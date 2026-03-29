@@ -2052,6 +2052,35 @@
 </head>
 <body>
 
+<!-- ═══════════════════ PASSWORD GATE ═══════════════════ -->
+<div id="auth-gate" style="position:fixed;inset:0;z-index:9999;background:#0d0f14;display:flex;align-items:center;justify-content:center;">
+  <div style="text-align:center;max-width:380px;padding:40px;">
+    <div style="margin-bottom:24px;">
+      <svg viewBox="0 0 160 44" width="160" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="gAcc" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#ff3a00"/><stop offset="100%" stop-color="#ff6b35"/></linearGradient></defs><rect x="0" y="4" width="36" height="36" rx="8" fill="url(#gAcc)" opacity="0.12"/><path d="M18 8 L30 14 L30 24 Q30 32 18 38 Q6 32 6 24 L6 14 Z" fill="none" stroke="url(#gAcc)" stroke-width="1.8" opacity="0.5"/><text x="10" y="29" font-family="Montserrat,sans-serif" font-weight="900" font-size="16" fill="url(#gAcc)" letter-spacing="0.5">IES</text><text x="46" y="20" font-family="Montserrat,sans-serif" font-weight="800" font-size="13" fill="#ffffff" letter-spacing="1">Intelligence</text><text x="46" y="35" font-family="Montserrat,sans-serif" font-weight="700" font-size="11" fill="rgba(255,255,255,0.5)" letter-spacing="2.5">HUB</text><rect x="46" y="23" width="24" height="2" rx="1" fill="url(#gAcc)"/></svg>
+    </div>
+    <div style="font-family:Montserrat,sans-serif;font-size:14px;color:rgba(255,255,255,.5);margin-bottom:20px;">Enter team access code</div>
+    <input id="auth-input" type="password" placeholder="Access code" autofocus
+      style="width:100%;padding:12px 16px;border-radius:8px;border:1.5px solid rgba(255,255,255,.15);background:rgba(255,255,255,.06);color:#fff;font-family:Montserrat,sans-serif;font-size:15px;text-align:center;outline:none;"
+      onkeydown="if(event.key==='Enter')checkAuth()">
+    <button onclick="checkAuth()" style="margin-top:12px;width:100%;padding:12px;border:none;border-radius:8px;background:linear-gradient(135deg,#ff3a00,#ff6b35);color:#fff;font-family:Montserrat,sans-serif;font-weight:700;font-size:14px;cursor:pointer;">Enter</button>
+    <div id="auth-error" style="color:#ef4444;font-size:12px;margin-top:10px;display:none;font-family:Montserrat,sans-serif;">Incorrect access code</div>
+  </div>
+</div>
+<script>
+function checkAuth(){
+  var code=document.getElementById('auth-input').value.trim().toLowerCase();
+  if(code==='ies2026'||code==='ieshub'){
+    document.getElementById('auth-gate').style.display='none';
+    sessionStorage.setItem('ies-auth','1');
+  } else {
+    document.getElementById('auth-error').style.display='block';
+    document.getElementById('auth-input').style.borderColor='#ef4444';
+    setTimeout(function(){document.getElementById('auth-error').style.display='none';document.getElementById('auth-input').style.borderColor='rgba(255,255,255,.15)';},2000);
+  }
+}
+if(sessionStorage.getItem('ies-auth')==='1'){document.getElementById('auth-gate').style.display='none';}
+</script>
+
 <!-- ═══════════════════ HEADER ═══════════════════ -->
 <header class="header">
   <div class="header-brand">
@@ -2101,13 +2130,6 @@
     <a class="nav-item" data-section="automation" onclick="navigate('automation', this)">
       <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2a2 2 0 012 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 017 7h1a1 1 0 011 1v3a1 1 0 01-1 1h-1.27A7 7 0 015.27 19H4a1 1 0 01-1-1v-3a1 1 0 011-1h1a7 7 0 017-7h1V5.73A2 2 0 0112 2z" fill="none"/><circle cx="9" cy="14" r="1" fill="currentColor"/><circle cx="15" cy="14" r="1" fill="currentColor"/></svg></span> Automation & Tech
     </a>
-    <!-- Deals & Pipeline — hidden, future-state (Phase 2 roadmap) -->
-    <!--
-    <a class="nav-item" data-section="deals" onclick="navigate('deals', this)">
-      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M22 12h-4l-3 9L9 3l-3 9H2" fill="none"/></svg></span> Deals & Pipeline
-      <span class="nav-badge" style="background:rgba(255,58,0,.15);color:var(--ies-orange);box-shadow:none;font-size:9px;">P2</span>
-    </a>
-    -->
     <a class="nav-item" data-section="verticals" onclick="navigate('verticals', this)">
       <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" fill="none"/><polyline points="3.27 6.96 12 12.01 20.73 6.96" fill="none"/><line x1="12" y1="22.08" x2="12" y2="12" fill="none"/></svg></span> Verticals
     </a>
@@ -2208,11 +2230,17 @@
       <div class="welcome-feature-desc">Interactive warehouse sizing calculator with dynamic facility layout, zone allocation modeling, and IES engineering recommendations.</div>
       <div style="margin-top:10px;"><span class="wiki-tag" style="background:rgba(25,135,84,.1);color:var(--ies-green);">LIVE</span></div>
     </div>
-    <div class="welcome-feature feature-coming">
-      <div class="welcome-feature-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--ies-gray-400)" stroke-width="1.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6"/></svg></div>
-      <div class="welcome-feature-title">DOS Integration</div>
-      <div class="welcome-feature-desc">Pipeline analytics, win/loss patterns, and proposal benchmarks powered by the Deal Operating System.</div>
-      <div style="margin-top:10px;"><span class="wiki-tag" style="background:rgba(107,122,144,.1);color:var(--ies-gray-600);">PHASE 2</span></div>
+    <div class="welcome-feature feature-live">
+      <div class="welcome-feature-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--ies-orange)" stroke-width="1.5"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg></div>
+      <div class="welcome-feature-title">Project Management</div>
+      <div class="welcome-feature-desc">Full pipeline tracking with kanban views, forecast vs. actual hours, task management, and win strategy development per opportunity.</div>
+      <div style="margin-top:10px;"><span class="wiki-tag" style="background:rgba(25,135,84,.1);color:var(--ies-green);">LIVE</span></div>
+    </div>
+    <div class="welcome-feature feature-live">
+      <div class="welcome-feature-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--ies-orange)" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg></div>
+      <div class="welcome-feature-title">Change Management</div>
+      <div class="welcome-feature-desc">Track team changes through the ADKAR methodology. Manage activities, build process flowcharts, and auto-advance initiatives as work completes.</div>
+      <div style="margin-top:10px;"><span class="wiki-tag" style="background:rgba(25,135,84,.1);color:var(--ies-green);">LIVE</span></div>
     </div>
     <div class="welcome-feature feature-coming">
       <div class="welcome-feature-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--ies-gray-400)" stroke-width="1.5"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg></div>
@@ -2235,23 +2263,22 @@
           <li>Top Market Alerts (multi-source)</li>
           <li>Warehouse Sizing Calculator</li>
           <li>Network Optimization (COG)</li>
-          <li>Training Wiki (22 pages, 12 SCCs)</li>
+          <li>Training Wiki (23+ pages, 12 SCCs)</li>
           <li>Industry Vertical Spotlights</li>
           <li>Automation & Tech Intel</li>
           <li>Project Management (Supabase)</li>
+          <li>Change Management (ADKAR)</li>
         </ul>
       </div>
       <div class="roadmap-phase phase-future">
         <div class="roadmap-phase-label"><span class="phase-dot"></span> Phase 2</div>
         <div class="roadmap-phase-title">Integrations & Analytics</div>
         <ul class="roadmap-items">
-          <li>Deals & Pipeline dashboard</li>
-          <li>Vertical pipeline snapshots</li>
-          <li>Win/loss analytics</li>
           <li>Salesforce CRM connector</li>
+          <li>Snowflake data warehouse</li>
           <li>Macro & Trade live data feeds</li>
           <li>Labor Intelligence section</li>
-          <li>DOS data migration to Projects</li>
+          <li>Win/loss analytics</li>
         </ul>
       </div>
       <div class="roadmap-phase phase-future">
@@ -2261,7 +2288,6 @@
           <li>Network tool: TL/LTL/parcel rates</li>
           <li>Network tool: inbound flows & constraints</li>
           <li>Cost Model Builder (replace XLS)</li>
-          <li>Snowflake data warehouse</li>
           <li>MOST work measurement tool</li>
         </ul>
       </div>
@@ -2943,7 +2969,7 @@
         <div style="font-size:13px;margin-bottom:4px;">4. Healthcare vertical w/o compliance cert — <strong>-11% close rate</strong></div>
       </div>
       <div class="dos-placeholder" style="margin-top:14px;padding:14px;">
-        <p style="font-size:11px;">🔗 <strong>Live DOS Connection — Phase 2:</strong> These patterns will auto-update from DOS win/loss data with configurable time windows and vertical filters.</p>
+        <p style="font-size:11px;">🔗 <strong>Salesforce Integration — Phase 2:</strong> These patterns will auto-update from CRM win/loss data with configurable time windows and vertical filters.</p>
       </div>
     </div>
   </div>
@@ -3127,11 +3153,10 @@
         <tr><td>Port Congestion</td><td>MarineTraffic, port authority data</td><td>Daily</td><td>API</td></tr>
         <tr><td>Tariff Developments</td><td>USTR, CBP, trade publications</td><td>As published</td><td>RSS + Manual</td></tr>
         <tr><td>Reshoring Activity</td><td>Reshoring Initiative, news feeds</td><td>Monthly</td><td>Manual</td></tr>
-        <tr><td>Pipeline / Deals</td><td>DOS (Deal Operating System)</td><td>Real-time</td><td>Direct DB (Phase 2)</td></tr>
       </tbody>
     </table>
     <div style="margin-top:16px;padding:14px;background:var(--ies-gray-100);border-radius:8px;font-size:12px;color:var(--ies-gray-600);">
-      <strong>Platform Recommendation:</strong> Custom web app (Next.js + Supabase) for maximum flexibility. API aggregation layer handles all external feeds. DOS connects via direct database read replica. React front end with role-based views (Designer vs. Leadership). Estimated build: 8–12 weeks for MVP.
+      <strong>Platform Recommendation:</strong> Custom web app (Next.js + Supabase) for maximum flexibility. API aggregation layer handles all external feeds. Salesforce and Snowflake connect via API integrations. React front end with role-based views (Designer vs. Leadership). Estimated build: 8–12 weeks for MVP.
     </div>
   </div>
 </div>
@@ -4741,6 +4766,7 @@ function navigate(section, el) {
   el.classList.add('active');
 
   // Scroll to top of content area
+  window.scrollTo(0, 0);
   var main = document.querySelector('.main');
   if (main) main.scrollTop = 0;
 
@@ -4807,12 +4833,14 @@ function navToTab(section, tabGroup, tabName) {
 // GUIDED TOUR
 // ═══════════════════════════════════════════════════
 var TOUR_STEPS = [
-  { icon: '👋', title: 'Welcome to the IES Intelligence Hub', desc: 'This platform brings together real-time market data, competitive intelligence, and training resources — everything the IES Solutions Design team needs in one place.' },
+  { icon: '👋', title: 'Welcome to the IES Intelligence Hub', desc: 'This platform brings together real-time market data, competitive intelligence, training resources, project tracking, and change management — everything the IES Solutions Design team needs in one place.' },
   { icon: '📊', title: 'Command Center', desc: 'Your operational dashboard. Live KPIs, diesel prices, labor availability, pipeline metrics, and the Top Market Alerts feed aggregating signals from competitors, tariffs, and accounts.' },
   { icon: '🏢', title: 'Competitive & Account Intel', desc: 'Track moves from DHL Supply Chain, Ryder, XPO, and CEVA. Monitor account signals like leadership changes, M&A activity, and facility expansions that create opportunities.' },
   { icon: '📍', title: 'Market Intelligence Map', desc: 'Interactive map of 10 key GXO markets. Click any pin to see labor scores, warehouse lease rates, and recent news — instant context for proposals and site selection.' },
-  { icon: '📖', title: 'Training Wiki', desc: '22-page reference library covering 12 Solutions Competency Centers, conveyor systems, warehouse design, MOST work measurement, 3PL commercial structure, and win strategy development.' },
-  { icon: '🚀', title: 'What\'s Coming Next', desc: 'The roadmap includes DOS integration, Salesforce connector, TL/LTL/parcel rate modeling for the Network tool, a Cost Model Builder, Snowflake data warehouse, and MOST tool integration.' },
+  { icon: '📋', title: 'Project Management', desc: 'Full pipeline tracking with kanban views, forecast vs. actual hours logging, task management, weekly updates, and win strategy development per opportunity. Your hours and project data are backed by Supabase.' },
+  { icon: '🔄', title: 'Change Management', desc: 'Track team changes through the ADKAR methodology — Awareness, Desire, Knowledge, Ability, Reinforcement. Manage sub-activities, build process flowcharts, and watch initiatives auto-advance as work completes.' },
+  { icon: '📖', title: 'Training Wiki', desc: '23+ page reference library covering 12 Solutions Competency Centers, Blue Yonder WMS, conveyor systems, warehouse design, MOST work measurement, 3PL commercial structure, and win strategy development.' },
+  { icon: '🚀', title: 'What\'s Coming Next', desc: 'The roadmap includes Salesforce CRM connector, Snowflake data warehouse, TL/LTL/parcel rate modeling, a Cost Model Builder, and MOST tool integration. Check the roadmap on the Welcome page for the full plan.' },
 ];
 var tourStep = 0;
 
