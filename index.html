@@ -11713,6 +11713,24 @@ async function cmRenderActivities(init) {
     return;
   }
 
+  // Phase gate progress indicators
+  const gateBar = document.createElement('div');
+  gateBar.style.cssText = 'display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;';
+  CM_PHASE_ORDER.forEach(phase => {
+    const phaseActs = activities.filter(a => a.adkar_phase === phase);
+    if (phaseActs.length === 0) return;
+    const doneCount = phaseActs.filter(a => a.status === 'done').length;
+    const allDone = doneCount === phaseActs.length;
+    const colors = {awareness:'#6366f1',desire:'#f59e0b',knowledge:'#06b6d4',ability:'#10b981',reinforcement:'#8b5cf6'};
+    const gate = document.createElement('div');
+    gate.style.cssText = `flex:1;min-width:120px;padding:8px 12px;border-radius:8px;border:1.5px solid ${allDone ? colors[phase] : 'var(--ies-gray-200)'};background:${allDone ? colors[phase]+'14' : '#fff'};text-align:center;`;
+    gate.innerHTML = `<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:${colors[phase]};margin-bottom:2px;">${phase}</div>` +
+      `<div style="font-size:13px;font-weight:600;color:var(--ies-navy);">${doneCount}/${phaseActs.length}</div>` +
+      (allDone ? `<div style="font-size:10px;color:${colors[phase]};margin-top:2px;">✓ Complete</div>` : '');
+    gateBar.appendChild(gate);
+  });
+  list.appendChild(gateBar);
+
   activities.forEach(act => {
     const item = document.createElement('div');
     item.className = 'cm-activity-item';
@@ -12261,9 +12279,70 @@ async function cmToggleActivityStatus(id, newStatus) {
       status: newStatus,
       completed_date: newStatus === 'done' ? new Date().toISOString() : null
     }).eq('id', id);
+    // Find which initiative this activity belongs to and check phase progression
+    const activity = cmData.activities.find(a => a.id === id);
+    if (activity && newStatus === 'done') {
+      await cmCheckPhaseProgression(activity.initiative_id);
+    }
     await cmLoadAll();
+    // Re-render detail if we're viewing one
+    if (cmCurrentInitiative) cmShowDetail(cmCurrentInitiative);
   } catch (err) {
     console.error('Error updating activity:', err);
+  }
+}
+
+// ── ADKAR AUTO-PROGRESSION ──
+
+const CM_PHASE_ORDER = ['awareness', 'desire', 'knowledge', 'ability', 'reinforcement'];
+
+async function cmCheckPhaseProgression(initiativeId) {
+  // Refresh activities for this initiative
+  const { data: activities } = await sb.from('change_activities').select('*').eq('initiative_id', initiativeId);
+  const init = cmData.initiatives.find(i => i.id === initiativeId);
+  if (!init || !activities) return;
+
+  const updates = {};
+  let highestCompletePhase = -1;
+
+  CM_PHASE_ORDER.forEach((phase, idx) => {
+    const phaseActivities = activities.filter(a => a.adkar_phase === phase);
+    if (phaseActivities.length === 0) return;
+
+    const doneCount = phaseActivities.filter(a => a.status === 'done').length;
+    const total = phaseActivities.length;
+    const pct = Math.round((doneCount / total) * 100);
+
+    // Update the phase score to reflect activity completion
+    updates[`${phase}_score`] = pct;
+
+    if (doneCount === total) {
+      highestCompletePhase = idx;
+    }
+  });
+
+  // Advance current_phase to the next incomplete phase
+  if (highestCompletePhase >= 0) {
+    const nextPhaseIdx = highestCompletePhase + 1;
+    if (nextPhaseIdx < CM_PHASE_ORDER.length) {
+      updates.current_phase = CM_PHASE_ORDER[nextPhaseIdx];
+    } else {
+      // All phases complete — mark the initiative as completed
+      updates.current_phase = 'reinforcement';
+      updates.status = 'completed';
+      updates.completed_date = new Date().toISOString().split('T')[0];
+    }
+  }
+
+  // Auto-set status to in_progress if it was not_started and we have progress
+  if (init.status === 'not_started' && Object.values(updates).some(v => v > 0)) {
+    updates.status = 'in_progress';
+  }
+
+  updates.updated_at = new Date().toISOString();
+
+  if (Object.keys(updates).length > 0) {
+    await sb.from('change_initiatives').update(updates).eq('id', initiativeId);
   }
 }
 
