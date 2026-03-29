@@ -780,6 +780,1258 @@
   .pm-strategy-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; }
   .pm-strategy-text { font-size:13px; line-height:1.6; color:var(--ies-gray-800); }
 
+
+  /* ── CHANGE MANAGEMENT MODULE STYLES ── */
+  
+  .cm-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 2rem;
+  }
+  
+  .cm-section-header h2 {
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: var(--ies-navy);
+    margin: 0;
+  }
+  
+  .cm-header-actions {
+    display: flex;
+    gap: 1rem;
+  }
+  
+  .cm-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.25rem;
+    border: none;
+    border-radius: 0.5rem;
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+  }
+  
+  .cm-btn-primary {
+    background: var(--ies-orange);
+    color: white;
+  }
+  
+  .cm-btn-primary:hover {
+    background: #e63800;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(255, 58, 0, 0.2);
+  }
+  
+  .cm-btn-secondary {
+    background: var(--ies-gray-200);
+    color: var(--ies-navy);
+  }
+  
+  .cm-btn-secondary:hover {
+    background: var(--ies-gray-300);
+    transform: translateY(-1px);
+  }
+  
+  .cm-btn-small {
+    padding: 0.5rem 0.875rem;
+    font-size: 0.85rem;
+  }
+  
+  .cm-stats-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+  }
+  
+  .cm-stat-card {
+    background: white;
+    border: 1px solid var(--ies-gray-200);
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    transition: all 0.2s ease;
+  }
+  
+  .cm-stat-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+  
+  .cm-stat-label {
+    font-size: 0.85rem;
+    color: var(--ies-gray-600);
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  
+  .cm-stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--ies-navy);
+  }
+  
+  .cm-stat-subtext {
+    font-size: 0.8rem;
+    color: var(--ies-gray-500);
+    margin-top: 0.5rem;
+  }
+  
+  .cm-view-toggle {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    border-bottom: 2px solid var(--ies-gray-200);
+    padding-bottom: 1rem;
+  }
+  
+  .cm-view-btn {
+    padding: 0.75rem 1.25rem;
+    border: none;
+    background: transparent;
+    color: var(--ies-gray-600);
+    font-weight: 500;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -1rem;
+    transition: all 0.2s ease;
+  }
+  
+  .cm-view-btn.active {
+    color: var(--ies-orange);
+    border-bottom-color: var(--ies-orange);
+  }
+  
+  .cm-view-btn:hover {
+    color: var(--ies-navy);
+  }
+  
+  /* ── BOARD VIEW (KANBAN) ── */
+  
+  .cm-board {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+  }
+  
+  .cm-phase-column {
+    background: var(--ies-gray-50);
+    border: 1px solid var(--ies-gray-200);
+    border-radius: 0.75rem;
+    padding: 1rem;
+    min-height: 500px;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .cm-phase-header {
+    font-weight: 600;
+    font-size: 0.95rem;
+    padding: 0.75rem;
+    margin-bottom: 1rem;
+    border-bottom: 2px solid;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-size: 0.8rem;
+  }
+  
+  .cm-phase-header.awareness {
+    color: #6366f1;
+    border-bottom-color: #6366f1;
+    background: rgba(99, 102, 241, 0.05);
+  }
+  
+  .cm-phase-header.desire {
+    color: #f59e0b;
+    border-bottom-color: #f59e0b;
+    background: rgba(245, 158, 11, 0.05);
+  }
+  
+  .cm-phase-header.knowledge {
+    color: #06b6d4;
+    border-bottom-color: #06b6d4;
+    background: rgba(6, 182, 212, 0.05);
+  }
+  
+  .cm-phase-header.ability {
+    color: #10b981;
+    border-bottom-color: #10b981;
+    background: rgba(16, 185, 129, 0.05);
+  }
+  
+  .cm-phase-header.reinforcement {
+    color: #8b5cf6;
+    border-bottom-color: #8b5cf6;
+    background: rgba(139, 92, 246, 0.05);
+  }
+  
+  .cm-cards-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    flex: 1;
+  }
+  
+  .cm-init-card {
+    background: white;
+    border: 1px solid var(--ies-gray-200);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+  
+  .cm-init-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+    border-color: var(--ies-orange);
+  }
+  
+  .cm-card-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--ies-navy);
+    margin-bottom: 0.5rem;
+    word-break: break-word;
+  }
+  
+  .cm-card-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+    margin-bottom: 0.75rem;
+  }
+  
+  .cm-card-owner {
+    color: var(--ies-gray-600);
+    font-weight: 500;
+  }
+  
+  .cm-card-badge {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  
+  .cm-badge-active {
+    background: rgba(16, 185, 129, 0.2);
+    color: #059669;
+  }
+  
+  .cm-badge-ontrack {
+    background: rgba(6, 182, 212, 0.2);
+    color: #0891b2;
+  }
+  
+  .cm-badge-atrisk {
+    background: rgba(245, 158, 11, 0.2);
+    color: #d97706;
+  }
+  
+  .cm-badge-blocked {
+    background: rgba(239, 68, 68, 0.2);
+    color: #991b1b;
+  }
+  
+  .cm-adkar-mini {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0.25rem;
+    margin-top: 0.75rem;
+  }
+  
+  .cm-adkar-segment {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--ies-gray-300);
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .cm-adkar-segment.filled {
+    background: currentColor;
+  }
+  
+  .cm-adkar-segment.awareness {
+    color: #6366f1;
+  }
+  
+  .cm-adkar-segment.desire {
+    color: #f59e0b;
+  }
+  
+  .cm-adkar-segment.knowledge {
+    color: #06b6d4;
+  }
+  
+  .cm-adkar-segment.ability {
+    color: #10b981;
+  }
+  
+  .cm-adkar-segment.reinforcement {
+    color: #8b5cf6;
+  }
+  
+  /* ── LIST VIEW ── */
+  
+  .cm-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    border: 1px solid var(--ies-gray-200);
+    border-radius: 0.75rem;
+    overflow: hidden;
+  }
+  
+  .cm-table thead {
+    background: var(--ies-gray-50);
+    border-bottom: 2px solid var(--ies-gray-200);
+  }
+  
+  .cm-table th {
+    padding: 1rem;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--ies-navy);
+  }
+  
+  .cm-table td {
+    padding: 1rem;
+    border-bottom: 1px solid var(--ies-gray-200);
+    font-size: 0.9rem;
+    color: var(--ies-gray-700);
+  }
+  
+  .cm-table tbody tr {
+    transition: all 0.2s ease;
+    cursor: pointer;
+  }
+  
+  .cm-table tbody tr:hover {
+    background: var(--ies-gray-50);
+  }
+  
+  .cm-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+  
+  /* ── TIMELINE VIEW ── */
+  
+  .cm-timeline-container {
+    background: white;
+    border: 1px solid var(--ies-gray-200);
+    border-radius: 0.75rem;
+    padding: 2rem;
+    overflow-x: auto;
+    min-height: 300px;
+  }
+  
+  .cm-timeline-chart {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    min-width: 800px;
+  }
+  
+  .cm-timeline-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  
+  .cm-timeline-label {
+    min-width: 150px;
+    font-weight: 500;
+    color: var(--ies-navy);
+    font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  
+  .cm-timeline-bar-container {
+    flex: 1;
+    position: relative;
+    height: 40px;
+    background: var(--ies-gray-100);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  
+  .cm-timeline-bar {
+    height: 100%;
+    border-radius: 4px;
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: white;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  
+  .cm-timeline-bar:hover {
+    filter: brightness(1.1);
+    transform: scaleY(1.1);
+  }
+  
+  /* ── DETAIL PANEL ── */
+  
+  .cm-detail-panel {
+    position: fixed;
+    right: 0;
+    top: 0;
+    width: 500px;
+    height: 100vh;
+    background: white;
+    border-left: 1px solid var(--ies-gray-200);
+    box-shadow: -4px 0 12px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  
+  .cm-detail-panel.active {
+    display: flex;
+  }
+  
+  .cm-detail-header {
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--ies-gray-200);
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-shrink: 0;
+  }
+  
+  .cm-detail-back {
+    background: none;
+    border: none;
+    color: var(--ies-gray-600);
+    cursor: pointer;
+    font-size: 1.5rem;
+    padding: 0;
+    transition: all 0.2s ease;
+  }
+  
+  .cm-detail-back:hover {
+    color: var(--ies-navy);
+  }
+  
+  .cm-detail-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--ies-navy);
+    flex: 1;
+    margin: 0;
+  }
+  
+  .cm-detail-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+  
+  .cm-detail-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0;
+  }
+  
+  .cm-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 2px solid var(--ies-gray-200);
+    padding: 1rem 1.5rem 0;
+    background: white;
+    flex-shrink: 0;
+  }
+  
+  .cm-tab {
+    padding: 0.75rem 1rem;
+    border: none;
+    background: transparent;
+    color: var(--ies-gray-600);
+    font-weight: 500;
+    cursor: pointer;
+    font-size: 0.9rem;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s ease;
+  }
+  
+  .cm-tab.active {
+    color: var(--ies-orange);
+    border-bottom-color: var(--ies-orange);
+  }
+  
+  .cm-tab:hover {
+    color: var(--ies-navy);
+  }
+  
+  .cm-tab-content {
+    display: none;
+    padding: 1.5rem;
+    animation: fadeIn 0.2s ease;
+  }
+  
+  .cm-tab-content.active {
+    display: block;
+  }
+  
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  .cm-adkar-progress {
+    margin-bottom: 1.5rem;
+  }
+  
+  .cm-progress-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--ies-gray-600);
+    margin-bottom: 0.75rem;
+    letter-spacing: 0.5px;
+  }
+  
+  .cm-progress-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  
+  .cm-progress-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  
+  .cm-progress-name {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--ies-navy);
+    min-width: 80px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  
+  .cm-progress-bar-container {
+    flex: 1;
+    height: 12px;
+    background: var(--ies-gray-200);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  
+  .cm-progress-bar-fill {
+    height: 100%;
+    border-radius: 6px;
+    transition: width 0.3s ease;
+  }
+  
+  .cm-progress-value {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--ies-gray-600);
+    min-width: 30px;
+    text-align: right;
+  }
+  
+  .cm-overview-section {
+    margin-bottom: 1.5rem;
+  }
+  
+  .cm-overview-section-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--ies-gray-600);
+    margin-bottom: 0.75rem;
+    letter-spacing: 0.5px;
+  }
+  
+  .cm-overview-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem;
+    background: var(--ies-gray-50);
+    border-radius: 0.4rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+  }
+  
+  .cm-overview-label {
+    color: var(--ies-gray-600);
+    font-weight: 500;
+  }
+  
+  .cm-overview-value {
+    color: var(--ies-navy);
+    font-weight: 600;
+  }
+  
+  .cm-activity-item {
+    background: var(--ies-gray-50);
+    border: 1px solid var(--ies-gray-200);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+    transition: all 0.2s ease;
+  }
+  
+  .cm-activity-item:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  }
+  
+  .cm-activity-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+  
+  .cm-activity-title {
+    font-weight: 600;
+    color: var(--ies-navy);
+    font-size: 0.95rem;
+  }
+  
+  .cm-activity-status {
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  
+  .cm-status-todo {
+    background: rgba(229, 231, 235, 0.8);
+    color: #6b7280;
+  }
+  
+  .cm-status-in_progress {
+    background: rgba(59, 130, 246, 0.2);
+    color: #1e40af;
+  }
+  
+  .cm-status-done {
+    background: rgba(16, 185, 129, 0.2);
+    color: #065f46;
+  }
+  
+  .cm-status-blocked {
+    background: rgba(239, 68, 68, 0.2);
+    color: #7f1d1d;
+  }
+  
+  .cm-activity-phase {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    background: var(--ies-gray-200);
+    border-radius: 0.25rem;
+    font-size: 0.7rem;
+    color: var(--ies-gray-700);
+    margin-top: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  
+  .cm-activity-due {
+    font-size: 0.8rem;
+    color: var(--ies-gray-600);
+    margin-top: 0.5rem;
+  }
+  
+  .cm-vertical-timeline {
+    position: relative;
+    padding-left: 2rem;
+  }
+  
+  .cm-timeline-dot {
+    position: absolute;
+    left: -0.5rem;
+    width: 1rem;
+    height: 1rem;
+    background: var(--ies-orange);
+    border: 3px solid white;
+    border-radius: 50%;
+    box-shadow: 0 0 0 1px var(--ies-gray-300);
+  }
+  
+  .cm-timeline-item {
+    margin-bottom: 1.5rem;
+    padding-bottom: 1.5rem;
+    border-left: 2px solid var(--ies-gray-200);
+    padding-left: 1.5rem;
+    margin-left: -2rem;
+  }
+  
+  .cm-timeline-item:last-child {
+    border-left: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+  }
+  
+  .cm-timeline-phase-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--ies-gray-600);
+    margin-bottom: 0.5rem;
+    letter-spacing: 0.5px;
+  }
+  
+  .cm-timeline-item-title {
+    font-weight: 600;
+    color: var(--ies-navy);
+    margin-bottom: 0.25rem;
+  }
+  
+  .cm-flowchart-item {
+    background: var(--ies-gray-50);
+    border: 1px solid var(--ies-gray-200);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  
+  .cm-flowchart-item:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    border-color: var(--ies-orange);
+  }
+  
+  .cm-flowchart-item-title {
+    font-weight: 600;
+    color: var(--ies-navy);
+  }
+  
+  .cm-flowchart-item-desc {
+    font-size: 0.85rem;
+    color: var(--ies-gray-600);
+    margin-top: 0.25rem;
+  }
+  
+  .cm-flowchart-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+  
+  /* ── FLOWCHART EDITOR ── */
+  
+  .cm-flowchart-editor {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: white;
+    z-index: 2000;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  
+  .cm-flowchart-editor.active {
+    display: flex;
+  }
+  
+  .cm-flowchart-toolbar {
+    background: white;
+    border-bottom: 1px solid var(--ies-gray-200);
+    padding: 1rem 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+  
+  .cm-flowchart-toolbar h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    color: var(--ies-navy);
+    flex: 1;
+  }
+  
+  .cm-canvas-container {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    gap: 1.5rem;
+    padding: 1.5rem;
+    background: var(--ies-gray-50);
+  }
+  
+  .cm-canvas-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  
+  .cm-canvas-svg-wrapper {
+    flex: 1;
+    background: white;
+    border: 1px solid var(--ies-gray-200);
+    border-radius: 0.5rem;
+    overflow: auto;
+    position: relative;
+  }
+  
+  .cm-canvas-svg {
+    width: 100%;
+    min-height: 600px;
+    background-image: linear-gradient(var(--ies-gray-100) 1px, transparent 1px),
+                      linear-gradient(90deg, var(--ies-gray-100) 1px, transparent 1px);
+    background-size: 20px 20px;
+    background-position: -1px -1px;
+  }
+  
+  .cm-flow-node {
+    cursor: move;
+    transition: all 0.2s ease;
+  }
+  
+  .cm-flow-node.selected rect,
+  .cm-flow-node.selected path,
+  .cm-flow-node.selected circle {
+    filter: drop-shadow(0 0 0 2px var(--ies-orange));
+  }
+  
+  .cm-flow-node-rect {
+    fill: white;
+    stroke: var(--ies-navy);
+    stroke-width: 2;
+  }
+  
+  .cm-flow-node-decision {
+    fill: white;
+    stroke: var(--ies-orange);
+    stroke-width: 2;
+  }
+  
+  .cm-flow-node-terminal {
+    fill: white;
+    stroke: var(--ies-gray-600);
+    stroke-width: 2;
+  }
+  
+  .cm-flow-node-text {
+    font-size: 12px;
+    font-weight: 500;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    fill: var(--ies-navy);
+    pointer-events: none;
+    word-wrap: break-word;
+  }
+  
+  .cm-flow-edge {
+    stroke: var(--ies-gray-400);
+    stroke-width: 2;
+    fill: none;
+    pointer-events: stroke;
+    cursor: pointer;
+  }
+  
+  .cm-flow-edge.hover {
+    stroke: var(--ies-orange);
+    stroke-width: 3;
+  }
+  
+  .cm-flow-arrowhead {
+    fill: var(--ies-gray-400);
+  }
+  
+  .cm-step-builder {
+    width: 300px;
+    background: white;
+    border: 1px solid var(--ies-gray-200);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    max-height: calc(100vh - 200px);
+    overflow-y: auto;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+  
+  .cm-step-builder h4 {
+    margin: 0 0 1rem 0;
+    font-size: 0.95rem;
+    color: var(--ies-navy);
+  }
+  
+  .cm-step-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  
+  .cm-form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  
+  .cm-form-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--ies-gray-700);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  
+  .cm-form-select,
+  .cm-form-input,
+  .cm-form-textarea {
+    padding: 0.5rem;
+    border: 1px solid var(--ies-gray-300);
+    border-radius: 0.4rem;
+    font-size: 0.9rem;
+    font-family: inherit;
+    transition: all 0.2s ease;
+  }
+  
+  .cm-form-select:focus,
+  .cm-form-input:focus,
+  .cm-form-textarea:focus {
+    outline: none;
+    border-color: var(--ies-orange);
+    box-shadow: 0 0 0 3px rgba(255, 58, 0, 0.1);
+  }
+  
+  .cm-form-textarea {
+    resize: vertical;
+    min-height: 60px;
+  }
+  
+  .cm-form-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+  }
+  
+  .cm-form-actions .cm-btn {
+    flex: 1;
+    justify-content: center;
+  }
+  
+  .cm-mode-toggle {
+    display: flex;
+    gap: 0.5rem;
+    margin-left: auto;
+  }
+  
+  .cm-mode-btn {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--ies-gray-300);
+    background: white;
+    color: var(--ies-gray-600);
+    border-radius: 0.4rem;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
+  }
+  
+  .cm-mode-btn.active {
+    background: var(--ies-orange);
+    color: white;
+    border-color: var(--ies-orange);
+  }
+  
+  .cm-flowchart-footer {
+    border-top: 1px solid var(--ies-gray-200);
+    padding: 1rem 1.5rem;
+    display: flex;
+    gap: 1rem;
+    justify-content: flex-end;
+    flex-shrink: 0;
+  }
+  
+  /* ── MODALS ── */
+  
+  .cm-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1500;
+    animation: fadeIn 0.2s ease;
+  }
+  
+  .cm-modal {
+    background: white;
+    border-radius: 0.75rem;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+    width: 90%;
+    max-width: 600px;
+    max-height: 90vh;
+    overflow-y: auto;
+    animation: slideUp 0.3s ease;
+  }
+  
+  @keyframes slideUp {
+    from {
+      transform: translateY(20px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+  
+  .cm-modal-header {
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--ies-gray-200);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  
+  .cm-modal-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--ies-navy);
+    margin: 0;
+  }
+  
+  .cm-modal-close {
+    background: none;
+    border: none;
+    color: var(--ies-gray-600);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0;
+    transition: all 0.2s ease;
+  }
+  
+  .cm-modal-close:hover {
+    color: var(--ies-navy);
+  }
+  
+  .cm-modal-body {
+    padding: 1.5rem;
+  }
+  
+  .cm-modal-footer {
+    padding: 1rem 1.5rem;
+    border-top: 1px solid var(--ies-gray-200);
+    display: flex;
+    gap: 1rem;
+    justify-content: flex-end;
+    flex-shrink: 0;
+  }
+  
+  /* ── FORM STYLES ── */
+  
+  .cm-form-field {
+    margin-bottom: 1.5rem;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .cm-form-field label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--ies-navy);
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  
+  .cm-form-field input,
+  .cm-form-field select,
+  .cm-form-field textarea {
+    padding: 0.75rem;
+    border: 1px solid var(--ies-gray-300);
+    border-radius: 0.5rem;
+    font-size: 0.95rem;
+    font-family: inherit;
+    transition: all 0.2s ease;
+  }
+  
+  .cm-form-field input:focus,
+  .cm-form-field select:focus,
+  .cm-form-field textarea:focus {
+    outline: none;
+    border-color: var(--ies-orange);
+    box-shadow: 0 0 0 3px rgba(255, 58, 0, 0.1);
+  }
+  
+  .cm-form-field textarea {
+    min-height: 100px;
+    resize: vertical;
+  }
+  
+  .cm-form-field.inline {
+    flex-direction: row;
+    align-items: flex-end;
+    gap: 1rem;
+  }
+  
+  .cm-form-field.inline label {
+    margin-bottom: 0;
+    min-width: 150px;
+  }
+  
+  .cm-form-field.inline input,
+  .cm-form-field.inline select {
+    flex: 1;
+  }
+  
+  .cm-impact-areas {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+  }
+  
+  .cm-impact-tag {
+    display: inline-block;
+    padding: 0.4rem 0.75rem;
+    background: rgba(255, 58, 0, 0.1);
+    color: var(--ies-orange);
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 500;
+  }
+  
+  .cm-impact-tag .remove {
+    margin-left: 0.4rem;
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+  }
+  
+  .cm-impact-tag .remove:hover {
+    opacity: 1;
+  }
+  
+  /* ── RESPONSIVE ── */
+  
+  @media (max-width: 1400px) {
+    .cm-board {
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
+  
+  @media (max-width: 1000px) {
+    .cm-board {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  
+    .cm-detail-panel {
+      width: 100%;
+    }
+  
+    .cm-canvas-container {
+      flex-direction: column;
+    }
+  
+    .cm-step-builder {
+      width: 100%;
+      max-height: 200px;
+    }
+  }
+  
+  @media (max-width: 768px) {
+    .cm-board {
+      grid-template-columns: 1fr;
+    }
+  
+    .cm-stats-row {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  
+    .cm-section-header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 1rem;
+    }
+  
+    .cm-header-actions {
+      width: 100%;
+    }
+  
+    .cm-header-actions .cm-btn {
+      flex: 1;
+    }
+  
+    .cm-modal {
+      width: 95%;
+      max-width: 100%;
+    }
+  
+    .cm-table {
+      font-size: 0.8rem;
+    }
+  
+    .cm-table th,
+    .cm-table td {
+      padding: 0.75rem 0.5rem;
+    }
+  
+    .cm-timeline-container {
+      padding: 1rem;
+    }
+  
+    .cm-tabs {
+      padding: 0.5rem 1rem 0;
+    }
+  
+    .cm-tab {
+      padding: 0.5rem 0.75rem;
+      font-size: 0.8rem;
+    }
+  }
+  
+
   /* ── RESPONSIVE ADJUSTMENTS ── */
   @media (max-width: 1024px) {
     .main { padding: var(--sp-24) var(--sp-32); }
@@ -867,6 +2119,12 @@
     </a>
   </div>
   <div class="sidebar-section">
+    <div class="sidebar-label">Operations</div>
+    <a class="nav-item" data-section="changemanagement" onclick="navigate('changemanagement', this)">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill="none"/><path d="M13 7h-2v5.41l3.29 3.29 1.41-1.41L13 11.59z" fill="none"/><path d="M16.5 3.5l-1 1M7.5 3.5l1 1M12 6v1" fill="none"/></svg></span> Change Management
+    </a>
+  </div>
+    <div class="sidebar-section">
     <div class="sidebar-label">Learn</div>
     <a class="nav-item" data-section="training" onclick="navigate('training', this)">
       <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M2 5v14c0 1 1 2 2 2h16c1 0 2-1 2-2V5M2 5c0-1 1-2 2-2h16c1 0 2 1 2 2m-18 7h16" fill="none"/></svg></span> Training Wiki
@@ -3183,6 +4441,270 @@
 
 </div>
 
+
+<div class="section" id="sec-changemanagement">
+  <!-- SECTION HEADER -->
+  <div class="cm-section-header">
+    <h2>Change Management</h2>
+    <div class="cm-header-actions">
+      <button class="cm-btn cm-btn-secondary" onclick="cmShowADKARGuide()">ADKAR Guide</button>
+      <button class="cm-btn cm-btn-primary" onclick="cmShowNewInitiative()">+ New Initiative</button>
+    </div>
+  </div>
+
+  <!-- STATS ROW -->
+  <div class="cm-stats-row">
+    <div class="cm-stat-card">
+      <div class="cm-stat-label">Total Initiatives</div>
+      <div class="cm-stat-value" id="cm-stat-total">0</div>
+      <div class="cm-stat-subtext">All initiatives</div>
+    </div>
+    <div class="cm-stat-card">
+      <div class="cm-stat-label">In Progress</div>
+      <div class="cm-stat-value" id="cm-stat-inprogress">0</div>
+      <div class="cm-stat-subtext">Active changes</div>
+    </div>
+    <div class="cm-stat-card">
+      <div class="cm-stat-label">Completion Rate</div>
+      <div class="cm-stat-value" id="cm-stat-completion">0%</div>
+      <div class="cm-stat-subtext">Finished initiatives</div>
+    </div>
+    <div class="cm-stat-card">
+      <div class="cm-stat-label">Avg ADKAR Score</div>
+      <div class="cm-stat-value" id="cm-stat-adkar">0</div>
+      <div class="cm-stat-subtext">Overall maturity</div>
+    </div>
+  </div>
+
+  <!-- VIEW TOGGLE -->
+  <div class="cm-view-toggle">
+    <button class="cm-view-btn active" onclick="cmSetView('board')">Board View</button>
+    <button class="cm-view-btn" onclick="cmSetView('list')">List View</button>
+    <button class="cm-view-btn" onclick="cmSetView('timeline')">Timeline View</button>
+  </div>
+
+  <!-- BOARD VIEW -->
+  <div id="cm-board-view" class="cm-board-view" style="display: block;">
+    <div class="cm-board" id="cm-board"></div>
+  </div>
+
+  <!-- LIST VIEW -->
+  <div id="cm-list-view" class="cm-list-view" style="display: none;">
+    <table class="cm-table" id="cm-table">
+      <thead>
+        <tr>
+          <th>Initiative</th>
+          <th>Owner</th>
+          <th>Current Phase</th>
+          <th>Status</th>
+          <th>Priority</th>
+          <th>Target Date</th>
+        </tr>
+      </thead>
+      <tbody id="cm-table-body"></tbody>
+    </table>
+  </div>
+
+  <!-- TIMELINE VIEW -->
+  <div id="cm-timeline-view" class="cm-timeline-view" style="display: none;">
+    <div class="cm-timeline-container">
+      <div class="cm-timeline-chart" id="cm-timeline-chart"></div>
+    </div>
+  </div>
+
+  <!-- DETAIL PANEL -->
+  <div class="cm-detail-panel" id="cm-detail-panel">
+    <div class="cm-detail-header">
+      <button class="cm-detail-back" onclick="cmBackToBoard()">←</button>
+      <h3 class="cm-detail-title" id="cm-detail-title">Initiative</h3>
+      <div class="cm-detail-actions">
+        <button class="cm-btn cm-btn-small cm-btn-secondary" onclick="cmShowEditInitiative()">Edit</button>
+        <button class="cm-btn cm-btn-small cm-btn-secondary" onclick="cmDeleteInitiative(cmCurrentInitiative)" style="background: rgba(239, 68, 68, 0.1); color: #dc2626;">Delete</button>
+      </div>
+    </div>
+
+    <!-- ADKAR PROGRESS BAR -->
+    <div style="padding: 1.5rem; border-bottom: 1px solid var(--ies-gray-200); background: var(--ies-gray-50);">
+      <div class="cm-adkar-progress">
+        <div class="cm-progress-label">ADKAR Maturity</div>
+        <div class="cm-progress-bars">
+          <div class="cm-progress-item">
+            <div class="cm-progress-name">Awareness</div>
+            <div class="cm-progress-bar-container">
+              <div class="cm-progress-bar-fill" id="cm-adkar-awareness" style="background: #6366f1; width: 0%;"></div>
+            </div>
+            <div class="cm-progress-value" id="cm-adkar-awareness-value">0%</div>
+          </div>
+          <div class="cm-progress-item">
+            <div class="cm-progress-name">Desire</div>
+            <div class="cm-progress-bar-container">
+              <div class="cm-progress-bar-fill" id="cm-adkar-desire" style="background: #f59e0b; width: 0%;"></div>
+            </div>
+            <div class="cm-progress-value" id="cm-adkar-desire-value">0%</div>
+          </div>
+          <div class="cm-progress-item">
+            <div class="cm-progress-name">Knowledge</div>
+            <div class="cm-progress-bar-container">
+              <div class="cm-progress-bar-fill" id="cm-adkar-knowledge" style="background: #06b6d4; width: 0%;"></div>
+            </div>
+            <div class="cm-progress-value" id="cm-adkar-knowledge-value">0%</div>
+          </div>
+          <div class="cm-progress-item">
+            <div class="cm-progress-name">Ability</div>
+            <div class="cm-progress-bar-container">
+              <div class="cm-progress-bar-fill" id="cm-adkar-ability" style="background: #10b981; width: 0%;"></div>
+            </div>
+            <div class="cm-progress-value" id="cm-adkar-ability-value">0%</div>
+          </div>
+          <div class="cm-progress-item">
+            <div class="cm-progress-name">Reinforcement</div>
+            <div class="cm-progress-bar-container">
+              <div class="cm-progress-bar-fill" id="cm-adkar-reinforcement" style="background: #8b5cf6; width: 0%;"></div>
+            </div>
+            <div class="cm-progress-value" id="cm-adkar-reinforcement-value">0%</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TABS -->
+    <div class="cm-tabs">
+      <button class="cm-tab active" onclick="cmShowTab('overview')">Overview</button>
+      <button class="cm-tab" onclick="cmShowTab('activities')">Activities</button>
+      <button class="cm-tab" onclick="cmShowTab('timeline')">Timeline</button>
+      <button class="cm-tab" onclick="cmShowTab('flowcharts')">Flowcharts</button>
+    </div>
+
+    <div class="cm-detail-body">
+      <!-- OVERVIEW TAB -->
+      <div class="cm-tab-content active" id="cm-tab-overview">
+        <div class="cm-overview-section">
+          <div class="cm-overview-section-title">Description</div>
+          <div id="cm-overview-description" style="padding: 0.75rem; color: var(--ies-gray-700); line-height: 1.5;"></div>
+        </div>
+
+        <div class="cm-overview-section">
+          <div class="cm-overview-section-title">Details</div>
+          <div class="cm-overview-item">
+            <span class="cm-overview-label">Owner</span>
+            <span class="cm-overview-value" id="cm-overview-owner"></span>
+          </div>
+          <div class="cm-overview-item">
+            <span class="cm-overview-label">Category</span>
+            <span class="cm-overview-value" id="cm-overview-category"></span>
+          </div>
+          <div class="cm-overview-item">
+            <span class="cm-overview-label">Priority</span>
+            <span class="cm-overview-value" id="cm-overview-priority"></span>
+          </div>
+          <div class="cm-overview-item">
+            <span class="cm-overview-label">Status</span>
+            <span class="cm-overview-value" id="cm-overview-status"></span>
+          </div>
+        </div>
+
+        <div class="cm-overview-section">
+          <div class="cm-overview-section-title">Timeline</div>
+          <div class="cm-overview-item">
+            <span class="cm-overview-label">Start Date</span>
+            <span class="cm-overview-value" id="cm-overview-start"></span>
+          </div>
+          <div class="cm-overview-item">
+            <span class="cm-overview-label">Target Date</span>
+            <span class="cm-overview-value" id="cm-overview-target"></span>
+          </div>
+          <div class="cm-overview-item">
+            <span class="cm-overview-label">Completed Date</span>
+            <span class="cm-overview-value" id="cm-overview-completed">—</span>
+          </div>
+        </div>
+
+        <div class="cm-overview-section">
+          <div class="cm-overview-section-title">Impact Areas</div>
+          <div class="cm-impact-areas" id="cm-overview-impacts"></div>
+        </div>
+      </div>
+
+      <!-- ACTIVITIES TAB -->
+      <div class="cm-tab-content" id="cm-tab-activities">
+        <div style="margin-bottom: 1rem;">
+          <button class="cm-btn cm-btn-small cm-btn-primary" onclick="cmShowNewActivity()">+ Add Activity</button>
+        </div>
+        <div id="cm-activities-list"></div>
+      </div>
+
+      <!-- TIMELINE TAB -->
+      <div class="cm-tab-content" id="cm-tab-timeline">
+        <div class="cm-vertical-timeline" id="cm-detail-timeline"></div>
+      </div>
+
+      <!-- FLOWCHARTS TAB -->
+      <div class="cm-tab-content" id="cm-tab-flowcharts">
+        <div style="margin-bottom: 1rem;">
+          <button class="cm-btn cm-btn-small cm-btn-primary" onclick="cmNewFlowchart()">+ New Flowchart</button>
+        </div>
+        <div id="cm-flowcharts-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FLOWCHART EDITOR -->
+  <div class="cm-flowchart-editor" id="cm-flowchart-editor">
+    <div class="cm-flowchart-toolbar">
+      <h3 id="cm-flowchart-title">Flowchart Editor</h3>
+      <button class="cm-btn cm-btn-small cm-btn-secondary" onclick="cmAddFlowNode('process')">+ Step</button>
+      <button class="cm-btn cm-btn-small cm-btn-secondary" onclick="cmAddFlowNode('decision')">+ Decision</button>
+      <button class="cm-btn cm-btn-small cm-btn-secondary" onclick="cmAddFlowNode('start')">+ Start</button>
+      <button class="cm-btn cm-btn-small cm-btn-secondary" onclick="cmAddFlowNode('end')">+ End</button>
+      <button class="cm-btn cm-btn-small cm-btn-secondary" onclick="cmDeleteSelectedNode()" id="cm-delete-btn" style="display: none;">Delete</button>
+      <div class="cm-mode-toggle">
+        <button class="cm-mode-btn active" onclick="cmToggleFlowMode('canvas')">Canvas</button>
+        <button class="cm-mode-btn" onclick="cmToggleFlowMode('step')">Step Builder</button>
+      </div>
+    </div>
+
+    <div class="cm-canvas-container">
+      <div class="cm-canvas-main">
+        <div class="cm-canvas-svg-wrapper">
+          <svg class="cm-canvas-svg" id="cm-canvas-svg"></svg>
+        </div>
+      </div>
+
+      <div class="cm-step-builder" id="cm-step-builder" style="display: none;">
+        <h4>Add Node</h4>
+        <div class="cm-step-form">
+          <div class="cm-form-group">
+            <label class="cm-form-label">Type</label>
+            <select class="cm-form-select" id="cm-step-type">
+              <option value="process">Process Step</option>
+              <option value="decision">Decision Point</option>
+              <option value="start">Start</option>
+              <option value="end">End</option>
+            </select>
+          </div>
+          <div class="cm-form-group">
+            <label class="cm-form-label">Label</label>
+            <input class="cm-form-input" type="text" id="cm-step-label" placeholder="Enter step text">
+          </div>
+          <div class="cm-form-actions">
+            <button class="cm-btn cm-btn-primary cm-btn-small" onclick="cmAddStepBased()">Add</button>
+            <button class="cm-btn cm-btn-secondary cm-btn-small" onclick="cmToggleFlowMode('canvas')">Back</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cm-flowchart-footer">
+      <button class="cm-btn cm-btn-secondary" onclick="cmCloseFlowchartEditor()">Cancel</button>
+      <button class="cm-btn cm-btn-primary" onclick="cmSaveFlowchart()">Save Flowchart</button>
+    </div>
+  </div>
+
+  <!-- MODAL CONTAINER -->
+  <div id="cm-modal-container"></div>
+</div>
+
+
 </div><!-- /main -->
 
 <!-- ═══════════════════ JAVASCRIPT ═══════════════════ -->
@@ -3245,6 +4767,11 @@ function navigate(section, el) {
   if (section === 'projects') {
     pmBackToPipeline();
     pmLoadAll();
+  }
+
+  // Load Change Management data when navigating to it
+  if (section === 'changemanagement') {
+    cmLoadAll();
   }
 }
 
@@ -9881,6 +11408,1223 @@ document.addEventListener('DOMContentLoaded', function() {
   if (document.getElementById('net-demand-list')) {
     renderDemandList();
   }
+
+// ── CHANGE MANAGEMENT MODULE ──
+
+// State management
+let cmData = {
+  initiatives: [],
+  activities: [],
+  flowcharts: []
+};
+
+let cmCurrentInitiative = null;
+let cmCurrentFlowchart = null;
+let cmCurrentView = 'board';
+let cmFlowMode = 'canvas';
+let cmFlowNodes = [];
+let cmFlowEdges = [];
+let cmSelectedNode = null;
+let cmConnectMode = false;
+let cmConnectFrom = null;
+let cmDraggedNode = null;
+let cmDragOffset = { x: 0, y: 0 };
+
+// ── INITIALIZATION ──
+
+async function cmLoadAll() {
+  try {
+    const [initsRes, actsRes, flowRes] = await Promise.all([
+      sb.from('change_initiatives').select('*').order('created_at', { ascending: false }),
+      sb.from('change_activities').select('*').order('sort_order', { ascending: true }),
+      sb.from('change_flowcharts').select('*').order('created_at', { ascending: false })
+    ]);
+
+    cmData.initiatives = initsRes.data || [];
+    cmData.activities = actsRes.data || [];
+    cmData.flowcharts = flowRes.data || [];
+
+    cmRenderStats();
+    cmRenderBoard();
+  } catch (err) {
+    console.error('Error loading change management data:', err);
+  }
+}
+
+// ── STATS RENDERING ──
+
+function cmRenderStats() {
+  const total = cmData.initiatives.length;
+  const inProgress = cmData.initiatives.filter(i => i.status === 'in_progress').length;
+  const completed = cmData.initiatives.filter(i => i.status === 'completed').length;
+  const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+  let totalScore = 0;
+  cmData.initiatives.forEach(i => {
+    const score = (i.awareness_score || 0) + (i.desire_score || 0) + (i.knowledge_score || 0) + (i.ability_score || 0) + (i.reinforcement_score || 0);
+    totalScore += score / 5;
+  });
+  const avgAdkar = total > 0 ? Math.round(totalScore / total) : 0;
+
+  document.getElementById('cm-stat-total').textContent = total;
+  document.getElementById('cm-stat-inprogress').textContent = inProgress;
+  document.getElementById('cm-stat-completion').textContent = completionRate + '%';
+  document.getElementById('cm-stat-adkar').textContent = avgAdkar;
+}
+
+// ── VIEW MANAGEMENT ──
+
+function cmSetView(view) {
+  cmCurrentView = view;
+
+  document.querySelectorAll('.cm-view-btn').forEach(btn => btn.classList.remove('active'));
+  event.target.classList.add('active');
+
+  document.getElementById('cm-board-view').style.display = view === 'board' ? 'block' : 'none';
+  document.getElementById('cm-list-view').style.display = view === 'list' ? 'block' : 'none';
+  document.getElementById('cm-timeline-view').style.display = view === 'timeline' ? 'block' : 'none';
+
+  if (view === 'board') cmRenderBoard();
+  else if (view === 'list') cmRenderList();
+  else if (view === 'timeline') cmRenderTimeline();
+}
+
+// ── BOARD VIEW (KANBAN) ──
+
+function cmRenderBoard() {
+  const phases = ['awareness', 'desire', 'knowledge', 'ability', 'reinforcement'];
+  const board = document.getElementById('cm-board');
+  board.innerHTML = '';
+
+  phases.forEach(phase => {
+    const column = document.createElement('div');
+    column.className = 'cm-phase-column';
+
+    const header = document.createElement('div');
+    header.className = `cm-phase-header ${phase}`;
+    header.textContent = phase.charAt(0).toUpperCase() + phase.slice(1);
+    column.appendChild(header);
+
+    const container = document.createElement('div');
+    container.className = 'cm-cards-container';
+
+    const inits = cmData.initiatives.filter(i => i.current_phase === phase);
+    inits.forEach(init => {
+      const card = cmCreateInitiativeCard(init);
+      container.appendChild(card);
+    });
+
+    column.appendChild(container);
+    board.appendChild(column);
+  });
+}
+
+function cmCreateInitiativeCard(init) {
+  const card = document.createElement('div');
+  card.className = 'cm-init-card';
+  card.onclick = () => cmShowDetail(init.id);
+
+  const title = document.createElement('div');
+  title.className = 'cm-card-title';
+  title.textContent = init.title;
+  card.appendChild(title);
+
+  const meta = document.createElement('div');
+  meta.className = 'cm-card-meta';
+  const owner = document.createElement('span');
+  owner.className = 'cm-card-owner';
+  owner.textContent = init.owner || 'Unassigned';
+  const badge = document.createElement('span');
+  badge.className = `cm-card-badge cm-badge-${init.status}`;
+  badge.textContent = init.status.replace('_', ' ');
+  meta.appendChild(owner);
+  meta.appendChild(badge);
+  card.appendChild(meta);
+
+  const adkar = document.createElement('div');
+  adkar.className = 'cm-adkar-mini';
+  ['awareness', 'desire', 'knowledge', 'ability', 'reinforcement'].forEach(phase => {
+    const seg = document.createElement('div');
+    seg.className = `cm-adkar-segment ${phase}`;
+    const score = init[`${phase}_score`] || 0;
+    if (score > 50) seg.classList.add('filled');
+    adkar.appendChild(seg);
+  });
+  card.appendChild(adkar);
+
+  return card;
+}
+
+// ── LIST VIEW ──
+
+function cmRenderList() {
+  const tbody = document.getElementById('cm-table-body');
+  tbody.innerHTML = '';
+
+  cmData.initiatives.forEach(init => {
+    const row = document.createElement('tr');
+    row.onclick = () => cmShowDetail(init.id);
+    row.innerHTML = `
+      <td>${init.title}</td>
+      <td>${init.owner || 'Unassigned'}</td>
+      <td><span style="text-transform: capitalize;">${init.current_phase}</span></td>
+      <td><span class="cm-card-badge cm-badge-${init.status}" style="margin: 0;">${init.status.replace('_', ' ')}</span></td>
+      <td><span style="text-transform: capitalize;">${init.priority || 'normal'}</span></td>
+      <td>${init.target_date ? new Date(init.target_date).toLocaleDateString() : '—'}</td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+
+// ── TIMELINE VIEW ──
+
+function cmRenderTimeline() {
+  const chart = document.getElementById('cm-timeline-chart');
+  chart.innerHTML = '';
+
+  if (cmData.initiatives.length === 0) {
+    chart.innerHTML = '<p style="color: var(--ies-gray-500); text-align: center; padding: 2rem;">No initiatives to display</p>';
+    return;
+  }
+
+  const minDate = new Date(Math.min(...cmData.initiatives.map(i => new Date(i.start_date || new Date()))));
+  const maxDate = new Date(Math.max(...cmData.initiatives.map(i => new Date(i.target_date || new Date()))));
+  const span = maxDate - minDate || 86400000;
+
+  cmData.initiatives.forEach(init => {
+    const row = document.createElement('div');
+    row.className = 'cm-timeline-row';
+
+    const label = document.createElement('div');
+    label.className = 'cm-timeline-label';
+    label.textContent = init.title;
+    row.appendChild(label);
+
+    const container = document.createElement('div');
+    container.className = 'cm-timeline-bar-container';
+
+    const startDate = new Date(init.start_date || minDate);
+    const endDate = new Date(init.target_date || maxDate);
+    const left = ((startDate - minDate) / span) * 100;
+    const width = ((endDate - startDate) / span) * 100;
+
+    const bar = document.createElement('div');
+    bar.className = 'cm-timeline-bar';
+    bar.style.left = Math.max(0, left) + '%';
+    bar.style.width = Math.max(5, width) + '%';
+    bar.style.background = cmGetInitiativeColor(init);
+    bar.textContent = init.title.substring(0, 10);
+    bar.onclick = (e) => {
+      e.stopPropagation();
+      cmShowDetail(init.id);
+    };
+
+    container.appendChild(bar);
+    row.appendChild(container);
+    chart.appendChild(row);
+  });
+}
+
+function cmGetInitiativeColor(init) {
+  const colors = {
+    awareness: '#6366f1',
+    desire: '#f59e0b',
+    knowledge: '#06b6d4',
+    ability: '#10b981',
+    reinforcement: '#8b5cf6'
+  };
+  return colors[init.current_phase] || '#6366f1';
+}
+
+// ── DETAIL PANEL ──
+
+async function cmShowDetail(id) {
+  cmCurrentInitiative = id;
+  const init = cmData.initiatives.find(i => i.id === id);
+  if (!init) return;
+
+  document.getElementById('cm-detail-title').textContent = init.title;
+  document.getElementById('cm-detail-panel').classList.add('active');
+
+  cmUpdateADKARBars(init);
+  cmRenderDetailOverview(init);
+  cmRenderActivities(init);
+  cmRenderDetailTimeline(init);
+  cmRenderFlowcharts(init);
+
+  document.querySelectorAll('.cm-tab').forEach(tab => {
+    tab.classList.remove('active');
+    tab.onclick = () => cmShowTab(tab.textContent.toLowerCase());
+  });
+  document.querySelector('.cm-tab').classList.add('active');
+  document.getElementById('cm-tab-overview').classList.add('active');
+}
+
+function cmBackToBoard() {
+  document.getElementById('cm-detail-panel').classList.remove('active');
+  cmCurrentInitiative = null;
+}
+
+function cmUpdateADKARBars(init) {
+  const phases = ['awareness', 'desire', 'knowledge', 'ability', 'reinforcement'];
+  phases.forEach(phase => {
+    const score = init[`${phase}_score`] || 0;
+    document.getElementById(`cm-adkar-${phase}`).style.width = score + '%';
+    document.getElementById(`cm-adkar-${phase}-value`).textContent = score + '%';
+  });
+}
+
+// ── DETAIL TAB: OVERVIEW ──
+
+function cmRenderDetailOverview(init) {
+  document.getElementById('cm-overview-description').textContent = init.description || '(No description)';
+  document.getElementById('cm-overview-owner').textContent = init.owner || '—';
+  document.getElementById('cm-overview-category').textContent = init.category || '—';
+  document.getElementById('cm-overview-priority').textContent = (init.priority || 'normal').toUpperCase();
+  document.getElementById('cm-overview-status').textContent = (init.status || 'draft').replace('_', ' ').toUpperCase();
+  document.getElementById('cm-overview-start').textContent = init.start_date ? new Date(init.start_date).toLocaleDateString() : '—';
+  document.getElementById('cm-overview-target').textContent = init.target_date ? new Date(init.target_date).toLocaleDateString() : '—';
+  document.getElementById('cm-overview-completed').textContent = init.completed_date ? new Date(init.completed_date).toLocaleDateString() : '—';
+
+  const impacts = document.getElementById('cm-overview-impacts');
+  impacts.innerHTML = '';
+  if (init.impact_areas && Array.isArray(init.impact_areas)) {
+    init.impact_areas.forEach(area => {
+      const tag = document.createElement('span');
+      tag.className = 'cm-impact-tag';
+      tag.textContent = area;
+      impacts.appendChild(tag);
+    });
+  } else {
+    impacts.innerHTML = '<span style="color: var(--ies-gray-500);">(None specified)</span>';
+  }
+}
+
+// ── DETAIL TAB: ACTIVITIES ──
+
+async function cmRenderActivities(init) {
+  const list = document.getElementById('cm-activities-list');
+  list.innerHTML = '';
+
+  const activities = cmData.activities.filter(a => a.initiative_id === init.id);
+  if (activities.length === 0) {
+    list.innerHTML = '<p style="color: var(--ies-gray-500); text-align: center; padding: 1rem;">No activities yet</p>';
+    return;
+  }
+
+  activities.forEach(act => {
+    const item = document.createElement('div');
+    item.className = 'cm-activity-item';
+
+    const header = document.createElement('div');
+    header.className = 'cm-activity-header';
+
+    const title = document.createElement('div');
+    title.className = 'cm-activity-title';
+    title.textContent = act.title;
+
+    const status = document.createElement('button');
+    status.className = `cm-activity-status cm-status-${act.status}`;
+    status.textContent = act.status.replace('_', ' ');
+    status.onclick = async (e) => {
+      e.stopPropagation();
+      const statuses = ['todo', 'in_progress', 'done', 'blocked'];
+      const current = statuses.indexOf(act.status);
+      const next = statuses[(current + 1) % statuses.length];
+      await cmToggleActivityStatus(act.id, next);
+      cmRenderActivities(init);
+    };
+
+    header.appendChild(title);
+    header.appendChild(status);
+    item.appendChild(header);
+
+    if (act.description) {
+      const desc = document.createElement('p');
+      desc.style.cssText = 'margin: 0.5rem 0; font-size: 0.9rem; color: var(--ies-gray-700);';
+      desc.textContent = act.description;
+      item.appendChild(desc);
+    }
+
+    const phase = document.createElement('span');
+    phase.className = 'cm-activity-phase';
+    phase.textContent = act.adkar_phase || 'general';
+    item.appendChild(phase);
+
+    if (act.due_date) {
+      const due = document.createElement('div');
+      due.className = 'cm-activity-due';
+      due.textContent = 'Due: ' + new Date(act.due_date).toLocaleDateString();
+      item.appendChild(due);
+    }
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'cm-btn cm-btn-small cm-btn-secondary';
+    deleteBtn.style.cssText = 'margin-top: 0.75rem; background: rgba(239, 68, 68, 0.1); color: #dc2626; width: 100%;';
+    deleteBtn.textContent = 'Delete';
+    deleteBtn.onclick = () => cmDeleteActivity(act.id).then(() => cmRenderActivities(init));
+
+    item.appendChild(deleteBtn);
+    list.appendChild(item);
+  });
+}
+
+// ── DETAIL TAB: TIMELINE ──
+
+function cmRenderDetailTimeline(init) {
+  const timeline = document.getElementById('cm-detail-timeline');
+  timeline.innerHTML = '';
+
+  const activities = cmData.activities.filter(a => a.initiative_id === init.id).sort((a, b) => {
+    const phases = ['awareness', 'desire', 'knowledge', 'ability', 'reinforcement'];
+    return phases.indexOf(a.adkar_phase) - phases.indexOf(b.adkar_phase);
+  });
+
+  if (activities.length === 0) {
+    timeline.innerHTML = '<p style="color: var(--ies-gray-500); text-align: center; padding: 1rem;">No timeline activities</p>';
+    return;
+  }
+
+  activities.forEach((act, idx) => {
+    const item = document.createElement('div');
+    item.className = 'cm-timeline-item';
+
+    const dot = document.createElement('div');
+    dot.className = 'cm-timeline-dot';
+    item.appendChild(dot);
+
+    const phase = document.createElement('div');
+    phase.className = 'cm-timeline-phase-label';
+    phase.textContent = act.adkar_phase || 'general';
+    item.appendChild(phase);
+
+    const title = document.createElement('div');
+    title.className = 'cm-timeline-item-title';
+    title.textContent = act.title;
+    item.appendChild(title);
+
+    if (act.due_date) {
+      const date = document.createElement('div');
+      date.style.cssText = 'font-size: 0.8rem; color: var(--ies-gray-600); margin-top: 0.25rem;';
+      date.textContent = new Date(act.due_date).toLocaleDateString();
+      item.appendChild(date);
+    }
+
+    timeline.appendChild(item);
+  });
+}
+
+// ── DETAIL TAB: FLOWCHARTS ──
+
+function cmRenderFlowcharts(init) {
+  const list = document.getElementById('cm-flowcharts-list');
+  list.innerHTML = '';
+
+  const charts = cmData.flowcharts.filter(f => f.initiative_id === init.id);
+  if (charts.length === 0) {
+    list.innerHTML = '<p style="color: var(--ies-gray-500); text-align: center; padding: 1rem;">No flowcharts yet</p>';
+    return;
+  }
+
+  charts.forEach(chart => {
+    const item = document.createElement('div');
+    item.className = 'cm-flowchart-item';
+
+    const info = document.createElement('div');
+    const chartTitle = document.createElement('div');
+    chartTitle.className = 'cm-flowchart-item-title';
+    chartTitle.textContent = chart.title;
+    info.appendChild(chartTitle);
+
+    if (chart.description) {
+      const desc = document.createElement('div');
+      desc.className = 'cm-flowchart-item-desc';
+      desc.textContent = chart.description;
+      info.appendChild(desc);
+    }
+
+    item.appendChild(info);
+
+    const actions = document.createElement('div');
+    actions.className = 'cm-flowchart-actions';
+
+    const editBtn = document.createElement('button');
+    editBtn.className = 'cm-btn cm-btn-small cm-btn-secondary';
+    editBtn.textContent = 'Edit';
+    editBtn.onclick = (e) => {
+      e.stopPropagation();
+      cmShowFlowchartEditor(chart.id);
+    };
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'cm-btn cm-btn-small cm-btn-secondary';
+    deleteBtn.style.background = 'rgba(239, 68, 68, 0.1)';
+    deleteBtn.style.color = '#dc2626';
+    deleteBtn.textContent = 'Delete';
+    deleteBtn.onclick = (e) => {
+      e.stopPropagation();
+      if (confirm('Delete this flowchart?')) {
+        sb.from('change_flowcharts').delete().eq('id', chart.id).then(() => {
+          cmLoadAll();
+          cmShowDetail(init.id);
+        });
+      }
+    };
+
+    actions.appendChild(editBtn);
+    actions.appendChild(deleteBtn);
+    item.appendChild(actions);
+    list.appendChild(item);
+  });
+}
+
+// ── TAB SWITCHING ──
+
+function cmShowTab(tabName) {
+  document.querySelectorAll('.cm-tab-content').forEach(tab => tab.classList.remove('active'));
+  document.querySelectorAll('.cm-tab').forEach(btn => btn.classList.remove('active'));
+
+  const tabMap = { overview: 'overview', activities: 'activities', timeline: 'timeline', flowcharts: 'flowcharts' };
+  const tab = tabMap[tabName] || tabName;
+
+  document.getElementById(`cm-tab-${tab}`).classList.add('active');
+  event.target.classList.add('active');
+}
+
+// ── MODALS ──
+
+function cmShowModal(title, content, actions) {
+  const container = document.getElementById('cm-modal-container');
+  const overlay = document.createElement('div');
+  overlay.className = 'cm-modal-overlay';
+
+  const modal = document.createElement('div');
+  modal.className = 'cm-modal';
+
+  const header = document.createElement('div');
+  header.className = 'cm-modal-header';
+
+  const titleEl = document.createElement('h2');
+  titleEl.className = 'cm-modal-title';
+  titleEl.textContent = title;
+  header.appendChild(titleEl);
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'cm-modal-close';
+  closeBtn.textContent = '×';
+  closeBtn.onclick = () => overlay.remove();
+  header.appendChild(closeBtn);
+
+  modal.appendChild(header);
+
+  const body = document.createElement('div');
+  body.className = 'cm-modal-body';
+  body.innerHTML = content;
+  modal.appendChild(body);
+
+  if (actions) {
+    const footer = document.createElement('div');
+    footer.className = 'cm-modal-footer';
+    footer.innerHTML = actions;
+    modal.appendChild(footer);
+  }
+
+  overlay.appendChild(modal);
+  container.appendChild(overlay);
+
+  return { overlay, modal, closeModal: () => overlay.remove() };
+}
+
+// ── NEW INITIATIVE MODAL ──
+
+async function cmShowNewInitiative() {
+  const content = `
+    <div class="cm-form-field">
+      <label>Initiative Title *</label>
+      <input type="text" id="cm-init-title" placeholder="e.g., Implement New WMS System">
+    </div>
+    <div class="cm-form-field">
+      <label>Description</label>
+      <textarea id="cm-init-desc" placeholder="Describe the change initiative..."></textarea>
+    </div>
+    <div class="cm-form-field inline">
+      <label>Owner</label>
+      <input type="text" id="cm-init-owner" placeholder="Owner name">
+    </div>
+    <div class="cm-form-field inline">
+      <label>Category</label>
+      <select id="cm-init-category">
+        <option value="">Select category</option>
+        <option value="technology">Technology</option>
+        <option value="process">Process</option>
+        <option value="organizational">Organizational</option>
+        <option value="cultural">Cultural</option>
+      </select>
+    </div>
+    <div class="cm-form-field inline">
+      <label>Priority</label>
+      <select id="cm-init-priority">
+        <option value="low">Low</option>
+        <option value="normal" selected>Normal</option>
+        <option value="high">High</option>
+        <option value="critical">Critical</option>
+      </select>
+    </div>
+    <div class="cm-form-field inline">
+      <label>Start Date</label>
+      <input type="date" id="cm-init-start">
+    </div>
+    <div class="cm-form-field inline">
+      <label>Target Date</label>
+      <input type="date" id="cm-init-target">
+    </div>
+    <div class="cm-form-field">
+      <label>Impact Areas (comma separated)</label>
+      <input type="text" id="cm-init-impacts" placeholder="e.g., Operations, IT, Training">
+    </div>
+  `;
+
+  const actions = `
+    <button class="cm-btn cm-btn-secondary" onclick="this.closest('.cm-modal-overlay').remove()">Cancel</button>
+    <button class="cm-btn cm-btn-primary" onclick="cmSaveInitiative()">Create Initiative</button>
+  `;
+
+  cmShowModal('New Initiative', content, actions);
+}
+
+async function cmShowEditInitiative() {
+  const init = cmData.initiatives.find(i => i.id === cmCurrentInitiative);
+  if (!init) return;
+
+  const impacts = (init.impact_areas || []).join(', ');
+
+  const content = `
+    <div class="cm-form-field">
+      <label>Initiative Title *</label>
+      <input type="text" id="cm-init-title" value="${init.title}">
+    </div>
+    <div class="cm-form-field">
+      <label>Description</label>
+      <textarea id="cm-init-desc">${init.description || ''}</textarea>
+    </div>
+    <div class="cm-form-field inline">
+      <label>Owner</label>
+      <input type="text" id="cm-init-owner" value="${init.owner || ''}">
+    </div>
+    <div class="cm-form-field inline">
+      <label>Category</label>
+      <select id="cm-init-category">
+        <option value="">Select category</option>
+        <option value="technology" ${init.category === 'technology' ? 'selected' : ''}>Technology</option>
+        <option value="process" ${init.category === 'process' ? 'selected' : ''}>Process</option>
+        <option value="organizational" ${init.category === 'organizational' ? 'selected' : ''}>Organizational</option>
+        <option value="cultural" ${init.category === 'cultural' ? 'selected' : ''}>Cultural</option>
+      </select>
+    </div>
+    <div class="cm-form-field inline">
+      <label>Priority</label>
+      <select id="cm-init-priority">
+        <option value="low" ${init.priority === 'low' ? 'selected' : ''}>Low</option>
+        <option value="normal" ${init.priority === 'normal' ? 'selected' : ''}>Normal</option>
+        <option value="high" ${init.priority === 'high' ? 'selected' : ''}>High</option>
+        <option value="critical" ${init.priority === 'critical' ? 'selected' : ''}>Critical</option>
+      </select>
+    </div>
+    <div class="cm-form-field inline">
+      <label>Current Phase</label>
+      <select id="cm-init-phase">
+        <option value="awareness" ${init.current_phase === 'awareness' ? 'selected' : ''}>Awareness</option>
+        <option value="desire" ${init.current_phase === 'desire' ? 'selected' : ''}>Desire</option>
+        <option value="knowledge" ${init.current_phase === 'knowledge' ? 'selected' : ''}>Knowledge</option>
+        <option value="ability" ${init.current_phase === 'ability' ? 'selected' : ''}>Ability</option>
+        <option value="reinforcement" ${init.current_phase === 'reinforcement' ? 'selected' : ''}>Reinforcement</option>
+      </select>
+    </div>
+    <div class="cm-form-field inline">
+      <label>Status</label>
+      <select id="cm-init-status">
+        <option value="draft" ${init.status === 'draft' ? 'selected' : ''}>Draft</option>
+        <option value="in_progress" ${init.status === 'in_progress' ? 'selected' : ''}>In Progress</option>
+        <option value="on_track" ${init.status === 'on_track' ? 'selected' : ''}>On Track</option>
+        <option value="at_risk" ${init.status === 'at_risk' ? 'selected' : ''}>At Risk</option>
+        <option value="completed" ${init.status === 'completed' ? 'selected' : ''}>Completed</option>
+      </select>
+    </div>
+    <div class="cm-form-field inline">
+      <label>Start Date</label>
+      <input type="date" id="cm-init-start" value="${init.start_date ? init.start_date.split('T')[0] : ''}">
+    </div>
+    <div class="cm-form-field inline">
+      <label>Target Date</label>
+      <input type="date" id="cm-init-target" value="${init.target_date ? init.target_date.split('T')[0] : ''}">
+    </div>
+    <div class="cm-form-field">
+      <label>Impact Areas (comma separated)</label>
+      <input type="text" id="cm-init-impacts" value="${impacts}">
+    </div>
+    <div class="cm-form-field" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 1rem;">
+      <div>
+        <label>Awareness Score (0-100)</label>
+        <input type="number" id="cm-init-awareness" min="0" max="100" value="${init.awareness_score || 0}">
+      </div>
+      <div>
+        <label>Desire Score (0-100)</label>
+        <input type="number" id="cm-init-desire" min="0" max="100" value="${init.desire_score || 0}">
+      </div>
+      <div>
+        <label>Knowledge Score (0-100)</label>
+        <input type="number" id="cm-init-knowledge" min="0" max="100" value="${init.knowledge_score || 0}">
+      </div>
+      <div>
+        <label>Ability Score (0-100)</label>
+        <input type="number" id="cm-init-ability" min="0" max="100" value="${init.ability_score || 0}">
+      </div>
+      <div>
+        <label>Reinforcement Score (0-100)</label>
+        <input type="number" id="cm-init-reinforcement" min="0" max="100" value="${init.reinforcement_score || 0}">
+      </div>
+    </div>
+  `;
+
+  const actions = `
+    <button class="cm-btn cm-btn-secondary" onclick="this.closest('.cm-modal-overlay').remove()">Cancel</button>
+    <button class="cm-btn cm-btn-primary" onclick="cmSaveInitiative(true)">Update Initiative</button>
+  `;
+
+  cmShowModal('Edit Initiative', content, actions);
+}
+
+async function cmSaveInitiative(isEdit = false) {
+  const title = document.getElementById('cm-init-title').value.trim();
+  if (!title) {
+    alert('Please enter an initiative title');
+    return;
+  }
+
+  const impacts = document.getElementById('cm-init-impacts').value
+    .split(',')
+    .map(i => i.trim())
+    .filter(i => i);
+
+  const data = {
+    title,
+    description: document.getElementById('cm-init-desc').value,
+    owner: document.getElementById('cm-init-owner').value,
+    category: document.getElementById('cm-init-category').value,
+    priority: document.getElementById('cm-init-priority').value,
+    current_phase: document.getElementById('cm-init-phase')?.value || 'awareness',
+    status: document.getElementById('cm-init-status')?.value || 'draft',
+    start_date: document.getElementById('cm-init-start').value,
+    target_date: document.getElementById('cm-init-target').value,
+    impact_areas: impacts,
+    awareness_score: parseInt(document.getElementById('cm-init-awareness')?.value || 0),
+    desire_score: parseInt(document.getElementById('cm-init-desire')?.value || 0),
+    knowledge_score: parseInt(document.getElementById('cm-init-knowledge')?.value || 0),
+    ability_score: parseInt(document.getElementById('cm-init-ability')?.value || 0),
+    reinforcement_score: parseInt(document.getElementById('cm-init-reinforcement')?.value || 0),
+    updated_at: new Date().toISOString()
+  };
+
+  try {
+    if (isEdit) {
+      await sb.from('change_initiatives').update(data).eq('id', cmCurrentInitiative);
+    } else {
+      await sb.from('change_initiatives').insert({
+        ...data,
+        created_at: new Date().toISOString()
+      });
+    }
+
+    document.querySelector('.cm-modal-overlay')?.remove();
+    await cmLoadAll();
+    if (isEdit) cmShowDetail(cmCurrentInitiative);
+  } catch (err) {
+    console.error('Error saving initiative:', err);
+    alert('Error saving initiative');
+  }
+}
+
+// ── DELETE INITIATIVE ──
+
+async function cmDeleteInitiative(id) {
+  if (!confirm('Are you sure? This will delete the initiative and all its activities.')) return;
+
+  try {
+    await sb.from('change_activities').delete().eq('initiative_id', id);
+    await sb.from('change_flowcharts').delete().eq('initiative_id', id);
+    await sb.from('change_initiatives').delete().eq('id', id);
+
+    cmBackToBoard();
+    await cmLoadAll();
+  } catch (err) {
+    console.error('Error deleting initiative:', err);
+    alert('Error deleting initiative');
+  }
+}
+
+// ── NEW ACTIVITY MODAL ──
+
+async function cmShowNewActivity() {
+  const content = `
+    <div class="cm-form-field">
+      <label>Activity Title *</label>
+      <input type="text" id="cm-act-title" placeholder="e.g., Conduct Training Session">
+    </div>
+    <div class="cm-form-field">
+      <label>Description</label>
+      <textarea id="cm-act-desc" placeholder="Activity details..."></textarea>
+    </div>
+    <div class="cm-form-field inline">
+      <label>Owner</label>
+      <input type="text" id="cm-act-owner" placeholder="Owner name">
+    </div>
+    <div class="cm-form-field inline">
+      <label>ADKAR Phase</label>
+      <select id="cm-act-phase">
+        <option value="awareness">Awareness</option>
+        <option value="desire">Desire</option>
+        <option value="knowledge">Knowledge</option>
+        <option value="ability">Ability</option>
+        <option value="reinforcement">Reinforcement</option>
+      </select>
+    </div>
+    <div class="cm-form-field inline">
+      <label>Status</label>
+      <select id="cm-act-status">
+        <option value="todo" selected>To Do</option>
+        <option value="in_progress">In Progress</option>
+        <option value="done">Done</option>
+        <option value="blocked">Blocked</option>
+      </select>
+    </div>
+    <div class="cm-form-field inline">
+      <label>Due Date</label>
+      <input type="date" id="cm-act-due">
+    </div>
+  `;
+
+  const actions = `
+    <button class="cm-btn cm-btn-secondary" onclick="this.closest('.cm-modal-overlay').remove()">Cancel</button>
+    <button class="cm-btn cm-btn-primary" onclick="cmSaveActivity()">Add Activity</button>
+  `;
+
+  cmShowModal('New Activity', content, actions);
+}
+
+async function cmSaveActivity() {
+  const title = document.getElementById('cm-act-title').value.trim();
+  if (!title) {
+    alert('Please enter an activity title');
+    return;
+  }
+
+  const data = {
+    initiative_id: cmCurrentInitiative,
+    title,
+    description: document.getElementById('cm-act-desc').value,
+    owner: document.getElementById('cm-act-owner').value,
+    adkar_phase: document.getElementById('cm-act-phase').value,
+    status: document.getElementById('cm-act-status').value,
+    due_date: document.getElementById('cm-act-due').value,
+    sort_order: cmData.activities.filter(a => a.initiative_id === cmCurrentInitiative).length,
+    created_at: new Date().toISOString()
+  };
+
+  try {
+    await sb.from('change_activities').insert(data);
+    document.querySelector('.cm-modal-overlay')?.remove();
+    await cmLoadAll();
+    cmRenderActivities(cmData.initiatives.find(i => i.id === cmCurrentInitiative));
+  } catch (err) {
+    console.error('Error saving activity:', err);
+    alert('Error saving activity');
+  }
+}
+
+// ── DELETE ACTIVITY ──
+
+async function cmDeleteActivity(id) {
+  try {
+    await sb.from('change_activities').delete().eq('id', id);
+    await cmLoadAll();
+  } catch (err) {
+    console.error('Error deleting activity:', err);
+  }
+}
+
+// ── TOGGLE ACTIVITY STATUS ──
+
+async function cmToggleActivityStatus(id, newStatus) {
+  try {
+    await sb.from('change_activities').update({
+      status: newStatus,
+      completed_date: newStatus === 'done' ? new Date().toISOString() : null
+    }).eq('id', id);
+    await cmLoadAll();
+  } catch (err) {
+    console.error('Error updating activity:', err);
+  }
+}
+
+// ── FLOWCHART EDITOR ──
+
+async function cmShowFlowchartEditor(chartId) {
+  cmCurrentFlowchart = chartId;
+  const chart = cmData.flowcharts.find(f => f.id === chartId);
+
+  if (chart) {
+    cmFlowNodes = JSON.parse(JSON.stringify(chart.chart_data?.nodes || []));
+    cmFlowEdges = JSON.parse(JSON.stringify(chart.chart_data?.edges || []));
+    document.getElementById('cm-flowchart-title').textContent = `Editing: ${chart.title}`;
+  }
+
+  document.getElementById('cm-flowchart-editor').classList.add('active');
+  cmRenderFlowchartSVG();
+}
+
+async function cmNewFlowchart() {
+  cmCurrentFlowchart = null;
+  cmFlowNodes = [];
+  cmFlowEdges = [];
+  cmSelectedNode = null;
+
+  const content = `
+    <div class="cm-form-field">
+      <label>Flowchart Title *</label>
+      <input type="text" id="cm-fc-title" placeholder="e.g., Change Implementation Process">
+    </div>
+    <div class="cm-form-field">
+      <label>Description</label>
+      <textarea id="cm-fc-desc" placeholder="Describe this flowchart..."></textarea>
+    </div>
+  `;
+
+  const actions = `
+    <button class="cm-btn cm-btn-secondary" onclick="this.closest('.cm-modal-overlay').remove()">Cancel</button>
+    <button class="cm-btn cm-btn-primary" onclick="cmStartNewFlowchart()">Create & Edit</button>
+  `;
+
+  cmShowModal('New Flowchart', content, actions);
+}
+
+async function cmStartNewFlowchart() {
+  const title = document.getElementById('cm-fc-title').value.trim();
+  if (!title) {
+    alert('Please enter a flowchart title');
+    return;
+  }
+
+  const desc = document.getElementById('cm-fc-desc').value;
+
+  try {
+    const res = await sb.from('change_flowcharts').insert({
+      initiative_id: cmCurrentInitiative,
+      title,
+      description: desc,
+      chart_data: { nodes: [], edges: [] },
+      created_at: new Date().toISOString()
+    }).select();
+
+    document.querySelector('.cm-modal-overlay')?.remove();
+    cmCurrentFlowchart = res.data[0].id;
+    cmFlowNodes = [];
+    cmFlowEdges = [];
+
+    document.getElementById('cm-flowchart-title').textContent = `Creating: ${title}`;
+    document.getElementById('cm-flowchart-editor').classList.add('active');
+    cmRenderFlowchartSVG();
+  } catch (err) {
+    console.error('Error creating flowchart:', err);
+    alert('Error creating flowchart');
+  }
+}
+
+function cmRenderFlowchartSVG() {
+  const svg = document.getElementById('cm-canvas-svg');
+  svg.innerHTML = '';
+
+  cmFlowEdges.forEach(edge => {
+    const fromNode = cmFlowNodes.find(n => n.id === edge.from);
+    const toNode = cmFlowNodes.find(n => n.id === edge.to);
+
+    if (fromNode && toNode) {
+      const fromX = fromNode.x + 60;
+      const fromY = fromNode.y + 40;
+      const toX = toNode.x + 60;
+      const toY = toNode.y;
+
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      const controlY = (fromY + toY) / 2;
+      path.setAttribute('d', `M ${fromX} ${fromY} C ${fromX} ${controlY}, ${toX} ${controlY}, ${toX} ${toY}`);
+      path.setAttribute('class', 'cm-flow-edge');
+      path.addEventListener('click', (e) => {
+        e.stopPropagation();
+        cmFlowEdges = cmFlowEdges.filter(ed => !(ed.from === edge.from && ed.to === edge.to));
+        cmRenderFlowchartSVG();
+      });
+
+      svg.appendChild(path);
+
+      const arrowhead = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+      arrowhead.setAttribute('points', `${toX},${toY} ${toX - 8},${toY - 12} ${toX + 8},${toY - 12}`);
+      arrowhead.setAttribute('class', 'cm-flow-arrowhead');
+      svg.appendChild(arrowhead);
+    }
+  });
+
+  cmFlowNodes.forEach(node => {
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    g.setAttribute('class', `cm-flow-node ${cmSelectedNode?.id === node.id ? 'selected' : ''}`);
+    g.style.cursor = 'move';
+
+    let shape;
+    if (node.type === 'process') {
+      shape = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      shape.setAttribute('x', node.x);
+      shape.setAttribute('y', node.y);
+      shape.setAttribute('width', '120');
+      shape.setAttribute('height', '80');
+      shape.setAttribute('rx', '4');
+      shape.setAttribute('class', 'cm-flow-node-rect');
+    } else if (node.type === 'decision') {
+      shape = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+      shape.setAttribute('points', `${node.x + 60},${node.y} ${node.x + 120},${node.y + 40} ${node.x + 60},${node.y + 80} ${node.x},${node.y + 40}`);
+      shape.setAttribute('class', 'cm-flow-node-decision');
+    } else if (node.type === 'start' || node.type === 'end') {
+      shape = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      shape.setAttribute('cx', node.x + 60);
+      shape.setAttribute('cy', node.y + 40);
+      shape.setAttribute('r', '40');
+      shape.setAttribute('class', 'cm-flow-node-terminal');
+    }
+
+    if (shape) {
+      g.appendChild(shape);
+
+      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      text.setAttribute('x', node.x + 60);
+      text.setAttribute('y', node.y + 40);
+      text.setAttribute('class', 'cm-flow-node-text');
+      text.textContent = node.label.substring(0, 15);
+      g.appendChild(text);
+
+      g.addEventListener('mousedown', (e) => cmDragStart(e, node.id));
+      g.addEventListener('click', (e) => {
+        e.stopPropagation();
+        cmSelectedNode = node;
+        cmRenderFlowchartSVG();
+        document.getElementById('cm-delete-btn').style.display = 'inline-block';
+      });
+
+      svg.appendChild(g);
+    }
+  });
+
+  svg.addEventListener('mousemove', cmDrag);
+  svg.addEventListener('mouseup', cmDragEnd);
+  svg.addEventListener('click', () => {
+    cmSelectedNode = null;
+    cmRenderFlowchartSVG();
+    document.getElementById('cm-delete-btn').style.display = 'none';
+  });
+}
+
+function cmDragStart(e, nodeId) {
+  cmDraggedNode = nodeId;
+  const svg = document.getElementById('cm-canvas-svg');
+  const rect = svg.getBoundingClientRect();
+  cmDragOffset = {
+    x: e.clientX - rect.left,
+    y: e.clientY - rect.top
+  };
+}
+
+function cmDrag(e) {
+  if (!cmDraggedNode) return;
+
+  const svg = document.getElementById('cm-canvas-svg');
+  const rect = svg.getBoundingClientRect();
+  const node = cmFlowNodes.find(n => n.id === cmDraggedNode);
+
+  if (node) {
+    node.x = Math.max(0, e.clientX - rect.left - 60);
+    node.y = Math.max(0, e.clientY - rect.top - 40);
+    cmRenderFlowchartSVG();
+  }
+}
+
+function cmDragEnd() {
+  cmDraggedNode = null;
+}
+
+function cmAddFlowNode(type) {
+  const id = Math.random().toString(36).substr(2, 9);
+  let label = 'New Step';
+
+  if (type === 'decision') label = 'Decision?';
+  else if (type === 'start') label = 'Start';
+  else if (type === 'end') label = 'End';
+
+  cmFlowNodes.push({
+    id,
+    type,
+    label,
+    x: 100 + (cmFlowNodes.length * 20),
+    y: 100 + (cmFlowNodes.length * 20)
+  });
+
+  cmRenderFlowchartSVG();
+}
+
+function cmAddStepBased() {
+  const type = document.getElementById('cm-step-type').value;
+  const label = document.getElementById('cm-step-label').value.trim();
+
+  if (!label) {
+    alert('Please enter a label');
+    return;
+  }
+
+  cmAddFlowNode(type);
+  const lastNode = cmFlowNodes[cmFlowNodes.length - 1];
+  lastNode.label = label;
+
+  if (cmFlowNodes.length > 1) {
+    const prevNode = cmFlowNodes[cmFlowNodes.length - 2];
+    cmFlowEdges.push({
+      from: prevNode.id,
+      to: lastNode.id
+    });
+  }
+
+  document.getElementById('cm-step-label').value = '';
+  cmRenderFlowchartSVG();
+}
+
+function cmDeleteSelectedNode() {
+  if (!cmSelectedNode) return;
+
+  cmFlowNodes = cmFlowNodes.filter(n => n.id !== cmSelectedNode.id);
+  cmFlowEdges = cmFlowEdges.filter(e => e.from !== cmSelectedNode.id && e.to !== cmSelectedNode.id);
+  cmSelectedNode = null;
+
+  cmRenderFlowchartSVG();
+  document.getElementById('cm-delete-btn').style.display = 'none';
+}
+
+function cmToggleFlowMode(mode) {
+  cmFlowMode = mode;
+  const canvas = document.querySelector('.cm-canvas-main');
+  const builder = document.getElementById('cm-step-builder');
+
+  if (mode === 'canvas') {
+    canvas.style.display = 'flex';
+    builder.style.display = 'none';
+  } else {
+    canvas.style.display = 'none';
+    builder.style.display = 'block';
+  }
+
+  document.querySelectorAll('.cm-mode-btn').forEach(btn => btn.classList.remove('active'));
+  event.target.classList.add('active');
+}
+
+async function cmSaveFlowchart() {
+  const chart = cmData.flowcharts.find(f => f.id === cmCurrentFlowchart);
+  if (!chart) return;
+
+  try {
+    await sb.from('change_flowcharts').update({
+      chart_data: {
+        nodes: cmFlowNodes,
+        edges: cmFlowEdges
+      },
+      updated_at: new Date().toISOString()
+    }).eq('id', cmCurrentFlowchart);
+
+    await cmLoadAll();
+    cmCloseFlowchartEditor();
+    cmShowDetail(cmCurrentInitiative);
+  } catch (err) {
+    console.error('Error saving flowchart:', err);
+    alert('Error saving flowchart');
+  }
+}
+
+function cmCloseFlowchartEditor() {
+  document.getElementById('cm-flowchart-editor').classList.remove('active');
+  cmCurrentFlowchart = null;
+  cmFlowNodes = [];
+  cmFlowEdges = [];
+  cmSelectedNode = null;
+}
+
+// ── ADKAR GUIDE MODAL ──
+
+function cmShowADKARGuide() {
+  const content = `
+    <div style="line-height: 1.8; color: var(--ies-gray-700);">
+      <h3 style="color: var(--ies-navy); margin-top: 0;">ADKAR Change Model</h3>
+      <p>A research-based framework for managing the people side of change. Each phase builds on the previous one.</p>
+
+      <h4 style="color: #6366f1; margin-top: 1.5rem;">1. Awareness</h4>
+      <p>Create awareness of the need for change. Help stakeholders understand why change is necessary and what problems it will solve.</p>
+      <ul style="margin-left: 1rem;">
+        <li>Communicate the business case</li>
+        <li>Share relevant data and trends</li>
+        <li>Involve key influencers</li>
+      </ul>
+
+      <h4 style="color: #f59e0b; margin-top: 1.5rem;">2. Desire</h4>
+      <p>Build desire to support and participate in the change. Help people understand "what's in it for me?"</p>
+      <ul style="margin-left: 1rem;">
+        <li>Show benefits clearly</li>
+        <li>Address concerns openly</li>
+        <li>Create peer networks</li>
+      </ul>
+
+      <h4 style="color: #06b6d4; margin-top: 1.5rem;">3. Knowledge</h4>
+      <p>Provide knowledge on how to change. Ensure people understand what new behaviors are expected.</p>
+      <ul style="margin-left: 1rem;">
+        <li>Deliver targeted training</li>
+        <li>Create reference materials</li>
+        <li>Enable hands-on practice</li>
+      </ul>
+
+      <h4 style="color: #10b981; margin-top: 1.5rem;">4. Ability</h4>
+      <p>Build the ability to implement the change. Ensure people can perform new roles and behaviors.</p>
+      <ul style="margin-left: 1rem;">
+        <li>Provide coaching and support</li>
+        <li>Build communities of practice</li>
+        <li>Track and reinforce progress</li>
+      </ul>
+
+      <h4 style="color: #8b5cf6; margin-top: 1.5rem;">5. Reinforcement</h4>
+      <p>Reinforce the changes to sustain them. Ensure the organization sticks with the new ways of working.</p>
+      <ul style="margin-left: 1rem;">
+        <li>Celebrate wins</li>
+        <li>Adjust systems and processes</li>
+        <li>Measure and communicate results</li>
+      </ul>
+    </div>
+  `;
+
+  const actions = `
+    <button class="cm-btn cm-btn-primary" onclick="this.closest('.cm-modal-overlay').remove()">Close</button>
+  `;
+
+  cmShowModal('ADKAR Change Model', content, actions);
+}
+
+// ── INITIALIZATION ON PAGE LOAD ──
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', cmLoadAll);
+} else {
+  cmLoadAll();
+}
+
+
 });
 </script>
 </body>
