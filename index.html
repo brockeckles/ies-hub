@@ -16241,6 +16241,8 @@ const cmApp = {
 
             // Labor cost adjustments
             document.getElementById('overtimePct').value = p.overtime_pct != null ? p.overtime_pct : 5;
+            document.getElementById('benefitLoadPct').value = p.benefit_load_pct != null ? p.benefit_load_pct : 35;
+            document.getElementById('bonusPct').value = p.bonus_pct != null ? p.bonus_pct : 0;
             document.getElementById('rampWeeksLow').value = p.ramp_weeks_low || 2;
             document.getElementById('rampWeeksMed').value = p.ramp_weeks_med || 4;
             document.getElementById('rampWeeksHigh').value = p.ramp_weeks_high || 8;
@@ -16346,10 +16348,19 @@ const cmApp = {
             const avgRate = marketLabor.length > 0 ? marketLabor.reduce((s, r) => s + parseFloat(r.hourly_rate || 0), 0) / marketLabor.length : 0;
             const totalOccupancy = facilityRate ? (parseFloat(facilityRate.lease_rate_psf_yr || 0) + parseFloat(facilityRate.cam_rate_psf_yr || 0) + parseFloat(facilityRate.tax_rate_psf_yr || 0) + parseFloat(facilityRate.insurance_rate_psf_yr || 0)) : 0;
 
+            // Auto-populate market defaults for OT% and benefit load%
+            const defaultOT = info.default_overtime_pct != null ? info.default_overtime_pct : 5;
+            const avgBenefitLoad = marketLabor.length > 0 ? marketLabor.reduce((s, r) => s + parseFloat(r.default_benefit_load_pct || 35), 0) / marketLabor.length : 35;
+            const avgBonus = marketLabor.length > 0 ? marketLabor.reduce((s, r) => s + parseFloat(r.default_bonus_pct || 0), 0) / marketLabor.length : 0;
+            document.getElementById('overtimePct').value = defaultOT;
+            document.getElementById('benefitLoadPct').value = avgBenefitLoad.toFixed(1);
+            document.getElementById('bonusPct').value = avgBonus.toFixed(1);
+
             card.innerHTML = `
                 <div class="cm-info-card-title">${info.name} — ${info.region || ''} ${info.state || ''}</div>
                 <div>Avg Labor Rate: $${avgRate.toFixed(2)}/hr (${marketLabor.length} roles)</div>
                 <div>Occupancy Cost: $${totalOccupancy.toFixed(2)}/sqft/yr</div>
+                <div>Default OT: ${defaultOT}% · Benefit Load: ${avgBenefitLoad.toFixed(1)}%</div>
             `;
             card.style.display = 'block';
         } else {
@@ -19509,6 +19520,8 @@ const cmApp = {
                 startup_cost: parseFloat(document.getElementById('startupCosts').value) || 0,
                 pricing_model: document.getElementById('pricingModel').value || 'hybrid',
                 overtime_pct: parseFloat(document.getElementById('overtimePct').value) || 5,
+                benefit_load_pct: parseFloat(document.getElementById('benefitLoadPct').value) || 35,
+                bonus_pct: parseFloat(document.getElementById('bonusPct').value) || 0,
                 ramp_weeks_low: parseInt(document.getElementById('rampWeeksLow').value) || 2,
                 ramp_weeks_med: parseInt(document.getElementById('rampWeeksMed').value) || 4,
                 ramp_weeks_high: parseInt(document.getElementById('rampWeeksHigh').value) || 8,
