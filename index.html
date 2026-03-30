@@ -2636,6 +2636,84 @@
             box-shadow: 0 4px 12px rgba(255,58,0,0.2);
         }
 
+        /* Tool Drawer — slides in from right, hosts calculator/network tools inline */
+        .cm-drawer-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.35);
+            z-index: 9998;
+            opacity: 0;
+            transition: opacity 0.25s ease;
+            pointer-events: none;
+        }
+        .cm-drawer-overlay.open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .cm-drawer {
+            position: fixed;
+            top: 0; right: 0; bottom: 0;
+            width: min(860px, 85vw);
+            background: var(--ies-gray-50, #f9fafb);
+            z-index: 9999;
+            transform: translateX(100%);
+            transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+            display: flex;
+            flex-direction: column;
+            box-shadow: -8px 0 32px rgba(0,0,0,0.15);
+        }
+        .cm-drawer.open {
+            transform: translateX(0);
+        }
+        .cm-drawer-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 24px;
+            background: #fff;
+            border-bottom: 1px solid var(--ies-gray-200, #e5e7eb);
+            flex-shrink: 0;
+        }
+        .cm-drawer-header-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--ies-navy, #1c1c2e);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .cm-drawer-close {
+            width: 36px; height: 36px;
+            border-radius: 8px;
+            border: 1px solid var(--ies-gray-200, #e5e7eb);
+            background: #fff;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            color: var(--ies-gray-500, #6b7280);
+            transition: all 0.15s;
+        }
+        .cm-drawer-close:hover {
+            background: var(--ies-gray-100, #f3f4f6);
+            color: var(--ies-navy, #1c1c2e);
+        }
+        .cm-drawer-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+        }
+        .cm-drawer-footer {
+            padding: 16px 24px;
+            background: #fff;
+            border-top: 1px solid var(--ies-gray-200, #e5e7eb);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+
         /* Utility */
         .cm-flex {
             display: flex;
@@ -4976,6 +5054,20 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 
 </div>
 
+<!-- ═══ TOOL DRAWERS (used by Cost Model to embed Calculator & Network tools) ═══ -->
+<div class="cm-drawer-overlay" id="cmDrawerOverlay" onclick="cmApp.closeDrawer()"></div>
+<div class="cm-drawer" id="cmDrawer">
+    <div class="cm-drawer-header">
+        <div class="cm-drawer-header-title" id="cmDrawerTitle"></div>
+        <button class="cm-drawer-close" onclick="cmApp.closeDrawer()" title="Close">&times;</button>
+    </div>
+    <div class="cm-drawer-body" id="cmDrawerBody"></div>
+    <div class="cm-drawer-footer">
+        <div style="font-size:12px;color:var(--ies-gray-500);" id="cmDrawerHint">Values will be imported when you close this panel.</div>
+        <button class="cm-btn cm-btn-primary" style="padding:10px 20px;font-size:13px;border-radius:8px;" onclick="cmApp.closeDrawer()">Done — Import Values</button>
+    </div>
+</div>
+
 <!-- ═══════════ FEEDBACK TRACKING ═══════════ -->
 <div class="section" id="sec-feedback">
   <div class="section-header">
@@ -5199,13 +5291,13 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
                             <div style="font-size:11px;color:var(--ies-gray-500);">Import optimal location & transport cost from network analysis</div>
                         </div>
                     </div>
-                    <button onclick="cmApp.importFromNetwork()" class="cm-btn cm-btn-primary" style="padding:8px 16px;font-size:12px;border-radius:6px;">Import Location</button>
+                    <button onclick="cmApp.openDrawer('network')" class="cm-btn cm-btn-primary" style="padding:8px 16px;font-size:12px;border-radius:6px;">Open Network Tool</button>
                 </div>
                 <div id="netImportPreview" style="display:none;background:rgba(0,71,171,0.04);border-radius:8px;padding:12px 16px;font-size:12px;color:var(--ies-gray-700);">
                     <div id="netImportValues"></div>
                 </div>
                 <div id="netImportEmpty" style="font-size:12px;color:var(--ies-gray-500);padding:8px 0;">
-                    Run the Network Optimization tool first to identify optimal DC locations, then import the recommended market.
+                    Open the network tool to find optimal DC locations, then results auto-import when you close the panel.
                 </div>
             </div>
         </div>
@@ -5437,13 +5529,13 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
                             <div style="font-size:11px;color:var(--ies-gray-500);">Import facility specs from calculator results</div>
                         </div>
                     </div>
-                    <button onclick="cmApp.importFromCalculator()" class="cm-btn cm-btn-primary" style="padding:8px 16px;font-size:12px;border-radius:6px;">Import Values</button>
+                    <button onclick="cmApp.openDrawer('calculator')" class="cm-btn cm-btn-primary" style="padding:8px 16px;font-size:12px;border-radius:6px;">Open Calculator</button>
                 </div>
                 <div id="wscImportPreview" style="display:none;background:rgba(0,71,171,0.04);border-radius:8px;padding:12px 16px;font-size:12px;color:var(--ies-gray-700);">
                     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;" id="wscImportValues"></div>
                 </div>
                 <div id="wscImportEmpty" style="font-size:12px;color:var(--ies-gray-500);padding:8px 0;">
-                    Run the Warehouse Sizing Calculator first, then click Import to pull in SF, dock doors, and clear height.
+                    Open the calculator to size your facility, then values auto-import when you close the panel.
                 </div>
             </div>
 
@@ -18351,7 +18443,97 @@ const cmApp = {
         this.renderVasTable();
     },
 
-    // ── TOOL INTEGRATIONS ──
+    // ── TOOL DRAWER (embeds Calculator & Network tools inside Cost Model) ──
+    _drawerSource: null,       // 'calculator' or 'network'
+    _drawerOrigParent: null,   // where the panel lived before we moved it
+    _drawerOrigDisplay: null,  // original display value
+
+    openDrawer(tool) {
+        var overlay = document.getElementById('cmDrawerOverlay');
+        var drawer  = document.getElementById('cmDrawer');
+        var body    = document.getElementById('cmDrawerBody');
+        var title   = document.getElementById('cmDrawerTitle');
+
+        // Determine which panel to relocate
+        var panelId, label, iconSvg;
+        if (tool === 'calculator') {
+            panelId = 'dt-warehouse';
+            label = 'Warehouse Sizing Calculator';
+            iconSvg = '<svg width="20" height="20" fill="none" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="12" rx="2" stroke="var(--ies-blue)" stroke-width="1.5"/><path d="M3 12h18M8 8v12M16 8v12" stroke="var(--ies-blue)" stroke-width="1.2" opacity=".5"/><path d="M7 5l5-2 5 2" stroke="var(--ies-blue)" stroke-width="1.5" stroke-linecap="round"/></svg>';
+        } else if (tool === 'network') {
+            panelId = 'dt-network';
+            label = 'Network Optimization';
+            iconSvg = '<svg width="20" height="20" fill="none" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5" stroke="var(--ies-blue)" stroke-width="1.5"/><circle cx="18" cy="6" r="2.5" stroke="var(--ies-blue)" stroke-width="1.5"/><circle cx="12" cy="18" r="2.5" stroke="var(--ies-blue)" stroke-width="1.5"/><path d="M8 7l4 9M16 7l-4 9M8.5 6h7" stroke="var(--ies-blue)" stroke-width="1.2" opacity=".5"/></svg>';
+        } else { return; }
+
+        var panel = document.getElementById(panelId);
+        if (!panel) return;
+
+        // Remember where it came from
+        this._drawerSource = tool;
+        this._drawerOrigParent = panel.parentNode;
+        this._drawerOrigDisplay = panel.style.display;
+
+        // Move into drawer body
+        body.innerHTML = '';
+        body.appendChild(panel);
+        panel.style.display = 'block';
+
+        // Set title
+        title.innerHTML = iconSvg + ' ' + label;
+
+        // Fire initial calc so values are current
+        if (tool === 'calculator' && typeof calcWarehouse === 'function') {
+            try { calcWarehouse(); } catch(e) {}
+        }
+        if (tool === 'network' && typeof runNetworkOptimization === 'function') {
+            try { runNetworkOptimization(); } catch(e) {}
+        }
+
+        // Open
+        overlay.classList.add('open');
+        drawer.classList.add('open');
+        document.body.style.overflow = 'hidden';
+
+        // Leaflet maps need invalidateSize after container moves
+        setTimeout(function() {
+            if (tool === 'network' && typeof netMap !== 'undefined' && netMap && netMap.invalidateSize) {
+                netMap.invalidateSize();
+            }
+            if (tool === 'calculator' && typeof mapInstance !== 'undefined' && mapInstance && mapInstance.invalidateSize) {
+                mapInstance.invalidateSize();
+            }
+        }, 350);
+    },
+
+    closeDrawer() {
+        var overlay = document.getElementById('cmDrawerOverlay');
+        var drawer  = document.getElementById('cmDrawer');
+        var body    = document.getElementById('cmDrawerBody');
+
+        // Move panel back to original location
+        if (this._drawerOrigParent && body.firstElementChild) {
+            var panel = body.firstElementChild;
+            panel.style.display = this._drawerOrigDisplay || 'none';
+            this._drawerOrigParent.appendChild(panel);
+        }
+
+        // Import values based on which tool was open
+        if (this._drawerSource === 'calculator') {
+            this.importFromCalculator();
+        } else if (this._drawerSource === 'network') {
+            this.importFromNetwork();
+        }
+
+        // Close
+        overlay.classList.remove('open');
+        drawer.classList.remove('open');
+        document.body.style.overflow = '';
+        this._drawerSource = null;
+        this._drawerOrigParent = null;
+    },
+
+    // ── TOOL INTEGRATIONS (import helpers called by closeDrawer) ──
     importFromCalculator() {
         const sqftEl = document.getElementById('wsc-r-sqft');
         const docksEl = document.getElementById('wsc-r-docks');
