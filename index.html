@@ -2129,6 +2129,48 @@
             position: sticky;
             top: 0;
             max-height: 800px;
+            transition: width 0.25s ease, padding 0.25s ease;
+            flex-shrink: 0;
+        }
+        .cm-sidebar.collapsed {
+            width: 0;
+            padding: 24px 0;
+            overflow: hidden;
+            border-right: none;
+        }
+        .cm-sidebar-toggle {
+            position: absolute;
+            top: 12px;
+            left: 248px;
+            width: 24px;
+            height: 24px;
+            background: var(--ies-gray-50, #f9fafb);
+            border: 1px solid var(--ies-gray-200, #e5e7eb);
+            border-radius: 50%;
+            cursor: pointer;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: left 0.25s ease, transform 0.25s ease;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+        }
+        .cm-sidebar-toggle:hover {
+            background: #fff;
+            border-color: var(--ies-orange);
+        }
+        .cm-sidebar-toggle svg {
+            width: 14px;
+            height: 14px;
+            stroke: var(--ies-gray-500, #6b7280);
+            transition: transform 0.25s ease;
+        }
+        .cm-sidebar.collapsed ~ .cm-content .cm-sidebar-toggle,
+        .cm-container.sidebar-collapsed .cm-sidebar-toggle {
+            left: 4px;
+        }
+        .cm-container.sidebar-collapsed .cm-sidebar-toggle svg {
+            transform: rotate(180deg);
         }
 
         .cm-nav-section {
@@ -2634,6 +2676,81 @@
             background: #e63800;
             transform: translateY(-1px);
             box-shadow: 0 4px 12px rgba(255,58,0,0.2);
+        }
+
+        /* Table Popout Modal — fullscreen view for data-heavy tables */
+        .cm-popout-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.4);
+            z-index: 9996;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            pointer-events: none;
+        }
+        .cm-popout-overlay.open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .cm-popout {
+            position: fixed;
+            top: 3vh; left: 3vw; right: 3vw; bottom: 3vh;
+            background: #fff;
+            border-radius: 14px;
+            z-index: 9997;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 12px 48px rgba(0,0,0,0.2);
+            transform: scale(0.95);
+            opacity: 0;
+            transition: transform 0.2s ease, opacity 0.2s ease;
+            pointer-events: none;
+        }
+        .cm-popout.open {
+            transform: scale(1);
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .cm-popout-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--ies-gray-200, #e5e7eb);
+            flex-shrink: 0;
+        }
+        .cm-popout-header-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--ies-navy, #1c1c2e);
+        }
+        .cm-popout-body {
+            flex: 1;
+            overflow: auto;
+            padding: 24px;
+        }
+        .cm-popout-body table.cm-table {
+            min-width: auto;
+        }
+        .cm-expand-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 10px;
+            border-radius: 6px;
+            border: 1px solid var(--ies-gray-200, #e5e7eb);
+            background: #fff;
+            color: var(--ies-gray-500, #6b7280);
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+            float: right;
+        }
+        .cm-expand-btn:hover {
+            background: var(--ies-gray-50, #f9fafb);
+            color: var(--ies-navy, #1c1c2e);
+            border-color: var(--ies-orange);
         }
 
         /* Tool Drawer — slides in from right, hosts calculator/network tools inline */
@@ -5068,6 +5185,16 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     </div>
 </div>
 
+<!-- ═══ TABLE POPOUT MODAL ═══ -->
+<div class="cm-popout-overlay" id="cmPopoutOverlay" onclick="cmApp.closePopout()"></div>
+<div class="cm-popout" id="cmPopout">
+    <div class="cm-popout-header">
+        <div class="cm-popout-header-title" id="cmPopoutTitle">Table View</div>
+        <button class="cm-drawer-close" onclick="cmApp.closePopout()" title="Close">&times;</button>
+    </div>
+    <div class="cm-popout-body" id="cmPopoutBody"></div>
+</div>
+
 <!-- ═══════════ FEEDBACK TRACKING ═══════════ -->
 <div class="section" id="sec-feedback">
   <div class="section-header">
@@ -5156,8 +5283,11 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     </div>
   </div>
 
-<div class="cm-container" id="editorContainer" style="display:none;">
-    <div class="cm-sidebar">
+<div class="cm-container" id="editorContainer" style="display:none;position:relative;">
+    <button class="cm-sidebar-toggle" id="cmSidebarToggle" onclick="cmApp.toggleSidebar()" title="Toggle sidebar">
+        <svg fill="none" viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <div class="cm-sidebar" id="cmSidebar">
         <div class="cm-nav-section">
             <div class="cm-nav-item active" data-section="setup">
                 <div class="cm-nav-checkmark"></div>
@@ -5618,8 +5748,14 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
             <h2 class="cm-section-title">Labor</h2>
 
             <div class="cm-card" style="overflow:visible;">
-                <div class="cm-card-title">Direct Labor (MOST-Based)</div>
-                <div style="overflow-x:auto;margin:0 -20px;padding:0 20px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <div class="cm-card-title" style="margin-bottom:0;">Direct Labor (MOST-Based)</div>
+                    <button class="cm-expand-btn" onclick="cmApp.openPopout('labor')">
+                        <svg width="13" height="13" fill="none" viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        Expand
+                    </button>
+                </div>
+                <div style="overflow-x:auto;margin:0 -20px;padding:0 20px;margin-top:16px;">
                 <table class="cm-table" style="min-width:1100px;">
                     <thead>
                         <tr>
@@ -17011,16 +17147,36 @@ const cmApp = {
         const w = (opts && opts.w) || 80;
         const step = (opts && opts.step) || (type === 'number' ? '0.01' : undefined);
         const ph = (opts && opts.ph) || '';
+        // Text inputs: update on blur only (avoid re-render stealing focus)
+        // Number inputs: update on input for live calculated column updates
+        const events = type === 'number'
+            ? 'onchange="cmApp._updateLine(\'' + arr + '\',' + idx + ',\'' + key + '\',this.value,\'' + type + '\')" ' +
+              'oninput="cmApp._updateLine(\'' + arr + '\',' + idx + ',\'' + key + '\',this.value,\'' + type + '\')"'
+            : 'onchange="cmApp._updateLine(\'' + arr + '\',' + idx + ',\'' + key + '\',this.value,\'' + type + '\')" ' +
+              'onblur="cmApp._updateLine(\'' + arr + '\',' + idx + ',\'' + key + '\',this.value,\'' + type + '\')"';
         return '<input type="' + type + '" class="cm-input" style="width:' + w + 'px;padding:4px 6px;font-size:12px;" ' +
-            'value="' + (val === 0 && type === 'number' ? '' : (val || '')) + '" placeholder="' + ph + '" ' +
+            'value="' + (val === 0 && type === 'number' ? '' : (val || '').toString().replace(/"/g, '&quot;')) + '" placeholder="' + ph + '" ' +
             (step ? 'step="' + step + '" ' : '') +
-            'onchange="cmApp._updateLine(\'' + arr + '\',' + idx + ',\'' + key + '\',this.value,\'' + type + '\')" ' +
-            'oninput="cmApp._updateLine(\'' + arr + '\',' + idx + ',\'' + key + '\',this.value,\'' + type + '\')">';
+            events + '>';
     },
+    // Fields that trigger calculated column updates (require re-render)
+    _calcFields: {
+        laborLines: ['volume','base_uph','hourly_rate','burden_pct','mhe_equipment_id','it_equipment_id'],
+        indirectLaborLines: ['headcount','hourly_rate','burden_pct'],
+        equipmentLines: ['quantity','monthly_cost','monthly_maintenance'],
+        overheadLines: ['monthly_cost','annual_cost'],
+        vasLines: ['volume','rate','monthly_cost'],
+        startupLines: ['one_time_cost']
+    },
+
     _updateLine(arr, idx, key, val, type) {
         const line = this.projectData[arr][idx];
         if (!line) return;
         line[key] = type === 'number' ? (parseFloat(val) || 0) : val;
+
+        // Check if this field affects calculated columns
+        const needsRender = (this._calcFields[arr] || []).indexOf(key) !== -1;
+
         // Recalculate labor hours if relevant fields changed
         if (arr === 'laborLines' && (key === 'volume' || key === 'adjusted_uph')) {
             line.annual_hours = line.adjusted_uph > 0 ? (line.volume || 0) / line.adjusted_uph : 0;
@@ -17031,19 +17187,22 @@ const cmApp = {
             line.adjusted_uph = line.base_uph * (1 - allowancePct / 100);
             line.annual_hours = line.adjusted_uph > 0 ? (line.volume || 0) / line.adjusted_uph : 0;
         }
-        // Re-render the specific table to update calculated columns
-        if (arr === 'laborLines') { this.renderLaborTable(); this.updateLaborTotals(); }
-        else if (arr === 'indirectLaborLines') { this.renderIndirectLaborTable(); this.updateLaborTotals(); }
-        else if (arr === 'equipmentLines') this.renderEquipmentTable();
-        else if (arr === 'overheadLines') this.renderOverheadTable();
-        else if (arr === 'vasLines') this.renderVasTable();
-        else if (arr === 'startupLines') {
-            if (key === 'one_time_cost') {
-                const termYears = parseFloat(document.getElementById('contractTerm').value) || 3;
-                line.annual_amort = termYears > 0 ? line.one_time_cost / termYears : 0;
-                line.monthly_amort = line.annual_amort / 12;
+
+        // Only re-render if a calculated field changed; text-only edits just save data
+        if (needsRender) {
+            if (arr === 'laborLines') { this.renderLaborTable(); this.updateLaborTotals(); }
+            else if (arr === 'indirectLaborLines') { this.renderIndirectLaborTable(); this.updateLaborTotals(); }
+            else if (arr === 'equipmentLines') this.renderEquipmentTable();
+            else if (arr === 'overheadLines') this.renderOverheadTable();
+            else if (arr === 'vasLines') this.renderVasTable();
+            else if (arr === 'startupLines') {
+                if (key === 'one_time_cost') {
+                    const termYears = parseFloat(document.getElementById('contractTerm').value) || 3;
+                    line.annual_amort = termYears > 0 ? line.one_time_cost / termYears : 0;
+                    line.monthly_amort = line.annual_amort / 12;
+                }
+                this.renderStartupTable();
             }
-            this.renderStartupTable();
         }
         this.markChanged();
     },
@@ -18503,6 +18662,72 @@ const cmApp = {
             volume: 0
         });
         this.renderVasTable();
+    },
+
+    // ── SIDEBAR TOGGLE ──
+    toggleSidebar() {
+        var container = document.getElementById('editorContainer');
+        var sidebar = document.getElementById('cmSidebar');
+        var toggle = document.getElementById('cmSidebarToggle');
+        if (sidebar.classList.contains('collapsed')) {
+            sidebar.classList.remove('collapsed');
+            container.classList.remove('sidebar-collapsed');
+            toggle.style.left = '248px';
+        } else {
+            sidebar.classList.add('collapsed');
+            container.classList.add('sidebar-collapsed');
+            toggle.style.left = '4px';
+        }
+    },
+
+    // ── TABLE POPOUT (fullscreen view for data-heavy tables) ──
+    _popoutSource: null,
+
+    openPopout(tableType) {
+        var overlay = document.getElementById('cmPopoutOverlay');
+        var popout = document.getElementById('cmPopout');
+        var body = document.getElementById('cmPopoutBody');
+        var title = document.getElementById('cmPopoutTitle');
+        this._popoutSource = tableType;
+
+        if (tableType === 'labor') {
+            title.textContent = 'Direct Labor (MOST-Based) — Expanded View';
+            // Clone the labor table into the popout (not move, so original stays)
+            var origTable = document.getElementById('laborTable').closest('table');
+            var clone = origTable.cloneNode(true);
+            clone.style.minWidth = 'auto';
+            clone.id = 'laborTablePopout';
+            body.innerHTML = '';
+            body.appendChild(clone);
+            // Add the "Add Row" button
+            var btnDiv = document.createElement('div');
+            btnDiv.style.cssText = 'margin-top:16px;';
+            btnDiv.innerHTML = '<button class="cm-btn cm-btn-secondary" onclick="cmApp.addLaborRow();cmApp.refreshPopout();">+ Add Labor Row</button>';
+            body.appendChild(btnDiv);
+        }
+
+        overlay.classList.add('open');
+        popout.classList.add('open');
+        document.body.style.overflow = 'hidden';
+    },
+
+    refreshPopout() {
+        if (this._popoutSource) {
+            this.closePopout();
+            this.openPopout(this._popoutSource);
+        }
+    },
+
+    closePopout() {
+        var overlay = document.getElementById('cmPopoutOverlay');
+        var popout = document.getElementById('cmPopout');
+        overlay.classList.remove('open');
+        popout.classList.remove('open');
+        document.body.style.overflow = '';
+        this._popoutSource = null;
+        // Re-render the original table to reflect any changes
+        this.renderLaborTable();
+        this.updateLaborTotals();
     },
 
     // ── TOOL DRAWER (embeds Calculator & Network tools inside Cost Model) ──
