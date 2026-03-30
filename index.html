@@ -5617,9 +5617,10 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         <div class="cm-section" id="laborSection">
             <h2 class="cm-section-title">Labor</h2>
 
-            <div class="cm-card">
+            <div class="cm-card" style="overflow:visible;">
                 <div class="cm-card-title">Direct Labor (MOST-Based)</div>
-                <table class="cm-table">
+                <div style="overflow-x:auto;margin:0 -20px;padding:0 20px;">
+                <table class="cm-table" style="min-width:1100px;">
                     <thead>
                         <tr>
                             <th>Activity</th>
@@ -5640,6 +5641,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
                     <tbody id="laborTable">
                     </tbody>
                 </table>
+                </div>
                 <div class="cm-mt-16">
                     <button class="cm-btn cm-btn-secondary" onclick="cmApp.addLaborRow()">+ Add Labor Row</button>
                 </div>
