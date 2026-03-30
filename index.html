@@ -157,8 +157,8 @@
   .section { display: none; }
   .section.active { display: block; }
   .section-header {
-    display: flex; align-items: center; justify-content: space-between;
-    margin-bottom: var(--sp-32);
+    display: flex; align-items: flex-start; justify-content: space-between;
+    margin-bottom: var(--sp-32); flex-wrap: nowrap; gap: 16px;
   }
   .section-title { font-size: 28px; font-weight: 800; color: var(--ies-navy); letter-spacing: -0.5px; }
   .section-subtitle { font-size: 13px; color: var(--ies-gray-600); margin-top: var(--sp-8); }
@@ -5239,14 +5239,14 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div class="section-title">Cost Model Builder <span style="font-size:12px;background:var(--ies-orange);color:#fff;padding:3px 8px;border-radius:4px;margin-left:8px;font-weight:700;vertical-align:middle;">BETA</span></div>
       <div class="section-subtitle">Build detailed operational cost models for 3PL warehouse proposals</div>
     </div>
-    <div id="topbarControls" style="display:none;align-items:center;gap:12px;margin-top:12px;">
+    <div id="topbarControls" style="display:none;align-items:center;gap:12px;flex-shrink:0;">
       <span class="cm-label">Project:</span>
       <select id="projectSelector" class="cm-select" style="min-width:180px;">
         <option value="">-- New Model --</option>
       </select>
-      <button id="newModelBtn" class="cm-btn cm-btn-primary cm-btn-sm">+ New Model</button>
-      <span class="cm-status-badge cm-status-draft" id="statusBadge" style="display:none;">Draft</span>
-      <span class="cm-save-indicator" id="saveIndicator" style="margin-left:auto;"></span>
+      <button id="newModelBtn" class="cm-btn cm-btn-primary cm-btn-sm" style="white-space:nowrap;">+ New Model</button>
+      <span class="cm-status-badge cm-status-draft" id="statusBadge" style="min-width:60px;text-align:center;">Draft</span>
+      <span class="cm-save-indicator" id="saveIndicator" style="min-width:70px;text-align:right;"></span>
     </div>
   </div>
 
@@ -16164,7 +16164,7 @@ const cmApp = {
             const badge = document.getElementById('statusBadge');
             badge.className = 'cm-status-badge ' + (statusMap[p.status] || 'cm-status-draft');
             badge.textContent = (p.status || 'draft').toUpperCase();
-            badge.style.display = 'inline-block';
+            badge.style.visibility = 'visible';
 
             this.switchSection('setup');
 
@@ -17161,7 +17161,7 @@ const cmApp = {
     },
     // Fields that trigger calculated column updates (require re-render)
     _calcFields: {
-        laborLines: ['volume','base_uph','hourly_rate','burden_pct','mhe_equipment_id','it_equipment_id'],
+        laborLines: ['volume','base_uph','hourly_rate','burden_pct','mhe_equipment_id','it_equipment_id','most_template_id'],
         indirectLaborLines: ['headcount','hourly_rate','burden_pct'],
         equipmentLines: ['quantity','monthly_cost','monthly_maintenance'],
         overheadLines: ['monthly_cost','annual_cost'],
@@ -17207,6 +17207,58 @@ const cmApp = {
         this.markChanged();
     },
 
+    _mostSelectHtml(idx, currentId) {
+        var templates = (this.refData.mostTemplates || []).filter(function(t) { return t.is_active !== false; });
+        var html = '<select class="cm-input" style="width:130px;padding:4px 6px;font-size:11px;" onchange="cmApp._updateLine(\'laborLines\',' + idx + ',\'most_template_id\',this.value,\'text\');cmApp._applyMostTemplate(' + idx + ',this.value)">';
+        html += '<option value="">— Select —</option>';
+        // Group by process_area
+        var groups = {};
+        templates.forEach(function(t) {
+            var area = t.process_area || 'Other';
+            if (!groups[area]) groups[area] = [];
+            groups[area].push(t);
+        });
+        var areaOrder = ['Receiving','Putaway','Replenishment','Picking','Packing','Shipping','Returns','VAS'];
+        var sortedKeys = areaOrder.filter(function(k) { return groups[k]; });
+        Object.keys(groups).forEach(function(k) { if (sortedKeys.indexOf(k) === -1) sortedKeys.push(k); });
+        sortedKeys.forEach(function(area) {
+            html += '<optgroup label="' + area + '">';
+            groups[area].forEach(function(t) {
+                var selected = (String(t.id) === String(currentId)) ? ' selected' : '';
+                var name = t.wms_transaction || t.activity_name || 'Template ' + t.id;
+                if (name.length > 30) name = name.substring(0, 28) + '…';
+                html += '<option value="' + t.id + '"' + selected + '>' + name + '</option>';
+            });
+            html += '</optgroup>';
+        });
+        html += '</select>';
+        return html;
+    },
+
+    _applyMostTemplate(idx, templateId) {
+        var line = this.projectData.laborLines[idx];
+        if (!templateId) {
+            line.most_template_id = '';
+            line.most_template_name = '';
+            return;
+        }
+        var template = (this.refData.mostTemplates || []).find(function(t) { return String(t.id) === String(templateId); });
+        if (template) {
+            line.most_template_id = template.id;
+            line.most_template_name = template.wms_transaction || template.activity_name || '';
+            // Auto-fill activity name if blank
+            if (!line.activity_name) {
+                line.activity_name = template.activity_name || template.wms_transaction || '';
+            }
+            // Auto-fill base UPH from template if available and current is 0
+            if ((!line.base_uph || line.base_uph === 0) && template.standard_uph) {
+                line.base_uph = template.standard_uph;
+            }
+        }
+        this.renderLaborTable();
+        this.updateLaborTotals();
+    },
+
     _equipSelectHtml(category, idx, currentId, fieldKey) {
         var catalog = (this.refData.equipmentCatalog || []).filter(function(e) { return e.category === category; });
         var html = '<select class="cm-input" style="width:120px;padding:4px 6px;font-size:11px;" onchange="cmApp._updateLine(\'laborLines\',' + idx + ',\'' + fieldKey + '\',this.value,\'text\')">';
@@ -17242,7 +17294,7 @@ const cmApp = {
             const row = document.createElement('tr');
             row.innerHTML =
                 '<td>' + this._cmInp('text', line.activity_name, idx, 'laborLines', 'activity_name', {w:100, ph:'Activity'}) + '</td>' +
-                '<td>' + this._cmInp('text', line.most_template_name, idx, 'laborLines', 'most_template_name', {w:90, ph:'Template'}) + '</td>' +
+                '<td>' + this._mostSelectHtml(idx, line.most_template_id) + '</td>' +
                 '<td>' + this._cmInp('number', line.volume, idx, 'laborLines', 'volume', {w:70, step:'1', ph:'Annual'}) + '</td>' +
                 '<td>' + this._cmInp('number', line.base_uph, idx, 'laborLines', 'base_uph', {w:55, step:'1', ph:'UPH'}) + '</td>' +
                 '<td class="cm-table-number">' + (line.adjusted_uph || 0).toFixed(0) + '</td>' +
@@ -18586,6 +18638,7 @@ const cmApp = {
         this.projectData.laborLines.push({
             activity_name: '',
             most_template_name: '',
+            most_template_id: '',
             volume: 0,
             base_uph: 0,
             adjusted_uph: 0,
