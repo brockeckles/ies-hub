@@ -5589,189 +5589,44 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         <!-- Volumes Section -->
         <div class="cm-section" id="volumesSection">
             <h2 class="cm-section-title">Volumes & Order Profile</h2>
-            <div class="cm-card">
-                <div class="cm-card-title">Receiving</div>
-                <div class="cm-input-grid cols-2">
-                <div class="cm-field-group">
-                    <label class="cm-field-label">Pallets Received</label>
-                    <div class="cm-input-group">
-                        <div class="cm-input-group-item">
-                            <input type="number" id="palletsReceived" class="cm-input" placeholder="0" min="0">
-                            <span class="cm-input-group-label">Annual</span>
-                        </div>
-                        <div class="cm-input-group-item" style="flex:0;">
-                            <div id="palletsReceivedDaily" class="cm-text-right">0/day</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="cm-field-group">
-                    <label class="cm-field-label">Cases Received</label>
-                    <div class="cm-input-group">
-                        <div class="cm-input-group-item">
-                            <input type="number" id="casesReceived" class="cm-input" placeholder="0" min="0">
-                            <span class="cm-input-group-label">Annual</span>
-                        </div>
-                        <div class="cm-input-group-item" style="flex:0;">
-                            <div id="casesReceivedDaily" class="cm-text-right">0/day</div>
-                        </div>
-                    </div>
-                </div>
-                </div>
+
+            <!-- Hidden legacy volume inputs for backward compatibility -->
+            <div id="cmVolumeLegacyFields" style="display:none;">
+                <input type="number" id="palletsReceived" value="0">
+                <input type="number" id="casesReceived" value="0">
+                <input type="number" id="palletsPutaway" value="0">
+                <input type="number" id="casesPutaway" value="0">
+                <input type="number" id="replenishments" value="0">
+                <input type="number" id="eachesPicked" value="0">
+                <input type="number" id="casesPicked" value="0">
+                <input type="number" id="palletsPicked" value="0">
+                <input type="number" id="ordersPacked" value="0">
+                <input type="number" id="palletsShipped" value="0">
+                <input type="number" id="returnsProcessed" value="0">
+                <input type="number" id="vasUnits" value="0">
+                <!-- Daily displays (kept for compatibility) -->
+                <span id="palletsReceivedDaily"></span>
+                <span id="casesReceivedDaily"></span>
+                <span id="palletsPutawayDaily"></span>
+                <span id="casesPutawayDaily"></span>
+                <span id="replenishmentsDaily"></span>
+                <span id="eachesPickedDaily"></span>
+                <span id="casesPickedDaily"></span>
+                <span id="palletsPickedDaily"></span>
+                <span id="ordersPackedDaily"></span>
+                <span id="palletsShippedDaily"></span>
+                <span id="returnsProcessedDaily"></span>
+                <span id="vasUnitsDaily"></span>
             </div>
 
             <div class="cm-card">
-                <div class="cm-card-title">Putaway</div>
-                <div class="cm-input-grid cols-2">
-                <div class="cm-field-group">
-                    <label class="cm-field-label">Pallets Putaway</label>
-                    <div class="cm-input-group">
-                        <div class="cm-input-group-item">
-                            <input type="number" id="palletsPutaway" class="cm-input" placeholder="0" min="0">
-                            <span class="cm-input-group-label">Annual</span>
-                        </div>
-                        <div class="cm-input-group-item" style="flex:0;">
-                            <div id="palletsPutawayDaily" class="cm-text-right">0/day</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="cm-field-group">
-                    <label class="cm-field-label">Cases Putaway</label>
-                    <div class="cm-input-group">
-                        <div class="cm-input-group-item">
-                            <input type="number" id="casesPutaway" class="cm-input" placeholder="0" min="0">
-                            <span class="cm-input-group-label">Annual</span>
-                        </div>
-                        <div class="cm-input-group-item" style="flex:0;">
-                            <div id="casesPutawayDaily" class="cm-text-right">0/day</div>
-                        </div>
-                    </div>
-                </div>
-                </div>
-            </div>
-
-            <div class="cm-card">
-                <div class="cm-card-title">Replenishment</div>
-                <div class="cm-field-group">
-                    <label class="cm-field-label">Replenishments</label>
-                    <div class="cm-input-group">
-                        <div class="cm-input-group-item">
-                            <input type="number" id="replenishments" class="cm-input" placeholder="0" min="0">
-                            <span class="cm-input-group-label">Annual</span>
-                        </div>
-                        <div class="cm-input-group-item" style="flex:0;">
-                            <div id="replenishmentsDaily" class="cm-text-right">0/day</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="cm-card">
-                <div class="cm-card-title">Picking</div>
-                <div class="cm-input-grid cols-3">
-                <div class="cm-field-group">
-                    <label class="cm-field-label">Eaches Picked</label>
-                    <div class="cm-input-group">
-                        <div class="cm-input-group-item">
-                            <input type="number" id="eachesPicked" class="cm-input" placeholder="0" min="0">
-                            <span class="cm-input-group-label">Annual</span>
-                        </div>
-                        <div class="cm-input-group-item" style="flex:0;">
-                            <div id="eachesPickedDaily" class="cm-text-right">0/day</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="cm-field-group">
-                    <label class="cm-field-label">Cases Picked</label>
-                    <div class="cm-input-group">
-                        <div class="cm-input-group-item">
-                            <input type="number" id="casesPicked" class="cm-input" placeholder="0" min="0">
-                            <span class="cm-input-group-label">Annual</span>
-                        </div>
-                        <div class="cm-input-group-item" style="flex:0;">
-                            <div id="casesPickedDaily" class="cm-text-right">0/day</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="cm-field-group">
-                    <label class="cm-field-label">Pallets Picked</label>
-                    <div class="cm-input-group">
-                        <div class="cm-input-group-item">
-                            <input type="number" id="palletsPicked" class="cm-input" placeholder="0" min="0">
-                            <span class="cm-input-group-label">Annual</span>
-                        </div>
-                        <div class="cm-input-group-item" style="flex:0;">
-                            <div id="palletsPickedDaily" class="cm-text-right">0/day</div>
-                        </div>
-                    </div>
-                </div>
-                </div>
-            </div>
-
-            <div class="cm-card">
-                <div class="cm-card-title">Packing & Shipping</div>
-                <div class="cm-input-grid cols-2">
-                <div class="cm-field-group">
-                    <label class="cm-field-label">Orders Packed</label>
-                    <div class="cm-input-group">
-                        <div class="cm-input-group-item">
-                            <input type="number" id="ordersPacked" class="cm-input" placeholder="0" min="0">
-                            <span class="cm-input-group-label">Annual</span>
-                        </div>
-                        <div class="cm-input-group-item" style="flex:0;">
-                            <div id="ordersPackedDaily" class="cm-text-right">0/day</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="cm-field-group">
-                    <label class="cm-field-label">Pallets Shipped</label>
-                    <div class="cm-input-group">
-                        <div class="cm-input-group-item">
-                            <input type="number" id="palletsShipped" class="cm-input" placeholder="0" min="0">
-                            <span class="cm-input-group-label">Annual</span>
-                        </div>
-                        <div class="cm-input-group-item" style="flex:0;">
-                            <div id="palletsShippedDaily" class="cm-text-right">0/day</div>
-                        </div>
-                    </div>
-                </div>
-                </div>
-            </div>
-
-            <div class="cm-card">
-                <div class="cm-card-title">Other</div>
-                <div class="cm-field-group">
-                    <label class="cm-field-label">Returns Processed</label>
-                    <div class="cm-input-group">
-                        <div class="cm-input-group-item">
-                            <input type="number" id="returnsProcessed" class="cm-input" placeholder="0" min="0">
-                            <span class="cm-input-group-label">Annual</span>
-                        </div>
-                        <div class="cm-input-group-item" style="flex:0;">
-                            <div id="returnsProcessedDaily" class="cm-text-right">0/day</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="cm-field-group">
-                    <label class="cm-field-label">VAS Units</label>
-                    <div class="cm-input-group">
-                        <div class="cm-input-group-item">
-                            <input type="number" id="vasUnits" class="cm-input" placeholder="0" min="0">
-                            <span class="cm-input-group-label">Annual</span>
-                        </div>
-                        <div class="cm-input-group-item" style="flex:0;">
-                            <div id="vasUnitsDaily" class="cm-text-right">0/day</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="cm-card">
-                <div class="cm-card-title">Named Volume Lines</div>
+                <div class="cm-card-title">Volume Lines</div>
                 <p style="font-size:12px;color:var(--ies-gray-400);margin-bottom:12px;">Define named volume lines that can be linked to labor activities. Each line auto-calculates daily volume based on operating days.</p>
                 <div style="overflow-x:auto;">
                     <table class="cm-table" id="volumeLinesTable">
                         <thead>
                             <tr>
+                                <th>Process Area</th>
                                 <th>Name</th>
                                 <th>UOM</th>
                                 <th style="text-align:right;">Annual Volume</th>
@@ -5783,8 +5638,9 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
                         </tbody>
                     </table>
                 </div>
-                <div class="cm-mt-8" style="margin-top:12px;">
+                <div class="cm-mt-8" style="margin-top:12px;display:flex;gap:8px;">
                     <button class="cm-btn cm-btn-secondary" onclick="cmApp.addVolumeLine()">+ Add Volume Line</button>
+                    <button class="cm-btn cm-btn-secondary" onclick="cmApp.preseedVolumeLines()">⟳ Reset to Defaults</button>
                 </div>
             </div>
 
@@ -16358,6 +16214,7 @@ const cmApp = {
             pricingBuckets: [],
             volumeLines: []
         };
+        this.preseedVolumeLines();
         this.initDefaultBuckets();
 
         // Clear all inputs
@@ -16394,6 +16251,37 @@ const cmApp = {
 
             // Load project data
             await this.loadProjectData(id);
+
+            // Migrate legacy volumes to volume lines if needed
+            if (this.projectData.volumeLines.length === 0) {
+                const legacyMap = [
+                    { name: 'Pallets Received', uom: 'pallet', process_area: 'Receiving', field: 'vol_pallets_received' },
+                    { name: 'Cases Received', uom: 'case', process_area: 'Receiving', field: 'vol_cases_received' },
+                    { name: 'Pallets Putaway', uom: 'pallet', process_area: 'Putaway', field: 'vol_pallets_putaway' },
+                    { name: 'Cases Putaway', uom: 'case', process_area: 'Putaway', field: 'vol_cases_putaway' },
+                    { name: 'Replenishments', uom: 'pallet', process_area: 'Replenishment', field: 'vol_replenishments' },
+                    { name: 'Eaches Picked', uom: 'each', process_area: 'Picking', field: 'vol_eaches_picked' },
+                    { name: 'Cases Picked', uom: 'case', process_area: 'Picking', field: 'vol_cases_picked' },
+                    { name: 'Pallets Picked', uom: 'pallet', process_area: 'Picking', field: 'vol_pallets_picked' },
+                    { name: 'Orders Packed', uom: 'order', process_area: 'Packing', field: 'vol_orders_packed' },
+                    { name: 'Pallets Shipped', uom: 'pallet', process_area: 'Shipping', field: 'vol_pallets_shipped' },
+                    { name: 'Returns Processed', uom: 'each', process_area: 'Returns', field: 'vol_returns_processed' },
+                    { name: 'VAS Units', uom: 'unit', process_area: 'VAS', field: 'vol_vas_units' }
+                ];
+                legacyMap.forEach(m => {
+                    const val = parseFloat(p[m.field]) || 0;
+                    if (val > 0) {
+                        this.projectData.volumeLines.push({
+                            name: m.name, uom: m.uom, process_area: m.process_area,
+                            annual_volume: val, daily_volume: 0
+                        });
+                    }
+                });
+                // If no volumes migrated, seed with defaults
+                if (this.projectData.volumeLines.length === 0) {
+                    this.preseedVolumeLines();
+                }
+            }
 
             // Populate form
             document.getElementById('modelName').value = p.name || '';
@@ -17608,6 +17496,10 @@ const cmApp = {
             else if (arr === 'equipmentLines') this.renderEquipmentTable();
             else if (arr === 'overheadLines') this.renderOverheadTable();
             else if (arr === 'vasLines') this.renderVasTable();
+            else if (arr === 'volumeLines') {
+                this.renderVolumeLines();
+                this.syncVolumesToLegacy();
+            }
             else if (arr === 'startupLines') {
                 if (key === 'one_time_cost') {
                     const termYears = parseFloat(document.getElementById('contractTerm').value) || 3;
@@ -19353,6 +19245,7 @@ const cmApp = {
     // =====================================================================
     addVolumeLine() {
         this.projectData.volumeLines.push({
+            process_area: '',
             name: '',
             uom: 'each',
             annual_volume: 0,
@@ -19367,12 +19260,24 @@ const cmApp = {
         if (!tbody) return;
         tbody.innerHTML = '';
         const operatingDays = this.getOperatingDays();
+        const processAreas = ['Receiving', 'Putaway', 'Replenishment', 'Picking', 'Packing', 'Shipping', 'Returns', 'VAS'];
 
         this.projectData.volumeLines.forEach((line, idx) => {
             const dailyVolume = operatingDays > 0 ? (line.annual_volume || 0) / operatingDays : 0;
             line.daily_volume = dailyVolume;
             const row = document.createElement('tr');
+
+            // Build process area select
+            let processAreaHtml = '<select class="cm-input" style="width:120px;padding:4px 4px;font-size:11px;" onchange="cmApp._updateLine(\'volumeLines\',' + idx + ',\'process_area\',this.value,\'text\'); cmApp.syncVolumesToLegacy(); cmApp.markChanged();">';
+            processAreaHtml += '<option value=""' + (!line.process_area ? ' selected' : '') + '>(Select)</option>';
+            processAreas.forEach(pa => {
+                const sel = pa === line.process_area ? ' selected' : '';
+                processAreaHtml += '<option value="' + pa + '"' + sel + '>' + pa + '</option>';
+            });
+            processAreaHtml += '</select>';
+
             row.innerHTML =
+                '<td>' + processAreaHtml + '</td>' +
                 '<td>' + this._cmInp('text', line.name, idx, 'volumeLines', 'name', {w:150, ph:'e.g., Cases Shipped'}) + '</td>' +
                 '<td>' + this._volumeUomSelectHtml(idx, line.uom) + '</td>' +
                 '<td class="cm-table-number">' + this._cmInp('number', line.annual_volume, idx, 'volumeLines', 'annual_volume', {w:100, ph:'0'}) + '</td>' +
@@ -19380,6 +19285,9 @@ const cmApp = {
                 '<td class="cm-table-actions"><button class="cm-btn-small cm-btn-small-danger" onclick="cmApp.deleteVolumeLine(' + idx + ')">Delete</button></td>';
             tbody.appendChild(row);
         });
+
+        // Sync to legacy fields at end of render
+        this.syncVolumesToLegacy();
     },
 
     deleteVolumeLine(idx) {
@@ -19387,6 +19295,64 @@ const cmApp = {
         this.renderVolumeLines();
         this.renderLaborTable(); // Re-render labor table to update volume source dropdowns
         this.markChanged();
+    },
+
+    preseedVolumeLines() {
+        // Clear and populate with standard 12 default volume lines
+        this.projectData.volumeLines = [
+            { process_area: 'Receiving', name: 'Pallets Received', uom: 'pallet', annual_volume: 0, daily_volume: 0 },
+            { process_area: 'Receiving', name: 'Cases Received', uom: 'case', annual_volume: 0, daily_volume: 0 },
+            { process_area: 'Putaway', name: 'Pallets Putaway', uom: 'pallet', annual_volume: 0, daily_volume: 0 },
+            { process_area: 'Putaway', name: 'Cases Putaway', uom: 'case', annual_volume: 0, daily_volume: 0 },
+            { process_area: 'Replenishment', name: 'Replenishments', uom: 'pallet', annual_volume: 0, daily_volume: 0 },
+            { process_area: 'Picking', name: 'Eaches Picked', uom: 'each', annual_volume: 0, daily_volume: 0 },
+            { process_area: 'Picking', name: 'Cases Picked', uom: 'case', annual_volume: 0, daily_volume: 0 },
+            { process_area: 'Picking', name: 'Pallets Picked', uom: 'pallet', annual_volume: 0, daily_volume: 0 },
+            { process_area: 'Packing', name: 'Orders Packed', uom: 'order', annual_volume: 0, daily_volume: 0 },
+            { process_area: 'Shipping', name: 'Pallets Shipped', uom: 'pallet', annual_volume: 0, daily_volume: 0 },
+            { process_area: 'Returns', name: 'Returns Processed', uom: 'each', annual_volume: 0, daily_volume: 0 },
+            { process_area: 'VAS', name: 'VAS Units', uom: 'unit', annual_volume: 0, daily_volume: 0 }
+        ];
+        this.renderVolumeLines();
+        this.markChanged();
+    },
+
+    syncVolumesToLegacy() {
+        // Map volume line names to legacy field IDs
+        const map = {
+            'Pallets Received': 'palletsReceived',
+            'Cases Received': 'casesReceived',
+            'Pallets Putaway': 'palletsPutaway',
+            'Cases Putaway': 'casesPutaway',
+            'Replenishments': 'replenishments',
+            'Eaches Picked': 'eachesPicked',
+            'Cases Picked': 'casesPicked',
+            'Pallets Picked': 'palletsPicked',
+            'Orders Packed': 'ordersPacked',
+            'Pallets Shipped': 'palletsShipped',
+            'Returns Processed': 'returnsProcessed',
+            'VAS Units': 'vasUnits'
+        };
+
+        // Reset all to 0
+        Object.values(map).forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = 0;
+        });
+
+        // Set from volume lines
+        this.projectData.volumeLines.forEach(vl => {
+            const fieldId = map[vl.name];
+            if (fieldId) {
+                const el = document.getElementById(fieldId);
+                if (el) el.value = vl.annual_volume || 0;
+            }
+        });
+
+        // Trigger downstream updates
+        this.updateVolumeDailyValues();
+        this.updateOrderMetrics();
+        this.updateFacilityMetrics();
     },
 
     _volumeUomSelectHtml(idx, currentUom) {
