@@ -5639,7 +5639,6 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
                     <span class="cm-text-orange" id="totalPicks">0</span>
                 </div>
             </div>
-        </div>
 
         <!-- Order Profile section merged into Volumes above -->
 
@@ -18265,9 +18264,36 @@ const cmApp = {
                 year: yr, orders, labor, facility, equipment, overhead, vas, startup,
                 totalCost, revenue, grossProfit, ebitda, ebit, depreciation,
                 taxes, netIncome, capex, workingCapitalChange, operatingCashFlow, freeCashFlow,
-                learningMult
+                learningMult,
+                // Balance sheet building blocks (cumulative computed below)
+                _revenue: revenue, _capex: capex, _workingCapitalChange: workingCapitalChange,
+                _netIncome: netIncome, _depreciation: depreciation
             });
         }
+
+        // Balance Sheet: compute cumulative values per year
+        let cumCash = 0, cumRetainedEarnings = 0, cumCapex = 0, cumDepreciation = 0;
+        projections.forEach(p => {
+            cumCapex += p._capex;
+            cumDepreciation += p._depreciation;
+            cumRetainedEarnings += p._netIncome;
+            cumCash += p.freeCashFlow;
+
+            // Assets
+            p.bsCash = cumCash;
+            p.bsAccountsReceivable = p._revenue / 12; // ~30 days DSO
+            p.bsNetPPE = cumCapex - cumDepreciation;
+            p.bsTotalAssets = p.bsCash + p.bsAccountsReceivable + p.bsNetPPE;
+
+            // Liabilities
+            p.bsAccountsPayable = p.totalCost / 12; // ~30 days DPO
+            p.bsTotalLiabilities = p.bsAccountsPayable;
+
+            // Equity
+            p.bsRetainedEarnings = cumRetainedEarnings;
+            p.bsTotalEquity = p.bsRetainedEarnings;
+            p.bsTotalLiabEquity = p.bsTotalLiabilities + p.bsTotalEquity;
+        });
 
         return { projections, startupCapital, margin };
     },
@@ -18309,6 +18335,16 @@ const cmApp = {
             { label: 'Operating Cash Flow', key: 'operatingCashFlow', bold: true, border: true },
             { label: '- Capital Expenditures', key: 'capex' },
             { label: 'Free Cash Flow', key: 'freeCashFlow', bold: true, border: true },
+            { label: '── BALANCE SHEET ──', section: true },
+            { label: 'Cash', key: 'bsCash', snapshot: true },
+            { label: 'Accounts Receivable', key: 'bsAccountsReceivable', snapshot: true },
+            { label: 'Net PP&E', key: 'bsNetPPE', snapshot: true },
+            { label: 'Total Assets', key: 'bsTotalAssets', bold: true, border: true, snapshot: true },
+            { label: 'Accounts Payable', key: 'bsAccountsPayable', snapshot: true },
+            { label: 'Total Liabilities', key: 'bsTotalLiabilities', bold: true, border: true, snapshot: true },
+            { label: 'Retained Earnings', key: 'bsRetainedEarnings', snapshot: true },
+            { label: 'Total Equity', key: 'bsTotalEquity', bold: true, snapshot: true },
+            { label: 'Total Liab. + Equity', key: 'bsTotalLiabEquity', bold: true, border: true, snapshot: true },
             { label: '── KEY METRICS ──', section: true },
             { label: 'Orders', key: 'orders', format: 'int' },
             { label: 'Cost/Order', key: null, calc: p => p.totalCost / (p.orders || 1), format: 'dollar2' },
@@ -18330,7 +18366,9 @@ const cmApp = {
                 if (r.format === 'mult') return v !== 1.0 ? v.toFixed(3) + 'x' : '—';
                 return fmt(v);
             });
-            const total = r.format === 'mult' ? '—' : (r.calc
+            const total = r.format === 'mult' ? '—' : r.snapshot
+                ? fmt(projections[projections.length - 1][r.key])
+                : (r.calc
                 ? (r.format === 'pct' ? fmtPct(projections.reduce((s, p) => s + (r.calc(p) || 0), 0) / projections.length)
                    : r.format === 'dollar2' ? '$' + (projections.reduce((s, p) => s + r.calc(p), 0) / projections.length).toFixed(2)
                    : '')
