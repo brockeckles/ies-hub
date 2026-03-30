@@ -4606,6 +4606,31 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div class="section-title">Cost Model Builder <span style="font-size:12px;background:var(--ies-orange);color:#fff;padding:3px 8px;border-radius:4px;margin-left:8px;font-weight:700;vertical-align:middle;">BETA</span></div>
       <div class="section-subtitle">Build detailed operational cost models for 3PL warehouse proposals</div>
     </div>
+    <div id="topbarControls" style="display:none;align-items:center;gap:12px;margin-top:12px;">
+      <span class="cm-label">Project:</span>
+      <select id="projectSelector" class="cm-select" style="min-width:180px;">
+        <option value="">-- New Model --</option>
+      </select>
+      <button id="newModelBtn" class="cm-btn cm-btn-primary cm-btn-sm">+ New Model</button>
+      <span class="cm-status-badge cm-status-draft" id="statusBadge" style="display:none;">Draft</span>
+      <span class="cm-save-indicator" id="saveIndicator" style="margin-left:auto;"></span>
+    </div>
+  </div>
+
+  <div id="landingPage" class="cm-landing">
+    <div class="cm-landing-header">
+      <div class="cm-landing-title">Cost Model Builder</div>
+      <div class="cm-landing-subtitle">Engineered warehouse costing for 3PL operations</div>
+    </div>
+    <div class="cm-landing-actions">
+      <button id="newModelBtnLanding" class="cm-btn cm-btn-primary">+ Create New Model</button>
+    </div>
+    <div id="projectsList" class="cm-projects-grid"></div>
+    <div id="emptyState" class="cm-empty-state">
+      <div class="cm-empty-state-icon">📋</div>
+      <div class="cm-empty-state-title">No Models Yet</div>
+      <div>Create your first cost model to get started</div>
+    </div>
   </div>
 
 <div class="cm-container" id="editorContainer" style="display:none;">
