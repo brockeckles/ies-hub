@@ -5755,7 +5755,8 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
                         Expand
                     </button>
                 </div>
-                <div style="overflow-x:auto;margin:0 -20px;padding:0 20px;margin-top:16px;">
+                <div style="font-size:11px;color:var(--ies-gray-400);margin-top:12px;text-align:right;">Scroll right for MHE, IT Equipment, Hourly Rate, Annual Cost, and Bucket columns &rarr; &nbsp;or use <strong>Expand</strong></div>
+                <div style="overflow-x:auto;margin:0 -20px;padding:0 20px;margin-top:4px;">
                 <table class="cm-table" style="min-width:1100px;">
                     <thead>
                         <tr>
@@ -5799,6 +5800,10 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
                     <tbody id="indirectLaborTable">
                     </tbody>
                 </table>
+                <div style="display:flex;align-items:center;gap:12px;margin-top:12px;">
+                    <button class="cm-btn cm-btn-secondary" onclick="cmApp.addIndirectLaborRow()">+ Add Indirect Role</button>
+                    <span style="font-size:11px;color:var(--ies-gray-400);">Indirect roles are auto-generated when you add direct labor rows. You can also add manually.</span>
+                </div>
             </div>
 
             <div class="cm-card">
@@ -5911,6 +5916,9 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
                     <tbody id="vasTable">
                     </tbody>
                 </table>
+                <div id="vasEmptyHint" style="padding:16px;text-align:center;color:var(--ies-gray-400);font-size:12px;line-height:1.6;">
+                    Common 3PL VAS items: kitting/assembly, labeling/relabeling, gift wrapping, shrink wrapping, quality inspection, serial number capture, returns processing, custom packaging, embroidery/monogramming, product testing.
+                </div>
                 <div class="cm-mt-16">
                     <button class="cm-btn cm-btn-secondary" onclick="cmApp.addVasRow()">+ Add Service</button>
                 </div>
@@ -17383,6 +17391,8 @@ const cmApp = {
     renderVasTable() {
         const tbody = document.getElementById('vasTable');
         tbody.innerHTML = '';
+        const hint = document.getElementById('vasEmptyHint');
+        if (hint) hint.style.display = this.projectData.vasLines.length === 0 ? 'block' : 'none';
 
         this.projectData.vasLines.forEach((line, idx) => {
             const annualCost = (line.rate || 0) * (line.volume || 0);
@@ -17723,7 +17733,7 @@ const cmApp = {
         const palletsPerYear = (parseFloat(document.getElementById('palletsReceived').value) || 0) +
                               (parseFloat(document.getElementById('palletsShipped').value) || 0);
         const casesPerYear = (parseFloat(document.getElementById('casesReceived').value) || 0) +
-                            (parseFloat(document.getElementById('casesShipped').value) || 0);
+                            (parseFloat(document.getElementById('casesPicked').value) || 0);
         const eachesPerYear = parseFloat(document.getElementById('eachesPicked').value) || 0;
         const sqftYear = parseFloat(document.getElementById('totalSqft').value) || 1;
 
@@ -18080,7 +18090,7 @@ const cmApp = {
             mc('EBITDA Margin', avgEbitdaMargin, avgEbitdaMargin.toFixed(1) + '%', th.ebitda, true, 'Target: \u2265' + th.ebitda + '%'),
             mc('EBIT Margin', avgEbitMargin, avgEbitMargin.toFixed(1) + '%', th.ebit, true, 'Target: \u2265' + th.ebit + '%'),
             mc('ROIC', roic, roic.toFixed(1) + '%', th.roic, true, 'Target: \u2265' + th.roic + '%'),
-            mc('MIRR', mirr, mirr.toFixed(1) + '%', th.mirr, true, 'Target: \u2265' + th.mirr + '%'),
+            mc('MIRR', startupCapital > 0 ? mirr : th.mirr, startupCapital > 0 ? mirr.toFixed(1) + '%' : 'N/A', th.mirr, true, startupCapital > 0 ? 'Target: \u2265' + th.mirr + '%' : 'No start-up capital'),
             mc('Payback Period', paybackMonths, paybackMonths + ' mo', th.payback, false, 'Target: \u2264' + th.payback + ' mo'),
             mc('NPV', npv, '$' + Math.round(npv).toLocaleString('en-US'), 0, true, 'At ' + (discountRate * 100) + '% discount'),
             mc('Revenue / FTE', revenuePerFte, '$' + Math.round(revenuePerFte).toLocaleString('en-US'), null, true, 'Year 1'),
@@ -18655,6 +18665,18 @@ const cmApp = {
         this.projectData.laborLines.splice(idx, 1);
         this.renderLaborTable();
         this.markChanged();
+    },
+
+    addIndirectLaborRow() {
+        this.projectData.indirectLaborLines.push({
+            role_name: '',
+            headcount: 1,
+            hourly_rate: 0,
+            burden_pct: 35,
+            annual_hours: 0,
+            pricing_bucket: ''
+        });
+        this.renderIndirectLaborTable();
     },
 
     deleteIndirectLaborLine(idx) {
