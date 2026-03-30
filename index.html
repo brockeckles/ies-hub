@@ -2121,14 +2121,14 @@
         }
 
         .cm-sidebar {
-            width: 260px;
+            width: 220px;
             background: var(--ies-gray-50, #f9fafb);
             border-right: 1px solid var(--ies-gray-200, #e5e7eb);
-            padding: 24px 0;
+            padding: 12px 0;
             overflow-y: auto;
             position: sticky;
             top: 0;
-            max-height: 800px;
+            max-height: calc(100vh - 100px);
             transition: width 0.25s ease, padding 0.25s ease;
             flex-shrink: 0;
         }
@@ -2141,7 +2141,7 @@
         .cm-sidebar-toggle {
             position: absolute;
             top: 100px;
-            left: 248px;
+            left: 208px;
             width: 28px;
             height: 28px;
             background: #fff;
@@ -2174,8 +2174,8 @@
         }
 
         .cm-nav-section {
-            padding: 12px 0;
-            border-bottom: 1px solid var(--gray-100);
+            padding: 2px 0;
+            border-bottom: none;
         }
 
         .cm-nav-section:last-child {
@@ -2185,9 +2185,9 @@
         .cm-nav-item {
             display: flex;
             align-items: center;
-            gap: 12px;
-            padding: 10px 16px;
-            font-size: 13px;
+            gap: 8px;
+            padding: 6px 14px;
+            font-size: 12px;
             font-weight: 500;
             color: var(--ies-gray-600, #6b7280);
             cursor: pointer;
@@ -2210,8 +2210,8 @@
 
         .cm-nav-checkmark {
             display: inline-block;
-            width: 16px;
-            height: 16px;
+            width: 14px;
+            height: 14px;
             border-radius: 50%;
             background: var(--gray-100);
             flex-shrink: 0;
@@ -2235,7 +2235,7 @@
 
         .cm-content {
             flex: 1;
-            padding: 32px;
+            padding: 20px 24px;
             overflow-y: auto;
             background: #fff;
         }
@@ -2348,7 +2348,7 @@
         }
 
         .cm-field-group {
-            margin-bottom: 16px;
+            margin-bottom: 10px;
         }
 
         .cm-field-group:last-child {
@@ -2368,8 +2368,8 @@
         /* Enterprise-Grade UI — Compact Input Grid */
         .cm-input-grid {
             display: grid;
-            gap: 12px;
-            margin-bottom: 16px;
+            gap: 10px;
+            margin-bottom: 10px;
         }
 
         .cm-input-grid.cols-2 {
@@ -2397,12 +2397,12 @@
         /* KPI Strip (dark header for section summaries) */
         .cm-kpi-strip {
             background: linear-gradient(135deg, #0a1628, #0d1f3c, #0a1628);
-            padding: 20px 24px;
+            padding: 14px 18px;
             border-radius: 12px;
-            margin-bottom: 24px;
+            margin-bottom: 16px;
             display: flex;
             flex-wrap: wrap;
-            gap: 32px;
+            gap: 20px;
             align-items: center;
         }
 
@@ -2421,7 +2421,7 @@
         }
 
         .cm-kpi-value {
-            font-size: 24px;
+            font-size: 20px;
             font-weight: 700;
             color: #fff;
             font-family: 'Courier New', monospace;
@@ -2430,14 +2430,14 @@
         /* Section Collapsible */
         .cm-section-collapsible {
             border-left: 2px solid var(--ies-blue);
-            margin-bottom: 20px;
+            margin-bottom: 12px;
         }
 
         .cm-section-collapsible-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 16px;
+            padding: 10px 14px;
             background: white;
             border: 1px solid var(--ies-gray-200);
             border-left-width: 2px;
@@ -2472,7 +2472,7 @@
         }
 
         .cm-section-collapsible-content {
-            padding: 20px;
+            padding: 14px;
             background: white;
             border: 1px solid var(--ies-gray-200);
             border-top: none;
@@ -2489,8 +2489,8 @@
             background: white;
             border: 1px solid var(--ies-gray-200);
             border-radius: 12px;
-            padding: 16px;
-            margin-bottom: 16px;
+            padding: 14px;
+            margin-bottom: 12px;
             box-shadow: 0 2px 8px rgba(0,0,0,.06);
         }
 
@@ -2498,7 +2498,7 @@
             font-size: 12px;
             font-weight: 700;
             color: var(--ies-navy);
-            margin-bottom: 12px;
+            margin-bottom: 8px;
             text-transform: uppercase;
             letter-spacing: 1px;
         }
@@ -2527,7 +2527,7 @@
 
         .cm-input, select.cm-select {
             width: 100%;
-            padding: 10px 12px;
+            padding: 8px 10px;
             border: 1px solid var(--ies-gray-200, #e5e7eb);
             border-radius: 8px;
             font-size: 13px;
@@ -16069,6 +16069,23 @@ const cmApp = {
     },
     saveTimeout: null,
 
+    // Formatting helpers
+    fmtNum: function(val, decimals) {
+        const n = parseFloat(val);
+        if (isNaN(n)) return val || '—';
+        return n.toLocaleString('en-US', { minimumFractionDigits: decimals || 0, maximumFractionDigits: decimals || 0 });
+    },
+    fmtCurrency: function(val) {
+        const n = parseFloat(val);
+        if (isNaN(n)) return '—';
+        return '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    },
+    fmtPercent: function(val, decimals) {
+        const n = parseFloat(val);
+        if (isNaN(n)) return '—';
+        return n.toLocaleString('en-US', { minimumFractionDigits: decimals || 1, maximumFractionDigits: decimals || 1 }) + '%';
+    },
+
     async init() {
         try {
             // Load all reference data
@@ -17765,11 +17782,11 @@ const cmApp = {
                 '<td>' + this._mostSelectHtml(idx, line.most_template_id) + '</td>' +
                 '<td>' + this._uomSelectHtml(idx, line.uom) + '</td>' +
                 '<td>' + volumeSourceHtml + '</td>' +
-                '<td class="cm-table-number">' + ((line.volume || 0)).toFixed(0) + '</td>' +
+                '<td class="cm-table-number">' + Math.round(line.volume || 0).toLocaleString('en-US') + '</td>' +
                 '<td><div style="display:flex;align-items:center;gap:2px;">' + this._cmInp('number', line.base_uph, idx, 'laborLines', 'base_uph', {w:55, step:'1', ph:'UPH'}) + uomLabel + '</div></td>' +
-                '<td class="cm-table-number">' + (line.adjusted_uph || 0).toFixed(0) + '</td>' +
+                '<td class="cm-table-number">' + Math.round(line.adjusted_uph || 0).toLocaleString('en-US') + '</td>' +
                 '<td>' + this._complexitySelectHtml(idx, line.complexity_tier) + '</td>' +
-                '<td class="cm-table-number">' + (line.annual_hours || 0).toFixed(1) + '</td>' +
+                '<td class="cm-table-number">' + (line.annual_hours || 0).toLocaleString('en-US', {minimumFractionDigits:1, maximumFractionDigits:1}) + '</td>' +
                 '<td class="cm-table-number">' + fte.toFixed(2) + '</td>' +
                 '<td>' + this._equipSelectHtml('MHE', idx, line.mhe_equipment_id, 'mhe_equipment_id') + '</td>' +
                 '<td>' + this._equipSelectHtml('Systems', idx, line.it_equipment_id, 'it_equipment_id') + '</td>' +
@@ -19281,7 +19298,7 @@ const cmApp = {
                 '<td>' + this._cmInp('text', line.name, idx, 'volumeLines', 'name', {w:150, ph:'e.g., Cases Shipped'}) + '</td>' +
                 '<td>' + this._volumeUomSelectHtml(idx, line.uom) + '</td>' +
                 '<td class="cm-table-number">' + this._cmInp('number', line.annual_volume, idx, 'volumeLines', 'annual_volume', {w:100, ph:'0'}) + '</td>' +
-                '<td class="cm-table-number">' + dailyVolume.toFixed(1) + '</td>' +
+                '<td class="cm-table-number">' + dailyVolume.toLocaleString('en-US', {minimumFractionDigits:1, maximumFractionDigits:1}) + '</td>' +
                 '<td class="cm-table-actions"><button class="cm-btn-small cm-btn-small-danger" onclick="cmApp.deleteVolumeLine(' + idx + ')">Delete</button></td>';
             tbody.appendChild(row);
         });
