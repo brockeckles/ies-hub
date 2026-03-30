@@ -17217,7 +17217,8 @@ const cmApp = {
 
     _mostSelectHtml(idx, currentId) {
         var templates = (this.refData.mostTemplates || []).filter(function(t) { return t.is_active !== false; });
-        var html = '<select class="cm-input" style="width:130px;padding:4px 6px;font-size:11px;" onchange="cmApp._updateLine(\'laborLines\',' + idx + ',\'most_template_id\',this.value,\'text\');cmApp._applyMostTemplate(' + idx + ',this.value)">';
+        var html = '<div style="display:flex;align-items:center;gap:4px;">';
+        html += '<select class="cm-input" style="width:115px;padding:4px 6px;font-size:11px;" onchange="cmApp._updateLine(\'laborLines\',' + idx + ',\'most_template_id\',this.value,\'text\');cmApp._applyMostTemplate(' + idx + ',this.value)">';
         html += '<option value="">— Select —</option>';
         // Group by process_area
         var groups = {};
@@ -17240,6 +17241,11 @@ const cmApp = {
             html += '</optgroup>';
         });
         html += '</select>';
+        // Info icon to view template details (only shown when a template is selected)
+        if (currentId) {
+            html += '<button onclick="cmApp.viewMostTemplate(' + currentId + ')" title="View MOST template details" style="background:none;border:none;cursor:pointer;padding:2px;display:flex;align-items:center;opacity:0.5;transition:opacity 0.15s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.5"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ies-blue,#2563eb)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></button>';
+        }
+        html += '</div>';
         return html;
     },
 
@@ -17265,6 +17271,99 @@ const cmApp = {
         }
         this.renderLaborTable();
         this.updateLaborTotals();
+    },
+
+    viewMostTemplate(templateId) {
+        var template = (this.refData.mostTemplates || []).find(function(t) { return t.id === templateId; });
+        if (!template) return;
+
+        var elements = (this.refData.mostElements || []).filter(function(e) { return e.template_id === templateId; }).sort(function(a,b) { return (a.sequence_order || 0) - (b.sequence_order || 0); });
+        var totalTmu = elements.reduce(function(s,e) { return s + (e.tmu_value || 0); }, 0);
+        var uph = totalTmu > 0 ? Math.round(100000 / (totalTmu * 0.6)) : (template.units_per_hour_base || 0);
+
+        // Build the popout content
+        var overlay = document.getElementById('cmPopoutOverlay');
+        var popout = document.getElementById('cmPopout');
+        var body = document.getElementById('cmPopoutBody');
+        var titleEl = document.getElementById('cmPopoutTitle');
+
+        this._popoutSource = 'mostDetail';
+        titleEl.textContent = 'MOST Template — ' + (template.activity_name || template.wms_transaction || 'Template');
+
+        var html = '';
+        // Header info card
+        html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">';
+        html += '<div style="background:var(--ies-gray-50,#f9fafb);border-radius:8px;padding:16px;">';
+        html += '<div style="font-size:11px;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Template Info</div>';
+        html += '<div style="display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:13px;">';
+        html += '<span style="color:var(--ies-gray-400);">Activity:</span><span style="font-weight:600;">' + (template.activity_name || '—') + '</span>';
+        html += '<span style="color:var(--ies-gray-400);">WMS Transaction:</span><span>' + (template.wms_transaction || '—') + '</span>';
+        html += '<span style="color:var(--ies-gray-400);">Process Area:</span><span>' + (template.process_area || '—') + '</span>';
+        html += '<span style="color:var(--ies-gray-400);">Equipment:</span><span>' + (template.equipment_type || 'None') + '</span>';
+        html += '<span style="color:var(--ies-gray-400);">UOM:</span><span>' + (template.uom || '—') + '</span>';
+        html += '</div></div>';
+
+        html += '<div style="background:var(--ies-gray-50,#f9fafb);border-radius:8px;padding:16px;">';
+        html += '<div style="font-size:11px;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Performance</div>';
+        html += '<div style="display:flex;gap:24px;align-items:baseline;">';
+        html += '<div><span style="font-size:28px;font-weight:700;color:var(--ies-blue,#2563eb);">' + (template.units_per_hour_base || uph || 0) + '</span><span style="font-size:12px;color:var(--ies-gray-400);margin-left:4px;">UPH</span></div>';
+        html += '<div><span style="font-size:28px;font-weight:700;color:var(--ies-gray-600);">' + (template.total_tmu_base || totalTmu) + '</span><span style="font-size:12px;color:var(--ies-gray-400);margin-left:4px;">TMU</span></div>';
+        html += '</div>';
+        if (template.description) {
+            html += '<div style="margin-top:12px;font-size:12px;color:var(--ies-gray-500);line-height:1.5;">' + template.description + '</div>';
+        }
+        html += '</div></div>';
+
+        // Elements breakdown table
+        if (elements.length > 0) {
+            html += '<div style="font-size:13px;font-weight:600;margin-bottom:8px;">MOST Element Breakdown (' + elements.length + ' steps)</div>';
+            html += '<div style="overflow-x:auto;border:1px solid var(--ies-gray-200,#e5e7eb);border-radius:8px;">';
+            html += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+            html += '<thead><tr style="background:var(--ies-gray-50,#f9fafb);">';
+            html += '<th style="padding:8px 10px;text-align:left;font-weight:600;border-bottom:1px solid var(--ies-gray-200,#e5e7eb);">#</th>';
+            html += '<th style="padding:8px 10px;text-align:left;font-weight:600;border-bottom:1px solid var(--ies-gray-200,#e5e7eb);">Element</th>';
+            html += '<th style="padding:8px 10px;text-align:left;font-weight:600;border-bottom:1px solid var(--ies-gray-200,#e5e7eb);">MOST Sequence</th>';
+            html += '<th style="padding:8px 10px;text-align:left;font-weight:600;border-bottom:1px solid var(--ies-gray-200,#e5e7eb);">Type</th>';
+            html += '<th style="padding:8px 10px;text-align:right;font-weight:600;border-bottom:1px solid var(--ies-gray-200,#e5e7eb);">TMU</th>';
+            html += '<th style="padding:8px 10px;text-align:center;font-weight:600;border-bottom:1px solid var(--ies-gray-200,#e5e7eb);">Variable?</th>';
+            html += '</tr></thead><tbody>';
+
+            elements.forEach(function(el, i) {
+                var rowBg = i % 2 === 0 ? '' : 'background:var(--ies-gray-50,#f9fafb);';
+                var varBadge = el.is_variable
+                    ? '<span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px;font-size:10px;">' + (el.variable_driver || 'Yes') + '</span>'
+                    : '<span style="color:var(--ies-gray-300);">—</span>';
+                var seqType = (el.sequence_type || '').replace(/_/g, ' ');
+                html += '<tr style="' + rowBg + '">';
+                html += '<td style="padding:6px 10px;border-bottom:1px solid var(--ies-gray-100,#f3f4f6);color:var(--ies-gray-400);">' + (el.sequence_order || (i + 1)) + '</td>';
+                html += '<td style="padding:6px 10px;border-bottom:1px solid var(--ies-gray-100,#f3f4f6);font-weight:500;">' + (el.element_name || '—') + '</td>';
+                html += '<td style="padding:6px 10px;border-bottom:1px solid var(--ies-gray-100,#f3f4f6);font-family:monospace;font-size:11px;color:var(--ies-gray-500);">' + (el.most_sequence || '—') + '</td>';
+                html += '<td style="padding:6px 10px;border-bottom:1px solid var(--ies-gray-100,#f3f4f6);font-size:11px;color:var(--ies-gray-400);text-transform:capitalize;">' + seqType + '</td>';
+                html += '<td style="padding:6px 10px;border-bottom:1px solid var(--ies-gray-100,#f3f4f6);text-align:right;font-weight:600;">' + (el.tmu_value || 0) + '</td>';
+                html += '<td style="padding:6px 10px;border-bottom:1px solid var(--ies-gray-100,#f3f4f6);text-align:center;">' + varBadge + '</td>';
+                html += '</tr>';
+            });
+
+            // Total row
+            html += '<tr style="background:var(--ies-gray-100,#f3f4f6);font-weight:600;">';
+            html += '<td colspan="4" style="padding:8px 10px;text-align:right;">Total TMU</td>';
+            html += '<td style="padding:8px 10px;text-align:right;">' + totalTmu + '</td>';
+            html += '<td></td></tr>';
+            html += '</tbody></table></div>';
+        } else {
+            html += '<div style="padding:24px;text-align:center;color:var(--ies-gray-400);font-size:13px;">No MOST elements defined for this template yet.</div>';
+        }
+
+        // Notes
+        if (template.notes) {
+            html += '<div style="margin-top:16px;padding:12px;background:#eff6ff;border-radius:8px;font-size:12px;color:var(--ies-blue,#2563eb);line-height:1.5;">';
+            html += '<strong>Notes:</strong> ' + template.notes + '</div>';
+        }
+
+        body.innerHTML = html;
+        overlay.classList.add('open');
+        popout.classList.add('open');
+        document.body.style.overflow = 'hidden';
     },
 
     _equipSelectHtml(category, idx, currentId, fieldKey) {
