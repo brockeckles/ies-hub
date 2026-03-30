@@ -5629,6 +5629,8 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
                             <th>Adj UPH</th>
                             <th style="text-align:right;">Annual Hours</th>
                             <th style="text-align:right;">FTEs</th>
+                            <th>MHE</th>
+                            <th>IT Equipment</th>
                             <th style="text-align:right;">Hourly Rate</th>
                             <th style="text-align:right;">Annual Cost</th>
                             <th>Bucket</th>
@@ -16307,37 +16309,67 @@ const cmApp = {
         };
 
         // =====================================================================
-        // 1. MHE — Driven by MOST template equipment types + labor FTEs
+        // 1. MHE — Driven by labor row assignments + MOST template fallback
         // =====================================================================
         const equipNeeds = {};
+
+        // First: honor explicit MHE / IT assignments from labor rows
         this.projectData.laborLines.forEach(line => {
-            const template = this.refData.mostTemplates.find(t => t.id === line.most_template_id);
-            if (!template || !template.equipment_type) return;
-            const equipTypes = template.equipment_type.split('+').map(s => s.trim());
-            equipTypes.forEach(eqType => {
-                if (!equipNeeds[eqType]) equipNeeds[eqType] = { fte: 0, activities: [] };
-                equipNeeds[eqType].fte += (line.fte || 0);
-                equipNeeds[eqType].activities.push(line.activity_name);
-            });
+            const operHours = this.getOperatingHours();
+            const fte = operHours > 0 ? (line.annual_hours || 0) / operHours : 0;
+            line.fte = fte; // store for downstream use
+
+            // Explicit MHE assignment
+            if (line.mhe_equipment_id) {
+                if (!equipNeeds[line.mhe_equipment_id]) equipNeeds[line.mhe_equipment_id] = { fte: 0, activities: [], catalogId: line.mhe_equipment_id };
+                equipNeeds[line.mhe_equipment_id].fte += fte;
+                equipNeeds[line.mhe_equipment_id].activities.push(line.activity_name || 'Direct labor');
+            }
+            // Explicit IT equipment assignment
+            if (line.it_equipment_id) {
+                if (!equipNeeds[line.it_equipment_id]) equipNeeds[line.it_equipment_id] = { fte: 0, activities: [], catalogId: line.it_equipment_id };
+                equipNeeds[line.it_equipment_id].fte += fte;
+                equipNeeds[line.it_equipment_id].activities.push(line.activity_name || 'Direct labor');
+            }
+
+            // Fallback: MOST template equipment types (only if no explicit MHE assigned)
+            if (!line.mhe_equipment_id) {
+                const template = this.refData.mostTemplates.find(t => t.id === line.most_template_id);
+                if (template && template.equipment_type) {
+                    const equipTypes = template.equipment_type.split('+').map(s => s.trim());
+                    equipTypes.forEach(eqType => {
+                        if (!equipNeeds[eqType]) equipNeeds[eqType] = { fte: 0, activities: [] };
+                        equipNeeds[eqType].fte += fte;
+                        equipNeeds[eqType].activities.push(line.activity_name);
+                    });
+                }
+            }
         });
 
-        Object.keys(equipNeeds).forEach(eqType => {
-            const need = equipNeeds[eqType];
+        Object.keys(equipNeeds).forEach(key => {
+            const need = equipNeeds[key];
             const qty = Math.max(1, Math.ceil(need.fte * spareFactor));
-            const catalogItem = findCatalog(eqType);
-            addEquip(eqType, 'MHE', qty, catalogItem, need.activities.join(', '));
+            // If catalogId is set, look up by ID; otherwise search by name keyword
+            const catalogItem = need.catalogId
+                ? equipCatalog.find(e => e.id === need.catalogId)
+                : findCatalog(key);
+            const name = catalogItem ? catalogItem.name : key;
+            const cat = catalogItem ? catalogItem.category : 'MHE';
+            addEquip(name, cat, qty, catalogItem, need.activities.join(', '));
         });
 
         // =====================================================================
         // 2. IT EQUIPMENT — RF Scanners, Label Printers, WiFi APs
+        //    (skip RF/scanners if any labor rows have explicit IT assignments)
         // =====================================================================
+        const hasExplicitIT = this.projectData.laborLines.some(l => l.it_equipment_id);
         const totalDirectFte = this.projectData.laborLines.reduce((s, l) => s + (l.fte || 0), 0);
         const totalIndirectHC = this.projectData.indirectLaborLines.reduce((s, l) => s + (l.headcount || 0), 0);
         const totalHC = Math.ceil(totalDirectFte) + totalIndirectHC;
         const sqft = parseFloat(document.getElementById('totalSqft').value) || 0;
 
-        // RF scanners / mobile computers for all direct labor + leads
-        if (totalDirectFte > 0) {
+        // RF scanners / mobile computers — only auto-add if no explicit IT assignments
+        if (totalDirectFte > 0 && !hasExplicitIT) {
             const rfItem = findCatalog('rf terminal') || findCatalog('rf scanner');
             const rfQty = Math.ceil(totalDirectFte * spareFactor);
             addEquip('RF Terminal / Mobile Computer', 'Systems', rfQty, rfItem, 'All direct labor (15% spare)');
@@ -17014,6 +17046,30 @@ const cmApp = {
         this.markChanged();
     },
 
+    _equipSelectHtml(category, idx, currentId, fieldKey) {
+        var catalog = (this.refData.equipmentCatalog || []).filter(function(e) { return e.category === category; });
+        var html = '<select class="cm-input" style="width:120px;padding:4px 6px;font-size:11px;" onchange="cmApp._updateLine(\'laborLines\',' + idx + ',\'' + fieldKey + '\',this.value,\'text\')">';
+        html += '<option value="">— None —</option>';
+        // Group by subcategory
+        var groups = {};
+        catalog.forEach(function(e) {
+            var sub = e.subcategory || 'Other';
+            if (!groups[sub]) groups[sub] = [];
+            groups[sub].push(e);
+        });
+        Object.keys(groups).sort().forEach(function(sub) {
+            html += '<optgroup label="' + sub + '">';
+            groups[sub].forEach(function(e) {
+                var selected = (e.id === currentId) ? ' selected' : '';
+                var shortName = e.name.length > 28 ? e.name.substring(0, 26) + '…' : e.name;
+                html += '<option value="' + e.id + '"' + selected + '>' + shortName + '</option>';
+            });
+            html += '</optgroup>';
+        });
+        html += '</select>';
+        return html;
+    },
+
     renderLaborTable() {
         const tbody = document.getElementById('laborTable');
         tbody.innerHTML = '';
@@ -17031,6 +17087,8 @@ const cmApp = {
                 '<td class="cm-table-number">' + (line.adjusted_uph || 0).toFixed(0) + '</td>' +
                 '<td class="cm-table-number">' + (line.annual_hours || 0).toFixed(1) + '</td>' +
                 '<td class="cm-table-number">' + fte.toFixed(2) + '</td>' +
+                '<td>' + this._equipSelectHtml('MHE', idx, line.mhe_equipment_id, 'mhe_equipment_id') + '</td>' +
+                '<td>' + this._equipSelectHtml('Systems', idx, line.it_equipment_id, 'it_equipment_id') + '</td>' +
                 '<td>' + this._cmInp('number', line.hourly_rate, idx, 'laborLines', 'hourly_rate', {w:60, ph:'$/hr'}) + '</td>' +
                 '<td class="cm-table-number" style="font-weight:600;">$' + annualCost.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0}) + '</td>' +
                 '<td>' + this.bucketSelectHtml('labor', idx, line.pricing_bucket) + '</td>' +
@@ -18372,7 +18430,9 @@ const cmApp = {
             adjusted_uph: 0,
             annual_hours: 0,
             hourly_rate: 0,
-            burden_pct: 0
+            burden_pct: 0,
+            mhe_equipment_id: '',
+            it_equipment_id: ''
         });
         this.renderLaborTable();
     },
