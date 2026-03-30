@@ -5643,6 +5643,35 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 
         <!-- Order Profile section merged into Volumes above -->
 
+            <div class="cm-card">
+                <div class="cm-card-title">Seasonality Profile</div>
+                <p style="font-size:0.82rem;color:#94a3b8;margin-bottom:12px;">Monthly volume multipliers relative to average. 1.0 = average month, 1.5 = 50% above average (e.g., holiday peak). Used for peak staffing and cash flow timing.</p>
+                <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;" id="seasonalityGrid">
+                    <div class="cm-field-group"><label class="cm-field-label" style="font-size:10px;">Jan</label><input type="number" class="cm-input cm-seasonality" data-month="0" value="1.0" min="0" max="5" step="0.05" style="width:100%;font-size:12px;text-align:center;"></div>
+                    <div class="cm-field-group"><label class="cm-field-label" style="font-size:10px;">Feb</label><input type="number" class="cm-input cm-seasonality" data-month="1" value="1.0" min="0" max="5" step="0.05" style="width:100%;font-size:12px;text-align:center;"></div>
+                    <div class="cm-field-group"><label class="cm-field-label" style="font-size:10px;">Mar</label><input type="number" class="cm-input cm-seasonality" data-month="2" value="1.0" min="0" max="5" step="0.05" style="width:100%;font-size:12px;text-align:center;"></div>
+                    <div class="cm-field-group"><label class="cm-field-label" style="font-size:10px;">Apr</label><input type="number" class="cm-input cm-seasonality" data-month="3" value="1.0" min="0" max="5" step="0.05" style="width:100%;font-size:12px;text-align:center;"></div>
+                    <div class="cm-field-group"><label class="cm-field-label" style="font-size:10px;">May</label><input type="number" class="cm-input cm-seasonality" data-month="4" value="1.0" min="0" max="5" step="0.05" style="width:100%;font-size:12px;text-align:center;"></div>
+                    <div class="cm-field-group"><label class="cm-field-label" style="font-size:10px;">Jun</label><input type="number" class="cm-input cm-seasonality" data-month="5" value="1.0" min="0" max="5" step="0.05" style="width:100%;font-size:12px;text-align:center;"></div>
+                    <div class="cm-field-group"><label class="cm-field-label" style="font-size:10px;">Jul</label><input type="number" class="cm-input cm-seasonality" data-month="6" value="1.0" min="0" max="5" step="0.05" style="width:100%;font-size:12px;text-align:center;"></div>
+                    <div class="cm-field-group"><label class="cm-field-label" style="font-size:10px;">Aug</label><input type="number" class="cm-input cm-seasonality" data-month="7" value="1.0" min="0" max="5" step="0.05" style="width:100%;font-size:12px;text-align:center;"></div>
+                    <div class="cm-field-group"><label class="cm-field-label" style="font-size:10px;">Sep</label><input type="number" class="cm-input cm-seasonality" data-month="8" value="1.0" min="0" max="5" step="0.05" style="width:100%;font-size:12px;text-align:center;"></div>
+                    <div class="cm-field-group"><label class="cm-field-label" style="font-size:10px;">Oct</label><input type="number" class="cm-input cm-seasonality" data-month="9" value="1.0" min="0" max="5" step="0.05" style="width:100%;font-size:12px;text-align:center;"></div>
+                    <div class="cm-field-group"><label class="cm-field-label" style="font-size:10px;">Nov</label><input type="number" class="cm-input cm-seasonality" data-month="10" value="1.0" min="0" max="5" step="0.05" style="width:100%;font-size:12px;text-align:center;"></div>
+                    <div class="cm-field-group"><label class="cm-field-label" style="font-size:10px;">Dec</label><input type="number" class="cm-input cm-seasonality" data-month="11" value="1.0" min="0" max="5" step="0.05" style="width:100%;font-size:12px;text-align:center;"></div>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;">
+                    <div style="display:flex;gap:8px;">
+                        <button class="cm-btn cm-btn-secondary cm-btn-sm" onclick="cmApp.applySeasonalityPreset('flat')">Flat</button>
+                        <button class="cm-btn cm-btn-secondary cm-btn-sm" onclick="cmApp.applySeasonalityPreset('ecommerce')">E-Commerce</button>
+                        <button class="cm-btn cm-btn-secondary cm-btn-sm" onclick="cmApp.applySeasonalityPreset('retail')">Retail</button>
+                        <button class="cm-btn cm-btn-secondary cm-btn-sm" onclick="cmApp.applySeasonalityPreset('backtoschool')">Back-to-School</button>
+                    </div>
+                    <div id="seasonalitySummary" style="font-size:11px;color:var(--ies-gray-400);">Peak: 1.0x | Avg: 1.0x</div>
+                </div>
+            </div>
+        </div>
+
         <!-- Facility Section -->
         <div class="cm-section" id="facilitySection">
             <h2 class="cm-section-title">Facility</h2>
@@ -5755,16 +5784,18 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
                         Expand
                     </button>
                 </div>
-                <div style="font-size:11px;color:var(--ies-gray-400);margin-top:12px;text-align:right;">Scroll right for MHE, IT Equipment, Hourly Rate, Annual Cost, and Bucket columns &rarr; &nbsp;or use <strong>Expand</strong></div>
+                <div style="font-size:11px;color:var(--ies-gray-400);margin-top:12px;text-align:right;">Scroll right for Complexity, MHE, IT Equipment, Hourly Rate, Annual Cost, and Bucket columns &rarr; &nbsp;or use <strong>Expand</strong></div>
                 <div style="overflow-x:auto;margin:0 -20px;padding:0 20px;margin-top:4px;">
-                <table class="cm-table" style="min-width:1100px;">
+                <table class="cm-table" style="min-width:1300px;">
                     <thead>
                         <tr>
                             <th>Activity</th>
                             <th>MOST Template</th>
+                            <th>UOM</th>
                             <th>Volume</th>
                             <th>Base UPH</th>
                             <th>Adj UPH</th>
+                            <th>Complexity</th>
                             <th style="text-align:right;">Annual Hours</th>
                             <th style="text-align:right;">FTEs</th>
                             <th>MHE</th>
@@ -5817,8 +5848,12 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
                     <span class="cm-text-orange" id="totalIndirectFtes">0</span>
                 </div>
                 <div class="cm-field-group cm-flex-between">
-                    <span>Total Headcount</span>
+                    <span>Avg Headcount</span>
                     <span class="cm-text-orange" id="totalHeadcount">0</span>
+                </div>
+                <div class="cm-field-group cm-flex-between">
+                    <span>Peak Headcount <span style="font-size:10px;color:var(--ies-gray-400);">(seasonal)</span></span>
+                    <span style="color:var(--ies-red,#ef4444);font-weight:600;" id="peakHeadcount">0</span>
                 </div>
                 <div class="cm-field-group cm-flex-between" style="padding-top: 12px; border-top: 1px solid var(--gray-100);">
                     <span style="font-weight: 700;">Total Labor Cost</span>
@@ -5997,6 +6032,57 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
                         <div class="cm-input-group-item" style="flex:0; min-width: 40px;">%</div>
                     </div>
                 </div>
+            </div>
+
+            <div class="cm-card">
+                <div class="cm-card-title">Labor Cost Adjustments</div>
+                <p style="font-size:0.82rem;color:#94a3b8;margin-bottom:10px;">These defaults come from the selected market. Override per model as needed.</p>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;">
+                    <div class="cm-field-group">
+                        <label class="cm-field-label">Overtime % of Hours</label>
+                        <div class="cm-input-group">
+                            <input type="number" id="overtimePct" class="cm-input" placeholder="5" min="0" max="50" step="0.5" value="5">
+                            <div class="cm-input-group-item" style="flex:0; min-width: 40px;">%</div>
+                        </div>
+                        <span class="cm-field-help">% of total hours paid at 1.5x rate (hourly roles)</span>
+                    </div>
+                    <div class="cm-field-group">
+                        <label class="cm-field-label">Benefit Load %</label>
+                        <div class="cm-input-group">
+                            <input type="number" id="benefitLoadPct" class="cm-input" placeholder="35" min="0" max="80" step="0.5" value="35">
+                            <div class="cm-input-group-item" style="flex:0; min-width: 40px;">%</div>
+                        </div>
+                        <span class="cm-field-help">FICA, health, 401k, workers comp, etc.</span>
+                    </div>
+                    <div class="cm-field-group">
+                        <label class="cm-field-label">Bonus % (Salaried)</label>
+                        <div class="cm-input-group">
+                            <input type="number" id="bonusPct" class="cm-input" placeholder="0" min="0" max="50" step="0.5" value="0">
+                            <div class="cm-input-group-item" style="flex:0; min-width: 40px;">%</div>
+                        </div>
+                        <span class="cm-field-help">Annual bonus for salaried/indirect roles</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cm-card">
+                <div class="cm-card-title">Learning Curve / Ramp-Up</div>
+                <p style="font-size:0.82rem;color:#94a3b8;margin-bottom:10px;">Ramp duration by complexity tier. Productivity starts at 60% and ramps to 100% over the defined period. Affects Year 1 labor costs.</p>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
+                    <div class="cm-field-group">
+                        <label class="cm-field-label">Low Complexity (weeks)</label>
+                        <input type="number" id="rampWeeksLow" class="cm-input" placeholder="2" min="1" max="26" step="1" value="2">
+                    </div>
+                    <div class="cm-field-group">
+                        <label class="cm-field-label">Medium Complexity (weeks)</label>
+                        <input type="number" id="rampWeeksMed" class="cm-input" placeholder="4" min="1" max="26" step="1" value="4">
+                    </div>
+                    <div class="cm-field-group">
+                        <label class="cm-field-label">High Complexity (weeks)</label>
+                        <input type="number" id="rampWeeksHigh" class="cm-input" placeholder="8" min="1" max="52" step="1" value="8">
+                    </div>
+                </div>
+                <div style="margin-top:8px;font-size:11px;color:var(--ies-gray-400);">Productivity curve: Week 1 = 60% &rarr; midpoint = 80% &rarr; end of ramp = 95% &rarr; steady state = 100%</div>
             </div>
 
             <div class="cm-card">
@@ -15983,15 +16069,22 @@ const cmApp = {
                 _on(id, 'input', () => { this.updateShiftMetrics(); this.markChanged(); });
             });
 
-            // Financial
+            // Financial + Labor Cost Adjustments + Ramp
             ['targetMargin', 'contractTerm', 'volumeGrowth', 'startupCosts', 'pricingModel',
              'discountRate', 'reinvestRate', 'laborEscalation',
-             'threshGrossMargin', 'threshEbitda', 'threshEbit', 'threshRoic', 'threshMirr', 'threshPayback'].forEach(id => {
+             'threshGrossMargin', 'threshEbitda', 'threshEbit', 'threshRoic', 'threshMirr', 'threshPayback',
+             'overtimePct', 'benefitLoadPct', 'bonusPct', 'rampWeeksLow', 'rampWeeksMed', 'rampWeeksHigh'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) {
                     el.addEventListener('input', () => this.markChanged());
                     el.addEventListener('change', () => this.markChanged());
                 }
+            });
+
+            // Seasonality inputs
+            document.querySelectorAll('.cm-seasonality').forEach(inp => {
+                inp.addEventListener('change', () => { this.updateSeasonalitySummary(); this.markChanged(); });
+                inp.addEventListener('input', () => { this.updateSeasonalitySummary(); });
             });
 
             // Populate dropdowns
@@ -16146,6 +16239,18 @@ const cmApp = {
             document.getElementById('startupCosts').value = p.startup_cost || '';
             document.getElementById('pricingModel').value = p.pricing_model || 'all-in';
 
+            // Labor cost adjustments
+            document.getElementById('overtimePct').value = p.overtime_pct != null ? p.overtime_pct : 5;
+            document.getElementById('rampWeeksLow').value = p.ramp_weeks_low || 2;
+            document.getElementById('rampWeeksMed').value = p.ramp_weeks_med || 4;
+            document.getElementById('rampWeeksHigh').value = p.ramp_weeks_high || 8;
+
+            // Seasonality
+            try {
+                var sp = typeof p.seasonality_profile === 'string' ? JSON.parse(p.seasonality_profile) : p.seasonality_profile;
+                this.setSeasonalityProfile(sp);
+            } catch(e) { this.setSeasonalityProfile(null); }
+
             // Update computed values
             this.updateVolumeDailyValues();
             this.updateOrderMetrics();
@@ -16154,12 +16259,20 @@ const cmApp = {
             this.updateMarketInfo();
             this.updateAllowanceInfo();
 
-            // Render tables
+            // Render tables and run full recalculation chain
+            this.recalculateLabor();
             this.renderLaborTable();
             this.renderIndirectLaborTable();
+            this.updateLaborTotals();
+            this.autoGenerateEquipment();
             this.renderEquipmentTable();
+            this.autoGenerateOverhead();
             this.renderOverheadTable();
             this.renderVasTable();
+            this.autoGenerateStartup();
+            this.renderStartupTable();
+            this.initDefaultBuckets();
+            this.renderPricingBuckets();
 
             // Show editor
             document.getElementById('landingPage').style.display = 'none';
@@ -17112,17 +17225,83 @@ const cmApp = {
         this.updateLaborTotals();
     },
 
+    getOvertimePct() {
+        return (parseFloat(document.getElementById('overtimePct').value) || 0) / 100;
+    },
+    getBenefitLoadPct() {
+        return (parseFloat(document.getElementById('benefitLoadPct').value) || 35) / 100;
+    },
+    getBonusPct() {
+        return (parseFloat(document.getElementById('bonusPct').value) || 0) / 100;
+    },
+
+    // Seasonality helpers
+    getSeasonalityProfile() {
+        var inputs = document.querySelectorAll('.cm-seasonality');
+        var profile = [];
+        inputs.forEach(function(inp) { profile.push(parseFloat(inp.value) || 1.0); });
+        return profile.length === 12 ? profile : [1,1,1,1,1,1,1,1,1,1,1,1];
+    },
+    setSeasonalityProfile(profile) {
+        var inputs = document.querySelectorAll('.cm-seasonality');
+        inputs.forEach(function(inp, i) { inp.value = (profile && profile[i] != null) ? profile[i] : 1.0; });
+        this.updateSeasonalitySummary();
+    },
+    updateSeasonalitySummary() {
+        var profile = this.getSeasonalityProfile();
+        var peak = Math.max.apply(null, profile);
+        var avg = profile.reduce(function(s,v){return s+v;},0) / 12;
+        var el = document.getElementById('seasonalitySummary');
+        if (el) el.textContent = 'Peak: ' + peak.toFixed(2) + 'x | Avg: ' + avg.toFixed(2) + 'x';
+    },
+    applySeasonalityPreset(preset) {
+        var profiles = {
+            flat:         [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+            ecommerce:    [0.70, 0.65, 0.75, 0.80, 0.85, 0.90, 0.95, 1.00, 1.10, 1.20, 1.50, 1.60],
+            retail:       [0.80, 0.75, 0.85, 0.90, 0.95, 0.90, 0.85, 0.95, 1.00, 1.15, 1.40, 1.50],
+            backtoschool: [0.80, 0.80, 0.85, 0.90, 1.00, 1.20, 1.40, 1.50, 1.10, 0.85, 0.80, 0.80]
+        };
+        this.setSeasonalityProfile(profiles[preset] || profiles.flat);
+        this.markChanged();
+    },
+
+    // Learning curve: average productivity factor for Year 1
+    getLearningCurveFactor(complexityTier) {
+        var rampMap = {
+            low: parseInt(document.getElementById('rampWeeksLow').value) || 2,
+            medium: parseInt(document.getElementById('rampWeeksMed').value) || 4,
+            high: parseInt(document.getElementById('rampWeeksHigh').value) || 8
+        };
+        var rampWeeks = rampMap[complexityTier || 'medium'] || 4;
+        // Productivity curve: starts at 60%, reaches 95% at end of ramp, 100% after
+        // Average productivity during ramp = (0.60 + 0.95) / 2 = 0.775
+        // For Year 1 (52 weeks): weighted avg = (rampWeeks * 0.775 + (52 - rampWeeks) * 1.0) / 52
+        var avgRampProductivity = 0.775;
+        var steadyWeeks = Math.max(0, 52 - rampWeeks);
+        return (rampWeeks * avgRampProductivity + steadyWeeks * 1.0) / 52;
+    },
+
     updateLaborTotals() {
+        const otPct = this.getOvertimePct();
+        const benefitLoad = this.getBenefitLoadPct();
         let directTotal = 0;
         let indirectTotal = 0;
 
         this.projectData.laborLines.forEach(line => {
-            directTotal += (line.annual_hours || 0) * (line.hourly_rate || 0) * (1 + (line.burden_pct || 0) / 100);
+            const hours = line.annual_hours || 0;
+            const rate = line.hourly_rate || 0;
+            const burden = line.burden_pct != null ? (line.burden_pct / 100) : benefitLoad;
+            // OT premium: otPct of hours paid at 1.5x, rest at 1.0x
+            const effectiveRate = rate * (1 + burden) * (1 + otPct * 0.5);
+            directTotal += hours * effectiveRate;
         });
 
         this.projectData.indirectLaborLines.forEach(line => {
             const hours = this.getOperatingHours();
-            indirectTotal += (line.headcount || 0) * hours * (line.hourly_rate || 0) * (1 + (line.burden_pct || 0) / 100);
+            const rate = line.hourly_rate || 0;
+            const burden = line.burden_pct != null ? (line.burden_pct / 100) : benefitLoad;
+            const bonusMult = 1 + this.getBonusPct();
+            indirectTotal += (line.headcount || 0) * hours * rate * (1 + burden) * bonusMult;
         });
 
         const totalLaborCost = directTotal + indirectTotal;
@@ -17136,7 +17315,7 @@ const cmApp = {
         if (indirectElement) indirectElement.textContent = '$' + indirectTotal.toLocaleString('en-US', {maximumFractionDigits: 0});
         if (totalElement) totalElement.textContent = '$' + totalLaborCost.toLocaleString('en-US', {maximumFractionDigits: 0});
 
-        // Update total FTEs
+        // Update total FTEs (avg and peak)
         const ftesElement = document.getElementById('laborTotalFtes');
         if (ftesElement) ftesElement.textContent = this.getTotalFtes().toFixed(0);
 
@@ -17144,10 +17323,18 @@ const cmApp = {
         const opHours = this.getOperatingHours();
         const directFtes = opHours > 0 ? this.projectData.laborLines.reduce((s, l) => s + (l.annual_hours || 0), 0) / opHours : 0;
         const indirectFtes = this.projectData.indirectLaborLines.reduce((s, l) => s + (l.headcount || 0), 0);
+
+        // Peak staffing from seasonality
+        const seasonality = this.getSeasonalityProfile();
+        const peakMult = Math.max.apply(null, seasonality);
+        const peakDirectFtes = directFtes * peakMult;
+        const peakTotal = peakDirectFtes + indirectFtes;
+
         const el = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
         el('totalDirectFtes', directFtes.toFixed(1));
         el('totalIndirectFtes', indirectFtes.toFixed(1));
         el('totalHeadcount', (directFtes + indirectFtes).toFixed(0));
+        el('peakHeadcount', peakTotal.toFixed(0));
         el('totalLaborCost', '$' + totalLaborCost.toLocaleString('en-US', {maximumFractionDigits: 0}));
     },
 
@@ -17267,6 +17454,10 @@ const cmApp = {
             // Auto-fill base UPH from template if available and current is 0
             if ((!line.base_uph || line.base_uph === 0) && template.standard_uph) {
                 line.base_uph = template.standard_uph;
+            }
+            // Auto-fill UOM from template
+            if (template.uom) {
+                line.uom = template.uom;
             }
         }
         this.renderLaborTable();
@@ -17390,6 +17581,27 @@ const cmApp = {
         return html;
     },
 
+    _uomSelectHtml(idx, current) {
+        var uoms = ['each','case','carton','pallet','order','line','unit','lb','cu ft'];
+        var html = '<select class="cm-input" style="width:70px;padding:4px 4px;font-size:11px;" onchange="cmApp._updateLine(\'laborLines\',' + idx + ',\'uom\',this.value,\'text\')">';
+        html += '<option value="">—</option>';
+        uoms.forEach(function(u) {
+            html += '<option value="' + u + '"' + (u === current ? ' selected' : '') + '>' + u + '</option>';
+        });
+        html += '</select>';
+        return html;
+    },
+
+    _complexitySelectHtml(idx, current) {
+        var tiers = [{v:'low',l:'Low'},{v:'medium',l:'Med'},{v:'high',l:'High'}];
+        var html = '<select class="cm-input" style="width:60px;padding:4px 4px;font-size:11px;" onchange="cmApp._updateLine(\'laborLines\',' + idx + ',\'complexity_tier\',this.value,\'text\')">';
+        tiers.forEach(function(t) {
+            html += '<option value="' + t.v + '"' + (t.v === (current || 'medium') ? ' selected' : '') + '>' + t.l + '</option>';
+        });
+        html += '</select>';
+        return html;
+    },
+
     renderLaborTable() {
         const tbody = document.getElementById('laborTable');
         tbody.innerHTML = '';
@@ -17398,13 +17610,16 @@ const cmApp = {
         this.projectData.laborLines.forEach((line, idx) => {
             const annualCost = (line.annual_hours || 0) * (line.hourly_rate || 0) * (1 + (line.burden_pct || 0) / 100);
             const fte = operatingHours > 0 ? (line.annual_hours || 0) / operatingHours : 0;
+            const uomLabel = line.uom ? '<span style="font-size:10px;color:var(--ies-gray-400);">/' + line.uom + '</span>' : '';
             const row = document.createElement('tr');
             row.innerHTML =
                 '<td>' + this._cmInp('text', line.activity_name, idx, 'laborLines', 'activity_name', {w:100, ph:'Activity'}) + '</td>' +
                 '<td>' + this._mostSelectHtml(idx, line.most_template_id) + '</td>' +
+                '<td>' + this._uomSelectHtml(idx, line.uom) + '</td>' +
                 '<td>' + this._cmInp('number', line.volume, idx, 'laborLines', 'volume', {w:70, step:'1', ph:'Annual'}) + '</td>' +
-                '<td>' + this._cmInp('number', line.base_uph, idx, 'laborLines', 'base_uph', {w:55, step:'1', ph:'UPH'}) + '</td>' +
+                '<td><div style="display:flex;align-items:center;gap:2px;">' + this._cmInp('number', line.base_uph, idx, 'laborLines', 'base_uph', {w:55, step:'1', ph:'UPH'}) + uomLabel + '</div></td>' +
                 '<td class="cm-table-number">' + (line.adjusted_uph || 0).toFixed(0) + '</td>' +
+                '<td>' + this._complexitySelectHtml(idx, line.complexity_tier) + '</td>' +
                 '<td class="cm-table-number">' + (line.annual_hours || 0).toFixed(1) + '</td>' +
                 '<td class="cm-table-number">' + fte.toFixed(2) + '</td>' +
                 '<td>' + this._equipSelectHtml('MHE', idx, line.mhe_equipment_id, 'mhe_equipment_id') + '</td>' +
@@ -17992,29 +18207,54 @@ const cmApp = {
         const startupCapital = this.projectData.startupLines.reduce((s, l) => s + (l.one_time_cost || 0), 0);
         const baseOrders = parseFloat(document.getElementById('ordersPacked').value) || 0;
 
+        // Learning curve: compute weighted avg productivity factor for Year 1
+        let yr1LearningFactor = 1.0;
+        if (this.projectData.laborLines.length > 0) {
+            let totalHours = 0, weightedFactor = 0;
+            this.projectData.laborLines.forEach(line => {
+                const h = line.annual_hours || 0;
+                const f = this.getLearningCurveFactor(line.complexity_tier || 'medium');
+                totalHours += h;
+                weightedFactor += h * f;
+            });
+            yr1LearningFactor = totalHours > 0 ? weightedFactor / totalHours : 1.0;
+        }
+
         const projections = [];
         for (let yr = 1; yr <= years; yr++) {
             const volMult = Math.pow(1 + volGrowth, yr - 1);
             const laborMult = Math.pow(1 + laborEsc, yr - 1);
             const costMult = Math.pow(1 + costEsc, yr - 1);
 
-            const labor = baseLaborCost * laborMult * volMult;
+            // Year 1 labor is higher due to learning curve (lower productivity = more hours)
+            const learningMult = yr === 1 ? (1 / yr1LearningFactor) : 1.0;
+            const labor = baseLaborCost * laborMult * volMult * learningMult;
             const facility = baseFacilityCost * costMult;
             const equipment = baseEquipmentCost * costMult;
-            const overhead = baseOverheadCost * costMult * Math.pow(1 + volGrowth * 0.3, yr - 1); // OH partially scales
+            const overhead = baseOverheadCost * costMult * Math.pow(1 + volGrowth * 0.3, yr - 1);
             const vas = baseVasCost * volMult;
-            const startup = startupAmort; // flat amortization
+            const startup = startupAmort;
             const totalCost = labor + facility + equipment + overhead + vas + startup;
             const revenue = totalCost * (1 + margin);
             const grossProfit = revenue - totalCost;
-            const depreciation = startupAmort; // simplified: startup amort = depreciation
+            const depreciation = startupAmort;
             const ebitda = grossProfit + depreciation;
             const ebit = grossProfit;
             const orders = baseOrders * volMult;
 
+            // Cash flow components
+            const taxes = Math.max(0, ebit * 0.25); // 25% effective tax rate
+            const netIncome = ebit - taxes;
+            const capex = yr === 1 ? startupCapital : 0; // startup capital in Year 1
+            const workingCapitalChange = yr === 1 ? (revenue * 0.08) : (revenue * volGrowth * 0.08); // ~30 days DSO
+            const operatingCashFlow = netIncome + depreciation - workingCapitalChange;
+            const freeCashFlow = operatingCashFlow - capex;
+
             projections.push({
                 year: yr, orders, labor, facility, equipment, overhead, vas, startup,
-                totalCost, revenue, grossProfit, ebitda, ebit, depreciation
+                totalCost, revenue, grossProfit, ebitda, ebit, depreciation,
+                taxes, netIncome, capex, workingCapitalChange, operatingCashFlow, freeCashFlow,
+                learningMult
             });
         }
 
@@ -18036,6 +18276,7 @@ const cmApp = {
             '<th style="text-align:right;">Total</th></tr>';
 
         const rows = [
+            { label: '── INCOME STATEMENT ──', section: true },
             { label: 'Revenue', key: 'revenue', bold: true },
             { label: 'Labor', key: 'labor' },
             { label: 'Facility', key: 'facility' },
@@ -18047,26 +18288,43 @@ const cmApp = {
             { label: 'Gross Profit', key: 'grossProfit', bold: true },
             { label: 'EBITDA', key: 'ebitda' },
             { label: 'EBIT', key: 'ebit' },
+            { label: 'Taxes (25%)', key: 'taxes' },
+            { label: 'Net Income', key: 'netIncome', bold: true, border: true },
+            { label: 'Gross Margin %', key: null, calc: p => p.revenue > 0 ? p.grossProfit / p.revenue : 0, format: 'pct' },
+            { label: '── CASH FLOW ──', section: true },
+            { label: 'Net Income', key: 'netIncome' },
+            { label: '+ Depreciation/Amort.', key: 'depreciation' },
+            { label: '- Working Capital Chg', key: 'workingCapitalChange' },
+            { label: 'Operating Cash Flow', key: 'operatingCashFlow', bold: true, border: true },
+            { label: '- Capital Expenditures', key: 'capex' },
+            { label: 'Free Cash Flow', key: 'freeCashFlow', bold: true, border: true },
+            { label: '── KEY METRICS ──', section: true },
             { label: 'Orders', key: 'orders', format: 'int' },
             { label: 'Cost/Order', key: null, calc: p => p.totalCost / (p.orders || 1), format: 'dollar2' },
-            { label: 'Gross Margin %', key: null, calc: p => p.revenue > 0 ? p.grossProfit / p.revenue : 0, format: 'pct' }
+            { label: 'Learning Curve Mult.', key: null, calc: p => p.learningMult || 1.0, format: 'mult' }
         ];
 
+        const colCount = projections.length + 2; // label + years + total
         tbody.innerHTML = rows.map(r => {
+            // Section header rows
+            if (r.section) {
+                return '<tr><td colspan="' + colCount + '" style="font-size:11px;font-weight:700;color:var(--ies-blue,#2563eb);padding-top:14px;letter-spacing:0.5px;">' + r.label + '</td></tr>';
+            }
             const style = (r.bold ? 'font-weight:600;' : '') + (r.border ? 'border-top:2px solid var(--gray-200);' : '');
             const vals = projections.map(p => {
                 const v = r.calc ? r.calc(p) : p[r.key];
                 if (r.format === 'int') return Math.round(v).toLocaleString('en-US');
                 if (r.format === 'dollar2') return '$' + v.toFixed(2);
                 if (r.format === 'pct') return fmtPct(v);
+                if (r.format === 'mult') return v !== 1.0 ? v.toFixed(3) + 'x' : '—';
                 return fmt(v);
             });
-            const total = r.calc
+            const total = r.format === 'mult' ? '—' : (r.calc
                 ? (r.format === 'pct' ? fmtPct(projections.reduce((s, p) => s + (r.calc(p) || 0), 0) / projections.length)
                    : r.format === 'dollar2' ? '$' + (projections.reduce((s, p) => s + r.calc(p), 0) / projections.length).toFixed(2)
                    : '')
                 : (r.format === 'int' ? Math.round(projections.reduce((s, p) => s + p[r.key], 0)).toLocaleString('en-US')
-                   : fmt(projections.reduce((s, p) => s + p[r.key], 0)));
+                   : fmt(projections.reduce((s, p) => s + p[r.key], 0))));
 
             return '<tr style="' + style + '"><td>' + r.label + '</td>' +
                 vals.map(v => '<td style="text-align:right;">' + v + '</td>').join('') +
@@ -18663,15 +18921,23 @@ const cmApp = {
     },
 
     calculateLaborCost() {
+        const otPct = this.getOvertimePct();
+        const benefitLoad = this.getBenefitLoadPct();
+        const bonusPct = this.getBonusPct();
         let cost = 0;
         this.projectData.laborLines.forEach(line => {
-            const fullyLoaded = (line.hourly_rate || 0) * (1 + (line.burden_pct || 0) / 100) + (line.benefits_per_hour || 0);
-            cost += (line.annual_hours || 0) * fullyLoaded;
+            const hours = line.annual_hours || 0;
+            const rate = line.hourly_rate || 0;
+            const burden = line.burden_pct != null ? (line.burden_pct / 100) : benefitLoad;
+            const effectiveRate = rate * (1 + burden) * (1 + otPct * 0.5);
+            cost += hours * effectiveRate;
         });
         this.projectData.indirectLaborLines.forEach(line => {
             const hours = this.getOperatingHours();
-            const fullyLoaded = (line.hourly_rate || 0) * (1 + (line.burden_pct || 0) / 100) + (line.benefits_per_hour || 0);
-            cost += (line.headcount || 0) * hours * fullyLoaded;
+            const rate = line.hourly_rate || 0;
+            const burden = line.burden_pct != null ? (line.burden_pct / 100) : benefitLoad;
+            const bonusMult = 1 + bonusPct;
+            cost += (line.headcount || 0) * hours * rate * (1 + burden) * bonusMult;
         });
         return cost;
     },
@@ -19242,6 +19508,11 @@ const cmApp = {
                 annual_volume_growth_pct: parseFloat(document.getElementById('volumeGrowth').value) || 0,
                 startup_cost: parseFloat(document.getElementById('startupCosts').value) || 0,
                 pricing_model: document.getElementById('pricingModel').value || 'hybrid',
+                overtime_pct: parseFloat(document.getElementById('overtimePct').value) || 5,
+                ramp_weeks_low: parseInt(document.getElementById('rampWeeksLow').value) || 2,
+                ramp_weeks_med: parseInt(document.getElementById('rampWeeksMed').value) || 4,
+                ramp_weeks_high: parseInt(document.getElementById('rampWeeksHigh').value) || 8,
+                seasonality_profile: JSON.stringify(this.getSeasonalityProfile()),
                 total_annual_cost: this.calculateLaborCost() + this.calculateFacilityCost() +
                                   this.calculateEquipmentCost() + this.calculateOverheadCost() +
                                   this.calculateVasCost(),
