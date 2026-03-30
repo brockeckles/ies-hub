@@ -14947,10 +14947,14 @@ const cmApp = {
                 this.loadRefData('ref_overhead_rates', 'overheadRates')
             ]);
 
+            // Safe helper — some elements may not exist if section hasn't rendered
+            const _el = (id) => document.getElementById(id);
+            const _on = (id, evt, fn) => { const el = _el(id); if (el) el.addEventListener(evt, fn); };
+
             // Setup event listeners
-            document.getElementById('newModelBtn').addEventListener('click', () => this.newModel());
-            document.getElementById('newModelBtnLanding').addEventListener('click', () => this.newModel());
-            document.getElementById('projectSelector').addEventListener('change', (e) => this.openProject(e.target.value));
+            _on('newModelBtn', 'click', () => this.newModel());
+            _on('newModelBtnLanding', 'click', () => this.newModel());
+            _on('projectSelector', 'change', (e) => this.openProject(e.target.value));
 
             // Setup sidebar navigation
             document.querySelectorAll('.cm-nav-item').forEach(item => {
@@ -14958,51 +14962,32 @@ const cmApp = {
             });
 
             // Setup input listeners
-            document.getElementById('modelName').addEventListener('input', () => this.markChanged());
-            document.getElementById('modelDescription').addEventListener('input', () => this.markChanged());
-            document.getElementById('market').addEventListener('change', () => {
-                this.updateMarketInfo();
-                this.markChanged();
-            });
-            document.getElementById('environment').addEventListener('change', () => this.markChanged());
-            document.getElementById('allowanceProfile').addEventListener('change', () => {
-                this.updateAllowanceInfo();
-                this.markChanged();
-            });
+            _on('modelName', 'input', () => this.markChanged());
+            _on('modelDescription', 'input', () => this.markChanged());
+            _on('market', 'change', () => { this.updateMarketInfo(); this.markChanged(); });
+            _on('environment', 'change', () => this.markChanged());
+            _on('allowanceProfile', 'change', () => { this.updateAllowanceInfo(); this.markChanged(); });
 
             // Volume inputs
             ['palletsReceived', 'casesReceived', 'palletsPutaway', 'casesPutaway', 'replenishments',
              'eachesPicked', 'casesPicked', 'palletsPicked', 'ordersPacked', 'palletsShipped',
              'returnsProcessed', 'vasUnits'].forEach(id => {
-                document.getElementById(id).addEventListener('input', () => {
-                    this.updateVolumeDailyValues();
-                    this.updateSqftSuggestion();
-                    this.markChanged();
-                });
+                _on(id, 'input', () => { this.updateVolumeDailyValues(); this.updateSqftSuggestion(); this.markChanged(); });
             });
 
             // Order profile
             ['linesPerOrder', 'unitsPerLine', 'orderWeight', 'singleLineOrderPct'].forEach(id => {
-                document.getElementById(id).addEventListener('input', () => {
-                    this.updateOrderMetrics();
-                    this.markChanged();
-                });
+                _on(id, 'input', () => { this.updateOrderMetrics(); this.markChanged(); });
             });
 
             // Facility
             ['totalSqft', 'clearHeight', 'dockDoors', 'stagingSqft', 'officeSqft'].forEach(id => {
-                document.getElementById(id).addEventListener('input', () => {
-                    this.updateFacilityMetrics();
-                    this.markChanged();
-                });
+                _on(id, 'input', () => { this.updateFacilityMetrics(); this.markChanged(); });
             });
 
             // Shifts
             ['shiftsPerDay', 'hoursPerShift', 'daysPerWeek', 'weeksPerYear'].forEach(id => {
-                document.getElementById(id).addEventListener('input', () => {
-                    this.updateShiftMetrics();
-                    this.markChanged();
-                });
+                _on(id, 'input', () => { this.updateShiftMetrics(); this.markChanged(); });
             });
 
             // Financial
@@ -15024,8 +15009,7 @@ const cmApp = {
             await this.loadProjects();
 
         } catch (error) {
-            console.error('Init error:', error);
-            alert('Error loading reference data: ' + error.message);
+            console.warn('Cost Model init warning:', error.message);
         }
     },
 
