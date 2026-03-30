@@ -2121,9 +2121,9 @@
         }
 
         .cm-sidebar {
-            width: 280px;
-            background: white;
-            border-right: 1px solid var(--gray-200);
+            width: 260px;
+            background: var(--ies-gray-50, #f9fafb);
+            border-right: 1px solid var(--ies-gray-200, #e5e7eb);
             padding: 24px 0;
             overflow-y: auto;
             position: sticky;
@@ -2147,7 +2147,7 @@
             padding: 10px 16px;
             font-size: 13px;
             font-weight: 500;
-            color: var(--gray-600);
+            color: var(--ies-gray-600, #6b7280);
             cursor: pointer;
             transition: all 0.2s;
             border-left: 3px solid transparent;
@@ -2155,12 +2155,12 @@
         }
 
         .cm-nav-item:hover {
-            background: var(--gray-50);
-            color: var(--gray-700);
+            background: rgba(255,58,0,0.04);
+            color: var(--ies-navy, #1c1c2e);
         }
 
         .cm-nav-item.active {
-            background: #fff3ed;
+            background: rgba(255,58,0,0.08);
             border-left-color: var(--ies-orange);
             color: var(--ies-orange);
             font-weight: 600;
@@ -2195,6 +2195,7 @@
             flex: 1;
             padding: 32px;
             overflow-y: auto;
+            background: #fff;
         }
 
         /* Landing Page */
@@ -2234,11 +2235,12 @@
 
         .cm-project-card {
             background: white;
-            border: 1px solid var(--gray-200);
-            border-radius: 8px;
+            border: 1px solid var(--ies-gray-200, #e5e7eb);
+            border-radius: 12px;
             padding: 20px;
             cursor: pointer;
             transition: all 0.2s;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
         }
 
         .cm-project-card:hover {
@@ -2282,15 +2284,16 @@
             color: var(--ies-navy);
             margin-bottom: 24px;
             padding-bottom: 12px;
-            border-bottom: 2px solid var(--gray-100);
+            border-bottom: 2px solid var(--ies-gray-100, #f3f4f6);
         }
 
         .cm-card {
             background: white;
-            border: 1px solid var(--gray-200);
-            border-radius: 8px;
+            border: 1px solid var(--ies-gray-200, #e5e7eb);
+            border-radius: 12px;
             padding: 20px;
             margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
         }
 
         .cm-card-title {
@@ -2327,6 +2330,26 @@
             margin-top: 4px;
         }
 
+        .cm-input, select.cm-select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--ies-gray-200, #e5e7eb);
+            border-radius: 8px;
+            font-size: 13px;
+            color: var(--ies-navy, #1c1c2e);
+            background: #fff;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            outline: none;
+            box-sizing: border-box;
+        }
+        .cm-input:focus, select.cm-select:focus {
+            border-color: var(--ies-orange, #ff3a00);
+            box-shadow: 0 0 0 3px rgba(255,58,0,0.08);
+        }
+        .cm-input::placeholder {
+            color: var(--ies-gray-400, #9ca3af);
+        }
+
         .cm-input-group {
             display: flex;
             gap: 12px;
@@ -2351,15 +2374,15 @@
         }
 
         .cm-table thead {
-            background: var(--gray-50);
-            border-bottom: 2px solid var(--gray-200);
+            background: var(--ies-gray-50, #f9fafb);
+            border-bottom: 2px solid var(--ies-gray-200, #e5e7eb);
         }
 
         .cm-table th {
             padding: 12px;
             text-align: left;
-            font-weight: 700;
-            color: var(--gray-700);
+            font-weight: 600;
+            color: var(--ies-gray-600, #6b7280);
             text-transform: uppercase;
             letter-spacing: 0.5px;
             font-size: 11px;
@@ -2367,11 +2390,11 @@
 
         .cm-table td {
             padding: 12px;
-            border-bottom: 1px solid var(--gray-100);
+            border-bottom: 1px solid var(--ies-gray-100, #f3f4f6);
         }
 
         .cm-table tbody tr:hover {
-            background: var(--gray-50);
+            background: var(--ies-gray-50, #f9fafb);
         }
 
         .cm-table-number {
@@ -2418,10 +2441,11 @@
 
         .cm-metric-card {
             background: linear-gradient(135deg, #fff3ed 0%, white 100%);
-            border: 1px solid var(--gray-200);
-            border-radius: 8px;
+            border: 1px solid var(--ies-gray-200, #e5e7eb);
+            border-radius: 12px;
             padding: 20px;
             text-align: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
         }
 
         .cm-metric-label {
@@ -2441,10 +2465,11 @@
 
         .cm-cost-bars {
             background: white;
-            border: 1px solid var(--gray-200);
-            border-radius: 8px;
+            border: 1px solid var(--ies-gray-200, #e5e7eb);
+            border-radius: 12px;
             padding: 20px;
             margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
         }
 
         .cm-cost-bar {
@@ -2554,19 +2579,61 @@
         .cm-empty-state {
             text-align: center;
             padding: 48px 24px;
-            color: var(--gray-500);
+            color: var(--ies-gray-500, #6b7280);
+            background: var(--ies-gray-50, #f9fafb);
+            border-radius: 12px;
+            border: 2px dashed var(--ies-gray-200, #e5e7eb);
         }
 
         .cm-empty-state-icon {
             font-size: 48px;
             margin-bottom: 16px;
+            opacity: 0.7;
         }
 
         .cm-empty-state-title {
             font-size: 18px;
             font-weight: 700;
-            color: var(--gray-700);
+            color: var(--ies-navy, #1c1c2e);
             margin-bottom: 8px;
+        }
+
+        /* Section nav footer */
+        .cm-section-nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 32px;
+            padding-top: 20px;
+            border-top: 1px solid var(--ies-gray-200, #e5e7eb);
+        }
+        .cm-section-nav button {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+        }
+        .cm-section-nav .cm-nav-prev {
+            background: var(--ies-gray-100, #f3f4f6);
+            color: var(--ies-gray-700, #374151);
+        }
+        .cm-section-nav .cm-nav-prev:hover {
+            background: var(--ies-gray-200, #e5e7eb);
+        }
+        .cm-section-nav .cm-nav-next {
+            background: var(--ies-orange, #ff3a00);
+            color: #fff;
+        }
+        .cm-section-nav .cm-nav-next:hover {
+            background: #e63800;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(255,58,0,0.2);
         }
 
         /* Utility */
@@ -4976,7 +5043,24 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     <div id="emptyState" class="cm-empty-state">
       <div class="cm-empty-state-icon">📋</div>
       <div class="cm-empty-state-title">No Models Yet</div>
-      <div>Create your first cost model to get started</div>
+      <div style="margin-bottom:20px;">Create your first cost model to get started with warehouse costing.</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;max-width:640px;margin:0 auto;text-align:left;">
+        <div style="padding:16px;background:#fff;border-radius:10px;border:1px solid var(--ies-gray-200);">
+          <div style="font-size:20px;margin-bottom:6px;">1️⃣</div>
+          <div style="font-size:12px;font-weight:700;color:var(--ies-navy);margin-bottom:4px;">Setup & Volumes</div>
+          <div style="font-size:11px;color:var(--ies-gray-500);line-height:1.5;">Define market, environment, throughput volumes, and order profile.</div>
+        </div>
+        <div style="padding:16px;background:#fff;border-radius:10px;border:1px solid var(--ies-gray-200);">
+          <div style="font-size:20px;margin-bottom:6px;">2️⃣</div>
+          <div style="font-size:12px;font-weight:700;color:var(--ies-navy);margin-bottom:4px;">Build Cost Layers</div>
+          <div style="font-size:11px;color:var(--ies-gray-500);line-height:1.5;">Labor, equipment, overhead, VAS, and startup costs calculated from your data.</div>
+        </div>
+        <div style="padding:16px;background:#fff;border-radius:10px;border:1px solid var(--ies-gray-200);">
+          <div style="font-size:20px;margin-bottom:6px;">3️⃣</div>
+          <div style="font-size:12px;font-weight:700;color:var(--ies-navy);margin-bottom:4px;">Financials & Pricing</div>
+          <div style="font-size:11px;color:var(--ies-gray-500);line-height:1.5;">Multi-year P&L, pricing buckets, and executive summary auto-generated.</div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -4991,13 +5075,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         <div class="cm-nav-section">
             <div class="cm-nav-item" data-section="volumes">
                 <div class="cm-nav-checkmark"></div>
-                Volumes
-            </div>
-        </div>
-        <div class="cm-nav-section">
-            <div class="cm-nav-item" data-section="orderprofile">
-                <div class="cm-nav-checkmark"></div>
-                Order Profile
+                Volumes & Profile
             </div>
         </div>
         <div class="cm-nav-section">
@@ -5108,11 +5186,33 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
                 </div>
                 <div id="allowanceInfo" class="cm-info-card" style="display:none;"></div>
             </div>
+
+            <!-- Integration: Network Optimization -->
+            <div class="cm-card" id="netOptIntegrationCard" style="border-left:3px solid var(--ies-blue, #0047ab);background:linear-gradient(135deg,#f0f7ff 0%,#fff 60%);">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <div style="width:36px;height:36px;background:linear-gradient(135deg,var(--ies-blue),#1e5bb8);border-radius:8px;display:flex;align-items:center;justify-content:center;">
+                            <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5" stroke="#fff" stroke-width="1.5"/><circle cx="18" cy="6" r="2.5" stroke="#fff" stroke-width="1.5"/><circle cx="12" cy="18" r="2.5" stroke="#fff" stroke-width="1.5"/><path d="M8 7l4 9M16 7l-4 9M8.5 6h7" stroke="#fff" stroke-width="1.2" opacity=".6"/></svg>
+                        </div>
+                        <div>
+                            <div style="font-weight:700;font-size:13px;color:var(--ies-navy);">Network Optimization</div>
+                            <div style="font-size:11px;color:var(--ies-gray-500);">Import optimal location & transport cost from network analysis</div>
+                        </div>
+                    </div>
+                    <button onclick="cmApp.importFromNetwork()" class="cm-btn cm-btn-primary" style="padding:8px 16px;font-size:12px;border-radius:6px;">Import Location</button>
+                </div>
+                <div id="netImportPreview" style="display:none;background:rgba(0,71,171,0.04);border-radius:8px;padding:12px 16px;font-size:12px;color:var(--ies-gray-700);">
+                    <div id="netImportValues"></div>
+                </div>
+                <div id="netImportEmpty" style="font-size:12px;color:var(--ies-gray-500);padding:8px 0;">
+                    Run the Network Optimization tool first to identify optimal DC locations, then import the recommended market.
+                </div>
+            </div>
         </div>
 
         <!-- Volumes Section -->
         <div class="cm-section" id="volumesSection">
-            <h2 class="cm-section-title">Annual Volumes</h2>
+            <h2 class="cm-section-title">Volumes & Order Profile</h2>
             <div class="cm-card">
                 <div class="cm-card-title">Receiving</div>
                 <div class="cm-field-group">
@@ -5280,11 +5380,8 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Order Profile Section -->
-        <div class="cm-section" id="orderprofileSection">
-            <h2 class="cm-section-title">Order Profile</h2>
+            <h3 style="font-size:15px;font-weight:600;color:var(--ies-navy);margin:20px 0 12px;padding-top:16px;border-top:1px solid rgba(0,0,0,0.08);">Order Profile</h3>
             <div class="cm-card">
                 <div class="cm-field-group">
                     <label class="cm-field-label">Average Lines per Order</label>
@@ -5322,9 +5419,34 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
             </div>
         </div>
 
+        <!-- Order Profile section merged into Volumes above -->
+
         <!-- Facility Section -->
         <div class="cm-section" id="facilitySection">
             <h2 class="cm-section-title">Facility</h2>
+
+            <!-- Integration: Warehouse Sizing Calculator -->
+            <div class="cm-card" id="wscIntegrationCard" style="border-left:3px solid var(--ies-blue, #0047ab);background:linear-gradient(135deg,#f0f7ff 0%,#fff 60%);">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <div style="width:36px;height:36px;background:linear-gradient(135deg,var(--ies-blue),#1e5bb8);border-radius:8px;display:flex;align-items:center;justify-content:center;">
+                            <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="12" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M3 12h18M8 8v12M16 8v12" stroke="#fff" stroke-width="1.2" opacity=".6"/><path d="M7 5l5-2 5 2" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg>
+                        </div>
+                        <div>
+                            <div style="font-weight:700;font-size:13px;color:var(--ies-navy);">Warehouse Sizing Calculator</div>
+                            <div style="font-size:11px;color:var(--ies-gray-500);">Import facility specs from calculator results</div>
+                        </div>
+                    </div>
+                    <button onclick="cmApp.importFromCalculator()" class="cm-btn cm-btn-primary" style="padding:8px 16px;font-size:12px;border-radius:6px;">Import Values</button>
+                </div>
+                <div id="wscImportPreview" style="display:none;background:rgba(0,71,171,0.04);border-radius:8px;padding:12px 16px;font-size:12px;color:var(--ies-gray-700);">
+                    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;" id="wscImportValues"></div>
+                </div>
+                <div id="wscImportEmpty" style="font-size:12px;color:var(--ies-gray-500);padding:8px 0;">
+                    Run the Warehouse Sizing Calculator first, then click Import to pull in SF, dock doors, and clear height.
+                </div>
+            </div>
+
             <div class="cm-card">
                 <div class="cm-field-group">
                     <label class="cm-field-label">Total Square Footage</label>
@@ -15988,17 +16110,46 @@ const cmApp = {
         return days * weeks;
     },
 
+    _sectionOrder: ['setup','volumes','facility','shifts','labor','equipment','overhead','vas','financial','startup','pricing','summary'],
+    _sectionLabels: {setup:'Setup',volumes:'Volumes & Profile',facility:'Facility',shifts:'Shifts',labor:'Labor',equipment:'Equipment',overhead:'Overhead',vas:'VAS',financial:'Financial',startup:'Startup',pricing:'Pricing',summary:'Summary'},
+
     switchSection(sectionId) {
         // Hide all sections
         document.querySelectorAll('.cm-section').forEach(s => s.classList.remove('active'));
         // Show active section
-        document.getElementById(sectionId + 'Section').classList.add('active');
+        var sectionEl = document.getElementById(sectionId + 'Section');
+        sectionEl.classList.add('active');
 
         // Update nav
         document.querySelectorAll('.cm-nav-item').forEach(item => {
             item.classList.remove('active');
             if (item.dataset.section === sectionId) item.classList.add('active');
         });
+
+        // Inject section nav footer
+        var existingNav = sectionEl.querySelector('.cm-section-nav');
+        if (existingNav) existingNav.remove();
+        var idx = this._sectionOrder.indexOf(sectionId);
+        if (idx >= 0) {
+            var nav = document.createElement('div');
+            nav.className = 'cm-section-nav';
+            var prevHtml = '';
+            var nextHtml = '';
+            if (idx > 0) {
+                var prevId = this._sectionOrder[idx - 1];
+                prevHtml = '<button class="cm-nav-prev" onclick="cmApp.switchSection(\'' + prevId + '\')"><svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> ' + this._sectionLabels[prevId] + '</button>';
+            } else {
+                prevHtml = '<div></div>';
+            }
+            if (idx < this._sectionOrder.length - 1) {
+                var nextId = this._sectionOrder[idx + 1];
+                nextHtml = '<button class="cm-nav-next" onclick="cmApp.switchSection(\'' + nextId + '\')">' + this._sectionLabels[nextId] + ' <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>';
+            } else {
+                nextHtml = '<div></div>';
+            }
+            nav.innerHTML = prevHtml + nextHtml;
+            sectionEl.appendChild(nav);
+        }
 
         // Render labor and summary if needed
         if (sectionId === 'labor') {
@@ -16025,6 +16176,10 @@ const cmApp = {
         } else if (sectionId === 'summary') {
             this.recalculateSummary();
         }
+
+        // Scroll to top of content area
+        var contentEl = sectionEl.closest('.cm-content');
+        if (contentEl) contentEl.scrollTop = 0;
     },
 
     autoGenerateEquipment() {
@@ -18194,6 +18349,99 @@ const cmApp = {
             volume: 0
         });
         this.renderVasTable();
+    },
+
+    // ── TOOL INTEGRATIONS ──
+    importFromCalculator() {
+        const sqftEl = document.getElementById('wsc-r-sqft');
+        const docksEl = document.getElementById('wsc-r-docks');
+        const heightEl = document.getElementById('wsc-r-height');
+
+        if (!sqftEl || sqftEl.textContent.trim() === '—') {
+            const empty = document.getElementById('wscImportEmpty');
+            if (empty) { empty.innerHTML = '<span style="color:var(--ies-orange);font-weight:600;">⚠ No calculator results found.</span> Open the Warehouse Sizing Calculator from Design Tools and run a calculation first.'; }
+            return;
+        }
+
+        // Parse values from calculator KPI strip
+        const sqft = parseInt(sqftEl.textContent.replace(/[^0-9]/g, '')) || 0;
+        const docks = parseInt(docksEl.textContent.replace(/[^0-9]/g, '')) || 0;
+        const height = parseInt(heightEl.textContent.replace(/[^0-9]/g, '')) || 0;
+
+        // Positions & utilization
+        const posEl = document.getElementById('wsc-r-positions');
+        const positions = posEl ? parseInt(posEl.textContent.replace(/[^0-9]/g, '')) || 0 : 0;
+
+        // Set values in Cost Model facility fields
+        if (sqft > 0) document.getElementById('totalSqft').value = sqft;
+        if (docks > 0) document.getElementById('dockDoors').value = docks;
+        if (height > 0) document.getElementById('clearHeight').value = height;
+
+        // Update calculated values
+        this.updateFacilityMetrics();
+        this.updateSqftSuggestion();
+        this.markChanged();
+
+        // Show preview
+        const preview = document.getElementById('wscImportPreview');
+        const valuesEl = document.getElementById('wscImportValues');
+        const empty = document.getElementById('wscImportEmpty');
+        if (preview && valuesEl) {
+            valuesEl.innerHTML =
+                '<div><span style="font-weight:600;color:var(--ies-gray-500);font-size:10px;text-transform:uppercase;letter-spacing:.5px;">Total SF</span><div style="font-weight:700;font-size:16px;color:var(--ies-navy);">' + sqft.toLocaleString() + '</div></div>' +
+                '<div><span style="font-weight:600;color:var(--ies-gray-500);font-size:10px;text-transform:uppercase;letter-spacing:.5px;">Dock Doors</span><div style="font-weight:700;font-size:16px;color:var(--ies-navy);">' + docks + '</div></div>' +
+                '<div><span style="font-weight:600;color:var(--ies-gray-500);font-size:10px;text-transform:uppercase;letter-spacing:.5px;">Clear Height</span><div style="font-weight:700;font-size:16px;color:var(--ies-navy);">' + height + ' ft</div></div>';
+            preview.style.display = 'block';
+            if (empty) empty.innerHTML = '<span style="color:var(--ies-green, #198754);font-weight:600;">✓ Values imported successfully</span>';
+        }
+    },
+
+    importFromNetwork() {
+        const dcsEl = document.getElementById('net-k-dcs');
+        const dcResultsEl = document.getElementById('net-dc-results');
+
+        if (!dcsEl || dcsEl.textContent.trim() === '—') {
+            const empty = document.getElementById('netImportEmpty');
+            if (empty) { empty.innerHTML = '<span style="color:var(--ies-orange);font-weight:600;">⚠ No network results found.</span> Open the Network Optimization tool from Design Tools and run an analysis first.'; }
+            return;
+        }
+
+        // Parse key network metrics
+        const numDCs = parseInt(dcsEl.textContent) || 0;
+        const distEl = document.getElementById('net-k-dist');
+        const costEl = document.getElementById('net-k-cost');
+        const avgDist = distEl ? distEl.textContent.trim() : '—';
+        const transCost = costEl ? costEl.textContent.trim() : '—';
+
+        // Try to extract DC location info from results panel
+        let locationInfo = '';
+        if (dcResultsEl) {
+            const text = dcResultsEl.textContent || '';
+            // Extract first DC location mention
+            const match = text.match(/DC\s*#?\d*[:\s]+([A-Za-z\s,]+(?:,\s*[A-Z]{2}))/);
+            if (match) locationInfo = match[1].trim();
+        }
+
+        // Show preview
+        const preview = document.getElementById('netImportPreview');
+        const valuesEl = document.getElementById('netImportValues');
+        const empty = document.getElementById('netImportEmpty');
+        if (preview && valuesEl) {
+            let html = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;">';
+            html += '<div><span style="font-weight:600;color:var(--ies-gray-500);font-size:10px;text-transform:uppercase;letter-spacing:.5px;">DCs</span><div style="font-weight:700;font-size:16px;color:var(--ies-navy);">' + numDCs + '</div></div>';
+            html += '<div><span style="font-weight:600;color:var(--ies-gray-500);font-size:10px;text-transform:uppercase;letter-spacing:.5px;">Avg Distance</span><div style="font-weight:700;font-size:16px;color:var(--ies-navy);">' + avgDist + '</div></div>';
+            html += '<div><span style="font-weight:600;color:var(--ies-gray-500);font-size:10px;text-transform:uppercase;letter-spacing:.5px;">Transport Cost</span><div style="font-weight:700;font-size:16px;color:var(--ies-navy);">' + transCost + '</div></div>';
+            html += '</div>';
+            if (locationInfo) {
+                html += '<div style="margin-top:8px;padding:8px 12px;background:rgba(0,71,171,0.06);border-radius:6px;font-size:12px;"><strong>Recommended Location:</strong> ' + locationInfo + '</div>';
+            }
+            html += '<div style="margin-top:8px;font-size:11px;color:var(--ies-gray-500);">Use these insights to select the appropriate market and inform facility decisions.</div>';
+            valuesEl.innerHTML = html;
+            preview.style.display = 'block';
+            if (empty) empty.innerHTML = '<span style="color:var(--ies-green, #198754);font-weight:600;">✓ Network data imported</span>';
+        }
+
+        this.markChanged();
     },
 
     markChanged() {
