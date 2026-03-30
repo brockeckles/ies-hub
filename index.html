@@ -2357,12 +2357,165 @@
 
         .cm-field-label {
             display: block;
-            font-size: 12px;
+            font-size: 13px;
             font-weight: 600;
-            color: var(--gray-600);
+            color: var(--ies-navy);
             margin-bottom: 6px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+        }
+
+        /* Enterprise-Grade UI — Compact Input Grid */
+        .cm-input-grid {
+            display: grid;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .cm-input-grid.cols-2 {
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .cm-input-grid.cols-3 {
+            grid-template-columns: 1fr 1fr 1fr;
+        }
+
+        .cm-compact-input,
+        .cm-compact-input.cm-input {
+            padding: 8px 12px;
+            font-size: 13px;
+            border: 1.5px solid var(--ies-gray-200);
+            border-radius: 8px;
+        }
+
+        .cm-compact-input:focus,
+        .cm-compact-input.cm-input:focus {
+            border-color: var(--ies-orange);
+            box-shadow: 0 0 0 3px rgba(255,58,0,0.08);
+        }
+
+        /* KPI Strip (dark header for section summaries) */
+        .cm-kpi-strip {
+            background: linear-gradient(135deg, #0a1628, #0d1f3c, #0a1628);
+            padding: 20px 24px;
+            border-radius: 12px;
+            margin-bottom: 24px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 32px;
+            align-items: center;
+        }
+
+        .cm-kpi-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .cm-kpi-label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: rgba(255,255,255,0.6);
+        }
+
+        .cm-kpi-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #fff;
+            font-family: 'Courier New', monospace;
+        }
+
+        /* Section Collapsible */
+        .cm-section-collapsible {
+            border-left: 2px solid var(--ies-blue);
+            margin-bottom: 20px;
+        }
+
+        .cm-section-collapsible-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px;
+            background: white;
+            border: 1px solid var(--ies-gray-200);
+            border-left-width: 2px;
+            border-left-color: var(--ies-blue);
+            border-radius: 12px 12px 0 0;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .cm-section-collapsible-header:hover {
+            background: var(--ies-gray-50);
+        }
+
+        .cm-section-collapsible-header h3 {
+            margin: 0;
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--ies-navy);
+        }
+
+        .cm-section-collapsible-chevron {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            transition: transform 0.2s ease;
+        }
+
+        .cm-section-collapsible.collapsed .cm-section-collapsible-chevron {
+            transform: rotate(-90deg);
+        }
+
+        .cm-section-collapsible-content {
+            padding: 20px;
+            background: white;
+            border: 1px solid var(--ies-gray-200);
+            border-top: none;
+            border-radius: 0 0 12px 12px;
+            display: block;
+        }
+
+        .cm-section-collapsible.collapsed .cm-section-collapsible-content {
+            display: none;
+        }
+
+        /* Tighten card/table styles */
+        .cm-card {
+            background: white;
+            border: 1px solid var(--ies-gray-200);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,.06);
+        }
+
+        .cm-card-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--ies-navy);
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .cm-table {
+            font-size: 12px;
+        }
+
+        .cm-table th {
+            font-size: 11px;
+            font-weight: 800;
+            padding: 8px 12px;
+        }
+
+        .cm-table td {
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--ies-gray-100);
         }
 
         .cm-field-help {
@@ -5381,23 +5534,24 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 
             <div class="cm-card">
                 <div class="cm-card-title">Environment</div>
-                <div class="cm-field-group">
-                    <label class="cm-field-label">Market</label>
-                    <select id="market" class="cm-select">
-                        <option value="">-- Select Market --</option>
-                    </select>
-                    <span class="cm-field-help">Determines labor rates and facility costs</span>
+                <div class="cm-input-grid cols-2">
+                    <div class="cm-field-group">
+                        <label class="cm-field-label">Market</label>
+                        <select id="market" class="cm-select">
+                            <option value="">-- Select Market --</option>
+                        </select>
+                        <span class="cm-field-help">Determines labor rates and facility costs</span>
+                    </div>
+                    <div class="cm-field-group">
+                        <label class="cm-field-label">Environment Type</label>
+                        <select id="environment" class="cm-select">
+                            <option value="ambient">Ambient</option>
+                            <option value="cold">Cold Storage (35-45°F)</option>
+                            <option value="frozen">Frozen (-10°F or lower)</option>
+                        </select>
+                    </div>
                 </div>
                 <div id="marketInfo" class="cm-info-card" style="display:none;"></div>
-
-                <div class="cm-field-group">
-                    <label class="cm-field-label">Environment Type</label>
-                    <select id="environment" class="cm-select">
-                        <option value="ambient">Ambient</option>
-                        <option value="cold">Cold Storage (35-45°F)</option>
-                        <option value="frozen">Frozen (-10°F or lower)</option>
-                    </select>
-                </div>
 
                 <div class="cm-field-group">
                     <label class="cm-field-label">Allowance Profile</label>
@@ -5603,6 +5757,29 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
                 </div>
             </div>
 
+            <div class="cm-card">
+                <div class="cm-card-title">Named Volume Lines</div>
+                <p style="font-size:12px;color:var(--ies-gray-400);margin-bottom:12px;">Define named volume lines that can be linked to labor activities. Each line auto-calculates daily volume based on operating days.</p>
+                <div style="overflow-x:auto;">
+                    <table class="cm-table" id="volumeLinesTable">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>UOM</th>
+                                <th style="text-align:right;">Annual Volume</th>
+                                <th style="text-align:right;">Daily Volume</th>
+                                <th style="text-align:center;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="volumeLinesBody">
+                        </tbody>
+                    </table>
+                </div>
+                <div class="cm-mt-8" style="margin-top:12px;">
+                    <button class="cm-btn cm-btn-secondary" onclick="cmApp.addVolumeLine()">+ Add Volume Line</button>
+                </div>
+            </div>
+
             <h3 style="font-size:15px;font-weight:600;color:var(--ies-navy);margin:20px 0 12px;padding-top:16px;border-top:1px solid rgba(0,0,0,0.08);">Order Profile</h3>
             <div class="cm-card">
                 <div class="cm-field-group">
@@ -5736,21 +5913,23 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         <div class="cm-section" id="shiftsSection">
             <h2 class="cm-section-title">Shift Structure</h2>
             <div class="cm-card">
-                <div class="cm-field-group">
-                    <label class="cm-field-label">Shifts per Day</label>
-                    <input type="number" id="shiftsPerDay" class="cm-input" placeholder="1" min="1" step="0.5">
-                </div>
-                <div class="cm-field-group">
-                    <label class="cm-field-label">Hours per Shift</label>
-                    <input type="number" id="hoursPerShift" class="cm-input" placeholder="8" min="1" step="0.5">
-                </div>
-                <div class="cm-field-group">
-                    <label class="cm-field-label">Days per Week</label>
-                    <input type="number" id="daysPerWeek" class="cm-input" placeholder="5" min="1" max="7" step="0.5">
-                </div>
-                <div class="cm-field-group">
-                    <label class="cm-field-label">Operating Weeks per Year</label>
-                    <input type="number" id="weeksPerYear" class="cm-input" placeholder="52" min="1" step="0.5">
+                <div class="cm-input-grid cols-2">
+                    <div class="cm-field-group">
+                        <label class="cm-field-label">Shifts per Day</label>
+                        <input type="number" id="shiftsPerDay" class="cm-input" placeholder="1" min="1" step="0.5">
+                    </div>
+                    <div class="cm-field-group">
+                        <label class="cm-field-label">Hours per Shift</label>
+                        <input type="number" id="hoursPerShift" class="cm-input" placeholder="8" min="1" step="0.5">
+                    </div>
+                    <div class="cm-field-group">
+                        <label class="cm-field-label">Days per Week</label>
+                        <input type="number" id="daysPerWeek" class="cm-input" placeholder="5" min="1" max="7" step="0.5">
+                    </div>
+                    <div class="cm-field-group">
+                        <label class="cm-field-label">Operating Weeks per Year</label>
+                        <input type="number" id="weeksPerYear" class="cm-input" placeholder="52" min="1" step="0.5">
+                    </div>
                 </div>
             </div>
 
@@ -5785,13 +5964,14 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
                 </div>
                 <div style="font-size:11px;color:var(--ies-gray-400);margin-top:12px;text-align:right;">Scroll right for Complexity, MHE, IT Equipment, Hourly Rate, Annual Cost, and Bucket columns &rarr; &nbsp;or use <strong>Expand</strong></div>
                 <div style="overflow-x:auto;margin:0 -20px;padding:0 20px;margin-top:4px;">
-                <table class="cm-table" style="min-width:1300px;">
+                <table class="cm-table" style="min-width:1400px;">
                     <thead>
                         <tr>
                             <th>Activity</th>
                             <th>MOST Template</th>
                             <th>UOM</th>
-                            <th>Volume</th>
+                            <th>Volume Source</th>
+                            <th style="text-align:right;">Volume</th>
                             <th>Base UPH</th>
                             <th>Adj UPH</th>
                             <th>Complexity</th>
@@ -5971,64 +6151,76 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         <div class="cm-section" id="financialSection">
             <h2 class="cm-section-title">Financial</h2>
             <div class="cm-card">
-                <div class="cm-field-group">
-                    <label class="cm-field-label">Target Margin %</label>
-                    <div class="cm-input-group">
-                        <input type="number" id="targetMargin" class="cm-input" placeholder="15" min="0" step="0.1">
-                        <div class="cm-input-group-item" style="flex:0; min-width: 40px;">%</div>
+                <div class="cm-card-title">Contract & Pricing</div>
+                <div class="cm-input-grid cols-3">
+                    <div class="cm-field-group">
+                        <label class="cm-field-label">Target Margin %</label>
+                        <div class="cm-input-group">
+                            <input type="number" id="targetMargin" class="cm-input" placeholder="15" min="0" step="0.1">
+                            <div style="flex:0; min-width: 30px;text-align:center;">%</div>
+                        </div>
                     </div>
-                </div>
-                <div class="cm-field-group">
-                    <label class="cm-field-label">Contract Term</label>
-                    <div class="cm-input-group">
+                    <div class="cm-field-group">
+                        <label class="cm-field-label">Contract Term (years)</label>
                         <input type="number" id="contractTerm" class="cm-input" placeholder="1" min="1" step="0.1">
-                        <div class="cm-input-group-item" style="flex:0; min-width: 60px;">years</div>
+                    </div>
+                    <div class="cm-field-group">
+                        <label class="cm-field-label">Pricing Model</label>
+                        <select id="pricingModel" class="cm-select">
+                            <option value="all-in">All-In</option>
+                            <option value="transactional">Transactional</option>
+                            <option value="hybrid">Hybrid</option>
+                            <option value="cost-plus">Cost-Plus</option>
+                        </select>
                     </div>
                 </div>
-                <div class="cm-field-group">
-                    <label class="cm-field-label">Annual Volume Growth %</label>
-                    <div class="cm-input-group">
-                        <input type="number" id="volumeGrowth" class="cm-input" placeholder="0" step="0.1">
-                        <div class="cm-input-group-item" style="flex:0; min-width: 40px;">%</div>
+            </div>
+
+            <div class="cm-card">
+                <div class="cm-card-title">Growth & Volume</div>
+                <div class="cm-input-grid cols-2">
+                    <div class="cm-field-group">
+                        <label class="cm-field-label">Annual Volume Growth %</label>
+                        <div class="cm-input-group">
+                            <input type="number" id="volumeGrowth" class="cm-input" placeholder="0" step="0.1">
+                            <div style="flex:0; min-width: 30px;text-align:center;">%</div>
+                        </div>
+                    </div>
+                    <div class="cm-field-group">
+                        <label class="cm-field-label">Annual Labor Escalation %</label>
+                        <div class="cm-input-group">
+                            <input type="number" id="laborEscalation" class="cm-input" placeholder="3" min="0" max="15" step="0.5" value="3">
+                            <div style="flex:0; min-width: 30px;text-align:center;">%</div>
+                        </div>
                     </div>
                 </div>
-                <div class="cm-field-group">
-                    <label class="cm-field-label">Startup Costs</label>
-                    <div class="cm-input-group">
-                        <div style="flex:0; min-width: 30px; text-align: right;">$</div>
-                        <input type="number" id="startupCosts" class="cm-input" placeholder="0" min="0" step="100">
+            </div>
+
+            <div class="cm-card">
+                <div class="cm-card-title">Financial Assumptions</div>
+                <div class="cm-input-grid cols-3">
+                    <div class="cm-field-group">
+                        <label class="cm-field-label">Discount Rate / WACC %</label>
+                        <div class="cm-input-group">
+                            <input type="number" id="discountRate" class="cm-input" placeholder="10" min="0" max="50" step="0.5" value="10">
+                            <div style="flex:0; min-width: 30px;text-align:center;">%</div>
+                        </div>
+                        <span class="cm-field-help">For MIRR, NPV</span>
                     </div>
-                </div>
-                <div class="cm-field-group">
-                    <label class="cm-field-label">Pricing Model</label>
-                    <select id="pricingModel" class="cm-select">
-                        <option value="all-in">All-In</option>
-                        <option value="transactional">Transactional</option>
-                        <option value="hybrid">Hybrid</option>
-                        <option value="cost-plus">Cost-Plus</option>
-                    </select>
-                </div>
-                <div class="cm-field-group">
-                    <label class="cm-field-label">Discount Rate / WACC %</label>
-                    <div class="cm-input-group">
-                        <input type="number" id="discountRate" class="cm-input" placeholder="10" min="0" max="50" step="0.5" value="10">
-                        <div class="cm-input-group-item" style="flex:0; min-width: 40px;">%</div>
+                    <div class="cm-field-group">
+                        <label class="cm-field-label">Reinvestment Rate %</label>
+                        <div class="cm-input-group">
+                            <input type="number" id="reinvestRate" class="cm-input" placeholder="8" min="0" max="50" step="0.5" value="8">
+                            <div style="flex:0; min-width: 30px;text-align:center;">%</div>
+                        </div>
+                        <span class="cm-field-help">MIRR assumption</span>
                     </div>
-                    <span class="cm-field-help">Used for MIRR, NPV calculations</span>
-                </div>
-                <div class="cm-field-group">
-                    <label class="cm-field-label">Reinvestment Rate %</label>
-                    <div class="cm-input-group">
-                        <input type="number" id="reinvestRate" class="cm-input" placeholder="8" min="0" max="50" step="0.5" value="8">
-                        <div class="cm-input-group-item" style="flex:0; min-width: 40px;">%</div>
-                    </div>
-                    <span class="cm-field-help">MIRR reinvestment assumption</span>
-                </div>
-                <div class="cm-field-group">
-                    <label class="cm-field-label">Annual Labor Escalation %</label>
-                    <div class="cm-input-group">
-                        <input type="number" id="laborEscalation" class="cm-input" placeholder="3" min="0" max="15" step="0.5" value="3">
-                        <div class="cm-input-group-item" style="flex:0; min-width: 40px;">%</div>
+                    <div class="cm-field-group">
+                        <label class="cm-field-label">Startup Costs</label>
+                        <div class="cm-input-group">
+                            <div style="flex:0; min-width: 25px; text-align: right;">$</div>
+                            <input type="number" id="startupCosts" class="cm-input" placeholder="0" min="0" step="100">
+                        </div>
                     </div>
                 </div>
             </div>
@@ -16006,7 +16198,8 @@ const cmApp = {
         overheadLines: [],
         vasLines: [],
         startupLines: [],
-        pricingBuckets: []
+        pricingBuckets: [],
+        volumeLines: []
     },
     saveTimeout: null,
 
@@ -16152,7 +16345,8 @@ const cmApp = {
             overheadLines: [],
             vasLines: [],
             startupLines: [],
-            pricingBuckets: []
+            pricingBuckets: [],
+            volumeLines: []
         };
         this.initDefaultBuckets();
 
@@ -16261,6 +16455,7 @@ const cmApp = {
             this.updateAllowanceInfo();
 
             // Render tables and run full recalculation chain
+            this.renderVolumeLines();
             this.recalculateLabor();
             this.renderLaborTable();
             this.renderIndirectLaborTable();
@@ -16298,11 +16493,12 @@ const cmApp = {
 
     async loadProjectData(projectId) {
         try {
-            const [labor, equipment, overhead, vas] = await Promise.all([
+            const [labor, equipment, overhead, vas, volumes] = await Promise.all([
                 cmFetchTable('cost_model_labor', 'project_id=eq.' + projectId),
                 cmFetchTable('cost_model_equipment', 'project_id=eq.' + projectId),
                 cmFetchTable('cost_model_overhead', 'project_id=eq.' + projectId),
-                cmFetchTable('cost_model_vas', 'project_id=eq.' + projectId)
+                cmFetchTable('cost_model_vas', 'project_id=eq.' + projectId),
+                cmFetchTable('cost_model_volumes', 'project_id=eq.' + projectId).catch(() => [])
             ]);
 
             this.projectData.laborLines = labor;
@@ -16310,6 +16506,7 @@ const cmApp = {
             this.projectData.equipmentLines = equipment;
             this.projectData.overheadLines = overhead;
             this.projectData.vasLines = vas;
+            this.projectData.volumeLines = volumes || [];
         } catch (error) {
             console.error('Error loading project data:', error);
         }
@@ -17371,7 +17568,8 @@ const cmApp = {
         equipmentLines: ['quantity','monthly_cost','monthly_maintenance'],
         overheadLines: ['monthly_cost','annual_cost'],
         vasLines: ['volume','rate','monthly_cost'],
-        startupLines: ['one_time_cost']
+        startupLines: ['one_time_cost'],
+        volumeLines: ['annual_volume']
     },
 
     _updateLine(arr, idx, key, val, type) {
@@ -17602,6 +17800,31 @@ const cmApp = {
         return html;
     },
 
+    _volumeSourceSelectHtml(idx, currentId) {
+        let html = '<select class="cm-input" style="width:100px;padding:4px 4px;font-size:11px;" onchange="cmApp.onVolumeSourceChange(' + idx + ', this.value)">';
+        html += '<option value="">-- Manual --</option>';
+        this.projectData.volumeLines.forEach(vl => {
+            const sel = (vl.name === currentId) ? ' selected' : '';
+            html += '<option value="' + vl.name + '"' + sel + '>' + vl.name + '</option>';
+        });
+        html += '</select>';
+        return html;
+    },
+
+    onVolumeSourceChange(idx, volumeLineName) {
+        const volumeLine = this.projectData.volumeLines.find(v => v.name === volumeLineName);
+        const line = this.projectData.laborLines[idx];
+        if (volumeLine) {
+            line.volume_line_id = volumeLineName;
+            line.volume = volumeLine.annual_volume;
+            // Auto-update UOM to match if there's a mismatch (but allow override)
+        } else {
+            line.volume_line_id = '';
+        }
+        this.renderLaborTable();
+        this.markChanged();
+    },
+
     _complexitySelectHtml(idx, current) {
         var tiers = [{v:'low',l:'Low'},{v:'medium',l:'Med'},{v:'high',l:'High'}];
         var html = '<select class="cm-input" style="width:60px;padding:4px 4px;font-size:11px;" onchange="cmApp._updateLine(\'laborLines\',' + idx + ',\'complexity_tier\',this.value,\'text\')">';
@@ -17621,12 +17844,26 @@ const cmApp = {
             const annualCost = (line.annual_hours || 0) * (line.hourly_rate || 0) * (1 + (line.burden_pct || 0) / 100);
             const fte = operatingHours > 0 ? (line.annual_hours || 0) / operatingHours : 0;
             const uomLabel = line.uom ? '<span style="font-size:10px;color:var(--ies-gray-400);">/' + line.uom + '</span>' : '';
+
+            // Volume source: auto-populate from named volume line if selected
+            let volumeSourceHtml = this._volumeSourceSelectHtml(idx, line.volume_line_id, line.uom);
+
+            // UOM mismatch warning
+            let uomWarning = '';
+            if (line.volume_line_id) {
+                const volumeLine = this.projectData.volumeLines.find(v => v.name === line.volume_line_id);
+                if (volumeLine && volumeLine.uom !== line.uom) {
+                    uomWarning = '<span style="display:inline-block;background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:4px;font-size:10px;margin-left:4px;font-weight:600;">UOM !</span>';
+                }
+            }
+
             const row = document.createElement('tr');
             row.innerHTML =
                 '<td>' + this._cmInp('text', line.activity_name, idx, 'laborLines', 'activity_name', {w:100, ph:'Activity'}) + '</td>' +
                 '<td>' + this._mostSelectHtml(idx, line.most_template_id) + '</td>' +
                 '<td>' + this._uomSelectHtml(idx, line.uom) + '</td>' +
-                '<td>' + this._cmInp('number', line.volume, idx, 'laborLines', 'volume', {w:70, step:'1', ph:'Annual'}) + '</td>' +
+                '<td>' + volumeSourceHtml + '</td>' +
+                '<td class="cm-table-number">' + ((line.volume || 0)).toFixed(0) + '</td>' +
                 '<td><div style="display:flex;align-items:center;gap:2px;">' + this._cmInp('number', line.base_uph, idx, 'laborLines', 'base_uph', {w:55, step:'1', ph:'UPH'}) + uomLabel + '</div></td>' +
                 '<td class="cm-table-number">' + (line.adjusted_uph || 0).toFixed(0) + '</td>' +
                 '<td>' + this._complexitySelectHtml(idx, line.complexity_tier) + '</td>' +
@@ -17635,7 +17872,7 @@ const cmApp = {
                 '<td>' + this._equipSelectHtml('MHE', idx, line.mhe_equipment_id, 'mhe_equipment_id') + '</td>' +
                 '<td>' + this._equipSelectHtml('Systems', idx, line.it_equipment_id, 'it_equipment_id') + '</td>' +
                 '<td>' + this._cmInp('number', line.hourly_rate, idx, 'laborLines', 'hourly_rate', {w:60, ph:'$/hr'}) + '</td>' +
-                '<td class="cm-table-number" style="font-weight:600;">$' + annualCost.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0}) + '</td>' +
+                '<td class="cm-table-number" style="font-weight:600;">$' + annualCost.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0}) + uomWarning + '</td>' +
                 '<td>' + this.bucketSelectHtml('labor', idx, line.pricing_bucket) + '</td>' +
                 '<td class="cm-table-actions"><button class="cm-btn-small cm-btn-small-danger" onclick="cmApp.deleteLaborLine(' + idx + ')">Delete</button></td>';
             tbody.appendChild(row);
@@ -19070,7 +19307,9 @@ const cmApp = {
             hourly_rate: 0,
             burden_pct: 0,
             mhe_equipment_id: '',
-            it_equipment_id: ''
+            it_equipment_id: '',
+            volume_line_id: '',
+            uom: 'each'
         });
         this.renderLaborTable();
     },
@@ -19097,6 +19336,58 @@ const cmApp = {
         this.projectData.indirectLaborLines.splice(idx, 1);
         this.renderIndirectLaborTable();
         this.markChanged();
+    },
+
+    // =====================================================================
+    // VOLUME LINES
+    // =====================================================================
+    addVolumeLine() {
+        this.projectData.volumeLines.push({
+            name: '',
+            uom: 'each',
+            annual_volume: 0,
+            daily_volume: 0
+        });
+        this.renderVolumeLines();
+        this.markChanged();
+    },
+
+    renderVolumeLines() {
+        const tbody = document.getElementById('volumeLinesBody');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        const operatingDays = this.getOperatingDays();
+
+        this.projectData.volumeLines.forEach((line, idx) => {
+            const dailyVolume = operatingDays > 0 ? (line.annual_volume || 0) / operatingDays : 0;
+            line.daily_volume = dailyVolume;
+            const row = document.createElement('tr');
+            row.innerHTML =
+                '<td>' + this._cmInp('text', line.name, idx, 'volumeLines', 'name', {w:150, ph:'e.g., Cases Shipped'}) + '</td>' +
+                '<td>' + this._volumeUomSelectHtml(idx, line.uom) + '</td>' +
+                '<td class="cm-table-number">' + this._cmInp('number', line.annual_volume, idx, 'volumeLines', 'annual_volume', {w:100, ph:'0'}) + '</td>' +
+                '<td class="cm-table-number">' + dailyVolume.toFixed(1) + '</td>' +
+                '<td class="cm-table-actions"><button class="cm-btn-small cm-btn-small-danger" onclick="cmApp.deleteVolumeLine(' + idx + ')">Delete</button></td>';
+            tbody.appendChild(row);
+        });
+    },
+
+    deleteVolumeLine(idx) {
+        this.projectData.volumeLines.splice(idx, 1);
+        this.renderVolumeLines();
+        this.renderLaborTable(); // Re-render labor table to update volume source dropdowns
+        this.markChanged();
+    },
+
+    _volumeUomSelectHtml(idx, currentUom) {
+        const uoms = ['each', 'case', 'carton', 'pallet', 'order', 'line', 'unit', 'lb', 'cu ft'];
+        let html = '<select class="cm-input" style="width:100px;padding:4px 4px;font-size:11px;" onchange="cmApp._updateLine(\'volumeLines\',' + idx + ',\'uom\',this.value,\'text\'); cmApp.renderLaborTable(); cmApp.markChanged();">';
+        uoms.forEach(u => {
+            const sel = u === currentUom ? ' selected' : '';
+            html += '<option value="' + u + '"' + sel + '>' + u + '</option>';
+        });
+        html += '</select>';
+        return html;
     },
 
     deleteEquipmentLine(idx) {
