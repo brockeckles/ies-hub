@@ -2365,6 +2365,13 @@
             letter-spacing: 0.5px;
         }
 
+        .cm-card-description {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-bottom: 12px;
+            line-height: 1.5;
+        }
+
         /* Enterprise-Grade UI — Compact Input Grid */
         .cm-input-grid {
             display: grid;
@@ -2378,6 +2385,10 @@
 
         .cm-input-grid.cols-3 {
             grid-template-columns: 1fr 1fr 1fr;
+        }
+
+        .cm-input-grid.cols-4 {
+            grid-template-columns: 1fr 1fr 1fr 1fr;
         }
 
         .cm-compact-input,
@@ -5523,12 +5534,12 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
                 <div class="cm-card-title">Model Information</div>
                 <div class="cm-field-group">
                     <label class="cm-field-label">Model Name</label>
-                    <input type="text" id="modelName" class="cm-input" placeholder="e.g., GXO Chicago Hub Q1 2026">
+                    <input type="text" id="modelName" class="cm-input" placeholder="e.g., GXO Chicago Hub Q1 2026" style="max-width:500px;">
                     <span class="cm-field-help">Unique name for this cost model</span>
                 </div>
                 <div class="cm-field-group">
                     <label class="cm-field-label">Description</label>
-                    <textarea id="modelDescription" class="cm-input" placeholder="Project scope, assumptions, etc." style="resize:vertical; min-height:80px;"></textarea>
+                    <textarea id="modelDescription" class="cm-input" placeholder="Project scope, assumptions, etc." style="resize:vertical; min-height:80px;max-width:500px;"></textarea>
                 </div>
             </div>
 
@@ -5537,14 +5548,14 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
                 <div class="cm-input-grid cols-2">
                     <div class="cm-field-group">
                         <label class="cm-field-label">Market</label>
-                        <select id="market" class="cm-select">
+                        <select id="market" class="cm-select" style="max-width:250px;">
                             <option value="">-- Select Market --</option>
                         </select>
                         <span class="cm-field-help">Determines labor rates and facility costs</span>
                     </div>
                     <div class="cm-field-group">
                         <label class="cm-field-label">Environment Type</label>
-                        <select id="environment" class="cm-select">
+                        <select id="environment" class="cm-select" style="max-width:180px;">
                             <option value="ambient">Ambient</option>
                             <option value="cold">Cold Storage (35-45°F)</option>
                             <option value="frozen">Frozen (-10°F or lower)</option>
@@ -5555,7 +5566,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 
                 <div class="cm-field-group">
                     <label class="cm-field-label">Allowance Profile</label>
-                    <select id="allowanceProfile" class="cm-select">
+                    <select id="allowanceProfile" class="cm-select" style="max-width:250px;">
                         <option value="">-- Select Profile --</option>
                     </select>
                     <span class="cm-field-help">PFD%, ergonomic adjustments applied to labor calculations</span>
@@ -5621,7 +5632,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 
             <div class="cm-card">
                 <div class="cm-card-title">Volume Lines</div>
-                <p style="font-size:12px;color:var(--ies-gray-400);margin-bottom:12px;">Define named volume lines that can be linked to labor activities. Each line auto-calculates daily volume based on operating days.</p>
+                <p class="cm-card-description">Define named volume lines that can be linked to labor activities. Each line auto-calculates daily volume based on operating days.</p>
                 <div style="overflow-x:auto;">
                     <table class="cm-table" id="volumeLinesTable">
                         <thead>
@@ -5649,22 +5660,22 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
                 <div class="cm-input-grid cols-2">
                 <div class="cm-field-group">
                     <label class="cm-field-label">Average Lines per Order</label>
-                    <input type="number" id="linesPerOrder" class="cm-input" placeholder="0" min="0" step="0.1">
+                    <input type="number" id="linesPerOrder" class="cm-input" placeholder="0" min="0" step="0.1" style="max-width:120px;">
                     <span class="cm-field-help">Total lines / total orders</span>
                 </div>
                 <div class="cm-field-group">
                     <label class="cm-field-label">Average Units per Line</label>
-                    <input type="number" id="unitsPerLine" class="cm-input" placeholder="0" min="0" step="0.1">
+                    <input type="number" id="unitsPerLine" class="cm-input" placeholder="0" min="0" step="0.1" style="max-width:120px;">
                     <span class="cm-field-help">Total units / total lines</span>
                 </div>
                 <div class="cm-field-group">
                     <label class="cm-field-label">Average Order Weight (lbs)</label>
-                    <input type="number" id="orderWeight" class="cm-input" placeholder="0" min="0" step="0.1">
+                    <input type="number" id="orderWeight" class="cm-input" placeholder="0" min="0" step="0.1" style="max-width:120px;">
                 </div>
                 <div class="cm-field-group">
                     <label class="cm-field-label">% Single-Line Orders</label>
                     <div class="cm-input-group">
-                        <input type="number" id="singleLineOrderPct" class="cm-input" placeholder="0" min="0" max="100" step="0.1">
+                        <input type="number" id="singleLineOrderPct" class="cm-input" placeholder="0" min="0" max="100" step="0.1" style="max-width:100px;">
                         <div class="cm-input-group-item" style="flex:0; min-width: 40px;">%</div>
                     </div>
                 </div>
@@ -5687,7 +5698,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 
             <div class="cm-card">
                 <div class="cm-card-title">Seasonality Profile</div>
-                <p style="font-size:0.82rem;color:#94a3b8;margin-bottom:12px;">Monthly volume multipliers relative to average. 1.0 = average month, 1.5 = 50% above average (e.g., holiday peak). Used for peak staffing and cash flow timing.</p>
+                <p class="cm-card-description">Monthly volume multipliers relative to average. 1.0 = average month, 1.5 = 50% above average (e.g., holiday peak). Used for peak staffing and cash flow timing.</p>
                 <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;" id="seasonalityGrid">
                     <div class="cm-field-group"><label class="cm-field-label" style="font-size:10px;">Jan</label><input type="number" class="cm-input cm-seasonality" data-month="0" value="1.0" min="0" max="5" step="0.05" style="width:100%;font-size:12px;text-align:center;"></div>
                     <div class="cm-field-group"><label class="cm-field-label" style="font-size:10px;">Feb</label><input type="number" class="cm-input cm-seasonality" data-month="1" value="1.0" min="0" max="5" step="0.05" style="width:100%;font-size:12px;text-align:center;"></div>
@@ -5741,28 +5752,30 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
             </div>
 
             <div class="cm-card">
+                <div class="cm-input-grid cols-3">
                 <div class="cm-field-group">
                     <label class="cm-field-label">Total Square Footage</label>
-                    <input type="number" id="totalSqft" class="cm-input" placeholder="0" min="0">
+                    <input type="number" id="totalSqft" class="cm-input" placeholder="0" min="0" style="max-width:150px;">
                     <span class="cm-field-help">Entire facility footprint</span>
                     <span class="cm-field-help cm-text-orange" id="sqftSuggestion" style="display:none;"></span>
                 </div>
                 <div class="cm-field-group">
                     <label class="cm-field-label">Clear Height (feet)</label>
-                    <input type="number" id="clearHeight" class="cm-input" placeholder="0" min="0" step="0.1">
+                    <input type="number" id="clearHeight" class="cm-input" placeholder="0" min="0" step="0.1" style="max-width:120px;">
                     <span class="cm-field-help">Floor to ceiling</span>
                 </div>
                 <div class="cm-field-group">
                     <label class="cm-field-label">Dock Doors</label>
-                    <input type="number" id="dockDoors" class="cm-input" placeholder="0" min="0" step="1">
+                    <input type="number" id="dockDoors" class="cm-input" placeholder="0" min="0" step="1" style="max-width:100px;">
                 </div>
                 <div class="cm-field-group">
                     <label class="cm-field-label">Staging Area Square Footage</label>
-                    <input type="number" id="stagingSqft" class="cm-input" placeholder="0" min="0">
+                    <input type="number" id="stagingSqft" class="cm-input" placeholder="0" min="0" style="max-width:150px;">
                 </div>
                 <div class="cm-field-group">
                     <label class="cm-field-label">Office Square Footage</label>
-                    <input type="number" id="officeSqft" class="cm-input" placeholder="0" min="0">
+                    <input type="number" id="officeSqft" class="cm-input" placeholder="0" min="0" style="max-width:150px;">
+                </div>
                 </div>
             </div>
 
@@ -5779,22 +5792,22 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         <div class="cm-section" id="shiftsSection">
             <h2 class="cm-section-title">Shift Structure</h2>
             <div class="cm-card">
-                <div class="cm-input-grid cols-2">
+                <div class="cm-input-grid cols-4">
                     <div class="cm-field-group">
                         <label class="cm-field-label">Shifts per Day</label>
-                        <input type="number" id="shiftsPerDay" class="cm-input" placeholder="1" min="1" step="0.5">
+                        <input type="number" id="shiftsPerDay" class="cm-input" placeholder="1" min="1" step="0.5" style="max-width:100px;">
                     </div>
                     <div class="cm-field-group">
                         <label class="cm-field-label">Hours per Shift</label>
-                        <input type="number" id="hoursPerShift" class="cm-input" placeholder="8" min="1" step="0.5">
+                        <input type="number" id="hoursPerShift" class="cm-input" placeholder="8" min="1" step="0.5" style="max-width:100px;">
                     </div>
                     <div class="cm-field-group">
                         <label class="cm-field-label">Days per Week</label>
-                        <input type="number" id="daysPerWeek" class="cm-input" placeholder="5" min="1" max="7" step="0.5">
+                        <input type="number" id="daysPerWeek" class="cm-input" placeholder="5" min="1" max="7" step="0.5" style="max-width:100px;">
                     </div>
                     <div class="cm-field-group">
                         <label class="cm-field-label">Operating Weeks per Year</label>
-                        <input type="number" id="weeksPerYear" class="cm-input" placeholder="52" min="1" step="0.5">
+                        <input type="number" id="weeksPerYear" class="cm-input" placeholder="52" min="1" step="0.5" style="max-width:100px;">
                     </div>
                 </div>
             </div>
@@ -6020,19 +6033,19 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
                 <div class="cm-card-title">Contract & Pricing</div>
                 <div class="cm-input-grid cols-3">
                     <div class="cm-field-group">
+                        <label class="cm-field-label">Contract Term (years)</label>
+                        <input type="number" id="contractTerm" class="cm-input" placeholder="1" min="1" step="0.1" style="max-width:120px;">
+                    </div>
+                    <div class="cm-field-group">
                         <label class="cm-field-label">Target Margin %</label>
                         <div class="cm-input-group">
-                            <input type="number" id="targetMargin" class="cm-input" placeholder="15" min="0" step="0.1">
+                            <input type="number" id="targetMargin" class="cm-input" placeholder="15" min="0" step="0.1" style="max-width:100px;">
                             <div style="flex:0; min-width: 30px;text-align:center;">%</div>
                         </div>
                     </div>
                     <div class="cm-field-group">
-                        <label class="cm-field-label">Contract Term (years)</label>
-                        <input type="number" id="contractTerm" class="cm-input" placeholder="1" min="1" step="0.1">
-                    </div>
-                    <div class="cm-field-group">
                         <label class="cm-field-label">Pricing Model</label>
-                        <select id="pricingModel" class="cm-select">
+                        <select id="pricingModel" class="cm-select" style="max-width:180px;">
                             <option value="all-in">All-In</option>
                             <option value="transactional">Transactional</option>
                             <option value="hybrid">Hybrid</option>
@@ -6048,14 +6061,14 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
                     <div class="cm-field-group">
                         <label class="cm-field-label">Annual Volume Growth %</label>
                         <div class="cm-input-group">
-                            <input type="number" id="volumeGrowth" class="cm-input" placeholder="0" step="0.1">
+                            <input type="number" id="volumeGrowth" class="cm-input" placeholder="0" step="0.1" style="max-width:100px;">
                             <div style="flex:0; min-width: 30px;text-align:center;">%</div>
                         </div>
                     </div>
                     <div class="cm-field-group">
                         <label class="cm-field-label">Annual Labor Escalation %</label>
                         <div class="cm-input-group">
-                            <input type="number" id="laborEscalation" class="cm-input" placeholder="3" min="0" max="15" step="0.5" value="3">
+                            <input type="number" id="laborEscalation" class="cm-input" placeholder="3" min="0" max="15" step="0.5" value="3" style="max-width:100px;">
                             <div style="flex:0; min-width: 30px;text-align:center;">%</div>
                         </div>
                     </div>
@@ -6068,7 +6081,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
                     <div class="cm-field-group">
                         <label class="cm-field-label">Discount Rate / WACC %</label>
                         <div class="cm-input-group">
-                            <input type="number" id="discountRate" class="cm-input" placeholder="10" min="0" max="50" step="0.5" value="10">
+                            <input type="number" id="discountRate" class="cm-input" placeholder="10" min="0" max="50" step="0.5" value="10" style="max-width:100px;">
                             <div style="flex:0; min-width: 30px;text-align:center;">%</div>
                         </div>
                         <span class="cm-field-help">For MIRR, NPV</span>
@@ -6076,7 +6089,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
                     <div class="cm-field-group">
                         <label class="cm-field-label">Reinvestment Rate %</label>
                         <div class="cm-input-group">
-                            <input type="number" id="reinvestRate" class="cm-input" placeholder="8" min="0" max="50" step="0.5" value="8">
+                            <input type="number" id="reinvestRate" class="cm-input" placeholder="8" min="0" max="50" step="0.5" value="8" style="max-width:100px;">
                             <div style="flex:0; min-width: 30px;text-align:center;">%</div>
                         </div>
                         <span class="cm-field-help">MIRR assumption</span>
@@ -6085,7 +6098,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
                         <label class="cm-field-label">Startup Costs</label>
                         <div class="cm-input-group">
                             <div style="flex:0; min-width: 25px; text-align: right;">$</div>
-                            <input type="number" id="startupCosts" class="cm-input" placeholder="0" min="0" step="100">
+                            <input type="number" id="startupCosts" class="cm-input" placeholder="0" min="0" step="100" style="max-width:150px;">
                         </div>
                     </div>
                 </div>
@@ -6093,12 +6106,12 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 
             <div class="cm-card">
                 <div class="cm-card-title">Labor Cost Adjustments</div>
-                <p style="font-size:0.82rem;color:#94a3b8;margin-bottom:10px;">These defaults come from the selected market. Override per model as needed.</p>
-                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;">
+                <p class="cm-card-description">These defaults come from the selected market. Override per model as needed.</p>
+                <div class="cm-input-grid cols-3">
                     <div class="cm-field-group">
                         <label class="cm-field-label">Overtime % of Hours</label>
                         <div class="cm-input-group">
-                            <input type="number" id="overtimePct" class="cm-input" placeholder="5" min="0" max="50" step="0.5" value="5">
+                            <input type="number" id="overtimePct" class="cm-input" placeholder="5" min="0" max="50" step="0.5" value="5" style="max-width:100px;">
                             <div class="cm-input-group-item" style="flex:0; min-width: 40px;">%</div>
                         </div>
                         <span class="cm-field-help">% of total hours paid at 1.5x rate (hourly roles)</span>
@@ -6106,7 +6119,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
                     <div class="cm-field-group">
                         <label class="cm-field-label">Benefit Load %</label>
                         <div class="cm-input-group">
-                            <input type="number" id="benefitLoadPct" class="cm-input" placeholder="35" min="0" max="80" step="0.5" value="35">
+                            <input type="number" id="benefitLoadPct" class="cm-input" placeholder="35" min="0" max="80" step="0.5" value="35" style="max-width:100px;">
                             <div class="cm-input-group-item" style="flex:0; min-width: 40px;">%</div>
                         </div>
                         <span class="cm-field-help">FICA, health, 401k, workers comp, etc.</span>
@@ -6114,7 +6127,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
                     <div class="cm-field-group">
                         <label class="cm-field-label">Bonus % (Salaried)</label>
                         <div class="cm-input-group">
-                            <input type="number" id="bonusPct" class="cm-input" placeholder="0" min="0" max="50" step="0.5" value="0">
+                            <input type="number" id="bonusPct" class="cm-input" placeholder="0" min="0" max="50" step="0.5" value="0" style="max-width:100px;">
                             <div class="cm-input-group-item" style="flex:0; min-width: 40px;">%</div>
                         </div>
                         <span class="cm-field-help">Annual bonus for salaried/indirect roles</span>
@@ -6124,19 +6137,19 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 
             <div class="cm-card">
                 <div class="cm-card-title">Learning Curve / Ramp-Up</div>
-                <p style="font-size:0.82rem;color:#94a3b8;margin-bottom:10px;">Ramp duration by complexity tier. Productivity starts at 60% and ramps to 100% over the defined period. Affects Year 1 labor costs.</p>
-                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
+                <p class="cm-card-description">Ramp duration by complexity tier. Productivity starts at 60% and ramps to 100% over the defined period. Affects Year 1 labor costs.</p>
+                <div class="cm-input-grid cols-3">
                     <div class="cm-field-group">
                         <label class="cm-field-label">Low Complexity (weeks)</label>
-                        <input type="number" id="rampWeeksLow" class="cm-input" placeholder="2" min="1" max="26" step="1" value="2">
+                        <input type="number" id="rampWeeksLow" class="cm-input" placeholder="2" min="1" max="26" step="1" value="2" style="max-width:100px;">
                     </div>
                     <div class="cm-field-group">
                         <label class="cm-field-label">Medium Complexity (weeks)</label>
-                        <input type="number" id="rampWeeksMed" class="cm-input" placeholder="4" min="1" max="26" step="1" value="4">
+                        <input type="number" id="rampWeeksMed" class="cm-input" placeholder="4" min="1" max="26" step="1" value="4" style="max-width:100px;">
                     </div>
                     <div class="cm-field-group">
                         <label class="cm-field-label">High Complexity (weeks)</label>
-                        <input type="number" id="rampWeeksHigh" class="cm-input" placeholder="8" min="1" max="52" step="1" value="8">
+                        <input type="number" id="rampWeeksHigh" class="cm-input" placeholder="8" min="1" max="52" step="1" value="8" style="max-width:100px;">
                     </div>
                 </div>
                 <div style="margin-top:8px;font-size:11px;color:var(--ies-gray-400);">Productivity curve: Week 1 = 60% &rarr; midpoint = 80% &rarr; end of ramp = 95% &rarr; steady state = 100%</div>
@@ -6144,38 +6157,38 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 
             <div class="cm-card">
                 <div class="cm-card-title">Financial Metric Thresholds</div>
-                <p style="font-size:0.82rem;color:#94a3b8;margin-bottom:10px;">Define target thresholds. Metrics below target show red; at or above show green.</p>
-                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;">
+                <p class="cm-card-description">Define target thresholds. Metrics below target show red; at or above show green.</p>
+                <div class="cm-input-grid cols-3">
                     <div class="cm-field-group">
                         <label class="cm-field-label">Min Gross Margin %</label>
-                        <input type="number" id="threshGrossMargin" class="cm-input" value="12" min="0" step="0.5">
+                        <input type="number" id="threshGrossMargin" class="cm-input" value="12" min="0" step="0.5" style="max-width:100px;">
                     </div>
                     <div class="cm-field-group">
                         <label class="cm-field-label">Min EBITDA Margin %</label>
-                        <input type="number" id="threshEbitda" class="cm-input" value="8" min="0" step="0.5">
+                        <input type="number" id="threshEbitda" class="cm-input" value="8" min="0" step="0.5" style="max-width:100px;">
                     </div>
                     <div class="cm-field-group">
                         <label class="cm-field-label">Min EBIT Margin %</label>
-                        <input type="number" id="threshEbit" class="cm-input" value="5" min="0" step="0.5">
+                        <input type="number" id="threshEbit" class="cm-input" value="5" min="0" step="0.5" style="max-width:100px;">
                     </div>
                     <div class="cm-field-group">
                         <label class="cm-field-label">Min ROIC %</label>
-                        <input type="number" id="threshRoic" class="cm-input" value="15" min="0" step="0.5">
+                        <input type="number" id="threshRoic" class="cm-input" value="15" min="0" step="0.5" style="max-width:100px;">
                     </div>
                     <div class="cm-field-group">
                         <label class="cm-field-label">Min MIRR %</label>
-                        <input type="number" id="threshMirr" class="cm-input" value="10" min="0" step="0.5">
+                        <input type="number" id="threshMirr" class="cm-input" value="10" min="0" step="0.5" style="max-width:100px;">
                     </div>
                     <div class="cm-field-group">
                         <label class="cm-field-label">Max Payback (months)</label>
-                        <input type="number" id="threshPayback" class="cm-input" value="24" min="1" step="1">
+                        <input type="number" id="threshPayback" class="cm-input" value="24" min="1" step="1" style="max-width:100px;">
                     </div>
                 </div>
             </div>
 
             <div class="cm-card">
                 <div class="cm-card-title">Multi-Year Contract Budget</div>
-                <p style="font-size:0.82rem;color:#94a3b8;margin-bottom:10px;">Annual operating P&amp;L by contract year with volume growth and cost escalation.</p>
+                <p class="cm-card-description">Annual operating P&amp;L by contract year with volume growth and cost escalation.</p>
                 <div style="overflow-x:auto;">
                     <table class="cm-table" id="multiYearBudgetTable">
                         <thead id="multiYearBudgetHead"></thead>
@@ -6199,18 +6212,18 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 
             <div class="cm-card">
                 <div class="cm-card-title">Amortization Settings</div>
-                <div class="cm-field-group">
-                    <div>
-                        <label class="cm-label">Contract Term (years)</label>
-                        <input type="number" class="cm-input" id="contractTermYears" value="3" min="1" max="10" style="width:80px;">
+                <div class="cm-input-grid cols-3">
+                    <div class="cm-field-group">
+                        <label class="cm-field-label">Contract Term (years)</label>
+                        <input type="number" class="cm-input" id="contractTermYears" value="3" min="1" max="10" style="max-width:100px;">
                     </div>
-                    <div>
-                        <label class="cm-label">Ramp-Up Period (weeks)</label>
-                        <input type="number" class="cm-input" id="rampUpWeeks" value="8" min="1" max="26" style="width:80px;">
+                    <div class="cm-field-group">
+                        <label class="cm-field-label">Ramp-Up Period (weeks)</label>
+                        <input type="number" class="cm-input" id="rampUpWeeks" value="8" min="1" max="26" style="max-width:100px;">
                     </div>
-                    <div>
-                        <label class="cm-label">Annual Escalation %</label>
-                        <input type="number" class="cm-input" id="annualEscalation" value="3" min="0" max="10" step="0.5" style="width:80px;">
+                    <div class="cm-field-group">
+                        <label class="cm-field-label">Annual Escalation %</label>
+                        <input type="number" class="cm-input" id="annualEscalation" value="3" min="0" max="10" step="0.5" style="max-width:100px;">
                     </div>
                 </div>
             </div>
@@ -6268,7 +6281,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 
             <div class="cm-card">
                 <div class="cm-card-title">Define Pricing Buckets</div>
-                <p style="font-size:0.85rem;color:#94a3b8;margin-bottom:12px;">Define how costs are grouped for customer pricing. Each cost line item across all sections can be assigned to a bucket.</p>
+                <p class="cm-card-description">Define how costs are grouped for customer pricing. Each cost line item across all sections can be assigned to a bucket.</p>
                 <table class="cm-table" id="pricingBucketsTable">
                     <thead>
                         <tr>
@@ -6287,7 +6300,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 
             <div class="cm-card">
                 <div class="cm-card-title">Pricing Schedule</div>
-                <p style="font-size:0.85rem;color:#94a3b8;margin-bottom:12px;">Aggregated costs by bucket. Fixed buckets show a monthly fee; variable buckets show a per-unit rate.</p>
+                <p class="cm-card-description">Aggregated costs by bucket. Fixed buckets show a monthly fee; variable buckets show a per-unit rate.</p>
                 <table class="cm-table" id="pricingScheduleTable">
                     <thead>
                         <tr>
@@ -6313,7 +6326,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 
             <div class="cm-card">
                 <div class="cm-card-title">Unassigned Cost Items</div>
-                <p style="font-size:0.85rem;color:#94a3b8;margin-bottom:12px;">Cost lines not yet assigned to a pricing bucket. Assign them in each section's table or they will default to Management Fee.</p>
+                <p class="cm-card-description">Cost lines not yet assigned to a pricing bucket. Assign them in each section's table or they will default to Management Fee.</p>
                 <div id="unassignedCostsList" style="font-size:0.88rem;color:#94a3b8;"></div>
             </div>
         </div>
