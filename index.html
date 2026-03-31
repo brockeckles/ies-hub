@@ -5509,14 +5509,14 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
   </div>
 
   <!-- Tool selector tabs -->
-  <div id="dt-tabs" style="display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap;">
+  <div id="dt-tabs" class="dt-tabs-bar" style="display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap;">
     <button class="dt-tab active" onclick="showDesignTool('dt-landing',this)">All Tools</button>
-    <button class="dt-tab" onclick="showDesignTool('dt-warehouse',this)">Warehouse Sizing Calculator</button>
     <button class="dt-tab" onclick="showDesignTool('dt-network',this)">Center of Gravity</button>
-    <button class="dt-tab" onclick="showDesignTool('dt-netopt',this)">Network Optimization <span style="font-size:9px;background:var(--ies-blue);color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;font-weight:700;">NEW</span></button>
-    <button class="dt-tab" onclick="showDesignTool('dt-fleet',this)">Fleet Modeler <span style="font-size:9px;background:var(--ies-orange);color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;font-weight:700;">NEW</span></button>
-    <button class="dt-tab" onclick="showDesignTool('dt-costmodel',this)">Cost Model <span style="font-size:9px;background:var(--ies-orange);color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;font-weight:700;">BETA</span></button>
-    <button class="dt-tab" onclick="showDesignTool('dt-deals',this)">Deal Manager <span style="font-size:9px;background:var(--ies-blue);color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;font-weight:700;">NEW</span></button>
+    <button class="dt-tab" onclick="showDesignTool('dt-netopt',this)">Network Optimization</button>
+    <button class="dt-tab" onclick="showDesignTool('dt-warehouse',this)">Warehouse Sizing</button>
+    <button class="dt-tab" onclick="showDesignTool('dt-costmodel',this)">Cost Model</button>
+    <button class="dt-tab" onclick="showDesignTool('dt-deals',this)">Deal Manager</button>
+    <button class="dt-tab" onclick="showDesignTool('dt-fleet',this)">Fleet Modeler</button>
   </div>
 
   <!-- ── LANDING PAGE ── -->
@@ -5528,9 +5528,9 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         <div style="width:6px;height:24px;background:linear-gradient(180deg,#059669,#047857);border-radius:3px;"></div>
         <div style="font-weight:700;font-size:15px;color:var(--ies-navy);letter-spacing:.3px;">Network Optimization</div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;">
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;">
         <!-- Center of Gravity Card -->
-        <div onclick="showDesignTool('dt-network',document.querySelectorAll('.dt-tab')[2])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='var(--ies-blue)';this.style.boxShadow='0 4px 16px rgba(0,71,171,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
+        <div onclick="showDesignTool('dt-network',document.querySelectorAll('#dt-tabs .dt-tab')[1])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='var(--ies-blue)';this.style.boxShadow='0 4px 16px rgba(0,71,171,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
           <div style="width:48px;height:48px;background:linear-gradient(135deg,#059669,#047857);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;">
             <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5" stroke="#fff" stroke-width="1.5"/><circle cx="18" cy="6" r="2.5" stroke="#fff" stroke-width="1.5"/><circle cx="12" cy="18" r="2.5" stroke="#fff" stroke-width="1.5"/><path d="M8 7l4 9M16 7l-4 9M8.5 6h7" stroke="#fff" stroke-width="1.2" opacity=".6"/></svg>
           </div>
@@ -5541,7 +5541,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
           </div>
         </div>
         <!-- Network Optimization Card -->
-        <div onclick="showDesignTool('dt-netopt',document.querySelectorAll('.dt-tab')[3])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='var(--ies-blue)';this.style.boxShadow='0 4px 16px rgba(0,71,171,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
+        <div onclick="showDesignTool('dt-netopt',document.querySelectorAll('#dt-tabs .dt-tab')[2])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='var(--ies-blue)';this.style.boxShadow='0 4px 16px rgba(0,71,171,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
           <div style="width:48px;height:48px;background:linear-gradient(135deg,#059669,#047857);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;">
             <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><path d="M3 21V3h18v18H3z" stroke="#fff" stroke-width="1.5"/><circle cx="8" cy="16" r="2" stroke="#fff" stroke-width="1.5"/><circle cx="16" cy="8" r="2" stroke="#fff" stroke-width="1.5"/><circle cx="16" cy="16" r="2" stroke="#fff" stroke-width="1.5"/><path d="M10 16h4M16 10v4M9.5 14.5l5-5" stroke="#fff" stroke-width="1.2" opacity=".6"/></svg>
           </div>
@@ -5560,9 +5560,9 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         <div style="width:6px;height:24px;background:linear-gradient(180deg,var(--ies-blue),#1e5bb8);border-radius:3px;"></div>
         <div style="font-weight:700;font-size:15px;color:var(--ies-navy);letter-spacing:.3px;">Warehouse Design</div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;">
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;">
         <!-- Warehouse Sizing Card -->
-        <div onclick="showDesignTool('dt-warehouse',document.querySelectorAll('.dt-tab')[1])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='var(--ies-blue)';this.style.boxShadow='0 4px 16px rgba(0,71,171,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
+        <div onclick="showDesignTool('dt-warehouse',document.querySelectorAll('#dt-tabs .dt-tab')[3])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='var(--ies-blue)';this.style.boxShadow='0 4px 16px rgba(0,71,171,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
           <div style="width:48px;height:48px;background:linear-gradient(135deg,var(--ies-blue),#1e5bb8);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;">
             <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="12" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M3 12h18M8 8v12M16 8v12" stroke="#fff" stroke-width="1.2" opacity=".6"/><path d="M7 5l5-2 5 2" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg>
           </div>
@@ -5584,7 +5584,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
           </div>
         </div>
         <!-- Deal Manager Card -->
-        <div onclick="showDesignTool('dt-deals',document.querySelectorAll('.dt-tab')[6])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='var(--ies-blue)';this.style.boxShadow='0 4px 16px rgba(0,71,171,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
+        <div onclick="showDesignTool('dt-deals',document.querySelectorAll('#dt-tabs .dt-tab')[5])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='var(--ies-blue)';this.style.boxShadow='0 4px 16px rgba(0,71,171,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
           <div style="width:48px;height:48px;background:linear-gradient(135deg,var(--ies-blue),#1e5bb8);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;">
             <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7a2 2 0 012-2h14a2 2 0 012 2" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 11v6M15 11v6" stroke="#fff" stroke-width="1.2" opacity=".6"/></svg>
           </div>
@@ -5603,9 +5603,9 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         <div style="width:6px;height:24px;background:linear-gradient(180deg,#f59e0b,#d97706);border-radius:3px;"></div>
         <div style="font-weight:700;font-size:15px;color:var(--ies-navy);letter-spacing:.3px;">Transportation</div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;">
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;">
         <!-- Fleet Modeler Card -->
-        <div onclick="showDesignTool('dt-fleet',document.querySelectorAll('.dt-tab')[4])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='#f59e0b';this.style.boxShadow='0 4px 16px rgba(243,112,33,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
+        <div onclick="showDesignTool('dt-fleet',document.querySelectorAll('#dt-tabs .dt-tab')[6])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='#f59e0b';this.style.boxShadow='0 4px 16px rgba(243,112,33,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
           <div style="width:48px;height:48px;background:linear-gradient(135deg,#f59e0b,#d97706);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;">
             <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><path d="M1 14l4-6h6l2 3h6a3 3 0 013 3v0H1z" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><circle cx="6" cy="17" r="2" stroke="#fff" stroke-width="1.5"/><circle cx="17" cy="17" r="2" stroke="#fff" stroke-width="1.5"/><path d="M8 17h7" stroke="#fff" stroke-width="1.2"/></svg>
           </div>
@@ -5626,7 +5626,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     <!-- WAREHOUSE SIZING CALCULATOR LANDING PAGE -->
     <div id="wsc-landing" class="dt-landing" style="display:block;">
       <div class="dt-landing-header">
-        <button class="dt-landing-back-btn" onclick="showDesignTool('dt-landing', document.querySelector('.dt-tab'))">&#8592; Back to Design Tools</button>
+        <button class="dt-landing-back-btn" onclick="showDesignTool('dt-landing', document.querySelector('#dt-tabs .dt-tab'))">&#8592; Back to Design Tools</button>
         <div class="dt-landing-title">Warehouse Sizing Calculator</div>
         <div class="dt-landing-subtitle">Design optimal warehouse layouts and estimate facility sizing requirements</div>
       </div>
@@ -6258,7 +6258,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     <!-- CENTER OF GRAVITY LANDING PAGE -->
     <div id="net-landing" class="dt-landing" style="display:block;">
       <div class="dt-landing-header">
-        <button class="dt-landing-back-btn" onclick="showDesignTool('dt-landing', document.querySelector('.dt-tab'))">&#8592; Back to Design Tools</button>
+        <button class="dt-landing-back-btn" onclick="showDesignTool('dt-landing', document.querySelector('#dt-tabs .dt-tab'))">&#8592; Back to Design Tools</button>
         <div class="dt-landing-title">Center of Gravity (Network)</div>
         <div class="dt-landing-subtitle">Find optimal distribution center locations using demand-weighted analysis</div>
       </div>
@@ -6458,7 +6458,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     <!-- NETWORK OPTIMIZATION LANDING PAGE -->
     <div id="netopt-landing" class="dt-landing" style="display:block;">
       <div class="dt-landing-header">
-        <button class="dt-landing-back-btn" onclick="showDesignTool('dt-landing', document.querySelector('.dt-tab'))">&#8592; Back to Design Tools</button>
+        <button class="dt-landing-back-btn" onclick="showDesignTool('dt-landing', document.querySelector('#dt-tabs .dt-tab'))">&#8592; Back to Design Tools</button>
         <div class="dt-landing-title">Network Optimization</div>
         <div class="dt-landing-subtitle">Optimize multi-mode transportation and facility location decisions</div>
       </div>
@@ -7241,7 +7241,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     <!-- DEAL MANAGER LANDING PAGE -->
     <div id="deal-landing" class="dt-landing" style="display:block;">
       <div class="dt-landing-header">
-        <button class="dt-landing-back-btn" onclick="showDesignTool('dt-landing', document.querySelector('.dt-tab'))">&#8592; Back to Design Tools</button>
+        <button class="dt-landing-back-btn" onclick="showDesignTool('dt-landing', document.querySelector('#dt-tabs .dt-tab'))">&#8592; Back to Design Tools</button>
         <div class="dt-landing-title">Deal Manager</div>
         <div class="dt-landing-subtitle">Multi-location warehouse deals with aggregate financials</div>
       </div>
@@ -7418,6 +7418,17 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <span class="cm-status-badge cm-status-draft" id="statusBadge" style="min-width:60px;text-align:center;">Draft</span>
       <span class="cm-save-indicator" id="saveIndicator" style="min-width:70px;text-align:right;"></span>
     </div>
+  </div>
+
+  <!-- Tool navigation tabs (mirrors dt-tabs from Design Tools) -->
+  <div class="dt-tabs-bar" style="display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap;">
+    <button class="dt-tab" onclick="navigate('designtools', document.querySelector('[data-section=designtools]'))">All Tools</button>
+    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-network', document.querySelectorAll('#dt-tabs .dt-tab')[1]); },50)">Center of Gravity</button>
+    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-netopt', document.querySelectorAll('#dt-tabs .dt-tab')[2]); },50)">Network Optimization</button>
+    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-warehouse', document.querySelectorAll('#dt-tabs .dt-tab')[3]); },50)">Warehouse Sizing</button>
+    <button class="dt-tab active">Cost Model</button>
+    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-deals', document.querySelectorAll('#dt-tabs .dt-tab')[5]); },50)">Deal Manager</button>
+    <button class="dt-tab" onclick="showDesignTool('dt-fleet')">Fleet Modeler</button>
   </div>
 
   <div id="landingPage" class="dt-landing">
@@ -8475,6 +8486,17 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div class="section-title">Fleet Modeler & Optimizer</div>
       <div class="section-subtitle">Design optimal fleet configurations and compare private vs. dedicated vs. carrier options</div>
     </div>
+  </div>
+
+  <!-- Tool navigation tabs (mirrors dt-tabs from Design Tools) -->
+  <div class="dt-tabs-bar" style="display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap;">
+    <button class="dt-tab" onclick="navigate('designtools', document.querySelector('[data-section=designtools]'))">All Tools</button>
+    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-network', document.querySelectorAll('#dt-tabs .dt-tab')[1]); },50)">Center of Gravity</button>
+    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-netopt', document.querySelectorAll('#dt-tabs .dt-tab')[2]); },50)">Network Optimization</button>
+    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-warehouse', document.querySelectorAll('#dt-tabs .dt-tab')[3]); },50)">Warehouse Sizing</button>
+    <button class="dt-tab" onclick="showDesignTool('dt-costmodel')">Cost Model</button>
+    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-deals', document.querySelectorAll('#dt-tabs .dt-tab')[5]); },50)">Deal Manager</button>
+    <button class="dt-tab active">Fleet Modeler</button>
   </div>
 
   <!-- FLEET MODELER LANDING PAGE -->
@@ -14463,7 +14485,7 @@ function daOpenArtifact(artifactType, artifactId) {
     // Navigate to Design Tools → Network Optimization tab, then load scenario
     navigate('designtools', document.querySelector('[data-section=designtools]'));
     setTimeout(() => {
-      showDesignTool('dt-netopt', document.querySelectorAll('.dt-tab')[3]);
+      showDesignTool('dt-netopt', document.querySelectorAll('#dt-tabs .dt-tab')[2]);
       setTimeout(() => { netoptLoadScenario(parseInt(artifactId, 10) || artifactId); }, 200);
     }, 200);
   } else if (artifactType === 'fleet_scenario' && artifactId) {
@@ -14499,7 +14521,7 @@ function daCreateNew(artifactType) {
   } else if (artifactType === 'netopt_scenario') {
     navigate('designtools', document.querySelector('[data-section=designtools]'));
     setTimeout(() => {
-      showDesignTool('dt-netopt', document.querySelectorAll('.dt-tab')[3]);
+      showDesignTool('dt-netopt', document.querySelectorAll('#dt-tabs .dt-tab')[2]);
       document.getElementById('da-modal-container').innerHTML = '';
     }, 100);
   }
