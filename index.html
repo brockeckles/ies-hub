@@ -17007,7 +17007,7 @@ function netCollectInputs() {
         result_avg_distance: 0,
         result_est_freight: 0,
         result_avg_transit: 0,
-        result_recommended_dcs: ''
+        result_recommended_dcs: 0
     };
 
     // Capture calculation results if available
@@ -17271,18 +17271,28 @@ async function netoptSaveScenario(projectId, scenarioName) {
         document.getElementById('netopt-scenario-name').value = name;
 
         // Auto-link to deal if selected
-        var dealId = document.getElementById('netoptDealSelector')?.value;
-        if (dealId && typeof sb !== 'undefined' && sb) {
-            try {
-                await sb.from('deal_artifacts').insert({
-                    deal_id: dealId,
-                    artifact_type: 'netopt_scenario',
-                    artifact_id: netoptActiveScenarioId,
-                    artifact_name: name,
-                    created_by: 'Brock Eckles'
-                });
-            } catch(e) {
-                console.warn('Could not auto-link to deal:', e);
+        var dealIdStr = document.getElementById('netoptDealSelector')?.value;
+        if (dealIdStr && typeof sb !== 'undefined' && sb) {
+            var dealIdNum = parseInt(dealIdStr, 10);
+            if (!isNaN(dealIdNum)) {
+                try {
+                    // Check if already linked
+                    var { data: existing } = await sb.from('deal_artifacts')
+                        .select('id').eq('deal_id', dealIdNum)
+                        .eq('artifact_type', 'netopt_scenario')
+                        .eq('artifact_id', String(netoptActiveScenarioId)).limit(1);
+                    if (!existing || existing.length === 0) {
+                        await sb.from('deal_artifacts').insert({
+                            deal_id: dealIdNum,
+                            artifact_type: 'netopt_scenario',
+                            artifact_id: String(netoptActiveScenarioId),
+                            artifact_name: name,
+                            created_by: 'IES Hub'
+                        });
+                    }
+                } catch(e) {
+                    console.warn('Could not auto-link to deal:', e);
+                }
             }
         }
 
@@ -22430,6 +22440,14 @@ const cmApp = {
             // Set active project context for scenario linking
             activeCostModelProjectId = id;
 
+            // Set deal selector if project is linked to a deal
+            var cmDealSel = document.getElementById('cmDealSelector');
+            if (cmDealSel && p.deal_id) {
+                cmDealSel.value = String(p.deal_id);
+            } else if (cmDealSel) {
+                cmDealSel.value = '';
+            }
+
             // Show project link indicators for WSC and Network tools
             var wscLink = document.getElementById('wsc-project-link');
             var netLink = document.getElementById('net-project-link');
@@ -25902,7 +25920,7 @@ const cmApp = {
                                   this.calculateVasCost(),
                 pricing_buckets: JSON.stringify(this.projectData.pricingBuckets || []),
                 status: 'draft',
-                deal_id: this.currentProject?.deal_id || document.getElementById('cmDealSelector')?.value || null
+                deal_id: (function() { var v = document.getElementById('cmDealSelector')?.value || ''; var n = parseInt(v, 10); return isNaN(n) ? null : n; })()
             };
 
             if (this.currentProject) {
@@ -25910,6 +25928,30 @@ const cmApp = {
             } else {
                 const created = await cmApiPost('cost_model_projects', projectData);
                 this.currentProject = created[0];
+            }
+
+            // Auto-link to deal workspace if deal is selected
+            if (projectData.deal_id && this.currentProject && typeof sb !== 'undefined' && sb) {
+                try {
+                    var { data: existing } = await sb.from('deal_artifacts')
+                        .select('id').eq('deal_id', projectData.deal_id)
+                        .eq('artifact_type', 'cost_model')
+                        .eq('artifact_id', String(this.currentProject.id)).limit(1);
+                    if (!existing || existing.length === 0) {
+                        var parts = [];
+                        if (projectData.total_annual_cost) parts.push('$' + Number(projectData.total_annual_cost).toLocaleString() + '/yr');
+                        if (projectData.facility_sqft) parts.push(Number(projectData.facility_sqft).toLocaleString() + ' SF');
+                        if (projectData.environment_type) parts.push(projectData.environment_type);
+                        await sb.from('deal_artifacts').insert({
+                            deal_id: projectData.deal_id,
+                            artifact_type: 'cost_model',
+                            artifact_id: String(this.currentProject.id),
+                            artifact_name: projectData.name,
+                            artifact_notes: parts.join(' · ') || null,
+                            created_by: 'IES Hub'
+                        });
+                    }
+                } catch(e) { console.warn('Could not auto-link cost model to deal:', e); }
             }
 
             const indicator = document.getElementById('saveIndicator');
