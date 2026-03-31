@@ -5618,9 +5618,32 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 
         <!-- TAB: FACILITIES -->
         <div id="netopt-tab-facilities" class="netopt-tab-content" style="display:none;">
-          <div style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;">
+          <div style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
             <label class="wsc-input-label" style="margin:0;">Facility Network</label>
-            <button onclick="netoptAddFacility()" style="padding:8px 14px;border:1.5px solid var(--ies-blue);border-radius:6px;background:rgba(0,71,171,.06);color:var(--ies-blue);font-weight:600;font-size:12px;cursor:pointer;">+ Add Facility</button>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button onclick="netoptAddFacility()" style="padding:8px 14px;border:1.5px solid var(--ies-blue);border-radius:6px;background:rgba(0,71,171,.06);color:var(--ies-blue);font-weight:600;font-size:12px;cursor:pointer;">+ Add Facility</button>
+              <button onclick="netoptShowMarketPicker()" style="padding:8px 14px;border:1.5px solid var(--ies-orange,#ff3a00);border-radius:6px;background:rgba(255,58,0,.06);color:var(--ies-orange,#ff3a00);font-weight:600;font-size:12px;cursor:pointer;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-2px;margin-right:4px;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>Select from Markets</button>
+              <button onclick="netoptAutoRecommendFacilities()" style="padding:8px 14px;border:1.5px solid #10b981;border-radius:6px;background:rgba(16,185,129,.06);color:#10b981;font-weight:600;font-size:12px;cursor:pointer;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-2px;margin-right:4px;"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>Auto-Recommend</button>
+            </div>
+          </div>
+          <!-- Market Picker Modal (hidden by default) -->
+          <div id="netopt-market-picker" style="display:none;margin-bottom:16px;background:linear-gradient(135deg,#f0f4ff,#fff);border:1.5px solid var(--ies-blue);border-radius:10px;padding:16px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+              <span style="font-weight:700;font-size:13px;color:var(--ies-navy);">Select Markets to Add as Candidates</span>
+              <div style="display:flex;gap:8px;">
+                <button onclick="netoptMarketPickerSelectAll()" style="padding:4px 10px;border:1px solid var(--ies-blue);border-radius:4px;background:transparent;color:var(--ies-blue);font-size:11px;font-weight:600;cursor:pointer;">Select All</button>
+                <button onclick="netoptMarketPickerClear()" style="padding:4px 10px;border:1px solid var(--ies-gray-400,#9ca3af);border-radius:4px;background:transparent;color:var(--ies-gray-600,#4b5563);font-size:11px;font-weight:600;cursor:pointer;">Clear</button>
+              </div>
+            </div>
+            <div id="netopt-market-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-bottom:12px;">
+              <!-- Populated by JS -->
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:8px;">
+              <button onclick="netoptCloseMarketPicker()" style="padding:8px 16px;border:1px solid var(--ies-gray-300,#d1d5db);border-radius:6px;background:#fff;color:var(--ies-navy);font-weight:600;font-size:12px;cursor:pointer;">Cancel</button>
+              <button onclick="netoptAddSelectedMarkets()" style="padding:8px 16px;border:none;border-radius:6px;background:var(--ies-blue);color:#fff;font-weight:600;font-size:12px;cursor:pointer;">Add Selected</button>
+            </div>
           </div>
           <div style="overflow-x:auto;background:#fff;border-radius:8px;border:1px solid var(--ies-gray-200);">
             <table style="width:100%;border-collapse:collapse;font-size:12px;">
@@ -16930,6 +16953,207 @@ function netoptRemoveDemand(id) {
   netoptUpdateKPI();
 }
 
+// ── MARKET PICKER (select from 10 pre-defined markets) ──
+function netoptShowMarketPicker() {
+  var picker = document.getElementById('netopt-market-picker');
+  var grid = document.getElementById('netopt-market-grid');
+  // Determine which markets are already added
+  var existingCities = netoptState.facilities.map(function(f) { return f.city.toLowerCase().trim(); });
+  grid.innerHTML = '';
+  NETOPT_FACILITY_CANDIDATES.forEach(function(m, idx) {
+    var alreadyAdded = existingCities.indexOf(m.city.toLowerCase().trim()) !== -1;
+    var card = document.createElement('label');
+    card.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid ' + (alreadyAdded ? 'var(--ies-gray-200,#e5e7eb)' : 'var(--ies-gray-300,#d1d5db)') + ';border-radius:8px;cursor:' + (alreadyAdded ? 'default' : 'pointer') + ';background:' + (alreadyAdded ? '#f3f4f6' : '#fff') + ';transition:border-color .15s,box-shadow .15s;opacity:' + (alreadyAdded ? '0.55' : '1') + ';';
+    if (!alreadyAdded) {
+      card.onmouseenter = function() { this.style.borderColor = 'var(--ies-blue)'; this.style.boxShadow = '0 0 0 2px rgba(0,71,171,.1)'; };
+      card.onmouseleave = function() { var cb = this.querySelector('input'); this.style.borderColor = cb && cb.checked ? 'var(--ies-blue)' : 'var(--ies-gray-300,#d1d5db)'; this.style.boxShadow = 'none'; };
+    }
+    var checkbox = '<input type="checkbox" data-market-idx="' + idx + '" ' + (alreadyAdded ? 'disabled checked' : '') + ' style="width:16px;height:16px;accent-color:var(--ies-blue);cursor:' + (alreadyAdded ? 'default' : 'pointer') + ';">';
+    var info = '<div style="flex:1;min-width:0;">' +
+      '<div style="font-weight:700;font-size:12px;color:var(--ies-navy);">' + m.name + '</div>' +
+      '<div style="font-size:10px;color:#6b7280;">' + m.city + ' &middot; ' + m.capacity + 'K cap &middot; $' + m.fixedCost.toFixed(1) + 'M fixed</div>' +
+      (alreadyAdded ? '<div style="font-size:9px;color:var(--ies-blue);font-weight:600;margin-top:2px;">Already added</div>' : '') +
+      '</div>';
+    card.innerHTML = checkbox + info;
+    grid.appendChild(card);
+  });
+  picker.style.display = 'block';
+}
+
+function netoptCloseMarketPicker() {
+  document.getElementById('netopt-market-picker').style.display = 'none';
+}
+
+function netoptMarketPickerSelectAll() {
+  var cbs = document.querySelectorAll('#netopt-market-grid input[type="checkbox"]:not(:disabled)');
+  cbs.forEach(function(cb) { cb.checked = true; cb.closest('label').style.borderColor = 'var(--ies-blue)'; });
+}
+
+function netoptMarketPickerClear() {
+  var cbs = document.querySelectorAll('#netopt-market-grid input[type="checkbox"]:not(:disabled)');
+  cbs.forEach(function(cb) { cb.checked = false; cb.closest('label').style.borderColor = 'var(--ies-gray-300,#d1d5db)'; });
+}
+
+function netoptAddSelectedMarkets() {
+  var cbs = document.querySelectorAll('#netopt-market-grid input[type="checkbox"]:checked:not(:disabled)');
+  var count = 0;
+  cbs.forEach(function(cb) {
+    var idx = parseInt(cb.getAttribute('data-market-idx'));
+    var m = NETOPT_FACILITY_CANDIDATES[idx];
+    if (!m) return;
+    var id = 'fac-' + Date.now() + '-' + idx;
+    var g = geocodeCity(m.city);
+    netoptState.facilities.push({
+      id: id,
+      name: m.name,
+      city: m.city,
+      capacity: m.capacity,
+      fixedCost: m.fixedCost,
+      varCost: m.varCost,
+      status: 'Candidate',
+      lat: g ? g.lat : null,
+      lng: g ? g.lng : null
+    });
+    count++;
+  });
+  netoptCloseMarketPicker();
+  netoptRenderFacilitiesTable();
+  netoptUpdateKPI();
+  if (count > 0) {
+    netoptShowToast(count + ' market' + (count > 1 ? 's' : '') + ' added as facility candidates');
+  }
+}
+
+// ── AUTO-RECOMMEND FACILITIES FROM DEMAND ──
+function netoptAutoRecommendFacilities() {
+  if (netoptState.demands.length === 0) {
+    alert('Please add demand points first. The system needs demand data to recommend facility locations.');
+    return;
+  }
+
+  // Build weighted demand points for clustering
+  var demandPts = [];
+  netoptState.demands.forEach(function(d) {
+    var lat = d.lat, lng = d.lng;
+    if (!lat || !lng) {
+      var g = geocodeCity(d.city + (d.state ? ', ' + d.state : ''));
+      if (g) { lat = g.lat; lng = g.lng; d.lat = lat; d.lng = lng; }
+    }
+    if (lat && lng) {
+      demandPts.push({ lat: lat, lng: lng, weight: d.volume || 100 });
+    }
+  });
+
+  if (demandPts.length === 0) {
+    alert('Could not geocode any demand points. Please check city names.');
+    return;
+  }
+
+  // Determine cluster count: min 2, max 6, scale with demand points
+  var k = Math.min(Math.max(2, Math.ceil(demandPts.length / 15)), 6);
+  // Respect constraints if set
+  if (netoptState.constraints.maxFacilities) {
+    k = Math.min(k, netoptState.constraints.maxFacilities);
+  }
+
+  // Run k-means clustering (reuse existing kMeansCOG)
+  var clusters = kMeansCOG(demandPts, k, 50);
+
+  // Map each cluster center to the nearest real city, then find closest NETOPT market
+  var recommended = [];
+  var usedNames = {};
+  clusters.forEach(function(cl) {
+    // Find nearest city in NET_CITIES
+    var nc = nearestCity(cl.center.lat, cl.center.lng);
+    // Try to match to a NETOPT_FACILITY_CANDIDATES entry
+    var matched = null;
+    var bestDist = Infinity;
+    NETOPT_FACILITY_CANDIDATES.forEach(function(cand) {
+      var candGeo = geocodeCity(cand.city);
+      if (candGeo) {
+        var d = haversine(cl.center.lat, cl.center.lng, candGeo.lat, candGeo.lng);
+        if (d < bestDist) { bestDist = d; matched = cand; }
+      }
+    });
+
+    // Use matched market if within 300 miles, otherwise use nearest city with estimated costs
+    var facName, facCity, facCapacity, facFixed, facVar;
+    if (matched && bestDist < 300) {
+      facName = matched.name;
+      facCity = matched.city;
+      facCapacity = matched.capacity;
+      facFixed = matched.fixedCost;
+      facVar = matched.varCost;
+    } else {
+      facName = nc.replace(/,.*/, '').trim();
+      facCity = nc;
+      facCapacity = Math.round(cl.totalWeight * 1.2);
+      facFixed = 2.5;
+      facVar = 0.23;
+    }
+
+    // Avoid duplicates
+    if (usedNames[facName]) {
+      facName = facName + ' (' + (Object.keys(usedNames).length + 1) + ')';
+    }
+    usedNames[facName] = true;
+
+    var geo = geocodeCity(facCity);
+    recommended.push({
+      name: facName,
+      city: facCity,
+      capacity: facCapacity,
+      fixedCost: facFixed,
+      varCost: facVar,
+      lat: geo ? geo.lat : cl.center.lat,
+      lng: geo ? geo.lng : cl.center.lng,
+      clusterWeight: cl.totalWeight,
+      clusterSize: cl.members.length
+    });
+  });
+
+  // Check for existing facilities and warn
+  var existingCities = netoptState.facilities.map(function(f) { return f.city.toLowerCase().trim(); });
+  var newRecs = recommended.filter(function(r) { return existingCities.indexOf(r.city.toLowerCase().trim()) === -1; });
+  var skipped = recommended.length - newRecs.length;
+
+  if (newRecs.length === 0) {
+    alert('All recommended locations are already in your facility list.');
+    return;
+  }
+
+  // Add recommended facilities
+  newRecs.forEach(function(r) {
+    netoptState.facilities.push({
+      id: 'fac-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
+      name: r.name,
+      city: r.city,
+      capacity: r.capacity,
+      fixedCost: r.fixedCost,
+      varCost: r.varCost,
+      status: 'Candidate',
+      lat: r.lat,
+      lng: r.lng
+    });
+  });
+
+  netoptRenderFacilitiesTable();
+  netoptUpdateKPI();
+
+  var msg = newRecs.length + ' facility location' + (newRecs.length > 1 ? 's' : '') + ' recommended based on demand clustering';
+  if (skipped > 0) msg += ' (' + skipped + ' already existed)';
+  netoptShowToast(msg);
+}
+
+// Small toast helper for NetOpt
+function netoptShowToast(message) {
+  var toast = document.createElement('div');
+  toast.textContent = message;
+  toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--ies-navy,#1c1c2e);color:#fff;padding:12px 24px;border-radius:8px;font-size:13px;font-weight:600;z-index:99999;box-shadow:0 4px 20px rgba(0,0,0,.25);transition:opacity .3s;';
+  document.body.appendChild(toast);
+  setTimeout(function() { toast.style.opacity = '0'; setTimeout(function() { toast.remove(); }, 300); }, 3000);
+}
+
 // Geocode facility
 function netoptGeocodeFacility(id) {
   var f = netoptState.facilities.find(x => x.id === id);
@@ -17000,8 +17224,16 @@ function netoptSetSolverMode(mode) {
 
 // Run optimization
 function netoptRunOptimization() {
-  if (netoptState.facilities.length === 0 || netoptState.demands.length === 0) {
-    alert('Please add at least one facility and one demand point.');
+  if (netoptState.facilities.length === 0 && netoptState.demands.length === 0) {
+    alert('Please add at least one facility candidate and one demand point before running optimization.');
+    return;
+  }
+  if (netoptState.facilities.length === 0) {
+    alert('Please add at least one facility candidate. Use "Select from Markets" to choose from pre-defined locations, "Auto-Recommend" to suggest locations based on your demand, or "+ Add Facility" to add manually.');
+    return;
+  }
+  if (netoptState.demands.length === 0) {
+    alert('Please add at least one demand point before running optimization.');
     return;
   }
 
