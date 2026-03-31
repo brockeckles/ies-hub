@@ -4833,6 +4833,9 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     <a class="nav-item" data-section="feedback" onclick="navigate('feedback', this)">
       <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2v10z" fill="none"/><path d="M8 10h.01M12 10h.01M16 10h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span> Ideas & Feedback <span id="fbNavCount" style="font-size:10px;background:var(--ies-orange);color:#fff;padding:1px 6px;border-radius:10px;margin-left:4px;font-weight:700;display:none;"></span>
     </a>
+    <a class="nav-item" data-section="security" onclick="navigate('security', this)">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="none"/></svg></span> Security
+    </a>
   </div>
   <!-- Analytics nav hidden — access via Ctrl+Shift+A -->
 </nav>
@@ -9189,6 +9192,32 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 
 </div>
 
+<!-- ───── SECURITY ───── -->
+<div class="section" id="sec-security">
+  <div class="section-header">
+    <div>
+      <div class="section-title">Security</div>
+      <div class="section-subtitle">Architecture, compliance, and incident response for IES Intelligence Hub</div>
+    </div>
+  </div>
+
+  <div class="wiki-layout">
+    <div class="wiki-sidebar">
+      <div class="wiki-sidebar-title">Security Topics</div>
+
+      <a class="wiki-nav-item active" onclick="showSecurityPage('sec-overview')">Overview</a>
+      <a class="wiki-nav-item" onclick="showSecurityPage('sec-access')">Access Control</a>
+      <a class="wiki-nav-item" onclick="showSecurityPage('sec-data')">Data Protection</a>
+      <a class="wiki-nav-item" onclick="showSecurityPage('sec-compliance')">Compliance & Standards</a>
+      <a class="wiki-nav-item" onclick="showSecurityPage('sec-incident')">Incident Response</a>
+      <a class="wiki-nav-item" onclick="showSecurityPage('sec-roadmap')">Security Roadmap</a>
+    </div>
+
+    <div class="wiki-content" id="securityContent">
+      <!-- Security pages rendered here -->
+    </div>
+  </div>
+</div>
 
 <div class="section" id="sec-analytics">
   <div class="section-header">
@@ -11897,6 +11926,500 @@ function showWiki(page) {
     if (clicked && clicked.classList.contains('wiki-nav-item')) clicked.classList.add('active');
   } catch(e) { /* called programmatically, no event */ }
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// SECURITY SECTION
+// ═══════════════════════════════════════════════════════════════════════
+
+var SECURITY_PAGES = {};
+
+// ─ OVERVIEW PAGE ─
+SECURITY_PAGES['sec-overview'] = '<div class="wiki-article">' +
+  '<div class="wiki-breadcrumb">Security / Overview</div>' +
+  '<h2>Security Overview</h2>' +
+  '<p>The IES Intelligence Hub is built on a modern, encrypted SaaS architecture designed to protect sensitive supply chain data. We prioritize security by default across every layer — from browser to database — and maintain continuous compliance with enterprise standards.</p>' +
+
+  '<div style="background:#f0fdf4;border:1px solid #dcfce7;border-radius:10px;padding:20px;margin:24px 0;">' +
+    '<div style="display:flex;align-items:flex-start;gap:12px;">' +
+      '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 12 15 15 9"/></svg>' +
+      '<div><strong style="color:#15803d;">Security is foundational, not an afterthought.</strong> We encrypt data in transit and at rest, enforce role-based access control, and audit all access logs.</div>' +
+    '</div>' +
+  '</div>' +
+
+  '<h3 style="margin-top:32px;margin-bottom:16px;">Architecture Overview</h3>' +
+  '<p style="margin-bottom:20px;font-size:13px;color:var(--ies-gray-600);">End-to-end encryption across all layers:</p>' +
+
+  '<div style="background:#fff;border:1px solid var(--ies-gray-200);border-radius:10px;padding:24px;margin:20px 0;">' +
+    '<div style="display:flex;flex-direction:column;gap:16px;font-size:13px;">' +
+      // Browser layer
+      '<div style="display:flex;align-items:center;gap:12px;">' +
+        '<div style="background:#0047ab;color:#fff;padding:8px 12px;border-radius:6px;font-weight:600;width:140px;text-align:center;font-size:12px;">Browser / SPA</div>' +
+        '<div style="flex:1;height:2px;background:linear-gradient(90deg,#0047ab,#0047ab 50%,transparent 50%);position:relative;">' +
+          '<svg style="position:absolute;right:-6px;top:-6px;width:14px;height:14px;" viewBox="0 0 24 24" fill="#0047ab"><polygon points="12,2 15,8 21,8 16.5,12 18,18 12,14 6,18 7.5,12 3,8 9,8"/></svg>' +
+        '</div>' +
+      '</div>' +
+      '<div style="color:var(--ies-gray-600);font-size:11px;margin-left:140px;">React/SPA with secure session storage</div>' +
+
+      // HTTPS/JWT layer
+      '<div style="display:flex;align-items:center;gap:12px;margin-top:12px;">' +
+        '<div style="background:#ff6b35;color:#fff;padding:8px 12px;border-radius:6px;font-weight:600;width:140px;text-align:center;font-size:12px;">HTTPS / JWT</div>' +
+        '<div style="flex:1;height:2px;background:linear-gradient(90deg,#ff6b35,#ff6b35 50%,transparent 50%);position:relative;">' +
+          '<svg style="position:absolute;right:-6px;top:-6px;width:14px;height:14px;" viewBox="0 0 24 24" fill="#ff6b35"><polygon points="12,2 15,8 21,8 16.5,12 18,18 12,14 6,18 7.5,12 3,8 9,8"/></svg>' +
+        '</div>' +
+      '</div>' +
+      '<div style="color:var(--ies-gray-600);font-size:11px;margin-left:140px;">TLS 1.2+ encryption + JWT bearer tokens</div>' +
+
+      // Supabase API layer
+      '<div style="display:flex;align-items:center;gap:12px;margin-top:12px;">' +
+        '<div style="background:#1c1c2e;color:#fff;padding:8px 12px;border-radius:6px;font-weight:600;width:140px;text-align:center;font-size:12px;">Supabase REST API</div>' +
+        '<div style="flex:1;height:2px;background:linear-gradient(90deg,#1c1c2e,#1c1c2e 50%,transparent 50%);position:relative;">' +
+          '<svg style="position:absolute;right:-6px;top:-6px;width:14px;height:14px;" viewBox="0 0 24 24" fill="#1c1c2e"><polygon points="12,2 15,8 21,8 16.5,12 18,18 12,14 6,18 7.5,12 3,8 9,8"/></svg>' +
+        '</div>' +
+      '</div>' +
+      '<div style="color:var(--ies-gray-600);font-size:11px;margin-left:140px;">Authentication & authorization gateway</div>' +
+
+      // Database layer
+      '<div style="display:flex;align-items:center;gap:12px;margin-top:12px;">' +
+        '<div style="background:#10b981;color:#fff;padding:8px 12px;border-radius:6px;font-weight:600;width:140px;text-align:center;font-size:12px;">PostgreSQL (RLS)</div>' +
+        '<div style="flex:1;height:2px;background:linear-gradient(90deg,#10b981,#10b981 50%,transparent 50%);position:relative;">' +
+          '<svg style="position:absolute;right:-6px;top:-6px;width:14px;height:14px;" viewBox="0 0 24 24" fill="#10b981"><polygon points="12,2 15,8 21,8 16.5,12 18,18 12,14 6,18 7.5,12 3,8 9,8"/></svg>' +
+        '</div>' +
+      '</div>' +
+      '<div style="color:var(--ies-gray-600);font-size:11px;margin-left:140px;">AES-256 encryption + row-level security policies</div>' +
+    '</div>' +
+  '</div>' +
+
+  '<h3 style="margin-top:32px;margin-bottom:16px;">Security Posture</h3>' +
+  '<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin:20px 0;">' +
+    '<div style="background:#f0fdf4;border:1px solid #dcfce7;border-radius:10px;padding:16px;text-align:center;">' +
+      '<div style="font-size:32px;margin-bottom:8px;">🔐</div>' +
+      '<div style="font-weight:600;color:#15803d;font-size:13px;margin-bottom:4px;">SOC 2 Type II</div>' +
+      '<div style="font-size:11px;color:var(--ies-gray-600);">Supabase certified</div>' +
+    '</div>' +
+    '<div style="background:#f0fdf4;border:1px solid #dcfce7;border-radius:10px;padding:16px;text-align:center;">' +
+      '<div style="font-size:32px;margin-bottom:8px;">🔑</div>' +
+      '<div style="font-weight:600;color:#15803d;font-size:13px;margin-bottom:4px;">AES-256</div>' +
+      '<div style="font-size:11px;color:var(--ies-gray-600);">Data at rest encryption</div>' +
+    '</div>' +
+    '<div style="background:#f0fdf4;border:1px solid #dcfce7;border-radius:10px;padding:16px;text-align:center;">' +
+      '<div style="font-size:32px;margin-bottom:8px;">🔒</div>' +
+      '<div style="font-weight:600;color:#15803d;font-size:13px;margin-bottom:4px;">TLS 1.2+</div>' +
+      '<div style="font-size:11px;color:var(--ies-gray-600);">Data in transit encryption</div>' +
+    '</div>' +
+    '<div style="background:#f0fdf4;border:1px solid #dcfce7;border-radius:10px;padding:16px;text-align:center;">' +
+      '<div style="font-size:32px;margin-bottom:8px;">🗺️</div>' +
+      '<div style="font-weight:600;color:#15803d;font-size:13px;margin-bottom:4px;">US Data</div>' +
+      '<div style="font-size:11px;color:var(--ies-gray-600);">AWS us-east-1 region</div>' +
+    '</div>' +
+  '</div>' +
+'</div>';
+
+// ─ ACCESS CONTROL PAGE ─
+SECURITY_PAGES['sec-access'] = '<div class="wiki-article">' +
+  '<div class="wiki-breadcrumb">Security / Access Control & Authentication</div>' +
+  '<h2>Access Control & Authentication</h2>' +
+  '<p>We are transitioning from shared access codes (legacy) to enterprise-grade authentication with planned Azure AD SSO integration.</p>' +
+
+  '<h3 style="margin-top:28px;margin-bottom:16px;">Current State: Shared Access Codes</h3>' +
+  '<p style="font-size:13px;color:var(--ies-gray-600);margin-bottom:16px;">The Hub currently uses shared HTTP Basic Auth credentials for simplicity. This approach is being phased out in favor of user-specific authentication.</p>' +
+  '<div style="background:#fff3cd;border:1px solid #ffecb5;border-radius:10px;padding:16px;margin:16px 0;display:flex;gap:12px;">' +
+    '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#856404" stroke-width="2" style="flex-shrink:0;margin-top:2px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' +
+    '<div style="font-size:13px;color:#856404;"><strong>Migration in Progress:</strong> Shared codes will be deprecated. User-specific accounts with role-based access control are coming in Phase 1.</div>' +
+  '</div>' +
+
+  '<h3 style="margin-top:28px;margin-bottom:16px;">Future State: Supabase Auth + Azure AD SSO</h3>' +
+  '<p style="font-size:13px;color:var(--ies-gray-600);margin-bottom:16px;">Phase 1 (1–2 weeks) introduces user email accounts with temporary passwords. Phase 2 (4–6 weeks) brings Azure AD SSO integration for enterprise customers.</p>' +
+
+  '<h3 style="margin-top:28px;margin-bottom:16px;">Role-Based Access Control (RBAC)</h3>' +
+  '<table style="width:100%;border-collapse:collapse;font-size:13px;margin:16px 0;border:1px solid var(--ies-gray-200);border-radius:8px;overflow:hidden;">' +
+    '<tr style="background:var(--ies-gray-100);border-bottom:1px solid var(--ies-gray-200);">' +
+      '<th style="padding:12px;text-align:left;font-weight:700;">Role</th>' +
+      '<th style="padding:12px;text-align:left;font-weight:700;">Purpose</th>' +
+      '<th style="padding:12px;text-align:left;font-weight:700;">Permissions</th>' +
+    '</tr>' +
+    '<tr style="border-bottom:1px solid var(--ies-gray-200);">' +
+      '<td style="padding:12px;font-weight:600;">Designer</td>' +
+      '<td style="padding:12px;">Solutions architects & IES leads</td>' +
+      '<td style="padding:12px;">Full access: all tools, all deals, audit logs</td>' +
+    '</tr>' +
+    '<tr style="border-bottom:1px solid var(--ies-gray-200);">' +
+      '<td style="padding:12px;font-weight:600;">Leadership</td>' +
+      '<td style="padding:12px;">Regional & program managers</td>' +
+      '<td style="padding:12px;">View all deals & analytics; edit own records</td>' +
+    '</tr>' +
+    '<tr style="border-bottom:1px solid var(--ies-gray-200);">' +
+      '<td style="padding:12px;font-weight:600;">Analyst</td>' +
+      '<td style="padding:12px;">Finance & project teams</td>' +
+      '<td style="padding:12px;">View own assigned records; run reports</td>' +
+    '</tr>' +
+    '<tr>' +
+      '<td style="padding:12px;font-weight:600;">Viewer</td>' +
+      '<td style="padding:12px;">Client stakeholders & advisors</td>' +
+      '<td style="padding:12px;">Read-only access to assigned deal(s)</td>' +
+    '</tr>' +
+  '</table>' +
+
+  '<h3 style="margin-top:28px;margin-bottom:16px;">Session Management</h3>' +
+  '<p style="font-size:13px;color:var(--ies-gray-600);margin-bottom:12px;">Sessions are managed by Supabase:</p>' +
+  '<ul style="font-size:13px;color:var(--ies-gray-600);margin-left:20px;margin-bottom:16px;">' +
+    '<li>JWT tokens expire after 1 hour of inactivity</li>' +
+    '<li>Refresh tokens allow re-authentication without re-entering credentials</li>' +
+    '<li>Sessions are tied to specific browser/device (IP validation in roadmap)</li>' +
+  '</ul>' +
+
+  '<h3 style="margin-top:28px;margin-bottom:16px;">Multi-Factor Authentication (MFA)</h3>' +
+  '<p style="font-size:13px;color:var(--ies-gray-600);"><strong>Status:</strong> Planned for Phase 2. MFA via TOTP (authenticator apps) will be mandatory for Designer and Leadership roles.</p>' +
+'</div>';
+
+// ─ DATA PROTECTION PAGE ─
+SECURITY_PAGES['sec-data'] = '<div class="wiki-article">' +
+  '<div class="wiki-breadcrumb">Security / Data Protection</div>' +
+  '<h2>Data Protection</h2>' +
+  '<p>All sensitive data — financial models, client negotiations, supply chain intelligence — is encrypted at rest and in transit using industry-standard cryptography.</p>' +
+
+  '<h3 style="margin-top:28px;margin-bottom:16px;">Encryption at Rest</h3>' +
+  '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:16px;margin:16px 0;">' +
+    '<div style="font-weight:600;color:#0369a1;margin-bottom:8px;">AES-256 Encryption</div>' +
+    '<p style="font-size:13px;color:#0369a1;">All database tables are encrypted by Supabase using AWS KMS (Key Management Service). The encryption keys are managed by AWS and isolated from the application.</p>' +
+  '</div>' +
+  '<p style="font-size:13px;color:var(--ies-gray-600);margin-top:12px;">Files uploaded to the Hub (cost models, designs, attachments) are stored in Supabase Storage with the same encryption standard.</p>' +
+
+  '<h3 style="margin-top:28px;margin-bottom:16px;">Encryption in Transit</h3>' +
+  '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:16px;margin:16px 0;">' +
+    '<div style="font-weight:600;color:#0369a1;margin-bottom:8px;">TLS 1.2+ (HTTPS)</div>' +
+    '<p style="font-size:13px;color:#0369a1;">All communication between browser and server is encrypted using TLS 1.2 or higher. Outdated SSL/TLS versions are blocked.</p>' +
+  '</div>' +
+  '<p style="font-size:13px;color:var(--ies-gray-600);margin-top:12px;"><strong>Certificate:</strong> The site uses a valid SSL/TLS certificate issued by AWS Certificate Manager, renewed automatically.</p>' +
+
+  '<h3 style="margin-top:28px;margin-bottom:16px;">Data Residency</h3>' +
+  '<table style="width:100%;border-collapse:collapse;font-size:13px;margin:16px 0;border:1px solid var(--ies-gray-200);border-radius:8px;overflow:hidden;">' +
+    '<tr style="background:var(--ies-gray-100);border-bottom:1px solid var(--ies-gray-200);">' +
+      '<th style="padding:12px;text-align:left;font-weight:700;">Component</th>' +
+      '<th style="padding:12px;text-align:left;font-weight:700;">Location</th>' +
+      '<th style="padding:12px;text-align:left;font-weight:700;">Provider</th>' +
+    '</tr>' +
+    '<tr style="border-bottom:1px solid var(--ies-gray-200);">' +
+      '<td style="padding:12px;font-weight:600;">Database (PostgreSQL)</td>' +
+      '<td style="padding:12px;">AWS us-east-1 (N. Virginia)</td>' +
+      '<td style="padding:12px;">Supabase/AWS</td>' +
+    '</tr>' +
+    '<tr style="border-bottom:1px solid var(--ies-gray-200);">' +
+      '<td style="padding:12px;font-weight:600;">Storage (Files/Uploads)</td>' +
+      '<td style="padding:12px;">AWS us-east-1 (N. Virginia)</td>' +
+      '<td style="padding:12px;">Supabase/AWS S3</td>' +
+    '</tr>' +
+    '<tr>' +
+      '<td style="padding:12px;font-weight:600;">CDN (Static Content)</td>' +
+      '<td style="padding:12px;">Global with US primary</td>' +
+      '<td style="padding:12px;">GitHub Pages / CDN</td>' +
+    '</tr>' +
+  '</table>' +
+  '<p style="font-size:13px;color:var(--ies-gray-600);margin-top:16px;"><strong>All data is stored within the United States.</strong> If you require data residency outside the US, please contact the security team.</p>' +
+
+  '<h3 style="margin-top:28px;margin-bottom:16px;">Backups & Recovery</h3>' +
+  '<div style="background:#f0fdf4;border:1px solid #dcfce7;border-radius:10px;padding:16px;margin:16px 0;">' +
+    '<div style="font-weight:600;color:#15803d;margin-bottom:8px;">Automatic Daily Backups</div>' +
+    '<ul style="font-size:13px;color:#15803d;margin-left:20px;">' +
+      '<li>Supabase performs daily automated backups of the entire database</li>' +
+      '<li>Point-in-time recovery (PITR) available up to 7 days</li>' +
+      '<li>Backup data is encrypted using the same AES-256 standard</li>' +
+      '<li>RTO (Recovery Time Objective): &lt;4 hours</li>' +
+    '</ul>' +
+  '</div>' +
+
+  '<h3 style="margin-top:28px;margin-bottom:16px;">Data Retention & Deletion</h3>' +
+  '<p style="font-size:13px;color:var(--ies-gray-600);margin-bottom:12px;">Data retention policies follow GXO\s internal standards:</p>' +
+  '<ul style="font-size:13px;color:var(--ies-gray-600);margin-left:20px;margin-bottom:16px;">' +
+    '<li><strong>Active Records:</strong> Kept indefinitely unless deleted by user or GXO legal request</li>' +
+    '<li><strong>Deleted Records:</strong> Soft-deleted (marked as deleted); hard-deleted after 90 days</li>' +
+    '<li><strong>Audit Logs:</strong> Retained for 12 months for compliance</li>' +
+    '<li><strong>User Data Deletion Requests:</strong> Processed within 30 days of formal request</li>' +
+  '</ul>' +
+
+  '<h3 style="margin-top:28px;margin-bottom:16px;">Row-Level Security (RLS)</h3>' +
+  '<p style="font-size:13px;color:var(--ies-gray-600);margin-bottom:12px;">RLS is a database-level access control mechanism that ensures users can only access data they are authorized to see, regardless of the application logic.</p>' +
+  '<div style="background:#f3e8ff;border:1px solid #e9d5ff;border-radius:10px;padding:16px;margin:16px 0;font-size:13px;color:#6b21a8;">' +
+    '<strong>Current Status:</strong> RLS is enabled on the <code>deals</code> and <code>projects</code> tables. Full RLS coverage for all tables is coming in Phase 2.' +
+  '</div>' +
+'</div>';
+
+// ─ COMPLIANCE PAGE ─
+SECURITY_PAGES['sec-compliance'] = '<div class="wiki-article">' +
+  '<div class="wiki-breadcrumb">Security / Compliance & Standards</div>' +
+  '<h2>Compliance & Standards</h2>' +
+  '<p>The IES Intelligence Hub leverages Supabase\s SOC 2 Type II certification and is designed to meet enterprise data governance requirements.</p>' +
+
+  '<h3 style="margin-top:28px;margin-bottom:16px;">Supabase SOC 2 Type II Certification</h3>' +
+  '<div style="background:#f0fdf4;border:1px solid #dcfce7;border-radius:10px;padding:16px;margin:16px 0;">' +
+    '<div style="font-weight:600;color:#15803d;margin-bottom:8px;">✓ Certified & Audited</div>' +
+    '<p style="font-size:13px;color:#15803d;">Supabase has completed a SOC 2 Type II audit, covering:<ul style="margin-left:20px;margin-top:8px;"><li>Security: Access controls, encryption, vulnerability management</li><li>Availability: 99.9% uptime SLA</li><li>Integrity: Data accuracy and consistency</li><li>Confidentiality: Data protection measures</li></ul></p>' +
+  '</div>' +
+  '<p style="font-size:12px;color:var(--ies-gray-600);margin-top:12px;"><a href="https://supabase.com/security" target="_blank" style="color:var(--ies-blue);text-decoration:none;">View Supabase Security Center</a></p>' +
+
+  '<h3 style="margin-top:28px;margin-bottom:16px;">Data Classification Framework</h3>' +
+  '<p style="font-size:13px;color:var(--ies-gray-600);margin-bottom:16px;">All data in the Hub is classified into tiers, each with distinct handling and retention requirements:</p>' +
+  '<table style="width:100%;border-collapse:collapse;font-size:13px;margin:16px 0;border:1px solid var(--ies-gray-200);border-radius:8px;overflow:hidden;">' +
+    '<tr style="background:var(--ies-gray-100);border-bottom:1px solid var(--ies-gray-200);">' +
+      '<th style="padding:12px;text-align:left;font-weight:700;">Classification</th>' +
+      '<th style="padding:12px;text-align:left;font-weight:700;">Examples</th>' +
+      '<th style="padding:12px;text-align:left;font-weight:700;">Access</th>' +
+      '<th style="padding:12px;text-align:left;font-weight:700;">Encryption</th>' +
+    '</tr>' +
+    '<tr style="border-bottom:1px solid var(--ies-gray-200);">' +
+      '<td style="padding:12px;"><span style="background:#e0e7ff;color:#3730a3;padding:2px 6px;border-radius:4px;font-weight:600;font-size:11px;">Public</span></td>' +
+      '<td style="padding:12px;font-size:12px;">Training wiki, general guides</td>' +
+      '<td style="padding:12px;font-size:12px;">Unrestricted</td>' +
+      '<td style="padding:12px;font-size:12px;">In transit (HTTPS)</td>' +
+    '</tr>' +
+    '<tr style="border-bottom:1px solid var(--ies-gray-200);">' +
+      '<td style="padding:12px;"><span style="background:#dbeafe;color:#0c4a6e;padding:2px 6px;border-radius:4px;font-weight:600;font-size:11px;">Internal</span></td>' +
+      '<td style="padding:12px;font-size:12px;">Deal summaries, project templates</td>' +
+      '<td style="padding:12px;font-size:12px;">GXO staff only</td>' +
+      '<td style="padding:12px;font-size:12px;">Rest + transit</td>' +
+    '</tr>' +
+    '<tr style="border-bottom:1px solid var(--ies-gray-200);">' +
+      '<td style="padding:12px;"><span style="background:#fce7f3;color:#831843;padding:2px 6px;border-radius:4px;font-weight:600;font-size:11px;">Confidential</span></td>' +
+      '<td style="padding:12px;font-size:12px;">Financial models, cost data, contracts</td>' +
+      '<td style="padding:12px;font-size:12px;">IES team + authorized client</td>' +
+      '<td style="padding:12px;font-size:12px;">Rest + transit + RLS</td>' +
+    '</tr>' +
+    '<tr>' +
+      '<td style="padding:12px;"><span style="background:#fee2e2;color:#7c2d12;padding:2px 6px;border-radius:4px;font-weight:600;font-size:11px;">Restricted</span></td>' +
+      '<td style="padding:12px;font-size:12px;">Audit logs, credentials, PII</td>' +
+      '<td style="padding:12px;font-size:12px;">Security team only</td>' +
+      '<td style="padding:12px;font-size:12px;">Rest + transit + RLS + audit</td>' +
+    '</tr>' +
+  '</table>' +
+
+  '<h3 style="margin-top:28px;margin-bottom:16px;">Row-Level Security (RLS) Status</h3>' +
+  '<div style="background:#f0fdf4;border:1px solid #dcfce7;border-radius:10px;padding:16px;margin:16px 0;">' +
+    '<div style="font-weight:600;color:#15803d;margin-bottom:8px;">Status: Partial (Phase 1) → Full (Phase 2)</div>' +
+    '<ul style="font-size:13px;color:#15803d;margin-left:20px;">' +
+      '<li><strong>Phase 1 (Current):</strong> RLS enabled on <code>deals</code>, <code>projects</code>, <code>feedback</code> tables</li>' +
+      '<li><strong>Phase 2:</strong> RLS enabled on all data tables; granular field-level access controls</li>' +
+    '</ul>' +
+  '</div>' +
+
+  '<h3 style="margin-top:28px;margin-bottom:16px;">Data Processing Agreement (DPA)</h3>' +
+  '<p style="font-size:13px;color:var(--ies-gray-600);margin-bottom:12px;">A Data Processing Agreement is available upon request and outlines how GXO and Supabase handle personal and sensitive data in compliance with privacy regulations.</p>' +
+  '<div style="background:#fff3cd;border:1px solid #ffecb5;border-radius:10px;padding:12px;font-size:12px;color:#856404;">To request the DPA, contact the GXO Security Team.</div>' +
+
+  '<h3 style="margin-top:28px;margin-bottom:16px;">Third-Party Integrations</h3>' +
+  '<table style="width:100%;border-collapse:collapse;font-size:13px;margin:16px 0;border:1px solid var(--ies-gray-200);border-radius:8px;overflow:hidden;">' +
+    '<tr style="background:var(--ies-gray-100);border-bottom:1px solid var(--ies-gray-200);">' +
+      '<th style="padding:12px;text-align:left;font-weight:700;">Service</th>' +
+      '<th style="padding:12px;text-align:left;font-weight:700;">Purpose</th>' +
+      '<th style="padding:12px;text-align:left;font-weight:700;">Compliance</th>' +
+    '</tr>' +
+    '<tr style="border-bottom:1px solid var(--ies-gray-200);">' +
+      '<td style="padding:12px;font-weight:600;">Supabase</td>' +
+      '<td style="padding:12px;">Database, auth, storage</td>' +
+      '<td style="padding:12px;">SOC 2 Type II, DPA available</td>' +
+    '</tr>' +
+    '<tr style="border-bottom:1px solid var(--ies-gray-200);">' +
+      '<td style="padding:12px;font-weight:600;">GitHub Pages</td>' +
+      '<td style="padding:12px;">Static content hosting</td>' +
+      '<td style="padding:12px;">Enterprise agreement, HIPAA eligible</td>' +
+    '</tr>' +
+    '<tr>' +
+      '<td style="padding:12px;font-weight:600;">Azure AD (Planned)</td>' +
+      '<td style="padding:12px;">Single sign-on (Phase 2)</td>' +
+      '<td style="padding:12px;">SOC 2 Type II, DPA available</td>' +
+    '</tr>' +
+  '</table>' +
+'</div>';
+
+// ─ INCIDENT RESPONSE PAGE ─
+SECURITY_PAGES['sec-incident'] = '<div class="wiki-article">' +
+  '<div class="wiki-breadcrumb">Security / Incident Response</div>' +
+  '<h2>Incident Response</h2>' +
+  '<p>We maintain a clear process for reporting, investigating, and resolving security incidents to minimize impact and maintain transparency.</p>' +
+
+  '<h3 style="margin-top:28px;margin-bottom:16px;">How to Report a Security Issue</h3>' +
+  '<div style="background:#fef2f2;border:1px solid #fee2e2;border-radius:10px;padding:16px;margin:16px 0;">' +
+    '<div style="font-weight:600;color:#991b1b;margin-bottom:12px;">Do not post security vulnerabilities publicly.</div>' +
+    '<p style="font-size:13px;color:#991b1b;margin-bottom:12px;">If you discover a potential security vulnerability, please report it directly to the GXO Security Team:</p>' +
+    '<div style="background:rgba(255,255,255,0.5);border-left:3px solid #991b1b;padding:12px;border-radius:4px;font-family:monospace;font-size:12px;color:#1c1c2e;">security@gxo.com</div>' +
+    '<p style="font-size:12px;color:#991b1b;margin-top:12px;">Include: vulnerability description, affected component, steps to reproduce, and your contact information.</p>' +
+  '</div>' +
+
+  '<h3 style="margin-top:28px;margin-bottom:16px;">Investigation Process</h3>' +
+  '<ol style="font-size:13px;color:var(--ies-gray-600);margin-left:20px;">' +
+    '<li><strong>Initial Assessment (0–4 hours):</strong> Security team confirms receipt and determines severity</li>' +
+    '<li><strong>Containment (4–24 hours):</strong> Affected systems are isolated; data access logs are reviewed</li>' +
+    '<li><strong>Remediation (24–72 hours):</strong> Fix is developed, tested, and deployed</li>' +
+    '<li><strong>Verification:</strong> Patch is validated; no regression is confirmed</li>' +
+    '<li><strong>Post-Incident Review:</strong> Root cause analysis and process improvements documented</li>' +
+  '</ol>' +
+
+  '<h3 style="margin-top:28px;margin-bottom:16px;">Notification Timeline</h3>' +
+  '<p style="font-size:13px;color:var(--ies-gray-600);margin-bottom:16px;">If an incident affects user data, affected parties are notified within 72 hours of discovery, as required by data protection regulations:</p>' +
+  '<ul style="font-size:13px;color:var(--ies-gray-600);margin-left:20px;margin-bottom:16px;">' +
+    '<li><strong>High severity:</strong> Within 24 hours</li>' +
+    '<li><strong>Medium severity:</strong> Within 48 hours</li>' +
+    '<li><strong>Low severity:</strong> Within 72 hours (or if no PII exposure)</li>' +
+  '</ul>' +
+
+  '<h3 style="margin-top:28px;margin-bottom:16px;">Data Deletion Requests</h3>' +
+  '<p style="font-size:13px;color:var(--ies-gray-600);margin-bottom:12px;">To request deletion of personal data or an entire deal record:</p>' +
+  '<ol style="font-size:13px;color:var(--ies-gray-600);margin-left:20px;margin-bottom:16px;">' +
+    '<li>Submit a formal request to <span style="font-family:monospace;color:var(--ies-blue);">security@gxo.com</span></li>' +
+    '<li>Specify the data to be deleted and reason for deletion</li>' +
+    '<li>Security team reviews and approves within 5 business days</li>' +
+    '<li>Data is deleted; confirmation is provided</li>' +
+    '<li>Deletion is verified by a second team member</li>' +
+  '</ol>' +
+
+  '<h3 style="margin-top:28px;margin-bottom:16px;">Post-Incident Review</h3>' +
+  '<p style="font-size:13px;color:var(--ies-gray-600);">After any security incident, a blameless post-incident review is conducted to:</p>' +
+  '<ul style="font-size:13px;color:var(--ies-gray-600);margin-left:20px;">' +
+    '<li>Document what happened and why</li>' +
+    '<li>Identify systemic improvements to prevent recurrence</li>' +
+    '<li>Update security documentation and procedures</li>' +
+    '<li>Share lessons learned (anonymized) with the team</li>' +
+  '</ul>' +
+'</div>';
+
+// ─ ROADMAP PAGE ─
+SECURITY_PAGES['sec-roadmap'] = '<div class="wiki-article">' +
+  '<div class="wiki-breadcrumb">Security / Security Roadmap</div>' +
+  '<h2>Security Roadmap</h2>' +
+  '<p>We are implementing a phased security hardening program to reach enterprise-grade controls. The roadmap below outlines our 2026 plans.</p>' +
+
+  '<h3 style="margin-top:28px;margin-bottom:24px;display:flex;align-items:center;gap:10px;">' +
+    '<span style="display:inline-block;background:#10b981;color:#fff;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;">1</span>' +
+    'Phase 1: Authentication & Audit (1–2 Weeks)' +
+  '</h3>' +
+  '<div style="background:#f0fdf4;border:1px solid #dcfce7;border-radius:10px;padding:20px;margin:16px 0;">' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:16px;">' +
+      '<div>' +
+        '<div style="font-weight:600;color:#15803d;margin-bottom:8px;">📋 Tasks</div>' +
+        '<ul style="font-size:13px;color:#15803d;margin-left:16px;">' +
+          '<li>Deploy Supabase Auth email/password</li>' +
+          '<li>Create roles table (Designer, Leadership, Analyst, Viewer)</li>' +
+          '<li>Enable RLS on all core tables</li>' +
+          '<li>Implement audit logging (login, data access, modifications)</li>' +
+          '<li>Publish Security section to hub</li>' +
+        '</ul>' +
+      '</div>' +
+      '<div>' +
+        '<div style="font-weight:600;color:#15803d;margin-bottom:8px;">✓ Deliverables</div>' +
+        '<ul style="font-size:13px;color:#15803d;margin-left:16px;">' +
+          '<li>User accounts with role-based permissions</li>' +
+          '<li>Audit log table with 12-month retention</li>' +
+          '<li>Security documentation (this section)</li>' +
+          '<li>RLS policies on all tables</li>' +
+        '</ul>' +
+      '</div>' +
+    '</div>' +
+    '<div style="border-top:1px solid #dcfce7;padding-top:12px;font-size:12px;color:#15803d;"><strong>Effort:</strong> 40–50 hours | <strong>Cost:</strong> Supabase standard plan upgrade</div>' +
+  '</div>' +
+
+  '<h3 style="margin-top:28px;margin-bottom:24px;display:flex;align-items:center;gap:10px;">' +
+    '<span style="display:inline-block;background:#0047ab;color:#fff;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;">2</span>' +
+    'Phase 2: Enterprise Architecture (4–6 Weeks)' +
+  '</h3>' +
+  '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:20px;margin:16px 0;">' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:16px;">' +
+      '<div>' +
+        '<div style="font-weight:600;color:#0369a1;margin-bottom:8px;">📋 Tasks</div>' +
+        '<ul style="font-size:13px;color:#0369a1;margin-left:16px;">' +
+          '<li>Migrate to dedicated Supabase project (prod-only)</li>' +
+          '<li>Implement custom security headers (CSP, HSTS)</li>' +
+          '<li>Deploy Azure AD SSO integration</li>' +
+          '<li>Field-level RLS (masking sensitive fields)</li>' +
+          '<li>Implement MFA for Designer role</li>' +
+        '</ul>' +
+      '</div>' +
+      '<div>' +
+        '<div style="font-weight:600;color:#0369a1;margin-bottom:8px;">✓ Deliverables</div>' +
+        '<ul style="font-size:13px;color:#0369a1;margin-left:16px;">' +
+          '<li>Azure AD SSO in production</li>' +
+          '<li>Custom security headers active</li>' +
+          '<li>MFA enforcement for high-risk roles</li>' +
+          '<li>Field-level encryption for sensitive data</li>' +
+        '</ul>' +
+      '</div>' +
+    '</div>' +
+    '<div style="border-top:1px solid #bae6fd;padding-top:12px;font-size:12px;color:#0369a1;"><strong>Effort:</strong> 80–100 hours | <strong>Cost:</strong> Azure AD Premium licensing + security consulting</div>' +
+  '</div>' +
+
+  '<h3 style="margin-top:28px;margin-bottom:24px;display:flex;align-items:center;gap:10px;">' +
+    '<span style="display:inline-block;background:#ff6b35;color:#fff;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;">3</span>' +
+    'Phase 3: Ongoing Hardening' +
+  '</h3>' +
+  '<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:10px;padding:20px;margin:16px 0;">' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:16px;">' +
+      '<div>' +
+        '<div style="font-weight:600;color:#92400e;margin-bottom:8px;">📋 Continuous Tasks</div>' +
+        '<ul style="font-size:13px;color:#92400e;margin-left:16px;">' +
+          '<li>Quarterly penetration testing</li>' +
+          '<li>Annual third-party security audit</li>' +
+          '<li>SIEM integration (CloudTrail, VPC Flow Logs)</li>' +
+          '<li>Vulnerability scanning (Snyk, Dependabot)</li>' +
+          '<li>Incident response drills</li>' +
+        '</ul>' +
+      '</div>' +
+      '<div>' +
+        '<div style="font-weight:600;color:#92400e;margin-bottom:8px;">✓ Outcomes</div>' +
+        '<ul style="font-size:13px;color:#92400e;margin-left:16px;">' +
+          '<li>Zero-trust architecture</li>' +
+          '<li>Real-time threat detection</li>' +
+          '<li>Compliance ready for SOC 2 renewal</li>' +
+          '<li>Enterprise security posture</li>' +
+        '</ul>' +
+      '</div>' +
+    '</div>' +
+    '<div style="border-top:1px solid #fcd34d;padding-top:12px;font-size:12px;color:#92400e;"><strong>Effort:</strong> Ongoing (10–15 hrs/quarter) | <strong>Cost:</strong> ~$2K–5K/year for tooling</div>' +
+  '</div>' +
+
+  '<h3 style="margin-top:28px;margin-bottom:16px;">Summary Timeline</h3>' +
+  '<div style="background:#fff;border:1px solid var(--ies-gray-200);border-radius:10px;overflow:hidden;margin:16px 0;">' +
+    '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-bottom:1px solid var(--ies-gray-200);">' +
+      '<div style="padding:12px;text-align:center;border-right:1px solid var(--ies-gray-200);font-weight:600;color:var(--ies-navy);">Phase</div>' +
+      '<div style="padding:12px;text-align:center;border-right:1px solid var(--ies-gray-200);font-weight:600;color:var(--ies-navy);">Timeline</div>' +
+      '<div style="padding:12px;text-align:center;font-weight:600;color:var(--ies-navy);">Status</div>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-bottom:1px solid var(--ies-gray-200);">' +
+      '<div style="padding:12px;border-right:1px solid var(--ies-gray-200);">Phase 1</div>' +
+      '<div style="padding:12px;border-right:1px solid var(--ies-gray-200);font-size:12px;">1–2 weeks</div>' +
+      '<div style="padding:12px;"><span style="background:#dcfce7;color:#15803d;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:600;">IN PROGRESS</span></div>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-bottom:1px solid var(--ies-gray-200);">' +
+      '<div style="padding:12px;border-right:1px solid var(--ies-gray-200);">Phase 2</div>' +
+      '<div style="padding:12px;border-right:1px solid var(--ies-gray-200);font-size:12px;">4–6 weeks</div>' +
+      '<div style="padding:12px;"><span style="background:#bae6fd;color:#0369a1;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:600;">PLANNED</span></div>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));">' +
+      '<div style="padding:12px;border-right:1px solid var(--ies-gray-200);">Phase 3</div>' +
+      '<div style="padding:12px;border-right:1px solid var(--ies-gray-200);font-size:12px;">Ongoing</div>' +
+      '<div style="padding:12px;"><span style="background:#fce7f3;color:#831843;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:600;">QUEUED</span></div>' +
+    '</div>' +
+  '</div>' +
+'</div>';
+
+function showSecurityPage(page) {
+  var content = SECURITY_PAGES[page];
+  if (!content) return;
+  document.getElementById('securityContent').innerHTML = content;
+  // Scroll to top
+  var sc = document.getElementById('securityContent');
+  if (sc) sc.scrollTop = 0;
+  window.scrollTo(0, 0);
+  // Update active nav
+  document.querySelectorAll('#sec-security .wiki-nav-item').forEach(function(item) { item.classList.remove('active'); });
+  try {
+    var clicked = window.event && window.event.target;
+    if (clicked && clicked.classList.contains('wiki-nav-item')) clicked.classList.add('active');
+  } catch(e) { /* called programmatically, no event */ }
+}
+
+// Initialize with Overview page on load
+document.addEventListener('DOMContentLoaded', function() {
+  try {
+    showSecurityPage('sec-overview');
+  } catch(e) {}
+});
 
 // ── TABS ──
 function switchTab(group, tab, el) {
@@ -22734,6 +23257,7 @@ var anSectionNames = {
   fleet: 'Fleet Modeler',
   netopt: 'Network Optimization',
   feedback: 'Ideas & Feedback',
+  security: 'Security',
   analytics: 'Analytics'
 };
 
@@ -23016,7 +23540,7 @@ var fbSectionNames = {
   macro: 'Macro & Trade', automation: 'Automation & Tech', verticals: 'Verticals',
   deals: 'Deal Management', changemanagement: 'Change Management',
   training: 'Training Wiki', designtools: 'Design Tools', costmodel: 'Cost Model',
-  fleet: 'Fleet Modeler', feedback: 'Ideas & Feedback', analytics: 'Analytics'
+  fleet: 'Fleet Modeler', feedback: 'Ideas & Feedback', security: 'Security', analytics: 'Analytics'
 };
 
 function fbOpenModal() {
