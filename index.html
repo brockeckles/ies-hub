@@ -6085,13 +6085,9 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 
           <div id="netopt-results-content" style="display:none;">
 
-            <!-- Recommended Configuration Card -->
-            <div style="background:linear-gradient(135deg,#ecfdf5 0%,#f0fdf4 100%);border-radius:10px;border:1px solid rgba(25,135,84,.12);padding:16px;margin-bottom:20px;">
-              <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-                <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4" stroke="#198754" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="9" stroke="#198754" stroke-width="2"/></svg>
-                <div style="font-weight:700;color:#198754;font-size:13px;">RECOMMENDED CONFIGURATION</div>
-              </div>
-              <div id="netopt-recommendation-text" style="font-size:13px;color:var(--ies-gray-700);line-height:1.6;margin-bottom:12px;"></div>
+            <!-- Recommendation Panel -->
+            <div id="netopt-recommendation-panel" style="border-radius:10px;border:1px solid rgba(0,71,171,.12);overflow:hidden;margin-bottom:20px;">
+              <!-- Populated by JS: netoptRenderRecommendation() -->
             </div>
 
             <!-- Interactive Map -->
@@ -17611,13 +17607,8 @@ function netoptRenderResults() {
   var r = netoptState.results;
   if (!r) return;
 
-  // Recommendation text — mention both cost and service optimal if different
-  var facNames = r.openFacilities.map(f => f.name).join(', ');
-  var totalVol = netoptState.demands.reduce((s, d) => s + d.volume, 0).toFixed(0);
-  var avgDays = r.avgDeliveryDays ? r.avgDeliveryDays.toFixed(1) : '—';
-  var recText = 'Based on ' + netoptState.demands.length + ' demand points totaling ' + totalVol + 'K units, we recommend a ' + r.openFacilities.length + '-facility network in ' + facNames + '. Avg delivery: ' + avgDays + ' days at $' + r.totalCost.toFixed(1) + 'M/yr.';
-  recText += ' [' + (r.solverMode === 'exact' ? 'Exact — provably optimal' : 'Heuristic — may improve with Exact mode') + ']';
-  document.getElementById('netopt-recommendation-text').textContent = recText;
+  // Intelligent recommendation
+  netoptRenderRecommendation(r);
 
   // Cost breakdown
   var tbody = document.getElementById('netopt-cost-breakdown');
@@ -17976,6 +17967,167 @@ function netoptDrawServiceZones(openFacilities) {
 }
 
 // Override netoptUpdateHeatLayer to also clean up zone legend when not in zones mode
+
+// ── INTELLIGENT RECOMMENDATION ENGINE ──
+function netoptRenderRecommendation(r) {
+  var panel = document.getElementById('netopt-recommendation-panel');
+  if (!panel || !r || !r.allScenarios || r.allScenarios.length === 0) return;
+
+  var scenarios = r.allScenarios;
+  var bestCostIdx = r.bestCostIdx != null ? r.bestCostIdx : 0;
+  var bestServiceIdx = r.bestServiceIdx != null ? r.bestServiceIdx : scenarios.length - 1;
+  var costScen = scenarios[bestCostIdx];
+  var serviceScen = scenarios[bestServiceIdx];
+  var sameScenario = (bestCostIdx === bestServiceIdx);
+  var totalVol = netoptState.demands.reduce(function(s, d) { return s + d.volume; }, 0);
+  var solverLabel = r.solverMode === 'exact' ? 'Exact solver' : 'Heuristic solver';
+
+  // Analyze trade-off
+  var costDelta = serviceScen.totalCost - costScen.totalCost;
+  var costDeltaPct = costScen.totalCost > 0 ? (costDelta / costScen.totalCost * 100) : 0;
+  var daysDelta = costScen.avgDeliveryDays - serviceScen.avgDeliveryDays;
+  var twoDayImprove = (serviceScen.dayPct.d1 + serviceScen.dayPct.d2) - (costScen.dayPct.d1 + costScen.dayPct.d2);
+
+  // Find balanced scenario: best cost-per-day-improvement ratio
+  var balancedIdx = bestCostIdx;
+  if (!sameScenario && scenarios.length > 2) {
+    var bestRatio = Infinity;
+    for (var si = 0; si < scenarios.length; si++) {
+      if (si === bestCostIdx) continue;
+      var extraCost = scenarios[si].totalCost - costScen.totalCost;
+      var daysGained = costScen.avgDeliveryDays - scenarios[si].avgDeliveryDays;
+      if (daysGained > 0.05) {
+        var ratio = extraCost / daysGained; // $/day improved
+        // Penalize if diminishing returns (less improvement per $)
+        var twoDayGained = (scenarios[si].dayPct.d1 + scenarios[si].dayPct.d2) - (costScen.dayPct.d1 + costScen.dayPct.d2);
+        var serviceScore = daysGained + (twoDayGained / 50); // bonus for 2-day coverage
+        var adjRatio = extraCost / serviceScore;
+        if (adjRatio < bestRatio) {
+          bestRatio = adjRatio;
+          balancedIdx = si;
+        }
+      }
+    }
+  }
+  var balancedScen = scenarios[balancedIdx];
+  var hasBalanced = !sameScenario && balancedIdx !== bestCostIdx && balancedIdx !== bestServiceIdx;
+
+  // Determine what to recommend and why
+  var recIdx, recRationale, recType;
+
+  if (sameScenario) {
+    // Same scenario is both cheapest and fastest — easy call
+    recIdx = bestCostIdx;
+    recType = 'optimal';
+    recRationale = 'This configuration is both the lowest cost and fastest delivery option — it dominates all other scenarios.';
+  } else if (costDeltaPct < 8 && daysDelta > 0.3) {
+    // Service upgrade is cheap (<8% more cost) for meaningful improvement
+    recIdx = bestServiceIdx;
+    recType = 'service';
+    recRationale = 'The best-service network is only ' + costDeltaPct.toFixed(0) + '% more expensive ($' + costDelta.toFixed(2) + 'M/yr) but improves avg delivery by ' + daysDelta.toFixed(1) + ' days. The marginal cost is well justified by the service improvement.';
+  } else if (costDeltaPct > 30 && daysDelta < 0.5) {
+    // Service upgrade is expensive for minimal improvement
+    recIdx = bestCostIdx;
+    recType = 'cost';
+    recRationale = 'Adding facilities improves delivery by only ' + daysDelta.toFixed(1) + ' days but costs ' + costDeltaPct.toFixed(0) + '% more ($' + costDelta.toFixed(2) + 'M/yr). The cost-optimized network is recommended unless SLA requirements dictate otherwise.';
+  } else if (hasBalanced) {
+    // There's a meaningful middle ground
+    var balCostDelta = balancedScen.totalCost - costScen.totalCost;
+    var balCostPct = costScen.totalCost > 0 ? (balCostDelta / costScen.totalCost * 100) : 0;
+    var balDaysGain = costScen.avgDeliveryDays - balancedScen.avgDeliveryDays;
+    var bal2Day = (balancedScen.dayPct.d1 + balancedScen.dayPct.d2).toFixed(0);
+    recIdx = balancedIdx;
+    recType = 'balanced';
+    recRationale = 'This configuration strikes the best balance — ' + balCostPct.toFixed(0) + '% more than the lowest-cost option ($' + balCostDelta.toFixed(2) + 'M/yr) but ' + balDaysGain.toFixed(1) + ' days faster with ' + bal2Day + '% of orders within 2 days. It offers the best cost-per-day-improved ratio across all scenarios.';
+  } else {
+    // Default: recommend based on whether the trade-off favors cost or service
+    if (costDeltaPct < 15) {
+      recIdx = bestServiceIdx;
+      recType = 'service';
+      recRationale = 'For ' + costDeltaPct.toFixed(0) + '% additional cost ($' + costDelta.toFixed(2) + 'M/yr), the service-optimized network delivers ' + daysDelta.toFixed(1) + ' fewer avg days with ' + twoDayImprove.toFixed(0) + ' percentage points more orders in the 2-day window.';
+    } else {
+      recIdx = bestCostIdx;
+      recType = 'cost';
+      recRationale = 'The service upgrade costs ' + costDeltaPct.toFixed(0) + '% more ($' + costDelta.toFixed(2) + 'M/yr) for ' + daysDelta.toFixed(1) + ' days improvement. The cost-optimized network is recommended unless faster delivery is a competitive requirement.';
+    }
+  }
+
+  var recScen = scenarios[recIdx];
+  var recFacNames = recScen.openFacilities.map(function(f) { return f.name; }).join(', ');
+  var rec2Day = (recScen.dayPct.d1 + recScen.dayPct.d2).toFixed(0);
+
+  // Determine badge color/label based on recommendation type
+  var badgeColor, badgeLabel;
+  if (recType === 'optimal') { badgeColor = '#10b981'; badgeLabel = 'OPTIMAL'; }
+  else if (recType === 'balanced') { badgeColor = '#8b5cf6'; badgeLabel = 'BALANCED'; }
+  else if (recType === 'service') { badgeColor = '#3b82f6'; badgeLabel = 'SERVICE-DRIVEN'; }
+  else { badgeColor = '#10b981'; badgeLabel = 'COST-DRIVEN'; }
+
+  // Build the panel HTML
+  var html = '';
+
+  // Main recommendation
+  html += '<div style="background:linear-gradient(135deg,#f8fafc,#f0f4ff);padding:16px 18px 14px;">';
+  html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">';
+  html += '<svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4" stroke="' + badgeColor + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="9" stroke="' + badgeColor + '" stroke-width="2"/></svg>';
+  html += '<span style="font-weight:700;color:' + badgeColor + ';font-size:13px;">RECOMMENDED</span>';
+  html += '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:9px;font-weight:700;background:' + badgeColor + '18;color:' + badgeColor + ';letter-spacing:.5px;">' + badgeLabel + '</span>';
+  html += '<span style="margin-left:auto;font-size:10px;color:var(--ies-gray-400);">' + solverLabel + '</span>';
+  html += '</div>';
+
+  // Key metrics row
+  html += '<div style="display:flex;gap:16px;margin-bottom:12px;flex-wrap:wrap;">';
+  var metrics = [
+    { label: 'Facilities', value: recScen.openFacilities.length + ' DCs' },
+    { label: 'Total Cost', value: '$' + recScen.totalCost.toFixed(2) + 'M/yr' },
+    { label: 'Avg Delivery', value: recScen.avgDeliveryDays.toFixed(1) + ' days' },
+    { label: '≤2 Day', value: rec2Day + '%' }
+  ];
+  metrics.forEach(function(m) {
+    html += '<div style="text-align:center;padding:6px 14px;background:rgba(255,255,255,.7);border-radius:6px;border:1px solid rgba(0,0,0,.04);">';
+    html += '<div style="font-size:16px;font-weight:800;color:var(--ies-navy);">' + m.value + '</div>';
+    html += '<div style="font-size:9px;font-weight:600;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:.4px;">' + m.label + '</div>';
+    html += '</div>';
+  });
+  html += '</div>';
+
+  html += '<div style="font-size:12px;color:var(--ies-gray-600);line-height:1.6;">';
+  html += '<strong>' + recScen.openFacilities.length + '-DC network:</strong> ' + recFacNames + '. ';
+  html += recRationale;
+  html += '</div>';
+  html += '</div>';
+
+  // If cost and service are different, show the comparison strip
+  if (!sameScenario) {
+    html += '<div style="display:flex;border-top:1px solid rgba(0,0,0,.06);font-size:11px;">';
+
+    // Cost-optimal mini card
+    var cFacs = costScen.openFacilities.map(function(f) { return f.name; }).join(', ');
+    var c2Day = (costScen.dayPct.d1 + costScen.dayPct.d2).toFixed(0);
+    html += '<div style="flex:1;padding:10px 16px;border-right:1px solid rgba(0,0,0,.06);' + (recIdx === bestCostIdx ? 'background:rgba(16,185,129,.04);' : '') + '">';
+    html += '<div style="font-weight:700;color:#059669;font-size:10px;text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">';
+    html += '<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#10b981;margin-right:4px;vertical-align:0px;"></span>Lowest Cost</div>';
+    html += '<div style="color:var(--ies-navy);font-weight:600;">' + costScen.openFacilities.length + ' DCs — $' + costScen.totalCost.toFixed(2) + 'M/yr</div>';
+    html += '<div style="color:var(--ies-gray-500);font-size:10px;">' + cFacs + '</div>';
+    html += '<div style="color:var(--ies-gray-500);font-size:10px;">' + costScen.avgDeliveryDays.toFixed(1) + ' avg days &middot; ' + c2Day + '% ≤2 day</div>';
+    html += '</div>';
+
+    // Service-optimal mini card
+    var sFacs = serviceScen.openFacilities.map(function(f) { return f.name; }).join(', ');
+    var s2Day = (serviceScen.dayPct.d1 + serviceScen.dayPct.d2).toFixed(0);
+    html += '<div style="flex:1;padding:10px 16px;' + (recIdx === bestServiceIdx ? 'background:rgba(59,130,246,.04);' : '') + '">';
+    html += '<div style="font-weight:700;color:#2563eb;font-size:10px;text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">';
+    html += '<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#3b82f6;margin-right:4px;vertical-align:0px;"></span>Best Service</div>';
+    html += '<div style="color:var(--ies-navy);font-weight:600;">' + serviceScen.openFacilities.length + ' DCs — $' + serviceScen.totalCost.toFixed(2) + 'M/yr</div>';
+    html += '<div style="color:var(--ies-gray-500);font-size:10px;">' + sFacs + '</div>';
+    html += '<div style="color:var(--ies-gray-500);font-size:10px;">' + serviceScen.avgDeliveryDays.toFixed(1) + ' avg days &middot; ' + s2Day + '% ≤2 day</div>';
+    html += '</div>';
+
+    html += '</div>';
+  }
+
+  panel.innerHTML = html;
+}
 
 // ── NETOPT HEATMAP ──
 
