@@ -6124,6 +6124,16 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
               </div>
             </div>
 
+            <!-- Service Profile Card (delivery day breakdown) -->
+            <div id="netopt-service-profile" style="background:#fff;border-radius:12px;border:1px solid var(--ies-gray-200);box-shadow:var(--shadow-md);overflow:hidden;margin-bottom:20px;">
+              <div style="padding:12px 16px 8px;border-bottom:1px solid var(--ies-gray-100);">
+                <div style="font-size:11px;font-weight:700;color:var(--ies-navy);text-transform:uppercase;letter-spacing:.6px;">Delivery Performance</div>
+              </div>
+              <div id="netopt-service-profile-body" style="padding:16px;">
+                <!-- Populated by JS -->
+              </div>
+            </div>
+
             <!-- Scenario Comparison -->
             <div style="background:#fff;border-radius:12px;border:1px solid var(--ies-gray-200);box-shadow:var(--shadow-md);overflow:hidden;">
               <div style="padding:12px 16px 8px;border-bottom:1px solid var(--ies-gray-100);">
@@ -6136,9 +6146,13 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
                       <th style="padding:10px 14px;text-align:left;font-weight:700;color:var(--ies-navy);"># DCs</th>
                       <th style="padding:10px 14px;text-align:left;font-weight:700;color:var(--ies-navy);">Facilities</th>
                       <th style="padding:10px 14px;text-align:right;font-weight:700;color:var(--ies-navy);">Total Cost ($M)</th>
-                      <th style="padding:10px 14px;text-align:right;font-weight:700;color:var(--ies-navy);">Avg Distance (mi)</th>
-                      <th style="padding:10px 14px;text-align:right;font-weight:700;color:var(--ies-navy);">Service %</th>
-                      <th style="padding:10px 14px;text-align:right;font-weight:700;color:var(--ies-navy);">Δ vs Optimal</th>
+                      <th style="padding:10px 14px;text-align:right;font-weight:700;color:var(--ies-navy);">Avg Days</th>
+                      <th style="padding:10px 14px;text-align:right;font-weight:700;color:var(--ies-navy);">1-Day %</th>
+                      <th style="padding:10px 14px;text-align:right;font-weight:700;color:var(--ies-navy);">2-Day %</th>
+                      <th style="padding:10px 14px;text-align:right;font-weight:700;color:var(--ies-navy);">3-Day %</th>
+                      <th style="padding:10px 14px;text-align:right;font-weight:700;color:var(--ies-navy);">4-Day %</th>
+                      <th style="padding:10px 14px;text-align:right;font-weight:700;color:var(--ies-navy);">5+ Day %</th>
+                      <th style="padding:10px 14px;text-align:center;font-weight:700;color:var(--ies-navy);">Verdict</th>
                     </tr>
                   </thead>
                   <tbody id="netopt-comparison-tbody">
@@ -17314,7 +17328,18 @@ function netoptGreedyOptimize(facilities, demands, transport, constraints) {
     scenarios.push(bestConfig);
   }
 
-  // Find optimal scenario
+  // Tag best-cost and best-service scenarios
+  var bestCostIdx = 0, bestServiceIdx = 0;
+  for (var si = 0; si < scenarios.length; si++) {
+    if (scenarios[si].totalCost < scenarios[bestCostIdx].totalCost) bestCostIdx = si;
+    if (scenarios[si].avgDeliveryDays < scenarios[bestServiceIdx].avgDeliveryDays) bestServiceIdx = si;
+  }
+  scenarios.forEach(function(s, i) {
+    s._isBestCost = (i === bestCostIdx);
+    s._isBestService = (i === bestServiceIdx);
+  });
+
+  // Default recommended = best cost among feasible (backward compatible)
   var bestScenario = scenarios.reduce((best, curr) => {
     if (constraints.budgetCap && curr.totalCost > constraints.budgetCap) return best;
     if (curr.serviceLevel < constraints.serviceLevelPct) return best;
@@ -17322,6 +17347,8 @@ function netoptGreedyOptimize(facilities, demands, transport, constraints) {
   }, scenarios[0] || {});
 
   bestScenario.allScenarios = scenarios;
+  bestScenario.bestCostIdx = bestCostIdx;
+  bestScenario.bestServiceIdx = bestServiceIdx;
   return bestScenario;
 }
 
@@ -17397,6 +17424,12 @@ function netoptEvaluateConfig(config, demands, transport, constraints) {
   var assignedVolume = {};
   var distances = [];
   var serviceCt = 0;
+  var truckSpeed = transport.truckSpeedMiPerDay || 500;
+
+  // Delivery day buckets: volume-weighted (units in K)
+  var dayBuckets = { d1: 0, d2: 0, d3: 0, d4: 0, d5plus: 0 };
+  var totalVolume = 0;
+  var weightedDaySum = 0;
 
   config.forEach(f => assignedVolume[f.id] = 0);
 
@@ -17423,6 +17456,36 @@ function netoptEvaluateConfig(config, demands, transport, constraints) {
       distances.push(minDist);
 
       if (minDist <= d.maxMiles) serviceCt++;
+
+      // Delivery day estimation: distance / truck speed + 1 day handling
+      // Parcel uses carrier transit tables (simplified: zone-based days)
+      var transitDays;
+      var parcelPct = mix.parcel || 0;
+      var groundPct = (mix.tl || 0) + (mix.ltl || 0);
+      // Ground transit: miles / speed, minimum 1 day, + 1 day order processing
+      var groundDays = Math.ceil(minDist / truckSpeed) + 1;
+      // Parcel transit: approximation based on zone (distance bands)
+      var parcelDays;
+      if (minDist <= 150) parcelDays = 2;       // Zone 2-3: next day + handling
+      else if (minDist <= 400) parcelDays = 3;   // Zone 4-5
+      else if (minDist <= 800) parcelDays = 4;   // Zone 6-7
+      else parcelDays = 5;                        // Zone 8+
+      // Blended delivery days across modes
+      transitDays = groundPct > 0 || parcelPct > 0
+        ? (groundDays * groundPct + parcelDays * parcelPct) / (groundPct + parcelPct)
+        : groundDays;
+      transitDays = Math.max(1, Math.round(transitDays * 10) / 10);
+
+      var demVol = d.volume || 1;
+      totalVolume += demVol;
+      weightedDaySum += transitDays * demVol;
+
+      // Volume-weighted day bucket assignment
+      if (transitDays <= 1.5) dayBuckets.d1 += demVol;
+      else if (transitDays <= 2.5) dayBuckets.d2 += demVol;
+      else if (transitDays <= 3.5) dayBuckets.d3 += demVol;
+      else if (transitDays <= 4.5) dayBuckets.d4 += demVol;
+      else dayBuckets.d5plus += demVol;
     }
   });
 
@@ -17435,6 +17498,16 @@ function netoptEvaluateConfig(config, demands, transport, constraints) {
   var totalCost = fixedCost + (transportCost / 1000000) + varCost + inventoryCost;
   var avgDistance = distances.length > 0 ? distances.reduce((a, b) => a + b) / distances.length : 0;
   var serviceLevel = demands.length > 0 ? (serviceCt / demands.length) * 100 : 0;
+  var avgDeliveryDays = totalVolume > 0 ? weightedDaySum / totalVolume : 0;
+
+  // Convert day buckets to percentages
+  var dayPct = {
+    d1: totalVolume > 0 ? (dayBuckets.d1 / totalVolume * 100) : 0,
+    d2: totalVolume > 0 ? (dayBuckets.d2 / totalVolume * 100) : 0,
+    d3: totalVolume > 0 ? (dayBuckets.d3 / totalVolume * 100) : 0,
+    d4: totalVolume > 0 ? (dayBuckets.d4 / totalVolume * 100) : 0,
+    d5plus: totalVolume > 0 ? (dayBuckets.d5plus / totalVolume * 100) : 0
+  };
 
   return {
     openFacilities: config,
@@ -17445,7 +17518,9 @@ function netoptEvaluateConfig(config, demands, transport, constraints) {
     inventoryCostM: inventoryCost,
     totalCost: totalCost,
     avgDistance: avgDistance,
-    serviceLevel: serviceLevel
+    serviceLevel: serviceLevel,
+    avgDeliveryDays: avgDeliveryDays,
+    dayPct: dayPct
   };
 }
 
@@ -17490,8 +17565,23 @@ function netoptExactOptimize(facilities, demands, transport, constraints) {
     }
   }
 
+  // Tag best-cost and best-service scenarios
+  var bestCostIdx = 0, bestServiceIdx = 0;
+  for (var si = 0; si < allScenarios.length; si++) {
+    if (allScenarios[si].totalCost < allScenarios[bestCostIdx].totalCost) bestCostIdx = si;
+    if (allScenarios[si].avgDeliveryDays < allScenarios[bestServiceIdx].avgDeliveryDays) bestServiceIdx = si;
+  }
+  allScenarios.forEach(function(s, i) {
+    s._isBestCost = (i === bestCostIdx);
+    s._isBestService = (i === bestServiceIdx);
+  });
+
   if (!globalBest && allScenarios.length > 0) globalBest = allScenarios[0];
-  if (globalBest) globalBest.allScenarios = allScenarios;
+  if (globalBest) {
+    globalBest.allScenarios = allScenarios;
+    globalBest.bestCostIdx = bestCostIdx;
+    globalBest.bestServiceIdx = bestServiceIdx;
+  }
   if (!globalBest) globalBest = { openFacilities: [], totalCost: Infinity, allScenarios: allScenarios };
   return globalBest;
 }
@@ -17518,9 +17608,11 @@ function netoptRenderResults() {
   var r = netoptState.results;
   if (!r) return;
 
-  // Recommendation text
+  // Recommendation text — mention both cost and service optimal if different
   var facNames = r.openFacilities.map(f => f.name).join(', ');
-  var recText = `Based on ${netoptState.demands.length} demand points totaling ${netoptState.demands.reduce((s, d) => s + d.volume, 0).toFixed(0)}K units, we recommend a ${r.openFacilities.length}-facility network in ${facNames}. This achieves ${r.serviceLevel.toFixed(0)}% service level at $${r.totalCost.toFixed(1)}M/yr.`;
+  var totalVol = netoptState.demands.reduce((s, d) => s + d.volume, 0).toFixed(0);
+  var avgDays = r.avgDeliveryDays ? r.avgDeliveryDays.toFixed(1) : '—';
+  var recText = 'Based on ' + netoptState.demands.length + ' demand points totaling ' + totalVol + 'K units, we recommend a ' + r.openFacilities.length + '-facility network in ' + facNames + '. Avg delivery: ' + avgDays + ' days at $' + r.totalCost.toFixed(1) + 'M/yr.';
   recText += ' [' + (r.solverMode === 'exact' ? 'Exact — provably optimal' : 'Heuristic — may improve with Exact mode') + ']';
   document.getElementById('netopt-recommendation-text').textContent = recText;
 
@@ -17549,7 +17641,42 @@ function netoptRenderResults() {
     </tr>
   `;
 
-  // Scenario comparison — clickable rows
+  // Delivery Performance card
+  var spBody = document.getElementById('netopt-service-profile-body');
+  if (spBody && r.dayPct) {
+    var dp = r.dayPct;
+    var barColors = ['#10b981', '#3b82f6', '#f59e0b', '#f97316', '#ef4444'];
+    var barLabels = ['1 Day', '2 Day', '3 Day', '4 Day', '5+ Day'];
+    var barVals = [dp.d1, dp.d2, dp.d3, dp.d4, dp.d5plus];
+
+    var avgDaysDisplay = r.avgDeliveryDays ? r.avgDeliveryDays.toFixed(1) : '—';
+    var cumul2Day = (dp.d1 + dp.d2).toFixed(0);
+    var cumul3Day = (dp.d1 + dp.d2 + dp.d3).toFixed(0);
+
+    spBody.innerHTML = `
+      <div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;">
+        <div style="flex:0 0 auto;text-align:center;padding:8px 20px;background:linear-gradient(135deg,#f0f4ff,#e8f0fe);border-radius:10px;">
+          <div style="font-size:28px;font-weight:800;color:var(--ies-navy);">${avgDaysDisplay}</div>
+          <div style="font-size:10px;font-weight:600;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:.5px;">Avg Days</div>
+          <div style="margin-top:6px;font-size:10px;color:var(--ies-gray-500);">${cumul2Day}% within 2 days &middot; ${cumul3Day}% within 3 days</div>
+        </div>
+        <div style="flex:1;min-width:200px;">
+          <div style="font-size:10px;font-weight:600;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">% of Orders by Delivery Day</div>
+          ${barVals.map(function(val, bi) {
+            return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">' +
+              '<div style="width:42px;font-size:10px;font-weight:600;color:var(--ies-gray-600);text-align:right;">' + barLabels[bi] + '</div>' +
+              '<div style="flex:1;height:18px;background:#f1f3f5;border-radius:4px;overflow:hidden;position:relative;">' +
+                '<div style="height:100%;width:' + Math.max(val, 0.5) + '%;background:' + barColors[bi] + ';border-radius:4px;transition:width .3s;"></div>' +
+              '</div>' +
+              '<div style="width:36px;font-size:11px;font-weight:700;color:var(--ies-navy);text-align:right;">' + val.toFixed(0) + '%</div>' +
+            '</div>';
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  // Scenario comparison — clickable rows with cost/service badges
   if (r.allScenarios) {
     var cBody = document.getElementById('netopt-comparison-tbody');
     cBody.innerHTML = '';
@@ -17559,10 +17686,14 @@ function netoptRenderResults() {
     r.allScenarios.forEach((scenario, i) => {
       var numDCs = scenario.openFacilities.length;
       var facNames = scenario.openFacilities.map(f => f.name).join(', ');
-      var bestCost = r.allScenarios.reduce((m, s) => Math.min(m, s.totalCost), Infinity);
-      var delta = scenario.totalCost - bestCost;
-      var deltaStr = delta < 0.01 ? '★ Optimal' : '+$' + delta.toFixed(2) + 'M';
       var isSelected = (i === selectedIdx);
+      var dp = scenario.dayPct || { d1:0, d2:0, d3:0, d4:0, d5plus:0 };
+
+      // Build verdict badges
+      var badges = [];
+      if (scenario._isBestCost) badges.push('<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:9px;font-weight:700;background:rgba(16,185,129,.12);color:#059669;">BEST COST</span>');
+      if (scenario._isBestService) badges.push('<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:9px;font-weight:700;background:rgba(59,130,246,.12);color:#2563eb;">BEST SERVICE</span>');
+      var verdictHtml = badges.length > 0 ? badges.join(' ') : '<span style="color:var(--ies-gray-400);font-size:10px;">—</span>';
 
       var row = document.createElement('tr');
       row.style.borderBottom = '1px solid var(--ies-gray-200)';
@@ -17579,9 +17710,13 @@ function netoptRenderResults() {
         <td style="padding:10px 14px;font-weight:600;">${numDCs}</td>
         <td style="padding:10px 14px;font-size:11px;">${facNames}</td>
         <td style="padding:10px 14px;text-align:right;font-weight:600;">$${scenario.totalCost.toFixed(2)}M</td>
-        <td style="padding:10px 14px;text-align:right;font-weight:600;">${scenario.avgDistance.toFixed(0)}</td>
-        <td style="padding:10px 14px;text-align:right;font-weight:600;">${scenario.serviceLevel.toFixed(0)}%</td>
-        <td style="padding:10px 14px;text-align:right;font-weight:600;color:${delta < 0.01 ? 'var(--ies-green)' : 'var(--ies-gray-600)'};">${deltaStr}</td>
+        <td style="padding:10px 14px;text-align:right;font-weight:600;">${scenario.avgDeliveryDays ? scenario.avgDeliveryDays.toFixed(1) : '—'}</td>
+        <td style="padding:10px 14px;text-align:right;font-weight:600;color:#10b981;">${dp.d1.toFixed(0)}%</td>
+        <td style="padding:10px 14px;text-align:right;font-weight:600;color:#3b82f6;">${dp.d2.toFixed(0)}%</td>
+        <td style="padding:10px 14px;text-align:right;font-weight:600;color:#f59e0b;">${dp.d3.toFixed(0)}%</td>
+        <td style="padding:10px 14px;text-align:right;font-weight:600;color:#f97316;">${dp.d4.toFixed(0)}%</td>
+        <td style="padding:10px 14px;text-align:right;font-weight:600;color:#ef4444;">${dp.d5plus.toFixed(0)}%</td>
+        <td style="padding:10px 14px;text-align:center;">${verdictHtml}</td>
       `;
       cBody.appendChild(row);
     });
@@ -17600,10 +17735,14 @@ function netoptSelectScenario(idx) {
   var prevAll = netoptState.results.allScenarios;
   var prevMode = netoptState.results.solverMode;
   var prevTime = netoptState.results.solveTimeMs;
+  var prevBestCost = netoptState.results.bestCostIdx;
+  var prevBestService = netoptState.results.bestServiceIdx;
   netoptState.results = scenario;
   netoptState.results.allScenarios = prevAll;
   netoptState.results.solverMode = prevMode;
   netoptState.results.solveTimeMs = prevTime;
+  netoptState.results.bestCostIdx = prevBestCost;
+  netoptState.results.bestServiceIdx = prevBestService;
 
   // Re-render everything for the selected scenario
   netoptRenderResults();
@@ -17722,15 +17861,22 @@ function netoptSetMapMode(mode) {
 
 function netoptBuildHeatData() {
   // Build [lat, lng, intensity] array from demand points
+  // Use square-root scaling so high-volume points dominate visually
+  // while low-volume points still register as cool spots
   var heatData = [];
   var maxVol = 1;
   netoptState.demands.forEach(function(d) {
-    if (d.volume > maxVol) maxVol = d.volume;
+    if ((d.volume || 0) > maxVol) maxVol = d.volume;
   });
+  var sqrtMax = Math.sqrt(maxVol);
   netoptState.demands.forEach(function(d) {
     if (!d.lat || !d.lng) return;
-    // Normalize intensity 0-1, with a floor so even small demand shows
-    var intensity = Math.max(0.15, (d.volume || 1) / maxVol);
+    var vol = d.volume || 1;
+    // Square-root scaling spreads the range: a 320K point vs a 50K point
+    // becomes 0.97 vs 0.38 instead of linear 1.0 vs 0.16
+    var intensity = Math.sqrt(vol) / sqrtMax;
+    // Floor at 0.08 so even tiny demand shows as a cool spot
+    intensity = Math.max(0.08, intensity);
     heatData.push([d.lat, d.lng, intensity]);
   });
   return heatData;
@@ -17752,21 +17898,25 @@ function netoptUpdateHeatLayer() {
   if (heatData.length === 0) return;
 
   // Create heat layer with tuned settings for US-scale network view
+  // Larger radius + moderate blur = overlapping demand in dense regions merges into hot zones
   netoptState.heatLayer = L.heatLayer(heatData, {
-    radius: 35,
-    blur: 25,
+    radius: 45,
+    blur: 30,
     maxZoom: 10,
     max: 1.0,
-    minOpacity: 0.25,
+    minOpacity: 0.15,
     gradient: {
-      0.0: '#313695',
-      0.15: '#4575b4',
-      0.3: '#74add1',
-      0.45: '#abd9e9',
-      0.55: '#fee090',
-      0.7: '#fdae61',
-      0.85: '#f46d43',
-      1.0: '#d73027'
+      0.0:  '#3b4cc0',
+      0.1:  '#5977e3',
+      0.2:  '#7b9ff9',
+      0.3:  '#9ebeff',
+      0.4:  '#c0d4f5',
+      0.5:  '#f2cbb7',
+      0.6:  '#f0a582',
+      0.7:  '#e67a5b',
+      0.8:  '#d1462f',
+      0.9:  '#b40426',
+      1.0:  '#8b0000'
     }
   }).addTo(netoptState.netoptMap);
 }
