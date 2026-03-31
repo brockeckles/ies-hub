@@ -8733,7 +8733,6 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
   <!-- Section-level tabs: Pipeline vs Stages vs My Hours -->
   <div id="pm-section-tabs" style="display:flex;gap:8px;margin-bottom:20px;">
     <button class="pm-tab active" onclick="pmShowSection('pipeline',this)">Pipeline</button>
-    <button class="pm-tab" onclick="pmShowSection('stages',this)">Deal Stages</button>
     <button class="pm-tab" onclick="pmShowSection('timesheet',this)">My Hours</button>
   </div>
 
@@ -8980,25 +8979,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
   </div><!-- /pm-section-pipeline -->
 
   <!-- ══ DEAL STAGES SECTION ══ -->
-  <div id="pm-section-stages" style="display:none;">
-    <div id="dm-deal-selector" style="display:flex;gap:10px;margin-bottom:20px;align-items:center;">
-      <label style="font-weight:600;color:var(--ies-navy);">Select Deal:</label>
-      <select id="dm-deal-select" class="pm-form-input" onchange="dmLoadDealStages()" style="width:300px;padding:8px 14px;">
-        <option value="">-- No deal selected --</option>
-      </select>
-    </div>
-
-    <div id="dm-stages-container" style="display:none;">
-      <!-- Stage-gated pipeline will be rendered here -->
-      <div id="dm-stages-pipeline" style="display:flex;flex-direction:column;gap:16px;"></div>
-    </div>
-
-    <div id="dm-no-deal" style="text-align:center;padding:40px;color:var(--ies-gray-400);">
-      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" style="width:48px;height:48px;margin:0 auto 16px;opacity:.5;stroke:currentColor;"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg>
-      <div style="font-size:16px;font-weight:600;margin-bottom:4px;">No deal selected</div>
-      <div style="font-size:13px;">Select a deal from the dropdown above to view its stage-gated pipeline.</div>
-    </div>
-  </div><!-- /pm-section-stages -->
+  <!-- Deal Stages section removed — DOS activities now live in each deal's Tasks tab -->
 
   <!-- ══ TIMESHEET SECTION ══ -->
   <div id="pm-section-timesheet" style="display:none;">
@@ -13435,7 +13416,7 @@ async function pmExecuteDOSPopulate() {
       return {
         opportunity_id: pmCurrentOpp.id,
         title: t.element_name,
-        description: '[Stage ' + (stage.stage_number||'?') + ': ' + (stage.stage_name||'') + '] [' + ws + '] ' + (t.description || ''),
+        description: t.description || '',
         assignee: null,
         priority: 'medium',
         status: 'todo',
@@ -13570,11 +13551,7 @@ function pmShowSection(section, tabEl) {
   document.querySelectorAll('#pm-section-tabs .pm-tab').forEach(function(t){ t.classList.remove('active'); });
   if (tabEl) tabEl.classList.add('active');
   document.getElementById('pm-section-pipeline').style.display = section === 'pipeline' ? 'block' : 'none';
-  document.getElementById('pm-section-stages').style.display = section === 'stages' ? 'block' : 'none';
   document.getElementById('pm-section-timesheet').style.display = section === 'timesheet' ? 'block' : 'none';
-  if (section === 'stages') {
-    dmLoadDeals();
-  }
   if (section === 'timesheet') {
     pmPopulateTimesheetResources();
     pmRenderTimesheet();
