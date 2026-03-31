@@ -674,7 +674,7 @@
     box-shadow: 0 2px 8px rgba(0,71,171,.2) !important;
   }
 
-  /* ── PROJECT MANAGEMENT STYLES ── */
+  /* ── DEAL MANAGEMENT STYLES (formerly Project Management) ── */
   .pm-pipeline { display:flex; gap:16px; overflow-x:auto; padding-bottom:8px; min-height:400px; }
   .pm-stage-col { flex:1; min-width:220px; max-width:320px; background:var(--ies-gray-50); border-radius:12px; padding:12px; border:1px solid var(--ies-gray-200); }
   .pm-stage-hdr { font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.8px; color:var(--ies-gray-600); margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; }
@@ -3392,6 +3392,263 @@
 }
 .fb-toast.show { display: block; }
 
+/* ── DEAL MANAGEMENT STYLES ── */
+.dm-stage-container {
+  background: #fff;
+  border: 1px solid var(--ies-gray-200);
+  border-radius: 12px;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.dm-stage-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, rgba(243,112,33,.05), rgba(33,150,243,.05));
+  border-bottom: 2px solid var(--ies-gray-200);
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.dm-stage-header:hover {
+  background: linear-gradient(135deg, rgba(243,112,33,.1), rgba(33,150,243,.1));
+}
+
+.dm-stage-header.expanded {
+  border-bottom-color: var(--ies-orange);
+}
+
+.dm-stage-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dm-stage-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--ies-orange);
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.dm-stage-name {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--ies-navy);
+}
+
+.dm-stage-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 auto 0 0;
+  padding-right: 16px;
+}
+
+.dm-progress-bar {
+  width: 120px;
+  height: 6px;
+  background: var(--ies-gray-200);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.dm-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--ies-orange), var(--ies-blue));
+  transition: width 0.3s ease;
+}
+
+.dm-progress-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ies-gray-600);
+  min-width: 45px;
+  text-align: right;
+}
+
+.dm-stage-expand-icon {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease;
+  color: var(--ies-gray-600);
+}
+
+.dm-stage-header.expanded .dm-stage-expand-icon {
+  transform: rotate(180deg);
+}
+
+.dm-stage-content {
+  display: none;
+  padding: 20px;
+  background: #fff;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+
+.dm-stage-content.expanded {
+  display: block;
+  max-height: 2000px;
+}
+
+.dm-elements-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dm-element-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  background: var(--ies-gray-50);
+  border: 1px solid var(--ies-gray-200);
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.dm-element-item:hover {
+  background: var(--ies-gray-100);
+  border-color: var(--ies-blue);
+}
+
+.dm-element-checkbox {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  margin-top: 2px;
+  cursor: pointer;
+  accent-color: var(--ies-orange);
+}
+
+.dm-element-info {
+  flex: 1;
+}
+
+.dm-element-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--ies-navy);
+  margin-bottom: 4px;
+}
+
+.dm-element-description {
+  font-size: 13px;
+  color: var(--ies-gray-600);
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.dm-element-meta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ies-gray-600);
+}
+
+.dm-element-type-badge {
+  background: rgba(33,150,243,.1);
+  color: var(--ies-blue);
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: capitalize;
+}
+
+.dm-element-workstream {
+  background: rgba(25,135,84,.1);
+  color: var(--ies-green);
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: capitalize;
+}
+
+.dm-element-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.dm-element-status.not_started {
+  background: rgba(160,168,184,.08);
+  color: var(--ies-gray-600);
+  border-color: var(--ies-gray-300);
+}
+
+.dm-element-status.in_progress {
+  background: rgba(0,71,171,.08);
+  color: var(--ies-blue);
+  border-color: var(--ies-blue);
+}
+
+.dm-element-status.complete {
+  background: rgba(25,135,84,.08);
+  color: var(--ies-green);
+  border-color: var(--ies-green);
+}
+
+.dm-element-status.blocked {
+  background: rgba(220,53,69,.08);
+  color: var(--ies-red);
+  border-color: var(--ies-red);
+}
+
+.dm-element-status.na,
+.dm-element-status.skipped {
+  background: rgba(255,193,7,.08);
+  color: #b8860b;
+  border-color: #daa520;
+}
+
+.dm-stage-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+  padding: 16px;
+  background: var(--ies-gray-50);
+  border-radius: 8px;
+  margin-top: 16px;
+}
+
+.dm-stat {
+  text-align: center;
+}
+
+.dm-stat-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ies-gray-600);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.dm-stat-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ies-navy);
+}
+
 </style>
 
 </head>
@@ -3473,11 +3730,11 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
   </div>
   <div class="sidebar-section">
     <div class="sidebar-label">Solutions Design</div>
+    <a class="nav-item" data-section="deals" onclick="navigate('deals', this)">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" fill="none"/><rect x="9" y="3" width="6" height="4" rx="1" fill="none"/><path d="M9 14l2 2 4-4" fill="none"/></svg></span> Deal Management
+    </a>
     <a class="nav-item" data-section="designtools" onclick="navigate('designtools', this)">
       <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M7 6a5 5 0 1 0 10 0 5 5 0 0 0-10 0M13 19c0-2-1.5-4-3-4s-3 2-3 4" fill="none"/><path d="M8 14l-5 5M16 6l5 5" fill="none"/></svg></span> Design Tools
-    </a>
-    <a class="nav-item" data-section="projects" onclick="navigate('projects', this)">
-      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" fill="none"/><rect x="9" y="3" width="6" height="4" rx="1" fill="none"/><path d="M9 14l2 2 4-4" fill="none"/></svg></span> Project Management
     </a>
   </div>
   <div class="sidebar-section">
@@ -3576,8 +3833,8 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     </div>
     <div class="welcome-feature feature-live">
       <div class="welcome-feature-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--ies-orange)" stroke-width="1.5"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg></div>
-      <div class="welcome-feature-title">Project Management</div>
-      <div class="welcome-feature-desc">Full pipeline tracking with kanban views, forecast vs. actual hours, task management, and win strategy development per opportunity.</div>
+      <div class="welcome-feature-title">Deal Management</div>
+      <div class="welcome-feature-desc">Stage-gated deal pipeline with kanban views, forecast vs. actual hours, activity tracking, and deal progression through qualification, discovery, design, proposal, and negotiation.</div>
       <div style="margin-top:10px;"><span class="wiki-tag" style="background:rgba(25,135,84,.1);color:var(--ies-green);">LIVE</span></div>
     </div>
     <div class="welcome-feature feature-live">
@@ -3611,7 +3868,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
           <li>Training Wiki (23+ pages, 12 SCCs)</li>
           <li>Industry Vertical Spotlights</li>
           <li>Automation & Tech Intel</li>
-          <li>Project Management (Supabase)</li>
+          <li>Deal Management (Stage-Gated)</li>
           <li>Change Management (ADKAR)</li>
         </ul>
       </div>
@@ -3655,7 +3912,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
   <div class="alert-bar">
     <span class="alert-icon"><svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="#ff3a00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
     <div class="alert-text">
-      <strong>3 active alerts:</strong> Diesel surged +4.2% WoW · DHL Supply Chain expanding in Dallas–Fort Worth · Port of Los Angeles congestion elevated (avg dwell 6.2 days)
+      Loading alerts…
     </div>
   </div>
 
@@ -4246,11 +4503,11 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
   </div>
 </div>
 
-<!-- ───── DEALS & PIPELINE SUPPORT (hidden — future-state, see Phase 2 roadmap) ───── -->
-<div class="section" id="sec-deals" style="display:none;">
+<!-- ───── DEALS ANALYTICS SUPPORT (hidden — future-state, see Phase 2 roadmap) ───── -->
+<div class="section" id="sec-dealsanalytics" style="display:none;">
   <div class="section-header">
     <div>
-      <div class="section-title">Deals & Pipeline Support</div>
+      <div class="section-title">Deal Analytics & Pipeline Support</div>
       <div class="section-subtitle">DOS-powered analytics — win/loss patterns, proposal benchmarks, and pipeline health</div>
     </div>
     <span class="card-badge badge-dos" style="font-size:12px;padding:6px 14px;">DOS INTEGRATION</span>
@@ -7421,12 +7678,12 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 </div>
 
 
-<!-- ═══════════ PROJECT MANAGEMENT ═══════════ -->
-<div class="section" id="sec-projects">
+<!-- ═══════════ DEAL MANAGEMENT ═══════════ -->
+<div class="section" id="sec-deals">
   <div class="section-header">
     <div>
-      <div class="section-title">Project Management</div>
-      <div class="section-subtitle">Track opportunities, hours, and project updates across IES engagements</div>
+      <div class="section-title">Deal Management</div>
+      <div class="section-subtitle">Track deals through stage-gated pipeline with activity tracking and forecasting</div>
     </div>
     <div style="display:flex;gap:10px;">
       <button class="pm-btn pm-btn-outline pm-btn-sm" onclick="pmShowCustomers()">
@@ -7440,9 +7697,10 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     </div>
   </div>
 
-  <!-- Section-level tabs: Pipeline vs My Hours -->
+  <!-- Section-level tabs: Pipeline vs Stages vs My Hours -->
   <div id="pm-section-tabs" style="display:flex;gap:8px;margin-bottom:20px;">
     <button class="pm-tab active" onclick="pmShowSection('pipeline',this)">Pipeline</button>
+    <button class="pm-tab" onclick="pmShowSection('stages',this)">Deal Stages</button>
     <button class="pm-tab" onclick="pmShowSection('timesheet',this)">My Hours</button>
   </div>
 
@@ -7602,7 +7860,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
           <option value="">All Work Types</option>
           <option value="solutions_design">Solutions Design</option>
           <option value="engineering">Engineering</option>
-          <option value="project_management">Project Management</option>
+          <option value="deal_management">Deal Management</option>
           <option value="site_visit">Site Visit</option>
           <option value="customer_meeting">Customer Meeting</option>
           <option value="internal_review">Internal Review</option>
@@ -7660,6 +7918,27 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
   </div>
 
   </div><!-- /pm-section-pipeline -->
+
+  <!-- ══ DEAL STAGES SECTION ══ -->
+  <div id="pm-section-stages" style="display:none;">
+    <div id="dm-deal-selector" style="display:flex;gap:10px;margin-bottom:20px;align-items:center;">
+      <label style="font-weight:600;color:var(--ies-navy);">Select Deal:</label>
+      <select id="dm-deal-select" class="pm-form-input" onchange="dmLoadDealStages()" style="width:300px;padding:8px 14px;">
+        <option value="">-- No deal selected --</option>
+      </select>
+    </div>
+
+    <div id="dm-stages-container" style="display:none;">
+      <!-- Stage-gated pipeline will be rendered here -->
+      <div id="dm-stages-pipeline" style="display:flex;flex-direction:column;gap:16px;"></div>
+    </div>
+
+    <div id="dm-no-deal" style="text-align:center;padding:40px;color:var(--ies-gray-400);">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" style="width:48px;height:48px;margin:0 auto 16px;opacity:.5;stroke:currentColor;"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg>
+      <div style="font-size:16px;font-weight:600;margin-bottom:4px;">No deal selected</div>
+      <div style="font-size:13px;">Select a deal from the dropdown above to view its stage-gated pipeline.</div>
+    </div>
+  </div><!-- /pm-section-stages -->
 
   <!-- ══ TIMESHEET SECTION ══ -->
   <div id="pm-section-timesheet" style="display:none;">
@@ -8288,10 +8567,11 @@ function navigate(section, el) {
     if (wc && !wc.innerHTML.trim()) showWiki('scc-g2p');
   }
 
-  // Reset Projects view when navigating to it
-  if (section === 'projects') {
+  // Reset Deals view when navigating to it
+  if (section === 'deals') {
     pmBackToPipeline();
     pmLoadAll();
+    dmLoadDeals();
   }
 
   // Load Change Management data when navigating to it
@@ -8352,7 +8632,7 @@ var TOUR_STEPS = [
   { icon: '📊', title: 'Command Center', desc: 'Your operational dashboard. Live KPIs, diesel prices, labor availability, pipeline metrics, and the Top Market Alerts feed aggregating signals from competitors, tariffs, and accounts.' },
   { icon: '🏢', title: 'Competitive & Account Intel', desc: 'Track moves from DHL Supply Chain, Ryder, XPO, and CEVA. Monitor account signals like leadership changes, M&A activity, and facility expansions that create opportunities.' },
   { icon: '📍', title: 'Market Intelligence Map', desc: 'Interactive map of 10 key GXO markets. Click any pin to see labor scores, warehouse lease rates, and recent news — instant context for proposals and site selection.' },
-  { icon: '📋', title: 'Project Management', desc: 'Full pipeline tracking with kanban views, forecast vs. actual hours logging, task management, weekly updates, and win strategy development per opportunity. Your hours and project data are backed by Supabase.' },
+  { icon: '📋', title: 'Deal Management', desc: 'Stage-gated deal pipeline with kanban views, activity tracking per stage, forecast vs. actual hours, deal progression tracking, and deal strategy development. Backed by Supabase with structured stage workflows.' },
   { icon: '🔄', title: 'Change Management', desc: 'Track team changes through the ADKAR methodology — Awareness, Desire, Knowledge, Ability, Reinforcement. Manage sub-activities, build process flowcharts, and watch initiatives auto-advance as work completes.' },
   { icon: '📖', title: 'Training Wiki', desc: '23+ page reference library covering 12 Solutions Competency Centers, Blue Yonder WMS, conveyor systems, warehouse design, MOST work measurement, 3PL commercial structure, and win strategy development.' },
   { icon: '🚀', title: 'What\'s Coming Next', desc: 'The Cost Model Builder is now live in Beta! The roadmap also includes Salesforce CRM connector, Snowflake data warehouse, TL/LTL/parcel rate modeling, and MOST tool integration. Check the roadmap on the Welcome page for the full plan.' },
@@ -10792,18 +11072,25 @@ async function loadKPIStrip() {
 
 // ── Alert Bar (live from hub_alerts) ──
 async function loadAlerts() {
-  const { data: alerts } = await sb.from('hub_alerts')
-    .select('title')
-    .eq('is_active', true)
-    .order('severity', { ascending: true })
-    .limit(5);
+  const bar = document.querySelector('.alert-bar .alert-text');
+  if (!bar) return;
+  try {
+    const { data: alerts, error } = await sb.from('hub_alerts')
+      .select('title')
+      .eq('is_active', true)
+      .order('severity', { ascending: true })
+      .limit(5);
 
-  if (alerts && alerts.length) {
-    const bar = document.querySelector('.alert-bar .alert-text');
-    if (bar) {
+    if (error) throw error;
+    if (alerts && alerts.length) {
       bar.innerHTML = '<strong>' + alerts.length + ' active alert' + (alerts.length > 1 ? 's' : '') + ':</strong> ' +
         alerts.map(a => a.title).join(' · ');
+    } else {
+      bar.innerHTML = '<strong>No active alerts</strong> — all systems nominal';
     }
+  } catch(e) {
+    console.warn('loadAlerts error:', e);
+    bar.innerHTML = '<strong>Alerts unavailable</strong> — refresh to retry';
   }
 }
 
@@ -11134,8 +11421,22 @@ document.addEventListener('DOMContentLoaded', function() {
   loadAllData().then(() => {
     console.log('IES Intelligence Hub loaded — Supabase connected ✓');
     console.log('Project: ' + SUPABASE_URL);
-    // Load project management data
+    // Load deal management data
     pmLoadAll();
+
+    // ── Auto-refresh alerts & KPIs every 5 minutes ──
+    setInterval(async function() {
+      try {
+        await Promise.all([
+          loadAlerts(),
+          loadTopMarketAlerts(),
+          loadKPIStrip(),
+        ]);
+        updateTimestamp();
+        console.log('Auto-refresh: alerts & KPIs updated');
+      } catch(e) { console.warn('Auto-refresh failed:', e); }
+    }, 300000); // 5 minutes
+
   }).catch(err => {
     console.warn('Supabase load failed, falling back to static data:', err);
     // Still try to load PM data
@@ -11144,7 +11445,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // ═══════════════════════════════════════════════════
-// PROJECT MANAGEMENT MODULE
+// DEAL & PROJECT MANAGEMENT MODULES
 // ═══════════════════════════════════════════════════
 var PM_STAGES = [
   { key:'intake', label:'Intake' },
@@ -11159,7 +11460,7 @@ var PM_STAGES = [
   { key:'on_hold', label:'On Hold' }
 ];
 var PM_ACTIVE_STAGES = ['intake','qualification','discovery','solutioning','pricing','proposal','negotiation'];
-var PM_HOURS_TYPES = ['solutions_design','engineering','project_management','site_visit','customer_meeting','internal_review','documentation','other'];
+var PM_HOURS_TYPES = ['solutions_design','engineering','deal_management','site_visit','customer_meeting','internal_review','documentation','other'];
 var PM_STATUS_COLORS = {
   active:'background:rgba(25,135,84,.08);color:var(--ies-green)',
   on_hold:'background:rgba(255,193,7,.12);color:#b38600',
@@ -11866,7 +12167,11 @@ function pmShowSection(section, tabEl) {
   document.querySelectorAll('#pm-section-tabs .pm-tab').forEach(function(t){ t.classList.remove('active'); });
   if (tabEl) tabEl.classList.add('active');
   document.getElementById('pm-section-pipeline').style.display = section === 'pipeline' ? 'block' : 'none';
+  document.getElementById('pm-section-stages').style.display = section === 'stages' ? 'block' : 'none';
   document.getElementById('pm-section-timesheet').style.display = section === 'timesheet' ? 'block' : 'none';
+  if (section === 'stages') {
+    dmLoadDeals();
+  }
   if (section === 'timesheet') {
     pmPopulateTimesheetResources();
     pmRenderTimesheet();
@@ -12593,6 +12898,235 @@ async function pmDeleteCustomer(id) {
     await pmLoadAll();
     pmShowCustomers();
   } catch(e) { alert('Error deleting customer: ' + e.message); }
+}
+
+// ═══════════ DEAL MANAGEMENT ═══════════
+// Stage-gated deal workflow with activity tracking
+
+var dmData = {
+  deals: [],
+  stages: [],
+  elements: {}
+};
+
+async function dmLoadDeals() {
+  if (!sb) return;
+  try {
+    const deals = await sb.from('deal_deals').select('*').order('name', {ascending: true});
+    dmData.deals = deals.data || [];
+    dmRenderDealSelect();
+  } catch(e) {
+    console.error('Error loading deals:', e);
+  }
+}
+
+function dmRenderDealSelect() {
+  const select = document.getElementById('dm-deal-select');
+  if (!select) return;
+
+  const currentVal = select.value;
+  select.innerHTML = '<option value="">-- No deal selected --</option>';
+
+  dmData.deals.forEach(deal => {
+    const opt = document.createElement('option');
+    opt.value = deal.id;
+    opt.textContent = deal.name;
+    select.appendChild(opt);
+  });
+
+  select.value = currentVal;
+}
+
+async function dmLoadDealStages() {
+  const dealId = document.getElementById('dm-deal-select').value;
+  if (!dealId) {
+    document.getElementById('dm-stages-container').style.display = 'none';
+    document.getElementById('dm-no-deal').style.display = 'block';
+    return;
+  }
+
+  if (!sb) return;
+  try {
+    // Load stages in order
+    const stages = await sb
+      .from('stages')
+      .select('*')
+      .order('stage_number', {ascending: true});
+
+    dmData.stages = stages.data || [];
+
+    // Load all elements for this deal
+    const elements = await sb
+      .from('project_elements')
+      .select('*, stage_element_templates(*)')
+      .eq('project_id', dealId)
+      .order('stage_number', {ascending: true});
+
+    // Organize elements by stage
+    dmData.elements = {};
+    (elements.data || []).forEach(el => {
+      if (!dmData.elements[el.stage_number]) {
+        dmData.elements[el.stage_number] = [];
+      }
+      dmData.elements[el.stage_number].push(el);
+    });
+
+    dmRenderStagesPipeline(dealId);
+    document.getElementById('dm-no-deal').style.display = 'none';
+    document.getElementById('dm-stages-container').style.display = 'block';
+  } catch(e) {
+    console.error('Error loading deal stages:', e);
+    alert('Error loading deal stages: ' + e.message);
+  }
+}
+
+function dmRenderStagesPipeline(dealId) {
+  const container = document.getElementById('dm-stages-pipeline');
+  if (!container) return;
+
+  container.innerHTML = '';
+
+  dmData.stages.forEach(stage => {
+    const stageElements = dmData.elements[stage.stage_number] || [];
+    const completed = stageElements.filter(el =>
+      el.parent_element_id === null &&
+      ['complete', 'na', 'skipped'].includes(el.element_status)
+    ).length;
+    const total = stageElements.filter(el => el.parent_element_id === null).length;
+    const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+    const stageDiv = document.createElement('div');
+    stageDiv.className = 'dm-stage-container';
+
+    const headerDiv = document.createElement('div');
+    headerDiv.className = 'dm-stage-header';
+    headerDiv.onclick = function() {
+      this.classList.toggle('expanded');
+      const content = this.nextElementSibling;
+      if (content) content.classList.toggle('expanded');
+    };
+
+    headerDiv.innerHTML = `
+      <div class="dm-stage-title">
+        <div class="dm-stage-number">${stage.stage_number}</div>
+        <div class="dm-stage-name">${stage.stage_name}</div>
+      </div>
+      <div class="dm-stage-progress">
+        <div class="dm-progress-bar">
+          <div class="dm-progress-fill" style="width: ${percent}%"></div>
+        </div>
+        <div class="dm-progress-text">${completed}/${total}</div>
+      </div>
+      <div class="dm-stage-expand-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </div>
+    `;
+
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'dm-stage-content';
+
+    const elementsList = document.createElement('div');
+    elementsList.className = 'dm-elements-list';
+
+    stageElements.filter(el => el.parent_element_id === null).forEach(element => {
+      const elDiv = document.createElement('div');
+      elDiv.className = 'dm-element-item';
+
+      const statusClass = `dm-element-status ${element.element_status}`;
+      const workstreamDisplay = element.responsible_workstream ?
+        `<span class="dm-element-workstream">${element.responsible_workstream}</span>` : '';
+
+      elDiv.innerHTML = `
+        <input type="checkbox" class="dm-element-checkbox"
+          ${['complete', 'na', 'skipped'].includes(element.element_status) ? 'checked' : ''}
+          onchange="dmToggleElementStatus(${element.id}, this.checked)">
+        <div class="dm-element-info">
+          <div class="dm-element-name">${element.element_name}</div>
+          ${element.description ? `<div class="dm-element-description">${element.description}</div>` : ''}
+          <div class="dm-element-meta">
+            <span class="dm-element-type-badge">${element.element_type}</span>
+            ${workstreamDisplay}
+            <span class="${statusClass}" onclick="dmToggleStatus(${element.id}, event)">${element.element_status.replace(/_/g, ' ')}</span>
+          </div>
+        </div>
+      `;
+
+      elementsList.appendChild(elDiv);
+    });
+
+    contentDiv.appendChild(elementsList);
+
+    // Add stage stats
+    const statsDiv = document.createElement('div');
+    statsDiv.className = 'dm-stage-stats';
+    statsDiv.innerHTML = `
+      <div class="dm-stat">
+        <div class="dm-stat-label">Total Items</div>
+        <div class="dm-stat-value">${total}</div>
+      </div>
+      <div class="dm-stat">
+        <div class="dm-stat-label">Complete</div>
+        <div class="dm-stat-value">${completed}</div>
+      </div>
+      <div class="dm-stat">
+        <div class="dm-stat-label">In Progress</div>
+        <div class="dm-stat-value">${stageElements.filter(el => el.parent_element_id === null && el.element_status === 'in_progress').length}</div>
+      </div>
+      <div class="dm-stat">
+        <div class="dm-stat-label">Blocked</div>
+        <div class="dm-stat-value">${stageElements.filter(el => el.parent_element_id === null && el.element_status === 'blocked').length}</div>
+      </div>
+    `;
+
+    contentDiv.appendChild(statsDiv);
+
+    stageDiv.appendChild(headerDiv);
+    stageDiv.appendChild(contentDiv);
+    container.appendChild(stageDiv);
+  });
+}
+
+async function dmToggleElementStatus(elementId, isComplete) {
+  if (!sb) return;
+  try {
+    const newStatus = isComplete ? 'complete' : 'not_started';
+    await sb.from('project_elements')
+      .update({element_status: newStatus, updated_at: new Date().toISOString()})
+      .eq('id', elementId);
+
+    const dealId = document.getElementById('dm-deal-select').value;
+    await dmLoadDealStages();
+  } catch(e) {
+    console.error('Error updating element status:', e);
+  }
+}
+
+async function dmToggleStatus(elementId, event) {
+  event.stopPropagation();
+  if (!sb) return;
+
+  const statusCycle = ['not_started', 'in_progress', 'complete', 'blocked', 'na'];
+
+  try {
+    // Get current status
+    const result = await sb.from('project_elements').select('element_status').eq('id', elementId).single();
+    const currentStatus = result.data?.element_status || 'not_started';
+
+    const currentIdx = statusCycle.indexOf(currentStatus);
+    const nextIdx = (currentIdx + 1) % statusCycle.length;
+    const nextStatus = statusCycle[nextIdx];
+
+    await sb.from('project_elements')
+      .update({element_status: nextStatus, updated_at: new Date().toISOString()})
+      .eq('id', elementId);
+
+    const dealId = document.getElementById('dm-deal-select').value;
+    await dmLoadDealStages();
+  } catch(e) {
+    console.error('Error cycling status:', e);
+  }
 }
 
 // ═══════════════════════════════════════════════════
@@ -19703,7 +20237,7 @@ var anSectionNames = {
   macrotrade: 'Macro & Trade',
   automation: 'Automation & Tech',
   verticals: 'Verticals',
-  projects: 'Project Management',
+  deals: 'Deal Management',
   changemanagement: 'Change Management',
   training: 'Training Wiki',
   calculator: 'Sizing Calculator',
@@ -19991,7 +20525,7 @@ var fbSectionNames = {
   welcome: 'Welcome', overview: 'Command Center', competitive: 'Competitive & Account',
   marketmap: 'Market Map', market: 'Market & Cost', labor: 'Labor Intel',
   macro: 'Macro & Trade', automation: 'Automation & Tech', verticals: 'Verticals',
-  projects: 'Project Management', changemanagement: 'Change Management',
+  deals: 'Deal Management', changemanagement: 'Change Management',
   training: 'Training Wiki', designtools: 'Design Tools', costmodel: 'Cost Model',
   feedback: 'Ideas & Feedback', analytics: 'Analytics'
 };
