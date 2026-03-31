@@ -13397,7 +13397,7 @@ async function pmExecuteDOSPopulate() {
     var cb = document.getElementById('dos-stage-cb-' + i);
     if (cb && cb.checked) selectedStages.push(i);
   }
-  if (selectedStages.length === 0) { alert('Please select at least one stage.'); return; }
+  if (selectedStages.length === 0) { pmToast('Please select at least one stage.', 'warning'); return; }
 
   try {
     // Fetch templates for selected stages
@@ -13411,7 +13411,7 @@ async function pmExecuteDOSPopulate() {
     if (templatesRes.error) throw templatesRes.error;
     var templates = templatesRes.data || [];
 
-    if (templates.length === 0) { alert('No templates found for selected stages.'); return; }
+    if (templates.length === 0) { pmToast('No templates found for selected stages.', 'warning'); return; }
 
     // Build stage lookup
     var stageLookup = {};
@@ -13453,11 +13453,20 @@ async function pmExecuteDOSPopulate() {
     pmOpenDetail(pmCurrentOpp.id);
     pmShowDetailTab('tasks', document.querySelectorAll('#pm-detail .pm-tab')[1]);
 
-    alert(templates.length + ' DOS activities populated successfully.');
+    pmToast(templates.length + ' DOS activities added as tasks.', 'success');
   } catch(e) {
     console.error('DOS populate error:', e);
-    alert('Error populating activities: ' + e.message);
+    pmToast('Error populating activities: ' + e.message, 'error');
   }
+}
+
+function pmToast(message, type) {
+  var bg = type === 'success' ? 'var(--ies-green,#10b981)' : type === 'error' ? 'var(--ies-red,#ef4444)' : 'var(--ies-navy,#1c1c2e)';
+  var toast = document.createElement('div');
+  toast.textContent = message;
+  toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:' + bg + ';color:#fff;padding:12px 24px;border-radius:8px;font-size:13px;font-weight:600;z-index:99999;box-shadow:0 4px 20px rgba(0,0,0,.25);transition:opacity .3s;font-family:Montserrat,sans-serif;';
+  document.body.appendChild(toast);
+  setTimeout(function() { toast.style.opacity = '0'; setTimeout(function() { toast.remove(); }, 300); }, 3000);
 }
 
 function pmEditTask(taskId) {
