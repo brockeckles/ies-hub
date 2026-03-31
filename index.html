@@ -12478,11 +12478,12 @@ async function getMarketData(market) {
   const reKey = pin?.reKey || market;
   const laborKey = pin?.laborKey || market;
 
-  const [laborRes, reRes, newsRes, dealsRes] = await Promise.all([
+  const [laborRes, reRes, newsRes, dealsRes, freightRes] = await Promise.all([
     sb.from('labor_markets').select('*').eq('msa', laborKey).order('as_of_date', { ascending: false }).limit(1).single(),
     sb.from('industrial_real_estate').select('*').eq('market', reKey).order('quarter', { ascending: false }).limit(1).single(),
     sb.from('competitor_news').select('headline, competitor, published_date, tags, source_url').order('published_date', { ascending: false }).limit(10),
     sb.from('pipeline_deals').select('deal_name, stage, tcv, vertical').ilike('market', `%${market.split(',')[0].split('–')[0]}%`),
+    sb.from('market_freight').select('*').eq('market', market).order('as_of_date', { ascending: false }).limit(1).single(),
   ]);
 
   // Filter news for market relevance
@@ -12493,7 +12494,7 @@ async function getMarketData(market) {
   }).slice(0, 3);
   const newsToShow = relevantNews.length > 0 ? relevantNews : (newsRes.data || []).slice(0, 3);
 
-  const result = { labor: laborRes.data, realEstate: reRes.data, news: newsToShow, deals: dealsRes.data || [] };
+  const result = { labor: laborRes.data, realEstate: reRes.data, freight: freightRes.data, news: newsToShow, deals: dealsRes.data || [] };
   marketCache[market] = result;
   return result;
 }
@@ -12567,14 +12568,27 @@ async function selectMarket(market, marker) {
   html += '<div class="market-tab-panel" data-tab="freight" style="' + (activeTab !== 'freight' ? 'display:none;' : '') + '">';
   if (data.freight) {
     const f = data.freight;
+    const capacityColor = f.tl_capacity === 'Tight' ? 'var(--ies-red)' : (f.tl_capacity === 'Balanced' ? '#b58a00' : 'var(--ies-green)');
     html += `<div class="map-detail-section">
       <div class="map-detail-label">Freight & Transportation</div>
-      <div class="map-detail-row"><span>Avg Outbound Rate (Dry Van)</span><span class="map-detail-value">$${parseFloat(f.avg_rate_per_mile || 0).toFixed(2)}/mi</span></div>
-      <div class="map-detail-row"><span>Lane Volume Index</span><span class="map-detail-value">${f.volume_index || '—'}</span></div>
-      <div class="map-detail-row"><span>Capacity</span><span class="map-detail-value">${f.capacity_status || '—'}</span></div>
+      <div class="map-detail-row"><span>Avg Outbound Rate (TL)</span><span class="map-detail-value">$${parseFloat(f.avg_outbound_rate_per_mile || 0).toFixed(2)}/mi</span></div>
+      <div class="map-detail-row"><span>Avg Inbound Rate (TL)</span><span class="map-detail-value">$${parseFloat(f.avg_inbound_rate_per_mile || 0).toFixed(2)}/mi</span></div>
+      <div class="map-detail-row"><span>TL Capacity</span><span class="map-detail-value" style="color:${capacityColor};font-weight:700;">${f.tl_capacity || '—'}</span></div>
+      <div class="map-detail-row"><span>LTL Avg Transit</span><span class="map-detail-value">${f.ltl_transit_days || '—'} days</span></div>
+      <div class="map-detail-row"><span>Intermodal</span><span class="map-detail-value">${f.intermodal_available ? '✓ Available' : '✗ Limited'}</span></div>
+      <div class="map-detail-row"><span>Nearest Port</span><span class="map-detail-value">${f.nearest_port || '—'} (${f.port_dwell_days || '—'}d dwell)</span></div>
     </div>`;
+    if (f.top_lanes && f.top_lanes.length) {
+      html += `<div class="map-detail-section"><div class="map-detail-label">Top Outbound Lanes</div>`;
+      f.top_lanes.forEach(lane => { html += `<div class="map-detail-row" style="font-size:12px;"><span>${lane}</span></div>`; });
+      html += `</div>`;
+    }
+    if (f.notes) {
+      html += `<div class="map-detail-section"><div class="map-detail-label">Market Notes</div><div style="font-size:12px;color:var(--ies-gray-600);line-height:1.5;">${esc(f.notes)}</div></div>`;
+    }
+    html += `<div style="font-size:10px;color:var(--ies-gray-400);margin-top:8px;">Source: ${esc(f.source || '')} · As of ${f.as_of_date || ''}</div>`;
   } else {
-    html += '<div style="font-size:12px;color:var(--ies-gray-400);padding:12px 0;">No freight data available for this market — see Freight Rate Index chart on Command Center</div>';
+    html += '<div style="font-size:12px;color:var(--ies-gray-400);padding:12px 0;">No freight data available for this market</div>';
   }
   html += '</div>';
 
