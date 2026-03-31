@@ -17461,14 +17461,18 @@ function netoptEvaluateConfig(config, demands, transport, constraints) {
       var transitDays;
       var parcelPct = mix.parcel || 0;
       var groundPct = (mix.tl || 0) + (mix.ltl || 0);
-      // Ground transit: miles / speed, minimum 1 day, + 1 day order processing
-      var groundDays = Math.ceil(minDist / truckSpeed) + 1;
-      // Parcel transit: approximation based on zone (distance bands)
+      // Ground transit: local (<150mi) = 1 day (same-day processing + local carrier)
+      // Regional = distance-based using truck speed + 1 day processing
+      var groundDays;
+      if (minDist <= 150) groundDays = 1;
+      else groundDays = Math.ceil(minDist / truckSpeed) + 1;
+      // Parcel transit: zone-based carrier transit tables
       var parcelDays;
-      if (minDist <= 150) parcelDays = 2;       // Zone 2-3: next day + handling
-      else if (minDist <= 400) parcelDays = 3;   // Zone 4-5
-      else if (minDist <= 800) parcelDays = 4;   // Zone 6-7
-      else parcelDays = 5;                        // Zone 8+
+      if (minDist <= 50) parcelDays = 1;          // Local: same-city next-day
+      else if (minDist <= 150) parcelDays = 2;    // Zone 2-3
+      else if (minDist <= 400) parcelDays = 3;    // Zone 4-5
+      else if (minDist <= 800) parcelDays = 4;    // Zone 6-7
+      else parcelDays = 5;                         // Zone 8+
       // Blended delivery days across modes
       transitDays = groundPct > 0 || parcelPct > 0
         ? (groundDays * groundPct + parcelDays * parcelPct) / (groundPct + parcelPct)
@@ -17870,19 +17874,20 @@ function netoptGetDeliveryDayThresholds() {
   var totalPct = groundPct + parcelPct;
   if (totalPct === 0) { groundPct = 1; totalPct = 1; }
 
-  // For ground: delivery days = ceil(dist/truckSpeed) + 1 handling day
-  // Invert: dist_max for N days = (N - 1) * truckSpeed
-  // For parcel: fixed zone-based brackets (150/400/800 mi)
-  // Blend to get effective distance threshold per day
+  // Thresholds must match the solver's transit day calculation:
+  // Ground: <=150mi = 1 day, then ceil(dist/speed)+1
+  // Parcel: <=50mi = 1 day, <=150mi = 2 day, <=400mi = 3 day, <=800mi = 4 day
+  // Blend by mode mix
 
   var thresholds = []; // [{day: 1, maxMiles: X}, ...]
   for (var day = 1; day <= 5; day++) {
-    // Ground: max miles where ceil(dist/speed)+1 <= day
-    // → ceil(dist/speed) <= day-1 → dist <= (day-1)*speed
-    var groundMax = (day - 1) * truckSpeed;
-    // Parcel: reverse the zone brackets
+    // Ground: 1 day ≤ 150mi; 2 day ≤ 500mi; 3 day ≤ 1000mi; etc.
+    var groundMax;
+    if (day <= 1) groundMax = 150;
+    else groundMax = (day - 1) * truckSpeed;
+    // Parcel: zone-based brackets (matching solver)
     var parcelMax;
-    if (day <= 1) parcelMax = 0;
+    if (day <= 1) parcelMax = 50;
     else if (day <= 2) parcelMax = 150;
     else if (day <= 3) parcelMax = 400;
     else if (day <= 4) parcelMax = 800;
