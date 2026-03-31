@@ -2401,6 +2401,27 @@
             transform: translateY(-2px);
         }
 
+        .dt-landing-back-btn {
+            background: none;
+            border: none;
+            color: var(--ies-blue);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            padding: 6px 12px;
+            margin-bottom: 16px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+        .dt-landing-back-btn:hover {
+            background: rgba(33,150,243,0.08);
+            color: var(--ies-navy);
+        }
+
         .dt-landing-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -5576,6 +5597,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     <!-- WAREHOUSE SIZING CALCULATOR LANDING PAGE -->
     <div id="wsc-landing" class="dt-landing" style="display:block;">
       <div class="dt-landing-header">
+        <button class="dt-landing-back-btn" onclick="showDesignTool('dt-landing', document.querySelector('.dt-tab'))">&#8592; Back to Design Tools</button>
         <div class="dt-landing-title">Warehouse Sizing Calculator</div>
         <div class="dt-landing-subtitle">Design optimal warehouse layouts and estimate facility sizing requirements</div>
       </div>
@@ -6207,6 +6229,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     <!-- CENTER OF GRAVITY LANDING PAGE -->
     <div id="net-landing" class="dt-landing" style="display:block;">
       <div class="dt-landing-header">
+        <button class="dt-landing-back-btn" onclick="showDesignTool('dt-landing', document.querySelector('.dt-tab'))">&#8592; Back to Design Tools</button>
         <div class="dt-landing-title">Center of Gravity (Network)</div>
         <div class="dt-landing-subtitle">Find optimal distribution center locations using demand-weighted analysis</div>
       </div>
@@ -6406,6 +6429,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     <!-- NETWORK OPTIMIZATION LANDING PAGE -->
     <div id="netopt-landing" class="dt-landing" style="display:block;">
       <div class="dt-landing-header">
+        <button class="dt-landing-back-btn" onclick="showDesignTool('dt-landing', document.querySelector('.dt-tab'))">&#8592; Back to Design Tools</button>
         <div class="dt-landing-title">Network Optimization</div>
         <div class="dt-landing-subtitle">Optimize multi-mode transportation and facility location decisions</div>
       </div>
@@ -7367,13 +7391,14 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     </div>
   </div>
 
-  <div id="landingPage" class="cm-landing">
-    <div class="cm-landing-header">
-      <div class="cm-landing-title">Cost Model Builder</div>
-      <div class="cm-landing-subtitle">Engineered warehouse costing for 3PL operations</div>
+  <div id="landingPage" class="dt-landing">
+    <div class="dt-landing-header">
+      <button class="dt-landing-back-btn" onclick="navigate('designtools', document.querySelector('[data-section=designtools]'))">&#8592; Back to Design Tools</button>
+      <div class="dt-landing-title">Cost Model Builder</div>
+      <div class="dt-landing-subtitle">Engineered warehouse costing for 3PL operations</div>
     </div>
-    <div class="cm-landing-actions">
-      <button id="newModelBtnLanding" class="cm-btn cm-btn-primary">+ Create New Model</button>
+    <div class="dt-landing-actions">
+      <button id="newModelBtnLanding" class="dt-landing-btn">+ Create New Model</button>
     </div>
     <div id="projectsList" class="cm-projects-grid"></div>
     <div id="emptyState" class="cm-empty-state">
@@ -8442,6 +8467,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
   <!-- FLEET MODELER LANDING PAGE -->
   <div id="fm-landing" class="dt-landing" style="display:none;">
     <div class="dt-landing-header">
+      <button class="dt-landing-back-btn" onclick="navigate('designtools', document.querySelector('[data-section=designtools]'))">&#8592; Back to Design Tools</button>
       <div class="dt-landing-title">Fleet Modeler</div>
       <div class="dt-landing-subtitle">Design optimal fleet configurations and compare operational scenarios</div>
     </div>
@@ -14387,9 +14413,19 @@ async function daRemoveArtifact(artifactId) {
 
 function daOpenArtifact(artifactType, artifactId) {
   if (artifactType === 'cost_model' && artifactId) {
-    // Navigate to Cost Model Builder section and open the specific project
-    navigate('costmodel', document.querySelector('[data-section=costmodel]'));
-    setTimeout(() => { cmApp.openProject(parseInt(artifactId, 10) || artifactId); }, 300);
+    // Bypass navigate() to avoid landing page reset — directly show section + open project
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.getElementById('sec-costmodel').classList.add('active');
+    var cmNav = document.querySelector('[data-section=costmodel]');
+    if (cmNav) {
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      cmNav.classList.add('active');
+    }
+    // Show editor directly, skip landing page
+    document.getElementById('landingPage').style.display = 'none';
+    document.getElementById('editorContainer').style.display = 'flex';
+    document.getElementById('topbarControls').style.display = 'flex';
+    cmApp.openProject(parseInt(artifactId, 10) || artifactId);
   } else if (artifactType === 'netopt_scenario' && artifactId) {
     // Navigate to Design Tools → Network Optimization tab, then load scenario
     navigate('designtools', document.querySelector('[data-section=designtools]'));
@@ -14398,7 +14434,15 @@ function daOpenArtifact(artifactType, artifactId) {
       setTimeout(() => { netoptLoadScenario(parseInt(artifactId, 10) || artifactId); }, 200);
     }, 200);
   } else if (artifactType === 'fleet_scenario' && artifactId) {
-    navigate('fleet', document.querySelector('[data-section=designtools]'));
+    // Bypass navigate() to show fleet section directly and open scenario
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.getElementById('sec-fleet').classList.add('active');
+    var dtNav = document.querySelector('[data-section=designtools]');
+    if (dtNav) {
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      dtNav.classList.add('active');
+    }
+    fmShowTool();
   } else {
     alert('Cannot open this artifact type yet');
   }
@@ -14406,14 +14450,23 @@ function daOpenArtifact(artifactType, artifactId) {
 
 function daCreateNew(artifactType) {
   if (artifactType === 'cost_model') {
-    navigate('costmodel', document.querySelector('[data-section=costmodel]'));
-    setTimeout(() => {
-      cmApp.newModel();
-      document.getElementById('da-modal-container').innerHTML = '';
-    }, 100);
+    // Bypass navigate() landing reset — go directly to editor
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.getElementById('sec-costmodel').classList.add('active');
+    var cmNav = document.querySelector('[data-section=costmodel]');
+    if (cmNav) {
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      cmNav.classList.add('active');
+    }
+    document.getElementById('landingPage').style.display = 'none';
+    document.getElementById('editorContainer').style.display = 'flex';
+    document.getElementById('topbarControls').style.display = 'flex';
+    cmApp.newModel();
+    document.getElementById('da-modal-container').innerHTML = '';
   } else if (artifactType === 'netopt_scenario') {
-    navigate('warehouse', document.querySelector('[data-section=projects]'));
+    navigate('designtools', document.querySelector('[data-section=designtools]'));
     setTimeout(() => {
+      showDesignTool('dt-netopt', document.querySelectorAll('.dt-tab')[3]);
       document.getElementById('da-modal-container').innerHTML = '';
     }, 100);
   }
