@@ -14207,8 +14207,8 @@ function daCreateNew(artifactType) {
 async function daLoadDealsForSelector() {
   if (!sb) return;
   try {
-    const result = await sb.from('deal_deals').select('id, name').order('name', {ascending: true});
-    daData.deals = result.data || [];
+    const result = await sb.from('opportunities').select('id, name, stage, status').order('name', {ascending: true});
+    daData.deals = (result.data || []).map(function(o) { return { id: o.id, name: o.name, stage: o.stage, status: o.status }; });
     daPopulateDealSelectors();
   } catch(e) {
     console.error('Error loading deals for selector:', e);
@@ -14232,15 +14232,26 @@ function daPopulateDealSelectors() {
 }
 
 async function daLinkCostModelToDeal() {
-  const dealId = document.getElementById('cmDealSelector')?.value;
-  if (!dealId || !cmApp.currentProject || !sb) return;
+  const dealIdStr = document.getElementById('cmDealSelector')?.value;
+  if (!dealIdStr || !sb) return;
+  const dealId = parseInt(dealIdStr, 10);
+  if (isNaN(dealId)) return;
+
+  // Must have a saved cost model to link
+  if (!cmApp.currentProject || !cmApp.currentProject.id) {
+    alert('Please save the cost model first before linking to a deal.');
+    document.getElementById('cmDealSelector').value = '';
+    return;
+  }
+
+  const projId = cmApp.currentProject.id;
 
   // Store the deal_id on the current project for saving
   cmApp.currentProject.deal_id = dealId;
 
   // Update cost_model_projects.deal_id in Supabase
   try {
-    await sb.from('cost_model_projects').update({ deal_id: dealId }).eq('id', cmApp.currentProject.id);
+    await sb.from('cost_model_projects').update({ deal_id: dealId }).eq('id', projId);
   } catch(e) { console.warn('Could not update cost_model_projects.deal_id:', e); }
 
   // Create deal_artifacts record so it shows in the workspace
@@ -14250,7 +14261,7 @@ async function daLinkCostModelToDeal() {
       .select('id')
       .eq('deal_id', dealId)
       .eq('artifact_type', 'cost_model')
-      .eq('artifact_id', String(cmApp.currentProject.id))
+      .eq('artifact_id', String(projId))
       .limit(1);
 
     if (!existing || existing.length === 0) {
@@ -14262,24 +14273,32 @@ async function daLinkCostModelToDeal() {
       if (proj.environment_type) parts.push(proj.environment_type);
       if (proj.pricing_model) parts.push(proj.pricing_model + ' pricing');
 
-      await sb.from('deal_artifacts').insert({
+      const { error } = await sb.from('deal_artifacts').insert({
         deal_id: dealId,
         artifact_type: 'cost_model',
-        artifact_id: String(cmApp.currentProject.id),
+        artifact_id: String(projId),
         artifact_name: proj.name || 'Untitled Cost Model',
         artifact_notes: parts.join(' · ') || null,
         created_by: 'IES Hub'
       });
+      if (error) throw error;
+      // Show confirmation
+      if (typeof netoptToast === 'function') netoptToast('Cost model linked to deal');
+    } else {
+      if (typeof netoptToast === 'function') netoptToast('Already linked');
     }
     console.log('Cost model linked to deal:', dealId);
   } catch(e) {
     console.error('Error creating deal_artifacts record for cost model:', e);
+    alert('Error linking cost model: ' + (e.message || e));
   }
 }
 
 async function daLinkNetoptToDeal() {
-  const dealId = document.getElementById('netoptDealSelector')?.value;
-  if (!dealId || !sb) return;
+  const dealIdStr = document.getElementById('netoptDealSelector')?.value;
+  if (!dealIdStr || !sb) return;
+  const dealId = parseInt(dealIdStr, 10);
+  if (isNaN(dealId)) return;
 
   if (typeof netoptState !== 'undefined') {
     netoptState.linkedDealId = dealId;
@@ -14289,7 +14308,8 @@ async function daLinkNetoptToDeal() {
   const scenarioName = netoptState?.scenarioName || 'Unsaved Scenario';
   const scenarioId = netoptState?.currentScenarioId;
   if (!scenarioId) {
-    console.log('NetOpt scenario not saved yet — will link on save');
+    alert('Please save the scenario first before linking to a deal.');
+    document.getElementById('netoptDealSelector').value = '';
     return;
   }
 
@@ -14302,17 +14322,22 @@ async function daLinkNetoptToDeal() {
       .limit(1);
 
     if (!existing || existing.length === 0) {
-      await sb.from('deal_artifacts').insert({
+      const { error } = await sb.from('deal_artifacts').insert({
         deal_id: dealId,
         artifact_type: 'netopt_scenario',
         artifact_id: String(scenarioId),
         artifact_name: scenarioName,
         created_by: 'IES Hub'
       });
+      if (error) throw error;
+      if (typeof netoptToast === 'function') netoptToast('Scenario linked to deal');
+    } else {
+      if (typeof netoptToast === 'function') netoptToast('Already linked');
     }
     console.log('NetOpt scenario linked to deal:', dealId);
   } catch(e) {
     console.error('Error creating deal_artifacts record for netopt:', e);
+    alert('Error linking scenario: ' + (e.message || e));
   }
 }
 
