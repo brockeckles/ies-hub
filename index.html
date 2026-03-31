@@ -7194,6 +7194,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <!-- Tab bar -->
       <div id="dealDetailTabs" style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;">
         <button class="dt-tab active" onclick="dealApp.switchTab('summary',this)">Summary</button>
+        <button class="dt-tab" onclick="dealApp.switchTab('pipeline',this)">Pipeline</button>
         <button class="dt-tab" onclick="dealApp.switchTab('sites',this)">Sites</button>
         <button class="dt-tab" onclick="dealApp.switchTab('financials',this)">Financials</button>
         <button class="dt-tab" onclick="dealApp.switchTab('pricing',this)">Pricing</button>
@@ -7211,6 +7212,46 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
             <div style="font-weight:700;font-size:15px;color:var(--ies-navy);margin-bottom:16px;">Site Comparison</div>
             <div id="dealSummarySiteComparison" style="overflow-x:auto;"></div>
           </div>
+        </div>
+      </div>
+
+      <!-- Pipeline Tab (DOS Stage-Gated Process) -->
+      <div id="dealTab-pipeline" class="deal-tab-panel" style="display:none;">
+        <!-- Stage Stepper -->
+        <div id="dosStageStepper" style="display:flex;align-items:center;margin-bottom:24px;background:#fff;border-radius:10px;border:1px solid var(--ies-gray-200);padding:20px 24px;gap:0;overflow-x:auto;"></div>
+
+        <!-- Stage Activities -->
+        <div style="display:grid;grid-template-columns:1fr;gap:20px;">
+          <!-- Current Stage Card -->
+          <div style="background:#fff;border-radius:10px;border:1px solid var(--ies-gray-200);padding:24px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+              <div>
+                <div id="dosCurrentStageLabel" style="font-size:11px;font-weight:700;color:var(--ies-blue);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">STAGE 1</div>
+                <div id="dosCurrentStageName" style="font-size:16px;font-weight:700;color:var(--ies-navy);">Pre-Sales Engagement</div>
+              </div>
+              <div style="display:flex;gap:8px;">
+                <button id="dosActivateBtn" onclick="dealApp.activateCurrentStage()" class="hub-btn hub-btn-primary hub-btn-sm" style="padding:8px 14px;background:var(--ies-blue);color:#fff;border:none;border-radius:6px;font-family:Montserrat,sans-serif;font-weight:600;font-size:11px;cursor:pointer;">Activate Stage</button>
+                <button id="dosAdvanceBtn" onclick="dealApp.advanceStage()" class="hub-btn hub-btn-sm" style="padding:8px 14px;background:var(--ies-green,#10b981);color:#fff;border:none;border-radius:6px;font-family:Montserrat,sans-serif;font-weight:600;font-size:11px;cursor:pointer;display:none;">Advance to Next Stage →</button>
+              </div>
+            </div>
+
+            <!-- Activity Progress Bar -->
+            <div style="margin-bottom:20px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                <span id="dosProgressLabel" style="font-size:11px;font-weight:600;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:0.5px;">0 / 0 Complete</span>
+                <span id="dosProgressPct" style="font-size:11px;font-weight:700;color:var(--ies-blue);">0%</span>
+              </div>
+              <div style="background:var(--ies-gray-100);border-radius:6px;height:8px;overflow:hidden;">
+                <div id="dosProgressBar" style="background:var(--ies-blue);height:100%;width:0%;border-radius:6px;transition:width 0.4s ease;"></div>
+              </div>
+            </div>
+
+            <!-- Activity List -->
+            <div id="dosActivityList" style="display:flex;flex-direction:column;gap:0;"></div>
+          </div>
+
+          <!-- Stage History (collapsed stages below) -->
+          <div id="dosStageHistory" style="display:flex;flex-direction:column;gap:12px;"></div>
         </div>
       </div>
 
@@ -27285,6 +27326,7 @@ const dealApp = {
         if (tabEl) tabEl.classList.add('active');
         // Render tab content on demand
         if (tabName === 'summary') this.renderSummaryTab();
+        if (tabName === 'pipeline') this.renderPipelineTab();
         if (tabName === 'sites') this.renderSitesTable();
         if (tabName === 'financials') this.renderFinancialsTab();
         if (tabName === 'pricing') this.renderPricingTab();
@@ -27914,6 +27956,354 @@ const dealApp = {
         } catch (error) {
             console.error('Error linking project:', error);
             alert('Error linking site');
+        }
+    },
+
+    // ═══════════ DOS PIPELINE TAB ═══════════
+    dosStages: [],
+    dosElements: [],
+
+    async renderPipelineTab() {
+        if (!this.currentDeal) return;
+        var self = this;
+
+        // Load stages (cache after first fetch)
+        if (this.dosStages.length === 0) {
+            try {
+                this.dosStages = await cmFetchTable('stages', 'order=stage_number.asc');
+            } catch(e) { console.error('Error loading DOS stages:', e); return; }
+        }
+
+        var deal = this.currentDeal;
+        var currentStageId = deal.current_stage_id || null;
+        var dosProjectId = deal.dos_project_id || null;
+
+        // Load project elements if we have a DOS project
+        this.dosElements = [];
+        if (dosProjectId) {
+            try {
+                this.dosElements = await cmFetchTable('project_elements', 'project_id=eq.' + dosProjectId + '&order=stage_number.asc,sort_order.asc');
+            } catch(e) { console.error('Error loading DOS elements:', e); }
+        }
+
+        // Determine current stage info
+        var currentStage = currentStageId ? this.dosStages.find(function(s){ return s.id === currentStageId; }) : null;
+        var currentStageNum = currentStage ? currentStage.stage_number : 0;
+
+        // Render stage stepper
+        this.renderStageStepper(currentStageNum);
+
+        // Render current stage activities
+        this.renderStageActivities(currentStage, currentStageNum);
+
+        // Render completed stage history
+        this.renderStageHistory(currentStageNum);
+    },
+
+    renderStageStepper(currentStageNum) {
+        var el = document.getElementById('dosStageStepper');
+        if (!el) return;
+        var self = this;
+
+        el.innerHTML = this.dosStages.map(function(stage, i) {
+            var num = stage.stage_number;
+            var isActive = num === currentStageNum;
+            var isComplete = num < currentStageNum;
+            var isFuture = num > currentStageNum;
+            var isFirst = i === 0;
+
+            var bgColor = isComplete ? 'var(--ies-green,#10b981)' : isActive ? 'var(--ies-blue)' : 'var(--ies-gray-200)';
+            var textColor = (isComplete || isActive) ? '#fff' : 'var(--ies-gray-500)';
+            var nameColor = isActive ? 'var(--ies-navy)' : isComplete ? 'var(--ies-green,#10b981)' : 'var(--ies-gray-400)';
+            var nameWeight = isActive ? '700' : '600';
+
+            // Count elements for this stage
+            var stageElements = self.dosElements.filter(function(e){ return e.stage_number === num; });
+            var completed = stageElements.filter(function(e){ return e.element_status === 'complete'; }).length;
+            var total = stageElements.length;
+
+            var connector = isFirst ? '' :
+                '<div style="flex:1;height:3px;background:' + (isComplete ? 'var(--ies-green,#10b981)' : isActive ? 'var(--ies-blue)' : 'var(--ies-gray-200)') + ';min-width:20px;margin:0 -4px;align-self:center;"></div>';
+
+            var checkOrNum = isComplete ?
+                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>' :
+                num;
+
+            return connector +
+                '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;min-width:90px;cursor:' + (isComplete || isActive ? 'pointer' : 'default') + ';" onclick="' + (isComplete || isActive ? 'dealApp.viewStageActivities(' + stage.id + ',' + num + ')' : '') + '">' +
+                    '<div style="width:32px;height:32px;border-radius:50%;background:' + bgColor + ';color:' + textColor + ';display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;font-family:Montserrat,sans-serif;flex-shrink:0;">' + checkOrNum + '</div>' +
+                    '<div style="font-size:11px;font-weight:' + nameWeight + ';color:' + nameColor + ';text-align:center;line-height:1.3;max-width:100px;">' + stage.stage_name + '</div>' +
+                    (total > 0 ? '<div style="font-size:10px;color:var(--ies-gray-400);font-weight:600;">' + completed + '/' + total + '</div>' : '') +
+                '</div>';
+        }).join('');
+    },
+
+    renderStageActivities(currentStage, currentStageNum) {
+        var labelEl = document.getElementById('dosCurrentStageLabel');
+        var nameEl = document.getElementById('dosCurrentStageName');
+        var activateBtn = document.getElementById('dosActivateBtn');
+        var advanceBtn = document.getElementById('dosAdvanceBtn');
+        var listEl = document.getElementById('dosActivityList');
+
+        if (!currentStage || currentStageNum === 0) {
+            // No stage activated yet
+            labelEl.textContent = 'NO STAGE ACTIVE';
+            nameEl.textContent = 'Activate Stage 1 to begin the deal process';
+            activateBtn.style.display = '';
+            activateBtn.textContent = 'Activate Stage 1: Pre-Sales Engagement';
+            advanceBtn.style.display = 'none';
+            document.getElementById('dosProgressLabel').textContent = '—';
+            document.getElementById('dosProgressPct').textContent = '';
+            document.getElementById('dosProgressBar').style.width = '0%';
+            listEl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--ies-gray-400);font-size:13px;">Click "Activate Stage 1" to populate the standard IES activities for this deal.</div>';
+            return;
+        }
+
+        labelEl.textContent = 'STAGE ' + currentStageNum + ' OF 6';
+        nameEl.textContent = currentStage.stage_name;
+
+        // Get elements for current stage
+        var stageElements = this.dosElements.filter(function(e){ return e.stage_number === currentStageNum; });
+        var completed = stageElements.filter(function(e){ return e.element_status === 'complete'; }).length;
+        var total = stageElements.length;
+        var pct = total > 0 ? Math.round(completed / total * 100) : 0;
+
+        document.getElementById('dosProgressLabel').textContent = completed + ' / ' + total + ' Complete';
+        document.getElementById('dosProgressPct').textContent = pct + '%';
+        document.getElementById('dosProgressBar').style.width = pct + '%';
+
+        // Show/hide buttons
+        activateBtn.style.display = 'none';
+        advanceBtn.style.display = (pct === 100 && currentStageNum < 6) ? '' : 'none';
+
+        // Workstream color map
+        var wsColors = {
+            'solutions': { bg: 'rgba(37,99,235,.08)', color: 'var(--ies-blue)', label: 'Solutions' },
+            'engineering': { bg: 'rgba(139,92,246,.08)', color: '#8b5cf6', label: 'Engineering' },
+            'commercial': { bg: 'rgba(251,146,60,.08)', color: '#f59e0b', label: 'Commercial' },
+            'commercial_lead': { bg: 'rgba(251,146,60,.08)', color: '#f59e0b', label: 'Commercial Lead' },
+            'finance_pricing': { bg: 'rgba(16,185,129,.08)', color: '#10b981', label: 'Finance / Pricing' },
+            'legal': { bg: 'rgba(107,114,128,.08)', color: '#6b7280', label: 'Legal' },
+            'elt': { bg: 'rgba(239,68,68,.08)', color: '#ef4444', label: 'ELT' },
+            'operations': { bg: 'rgba(6,182,212,.08)', color: '#06b6d4', label: 'Operations' },
+            'shared': { bg: 'rgba(107,114,128,.08)', color: '#6b7280', label: 'Shared' }
+        };
+
+        // Element type icons
+        var typeIcons = {
+            'internal_meeting': '📋', 'customer_meeting': '🤝', 'governance_document': '📜',
+            'legal_document': '⚖️', 'rfp_document': '📄', 'team_assignment': '👥',
+            'timeline': '📅', 'design_artifact': '✏️', 'cost_model': '💰',
+            'response': '📨', 'presentation': '📊', 'loi': '✍️', 'paf': '📋',
+            'cod': '🏗️', 'document': '📄', 'meeting': '📋', 'deliverable': '📦',
+            'approval': '✅', 'review': '🔍', 'milestone': '🏁', 'other': '📎'
+        };
+
+        // Status badge config
+        var statusConfig = {
+            'not_started': { bg: 'var(--ies-gray-100)', color: 'var(--ies-gray-500)', label: 'Not Started' },
+            'in_progress': { bg: 'rgba(37,99,235,.1)', color: 'var(--ies-blue)', label: 'In Progress' },
+            'complete': { bg: 'rgba(16,185,129,.1)', color: '#10b981', label: 'Complete' },
+            'blocked': { bg: 'rgba(239,68,68,.1)', color: '#ef4444', label: 'Blocked' },
+            'na': { bg: 'var(--ies-gray-100)', color: 'var(--ies-gray-400)', label: 'N/A' },
+            'skipped': { bg: 'var(--ies-gray-100)', color: 'var(--ies-gray-400)', label: 'Skipped' }
+        };
+
+        if (stageElements.length === 0) {
+            listEl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--ies-gray-400);font-size:13px;">No activities loaded for this stage.</div>';
+            return;
+        }
+
+        listEl.innerHTML = stageElements.map(function(elem) {
+            var ws = wsColors[elem.responsible_workstream] || wsColors['shared'];
+            var icon = typeIcons[elem.element_type] || '📎';
+            var st = statusConfig[elem.element_status] || statusConfig['not_started'];
+            var isComplete = elem.element_status === 'complete';
+
+            return '<div style="display:flex;align-items:center;gap:16px;padding:14px 0;border-bottom:1px solid var(--ies-gray-100);">' +
+                // Checkbox
+                '<div onclick="dealApp.toggleElementStatus(\'' + elem.id + '\',\'' + elem.element_status + '\')" style="cursor:pointer;flex-shrink:0;width:24px;height:24px;border-radius:6px;border:2px solid ' + (isComplete ? '#10b981' : 'var(--ies-gray-300)') + ';background:' + (isComplete ? '#10b981' : '#fff') + ';display:flex;align-items:center;justify-content:center;">' +
+                    (isComplete ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '') +
+                '</div>' +
+                // Icon + Name + Description
+                '<div style="flex:1;min-width:0;">' +
+                    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">' +
+                        '<span style="font-size:14px;">' + icon + '</span>' +
+                        '<span style="font-size:13px;font-weight:600;color:var(--ies-navy);' + (isComplete ? 'text-decoration:line-through;opacity:0.6;' : '') + '">' + elem.element_name + '</span>' +
+                    '</div>' +
+                    (elem.description ? '<div style="font-size:11px;color:var(--ies-gray-500);margin-left:26px;line-height:1.4;' + (isComplete ? 'text-decoration:line-through;opacity:0.5;' : '') + '">' + elem.description + '</div>' : '') +
+                '</div>' +
+                // Workstream badge
+                '<div style="flex-shrink:0;padding:4px 10px;border-radius:20px;font-size:10px;font-weight:700;background:' + ws.bg + ';color:' + ws.color + ';text-transform:uppercase;letter-spacing:0.5px;">' + ws.label + '</div>' +
+                // Status dropdown
+                '<select onchange="dealApp.updateElementStatus(\'' + elem.id + '\',this.value)" style="flex-shrink:0;padding:6px 10px;border:1px solid var(--ies-gray-200);border-radius:6px;font-family:Montserrat,sans-serif;font-size:11px;font-weight:600;color:' + st.color + ';background:' + st.bg + ';cursor:pointer;min-width:100px;">' +
+                    '<option value="not_started"' + (elem.element_status === 'not_started' ? ' selected' : '') + '>Not Started</option>' +
+                    '<option value="in_progress"' + (elem.element_status === 'in_progress' ? ' selected' : '') + '>In Progress</option>' +
+                    '<option value="complete"' + (elem.element_status === 'complete' ? ' selected' : '') + '>Complete</option>' +
+                    '<option value="blocked"' + (elem.element_status === 'blocked' ? ' selected' : '') + '>Blocked</option>' +
+                    '<option value="na"' + (elem.element_status === 'na' ? ' selected' : '') + '>N/A</option>' +
+                    '<option value="skipped"' + (elem.element_status === 'skipped' ? ' selected' : '') + '>Skipped</option>' +
+                '</select>' +
+            '</div>';
+        }).join('');
+    },
+
+    renderStageHistory(currentStageNum) {
+        var el = document.getElementById('dosStageHistory');
+        if (!el) return;
+        var self = this;
+
+        // Show collapsed cards for completed stages
+        var completedStages = this.dosStages.filter(function(s){ return s.stage_number < currentStageNum; });
+
+        if (completedStages.length === 0) {
+            el.innerHTML = '';
+            return;
+        }
+
+        el.innerHTML = '<div style="font-size:11px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Completed Stages</div>' +
+            completedStages.map(function(stage) {
+                var elements = self.dosElements.filter(function(e){ return e.stage_number === stage.stage_number; });
+                var completed = elements.filter(function(e){ return e.element_status === 'complete'; }).length;
+                return '<div style="background:#fff;border-radius:10px;border:1px solid var(--ies-gray-200);padding:16px 20px;cursor:pointer;" onclick="dealApp.viewStageActivities(' + stage.id + ',' + stage.stage_number + ')">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+                        '<div style="display:flex;align-items:center;gap:12px;">' +
+                            '<div style="width:28px;height:28px;border-radius:50%;background:var(--ies-green,#10b981);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">' +
+                                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
+                            '</div>' +
+                            '<div><div style="font-size:13px;font-weight:700;color:var(--ies-navy);">Stage ' + stage.stage_number + ': ' + stage.stage_name + '</div></div>' +
+                        '</div>' +
+                        '<div style="font-size:11px;font-weight:600;color:var(--ies-green,#10b981);">' + completed + '/' + elements.length + ' ✓</div>' +
+                    '</div>' +
+                '</div>';
+            }).join('');
+    },
+
+    viewStageActivities(stageId, stageNum) {
+        var stage = this.dosStages.find(function(s){ return s.id === stageId; });
+        if (!stage) return;
+        this.renderStageActivities(stage, stageNum);
+    },
+
+    async activateCurrentStage() {
+        if (!this.currentDeal) return;
+        var self = this;
+        var deal = this.currentDeal;
+
+        try {
+            // Determine which stage to activate
+            var targetStageNum = deal.current_stage_id ? null : 1; // Start at Stage 1 if no stage yet
+            if (!targetStageNum) return;
+
+            var targetStage = this.dosStages.find(function(s){ return s.stage_number === targetStageNum; });
+            if (!targetStage) return;
+
+            // Create DOS project if needed
+            var dosProjectId = deal.dos_project_id;
+            if (!dosProjectId) {
+                var result = await cmApiPost('projects', {
+                    project_name: deal.deal_name,
+                    current_stage_id: targetStage.id,
+                    project_status: 'active',
+                    template_version_id: 1
+                });
+                dosProjectId = result[0].id;
+
+                // Link project to deal
+                await cmApiPatch('deal_deals', deal.id, {
+                    dos_project_id: dosProjectId,
+                    current_stage_id: targetStage.id,
+                    updated_at: new Date().toISOString()
+                });
+                deal.dos_project_id = dosProjectId;
+                deal.current_stage_id = targetStage.id;
+            }
+
+            // Instantiate stage elements via RPC
+            var resp = await fetch(SUPABASE_URL + '/rest/v1/rpc/instantiate_stage_elements', {
+                method: 'POST',
+                headers: API_HEADERS,
+                body: JSON.stringify({ p_project_id: dosProjectId, p_stage_id: targetStage.id })
+            });
+            if (!resp.ok) throw new Error(await resp.text());
+
+            // Re-render
+            await this.renderPipelineTab();
+        } catch(e) {
+            console.error('Error activating stage:', e);
+            alert('Error activating stage: ' + e.message);
+        }
+    },
+
+    async advanceStage() {
+        if (!this.currentDeal) return;
+        var deal = this.currentDeal;
+        var currentStage = this.dosStages.find(function(s){ return s.id === deal.current_stage_id; });
+        if (!currentStage || currentStage.stage_number >= 6) return;
+
+        var nextStage = this.dosStages.find(function(s){ return s.stage_number === currentStage.stage_number + 1; });
+        if (!nextStage) return;
+
+        if (!confirm('Advance to Stage ' + nextStage.stage_number + ': ' + nextStage.stage_name + '?\n\nThis will create all standard activities for the new stage.')) return;
+
+        try {
+            // Update deal's current stage
+            await cmApiPatch('deal_deals', deal.id, {
+                current_stage_id: nextStage.id,
+                updated_at: new Date().toISOString()
+            });
+            deal.current_stage_id = nextStage.id;
+
+            // Instantiate elements for the new stage
+            var resp = await fetch(SUPABASE_URL + '/rest/v1/rpc/instantiate_stage_elements', {
+                method: 'POST',
+                headers: API_HEADERS,
+                body: JSON.stringify({ p_project_id: deal.dos_project_id, p_stage_id: nextStage.id })
+            });
+            if (!resp.ok) throw new Error(await resp.text());
+
+            // Re-render
+            await this.renderPipelineTab();
+        } catch(e) {
+            console.error('Error advancing stage:', e);
+            alert('Error advancing stage: ' + e.message);
+        }
+    },
+
+    async toggleElementStatus(elementId, currentStatus) {
+        var newStatus = currentStatus === 'complete' ? 'not_started' : 'complete';
+        await this.updateElementStatus(elementId, newStatus);
+    },
+
+    async updateElementStatus(elementId, newStatus) {
+        try {
+            await fetch(SUPABASE_URL + '/rest/v1/project_elements?id=eq.' + elementId, {
+                method: 'PATCH',
+                headers: API_HEADERS,
+                body: JSON.stringify({
+                    element_status: newStatus,
+                    completed_at: newStatus === 'complete' ? new Date().toISOString() : null,
+                    updated_at: new Date().toISOString()
+                })
+            });
+
+            // Update local state
+            var elem = this.dosElements.find(function(e){ return e.id == elementId; });
+            if (elem) {
+                elem.element_status = newStatus;
+                elem.completed_at = newStatus === 'complete' ? new Date().toISOString() : null;
+            }
+
+            // Re-render the current view
+            var deal = this.currentDeal;
+            var currentStage = deal.current_stage_id ? this.dosStages.find(function(s){ return s.id === deal.current_stage_id; }) : null;
+            var currentStageNum = currentStage ? currentStage.stage_number : 0;
+
+            this.renderStageStepper(currentStageNum);
+            this.renderStageActivities(currentStage, currentStageNum);
+        } catch(e) {
+            console.error('Error updating element status:', e);
+            alert('Error updating status');
         }
     },
 
