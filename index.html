@@ -2354,6 +2354,121 @@
             margin: 12px 0;
         }
 
+        /* ═══ DESIGN TOOLS LANDING PAGES ═══ */
+        .dt-landing {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .dt-landing-header {
+            text-align: center;
+            margin-bottom: 48px;
+        }
+
+        .dt-landing-title {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--ies-navy);
+            margin-bottom: 8px;
+        }
+
+        .dt-landing-subtitle {
+            font-size: 14px;
+            color: var(--ies-gray-600);
+        }
+
+        .dt-landing-actions {
+            text-align: center;
+            margin-bottom: 48px;
+        }
+
+        .dt-landing-btn {
+            background: var(--ies-blue);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 12px 32px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 2px 8px rgba(0,71,171,0.15);
+        }
+
+        .dt-landing-btn:hover {
+            background: #003a8f;
+            box-shadow: 0 4px 12px rgba(0,71,171,0.25);
+            transform: translateY(-2px);
+        }
+
+        .dt-landing-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 32px;
+        }
+
+        .dt-landing-card {
+            background: white;
+            border: 1px solid var(--ies-gray-200);
+            border-radius: 12px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        }
+
+        .dt-landing-card:hover {
+            border-color: var(--ies-blue);
+            box-shadow: 0 4px 12px rgba(0,71,171,0.1);
+            transform: translateY(-2px);
+        }
+
+        .dt-landing-card-name {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--ies-navy);
+            margin-bottom: 8px;
+        }
+
+        .dt-landing-card-meta {
+            font-size: 12px;
+            color: var(--ies-gray-600);
+            margin-bottom: 12px;
+        }
+
+        .dt-landing-card-metric {
+            font-size: 13px;
+            color: var(--ies-gray-700);
+            line-height: 1.5;
+        }
+
+        .dt-empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            background: linear-gradient(135deg, #f8f9fb 0%, #fff 100%);
+            border-radius: 12px;
+            border: 1px dashed var(--ies-gray-200);
+        }
+
+        .dt-empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        .dt-empty-state-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--ies-navy);
+            margin-bottom: 12px;
+        }
+
+        .dt-empty-state-text {
+            font-size: 14px;
+            color: var(--ies-gray-600);
+            margin-bottom: 24px;
+        }
+
         /* Cards and Sections */
         .cm-section {
             display: none;
@@ -5458,6 +5573,27 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
   <!-- ── WAREHOUSE SIZING CALCULATOR ── -->
   <div id="dt-warehouse" class="dt-panel" style="display:none;">
 
+    <!-- WAREHOUSE SIZING CALCULATOR LANDING PAGE -->
+    <div id="wsc-landing" class="dt-landing" style="display:block;">
+      <div class="dt-landing-header">
+        <div class="dt-landing-title">Warehouse Sizing Calculator</div>
+        <div class="dt-landing-subtitle">Design optimal warehouse layouts and estimate facility sizing requirements</div>
+      </div>
+      <div class="dt-landing-actions">
+        <button class="dt-landing-btn" onclick="wscNewScenario()">+ Create New Scenario</button>
+      </div>
+      <div id="wsc-landing-grid" class="dt-landing-grid"></div>
+      <div id="wsc-empty-state" class="dt-empty-state" style="display:none;">
+        <div class="dt-empty-state-icon">📦</div>
+        <div class="dt-empty-state-title">No Scenarios Yet</div>
+        <div class="dt-empty-state-text">Create your first warehouse sizing scenario to get started with facility design.</div>
+        <button class="dt-landing-btn" onclick="wscNewScenario()">Create First Scenario</button>
+      </div>
+    </div>
+
+    <!-- WAREHOUSE SIZING CALCULATOR TOOL -->
+    <div id="wsc-tool" style="display:none;">
+
     <!-- ROW 1: KPI METRICS STRIP — Full Width, Bloomberg-style data bar -->
     <div style="background:linear-gradient(135deg, #0a1628, #0d1f3c, #0a1628);border-radius:10px;padding:16px 20px;color:#fff;box-shadow:0 4px 12px rgba(0,0,0,.15);margin-bottom:20px;">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:0;">
@@ -6062,10 +6198,32 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:rgba(255,255,255,.6);"><span style="width:10px;height:10px;border-radius:2px;background:#f59e0b;"></span>Dock Doors</div>
       </div>
     </div>
+    </div>
   </div>
 
   <!-- ── NETWORK OPTIMIZATION — Weighted Center of Gravity ── -->
   <div id="dt-network" class="dt-panel" style="display:none;">
+
+    <!-- CENTER OF GRAVITY LANDING PAGE -->
+    <div id="net-landing" class="dt-landing" style="display:block;">
+      <div class="dt-landing-header">
+        <div class="dt-landing-title">Center of Gravity (Network)</div>
+        <div class="dt-landing-subtitle">Find optimal distribution center locations using demand-weighted analysis</div>
+      </div>
+      <div class="dt-landing-actions">
+        <button class="dt-landing-btn" onclick="netNewScenario()">+ Create New Scenario</button>
+      </div>
+      <div id="net-landing-grid" class="dt-landing-grid"></div>
+      <div id="net-empty-state" class="dt-empty-state" style="display:none;">
+        <div class="dt-empty-state-icon">🗺️</div>
+        <div class="dt-empty-state-title">No Scenarios Yet</div>
+        <div class="dt-empty-state-text">Create your first network optimization scenario to analyze DC location options.</div>
+        <button class="dt-landing-btn" onclick="netNewScenario()">Create First Scenario</button>
+      </div>
+    </div>
+
+    <!-- CENTER OF GRAVITY TOOL -->
+    <div id="net-tool" style="display:none;">
 
     <!-- KPI STRIP -->
     <div id="net-kpi-strip" style="background:linear-gradient(135deg, #0a1628, #0d1f3c, #0a1628);border-radius:10px;padding:16px 20px;color:#fff;box-shadow:0 4px 12px rgba(0,0,0,.15);margin-bottom:20px;">
@@ -6239,10 +6397,32 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 
       </div>
     </div>
+    </div>
   </div>
 
   <!-- ── NETWORK OPTIMIZATION (Enterprise) ── -->
   <div id="dt-netopt" class="dt-panel" style="display:none;">
+
+    <!-- NETWORK OPTIMIZATION LANDING PAGE -->
+    <div id="netopt-landing" class="dt-landing" style="display:block;">
+      <div class="dt-landing-header">
+        <div class="dt-landing-title">Network Optimization</div>
+        <div class="dt-landing-subtitle">Optimize multi-mode transportation and facility location decisions</div>
+      </div>
+      <div class="dt-landing-actions">
+        <button class="dt-landing-btn" onclick="netoptNewScenario()">+ Create New Scenario</button>
+      </div>
+      <div id="netopt-landing-grid" class="dt-landing-grid"></div>
+      <div id="netopt-empty-state" class="dt-empty-state" style="display:none;">
+        <div class="dt-empty-state-icon">⚙️</div>
+        <div class="dt-empty-state-title">No Scenarios Yet</div>
+        <div class="dt-empty-state-text">Create your first optimization scenario to analyze transportation modes and facility networks.</div>
+        <button class="dt-landing-btn" onclick="netoptNewScenario()">Create First Scenario</button>
+      </div>
+    </div>
+
+    <!-- NETWORK OPTIMIZATION TOOL -->
+    <div id="netopt-tool" style="display:none;">
 
     <!-- KPI STRIP -->
     <div id="netopt-kpi-strip" style="background:linear-gradient(135deg, #0a1628, #0d1f3c, #0a1628);border-radius:10px;padding:16px 20px;color:#fff;box-shadow:0 4px 12px rgba(0,0,0,.15);margin-bottom:20px;">
@@ -6988,6 +7168,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         </div>
 
       </div>
+    </div>
     </div>
 
   </div>
@@ -8258,7 +8439,26 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     </div>
   </div>
 
-  <div id="fm-main" style="display:flex;flex-direction:column;gap:20px;">
+  <!-- FLEET MODELER LANDING PAGE -->
+  <div id="fm-landing" class="dt-landing" style="display:none;">
+    <div class="dt-landing-header">
+      <div class="dt-landing-title">Fleet Modeler</div>
+      <div class="dt-landing-subtitle">Design optimal fleet configurations and compare operational scenarios</div>
+    </div>
+    <div class="dt-landing-actions">
+      <button class="dt-landing-btn" onclick="fmNewScenario()">+ Create New Scenario</button>
+    </div>
+    <div id="fm-landing-grid" class="dt-landing-grid"></div>
+    <div id="fm-empty-state" class="dt-empty-state" style="display:none;">
+      <div class="dt-empty-state-icon">🚚</div>
+      <div class="dt-empty-state-title">No Scenarios Yet</div>
+      <div class="dt-empty-state-text">Create your first fleet modeling scenario to optimize vehicle configurations.</div>
+      <button class="dt-landing-btn" onclick="fmNewScenario()">Create First Scenario</button>
+    </div>
+  </div>
+
+  <!-- FLEET MODELER TOOL -->
+  <div id="fm-tool" style="display:flex;flex-direction:column;gap:20px;">
     <!-- Tab Navigation -->
     <div style="display:flex;gap:8px;border-bottom:2px solid var(--ies-gray-200);overflow-x:auto;">
       <button class="fm-tab active" onclick="fmShowTab('lanes')">Lanes</button>
@@ -9376,8 +9576,18 @@ function navigate(section, el) {
     fbLoadAll();
   }
 
-  // Cost Model initializes itself on DOMContentLoaded via cmApp.init()
-  // No additional action needed on navigate
+  // Cost Model: reset to landing page and refresh project list
+  if (section === 'costmodel') {
+    document.getElementById('landingPage').style.display = 'block';
+    document.getElementById('editorContainer').style.display = 'none';
+    document.getElementById('topbarControls').style.display = 'none';
+    cmApp.loadProjects();
+  }
+
+  // Fleet Modeler: show landing page when section is opened
+  if (section === 'fleet') {
+    fmShowLanding();
+  }
 
   // Track page view for analytics
   anTrackPageView(section);
@@ -14411,12 +14621,12 @@ function showDesignTool(panelId, tabEl) {
   if (tabEl) {
     tabEl.classList.add('active');
   }
-  // If switching to calculator, run calc and refresh scenarios
-  if (panelId === 'dt-warehouse') { calcWarehouse(); wscRefreshScenarioList(window.activeCostModelProjectId || null); }
-  // If switching to network tool, initialize map and refresh scenarios
-  if (panelId === 'dt-network') { setTimeout(function() { initNetworkMap(); runNetworkOptimization(); }, 100); netRefreshScenarioList(window.activeCostModelProjectId || null); }
-  // If switching to netopt, refresh scenarios
-  if (panelId === 'dt-netopt') { netoptRefreshScenarioList(window.activeCostModelProjectId || null); }
+  // If switching to warehouse, show landing page
+  if (panelId === 'dt-warehouse') { wscShowLanding(); }
+  // If switching to network tool, show landing page
+  if (panelId === 'dt-network') { netShowLanding(); }
+  // If switching to netopt, show landing page
+  if (panelId === 'dt-netopt') { netoptShowLanding(); }
   // If switching to deals, load deals list
   if (panelId === 'dt-deals') { dealApp.loadDeals(); }
   // Scroll to top
@@ -18040,6 +18250,221 @@ function netoptRecalcAllCosts() {
   netoptState.transport.ltlUnits = ltlUnits;
 
   netoptUpdateKPI();
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// DESIGN TOOLS LANDING PAGES — Scenario Management
+// ══════════════════════════════════════════════════════════════════════
+
+// ── WAREHOUSE SIZING CALCULATOR LANDING ──
+async function wscShowLanding() {
+  var landing = document.getElementById('wsc-landing');
+  var tool = document.getElementById('wsc-tool');
+  if (landing) landing.style.display = 'block';
+  if (tool) tool.style.display = 'none';
+  await wscLoadScenariosList();
+}
+
+async function wscShowTool() {
+  var landing = document.getElementById('wsc-landing');
+  var tool = document.getElementById('wsc-tool');
+  if (landing) landing.style.display = 'none';
+  if (tool) tool.style.display = 'block';
+}
+
+async function wscLoadScenariosList() {
+  try {
+    var scenarios = await wscListScenarios(window.activeCostModelProjectId || null);
+    var grid = document.getElementById('wsc-landing-grid');
+    var empty = document.getElementById('wsc-empty-state');
+
+    if (!grid) return;
+
+    if (scenarios.length === 0) {
+      grid.innerHTML = '';
+      if (empty) empty.style.display = 'block';
+      return;
+    }
+
+    if (empty) empty.style.display = 'none';
+
+    grid.innerHTML = scenarios.map(function(s) {
+      return '<div class="dt-landing-card" onclick="wscLoadScenario(' + s.id + '); wscShowTool()">' +
+        '<div class="dt-landing-card-name">' + (s.scenario_name || 'Untitled') + '</div>' +
+        '<div class="dt-landing-card-meta">' + (s.created_at ? new Date(s.created_at).toLocaleDateString() : '') + '</div>' +
+        '<div class="dt-landing-card-metric">SF: ' + (s.facility_sqft ? s.facility_sqft.toLocaleString() : '—') + '</div>' +
+        '</div>';
+    }).join('');
+  } catch (e) {
+    console.error('Error loading scenarios:', e);
+  }
+}
+
+function wscNewScenario() {
+  resetCalculator();
+  wscShowTool();
+}
+
+// ── CENTER OF GRAVITY LANDING ──
+async function netShowLanding() {
+  var landing = document.getElementById('net-landing');
+  var tool = document.getElementById('net-tool');
+  if (landing) landing.style.display = 'block';
+  if (tool) tool.style.display = 'none';
+  await netLoadScenariosList();
+}
+
+async function netShowTool() {
+  var landing = document.getElementById('net-landing');
+  var tool = document.getElementById('net-tool');
+  if (landing) landing.style.display = 'none';
+  if (tool) tool.style.display = 'block';
+}
+
+async function netLoadScenariosList() {
+  try {
+    var scenarios = await netListScenarios(window.activeCostModelProjectId || null);
+    var grid = document.getElementById('net-landing-grid');
+    var empty = document.getElementById('net-empty-state');
+
+    if (!grid) return;
+
+    if (scenarios.length === 0) {
+      grid.innerHTML = '';
+      if (empty) empty.style.display = 'block';
+      return;
+    }
+
+    if (empty) empty.style.display = 'none';
+
+    grid.innerHTML = scenarios.map(function(s) {
+      return '<div class="dt-landing-card" onclick="netLoadScenario(' + s.id + '); netShowTool()">' +
+        '<div class="dt-landing-card-name">' + (s.scenario_name || 'Untitled') + '</div>' +
+        '<div class="dt-landing-card-meta">' + (s.created_at ? new Date(s.created_at).toLocaleDateString() : '') + '</div>' +
+        '<div class="dt-landing-card-metric">DCs: ' + (s.dc_count || '—') + ' | Freight: $' + (s.result_est_freight ? s.result_est_freight.toLocaleString(undefined, {maximumFractionDigits: 0}) : '—') + '</div>' +
+        '</div>';
+    }).join('');
+  } catch (e) {
+    console.error('Error loading scenarios:', e);
+  }
+}
+
+function netNewScenario() {
+  resetNetworkTool();
+  netShowTool();
+}
+
+// ── NETWORK OPTIMIZATION LANDING ──
+async function netoptShowLanding() {
+  var landing = document.getElementById('netopt-landing');
+  var tool = document.getElementById('netopt-tool');
+  if (landing) landing.style.display = 'block';
+  if (tool) tool.style.display = 'none';
+  await netoptLoadScenariosList();
+}
+
+async function netoptShowTool() {
+  var landing = document.getElementById('netopt-landing');
+  var tool = document.getElementById('netopt-tool');
+  if (landing) landing.style.display = 'none';
+  if (tool) tool.style.display = 'block';
+}
+
+async function netoptLoadScenariosList() {
+  try {
+    var scenarios = await netoptListScenarios(window.activeCostModelProjectId || null);
+    var grid = document.getElementById('netopt-landing-grid');
+    var empty = document.getElementById('netopt-empty-state');
+
+    if (!grid) return;
+
+    if (scenarios.length === 0) {
+      grid.innerHTML = '';
+      if (empty) empty.style.display = 'block';
+      return;
+    }
+
+    if (empty) empty.style.display = 'none';
+
+    grid.innerHTML = scenarios.map(function(s) {
+      return '<div class="dt-landing-card" onclick="netoptLoadScenario(' + s.id + '); netoptShowTool()">' +
+        '<div class="dt-landing-card-name">' + (s.scenario_name || 'Untitled') + '</div>' +
+        '<div class="dt-landing-card-meta">' + (s.created_at ? new Date(s.created_at).toLocaleDateString() : '') + '</div>' +
+        '<div class="dt-landing-card-metric">Cost: $' + (s.result_total_cost ? s.result_total_cost.toLocaleString(undefined, {maximumFractionDigits: 0}) : '—') + ' | Mode: ' + (s.solver_mode || '—') + '</div>' +
+        '</div>';
+    }).join('');
+  } catch (e) {
+    console.error('Error loading scenarios:', e);
+  }
+}
+
+function netoptNewScenario() {
+  // Clear netopt state for new scenario
+  if (typeof netoptState !== 'undefined') {
+    netoptState.facilities = [];
+    netoptState.demands = [];
+    netoptState.results = null;
+    netoptRenderFacilitiesTable();
+    netoptRenderDemandsTable();
+  }
+  netoptShowTool();
+}
+
+// ── FLEET MODELER LANDING ──
+async function fmShowLanding() {
+  var landing = document.getElementById('fm-landing');
+  var tool = document.getElementById('fm-tool');
+  if (landing) landing.style.display = 'block';
+  if (tool) tool.style.display = 'none';
+  await fmLoadScenariosList();
+}
+
+async function fmShowTool() {
+  var landing = document.getElementById('fm-landing');
+  var tool = document.getElementById('fm-tool');
+  if (landing) landing.style.display = 'none';
+  if (tool) tool.style.display = 'block';
+}
+
+async function fmLoadScenariosList() {
+  try {
+    var scenarios = await cmFetchTable('fleet_scenarios', 'order=created_at.desc');
+    var grid = document.getElementById('fm-landing-grid');
+    var empty = document.getElementById('fm-empty-state');
+
+    if (!grid) return;
+
+    if (scenarios.length === 0) {
+      grid.innerHTML = '';
+      if (empty) empty.style.display = 'block';
+      return;
+    }
+
+    if (empty) empty.style.display = 'none';
+
+    grid.innerHTML = scenarios.map(function(s) {
+      return '<div class="dt-landing-card" onclick="fmLoadFleetScenario(' + s.id + '); fmShowTool()">' +
+        '<div class="dt-landing-card-name">' + (s.name || 'Untitled') + '</div>' +
+        '<div class="dt-landing-card-meta">' + (s.created_at ? new Date(s.created_at).toLocaleDateString() : '') + '</div>' +
+        '<div class="dt-landing-card-metric">' + (s.notes ? s.notes.substring(0, 60) + '...' : 'Fleet scenario') + '</div>' +
+        '</div>';
+    }).join('');
+  } catch (e) {
+    console.error('Error loading scenarios:', e);
+  }
+}
+
+function fmNewScenario() {
+  // Reset fleet modeler for new scenario (if function exists)
+  if (typeof fmClearAllScenarios === 'function') {
+    fmClearAllScenarios();
+  }
+  fmShowTool();
+}
+
+function fmLoadFleetScenario(id) {
+  // Placeholder - fleet has its own scenario loading logic
+  console.log('Loading fleet scenario:', id);
 }
 
 // ══════════════════════════════════════════════════════════════════════
