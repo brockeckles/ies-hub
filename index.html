@@ -5165,7 +5165,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         <div style="font-size:11px; color:var(--ies-orange); margin-top:2px;" id="detailMarketSub">Click a pin on the map to view intelligence</div>
       </div>
       <!-- Detail tabs -->
-      <div id="marketDetailTabs" style="display:none; padding:8px 16px 0; border-bottom:1px solid var(--ies-gray-200); display:flex; gap:0;">
+      <div id="marketDetailTabs" style="display:none; padding:8px 16px 0; border-bottom:1px solid var(--ies-gray-200); gap:0;">
         <button class="tab-btn active" onclick="switchMarketTab('labor', this)" style="font-size:11px; padding:8px 12px;">Labor</button>
         <button class="tab-btn" onclick="switchMarketTab('realestate', this)" style="font-size:11px; padding:8px 12px;">Real Estate</button>
         <button class="tab-btn" onclick="switchMarketTab('freight', this)" style="font-size:11px; padding:8px 12px;">Freight</button>
@@ -11933,8 +11933,10 @@ function switchDataLibTab(tab, el) {
 function switchMarketTab(tab, el) {
   el.parentElement.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   el.classList.add('active');
-  // Content is dynamically rendered by selectMarket(), so we just flag active tab
-  if (typeof window.activeMarketTab !== 'undefined') window.activeMarketTab = tab;
+  window.activeMarketTab = tab;
+  document.querySelectorAll('.market-tab-panel').forEach(function(p) {
+    p.style.display = p.dataset.tab === tab ? '' : 'none';
+  });
 }
 
 // ── DEAL CONTEXT BAR (breadcrumb support) ──
@@ -12519,8 +12521,17 @@ async function selectMarket(market, marker) {
     ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${scoreColor};margin-right:4px;"></span>${data.labor.availability_status} labor market · Score: ${data.labor.availability_score}/100`
     : 'Loading…';
 
+  // Show the tabs bar
+  var tabsBar = document.getElementById('marketDetailTabs');
+  if (tabsBar) tabsBar.style.display = 'flex';
+
+  // Determine active tab (default: labor)
+  var activeTab = window.activeMarketTab || 'labor';
+
   let html = '';
 
+  // ── Labor tab ──
+  html += '<div class="market-tab-panel" data-tab="labor" style="' + (activeTab !== 'labor' ? 'display:none;' : '') + '">';
   if (data.labor) {
     const l = data.labor;
     html += `<div class="map-detail-section">
@@ -12531,8 +12542,13 @@ async function selectMarket(market, marker) {
       <div class="map-detail-row"><span>Turnover Rate</span><span class="map-detail-value">${l.turnover_rate || '—'}%</span></div>
       <div class="map-detail-row"><span>Trend</span><span class="map-detail-value">${l.trend === 'up' ? '▲ improving' : l.trend === 'down' ? '▼ worsening' : '─ stable'}</span></div>
     </div>`;
+  } else {
+    html += '<div style="font-size:12px;color:var(--ies-gray-400);padding:12px 0;">No labor data available for this market</div>';
   }
+  html += '</div>';
 
+  // ── Real Estate tab ──
+  html += '<div class="market-tab-panel" data-tab="realestate" style="' + (activeTab !== 'realestate' ? 'display:none;' : '') + '">';
   if (data.realEstate) {
     const r = data.realEstate;
     html += `<div class="map-detail-section">
@@ -12542,18 +12558,43 @@ async function selectMarket(market, marker) {
       <div class="map-detail-row"><span>YoY Change</span><span class="map-detail-value" style="color:${parseFloat(r.yoy_change) > 0 ? 'var(--ies-red)' : 'var(--ies-green)'}">${parseFloat(r.yoy_change) > 0 ? '+' : ''}${r.yoy_change}%</span></div>
       <div class="map-detail-row"><span>Source</span><span style="font-size:11px;color:var(--ies-gray-600)">${r.source} · ${r.quarter}</span></div>
     </div>`;
+  } else {
+    html += '<div style="font-size:12px;color:var(--ies-gray-400);padding:12px 0;">No real estate data available for this market</div>';
   }
+  html += '</div>';
 
-  if (data.deals.length > 0) {
+  // ── Freight tab ──
+  html += '<div class="market-tab-panel" data-tab="freight" style="' + (activeTab !== 'freight' ? 'display:none;' : '') + '">';
+  if (data.freight) {
+    const f = data.freight;
+    html += `<div class="map-detail-section">
+      <div class="map-detail-label">Freight & Transportation</div>
+      <div class="map-detail-row"><span>Avg Outbound Rate (Dry Van)</span><span class="map-detail-value">$${parseFloat(f.avg_rate_per_mile || 0).toFixed(2)}/mi</span></div>
+      <div class="map-detail-row"><span>Lane Volume Index</span><span class="map-detail-value">${f.volume_index || '—'}</span></div>
+      <div class="map-detail-row"><span>Capacity</span><span class="map-detail-value">${f.capacity_status || '—'}</span></div>
+    </div>`;
+  } else {
+    html += '<div style="font-size:12px;color:var(--ies-gray-400);padding:12px 0;">No freight data available for this market — see Freight Rate Index chart on Command Center</div>';
+  }
+  html += '</div>';
+
+  // ── Deals tab ──
+  html += '<div class="market-tab-panel" data-tab="deals" style="' + (activeTab !== 'deals' ? 'display:none;' : '') + '">';
+  if (data.deals && data.deals.length > 0) {
     html += `<div class="map-detail-section"><div class="map-detail-label">Active Deals in Market</div>`;
     data.deals.forEach(d => {
       html += `<div class="map-detail-row"><span>${d.deal_name}</span><span class="map-detail-value">$${(d.tcv/1000000).toFixed(1)}M</span></div>`;
     });
     html += `</div>`;
+  } else {
+    html += '<div style="font-size:12px;color:var(--ies-gray-400);padding:12px 0;">No active deals in this market</div>';
   }
+  html += '</div>';
 
+  // ── News tab ──
+  html += '<div class="market-tab-panel" data-tab="news" style="' + (activeTab !== 'news' ? 'display:none;' : '') + '">';
   html += `<div class="map-detail-section"><div class="map-detail-label">Latest Intelligence</div>`;
-  if (data.news.length > 0) {
+  if (data.news && data.news.length > 0) {
     data.news.forEach(n => {
       var safeHeadline = esc(n.headline);
       var titleHtml = n.source_url
@@ -12563,9 +12604,9 @@ async function selectMarket(market, marker) {
         '<div class="map-news-meta">' + esc(n.competitor || 'Industry') + ' · ' + (n.published_date || '') + '</div></div>';
     });
   } else {
-    html += `<div style="font-size:12px;color:var(--ies-gray-600);padding:8px 0;">No market-specific news this week</div>`;
+    html += '<div style="font-size:12px;color:var(--ies-gray-400);padding:8px 0;">No market-specific news this week</div>';
   }
-  html += `</div>`;
+  html += '</div></div>';
 
   document.getElementById('marketDetailBody').innerHTML = html;
 }
