@@ -3576,7 +3576,8 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
           <li>Market Intelligence Map (10 markets)</li>
           <li>Top Market Alerts (multi-source)</li>
           <li>Warehouse Sizing Calculator</li>
-          <li>Network Optimization (COG)</li>
+          <li>Center of Gravity (COG)</li>
+          <li>Network Optimization</li>
           <li>Training Wiki (23+ pages, 12 SCCs)</li>
           <li>Industry Vertical Spotlights</li>
           <li>Automation & Tech Intel</li>
@@ -4538,7 +4539,8 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
   <div id="dt-tabs" style="display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap;">
     <button class="dt-tab active" onclick="showDesignTool('dt-landing',this)">All Tools</button>
     <button class="dt-tab" onclick="showDesignTool('dt-warehouse',this)">Warehouse Sizing Calculator</button>
-    <button class="dt-tab" onclick="showDesignTool('dt-network',this)">Network Optimization</button>
+    <button class="dt-tab" onclick="showDesignTool('dt-network',this)">Center of Gravity</button>
+    <button class="dt-tab" onclick="showDesignTool('dt-netopt',this)">Network Optimization <span style="font-size:9px;background:var(--ies-blue);color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;font-weight:700;">NEW</span></button>
     <button class="dt-tab" onclick="showDesignTool('dt-costmodel',this)">Cost Model <span style="font-size:9px;background:var(--ies-orange);color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;font-weight:700;">BETA</span></button>
   </div>
 
@@ -4561,10 +4563,21 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         <div style="width:48px;height:48px;background:linear-gradient(135deg,var(--ies-blue),#1e5bb8);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;">
           <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5" stroke="#fff" stroke-width="1.5"/><circle cx="18" cy="6" r="2.5" stroke="#fff" stroke-width="1.5"/><circle cx="12" cy="18" r="2.5" stroke="#fff" stroke-width="1.5"/><path d="M8 7l4 9M16 7l-4 9M8.5 6h7" stroke="#fff" stroke-width="1.2" opacity=".6"/></svg>
         </div>
-        <div style="font-weight:700;font-size:16px;color:var(--ies-navy);margin-bottom:6px;">Network Optimization</div>
+        <div style="font-weight:700;font-size:16px;color:var(--ies-navy);margin-bottom:6px;">Center of Gravity</div>
         <div style="font-size:13px;color:var(--ies-gray-600);line-height:1.5;margin-bottom:16px;">Weighted center of gravity analysis for optimal DC placement. Input demand locations and volumes to model 1–5 facility networks.</div>
         <div style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--ies-blue);">
           Open Tool <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
+      <!-- Network Optimization Card (NEW) -->
+      <div onclick="showDesignTool('dt-netopt',document.querySelectorAll('.dt-tab')[3])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='var(--ies-blue)';this.style.boxShadow='0 4px 16px rgba(0,71,171,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
+        <div style="width:48px;height:48px;background:linear-gradient(135deg,#059669,#047857);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;">
+          <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><path d="M3 21V3h18v18H3z" stroke="#fff" stroke-width="1.5"/><circle cx="8" cy="16" r="2" stroke="#fff" stroke-width="1.5"/><circle cx="16" cy="8" r="2" stroke="#fff" stroke-width="1.5"/><circle cx="16" cy="16" r="2" stroke="#fff" stroke-width="1.5"/><path d="M10 16h4M16 10v4M9.5 14.5l5-5" stroke="#fff" stroke-width="1.2" opacity=".6"/></svg>
+        </div>
+        <div style="font-weight:700;font-size:16px;color:var(--ies-navy);margin-bottom:6px;">Network Optimization <span style="font-size:10px;background:var(--ies-blue);color:#fff;padding:2px 6px;border-radius:3px;margin-left:6px;font-weight:700;">NEW</span></div>
+        <div style="font-size:13px;color:var(--ies-gray-600);line-height:1.5;margin-bottom:16px;">Enterprise-grade facility location optimization with cost minimization, service level constraints, and scenario comparison. Powered by MIP solver.</div>
+        <div style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--ies-blue);">
+          Open Optimizer <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </div>
       </div>
       <!-- Cost Model Card -->
@@ -5367,6 +5380,278 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     </div>
   </div>
 
+  <!-- ── NETWORK OPTIMIZATION (Enterprise) ── -->
+  <div id="dt-netopt" class="dt-panel" style="display:none;">
+
+    <!-- KPI STRIP -->
+    <div id="netopt-kpi-strip" style="background:linear-gradient(135deg, #0a1628, #0d1f3c, #0a1628);border-radius:10px;padding:16px 20px;color:#fff;box-shadow:0 4px 12px rgba(0,0,0,.15);margin-bottom:20px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:0;flex-wrap:wrap;">
+        <div style="flex:0 0 auto;padding-right:20px;border-right:1px solid rgba(255,255,255,.15);">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;opacity:.65;margin-bottom:6px;">Open Facilities</div>
+          <div style="display:flex;align-items:baseline;gap:4px;">
+            <span id="netopt-k-open" style="font-size:28px;font-weight:900;letter-spacing:-1px;">—</span>
+          </div>
+        </div>
+        <div style="flex:0 0 auto;padding:0 20px;border-right:1px solid rgba(255,255,255,.15);text-align:center;">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;opacity:.65;margin-bottom:6px;">Total Demand</div>
+          <span id="netopt-k-demand" style="font-size:18px;font-weight:800;">—</span>
+        </div>
+        <div style="flex:0 0 auto;padding:0 20px;border-right:1px solid rgba(255,255,255,.15);text-align:center;">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;opacity:.65;margin-bottom:6px;">Total Cost</div>
+          <span id="netopt-k-cost" style="font-size:18px;font-weight:800;">—</span>
+        </div>
+        <div style="flex:0 0 auto;padding:0 20px;border-right:1px solid rgba(255,255,255,.15);text-align:center;">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;opacity:.65;margin-bottom:6px;">Service Level</div>
+          <span id="netopt-k-service" style="font-size:18px;font-weight:800;">—</span>
+        </div>
+        <div style="flex:0 0 auto;padding-left:20px;text-align:center;">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;opacity:.65;margin-bottom:6px;">Avg Distance</div>
+          <div style="display:flex;align-items:baseline;gap:4px;justify-content:center;">
+            <span id="netopt-k-dist" style="font-size:18px;font-weight:800;">—</span>
+            <span style="font-size:11px;opacity:.6;">mi</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB GROUP -->
+    <div style="background:#fff;border-radius:14px;border:1px solid var(--ies-gray-200);box-shadow:0 2px 8px rgba(0,0,0,.06);overflow:hidden;">
+
+      <!-- TABS HEADER -->
+      <div style="padding:0 24px;border-bottom:1px solid var(--ies-gray-200);">
+        <div class="wsc-tab-group" id="netopt-tabs" style="margin-bottom:0;">
+          <button class="wsc-tab active" onclick="netoptSwitchTab('setup')">Setup</button>
+          <button class="wsc-tab" onclick="netoptSwitchTab('facilities')">Facilities</button>
+          <button class="wsc-tab" onclick="netoptSwitchTab('demand')">Demand</button>
+          <button class="wsc-tab" onclick="netoptSwitchTab('transportation')">Transportation</button>
+          <button class="wsc-tab" onclick="netoptSwitchTab('constraints')">Constraints</button>
+          <button class="wsc-tab" onclick="netoptSwitchTab('results')">Results</button>
+        </div>
+      </div>
+
+      <!-- TAB CONTENT -->
+      <div style="padding:24px;">
+
+        <!-- TAB: SETUP -->
+        <div id="netopt-tab-setup" class="netopt-tab-content" style="display:block;">
+          <div class="wsc-input-group">
+            <label class="wsc-input-label">Scenario Name</label>
+            <input type="text" id="netopt-scenario-name" class="wsc-input" placeholder="Network Optimization Scenario" spellcheck="false">
+          </div>
+
+          <div style="margin-top:20px;margin-bottom:20px;">
+            <label class="wsc-input-label" style="margin-bottom:12px;">Quick-Start Templates</label>
+            <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;">
+              <button onclick="netoptLoadTemplate('us-2dc')" style="padding:12px 16px;border:1.5px solid var(--ies-gray-200);border-radius:8px;background:#fff;color:var(--ies-navy);font-weight:600;font-size:13px;cursor:pointer;transition:all .2s;">US 2-DC (ATL, CHI)</button>
+              <button onclick="netoptLoadTemplate('us-3dc')" style="padding:12px 16px;border:1.5px solid var(--ies-gray-200);border-radius:8px;background:#fff;color:var(--ies-navy);font-weight:600;font-size:13px;cursor:pointer;transition:all .2s;">US 3-DC (ATL, CHI, LA)</button>
+              <button onclick="netoptLoadTemplate('us-4dc')" style="padding:12px 16px;border:1.5px solid var(--ies-gray-200);border-radius:8px;background:#fff;color:var(--ies-navy);font-weight:600;font-size:13px;cursor:pointer;transition:all .2s;">US 4-DC (add DAL)</button>
+              <button onclick="netoptLoadTemplate('custom')" style="padding:12px 16px;border:1.5px solid var(--ies-orange);border-radius:8px;background:rgba(255,58,0,.06);color:var(--ies-orange);font-weight:600;font-size:13px;cursor:pointer;transition:all .2s;">Custom (Blank)</button>
+            </div>
+          </div>
+
+          <div style="background:linear-gradient(135deg,#f0f5ff 0%,#e8eeff 100%);border-radius:10px;border:1px solid rgba(0,71,171,.12);padding:16px;margin-top:20px;">
+            <div style="font-size:12px;color:var(--ies-blue);line-height:1.6;">
+              <strong>Getting Started:</strong> Select a template above to pre-populate facilities and demand, or build a custom network. Configure your facilities, demand points, and transportation costs, then click "Run Optimization" to find the optimal network design.
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB: FACILITIES -->
+        <div id="netopt-tab-facilities" class="netopt-tab-content" style="display:none;">
+          <div style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;">
+            <label class="wsc-input-label" style="margin:0;">Facility Network</label>
+            <button onclick="netoptAddFacility()" style="padding:8px 14px;border:1.5px solid var(--ies-blue);border-radius:6px;background:rgba(0,71,171,.06);color:var(--ies-blue);font-weight:600;font-size:12px;cursor:pointer;">+ Add Facility</button>
+          </div>
+          <div style="overflow-x:auto;background:#fff;border-radius:8px;border:1px solid var(--ies-gray-200);">
+            <table style="width:100%;border-collapse:collapse;font-size:12px;">
+              <thead style="background:#f8f9fb;border-bottom:1px solid var(--ies-gray-200);">
+                <tr>
+                  <th style="padding:12px 16px;text-align:left;font-weight:700;color:var(--ies-navy);">Name</th>
+                  <th style="padding:12px 16px;text-align:left;font-weight:700;color:var(--ies-navy);">City/State</th>
+                  <th style="padding:12px 16px;text-align:right;font-weight:700;color:var(--ies-navy);">Capacity (K units/yr)</th>
+                  <th style="padding:12px 16px;text-align:right;font-weight:700;color:var(--ies-navy);">Fixed Cost (M$/yr)</th>
+                  <th style="padding:12px 16px;text-align:right;font-weight:700;color:var(--ies-navy);">Var Cost ($/unit)</th>
+                  <th style="padding:12px 16px;text-align:center;font-weight:700;color:var(--ies-navy);">Status</th>
+                  <th style="padding:12px 16px;text-align:center;font-weight:700;color:var(--ies-navy);">Action</th>
+                </tr>
+              </thead>
+              <tbody id="netopt-facilities-tbody">
+                <!-- Populated by JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- TAB: DEMAND -->
+        <div id="netopt-tab-demand" class="netopt-tab-content" style="display:none;">
+          <div style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;">
+            <label class="wsc-input-label" style="margin:0;">Demand Points</label>
+            <button onclick="netoptAddDemandPoint()" style="padding:8px 14px;border:1.5px solid var(--ies-blue);border-radius:6px;background:rgba(0,71,171,.06);color:var(--ies-blue);font-weight:600;font-size:12px;cursor:pointer;">+ Add Demand</button>
+          </div>
+          <div style="overflow-x:auto;background:#fff;border-radius:8px;border:1px solid var(--ies-gray-200);">
+            <table style="width:100%;border-collapse:collapse;font-size:12px;">
+              <thead style="background:#f8f9fb;border-bottom:1px solid var(--ies-gray-200);">
+                <tr>
+                  <th style="padding:12px 16px;text-align:left;font-weight:700;color:var(--ies-navy);">Customer/City</th>
+                  <th style="padding:12px 16px;text-align:left;font-weight:700;color:var(--ies-navy);">State</th>
+                  <th style="padding:12px 16px;text-align:right;font-weight:700;color:var(--ies-navy);">Annual Volume (units)</th>
+                  <th style="padding:12px 16px;text-align:right;font-weight:700;color:var(--ies-navy);">Max Miles (SLA)</th>
+                  <th style="padding:12px 16px;text-align:center;font-weight:700;color:var(--ies-navy);">Action</th>
+                </tr>
+              </thead>
+              <tbody id="netopt-demands-tbody">
+                <!-- Populated by JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- TAB: TRANSPORTATION -->
+        <div id="netopt-tab-transportation" class="netopt-tab-content" style="display:none;">
+          <div style="max-width:500px;">
+            <div class="wsc-input-group">
+              <label class="wsc-input-label">Outbound Cost per Unit-Mile ($/unit-mi)</label>
+              <input type="number" id="netopt-outbound-cost" class="wsc-input" value="0.0025" min="0.0001" step="0.0005" oninput="netoptUpdateKPI()">
+              <div class="wsc-input-helper">Typical range: $0.002-$0.005/unit-mi</div>
+            </div>
+
+            <div class="wsc-input-group">
+              <label class="wsc-input-label">Inbound Cost per Unit-Mile ($/unit-mi)</label>
+              <input type="number" id="netopt-inbound-cost" class="wsc-input" value="0.0015" min="0.0001" step="0.0005" oninput="netoptUpdateKPI()">
+              <div class="wsc-input-helper">Typical range: $0.0010-$0.003/unit-mi</div>
+            </div>
+
+            <div class="wsc-input-group">
+              <label class="wsc-input-label">LTL Surcharge (%)</label>
+              <input type="number" id="netopt-ltl-surcharge" class="wsc-input" value="25" min="0" max="100" step="5" oninput="netoptUpdateKPI()">
+              <div class="wsc-input-helper">Applied to shipments below full-truck load threshold</div>
+            </div>
+
+            <div class="wsc-input-group">
+              <label class="wsc-input-label">Truck Speed for Transit (miles/day)</label>
+              <input type="number" id="netopt-truck-speed" class="wsc-input" value="500" min="250" max="1000" step="50" oninput="netoptUpdateKPI()">
+              <div class="wsc-input-helper">Typical: 400-600 mi/day depending on lane composition</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB: CONSTRAINTS -->
+        <div id="netopt-tab-constraints" class="netopt-tab-content" style="display:none;">
+          <div style="max-width:500px;">
+            <div class="wsc-input-group">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <label class="wsc-input-label" style="margin:0;">Service Level Target (%)</label>
+                <span id="netopt-service-target-val" style="font-weight:700;color:var(--ies-blue);">95%</span>
+              </div>
+              <input type="range" id="netopt-service-target" class="wsc-slider" min="80" max="100" step="1" value="95" oninput="document.getElementById('netopt-service-target-val').textContent=this.value+'%';netoptUpdateKPI();">
+              <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--ies-gray-400);margin-top:2px;"><span>80%</span><span>100%</span></div>
+            </div>
+
+            <div class="wsc-input-group">
+              <label class="wsc-input-label">Minimum Facilities</label>
+              <input type="number" id="netopt-min-facilities" class="wsc-input" value="1" min="1" max="10" oninput="netoptUpdateKPI()">
+            </div>
+
+            <div class="wsc-input-group">
+              <label class="wsc-input-label">Maximum Facilities</label>
+              <input type="number" id="netopt-max-facilities" class="wsc-input" value="5" min="1" max="20" oninput="netoptUpdateKPI()">
+            </div>
+
+            <div class="wsc-input-group">
+              <label class="wsc-input-label">Annual Budget Cap ($M, optional)</label>
+              <input type="number" id="netopt-budget-cap" class="wsc-input" placeholder="Leave blank for no limit" min="0" step="0.1" oninput="netoptUpdateKPI()">
+            </div>
+
+            <div class="wsc-input-group">
+              <label class="wsc-input-label">Inventory Carrying Cost (%/yr)</label>
+              <input type="number" id="netopt-inventory-carry" class="wsc-input" value="15" min="0" max="50" step="1" oninput="netoptUpdateKPI()">
+              <div class="wsc-input-helper">Carrying cost = avg inventory value × this % per year</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB: RESULTS -->
+        <div id="netopt-tab-results" class="netopt-tab-content" style="display:none;">
+
+          <div style="text-align:center;padding:40px 20px;" id="netopt-results-empty">
+            <div style="font-size:14px;color:var(--ies-gray-600);margin-bottom:20px;">Run optimization to see results and network recommendations.</div>
+            <button onclick="netoptRunOptimization()" style="padding:12px 28px;background:var(--ies-green);color:#fff;border:none;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;transition:all .2s;">Run Optimization</button>
+          </div>
+
+          <div id="netopt-results-content" style="display:none;">
+
+            <!-- Solver Mode Toggle -->
+            <div style="margin-bottom:20px;display:flex;align-items:center;gap:16px;">
+              <label style="font-size:12px;font-weight:600;color:var(--ies-navy);">Solver Mode:</label>
+              <div style="display:flex;gap:8px;">
+                <button id="netopt-mode-heuristic" onclick="netoptSetSolverMode('heuristic')" style="padding:8px 16px;border:1.5px solid var(--ies-blue);background:var(--ies-blue);color:#fff;border-radius:6px;font-weight:600;font-size:12px;cursor:pointer;transition:all .2s;">Fast Heuristic</button>
+                <button id="netopt-mode-mip" onclick="netoptSetSolverMode('mip')" style="padding:8px 16px;border:1.5px solid var(--ies-gray-200);background:#fff;color:var(--ies-navy);border-radius:6px;font-weight:600;font-size:12px;cursor:pointer;transition:all .2s;">Exact MIP</button>
+              </div>
+            </div>
+
+            <!-- Recommended Configuration Card -->
+            <div style="background:linear-gradient(135deg,#ecfdf5 0%,#f0fdf4 100%);border-radius:10px;border:1px solid rgba(25,135,84,.12);padding:16px;margin-bottom:20px;">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4" stroke="#198754" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="9" stroke="#198754" stroke-width="2"/></svg>
+                <div style="font-weight:700;color:#198754;font-size:13px;">RECOMMENDED CONFIGURATION</div>
+              </div>
+              <div id="netopt-recommendation-text" style="font-size:13px;color:var(--ies-gray-700);line-height:1.6;margin-bottom:12px;"></div>
+            </div>
+
+            <!-- Interactive Map -->
+            <div style="background:#fff;border-radius:12px;border:1px solid var(--ies-gray-200);box-shadow:var(--shadow-md);overflow:hidden;margin-bottom:20px;">
+              <div style="padding:12px 16px 8px;border-bottom:1px solid var(--ies-gray-100);">
+                <div style="font-size:11px;font-weight:700;color:var(--ies-navy);text-transform:uppercase;letter-spacing:.6px;">Network Map</div>
+              </div>
+              <div id="netopt-map" style="height:400px;background:#f8f9fb;"></div>
+            </div>
+
+            <!-- Cost Breakdown Table -->
+            <div style="background:#fff;border-radius:12px;border:1px solid var(--ies-gray-200);box-shadow:var(--shadow-md);overflow:hidden;margin-bottom:20px;">
+              <div style="padding:12px 16px 8px;border-bottom:1px solid var(--ies-gray-100);">
+                <div style="font-size:11px;font-weight:700;color:var(--ies-navy);text-transform:uppercase;letter-spacing:.6px;">Cost Breakdown</div>
+              </div>
+              <div style="padding:16px;">
+                <table style="width:100%;font-size:12px;">
+                  <tbody id="netopt-cost-breakdown">
+                    <!-- Populated by JS -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Scenario Comparison -->
+            <div style="background:#fff;border-radius:12px;border:1px solid var(--ies-gray-200);box-shadow:var(--shadow-md);overflow:hidden;">
+              <div style="padding:12px 16px 8px;border-bottom:1px solid var(--ies-gray-100);">
+                <div style="font-size:11px;font-weight:700;color:var(--ies-navy);text-transform:uppercase;letter-spacing:.6px;">Scenario Comparison (1 through N DCs)</div>
+              </div>
+              <div style="overflow-x:auto;">
+                <table style="width:100%;border-collapse:collapse;font-size:11px;">
+                  <thead style="background:#f8f9fb;border-bottom:1px solid var(--ies-gray-200);">
+                    <tr>
+                      <th style="padding:10px 14px;text-align:left;font-weight:700;color:var(--ies-navy);"># DCs</th>
+                      <th style="padding:10px 14px;text-align:left;font-weight:700;color:var(--ies-navy);">Facilities</th>
+                      <th style="padding:10px 14px;text-align:right;font-weight:700;color:var(--ies-navy);">Total Cost ($M)</th>
+                      <th style="padding:10px 14px;text-align:right;font-weight:700;color:var(--ies-navy);">Avg Distance (mi)</th>
+                      <th style="padding:10px 14px;text-align:right;font-weight:700;color:var(--ies-navy);">Service %</th>
+                      <th style="padding:10px 14px;text-align:right;font-weight:700;color:var(--ies-navy);">Δ vs Optimal</th>
+                    </tr>
+                  </thead>
+                  <tbody id="netopt-comparison-tbody">
+                    <!-- Populated by JS -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
   <!-- ── COST MODEL (redirect to dedicated section) ── -->
   <div id="dt-costmodel" class="dt-panel" style="display:none;">
     <div style="text-align:center;padding:60px 40px;">
@@ -5625,8 +5910,8 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
                             <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5" stroke="#fff" stroke-width="1.5"/><circle cx="18" cy="6" r="2.5" stroke="#fff" stroke-width="1.5"/><circle cx="12" cy="18" r="2.5" stroke="#fff" stroke-width="1.5"/><path d="M8 7l4 9M16 7l-4 9M8.5 6h7" stroke="#fff" stroke-width="1.2" opacity=".6"/></svg>
                         </div>
                         <div>
-                            <div style="font-weight:700;font-size:13px;color:var(--ies-navy);">Network Optimization</div>
-                            <div style="font-size:11px;color:var(--ies-gray-500);">Import optimal location & transport cost from network analysis</div>
+                            <div style="font-weight:700;font-size:13px;color:var(--ies-navy);">Center of Gravity</div>
+                            <div style="font-size:11px;color:var(--ies-gray-500);">Import optimal location & transport cost from COG analysis</div>
                         </div>
                     </div>
                     <button onclick="cmApp.openDrawer('network')" class="cm-btn cm-btn-primary" style="padding:8px 16px;font-size:12px;border-radius:6px;">Open Network Tool</button>
@@ -14618,6 +14903,636 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 }); // end DOMContentLoaded
 
+// ── NETWORK OPTIMIZATION MODULE ──
+
+var netoptState = {
+  facilities: [],
+  demands: [],
+  transport: {
+    outboundPerUnitMile: 0.0025,
+    inboundPerUnitMile: 0.0015,
+    ltlSurcharge: 25,
+    truckSpeedMiPerDay: 500
+  },
+  constraints: {
+    serviceLevelPct: 95,
+    minFacilities: 1,
+    maxFacilities: 5,
+    budgetCap: null,
+    inventoryCarryPct: 15
+  },
+  results: null,
+  activeTab: 'setup',
+  solverMode: 'heuristic',
+  mapInitialized: false,
+  netoptMap: null,
+  mapMarkers: [],
+  mapPolylines: []
+};
+
+// Pre-defined facility candidates (10 major US warehouse cities)
+var NETOPT_FACILITY_CANDIDATES = [
+  {name: 'Atlanta', city: 'Atlanta, GA', capacity: 800, fixedCost: 3.2, varCost: 0.25},
+  {name: 'Chicago', city: 'Chicago, IL', capacity: 750, fixedCost: 3.0, varCost: 0.24},
+  {name: 'Dallas', city: 'Dallas, TX', capacity: 650, fixedCost: 2.8, varCost: 0.23},
+  {name: 'Los Angeles', city: 'Los Angeles, CA', capacity: 700, fixedCost: 3.1, varCost: 0.26},
+  {name: 'Memphis', city: 'Memphis, TN', capacity: 600, fixedCost: 2.5, varCost: 0.22},
+  {name: 'Columbus', city: 'Columbus, OH', capacity: 550, fixedCost: 2.4, varCost: 0.21},
+  {name: 'Indianapolis', city: 'Indianapolis, IN', capacity: 550, fixedCost: 2.3, varCost: 0.20},
+  {name: 'Allentown', city: 'Allentown, PA', capacity: 600, fixedCost: 2.7, varCost: 0.25},
+  {name: 'Savannah', city: 'Savannah, GA', capacity: 500, fixedCost: 2.2, varCost: 0.21},
+  {name: 'Reno', city: 'Reno, NV', capacity: 400, fixedCost: 1.8, varCost: 0.24}
+];
+
+// Pre-defined major demand points (15 cities)
+var NETOPT_DEMAND_POINTS = [
+  {city: 'New York, NY', volume: 320},
+  {city: 'Los Angeles, CA', volume: 280},
+  {city: 'Chicago, IL', volume: 210},
+  {city: 'Houston, TX', volume: 180},
+  {city: 'Phoenix, AZ', volume: 150},
+  {city: 'Philadelphia, PA', volume: 140},
+  {city: 'San Antonio, TX', volume: 130},
+  {city: 'San Diego, CA', volume: 120},
+  {city: 'Dallas, TX', volume: 150},
+  {city: 'San Jose, CA', volume: 110},
+  {city: 'Austin, TX', volume: 95},
+  {city: 'Jacksonville, FL', volume: 100},
+  {city: 'Fort Worth, TX', volume: 90},
+  {city: 'Columbus, OH', volume: 85},
+  {city: 'Charlotte, NC', volume: 95}
+];
+
+// Initialize Network Optimization tool
+function netoptInit() {
+  netoptState.facilities = [];
+  netoptState.demands = [];
+  netoptUpdateKPI();
+}
+
+// Load quick-start template
+function netoptLoadTemplate(templateName) {
+  netoptState.facilities = [];
+  netoptState.demands = [];
+
+  if (templateName === 'us-2dc') {
+    // Atlanta, Chicago
+    netoptState.facilities = [
+      NETOPT_FACILITY_CANDIDATES.find(f => f.name === 'Atlanta'),
+      NETOPT_FACILITY_CANDIDATES.find(f => f.name === 'Chicago')
+    ].map((f, i) => ({...f, id: 'fac-' + i, status: 'Candidate', lat: null, lng: null}));
+    netoptState.demands = NETOPT_DEMAND_POINTS.slice(0, 8).map((d, i) => ({...d, id: 'dem-' + i, state: '', maxMiles: 500, lat: null, lng: null}));
+  } else if (templateName === 'us-3dc') {
+    // Atlanta, Chicago, LA
+    netoptState.facilities = [
+      NETOPT_FACILITY_CANDIDATES.find(f => f.name === 'Atlanta'),
+      NETOPT_FACILITY_CANDIDATES.find(f => f.name === 'Chicago'),
+      NETOPT_FACILITY_CANDIDATES.find(f => f.name === 'Los Angeles')
+    ].map((f, i) => ({...f, id: 'fac-' + i, status: 'Candidate', lat: null, lng: null}));
+    netoptState.demands = NETOPT_DEMAND_POINTS.slice(0, 10).map((d, i) => ({...d, id: 'dem-' + i, state: '', maxMiles: 500, lat: null, lng: null}));
+  } else if (templateName === 'us-4dc') {
+    // Atlanta, Chicago, LA, Dallas
+    netoptState.facilities = [
+      NETOPT_FACILITY_CANDIDATES.find(f => f.name === 'Atlanta'),
+      NETOPT_FACILITY_CANDIDATES.find(f => f.name === 'Chicago'),
+      NETOPT_FACILITY_CANDIDATES.find(f => f.name === 'Los Angeles'),
+      NETOPT_FACILITY_CANDIDATES.find(f => f.name === 'Dallas')
+    ].map((f, i) => ({...f, id: 'fac-' + i, status: 'Candidate', lat: null, lng: null}));
+    netoptState.demands = NETOPT_DEMAND_POINTS.map((d, i) => ({...d, id: 'dem-' + i, state: '', maxMiles: 500, lat: null, lng: null}));
+  } else if (templateName === 'custom') {
+    netoptState.facilities = [];
+    netoptState.demands = [];
+  }
+
+  // Geocode coordinates
+  netoptState.facilities.forEach(f => {
+    var g = geocodeCity(f.city);
+    if (g) { f.lat = g.lat; f.lng = g.lng; }
+  });
+  netoptState.demands.forEach(d => {
+    var parts = d.city.split(', ');
+    if (parts.length === 2) { d.state = parts[1]; }
+    var g = geocodeCity(d.city);
+    if (g) { d.lat = g.lat; d.lng = g.lng; }
+  });
+
+  netoptRenderTables();
+  netoptUpdateKPI();
+  netoptSwitchTab('facilities');
+}
+
+// Switch tab
+function netoptSwitchTab(tabName) {
+  netoptState.activeTab = tabName;
+
+  // Hide all tabs
+  document.querySelectorAll('.netopt-tab-content').forEach(el => el.style.display = 'none');
+  document.querySelectorAll('#netopt-tabs .wsc-tab').forEach(el => el.classList.remove('active'));
+
+  // Show active tab
+  var tabEl = document.getElementById('netopt-tab-' + tabName);
+  if (tabEl) tabEl.style.display = 'block';
+
+  // Mark tab button as active
+  var btns = document.querySelectorAll('#netopt-tabs .wsc-tab');
+  var btnNames = ['setup', 'facilities', 'demand', 'transportation', 'constraints', 'results'];
+  btns.forEach((btn, i) => {
+    if (btnNames[i] === tabName) btn.classList.add('active');
+  });
+
+  // Initialize map on first results view
+  if (tabName === 'results' && !netoptState.mapInitialized && netoptState.results) {
+    setTimeout(() => netoptInitializeMap(), 100);
+  }
+}
+
+// Render facilities table
+function netoptRenderFacilitiesTable() {
+  var tbody = document.getElementById('netopt-facilities-tbody');
+  tbody.innerHTML = '';
+  netoptState.facilities.forEach(f => {
+    var row = document.createElement('tr');
+    row.style.borderBottom = '1px solid var(--ies-gray-200)';
+    row.innerHTML = `
+      <td style="padding:12px 16px;"><input type="text" value="${f.name}" class="wsc-input" style="width:100%;font-size:12px;" onchange="netoptState.facilities.find(x=>x.id==='${f.id}').name=this.value;"></td>
+      <td style="padding:12px 16px;"><input type="text" value="${f.city}" class="wsc-input" style="width:100%;font-size:12px;" onchange="netoptState.facilities.find(x=>x.id==='${f.id}').city=this.value;netoptGeocodeFacility('${f.id}');"></td>
+      <td style="padding:12px 16px;text-align:right;"><input type="number" value="${f.capacity}" min="100" step="50" class="wsc-input" style="width:100%;text-align:right;font-size:12px;" onchange="netoptState.facilities.find(x=>x.id==='${f.id}').capacity=parseFloat(this.value);netoptUpdateKPI();"></td>
+      <td style="padding:12px 16px;text-align:right;"><input type="number" value="${f.fixedCost}" min="0" step="0.1" class="wsc-input" style="width:100%;text-align:right;font-size:12px;" onchange="netoptState.facilities.find(x=>x.id==='${f.id}').fixedCost=parseFloat(this.value);netoptUpdateKPI();"></td>
+      <td style="padding:12px 16px;text-align:right;"><input type="number" value="${f.varCost}" min="0" step="0.01" class="wsc-input" style="width:100%;text-align:right;font-size:12px;" onchange="netoptState.facilities.find(x=>x.id==='${f.id}').varCost=parseFloat(this.value);netoptUpdateKPI();"></td>
+      <td style="padding:12px 16px;text-align:center;">
+        <select class="wsc-select" style="width:100%;font-size:12px;" onchange="netoptState.facilities.find(x=>x.id==='${f.id}').status=this.value;">
+          <option ${f.status==='Candidate'?'selected':''}>Candidate</option>
+          <option ${f.status==='Locked Open'?'selected':''}>Locked Open</option>
+        </select>
+      </td>
+      <td style="padding:12px 16px;text-align:center;"><button onclick="netoptRemoveFacility('${f.id}')" style="padding:4px 8px;background:#fff;border:1px solid var(--ies-red);color:var(--ies-red);border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;">Remove</button></td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+
+// Render demands table
+function netoptRenderDemandsTable() {
+  var tbody = document.getElementById('netopt-demands-tbody');
+  tbody.innerHTML = '';
+  netoptState.demands.forEach(d => {
+    var row = document.createElement('tr');
+    row.style.borderBottom = '1px solid var(--ies-gray-200)';
+    row.innerHTML = `
+      <td style="padding:12px 16px;"><input type="text" value="${d.city}" class="wsc-input" style="width:100%;font-size:12px;" onchange="netoptState.demands.find(x=>x.id==='${d.id}').city=this.value;netoptGeocideDemand('${d.id}');"></td>
+      <td style="padding:12px 16px;"><input type="text" value="${d.state}" class="wsc-input" style="width:100%;font-size:12px;" onchange="netoptState.demands.find(x=>x.id==='${d.id}').state=this.value;"></td>
+      <td style="padding:12px 16px;text-align:right;"><input type="number" value="${d.volume}" min="1" step="10" class="wsc-input" style="width:100%;text-align:right;font-size:12px;" onchange="netoptState.demands.find(x=>x.id==='${d.id}').volume=parseFloat(this.value);netoptUpdateKPI();"></td>
+      <td style="padding:12px 16px;text-align:right;"><input type="number" value="${d.maxMiles}" min="50" step="50" class="wsc-input" style="width:100%;text-align:right;font-size:12px;" onchange="netoptState.demands.find(x=>x.id==='${d.id}').maxMiles=parseFloat(this.value);"></td>
+      <td style="padding:12px 16px;text-align:center;"><button onclick="netoptRemoveDemand('${d.id}')" style="padding:4px 8px;background:#fff;border:1px solid var(--ies-red);color:var(--ies-red);border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;">Remove</button></td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+
+// Render both tables
+function netoptRenderTables() {
+  netoptRenderFacilitiesTable();
+  netoptRenderDemandsTable();
+}
+
+// Add facility row
+function netoptAddFacility() {
+  var id = 'fac-' + Date.now();
+  netoptState.facilities.push({
+    id: id,
+    name: 'New Facility',
+    city: 'Atlanta, GA',
+    capacity: 500,
+    fixedCost: 2.5,
+    varCost: 0.23,
+    status: 'Candidate',
+    lat: null,
+    lng: null
+  });
+  netoptRenderFacilitiesTable();
+  var g = geocodeCity('Atlanta, GA');
+  if (g) {
+    var f = netoptState.facilities.find(x => x.id === id);
+    f.lat = g.lat;
+    f.lng = g.lng;
+  }
+}
+
+// Add demand row
+function netoptAddDemandPoint() {
+  var id = 'dem-' + Date.now();
+  netoptState.demands.push({
+    id: id,
+    city: 'New York, NY',
+    state: 'NY',
+    volume: 100,
+    maxMiles: 500,
+    lat: null,
+    lng: null
+  });
+  netoptRenderDemandsTable();
+  var g = geocodeCity('New York, NY');
+  if (g) {
+    var d = netoptState.demands.find(x => x.id === id);
+    d.lat = g.lat;
+    d.lng = g.lng;
+  }
+}
+
+// Remove facility
+function netoptRemoveFacility(id) {
+  netoptState.facilities = netoptState.facilities.filter(f => f.id !== id);
+  netoptRenderFacilitiesTable();
+  netoptUpdateKPI();
+}
+
+// Remove demand
+function netoptRemoveDemand(id) {
+  netoptState.demands = netoptState.demands.filter(d => d.id !== id);
+  netoptRenderDemandsTable();
+  netoptUpdateKPI();
+}
+
+// Geocode facility
+function netoptGeocodeFacility(id) {
+  var f = netoptState.facilities.find(x => x.id === id);
+  if (f) {
+    var g = geocodeCity(f.city);
+    if (g) { f.lat = g.lat; f.lng = g.lng; }
+  }
+}
+
+// Geocode demand
+function netoptGeocideDemand(id) {
+  var d = netoptState.demands.find(x => x.id === id);
+  if (d) {
+    var g = geocodeCity(d.city);
+    if (g) { d.lat = g.lat; d.lng = g.lng; }
+  }
+}
+
+// Update KPI strip
+function netoptUpdateKPI() {
+  var transport = netoptState.transport;
+  transport.outboundPerUnitMile = parseFloat(document.getElementById('netopt-outbound-cost').value) || 0.0025;
+  transport.inboundPerUnitMile = parseFloat(document.getElementById('netopt-inbound-cost').value) || 0.0015;
+  transport.ltlSurcharge = parseFloat(document.getElementById('netopt-ltl-surcharge').value) || 25;
+  transport.truckSpeedMiPerDay = parseFloat(document.getElementById('netopt-truck-speed').value) || 500;
+
+  var constraints = netoptState.constraints;
+  constraints.serviceLevelPct = parseFloat(document.getElementById('netopt-service-target').value) || 95;
+  constraints.minFacilities = parseFloat(document.getElementById('netopt-min-facilities').value) || 1;
+  constraints.maxFacilities = parseFloat(document.getElementById('netopt-max-facilities').value) || 5;
+  constraints.budgetCap = document.getElementById('netopt-budget-cap').value ? parseFloat(document.getElementById('netopt-budget-cap').value) : null;
+  constraints.inventoryCarryPct = parseFloat(document.getElementById('netopt-inventory-carry').value) || 15;
+
+  // Calculate summary KPIs
+  var totalDemand = netoptState.demands.reduce((s, d) => s + (d.volume || 0), 0) * 1000; // Convert K to units
+  var openCount = netoptState.results ? (netoptState.results.openFacilities || []).length : 0;
+  var totalCost = netoptState.results ? netoptState.results.totalCost : 0;
+  var avgDist = netoptState.results ? netoptState.results.avgDistance : 0;
+  var servicePct = netoptState.results ? netoptState.results.serviceLevel : 0;
+
+  document.getElementById('netopt-k-open').textContent = openCount || '—';
+  document.getElementById('netopt-k-demand').textContent = totalDemand ? (totalDemand / 1000000).toFixed(1) + 'M' : '—';
+  document.getElementById('netopt-k-cost').textContent = totalCost ? '$' + (totalCost / 1000000).toFixed(1) + 'M' : '—';
+  document.getElementById('netopt-k-service').textContent = servicePct ? servicePct.toFixed(0) + '%' : '—';
+  document.getElementById('netopt-k-dist').textContent = avgDist ? avgDist.toFixed(0) : '—';
+}
+
+// Set solver mode
+function netoptSetSolverMode(mode) {
+  netoptState.solverMode = mode;
+  document.getElementById('netopt-mode-heuristic').style.background = mode === 'heuristic' ? 'var(--ies-blue)' : '#fff';
+  document.getElementById('netopt-mode-heuristic').style.color = mode === 'heuristic' ? '#fff' : 'var(--ies-navy)';
+  document.getElementById('netopt-mode-heuristic').style.borderColor = mode === 'heuristic' ? 'var(--ies-blue)' : 'var(--ies-gray-200)';
+  document.getElementById('netopt-mode-mip').style.background = mode === 'mip' ? 'var(--ies-blue)' : '#fff';
+  document.getElementById('netopt-mode-mip').style.color = mode === 'mip' ? '#fff' : 'var(--ies-navy)';
+  document.getElementById('netopt-mode-mip').style.borderColor = mode === 'mip' ? 'var(--ies-blue)' : 'var(--ies-gray-200)';
+}
+
+// Run optimization
+function netoptRunOptimization() {
+  if (netoptState.facilities.length === 0 || netoptState.demands.length === 0) {
+    alert('Please add at least one facility and one demand point.');
+    return;
+  }
+
+  // Geocode any missing coordinates
+  netoptState.facilities.forEach(f => {
+    if (!f.lat || !f.lng) {
+      var g = geocodeCity(f.city);
+      if (g) { f.lat = g.lat; f.lng = g.lng; }
+    }
+  });
+  netoptState.demands.forEach(d => {
+    if (!d.lat || !d.lng) {
+      var g = geocodeCity(d.city);
+      if (g) { d.lat = g.lat; d.lng = g.lng; }
+    }
+  });
+
+  // Run greedy heuristic
+  var results = netoptGreedyOptimize(
+    netoptState.facilities,
+    netoptState.demands,
+    netoptState.transport,
+    netoptState.constraints
+  );
+
+  netoptState.results = results;
+  netoptRenderResults();
+  netoptUpdateKPI();
+
+  // Switch to results tab
+  document.getElementById('netopt-results-empty').style.display = 'none';
+  document.getElementById('netopt-results-content').style.display = 'block';
+  netoptSwitchTab('results');
+}
+
+// Greedy Facility Addition Heuristic
+function netoptGreedyOptimize(facilities, demands, transport, constraints) {
+  var scenarios = [];
+  var minFacs = constraints.minFacilities || 1;
+  var maxFacs = Math.min(constraints.maxFacilities || 5, facilities.length);
+
+  // Evaluate each facility count from 1 to maxFacs
+  for (var numFacs = 1; numFacs <= maxFacs; numFacs++) {
+    // Find best numFacs facilities
+    var bestConfig = netoptFindBestConfig(facilities, demands, transport, constraints, numFacs);
+    scenarios.push(bestConfig);
+  }
+
+  // Find optimal scenario
+  var bestScenario = scenarios.reduce((best, curr) => {
+    if (constraints.budgetCap && curr.totalCost > constraints.budgetCap) return best;
+    if (curr.serviceLevel < constraints.serviceLevelPct) return best;
+    return curr.totalCost < best.totalCost ? curr : best;
+  }, scenarios[0] || {});
+
+  bestScenario.allScenarios = scenarios;
+  return bestScenario;
+}
+
+// Find best facility configuration for a given count
+function netoptFindBestConfig(facilities, demands, transport, constraints, numFacs) {
+  var best = null;
+  var lockedFacs = facilities.filter(f => f.status === 'Locked Open');
+  var candidateFacs = facilities.filter(f => f.status === 'Candidate');
+
+  // Greedy: add highest-impact candidates
+  var config = lockedFacs.slice();
+  var remaining = candidateFacs.slice();
+
+  while (config.length < numFacs && remaining.length > 0) {
+    var bestAdd = null;
+    var bestCost = Infinity;
+    var bestIdx = -1;
+
+    for (var i = 0; i < remaining.length; i++) {
+      var testConfig = config.concat([remaining[i]]);
+      var cost = netoptCalculateTotalCost(testConfig, demands, transport, constraints);
+      if (cost < bestCost) {
+        bestCost = cost;
+        bestAdd = remaining[i];
+        bestIdx = i;
+      }
+    }
+
+    if (bestAdd) {
+      config.push(bestAdd);
+      remaining.splice(bestIdx, 1);
+    } else {
+      break;
+    }
+  }
+
+  return netoptEvaluateConfig(config, demands, transport, constraints);
+}
+
+// Calculate total cost for a configuration
+function netoptCalculateTotalCost(config, demands, transport, constraints) {
+  var fixedCost = config.reduce((s, f) => s + (f.fixedCost || 0), 0) * 1000000; // Convert M$ to $
+  var transportCost = 0;
+
+  demands.forEach(d => {
+    if (config.length > 0) {
+      var closest = config[0];
+      var minDist = roadDist(d.lat, d.lng, closest.lat, closest.lng);
+      for (var i = 1; i < config.length; i++) {
+        var dist = roadDist(d.lat, d.lng, config[i].lat, config[i].lng);
+        if (dist < minDist) {
+          minDist = dist;
+          closest = config[i];
+        }
+      }
+      var unitMiCost = transport.outboundPerUnitMile || 0.0025;
+      transportCost += (d.volume || 0) * 1000 * minDist * unitMiCost;
+    }
+  });
+
+  return (fixedCost + transportCost) / 1000000; // Return in M$
+}
+
+// Evaluate a configuration
+function netoptEvaluateConfig(config, demands, transport, constraints) {
+  var fixedCost = config.reduce((s, f) => s + (f.fixedCost || 0), 0);
+  var transportCost = 0;
+  var assignedVolume = {};
+  var distances = [];
+  var serviceCt = 0;
+
+  config.forEach(f => assignedVolume[f.id] = 0);
+
+  demands.forEach(d => {
+    if (config.length > 0) {
+      var closest = config[0];
+      var minDist = roadDist(d.lat, d.lng, closest.lat, closest.lng);
+      for (var i = 1; i < config.length; i++) {
+        var dist = roadDist(d.lat, d.lng, config[i].lat, config[i].lng);
+        if (dist < minDist) {
+          minDist = dist;
+          closest = config[i];
+        }
+      }
+
+      assignedVolume[closest.id] = (assignedVolume[closest.id] || 0) + (d.volume || 0);
+      var unitMiCost = transport.outboundPerUnitMile || 0.0025;
+      transportCost += (d.volume || 0) * 1000 * minDist * unitMiCost;
+      distances.push(minDist);
+
+      if (minDist <= d.maxMiles) serviceCt++;
+    }
+  });
+
+  var varCost = config.reduce((s, f) => {
+    var vol = assignedVolume[f.id] || 0;
+    return s + (vol * 1000 * (f.varCost || 0) / 1000000);
+  }, 0);
+
+  var inventoryCost = (fixedCost + varCost) * (constraints.inventoryCarryPct || 15) / 100 / 12; // Monthly carry
+  var totalCost = fixedCost + (transportCost / 1000000) + varCost + inventoryCost;
+  var avgDistance = distances.length > 0 ? distances.reduce((a, b) => a + b) / distances.length : 0;
+  var serviceLevel = demands.length > 0 ? (serviceCt / demands.length) * 100 : 0;
+
+  return {
+    openFacilities: config,
+    assignedVolume: assignedVolume,
+    fixedCostM: fixedCost,
+    transportCostM: transportCost / 1000000,
+    varCostM: varCost,
+    inventoryCostM: inventoryCost,
+    totalCost: totalCost,
+    avgDistance: avgDistance,
+    serviceLevel: serviceLevel
+  };
+}
+
+// Render results
+function netoptRenderResults() {
+  var r = netoptState.results;
+  if (!r) return;
+
+  // Recommendation text
+  var facNames = r.openFacilities.map(f => f.name).join(', ');
+  var recText = `Based on ${netoptState.demands.length} demand points totaling ${netoptState.demands.reduce((s, d) => s + d.volume, 0).toFixed(0)}K units, we recommend a ${r.openFacilities.length}-facility network in ${facNames}. This achieves ${r.serviceLevel.toFixed(0)}% service level at $${r.totalCost.toFixed(1)}M/yr.`;
+  document.getElementById('netopt-recommendation-text').textContent = recText;
+
+  // Cost breakdown
+  var tbody = document.getElementById('netopt-cost-breakdown');
+  tbody.innerHTML = `
+    <tr style="border-bottom:1px solid var(--ies-gray-200);">
+      <td style="padding:10px 0;font-weight:600;">Facility Fixed Costs</td>
+      <td style="padding:10px 0;text-align:right;font-weight:700;color:var(--ies-blue);">$${r.fixedCostM.toFixed(2)}M</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--ies-gray-200);">
+      <td style="padding:10px 0;font-weight:600;">Transportation Costs</td>
+      <td style="padding:10px 0;text-align:right;font-weight:700;color:var(--ies-blue);">$${r.transportCostM.toFixed(2)}M</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--ies-gray-200);">
+      <td style="padding:10px 0;font-weight:600;">Variable Handling</td>
+      <td style="padding:10px 0;text-align:right;font-weight:700;color:var(--ies-blue);">$${r.varCostM.toFixed(2)}M</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--ies-gray-200);">
+      <td style="padding:10px 0;font-weight:600;">Inventory Carrying</td>
+      <td style="padding:10px 0;text-align:right;font-weight:700;color:var(--ies-blue);">$${r.inventoryCostM.toFixed(2)}M</td>
+    </tr>
+    <tr style="border-top:2px solid var(--ies-navy);">
+      <td style="padding:10px 0;font-weight:700;color:var(--ies-navy);">TOTAL ANNUAL COST</td>
+      <td style="padding:10px 0;text-align:right;font-weight:900;color:var(--ies-navy);font-size:14px;">$${r.totalCost.toFixed(2)}M</td>
+    </tr>
+  `;
+
+  // Scenario comparison
+  if (r.allScenarios) {
+    var cBody = document.getElementById('netopt-comparison-tbody');
+    cBody.innerHTML = '';
+    r.allScenarios.forEach((scenario, i) => {
+      var numDCs = i + 1;
+      var facNames = scenario.openFacilities.map(f => f.name).join(', ');
+      var bestCost = r.allScenarios.reduce((m, s) => Math.min(m, s.totalCost), Infinity);
+      var delta = scenario.totalCost - bestCost;
+      var deltaStr = delta < 0.01 ? '(Optimal)' : '+$' + delta.toFixed(2) + 'M';
+
+      var row = document.createElement('tr');
+      row.style.borderBottom = '1px solid var(--ies-gray-200)';
+      if (numDCs === r.openFacilities.length) {
+        row.style.background = 'rgba(0,71,171,.04)';
+      }
+      row.innerHTML = `
+        <td style="padding:10px 14px;font-weight:600;">${numDCs}</td>
+        <td style="padding:10px 14px;font-size:11px;">${facNames}</td>
+        <td style="padding:10px 14px;text-align:right;font-weight:600;">$${scenario.totalCost.toFixed(2)}M</td>
+        <td style="padding:10px 14px;text-align:right;font-weight:600;">${scenario.avgDistance.toFixed(0)}</td>
+        <td style="padding:10px 14px;text-align:right;font-weight:600;">${scenario.serviceLevel.toFixed(0)}%</td>
+        <td style="padding:10px 14px;text-align:right;font-weight:600;color:${numDCs === r.openFacilities.length ? 'var(--ies-green)' : 'var(--ies-gray-600)'};">${deltaStr}</td>
+      `;
+      cBody.appendChild(row);
+    });
+  }
+}
+
+// Initialize map (lazy load on first Results tab view)
+function netoptInitializeMap() {
+  if (netoptState.mapInitialized) return;
+
+  var mapDiv = document.getElementById('netopt-map');
+  if (!mapDiv || !mapDiv.offsetParent) return; // Not visible
+
+  var centerLat = 39.8283, centerLng = -98.5795; // US center
+  netoptState.netoptMap = L.map('netopt-map').setView([centerLat, centerLng], 4);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors',
+    maxZoom: 18
+  }).addTo(netoptState.netoptMap);
+
+  netoptRenderMap();
+  netoptState.mapInitialized = true;
+}
+
+// Render map visualization
+function netoptRenderMap() {
+  if (!netoptState.netoptMap || !netoptState.results) return;
+
+  // Clear old markers
+  netoptState.mapMarkers.forEach(m => m.remove());
+  netoptState.mapPolylines.forEach(p => p.remove());
+  netoptState.mapMarkers = [];
+  netoptState.mapPolylines = [];
+
+  var r = netoptState.results;
+
+  // Draw facilities
+  r.openFacilities.forEach(f => {
+    var marker = L.circleMarker([f.lat, f.lng], {
+      radius: 8,
+      fillColor: 'var(--ies-green)',
+      color: '#fff',
+      weight: 2,
+      opacity: 1,
+      fillOpacity: 0.8
+    }).addTo(netoptState.netoptMap);
+    marker.bindPopup(`<strong>${f.name}</strong><br>Open Facility`);
+    netoptState.mapMarkers.push(marker);
+  });
+
+  // Draw demand points and assignment lines
+  netoptState.demands.forEach(d => {
+    var marker = L.circleMarker([d.lat, d.lng], {
+      radius: 5,
+      fillColor: 'var(--ies-blue)',
+      color: '#fff',
+      weight: 1.5,
+      opacity: 1,
+      fillOpacity: 0.7
+    }).addTo(netoptState.netoptMap);
+    marker.bindPopup(`<strong>${d.city}</strong><br>${d.volume}K units`);
+    netoptState.mapMarkers.push(marker);
+
+    // Find assigned facility
+    if (r.openFacilities.length > 0) {
+      var closest = r.openFacilities[0];
+      var minDist = roadDist(d.lat, d.lng, closest.lat, closest.lng);
+      r.openFacilities.forEach(f => {
+        var dist = roadDist(d.lat, d.lng, f.lat, f.lng);
+        if (dist < minDist) {
+          minDist = dist;
+          closest = f;
+        }
+      });
+
+      // Draw line
+      var polyline = L.polyline([[d.lat, d.lng], [closest.lat, closest.lng]], {
+        color: 'rgba(0,71,171,.3)',
+        weight: 1.5,
+        opacity: 0.6
+      }).addTo(netoptState.netoptMap);
+      netoptState.mapPolylines.push(polyline);
+    }
+  });
+}
+
 // ── CHANGE MANAGEMENT MODULE ──
 
 // State management
@@ -16055,7 +16970,8 @@ var anSectionNames = {
   changemanagement: 'Change Management',
   training: 'Training Wiki',
   calculator: 'Sizing Calculator',
-  network: 'Network Optimization',
+  network: 'Center of Gravity',
+  netopt: 'Network Optimization',
   costmodel: 'Cost Model Builder',
   feedback: 'Ideas & Feedback',
   analytics: 'Analytics'
@@ -20155,7 +21071,7 @@ const cmApp = {
             iconSvg = '<svg width="20" height="20" fill="none" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="12" rx="2" stroke="var(--ies-blue)" stroke-width="1.5"/><path d="M3 12h18M8 8v12M16 8v12" stroke="var(--ies-blue)" stroke-width="1.2" opacity=".5"/><path d="M7 5l5-2 5 2" stroke="var(--ies-blue)" stroke-width="1.5" stroke-linecap="round"/></svg>';
         } else if (tool === 'network') {
             panelId = 'dt-network';
-            label = 'Network Optimization';
+            label = 'Center of Gravity';
             iconSvg = '<svg width="20" height="20" fill="none" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5" stroke="var(--ies-blue)" stroke-width="1.5"/><circle cx="18" cy="6" r="2.5" stroke="var(--ies-blue)" stroke-width="1.5"/><circle cx="12" cy="18" r="2.5" stroke="var(--ies-blue)" stroke-width="1.5"/><path d="M8 7l4 9M16 7l-4 9M8.5 6h7" stroke="var(--ies-blue)" stroke-width="1.2" opacity=".5"/></svg>';
         } else { return; }
 
@@ -20277,7 +21193,7 @@ const cmApp = {
 
         if (!dcsEl || dcsEl.textContent.trim() === '—') {
             const empty = document.getElementById('netImportEmpty');
-            if (empty) { empty.innerHTML = '<span style="color:var(--ies-orange);font-weight:600;">⚠ No network results found.</span> Open the Network Optimization tool from Design Tools and run an analysis first.'; }
+            if (empty) { empty.innerHTML = '<span style="color:var(--ies-orange);font-weight:600;">⚠ No network results found.</span> Open the Center of Gravity tool from Design Tools and run an analysis first.'; }
             return;
         }
 
