@@ -181,8 +181,9 @@
   .hub-data-table td { padding: 12px 16px; border-bottom: 1px solid var(--ies-gray-100); }
   .hub-data-table tr:hover td { background: var(--ies-gray-50); }
 
-  /* Sector Pulse cards for Command Center */
-  .sector-pulse { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+  /* Sector Pulse — live data modules for Command Center */
+  .sector-pulse { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  @media (max-width: 900px) { .sector-pulse { grid-template-columns: 1fr; } }
   .sector-pulse-card {
     background: #fff; border-radius: 10px; padding: 16px; border: 1px solid var(--ies-gray-200);
     cursor: pointer; transition: all .2s ease;
@@ -196,6 +197,35 @@
   .sector-pulse-card-body.collapsed { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .sector-pulse-card-footer { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 11px; color: var(--ies-gray-400); }
   .sector-pulse-expand { color: var(--ies-blue); font-size: 11px; font-weight: 600; cursor: pointer; margin-top: 8px; }
+  /* Sector Pulse module internals */
+  .sp-metrics { display: flex; gap: 12px; margin-bottom: 12px; }
+  .sp-metric { flex: 1; background: var(--ies-gray-50); border-radius: 6px; padding: 8px 10px; text-align: center; }
+  .sp-metric-value { font-size: 16px; font-weight: 800; color: var(--ies-navy); }
+  .sp-metric-label { font-size: 10px; font-weight: 600; color: var(--ies-gray-400); text-transform: uppercase; letter-spacing: .5px; margin-top: 2px; }
+  .sp-metric-delta { font-size: 10px; font-weight: 600; margin-top: 1px; }
+  .sp-metric-delta.up { color: var(--ies-green); }
+  .sp-metric-delta.down { color: var(--ies-red); }
+  .sp-news-list { list-style: none; padding: 0; margin: 0; }
+  .sp-news-item { padding: 6px 0; border-bottom: 1px solid var(--ies-gray-100); font-size: 12px; color: var(--ies-gray-600); display: flex; gap: 8px; align-items: baseline; }
+  .sp-news-item:last-child { border-bottom: none; }
+  .sp-news-vendor { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
+  .sp-news-date { font-size: 10px; color: var(--ies-gray-400); white-space: nowrap; margin-left: auto; }
+  .sp-mini-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .sp-mini-table th { text-align: left; font-size: 10px; font-weight: 700; color: var(--ies-gray-400); text-transform: uppercase; letter-spacing: .5px; padding: 4px 6px; border-bottom: 2px solid var(--ies-gray-100); }
+  .sp-mini-table td { padding: 5px 6px; border-bottom: 1px solid var(--ies-gray-50); color: var(--ies-gray-600); }
+  .sp-mini-table tr:last-child td { border-bottom: none; }
+  .sp-status { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 4px; white-space: nowrap; }
+  .sp-status-normal { background: rgba(25,135,84,.08); color: var(--ies-green); }
+  .sp-status-moderate { background: rgba(255,193,7,.12); color: #b58a00; }
+  .sp-status-elevated { background: rgba(220,53,69,.08); color: var(--ies-red); }
+  .sp-status-high { background: rgba(220,53,69,.15); color: var(--ies-red); font-weight: 800; }
+  .sp-status-medium { background: rgba(255,193,7,.12); color: #b58a00; }
+  .sp-status-low { background: rgba(25,135,84,.08); color: var(--ies-green); }
+  .sp-vertical-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--ies-gray-50); }
+  .sp-vertical-row:last-child { border-bottom: none; }
+  .sp-vertical-name { font-size: 12px; font-weight: 700; color: var(--ies-navy); min-width: 100px; }
+  .sp-vertical-stat { font-size: 11px; color: var(--ies-gray-500); }
+  .sp-vertical-stat strong { color: var(--ies-navy); }
 
   /* Signal feed for unified Command Center */
   .signal-feed { max-height: 500px; overflow-y: auto; }
@@ -4772,6 +4802,15 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 <!-- ═══════════════════ SIDEBAR ═══════════════════ -->
 <nav class="sidebar">
   <div class="sidebar-section">
+    <div class="sidebar-label">Intelligence</div>
+    <a class="nav-item active" data-section="overview" onclick="navigate('overview', this)">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="8" height="8" fill="none"/><rect x="13" y="3" width="8" height="8" fill="none"/><rect x="3" y="13" width="8" height="8" fill="none"/><rect x="13" y="13" width="8" height="8" fill="none"/></svg></span> Command Center
+    </a>
+    <a class="nav-item" data-section="marketmap" onclick="navigate('marketmap', this)">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" fill="none"/><circle cx="12" cy="10" r="3" fill="none"/></svg></span> Market Explorer
+    </a>
+  </div>
+  <div class="sidebar-section">
     <div class="sidebar-label">Work</div>
     <a class="nav-item" data-section="deals" onclick="navigate('deals', this)">
       <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" fill="none"/><rect x="9" y="3" width="6" height="4" rx="1" fill="none"/><path d="M9 14l2 2 4-4" fill="none"/></svg></span> Deal Management
@@ -4781,21 +4820,15 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     </a>
   </div>
   <div class="sidebar-section">
-    <div class="sidebar-label">Intelligence</div>
-    <a class="nav-item" data-section="overview" onclick="navigate('overview', this)">
-      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="8" height="8" fill="none"/><rect x="13" y="3" width="8" height="8" fill="none"/><rect x="3" y="13" width="8" height="8" fill="none"/><rect x="13" y="13" width="8" height="8" fill="none"/></svg></span> Command Center
-    </a>
-    <a class="nav-item" data-section="marketmap" onclick="navigate('marketmap', this)">
-      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" fill="none"/><circle cx="12" cy="10" r="3" fill="none"/></svg></span> Market Explorer
-    </a>
-  </div>
-  <div class="sidebar-section">
     <div class="sidebar-label">Resources</div>
     <a class="nav-item" data-section="training" onclick="navigate('training', this)">
       <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M2 5v14c0 1 1 2 2 2h16c1 0 2-1 2-2V5M2 5c0-1 1-2 2-2h16c1 0 2 1 2 2m-18 7h16" fill="none"/></svg></span> Training Wiki
     </a>
     <a class="nav-item" data-section="changemanagement" onclick="navigate('changemanagement', this)">
       <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill="none"/><path d="M13 7h-2v5.41l3.29 3.29 1.41-1.41L13 11.59z" fill="none"/><path d="M16.5 3.5l-1 1M7.5 3.5l1 1M12 6v1" fill="none"/></svg></span> Change Management
+    </a>
+    <a class="nav-item" data-section="welcome" onclick="navigate('welcome', this)">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10" fill="none"/><line x1="12" y1="16" x2="12" y2="12" fill="none"/><line x1="12" y1="8" x2="12.01" y2="8" fill="none"/></svg></span> Hub Guide
     </a>
     <a class="nav-item" data-section="feedback" onclick="navigate('feedback', this)">
       <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2v10z" fill="none"/><path d="M8 10h.01M12 10h.01M16 10h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span> Ideas & Feedback <span id="fbNavCount" style="font-size:10px;background:var(--ies-orange);color:#fff;padding:1px 6px;border-radius:10px;margin-left:4px;font-weight:700;display:none;"></span>
@@ -4824,7 +4857,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 <div class="main">
 
 <!-- ───── WELCOME PAGE ───── -->
-<div class="section active" id="sec-welcome">
+<div class="section" id="sec-welcome">
   <div class="welcome-hero">
     <div class="welcome-hero-label">IES Solutions Design Team</div>
     <div class="welcome-hero-title">Intelligence Hub</div>
@@ -4934,7 +4967,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 </div>
 
 <!-- ───── OVERVIEW / COMMAND CENTER ───── -->
-<div class="section" id="sec-overview">
+<div class="section active" id="sec-overview">
   <!-- Alert Bar — live from hub_alerts -->
   <div class="alert-bar" id="ccAlertBar">
     <span class="alert-icon"><svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="#ff3a00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
@@ -5018,63 +5051,72 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     </div>
   </div>
 
-  <!-- Sector Pulse — replaces Automation, Verticals, Macro pages -->
+  <!-- Sector Pulse — live data modules -->
   <div style="margin-bottom:32px;">
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
       <div style="font-size:14px; font-weight:700; color:var(--ies-navy);">Sector Pulse</div>
-      <div style="font-size:11px; color:var(--ies-gray-400);">Industry headlines & emerging trends</div>
+      <div style="font-size:11px; color:var(--ies-gray-400);">Live from Supabase — automation, verticals, supply chain, labor</div>
     </div>
     <div class="sector-pulse" id="sectorPulseGrid">
-      <div class="sector-pulse-card" onclick="toggleSectorCard(this)">
+
+      <!-- Automation & Robotics -->
+      <div class="sector-pulse-card">
         <div class="sector-pulse-card-header">
-          <div class="sector-pulse-card-icon" style="background:rgba(220,53,69,.1);">🤖</div>
+          <div class="sector-pulse-card-icon" style="background:rgba(220,53,69,.1);font-size:15px;">&#x1F916;</div>
           <div class="sector-pulse-card-title">Automation & Robotics</div>
-          <span class="sector-pulse-card-tag" style="background:rgba(25,135,84,.08);color:var(--ies-green);">Expanding</span>
+          <span class="sector-pulse-card-tag" style="background:rgba(25,135,84,.08);color:var(--ies-green);">LIVE</span>
         </div>
-        <div class="sector-pulse-card-body collapsed">GXO deploys 10,000th AMR unit — industry payback now averaging 18 months. Locus Robotics raises $150M Series F. Blue Yonder WMS 10.0 adds native AMR orchestration layer. AI-powered demand forecasting reduces safety stock by 15-20% in pilot programs.</div>
-        <div class="sector-pulse-expand">Read more ↓</div>
-        <div class="sector-pulse-card-footer"><span>Updated weekly</span></div>
+        <div class="sp-metrics" id="spAutoMetrics">
+          <div class="sp-metric"><div class="sp-metric-value">—</div><div class="sp-metric-label">Loading…</div></div>
+        </div>
+        <ul class="sp-news-list" id="spAutoNews">
+          <li class="sp-news-item" style="color:var(--ies-gray-400);">Loading headlines…</li>
+        </ul>
       </div>
-      <div class="sector-pulse-card" onclick="toggleSectorCard(this)">
+
+      <!-- Vertical Spotlight -->
+      <div class="sector-pulse-card">
         <div class="sector-pulse-card-header">
-          <div class="sector-pulse-card-icon" style="background:rgba(0,71,171,.1);">🍔</div>
-          <div class="sector-pulse-card-title">Food & Beverage</div>
-          <span class="sector-pulse-card-tag" style="background:rgba(255,193,7,.12);color:#b58a00;">Mixed</span>
+          <div class="sector-pulse-card-icon" style="background:rgba(0,71,171,.1);font-size:15px;">&#x1F4CA;</div>
+          <div class="sector-pulse-card-title">Vertical Spotlight</div>
+          <span class="sector-pulse-card-tag" style="background:rgba(0,71,171,.08);color:var(--ies-blue);">LIVE</span>
         </div>
-        <div class="sector-pulse-card-body collapsed">Cold chain market growing at 19% CAGR through 2028. FDA FSMA 204 traceability mandate driving WMS upgrade cycles. Micro-fulfillment for grocery surging — Walmart adds 500 automated pickup points. Cold chain labor scarcity intensifying in Southeast markets.</div>
-        <div class="sector-pulse-expand">Read more ↓</div>
-        <div class="sector-pulse-card-footer"><span>Updated monthly</span></div>
+        <div id="spVerticals">
+          <div style="color:var(--ies-gray-400);font-size:12px;padding:8px 0;">Loading verticals…</div>
+        </div>
       </div>
-      <div class="sector-pulse-card" onclick="toggleSectorCard(this)">
+
+      <!-- Supply Chain Pulse (Ports + Reshoring) -->
+      <div class="sector-pulse-card">
         <div class="sector-pulse-card-header">
-          <div class="sector-pulse-card-icon" style="background:rgba(108,117,125,.1);">🚗</div>
-          <div class="sector-pulse-card-title">Automotive & EV</div>
-          <span class="sector-pulse-card-tag" style="background:rgba(0,71,171,.08);color:var(--ies-blue);">Shifting</span>
+          <div class="sector-pulse-card-icon" style="background:rgba(13,202,240,.1);font-size:15px;">&#x1F6A2;</div>
+          <div class="sector-pulse-card-title">Supply Chain Pulse</div>
+          <span class="sector-pulse-card-tag" style="background:rgba(220,53,69,.08);color:var(--ies-red);">LIVE</span>
         </div>
-        <div class="sector-pulse-card-body collapsed">EV battery supply chain reshoring accelerates — 12 new gigafactory projects announced in 2025. Aftermarket parts complexity rising 30% with EV/ICE dual inventory. JIT-to-JIS transitions creating new 3PL opportunities in sequencing.</div>
-        <div class="sector-pulse-expand">Read more ↓</div>
-        <div class="sector-pulse-card-footer"><span>Updated monthly</span></div>
+        <div style="font-size:11px;font-weight:700;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Port Congestion</div>
+        <table class="sp-mini-table" id="spPorts">
+          <thead><tr><th>Port</th><th>Dwell</th><th>vs Norm</th><th>Status</th></tr></thead>
+          <tbody><tr><td colspan="4" style="color:var(--ies-gray-400);">Loading…</td></tr></tbody>
+        </table>
+        <div style="font-size:11px;font-weight:700;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px;">Reshoring Activity</div>
+        <ul class="sp-news-list" id="spReshoring">
+          <li class="sp-news-item" style="color:var(--ies-gray-400);">Loading…</li>
+        </ul>
       </div>
-      <div class="sector-pulse-card" onclick="toggleSectorCard(this)">
+
+      <!-- Labor Watch (Union Activity) -->
+      <div class="sector-pulse-card">
         <div class="sector-pulse-card-header">
-          <div class="sector-pulse-card-icon" style="background:rgba(25,135,84,.1);">🛒</div>
-          <div class="sector-pulse-card-title">Retail & E-Commerce</div>
-          <span class="sector-pulse-card-tag" style="background:rgba(25,135,84,.08);color:var(--ies-green);">Growing</span>
+          <div class="sector-pulse-card-icon" style="background:rgba(255,193,7,.12);font-size:15px;">&#x1F477;</div>
+          <div class="sector-pulse-card-title">Labor Watch</div>
+          <span class="sector-pulse-card-tag" style="background:rgba(255,193,7,.12);color:#b58a00;">LIVE</span>
         </div>
-        <div class="sector-pulse-card-body collapsed">Same-day delivery now expected by 65% of online shoppers. Returns processing volume up 22% YoY — reverse logistics becoming a profit center. Social commerce driving unpredictable demand spikes. Retail media networks creating new data partnerships with 3PLs.</div>
-        <div class="sector-pulse-expand">Read more ↓</div>
-        <div class="sector-pulse-card-footer"><span>Updated monthly</span></div>
+        <table class="sp-mini-table" id="spLabor">
+          <thead><tr><th>Event</th><th>Company</th><th>Location</th><th>Impact</th><th>Status</th></tr></thead>
+          <tbody><tr><td colspan="5" style="color:var(--ies-gray-400);">Loading…</td></tr></tbody>
+        </table>
       </div>
-      <div class="sector-pulse-card" onclick="toggleSectorCard(this)">
-        <div class="sector-pulse-card-header">
-          <div class="sector-pulse-card-icon" style="background:rgba(13,202,240,.1);">🌐</div>
-          <div class="sector-pulse-card-title">Macro & Trade</div>
-          <span class="sector-pulse-card-tag" style="background:rgba(220,53,69,.08);color:var(--ies-red);">Volatile</span>
-        </div>
-        <div class="sector-pulse-card-body collapsed">Section 301 tariff expansion adds 25% duties on $18B of imports. Port of LA/LB dwell times up to 4.2 days. Nearshoring activity: 350,000+ jobs reshored YTD per Reshoring Initiative. Freightos Baltic Index holding steady at $1,850/FEU after peak season correction.</div>
-        <div class="sector-pulse-expand">Read more ↓</div>
-        <div class="sector-pulse-card-footer"><span>Updated weekly</span></div>
-      </div>
+
     </div>
   </div>
 </div>
@@ -11931,6 +11973,112 @@ function navigateBackToDeal() {
   }
 }
 
+// ── SECTOR PULSE LOADERS (live data modules) ──
+async function loadSectorPulse() {
+  if (!sb) return;
+  await Promise.all([
+    loadSPAutomation(),
+    loadSPVerticals(),
+    loadSPSupplyChain(),
+    loadSPLabor()
+  ]);
+}
+
+async function loadSPAutomation() {
+  try {
+    var [metricsRes, newsRes] = await Promise.all([
+      sb.from('automation_metrics').select('*').order('as_of_date', { ascending: false }).limit(5),
+      sb.from('automation_news').select('vendor, headline, published_date, source_url').order('published_date', { ascending: false }).limit(5)
+    ]);
+    // Render metrics
+    var mc = document.getElementById('spAutoMetrics');
+    if (mc && metricsRes.data && metricsRes.data.length) {
+      mc.innerHTML = metricsRes.data.map(function(m) {
+        var delta = m.period_change || '';
+        var cls = delta.indexOf('+') === 0 ? 'up' : (delta.indexOf('-') === 0 ? 'down' : '');
+        return '<div class="sp-metric"><div class="sp-metric-value">' + esc(String(m.metric_value).replace(/\.00$/, '')) + '<span style="font-size:10px;font-weight:600;color:var(--ies-gray-400);margin-left:2px;">' + esc(m.metric_unit || '') + '</span></div><div class="sp-metric-label">' + esc(m.metric_name) + '</div>' + (delta ? '<div class="sp-metric-delta ' + cls + '">' + esc(delta) + '</div>' : '') + '</div>';
+      }).join('');
+    }
+    // Render news
+    var nc = document.getElementById('spAutoNews');
+    if (nc && newsRes.data && newsRes.data.length) {
+      nc.innerHTML = newsRes.data.map(function(n) {
+        var d = n.published_date ? new Date(n.published_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+        var vendor = n.vendor || '';
+        var colors = { 'Locus': 'rgba(220,53,69,.1)', 'Symbotic': 'rgba(0,71,171,.1)', 'AutoStore': 'rgba(25,135,84,.1)', '6 River': 'rgba(255,193,7,.12)', 'Blue Yonder': 'rgba(0,71,171,.1)' };
+        var bg = colors[vendor] || 'rgba(107,122,144,.1)';
+        var titleHtml = n.source_url ? '<a href="' + esc(n.source_url) + '" target="_blank" rel="noopener" style="color:var(--ies-gray-600);text-decoration:none;">' + esc(stripHtml(n.headline)) + ' ' + LINK_SVG + '</a>' : esc(stripHtml(n.headline));
+        return '<li class="sp-news-item"><span class="sp-news-vendor" style="background:' + bg + ';color:var(--ies-gray-600);">' + esc(vendor) + '</span><span style="flex:1;">' + titleHtml + '</span><span class="sp-news-date">' + d + '</span></li>';
+      }).join('');
+    }
+  } catch(e) { console.warn('loadSPAutomation error:', e); }
+}
+
+async function loadSPVerticals() {
+  try {
+    var { data } = await sb.from('vertical_spotlights').select('*').order('as_of_date', { ascending: false });
+    var c = document.getElementById('spVerticals');
+    if (!c || !data || !data.length) return;
+    var vertLabels = { food_beverage: 'Food & Bev', automotive: 'Automotive', retail_ecommerce: 'Retail & E-Com', healthcare: 'Healthcare', technology: 'Technology' };
+    var vertIcons = { food_beverage: '#e07a2f', automotive: '#6c757d', retail_ecommerce: '#198754', healthcare: '#0d6efd', technology: '#6366f1' };
+    c.innerHTML = data.map(function(v) {
+      var name = vertLabels[v.vertical] || v.vertical;
+      var color = vertIcons[v.vertical] || 'var(--ies-gray-600)';
+      var pipeline = v.pipeline_value ? '$' + (v.pipeline_value / 1e6).toFixed(0) + 'M' : '—';
+      return '<div class="sp-vertical-row">' +
+        '<div class="sp-vertical-name" style="color:' + color + ';">' + esc(name) + '</div>' +
+        '<div class="sp-vertical-stat"><strong>' + pipeline + '</strong> pipeline</div>' +
+        '<div class="sp-vertical-stat"><strong>' + (v.active_opportunities || 0) + '</strong> opps</div>' +
+        '<div class="sp-vertical-stat"><strong>' + (v.close_rate || 0) + '%</strong> close</div>' +
+        '</div>' +
+        '<div style="font-size:11px;color:var(--ies-gray-500);padding:0 0 8px;border-bottom:1px solid var(--ies-gray-50);">' + esc(v.headline || '') + '</div>';
+    }).join('');
+  } catch(e) { console.warn('loadSPVerticals error:', e); }
+}
+
+async function loadSPSupplyChain() {
+  try {
+    var [portsRes, reshoringRes] = await Promise.all([
+      sb.from('port_status').select('*').order('report_date', { ascending: false }),
+      sb.from('reshoring_activity').select('*').order('published_date', { ascending: false }).limit(4)
+    ]);
+    // Port congestion table
+    var pt = document.querySelector('#spPorts tbody');
+    if (pt && portsRes.data && portsRes.data.length) {
+      pt.innerHTML = portsRes.data.map(function(p) {
+        var statusClass = 'sp-status-' + (p.status || 'normal').toLowerCase();
+        var delta = parseFloat(p.delta_vs_normal);
+        var deltaStr = delta > 0 ? '+' + delta.toFixed(1) + 'd' : delta.toFixed(1) + 'd';
+        var deltaColor = delta > 1 ? 'var(--ies-red)' : (delta > 0.5 ? '#b58a00' : 'var(--ies-green)');
+        return '<tr><td style="font-weight:600;">' + esc(p.port_name) + '</td><td>' + p.avg_dwell_days + 'd</td><td style="color:' + deltaColor + ';font-weight:600;">' + deltaStr + '</td><td><span class="sp-status ' + statusClass + '">' + esc(p.status) + '</span></td></tr>';
+      }).join('');
+    }
+    // Reshoring headlines
+    var rc = document.getElementById('spReshoring');
+    if (rc && reshoringRes.data && reshoringRes.data.length) {
+      rc.innerHTML = reshoringRes.data.map(function(r) {
+        var d = r.published_date ? new Date(r.published_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+        var tags = (r.tags || []).map(function(t) { return '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:rgba(25,135,84,.08);color:var(--ies-green);margin-left:4px;">' + esc(t) + '</span>'; }).join('');
+        return '<li class="sp-news-item"><span style="flex:1;font-weight:600;">' + esc(r.headline) + tags + '</span><span class="sp-news-date">' + esc(r.investment_amount || '') + ' · ' + d + '</span></li>';
+      }).join('');
+    }
+  } catch(e) { console.warn('loadSPSupplyChain error:', e); }
+}
+
+async function loadSPLabor() {
+  try {
+    var { data } = await sb.from('union_activity').select('*').order('event_date', { ascending: false }).limit(6);
+    var tb = document.querySelector('#spLabor tbody');
+    if (!tb || !data || !data.length) return;
+    tb.innerHTML = data.map(function(u) {
+      var impactClass = 'sp-status-' + (u.impact || 'low').toLowerCase();
+      var statusMap = { 'Strike vote': 'sp-status-elevated', 'Negotiating': 'sp-status-moderate', 'Filed': 'sp-status-moderate', 'Organizing': 'sp-status-moderate', 'Ratified': 'sp-status-normal' };
+      var statusClass = statusMap[u.status] || 'sp-status-normal';
+      return '<tr><td style="font-weight:600;max-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + esc(u.event_description) + '">' + esc(u.event_description) + '</td><td>' + esc(u.company || '') + '</td><td>' + esc(u.location || '') + '</td><td><span class="sp-status ' + impactClass + '">' + esc(u.impact) + '</span></td><td><span class="sp-status ' + statusClass + '">' + esc(u.status) + '</span></td></tr>';
+    }).join('');
+  } catch(e) { console.warn('loadSPLabor error:', e); }
+}
+
 // ── UNIFIED SIGNAL FEED LOADER (Command Center) ──
 async function loadSignalFeed() {
   var feed = document.getElementById('signalFeed');
@@ -12019,6 +12167,7 @@ async function loadAllData() {
     loadKPIStrip(),
     loadAlerts(),
     loadSignalFeed(),
+    loadSectorPulse(),
   ]);
 }
 
@@ -12455,9 +12604,10 @@ document.addEventListener('DOMContentLoaded', function() {
           loadAlerts(),
           loadSignalFeed(),
           loadKPIStrip(),
+          loadSectorPulse(),
         ]);
         updateTimestamp();
-        console.log('Auto-refresh: alerts & KPIs updated');
+        console.log('Auto-refresh: alerts, KPIs & sector pulse updated');
       } catch(e) { console.warn('Auto-refresh failed:', e); }
     }, 300000); // 5 minutes
 
@@ -22313,7 +22463,7 @@ function anInitTracking() {
 // ── Dashboard Logic ──
 var anRange = 'today';
 var anSectionNames = {
-  welcome: 'Welcome',
+  welcome: 'Hub Guide',
   overview: 'Command Center',
   marketmap: 'Market Explorer',
   deals: 'Deal Management',
@@ -22601,7 +22751,7 @@ var fbUserName = localStorage.getItem('fb_username') || '';
 
 // Section name mapping
 var fbSectionNames = {
-  welcome: 'Welcome', overview: 'Command Center', competitive: 'Competitive & Account',
+  welcome: 'Hub Guide', overview: 'Command Center', competitive: 'Competitive & Account',
   marketmap: 'Market Map', market: 'Market & Cost', labor: 'Labor Intel',
   macro: 'Macro & Trade', automation: 'Automation & Tech', verticals: 'Verticals',
   deals: 'Deal Management', changemanagement: 'Change Management',
