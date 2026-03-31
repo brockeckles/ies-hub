@@ -4571,6 +4571,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     <button class="dt-tab" onclick="showDesignTool('dt-network',this)">Center of Gravity</button>
     <button class="dt-tab" onclick="showDesignTool('dt-netopt',this)">Network Optimization <span style="font-size:9px;background:var(--ies-blue);color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;font-weight:700;">NEW</span></button>
     <button class="dt-tab" onclick="showDesignTool('dt-costmodel',this)">Cost Model <span style="font-size:9px;background:var(--ies-orange);color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;font-weight:700;">BETA</span></button>
+    <button class="dt-tab" onclick="showDesignTool('dt-deals',this)">Deal Manager <span style="font-size:9px;background:var(--ies-blue);color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;font-weight:700;">NEW</span></button>
   </div>
 
   <!-- ── LANDING PAGE ── -->
@@ -4618,6 +4619,17 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         <div style="font-size:13px;color:var(--ies-gray-600);line-height:1.5;margin-bottom:16px;">Build detailed operational cost models with labor, equipment, real estate, and overhead components for client proposals.</div>
         <div style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--ies-blue);">
           Open Cost Model <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
+      <!-- Deal Manager Card -->
+      <div onclick="showDesignTool('dt-deals',document.querySelectorAll('.dt-tab')[5])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='var(--ies-blue)';this.style.boxShadow='0 4px 16px rgba(0,71,171,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
+        <div style="width:48px;height:48px;background:linear-gradient(135deg,#0ea5e9,#0284c7);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;">
+          <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7a2 2 0 012-2h14a2 2 0 012 2" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 11v6M15 11v6" stroke="#fff" stroke-width="1.2" opacity=".6"/></svg>
+        </div>
+        <div style="font-weight:700;font-size:16px;color:var(--ies-navy);margin-bottom:6px;">Deal Manager <span style="font-size:10px;background:var(--ies-blue);color:#fff;padding:2px 6px;border-radius:3px;margin-left:6px;font-weight:700;">NEW</span></div>
+        <div style="font-size:13px;color:var(--ies-gray-600);line-height:1.5;margin-bottom:16px;">Group multiple warehouse sites into deals. Manage client rollups, aggregate financials, and compare multi-location scenarios.</div>
+        <div style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--ies-blue);">
+          Open Deal Manager <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </div>
       </div>
     </div>
@@ -5519,9 +5531,87 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
             </div>
           </div>
 
+          <!-- Demo Demand Generator -->
+          <div style="margin-top:20px;margin-bottom:20px;">
+            <label class="wsc-input-label" style="margin-bottom:12px;">Generate Demo Demand Data</label>
+            <div style="background:linear-gradient(135deg,#fef3c7 0%,#fef9c3 100%);border-radius:10px;border:1px solid rgba(202,138,4,.15);padding:16px;">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+                <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#ca8a04" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <div style="font-size:12px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:.5px;">Business Archetype Generator</div>
+              </div>
+              <div style="font-size:11px;color:var(--ies-gray-600);line-height:1.5;margin-bottom:12px;">
+                Generate realistic demand distributions at the 3-digit ZIP level based on business type. Great for quick scenario modeling when customer data isn't available.
+              </div>
+
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+                <div class="wsc-input-group" style="margin:0;">
+                  <label class="wsc-input-label">Business Type</label>
+                  <select id="netopt-demo-archetype" class="wsc-input" onchange="netoptUpdateArchetypePreview()">
+                    <option value="dtc_national">DTC E-Commerce — National</option>
+                    <option value="dtc_east">DTC E-Commerce — East Coast Heavy</option>
+                    <option value="dtc_west">DTC E-Commerce — West Coast Heavy</option>
+                    <option value="cpg_bigbox">CPG → Big Box Retail (Walmart/Target/Costco)</option>
+                    <option value="cpg_grocery">CPG → Grocery Chains</option>
+                    <option value="industrial">Industrial / MRO Distribution</option>
+                    <option value="food_bev">Food & Beverage</option>
+                    <option value="healthcare">Healthcare / Pharma</option>
+                    <option value="auto_parts">Auto Parts / Aftermarket</option>
+                    <option value="bto_tech">Build-to-Order / Tech / Electronics</option>
+                  </select>
+                </div>
+                <div class="wsc-input-group" style="margin:0;">
+                  <label class="wsc-input-label">Total Annual Volume (units)</label>
+                  <input type="number" id="netopt-demo-volume" class="wsc-input" value="5000000" min="100000" max="500000000" step="100000">
+                  <div class="wsc-input-helper">Distributed across ZIP3 zones by archetype pattern</div>
+                </div>
+              </div>
+
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+                <div class="wsc-input-group" style="margin:0;">
+                  <label class="wsc-input-label">Avg Order Weight (lbs)</label>
+                  <input type="number" id="netopt-demo-avg-weight" class="wsc-input" value="5" min="0.5" max="500" step="0.5">
+                </div>
+                <div class="wsc-input-group" style="margin:0;">
+                  <label class="wsc-input-label">Max SLA (miles)</label>
+                  <input type="number" id="netopt-demo-sla" class="wsc-input" value="500" min="100" max="2000" step="50">
+                </div>
+              </div>
+
+              <!-- Archetype Preview Card -->
+              <div id="netopt-archetype-preview" style="background:#fff;border-radius:8px;padding:12px;margin-bottom:12px;border:1px solid rgba(202,138,4,.1);">
+                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;font-size:10px;">
+                  <div>
+                    <div style="color:var(--ies-gray-500);font-weight:600;text-transform:uppercase;margin-bottom:2px;">Distribution</div>
+                    <div id="netopt-demo-dist-desc" style="color:var(--ies-navy);font-weight:700;">Population-weighted, national</div>
+                  </div>
+                  <div>
+                    <div style="color:var(--ies-gray-500);font-weight:600;text-transform:uppercase;margin-bottom:2px;">TL / LTL / Parcel</div>
+                    <div id="netopt-demo-mode-desc" style="color:var(--ies-navy);font-weight:700;">5% / 10% / 85%</div>
+                  </div>
+                  <div>
+                    <div style="color:var(--ies-gray-500);font-weight:600;text-transform:uppercase;margin-bottom:2px;">ZIP3 Zones</div>
+                    <div id="netopt-demo-zip-count" style="color:var(--ies-navy);font-weight:700;">~180 demand points</div>
+                  </div>
+                  <div>
+                    <div style="color:var(--ies-gray-500);font-weight:600;text-transform:uppercase;margin-bottom:2px;">Top Region</div>
+                    <div id="netopt-demo-top-region" style="color:var(--ies-navy);font-weight:700;">Northeast 32%</div>
+                  </div>
+                </div>
+              </div>
+
+              <div style="display:flex;gap:10px;align-items:center;">
+                <button onclick="netoptGenerateDemoDemand()" style="padding:9px 18px;background:linear-gradient(135deg,#b45309,#92400e);color:#fff;border:none;border-radius:7px;font-weight:700;font-size:12px;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:6px;" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform=''">
+                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/></svg>
+                  Generate Demand Data
+                </button>
+                <span id="netopt-demo-status" style="font-size:10px;color:var(--ies-gray-400);"></span>
+              </div>
+            </div>
+          </div>
+
           <div style="background:linear-gradient(135deg,#f0f5ff 0%,#e8eeff 100%);border-radius:10px;border:1px solid rgba(0,71,171,.12);padding:16px;margin-top:20px;">
             <div style="font-size:12px;color:var(--ies-blue);line-height:1.6;">
-              <strong>Getting Started:</strong> Select a template above to pre-populate facilities and demand, or build a custom network. You can also run the Center of Gravity tool first, then import those results here for full cost optimization.
+              <strong>Getting Started:</strong> Select a template above, generate demo demand data by business type, or build a custom network. You can also run the Center of Gravity tool first, then import those results here for full cost optimization.
             </div>
           </div>
         </div>
@@ -5579,6 +5669,42 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         <!-- TAB: TRANSPORTATION -->
         <div id="netopt-tab-transportation" class="netopt-tab-content" style="display:none;">
 
+          <!-- Mode Mix Section -->
+          <div style="background:linear-gradient(135deg,#fefce8 0%,#fef9c3 100%);border-radius:10px;border:1px solid rgba(202,138,4,.15);padding:16px 20px;margin-bottom:20px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+              <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M4 19h16M4 15h16M4 11h16M4 7h16" stroke="#ca8a04" stroke-width="2" stroke-linecap="round"/></svg>
+              <span style="font-size:11px;font-weight:700;color:var(--ies-navy);text-transform:uppercase;letter-spacing:.6px;">Mode Mix (% of Outbound Volume)</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;">
+              <div style="background:#fff;border-radius:8px;padding:12px;border:1px solid rgba(202,138,4,.1);">
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><rect x="2" y="8" width="20" height="12" rx="2" stroke="#0047AB" stroke-width="2"/><path d="M7 8V6a1 1 0 011-1h8a1 1 0 011 1v2" stroke="#0047AB" stroke-width="2"/></svg>
+                  <span style="font-size:10px;font-weight:700;color:var(--ies-navy);text-transform:uppercase;">Truckload (TL)</span>
+                </div>
+                <input type="number" id="netopt-mode-tl-pct" class="wsc-input" value="30" min="0" max="100" step="5" oninput="netoptBalanceModeMix('tl')" style="font-size:16px;font-weight:700;text-align:center;">
+                <div style="font-size:9px;color:var(--ies-gray-400);text-align:center;margin-top:2px;">% of outbound units</div>
+              </div>
+              <div style="background:#fff;border-radius:8px;padding:12px;border:1px solid rgba(202,138,4,.1);">
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><rect x="3" y="9" width="14" height="10" rx="2" stroke="#059669" stroke-width="2"/><path d="M8 9V7a1 1 0 011-1h4a1 1 0 011 1v2" stroke="#059669" stroke-width="2"/></svg>
+                  <span style="font-size:10px;font-weight:700;color:#059669;text-transform:uppercase;">LTL</span>
+                </div>
+                <input type="number" id="netopt-mode-ltl-pct" class="wsc-input" value="25" min="0" max="100" step="5" oninput="netoptBalanceModeMix('ltl')" style="font-size:16px;font-weight:700;text-align:center;">
+                <div style="font-size:9px;color:var(--ies-gray-400);text-align:center;margin-top:2px;">% of outbound units</div>
+              </div>
+              <div style="background:#fff;border-radius:8px;padding:12px;border:1px solid rgba(202,138,4,.1);">
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><rect x="5" y="7" width="14" height="10" rx="2" stroke="#9333ea" stroke-width="2"/><path d="M9 7V5h6v2" stroke="#9333ea" stroke-width="2"/></svg>
+                  <span style="font-size:10px;font-weight:700;color:#9333ea;text-transform:uppercase;">Parcel</span>
+                </div>
+                <input type="number" id="netopt-mode-parcel-pct" class="wsc-input" value="45" min="0" max="100" step="5" oninput="netoptBalanceModeMix('parcel')" style="font-size:16px;font-weight:700;text-align:center;">
+                <div style="font-size:9px;color:var(--ies-gray-400);text-align:center;margin-top:2px;">% of outbound units</div>
+              </div>
+            </div>
+            <div id="netopt-mode-mix-warn" style="font-size:10px;color:#dc2626;margin-top:8px;display:none;font-weight:600;"></div>
+            <div style="font-size:10px;color:var(--ies-gray-500);margin-top:6px;">Mode mix must total 100%. Drives blended outbound transport cost.</div>
+          </div>
+
           <!-- Live Market Rates Card -->
           <div style="background:linear-gradient(135deg,#eff6ff 0%,#f0f9ff 100%);border-radius:10px;border:1px solid rgba(59,130,246,.15);padding:16px 20px;margin-bottom:20px;">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
@@ -5624,67 +5750,250 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
             <div style="display:flex;gap:0;border-radius:6px;overflow:hidden;border:1.5px solid var(--ies-gray-200);">
               <button id="netopt-rate-mode-market" onclick="netoptSetRateMode('market')" style="padding:6px 14px;border:none;background:var(--ies-blue);color:#fff;font-weight:600;font-size:11px;cursor:pointer;transition:all .15s;">Market Rates</button>
               <button id="netopt-rate-mode-manual" onclick="netoptSetRateMode('manual')" style="padding:6px 14px;border:none;background:#fff;color:var(--ies-navy);font-weight:600;font-size:11px;cursor:pointer;transition:all .15s;border-left:1px solid var(--ies-gray-200);">Manual Override</button>
+              <button id="netopt-rate-mode-csv" onclick="netoptSetRateMode('csv')" style="padding:6px 14px;border:none;background:#fff;color:var(--ies-navy);font-weight:600;font-size:11px;cursor:pointer;transition:all .15s;border-left:1px solid var(--ies-gray-200);">Upload Rate Card</button>
             </div>
             <span id="netopt-rate-mode-desc" style="font-size:10px;color:var(--ies-gray-500);">Using latest DAT linehaul rates + fuel surcharge</span>
           </div>
 
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:700px;">
-            <!-- Left Column: Core Rates -->
-            <div>
-              <div class="wsc-input-group">
-                <label class="wsc-input-label">TL Base Rate ($/mile)</label>
-                <input type="number" id="netopt-tl-rate" class="wsc-input" value="2.37" min="0.50" step="0.01" oninput="netoptRecalcUnitMileCost()">
-                <div class="wsc-input-helper" id="netopt-tl-rate-source">Source: DAT Contract Van</div>
+          <!-- CSV Upload Panel (hidden by default) -->
+          <div id="netopt-csv-upload-panel" style="display:none;background:#f8f9fb;border-radius:10px;border:1px dashed var(--ies-gray-300);padding:16px 20px;margin-bottom:20px;text-align:center;">
+            <div style="font-size:12px;font-weight:700;color:var(--ies-navy);margin-bottom:8px;">Upload Negotiated Rate Cards</div>
+            <div style="font-size:10px;color:var(--ies-gray-500);margin-bottom:12px;line-height:1.5;">
+              Upload CSV files with your carrier-specific rates. Supports TL (origin, dest, rate/mile), LTL (weight breaks × class), and Parcel (zone × weight bracket).
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px;">
+              <div>
+                <label style="display:inline-block;padding:8px 14px;background:var(--ies-blue);color:#fff;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;">
+                  TL Rate Card
+                  <input type="file" id="netopt-csv-tl" accept=".csv" onchange="netoptParseRateCSV('tl',this)" style="display:none;">
+                </label>
+                <div id="netopt-csv-tl-status" style="font-size:9px;color:var(--ies-gray-400);margin-top:4px;">No file</div>
               </div>
-
-              <div class="wsc-input-group">
-                <label class="wsc-input-label">Avg Units per Truckload</label>
-                <input type="number" id="netopt-units-per-tl" class="wsc-input" value="800" min="50" max="5000" step="50" oninput="netoptRecalcUnitMileCost()">
-                <div class="wsc-input-helper">Converts $/mile to $/unit-mile for optimization</div>
+              <div>
+                <label style="display:inline-block;padding:8px 14px;background:#059669;color:#fff;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;">
+                  LTL Rate Card
+                  <input type="file" id="netopt-csv-ltl" accept=".csv" onchange="netoptParseRateCSV('ltl',this)" style="display:none;">
+                </label>
+                <div id="netopt-csv-ltl-status" style="font-size:9px;color:var(--ies-gray-400);margin-top:4px;">No file</div>
               </div>
-
-              <div class="wsc-input-group">
-                <label class="wsc-input-label">Fuel Surcharge (%)</label>
-                <input type="number" id="netopt-fuel-surcharge" class="wsc-input" value="0" min="0" max="50" step="0.5" oninput="netoptRecalcUnitMileCost()">
-                <div class="wsc-input-helper" id="netopt-fsc-source">Calculated from EIA diesel vs $2.50 baseline</div>
-              </div>
-
-              <div class="wsc-input-group" style="background:#f8f9fb;border-radius:8px;padding:12px;border:1px solid var(--ies-gray-200);">
-                <label class="wsc-input-label" style="color:var(--ies-blue);font-weight:700;">Effective $/Unit-Mile (Outbound)</label>
-                <div id="netopt-effective-unit-mile" style="font-size:18px;font-weight:700;color:var(--ies-navy);margin-top:4px;">$0.00296</div>
-                <div style="font-size:10px;color:var(--ies-gray-400);margin-top:2px;">(TL Rate × (1 + FSC%)) ÷ Units/TL</div>
-                <input type="hidden" id="netopt-outbound-cost" value="0.00296">
+              <div>
+                <label style="display:inline-block;padding:8px 14px;background:#9333ea;color:#fff;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;">
+                  Parcel Rate Card
+                  <input type="file" id="netopt-csv-parcel" accept=".csv" onchange="netoptParseRateCSV('parcel',this)" style="display:none;">
+                </label>
+                <div id="netopt-csv-parcel-status" style="font-size:9px;color:var(--ies-gray-400);margin-top:4px;">No file</div>
               </div>
             </div>
+            <button onclick="netoptDownloadRateTemplate()" style="padding:5px 12px;background:none;border:1px solid var(--ies-gray-300);border-radius:5px;font-size:10px;color:var(--ies-gray-500);cursor:pointer;">Download CSV Templates</button>
+          </div>
 
-            <!-- Right Column: Additional Costs -->
-            <div>
-              <div class="wsc-input-group">
-                <label class="wsc-input-label">Inbound Rate Ratio (%)</label>
-                <input type="number" id="netopt-inbound-ratio" class="wsc-input" value="60" min="10" max="100" step="5" oninput="netoptRecalcUnitMileCost()">
-                <div class="wsc-input-helper">Inbound as % of outbound (typically 50-70%)</div>
-                <input type="hidden" id="netopt-inbound-cost" value="0.00178">
+          <!-- TL SECTION -->
+          <div style="margin-bottom:24px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid var(--ies-blue);">
+              <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><rect x="2" y="8" width="20" height="12" rx="2" stroke="#0047AB" stroke-width="2"/><path d="M7 8V6a1 1 0 011-1h8a1 1 0 011 1v2" stroke="#0047AB" stroke-width="2"/></svg>
+              <span style="font-size:12px;font-weight:700;color:var(--ies-navy);">Truckload (TL)</span>
+              <span style="font-size:10px;color:var(--ies-gray-400);margin-left:auto;" id="netopt-tl-pct-label">30% of volume</span>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:650px;">
+              <div>
+                <div class="wsc-input-group">
+                  <label class="wsc-input-label">TL Base Rate ($/mile)</label>
+                  <input type="number" id="netopt-tl-rate" class="wsc-input" value="2.37" min="0.50" step="0.01" oninput="netoptRecalcAllCosts()">
+                  <div class="wsc-input-helper" id="netopt-tl-rate-source">Source: DAT Contract Van</div>
+                </div>
+                <div class="wsc-input-group">
+                  <label class="wsc-input-label">Avg Units per Truckload</label>
+                  <input type="number" id="netopt-units-per-tl" class="wsc-input" value="800" min="50" max="5000" step="50" oninput="netoptRecalcAllCosts()">
+                </div>
+                <div class="wsc-input-group">
+                  <label class="wsc-input-label">Fuel Surcharge (%)</label>
+                  <input type="number" id="netopt-fuel-surcharge" class="wsc-input" value="0" min="0" max="50" step="0.5" oninput="netoptRecalcAllCosts()">
+                  <div class="wsc-input-helper" id="netopt-fsc-source">Calculated from EIA diesel vs $2.50 baseline</div>
+                </div>
               </div>
-
-              <div class="wsc-input-group">
-                <label class="wsc-input-label">LTL Surcharge (%)</label>
-                <input type="number" id="netopt-ltl-surcharge" class="wsc-input" value="25" min="0" max="100" step="5" oninput="netoptUpdateKPI()">
-                <div class="wsc-input-helper">Applied to shipments below full-truck threshold</div>
-              </div>
-
-              <div class="wsc-input-group">
-                <label class="wsc-input-label">Truck Speed (miles/day)</label>
-                <input type="number" id="netopt-truck-speed" class="wsc-input" value="500" min="250" max="1000" step="50" oninput="netoptUpdateKPI()">
-                <div class="wsc-input-helper">Typical: 400-600 mi/day</div>
-              </div>
-
-              <div class="wsc-input-group" style="background:#f8f9fb;border-radius:8px;padding:12px;border:1px solid var(--ies-gray-200);">
-                <label class="wsc-input-label" style="color:var(--ies-blue);font-weight:700;">Effective $/Unit-Mile (Inbound)</label>
-                <div id="netopt-effective-inbound" style="font-size:18px;font-weight:700;color:var(--ies-navy);margin-top:4px;">$0.00178</div>
-                <div style="font-size:10px;color:var(--ies-gray-400);margin-top:2px;">Outbound × Inbound Ratio</div>
+              <div>
+                <div class="wsc-input-group">
+                  <label class="wsc-input-label">Inbound Rate Ratio (%)</label>
+                  <input type="number" id="netopt-inbound-ratio" class="wsc-input" value="60" min="10" max="100" step="5" oninput="netoptRecalcAllCosts()">
+                  <div class="wsc-input-helper">Inbound as % of outbound (typically 50-70%)</div>
+                </div>
+                <div class="wsc-input-group">
+                  <label class="wsc-input-label">Truck Speed (miles/day)</label>
+                  <input type="number" id="netopt-truck-speed" class="wsc-input" value="500" min="250" max="1000" step="50">
+                  <div class="wsc-input-helper">Typical: 400-600 mi/day</div>
+                </div>
+                <div class="wsc-input-group" style="background:#f0f5ff;border-radius:8px;padding:12px;border:1px solid rgba(0,71,171,.1);">
+                  <label class="wsc-input-label" style="color:var(--ies-blue);font-weight:700;">TL $/Unit-Mile</label>
+                  <div id="netopt-tl-unit-mile" style="font-size:18px;font-weight:700;color:var(--ies-navy);margin-top:4px;">$0.00296</div>
+                  <div style="font-size:9px;color:var(--ies-gray-400);margin-top:2px;">(Rate × (1+FSC%)) ÷ Units/TL</div>
+                </div>
               </div>
             </div>
           </div>
+
+          <!-- LTL SECTION -->
+          <div style="margin-bottom:24px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid #059669;">
+              <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><rect x="3" y="9" width="14" height="10" rx="2" stroke="#059669" stroke-width="2"/><path d="M8 9V7a1 1 0 011-1h4a1 1 0 011 1v2" stroke="#059669" stroke-width="2"/></svg>
+              <span style="font-size:12px;font-weight:700;color:var(--ies-navy);">Less-Than-Truckload (LTL)</span>
+              <span style="font-size:10px;color:var(--ies-gray-400);margin-left:auto;" id="netopt-ltl-pct-label">25% of volume</span>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:650px;">
+              <div>
+                <div class="wsc-input-group">
+                  <label class="wsc-input-label">Avg Shipment Weight (lbs)</label>
+                  <input type="number" id="netopt-ltl-avg-weight" class="wsc-input" value="1500" min="100" max="20000" step="100" oninput="netoptRecalcAllCosts()">
+                </div>
+                <div class="wsc-input-group">
+                  <label class="wsc-input-label">Freight Class</label>
+                  <select id="netopt-ltl-class" class="wsc-input" onchange="netoptRecalcAllCosts()">
+                    <option value="50">Class 50 (Fits/Clean Freight)</option>
+                    <option value="55">Class 55</option>
+                    <option value="60">Class 60</option>
+                    <option value="65">Class 65</option>
+                    <option value="70" selected>Class 70 (General Merchandise)</option>
+                    <option value="77.5">Class 77.5</option>
+                    <option value="85">Class 85</option>
+                    <option value="92.5">Class 92.5</option>
+                    <option value="100">Class 100</option>
+                    <option value="110">Class 110</option>
+                    <option value="125">Class 125</option>
+                    <option value="150">Class 150</option>
+                    <option value="175">Class 175</option>
+                    <option value="200">Class 200</option>
+                    <option value="250">Class 250</option>
+                    <option value="300">Class 300</option>
+                    <option value="400">Class 400</option>
+                    <option value="500">Class 500 (Low Density/High Value)</option>
+                  </select>
+                </div>
+                <div class="wsc-input-group">
+                  <label class="wsc-input-label">Units per LTL Shipment</label>
+                  <input type="number" id="netopt-units-per-ltl" class="wsc-input" value="150" min="5" max="1000" step="10" oninput="netoptRecalcAllCosts()">
+                </div>
+              </div>
+              <div>
+                <div class="wsc-input-group">
+                  <label class="wsc-input-label">LTL Discount (%)</label>
+                  <input type="number" id="netopt-ltl-discount" class="wsc-input" value="65" min="0" max="90" step="5" oninput="netoptRecalcAllCosts()">
+                  <div class="wsc-input-helper">Off base tariff (typically 55-80% for 3PLs)</div>
+                </div>
+                <div class="wsc-input-group">
+                  <label class="wsc-input-label">LTL Fuel Surcharge (%)</label>
+                  <input type="number" id="netopt-ltl-fsc" class="wsc-input" value="28" min="0" max="50" step="1" oninput="netoptRecalcAllCosts()">
+                </div>
+                <div class="wsc-input-group" style="background:#ecfdf5;border-radius:8px;padding:12px;border:1px solid rgba(5,150,105,.1);">
+                  <label class="wsc-input-label" style="color:#059669;font-weight:700;">LTL $/Unit-Mile</label>
+                  <div id="netopt-ltl-unit-mile" style="font-size:18px;font-weight:700;color:var(--ies-navy);margin-top:4px;">$0.00520</div>
+                  <div style="font-size:9px;color:var(--ies-gray-400);margin-top:2px;">Tariff rate × (1-discount%) × (1+FSC%) ÷ units/shipment</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- PARCEL SECTION -->
+          <div style="margin-bottom:24px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid #9333ea;">
+              <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><rect x="5" y="7" width="14" height="10" rx="2" stroke="#9333ea" stroke-width="2"/><path d="M9 7V5h6v2" stroke="#9333ea" stroke-width="2"/></svg>
+              <span style="font-size:12px;font-weight:700;color:var(--ies-navy);">Parcel</span>
+              <span style="font-size:10px;color:var(--ies-gray-400);margin-left:auto;" id="netopt-parcel-pct-label">45% of volume</span>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:650px;">
+              <div>
+                <div class="wsc-input-group">
+                  <label class="wsc-input-label">Carrier</label>
+                  <select id="netopt-parcel-carrier" class="wsc-input" onchange="netoptRecalcAllCosts()">
+                    <option value="ups">UPS Ground</option>
+                    <option value="fedex">FedEx Ground</option>
+                    <option value="usps">USPS Priority</option>
+                    <option value="custom">Custom Rates</option>
+                  </select>
+                </div>
+                <div class="wsc-input-group">
+                  <label class="wsc-input-label">Avg Package Weight (lbs)</label>
+                  <input type="number" id="netopt-parcel-avg-weight" class="wsc-input" value="5" min="0.5" max="70" step="0.5" oninput="netoptRecalcAllCosts()">
+                </div>
+                <div class="wsc-input-group">
+                  <label class="wsc-input-label">Negotiated Discount (%)</label>
+                  <input type="number" id="netopt-parcel-discount" class="wsc-input" value="35" min="0" max="70" step="5" oninput="netoptRecalcAllCosts()">
+                  <div class="wsc-input-helper">Off published rates (GXO typically 30-50%)</div>
+                </div>
+              </div>
+              <div>
+                <div class="wsc-input-group">
+                  <label class="wsc-input-label">Residential Surcharge ($)</label>
+                  <input type="number" id="netopt-parcel-resi" class="wsc-input" value="4.50" min="0" max="15" step="0.25" oninput="netoptRecalcAllCosts()">
+                  <div class="wsc-input-helper">Per package, applied to residential deliveries</div>
+                </div>
+                <div class="wsc-input-group">
+                  <label class="wsc-input-label">% Residential</label>
+                  <input type="number" id="netopt-parcel-resi-pct" class="wsc-input" value="75" min="0" max="100" step="5" oninput="netoptRecalcAllCosts()">
+                </div>
+                <div class="wsc-input-group" style="background:#f5f3ff;border-radius:8px;padding:12px;border:1px solid rgba(147,51,234,.1);">
+                  <label class="wsc-input-label" style="color:#9333ea;font-weight:700;">Parcel $/Unit (avg Zone 5)</label>
+                  <div id="netopt-parcel-unit-cost" style="font-size:18px;font-weight:700;color:var(--ies-navy);margin-top:4px;">$8.45</div>
+                  <div style="font-size:9px;color:var(--ies-gray-400);margin-top:2px;">Zone-weighted avg + surcharges × (1-discount%)</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Parcel Zone Rate Table -->
+            <div style="margin-top:12px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                <span style="font-size:10px;font-weight:700;color:var(--ies-navy);text-transform:uppercase;">Zone Rate Table ($/pkg, published)</span>
+                <button onclick="document.getElementById('netopt-parcel-zone-tbl').style.display=document.getElementById('netopt-parcel-zone-tbl').style.display==='none'?'block':'none'" style="font-size:10px;color:var(--ies-blue);background:none;border:none;cursor:pointer;font-weight:600;">Show/Hide</button>
+              </div>
+              <div id="netopt-parcel-zone-tbl" style="display:none;overflow-x:auto;">
+                <table style="width:100%;border-collapse:collapse;font-size:11px;background:#fff;border-radius:6px;border:1px solid var(--ies-gray-200);" id="netopt-parcel-rate-table">
+                  <thead style="background:#f5f3ff;">
+                    <tr>
+                      <th style="padding:8px 10px;text-align:left;font-weight:700;color:#9333ea;border-bottom:1px solid var(--ies-gray-200);">Weight</th>
+                      <th style="padding:8px 10px;text-align:right;font-weight:700;color:#9333ea;border-bottom:1px solid var(--ies-gray-200);">Zone 2</th>
+                      <th style="padding:8px 10px;text-align:right;font-weight:700;color:#9333ea;border-bottom:1px solid var(--ies-gray-200);">Zone 3</th>
+                      <th style="padding:8px 10px;text-align:right;font-weight:700;color:#9333ea;border-bottom:1px solid var(--ies-gray-200);">Zone 4</th>
+                      <th style="padding:8px 10px;text-align:right;font-weight:700;color:#9333ea;border-bottom:1px solid var(--ies-gray-200);">Zone 5</th>
+                      <th style="padding:8px 10px;text-align:right;font-weight:700;color:#9333ea;border-bottom:1px solid var(--ies-gray-200);">Zone 6</th>
+                      <th style="padding:8px 10px;text-align:right;font-weight:700;color:#9333ea;border-bottom:1px solid var(--ies-gray-200);">Zone 7</th>
+                      <th style="padding:8px 10px;text-align:right;font-weight:700;color:#9333ea;border-bottom:1px solid var(--ies-gray-200);">Zone 8</th>
+                    </tr>
+                  </thead>
+                  <tbody id="netopt-parcel-rate-tbody">
+                    <!-- Populated by JS -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- BLENDED COST SUMMARY -->
+          <div style="background:linear-gradient(135deg,#0047AB 0%,#003380 100%);border-radius:10px;padding:20px;color:#fff;">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px;opacity:.8;">Blended Outbound Cost Summary</div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;">
+              <div>
+                <div style="font-size:9px;text-transform:uppercase;opacity:.7;margin-bottom:2px;">TL Component</div>
+                <div id="netopt-blend-tl" style="font-size:16px;font-weight:700;">$0.00089</div>
+                <div style="font-size:9px;opacity:.6;">$/unit-mile × 30%</div>
+              </div>
+              <div>
+                <div style="font-size:9px;text-transform:uppercase;opacity:.7;margin-bottom:2px;">LTL Component</div>
+                <div id="netopt-blend-ltl" style="font-size:16px;font-weight:700;">$0.00130</div>
+                <div style="font-size:9px;opacity:.6;">$/unit-mile × 25%</div>
+              </div>
+              <div>
+                <div style="font-size:9px;text-transform:uppercase;opacity:.7;margin-bottom:2px;">Parcel Component</div>
+                <div id="netopt-blend-parcel" style="font-size:16px;font-weight:700;">$0.00760</div>
+                <div style="font-size:9px;opacity:.6;">$/unit (zone-based) × 45%</div>
+              </div>
+              <div style="border-left:1px solid rgba(255,255,255,.2);padding-left:16px;">
+                <div style="font-size:9px;text-transform:uppercase;opacity:.7;margin-bottom:2px;">Blended $/Unit-Mile</div>
+                <div id="netopt-blend-total" style="font-size:20px;font-weight:800;">$0.00320</div>
+                <div style="font-size:9px;opacity:.6;">Feeds optimizer</div>
+              </div>
+            </div>
+            <input type="hidden" id="netopt-outbound-cost" value="0.00296">
+            <input type="hidden" id="netopt-inbound-cost" value="0.00178">
+          </div>
+
         </div>
 
         <!-- TAB: CONSTRAINTS -->
@@ -5821,6 +6130,110 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div style="font-weight:700;font-size:18px;color:var(--ies-navy);margin-bottom:12px;">Cost Model Builder</div>
       <div style="font-size:14px;color:var(--ies-gray-500);margin-bottom:20px;">The Cost Model Builder now has its own dedicated section.</div>
       <button onclick="navigate('costmodel', document.querySelector('[data-section=costmodel]'))" style="padding:10px 24px;background:var(--ies-orange);color:#fff;border:none;border-radius:6px;font-family:Montserrat,sans-serif;font-weight:600;font-size:13px;cursor:pointer;">Open Cost Model Builder</button>
+    </div>
+  </div>
+
+  <!-- ── DEAL MANAGER ── -->
+  <div id="dt-deals" class="dt-panel" style="display:none;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">
+      <div>
+        <div style="font-weight:700;font-size:20px;color:var(--ies-navy);margin-bottom:4px;">Deal Manager</div>
+        <div style="font-size:13px;color:var(--ies-gray-600);">Multi-location warehouse deals with aggregate financials</div>
+      </div>
+      <button onclick="dealApp.showNewDealModal()" style="padding:10px 20px;background:var(--ies-orange);color:#fff;border:none;border-radius:8px;font-family:Montserrat,sans-serif;font-weight:600;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;box-shadow:var(--shadow-sm);transition:.15s ease;" onmouseover="this.style.background='var(--ies-orange-hover)'" onmouseout="this.style.background='var(--ies-orange)'">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        New Deal
+      </button>
+    </div>
+
+    <!-- Deal List View -->
+    <div id="dealListView" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;">
+      <!-- Deals will be rendered here -->
+    </div>
+
+    <!-- Deal Detail View (hidden by default) -->
+    <div id="dealDetailView" style="display:none;">
+      <button onclick="dealApp.backToDealList()" style="margin-bottom:16px;padding:8px 16px;background:var(--ies-gray-100);color:var(--ies-navy);border:1px solid var(--ies-gray-300);border-radius:6px;font-family:Montserrat,sans-serif;font-weight:600;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Back to Deals
+      </button>
+
+      <!-- Deal Header -->
+      <div style="background:#fff;border-radius:12px;border:1px solid var(--ies-gray-200);padding:24px;margin-bottom:20px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+          <div>
+            <label style="display:block;font-size:12px;font-weight:600;color:var(--ies-gray-600);text-transform:uppercase;margin-bottom:6px;">Deal Name</label>
+            <input type="text" id="dealEditName" style="width:100%;padding:10px 12px;border:1px solid var(--ies-gray-300);border-radius:6px;font-family:Montserrat,sans-serif;font-size:14px;" placeholder="e.g., Acme Corp Multi-DC">
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;font-weight:600;color:var(--ies-gray-600);text-transform:uppercase;margin-bottom:6px;">Client Name</label>
+            <input type="text" id="dealEditClient" style="width:100%;padding:10px 12px;border:1px solid var(--ies-gray-300);border-radius:6px;font-family:Montserrat,sans-serif;font-size:14px;" placeholder="e.g., Acme Corporation">
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;font-weight:600;color:var(--ies-gray-600);text-transform:uppercase;margin-bottom:6px;">Deal Owner</label>
+            <input type="text" id="dealEditOwner" style="width:100%;padding:10px 12px;border:1px solid var(--ies-gray-300);border-radius:6px;font-family:Montserrat,sans-serif;font-size:14px;" placeholder="e.g., Brock Eckles">
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;font-weight:600;color:var(--ies-gray-600);text-transform:uppercase;margin-bottom:6px;">Status</label>
+            <select id="dealEditStatus" style="width:100%;padding:10px 12px;border:1px solid var(--ies-gray-300);border-radius:6px;font-family:Montserrat,sans-serif;font-size:14px;">
+              <option value="Draft">Draft</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Proposal Sent">Proposal Sent</option>
+              <option value="Won">Won</option>
+              <option value="Lost">Lost</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;color:var(--ies-gray-600);text-transform:uppercase;margin-bottom:6px;">Notes</label>
+          <textarea id="dealEditNotes" style="width:100%;padding:10px 12px;border:1px solid var(--ies-gray-300);border-radius:6px;font-family:Montserrat,sans-serif;font-size:14px;min-height:80px;" placeholder="Deal notes..."></textarea>
+        </div>
+        <button onclick="dealApp.saveDealHeader()" style="margin-top:16px;padding:10px 20px;background:var(--ies-orange);color:#fff;border:none;border-radius:6px;font-family:Montserrat,sans-serif;font-weight:600;font-size:13px;cursor:pointer;">Save Deal Details</button>
+      </div>
+
+      <!-- Aggregate Financials -->
+      <div id="dealAggregateCard" style="background:#fff;border-radius:12px;border:1px solid var(--ies-gray-200);padding:24px;margin-bottom:20px;">
+        <div style="font-weight:700;font-size:16px;color:var(--ies-navy);margin-bottom:16px;">Aggregate Financials</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;" id="dealAggregateMetrics">
+          <!-- Metrics will be rendered here -->
+        </div>
+      </div>
+
+      <!-- Sites Table -->
+      <div style="background:#fff;border-radius:12px;border:1px solid var(--ies-gray-200);padding:24px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <div style="font-weight:700;font-size:16px;color:var(--ies-navy);">Warehouse Sites</div>
+          <div style="display:flex;gap:8px;">
+            <button onclick="dealApp.showAddSiteModal()" style="padding:8px 16px;background:var(--ies-blue);color:#fff;border:none;border-radius:6px;font-family:Montserrat,sans-serif;font-weight:600;font-size:12px;cursor:pointer;">+ Add New Site</button>
+            <button onclick="dealApp.showLinkExistingModal()" style="padding:8px 16px;background:var(--ies-gray-200);color:var(--ies-navy);border:1px solid var(--ies-gray-300);border-radius:6px;font-family:Montserrat,sans-serif;font-weight:600;font-size:12px;cursor:pointer;">Link Existing</button>
+          </div>
+        </div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:13px;" id="dealSitesTable">
+            <thead>
+              <tr style="border-bottom:2px solid var(--ies-gray-200);background:var(--ies-gray-50);">
+                <th style="padding:12px;text-align:left;font-weight:600;color:var(--ies-gray-700);">Site Name</th>
+                <th style="padding:12px;text-align:left;font-weight:600;color:var(--ies-gray-700);">Location</th>
+                <th style="padding:12px;text-align:right;font-weight:600;color:var(--ies-gray-700);">Annual Cost</th>
+                <th style="padding:12px;text-align:right;font-weight:600;color:var(--ies-gray-700);">Headcount</th>
+                <th style="padding:12px;text-align:right;font-weight:600;color:var(--ies-gray-700);">Sqft</th>
+                <th style="padding:12px;text-align:center;font-weight:600;color:var(--ies-gray-700);">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="dealSitesTableBody">
+              <!-- Rows will be rendered here -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Empty State -->
+    <div id="dealEmptyState" style="text-align:center;padding:60px 40px;display:none;">
+      <div style="font-size:48px;margin-bottom:12px;">📋</div>
+      <div style="font-weight:700;font-size:16px;color:var(--ies-navy);margin-bottom:6px;">No Deals Yet</div>
+      <div style="font-size:13px;color:var(--ies-gray-600);margin-bottom:20px;">Create a new deal to get started with multi-location modeling.</div>
+      <button onclick="dealApp.showNewDealModal()" style="padding:10px 20px;background:var(--ies-orange);color:#fff;border:none;border-radius:6px;font-family:Montserrat,sans-serif;font-weight:600;font-size:13px;cursor:pointer;">Create First Deal</button>
     </div>
   </div>
 
@@ -12205,6 +12618,8 @@ function showDesignTool(panelId, tabEl) {
   if (panelId === 'dt-network') { setTimeout(function() { initNetworkMap(); runNetworkOptimization(); }, 100); netRefreshScenarioList(window.activeCostModelProjectId || null); }
   // If switching to netopt, refresh scenarios
   if (panelId === 'dt-netopt') { netoptRefreshScenarioList(window.activeCostModelProjectId || null); }
+  // If switching to deals, load deals list
+  if (panelId === 'dt-deals') { dealApp.loadDeals(); }
   // Scroll to top
   var main = document.querySelector('.main');
   if (main) main.scrollTop = 0;
@@ -14997,7 +15412,7 @@ function netoptCollectInputs() {
 // Apply saved state back into netopt
 function netoptApplyInputs(data) {
     if (data.facilities) { netoptState.facilities = data.facilities; netoptRenderFacilitiesTable(); }
-    if (data.demands) { netoptState.demands = data.demands; netoptRenderDemandTable(); }
+    if (data.demands) { netoptState.demands = data.demands; netoptRenderDemandsTable(); }
     if (data.transport) {
         Object.assign(netoptState.transport, data.transport);
         var tl = document.getElementById('netopt-tl-rate');
@@ -15005,8 +15420,14 @@ function netoptApplyInputs(data) {
             var unitsPer = parseFloat(document.getElementById('netopt-units-per-tl').value) || 800;
             tl.value = (data.transport.outboundPerUnitMile * unitsPer).toFixed(2);
         }
-        document.getElementById('netopt-ltl-surcharge').value = data.transport.ltlSurcharge || 25;
         document.getElementById('netopt-truck-speed').value = data.transport.truckSpeedMiPerDay || 500;
+        // Restore mode mix if saved
+        if (data.transport.modeMix) {
+          document.getElementById('netopt-mode-tl-pct').value = Math.round((data.transport.modeMix.tl || 0) * 100);
+          document.getElementById('netopt-mode-ltl-pct').value = Math.round((data.transport.modeMix.ltl || 0) * 100);
+          document.getElementById('netopt-mode-parcel-pct').value = Math.round((data.transport.modeMix.parcel || 0) * 100);
+        }
+        netoptRecalcAllCosts();
     }
     if (data.constraints) {
         Object.assign(netoptState.constraints, data.constraints);
@@ -15293,7 +15714,7 @@ function netoptImportFromCOG() {
     netoptState.facilities = facilities;
     netoptState.demands = demands;
     netoptRenderFacilitiesTable();
-    netoptRenderDemandTable();
+    netoptRenderDemandsTable();
     netoptUpdateKPI();
 
     // Mark COG-sourced facilities in the table
@@ -15425,54 +15846,860 @@ function netoptApplyMarketRates() {
     document.getElementById('netopt-fuel-surcharge').value = netoptMarketRates.fscPct.toFixed(1);
     document.getElementById('netopt-fsc-source').textContent = 'Diesel $' + (netoptMarketRates.diesel || 0).toFixed(2) + ' vs $' + NETOPT_DIESEL_BASELINE.toFixed(2) + ' baseline';
   }
-  netoptRecalcUnitMileCost();
+  netoptRecalcAllCosts();
 }
 
-// Toggle between market rates and manual override
+// Toggle between market rates, manual, and CSV
 function netoptSetRateMode(mode) {
   netoptRateMode = mode;
   var mBtn = document.getElementById('netopt-rate-mode-market');
   var oBtn = document.getElementById('netopt-rate-mode-manual');
+  var cBtn = document.getElementById('netopt-rate-mode-csv');
   var desc = document.getElementById('netopt-rate-mode-desc');
+  var csvPanel = document.getElementById('netopt-csv-upload-panel');
   var tlInput = document.getElementById('netopt-tl-rate');
   var fscInput = document.getElementById('netopt-fuel-surcharge');
 
+  // Reset all buttons
+  [mBtn, oBtn, cBtn].forEach(function(b) { if (b) { b.style.background = '#fff'; b.style.color = 'var(--ies-navy)'; }});
+
   if (mode === 'market') {
     mBtn.style.background = 'var(--ies-blue)'; mBtn.style.color = '#fff';
-    oBtn.style.background = '#fff'; oBtn.style.color = 'var(--ies-navy)';
     desc.textContent = 'Using latest DAT linehaul rates + fuel surcharge';
+    csvPanel.style.display = 'none';
     tlInput.style.background = '#f1f5f9'; fscInput.style.background = '#f1f5f9';
     netoptApplyMarketRates();
+  } else if (mode === 'csv') {
+    cBtn.style.background = 'var(--ies-blue)'; cBtn.style.color = '#fff';
+    desc.textContent = 'Using uploaded carrier rate cards';
+    csvPanel.style.display = 'block';
+    tlInput.style.background = ''; fscInput.style.background = '';
   } else {
     oBtn.style.background = 'var(--ies-blue)'; oBtn.style.color = '#fff';
-    mBtn.style.background = '#fff'; mBtn.style.color = 'var(--ies-navy)';
     desc.textContent = 'Enter your own contracted or negotiated rates';
+    csvPanel.style.display = 'none';
     tlInput.style.background = ''; fscInput.style.background = '';
     document.getElementById('netopt-tl-rate-source').textContent = 'Source: Manual entry';
     document.getElementById('netopt-fsc-source').textContent = 'Manual fuel surcharge';
   }
 }
 
-// Recalculate $/unit-mile from TL rate, FSC, and units per TL
-function netoptRecalcUnitMileCost() {
+// ── Parcel Zone Rate Tables (published GRI-adjusted 2025/2026 estimates) ──
+// Rows: weight brackets. Columns: zone 2-8. Values: $/package (UPS Ground published)
+var NETOPT_PARCEL_RATES = {
+  ups: {
+    weights: [1, 2, 3, 5, 10, 15, 20, 30, 40, 50, 70],
+    zones: [2, 3, 4, 5, 6, 7, 8],
+    rates: [
+      [8.45, 8.85, 9.35, 10.20, 11.10, 12.25, 13.80],  // 1 lb
+      [8.90, 9.45, 10.05, 10.95, 12.00, 13.35, 15.10],  // 2 lb
+      [9.35, 10.00, 10.75, 11.75, 12.90, 14.45, 16.40],  // 3 lb
+      [10.25, 11.10, 12.10, 13.30, 14.70, 16.65, 19.00],  // 5 lb
+      [12.50, 13.85, 15.30, 17.10, 19.20, 22.00, 25.50],  // 10 lb
+      [14.75, 16.60, 18.50, 20.90, 23.70, 27.35, 32.00],  // 15 lb
+      [17.00, 19.35, 21.70, 24.70, 28.20, 32.70, 38.50],  // 20 lb
+      [21.50, 24.85, 28.10, 32.30, 37.20, 43.40, 51.50],  // 30 lb
+      [26.00, 30.35, 34.50, 39.90, 46.20, 54.10, 64.50],  // 40 lb
+      [30.50, 35.85, 40.90, 47.50, 55.20, 64.80, 77.50],  // 50 lb
+      [39.50, 46.85, 53.70, 62.70, 73.20, 86.20, 103.50]  // 70 lb
+    ]
+  },
+  fedex: {
+    weights: [1, 2, 3, 5, 10, 15, 20, 30, 40, 50, 70],
+    zones: [2, 3, 4, 5, 6, 7, 8],
+    rates: [
+      [8.30, 8.70, 9.20, 10.05, 10.90, 12.05, 13.55],
+      [8.75, 9.30, 9.90, 10.80, 11.85, 13.15, 14.85],
+      [9.20, 9.85, 10.60, 11.55, 12.70, 14.20, 16.10],
+      [10.10, 10.95, 11.95, 13.10, 14.50, 16.40, 18.70],
+      [12.30, 13.65, 15.10, 16.85, 18.95, 21.70, 25.10],
+      [14.50, 16.35, 18.25, 20.60, 23.40, 26.95, 31.50],
+      [16.75, 19.05, 21.40, 24.35, 27.80, 32.20, 37.90],
+      [21.15, 24.45, 27.70, 31.80, 36.60, 42.70, 50.70],
+      [25.60, 29.85, 33.95, 39.30, 45.50, 53.30, 63.50],
+      [30.00, 35.30, 40.30, 46.80, 54.40, 63.80, 76.30],
+      [38.90, 46.10, 52.90, 61.70, 72.10, 84.90, 101.90]
+    ]
+  },
+  usps: {
+    weights: [1, 2, 3, 5, 10, 15, 20, 30, 40, 50, 70],
+    zones: [2, 3, 4, 5, 6, 7, 8],
+    rates: [
+      [7.90, 8.10, 8.40, 8.90, 9.50, 10.30, 11.20],
+      [8.10, 8.40, 8.80, 9.40, 10.10, 11.00, 12.10],
+      [8.30, 8.70, 9.20, 9.90, 10.70, 11.70, 13.00],
+      [8.90, 9.50, 10.20, 11.10, 12.20, 13.50, 15.20],
+      [10.50, 11.50, 12.60, 13.90, 15.50, 17.50, 20.00],
+      [12.20, 13.50, 14.90, 16.70, 18.80, 21.50, 24.80],
+      [13.90, 15.50, 17.20, 19.50, 22.10, 25.50, 29.60],
+      [17.30, 19.50, 21.80, 25.10, 28.70, 33.50, 39.20],
+      [20.70, 23.50, 26.40, 30.70, 35.30, 41.50, 48.80],
+      [24.10, 27.50, 31.00, 36.30, 41.90, 49.50, 58.40],
+      [30.90, 35.50, 40.20, 47.50, 55.10, 65.50, 77.60]
+    ]
+  }
+};
+
+// Custom rates holder (populated by CSV upload)
+NETOPT_PARCEL_RATES.custom = JSON.parse(JSON.stringify(NETOPT_PARCEL_RATES.ups));
+
+// LTL base tariff rates ($/cwt by class, 500mi average — simplified CZAR-lite)
+var NETOPT_LTL_TARIFF = {
+  // class: base $/CWT at different weight breaks (500lb, 1000lb, 2000lb, 5000lb, 10000lb, 20000lb)
+  '50':  [22.50, 18.00, 14.50, 11.00, 8.50, 6.80],
+  '55':  [25.00, 20.00, 16.10, 12.20, 9.45, 7.55],
+  '60':  [27.50, 22.00, 17.70, 13.40, 10.40, 8.30],
+  '65':  [30.00, 24.00, 19.30, 14.65, 11.35, 9.05],
+  '70':  [32.50, 26.00, 20.90, 15.85, 12.30, 9.80],
+  '77.5':[36.00, 28.80, 23.15, 17.55, 13.60, 10.85],
+  '85':  [39.50, 31.60, 25.40, 19.25, 14.90, 11.90],
+  '92.5':[43.00, 34.40, 27.65, 20.95, 16.25, 12.95],
+  '100': [46.50, 37.20, 29.90, 22.70, 17.60, 14.00],
+  '110': [51.00, 40.80, 32.80, 24.90, 19.30, 15.35],
+  '125': [57.00, 45.60, 36.65, 27.80, 21.55, 17.15],
+  '150': [65.00, 52.00, 41.80, 31.70, 24.55, 19.55],
+  '175': [73.00, 58.40, 46.95, 35.60, 27.55, 21.95],
+  '200': [81.00, 64.80, 52.10, 39.50, 30.60, 24.35],
+  '250': [97.00, 77.60, 62.40, 47.30, 36.65, 29.15],
+  '300': [113.00, 90.40, 72.70, 55.15, 42.75, 34.00],
+  '400': [145.00, 116.00, 93.30, 70.75, 54.85, 43.60],
+  '500': [177.00, 141.60, 113.85, 86.35, 66.90, 53.20]
+};
+
+// Distance-to-zone mapping for parcel (rough: miles → UPS/FedEx zone)
+function netoptMilesToZone(miles) {
+  if (miles <= 150) return 2;
+  if (miles <= 300) return 3;
+  if (miles <= 600) return 4;
+  if (miles <= 1000) return 5;
+  if (miles <= 1400) return 6;
+  if (miles <= 1800) return 7;
+  return 8;
+}
+
+// Distance multiplier for LTL (base tariff is ~500mi; scale for actual distance)
+function netoptLTLDistMultiplier(miles) {
+  if (miles <= 100) return 0.55;
+  if (miles <= 250) return 0.70;
+  if (miles <= 500) return 1.00;
+  if (miles <= 750) return 1.20;
+  if (miles <= 1000) return 1.40;
+  if (miles <= 1500) return 1.65;
+  return 1.90;
+}
+
+// Get parcel cost for a specific zone and weight
+function netoptGetParcelRate(carrier, weightLbs, zone) {
+  var table = NETOPT_PARCEL_RATES[carrier] || NETOPT_PARCEL_RATES.ups;
+  var zoneIdx = zone - 2; // zones start at 2
+  if (zoneIdx < 0) zoneIdx = 0;
+  if (zoneIdx >= table.zones.length) zoneIdx = table.zones.length - 1;
+
+  // Find weight bracket
+  var rowIdx = 0;
+  for (var i = 0; i < table.weights.length; i++) {
+    if (weightLbs >= table.weights[i]) rowIdx = i;
+  }
+  return table.rates[rowIdx][zoneIdx];
+}
+
+// Get LTL cost for a specific class, weight, and distance
+function netoptGetLTLRate(freightClass, weightLbs, miles) {
+  var tariff = NETOPT_LTL_TARIFF[String(freightClass)] || NETOPT_LTL_TARIFF['70'];
+  // Find weight break index: 500, 1000, 2000, 5000, 10000, 20000
+  var breaks = [500, 1000, 2000, 5000, 10000, 20000];
+  var breakIdx = 0;
+  for (var i = 0; i < breaks.length; i++) {
+    if (weightLbs >= breaks[i]) breakIdx = i;
+  }
+  var baseCWT = tariff[breakIdx]; // $/CWT at this break
+  var distMult = netoptLTLDistMultiplier(miles);
+  var cwt = weightLbs / 100;
+  return baseCWT * cwt * distMult; // total $ for this shipment before discount/FSC
+}
+
+// Balance mode mix to 100%
+function netoptBalanceModeMix(changed) {
+  var tl = parseFloat(document.getElementById('netopt-mode-tl-pct').value) || 0;
+  var ltl = parseFloat(document.getElementById('netopt-mode-ltl-pct').value) || 0;
+  var parcel = parseFloat(document.getElementById('netopt-mode-parcel-pct').value) || 0;
+  var total = tl + ltl + parcel;
+  var warn = document.getElementById('netopt-mode-mix-warn');
+  if (Math.abs(total - 100) > 0.5) {
+    warn.style.display = 'block';
+    warn.textContent = 'Mode mix totals ' + total + '% — must equal 100%';
+  } else {
+    warn.style.display = 'none';
+  }
+  // Update labels
+  var tlLabel = document.getElementById('netopt-tl-pct-label');
+  var ltlLabel = document.getElementById('netopt-ltl-pct-label');
+  var parcelLabel = document.getElementById('netopt-parcel-pct-label');
+  if (tlLabel) tlLabel.textContent = tl + '% of volume';
+  if (ltlLabel) ltlLabel.textContent = ltl + '% of volume';
+  if (parcelLabel) parcelLabel.textContent = parcel + '% of volume';
+  netoptRecalcAllCosts();
+}
+
+// Populate parcel zone rate table display
+function netoptRenderParcelRateTable() {
+  var carrier = document.getElementById('netopt-parcel-carrier').value || 'ups';
+  var table = NETOPT_PARCEL_RATES[carrier] || NETOPT_PARCEL_RATES.ups;
+  var discount = parseFloat(document.getElementById('netopt-parcel-discount').value) || 0;
+  var tbody = document.getElementById('netopt-parcel-rate-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  var labels = ['1 lb','2 lb','3 lb','5 lb','10 lb','15 lb','20 lb','30 lb','40 lb','50 lb','70 lb'];
+  table.rates.forEach(function(row, i) {
+    var tr = document.createElement('tr');
+    tr.style.borderBottom = '1px solid var(--ies-gray-100)';
+    var html = '<td style="padding:6px 10px;font-weight:600;color:var(--ies-navy);">' + labels[i] + '</td>';
+    row.forEach(function(rate) {
+      var net = rate * (1 - discount / 100);
+      html += '<td style="padding:6px 10px;text-align:right;color:var(--ies-gray-600);">$' + net.toFixed(2) + '</td>';
+    });
+    tr.innerHTML = html;
+    tbody.appendChild(tr);
+  });
+}
+
+// CSV rate card parser
+function netoptParseRateCSV(mode, input) {
+  var file = input.files[0];
+  if (!file) return;
+  var status = document.getElementById('netopt-csv-' + mode + '-status');
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var lines = e.target.result.split('\n').filter(function(l) { return l.trim(); });
+      if (mode === 'parcel' && lines.length > 1) {
+        // Parse parcel CSV: header is weight,zone2,zone3,...zone8
+        var rates = [];
+        var weights = [];
+        for (var i = 1; i < lines.length; i++) {
+          var cols = lines[i].split(',').map(function(c) { return parseFloat(c.trim()); });
+          weights.push(cols[0]);
+          rates.push(cols.slice(1));
+        }
+        NETOPT_PARCEL_RATES.custom = { weights: weights, zones: [2,3,4,5,6,7,8], rates: rates };
+        document.getElementById('netopt-parcel-carrier').value = 'custom';
+        status.textContent = lines.length - 1 + ' rows loaded';
+        status.style.color = '#059669';
+      } else if (mode === 'tl' && lines.length > 1) {
+        // Simple avg: take mean of rate column
+        var total = 0, count = 0;
+        for (var i = 1; i < lines.length; i++) {
+          var cols = lines[i].split(',');
+          var rate = parseFloat(cols[cols.length - 1]);
+          if (!isNaN(rate)) { total += rate; count++; }
+        }
+        if (count > 0) {
+          document.getElementById('netopt-tl-rate').value = (total / count).toFixed(2);
+          status.textContent = count + ' lanes, avg $' + (total / count).toFixed(2) + '/mi';
+          status.style.color = '#059669';
+        }
+      } else if (mode === 'ltl' && lines.length > 1) {
+        status.textContent = (lines.length - 1) + ' rate entries loaded';
+        status.style.color = '#059669';
+      }
+      netoptRecalcAllCosts();
+    } catch(err) {
+      status.textContent = 'Parse error: ' + err.message;
+      status.style.color = '#dc2626';
+    }
+  };
+  reader.readAsText(file);
+}
+
+// Download CSV template
+function netoptDownloadRateTemplate() {
+  var tl = 'origin_city,origin_state,dest_city,dest_state,rate_per_mile\nAtlanta,GA,New York,NY,2.45\nChicago,IL,Los Angeles,CA,2.60\n';
+  var ltl = 'freight_class,weight_break_lbs,rate_per_cwt\n70,500,32.50\n70,1000,26.00\n100,500,46.50\n';
+  var parcel = 'weight_lbs,zone2,zone3,zone4,zone5,zone6,zone7,zone8\n1,8.45,8.85,9.35,10.20,11.10,12.25,13.80\n5,10.25,11.10,12.10,13.30,14.70,16.65,19.00\n';
+  var combined = '--- TL RATE CARD ---\n' + tl + '\n--- LTL RATE CARD ---\n' + ltl + '\n--- PARCEL RATE CARD ---\n' + parcel;
+  var blob = new Blob([combined], { type: 'text/csv' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'rate_card_templates.csv';
+  a.click();
+}
+
+// ── Master cost recalculation (replaces old netoptRecalcUnitMileCost) ──
+function netoptRecalcUnitMileCost() { netoptRecalcAllCosts(); }
+
+function netoptRecalcAllCosts() {
+  // TL cost per unit-mile
   var tlRate = parseFloat(document.getElementById('netopt-tl-rate').value) || 2.37;
   var fscPct = parseFloat(document.getElementById('netopt-fuel-surcharge').value) || 0;
   var unitsPer = parseFloat(document.getElementById('netopt-units-per-tl').value) || 800;
   var inboundRatio = parseFloat(document.getElementById('netopt-inbound-ratio').value) || 60;
+  var tlAllIn = tlRate * (1 + fscPct / 100);
+  var tlUnitMile = tlAllIn / unitsPer;
 
-  var allInRate = tlRate * (1 + fscPct / 100);
-  var outboundUnitMile = allInRate / unitsPer;
-  var inboundUnitMile = outboundUnitMile * (inboundRatio / 100);
+  // Display TL $/unit-mile
+  var tlDisplay = document.getElementById('netopt-tl-unit-mile');
+  if (tlDisplay) tlDisplay.textContent = '$' + tlUnitMile.toFixed(5);
 
-  // Update hidden inputs that the optimizer reads
-  document.getElementById('netopt-outbound-cost').value = outboundUnitMile.toFixed(6);
+  // LTL cost per unit-mile (at reference distance of 500mi)
+  var ltlWeight = parseFloat(document.getElementById('netopt-ltl-avg-weight').value) || 1500;
+  var ltlClass = document.getElementById('netopt-ltl-class').value || '70';
+  var ltlDiscount = parseFloat(document.getElementById('netopt-ltl-discount').value) || 65;
+  var ltlFsc = parseFloat(document.getElementById('netopt-ltl-fsc').value) || 28;
+  var ltlUnits = parseFloat(document.getElementById('netopt-units-per-ltl').value) || 150;
+  var ltlShipmentCost = netoptGetLTLRate(ltlClass, ltlWeight, 500); // base at 500mi
+  ltlShipmentCost = ltlShipmentCost * (1 - ltlDiscount / 100) * (1 + ltlFsc / 100);
+  var ltlUnitMile = ltlShipmentCost / ltlUnits / 500; // per unit per mile
+
+  var ltlDisplay = document.getElementById('netopt-ltl-unit-mile');
+  if (ltlDisplay) ltlDisplay.textContent = '$' + ltlUnitMile.toFixed(5);
+
+  // Parcel cost per unit (at reference zone 5)
+  var carrier = document.getElementById('netopt-parcel-carrier').value || 'ups';
+  var parcelWeight = parseFloat(document.getElementById('netopt-parcel-avg-weight').value) || 5;
+  var parcelDiscount = parseFloat(document.getElementById('netopt-parcel-discount').value) || 35;
+  var resiCharge = parseFloat(document.getElementById('netopt-parcel-resi').value) || 4.50;
+  var resiPct = parseFloat(document.getElementById('netopt-parcel-resi-pct').value) || 75;
+  var zone5Rate = netoptGetParcelRate(carrier, parcelWeight, 5);
+  var parcelUnitCost = zone5Rate * (1 - parcelDiscount / 100) + (resiCharge * resiPct / 100);
+
+  var parcelDisplay = document.getElementById('netopt-parcel-unit-cost');
+  if (parcelDisplay) parcelDisplay.textContent = '$' + parcelUnitCost.toFixed(2);
+
+  // Render parcel rate table
+  netoptRenderParcelRateTable();
+
+  // Mode mix
+  var tlPct = parseFloat(document.getElementById('netopt-mode-tl-pct').value) || 0;
+  var ltlPct = parseFloat(document.getElementById('netopt-mode-ltl-pct').value) || 0;
+  var parcelPct = parseFloat(document.getElementById('netopt-mode-parcel-pct').value) || 0;
+
+  // Blended outbound $/unit-mile
+  // TL and LTL are distance-based ($/unit-mile), parcel is zone-based ($/unit flat + distance component)
+  // For optimizer: convert parcel to $/unit-mile equivalent at avg 500mi haul
+  var parcelPerUnitMile = parcelUnitCost / 500;
+  var blendedUnitMile = (tlUnitMile * tlPct / 100) + (ltlUnitMile * ltlPct / 100) + (parcelPerUnitMile * parcelPct / 100);
+  var inboundUnitMile = blendedUnitMile * (inboundRatio / 100);
+
+  // Update blended display
+  var blendTl = document.getElementById('netopt-blend-tl');
+  var blendLtl = document.getElementById('netopt-blend-ltl');
+  var blendParcel = document.getElementById('netopt-blend-parcel');
+  var blendTotal = document.getElementById('netopt-blend-total');
+  if (blendTl) blendTl.textContent = '$' + (tlUnitMile * tlPct / 100).toFixed(5);
+  if (blendLtl) blendLtl.textContent = '$' + (ltlUnitMile * ltlPct / 100).toFixed(5);
+  if (blendParcel) blendParcel.textContent = '$' + (parcelPerUnitMile * parcelPct / 100).toFixed(5);
+  if (blendTotal) blendTotal.textContent = '$' + blendedUnitMile.toFixed(5);
+
+  // Update hidden inputs for the optimizer
+  document.getElementById('netopt-outbound-cost').value = blendedUnitMile.toFixed(6);
   document.getElementById('netopt-inbound-cost').value = inboundUnitMile.toFixed(6);
 
-  // Update display
-  document.getElementById('netopt-effective-unit-mile').textContent = '$' + outboundUnitMile.toFixed(5);
-  document.getElementById('netopt-effective-inbound').textContent = '$' + inboundUnitMile.toFixed(5);
+  // Store mode-specific rates on netoptState.transport for detailed solver
+  netoptState.transport.tlUnitMile = tlUnitMile;
+  netoptState.transport.ltlUnitMile = ltlUnitMile;
+  netoptState.transport.parcelUnitCost = parcelUnitCost;
+  netoptState.transport.modeMix = { tl: tlPct / 100, ltl: ltlPct / 100, parcel: parcelPct / 100 };
+  netoptState.transport.parcelCarrier = carrier;
+  netoptState.transport.parcelDiscount = parcelDiscount;
+  netoptState.transport.parcelWeight = parcelWeight;
+  netoptState.transport.parcelResi = resiCharge;
+  netoptState.transport.parcelResiPct = resiPct;
+  netoptState.transport.ltlClass = ltlClass;
+  netoptState.transport.ltlWeight = ltlWeight;
+  netoptState.transport.ltlDiscount = ltlDiscount;
+  netoptState.transport.ltlFsc = ltlFsc;
+  netoptState.transport.ltlUnits = ltlUnits;
 
   netoptUpdateKPI();
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// DEMAND DATA GENERATOR — Business Archetypes at 3-Digit ZIP Level
+// ══════════════════════════════════════════════════════════════════════
+
+// Compressed US 3-digit ZIP database: [zip3, city, state, lat, lng, population_index]
+// population_index is relative weight 1-100 (100 = NYC metro area density)
+var NETOPT_ZIP3_DB = [
+  // Northeast Corridor
+  ['100','New York','NY',40.71,-74.01,100],['101','New York','NY',40.75,-73.98,45],['102','New York','NY',40.80,-73.95,30],
+  ['103','Staten Is','NY',40.58,-74.15,22],['104','Bronx','NY',40.85,-73.87,35],['105','Westchester','NY',41.03,-73.76,25],
+  ['106','White Plains','NY',41.03,-73.77,18],['107','Yonkers','NY',40.93,-73.90,20],['108','New Rochelle','NY',40.91,-73.78,15],
+  ['110','Queens','NY',40.73,-73.79,40],['111','Long Island City','NY',40.74,-73.92,28],['112','Brooklyn','NY',40.65,-73.95,42],
+  ['113','Brooklyn','NY',40.63,-73.93,30],['114','Jamaica','NY',40.69,-73.79,25],['115','W Nassau','NY',40.72,-73.64,20],
+  ['116','Long Island','NY',40.75,-73.41,18],['117','Hicksville','NY',40.77,-73.52,16],['118','Hauppauge','NY',40.82,-73.20,12],
+  ['119','Riverhead','NY',40.92,-72.66,8],
+  ['070','Newark','NJ',40.73,-74.17,35],['071','Newark','NJ',40.74,-74.16,28],['072','Elizabeth','NJ',40.66,-74.21,22],
+  ['073','Jersey City','NJ',40.73,-74.08,30],['074','Paterson','NJ',40.92,-74.17,20],['075','Paterson','NJ',40.91,-74.16,15],
+  ['076','Hackensack','NJ',40.89,-74.04,18],['077','Red Bank','NJ',40.35,-74.06,12],['078','Dover','NJ',40.88,-74.56,10],
+  ['079','Summit','NJ',40.72,-74.36,14],['080','S Jersey','NJ',39.95,-75.12,16],['081','Camden','NJ',39.94,-75.12,18],
+  ['085','Trenton','NJ',40.22,-74.76,14],['086','Trenton','NJ',40.23,-74.77,10],['087','Toms River','NJ',39.95,-74.20,12],
+  ['088','New Brunswick','NJ',40.49,-74.45,16],['089','New Brunswick','NJ',40.50,-74.44,12],
+  ['060','Hartford','CT',41.76,-72.68,18],['061','Hartford','CT',41.77,-72.67,12],['062','Middletown','CT',41.46,-72.82,8],
+  ['063','New London','CT',41.36,-72.10,7],['064','New Haven','CT',41.31,-72.92,15],['065','New Haven','CT',41.30,-72.93,12],
+  ['066','Bridgeport','CT',41.19,-73.19,18],['067','Waterbury','CT',41.56,-73.04,10],['068','Stamford','CT',41.05,-73.54,16],
+  ['010','Springfield','MA',42.10,-72.59,12],['011','Springfield','MA',42.11,-72.58,8],['012','Pittsfield','MA',42.45,-73.26,5],
+  ['013','Greenfield','MA',42.59,-72.60,4],['014','Worcester','MA',42.26,-71.80,14],['015','Worcester','MA',42.27,-71.79,10],
+  ['016','Worcester','MA',42.28,-71.78,8],['017','Framingham','MA',42.28,-71.42,12],['018','Middleboro','MA',41.89,-70.91,8],
+  ['019','Lynn','MA',42.47,-70.95,10],['020','Brockton','MA',42.08,-71.02,14],['021','Boston','MA',42.36,-71.06,38],
+  ['022','Boston','MA',42.35,-71.07,30],['023','Brockton','MA',42.08,-71.01,10],['024','Lexington','MA',42.45,-71.23,14],
+  ['025','Buzzards Bay','MA',41.74,-70.62,6],['026','Cape Cod','MA',41.67,-70.30,5],['027','Providence','RI',41.82,-71.41,16],
+  ['028','Providence','RI',41.83,-71.40,12],['029','Providence','RI',41.84,-71.39,8],
+  ['030','Manchester','NH',43.00,-71.45,10],['031','Manchester','NH',43.01,-71.44,8],['032','Concord','NH',43.21,-71.54,6],
+  ['033','Concord','NH',43.22,-71.53,4],['034','Keene','NH',42.93,-72.28,3],['035','Littleton','NH',44.31,-71.77,2],
+  ['036','Claremont','NH',43.38,-72.35,2],['037','White River','VT',43.65,-72.32,3],['038','Portsmouth','NH',43.08,-70.76,6],
+  ['039','Portsmouth','NH',43.07,-70.77,4],
+  ['040','Portland','ME',43.66,-70.26,8],['041','Portland','ME',43.67,-70.25,6],['042','Lewiston','ME',44.10,-70.21,4],
+  ['043','Augusta','ME',44.31,-69.78,4],['044','Bangor','ME',44.80,-68.77,4],['045','Bath','ME',43.91,-69.82,3],
+  ['046','Machias','ME',44.71,-67.46,1],['047','Houlton','ME',46.13,-67.84,1],['048','Rockland','ME',44.10,-69.11,2],
+  ['049','Waterville','ME',44.55,-69.63,3],
+  ['050','White River','VT',43.65,-72.32,3],['051','Bellows Falls','VT',43.13,-72.44,2],['052','Bennington','VT',42.88,-73.20,2],
+  ['053','Brattleboro','VT',42.85,-72.56,3],['054','Burlington','VT',44.48,-73.21,6],['056','Montpelier','VT',44.26,-72.58,3],
+  // Mid-Atlantic
+  ['150','Pittsburgh','PA',40.44,-80.00,18],['151','Pittsburgh','PA',40.43,-79.99,14],['152','Pittsburgh','PA',40.45,-80.01,12],
+  ['153','Washington','PA',40.17,-80.25,6],['154','Uniontown','PA',39.90,-79.72,4],['155','Johnstown','PA',40.33,-78.92,4],
+  ['156','Greensburg','PA',40.30,-79.54,5],['157','Bedford','PA',40.02,-78.50,2],['158','DuBois','PA',41.12,-78.76,3],
+  ['159','Johnstown','PA',40.34,-78.91,3],['160','New Castle','PA',41.00,-80.35,4],['161','New Castle','PA',41.01,-80.34,3],
+  ['162','Sharon','PA',41.23,-80.50,3],['163','Oil City','PA',41.43,-79.70,2],['164','Erie','PA',42.13,-80.09,8],
+  ['165','Erie','PA',42.14,-80.08,5],['166','Altoona','PA',40.52,-78.40,4],['167','Bradford','PA',41.96,-78.64,2],
+  ['168','State College','PA',40.79,-77.86,5],['169','Williamsport','PA',41.24,-77.00,4],
+  ['170','Harrisburg','PA',40.27,-76.88,10],['171','Harrisburg','PA',40.28,-76.87,7],['172','Chambersburg','PA',39.94,-77.66,4],
+  ['173','York','PA',39.96,-76.73,6],['174','York','PA',39.97,-76.72,4],['175','Lancaster','PA',40.04,-76.31,8],
+  ['176','Lancaster','PA',40.05,-76.30,6],['177','Williamsport','PA',41.25,-76.99,3],['178','Sunbury','PA',40.86,-76.79,3],
+  ['179','Pottsville','PA',40.68,-76.20,4],['180','Lehigh Valley','PA',40.60,-75.49,14],['181','Allentown','PA',40.61,-75.47,12],
+  ['182','Hazleton','PA',40.96,-75.97,4],['183','Stroudsburg','PA',41.00,-75.20,5],['184','Scranton','PA',41.41,-75.66,8],
+  ['185','Scranton','PA',41.42,-75.65,6],['186','Wilkes-Barre','PA',41.25,-75.88,6],['187','Wilkes-Barre','PA',41.26,-75.87,4],
+  ['188','Scranton','PA',41.40,-75.67,4],['189','Doylestown','PA',40.31,-75.13,8],['190','Philadelphia','PA',39.95,-75.17,32],
+  ['191','Philadelphia','PA',39.94,-75.16,28],['192','Philadelphia','PA',39.93,-75.18,18],['193','SE PA','PA',40.10,-75.30,14],
+  ['194','SE PA','PA',40.20,-75.40,10],['195','Reading','PA',40.34,-75.93,8],['196','Reading','PA',40.33,-75.94,6],
+  ['197','Wilmington','DE',39.74,-75.55,10],['198','Wilmington','DE',39.75,-75.54,8],['199','Dover','DE',39.16,-75.52,4],
+  ['200','Washington','DC',38.90,-77.04,22],['201','Dulles','VA',38.95,-77.45,15],['202','Washington','DC',38.91,-77.03,18],
+  ['203','Washington','DC',38.89,-77.05,12],['204','Fredericksburg','VA',38.30,-77.46,6],['205','Richmond','VA',37.54,-77.44,4],
+  ['206','Richmond','VA',37.55,-77.43,3],['207','Richmond','VA',37.56,-77.42,2],['208','Merrifield','VA',38.87,-77.24,14],
+  ['209','Silver Spring','MD',39.00,-77.02,12],['210','Linthicum','MD',39.20,-76.67,10],['211','Columbia','MD',39.22,-76.85,12],
+  ['212','Baltimore','MD',39.29,-76.61,20],['214','Annapolis','MD',38.98,-76.49,8],['215','Cumberland','MD',39.65,-78.76,3],
+  ['216','Easton','MD',38.77,-76.08,3],['217','Frederick','MD',39.41,-77.41,6],['218','Salisbury','MD',38.37,-75.60,4],
+  ['219','Baltimore','MD',39.28,-76.62,5],
+  // Southeast
+  ['220','Fairfax','VA',38.85,-77.31,16],['221','Arlington','VA',38.88,-77.10,14],['222','Arlington','VA',38.87,-77.11,12],
+  ['223','Alexandria','VA',38.80,-77.05,10],['224','Staunton','VA',38.15,-79.07,4],['225','Farmville','VA',37.30,-78.39,2],
+  ['226','Winchester','VA',39.19,-78.16,4],['227','Culpeper','VA',38.47,-78.01,3],['228','Charlottesville','VA',38.03,-78.48,5],
+  ['229','Charlottesville','VA',38.04,-78.47,3],['230','Richmond','VA',37.54,-77.43,14],['231','Richmond','VA',37.55,-77.42,10],
+  ['232','Richmond','VA',37.53,-77.44,8],['233','Norfolk','VA',36.85,-76.29,10],['234','Virginia Beach','VA',36.85,-75.98,12],
+  ['235','Norfolk','VA',36.86,-76.28,6],['236','Newport News','VA',37.09,-76.47,8],['237','Newport News','VA',37.08,-76.48,5],
+  ['238','Richmond','VA',37.52,-77.45,4],['239','Farmville','VA',37.30,-78.39,2],['240','Roanoke','VA',37.27,-79.94,6],
+  ['241','Roanoke','VA',37.28,-79.93,4],['242','Bristol','VA',36.60,-82.19,3],['243','Pulaski','VA',37.05,-80.78,2],
+  ['244','Charlottesville','VA',38.04,-78.47,3],['245','Lynchburg','VA',37.41,-79.14,5],['246','Bluefield','WV',37.27,-81.22,2],
+  ['247','Bluefield','WV',37.26,-81.23,2],['248','Clarksburg','WV',39.28,-80.34,3],['249','Lewisburg','WV',37.80,-80.43,1],
+  ['250','Charleston','WV',38.35,-81.63,6],['251','Charleston','WV',38.34,-81.64,4],['252','Charleston','WV',38.36,-81.62,3],
+  ['253','Huntington','WV',38.42,-82.45,4],['254','Martinsburg','WV',39.46,-77.96,3],['255','Huntington','WV',38.41,-82.44,3],
+  ['256','Huntington','WV',38.43,-82.43,2],['257','Huntington','WV',38.42,-82.46,2],['258','Beckley','WV',37.78,-81.19,2],
+  ['259','Beckley','WV',37.77,-81.20,1],['260','Wheeling','WV',40.06,-80.72,3],['261','Parkersburg','WV',39.27,-81.56,3],
+  ['262','Clarksburg','WV',39.28,-80.34,2],['263','Clarksburg','WV',39.27,-80.35,2],['264','Clarksburg','WV',39.29,-80.33,1],
+  ['265','Clarksburg','WV',39.30,-80.32,1],['266','Gassaway','WV',38.67,-80.77,1],['267','Cumberland','MD',39.65,-78.76,2],
+  ['268','Petersburg','WV',38.99,-79.12,1],
+  ['270','Greensboro','NC',36.07,-79.79,10],['271','Winston-Salem','NC',36.10,-80.24,10],['272','Greensboro','NC',36.08,-79.78,8],
+  ['273','Greensboro','NC',36.06,-79.80,6],['274','Greensboro','NC',36.09,-79.77,4],['275','Raleigh','NC',35.78,-78.64,14],
+  ['276','Raleigh','NC',35.77,-78.65,12],['277','Durham','NC',35.99,-78.90,10],['278','Rocky Mount','NC',35.94,-77.79,4],
+  ['279','Rocky Mount','NC',35.93,-77.80,3],['280','Charlotte','NC',35.23,-80.84,16],['281','Charlotte','NC',35.22,-80.85,12],
+  ['282','Charlotte','NC',35.24,-80.83,10],['283','Fayetteville','NC',35.05,-78.88,6],['284','Wilmington','NC',34.23,-77.94,6],
+  ['285','Kinston','NC',35.26,-77.58,3],['286','Hickory','NC',35.73,-81.34,4],['287','Asheville','NC',35.60,-82.55,6],
+  ['288','Asheville','NC',35.59,-82.56,4],['289','Gastonia','NC',35.26,-81.19,5],
+  ['290','Columbia','SC',34.00,-81.03,8],['291','Columbia','SC',33.99,-81.04,6],['292','Columbia','SC',34.01,-81.02,5],
+  ['293','Greenville','SC',34.85,-82.40,10],['294','Charleston','SC',32.78,-79.93,10],['295','Florence','SC',34.20,-79.76,3],
+  ['296','Greenville','SC',34.84,-82.41,6],['297','Charlotte','NC',35.21,-80.86,4],['298','Hilton Head','SC',32.22,-80.75,3],
+  ['299','Savannah','GA',32.08,-81.09,6],
+  ['300','Atlanta','GA',33.75,-84.39,20],['301','Atlanta','GA',33.74,-84.40,15],['302','Atlanta','GA',33.76,-84.38,12],
+  ['303','Atlanta','GA',33.73,-84.41,18],['304','Swainsboro','GA',32.60,-82.33,2],['305','Athens','GA',33.96,-83.38,5],
+  ['306','Athens','GA',33.97,-83.37,3],['307','Chattanooga','TN',35.05,-85.31,6],['308','Augusta','GA',33.47,-81.97,5],
+  ['309','Augusta','GA',33.48,-81.96,4],['310','Macon','GA',32.84,-83.63,4],['311','Atlanta','GA',33.77,-84.37,10],
+  ['312','Macon','GA',32.83,-83.64,3],['313','Savannah','GA',32.08,-81.10,5],['314','Savannah','GA',32.07,-81.11,4],
+  ['315','Waycross','GA',31.21,-82.35,2],['316','Valdosta','GA',30.83,-83.28,3],['317','Albany','GA',31.58,-84.16,2],
+  ['318','Columbus','GA',32.46,-84.99,4],['319','Columbus','GA',32.47,-84.98,3],
+  ['320','Jacksonville','FL',30.33,-81.66,10],['321','Daytona Beach','FL',29.21,-81.02,5],['322','Jacksonville','FL',30.32,-81.65,8],
+  ['323','Tallahassee','FL',30.44,-84.28,5],['324','Panama City','FL',30.16,-85.66,3],['325','Pensacola','FL',30.44,-87.19,5],
+  ['326','Gainesville','FL',29.65,-82.32,5],['327','Orlando','FL',28.54,-81.38,14],['328','Orlando','FL',28.53,-81.39,12],
+  ['329','Melbourne','FL',28.08,-80.61,5],['330','Miami','FL',25.76,-80.19,20],['331','Miami','FL',25.77,-80.18,15],
+  ['332','Miami','FL',25.75,-80.20,14],['333','Fort Lauderdale','FL',26.12,-80.14,16],['334','W Palm Beach','FL',26.71,-80.05,10],
+  ['335','Tampa','FL',27.95,-82.46,14],['336','Tampa','FL',27.94,-82.47,10],['337','St Petersburg','FL',27.77,-82.64,10],
+  ['338','Lakeland','FL',28.04,-81.95,5],['339','Fort Myers','FL',26.64,-81.87,6],['340','Fort Myers','FL',26.63,-81.88,4],
+  ['341','Fort Myers','FL',26.65,-81.86,3],['342','Sarasota','FL',27.34,-82.53,6],['344','Gainesville','FL',29.64,-82.33,3],
+  ['346','Tampa','FL',27.96,-82.45,6],['347','Orlando','FL',28.55,-81.37,5],['349','West Palm','FL',26.72,-80.04,4],
+  // South Central
+  ['350','Birmingham','AL',33.52,-86.81,8],['351','Birmingham','AL',33.51,-86.82,6],['352','Tuscaloosa','AL',33.21,-87.57,4],
+  ['354','Tuscaloosa','AL',33.22,-87.56,3],['355','Birmingham','AL',33.53,-86.80,4],['356','Huntsville','AL',34.73,-86.59,6],
+  ['357','Huntsville','AL',34.74,-86.58,4],['358','Huntsville','AL',34.75,-86.57,3],['359','Gadsden','AL',34.01,-86.01,2],
+  ['360','Montgomery','AL',32.38,-86.31,5],['361','Montgomery','AL',32.37,-86.32,3],['362','Anniston','AL',33.66,-85.83,2],
+  ['363','Dothan','AL',31.22,-85.39,3],['364','Evergreen','AL',31.43,-86.95,1],['365','Mobile','AL',30.69,-88.04,5],
+  ['366','Mobile','AL',30.70,-88.03,3],['367','Selma','AL',32.41,-87.02,2],['368','Selma','AL',32.42,-87.01,1],
+  ['369','Meridian','MS',32.35,-88.70,2],['370','Nashville','TN',36.16,-86.78,12],['371','Nashville','TN',36.17,-86.77,8],
+  ['372','Nashville','TN',36.15,-86.79,6],['373','Chattanooga','TN',35.05,-85.31,6],['374','Chattanooga','TN',35.06,-85.30,4],
+  ['375','Memphis','TN',35.15,-90.05,8],['376','Johnson City','TN',36.31,-82.35,3],['377','Knoxville','TN',35.96,-83.92,7],
+  ['378','Knoxville','TN',35.97,-83.91,5],['379','Knoxville','TN',35.98,-83.90,3],['380','Memphis','TN',35.14,-90.06,10],
+  ['381','Memphis','TN',35.16,-90.04,6],['382','McKenzie','TN',36.13,-88.52,2],['383','Jackson','TN',35.61,-88.81,3],
+  ['384','Columbia','TN',35.62,-87.04,2],['385','Cookeville','TN',36.16,-85.50,2],
+  ['386','Jackson','MS',32.30,-90.18,5],['387','Greenville','MS',33.41,-91.06,2],['388','Tupelo','MS',34.26,-88.70,2],
+  ['389','Grenada','MS',33.77,-89.81,1],['390','Jackson','MS',32.31,-90.17,4],['391','Jackson','MS',32.29,-90.19,3],
+  ['392','Hattiesburg','MS',31.33,-89.29,3],['393','Meridian','MS',32.36,-88.69,2],['394','Laurel','MS',31.69,-89.13,2],
+  ['395','Biloxi','MS',30.40,-88.88,4],['396','McComb','MS',31.24,-90.45,1],['397','Columbus','MS',33.50,-88.43,2],
+  // Midwest
+  ['400','Louisville','KY',38.25,-85.76,8],['401','Louisville','KY',38.26,-85.75,6],['402','Louisville','KY',38.24,-85.77,5],
+  ['403','Lexington','KY',38.04,-84.50,6],['404','Lexington','KY',38.03,-84.51,4],['405','Lexington','KY',38.05,-84.49,3],
+  ['406','Frankfort','KY',38.20,-84.87,3],['410','Cincinnati','OH',39.10,-84.51,10],['411','Covington','KY',39.08,-84.51,6],
+  ['420','Paducah','KY',37.08,-88.60,2],['421','Bowling Green','KY',36.99,-86.44,3],['422','Danville','KY',37.65,-84.77,2],
+  ['423','Pikeville','KY',37.48,-82.52,2],['424','Somerset','KY',37.09,-84.60,2],['425','London','KY',37.13,-84.08,2],
+  ['426','Somerset','KY',37.10,-84.59,1],['427','Elizabethtown','KY',37.69,-85.86,2],
+  ['430','Columbus','OH',39.96,-83.00,12],['431','Columbus','OH',39.97,-82.99,8],['432','Columbus','OH',39.95,-83.01,6],
+  ['433','Marion','OH',40.59,-83.13,3],['434','Toledo','OH',41.66,-83.56,6],['435','Toledo','OH',41.67,-83.55,4],
+  ['436','Toledo','OH',41.65,-83.57,3],['437','Zanesville','OH',39.94,-82.01,2],['438','Zanesville','OH',39.95,-82.00,2],
+  ['439','Steubenville','OH',40.36,-80.63,3],['440','Cleveland','OH',41.50,-81.69,14],['441','Cleveland','OH',41.49,-81.70,10],
+  ['442','Akron','OH',41.08,-81.52,8],['443','Akron','OH',41.09,-81.51,6],['444','Youngstown','OH',41.10,-80.65,5],
+  ['445','Youngstown','OH',41.11,-80.64,3],['446','Canton','OH',40.80,-81.38,5],['447','Canton','OH',40.81,-81.37,3],
+  ['448','Mansfield','OH',40.76,-82.52,3],['449','Mansfield','OH',40.77,-82.51,2],['450','Cincinnati','OH',39.10,-84.51,12],
+  ['451','Cincinnati','OH',39.11,-84.50,8],['452','Cincinnati','OH',39.09,-84.52,6],['453','Dayton','OH',39.76,-84.19,8],
+  ['454','Dayton','OH',39.77,-84.18,5],['455','Springfield','OH',39.92,-83.81,4],['456','Chillicothe','OH',39.33,-82.98,2],
+  ['457','Athens','OH',39.33,-82.10,2],['458','Lima','OH',40.74,-84.11,3],['459','Cincinnati','OH',39.12,-84.49,4],
+  ['460','Indianapolis','IN',39.77,-86.16,12],['461','Indianapolis','IN',39.78,-86.15,8],['462','Indianapolis','IN',39.76,-86.17,6],
+  ['463','Gary','IN',41.59,-87.35,6],['464','Gary','IN',41.60,-87.34,4],['465','South Bend','IN',41.68,-86.25,5],
+  ['466','South Bend','IN',41.69,-86.24,3],['467','Fort Wayne','IN',41.08,-85.14,6],['468','Fort Wayne','IN',41.09,-85.13,4],
+  ['469','Kokomo','IN',40.49,-86.13,3],['470','Cincinnati','OH',39.10,-84.52,4],['471','Louisville','KY',38.25,-85.76,3],
+  ['472','Columbus','IN',39.20,-85.92,3],['473','Muncie','IN',40.19,-85.39,3],['474','Bloomington','IN',39.17,-86.53,4],
+  ['475','Terre Haute','IN',39.47,-87.41,3],['476','Evansville','IN',37.97,-87.56,4],['477','Evansville','IN',37.98,-87.55,3],
+  ['478','Terre Haute','IN',39.48,-87.40,2],['479','Lafayette','IN',40.42,-86.87,4],
+  ['480','Royal Oak','MI',42.49,-83.14,12],['481','Detroit','MI',42.33,-83.05,16],['482','Detroit','MI',42.34,-83.04,12],
+  ['483','Royal Oak','MI',42.50,-83.13,8],['484','Flint','MI',43.01,-83.69,6],['485','Flint','MI',43.02,-83.68,4],
+  ['486','Saginaw','MI',43.42,-83.95,4],['487','Saginaw','MI',43.43,-83.94,3],['488','Lansing','MI',42.73,-84.56,6],
+  ['489','Lansing','MI',42.74,-84.55,4],['490','Kalamazoo','MI',42.29,-85.59,5],['491','Kalamazoo','MI',42.30,-85.58,3],
+  ['492','Jackson','MI',42.25,-84.40,3],['493','Grand Rapids','MI',42.96,-85.66,8],['494','Grand Rapids','MI',42.97,-85.65,5],
+  ['495','Grand Rapids','MI',42.98,-85.64,4],['496','Traverse City','MI',44.76,-85.62,3],['497','Gaylord','MI',45.03,-84.67,1],
+  ['498','Iron Mountain','MI',45.82,-88.07,1],['499','Iron Mountain','MI',45.83,-88.06,1],
+  ['500','Des Moines','IA',41.59,-93.62,6],['501','Des Moines','IA',41.60,-93.61,4],['502','Des Moines','IA',41.58,-93.63,3],
+  ['503','Des Moines','IA',41.61,-93.60,2],['504','Mason City','IA',43.15,-93.20,2],['505','Fort Dodge','IA',42.50,-94.17,2],
+  ['506','Waterloo','IA',42.49,-92.34,3],['507','Waterloo','IA',42.50,-92.33,2],['508','Creston','IA',41.06,-94.36,1],
+  ['509','Des Moines','IA',41.57,-93.64,2],['510','Sioux City','IA',42.50,-96.40,3],['511','Sioux City','IA',42.51,-96.39,2],
+  ['512','Sheldon','IA',43.18,-95.86,1],['513','Spencer','IA',43.14,-95.14,1],['514','Carroll','IA',42.07,-94.87,1],
+  ['515','Omaha','NE',41.26,-95.94,5],['516','Omaha','NE',41.27,-95.93,3],['520','Dubuque','IA',42.50,-90.66,3],
+  ['521','Decorah','IA',43.30,-91.79,1],['522','Cedar Rapids','IA',42.03,-91.64,5],['523','Cedar Rapids','IA',42.04,-91.63,3],
+  ['524','Cedar Rapids','IA',42.02,-91.65,2],['525','Ottumwa','IA',41.02,-92.41,2],['526','Burlington','IA',40.81,-91.11,2],
+  ['527','Rock Island','IL',41.51,-90.58,4],['528','Davenport','IA',41.52,-90.58,5],
+  ['530','Milwaukee','WI',43.04,-87.91,10],['531','Milwaukee','WI',43.03,-87.92,8],['532','Milwaukee','WI',43.05,-87.90,6],
+  ['534','Racine','WI',42.73,-87.78,5],['535','Madison','WI',43.07,-89.40,6],['537','Madison','WI',43.08,-89.39,4],
+  ['538','Madison','WI',43.06,-89.41,3],['539','Portage','WI',43.54,-89.46,2],['540','St Paul','MN',44.94,-93.09,4],
+  ['541','Green Bay','WI',44.51,-88.02,5],['542','Green Bay','WI',44.52,-88.01,3],['543','Green Bay','WI',44.50,-88.03,2],
+  ['544','Wausau','WI',44.96,-89.63,2],['545','Rhinelander','WI',45.64,-89.41,1],['546','La Crosse','WI',43.80,-91.24,3],
+  ['547','Eau Claire','WI',44.81,-91.50,3],['548','Spooner','WI',45.82,-91.89,1],['549','Oshkosh','WI',44.02,-88.54,3],
+  ['550','St Paul','MN',44.95,-93.09,10],['551','St Paul','MN',44.96,-93.10,8],['553','Minneapolis','MN',44.98,-93.27,14],
+  ['554','Minneapolis','MN',44.97,-93.26,10],['555','Minneapolis','MN',44.99,-93.28,6],['556','Duluth','MN',46.79,-92.10,3],
+  ['557','Duluth','MN',46.80,-92.09,2],['558','Duluth','MN',46.78,-92.11,2],['559','Rochester','MN',44.02,-92.47,4],
+  ['560','Mankato','MN',44.16,-94.00,2],['561','Mankato','MN',44.17,-93.99,2],['562','Willmar','MN',45.12,-95.04,1],
+  ['563','St Cloud','MN',45.56,-94.16,3],['564','Brainerd','MN',46.36,-94.20,2],['565','Detroit Lakes','MN',46.82,-95.84,1],
+  ['566','Bemidji','MN',47.47,-94.88,1],['567','Thief River','MN',48.12,-96.18,1],
+  ['570','Sioux Falls','SD',43.55,-96.70,4],['571','Sioux Falls','SD',43.56,-96.69,3],['572','Watertown','SD',44.89,-97.12,1],
+  ['573','Mitchell','SD',43.71,-98.03,1],['574','Aberdeen','SD',45.46,-98.49,1],['575','Pierre','SD',44.37,-100.35,1],
+  ['576','Mobridge','SD',45.54,-100.43,1],['577','Rapid City','SD',44.08,-103.23,2],
+  ['580','Fargo','ND',46.88,-96.79,3],['581','Fargo','ND',46.87,-96.80,2],['582','Grand Forks','ND',47.93,-97.03,2],
+  ['583','Devils Lake','ND',48.11,-98.86,1],['584','Jamestown','ND',46.91,-98.71,1],['585','Bismarck','ND',46.81,-100.78,2],
+  ['586','Dickinson','ND',46.88,-102.79,1],['587','Minot','ND',48.23,-101.29,1],['588','Williston','ND',48.15,-103.62,1],
+  ['590','Billings','MT',45.78,-108.50,2],['591','Billings','MT',45.79,-108.49,2],['592','Wolf Point','MT',48.09,-105.64,1],
+  ['593','Miles City','MT',46.41,-105.84,1],['594','Great Falls','MT',47.50,-111.30,2],['595','Havre','MT',48.55,-109.68,1],
+  ['596','Helena','MT',46.59,-112.04,2],['597','Butte','MT',46.00,-112.53,2],['598','Missoula','MT',46.87,-114.00,3],
+  ['599','Kalispell','MT',48.19,-114.32,2],
+  // Chicago / Illinois
+  ['600','Palatine','IL',42.11,-88.03,14],['601','Carol Stream','IL',41.91,-88.13,12],['602','Evanston','IL',42.04,-87.68,10],
+  ['603','Oak Park','IL',41.89,-87.79,12],['604','S Suburbs','IL',41.52,-87.70,10],['605','SW Suburbs','IL',41.64,-87.73,10],
+  ['606','Chicago','IL',41.88,-87.63,22],['607','Chicago','IL',41.87,-87.64,16],['608','Chicago','IL',41.86,-87.65,12],
+  ['609','Kankakee','IL',41.12,-87.86,3],['610','Rockford','IL',42.27,-89.09,5],['611','Rockford','IL',42.28,-89.08,3],
+  ['612','Rock Island','IL',41.51,-90.58,4],['613','La Salle','IL',41.34,-89.09,2],['614','Galesburg','IL',40.95,-90.37,2],
+  ['615','Peoria','IL',40.69,-89.59,5],['616','Peoria','IL',40.70,-89.58,3],['617','Bloomington','IL',40.48,-88.99,4],
+  ['618','Champaign','IL',40.12,-88.24,4],['619','Champaign','IL',40.11,-88.25,3],['620','E St Louis','IL',38.62,-90.15,6],
+  ['622','E St Louis','IL',38.63,-90.14,4],['623','Quincy','IL',39.93,-91.38,2],['624','Effingham','IL',39.12,-88.54,2],
+  ['625','Springfield','IL',39.80,-89.65,5],['626','Springfield','IL',39.81,-89.64,3],['627','Springfield','IL',39.79,-89.66,2],
+  ['628','Centralia','IL',38.53,-89.13,2],['629','Carbondale','IL',37.73,-89.22,3],
+  // Texas
+  ['700','New Orleans','LA',29.95,-90.07,10],['701','New Orleans','LA',29.96,-90.06,8],['703','Thibodaux','LA',29.80,-90.82,3],
+  ['704','Hammond','LA',30.50,-90.46,3],['706','Lake Charles','LA',30.23,-93.22,3],['707','Baton Rouge','LA',30.45,-91.19,6],
+  ['708','Baton Rouge','LA',30.46,-91.18,4],['710','Shreveport','LA',32.51,-93.75,4],['711','Shreveport','LA',32.52,-93.74,3],
+  ['712','Monroe','LA',32.51,-92.12,3],['713','Alexandria','LA',31.31,-92.45,2],['714','Alexandria','LA',31.32,-92.44,2],
+  ['716','Pine Bluff','AR',34.23,-92.00,2],['717','Camden','AR',33.58,-92.83,1],['718','Texarkana','AR',33.44,-94.05,2],
+  ['719','Hot Springs','AR',34.50,-93.06,2],['720','Little Rock','AR',34.75,-92.29,5],['721','Little Rock','AR',34.74,-92.30,4],
+  ['722','Little Rock','AR',34.76,-92.28,3],['723','Memphis','TN',35.13,-90.07,3],['724','Jonesboro','AR',35.84,-90.70,2],
+  ['725','Batesville','AR',35.77,-91.64,1],['726','Harrison','AR',36.23,-93.11,1],['727','Fayetteville','AR',36.06,-94.16,3],
+  ['728','Russellville','AR',35.28,-93.13,2],['729','Fort Smith','AR',35.39,-94.40,3],
+  ['730','Oklahoma City','OK',35.47,-97.52,6],['731','Oklahoma City','OK',35.48,-97.51,4],['733','Austin TX','TX',30.27,-97.74,2],
+  ['734','Ardmore','OK',34.17,-97.14,2],['735','Lawton','OK',34.60,-98.39,2],['736','Clinton','OK',35.52,-99.00,1],
+  ['737','Enid','OK',36.40,-97.88,2],['738','Woodward','OK',36.43,-99.39,1],['739','Guymon','OK',36.69,-101.48,1],
+  ['740','Tulsa','OK',36.15,-95.99,6],['741','Tulsa','OK',36.16,-95.98,4],['743','Tulsa','OK',36.14,-96.00,3],
+  ['744','Muskogee','OK',35.75,-95.37,2],['745','McAlester','OK',34.93,-95.77,2],['746','Ponca City','OK',36.71,-97.09,2],
+  ['747','Durant','OK',34.00,-96.39,1],['748','Shawnee','OK',35.33,-96.93,2],['749','Poteau','OK',35.05,-94.62,1],
+  ['750','Dallas','TX',32.78,-96.80,16],['751','Dallas','TX',32.79,-96.79,10],['752','Dallas','TX',32.77,-96.81,8],
+  ['753','Dallas','TX',32.80,-96.78,6],['754','Greenville','TX',33.14,-96.11,2],['755','Texarkana','TX',33.43,-94.05,2],
+  ['756','Longview','TX',32.50,-94.74,3],['757','Tyler','TX',32.35,-95.30,3],['758','Palestine','TX',31.76,-95.63,1],
+  ['759','Lufkin','TX',31.34,-94.73,2],['760','Fort Worth','TX',32.75,-97.33,12],['761','Fort Worth','TX',32.76,-97.32,8],
+  ['762','Denton','TX',33.21,-97.13,5],['763','Wichita Falls','TX',33.91,-98.49,2],['764','Stephenville','TX',32.22,-98.20,1],
+  ['765','Waco','TX',31.55,-97.15,4],['766','Waco','TX',31.56,-97.14,3],['767','Waco','TX',31.54,-97.16,2],
+  ['768','Abilene','TX',32.45,-99.73,2],['769','San Angelo','TX',31.46,-100.44,2],
+  ['770','Houston','TX',29.76,-95.37,18],['771','Houston','TX',29.77,-95.36,14],['772','Houston','TX',29.75,-95.38,10],
+  ['773','Conroe','TX',30.31,-95.46,5],['774','Richmond','TX',29.58,-95.76,4],['775','Galveston','TX',29.30,-94.80,4],
+  ['776','Beaumont','TX',30.09,-94.10,4],['777','Beaumont','TX',30.10,-94.09,3],['778','Bryan','TX',30.67,-96.37,3],
+  ['779','Victoria','TX',28.81,-96.99,2],['780','San Antonio','TX',29.42,-98.49,10],['781','San Antonio','TX',29.43,-98.48,8],
+  ['782','San Antonio','TX',29.44,-98.47,6],['783','Corpus Christi','TX',27.80,-97.40,4],['784','Corpus Christi','TX',27.81,-97.39,3],
+  ['785','McAllen','TX',26.20,-98.23,4],['786','Austin','TX',30.27,-97.74,10],['787','Austin','TX',30.28,-97.73,8],
+  ['788','San Marcos','TX',29.88,-97.94,3],['789','Giddings','TX',30.18,-96.94,1],['790','Amarillo','TX',35.22,-101.83,2],
+  ['791','Amarillo','TX',35.23,-101.82,2],['792','Childress','TX',34.43,-100.20,1],['793','Lubbock','TX',33.58,-101.85,3],
+  ['794','Lubbock','TX',33.57,-101.86,2],['795','Abilene','TX',32.45,-99.74,2],['796','Abilene','TX',32.44,-99.75,1],
+  ['797','Midland','TX',31.99,-102.08,2],['798','El Paso','TX',31.76,-106.49,5],['799','El Paso','TX',31.77,-106.48,4],
+  // West
+  ['800','Denver','CO',39.74,-104.99,10],['801','Denver','CO',39.73,-105.00,8],['802','Denver','CO',39.75,-104.98,6],
+  ['803','Boulder','CO',40.01,-105.27,5],['804','Denver','CO',39.76,-104.97,4],['805','Longmont','CO',40.17,-105.10,3],
+  ['806','Denver','CO',39.72,-105.01,3],['807','Denver','CO',39.71,-105.02,2],['808','Colorado Springs','CO',38.83,-104.82,5],
+  ['809','Colorado Springs','CO',38.84,-104.81,3],['810','Colorado Springs','CO',38.82,-104.83,2],['811','Alamosa','CO',37.47,-105.87,1],
+  ['812','Salida','CO',38.53,-106.00,1],['813','Durango','CO',37.28,-107.88,1],['814','Grand Junction','CO',39.06,-108.55,2],
+  ['815','Grand Junction','CO',39.07,-108.54,1],['816','Glenwood Springs','CO',39.55,-107.32,1],
+  ['820','Cheyenne','WY',41.14,-104.82,2],['821','Yellowstone','WY',44.43,-110.59,1],['822','Wheatland','WY',42.05,-104.95,1],
+  ['823','Rawlins','WY',41.79,-107.24,1],['824','Worland','WY',44.02,-107.95,1],['825','Riverton','WY',42.86,-108.38,1],
+  ['826','Casper','WY',42.87,-106.31,2],['827','Gillette','WY',44.29,-105.50,1],['828','Sheridan','WY',44.80,-106.96,1],['829','Rock Springs','WY',41.59,-109.22,1],
+  ['830','Salt Lake','UT',40.76,-111.89,8],['831','Salt Lake','UT',40.77,-111.88,5],['832','Pocatello','ID',42.87,-112.44,2],
+  ['833','Twin Falls','ID',42.56,-114.47,2],['834','Idaho Falls','ID',43.47,-112.03,2],['835','Lewiston','ID',46.42,-117.02,2],
+  ['836','Boise','ID',43.62,-116.21,4],['837','Boise','ID',43.63,-116.20,3],['838','Spokane','WA',47.66,-117.43,4],
+  ['840','Salt Lake','UT',40.75,-111.90,6],['841','Salt Lake','UT',40.74,-111.91,4],['842','Ogden','UT',41.22,-111.97,3],
+  ['843','Ogden','UT',41.23,-111.96,2],['844','Ogden','UT',41.21,-111.98,2],['845','Provo','UT',40.23,-111.66,4],
+  ['846','Provo','UT',40.24,-111.65,3],['847','Provo','UT',40.22,-111.67,2],
+  ['850','Phoenix','AZ',33.45,-112.07,12],['852','Phoenix','AZ',33.44,-112.08,10],['853','Phoenix','AZ',33.43,-112.09,8],
+  ['855','Globe','AZ',33.39,-110.79,1],['856','Tucson','AZ',32.22,-110.93,5],['857','Tucson','AZ',32.23,-110.92,3],
+  ['859','Show Low','AZ',34.25,-110.03,1],['860','Phoenix','AZ',33.46,-112.06,5],['863','Prescott','AZ',34.54,-112.47,2],
+  ['864','Kingman','AZ',35.19,-114.05,1],['865','Flagstaff','AZ',35.20,-111.65,2],
+  ['870','Albuquerque','NM',35.08,-106.65,5],['871','Albuquerque','NM',35.09,-106.64,3],['872','Albuquerque','NM',35.07,-106.66,2],
+  ['873','Gallup','NM',35.53,-108.74,1],['874','Farmington','NM',36.73,-108.22,1],['875','Santa Fe','NM',35.69,-105.94,3],
+  ['877','Las Vegas','NM',35.60,-105.22,1],['878','Socorro','NM',34.06,-106.89,1],['879','Truth or Cons','NM',33.13,-107.25,1],
+  ['880','Las Cruces','NM',32.35,-106.76,3],['881','Clovis','NM',34.40,-103.20,1],['882','Roswell','NM',33.39,-104.52,2],
+  ['883','Carrizozo','NM',33.64,-105.88,1],['884','Tucumcari','NM',35.17,-103.73,1],
+  ['889','Las Vegas','NV',36.17,-115.14,10],['890','Las Vegas','NV',36.16,-115.15,8],['891','Las Vegas','NV',36.18,-115.13,5],
+  ['893','Ely','NV',39.25,-114.89,1],['894','Reno','NV',39.53,-119.81,4],['895','Reno','NV',39.54,-119.80,3],
+  ['897','Carson City','NV',39.16,-119.77,2],['898','Elko','NV',40.83,-115.76,1],
+  // Pacific
+  ['900','Los Angeles','CA',34.05,-118.24,22],['901','Los Angeles','CA',34.04,-118.25,18],['902','Inglewood','CA',33.96,-118.35,14],
+  ['903','Inglewood','CA',33.95,-118.36,10],['904','Santa Monica','CA',34.02,-118.49,12],['905','Torrance','CA',33.84,-118.34,10],
+  ['906','Whittier','CA',33.98,-118.03,8],['907','Long Beach','CA',33.77,-118.19,12],['908','Long Beach','CA',33.78,-118.18,8],
+  ['910','Pasadena','CA',34.15,-118.14,8],['911','Pasadena','CA',34.14,-118.15,6],['912','Glendale','CA',34.14,-118.26,8],
+  ['913','Van Nuys','CA',34.19,-118.45,10],['914','Van Nuys','CA',34.18,-118.46,8],['915','Burbank','CA',34.18,-118.31,6],
+  ['916','N Hollywood','CA',34.17,-118.38,6],['917','Alhambra','CA',34.10,-118.13,6],['918','Alhambra','CA',34.09,-118.14,5],
+  ['919','San Gabriel','CA',34.10,-118.10,5],['920','San Diego','CA',32.72,-117.16,12],['921','San Diego','CA',32.71,-117.17,10],
+  ['922','Escondido','CA',33.12,-117.09,5],['923','San Bernardino','CA',34.11,-117.29,6],['924','San Bernardino','CA',34.10,-117.30,5],
+  ['925','Riverside','CA',33.95,-117.40,8],['926','Santa Ana','CA',33.75,-117.87,10],['927','Santa Ana','CA',33.74,-117.88,8],
+  ['928','Anaheim','CA',33.84,-117.91,10],['930','Ventura','CA',34.28,-119.29,4],['931','Santa Barbara','CA',34.42,-119.70,4],
+  ['932','Bakersfield','CA',35.37,-119.02,5],['933','Bakersfield','CA',35.38,-119.01,3],['934','Santa Barbara','CA',34.41,-119.71,3],
+  ['935','Mojave','CA',35.05,-118.17,1],['936','Fresno','CA',36.74,-119.77,6],['937','Fresno','CA',36.75,-119.76,4],
+  ['938','Fresno','CA',36.73,-119.78,3],['939','Salinas','CA',36.67,-121.66,3],['940','San Francisco','CA',37.77,-122.42,14],
+  ['941','San Francisco','CA',37.78,-122.41,12],['942','Sacramento','CA',38.58,-121.49,3],['943','Palo Alto','CA',37.44,-122.14,8],
+  ['944','San Mateo','CA',37.56,-122.32,8],['945','Oakland','CA',37.80,-122.27,10],['946','Oakland','CA',37.81,-122.26,8],
+  ['947','Berkeley','CA',37.87,-122.27,6],['948','Richmond','CA',37.94,-122.35,5],['949','San Rafael','CA',37.97,-122.53,4],
+  ['950','San Jose','CA',37.34,-121.89,12],['951','San Jose','CA',37.33,-121.90,8],['952','Stockton','CA',37.95,-121.29,5],
+  ['953','Stockton','CA',37.96,-121.28,3],['954','Santa Rosa','CA',38.44,-122.71,4],['955','Eureka','CA',40.80,-124.16,2],
+  ['956','Sacramento','CA',38.58,-121.49,8],['957','Sacramento','CA',38.59,-121.48,5],['958','Sacramento','CA',38.57,-121.50,4],
+  ['959','Marysville','CA',39.15,-121.59,2],['960','Redding','CA',40.59,-122.39,2],['961','Reno','NV',39.53,-119.81,2],
+  // Pacific NW / Hawaii / Alaska
+  ['970','Portland','OR',45.52,-122.68,8],['971','Portland','OR',45.53,-122.67,6],['972','Portland','OR',45.51,-122.69,5],
+  ['973','Salem','OR',44.94,-123.03,4],['974','Eugene','OR',44.05,-123.09,4],['975','Medford','OR',42.33,-122.87,3],
+  ['976','Klamath Falls','OR',42.19,-121.74,1],['977','Bend','OR',44.06,-121.31,2],['978','Pendleton','OR',45.67,-118.79,1],
+  ['979','Boise','ID',43.61,-116.22,2],
+  ['980','Seattle','WA',47.61,-122.33,12],['981','Seattle','WA',47.62,-122.32,10],['982','Everett','WA',47.98,-122.20,5],
+  ['983','Tacoma','WA',47.25,-122.44,6],['984','Tacoma','WA',47.26,-122.43,4],['985','Olympia','WA',47.04,-122.90,3],
+  ['986','Portland','OR',45.52,-122.67,3],['988','Wenatchee','WA',47.42,-120.31,1],['989','Yakima','WA',46.60,-120.51,2],
+  ['990','Spokane','WA',47.66,-117.43,4],['991','Spokane','WA',47.67,-117.42,3],['992','Spokane','WA',47.65,-117.44,2],
+  ['993','Pasco','WA',46.24,-119.10,2],['994','Lewiston','ID',46.42,-117.01,1],
+  ['967','Honolulu','HI',21.31,-157.86,6],['968','Honolulu','HI',21.30,-157.87,4],
+  ['995','Anchorage','AK',61.22,-149.90,3],['996','Anchorage','AK',61.21,-149.91,2],['997','Fairbanks','AK',64.84,-147.72,1],['998','Juneau','AK',58.30,-134.42,1],['999','Ketchikan','AK',55.34,-131.64,1]
+];
+
+// ── Business Archetype Definitions ──
+var NETOPT_ARCHETYPES = {
+  dtc_national: {
+    name: 'DTC E-Commerce — National',
+    desc: 'Population-weighted, national',
+    modeMix: { tl: 5, ltl: 10, parcel: 85 },
+    topRegion: 'Northeast 28%',
+    zipCount: 200,
+    regionWeights: { ne: 1.3, se: 1.0, mw: 0.9, sw: 0.8, w: 1.1 },
+    popExponent: 1.1  // slightly favor dense areas
+  },
+  dtc_east: {
+    name: 'DTC E-Commerce — East Coast Heavy',
+    desc: 'Concentrated East Coast / BosWash corridor',
+    modeMix: { tl: 5, ltl: 8, parcel: 87 },
+    topRegion: 'Northeast 45%',
+    zipCount: 180,
+    regionWeights: { ne: 2.2, se: 1.2, mw: 0.5, sw: 0.3, w: 0.4 },
+    popExponent: 1.2
+  },
+  dtc_west: {
+    name: 'DTC E-Commerce — West Coast Heavy',
+    desc: 'Concentrated West Coast / CA+WA+OR',
+    modeMix: { tl: 5, ltl: 8, parcel: 87 },
+    topRegion: 'West 48%',
+    zipCount: 180,
+    regionWeights: { ne: 0.5, se: 0.4, mw: 0.3, sw: 0.6, w: 2.5 },
+    popExponent: 1.2
+  },
+  cpg_bigbox: {
+    name: 'CPG → Big Box Retail',
+    desc: 'Walmart/Target/Costco store distribution',
+    modeMix: { tl: 60, ltl: 30, parcel: 10 },
+    topRegion: 'South 30%',
+    zipCount: 120,
+    regionWeights: { ne: 0.9, se: 1.2, mw: 1.1, sw: 1.0, w: 0.8 },
+    popExponent: 0.7  // more spread out (follows store count not pop density)
+  },
+  cpg_grocery: {
+    name: 'CPG → Grocery Chains',
+    desc: 'Kroger/Publix/Albertsons DC distribution',
+    modeMix: { tl: 55, ltl: 35, parcel: 10 },
+    topRegion: 'Midwest 25%',
+    zipCount: 100,
+    regionWeights: { ne: 1.0, se: 1.1, mw: 1.2, sw: 0.8, w: 0.9 },
+    popExponent: 0.6
+  },
+  industrial: {
+    name: 'Industrial / MRO Distribution',
+    desc: 'Manufacturing belt heavy, B2B',
+    modeMix: { tl: 30, ltl: 50, parcel: 20 },
+    topRegion: 'Midwest 35%',
+    zipCount: 150,
+    regionWeights: { ne: 0.8, se: 0.7, mw: 1.8, sw: 0.6, w: 0.5 },
+    popExponent: 0.5
+  },
+  food_bev: {
+    name: 'Food & Beverage',
+    desc: 'Population-weighted, cold chain',
+    modeMix: { tl: 45, ltl: 40, parcel: 15 },
+    topRegion: 'Northeast 28%',
+    zipCount: 160,
+    regionWeights: { ne: 1.2, se: 1.1, mw: 1.0, sw: 0.8, w: 1.0 },
+    popExponent: 1.0
+  },
+  healthcare: {
+    name: 'Healthcare / Pharma',
+    desc: 'Hospital & pharmacy distribution',
+    modeMix: { tl: 15, ltl: 25, parcel: 60 },
+    topRegion: 'Northeast 30%',
+    zipCount: 180,
+    regionWeights: { ne: 1.4, se: 1.0, mw: 0.9, sw: 0.7, w: 1.0 },
+    popExponent: 1.1
+  },
+  auto_parts: {
+    name: 'Auto Parts / Aftermarket',
+    desc: 'Broad distribution, vehicle-density weighted',
+    modeMix: { tl: 35, ltl: 40, parcel: 25 },
+    topRegion: 'South 28%',
+    zipCount: 170,
+    regionWeights: { ne: 0.9, se: 1.2, mw: 1.1, sw: 1.0, w: 0.9 },
+    popExponent: 0.8
+  },
+  bto_tech: {
+    name: 'Build-to-Order / Tech',
+    desc: 'Tech hubs + metro areas, high parcel mix',
+    modeMix: { tl: 10, ltl: 15, parcel: 75 },
+    topRegion: 'West 35%',
+    zipCount: 160,
+    regionWeights: { ne: 1.1, se: 0.7, mw: 0.6, sw: 0.8, w: 1.6 },
+    popExponent: 1.3  // strongly favor dense/tech areas
+  }
+};
+
+// Determine region from state abbreviation
+function netoptGetRegion(state) {
+  var ne = ['CT','DE','DC','MA','MD','ME','NH','NJ','NY','PA','RI','VT','VA','WV'];
+  var se = ['AL','FL','GA','KY','LA','MS','NC','SC','TN','AR'];
+  var mw = ['IA','IL','IN','KS','MI','MN','MO','ND','NE','OH','OK','SD','WI'];
+  var sw = ['AZ','NM','TX'];
+  var w = ['AK','CA','CO','HI','ID','MT','NV','OR','UT','WA','WY'];
+  if (ne.indexOf(state) >= 0) return 'ne';
+  if (se.indexOf(state) >= 0) return 'se';
+  if (mw.indexOf(state) >= 0) return 'mw';
+  if (sw.indexOf(state) >= 0) return 'sw';
+  if (w.indexOf(state) >= 0) return 'w';
+  return 'mw'; // default
+}
+
+// Update archetype preview card
+function netoptUpdateArchetypePreview() {
+  var arch = NETOPT_ARCHETYPES[document.getElementById('netopt-demo-archetype').value];
+  if (!arch) return;
+  var distDesc = document.getElementById('netopt-demo-dist-desc');
+  var modeDesc = document.getElementById('netopt-demo-mode-desc');
+  var zipCount = document.getElementById('netopt-demo-zip-count');
+  var topRegion = document.getElementById('netopt-demo-top-region');
+  if (distDesc) distDesc.textContent = arch.desc;
+  if (modeDesc) modeDesc.textContent = arch.modeMix.tl + '% / ' + arch.modeMix.ltl + '% / ' + arch.modeMix.parcel + '%';
+  if (zipCount) zipCount.textContent = '~' + arch.zipCount + ' demand points';
+  if (topRegion) topRegion.textContent = arch.topRegion;
+}
+
+// Generate demo demand data
+function netoptGenerateDemoDemand() {
+  var archetypeKey = document.getElementById('netopt-demo-archetype').value;
+  var totalVolume = parseFloat(document.getElementById('netopt-demo-volume').value) || 5000000;
+  var sla = parseFloat(document.getElementById('netopt-demo-sla').value) || 500;
+  var arch = NETOPT_ARCHETYPES[archetypeKey];
+  if (!arch) return;
+
+  var status = document.getElementById('netopt-demo-status');
+  if (status) status.textContent = 'Generating...';
+
+  // Step 1: Calculate weighted scores for each ZIP3
+  var scored = [];
+  NETOPT_ZIP3_DB.forEach(function(z) {
+    var zip3 = z[0], city = z[1], state = z[2], lat = z[3], lng = z[4], popIdx = z[5];
+    var region = netoptGetRegion(state);
+    var regionWeight = arch.regionWeights[region] || 1.0;
+    var score = Math.pow(popIdx, arch.popExponent) * regionWeight;
+    // Add small random noise (±15%) for realism
+    score *= (0.85 + Math.random() * 0.30);
+    if (score > 0.5) { // min threshold
+      scored.push({ zip3: zip3, city: city, state: state, lat: lat, lng: lng, score: score });
+    }
+  });
+
+  // Step 2: Sort by score, take top N
+  scored.sort(function(a, b) { return b.score - a.score; });
+  var maxPoints = Math.min(arch.zipCount, scored.length);
+  var selected = scored.slice(0, maxPoints);
+
+  // Step 3: Normalize scores and distribute volume
+  var totalScore = selected.reduce(function(s, z) { return s + z.score; }, 0);
+  var demandPoints = [];
+  selected.forEach(function(z, i) {
+    var pct = z.score / totalScore;
+    var volume = Math.round(totalVolume * pct / 1000); // Convert to K units
+    if (volume < 1) volume = 1;
+    demandPoints.push({
+      id: 'dem-' + Date.now() + '-' + i,
+      city: z.city + ', ' + z.state,
+      state: z.state,
+      volume: volume,
+      maxMiles: sla,
+      lat: z.lat,
+      lng: z.lng,
+      zip3: z.zip3
+    });
+  });
+
+  // Step 4: Apply to netoptState
+  netoptState.demands = demandPoints;
+  netoptRenderDemandsTable();
+  netoptUpdateKPI();
+
+  // Step 5: Set mode mix from archetype
+  document.getElementById('netopt-mode-tl-pct').value = arch.modeMix.tl;
+  document.getElementById('netopt-mode-ltl-pct').value = arch.modeMix.ltl;
+  document.getElementById('netopt-mode-parcel-pct').value = arch.modeMix.parcel;
+  netoptBalanceModeMix('tl');
+
+  if (status) {
+    status.textContent = 'Generated ' + demandPoints.length + ' demand points (' + (totalVolume / 1000000).toFixed(1) + 'M units). Mode mix set to ' + arch.modeMix.tl + '/' + arch.modeMix.ltl + '/' + arch.modeMix.parcel + ' (TL/LTL/Parcel).';
+    status.style.color = '#059669';
+  }
+
+  // Auto-switch to Demand tab after 1.5s
+  setTimeout(function() { netoptSwitchTab('demand'); }, 1500);
 }
 
 // Pre-defined facility candidates (10 major US warehouse cities)
@@ -15726,7 +16953,6 @@ function netoptUpdateKPI() {
   var transport = netoptState.transport;
   transport.outboundPerUnitMile = parseFloat(document.getElementById('netopt-outbound-cost').value) || 0.0025;
   transport.inboundPerUnitMile = parseFloat(document.getElementById('netopt-inbound-cost').value) || 0.0015;
-  transport.ltlSurcharge = parseFloat(document.getElementById('netopt-ltl-surcharge').value) || 25;
   transport.truckSpeedMiPerDay = parseFloat(document.getElementById('netopt-truck-speed').value) || 500;
 
   var constraints = netoptState.constraints;
@@ -15896,6 +17122,7 @@ function netoptFindBestConfig(facilities, demands, transport, constraints, numFa
 function netoptCalculateTotalCost(config, demands, transport, constraints) {
   var fixedCost = config.reduce((s, f) => s + (f.fixedCost || 0), 0) * 1000000; // Convert M$ to $
   var transportCost = 0;
+  var mix = transport.modeMix || { tl: 1, ltl: 0, parcel: 0 };
 
   demands.forEach(d => {
     if (config.length > 0) {
@@ -15908,8 +17135,12 @@ function netoptCalculateTotalCost(config, demands, transport, constraints) {
           closest = config[i];
         }
       }
-      var unitMiCost = transport.outboundPerUnitMile || 0.0025;
-      transportCost += (d.volume || 0) * 1000 * minDist * unitMiCost;
+      var vol = (d.volume || 0) * 1000; // K to units
+      // Multi-mode cost: TL and LTL are distance-based, parcel is zone-based
+      var tlCost = vol * mix.tl * minDist * (transport.tlUnitMile || transport.outboundPerUnitMile || 0.0025);
+      var ltlCost = vol * mix.ltl * minDist * (transport.ltlUnitMile || transport.outboundPerUnitMile || 0.0040);
+      var parcelCost = vol * mix.parcel * (transport.parcelUnitCost || 8.50); // flat per unit for parcel
+      transportCost += tlCost + ltlCost + parcelCost;
     }
   });
 
@@ -15939,8 +17170,13 @@ function netoptEvaluateConfig(config, demands, transport, constraints) {
       }
 
       assignedVolume[closest.id] = (assignedVolume[closest.id] || 0) + (d.volume || 0);
-      var unitMiCost = transport.outboundPerUnitMile || 0.0025;
-      transportCost += (d.volume || 0) * 1000 * minDist * unitMiCost;
+      var vol = (d.volume || 0) * 1000;
+      var mix = transport.modeMix || { tl: 1, ltl: 0, parcel: 0 };
+      // Multi-mode transport cost
+      var tlCost = vol * mix.tl * minDist * (transport.tlUnitMile || transport.outboundPerUnitMile || 0.0025);
+      var ltlCost = vol * mix.ltl * minDist * (transport.ltlUnitMile || transport.outboundPerUnitMile || 0.0040);
+      var parcelCost = vol * mix.parcel * (transport.parcelUnitCost || 8.50);
+      transportCost += tlCost + ltlCost + parcelCost;
       distances.push(minDist);
 
       if (minDist <= d.maxMiles) serviceCt++;
@@ -22095,6 +23331,394 @@ const cmApp = {
             console.error('Save error:', error);
             document.getElementById('saveIndicator').textContent = 'Error saving';
         }
+    }
+};
+
+// Deal Manager Application
+const dealApp = {
+    currentDeal: null,
+    deals: [],
+
+    fmt: {
+        currency: function(val) {
+            const n = parseFloat(val);
+            if (isNaN(n)) return '—';
+            return '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+        },
+        num: function(val, decimals) {
+            const n = parseFloat(val);
+            if (isNaN(n)) return '—';
+            return n.toLocaleString('en-US', { minimumFractionDigits: decimals || 0, maximumFractionDigits: decimals || 0 });
+        },
+        percent: function(val) {
+            const n = parseFloat(val);
+            if (isNaN(n)) return '—';
+            return n.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+        }
+    },
+
+    async loadDeals() {
+        try {
+            this.deals = await cmFetchTable('deal_deals', 'order=updated_at.desc');
+            this.renderDealList();
+        } catch (error) {
+            console.error('Error loading deals:', error);
+            this.deals = [];
+            this.renderDealList();
+        }
+    },
+
+    renderDealList() {
+        const listView = document.getElementById('dealListView');
+        const emptyState = document.getElementById('dealEmptyState');
+        const detailView = document.getElementById('dealDetailView');
+
+        if (this.deals.length === 0) {
+            listView.style.display = 'none';
+            detailView.style.display = 'none';
+            emptyState.style.display = 'block';
+            return;
+        }
+
+        listView.innerHTML = '';
+        this.deals.forEach(deal => {
+            const card = document.createElement('div');
+            card.style.cssText = 'background:#fff;border-radius:12px;border:1px solid var(--ies-gray-200);padding:20px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);';
+            card.onmouseover = function() { this.style.borderColor='var(--ies-blue)'; this.style.boxShadow='0 4px 12px rgba(0,71,171,.12)'; };
+            card.onmouseout = function() { this.style.borderColor='var(--ies-gray-200)'; this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'; };
+            card.onclick = () => this.openDeal(deal.id);
+
+            const statusColors = {
+                'Draft': 'background:rgba(107,114,128,.1);color:rgb(107,114,128)',
+                'In Progress': 'background:rgba(37,99,235,.1);color:rgb(37,99,235)',
+                'Proposal Sent': 'background:rgba(251,146,60,.1);color:rgb(251,146,60)',
+                'Won': 'background:rgba(34,197,94,.1);color:rgb(34,197,94)',
+                'Lost': 'background:rgba(239,68,68,.1);color:rgb(239,68,68)'
+            };
+
+            card.innerHTML = `
+                <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:12px;">
+                    <div style="font-weight:700;font-size:15px;color:var(--ies-navy);flex:1;margin-right:12px;">${deal.deal_name}</div>
+                    <span style="padding:4px 10px;border-radius:4px;font-size:11px;font-weight:600;${statusColors[deal.status] || statusColors['Draft']};white-space:nowrap;">${deal.status}</span>
+                </div>
+                <div style="font-size:12px;color:var(--ies-gray-600);margin-bottom:8px;"><strong>Client:</strong> ${deal.client_name || '—'}</div>
+                <div style="font-size:12px;color:var(--ies-gray-600);margin-bottom:12px;"><strong>Owner:</strong> ${deal.deal_owner || '—'}</div>
+                <div style="padding-top:12px;border-top:1px solid var(--ies-gray-200);display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;">
+                    <div>
+                        <div style="color:var(--ies-gray-500);font-weight:500;margin-bottom:2px;">Sites</div>
+                        <div id="card-sites-${deal.id}" style="font-weight:600;color:var(--ies-navy);">—</div>
+                    </div>
+                    <div>
+                        <div style="color:var(--ies-gray-500);font-weight:500;margin-bottom:2px;">Total Cost</div>
+                        <div id="card-cost-${deal.id}" style="font-weight:600;color:var(--ies-orange);">—</div>
+                    </div>
+                </div>
+            `;
+            listView.appendChild(card);
+        });
+
+        // Load site counts and costs for each deal
+        this.deals.forEach(deal => this.updateDealCardMetrics(deal.id));
+
+        listView.style.display = 'grid';
+        emptyState.style.display = 'none';
+        detailView.style.display = 'none';
+    },
+
+    async updateDealCardMetrics(dealId) {
+        try {
+            const sites = await cmFetchTable('cost_model_projects', `deal_id=eq.${dealId}`);
+            const siteCount = sites.length;
+            let totalCost = 0;
+
+            sites.forEach(site => {
+                if (site.metadata && site.metadata.projections && site.metadata.projections.length > 0) {
+                    const y1 = site.metadata.projections[0];
+                    totalCost += (parseFloat(y1.totalCost) || 0);
+                }
+            });
+
+            const siteEl = document.getElementById(`card-sites-${dealId}`);
+            const costEl = document.getElementById(`card-cost-${dealId}`);
+            if (siteEl) siteEl.textContent = siteCount + ' site' + (siteCount !== 1 ? 's' : '');
+            if (costEl) costEl.textContent = this.fmt.currency(totalCost);
+        } catch (error) {
+            console.warn('Error updating deal card metrics:', error);
+        }
+    },
+
+    async openDeal(dealId) {
+        try {
+            // Fetch deal details
+            const deals = await cmFetchTable('deal_deals', `id=eq.${dealId}`);
+            if (deals.length === 0) return;
+
+            this.currentDeal = deals[0];
+
+            // Fetch linked sites
+            const sites = await cmFetchTable('cost_model_projects', `deal_id=eq.${dealId}`);
+            this.currentDeal.sites = sites;
+
+            this.renderDealDetail();
+        } catch (error) {
+            console.error('Error opening deal:', error);
+            alert('Error loading deal details');
+        }
+    },
+
+    renderDealDetail() {
+        const deal = this.currentDeal;
+        document.getElementById('dealListView').style.display = 'none';
+        document.getElementById('dealDetailView').style.display = 'block';
+        document.getElementById('dealEmptyState').style.display = 'none';
+
+        // Populate form fields
+        document.getElementById('dealEditName').value = deal.deal_name || '';
+        document.getElementById('dealEditClient').value = deal.client_name || '';
+        document.getElementById('dealEditOwner').value = deal.deal_owner || '';
+        document.getElementById('dealEditStatus').value = deal.status || 'Draft';
+        document.getElementById('dealEditNotes').value = deal.notes || '';
+
+        // Render sites table
+        this.renderSitesTable();
+
+        // Render aggregate financials
+        this.renderAggregateFinancials();
+    },
+
+    renderSitesTable() {
+        const tbody = document.getElementById('dealSitesTableBody');
+        tbody.innerHTML = '';
+
+        if (!this.currentDeal.sites || this.currentDeal.sites.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--ies-gray-500);">No sites linked to this deal. Add one to get started.</td></tr>';
+            return;
+        }
+
+        this.currentDeal.sites.forEach(site => {
+            const meta = site.metadata || {};
+            const projections = meta.projections || [];
+            const y1 = projections[0] || {};
+
+            const row = document.createElement('tr');
+            row.style.borderBottom = '1px solid var(--ies-gray-100)';
+            row.innerHTML = `
+                <td style="padding:12px;"><strong>${site.project_name || '(Untitled)'}</strong></td>
+                <td style="padding:12px;">${meta.market || '—'}</td>
+                <td style="padding:12px;text-align:right;">${dealApp.fmt.currency(y1.totalCost || 0)}</td>
+                <td style="padding:12px;text-align:right;">${dealApp.fmt.num(meta.headcount || 0, 0)}</td>
+                <td style="padding:12px;text-align:right;">${dealApp.fmt.num(meta.totalSqft || 0, 0)}</td>
+                <td style="padding:12px;text-align:center;">
+                    <button onclick="cmApp.openProject('${site.id}'); dealApp.backToDealList();" style="padding:4px 10px;background:var(--ies-blue);color:#fff;border:none;border-radius:4px;font-size:11px;cursor:pointer;margin-right:4px;font-weight:600;">Edit</button>
+                    <button onclick="dealApp.unlinkSite('${site.id}')" style="padding:4px 10px;background:var(--ies-red);color:#fff;border:none;border-radius:4px;font-size:11px;cursor:pointer;font-weight:600;">Unlink</button>
+                </td>
+            `;
+            tbody.appendChild(row);
+        });
+    },
+
+    renderAggregateFinancials() {
+        const metricsContainer = document.getElementById('dealAggregateMetrics');
+        metricsContainer.innerHTML = '';
+
+        // Calculate aggregates
+        let totalAnnualCost = 0;
+        let totalHeadcount = 0;
+        let totalSqft = 0;
+        let totalStartupInvestment = 0;
+        let totalRevenue = 0;
+        let totalEbitda = 0;
+        let ebitdaMargin = 0;
+        let count = 0;
+
+        if (this.currentDeal.sites && this.currentDeal.sites.length > 0) {
+            this.currentDeal.sites.forEach(site => {
+                const meta = site.metadata || {};
+                const projections = meta.projections || [];
+                const y1 = projections[0] || {};
+
+                totalAnnualCost += parseFloat(y1.totalCost) || 0;
+                totalHeadcount += parseFloat(meta.headcount) || 0;
+                totalSqft += parseFloat(meta.totalSqft) || 0;
+                totalStartupInvestment += parseFloat(y1.startupCosts) || 0;
+                totalRevenue += parseFloat(y1.revenue) || 0;
+                totalEbitda += parseFloat(y1.ebitda) || 0;
+                count++;
+            });
+
+            if (totalRevenue > 0) {
+                ebitdaMargin = (totalEbitda / totalRevenue) * 100;
+            }
+        }
+
+        const metrics = [
+            { label: 'Total Annual Cost', value: this.fmt.currency(totalAnnualCost), color: 'var(--ies-orange)' },
+            { label: 'Total Headcount', value: this.fmt.num(totalHeadcount, 0), color: 'var(--ies-blue)' },
+            { label: 'Total Square Footage', value: this.fmt.num(totalSqft, 0), color: 'var(--ies-blue)' },
+            { label: 'Start-Up Investment', value: this.fmt.currency(totalStartupInvestment), color: 'var(--ies-orange)' },
+            { label: 'Total Revenue (Y1)', value: this.fmt.currency(totalRevenue), color: 'var(--ies-green)' },
+            { label: 'Total EBITDA (Y1)', value: this.fmt.currency(totalEbitda), color: 'var(--ies-green)' },
+            { label: 'EBITDA Margin', value: this.fmt.percent(ebitdaMargin), color: 'var(--ies-green)' }
+        ];
+
+        metrics.forEach(m => {
+            const div = document.createElement('div');
+            div.style.cssText = 'background:var(--ies-gray-50);border-radius:8px;padding:16px;border-left:4px solid ' + m.color + ';';
+            div.innerHTML = `
+                <div style="font-size:11px;font-weight:600;color:var(--ies-gray-600);text-transform:uppercase;margin-bottom:4px;">${m.label}</div>
+                <div style="font-size:16px;font-weight:700;color:var(--ies-navy);">${m.value}</div>
+            `;
+            metricsContainer.appendChild(div);
+        });
+    },
+
+    async saveDealHeader() {
+        try {
+            const updates = {
+                deal_name: document.getElementById('dealEditName').value,
+                client_name: document.getElementById('dealEditClient').value,
+                deal_owner: document.getElementById('dealEditOwner').value,
+                status: document.getElementById('dealEditStatus').value,
+                notes: document.getElementById('dealEditNotes').value,
+                updated_at: new Date().toISOString()
+            };
+
+            await cmApiPatch('deal_deals', this.currentDeal.id, updates);
+
+            // Update in memory
+            Object.assign(this.currentDeal, updates);
+
+            alert('Deal details saved successfully');
+        } catch (error) {
+            console.error('Error saving deal:', error);
+            alert('Error saving deal details');
+        }
+    },
+
+    async unlinkSite(siteId) {
+        if (!confirm('Remove this site from the deal?')) return;
+
+        try {
+            await cmApiPatch('cost_model_projects', siteId, { deal_id: null });
+
+            // Remove from sites array and re-render
+            this.currentDeal.sites = this.currentDeal.sites.filter(s => s.id !== siteId);
+            this.renderSitesTable();
+            this.renderAggregateFinancials();
+        } catch (error) {
+            console.error('Error unlinking site:', error);
+            alert('Error unlinking site');
+        }
+    },
+
+    showNewDealModal() {
+        const name = prompt('Enter deal name:');
+        if (!name) return;
+
+        const client = prompt('Enter client name:');
+        const owner = prompt('Enter deal owner (optional):');
+
+        this.createNewDeal(name, client, owner);
+    },
+
+    async createNewDeal(dealName, clientName, dealOwner) {
+        try {
+            const newDeal = {
+                deal_name: dealName,
+                client_name: clientName || null,
+                deal_owner: dealOwner || null,
+                status: 'Draft',
+                notes: null
+            };
+
+            const result = await cmApiPost('deal_deals', newDeal);
+            this.currentDeal = result[0];
+            this.currentDeal.sites = [];
+            this.renderDealDetail();
+        } catch (error) {
+            console.error('Error creating deal:', error);
+            alert('Error creating deal');
+        }
+    },
+
+    showAddSiteModal() {
+        const siteName = prompt('Enter site name:');
+        if (!siteName) return;
+
+        this.createNewSiteInDeal(siteName);
+    },
+
+    async createNewSiteInDeal(siteName) {
+        try {
+            const newSite = {
+                project_name: siteName,
+                deal_id: this.currentDeal.id,
+                metadata: {},
+                created_at: new Date().toISOString()
+            };
+
+            const result = await cmApiPost('cost_model_projects', newSite);
+            const newProject = result[0];
+
+            // Add to current deal
+            this.currentDeal.sites.push(newProject);
+            this.renderSitesTable();
+            this.renderAggregateFinancials();
+
+            // Open the new site in cost model
+            cmApp.openProject(newProject.id);
+        } catch (error) {
+            console.error('Error creating site:', error);
+            alert('Error creating site');
+        }
+    },
+
+    showLinkExistingModal() {
+        this.loadUnlinkedProjects();
+    },
+
+    async loadUnlinkedProjects() {
+        try {
+            const allProjects = await cmFetchTable('cost_model_projects', 'limit=100');
+            const unlinked = allProjects.filter(p => !p.deal_id);
+
+            if (unlinked.length === 0) {
+                alert('No unlinked cost model projects available. Create one first.');
+                return;
+            }
+
+            const options = unlinked.map(p => `${p.project_name || '(Untitled)'} (ID: ${p.id.substring(0, 8)})`).join('\n');
+            const selectedText = prompt('Select a project to link:\n\n' + options);
+
+            if (selectedText) {
+                const projectId = selectedText.match(/\(ID: ([a-f0-9]+)\)/)?.[1];
+                if (projectId) {
+                    this.linkProjectToDeal(projectId);
+                }
+            }
+        } catch (error) {
+            console.error('Error loading projects:', error);
+            alert('Error loading projects');
+        }
+    },
+
+    async linkProjectToDeal(projectId) {
+        try {
+            await cmApiPatch('cost_model_projects', projectId, { deal_id: this.currentDeal.id });
+
+            // Reload deal
+            await this.openDeal(this.currentDeal.id);
+            alert('Site linked successfully');
+        } catch (error) {
+            console.error('Error linking project:', error);
+            alert('Error linking site');
+        }
+    },
+
+    backToDealList() {
+        document.getElementById('dealListView').style.display = 'grid';
+        document.getElementById('dealDetailView').style.display = 'none';
+        this.currentDeal = null;
     }
 };
 
