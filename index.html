@@ -5500,9 +5500,28 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
             </div>
           </div>
 
+          <!-- Import from COG -->
+          <div style="margin-top:20px;margin-bottom:20px;">
+            <label class="wsc-input-label" style="margin-bottom:12px;">Import from Center of Gravity</label>
+            <div style="background:linear-gradient(135deg,#ecfdf5 0%,#f0fdf4 100%);border-radius:10px;border:1px solid rgba(5,150,105,.15);padding:16px;">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+                <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" stroke="#059669" stroke-width="2"/><path d="M8 12l2-6 4 6H8zM12 12v4" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <div style="font-size:12px;font-weight:700;color:#059669;text-transform:uppercase;letter-spacing:.5px;">Suggest Locations</div>
+              </div>
+              <div style="font-size:11px;color:var(--ies-gray-600);line-height:1.5;margin-bottom:12px;">
+                Run the Center of Gravity tool first, then import the COG-optimized DC locations and demand points as candidates here. The optimizer will evaluate real facility costs and constraints on top of the COG's directional placement.
+              </div>
+              <button onclick="netoptImportFromCOG()" style="padding:9px 18px;background:linear-gradient(135deg,#059669,#047857);color:#fff;border:none;border-radius:7px;font-weight:700;font-size:12px;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:6px;" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform=''">
+                <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/></svg>
+                Import COG Results as Facility Candidates
+              </button>
+              <div id="netopt-cog-import-status" style="font-size:10px;color:var(--ies-gray-400);margin-top:8px;display:none;"></div>
+            </div>
+          </div>
+
           <div style="background:linear-gradient(135deg,#f0f5ff 0%,#e8eeff 100%);border-radius:10px;border:1px solid rgba(0,71,171,.12);padding:16px;margin-top:20px;">
             <div style="font-size:12px;color:var(--ies-blue);line-height:1.6;">
-              <strong>Getting Started:</strong> Select a template above to pre-populate facilities and demand, or build a custom network. Configure your facilities, demand points, and transportation costs, then click "Run Optimization" to find the optimal network design.
+              <strong>Getting Started:</strong> Select a template above to pre-populate facilities and demand, or build a custom network. You can also run the Center of Gravity tool first, then import those results here for full cost optimization.
             </div>
           </div>
         </div>
@@ -15168,6 +15187,123 @@ function cmToggleNavGroup(groupId) {
         items.classList.add('collapsed');
         if (chevron) chevron.classList.add('collapsed');
     }
+}
+
+// ── IMPORT COG RESULTS INTO NETWORK OPTIMIZATION ──
+function netoptImportFromCOG() {
+    var statusEl = document.getElementById('netopt-cog-import-status');
+    if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = 'Checking COG data…'; statusEl.style.color = 'var(--ies-gray-500)'; }
+
+    // Get COG demand points
+    if (!window.netDemandPoints || netDemandPoints.length === 0) {
+        if (statusEl) { statusEl.textContent = 'No COG demand data found. Please run the Center of Gravity tool first.'; statusEl.style.color = '#dc2626'; }
+        return;
+    }
+
+    // Geocode COG demand points
+    var geoPoints = [];
+    for (var i = 0; i < netDemandPoints.length; i++) {
+        var geo = geocodeCity(netDemandPoints[i].city);
+        if (geo && netDemandPoints[i].volume > 0) {
+            geoPoints.push({ lat: geo.lat, lng: geo.lng, weight: netDemandPoints[i].volume, name: geo.name, city: netDemandPoints[i].city, idx: i });
+        }
+    }
+
+    if (geoPoints.length < 1) {
+        if (statusEl) { statusEl.textContent = 'No geocodable demand points found in COG tool.'; statusEl.style.color = '#dc2626'; }
+        return;
+    }
+
+    // Run COG for 1 through 5 DCs and find the optimal count (elbow method)
+    var maxDCs = Math.min(5, geoPoints.length);
+    var bestK = netDCCount || 2; // Use COG's selected DC count
+    var clusters = kMeansCOG(geoPoints, bestK);
+
+    // Convert cluster centers to facility candidates
+    var facilities = [];
+    for (var ci = 0; ci < clusters.length; ci++) {
+        if (clusters[ci].members.length === 0) continue;
+        var cityName = nearestCity(clusters[ci].center.lat, clusters[ci].center.lng);
+        var geo2 = geocodeCity(cityName);
+
+        // Try to match to a known facility candidate for realistic cost data
+        var matched = NETOPT_FACILITY_CANDIDATES.find(function(f) {
+            return cityName.toLowerCase().indexOf(f.name.toLowerCase()) >= 0;
+        });
+
+        facilities.push({
+            id: 'cog-' + Date.now() + '-' + ci,
+            name: cityName.split(',')[0],
+            city: cityName,
+            capacity: matched ? matched.capacity : 600,
+            fixedCost: matched ? matched.fixedCost : 2.5,
+            varCost: matched ? matched.varCost : 0.23,
+            status: 'Candidate',
+            lat: geo2 ? geo2.lat : clusters[ci].center.lat,
+            lng: geo2 ? geo2.lng : clusters[ci].center.lng,
+            cogSource: true
+        });
+    }
+
+    // Also import demand points
+    var demands = [];
+    for (var di = 0; di < geoPoints.length; di++) {
+        var gp = geoPoints[di];
+        demands.push({
+            id: 'dem-cog-' + Date.now() + '-' + di,
+            city: gp.city,
+            volume: Math.round(gp.weight / 1000), // Convert to K units for netopt
+            maxMiles: 500, // Default service requirement
+            lat: gp.lat,
+            lng: gp.lng
+        });
+    }
+
+    // Also add nearby major warehouse cities that weren't COG centers (diversify candidates)
+    var existingCities = facilities.map(function(f) { return f.name.toLowerCase(); });
+    NETOPT_FACILITY_CANDIDATES.forEach(function(cand) {
+        if (existingCities.indexOf(cand.name.toLowerCase()) < 0) {
+            var candGeo = geocodeCity(cand.city);
+            // Check if this candidate is within 300mi of any demand point
+            var relevant = false;
+            for (var di2 = 0; di2 < geoPoints.length; di2++) {
+                if (candGeo && roadDist(candGeo.lat, candGeo.lng, geoPoints[di2].lat, geoPoints[di2].lng) < 600) {
+                    relevant = true;
+                    break;
+                }
+            }
+            if (relevant && candGeo) {
+                facilities.push({
+                    id: 'cand-' + Date.now() + '-' + cand.name,
+                    name: cand.name,
+                    city: cand.city,
+                    capacity: cand.capacity,
+                    fixedCost: cand.fixedCost,
+                    varCost: cand.varCost,
+                    status: 'Candidate',
+                    lat: candGeo.lat,
+                    lng: candGeo.lng,
+                    cogSource: false
+                });
+            }
+        }
+    });
+
+    // Populate netopt state
+    netoptState.facilities = facilities;
+    netoptState.demands = demands;
+    netoptRenderFacilitiesTable();
+    netoptRenderDemandTable();
+    netoptUpdateKPI();
+
+    // Mark COG-sourced facilities in the table
+    if (statusEl) {
+        statusEl.textContent = 'Imported ' + clusters.length + ' COG-optimized locations + ' + (facilities.length - clusters.length) + ' nearby candidates, and ' + demands.length + ' demand points. Switch to Facilities tab to review.';
+        statusEl.style.color = '#059669';
+    }
+
+    // Auto-switch to facilities tab after a brief delay
+    setTimeout(function() { netoptSwitchTab('facilities'); }, 1500);
 }
 
 // ── NETWORK OPTIMIZATION MODULE ──
