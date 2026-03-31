@@ -2183,6 +2183,47 @@
             border-bottom: none;
         }
 
+        .cm-nav-group-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 14px 4px;
+            cursor: pointer;
+            user-select: none;
+        }
+        .cm-nav-group-header:hover {
+            background: rgba(255,255,255,0.03);
+        }
+        .cm-nav-group-label {
+            font-size: 9px;
+            font-weight: 700;
+            color: var(--ies-gray-400, #9ca3af);
+            text-transform: uppercase;
+            letter-spacing: .8px;
+        }
+        .cm-nav-group-chevron {
+            width: 12px;
+            height: 12px;
+            color: var(--ies-gray-400, #9ca3af);
+            transition: transform .2s;
+        }
+        .cm-nav-group-chevron.collapsed {
+            transform: rotate(-90deg);
+        }
+        .cm-nav-group-items {
+            overflow: hidden;
+            transition: max-height .25s ease;
+            max-height: 500px;
+        }
+        .cm-nav-group-items.collapsed {
+            max-height: 0;
+        }
+        .cm-nav-group-divider {
+            height: 1px;
+            background: rgba(255,255,255,0.06);
+            margin: 6px 14px;
+        }
+
         .cm-nav-item {
             display: flex;
             align-items: center;
@@ -5509,29 +5550,111 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 
         <!-- TAB: TRANSPORTATION -->
         <div id="netopt-tab-transportation" class="netopt-tab-content" style="display:none;">
-          <div style="max-width:500px;">
-            <div class="wsc-input-group">
-              <label class="wsc-input-label">Outbound Cost per Unit-Mile ($/unit-mi)</label>
-              <input type="number" id="netopt-outbound-cost" class="wsc-input" value="0.0025" min="0.0001" step="0.0005" oninput="netoptUpdateKPI()">
-              <div class="wsc-input-helper">Typical range: $0.002-$0.005/unit-mi</div>
+
+          <!-- Live Market Rates Card -->
+          <div style="background:linear-gradient(135deg,#eff6ff 0%,#f0f9ff 100%);border-radius:10px;border:1px solid rgba(59,130,246,.15);padding:16px 20px;margin-bottom:20px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83" stroke="#3b82f6" stroke-width="2" stroke-linecap="round"/></svg>
+                <span style="font-size:11px;font-weight:700;color:var(--ies-navy);text-transform:uppercase;letter-spacing:.6px;">Live Market Rates</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;">
+                <span id="netopt-rate-freshness" style="font-size:10px;color:var(--ies-gray-400);">Not loaded</span>
+                <button onclick="netoptFetchFreightRates()" style="padding:5px 12px;background:var(--ies-blue);color:#fff;border:none;border-radius:5px;font-size:10px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:4px;">
+                  <svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M1 4v6h6M23 20v-6h-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  Refresh
+                </button>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;" id="netopt-market-rates-grid">
+              <div style="background:#fff;border-radius:8px;padding:10px 12px;border:1px solid rgba(59,130,246,.1);">
+                <div style="font-size:9px;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">DAT Contract Van</div>
+                <div id="netopt-rate-dat-contract" style="font-size:16px;font-weight:700;color:var(--ies-navy);">—</div>
+                <div id="netopt-rate-dat-contract-chg" style="font-size:9px;color:var(--ies-gray-400);">per mile</div>
+              </div>
+              <div style="background:#fff;border-radius:8px;padding:10px 12px;border:1px solid rgba(59,130,246,.1);">
+                <div style="font-size:9px;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">DAT Spot Van</div>
+                <div id="netopt-rate-dat-spot" style="font-size:16px;font-weight:700;color:var(--ies-navy);">—</div>
+                <div id="netopt-rate-dat-spot-chg" style="font-size:9px;color:var(--ies-gray-400);">per mile</div>
+              </div>
+              <div style="background:#fff;border-radius:8px;padding:10px 12px;border:1px solid rgba(59,130,246,.1);">
+                <div style="font-size:9px;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Diesel (EIA)</div>
+                <div id="netopt-rate-diesel" style="font-size:16px;font-weight:700;color:var(--ies-navy);">—</div>
+                <div id="netopt-rate-diesel-chg" style="font-size:9px;color:var(--ies-gray-400);">per gallon</div>
+              </div>
+              <div style="background:#fff;border-radius:8px;padding:10px 12px;border:1px solid rgba(59,130,246,.1);">
+                <div style="font-size:9px;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Fuel Surcharge</div>
+                <div id="netopt-rate-fsc" style="font-size:16px;font-weight:700;color:var(--ies-navy);">—</div>
+                <div style="font-size:9px;color:var(--ies-gray-400);">calculated</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Rate Mode Toggle -->
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+            <label style="font-size:11px;font-weight:700;color:var(--ies-navy);text-transform:uppercase;letter-spacing:.5px;">Rate Source:</label>
+            <div style="display:flex;gap:0;border-radius:6px;overflow:hidden;border:1.5px solid var(--ies-gray-200);">
+              <button id="netopt-rate-mode-market" onclick="netoptSetRateMode('market')" style="padding:6px 14px;border:none;background:var(--ies-blue);color:#fff;font-weight:600;font-size:11px;cursor:pointer;transition:all .15s;">Market Rates</button>
+              <button id="netopt-rate-mode-manual" onclick="netoptSetRateMode('manual')" style="padding:6px 14px;border:none;background:#fff;color:var(--ies-navy);font-weight:600;font-size:11px;cursor:pointer;transition:all .15s;border-left:1px solid var(--ies-gray-200);">Manual Override</button>
+            </div>
+            <span id="netopt-rate-mode-desc" style="font-size:10px;color:var(--ies-gray-500);">Using latest DAT linehaul rates + fuel surcharge</span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:700px;">
+            <!-- Left Column: Core Rates -->
+            <div>
+              <div class="wsc-input-group">
+                <label class="wsc-input-label">TL Base Rate ($/mile)</label>
+                <input type="number" id="netopt-tl-rate" class="wsc-input" value="2.37" min="0.50" step="0.01" oninput="netoptRecalcUnitMileCost()">
+                <div class="wsc-input-helper" id="netopt-tl-rate-source">Source: DAT Contract Van</div>
+              </div>
+
+              <div class="wsc-input-group">
+                <label class="wsc-input-label">Avg Units per Truckload</label>
+                <input type="number" id="netopt-units-per-tl" class="wsc-input" value="800" min="50" max="5000" step="50" oninput="netoptRecalcUnitMileCost()">
+                <div class="wsc-input-helper">Converts $/mile to $/unit-mile for optimization</div>
+              </div>
+
+              <div class="wsc-input-group">
+                <label class="wsc-input-label">Fuel Surcharge (%)</label>
+                <input type="number" id="netopt-fuel-surcharge" class="wsc-input" value="0" min="0" max="50" step="0.5" oninput="netoptRecalcUnitMileCost()">
+                <div class="wsc-input-helper" id="netopt-fsc-source">Calculated from EIA diesel vs $2.50 baseline</div>
+              </div>
+
+              <div class="wsc-input-group" style="background:#f8f9fb;border-radius:8px;padding:12px;border:1px solid var(--ies-gray-200);">
+                <label class="wsc-input-label" style="color:var(--ies-blue);font-weight:700;">Effective $/Unit-Mile (Outbound)</label>
+                <div id="netopt-effective-unit-mile" style="font-size:18px;font-weight:700;color:var(--ies-navy);margin-top:4px;">$0.00296</div>
+                <div style="font-size:10px;color:var(--ies-gray-400);margin-top:2px;">(TL Rate × (1 + FSC%)) ÷ Units/TL</div>
+                <input type="hidden" id="netopt-outbound-cost" value="0.00296">
+              </div>
             </div>
 
-            <div class="wsc-input-group">
-              <label class="wsc-input-label">Inbound Cost per Unit-Mile ($/unit-mi)</label>
-              <input type="number" id="netopt-inbound-cost" class="wsc-input" value="0.0015" min="0.0001" step="0.0005" oninput="netoptUpdateKPI()">
-              <div class="wsc-input-helper">Typical range: $0.0010-$0.003/unit-mi</div>
-            </div>
+            <!-- Right Column: Additional Costs -->
+            <div>
+              <div class="wsc-input-group">
+                <label class="wsc-input-label">Inbound Rate Ratio (%)</label>
+                <input type="number" id="netopt-inbound-ratio" class="wsc-input" value="60" min="10" max="100" step="5" oninput="netoptRecalcUnitMileCost()">
+                <div class="wsc-input-helper">Inbound as % of outbound (typically 50-70%)</div>
+                <input type="hidden" id="netopt-inbound-cost" value="0.00178">
+              </div>
 
-            <div class="wsc-input-group">
-              <label class="wsc-input-label">LTL Surcharge (%)</label>
-              <input type="number" id="netopt-ltl-surcharge" class="wsc-input" value="25" min="0" max="100" step="5" oninput="netoptUpdateKPI()">
-              <div class="wsc-input-helper">Applied to shipments below full-truck load threshold</div>
-            </div>
+              <div class="wsc-input-group">
+                <label class="wsc-input-label">LTL Surcharge (%)</label>
+                <input type="number" id="netopt-ltl-surcharge" class="wsc-input" value="25" min="0" max="100" step="5" oninput="netoptUpdateKPI()">
+                <div class="wsc-input-helper">Applied to shipments below full-truck threshold</div>
+              </div>
 
-            <div class="wsc-input-group">
-              <label class="wsc-input-label">Truck Speed for Transit (miles/day)</label>
-              <input type="number" id="netopt-truck-speed" class="wsc-input" value="500" min="250" max="1000" step="50" oninput="netoptUpdateKPI()">
-              <div class="wsc-input-helper">Typical: 400-600 mi/day depending on lane composition</div>
+              <div class="wsc-input-group">
+                <label class="wsc-input-label">Truck Speed (miles/day)</label>
+                <input type="number" id="netopt-truck-speed" class="wsc-input" value="500" min="250" max="1000" step="50" oninput="netoptUpdateKPI()">
+                <div class="wsc-input-helper">Typical: 400-600 mi/day</div>
+              </div>
+
+              <div class="wsc-input-group" style="background:#f8f9fb;border-radius:8px;padding:12px;border:1px solid var(--ies-gray-200);">
+                <label class="wsc-input-label" style="color:var(--ies-blue);font-weight:700;">Effective $/Unit-Mile (Inbound)</label>
+                <div id="netopt-effective-inbound" style="font-size:18px;font-weight:700;color:var(--ies-navy);margin-top:4px;">$0.00178</div>
+                <div style="font-size:10px;color:var(--ies-gray-400);margin-top:2px;">Outbound × Inbound Ratio</div>
+              </div>
             </div>
           </div>
         </div>
@@ -5792,77 +5915,44 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         <svg fill="none" viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>
     <div class="cm-sidebar" id="cmSidebar">
-        <div class="cm-nav-section">
-            <div class="cm-nav-item active" data-section="setup">
-                <div class="cm-nav-checkmark"></div>
-                Setup
-            </div>
+        <!-- Group: Cost Model -->
+        <div class="cm-nav-group-header" onclick="cmToggleNavGroup('cost-model')">
+            <span class="cm-nav-group-label">Cost Model</span>
+            <svg class="cm-nav-group-chevron" id="chevron-cost-model" fill="none" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </div>
-        <div class="cm-nav-section">
-            <div class="cm-nav-item" data-section="volumes">
-                <div class="cm-nav-checkmark"></div>
-                Volumes & Profile
-            </div>
+        <div class="cm-nav-group-items" id="group-cost-model">
+            <div class="cm-nav-section"><div class="cm-nav-item active" data-section="setup"><div class="cm-nav-checkmark"></div>Setup</div></div>
+            <div class="cm-nav-section"><div class="cm-nav-item" data-section="volumes"><div class="cm-nav-checkmark"></div>Volumes & Profile</div></div>
+            <div class="cm-nav-section"><div class="cm-nav-item" data-section="facility"><div class="cm-nav-checkmark"></div>Facility</div></div>
+            <div class="cm-nav-section"><div class="cm-nav-item" data-section="shifts"><div class="cm-nav-checkmark"></div>Shift Structure</div></div>
+            <div class="cm-nav-section"><div class="cm-nav-item" data-section="labor"><div class="cm-nav-checkmark"></div>Labor</div></div>
+            <div class="cm-nav-section"><div class="cm-nav-item" data-section="equipment"><div class="cm-nav-checkmark"></div>Equipment</div></div>
+            <div class="cm-nav-section"><div class="cm-nav-item" data-section="overhead"><div class="cm-nav-checkmark"></div>Overhead</div></div>
+            <div class="cm-nav-section"><div class="cm-nav-item" data-section="vas"><div class="cm-nav-checkmark"></div>VAS</div></div>
         </div>
-        <div class="cm-nav-section">
-            <div class="cm-nav-item" data-section="facility">
-                <div class="cm-nav-checkmark"></div>
-                Facility
-            </div>
+
+        <div class="cm-nav-group-divider"></div>
+
+        <!-- Group: Financial -->
+        <div class="cm-nav-group-header" onclick="cmToggleNavGroup('financial')">
+            <span class="cm-nav-group-label">Financial</span>
+            <svg class="cm-nav-group-chevron" id="chevron-financial" fill="none" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </div>
-        <div class="cm-nav-section">
-            <div class="cm-nav-item" data-section="shifts">
-                <div class="cm-nav-checkmark"></div>
-                Shift Structure
-            </div>
+        <div class="cm-nav-group-items" id="group-financial">
+            <div class="cm-nav-section"><div class="cm-nav-item" data-section="financial"><div class="cm-nav-checkmark"></div>Financial</div></div>
+            <div class="cm-nav-section"><div class="cm-nav-item" data-section="startup"><div class="cm-nav-checkmark"></div>Start-Up</div></div>
+            <div class="cm-nav-section"><div class="cm-nav-item" data-section="pricing"><div class="cm-nav-checkmark"></div>Pricing</div></div>
         </div>
-        <div class="cm-nav-section">
-            <div class="cm-nav-item" data-section="labor">
-                <div class="cm-nav-checkmark"></div>
-                Labor
-            </div>
+
+        <div class="cm-nav-group-divider"></div>
+
+        <!-- Group: Output -->
+        <div class="cm-nav-group-header" onclick="cmToggleNavGroup('output')">
+            <span class="cm-nav-group-label">Output</span>
+            <svg class="cm-nav-group-chevron" id="chevron-output" fill="none" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </div>
-        <div class="cm-nav-section">
-            <div class="cm-nav-item" data-section="equipment">
-                <div class="cm-nav-checkmark"></div>
-                Equipment
-            </div>
-        </div>
-        <div class="cm-nav-section">
-            <div class="cm-nav-item" data-section="overhead">
-                <div class="cm-nav-checkmark"></div>
-                Overhead
-            </div>
-        </div>
-        <div class="cm-nav-section">
-            <div class="cm-nav-item" data-section="vas">
-                <div class="cm-nav-checkmark"></div>
-                VAS
-            </div>
-        </div>
-        <div class="cm-nav-section">
-            <div class="cm-nav-item" data-section="financial">
-                <div class="cm-nav-checkmark"></div>
-                Financial
-            </div>
-        </div>
-        <div class="cm-nav-section">
-            <div class="cm-nav-item" data-section="startup">
-                <div class="cm-nav-checkmark"></div>
-                Start-Up
-            </div>
-        </div>
-        <div class="cm-nav-section">
-            <div class="cm-nav-item" data-section="pricing">
-                <div class="cm-nav-checkmark"></div>
-                Pricing
-            </div>
-        </div>
-        <div class="cm-nav-section">
-            <div class="cm-nav-item" data-section="summary">
-                <div class="cm-nav-checkmark"></div>
-                Summary
-            </div>
+        <div class="cm-nav-group-items" id="group-output">
+            <div class="cm-nav-section"><div class="cm-nav-item" data-section="summary"><div class="cm-nav-checkmark"></div>Summary</div></div>
         </div>
     </div>
 
@@ -14915,14 +15005,28 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 }); // end DOMContentLoaded
 
+// ── NAV GROUP COLLAPSE/EXPAND ──
+function cmToggleNavGroup(groupId) {
+    var items = document.getElementById('group-' + groupId);
+    var chevron = document.getElementById('chevron-' + groupId);
+    if (!items) return;
+    if (items.classList.contains('collapsed')) {
+        items.classList.remove('collapsed');
+        if (chevron) chevron.classList.remove('collapsed');
+    } else {
+        items.classList.add('collapsed');
+        if (chevron) chevron.classList.add('collapsed');
+    }
+}
+
 // ── NETWORK OPTIMIZATION MODULE ──
 
 var netoptState = {
   facilities: [],
   demands: [],
   transport: {
-    outboundPerUnitMile: 0.0025,
-    inboundPerUnitMile: 0.0015,
+    outboundPerUnitMile: 0.00296,
+    inboundPerUnitMile: 0.00178,
     ltlSurcharge: 25,
     truckSpeedMiPerDay: 500
   },
@@ -14941,6 +15045,148 @@ var netoptState = {
   mapMarkers: [],
   mapPolylines: []
 };
+
+var netoptRateMode = 'market'; // 'market' or 'manual'
+var netoptMarketRates = { datContract: null, datSpot: null, diesel: null, fscPct: null, lastUpdated: null };
+var NETOPT_DIESEL_BASELINE = 2.50; // DOE baseline for fuel surcharge calculation
+
+// Fetch live freight rates from Supabase
+async function netoptFetchFreightRates() {
+  var freshEl = document.getElementById('netopt-rate-freshness');
+  if (freshEl) freshEl.textContent = 'Loading…';
+  try {
+    var [rates, fuels] = await Promise.all([
+      cmFetchTable('freight_rates', 'order=report_date.desc&limit=10'),
+      cmFetchTable('fuel_prices', 'order=report_date.desc&limit=5')
+    ]);
+
+    // Extract latest truck rates
+    var datContract = rates.find(r => r.index_name && r.index_name.indexOf('Contract Van') >= 0);
+    var datSpot = rates.find(r => r.index_name && r.index_name.indexOf('Spot Van') >= 0);
+    var diesel = fuels.find(f => f.fuel_type && f.fuel_type.toLowerCase().indexOf('diesel') >= 0);
+
+    netoptMarketRates.datContract = datContract ? parseFloat(datContract.rate) : null;
+    netoptMarketRates.datSpot = datSpot ? parseFloat(datSpot.rate) : null;
+    netoptMarketRates.diesel = diesel ? parseFloat(diesel.price_per_gallon) : null;
+    netoptMarketRates.lastUpdated = datContract ? datContract.report_date : null;
+
+    // Calculate fuel surcharge: (current - baseline) / baseline * fuel-portion-of-linehaul
+    // Industry standard: fuel ~30% of linehaul cost, surcharge covers delta
+    if (netoptMarketRates.diesel && netoptMarketRates.diesel > NETOPT_DIESEL_BASELINE) {
+      netoptMarketRates.fscPct = Math.round(((netoptMarketRates.diesel - NETOPT_DIESEL_BASELINE) / NETOPT_DIESEL_BASELINE) * 100 * 10) / 10;
+    } else {
+      netoptMarketRates.fscPct = 0;
+    }
+
+    // Update market rate display cards
+    var el;
+    el = document.getElementById('netopt-rate-dat-contract');
+    if (el) el.textContent = netoptMarketRates.datContract ? '$' + netoptMarketRates.datContract.toFixed(2) : '—';
+    el = document.getElementById('netopt-rate-dat-contract-chg');
+    if (el && datContract && datContract.wow_change != null) {
+      var chg = parseFloat(datContract.wow_change);
+      el.textContent = (chg >= 0 ? '▲' : '▼') + ' ' + Math.abs(chg).toFixed(1) + '% WoW';
+      el.style.color = chg >= 0 ? '#059669' : '#dc2626';
+    }
+
+    el = document.getElementById('netopt-rate-dat-spot');
+    if (el) el.textContent = netoptMarketRates.datSpot ? '$' + netoptMarketRates.datSpot.toFixed(2) : '—';
+    el = document.getElementById('netopt-rate-dat-spot-chg');
+    if (el && datSpot && datSpot.wow_change != null) {
+      var chg2 = parseFloat(datSpot.wow_change);
+      el.textContent = (chg2 >= 0 ? '▲' : '▼') + ' ' + Math.abs(chg2).toFixed(1) + '% WoW';
+      el.style.color = chg2 >= 0 ? '#059669' : '#dc2626';
+    }
+
+    el = document.getElementById('netopt-rate-diesel');
+    if (el) el.textContent = netoptMarketRates.diesel ? '$' + netoptMarketRates.diesel.toFixed(2) : '—';
+    el = document.getElementById('netopt-rate-diesel-chg');
+    if (el && diesel && diesel.week_over_week_change != null) {
+      var chg3 = parseFloat(diesel.week_over_week_change);
+      el.textContent = (chg3 >= 0 ? '▲' : '▼') + ' $' + Math.abs(chg3).toFixed(3) + ' WoW';
+      el.style.color = chg3 >= 0 ? '#dc2626' : '#059669'; // Red = higher fuel cost
+    }
+
+    el = document.getElementById('netopt-rate-fsc');
+    if (el) el.textContent = netoptMarketRates.fscPct != null ? netoptMarketRates.fscPct.toFixed(1) + '%' : '—';
+
+    // Update freshness indicator
+    if (freshEl && netoptMarketRates.lastUpdated) {
+      var d = new Date(netoptMarketRates.lastUpdated);
+      freshEl.textContent = 'Updated ' + d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      freshEl.style.color = '#059669';
+    }
+
+    // Auto-populate rate fields if in market mode
+    if (netoptRateMode === 'market') {
+      netoptApplyMarketRates();
+    }
+
+  } catch(err) {
+    console.error('Failed to fetch freight rates:', err);
+    if (freshEl) { freshEl.textContent = 'Failed to load'; freshEl.style.color = '#dc2626'; }
+  }
+}
+
+// Apply market rates to input fields
+function netoptApplyMarketRates() {
+  if (netoptMarketRates.datContract) {
+    document.getElementById('netopt-tl-rate').value = netoptMarketRates.datContract.toFixed(2);
+    document.getElementById('netopt-tl-rate-source').textContent = 'Source: DAT Contract Van (live)';
+  }
+  if (netoptMarketRates.fscPct != null) {
+    document.getElementById('netopt-fuel-surcharge').value = netoptMarketRates.fscPct.toFixed(1);
+    document.getElementById('netopt-fsc-source').textContent = 'Diesel $' + (netoptMarketRates.diesel || 0).toFixed(2) + ' vs $' + NETOPT_DIESEL_BASELINE.toFixed(2) + ' baseline';
+  }
+  netoptRecalcUnitMileCost();
+}
+
+// Toggle between market rates and manual override
+function netoptSetRateMode(mode) {
+  netoptRateMode = mode;
+  var mBtn = document.getElementById('netopt-rate-mode-market');
+  var oBtn = document.getElementById('netopt-rate-mode-manual');
+  var desc = document.getElementById('netopt-rate-mode-desc');
+  var tlInput = document.getElementById('netopt-tl-rate');
+  var fscInput = document.getElementById('netopt-fuel-surcharge');
+
+  if (mode === 'market') {
+    mBtn.style.background = 'var(--ies-blue)'; mBtn.style.color = '#fff';
+    oBtn.style.background = '#fff'; oBtn.style.color = 'var(--ies-navy)';
+    desc.textContent = 'Using latest DAT linehaul rates + fuel surcharge';
+    tlInput.style.background = '#f1f5f9'; fscInput.style.background = '#f1f5f9';
+    netoptApplyMarketRates();
+  } else {
+    oBtn.style.background = 'var(--ies-blue)'; oBtn.style.color = '#fff';
+    mBtn.style.background = '#fff'; mBtn.style.color = 'var(--ies-navy)';
+    desc.textContent = 'Enter your own contracted or negotiated rates';
+    tlInput.style.background = ''; fscInput.style.background = '';
+    document.getElementById('netopt-tl-rate-source').textContent = 'Source: Manual entry';
+    document.getElementById('netopt-fsc-source').textContent = 'Manual fuel surcharge';
+  }
+}
+
+// Recalculate $/unit-mile from TL rate, FSC, and units per TL
+function netoptRecalcUnitMileCost() {
+  var tlRate = parseFloat(document.getElementById('netopt-tl-rate').value) || 2.37;
+  var fscPct = parseFloat(document.getElementById('netopt-fuel-surcharge').value) || 0;
+  var unitsPer = parseFloat(document.getElementById('netopt-units-per-tl').value) || 800;
+  var inboundRatio = parseFloat(document.getElementById('netopt-inbound-ratio').value) || 60;
+
+  var allInRate = tlRate * (1 + fscPct / 100);
+  var outboundUnitMile = allInRate / unitsPer;
+  var inboundUnitMile = outboundUnitMile * (inboundRatio / 100);
+
+  // Update hidden inputs that the optimizer reads
+  document.getElementById('netopt-outbound-cost').value = outboundUnitMile.toFixed(6);
+  document.getElementById('netopt-inbound-cost').value = inboundUnitMile.toFixed(6);
+
+  // Update display
+  document.getElementById('netopt-effective-unit-mile').textContent = '$' + outboundUnitMile.toFixed(5);
+  document.getElementById('netopt-effective-inbound').textContent = '$' + inboundUnitMile.toFixed(5);
+
+  netoptUpdateKPI();
+}
 
 // Pre-defined facility candidates (10 major US warehouse cities)
 var NETOPT_FACILITY_CANDIDATES = [
@@ -15055,6 +15301,11 @@ function netoptSwitchTab(tabName) {
   // Initialize map on first results view
   if (tabName === 'results' && !netoptState.mapInitialized && netoptState.results) {
     setTimeout(() => netoptInitializeMap(), 100);
+  }
+
+  // Auto-fetch freight rates on first Transportation tab visit
+  if (tabName === 'transportation' && !netoptMarketRates.lastUpdated) {
+    netoptFetchFreightRates();
   }
 }
 
