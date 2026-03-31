@@ -4838,7 +4838,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
   </div>
 
   <div class="welcome-features">
-    <div class="welcome-feature feature-live">
+    <div class="welcome-feature feature-live" onclick="navigate('overview', document.querySelector('[data-section=overview]'))" style="cursor:pointer;">
       <div class="welcome-feature-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--ies-orange)" stroke-width="1.5"><rect x="3" y="3" width="8" height="8"/><rect x="13" y="3" width="8" height="8"/><rect x="3" y="13" width="8" height="8"/><rect x="13" y="13" width="8" height="8"/></svg></div>
       <div class="welcome-feature-title">Command Center</div>
       <div class="welcome-feature-desc">Live KPIs, top market alerts from competitor moves, tariff changes, and account signals — all in one view with interactive charts.</div>
@@ -4850,25 +4850,25 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div class="welcome-feature-desc">Interactive map of key markets with labor data, real estate rates, freight, active deals, and a full Data Library of market tables — all in one research interface.</div>
       <div style="margin-top:10px;"><span class="wiki-tag" style="background:rgba(25,135,84,.1);color:var(--ies-green);">LIVE</span></div>
     </div>
-    <div class="welcome-feature feature-live">
+    <div class="welcome-feature feature-live" onclick="navigate('training', document.querySelector('[data-section=training]'))" style="cursor:pointer;">
       <div class="welcome-feature-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--ies-orange)" stroke-width="1.5"><path d="M2 5v14c0 1 1 2 2 2h16c1 0 2-1 2-2V5M2 5c0-1 1-2 2-2h16c1 0 2 1 2 2m-18 7h16"/></svg></div>
       <div class="welcome-feature-title">Training Wiki</div>
       <div class="welcome-feature-desc">Reference guides on warehouse robotics, conveyor systems, and engineering fundamentals — built for the team, by the team.</div>
       <div style="margin-top:10px;"><span class="wiki-tag" style="background:rgba(25,135,84,.1);color:var(--ies-green);">LIVE</span></div>
     </div>
-    <div class="welcome-feature feature-live">
+    <div class="welcome-feature feature-live" onclick="navigate('designtools', document.querySelector('[data-section=designtools]'))" style="cursor:pointer;">
       <div class="welcome-feature-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--ies-orange)" stroke-width="1.5"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg></div>
       <div class="welcome-feature-title">Design Tools</div>
       <div class="welcome-feature-desc">Interactive warehouse sizing calculator with dynamic facility layout, zone allocation modeling, and IES engineering recommendations.</div>
       <div style="margin-top:10px;"><span class="wiki-tag" style="background:rgba(25,135,84,.1);color:var(--ies-green);">LIVE</span></div>
     </div>
-    <div class="welcome-feature feature-live">
+    <div class="welcome-feature feature-live" onclick="navigate('deals', document.querySelector('[data-section=deals]'))" style="cursor:pointer;">
       <div class="welcome-feature-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--ies-orange)" stroke-width="1.5"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg></div>
       <div class="welcome-feature-title">Deal Management</div>
       <div class="welcome-feature-desc">Stage-gated deal pipeline with kanban views, forecast vs. actual hours, activity tracking, and deal progression through qualification, discovery, design, proposal, and negotiation.</div>
       <div style="margin-top:10px;"><span class="wiki-tag" style="background:rgba(25,135,84,.1);color:var(--ies-green);">LIVE</span></div>
     </div>
-    <div class="welcome-feature feature-live">
+    <div class="welcome-feature feature-live" onclick="navigate('changemanagement', document.querySelector('[data-section=changemanagement]'))" style="cursor:pointer;">
       <div class="welcome-feature-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--ies-orange)" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg></div>
       <div class="welcome-feature-title">Change Management</div>
       <div class="welcome-feature-desc">Track team changes through the ADKAR methodology. Manage activities, build process flowcharts, and auto-advance initiatives as work completes.</div>
@@ -11937,10 +11937,11 @@ async function loadSignalFeed() {
   if (!feed || !sb) return;
   try {
     // Load from multiple tables in parallel
-    var [compRes, tariffRes, accountRes] = await Promise.all([
+    var [compRes, tariffRes, accountRes, rfpRes] = await Promise.all([
       sb.from('competitor_news').select('*').order('published_date', { ascending: false }).limit(8),
       sb.from('tariff_developments').select('*').order('published_date', { ascending: false }).limit(5),
-      sb.from('account_signals').select('*').order('signal_date', { ascending: false }).limit(5)
+      sb.from('account_signals').select('*').order('signal_date', { ascending: false }).limit(5),
+      sb.from('rfp_signals').select('*').order('created_at', { ascending: false }).limit(5)
     ]);
     var items = [];
     if (compRes.data) compRes.data.forEach(function(r) {
@@ -11951,6 +11952,9 @@ async function loadSignalFeed() {
     });
     if (accountRes.data) accountRes.data.forEach(function(r) {
       items.push({ type: 'account', title: r.account_name + ': ' + (r.signal_type || 'Signal'), excerpt: r.detail, date: r.signal_date, source: r.source || 'Account Intel', url: r.source_url });
+    });
+    if (rfpRes.data) rfpRes.data.forEach(function(r) {
+      items.push({ type: 'rfp', title: r.company + ': ' + (r.signal_type || 'RFP Signal'), excerpt: r.detail, date: r.created_at, source: r.vertical || 'RFP Intel' });
     });
     // Sort by date descending
     items.sort(function(a, b) { return new Date(b.date || 0) - new Date(a.date || 0); });
