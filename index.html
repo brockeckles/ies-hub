@@ -7426,7 +7426,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-network', document.querySelectorAll('#dt-tabs .dt-tab')[1]); },50)">Center of Gravity</button>
     <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-netopt', document.querySelectorAll('#dt-tabs .dt-tab')[2]); },50)">Network Optimization</button>
     <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-warehouse', document.querySelectorAll('#dt-tabs .dt-tab')[3]); },50)">Warehouse Sizing</button>
-    <button class="dt-tab active">Cost Model</button>
+    <button class="dt-tab">Cost Model</button>
     <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-deals', document.querySelectorAll('#dt-tabs .dt-tab')[5]); },50)">Deal Manager</button>
     <button class="dt-tab" onclick="showDesignTool('dt-fleet')">Fleet Modeler</button>
   </div>
@@ -8496,7 +8496,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-warehouse', document.querySelectorAll('#dt-tabs .dt-tab')[3]); },50)">Warehouse Sizing</button>
     <button class="dt-tab" onclick="showDesignTool('dt-costmodel')">Cost Model</button>
     <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-deals', document.querySelectorAll('#dt-tabs .dt-tab')[5]); },50)">Deal Manager</button>
-    <button class="dt-tab active">Fleet Modeler</button>
+    <button class="dt-tab">Fleet Modeler</button>
   </div>
 
   <!-- FLEET MODELER LANDING PAGE -->
@@ -9589,7 +9589,11 @@ function navigate(section, el) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('sec-' + section).classList.add('active');
-  el.classList.add('active');
+  if (el) el.classList.add('active');
+
+  // Sync tool tabs when entering costmodel or fleet sections
+  if (section === 'costmodel' && typeof dtSyncActiveTab === 'function') dtSyncActiveTab('Cost Model');
+  if (section === 'fleet' && typeof dtSyncActiveTab === 'function') dtSyncActiveTab('Fleet Modeler');
 
   // Scroll to top of content area
   window.scrollTo(0, 0);
@@ -14707,13 +14711,28 @@ document.addEventListener('mouseout', function(e) {
 
 // ═══════════ DESIGN TOOLS ═══════════
 
+function dtSyncActiveTab(toolName) {
+  // Sync active state across ALL tab bars (dt-tabs, cm tabs, fleet tabs)
+  var allTabs = document.querySelectorAll('.dt-tab');
+  for (var i = 0; i < allTabs.length; i++) {
+    allTabs[i].classList.remove('active');
+    // Match by trimmed text content (ignore badge spans)
+    var label = allTabs[i].childNodes[0] ? allTabs[i].childNodes[0].textContent.trim() : allTabs[i].textContent.trim();
+    if (label === toolName) {
+      allTabs[i].classList.add('active');
+    }
+  }
+}
+
 function showDesignTool(panelId, tabEl) {
   // Cost model and fleet modeler redirect to their dedicated sections
   if (panelId === 'dt-costmodel') {
+    dtSyncActiveTab('Cost Model');
     navigate('costmodel', document.querySelector('[data-section=costmodel]'));
     return;
   }
   if (panelId === 'dt-fleet') {
+    dtSyncActiveTab('Fleet Modeler');
     navigate('fleet', document.querySelector('[data-section=designtools]'));
     return;
   }
@@ -14721,13 +14740,26 @@ function showDesignTool(panelId, tabEl) {
   for (var i = 0; i < panels.length; i++) panels[i].style.display = 'none';
   var target = document.getElementById(panelId);
   if (target) target.style.display = 'block';
-  // Toggle active class (CSS !important handles styling)
-  var tabs = document.querySelectorAll('.dt-tab');
-  for (var j = 0; j < tabs.length; j++) {
-    tabs[j].classList.remove('active');
-  }
-  if (tabEl) {
-    tabEl.classList.add('active');
+
+  // Determine tool name for syncing
+  var toolNames = {
+    'dt-landing': 'All Tools',
+    'dt-network': 'Center of Gravity',
+    'dt-netopt': 'Network Optimization',
+    'dt-warehouse': 'Warehouse Sizing',
+    'dt-deals': 'Deal Manager'
+  };
+  if (toolNames[panelId]) {
+    dtSyncActiveTab(toolNames[panelId]);
+  } else {
+    // Fallback: use the clicked tab element
+    var tabs = document.querySelectorAll('.dt-tab');
+    for (var j = 0; j < tabs.length; j++) {
+      tabs[j].classList.remove('active');
+    }
+    if (tabEl) {
+      tabEl.classList.add('active');
+    }
   }
   // If switching to warehouse, show landing page
   if (panelId === 'dt-warehouse') { wscShowLanding(); }
