@@ -2464,6 +2464,50 @@
             line-height: 1.5;
         }
 
+        .dt-landing-card-actions {
+            display: flex;
+            gap: 6px;
+            margin-top: 12px;
+            padding-top: 10px;
+            border-top: 1px solid var(--ies-gray-200);
+        }
+
+        .dt-landing-card-actions button {
+            flex: 1;
+            padding: 6px 0;
+            border: 1px solid var(--ies-gray-200);
+            border-radius: 6px;
+            font-family: 'Montserrat', sans-serif;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all .15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+        }
+
+        .dt-card-btn-copy {
+            background: var(--ies-gray-50);
+            color: var(--ies-blue);
+        }
+
+        .dt-card-btn-copy:hover {
+            background: rgba(33,150,243,.08);
+            border-color: var(--ies-blue) !important;
+        }
+
+        .dt-card-btn-delete {
+            background: var(--ies-gray-50);
+            color: #dc3545;
+        }
+
+        .dt-card-btn-delete:hover {
+            background: rgba(220,53,69,.08);
+            border-color: #dc3545 !important;
+        }
+
         .dt-empty-state {
             text-align: center;
             padding: 60px 20px;
@@ -14711,6 +14755,113 @@ document.addEventListener('mouseout', function(e) {
 
 // ═══════════ DESIGN TOOLS ═══════════
 
+// ═══════════ UNIFIED COPY & DELETE FOR ALL DESIGN TOOL LANDING CARDS ═══════════
+
+// Map tool keys to their landing-page refresh functions
+var dtRefreshMap = {
+  wsc: function() { wscLoadScenariosList(); },
+  net: function() { netLoadScenariosList(); },
+  netopt: function() { netoptLoadScenariosList(); },
+  fleet: function() { fmLoadScenariosList(); },
+  costmodel: function() { cmApp.loadProjects(); },
+  deal: function() { dealApp.loadDeals(); }
+};
+
+// Name field varies by table
+var dtNameField = {
+  warehouse_sizing_scenarios: 'scenario_name',
+  network_optimization_scenarios: 'scenario_name',
+  netopt_scenarios: 'scenario_name',
+  fleet_scenarios: 'name',
+  cost_model_projects: 'name',
+  deal_deals: 'deal_name'
+};
+
+async function dtDeleteScenario(table, id, toolKey) {
+  var label = (table === 'deal_deals') ? 'deal' : (table === 'cost_model_projects') ? 'model' : 'scenario';
+  if (!confirm('Delete this ' + label + '? This cannot be undone.')) return;
+  try {
+    await cmApiDelete(table, id);
+    // Also clean up linked data for cost models
+    if (table === 'cost_model_projects') {
+      // Remove deal_artifacts referencing this model
+      try {
+        await fetch(SUPABASE_URL + '/rest/v1/deal_artifacts?artifact_type=eq.cost_model&artifact_id=eq.' + id, {
+          method: 'DELETE', headers: API_HEADERS
+        });
+      } catch(e) {}
+    }
+    // Also clean up fleet lanes for fleet scenarios
+    if (table === 'fleet_scenarios') {
+      try {
+        await fetch(SUPABASE_URL + '/rest/v1/fleet_lanes?scenario_id=eq.' + id, {
+          method: 'DELETE', headers: API_HEADERS
+        });
+      } catch(e) {}
+    }
+    if (dtRefreshMap[toolKey]) dtRefreshMap[toolKey]();
+    if (typeof netoptToast === 'function') netoptToast('Deleted');
+  } catch(e) {
+    console.error('Delete error:', e);
+    alert('Error deleting: ' + (e.message || e));
+  }
+}
+
+async function dtCopyScenario(table, id, toolKey) {
+  try {
+    // Fetch the original record
+    var records = await cmFetchTable(table, 'id=eq.' + id);
+    if (!records || records.length === 0) { alert('Record not found'); return; }
+    var original = records[0];
+
+    // Build the copy — strip system fields
+    var copy = {};
+    var skipFields = ['id', 'created_at', 'updated_at'];
+    Object.keys(original).forEach(function(k) {
+      if (skipFields.indexOf(k) === -1 && original[k] !== undefined) {
+        copy[k] = original[k];
+      }
+    });
+
+    // Rename with " (Copy)" suffix
+    var nameField = dtNameField[table] || 'name';
+    if (copy[nameField]) {
+      copy[nameField] = copy[nameField] + ' (Copy)';
+    }
+
+    // Clear deal linkage on cost model copies so they're independent
+    if (table === 'cost_model_projects' && copy.deal_id) {
+      copy.deal_id = null;
+    }
+
+    // Insert the copy
+    var result = await cmApiPost(table, copy);
+
+    // For fleet scenarios, also copy fleet_lanes
+    if (table === 'fleet_scenarios' && result && result[0]) {
+      var newId = result[0].id;
+      try {
+        var lanes = await cmFetchTable('fleet_lanes', 'scenario_id=eq.' + id);
+        for (var i = 0; i < lanes.length; i++) {
+          var laneCopy = {};
+          Object.keys(lanes[i]).forEach(function(k) {
+            if (skipFields.indexOf(k) === -1) laneCopy[k] = lanes[i][k];
+          });
+          laneCopy.scenario_id = newId;
+          await cmApiPost('fleet_lanes', laneCopy);
+        }
+      } catch(e) { console.warn('Could not copy fleet lanes:', e); }
+    }
+
+    // Refresh the landing page
+    if (dtRefreshMap[toolKey]) dtRefreshMap[toolKey]();
+    if (typeof netoptToast === 'function') netoptToast('Copied');
+  } catch(e) {
+    console.error('Copy error:', e);
+    alert('Error copying: ' + (e.message || e));
+  }
+}
+
 function dtSyncActiveTab(toolName) {
   // Sync active state across ALL tab bars (dt-tabs, cm tabs, fleet tabs)
   var allTabs = document.querySelectorAll('.dt-tab');
@@ -18429,11 +18580,16 @@ async function wscLoadScenariosList() {
     if (empty) empty.style.display = 'none';
 
     grid.innerHTML = scenarios.map(function(s) {
-      return '<div class="dt-landing-card" onclick="wscLoadScenario(' + s.id + '); wscShowTool()">' +
+      return '<div class="dt-landing-card">' +
+        '<div onclick="wscLoadScenario(' + s.id + '); wscShowTool()" style="cursor:pointer;">' +
         '<div class="dt-landing-card-name">' + (s.scenario_name || 'Untitled') + '</div>' +
         '<div class="dt-landing-card-meta">' + (s.created_at ? new Date(s.created_at).toLocaleDateString() : '') + '</div>' +
         '<div class="dt-landing-card-metric">SF: ' + (s.facility_sqft ? s.facility_sqft.toLocaleString() : '—') + '</div>' +
-        '</div>';
+        '</div>' +
+        '<div class="dt-landing-card-actions">' +
+        '<button class="dt-card-btn-copy" onclick="event.stopPropagation(); dtCopyScenario(\'warehouse_sizing_scenarios\',' + s.id + ',\'wsc\')"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/><path d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2" stroke="currentColor" stroke-width="2"/></svg> Copy</button>' +
+        '<button class="dt-card-btn-delete" onclick="event.stopPropagation(); dtDeleteScenario(\'warehouse_sizing_scenarios\',' + s.id + ',\'wsc\')"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Delete</button>' +
+        '</div></div>';
     }).join('');
   } catch (e) {
     console.error('Error loading scenarios:', e);
@@ -18478,11 +18634,16 @@ async function netLoadScenariosList() {
     if (empty) empty.style.display = 'none';
 
     grid.innerHTML = scenarios.map(function(s) {
-      return '<div class="dt-landing-card" onclick="netLoadScenario(' + s.id + '); netShowTool()">' +
+      return '<div class="dt-landing-card">' +
+        '<div onclick="netLoadScenario(' + s.id + '); netShowTool()" style="cursor:pointer;">' +
         '<div class="dt-landing-card-name">' + (s.scenario_name || 'Untitled') + '</div>' +
         '<div class="dt-landing-card-meta">' + (s.created_at ? new Date(s.created_at).toLocaleDateString() : '') + '</div>' +
         '<div class="dt-landing-card-metric">DCs: ' + (s.dc_count || '—') + ' | Freight: $' + (s.result_est_freight ? s.result_est_freight.toLocaleString(undefined, {maximumFractionDigits: 0}) : '—') + '</div>' +
-        '</div>';
+        '</div>' +
+        '<div class="dt-landing-card-actions">' +
+        '<button class="dt-card-btn-copy" onclick="event.stopPropagation(); dtCopyScenario(\'network_optimization_scenarios\',' + s.id + ',\'net\')"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/><path d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2" stroke="currentColor" stroke-width="2"/></svg> Copy</button>' +
+        '<button class="dt-card-btn-delete" onclick="event.stopPropagation(); dtDeleteScenario(\'network_optimization_scenarios\',' + s.id + ',\'net\')"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Delete</button>' +
+        '</div></div>';
     }).join('');
   } catch (e) {
     console.error('Error loading scenarios:', e);
@@ -18527,11 +18688,16 @@ async function netoptLoadScenariosList() {
     if (empty) empty.style.display = 'none';
 
     grid.innerHTML = scenarios.map(function(s) {
-      return '<div class="dt-landing-card" onclick="netoptLoadScenario(' + s.id + '); netoptShowTool()">' +
+      return '<div class="dt-landing-card">' +
+        '<div onclick="netoptLoadScenario(' + s.id + '); netoptShowTool()" style="cursor:pointer;">' +
         '<div class="dt-landing-card-name">' + (s.scenario_name || 'Untitled') + '</div>' +
         '<div class="dt-landing-card-meta">' + (s.created_at ? new Date(s.created_at).toLocaleDateString() : '') + '</div>' +
         '<div class="dt-landing-card-metric">Cost: $' + (s.result_total_cost ? s.result_total_cost.toLocaleString(undefined, {maximumFractionDigits: 0}) : '—') + ' | Mode: ' + (s.solver_mode || '—') + '</div>' +
-        '</div>';
+        '</div>' +
+        '<div class="dt-landing-card-actions">' +
+        '<button class="dt-card-btn-copy" onclick="event.stopPropagation(); dtCopyScenario(\'netopt_scenarios\',' + s.id + ',\'netopt\')"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/><path d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2" stroke="currentColor" stroke-width="2"/></svg> Copy</button>' +
+        '<button class="dt-card-btn-delete" onclick="event.stopPropagation(); dtDeleteScenario(\'netopt_scenarios\',' + s.id + ',\'netopt\')"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Delete</button>' +
+        '</div></div>';
     }).join('');
   } catch (e) {
     console.error('Error loading scenarios:', e);
@@ -18583,11 +18749,16 @@ async function fmLoadScenariosList() {
     if (empty) empty.style.display = 'none';
 
     grid.innerHTML = scenarios.map(function(s) {
-      return '<div class="dt-landing-card" onclick="fmLoadFleetScenario(' + s.id + '); fmShowTool()">' +
+      return '<div class="dt-landing-card">' +
+        '<div onclick="fmLoadFleetScenario(' + s.id + '); fmShowTool()" style="cursor:pointer;">' +
         '<div class="dt-landing-card-name">' + (s.name || 'Untitled') + '</div>' +
         '<div class="dt-landing-card-meta">' + (s.created_at ? new Date(s.created_at).toLocaleDateString() : '') + '</div>' +
         '<div class="dt-landing-card-metric">' + (s.notes ? s.notes.substring(0, 60) + '...' : 'Fleet scenario') + '</div>' +
-        '</div>';
+        '</div>' +
+        '<div class="dt-landing-card-actions">' +
+        '<button class="dt-card-btn-copy" onclick="event.stopPropagation(); dtCopyScenario(\'fleet_scenarios\',' + s.id + ',\'fleet\')"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/><path d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2" stroke="currentColor" stroke-width="2"/></svg> Copy</button>' +
+        '<button class="dt-card-btn-delete" onclick="event.stopPropagation(); dtDeleteScenario(\'fleet_scenarios\',' + s.id + ',\'fleet\')"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Delete</button>' +
+        '</div></div>';
     }).join('');
   } catch (e) {
     console.error('Error loading scenarios:', e);
@@ -22798,12 +22969,17 @@ const cmApp = {
                     const card = document.createElement('div');
                     card.className = 'dt-landing-card';
                     card.innerHTML = `
+                        <div style="cursor:pointer;" onclick="cmApp.openProject(${p.id})">
                         <div class="dt-landing-card-name">${p.name}</div>
                         <div class="dt-landing-card-meta">${(this.refData.markets.find(m => m.id === p.market_id) || {}).name || 'N/A'}</div>
                         <div class="dt-landing-card-metric">$${(p.total_annual_cost || 0).toLocaleString('en-US', {maximumFractionDigits: 0})}/yr</div>
                         <div class="dt-landing-card-meta">${new Date(p.created_at).toLocaleDateString()}</div>
+                        </div>
+                        <div class="dt-landing-card-actions">
+                        <button class="dt-card-btn-copy" onclick="event.stopPropagation(); dtCopyScenario('cost_model_projects',${p.id},'costmodel')"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/><path d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2" stroke="currentColor" stroke-width="2"/></svg> Copy</button>
+                        <button class="dt-card-btn-delete" onclick="event.stopPropagation(); dtDeleteScenario('cost_model_projects',${p.id},'costmodel')"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Delete</button>
+                        </div>
                     `;
-                    card.addEventListener('click', () => this.openProject(p.id));
                     projectsList.appendChild(card);
                 });
             }
@@ -26599,10 +26775,7 @@ const dealApp = {
         listView.innerHTML = '';
         this.deals.forEach(deal => {
             const card = document.createElement('div');
-            card.style.cssText = 'background:#fff;border-radius:12px;border:1px solid var(--ies-gray-200);padding:20px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);';
-            card.onmouseover = function() { this.style.borderColor='var(--ies-blue)'; this.style.boxShadow='0 4px 12px rgba(0,71,171,.12)'; };
-            card.onmouseout = function() { this.style.borderColor='var(--ies-gray-200)'; this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'; };
-            card.onclick = () => this.openDeal(deal.id);
+            card.className = 'dt-landing-card';
 
             const statusColors = {
                 'Draft': 'background:rgba(107,114,128,.1);color:rgb(107,114,128)',
@@ -26613,6 +26786,7 @@ const dealApp = {
             };
 
             card.innerHTML = `
+                <div style="cursor:pointer;" onclick="dealApp.openDeal('${deal.id}')">
                 <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:12px;">
                     <div style="font-weight:700;font-size:15px;color:var(--ies-navy);flex:1;margin-right:12px;">${deal.deal_name}</div>
                     <span style="padding:4px 10px;border-radius:4px;font-size:11px;font-weight:600;${statusColors[deal.status] || statusColors['Draft']};white-space:nowrap;">${deal.status}</span>
@@ -26628,6 +26802,11 @@ const dealApp = {
                         <div style="color:var(--ies-gray-500);font-weight:500;margin-bottom:2px;">Total Cost</div>
                         <div id="card-cost-${deal.id}" style="font-weight:600;color:var(--ies-orange);">—</div>
                     </div>
+                </div>
+                </div>
+                <div class="dt-landing-card-actions">
+                <button class="dt-card-btn-copy" onclick="event.stopPropagation(); dtCopyScenario('deal_deals','${deal.id}','deal')"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/><path d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2" stroke="currentColor" stroke-width="2"/></svg> Copy</button>
+                <button class="dt-card-btn-delete" onclick="event.stopPropagation(); dtDeleteScenario('deal_deals','${deal.id}','deal')"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Delete</button>
                 </div>
             `;
             listView.appendChild(card);
