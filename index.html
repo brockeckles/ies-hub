@@ -13423,6 +13423,20 @@ async function pmExecuteDOSPopulate() {
   if (selectedStages.length === 0) { pmToast('Please select at least one stage.', 'warning'); return; }
 
   try {
+    // Check for already-populated stages and skip them
+    var existingTasks = pmData.tasks.filter(function(t){ return t.opportunity_id == pmCurrentOpp.id && t.dos_stage_number; });
+    var existingStages = {};
+    existingTasks.forEach(function(t){ existingStages[t.dos_stage_number] = true; });
+    var skippedStages = selectedStages.filter(function(n){ return existingStages[n]; });
+    selectedStages = selectedStages.filter(function(n){ return !existingStages[n]; });
+    if (selectedStages.length === 0) {
+      pmToast('Selected stages already populated. Uncheck them to add different stages.', 'warning');
+      return;
+    }
+    if (skippedStages.length > 0) {
+      pmToast('Skipped Stage ' + skippedStages.join(', ') + ' (already populated).', 'warning');
+    }
+
     // Fetch templates for selected stages
     var stageIds = [];
     var stagesRes = await sb.from('stages').select('id,stage_number,stage_name').in('stage_number', selectedStages).order('stage_number');
