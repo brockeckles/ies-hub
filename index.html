@@ -3649,6 +3649,510 @@
   color: var(--ies-navy);
 }
 
+/* ═══════════════════════════════════════════════════
+   FLEET MODELER STYLES
+   ═══════════════════════════════════════════════════ */
+
+.fm-tab {
+  background: none;
+  border: none;
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ies-gray-600);
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  transition: all 0.2s ease;
+  font-family: 'Montserrat', sans-serif;
+}
+
+.fm-tab:hover {
+  color: var(--ies-navy);
+}
+
+.fm-tab.active {
+  color: var(--ies-blue);
+  border-bottom-color: var(--ies-blue);
+}
+
+.fm-tab-content {
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.fm-btn-primary {
+  background: var(--ies-blue);
+  color: #fff;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'Montserrat', sans-serif;
+  transition: all 0.2s ease;
+}
+
+.fm-btn-primary:hover {
+  background: #0039a6;
+  box-shadow: 0 4px 12px rgba(0, 71, 171, 0.2);
+}
+
+.fm-btn-secondary {
+  background: #fff;
+  color: var(--ies-blue);
+  border: 1px solid var(--ies-blue);
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'Montserrat', sans-serif;
+  transition: all 0.2s ease;
+}
+
+.fm-btn-secondary:hover {
+  background: var(--ies-blue);
+  color: #fff;
+}
+
+.fm-lane-row {
+  display: flex;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--ies-gray-200);
+  align-items: center;
+}
+
+.fm-lane-row input,
+.fm-lane-row select {
+  padding: 6px;
+  border: 1px solid var(--ies-gray-300);
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: 'Montserrat', sans-serif;
+}
+
+.fm-metric-card {
+  background: linear-gradient(135deg, #f8f9fb, #f0f1f5);
+  border: 1px solid var(--ies-gray-200);
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+}
+
+.fm-metric-label {
+  font-size: 12px;
+  color: var(--ies-gray-600);
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.fm-metric-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ies-navy);
+}
+
+.fm-cost-card {
+  background: #fff;
+  border: 1px solid var(--ies-gray-200);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.fm-cost-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ies-navy);
+  margin-bottom: 12px;
+}
+
+.fm-cost-card-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--ies-blue);
+  margin-bottom: 8px;
+}
+
+.fm-cost-card-savings {
+  font-size: 12px;
+  color: var(--ies-green);
+  font-weight: 600;
+}
+
+.fm-scenario-item {
+  background: #fff;
+  border: 1px solid var(--ies-gray-200);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.2s ease;
+}
+
+.fm-scenario-item:hover {
+  border-color: var(--ies-blue);
+  box-shadow: 0 2px 8px rgba(0, 71, 171, 0.1);
+}
+
+.fm-scenario-info {
+  flex: 1;
+}
+
+.fm-scenario-name {
+  font-weight: 600;
+  color: var(--ies-navy);
+  margin-bottom: 4px;
+}
+
+.fm-scenario-meta {
+  font-size: 12px;
+  color: var(--ies-gray-600);
+}
+
+.fm-toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: var(--ies-navy);
+  color: #fff;
+  padding: 16px 24px;
+  border-radius: 8px;
+  font-size: 13px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  z-index: 1000;
+  animation: slideInUp 0.3s ease;
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ══ Deal Artifacts Styles ══ */
+.da-workspace-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.da-toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.da-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.da-card {
+  background: #fff;
+  border: 1px solid var(--ies-gray-200);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.da-card:hover {
+  border-color: var(--ies-orange);
+  box-shadow: 0 4px 12px rgba(243, 112, 33, 0.1);
+}
+
+.da-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.da-card-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #fff;
+  font-size: 18px;
+}
+
+.da-card-icon.cost_model {
+  background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+}
+
+.da-card-icon.netopt_scenario {
+  background: linear-gradient(135deg, #4CAF50 0%, #388E3C 100%);
+}
+
+.da-card-icon.fleet_scenario {
+  background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);
+}
+
+.da-card-icon.document {
+  background: linear-gradient(135deg, #9C27B0 0%, #7B1FA2 100%);
+}
+
+.da-card-icon.other {
+  background: linear-gradient(135deg, #757575 0%, #616161 100%);
+}
+
+.da-card-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ies-navy);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.da-card-meta {
+  font-size: 11px;
+  color: var(--ies-gray-400);
+}
+
+.da-card-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.da-card-actions button {
+  flex: 1;
+  padding: 6px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.da-card-actions .da-btn-open {
+  background: var(--ies-orange);
+  color: #fff;
+}
+
+.da-card-actions .da-btn-open:hover {
+  background: #E55100;
+}
+
+.da-card-actions .da-btn-remove {
+  background: var(--ies-gray-200);
+  color: var(--ies-navy);
+}
+
+.da-card-actions .da-btn-remove:hover {
+  background: #E0E0E0;
+}
+
+.da-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--ies-gray-400);
+}
+
+.da-empty svg {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 16px;
+  opacity: 0.5;
+  stroke: currentColor;
+}
+
+.da-empty-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.da-empty-text {
+  font-size: 12px;
+}
+
+.da-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.da-modal {
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 500px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.da-modal-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ies-navy);
+  margin-bottom: 20px;
+}
+
+.da-modal-section {
+  margin-bottom: 20px;
+}
+
+.da-modal-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ies-navy);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  display: block;
+}
+
+.da-modal-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--ies-gray-200);
+  border-radius: 6px;
+  font-family: Montserrat, sans-serif;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+
+.da-modal-input:focus {
+  outline: none;
+  border-color: var(--ies-orange);
+  box-shadow: 0 0 0 3px rgba(243, 112, 33, 0.1);
+}
+
+.da-modal-list {
+  border: 1px solid var(--ies-gray-200);
+  border-radius: 6px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.da-modal-item {
+  padding: 12px;
+  border-bottom: 1px solid var(--ies-gray-200);
+  cursor: pointer;
+  transition: background 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.da-modal-item:last-child {
+  border-bottom: none;
+}
+
+.da-modal-item:hover {
+  background: var(--ies-gray-50);
+}
+
+.da-modal-item-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.da-modal-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.da-modal-item-name {
+  font-weight: 600;
+  color: var(--ies-navy);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.da-modal-item-meta {
+  font-size: 11px;
+  color: var(--ies-gray-400);
+  margin-top: 2px;
+}
+
+.da-deal-selector {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 12px;
+  background: var(--ies-gray-50);
+  border: 1px solid var(--ies-gray-200);
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+
+.da-deal-selector-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ies-navy);
+  white-space: nowrap;
+}
+
+.da-deal-selector-input {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid var(--ies-gray-300);
+  border-radius: 4px;
+  font-family: Montserrat, sans-serif;
+  font-size: 12px;
+}
+
+.da-deal-selector-input:focus {
+  outline: none;
+  border-color: var(--ies-orange);
+}
+
+.da-summary-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  background: var(--ies-gray-100);
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ies-navy);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.da-summary-badge:hover {
+  background: var(--ies-orange);
+  color: #fff;
+}
+
 </style>
 
 </head>
@@ -3732,6 +4236,9 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     <div class="sidebar-label">Solutions Design</div>
     <a class="nav-item" data-section="deals" onclick="navigate('deals', this)">
       <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" fill="none"/><rect x="9" y="3" width="6" height="4" rx="1" fill="none"/><path d="M9 14l2 2 4-4" fill="none"/></svg></span> Deal Management
+    </a>
+    <a class="nav-item" data-section="fleet" onclick="navigate('fleet', this)">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M3 9h18v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Z" fill="none"/><circle cx="7" cy="15" r="1" fill="currentColor"/><circle cx="17" cy="15" r="1" fill="currentColor"/><path d="M3 9V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2" fill="none"/></svg></span> Fleet Modeler
     </a>
     <a class="nav-item" data-section="designtools" onclick="navigate('designtools', this)">
       <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M7 6a5 5 0 1 0 10 0 5 5 0 0 0-10 0M13 19c0-2-1.5-4-3-4s-3 2-3 4" fill="none"/><path d="M8 14l-5 5M16 6l5 5" fill="none"/></svg></span> Design Tools
@@ -5760,6 +6267,11 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
             <input type="text" id="netopt-scenario-name" class="wsc-input" placeholder="Network Optimization Scenario" spellcheck="false">
           </div>
 
+          <div class="da-deal-selector" style="margin-top:12px;">
+            <label class="da-deal-selector-label">Link to Deal:</label>
+            <select id="netoptDealSelector" class="da-deal-selector-input" onchange="daLinkNetoptToDeal()"></select>
+          </div>
+
           <div style="margin-top:20px;margin-bottom:20px;">
             <label class="wsc-input-label" style="margin-bottom:12px;">Quick-Start Templates</label>
             <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;">
@@ -6712,6 +7224,10 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
                 <div class="cm-field-group">
                     <label class="cm-field-label">Description</label>
                     <textarea id="modelDescription" class="cm-input" placeholder="Project scope, assumptions, etc." style="resize:vertical; min-height:80px;max-width:500px;"></textarea>
+                </div>
+                <div class="da-deal-selector" style="margin-top:16px;">
+                    <label class="da-deal-selector-label">Link to Deal:</label>
+                    <select id="cmDealSelector" class="da-deal-selector-input" onchange="daLinkCostModelToDeal()"></select>
                 </div>
             </div>
 
@@ -7678,6 +8194,184 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 </div>
 
 
+<!-- ═══════════ FLEET MODELER ═══════════ -->
+<div class="section" id="sec-fleet">
+  <div class="section-header">
+    <div>
+      <div class="section-title">Fleet Modeler & Optimizer</div>
+      <div class="section-subtitle">Design optimal fleet configurations and compare private vs. dedicated vs. carrier options</div>
+    </div>
+  </div>
+
+  <div id="fm-main" style="display:flex;flex-direction:column;gap:20px;">
+    <!-- Tab Navigation -->
+    <div style="display:flex;gap:8px;border-bottom:2px solid var(--ies-gray-200);overflow-x:auto;">
+      <button class="fm-tab active" onclick="fmShowTab('lanes')">Lanes</button>
+      <button class="fm-tab" onclick="fmShowTab('config')">Configuration</button>
+      <button class="fm-tab" onclick="fmShowTab('results')">Results</button>
+      <button class="fm-tab" onclick="fmShowTab('scenarios')">Scenarios</button>
+    </div>
+
+    <!-- LANES TAB -->
+    <div id="fm-tab-lanes" class="fm-tab-content" style="display:block;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:16px;">
+        <button class="fm-btn-secondary" onclick="fmLoadDemoData()">Load Demo Data</button>
+        <button class="fm-btn-secondary" onclick="fmAddLane()">Add Lane</button>
+        <button class="fm-btn-secondary" onclick="fmUploadCSV()">Upload CSV</button>
+        <button class="fm-btn-secondary" onclick="fmExportLanes()">Export Lanes</button>
+      </div>
+
+      <div style="overflow-x:auto;background:#fff;border-radius:10px;border:1px solid var(--ies-gray-200);">
+        <table id="fm-lanes-table" style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead style="background:var(--ies-gray-150);border-bottom:1px solid var(--ies-gray-300);">
+            <tr>
+              <th style="padding:12px;text-align:left;font-weight:600;">Origin</th>
+              <th style="padding:12px;text-align:left;font-weight:600;">Destination</th>
+              <th style="padding:12px;text-align:center;font-weight:600;">Weekly Ships</th>
+              <th style="padding:12px;text-align:center;font-weight:600;">Avg Wgt (lbs)</th>
+              <th style="padding:12px;text-align:center;font-weight:600;">Avg Cube (ft³)</th>
+              <th style="padding:12px;text-align:left;font-weight:600;">Delivery Window</th>
+              <th style="padding:12px;text-align:center;font-weight:600;color:var(--ies-gray-600);">Miles</th>
+              <th style="padding:12px;text-align:center;font-weight:600;">Action</th>
+            </tr>
+          </thead>
+          <tbody id="fm-lanes-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- CONFIGURATION TAB -->
+    <div id="fm-tab-config" class="fm-tab-content" style="display:none;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px;">
+        <!-- Vehicle Selection -->
+        <div style="background:#fff;border-radius:10px;border:1px solid var(--ies-gray-200);padding:20px;">
+          <div style="font-weight:600;margin-bottom:16px;color:var(--ies-navy);">Vehicle Types</div>
+          <div style="display:flex;flex-direction:column;gap:12px;" id="fm-vehicle-checks"></div>
+        </div>
+
+        <!-- Cost Parameters -->
+        <div style="background:#fff;border-radius:10px;border:1px solid var(--ies-gray-200);padding:20px;">
+          <div style="font-weight:600;margin-bottom:16px;color:var(--ies-navy);">Cost Parameters</div>
+          <div style="display:flex;flex-direction:column;gap:12px;" id="fm-cost-params"></div>
+        </div>
+
+        <!-- Operational Params -->
+        <div style="background:#fff;border-radius:10px;border:1px solid var(--ies-gray-200);padding:20px;">
+          <div style="font-weight:600;margin-bottom:16px;color:var(--ies-navy);">Fleet Assumptions</div>
+          <div style="display:flex;flex-direction:column;gap:12px;">
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
+              <span>Utilization Target (%)</span>
+              <input type="number" id="fm-utilization" value="85" min="50" max="95" style="width:60px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;">
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
+              <span>Deadhead/Empty %</span>
+              <input type="number" id="fm-deadhead" value="15" min="0" max="50" style="width:60px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;">
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
+              <span>Service Level Target (%)</span>
+              <input type="number" id="fm-service-level" value="95" min="80" max="99" style="width:60px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;">
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:20px;">
+        <button class="fm-btn-primary" onclick="fmCalculateFleet()">Calculate Fleet Requirements</button>
+      </div>
+    </div>
+
+    <!-- RESULTS TAB -->
+    <div id="fm-tab-results" class="fm-tab-content" style="display:none;">
+      <div id="fm-results-content" style="display:none;">
+        <!-- Fleet Summary -->
+        <div style="background:linear-gradient(135deg, #0a1628, #0d1f3c, #0a1628);border-radius:10px;padding:24px;color:#fff;margin-bottom:20px;box-shadow:0 4px 12px rgba(0,0,0,.15);">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:20px;">
+            <div>
+              <div style="font-size:12px;color:rgba(255,255,255,.7);margin-bottom:6px;">Total Vehicles</div>
+              <div id="fm-res-total-vehicles" style="font-size:32px;font-weight:900;">—</div>
+            </div>
+            <div>
+              <div style="font-size:12px;color:rgba(255,255,255,.7);margin-bottom:6px;">Total Drivers</div>
+              <div id="fm-res-total-drivers" style="font-size:32px;font-weight:900;">—</div>
+            </div>
+            <div>
+              <div style="font-size:12px;color:rgba(255,255,255,.7);margin-bottom:6px;">Fleet Utilization</div>
+              <div id="fm-res-utilization" style="font-size:32px;font-weight:900;">—</div>
+            </div>
+            <div>
+              <div style="font-size:12px;color:rgba(255,255,255,.7);margin-bottom:6px;">Cost/Mile</div>
+              <div id="fm-res-cost-per-mile" style="font-size:32px;font-weight:900;">—</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Fleet Mix Table -->
+        <div style="background:#fff;border-radius:10px;border:1px solid var(--ies-gray-200);padding:20px;margin-bottom:20px;">
+          <div style="font-weight:600;margin-bottom:16px;color:var(--ies-navy);">Fleet Composition</div>
+          <div style="overflow-x:auto;">
+            <table id="fm-fleet-mix-table" style="width:100%;border-collapse:collapse;font-size:13px;">
+              <thead style="background:var(--ies-gray-150);border-bottom:1px solid var(--ies-gray-300);">
+                <tr>
+                  <th style="padding:12px;text-align:left;font-weight:600;">Vehicle Type</th>
+                  <th style="padding:12px;text-align:center;font-weight:600;">Required</th>
+                  <th style="padding:12px;text-align:center;font-weight:600;">Utilization</th>
+                  <th style="padding:12px;text-align:center;font-weight:600;">Annual Cost</th>
+                </tr>
+              </thead>
+              <tbody id="fm-fleet-mix-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Cost Comparison -->
+        <div style="background:#fff;border-radius:10px;border:1px solid var(--ies-gray-200);padding:20px;margin-bottom:20px;">
+          <div style="font-weight:600;margin-bottom:16px;color:var(--ies-navy);">Annual Cost Comparison</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;" id="fm-cost-cards"></div>
+        </div>
+
+        <!-- Sensitivity Analysis -->
+        <div style="background:#fff;border-radius:10px;border:1px solid var(--ies-gray-200);padding:20px;margin-bottom:20px;">
+          <div style="font-weight:600;margin-bottom:16px;color:var(--ies-navy);">Sensitivity Analysis</div>
+          <div style="height:300px;">
+            <canvas id="fm-sensitivity-chart"></canvas>
+          </div>
+        </div>
+
+        <!-- Key Metrics -->
+        <div style="background:#fff;border-radius:10px;border:1px solid var(--ies-gray-200);padding:20px;">
+          <div style="font-weight:600;margin-bottom:16px;color:var(--ies-navy);">Key Performance Metrics</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;" id="fm-metrics-grid"></div>
+        </div>
+      </div>
+
+      <div id="fm-no-results" style="background:#fff;border-radius:10px;border:1px solid var(--ies-gray-200);padding:40px;text-align:center;color:var(--ies-gray-600);">
+        <div style="font-size:16px;margin-bottom:8px;">No results yet</div>
+        <div style="font-size:13px;">Configure lanes and settings, then calculate fleet requirements to see results</div>
+      </div>
+    </div>
+
+    <!-- SCENARIOS TAB -->
+    <div id="fm-tab-scenarios" class="fm-tab-content" style="display:none;">
+      <div style="display:flex;gap:12px;margin-bottom:16px;">
+        <button class="fm-btn-primary" onclick="fmSaveScenario()">Save Scenario</button>
+        <button class="fm-btn-secondary" onclick="fmClearScenario()">Clear All</button>
+      </div>
+
+      <div style="background:#fff;border-radius:10px;border:1px solid var(--ies-gray-200);padding:20px;">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+          <span style="font-weight:600;color:var(--ies-navy);">Saved Scenarios</span>
+          <span id="fm-scenario-count" style="font-size:12px;background:var(--ies-orange);color:#fff;padding:2px 8px;border-radius:12px;">0</span>
+        </div>
+        <div id="fm-scenarios-list" style="display:flex;flex-direction:column;gap:12px;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Hidden CSV Upload Input -->
+<input type="file" id="fm-csv-upload" accept=".csv" style="display:none;" onchange="fmProcessCSVUpload(event)">
+
+
 <!-- ═══════════ DEAL MANAGEMENT ═══════════ -->
 <div class="section" id="sec-deals">
   <div class="section-header">
@@ -7792,6 +8486,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <button class="pm-tab active" onclick="pmShowDetailTab('overview',this)">Overview</button>
       <button class="pm-tab" onclick="pmShowDetailTab('tasks',this)">Tasks</button>
       <button class="pm-tab" onclick="pmShowDetailTab('hours',this)">Hours</button>
+      <button class="pm-tab" onclick="pmShowDetailTab('workspace',this)">Workspace</button>
       <button class="pm-tab" onclick="pmShowDetailTab('updates',this)">Updates</button>
     </div>
 
@@ -7896,6 +8591,28 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         <div style="font-size:14px;font-weight:600;margin-bottom:4px;">No hours logged yet</div>
         <div style="font-size:12px;">Click "Add Hours" to start tracking time for this opportunity.</div>
+      </div>
+    </div>
+
+    <!-- Workspace Tab -->
+    <div class="pm-tab-panel" id="pm-tab-workspace">
+      <div class="da-workspace-container">
+        <div class="da-toolbar">
+          <button class="pm-btn pm-btn-primary pm-btn-sm" onclick="daShowLinkExistingModal()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            Link Existing
+          </button>
+          <button class="pm-btn pm-btn-outline pm-btn-sm" onclick="daShowCreateNewModal()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Create New
+          </button>
+        </div>
+        <div id="da-artifacts-grid" class="da-grid"></div>
+        <div id="da-artifacts-empty" class="da-empty" style="display:none;">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+          <div class="da-empty-title">No design artifacts yet</div>
+          <div class="da-empty-text">Link existing cost models, network optimization scenarios, or create new ones for this deal.</div>
+        </div>
       </div>
     </div>
 
@@ -8140,6 +8857,8 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 
   <!-- Modal container (shared across pipeline + timesheet) -->
   <div id="pm-modal-container"></div>
+  <!-- Deal Artifacts modal container -->
+  <div id="da-modal-container"></div>
 
 </div>
 
@@ -11423,6 +12142,10 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('Project: ' + SUPABASE_URL);
     // Load deal management data
     pmLoadAll();
+    // Load deals for artifact linking
+    daLoadDealsForSelector();
+    // Load deal stages
+    dmLoadDeals();
 
     // ── Auto-refresh alerts & KPIs every 5 minutes ──
     setInterval(async function() {
@@ -11655,7 +12378,7 @@ function pmOpenDetail(oppId) {
   document.getElementById('pm-pipeline-view').style.display = 'none';
   document.getElementById('pm-list-view').style.display = 'none';
   document.getElementById('pm-stats').style.display = 'none';
-  document.querySelector('#sec-projects .pm-toolbar').style.display = 'none';
+  document.querySelector('#sec-deals .pm-toolbar').style.display = 'none';
   var detail = document.getElementById('pm-detail');
   detail.classList.add('active');
   // Populate header
@@ -11675,7 +12398,7 @@ function pmBackToPipeline() {
   pmCurrentOpp = null;
   document.getElementById('pm-detail').classList.remove('active');
   document.getElementById('pm-stats').style.display = '';
-  document.querySelector('#sec-projects .pm-toolbar').style.display = '';
+  document.querySelector('#sec-deals .pm-toolbar').style.display = '';
   if (pmViewMode === 'kanban') {
     document.getElementById('pm-pipeline-view').style.display = 'block';
     document.getElementById('pm-list-view').style.display = 'none';
@@ -11692,6 +12415,10 @@ function pmShowDetailTab(tabId, tabEl) {
   if (tabEl) tabEl.classList.add('active');
   var panel = document.getElementById('pm-tab-' + tabId);
   if (panel) panel.classList.add('active');
+  // Load workspace artifacts when workspace tab is clicked
+  if (tabId === 'workspace' && pmCurrentOpp) {
+    daLoadArtifacts(pmCurrentOpp.id);
+  }
 }
 
 function pmRenderOverview() {
@@ -12772,7 +13499,7 @@ async function pmDeleteOpportunity() {
     pmCurrentOpp = null;
     document.getElementById('pm-detail').classList.remove('active');
     document.getElementById('pm-stats').style.display = '';
-    document.querySelector('#sec-projects .pm-toolbar').style.display = '';
+    document.querySelector('#sec-deals .pm-toolbar').style.display = '';
     document.getElementById('pm-pipeline-view').style.display = 'block';
     await pmLoadAll();
   } catch(e) { alert('Error deleting opportunity: ' + e.message); }
@@ -13126,6 +13853,287 @@ async function dmToggleStatus(elementId, event) {
     await dmLoadDealStages();
   } catch(e) {
     console.error('Error cycling status:', e);
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// DEAL ARTIFACTS (Workspace)
+// ═══════════════════════════════════════════════════
+var daData = {
+  artifacts: [],
+  deals: [],
+  costModels: [],
+  netoptScenarios: [],
+  currentDealId: null
+};
+
+async function daLoadArtifacts(dealId) {
+  if (!sb) return;
+  try {
+    daData.currentDealId = dealId;
+    const result = await sb.from('deal_artifacts')
+      .select('*')
+      .eq('deal_id', dealId)
+      .order('created_at', {ascending: false});
+
+    daData.artifacts = result.data || [];
+    daRenderArtifacts();
+  } catch(e) {
+    console.error('Error loading artifacts:', e);
+  }
+}
+
+function daRenderArtifacts() {
+  const grid = document.getElementById('da-artifacts-grid');
+  const empty = document.getElementById('da-artifacts-empty');
+
+  if (!grid || !empty) return;
+
+  grid.innerHTML = '';
+
+  if (daData.artifacts.length === 0) {
+    grid.style.display = 'none';
+    empty.style.display = 'block';
+    return;
+  }
+
+  empty.style.display = 'none';
+  grid.style.display = 'grid';
+
+  daData.artifacts.forEach(artifact => {
+    const card = document.createElement('div');
+    card.className = 'da-card';
+
+    const typeInfo = daGetTypeInfo(artifact.artifact_type);
+    const dateStr = new Date(artifact.created_at).toLocaleDateString();
+
+    let html = '<div class="da-card-header">';
+    html += `<div class="da-card-icon ${artifact.artifact_type}">${typeInfo.icon}</div>`;
+    html += '<div style="flex:1;min-width:0;">';
+    html += `<div class="da-card-title">${artifact.artifact_name}</div>`;
+    html += `<div class="da-card-meta">${typeInfo.label} • ${dateStr}</div>`;
+    html += '</div></div>';
+
+    if (artifact.artifact_notes) {
+      html += `<div style="font-size:12px;color:var(--ies-gray-600);line-height:1.4;">${artifact.artifact_notes}</div>`;
+    }
+
+    html += '<div class="da-card-actions">';
+    html += `<button class="da-btn-open" onclick="daOpenArtifact('${artifact.artifact_type}', '${artifact.artifact_id || ''}')">Open</button>`;
+    html += `<button class="da-btn-remove" onclick="daRemoveArtifact('${artifact.id}')">Remove</button>`;
+    html += '</div>';
+
+    card.innerHTML = html;
+    grid.appendChild(card);
+  });
+}
+
+function daGetTypeInfo(type) {
+  const types = {
+    cost_model: { icon: '📊', label: 'Cost Model' },
+    netopt_scenario: { icon: '🗺️', label: 'Network Scenario' },
+    fleet_scenario: { icon: '🚚', label: 'Fleet Scenario' },
+    document: { icon: '📄', label: 'Document' },
+    other: { icon: '📎', label: 'Other' }
+  };
+  return types[type] || types.other;
+}
+
+async function daShowLinkExistingModal() {
+  if (!daData.currentDealId) {
+    alert('No deal selected');
+    return;
+  }
+
+  if (!sb) return;
+
+  try {
+    // Load cost models and netopt scenarios
+    const [cmResult, noResult, fsResult] = await Promise.all([
+      sb.from('cost_model_projects').select('id, name, created_at').order('name'),
+      sb.from('netopt_scenarios').select('id, scenario_name, created_at').order('scenario_name'),
+      sb.from('fleet_scenarios').select('id, scenario_name, created_at').order('scenario_name').then(r => r).catch(() => ({ data: [] }))
+    ]);
+
+    daData.costModels = cmResult.data || [];
+    daData.netoptScenarios = noResult.data || [];
+
+    let html = '<div class="da-modal-overlay" onclick="if(event.target===this)document.getElementById(\'da-modal-container\').innerHTML=\'\'">';
+    html += '<div class="da-modal">';
+    html += '<div class="da-modal-title">Link Existing Design Artifact</div>';
+
+    // Cost Models section
+    if (daData.costModels.length > 0) {
+      html += '<div class="da-modal-section">';
+      html += '<label class="da-modal-label">Cost Models</label>';
+      html += '<div class="da-modal-list">';
+      daData.costModels.forEach(cm => {
+        const dateStr = new Date(cm.created_at).toLocaleDateString();
+        html += `<div class="da-modal-item" onclick="daLinkArtifact('cost_model', '${cm.id}', '${cm.name}')">`;
+        html += `<div class="da-modal-item-icon" style="background:linear-gradient(135deg,#2196F3,#1976D2);">📊</div>`;
+        html += '<div class="da-modal-item-info">';
+        html += `<div class="da-modal-item-name">${cm.name}</div>`;
+        html += `<div class="da-modal-item-meta">Created ${dateStr}</div>`;
+        html += '</div></div>';
+      });
+      html += '</div></div>';
+    }
+
+    // NetOpt scenarios section
+    if (daData.netoptScenarios.length > 0) {
+      html += '<div class="da-modal-section">';
+      html += '<label class="da-modal-label">Network Optimization Scenarios</label>';
+      html += '<div class="da-modal-list">';
+      daData.netoptScenarios.forEach(no => {
+        const dateStr = new Date(no.created_at).toLocaleDateString();
+        html += `<div class="da-modal-item" onclick="daLinkArtifact('netopt_scenario', '${no.id}', '${no.scenario_name}')">`;
+        html += `<div class="da-modal-item-icon" style="background:linear-gradient(135deg,#4CAF50,#388E3C);">🗺️</div>`;
+        html += '<div class="da-modal-item-info">';
+        html += `<div class="da-modal-item-name">${no.scenario_name}</div>`;
+        html += `<div class="da-modal-item-meta">Created ${dateStr}</div>`;
+        html += '</div></div>';
+      });
+      html += '</div></div>';
+    }
+
+    if (daData.costModels.length === 0 && daData.netoptScenarios.length === 0) {
+      html += '<div style="padding:40px 20px;text-align:center;color:var(--ies-gray-400);">No design artifacts available. Create one first.</div>';
+    }
+
+    html += '</div></div>';
+
+    document.getElementById('da-modal-container').innerHTML = html;
+  } catch(e) {
+    console.error('Error loading artifacts modal:', e);
+    alert('Error loading artifacts');
+  }
+}
+
+async function daShowCreateNewModal() {
+  let html = '<div class="da-modal-overlay" onclick="if(event.target===this)document.getElementById(\'da-modal-container\').innerHTML=\'\'">';
+  html += '<div class="da-modal">';
+  html += '<div class="da-modal-title">Create New Design Artifact</div>';
+
+  html += '<div class="da-modal-section">';
+  html += '<label class="da-modal-label">Choose Type</label>';
+  html += '<div style="display:flex;flex-direction:column;gap:8px;">';
+  html += '<button class="pm-btn pm-btn-outline pm-btn-sm" onclick="daCreateNew(\'cost_model\')" style="text-align:left;justify-content:flex-start;padding:12px;">📊 New Cost Model</button>';
+  html += '<button class="pm-btn pm-btn-outline pm-btn-sm" onclick="daCreateNew(\'netopt_scenario\')" style="text-align:left;justify-content:flex-start;padding:12px;">🗺️ New Network Optimization Scenario</button>';
+  html += '</div>';
+  html += '</div>';
+
+  html += '</div></div>';
+
+  document.getElementById('da-modal-container').innerHTML = html;
+}
+
+async function daLinkArtifact(artifactType, artifactId, artifactName) {
+  if (!sb || !daData.currentDealId) return;
+
+  try {
+    await sb.from('deal_artifacts').insert({
+      deal_id: daData.currentDealId,
+      artifact_type: artifactType,
+      artifact_id: artifactId,
+      artifact_name: artifactName,
+      created_by: 'Brock Eckles'
+    });
+
+    document.getElementById('da-modal-container').innerHTML = '';
+    await daLoadArtifacts(daData.currentDealId);
+  } catch(e) {
+    console.error('Error linking artifact:', e);
+    alert('Error linking artifact: ' + e.message);
+  }
+}
+
+async function daRemoveArtifact(artifactId) {
+  if (!sb) return;
+
+  if (!confirm('Remove this artifact from the deal?')) return;
+
+  try {
+    await sb.from('deal_artifacts').delete().eq('id', artifactId);
+    await daLoadArtifacts(daData.currentDealId);
+  } catch(e) {
+    console.error('Error removing artifact:', e);
+    alert('Error removing artifact');
+  }
+}
+
+function daOpenArtifact(artifactType, artifactId) {
+  if (artifactType === 'cost_model' && artifactId) {
+    // Open cost model in new context
+    navigate('costmodel', document.querySelector('[data-section=costmodel]'));
+    setTimeout(() => { cmApp.openProject(artifactId); }, 100);
+  } else if (artifactType === 'netopt_scenario' && artifactId) {
+    // Open network optimization scenario
+    navigate('warehouse', document.querySelector('[data-section=projects]'));
+    setTimeout(() => { netoptLoadScenario(artifactId); }, 100);
+  } else {
+    alert('Cannot open this artifact type');
+  }
+}
+
+function daCreateNew(artifactType) {
+  if (artifactType === 'cost_model') {
+    navigate('costmodel', document.querySelector('[data-section=costmodel]'));
+    setTimeout(() => {
+      cmApp.newModel();
+      document.getElementById('da-modal-container').innerHTML = '';
+    }, 100);
+  } else if (artifactType === 'netopt_scenario') {
+    navigate('warehouse', document.querySelector('[data-section=projects]'));
+    setTimeout(() => {
+      document.getElementById('da-modal-container').innerHTML = '';
+    }, 100);
+  }
+}
+
+async function daLoadDealsForSelector() {
+  if (!sb) return;
+  try {
+    const result = await sb.from('deal_deals').select('id, name').order('name', {ascending: true});
+    daData.deals = result.data || [];
+    daPopulateDealSelectors();
+  } catch(e) {
+    console.error('Error loading deals for selector:', e);
+  }
+}
+
+function daPopulateDealSelectors() {
+  const selectors = ['cmDealSelector', 'netoptDealSelector'];
+  selectors.forEach(selectorId => {
+    const sel = document.getElementById(selectorId);
+    if (sel) {
+      sel.innerHTML = '<option value="">-- Select Deal --</option>';
+      daData.deals.forEach(deal => {
+        const opt = document.createElement('option');
+        opt.value = deal.id;
+        opt.textContent = deal.name;
+        sel.appendChild(opt);
+      });
+    }
+  });
+}
+
+function daLinkCostModelToDeal() {
+  const dealId = document.getElementById('cmDealSelector')?.value;
+  if (dealId && cmApp.currentProject) {
+    // Store the deal_id on the current project for saving
+    cmApp.currentProject.deal_id = dealId;
+    console.log('Cost model linked to deal:', dealId);
+  }
+}
+
+function daLinkNetoptToDeal() {
+  const dealId = document.getElementById('netoptDealSelector')?.value;
+  if (dealId) {
+    // Store on netoptState for saving
+    if (typeof netoptState !== 'undefined') {
+      netoptState.linkedDealId = dealId;
+    }
+    console.log('NetOpt scenario linked to deal:', dealId);
   }
 }
 
@@ -16053,6 +17061,23 @@ async function netoptSaveScenario(projectId, scenarioName) {
         netoptActiveScenarioId = resp[0].id;
 
         document.getElementById('netopt-scenario-name').value = name;
+
+        // Auto-link to deal if selected
+        var dealId = document.getElementById('netoptDealSelector')?.value;
+        if (dealId && typeof sb !== 'undefined' && sb) {
+            try {
+                await sb.from('deal_artifacts').insert({
+                    deal_id: dealId,
+                    artifact_type: 'netopt_scenario',
+                    artifact_id: netoptActiveScenarioId,
+                    artifact_name: name,
+                    created_by: 'Brock Eckles'
+                });
+            } catch(e) {
+                console.warn('Could not auto-link to deal:', e);
+            }
+        }
+
         var saveBtn = document.querySelector('#netopt-scenario-bar .wsc-action-btn:nth-child(1)');
         if (saveBtn) {
             var orig = saveBtn.innerHTML;
@@ -24668,7 +25693,8 @@ const cmApp = {
                                   this.calculateEquipmentCost() + this.calculateOverheadCost() +
                                   this.calculateVasCost(),
                 pricing_buckets: JSON.stringify(this.projectData.pricingBuckets || []),
-                status: 'draft'
+                status: 'draft',
+                deal_id: this.currentProject?.deal_id || document.getElementById('cmDealSelector')?.value || null
             };
 
             if (this.currentProject) {
@@ -25080,8 +26106,491 @@ const dealApp = {
 // Initialize on load
 document.addEventListener('DOMContentLoaded', () => {
     cmApp.init();
+    fmApp.init();
 });
 
+/* ═══════════════════════════════════════════════════
+   FLEET MODELER APPLICATION
+   ═══════════════════════════════════════════════════ */
+
+const fmApp = {
+  lanes: [],
+  results: null,
+  scenarios: [],
+  config: {
+    utilization: 85,
+    deadhead: 15,
+    serviceLevel: 95,
+    vehicles: ['dry_van', 'reefer', 'straight_truck']
+  },
+  vehicleSpecs: {
+    dry_van: { capacity_wgt: 45000, capacity_cube: 3000, cost_per_mile: 1.85, name: 'Dry Van (53ft)' },
+    reefer: { capacity_wgt: 42000, capacity_cube: 2800, cost_per_mile: 2.25, name: 'Reefer (53ft)' },
+    flatbed: { capacity_wgt: 48000, capacity_cube: 3500, cost_per_mile: 2.10, name: 'Flatbed (48ft)' },
+    straight_truck: { capacity_wgt: 12000, capacity_cube: 1200, cost_per_mile: 1.45, name: 'Straight Truck (26ft)' },
+    sprinter_van: { capacity_wgt: 3500, capacity_cube: 400, cost_per_mile: 0.95, name: 'Sprinter Van' }
+  },
+  costModel: {
+    fuel_cost_per_mile: 0.55,
+    maintenance_per_mile: 0.18,
+    driver_hourly_rate: 25,
+    annual_insurance_per_vehicle: 12000,
+    admin_overhead_pct: 10
+  },
+
+  init() {
+    this.renderVehicleChecks();
+    this.renderCostParams();
+    this.renderLanesTable();
+  },
+
+  renderVehicleChecks() {
+    const container = document.getElementById('fm-vehicle-checks');
+    const keys = Object.keys(this.vehicleSpecs);
+    container.innerHTML = keys.map((key, idx) => `
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+        <input type="checkbox" data-vehicle="${key}" ${this.config.vehicles.includes(key) ? 'checked' : ''}
+               onchange="fmApp.updateVehicleSelection()" />
+        ${this.vehicleSpecs[key].name}
+      </label>
+    `).join('');
+  },
+
+  updateVehicleSelection() {
+    const checks = document.querySelectorAll('#fm-vehicle-checks input[type=checkbox]');
+    this.config.vehicles = Array.from(checks).filter(cb => cb.checked).map(cb => cb.getAttribute('data-vehicle'));
+  },
+
+  renderCostParams() {
+    const container = document.getElementById('fm-cost-params');
+    container.innerHTML = `
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
+        <span>Fuel ($/mi)</span>
+        <input type="number" id="fm-fuel-cost" value="${this.costModel.fuel_cost_per_mile}" step="0.01" style="width:70px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;">
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
+        <span>Maintenance ($/mi)</span>
+        <input type="number" id="fm-maint-cost" value="${this.costModel.maintenance_per_mile}" step="0.01" style="width:70px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;">
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
+        <span>Driver Rate ($/hr)</span>
+        <input type="number" id="fm-driver-rate" value="${this.costModel.driver_hourly_rate}" step="0.5" style="width:70px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;">
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
+        <span>Insurance ($/vehicle/yr)</span>
+        <input type="number" id="fm-insurance" value="${this.costModel.annual_insurance_per_vehicle}" step="500" style="width:70px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;">
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
+        <span>Admin Overhead (%)</span>
+        <input type="number" id="fm-admin" value="${this.costModel.admin_overhead_pct}" step="0.1" style="width:70px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;">
+      </label>
+    `;
+  },
+
+  renderLanesTable() {
+    const tbody = document.getElementById('fm-lanes-tbody');
+    tbody.innerHTML = this.lanes.length === 0
+      ? '<tr><td colspan="8" style="padding:20px;text-align:center;color:var(--ies-gray-600);">No lanes added. Click "Add Lane" or "Load Demo Data"</td></tr>'
+      : this.lanes.map((lane, idx) => `
+        <tr style="border-bottom:1px solid var(--ies-gray-200);">
+          <td style="padding:12px;"><input type="text" value="${lane.origin}" onchange="fmApp.lanes[${idx}].origin = this.value" style="width:100%;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;font-size:12px;" placeholder="e.g., Chicago"></td>
+          <td style="padding:12px;"><input type="text" value="${lane.destination}" onchange="fmApp.lanes[${idx}].destination = this.value" style="width:100%;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;font-size:12px;" placeholder="e.g., Atlanta"></td>
+          <td style="padding:12px;text-align:center;"><input type="number" value="${lane.weekly_shipments}" onchange="fmApp.lanes[${idx}].weekly_shipments = parseInt(this.value)" style="width:80px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;font-size:12px;" min="1"></td>
+          <td style="padding:12px;text-align:center;"><input type="number" value="${lane.avg_weight}" onchange="fmApp.lanes[${idx}].avg_weight = parseFloat(this.value)" style="width:80px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;font-size:12px;" step="100"></td>
+          <td style="padding:12px;text-align:center;"><input type="number" value="${lane.avg_cube}" onchange="fmApp.lanes[${idx}].avg_cube = parseFloat(this.value)" style="width:80px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;font-size:12px;" step="10"></td>
+          <td style="padding:12px;"><select onchange="fmApp.lanes[${idx}].delivery_window = this.value" style="width:100%;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;font-size:12px;">
+            <option ${lane.delivery_window === 'same_day' ? 'selected' : ''}>same-day</option>
+            <option ${lane.delivery_window === 'next_day' ? 'selected' : ''}>next-day</option>
+            <option ${lane.delivery_window === '2_day' ? 'selected' : ''}>2-day</option>
+            <option ${lane.delivery_window === '3_day' ? 'selected' : ''}>3-day+</option>
+          </select></td>
+          <td style="padding:12px;text-align:center;color:var(--ies-gray-600);font-size:12px;">${lane.distance_miles || '—'}</td>
+          <td style="padding:12px;text-align:center;"><button onclick="fmApp.removeLane(${idx})" style="background:var(--ies-red);color:#fff;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600;">Remove</button></td>
+        </tr>
+      `).join('');
+  },
+
+  addLane() {
+    this.lanes.push({
+      origin: '',
+      destination: '',
+      weekly_shipments: 1,
+      avg_weight: 5000,
+      avg_cube: 300,
+      delivery_window: 'next_day',
+      distance_miles: null
+    });
+    this.renderLanesTable();
+  },
+
+  removeLane(idx) {
+    this.lanes.splice(idx, 1);
+    this.renderLanesTable();
+  },
+
+  loadDemoData() {
+    this.lanes = [
+      { origin: 'Chicago', destination: 'Atlanta', weekly_shipments: 8, avg_weight: 22000, avg_cube: 1800, delivery_window: 'next_day', distance_miles: 600 },
+      { origin: 'Chicago', destination: 'Dallas', weekly_shipments: 6, avg_weight: 20000, avg_cube: 1500, delivery_window: 'next_day', distance_miles: 920 },
+      { origin: 'Los Angeles', destination: 'Phoenix', weekly_shipments: 10, avg_weight: 25000, avg_cube: 2000, delivery_window: 'same_day', distance_miles: 370 },
+      { origin: 'New York', destination: 'Boston', weekly_shipments: 12, avg_weight: 18000, avg_cube: 1200, delivery_window: '2_day', distance_miles: 220 },
+      { origin: 'Dallas', destination: 'Houston', weekly_shipments: 7, avg_weight: 19000, avg_cube: 1400, delivery_window: 'same_day', distance_miles: 240 }
+    ];
+    this.renderLanesTable();
+    this.showToast('Demo data loaded (5 lanes)');
+  },
+
+  uploadCSV() {
+    document.getElementById('fm-csv-upload').click();
+  },
+
+  processCSVUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const csv = e.target.result;
+      const lines = csv.split('\n');
+      const headers = lines[0].toLowerCase().split(',').map(h => h.trim());
+      this.lanes = [];
+      for (let i = 1; i < lines.length; i++) {
+        if (!lines[i].trim()) continue;
+        const values = lines[i].split(',').map(v => v.trim());
+        const obj = {};
+        headers.forEach((h, idx) => { obj[h] = values[idx]; });
+        if (obj.origin && obj.destination) {
+          this.lanes.push({
+            origin: obj.origin,
+            destination: obj.destination,
+            weekly_shipments: parseInt(obj.weekly_shipments) || 1,
+            avg_weight: parseFloat(obj.avg_weight) || 5000,
+            avg_cube: parseFloat(obj.avg_cube) || 300,
+            delivery_window: obj.delivery_window || 'next_day',
+            distance_miles: parseFloat(obj.distance_miles) || null
+          });
+        }
+      }
+      this.renderLanesTable();
+      this.showToast(`Loaded ${this.lanes.length} lanes from CSV`);
+    };
+    reader.readAsText(file);
+  },
+
+  exportLanes() {
+    const csv = ['origin,destination,weekly_shipments,avg_weight,avg_cube,delivery_window,distance_miles'];
+    this.lanes.forEach(lane => {
+      csv.push(`${lane.origin},${lane.destination},${lane.weekly_shipments},${lane.avg_weight},${lane.avg_cube},${lane.delivery_window},${lane.distance_miles || ''}`);
+    });
+    const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'fleet_lanes.csv';
+    a.click();
+    this.showToast('Lanes exported to CSV');
+  },
+
+  calculateFleet() {
+    if (this.lanes.length === 0) {
+      this.showToast('Add lanes before calculating');
+      return;
+    }
+
+    if (this.config.vehicles.length === 0) {
+      this.showToast('Select at least one vehicle type');
+      return;
+    }
+
+    this.costModel.fuel_cost_per_mile = parseFloat(document.getElementById('fm-fuel-cost').value) || 0.55;
+    this.costModel.maintenance_per_mile = parseFloat(document.getElementById('fm-maint-cost').value) || 0.18;
+    this.costModel.driver_hourly_rate = parseFloat(document.getElementById('fm-driver-rate').value) || 25;
+    this.costModel.annual_insurance_per_vehicle = parseFloat(document.getElementById('fm-insurance').value) || 12000;
+    this.costModel.admin_overhead_pct = parseFloat(document.getElementById('fm-admin').value) || 10;
+
+    this.config.utilization = parseFloat(document.getElementById('fm-utilization').value) || 85;
+    this.config.deadhead = parseFloat(document.getElementById('fm-deadhead').value) || 15;
+    this.config.serviceLevel = parseFloat(document.getElementById('fm-service-level').value) || 95;
+
+    const vehicleFleet = {};
+    let totalMilesPerWeek = 0;
+    const primaryVehicle = this.config.vehicles[0];
+    const specs = this.vehicleSpecs[primaryVehicle];
+
+    this.config.vehicles.forEach(vtype => { vehicleFleet[vtype] = 0; });
+
+    this.lanes.forEach(lane => {
+      const tripWeight = lane.avg_weight * lane.weekly_shipments;
+      const tripsNeeded = Math.ceil(tripWeight / specs.capacity_wgt);
+      const milesPerTrip = lane.distance_miles || 500;
+      const roundTripMiles = milesPerTrip * 2 * (1 + this.config.deadhead / 100);
+      totalMilesPerWeek += (roundTripMiles * tripsNeeded);
+    });
+
+    const tripsPerWeek = this.lanes.reduce((sum, lane) => {
+      const tripWeight = lane.avg_weight * lane.weekly_shipments;
+      return sum + Math.ceil(tripWeight / specs.capacity_wgt);
+    }, 0);
+
+    const daysPerWeek = 5;
+    const hoursPerDay = 10;
+    const availableHoursPerWeek = daysPerWeek * hoursPerDay;
+    const hoursPerTrip = ((this.lanes[0]?.distance_miles || 500) * 2) / 55;
+    const tripsPerVehiclePerWeek = Math.floor(availableHoursPerWeek / hoursPerTrip);
+    const vehiclesNeeded = Math.ceil(tripsPerWeek / Math.max(1, tripsPerVehiclePerWeek));
+
+    vehicleFleet[primaryVehicle] = vehiclesNeeded;
+
+    const totalVehicles = vehiclesNeeded;
+    const avgDriversPerVehicle = 1.3;
+    const totalDrivers = Math.ceil(totalVehicles * avgDriversPerVehicle);
+    const costPerMile = (this.costModel.fuel_cost_per_mile + this.costModel.maintenance_per_mile);
+
+    this.results = {
+      totalVehicles,
+      totalDrivers,
+      utilization: this.config.utilization,
+      costPerMile,
+      fleetMix: vehicleFleet,
+      totalMilesPerWeek: Math.round(totalMilesPerWeek),
+      annual_miles: Math.round(totalMilesPerWeek * 52)
+    };
+
+    this.renderResults();
+    fmShowTab('results');
+    this.showToast('Fleet calculation complete');
+  },
+
+  renderResults() {
+    if (!this.results) return;
+
+    document.getElementById('fm-results-content').style.display = 'block';
+    document.getElementById('fm-no-results').style.display = 'none';
+
+    document.getElementById('fm-res-total-vehicles').textContent = this.results.totalVehicles;
+    document.getElementById('fm-res-total-drivers').textContent = this.results.totalDrivers;
+    document.getElementById('fm-res-utilization').textContent = this.results.utilization.toFixed(0) + '%';
+    document.getElementById('fm-res-cost-per-mile').textContent = '$' + this.results.costPerMile.toFixed(2);
+
+    const tbody = document.getElementById('fm-fleet-mix-tbody');
+    tbody.innerHTML = Object.entries(this.results.fleetMix).filter(([,count]) => count > 0).map(([vtype, count]) => {
+      const spec = this.vehicleSpecs[vtype];
+      const annualCost = (count * this.results.annual_miles * spec.cost_per_mile) + (count * this.costModel.annual_insurance_per_vehicle);
+      return `
+        <tr style="border-bottom:1px solid var(--ies-gray-200);">
+          <td style="padding:12px;">${spec.name}</td>
+          <td style="padding:12px;text-align:center;font-weight:600;">${count}</td>
+          <td style="padding:12px;text-align:center;">${this.config.utilization.toFixed(0)}%</td>
+          <td style="padding:12px;text-align:center;font-weight:600;">$${(annualCost / 1000000).toFixed(2)}M</td>
+        </tr>
+      `;
+    }).join('');
+
+    const privateFleetCost = this.results.annual_miles * this.results.costPerMile +
+                             (this.results.totalDrivers * this.costModel.driver_hourly_rate * 2080) +
+                             (this.results.totalVehicles * this.costModel.annual_insurance_per_vehicle);
+    const dedicatedFleetCost = privateFleetCost * 0.9;
+    const commonCarrierCost = privateFleetCost * 1.15;
+    const savings = privateFleetCost - dedicatedFleetCost;
+
+    document.getElementById('fm-cost-cards').innerHTML = `
+      <div class="fm-cost-card">
+        <div class="fm-cost-card-title">Private Fleet</div>
+        <div class="fm-cost-card-value">$${(privateFleetCost / 1000000).toFixed(2)}M</div>
+        <div style="font-size:12px;color:var(--ies-gray-600);">Full ownership</div>
+      </div>
+      <div class="fm-cost-card" style="border-color:var(--ies-blue);background:linear-gradient(135deg, rgba(0,71,171,.05), rgba(0,71,171,.02));">
+        <div class="fm-cost-card-title">Dedicated Fleet (GXO)</div>
+        <div class="fm-cost-card-value" style="color:var(--ies-green);">$${(dedicatedFleetCost / 1000000).toFixed(2)}M</div>
+        <div class="fm-cost-card-savings">Saves $${(savings / 1000000).toFixed(2)}M annually</div>
+      </div>
+      <div class="fm-cost-card">
+        <div class="fm-cost-card-title">Common Carrier</div>
+        <div class="fm-cost-card-value" style="color:var(--ies-red);">$${(commonCarrierCost / 1000000).toFixed(2)}M</div>
+        <div style="font-size:12px;color:var(--ies-red);">15% premium vs private</div>
+      </div>
+    `;
+
+    const annualShipments = this.lanes.reduce((sum, l) => sum + (l.weekly_shipments * 52), 0);
+    const costPerShipment = privateFleetCost / Math.max(1, annualShipments);
+    const totalWeight = this.lanes.reduce((sum, l) => sum + (l.avg_weight * l.weekly_shipments * 52), 0);
+    const costPerPound = totalWeight > 0 ? privateFleetCost / totalWeight : 0;
+
+    document.getElementById('fm-metrics-grid').innerHTML = `
+      <div class="fm-metric-card">
+        <div class="fm-metric-label">Cost per Shipment</div>
+        <div class="fm-metric-value">$${costPerShipment.toFixed(0)}</div>
+      </div>
+      <div class="fm-metric-card">
+        <div class="fm-metric-label">Cost per 1000 lbs</div>
+        <div class="fm-metric-value">$${(costPerPound * 1000).toFixed(0)}</div>
+      </div>
+      <div class="fm-metric-card">
+        <div class="fm-metric-label">Weekly Miles</div>
+        <div class="fm-metric-value">${this.results.totalMilesPerWeek.toLocaleString()}</div>
+      </div>
+      <div class="fm-metric-card">
+        <div class="fm-metric-label">Driver Util. Hrs/Wk</div>
+        <div class="fm-metric-value">${Math.round(this.results.totalMilesPerWeek / 55)}</div>
+      </div>
+    `;
+
+    this.renderSensitivityChart();
+  },
+
+  renderSensitivityChart() {
+    const ctx = document.getElementById('fm-sensitivity-chart');
+    if (!ctx) return;
+
+    const baseCost = this.results.totalMilesPerWeek * this.results.costPerMile * 52;
+    const scenarios = [
+      { label: '-20% Vol', value: baseCost * 0.8 },
+      { label: '-10% Vol', value: baseCost * 0.9 },
+      { label: 'Base', value: baseCost },
+      { label: '+10% Vol', value: baseCost * 1.1 },
+      { label: '+20% Vol', value: baseCost * 1.2 }
+    ];
+
+    if (window.fmSensitivityChart) {
+      window.fmSensitivityChart.destroy();
+    }
+
+    window.fmSensitivityChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: scenarios.map(s => s.label),
+        datasets: [{
+          label: 'Annual Cost',
+          data: scenarios.map(s => s.value / 1000000),
+          backgroundColor: ['#dc3545', '#ffc107', '#0047AB', '#ffc107', '#dc3545'],
+          borderRadius: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+          legend: { display: false }
+        },
+        scales: {
+          y: {
+            beginAtZero: true
+          }
+        }
+      }
+    });
+  },
+
+  saveScenario() {
+    const name = prompt('Scenario name:');
+    if (!name) return;
+
+    const scenario = {
+      id: Date.now(),
+      name,
+      lanes: JSON.parse(JSON.stringify(this.lanes)),
+      config: JSON.parse(JSON.stringify(this.config)),
+      results: this.results ? JSON.parse(JSON.stringify(this.results)) : null,
+      created_at: new Date().toLocaleString()
+    };
+
+    this.scenarios.push(scenario);
+    this.renderScenariosListLocal();
+    this.showToast(`Scenario "${name}" saved`);
+  },
+
+  clearScenario() {
+    if (confirm('Clear all lanes and reset configuration?')) {
+      this.lanes = [];
+      this.results = null;
+      this.renderLanesTable();
+      document.getElementById('fm-no-results').style.display = 'block';
+      document.getElementById('fm-results-content').style.display = 'none';
+      this.showToast('Cleared');
+    }
+  },
+
+  renderScenariosListLocal() {
+    const container = document.getElementById('fm-scenarios-list');
+    document.getElementById('fm-scenario-count').textContent = this.scenarios.length;
+
+    if (this.scenarios.length === 0) {
+      container.innerHTML = '<div style="color:var(--ies-gray-600);padding:20px;text-align:center;">No scenarios saved yet</div>';
+      return;
+    }
+
+    container.innerHTML = this.scenarios.map(s => `
+      <div class="fm-scenario-item">
+        <div class="fm-scenario-info">
+          <div class="fm-scenario-name">${s.name}</div>
+          <div class="fm-scenario-meta">${s.lanes.length} lanes • ${s.created_at}</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button onclick="fmApp.loadScenario(${s.id})" class="fm-btn-secondary" style="padding:6px 12px;font-size:11px;">Load</button>
+          <button onclick="fmApp.deleteScenario(${s.id})" style="background:var(--ies-red);color:#fff;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;">Delete</button>
+        </div>
+      </div>
+    `).join('');
+  },
+
+  loadScenario(id) {
+    const scenario = this.scenarios.find(s => s.id === id);
+    if (!scenario) return;
+
+    this.lanes = JSON.parse(JSON.stringify(scenario.lanes));
+    this.config = JSON.parse(JSON.stringify(scenario.config));
+    this.results = scenario.results ? JSON.parse(JSON.stringify(scenario.results)) : null;
+
+    this.renderLanesTable();
+    this.renderVehicleChecks();
+    if (this.results) {
+      this.renderResults();
+      fmShowTab('results');
+    } else {
+      fmShowTab('lanes');
+    }
+    this.showToast(`Loaded scenario "${scenario.name}"`);
+  },
+
+  deleteScenario(id) {
+    if (!confirm('Delete this scenario?')) return;
+    this.scenarios = this.scenarios.filter(s => s.id !== id);
+    this.renderScenariosListLocal();
+    this.showToast('Scenario deleted');
+  },
+
+  showToast(message) {
+    let toast = document.getElementById('fm-toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'fm-toast';
+      toast.className = 'fm-toast';
+      document.body.appendChild(toast);
+    }
+    toast.textContent = message;
+    toast.style.display = 'block';
+    setTimeout(() => { toast.style.display = 'none'; }, 3000);
+  }
+};
+
+function fmShowTab(tabName) {
+  document.querySelectorAll('.fm-tab-content').forEach(el => { el.style.display = 'none'; });
+  document.querySelectorAll('.fm-tab').forEach(el => { el.classList.remove('active'); });
+
+  const tabEl = document.getElementById('fm-tab-' + tabName);
+  if (tabEl) tabEl.style.display = 'block';
+
+  event.target.classList.add('active');
+}
+
+function fmAddLane() { fmApp.addLane(); }
+function fmRemoveLane(idx) { fmApp.removeLane(idx); }
+function fmLoadDemoData() { fmApp.loadDemoData(); }
+function fmUploadCSV() { fmApp.uploadCSV(); }
+function fmProcessCSVUpload(evt) { fmApp.processCSVUpload(evt); }
+function fmExportLanes() { fmApp.exportLanes(); }
+function fmCalculateFleet() { fmApp.calculateFleet(); }
+function fmSaveScenario() { fmApp.saveScenario(); }
+function fmClearScenario() { fmApp.clearScenario(); }
 </script>
 
 
