@@ -8872,6 +8872,9 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         <select class="pm-form-input" id="pm-task-assignee-filter" onchange="pmRenderTasks()" style="width:180px;padding:8px 14px;">
           <option value="">All Assignees</option>
         </select>
+        <select class="pm-form-input" id="pm-task-stage-filter" onchange="pmRenderTasks()" style="width:220px;padding:8px 14px;display:none;">
+          <option value="">All Stages</option>
+        </select>
         <div style="flex:1;"></div>
         <button class="pm-btn pm-btn-sm" onclick="pmPopulateDOSActivities()" style="background:var(--ies-green,#10b981);color:#fff;border:none;border-radius:6px;font-family:Montserrat,sans-serif;font-weight:600;font-size:11px;padding:8px 14px;cursor:pointer;">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px;"><path d="M12 5v14M5 12h14"/><circle cx="12" cy="12" r="10"/></svg>
@@ -13198,6 +13201,7 @@ function pmRenderTasks() {
   if (!pmCurrentOpp) return;
   var statusFilter = (document.getElementById('pm-task-filter') || {}).value || '';
   var assigneeFilter = (document.getElementById('pm-task-assignee-filter') || {}).value || '';
+  var stageFilter = (document.getElementById('pm-task-stage-filter') || {}).value || '';
   var tasks = pmData.tasks.filter(function(t){ return t.opportunity_id == pmCurrentOpp.id; });
   // Populate assignee filter
   var assignees = {};
@@ -13208,9 +13212,20 @@ function pmRenderTasks() {
     Object.keys(assignees).sort().forEach(function(a){ ahtml += '<option value="'+a+'"'+(a===assigneeFilter?' selected':'')+'>'+a+'</option>'; });
     asel.innerHTML = ahtml;
   }
+  // Populate stage filter
+  var stageSet = {};
+  tasks.forEach(function(t){ if(t.dos_stage_number) stageSet[t.dos_stage_number] = t.dos_stage_name || 'Stage '+t.dos_stage_number; });
+  var ssel = document.getElementById('pm-task-stage-filter');
+  if (ssel) {
+    var shtml = '<option value="">All Stages</option>';
+    Object.keys(stageSet).sort(function(a,b){return a-b;}).forEach(function(n){ shtml += '<option value="'+n+'"'+(n===stageFilter?' selected':'')+'>Stage '+n+': '+stageSet[n]+'</option>'; });
+    if (Object.keys(stageSet).length === 0) ssel.style.display = 'none'; else ssel.style.display = '';
+    ssel.innerHTML = shtml;
+  }
   // Apply filters
   if (statusFilter) tasks = tasks.filter(function(t){ return t.status === statusFilter; });
   if (assigneeFilter) tasks = tasks.filter(function(t){ return t.assignee === assigneeFilter; });
+  if (stageFilter) tasks = tasks.filter(function(t){ return String(t.dos_stage_number) === stageFilter; });
 
   var container = document.getElementById('pm-tasks-list');
   var empty = document.getElementById('pm-tasks-empty');
@@ -13220,8 +13235,35 @@ function pmRenderTasks() {
     return;
   }
   empty.style.display = 'none';
+
+  // Sort tasks by dos_stage_number (nulls last), then sort_order
+  tasks.sort(function(a,b){
+    var sa = a.dos_stage_number || 999, sb2 = b.dos_stage_number || 999;
+    if (sa !== sb2) return sa - sb2;
+    return (a.sort_order||0) - (b.sort_order||0);
+  });
+
   var html = '';
+  var currentStage = null;
   tasks.forEach(function(t){
+    // Stage section header
+    var stageKey = t.dos_stage_number || 0;
+    if (stageKey !== currentStage) {
+      currentStage = stageKey;
+      if (t.dos_stage_number && t.dos_stage_name) {
+        var stageTasks = tasks.filter(function(x){ return x.dos_stage_number === t.dos_stage_number; });
+        var doneCnt = stageTasks.filter(function(x){ return x.status === 'done'; }).length;
+        html += '<div style="display:flex;align-items:center;gap:12px;margin:' + (currentStage > 1 ? '24px' : '0') + ' 0 8px 0;padding-bottom:8px;border-bottom:2px solid var(--ies-navy,#1c1c2e);">';
+        html += '<div style="background:var(--ies-navy,#1c1c2e);color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:12px;font-family:Montserrat,sans-serif;white-space:nowrap;">STAGE ' + t.dos_stage_number + '</div>';
+        html += '<div style="font-size:14px;font-weight:700;color:var(--ies-navy,#1c1c2e);font-family:Montserrat,sans-serif;">' + t.dos_stage_name + '</div>';
+        html += '<div style="font-size:11px;color:var(--ies-gray-400);margin-left:auto;font-family:Montserrat,sans-serif;">' + doneCnt + '/' + stageTasks.length + ' complete</div>';
+        html += '</div>';
+      } else if (!t.dos_stage_number) {
+        html += '<div style="display:flex;align-items:center;gap:12px;margin:24px 0 8px 0;padding-bottom:8px;border-bottom:2px solid var(--ies-gray-200,#e5e7eb);">';
+        html += '<div style="font-size:14px;font-weight:700;color:var(--ies-gray-400);font-family:Montserrat,sans-serif;">Custom Tasks</div>';
+        html += '</div>';
+      }
+    }
     var isDone = t.status === 'done';
     var isBlocked = t.status === 'blocked';
     var isInProg = t.status === 'in_progress';
@@ -13420,7 +13462,9 @@ async function pmExecuteDOSPopulate() {
         assignee: null,
         priority: 'medium',
         status: 'todo',
-        sort_order: maxSort + idx + 1
+        sort_order: maxSort + idx + 1,
+        dos_stage_number: stage.stage_number || null,
+        dos_stage_name: stage.stage_name || null
       };
     });
 
