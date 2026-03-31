@@ -17900,45 +17900,95 @@ function netoptGetDeliveryDayThresholds() {
   return thresholds;
 }
 
+// Simplified continental US boundary for zone clipping (~45 points)
+var CONUS_BOUNDARY = [
+  [49.0,-124.7],[48.0,-123.0],[46.3,-124.1],[43.0,-124.4],[40.0,-124.3],[38.0,-123.0],
+  [35.0,-120.5],[33.5,-118.5],[32.6,-117.1],[32.5,-114.7],[31.3,-111.1],[31.3,-108.2],
+  [31.8,-106.4],[29.4,-103.2],[26.0,-97.2],[27.8,-96.8],[29.0,-95.0],[29.5,-93.5],
+  [29.8,-90.0],[30.0,-88.0],[30.2,-85.5],[29.9,-84.0],[25.0,-80.5],[27.0,-80.0],
+  [30.3,-81.2],[32.0,-80.8],[34.5,-77.0],[36.5,-75.5],[37.5,-75.5],[38.5,-75.0],
+  [39.5,-74.0],[40.5,-74.0],[41.0,-72.0],[41.5,-70.5],[42.0,-70.0],[43.5,-70.0],
+  [44.5,-67.0],[47.0,-67.8],[47.5,-69.0],[45.0,-71.5],[45.0,-74.8],[43.5,-79.0],
+  [42.0,-83.0],[41.5,-84.8],[46.5,-84.5],[48.0,-88.0],[46.8,-90.8],[46.8,-92.0],
+  [49.0,-95.0],[49.0,-124.7]
+];
+
+function netoptPointInConus(lat, lng) {
+  var inside = false;
+  for (var i = 0, j = CONUS_BOUNDARY.length - 1; i < CONUS_BOUNDARY.length; j = i++) {
+    var xi = CONUS_BOUNDARY[i][1], yi = CONUS_BOUNDARY[i][0];
+    var xj = CONUS_BOUNDARY[j][1], yj = CONUS_BOUNDARY[j][0];
+    if ((yi > lat) !== (yj > lat) && lng < (xj - xi) * (lat - yi) / (yj - yi) + xi) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+function netoptMakeClippedZone(centerLat, centerLng, radiusMiles) {
+  var pts = [];
+  var R = 3959;
+  var numPts = 72;
+  for (var a = 0; a < 360; a += (360 / numPts)) {
+    var rad = a * Math.PI / 180;
+    var latR = centerLat * Math.PI / 180;
+    var lngR = centerLng * Math.PI / 180;
+    var d = radiusMiles / R;
+    var newLat = Math.asin(Math.sin(latR) * Math.cos(d) + Math.cos(latR) * Math.sin(d) * Math.cos(rad));
+    var newLng = lngR + Math.atan2(Math.sin(rad) * Math.sin(d) * Math.cos(latR), Math.cos(d) - Math.sin(latR) * Math.sin(newLat));
+    var lat = newLat * 180 / Math.PI;
+    var lng = newLng * 180 / Math.PI;
+    if (netoptPointInConus(lat, lng)) {
+      pts.push([lat, lng]);
+    } else {
+      // Snap to nearest CONUS boundary point
+      var bestDist = Infinity, bestPt = null;
+      for (var bi = 0; bi < CONUS_BOUNDARY.length; bi++) {
+        var bd = (lat - CONUS_BOUNDARY[bi][0]) * (lat - CONUS_BOUNDARY[bi][0]) + (lng - CONUS_BOUNDARY[bi][1]) * (lng - CONUS_BOUNDARY[bi][1]);
+        if (bd < bestDist) { bestDist = bd; bestPt = CONUS_BOUNDARY[bi]; }
+      }
+      if (bestPt) pts.push([bestPt[0], bestPt[1]]);
+    }
+  }
+  return pts;
+}
+
 function netoptDrawServiceZones(openFacilities) {
   if (!netoptState.netoptMap || !openFacilities || openFacilities.length === 0) return;
-  // Remove old legend if present
   if (netoptState._zoneLegend) { netoptState._zoneLegend.remove(); netoptState._zoneLegend = null; }
 
   var thresholds = netoptGetDeliveryDayThresholds();
 
-  // Zone colors and labels: outermost drawn first so inner zones layer on top
+  // Distinct colors: saturated border + pastel fill for clear differentiation
   var zoneStyles = [
-    { day: 5, color: '#ef4444', label: '5+ Day' },
-    { day: 4, color: '#f97316', label: '4 Day' },
-    { day: 3, color: '#f59e0b', label: '3 Day' },
-    { day: 2, color: '#3b82f6', label: '2 Day' },
-    { day: 1, color: '#10b981', label: '1 Day' }
+    { day: 5, color: '#dc2626', fill: '#fecaca', label: '5+ Day' },
+    { day: 4, color: '#ea580c', fill: '#fed7aa', label: '4 Day' },
+    { day: 3, color: '#ca8a04', fill: '#fef08a', label: '3 Day' },
+    { day: 2, color: '#2563eb', fill: '#bfdbfe', label: '2 Day' },
+    { day: 1, color: '#059669', fill: '#a7f3d0', label: '1 Day' }
   ];
 
-  // Draw from outermost to innermost so inner zones paint over outer
+  // Draw outermost first, inner zones overlay on top
   zoneStyles.forEach(function(zs) {
     var th = thresholds.find(function(t) { return t.day === zs.day; });
     if (!th || th.maxMiles <= 0) return;
 
-    // Convert miles to meters (Leaflet L.circle uses meters)
-    var radiusMeters = th.maxMiles * 1609.34;
-
     openFacilities.forEach(function(f) {
       if (!f.lat || !f.lng) return;
 
-      var circle = L.circle([f.lat, f.lng], {
-        radius: radiusMeters,
-        fillColor: zs.color,
-        fillOpacity: 0.12,
+      var pts = netoptMakeClippedZone(f.lat, f.lng, th.maxMiles);
+      if (pts.length < 3) return;
+
+      var polygon = L.polygon(pts, {
+        fillColor: zs.fill,
+        fillOpacity: 0.5,
         color: zs.color,
-        weight: 1.5,
-        opacity: 0.4,
-        dashArray: zs.day >= 4 ? '4 4' : null
+        weight: 2,
+        opacity: 0.8
       }).addTo(netoptState.netoptMap);
 
-      circle.bindPopup('<strong>' + f.name + '</strong><br>' + zs.label + ' delivery zone<br>' + th.maxMiles.toFixed(0) + ' mi radius');
-      netoptState.zoneLayers.push(circle);
+      polygon.bindPopup('<strong>' + f.name + '</strong><br>' + zs.label + ' delivery zone<br>' + th.maxMiles.toFixed(0) + ' mi radius');
+      netoptState.zoneLayers.push(polygon);
     });
   });
 
@@ -17954,11 +18004,11 @@ function netoptDrawServiceZones(openFacilities) {
     div.style.cssText = 'background:rgba(255,255,255,.92);backdrop-filter:blur(4px);padding:8px 12px;border-radius:8px;font-size:10px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.15);line-height:1.7;';
     div.innerHTML =
       '<div style="font-weight:700;font-size:11px;margin-bottom:4px;color:var(--ies-navy);">Delivery Zones</div>' +
-      '<div><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#10b981;margin-right:6px;vertical-align:-1px;"></span>1 Day</div>' +
-      '<div><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#3b82f6;margin-right:6px;vertical-align:-1px;"></span>2 Day</div>' +
-      '<div><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#f59e0b;margin-right:6px;vertical-align:-1px;"></span>3 Day</div>' +
-      '<div><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#f97316;margin-right:6px;vertical-align:-1px;"></span>4 Day</div>' +
-      '<div><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#ef4444;margin-right:6px;vertical-align:-1px;"></span>5+ Day</div>';
+      '<div><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:#a7f3d0;border:1.5px solid #059669;margin-right:6px;vertical-align:-2px;"></span>1 Day</div>' +
+      '<div><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:#bfdbfe;border:1.5px solid #2563eb;margin-right:6px;vertical-align:-2px;"></span>2 Day</div>' +
+      '<div><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:#fef08a;border:1.5px solid #ca8a04;margin-right:6px;vertical-align:-2px;"></span>3 Day</div>' +
+      '<div><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:#fed7aa;border:1.5px solid #ea580c;margin-right:6px;vertical-align:-2px;"></span>4 Day</div>' +
+      '<div><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:#fecaca;border:1.5px solid #dc2626;margin-right:6px;vertical-align:-2px;"></span>5+ Day</div>';
     return div;
   };
   legend.addTo(netoptState.netoptMap);
