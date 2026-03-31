@@ -15206,10 +15206,10 @@ function netoptUpdateKPI() {
   var servicePct = netoptState.results ? netoptState.results.serviceLevel : 0;
 
   document.getElementById('netopt-k-open').textContent = openCount || '—';
-  document.getElementById('netopt-k-demand').textContent = totalDemand ? (totalDemand / 1000000).toFixed(1) + 'M' : '—';
-  document.getElementById('netopt-k-cost').textContent = totalCost ? '$' + (totalCost / 1000000).toFixed(1) + 'M' : '—';
+  document.getElementById('netopt-k-demand').textContent = totalDemand ? (totalDemand >= 1000000 ? (totalDemand / 1000000).toFixed(1) + 'M' : (totalDemand / 1000).toFixed(0) + 'K') : '—';
+  document.getElementById('netopt-k-cost').textContent = totalCost ? '$' + totalCost.toFixed(1) + 'M' : '—';
   document.getElementById('netopt-k-service').textContent = servicePct ? servicePct.toFixed(0) + '%' : '—';
-  document.getElementById('netopt-k-dist').textContent = avgDist ? avgDist.toFixed(0) : '—';
+  document.getElementById('netopt-k-dist').textContent = avgDist ? Math.round(avgDist).toLocaleString('en-US') : '—';
 }
 
 // Set solver mode
@@ -15532,33 +15532,66 @@ function netoptRenderResults() {
     </tr>
   `;
 
-  // Scenario comparison
+  // Scenario comparison — clickable rows
   if (r.allScenarios) {
     var cBody = document.getElementById('netopt-comparison-tbody');
     cBody.innerHTML = '';
+    var selectedIdx = netoptState.selectedScenarioIdx != null ? netoptState.selectedScenarioIdx : r.allScenarios.indexOf(r);
+    if (selectedIdx < 0) selectedIdx = r.allScenarios.findIndex(s => s.openFacilities.length === r.openFacilities.length);
+
     r.allScenarios.forEach((scenario, i) => {
-      var numDCs = i + 1;
+      var numDCs = scenario.openFacilities.length;
       var facNames = scenario.openFacilities.map(f => f.name).join(', ');
       var bestCost = r.allScenarios.reduce((m, s) => Math.min(m, s.totalCost), Infinity);
       var delta = scenario.totalCost - bestCost;
-      var deltaStr = delta < 0.01 ? '(Optimal)' : '+$' + delta.toFixed(2) + 'M';
+      var deltaStr = delta < 0.01 ? '★ Optimal' : '+$' + delta.toFixed(2) + 'M';
+      var isSelected = (i === selectedIdx);
 
       var row = document.createElement('tr');
       row.style.borderBottom = '1px solid var(--ies-gray-200)';
-      if (numDCs === r.openFacilities.length) {
-        row.style.background = 'rgba(0,71,171,.04)';
+      row.style.cursor = 'pointer';
+      row.style.transition = 'all .15s';
+      if (isSelected) {
+        row.style.background = 'rgba(0,71,171,.08)';
+        row.style.borderLeft = '3px solid var(--ies-blue)';
       }
+      row.onmouseover = function() { if (!isSelected) this.style.background = 'rgba(0,71,171,.03)'; };
+      row.onmouseout = function() { if (!isSelected) this.style.background = ''; };
+      row.onclick = (function(idx) { return function() { netoptSelectScenario(idx); }; })(i);
       row.innerHTML = `
         <td style="padding:10px 14px;font-weight:600;">${numDCs}</td>
         <td style="padding:10px 14px;font-size:11px;">${facNames}</td>
         <td style="padding:10px 14px;text-align:right;font-weight:600;">$${scenario.totalCost.toFixed(2)}M</td>
         <td style="padding:10px 14px;text-align:right;font-weight:600;">${scenario.avgDistance.toFixed(0)}</td>
         <td style="padding:10px 14px;text-align:right;font-weight:600;">${scenario.serviceLevel.toFixed(0)}%</td>
-        <td style="padding:10px 14px;text-align:right;font-weight:600;color:${numDCs === r.openFacilities.length ? 'var(--ies-green)' : 'var(--ies-gray-600)'};">${deltaStr}</td>
+        <td style="padding:10px 14px;text-align:right;font-weight:600;color:${delta < 0.01 ? 'var(--ies-green)' : 'var(--ies-gray-600)'};">${deltaStr}</td>
       `;
       cBody.appendChild(row);
     });
   }
+}
+
+// Switch active scenario when user clicks a row in the comparison table
+function netoptSelectScenario(idx) {
+  var allScenarios = netoptState.results ? netoptState.results.allScenarios : null;
+  if (!allScenarios || !allScenarios[idx]) return;
+
+  var scenario = allScenarios[idx];
+  netoptState.selectedScenarioIdx = idx;
+
+  // Update the active results to reflect the selected scenario (keep allScenarios intact)
+  var prevAll = netoptState.results.allScenarios;
+  var prevMode = netoptState.results.solverMode;
+  var prevTime = netoptState.results.solveTimeMs;
+  netoptState.results = scenario;
+  netoptState.results.allScenarios = prevAll;
+  netoptState.results.solverMode = prevMode;
+  netoptState.results.solveTimeMs = prevTime;
+
+  // Re-render everything for the selected scenario
+  netoptRenderResults();
+  netoptUpdateKPI();
+  if (netoptState.mapInitialized) netoptRenderMap();
 }
 
 // Initialize map (lazy load on first Results tab view)
