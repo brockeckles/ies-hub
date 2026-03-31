@@ -7560,23 +7560,47 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 
       <!-- Financials Tab -->
       <div id="dealTab-financials" class="deal-tab-panel" style="display:none;">
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;" id="dealFinancialMetrics"></div>
+        <!-- Financial Metric Cards -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:24px;" id="dealFinancialMetrics"></div>
+
+        <!-- Multi-Year Contract P&L -->
         <div style="background:#fff;border-radius:12px;border:1px solid var(--ies-gray-200);padding:24px;margin-bottom:20px;">
-          <div style="font-weight:700;font-size:15px;color:var(--ies-navy);margin-bottom:16px;">Combined P&L by Site</div>
-          <div id="dealFinancialTable" style="overflow-x:auto;"></div>
+          <div style="font-weight:700;font-size:15px;color:var(--ies-navy);margin-bottom:4px;">Multi-Year Contract Budget</div>
+          <div style="font-size:12px;color:var(--ies-gray-500);margin-bottom:16px;">Annual operating P&L by contract year with volume growth and cost escalation across all sites.</div>
+          <div id="dealMultiYearPL" style="overflow-x:auto;"></div>
         </div>
+
+        <!-- Site-by-Site Annual Cost Comparison -->
+        <div style="background:#fff;border-radius:12px;border:1px solid var(--ies-gray-200);padding:24px;margin-bottom:20px;">
+          <div style="font-weight:700;font-size:15px;color:var(--ies-navy);margin-bottom:4px;">Annual Cost by Site</div>
+          <div style="font-size:12px;color:var(--ies-gray-500);margin-bottom:16px;">Year 1 cost comparison across all sites.</div>
+          <div id="dealSiteCostTable" style="overflow-x:auto;"></div>
+        </div>
+
+        <!-- Unit Economics -->
         <div style="background:#fff;border-radius:12px;border:1px solid var(--ies-gray-200);padding:24px;">
-          <div style="font-weight:700;font-size:15px;color:var(--ies-navy);margin-bottom:16px;">Labor Detail Across Sites</div>
-          <div id="dealLaborDetail" style="overflow-x:auto;"></div>
+          <div style="font-weight:700;font-size:15px;color:var(--ies-navy);margin-bottom:16px;">Unit Economics</div>
+          <div id="dealUnitEconomics" style="overflow-x:auto;"></div>
         </div>
       </div>
 
       <!-- Pricing Tab -->
       <div id="dealTab-pricing" class="deal-tab-panel" style="display:none;">
+        <!-- Pricing Schedule per Site -->
         <div style="background:#fff;border-radius:12px;border:1px solid var(--ies-gray-200);padding:24px;margin-bottom:20px;">
-          <div style="font-weight:700;font-size:15px;color:var(--ies-navy);margin-bottom:16px;">Pricing Schedule by Site</div>
+          <div style="font-weight:700;font-size:15px;color:var(--ies-navy);margin-bottom:4px;">Pricing Schedule by Site</div>
+          <div style="font-size:12px;color:var(--ies-gray-500);margin-bottom:16px;">Pricing buckets from each site's cost model. Fixed buckets show monthly fee; variable buckets show per-unit rate.</div>
           <div id="dealPricingTable" style="overflow-x:auto;"></div>
         </div>
+
+        <!-- Combined Pricing Summary -->
+        <div style="background:#fff;border-radius:12px;border:1px solid var(--ies-gray-200);padding:24px;margin-bottom:20px;">
+          <div style="font-weight:700;font-size:15px;color:var(--ies-navy);margin-bottom:4px;">Combined Deal Pricing</div>
+          <div style="font-size:12px;color:var(--ies-gray-500);margin-bottom:16px;">Aggregated pricing across all sites with margin applied.</div>
+          <div id="dealPricingCombined" style="overflow-x:auto;"></div>
+        </div>
+
+        <!-- Deal-Level Financial Summary -->
         <div style="background:#fff;border-radius:12px;border:1px solid var(--ies-gray-200);padding:24px;">
           <div style="font-weight:700;font-size:15px;color:var(--ies-navy);margin-bottom:16px;">Deal-Level Pricing Summary</div>
           <div id="dealPricingSummary"></div>
@@ -27416,71 +27440,70 @@ const dealApp = {
     },
 
     async loadDealChildData() {
-        if (!this.currentDeal || !this.currentDeal.sites) return;
-        this.siteData = {}; // { siteId: { summary, labor, equipment, overhead, vas } }
-        var siteIds = this.currentDeal.sites.map(s => s.id);
-        for (var i = 0; i < siteIds.length; i++) {
-            var sid = siteIds[i];
-            try {
-                var summary = await cmFetchTable('cost_model_summary', 'project_id=eq.' + sid + '&limit=1');
-                var labor = await cmFetchTable('cost_model_labor', 'project_id=eq.' + sid);
-                var equipment = await cmFetchTable('cost_model_equipment', 'project_id=eq.' + sid);
-                var overhead = await cmFetchTable('cost_model_overhead', 'project_id=eq.' + sid);
-                var vas = await cmFetchTable('cost_model_vas', 'project_id=eq.' + sid);
-                this.siteData[sid] = {
-                    summary: summary[0] || {},
-                    labor: labor,
-                    equipment: equipment,
-                    overhead: overhead,
-                    vas: vas
-                };
-            } catch(e) {
-                this.siteData[sid] = { summary: {}, labor: [], equipment: [], overhead: [], vas: [] };
-            }
-        }
+        // No child tables to fetch — all data is on cost_model_projects rows
+        // Pre-compute deal-level aggregates from site data
+        this.dealAggregates = { totalCost: 0, totalSqft: 0, totalStartup: 0, totalMargin: 0, marginCount: 0, sites: [] };
+        var sites = this.currentDeal.sites || [];
+        var self = this;
+        sites.forEach(function(s) {
+            var cost = parseFloat(s.total_annual_cost) || 0;
+            var sqft = parseFloat(s.facility_sqft) || 0;
+            var startup = parseFloat(s.startup_cost) || 0;
+            var margin = parseFloat(s.target_margin_pct) || 0;
+            self.dealAggregates.totalCost += cost;
+            self.dealAggregates.totalSqft += sqft;
+            self.dealAggregates.totalStartup += startup;
+            if (margin > 0) { self.dealAggregates.totalMargin += margin; self.dealAggregates.marginCount++; }
+
+            // Parse pricing buckets
+            var buckets = [];
+            try { buckets = typeof s.pricing_buckets === 'string' ? JSON.parse(s.pricing_buckets) : (s.pricing_buckets || []); } catch(e) {}
+
+            self.dealAggregates.sites.push({
+                id: s.id,
+                name: s.name || 'Untitled',
+                cost: cost,
+                sqft: sqft,
+                startup: startup,
+                margin: margin,
+                contractYears: parseInt(s.contract_term_years) || 3,
+                pricingModel: s.pricing_model || 'all-in',
+                environment: s.environment_type || '—',
+                volumeGrowth: parseFloat(s.annual_volume_growth_pct) || 0,
+                orders: parseFloat(s.vol_orders_packed) || 0,
+                palletsReceived: parseFloat(s.vol_pallets_received) || 0,
+                palletsShipped: parseFloat(s.vol_pallets_shipped) || 0,
+                eachesPicked: parseFloat(s.vol_eaches_picked) || 0,
+                casesPicked: parseFloat(s.vol_cases_picked) || 0,
+                vasUnits: parseFloat(s.vol_vas_units) || 0,
+                buckets: buckets
+            });
+        });
+        this.dealAggregates.avgMargin = this.dealAggregates.marginCount > 0
+            ? this.dealAggregates.totalMargin / this.dealAggregates.marginCount : 0;
     },
 
-    renderSummaryTab() {
-        var sites = this.currentDeal.sites || [];
-        var totalCost = 0, totalSqft = 0, totalMargin = 0, marginCount = 0, totalStartup = 0;
-        var laborTotal = 0, facilityTotal = 0, equipTotal = 0, overheadTotal = 0, vasTotal = 0;
-
-        sites.forEach(function(s) {
-            totalCost += parseFloat(s.total_annual_cost) || 0;
-            totalSqft += parseFloat(s.facility_sqft) || 0;
-            totalStartup += parseFloat(s.startup_cost) || 0;
-            if (s.target_margin_pct) { totalMargin += parseFloat(s.target_margin_pct); marginCount++; }
-        });
-
-        // Use siteData for cost breakdown if available
+    async renderSummaryTab() {
+        if (!this.dealAggregates) await this.loadDealChildData();
+        var agg = this.dealAggregates;
+        var sites = agg.sites;
         var self = this;
-        if (this.siteData) {
-            sites.forEach(function(s) {
-                var d = self.siteData[s.id];
-                if (d && d.summary) {
-                    laborTotal += parseFloat(d.summary.total_labor_cost) || 0;
-                    facilityTotal += parseFloat(d.summary.total_facility_cost) || 0;
-                    equipTotal += parseFloat(d.summary.total_equipment_cost) || 0;
-                    overheadTotal += parseFloat(d.summary.total_overhead_cost) || 0;
-                    vasTotal += parseFloat(d.summary.total_vas_cost) || 0;
-                }
-            });
-        }
 
-        var avgMargin = marginCount > 0 ? (totalMargin / marginCount) : 0;
-        var revenueNeeded = avgMargin > 0 ? totalCost / (1 - avgMargin / 100) : totalCost;
+        var revenueNeeded = agg.avgMargin > 0 ? agg.totalCost / (1 - agg.avgMargin / 100) : agg.totalCost;
+        var avgContractYears = sites.length > 0 ? (sites.reduce(function(s,x){ return s + x.contractYears; }, 0) / sites.length).toFixed(1) : '—';
+        var costPerSqft = agg.totalSqft > 0 ? agg.totalCost / agg.totalSqft : 0;
 
         // KPI Cards
         var metricsEl = document.getElementById('dealSummaryMetrics');
         var kpis = [
-            { label: 'Total Annual Cost', value: this.fmt.currency(totalCost), color: 'var(--ies-orange)', icon: '💰' },
-            { label: 'Sites', value: sites.length, color: 'var(--ies-blue)', icon: '🏢' },
-            { label: 'Total Square Footage', value: this.fmt.num(totalSqft, 0) + ' SF', color: 'var(--ies-blue)', icon: '📐' },
-            { label: 'Avg Target Margin', value: this.fmt.percent(avgMargin), color: 'var(--ies-green)', icon: '📈' },
-            { label: 'Est. Revenue Needed', value: this.fmt.currency(revenueNeeded), color: 'var(--ies-green)', icon: '💵' },
-            { label: 'Startup Investment', value: this.fmt.currency(totalStartup), color: 'var(--ies-orange)', icon: '🚀' },
-            { label: 'Contract Term', value: (sites[0]?.contract_term_years || '—') + ' yrs', color: 'var(--ies-navy)', icon: '📄' },
-            { label: 'Cost / Sqft', value: totalSqft > 0 ? this.fmt.currency(totalCost / totalSqft) : '—', color: 'var(--ies-navy)', icon: '📊' }
+            { label: 'Total Annual Cost', value: self.fmt.currency(agg.totalCost), color: 'var(--ies-orange)' },
+            { label: 'Sites', value: sites.length, color: 'var(--ies-blue)' },
+            { label: 'Total Square Footage', value: self.fmt.num(agg.totalSqft, 0) + ' SF', color: 'var(--ies-blue)' },
+            { label: 'Avg Target Margin', value: self.fmt.percent(agg.avgMargin), color: 'var(--ies-green)' },
+            { label: 'Est. Revenue Needed', value: self.fmt.currency(revenueNeeded), color: 'var(--ies-green)' },
+            { label: 'Startup Investment', value: self.fmt.currency(agg.totalStartup), color: 'var(--ies-orange)' },
+            { label: 'Avg Contract Term', value: avgContractYears + ' yrs', color: 'var(--ies-navy)' },
+            { label: 'Cost / Sqft', value: costPerSqft > 0 ? self.fmt.currency(costPerSqft) : '—', color: 'var(--ies-navy)' }
         ];
         metricsEl.innerHTML = kpis.map(function(k) {
             return '<div style="background:#fff;border-radius:10px;border:1px solid var(--ies-gray-200);padding:16px 20px;border-left:4px solid ' + k.color + ';">' +
@@ -27488,44 +27511,50 @@ const dealApp = {
                 '<div style="font-size:20px;font-weight:700;color:var(--ies-navy);">' + k.value + '</div></div>';
         }).join('');
 
-        // Cost breakdown bars
+        // Cost by site bar chart
         var breakdownEl = document.getElementById('dealSummaryCostBreakdown');
-        var categories = [
-            { label: 'Labor', value: laborTotal, color: '#2563eb' },
-            { label: 'Facility', value: facilityTotal, color: '#f59e0b' },
-            { label: 'Equipment', value: equipTotal, color: '#10b981' },
-            { label: 'Overhead', value: overheadTotal, color: '#8b5cf6' },
-            { label: 'VAS', value: vasTotal, color: '#ef4444' }
-        ];
-        var maxCat = Math.max.apply(null, categories.map(function(c){ return c.value; })) || 1;
-        breakdownEl.innerHTML = categories.map(function(c) {
-            var pct = (c.value / maxCat * 100).toFixed(0);
-            return '<div style="margin-bottom:14px;">' +
-                '<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:600;color:var(--ies-gray-700);margin-bottom:4px;"><span>' + c.label + '</span><span>' + self.fmt.currency(c.value) + '</span></div>' +
-                '<div style="background:var(--ies-gray-100);border-radius:6px;height:10px;overflow:hidden;"><div style="background:' + c.color + ';height:100%;width:' + pct + '%;border-radius:6px;transition:width 0.4s;"></div></div></div>';
-        }).join('');
+        var maxCost = Math.max.apply(null, sites.map(function(s){ return s.cost; })) || 1;
+        if (sites.length === 0) {
+            breakdownEl.innerHTML = '<div style="color:var(--ies-gray-500);font-size:13px;">No sites to display.</div>';
+        } else {
+            var colors = ['#2563eb', '#f59e0b', '#10b981', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899'];
+            breakdownEl.innerHTML = sites.map(function(s, i) {
+                var pct = (s.cost / maxCost * 100).toFixed(0);
+                var c = colors[i % colors.length];
+                return '<div style="margin-bottom:14px;">' +
+                    '<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:600;color:var(--ies-gray-700);margin-bottom:4px;"><span>' + s.name + '</span><span>' + self.fmt.currency(s.cost) + '</span></div>' +
+                    '<div style="background:var(--ies-gray-100);border-radius:6px;height:10px;overflow:hidden;"><div style="background:' + c + ';height:100%;width:' + pct + '%;border-radius:6px;transition:width 0.4s;"></div></div></div>';
+            }).join('');
+        }
 
-        // Site comparison mini-table
+        // Site comparison table
         var compEl = document.getElementById('dealSummarySiteComparison');
         if (sites.length === 0) {
             compEl.innerHTML = '<div style="color:var(--ies-gray-500);font-size:13px;">No sites to compare.</div>';
-            return;
+        } else {
+            var html = '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="border-bottom:2px solid var(--ies-gray-200);background:var(--ies-gray-50);">' +
+                '<th style="padding:10px;text-align:left;">Site</th><th style="padding:10px;text-align:left;">Env.</th><th style="padding:10px;text-align:right;">Annual Cost</th><th style="padding:10px;text-align:right;">Sqft</th><th style="padding:10px;text-align:right;">$/Sqft</th><th style="padding:10px;text-align:right;">Margin</th><th style="padding:10px;text-align:left;">Pricing</th></tr></thead><tbody>';
+            sites.forEach(function(s) {
+                var perSqft = s.sqft > 0 ? s.cost / s.sqft : 0;
+                html += '<tr style="border-bottom:1px solid var(--ies-gray-100);">' +
+                    '<td style="padding:10px;font-weight:600;">' + s.name + '</td>' +
+                    '<td style="padding:10px;">' + s.environment + '</td>' +
+                    '<td style="padding:10px;text-align:right;">' + self.fmt.currency(s.cost) + '</td>' +
+                    '<td style="padding:10px;text-align:right;">' + self.fmt.num(s.sqft, 0) + '</td>' +
+                    '<td style="padding:10px;text-align:right;">' + self.fmt.currency(perSqft) + '</td>' +
+                    '<td style="padding:10px;text-align:right;">' + (s.margin > 0 ? s.margin + '%' : '—') + '</td>' +
+                    '<td style="padding:10px;">' + s.pricingModel + '</td></tr>';
+            });
+            // Totals row
+            html += '<tr style="border-top:2px solid var(--ies-gray-300);font-weight:700;background:var(--ies-gray-50);">' +
+                '<td style="padding:10px;">TOTAL</td><td></td>' +
+                '<td style="padding:10px;text-align:right;">' + self.fmt.currency(agg.totalCost) + '</td>' +
+                '<td style="padding:10px;text-align:right;">' + self.fmt.num(agg.totalSqft, 0) + '</td>' +
+                '<td style="padding:10px;text-align:right;">' + (agg.totalSqft > 0 ? self.fmt.currency(agg.totalCost / agg.totalSqft) : '—') + '</td>' +
+                '<td style="padding:10px;text-align:right;">' + self.fmt.percent(agg.avgMargin) + '</td><td></td></tr>';
+            html += '</tbody></table>';
+            compEl.innerHTML = html;
         }
-        var compHtml = '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="border-bottom:2px solid var(--ies-gray-200);background:var(--ies-gray-50);">' +
-            '<th style="padding:10px;text-align:left;">Site</th><th style="padding:10px;text-align:right;">Annual Cost</th><th style="padding:10px;text-align:right;">Sqft</th><th style="padding:10px;text-align:right;">$/Sqft</th><th style="padding:10px;text-align:right;">Margin</th></tr></thead><tbody>';
-        sites.forEach(function(s) {
-            var cost = parseFloat(s.total_annual_cost) || 0;
-            var sqft = parseFloat(s.facility_sqft) || 0;
-            var perSqft = sqft > 0 ? cost / sqft : 0;
-            compHtml += '<tr style="border-bottom:1px solid var(--ies-gray-100);">' +
-                '<td style="padding:10px;font-weight:600;">' + (s.name || 'Untitled') + '</td>' +
-                '<td style="padding:10px;text-align:right;">' + self.fmt.currency(cost) + '</td>' +
-                '<td style="padding:10px;text-align:right;">' + self.fmt.num(sqft, 0) + '</td>' +
-                '<td style="padding:10px;text-align:right;">' + self.fmt.currency(perSqft) + '</td>' +
-                '<td style="padding:10px;text-align:right;">' + (s.target_margin_pct || '—') + '%</td></tr>';
-        });
-        compHtml += '</tbody></table>';
-        compEl.innerHTML = compHtml;
     },
 
     renderSitesTable() {
@@ -27562,173 +27591,321 @@ const dealApp = {
     },
 
     async renderFinancialsTab() {
-        var sites = this.currentDeal.sites || [];
-        if (!this.siteData) await this.loadDealChildData();
+        if (!this.dealAggregates) await this.loadDealChildData();
+        var agg = this.dealAggregates;
+        var sites = agg.sites;
         var self = this;
 
-        // Aggregate metrics
-        var totals = { labor: 0, facility: 0, equipment: 0, overhead: 0, vas: 0, operating: 0, revenue: 0, headcount: 0 };
-        sites.forEach(function(s) {
-            var d = self.siteData ? self.siteData[s.id] : null;
-            if (d && d.summary) {
-                totals.labor += parseFloat(d.summary.total_labor_cost) || 0;
-                totals.facility += parseFloat(d.summary.total_facility_cost) || 0;
-                totals.equipment += parseFloat(d.summary.total_equipment_cost) || 0;
-                totals.overhead += parseFloat(d.summary.total_overhead_cost) || 0;
-                totals.vas += parseFloat(d.summary.total_vas_cost) || 0;
-                totals.operating += parseFloat(d.summary.total_operating_cost) || 0;
-                totals.revenue += parseFloat(d.summary.total_revenue_needed) || 0;
-                totals.headcount += parseFloat(d.summary.total_headcount) || 0;
-            }
-        });
+        // Determine max contract years across all sites
+        var maxYears = Math.max.apply(null, sites.map(function(s){ return s.contractYears; }).concat([3]));
+        var laborEsc = 0.03; // 3% annual escalation assumption
 
-        // KPI cards
-        var fmEl = document.getElementById('dealFinancialMetrics');
-        var fkpis = [
-            { label: 'Total Operating Cost', value: self.fmt.currency(totals.operating), color: 'var(--ies-orange)' },
-            { label: 'Total Revenue Needed', value: self.fmt.currency(totals.revenue), color: 'var(--ies-green)' },
-            { label: 'Total Headcount', value: self.fmt.num(totals.headcount, 0), color: 'var(--ies-blue)' },
-            { label: 'Margin Amount', value: self.fmt.currency(totals.revenue - totals.operating), color: 'var(--ies-green)' }
-        ];
-        fmEl.innerHTML = fkpis.map(function(k) {
-            return '<div style="background:#fff;border-radius:10px;border:1px solid var(--ies-gray-200);padding:16px 20px;border-left:4px solid ' + k.color + ';">' +
-                '<div style="font-size:11px;font-weight:600;color:var(--ies-gray-500);text-transform:uppercase;margin-bottom:6px;">' + k.label + '</div>' +
-                '<div style="font-size:20px;font-weight:700;color:var(--ies-navy);">' + k.value + '</div></div>';
-        }).join('');
-
-        // P&L table by site
-        var tEl = document.getElementById('dealFinancialTable');
-        var rows = ['Labor', 'Facility', 'Equipment', 'Overhead', 'VAS', 'Total Operating', 'Revenue Needed', 'Margin'];
-        var keys = ['total_labor_cost', 'total_facility_cost', 'total_equipment_cost', 'total_overhead_cost', 'total_vas_cost', 'total_operating_cost', 'total_revenue_needed'];
-
-        var html = '<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="border-bottom:2px solid var(--ies-gray-200);background:var(--ies-gray-50);">';
-        html += '<th style="padding:12px;text-align:left;font-weight:600;min-width:160px;">Category</th>';
-        sites.forEach(function(s) { html += '<th style="padding:12px;text-align:right;font-weight:600;">' + (s.name || 'Untitled') + '</th>'; });
-        html += '<th style="padding:12px;text-align:right;font-weight:700;color:var(--ies-navy);border-left:2px solid var(--ies-gray-200);">TOTAL</th></tr></thead><tbody>';
-
-        for (var r = 0; r < rows.length; r++) {
-            var isTotal = (r >= 5);
-            var rowStyle = isTotal ? 'font-weight:700;' : '';
-            if (r === 5) rowStyle += 'border-top:2px solid var(--ies-gray-300);';
-            html += '<tr style="border-bottom:1px solid var(--ies-gray-100);' + rowStyle + '">';
-            html += '<td style="padding:12px;' + rowStyle + '">' + rows[r] + '</td>';
-            var rowTotal = 0;
+        // Build multi-year projections for the deal
+        var projections = [];
+        for (var yr = 1; yr <= maxYears; yr++) {
+            var p = { year: yr, totalCost: 0, revenue: 0, grossProfit: 0, ebitda: 0, ebit: 0, taxes: 0, netIncome: 0, startup: 0, orders: 0 };
             sites.forEach(function(s) {
-                var d = self.siteData ? self.siteData[s.id] : null;
-                var val = 0;
-                if (d && d.summary) {
-                    if (r < 5) { val = parseFloat(d.summary[keys[r]]) || 0; }
-                    else if (r === 5) { val = parseFloat(d.summary.total_operating_cost) || 0; }
-                    else if (r === 6) { val = parseFloat(d.summary.total_revenue_needed) || 0; }
-                    else if (r === 7) { val = (parseFloat(d.summary.total_revenue_needed) || 0) - (parseFloat(d.summary.total_operating_cost) || 0); }
-                }
-                rowTotal += val;
-                html += '<td style="padding:12px;text-align:right;' + rowStyle + '">' + self.fmt.currency(val) + '</td>';
+                if (yr > s.contractYears) return; // site's contract ended
+                var volMult = Math.pow(1 + (s.volumeGrowth / 100), yr - 1);
+                var costMult = Math.pow(1 + laborEsc, yr - 1);
+                var siteCost = s.cost * costMult * (yr === 1 ? 1 : (1 + (s.volumeGrowth / 100 * 0.3)));
+                var siteStartup = yr === 1 ? (s.startup / s.contractYears) : (s.startup / s.contractYears);
+                var siteMargin = s.margin / 100;
+                var siteRevenue = (siteCost + siteStartup) * (1 + siteMargin);
+                p.totalCost += siteCost + siteStartup;
+                p.revenue += siteRevenue;
+                p.startup += siteStartup;
+                p.orders += s.orders * volMult;
             });
-            html += '<td style="padding:12px;text-align:right;border-left:2px solid var(--ies-gray-200);' + rowStyle + '">' + self.fmt.currency(rowTotal) + '</td>';
-            html += '</tr>';
+            p.grossProfit = p.revenue - p.totalCost;
+            p.ebitda = p.grossProfit + p.startup; // add back amortization
+            p.ebit = p.grossProfit;
+            p.taxes = Math.max(0, p.ebit * 0.25);
+            p.netIncome = p.ebit - p.taxes;
+            projections.push(p);
         }
-        html += '</tbody></table>';
-        tEl.innerHTML = html;
 
-        // Labor detail table
-        var lEl = document.getElementById('dealLaborDetail');
-        var allLabor = [];
-        sites.forEach(function(s) {
-            var d = self.siteData ? self.siteData[s.id] : null;
-            if (d && d.labor) {
-                d.labor.forEach(function(l) { allLabor.push(Object.assign({}, l, { _siteName: s.name || 'Untitled' })); });
+        // Financial Metric Cards (with threshold coloring)
+        var totalRevenue = projections.reduce(function(s,p){ return s + p.revenue; }, 0);
+        var totalCostAll = projections.reduce(function(s,p){ return s + p.totalCost; }, 0);
+        var totalGrossProfit = totalRevenue - totalCostAll;
+        var totalEbitda = projections.reduce(function(s,p){ return s + p.ebitda; }, 0);
+        var avgGrossMargin = totalRevenue > 0 ? (totalGrossProfit / totalRevenue * 100) : 0;
+        var avgEbitdaMargin = totalRevenue > 0 ? (totalEbitda / totalRevenue * 100) : 0;
+        var totalNetIncome = projections.reduce(function(s,p){ return s + p.netIncome; }, 0);
+        var contractValue = totalRevenue;
+
+        // NPV calculation
+        var discountRate = 0.10;
+        var npv = -agg.totalStartup;
+        projections.forEach(function(p, i) { npv += p.grossProfit / Math.pow(1 + discountRate, i + 1); });
+
+        // Payback period
+        var paybackMonths = maxYears * 12;
+        var cumCash = -agg.totalStartup;
+        for (var pyr = 0; pyr < projections.length; pyr++) {
+            var monthlyProfit = projections[pyr].grossProfit / 12;
+            for (var pm = 0; pm < 12; pm++) {
+                cumCash += monthlyProfit;
+                if (cumCash >= 0) { paybackMonths = pyr * 12 + pm + 1; pyr = projections.length; break; }
             }
-        });
-        if (allLabor.length === 0) {
-            lEl.innerHTML = '<div style="color:var(--ies-gray-500);font-size:13px;padding:8px;">No labor data available. Open each site in the Cost Model to populate.</div>';
-        } else {
-            var lhtml = '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="border-bottom:2px solid var(--ies-gray-200);background:var(--ies-gray-50);">' +
-                '<th style="padding:10px;text-align:left;">Site</th><th style="padding:10px;text-align:left;">Role</th><th style="padding:10px;text-align:left;">Category</th>' +
-                '<th style="padding:10px;text-align:right;">Headcount</th><th style="padding:10px;text-align:right;">Rate/Hr</th><th style="padding:10px;text-align:right;">Annual Cost</th></tr></thead><tbody>';
-            allLabor.forEach(function(l) {
-                lhtml += '<tr style="border-bottom:1px solid var(--ies-gray-100);">' +
-                    '<td style="padding:10px;">' + l._siteName + '</td>' +
-                    '<td style="padding:10px;font-weight:600;">' + (l.role_name || '—') + '</td>' +
-                    '<td style="padding:10px;">' + (l.role_category || '—') + '</td>' +
-                    '<td style="padding:10px;text-align:right;">' + (l.headcount || '—') + '</td>' +
-                    '<td style="padding:10px;text-align:right;">' + self.fmt.currency(parseFloat(l.hourly_rate) || 0) + '</td>' +
-                    '<td style="padding:10px;text-align:right;">' + self.fmt.currency(parseFloat(l.total_annual_cost) || 0) + '</td></tr>';
-            });
-            lhtml += '</tbody></table>';
-            lEl.innerHTML = lhtml;
         }
+
+        var mc = function(label, value, fmt, threshold, higherIsBetter, sub) {
+            var cls = 'neutral';
+            if (threshold !== null && value !== null && !isNaN(value)) {
+                cls = higherIsBetter ? (value >= threshold ? 'green' : 'red') : (value <= threshold ? 'green' : 'red');
+            }
+            return '<div class="cm-fin-metric ' + cls + '">' +
+                '<div class="label">' + label + '</div>' +
+                '<div class="value">' + fmt + '</div>' +
+                (sub ? '<div class="sub">' + sub + '</div>' : '') + '</div>';
+        };
+
+        var fmEl = document.getElementById('dealFinancialMetrics');
+        fmEl.innerHTML = [
+            mc('Total Contract Value', contractValue, self.fmt.currency(contractValue), null, true, maxYears + '-year total revenue'),
+            mc('Gross Margin', avgGrossMargin, avgGrossMargin.toFixed(1) + '%', 12, true, 'Target: ≥12%'),
+            mc('EBITDA Margin', avgEbitdaMargin, avgEbitdaMargin.toFixed(1) + '%', 8, true, 'Target: ≥8%'),
+            mc('Net Income (' + maxYears + 'yr)', totalNetIncome, self.fmt.currency(totalNetIncome), null, true, 'After 25% tax'),
+            mc('NPV', npv, self.fmt.currency(npv), 0, true, 'At 10% discount rate'),
+            mc('Payback Period', paybackMonths, paybackMonths + ' mo', 24, false, 'Target: ≤24 mo'),
+            mc('Total Startup', agg.totalStartup, self.fmt.currency(agg.totalStartup), null, null, 'Across all sites'),
+            mc('Avg Orders/Year', sites.length > 0 ? projections[0].orders : 0, self.fmt.num(projections.length > 0 ? projections[0].orders : 0, 0), null, null, 'Year 1 combined')
+        ].join('');
+
+        // Multi-Year P&L Table (matches CM Builder format)
+        var plEl = document.getElementById('dealMultiYearPL');
+        var fmt = function(v) { return '$' + Math.round(v).toLocaleString('en-US'); };
+        var fmtPct = function(v) { return (v * 100).toFixed(1) + '%'; };
+
+        var rows = [
+            { label: '── INCOME STATEMENT ──', section: true },
+            { label: 'Revenue', key: 'revenue', bold: true },
+            { label: 'Total Operating Cost', key: 'totalCost' },
+            { label: 'Start-Up Amort.', key: 'startup' },
+            { label: 'Gross Profit', key: 'grossProfit', bold: true, border: true },
+            { label: 'EBITDA', key: 'ebitda' },
+            { label: 'EBIT', key: 'ebit' },
+            { label: 'Taxes (25%)', key: 'taxes' },
+            { label: 'Net Income', key: 'netIncome', bold: true, border: true },
+            { label: 'Gross Margin %', key: null, calc: function(p){ return p.revenue > 0 ? p.grossProfit / p.revenue : 0; }, format: 'pct' },
+            { label: 'EBITDA Margin %', key: null, calc: function(p){ return p.revenue > 0 ? p.ebitda / p.revenue : 0; }, format: 'pct' },
+            { label: '── KEY METRICS ──', section: true },
+            { label: 'Orders', key: 'orders', format: 'int' },
+            { label: 'Cost/Order', key: null, calc: function(p){ return p.orders > 0 ? p.totalCost / p.orders : 0; }, format: 'dollar2' },
+            { label: 'Revenue/Order', key: null, calc: function(p){ return p.orders > 0 ? p.revenue / p.orders : 0; }, format: 'dollar2' },
+            { label: 'Profit/Order', key: null, calc: function(p){ return p.orders > 0 ? p.grossProfit / p.orders : 0; }, format: 'dollar2' }
+        ];
+
+        var colCount = projections.length + 2;
+        var plHtml = '<table class="cm-table" style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr><th style="min-width:160px;padding:10px;text-align:left;">Line Item</th>' +
+            projections.map(function(p){ return '<th style="text-align:right;padding:10px;">Year ' + p.year + '</th>'; }).join('') +
+            '<th style="text-align:right;padding:10px;font-weight:700;">Total</th></tr></thead><tbody>';
+
+        rows.forEach(function(r) {
+            if (r.section) {
+                plHtml += '<tr><td colspan="' + colCount + '" style="font-size:11px;font-weight:700;color:var(--ies-blue);padding-top:14px;letter-spacing:0.5px;">' + r.label + '</td></tr>';
+                return;
+            }
+            var style = (r.bold ? 'font-weight:600;' : '') + (r.border ? 'border-top:2px solid var(--ies-gray-200);' : '');
+            var vals = projections.map(function(p) {
+                var v = r.calc ? r.calc(p) : p[r.key];
+                if (r.format === 'int') return Math.round(v).toLocaleString('en-US');
+                if (r.format === 'dollar2') return '$' + (v || 0).toFixed(2);
+                if (r.format === 'pct') return fmtPct(v);
+                return fmt(v);
+            });
+
+            var total;
+            if (r.format === 'pct') {
+                total = fmtPct(projections.reduce(function(s,p){ return s + (r.calc(p) || 0); }, 0) / projections.length);
+            } else if (r.format === 'dollar2') {
+                total = '$' + (projections.reduce(function(s,p){ return s + (r.calc ? r.calc(p) : 0); }, 0) / projections.length).toFixed(2);
+            } else if (r.format === 'int') {
+                total = Math.round(projections.reduce(function(s,p){ return s + p[r.key]; }, 0)).toLocaleString('en-US');
+            } else if (r.calc) {
+                total = '';
+            } else {
+                total = fmt(projections.reduce(function(s,p){ return s + p[r.key]; }, 0));
+            }
+
+            plHtml += '<tr style="' + style + '"><td style="padding:10px;">' + r.label + '</td>' +
+                vals.map(function(v){ return '<td style="text-align:right;padding:10px;">' + v + '</td>'; }).join('') +
+                '<td style="text-align:right;padding:10px;font-weight:600;">' + total + '</td></tr>';
+        });
+        plHtml += '</tbody></table>';
+        plEl.innerHTML = plHtml;
+
+        // Site Cost Comparison Table
+        var scEl = document.getElementById('dealSiteCostTable');
+        var scHtml = '<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="border-bottom:2px solid var(--ies-gray-200);background:var(--ies-gray-50);">' +
+            '<th style="padding:12px;text-align:left;">Site</th>' +
+            '<th style="padding:12px;text-align:right;">Annual Cost</th>' +
+            '<th style="padding:12px;text-align:right;">% of Total</th>' +
+            '<th style="padding:12px;text-align:right;">Revenue (w/ Margin)</th>' +
+            '<th style="padding:12px;text-align:right;">Gross Profit</th>' +
+            '<th style="padding:12px;text-align:right;">Margin %</th>' +
+            '<th style="padding:12px;text-align:right;">Startup</th>' +
+            '</tr></thead><tbody>';
+        sites.forEach(function(s) {
+            var rev = s.margin > 0 ? s.cost / (1 - s.margin / 100) : s.cost;
+            var gp = rev - s.cost;
+            var pctTotal = agg.totalCost > 0 ? (s.cost / agg.totalCost * 100) : 0;
+            scHtml += '<tr style="border-bottom:1px solid var(--ies-gray-100);">' +
+                '<td style="padding:12px;font-weight:600;">' + s.name + '</td>' +
+                '<td style="padding:12px;text-align:right;">' + self.fmt.currency(s.cost) + '</td>' +
+                '<td style="padding:12px;text-align:right;">' + pctTotal.toFixed(1) + '%</td>' +
+                '<td style="padding:12px;text-align:right;">' + self.fmt.currency(rev) + '</td>' +
+                '<td style="padding:12px;text-align:right;color:' + (gp >= 0 ? '#10b981' : '#ef4444') + ';">' + self.fmt.currency(gp) + '</td>' +
+                '<td style="padding:12px;text-align:right;">' + (s.margin > 0 ? s.margin + '%' : '—') + '</td>' +
+                '<td style="padding:12px;text-align:right;">' + self.fmt.currency(s.startup) + '</td></tr>';
+        });
+        // Totals row
+        var totalRev = agg.avgMargin > 0 ? agg.totalCost / (1 - agg.avgMargin / 100) : agg.totalCost;
+        scHtml += '<tr style="border-top:2px solid var(--ies-gray-300);font-weight:700;background:var(--ies-gray-50);">' +
+            '<td style="padding:12px;">TOTAL</td>' +
+            '<td style="padding:12px;text-align:right;">' + self.fmt.currency(agg.totalCost) + '</td>' +
+            '<td style="padding:12px;text-align:right;">100%</td>' +
+            '<td style="padding:12px;text-align:right;">' + self.fmt.currency(totalRev) + '</td>' +
+            '<td style="padding:12px;text-align:right;color:#10b981;">' + self.fmt.currency(totalRev - agg.totalCost) + '</td>' +
+            '<td style="padding:12px;text-align:right;">' + self.fmt.percent(agg.avgMargin) + '</td>' +
+            '<td style="padding:12px;text-align:right;">' + self.fmt.currency(agg.totalStartup) + '</td></tr>';
+        scHtml += '</tbody></table>';
+        scEl.innerHTML = scHtml;
+
+        // Unit Economics table
+        var ueEl = document.getElementById('dealUnitEconomics');
+        var yr1 = projections[0] || { totalCost: 0, revenue: 0, orders: 0, grossProfit: 0 };
+        var totalOrders = yr1.orders;
+        var totalPallets = sites.reduce(function(s,x){ return s + x.palletsShipped; }, 0);
+        var totalEaches = sites.reduce(function(s,x){ return s + x.eachesPicked; }, 0);
+        var totalCases = sites.reduce(function(s,x){ return s + x.casesPicked; }, 0);
+
+        var ueRows = [
+            { label: 'Cost per Order', value: totalOrders > 0 ? self.fmt.currency(agg.totalCost / totalOrders) : '—', cls: 'cm-text-orange' },
+            { label: 'Revenue per Order', value: totalOrders > 0 ? self.fmt.currency(totalRev / totalOrders) : '—', cls: 'cm-text-success' },
+            { label: 'Profit per Order', value: totalOrders > 0 ? self.fmt.currency((totalRev - agg.totalCost) / totalOrders) : '—', cls: 'cm-text-success' },
+            { label: 'Cost per Pallet Shipped', value: totalPallets > 0 ? self.fmt.currency(agg.totalCost / totalPallets) : '—', cls: 'cm-text-orange' },
+            { label: 'Cost per Each Picked', value: totalEaches > 0 ? '$' + (agg.totalCost / totalEaches).toFixed(4) : '—', cls: 'cm-text-orange' },
+            { label: 'Cost per Case Picked', value: totalCases > 0 ? self.fmt.currency(agg.totalCost / totalCases) : '—', cls: 'cm-text-orange' },
+            { label: 'Cost per Sq Ft', value: agg.totalSqft > 0 ? self.fmt.currency(agg.totalCost / agg.totalSqft) : '—', cls: 'cm-text-orange' },
+            { label: 'Monthly Management Fee (est.)', value: self.fmt.currency(agg.totalCost / 12), cls: 'cm-text-orange' }
+        ];
+        ueEl.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px;max-width:500px;"><tbody>' +
+            ueRows.map(function(r) {
+                return '<tr style="border-bottom:1px solid var(--ies-gray-100);"><td style="padding:12px;">' + r.label + '</td>' +
+                    '<td style="padding:12px;text-align:right;font-weight:600;" class="' + r.cls + '">' + r.value + '</td></tr>';
+            }).join('') + '</tbody></table>';
     },
 
     async renderPricingTab() {
-        var sites = this.currentDeal.sites || [];
+        if (!this.dealAggregates) await this.loadDealChildData();
+        var agg = this.dealAggregates;
+        var sites = agg.sites;
         var self = this;
 
-        // Build pricing schedule by site — each site has pricing_buckets JSON
+        // === Per-Site Pricing Schedule ===
         var tEl = document.getElementById('dealPricingTable');
 
-        // Collect all unique bucket names across sites
+        if (sites.length === 0 || sites.every(function(s){ return !s.buckets || s.buckets.length === 0; })) {
+            tEl.innerHTML = '<div style="color:var(--ies-gray-500);font-size:13px;padding:8px;">No pricing data available. Configure pricing buckets in each site\'s Cost Model.</div>';
+        } else {
+            // Render one pricing table per site
+            var allHtml = '';
+            sites.forEach(function(s) {
+                if (!s.buckets || s.buckets.length === 0) return;
+                var margin = s.margin / 100;
+                allHtml += '<div style="margin-bottom:24px;"><div style="font-weight:600;font-size:13px;color:var(--ies-navy);margin-bottom:8px;padding-bottom:4px;border-bottom:2px solid var(--ies-gray-200);">' + s.name + ' <span style="font-weight:400;color:var(--ies-gray-500);font-size:12px;">(' + s.pricingModel + ')</span></div>';
+                allHtml += '<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="background:var(--ies-gray-50);border-bottom:1px solid var(--ies-gray-200);">' +
+                    '<th style="padding:10px;text-align:left;">Bucket</th>' +
+                    '<th style="padding:10px;text-align:right;">Type</th>' +
+                    '<th style="padding:10px;text-align:right;">UOM</th>' +
+                    '<th style="padding:10px;text-align:right;">Rate / Fee</th>' +
+                    '<th style="padding:10px;text-align:right;">With Margin (' + s.margin + '%)</th>' +
+                    '</tr></thead><tbody>';
+                s.buckets.forEach(function(b) {
+                    var rateDisplay = '—';
+                    var rateWithMargin = '—';
+                    if (b.type === 'fixed') {
+                        rateDisplay = 'Monthly Fee';
+                        rateWithMargin = 'Monthly Fee';
+                    } else {
+                        rateDisplay = 'per ' + (b.uom || 'unit');
+                        rateWithMargin = 'per ' + (b.uom || 'unit');
+                    }
+                    allHtml += '<tr style="border-bottom:1px solid var(--ies-gray-100);">' +
+                        '<td style="padding:10px;font-weight:500;">' + (b.name || '—') + '</td>' +
+                        '<td style="padding:10px;text-align:right;"><span style="padding:2px 8px;background:' + (b.type === 'fixed' ? '#dbeafe' : '#dcfce7') + ';color:' + (b.type === 'fixed' ? '#1e40af' : '#166534') + ';border-radius:4px;font-size:11px;font-weight:600;">' + (b.type || '—') + '</span></td>' +
+                        '<td style="padding:10px;text-align:right;">' + (b.uom || '—') + '</td>' +
+                        '<td style="padding:10px;text-align:right;">—</td>' +
+                        '<td style="padding:10px;text-align:right;">—</td></tr>';
+                });
+                allHtml += '</tbody></table></div>';
+            });
+            tEl.innerHTML = allHtml;
+        }
+
+        // === Combined Deal Pricing ===
+        var cEl = document.getElementById('dealPricingCombined');
+        // Collect all unique bucket names
         var allBucketNames = [];
-        var siteBuckets = {};
+        var bucketTypeMap = {};
+        var bucketUomMap = {};
         sites.forEach(function(s) {
-            var buckets = [];
-            try { buckets = typeof s.pricing_buckets === 'string' ? JSON.parse(s.pricing_buckets) : (s.pricing_buckets || []); } catch(e) {}
-            siteBuckets[s.id] = buckets;
-            buckets.forEach(function(b) {
-                if (b.name && allBucketNames.indexOf(b.name) === -1) allBucketNames.push(b.name);
+            (s.buckets || []).forEach(function(b) {
+                if (b.name && allBucketNames.indexOf(b.name) === -1) {
+                    allBucketNames.push(b.name);
+                    bucketTypeMap[b.name] = b.type || 'variable';
+                    bucketUomMap[b.name] = b.uom || 'unit';
+                }
             });
         });
 
         if (allBucketNames.length === 0) {
-            tEl.innerHTML = '<div style="color:var(--ies-gray-500);font-size:13px;padding:8px;">No pricing data available. Configure pricing buckets in each site\'s Cost Model.</div>';
+            cEl.innerHTML = '<div style="color:var(--ies-gray-500);font-size:13px;">No pricing buckets configured.</div>';
         } else {
-            var html = '<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="border-bottom:2px solid var(--ies-gray-200);background:var(--ies-gray-50);">';
-            html += '<th style="padding:12px;text-align:left;font-weight:600;">Pricing Bucket</th>';
-            sites.forEach(function(s) { html += '<th style="padding:12px;text-align:center;font-weight:600;" colspan="2">' + (s.name || 'Untitled') + '</th>'; });
-            html += '</tr><tr style="border-bottom:1px solid var(--ies-gray-200);background:var(--ies-gray-50);">';
-            html += '<th></th>';
-            sites.forEach(function() { html += '<th style="padding:8px;text-align:right;font-size:11px;font-weight:600;color:var(--ies-gray-500);">Type</th><th style="padding:8px;text-align:right;font-size:11px;font-weight:600;color:var(--ies-gray-500);">UOM</th>'; });
-            html += '</tr></thead><tbody>';
+            var cHtml = '<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="background:var(--ies-gray-50);border-bottom:2px solid var(--ies-gray-200);">' +
+                '<th style="padding:12px;text-align:left;">Bucket</th><th style="padding:12px;text-align:right;">Type</th><th style="padding:12px;text-align:right;">UOM</th>';
+            sites.forEach(function(s) { cHtml += '<th style="padding:12px;text-align:center;">' + s.name + '</th>'; });
+            cHtml += '</tr></thead><tbody>';
 
             allBucketNames.forEach(function(name) {
-                html += '<tr style="border-bottom:1px solid var(--ies-gray-100);">';
-                html += '<td style="padding:12px;font-weight:600;">' + name + '</td>';
+                cHtml += '<tr style="border-bottom:1px solid var(--ies-gray-100);">';
+                cHtml += '<td style="padding:12px;font-weight:600;">' + name + '</td>';
+                cHtml += '<td style="padding:12px;text-align:right;"><span style="padding:2px 8px;background:' + (bucketTypeMap[name] === 'fixed' ? '#dbeafe' : '#dcfce7') + ';color:' + (bucketTypeMap[name] === 'fixed' ? '#1e40af' : '#166534') + ';border-radius:4px;font-size:11px;font-weight:600;">' + bucketTypeMap[name] + '</span></td>';
+                cHtml += '<td style="padding:12px;text-align:right;">' + bucketUomMap[name] + '</td>';
                 sites.forEach(function(s) {
-                    var bucket = (siteBuckets[s.id] || []).find(function(b){ return b.name === name; });
-                    if (bucket) {
-                        html += '<td style="padding:12px;text-align:right;">' + (bucket.type || '—') + '</td>';
-                        html += '<td style="padding:12px;text-align:right;">' + (bucket.uom || '—') + '</td>';
-                    } else {
-                        html += '<td style="padding:12px;text-align:right;color:var(--ies-gray-400);">—</td><td style="padding:12px;text-align:right;color:var(--ies-gray-400);">—</td>';
-                    }
+                    var found = (s.buckets || []).some(function(b){ return b.name === name; });
+                    cHtml += '<td style="padding:12px;text-align:center;">' + (found ? '<span style="color:#10b981;font-weight:600;">✓</span>' : '<span style="color:var(--ies-gray-300);">—</span>') + '</td>';
                 });
-                html += '</tr>';
+                cHtml += '</tr>';
             });
-            html += '</tbody></table>';
-            tEl.innerHTML = html;
+            cHtml += '</tbody></table>';
+            cEl.innerHTML = cHtml;
         }
 
-        // Deal-level pricing summary
+        // === Deal-Level Summary Cards ===
         var sEl = document.getElementById('dealPricingSummary');
-        var totalCost = 0;
-        sites.forEach(function(s) { totalCost += parseFloat(s.total_annual_cost) || 0; });
-        var avgMargin = 0, mCount = 0;
-        sites.forEach(function(s) { if (s.target_margin_pct) { avgMargin += parseFloat(s.target_margin_pct); mCount++; } });
-        avgMargin = mCount > 0 ? avgMargin / mCount : 0;
-        var revenue = avgMargin > 0 ? totalCost / (1 - avgMargin / 100) : totalCost;
-        var margin = revenue - totalCost;
+        var totalCost = agg.totalCost;
+        var revenue = agg.avgMargin > 0 ? totalCost / (1 - agg.avgMargin / 100) : totalCost;
+        var marginAmt = revenue - totalCost;
+        var monthlyRevenue = revenue / 12;
 
         sEl.innerHTML =
-            '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;">' +
+            '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;">' +
             '<div style="background:var(--ies-gray-50);border-radius:8px;padding:16px;border-left:4px solid var(--ies-orange);">' +
-            '<div style="font-size:11px;font-weight:600;color:var(--ies-gray-500);text-transform:uppercase;margin-bottom:4px;">Total Cost Base</div>' +
+            '<div style="font-size:11px;font-weight:600;color:var(--ies-gray-500);text-transform:uppercase;margin-bottom:4px;">Total Annual Cost</div>' +
             '<div style="font-size:18px;font-weight:700;color:var(--ies-navy);">' + self.fmt.currency(totalCost) + '</div></div>' +
             '<div style="background:var(--ies-gray-50);border-radius:8px;padding:16px;border-left:4px solid var(--ies-green);">' +
-            '<div style="font-size:11px;font-weight:600;color:var(--ies-gray-500);text-transform:uppercase;margin-bottom:4px;">Target Revenue</div>' +
+            '<div style="font-size:11px;font-weight:600;color:var(--ies-gray-500);text-transform:uppercase;margin-bottom:4px;">Target Annual Revenue</div>' +
             '<div style="font-size:18px;font-weight:700;color:var(--ies-navy);">' + self.fmt.currency(revenue) + '</div></div>' +
             '<div style="background:var(--ies-gray-50);border-radius:8px;padding:16px;border-left:4px solid var(--ies-green);">' +
-            '<div style="font-size:11px;font-weight:600;color:var(--ies-gray-500);text-transform:uppercase;margin-bottom:4px;">Target Margin (' + avgMargin.toFixed(1) + '%)</div>' +
-            '<div style="font-size:18px;font-weight:700;color:var(--ies-navy);">' + self.fmt.currency(margin) + '</div></div></div>';
+            '<div style="font-size:11px;font-weight:600;color:var(--ies-gray-500);text-transform:uppercase;margin-bottom:4px;">Target Margin (' + agg.avgMargin.toFixed(1) + '%)</div>' +
+            '<div style="font-size:18px;font-weight:700;color:var(--ies-navy);">' + self.fmt.currency(marginAmt) + '</div></div>' +
+            '<div style="background:var(--ies-gray-50);border-radius:8px;padding:16px;border-left:4px solid var(--ies-blue);">' +
+            '<div style="font-size:11px;font-weight:600;color:var(--ies-gray-500);text-transform:uppercase;margin-bottom:4px;">Monthly Revenue</div>' +
+            '<div style="font-size:18px;font-weight:700;color:var(--ies-navy);">' + self.fmt.currency(monthlyRevenue) + '</div></div></div>';
     },
 
     async saveDealHeader() {
