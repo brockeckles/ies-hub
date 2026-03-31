@@ -7470,29 +7470,27 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 
     <!-- Deal Detail View (hidden by default) -->
     <div id="dealDetailView" style="display:none;">
-      <button onclick="dealApp.backToDealList()" style="margin-bottom:16px;padding:8px 16px;background:var(--ies-gray-100);color:var(--ies-navy);border:1px solid var(--ies-gray-300);border-radius:6px;font-family:Montserrat,sans-serif;font-weight:600;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;">
-        <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        Back to Deals
-      </button>
+      <button onclick="dealApp.backToDealList()" class="dt-landing-back-btn" style="margin-bottom:16px;">← Back to Deals</button>
 
-      <!-- Deal Header -->
+      <!-- Deal Header (always visible) -->
       <div style="background:#fff;border-radius:12px;border:1px solid var(--ies-gray-200);padding:24px;margin-bottom:20px;">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:16px;margin-bottom:16px;">
           <div>
-            <label style="display:block;font-size:12px;font-weight:600;color:var(--ies-gray-600);text-transform:uppercase;margin-bottom:6px;">Deal Name</label>
-            <input type="text" id="dealEditName" style="width:100%;padding:10px 12px;border:1px solid var(--ies-gray-300);border-radius:6px;font-family:Montserrat,sans-serif;font-size:14px;" placeholder="e.g., Acme Corp Multi-DC">
+            <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-600);text-transform:uppercase;margin-bottom:6px;">Deal Name</label>
+            <input type="text" id="dealEditName" style="width:100%;padding:10px 12px;border:1px solid var(--ies-gray-300);border-radius:6px;font-family:Montserrat,sans-serif;font-size:14px;box-sizing:border-box;" placeholder="e.g., Acme Corp Multi-DC">
           </div>
           <div>
-            <label style="display:block;font-size:12px;font-weight:600;color:var(--ies-gray-600);text-transform:uppercase;margin-bottom:6px;">Client Name</label>
-            <input type="text" id="dealEditClient" style="width:100%;padding:10px 12px;border:1px solid var(--ies-gray-300);border-radius:6px;font-family:Montserrat,sans-serif;font-size:14px;" placeholder="e.g., Acme Corporation">
+            <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-600);text-transform:uppercase;margin-bottom:6px;">Client Name</label>
+            <input type="text" id="dealEditClient" list="dealClientDatalist" style="width:100%;padding:10px 12px;border:1px solid var(--ies-gray-300);border-radius:6px;font-family:Montserrat,sans-serif;font-size:14px;box-sizing:border-box;" placeholder="e.g., Acme Corporation">
+            <datalist id="dealClientDatalist"></datalist>
           </div>
           <div>
-            <label style="display:block;font-size:12px;font-weight:600;color:var(--ies-gray-600);text-transform:uppercase;margin-bottom:6px;">Deal Owner</label>
-            <input type="text" id="dealEditOwner" style="width:100%;padding:10px 12px;border:1px solid var(--ies-gray-300);border-radius:6px;font-family:Montserrat,sans-serif;font-size:14px;" placeholder="e.g., Brock Eckles">
+            <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-600);text-transform:uppercase;margin-bottom:6px;">Deal Owner</label>
+            <input type="text" id="dealEditOwner" style="width:100%;padding:10px 12px;border:1px solid var(--ies-gray-300);border-radius:6px;font-family:Montserrat,sans-serif;font-size:14px;box-sizing:border-box;" placeholder="e.g., Brock Eckles">
           </div>
           <div>
-            <label style="display:block;font-size:12px;font-weight:600;color:var(--ies-gray-600);text-transform:uppercase;margin-bottom:6px;">Status</label>
-            <select id="dealEditStatus" style="width:100%;padding:10px 12px;border:1px solid var(--ies-gray-300);border-radius:6px;font-family:Montserrat,sans-serif;font-size:14px;">
+            <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-600);text-transform:uppercase;margin-bottom:6px;">Status</label>
+            <select id="dealEditStatus" style="width:100%;padding:10px 12px;border:1px solid var(--ies-gray-300);border-radius:6px;font-family:Montserrat,sans-serif;font-size:14px;box-sizing:border-box;">
               <option value="Draft">Draft</option>
               <option value="In Progress">In Progress</option>
               <option value="Proposal Sent">Proposal Sent</option>
@@ -7501,46 +7499,87 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
             </select>
           </div>
         </div>
-        <div>
-          <label style="display:block;font-size:12px;font-weight:600;color:var(--ies-gray-600);text-transform:uppercase;margin-bottom:6px;">Notes</label>
-          <textarea id="dealEditNotes" style="width:100%;padding:10px 12px;border:1px solid var(--ies-gray-300);border-radius:6px;font-family:Montserrat,sans-serif;font-size:14px;min-height:80px;" placeholder="Deal notes..."></textarea>
+        <div style="margin-bottom:16px;">
+          <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-600);text-transform:uppercase;margin-bottom:6px;">Notes</label>
+          <textarea id="dealEditNotes" style="width:100%;padding:10px 12px;border:1px solid var(--ies-gray-300);border-radius:6px;font-family:Montserrat,sans-serif;font-size:14px;min-height:60px;box-sizing:border-box;" placeholder="Deal notes..."></textarea>
         </div>
-        <button onclick="dealApp.saveDealHeader()" style="margin-top:16px;padding:10px 20px;background:var(--ies-orange);color:#fff;border:none;border-radius:6px;font-family:Montserrat,sans-serif;font-weight:600;font-size:13px;cursor:pointer;">Save Deal Details</button>
+        <button onclick="dealApp.saveDealHeader()" style="padding:10px 20px;background:var(--ies-orange);color:#fff;border:none;border-radius:6px;font-family:Montserrat,sans-serif;font-weight:600;font-size:13px;cursor:pointer;">Save Deal Details</button>
       </div>
 
-      <!-- Aggregate Financials -->
-      <div id="dealAggregateCard" style="background:#fff;border-radius:12px;border:1px solid var(--ies-gray-200);padding:24px;margin-bottom:20px;">
-        <div style="font-weight:700;font-size:16px;color:var(--ies-navy);margin-bottom:16px;">Aggregate Financials</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;" id="dealAggregateMetrics">
-          <!-- Metrics will be rendered here -->
-        </div>
+      <!-- Tab bar -->
+      <div id="dealDetailTabs" style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;">
+        <button class="dt-tab active" onclick="dealApp.switchTab('summary',this)">Summary</button>
+        <button class="dt-tab" onclick="dealApp.switchTab('sites',this)">Sites</button>
+        <button class="dt-tab" onclick="dealApp.switchTab('financials',this)">Financials</button>
+        <button class="dt-tab" onclick="dealApp.switchTab('pricing',this)">Pricing</button>
       </div>
 
-      <!-- Sites Table -->
-      <div style="background:#fff;border-radius:12px;border:1px solid var(--ies-gray-200);padding:24px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-          <div style="font-weight:700;font-size:16px;color:var(--ies-navy);">Warehouse Sites</div>
-          <div style="display:flex;gap:8px;">
-            <button onclick="dealApp.showAddSiteModal()" style="padding:8px 16px;background:var(--ies-blue);color:#fff;border:none;border-radius:6px;font-family:Montserrat,sans-serif;font-weight:600;font-size:12px;cursor:pointer;">+ Add New Site</button>
-            <button onclick="dealApp.showLinkExistingModal()" style="padding:8px 16px;background:var(--ies-gray-200);color:var(--ies-navy);border:1px solid var(--ies-gray-300);border-radius:6px;font-family:Montserrat,sans-serif;font-weight:600;font-size:12px;cursor:pointer;">Link Existing</button>
+      <!-- Summary Tab -->
+      <div id="dealTab-summary" class="deal-tab-panel" style="display:block;">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;" id="dealSummaryMetrics"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+          <div style="background:#fff;border-radius:12px;border:1px solid var(--ies-gray-200);padding:24px;">
+            <div style="font-weight:700;font-size:15px;color:var(--ies-navy);margin-bottom:16px;">Cost Breakdown by Category</div>
+            <div id="dealSummaryCostBreakdown"></div>
+          </div>
+          <div style="background:#fff;border-radius:12px;border:1px solid var(--ies-gray-200);padding:24px;">
+            <div style="font-weight:700;font-size:15px;color:var(--ies-navy);margin-bottom:16px;">Site Comparison</div>
+            <div id="dealSummarySiteComparison" style="overflow-x:auto;"></div>
           </div>
         </div>
-        <div style="overflow-x:auto;">
-          <table style="width:100%;border-collapse:collapse;font-size:13px;" id="dealSitesTable">
-            <thead>
-              <tr style="border-bottom:2px solid var(--ies-gray-200);background:var(--ies-gray-50);">
-                <th style="padding:12px;text-align:left;font-weight:600;color:var(--ies-gray-700);">Site Name</th>
-                <th style="padding:12px;text-align:left;font-weight:600;color:var(--ies-gray-700);">Location</th>
-                <th style="padding:12px;text-align:right;font-weight:600;color:var(--ies-gray-700);">Annual Cost</th>
-                <th style="padding:12px;text-align:right;font-weight:600;color:var(--ies-gray-700);">Headcount</th>
-                <th style="padding:12px;text-align:right;font-weight:600;color:var(--ies-gray-700);">Sqft</th>
-                <th style="padding:12px;text-align:center;font-weight:600;color:var(--ies-gray-700);">Actions</th>
-              </tr>
-            </thead>
-            <tbody id="dealSitesTableBody">
-              <!-- Rows will be rendered here -->
-            </tbody>
-          </table>
+      </div>
+
+      <!-- Sites Tab -->
+      <div id="dealTab-sites" class="deal-tab-panel" style="display:none;">
+        <div style="background:#fff;border-radius:12px;border:1px solid var(--ies-gray-200);padding:24px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <div style="font-weight:700;font-size:16px;color:var(--ies-navy);">Warehouse Sites</div>
+            <div style="display:flex;gap:8px;">
+              <button onclick="dealApp.showAddSiteModal()" style="padding:8px 16px;background:var(--ies-blue);color:#fff;border:none;border-radius:6px;font-family:Montserrat,sans-serif;font-weight:600;font-size:12px;cursor:pointer;">+ Add New Site</button>
+              <button onclick="dealApp.showLinkExistingModal()" style="padding:8px 16px;background:var(--ies-gray-200);color:var(--ies-navy);border:1px solid var(--ies-gray-300);border-radius:6px;font-family:Montserrat,sans-serif;font-weight:600;font-size:12px;cursor:pointer;">Link Existing</button>
+            </div>
+          </div>
+          <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:13px;" id="dealSitesTable">
+              <thead>
+                <tr style="border-bottom:2px solid var(--ies-gray-200);background:var(--ies-gray-50);">
+                  <th style="padding:12px;text-align:left;font-weight:600;color:var(--ies-gray-700);">Site Name</th>
+                  <th style="padding:12px;text-align:left;font-weight:600;color:var(--ies-gray-700);">Market</th>
+                  <th style="padding:12px;text-align:left;font-weight:600;color:var(--ies-gray-700);">Environment</th>
+                  <th style="padding:12px;text-align:right;font-weight:600;color:var(--ies-gray-700);">Sqft</th>
+                  <th style="padding:12px;text-align:right;font-weight:600;color:var(--ies-gray-700);">Annual Cost</th>
+                  <th style="padding:12px;text-align:right;font-weight:600;color:var(--ies-gray-700);">Target Margin</th>
+                  <th style="padding:12px;text-align:center;font-weight:600;color:var(--ies-gray-700);">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="dealSitesTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Financials Tab -->
+      <div id="dealTab-financials" class="deal-tab-panel" style="display:none;">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;" id="dealFinancialMetrics"></div>
+        <div style="background:#fff;border-radius:12px;border:1px solid var(--ies-gray-200);padding:24px;margin-bottom:20px;">
+          <div style="font-weight:700;font-size:15px;color:var(--ies-navy);margin-bottom:16px;">Combined P&L by Site</div>
+          <div id="dealFinancialTable" style="overflow-x:auto;"></div>
+        </div>
+        <div style="background:#fff;border-radius:12px;border:1px solid var(--ies-gray-200);padding:24px;">
+          <div style="font-weight:700;font-size:15px;color:var(--ies-navy);margin-bottom:16px;">Labor Detail Across Sites</div>
+          <div id="dealLaborDetail" style="overflow-x:auto;"></div>
+        </div>
+      </div>
+
+      <!-- Pricing Tab -->
+      <div id="dealTab-pricing" class="deal-tab-panel" style="display:none;">
+        <div style="background:#fff;border-radius:12px;border:1px solid var(--ies-gray-200);padding:24px;margin-bottom:20px;">
+          <div style="font-weight:700;font-size:15px;color:var(--ies-navy);margin-bottom:16px;">Pricing Schedule by Site</div>
+          <div id="dealPricingTable" style="overflow-x:auto;"></div>
+        </div>
+        <div style="background:#fff;border-radius:12px;border:1px solid var(--ies-gray-200);padding:24px;">
+          <div style="font-weight:700;font-size:15px;color:var(--ies-navy);margin-bottom:16px;">Deal-Level Pricing Summary</div>
+          <div id="dealPricingSummary"></div>
         </div>
       </div>
     </div>
@@ -15017,7 +15056,7 @@ async function cmCombineModels(dragId, dropId, existingDealId) {
   cmShowCombineModal(dragId, dropId);
 }
 
-function cmShowCombineModal(modelAId, modelBId) {
+async function cmShowCombineModal(modelAId, modelBId) {
   // Get model names from the cards
   var nameA = ''; var nameB = '';
   document.querySelectorAll('#projectsList .dt-landing-card[draggable=true]').forEach(function(c) {
@@ -15026,6 +15065,19 @@ function cmShowCombineModal(modelAId, modelBId) {
     if (id === modelAId && nameEl) nameA = nameEl.textContent;
     if (id === modelBId && nameEl) nameB = nameEl.textContent;
   });
+
+  // Fetch existing client names for datalist
+  var clientOptions = '';
+  try {
+    var existingDeals = await cmFetchTable('deal_deals', 'order=client_name.asc');
+    var seenClients = {};
+    existingDeals.forEach(function(d) {
+      if (d.client_name && !seenClients[d.client_name]) {
+        seenClients[d.client_name] = true;
+        clientOptions += '<option value="' + d.client_name.replace(/"/g, '&quot;') + '">';
+      }
+    });
+  } catch(e) {}
 
   var overlay = document.createElement('div');
   overlay.className = 'cm-combine-overlay';
@@ -15053,7 +15105,8 @@ function cmShowCombineModal(modelAId, modelBId) {
     '</div>' +
     '<div style="margin-bottom:20px;">' +
     '<label style="display:block;font-size:12px;font-weight:600;color:var(--ies-gray-600);text-transform:uppercase;margin-bottom:6px;">Client Name</label>' +
-    '<input type="text" id="cmCombineClientName" style="width:100%;padding:10px 12px;border:1px solid var(--ies-gray-300);border-radius:8px;font-family:Montserrat,sans-serif;font-size:14px;box-sizing:border-box;" placeholder="e.g., Acme Corporation">' +
+    '<input type="text" id="cmCombineClientName" list="cmClientDatalist" style="width:100%;padding:10px 12px;border:1px solid var(--ies-gray-300);border-radius:8px;font-family:Montserrat,sans-serif;font-size:14px;box-sizing:border-box;" placeholder="e.g., Acme Corporation">' +
+    '<datalist id="cmClientDatalist">' + clientOptions + '</datalist>' +
     '</div>' +
     '<div style="display:flex;gap:10px;justify-content:flex-end;">' +
     '<button onclick="document.getElementById(\'cmCombineOverlay\').remove()" style="padding:10px 20px;background:var(--ies-gray-100);color:var(--ies-gray-600);border:1px solid var(--ies-gray-200);border-radius:8px;font-family:Montserrat,sans-serif;font-weight:600;font-size:13px;cursor:pointer;">Cancel</button>' +
@@ -27313,104 +27366,369 @@ const dealApp = {
         document.getElementById('deal-landing').style.display = 'none';
         document.getElementById('dealDetailView').style.display = 'block';
 
-        // Populate form fields
+        // Populate header form
         document.getElementById('dealEditName').value = deal.deal_name || '';
         document.getElementById('dealEditClient').value = deal.client_name || '';
         document.getElementById('dealEditOwner').value = deal.deal_owner || '';
         document.getElementById('dealEditStatus').value = deal.status || 'Draft';
         document.getElementById('dealEditNotes').value = deal.notes || '';
 
-        // Render sites table
-        this.renderSitesTable();
+        // Populate client datalist
+        this.populateClientDatalist();
 
-        // Render aggregate financials
-        this.renderAggregateFinancials();
+        // Load summary data and show Summary tab by default
+        this.switchTab('summary', document.querySelector('#dealDetailTabs .dt-tab'));
+
+        // Also fetch detailed data for financials/pricing (child tables)
+        this.loadDealChildData();
+    },
+
+    switchTab(tabName, tabEl) {
+        // Hide all tab panels
+        document.querySelectorAll('.deal-tab-panel').forEach(p => p.style.display = 'none');
+        // Show selected
+        var panel = document.getElementById('dealTab-' + tabName);
+        if (panel) panel.style.display = 'block';
+        // Sync tab buttons
+        document.querySelectorAll('#dealDetailTabs .dt-tab').forEach(t => t.classList.remove('active'));
+        if (tabEl) tabEl.classList.add('active');
+        // Render tab content on demand
+        if (tabName === 'summary') this.renderSummaryTab();
+        if (tabName === 'sites') this.renderSitesTable();
+        if (tabName === 'financials') this.renderFinancialsTab();
+        if (tabName === 'pricing') this.renderPricingTab();
+    },
+
+    async populateClientDatalist() {
+        try {
+            var deals = await cmFetchTable('deal_deals', 'order=client_name.asc');
+            var dl = document.getElementById('dealClientDatalist');
+            if (!dl) return;
+            dl.innerHTML = '';
+            var seen = {};
+            deals.forEach(function(d) {
+                if (d.client_name && !seen[d.client_name]) {
+                    seen[d.client_name] = true;
+                    dl.innerHTML += '<option value="' + d.client_name.replace(/"/g, '&quot;') + '">';
+                }
+            });
+        } catch(e) {}
+    },
+
+    async loadDealChildData() {
+        if (!this.currentDeal || !this.currentDeal.sites) return;
+        this.siteData = {}; // { siteId: { summary, labor, equipment, overhead, vas } }
+        var siteIds = this.currentDeal.sites.map(s => s.id);
+        for (var i = 0; i < siteIds.length; i++) {
+            var sid = siteIds[i];
+            try {
+                var summary = await cmFetchTable('cost_model_summary', 'project_id=eq.' + sid + '&limit=1');
+                var labor = await cmFetchTable('cost_model_labor', 'project_id=eq.' + sid);
+                var equipment = await cmFetchTable('cost_model_equipment', 'project_id=eq.' + sid);
+                var overhead = await cmFetchTable('cost_model_overhead', 'project_id=eq.' + sid);
+                var vas = await cmFetchTable('cost_model_vas', 'project_id=eq.' + sid);
+                this.siteData[sid] = {
+                    summary: summary[0] || {},
+                    labor: labor,
+                    equipment: equipment,
+                    overhead: overhead,
+                    vas: vas
+                };
+            } catch(e) {
+                this.siteData[sid] = { summary: {}, labor: [], equipment: [], overhead: [], vas: [] };
+            }
+        }
+    },
+
+    renderSummaryTab() {
+        var sites = this.currentDeal.sites || [];
+        var totalCost = 0, totalSqft = 0, totalMargin = 0, marginCount = 0, totalStartup = 0;
+        var laborTotal = 0, facilityTotal = 0, equipTotal = 0, overheadTotal = 0, vasTotal = 0;
+
+        sites.forEach(function(s) {
+            totalCost += parseFloat(s.total_annual_cost) || 0;
+            totalSqft += parseFloat(s.facility_sqft) || 0;
+            totalStartup += parseFloat(s.startup_cost) || 0;
+            if (s.target_margin_pct) { totalMargin += parseFloat(s.target_margin_pct); marginCount++; }
+        });
+
+        // Use siteData for cost breakdown if available
+        var self = this;
+        if (this.siteData) {
+            sites.forEach(function(s) {
+                var d = self.siteData[s.id];
+                if (d && d.summary) {
+                    laborTotal += parseFloat(d.summary.total_labor_cost) || 0;
+                    facilityTotal += parseFloat(d.summary.total_facility_cost) || 0;
+                    equipTotal += parseFloat(d.summary.total_equipment_cost) || 0;
+                    overheadTotal += parseFloat(d.summary.total_overhead_cost) || 0;
+                    vasTotal += parseFloat(d.summary.total_vas_cost) || 0;
+                }
+            });
+        }
+
+        var avgMargin = marginCount > 0 ? (totalMargin / marginCount) : 0;
+        var revenueNeeded = avgMargin > 0 ? totalCost / (1 - avgMargin / 100) : totalCost;
+
+        // KPI Cards
+        var metricsEl = document.getElementById('dealSummaryMetrics');
+        var kpis = [
+            { label: 'Total Annual Cost', value: this.fmt.currency(totalCost), color: 'var(--ies-orange)', icon: '💰' },
+            { label: 'Sites', value: sites.length, color: 'var(--ies-blue)', icon: '🏢' },
+            { label: 'Total Square Footage', value: this.fmt.num(totalSqft, 0) + ' SF', color: 'var(--ies-blue)', icon: '📐' },
+            { label: 'Avg Target Margin', value: this.fmt.percent(avgMargin), color: 'var(--ies-green)', icon: '📈' },
+            { label: 'Est. Revenue Needed', value: this.fmt.currency(revenueNeeded), color: 'var(--ies-green)', icon: '💵' },
+            { label: 'Startup Investment', value: this.fmt.currency(totalStartup), color: 'var(--ies-orange)', icon: '🚀' },
+            { label: 'Contract Term', value: (sites[0]?.contract_term_years || '—') + ' yrs', color: 'var(--ies-navy)', icon: '📄' },
+            { label: 'Cost / Sqft', value: totalSqft > 0 ? this.fmt.currency(totalCost / totalSqft) : '—', color: 'var(--ies-navy)', icon: '📊' }
+        ];
+        metricsEl.innerHTML = kpis.map(function(k) {
+            return '<div style="background:#fff;border-radius:10px;border:1px solid var(--ies-gray-200);padding:16px 20px;border-left:4px solid ' + k.color + ';">' +
+                '<div style="font-size:11px;font-weight:600;color:var(--ies-gray-500);text-transform:uppercase;margin-bottom:6px;">' + k.label + '</div>' +
+                '<div style="font-size:20px;font-weight:700;color:var(--ies-navy);">' + k.value + '</div></div>';
+        }).join('');
+
+        // Cost breakdown bars
+        var breakdownEl = document.getElementById('dealSummaryCostBreakdown');
+        var categories = [
+            { label: 'Labor', value: laborTotal, color: '#2563eb' },
+            { label: 'Facility', value: facilityTotal, color: '#f59e0b' },
+            { label: 'Equipment', value: equipTotal, color: '#10b981' },
+            { label: 'Overhead', value: overheadTotal, color: '#8b5cf6' },
+            { label: 'VAS', value: vasTotal, color: '#ef4444' }
+        ];
+        var maxCat = Math.max.apply(null, categories.map(function(c){ return c.value; })) || 1;
+        breakdownEl.innerHTML = categories.map(function(c) {
+            var pct = (c.value / maxCat * 100).toFixed(0);
+            return '<div style="margin-bottom:14px;">' +
+                '<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:600;color:var(--ies-gray-700);margin-bottom:4px;"><span>' + c.label + '</span><span>' + self.fmt.currency(c.value) + '</span></div>' +
+                '<div style="background:var(--ies-gray-100);border-radius:6px;height:10px;overflow:hidden;"><div style="background:' + c.color + ';height:100%;width:' + pct + '%;border-radius:6px;transition:width 0.4s;"></div></div></div>';
+        }).join('');
+
+        // Site comparison mini-table
+        var compEl = document.getElementById('dealSummarySiteComparison');
+        if (sites.length === 0) {
+            compEl.innerHTML = '<div style="color:var(--ies-gray-500);font-size:13px;">No sites to compare.</div>';
+            return;
+        }
+        var compHtml = '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="border-bottom:2px solid var(--ies-gray-200);background:var(--ies-gray-50);">' +
+            '<th style="padding:10px;text-align:left;">Site</th><th style="padding:10px;text-align:right;">Annual Cost</th><th style="padding:10px;text-align:right;">Sqft</th><th style="padding:10px;text-align:right;">$/Sqft</th><th style="padding:10px;text-align:right;">Margin</th></tr></thead><tbody>';
+        sites.forEach(function(s) {
+            var cost = parseFloat(s.total_annual_cost) || 0;
+            var sqft = parseFloat(s.facility_sqft) || 0;
+            var perSqft = sqft > 0 ? cost / sqft : 0;
+            compHtml += '<tr style="border-bottom:1px solid var(--ies-gray-100);">' +
+                '<td style="padding:10px;font-weight:600;">' + (s.name || 'Untitled') + '</td>' +
+                '<td style="padding:10px;text-align:right;">' + self.fmt.currency(cost) + '</td>' +
+                '<td style="padding:10px;text-align:right;">' + self.fmt.num(sqft, 0) + '</td>' +
+                '<td style="padding:10px;text-align:right;">' + self.fmt.currency(perSqft) + '</td>' +
+                '<td style="padding:10px;text-align:right;">' + (s.target_margin_pct || '—') + '%</td></tr>';
+        });
+        compHtml += '</tbody></table>';
+        compEl.innerHTML = compHtml;
     },
 
     renderSitesTable() {
         const tbody = document.getElementById('dealSitesTableBody');
+        if (!tbody) return;
         tbody.innerHTML = '';
 
         if (!this.currentDeal.sites || this.currentDeal.sites.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--ies-gray-500);">No sites linked to this deal. Add one to get started.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" style="padding:20px;text-align:center;color:var(--ies-gray-500);">No sites linked to this deal. Add one to get started.</td></tr>';
             return;
         }
 
-        this.currentDeal.sites.forEach(site => {
-            const meta = site.metadata || {};
-            const projections = meta.projections || [];
-            const y1 = projections[0] || {};
-
-            const row = document.createElement('tr');
+        var self = this;
+        this.currentDeal.sites.forEach(function(site) {
+            var market = '—';
+            if (site.market_id && cmApp.refData && cmApp.refData.markets) {
+                var m = cmApp.refData.markets.find(function(mk){ return mk.id === site.market_id; });
+                if (m) market = m.name;
+            }
+            var row = document.createElement('tr');
             row.style.borderBottom = '1px solid var(--ies-gray-100)';
-            row.innerHTML = `
-                <td style="padding:12px;"><strong>${site.project_name || '(Untitled)'}</strong></td>
-                <td style="padding:12px;">${meta.market || '—'}</td>
-                <td style="padding:12px;text-align:right;">${dealApp.fmt.currency(y1.totalCost || 0)}</td>
-                <td style="padding:12px;text-align:right;">${dealApp.fmt.num(meta.headcount || 0, 0)}</td>
-                <td style="padding:12px;text-align:right;">${dealApp.fmt.num(meta.totalSqft || 0, 0)}</td>
-                <td style="padding:12px;text-align:center;">
-                    <button onclick="cmApp.openProject('${site.id}'); dealApp.backToDealList();" style="padding:4px 10px;background:var(--ies-blue);color:#fff;border:none;border-radius:4px;font-size:11px;cursor:pointer;margin-right:4px;font-weight:600;">Edit</button>
-                    <button onclick="dealApp.unlinkSite('${site.id}')" style="padding:4px 10px;background:var(--ies-red);color:#fff;border:none;border-radius:4px;font-size:11px;cursor:pointer;font-weight:600;">Unlink</button>
-                </td>
-            `;
+            row.innerHTML =
+                '<td style="padding:12px;"><strong>' + (site.name || '(Untitled)') + '</strong></td>' +
+                '<td style="padding:12px;">' + market + '</td>' +
+                '<td style="padding:12px;">' + (site.environment_type || '—') + '</td>' +
+                '<td style="padding:12px;text-align:right;">' + self.fmt.num(parseFloat(site.facility_sqft) || 0, 0) + '</td>' +
+                '<td style="padding:12px;text-align:right;">' + self.fmt.currency(parseFloat(site.total_annual_cost) || 0) + '</td>' +
+                '<td style="padding:12px;text-align:right;">' + (site.target_margin_pct ? site.target_margin_pct + '%' : '—') + '</td>' +
+                '<td style="padding:12px;text-align:center;">' +
+                '<button onclick="cmApp.openProject(' + site.id + '); navigate(\'costmodel\', document.querySelector(\'[data-section=costmodel]\'));" style="padding:4px 10px;background:var(--ies-blue);color:#fff;border:none;border-radius:4px;font-size:11px;cursor:pointer;margin-right:4px;font-weight:600;">Edit</button>' +
+                '<button onclick="dealApp.unlinkSite(' + site.id + ')" style="padding:4px 10px;background:#dc3545;color:#fff;border:none;border-radius:4px;font-size:11px;cursor:pointer;font-weight:600;">Unlink</button></td>';
             tbody.appendChild(row);
         });
     },
 
-    renderAggregateFinancials() {
-        const metricsContainer = document.getElementById('dealAggregateMetrics');
-        metricsContainer.innerHTML = '';
+    async renderFinancialsTab() {
+        var sites = this.currentDeal.sites || [];
+        if (!this.siteData) await this.loadDealChildData();
+        var self = this;
 
-        // Calculate aggregates
-        let totalAnnualCost = 0;
-        let totalHeadcount = 0;
-        let totalSqft = 0;
-        let totalStartupInvestment = 0;
-        let totalRevenue = 0;
-        let totalEbitda = 0;
-        let ebitdaMargin = 0;
-        let count = 0;
-
-        if (this.currentDeal.sites && this.currentDeal.sites.length > 0) {
-            this.currentDeal.sites.forEach(site => {
-                const meta = site.metadata || {};
-                const projections = meta.projections || [];
-                const y1 = projections[0] || {};
-
-                totalAnnualCost += parseFloat(y1.totalCost) || 0;
-                totalHeadcount += parseFloat(meta.headcount) || 0;
-                totalSqft += parseFloat(meta.totalSqft) || 0;
-                totalStartupInvestment += parseFloat(y1.startupCosts) || 0;
-                totalRevenue += parseFloat(y1.revenue) || 0;
-                totalEbitda += parseFloat(y1.ebitda) || 0;
-                count++;
-            });
-
-            if (totalRevenue > 0) {
-                ebitdaMargin = (totalEbitda / totalRevenue) * 100;
+        // Aggregate metrics
+        var totals = { labor: 0, facility: 0, equipment: 0, overhead: 0, vas: 0, operating: 0, revenue: 0, headcount: 0 };
+        sites.forEach(function(s) {
+            var d = self.siteData ? self.siteData[s.id] : null;
+            if (d && d.summary) {
+                totals.labor += parseFloat(d.summary.total_labor_cost) || 0;
+                totals.facility += parseFloat(d.summary.total_facility_cost) || 0;
+                totals.equipment += parseFloat(d.summary.total_equipment_cost) || 0;
+                totals.overhead += parseFloat(d.summary.total_overhead_cost) || 0;
+                totals.vas += parseFloat(d.summary.total_vas_cost) || 0;
+                totals.operating += parseFloat(d.summary.total_operating_cost) || 0;
+                totals.revenue += parseFloat(d.summary.total_revenue_needed) || 0;
+                totals.headcount += parseFloat(d.summary.total_headcount) || 0;
             }
+        });
+
+        // KPI cards
+        var fmEl = document.getElementById('dealFinancialMetrics');
+        var fkpis = [
+            { label: 'Total Operating Cost', value: self.fmt.currency(totals.operating), color: 'var(--ies-orange)' },
+            { label: 'Total Revenue Needed', value: self.fmt.currency(totals.revenue), color: 'var(--ies-green)' },
+            { label: 'Total Headcount', value: self.fmt.num(totals.headcount, 0), color: 'var(--ies-blue)' },
+            { label: 'Margin Amount', value: self.fmt.currency(totals.revenue - totals.operating), color: 'var(--ies-green)' }
+        ];
+        fmEl.innerHTML = fkpis.map(function(k) {
+            return '<div style="background:#fff;border-radius:10px;border:1px solid var(--ies-gray-200);padding:16px 20px;border-left:4px solid ' + k.color + ';">' +
+                '<div style="font-size:11px;font-weight:600;color:var(--ies-gray-500);text-transform:uppercase;margin-bottom:6px;">' + k.label + '</div>' +
+                '<div style="font-size:20px;font-weight:700;color:var(--ies-navy);">' + k.value + '</div></div>';
+        }).join('');
+
+        // P&L table by site
+        var tEl = document.getElementById('dealFinancialTable');
+        var rows = ['Labor', 'Facility', 'Equipment', 'Overhead', 'VAS', 'Total Operating', 'Revenue Needed', 'Margin'];
+        var keys = ['total_labor_cost', 'total_facility_cost', 'total_equipment_cost', 'total_overhead_cost', 'total_vas_cost', 'total_operating_cost', 'total_revenue_needed'];
+
+        var html = '<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="border-bottom:2px solid var(--ies-gray-200);background:var(--ies-gray-50);">';
+        html += '<th style="padding:12px;text-align:left;font-weight:600;min-width:160px;">Category</th>';
+        sites.forEach(function(s) { html += '<th style="padding:12px;text-align:right;font-weight:600;">' + (s.name || 'Untitled') + '</th>'; });
+        html += '<th style="padding:12px;text-align:right;font-weight:700;color:var(--ies-navy);border-left:2px solid var(--ies-gray-200);">TOTAL</th></tr></thead><tbody>';
+
+        for (var r = 0; r < rows.length; r++) {
+            var isTotal = (r >= 5);
+            var rowStyle = isTotal ? 'font-weight:700;' : '';
+            if (r === 5) rowStyle += 'border-top:2px solid var(--ies-gray-300);';
+            html += '<tr style="border-bottom:1px solid var(--ies-gray-100);' + rowStyle + '">';
+            html += '<td style="padding:12px;' + rowStyle + '">' + rows[r] + '</td>';
+            var rowTotal = 0;
+            sites.forEach(function(s) {
+                var d = self.siteData ? self.siteData[s.id] : null;
+                var val = 0;
+                if (d && d.summary) {
+                    if (r < 5) { val = parseFloat(d.summary[keys[r]]) || 0; }
+                    else if (r === 5) { val = parseFloat(d.summary.total_operating_cost) || 0; }
+                    else if (r === 6) { val = parseFloat(d.summary.total_revenue_needed) || 0; }
+                    else if (r === 7) { val = (parseFloat(d.summary.total_revenue_needed) || 0) - (parseFloat(d.summary.total_operating_cost) || 0); }
+                }
+                rowTotal += val;
+                html += '<td style="padding:12px;text-align:right;' + rowStyle + '">' + self.fmt.currency(val) + '</td>';
+            });
+            html += '<td style="padding:12px;text-align:right;border-left:2px solid var(--ies-gray-200);' + rowStyle + '">' + self.fmt.currency(rowTotal) + '</td>';
+            html += '</tr>';
+        }
+        html += '</tbody></table>';
+        tEl.innerHTML = html;
+
+        // Labor detail table
+        var lEl = document.getElementById('dealLaborDetail');
+        var allLabor = [];
+        sites.forEach(function(s) {
+            var d = self.siteData ? self.siteData[s.id] : null;
+            if (d && d.labor) {
+                d.labor.forEach(function(l) { allLabor.push(Object.assign({}, l, { _siteName: s.name || 'Untitled' })); });
+            }
+        });
+        if (allLabor.length === 0) {
+            lEl.innerHTML = '<div style="color:var(--ies-gray-500);font-size:13px;padding:8px;">No labor data available. Open each site in the Cost Model to populate.</div>';
+        } else {
+            var lhtml = '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="border-bottom:2px solid var(--ies-gray-200);background:var(--ies-gray-50);">' +
+                '<th style="padding:10px;text-align:left;">Site</th><th style="padding:10px;text-align:left;">Role</th><th style="padding:10px;text-align:left;">Category</th>' +
+                '<th style="padding:10px;text-align:right;">Headcount</th><th style="padding:10px;text-align:right;">Rate/Hr</th><th style="padding:10px;text-align:right;">Annual Cost</th></tr></thead><tbody>';
+            allLabor.forEach(function(l) {
+                lhtml += '<tr style="border-bottom:1px solid var(--ies-gray-100);">' +
+                    '<td style="padding:10px;">' + l._siteName + '</td>' +
+                    '<td style="padding:10px;font-weight:600;">' + (l.role_name || '—') + '</td>' +
+                    '<td style="padding:10px;">' + (l.role_category || '—') + '</td>' +
+                    '<td style="padding:10px;text-align:right;">' + (l.headcount || '—') + '</td>' +
+                    '<td style="padding:10px;text-align:right;">' + self.fmt.currency(parseFloat(l.hourly_rate) || 0) + '</td>' +
+                    '<td style="padding:10px;text-align:right;">' + self.fmt.currency(parseFloat(l.total_annual_cost) || 0) + '</td></tr>';
+            });
+            lhtml += '</tbody></table>';
+            lEl.innerHTML = lhtml;
+        }
+    },
+
+    async renderPricingTab() {
+        var sites = this.currentDeal.sites || [];
+        var self = this;
+
+        // Build pricing schedule by site — each site has pricing_buckets JSON
+        var tEl = document.getElementById('dealPricingTable');
+
+        // Collect all unique bucket names across sites
+        var allBucketNames = [];
+        var siteBuckets = {};
+        sites.forEach(function(s) {
+            var buckets = [];
+            try { buckets = typeof s.pricing_buckets === 'string' ? JSON.parse(s.pricing_buckets) : (s.pricing_buckets || []); } catch(e) {}
+            siteBuckets[s.id] = buckets;
+            buckets.forEach(function(b) {
+                if (b.name && allBucketNames.indexOf(b.name) === -1) allBucketNames.push(b.name);
+            });
+        });
+
+        if (allBucketNames.length === 0) {
+            tEl.innerHTML = '<div style="color:var(--ies-gray-500);font-size:13px;padding:8px;">No pricing data available. Configure pricing buckets in each site\'s Cost Model.</div>';
+        } else {
+            var html = '<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="border-bottom:2px solid var(--ies-gray-200);background:var(--ies-gray-50);">';
+            html += '<th style="padding:12px;text-align:left;font-weight:600;">Pricing Bucket</th>';
+            sites.forEach(function(s) { html += '<th style="padding:12px;text-align:center;font-weight:600;" colspan="2">' + (s.name || 'Untitled') + '</th>'; });
+            html += '</tr><tr style="border-bottom:1px solid var(--ies-gray-200);background:var(--ies-gray-50);">';
+            html += '<th></th>';
+            sites.forEach(function() { html += '<th style="padding:8px;text-align:right;font-size:11px;font-weight:600;color:var(--ies-gray-500);">Type</th><th style="padding:8px;text-align:right;font-size:11px;font-weight:600;color:var(--ies-gray-500);">UOM</th>'; });
+            html += '</tr></thead><tbody>';
+
+            allBucketNames.forEach(function(name) {
+                html += '<tr style="border-bottom:1px solid var(--ies-gray-100);">';
+                html += '<td style="padding:12px;font-weight:600;">' + name + '</td>';
+                sites.forEach(function(s) {
+                    var bucket = (siteBuckets[s.id] || []).find(function(b){ return b.name === name; });
+                    if (bucket) {
+                        html += '<td style="padding:12px;text-align:right;">' + (bucket.type || '—') + '</td>';
+                        html += '<td style="padding:12px;text-align:right;">' + (bucket.uom || '—') + '</td>';
+                    } else {
+                        html += '<td style="padding:12px;text-align:right;color:var(--ies-gray-400);">—</td><td style="padding:12px;text-align:right;color:var(--ies-gray-400);">—</td>';
+                    }
+                });
+                html += '</tr>';
+            });
+            html += '</tbody></table>';
+            tEl.innerHTML = html;
         }
 
-        const metrics = [
-            { label: 'Total Annual Cost', value: this.fmt.currency(totalAnnualCost), color: 'var(--ies-orange)' },
-            { label: 'Total Headcount', value: this.fmt.num(totalHeadcount, 0), color: 'var(--ies-blue)' },
-            { label: 'Total Square Footage', value: this.fmt.num(totalSqft, 0), color: 'var(--ies-blue)' },
-            { label: 'Start-Up Investment', value: this.fmt.currency(totalStartupInvestment), color: 'var(--ies-orange)' },
-            { label: 'Total Revenue (Y1)', value: this.fmt.currency(totalRevenue), color: 'var(--ies-green)' },
-            { label: 'Total EBITDA (Y1)', value: this.fmt.currency(totalEbitda), color: 'var(--ies-green)' },
-            { label: 'EBITDA Margin', value: this.fmt.percent(ebitdaMargin), color: 'var(--ies-green)' }
-        ];
+        // Deal-level pricing summary
+        var sEl = document.getElementById('dealPricingSummary');
+        var totalCost = 0;
+        sites.forEach(function(s) { totalCost += parseFloat(s.total_annual_cost) || 0; });
+        var avgMargin = 0, mCount = 0;
+        sites.forEach(function(s) { if (s.target_margin_pct) { avgMargin += parseFloat(s.target_margin_pct); mCount++; } });
+        avgMargin = mCount > 0 ? avgMargin / mCount : 0;
+        var revenue = avgMargin > 0 ? totalCost / (1 - avgMargin / 100) : totalCost;
+        var margin = revenue - totalCost;
 
-        metrics.forEach(m => {
-            const div = document.createElement('div');
-            div.style.cssText = 'background:var(--ies-gray-50);border-radius:8px;padding:16px;border-left:4px solid ' + m.color + ';';
-            div.innerHTML = `
-                <div style="font-size:11px;font-weight:600;color:var(--ies-gray-600);text-transform:uppercase;margin-bottom:4px;">${m.label}</div>
-                <div style="font-size:16px;font-weight:700;color:var(--ies-navy);">${m.value}</div>
-            `;
-            metricsContainer.appendChild(div);
-        });
+        sEl.innerHTML =
+            '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;">' +
+            '<div style="background:var(--ies-gray-50);border-radius:8px;padding:16px;border-left:4px solid var(--ies-orange);">' +
+            '<div style="font-size:11px;font-weight:600;color:var(--ies-gray-500);text-transform:uppercase;margin-bottom:4px;">Total Cost Base</div>' +
+            '<div style="font-size:18px;font-weight:700;color:var(--ies-navy);">' + self.fmt.currency(totalCost) + '</div></div>' +
+            '<div style="background:var(--ies-gray-50);border-radius:8px;padding:16px;border-left:4px solid var(--ies-green);">' +
+            '<div style="font-size:11px;font-weight:600;color:var(--ies-gray-500);text-transform:uppercase;margin-bottom:4px;">Target Revenue</div>' +
+            '<div style="font-size:18px;font-weight:700;color:var(--ies-navy);">' + self.fmt.currency(revenue) + '</div></div>' +
+            '<div style="background:var(--ies-gray-50);border-radius:8px;padding:16px;border-left:4px solid var(--ies-green);">' +
+            '<div style="font-size:11px;font-weight:600;color:var(--ies-gray-500);text-transform:uppercase;margin-bottom:4px;">Target Margin (' + avgMargin.toFixed(1) + '%)</div>' +
+            '<div style="font-size:18px;font-weight:700;color:var(--ies-navy);">' + self.fmt.currency(margin) + '</div></div></div>';
     },
 
     async saveDealHeader() {
@@ -27445,7 +27763,7 @@ const dealApp = {
             // Remove from sites array and re-render
             this.currentDeal.sites = this.currentDeal.sites.filter(s => s.id !== siteId);
             this.renderSitesTable();
-            this.renderAggregateFinancials();
+            this.renderSummaryTab();
         } catch (error) {
             console.error('Error unlinking site:', error);
             alert('Error unlinking site');
@@ -27503,7 +27821,7 @@ const dealApp = {
             // Add to current deal
             this.currentDeal.sites.push(newProject);
             this.renderSitesTable();
-            this.renderAggregateFinancials();
+            this.renderSummaryTab();
 
             // Open the new site in cost model
             cmApp.openProject(newProject.id);
