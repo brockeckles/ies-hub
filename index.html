@@ -3444,7 +3444,6 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 <!-- ═══════════════════ SIDEBAR ═══════════════════ -->
 <nav class="sidebar">
   <div class="sidebar-section">
-    <div class="sidebar-label">Home</div>
     <a class="nav-item active" data-section="welcome" onclick="navigate('welcome', this)">
       <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" fill="none"/><polyline points="9 22 9 12 15 12 15 22" fill="none"/></svg></span> Welcome
     </a>
@@ -3472,44 +3471,35 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     </a>
   </div>
   <div class="sidebar-section">
-    <div class="sidebar-label">Strategy</div>
-    <a class="nav-item" data-section="automation" onclick="navigate('automation', this)">
-      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2a2 2 0 012 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 017 7h1a1 1 0 011 1v3a1 1 0 01-1 1h-1.27A7 7 0 015.27 19H4a1 1 0 01-1-1v-3a1 1 0 011-1h1a7 7 0 017-7h1V5.73A2 2 0 0112 2z" fill="none"/><circle cx="9" cy="14" r="1" fill="currentColor"/><circle cx="15" cy="14" r="1" fill="currentColor"/></svg></span> Automation & Tech
-    </a>
-    <a class="nav-item" data-section="verticals" onclick="navigate('verticals', this)">
-      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" fill="none"/><polyline points="3.27 6.96 12 12.01 20.73 6.96" fill="none"/><line x1="12" y1="22.08" x2="12" y2="12" fill="none"/></svg></span> Verticals
-    </a>
-  </div>
-  <div class="sidebar-section">
-    <div class="sidebar-label">Projects</div>
-    <a class="nav-item" data-section="projects" onclick="navigate('projects', this)">
-      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" fill="none"/><rect x="9" y="3" width="6" height="4" rx="1" fill="none"/><path d="M9 14l2 2 4-4" fill="none"/></svg></span> Project Management
-    </a>
-  </div>
-  <div class="sidebar-section">
-    <div class="sidebar-label">Operations</div>
-    <a class="nav-item" data-section="changemanagement" onclick="navigate('changemanagement', this)">
-      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill="none"/><path d="M13 7h-2v5.41l3.29 3.29 1.41-1.41L13 11.59z" fill="none"/><path d="M16.5 3.5l-1 1M7.5 3.5l1 1M12 6v1" fill="none"/></svg></span> Change Management
-    </a>
-    <!-- Analytics nav hidden — access via Ctrl+Shift+A -->
-  </div>
-    <div class="sidebar-section">
-    <div class="sidebar-label">Learn</div>
-    <a class="nav-item" data-section="training" onclick="navigate('training', this)">
-      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M2 5v14c0 1 1 2 2 2h16c1 0 2-1 2-2V5M2 5c0-1 1-2 2-2h16c1 0 2 1 2 2m-18 7h16" fill="none"/></svg></span> Training Wiki
-    </a>
-  </div>
-  <div class="sidebar-section">
-    <div class="sidebar-label">Tools</div>
+    <div class="sidebar-label">Solutions Design</div>
     <a class="nav-item" data-section="designtools" onclick="navigate('designtools', this)">
       <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M7 6a5 5 0 1 0 10 0 5 5 0 0 0-10 0M13 19c0-2-1.5-4-3-4s-3 2-3 4" fill="none"/><path d="M8 14l-5 5M16 6l5 5" fill="none"/></svg></span> Design Tools
     </a>
     <a class="nav-item" data-section="costmodel" onclick="navigate('costmodel', this)">
       <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6" fill="none"/></svg></span> Cost Model <span style="font-size:9px;background:var(--ies-orange);color:#fff;padding:2px 6px;border-radius:3px;margin-left:6px;font-weight:700;">BETA</span>
     </a>
+    <a class="nav-item" data-section="projects" onclick="navigate('projects', this)">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" fill="none"/><rect x="9" y="3" width="6" height="4" rx="1" fill="none"/><path d="M9 14l2 2 4-4" fill="none"/></svg></span> Project Management
+    </a>
   </div>
   <div class="sidebar-section">
-    <div class="sidebar-label">Feedback</div>
+    <div class="sidebar-label">Strategy & Ops</div>
+    <a class="nav-item" data-section="automation" onclick="navigate('automation', this)">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2a2 2 0 012 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 017 7h1a1 1 0 011 1v3a1 1 0 01-1 1h-1.27A7 7 0 015.27 19H4a1 1 0 01-1-1v-3a1 1 0 011-1h1a7 7 0 017-7h1V5.73A2 2 0 0112 2z" fill="none"/><circle cx="9" cy="14" r="1" fill="currentColor"/><circle cx="15" cy="14" r="1" fill="currentColor"/></svg></span> Automation & Tech
+    </a>
+    <a class="nav-item" data-section="verticals" onclick="navigate('verticals', this)">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" fill="none"/><polyline points="3.27 6.96 12 12.01 20.73 6.96" fill="none"/><line x1="12" y1="22.08" x2="12" y2="12" fill="none"/></svg></span> Verticals
+    </a>
+    <a class="nav-item" data-section="changemanagement" onclick="navigate('changemanagement', this)">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill="none"/><path d="M13 7h-2v5.41l3.29 3.29 1.41-1.41L13 11.59z" fill="none"/><path d="M16.5 3.5l-1 1M7.5 3.5l1 1M12 6v1" fill="none"/></svg></span> Change Management
+    </a>
+    <!-- Analytics nav hidden — access via Ctrl+Shift+A -->
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-label">Resources</div>
+    <a class="nav-item" data-section="training" onclick="navigate('training', this)">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M2 5v14c0 1 1 2 2 2h16c1 0 2-1 2-2V5M2 5c0-1 1-2 2-2h16c1 0 2 1 2 2m-18 7h16" fill="none"/></svg></span> Training Wiki
+    </a>
     <a class="nav-item" data-section="feedback" onclick="navigate('feedback', this)">
       <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2v10z" fill="none"/><path d="M8 10h.01M12 10h.01M16 10h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span> Ideas & Feedback <span id="fbNavCount" style="font-size:10px;background:var(--ies-orange);color:#fff;padding:1px 6px;border-radius:10px;margin-left:4px;font-weight:700;display:none;"></span>
     </a>
