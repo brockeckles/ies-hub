@@ -3841,6 +3841,52 @@
   }
 }
 
+/* ══ Fleet Modeler Map Styles ══ */
+.fm-map-container {
+  position: relative;
+  height: 600px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--ies-gray-200);
+  background: #fff;
+}
+
+.fm-map-legend {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  background: rgba(255,255,255,.95);
+  backdrop-filter: blur(4px);
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.15);
+  z-index: 400;
+  max-width: 240px;
+}
+
+.fm-map-legend-title {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--ies-navy);
+  margin-bottom: 8px;
+}
+
+.fm-map-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 11px;
+}
+
+.fm-map-legend-swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
 /* ══ Deal Artifacts Styles ══ */
 .da-workspace-container {
   display: flex;
@@ -4236,9 +4282,6 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     <div class="sidebar-label">Solutions Design</div>
     <a class="nav-item" data-section="deals" onclick="navigate('deals', this)">
       <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" fill="none"/><rect x="9" y="3" width="6" height="4" rx="1" fill="none"/><path d="M9 14l2 2 4-4" fill="none"/></svg></span> Deal Management
-    </a>
-    <a class="nav-item" data-section="fleet" onclick="navigate('fleet', this)">
-      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M3 9h18v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Z" fill="none"/><circle cx="7" cy="15" r="1" fill="currentColor"/><circle cx="17" cy="15" r="1" fill="currentColor"/><path d="M3 9V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2" fill="none"/></svg></span> Fleet Modeler
     </a>
     <a class="nav-item" data-section="designtools" onclick="navigate('designtools', this)">
       <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M7 6a5 5 0 1 0 10 0 5 5 0 0 0-10 0M13 19c0-2-1.5-4-3-4s-3 2-3 4" fill="none"/><path d="M8 14l-5 5M16 6l5 5" fill="none"/></svg></span> Design Tools
@@ -5335,6 +5378,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     <button class="dt-tab" onclick="showDesignTool('dt-warehouse',this)">Warehouse Sizing Calculator</button>
     <button class="dt-tab" onclick="showDesignTool('dt-network',this)">Center of Gravity</button>
     <button class="dt-tab" onclick="showDesignTool('dt-netopt',this)">Network Optimization <span style="font-size:9px;background:var(--ies-blue);color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;font-weight:700;">NEW</span></button>
+    <button class="dt-tab" onclick="showDesignTool('dt-fleet',this)">Fleet Modeler <span style="font-size:9px;background:var(--ies-orange);color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;font-weight:700;">NEW</span></button>
     <button class="dt-tab" onclick="showDesignTool('dt-costmodel',this)">Cost Model <span style="font-size:9px;background:var(--ies-orange);color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;font-weight:700;">BETA</span></button>
     <button class="dt-tab" onclick="showDesignTool('dt-deals',this)">Deal Manager <span style="font-size:9px;background:var(--ies-blue);color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;font-weight:700;">NEW</span></button>
   </div>
@@ -5386,8 +5430,19 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
           Open Cost Model <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </div>
       </div>
+      <!-- Fleet Modeler Card -->
+      <div onclick="showDesignTool('dt-fleet',document.querySelectorAll('.dt-tab')[4])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='var(--ies-orange)';this.style.boxShadow='0 4px 16px rgba(243,112,33,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
+        <div style="width:48px;height:48px;background:linear-gradient(135deg,#f59e0b,#d97706);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;">
+          <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><path d="M1 14l4-6h6l2 3h6a3 3 0 013 3v0H1z" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><circle cx="6" cy="17" r="2" stroke="#fff" stroke-width="1.5"/><circle cx="17" cy="17" r="2" stroke="#fff" stroke-width="1.5"/><path d="M8 17h7" stroke="#fff" stroke-width="1.2"/></svg>
+        </div>
+        <div style="font-weight:700;font-size:16px;color:var(--ies-navy);margin-bottom:6px;">Fleet Modeler <span style="font-size:10px;background:var(--ies-orange);color:#fff;padding:2px 6px;border-radius:3px;margin-left:6px;font-weight:700;">NEW</span></div>
+        <div style="font-size:13px;color:var(--ies-gray-600);line-height:1.5;margin-bottom:16px;">Design optimal fleet configurations with sizing, cost comparison (private vs. dedicated vs. carrier), and sensitivity analysis.</div>
+        <div style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--ies-orange);">
+          Open Fleet Modeler <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
       <!-- Deal Manager Card -->
-      <div onclick="showDesignTool('dt-deals',document.querySelectorAll('.dt-tab')[5])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='var(--ies-blue)';this.style.boxShadow='0 4px 16px rgba(0,71,171,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
+      <div onclick="showDesignTool('dt-deals',document.querySelectorAll('.dt-tab')[6])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='var(--ies-blue)';this.style.boxShadow='0 4px 16px rgba(0,71,171,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
         <div style="width:48px;height:48px;background:linear-gradient(135deg,#0ea5e9,#0284c7);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;">
           <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7a2 2 0 012-2h14a2 2 0 012 2" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 11v6M15 11v6" stroke="#fff" stroke-width="1.2" opacity=".6"/></svg>
         </div>
@@ -8209,6 +8264,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <button class="fm-tab active" onclick="fmShowTab('lanes')">Lanes</button>
       <button class="fm-tab" onclick="fmShowTab('config')">Configuration</button>
       <button class="fm-tab" onclick="fmShowTab('results')">Results</button>
+      <button class="fm-tab" onclick="fmShowTab('map')">Map</button>
       <button class="fm-tab" onclick="fmShowTab('scenarios')">Scenarios</button>
     </div>
 
@@ -8347,6 +8403,18 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div id="fm-no-results" style="background:#fff;border-radius:10px;border:1px solid var(--ies-gray-200);padding:40px;text-align:center;color:var(--ies-gray-600);">
         <div style="font-size:16px;margin-bottom:8px;">No results yet</div>
         <div style="font-size:13px;">Configure lanes and settings, then calculate fleet requirements to see results</div>
+      </div>
+    </div>
+
+    <!-- MAP TAB -->
+    <div id="fm-tab-map" class="fm-tab-content" style="display:none;">
+      <div id="fm-map-no-data" style="background:#fff;border-radius:10px;border:1px solid var(--ies-gray-200);padding:40px;text-align:center;color:var(--ies-gray-600);">
+        <div style="font-size:16px;margin-bottom:8px;">No routes to visualize</div>
+        <div style="font-size:13px;">Add lanes in the Lanes tab to see the route map</div>
+      </div>
+      <div id="fm-map-container" style="display:none;">
+        <div class="fm-map-container" id="fm-leaflet-map"></div>
+        <div class="fm-map-legend" id="fm-map-legend"></div>
       </div>
     </div>
 
@@ -13877,6 +13945,21 @@ async function daLoadArtifacts(dealId) {
       .order('created_at', {ascending: false});
 
     daData.artifacts = result.data || [];
+
+    // Enrich cost model artifacts with summary data
+    const cmArtifacts = daData.artifacts.filter(a => a.artifact_type === 'cost_model' && a.artifact_id);
+    if (cmArtifacts.length > 0) {
+      const cmIds = cmArtifacts.map(a => a.artifact_id);
+      const { data: cmDetails } = await sb.from('cost_model_projects')
+        .select('id, name, total_annual_cost, facility_sqft, environment_type, pricing_model, target_margin_pct, contract_term_years')
+        .in('id', cmIds);
+      if (cmDetails) {
+        const cmMap = {};
+        cmDetails.forEach(cm => { cmMap[String(cm.id)] = cm; });
+        cmArtifacts.forEach(a => { a._cmDetail = cmMap[String(a.artifact_id)] || null; });
+      }
+    }
+
     daRenderArtifacts();
   } catch(e) {
     console.error('Error loading artifacts:', e);
@@ -13914,7 +13997,30 @@ function daRenderArtifacts() {
     html += `<div class="da-card-meta">${typeInfo.label} • ${dateStr}</div>`;
     html += '</div></div>';
 
-    if (artifact.artifact_notes) {
+    // Show cost model summary if available
+    if (artifact._cmDetail) {
+      const cm = artifact._cmDetail;
+      html += '<div style="background:var(--ies-gray-50);border-radius:8px;padding:10px 12px;margin:8px 0;font-size:11px;line-height:1.6;">';
+      if (cm.total_annual_cost) {
+        html += `<div style="display:flex;justify-content:space-between;"><span style="color:var(--ies-gray-600);">Annual Cost</span><strong style="color:var(--ies-navy);">$${Number(cm.total_annual_cost).toLocaleString()}</strong></div>`;
+      }
+      if (cm.facility_sqft) {
+        html += `<div style="display:flex;justify-content:space-between;"><span style="color:var(--ies-gray-600);">Facility</span><span style="color:var(--ies-navy);">${Number(cm.facility_sqft).toLocaleString()} SF</span></div>`;
+      }
+      if (cm.environment_type) {
+        html += `<div style="display:flex;justify-content:space-between;"><span style="color:var(--ies-gray-600);">Type</span><span style="color:var(--ies-navy);">${cm.environment_type}</span></div>`;
+      }
+      if (cm.pricing_model) {
+        html += `<div style="display:flex;justify-content:space-between;"><span style="color:var(--ies-gray-600);">Pricing</span><span style="color:var(--ies-navy);">${cm.pricing_model}</span></div>`;
+      }
+      if (cm.target_margin_pct) {
+        html += `<div style="display:flex;justify-content:space-between;"><span style="color:var(--ies-gray-600);">Target Margin</span><span style="color:var(--ies-navy);">${cm.target_margin_pct}%</span></div>`;
+      }
+      if (cm.contract_term_years) {
+        html += `<div style="display:flex;justify-content:space-between;"><span style="color:var(--ies-gray-600);">Term</span><span style="color:var(--ies-navy);">${cm.contract_term_years} yr</span></div>`;
+      }
+      html += '</div>';
+    } else if (artifact.artifact_notes) {
       html += `<div style="font-size:12px;color:var(--ies-gray-600);line-height:1.4;">${artifact.artifact_notes}</div>`;
     }
 
@@ -13950,7 +14056,7 @@ async function daShowLinkExistingModal() {
   try {
     // Load cost models and netopt scenarios
     const [cmResult, noResult, fsResult] = await Promise.all([
-      sb.from('cost_model_projects').select('id, name, created_at').order('name'),
+      sb.from('cost_model_projects').select('id, name, created_at, total_annual_cost, facility_sqft, environment_type, pricing_model').order('name'),
       sb.from('netopt_scenarios').select('id, scenario_name, created_at').order('scenario_name'),
       sb.from('fleet_scenarios').select('id, scenario_name, created_at').order('scenario_name').then(r => r).catch(() => ({ data: [] }))
     ]);
@@ -13969,11 +14075,17 @@ async function daShowLinkExistingModal() {
       html += '<div class="da-modal-list">';
       daData.costModels.forEach(cm => {
         const dateStr = new Date(cm.created_at).toLocaleDateString();
-        html += `<div class="da-modal-item" onclick="daLinkArtifact('cost_model', '${cm.id}', '${cm.name}')">`;
+        const cmParts = [];
+        if (cm.total_annual_cost) cmParts.push('$' + Number(cm.total_annual_cost).toLocaleString() + '/yr');
+        if (cm.facility_sqft) cmParts.push(Number(cm.facility_sqft).toLocaleString() + ' SF');
+        if (cm.environment_type) cmParts.push(cm.environment_type);
+        const cmNote = cmParts.join(' · ');
+        const escapedNote = cmNote.replace(/'/g, "\\'");
+        html += `<div class="da-modal-item" onclick="daLinkArtifact('cost_model', '${cm.id}', '${cm.name}', '${escapedNote}')">`;
         html += `<div class="da-modal-item-icon" style="background:linear-gradient(135deg,#2196F3,#1976D2);">📊</div>`;
         html += '<div class="da-modal-item-info">';
         html += `<div class="da-modal-item-name">${cm.name}</div>`;
-        html += `<div class="da-modal-item-meta">Created ${dateStr}</div>`;
+        html += `<div class="da-modal-item-meta">${cmNote ? cmNote + ' • ' : ''}Created ${dateStr}</div>`;
         html += '</div></div>';
       });
       html += '</div></div>';
@@ -14027,17 +14139,19 @@ async function daShowCreateNewModal() {
   document.getElementById('da-modal-container').innerHTML = html;
 }
 
-async function daLinkArtifact(artifactType, artifactId, artifactName) {
+async function daLinkArtifact(artifactType, artifactId, artifactName, artifactNotes) {
   if (!sb || !daData.currentDealId) return;
 
   try {
-    await sb.from('deal_artifacts').insert({
+    const record = {
       deal_id: daData.currentDealId,
       artifact_type: artifactType,
       artifact_id: artifactId,
       artifact_name: artifactName,
-      created_by: 'Brock Eckles'
-    });
+      created_by: 'IES Hub'
+    };
+    if (artifactNotes) record.artifact_notes = artifactNotes;
+    await sb.from('deal_artifacts').insert(record);
 
     document.getElementById('da-modal-container').innerHTML = '';
     await daLoadArtifacts(daData.currentDealId);
@@ -14117,23 +14231,88 @@ function daPopulateDealSelectors() {
   });
 }
 
-function daLinkCostModelToDeal() {
+async function daLinkCostModelToDeal() {
   const dealId = document.getElementById('cmDealSelector')?.value;
-  if (dealId && cmApp.currentProject) {
-    // Store the deal_id on the current project for saving
-    cmApp.currentProject.deal_id = dealId;
+  if (!dealId || !cmApp.currentProject || !sb) return;
+
+  // Store the deal_id on the current project for saving
+  cmApp.currentProject.deal_id = dealId;
+
+  // Update cost_model_projects.deal_id in Supabase
+  try {
+    await sb.from('cost_model_projects').update({ deal_id: dealId }).eq('id', cmApp.currentProject.id);
+  } catch(e) { console.warn('Could not update cost_model_projects.deal_id:', e); }
+
+  // Create deal_artifacts record so it shows in the workspace
+  try {
+    // Check if already linked to avoid duplicates
+    const { data: existing } = await sb.from('deal_artifacts')
+      .select('id')
+      .eq('deal_id', dealId)
+      .eq('artifact_type', 'cost_model')
+      .eq('artifact_id', String(cmApp.currentProject.id))
+      .limit(1);
+
+    if (!existing || existing.length === 0) {
+      // Build a summary note from the cost model data
+      const proj = cmApp.currentProject;
+      const parts = [];
+      if (proj.total_annual_cost) parts.push('$' + Number(proj.total_annual_cost).toLocaleString() + '/yr');
+      if (proj.facility_sqft) parts.push(Number(proj.facility_sqft).toLocaleString() + ' SF');
+      if (proj.environment_type) parts.push(proj.environment_type);
+      if (proj.pricing_model) parts.push(proj.pricing_model + ' pricing');
+
+      await sb.from('deal_artifacts').insert({
+        deal_id: dealId,
+        artifact_type: 'cost_model',
+        artifact_id: String(cmApp.currentProject.id),
+        artifact_name: proj.name || 'Untitled Cost Model',
+        artifact_notes: parts.join(' · ') || null,
+        created_by: 'IES Hub'
+      });
+    }
     console.log('Cost model linked to deal:', dealId);
+  } catch(e) {
+    console.error('Error creating deal_artifacts record for cost model:', e);
   }
 }
 
-function daLinkNetoptToDeal() {
+async function daLinkNetoptToDeal() {
   const dealId = document.getElementById('netoptDealSelector')?.value;
-  if (dealId) {
-    // Store on netoptState for saving
-    if (typeof netoptState !== 'undefined') {
-      netoptState.linkedDealId = dealId;
+  if (!dealId || !sb) return;
+
+  if (typeof netoptState !== 'undefined') {
+    netoptState.linkedDealId = dealId;
+  }
+
+  // For NetOpt, we need a scenario ID — check if one is saved
+  const scenarioName = netoptState?.scenarioName || 'Unsaved Scenario';
+  const scenarioId = netoptState?.currentScenarioId;
+  if (!scenarioId) {
+    console.log('NetOpt scenario not saved yet — will link on save');
+    return;
+  }
+
+  try {
+    const { data: existing } = await sb.from('deal_artifacts')
+      .select('id')
+      .eq('deal_id', dealId)
+      .eq('artifact_type', 'netopt_scenario')
+      .eq('artifact_id', String(scenarioId))
+      .limit(1);
+
+    if (!existing || existing.length === 0) {
+      await sb.from('deal_artifacts').insert({
+        deal_id: dealId,
+        artifact_type: 'netopt_scenario',
+        artifact_id: String(scenarioId),
+        artifact_name: scenarioName,
+        created_by: 'IES Hub'
+      });
     }
     console.log('NetOpt scenario linked to deal:', dealId);
+  } catch(e) {
+    console.error('Error creating deal_artifacts record for netopt:', e);
   }
 }
 
@@ -14181,9 +14360,13 @@ document.addEventListener('mouseout', function(e) {
 // ═══════════ DESIGN TOOLS ═══════════
 
 function showDesignTool(panelId, tabEl) {
-  // Cost model tab redirects to dedicated section
+  // Cost model and fleet modeler redirect to their dedicated sections
   if (panelId === 'dt-costmodel') {
     navigate('costmodel', document.querySelector('[data-section=costmodel]'));
+    return;
+  }
+  if (panelId === 'dt-fleet') {
+    navigate('fleet', document.querySelector('[data-section=designtools]'));
     return;
   }
   var panels = document.querySelectorAll('.dt-panel');
@@ -21552,7 +21735,7 @@ var fbSectionNames = {
   macro: 'Macro & Trade', automation: 'Automation & Tech', verticals: 'Verticals',
   deals: 'Deal Management', changemanagement: 'Change Management',
   training: 'Training Wiki', designtools: 'Design Tools', costmodel: 'Cost Model',
-  feedback: 'Ideas & Feedback', analytics: 'Analytics'
+  fleet: 'Fleet Modeler', feedback: 'Ideas & Feedback', analytics: 'Analytics'
 };
 
 function fbOpenModal() {
@@ -26193,9 +26376,9 @@ const fmApp = {
       ? '<tr><td colspan="8" style="padding:20px;text-align:center;color:var(--ies-gray-600);">No lanes added. Click "Add Lane" or "Load Demo Data"</td></tr>'
       : this.lanes.map((lane, idx) => `
         <tr style="border-bottom:1px solid var(--ies-gray-200);">
-          <td style="padding:12px;"><input type="text" value="${lane.origin}" onchange="fmApp.lanes[${idx}].origin = this.value" style="width:100%;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;font-size:12px;" placeholder="e.g., Chicago"></td>
-          <td style="padding:12px;"><input type="text" value="${lane.destination}" onchange="fmApp.lanes[${idx}].destination = this.value" style="width:100%;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;font-size:12px;" placeholder="e.g., Atlanta"></td>
-          <td style="padding:12px;text-align:center;"><input type="number" value="${lane.weekly_shipments}" onchange="fmApp.lanes[${idx}].weekly_shipments = parseInt(this.value)" style="width:80px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;font-size:12px;" min="1"></td>
+          <td style="padding:12px;"><input type="text" value="${lane.origin}" onchange="fmApp.lanes[${idx}].origin = this.value; fmApp.updateMapIfVisible();" style="width:100%;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;font-size:12px;" placeholder="e.g., Chicago"></td>
+          <td style="padding:12px;"><input type="text" value="${lane.destination}" onchange="fmApp.lanes[${idx}].destination = this.value; fmApp.updateMapIfVisible();" style="width:100%;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;font-size:12px;" placeholder="e.g., Atlanta"></td>
+          <td style="padding:12px;text-align:center;"><input type="number" value="${lane.weekly_shipments}" onchange="fmApp.lanes[${idx}].weekly_shipments = parseInt(this.value); fmApp.updateMapIfVisible();" style="width:80px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;font-size:12px;" min="1"></td>
           <td style="padding:12px;text-align:center;"><input type="number" value="${lane.avg_weight}" onchange="fmApp.lanes[${idx}].avg_weight = parseFloat(this.value)" style="width:80px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;font-size:12px;" step="100"></td>
           <td style="padding:12px;text-align:center;"><input type="number" value="${lane.avg_cube}" onchange="fmApp.lanes[${idx}].avg_cube = parseFloat(this.value)" style="width:80px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;font-size:12px;" step="10"></td>
           <td style="padding:12px;"><select onchange="fmApp.lanes[${idx}].delivery_window = this.value" style="width:100%;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;font-size:12px;">
@@ -26205,7 +26388,7 @@ const fmApp = {
             <option ${lane.delivery_window === '3_day' ? 'selected' : ''}>3-day+</option>
           </select></td>
           <td style="padding:12px;text-align:center;color:var(--ies-gray-600);font-size:12px;">${lane.distance_miles || '—'}</td>
-          <td style="padding:12px;text-align:center;"><button onclick="fmApp.removeLane(${idx})" style="background:var(--ies-red);color:#fff;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600;">Remove</button></td>
+          <td style="padding:12px;text-align:center;"><button onclick="fmApp.removeLane(${idx}); fmApp.updateMapIfVisible();" style="background:var(--ies-red);color:#fff;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600;">Remove</button></td>
         </tr>
       `).join('');
   },
@@ -26569,6 +26752,247 @@ const fmApp = {
     toast.textContent = message;
     toast.style.display = 'block';
     setTimeout(() => { toast.style.display = 'none'; }, 3000);
+  },
+
+  // ── ROUTE VISUALIZATION MAP ──
+  cityCoordinates: {
+    'Chicago': [41.8781, -87.6298],
+    'Atlanta': [33.7490, -84.3880],
+    'Dallas': [32.7767, -96.7970],
+    'Houston': [29.7604, -95.3698],
+    'Los Angeles': [34.0522, -118.2437],
+    'Phoenix': [33.4484, -112.0742],
+    'New York': [40.7128, -74.0060],
+    'Boston': [42.3601, -71.0589],
+    'Philadelphia': [39.9526, -75.1652],
+    'Detroit': [42.3314, -83.0458],
+    'San Francisco': [37.7749, -122.4194],
+    'Seattle': [47.6062, -122.3321],
+    'Denver': [39.7392, -104.9903],
+    'Miami': [25.7617, -80.1918],
+    'Minneapolis': [44.9778, -93.2650],
+    'Charlotte': [35.2271, -80.8431],
+    'Nashville': [36.1627, -86.7816],
+    'Memphis': [35.1495, -90.0490],
+    'St. Louis': [38.6270, -90.1994],
+    'Kansas City': [39.0997, -94.5786],
+    'Indianapolis': [39.7684, -86.1581],
+    'Columbus': [39.9612, -82.9988],
+    'Portland': [45.5152, -122.6784],
+    'Las Vegas': [36.1699, -115.1398],
+    'Salt Lake City': [40.7608, -111.8910],
+    'Austin': [30.2672, -97.7431],
+    'San Antonio': [29.4241, -98.4936],
+    'Jacksonville': [30.3322, -81.6557],
+    'Tampa': [27.9506, -82.4572],
+    'Cleveland': [41.4993, -81.6944],
+    'Cincinnati': [39.1582, -84.4555],
+    'Pittsburgh': [40.4406, -79.9959],
+    'Milwaukee': [43.0389, -87.9065],
+    'Albuquerque': [35.0844, -106.6504],
+    'Tucson': [32.2226, -110.9747],
+    'Fresno': [36.7469, -119.7726],
+    'Sacramento': [38.5816, -121.4944],
+    'Oakland': [37.8044, -122.2712],
+    'Long Beach': [33.7701, -118.1937],
+    'San Diego': [32.7157, -117.1611],
+    'Bakersfield': [35.3733, -119.0187],
+    'Stockton': [37.9577, -121.2908],
+    'Riverside': [33.9530, -117.2822],
+    'Providence': [41.8240, -71.4128],
+    'Hartford': [41.7658, -72.6734],
+    'Buffalo': [42.8864, -78.8784],
+    'Rochester': [43.1566, -77.6088],
+    'Louisville': [38.2527, -85.7585],
+    'Lexington': [38.2009, -84.8733],
+    'New Orleans': [29.9511, -90.2623],
+    'Baton Rouge': [30.4515, -91.1871],
+  },
+
+  vehicleColors: {
+    dry_van: '#2563eb',       // blue
+    reefer: '#06b6d4',        // teal
+    flatbed: '#f97316',       // orange
+    straight_truck: '#10b981', // green
+    sprinter_van: '#8b5cf6'   // purple
+  },
+
+  renderMap() {
+    if (this.lanes.length === 0) {
+      document.getElementById('fm-map-no-data').style.display = 'block';
+      document.getElementById('fm-map-container').style.display = 'none';
+      return;
+    }
+
+    document.getElementById('fm-map-no-data').style.display = 'none';
+    document.getElementById('fm-map-container').style.display = 'block';
+
+    // Calculate bounds
+    const coords = [];
+    this.lanes.forEach(lane => {
+      const orig = this.cityCoordinates[lane.origin];
+      const dest = this.cityCoordinates[lane.destination];
+      if (orig) coords.push(orig);
+      if (dest) coords.push(dest);
+    });
+
+    if (coords.length === 0) {
+      document.getElementById('fm-map-no-data').style.display = 'block';
+      document.getElementById('fm-map-container').style.display = 'none';
+      this.showToast('No valid cities found in lanes');
+      return;
+    }
+
+    // Initialize or clear map
+    const mapDiv = document.getElementById('fm-leaflet-map');
+    if (window.fmLeafletMap) {
+      window.fmLeafletMap.remove();
+    }
+
+    // Center on first coordinate
+    const centerLat = coords.reduce((s, c) => s + c[0], 0) / coords.length;
+    const centerLng = coords.reduce((s, c) => s + c[1], 0) / coords.length;
+
+    window.fmLeafletMap = L.map('fm-leaflet-map', {
+      zoomControl: true,
+      scrollWheelZoom: true,
+      attributionControl: false
+    }).setView([centerLat, centerLng], 4);
+
+    // Add tile layer
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: ''
+    }).addTo(window.fmLeafletMap);
+
+    // Track route endpoints for clustering
+    const locations = {};
+
+    // Draw routes
+    this.lanes.forEach((lane, idx) => {
+      const orig = this.cityCoordinates[lane.origin];
+      const dest = this.cityCoordinates[lane.destination];
+
+      if (!orig || !dest) return;
+
+      // Track locations
+      if (!locations[lane.origin]) locations[lane.origin] = { name: lane.origin, inbound: 0, outbound: 0, lat: orig[0], lng: orig[1] };
+      if (!locations[lane.destination]) locations[lane.destination] = { name: lane.destination, inbound: 0, outbound: 0, lat: dest[0], lng: dest[1] };
+
+      locations[lane.origin].outbound += lane.weekly_shipments;
+      locations[lane.destination].inbound += lane.weekly_shipments;
+
+      // Determine line color based on primary vehicle type
+      const primaryVehicle = this.config.vehicles[0] || 'dry_van';
+      const color = this.vehicleColors[primaryVehicle];
+
+      // Line weight proportional to weekly shipments (5-20 pixels)
+      const maxShipments = Math.max(...this.lanes.map(l => l.weekly_shipments));
+      const minWeight = 2, maxWeight = 8;
+      const weight = minWeight + (lane.weekly_shipments / maxShipments) * (maxWeight - minWeight);
+
+      const polyline = L.polyline([orig, dest], {
+        color: color,
+        weight: weight,
+        opacity: 0.7,
+        dashArray: lane.weekly_shipments < 3 ? '5,5' : 'none'
+      }).addTo(window.fmLeafletMap);
+
+      const shipmentLabel = lane.weekly_shipments === 1 ? 'shipment' : 'shipments';
+      const vehicleType = this.vehicleSpecs[primaryVehicle]?.name || 'Vehicle';
+      polyline.bindPopup(
+        `<strong>${lane.origin} → ${lane.destination}</strong><br/>` +
+        `${lane.weekly_shipments} ${shipmentLabel}/week<br/>` +
+        `${vehicleType}<br/>` +
+        `${lane.distance_miles ? lane.distance_miles + ' mi' : 'Distance TBD'}`
+      );
+    });
+
+    // Draw location markers with clustering logic
+    Object.values(locations).forEach(loc => {
+      const totalShipments = loc.inbound + loc.outbound;
+      const radius = Math.min(15, 6 + (totalShipments / 20) * 8);
+
+      const marker = L.circleMarker([loc.lat, loc.lng], {
+        radius: radius,
+        fillColor: '#0047ab',
+        color: '#fff',
+        weight: 2,
+        opacity: 1,
+        fillOpacity: 0.8
+      }).addTo(window.fmLeafletMap);
+
+      marker.bindPopup(
+        `<strong>${loc.name}</strong><br/>` +
+        `Inbound: ${loc.inbound} shipments<br/>` +
+        `Outbound: ${loc.outbound} shipments`
+      );
+    });
+
+    // Render legend
+    this.renderMapLegend();
+
+    // Fit bounds
+    if (coords.length > 0) {
+      const bounds = L.latLngBounds(coords);
+      window.fmLeafletMap.fitBounds(bounds, { padding: [50, 50] });
+    }
+  },
+
+  renderMapLegend() {
+    const legend = document.getElementById('fm-map-legend');
+    let html = '<div class="fm-map-legend-title">Fleet Summary</div>';
+
+    const vehicleLabels = {
+      dry_van: 'Dry Van (53ft)',
+      reefer: 'Reefer (53ft)',
+      flatbed: 'Flatbed (48ft)',
+      straight_truck: 'Straight Truck (26ft)',
+      sprinter_van: 'Sprinter Van'
+    };
+
+    // Vehicle types
+    html += '<div style="margin-bottom:12px;border-bottom:1px solid rgba(0,0,0,.08);padding-bottom:8px;">';
+    this.config.vehicles.forEach(vtype => {
+      const label = vehicleLabels[vtype];
+      const color = this.vehicleColors[vtype];
+      const count = this.results?.fleetMix?.[vtype] || 0;
+      html += `
+        <div class="fm-map-legend-item">
+          <div class="fm-map-legend-swatch" style="background:${color};"></div>
+          <span>${label} ${count > 0 ? `(${count})` : ''}</span>
+        </div>
+      `;
+    });
+    html += '</div>';
+
+    // Route stats
+    const totalRoutes = this.lanes.length;
+    const totalWeeklyShipments = this.lanes.reduce((s, l) => s + l.weekly_shipments, 0);
+    const utilization = this.results?.utilization || '—';
+
+    html += `
+      <div style="font-size:11px;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+          <span>Routes:</span> <strong>${totalRoutes}</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+          <span>Weekly Ships:</span> <strong>${totalWeeklyShipments}</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;">
+          <span>Utilization:</span> <strong>${utilization}%</strong>
+        </div>
+      </div>
+    `;
+
+    legend.innerHTML = html;
+  },
+
+  updateMapIfVisible() {
+    const mapTab = document.getElementById('fm-tab-map');
+    if (mapTab && mapTab.style.display !== 'none') {
+      this.renderMap();
+    }
   }
 };
 
@@ -26580,6 +27004,12 @@ function fmShowTab(tabName) {
   if (tabEl) tabEl.style.display = 'block';
 
   event.target.classList.add('active');
+
+  // Render map when map tab is clicked
+  if (tabName === 'map') {
+    // Delay slightly to ensure container is visible
+    setTimeout(() => { fmApp.renderMap(); }, 100);
+  }
 }
 
 function fmAddLane() { fmApp.addLane(); }
