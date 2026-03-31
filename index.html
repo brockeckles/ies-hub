@@ -2508,6 +2508,171 @@
             border-color: #dc3545 !important;
         }
 
+        /* ── Deal Group Cards (stacked iOS folder style) ── */
+        .dt-deal-group {
+            position: relative;
+            cursor: pointer;
+            border-radius: 12px;
+            transition: all 0.25s;
+        }
+
+        .dt-deal-group-stack {
+            position: relative;
+            margin-bottom: 8px;
+        }
+
+        .dt-deal-group-stack::before,
+        .dt-deal-group-stack::after {
+            content: '';
+            position: absolute;
+            border-radius: 12px;
+            border: 1px solid var(--ies-gray-200);
+            background: #f8f9fb;
+        }
+
+        .dt-deal-group-stack::before {
+            top: 4px; left: 4px; right: 4px; bottom: -4px;
+            z-index: 0;
+            opacity: .6;
+        }
+
+        .dt-deal-group-stack::after {
+            top: 8px; left: 8px; right: 8px; bottom: -8px;
+            z-index: -1;
+            opacity: .3;
+        }
+
+        .dt-deal-group-card {
+            position: relative;
+            z-index: 1;
+            background: white;
+            border: 1.5px solid var(--ies-blue);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,71,171,0.08);
+        }
+
+        .dt-deal-group:hover .dt-deal-group-card {
+            border-color: var(--ies-orange);
+            box-shadow: 0 4px 16px rgba(243,112,33,0.15);
+            transform: translateY(-2px);
+        }
+
+        .dt-deal-group-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 700;
+            background: rgba(33,150,243,0.1);
+            color: var(--ies-blue);
+            margin-bottom: 10px;
+        }
+
+        .dt-deal-group-models {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 10px;
+        }
+
+        .dt-deal-group-models span {
+            padding: 3px 8px;
+            background: var(--ies-gray-50);
+            border: 1px solid var(--ies-gray-200);
+            border-radius: 6px;
+            font-size: 11px;
+            color: var(--ies-gray-700);
+            font-weight: 500;
+        }
+
+        /* ── Deal group expand view ── */
+        .dt-deal-group-expanded {
+            background: rgba(33,150,243,0.03);
+            border: 1.5px solid var(--ies-blue);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 4px;
+        }
+
+        .dt-deal-group-expanded-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(33,150,243,0.15);
+        }
+
+        .dt-deal-group-expanded-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            gap: 12px;
+        }
+
+        /* ── Drag and Drop States ── */
+        .dt-landing-card[draggable=true] {
+            cursor: grab;
+        }
+
+        .dt-landing-card[draggable=true]:active {
+            cursor: grabbing;
+        }
+
+        .dt-landing-card.cm-dragging {
+            opacity: 0.5;
+            transform: scale(0.95);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+        }
+
+        .dt-landing-card.cm-drag-over {
+            border-color: var(--ies-orange) !important;
+            box-shadow: 0 0 0 3px rgba(243,112,33,0.25), 0 8px 24px rgba(243,112,33,0.2) !important;
+            transform: scale(1.04);
+            transition: all 0.2s ease;
+        }
+
+        .dt-deal-group.cm-drag-over .dt-deal-group-card {
+            border-color: var(--ies-orange) !important;
+            box-shadow: 0 0 0 3px rgba(243,112,33,0.25), 0 8px 24px rgba(243,112,33,0.2) !important;
+            transform: scale(1.04);
+            transition: all 0.2s ease;
+        }
+
+        /* ── Combine Deal Modal ── */
+        .cm-combine-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn .2s ease;
+        }
+
+        .cm-combine-modal {
+            background: white;
+            border-radius: 16px;
+            padding: 32px;
+            width: 420px;
+            max-width: 90vw;
+            box-shadow: 0 24px 48px rgba(0,0,0,0.2);
+            animation: slideUp .25s ease;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
         .dt-empty-state {
             text-align: center;
             padding: 60px 20px;
@@ -9635,9 +9800,17 @@ function navigate(section, el) {
   document.getElementById('sec-' + section).classList.add('active');
   if (el) el.classList.add('active');
 
-  // Sync tool tabs when entering costmodel or fleet sections
+  // Sync tool tabs when entering costmodel, fleet, or returning to designtools
   if (section === 'costmodel' && typeof dtSyncActiveTab === 'function') dtSyncActiveTab('Cost Model');
   if (section === 'fleet' && typeof dtSyncActiveTab === 'function') dtSyncActiveTab('Fleet Modeler');
+  if (section === 'designtools' && typeof dtSyncActiveTab === 'function') {
+    dtSyncActiveTab('All Tools');
+    // Show the landing panel
+    var dtPanels = document.querySelectorAll('.dt-panel');
+    for (var dp = 0; dp < dtPanels.length; dp++) dtPanels[dp].style.display = 'none';
+    var dtLanding = document.getElementById('dt-landing');
+    if (dtLanding) dtLanding.style.display = 'block';
+  }
 
   // Scroll to top of content area
   window.scrollTo(0, 0);
@@ -14754,6 +14927,178 @@ document.addEventListener('mouseout', function(e) {
 });
 
 // ═══════════ DESIGN TOOLS ═══════════
+
+// ═══════════ COST MODEL DEAL GROUPING — DRAG & DROP + COMBINE ═══════════
+
+function cmToggleDealGroup(dealId) {
+  var exp = document.getElementById('cm-deal-expand-' + dealId);
+  if (!exp) return;
+  var stack = exp.previousElementSibling; // the .dt-deal-group-stack
+  if (exp.style.display === 'none') {
+    exp.style.display = 'block';
+    if (stack) stack.style.display = 'none';
+    // Re-init drag handlers inside expanded view
+    cmInitDragDrop();
+  } else {
+    exp.style.display = 'none';
+    if (stack) stack.style.display = 'block';
+  }
+}
+
+function cmInitDragDrop() {
+  var cards = document.querySelectorAll('#projectsList .dt-landing-card[draggable=true]');
+  cards.forEach(function(card) {
+    card.addEventListener('dragstart', function(e) {
+      e.dataTransfer.setData('text/plain', card.dataset.cmId);
+      card.classList.add('cm-dragging');
+      // Highlight potential drop targets
+      setTimeout(function() {
+        document.querySelectorAll('#projectsList .dt-landing-card[draggable=true], #projectsList .dt-deal-group').forEach(function(el) {
+          if (el !== card) el.style.transition = 'all 0.2s ease';
+        });
+      }, 0);
+    });
+    card.addEventListener('dragend', function() {
+      card.classList.remove('cm-dragging');
+      document.querySelectorAll('.cm-drag-over').forEach(function(el) { el.classList.remove('cm-drag-over'); });
+    });
+    card.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      if (!card.classList.contains('cm-dragging')) card.classList.add('cm-drag-over');
+    });
+    card.addEventListener('dragleave', function() {
+      card.classList.remove('cm-drag-over');
+    });
+    card.addEventListener('drop', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      card.classList.remove('cm-drag-over');
+      var dragId = parseInt(e.dataTransfer.getData('text/plain'), 10);
+      var dropId = parseInt(card.dataset.cmId, 10);
+      var dropDealId = card.dataset.dealId || null;
+      if (dragId && dropId && dragId !== dropId) {
+        cmCombineModels(dragId, dropId, dropDealId);
+      }
+    });
+  });
+}
+
+async function cmCombineModels(dragId, dropId, existingDealId) {
+  // If either model already has a deal, auto-merge into that deal
+  if (existingDealId) {
+    try {
+      await fetch(SUPABASE_URL + '/rest/v1/cost_model_projects?id=eq.' + dragId, {
+        method: 'PATCH', headers: API_HEADERS, body: JSON.stringify({ deal_id: existingDealId })
+      });
+      if (typeof netoptToast === 'function') netoptToast('Added to deal');
+      cmApp.loadProjects();
+    } catch(e) {
+      console.error('Error adding to deal:', e);
+      alert('Error adding to deal: ' + (e.message || e));
+    }
+    return;
+  }
+
+  // Check if the dragged model has a deal
+  try {
+    var dragProjects = await cmFetchTable('cost_model_projects', 'id=eq.' + dragId);
+    if (dragProjects.length > 0 && dragProjects[0].deal_id) {
+      // Auto-merge the drop model into the drag model's deal
+      await fetch(SUPABASE_URL + '/rest/v1/cost_model_projects?id=eq.' + dropId, {
+        method: 'PATCH', headers: API_HEADERS, body: JSON.stringify({ deal_id: dragProjects[0].deal_id })
+      });
+      if (typeof netoptToast === 'function') netoptToast('Added to deal');
+      cmApp.loadProjects();
+      return;
+    }
+  } catch(e) {}
+
+  // Neither has a deal — show the combine modal
+  cmShowCombineModal(dragId, dropId);
+}
+
+function cmShowCombineModal(modelAId, modelBId) {
+  // Get model names from the cards
+  var nameA = ''; var nameB = '';
+  document.querySelectorAll('#projectsList .dt-landing-card[draggable=true]').forEach(function(c) {
+    var id = parseInt(c.dataset.cmId, 10);
+    var nameEl = c.querySelector('.dt-landing-card-name');
+    if (id === modelAId && nameEl) nameA = nameEl.textContent;
+    if (id === modelBId && nameEl) nameB = nameEl.textContent;
+  });
+
+  var overlay = document.createElement('div');
+  overlay.className = 'cm-combine-overlay';
+  overlay.id = 'cmCombineOverlay';
+  overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+
+  overlay.innerHTML =
+    '<div class="cm-combine-modal">' +
+    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">' +
+    '<div style="width:44px;height:44px;background:linear-gradient(135deg,var(--ies-blue),#1e5bb8);border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">' +
+    '<svg width="22" height="22" fill="none" viewBox="0 0 24 24"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7a2 2 0 012-2h14a2 2 0 012 2" stroke="#fff" stroke-width="1.5"/><path d="M9 11v6M15 11v6" stroke="#fff" stroke-width="1.2" opacity=".6"/></svg>' +
+    '</div>' +
+    '<div><div style="font-weight:700;font-size:16px;color:var(--ies-navy);">Create Deal</div>' +
+    '<div style="font-size:12px;color:var(--ies-gray-500);">Combine cost models into a multi-site deal</div></div>' +
+    '</div>' +
+    '<div style="background:var(--ies-gray-50);border-radius:8px;padding:12px;margin-bottom:20px;font-size:12px;color:var(--ies-gray-600);">' +
+    '<div style="font-weight:600;margin-bottom:4px;">Models to combine:</div>' +
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
+    '<span style="padding:3px 8px;background:#fff;border:1px solid var(--ies-gray-200);border-radius:6px;font-weight:500;">' + (nameA || 'Model ' + modelAId) + '</span>' +
+    '<span style="padding:3px 8px;background:#fff;border:1px solid var(--ies-gray-200);border-radius:6px;font-weight:500;">' + (nameB || 'Model ' + modelBId) + '</span>' +
+    '</div></div>' +
+    '<div style="margin-bottom:14px;">' +
+    '<label style="display:block;font-size:12px;font-weight:600;color:var(--ies-gray-600);text-transform:uppercase;margin-bottom:6px;">Deal Name</label>' +
+    '<input type="text" id="cmCombineDealName" style="width:100%;padding:10px 12px;border:1px solid var(--ies-gray-300);border-radius:8px;font-family:Montserrat,sans-serif;font-size:14px;box-sizing:border-box;" placeholder="e.g., Acme Corp Multi-DC" autofocus>' +
+    '</div>' +
+    '<div style="margin-bottom:20px;">' +
+    '<label style="display:block;font-size:12px;font-weight:600;color:var(--ies-gray-600);text-transform:uppercase;margin-bottom:6px;">Client Name</label>' +
+    '<input type="text" id="cmCombineClientName" style="width:100%;padding:10px 12px;border:1px solid var(--ies-gray-300);border-radius:8px;font-family:Montserrat,sans-serif;font-size:14px;box-sizing:border-box;" placeholder="e.g., Acme Corporation">' +
+    '</div>' +
+    '<div style="display:flex;gap:10px;justify-content:flex-end;">' +
+    '<button onclick="document.getElementById(\'cmCombineOverlay\').remove()" style="padding:10px 20px;background:var(--ies-gray-100);color:var(--ies-gray-600);border:1px solid var(--ies-gray-200);border-radius:8px;font-family:Montserrat,sans-serif;font-weight:600;font-size:13px;cursor:pointer;">Cancel</button>' +
+    '<button onclick="cmFinishCombine(' + modelAId + ',' + modelBId + ')" style="padding:10px 20px;background:var(--ies-orange);color:#fff;border:none;border-radius:8px;font-family:Montserrat,sans-serif;font-weight:600;font-size:13px;cursor:pointer;">Create Deal</button>' +
+    '</div></div>';
+
+  document.body.appendChild(overlay);
+  setTimeout(function() { var inp = document.getElementById('cmCombineDealName'); if (inp) inp.focus(); }, 100);
+}
+
+async function cmFinishCombine(modelAId, modelBId) {
+  var dealName = (document.getElementById('cmCombineDealName').value || '').trim();
+  var clientName = (document.getElementById('cmCombineClientName').value || '').trim();
+  if (!dealName) { alert('Please enter a deal name'); return; }
+
+  try {
+    // Create the deal in deal_deals
+    var result = await cmApiPost('deal_deals', {
+      deal_name: dealName,
+      client_name: clientName || null,
+      deal_owner: null,
+      status: 'Draft',
+      notes: null
+    });
+    var newDealId = result[0].id;
+
+    // Link both cost models to the deal
+    await fetch(SUPABASE_URL + '/rest/v1/cost_model_projects?id=eq.' + modelAId, {
+      method: 'PATCH', headers: API_HEADERS, body: JSON.stringify({ deal_id: newDealId })
+    });
+    await fetch(SUPABASE_URL + '/rest/v1/cost_model_projects?id=eq.' + modelBId, {
+      method: 'PATCH', headers: API_HEADERS, body: JSON.stringify({ deal_id: newDealId })
+    });
+
+    // Close modal and refresh
+    var overlay = document.getElementById('cmCombineOverlay');
+    if (overlay) overlay.remove();
+
+    if (typeof netoptToast === 'function') netoptToast('Deal created');
+    cmApp.loadProjects();
+  } catch(e) {
+    console.error('Error creating deal:', e);
+    alert('Error creating deal: ' + (e.message || e));
+  }
+}
 
 // ═══════════ UNIFIED COPY & DELETE FOR ALL DESIGN TOOL LANDING CARDS ═══════════
 
@@ -22950,6 +23295,12 @@ const cmApp = {
     async loadProjects() {
         try {
             const projects = await cmFetchTable('cost_model_projects', 'limit=100');
+            // Also fetch deals for grouping
+            var deals = [];
+            try { deals = await cmFetchTable('deal_deals', 'order=deal_name.asc'); } catch(e) {}
+            var dealMap = {};
+            deals.forEach(function(d) { dealMap[d.id] = d; });
+
             const selector = document.getElementById('projectSelector');
             selector.innerHTML = '<option value="">-- New Model --</option>';
 
@@ -22960,18 +23311,110 @@ const cmApp = {
                 document.getElementById('emptyState').style.display = 'block';
             } else {
                 document.getElementById('emptyState').style.display = 'none';
+
+                // Populate project selector (all projects, flat)
                 projects.forEach(p => {
                     const opt = document.createElement('option');
                     opt.value = p.id;
                     opt.textContent = p.name;
                     selector.appendChild(opt);
+                });
 
+                // Group projects by deal_id
+                var grouped = {}; // deal_id → [projects]
+                var ungrouped = [];
+                projects.forEach(function(p) {
+                    if (p.deal_id && dealMap[p.deal_id]) {
+                        if (!grouped[p.deal_id]) grouped[p.deal_id] = [];
+                        grouped[p.deal_id].push(p);
+                    } else {
+                        ungrouped.push(p);
+                    }
+                });
+
+                // Render deal group cards first
+                var self = this;
+                Object.keys(grouped).forEach(function(dealId) {
+                    var deal = dealMap[dealId];
+                    var models = grouped[dealId];
+                    var totalCost = models.reduce(function(s,m){ return s + (parseFloat(m.total_annual_cost) || 0); }, 0);
+
+                    var groupEl = document.createElement('div');
+                    groupEl.className = 'dt-deal-group';
+                    groupEl.dataset.dealId = dealId;
+                    groupEl.setAttribute('data-cm-group', 'true');
+
+                    // Drag-over support for groups (to add models to existing deals)
+                    groupEl.addEventListener('dragover', function(e) { e.preventDefault(); this.classList.add('cm-drag-over'); });
+                    groupEl.addEventListener('dragleave', function(e) { this.classList.remove('cm-drag-over'); });
+                    groupEl.addEventListener('drop', function(e) {
+                        e.preventDefault();
+                        this.classList.remove('cm-drag-over');
+                        var dragId = parseInt(e.dataTransfer.getData('text/plain'), 10);
+                        if (dragId) cmCombineModels(dragId, null, dealId);
+                    });
+
+                    var modelPills = models.map(function(m) {
+                        return '<span>' + (m.name || 'Untitled') + '</span>';
+                    }).join('');
+
+                    groupEl.innerHTML =
+                        '<div class="dt-deal-group-stack" onclick="cmToggleDealGroup(\'' + dealId + '\')">' +
+                        '<div class="dt-deal-group-card">' +
+                        '<div class="dt-deal-group-badge"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7a2 2 0 012-2h14a2 2 0 012 2" stroke="currentColor" stroke-width="1.5"/></svg> ' + (deal.deal_name || 'Deal') + ' &middot; ' + models.length + ' models</div>' +
+                        '<div class="dt-landing-card-metric" style="font-weight:700;color:var(--ies-navy);font-size:16px;margin-bottom:6px;">$' + totalCost.toLocaleString('en-US', {maximumFractionDigits: 0}) + '/yr</div>' +
+                        '<div class="dt-landing-card-meta">' + (deal.client_name || '') + (deal.status ? ' &middot; ' + deal.status : '') + '</div>' +
+                        '<div class="dt-deal-group-models">' + modelPills + '</div>' +
+                        '</div></div>';
+
+                    // Expanded view (hidden initially)
+                    var expandEl = document.createElement('div');
+                    expandEl.id = 'cm-deal-expand-' + dealId;
+                    expandEl.className = 'dt-deal-group-expanded';
+                    expandEl.style.display = 'none';
+
+                    var expandHeader = '<div class="dt-deal-group-expanded-header">' +
+                        '<div><span style="font-weight:700;font-size:14px;color:var(--ies-navy);">' + (deal.deal_name || 'Deal') + '</span>' +
+                        '<span style="font-size:12px;color:var(--ies-gray-500);margin-left:8px;">' + models.length + ' model' + (models.length > 1 ? 's' : '') + '</span></div>' +
+                        '<div style="display:flex;gap:8px;">' +
+                        '<button onclick="navigate(\'designtools\'); setTimeout(function(){ showDesignTool(\'dt-deals\', document.querySelectorAll(\'#dt-tabs .dt-tab\')[5]); setTimeout(function(){ dealApp.openDeal(\'' + dealId + '\'); },100); },50)" style="padding:4px 12px;background:var(--ies-blue);color:#fff;border:none;border-radius:6px;font-family:Montserrat,sans-serif;font-size:11px;font-weight:600;cursor:pointer;">Open in Deal Manager</button>' +
+                        '<button onclick="cmToggleDealGroup(\'' + dealId + '\')" style="padding:4px 12px;background:var(--ies-gray-100);color:var(--ies-gray-600);border:1px solid var(--ies-gray-200);border-radius:6px;font-family:Montserrat,sans-serif;font-size:11px;font-weight:600;cursor:pointer;">Collapse</button>' +
+                        '</div></div>';
+
+                    var expandGrid = '<div class="dt-deal-group-expanded-grid">';
+                    models.forEach(function(m) {
+                        var market = (self.refData.markets.find(function(mk){ return mk.id === m.market_id; }) || {}).name || 'N/A';
+                        expandGrid += '<div class="dt-landing-card" draggable="true" data-cm-id="' + m.id + '" data-deal-id="' + dealId + '">' +
+                            '<div style="cursor:pointer;" onclick="cmApp.openProject(' + m.id + ')">' +
+                            '<div class="dt-landing-card-name">' + (m.name || 'Untitled') + '</div>' +
+                            '<div class="dt-landing-card-meta">' + market + '</div>' +
+                            '<div class="dt-landing-card-metric">$' + (m.total_annual_cost || 0).toLocaleString('en-US', {maximumFractionDigits: 0}) + '/yr</div>' +
+                            '<div class="dt-landing-card-meta">' + new Date(m.created_at).toLocaleDateString() + '</div>' +
+                            '</div>' +
+                            '<div class="dt-landing-card-actions">' +
+                            '<button class="dt-card-btn-copy" onclick="event.stopPropagation(); dtCopyScenario(\'cost_model_projects\',' + m.id + ',\'costmodel\')"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/><path d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2" stroke="currentColor" stroke-width="2"/></svg> Copy</button>' +
+                            '<button class="dt-card-btn-delete" onclick="event.stopPropagation(); dtDeleteScenario(\'cost_model_projects\',' + m.id + ',\'costmodel\')"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Delete</button>' +
+                            '</div></div>';
+                    });
+                    expandGrid += '</div>';
+                    expandEl.innerHTML = expandHeader + expandGrid;
+
+                    groupEl.appendChild(expandEl);
+                    projectsList.appendChild(groupEl);
+                });
+
+                // Render ungrouped cards (draggable)
+                ungrouped.forEach(p => {
+                    var market = (this.refData.markets.find(m => m.id === p.market_id) || {}).name || 'N/A';
                     const card = document.createElement('div');
                     card.className = 'dt-landing-card';
+                    card.setAttribute('draggable', 'true');
+                    card.dataset.cmId = p.id;
+                    card.dataset.dealId = '';
                     card.innerHTML = `
                         <div style="cursor:pointer;" onclick="cmApp.openProject(${p.id})">
-                        <div class="dt-landing-card-name">${p.name}</div>
-                        <div class="dt-landing-card-meta">${(this.refData.markets.find(m => m.id === p.market_id) || {}).name || 'N/A'}</div>
+                        <div class="dt-landing-card-name">${p.name || 'Untitled'}</div>
+                        <div class="dt-landing-card-meta">${market}</div>
                         <div class="dt-landing-card-metric">$${(p.total_annual_cost || 0).toLocaleString('en-US', {maximumFractionDigits: 0})}/yr</div>
                         <div class="dt-landing-card-meta">${new Date(p.created_at).toLocaleDateString()}</div>
                         </div>
@@ -22982,6 +23425,9 @@ const cmApp = {
                     `;
                     projectsList.appendChild(card);
                 });
+
+                // Attach drag handlers to all draggable cards
+                cmInitDragDrop();
             }
         } catch (error) {
             console.error('Error loading projects:', error);
