@@ -11934,23 +11934,23 @@ function navigateBackToDeal() {
 // ── UNIFIED SIGNAL FEED LOADER (Command Center) ──
 async function loadSignalFeed() {
   var feed = document.getElementById('signalFeed');
-  if (!feed) return;
+  if (!feed || !sb) return;
   try {
     // Load from multiple tables in parallel
     var [compRes, tariffRes, accountRes] = await Promise.all([
-      supabase.from('competitor_news').select('*').order('published_at', { ascending: false }).limit(8),
-      supabase.from('tariff_developments').select('*').order('published_date', { ascending: false }).limit(5),
-      supabase.from('account_signals').select('*').order('detected_at', { ascending: false }).limit(5)
+      sb.from('competitor_news').select('*').order('published_date', { ascending: false }).limit(8),
+      sb.from('tariff_developments').select('*').order('published_date', { ascending: false }).limit(5),
+      sb.from('account_signals').select('*').order('signal_date', { ascending: false }).limit(5)
     ]);
     var items = [];
     if (compRes.data) compRes.data.forEach(function(r) {
-      items.push({ type: 'competitor', title: r.headline || r.title, excerpt: r.summary, date: r.published_at, source: r.source, url: r.url });
+      items.push({ type: 'competitor', title: r.headline || r.title, excerpt: r.summary, date: r.published_date, source: r.source, url: r.source_url });
     });
     if (tariffRes.data) tariffRes.data.forEach(function(r) {
-      items.push({ type: 'tariff', title: r.title, excerpt: r.summary || r.description, date: r.published_date || r.effective_date, source: 'Trade Policy' });
+      items.push({ type: 'tariff', title: r.title, excerpt: r.summary, date: r.published_date || r.effective_date, source: 'Trade Policy', url: r.source_url });
     });
     if (accountRes.data) accountRes.data.forEach(function(r) {
-      items.push({ type: 'account', title: r.account_name + ': ' + (r.signal_type || 'Signal'), excerpt: r.description || r.notes, date: r.detected_at, source: r.source || 'Account Intel' });
+      items.push({ type: 'account', title: r.account_name + ': ' + (r.signal_type || 'Signal'), excerpt: r.detail, date: r.signal_date, source: r.source || 'Account Intel', url: r.source_url });
     });
     // Sort by date descending
     items.sort(function(a, b) { return new Date(b.date || 0) - new Date(a.date || 0); });
