@@ -14177,15 +14177,20 @@ async function daRemoveArtifact(artifactId) {
 
 function daOpenArtifact(artifactType, artifactId) {
   if (artifactType === 'cost_model' && artifactId) {
-    // Open cost model in new context
+    // Navigate to Cost Model Builder section and open the specific project
     navigate('costmodel', document.querySelector('[data-section=costmodel]'));
-    setTimeout(() => { cmApp.openProject(artifactId); }, 100);
+    setTimeout(() => { cmApp.openProject(parseInt(artifactId, 10) || artifactId); }, 300);
   } else if (artifactType === 'netopt_scenario' && artifactId) {
-    // Open network optimization scenario
-    navigate('warehouse', document.querySelector('[data-section=projects]'));
-    setTimeout(() => { netoptLoadScenario(artifactId); }, 100);
+    // Navigate to Design Tools → Network Optimization tab, then load scenario
+    navigate('designtools', document.querySelector('[data-section=designtools]'));
+    setTimeout(() => {
+      showDesignTool('dt-netopt', document.querySelectorAll('.dt-tab')[3]);
+      setTimeout(() => { netoptLoadScenario(parseInt(artifactId, 10) || artifactId); }, 200);
+    }, 200);
+  } else if (artifactType === 'fleet_scenario' && artifactId) {
+    navigate('fleet', document.querySelector('[data-section=designtools]'));
   } else {
-    alert('Cannot open this artifact type');
+    alert('Cannot open this artifact type yet');
   }
 }
 
@@ -22441,9 +22446,20 @@ const cmApp = {
             activeCostModelProjectId = id;
 
             // Set deal selector if project is linked to a deal
+            // Ensure deals are loaded first (they may not be if page just loaded)
             var cmDealSel = document.getElementById('cmDealSelector');
             if (cmDealSel && p.deal_id) {
+                // If selector has no options yet, reload deals first
+                if (cmDealSel.options.length <= 1) {
+                    await daLoadDealsForSelector();
+                }
                 cmDealSel.value = String(p.deal_id);
+                // If value didn't stick (option doesn't exist), try once more after a delay
+                if (cmDealSel.value !== String(p.deal_id)) {
+                    setTimeout(function() {
+                        cmDealSel.value = String(p.deal_id);
+                    }, 500);
+                }
             } else if (cmDealSel) {
                 cmDealSel.value = '';
             }
