@@ -13,6 +13,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
 <style>
   :root {
     /* IES Brand Palette - Refined for premium SaaS */
@@ -6095,8 +6096,16 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 
             <!-- Interactive Map -->
             <div style="background:#fff;border-radius:12px;border:1px solid var(--ies-gray-200);box-shadow:var(--shadow-md);overflow:hidden;margin-bottom:20px;">
-              <div style="padding:12px 16px 8px;border-bottom:1px solid var(--ies-gray-100);">
+              <div style="padding:12px 16px 8px;border-bottom:1px solid var(--ies-gray-100);display:flex;justify-content:space-between;align-items:center;">
                 <div style="font-size:11px;font-weight:700;color:var(--ies-navy);text-transform:uppercase;letter-spacing:.6px;">Network Map</div>
+                <div style="display:flex;gap:4px;background:#f1f3f5;border-radius:6px;padding:2px;">
+                  <button id="netopt-map-mode-markers" onclick="netoptSetMapMode('markers')" style="padding:5px 12px;border:none;border-radius:5px;font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;background:var(--ies-blue);color:#fff;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-1px;margin-right:3px;"><circle cx="12" cy="10" r="3"/><path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 10-16 0c0 3 2.7 7 8 11.7z"/></svg>Markers</button>
+                  <button id="netopt-map-mode-heat" onclick="netoptSetMapMode('heat')" style="padding:5px 12px;border:none;border-radius:5px;font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;background:transparent;color:var(--ies-gray-600,#4b5563);">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-1px;margin-right:3px;"><path d="M12 2c0 6-8 8-8 14a8 8 0 0016 0c0-6-8-8-8-14z"/></svg>Heatmap</button>
+                  <button id="netopt-map-mode-both" onclick="netoptSetMapMode('both')" style="padding:5px 12px;border:none;border-radius:5px;font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;background:transparent;color:var(--ies-gray-600,#4b5563);">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-1px;margin-right:3px;"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Both</button>
+                </div>
               </div>
               <div id="netopt-map" style="height:400px;background:#f8f9fb;"></div>
             </div>
@@ -15774,7 +15783,9 @@ var netoptState = {
   mapInitialized: false,
   netoptMap: null,
   mapMarkers: [],
-  mapPolylines: []
+  mapPolylines: [],
+  heatLayer: null,
+  mapMode: 'markers' // 'markers', 'heat', 'both'
 };
 
 var netoptRateMode = 'market'; // 'market' or 'manual'
@@ -17623,6 +17634,9 @@ function netoptInitializeMap() {
 function netoptRenderMap() {
   if (!netoptState.netoptMap || !netoptState.results) return;
 
+  var mode = netoptState.mapMode || 'markers';
+  var showMarkers = (mode === 'markers' || mode === 'both');
+
   // Clear old markers
   netoptState.mapMarkers.forEach(m => m.remove());
   netoptState.mapPolylines.forEach(p => p.remove());
@@ -17631,54 +17645,130 @@ function netoptRenderMap() {
 
   var r = netoptState.results;
 
-  // Draw facilities
+  // Always draw facilities (they're the solver output — always relevant)
   r.openFacilities.forEach(f => {
     var marker = L.circleMarker([f.lat, f.lng], {
-      radius: 8,
-      fillColor: 'var(--ies-green)',
+      radius: 10,
+      fillColor: '#10b981',
       color: '#fff',
-      weight: 2,
+      weight: 2.5,
       opacity: 1,
-      fillOpacity: 0.8
+      fillOpacity: 0.9
     }).addTo(netoptState.netoptMap);
     marker.bindPopup(`<strong>${f.name}</strong><br>Open Facility`);
     netoptState.mapMarkers.push(marker);
   });
 
-  // Draw demand points and assignment lines
-  netoptState.demands.forEach(d => {
-    var marker = L.circleMarker([d.lat, d.lng], {
-      radius: 5,
-      fillColor: 'var(--ies-blue)',
-      color: '#fff',
-      weight: 1.5,
-      opacity: 1,
-      fillOpacity: 0.7
-    }).addTo(netoptState.netoptMap);
-    marker.bindPopup(`<strong>${d.city}</strong><br>${d.volume}K units`);
-    netoptState.mapMarkers.push(marker);
-
-    // Find assigned facility
-    if (r.openFacilities.length > 0) {
-      var closest = r.openFacilities[0];
-      var minDist = roadDist(d.lat, d.lng, closest.lat, closest.lng);
-      r.openFacilities.forEach(f => {
-        var dist = roadDist(d.lat, d.lng, f.lat, f.lng);
-        if (dist < minDist) {
-          minDist = dist;
-          closest = f;
-        }
-      });
-
-      // Draw line
-      var polyline = L.polyline([[d.lat, d.lng], [closest.lat, closest.lng]], {
-        color: 'rgba(0,71,171,.3)',
+  if (showMarkers) {
+    // Draw demand points and assignment lines
+    netoptState.demands.forEach(d => {
+      if (!d.lat || !d.lng) return;
+      var marker = L.circleMarker([d.lat, d.lng], {
+        radius: 5,
+        fillColor: '#0047ab',
+        color: '#fff',
         weight: 1.5,
-        opacity: 0.6
+        opacity: 1,
+        fillOpacity: 0.7
       }).addTo(netoptState.netoptMap);
-      netoptState.mapPolylines.push(polyline);
+      marker.bindPopup(`<strong>${d.city}</strong><br>${d.volume}K units`);
+      netoptState.mapMarkers.push(marker);
+
+      // Find assigned facility
+      if (r.openFacilities.length > 0) {
+        var closest = r.openFacilities[0];
+        var minDist = roadDist(d.lat, d.lng, closest.lat, closest.lng);
+        r.openFacilities.forEach(f => {
+          var dist = roadDist(d.lat, d.lng, f.lat, f.lng);
+          if (dist < minDist) {
+            minDist = dist;
+            closest = f;
+          }
+        });
+
+        // Draw line
+        var polyline = L.polyline([[d.lat, d.lng], [closest.lat, closest.lng]], {
+          color: 'rgba(0,71,171,.3)',
+          weight: 1.5,
+          opacity: 0.6
+        }).addTo(netoptState.netoptMap);
+        netoptState.mapPolylines.push(polyline);
+      }
+    });
+  }
+
+  // Update heatmap layer
+  netoptUpdateHeatLayer();
+}
+
+// ── NETOPT HEATMAP ──
+
+function netoptSetMapMode(mode) {
+  netoptState.mapMode = mode;
+  // Update toggle button styles
+  ['markers', 'heat', 'both'].forEach(function(m) {
+    var btn = document.getElementById('netopt-map-mode-' + m);
+    if (!btn) return;
+    if (m === mode) {
+      btn.style.background = 'var(--ies-blue)';
+      btn.style.color = '#fff';
+    } else {
+      btn.style.background = 'transparent';
+      btn.style.color = 'var(--ies-gray-600,#4b5563)';
     }
   });
+  netoptRenderMap();
+}
+
+function netoptBuildHeatData() {
+  // Build [lat, lng, intensity] array from demand points
+  var heatData = [];
+  var maxVol = 1;
+  netoptState.demands.forEach(function(d) {
+    if (d.volume > maxVol) maxVol = d.volume;
+  });
+  netoptState.demands.forEach(function(d) {
+    if (!d.lat || !d.lng) return;
+    // Normalize intensity 0-1, with a floor so even small demand shows
+    var intensity = Math.max(0.15, (d.volume || 1) / maxVol);
+    heatData.push([d.lat, d.lng, intensity]);
+  });
+  return heatData;
+}
+
+function netoptUpdateHeatLayer() {
+  if (!netoptState.netoptMap) return;
+  var show = (netoptState.mapMode === 'heat' || netoptState.mapMode === 'both');
+
+  // Remove old heat layer
+  if (netoptState.heatLayer) {
+    netoptState.netoptMap.removeLayer(netoptState.heatLayer);
+    netoptState.heatLayer = null;
+  }
+
+  if (!show) return;
+
+  var heatData = netoptBuildHeatData();
+  if (heatData.length === 0) return;
+
+  // Create heat layer with tuned settings for US-scale network view
+  netoptState.heatLayer = L.heatLayer(heatData, {
+    radius: 35,
+    blur: 25,
+    maxZoom: 10,
+    max: 1.0,
+    minOpacity: 0.25,
+    gradient: {
+      0.0: '#313695',
+      0.15: '#4575b4',
+      0.3: '#74add1',
+      0.45: '#abd9e9',
+      0.55: '#fee090',
+      0.7: '#fdae61',
+      0.85: '#f46d43',
+      1.0: '#d73027'
+    }
+  }).addTo(netoptState.netoptMap);
 }
 
 // ── CHANGE MANAGEMENT MODULE ──
