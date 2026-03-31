@@ -4736,15 +4736,15 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         </div>
 
         <!-- Scenario Save/Load Bar -->
-        <div id="wsc-scenario-bar" style="padding:10px 24px;border-bottom:1px solid var(--ies-gray-100);display:none;align-items:center;gap:8px;flex-wrap:wrap;">
+        <div id="wsc-scenario-bar" style="padding:10px 24px;border-bottom:1px solid var(--ies-gray-100);display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           <select id="wsc-scenario-select" onchange="if(this.value) wscLoadScenario(this.value)" style="flex:1;min-width:140px;padding:6px 8px;border:1px solid var(--ies-gray-300);border-radius:6px;font-size:12px;background:#fff;color:var(--ies-gray-800);cursor:pointer;">
             <option value="">-- Select scenario --</option>
           </select>
-          <button class="wsc-action-btn" onclick="wscSaveScenario(activeCostModelProjectId)" title="Save scenario">
+          <button class="wsc-action-btn" onclick="wscSaveScenario(window.activeCostModelProjectId || null)" title="Save scenario">
             <svg width="13" height="13" fill="none" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="17 21 17 13 7 13 7 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7 3 7 8 15 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             Save
           </button>
-          <button class="wsc-action-btn" onclick="var name = prompt('Scenario name:'); if(name) wscSaveScenario(activeCostModelProjectId, name);" title="Save as new">
+          <button class="wsc-action-btn" onclick="var name = prompt('Scenario name:'); if(name) wscSaveScenario(window.activeCostModelProjectId || null, name);" title="Save as new">
             <svg width="13" height="13" fill="none" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             Save As
           </button>
@@ -5294,15 +5294,15 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
           </button>
         </div>
         <!-- Scenario Save/Load Bar -->
-        <div id="net-scenario-bar" style="padding:10px 20px;border-bottom:1px solid var(--ies-gray-100);display:none;align-items:center;gap:8px;flex-wrap:wrap;">
+        <div id="net-scenario-bar" style="padding:10px 20px;border-bottom:1px solid var(--ies-gray-100);display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           <select id="net-scenario-select" onchange="if(this.value) netLoadScenario(this.value)" style="flex:1;min-width:140px;padding:6px 8px;border:1px solid var(--ies-gray-300);border-radius:6px;font-size:12px;background:#fff;color:var(--ies-gray-800);cursor:pointer;">
             <option value="">-- Select scenario --</option>
           </select>
-          <button class="wsc-action-btn" onclick="netSaveScenario(activeCostModelProjectId)" title="Save scenario">
+          <button class="wsc-action-btn" onclick="netSaveScenario(window.activeCostModelProjectId || null)" title="Save scenario">
             <svg width="13" height="13" fill="none" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="17 21 17 13 7 13 7 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7 3 7 8 15 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             Save
           </button>
-          <button class="wsc-action-btn" onclick="var name = prompt('Scenario name:'); if(name) netSaveScenario(activeCostModelProjectId, name);" title="Save as new">
+          <button class="wsc-action-btn" onclick="var name = prompt('Scenario name:'); if(name) netSaveScenario(window.activeCostModelProjectId || null, name);" title="Save as new">
             <svg width="13" height="13" fill="none" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             Save As
           </button>
@@ -5440,6 +5440,28 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
             <span style="font-size:11px;opacity:.6;">mi</span>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- SCENARIO BAR -->
+    <div id="netopt-scenario-bar" style="background:#fff;border-radius:10px;border:1px solid var(--ies-gray-200);padding:10px 20px;margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <select id="netopt-scenario-select" onchange="if(this.value) netoptLoadScenario(this.value)" style="flex:1;min-width:160px;padding:6px 8px;border:1px solid var(--ies-gray-300);border-radius:6px;font-size:12px;background:#fff;color:var(--ies-gray-800);cursor:pointer;">
+        <option value="">-- Select scenario --</option>
+      </select>
+      <button class="wsc-action-btn" onclick="netoptSaveScenario(window.activeCostModelProjectId || null)" title="Save scenario">
+        <svg width="13" height="13" fill="none" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="17 21 17 13 7 13 7 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7 3 7 8 15 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Save
+      </button>
+      <button class="wsc-action-btn" onclick="var name = prompt('Scenario name:'); if(name) netoptSaveScenario(window.activeCostModelProjectId || null, name);" title="Save as new">
+        <svg width="13" height="13" fill="none" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Save As
+      </button>
+      <button class="wsc-action-btn" onclick="if(document.getElementById('netopt-scenario-select').value) netoptDeleteScenario(document.getElementById('netopt-scenario-select').value);" title="Delete scenario">
+        <svg width="13" height="13" fill="none" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="10" y1="11" x2="10" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="14" y1="11" x2="14" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Delete
+      </button>
+      <div id="netopt-project-link" style="margin-left:auto;font-size:11px;color:var(--ies-orange);font-weight:600;display:none;">
+        Linked to: <span id="netopt-project-link-name"></span>
       </div>
     </div>
 
@@ -12158,10 +12180,12 @@ function showDesignTool(panelId, tabEl) {
   if (tabEl) {
     tabEl.classList.add('active');
   }
-  // If switching to calculator, run calc
-  if (panelId === 'dt-warehouse') calcWarehouse();
-  // If switching to network tool, initialize map
-  if (panelId === 'dt-network') { setTimeout(function() { initNetworkMap(); runNetworkOptimization(); }, 100); }
+  // If switching to calculator, run calc and refresh scenarios
+  if (panelId === 'dt-warehouse') { calcWarehouse(); wscRefreshScenarioList(window.activeCostModelProjectId || null); }
+  // If switching to network tool, initialize map and refresh scenarios
+  if (panelId === 'dt-network') { setTimeout(function() { initNetworkMap(); runNetworkOptimization(); }, 100); netRefreshScenarioList(window.activeCostModelProjectId || null); }
+  // If switching to netopt, refresh scenarios
+  if (panelId === 'dt-netopt') { netoptRefreshScenarioList(window.activeCostModelProjectId || null); }
   // Scroll to top
   var main = document.querySelector('.main');
   if (main) main.scrollTop = 0;
@@ -14599,11 +14623,6 @@ function wscApplyInputs(data) {
 // Save current WSC state to Supabase
 async function wscSaveScenario(projectId, scenarioName) {
     try {
-        if (!projectId) {
-            alert('No project linked. Please open a Cost Model project first.');
-            return;
-        }
-
         var name = scenarioName || (document.getElementById('wsc-scenario-name').value || 'Untitled Scenario').trim();
         if (!name) {
             alert('Please enter a scenario name');
@@ -14613,11 +14632,11 @@ async function wscSaveScenario(projectId, scenarioName) {
         var inputs = wscCollectInputs();
 
         var payload = {
-            project_id: projectId,
             scenario_name: name,
             is_active: true,
             ...inputs
         };
+        if (projectId) payload.project_id = projectId;
 
         var resp = await cmApiPost('warehouse_sizing_scenarios', payload);
         wscActiveScenarioId = resp[0].id;
@@ -14665,10 +14684,11 @@ async function wscLoadScenario(scenarioId) {
     }
 }
 
-// List scenarios for a project
+// List scenarios for a project (or standalone if no projectId)
 async function wscListScenarios(projectId) {
     try {
-        var scenarios = await cmFetchTable('warehouse_sizing_scenarios', 'project_id=eq.' + projectId);
+        var filter = projectId ? 'project_id=eq.' + projectId : 'project_id=is.null';
+        var scenarios = await cmFetchTable('warehouse_sizing_scenarios', filter);
         return scenarios;
     } catch(error) {
         console.error('WSC list error:', error);
@@ -14686,10 +14706,8 @@ async function wscDeleteScenario(scenarioId) {
             wscActiveScenarioId = null;
         }
 
-        // Refresh list if a project is active
-        if (activeCostModelProjectId) {
-            wscRefreshScenarioList(activeCostModelProjectId);
-        }
+        // Refresh list
+        wscRefreshScenarioList(window.activeCostModelProjectId || null);
     } catch(error) {
         console.error('WSC delete error:', error);
         alert('Error deleting scenario: ' + error.message);
@@ -14717,7 +14735,7 @@ async function wscRefreshScenarioList(projectId) {
 
 // Auto-save debounced function
 function wscMarkChanged() {
-    if (!wscActiveScenarioId || !activeCostModelProjectId) return;
+    if (!wscActiveScenarioId) return;
 
     clearTimeout(wscAutoSaveTimer);
     wscAutoSaveTimer = setTimeout(function() {
@@ -14727,7 +14745,7 @@ function wscMarkChanged() {
 
 // Auto-save the current scenario
 async function wscAutoSaveCurrentScenario() {
-    if (!wscActiveScenarioId || !activeCostModelProjectId) return;
+    if (!wscActiveScenarioId) return;
 
     try {
         var inputs = wscCollectInputs();
@@ -14802,11 +14820,6 @@ function netApplyInputs(data) {
 // Save current network scenario to Supabase
 async function netSaveScenario(projectId, scenarioName) {
     try {
-        if (!projectId) {
-            alert('No project linked. Please open a Cost Model project first.');
-            return;
-        }
-
         var name = scenarioName || (document.getElementById('net-scenario-name').value || 'Untitled Network Scenario').trim();
         if (!name) {
             alert('Please enter a scenario name');
@@ -14816,11 +14829,11 @@ async function netSaveScenario(projectId, scenarioName) {
         var inputs = netCollectInputs();
 
         var payload = {
-            project_id: projectId,
             scenario_name: name,
             is_active: true,
             ...inputs
         };
+        if (projectId) payload.project_id = projectId;
 
         var resp = await cmApiPost('network_optimization_scenarios', payload);
         netActiveScenarioId = resp[0].id;
@@ -14868,10 +14881,11 @@ async function netLoadScenario(scenarioId) {
     }
 }
 
-// List scenarios for a project
+// List scenarios (standalone or project-linked)
 async function netListScenarios(projectId) {
     try {
-        var scenarios = await cmFetchTable('network_optimization_scenarios', 'project_id=eq.' + projectId);
+        var filter = projectId ? 'project_id=eq.' + projectId : 'project_id=is.null';
+        var scenarios = await cmFetchTable('network_optimization_scenarios', filter);
         return scenarios;
     } catch(error) {
         console.error('Network list error:', error);
@@ -14889,10 +14903,7 @@ async function netDeleteScenario(scenarioId) {
             netActiveScenarioId = null;
         }
 
-        // Refresh list if a project is active
-        if (activeCostModelProjectId) {
-            netRefreshScenarioList(activeCostModelProjectId);
-        }
+        netRefreshScenarioList(window.activeCostModelProjectId || null);
     } catch(error) {
         console.error('Network delete error:', error);
         alert('Error deleting scenario: ' + error.message);
@@ -14920,7 +14931,7 @@ async function netRefreshScenarioList(projectId) {
 
 // Auto-save debounced function
 function netMarkChanged() {
-    if (!netActiveScenarioId || !activeCostModelProjectId) return;
+    if (!netActiveScenarioId) return;
 
     clearTimeout(netAutoSaveTimer);
     netAutoSaveTimer = setTimeout(function() {
@@ -14930,7 +14941,7 @@ function netMarkChanged() {
 
 // Auto-save the current scenario
 async function netAutoSaveCurrentScenario() {
-    if (!netActiveScenarioId || !activeCostModelProjectId) return;
+    if (!netActiveScenarioId) return;
 
     try {
         var inputs = netCollectInputs();
@@ -14944,6 +14955,159 @@ async function netAutoSaveCurrentScenario() {
         await cmApiPatch('network_optimization_scenarios', netActiveScenarioId, payload);
     } catch(error) {
         console.error('Network auto-save error:', error);
+    }
+}
+
+// ═════════════════════════════════════════════════════════════
+// NETWORK OPTIMIZATION (ENTERPRISE) — Scenario Save/Load
+// ═════════════════════════════════════════════════════════════
+
+var netoptActiveScenarioId = null;
+
+// Collect all netopt state into a JSON-friendly object
+function netoptCollectInputs() {
+    return {
+        facilities: JSON.parse(JSON.stringify(netoptState.facilities)),
+        demands: JSON.parse(JSON.stringify(netoptState.demands)),
+        transport: JSON.parse(JSON.stringify(netoptState.transport)),
+        constraints: JSON.parse(JSON.stringify(netoptState.constraints)),
+        solver_mode: netoptState.solverMode || 'heuristic'
+    };
+}
+
+// Apply saved state back into netopt
+function netoptApplyInputs(data) {
+    if (data.facilities) { netoptState.facilities = data.facilities; netoptRenderFacilitiesTable(); }
+    if (data.demands) { netoptState.demands = data.demands; netoptRenderDemandTable(); }
+    if (data.transport) {
+        Object.assign(netoptState.transport, data.transport);
+        var tl = document.getElementById('netopt-tl-rate');
+        if (tl && data.transport.outboundPerUnitMile) {
+            var unitsPer = parseFloat(document.getElementById('netopt-units-per-tl').value) || 800;
+            tl.value = (data.transport.outboundPerUnitMile * unitsPer).toFixed(2);
+        }
+        document.getElementById('netopt-ltl-surcharge').value = data.transport.ltlSurcharge || 25;
+        document.getElementById('netopt-truck-speed').value = data.transport.truckSpeedMiPerDay || 500;
+    }
+    if (data.constraints) {
+        Object.assign(netoptState.constraints, data.constraints);
+        document.getElementById('netopt-service-target').value = data.constraints.serviceLevelPct || 95;
+        document.getElementById('netopt-service-target-val').textContent = (data.constraints.serviceLevelPct || 95) + '%';
+        document.getElementById('netopt-min-facilities').value = data.constraints.minFacilities || 1;
+        document.getElementById('netopt-max-facilities').value = data.constraints.maxFacilities || 5;
+        document.getElementById('netopt-budget-cap').value = data.constraints.budgetCap || '';
+        document.getElementById('netopt-inventory-carry').value = data.constraints.inventoryCarryPct || 15;
+    }
+    if (data.solver_mode) {
+        netoptSetSolverMode(data.solver_mode);
+    }
+    netoptRecalcUnitMileCost();
+    netoptUpdateKPI();
+}
+
+// Save netopt scenario to Supabase
+async function netoptSaveScenario(projectId, scenarioName) {
+    try {
+        var name = scenarioName || (document.getElementById('netopt-scenario-name').value || 'Network Optimization Scenario').trim();
+        if (!name) { alert('Please enter a scenario name'); return; }
+
+        var inputs = netoptCollectInputs();
+        var payload = {
+            scenario_name: name,
+            is_active: true,
+            facilities: inputs.facilities,
+            demands: inputs.demands,
+            transport: inputs.transport,
+            constraints: inputs.constraints,
+            solver_mode: inputs.solver_mode
+        };
+        if (projectId) payload.project_id = projectId;
+
+        // Save results if available
+        if (netoptState.results) {
+            payload.result_total_cost = netoptState.results.totalCost;
+            payload.result_avg_distance = netoptState.results.avgDistance;
+            payload.result_service_level = netoptState.results.serviceLevel;
+            payload.result_open_facilities = netoptState.results.openFacilities;
+        }
+
+        var resp = await cmApiPost('netopt_scenarios', payload);
+        netoptActiveScenarioId = resp[0].id;
+
+        document.getElementById('netopt-scenario-name').value = name;
+        var saveBtn = document.querySelector('#netopt-scenario-bar .wsc-action-btn:nth-child(1)');
+        if (saveBtn) {
+            var orig = saveBtn.innerHTML;
+            saveBtn.innerHTML = '<svg width="13" height="13" fill="none" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" stroke="var(--ies-green)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg> Saved!';
+            saveBtn.style.borderColor = 'var(--ies-green)';
+            saveBtn.style.color = 'var(--ies-green)';
+            setTimeout(function() { saveBtn.innerHTML = orig; saveBtn.style.borderColor = ''; saveBtn.style.color = ''; }, 2000);
+        }
+
+        netoptRefreshScenarioList(projectId);
+    } catch(error) {
+        console.error('Netopt save error:', error);
+        alert('Error saving scenario: ' + error.message);
+    }
+}
+
+// Load a netopt scenario from Supabase
+async function netoptLoadScenario(scenarioId) {
+    try {
+        var scenarios = await cmFetchTable('netopt_scenarios', 'id=eq.' + scenarioId);
+        if (scenarios.length === 0) { alert('Scenario not found'); return; }
+
+        var scenario = scenarios[0];
+        netoptActiveScenarioId = scenario.id;
+        document.getElementById('netopt-scenario-name').value = scenario.scenario_name || '';
+
+        netoptApplyInputs(scenario);
+    } catch(error) {
+        console.error('Netopt load error:', error);
+        alert('Error loading scenario: ' + error.message);
+    }
+}
+
+// List netopt scenarios
+async function netoptListScenarios(projectId) {
+    try {
+        var filter = projectId ? 'project_id=eq.' + projectId : 'project_id=is.null';
+        return await cmFetchTable('netopt_scenarios', filter);
+    } catch(error) {
+        console.error('Netopt list error:', error);
+        return [];
+    }
+}
+
+// Delete a netopt scenario
+async function netoptDeleteScenario(scenarioId) {
+    try {
+        if (!confirm('Delete this scenario?')) return;
+        await cmApiDelete('netopt_scenarios', scenarioId);
+        if (netoptActiveScenarioId === scenarioId) netoptActiveScenarioId = null;
+        netoptRefreshScenarioList(window.activeCostModelProjectId || null);
+    } catch(error) {
+        console.error('Netopt delete error:', error);
+        alert('Error deleting scenario: ' + error.message);
+    }
+}
+
+// Refresh netopt scenario dropdown
+async function netoptRefreshScenarioList(projectId) {
+    try {
+        var scenarios = await netoptListScenarios(projectId);
+        var select = document.getElementById('netopt-scenario-select');
+        if (select) {
+            select.innerHTML = '<option value="">-- Select scenario --</option>';
+            scenarios.forEach(function(s) {
+                var opt = document.createElement('option');
+                opt.value = s.id;
+                opt.textContent = s.scenario_name;
+                select.appendChild(opt);
+            });
+        }
+    } catch(error) {
+        console.error('Error refreshing netopt scenario list:', error);
     }
 }
 
@@ -18149,16 +18313,16 @@ const cmApp = {
         wscActiveScenarioId = null;
         netActiveScenarioId = null;
 
-        // Hide scenario bars and project link indicators
-        var wscBar = document.getElementById('wsc-scenario-bar');
-        var netBar = document.getElementById('net-scenario-bar');
-        if (wscBar) wscBar.style.display = 'none';
-        if (netBar) netBar.style.display = 'none';
-
+        // Hide project link indicators (bars stay visible for standalone use)
         var wscLink = document.getElementById('wsc-project-link');
         var netLink = document.getElementById('net-project-link');
         if (wscLink) wscLink.style.display = 'none';
         if (netLink) netLink.style.display = 'none';
+
+        // Refresh scenario lists to show standalone scenarios
+        wscRefreshScenarioList(null);
+        netRefreshScenarioList(null);
+        netoptRefreshScenarioList(null);
 
         this.switchSection('setup');
     },
@@ -18306,12 +18470,7 @@ const cmApp = {
             // Set active project context for scenario linking
             activeCostModelProjectId = id;
 
-            // Show scenario bars and project link indicators for WSC and Network tools
-            var wscBar = document.getElementById('wsc-scenario-bar');
-            var netBar = document.getElementById('net-scenario-bar');
-            if (wscBar) wscBar.style.display = 'flex';
-            if (netBar) netBar.style.display = 'flex';
-
+            // Show project link indicators for WSC and Network tools
             var wscLink = document.getElementById('wsc-project-link');
             var netLink = document.getElementById('net-project-link');
             if (wscLink) {
@@ -18323,9 +18482,10 @@ const cmApp = {
                 document.getElementById('net-project-link-name').textContent = p.name || 'Project';
             }
 
-            // Load existing scenarios for both tools
+            // Load existing scenarios for all tools
             wscRefreshScenarioList(id);
             netRefreshScenarioList(id);
+            netoptRefreshScenarioList(id);
 
             this.switchSection('setup');
 
