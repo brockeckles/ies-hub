@@ -14988,7 +14988,7 @@ async function cmCombineModels(dragId, dropId, existingDealId) {
   if (existingDealId) {
     try {
       await fetch(SUPABASE_URL + '/rest/v1/cost_model_projects?id=eq.' + dragId, {
-        method: 'PATCH', headers: API_HEADERS, body: JSON.stringify({ deal_id: existingDealId })
+        method: 'PATCH', headers: API_HEADERS, body: JSON.stringify({ deal_deals_id: existingDealId })
       });
       if (typeof netoptToast === 'function') netoptToast('Added to deal');
       cmApp.loadProjects();
@@ -15002,10 +15002,10 @@ async function cmCombineModels(dragId, dropId, existingDealId) {
   // Check if the dragged model has a deal
   try {
     var dragProjects = await cmFetchTable('cost_model_projects', 'id=eq.' + dragId);
-    if (dragProjects.length > 0 && dragProjects[0].deal_id) {
+    if (dragProjects.length > 0 && dragProjects[0].deal_deals_id) {
       // Auto-merge the drop model into the drag model's deal
       await fetch(SUPABASE_URL + '/rest/v1/cost_model_projects?id=eq.' + dropId, {
-        method: 'PATCH', headers: API_HEADERS, body: JSON.stringify({ deal_id: dragProjects[0].deal_id })
+        method: 'PATCH', headers: API_HEADERS, body: JSON.stringify({ deal_deals_id: dragProjects[0].deal_deals_id })
       });
       if (typeof netoptToast === 'function') netoptToast('Added to deal');
       cmApp.loadProjects();
@@ -15082,10 +15082,10 @@ async function cmFinishCombine(modelAId, modelBId) {
 
     // Link both cost models to the deal
     await fetch(SUPABASE_URL + '/rest/v1/cost_model_projects?id=eq.' + modelAId, {
-      method: 'PATCH', headers: API_HEADERS, body: JSON.stringify({ deal_id: newDealId })
+      method: 'PATCH', headers: API_HEADERS, body: JSON.stringify({ deal_deals_id: newDealId })
     });
     await fetch(SUPABASE_URL + '/rest/v1/cost_model_projects?id=eq.' + modelBId, {
-      method: 'PATCH', headers: API_HEADERS, body: JSON.stringify({ deal_id: newDealId })
+      method: 'PATCH', headers: API_HEADERS, body: JSON.stringify({ deal_deals_id: newDealId })
     });
 
     // Close modal and refresh
@@ -15175,8 +15175,9 @@ async function dtCopyScenario(table, id, toolKey) {
     }
 
     // Clear deal linkage on cost model copies so they're independent
-    if (table === 'cost_model_projects' && copy.deal_id) {
-      copy.deal_id = null;
+    if (table === 'cost_model_projects') {
+      if (copy.deal_id) copy.deal_id = null;
+      if (copy.deal_deals_id) copy.deal_deals_id = null;
     }
 
     // Insert the copy
@@ -23320,13 +23321,13 @@ const cmApp = {
                     selector.appendChild(opt);
                 });
 
-                // Group projects by deal_id
-                var grouped = {}; // deal_id → [projects]
+                // Group projects by deal_deals_id (UUID link to deal_deals)
+                var grouped = {}; // deal_deals_id → [projects]
                 var ungrouped = [];
                 projects.forEach(function(p) {
-                    if (p.deal_id && dealMap[p.deal_id]) {
-                        if (!grouped[p.deal_id]) grouped[p.deal_id] = [];
-                        grouped[p.deal_id].push(p);
+                    if (p.deal_deals_id && dealMap[p.deal_deals_id]) {
+                        if (!grouped[p.deal_deals_id]) grouped[p.deal_deals_id] = [];
+                        grouped[p.deal_deals_id].push(p);
                     } else {
                         ungrouped.push(p);
                     }
@@ -27268,7 +27269,7 @@ const dealApp = {
 
     async updateDealCardMetrics(dealId) {
         try {
-            const sites = await cmFetchTable('cost_model_projects', `deal_id=eq.${dealId}`);
+            const sites = await cmFetchTable('cost_model_projects', `deal_deals_id=eq.${dealId}`);
             const siteCount = sites.length;
             let totalCost = 0;
 
@@ -27297,7 +27298,7 @@ const dealApp = {
             this.currentDeal = deals[0];
 
             // Fetch linked sites
-            const sites = await cmFetchTable('cost_model_projects', `deal_id=eq.${dealId}`);
+            const sites = await cmFetchTable('cost_model_projects', `deal_deals_id=eq.${dealId}`);
             this.currentDeal.sites = sites;
 
             this.renderDealDetail();
@@ -27439,7 +27440,7 @@ const dealApp = {
         if (!confirm('Remove this site from the deal?')) return;
 
         try {
-            await cmApiPatch('cost_model_projects', siteId, { deal_id: null });
+            await cmApiPatch('cost_model_projects', siteId, { deal_deals_id: null });
 
             // Remove from sites array and re-render
             this.currentDeal.sites = this.currentDeal.sites.filter(s => s.id !== siteId);
@@ -27491,9 +27492,8 @@ const dealApp = {
     async createNewSiteInDeal(siteName) {
         try {
             const newSite = {
-                project_name: siteName,
-                deal_id: this.currentDeal.id,
-                metadata: {},
+                name: siteName,
+                deal_deals_id: this.currentDeal.id,
                 created_at: new Date().toISOString()
             };
 
@@ -27520,7 +27520,7 @@ const dealApp = {
     async loadUnlinkedProjects() {
         try {
             const allProjects = await cmFetchTable('cost_model_projects', 'limit=100');
-            const unlinked = allProjects.filter(p => !p.deal_id);
+            const unlinked = allProjects.filter(p => !p.deal_deals_id);
 
             if (unlinked.length === 0) {
                 alert('No unlinked cost model projects available. Create one first.');
@@ -27544,7 +27544,7 @@ const dealApp = {
 
     async linkProjectToDeal(projectId) {
         try {
-            await cmApiPatch('cost_model_projects', projectId, { deal_id: this.currentDeal.id });
+            await cmApiPatch('cost_model_projects', projectId, { deal_deals_id: this.currentDeal.id });
 
             // Reload deal
             await this.openDeal(this.currentDeal.id);
