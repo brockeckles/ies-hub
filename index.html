@@ -8874,6 +8874,10 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
           <option value="">All Assignees</option>
         </select>
         <div style="flex:1;"></div>
+        <button class="pm-btn pm-btn-sm" onclick="pmPopulateDOSActivities()" style="background:var(--ies-green,#10b981);color:#fff;border:none;border-radius:6px;font-family:Montserrat,sans-serif;font-weight:600;font-size:11px;padding:8px 14px;cursor:pointer;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px;"><path d="M12 5v14M5 12h14"/><circle cx="12" cy="12" r="10"/></svg>
+          Populate DOS Activities
+        </button>
         <button class="pm-btn pm-btn-primary pm-btn-sm" onclick="pmShowNewTask()">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Add Task
@@ -8883,7 +8887,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div id="pm-tasks-empty" class="pm-empty" style="display:none;">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg>
         <div style="font-size:14px;font-weight:600;margin-bottom:4px;">No tasks yet</div>
-        <div style="font-size:12px;">Click "Add Task" to create sub-activities for this opportunity.</div>
+        <div style="font-size:12px;">Click "Populate DOS Activities" to load standard IES activities, or "Add Task" to create custom ones.</div>
       </div>
     </div>
 
@@ -13328,6 +13332,132 @@ async function pmSaveNewTask() {
     pmOpenDetail(pmCurrentOpp.id);
     pmShowDetailTab('tasks', document.querySelectorAll('#pm-detail .pm-tab')[1]);
   } catch(e) { alert('Error creating task: ' + e.message); }
+}
+
+// DOS Stage Activity Population
+async function pmPopulateDOSActivities() {
+  if (!sb || !pmCurrentOpp) return;
+
+  // Map opportunity kanban stages to DOS stage numbers
+  var stageMap = {
+    'intake': [1],           // Pre-Sales Engagement
+    'qualification': [2],    // Deal Qualification
+    'discovery': [3],        // Kick-Off & Solution Design
+    'solutioning': [3],      // Kick-Off & Solution Design (continued)
+    'pricing': [4, 5],       // Operations Review + Executive Review
+    'proposal': [5],         // Executive Review
+    'negotiation': [5],      // Executive Review
+    'closed_won': [6],       // Delivery Handover
+    'closed_lost': []
+  };
+
+  var oppStage = (pmCurrentOpp.stage || '').toLowerCase();
+  var dosStageNums = stageMap[oppStage] || [];
+
+  // Build selection modal
+  var html = '<div class="pm-modal-overlay" onclick="if(event.target===this)this.remove()">';
+  html += '<div class="pm-modal" style="max-width:520px;">';
+  html += '<div class="pm-modal-title">Populate DOS Activities</div>';
+  html += '<div style="font-size:13px;color:var(--ies-gray-600);margin-bottom:16px;">Select which IES DOS stages to populate standard activities from. Activities will be added as tasks for this opportunity.</div>';
+  html += '<div style="font-size:12px;color:var(--ies-gray-400);margin-bottom:12px;">Current stage: <strong style="color:var(--ies-navy);">' + (pmCurrentOpp.stage || '—') + '</strong></div>';
+
+  var dosStageLabels = [
+    { num: 1, name: 'Pre-Sales Engagement', count: 4 },
+    { num: 2, name: 'Deal Qualification', count: 6 },
+    { num: 3, name: 'Kick-Off & Solution Design', count: 15 },
+    { num: 4, name: 'Operations Review', count: 2 },
+    { num: 5, name: 'Executive Review', count: 5 },
+    { num: 6, name: 'Delivery Handover', count: 6 }
+  ];
+
+  html += '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">';
+  dosStageLabels.forEach(function(s) {
+    var isRecommended = dosStageNums.indexOf(s.num) >= 0;
+    html += '<label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px solid ' + (isRecommended ? 'var(--ies-blue)' : 'var(--ies-gray-200)') + ';border-radius:6px;cursor:pointer;background:' + (isRecommended ? 'rgba(37,99,235,.04)' : '#fff') + ';">';
+    html += '<input type="checkbox" id="dos-stage-cb-' + s.num + '" value="' + s.num + '"' + (isRecommended ? ' checked' : '') + ' style="width:18px;height:18px;accent-color:var(--ies-blue);">';
+    html += '<div style="flex:1;"><div style="font-size:13px;font-weight:600;color:var(--ies-navy);">Stage ' + s.num + ': ' + s.name + '</div>';
+    html += '<div style="font-size:11px;color:var(--ies-gray-500);">' + s.count + ' standard activities' + (isRecommended ? ' — <span style="color:var(--ies-blue);font-weight:600;">Recommended for current stage</span>' : '') + '</div>';
+    html += '</div></label>';
+  });
+  html += '</div>';
+
+  html += '<div style="display:flex;gap:10px;justify-content:flex-end;">';
+  html += '<button class="pm-btn pm-btn-outline" onclick="this.closest(\'.pm-modal-overlay\').remove()">Cancel</button>';
+  html += '<button class="pm-btn pm-btn-primary" onclick="pmExecuteDOSPopulate()">Populate Activities</button>';
+  html += '</div></div></div>';
+  document.getElementById('pm-modal-container').innerHTML = html;
+}
+
+async function pmExecuteDOSPopulate() {
+  if (!sb || !pmCurrentOpp) return;
+
+  // Gather selected stage numbers
+  var selectedStages = [];
+  for (var i = 1; i <= 6; i++) {
+    var cb = document.getElementById('dos-stage-cb-' + i);
+    if (cb && cb.checked) selectedStages.push(i);
+  }
+  if (selectedStages.length === 0) { alert('Please select at least one stage.'); return; }
+
+  try {
+    // Fetch templates for selected stages
+    var stageIds = [];
+    var stagesRes = await sb.from('stages').select('id,stage_number,stage_name').in('stage_number', selectedStages).order('stage_number');
+    if (stagesRes.error) throw stagesRes.error;
+    var stages = stagesRes.data || [];
+    stageIds = stages.map(function(s){ return s.id; });
+
+    var templatesRes = await sb.from('stage_element_templates').select('*').in('stage_id', stageIds).order('sort_order');
+    if (templatesRes.error) throw templatesRes.error;
+    var templates = templatesRes.data || [];
+
+    if (templates.length === 0) { alert('No templates found for selected stages.'); return; }
+
+    // Build stage lookup
+    var stageLookup = {};
+    stages.forEach(function(s){ stageLookup[s.id] = s; });
+
+    // Get current max sort_order for this opportunity's tasks
+    var existingTasks = pmData.tasks.filter(function(t){ return t.opportunity_id == pmCurrentOpp.id; });
+    var maxSort = existingTasks.reduce(function(m,t){ return Math.max(m, t.sort_order||0); }, 0);
+
+    // Workstream labels
+    var wsLabels = {
+      'solutions': 'Solutions', 'engineering': 'Engineering', 'commercial': 'Commercial',
+      'commercial_lead': 'Commercial Lead', 'finance_pricing': 'Finance/Pricing',
+      'legal': 'Legal', 'elt': 'ELT', 'operations': 'Operations', 'shared': 'Shared'
+    };
+
+    // Build task rows
+    var rows = templates.map(function(t, idx) {
+      var stage = stageLookup[t.stage_id] || {};
+      var ws = wsLabels[t.responsible_workstream] || t.responsible_workstream || '';
+      return {
+        opportunity_id: pmCurrentOpp.id,
+        title: t.element_name,
+        description: '[Stage ' + (stage.stage_number||'?') + ': ' + (stage.stage_name||'') + '] [' + ws + '] ' + (t.description || ''),
+        assignee: null,
+        priority: 'medium',
+        status: 'todo',
+        sort_order: maxSort + idx + 1
+      };
+    });
+
+    // Insert all at once
+    var res = await sb.from('opportunity_tasks').insert(rows);
+    if (res.error) throw res.error;
+
+    // Close modal, reload
+    document.getElementById('pm-modal-container').innerHTML = '';
+    await pmLoadAll();
+    pmOpenDetail(pmCurrentOpp.id);
+    pmShowDetailTab('tasks', document.querySelectorAll('#pm-detail .pm-tab')[1]);
+
+    alert(templates.length + ' DOS activities populated successfully.');
+  } catch(e) {
+    console.error('DOS populate error:', e);
+    alert('Error populating activities: ' + e.message);
+  }
 }
 
 function pmEditTask(taskId) {
