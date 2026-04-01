@@ -9146,6 +9146,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
           <option value="order">Order</option>
         </select>
         <div style="font-size:12px;color:var(--ies-gray-400);" id="mostTemplateCount">18 templates</div>
+        <button class="hub-btn" onclick="mostApp.showEditor(null)" style="padding:6px 16px;font-size:12px;font-weight:600;background:var(--ies-orange);color:#fff;border:none;border-radius:6px;cursor:pointer;">+ New Template</button>
       </div>
 
       <!-- Template cards grid -->
@@ -9156,6 +9157,107 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     <div id="mostDetailView" style="display:none;">
       <button class="dt-landing-back-btn" onclick="mostApp.backToLibrary()" style="margin-bottom:16px;">&#8592; Back to Template Library</button>
       <div id="mostDetailContent"></div>
+    </div>
+
+    <!-- ═══ TEMPLATE EDITOR VIEW ═══ -->
+    <div id="mostEditorView" style="display:none;">
+      <button class="dt-landing-back-btn" onclick="mostApp.cancelEditor()" style="margin-bottom:16px;">&#8592; Cancel</button>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+        <div style="font-size:20px;font-weight:700;color:var(--ies-navy);" id="mostEditorTitle">New Template</div>
+        <div style="display:flex;gap:8px;">
+          <button class="hub-btn" id="mostDeleteBtn" onclick="mostApp.deleteTemplate()" style="padding:6px 16px;font-size:12px;font-weight:600;background:#fee2e2;color:#dc2626;border:1px solid #fecaca;border-radius:6px;cursor:pointer;display:none;">Delete</button>
+          <button class="hub-btn" onclick="mostApp.saveTemplate()" style="padding:6px 20px;font-size:12px;font-weight:600;background:var(--ies-orange);color:#fff;border:none;border-radius:6px;cursor:pointer;">Save Template</button>
+        </div>
+      </div>
+
+      <!-- Metadata fields -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;">
+        <div>
+          <label style="font-size:12px;font-weight:600;color:var(--ies-gray-500);display:block;margin-bottom:4px;">Activity Name <span style="color:#dc2626;">*</span></label>
+          <input type="text" id="mostEdActivity" class="cm-input" placeholder="e.g., Receive Pallet — Floor Load" style="width:100%;">
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:var(--ies-gray-500);display:block;margin-bottom:4px;">Process Area <span style="color:#dc2626;">*</span></label>
+          <select id="mostEdArea" class="cm-select" style="width:100%;">
+            <option value="">Select...</option>
+            <option value="Receiving">Receiving</option>
+            <option value="Putaway">Putaway</option>
+            <option value="Replenishment">Replenishment</option>
+            <option value="Picking">Picking</option>
+            <option value="Packing">Packing</option>
+            <option value="Shipping">Shipping</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:var(--ies-gray-500);display:block;margin-bottom:4px;">UOM <span style="color:#dc2626;">*</span></label>
+          <select id="mostEdUOM" class="cm-select" style="width:100%;">
+            <option value="each">Each</option>
+            <option value="case">Case</option>
+            <option value="pallet">Pallet</option>
+            <option value="order">Order</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:var(--ies-gray-500);display:block;margin-bottom:4px;">Equipment Type</label>
+          <input type="text" id="mostEdEquipment" class="cm-input" placeholder="e.g., Reach Truck, RF Scanner" style="width:100%;">
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:var(--ies-gray-500);display:block;margin-bottom:4px;">WMS Transaction</label>
+          <input type="text" id="mostEdWMS" class="cm-input" placeholder="e.g., RF Receiving, Pick to Tote" style="width:100%;">
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:var(--ies-gray-500);display:block;margin-bottom:4px;">Pick Method</label>
+          <input type="text" id="mostEdPickMethod" class="cm-input" placeholder="e.g., Discrete, Batch, Cluster" style="width:100%;">
+        </div>
+        <div style="grid-column:1/-1;">
+          <label style="font-size:12px;font-weight:600;color:var(--ies-gray-500);display:block;margin-bottom:4px;">Description</label>
+          <textarea id="mostEdDescription" class="cm-input" rows="2" placeholder="Brief description of this activity template..." style="width:100%;resize:vertical;font-family:inherit;"></textarea>
+        </div>
+      </div>
+
+      <!-- Computed metrics bar -->
+      <div id="mostEdMetrics" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">
+        <div style="background:var(--ies-gray-50);border-radius:10px;padding:12px;text-align:center;">
+          <div style="font-size:20px;font-weight:700;color:var(--ies-orange);" id="mostEdUPH">0.0</div>
+          <div style="font-size:11px;color:var(--ies-gray-400);">UPH</div>
+        </div>
+        <div style="background:var(--ies-gray-50);border-radius:10px;padding:12px;text-align:center;">
+          <div style="font-size:20px;font-weight:700;color:var(--ies-navy);" id="mostEdTotalTMU">0</div>
+          <div style="font-size:11px;color:var(--ies-gray-400);">Total TMU</div>
+        </div>
+        <div style="background:var(--ies-gray-50);border-radius:10px;padding:12px;text-align:center;">
+          <div style="font-size:20px;font-weight:700;color:var(--ies-navy);" id="mostEdCycleTime">0.0s</div>
+          <div style="font-size:11px;color:var(--ies-gray-400);">Cycle Time</div>
+        </div>
+        <div style="background:var(--ies-gray-50);border-radius:10px;padding:12px;text-align:center;">
+          <div style="font-size:20px;font-weight:700;color:var(--ies-navy);" id="mostEdElCount">0</div>
+          <div style="font-size:11px;color:var(--ies-gray-400);">Elements</div>
+        </div>
+      </div>
+
+      <!-- Element sequence editor -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <div style="font-size:16px;font-weight:700;color:var(--ies-navy);">MOST Element Sequence</div>
+        <button class="hub-btn" onclick="mostApp.addElementRow()" style="padding:5px 14px;font-size:12px;font-weight:600;background:var(--ies-blue);color:#fff;border:none;border-radius:6px;cursor:pointer;">+ Add Element</button>
+      </div>
+      <div style="overflow-x:auto;">
+        <table class="cm-table" style="width:100%;font-size:12px;" id="mostEdTable">
+          <thead><tr>
+            <th style="width:30px;">#</th>
+            <th style="min-width:180px;">Element Name <span style="color:#dc2626;">*</span></th>
+            <th style="min-width:150px;">MOST Sequence <span style="color:#dc2626;">*</span></th>
+            <th style="min-width:120px;">Sequence Type</th>
+            <th style="width:80px;text-align:right;">TMU <span style="color:#dc2626;">*</span></th>
+            <th style="width:60px;text-align:center;">Variable</th>
+            <th style="min-width:130px;">Driver</th>
+            <th style="min-width:130px;">Formula</th>
+            <th style="width:60px;text-align:center;">Notes</th>
+            <th style="width:80px;text-align:center;">Actions</th>
+          </tr></thead>
+          <tbody id="mostEdTableBody"></tbody>
+        </table>
+      </div>
+      <div id="mostEdValidation" style="display:none;margin-top:12px;padding:10px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;font-size:12px;color:#dc2626;"></div>
     </div>
 
     <!-- ═══ QUICK LABOR ANALYSIS VIEW (placeholder for Session 3) ═══ -->
@@ -30465,11 +30567,13 @@ const mostApp = {
     this.currentMode = mode;
     var libView = document.getElementById('mostLibraryView');
     var detView = document.getElementById('mostDetailView');
+    var edView = document.getElementById('mostEditorView');
     var anaView = document.getElementById('mostAnalysisView');
     var libBtn = document.getElementById('mostModeLibrary');
     var anaBtn = document.getElementById('mostModeAnalysis');
     if (libView) libView.style.display = mode === 'library' ? 'block' : 'none';
     if (detView) detView.style.display = 'none';
+    if (edView) edView.style.display = 'none';
     if (anaView) anaView.style.display = mode === 'analysis' ? 'block' : 'none';
     if (libBtn) libBtn.style.opacity = mode === 'library' ? '1' : '0.5';
     if (anaBtn) anaBtn.style.opacity = mode === 'analysis' ? '1' : '0.5';
@@ -30569,7 +30673,11 @@ const mostApp = {
     html += '<div style="font-size:28px;font-weight:700;color:var(--ies-navy);margin-top:8px;">' + t.activity_name + '</div>';
     html += '<div style="font-size:13px;color:var(--ies-gray-500);margin-top:4px;">' + (t.equipment_type || '') + (t.wms_transaction ? ' &middot; ' + t.wms_transaction : '') + ' &middot; UOM: ' + t.uom + (t.pick_method ? ' &middot; Method: ' + t.pick_method : '') + '</div>';
     html += '</div>';
-    html += '<div style="display:flex;gap:2px;"><span style="padding:4px 12px;border-radius:4px;font-size:11px;font-weight:600;background:' + (t.is_active ? 'rgba(16,185,129,0.1);color:#10b981' : 'rgba(239,68,68,0.1);color:#ef4444') + ';">' + (t.is_active ? 'Active' : 'Inactive') + '</span></div>';
+    html += '<div style="display:flex;gap:8px;align-items:center;">';
+    html += '<button class="hub-btn" onclick="mostApp.duplicateTemplate(' + t.id + ')" style="padding:5px 12px;font-size:11px;font-weight:600;background:var(--ies-gray-100);color:var(--ies-navy);border:1px solid var(--ies-gray-200);border-radius:6px;cursor:pointer;">Duplicate</button>';
+    html += '<button class="hub-btn" onclick="mostApp.showEditor(' + t.id + ')" style="padding:5px 12px;font-size:11px;font-weight:600;background:var(--ies-blue);color:#fff;border:none;border-radius:6px;cursor:pointer;">Edit</button>';
+    html += '<span style="padding:4px 12px;border-radius:4px;font-size:11px;font-weight:600;background:' + (t.is_active ? 'rgba(16,185,129,0.1);color:#10b981' : 'rgba(239,68,68,0.1);color:#ef4444') + ';">' + (t.is_active ? 'Active' : 'Inactive') + '</span>';
+    html += '</div>';
     html += '</div>';
 
     // Key metrics row
@@ -30662,7 +30770,338 @@ const mostApp = {
 
   backToLibrary() {
     document.getElementById('mostDetailView').style.display = 'none';
+    document.getElementById('mostEditorView').style.display = 'none';
     document.getElementById('mostLibraryView').style.display = 'block';
+  },
+
+  // ═══ SESSION 2: TEMPLATE EDITOR ═══
+  editingId: null,
+  editorElements: [],
+
+  showEditor(templateId) {
+    this.editingId = templateId;
+    var title = document.getElementById('mostEditorTitle');
+    var delBtn = document.getElementById('mostDeleteBtn');
+    var valDiv = document.getElementById('mostEdValidation');
+    if (valDiv) valDiv.style.display = 'none';
+
+    if (templateId) {
+      // Edit existing
+      var t = this.templates.find(function(x) { return x.id === templateId; });
+      if (!t) return;
+      title.textContent = 'Edit Template';
+      delBtn.style.display = 'inline-block';
+      document.getElementById('mostEdActivity').value = t.activity_name || '';
+      document.getElementById('mostEdArea').value = t.process_area || '';
+      document.getElementById('mostEdUOM').value = t.uom || 'each';
+      document.getElementById('mostEdEquipment').value = t.equipment_type || '';
+      document.getElementById('mostEdWMS').value = t.wms_transaction || '';
+      document.getElementById('mostEdPickMethod').value = t.pick_method || '';
+      document.getElementById('mostEdDescription').value = t.description || '';
+      // Clone elements for editing
+      this.editorElements = this.elements
+        .filter(function(e) { return e.template_id === templateId; })
+        .map(function(e) { return Object.assign({}, e); });
+    } else {
+      // New template
+      title.textContent = 'New Template';
+      delBtn.style.display = 'none';
+      document.getElementById('mostEdActivity').value = '';
+      document.getElementById('mostEdArea').value = '';
+      document.getElementById('mostEdUOM').value = 'each';
+      document.getElementById('mostEdEquipment').value = '';
+      document.getElementById('mostEdWMS').value = '';
+      document.getElementById('mostEdPickMethod').value = '';
+      document.getElementById('mostEdDescription').value = '';
+      this.editorElements = [];
+    }
+
+    this.renderEditorTable();
+    this._hideAllViews();
+    document.getElementById('mostEditorView').style.display = 'block';
+    var main = document.querySelector('.main');
+    if (main) main.scrollTop = 0;
+  },
+
+  _hideAllViews() {
+    ['mostLibraryView','mostDetailView','mostEditorView','mostAnalysisView'].forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) el.style.display = 'none';
+    });
+  },
+
+  cancelEditor() {
+    this.editingId = null;
+    this.editorElements = [];
+    document.getElementById('mostEditorView').style.display = 'none';
+    document.getElementById('mostLibraryView').style.display = 'block';
+  },
+
+  renderEditorTable() {
+    var tbody = document.getElementById('mostEdTableBody');
+    if (!tbody) return;
+    var self = this;
+
+    if (this.editorElements.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--ies-gray-400);font-size:13px;">No elements yet. Click "+ Add Element" to start building the MOST sequence.</td></tr>';
+      this._updateEditorMetrics();
+      return;
+    }
+
+    tbody.innerHTML = this.editorElements.map(function(el, idx) {
+      var seq = idx + 1;
+      var isVar = el.is_variable ? 'checked' : '';
+      return '<tr data-idx="' + idx + '">' +
+        '<td style="font-weight:600;color:var(--ies-gray-400);text-align:center;">' + seq + '</td>' +
+        '<td><input type="text" class="cm-input most-ed-field" data-field="element_name" value="' + (el.element_name || '').replace(/"/g, '&quot;') + '" placeholder="Element name" style="width:100%;font-size:12px;padding:4px 8px;" onchange="mostApp.updateElement(' + idx + ',\'element_name\',this.value)"></td>' +
+        '<td><input type="text" class="cm-input most-ed-field" data-field="most_sequence" value="' + (el.most_sequence || '').replace(/"/g, '&quot;') + '" placeholder="A1 B0 G1 A0..." style="width:100%;font-size:12px;padding:4px 8px;font-family:Consolas,monospace;" onchange="mostApp.updateElement(' + idx + ',\'most_sequence\',this.value)"></td>' +
+        '<td><select class="cm-select most-ed-field" data-field="sequence_type" style="width:100%;font-size:12px;padding:4px 6px;" onchange="mostApp.updateElement(' + idx + ',\'sequence_type\',this.value)">' +
+          '<option value="general_move"' + (el.sequence_type === 'general_move' ? ' selected' : '') + '>General Move</option>' +
+          '<option value="controlled_move"' + (el.sequence_type === 'controlled_move' ? ' selected' : '') + '>Controlled Move</option>' +
+          '<option value="tool_use"' + (el.sequence_type === 'tool_use' ? ' selected' : '') + '>Tool Use</option>' +
+        '</select></td>' +
+        '<td><input type="number" class="cm-input most-ed-field" data-field="tmu_value" value="' + (el.tmu_value || 0) + '" min="0" step="1" style="width:70px;font-size:12px;padding:4px 8px;text-align:right;" onchange="mostApp.updateElement(' + idx + ',\'tmu_value\',this.value)"></td>' +
+        '<td style="text-align:center;"><input type="checkbox" ' + isVar + ' onchange="mostApp.updateElement(' + idx + ',\'is_variable\',this.checked)" style="cursor:pointer;"></td>' +
+        '<td><input type="text" class="cm-input most-ed-field" data-field="variable_driver" value="' + (el.variable_driver || '').replace(/"/g, '&quot;') + '" placeholder="e.g., travel_dist" style="width:100%;font-size:12px;padding:4px 8px;" onchange="mostApp.updateElement(' + idx + ',\'variable_driver\',this.value)"' + (!el.is_variable ? ' disabled' : '') + '></td>' +
+        '<td><input type="text" class="cm-input most-ed-field" data-field="variable_formula" value="' + (el.variable_formula || '').replace(/"/g, '&quot;') + '" placeholder="Formula" style="width:100%;font-size:12px;padding:4px 8px;" onchange="mostApp.updateElement(' + idx + ',\'variable_formula\',this.value)"' + (!el.is_variable ? ' disabled' : '') + '></td>' +
+        '<td style="text-align:center;"><input type="text" class="cm-input most-ed-field" data-field="notes" value="' + (el.notes || '').replace(/"/g, '&quot;') + '" placeholder="—" style="width:60px;font-size:12px;padding:4px 6px;text-align:center;" onchange="mostApp.updateElement(' + idx + ',\'notes\',this.value)"></td>' +
+        '<td style="text-align:center;">' +
+          '<div style="display:flex;gap:2px;justify-content:center;">' +
+            (idx > 0 ? '<button onclick="mostApp.moveElement(' + idx + ',-1)" style="background:none;border:none;cursor:pointer;padding:2px;font-size:14px;color:var(--ies-gray-400);" title="Move up">&#9650;</button>' : '<span style="width:18px;display:inline-block;"></span>') +
+            (idx < self.editorElements.length - 1 ? '<button onclick="mostApp.moveElement(' + idx + ',1)" style="background:none;border:none;cursor:pointer;padding:2px;font-size:14px;color:var(--ies-gray-400);" title="Move down">&#9660;</button>' : '<span style="width:18px;display:inline-block;"></span>') +
+            '<button onclick="mostApp.removeElement(' + idx + ')" style="background:none;border:none;cursor:pointer;padding:2px;font-size:14px;color:#dc2626;" title="Remove">&times;</button>' +
+          '</div>' +
+        '</td>' +
+      '</tr>';
+    }).join('');
+
+    this._updateEditorMetrics();
+  },
+
+  addElementRow() {
+    this.editorElements.push({
+      element_name: '',
+      most_sequence: '',
+      sequence_type: 'general_move',
+      tmu_value: 0,
+      is_variable: false,
+      variable_driver: null,
+      variable_formula: null,
+      notes: null
+    });
+    this.renderEditorTable();
+    // Focus the new row's name input
+    var tbody = document.getElementById('mostEdTableBody');
+    var lastRow = tbody.querySelector('tr:last-child');
+    if (lastRow) {
+      var nameInput = lastRow.querySelector('input[data-field="element_name"]');
+      if (nameInput) nameInput.focus();
+    }
+  },
+
+  updateElement(idx, field, value) {
+    if (idx < 0 || idx >= this.editorElements.length) return;
+    if (field === 'tmu_value') value = parseFloat(value) || 0;
+    if (field === 'is_variable') {
+      this.editorElements[idx].is_variable = !!value;
+      // Re-render to toggle driver/formula disabled state
+      this.renderEditorTable();
+      return;
+    }
+    this.editorElements[idx][field] = value;
+    this._updateEditorMetrics();
+  },
+
+  moveElement(idx, direction) {
+    var newIdx = idx + direction;
+    if (newIdx < 0 || newIdx >= this.editorElements.length) return;
+    var temp = this.editorElements[idx];
+    this.editorElements[idx] = this.editorElements[newIdx];
+    this.editorElements[newIdx] = temp;
+    this.renderEditorTable();
+  },
+
+  removeElement(idx) {
+    this.editorElements.splice(idx, 1);
+    this.renderEditorTable();
+  },
+
+  _updateEditorMetrics() {
+    var totalTmu = 0;
+    this.editorElements.forEach(function(el) { totalTmu += parseFloat(el.tmu_value) || 0; });
+    var uph = totalTmu > 0 ? (100000 / totalTmu) : 0;
+    var seconds = totalTmu * 0.036;
+    var el1 = document.getElementById('mostEdUPH');
+    var el2 = document.getElementById('mostEdTotalTMU');
+    var el3 = document.getElementById('mostEdCycleTime');
+    var el4 = document.getElementById('mostEdElCount');
+    if (el1) el1.textContent = uph.toFixed(1);
+    if (el2) el2.textContent = totalTmu.toLocaleString();
+    if (el3) el3.textContent = seconds.toFixed(1) + 's';
+    if (el4) el4.textContent = this.editorElements.length;
+  },
+
+  _validateEditor() {
+    var errors = [];
+    var activity = (document.getElementById('mostEdActivity').value || '').trim();
+    var area = (document.getElementById('mostEdArea').value || '').trim();
+    if (!activity) errors.push('Activity Name is required.');
+    if (!area) errors.push('Process Area is required.');
+    if (this.editorElements.length === 0) errors.push('At least one MOST element is required.');
+    this.editorElements.forEach(function(el, idx) {
+      if (!(el.element_name || '').trim()) errors.push('Element #' + (idx+1) + ': Name is required.');
+      if (!(el.most_sequence || '').trim()) errors.push('Element #' + (idx+1) + ': MOST Sequence is required.');
+      if (!el.tmu_value || parseFloat(el.tmu_value) <= 0) errors.push('Element #' + (idx+1) + ': TMU must be greater than 0.');
+    });
+    return errors;
+  },
+
+  async saveTemplate() {
+    var valDiv = document.getElementById('mostEdValidation');
+    var errors = this._validateEditor();
+    if (errors.length > 0) {
+      valDiv.innerHTML = errors.join('<br>');
+      valDiv.style.display = 'block';
+      return;
+    }
+    valDiv.style.display = 'none';
+
+    // Compute totals
+    var totalTmu = 0;
+    this.editorElements.forEach(function(el) { totalTmu += parseFloat(el.tmu_value) || 0; });
+    var uph = totalTmu > 0 ? (100000 / totalTmu) : 0;
+
+    var templateData = {
+      activity_name: document.getElementById('mostEdActivity').value.trim(),
+      process_area: document.getElementById('mostEdArea').value.trim(),
+      uom: document.getElementById('mostEdUOM').value,
+      equipment_type: document.getElementById('mostEdEquipment').value.trim() || null,
+      wms_transaction: document.getElementById('mostEdWMS').value.trim() || null,
+      pick_method: document.getElementById('mostEdPickMethod').value.trim() || null,
+      description: document.getElementById('mostEdDescription').value.trim() || null,
+      total_tmu_base: totalTmu,
+      units_per_hour_base: Math.round(uph * 10) / 10,
+      is_active: true,
+      updated_at: new Date().toISOString()
+    };
+
+    try {
+      var templateId;
+      if (this.editingId) {
+        // Update existing
+        var uRes = await sbClient.from('ref_most_templates').update(templateData).eq('id', this.editingId).select();
+        if (uRes.error) throw uRes.error;
+        templateId = this.editingId;
+        // Delete old elements
+        await sbClient.from('ref_most_elements').delete().eq('template_id', templateId);
+      } else {
+        // Insert new
+        var iRes = await sbClient.from('ref_most_templates').insert(templateData).select();
+        if (iRes.error) throw iRes.error;
+        templateId = iRes.data[0].id;
+      }
+
+      // Insert elements
+      if (this.editorElements.length > 0) {
+        var elemRows = this.editorElements.map(function(el, idx) {
+          return {
+            template_id: templateId,
+            sequence_order: idx + 1,
+            element_name: (el.element_name || '').trim(),
+            most_sequence: (el.most_sequence || '').trim(),
+            sequence_type: el.sequence_type || 'general_move',
+            tmu_value: parseFloat(el.tmu_value) || 0,
+            is_variable: !!el.is_variable,
+            variable_driver: el.is_variable ? (el.variable_driver || '').trim() || null : null,
+            variable_formula: el.is_variable ? (el.variable_formula || '').trim() || null : null,
+            notes: (el.notes || '').trim() || null
+          };
+        });
+        var eRes = await sbClient.from('ref_most_elements').insert(elemRows);
+        if (eRes.error) throw eRes.error;
+      }
+
+      // Reload data and return to library
+      this.initialized = false;
+      await this.init();
+      this.editingId = null;
+      this.editorElements = [];
+      showToast('Template saved successfully', 'success');
+    } catch (err) {
+      console.error('MOST save error:', err);
+      valDiv.innerHTML = 'Save failed: ' + (err.message || 'Unknown error');
+      valDiv.style.display = 'block';
+    }
+  },
+
+  async deleteTemplate() {
+    if (!this.editingId) return;
+    if (!confirm('Delete this template and all its elements? This cannot be undone.')) return;
+    try {
+      await sbClient.from('ref_most_elements').delete().eq('template_id', this.editingId);
+      await sbClient.from('ref_most_templates').delete().eq('id', this.editingId);
+      this.initialized = false;
+      await this.init();
+      this.editingId = null;
+      this.editorElements = [];
+      showToast('Template deleted', 'success');
+    } catch (err) {
+      console.error('MOST delete error:', err);
+      alert('Delete failed: ' + (err.message || 'Unknown error'));
+    }
+  },
+
+  async duplicateTemplate(templateId) {
+    var t = this.templates.find(function(x) { return x.id === templateId; });
+    if (!t) return;
+    try {
+      var newData = {
+        activity_name: t.activity_name + ' (Copy)',
+        process_area: t.process_area,
+        uom: t.uom,
+        equipment_type: t.equipment_type,
+        wms_transaction: t.wms_transaction,
+        pick_method: t.pick_method,
+        description: t.description,
+        total_tmu_base: t.total_tmu_base,
+        units_per_hour_base: t.units_per_hour_base,
+        is_active: true
+      };
+      var iRes = await sbClient.from('ref_most_templates').insert(newData).select();
+      if (iRes.error) throw iRes.error;
+      var newId = iRes.data[0].id;
+
+      // Copy elements
+      var srcEls = this.elements.filter(function(e) { return e.template_id === templateId; });
+      if (srcEls.length > 0) {
+        var newEls = srcEls.map(function(e) {
+          return {
+            template_id: newId,
+            sequence_order: e.sequence_order,
+            element_name: e.element_name,
+            most_sequence: e.most_sequence,
+            sequence_type: e.sequence_type,
+            tmu_value: e.tmu_value,
+            is_variable: e.is_variable,
+            variable_driver: e.variable_driver,
+            variable_formula: e.variable_formula,
+            notes: e.notes
+          };
+        });
+        var eRes = await sbClient.from('ref_most_elements').insert(newEls);
+        if (eRes.error) throw eRes.error;
+      }
+
+      // Reload and open editor for new copy
+      this.initialized = false;
+      await this.loadData();
+      this.initialized = true;
+      this.showEditor(newId);
+      showToast('Template duplicated — editing copy', 'success');
+    } catch (err) {
+      console.error('MOST duplicate error:', err);
+      alert('Duplicate failed: ' + (err.message || 'Unknown error'));
+    }
   }
 };
 
