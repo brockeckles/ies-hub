@@ -5342,9 +5342,9 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
   </div>
 
   <!-- Main content: Signal Feed (left) + Charts (right) -->
-  <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px;">
-    <!-- Unified Signal Feed -->
-    <div class="hub-card" style="padding:0; overflow:hidden; display:flex; flex-direction:column;">
+  <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px; align-items:start;">
+    <!-- Unified Signal Feed — height synced to charts column via JS -->
+    <div class="hub-card" id="feedCard" style="padding:0; overflow:hidden; display:flex; flex-direction:column;">
       <div style="padding:16px 20px; border-bottom:1px solid var(--ies-gray-200); display:flex; align-items:center; justify-content:space-between;">
         <div style="font-size:14px; font-weight:700; color:var(--ies-navy);">Intelligence Feed</div>
         <span class="card-badge badge-live">LIVE</span>
@@ -13866,6 +13866,15 @@ document.addEventListener('DOMContentLoaded', function() {
   loadAllData().then(() => {
     console.log('IES Intelligence Hub loaded — Supabase connected ✓');
     console.log('Project: ' + SUPABASE_URL);
+    // Sync feed card height to charts column
+    requestAnimationFrame(function() {
+      var chartsCol = document.querySelector('#feedCard');
+      if (chartsCol) {
+        var grid = chartsCol.parentElement;
+        var charts = grid.children[1];
+        if (charts) chartsCol.style.maxHeight = charts.offsetHeight + 'px';
+      }
+    });
     // Load deal management data
     pmLoadAll();
     // Load deals for artifact linking
