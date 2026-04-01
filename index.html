@@ -5251,7 +5251,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         <ul class="roadmap-items">
           <li>Command Center — KPIs, Signal Feed, Charts, Sector Pulse</li>
           <li>Market Explorer — Interactive map + Data Library</li>
-          <li>Design Tools — 6 tools (Center of Gravity, Network Optimization, Warehouse Sizing, Cost Model, Multi-Site Analyzer, Fleet Modeler)</li>
+          <li>Design Tools — 7 tools (Center of Gravity, Network Optimization, Warehouse Sizing, Cost Model, Multi-Site Analyzer, Fleet Modeler, MOST Standards)</li>
           <li>Deal Management — Stage-gated pipeline, activity templates, Hours tracking</li>
           <li>Training Wiki (23+ pages, 12 SCCs)</li>
           <li>Change Management (ADKAR)</li>
@@ -5752,6 +5752,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     <button class="dt-tab" onclick="showDesignTool('dt-costmodel',this)">Cost Model</button>
     <button class="dt-tab" onclick="showDesignTool('dt-deals',this)">Multi-Site Analyzer</button>
     <button class="dt-tab" onclick="showDesignTool('dt-fleet',this)">Fleet Modeler</button>
+    <button class="dt-tab" onclick="showDesignTool('dt-most',this)">MOST Standards</button>
   </div>
 
   <!-- ── LANDING PAGE ── -->
@@ -5848,6 +5849,27 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
           <div style="font-size:13px;color:var(--ies-gray-600);line-height:1.5;margin-bottom:16px;">Design optimal fleet configurations with sizing, cost comparison (private vs. dedicated vs. carrier), and route visualization.</div>
           <div style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#d97706;">
             Open Fleet Modeler <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Engineering Category -->
+    <div style="margin-top:32px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+        <div style="width:6px;height:24px;background:linear-gradient(180deg,#8b5cf6,#6d28d9);border-radius:3px;"></div>
+        <div style="font-weight:700;font-size:15px;color:var(--ies-navy);letter-spacing:.3px;">Engineering</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;">
+        <!-- MOST Standards Card -->
+        <div onclick="showDesignTool('dt-most',document.querySelectorAll('#dt-tabs .dt-tab')[7])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='#8b5cf6';this.style.boxShadow='0 4px 16px rgba(139,92,246,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
+          <div style="width:48px;height:48px;background:linear-gradient(135deg,#8b5cf6,#6d28d9);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;">
+            <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><path d="M12 8v4l3 3" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="9" stroke="#fff" stroke-width="1.5"/><path d="M16.5 3.5l1 1M7.5 3.5l-1 1" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </div>
+          <div style="font-weight:700;font-size:16px;color:var(--ies-navy);margin-bottom:6px;">MOST Labor Standards</div>
+          <div style="font-size:13px;color:var(--ies-gray-600);line-height:1.5;margin-bottom:16px;">Browse and manage engineered time standards (MOST sequences), analyze labor requirements, and model FTEs from TMU-based productivity rates.</div>
+          <div style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#7c3aed;">
+            Open MOST Standards <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
         </div>
       </div>
@@ -7782,6 +7804,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     <button class="dt-tab active" onclick="window.scrollTo(0,0)">Cost Model</button>
     <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-deals', document.querySelectorAll('#dt-tabs .dt-tab')[5]); },50)">Multi-Site Analyzer</button>
     <button class="dt-tab" onclick="showDesignTool('dt-fleet')">Fleet Modeler</button>
+    <button class="dt-tab" onclick="showDesignTool('dt-most')">MOST Standards</button>
   </div>
 
   <div id="landingPage" class="dt-landing">
@@ -8858,6 +8881,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     <button class="dt-tab" onclick="showDesignTool('dt-costmodel')">Cost Model</button>
     <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-deals', document.querySelectorAll('#dt-tabs .dt-tab')[5]); },50)">Multi-Site Analyzer</button>
     <button class="dt-tab active" onclick="window.scrollTo(0,0)">Fleet Modeler</button>
+    <button class="dt-tab" onclick="showDesignTool('dt-most')">MOST Standards</button>
   </div>
 
   <!-- FLEET MODELER LANDING PAGE -->
@@ -9054,6 +9078,92 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
           <span id="fm-scenario-count" style="font-size:12px;background:var(--ies-orange);color:#fff;padding:2px 8px;border-radius:12px;">0</span>
         </div>
         <div id="fm-scenarios-list" style="display:flex;flex-direction:column;gap:12px;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     MOST LABOR STANDARDS TOOL (sec-most)
+     ═══════════════════════════════════════════════════════════════ -->
+<div class="section" id="sec-most">
+  <div class="section-header">
+    <div>
+      <div class="section-title">MOST Labor Standards</div>
+      <div class="section-subtitle">Engineered time standards for warehouse labor modeling</div>
+    </div>
+    <button class="tour-trigger-icon" onclick="startSectionTour('most')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
+  </div>
+
+  <!-- Tool navigation tabs -->
+  <div class="dt-tabs-bar" style="display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap;">
+    <button class="dt-tab" onclick="navigate('designtools', document.querySelector('[data-section=designtools]'))">All Tools</button>
+    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-network', document.querySelectorAll('#dt-tabs .dt-tab')[1]); },50)">Center of Gravity</button>
+    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-netopt', document.querySelectorAll('#dt-tabs .dt-tab')[2]); },50)">Network Optimization</button>
+    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-warehouse', document.querySelectorAll('#dt-tabs .dt-tab')[3]); },50)">Warehouse Sizing</button>
+    <button class="dt-tab" onclick="showDesignTool('dt-costmodel')">Cost Model</button>
+    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-deals', document.querySelectorAll('#dt-tabs .dt-tab')[5]); },50)">Multi-Site Analyzer</button>
+    <button class="dt-tab" onclick="showDesignTool('dt-fleet')">Fleet Modeler</button>
+    <button class="dt-tab active" onclick="window.scrollTo(0,0)">MOST Standards</button>
+  </div>
+
+  <!-- MOST LANDING PAGE -->
+  <div id="mostLandingPage" class="dt-landing">
+    <div class="dt-landing-header">
+      <button class="dt-landing-back-btn" onclick="navigate('designtools', document.querySelector('[data-section=designtools]'))">&#8592; Back to Design Tools</button>
+      <div class="dt-landing-title">MOST Labor Standards</div>
+      <div class="dt-landing-subtitle">Browse, manage, and analyze engineered time standards for warehouse operations</div>
+      <button class="tour-trigger-icon" onclick="startSectionTour('most')" title="Start guided tour" style="margin-top:8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
+    </div>
+
+    <!-- Mode selector tabs -->
+    <div id="mostModeTabs" style="display:flex;gap:8px;margin-bottom:24px;">
+      <button class="hub-btn" id="mostModeLibrary" onclick="mostApp.switchMode('library')" style="padding:8px 20px;font-size:13px;font-weight:600;">Template Library</button>
+      <button class="hub-btn" id="mostModeAnalysis" onclick="mostApp.switchMode('analysis')" style="padding:8px 20px;font-size:13px;font-weight:600;opacity:0.5;">Quick Labor Analysis</button>
+    </div>
+
+    <!-- ═══ TEMPLATE LIBRARY VIEW ═══ -->
+    <div id="mostLibraryView">
+      <!-- Filter/Search bar -->
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:20px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:200px;">
+          <input type="text" id="mostSearchInput" class="cm-input" placeholder="Search templates by name, process area, equipment..." oninput="mostApp.filterTemplates()" style="width:100%;max-width:400px;">
+        </div>
+        <select id="mostFilterArea" class="cm-select" onchange="mostApp.filterTemplates()" style="min-width:160px;">
+          <option value="">All Process Areas</option>
+          <option value="Receiving">Receiving</option>
+          <option value="Putaway">Putaway</option>
+          <option value="Replenishment">Replenishment</option>
+          <option value="Picking">Picking</option>
+          <option value="Packing">Packing</option>
+          <option value="Shipping">Shipping</option>
+        </select>
+        <select id="mostFilterUOM" class="cm-select" onchange="mostApp.filterTemplates()" style="min-width:120px;">
+          <option value="">All UOMs</option>
+          <option value="pallet">Pallet</option>
+          <option value="case">Case</option>
+          <option value="each">Each</option>
+          <option value="order">Order</option>
+        </select>
+        <div style="font-size:12px;color:var(--ies-gray-400);" id="mostTemplateCount">18 templates</div>
+      </div>
+
+      <!-- Template cards grid -->
+      <div id="mostTemplateGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;"></div>
+    </div>
+
+    <!-- ═══ TEMPLATE DETAIL VIEW ═══ -->
+    <div id="mostDetailView" style="display:none;">
+      <button class="dt-landing-back-btn" onclick="mostApp.backToLibrary()" style="margin-bottom:16px;">&#8592; Back to Template Library</button>
+      <div id="mostDetailContent"></div>
+    </div>
+
+    <!-- ═══ QUICK LABOR ANALYSIS VIEW (placeholder for Session 3) ═══ -->
+    <div id="mostAnalysisView" style="display:none;">
+      <div class="dt-empty-state">
+        <div class="dt-empty-state-icon">&#9881;</div>
+        <div class="dt-empty-state-title">Quick Labor Analysis</div>
+        <div class="dt-empty-state-text">Coming soon — select templates, plug in volumes, and instantly model FTEs and labor cost without creating a full Cost Model.</div>
       </div>
     </div>
   </div>
@@ -9977,14 +10087,15 @@ function navigate(section, el) {
   if (el) el.classList.add('active');
 
   // Cost Model and Fleet Modeler are children of Design Tools — keep sidebar highlighting
-  if ((section === 'costmodel' || section === 'fleet') && !el) {
+  if ((section === 'costmodel' || section === 'fleet' || section === 'most') && !el) {
     var dtNav = document.querySelector('[data-section=designtools]');
     if (dtNav) dtNav.classList.add('active');
   }
 
-  // Sync tool tabs when entering costmodel, fleet, or returning to designtools
+  // Sync tool tabs when entering costmodel, fleet, most, or returning to designtools
   if (section === 'costmodel' && typeof dtSyncActiveTab === 'function') dtSyncActiveTab('Cost Model');
   if (section === 'fleet' && typeof dtSyncActiveTab === 'function') dtSyncActiveTab('Fleet Modeler');
+  if (section === 'most' && typeof dtSyncActiveTab === 'function') dtSyncActiveTab('MOST Standards');
   if (section === 'designtools' && typeof dtSyncActiveTab === 'function') {
     dtSyncActiveTab('All Tools');
     // Show the landing panel
@@ -10051,6 +10162,11 @@ function navigate(section, el) {
   // Fleet Modeler: show landing page when section is opened
   if (section === 'fleet') {
     fmShowLanding();
+  }
+
+  // MOST Standards: init and show landing
+  if (section === 'most') {
+    mostApp.init();
   }
 
   // Track page view for analytics
@@ -16308,6 +16424,11 @@ function showDesignTool(panelId, tabEl) {
   if (panelId === 'dt-fleet') {
     dtSyncActiveTab('Fleet Modeler');
     navigate('fleet', document.querySelector('[data-section=designtools]'));
+    return;
+  }
+  if (panelId === 'dt-most') {
+    dtSyncActiveTab('MOST Standards');
+    navigate('most', document.querySelector('[data-section=designtools]'));
     return;
   }
   var panels = document.querySelectorAll('.dt-panel');
@@ -30311,6 +30432,240 @@ const TourEngine = {
   }
 };
 
+/* ═══════════════════════════════════════════════════
+   MOST LABOR STANDARDS APPLICATION
+   ═══════════════════════════════════════════════════ */
+const mostApp = {
+  templates: [],
+  elements: [],
+  initialized: false,
+  currentMode: 'library',
+
+  async init() {
+    if (!this.initialized) {
+      await this.loadData();
+      this.initialized = true;
+    }
+    this.renderTemplateGrid();
+    this.switchMode('library');
+  },
+
+  async loadData() {
+    try {
+      const [tRes, eRes] = await Promise.all([
+        sbClient.from('ref_most_templates').select('*').order('process_area').order('activity_name'),
+        sbClient.from('ref_most_elements').select('*').order('template_id').order('sequence_order')
+      ]);
+      this.templates = (tRes.data || []);
+      this.elements = (eRes.data || []);
+    } catch(e) { console.error('MOST data load error:', e); }
+  },
+
+  switchMode(mode) {
+    this.currentMode = mode;
+    var libView = document.getElementById('mostLibraryView');
+    var detView = document.getElementById('mostDetailView');
+    var anaView = document.getElementById('mostAnalysisView');
+    var libBtn = document.getElementById('mostModeLibrary');
+    var anaBtn = document.getElementById('mostModeAnalysis');
+    if (libView) libView.style.display = mode === 'library' ? 'block' : 'none';
+    if (detView) detView.style.display = 'none';
+    if (anaView) anaView.style.display = mode === 'analysis' ? 'block' : 'none';
+    if (libBtn) libBtn.style.opacity = mode === 'library' ? '1' : '0.5';
+    if (anaBtn) anaBtn.style.opacity = mode === 'analysis' ? '1' : '0.5';
+  },
+
+  filterTemplates() {
+    this.renderTemplateGrid();
+  },
+
+  getFilteredTemplates() {
+    var search = (document.getElementById('mostSearchInput') || {}).value || '';
+    var area = (document.getElementById('mostFilterArea') || {}).value || '';
+    var uom = (document.getElementById('mostFilterUOM') || {}).value || '';
+    search = search.toLowerCase();
+    return this.templates.filter(function(t) {
+      if (area && t.process_area !== area) return false;
+      if (uom && t.uom !== uom) return false;
+      if (search) {
+        var haystack = (t.activity_name + ' ' + t.process_area + ' ' + t.equipment_type + ' ' + t.wms_transaction + ' ' + t.uom).toLowerCase();
+        if (haystack.indexOf(search) === -1) return false;
+      }
+      return true;
+    });
+  },
+
+  _areaColor(area) {
+    var colors = {
+      'Receiving': { bg: 'rgba(59,130,246,0.1)', border: '#3b82f6', text: '#3b82f6' },
+      'Putaway': { bg: 'rgba(16,185,129,0.1)', border: '#10b981', text: '#10b981' },
+      'Replenishment': { bg: 'rgba(245,158,11,0.1)', border: '#f59e0b', text: '#92400e' },
+      'Picking': { bg: 'rgba(239,68,68,0.1)', border: '#ef4444', text: '#ef4444' },
+      'Packing': { bg: 'rgba(139,92,246,0.1)', border: '#8b5cf6', text: '#8b5cf6' },
+      'Shipping': { bg: 'rgba(6,182,212,0.1)', border: '#06b6d4', text: '#06b6d4' }
+    };
+    return colors[area] || { bg: 'rgba(100,116,139,0.1)', border: '#64748b', text: '#64748b' };
+  },
+
+  renderTemplateGrid() {
+    var grid = document.getElementById('mostTemplateGrid');
+    var countEl = document.getElementById('mostTemplateCount');
+    if (!grid) return;
+    var filtered = this.getFilteredTemplates();
+    if (countEl) countEl.textContent = filtered.length + ' template' + (filtered.length !== 1 ? 's' : '');
+
+    if (filtered.length === 0) {
+      grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--ies-gray-400);font-size:14px;">No templates match your filters.</div>';
+      return;
+    }
+
+    var self = this;
+    grid.innerHTML = filtered.map(function(t) {
+      var ac = self._areaColor(t.process_area);
+      var elCount = self.elements.filter(function(e) { return e.template_id === t.id; }).length;
+      var totalTmu = parseFloat(t.total_tmu_base) || 0;
+      var uph = parseFloat(t.units_per_hour_base) || 0;
+      var pickMethod = t.pick_method ? '<span style="font-size:11px;padding:2px 8px;border-radius:4px;background:rgba(100,116,139,0.1);color:var(--ies-gray-500);font-weight:600;">' + t.pick_method + '</span>' : '';
+
+      return '<div style="background:var(--ies-gray-50,#f9fafb);border-radius:10px;padding:20px;cursor:pointer;border:1px solid var(--ies-gray-100,#e5e7eb);transition:all 0.15s;" ' +
+        'onmouseenter="this.style.borderColor=\'' + ac.border + '\';this.style.boxShadow=\'0 4px 12px rgba(0,0,0,0.08)\'" ' +
+        'onmouseleave="this.style.borderColor=\'var(--ies-gray-100,#e5e7eb)\';this.style.boxShadow=\'none\'" ' +
+        'onclick="mostApp.showDetail(' + t.id + ')">' +
+        '<div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:12px;">' +
+          '<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:4px;background:' + ac.bg + ';color:' + ac.text + ';text-transform:uppercase;letter-spacing:0.5px;">' + t.process_area + '</span>' +
+          pickMethod +
+        '</div>' +
+        '<div style="font-size:14px;font-weight:700;color:var(--ies-navy);margin-bottom:6px;">' + t.activity_name + '</div>' +
+        '<div style="font-size:11px;color:var(--ies-gray-500);margin-bottom:14px;">' + (t.equipment_type || '') + (t.wms_transaction ? ' &middot; ' + t.wms_transaction : '') + '</div>' +
+        '<div style="display:flex;gap:16px;align-items:center;">' +
+          '<div style="text-align:center;"><div style="font-size:20px;font-weight:700;color:var(--ies-orange);">' + uph.toFixed(1) + '</div><div style="font-size:11px;color:var(--ies-gray-400);">UPH</div></div>' +
+          '<div style="width:1px;height:28px;background:var(--ies-gray-200);"></div>' +
+          '<div style="text-align:center;"><div style="font-size:14px;font-weight:600;color:var(--ies-navy);">' + totalTmu.toLocaleString() + '</div><div style="font-size:11px;color:var(--ies-gray-400);">TMU</div></div>' +
+          '<div style="width:1px;height:28px;background:var(--ies-gray-200);"></div>' +
+          '<div style="text-align:center;"><div style="font-size:14px;font-weight:600;color:var(--ies-navy);">' + t.uom + '</div><div style="font-size:11px;color:var(--ies-gray-400);">UOM</div></div>' +
+          '<div style="width:1px;height:28px;background:var(--ies-gray-200);"></div>' +
+          '<div style="text-align:center;"><div style="font-size:14px;font-weight:600;color:var(--ies-navy);">' + elCount + '</div><div style="font-size:11px;color:var(--ies-gray-400);">Elements</div></div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  },
+
+  showDetail(templateId) {
+    var t = this.templates.find(function(x) { return x.id === templateId; });
+    if (!t) return;
+    var els = this.elements.filter(function(e) { return e.template_id === templateId; });
+    var ac = this._areaColor(t.process_area);
+    var totalTmu = parseFloat(t.total_tmu_base) || 0;
+    var uph = parseFloat(t.units_per_hour_base) || 0;
+    var seconds = (totalTmu * 0.036).toFixed(1);
+    var variableEls = els.filter(function(e) { return e.is_variable; });
+    var fixedEls = els.filter(function(e) { return !e.is_variable; });
+
+    var html = '';
+    // Header
+    html += '<div style="display:flex;align-items:start;justify-content:space-between;margin-bottom:24px;">';
+    html += '<div>';
+    html += '<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:4px;background:' + ac.bg + ';color:' + ac.text + ';text-transform:uppercase;letter-spacing:0.5px;">' + t.process_area + '</span>';
+    html += '<div style="font-size:28px;font-weight:700;color:var(--ies-navy);margin-top:8px;">' + t.activity_name + '</div>';
+    html += '<div style="font-size:13px;color:var(--ies-gray-500);margin-top:4px;">' + (t.equipment_type || '') + (t.wms_transaction ? ' &middot; ' + t.wms_transaction : '') + ' &middot; UOM: ' + t.uom + (t.pick_method ? ' &middot; Method: ' + t.pick_method : '') + '</div>';
+    html += '</div>';
+    html += '<div style="display:flex;gap:2px;"><span style="padding:4px 12px;border-radius:4px;font-size:11px;font-weight:600;background:' + (t.is_active ? 'rgba(16,185,129,0.1);color:#10b981' : 'rgba(239,68,68,0.1);color:#ef4444') + ';">' + (t.is_active ? 'Active' : 'Inactive') + '</span></div>';
+    html += '</div>';
+
+    // Key metrics row
+    html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;">';
+    var metrics = [
+      { label: 'Base UPH', value: uph.toFixed(1), color: 'var(--ies-orange)' },
+      { label: 'Total TMU', value: totalTmu.toLocaleString(), color: 'var(--ies-navy)' },
+      { label: 'Cycle Time', value: seconds + 's', color: 'var(--ies-navy)' },
+      { label: 'Elements', value: els.length, color: 'var(--ies-navy)' }
+    ];
+    metrics.forEach(function(m) {
+      html += '<div style="background:var(--ies-gray-50);border-radius:10px;padding:16px;text-align:center;">';
+      html += '<div style="font-size:28px;font-weight:700;color:' + m.color + ';">' + m.value + '</div>';
+      html += '<div style="font-size:12px;color:var(--ies-gray-400);margin-top:4px;">' + m.label + '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+
+    // TMU formula
+    html += '<div style="background:var(--ies-gray-50);border-radius:10px;padding:16px;margin-bottom:24px;">';
+    html += '<div style="font-size:12px;font-weight:600;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">TMU Conversion</div>';
+    html += '<div style="font-size:13px;color:var(--ies-navy);line-height:1.8;">';
+    html += '1 TMU = 0.00001 hours = 0.036 seconds &nbsp;&middot;&nbsp; ';
+    html += 'UPH = 100,000 &divide; Total TMU &nbsp;&middot;&nbsp; ';
+    html += '<strong>' + totalTmu.toLocaleString() + ' TMU = ' + uph.toFixed(1) + ' UPH = ' + seconds + ' sec/cycle</strong>';
+    html += '</div></div>';
+
+    // Element sequence table
+    html += '<div style="margin-bottom:16px;">';
+    html += '<div style="font-size:16px;font-weight:700;color:var(--ies-navy);margin-bottom:12px;">MOST Element Sequence</div>';
+    html += '<div style="overflow-x:auto;"><table class="cm-table" style="width:100%;font-size:12px;">';
+    html += '<thead><tr>';
+    html += '<th style="width:30px;">#</th>';
+    html += '<th>Element Name</th>';
+    html += '<th>MOST Sequence</th>';
+    html += '<th style="text-align:center;">Type</th>';
+    html += '<th style="text-align:right;">TMU</th>';
+    html += '<th style="text-align:center;">Variable</th>';
+    html += '<th>Driver</th>';
+    html += '</tr></thead><tbody>';
+
+    els.forEach(function(el, idx) {
+      var seqType = (el.sequence_type || '').replace(/_/g, ' ');
+      var typeColor = seqType === 'general move' ? '#3b82f6' : seqType === 'controlled move' ? '#10b981' : '#f59e0b';
+      var varBadge = el.is_variable
+        ? '<span style="background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:4px;font-size:11px;font-weight:600;">' + (el.variable_driver || 'Yes') + '</span>'
+        : '<span style="color:var(--ies-gray-300);">&mdash;</span>';
+      var rowBg = idx % 2 === 0 ? '' : 'background:var(--ies-gray-50,#f9fafb);';
+
+      html += '<tr style="' + rowBg + '">';
+      html += '<td style="font-weight:600;color:var(--ies-gray-400);">' + el.sequence_order + '</td>';
+      html += '<td style="font-weight:600;color:var(--ies-navy);">' + el.element_name + '</td>';
+      html += '<td><code style="font-family:Consolas,monospace;font-size:12px;background:var(--ies-gray-100);padding:2px 6px;border-radius:4px;">' + el.most_sequence + '</code></td>';
+      html += '<td style="text-align:center;"><span style="font-size:11px;color:' + typeColor + ';font-weight:600;text-transform:capitalize;">' + seqType + '</span></td>';
+      html += '<td style="text-align:right;font-weight:600;">' + parseFloat(el.tmu_value).toLocaleString() + '</td>';
+      html += '<td style="text-align:center;">' + (el.is_variable ? '&#9679;' : '') + '</td>';
+      html += '<td>' + varBadge + '</td>';
+      html += '</tr>';
+    });
+
+    // Total row
+    html += '<tr style="border-top:2px solid var(--ies-gray-200);font-weight:700;">';
+    html += '<td></td><td>TOTAL</td><td></td><td></td>';
+    html += '<td style="text-align:right;color:var(--ies-orange);">' + totalTmu.toLocaleString() + '</td>';
+    html += '<td></td><td></td></tr>';
+    html += '</tbody></table></div></div>';
+
+    // Variable elements summary
+    if (variableEls.length > 0) {
+      html += '<div style="background:rgba(245,158,11,0.06);border-radius:10px;padding:16px;border-left:3px solid #f59e0b;">';
+      html += '<div style="font-size:13px;font-weight:600;color:#92400e;margin-bottom:8px;">Variable Elements (' + variableEls.length + ' of ' + els.length + ')</div>';
+      html += '<div style="font-size:12px;color:var(--ies-gray-600);line-height:1.8;">';
+      html += 'These elements adjust dynamically based on site conditions: ';
+      var drivers = {};
+      variableEls.forEach(function(v) { if (v.variable_driver) drivers[v.variable_driver] = true; });
+      html += Object.keys(drivers).map(function(d) {
+        return '<strong>' + d.replace(/_/g, ' ') + '</strong>';
+      }).join(', ');
+      html += '. The Cost Model recalculates TMU for these elements using actual warehouse parameters.';
+      html += '</div></div>';
+    }
+
+    document.getElementById('mostDetailContent').innerHTML = html;
+    document.getElementById('mostLibraryView').style.display = 'none';
+    document.getElementById('mostDetailView').style.display = 'block';
+    window.scrollTo(0, 0);
+    var main = document.querySelector('.main');
+    if (main) main.scrollTop = 0;
+  },
+
+  backToLibrary() {
+    document.getElementById('mostDetailView').style.display = 'none';
+    document.getElementById('mostLibraryView').style.display = 'block';
+  }
+};
+
 // Tour Definitions
 const TourDefinitions = {
   overview: {
@@ -30397,7 +30752,7 @@ const TourDefinitions = {
       {
         target: '#dt-tabs',
         title: 'Tool Navigation',
-        content: 'Access all 6 design tools from these tabs: Center of Gravity, Network Optimization, Warehouse Sizing, Cost Model Builder, Multi-Site Analyzer, and Fleet Modeler.',
+        content: 'Access all 7 design tools from these tabs: Center of Gravity, Network Optimization, Warehouse Sizing, Cost Model Builder, Multi-Site Analyzer, Fleet Modeler, and MOST Standards.',
         padding: 8
       },
       {
@@ -30644,6 +30999,30 @@ const TourDefinitions = {
         target: '#fm-landing .dt-landing-actions',
         title: 'Create a Scenario',
         content: 'Click here to start a new fleet scenario. Define your lanes, shipment volumes, and vehicle types — then run the optimizer to see cost comparisons and recommended fleet configurations.',
+        padding: 8
+      }
+    ]
+  },
+
+  most: {
+    name: 'MOST Labor Standards',
+    steps: [
+      {
+        target: '#sec-most .dt-tabs-bar',
+        title: 'Tool Navigation',
+        content: 'Quick-switch between all 7 design tools directly from the MOST Standards tool, or head back to the full Design Tools suite.',
+        padding: 8
+      },
+      {
+        target: '#mostModeTabs',
+        title: 'Two Modes',
+        content: 'Template Library lets you browse, inspect, and manage the engineered MOST time standards used across the platform. Quick Labor Analysis lets you model FTEs and cost without creating a full Cost Model.',
+        padding: 12
+      },
+      {
+        target: '#mostTemplateGrid',
+        title: 'Template Library',
+        content: 'Each card represents an engineered labor standard — built from MOST element sequences with TMU values. Click any card to see the full element breakdown, variable drivers, and cycle time calculation.',
         padding: 8
       }
     ]
