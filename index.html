@@ -13330,10 +13330,12 @@ async function loadSignalFeed() {
       // Skip excerpt if it's a near-duplicate of the title (Google News auto-snippets)
       var showExcerpt = false;
       if (item.excerpt) {
-        var cleanExcerpt = item.excerpt.replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
-        var cleanTitle = (item.title || '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+        var norm = function(s) { return s.replace(/&nbsp;/g, ' ').replace(/[-–—|]/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase(); };
+        var cleanExcerpt = norm(item.excerpt);
+        var cleanTitle = norm(item.title || '');
         // Show excerpt only if it adds meaningful content beyond the title
-        showExcerpt = cleanExcerpt.length > 0 && !cleanTitle.replace(/\s*[-–—|]\s*\w+[\w\s]*$/, '').startsWith(cleanExcerpt.substring(0, 30)) && !cleanExcerpt.startsWith(cleanTitle.substring(0, 30));
+        var titleCore = cleanTitle.replace(/\s+\w[\w\s]*$/, ''); // strip trailing source name
+        showExcerpt = cleanExcerpt.length > 0 && !titleCore.startsWith(cleanExcerpt.substring(0, 25)) && !cleanExcerpt.startsWith(cleanTitle.substring(0, 25));
       }
       return '<div class="signal-item" data-signal-type="' + item.type + '">' +
         '<div class="signal-header"><span class="signal-type signal-type-' + item.type + '">' + item.type + '</span><span class="signal-date">' + dateStr + '</span></div>' +
