@@ -4854,6 +4854,56 @@
   pointer-events: auto;
 }
 
+/* New section-level tour spotlight — pointer-events always none so page stays clickable */
+.tour-spotlight-v2 {
+  position: fixed;
+  border: 3px solid var(--ies-blue);
+  border-radius: 8px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
+  z-index: 10001;
+  transition: all 0.3s ease;
+  pointer-events: none;
+  display: none;
+}
+.tour-spotlight-v2.active {
+  display: block;
+}
+
+/* New section-level tour card — always on top, clickable */
+.tour-card-v2 {
+  position: fixed;
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+  z-index: 10002;
+  max-width: 380px;
+  min-width: 300px;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: all 0.3s ease;
+  pointer-events: auto;
+  display: none;
+}
+.tour-card-v2.active {
+  opacity: 1;
+  transform: translateY(0);
+  display: block;
+}
+
+/* Click-catcher behind spotlight+card to close tour on outside click */
+.tour-backdrop-v2 {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 10000;
+  display: none;
+  cursor: default;
+}
+.tour-backdrop-v2.active {
+  display: block;
+}
+
+/* Legacy .tour-spotlight and .tour-card kept for old Welcome-page tour */
 .tour-spotlight {
   position: fixed;
   border: 2px solid var(--ies-blue);
@@ -4868,7 +4918,7 @@
   display: block;
 }
 
-/* Tour Card / Tooltip */
+/* Legacy tour card for Welcome-page tour */
 .tour-card {
   position: fixed;
   background: #fff;
@@ -5253,7 +5303,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div class="section-title">Overview & Command Center</div>
       <div class="section-subtitle">Real-time market intelligence and operational KPIs</div>
     </div>
-    <button class="tour-trigger-icon" onclick="startTour('overview')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
+    <button class="tour-trigger-icon" onclick="startSectionTour('overview')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
   </div>
 
   <!-- Alert Bar — live from hub_alerts -->
@@ -5430,7 +5480,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div class="hub-section-title">Market Explorer</div>
       <div class="hub-section-subtitle">Click a market to explore wages, real estate, freight, active deals, and intelligence</div>
     </div>
-    <button class="tour-trigger-icon" onclick="startTour('marketexplorer')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
+    <button class="tour-trigger-icon" onclick="startSectionTour('marketexplorer')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
   </div>
 
   <div style="display:grid; grid-template-columns: 1fr 400px; gap: 24px;">
@@ -5639,7 +5689,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div class="section-title">Training Wiki</div>
       <div class="section-subtitle">Reference guides for warehouse automation, engineering, and solutions design</div>
     </div>
-    <button class="tour-trigger-icon" onclick="startTour('wiki')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
+    <button class="tour-trigger-icon" onclick="startSectionTour('wiki')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
   </div>
 
   <div class="wiki-layout">
@@ -5690,7 +5740,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div class="section-title">Design Tools</div>
       <div class="section-subtitle">Interactive calculators and models for warehouse solutions design</div>
     </div>
-    <button class="tour-trigger-icon" onclick="startTour('designtools')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
+    <button class="tour-trigger-icon" onclick="startSectionTour('designtools')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
   </div>
 
   <!-- Tool selector tabs -->
@@ -7662,7 +7712,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div class="section-subtitle">Team questions, enhancement ideas, and bug reports — tracked and prioritized</div>
     </div>
     <div style="display:flex;gap:10px;align-items:center;">
-      <button class="tour-trigger-icon" onclick="startTour('feedback')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
+      <button class="tour-trigger-icon" onclick="startSectionTour('feedback')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
       <button onclick="fbOpenModal()" style="padding:10px 20px;background:var(--ies-orange);color:#fff;border:none;border-radius:8px;font-family:Montserrat,sans-serif;font-weight:700;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19" stroke="#fff" stroke-width="2" stroke-linecap="round"/><line x1="5" y1="12" x2="19" y2="12" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
         New Feedback
@@ -7707,7 +7757,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div class="section-title">Cost Model Builder <span style="font-size:12px;background:var(--ies-orange);color:#fff;padding:3px 8px;border-radius:4px;margin-left:8px;font-weight:700;vertical-align:middle;">BETA</span></div>
       <div class="section-subtitle">Build detailed operational cost models for 3PL warehouse proposals</div>
     </div>
-    <button class="tour-trigger-icon" onclick="startTour('costmodel')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
+    <button class="tour-trigger-icon" onclick="startSectionTour('costmodel')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
     <div id="topbarControls" style="display:none;align-items:center;gap:12px;flex-shrink:0;">
       <span class="cm-label">Project:</span>
       <select id="projectSelector" class="cm-select" style="min-width:180px;">
@@ -9014,7 +9064,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div class="section-subtitle">Track deals through stage-gated pipeline with activity tracking and forecasting</div>
     </div>
     <div style="display:flex;gap:10px;align-items:center;">
-      <button class="tour-trigger-icon" onclick="startTour('deals')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
+      <button class="tour-trigger-icon" onclick="startSectionTour('deals')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
       <button class="pm-btn pm-btn-outline pm-btn-sm" onclick="pmShowCustomers()">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px;"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
         Customers
@@ -9492,7 +9542,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div class="section-title">Security</div>
       <div class="section-subtitle">Architecture, compliance, and incident response for IES Intelligence Hub</div>
     </div>
-    <button class="tour-trigger-icon" onclick="startTour('security')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
+    <button class="tour-trigger-icon" onclick="startSectionTour('security')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
   </div>
 
   <div class="wiki-layout">
@@ -9519,7 +9569,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div class="section-title">Site Analytics</div>
       <div class="section-subtitle"><span class="an-live-dot"></span>Visitor activity and engagement tracking</div>
     </div>
-    <button class="tour-trigger-icon" onclick="startTour('analytics')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
+    <button class="tour-trigger-icon" onclick="startSectionTour('analytics')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
   </div>
 
   <!-- Time Range Controls -->
@@ -9622,7 +9672,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div>
         <h2>Change Management</h2>
       </div>
-      <button class="tour-trigger-icon" onclick="startTour('changemanagement')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
+      <button class="tour-trigger-icon" onclick="startSectionTour('changemanagement')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
     </div>
     <div class="cm-header-actions">
       <button class="cm-btn cm-btn-secondary" onclick="cmShowADKARGuide()">ADKAR Guide</button>
@@ -30076,26 +30126,39 @@ const TourEngine = {
   currentTour: null,
   currentStep: 0,
   isActive: false,
-  overlay: null,
+  backdrop: null,
   spotlight: null,
   card: null,
+  _initialized: false,
+  _escHandler: null,
 
   init() {
-    // Create overlay
-    this.overlay = document.createElement('div');
-    this.overlay.className = 'tour-overlay';
-    document.body.appendChild(this.overlay);
-    this.overlay.addEventListener('click', () => this.closeTour());
+    // Prevent double-init (script runs at end of body + DOMContentLoaded)
+    if (this._initialized) return;
+    this._initialized = true;
 
-    // Create spotlight
+    // Backdrop — transparent click-catcher that closes tour on outside click
+    this.backdrop = document.createElement('div');
+    this.backdrop.className = 'tour-backdrop-v2';
+    this.backdrop.addEventListener('click', function() { TourEngine.closeTour(); });
+    document.body.appendChild(this.backdrop);
+
+    // Spotlight — visual cutout with box-shadow, never blocks clicks
     this.spotlight = document.createElement('div');
-    this.spotlight.className = 'tour-spotlight';
+    this.spotlight.className = 'tour-spotlight-v2';
     document.body.appendChild(this.spotlight);
 
-    // Create card
+    // Card — positioned tooltip with buttons, always clickable
     this.card = document.createElement('div');
-    this.card.className = 'tour-card';
+    this.card.className = 'tour-card-v2';
+    this.card.addEventListener('click', function(e) { e.stopPropagation(); });
     document.body.appendChild(this.card);
+
+    // Escape key closes tour
+    this._escHandler = function(e) {
+      if (e.key === 'Escape' && TourEngine.isActive) TourEngine.closeTour();
+    };
+    document.addEventListener('keydown', this._escHandler);
   },
 
   startTour(tourKey) {
@@ -30103,12 +30166,14 @@ const TourEngine = {
       console.warn('Tour not found:', tourKey);
       return;
     }
+    // Close any existing tour first
+    if (this.isActive) this.closeTour();
 
     this.currentTour = TourDefinitions[tourKey];
     this.currentStep = 0;
     this.isActive = true;
 
-    this.overlay.classList.add('active');
+    this.backdrop.classList.add('active');
     this.spotlight.classList.add('active');
     this.showStep();
   },
@@ -30119,130 +30184,123 @@ const TourEngine = {
       return;
     }
 
-    const step = this.currentTour.steps[this.currentStep];
-    const targetEl = document.querySelector(step.target);
+    var step = this.currentTour.steps[this.currentStep];
+    var targetEl = document.querySelector(step.target);
 
     if (!targetEl) {
-      console.warn('Target element not found:', step.target);
-      this.nextStep();
+      console.warn('Tour: target not found, skipping:', step.target);
+      this.currentStep++;
+      if (this.currentStep < this.currentTour.steps.length) {
+        this.showStep();
+      } else {
+        this.closeTour();
+      }
       return;
     }
 
     // Scroll target into view
     targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-    // Highlight element
-    setTimeout(() => {
-      const rect = targetEl.getBoundingClientRect();
-      const padding = step.padding || 8;
+    var self = this;
+    setTimeout(function() {
+      var rect = targetEl.getBoundingClientRect();
+      var padding = step.padding || 8;
 
-      this.spotlight.style.top = (rect.top - padding) + 'px';
-      this.spotlight.style.left = (rect.left - padding) + 'px';
-      this.spotlight.style.width = (rect.width + padding * 2) + 'px';
-      this.spotlight.style.height = (rect.height + padding * 2) + 'px';
+      // Position spotlight around target
+      self.spotlight.style.top = (rect.top - padding) + 'px';
+      self.spotlight.style.left = (rect.left - padding) + 'px';
+      self.spotlight.style.width = (rect.width + padding * 2) + 'px';
+      self.spotlight.style.height = (rect.height + padding * 2) + 'px';
 
-      // Position card
-      this.positionCard(rect, step);
+      // Build card HTML with onclick handlers (no addEventListener needed)
+      self.card.innerHTML = self.buildCardHTML(step);
 
-      // Update card content
-      this.card.innerHTML = this.buildCardHTML(step);
-      this.card.classList.add('active');
+      // Position card intelligently
+      self.positionCard(rect);
 
-      // Attach event listeners
-      document.querySelector('.tour-btn-prev').addEventListener('click', () => this.prevStep());
-      document.querySelector('.tour-btn-next').addEventListener('click', () => this.nextStep());
-      document.querySelector('.tour-btn-close').addEventListener('click', () => this.closeTour());
-    }, 300);
+      // Show card
+      self.card.classList.add('active');
+    }, 350);
   },
 
-  positionCard(targetRect, step) {
-    const cardWidth = 380;
-    const cardHeight = 200;
-    const gap = 16;
-    const viewport = {
-      width: window.innerWidth,
-      height: window.innerHeight
-    };
+  positionCard(targetRect) {
+    var cardWidth = 380;
+    var cardHeight = 220;
+    var gap = 16;
+    var vw = window.innerWidth;
+    var vh = window.innerHeight;
+    var top, left;
 
-    let top, left, arrowClass = 'top';
-
-    // Default: position below
-    if (targetRect.bottom + gap + cardHeight < viewport.height) {
-      top = targetRect.bottom + window.scrollY + gap;
-      arrowClass = 'top';
+    // Try below target
+    if (targetRect.bottom + gap + cardHeight < vh) {
+      top = targetRect.bottom + gap;
     }
-    // Position above if no room below
+    // Try above target
     else if (targetRect.top - gap - cardHeight > 0) {
-      top = targetRect.top + window.scrollY - gap - cardHeight;
-      arrowClass = 'bottom';
+      top = targetRect.top - gap - cardHeight;
     }
-    // Position to the right
-    else if (targetRect.right + gap + cardWidth < viewport.width) {
-      left = targetRect.right + window.scrollX + gap;
-      top = targetRect.top + window.scrollY;
-      arrowClass = 'left';
-    }
-    // Position to the left
+    // Fallback: center vertically
     else {
-      left = targetRect.left + window.scrollX - gap - cardWidth;
-      top = targetRect.top + window.scrollY;
-      arrowClass = 'right';
+      top = Math.max(16, (vh - cardHeight) / 2);
     }
 
-    // Fallback horizontal centering
-    if (left === undefined) {
-      left = Math.max(16, Math.min(viewport.width - cardWidth - 16, targetRect.left + window.scrollX + (targetRect.width - cardWidth) / 2));
-    }
+    // Horizontal: center on target, clamped to viewport
+    left = targetRect.left + (targetRect.width - cardWidth) / 2;
+    left = Math.max(16, Math.min(vw - cardWidth - 16, left));
 
+    // Use fixed positioning (no scrollY needed since position:fixed)
     this.card.style.top = top + 'px';
     this.card.style.left = left + 'px';
-
-    // Store arrow class for HTML generation
-    this.card.dataset.arrowClass = arrowClass;
   },
 
   buildCardHTML(step) {
-    const totalSteps = this.currentTour.steps.length;
-    const stepNum = this.currentStep + 1;
-    const arrowClass = this.card.dataset.arrowClass || 'top';
+    var totalSteps = this.currentTour.steps.length;
+    var stepNum = this.currentStep + 1;
+    var isFirst = this.currentStep === 0;
+    var isLast = this.currentStep === totalSteps - 1;
 
-    return `
-      <div class="tour-arrow ${arrowClass}"></div>
-      <div class="tour-card-header">
-        <div>
-          <div class="tour-card-title">${step.title}</div>
-          <div class="tour-card-step">STEP ${stepNum} OF ${totalSteps}</div>
-        </div>
-      </div>
-      <div class="tour-card-content">${step.content}</div>
-      <div class="tour-card-footer">
-        <div class="tour-progress">Step ${stepNum}/${totalSteps}</div>
-        <div class="tour-card-buttons">
-          <button class="tour-btn tour-btn-close">Close</button>
-          <button class="tour-btn tour-btn-prev" ${this.currentStep === 0 ? 'disabled' : ''}>← Back</button>
-          <button class="tour-btn tour-btn-next">${this.currentStep === totalSteps - 1 ? 'Done' : 'Next'} →</button>
-        </div>
-      </div>
-    `;
+    // Progress dots
+    var dots = '';
+    for (var i = 0; i < totalSteps; i++) {
+      dots += '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;margin:0 3px;background:' + (i === this.currentStep ? 'var(--ies-blue)' : 'var(--ies-gray-200)') + ';transition:background 0.2s;"></span>';
+    }
+
+    return '<div style="text-align:center;">' +
+      '<div class="tour-card-title" style="font-size:16px;font-weight:700;color:var(--ies-navy);margin-bottom:4px;">' + step.title + '</div>' +
+      '<div style="font-size:11px;font-weight:700;color:var(--ies-blue);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;">STEP ' + stepNum + ' OF ' + totalSteps + '</div>' +
+      '<div style="font-size:13px;color:var(--ies-gray-600);line-height:1.6;margin-bottom:16px;">' + step.content + '</div>' +
+      '<div style="margin-bottom:14px;">' + dots + '</div>' +
+      '<div style="display:flex;gap:10px;justify-content:center;">' +
+        '<button onclick="TourEngine.closeTour()" class="tour-btn" style="background:var(--ies-gray-100);color:var(--ies-gray-600);padding:8px 16px;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:Montserrat,sans-serif;">Close</button>' +
+        (isFirst ? '' : '<button onclick="TourEngine.prevStep()" class="tour-btn" style="background:var(--ies-gray-100);color:var(--ies-gray-600);padding:8px 16px;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:Montserrat,sans-serif;">&larr; Back</button>') +
+        '<button onclick="TourEngine.nextStep()" class="tour-btn" style="background:var(--ies-blue);color:#fff;padding:8px 20px;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:Montserrat,sans-serif;">' + (isLast ? 'Done &rarr;' : 'Next &rarr;') + '</button>' +
+      '</div>' +
+    '</div>';
   },
 
   nextStep() {
     this.currentStep++;
+    this.card.classList.remove('active');
     this.showStep();
   },
 
   prevStep() {
     if (this.currentStep > 0) {
       this.currentStep--;
+      this.card.classList.remove('active');
       this.showStep();
     }
   },
 
   closeTour() {
     this.isActive = false;
-    this.overlay.classList.remove('active');
-    this.card.classList.remove('active');
-    this.spotlight.classList.remove('active');
+    this.currentTour = null;
+    this.currentStep = 0;
+
+    // Remove active states
+    if (this.backdrop) this.backdrop.classList.remove('active');
+    if (this.card) { this.card.classList.remove('active'); this.card.innerHTML = ''; }
+    if (this.spotlight) this.spotlight.classList.remove('active');
   }
 };
 
@@ -30489,15 +30547,16 @@ const TourDefinitions = {
   }
 };
 
-// Initialize tour engine on page load
+// Initialize tour engine (guarded against double-init)
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => TourEngine.init());
+  document.addEventListener('DOMContentLoaded', function() { TourEngine.init(); });
 } else {
   TourEngine.init();
 }
 
-// Public function to start a tour from tour icon clicks
-function startTour(tourKey) {
+// Section tour launcher — called from Guided Tour buttons (onclick="startSectionTour('deals')")
+// Separate name from the old Welcome-page startTour() so both can coexist.
+function startSectionTour(tourKey) {
   TourEngine.startTour(tourKey);
 }
 </script>
