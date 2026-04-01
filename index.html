@@ -5864,6 +5864,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         <button class="dt-landing-back-btn" onclick="showDesignTool('dt-landing', document.querySelector('#dt-tabs .dt-tab'))">&#8592; Back to Design Tools</button>
         <div class="dt-landing-title">Warehouse Sizing Calculator</div>
         <div class="dt-landing-subtitle">Design optimal warehouse layouts and estimate facility sizing requirements</div>
+        <button class="tour-trigger-icon" onclick="startSectionTour('warehouse')" title="Start guided tour" style="margin-top:8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
       </div>
       <div class="dt-landing-actions">
         <button class="dt-landing-btn" onclick="wscNewScenario()">+ Create New Scenario</button>
@@ -6496,6 +6497,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         <button class="dt-landing-back-btn" onclick="showDesignTool('dt-landing', document.querySelector('#dt-tabs .dt-tab'))">&#8592; Back to Design Tools</button>
         <div class="dt-landing-title">Center of Gravity (Network)</div>
         <div class="dt-landing-subtitle">Find optimal distribution center locations using demand-weighted analysis</div>
+        <button class="tour-trigger-icon" onclick="startSectionTour('cog')" title="Start guided tour" style="margin-top:8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
       </div>
       <div class="dt-landing-actions">
         <button class="dt-landing-btn" onclick="netNewScenario()">+ Create New Scenario</button>
@@ -6696,6 +6698,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         <button class="dt-landing-back-btn" onclick="showDesignTool('dt-landing', document.querySelector('#dt-tabs .dt-tab'))">&#8592; Back to Design Tools</button>
         <div class="dt-landing-title">Network Optimization</div>
         <div class="dt-landing-subtitle">Optimize multi-mode transportation and facility location decisions</div>
+        <button class="tour-trigger-icon" onclick="startSectionTour('netopt')" title="Start guided tour" style="margin-top:8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
       </div>
       <div class="dt-landing-actions">
         <button class="dt-landing-btn" onclick="netoptNewScenario()">+ Create New Scenario</button>
@@ -7479,6 +7482,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         <button class="dt-landing-back-btn" onclick="showDesignTool('dt-landing', document.querySelector('#dt-tabs .dt-tab'))">&#8592; Back to Design Tools</button>
         <div class="dt-landing-title">Multi-Site Analyzer</div>
         <div class="dt-landing-subtitle">Multi-location warehouse deals with aggregate financials</div>
+        <button class="tour-trigger-icon" onclick="startSectionTour('multisite')" title="Start guided tour" style="margin-top:8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
       </div>
       <div class="dt-landing-actions">
         <button class="dt-landing-btn" onclick="dealApp.showNewDealModal()">+ Create New Deal</button>
@@ -30378,7 +30382,7 @@ const TourDefinitions = {
       {
         target: '#dt-tabs',
         title: 'Tool Navigation',
-        content: 'Access all 7 design tools from these tabs: Network Optimizer, Cost Model Builder, Fleet Modeler, Staffing Planner, Slotting Engine, WMS Configurator, and Layout Designer.',
+        content: 'Access all 6 design tools from these tabs: Center of Gravity, Network Optimization, Warehouse Sizing, Cost Model Builder, Multi-Site Analyzer, and Fleet Modeler.',
         padding: 8
       },
       {
@@ -30391,6 +30395,102 @@ const TourDefinitions = {
         target: '.dt-panel',
         title: 'Active Tool Interface',
         content: 'When a tool is open, this area shows its input panels, calculation engine, and results. Tools can export data and link to the Cost Model Builder for integrated pricing.',
+        padding: 12
+      }
+    ]
+  },
+
+  cog: {
+    name: 'Center of Gravity',
+    steps: [
+      {
+        target: '#net-landing .dt-landing-header',
+        title: 'Center of Gravity Overview',
+        content: 'Find optimal distribution center locations using demand-weighted analysis. Input your customer locations and shipment volumes to calculate the ideal facility placement.',
+        padding: 12
+      },
+      {
+        target: '#net-landing .dt-landing-actions',
+        title: 'Create a Scenario',
+        content: 'Click here to start a new Center of Gravity scenario. Add demand points, set constraints, and run the optimizer to find the best facility locations for your network.',
+        padding: 8
+      },
+      {
+        target: '#net-landing .dt-landing-grid',
+        title: 'Saved Scenarios',
+        content: 'Your saved scenarios appear here as cards. Load any previous analysis to review results, adjust inputs, or compare alternatives side by side.',
+        padding: 12
+      }
+    ]
+  },
+
+  netopt: {
+    name: 'Network Optimization',
+    steps: [
+      {
+        target: '#netopt-landing .dt-landing-header',
+        title: 'Network Optimization Overview',
+        content: 'Optimize multi-mode transportation across TL, LTL, and Parcel. Upload rate cards, define service zones, and model demand to find the lowest-cost shipping network.',
+        padding: 12
+      },
+      {
+        target: '#netopt-landing .dt-landing-actions',
+        title: 'Create a Scenario',
+        content: 'Click here to start a new network optimization scenario. Define lanes, upload CSV rate cards, and generate demand profiles for 6 business archetypes.',
+        padding: 8
+      },
+      {
+        target: '#netopt-landing .dt-landing-grid',
+        title: 'Saved Scenarios',
+        content: 'Your saved scenarios appear here. Load any previous optimization to review cost breakdowns, heatmaps, and service zone coverage.',
+        padding: 12
+      }
+    ]
+  },
+
+  warehouse: {
+    name: 'Warehouse Sizing Calculator',
+    steps: [
+      {
+        target: '#wsc-landing .dt-landing-header',
+        title: 'Warehouse Sizing Overview',
+        content: 'Design optimal warehouse layouts and estimate facility sizing requirements. Input SKU profiles, throughput volumes, and storage types to calculate the space you need.',
+        padding: 12
+      },
+      {
+        target: '#wsc-landing .dt-landing-actions',
+        title: 'Create a Scenario',
+        content: 'Click here to start a new sizing scenario. Define your storage zones, dock requirements, and operational parameters to generate a complete facility layout.',
+        padding: 8
+      },
+      {
+        target: '#wsc-landing .dt-landing-grid',
+        title: 'Saved Scenarios',
+        content: 'Your saved scenarios appear here as cards. Load any previous analysis to review layouts, adjust parameters, or compare facility configurations.',
+        padding: 12
+      }
+    ]
+  },
+
+  multisite: {
+    name: 'Multi-Site Analyzer',
+    steps: [
+      {
+        target: '#deal-landing .dt-landing-header',
+        title: 'Multi-Site Analyzer Overview',
+        content: 'Group multiple cost models into a single deal to see aggregate financials across locations. Perfect for multi-site RFPs where you need a consolidated pricing view.',
+        padding: 12
+      },
+      {
+        target: '#deal-landing .dt-landing-actions',
+        title: 'Create a Deal',
+        content: 'Click here to create a new multi-site deal. Add individual cost models as sites, then view combined financials, pricing summaries, and site-by-site comparisons.',
+        padding: 8
+      },
+      {
+        target: '#deal-landing .dt-landing-grid',
+        title: 'Saved Deals',
+        content: 'Your saved deals appear here. Deals group cost models together — click any deal to open its detail view with Summary, Sites, Financials, and Pricing tabs.',
         padding: 12
       }
     ]
