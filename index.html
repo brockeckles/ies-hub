@@ -13327,10 +13327,18 @@ async function loadSignalFeed() {
       var dateStr = item.date ? new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
       var linkSvg = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="display:inline-block;vertical-align:-1px;opacity:.4;margin-left:4px;"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
       var titleHtml = item.url ? '<a href="' + item.url + '" target="_blank" rel="noopener">' + (item.title || 'Signal') + linkSvg + '</a>' : (item.title || 'Signal');
+      // Skip excerpt if it's a near-duplicate of the title (Google News auto-snippets)
+      var showExcerpt = false;
+      if (item.excerpt) {
+        var cleanExcerpt = item.excerpt.replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+        var cleanTitle = (item.title || '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+        // Show excerpt only if it adds meaningful content beyond the title
+        showExcerpt = cleanExcerpt.length > 0 && !cleanTitle.replace(/\s*[-–—|]\s*\w+[\w\s]*$/, '').startsWith(cleanExcerpt.substring(0, 30)) && !cleanExcerpt.startsWith(cleanTitle.substring(0, 30));
+      }
       return '<div class="signal-item" data-signal-type="' + item.type + '">' +
         '<div class="signal-header"><span class="signal-type signal-type-' + item.type + '">' + item.type + '</span><span class="signal-date">' + dateStr + '</span></div>' +
         '<div class="signal-title">' + titleHtml + '</div>' +
-        (item.excerpt ? '<div class="signal-excerpt">' + item.excerpt + '</div>' : '') +
+        (showExcerpt ? '<div class="signal-excerpt">' + item.excerpt + '</div>' : '') +
         '</div>';
     }).join('');
   } catch(e) {
