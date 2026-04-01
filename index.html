@@ -5239,7 +5239,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div class="welcome-feature-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--ies-orange)" stroke-width="1.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6"/></svg></div>
       <div class="welcome-feature-title">Cost Model Builder</div>
       <div class="welcome-feature-desc">Build detailed operational cost models with MOST-driven labor, equipment, real estate, overhead, pricing buckets, and multi-year P&L projections.</div>
-      <div style="margin-top:10px;"><span class="wiki-tag" style="background:rgba(255,58,0,.1);color:var(--ies-orange);">BETA</span></div>
+      <div style="margin-top:10px;"></div>
     </div>
   </div>
 
@@ -5740,6 +5740,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     <div>
       <div class="section-title">Design Tools</div>
       <div class="section-subtitle">Interactive calculators and models for warehouse solutions design</div>
+      <div style="margin-top:12px;padding:10px 16px;background:rgba(243,112,33,0.06);border-left:3px solid var(--ies-orange);border-radius:0 6px 6px 0;font-size:12px;color:var(--ies-gray-600);line-height:1.5;max-width:720px;margin-left:auto;margin-right:auto;">All design tools are currently in beta and serve as proofs of concept. Each tool requires subject-matter expert leadership and dedicated development before formal rollout.</div>
     </div>
     <button class="tour-trigger-icon" onclick="startSectionTour('designtools')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
   </div>
@@ -5771,7 +5772,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
           <div style="width:48px;height:48px;background:linear-gradient(135deg,var(--ies-blue),#1e5bb8);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;">
             <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
-          <div style="font-weight:700;font-size:16px;color:var(--ies-navy);margin-bottom:6px;">Cost Model Builder <span style="font-size:10px;background:var(--ies-orange);color:#fff;padding:2px 6px;border-radius:3px;margin-left:6px;font-weight:700;">BETA</span></div>
+          <div style="font-weight:700;font-size:16px;color:var(--ies-navy);margin-bottom:6px;">Cost Model Builder</div>
           <div style="font-size:13px;color:var(--ies-gray-600);line-height:1.5;margin-bottom:16px;">Build detailed operational cost models with MOST-driven labor, equipment, real estate, and overhead components.</div>
           <div style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--ies-blue);">
             Open Cost Model <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -7781,7 +7782,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
   </div>
   <div class="section-header">
     <div>
-      <div class="section-title">Cost Model Builder <span style="font-size:12px;background:var(--ies-orange);color:#fff;padding:3px 8px;border-radius:4px;margin-left:8px;font-weight:700;vertical-align:middle;">BETA</span></div>
+      <div class="section-title">Cost Model Builder</div>
       <div class="section-subtitle">Build detailed operational cost models for 3PL warehouse proposals</div>
     </div>
     <button class="tour-trigger-icon" onclick="startSectionTour('costmodel')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
@@ -16091,20 +16092,25 @@ function daOpenArtifact(artifactType, artifactId) {
     // Open the project, then ensure deal selector reflects the deal context
     cmApp.openProject(parseInt(artifactId, 10) || artifactId).then(function() {
       if (sourceDealId) {
-        var cmDealSel = document.getElementById('cmDealSelector');
-        if (cmDealSel) {
-          // Ensure deals are loaded, then set the value
-          daLoadDealsForSelector().then(function() {
-            cmDealSel.value = String(sourceDealId);
-            // Also update the project record if deal_id wasn't set
-            if (cmApp.currentProject && !cmApp.currentProject.deal_id) {
-              cmApp.currentProject.deal_id = sourceDealId;
-              if (sb) {
-                sb.from('cost_model_projects').update({ deal_id: sourceDealId }).eq('id', cmApp.currentProject.id).then(function(){}).catch(function(e){ console.error('Failed to update deal_id:', e); });
+        // Ensure deals are loaded, then set the value with retry for slow Supabase
+        daLoadDealsForSelector().then(function() {
+          function trySetDealSelector(attempts) {
+            var cmDealSel = document.getElementById('cmDealSelector');
+            if (cmDealSel && cmDealSel.options.length > 1) {
+              cmDealSel.value = String(sourceDealId);
+              // Also update the project record if deal_id wasn't set
+              if (cmApp.currentProject && !cmApp.currentProject.deal_id) {
+                cmApp.currentProject.deal_id = sourceDealId;
+                if (sb) {
+                  sb.from('cost_model_projects').update({ deal_id: sourceDealId }).eq('id', cmApp.currentProject.id).then(function(){}).catch(function(e){ console.error('Failed to update deal_id:', e); });
+                }
               }
+            } else if (attempts > 0) {
+              setTimeout(function() { trySetDealSelector(attempts - 1); }, 300);
             }
-          });
-        }
+          }
+          trySetDealSelector(5);
+        });
       }
     });
   } else if (artifactType === 'netopt_scenario' && artifactId) {
@@ -16124,6 +16130,8 @@ function daOpenArtifact(artifactType, artifactId) {
       dtNav.classList.add('active');
     }
     fmShowTool();
+    // Load the specific scenario by ID
+    fmLoadFleetScenario(parseInt(artifactId, 10) || artifactId);
   } else if (artifactType === 'presentation') {
     // Presentation artifacts are downloaded files — show info toast
     showToast('This presentation was downloaded when generated. Check your Downloads folder.', 'info');
@@ -20546,9 +20554,43 @@ function fmNewScenario() {
   fmShowTool();
 }
 
-function fmLoadFleetScenario(id) {
-  // Placeholder - fleet has its own scenario loading logic
-  console.log('Loading fleet scenario:', id);
+async function fmLoadFleetScenario(id) {
+  try {
+    // Fetch scenario and its lanes from Supabase
+    var scenarios = await cmFetchTable('fleet_scenarios', 'id=eq.' + id);
+    if (!scenarios || scenarios.length === 0) { showToast('Scenario not found', 'error'); return; }
+    var scenario = scenarios[0];
+    var lanes = await cmFetchTable('fleet_lanes', 'scenario_id=eq.' + id + '&order=id.asc');
+
+    // Map Supabase lanes into fmApp lane format
+    fmApp.lanes = (lanes || []).map(function(l) {
+      return {
+        origin: l.origin || l.origin_city || '',
+        destination: l.destination || l.destination_city || '',
+        distance: l.distance_miles || l.distance || 0,
+        annualVolume: l.annual_volume || l.volume || 0,
+        weight: l.avg_weight || l.weight || 0
+      };
+    });
+
+    // Restore config if stored on scenario
+    if (scenario.config && typeof scenario.config === 'object') {
+      fmApp.config = JSON.parse(JSON.stringify(scenario.config));
+      fmApp.renderVehicleChecks();
+    }
+
+    // Re-render lanes table
+    fmApp.renderLanesTable();
+    fmApp.results = null;
+    document.getElementById('fm-no-results').style.display = 'block';
+    document.getElementById('fm-results-content').style.display = 'none';
+    fmShowTab('lanes');
+
+    showToast('Loaded scenario: ' + (scenario.scenario_name || scenario.name || 'Untitled'), 'success');
+  } catch (e) {
+    console.error('Error loading fleet scenario:', e);
+    showToast('Error loading scenario', 'error');
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -32306,24 +32348,24 @@ const deckGen = {
   },
 
   _getDefaultData() {
-    // Hardcoded Wayfair example data (from v3)
+    // Generic placeholder data for deals missing details
     return {
-      customerName: 'Wayfair',
-      location: 'Indianapolis, IN',
-      sqft: '100K',
-      palletsPerDay: '1,000',
-      palletsPerYear: '260K',
-      headcount: '75',
-      annualRevenue: '$10.6M',
-      totalCost: '$8.75M',
-      ebitda: '$1.85M',
-      margin: '17.7%',
-      ebidtaPercent: '22.2%',
-      contractYears: '5',
-      inboundRate: '$0.75/pallet',
-      storageRate: '$3.50/pallet/mo',
-      pickPackRate: '$1.25/case',
-      outboundRate: '$2.00/unit'
+      customerName: '[Customer]',
+      location: '[Location TBD]',
+      sqft: '—',
+      palletsPerDay: '—',
+      palletsPerYear: '—',
+      headcount: '—',
+      annualRevenue: '—',
+      totalCost: '—',
+      ebitda: '—',
+      margin: '—',
+      ebidtaPercent: '—',
+      contractYears: '—',
+      inboundRate: '—',
+      storageRate: '—',
+      pickPackRate: '—',
+      outboundRate: '—'
     };
   },
 
@@ -32387,7 +32429,7 @@ const deckGen = {
         slide,
         'Solutions Qualification Review',
         `${data.customerName} | ${data.location}`,
-        'Prepared for Wayfair Leadership'
+        `Prepared for ${data.customerName} Leadership`
       );
     }
 
@@ -32400,8 +32442,8 @@ const deckGen = {
       this._addTitle(slide, 'Customer Overview');
 
       this._add2x2CardGrid(slide, [
-        { icon: 'industry', title: 'Company Profile', description: 'e-commerce leader, $5B+ revenue' },
-        { icon: 'clipboard', title: 'Current Operations', description: 'Multi-site DC network, 500K+ sqft' },
+        { icon: 'industry', title: 'Company Profile', description: `${data.customerName} — ${data.location}` },
+        { icon: 'clipboard', title: 'Current Operations', description: `${data.sqft} sqft facility` },
         { icon: 'boxes', title: 'Volume Profile', description: `${data.palletsPerDay} pallets/day, seasonal spikes` },
         { icon: 'bullseye', title: 'Strategic Priorities', description: 'Cost optimization, speed to market' }
       ]);
@@ -32761,12 +32803,12 @@ const deckGen = {
       this._addTitle(slide, 'Solution Architecture', true);
 
       this._add2x3CardGrid(slide, [
-        { icon: 'warehouse', title: 'Facility', description: '100K sqft, climate controlled' },
-        { icon: 'boxes', title: 'Storage', description: '500 pallet positions' },
+        { icon: 'warehouse', title: 'Facility', description: `${data.sqft} sqft, ${data.location}` },
+        { icon: 'boxes', title: 'Storage', description: `${data.palletsPerDay} pallets/day capacity` },
         { icon: 'laptop', title: 'Technology', description: 'Blue Yonder WMS' },
         { icon: 'truck', title: 'Material Flow', description: 'Automated conveyors' },
-        { icon: 'users', title: 'Labor', description: '75 dedicated team members' },
-        { icon: 'tools', title: 'Equipment', description: '50 MHE units' }
+        { icon: 'users', title: 'Labor', description: `${data.headcount} dedicated team members` },
+        { icon: 'tools', title: 'Equipment', description: 'MHE fleet per spec' }
       ], true);
     }
 
@@ -32785,7 +32827,7 @@ const deckGen = {
         ],
         [
           { text: 'Total Sqft', options: { fill: this._B.white } },
-          { text: '100,000', options: { fill: this._B.lightGray } }
+          { text: data.sqft, options: { fill: this._B.lightGray } }
         ],
         [
           { text: 'Ceiling Height', options: { fill: this._B.lightGray } },
@@ -33106,7 +33148,7 @@ const deckGen = {
         {
           badge: 'MARKET',
           title: 'Market Expansion',
-          items: ['Enter e-commerce logistics', 'Midwest corridor strength', '500-mile demand radius']
+          items: ['New market vertical entry', 'Regional corridor strength', 'Demand radius expansion']
         },
         {
           badge: 'GROWTH',
@@ -33325,8 +33367,8 @@ const deckGen = {
       this._addTitle(slide, 'Recommendation', true);
 
       this._addNumberedList(slide, [
-        { title: 'Strategic Value', description: '$10.3M 5-year EBITDA with 17.7% margins' },
-        { title: 'Market Opportunity', description: 'Entry into $50B+ e-commerce logistics market' },
+        { title: 'Strategic Value', description: `${data.ebitda} EBITDA with ${data.margin} margins` },
+        { title: 'Market Opportunity', description: `${data.customerName} — ${data.location} market entry` },
         { title: 'Operational Readiness', description: 'Clear execution plan with Q3 2026 go-live' }
       ], true);
     }
@@ -33670,32 +33712,32 @@ const deckGen = {
         [
           { text: 'Inbound Processing', options: { fill: this._B.white } },
           { text: data.inboundRate, options: { fill: this._B.lightGray } },
-          { text: '60K pallets', options: { fill: this._B.white } },
-          { text: '$45,000', options: { fill: this._B.lightGray } }
+          { text: `${data.palletsPerYear} pallets`, options: { fill: this._B.white } },
+          { text: '—', options: { fill: this._B.lightGray } }
         ],
         [
           { text: 'Storage', options: { fill: this._B.lightGray } },
           { text: data.storageRate, options: { fill: this._B.white } },
-          { text: '500 positions', options: { fill: this._B.lightGray } },
-          { text: '$2,100,000', options: { fill: this._B.white } }
+          { text: 'Per spec', options: { fill: this._B.lightGray } },
+          { text: '—', options: { fill: this._B.white } }
         ],
         [
           { text: 'Pick & Pack', options: { fill: this._B.white } },
           { text: data.pickPackRate, options: { fill: this._B.lightGray } },
-          { text: '500K cases', options: { fill: this._B.white } },
-          { text: '$625,000', options: { fill: this._B.lightGray } }
+          { text: 'Per spec', options: { fill: this._B.white } },
+          { text: '—', options: { fill: this._B.lightGray } }
         ],
         [
           { text: 'Outbound Shipping', options: { fill: this._B.lightGray } },
           { text: data.outboundRate, options: { fill: this._B.white } },
-          { text: '1M units', options: { fill: this._B.lightGray } },
-          { text: '$2,000,000', options: { fill: this._B.white } }
+          { text: 'Per spec', options: { fill: this._B.lightGray } },
+          { text: '—', options: { fill: this._B.white } }
         ],
         [
           { text: 'Total Annual Cost', options: { fill: this._B.white, bold: true } },
           { text: '', options: { fill: this._B.lightGray } },
           { text: '', options: { fill: this._B.white } },
-          { text: '$4,770,000', options: { fill: this._B.lightGray, bold: true } }
+          { text: data.totalCost, options: { fill: this._B.lightGray, bold: true } }
         ]
       ];
 
