@@ -5758,38 +5758,6 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
   <!-- ── LANDING PAGE ── -->
   <div id="dt-landing" class="dt-panel" style="display:block;">
 
-    <!-- ── NETWORK OPTIMIZATION ── -->
-    <div style="margin-bottom:32px;">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
-        <div style="width:6px;height:24px;background:linear-gradient(180deg,#059669,#047857);border-radius:3px;"></div>
-        <div style="font-weight:700;font-size:15px;color:var(--ies-navy);letter-spacing:.3px;">Network Optimization</div>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;">
-        <!-- Center of Gravity Card -->
-        <div onclick="showDesignTool('dt-network',document.querySelectorAll('#dt-tabs .dt-tab')[1])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='var(--ies-blue)';this.style.boxShadow='0 4px 16px rgba(0,71,171,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
-          <div style="width:48px;height:48px;background:linear-gradient(135deg,#059669,#047857);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;">
-            <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5" stroke="#fff" stroke-width="1.5"/><circle cx="18" cy="6" r="2.5" stroke="#fff" stroke-width="1.5"/><circle cx="12" cy="18" r="2.5" stroke="#fff" stroke-width="1.5"/><path d="M8 7l4 9M16 7l-4 9M8.5 6h7" stroke="#fff" stroke-width="1.2" opacity=".6"/></svg>
-          </div>
-          <div style="font-weight:700;font-size:16px;color:var(--ies-navy);margin-bottom:6px;">Center of Gravity</div>
-          <div style="font-size:13px;color:var(--ies-gray-600);line-height:1.5;margin-bottom:16px;">Weighted center of gravity analysis for optimal DC placement. Input demand locations and volumes to model 1-5 facility networks.</div>
-          <div style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#059669;">
-            Open Tool <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </div>
-        </div>
-        <!-- Network Optimization Card -->
-        <div onclick="showDesignTool('dt-netopt',document.querySelectorAll('#dt-tabs .dt-tab')[2])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='var(--ies-blue)';this.style.boxShadow='0 4px 16px rgba(0,71,171,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
-          <div style="width:48px;height:48px;background:linear-gradient(135deg,#059669,#047857);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;">
-            <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><path d="M3 21V3h18v18H3z" stroke="#fff" stroke-width="1.5"/><circle cx="8" cy="16" r="2" stroke="#fff" stroke-width="1.5"/><circle cx="16" cy="8" r="2" stroke="#fff" stroke-width="1.5"/><circle cx="16" cy="16" r="2" stroke="#fff" stroke-width="1.5"/><path d="M10 16h4M16 10v4M9.5 14.5l5-5" stroke="#fff" stroke-width="1.2" opacity=".6"/></svg>
-          </div>
-          <div style="font-weight:700;font-size:16px;color:var(--ies-navy);margin-bottom:6px;">Network Optimization</div>
-          <div style="font-size:13px;color:var(--ies-gray-600);line-height:1.5;margin-bottom:16px;">Enterprise-grade facility location optimization with cost minimization, service level constraints, and scenario comparison.</div>
-          <div style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#059669;">
-            Open Optimizer <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- ── SOLUTIONS ── -->
     <div style="margin-bottom:32px;">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
@@ -5849,6 +5817,38 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
           <div style="font-size:13px;color:var(--ies-gray-600);line-height:1.5;margin-bottom:16px;">Browse and manage engineered time standards (MOST sequences), analyze labor requirements, and model FTEs from TMU-based productivity rates.</div>
           <div style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#7c3aed;">
             Open MOST Standards <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── NETWORK OPTIMIZATION ── -->
+    <div style="margin-bottom:32px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+        <div style="width:6px;height:24px;background:linear-gradient(180deg,#059669,#047857);border-radius:3px;"></div>
+        <div style="font-weight:700;font-size:15px;color:var(--ies-navy);letter-spacing:.3px;">Network Optimization</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;">
+        <!-- Center of Gravity Card -->
+        <div onclick="showDesignTool('dt-network',document.querySelectorAll('#dt-tabs .dt-tab')[1])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='var(--ies-blue)';this.style.boxShadow='0 4px 16px rgba(0,71,171,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
+          <div style="width:48px;height:48px;background:linear-gradient(135deg,#059669,#047857);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;">
+            <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5" stroke="#fff" stroke-width="1.5"/><circle cx="18" cy="6" r="2.5" stroke="#fff" stroke-width="1.5"/><circle cx="12" cy="18" r="2.5" stroke="#fff" stroke-width="1.5"/><path d="M8 7l4 9M16 7l-4 9M8.5 6h7" stroke="#fff" stroke-width="1.2" opacity=".6"/></svg>
+          </div>
+          <div style="font-weight:700;font-size:16px;color:var(--ies-navy);margin-bottom:6px;">Center of Gravity</div>
+          <div style="font-size:13px;color:var(--ies-gray-600);line-height:1.5;margin-bottom:16px;">Weighted center of gravity analysis for optimal DC placement. Input demand locations and volumes to model 1-5 facility networks.</div>
+          <div style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#059669;">
+            Open Tool <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </div>
+        <!-- Network Optimization Card -->
+        <div onclick="showDesignTool('dt-netopt',document.querySelectorAll('#dt-tabs .dt-tab')[2])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='var(--ies-blue)';this.style.boxShadow='0 4px 16px rgba(0,71,171,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
+          <div style="width:48px;height:48px;background:linear-gradient(135deg,#059669,#047857);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;">
+            <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><path d="M3 21V3h18v18H3z" stroke="#fff" stroke-width="1.5"/><circle cx="8" cy="16" r="2" stroke="#fff" stroke-width="1.5"/><circle cx="16" cy="8" r="2" stroke="#fff" stroke-width="1.5"/><circle cx="16" cy="16" r="2" stroke="#fff" stroke-width="1.5"/><path d="M10 16h4M16 10v4M9.5 14.5l5-5" stroke="#fff" stroke-width="1.2" opacity=".6"/></svg>
+          </div>
+          <div style="font-weight:700;font-size:16px;color:var(--ies-navy);margin-bottom:6px;">Network Optimization</div>
+          <div style="font-size:13px;color:var(--ies-gray-600);line-height:1.5;margin-bottom:16px;">Enterprise-grade facility location optimization with cost minimization, service level constraints, and scenario comparison.</div>
+          <div style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#059669;">
+            Open Optimizer <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
         </div>
       </div>
