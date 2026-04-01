@@ -30354,21 +30354,21 @@ const TourDefinitions = {
     name: 'Cost Model Builder',
     steps: [
       {
-        target: '.cm-nav-section',
-        title: 'Section Navigation',
-        content: 'The Cost Model has 13 sections: Setup, Labor, Equipment, Real Estate, Utilities, Materials, IT/WMS, Transportation, Overhead, Management, Value-Added Services, Pricing, and P&L Summary. Navigate using this sidebar.',
+        target: '#sec-costmodel .dt-tabs-bar',
+        title: 'Tool Navigation',
+        content: 'Quick-switch between all design tools directly from the Cost Model Builder. Jump to Network Optimization, Warehouse Sizing, Fleet Modeler, or back to the full Design Tools suite.',
         padding: 8
       },
       {
-        target: '#setupSection',
-        title: 'Setup & Configuration',
-        content: 'Start here — define the warehouse operation: client info, facility type, shift structure, volume profile, and contract terms. This data flows into all downstream cost calculations.',
+        target: '.dt-landing-header',
+        title: 'Cost Model Overview',
+        content: 'The Cost Model Builder provides engineered warehouse costing for 3PL operations. Create models with 13 cost sections — from Setup and Labor through Pricing and P&L Summary.',
         padding: 12
       },
       {
-        target: '.cm-content',
-        title: 'Model Workspace',
-        content: 'The main workspace where you build the model. Each of the 13 sections has input fields, calculation tables, and results. Data flows between sections so changes propagate automatically.',
+        target: '#newModelBtnLanding',
+        title: 'Create a Model',
+        content: 'Click here to start a new cost model. Once inside, you\'ll see a sidebar with 13 sections, input fields for each cost category, and a live summary that updates as you build.',
         padding: 8
       }
     ]
