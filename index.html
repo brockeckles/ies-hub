@@ -13960,48 +13960,69 @@ async function pmExecuteDOSPopulate() {
       pmToast('Skipped Stage ' + skippedStages.join(', ') + ' (already populated).', 'warning');
     }
 
-    // Fetch templates for selected stages
-    var stageIds = [];
-    var stagesRes = await sb.from('stages').select('id,stage_number,stage_name').in('stage_number', selectedStages).order('stage_number');
-    if (stagesRes.error) throw stagesRes.error;
-    var stages = stagesRes.data || [];
-    stageIds = stages.map(function(s){ return s.id; });
+    // DOS stage/template definitions (hardcoded — no public Supabase read needed)
+    var DOS_TEMPLATES = [
+      {sn:1,sname:'Pre-Sales Engagement',name:'Credit Check Form',desc:'Commercial Lead must run credit check and obtain appropriate approvals to proceed',ws:'commercial'},
+      {sn:1,sname:'Pre-Sales Engagement',name:'Mutual NDA Form',desc:'GXO NDA template preferred',ws:'commercial'},
+      {sn:1,sname:'Pre-Sales Engagement',name:'SCAN Documents',desc:'Required documents must be fully and effectively completed',ws:'commercial'},
+      {sn:1,sname:'Pre-Sales Engagement',name:'Client RFP Files',desc:'Files must be uploaded to SCAN SharePoint',ws:'commercial'},
+      {sn:2,sname:'Deal Qualification',name:'Solution Lead Assignment',desc:'Solutions Lead assignment',ws:'solutions'},
+      {sn:2,sname:'Deal Qualification',name:'Solutions Qualification Template',desc:'Solutions Lead completes the SQ Template',ws:'solutions'},
+      {sn:2,sname:'Deal Qualification',name:'Solutions Qualifications Meeting',desc:'Attendees include Solutions Lead, Solutions Leader, Division President, Commercial Lead, Sales Leader',ws:'solutions'},
+      {sn:2,sname:'Deal Qualification',name:'Engineering Lead Assignment',desc:'Engineering Lead Assignment',ws:'engineering'},
+      {sn:2,sname:'Deal Qualification',name:'Response Timeline',desc:'Must obtain Pursuit Team alignment on timeline',ws:'solutions'},
+      {sn:2,sname:'Deal Qualification',name:'Solutions Qualification Deck',desc:'Includes Win Strategy, Value Prop Goals, Solution Architecture, and Pursuit Plan',ws:'solutions'},
+      {sn:3,sname:'Kick-Off & Solution Design',name:'Kickoff Meeting',desc:'Attendee list dictated by RoE',ws:'solutions'},
+      {sn:3,sname:'Kick-Off & Solution Design',name:'Engage SME Support',desc:'As dictated by RoE',ws:'solutions'},
+      {sn:3,sname:'Kick-Off & Solution Design',name:'Solution Design Concept Meeting',desc:'Attendee list dictated by RoE',ws:'solutions'},
+      {sn:3,sname:'Kick-Off & Solution Design',name:'Engineering Review Meeting',desc:'Attendee list dictated by RoE',ws:'engineering'},
+      {sn:3,sname:'Kick-Off & Solution Design',name:'Cost Model Review Meeting',desc:'Attendee list dictated by RoE',ws:'solutions'},
+      {sn:3,sname:'Kick-Off & Solution Design',name:'Site Visits',desc:'Should perform site visits whenever feasible',ws:'solutions'},
+      {sn:3,sname:'Kick-Off & Solution Design',name:'Data Request Template',desc:'To be provided to customer if sufficient data is not available to develop solution',ws:'solutions'},
+      {sn:3,sname:'Kick-Off & Solution Design',name:'Data Analysis',desc:'Use appropriate template (i.e., Rd 1, Rd 2, existing)',ws:'engineering'},
+      {sn:3,sname:'Kick-Off & Solution Design',name:'Material Flow Diagram',desc:'Engineering-developed material flow analysis',ws:'engineering'},
+      {sn:3,sname:'Kick-Off & Solution Design',name:'Labor Model',desc:'Utilization of MOST or existing site UPHs',ws:'engineering'},
+      {sn:3,sname:'Kick-Off & Solution Design',name:'Engineering Workbook',desc:'Engineering analysis and specifications workbook',ws:'engineering'},
+      {sn:3,sname:'Kick-Off & Solution Design',name:'Conceptual Layout (ROM)',desc:'Rough order of magnitude facility layout',ws:'engineering'},
+      {sn:3,sname:'Kick-Off & Solution Design',name:'Customer Pricing Template',desc:'QA check to be performed by Pricing once Solutions have linked Cost Models to Customer Pricing Template',ws:'solutions'},
+      {sn:3,sname:'Kick-Off & Solution Design',name:'Cost Model',desc:'Solutions leads development of Cost Model with inputs from key workstreams',ws:'solutions'},
+      {sn:3,sname:'Kick-Off & Solution Design',name:'Implementation Timeline',desc:'Utilization of template in ROM rounds',ws:'solutions'},
+      {sn:4,sname:'Operations Review',name:'Operations Review',desc:'PowerPoint-driven meeting conducted virtually or F2F if RoE requires it',ws:'solutions'},
+      {sn:4,sname:'Operations Review',name:'PMO Timeline Draft',desc:'PMO-developed timeline that takes template timeline a level lower',ws:'solutions'},
+      {sn:5,sname:'Executive Review',name:'Obtain ELT Approvals',desc:'PowerAutomate Email workflow for executive approvals',ws:'finance_pricing'},
+      {sn:5,sname:'Executive Review',name:'Present Solution to Customer Decision Maker',desc:'Customer-facing presentation of proposed solution',ws:'solutions'},
+      {sn:5,sname:'Executive Review',name:'Proposal Response',desc:'Formal proposal response document',ws:'commercial_lead'},
+      {sn:5,sname:'Executive Review',name:'Prepare Presentation',desc:'Executive presentation preparation',ws:'commercial_lead'},
+      {sn:5,sname:'Executive Review',name:'Risk Assessment',desc:'Solution and commercial risk assessment',ws:'solutions'},
+      {sn:6,sname:'Delivery Handover',name:'Legal Review T&Cs',desc:'Legal review of terms and conditions',ws:'legal'},
+      {sn:6,sname:'Delivery Handover',name:'Internal Planning Session (IPS)',desc:'Internal planning session for delivery preparation',ws:'solutions'},
+      {sn:6,sname:'Delivery Handover',name:'Joint Planning Session (JPS)',desc:'Joint planning session with customer',ws:'solutions'},
+      {sn:6,sname:'Delivery Handover',name:'Sign LOI',desc:'Letter of Intent execution',ws:'elt'},
+      {sn:6,sname:'Delivery Handover',name:'Submit PAF',desc:'Project Approval Form submission',ws:'finance_pricing'},
+      {sn:6,sname:'Delivery Handover',name:'Complete Development of Concept of Design (CoD)',desc:'Full Concept of Design document for implementation handoff',ws:'solutions'}
+    ];
 
-    var templatesRes = await sb.from('stage_element_templates').select('*').in('stage_id', stageIds).order('sort_order');
-    if (templatesRes.error) throw templatesRes.error;
-    var templates = templatesRes.data || [];
+    // Filter to selected stages
+    var templates = DOS_TEMPLATES.filter(function(t){ return selectedStages.indexOf(t.sn) !== -1; });
 
     if (templates.length === 0) { pmToast('No templates found for selected stages.', 'warning'); return; }
-
-    // Build stage lookup
-    var stageLookup = {};
-    stages.forEach(function(s){ stageLookup[s.id] = s; });
 
     // Get current max sort_order for this opportunity's tasks
     var existingTasks = pmData.tasks.filter(function(t){ return t.opportunity_id == pmCurrentOpp.id; });
     var maxSort = existingTasks.reduce(function(m,t){ return Math.max(m, t.sort_order||0); }, 0);
 
-    // Workstream labels
-    var wsLabels = {
-      'solutions': 'Solutions', 'engineering': 'Engineering', 'commercial': 'Commercial',
-      'commercial_lead': 'Commercial Lead', 'finance_pricing': 'Finance/Pricing',
-      'legal': 'Legal', 'elt': 'ELT', 'operations': 'Operations', 'shared': 'Shared'
-    };
-
     // Build task rows
     var rows = templates.map(function(t, idx) {
-      var stage = stageLookup[t.stage_id] || {};
-      var ws = wsLabels[t.responsible_workstream] || t.responsible_workstream || '';
       return {
         opportunity_id: pmCurrentOpp.id,
-        title: t.element_name,
-        description: t.description || '',
+        title: t.name,
+        description: t.desc || '',
         assignee: null,
         priority: 'medium',
         status: 'todo',
         sort_order: maxSort + idx + 1,
-        dos_stage_number: stage.stage_number || null,
-        dos_stage_name: stage.stage_name || null
+        dos_stage_number: t.sn,
+        dos_stage_name: t.sname
       };
     });
 
