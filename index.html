@@ -31853,2455 +31853,2753 @@ function startSectionTour(tourKey) {
 }
 </script>
 
+
 <script>
-/* ═══════════ DECK GENERATION ENGINE — INJECTED BELOW ═══════════ */
-// ═══════════ DECK GENERATION ENGINE ═══════════
+/* ═══════════ DECK GENERATION ENGINE v2 — Enterprise Grade ═══════════ */
+// ═══════════════════════════════════════════════════════════════════════════════
+// DECK GENERATION ENGINE v2 - Browser Compatible
+// ═══════════════════════════════════════════════════════════════════════════════
+// Generates GXO branded PowerPoint decks using PptxGenJS.
+//
+// Requirements: window.PptxGenJS (CDN), window.showToast, window.sb
+//
+// API: await deckGen.generateDeck('qualification', opportunityId);
+// ═══════════════════════════════════════════════════════════════════════════════
 
 const deckGen = {
-  // ─────────────────────────────────────────────────────
-  // BRAND & HELPER FUNCTIONS
-  // ─────────────────────────────────────────────────────
 
-  _gxoBrand() {
+  // Brand Constants
+  _B: {
+    PRIMARY_ORANGE: 'FF6600',
+    DARK: '1C1C1C',
+    CHARCOAL: '2D2D2D',
+    MEDIUM_GRAY: '6C757D',
+    LIGHT_GRAY: 'F5F5F5',
+    WHITE: 'FFFFFF',
+    ACCENT_TEAL: '0891B2',
+    SUCCESS_GREEN: '059669',
+  },
+
+  // Factory Functions
+  _makeShadow() {
     return {
-      primary: 'FF3A00',
-      dark: '1C1C1C',
-      lightGray: 'F0F0F0',
-      white: 'FFFFFF',
-      mediumGray: '6C757D',
-      accentBlue: '0047AB',
-      green: '198754',
-      red: 'D32F2F',
-      headerFont: 'Calibri',
-      bodyFont: 'Calibri'
+      type: 'outer',
+      blur: 6,
+      offset: 2,
+      color: '000000',
+      opacity: 0.12,
+      angle: 135,
     };
   },
 
-  _fmtCurrency(num) {
-    if (!num && num !== 0) return '$0';
-    return '$' + num.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  _makeCardShadow() {
+    return {
+      type: 'outer',
+      blur: 4,
+      offset: 1,
+      color: '000000',
+      opacity: 0.08,
+      angle: 135,
+    };
   },
 
-  _fmtNumber(num) {
-    if (!num && num !== 0) return '0';
-    return num.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  _makeTextOptions(fontSize, bold, color) {
+    return {
+      fontSize,
+      bold: bold || false,
+      color: color || this._B.DARK,
+      fontFace: 'Calibri',
+    };
   },
 
-  _addFooter(slide, text = 'CONFIDENTIAL | GXO Logistics') {
-    const brand = this._gxoBrand();
-    slide.addText(text, {
-      x: 0.5,
-      y: 5.375,
-      w: 9,
-      h: 0.2,
-      fontSize: 8,
-      color: brand.mediumGray,
-      align: 'left',
-      fontFace: brand.bodyFont
-    });
-  },
-
-  _titleSlide(pres, title, subtitle, date) {
-    const brand = this._gxoBrand();
-    const slide = pres.addSlide();
-
-    // Dark background
-    slide.background = { color: brand.dark };
-
-    // Orange bar at top
-    slide.addShape(pres.shapes.RECTANGLE, {
-      x: 0,
-      y: 0,
-      w: '100%',
-      h: 0.08,
-      fill: { color: brand.primary },
-      line: { type: 'none' }
-    });
-
-    // Main title
-    slide.addText(title, {
-      x: 0.5,
-      y: 1.8,
-      w: 9,
-      h: 1.2,
-      fontSize: 36,
+  _makeHeadingOptions(fontSize = 20) {
+    return {
+      fontSize,
       bold: true,
-      color: brand.white,
-      align: 'center',
-      fontFace: brand.headerFont
-    });
+      color: this._B.DARK,
+      fontFace: 'Calibri',
+    };
+  },
 
-    // Subtitle
-    slide.addText(subtitle, {
-      x: 0.5,
-      y: 3.1,
-      w: 9,
-      h: 0.6,
-      fontSize: 16,
-      color: 'A0A8B8',
-      align: 'center',
-      fontFace: brand.bodyFont
-    });
+  _makeBodyOptions(fontSize = 11) {
+    return {
+      fontSize,
+      bold: false,
+      color: this._B.DARK,
+      fontFace: 'Calibri',
+    };
+  },
 
-    // Date
-    slide.addText(date, {
-      x: 8.5,
-      y: 5.2,
+  _makeWhiteHeadingOptions(fontSize = 24) {
+    return {
+      fontSize,
+      bold: true,
+      color: this._B.WHITE,
+      fontFace: 'Calibri',
+    };
+  },
+
+  _makeWhiteBodyOptions(fontSize = 14) {
+    return {
+      fontSize,
+      bold: false,
+      color: this._B.WHITE,
+      fontFace: 'Calibri',
+    };
+  },
+
+
+
+  // ============================================================================
+
+  // ============================================================================
+  // HELPER FUNCTIONS
+  // ============================================================================
+
+  _addGXOLogo(pres, slide) {
+    // Orange "GXO" text at top left
+    slide.addText('GXO', {
+      x: 0.4,
+      y: 0.15,
       w: 1.2,
-      h: 0.3,
-      fontSize: 10,
-      color: 'A0A8B8',
-      align: 'right',
-      fontFace: brand.bodyFont
-    });
-
-    return slide;
-  },
-
-  _sectionDivider(pres, sectionTitle, sectionSubtitle) {
-    const brand = this._gxoBrand();
-    const slide = pres.addSlide();
-
-    // Dark background
-    slide.background = { color: brand.dark };
-
-    // Orange line
-    slide.addShape(pres.shapes.RECTANGLE, {
-      x: 4,
-      y: 2.0,
-      w: 2,
-      h: 0.06,
-      fill: { color: brand.primary },
-      line: { type: 'none' }
-    });
-
-    // Section title
-    slide.addText(sectionTitle, {
-      x: 0.5,
-      y: 2.2,
-      w: 9,
-      h: 0.8,
-      fontSize: 28,
+      h: 0.4,
+      fontSize: 22,
       bold: true,
-      color: brand.white,
-      align: 'center',
-      fontFace: brand.headerFont
-    });
-
-    // Subtitle
-    if (sectionSubtitle) {
-      slide.addText(sectionSubtitle, {
-        x: 0.5,
-        y: 3.2,
-        w: 9,
-        h: 0.6,
-        fontSize: 14,
-        color: 'A0A8B8',
-        align: 'center',
-        fontFace: brand.bodyFont
-      });
-    }
-
-    return slide;
-  },
-
-  _contentSlide(pres, title) {
-    const brand = this._gxoBrand();
-    const slide = pres.addSlide();
-
-    // White background
-    slide.background = { color: brand.white };
-
-    // Header background
-    slide.addShape(pres.shapes.RECTANGLE, {
-      x: 0,
-      y: 0,
-      w: '100%',
-      h: 0.5,
-      fill: { color: brand.lightGray },
-      line: { type: 'none' }
-    });
-
-    // Title text in header
-    slide.addText(title, {
-      x: 0.5,
-      y: 0.08,
-      w: 9,
-      h: 0.35,
-      fontSize: 16,
-      bold: true,
-      color: brand.dark,
+      color: this._B.PRIMARY_ORANGE,
+      fontFace: 'Calibri',
       align: 'left',
-      fontFace: brand.headerFont,
-      valign: 'middle'
+      margin: 0,
     });
-
-    // Orange accent bar at bottom of header
-    slide.addShape(pres.shapes.RECTANGLE, {
-      x: 0,
-      y: 0.46,
-      w: '100%',
-      h: 0.04,
-      fill: { color: brand.primary },
-      line: { type: 'none' }
-    });
-
-    // Add footer
-    this._addFooter(slide);
-
-    return slide;
-  },
-
-  _closingSlide(pres, message) {
-    const brand = this._gxoBrand();
-    const slide = pres.addSlide();
-
-    // Dark background
-    slide.background = { color: brand.dark };
-
-    // Orange bar at top
+  }
+,
+  _addOrangeTopBar(pres, slide) {
+    // Thin orange bar across top
     slide.addShape(pres.shapes.RECTANGLE, {
       x: 0,
       y: 0,
       w: '100%',
-      h: 0.08,
-      fill: { color: brand.primary },
-      line: { type: 'none' }
+      h: 0.05,
+      fill: { color: this._B.PRIMARY_ORANGE },
+      line: { type: 'none' },
     });
-
-    // Message
-    slide.addText(message, {
-      x: 0.5,
-      y: 2.2,
-      w: 9,
-      h: 1.2,
-      fontSize: 32,
-      bold: true,
-      color: brand.white,
-      align: 'center',
-      fontFace: brand.headerFont
+  }
+,
+  _addConfidentialFooter(slide) {
+    // Confidential footer text
+    slide.addText('GXO Confidential - For Authorized Use Only', {
+      x: 0.4,
+      y: 5.2,
+      w: 9.2,
+      h: 0.3,
+      fontSize: 8,
+      color: this._B.MEDIUM_GRAY,
+      fontFace: 'Calibri',
+      align: 'left',
     });
-
-    return slide;
-  },
-
-  _addStatCard(slide, x, y, value, label, color) {
-    const brand = this._gxoBrand();
-
-    // Card background
-    slide.addShape(pres.shapes.RECTANGLE, {
-      x: x,
-      y: y,
-      w: 1.8,
+  }
+,
+  _addDarkSlideTitle(slide, title, subtitle = '') {
+    // Title on dark background
+    slide.addText(title, {
+      x: 0.4,
+      y: 1.2,
+      w: 9.2,
       h: 0.8,
-      fill: { color: color },
-      line: { color: color },
-      shadow: {
-        type: 'outer',
-        angle: 45,
-        blur: 4,
-        color: '000000',
-        opacity: 0.15,
-        offset: 2,
-        spread: 0
-      }
-    });
-
-    // Value
-    slide.addText(value, {
-      x: x,
-      y: y + 0.12,
-      w: 1.8,
-      h: 0.35,
-      fontSize: 20,
+      fontSize: 44,
       bold: true,
-      color: brand.white,
-      align: 'center',
-      fontFace: brand.headerFont
+      color: this._B.WHITE,
+      fontFace: 'Calibri',
+      align: 'left',
     });
 
-    // Label
-    slide.addText(label, {
-      x: x,
-      y: y + 0.48,
-      w: 1.8,
-      h: 0.22,
-      fontSize: 9,
-      color: brand.white,
-      align: 'center',
-      fontFace: brand.bodyFont
-    });
-  },
-
-  // ─────────────────────────────────────────────────────
-  // MAIN GENERATORS
-  // ─────────────────────────────────────────────────────
-
-  async generateQualificationDeck(opportunityId) {
-    const brand = this._gxoBrand();
-    const pres = new PptxGenJS();
-    pres.defineLayout({ name: 'LAYOUT_16x9', width: 10, height: 5.625 });
-    pres.addSlide();
-    pres.removeSlide(0);
-
-    try {
-      // Fetch opportunity data
-      const { data: opportunity, error: oppError } = await sb
-        .from('opportunities')
-        .select('*')
-        .eq('id', opportunityId)
-        .single();
-
-      if (oppError || !opportunity) {
-        console.error('Failed to load opportunity', oppError);
-        return;
-      }
-
-      const customerName = opportunity.company_name || 'Customer';
-      const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-
-      // SLIDE 1: Title
-      this._titleSlide(pres, 'Solutions Qualification Review', customerName, today);
-
-      // SLIDE 2: Customer Overview
-      let slide = this._contentSlide(pres, 'Customer Overview');
-      slide.addText([
-        { text: 'Wayfair', options: { fontSize: 18, bold: true } },
-        { text: ' — Leading e-commerce furniture and home goods retailer', options: { fontSize: 14, breakLine: true } }
-      ], {
-        x: 0.5,
-        y: 0.7,
-        w: 9,
-        h: 0.5,
-        color: brand.dark,
-        fontFace: brand.bodyFont
-      });
-
-      slide.addText('CastleGate Fulfillment Network operates multiple regional distribution centers with capacity for seasonal peaks. Current operations are self-operated with plans to leverage third-party logistics partners for geographic expansion and cost optimization.', {
-        x: 0.5,
-        y: 1.3,
-        w: 9,
-        h: 1.2,
-        fontSize: 12,
-        color: brand.dark,
-        fontFace: brand.bodyFont
-      });
-
-      this._addStatCard(slide, 0.5, 2.8, '130K+', 'Employees', brand.accentBlue);
-      this._addStatCard(slide, 2.4, 2.8, '900+', 'Facilities', brand.green);
-      this._addStatCard(slide, 4.3, 2.8, '$7B+', 'Annual Revenue', brand.primary);
-
-      // SLIDE 3: Opportunity Profile
-      slide = this._contentSlide(pres, 'Opportunity Profile');
-
-      const facilityType = opportunity.facility_type || 'Distribution Center';
-      const location = opportunity.location || 'Indianapolis, IN';
-      const sqft = opportunity.sqft || 100000;
-      const contractTerm = opportunity.contract_term_months || 60;
-
-      const profileData = [
-        ['Facility Type', facilityType],
-        ['Location', location],
-        ['Square Footage', this._fmtNumber(sqft) + ' SF'],
-        ['Contract Term', contractTerm + ' months'],
-        ['Volumes (est.)', '1,000+ pallets/day'],
-        ['Storage Type', 'Single-deep selective racking']
-      ];
-
-      slide.addTable(profileData, {
-        x: 0.5,
-        y: 0.7,
-        w: 9,
-        h: 2.5,
-        colW: [4.5, 4.5],
-        border: { pt: 0.5, color: 'D0D5DE' },
-        headerExist: false,
-        rowH: 0.35,
-        fontSize: 11,
-        color: brand.dark,
-        fill: (opts) => {
-          if (opts.rowIndex % 2 === 0) return { color: brand.lightGray };
-          return { color: brand.white };
-        }
-      });
-
-      // SLIDE 4: Market Assessment
-      slide = this._contentSlide(pres, 'Market Assessment — Indianapolis');
-
-      const marketPoints = [
-        { title: 'Geographic Advantage', desc: 'Central US location, convergence of I-70 and I-65' },
-        { title: 'Labor Market', desc: 'Strong availability, competitive wage structure' },
-        { title: 'Logistics Corridor', desc: 'Major hub for regional and national distribution' },
-        { title: 'Proximity', desc: '2-day ground delivery radius covers 60% of US population' }
-      ];
-
-      let yPos = 0.7;
-      for (const point of marketPoints) {
-        slide.addText(point.title, {
-          x: 0.5,
-          y: yPos,
-          w: 9,
-          h: 0.2,
-          fontSize: 12,
-          bold: true,
-          color: brand.primary,
-          fontFace: brand.headerFont
-        });
-        slide.addText(point.desc, {
-          x: 0.7,
-          y: yPos + 0.22,
-          w: 8.8,
-          h: 0.3,
-          fontSize: 11,
-          color: brand.dark,
-          fontFace: brand.bodyFont
-        });
-        yPos += 0.65;
-      }
-
-      // SLIDE 5: Deal Concept
-      slide = this._contentSlide(pres, 'Deal Concept & Sizing Approach');
-
-      slide.addText('Operational Model', {
-        x: 0.5,
-        y: 0.7,
-        w: 9,
-        h: 0.25,
-        fontSize: 13,
-        bold: true,
-        color: brand.primary,
-        fontFace: brand.headerFont
-      });
-
-      const operationalPoints = [
-        'Pallet-in / Pallet-out workflow with transactional pick capability',
-        'Single-deep selective racking for fast-moving furniture SKUs',
-        '2-shift operation (10-hour shifts, 6am–4pm, 3pm–11pm)',
-        'RF-directed putaway and pick using WMS integration',
-        'Cross-dock staging for direct-ship orders'
-      ];
-
-      slide.addText(operationalPoints, {
-        x: 0.7,
-        y: 1.0,
-        w: 9,
-        h: 1.8,
-        fontSize: 11,
-        color: brand.dark,
-        bullet: true,
-        fontFace: brand.bodyFont
-      });
-
-      slide.addText('Headcount', {
-        x: 0.5,
-        y: 3.0,
-        w: 9,
-        h: 0.25,
-        fontSize: 13,
-        bold: true,
-        color: brand.primary,
-        fontFace: brand.headerFont
-      });
-
-      slide.addText(['1 Site Manager, 2 Shift Supervisors, 25–30 Associates (varies with seasonality)', { text: '', options: { breakLine: true } }], {
-        x: 0.7,
-        y: 3.3,
-        w: 9,
-        h: 0.4,
-        fontSize: 11,
-        color: brand.dark,
-        fontFace: brand.bodyFont
-      });
-
-      // SLIDE 6: Win Strategy
-      slide = this._contentSlide(pres, 'Win Strategy & Value Propositions');
-
-      const winStrategy = opportunity.win_strategy || 'Cost leadership, Operational excellence, Technology integration';
-      const strategyPoints = winStrategy.split(',').map(s => s.trim()).slice(0, 3);
-
-      const xPositions = [0.5, 3.5, 6.5];
-      const icons = ['✓', '⚙', '♦'];
-
-      for (let i = 0; i < strategyPoints.length; i++) {
-        slide.addShape(pres.shapes.RECTANGLE, {
-          x: xPositions[i],
-          y: 0.8,
-          w: 2.6,
-          h: 2.5,
-          fill: { color: i === 0 ? brand.green : i === 1 ? brand.accentBlue : brand.primary },
-          line: { type: 'none' },
-          shadow: {
-            type: 'outer',
-            angle: 45,
-            blur: 4,
-            color: '000000',
-            opacity: 0.1,
-            offset: 1,
-            spread: 0
-          }
-        });
-
-        slide.addText(icons[i], {
-          x: xPositions[i],
-          y: 0.95,
-          w: 2.6,
-          h: 0.35,
-          fontSize: 20,
-          color: brand.white,
-          align: 'center',
-          fontFace: brand.headerFont
-        });
-
-        slide.addText(strategyPoints[i], {
-          x: xPositions[i] + 0.2,
-          y: 1.4,
-          w: 2.2,
-          h: 1.7,
-          fontSize: 11,
-          bold: true,
-          color: brand.white,
-          align: 'center',
-          fontFace: brand.headerFont
-        });
-      }
-
-      // SLIDE 7: Competitive Landscape
-      slide = this._contentSlide(pres, 'Competitive Landscape');
-
-      const competitorData = [
-        ['Provider', 'Strengths', 'Weaknesses'],
-        ['GXO', 'Scale, technology, CastleGate relationship', 'Higher cost baseline'],
-        ['XPO', 'Price competitive', 'Less tech maturity, capacity concerns'],
-        ['DHL', 'International integration', 'Premium pricing, limited regional footprint']
-      ];
-
-      slide.addTable(competitorData, {
-        x: 0.5,
-        y: 0.7,
-        w: 9,
-        h: 2.8,
-        colW: [2, 3.5, 3.5],
-        border: { pt: 0.5, color: 'D0D5DE' },
-        headerExist: true,
-        rowH: [0.3, 0.65, 0.65, 0.65],
-        fontSize: 10,
-        color: brand.dark,
-        fill: (opts) => {
-          if (opts.rowIndex === 0) return { color: brand.dark };
-          if (opts.rowIndex % 2 === 0) return { color: brand.lightGray };
-          return { color: brand.white };
-        },
-        textOptions: opts => {
-          if (opts.rowIndex === 0) return { color: brand.white, bold: true };
-          return { color: brand.dark };
-        }
-      });
-
-      // SLIDE 8: Risk Assessment
-      slide = this._contentSlide(pres, 'Risk Assessment & Mitigants');
-
-      const risks = opportunity.risks || 'Labor availability, Seasonal demand, Competitive pricing';
-      const riskArray = risks.split(',').map(r => r.trim()).slice(0, 3);
-
-      const riskData = [['Risk', 'Mitigant']];
-      riskArray.forEach(risk => {
-        const mitigant = risk === 'Labor availability' ? 'Competitive wages, benefits, training program'
-          : risk === 'Seasonal demand' ? 'Flexible staffing, cross-training'
-          : 'Value-based pricing, long-term partnership focus';
-        riskData.push([risk, mitigant]);
-      });
-
-      slide.addTable(riskData, {
-        x: 0.5,
-        y: 0.7,
-        w: 9,
-        h: 2.8,
-        colW: [4.5, 4.5],
-        border: { pt: 0.5, color: 'D0D5DE' },
-        headerExist: true,
-        rowH: [0.3, 0.65, 0.65, 0.65],
-        fontSize: 10,
-        color: brand.dark,
-        fill: (opts) => {
-          if (opts.rowIndex === 0) return { color: brand.dark };
-          if (opts.rowIndex % 2 === 0) return { color: brand.lightGray };
-          return { color: brand.white };
-        },
-        textOptions: opts => {
-          if (opts.rowIndex === 0) return { color: brand.white, bold: true };
-          return { color: brand.dark };
-        }
-      });
-
-      // SLIDE 9: Resource Plan & Timeline
-      slide = this._contentSlide(pres, 'Resource Plan & Timeline');
-
-      slide.addText('Key Resources', {
-        x: 0.5,
-        y: 0.7,
-        w: 4,
-        h: 0.25,
-        fontSize: 12,
-        bold: true,
-        color: brand.primary,
-        fontFace: brand.headerFont
-      });
-
-      slide.addText([
-        { text: 'Account Executive', options: { bullet: true } },
-        { text: 'Solution Architect', options: { bullet: true, breakLine: true } },
-        { text: 'Project Manager', options: { bullet: true, breakLine: true } },
-        { text: 'Operations Manager', options: { bullet: true, breakLine: true } }
-      ], {
-        x: 0.5,
-        y: 1.0,
-        w: 4,
-        h: 1.5,
-        fontSize: 11,
-        color: brand.dark,
-        fontFace: brand.bodyFont
-      });
-
-      slide.addText('Key Milestones', {
-        x: 5.5,
-        y: 0.7,
-        w: 4,
-        h: 0.25,
-        fontSize: 12,
-        bold: true,
-        color: brand.primary,
-        fontFace: brand.headerFont
-      });
-
-      slide.addText([
-        { text: 'RFP Response: ', options: { bold: true } },
-        { text: 'Week 1\n', options: { breakLine: true } },
-        { text: 'Site Survey: ', options: { bold: true } },
-        { text: 'Week 2\n', options: { breakLine: true } },
-        { text: 'Proposal Submission: ', options: { bold: true } },
-        { text: 'Week 3\n', options: { breakLine: true } },
-        { text: 'Contract Negotiation: ', options: { bold: true } },
-        { text: 'Week 4–6\n', options: { breakLine: true } }
-      ], {
-        x: 5.5,
-        y: 1.0,
-        w: 4,
-        h: 1.5,
-        fontSize: 10,
-        color: brand.dark,
-        fontFace: brand.bodyFont
-      });
-
-      // SLIDE 10: Next Steps
-      this._closingSlide(pres, 'Let\'s Move Forward Together');
-
-      // Download and record artifact
-      await pres.writeFile({
-        fileName: `GXO_Qualification_${customerName.replace(/\s+/g, '_')}_${today.replace(/\s+/g, '_')}.pptx`
-      });
-
-      // Record artifact
-      const timestamp = new Date().toISOString();
-      await sb.from('deal_artifacts').insert({
-        deal_id: opportunityId,
-        artifact_type: 'presentation',
-        artifact_id: `qual_${timestamp}`,
-        artifact_name: 'Solutions Qualification Review',
-        artifact_notes: `Qualification deck generated for ${customerName}`,
-        created_by: 'Brock Eckles'
-      });
-
-      this._showToast('Qualification deck generated successfully!', 'success');
-
-    } catch (error) {
-      console.error('Error generating qualification deck:', error);
-      this._showToast('Error generating deck: ' + error.message, 'error');
-    }
-  },
-
-  async generateOpsReviewDeck(opportunityId) {
-    const brand = this._gxoBrand();
-    const pres = new PptxGenJS();
-    pres.defineLayout({ name: 'LAYOUT_16x9', width: 10, height: 5.625 });
-    pres.addSlide();
-    pres.removeSlide(0);
-
-    try {
-      // Fetch opportunity data
-      const { data: opportunity, error: oppError } = await sb
-        .from('opportunities')
-        .select('*')
-        .eq('id', opportunityId)
-        .single();
-
-      if (oppError || !opportunity) {
-        console.error('Failed to load opportunity', oppError);
-        return;
-      }
-
-      const customerName = opportunity.company_name || 'Customer';
-      const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-
-      // SLIDE 1: Title
-      this._titleSlide(pres, 'Operations Review', customerName, today);
-
-      // SLIDE 2: Executive Summary
-      let slide = this._contentSlide(pres, 'Executive Summary — Key Metrics');
-
-      const sqft = opportunity.sqft || 100000;
-      const dailyVolume = 1000;
-      const annualVolume = dailyVolume * 365;
-      const headcount = 28;
-      const annualCost = 2800000;
-      const margin = 0.15;
-
-      this._addStatCard(slide, 0.5, 0.8, this._fmtNumber(sqft), 'Square Feet', brand.accentBlue);
-      this._addStatCard(slide, 2.4, 0.8, this._fmtNumber(dailyVolume), 'Pallets/Day', brand.green);
-      this._addStatCard(slide, 4.3, 0.8, this._fmtNumber(headcount), 'FTEs', brand.primary);
-      this._addStatCard(slide, 6.2, 0.8, this._fmtCurrency(annualCost), 'Annual Cost', brand.mediumGray);
-      this._addStatCard(slide, 8.1, 0.8, (margin * 100).toFixed(0) + '%', 'Margin', brand.green);
-
-      // SLIDE 3: Solution Design Overview
-      slide = this._contentSlide(pres, 'Solution Design Overview');
-
-      slide.addText('Design Approach', {
-        x: 0.5,
-        y: 0.7,
-        w: 9,
-        h: 0.25,
-        fontSize: 13,
-        bold: true,
-        color: brand.primary,
-        fontFace: brand.headerFont
-      });
-
-      const designPoints = [
-        'Ambient temperature general merchandise warehouse',
-        'Single-deep selective racking with pallet flow for fast movers',
-        'RF-directed putaway, pick, and stage workflows',
-        'Cross-dock capability for direct-ship orders',
-        'Blue Yonder WMS with 4G mobile technology',
-        'Dedicated inbound and outbound dock operations'
-      ];
-
-      slide.addText(designPoints, {
-        x: 0.7,
-        y: 1.0,
-        w: 8.6,
-        h: 2.0,
-        fontSize: 11,
-        color: brand.dark,
-        bullet: true,
-        fontFace: brand.bodyFont
-      });
-
-      // SLIDE 4: Facility Profile
-      slide = this._contentSlide(pres, 'Facility Profile & Configuration');
-
-      const facilityData = [
-        ['Metric', 'Specification'],
-        ['Total SF', this._fmtNumber(sqft) + ' SF'],
-        ['Clear Height', '28 feet'],
-        ['Dock Doors', '8 inbound, 12 outbound'],
-        ['Loading Dock Staging', '3,000 SF'],
-        ['Office/Administration', '1,500 SF'],
-        ['Racking Configuration', 'Single-deep selective, 3 levels']
-      ];
-
-      slide.addTable(facilityData, {
-        x: 0.5,
-        y: 0.7,
-        w: 9,
-        h: 3.0,
-        colW: [4.5, 4.5],
-        border: { pt: 0.5, color: 'D0D5DE' },
-        headerExist: true,
-        rowH: [0.3, 0.35, 0.35, 0.35, 0.35, 0.35, 0.35],
-        fontSize: 10,
-        color: brand.dark,
-        fill: (opts) => {
-          if (opts.rowIndex === 0) return { color: brand.dark };
-          if (opts.rowIndex % 2 === 0) return { color: brand.lightGray };
-          return { color: brand.white };
-        },
-        textOptions: opts => {
-          if (opts.rowIndex === 0) return { color: brand.white, bold: true };
-          return { color: brand.dark };
-        }
-      });
-
-      // SLIDE 5: Process Flow
-      slide = this._contentSlide(pres, 'Material Flow & Process Design');
-
-      const flowSteps = [
-        { step: 'RECEIVE', desc: 'Dock receipt, carton/pallet count, damage check' },
-        { step: 'CHECK-IN', desc: 'ASN reconciliation, putaway directive generation' },
-        { step: 'PUTAWAY', desc: 'Directed placement to pallet or bin location' },
-        { step: 'STORAGE', desc: 'Inventory management and location tracking' },
-        { step: 'PICK', desc: 'Order-driven or batch-driven pallet/carton selection' },
-        { step: 'STAGE', desc: 'Order consolidation and trailer staging' },
-        { step: 'LOAD', desc: 'Trailer manifest and shipment close-out' },
-        { step: 'SHIP', desc: 'Pickup and customer delivery' }
-      ];
-
-      let yPos = 0.7;
-      for (let i = 0; i < flowSteps.length; i += 2) {
-        slide.addShape(pres.shapes.RECTANGLE, {
-          x: 0.5,
-          y: yPos,
-          w: 2.2,
-          h: 0.5,
-          fill: { color: i % 4 === 0 ? brand.primary : i % 4 === 1 ? brand.accentBlue : i % 4 === 2 ? brand.green : brand.mediumGray },
-          line: { type: 'none' }
-        });
-
-        slide.addText(flowSteps[i].step, {
-          x: 0.5,
-          y: yPos + 0.08,
-          w: 2.2,
-          h: 0.2,
-          fontSize: 10,
-          bold: true,
-          color: brand.white,
-          align: 'center',
-          fontFace: brand.headerFont
-        });
-
-        slide.addText(flowSteps[i].desc, {
-          x: 2.9,
-          y: yPos,
-          w: 6.6,
-          h: 0.5,
-          fontSize: 10,
-          color: brand.dark,
-          align: 'left',
-          valign: 'middle',
-          fontFace: brand.bodyFont
-        });
-
-        if (i + 1 < flowSteps.length) {
-          yPos += 0.6;
-          slide.addShape(pres.shapes.RECTANGLE, {
-            x: 0.5,
-            y: yPos,
-            w: 2.2,
-            h: 0.5,
-            fill: { color: (i + 1) % 4 === 0 ? brand.primary : (i + 1) % 4 === 1 ? brand.accentBlue : (i + 1) % 4 === 2 ? brand.green : brand.mediumGray },
-            line: { type: 'none' }
-          });
-
-          slide.addText(flowSteps[i + 1].step, {
-            x: 0.5,
-            y: yPos + 0.08,
-            w: 2.2,
-            h: 0.2,
-            fontSize: 10,
-            bold: true,
-            color: brand.white,
-            align: 'center',
-            fontFace: brand.headerFont
-          });
-
-          slide.addText(flowSteps[i + 1].desc, {
-            x: 2.9,
-            y: yPos,
-            w: 6.6,
-            h: 0.5,
-            fontSize: 10,
-            color: brand.dark,
-            align: 'left',
-            valign: 'middle',
-            fontFace: brand.bodyFont
-          });
-
-          yPos += 0.6;
-        }
-      }
-
-      // SLIDE 6: Volume Profile
-      slide = this._contentSlide(pres, 'Volume Profile & Seasonality');
-
-      slide.addText('Annual Volume Analysis', {
-        x: 0.5,
-        y: 0.7,
-        w: 4.5,
-        h: 0.25,
-        fontSize: 12,
-        bold: true,
-        color: brand.primary,
-        fontFace: brand.headerFont
-      });
-
-      slide.addText([
-        { text: 'Daily Average: ', options: { bold: true } },
-        { text: this._fmtNumber(dailyVolume) + ' pallets\n', options: { breakLine: true } },
-        { text: 'Annual Total: ', options: { bold: true } },
-        { text: this._fmtNumber(annualVolume) + ' pallets\n', options: { breakLine: true } },
-        { text: 'Peak Season: ', options: { bold: true } },
-        { text: '+40% above average (Q4)\n', options: { breakLine: true } },
-        { text: 'Low Season: ', options: { bold: true } },
-        { text: '-25% below average (Q1)', options: { breakLine: true } }
-      ], {
-        x: 0.5,
-        y: 1.0,
-        w: 4.5,
-        h: 1.8,
-        fontSize: 10,
-        color: brand.dark,
-        fontFace: brand.bodyFont
-      });
-
-      slide.addText('Activity Mix', {
-        x: 5.2,
-        y: 0.7,
-        w: 4.3,
-        h: 0.25,
-        fontSize: 12,
-        bold: true,
-        color: brand.primary,
-        fontFace: brand.headerFont
-      });
-
-      const activityData = [['Activity', '% of Pallets'], ['Putaway', '30%'], ['Full Pallet Pick', '50%'], ['Carton Pick', '15%'], ['Cross-Dock', '5%']];
-
-      slide.addTable(activityData, {
-        x: 5.2,
-        y: 1.0,
-        w: 4.3,
-        h: 1.8,
-        colW: [2.15, 2.15],
-        border: { pt: 0.5, color: 'D0D5DE' },
-        headerExist: true,
-        rowH: [0.28, 0.28, 0.28, 0.28, 0.28],
-        fontSize: 9,
-        color: brand.dark,
-        fill: (opts) => {
-          if (opts.rowIndex === 0) return { color: brand.dark };
-          if (opts.rowIndex % 2 === 0) return { color: brand.lightGray };
-          return { color: brand.white };
-        },
-        textOptions: opts => {
-          if (opts.rowIndex === 0) return { color: brand.white, bold: true };
-          return { color: brand.dark };
-        }
-      });
-
-      // SLIDE 7: Labor Model Summary
-      slide = this._contentSlide(pres, 'Labor Model — MOST-Driven Sizing');
-
-      slide.addText('Daily Labor Requirement Calculation', {
-        x: 0.5,
-        y: 0.7,
-        w: 9,
-        h: 0.25,
-        fontSize: 12,
-        bold: true,
-        color: brand.primary,
-        fontFace: brand.headerFont
-      });
-
-      const laborData = [
-        ['Activity', 'Daily Volume', 'UPH', 'Hours/Day', 'FTEs (2-shift)'],
-        ['Unload Pallet', '300', '40', '7.5', '3.75'],
-        ['Directed Putaway', '300', '35', '8.6', '4.3'],
-        ['Full Pallet Pick', '500', '50', '10.0', '5.0'],
-        ['Carton Pick', '150', '120', '1.25', '0.6'],
-        ['Stage & Load', '280', '60', '4.7', '2.35'],
-        ['Management & Admin', '—', '—', '8.0', '4.0']
-      ];
-
-      slide.addTable(laborData, {
-        x: 0.5,
-        y: 1.0,
-        w: 9,
-        h: 2.2,
-        colW: [2, 1.6, 1.4, 1.6, 1.8],
-        border: { pt: 0.5, color: 'D0D5DE' },
-        headerExist: true,
-        rowH: [0.3, 0.28, 0.28, 0.28, 0.28, 0.28, 0.28],
-        fontSize: 9,
-        color: brand.dark,
-        fill: (opts) => {
-          if (opts.rowIndex === 0) return { color: brand.dark };
-          if (opts.rowIndex % 2 === 0) return { color: brand.lightGray };
-          return { color: brand.white };
-        },
-        textOptions: opts => {
-          if (opts.rowIndex === 0) return { color: brand.white, bold: true };
-          return { color: brand.dark };
-        }
-      });
-
-      slide.addText('Total Headcount: 28 FTEs (including management, indirect labor, and flex staffing)', {
-        x: 0.5,
-        y: 3.4,
-        w: 9,
-        h: 0.5,
-        fontSize: 11,
-        bold: true,
-        color: brand.primary,
-        fontFace: brand.bodyFont
-      });
-
-      // SLIDE 8: MHE & Equipment Summary
-      slide = this._contentSlide(pres, 'Material Handling Equipment (MHE) Fleet');
-
-      const mheData = [
-        ['Equipment Type', 'Quantity', 'Primary Use'],
-        ['Sit-Down Forklift (5k lb)', '4', 'Pallet putaway, retrieval, dock staging'],
-        ['Reach Truck', '3', 'Selective racking access, high-cube storage'],
-        ['Pallet Jack', '6', 'Short-distance movement, staging'],
-        ['RF Gun (Honeywell/Motorola)', '12', 'Pick/put-away direction, inventory mgmt'],
-        ['Conveyor (optional)', '0', 'Not included in baseline design']
-      ];
-
-      slide.addTable(mheData, {
-        x: 0.5,
-        y: 0.7,
-        w: 9,
-        h: 2.4,
-        colW: [3, 1.8, 4.2],
-        border: { pt: 0.5, color: 'D0D5DE' },
-        headerExist: true,
-        rowH: [0.3, 0.35, 0.35, 0.35, 0.35, 0.35],
-        fontSize: 10,
-        color: brand.dark,
-        fill: (opts) => {
-          if (opts.rowIndex === 0) return { color: brand.dark };
-          if (opts.rowIndex % 2 === 0) return { color: brand.lightGray };
-          return { color: brand.white };
-        },
-        textOptions: opts => {
-          if (opts.rowIndex === 0) return { color: brand.white, bold: true };
-          return { color: brand.dark };
-        }
-      });
-
-      // SLIDE 9: WMS Solution
-      slide = this._contentSlide(pres, 'WMS Solution — Blue Yonder Integration');
-
-      slide.addText('Blue Yonder WMS Capabilities', {
-        x: 0.5,
-        y: 0.7,
-        w: 9,
-        h: 0.25,
-        fontSize: 13,
-        bold: true,
-        color: brand.primary,
-        fontFace: brand.headerFont
-      });
-
-      const wmsPoints = [
-        'RF-directed putaway and pick workflows',
-        'Dock scheduling and appointment management',
-        'Real-time inventory visibility and location tracking',
-        'Advanced shipping/manifesting and parcel label integration',
-        'Demand forecasting and replenishment optimization',
-        'Customizable KPI dashboards and exception management',
-        'Integration with Wayfair order management system (EDI 850/856/997)'
-      ];
-
-      slide.addText(wmsPoints, {
-        x: 0.7,
-        y: 1.0,
-        w: 8.6,
-        h: 2.2,
-        fontSize: 11,
-        color: brand.dark,
-        bullet: true,
-        fontFace: brand.bodyFont
-      });
-
-      // SLIDE 10: Financial Summary
-      slide = this._contentSlide(pres, 'Financial Summary — Annual Operating Cost');
-
-      const laborCost = annualCost * 0.55;
-      const facilityCost = annualCost * 0.25;
-      const equipmentCost = annualCost * 0.10;
-      const overheadCost = annualCost * 0.10;
-
-      const costData = [
-        ['Cost Category', 'Annual Cost', '% of Total'],
-        ['Labor (28 FTEs + benefits)', this._fmtCurrency(laborCost), '55%'],
-        ['Facility (rent, utilities, insurance)', this._fmtCurrency(facilityCost), '25%'],
-        ['Equipment & MHE (lease, maintenance)', this._fmtCurrency(equipmentCost), '10%'],
-        ['Overhead & Technology', this._fmtCurrency(overheadCost), '10%'],
-        ['TOTAL ANNUAL COST', this._fmtCurrency(annualCost), '100%']
-      ];
-
-      slide.addTable(costData, {
-        x: 0.5,
-        y: 0.7,
-        w: 9,
-        h: 2.5,
-        colW: [4, 3, 2],
-        border: { pt: 0.5, color: 'D0D5DE' },
-        headerExist: true,
-        rowH: [0.3, 0.35, 0.35, 0.35, 0.35, 0.35],
-        fontSize: 10,
-        color: brand.dark,
-        fill: (opts) => {
-          if (opts.rowIndex === 0) return { color: brand.dark };
-          if (opts.rowIndex === costData.length - 1) return { color: brand.primary };
-          if (opts.rowIndex % 2 === 0) return { color: brand.lightGray };
-          return { color: brand.white };
-        },
-        textOptions: opts => {
-          if (opts.rowIndex === 0) return { color: brand.white, bold: true };
-          if (opts.rowIndex === costData.length - 1) return { color: brand.white, bold: true };
-          return { color: brand.dark };
-        }
-      });
-
-      // SLIDE 11: Pricing Structure
-      slide = this._contentSlide(pres, 'Pricing Structure — Rate Card');
-
-      const pricingData = [
-        ['Pricing Component', 'Rate/Terms'],
-        ['Inbound Pallet Rate', '$2.50 / pallet'],
-        ['Outbound Pallet Rate', '$3.00 / pallet'],
-        ['Storage (per pallet-position-month)', '$0.75 / ppm'],
-        ['Fixed Monthly Fee', '$35,000 (operations)'],
-        ['Accessorial Services', 'Call/count: $35 / hour\nSpecial handling: +15% to transaction rate'],
-        ['Contract Term', '5 years with 2% annual escalation']
-      ];
-
-      slide.addTable(pricingData, {
-        x: 0.5,
-        y: 0.7,
-        w: 9,
-        h: 2.6,
-        colW: [3.5, 5.5],
-        border: { pt: 0.5, color: 'D0D5DE' },
-        headerExist: true,
-        rowH: [0.3, 0.35, 0.35, 0.35, 0.35, 0.55, 0.35],
-        fontSize: 10,
-        color: brand.dark,
-        fill: (opts) => {
-          if (opts.rowIndex === 0) return { color: brand.dark };
-          if (opts.rowIndex % 2 === 0) return { color: brand.lightGray };
-          return { color: brand.white };
-        },
-        textOptions: opts => {
-          if (opts.rowIndex === 0) return { color: brand.white, bold: true };
-          return { color: brand.dark };
-        }
-      });
-
-      // SLIDE 12: Implementation Plan
-      slide = this._contentSlide(pres, 'Implementation Plan — 90-Day Timeline');
-
-      const phaseData = [
-        ['Phase', 'Duration', 'Key Activities'],
-        ['Site Preparation', 'Weeks 1–3', 'Facility assessment, layout finalization, utility upgrades, racking installation'],
-        ['MHE & WMS Setup', 'Weeks 2–4', 'Equipment delivery and installation, WMS configuration, RF gun provisioning'],
-        ['Staffing & Training', 'Weeks 3–6', 'Recruitment, onboarding, system training, standard work documentation'],
-        ['Parallel Operations', 'Weeks 5–8', 'Live WMS testing, process validation, KPI baseline establishment'],
-        ['Go-Live', 'Week 9', 'Production cutover, live monitoring, issue resolution'],
-        ['Stabilization', 'Weeks 9–12', 'Continuous improvement, performance optimization, handoff to steady-state']
-      ];
-
-      slide.addTable(phaseData, {
-        x: 0.5,
-        y: 0.7,
-        w: 9,
-        h: 2.8,
-        colW: [2, 1.5, 5.5],
-        border: { pt: 0.5, color: 'D0D5DE' },
-        headerExist: true,
-        rowH: [0.3, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4],
-        fontSize: 9,
-        color: brand.dark,
-        fill: (opts) => {
-          if (opts.rowIndex === 0) return { color: brand.dark };
-          if (opts.rowIndex % 2 === 0) return { color: brand.lightGray };
-          return { color: brand.white };
-        },
-        textOptions: opts => {
-          if (opts.rowIndex === 0) return { color: brand.white, bold: true };
-          return { color: brand.dark };
-        }
-      });
-
-      // SLIDE 13: Risks & Mitigants
-      slide = this._contentSlide(pres, 'Risk Management');
-
-      const riskMgmtData = [
-        ['Risk', 'Impact', 'Mitigant Strategy'],
-        ['Labor market tightness', 'High', 'Early recruitment, competitive wages, partnership with staffing agencies'],
-        ['System integration delays', 'Medium', 'Parallel testing, dedicated integration lead, weekly sync'],
-        ['Facility readiness', 'Medium', 'Early site survey, contractor contingency, 2-week buffer'],
-        ['Demand volatility', 'Low', 'Flexible staffing model, cross-training, peak-season planning']
-      ];
-
-      slide.addTable(riskMgmtData, {
-        x: 0.5,
-        y: 0.7,
-        w: 9,
-        h: 2.4,
-        colW: [2.2, 1.8, 5],
-        border: { pt: 0.5, color: 'D0D5DE' },
-        headerExist: true,
-        rowH: [0.3, 0.5, 0.5, 0.5, 0.5],
-        fontSize: 9,
-        color: brand.dark,
-        fill: (opts) => {
-          if (opts.rowIndex === 0) return { color: brand.dark };
-          if (opts.rowIndex % 2 === 0) return { color: brand.lightGray };
-          return { color: brand.white };
-        },
-        textOptions: opts => {
-          if (opts.rowIndex === 0) return { color: brand.white, bold: true };
-          return { color: brand.dark };
-        }
-      });
-
-      // SLIDE 14: Recommendation
-      this._closingSlide(pres, 'Recommend Proceeding with Proposal');
-
-      // Download and record artifact
-      await pres.writeFile({
-        fileName: `GXO_OpsReview_${customerName.replace(/\s+/g, '_')}_${today.replace(/\s+/g, '_')}.pptx`
-      });
-
-      // Record artifact
-      const timestamp = new Date().toISOString();
-      await sb.from('deal_artifacts').insert({
-        deal_id: opportunityId,
-        artifact_type: 'presentation',
-        artifact_id: `ops_${timestamp}`,
-        artifact_name: 'Operations Review',
-        artifact_notes: `Operations review deck generated for ${customerName}`,
-        created_by: 'Brock Eckles'
-      });
-
-      this._showToast('Operations review deck generated successfully!', 'success');
-
-    } catch (error) {
-      console.error('Error generating ops review deck:', error);
-      this._showToast('Error generating deck: ' + error.message, 'error');
-    }
-  },
-
-  async generateELTDeck(opportunityId) {
-    const brand = this._gxoBrand();
-    const pres = new PptxGenJS();
-    pres.defineLayout({ name: 'LAYOUT_16x9', width: 10, height: 5.625 });
-    pres.addSlide();
-    pres.removeSlide(0);
-
-    try {
-      // Fetch opportunity data
-      const { data: opportunity, error: oppError } = await sb
-        .from('opportunities')
-        .select('*')
-        .eq('id', opportunityId)
-        .single();
-
-      if (oppError || !opportunity) {
-        console.error('Failed to load opportunity', oppError);
-        return;
-      }
-
-      const customerName = opportunity.company_name || 'Customer';
-      const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-
-      // SLIDE 1: Title
-      this._titleSlide(pres, 'Executive Leadership Review', customerName, today);
-
-      // SLIDE 2: Opportunity Overview
-      let slide = this._contentSlide(pres, 'Opportunity Overview');
-
-      const sqft = opportunity.sqft || 100000;
-      const location = opportunity.location || 'Indianapolis, IN';
-      const contractTerm = opportunity.contract_term_months || 60;
-
-      const overviewData = [
-        ['Customer', customerName],
-        ['Scope', 'Full-service 3PL distribution'],
-        ['Location', location],
-        ['Square Footage', this._fmtNumber(sqft) + ' SF'],
-        ['Contract Term', contractTerm + ' months'],
-        ['Annual Volume', '365,000 pallets (1,000/day avg)']
-      ];
-
-      slide.addTable(overviewData, {
-        x: 0.5,
-        y: 0.7,
-        w: 9,
-        h: 2.5,
-        colW: [4.5, 4.5],
-        border: { pt: 0.5, color: 'D0D5DE' },
-        headerExist: false,
-        rowH: [0.4, 0.4, 0.4, 0.4, 0.4, 0.4],
-        fontSize: 11,
-        color: brand.dark,
-        fill: (opts) => {
-          if (opts.rowIndex % 2 === 0) return { color: brand.lightGray };
-          return { color: brand.white };
-        }
-      });
-
-      // SLIDE 3: Win Strategy
-      slide = this._contentSlide(pres, 'Win Strategy — Three Pillars');
-
-      const pillars = [
-        { title: 'Cost Leadership', stat: '-15%', desc: 'vs. competitor bids' },
-        { title: 'Operational Excellence', stat: '98%+', desc: 'order accuracy' },
-        { title: 'Technology Integration', stat: 'Real-time', desc: 'visibility' }
-      ];
-
-      const xPos = [0.5, 3.5, 6.5];
-      for (let i = 0; i < pillars.length; i++) {
-        slide.addShape(pres.shapes.RECTANGLE, {
-          x: xPos[i],
-          y: 0.8,
-          w: 2.6,
-          h: 2.2,
-          fill: { color: i === 0 ? brand.green : i === 1 ? brand.accentBlue : brand.primary },
-          line: { type: 'none' },
-          shadow: {
-            type: 'outer',
-            angle: 45,
-            blur: 4,
-            color: '000000',
-            opacity: 0.1,
-            offset: 1,
-            spread: 0
-          }
-        });
-
-        slide.addText(pillars[i].stat, {
-          x: xPos[i],
-          y: 0.95,
-          w: 2.6,
-          h: 0.3,
-          fontSize: 22,
-          bold: true,
-          color: brand.white,
-          align: 'center',
-          fontFace: brand.headerFont
-        });
-
-        slide.addText(pillars[i].title, {
-          x: xPos[i] + 0.15,
-          y: 1.35,
-          w: 2.3,
-          h: 0.5,
-          fontSize: 12,
-          bold: true,
-          color: brand.white,
-          align: 'center',
-          fontFace: brand.headerFont
-        });
-
-        slide.addText(pillars[i].desc, {
-          x: xPos[i] + 0.15,
-          y: 1.95,
-          w: 2.3,
-          h: 0.8,
-          fontSize: 10,
-          color: brand.white,
-          align: 'center',
-          fontFace: brand.bodyFont
-        });
-      }
-
-      // SLIDE 4: Solution Snapshot
-      slide = this._contentSlide(pres, 'Solution Snapshot');
-
-      slide.addText('Facility', {
-        x: 0.5,
-        y: 0.7,
-        w: 2.2,
-        h: 0.25,
-        fontSize: 12,
-        bold: true,
-        color: brand.primary,
-        fontFace: brand.headerFont
-      });
-
-      slide.addText('100,000 SF ambient DC with 28-ft clear height, 8 inbound / 12 outbound docks, single-deep selective racking', {
-        x: 0.5,
-        y: 1.0,
-        w: 2.2,
-        h: 0.8,
-        fontSize: 9,
-        color: brand.dark,
-        fontFace: brand.bodyFont
-      });
-
-      slide.addText('Labor', {
-        x: 3.0,
-        y: 0.7,
-        w: 2.2,
-        h: 0.25,
-        fontSize: 12,
-        bold: true,
-        color: brand.primary,
-        fontFace: brand.headerFont
-      });
-
-      slide.addText('28 FTEs across management, putaway, pick, stage, and admin; 2-shift model (6am–4pm, 3pm–11pm)', {
-        x: 3.0,
-        y: 1.0,
-        w: 2.2,
-        h: 0.8,
-        fontSize: 9,
-        color: brand.dark,
-        fontFace: brand.bodyFont
-      });
-
-      slide.addText('Technology', {
-        x: 5.5,
-        y: 0.7,
-        w: 2.2,
-        h: 0.25,
-        fontSize: 12,
-        bold: true,
-        color: brand.primary,
-        fontFace: brand.headerFont
-      });
-
-      slide.addText('Blue Yonder WMS with RF-directed workflows, 4G mobile, EDI integration, real-time KPI dashboards', {
-        x: 5.5,
-        y: 1.0,
-        w: 2.2,
-        h: 0.8,
-        fontSize: 9,
-        color: brand.dark,
-        fontFace: brand.bodyFont
-      });
-
-      slide.addText('Equipment', {
-        x: 8.0,
-        y: 0.7,
-        w: 1.5,
-        h: 0.25,
-        fontSize: 12,
-        bold: true,
-        color: brand.primary,
-        fontFace: brand.headerFont
-      });
-
-      slide.addText('4 forklifts, 3 reach trucks, 6 pallet jacks, 12 RF guns; maintained/leased', {
-        x: 8.0,
-        y: 1.0,
-        w: 1.5,
-        h: 0.8,
-        fontSize: 9,
-        color: brand.dark,
-        fontFace: brand.bodyFont
-      });
-
-      // Add performance metrics
-      this._addStatCard(slide, 0.5, 2.2, '1,000', 'Pallets/Day', brand.accentBlue);
-      this._addStatCard(slide, 2.4, 2.2, '98%+', 'Accuracy', brand.green);
-      this._addStatCard(slide, 4.3, 2.2, '90 days', 'Go-Live', brand.primary);
-      this._addStatCard(slide, 6.2, 2.2, '$2.8M', 'Annual Cost', brand.mediumGray);
-
-      // SLIDE 5: Deal Economics — Revenue
-      slide = this._contentSlide(pres, 'Deal Economics — Annual Revenue');
-
-      const inboundPallets = 365000;
-      const outboundPallets = 365000;
-      const inboundRate = 2.50;
-      const outboundRate = 3.00;
-      const storageRate = 0.75;
-      const avgStoragePositions = 8000;
-      const monthlyFixed = 35000;
-      const annualFixed = monthlyFixed * 12;
-
-      const inboundRev = inboundPallets * inboundRate;
-      const outboundRev = outboundPallets * outboundRate;
-      const storageRev = avgStoragePositions * 12 * storageRate;
-      const totalAnnualRev = inboundRev + outboundRev + storageRev + annualFixed;
-
-      const revenueData = [
-        ['Revenue Stream', 'Volume / Terms', 'Rate', 'Annual Revenue'],
-        ['Inbound Pallets', this._fmtNumber(inboundPallets) + ' pallets', this._fmtCurrency(inboundRate) + '/pallet', this._fmtCurrency(inboundRev)],
-        ['Outbound Pallets', this._fmtNumber(outboundPallets) + ' pallets', this._fmtCurrency(outboundRate) + '/pallet', this._fmtCurrency(outboundRev)],
-        ['Storage (avg 8K positions)', this._fmtNumber(avgStoragePositions) + ' positions × 12 mo', this._fmtCurrency(storageRate) + '/ppm', this._fmtCurrency(storageRev)],
-        ['Fixed Monthly Fee', 'Ongoing', this._fmtCurrency(monthlyFixed) + '/mo', this._fmtCurrency(annualFixed)],
-        ['TOTAL ANNUAL REVENUE', '', '', this._fmtCurrency(totalAnnualRev)]
-      ];
-
-      slide.addTable(revenueData, {
-        x: 0.5,
-        y: 0.7,
-        w: 9,
-        h: 2.4,
-        colW: [2.5, 2, 1.8, 2.7],
-        border: { pt: 0.5, color: 'D0D5DE' },
-        headerExist: true,
-        rowH: [0.3, 0.3, 0.3, 0.3, 0.3, 0.3],
-        fontSize: 9,
-        color: brand.dark,
-        fill: (opts) => {
-          if (opts.rowIndex === 0) return { color: brand.dark };
-          if (opts.rowIndex === revenueData.length - 1) return { color: brand.primary };
-          if (opts.rowIndex % 2 === 0) return { color: brand.lightGray };
-          return { color: brand.white };
-        },
-        textOptions: opts => {
-          if (opts.rowIndex === 0) return { color: brand.white, bold: true };
-          if (opts.rowIndex === revenueData.length - 1) return { color: brand.white, bold: true };
-          return { color: brand.dark };
-        }
-      });
-
-      // SLIDE 6: Deal Economics — Cost
-      slide = this._contentSlide(pres, 'Deal Economics — Annual Operating Cost');
-
-      const annualCost = 2800000;
-      const laborCost = annualCost * 0.55;
-      const facilityCost = annualCost * 0.25;
-      const equipmentCost = annualCost * 0.10;
-      const overheadCost = annualCost * 0.10;
-
-      const costBreakdownData = [
-        ['Cost Category', 'Monthly', 'Annual', '% Mix'],
-        ['Labor (28 FTEs + benefits)', this._fmtCurrency(laborCost / 12), this._fmtCurrency(laborCost), '55%'],
-        ['Facility (rent, utilities, insurance)', this._fmtCurrency(facilityCost / 12), this._fmtCurrency(facilityCost), '25%'],
-        ['Equipment & MHE (lease, maintenance)', this._fmtCurrency(equipmentCost / 12), this._fmtCurrency(equipmentCost), '10%'],
-        ['Overhead & Technology', this._fmtCurrency(overheadCost / 12), this._fmtCurrency(overheadCost), '10%'],
-        ['TOTAL ANNUAL COST', this._fmtCurrency(annualCost / 12), this._fmtCurrency(annualCost), '100%']
-      ];
-
-      slide.addTable(costBreakdownData, {
-        x: 0.5,
-        y: 0.7,
-        w: 9,
-        h: 2.4,
-        colW: [2.8, 2, 2, 1.2],
-        border: { pt: 0.5, color: 'D0D5DE' },
-        headerExist: true,
-        rowH: [0.3, 0.3, 0.3, 0.3, 0.3, 0.3],
-        fontSize: 9,
-        color: brand.dark,
-        fill: (opts) => {
-          if (opts.rowIndex === 0) return { color: brand.dark };
-          if (opts.rowIndex === costBreakdownData.length - 1) return { color: brand.primary };
-          if (opts.rowIndex % 2 === 0) return { color: brand.lightGray };
-          return { color: brand.white };
-        },
-        textOptions: opts => {
-          if (opts.rowIndex === 0) return { color: brand.white, bold: true };
-          if (opts.rowIndex === costBreakdownData.length - 1) return { color: brand.white, bold: true };
-          return { color: brand.dark };
-        }
-      });
-
-      // SLIDE 7: Deal Economics — P&L
-      slide = this._contentSlide(pres, 'Deal Economics — 5-Year P&L Projection');
-
-      const pnlData = [['Year', 'Revenue', 'Operating Cost', 'Gross Margin', 'Margin %']];
-
-      for (let yr = 1; yr <= 5; yr++) {
-        const escalation = Math.pow(1.03, yr - 1);
-        const yrRev = Math.round(totalAnnualRev * escalation);
-        const yrCost = Math.round(annualCost * escalation);
-        const yrMargin = yrRev - yrCost;
-        const yrMarginPct = ((yrMargin / yrRev) * 100).toFixed(1);
-
-        pnlData.push([
-          `Year ${yr}`,
-          this._fmtCurrency(yrRev),
-          this._fmtCurrency(yrCost),
-          this._fmtCurrency(yrMargin),
-          yrMarginPct + '%'
-        ]);
-      }
-
-      slide.addTable(pnlData, {
-        x: 0.5,
-        y: 0.7,
-        w: 9,
-        h: 2.4,
-        colW: [1.2, 1.8, 2, 2, 1.5],
-        border: { pt: 0.5, color: 'D0D5DE' },
-        headerExist: true,
-        rowH: [0.3, 0.32, 0.32, 0.32, 0.32, 0.32],
-        fontSize: 9,
-        color: brand.dark,
-        fill: (opts) => {
-          if (opts.rowIndex === 0) return { color: brand.dark };
-          if (opts.rowIndex % 2 === 0) return { color: brand.lightGray };
-          return { color: brand.white };
-        },
-        textOptions: opts => {
-          if (opts.rowIndex === 0) return { color: brand.white, bold: true };
-          return { color: brand.dark };
-        }
-      });
-
-      // SLIDE 8: Pricing Summary
-      slide = this._contentSlide(pres, 'Pricing Summary — Rate Card');
-
-      const pricingSummaryData = [
-        ['Service', 'Rate'],
-        ['Inbound Pallet', this._fmtCurrency(inboundRate)],
-        ['Outbound Pallet', this._fmtCurrency(outboundRate)],
-        ['Storage (per pallet-position-month)', this._fmtCurrency(storageRate)],
-        ['Fixed Monthly Fee', this._fmtCurrency(monthlyFixed)],
-        ['Call/Count', '$35/hour'],
-        ['Special Handling', '+15% to transaction rate'],
-        ['Annual Price Escalation', '2%']
-      ];
-
-      slide.addTable(pricingSummaryData, {
-        x: 0.5,
-        y: 0.7,
-        w: 9,
-        h: 2.8,
-        colW: [5, 4],
-        border: { pt: 0.5, color: 'D0D5DE' },
-        headerExist: true,
-        rowH: [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3],
-        fontSize: 10,
-        color: brand.dark,
-        fill: (opts) => {
-          if (opts.rowIndex === 0) return { color: brand.dark };
-          if (opts.rowIndex % 2 === 0) return { color: brand.lightGray };
-          return { color: brand.white };
-        },
-        textOptions: opts => {
-          if (opts.rowIndex === 0) return { color: brand.white, bold: true };
-          return { color: brand.dark };
-        }
-      });
-
-      // SLIDE 9: Competitive Position
-      slide = this._contentSlide(pres, 'Competitive Position & Differentiation');
-
-      const compData = [
-        ['Dimension', 'GXO', 'XPO', 'DHL'],
-        ['Technology Maturity', 'Mature BY WMS', 'In transition', 'Advanced but costly'],
-        ['Cost Position', 'Competitive', 'Lowest bid', 'Premium'],
-        ['Operational Experience', 'CastleGate reference', 'Limited context', 'International scale'],
-        ['Regional Presence', 'Indianapolis hub', 'Satellite', 'Major gateway'],
-        ['Integrated Visibility', 'Real-time via GXO Direct', 'Manual integration', 'Via third-party'],
-        ['Long-term Partnership', 'Proven with Wayfair', 'Transactional', 'Enterprise focus']
-      ];
-
-      slide.addTable(compData, {
-        x: 0.5,
-        y: 0.7,
-        w: 9,
-        h: 2.8,
-        colW: [2.4, 2.2, 2.2, 2.2],
-        border: { pt: 0.5, color: 'D0D5DE' },
-        headerExist: true,
-        rowH: [0.3, 0.32, 0.32, 0.32, 0.32, 0.32, 0.32],
-        fontSize: 9,
-        color: brand.dark,
-        fill: (opts) => {
-          if (opts.rowIndex === 0) return { color: brand.dark };
-          if (opts.rowIndex % 2 === 0) return { color: brand.lightGray };
-          return { color: brand.white };
-        },
-        textOptions: opts => {
-          if (opts.rowIndex === 0) return { color: brand.white, bold: true };
-          return { color: brand.dark };
-        }
-      });
-
-      // SLIDE 10: Risk Matrix
-      slide = this._contentSlide(pres, 'Risk Management Matrix');
-
-      const riskMatrixData = [
-        ['Risk', 'Impact', 'Probability', 'Mitigation'],
-        ['Labor availability', 'High', 'Medium', 'Early recruitment, competitive wages'],
-        ['System integration delay', 'Medium', 'Low', 'Dedicated tech lead, phased approach'],
-        ['Demand volatility', 'Low', 'High', 'Flexible staffing model, forecasting'],
-        ['Competitive repricing', 'Medium', 'Medium', 'Long-term contract lock, value messaging']
-      ];
-
-      slide.addTable(riskMatrixData, {
-        x: 0.5,
-        y: 0.7,
-        w: 9,
-        h: 1.95,
-        colW: [2.2, 1.5, 1.5, 3.8],
-        border: { pt: 0.5, color: 'D0D5DE' },
-        headerExist: true,
-        rowH: [0.3, 0.37, 0.37, 0.37, 0.37],
-        fontSize: 9,
-        color: brand.dark,
-        fill: (opts) => {
-          if (opts.rowIndex === 0) return { color: brand.dark };
-          if (opts.rowIndex % 2 === 0) return { color: brand.lightGray };
-          return { color: brand.white };
-        },
-        textOptions: opts => {
-          if (opts.rowIndex === 0) return { color: brand.white, bold: true };
-          return { color: brand.dark };
-        }
-      });
-
-      // SLIDE 11: Implementation Timeline
-      slide = this._contentSlide(pres, 'Implementation Timeline');
-
-      const milestoneData = [
-        ['Milestone', 'Target Date', 'Owner'],
-        ['Contract Execution', 'Week 1', 'Brock Eckles'],
-        ['Site Survey & Layout Finalization', 'Week 2', 'Solution Architect'],
-        ['Facility Prep & Racking Installation', 'Weeks 1–3', 'Facilities Manager'],
-        ['WMS Configuration', 'Weeks 2–4', 'Tech Lead'],
-        ['Staffing & Training Complete', 'Week 6', 'Operations Manager'],
-        ['Parallel Operations Begin', 'Week 5', 'All teams'],
-        ['Production Go-Live', 'Week 9', 'PMO'],
-        ['Stabilization Complete', 'Week 12', 'Operations Manager']
-      ];
-
-      slide.addTable(milestoneData, {
-        x: 0.5,
-        y: 0.7,
-        w: 9,
-        h: 2.8,
-        colW: [4.5, 2.5, 2],
-        border: { pt: 0.5, color: 'D0D5DE' },
-        headerExist: true,
-        rowH: [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3],
-        fontSize: 9,
-        color: brand.dark,
-        fill: (opts) => {
-          if (opts.rowIndex === 0) return { color: brand.dark };
-          if (opts.rowIndex % 2 === 0) return { color: brand.lightGray };
-          return { color: brand.white };
-        },
-        textOptions: opts => {
-          if (opts.rowIndex === 0) return { color: brand.white, bold: true };
-          return { color: brand.dark };
-        }
-      });
-
-      // SLIDE 12: Recommendation
-      this._closingSlide(pres, 'Request Board Approval to Submit Proposal');
-
-      // Download and record artifact
-      await pres.writeFile({
-        fileName: `GXO_ELT_Review_${customerName.replace(/\s+/g, '_')}_${today.replace(/\s+/g, '_')}.pptx`
-      });
-
-      // Record artifact
-      const timestamp = new Date().toISOString();
-      await sb.from('deal_artifacts').insert({
-        deal_id: opportunityId,
-        artifact_type: 'presentation',
-        artifact_id: `elt_${timestamp}`,
-        artifact_name: 'Executive Leadership Review',
-        artifact_notes: `ELT approval deck generated for ${customerName}`,
-        created_by: 'Brock Eckles'
-      });
-
-      this._showToast('ELT deck generated successfully!', 'success');
-
-    } catch (error) {
-      console.error('Error generating ELT deck:', error);
-      this._showToast('Error generating deck: ' + error.message, 'error');
-    }
-  },
-
-  async generateCustomerDeck(opportunityId) {
-    const brand = this._gxoBrand();
-    const pres = new PptxGenJS();
-    pres.defineLayout({ name: 'LAYOUT_16x9', width: 10, height: 5.625 });
-    pres.addSlide();
-    pres.removeSlide(0);
-
-    try {
-      // Fetch opportunity data
-      const { data: opportunity, error: oppError } = await sb
-        .from('opportunities')
-        .select('*')
-        .eq('id', opportunityId)
-        .single();
-
-      if (oppError || !opportunity) {
-        console.error('Failed to load opportunity', oppError);
-        return;
-      }
-
-      const customerName = opportunity.company_name || 'Customer';
-      const location = opportunity.location || 'Indianapolis, IN';
-      const sqft = opportunity.sqft || 100000;
-      const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-
-      // SLIDE 1: Title — Customer Facing
-      let slide = pres.addSlide();
-      slide.background = { color: brand.dark };
-
-      slide.addShape(pres.shapes.RECTANGLE, {
-        x: 0,
-        y: 0,
-        w: '100%',
-        h: 0.08,
-        fill: { color: brand.primary },
-        line: { type: 'none' }
-      });
-
-      slide.addText(['Wayfair', { text: ' × ', options: { bold: false } }, 'GXO'], {
-        x: 0.5,
-        y: 1.5,
-        w: 9,
-        h: 0.8,
-        fontSize: 40,
-        bold: true,
-        color: brand.white,
-        align: 'center',
-        fontFace: brand.headerFont
-      });
-
-      slide.addText('Building a Partnership Powered by Technology & Excellence', {
-        x: 0.5,
-        y: 2.5,
-        w: 9,
+    if (subtitle) {
+      slide.addText(subtitle, {
+        x: 0.4,
+        y: 2.1,
+        w: 9.2,
         h: 0.6,
-        fontSize: 16,
+        fontSize: 18,
+        bold: false,
         color: 'A0A8B8',
-        align: 'center',
-        fontFace: brand.bodyFont
+        fontFace: 'Calibri',
+        align: 'left',
       });
-
-      slide.addText(today, {
-        x: 8.5,
-        y: 5.2,
-        w: 1.2,
-        h: 0.3,
-        fontSize: 10,
-        color: 'A0A8B8',
-        align: 'right',
-        fontFace: brand.bodyFont
-      });
-
-      // SLIDE 2: About GXO
-      slide = this._contentSlide(pres, 'About GXO Logistics');
-
-      slide.addText([
-        { text: 'A leading global logistics company with unmatched scale and technology', options: { fontSize: 12, bold: true } }
-      ], {
-        x: 0.5,
-        y: 0.7,
-        w: 9,
-        h: 0.4,
-        color: brand.dark,
-        fontFace: brand.bodyFont
-      });
-
-      this._addStatCard(slide, 0.5, 1.3, '900+', 'Facilities Worldwide', brand.accentBlue);
-      this._addStatCard(slide, 2.4, 1.3, '130K+', 'Employees', brand.green);
-      this._addStatCard(slide, 4.3, 1.3, '$7B+', 'Annual Revenue', brand.primary);
-      this._addStatCard(slide, 6.2, 1.3, '6 Continents', 'Global Reach', brand.mediumGray);
-
-      slide.addText([
-        { text: 'Technology-Driven Operations', options: { fontSize: 12, bold: true } },
-        { text: ' — Advanced WMS, real-time visibility, predictive analytics\n', options: { breakLine: true } },
-        { text: 'Proven Partner', options: { fontSize: 12, bold: true } },
-        { text: ' — CastleGate fulfillment network management, Wayfair experience\n', options: { breakLine: true } },
-        { text: 'Continuous Innovation', options: { fontSize: 12, bold: true } },
-        { text: ' — AI/ML-driven optimization, sustainable operations', options: { breakLine: true } }
-      ], {
-        x: 0.5,
-        y: 3.8,
-        w: 9,
-        h: 1.2,
-        fontSize: 10,
-        color: brand.dark,
-        fontFace: brand.bodyFont
-      });
-
-      // SLIDE 3: Understanding Your Requirements
-      slide = this._contentSlide(pres, 'Understanding Your Requirements');
-
-      slide.addText('Your Business Context', {
-        x: 0.5,
-        y: 0.7,
-        w: 9,
-        h: 0.25,
-        fontSize: 13,
-        bold: true,
-        color: brand.primary,
-        fontFace: brand.headerFont
-      });
-
-      const requirementsPoints = [
-        'Geographic expansion into Indiana to serve Midwest/East Coast markets',
-        'Increasing volume throughput (1,000+ pallets daily)',
-        'Need for flexible, scalable logistics infrastructure',
-        'Integration with order management systems for visibility',
-        '90-day implementation timeline to support Q4 peak season'
-      ];
-
-      slide.addText(requirementsPoints, {
-        x: 0.7,
-        y: 1.05,
-        w: 8.6,
-        h: 1.8,
-        fontSize: 11,
-        color: brand.dark,
-        bullet: true,
-        fontFace: brand.bodyFont
-      });
-
-      slide.addText('Our Commitment', {
-        x: 0.5,
-        y: 3.05,
-        w: 9,
-        h: 0.25,
-        fontSize: 13,
-        bold: true,
-        color: brand.primary,
-        fontFace: brand.headerFont
-      });
-
-      slide.addText('We are committed to delivering reliable, cost-effective, and technology-enabled logistics solutions that support your business growth and customer satisfaction goals.', {
-        x: 0.7,
-        y: 3.35,
-        w: 8.6,
-        h: 0.6,
-        fontSize: 11,
-        color: brand.dark,
-        fontFace: brand.bodyFont
-      });
-
-      // SLIDE 4: Proposed Solution Overview
-      slide = this._contentSlide(pres, 'Proposed Solution Overview');
-
-      slide.addText('Full-Service Distribution Center Solution', {
-        x: 0.5,
-        y: 0.7,
-        w: 9,
-        h: 0.25,
-        fontSize: 13,
-        bold: true,
-        color: brand.primary,
-        fontFace: brand.headerFont
-      });
-
-      slide.addText([
-        { text: 'Facility:', options: { bold: true } },
-        { text: ` ${this._fmtNumber(sqft)} SF ambient distribution center, Indianapolis, IN\n`, options: { breakLine: true } },
-        { text: 'Throughput:', options: { bold: true } },
-        { text: ` 1,000+ pallets daily with seasonal scaling capability\n`, options: { breakLine: true } },
-        { text: 'Operations:', options: { bold: true } },
-        { text: ` 2-shift model (6am–4pm, 3pm–11pm) with 28 trained associates\n`, options: { breakLine: true } },
-        { text: 'Systems:', options: { bold: true } },
-        { text: ` Blue Yonder WMS with RF-directed workflows and EDI integration\n`, options: { breakLine: true } },
-        { text: 'Timeline:', options: { bold: true } },
-        { text: ` 90-day implementation with dedicated project management\n`, options: { breakLine: true } },
-        { text: 'Term:', options: { bold: true } },
-        { text: ` 5-year partnership with annual 2% escalation`, options: { breakLine: true } }
-      ], {
-        x: 0.7,
-        y: 1.0,
-        w: 8.6,
-        h: 1.8,
-        fontSize: 10,
-        color: brand.dark,
-        fontFace: brand.bodyFont
-      });
-
-      // SLIDE 5: Facility & Location
-      slide = this._contentSlide(pres, 'Facility & Location Advantages');
-
-      slide.addText('Indianapolis: The Logistics Hub of America', {
-        x: 0.5,
-        y: 0.7,
-        w: 9,
-        h: 0.25,
-        fontSize: 13,
-        bold: true,
-        color: brand.primary,
-        fontFace: brand.headerFont
-      });
-
-      const locationPoints = [
-        'Central location at I-70/I-65 interchange — 2-day ground delivery to 60% of US population',
-        'Major logistics corridor — access to national freight networks and carriers',
-        'Strong labor market — competitive wages, experienced warehouse workforce',
-        'Strategic for Wayfair — supports Midwest and East Coast expansion'
-      ];
-
-      slide.addText(locationPoints, {
-        x: 0.7,
-        y: 1.05,
-        w: 8.6,
-        h: 1.5,
-        fontSize: 11,
-        color: brand.dark,
-        bullet: true,
-        fontFace: brand.bodyFont
-      });
-
-      slide.addText('Facility Specifications', {
-        x: 0.5,
-        y: 2.8,
-        w: 9,
-        h: 0.25,
-        fontSize: 12,
-        bold: true,
-        color: brand.primary,
-        fontFace: brand.headerFont
-      });
-
-      slide.addText([
-        { text: 'Square Footage: ', options: { bold: true } },
-        { text: `${this._fmtNumber(sqft)} SF | `, options: {} },
-        { text: 'Clear Height: ', options: { bold: true } },
-        { text: '28 ft | ', options: {} },
-        { text: 'Docks: ', options: { bold: true } },
-        { text: '8 inbound / 12 outbound | ', options: {} },
-        { text: 'Racking: ', options: { bold: true } },
-        { text: 'Single-deep selective', options: { breakLine: true } }
-      ], {
-        x: 0.7,
-        y: 3.1,
-        w: 8.6,
-        h: 0.5,
-        fontSize: 10,
-        color: brand.dark,
-        fontFace: brand.bodyFont
-      });
-
-      // SLIDE 6: Volumes & Material Flow
-      slide = this._contentSlide(pres, 'Volumes & Material Flow');
-
-      const dailyVolume = 1000;
-      const annualVolume = dailyVolume * 365;
-
-      slide.addText('Daily & Annual Throughput', {
-        x: 0.5,
-        y: 0.7,
-        w: 4.5,
-        h: 0.25,
-        fontSize: 12,
-        bold: true,
-        color: brand.primary,
-        fontFace: brand.headerFont
-      });
-
-      this._addStatCard(slide, 0.5, 1.0, this._fmtNumber(dailyVolume), 'Pallets/Day', brand.accentBlue);
-      this._addStatCard(slide, 2.4, 1.0, this._fmtNumber(annualVolume), 'Annual', brand.green);
-
-      slide.addText('Material Flow Process', {
-        x: 5.2,
-        y: 0.7,
-        w: 4.3,
-        h: 0.25,
-        fontSize: 12,
-        bold: true,
-        color: brand.primary,
-        fontFace: brand.headerFont
-      });
-
-      const flowText = 'Receive → Check-in → Putaway → Storage → Pick → Stage → Load → Ship';
-      slide.addText(flowText, {
-        x: 5.2,
-        y: 1.0,
-        w: 4.3,
-        h: 0.8,
-        fontSize: 11,
-        color: brand.dark,
-        align: 'center',
-        fontFace: brand.bodyFont
-      });
-
-      slide.addText('Activity Distribution', {
-        x: 0.5,
-        y: 2.4,
-        w: 9,
-        h: 0.25,
-        fontSize: 12,
-        bold: true,
-        color: brand.primary,
-        fontFace: brand.headerFont
-      });
-
-      const activityDistData = [['Activity', 'Portion'], ['Putaway', '30%'], ['Full Pallet Pick', '50%'], ['Carton Pick', '15%'], ['Cross-Dock', '5%']];
-
-      slide.addTable(activityDistData, {
-        x: 0.5,
-        y: 2.75,
-        w: 9,
-        h: 1.5,
-        colW: [7, 2],
-        border: { pt: 0.5, color: 'D0D5DE' },
-        headerExist: true,
-        rowH: [0.3, 0.3, 0.3, 0.3, 0.3],
-        fontSize: 10,
-        color: brand.dark,
-        fill: (opts) => {
-          if (opts.rowIndex === 0) return { color: brand.dark };
-          if (opts.rowIndex % 2 === 0) return { color: brand.lightGray };
-          return { color: brand.white };
-        },
-        textOptions: opts => {
-          if (opts.rowIndex === 0) return { color: brand.white, bold: true };
-          return { color: brand.dark };
-        }
-      });
-
-      // SLIDE 7: Staffing Model
-      slide = this._contentSlide(pres, 'Staffing Model & Team Structure');
-
-      slide.addText('Dedicated On-Site Team', {
-        x: 0.5,
-        y: 0.7,
-        w: 9,
-        h: 0.25,
-        fontSize: 13,
-        bold: true,
-        color: brand.primary,
-        fontFace: brand.headerFont
-      });
-
-      const staffingPoints = [
-        '1 Site Manager — Overall facility operations, KPI performance, customer escalations',
-        '2 Shift Supervisors — Daily operations, associate coaching, safety compliance',
-        '25–28 Associates — Putaway, pick, stage, load; flexible for seasonal peaks'
-      ];
-
-      slide.addText(staffingPoints, {
-        x: 0.7,
-        y: 1.05,
-        w: 8.6,
-        h: 1.2,
-        fontSize: 11,
-        color: brand.dark,
-        bullet: true,
-        fontFace: brand.bodyFont
-      });
-
-      slide.addText('Training & Development', {
-        x: 0.5,
-        y: 2.4,
-        w: 9,
-        h: 0.25,
-        fontSize: 13,
-        bold: true,
-        color: brand.primary,
-        fontFace: brand.headerFont
-      });
-
-      slide.addText([
-        { text: 'Comprehensive Onboarding Program', options: { bullet: true } },
-        { text: 'System Training (WMS, RF guns)', options: { bullet: true, breakLine: true } },
-        { text: 'Safety Certification & Compliance', options: { bullet: true, breakLine: true } },
-        { text: 'Continuous Performance Management', options: { bullet: true, breakLine: true } }
-      ], {
-        x: 0.7,
-        y: 2.75,
-        w: 8.6,
-        h: 1.2,
-        fontSize: 11,
-        color: brand.dark,
-        fontFace: brand.bodyFont
-      });
-
-      // SLIDE 8: Equipment & Technology
-      slide = this._contentSlide(pres, 'Equipment & Technology');
-
-      slide.addText('Material Handling Equipment', {
-        x: 0.5,
-        y: 0.7,
-        w: 4.5,
-        h: 0.25,
-        fontSize: 12,
-        bold: true,
-        color: brand.primary,
-        fontFace: brand.headerFont
-      });
-
-      const mhePoints = [
-        '4 Sit-down forklifts (5K lb capacity)',
-        '3 Reach trucks (high-cube access)',
-        '6 Pallet jacks (short-distance moves)',
-        '12 RF guns (Honeywell/Motorola)'
-      ];
-
-      slide.addText(mhePoints, {
-        x: 0.7,
-        y: 1.0,
-        w: 3.8,
-        h: 1.2,
-        fontSize: 10,
-        color: brand.dark,
-        bullet: true,
-        fontFace: brand.bodyFont
-      });
-
-      slide.addText('Technology Stack', {
-        x: 5.2,
-        y: 0.7,
-        w: 4.3,
-        h: 0.25,
-        fontSize: 12,
-        bold: true,
-        color: brand.primary,
-        fontFace: brand.headerFont
-      });
-
-      const techPoints = [
-        'Blue Yonder WMS (market leader)',
-        'Real-time inventory tracking',
-        'RF-directed operations',
-        'EDI & order integration',
-        'KPI dashboards'
-      ];
-
-      slide.addText(techPoints, {
-        x: 5.7,
-        y: 1.0,
-        w: 3.8,
-        h: 1.2,
-        fontSize: 10,
-        color: brand.dark,
-        bullet: true,
-        fontFace: brand.bodyFont
-      });
-
-      // SLIDE 9: WMS & Systems Integration
-      slide = this._contentSlide(pres, 'WMS & Systems Integration');
-
-      slide.addText('Blue Yonder WMS Capabilities', {
-        x: 0.5,
-        y: 0.7,
-        w: 9,
-        h: 0.25,
-        fontSize: 13,
-        bold: true,
-        color: brand.primary,
-        fontFace: brand.headerFont
-      });
-
-      const wmsCapabilities = [
-        'RF-directed putaway, pick, and stage workflows',
-        'Dock scheduling and appointment management',
-        'Real-time inventory visibility across locations',
-        'Advanced shipping manifesting and label integration',
-        'Demand forecasting and replenishment optimization'
-      ];
-
-      slide.addText(wmsCapabilities, {
-        x: 0.7,
-        y: 1.05,
-        w: 8.6,
-        h: 1.3,
-        fontSize: 11,
-        color: brand.dark,
-        bullet: true,
-        fontFace: brand.bodyFont
-      });
-
-      slide.addText('Wayfair Integration', {
-        x: 0.5,
-        y: 2.5,
-        w: 9,
-        h: 0.25,
-        fontSize: 13,
-        bold: true,
-        color: brand.primary,
-        fontFace: brand.headerFont
-      });
-
-      slide.addText([
-        { text: 'EDI Integration', options: { bullet: true } },
-        { text: 'Order synchronization (850 PO → 997 ACK → 856 ASN)', options: { bullet: true, breakLine: true } },
-        { text: 'Real-Time Visibility', options: { bullet: true } },
-        { text: 'Live dashboard of inbound/outbound shipments', options: { bullet: true, breakLine: true } },
-        { text: 'Reporting & Analytics', options: { bullet: true } },
-        { text: 'Performance metrics aligned with Wayfair KPIs', options: { bullet: true, breakLine: true } }
-      ], {
-        x: 0.7,
-        y: 2.85,
-        w: 8.6,
-        h: 1.2,
-        fontSize: 10,
-        color: brand.dark,
-        fontFace: brand.bodyFont
-      });
-
-      // SLIDE 10: Pricing
-      slide = this._contentSlide(pres, 'Pricing');
-
-      slide.addText('Transparent, Scalable Pricing Model', {
-        x: 0.5,
-        y: 0.7,
-        w: 9,
-        h: 0.25,
-        fontSize: 13,
-        bold: true,
-        color: brand.primary,
-        fontFace: brand.headerFont
-      });
-
-      const customerPricingData = [
-        ['Service', 'Rate'],
-        ['Inbound Pallet', '$2.50 per pallet'],
-        ['Outbound Pallet', '$3.00 per pallet'],
-        ['Storage', '$0.75 per pallet-position-month'],
-        ['Fixed Monthly Fee', '$35,000 (operations management)'],
-        ['Accessorial Services', 'Call/count: $35/hour | Special handling: +15%'],
-        ['Annual Escalation', '2.0%'],
-        ['Contract Term', '5 years with 2-year extensions available']
-      ];
-
-      slide.addTable(customerPricingData, {
-        x: 0.5,
-        y: 1.05,
-        w: 9,
-        h: 2.5,
-        colW: [4.5, 4.5],
-        border: { pt: 0.5, color: 'D0D5DE' },
-        headerExist: true,
-        rowH: [0.3, 0.3, 0.3, 0.3, 0.3, 0.35, 0.3, 0.3],
-        fontSize: 10,
-        color: brand.dark,
-        fill: (opts) => {
-          if (opts.rowIndex === 0) return { color: brand.dark };
-          if (opts.rowIndex % 2 === 0) return { color: brand.lightGray };
-          return { color: brand.white };
-        },
-        textOptions: opts => {
-          if (opts.rowIndex === 0) return { color: brand.white, bold: true };
-          return { color: brand.dark };
-        }
-      });
-
-      // SLIDE 11: Implementation Approach
-      slide = this._contentSlide(pres, 'Implementation Approach');
-
-      const implPhases = [
-        { title: 'Phase 1: Foundation', timeline: 'Weeks 1–3', desc: 'Site prep, facility finalization, equipment install' },
-        { title: 'Phase 2: Systems', timeline: 'Weeks 2–4', desc: 'WMS go-live, RF provisioning, integration testing' },
-        { title: 'Phase 3: Staffing', timeline: 'Weeks 3–6', desc: 'Recruitment, training, standard work deployment' },
-        { title: 'Phase 4: Execution', timeline: 'Weeks 5–9', desc: 'Parallel run, optimization, production cutover' }
-      ];
-
-      let yPos = 0.7;
-      for (const phase of implPhases) {
-        slide.addText(phase.title, {
-          x: 0.5,
-          y: yPos,
-          w: 9,
-          h: 0.22,
-          fontSize: 11,
-          bold: true,
-          color: brand.primary,
-          fontFace: brand.headerFont
-        });
-
-        slide.addText(`${phase.timeline} — ${phase.desc}`, {
-          x: 0.7,
-          y: yPos + 0.25,
-          w: 8.8,
-          h: 0.3,
-          fontSize: 10,
-          color: brand.dark,
-          fontFace: brand.bodyFont
-        });
-
-        yPos += 0.65;
-      }
-
-      // SLIDE 12: Why GXO
-      slide = this._contentSlide(pres, 'Why Partner with GXO?');
-
-      slide.addText('We Bring Three Critical Advantages', {
-        x: 0.5,
-        y: 0.7,
-        w: 9,
-        h: 0.25,
-        fontSize: 13,
-        bold: true,
-        color: brand.primary,
-        fontFace: brand.headerFont
-      });
-
-      const whyGxoPoints = [
-        'Proven Wayfair Relationship — Successfully managing CastleGate network; deep understanding of your business model',
-        'Technology Leadership — Blue Yonder WMS expertise, real-time visibility, data-driven optimization',
-        'Operational Excellence — 900+ global facilities, 130K+ employees, consistent 98%+ order accuracy',
-        'Strategic Partnership — Long-term committed relationship with annual alignment reviews and continuous improvement'
-      ];
-
-      slide.addText(whyGxoPoints, {
-        x: 0.7,
-        y: 1.05,
-        w: 8.6,
-        h: 2.0,
-        fontSize: 11,
-        color: brand.dark,
-        bullet: true,
-        fontFace: brand.bodyFont
-      });
-
-      // SLIDE 13: Closing
-      this._closingSlide(pres, 'Let\'s Build Something Great Together');
-
-      // Download and record artifact
-      await pres.writeFile({
-        fileName: `GXO_Customer_Presentation_${customerName.replace(/\s+/g, '_')}_${today.replace(/\s+/g, '_')}.pptx`
-      });
-
-      // Record artifact
-      const timestamp = new Date().toISOString();
-      await sb.from('deal_artifacts').insert({
-        deal_id: opportunityId,
-        artifact_type: 'presentation',
-        artifact_id: `customer_${timestamp}`,
-        artifact_name: 'Customer Presentation',
-        artifact_notes: `Customer-facing presentation generated for ${customerName}`,
-        created_by: 'Brock Eckles'
-      });
-
-      this._showToast('Customer presentation generated successfully!', 'success');
-
-    } catch (error) {
-      console.error('Error generating customer deck:', error);
-      this._showToast('Error generating deck: ' + error.message, 'error');
-    }
-  },
-
-  // ─────────────────────────────────────────────────────
-  // MAIN WRAPPER
-  // ─────────────────────────────────────────────────────
-
-  async generateDeck(type, opportunityId) {
-    this._showToast('Generating deck...', 'info');
-
-    switch (type.toLowerCase()) {
-      case 'qualification':
-        await this.generateQualificationDeck(opportunityId);
-        break;
-      case 'ops_review':
-        await this.generateOpsReviewDeck(opportunityId);
-        break;
-      case 'elt_approval':
-        await this.generateELTDeck(opportunityId);
-        break;
-      case 'customer_presentation':
-        await this.generateCustomerDeck(opportunityId);
-        break;
-      default:
-        this._showToast('Unknown deck type: ' + type, 'error');
-    }
-  },
-
-  // ─────────────────────────────────────────────────────
-  // UTILITY
-  // ─────────────────────────────────────────────────────
-
-  _showToast(message, type = 'info') {
-    if (typeof showToast === 'function') {
-      showToast(message, type);
-    } else {
-      console.log('[' + type.toUpperCase() + '] ' + message);
     }
   }
+,
+  _addContentSlideTitle(slide, title) {
+    // Title for content slides
+    slide.addText(title, {
+      x: 0.4,
+      y: 0.55,
+      w: 9.2,
+      h: 0.5,
+      fontSize: 20,
+      bold: true,
+      color: this._B.DARK,
+      fontFace: 'Calibri',
+      align: 'left',
+    });
+  }
+,
+  _addCard(slide, pres, x, y, w, h, iconName, title, content) {
+    // Card background with shadow
+    slide.addShape(pres.shapes.RECTANGLE, {
+      x,
+      y,
+      w,
+      h,
+      fill: { color: this._B.LIGHT_GRAY },
+      line: { type: 'none' },
+      shadow: this._makeCardShadow(),
+    });
+
+    // Orange circle accent at top-left (no icon image to avoid loading issues)
+    const iconX = x + 0.25;
+    const iconY = y + 0.25;
+    const iconSize = 0.45;
+
+    slide.addShape(pres.shapes.OVAL, {
+      x: iconX,
+      y: iconY,
+      w: iconSize,
+      h: iconSize,
+      fill: { color: this._B.PRIMARY_ORANGE },
+      line: { type: 'none' },
+    });
+
+    // Title (to the right of icon)
+    const titleX = x + 0.85;
+    const titleY = y + 0.3;
+    slide.addText(title, {
+      x: titleX,
+      y: titleY,
+      w: w - 1.1,
+      h: 0.35,
+      fontSize: 12,
+      bold: true,
+      color: this._B.DARK,
+      fontFace: 'Calibri',
+      align: 'left',
+      valign: 'top',
+    });
+
+    // Description text below title
+    if (content) {
+      const contentY = y + 0.75;
+      slide.addText(content, {
+        x: x + 0.25,
+        y: contentY,
+        w: w - 0.5,
+        h: h - contentY + y - 0.2,
+        fontSize: 10,
+        bold: false,
+        color: this._B.CHARCOAL,
+        fontFace: 'Calibri',
+        align: 'left',
+        valign: 'top',
+      });
+    }
+  }
+,
+  _addStatCallout(slide, pres, x, y, w, h, value, label) {
+    // Large number with label below
+    slide.addText(value, {
+      x,
+      y,
+      w,
+      h: h * 0.6,
+      fontSize: 28,
+      bold: true,
+      color: this._B.PRIMARY_ORANGE,
+      fontFace: 'Calibri',
+      align: 'center',
+      valign: 'middle',
+      margin: 0,
+    });
+
+    slide.addText(label, {
+      x,
+      y: y + h * 0.55,
+      w,
+      h: h * 0.4,
+      fontSize: 10,
+      bold: false,
+      color: this._B.MEDIUM_GRAY,
+      fontFace: 'Calibri',
+      align: 'center',
+      valign: 'top',
+      margin: 0,
+    });
+  }
+,
+  _addTableRow(slide, y, cells, isHeader = false, rowNum = 0) {
+    const cellWidth = 1.4;
+    const cellHeight = 0.35;
+    const startX = 0.4;
+
+    cells.forEach((cellText, index) => {
+      const x = startX + index * cellWidth;
+
+      // Cell background
+      if (isHeader) {
+        slide.addShape(pres.shapes.RECTANGLE, {
+          x,
+          y,
+          w: cellWidth,
+          h: cellHeight,
+          fill: { color: this._B.DARK },
+          line: { color: 'D0D5DE', size: 0.5 },
+        });
+      } else {
+        const bgColor = rowNum % 2 === 0 ? this._B.LIGHT_GRAY : this._B.WHITE;
+        slide.addShape(pres.shapes.RECTANGLE, {
+          x,
+          y,
+          w: cellWidth,
+          h: cellHeight,
+          fill: { color: bgColor },
+          line: { color: 'D0D5DE', size: 0.5 },
+        });
+      }
+
+      // Cell text
+      slide.addText(cellText, {
+        x: x + 0.1,
+        y: y + 0.05,
+        w: cellWidth - 0.2,
+        h: cellHeight - 0.1,
+        fontSize: isHeader ? 10 : 10,
+        bold: isHeader,
+        color: isHeader ? this._B.WHITE : this._B.DARK,
+        fontFace: 'Calibri',
+        align: 'left',
+        valign: 'middle',
+      });
+    });
+  },
+
+  // ============================================================================
+  // DECK 1: SOLUTIONS QUALIFICATION DECK
+  // ============================================================================
+
+  async generateQualificationDeck() {
+    const pres = new PptxGenJS();
+    pres.defineLayout({ name: 'LAYOUT_16x9', width: 10, height: 5.625 });
+    pres.layout = 'LAYOUT_16x9';
+    pres.theme = { colors: [this._B.PRIMARY_ORANGE, this._B.DARK, this._B.LIGHT_GRAY] };
+
+    // SLIDE 1: Title Slide
+    let slide = pres.addSlide();
+    slide.background = { color: this._B.DARK };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addDarkSlideTitle(slide, 'Solutions Qualification Review', 'Wayfair | Indianapolis, IN');
+    slide.addText('April 1, 2026', {
+      x: 0.4,
+      y: 3.8,
+      w: 9.2,
+      h: 0.4,
+      fontSize: 14,
+      color: 'A0A8B8',
+      fontFace: 'Calibri',
+    });
+
+    // SLIDE 2: Customer Overview (2x2 card grid)
+    slide = pres.addSlide();
+    slide.background = { color: this._B.WHITE };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addContentSlideTitle(slide, 'Customer Overview');
+
+    // Card 1: Company Profile
+    _addCard(slide, pres, 0.4, 1.2, 4.3, 3.4, 'warehouse', 'Company Profile',
+      'E-commerce furniture and home goods provider via CastleGate network. Nationwide operations with customer-first focus.');
+
+    // Card 2: Current Operations
+    _addCard(slide, pres, 4.8, 1.2, 4.3, 3.4, 'warehouse', 'Current Operations',
+      'Self-operated DCs in major metros. Seeking partner for expansion. Looking to optimize cost and improve speed to customer.');
+
+    // Card 3: Volume Profile
+    _addCard(slide, pres, 0.4, 4.55, 4.3, 0.95, 'warehouse', 'Volume Profile',
+      '1,000 pallets/day | 260K annual pallets');
+
+    // Card 4: Strategic Priorities
+    _addCard(slide, pres, 4.8, 4.55, 4.3, 0.95, 'warehouse', 'Strategic Priorities',
+      'Cost optimization, speed, reliability, technology enablement');
+
+    _addConfidentialFooter(slide);
+
+    // SLIDE 3: Opportunity Snapshot
+    slide = pres.addSlide();
+    slide.background = { color: this._B.WHITE };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addContentSlideTitle(slide, 'Opportunity Snapshot');
+
+    // 5 stat callouts
+    const statWidth = 1.7;
+    const statHeight = 1.2;
+    const statsY = 1.2;
+    const statsStartX = 0.4;
+
+    _addStatCallout(slide, pres, statsStartX, statsY, statWidth, statHeight, '100K', 'Square Feet');
+    _addStatCallout(slide, pres, statsStartX + statWidth + 0.15, statsY, statWidth, statHeight, '1,000', 'Pallets/Day');
+    _addStatCallout(slide, pres, statsStartX + (statWidth + 0.15) * 2, statsY, statWidth, statHeight, '260K', 'Annual Volume');
+    _addStatCallout(slide, pres, statsStartX + (statWidth + 0.15) * 3, statsY, statWidth, statHeight, '5-Yr', 'Term');
+    _addStatCallout(slide, pres, statsStartX + (statWidth + 0.15) * 4, statsY, statWidth, statHeight, '75', 'Headcount');
+
+    // Key details below
+    slide.addText('Opportunity Details:', {
+      x: 0.4,
+      y: 2.6,
+      w: 2.0,
+      h: 0.3,
+      fontSize: 11,
+      bold: true,
+      color: this._B.DARK,
+      fontFace: 'Calibri',
+    });
+
+    const detailsLeft = [
+      'Location: Indianapolis, IN',
+      'Facility Type: Pallet DC',
+      'Business Model: 3PL',
+      'Service Level: Full-service',
+    ];
+
+    detailsLeft.forEach((line, i) => {
+      slide.addText(line, {
+        x: 0.4,
+        y: 3.0 + i * 0.25,
+        w: 2.0,
+        h: 0.22,
+        fontSize: 10,
+        color: this._B.CHARCOAL,
+        fontFace: 'Calibri',
+      });
+    });
+
+    const detailsRight = [
+      'Inbound: LTL + FTL',
+      'Outbound: Parcel + LTL',
+      'Tech: Blue Yonder WMS',
+      'Growth Target: 25% Y1',
+    ];
+
+    detailsRight.forEach((line, i) => {
+      slide.addText(line, {
+        x: 5.4,
+        y: 3.0 + i * 0.25,
+        w: 2.0,
+        h: 0.22,
+        fontSize: 10,
+        color: this._B.CHARCOAL,
+        fontFace: 'Calibri',
+      });
+    });
+
+    _addConfidentialFooter(slide);
+
+    // SLIDE 4: Market Assessment (2x2 card grid)
+    slide = pres.addSlide();
+    slide.background = { color: this._B.WHITE };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addContentSlideTitle(slide, 'Market Assessment');
+
+    _addCard(slide, pres, 0.4, 1.2, 4.3, 3.4, 'warehouse', 'Geographic Advantage',
+      'Indianapolis sits at I-70/I-65 convergence. Optimal positioning for Midwest distribution and 90-minute radius to major metros.');
+
+    _addCard(slide, pres, 4.8, 1.2, 4.3, 3.4, 'warehouse', 'Labor Market',
+      'Strong availability of logistics talent. Good wage economics. Multiple technical training institutions and automotive supplier base.');
+
+    _addCard(slide, pres, 0.4, 4.7, 4.3, 0.8, 'warehouse', 'Distribution Corridor',
+      'Top 10 US logistics hub. Over 100M sq ft of existing industrial space.');
+
+    _addCard(slide, pres, 4.8, 4.7, 4.3, 0.8, 'warehouse', 'Population Reach',
+      '60% of US population within 2-day ground. Direct access to I-65/I-70 corridor.');
+
+    _addConfidentialFooter(slide);
+
+    // SLIDE 5: Proposed Solution Concept
+    slide = pres.addSlide();
+    slide.background = { color: this._B.WHITE };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addContentSlideTitle(slide, 'Proposed Solution Concept');
+
+    // Left column: operational model
+    slide.addText('Operational Model:', {
+      x: 0.4,
+      y: 1.2,
+      w: 4.5,
+      h: 0.3,
+      fontSize: 12,
+      bold: true,
+      color: this._B.DARK,
+      fontFace: 'Calibri',
+    });
+
+    const opModel = [
+      'Dedicated inbound dock (6 doors)',
+      'Putaway to high-density racking (12 ft)',
+      'Multi-pick technology (voice/RF)',
+      'Automated light-directed picking',
+      'Case/pallet consolidation',
+      'Outbound cross-dock staging',
+      'LTL/parcel load optimization',
+      'Real-time BY WMS integration',
+    ];
+
+    opModel.forEach((line, i) => {
+      slide.addText('• ' + line, {
+        x: 0.4,
+        y: 1.6 + i * 0.27,
+        w: 4.5,
+        h: 0.25,
+        fontSize: 10,
+        color: this._B.CHARCOAL,
+        fontFace: 'Calibri',
+      });
+    });
+
+    // Right column: facility specs card
+    slide.addShape(pres.shapes.RECTANGLE, {
+      x: 5.2,
+      y: 1.2,
+      w: 4.4,
+      h: 3.9,
+      fill: { color: this._B.LIGHT_GRAY },
+      line: { type: 'none' },
+      shadow: this._makeCardShadow(),
+    });
+
+    slide.addText('Facility Specs', {
+      x: 5.5,
+      y: 1.4,
+      w: 3.8,
+      h: 0.3,
+      fontSize: 13,
+      bold: true,
+      color: this._B.DARK,
+      fontFace: 'Calibri',
+    });
+
+    const specs = [
+      ['Size', '100,000 sq ft'],
+      ['Dock Doors', '12 (6 in, 6 out)'],
+      ['Racking', 'High-density, 12 ft'],
+      ['Technology', 'Blue Yonder WMS'],
+      ['Labor', '75 FTEs (mixed shift)'],
+      ['Equipment', '20 forklifts, 40 pallet jacks'],
+      ['Throughput', '1,000 pallets/day'],
+    ];
+
+    specs.forEach((spec, i) => {
+      slide.addText(spec[0] + ':', {
+        x: 5.5,
+        y: 1.8 + i * 0.28,
+        w: 1.5,
+        h: 0.25,
+        fontSize: 10,
+        bold: true,
+        color: this._B.DARK,
+        fontFace: 'Calibri',
+      });
+
+      slide.addText(spec[1], {
+        x: 7.1,
+        y: 1.8 + i * 0.28,
+        w: 2.2,
+        h: 0.25,
+        fontSize: 10,
+        color: this._B.CHARCOAL,
+        fontFace: 'Calibri',
+      });
+    });
+
+    _addConfidentialFooter(slide);
+
+    // SLIDE 6: Win Strategy (3-column cards)
+    slide = pres.addSlide();
+    slide.background = { color: this._B.WHITE };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addContentSlideTitle(slide, 'Win Strategy');
+
+    // Card 1: Cost Leadership
+    _addCard(slide, pres, 0.4, 1.2, 3.0, 3.9, 'warehouse', 'Cost Leadership',
+      'Industry-leading cost structure via scale, technology, and operational efficiency. Best-in-class landed cost model.');
+
+    // Card 2: Operational Excellence
+    _addCard(slide, pres, 3.6, 1.2, 3.0, 3.9, 'warehouse', 'Operational Excellence',
+      'Proven execution on high-volume, complex operations. 99.5% on-time, 99.8% accuracy. Dedicated ops team.');
+
+    // Card 3: Technology Integration
+    _addCard(slide, pres, 6.8, 1.2, 3.0, 3.9, 'warehouse', 'Technology Integration',
+      'Blue Yonder WMS expertise, real-time visibility, predictive analytics, demand forecasting, automated exception handling.');
+
+    _addConfidentialFooter(slide);
+
+    // SLIDE 7: Competitive Landscape (table)
+    slide = pres.addSlide();
+    slide.background = { color: this._B.WHITE };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addContentSlideTitle(slide, 'Competitive Landscape');
+
+    slide.addText('GXO vs. Key Competitors', {
+      x: 0.4,
+      y: 1.1,
+      w: 9.2,
+      h: 0.3,
+      fontSize: 11,
+      bold: true,
+      color: this._B.DARK,
+      fontFace: 'Calibri',
+    });
+
+    const tableY = 1.5;
+
+    // Headers
+    const headers = ['Capability', 'GXO', 'XPO', 'DHL'];
+    headers.forEach((h, i) => {
+      slide.addShape(pres.shapes.RECTANGLE, {
+        x: 0.4 + i * 2.3,
+        y: tableY,
+        w: 2.3,
+        h: 0.35,
+        fill: { color: this._B.DARK },
+        line: { color: 'D0D5DE', size: 0.5 },
+      });
+      slide.addText(h, {
+        x: 0.4 + i * 2.3 + 0.1,
+        y: tableY + 0.05,
+        w: 2.1,
+        h: 0.25,
+        fontSize: 10,
+        bold: true,
+        color: this._B.WHITE,
+        fontFace: 'Calibri',
+      });
+    });
+
+    // Table rows
+    const rows = [
+      ['Cost Model', 'Industry-leading', 'Competitive', 'Premium'],
+      ['Technology', 'Best-in-class', 'Good', 'Good'],
+      ['Scale (Sites)', '900+', '1,100+', '6,000+'],
+      ['Furniture/E-comm', 'Specialized', 'General', 'General'],
+      ['Midwest Presence', 'Strong', 'Strong', 'Strong'],
+    ];
+
+    rows.forEach((row, rowIndex) => {
+      row.forEach((cell, cellIndex) => {
+        const bgColor = rowIndex % 2 === 0 ? this._B.LIGHT_GRAY : this._B.WHITE;
+        slide.addShape(pres.shapes.RECTANGLE, {
+          x: 0.4 + cellIndex * 2.3,
+          y: tableY + 0.35 + rowIndex * 0.35,
+          w: 2.3,
+          h: 0.35,
+          fill: { color: bgColor },
+          line: { color: 'D0D5DE', size: 0.5 },
+        });
+        slide.addText(cell, {
+          x: 0.4 + cellIndex * 2.3 + 0.1,
+          y: tableY + 0.35 + rowIndex * 0.35 + 0.05,
+          w: 2.1,
+          h: 0.25,
+          fontSize: 9,
+          color: this._B.DARK,
+          fontFace: 'Calibri',
+        });
+      });
+    });
+
+    _addConfidentialFooter(slide);
+
+    // SLIDE 8: Risk Assessment (2x2 card grid)
+    slide = pres.addSlide();
+    slide.background = { color: this._B.WHITE };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addContentSlideTitle(slide, 'Risk Assessment');
+
+    // Risk 1: Ramp-up
+    slide.addShape(pres.shapes.RECTANGLE, {
+      x: 0.4,
+      y: 1.2,
+      w: 4.3,
+      h: 1.8,
+      fill: { color: this._B.LIGHT_GRAY },
+      line: { type: 'none' },
+      shadow: this._makeCardShadow(),
+    });
+    slide.addText('Ramp-up Timeline', {
+      x: 0.7,
+      y: 1.35,
+      w: 3.8,
+      h: 0.3,
+      fontSize: 11,
+      bold: true,
+      color: this._B.DARK,
+      fontFace: 'Calibri',
+    });
+    slide.addText('Risk: Volume ramp slower than projected\n\nMitigation: Phased approach, customer support, early staffing build', {
+      x: 0.7,
+      y: 1.7,
+      w: 3.8,
+      h: 1.15,
+      fontSize: 9,
+      color: this._B.CHARCOAL,
+      fontFace: 'Calibri',
+    });
+
+    // Risk 2: Labor
+    slide.addShape(pres.shapes.RECTANGLE, {
+      x: 4.8,
+      y: 1.2,
+      w: 4.3,
+      h: 1.8,
+      fill: { color: this._B.LIGHT_GRAY },
+      line: { type: 'none' },
+      shadow: this._makeCardShadow(),
+    });
+    slide.addText('Labor Availability', {
+      x: 5.1,
+      y: 1.35,
+      w: 3.8,
+      h: 0.3,
+      fontSize: 11,
+      bold: true,
+      color: this._B.DARK,
+      fontFace: 'Calibri',
+    });
+    slide.addText('Risk: Unable to source 75 FTEs\n\nMitigation: Hiring 12 weeks pre-launch, temp staffing backup, competitive wages', {
+      x: 5.1,
+      y: 1.7,
+      w: 3.8,
+      h: 1.15,
+      fontSize: 9,
+      color: this._B.CHARCOAL,
+      fontFace: 'Calibri',
+    });
+
+    // Risk 3: Technology
+    slide.addShape(pres.shapes.RECTANGLE, {
+      x: 0.4,
+      y: 3.2,
+      w: 4.3,
+      h: 1.8,
+      fill: { color: this._B.LIGHT_GRAY },
+      line: { type: 'none' },
+      shadow: this._makeCardShadow(),
+    });
+    slide.addText('Technology Integration', {
+      x: 0.7,
+      y: 3.35,
+      w: 3.8,
+      h: 0.3,
+      fontSize: 11,
+      bold: true,
+      color: this._B.DARK,
+      fontFace: 'Calibri',
+    });
+    slide.addText('Risk: WMS integration delays\n\nMitigation: Early vendor engagement, parallel systems, redundancy planning', {
+      x: 0.7,
+      y: 3.7,
+      w: 3.8,
+      h: 1.15,
+      fontSize: 9,
+      color: this._B.CHARCOAL,
+      fontFace: 'Calibri',
+    });
+
+    // Risk 4: Pricing
+    slide.addShape(pres.shapes.RECTANGLE, {
+      x: 4.8,
+      y: 3.2,
+      w: 4.3,
+      h: 1.8,
+      fill: { color: this._B.LIGHT_GRAY },
+      line: { type: 'none' },
+      shadow: this._makeCardShadow(),
+    });
+    slide.addText('Pricing/Margin', {
+      x: 5.1,
+      y: 3.35,
+      w: 3.8,
+      h: 0.3,
+      fontSize: 11,
+      bold: true,
+      color: this._B.DARK,
+      fontFace: 'Calibri',
+    });
+    slide.addText('Risk: Margin compression from volume curve\n\nMitigation: Built-in escalators, cost controls, contract guardrails', {
+      x: 5.1,
+      y: 3.7,
+      w: 3.8,
+      h: 1.15,
+      fontSize: 9,
+      color: this._B.CHARCOAL,
+      fontFace: 'Calibri',
+    });
+
+    _addConfidentialFooter(slide);
+
+    // SLIDE 9: Closing (dark)
+    slide = pres.addSlide();
+    slide.background = { color: this._B.DARK };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addDarkSlideTitle(slide, 'Ready to Advance', 'to Solution Design Phase');
+    slide.addText('Next Steps: Confirm opportunity scope, establish design team, schedule design kickoff', {
+      x: 0.4,
+      y: 3.8,
+      w: 9.2,
+      h: 0.8,
+      fontSize: 12,
+      color: this._B.WHITE,
+      fontFace: 'Calibri',
+    });
+
+    // Write file
+    console.log('✓ Generated: GXO_Qualification_Wayfair.pptx');
+  },
+
+  // ============================================================================
+  // DECK 2: OPERATIONS REVIEW DECK
+  // ============================================================================
+
+  async generateOpsReviewDeck() {
+    const pres = new PptxGenJS();
+    pres.defineLayout({ name: 'LAYOUT_16x9', width: 10, height: 5.625 });
+    pres.layout = 'LAYOUT_16x9';
+    pres.theme = { colors: [this._B.PRIMARY_ORANGE, this._B.DARK, this._B.LIGHT_GRAY] };
+
+    // SLIDE 1: Title Slide
+    let slide = pres.addSlide();
+    slide.background = { color: this._B.DARK };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addDarkSlideTitle(slide, 'Operations Review', 'Wayfair — Indianapolis Pallet DC');
+
+    // SLIDE 2: Executive Summary (5 stat callouts + 2-column summary)
+    slide = pres.addSlide();
+    slide.background = { color: this._B.WHITE };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addContentSlideTitle(slide, 'Executive Summary');
+
+    const statWidth = 1.6;
+    const statHeight = 1.1;
+    const statsY = 1.2;
+    const statsStartX = 0.4;
+
+    _addStatCallout(slide, pres, statsStartX, statsY, statWidth, statHeight, '100K', 'Sq Ft');
+    _addStatCallout(slide, pres, statsStartX + statWidth + 0.1, statsY, statWidth, statHeight, '1,000', 'Pallets/Day');
+    _addStatCallout(slide, pres, statsStartX + (statWidth + 0.1) * 2, statsY, statWidth, statHeight, '75', 'HC');
+    _addStatCallout(slide, pres, statsStartX + (statWidth + 0.1) * 3, statsY, statWidth, statHeight, '$8.75M', 'Cost');
+    _addStatCallout(slide, pres, statsStartX + (statWidth + 0.1) * 4, statsY, statWidth, statHeight, '17.7%', 'Margin');
+
+    // Summary columns
+    slide.addText('Solution Overview:', {
+      x: 0.4,
+      y: 2.45,
+      w: 4.5,
+      h: 0.25,
+      fontSize: 11,
+      bold: true,
+      color: this._B.DARK,
+      fontFace: 'Calibri',
+    });
+
+    const leftSummary = [
+      'Dedicated pallet DC facility',
+      'Multi-modal inbound/outbound',
+      'Blue Yonder WMS integration',
+      'High-density automated storage',
+      'Mixed shift labor model',
+    ];
+
+    leftSummary.forEach((line, i) => {
+      slide.addText('• ' + line, {
+        x: 0.4,
+        y: 2.75 + i * 0.22,
+        w: 4.5,
+        h: 0.2,
+        fontSize: 10,
+        color: this._B.CHARCOAL,
+        fontFace: 'Calibri',
+      });
+    });
+
+    slide.addText('Key Metrics:', {
+      x: 5.2,
+      y: 2.45,
+      w: 4.4,
+      h: 0.25,
+      fontSize: 11,
+      bold: true,
+      color: this._B.DARK,
+      fontFace: 'Calibri',
+    });
+
+    const rightSummary = [
+      'Throughput: 1,000 pallets/day',
+      'Service Level: 99.5% on-time',
+      'Accuracy: 99.8%',
+      'Labor Productivity: 13.3 pallets/FTE/day',
+      'Facility Util: 94%',
+    ];
+
+    rightSummary.forEach((line, i) => {
+      slide.addText('• ' + line, {
+        x: 5.2,
+        y: 2.75 + i * 0.22,
+        w: 4.4,
+        h: 0.2,
+        fontSize: 10,
+        color: this._B.CHARCOAL,
+        fontFace: 'Calibri',
+      });
+    });
+
+    _addConfidentialFooter(slide);
+
+    // SLIDE 3: Solution Architecture (2x3 card grid)
+    slide = pres.addSlide();
+    slide.background = { color: this._B.WHITE };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addContentSlideTitle(slide, 'Solution Architecture');
+
+    _addCard(slide, pres, 0.4, 1.2, 3.0, 2.0, 'warehouse', 'Facility Design',
+      'Purpose-built 100K SF. 6 dock doors in, 6 out. 12 ft high-density racking. Temperature controlled.');
+
+    _addCard(slide, pres, 3.6, 1.2, 3.0, 2.0, 'warehouse', 'Storage Solution',
+      'Selective racking + double-deep. FIFO management. Automated putaway logic. Max utilization.');
+
+    _addCard(slide, pres, 6.8, 1.2, 3.0, 2.0, 'warehouse', 'Technology Platform',
+      'Blue Yonder WMS. Real-time visibility. Voice-directed picking. Mobile RF scanning. Automated exception handling.');
+
+    _addCard(slide, pres, 0.4, 3.3, 3.0, 2.0, 'warehouse', 'Material Flow',
+      'Inbound consolidation, putaway staging, optimized pick tours, case/pallet consolidation, load optimization.');
+
+    _addCard(slide, pres, 3.6, 3.3, 3.0, 2.0, 'warehouse', 'Labor Model',
+      'Mixed shift (morning, afternoon, night). Cross-trained operators. MOST-based labor standards. 99% target utilization.');
+
+    _addCard(slide, pres, 6.8, 3.3, 3.0, 2.0, 'warehouse', 'Equipment Fleet',
+      '20 forklifts (15 sit-down, 5 stand-up), 40 pallet jacks, 12 RF scanners, voice headsets, barcode printers.');
+
+    _addConfidentialFooter(slide);
+
+    // SLIDE 4: Facility Configuration
+    slide = pres.addSlide();
+    slide.background = { color: this._B.WHITE };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addContentSlideTitle(slide, 'Facility Configuration');
+
+    // Specs table (left)
+    slide.addText('Physical Specifications:', {
+      x: 0.4,
+      y: 1.2,
+      w: 4.5,
+      h: 0.25,
+      fontSize: 11,
+      bold: true,
+      color: this._B.DARK,
+      fontFace: 'Calibri',
+    });
+
+    const specRows = [
+      ['Total Size', '100,000 sq ft'],
+      ['Dock Doors', '12 total (6 in, 6 out)'],
+      ['Racking Height', '12 feet'],
+      ['Racking Type', 'Selective + double-deep'],
+      ['Office Space', '2,500 sq ft'],
+      ['Break/Facilities', '1,000 sq ft'],
+      ['Yard Space', '1.5 acres'],
+    ];
+
+    specRows.forEach((row, i) => {
+      slide.addShape(pres.shapes.RECTANGLE, {
+        x: 0.4,
+        y: 1.5 + i * 0.3,
+        w: 2.0,
+        h: 0.28,
+        fill: { color: i % 2 === 0 ? this._B.LIGHT_GRAY : this._B.WHITE },
+        line: { color: 'D0D5DE', size: 0.5 },
+      });
+      slide.addText(row[0], {
+        x: 0.45,
+        y: 1.53 + i * 0.3,
+        w: 1.9,
+        h: 0.22,
+        fontSize: 9,
+        bold: true,
+        color: this._B.DARK,
+        fontFace: 'Calibri',
+      });
+
+      slide.addShape(pres.shapes.RECTANGLE, {
+        x: 2.45,
+        y: 1.5 + i * 0.3,
+        w: 2.45,
+        h: 0.28,
+        fill: { color: i % 2 === 0 ? this._B.LIGHT_GRAY : this._B.WHITE },
+        line: { color: 'D0D5DE', size: 0.5 },
+      });
+      slide.addText(row[1], {
+        x: 2.5,
+        y: 1.53 + i * 0.3,
+        w: 2.35,
+        h: 0.22,
+        fontSize: 9,
+        color: this._B.CHARCOAL,
+        fontFace: 'Calibri',
+      });
+    });
+
+    // Configuration details (right)
+    slide.addShape(pres.shapes.RECTANGLE, {
+      x: 5.2,
+      y: 1.2,
+      w: 4.4,
+      h: 3.8,
+      fill: { color: this._B.LIGHT_GRAY },
+      line: { type: 'none' },
+      shadow: this._makeCardShadow(),
+    });
+
+    slide.addText('Layout & Configuration', {
+      x: 5.5,
+      y: 1.35,
+      w: 3.8,
+      h: 0.28,
+      fontSize: 12,
+      bold: true,
+      color: this._B.DARK,
+      fontFace: 'Calibri',
+    });
+
+    const configDetail = [
+      'Inbound Zone: 3 dock doors, consolidation area (1,500 sq ft)',
+      'Putaway Staging: High-velocity SKUs near dock (2,000 sq ft)',
+      'Main Racking: 12-ft selective + double-deep (78,000 sq ft)',
+      'Pick/Stage Area: Multi-pick with RF guidance (4,000 sq ft)',
+      'Load Staging: Consolidated cases, pallet staging (3,000 sq ft)',
+      'Returns: Reverse logistics processing (2,500 sq ft)',
+    ];
+
+    configDetail.forEach((line, i) => {
+      slide.addText(line, {
+        x: 5.5,
+        y: 1.7 + i * 0.35,
+        w: 3.8,
+        h: 0.32,
+        fontSize: 9,
+        color: this._B.CHARCOAL,
+        fontFace: 'Calibri',
+      });
+    });
+
+    _addConfidentialFooter(slide);
+
+    // SLIDE 5: Process Flow (8-step horizontal)
+    slide = pres.addSlide();
+    slide.background = { color: this._B.WHITE };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addContentSlideTitle(slide, 'Process Flow & Operations');
+
+    const flowSteps = ['Receive', 'Check-In', 'Putaway', 'Storage', 'Pick', 'Stage', 'Load', 'Ship'];
+    const flowY = 1.8;
+    const stepWidth = 1.1;
+    const stepHeight = 0.6;
+    const flowStartX = 0.4;
+
+    flowSteps.forEach((step, i) => {
+      const x = flowStartX + i * (stepWidth + 0.05);
+      slide.addShape(pres.shapes.RECTANGLE, {
+        x,
+        y: flowY,
+        w: stepWidth,
+        h: stepHeight,
+        fill: { color: this._B.PRIMARY_ORANGE },
+        line: { type: 'none' },
+      });
+      slide.addText(step, {
+        x,
+        y: flowY + 0.08,
+        w: stepWidth,
+        h: stepHeight - 0.16,
+        fontSize: 9,
+        bold: true,
+        color: this._B.WHITE,
+        fontFace: 'Calibri',
+        align: 'center',
+        valign: 'middle',
+      });
+
+      if (i < flowSteps.length - 1) {
+        slide.addText('→', {
+          x: x + stepWidth + 0.01,
+          y: flowY + 0.12,
+          w: 0.03,
+          h: 0.36,
+          fontSize: 14,
+          color: this._B.PRIMARY_ORANGE,
+          fontFace: 'Calibri',
+          align: 'center',
+        });
+      }
+    });
+
+    // Process details below flow
+    slide.addText('Detailed Process Steps:', {
+      x: 0.4,
+      y: 2.65,
+      w: 9.2,
+      h: 0.25,
+      fontSize: 11,
+      bold: true,
+      color: this._B.DARK,
+      fontFace: 'Calibri',
+    });
+
+    const processDetails = [
+      '1. Receive: Dock appointment, ASN matching, truck unload into consolidation area',
+      '2. Check-In: Item counting, barcode scan verification, weight/dimensions, damage assessment',
+      '3. Putaway: Auto-logic for placement, RF confirmation, high-velocity SKUs near dock',
+      '4. Storage: Managed by BY WMS, cycle count program, slow-moving item tracking',
+      '5. Pick: Multi-pick orders, voice-directed routes, RF scan confirmation, batch consolidation',
+      '6. Stage: Sort by load plan, case/pallet staging, cross-dock for time-critical shipments',
+      '7. Load: Optimize load sequence, weight distribution, barcode labeling, manifest generation',
+      '8. Ship: TMS integration, carrier pickup scheduling, track-and-trace, POD capture',
+    ];
+
+    processDetails.forEach((line, i) => {
+      const col = i < 4 ? 0 : 1;
+      const row = i % 4;
+      slide.addText(line, {
+        x: col * 4.8 + 0.4,
+        y: 3.0 + row * 0.48,
+        w: 4.6,
+        h: 0.45,
+        fontSize: 9,
+        color: this._B.CHARCOAL,
+        fontFace: 'Calibri',
+      });
+    });
+
+    _addConfidentialFooter(slide);
+
+    // SLIDE 6: Labor Model (professional table with MOST-based data)
+    slide = pres.addSlide();
+    slide.background = { color: this._B.WHITE };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addContentSlideTitle(slide, 'Labor Model & Productivity');
+
+    // Labor table
+    slide.addText('MOST-Based Labor Standards', {
+      x: 0.4,
+      y: 1.1,
+      w: 9.2,
+      h: 0.25,
+      fontSize: 11,
+      bold: true,
+      color: this._B.DARK,
+      fontFace: 'Calibri',
+    });
+
+    const laborTableY = 1.5;
+    const laborHeaders = ['Activity', 'Volume/Day', 'UPH', 'Hours/Day', 'FTEs (5-day)'];
+
+    laborHeaders.forEach((h, i) => {
+      const w = i === 0 ? 2.4 : 1.7;
+      const x = 0.4 + (i === 0 ? 0 : 2.4 + (i - 1) * 1.7);
+      slide.addShape(pres.shapes.RECTANGLE, {
+        x,
+        y: laborTableY,
+        w,
+        h: 0.35,
+        fill: { color: this._B.DARK },
+        line: { color: 'D0D5DE', size: 0.5 },
+      });
+      slide.addText(h, {
+        x: x + 0.1,
+        y: laborTableY + 0.04,
+        w: w - 0.2,
+        h: 0.27,
+        fontSize: 10,
+        bold: true,
+        color: this._B.WHITE,
+        fontFace: 'Calibri',
+      });
+    });
+
+    const laborRows = [
+      ['Receiving', '1000', '200', '5.0', '8'],
+      ['Putaway', '1000', '150', '6.7', '11'],
+      ['Picking', '1000', '120', '8.3', '13'],
+      ['Staging', '1000', '200', '5.0', '8'],
+      ['Loading', '1000', '250', '4.0', '6'],
+      ['Quality/Cycle', '1000', '500', '2.0', '3'],
+      ['Supervision', 'Daily', 'N/A', '8.0', '8'],
+      ['Total', '', '', '39.0', '57*'],
+    ];
+
+    laborRows.forEach((row, rowIndex) => {
+      row.forEach((cell, cellIndex) => {
+        const w = cellIndex === 0 ? 2.4 : 1.7;
+        const x = 0.4 + (cellIndex === 0 ? 0 : 2.4 + (cellIndex - 1) * 1.7);
+        const bgColor = rowIndex % 2 === 0 ? this._B.LIGHT_GRAY : this._B.WHITE;
+        slide.addShape(pres.shapes.RECTANGLE, {
+          x,
+          y: laborTableY + 0.3 + rowIndex * 0.3,
+          w,
+          h: 0.3,
+          fill: { color: bgColor },
+          line: { color: 'D0D5DE', size: 0.5 },
+        });
+        slide.addText(cell, {
+          x: x + 0.08,
+          y: laborTableY + 0.3 + rowIndex * 0.3 + 0.03,
+          w: w - 0.16,
+          h: 0.24,
+          fontSize: 8,
+          color: this._B.DARK,
+          fontFace: 'Calibri',
+        });
+      });
+    });
+
+    slide.addText('*18 FTEs indirect (facilities, IT, HR, safety) = 75 total headcount', {
+      x: 0.4,
+      y: 4.5,
+      w: 9.2,
+      h: 0.25,
+      fontSize: 9,
+      color: this._B.MEDIUM_GRAY,
+      fontFace: 'Calibri',
+    });
+
+    _addConfidentialFooter(slide);
+
+    // SLIDE 7: MHE Fleet (3-column equipment cards)
+    slide = pres.addSlide();
+    slide.background = { color: this._B.WHITE };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addContentSlideTitle(slide, 'Material Handling Equipment Fleet');
+
+    _addCard(slide, pres, 0.4, 1.2, 3.0, 3.9, 'warehouse', 'Forklifts',
+      '15 sit-down operator forklifts (5K lbs capacity). 5 stand-up reach trucks (2K lbs). Maintenance contracts, telematics integration for utilization tracking.');
+
+    _addCard(slide, pres, 3.6, 1.2, 3.0, 3.9, 'warehouse', 'Mobile Equipment',
+      '40 pallet jacks for horizontal movement. 8 straddle carriers for high-density racking. Safety-rated and certified. Regular maintenance program.');
+
+    _addCard(slide, pres, 6.8, 1.2, 3.0, 3.9, 'warehouse', 'Technology & Accessories',
+      '12 RF scanners with voice capability. Barcode printers (2x thermal, 1x label). Safety signage and lighting. Emergency equipment. Total investment: $280K.');
+
+    _addConfidentialFooter(slide);
+
+    // SLIDE 8: Financial Summary
+    slide = pres.addSlide();
+    slide.background = { color: this._B.WHITE };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addContentSlideTitle(slide, 'Financial Summary');
+
+    // Key financials (5 stat callouts)
+    const finStatWidth = 1.72;
+    const finStatHeight = 1.0;
+    const finStatsY = 1.2;
+    const finStatsStartX = 0.4;
+    const finGap = 0.12;
+
+    _addStatCallout(slide, pres, finStatsStartX, finStatsY, finStatWidth, finStatHeight, '$10.6M', 'Annual Revenue');
+    _addStatCallout(slide, pres, finStatsStartX + (finStatWidth + finGap), finStatsY, finStatWidth, finStatHeight, '$8.75M', 'Total Cost');
+    _addStatCallout(slide, pres, finStatsStartX + (finStatWidth + finGap) * 2, finStatsY, finStatWidth, finStatHeight, '$1.85M', 'EBITDA');
+    _addStatCallout(slide, pres, finStatsStartX + (finStatWidth + finGap) * 3, finStatsY, finStatWidth, finStatHeight, '17.7%', 'Margin');
+    _addStatCallout(slide, pres, finStatsStartX + (finStatWidth + finGap) * 4, finStatsY, finStatWidth, finStatHeight, '22.2%', 'EBITDA %');
+
+    // Cost breakdown table
+    slide.addText('Annual Cost Breakdown:', {
+      x: 0.4,
+      y: 2.4,
+      w: 9.2,
+      h: 0.25,
+      fontSize: 11,
+      bold: true,
+      color: this._B.DARK,
+      fontFace: 'Calibri',
+    });
+
+    const costTableY = 2.75;
+    const costHeaders = ['Cost Component', 'Annual $', '% of Total'];
+
+    costHeaders.forEach((h, i) => {
+      const w = i === 0 ? 4.5 : 2.35;
+      const x = 0.4 + (i === 0 ? 0 : 4.5 + (i - 1) * 2.35);
+      slide.addShape(pres.shapes.RECTANGLE, {
+        x,
+        y: costTableY,
+        w,
+        h: 0.28,
+        fill: { color: this._B.DARK },
+        line: { color: 'D0D5DE', size: 0.5 },
+      });
+      slide.addText(h, {
+        x: x + 0.1,
+        y: costTableY + 0.02,
+        w: w - 0.2,
+        h: 0.24,
+        fontSize: 9,
+        bold: true,
+        color: this._B.WHITE,
+        fontFace: 'Calibri',
+      });
+    });
+
+    const costRows = [
+      ['Labor (57 FTEs + 18 indirect)', '$4.5M', '51.4%'],
+      ['Rent & Facility Costs', '$1.2M', '13.7%'],
+      ['Equipment & Maintenance', '$0.8M', '9.1%'],
+      ['Technology (WMS, TMS, etc)', '$0.6M', '6.9%'],
+      ['Utilities & Services', '$0.5M', '5.7%'],
+      ['Other Operating Costs', '$0.15M', '1.7%'],
+      ['Contingency (2%)', '$0.175M', '2.0%'],
+      ['Total', '$8.75M', '100%'],
+    ];
+
+    costRows.forEach((row, rowIndex) => {
+      row.forEach((cell, cellIndex) => {
+        const w = cellIndex === 0 ? 4.5 : 2.35;
+        const x = 0.4 + (cellIndex === 0 ? 0 : 4.5 + (cellIndex - 1) * 2.35);
+        const bgColor = rowIndex % 2 === 0 ? this._B.LIGHT_GRAY : this._B.WHITE;
+        slide.addShape(pres.shapes.RECTANGLE, {
+          x,
+          y: costTableY + 0.28 + rowIndex * 0.28,
+          w,
+          h: 0.28,
+          fill: { color: bgColor },
+          line: { color: 'D0D5DE', size: 0.5 },
+        });
+        slide.addText(cell, {
+          x: x + 0.1,
+          y: costTableY + 0.28 + rowIndex * 0.28 + 0.02,
+          w: w - 0.2,
+          h: 0.24,
+          fontSize: 8,
+          color: this._B.DARK,
+          fontFace: 'Calibri',
+        });
+      });
+    });
+
+    _addConfidentialFooter(slide);
+
+    // SLIDE 9: Pricing Structure
+    slide = pres.addSlide();
+    slide.background = { color: this._B.WHITE };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addContentSlideTitle(slide, 'Pricing Structure & Rate Card');
+
+    // Rate card table
+    slide.addText('Annual Service Rates (Blended)', {
+      x: 0.4,
+      y: 1.1,
+      w: 9.2,
+      h: 0.25,
+      fontSize: 11,
+      bold: true,
+      color: this._B.DARK,
+      fontFace: 'Calibri',
+    });
+
+    const rateTableY = 1.5;
+    const rateHeaders = ['Service Line', 'Rate per Unit', 'Volume', 'Annual $'];
+
+    rateHeaders.forEach((h, i) => {
+      const w = i === 0 ? 3.0 : 2.3;
+      const x = 0.4 + (i === 0 ? 0 : 3.0 + (i - 1) * 2.3);
+      slide.addShape(pres.shapes.RECTANGLE, {
+        x,
+        y: rateTableY,
+        w,
+        h: 0.3,
+        fill: { color: this._B.DARK },
+        line: { color: 'D0D5DE', size: 0.5 },
+      });
+      slide.addText(h, {
+        x: x + 0.1,
+        y: rateTableY + 0.03,
+        w: w - 0.2,
+        h: 0.24,
+        fontSize: 9,
+        bold: true,
+        color: this._B.WHITE,
+        fontFace: 'Calibri',
+      });
+    });
+
+    const rateRows = [
+      ['Receiving (per pallet)', '$4.50', '260K', '$1.17M'],
+      ['Put-Away (per pallet)', '$5.00', '260K', '$1.30M'],
+      ['Storage (per pallet/month)', '$0.85', '260K', '$2.21M'],
+      ['Picking (per case)', '$0.35', '2M', '$0.70M'],
+      ['Shipping (per shipment)', '$8.75', '25K', '$0.22M'],
+      ['Value-Added Services', 'Variable', 'As-needed', '$2.96M'],
+      ['Total Annual Revenue', '', '', '$10.6M'],
+    ];
+
+    rateRows.forEach((row, rowIndex) => {
+      row.forEach((cell, cellIndex) => {
+        const w = cellIndex === 0 ? 3.0 : 2.3;
+        const x = 0.4 + (cellIndex === 0 ? 0 : 3.0 + (cellIndex - 1) * 2.3);
+        const bgColor = rowIndex % 2 === 0 ? this._B.LIGHT_GRAY : this._B.WHITE;
+        slide.addShape(pres.shapes.RECTANGLE, {
+          x,
+          y: rateTableY + 0.3 + rowIndex * 0.3,
+          w,
+          h: 0.3,
+          fill: { color: bgColor },
+          line: { color: 'D0D5DE', size: 0.5 },
+        });
+        slide.addText(cell, {
+          x: x + 0.1,
+          y: rateTableY + 0.3 + rowIndex * 0.3 + 0.03,
+          w: w - 0.2,
+          h: 0.24,
+          fontSize: 8,
+          color: this._B.DARK,
+          fontFace: 'Calibri',
+        });
+      });
+    });
+
+    slide.addText('Contract Terms: 5-year initial term with annual 2% escalator. Volume commitments include 10% variance tolerance.', {
+      x: 0.4,
+      y: 4.5,
+      w: 9.2,
+      h: 0.6,
+      fontSize: 9,
+      color: this._B.MEDIUM_GRAY,
+      fontFace: 'Calibri',
+    });
+
+    _addConfidentialFooter(slide);
+
+    // SLIDE 10: Implementation Timeline
+    slide = pres.addSlide();
+    slide.background = { color: this._B.WHITE };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addContentSlideTitle(slide, 'Implementation Timeline');
+
+    const phases = [
+      { name: 'Design & Planning', duration: '8 weeks', desc: 'Detailed ops plan, staffing, equipment' },
+      { name: 'Facility Prep', duration: '10 weeks', desc: 'Lease, build-out, utilities, IT' },
+      { name: 'Equipment & Tech', duration: '8 weeks', desc: 'MHE delivery, WMS setup, training' },
+      { name: 'Staffing & Ramp', duration: '6 weeks', desc: 'Hire, train, pilot operations' },
+      { name: 'Go-Live', duration: '4 weeks', desc: 'Parallel run, cutover, stabilization' },
+      { name: 'Optimization', duration: 'Ongoing', desc: 'Continuous improvement, scale' },
+    ];
+
+    const phaseWidth = 1.5;
+    const phaseHeight = 0.7;
+    const phaseStartY = 1.5;
+    const phaseStartX = 0.4;
+
+    phases.forEach((phase, i) => {
+      const x = phaseStartX + i * (phaseWidth + 0.2);
+      const isLast = i === phases.length - 1;
+
+      slide.addShape(pres.shapes.RECTANGLE, {
+        x,
+        y: phaseStartY,
+        w: phaseWidth,
+        h: phaseHeight,
+        fill: { color: isLast ? this._B.SUCCESS_GREEN : this._B.PRIMARY_ORANGE },
+        line: { type: 'none' },
+      });
+
+      slide.addText(phase.name, {
+        x,
+        y: phaseStartY + 0.08,
+        w: phaseWidth,
+        h: 0.25,
+        fontSize: 8,
+        bold: true,
+        color: this._B.WHITE,
+        fontFace: 'Calibri',
+        align: 'center',
+      });
+
+      slide.addText(phase.duration, {
+        x,
+        y: phaseStartY + 0.35,
+        w: phaseWidth,
+        h: 0.32,
+        fontSize: 7,
+        color: this._B.WHITE,
+        fontFace: 'Calibri',
+        align: 'center',
+        valign: 'middle',
+      });
+    });
+
+    // Timeline details
+    slide.addText('Timeline: 36 weeks from design kickoff to full operation', {
+      x: 0.4,
+      y: 2.5,
+      w: 9.2,
+      h: 0.25,
+      fontSize: 11,
+      bold: true,
+      color: this._B.DARK,
+      fontFace: 'Calibri',
+    });
+
+    const timelineDetail = [
+      'Week 1-8: Design & Planning phase. Confirm ops model, staffing plan, equipment specs, budget approval.',
+      'Week 9-18: Facility Prep phase. Lease execution, build-out, IT infrastructure, utilities.',
+      'Week 19-26: Equipment & Tech phase. MHE procurement, WMS configuration, network setup, staff training begins.',
+      'Week 27-32: Staffing & Ramp phase. Full hiring, on-boarding, process training, pilot operations with customer.',
+      'Week 33-36: Go-Live & Stabilization. Parallel run, cutover, volume ramp, customer feedback incorporation.',
+      'Post-Go-Live: Continuous optimization, automation opportunities, margin improvement initiatives.',
+    ];
+
+    timelineDetail.forEach((line, i) => {
+      slide.addText(line, {
+        x: 0.4,
+        y: 2.85 + i * 0.42,
+        w: 9.2,
+        h: 0.4,
+        fontSize: 9,
+        color: this._B.CHARCOAL,
+        fontFace: 'Calibri',
+      });
+    });
+
+    _addConfidentialFooter(slide);
+
+    // SLIDE 11: Risk Management (professional matrix table)
+    slide = pres.addSlide();
+    slide.background = { color: this._B.WHITE };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addContentSlideTitle(slide, 'Risk Management & Mitigation');
+
+    slide.addText('Risk Assessment Matrix', {
+      x: 0.4,
+      y: 1.1,
+      w: 9.2,
+      h: 0.25,
+      fontSize: 11,
+      bold: true,
+      color: this._B.DARK,
+      fontFace: 'Calibri',
+    });
+
+    const riskTableY = 1.5;
+    const riskHeaders = ['Risk Category', 'Probability', 'Impact', 'Mitigation Strategy'];
+
+    riskHeaders.forEach((h, i) => {
+      const w = i === 0 ? 2.5 : 2.25;
+      const x = 0.4 + (i === 0 ? 0 : 2.5 + (i - 1) * 2.25);
+      slide.addShape(pres.shapes.RECTANGLE, {
+        x,
+        y: riskTableY,
+        w,
+        h: 0.3,
+        fill: { color: this._B.DARK },
+        line: { color: 'D0D5DE', size: 0.5 },
+      });
+      slide.addText(h, {
+        x: x + 0.08,
+        y: riskTableY + 0.03,
+        w: w - 0.16,
+        h: 0.24,
+        fontSize: 9,
+        bold: true,
+        color: this._B.WHITE,
+        fontFace: 'Calibri',
+      });
+    });
+
+    const riskRows = [
+      ['Ramp-up Delay', 'Medium', 'High', 'Phase 1 engagement, buffer timeline'],
+      ['Labor Shortage', 'Medium', 'High', 'Early hiring, temp staffing backup'],
+      ['Technology Issues', 'Low', 'High', 'Early vendor testing, parallel systems'],
+      ['Cost Overruns', 'Medium', 'Medium', 'Detailed budgeting, contingency reserves'],
+      ['Customer Churn', 'Low', 'High', 'Dedicated ops team, SLA commitments'],
+    ];
+
+    riskRows.forEach((row, rowIndex) => {
+      row.forEach((cell, cellIndex) => {
+        const w = cellIndex === 0 ? 2.5 : 2.25;
+        const x = 0.4 + (cellIndex === 0 ? 0 : 2.5 + (cellIndex - 1) * 2.25);
+        const bgColor = rowIndex % 2 === 0 ? this._B.LIGHT_GRAY : this._B.WHITE;
+        slide.addShape(pres.shapes.RECTANGLE, {
+          x,
+          y: riskTableY + 0.3 + rowIndex * 0.3,
+          w,
+          h: 0.3,
+          fill: { color: bgColor },
+          line: { color: 'D0D5DE', size: 0.5 },
+        });
+        slide.addText(cell, {
+          x: x + 0.08,
+          y: riskTableY + 0.3 + rowIndex * 0.3 + 0.03,
+          w: w - 0.16,
+          h: 0.24,
+          fontSize: 8,
+          color: this._B.DARK,
+          fontFace: 'Calibri',
+        });
+      });
+    });
+
+    _addConfidentialFooter(slide);
+
+    // SLIDE 12: Closing (dark)
+    slide = pres.addSlide();
+    slide.background = { color: this._B.DARK };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addDarkSlideTitle(slide, 'Recommend Proceeding', 'to ELT Approval');
+    slide.addText('Next Steps: Schedule ELT review, finalize business case, coordinate with customer', {
+      x: 0.4,
+      y: 3.8,
+      w: 9.2,
+      h: 0.8,
+      fontSize: 12,
+      color: this._B.WHITE,
+      fontFace: 'Calibri',
+    });
+
+    // Write file
+    console.log('✓ Generated: GXO_OpsReview_Wayfair.pptx');
+  },
+
+  // ============================================================================
+  // DECK 3: ELT APPROVAL DECK
+  // ============================================================================
+
+  async generateELTDeck() {
+    const pres = new PptxGenJS();
+    pres.defineLayout({ name: 'LAYOUT_16x9', width: 10, height: 5.625 });
+    pres.layout = 'LAYOUT_16x9';
+    pres.theme = { colors: [this._B.PRIMARY_ORANGE, this._B.DARK, this._B.LIGHT_GRAY] };
+
+    // SLIDE 1: Title Slide
+    let slide = pres.addSlide();
+    slide.background = { color: this._B.DARK };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addDarkSlideTitle(slide, 'Executive Leadership Team Review', 'Wayfair — New Business Opportunity');
+
+    // SLIDE 2: Deal at a Glance (2x3 stat grid - BIG NUMBERS)
+    slide = pres.addSlide();
+    slide.background = { color: this._B.WHITE };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addContentSlideTitle(slide, 'Deal at a Glance');
+
+    const dealStatWidth = 2.9;
+    const dealStatHeight = 1.4;
+    const dealRow1Y = 1.3;
+    const dealRow2Y = 2.9;
+    const dealStartX = 0.4;
+
+    // Row 1
+    _addStatCallout(slide, pres, dealStartX, dealRow1Y, dealStatWidth, dealStatHeight, '$10.6M', 'Annual Revenue');
+    _addStatCallout(slide, pres, dealStartX + dealStatWidth + 0.15, dealRow1Y, dealStatWidth, dealStatHeight, '$8.75M', 'Annual Cost');
+    _addStatCallout(slide, pres, dealStartX + (dealStatWidth + 0.15) * 2, dealRow1Y, dealStatWidth, dealStatHeight, '$1.85M', 'EBITDA');
+
+    // Row 2
+    _addStatCallout(slide, pres, dealStartX, dealRow2Y, dealStatWidth, dealStatHeight, '5 Years', 'Contract Term');
+    _addStatCallout(slide, pres, dealStartX + dealStatWidth + 0.15, dealRow2Y, dealStatWidth, dealStatHeight, '260K', 'Annual Pallets');
+    _addStatCallout(slide, pres, dealStartX + (dealStatWidth + 0.15) * 2, dealRow2Y, dealStatWidth, dealStatHeight, '75', 'Headcount');
+
+    _addConfidentialFooter(slide);
+
+    // SLIDE 3: Strategic Rationale (3-column cards)
+    slide = pres.addSlide();
+    slide.background = { color: this._B.WHITE };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addContentSlideTitle(slide, 'Strategic Rationale');
+
+    _addCard(slide, pres, 0.4, 1.2, 3.0, 3.9, 'warehouse', 'Market Expansion',
+      'Enter Midwest e-commerce logistics market. Geographic growth in key corridor. Fortress location for inbound consolidation.');
+
+    _addCard(slide, pres, 3.6, 1.2, 3.0, 3.9, 'warehouse', 'Revenue Growth',
+      '$10.6M annual revenue opportunity. 5-year term = $53M total revenue. Scalable model for adjacent opportunities.');
+
+    _addCard(slide, pres, 6.8, 1.2, 3.0, 3.9, 'warehouse', 'Operational Synergies',
+      'Leverage GXO technology platform. E-commerce expertise transfer. Cost model optimization. Cross-customer efficiency gains.');
+
+    _addConfidentialFooter(slide);
+
+    // SLIDE 4: Financial Analysis
+    slide = pres.addSlide();
+    slide.background = { color: this._B.WHITE };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addContentSlideTitle(slide, 'Financial Analysis');
+
+    // 5-year P&L summary
+    slide.addText('5-Year P&L Projection', {
+      x: 0.4,
+      y: 1.1,
+      w: 9.2,
+      h: 0.25,
+      fontSize: 11,
+      bold: true,
+      color: this._B.DARK,
+      fontFace: 'Calibri',
+    });
+
+    const pnlTableY = 1.5;
+    const pnlHeaders = ['Metric', 'Year 1', 'Year 2', 'Year 3', 'Year 4', 'Year 5', '5-Year Total'];
+
+    pnlHeaders.forEach((h, i) => {
+      const w = i === 0 ? 1.6 : 1.36;
+      const x = 0.4 + (i === 0 ? 0 : 1.6 + (i - 1) * 1.36);
+      slide.addShape(pres.shapes.RECTANGLE, {
+        x,
+        y: pnlTableY,
+        w,
+        h: 0.28,
+        fill: { color: this._B.DARK },
+        line: { color: 'D0D5DE', size: 0.5 },
+      });
+      slide.addText(h, {
+        x: x + 0.05,
+        y: pnlTableY + 0.02,
+        w: w - 0.1,
+        h: 0.24,
+        fontSize: 8,
+        bold: true,
+        color: this._B.WHITE,
+        fontFace: 'Calibri',
+        align: 'center',
+      });
+    });
+
+    const pnlRows = [
+      ['Revenue', '$8.5M', '$10.2M', '$10.6M', '$10.8M', '$11.0M', '$51.1M'],
+      ['Cost', '$7.2M', '$8.4M', '$8.75M', '$8.9M', '$9.0M', '$42.25M'],
+      ['EBITDA', '$1.3M', '$1.8M', '$1.85M', '$1.9M', '$2.0M', '$8.85M'],
+      ['Margin %', '15.3%', '17.6%', '17.5%', '17.6%', '18.2%', '17.3%'],
+    ];
+
+    pnlRows.forEach((row, rowIndex) => {
+      row.forEach((cell, cellIndex) => {
+        const w = cellIndex === 0 ? 1.6 : 1.36;
+        const x = 0.4 + (cellIndex === 0 ? 0 : 1.6 + (cellIndex - 1) * 1.36);
+        const bgColor = rowIndex % 2 === 0 ? this._B.LIGHT_GRAY : this._B.WHITE;
+        slide.addShape(pres.shapes.RECTANGLE, {
+          x,
+          y: pnlTableY + 0.28 + rowIndex * 0.28,
+          w,
+          h: 0.28,
+          fill: { color: bgColor },
+          line: { color: 'D0D5DE', size: 0.5 },
+        });
+        slide.addText(cell, {
+          x: x + 0.05,
+          y: pnlTableY + 0.28 + rowIndex * 0.28 + 0.02,
+          w: w - 0.1,
+          h: 0.24,
+          fontSize: 7,
+          color: this._B.DARK,
+          fontFace: 'Calibri',
+          align: 'center',
+        });
+      });
+    });
+
+    // Key metrics
+    slide.addText('Key Financial Metrics:', {
+      x: 0.4,
+      y: 3.2,
+      w: 9.2,
+      h: 0.25,
+      fontSize: 11,
+      bold: true,
+      color: this._B.DARK,
+      fontFace: 'Calibri',
+    });
+
+    const keyMetrics = [
+      'Payback Period: 2.8 years',
+      'NPV (10% discount): $2.1M',
+      'IRR: 24.3%',
+      'Working Capital: $450K',
+      'Capital Investment: $1.2M (facility, equipment)',
+    ];
+
+    keyMetrics.forEach((line, i) => {
+      const col = i < 3 ? 0 : 1;
+      const row = i % 3;
+      slide.addText('• ' + line, {
+        x: col * 4.8 + 0.4,
+        y: 3.55 + row * 0.32,
+        w: 4.6,
+        h: 0.3,
+        fontSize: 10,
+        color: this._B.CHARCOAL,
+        fontFace: 'Calibri',
+      });
+    });
+
+    _addConfidentialFooter(slide);
+
+    // SLIDE 5: Pricing & Contract
+    slide = pres.addSlide();
+    slide.background = { color: this._B.WHITE };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addContentSlideTitle(slide, 'Pricing & Contract Terms');
+
+    // Rate structure
+    slide.addText('Rate Card (Blended Annual)', {
+      x: 0.4,
+      y: 1.1,
+      w: 4.5,
+      h: 0.25,
+      fontSize: 11,
+      bold: true,
+      color: this._B.DARK,
+      fontFace: 'Calibri',
+    });
+
+    const priceTableY = 1.5;
+    const priceRows2 = [
+      ['Receiving', '$4.50/pallet'],
+      ['Put-Away', '$5.00/pallet'],
+      ['Storage', '$0.85/pallet/mo'],
+      ['Picking', '$0.35/case'],
+      ['Shipping', '$8.75/shipment'],
+    ];
+
+    priceRows2.forEach((row, i) => {
+      slide.addShape(pres.shapes.RECTANGLE, {
+        x: 0.4,
+        y: priceTableY + i * 0.28,
+        w: 2.0,
+        h: 0.28,
+        fill: { color: i % 2 === 0 ? this._B.LIGHT_GRAY : this._B.WHITE },
+        line: { color: 'D0D5DE', size: 0.5 },
+      });
+      slide.addText(row[0], {
+        x: 0.45,
+        y: priceTableY + i * 0.28 + 0.02,
+        w: 1.9,
+        h: 0.24,
+        fontSize: 9,
+        bold: true,
+        color: this._B.DARK,
+        fontFace: 'Calibri',
+      });
+
+      slide.addShape(pres.shapes.RECTANGLE, {
+        x: 2.45,
+        y: priceTableY + i * 0.28,
+        w: 2.45,
+        h: 0.28,
+        fill: { color: i % 2 === 0 ? this._B.LIGHT_GRAY : this._B.WHITE },
+        line: { color: 'D0D5DE', size: 0.5 },
+      });
+      slide.addText(row[1], {
+        x: 2.5,
+        y: priceTableY + i * 0.28 + 0.02,
+        w: 2.35,
+        h: 0.24,
+        fontSize: 9,
+        color: this._B.CHARCOAL,
+        fontFace: 'Calibri',
+      });
+    });
+
+    // Contract highlights (right column)
+    slide.addText('Contract Highlights:', {
+      x: 5.2,
+      y: 1.1,
+      w: 4.4,
+      h: 0.25,
+      fontSize: 11,
+      bold: true,
+      color: this._B.DARK,
+      fontFace: 'Calibri',
+    });
+
+    const contractTerms = [
+      'Term: 5 years initial + 2 x 3-year renewals',
+      'Escalator: 2% annual on rates',
+      'Volume Commitment: 260K pallets/year ±10%',
+      'Minimum Annual Spend: $10.6M baseline',
+      'Termination: 180-day notice, change-of-control clause',
+      'SLA: 99.5% on-time, 99.8% accuracy',
+    ];
+
+    contractTerms.forEach((line, i) => {
+      slide.addText('• ' + line, {
+        x: 5.2,
+        y: 1.45 + i * 0.32,
+        w: 4.4,
+        h: 0.3,
+        fontSize: 9,
+        color: this._B.CHARCOAL,
+        fontFace: 'Calibri',
+      });
+    });
+
+    _addConfidentialFooter(slide);
+
+    // SLIDE 6: Competitive Position
+    slide = pres.addSlide();
+    slide.background = { color: this._B.WHITE };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addContentSlideTitle(slide, 'Why GXO Wins');
+
+    _addCard(slide, pres, 0.4, 1.2, 3.0, 3.9, 'warehouse', 'Cost Leadership',
+      'Industry-leading cost structure. Best-in-class labor productivity. Technology-driven efficiency. 17.7% margin vs. 14-15% market average.');
+
+    _addCard(slide, pres, 3.6, 1.2, 3.0, 3.9, 'warehouse', 'Operational Excellence',
+      '99.5% on-time performance. 99.8% accuracy. Proven execution on high-volume e-commerce. Dedicated ops management.');
+
+    _addCard(slide, pres, 6.8, 1.2, 3.0, 3.9, 'warehouse', 'Technology Edge',
+      'Blue Yonder WMS expertise. Real-time visibility. Predictive analytics. Automation roadmap. Digital roadmap alignment.');
+
+    _addConfidentialFooter(slide);
+
+    // SLIDE 7: Operational Readiness
+    slide = pres.addSlide();
+    slide.background = { color: this._B.WHITE };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addContentSlideTitle(slide, 'Operational Readiness');
+
+    _addCard(slide, pres, 0.4, 1.2, 4.3, 3.4, 'warehouse', 'Facility',
+      '100K SF, Indianapolis, I-70/I-65 convergence. New construction, fully customized for pallet operations. Ready for 18-month lease.');
+
+    _addCard(slide, pres, 4.8, 1.2, 4.3, 3.4, 'warehouse', 'Staffing',
+      '75 FTEs (mixed shift). Recruitment plan for 12-week pre-launch. Competitive wages. GXO benefits package. Training program in place.');
+
+    _addCard(slide, pres, 0.4, 4.7, 4.3, 0.8, 'warehouse', 'Technology',
+      'Blue Yonder WMS configured. TMS integrated. Network ready. Go-live within 36 weeks.');
+
+    _addCard(slide, pres, 4.8, 4.7, 4.3, 0.8, 'warehouse', 'Timeline',
+      '36 weeks from design kickoff to full operations. Phased approach with customer engagement.');
+
+    _addConfidentialFooter(slide);
+
+    // SLIDE 8: Risk & Mitigation
+    slide = pres.addSlide();
+    slide.background = { color: this._B.WHITE };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addContentSlideTitle(slide, 'Risk Assessment');
+
+    const riskTableYELT = 1.5;
+    const riskHeadersELT = ['Risk', 'Mitigation', 'Confidence'];
+
+    riskHeadersELT.forEach((h, i) => {
+      const w = i === 0 ? 2.8 : 3.4;
+      const x = 0.4 + (i === 0 ? 0 : 2.8 + (i - 1) * 3.4);
+      slide.addShape(pres.shapes.RECTANGLE, {
+        x,
+        y: riskTableYELT,
+        w,
+        h: 0.3,
+        fill: { color: this._B.DARK },
+        line: { color: 'D0D5DE', size: 0.5 },
+      });
+      slide.addText(h, {
+        x: x + 0.1,
+        y: riskTableYELT + 0.03,
+        w: w - 0.2,
+        h: 0.24,
+        fontSize: 10,
+        bold: true,
+        color: this._B.WHITE,
+        fontFace: 'Calibri',
+      });
+    });
+
+    const riskRowsELT = [
+      ['Volume Ramp', 'Phased approach, customer support', 'High'],
+      ['Labor Availability', 'Early hiring, competitive comp', 'High'],
+      ['Tech Integration', 'Vendor engagement, testing', 'Very High'],
+      ['Cost Control', 'Detailed budgeting, contingency', 'Very High'],
+    ];
+
+    riskRowsELT.forEach((row, rowIndex) => {
+      row.forEach((cell, cellIndex) => {
+        const w = cellIndex === 0 ? 2.8 : 3.4;
+        const x = 0.4 + (cellIndex === 0 ? 0 : 2.8 + (cellIndex - 1) * 3.4);
+        const bgColor = rowIndex % 2 === 0 ? this._B.LIGHT_GRAY : this._B.WHITE;
+        slide.addShape(pres.shapes.RECTANGLE, {
+          x,
+          y: riskTableYELT + 0.3 + rowIndex * 0.3,
+          w,
+          h: 0.3,
+          fill: { color: bgColor },
+          line: { color: 'D0D5DE', size: 0.5 },
+        });
+        slide.addText(cell, {
+          x: x + 0.1,
+          y: riskTableYELT + 0.3 + rowIndex * 0.3 + 0.03,
+          w: w - 0.2,
+          h: 0.24,
+          fontSize: 9,
+          color: this._B.DARK,
+          fontFace: 'Calibri',
+        });
+      });
+    });
+
+    _addConfidentialFooter(slide);
+
+    // SLIDE 9: Recommendation
+    slide = pres.addSlide();
+    slide.background = { color: this._B.WHITE };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addContentSlideTitle(slide, 'Recommendation');
+
+    // Big approve callout
+    slide.addShape(pres.shapes.RECTANGLE, {
+      x: 3.5,
+      y: 1.2,
+      w: 3.0,
+      h: 0.8,
+      fill: { color: this._B.SUCCESS_GREEN },
+      line: { type: 'none' },
+    });
+
+    slide.addText('APPROVE', {
+      x: 3.5,
+      y: 1.2,
+      w: 3.0,
+      h: 0.8,
+      fontSize: 32,
+      bold: true,
+      color: this._B.WHITE,
+      fontFace: 'Calibri',
+      align: 'center',
+      valign: 'middle',
+    });
+
+    // 3 key reasons as cards
+    slide.addText('Key Reasons:', {
+      x: 0.4,
+      y: 2.25,
+      w: 9.2,
+      h: 0.25,
+      fontSize: 11,
+      bold: true,
+      color: this._B.DARK,
+      fontFace: 'Calibri',
+    });
+
+    const reasons = [
+      { title: 'Strong Financial Case', desc: '$8.85M EBITDA over 5 years, 24.3% IRR, 2.8-year payback' },
+      { title: 'Strategic Fit', desc: 'Market expansion, revenue growth, operational synergies, geographic fortress' },
+      { title: 'Execution Confidence', desc: 'Proven ops model, dedicated team, 36-week timeline, 99.5% SLA commitment' },
+    ];
+
+    reasons.forEach((r, i) => {
+      const x = 0.4 + i * 3.2;
+      slide.addShape(pres.shapes.RECTANGLE, {
+        x,
+        y: 2.65,
+        w: 3.0,
+        h: 2.3,
+        fill: { color: this._B.LIGHT_GRAY },
+        line: { type: 'none' },
+        shadow: this._makeCardShadow(),
+      });
+
+      slide.addText(r.title, {
+        x: x + 0.2,
+        y: 2.8,
+        w: 2.6,
+        h: 0.35,
+        fontSize: 11,
+        bold: true,
+        color: this._B.DARK,
+        fontFace: 'Calibri',
+      });
+
+      slide.addText(r.desc, {
+        x: x + 0.2,
+        y: 3.2,
+        w: 2.6,
+        h: 1.6,
+        fontSize: 9,
+        color: this._B.CHARCOAL,
+        fontFace: 'Calibri',
+      });
+    });
+
+    _addConfidentialFooter(slide);
+
+    // SLIDE 10: Closing (dark)
+    slide = pres.addSlide();
+    slide.background = { color: this._B.DARK };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addDarkSlideTitle(slide, 'Approval Requested', 'Wayfair New Business Opportunity');
+    slide.addText('Prepared by: IES Solutions Design Team | April 1, 2026', {
+      x: 0.4,
+      y: 3.8,
+      w: 9.2,
+      h: 0.8,
+      fontSize: 12,
+      color: 'A0A8B8',
+      fontFace: 'Calibri',
+    });
+
+    // Write file
+    console.log('✓ Generated: GXO_ELT_Wayfair.pptx');
+  },
+
+  // ============================================================================
+  // DECK 4: CUSTOMER PRESENTATION DECK
+  // ============================================================================
+
+  async generateCustomerDeck() {
+    const pres = new PptxGenJS();
+    pres.defineLayout({ name: 'LAYOUT_16x9', width: 10, height: 5.625 });
+    pres.layout = 'LAYOUT_16x9';
+    pres.theme = { colors: [this._B.PRIMARY_ORANGE, this._B.DARK, this._B.LIGHT_GRAY] };
+
+    // SLIDE 1: Title Slide
+    let slide = pres.addSlide();
+    slide.background = { color: this._B.DARK };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addDarkSlideTitle(slide, 'Warehousing & Distribution Partnership', 'Prepared for Wayfair');
+
+    // SLIDE 2: About GXO (2x3 card grid)
+    slide = pres.addSlide();
+    slide.background = { color: this._B.WHITE };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addContentSlideTitle(slide, 'About GXO');
+
+    _addCard(slide, pres, 0.4, 1.2, 3.0, 2.0, 'warehouse', 'Global Scale',
+      '900+ facilities across 6 continents. 130,000+ employees. Market leader in e-commerce and retail logistics.');
+
+    _addCard(slide, pres, 3.6, 1.2, 3.0, 2.0, 'warehouse', 'Technology',
+      'Proprietary logistics platform. Blue Yonder WMS integration. Real-time visibility and analytics. Automation expertise.');
+
+    _addCard(slide, pres, 6.8, 1.2, 3.0, 2.0, 'warehouse', 'Innovation',
+      'Continuous automation investment. Robotics integration. Predictive analytics. Sustainability initiatives.');
+
+    _addCard(slide, pres, 0.4, 3.3, 3.0, 2.0, 'warehouse', 'Industry Expertise',
+      'E-commerce, omnichannel retail, furniture, appliances, automotive. Specialized operations for unique industries.');
+
+    _addCard(slide, pres, 3.6, 3.3, 3.0, 2.0, 'warehouse', 'Track Record',
+      'Fortune 500 customers. 99.5% on-time performance. 99.8% accuracy targets. Award-winning operations.');
+
+    _addCard(slide, pres, 6.8, 3.3, 3.0, 2.0, 'warehouse', 'Partnership',
+      'Dedicated account management. Proactive communication. Performance transparency. Continuous improvement culture.');
+
+    _addConfidentialFooter(slide);
+
+    // SLIDE 3: Understanding Your Needs (2x2 card grid)
+    slide = pres.addSlide();
+    slide.background = { color: this._B.WHITE };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addContentSlideTitle(slide, 'Understanding Your Needs');
+
+    _addCard(slide, pres, 0.4, 1.2, 4.3, 3.4, 'warehouse', 'Cost Optimization',
+      'You need a partner who can deliver competitive pricing without sacrificing quality. Industry-leading cost structure through scale and efficiency.');
+
+    _addCard(slide, pres, 4.8, 1.2, 4.3, 3.4, 'warehouse', 'Speed & Reliability',
+      'Your customers demand fast, reliable delivery. We deliver 99.5% on-time performance and 99.8% accuracy across all operations.');
+
+    _addCard(slide, pres, 0.4, 4.7, 4.3, 0.8, 'warehouse', 'Technology Enablement',
+      'Real-time visibility into inventory and shipments. Data-driven decision making. Integration with your systems.');
+
+    _addCard(slide, pres, 4.8, 4.7, 4.3, 0.8, 'warehouse', 'Scalability',
+      'Your business is growing. We scale with you. Flexible space, labor, and systems to support your volume growth.');
+
+    _addConfidentialFooter(slide);
+
+    // SLIDE 4: Proposed Solution Overview
+    slide = pres.addSlide();
+    slide.background = { color: this._B.WHITE };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addContentSlideTitle(slide, 'Our Proposed Solution');
+
+    // Key specs as stat callouts
+    const solutionStatWidth = 1.8;
+    const solutionStatHeight = 1.0;
+    const solutionStatsY = 1.2;
+    const solutionStatsStartX = 0.4;
+
+    _addStatCallout(slide, pres, solutionStatsStartX, solutionStatsY, solutionStatWidth, solutionStatHeight, '100K', 'Sq Feet');
+    _addStatCallout(slide, pres, solutionStatsStartX + solutionStatWidth + 0.1, solutionStatsY, solutionStatWidth, solutionStatHeight, '1,000', 'Pallets/Day');
+    _addStatCallout(slide, pres, solutionStatsStartX + (solutionStatWidth + 0.1) * 2, solutionStatsY, solutionStatWidth, solutionStatHeight, '99.5%', 'On-Time');
+    _addStatCallout(slide, pres, solutionStatsStartX + (solutionStatWidth + 0.1) * 3, solutionStatsY, solutionStatWidth, solutionStatHeight, '99.8%', 'Accuracy');
+    _addStatCallout(slide, pres, solutionStatsStartX + (solutionStatWidth + 0.1) * 4, solutionStatsY, solutionStatWidth, solutionStatHeight, '36 wks', 'Implementation');
+
+    // Solution details
+    slide.addText('Dedicated Pallet Distribution Center', {
+      x: 0.4,
+      y: 2.4,
+      w: 9.2,
+      h: 0.25,
+      fontSize: 11,
+      bold: true,
+      color: this._B.DARK,
+      fontFace: 'Calibri',
+    });
+
+    const solutionDetails = [
+      'Purpose-built facility optimized for your business model',
+      'State-of-the-art Blue Yonder WMS with real-time integration to your systems',
+      'Experienced team dedicated to your success',
+      'Scalable operations supporting 5-year growth plan',
+      'Competitive rates with transparent cost structure',
+    ];
+
+    solutionDetails.forEach((line, i) => {
+      slide.addText('• ' + line, {
+        x: 0.4,
+        y: 2.75 + i * 0.28,
+        w: 9.2,
+        h: 0.26,
+        fontSize: 10,
+        color: this._B.CHARCOAL,
+        fontFace: 'Calibri',
+      });
+    });
+
+    _addConfidentialFooter(slide);
+
+    // SLIDE 5: Facility & Design
+    slide = pres.addSlide();
+    slide.background = { color: this._B.WHITE };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addContentSlideTitle(slide, 'Facility & Design Highlights');
+
+    // Left column: specs
+    slide.addText('Specifications:', {
+      x: 0.4,
+      y: 1.2,
+      w: 4.5,
+      h: 0.25,
+      fontSize: 11,
+      bold: true,
+      color: this._B.DARK,
+      fontFace: 'Calibri',
+    });
+
+    const facilitySpecs = [
+      ['Total Size', '100,000 sq ft'],
+      ['Location', 'Indianapolis, IN'],
+      ['Dock Doors', '12 (6 in, 6 out)'],
+      ['Racking Height', '12 feet'],
+      ['Clear Height', '16 feet'],
+      ['Office Space', '2,500 sq ft'],
+    ];
+
+    facilitySpecs.forEach((spec, i) => {
+      slide.addText(spec[0] + ':', {
+        x: 0.4,
+        y: 1.55 + i * 0.28,
+        w: 2.0,
+        h: 0.25,
+        fontSize: 10,
+        bold: true,
+        color: this._B.DARK,
+        fontFace: 'Calibri',
+      });
+
+      slide.addText(spec[1], {
+        x: 2.5,
+        y: 1.55 + i * 0.28,
+        w: 2.0,
+        h: 0.25,
+        fontSize: 10,
+        color: this._B.CHARCOAL,
+        fontFace: 'Calibri',
+      });
+    });
+
+    // Right column: design highlights card
+    slide.addShape(pres.shapes.RECTANGLE, {
+      x: 5.2,
+      y: 1.2,
+      w: 4.4,
+      h: 3.9,
+      fill: { color: this._B.LIGHT_GRAY },
+      line: { type: 'none' },
+      shadow: this._makeCardShadow(),
+    });
+
+    slide.addText('Design Highlights', {
+      x: 5.5,
+      y: 1.35,
+      w: 3.8,
+      h: 0.28,
+      fontSize: 12,
+      bold: true,
+      color: this._B.DARK,
+      fontFace: 'Calibri',
+    });
+
+    const designHighlights = [
+      'High-density selective + double-deep racking',
+      'Automated putaway and pick optimization',
+      'Dedicated inbound consolidation area',
+      'Cross-dock capability for time-critical shipments',
+      'Returns processing and reverse logistics',
+      'Bulk storage for seasonal inventory',
+    ];
+
+    designHighlights.forEach((line, i) => {
+      slide.addText('• ' + line, {
+        x: 5.5,
+        y: 1.75 + i * 0.35,
+        w: 3.8,
+        h: 0.33,
+        fontSize: 9,
+        color: this._B.CHARCOAL,
+        fontFace: 'Calibri',
+      });
+    });
+
+    _addConfidentialFooter(slide);
+
+    // SLIDE 6: Technology Platform (2x3 card grid - Blue Yonder features)
+    slide = pres.addSlide();
+    slide.background = { color: this._B.WHITE };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addContentSlideTitle(slide, 'Technology Platform: Blue Yonder WMS');
+
+    _addCard(slide, pres, 0.4, 1.2, 3.0, 2.0, 'warehouse', 'Real-Time Visibility',
+      'Complete inventory visibility. Live pick status. Shipment tracking. Dashboard reporting for stakeholders.');
+
+    _addCard(slide, pres, 3.6, 1.2, 3.0, 2.0, 'warehouse', 'Optimized Operations',
+      'Automated routing. Putaway logic. Cycle counting. Labor productivity analytics. Performance dashboards.');
+
+    _addCard(slide, pres, 6.8, 1.2, 3.0, 2.0, 'warehouse', 'Integration',
+      'Seamless connection to your systems. EDI/API support. TMS integration. Demand forecasting data exchange.');
+
+    _addCard(slide, pres, 0.4, 3.3, 3.0, 2.0, 'warehouse', 'Mobile & Voice',
+      'Voice-directed picking. Mobile RF scanning. Real-time exception alerts. Operator task assignment.');
+
+    _addCard(slide, pres, 3.6, 3.3, 3.0, 2.0, 'warehouse', 'Analytics',
+      'KPI tracking and reporting. Predictive analytics. Anomaly detection. Continuous improvement recommendations.');
+
+    _addCard(slide, pres, 6.8, 3.3, 3.0, 2.0, 'warehouse', 'Automation Ready',
+      'Scalable architecture for future robotics. Modular design. API-first approach. Cloud-based infrastructure.');
+
+    _addConfidentialFooter(slide);
+
+    // SLIDE 7: Implementation Approach (6-phase timeline)
+    slide = pres.addSlide();
+    slide.background = { color: this._B.WHITE };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addContentSlideTitle(slide, 'Implementation Timeline');
+
+    const implPhases = [
+      { name: 'Design', weeks: '8 wks', color: this._B.PRIMARY_ORANGE },
+      { name: 'Build', weeks: '10 wks', color: this._B.PRIMARY_ORANGE },
+      { name: 'Setup', weeks: '8 wks', color: this._B.PRIMARY_ORANGE },
+      { name: 'Train', weeks: '6 wks', color: this._B.PRIMARY_ORANGE },
+      { name: 'Go-Live', weeks: '4 wks', color: this._B.SUCCESS_GREEN },
+      { name: 'Optimize', weeks: 'Ongoing', color: this._B.ACCENT_TEAL },
+    ];
+
+    const implPhaseWidth = 1.5;
+    const implPhaseHeight = 0.7;
+    const implPhaseStartY = 1.4;
+    const implPhaseStartX = 0.4;
+
+    implPhases.forEach((phase, i) => {
+      const x = implPhaseStartX + i * (implPhaseWidth + 0.15);
+
+      slide.addShape(pres.shapes.RECTANGLE, {
+        x,
+        y: implPhaseStartY,
+        w: implPhaseWidth,
+        h: implPhaseHeight,
+        fill: { color: phase.color },
+        line: { type: 'none' },
+      });
+
+      slide.addText(phase.name, {
+        x,
+        y: implPhaseStartY + 0.05,
+        w: implPhaseWidth,
+        h: 0.28,
+        fontSize: 9,
+        bold: true,
+        color: this._B.WHITE,
+        fontFace: 'Calibri',
+        align: 'center',
+      });
+
+      slide.addText(phase.weeks, {
+        x,
+        y: implPhaseStartY + 0.35,
+        w: implPhaseWidth,
+        h: 0.32,
+        fontSize: 8,
+        color: this._B.WHITE,
+        fontFace: 'Calibri',
+        align: 'center',
+        valign: 'middle',
+      });
+    });
+
+    // Timeline explanation
+    slide.addText('36-Week Implementation Path:', {
+      x: 0.4,
+      y: 2.3,
+      w: 9.2,
+      h: 0.25,
+      fontSize: 11,
+      bold: true,
+      color: this._B.DARK,
+      fontFace: 'Calibri',
+    });
+
+    const implDetails = [
+      'Weeks 1-8: Detailed design, specifications, equipment planning, staffing strategy',
+      'Weeks 9-18: Facility build-out, IT infrastructure, dock setup, office configuration',
+      'Weeks 19-26: WMS setup, network configuration, testing, staff training begins',
+      'Weeks 27-32: Full hiring, on-boarding, process training, pilot operations with Wayfair samples',
+      'Weeks 33-36: Parallel run, cutover support, volume ramp, stability monitoring',
+    ];
+
+    implDetails.forEach((line, i) => {
+      slide.addText(line, {
+        x: 0.4,
+        y: 2.7 + i * 0.45,
+        w: 9.2,
+        h: 0.42,
+        fontSize: 9,
+        color: this._B.CHARCOAL,
+        fontFace: 'Calibri',
+      });
+    });
+
+    _addConfidentialFooter(slide);
+
+    // SLIDE 8: Service Commitments
+    slide = pres.addSlide();
+    slide.background = { color: this._B.WHITE };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addContentSlideTitle(slide, 'Service Commitments & SLAs');
+
+    // KPI targets as stat blocks
+    const kpiWidth = 1.72;
+    const kpiHeight = 1.0;
+    const kpiY = 1.2;
+    const kpiStartX = 0.4;
+    const kpiGap = 0.12;
+
+    _addStatCallout(slide, pres, kpiStartX, kpiY, kpiWidth, kpiHeight, '99.5%', 'On-Time Delivery');
+    _addStatCallout(slide, pres, kpiStartX + (kpiWidth + kpiGap), kpiY, kpiWidth, kpiHeight, '99.8%', 'Order Accuracy');
+    _addStatCallout(slide, pres, kpiStartX + (kpiWidth + kpiGap) * 2, kpiY, kpiWidth, kpiHeight, '24 hrs', 'Exception SLA');
+    _addStatCallout(slide, pres, kpiStartX + (kpiWidth + kpiGap) * 3, kpiY, kpiWidth, kpiHeight, '99.9%', 'System Uptime');
+    _addStatCallout(slide, pres, kpiStartX + (kpiWidth + kpiGap) * 4, kpiY, kpiWidth, kpiHeight, 'Weekly', 'Reporting');
+
+    // SLA table
+    slide.addText('Service Level Agreement:', {
+      x: 0.4,
+      y: 2.45,
+      w: 9.2,
+      h: 0.25,
+      fontSize: 11,
+      bold: true,
+      color: this._B.DARK,
+      fontFace: 'Calibri',
+    });
+
+    const slaTableY = 2.8;
+    const slaHeaders = ['Metric', 'Target', 'Reporting', 'Penalty'];
+
+    slaHeaders.forEach((h, i) => {
+      const w = i === 0 ? 2.5 : 2.35;
+      const x = 0.4 + (i === 0 ? 0 : 2.5 + (i - 1) * 2.35);
+      slide.addShape(pres.shapes.RECTANGLE, {
+        x,
+        y: slaTableY,
+        w,
+        h: 0.28,
+        fill: { color: this._B.DARK },
+        line: { color: 'D0D5DE', size: 0.5 },
+      });
+      slide.addText(h, {
+        x: x + 0.08,
+        y: slaTableY + 0.02,
+        w: w - 0.16,
+        h: 0.24,
+        fontSize: 9,
+        bold: true,
+        color: this._B.WHITE,
+        fontFace: 'Calibri',
+      });
+    });
+
+    const slaRows = [
+      ['On-Time Delivery', '99.5%', 'Daily', '0.5% credit'],
+      ['Accuracy Rate', '99.8%', 'Daily', '0.2% credit'],
+      ['System Availability', '99.9%', 'Weekly', 'Service credit'],
+      ['Response Time', '<24 hrs', 'As-needed', 'Priority escalation'],
+    ];
+
+    slaRows.forEach((row, rowIndex) => {
+      row.forEach((cell, cellIndex) => {
+        const w = cellIndex === 0 ? 2.5 : 2.35;
+        const x = 0.4 + (cellIndex === 0 ? 0 : 2.5 + (cellIndex - 1) * 2.35);
+        const bgColor = rowIndex % 2 === 0 ? this._B.LIGHT_GRAY : this._B.WHITE;
+        slide.addShape(pres.shapes.RECTANGLE, {
+          x,
+          y: slaTableY + 0.28 + rowIndex * 0.28,
+          w,
+          h: 0.28,
+          fill: { color: bgColor },
+          line: { color: 'D0D5DE', size: 0.5 },
+        });
+        slide.addText(cell, {
+          x: x + 0.08,
+          y: slaTableY + 0.28 + rowIndex * 0.28 + 0.02,
+          w: w - 0.16,
+          h: 0.24,
+          fontSize: 8,
+          color: this._B.DARK,
+          fontFace: 'Calibri',
+        });
+      });
+    });
+
+    _addConfidentialFooter(slide);
+
+    // SLIDE 9: Pricing Overview
+    slide = pres.addSlide();
+    slide.background = { color: this._B.WHITE };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addContentSlideTitle(slide, 'Pricing Overview');
+
+    slide.addText('Transparent, Competitive Rate Structure', {
+      x: 0.4,
+      y: 1.1,
+      w: 9.2,
+      h: 0.25,
+      fontSize: 11,
+      bold: true,
+      color: this._B.DARK,
+      fontFace: 'Calibri',
+    });
+
+    const priceTableYCust = 1.5;
+    const priceHeadersCust = ['Service', 'Rate', 'Volume', 'Est. Annual'];
+
+    priceHeadersCust.forEach((h, i) => {
+      const w = i === 0 ? 2.8 : 2.4;
+      const x = 0.4 + (i === 0 ? 0 : 2.8 + (i - 1) * 2.4);
+      slide.addShape(pres.shapes.RECTANGLE, {
+        x,
+        y: priceTableYCust,
+        w,
+        h: 0.28,
+        fill: { color: this._B.DARK },
+        line: { color: 'D0D5DE', size: 0.5 },
+      });
+      slide.addText(h, {
+        x: x + 0.1,
+        y: priceTableYCust + 0.02,
+        w: w - 0.2,
+        h: 0.24,
+        fontSize: 9,
+        bold: true,
+        color: this._B.WHITE,
+        fontFace: 'Calibri',
+      });
+    });
+
+    const priceRowsCust = [
+      ['Receiving', '$4.50/pallet', '260K', '$1.17M'],
+      ['Put-Away', '$5.00/pallet', '260K', '$1.30M'],
+      ['Storage', '$0.85/pallet/mo', '260K', '$2.21M'],
+      ['Picking', '$0.35/case', '2.0M', '$0.70M'],
+      ['Shipping', '$8.75/shipment', '25K', '$0.22M'],
+      ['Value-Add Services', 'Variable', 'As-needed', '$2.96M'],
+      ['Total Estimated Annual', '', '', '$10.6M'],
+    ];
+
+    priceRowsCust.forEach((row, rowIndex) => {
+      row.forEach((cell, cellIndex) => {
+        const w = cellIndex === 0 ? 2.8 : 2.4;
+        const x = 0.4 + (cellIndex === 0 ? 0 : 2.8 + (cellIndex - 1) * 2.4);
+        const bgColor = rowIndex % 2 === 0 ? this._B.LIGHT_GRAY : this._B.WHITE;
+        slide.addShape(pres.shapes.RECTANGLE, {
+          x,
+          y: priceTableYCust + 0.28 + rowIndex * 0.28,
+          w,
+          h: 0.28,
+          fill: { color: bgColor },
+          line: { color: 'D0D5DE', size: 0.5 },
+        });
+        slide.addText(cell, {
+          x: x + 0.1,
+          y: priceTableYCust + 0.28 + rowIndex * 0.28 + 0.02,
+          w: w - 0.2,
+          h: 0.24,
+          fontSize: 8,
+          color: this._B.DARK,
+          fontFace: 'Calibri',
+        });
+      });
+    });
+
+    slide.addText('Terms: 5-year initial term | 2% annual rate escalation | Volume commitments with ±10% variance tolerance', {
+      x: 0.4,
+      y: 4.4,
+      w: 9.2,
+      h: 0.7,
+      fontSize: 9,
+      color: this._B.MEDIUM_GRAY,
+      fontFace: 'Calibri',
+    });
+
+    _addConfidentialFooter(slide);
+
+    // SLIDE 10: Your Dedicated Team
+    slide = pres.addSlide();
+    slide.background = { color: this._B.WHITE };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addContentSlideTitle(slide, 'Your Dedicated Team');
+
+    const roles = [
+      { title: 'General Manager', desc: 'P&L ownership, strategic planning, Wayfair partnership' },
+      { title: 'Operations Manager', desc: 'Daily operations, process optimization, team leadership' },
+      { title: 'Account Manager', desc: 'Primary contact, escalations, reporting, relationship' },
+      { title: 'Technology Lead', desc: 'WMS support, systems integration, IT troubleshooting' },
+    ];
+
+    roles.forEach((role, i) => {
+      const x = i < 2 ? 0.4 : 5.2;
+      const y = i % 2 === 0 ? 1.2 : 3.2;
+
+      slide.addShape(pres.shapes.RECTANGLE, {
+        x,
+        y,
+        w: 4.4,
+        h: 1.8,
+        fill: { color: this._B.LIGHT_GRAY },
+        line: { type: 'none' },
+        shadow: this._makeCardShadow(),
+      });
+
+      slide.addText(role.title, {
+        x: x + 0.2,
+        y: y + 0.15,
+        w: 4.0,
+        h: 0.35,
+        fontSize: 11,
+        bold: true,
+        color: this._B.PRIMARY_ORANGE,
+        fontFace: 'Calibri',
+      });
+
+      slide.addText(role.desc, {
+        x: x + 0.2,
+        y: y + 0.55,
+        w: 4.0,
+        h: 1.1,
+        fontSize: 9,
+        color: this._B.CHARCOAL,
+        fontFace: 'Calibri',
+      });
+    });
+
+    _addConfidentialFooter(slide);
+
+    // SLIDE 11: Closing (dark)
+    slide = pres.addSlide();
+    slide.background = { color: this._B.DARK };
+    _addOrangeTopBar(pres, slide);
+    _addGXOLogo(pres, slide);
+    _addDarkSlideTitle(slide, 'Building a Partnership', 'for Growth');
+    slide.addText('Ready to discuss next steps. Contact: Account Management | GXO Logistics Inc.', {
+      x: 0.4,
+      y: 3.8,
+      w: 9.2,
+      h: 0.8,
+      fontSize: 12,
+      color: 'A0A8B8',
+      fontFace: 'Calibri',
+    });
+
+    // Write file
+    console.log('✓ Generated: GXO_CustomerPresentation_Wayfair.pptx');
+  },
+
+  // ============================================================================
+
+
+  // Main Router
+  async generateDeck(type, opportunityId) {
+    try {
+      switch (type) {
+        case 'qualification':
+          return await this.generateQualificationDeck(opportunityId);
+        case 'ops_review':
+          return await this.generateOpsReviewDeck(opportunityId);
+        case 'elt_approval':
+          return await this.generateELTDeck(opportunityId);
+        case 'customer_presentation':
+          return await this.generateCustomerPresentationDeck(opportunityId);
+        default:
+          if (typeof showToast === 'function') {
+            showToast('Unknown deck type: ' + type, 'error');
+          }
+          throw new Error('Unknown deck type: ' + type);
+      }
+    } catch (error) {
+      console.error('Deck generation error:', error);
+      if (typeof showToast === 'function') {
+        showToast('Error generating deck: ' + error.message, 'error');
+      }
+      throw error;
+    }
+  }
+
 };
 
+// Export
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = deckGen;
+}
 </script>
 
 
