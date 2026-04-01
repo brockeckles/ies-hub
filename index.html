@@ -12466,9 +12466,9 @@ SECURITY_PAGES['sec-compliance'] = '<div class="wiki-article">' +
       '<th style="padding:12px;text-align:left;font-weight:700;">Encryption</th>' +
     '</tr>' +
     '<tr style="border-bottom:1px solid var(--ies-gray-200);">' +
-      '<td style="padding:12px;"><span style="background:#e0e7ff;color:#3730a3;padding:2px 6px;border-radius:4px;font-weight:600;font-size:11px;">Public</span></td>' +
+      '<td style="padding:12px;"><span style="background:#e0e7ff;color:#3730a3;padding:2px 6px;border-radius:4px;font-weight:600;font-size:11px;">General</span></td>' +
       '<td style="padding:12px;font-size:12px;">Training wiki, general guides</td>' +
-      '<td style="padding:12px;font-size:12px;">Unrestricted</td>' +
+      '<td style="padding:12px;font-size:12px;">Authenticated users</td>' +
       '<td style="padding:12px;font-size:12px;">In transit (HTTPS)</td>' +
     '</tr>' +
     '<tr style="border-bottom:1px solid var(--ies-gray-200);">' +
@@ -30254,73 +30254,73 @@ const TourDefinitions = {
       {
         target: '.kpi-strip',
         title: 'Key Performance Indicators',
-        content: 'Track critical supply chain metrics at a glance. Diesel prices, warehouse rates, wages, freight costs, and RFP activity. Click any KPI card to drill into detailed trends.',
+        content: 'Track critical supply chain metrics at a glance — diesel prices, warehouse rates, wages, freight costs, and active RFP signals. Click any KPI card to explore that market in the Market Explorer.',
         padding: 12
       },
       {
         target: '.signal-feed',
         title: 'Intelligence Feed',
-        content: 'Real-time market signals for competitors, accounts, tariffs, and RFPs. Filter by type and stay informed of market movements that impact your pricing and strategy.',
+        content: 'Real-time market signals filtered by type: Competitor moves, Account news, Tariff changes, and RFP activity. Use the filter tabs to focus on what matters to your current deals.',
         padding: 12
       },
       {
         target: '#ccAlertBar',
-        title: 'Alert Bar',
-        content: 'Priority alerts for critical supply chain events. Check here first for urgent operational or market changes requiring immediate attention.',
+        title: 'Active Alerts',
+        content: 'Priority alerts for critical supply chain events — diesel surges, port congestion, competitor expansions. Check here first each morning for anything that impacts active deals.',
         padding: 8
       }
     ]
   },
 
   wiki: {
-    name: 'Knowledge Base & Wiki',
+    name: 'Training Wiki',
     steps: [
       {
-        target: '#wiki-search',
-        title: 'Search Knowledge Base',
-        content: 'Search across all wiki articles, templates, and reference materials. Type to find information on supply chain concepts, 3PL pricing, and industry best practices.',
+        target: '.wiki-sidebar',
+        title: 'Topic Navigation',
+        content: 'Browse the knowledge base by topic. Each category contains articles on IES processes, supply chain concepts, and operational best practices. Click any topic to load its content.',
         padding: 8
       },
       {
-        target: '.wiki-categories',
-        title: 'Browse by Category',
-        content: 'Organized knowledge into logical categories. Select a category to explore related articles and maintain a structured understanding of key concepts.',
+        target: '.wiki-nav-item',
+        title: 'Article Selection',
+        content: 'Select specific articles within each topic. Articles cover everything from cost modeling methodology to warehouse design principles and Blue Yonder WMS workflows.',
         padding: 8
       },
       {
-        target: '.wiki-article-card',
-        title: 'Article Details',
-        content: 'Click any article to view full content, with references, templates, and links to related intelligence or design tools.',
-        padding: 8
+        target: '#wikiContent',
+        title: 'Article Content',
+        content: 'Full article content with formatted text, tables, callouts, and specifications. Use this as your reference library when building proposals and cost models.',
+        padding: 12
       }
     ]
   },
 
   deals: {
-    name: 'Deal Management Pipeline',
+    name: 'Deal Management',
     steps: [
       {
-        target: '#pm-section-pipeline',
-        title: 'Pipeline View',
-        content: 'See your entire deal pipeline organized by stage. Drag deals between stages to advance them, or click to open detailed deal cards with all activities.',
+        target: '.pm-board',
+        title: 'Pipeline Board',
+        content: 'Your deal pipeline organized in a kanban view. Six stages from Pre-Sales Engagement through Delivery Handover. Each column shows deal count and you can see status at a glance.',
         padding: 12
       },
       {
-        target: '.pm-stage-column',
+        target: '.pm-stage-col',
         title: 'Stage Columns',
-        content: 'Each column represents a stage: Prospect, Qualified, Proposed, Negotiating, and Closed. Deals flow left-to-right as they progress through your sales cycle.',
+        content: 'Each column represents an IES process stage. Cards show the customer, deal type, facility size, hours tracked, task progress, and days remaining. Click any deal card to open its full detail view.',
         padding: 8
       },
       {
-        target: '.pm-deal-card',
-        title: 'Deal Card',
-        content: 'Click any deal card to view full details: company info, contact history, probability, timeline, and financial projections.',
+        target: '.pm-stat-card',
+        title: 'Pipeline Metrics',
+        content: 'Key pipeline stats: active opportunities, total forecast hours, actual hours YTD, and customer count. Use these to understand team capacity and workload distribution.',
         padding: 8
       },
       {
-        target: '#pm-section-tabs',
-        title: 'My Hours Tab',
-        content: 'Switch to My Hours to track forecast vs actual time spent on deal activities. Critical for capacity planning and project management.',
+        target: '.pm-tab',
+        title: 'Pipeline & Hours Tabs',
+        content: 'Switch between Pipeline view and My Hours. The Hours tab tracks forecast vs. actual time across all deals — critical for capacity planning and accurate project scoping.',
         padding: 8
       }
     ]
@@ -30332,19 +30332,19 @@ const TourDefinitions = {
       {
         target: '#dt-tabs',
         title: 'Tool Navigation',
-        content: 'Choose from 7 specialized design tools: Center of Gravity, Network Optimization, Warehouse Sizing, Cost Model, Multi-Site Analyzer, and Fleet Modeler.',
+        content: 'Access all 7 design tools from these tabs: Network Optimizer, Cost Model Builder, Fleet Modeler, Staffing Planner, Slotting Engine, WMS Configurator, and Layout Designer.',
         padding: 8
       },
       {
         target: '#dt-landing',
         title: 'Tool Browser',
-        content: 'Start here to explore each tool\'s capabilities with descriptions and quick-start guides. Click any tool card to open the full interface.',
+        content: 'The landing page shows all available tools with descriptions. Click any tool card to open its full interface. Each tool is purpose-built for IES solution design workflows.',
         padding: 12
       },
       {
         target: '.dt-panel',
-        title: 'Tool Interface',
-        content: 'Each tool has input sections, calculation engines, and result visualization. Use data from the Wiki and intelligence feeds to model scenarios.',
+        title: 'Active Tool Interface',
+        content: 'When a tool is open, this area shows its input panels, calculation engine, and results. Tools can export data and link to the Cost Model Builder for integrated pricing.',
         padding: 12
       }
     ]
@@ -30354,40 +30354,40 @@ const TourDefinitions = {
     name: 'Cost Model Builder',
     steps: [
       {
+        target: '.cm-nav-section',
+        title: 'Section Navigation',
+        content: 'The Cost Model has 13 sections: Setup, Labor, Equipment, Real Estate, Utilities, Materials, IT/WMS, Transportation, Overhead, Management, Value-Added Services, Pricing, and P&L Summary. Navigate using this sidebar.',
+        padding: 8
+      },
+      {
         target: '#setupSection',
-        title: 'Setup & Inputs',
-        content: 'Define the warehouse operation: volumes, facility type, shift structure, labor rates, equipment, overhead, and value-added services.',
-        padding: 8
+        title: 'Setup & Configuration',
+        content: 'Start here — define the warehouse operation: client info, facility type, shift structure, volume profile, and contract terms. This data flows into all downstream cost calculations.',
+        padding: 12
       },
       {
-        target: '#financialSection',
-        title: 'Financial Modeling',
-        content: 'View total landed costs broken down by category. See cost per unit, margin analysis, and sensitivity to volume changes.',
-        padding: 8
-      },
-      {
-        target: '#pricingSection',
-        title: 'Pricing Engine',
-        content: 'Generate competitive pricing strategies based on cost structure. Adjust margins, add tiers, and export pricing to your RFP responses.',
+        target: '.cm-summary-strip',
+        title: 'Live Cost Summary',
+        content: 'The summary strip updates in real-time as you build the model. Track total cost, cost per unit, and margin as you adjust inputs across all 13 sections.',
         padding: 8
       }
     ]
   },
 
   security: {
-    name: 'Security & Compliance Reference',
+    name: 'Security & Compliance',
     steps: [
       {
-        target: '#sec-security',
-        title: 'Security Modules',
-        content: 'Six comprehensive security reference guides covering authentication, data privacy, network security, compliance frameworks, incident response, and audit trails.',
-        padding: 12
+        target: '#sec-security .wiki-sidebar',
+        title: 'Security Topics',
+        content: 'Six security reference areas: Architecture Overview, Access Control, Data Protection, Compliance, Incident Response, and Security Roadmap. Click any topic to view its full documentation.',
+        padding: 8
       },
       {
-        target: '.security-section-card',
-        title: 'Reference Pages',
-        content: 'Each section provides detailed policies, procedures, and checklists for compliance and operational security in the IES environment.',
-        padding: 8
+        target: '#sec-security .wiki-content',
+        title: 'Security Documentation',
+        content: 'Detailed security documentation covering current architecture, authentication methods, data encryption, RLS policies, compliance frameworks, and the planned enterprise integration roadmap.',
+        padding: 12
       }
     ]
   },
@@ -30396,74 +30396,93 @@ const TourDefinitions = {
     name: 'Analytics & Dashboards',
     steps: [
       {
-        target: '#sec-analytics',
-        title: 'Analytics Hub',
-        content: 'Custom dashboards tracking deal velocity, win rates, cost modeling accuracy, and tool usage metrics. Data refreshes in real-time.',
+        target: '.an-stats',
+        title: 'Key Analytics Metrics',
+        content: 'Top-level metrics showing deal performance, tool usage, and team activity. These update in real-time from your Supabase data.',
         padding: 12
       },
       {
-        target: '.analytics-chart',
-        title: 'Chart Interactions',
-        content: 'Hover over data points for details. Click legend items to toggle visibility. Export data for further analysis in your own tools.',
+        target: '.an-grid',
+        title: 'Dashboard Panels',
+        content: 'Interactive charts and heatmaps covering deal velocity, win rates, hours by stage, and tool adoption. Use the time range controls to adjust the analysis window.',
+        padding: 12
+      },
+      {
+        target: '.an-controls',
+        title: 'Time Range Controls',
+        content: 'Filter analytics by time period — 7 days, 30 days, 90 days, or year-to-date. Charts and metrics update automatically when you change the range.',
         padding: 8
       }
     ]
   },
 
   changemanagement: {
-    name: 'Change Management Tracking',
+    name: 'Change Management',
     steps: [
       {
-        target: '#sec-changemanagement',
-        title: 'Change Requests',
-        content: 'Submit and track change requests for the IES system. Each request moves through approval stages with stakeholder feedback and implementation tracking.',
+        target: '.cm-board',
+        title: 'Change Request Board',
+        content: 'All active change initiatives displayed in a kanban board. Cards show status, owner, priority, and ADKAR progress. Click any card to view full details.',
         padding: 12
       },
       {
-        target: '.cm-request-card',
-        title: 'Request Details',
-        content: 'Click to view full details: business justification, impact analysis, approval status, and implementation timeline.',
+        target: '.cm-header-actions',
+        title: 'Actions & Views',
+        content: 'Create new change requests, switch between board and list views, or open the visual flowchart editor to map change dependencies.',
+        padding: 8
+      },
+      {
+        target: '.cm-cards-container',
+        title: 'Change Cards',
+        content: 'Each card tracks a change initiative with ADKAR scoring (Awareness, Desire, Knowledge, Ability, Reinforcement), owner assignment, and status badges.',
         padding: 8
       }
     ]
   },
 
   feedback: {
-    name: 'Feedback System',
+    name: 'Ideas & Feedback',
     steps: [
       {
         target: '#fbFab',
-        title: 'Share Feedback',
-        content: 'Click the feedback button anytime to suggest enhancements, report bugs, ask questions, or share general comments about the IES hub.',
+        title: 'Quick Feedback Button',
+        content: 'Click the orange button anytime from any page to submit a new idea, report a bug, ask a question, or share general feedback. Your input directly shapes the Hub roadmap.',
         padding: 8
       },
       {
-        target: '#sec-feedback',
-        title: 'Feedback Dashboard',
-        content: 'View community feedback, upvote ideas you support, and see which enhancements are planned or in progress.',
-        padding: 12
+        target: '.fb-tabs',
+        title: 'Feedback Categories',
+        content: 'Filter feedback by type: All, Enhancements, Bugs, Questions, and General. See what the team has submitted and what\'s being worked on.',
+        padding: 8
+      },
+      {
+        target: '.fb-card',
+        title: 'Feedback Cards',
+        content: 'Each card shows the feedback type, status, priority, and upvote count. Upvote ideas you support to help prioritize the development roadmap.',
+        padding: 8
       }
     ]
   },
+
   marketexplorer: {
     name: 'Market Explorer',
     steps: [
       {
         target: '#leafletMap',
         title: 'Interactive Market Map',
-        content: 'Click any market pin to load detailed intelligence. Pins are color-coded by labor availability: green (available), yellow (moderate), and red (tight). Zoom and pan to explore different regions.',
+        content: 'Click any market pin to load detailed intelligence. Pins are color-coded by labor availability: green (available), yellow (moderate), and red (tight). Zoom and pan to explore regions.',
         padding: 12
       },
       {
         target: '#marketDetailPanel',
         title: 'Market Detail Panel',
-        content: 'When you click a market, this panel loads five tabs of intelligence: Labor (wages, availability, workforce), Real Estate (lease rates, vacancy), Freight (lane rates, carriers), Deals (active opportunities in that market), and News (local market developments).',
+        content: 'Five tabs of market intelligence: Labor (wages, availability), Real Estate (lease rates, vacancy), Freight (lane rates), Deals (active opportunities), and News (local developments).',
         padding: 8
       },
       {
         target: '.data-library',
         title: 'Data Library',
-        content: 'Expand the Data Library to access full market comparison tables. Browse Real Estate, Labor & Wages, Utilities, Materials, and Construction costs across all markets. Use this for benchmarking and proposal support.',
+        content: 'Expand for full market comparison tables: Real Estate, Labor & Wages, Utilities, Materials, and Construction costs across all markets. Essential for benchmarking and proposal support.',
         padding: 8
       }
     ]
