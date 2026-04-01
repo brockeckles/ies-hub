@@ -4749,6 +4749,240 @@
   color: #fff;
 }
 
+/* ── GUIDED TOUR SYSTEM ── */
+.tour-trigger-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--ies-gray-100);
+  border: 1.5px solid var(--ies-gray-300);
+  color: var(--ies-gray-600);
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.tour-trigger-icon:hover {
+  background: var(--ies-blue);
+  border-color: var(--ies-blue);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(0, 71, 171, 0.2);
+  transform: scale(1.05);
+}
+
+.tour-trigger-tooltip {
+  position: absolute;
+  bottom: -32px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--ies-navy);
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  z-index: 10;
+}
+
+.tour-trigger-icon:hover .tour-trigger-tooltip {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Tour Overlay and Spotlight */
+.tour-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 2000;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.tour-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.tour-spotlight {
+  position: fixed;
+  border: 2px solid var(--ies-blue);
+  border-radius: 8px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.6), inset 0 0 0 2px var(--ies-blue);
+  z-index: 2001;
+  transition: all 0.3s ease;
+  pointer-events: none;
+}
+
+/* Tour Card / Tooltip */
+.tour-card {
+  position: fixed;
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  z-index: 2002;
+  max-width: 380px;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: all 0.3s ease;
+  pointer-events: auto;
+}
+
+.tour-card.active {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.tour-card-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.tour-card-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ies-navy);
+  line-height: 1.2;
+}
+
+.tour-card-step {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ies-blue);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tour-card-content {
+  font-size: 13px;
+  color: var(--ies-gray-600);
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+
+.tour-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tour-card-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.tour-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 16px;
+  border-radius: 6px;
+  border: none;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: 'Montserrat', sans-serif;
+}
+
+.tour-btn-prev {
+  background: var(--ies-gray-100);
+  color: var(--ies-gray-600);
+  border: 1px solid var(--ies-gray-200);
+}
+
+.tour-btn-prev:hover {
+  background: var(--ies-gray-150);
+  border-color: var(--ies-gray-300);
+}
+
+.tour-btn-next {
+  background: var(--ies-blue);
+  color: #fff;
+}
+
+.tour-btn-next:hover {
+  background: #003d96;
+  box-shadow: 0 4px 12px rgba(0, 71, 171, 0.2);
+}
+
+.tour-btn-close {
+  background: transparent;
+  color: var(--ies-gray-600);
+  border: 1px solid var(--ies-gray-200);
+  padding: 8px 12px;
+}
+
+.tour-btn-close:hover {
+  background: var(--ies-gray-50);
+  border-color: var(--ies-red);
+  color: var(--ies-red);
+}
+
+.tour-progress {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ies-gray-400);
+}
+
+/* Arrow indicator pointing to highlighted element */
+.tour-arrow {
+  position: absolute;
+  width: 0;
+  height: 0;
+  border-style: solid;
+}
+
+.tour-arrow.top {
+  bottom: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 10px 10px 0 10px;
+  border-color: #fff transparent transparent transparent;
+}
+
+.tour-arrow.bottom {
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 0 10px 10px 10px;
+  border-color: transparent transparent #fff transparent;
+}
+
+.tour-arrow.left {
+  right: -10px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-width: 10px 0 10px 10px;
+  border-color: transparent transparent transparent #fff;
+}
+
+.tour-arrow.right {
+  left: -10px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-width: 10px 10px 10px 0;
+  border-color: transparent #fff transparent transparent;
+}
+
 </style>
 
 </head>
@@ -4927,42 +5161,45 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         <ul class="roadmap-items">
           <li>Command Center — KPIs, Signal Feed, Charts, Sector Pulse</li>
           <li>Market Explorer — Interactive map + Data Library</li>
-          <li>Design Tools — WSC, CoG, NetOpt, Cost Model, Fleet, Multi-Site</li>
-          <li>Deal Management — Stage-gated pipeline with workspace</li>
+          <li>Design Tools — 7 tools (WSC, NetOpt, Cost Model, Fleet, Staffing, Slotting, Layout)</li>
+          <li>Deal Management — Stage-gated pipeline, DOS integration, Hours tracking</li>
           <li>Training Wiki (23+ pages, 12 SCCs)</li>
           <li>Change Management (ADKAR)</li>
-          <li>Ideas & Feedback system</li>
+          <li>Ideas & Feedback system + Analytics</li>
+          <li>Supabase backend with RLS</li>
         </ul>
       </div>
       <div class="roadmap-phase phase-future">
         <div class="roadmap-phase-label"><span class="phase-dot"></span> Phase 2</div>
-        <div class="roadmap-phase-title">Integrations & Analytics</div>
+        <div class="roadmap-phase-title">Auth & Responsive</div>
         <ul class="roadmap-items">
-          <li>Salesforce CRM connector</li>
-          <li>Snowflake data warehouse</li>
-          <li>Live API feeds (freight, labor, tariffs)</li>
-          <li>Win/loss analytics</li>
-          <li>Mobile responsive layout</li>
+          <li>Supabase Auth migration (replace access codes)</li>
+          <li>Mobile & tablet responsive design</li>
+          <li>Guided tours & onboarding flows</li>
+          <li>Audit logging for compliance</li>
+          <li>Hub Redesign 2026 (simplified navigation)</li>
         </ul>
       </div>
       <div class="roadmap-phase phase-future">
         <div class="roadmap-phase-label"><span class="phase-dot"></span> Phase 3</div>
-        <div class="roadmap-phase-title">Advanced Tools</div>
+        <div class="roadmap-phase-title">Advanced Integrations</div>
         <ul class="roadmap-items">
-          <li>Network tool: TL/LTL/parcel rates</li>
-          <li>Network tool: inbound flows & constraints</li>
-          <li><s>Cost Model Builder</s> <span style="font-size:10px;background:var(--ies-orange);color:#fff;padding:1px 5px;border-radius:3px;font-weight:700;">BETA</span></li>
-          <li>MOST work measurement tool</li>
+          <li>Salesforce CRM connector</li>
+          <li>Snowflake data warehouse integration</li>
+          <li>Live API feeds (freight, labor, tariffs)</li>
+          <li>Scenario save & compare</li>
+          <li>MOST work measurement enhancements</li>
         </ul>
       </div>
       <div class="roadmap-phase phase-future">
         <div class="roadmap-phase-label"><span class="phase-dot"></span> Phase 4</div>
-        <div class="roadmap-phase-title">Platform & Scale</div>
+        <div class="roadmap-phase-title">Enterprise Scale</div>
         <ul class="roadmap-items">
-          <li>Financial modeling training</li>
+          <li>Azure AD / Entra ID SSO</li>
+          <li>Role-based access control (RBAC)</li>
+          <li>Multi-tenant support for 100+ users</li>
+          <li>Advanced financial modeling training</li>
           <li>Live freight rate API integration</li>
-          <li>Scenario save & compare</li>
-          <li>Role-based access & permissions</li>
         </ul>
       </div>
     </div>
@@ -4971,6 +5208,14 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 
 <!-- ───── OVERVIEW / COMMAND CENTER ───── -->
 <div class="section active" id="sec-overview">
+  <div class="section-header">
+    <div>
+      <div class="section-title">Overview & Command Center</div>
+      <div class="section-subtitle">Real-time market intelligence and operational KPIs</div>
+    </div>
+    <button class="tour-trigger-icon" onclick="startTour('overview')" title="Start guided tour">?<span class="tour-trigger-tooltip">Take a guided tour</span></button>
+  </div>
+
   <!-- Alert Bar — live from hub_alerts -->
   <div class="alert-bar" id="ccAlertBar">
     <span class="alert-icon"><svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="#ff3a00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
@@ -5353,6 +5598,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div class="section-title">Training Wiki</div>
       <div class="section-subtitle">Reference guides for warehouse automation, engineering, and solutions design</div>
     </div>
+    <button class="tour-trigger-icon" onclick="startTour('wiki')" title="Start guided tour">?<span class="tour-trigger-tooltip">Take a guided tour</span></button>
   </div>
 
   <div class="wiki-layout">
@@ -5403,6 +5649,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div class="section-title">Design Tools</div>
       <div class="section-subtitle">Interactive calculators and models for warehouse solutions design</div>
     </div>
+    <button class="tour-trigger-icon" onclick="startTour('designtools')" title="Start guided tour">?<span class="tour-trigger-tooltip">Take a guided tour</span></button>
   </div>
 
   <!-- Tool selector tabs -->
@@ -7373,10 +7620,13 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div class="section-title">Ideas & Feedback</div>
       <div class="section-subtitle">Team questions, enhancement ideas, and bug reports — tracked and prioritized</div>
     </div>
-    <button onclick="fbOpenModal()" style="padding:10px 20px;background:var(--ies-orange);color:#fff;border:none;border-radius:8px;font-family:Montserrat,sans-serif;font-weight:700;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;">
-      <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19" stroke="#fff" stroke-width="2" stroke-linecap="round"/><line x1="5" y1="12" x2="19" y2="12" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
-      New Feedback
-    </button>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <button class="tour-trigger-icon" onclick="startTour('feedback')" title="Start guided tour">?<span class="tour-trigger-tooltip">Take a guided tour</span></button>
+      <button onclick="fbOpenModal()" style="padding:10px 20px;background:var(--ies-orange);color:#fff;border:none;border-radius:8px;font-family:Montserrat,sans-serif;font-weight:700;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19" stroke="#fff" stroke-width="2" stroke-linecap="round"/><line x1="5" y1="12" x2="19" y2="12" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
+        New Feedback
+      </button>
+    </div>
   </div>
 
   <!-- Stats -->
@@ -7416,6 +7666,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div class="section-title">Cost Model Builder <span style="font-size:12px;background:var(--ies-orange);color:#fff;padding:3px 8px;border-radius:4px;margin-left:8px;font-weight:700;vertical-align:middle;">BETA</span></div>
       <div class="section-subtitle">Build detailed operational cost models for 3PL warehouse proposals</div>
     </div>
+    <button class="tour-trigger-icon" onclick="startTour('costmodel')" title="Start guided tour">?<span class="tour-trigger-tooltip">Take a guided tour</span></button>
     <div id="topbarControls" style="display:none;align-items:center;gap:12px;flex-shrink:0;">
       <span class="cm-label">Project:</span>
       <select id="projectSelector" class="cm-select" style="min-width:180px;">
@@ -8721,7 +8972,8 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div class="section-title">Deal Management</div>
       <div class="section-subtitle">Track deals through stage-gated pipeline with activity tracking and forecasting</div>
     </div>
-    <div style="display:flex;gap:10px;">
+    <div style="display:flex;gap:10px;align-items:center;">
+      <button class="tour-trigger-icon" onclick="startTour('deals')" title="Start guided tour">?<span class="tour-trigger-tooltip">Take a guided tour</span></button>
       <button class="pm-btn pm-btn-outline pm-btn-sm" onclick="pmShowCustomers()">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px;"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
         Customers
@@ -9199,6 +9451,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div class="section-title">Security</div>
       <div class="section-subtitle">Architecture, compliance, and incident response for IES Intelligence Hub</div>
     </div>
+    <button class="tour-trigger-icon" onclick="startTour('security')" title="Start guided tour">?<span class="tour-trigger-tooltip">Take a guided tour</span></button>
   </div>
 
   <div class="wiki-layout">
@@ -9225,6 +9478,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div class="section-title">Site Analytics</div>
       <div class="section-subtitle"><span class="an-live-dot"></span>Visitor activity and engagement tracking</div>
     </div>
+    <button class="tour-trigger-icon" onclick="startTour('analytics')" title="Start guided tour">?<span class="tour-trigger-tooltip">Take a guided tour</span></button>
   </div>
 
   <!-- Time Range Controls -->
@@ -9323,7 +9577,12 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 <div class="section" id="sec-changemanagement">
   <!-- SECTION HEADER -->
   <div class="cm-section-header">
-    <h2>Change Management</h2>
+    <div style="display:flex;align-items:center;gap:16;">
+      <div>
+        <h2>Change Management</h2>
+      </div>
+      <button class="tour-trigger-icon" onclick="startTour('changemanagement')" title="Start guided tour">?<span class="tour-trigger-tooltip">Take a guided tour</span></button>
+    </div>
     <div class="cm-header-actions">
       <button class="cm-btn cm-btn-secondary" onclick="cmShowADKARGuide()">ADKAR Guide</button>
       <button class="cm-btn cm-btn-primary" onclick="cmShowNewInitiative()">+ New Initiative</button>
@@ -29769,6 +30028,397 @@ function fmExportLanes() { fmApp.exportLanes(); }
 function fmCalculateFleet() { fmApp.calculateFleet(); }
 function fmSaveScenario() { fmApp.saveScenario(); }
 function fmClearScenario() { fmApp.clearScenario(); }
+
+/* ═══════════════════════════════════════════════════════
+   GUIDED TOUR SYSTEM - Lightweight Tour Engine
+   ═══════════════════════════════════════════════════════ */
+
+const TourEngine = {
+  currentTour: null,
+  currentStep: 0,
+  isActive: false,
+  overlay: null,
+  spotlight: null,
+  card: null,
+
+  init() {
+    // Create overlay
+    this.overlay = document.createElement('div');
+    this.overlay.className = 'tour-overlay';
+    document.body.appendChild(this.overlay);
+    this.overlay.addEventListener('click', () => this.closeTour());
+
+    // Create spotlight
+    this.spotlight = document.createElement('div');
+    this.spotlight.className = 'tour-spotlight';
+    document.body.appendChild(this.spotlight);
+
+    // Create card
+    this.card = document.createElement('div');
+    this.card.className = 'tour-card';
+    document.body.appendChild(this.card);
+  },
+
+  startTour(tourKey) {
+    if (!TourDefinitions[tourKey]) {
+      console.warn('Tour not found:', tourKey);
+      return;
+    }
+
+    this.currentTour = TourDefinitions[tourKey];
+    this.currentStep = 0;
+    this.isActive = true;
+
+    this.overlay.classList.add('active');
+    this.showStep();
+  },
+
+  showStep() {
+    if (!this.currentTour || this.currentStep >= this.currentTour.steps.length) {
+      this.closeTour();
+      return;
+    }
+
+    const step = this.currentTour.steps[this.currentStep];
+    const targetEl = document.querySelector(step.target);
+
+    if (!targetEl) {
+      console.warn('Target element not found:', step.target);
+      this.nextStep();
+      return;
+    }
+
+    // Scroll target into view
+    targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    // Highlight element
+    setTimeout(() => {
+      const rect = targetEl.getBoundingClientRect();
+      const padding = step.padding || 8;
+
+      this.spotlight.style.top = (rect.top + window.scrollY - padding) + 'px';
+      this.spotlight.style.left = (rect.left + window.scrollX - padding) + 'px';
+      this.spotlight.style.width = (rect.width + padding * 2) + 'px';
+      this.spotlight.style.height = (rect.height + padding * 2) + 'px';
+
+      // Position card
+      this.positionCard(rect, step);
+
+      // Update card content
+      this.card.innerHTML = this.buildCardHTML(step);
+      this.card.classList.add('active');
+
+      // Attach event listeners
+      document.querySelector('.tour-btn-prev').addEventListener('click', () => this.prevStep());
+      document.querySelector('.tour-btn-next').addEventListener('click', () => this.nextStep());
+      document.querySelector('.tour-btn-close').addEventListener('click', () => this.closeTour());
+    }, 300);
+  },
+
+  positionCard(targetRect, step) {
+    const cardWidth = 380;
+    const cardHeight = 200;
+    const gap = 16;
+    const viewport = {
+      width: window.innerWidth,
+      height: window.innerHeight
+    };
+
+    let top, left, arrowClass = 'top';
+
+    // Default: position below
+    if (targetRect.bottom + gap + cardHeight < viewport.height) {
+      top = targetRect.bottom + window.scrollY + gap;
+      arrowClass = 'top';
+    }
+    // Position above if no room below
+    else if (targetRect.top - gap - cardHeight > 0) {
+      top = targetRect.top + window.scrollY - gap - cardHeight;
+      arrowClass = 'bottom';
+    }
+    // Position to the right
+    else if (targetRect.right + gap + cardWidth < viewport.width) {
+      left = targetRect.right + window.scrollX + gap;
+      top = targetRect.top + window.scrollY;
+      arrowClass = 'left';
+    }
+    // Position to the left
+    else {
+      left = targetRect.left + window.scrollX - gap - cardWidth;
+      top = targetRect.top + window.scrollY;
+      arrowClass = 'right';
+    }
+
+    // Fallback horizontal centering
+    if (left === undefined) {
+      left = Math.max(16, Math.min(viewport.width - cardWidth - 16, targetRect.left + window.scrollX + (targetRect.width - cardWidth) / 2));
+    }
+
+    this.card.style.top = top + 'px';
+    this.card.style.left = left + 'px';
+
+    // Store arrow class for HTML generation
+    this.card.dataset.arrowClass = arrowClass;
+  },
+
+  buildCardHTML(step) {
+    const totalSteps = this.currentTour.steps.length;
+    const stepNum = this.currentStep + 1;
+    const arrowClass = this.card.dataset.arrowClass || 'top';
+
+    return `
+      <div class="tour-arrow ${arrowClass}"></div>
+      <div class="tour-card-header">
+        <div>
+          <div class="tour-card-title">${step.title}</div>
+          <div class="tour-card-step">STEP ${stepNum} OF ${totalSteps}</div>
+        </div>
+      </div>
+      <div class="tour-card-content">${step.content}</div>
+      <div class="tour-card-footer">
+        <div class="tour-progress">Step ${stepNum}/${totalSteps}</div>
+        <div class="tour-card-buttons">
+          <button class="tour-btn tour-btn-close">Close</button>
+          <button class="tour-btn tour-btn-prev" ${this.currentStep === 0 ? 'disabled' : ''}>← Back</button>
+          <button class="tour-btn tour-btn-next">${this.currentStep === totalSteps - 1 ? 'Done' : 'Next'} →</button>
+        </div>
+      </div>
+    `;
+  },
+
+  nextStep() {
+    this.currentStep++;
+    this.showStep();
+  },
+
+  prevStep() {
+    if (this.currentStep > 0) {
+      this.currentStep--;
+      this.showStep();
+    }
+  },
+
+  closeTour() {
+    this.isActive = false;
+    this.overlay.classList.remove('active');
+    this.card.classList.remove('active');
+    this.spotlight.style.width = '0';
+    this.spotlight.style.height = '0';
+  }
+};
+
+// Tour Definitions
+const TourDefinitions = {
+  overview: {
+    name: 'Overview & Command Center',
+    steps: [
+      {
+        target: '.kpi-strip',
+        title: 'Key Performance Indicators',
+        content: 'Track critical supply chain metrics at a glance. Diesel prices, warehouse rates, wages, freight costs, and RFP activity. Click any KPI card to drill into detailed trends.',
+        padding: 12
+      },
+      {
+        target: '.signal-feed',
+        title: 'Intelligence Feed',
+        content: 'Real-time market signals for competitors, accounts, tariffs, and RFPs. Filter by type and stay informed of market movements that impact your pricing and strategy.',
+        padding: 12
+      },
+      {
+        target: '#ccAlertBar',
+        title: 'Alert Bar',
+        content: 'Priority alerts for critical supply chain events. Check here first for urgent operational or market changes requiring immediate attention.',
+        padding: 8
+      }
+    ]
+  },
+
+  wiki: {
+    name: 'Knowledge Base & Wiki',
+    steps: [
+      {
+        target: '#wiki-search',
+        title: 'Search Knowledge Base',
+        content: 'Search across all wiki articles, templates, and reference materials. Type to find information on supply chain concepts, 3PL pricing, and industry best practices.',
+        padding: 8
+      },
+      {
+        target: '.wiki-categories',
+        title: 'Browse by Category',
+        content: 'Organized knowledge into logical categories. Select a category to explore related articles and maintain a structured understanding of key concepts.',
+        padding: 8
+      },
+      {
+        target: '.wiki-article-card',
+        title: 'Article Details',
+        content: 'Click any article to view full content, with references, templates, and links to related intelligence or design tools.',
+        padding: 8
+      }
+    ]
+  },
+
+  deals: {
+    name: 'Deal Management Pipeline',
+    steps: [
+      {
+        target: '#pm-section-pipeline',
+        title: 'Pipeline View',
+        content: 'See your entire deal pipeline organized by stage. Drag deals between stages to advance them, or click to open detailed deal cards with all activities.',
+        padding: 12
+      },
+      {
+        target: '.pm-stage-column',
+        title: 'Stage Columns',
+        content: 'Each column represents a stage: Prospect, Qualified, Proposed, Negotiating, and Closed. Deals flow left-to-right as they progress through your sales cycle.',
+        padding: 8
+      },
+      {
+        target: '.pm-deal-card',
+        title: 'Deal Card',
+        content: 'Click any deal card to view full details: company info, contact history, probability, timeline, and financial projections.',
+        padding: 8
+      },
+      {
+        target: '#pm-section-tabs',
+        title: 'My Hours Tab',
+        content: 'Switch to My Hours to track forecast vs actual time spent on DOS activities. Critical for capacity planning and project management.',
+        padding: 8
+      }
+    ]
+  },
+
+  designtools: {
+    name: 'Design Tools Suite',
+    steps: [
+      {
+        target: '#dt-tabs',
+        title: 'Tool Navigation',
+        content: 'Choose from 7 specialized design tools: Center of Gravity, Network Optimization, Warehouse Sizing, Cost Model, Multi-Site Analyzer, and Fleet Modeler.',
+        padding: 8
+      },
+      {
+        target: '#dt-landing',
+        title: 'Tool Browser',
+        content: 'Start here to explore each tool\'s capabilities with descriptions and quick-start guides. Click any tool card to open the full interface.',
+        padding: 12
+      },
+      {
+        target: '.dt-panel',
+        title: 'Tool Interface',
+        content: 'Each tool has input sections, calculation engines, and result visualization. Use data from the Wiki and intelligence feeds to model scenarios.',
+        padding: 12
+      }
+    ]
+  },
+
+  costmodel: {
+    name: 'Cost Model Builder',
+    steps: [
+      {
+        target: '#setupSection',
+        title: 'Setup & Inputs',
+        content: 'Define the warehouse operation: volumes, facility type, shift structure, labor rates, equipment, overhead, and value-added services.',
+        padding: 8
+      },
+      {
+        target: '#financialSection',
+        title: 'Financial Modeling',
+        content: 'View total landed costs broken down by category. See cost per unit, margin analysis, and sensitivity to volume changes.',
+        padding: 8
+      },
+      {
+        target: '#pricingSection',
+        title: 'Pricing Engine',
+        content: 'Generate competitive pricing strategies based on cost structure. Adjust margins, add tiers, and export pricing to your RFP responses.',
+        padding: 8
+      }
+    ]
+  },
+
+  security: {
+    name: 'Security & Compliance Reference',
+    steps: [
+      {
+        target: '#sec-security',
+        title: 'Security Modules',
+        content: 'Six comprehensive security reference guides covering authentication, data privacy, network security, compliance frameworks, incident response, and audit trails.',
+        padding: 12
+      },
+      {
+        target: '.security-section-card',
+        title: 'Reference Pages',
+        content: 'Each section provides detailed policies, procedures, and checklists for compliance and operational security in the IES environment.',
+        padding: 8
+      }
+    ]
+  },
+
+  analytics: {
+    name: 'Analytics & Dashboards',
+    steps: [
+      {
+        target: '#sec-analytics',
+        title: 'Analytics Hub',
+        content: 'Custom dashboards tracking deal velocity, win rates, cost modeling accuracy, and tool usage metrics. Data refreshes in real-time.',
+        padding: 12
+      },
+      {
+        target: '.analytics-chart',
+        title: 'Chart Interactions',
+        content: 'Hover over data points for details. Click legend items to toggle visibility. Export data for further analysis in your own tools.',
+        padding: 8
+      }
+    ]
+  },
+
+  changemanagement: {
+    name: 'Change Management Tracking',
+    steps: [
+      {
+        target: '#sec-changemanagement',
+        title: 'Change Requests',
+        content: 'Submit and track change requests for the IES system. Each request moves through approval stages with stakeholder feedback and implementation tracking.',
+        padding: 12
+      },
+      {
+        target: '.cm-request-card',
+        title: 'Request Details',
+        content: 'Click to view full details: business justification, impact analysis, approval status, and implementation timeline.',
+        padding: 8
+      }
+    ]
+  },
+
+  feedback: {
+    name: 'Feedback System',
+    steps: [
+      {
+        target: '#fbFab',
+        title: 'Share Feedback',
+        content: 'Click the feedback button anytime to suggest enhancements, report bugs, ask questions, or share general comments about the IES hub.',
+        padding: 8
+      },
+      {
+        target: '#sec-feedback',
+        title: 'Feedback Dashboard',
+        content: 'View community feedback, upvote ideas you support, and see which enhancements are planned or in progress.',
+        padding: 12
+      }
+    ]
+  }
+};
+
+// Initialize tour engine on page load
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => TourEngine.init());
+} else {
+  TourEngine.init();
+}
+
+// Public function to start a tour from tour icon clicks
+function startTour(tourKey) {
+  TourEngine.startTour(tourKey);
+}
 </script>
 
 
