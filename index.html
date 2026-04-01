@@ -5430,6 +5430,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div class="hub-section-title">Market Explorer</div>
       <div class="hub-section-subtitle">Click a market to explore wages, real estate, freight, active deals, and intelligence</div>
     </div>
+    <button class="tour-trigger-icon" onclick="startTour('marketexplorer')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
   </div>
 
   <div style="display:grid; grid-template-columns: 1fr 400px; gap: 24px;">
@@ -30441,6 +30442,29 @@ const TourDefinitions = {
         title: 'Feedback Dashboard',
         content: 'View community feedback, upvote ideas you support, and see which enhancements are planned or in progress.',
         padding: 12
+      }
+    ]
+  },
+  marketexplorer: {
+    name: 'Market Explorer',
+    steps: [
+      {
+        target: '#leafletMap',
+        title: 'Interactive Market Map',
+        content: 'Click any market pin to load detailed intelligence. Pins are color-coded by labor availability: green (available), yellow (moderate), and red (tight). Zoom and pan to explore different regions.',
+        padding: 12
+      },
+      {
+        target: '#marketDetailPanel',
+        title: 'Market Detail Panel',
+        content: 'When you click a market, this panel loads five tabs of intelligence: Labor (wages, availability, workforce), Real Estate (lease rates, vacancy), Freight (lane rates, carriers), Deals (active opportunities in that market), and News (local market developments).',
+        padding: 8
+      },
+      {
+        target: '.data-library',
+        title: 'Data Library',
+        content: 'Expand the Data Library to access full market comparison tables. Browse Real Estate, Labor & Wages, Utilities, Materials, and Construction costs across all markets. Use this for benchmarking and proposal support.',
+        padding: 8
       }
     ]
   }
