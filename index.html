@@ -4780,31 +4780,31 @@
 .tour-trigger-icon {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
   background: linear-gradient(135deg, var(--ies-blue) 0%, #0047ab 100%);
-  border: 2px solid #fff;
+  border: 2px solid rgba(255,255,255,0.3);
   color: #fff;
-  font-size: 18px;
-  font-weight: 800;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--font-primary, 'Montserrat', sans-serif);
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
   flex-shrink: 0;
   position: relative;
-  box-shadow: 0 4px 16px rgba(0, 71, 171, 0.25),
-              inset 0 1px 2px rgba(255, 255, 255, 0.3);
+  box-shadow: 0 4px 16px rgba(0, 71, 171, 0.25);
   animation: tour-glow 2.5s ease-in-out 2;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
 }
 
 .tour-trigger-icon:hover {
   background: linear-gradient(135deg, #003d96 0%, #002d70 100%);
-  border-color: #fff;
+  border-color: rgba(255,255,255,0.5);
   color: #fff;
-  box-shadow: 0 6px 24px rgba(0, 71, 171, 0.4),
-              inset 0 1px 3px rgba(255, 255, 255, 0.4);
-  transform: scale(1.12) translateY(-2px);
+  box-shadow: 0 6px 24px rgba(0, 71, 171, 0.4);
+  transform: scale(1.05) translateY(-1px);
 }
 
 .tour-trigger-icon:active {
@@ -5175,7 +5175,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     <div class="welcome-feature feature-live" onclick="navigate('deals', document.querySelector('[data-section=deals]'))" style="cursor:pointer;">
       <div class="welcome-feature-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--ies-orange)" stroke-width="1.5"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg></div>
       <div class="welcome-feature-title">Deal Management</div>
-      <div class="welcome-feature-desc">Stage-gated deal pipeline with kanban views, forecast vs. actual hours, activity tracking, and deal progression through qualification, discovery, design, proposal, and negotiation.</div>
+      <div class="welcome-feature-desc">Stage-gated deal pipeline with kanban views, forecast vs. actual hours, activity tracking, and deal progression from Pre-Sales through Delivery Handover.</div>
       <div style="margin-top:10px;"><span class="wiki-tag" style="background:rgba(25,135,84,.1);color:var(--ies-green);">LIVE</span></div>
     </div>
     <div class="welcome-feature feature-live" onclick="navigate('changemanagement', document.querySelector('[data-section=changemanagement]'))" style="cursor:pointer;">
@@ -5202,7 +5202,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
           <li>Command Center — KPIs, Signal Feed, Charts, Sector Pulse</li>
           <li>Market Explorer — Interactive map + Data Library</li>
           <li>Design Tools — 7 tools (WSC, NetOpt, Cost Model, Fleet, Staffing, Slotting, Layout)</li>
-          <li>Deal Management — Stage-gated pipeline, DOS integration, Hours tracking</li>
+          <li>Deal Management — Stage-gated pipeline, activity templates, Hours tracking</li>
           <li>Training Wiki (23+ pages, 12 SCCs)</li>
           <li>Change Management (ADKAR)</li>
           <li>Ideas & Feedback system + Analytics</li>
@@ -5253,7 +5253,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div class="section-title">Overview & Command Center</div>
       <div class="section-subtitle">Real-time market intelligence and operational KPIs</div>
     </div>
-    <button class="tour-trigger-icon" onclick="startTour('overview')" title="Start guided tour">?<span class="tour-trigger-tooltip">Take a guided tour</span></button>
+    <button class="tour-trigger-icon" onclick="startTour('overview')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
   </div>
 
   <!-- Alert Bar — live from hub_alerts -->
@@ -5419,7 +5419,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 
 <!-- sec-macro removed — content absorbed into Sector Pulse -->
 
-<!-- sec-dealsanalytics removed — reserved for Phase 2 (DOS integration) -->
+<!-- sec-dealsanalytics removed — reserved for Phase 2 -->
 
 <!-- sec-verticals removed — content consolidated into Sector Pulse -->
 
@@ -5638,7 +5638,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div class="section-title">Training Wiki</div>
       <div class="section-subtitle">Reference guides for warehouse automation, engineering, and solutions design</div>
     </div>
-    <button class="tour-trigger-icon" onclick="startTour('wiki')" title="Start guided tour">?<span class="tour-trigger-tooltip">Take a guided tour</span></button>
+    <button class="tour-trigger-icon" onclick="startTour('wiki')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
   </div>
 
   <div class="wiki-layout">
@@ -5689,7 +5689,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div class="section-title">Design Tools</div>
       <div class="section-subtitle">Interactive calculators and models for warehouse solutions design</div>
     </div>
-    <button class="tour-trigger-icon" onclick="startTour('designtools')" title="Start guided tour">?<span class="tour-trigger-tooltip">Take a guided tour</span></button>
+    <button class="tour-trigger-icon" onclick="startTour('designtools')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
   </div>
 
   <!-- Tool selector tabs -->
@@ -7505,7 +7505,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         </div>
       </div>
 
-      <!-- Pipeline Tab (DOS Stage-Gated Process) -->
+      <!-- Pipeline Tab (Stage-Gated Process) -->
       <div id="dealTab-pipeline" class="deal-tab-panel" style="display:none;">
         <!-- Stage Stepper -->
         <div id="dosStageStepper" style="display:flex;align-items:center;margin-bottom:24px;background:#fff;border-radius:10px;border:1px solid var(--ies-gray-200);padding:20px 24px;gap:0;overflow-x:auto;"></div>
@@ -7661,7 +7661,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div class="section-subtitle">Team questions, enhancement ideas, and bug reports — tracked and prioritized</div>
     </div>
     <div style="display:flex;gap:10px;align-items:center;">
-      <button class="tour-trigger-icon" onclick="startTour('feedback')" title="Start guided tour">?<span class="tour-trigger-tooltip">Take a guided tour</span></button>
+      <button class="tour-trigger-icon" onclick="startTour('feedback')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
       <button onclick="fbOpenModal()" style="padding:10px 20px;background:var(--ies-orange);color:#fff;border:none;border-radius:8px;font-family:Montserrat,sans-serif;font-weight:700;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19" stroke="#fff" stroke-width="2" stroke-linecap="round"/><line x1="5" y1="12" x2="19" y2="12" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
         New Feedback
@@ -7706,7 +7706,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div class="section-title">Cost Model Builder <span style="font-size:12px;background:var(--ies-orange);color:#fff;padding:3px 8px;border-radius:4px;margin-left:8px;font-weight:700;vertical-align:middle;">BETA</span></div>
       <div class="section-subtitle">Build detailed operational cost models for 3PL warehouse proposals</div>
     </div>
-    <button class="tour-trigger-icon" onclick="startTour('costmodel')" title="Start guided tour">?<span class="tour-trigger-tooltip">Take a guided tour</span></button>
+    <button class="tour-trigger-icon" onclick="startTour('costmodel')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
     <div id="topbarControls" style="display:none;align-items:center;gap:12px;flex-shrink:0;">
       <span class="cm-label">Project:</span>
       <select id="projectSelector" class="cm-select" style="min-width:180px;">
@@ -9013,7 +9013,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div class="section-subtitle">Track deals through stage-gated pipeline with activity tracking and forecasting</div>
     </div>
     <div style="display:flex;gap:10px;align-items:center;">
-      <button class="tour-trigger-icon" onclick="startTour('deals')" title="Start guided tour">?<span class="tour-trigger-tooltip">Take a guided tour</span></button>
+      <button class="tour-trigger-icon" onclick="startTour('deals')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
       <button class="pm-btn pm-btn-outline pm-btn-sm" onclick="pmShowCustomers()">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px;"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
         Customers
@@ -9173,7 +9173,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         <div style="flex:1;"></div>
         <button class="pm-btn pm-btn-sm" onclick="pmPopulateDOSActivities()" style="background:var(--ies-green,#10b981);color:#fff;border:none;border-radius:6px;font-family:Montserrat,sans-serif;font-weight:600;font-size:11px;padding:8px 14px;cursor:pointer;">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px;"><path d="M12 5v14M5 12h14"/><circle cx="12" cy="12" r="10"/></svg>
-          Populate DOS Activities
+          Populate Stage Activities
         </button>
         <button class="pm-btn pm-btn-primary pm-btn-sm" onclick="pmShowNewTask()">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -9184,7 +9184,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div id="pm-tasks-empty" class="pm-empty" style="display:none;">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg>
         <div style="font-size:14px;font-weight:600;margin-bottom:4px;">No tasks yet</div>
-        <div style="font-size:12px;">Click "Populate DOS Activities" to load standard IES activities, or "Add Task" to create custom ones.</div>
+        <div style="font-size:12px;">Click "Populate Stage Activities" to load standard IES activities, or "Add Task" to create custom ones.</div>
       </div>
     </div>
 
@@ -9277,7 +9277,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
   </div><!-- /pm-section-pipeline -->
 
   <!-- ══ DEAL STAGES SECTION ══ -->
-  <!-- Deal Stages section removed — DOS activities now live in each deal's Tasks tab -->
+  <!-- Deal Stages section removed — stage activities now live in each deal's Tasks tab -->
 
   <!-- ══ TIMESHEET SECTION ══ -->
   <div id="pm-section-timesheet" style="display:none;">
@@ -9491,7 +9491,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div class="section-title">Security</div>
       <div class="section-subtitle">Architecture, compliance, and incident response for IES Intelligence Hub</div>
     </div>
-    <button class="tour-trigger-icon" onclick="startTour('security')" title="Start guided tour">?<span class="tour-trigger-tooltip">Take a guided tour</span></button>
+    <button class="tour-trigger-icon" onclick="startTour('security')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
   </div>
 
   <div class="wiki-layout">
@@ -9518,7 +9518,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div class="section-title">Site Analytics</div>
       <div class="section-subtitle"><span class="an-live-dot"></span>Visitor activity and engagement tracking</div>
     </div>
-    <button class="tour-trigger-icon" onclick="startTour('analytics')" title="Start guided tour">?<span class="tour-trigger-tooltip">Take a guided tour</span></button>
+    <button class="tour-trigger-icon" onclick="startTour('analytics')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
   </div>
 
   <!-- Time Range Controls -->
@@ -9621,7 +9621,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div>
         <h2>Change Management</h2>
       </div>
-      <button class="tour-trigger-icon" onclick="startTour('changemanagement')" title="Start guided tour">?<span class="tour-trigger-tooltip">Take a guided tour</span></button>
+      <button class="tour-trigger-icon" onclick="startTour('changemanagement')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
     </div>
     <div class="cm-header-actions">
       <button class="cm-btn cm-btn-secondary" onclick="cmShowADKARGuide()">ADKAR Guide</button>
@@ -13518,18 +13518,17 @@ document.addEventListener('DOMContentLoaded', function() {
 // DEAL & PROJECT MANAGEMENT MODULES
 // ═══════════════════════════════════════════════════
 var PM_STAGES = [
-  { key:'intake', label:'Intake' },
-  { key:'qualification', label:'Qualification' },
-  { key:'discovery', label:'Discovery' },
-  { key:'solutioning', label:'Solutioning' },
-  { key:'pricing', label:'Pricing' },
-  { key:'proposal', label:'Proposal' },
-  { key:'negotiation', label:'Negotiation' },
+  { key:'pre_sales', label:'Pre-Sales Engagement' },
+  { key:'deal_qualification', label:'Deal Qualification' },
+  { key:'solution_design', label:'Kick-Off & Solution Design' },
+  { key:'ops_review', label:'Operations Review' },
+  { key:'exec_review', label:'Executive Review' },
+  { key:'delivery_handover', label:'Delivery Handover' },
   { key:'closed_won', label:'Closed Won' },
   { key:'closed_lost', label:'Closed Lost' },
   { key:'on_hold', label:'On Hold' }
 ];
-var PM_ACTIVE_STAGES = ['intake','qualification','discovery','solutioning','pricing','proposal','negotiation'];
+var PM_ACTIVE_STAGES = ['pre_sales','deal_qualification','solution_design','ops_review','exec_review','delivery_handover'];
 var PM_HOURS_TYPES = ['solutions_design','engineering','deal_management','site_visit','customer_meeting','internal_review','documentation','other'];
 var PM_STATUS_COLORS = {
   active:'background:rgba(25,135,84,.08);color:var(--ies-green)',
@@ -14179,20 +14178,19 @@ async function pmSaveNewTask() {
   } catch(e) { alert('Error creating task: ' + e.message); }
 }
 
-// DOS Stage Activity Population
+// Stage Activity Population
 async function pmPopulateDOSActivities() {
   if (!sb || !pmCurrentOpp) return;
 
-  // Map opportunity kanban stages to DOS stage numbers
+  // Map pipeline stages to activity stage numbers
   var stageMap = {
-    'intake': [1],           // Pre-Sales Engagement
-    'qualification': [2],    // Deal Qualification
-    'discovery': [3],        // Kick-Off & Solution Design
-    'solutioning': [3],      // Kick-Off & Solution Design (continued)
-    'pricing': [4, 5],       // Operations Review + Executive Review
-    'proposal': [5],         // Executive Review
-    'negotiation': [5],      // Executive Review
-    'closed_won': [6],       // Delivery Handover
+    'pre_sales': [1],              // Pre-Sales Engagement
+    'deal_qualification': [2],     // Deal Qualification
+    'solution_design': [3],        // Kick-Off & Solution Design
+    'ops_review': [4],             // Operations Review
+    'exec_review': [5],            // Executive Review
+    'delivery_handover': [6],      // Delivery Handover
+    'closed_won': [6],
     'closed_lost': []
   };
 
@@ -14202,8 +14200,8 @@ async function pmPopulateDOSActivities() {
   // Build selection modal
   var html = '<div class="pm-modal-overlay" onclick="if(event.target===this)this.remove()">';
   html += '<div class="pm-modal" style="max-width:520px;">';
-  html += '<div class="pm-modal-title">Populate DOS Activities</div>';
-  html += '<div style="font-size:13px;color:var(--ies-gray-600);margin-bottom:16px;">Select which IES DOS stages to populate standard activities from. Activities will be added as tasks for this opportunity.</div>';
+  html += '<div class="pm-modal-title">Populate Stage Activities</div>';
+  html += '<div style="font-size:13px;color:var(--ies-gray-600);margin-bottom:16px;">Select which IES stages to populate standard activities from. Activities will be added as tasks for this deal.</div>';
   html += '<div style="font-size:12px;color:var(--ies-gray-400);margin-bottom:12px;">Current stage: <strong style="color:var(--ies-navy);">' + (pmCurrentOpp.stage || '—') + '</strong></div>';
 
   var dosStageLabels = [
@@ -14335,7 +14333,7 @@ async function pmExecuteDOSPopulate() {
     pmOpenDetail(pmCurrentOpp.id);
     pmShowDetailTab('tasks', document.querySelectorAll('#pm-detail .pm-tab')[1]);
 
-    pmToast(templates.length + ' DOS activities added as tasks.', 'success');
+    pmToast(templates.length + ' stage activities added as tasks.', 'success');
   } catch(e) {
     console.error('DOS populate error:', e);
     pmToast('Error populating activities: ' + e.message, 'error');
@@ -14940,7 +14938,7 @@ function pmShowNewOpportunity() {
   html += '</div>';
   html += '<div class="pm-form-group full"><label class="pm-form-label">Opportunity Name</label><input type="text" class="pm-form-input" id="pm-opp-name" placeholder="e.g. Southeast Distribution Center RFP"></div>';
   html += '<div class="pm-form-group"><label class="pm-form-label">Stage</label><select class="pm-form-input" id="pm-opp-stage">';
-  PM_STAGES.forEach(function(s){ html += '<option value="'+s.key+'"' + (s.key==='intake'?' selected':'') + '>'+s.label+'</option>'; });
+  PM_STAGES.forEach(function(s){ html += '<option value="'+s.key+'"' + (s.key==='pre_sales'?' selected':'') + '>'+s.label+'</option>'; });
   html += '</select></div>';
   html += '<div class="pm-form-group"><label class="pm-form-label">Status</label><select class="pm-form-input" id="pm-opp-status">';
   html += '<option value="active">Active</option><option value="on_hold">On Hold</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option>';
@@ -30321,7 +30319,7 @@ const TourDefinitions = {
       {
         target: '#pm-section-tabs',
         title: 'My Hours Tab',
-        content: 'Switch to My Hours to track forecast vs actual time spent on DOS activities. Critical for capacity planning and project management.',
+        content: 'Switch to My Hours to track forecast vs actual time spent on deal activities. Critical for capacity planning and project management.',
         padding: 8
       }
     ]
