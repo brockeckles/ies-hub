@@ -4826,6 +4826,10 @@
   z-index: 2001;
   transition: all 0.3s ease;
   pointer-events: none;
+  display: none;
+}
+.tour-spotlight.active {
+  display: block;
 }
 
 /* Tour Card / Tooltip */
@@ -30070,6 +30074,7 @@ const TourEngine = {
     this.isActive = true;
 
     this.overlay.classList.add('active');
+    this.spotlight.classList.add('active');
     this.showStep();
   },
 
@@ -30096,8 +30101,8 @@ const TourEngine = {
       const rect = targetEl.getBoundingClientRect();
       const padding = step.padding || 8;
 
-      this.spotlight.style.top = (rect.top + window.scrollY - padding) + 'px';
-      this.spotlight.style.left = (rect.left + window.scrollX - padding) + 'px';
+      this.spotlight.style.top = (rect.top - padding) + 'px';
+      this.spotlight.style.left = (rect.left - padding) + 'px';
       this.spotlight.style.width = (rect.width + padding * 2) + 'px';
       this.spotlight.style.height = (rect.height + padding * 2) + 'px';
 
@@ -30202,8 +30207,7 @@ const TourEngine = {
     this.isActive = false;
     this.overlay.classList.remove('active');
     this.card.classList.remove('active');
-    this.spotlight.style.width = '0';
-    this.spotlight.style.height = '0';
+    this.spotlight.classList.remove('active');
   }
 };
 
