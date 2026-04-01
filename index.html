@@ -30555,8 +30555,8 @@ const mostApp = {
   async loadData() {
     try {
       const [tRes, eRes] = await Promise.all([
-        sbClient.from('ref_most_templates').select('*').order('process_area').order('activity_name'),
-        sbClient.from('ref_most_elements').select('*').order('template_id').order('sequence_order')
+        sb.from('ref_most_templates').select('*').order('process_area').order('activity_name'),
+        sb.from('ref_most_elements').select('*').order('template_id').order('sequence_order')
       ]);
       this.templates = (tRes.data || []);
       this.elements = (eRes.data || []);
@@ -30989,14 +30989,14 @@ const mostApp = {
       var templateId;
       if (this.editingId) {
         // Update existing
-        var uRes = await sbClient.from('ref_most_templates').update(templateData).eq('id', this.editingId).select();
+        var uRes = await sb.from('ref_most_templates').update(templateData).eq('id', this.editingId).select();
         if (uRes.error) throw uRes.error;
         templateId = this.editingId;
         // Delete old elements
-        await sbClient.from('ref_most_elements').delete().eq('template_id', templateId);
+        await sb.from('ref_most_elements').delete().eq('template_id', templateId);
       } else {
         // Insert new
-        var iRes = await sbClient.from('ref_most_templates').insert(templateData).select();
+        var iRes = await sb.from('ref_most_templates').insert(templateData).select();
         if (iRes.error) throw iRes.error;
         templateId = iRes.data[0].id;
       }
@@ -31017,7 +31017,7 @@ const mostApp = {
             notes: (el.notes || '').trim() || null
           };
         });
-        var eRes = await sbClient.from('ref_most_elements').insert(elemRows);
+        var eRes = await sb.from('ref_most_elements').insert(elemRows);
         if (eRes.error) throw eRes.error;
       }
 
@@ -31038,8 +31038,8 @@ const mostApp = {
     if (!this.editingId) return;
     if (!confirm('Delete this template and all its elements? This cannot be undone.')) return;
     try {
-      await sbClient.from('ref_most_elements').delete().eq('template_id', this.editingId);
-      await sbClient.from('ref_most_templates').delete().eq('id', this.editingId);
+      await sb.from('ref_most_elements').delete().eq('template_id', this.editingId);
+      await sb.from('ref_most_templates').delete().eq('id', this.editingId);
       this.initialized = false;
       await this.init();
       this.editingId = null;
@@ -31067,7 +31067,7 @@ const mostApp = {
         units_per_hour_base: t.units_per_hour_base,
         is_active: true
       };
-      var iRes = await sbClient.from('ref_most_templates').insert(newData).select();
+      var iRes = await sb.from('ref_most_templates').insert(newData).select();
       if (iRes.error) throw iRes.error;
       var newId = iRes.data[0].id;
 
@@ -31088,7 +31088,7 @@ const mostApp = {
             notes: e.notes
           };
         });
-        var eRes = await sbClient.from('ref_most_elements').insert(newEls);
+        var eRes = await sb.from('ref_most_elements').insert(newEls);
         if (eRes.error) throw eRes.error;
       }
 
