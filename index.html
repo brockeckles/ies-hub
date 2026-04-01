@@ -30126,7 +30126,6 @@ const TourEngine = {
   currentTour: null,
   currentStep: 0,
   isActive: false,
-  backdrop: null,
   spotlight: null,
   card: null,
   _initialized: false,
@@ -30137,12 +30136,6 @@ const TourEngine = {
     if (this._initialized) return;
     this._initialized = true;
 
-    // Backdrop — transparent click-catcher that closes tour on outside click
-    this.backdrop = document.createElement('div');
-    this.backdrop.className = 'tour-backdrop-v2';
-    this.backdrop.addEventListener('click', function() { TourEngine.closeTour(); });
-    document.body.appendChild(this.backdrop);
-
     // Spotlight — visual cutout with box-shadow, never blocks clicks
     this.spotlight = document.createElement('div');
     this.spotlight.className = 'tour-spotlight-v2';
@@ -30151,14 +30144,12 @@ const TourEngine = {
     // Card — positioned tooltip with buttons, always clickable
     this.card = document.createElement('div');
     this.card.className = 'tour-card-v2';
-    this.card.addEventListener('click', function(e) { e.stopPropagation(); });
     document.body.appendChild(this.card);
 
     // Escape key closes tour
-    this._escHandler = function(e) {
+    document.addEventListener('keydown', function(e) {
       if (e.key === 'Escape' && TourEngine.isActive) TourEngine.closeTour();
-    };
-    document.addEventListener('keydown', this._escHandler);
+    });
   },
 
   startTour(tourKey) {
@@ -30173,7 +30164,6 @@ const TourEngine = {
     this.currentStep = 0;
     this.isActive = true;
 
-    this.backdrop.classList.add('active');
     this.spotlight.classList.add('active');
     this.showStep();
   },
@@ -30280,14 +30270,12 @@ const TourEngine = {
 
   nextStep() {
     this.currentStep++;
-    this.card.classList.remove('active');
     this.showStep();
   },
 
   prevStep() {
     if (this.currentStep > 0) {
       this.currentStep--;
-      this.card.classList.remove('active');
       this.showStep();
     }
   },
@@ -30298,7 +30286,6 @@ const TourEngine = {
     this.currentStep = 0;
 
     // Remove active states
-    if (this.backdrop) this.backdrop.classList.remove('active');
     if (this.card) { this.card.classList.remove('active'); this.card.innerHTML = ''; }
     if (this.spotlight) this.spotlight.classList.remove('active');
   }
