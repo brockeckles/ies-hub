@@ -14725,6 +14725,9 @@ function pmToast(message, type) {
   setTimeout(function() { toast.style.opacity = '0'; setTimeout(function() { toast.remove(); }, 300); }, 3000);
 }
 
+// Global toast utility (used by mostApp and other tools)
+function showToast(message, type) { pmToast(message, type); }
+
 function pmEditTask(taskId) {
   var t = pmData.tasks.find(function(x){ return x.id == taskId; });
   if (!t) return;
