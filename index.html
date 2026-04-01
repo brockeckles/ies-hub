@@ -228,7 +228,7 @@
   .sp-vertical-stat strong { color: var(--ies-navy); }
 
   /* Signal feed for unified Command Center */
-  .signal-feed { max-height: 500px; overflow-y: auto; }
+  .signal-feed { max-height: 380px; overflow-y: auto; }
   .signal-item { padding: 12px 0; border-bottom: 1px solid var(--ies-gray-100); }
   .signal-item:last-child { border-bottom: none; }
   .signal-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
@@ -5344,7 +5344,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
   <!-- Main content: Signal Feed (left) + Charts (right) -->
   <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px;">
     <!-- Unified Signal Feed -->
-    <div class="hub-card" style="padding:0; overflow:hidden;">
+    <div class="hub-card" style="padding:0; overflow:hidden; align-self:start;">
       <div style="padding:16px 20px; border-bottom:1px solid var(--ies-gray-200); display:flex; align-items:center; justify-content:space-between;">
         <div style="font-size:14px; font-weight:700; color:var(--ies-navy);">Intelligence Feed</div>
         <span class="card-badge badge-live">LIVE</span>
