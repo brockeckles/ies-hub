@@ -31331,7 +31331,7 @@ const mostApp = {
           '<div style="font-size:13px;font-weight:700;color:var(--ies-navy);">' + s.name + '</div>' +
           '<span style="font-size:11px;color:var(--ies-gray-400);">' + s.timestamp + '</span>' +
         '</div>' +
-        '<div style="font-size:11px;color:var(--ies-gray-500);margin-bottom:10px;">' + s.lines + ' activities &middot; ' + s.shiftHrs + 'h shift &middot; ' + s.pfd + '% PFD &middot; $' + s.rate + '/hr</div>' +
+        '<div style="font-size:11px;color:var(--ies-gray-500);margin-bottom:10px;">' + s.lines + (s.lines === 1 ? ' activity' : ' activities') + ' &middot; ' + s.shiftHrs + 'h shift &middot; ' + s.pfd + '% PFD &middot; $' + s.rate + '/hr</div>' +
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
           '<div style="text-align:center;"><div style="font-size:20px;font-weight:700;color:var(--ies-orange);">' + s.ftes.toFixed(1) + '</div><div style="font-size:10px;color:var(--ies-gray-400);">FTEs</div></div>' +
           '<div style="text-align:center;"><div style="font-size:20px;font-weight:700;color:var(--ies-navy);">' + s.headcount + '</div><div style="font-size:10px;color:var(--ies-gray-400);">Headcount</div></div>' +
