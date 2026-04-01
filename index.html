@@ -5118,7 +5118,10 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     <div class="hub-title">IES Intelligence Hub</div>
   </div>
   <div class="header-right">
-    <input type="text" class="header-search" id="globalSearch" placeholder="Search all intelligence feeds…" oninput="handleSearch(this.value)">
+    <div style="position:relative;">
+      <input type="text" class="header-search" id="globalSearch" placeholder="Search hub…" autocomplete="off" oninput="handleSearch(this.value)" onkeydown="searchKeyNav(event)" onfocus="if(this.value.length>=2)handleSearch(this.value)" onblur="setTimeout(function(){document.getElementById('searchResults').style.display='none'},200)">
+      <div id="searchResults" style="display:none;position:absolute;top:100%;left:0;right:0;margin-top:4px;background:#fff;border:1px solid var(--ies-gray-200);border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.15);max-height:400px;overflow-y:auto;z-index:9999;font-family:Montserrat,sans-serif;"></div>
+    </div>
     <div class="header-timestamp" id="headerTimestamp"></div>
     <button class="header-refresh" onclick="refreshData()"><svg width="14" height="14" fill="none" viewBox="0 0 24 24" style="vertical-align:middle;margin-right:4px;"><path d="M1 4v6h6M23 20v-6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Refresh</button>
   </div>
@@ -13100,18 +13103,170 @@ function switchTab(group, tab, el) {
   el.classList.add('active');
 }
 
-// ── SEARCH ──
+// ── GLOBAL SEARCH ──
+var _searchIndex = null;
+var _searchHighlight = -1;
+
+function _buildSearchIndex() {
+  if (_searchIndex) return _searchIndex;
+  _searchIndex = [];
+
+  // Sections (sidebar navigation)
+  var sections = [
+    { label: 'Command Center', desc: 'KPIs, alerts, signals, charts', section: 'overview', cat: 'Pages' },
+    { label: 'Market Explorer', desc: 'Interactive map, labor, real estate, freight data', section: 'marketmap', cat: 'Pages' },
+    { label: 'Deal Management', desc: 'Pipeline, DOS stages, deck generation', section: 'deals', cat: 'Pages' },
+    { label: 'Design Tools', desc: 'Warehouse sizing, COG, network optimization, fleet, cost model, MOST, deal manager', section: 'designtools', cat: 'Pages' },
+    { label: 'Training Wiki', desc: 'SCCs, automation, robotics, warehouse design, commercial structure', section: 'training', cat: 'Pages' },
+    { label: 'Change Management', desc: 'Roadmap, release notes, implementation plan', section: 'changemanagement', cat: 'Pages' },
+    { label: 'Hub Guide', desc: 'Welcome tour, feature overview, getting started', section: 'welcome', cat: 'Pages' },
+    { label: 'Ideas & Feedback', desc: 'Submit ideas, vote, track enhancements', section: 'feedback', cat: 'Pages' },
+    { label: 'Security', desc: 'Access control, data protection, compliance', section: 'security', cat: 'Pages' }
+  ];
+  sections.forEach(function(s) { _searchIndex.push(s); });
+
+  // Design Tools
+  var tools = [
+    { label: 'Warehouse Sizing Calculator', desc: 'Calculate facility size, pallet positions, dock doors', section: 'designtools', action: function(){ navigate('designtools', document.querySelector('[data-section=designtools]')); setTimeout(function(){ showDesignTool('dt-warehouse', document.querySelectorAll('#dt-tabs .dt-tab')[0]); },100); }, cat: 'Design Tools' },
+    { label: 'Center of Gravity', desc: 'Optimal facility location analysis', section: 'designtools', action: function(){ navigate('designtools', document.querySelector('[data-section=designtools]')); setTimeout(function(){ showDesignTool('dt-network', document.querySelectorAll('#dt-tabs .dt-tab')[1]); },100); }, cat: 'Design Tools' },
+    { label: 'Network Optimization', desc: 'Multi-mode transport, heatmap, service zones, demand', section: 'designtools', action: function(){ navigate('designtools', document.querySelector('[data-section=designtools]')); setTimeout(function(){ showDesignTool('dt-netopt', document.querySelectorAll('#dt-tabs .dt-tab')[2]); },100); }, cat: 'Design Tools' },
+    { label: 'Fleet Modeler', desc: 'Fleet sizing, cost comparison, route mapping', section: 'fleet', cat: 'Design Tools' },
+    { label: 'Cost Model Builder', desc: 'Labor, equipment, real estate, overhead, pricing, P&L projections', section: 'costmodel', cat: 'Design Tools' },
+    { label: 'MOST Labor Standards', desc: 'Time studies, template library, quick analysis, FTE calculation', section: 'most', cat: 'Design Tools' },
+    { label: 'Deal Manager', desc: 'Multi-site cost model grouping, financials, pricing', section: 'designtools', action: function(){ navigate('designtools', document.querySelector('[data-section=designtools]')); setTimeout(function(){ showDesignTool('dt-deals', document.querySelectorAll('#dt-tabs .dt-tab')[6]); },100); }, cat: 'Design Tools' }
+  ];
+  tools.forEach(function(t) { _searchIndex.push(t); });
+
+  // Wiki pages
+  var wikiPages = [
+    { label: 'G2P Order Fulfillment', desc: 'Goods-to-person systems, automation', wiki: 'scc-g2p', cat: 'Wiki' },
+    { label: 'G2P Vendors', desc: 'Hai Robotics, AutoStore, Exotec comparison', wiki: 'robotics-g2p', cat: 'Wiki' },
+    { label: 'P2G Order Fulfillment', desc: 'Person-to-goods picking systems', wiki: 'scc-p2g', cat: 'Wiki' },
+    { label: 'Cobots', desc: 'Collaborative robots for warehousing', wiki: 'robotics-cobots', cat: 'Wiki' },
+    { label: 'Light/Voice/Vision', desc: 'Pick-to-light, voice picking, vision systems', wiki: 'scc-lvv', cat: 'Wiki' },
+    { label: 'Pallet AS/RS & Shuttles', desc: 'Automated storage and retrieval for pallets', wiki: 'scc-pallet-asrs', cat: 'Wiki' },
+    { label: 'AMR/AGV Movement & Sort', desc: 'Autonomous mobile robots, automated guided vehicles', wiki: 'scc-amr-agv', cat: 'Wiki' },
+    { label: 'Conveyor & Sortation', desc: 'Conveyor systems overview', wiki: 'conveyors-overview', cat: 'Wiki' },
+    { label: 'Conveyor Types', desc: 'Belt, roller, crossbelt, tilt-tray', wiki: 'conveyors-types', cat: 'Wiki' },
+    { label: 'Sortation Systems', desc: 'Crossbelt, sliding shoe, bomb bay sorters', wiki: 'conveyors-sortation', cat: 'Wiki' },
+    { label: 'Conveyor Design Fundamentals', desc: 'Layout, throughput, speed calculations', wiki: 'conveyors-design', cat: 'Wiki' },
+    { label: 'Conveyor Maintenance', desc: 'Preventive maintenance, spare parts', wiki: 'conveyors-maintenance', cat: 'Wiki' },
+    { label: 'Robotic Picking & Palletizing', desc: 'Robot arms, mixed-case palletizing', wiki: 'scc-pick-pal', cat: 'Wiki' },
+    { label: 'Rack/Shelving/VLMs', desc: 'Racking systems, vertical lift modules', wiki: 'scc-rack-vlm', cat: 'Wiki' },
+    { label: 'Trailer Loading & Unloading', desc: 'Dock operations, automated loading', wiki: 'scc-trailer', cat: 'Wiki' },
+    { label: 'Scan, PANDA, Wearables', desc: 'Scanning technology, wearable devices', wiki: 'scc-scan-panda', cat: 'Wiki' },
+    { label: 'Packout Technology', desc: 'Auto-boxing, right-size packaging', wiki: 'scc-packout', cat: 'Wiki' },
+    { label: 'Yard & Inventory Control', desc: 'Yard management, cycle counting, drones', wiki: 'scc-yard', cat: 'Wiki' },
+    { label: 'Blue Yonder WMS', desc: 'Warehouse management system overview', wiki: 'blueyonder-wms', cat: 'Wiki' },
+    { label: 'Warehouse Design & Sizing', desc: 'Facility planning, layout optimization', wiki: 'wh-design', cat: 'Wiki' },
+    { label: 'MOST Work Measurement', desc: 'Maynard operation sequence technique', wiki: 'most-overview', cat: 'Wiki' },
+    { label: '3PL Commercial Structure', desc: 'Pricing models, cost components, rate building', wiki: 'commercial-structure', cat: 'Wiki' },
+    { label: 'Win Strategy Development', desc: 'Proposal strategy, competitive positioning', wiki: 'win-strategy', cat: 'Wiki' }
+  ];
+  wikiPages.forEach(function(w) { _searchIndex.push(w); });
+
+  return _searchIndex;
+}
+
 function handleSearch(query) {
-  if (!query || query.length < 2) return;
-  // Simple highlight approach — in production this would use Fuse.js or similar
-  const q = query.toLowerCase();
-  document.querySelectorAll('.feed-title, .data-table td').forEach(el => {
-    if (el.textContent.toLowerCase().includes(q)) {
-      el.style.background = 'rgba(0,180,216,.12)';
-    } else {
-      el.style.background = '';
-    }
+  var container = document.getElementById('searchResults');
+  if (!container) return;
+  if (!query || query.length < 2) { container.style.display = 'none'; _searchHighlight = -1; return; }
+
+  var index = _buildSearchIndex();
+  var q = query.toLowerCase();
+  var matches = index.filter(function(item) {
+    return item.label.toLowerCase().includes(q) || item.desc.toLowerCase().includes(q);
   });
+
+  if (matches.length === 0) {
+    container.innerHTML = '<div style="padding:16px;text-align:center;color:var(--ies-gray-500);font-size:13px;">No results for "' + query.replace(/</g,'&lt;') + '"</div>';
+    container.style.display = 'block';
+    _searchHighlight = -1;
+    return;
+  }
+
+  // Group by category
+  var groups = {};
+  matches.forEach(function(m) {
+    if (!groups[m.cat]) groups[m.cat] = [];
+    groups[m.cat].push(m);
+  });
+
+  var html = '';
+  var idx = 0;
+  Object.keys(groups).forEach(function(cat) {
+    html += '<div style="padding:6px 14px 3px;font-size:10px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:.5px;">' + cat + '</div>';
+    groups[cat].forEach(function(item) {
+      var labelHtml = item.label.replace(new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + ')', 'gi'), '<mark style="background:rgba(243,112,33,.2);color:inherit;padding:0 1px;border-radius:2px;">$1</mark>');
+      html += '<div class="search-result-item" data-idx="' + idx + '" onmousedown="searchSelect(' + idx + ')" onmouseenter="_searchHighlight=' + idx + ';_searchHighlightUI()" style="padding:8px 14px;cursor:pointer;display:flex;flex-direction:column;gap:1px;transition:background .15s;">';
+      html += '<div style="font-size:13px;font-weight:600;color:var(--ies-navy);">' + labelHtml + '</div>';
+      html += '<div style="font-size:11px;color:var(--ies-gray-500);line-height:1.3;">' + item.desc + '</div>';
+      html += '</div>';
+      idx++;
+    });
+  });
+
+  container.innerHTML = html;
+  container.style.display = 'block';
+  _searchHighlight = -1;
+
+  // Flatten matches for keyboard nav
+  container._flatMatches = matches;
+}
+
+function searchSelect(idx) {
+  var container = document.getElementById('searchResults');
+  if (!container || !container._flatMatches) return;
+  var item = container._flatMatches[idx];
+  if (!item) return;
+
+  container.style.display = 'none';
+  document.getElementById('globalSearch').value = '';
+  _searchHighlight = -1;
+
+  if (item.action) {
+    item.action();
+  } else if (item.wiki) {
+    navigate('training', document.querySelector('[data-section=training]'));
+    setTimeout(function() { showWiki(item.wiki); }, 100);
+  } else if (item.section) {
+    navigate(item.section, document.querySelector('[data-section=' + item.section + ']'));
+  }
+}
+
+function searchKeyNav(e) {
+  var container = document.getElementById('searchResults');
+  if (!container || container.style.display === 'none' || !container._flatMatches) return;
+  var count = container._flatMatches.length;
+  if (count === 0) return;
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    _searchHighlight = (_searchHighlight + 1) % count;
+    _searchHighlightUI();
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    _searchHighlight = _searchHighlight <= 0 ? count - 1 : _searchHighlight - 1;
+    _searchHighlightUI();
+  } else if (e.key === 'Enter' && _searchHighlight >= 0) {
+    e.preventDefault();
+    searchSelect(_searchHighlight);
+  } else if (e.key === 'Escape') {
+    container.style.display = 'none';
+    _searchHighlight = -1;
+  }
+}
+
+function _searchHighlightUI() {
+  var items = document.querySelectorAll('.search-result-item');
+  items.forEach(function(el, i) {
+    el.style.background = parseInt(el.dataset.idx) === _searchHighlight ? 'rgba(33,150,243,.08)' : '';
+  });
+  // Scroll highlighted item into view
+  if (_searchHighlight >= 0 && items[_searchHighlight]) {
+    items[_searchHighlight].scrollIntoView({ block: 'nearest' });
+  }
 }
 
 // ── SIGNAL FEED FILTERS (Command Center) ──
