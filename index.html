@@ -8841,6 +8841,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div class="section-title">Fleet Modeler & Optimizer</div>
       <div class="section-subtitle">Design optimal fleet configurations and compare private vs. dedicated vs. carrier options</div>
     </div>
+    <button class="tour-trigger-icon" onclick="startSectionTour('fleet')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
   </div>
 
   <!-- Tool navigation tabs (mirrors dt-tabs from Design Tools) -->
@@ -30504,6 +30505,30 @@ const TourDefinitions = {
         target: '.fb-card',
         title: 'Feedback Cards',
         content: 'Each card shows the feedback type, status, priority, and upvote count. Upvote ideas you support to help prioritize the development roadmap.',
+        padding: 8
+      }
+    ]
+  },
+
+  fleet: {
+    name: 'Fleet Modeler & Optimizer',
+    steps: [
+      {
+        target: '#sec-fleet .dt-tabs-bar',
+        title: 'Tool Navigation',
+        content: 'Quick-switch between all design tools directly from the Fleet Modeler. Jump to Network Optimization, Warehouse Sizing, Cost Model Builder, or back to the full Design Tools suite.',
+        padding: 8
+      },
+      {
+        target: '#fm-landing .dt-landing-header',
+        title: 'Fleet Modeler Overview',
+        content: 'The Fleet Modeler helps you design optimal fleet configurations. Create scenarios to compare private fleet, dedicated carrier, and common carrier options across your lane network.',
+        padding: 12
+      },
+      {
+        target: '#fm-landing .dt-landing-actions',
+        title: 'Create a Scenario',
+        content: 'Click here to start a new fleet scenario. Define your lanes, shipment volumes, and vehicle types — then run the optimizer to see cost comparisons and recommended fleet configurations.',
         padding: 8
       }
     ]
