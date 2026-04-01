@@ -8650,7 +8650,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
                     </thead>
                     <tbody id="pricingBucketsBody"></tbody>
                 </table>
-                <button class="cm-btn cm-btn-sm" onclick="costModel.addPricingBucket()" style="margin-top:8px;">+ Add Bucket</button>
+                <button class="cm-btn cm-btn-sm" onclick="cmApp.addPricingBucket()" style="margin-top:8px;">+ Add Bucket</button>
             </div>
 
             <div class="cm-card">
@@ -13124,7 +13124,7 @@ function _buildSearchIndex() {
     { label: 'Ideas & Feedback', desc: 'Submit ideas, vote, track enhancements', section: 'feedback', cat: 'Pages' },
     { label: 'Security', desc: 'Access control, data protection, compliance', section: 'security', cat: 'Pages' }
   ];
-  sections.forEach(function(s) { _searchIndex.push(s); });
+  sections.forEach(function(s) { _searchStaticIndex.push(s); });
 
   // Design Tools
   var tools = [
@@ -13136,7 +13136,7 @@ function _buildSearchIndex() {
     { label: 'MOST Labor Standards', desc: 'Time studies, template library, quick analysis, FTE calculation', section: 'most', cat: 'Design Tools' },
     { label: 'Deal Manager', desc: 'Multi-site cost model grouping, financials, pricing', section: 'designtools', action: function(){ navigate('designtools', document.querySelector('[data-section=designtools]')); setTimeout(function(){ showDesignTool('dt-deals', document.querySelectorAll('#dt-tabs .dt-tab')[6]); },100); }, cat: 'Design Tools' }
   ];
-  tools.forEach(function(t) { _searchIndex.push(t); });
+  tools.forEach(function(t) { _searchStaticIndex.push(t); });
 
   // Wiki pages
   var wikiPages = [
@@ -27674,7 +27674,7 @@ const cmApp = {
             '<option value="' + b.id + '"' + (currentBucket === b.id ? ' selected' : '') + '>' + b.name + '</option>'
         ).join('');
         return '<select class="cm-input" style="padding:2px 4px;font-size:11px;width:120px;" ' +
-            'onchange="costModel.setBucketForLine(\'' + lineType + '\',' + idx + ',this.value)">' +
+            'onchange="cmApp.setBucketForLine(\'' + lineType + '\',' + idx + ',this.value)">' +
             opts + '<option value=""' + (!currentBucket ? ' selected' : '') + '>(none)</option></select>';
     },
 
@@ -27777,17 +27777,17 @@ const cmApp = {
             const vol = this.getBucketVolume(b);
             const volDisplay = b.type === 'fixed' ? '12 months' : vol.toLocaleString();
             return '<tr>' +
-                '<td><input type="text" class="cm-input" value="' + (b.name || '') + '" style="width:140px;padding:3px 6px;" onchange="costModel.updateBucketField(' + idx + ',\'name\',this.value)"></td>' +
-                '<td><select class="cm-input" style="padding:3px 6px;" onchange="costModel.updateBucketField(' + idx + ',\'type\',this.value);costModel.renderPricingBuckets()">' +
+                '<td><input type="text" class="cm-input" value="' + (b.name || '') + '" style="width:140px;padding:3px 6px;" onchange="cmApp.updateBucketField(' + idx + ',\'name\',this.value)"></td>' +
+                '<td><select class="cm-input" style="padding:3px 6px;" onchange="cmApp.updateBucketField(' + idx + ',\'type\',this.value);cmApp.renderPricingBuckets()">' +
                     '<option value="fixed"' + (b.type === 'fixed' ? ' selected' : '') + '>Fixed (monthly)</option>' +
                     '<option value="variable"' + (b.type === 'variable' ? ' selected' : '') + '>Variable (per unit)</option>' +
                 '</select></td>' +
-                '<td><input type="text" class="cm-input" value="' + (b.uom || '') + '" style="width:100px;padding:3px 6px;" onchange="costModel.updateBucketField(' + idx + ',\'uom\',this.value)"></td>' +
+                '<td><input type="text" class="cm-input" value="' + (b.uom || '') + '" style="width:100px;padding:3px 6px;" onchange="cmApp.updateBucketField(' + idx + ',\'uom\',this.value)"></td>' +
                 '<td>' + (b.type === 'fixed' ? '<span style="color:#64748b;">n/a</span>' :
-                    '<select class="cm-input" style="padding:3px 6px;" onchange="costModel.updateBucketField(' + idx + ',\'volume_field\',this.value);costModel.renderPricingBuckets()">' + volOpts + '</select>') +
+                    '<select class="cm-input" style="padding:3px 6px;" onchange="cmApp.updateBucketField(' + idx + ',\'volume_field\',this.value);cmApp.renderPricingBuckets()">' + volOpts + '</select>') +
                 '</td>' +
                 '<td style="text-align:right;">' + volDisplay + '</td>' +
-                '<td style="text-align:center;"><button class="cm-btn-icon" onclick="costModel.deletePricingBucket(' + idx + ')" title="Delete">\u00d7</button></td>' +
+                '<td style="text-align:center;"><button class="cm-btn-icon" onclick="cmApp.deletePricingBucket(' + idx + ')" title="Delete">\u00d7</button></td>' +
             '</tr>';
         }).join('');
     },
