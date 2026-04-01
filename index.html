@@ -5219,7 +5219,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     <div class="welcome-feature feature-live" onclick="navigate('designtools', document.querySelector('[data-section=designtools]'))" style="cursor:pointer;">
       <div class="welcome-feature-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--ies-orange)" stroke-width="1.5"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg></div>
       <div class="welcome-feature-title">Design Tools</div>
-      <div class="welcome-feature-desc">Interactive warehouse sizing calculator with dynamic facility layout, zone allocation modeling, and IES engineering recommendations.</div>
+      <div class="welcome-feature-desc">7 engineering tools — Center of Gravity, Network Optimization, Warehouse Sizing, Cost Model, Multi-Site Analyzer, Fleet Modeler, and MOST Labor Standards.</div>
       <div style="margin-top:10px;"><span class="wiki-tag" style="background:rgba(25,135,84,.1);color:var(--ies-green);">LIVE</span></div>
     </div>
     <div class="welcome-feature feature-live" onclick="navigate('deals', document.querySelector('[data-section=deals]'))" style="cursor:pointer;">
@@ -5252,11 +5252,14 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
           <li>Command Center — KPIs, Signal Feed, Charts, Sector Pulse</li>
           <li>Market Explorer — Interactive map + Data Library</li>
           <li>Design Tools — 7 tools (Center of Gravity, Network Optimization, Warehouse Sizing, Cost Model, Multi-Site Analyzer, Fleet Modeler, MOST Standards)</li>
-          <li>Deal Management — Stage-gated pipeline, activity templates, Hours tracking</li>
+          <li>Deal Management — Stage-gated DOS pipeline, activity templates, Hours tracking</li>
           <li>Training Wiki (23+ pages, 12 SCCs)</li>
           <li>Change Management (ADKAR)</li>
           <li>Ideas & Feedback system + Analytics</li>
           <li>Supabase backend with RLS</li>
+          <li>Hub Redesign 2026 — simplified 7-item navigation, unified design system</li>
+          <li>Guided tours & onboarding flows (TourEngine v2)</li>
+          <li>MOST Labor Standards — template library, quick analysis, scenario comparison</li>
         </ul>
       </div>
       <div class="roadmap-phase phase-future">
@@ -5265,9 +5268,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         <ul class="roadmap-items">
           <li>Supabase Auth migration (replace access codes)</li>
           <li>Mobile & tablet responsive design</li>
-          <li>Guided tours & onboarding flows</li>
           <li>Audit logging for compliance</li>
-          <li>Hub Redesign 2026 (simplified navigation)</li>
         </ul>
       </div>
       <div class="roadmap-phase phase-future">
@@ -5277,8 +5278,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
           <li>Salesforce CRM connector</li>
           <li>Snowflake data warehouse integration</li>
           <li>Live API feeds (freight, labor, tariffs)</li>
-          <li>Scenario save & compare</li>
-          <li>MOST work measurement enhancements</li>
+          <li>Scenario save & compare across all tools</li>
         </ul>
       </div>
       <div class="roadmap-phase phase-future">
@@ -10387,7 +10387,7 @@ var TOUR_STEPS = [
   { icon: '📋', title: 'Deal Management', desc: 'Stage-gated deal pipeline with kanban views, activity tracking per stage, forecast vs. actual hours, deal progression tracking, and deal strategy development. Backed by Supabase with structured stage workflows.' },
   { icon: '🔄', title: 'Change Management', desc: 'Track team changes through the ADKAR methodology — Awareness, Desire, Knowledge, Ability, Reinforcement. Manage sub-activities, build process flowcharts, and watch initiatives auto-advance as work completes.' },
   { icon: '📖', title: 'Training Wiki', desc: '23+ page reference library covering 12 Solutions Competency Centers, Blue Yonder WMS, conveyor systems, warehouse design, MOST work measurement, 3PL commercial structure, and win strategy development.' },
-  { icon: '🚀', title: 'What\'s Coming Next', desc: 'The roadmap includes Supabase Auth migration, mobile responsive design, Excel/PowerPoint exports, and enterprise SSO integration. Check the roadmap on the Welcome page for the full plan.' },
+  { icon: '🚀', title: 'What\'s Coming Next', desc: 'The roadmap includes Supabase Auth migration (replacing access codes), mobile responsive design, audit logging, Salesforce/Snowflake integrations, and enterprise Azure AD SSO. Check the roadmap on the Welcome page for the full plan.' },
 ];
 var tourStep = 0;
 
