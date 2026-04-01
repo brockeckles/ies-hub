@@ -13104,12 +13104,13 @@ function switchTab(group, tab, el) {
 }
 
 // ── GLOBAL SEARCH ──
-var _searchIndex = null;
+var _searchStaticIndex = null;
 var _searchHighlight = -1;
 
 function _buildSearchIndex() {
-  if (_searchIndex) return _searchIndex;
-  _searchIndex = [];
+  // Static items are cached; dynamic items rebuild each time from live data
+  if (!_searchStaticIndex) {
+    _searchStaticIndex = [];
 
   // Sections (sidebar navigation)
   var sections = [
@@ -13163,9 +13164,110 @@ function _buildSearchIndex() {
     { label: '3PL Commercial Structure', desc: 'Pricing models, cost components, rate building', wiki: 'commercial-structure', cat: 'Wiki' },
     { label: 'Win Strategy Development', desc: 'Proposal strategy, competitive positioning', wiki: 'win-strategy', cat: 'Wiki' }
   ];
-  wikiPages.forEach(function(w) { _searchIndex.push(w); });
+    wikiPages.forEach(function(w) { _searchStaticIndex.push(w); });
+  }
 
-  return _searchIndex;
+  // Start with static items
+  var index = _searchStaticIndex.slice();
+
+  // Dynamic: Deals / Opportunities (from pmData)
+  if (typeof pmData !== 'undefined' && pmData.opportunities) {
+    pmData.opportunities.forEach(function(opp) {
+      var custName = (typeof pmGetCustomerName === 'function') ? pmGetCustomerName(opp.customer_id) : '';
+      var stageName = (opp.stage || '').replace(/_/g, ' ');
+      index.push({
+        label: opp.name || 'Untitled Deal',
+        desc: [custName, opp.location, stageName, opp.status].filter(Boolean).join(' · '),
+        section: 'deals',
+        action: (function(id) { return function() {
+          navigate('deals', document.querySelector('[data-section=deals]'));
+          setTimeout(function() { if (typeof pmOpenDetail === 'function') pmOpenDetail(id); }, 200);
+        }; })(opp.id),
+        cat: 'Deals'
+      });
+    });
+  }
+
+  // Dynamic: Customers (from pmData)
+  if (typeof pmData !== 'undefined' && pmData.customers) {
+    pmData.customers.forEach(function(cust) {
+      var dealCount = (pmData.opportunities || []).filter(function(o) { return String(o.customer_id) === String(cust.id); }).length;
+      index.push({
+        label: cust.name || 'Unnamed Customer',
+        desc: (cust.industry || 'Customer') + (dealCount ? ' · ' + dealCount + ' deal' + (dealCount > 1 ? 's' : '') : ''),
+        section: 'deals',
+        cat: 'Customers'
+      });
+    });
+  }
+
+  // Dynamic: Cost Models (from daData)
+  if (typeof daData !== 'undefined' && daData.costModels) {
+    daData.costModels.forEach(function(cm) {
+      index.push({
+        label: cm.name || 'Untitled Cost Model',
+        desc: 'Cost Model' + (cm.created_at ? ' · ' + new Date(cm.created_at).toLocaleDateString() : ''),
+        section: 'costmodel',
+        action: (function(id) { return function() {
+          navigate('costmodel', document.querySelector('[data-section=costmodel]'));
+          setTimeout(function() {
+            document.getElementById('landingPage').style.display = 'none';
+            document.getElementById('editorContainer').style.display = 'flex';
+            document.getElementById('topbarControls').style.display = 'flex';
+            if (typeof cmApp !== 'undefined') cmApp.openProject(id);
+          }, 100);
+        }; })(cm.id),
+        cat: 'Cost Models'
+      });
+    });
+  }
+
+  // Dynamic: NetOpt Scenarios (from daData)
+  if (typeof daData !== 'undefined' && daData.netoptScenarios) {
+    daData.netoptScenarios.forEach(function(ns) {
+      index.push({
+        label: ns.scenario_name || ns.name || 'Untitled Scenario',
+        desc: 'Network Optimization' + (ns.created_at ? ' · ' + new Date(ns.created_at).toLocaleDateString() : ''),
+        section: 'designtools',
+        action: (function(id) { return function() {
+          navigate('designtools', document.querySelector('[data-section=designtools]'));
+          setTimeout(function() { showDesignTool('dt-netopt', document.querySelectorAll('#dt-tabs .dt-tab')[2]); }, 100);
+          setTimeout(function() { if (typeof netoptLoadScenario === 'function') netoptLoadScenario(id); }, 300);
+        }; })(ns.id),
+        cat: 'Scenarios'
+      });
+    });
+  }
+
+  // Dynamic: Signal feed items (competitor news, tariffs, etc.)
+  document.querySelectorAll('#signalFeed .signal-item').forEach(function(el) {
+    var title = (el.querySelector('.signal-title') || el.querySelector('strong') || {}).textContent || '';
+    var type = el.dataset.signalType || 'signal';
+    if (title) {
+      index.push({
+        label: title,
+        desc: type.charAt(0).toUpperCase() + type.slice(1) + ' signal · Command Center',
+        section: 'overview',
+        cat: 'Intelligence'
+      });
+    }
+  });
+
+  // Dynamic: Intelligence feed items
+  document.querySelectorAll('.feed-card, .feed-item').forEach(function(el) {
+    var title = (el.querySelector('.feed-title') || el.querySelector('.feed-card-title') || {}).textContent || '';
+    var source = (el.querySelector('.feed-source') || el.querySelector('.feed-card-source') || {}).textContent || '';
+    if (title && title.length > 5) {
+      index.push({
+        label: title.substring(0, 80) + (title.length > 80 ? '…' : ''),
+        desc: (source || 'News') + ' · Command Center',
+        section: 'overview',
+        cat: 'Intelligence'
+      });
+    }
+  });
+
+  return index;
 }
 
 function handleSearch(query) {
@@ -13195,9 +13297,15 @@ function handleSearch(query) {
 
   var html = '';
   var idx = 0;
+  var maxPerCat = 5;
+  // Flatten for keyboard nav after limiting
+  var flatMatches = [];
   Object.keys(groups).forEach(function(cat) {
-    html += '<div style="padding:6px 14px 3px;font-size:10px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:.5px;">' + cat + '</div>';
-    groups[cat].forEach(function(item) {
+    var items = groups[cat].slice(0, maxPerCat);
+    var overflow = groups[cat].length - items.length;
+    html += '<div style="padding:6px 14px 3px;font-size:10px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:.5px;">' + cat + ' <span style="font-weight:400;">(' + groups[cat].length + ')</span></div>';
+    items.forEach(function(item) {
+      flatMatches.push(item);
       var labelHtml = item.label.replace(new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + ')', 'gi'), '<mark style="background:rgba(243,112,33,.2);color:inherit;padding:0 1px;border-radius:2px;">$1</mark>');
       html += '<div class="search-result-item" data-idx="' + idx + '" onmousedown="searchSelect(' + idx + ')" onmouseenter="_searchHighlight=' + idx + ';_searchHighlightUI()" style="padding:8px 14px;cursor:pointer;display:flex;flex-direction:column;gap:1px;transition:background .15s;">';
       html += '<div style="font-size:13px;font-weight:600;color:var(--ies-navy);">' + labelHtml + '</div>';
@@ -13205,14 +13313,17 @@ function handleSearch(query) {
       html += '</div>';
       idx++;
     });
+    if (overflow > 0) {
+      html += '<div style="padding:4px 14px 6px;font-size:11px;color:var(--ies-gray-400);font-style:italic;">+' + overflow + ' more</div>';
+    }
   });
 
   container.innerHTML = html;
   container.style.display = 'block';
   _searchHighlight = -1;
 
-  // Flatten matches for keyboard nav
-  container._flatMatches = matches;
+  // Use capped flat list for keyboard nav
+  container._flatMatches = flatMatches;
 }
 
 function searchSelect(idx) {
