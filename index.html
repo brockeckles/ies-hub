@@ -5746,13 +5746,13 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
   <!-- Tool selector tabs -->
   <div id="dt-tabs" class="dt-tabs-bar" style="display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap;">
     <button class="dt-tab active" onclick="showDesignTool('dt-landing',this)">All Tools</button>
-    <button class="dt-tab" onclick="showDesignTool('dt-network',this)">Center of Gravity</button>
-    <button class="dt-tab" onclick="showDesignTool('dt-netopt',this)">Network Optimization</button>
-    <button class="dt-tab" onclick="showDesignTool('dt-warehouse',this)">Warehouse Sizing</button>
     <button class="dt-tab" onclick="showDesignTool('dt-costmodel',this)">Cost Model</button>
     <button class="dt-tab" onclick="showDesignTool('dt-deals',this)">Multi-Site Analyzer</button>
-    <button class="dt-tab" onclick="showDesignTool('dt-fleet',this)">Fleet Modeler</button>
+    <button class="dt-tab" onclick="showDesignTool('dt-warehouse',this)">Warehouse Sizing</button>
     <button class="dt-tab" onclick="showDesignTool('dt-most',this)">MOST Standards</button>
+    <button class="dt-tab" onclick="showDesignTool('dt-network',this)">Center of Gravity</button>
+    <button class="dt-tab" onclick="showDesignTool('dt-netopt',this)">Network Optimization</button>
+    <button class="dt-tab" onclick="showDesignTool('dt-fleet',this)">Fleet Modeler</button>
   </div>
 
   <!-- ── LANDING PAGE ── -->
@@ -7798,13 +7798,13 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
   <!-- Tool navigation tabs (mirrors dt-tabs from Design Tools) -->
   <div class="dt-tabs-bar" style="display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap;">
     <button class="dt-tab" onclick="navigate('designtools', document.querySelector('[data-section=designtools]'))">All Tools</button>
-    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-network', document.querySelectorAll('#dt-tabs .dt-tab')[1]); },50)">Center of Gravity</button>
-    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-netopt', document.querySelectorAll('#dt-tabs .dt-tab')[2]); },50)">Network Optimization</button>
-    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-warehouse', document.querySelectorAll('#dt-tabs .dt-tab')[3]); },50)">Warehouse Sizing</button>
     <button class="dt-tab active" onclick="window.scrollTo(0,0)">Cost Model</button>
-    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-deals', document.querySelectorAll('#dt-tabs .dt-tab')[5]); },50)">Multi-Site Analyzer</button>
-    <button class="dt-tab" onclick="showDesignTool('dt-fleet')">Fleet Modeler</button>
+    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-deals', document.querySelectorAll('#dt-tabs .dt-tab')[2]); },50)">Multi-Site Analyzer</button>
+    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-warehouse', document.querySelectorAll('#dt-tabs .dt-tab')[3]); },50)">Warehouse Sizing</button>
     <button class="dt-tab" onclick="showDesignTool('dt-most')">MOST Standards</button>
+    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-network', document.querySelectorAll('#dt-tabs .dt-tab')[5]); },50)">Center of Gravity</button>
+    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-netopt', document.querySelectorAll('#dt-tabs .dt-tab')[6]); },50)">Network Optimization</button>
+    <button class="dt-tab" onclick="showDesignTool('dt-fleet')">Fleet Modeler</button>
   </div>
 
   <div id="landingPage" class="dt-landing">
@@ -8875,13 +8875,13 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
   <!-- Tool navigation tabs (mirrors dt-tabs from Design Tools) -->
   <div class="dt-tabs-bar" style="display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap;">
     <button class="dt-tab" onclick="navigate('designtools', document.querySelector('[data-section=designtools]'))">All Tools</button>
-    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-network', document.querySelectorAll('#dt-tabs .dt-tab')[1]); },50)">Center of Gravity</button>
-    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-netopt', document.querySelectorAll('#dt-tabs .dt-tab')[2]); },50)">Network Optimization</button>
-    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-warehouse', document.querySelectorAll('#dt-tabs .dt-tab')[3]); },50)">Warehouse Sizing</button>
     <button class="dt-tab" onclick="showDesignTool('dt-costmodel')">Cost Model</button>
-    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-deals', document.querySelectorAll('#dt-tabs .dt-tab')[5]); },50)">Multi-Site Analyzer</button>
-    <button class="dt-tab active" onclick="window.scrollTo(0,0)">Fleet Modeler</button>
+    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-deals', document.querySelectorAll('#dt-tabs .dt-tab')[2]); },50)">Multi-Site Analyzer</button>
+    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-warehouse', document.querySelectorAll('#dt-tabs .dt-tab')[3]); },50)">Warehouse Sizing</button>
     <button class="dt-tab" onclick="showDesignTool('dt-most')">MOST Standards</button>
+    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-network', document.querySelectorAll('#dt-tabs .dt-tab')[5]); },50)">Center of Gravity</button>
+    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-netopt', document.querySelectorAll('#dt-tabs .dt-tab')[6]); },50)">Network Optimization</button>
+    <button class="dt-tab active" onclick="window.scrollTo(0,0)">Fleet Modeler</button>
   </div>
 
   <!-- FLEET MODELER LANDING PAGE -->
@@ -9098,13 +9098,13 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
   <!-- Tool navigation tabs -->
   <div class="dt-tabs-bar" style="display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap;">
     <button class="dt-tab" onclick="navigate('designtools', document.querySelector('[data-section=designtools]'))">All Tools</button>
-    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-network', document.querySelectorAll('#dt-tabs .dt-tab')[1]); },50)">Center of Gravity</button>
-    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-netopt', document.querySelectorAll('#dt-tabs .dt-tab')[2]); },50)">Network Optimization</button>
-    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-warehouse', document.querySelectorAll('#dt-tabs .dt-tab')[3]); },50)">Warehouse Sizing</button>
     <button class="dt-tab" onclick="showDesignTool('dt-costmodel')">Cost Model</button>
-    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-deals', document.querySelectorAll('#dt-tabs .dt-tab')[5]); },50)">Multi-Site Analyzer</button>
-    <button class="dt-tab" onclick="showDesignTool('dt-fleet')">Fleet Modeler</button>
+    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-deals', document.querySelectorAll('#dt-tabs .dt-tab')[2]); },50)">Multi-Site Analyzer</button>
+    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-warehouse', document.querySelectorAll('#dt-tabs .dt-tab')[3]); },50)">Warehouse Sizing</button>
     <button class="dt-tab active" onclick="window.scrollTo(0,0)">MOST Standards</button>
+    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-network', document.querySelectorAll('#dt-tabs .dt-tab')[5]); },50)">Center of Gravity</button>
+    <button class="dt-tab" onclick="navigate('designtools'); setTimeout(function(){ showDesignTool('dt-netopt', document.querySelectorAll('#dt-tabs .dt-tab')[6]); },50)">Network Optimization</button>
+    <button class="dt-tab" onclick="showDesignTool('dt-fleet')">Fleet Modeler</button>
   </div>
 
   <!-- MOST LANDING PAGE -->
