@@ -9260,13 +9260,100 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div id="mostEdValidation" style="display:none;margin-top:12px;padding:10px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;font-size:12px;color:#dc2626;"></div>
     </div>
 
-    <!-- ═══ QUICK LABOR ANALYSIS VIEW (placeholder for Session 3) ═══ -->
+    <!-- ═══ QUICK LABOR ANALYSIS VIEW ═══ -->
     <div id="mostAnalysisView" style="display:none;">
-      <div class="dt-empty-state">
-        <div class="dt-empty-state-icon">&#9881;</div>
-        <div class="dt-empty-state-title">Quick Labor Analysis</div>
-        <div class="dt-empty-state-text">Coming soon — select templates, plug in volumes, and instantly model FTEs and labor cost without creating a full Cost Model.</div>
+
+      <!-- Setup panel -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:24px;">
+        <div>
+          <label style="font-size:12px;font-weight:600;color:var(--ies-gray-500);display:block;margin-bottom:4px;">Shift Hours per Day</label>
+          <input type="number" id="qlaShiftHours" class="cm-input" value="8" min="1" max="24" step="0.5" style="width:100%;" onchange="mostApp.recalcAnalysis()">
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:var(--ies-gray-500);display:block;margin-bottom:4px;">Allowance Profile</label>
+          <select id="qlaAllowance" class="cm-select" style="width:100%;" onchange="mostApp.recalcAnalysis()">
+            <option value="0">None (0%)</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:var(--ies-gray-500);display:block;margin-bottom:4px;">Blended Hourly Rate ($)</label>
+          <input type="number" id="qlaHourlyRate" class="cm-input" value="18.50" min="0" step="0.25" style="width:100%;" onchange="mostApp.recalcAnalysis()">
+        </div>
       </div>
+
+      <!-- Add activity row -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <div style="font-size:16px;font-weight:700;color:var(--ies-navy);">Activity Lines</div>
+        <div style="display:flex;gap:8px;">
+          <button class="hub-btn" onclick="mostApp.addAnalysisLine()" style="padding:5px 14px;font-size:12px;font-weight:600;background:var(--ies-blue);color:#fff;border:none;border-radius:6px;cursor:pointer;">+ Add Activity</button>
+          <button class="hub-btn" onclick="mostApp.clearAnalysis()" style="padding:5px 14px;font-size:12px;font-weight:600;background:var(--ies-gray-100);color:var(--ies-gray-600);border:1px solid var(--ies-gray-200);border-radius:6px;cursor:pointer;">Clear All</button>
+        </div>
+      </div>
+
+      <!-- Activity lines table -->
+      <div style="overflow-x:auto;margin-bottom:24px;">
+        <table class="cm-table" style="width:100%;font-size:12px;" id="qlaTable">
+          <thead><tr>
+            <th style="min-width:200px;">MOST Template</th>
+            <th style="width:90px;text-align:right;">Base UPH</th>
+            <th style="width:90px;text-align:right;">Adj. UPH</th>
+            <th style="width:100px;text-align:right;">Daily Volume</th>
+            <th style="width:90px;text-align:right;">Hours/Day</th>
+            <th style="width:80px;text-align:right;">FTEs</th>
+            <th style="width:100px;text-align:right;">Daily Cost</th>
+            <th style="width:50px;text-align:center;"><!--delete--></th>
+          </tr></thead>
+          <tbody id="qlaTableBody">
+            <tr><td colspan="8" style="text-align:center;padding:24px;color:var(--ies-gray-400);font-size:13px;">Click "+ Add Activity" to start modeling labor requirements.</td></tr>
+          </tbody>
+          <tfoot id="qlaTableFoot" style="display:none;">
+            <tr style="font-weight:700;border-top:2px solid var(--ies-gray-200);">
+              <td>TOTAL</td>
+              <td></td><td></td>
+              <td style="text-align:right;" id="qlaTotalVolume">—</td>
+              <td style="text-align:right;" id="qlaTotalHours">—</td>
+              <td style="text-align:right;color:var(--ies-orange);" id="qlaTotalFTEs">—</td>
+              <td style="text-align:right;color:var(--ies-orange);" id="qlaTotalCost">—</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <!-- Results summary cards -->
+      <div id="qlaResults" style="display:none;">
+        <div style="font-size:16px;font-weight:700;color:var(--ies-navy);margin-bottom:12px;">Analysis Summary</div>
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:24px;">
+          <div style="background:var(--ies-gray-50);border-radius:10px;padding:16px;text-align:center;">
+            <div style="font-size:28px;font-weight:700;color:var(--ies-orange);" id="qlaResFTEs">0.0</div>
+            <div style="font-size:11px;color:var(--ies-gray-400);margin-top:4px;">Total FTEs</div>
+          </div>
+          <div style="background:var(--ies-gray-50);border-radius:10px;padding:16px;text-align:center;">
+            <div style="font-size:28px;font-weight:700;color:var(--ies-navy);" id="qlaResHeadcount">0</div>
+            <div style="font-size:11px;color:var(--ies-gray-400);margin-top:4px;">Headcount</div>
+          </div>
+          <div style="background:var(--ies-gray-50);border-radius:10px;padding:16px;text-align:center;">
+            <div style="font-size:28px;font-weight:700;color:var(--ies-navy);" id="qlaResHours">0.0</div>
+            <div style="font-size:11px;color:var(--ies-gray-400);margin-top:4px;">Hours/Day</div>
+          </div>
+          <div style="background:var(--ies-gray-50);border-radius:10px;padding:16px;text-align:center;">
+            <div style="font-size:28px;font-weight:700;color:var(--ies-navy);" id="qlaResDailyCost">$0</div>
+            <div style="font-size:11px;color:var(--ies-gray-400);margin-top:4px;">Daily Cost</div>
+          </div>
+          <div style="background:var(--ies-gray-50);border-radius:10px;padding:16px;text-align:center;">
+            <div style="font-size:28px;font-weight:700;color:var(--ies-navy);" id="qlaResAnnualCost">$0</div>
+            <div style="font-size:11px;color:var(--ies-gray-400);margin-top:4px;">Annual Cost (260d)</div>
+          </div>
+        </div>
+
+        <!-- Scenario comparison -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <div style="font-size:14px;font-weight:700;color:var(--ies-navy);">Scenario Comparison</div>
+          <button class="hub-btn" onclick="mostApp.saveScenario()" style="padding:5px 14px;font-size:12px;font-weight:600;background:var(--ies-orange);color:#fff;border:none;border-radius:6px;cursor:pointer;">Save as Scenario</button>
+        </div>
+        <div id="qlaScenariosGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;"></div>
+      </div>
+
     </div>
   </div>
 </div>
@@ -30577,6 +30664,7 @@ const mostApp = {
     if (anaView) anaView.style.display = mode === 'analysis' ? 'block' : 'none';
     if (libBtn) libBtn.style.opacity = mode === 'library' ? '1' : '0.5';
     if (anaBtn) anaBtn.style.opacity = mode === 'analysis' ? '1' : '0.5';
+    if (mode === 'analysis') this.initAnalysis();
   },
 
   filterTemplates() {
@@ -30759,6 +30847,12 @@ const mostApp = {
       html += '. The Cost Model recalculates TMU for these elements using actual warehouse parameters.';
       html += '</div></div>';
     }
+
+    // Cross-link to Cost Model
+    html += '<div style="margin-top:20px;padding:14px 16px;background:rgba(0,71,171,0.06);border-radius:10px;border-left:3px solid var(--ies-blue);display:flex;align-items:center;justify-content:space-between;">';
+    html += '<div style="font-size:13px;color:var(--ies-navy);">This template is available as a labor standard in the <strong>Cost Model Builder</strong>. Select it from the MOST Template dropdown on any labor line.</div>';
+    html += '<button class="hub-btn" onclick="navigate(\'costmodel\', document.querySelector(\'[data-section=costmodel]\'))" style="padding:6px 14px;font-size:12px;font-weight:600;background:var(--ies-blue);color:#fff;border:none;border-radius:6px;cursor:pointer;white-space:nowrap;">Open Cost Model</button>';
+    html += '</div>';
 
     document.getElementById('mostDetailContent').innerHTML = html;
     document.getElementById('mostLibraryView').style.display = 'none';
@@ -31049,6 +31143,213 @@ const mostApp = {
       console.error('MOST delete error:', err);
       alert('Delete failed: ' + (err.message || 'Unknown error'));
     }
+  },
+
+  // ═══ SESSION 3: QUICK LABOR ANALYSIS ═══
+  analysisLines: [],
+  scenarios: [],
+  allowanceProfiles: [],
+
+  async initAnalysis() {
+    // Load allowance profiles for the dropdown
+    if (this.allowanceProfiles.length === 0) {
+      try {
+        var res = await sb.from('ref_allowance_profiles').select('*').order('is_default', {ascending:false}).order('profile_name');
+        this.allowanceProfiles = res.data || [];
+      } catch(e) { console.error('Allowance profiles load error:', e); }
+    }
+    var sel = document.getElementById('qlaAllowance');
+    if (sel && this.allowanceProfiles.length > 0) {
+      sel.innerHTML = '<option value="0">None (0% PFD)</option>' +
+        this.allowanceProfiles.map(function(p) {
+          return '<option value="' + p.total_pfd_pct + '"' + (p.is_default ? ' selected' : '') + '>' + p.profile_name + ' (' + p.total_pfd_pct + '% PFD)</option>';
+        }).join('');
+    }
+  },
+
+  addAnalysisLine() {
+    if (!this.templates.length) { showToast('Loading templates...', 'info'); return; }
+    this.analysisLines.push({ templateId: '', volume: 0 });
+    this.renderAnalysisTable();
+  },
+
+  removeAnalysisLine(idx) {
+    this.analysisLines.splice(idx, 1);
+    this.renderAnalysisTable();
+    this.recalcAnalysis();
+  },
+
+  updateAnalysisLine(idx, field, value) {
+    if (!this.analysisLines[idx]) return;
+    this.analysisLines[idx][field] = field === 'volume' ? (parseFloat(value) || 0) : value;
+    this.renderAnalysisTable();
+    this.recalcAnalysis();
+  },
+
+  renderAnalysisTable() {
+    var tbody = document.getElementById('qlaTableBody');
+    var tfoot = document.getElementById('qlaTableFoot');
+    if (!tbody) return;
+
+    if (this.analysisLines.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--ies-gray-400);font-size:13px;">Click "+ Add Activity" to start modeling labor requirements.</td></tr>';
+      if (tfoot) tfoot.style.display = 'none';
+      var results = document.getElementById('qlaResults');
+      if (results) results.style.display = 'none';
+      return;
+    }
+    if (tfoot) tfoot.style.display = '';
+
+    var self = this;
+    var pfd = parseFloat(document.getElementById('qlaAllowance').value) || 0;
+    var shiftHrs = parseFloat(document.getElementById('qlaShiftHours').value) || 8;
+    var rate = parseFloat(document.getElementById('qlaHourlyRate').value) || 0;
+
+    tbody.innerHTML = this.analysisLines.map(function(line, idx) {
+      var t = line.templateId ? self.templates.find(function(x) { return String(x.id) === String(line.templateId); }) : null;
+      var baseUph = t ? (parseFloat(t.units_per_hour_base) || 0) : 0;
+      var adjUph = baseUph > 0 ? baseUph * (100 / (100 + pfd)) : 0;
+      var vol = parseFloat(line.volume) || 0;
+      var hours = adjUph > 0 ? vol / adjUph : 0;
+      var ftes = shiftHrs > 0 ? hours / shiftHrs : 0;
+      var cost = hours * rate;
+
+      // Template dropdown
+      var selHtml = '<select class="cm-select" style="width:100%;font-size:12px;padding:4px 6px;" onchange="mostApp.updateAnalysisLine(' + idx + ',\'templateId\',this.value)">';
+      selHtml += '<option value="">Select template...</option>';
+      var grouped = {};
+      self.templates.forEach(function(tmpl) {
+        if (tmpl.is_active === false) return;
+        if (!grouped[tmpl.process_area]) grouped[tmpl.process_area] = [];
+        grouped[tmpl.process_area].push(tmpl);
+      });
+      Object.keys(grouped).sort().forEach(function(area) {
+        selHtml += '<optgroup label="' + area + '">';
+        grouped[area].forEach(function(tmpl) {
+          selHtml += '<option value="' + tmpl.id + '"' + (String(tmpl.id) === String(line.templateId) ? ' selected' : '') + '>' + tmpl.activity_name + ' (' + (parseFloat(tmpl.units_per_hour_base)||0).toFixed(0) + ' UPH)</option>';
+        });
+        selHtml += '</optgroup>';
+      });
+      selHtml += '</select>';
+
+      return '<tr>' +
+        '<td>' + selHtml + '</td>' +
+        '<td style="text-align:right;color:var(--ies-gray-500);">' + (baseUph > 0 ? baseUph.toFixed(1) : '—') + '</td>' +
+        '<td style="text-align:right;font-weight:600;">' + (adjUph > 0 ? adjUph.toFixed(1) : '—') + '</td>' +
+        '<td><input type="number" class="cm-input" value="' + (vol || '') + '" min="0" step="1" style="width:90px;font-size:12px;padding:4px 8px;text-align:right;" onchange="mostApp.updateAnalysisLine(' + idx + ',\'volume\',this.value)" placeholder="0"></td>' +
+        '<td style="text-align:right;">' + (hours > 0 ? hours.toFixed(1) : '—') + '</td>' +
+        '<td style="text-align:right;font-weight:600;color:var(--ies-orange);">' + (ftes > 0 ? ftes.toFixed(2) : '—') + '</td>' +
+        '<td style="text-align:right;">' + (cost > 0 ? '$' + cost.toFixed(0) : '—') + '</td>' +
+        '<td style="text-align:center;"><button onclick="mostApp.removeAnalysisLine(' + idx + ')" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:16px;" title="Remove">&times;</button></td>' +
+      '</tr>';
+    }).join('');
+  },
+
+  recalcAnalysis() {
+    if (this.analysisLines.length === 0) return;
+
+    var pfd = parseFloat(document.getElementById('qlaAllowance').value) || 0;
+    var shiftHrs = parseFloat(document.getElementById('qlaShiftHours').value) || 8;
+    var rate = parseFloat(document.getElementById('qlaHourlyRate').value) || 0;
+    var self = this;
+
+    var totVol = 0, totHrs = 0, totCost = 0;
+    this.analysisLines.forEach(function(line) {
+      var t = line.templateId ? self.templates.find(function(x) { return String(x.id) === String(line.templateId); }) : null;
+      var baseUph = t ? (parseFloat(t.units_per_hour_base) || 0) : 0;
+      var adjUph = baseUph > 0 ? baseUph * (100 / (100 + pfd)) : 0;
+      var vol = parseFloat(line.volume) || 0;
+      var hours = adjUph > 0 ? vol / adjUph : 0;
+      totVol += vol;
+      totHrs += hours;
+      totCost += hours * rate;
+    });
+
+    var totFtes = shiftHrs > 0 ? totHrs / shiftHrs : 0;
+
+    // Update footer
+    var el = function(id, v) { var e = document.getElementById(id); if (e) e.textContent = v; };
+    el('qlaTotalVolume', totVol.toLocaleString());
+    el('qlaTotalHours', totHrs.toFixed(1));
+    el('qlaTotalFTEs', totFtes.toFixed(2));
+    el('qlaTotalCost', '$' + totCost.toFixed(0));
+
+    // Update summary cards
+    el('qlaResFTEs', totFtes.toFixed(1));
+    el('qlaResHeadcount', Math.ceil(totFtes));
+    el('qlaResHours', totHrs.toFixed(1));
+    el('qlaResDailyCost', '$' + totCost.toLocaleString(undefined, {maximumFractionDigits:0}));
+    el('qlaResAnnualCost', '$' + (totCost * 260).toLocaleString(undefined, {maximumFractionDigits:0}));
+
+    var results = document.getElementById('qlaResults');
+    if (results) results.style.display = totHrs > 0 ? 'block' : 'none';
+
+    // Re-render table rows (for adjusted UPH recalc)
+    this.renderAnalysisTable();
+  },
+
+  saveScenario() {
+    var pfd = parseFloat(document.getElementById('qlaAllowance').value) || 0;
+    var shiftHrs = parseFloat(document.getElementById('qlaShiftHours').value) || 8;
+    var rate = parseFloat(document.getElementById('qlaHourlyRate').value) || 0;
+    var totHrs = parseFloat(document.getElementById('qlaResHours').textContent) || 0;
+    var totFtes = parseFloat(document.getElementById('qlaResFTEs').textContent) || 0;
+    var dailyCost = document.getElementById('qlaResDailyCost').textContent;
+    var lineCount = this.analysisLines.filter(function(l) { return l.templateId && l.volume > 0; }).length;
+
+    if (lineCount === 0) { showToast('Add at least one activity with volume first', 'info'); return; }
+
+    this.scenarios.push({
+      name: 'Scenario ' + (this.scenarios.length + 1),
+      timestamp: new Date().toLocaleTimeString(),
+      lines: lineCount,
+      shiftHrs: shiftHrs,
+      pfd: pfd,
+      rate: rate,
+      ftes: totFtes,
+      headcount: Math.ceil(totFtes),
+      hours: totHrs,
+      dailyCost: dailyCost,
+      annualCost: document.getElementById('qlaResAnnualCost').textContent
+    });
+
+    this.renderScenarios();
+    showToast('Scenario saved', 'success');
+  },
+
+  renderScenarios() {
+    var grid = document.getElementById('qlaScenariosGrid');
+    if (!grid) return;
+    if (this.scenarios.length === 0) { grid.innerHTML = ''; return; }
+
+    grid.innerHTML = this.scenarios.map(function(s, idx) {
+      return '<div style="background:var(--ies-gray-50);border-radius:10px;padding:16px;border:1px solid var(--ies-gray-100);">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
+          '<div style="font-size:13px;font-weight:700;color:var(--ies-navy);">' + s.name + '</div>' +
+          '<span style="font-size:11px;color:var(--ies-gray-400);">' + s.timestamp + '</span>' +
+        '</div>' +
+        '<div style="font-size:11px;color:var(--ies-gray-500);margin-bottom:10px;">' + s.lines + ' activities &middot; ' + s.shiftHrs + 'h shift &middot; ' + s.pfd + '% PFD &middot; $' + s.rate + '/hr</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
+          '<div style="text-align:center;"><div style="font-size:20px;font-weight:700;color:var(--ies-orange);">' + s.ftes.toFixed(1) + '</div><div style="font-size:10px;color:var(--ies-gray-400);">FTEs</div></div>' +
+          '<div style="text-align:center;"><div style="font-size:20px;font-weight:700;color:var(--ies-navy);">' + s.headcount + '</div><div style="font-size:10px;color:var(--ies-gray-400);">Headcount</div></div>' +
+          '<div style="text-align:center;"><div style="font-size:14px;font-weight:600;color:var(--ies-navy);">' + s.dailyCost + '</div><div style="font-size:10px;color:var(--ies-gray-400);">Daily</div></div>' +
+          '<div style="text-align:center;"><div style="font-size:14px;font-weight:600;color:var(--ies-navy);">' + s.annualCost + '</div><div style="font-size:10px;color:var(--ies-gray-400);">Annual</div></div>' +
+        '</div>' +
+        '<button onclick="mostApp.removeScenario(' + idx + ')" style="margin-top:8px;background:none;border:none;cursor:pointer;font-size:11px;color:var(--ies-gray-400);">Remove</button>' +
+      '</div>';
+    }).join('');
+  },
+
+  removeScenario(idx) {
+    this.scenarios.splice(idx, 1);
+    this.renderScenarios();
+  },
+
+  clearAnalysis() {
+    this.analysisLines = [];
+    this.renderAnalysisTable();
+    var results = document.getElementById('qlaResults');
+    if (results) results.style.display = 'none';
   },
 
   async duplicateTemplate(templateId) {
@@ -31455,13 +31756,19 @@ const TourDefinitions = {
       {
         target: '#mostModeTabs',
         title: 'Two Modes',
-        content: 'Template Library lets you browse, inspect, and manage the engineered MOST time standards used across the platform. Quick Labor Analysis lets you model FTEs and cost without creating a full Cost Model.',
+        content: 'Template Library lets you browse, inspect, edit, and create MOST time standards. Quick Labor Analysis lets you model FTEs and labor cost from templates and volumes — without building a full Cost Model.',
         padding: 12
       },
       {
         target: '#mostTemplateGrid',
         title: 'Template Library',
-        content: 'Each card represents an engineered labor standard — built from MOST element sequences with TMU values. Click any card to see the full element breakdown, variable drivers, and cycle time calculation.',
+        content: 'Each card is an engineered labor standard built from MOST element sequences with TMU values. Click any card to see the full breakdown. Use the "+ New Template" button to create standards, or "Edit" and "Duplicate" from the detail view.',
+        padding: 8
+      },
+      {
+        target: '#mostSearchInput',
+        title: 'Search & Filter',
+        content: 'Search by activity name, equipment, or WMS transaction. Filter by process area (Receiving, Picking, Packing, etc.) and UOM to quickly find the standard you need.',
         padding: 8
       }
     ]
