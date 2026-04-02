@@ -2209,7 +2209,39 @@
   .cm-impact-tag .remove:hover {
     opacity: 1;
   }
-  
+
+  /* ── Admin Panel Styles ── */
+  .admin-tabs { display: flex; gap: var(--sp-12); margin-bottom: var(--sp-20); border-bottom: 1px solid var(--ies-gray-300); }
+  .admin-tab-btn { background: none; border: none; padding: var(--sp-12) var(--sp-16); font-size: 13px; font-weight: 600; color: var(--ies-gray-600); cursor: pointer; border-bottom: 3px solid transparent; transition: .15s; }
+  .admin-tab-btn:hover { color: var(--ies-blue); }
+  .admin-tab-btn.active { color: var(--ies-blue); border-bottom-color: var(--ies-blue); }
+
+  .admin-table-header { display: flex; gap: var(--sp-16); align-items: center; margin-bottom: var(--sp-16); }
+  .admin-search { flex: 1; padding: var(--sp-8) var(--sp-12); border: 1px solid var(--ies-gray-300); border-radius: 6px; font-size: 13px; }
+
+  .admin-data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .admin-data-table th { background: var(--ies-gray-100); padding: var(--sp-12); text-align: left; font-weight: 600; border-bottom: 1px solid var(--ies-gray-300); color: var(--ies-gray-800); }
+  .admin-data-table td { padding: var(--sp-12); border-bottom: 1px solid var(--ies-gray-200); }
+  .admin-data-table tr:hover { background: rgba(0,71,171,.02); }
+
+  .admin-badge { display: inline-block; padding: var(--sp-4) var(--sp-8); background: var(--ies-accent-light); color: var(--ies-blue); border-radius: 4px; font-size: 11px; font-weight: 600; }
+  .admin-btn-sm { padding: var(--sp-6) var(--sp-12); background: var(--ies-blue); color: #fff; border: none; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; transition: .15s; }
+  .admin-btn-sm:hover { background: var(--ies-orange); }
+  .admin-btn-sm.admin-btn-danger { background: var(--ies-red); }
+  .admin-btn-sm.admin-btn-danger:hover { opacity: 0.9; }
+
+  .admin-modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+  .admin-modal { background: white; border-radius: 8px; max-width: 500px; width: 90%; box-shadow: var(--shadow-xl); }
+  .admin-modal-header { padding: var(--sp-16) var(--sp-24); border-bottom: 1px solid var(--ies-gray-200); display: flex; justify-content: space-between; align-items: center; }
+  .admin-modal-header h3 { margin: 0; font-size: 16px; font-weight: 700; }
+  .admin-modal-body { padding: var(--sp-20); display: flex; flex-direction: column; gap: var(--sp-12); }
+  .admin-modal-body input, .admin-modal-body select, .admin-modal-body textarea { padding: var(--sp-10); border: 1px solid var(--ies-gray-300); border-radius: 6px; font-family: inherit; font-size: 13px; }
+  .admin-modal-actions { display: flex; gap: var(--sp-12); margin-top: var(--sp-20); }
+  .admin-modal-actions .hub-btn { flex: 1; }
+  .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+  .status-green { background: var(--ies-green); }
+  .status-gray { background: var(--ies-gray-400); }
+
   /* ── RESPONSIVE ── */
   
   @media (max-width: 1400px) {
@@ -5166,6 +5198,9 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     </a>
     <a class="nav-item" data-section="feedback" onclick="navigate('feedback', this)">
       <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2v10z" fill="none"/><path d="M8 10h.01M12 10h.01M16 10h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span> Ideas & Feedback <span id="fbNavCount" style="font-size:10px;background:var(--ies-orange);color:#fff;padding:1px 6px;border-radius:10px;margin-left:4px;font-weight:700;display:none;"></span>
+    </a>
+    <a class="nav-item" data-section="admin" onclick="navigate('admin', this)">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="1" fill="currentColor"/><path d="M12 2v6m0 4v6M4.22 4.22l4.24 4.24m2.12 2.12l4.24 4.24M2 12h6m4 0h6M4.22 19.78l4.24-4.24m2.12-2.12l4.24-4.24" fill="none"/></svg></span> Reference Data
     </a>
     <a class="nav-item" data-section="security" onclick="navigate('security', this)">
       <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="none"/></svg></span> Security
@@ -10249,6 +10284,18 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
   <div id="cm-modal-container"></div>
 </div>
 
+<!-- ═══════════════════════════════════════ ADMIN PANEL ═══════════════════════════════════════ -->
+<div class="section" id="sec-admin">
+  <div style="padding: var(--sp-32);">
+    <h1 style="font-size: 28px; font-weight: 700; margin-bottom: var(--sp-24); color: var(--ies-navy);">Reference Data Management</h1>
+    <div style="background: var(--ies-accent-light); padding: var(--sp-16); border-radius: 8px; margin-bottom: var(--sp-24); border-left: 4px solid var(--ies-blue); color: var(--ies-blue); font-size: 13px;">
+      <strong>Admin Area.</strong> Manage master tables for accounts, competitors, markets, and verticals. Changes here affect the entire hub.
+    </div>
+
+    <div id="admin-tabs-container"></div>
+    <div id="admin-table-container"></div>
+  </div>
+</div>
 
 </div><!-- /main -->
 
@@ -10349,6 +10396,13 @@ function navigate(section, el) {
   // Load feedback data when navigating to feedback section
   if (section === 'feedback') {
     fbLoadAll();
+  }
+
+  // Load admin panel when navigating to it
+  if (section === 'admin') {
+    if (typeof loadAdminPanel === 'function') {
+      loadAdminPanel();
+    }
   }
 
   // Cost Model: reset to landing page and refresh project list
@@ -34536,6 +34590,198 @@ const deckGen = {
 // Export for use in browser
 if (typeof window !== 'undefined') {
   window.deckGen = deckGen;
+}
+
+// ── ADMIN PANEL — Reference Data Management ──
+async function loadAdminPanel() {
+  var tabsContainer = document.getElementById('admin-tabs-container');
+  var tableContainer = document.getElementById('admin-table-container');
+
+  if (!tabsContainer || !tableContainer) return;
+
+  var tables = ['accounts', 'competitors', 'markets', 'verticals'];
+  var tabsHtml = '<div class="admin-table-header"><input type="text" class="admin-search" placeholder="Search..." oninput="filterAdminTable(this.value)"/><button class="hub-btn" style="padding:var(--sp-10) var(--sp-16);font-size:13px;" onclick="showAdminFormModal(curAdminTable, null)">+ Add ' + tables[0] + '</button></div><div class="admin-tabs">';
+
+  tables.forEach(function(table) {
+    tabsHtml += '<button class="admin-tab-btn' + (table === 'accounts' ? ' active' : '') + '" onclick="switchAdminTab(\'' + table + '\')">' + table.charAt(0).toUpperCase() + table.slice(1) + '</button>';
+  });
+  tabsHtml += '</div>';
+
+  tabsContainer.innerHTML = tabsHtml;
+
+  window.curAdminTable = 'accounts';
+  await loadAdminTable('accounts');
+}
+
+async function switchAdminTab(table) {
+  document.querySelectorAll('.admin-tab-btn').forEach(btn => btn.classList.remove('active'));
+  event.target.classList.add('active');
+
+  window.curAdminTable = table;
+  var addBtn = document.querySelector('.admin-search').parentElement.querySelector('.hub-btn');
+  addBtn.textContent = '+ Add ' + table.slice(0, -1);
+
+  await loadAdminTable(table);
+}
+
+async function loadAdminTable(table) {
+  var res = await sb.from('master_' + table).select('*').order('id', { ascending: true });
+  if (res.error) {
+    console.error('Error loading admin table:', res.error);
+    return;
+  }
+
+  var rows = res.data || [];
+  var html = '<table class="admin-data-table"><tbody>';
+
+  if (table === 'accounts') {
+    html += '<tr><th>Name</th><th>Vertical</th><th>Region</th><th>Type</th><th>Status</th><th>Actions</th></tr>';
+    rows.forEach(function(row) {
+      html += '<tr class="data-row"><td><strong>' + row.name + '</strong></td><td>' + (row.vertical || '—') + '</td><td>' + (row.region || '—') + '</td><td><span class="admin-badge">' + (row.account_type || 'prospect') + '</span></td><td><span class="status-dot status-' + (row.status === 'active' ? 'green' : 'gray') + '"></span></td><td><button class="admin-btn-sm" onclick="showAdminFormModal(\'accounts\', ' + row.id + ')">Edit</button> <button class="admin-btn-sm admin-btn-danger" onclick="deleteAdminRow(\'accounts\', ' + row.id + ')">Delete</button></td></tr>';
+    });
+  } else if (table === 'competitors') {
+    html += '<tr><th>Name</th><th>Vertical</th><th>HQ Location</th><th>Status</th><th>Actions</th></tr>';
+    rows.forEach(function(row) {
+      html += '<tr class="data-row"><td><strong>' + row.name + '</strong></td><td>' + (row.primary_vertical || '—') + '</td><td>' + (row.hq_location || '—') + '</td><td><span class="status-dot status-' + (row.status === 'active' ? 'green' : 'gray') + '"></span></td><td><button class="admin-btn-sm" onclick="showAdminFormModal(\'competitors\', ' + row.id + ')">Edit</button> <button class="admin-btn-sm admin-btn-danger" onclick="deleteAdminRow(\'competitors\', ' + row.id + ')">Delete</button></td></tr>';
+    });
+  } else if (table === 'markets') {
+    html += '<tr><th>City, State</th><th>Region</th><th>Tier</th><th>GXO Presence</th><th>Actions</th></tr>';
+    rows.forEach(function(row) {
+      html += '<tr class="data-row"><td><strong>' + row.city + ', ' + row.state + '</strong></td><td>' + (row.region || '—') + '</td><td><span class="admin-badge">' + (row.market_tier || '—') + '</span></td><td>' + (row.gxo_presence || '—') + '</td><td><button class="admin-btn-sm" onclick="showAdminFormModal(\'markets\', ' + row.id + ')">Edit</button> <button class="admin-btn-sm admin-btn-danger" onclick="deleteAdminRow(\'markets\', ' + row.id + ')">Delete</button></td></tr>';
+    });
+  } else if (table === 'verticals') {
+    html += '<tr><th>Vertical</th><th>GXO Focus</th><th>Status</th><th>Actions</th></tr>';
+    rows.forEach(function(row) {
+      html += '<tr class="data-row"><td><strong>' + row.vertical_name + '</strong></td><td><span class="admin-badge">' + (row.gxo_focus_level || '—') + '</span></td><td><span class="status-dot status-' + (row.status === 'active' ? 'green' : 'gray') + '"></span></td><td><button class="admin-btn-sm" onclick="showAdminFormModal(\'verticals\', ' + row.id + ')">Edit</button> <button class="admin-btn-sm admin-btn-danger" onclick="deleteAdminRow(\'verticals\', ' + row.id + ')">Delete</button></td></tr>';
+    });
+  }
+
+  html += '</tbody></table>';
+  document.getElementById('admin-table-container').innerHTML = html;
+}
+
+async function showAdminFormModal(table, rowId) {
+  var isNew = !rowId;
+  var title = (isNew ? 'Add ' : 'Edit ') + table.slice(0, -1).charAt(0).toUpperCase() + table.slice(1, -1).slice(1);
+  var row = rowId ? (await sb.from('master_' + table).select('*').eq('id', rowId)).data[0] : null;
+
+  var overlay = document.createElement('div');
+  overlay.className = 'admin-modal-overlay';
+  overlay.onclick = closeAdminModal;
+
+  var modal = document.createElement('div');
+  modal.className = 'admin-modal';
+  modal.onclick = function(e) { e.stopPropagation(); };
+
+  var header = document.createElement('div');
+  header.className = 'admin-modal-header';
+  header.innerHTML = '<h3>' + title + '</h3><button onclick="closeAdminModal()" style="background:none;border:none;font-size:24px;cursor:pointer;color:var(--ies-gray-600);">×</button>';
+
+  var body = document.createElement('div');
+  body.className = 'admin-modal-body';
+
+  if (table === 'accounts') {
+    body.innerHTML = '<input type="text" placeholder="Account Name" id="admin-form-name" value="' + (row?.name || '').replace(/"/g, '&quot;') + '"/><input type="text" placeholder="Vertical" id="admin-form-vertical" value="' + (row?.vertical || '').replace(/"/g, '&quot;') + '"/><input type="text" placeholder="Region" id="admin-form-region" value="' + (row?.region || '').replace(/"/g, '&quot;') + '"/><select id="admin-form-type"><option selected>' + (row?.account_type || 'prospect') + '</option><option>prospect</option><option>customer</option><option>won</option><option>lost</option></select>';
+  } else if (table === 'competitors') {
+    body.innerHTML = '<input type="text" placeholder="Competitor Name" id="admin-form-name" value="' + (row?.name || '').replace(/"/g, '&quot;') + '"/><input type="text" placeholder="Primary Vertical" id="admin-form-vertical" value="' + (row?.primary_vertical || '').replace(/"/g, '&quot;') + '"/><input type="text" placeholder="HQ Location" id="admin-form-hq" value="' + (row?.hq_location || '').replace(/"/g, '&quot;') + '"/>';
+  } else if (table === 'markets') {
+    body.innerHTML = '<input type="text" placeholder="City" id="admin-form-city" value="' + (row?.city || '').replace(/"/g, '&quot;') + '"/><input type="text" placeholder="State" id="admin-form-state" value="' + (row?.state || '').replace(/"/g, '&quot;') + '"/><input type="text" placeholder="Region" id="admin-form-region" value="' + (row?.region || '').replace(/"/g, '&quot;') + '"/><select id="admin-form-tier"><option selected>' + (row?.market_tier || 'Tier 1') + '</option><option>Tier 1</option><option>Tier 2</option><option>Tier 3</option></select>';
+  } else if (table === 'verticals') {
+    body.innerHTML = '<input type="text" placeholder="Vertical Name" id="admin-form-name" value="' + (row?.vertical_name || '').replace(/"/g, '&quot;') + '"/><textarea placeholder="Description" id="admin-form-desc">' + (row?.description || '').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</textarea><select id="admin-form-focus"><option selected>' + (row?.gxo_focus_level || 'medium') + '</option><option>high</option><option>medium</option><option>low</option></select>';
+  }
+
+  var actions = document.createElement('div');
+  actions.className = 'admin-modal-actions';
+  var btnSave = document.createElement('button');
+  btnSave.className = 'hub-btn';
+  btnSave.textContent = 'Save';
+  btnSave.onclick = function() { saveAdminRow(table, rowId || null); };
+
+  var btnCancel = document.createElement('button');
+  btnCancel.className = 'hub-btn';
+  btnCancel.style.background = 'var(--ies-gray-400)';
+  btnCancel.textContent = 'Cancel';
+  btnCancel.onclick = closeAdminModal;
+
+  actions.appendChild(btnSave);
+  actions.appendChild(btnCancel);
+
+  body.appendChild(actions);
+  modal.appendChild(header);
+  modal.appendChild(body);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+}
+
+function closeAdminModal() {
+  var modal = document.querySelector('.admin-modal-overlay');
+  if (modal) modal.remove();
+}
+
+async function saveAdminRow(table, rowId) {
+  var isNew = !rowId;
+  var data = {};
+
+  if (table === 'accounts') {
+    data = {
+      name: document.getElementById('admin-form-name').value,
+      vertical: document.getElementById('admin-form-vertical').value,
+      region: document.getElementById('admin-form-region').value,
+      account_type: document.getElementById('admin-form-type').value,
+      status: 'active'
+    };
+  } else if (table === 'competitors') {
+    data = {
+      name: document.getElementById('admin-form-name').value,
+      primary_vertical: document.getElementById('admin-form-vertical').value,
+      hq_location: document.getElementById('admin-form-hq').value,
+      status: 'active'
+    };
+  } else if (table === 'markets') {
+    data = {
+      city: document.getElementById('admin-form-city').value,
+      state: document.getElementById('admin-form-state').value,
+      region: document.getElementById('admin-form-region').value,
+      market_tier: document.getElementById('admin-form-tier').value,
+      gxo_presence: 'yes',
+      status: 'active'
+    };
+  } else if (table === 'verticals') {
+    data = {
+      vertical_name: document.getElementById('admin-form-name').value,
+      description: document.getElementById('admin-form-desc').value,
+      gxo_focus_level: document.getElementById('admin-form-focus').value,
+      status: 'active'
+    };
+  }
+
+  var res;
+  if (isNew) {
+    res = await sb.from('master_' + table).insert([data]);
+  } else {
+    res = await sb.from('master_' + table).update(data).eq('id', rowId);
+  }
+
+  if (res.error) {
+    alert('Error: ' + res.error.message);
+  } else {
+    closeAdminModal();
+    await loadAdminTable(table);
+  }
+}
+
+async function deleteAdminRow(table, rowId) {
+  if (!confirm('Delete this row? This cannot be undone.')) return;
+  await sb.from('master_' + table).delete().eq('id', rowId);
+  await loadAdminTable(table);
+}
+
+function filterAdminTable(query) {
+  var rows = document.querySelectorAll('.data-row');
+  rows.forEach(function(row) {
+    var text = row.textContent.toLowerCase();
+    row.style.display = text.includes(query.toLowerCase()) ? '' : 'none';
+  });
 }
 
 </script>
