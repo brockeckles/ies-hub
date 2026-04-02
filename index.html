@@ -14166,15 +14166,18 @@ async function loadAlerts() {
   if (!bar) return;
   try {
     const { data: alerts, error } = await sb.from('hub_alerts')
-      .select('title')
+      .select('title, severity, created_at, expires_at')
       .eq('is_active', true)
       .order('severity', { ascending: true })
       .limit(5);
 
     if (error) throw error;
-    if (alerts && alerts.length) {
-      bar.innerHTML = '<strong>' + alerts.length + ' active alert' + (alerts.length > 1 ? 's' : '') + ':</strong> ' +
-        alerts.map(a => a.title).join(' · ');
+    // Client-side filter: skip expired alerts
+    const now = new Date();
+    const live = (alerts || []).filter(a => !a.expires_at || new Date(a.expires_at) > now);
+    if (live.length) {
+      bar.innerHTML = '<strong>' + live.length + ' active alert' + (live.length > 1 ? 's' : '') + ':</strong> ' +
+        live.map(a => a.title).join(' · ');
     } else {
       bar.innerHTML = '<strong>No active alerts</strong> — all systems nominal';
     }
