@@ -31795,7 +31795,10 @@ function fmShowTab(tabName) {
   const tabEl = document.getElementById('fm-tab-' + tabName);
   if (tabEl) tabEl.style.display = 'block';
 
-  event.target.classList.add('active');
+  // Highlight the matching tab button
+  var tabBtns = document.querySelectorAll('.fm-tab');
+  tabBtns.forEach(function(btn) { if (btn.textContent.trim().toLowerCase().replace(/\s+/g,'') === tabName.replace(/\s+/g,'')) btn.classList.add('active'); });
+  if (typeof event !== 'undefined' && event && event.target && event.target.classList) event.target.classList.add('active');
 
   // Render map when map tab is clicked
   if (tabName === 'map') {
