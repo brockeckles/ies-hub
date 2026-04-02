@@ -183,7 +183,8 @@
   .hub-data-table tr:hover td { background: var(--ies-gray-50); }
 
   /* Sector Pulse — live data modules for Command Center */
-  .sector-pulse { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .sector-pulse { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; align-items: start; }
+  .sector-pulse-card:last-child:nth-child(odd) { grid-column: 1 / -1; }
   @media (max-width: 900px) { .sector-pulse { grid-template-columns: 1fr; } }
   .sector-pulse-card {
     background: #fff; border-radius: 10px; padding: 16px; border: 1px solid var(--ies-gray-200);
