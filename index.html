@@ -14445,13 +14445,15 @@ async function getMarketData(market) {
   const pin = MARKET_PINS.find(p => p.name === market);
   const reKey = pin?.reKey || market;
   const laborKey = pin?.laborKey || market;
+  /* Also try city-only key for matching (e.g., "Tracy" from "Tracy, CA") */
+  const cityOnly = market.split(',')[0].split('–')[0].trim();
 
   const [laborRes, reRes, newsRes, dealsRes, freightRes] = await Promise.all([
-    sb.from('labor_markets').select('*').eq('msa', laborKey).order('as_of_date', { ascending: false }).limit(1).single(),
-    sb.from('industrial_real_estate').select('*').eq('market', reKey).order('quarter', { ascending: false }).limit(1).single(),
+    sb.from('labor_markets').select('*').eq('msa', laborKey).order('as_of_date', { ascending: false }).limit(1).maybeSingle(),
+    sb.from('industrial_real_estate').select('*').eq('market', reKey).order('quarter', { ascending: false }).limit(1).maybeSingle(),
     sb.from('competitor_news').select('headline, competitor, published_date, tags, source_url').order('published_date', { ascending: false }).limit(10),
-    sb.from('pipeline_deals').select('deal_name, stage, tcv, vertical').ilike('market', `%${market.split(',')[0].split('–')[0]}%`),
-    sb.from('market_freight').select('*').eq('market', market).order('as_of_date', { ascending: false }).limit(1).single(),
+    sb.from('pipeline_deals').select('deal_name, stage, tcv, vertical').ilike('market', `%${cityOnly}%`),
+    sb.from('market_freight').select('*').eq('market', market).order('as_of_date', { ascending: false }).limit(1).maybeSingle(),
   ]);
 
   // Filter news for market relevance
@@ -14462,7 +14464,17 @@ async function getMarketData(market) {
   }).slice(0, 3);
   const newsToShow = relevantNews.length > 0 ? relevantNews : (newsRes.data || []).slice(0, 3);
 
-  const result = { labor: laborRes.data, realEstate: reRes.data, freight: freightRes.data, news: newsToShow, deals: dealsRes.data || [] };
+  /* Also fetch basic market profile from master_markets for the overview */
+  var profileRes = await sb.from('master_markets').select('*').eq('city', cityOnly).eq('status', 'active').limit(1).maybeSingle();
+
+  const result = {
+    labor: laborRes.data,
+    realEstate: reRes.data,
+    freight: freightRes.data,
+    news: newsToShow,
+    deals: dealsRes.data || [],
+    profile: profileRes.data
+  };
   marketCache[market] = result;
   return result;
 }
@@ -14486,9 +14498,20 @@ async function selectMarket(market, marker) {
   }
 
   const scoreColor = data.labor ? getScoreCSSVar(data.labor.availability_score) : 'var(--ies-gray-600)';
-  document.getElementById('detailMarketSub').innerHTML = data.labor
-    ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${scoreColor};margin-right:4px;"></span>${data.labor.availability_status} labor market · Score: ${data.labor.availability_score}/100`
-    : 'Loading…';
+  if (data.labor) {
+    document.getElementById('detailMarketSub').innerHTML =
+      `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${scoreColor};margin-right:4px;"></span>${data.labor.availability_status} labor market · Score: ${data.labor.availability_score}/100`;
+  } else if (data.profile) {
+    var p = data.profile;
+    var parts = [];
+    if (p.region) parts.push(p.region);
+    if (p.market_tier) parts.push(p.market_tier);
+    if (p.gxo_presence === 'yes') parts.push('GXO Active');
+    else if (p.gxo_presence === 'planned') parts.push('GXO Planned');
+    document.getElementById('detailMarketSub').textContent = parts.join(' · ') || 'Market added — intelligence data pending';
+  } else {
+    document.getElementById('detailMarketSub').textContent = 'No intelligence data yet';
+  }
 
   // Show the tabs bar
   var tabsBar = document.getElementById('marketDetailTabs');
@@ -14512,7 +14535,18 @@ async function selectMarket(market, marker) {
       <div class="map-detail-row"><span>Trend</span><span class="map-detail-value">${l.trend === 'up' ? '▲ improving' : l.trend === 'down' ? '▼ worsening' : '─ stable'}</span></div>
     </div>`;
   } else {
-    html += '<div style="font-size:12px;color:var(--ies-gray-400);padding:12px 0;">No labor data available for this market</div>';
+    html += '<div class="map-detail-section"><div class="map-detail-label">Labor Intelligence</div>';
+    html += '<div style="font-size:12px;color:var(--ies-gray-400);padding:8px 0;">No labor data available yet for this market</div>';
+    if (data.profile) {
+      var p = data.profile;
+      html += '<div class="map-detail-label" style="margin-top:12px;">Market Profile</div>';
+      if (p.region) html += '<div class="map-detail-row"><span>Region</span><span class="map-detail-value">' + esc(p.region) + '</span></div>';
+      if (p.market_tier) html += '<div class="map-detail-row"><span>Market Tier</span><span class="map-detail-value">' + esc(p.market_tier) + '</span></div>';
+      if (p.gxo_presence) html += '<div class="map-detail-row"><span>GXO Presence</span><span class="map-detail-value" style="text-transform:capitalize;">' + esc(p.gxo_presence) + '</span></div>';
+      if (p.metro_area) html += '<div class="map-detail-row"><span>Metro Area</span><span class="map-detail-value">' + esc(p.metro_area) + '</span></div>';
+      if (p.estimated_population) html += '<div class="map-detail-row"><span>Est. Population</span><span class="map-detail-value">' + Number(p.estimated_population).toLocaleString() + '</span></div>';
+    }
+    html += '</div>';
   }
   html += '</div>';
 
