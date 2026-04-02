@@ -11965,12 +11965,12 @@ WIKI_PAGES['conveyors-sortation'] = '<div class="wiki-article">' +
 
   // ── Decision Framework ──
   '<div class="wiki-callout" style="border-left-color:#ff3a00;"><div class="wiki-callout-title" style="color:#ff3a00;">Sortation Selection Decision Framework</div>' +
-  '<p style="font-size:12px;margin-bottom:12px;">Answer these questions to narrow your recommendation:</p>' +
-  '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
-    '<div style="background:rgba(59,130,246,.1);padding:12px;border-radius:8px;font-size:12px;"><strong style="color:#3b82f6;">1. What are the items?</strong><br/>Soft goods/apparel → Bomb Bay or Crossbelt<br/>Flat-bottom cartons → Shoe Sorter<br/>Mixed sizes → Crossbelt<br/>Uniform small parcels → Tilt-Tray</div>' +
-    '<div style="background:rgba(139,92,246,.1);padding:12px;border-radius:8px;font-size:12px;"><strong style="color:#8b5cf6;">2. What throughput?</strong><br/>&lt; 10K UPH → Tilt-Tray or Bomb Bay<br/>10K–15K UPH → Shoe Sorter<br/>15K+ UPH → Crossbelt</div>' +
-    '<div style="background:rgba(245,158,11,.1);padding:12px;border-radius:8px;font-size:12px;"><strong style="color:#f59e0b;">3. Budget constraint?</strong><br/>Tightest → Bomb Bay ($3–7M)<br/>Moderate → Shoe Sorter ($4–8M)<br/>Available → Tilt-Tray ($5–10M)<br/>Premium → Crossbelt ($8–15M+)</div>' +
-    '<div style="background:rgba(16,185,129,.1);padding:12px;border-radius:8px;font-size:12px;"><strong style="color:#10b981;">4. Space available?</strong><br/>Limited floor → Bomb Bay (uses vertical)<br/>Full loop space → Tilt-Tray / Crossbelt<br/>Linear layout → Shoe Sorter</div>' +
+  '<p style="font-size:13px;margin-bottom:12px;">Answer these questions to narrow your recommendation:</p>' +
+  '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;color:#334155;">' +
+    '<div style="background:rgba(59,130,246,.1);padding:12px;border-radius:8px;font-size:13px;"><strong style="color:#3b82f6;">1. What are the items?</strong><br/>Soft goods/apparel → Bomb Bay or Crossbelt<br/>Flat-bottom cartons → Shoe Sorter<br/>Mixed sizes → Crossbelt<br/>Uniform small parcels → Tilt-Tray</div>' +
+    '<div style="background:rgba(139,92,246,.1);padding:12px;border-radius:8px;font-size:13px;"><strong style="color:#8b5cf6;">2. What throughput?</strong><br/>&lt; 10K UPH → Tilt-Tray or Bomb Bay<br/>10K–15K UPH → Shoe Sorter<br/>15K+ UPH → Crossbelt</div>' +
+    '<div style="background:rgba(245,158,11,.1);padding:12px;border-radius:8px;font-size:13px;"><strong style="color:#f59e0b;">3. Budget constraint?</strong><br/>Tightest → Bomb Bay ($3–7M)<br/>Moderate → Shoe Sorter ($4–8M)<br/>Available → Tilt-Tray ($5–10M)<br/>Premium → Crossbelt ($8–15M+)</div>' +
+    '<div style="background:rgba(16,185,129,.1);padding:12px;border-radius:8px;font-size:13px;"><strong style="color:#10b981;">4. Space available?</strong><br/>Limited floor → Bomb Bay (uses vertical)<br/>Full loop space → Tilt-Tray / Crossbelt<br/>Linear layout → Shoe Sorter</div>' +
   '</div></div>' +
 
   // ── Comparison Matrix ──
@@ -12026,11 +12026,11 @@ WIKI_PAGES['conveyors-design'] = '<div class="wiki-article">' +
     '<div>' +
     '<p><strong>Unit-Load Conveyors</strong> (cartons, totes, pallets) — the most common in 3PL design:</p>' +
     '<div class="wiki-callout" style="border-left-color:#3b82f6;"><div class="wiki-callout-title" style="color:#3b82f6;">UPH Formula</div>' +
-    '<p style="font-family:monospace;font-size:14px;color:#e2e8f0;">UPH = (Belt Speed ÷ Item Spacing) × 60</p>' +
-    '<p style="font-size:12px;color:#cbd5e1;margin-top:8px;">Example: 200 fpm ÷ 1 ft spacing = 200 UPM = 12,000 UPH<br/>Apply 70–90% efficiency factor for real-world conditions → <strong>8,400–10,800 effective UPH</strong></p></div>' +
+    '<div style="background:#0f172a;border-radius:6px;padding:10px 14px;margin:8px 0;"><p style="font-family:monospace;font-size:14px;color:#e2e8f0;margin:0;">UPH = (Belt Speed ÷ Item Spacing) × 60</p></div>' +
+    '<p style="font-size:13px;color:#334155;margin-top:8px;">Example: 200 fpm ÷ 1 ft spacing = 200 UPM = 12,000 UPH<br/>Apply 70–90% efficiency factor for real-world conditions → <strong>8,400–10,800 effective UPH</strong></p></div>' +
     '<p><strong>Bulk Material Conveyors</strong> (less common in 3PL):</p>' +
     '<div class="wiki-callout"><div class="wiki-callout-title">TPH Formula</div>' +
-    '<p style="font-family:monospace;font-size:13px;color:#e2e8f0;">TPH = (Width″ × Speed fpm × Density lb/ft³) ÷ 2,000</p></div>' +
+    '<div style="background:#0f172a;border-radius:6px;padding:10px 14px;margin:8px 0;"><p style="font-family:monospace;font-size:14px;color:#e2e8f0;margin:0;">TPH = (Width″ × Speed fpm × Density lb/ft³) ÷ 2,000</p></div></div>' +
     '</div>' +
     // Visual throughput diagram
     '<div style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);border-radius:12px;padding:20px;">' +
@@ -12063,8 +12063,8 @@ WIKI_PAGES['conveyors-design'] = '<div class="wiki-article">' +
   '<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;margin:16px 0;">' +
     '<div>' +
     '<div class="wiki-callout" style="border-left-color:#8b5cf6;"><div class="wiki-callout-title" style="color:#8b5cf6;">Horsepower Formula</div>' +
-    '<p style="font-family:monospace;font-size:14px;color:#e2e8f0;">HP = (Belt Tension × Belt Speed) ÷ 33,000</p>' +
-    '<p style="font-size:12px;color:#cbd5e1;margin-top:8px;">Belt tension = f(product weight, belt weight, friction coeff 0.4–0.8, incline angle)</p></div>' +
+    '<div style="background:#0f172a;border-radius:6px;padding:10px 14px;margin:8px 0;"><p style="font-family:monospace;font-size:14px;color:#e2e8f0;margin:0;">HP = (Belt Tension × Belt Speed) ÷ 33,000</p></div>' +
+    '<p style="font-size:13px;color:#334155;margin-top:8px;">Belt tension = f(product weight, belt weight, friction coeff 0.4–0.8, incline angle)</p></div>' +
     '<p><strong>Best Practices for Motor Sizing:</strong></p>' +
     '<table class="wiki-spec-table"><tr><th>Rule</th><th>Application</th></tr>' +
     '<tr><td>80% Running Load</td><td>Size motor so normal operation is 80% of rated capacity</td></tr>' +
@@ -12427,12 +12427,12 @@ WIKI_PAGES['wh-design'] = '<div class="wiki-article">' +
 
   // ── Storage Calculation ──
   '<div class="wiki-callout" style="border-left-color:#8b5cf6;"><div class="wiki-callout-title" style="color:#8b5cf6;">Quick Storage Sizing Formula</div>' +
-  '<p style="font-family:monospace;font-size:14px;color:#e2e8f0;">Pallet Positions = (Avg Inventory in Pallets × Safety Stock Factor) ÷ Storage Utilization</p>' +
-  '<p style="font-size:12px;color:#cbd5e1;margin-top:8px;">Example: 8,000 avg pallets × 1.25 safety × ÷ 0.85 utilization = <strong>11,765 positions needed</strong><br/>At 2 pallets/rack-bay × 5 levels = 10 positions/bay → 1,177 bays → ~180,000 sq ft racking zone</p></div>' +
+  '<div style="background:#0f172a;border-radius:6px;padding:10px 14px;margin:8px 0;"><p style="font-family:monospace;font-size:14px;color:#e2e8f0;margin:0;">Pallet Positions = (Avg Inventory in Pallets × Safety Stock Factor) ÷ Storage Utilization</p></div>' +
+  '<p style="font-size:13px;color:#334155;margin-top:8px;">Example: 8,000 avg pallets × 1.25 safety × ÷ 0.85 utilization = <strong>11,765 positions needed</strong><br/>At 2 pallets/rack-bay × 5 levels = 10 positions/bay → 1,177 bays → ~180,000 sq ft racking zone</p></div>' +
 
   // ── Decision Framework ──
   '<div class="wiki-callout" style="border-left-color:#ff3a00;"><div class="wiki-callout-title" style="color:#ff3a00;">Design Decision Framework</div>' +
-  '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;font-size:12px;">' +
+  '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;font-size:13px;color:#334155;">' +
     '<div style="background:rgba(59,130,246,.1);padding:12px;border-radius:8px;"><strong style="color:#3b82f6;">E-Commerce / DTC</strong><br/>High dock ratio, large pick/pack zone (30%+), sortation critical, consider mezzanine for pick modules</div>' +
     '<div style="background:rgba(139,92,246,.1);padding:12px;border-radius:8px;"><strong style="color:#8b5cf6;">Retail Replenishment</strong><br/>High-cube bulk storage, cross-dock capability, case-pick focus, fewer VAS requirements</div>' +
     '<div style="background:rgba(245,158,11,.1);padding:12px;border-radius:8px;"><strong style="color:#f59e0b;">Cold Chain / Food</strong><br/>Insulated panels, multi-temp zones, shorter clear height (28 ft max), higher power for refrigeration</div>' +
