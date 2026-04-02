@@ -413,10 +413,10 @@
   .metric-value { font-size: 32px; font-weight: 800; color: var(--ies-navy); line-height: 1.1; }
   .metric-unit { font-size: 14px; font-weight: 500; color: var(--ies-gray-600); margin-left: var(--sp-4); }
   .metric-change { font-size: 13px; font-weight: 600; margin-top: var(--sp-8); display: flex; align-items: center; gap: var(--sp-4); }
-  .change-up { color: var(--ies-red); }
-  .change-down { color: var(--ies-green); }
-  .change-neutral { color: var(--ies-gray-600); }
-  .change-good-up { color: var(--ies-green); }
+  .change-up, .kpi-sub.change-up { color: var(--ies-red); }
+  .change-down, .kpi-sub.change-down { color: var(--ies-green); }
+  .change-neutral, .kpi-sub.change-neutral { color: var(--ies-gray-600); }
+  .change-good-up, .kpi-sub.change-good-up { color: var(--ies-green); }
 
   /* ── DATA TABLES ── */
   .data-table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; word-wrap: break-word; }
@@ -14197,7 +14197,9 @@ async function loadKPIStrip() {
       kpis[0].querySelector('.kpi-value').textContent = '$' + parseFloat(diesel.price_per_gallon).toFixed(2);
       const wow = diesel.week_over_week_change;
       const pct = ((wow / (parseFloat(diesel.price_per_gallon) - wow)) * 100).toFixed(1);
-      kpis[0].querySelector('.kpi-sub').textContent = (wow >= 0 ? '▲ +' : '▼ ') + Math.abs(pct) + '% WoW';
+      var dieselSub = kpis[0].querySelector('.kpi-sub');
+      dieselSub.textContent = (wow >= 0 ? '▲ +' : '▼ ') + Math.abs(pct) + '% WoW';
+      dieselSub.className = 'kpi-sub ' + (wow >= 0 ? 'change-up' : 'change-down');
     }
   }
 
