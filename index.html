@@ -10330,7 +10330,10 @@ var dieselChartInstance, laborChartInstance, pipelineChartInstance, freightChart
 var mapInstance = null;
 var marketCache = {};
 var activeMarker = null;
-var MARKET_PINS = [
+/* MARKET_PINS — loaded dynamically from master_markets in initMap().
+   Fallback hardcoded set used only if Supabase fetch fails. */
+var MARKET_PINS = [];
+var MARKET_PINS_FALLBACK = [
   { name: 'Inland Empire, CA', abbr: 'IE', lat: 33.95, lng: -117.40, reKey: 'Inland Empire, CA', laborKey: 'Inland Empire, CA' },
   { name: 'Phoenix', abbr: 'PHX', lat: 33.45, lng: -112.07, reKey: 'Phoenix', laborKey: 'Phoenix' },
   { name: 'Dallas–Fort Worth', abbr: 'DFW', lat: 32.78, lng: -96.80, reKey: 'Dallas–Fort Worth', laborKey: 'Dallas–Fort Worth' },
@@ -10342,6 +10345,40 @@ var MARKET_PINS = [
   { name: 'Savannah', abbr: 'SAV', lat: 32.08, lng: -81.09, reKey: 'Savannah', laborKey: 'Savannah' },
   { name: 'Central PA', abbr: 'CPA', lat: 40.27, lng: -76.88, reKey: 'Central PA (I-81)', laborKey: 'Central PA' },
 ];
+
+async function loadMarketPins() {
+  if (!sb) return MARKET_PINS_FALLBACK;
+  try {
+    var res = await sb.from('master_markets').select('id,city,state,region,market_tier,gxo_presence,latitude,longitude,labor_key,re_key').eq('status', 'active').order('city');
+    if (!res.data || res.data.length === 0) return MARKET_PINS_FALLBACK;
+    return res.data.filter(function(m) { return m.latitude && m.longitude; }).map(function(m) {
+      var displayName = m.city;
+      /* Append state abbreviation for disambiguation when helpful */
+      if (m.state && m.state.length === 2) displayName = m.city + ', ' + m.state;
+      else if (m.state && m.city !== m.state) {
+        /* Use first letters as abbr for display */
+        var words = m.state.split(' ');
+        var abbr = words.map(function(w) { return w.charAt(0); }).join('').toUpperCase();
+        if (abbr.length <= 3) displayName = m.city;
+      }
+      return {
+        id: m.id,
+        name: displayName,
+        abbr: m.city.substring(0, 3).toUpperCase(),
+        lat: parseFloat(m.latitude),
+        lng: parseFloat(m.longitude),
+        reKey: m.re_key || displayName,
+        laborKey: m.labor_key || displayName,
+        tier: m.market_tier || 'Tier 3',
+        presence: m.gxo_presence || 'no',
+        region: m.region || ''
+      };
+    });
+  } catch(e) {
+    console.warn('loadMarketPins: falling back to hardcoded pins', e);
+    return MARKET_PINS_FALLBACK;
+  }
+}
 
 // ── NAVIGATION ──
 function navigate(section, el) {
@@ -14302,7 +14339,7 @@ function getScoreCSSVar(score) {
   return 'var(--ies-red)';
 }
 
-function initMap() {
+async function initMap() {
   if (mapInstance) return; // already initialized
 
   const container = document.getElementById('leafletMap');
@@ -14339,12 +14376,18 @@ function initMap() {
     return;
   }
 
+  // Dynamically load market pins from master_markets
+  MARKET_PINS = await loadMarketPins();
+
+  // Tier-based pin sizing
+  var tierRadius = { 'Tier 1': 14, 'Tier 2': 11, 'Tier 3': 8 };
+  var presenceColor = { yes: '#6c757d', no: '#bbb', planned: '#f59e0b' };
+
   // Add market pins with color-coded circles
   MARKET_PINS.forEach(pin => {
-    // Default color — will be updated once data loads
     const marker = L.circleMarker([pin.lat, pin.lng], {
-      radius: 12,
-      fillColor: '#6c757d',
+      radius: tierRadius[pin.tier] || 10,
+      fillColor: presenceColor[pin.presence] || '#6c757d',
       color: '#fff',
       weight: 2.5,
       opacity: 1,
@@ -14353,7 +14396,7 @@ function initMap() {
     }).addTo(mapInstance);
 
     // Tooltip on hover
-    marker.bindTooltip(`<strong>${pin.name}</strong><br><span style="font-size:11px;">Click for intelligence</span>`, {
+    marker.bindTooltip(`<strong>${pin.name}</strong><br><span style="font-size:11px;">${pin.tier || ''} · Click for intelligence</span>`, {
       direction: 'top',
       offset: [0, -10],
       className: 'map-tooltip-custom',
@@ -34850,6 +34893,12 @@ async function showAdminFormModal(table, rowId) {
     row6.appendChild(adminMakeGroup('Status', adminMakeSelect('admin-form-status', ['active','inactive'], row?.status || 'active')));
     body.appendChild(row6);
 
+    var row7m = document.createElement('div');
+    row7m.className = 'admin-form-row';
+    row7m.appendChild(adminMakeGroup('Latitude', (function() { var inp = adminMakeInput('admin-form-lat', 'e.g., 39.77', row?.latitude ?? ''); inp.type = 'number'; inp.step = 'any'; return inp; })(), 'Required for Map Explorer pin'));
+    row7m.appendChild(adminMakeGroup('Longitude', (function() { var inp = adminMakeInput('admin-form-lng', 'e.g., -86.16', row?.longitude ?? ''); inp.type = 'number'; inp.step = 'any'; return inp; })(), 'Required for Map Explorer pin'));
+    body.appendChild(row7m);
+
   } else if (table === 'verticals') {
     body.appendChild(adminMakeGroup('Vertical Name', adminMakeInput('admin-form-name', 'e.g., Food & Beverage', row?.vertical_name || '')));
     body.appendChild(adminMakeGroup('Description', adminMakeTextarea('admin-form-desc', 'Brief description of the vertical…', row?.description || '')));
@@ -34932,6 +34981,8 @@ async function saveAdminRow(table, rowId) {
     if (!city) { errors.push('admin-form-city'); adminSetError('admin-form-city', 'City name is required'); }
     if (!state) { errors.push('admin-form-state'); adminSetError('admin-form-state', 'Please select a state/province'); }
     if (!region) { errors.push('admin-form-region'); adminSetError('admin-form-region', 'Please select a region'); }
+    var latVal = adminVal('admin-form-lat');
+    var lngVal = adminVal('admin-form-lng');
     data = {
       city: city,
       state: state,
@@ -34940,6 +34991,8 @@ async function saveAdminRow(table, rowId) {
       market_tier: adminVal('admin-form-tier') || 'Tier 2',
       gxo_presence: adminVal('admin-form-presence') || 'no',
       real_estate_cost_tier: adminVal('admin-form-recost') || null,
+      latitude: latVal ? parseFloat(latVal) : null,
+      longitude: lngVal ? parseFloat(lngVal) : null,
       status: adminVal('admin-form-status') || 'active'
     };
   } else if (table === 'verticals') {
