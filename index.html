@@ -10334,16 +10334,16 @@ var activeMarker = null;
    Fallback hardcoded set used only if Supabase fetch fails. */
 var MARKET_PINS = [];
 var MARKET_PINS_FALLBACK = [
-  { name: 'Inland Empire, CA', abbr: 'IE', lat: 33.95, lng: -117.40, reKey: 'Inland Empire, CA', laborKey: 'Inland Empire, CA' },
-  { name: 'Phoenix', abbr: 'PHX', lat: 33.45, lng: -112.07, reKey: 'Phoenix', laborKey: 'Phoenix' },
-  { name: 'Dallas–Fort Worth', abbr: 'DFW', lat: 32.78, lng: -96.80, reKey: 'Dallas–Fort Worth', laborKey: 'Dallas–Fort Worth' },
-  { name: 'Memphis', abbr: 'MEM', lat: 35.15, lng: -90.05, reKey: 'Memphis', laborKey: 'Memphis' },
-  { name: 'Chicago', abbr: 'CHI', lat: 41.88, lng: -87.63, reKey: 'Chicago', laborKey: 'Chicago' },
-  { name: 'Indianapolis', abbr: 'IND', lat: 39.77, lng: -86.16, reKey: 'Indianapolis', laborKey: 'Indianapolis' },
-  { name: 'Atlanta', abbr: 'ATL', lat: 33.75, lng: -84.39, reKey: 'Atlanta', laborKey: 'Atlanta' },
-  { name: 'Columbus, OH', abbr: 'COL', lat: 39.96, lng: -82.99, reKey: 'Columbus, OH', laborKey: 'Columbus, OH' },
-  { name: 'Savannah', abbr: 'SAV', lat: 32.08, lng: -81.09, reKey: 'Savannah', laborKey: 'Savannah' },
-  { name: 'Central PA', abbr: 'CPA', lat: 40.27, lng: -76.88, reKey: 'Central PA (I-81)', laborKey: 'Central PA' },
+  { name: 'Inland Empire, CA', abbr: 'IE', lat: 33.95, lng: -117.40, reKey: 'Inland Empire', laborKey: 'Inland Empire' },
+  { name: 'Phoenix, AZ', abbr: 'PHX', lat: 33.45, lng: -112.07, reKey: 'Phoenix', laborKey: 'Phoenix' },
+  { name: 'Dallas, TX', abbr: 'DFW', lat: 32.78, lng: -96.80, reKey: 'Dallas', laborKey: 'Dallas' },
+  { name: 'Memphis, TN', abbr: 'MEM', lat: 35.15, lng: -90.05, reKey: 'Memphis', laborKey: 'Memphis' },
+  { name: 'Chicago, IL', abbr: 'CHI', lat: 41.88, lng: -87.63, reKey: 'Chicago', laborKey: 'Chicago' },
+  { name: 'Indianapolis, IN', abbr: 'IND', lat: 39.77, lng: -86.16, reKey: 'Indianapolis', laborKey: 'Indianapolis' },
+  { name: 'Atlanta, GA', abbr: 'ATL', lat: 33.75, lng: -84.39, reKey: 'Atlanta', laborKey: 'Atlanta' },
+  { name: 'Columbus, OH', abbr: 'COL', lat: 39.96, lng: -82.99, reKey: 'Columbus', laborKey: 'Columbus' },
+  { name: 'Savannah, GA', abbr: 'SAV', lat: 32.08, lng: -81.09, reKey: 'Savannah', laborKey: 'Savannah' },
+  { name: 'Central PA, PA', abbr: 'CPA', lat: 40.27, lng: -76.88, reKey: 'Central PA', laborKey: 'Central PA' },
 ];
 
 async function loadMarketPins() {
@@ -14450,11 +14450,11 @@ async function getMarketData(market) {
   const cityOnly = market.split(',')[0].split('–')[0].trim();
 
   const [laborRes, reRes, newsRes, dealsRes, freightRes] = await Promise.all([
-    sb.from('labor_markets').select('*').eq('msa', laborKey).order('as_of_date', { ascending: false }).limit(1).maybeSingle(),
-    sb.from('industrial_real_estate').select('*').eq('market', reKey).order('quarter', { ascending: false }).limit(1).maybeSingle(),
+    sb.from('labor_markets').select('*').eq('msa', cityOnly).order('as_of_date', { ascending: false }).limit(1).maybeSingle(),
+    sb.from('industrial_real_estate').select('*').eq('market', cityOnly).order('quarter', { ascending: false }).limit(1).maybeSingle(),
     sb.from('competitor_news').select('headline, competitor, published_date, tags, source_url').order('published_date', { ascending: false }).limit(10),
     sb.from('pipeline_deals').select('deal_name, stage, tcv, vertical').ilike('market', `%${cityOnly}%`),
-    sb.from('market_freight').select('*').eq('market', market).order('as_of_date', { ascending: false }).limit(1).maybeSingle(),
+    sb.from('market_freight').select('*').eq('market', cityOnly).order('as_of_date', { ascending: false }).limit(1).maybeSingle(),
   ]);
 
   // Filter news for market relevance
@@ -35076,6 +35076,8 @@ async function saveAdminRow(table, rowId) {
       real_estate_cost_tier: adminVal('admin-form-recost') || null,
       latitude: latVal ? parseFloat(latVal) : null,
       longitude: lngVal ? parseFloat(lngVal) : null,
+      labor_key: city,
+      re_key: city,
       status: adminVal('admin-form-status') || 'active'
     };
   } else if (table === 'verticals') {
@@ -35104,6 +35106,27 @@ async function saveAdminRow(table, rowId) {
     adminShowToast((isNew ? 'Added' : 'Updated') + ' successfully', 'success');
     closeAdminModal();
     adminFormVerticals = []; /* bust cache if verticals changed */
+    /* Bust market caches so Map Explorer picks up changes immediately */
+    if (table === 'markets') {
+      marketCache = {};
+      MARKET_PINS = await loadMarketPins();
+      /* If map is already initialized, refresh pins */
+      if (typeof marketMap !== 'undefined' && marketMap) {
+        marketMap.eachLayer(function(l) { if (l instanceof L.CircleMarker) marketMap.removeLayer(l); });
+        MARKET_PINS.forEach(function(pin) {
+          var tierSize = pin.tier === 'Tier 1' ? 10 : pin.tier === 'Tier 2' ? 7 : 5;
+          var presColor = pin.presence === 'yes' ? '#00c853' : pin.presence === 'planned' ? '#ff9100' : '#90a4ae';
+          var marker = L.circleMarker([pin.lat, pin.lng], {
+            radius: tierSize, fillColor: presColor, color: '#fff', weight: 2.5,
+            opacity: 1, fillOpacity: 0.85
+          }).addTo(marketMap);
+          marker.bindTooltip('<strong>' + pin.name + '</strong><br><span style="font-size:11px;">Click for detail</span>');
+          marker.on('click', function() { selectMarket(pin.name, marker); });
+          pin.marker = marker;
+        });
+        colorPinsByLabor();
+      }
+    }
     await loadAdminTable(table);
   }
 }
