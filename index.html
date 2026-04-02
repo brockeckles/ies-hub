@@ -229,7 +229,7 @@
   .sp-vertical-stat strong { color: var(--ies-navy); }
 
   /* Signal feed for unified Command Center */
-  .signal-feed { overflow-y: auto; }
+  .signal-feed { max-height: 500px; overflow-y: auto; }
   .signal-item { padding: 12px 0; border-bottom: 1px solid var(--ies-gray-100); }
   .signal-item:last-child { border-bottom: none; }
   .signal-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
@@ -5823,7 +5823,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
           </div>
         </div>
         <!-- Multi-Site Analyzer Card -->
-        <div onclick="showDesignTool('dt-deals',document.querySelectorAll('#dt-tabs .dt-tab')[5])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='var(--ies-blue)';this.style.boxShadow='0 4px 16px rgba(0,71,171,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
+        <div onclick="showDesignTool('dt-deals',document.querySelectorAll('#dt-tabs .dt-tab')[2])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='var(--ies-blue)';this.style.boxShadow='0 4px 16px rgba(0,71,171,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
           <div style="width:48px;height:48px;background:linear-gradient(135deg,var(--ies-blue),#1e5bb8);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;">
             <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7a2 2 0 012-2h14a2 2 0 012 2" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 11v6M15 11v6" stroke="#fff" stroke-width="1.2" opacity=".6"/></svg>
           </div>
@@ -5855,7 +5855,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
           </div>
         </div>
         <!-- MOST Standards Card -->
-        <div onclick="showDesignTool('dt-most',document.querySelectorAll('#dt-tabs .dt-tab')[7])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='#8b5cf6';this.style.boxShadow='0 4px 16px rgba(139,92,246,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
+        <div onclick="showDesignTool('dt-most',document.querySelectorAll('#dt-tabs .dt-tab')[4])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='#8b5cf6';this.style.boxShadow='0 4px 16px rgba(139,92,246,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
           <div style="width:48px;height:48px;background:linear-gradient(135deg,#8b5cf6,#6d28d9);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;">
             <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><path d="M12 8v4l3 3" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="9" stroke="#fff" stroke-width="1.5"/><path d="M16.5 3.5l1 1M7.5 3.5l-1 1" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg>
           </div>
@@ -5876,7 +5876,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       </div>
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;">
         <!-- Center of Gravity Card -->
-        <div onclick="showDesignTool('dt-network',document.querySelectorAll('#dt-tabs .dt-tab')[1])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='var(--ies-blue)';this.style.boxShadow='0 4px 16px rgba(0,71,171,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
+        <div onclick="showDesignTool('dt-network',document.querySelectorAll('#dt-tabs .dt-tab')[5])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='var(--ies-blue)';this.style.boxShadow='0 4px 16px rgba(0,71,171,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
           <div style="width:48px;height:48px;background:linear-gradient(135deg,#059669,#047857);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;">
             <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5" stroke="#fff" stroke-width="1.5"/><circle cx="18" cy="6" r="2.5" stroke="#fff" stroke-width="1.5"/><circle cx="12" cy="18" r="2.5" stroke="#fff" stroke-width="1.5"/><path d="M8 7l4 9M16 7l-4 9M8.5 6h7" stroke="#fff" stroke-width="1.2" opacity=".6"/></svg>
           </div>
@@ -5887,7 +5887,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
           </div>
         </div>
         <!-- Network Optimization Card -->
-        <div onclick="showDesignTool('dt-netopt',document.querySelectorAll('#dt-tabs .dt-tab')[2])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='var(--ies-blue)';this.style.boxShadow='0 4px 16px rgba(0,71,171,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
+        <div onclick="showDesignTool('dt-netopt',document.querySelectorAll('#dt-tabs .dt-tab')[6])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='var(--ies-blue)';this.style.boxShadow='0 4px 16px rgba(0,71,171,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
           <div style="width:48px;height:48px;background:linear-gradient(135deg,#059669,#047857);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;">
             <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><path d="M3 21V3h18v18H3z" stroke="#fff" stroke-width="1.5"/><circle cx="8" cy="16" r="2" stroke="#fff" stroke-width="1.5"/><circle cx="16" cy="8" r="2" stroke="#fff" stroke-width="1.5"/><circle cx="16" cy="16" r="2" stroke="#fff" stroke-width="1.5"/><path d="M10 16h4M16 10v4M9.5 14.5l5-5" stroke="#fff" stroke-width="1.2" opacity=".6"/></svg>
           </div>
@@ -5908,7 +5908,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       </div>
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;">
         <!-- Fleet Modeler Card -->
-        <div onclick="showDesignTool('dt-fleet',document.querySelectorAll('#dt-tabs .dt-tab')[6])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='#f59e0b';this.style.boxShadow='0 4px 16px rgba(243,112,33,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
+        <div onclick="showDesignTool('dt-fleet',document.querySelectorAll('#dt-tabs .dt-tab')[7])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='#f59e0b';this.style.boxShadow='0 4px 16px rgba(243,112,33,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
           <div style="width:48px;height:48px;background:linear-gradient(135deg,#f59e0b,#d97706);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;">
             <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><path d="M1 14l4-6h6l2 3h6a3 3 0 013 3v0H1z" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><circle cx="6" cy="17" r="2" stroke="#fff" stroke-width="1.5"/><circle cx="17" cy="17" r="2" stroke="#fff" stroke-width="1.5"/><path d="M8 17h7" stroke="#fff" stroke-width="1.2"/></svg>
           </div>
@@ -13531,13 +13531,13 @@ function _buildSearchIndex() {
 
   // Design Tools
   var tools = [
-    { label: 'Warehouse Sizing Calculator', desc: 'Calculate facility size, pallet positions, dock doors', section: 'designtools', action: function(){ navigate('designtools', document.querySelector('[data-section=designtools]')); setTimeout(function(){ showDesignTool('dt-warehouse', document.querySelectorAll('#dt-tabs .dt-tab')[0]); },100); }, cat: 'Design Tools' },
-    { label: 'Center of Gravity', desc: 'Optimal facility location analysis', section: 'designtools', action: function(){ navigate('designtools', document.querySelector('[data-section=designtools]')); setTimeout(function(){ showDesignTool('dt-network', document.querySelectorAll('#dt-tabs .dt-tab')[1]); },100); }, cat: 'Design Tools' },
-    { label: 'Network Optimization', desc: 'Multi-mode transport, heatmap, service zones, demand', section: 'designtools', action: function(){ navigate('designtools', document.querySelector('[data-section=designtools]')); setTimeout(function(){ showDesignTool('dt-netopt', document.querySelectorAll('#dt-tabs .dt-tab')[2]); },100); }, cat: 'Design Tools' },
-    { label: 'Fleet Modeler', desc: 'Fleet sizing, cost comparison, route mapping', section: 'fleet', cat: 'Design Tools' },
     { label: 'Cost Model Builder', desc: 'Labor, equipment, real estate, overhead, pricing, P&L projections', section: 'costmodel', cat: 'Design Tools' },
-    { label: 'MOST Labor Standards', desc: 'Time studies, template library, quick analysis, FTE calculation', section: 'most', cat: 'Design Tools' },
-    { label: 'Deal Manager', desc: 'Multi-site cost model grouping, financials, pricing', section: 'designtools', action: function(){ navigate('designtools', document.querySelector('[data-section=designtools]')); setTimeout(function(){ showDesignTool('dt-deals', document.querySelectorAll('#dt-tabs .dt-tab')[6]); },100); }, cat: 'Design Tools' }
+    { label: 'Deal Manager', desc: 'Multi-site cost model grouping, financials, pricing', section: 'designtools', action: function(){ navigate('designtools', document.querySelector('[data-section=designtools]')); setTimeout(function(){ showDesignTool('dt-deals', document.querySelectorAll('#dt-tabs .dt-tab')[2]); },100); }, cat: 'Design Tools' },
+    { label: 'Warehouse Sizing Calculator', desc: 'Calculate facility size, pallet positions, dock doors', section: 'designtools', action: function(){ navigate('designtools', document.querySelector('[data-section=designtools]')); setTimeout(function(){ showDesignTool('dt-warehouse', document.querySelectorAll('#dt-tabs .dt-tab')[3]); },100); }, cat: 'Design Tools' },
+    { label: 'MOST Labor Standards', desc: 'Time studies, template library, quick analysis, FTE calculation', section: 'designtools', action: function(){ navigate('designtools', document.querySelector('[data-section=designtools]')); setTimeout(function(){ showDesignTool('dt-most', document.querySelectorAll('#dt-tabs .dt-tab')[4]); },100); }, cat: 'Design Tools' },
+    { label: 'Center of Gravity', desc: 'Optimal facility location analysis', section: 'designtools', action: function(){ navigate('designtools', document.querySelector('[data-section=designtools]')); setTimeout(function(){ showDesignTool('dt-network', document.querySelectorAll('#dt-tabs .dt-tab')[5]); },100); }, cat: 'Design Tools' },
+    { label: 'Network Optimization', desc: 'Multi-mode transport, heatmap, service zones, demand', section: 'designtools', action: function(){ navigate('designtools', document.querySelector('[data-section=designtools]')); setTimeout(function(){ showDesignTool('dt-netopt', document.querySelectorAll('#dt-tabs .dt-tab')[6]); },100); }, cat: 'Design Tools' },
+    { label: 'Fleet Modeler', desc: 'Fleet sizing, cost comparison, route mapping', section: 'designtools', action: function(){ navigate('designtools', document.querySelector('[data-section=designtools]')); setTimeout(function(){ showDesignTool('dt-fleet', document.querySelectorAll('#dt-tabs .dt-tab')[7]); },100); }, cat: 'Design Tools' }
   ];
   tools.forEach(function(t) { _searchStaticIndex.push(t); });
 
@@ -13634,7 +13634,7 @@ function _buildSearchIndex() {
         section: 'designtools',
         action: (function(id) { return function() {
           navigate('designtools', document.querySelector('[data-section=designtools]'));
-          setTimeout(function() { showDesignTool('dt-netopt', document.querySelectorAll('#dt-tabs .dt-tab')[2]); }, 100);
+          setTimeout(function() { showDesignTool('dt-netopt', document.querySelectorAll('#dt-tabs .dt-tab')[6]); }, 100);
           setTimeout(function() { if (typeof netoptLoadScenario === 'function') netoptLoadScenario(id); }, 300);
         }; })(ns.id),
         cat: 'Scenarios'
@@ -16789,7 +16789,7 @@ function daOpenArtifact(artifactType, artifactId) {
     // Navigate to Design Tools → Network Optimization tab, then load scenario
     navigate('designtools', document.querySelector('[data-section=designtools]'));
     setTimeout(() => {
-      showDesignTool('dt-netopt', document.querySelectorAll('#dt-tabs .dt-tab')[2]);
+      showDesignTool('dt-netopt', document.querySelectorAll('#dt-tabs .dt-tab')[6]);
       setTimeout(() => { netoptLoadScenario(parseInt(artifactId, 10) || artifactId); }, 200);
     }, 200);
   } else if (artifactType === 'fleet_scenario' && artifactId) {
@@ -16830,7 +16830,7 @@ function daCreateNew(artifactType) {
   } else if (artifactType === 'netopt_scenario') {
     navigate('designtools', document.querySelector('[data-section=designtools]'));
     setTimeout(() => {
-      showDesignTool('dt-netopt', document.querySelectorAll('#dt-tabs .dt-tab')[2]);
+      showDesignTool('dt-netopt', document.querySelectorAll('#dt-tabs .dt-tab')[6]);
       document.getElementById('da-modal-container').innerHTML = '';
     }, 100);
   }
@@ -25514,7 +25514,7 @@ const cmApp = {
                         '<div><span style="font-weight:700;font-size:14px;color:var(--ies-navy);">' + (deal.deal_name || 'Deal') + '</span>' +
                         '<span style="font-size:12px;color:var(--ies-gray-500);margin-left:8px;">' + models.length + ' model' + (models.length > 1 ? 's' : '') + '</span></div>' +
                         '<div style="display:flex;gap:8px;">' +
-                        '<button onclick="navigate(\'designtools\'); setTimeout(function(){ showDesignTool(\'dt-deals\', document.querySelectorAll(\'#dt-tabs .dt-tab\')[5]); setTimeout(function(){ dealApp.openDeal(\'' + dealId + '\'); },100); },50)" style="padding:4px 12px;background:var(--ies-blue);color:#fff;border:none;border-radius:6px;font-family:Montserrat,sans-serif;font-size:11px;font-weight:600;cursor:pointer;">Open in Multi-Site Analyzer</button>' +
+                        '<button onclick="navigate(\'designtools\'); setTimeout(function(){ showDesignTool(\'dt-deals\', document.querySelectorAll(\'#dt-tabs .dt-tab\')[2]); setTimeout(function(){ dealApp.openDeal(\'' + dealId + '\'); },100); },50)" style="padding:4px 12px;background:var(--ies-blue);color:#fff;border:none;border-radius:6px;font-family:Montserrat,sans-serif;font-size:11px;font-weight:600;cursor:pointer;">Open in Multi-Site Analyzer</button>' +
                         '<button onclick="cmToggleDealGroup(\'' + dealId + '\')" style="padding:4px 12px;background:var(--ies-gray-100);color:var(--ies-gray-600);border:1px solid var(--ies-gray-200);border-radius:6px;font-family:Montserrat,sans-serif;font-size:11px;font-weight:600;cursor:pointer;">Collapse</button>' +
                         '</div></div>';
 
