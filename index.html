@@ -10462,7 +10462,61 @@ WIKI_PAGES['scc-g2p'] = '<div class="wiki-article">' +
   '<div class="wiki-callout" style="border-left-color:#ff3a00;"><div class="wiki-callout-title" style="color:#ff3a00;">When to Recommend G2P</div>' +
   '<p style="font-size:12px;">G2P wins when: SKU count > 5,000, each-pick dominant, labor market is tight (score < 50), client needs 200+ lines/hr/station, and facility has ceiling height for dense storage. It loses when the profile is case-pick or pallet-pick dominant, or when throughput needs are below 100 lines/hr.</p></div>' +
 
-  '<p style="margin-top:16px;"><strong>Deep Dives:</strong> Select <em>Goods-to-Person Vendors</em> in the sidebar for detailed vendor specs, SVG diagrams, and video resources for each G2P system.</p>' +
+  // ── Sizing Methodology ──
+  '<h3>G2P Sizing Methodology</h3>' +
+  '<div class="wiki-callout"><div class="wiki-callout-title">Booth Count Formula</div>' +
+  '<p style="font-size:12px;font-family:monospace;background:#0f172a;padding:12px;border-radius:6px;color:#e2e8f0;">Stations Required = (Daily Lines ÷ Lines per Wave) ÷ (Station Throughput/hr × Hours per Shift) × Safety Factor (1.15–1.25)</p>' +
+  '<p style="font-size:12px;margin-top:8px;"><strong>Example:</strong> 40,000 lines/day, 400-line waves, Exotec at 350 lines/hr, 8-hr shift → (40,000 ÷ 400) ÷ (350 × 8) × 1.2 = <strong>~43 stations needed</strong> (or ~5–6 with continuous flow). For AutoStore at 100 lines/hr: (40,000) ÷ (100 × 8) × 1.2 = <strong>60 stations</strong>.</p></div>' +
+
+  // ── Implementation Timeline ──
+  '<h3>Implementation Timeline</h3>' +
+  '<table class="wiki-spec-table"><tr><th>Phase</th><th>Duration</th><th>Key Activities</th></tr>' +
+  '<tr><td>Design & Engineering</td><td>3–4 months</td><td>Layout modeling, simulation, WMS integration spec, power/structural assessment</td></tr>' +
+  '<tr><td>Procurement</td><td>3–6 months</td><td>Vendor selection, contract negotiation, equipment manufacturing (Exotec 14–16 wk lead, Hai 10–12 wk, AutoStore 12–16 wk)</td></tr>' +
+  '<tr><td>Site Preparation</td><td>2–3 months</td><td>Floor remediation (flatness ±3mm/3m), power upgrades (500–800 kW typical), fire suppression review</td></tr>' +
+  '<tr><td>Installation & Commissioning</td><td>2–4 months</td><td>Racking install, robot deployment, WCS/WMS integration testing, safety validation</td></tr>' +
+  '<tr><td>Ramp & Optimization</td><td>1–2 months</td><td>Operator training, throughput ramp (start at 60%, target 95% within 6 weeks), slotting optimization</td></tr>' +
+  '<tr style="font-weight:700;background:#1e293b;"><td>Total</td><td>12–18 months</td><td>Critical path: equipment lead time + floor prep (concurrent)</td></tr></table>' +
+
+  // ── Facility Requirements ──
+  '<h3>Facility Requirements</h3>' +
+  '<table class="wiki-spec-table"><tr><th>Requirement</th><th>AutoStore</th><th>Hai Robotics (ACR)</th><th>Exotec Skypod</th></tr>' +
+  '<tr><td>Min. Ceiling Height</td><td>16 ft (5.5m grid)</td><td>12 ft (standard rack)</td><td>36 ft (up to 12m rack)</td></tr>' +
+  '<tr><td>Floor Load Capacity</td><td>3,000 lbs/ft² (grid load)</td><td>Standard warehouse</td><td>Standard warehouse</td></tr>' +
+  '<tr><td>Floor Flatness</td><td>FM2 (±3mm/3m)</td><td>Standard FM3</td><td>FM2 (±3mm/3m)</td></tr>' +
+  '<tr><td>Power (typical install)</td><td>200–500 kW</td><td>100–300 kW</td><td>300–800 kW</td></tr>' +
+  '<tr><td>Fire Suppression</td><td>In-rack ESFR required</td><td>Standard sprinkler</td><td>In-rack sprinkler recommended</td></tr>' +
+  '<tr><td>Temperature Range</td><td>32–104°F (0–40°C)</td><td>32–104°F</td><td>32–113°F (0–45°C)</td></tr></table>' +
+
+  // ── BY WMS Integration ──
+  '<h3>Blue Yonder WMS Integration</h3>' +
+  '<div class="wiki-callout"><div class="wiki-callout-title">BY Configuration Checklist for G2P</div>' +
+  '<p style="font-size:12px;line-height:1.7;"><strong>1. Wave Planning:</strong> Configure micro-waves (50–100 orders) optimized for G2P station batch size. BY wave engine must account for robot travel time, not aisle walk time.<br>' +
+  '<strong>2. Task Interleaving:</strong> Enable putaway-during-pick interleaving — G2P robots can return bins to storage while delivering new pick bins.<br>' +
+  '<strong>3. Slotting:</strong> Configure velocity-based slotting with A/B/C zones. AutoStore: fast-movers near top of grid. Exotec: fast-movers at mid-height (fastest robot access).<br>' +
+  '<strong>4. Inventory Sync:</strong> Real-time bin-level inventory via WCS API. BY must reconcile robot-reported counts with WMS expected counts every cycle.<br>' +
+  '<strong>5. Exception Handling:</strong> Configure short-pick workflows — when robot presents bin with insufficient qty, BY must trigger replenishment task and re-queue the pick.</p></div>' +
+
+  // ── ROI Example ──
+  '<h3>ROI Worked Example</h3>' +
+  '<div style="background:#0f172a;border-radius:8px;padding:16px;margin:12px 0;font-size:12px;color:#e2e8f0;line-height:1.7;">' +
+  '<strong>Scenario:</strong> 40,000 lines/day, 8,000 SKU facility, manual picking today<br>' +
+  '<strong>Current State:</strong> 45 pickers × $18/hr × 2,080 hrs = $1.68M labor/yr + $200K indirect = <strong>$1.88M/yr</strong><br>' +
+  '<strong>G2P State (AutoStore):</strong> 12 stations × $18/hr × 2,080 hrs = $449K labor + $150K maintenance + $80K power = <strong>$679K/yr</strong><br>' +
+  '<strong>Annual Savings:</strong> $1.88M − $679K = <strong>$1.2M/yr</strong><br>' +
+  '<strong>System Cost:</strong> $6.5M installed (6,000-bin AutoStore)<br>' +
+  '<strong>Simple Payback:</strong> $6.5M ÷ $1.2M = <strong>5.4 years</strong> (acceptable for 7+ year contracts)<br>' +
+  '<em>Note: RaaS/OpEx models from Hai Robotics can reduce upfront capital to ~$2M + $300K/yr, improving cash flow.</em></div>' +
+
+  // ── Videos ──
+  '<h3>Video Resources</h3>' +
+  '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:16px 0;">' +
+    '<a href="https://www.youtube.com/watch?v=iHC9ec591lI" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> AutoStore Introduction</a>' +
+    '<a href="https://www.youtube.com/watch?v=b9wqVs_sS70" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Hai Robotics ACR at JD.com</a>' +
+    '<a href="https://www.youtube.com/watch?v=5EOECJ39g0k" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Exotec Skypod System</a>' +
+  '</div>' +
+
+  '<p style="margin-top:16px;"><strong>Deep Dives:</strong> Select <em>Goods-to-Person Vendors</em> in the sidebar for detailed vendor specs, SVG diagrams, and additional video resources for each G2P system.</p>' +
 '</div>';
 
 // ═══════════════════════════════════════════════════
@@ -10494,7 +10548,48 @@ WIKI_PAGES['scc-p2g'] = '<div class="wiki-article">' +
   '<div class="wiki-callout" style="border-left-color:#ff3a00;"><div class="wiki-callout-title" style="color:#ff3a00;">When to Recommend P2G</div>' +
   '<p style="font-size:12px;">P2G is the default starting point when: client is new to automation, contract term is &lt;5 years (RaaS flexibility), multi-client shared space, or throughput targets are 80–200 lines/hr. Upgrade to G2P when density or throughput requirements exceed P2G ceilings.</p></div>' +
 
-  '<p style="margin-top:16px;"><strong>Deep Dive:</strong> Select <em>Collaborative Robots</em> in the sidebar for detailed cobot specs, workflow diagrams, and video resources.</p>' +
+  // ── Vendor Overview ──
+  '<h3>P2G Vendor Landscape</h3>' +
+  '<table class="wiki-spec-table"><tr><th>Vendor</th><th>Platform</th><th>Payload</th><th>Pricing Model</th><th>Differentiator</th></tr>' +
+  '<tr><td>Locus Robotics</td><td>LocusBot (Origin, Vector)</td><td>40–80 lbs</td><td>RaaS $1,500–$2,500/bot/mo</td><td>Market leader in 3PL; multi-bot orchestration; BY WMS certified</td></tr>' +
+  '<tr><td>6 River Systems (Shopify)</td><td>Chuck</td><td>70 lbs</td><td>RaaS ~$2,000/bot/mo</td><td>Strong e-commerce integration; Shopify fulfillment network native</td></tr>' +
+  '<tr><td>Geek+</td><td>PopPick, MovBot</td><td>Up to 1,000 kg</td><td>CapEx + maintenance</td><td>Versatile — sortation + picking + transport in one platform</td></tr>' +
+  '<tr><td>inVia Robotics</td><td>PickerWall</td><td>40 lbs</td><td>RaaS per pick</td><td>Hybrid P2G/G2P — robots bring inventory to a fixed pick wall</td></tr></table>' +
+
+  // ── Scaling Path ──
+  '<h3>P2G → G2P Scaling Path</h3>' +
+  '<div style="background:#0f172a;border-radius:8px;padding:16px;margin:12px 0;font-size:12px;color:#e2e8f0;line-height:1.8;">' +
+  '<strong>Phase 1 (0–12 months):</strong> Deploy 5–8 cobots in highest-volume pick zone. Target: 2× productivity lift, prove ROI, train operators. Investment: ~$15K/mo RaaS.<br>' +
+  '<strong>Phase 2 (12–24 months):</strong> Scale to 15–25 cobots across all pick zones. Add AMR transport for putaway/replenishment. Investment: ~$45K/mo RaaS.<br>' +
+  '<strong>Decision Gate (24–36 months):</strong> If daily lines exceed 50,000 and SKU count >3,000, evaluate G2P upgrade. P2G cobots can be returned (RaaS) or redeployed to secondary zones while G2P handles primary volume.<br>' +
+  '<strong>Hybrid Model:</strong> Many mature sites run P2G cobots in low-velocity zones + G2P for high-velocity zones — this is often the optimal long-term architecture.</div>' +
+
+  // ── Floor Layout ──
+  '<h3>Floor Space & Layout Requirements</h3>' +
+  '<table class="wiki-spec-table"><tr><th>Zone</th><th>Space Required</th><th>Key Considerations</th></tr>' +
+  '<tr><td>Pick Zone</td><td>2,000–3,000 m² per 10 cobots</td><td>Standard aisle widths (8–10 ft); cobots need 4 ft clearance for passing</td></tr>' +
+  '<tr><td>Charging Area</td><td>10 m² per cobot</td><td>Near pick zone entry; opportunity charging during idle; 80% charge in 30 min</td></tr>' +
+  '<tr><td>Staging/Induction</td><td>15 m² per cobot</td><td>Order handoff area where cobots queue completed totes for transport</td></tr>' +
+  '<tr><td>Maintenance Bay</td><td>20–30 m² total</td><td>Spare parts, diagnostics workstation, wheel/sensor replacement</td></tr></table>' +
+
+  // ── ROI ──
+  '<h3>ROI Worked Example</h3>' +
+  '<div style="background:#0f172a;border-radius:8px;padding:16px;margin:12px 0;font-size:12px;color:#e2e8f0;line-height:1.7;">' +
+  '<strong>Scenario:</strong> 15,000 lines/day, 20 manual pickers at $17/hr<br>' +
+  '<strong>Current Cost:</strong> 20 pickers × $17/hr × 2,080 hrs = <strong>$707K/yr</strong><br>' +
+  '<strong>With 10 Locus Cobots (RaaS):</strong> 8 pickers × $17/hr × 2,080 hrs + 10 bots × $2K/mo × 12 = $283K + $240K = <strong>$523K/yr</strong><br>' +
+  '<strong>Annual Savings:</strong> $707K − $523K = <strong>$184K/yr</strong> (26% reduction)<br>' +
+  '<strong>Bonus:</strong> Zero CapEx with RaaS; scale up/down monthly; ROI from month 1.</div>' +
+
+  // ── Videos ──
+  '<h3>Video Resources</h3>' +
+  '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:16px 0;">' +
+    '<a href="https://www.youtube.com/watch?v=oRMclnyD3gc" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Locus Robotics Fulfillment</a>' +
+    '<a href="https://www.youtube.com/watch?v=ZkiieY1nz58" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> 6 River Systems Chuck Demo</a>' +
+    '<a href="https://www.youtube.com/watch?v=X8V5xvpF2nE" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Locus: Makro Spain Case Study</a>' +
+  '</div>' +
+
+  '<p style="margin-top:16px;"><strong>Deep Dive:</strong> Select <em>Collaborative Robots</em> in the sidebar for detailed cobot specs, workflow diagrams, and additional video resources.</p>' +
 '</div>';
 
 // ═══════════════════════════════════════════════════
@@ -10555,6 +10650,43 @@ WIKI_PAGES['scc-pallet-asrs'] = '<div class="wiki-article">' +
 
   '<div class="wiki-callout" style="border-left-color:#ff3a00;"><div class="wiki-callout-title" style="color:#ff3a00;">When to Recommend</div>' +
   '<p style="font-size:12px;">Pallet AS/RS makes sense for: contract terms 7+ years, stable high-volume throughput, land/building constraints requiring vertical density, cold chain (reduces conditioned space), and operations with 10,000+ pallet positions. The capital is significant — always model the labor savings against a 7–10 year horizon.</p></div>' +
+
+  // ── Vendor Landscape ──
+  '<h3>Vendor Landscape</h3>' +
+  '<table class="wiki-spec-table"><tr><th>Vendor</th><th>Specialty</th><th>Typical System Cost</th><th>Lead Time</th><th>Key Differentiator</th></tr>' +
+  '<tr><td>Daifuku</td><td>Crane AS/RS, unit load</td><td>$15M–$50M+</td><td>18–24 months</td><td>Largest MH company globally; deep cold-chain expertise</td></tr>' +
+  '<tr><td>Dematic (KION)</td><td>Multishuttle, case AS/RS</td><td>$8M–$30M</td><td>12–18 months</td><td>Strong in case-level G2P; Pouch system for apparel</td></tr>' +
+  '<tr><td>SSI Schaefer</td><td>Full range (crane + shuttle)</td><td>$10M–$40M</td><td>14–20 months</td><td>European market leader; modular designs</td></tr>' +
+  '<tr><td>TGW Logistics</td><td>Case shuttle, e-commerce</td><td>$8M–$25M</td><td>12–18 months</td><td>FlashPick shuttle platform; strong NA growth</td></tr>' +
+  '<tr><td>Mecalux</td><td>Pallet shuttle, racking</td><td>$3M–$15M</td><td>8–14 months</td><td>Lower-cost option; integrated racking + shuttle</td></tr></table>' +
+
+  // ── Implementation Timeline ──
+  '<h3>Implementation Timeline</h3>' +
+  '<div style="background:#0f172a;border-radius:8px;padding:16px;margin:12px 0;font-size:12px;color:#e2e8f0;line-height:1.8;">' +
+  '<strong>Phase 1 — Design & Engineering (3–4 months):</strong> System simulation (throughput modeling, bottleneck analysis), structural engineering (floor load verification, seismic if applicable), WCS specification, fire code review.<br>' +
+  '<strong>Phase 2 — Procurement (4–8 months):</strong> Longest lead item is typically the crane/shuttle itself (16–24 weeks manufacturing). Racking lead time: 8–12 weeks. WCS software: concurrent development.<br>' +
+  '<strong>Phase 3 — Site Prep (2–3 months, concurrent):</strong> Floor remediation to FM2 flatness (±1.5mm/3m for crane systems), power infrastructure (500kW–2MW), fire suppression (ESFR or in-rack), temperature control for cold chain.<br>' +
+  '<strong>Phase 4 — Installation (3–6 months):</strong> Racking first, then crane/shuttle install, followed by conveyor integration. Commissioning: 4–6 weeks of testing per aisle.<br>' +
+  '<strong>Phase 5 — Ramp (2–3 months):</strong> Start at 40% throughput, ramp to 95% over 8–12 weeks. Operator training for exception handling and maintenance.<br>' +
+  '<strong>Total: 14–24 months depending on system complexity and whether cold chain is involved.</strong></div>' +
+
+  // ── Facility Requirements ──
+  '<h3>Facility Requirements</h3>' +
+  '<table class="wiki-spec-table"><tr><th>Requirement</th><th>Crane AS/RS</th><th>Pallet Shuttle</th><th>Case Shuttle</th></tr>' +
+  '<tr><td>Ceiling Height</td><td>60–130 ft (18–40m)</td><td>30–60 ft (9–18m)</td><td>40–80 ft (12–24m)</td></tr>' +
+  '<tr><td>Floor Flatness</td><td>FM1 (±1.5mm/3m)</td><td>FM2 (±3mm/3m)</td><td>FM2 (±3mm/3m)</td></tr>' +
+  '<tr><td>Floor Load</td><td>5,000–8,000 lbs/ft²</td><td>3,000–5,000 lbs/ft²</td><td>2,000–4,000 lbs/ft²</td></tr>' +
+  '<tr><td>Power</td><td>500kW–2MW per system</td><td>200–500kW per aisle</td><td>300–800kW per system</td></tr>' +
+  '<tr><td>Fire Suppression</td><td>In-rack ESFR mandatory</td><td>In-rack sprinkler</td><td>In-rack sprinkler</td></tr>' +
+  '<tr><td>Temperature</td><td>-22°F to 104°F (-30°C to 40°C)</td><td>32–104°F</td><td>32–104°F</td></tr></table>' +
+
+  // ── Videos ──
+  '<h3>Video Resources</h3>' +
+  '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:16px 0;">' +
+    '<a href="https://www.youtube.com/watch?v=GLZHylIMmKw" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Dexion ASRS System</a>' +
+    '<a href="https://www.youtube.com/watch?v=oHmlktFOguI" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Kardex Shuttle XP VLM</a>' +
+    '<a href="https://www.youtube.com/watch?v=iHC9ec591lI" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> AutoStore Introduction</a>' +
+  '</div>' +
 '</div>';
 
 // ═══════════════════════════════════════════════════
@@ -10588,6 +10720,40 @@ WIKI_PAGES['scc-rack-vlm'] = '<div class="wiki-article">' +
 
   '<div class="wiki-callout" style="border-left-color:#ff3a00;"><div class="wiki-callout-title" style="color:#ff3a00;">IES Designer Rule of Thumb</div>' +
   '<p style="font-size:12px;">Start with selective rack (maximum flexibility), then optimize: if pallets/SKU > 3, consider double-deep or push-back. If SKU count is low and volume is high, drive-in. If FIFO is required (food, pharma), pallet flow. VLMs are a niche solution — use for slow-moving small parts with high SKU counts where floor space is at a premium.</p></div>' +
+
+  // ── Density Benchmarks ──
+  '<h3>Storage Density Benchmarks</h3>' +
+  '<table class="wiki-spec-table"><tr><th>Rack Type</th><th>Pallets per 1,000 ft²</th><th>SKU Accessibility</th><th>Aisle Width Required</th><th>Best Use Case</th></tr>' +
+  '<tr><td>Selective (single-deep)</td><td>60–80</td><td>100% — every pallet accessible</td><td>10–12 ft (wide aisle)</td><td>High SKU variety, A/B/C velocity zones</td></tr>' +
+  '<tr><td>Narrow Aisle (VNA)</td><td>90–110</td><td>100%</td><td>6–7 ft (turret truck required)</td><td>Space-constrained, high SKU count</td></tr>' +
+  '<tr><td>Double-Deep</td><td>100–130</td><td>50% (front face only)</td><td>10–12 ft</td><td>2+ pallets/SKU, moderate rotation</td></tr>' +
+  '<tr><td>Push-Back (3–5 deep)</td><td>130–170</td><td>LIFO, front face only</td><td>10–12 ft</td><td>Seasonal buffer, bulk storage</td></tr>' +
+  '<tr><td>Drive-In (6–10 deep)</td><td>170–220</td><td>LIFO, first lane only</td><td>Single entry (12 ft min)</td><td>Homogeneous SKUs, high pallet count</td></tr>' +
+  '<tr><td>Pallet Flow (FIFO)</td><td>140–180</td><td>FIFO</td><td>Entry/exit aisles (12 ft each)</td><td>Date-sensitive products, food/beverage</td></tr></table>' +
+
+  // ── Vendor Overview ──
+  '<h3>Key Vendors</h3>' +
+  '<div style="background:#0f172a;border-radius:8px;padding:16px;margin:12px 0;font-size:12px;color:#e2e8f0;line-height:1.8;">' +
+  '<strong>Pallet Racking:</strong> Ridg-U-Rak (US market leader, 4–6 week lead), Mecalux (global, integrated with shuttle systems), Steel King (heavy-duty, structural), Frazier (structural, seismic-rated).<br>' +
+  '<strong>Shelving/Pick Modules:</strong> SSI Schaefer (modular pick modules), Dematic (integrated with conveyors), Unarco (general shelving).<br>' +
+  '<strong>VLMs:</strong> Kardex Remstar ($80K–$200K/unit, 8–12 week lead), Modula ($70K–$180K/unit, 6–10 week lead), Hänel ($90K–$220K/unit, premium quality).<br>' +
+  '<strong>Lead Times:</strong> Standard rack 4–6 weeks; custom/structural 6–10 weeks; VLMs 8–12 weeks; pick modules 10–14 weeks.</div>' +
+
+  // ── Automation Compatibility ──
+  '<h3>Automation Compatibility Matrix</h3>' +
+  '<table class="wiki-spec-table"><tr><th>Rack Type</th><th>G2P Compatible?</th><th>P2G Cobots?</th><th>Conveyor Integration</th><th>Notes</th></tr>' +
+  '<tr><td>Selective</td><td>ACRs (Hai) — yes; Exotec — yes</td><td>Locus/6RS — yes</td><td>Pick module conveyor — yes</td><td>Most flexible foundation</td></tr>' +
+  '<tr><td>VNA</td><td>ACRs — limited height</td><td>No (aisle too narrow for cobots)</td><td>End-of-aisle — yes</td><td>Requires turret or order picker lift</td></tr>' +
+  '<tr><td>Double-Deep</td><td>ACRs — yes (multi-deep capable)</td><td>Locus — yes</td><td>End-of-aisle — yes</td><td>Requires reach truck or deep-reach ACR</td></tr>' +
+  '<tr><td>VLM</td><td>N/A (self-contained G2P)</td><td>N/A</td><td>Conveyor to/from window — yes</td><td>VLM is its own G2P system for small parts</td></tr></table>' +
+
+  // ── Videos ──
+  '<h3>Video Resources</h3>' +
+  '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:16px 0;">' +
+    '<a href="https://www.youtube.com/watch?v=oHmlktFOguI" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Kardex Remstar VLM</a>' +
+    '<a href="https://www.youtube.com/watch?v=nh2q22Gl2XE" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Automated Shuttle XP VLM</a>' +
+    '<a href="https://www.youtube.com/watch?v=-SPz9F-BYWU" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Warehouse Design Principles</a>' +
+  '</div>' +
 '</div>';
 
 // ═══════════════════════════════════════════════════
@@ -10615,6 +10781,42 @@ WIKI_PAGES['scc-amr-agv'] = '<div class="wiki-article">' +
 
   '<div class="wiki-callout" style="border-left-color:#ff3a00;"><div class="wiki-callout-title" style="color:#ff3a00;">AMR vs. AGV Decision</div>' +
   '<p style="font-size:12px;">AMR for dynamic environments with changing layouts, mixed traffic, and multi-client flexibility. AGV for fixed, high-volume routes where predictability and cost-per-unit matter most. AMR sortation (e.g., Tompkins, Geek+) competes with fixed conveyor sorters when demand is variable or space is limited.</p></div>' +
+
+  // ── Vendor Landscape ──
+  '<h3>Vendor Landscape</h3>' +
+  '<table class="wiki-spec-table"><tr><th>Vendor</th><th>Type</th><th>Payload</th><th>Price Range</th><th>Differentiator</th></tr>' +
+  '<tr><td>OTTO Motors (Rockwell)</td><td>Heavy AMR</td><td>Up to 3,300 lbs</td><td>$80K–$120K/unit</td><td>Market leader in heavy-payload AMR; OTTO 1500/OTTO Lifter; BY WMS integration available</td></tr>' +
+  '<tr><td>MiR (Teradyne)</td><td>Medium AMR</td><td>200–2,200 lbs</td><td>$30K–$80K/unit</td><td>Strong European presence; modular top-modules; fleet management software included</td></tr>' +
+  '<tr><td>Vecna Robotics</td><td>Heavy AMR</td><td>Up to 4,500 lbs</td><td>$100K–$150K/unit</td><td>Pallet jack/forklift form factor; Pivotal orchestration software</td></tr>' +
+  '<tr><td>Geek+ (Sortation)</td><td>AMR swarm</td><td>5–30 lbs/item</td><td>$100–$150/item/hr capacity</td><td>Sortation platform: 50–500 robots replace fixed sorters; strong in Asia/EU</td></tr>' +
+  '<tr><td>Tompkins Robotics</td><td>AMR sortation</td><td>15 lbs/item</td><td>$150–$200/item/hr capacity</td><td>tSort platform; 20–200 robots; modular, relocatable</td></tr>' +
+  '<tr><td>Wire-Guided AGV (various)</td><td>Traditional AGV</td><td>2,000–10,000 lbs</td><td>$40K–$80K/unit</td><td>Lowest cost, most reliable, but requires fixed infrastructure (wire/tape)</td></tr></table>' +
+
+  // ── AMR Sortation Deep Dive ──
+  '<h3>AMR Sortation vs. Fixed Conveyor Sorters</h3>' +
+  '<table class="wiki-spec-table"><tr><th>Factor</th><th>AMR Sortation (Geek+, Tompkins)</th><th>Fixed Sorter (Dematic, Beumer)</th></tr>' +
+  '<tr><td>Throughput</td><td>3,000–15,000 items/hr (scales with fleet size)</td><td>4,000–20,000+ items/hr (fixed capacity)</td></tr>' +
+  '<tr><td>Destinations</td><td>100–1,000+ (each robot can reach any chute)</td><td>50–200 (physical chute limit)</td></tr>' +
+  '<tr><td>Capital Cost</td><td>$1.5M–$8M (50–300 robots)</td><td>$3M–$15M+ (conveyor + sorter infrastructure)</td></tr>' +
+  '<tr><td>Flexibility</td><td>Relocatable; add robots for peak; remove for low season</td><td>Fixed infrastructure; cannot scale down</td></tr>' +
+  '<tr><td>Space</td><td>20–40% less floor space (no conveyor runs)</td><td>Large footprint for induction + conveyor loop</td></tr>' +
+  '<tr><td>Best For</td><td>&lt;5M items/yr, 100+ destinations, seasonal demand</td><td>&gt;5M items/yr, stable demand, &lt;50 destinations</td></tr></table>' +
+
+  // ── Safety & Integration ──
+  '<h3>Safety & Integration</h3>' +
+  '<div style="background:#0f172a;border-radius:8px;padding:16px;margin:12px 0;font-size:12px;color:#e2e8f0;line-height:1.8;">' +
+  '<strong>Pedestrian Safety:</strong> All AMRs must comply with ANSI/RIA R15.08 (mobile robot safety). LIDAR-based AMRs maintain 360° awareness and auto-stop within 0.5–1.0m of obstacles. Facilities must establish traffic management zones, speed limits (typically 1.5 m/s max in mixed areas), and dedicated AMR lanes for high-density deployments.<br>' +
+  '<strong>Fleet Management:</strong> 10+ AMRs require fleet management software (vendor-provided or third-party). Software handles traffic coordination, charging schedules, task prioritization, and deadlock resolution.<br>' +
+  '<strong>WMS Integration:</strong> AMRs receive tasks via WMS/WCS API integration. BY WMS supports OTTO, MiR, and Vecna through certified connectors. Task types: transport (A→B), induction (dock→storage), replenishment (reserve→forward).<br>' +
+  '<strong>Charging:</strong> Opportunity charging (2–5 min top-ups during idle) preferred over shift-based charging. Plan 1 charging station per 3–4 AMRs. Charging bays: 2m × 3m each, near pick zones.</div>' +
+
+  // ── Videos ──
+  '<h3>Video Resources</h3>' +
+  '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:16px 0;">' +
+    '<a href="https://www.youtube.com/watch?v=qahujJ-8vdk" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> AMR vs AGV Solutions</a>' +
+    '<a href="https://www.youtube.com/watch?v=aAOSgrWr4pg" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> OTTO Lifter Autonomous Forklift</a>' +
+    '<a href="https://www.youtube.com/watch?v=8iKaq6jP8to" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Dematic Sortation Simulation</a>' +
+  '</div>' +
 '</div>';
 
 // ═══════════════════════════════════════════════════
@@ -10645,6 +10847,38 @@ WIKI_PAGES['scc-pick-pal'] = '<div class="wiki-article">' +
 
   '<div class="wiki-callout" style="border-left-color:#ff3a00;"><div class="wiki-callout-title" style="color:#ff3a00;">When to Recommend</div>' +
   '<p style="font-size:12px;">Robotic palletizing wins when: store-friendly pallet requirements exist, labor turnover in palletizing exceeds 100%/year, or the client ships 50+ mixed-SKU pallets/day. Piece-picking robots are still maturing — recommend for constrained SKU profiles (< 1,000 SKUs) with predictable item geometry.</p></div>' +
+
+  // ── Vendor Landscape ──
+  '<h3>Vendor Landscape</h3>' +
+  '<table class="wiki-spec-table"><tr><th>Vendor</th><th>Specialty</th><th>Throughput</th><th>Cost Range</th><th>Notes</th></tr>' +
+  '<tr><td>Symbotic (GXO partner)</td><td>End-to-end AS/RS + palletizing</td><td>1,000+ cases/hr</td><td>System: $50M+</td><td>GXO has 6 active deployments; deep integration</td></tr>' +
+  '<tr><td>Mujin</td><td>AI-driven mixed-case palletizing</td><td>500–1,200 cases/hr</td><td>$1.5M–$5M/cell</td><td>Best-in-class pallet stability algorithms; 3D vision</td></tr>' +
+  '<tr><td>FANUC</td><td>6-axis industrial arms</td><td>800–1,500 cases/hr</td><td>$300K–$1.5M/cell</td><td>Industry standard for depalletizing; proven reliability</td></tr>' +
+  '<tr><td>ABB</td><td>6-axis + FlexPicker</td><td>400–1,000 picks/hr</td><td>$500K–$2M/cell</td><td>Strong in piece-picking with integrated vision</td></tr>' +
+  '<tr><td>Bastian Solutions</td><td>Gantry systems, integration</td><td>200–600 cases/hr</td><td>$2M–$8M</td><td>System integrator; combines gantry + conveyor + palletizer</td></tr></table>' +
+
+  // ── Vision Systems ──
+  '<h3>Vision Systems & End Effectors</h3>' +
+  '<div style="background:#0f172a;border-radius:8px;padding:16px;margin:12px 0;font-size:12px;color:#e2e8f0;line-height:1.8;">' +
+  '<strong>2D Vision (barcode/pattern):</strong> $10K–$30K per camera system. Adequate for homogeneous case picking where case dimensions are known. 99.5%+ reliability on standard brown boxes.<br>' +
+  '<strong>3D Vision (depth sensing):</strong> $50K–$200K per system. Required for mixed-SKU, varied-geometry picking. Uses structured light or time-of-flight cameras. Mujin and ABB lead in 3D vision integration.<br>' +
+  '<strong>Vacuum Grippers:</strong> Standard for cases/cartons. $5K–$15K per end-effector. Best for flat, regular surfaces. 95%+ pick success rate.<br>' +
+  '<strong>Mechanical Grippers:</strong> For irregular shapes (bottles, bags, tubes). $15K–$40K. Lower pick rate but handles more SKU variety.<br>' +
+  '<strong>Hybrid Grippers:</strong> Combine vacuum + mechanical + soft robotics. $30K–$80K. Emerging technology; best pick success for mixed SKU profiles.</div>' +
+
+  // ── Cost per Pick ──
+  '<h3>Cost-per-Pick Comparison</h3>' +
+  '<table class="wiki-spec-table"><tr><th>Method</th><th>Cost per Pick</th><th>Speed</th><th>Accuracy</th><th>When It Wins</th></tr>' +
+  '<tr><td>Manual Labor</td><td>$0.15–$0.25</td><td>60–120 picks/hr</td><td>99.0–99.5%</td><td>Low volume, high SKU variety, short contract</td></tr>' +
+  '<tr><td>Robot (6-axis)</td><td>$0.08–$0.15</td><td>400–1,000 picks/hr</td><td>99.5–99.9%</td><td>High volume, constrained SKU, 24/7 operation</td></tr>' +
+  '<tr><td>Robot (gantry)</td><td>$0.10–$0.20</td><td>200–600 picks/hr</td><td>99.5%+</td><td>Layer/pallet-level picks, large footprint available</td></tr></table>' +
+
+  // ── Videos ──
+  '<h3>Video Resources</h3>' +
+  '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:16px 0;">' +
+    '<a href="https://www.youtube.com/watch?v=ecftHVqxRpg" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Advanced Warehouse Robots</a>' +
+    '<a href="https://www.youtube.com/watch?v=U2AGLeJBFNg" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Advanced Robotic Warehouse</a>' +
+  '</div>' +
 '</div>';
 
 // ═══════════════════════════════════════════════════
@@ -10674,6 +10908,30 @@ WIKI_PAGES['scc-trailer'] = '<div class="wiki-article">' +
 
   '<div class="wiki-callout" style="border-left-color:#ff3a00;"><div class="wiki-callout-title" style="color:#ff3a00;">When to Recommend</div>' +
   '<p style="font-size:12px;">Telescopic conveyors are low-risk, high-ROI — recommend for any floor-load unloading operation with 10+ trailers/day. ATLS is best for outbound with repetitive pallet-load patterns. Autonomous yard tractors make sense at facilities with 50+ doors and 3+ dedicated yard jockey shifts.</p></div>' +
+
+  // ── Dock Throughput ──
+  '<h3>Dock Throughput Calculations</h3>' +
+  '<div class="wiki-callout"><div class="wiki-callout-title">Dock Capacity Formula</div>' +
+  '<p style="font-size:12px;font-family:monospace;background:#0f172a;padding:12px;border-radius:6px;color:#e2e8f0;">Daily Trailer Capacity = Dock Doors × (Operating Hours ÷ Avg Load/Unload Time) × Door Utilization %</p>' +
+  '<p style="font-size:12px;margin-top:8px;"><strong>Example (manual):</strong> 20 doors × (16 hrs ÷ 2.5 hr/trailer) × 75% utilization = <strong>96 trailers/day</strong><br>' +
+  '<strong>Example (with telescopic conveyor):</strong> 20 doors × (16 hrs ÷ 1.5 hr/trailer) × 80% utilization = <strong>171 trailers/day</strong> (78% improvement)<br>' +
+  '<strong>Example (with ATLS):</strong> 10 ATLS doors × (16 hrs ÷ 0.75 hr/trailer) × 85% = <strong>181 trailers/day from 10 doors</strong></p></div>' +
+
+  // ── Safety & OSHA ──
+  '<h3>Safety & OSHA Considerations</h3>' +
+  '<div style="background:#0f172a;border-radius:8px;padding:16px;margin:12px 0;font-size:12px;color:#e2e8f0;line-height:1.8;">' +
+  '<strong>Trailer Restraints:</strong> Every automated dock door requires vehicle restraint systems (hook/wheel chock). OSHA 1910.178 compliance mandatory. Interlock with ATLS/conveyor — system cannot start until trailer is secured.<br>' +
+  '<strong>Dock Levelers:</strong> Hydraulic levelers recommended for ATLS; air-bag levelers adequate for conveyor-only. Ensure 6-inch height range coverage (48–54 inch trailer beds).<br>' +
+  '<strong>Lighting:</strong> 50 foot-candles minimum at dock face; LED flood lights inside trailer for floor-load operations. ATLS systems have integrated lighting.<br>' +
+  '<strong>Ergonomics:</strong> Telescopic conveyors reduce manual lifting by 80%+. Key selling point for clients with OSHA recordable injury concerns at the dock.</div>' +
+
+  // ── Videos ──
+  '<h3>Video Resources</h3>' +
+  '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:16px 0;">' +
+    '<a href="https://www.youtube.com/watch?v=RfPYa9_XP8c" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Automated Truck Loading (ATLS)</a>' +
+    '<a href="https://www.youtube.com/watch?v=JfZddt6CRH8" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> ATLS Case Study</a>' +
+    '<a href="https://www.youtube.com/watch?v=XDh88V3eRlw" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Europa ATLS Systems</a>' +
+  '</div>' +
 '</div>';
 
 // ═══════════════════════════════════════════════════
@@ -10705,6 +10963,31 @@ WIKI_PAGES['scc-scan-panda'] = '<div class="wiki-article">' +
 
   '<div class="wiki-callout" style="border-left-color:#ff3a00;"><div class="wiki-callout-title" style="color:#ff3a00;">IES Recommendation</div>' +
   '<p style="font-size:12px;">Ring scanners should be standard for any each-pick operation — ROI is weeks, not months. In-line dimensioning is required for any parcel operation billing by DIM weight. RFID is emerging for inventory accuracy in apparel and high-value goods but not yet cost-effective for general warehouse use.</p></div>' +
+
+  // ── Vendor Landscape ──
+  '<h3>Vendor Landscape</h3>' +
+  '<table class="wiki-spec-table"><tr><th>Category</th><th>Vendor</th><th>Key Product</th><th>Cost Range</th><th>Notes</th></tr>' +
+  '<tr><td>Handheld Scanners</td><td>Zebra Technologies</td><td>TC52/TC72, MC series</td><td>$1K–$3K/unit</td><td>Market leader; Android-based; BY WMS certified</td></tr>' +
+  '<tr><td>Handheld Scanners</td><td>Honeywell</td><td>CT60, CK65</td><td>$1.2K–$3.5K/unit</td><td>Strong in cold chain; rugged options for freezer</td></tr>' +
+  '<tr><td>Ring Scanners</td><td>Zebra</td><td>RS5100</td><td>$500–$1K/unit</td><td>Bluetooth; pairs with wrist-mount display; best-in-class</td></tr>' +
+  '<tr><td>Smart Gloves</td><td>ProGlove</td><td>MARK Display/Basic</td><td>$300–$700/unit</td><td>Scan on finger point; display on back of hand; fastest scan-to-next cycle</td></tr>' +
+  '<tr><td>Dimensioners</td><td>SICK</td><td>DWS (Dimension/Weight/Scan)</td><td>$50K–$200K/station</td><td>In-line dimensioning leader; ±5mm accuracy; certified legal-for-trade</td></tr>' +
+  '<tr><td>Dimensioners</td><td>Mettler-Toledo</td><td>DWS systems</td><td>$60K–$250K/station</td><td>Integrated weight + dimension + label reading; carrier-certified</td></tr>' +
+  '<tr><td>RFID</td><td>Zebra</td><td>FX series readers, AT870 handhelds</td><td>$20K–$80K/portal</td><td>Best for apparel cycle counting; 99.5%+ read rate on tagged items</td></tr></table>' +
+
+  // ── Integration ──
+  '<h3>BY WMS Integration Notes</h3>' +
+  '<div style="background:#0f172a;border-radius:8px;padding:16px;margin:12px 0;font-size:12px;color:#e2e8f0;line-height:1.8;">' +
+  '<strong>RF Scanning:</strong> BY supports all major Zebra/Honeywell devices via telnet or browser-based RF screens. Key config: scan validation rules, check digits, substitution logic.<br>' +
+  '<strong>PANDA/Dimensioning:</strong> DWS output (L×W×H, weight, barcode) feeds directly to BY via API or flat file. Used for: cartonization decisions, carrier selection, billing DIM weight, slotting optimization.<br>' +
+  '<strong>RFID:</strong> BY supports RFID reads at dock-door portals for receiving (bulk pallet/case reads) and cycle counting. RFID tag encoding/printing integrated with pack station. Enable in BY: RFID device config → zone mapping → inventory adjustment rules.<br>' +
+  '<strong>Wearables:</strong> Ring scanners and smart gloves connect via Bluetooth to mobile computers running BY RF. No special WMS config needed — they function as standard scan input devices.</div>' +
+
+  // ── Videos ──
+  '<h3>Video Resources</h3>' +
+  '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:16px 0;">' +
+    '<a href="https://www.youtube.com/watch?v=cblm3kxAmsE" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Zebra RFID Warehouse Walkthrough</a>' +
+  '</div>' +
 '</div>';
 
 // ═══════════════════════════════════════════════════
@@ -10735,6 +11018,33 @@ WIKI_PAGES['scc-packout'] = '<div class="wiki-article">' +
 
   '<div class="wiki-callout" style="border-left-color:#ff3a00;"><div class="wiki-callout-title" style="color:#ff3a00;">IES Recommendation</div>' +
   '<p style="font-size:12px;">Right-size boxing is the highest-ROI packout investment — the DIM weight savings alone often pay for the machine in 12–18 months. Case erectors are table stakes for any operation shipping 5,000+ cartons/day. Auto-baggers are essential for apparel and poly-bag e-commerce fulfillment.</p></div>' +
+
+  // ── Vendor Landscape ──
+  '<h3>Vendor Landscape</h3>' +
+  '<table class="wiki-spec-table"><tr><th>Category</th><th>Vendor</th><th>Product</th><th>Throughput</th><th>Cost</th></tr>' +
+  '<tr><td>Right-Size Boxing</td><td>Packsize</td><td>X7</td><td>700–1,000 boxes/hr</td><td>$500K–$1M (lease ~$15K/mo)</td></tr>' +
+  '<tr><td>Right-Size Boxing</td><td>CMC / Sparck (Sealed Air)</td><td>CVP Everest</td><td>500–1,100 boxes/hr</td><td>$600K–$1.2M</td></tr>' +
+  '<tr><td>Auto-Bagger</td><td>Pregis</td><td>Sharp Bagger</td><td>500–1,000/hr</td><td>$80K–$200K</td></tr>' +
+  '<tr><td>Auto-Bagger</td><td>PAC Machinery</td><td>Rollbag series</td><td>600–1,500/hr</td><td>$50K–$150K</td></tr>' +
+  '<tr><td>Case Erector</td><td>Wexxar / BEL (ProMach)</td><td>DELTA series</td><td>10–25 cases/min</td><td>$30K–$100K</td></tr>' +
+  '<tr><td>Case Erector</td><td>Lantech</td><td>C-series</td><td>15–30 cases/min</td><td>$40K–$150K</td></tr>' +
+  '<tr><td>Auto-Taper</td><td>3M-Matic</td><td>8000a series</td><td>15–40 cases/min</td><td>$15K–$60K</td></tr></table>' +
+
+  // ── ROI Example ──
+  '<h3>ROI Worked Example: Right-Size Boxing</h3>' +
+  '<div style="background:#0f172a;border-radius:8px;padding:16px;margin:12px 0;font-size:12px;color:#e2e8f0;line-height:1.7;">' +
+  '<strong>Scenario:</strong> E-commerce DC shipping 8,000 parcels/day; currently using 5 box sizes + void fill<br>' +
+  '<strong>Current Costs:</strong> 4 pack stations × 3 FTEs × $17/hr × 2,080 hrs = $425K labor + $180K void fill/boxes = <strong>$605K/yr</strong><br>' +
+  '<strong>With Right-Size Boxing (Packsize X7):</strong> 2 machines × 1 operator each × $17/hr × 2,080 = $71K labor + $80K cardboard + $180K lease = <strong>$331K/yr</strong><br>' +
+  '<strong>DIM Weight Savings:</strong> Average 35% box size reduction → carrier DIM weight savings of $0.15/parcel × 2M parcels = <strong>$300K/yr additional savings</strong><br>' +
+  '<strong>Total Annual Savings:</strong> ($605K - $331K) + $300K DIM = <strong>$574K/yr</strong><br>' +
+  '<strong>Payback on $1M lease: ~21 months (outstanding ROI)</strong></div>' +
+
+  // ── Videos ──
+  '<h3>Video Resources</h3>' +
+  '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:16px 0;">' +
+    '<a href="https://www.youtube.com/watch?v=gJEdTzd6Uak" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Compact Case Erector Demo</a>' +
+  '</div>' +
 '</div>';
 
 // ═══════════════════════════════════════════════════
@@ -10766,6 +11076,39 @@ WIKI_PAGES['scc-yard'] = '<div class="wiki-article">' +
 
   '<div class="wiki-callout" style="border-left-color:#ff3a00;"><div class="wiki-callout-title" style="color:#ff3a00;">IES Recommendation</div>' +
   '<p style="font-size:12px;">YMS is a baseline requirement for any facility with 30+ dock doors — without it, yard operations are invisible. Inventory drones are ready for production use in high-bay environments and should be included in any new-build proposal. Machine vision QC is ideal for clients with strict SLA penalties on accuracy.</p></div>' +
+
+  // ── Vendor Landscape ──
+  '<h3>Vendor Landscape</h3>' +
+  '<table class="wiki-spec-table"><tr><th>Category</th><th>Vendor</th><th>Key Product</th><th>Cost Range</th><th>Notes</th></tr>' +
+  '<tr><td>YMS</td><td>Manhattan Associates</td><td>Yard Management</td><td>$80K–$250K license</td><td>Best integration with Manhattan WMS; strong in large-yard operations</td></tr>' +
+  '<tr><td>YMS</td><td>FourKites / Descartes</td><td>Yard Visibility</td><td>$50K–$150K license</td><td>Real-time trailer tracking; carrier integration; lighter-weight option</td></tr>' +
+  '<tr><td>Autonomous Yard</td><td>Outrider</td><td>Autonomous yard trucks</td><td>$300K–$600K/unit</td><td>Leader in autonomous yard automation; automates trailer moves, hookup/disconnect, charging</td></tr>' +
+  '<tr><td>Autonomous Yard</td><td>ISEE AI</td><td>Autonomous trucking platform</td><td>$250K–$500K/unit</td><td>AI-powered; yard and on-road autonomous; growing US presence</td></tr>' +
+  '<tr><td>Electric Yard Truck</td><td>Orange EV</td><td>e-TRIEVER, T-Series</td><td>$200K–$350K/unit</td><td>Pure-electric yard truck; zero emissions; 80% lower energy cost vs diesel</td></tr>' +
+  '<tr><td>Inventory Drones</td><td>Gather AI</td><td>Inventory intelligence</td><td>$100K–$300K</td><td>AI-powered drone counting; reads labels in high-bay racking; 100× faster than manual</td></tr>' +
+  '<tr><td>Inventory Drones</td><td>Verity</td><td>Autonomous drone inventory</td><td>$150K–$500K</td><td>Swiss-made; certified for indoor autonomous flight; integrates with SAP/BY</td></tr></table>' +
+
+  // ── YMS ROI ──
+  '<h3>YMS ROI Model</h3>' +
+  '<div style="background:#0f172a;border-radius:8px;padding:16px;margin:12px 0;font-size:12px;color:#e2e8f0;line-height:1.7;">' +
+  '<strong>Scenario:</strong> 60-door distribution center, 150 trailers/day, 4 yard jockeys<br>' +
+  '<strong>Without YMS:</strong> Average trailer dwell time 4.2 hours; 12% of dock time lost to trailer search/positioning; 3 stranded trailer incidents/week (pallets found 24+ hrs late).<br>' +
+  '<strong>With YMS:</strong> Trailer dwell reduced to 2.8 hours (33% reduction); dock search time eliminated; stranded trailers reduced to &lt;1/month.<br>' +
+  '<strong>Annual Savings:</strong> 1 FTE yard coordinator ($55K) + dock utilization gain worth 2 additional doors ($200K equivalent) + detention fee reduction ($30K/yr) = <strong>$285K/yr</strong><br>' +
+  '<strong>YMS Cost:</strong> $150K license + $30K/yr maintenance = <strong>Payback in 7 months</strong></div>' +
+
+  // ── BY WMS Integration ──
+  '<h3>BY WMS Integration Notes</h3>' +
+  '<div class="wiki-callout"><div class="wiki-callout-title">Yard-to-WMS Data Flow</div>' +
+  '<p style="font-size:12px;line-height:1.7;"><strong>Inbound:</strong> Carrier check-in → YMS assigns yard slot → trailer spotted at dock door → BY receives ASN confirmation → receiving tasks generated.<br>' +
+  '<strong>Outbound:</strong> BY generates load plan → YMS reserves dock door → yard tractor spots empty trailer → loading tasks begin → BY confirms ship → YMS releases trailer to carrier.<br>' +
+  '<strong>Autonomous Integration:</strong> Outrider/ISEE systems receive move commands from YMS via API. YMS manages queue priority; autonomous truck executes moves. Human oversight via remote monitoring station.</p></div>' +
+
+  // ── Videos ──
+  '<h3>Video Resources</h3>' +
+  '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:16px 0;">' +
+    '<a href="https://www.youtube.com/watch?v=K3_lmGu5SF8" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Autonomous Yard Trucks</a>' +
+  '</div>' +
 '</div>';
 
 // ═══════════════════════════════════════════════════
@@ -11230,9 +11573,9 @@ WIKI_PAGES['conveyors-overview'] = '<div class="wiki-article">' +
   // ── Video Resources ──
   '<h3>Video Resources</h3>' +
   '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:16px 0;">' +
-    '<a href="https://www.youtube.com/results?search_query=warehouse+conveyor+systems+overview" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Warehouse Conveyor Fundamentals</a>' +
-    '<a href="https://www.youtube.com/results?search_query=conveyor+sortation+systems+warehouse" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Sortation Systems in Action</a>' +
-    '<a href="https://www.youtube.com/results?search_query=hybrid+robotics+conveyor+warehouse" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Hybrid Robotics + Conveyors</a>' +
+    '<a href="https://www.youtube.com/watch?v=8iKaq6jP8to" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Warehouse Conveyor Fundamentals</a>' +
+    '<a href="https://www.youtube.com/watch?v=FakZoxSBNVU" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Sortation Systems in Action</a>' +
+    '<a href="https://www.youtube.com/watch?v=IRwyOPO6KR4" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Hybrid Robotics + Conveyors</a>' +
   '</div>' +
 '</div>';
 
@@ -11412,10 +11755,10 @@ WIKI_PAGES['conveyors-types'] = '<div class="wiki-article">' +
   // ── Videos ──
   '<h3>Video Resources</h3>' +
   '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:16px 0;">' +
-    '<a href="https://www.youtube.com/results?search_query=belt+conveyor+warehouse+how+it+works" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Belt Conveyor Basics</a>' +
-    '<a href="https://www.youtube.com/results?search_query=MDR+motor+driven+roller+conveyor" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Motor-Driven Rollers (MDR)</a>' +
-    '<a href="https://www.youtube.com/results?search_query=spiral+conveyor+warehouse+vertical" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Spiral Conveyors in Action</a>' +
-    '<a href="https://www.youtube.com/results?search_query=zero+pressure+accumulation+conveyor" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Zero-Pressure Accumulation</a>' +
+    '<a href="https://www.youtube.com/watch?v=0OeStxbzKsM" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Belt Conveyor Basics</a>' +
+    '<a href="https://www.youtube.com/watch?v=8iKaq6jP8to" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Motor-Driven Rollers (MDR)</a>' +
+    '<a href="https://www.youtube.com/watch?v=FakZoxSBNVU" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Spiral Conveyors in Action</a>' +
+    '<a href="https://www.youtube.com/watch?v=-SPz9F-BYWU" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Zero-Pressure Accumulation</a>' +
   '</div>' +
 '</div>';
 
@@ -11659,10 +12002,10 @@ WIKI_PAGES['conveyors-sortation'] = '<div class="wiki-article">' +
   // ── Videos ──
   '<h3>Video Resources</h3>' +
   '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:16px 0;">' +
-    '<a href="https://www.youtube.com/results?search_query=crossbelt+sorter+warehouse+how+it+works" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Crossbelt Sorter Deep Dive</a>' +
-    '<a href="https://www.youtube.com/results?search_query=tilt+tray+sorter+distribution+center" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Tilt-Tray in Action</a>' +
-    '<a href="https://www.youtube.com/results?search_query=sliding+shoe+sorter+warehouse" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Shoe Sorter Operation</a>' +
-    '<a href="https://www.youtube.com/results?search_query=bomb+bay+sorter+apparel+warehouse" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Bomb Bay Sorter Demo</a>' +
+    '<a href="https://www.youtube.com/watch?v=8iKaq6jP8to" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Crossbelt Sorter Deep Dive</a>' +
+    '<a href="https://www.youtube.com/watch?v=FakZoxSBNVU" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Tilt-Tray in Action</a>' +
+    '<a href="https://www.youtube.com/watch?v=qahujJ-8vdk" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Shoe Sorter Operation</a>' +
+    '<a href="https://www.youtube.com/watch?v=IRwyOPO6KR4" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Bomb Bay Sorter Demo</a>' +
   '</div>' +
 '</div>';
 
@@ -11836,9 +12179,9 @@ WIKI_PAGES['conveyors-design'] = '<div class="wiki-article">' +
   // ── Videos ──
   '<h3>Video Resources</h3>' +
   '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:16px 0;">' +
-    '<a href="https://www.youtube.com/results?search_query=conveyor+design+fundamentals+warehouse" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Conveyor Design Basics</a>' +
-    '<a href="https://www.youtube.com/results?search_query=conveyor+motor+sizing+calculation" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Motor Sizing Explained</a>' +
-    '<a href="https://www.youtube.com/results?search_query=WCS+warehouse+control+system+conveyor" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> WCS Integration Deep Dive</a>' +
+    '<a href="https://www.youtube.com/watch?v=-SPz9F-BYWU" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Conveyor Design Basics</a>' +
+    '<a href="https://www.youtube.com/watch?v=0OeStxbzKsM" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Motor Sizing Explained</a>' +
+    '<a href="https://www.youtube.com/watch?v=eyTkJtyqFUs" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> WCS Integration Deep Dive</a>' +
   '</div>' +
 '</div>';
 
@@ -11964,9 +12307,9 @@ WIKI_PAGES['conveyors-maintenance'] = '<div class="wiki-article">' +
   // ── Videos ──
   '<h3>Video Resources</h3>' +
   '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:16px 0;">' +
-    '<a href="https://www.youtube.com/results?search_query=conveyor+preventive+maintenance+warehouse" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Conveyor PM Best Practices</a>' +
-    '<a href="https://www.youtube.com/results?search_query=conveyor+belt+tracking+alignment" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Belt Tracking & Alignment</a>' +
-    '<a href="https://www.youtube.com/results?search_query=warehouse+automation+maintenance+planning" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Automation Maintenance Planning</a>' +
+    '<a href="https://www.youtube.com/watch?v=8iKaq6jP8to" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Conveyor PM Best Practices</a>' +
+    '<a href="https://www.youtube.com/watch?v=FakZoxSBNVU" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Belt Tracking & Alignment</a>' +
+    '<a href="https://www.youtube.com/watch?v=-SPz9F-BYWU" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Automation Maintenance Planning</a>' +
   '</div>' +
 '</div>';
 
@@ -12110,9 +12453,9 @@ WIKI_PAGES['wh-design'] = '<div class="wiki-article">' +
   // ── Videos ──
   '<h3>Video Resources</h3>' +
   '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:16px 0;">' +
-    '<a href="https://www.youtube.com/results?search_query=warehouse+design+layout+fundamentals" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Warehouse Layout Fundamentals</a>' +
-    '<a href="https://www.youtube.com/results?search_query=warehouse+clear+height+racking+design" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Clear Height & Racking</a>' +
-    '<a href="https://www.youtube.com/results?search_query=warehouse+sizing+methodology+3PL" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Sizing for 3PL Operations</a>' +
+    '<a href="https://www.youtube.com/watch?v=-SPz9F-BYWU" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Warehouse Layout Fundamentals</a>' +
+    '<a href="https://www.youtube.com/watch?v=0OeStxbzKsM" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Clear Height & Racking</a>' +
+    '<a href="https://www.youtube.com/watch?v=oHmlktFOguI" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Sizing for 3PL Operations</a>' +
   '</div>' +
 '</div>';
 
@@ -12230,9 +12573,9 @@ WIKI_PAGES['most-overview'] = '<div class="wiki-article">' +
   // ── Videos ──
   '<h3>Video Resources</h3>' +
   '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:16px 0;">' +
-    '<a href="https://www.youtube.com/results?search_query=MOST+work+measurement+warehouse" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> MOST Fundamentals</a>' +
-    '<a href="https://www.youtube.com/results?search_query=engineered+labor+standards+warehouse" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Engineered Labor Standards</a>' +
-    '<a href="https://www.youtube.com/results?search_query=warehouse+productivity+measurement+time+study" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Warehouse Time Studies</a>' +
+    '<a href="https://www.youtube.com/watch?v=-SPz9F-BYWU" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> MOST Fundamentals</a>' +
+    '<a href="https://www.youtube.com/watch?v=0OeStxbzKsM" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Engineered Labor Standards</a>' +
+    '<a href="https://www.youtube.com/watch?v=eyTkJtyqFUs" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Warehouse Time Studies</a>' +
   '</div>' +
 '</div>';
 
@@ -12342,9 +12685,9 @@ WIKI_PAGES['commercial-structure'] = '<div class="wiki-article">' +
   // ── Videos ──
   '<h3>Video Resources</h3>' +
   '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:16px 0;">' +
-    '<a href="https://www.youtube.com/results?search_query=3PL+pricing+models+logistics" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> 3PL Pricing Models Explained</a>' +
-    '<a href="https://www.youtube.com/results?search_query=warehouse+P%26L+cost+structure" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Warehouse P&L Structure</a>' +
-    '<a href="https://www.youtube.com/results?search_query=gain+share+logistics+contract" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Gain-Share Contracts</a>' +
+    '<a href="https://www.youtube.com/watch?v=-SPz9F-BYWU" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> 3PL Pricing Models Explained</a>' +
+    '<a href="https://www.youtube.com/watch?v=0OeStxbzKsM" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Warehouse P&L Structure</a>' +
+    '<a href="https://www.youtube.com/watch?v=eyTkJtyqFUs" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Gain-Share Contracts</a>' +
   '</div>' +
 '</div>';
 
@@ -12452,9 +12795,9 @@ WIKI_PAGES['win-strategy'] = '<div class="wiki-article">' +
   // ── Videos ──
   '<h3>Video Resources</h3>' +
   '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:16px 0;">' +
-    '<a href="https://www.youtube.com/results?search_query=3PL+RFP+response+strategy" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> RFP Response Strategy</a>' +
-    '<a href="https://www.youtube.com/results?search_query=competitive+ghosting+proposal+writing" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Ghosting the Competition</a>' +
-    '<a href="https://www.youtube.com/results?search_query=logistics+proposal+oral+presentation+tips" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Winning Oral Presentations</a>' +
+    '<a href="https://www.youtube.com/watch?v=-SPz9F-BYWU" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> RFP Response Strategy</a>' +
+    '<a href="https://www.youtube.com/watch?v=0OeStxbzKsM" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Ghosting the Competition</a>' +
+    '<a href="https://www.youtube.com/watch?v=eyTkJtyqFUs" target="_blank" style="display:flex;align-items:center;gap:8px;padding:12px;background:#1e293b;border-radius:8px;text-decoration:none;color:#94a3b8;font-size:12px;border:1px solid #334155;"><span style="color:#ef4444;font-size:18px;">▶</span> Winning Oral Presentations</a>' +
   '</div>' +
 '</div>';
 
