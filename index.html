@@ -34865,7 +34865,8 @@ async function showAdminFormModal(table, rowId) {
     var countryEl = adminMakeSelect('admin-form-country', ['US','CA','MX'], detectedCountry);
     body.appendChild(adminMakeGroup('Country', countryEl));
 
-    body.appendChild(adminMakeGroup('City', adminMakeInput('admin-form-city', 'e.g., Indianapolis', row?.city || '')));
+    var cityInput = adminMakeInput('admin-form-city', 'e.g., Indianapolis', row?.city || '');
+    body.appendChild(adminMakeGroup('City', cityInput));
 
     var stateEl = adminMakeSelect('admin-form-state', [], null);
     adminPopulateStates(detectedCountry, stateEl, row?.state || '');
@@ -34895,9 +34896,56 @@ async function showAdminFormModal(table, rowId) {
 
     var row7m = document.createElement('div');
     row7m.className = 'admin-form-row';
-    row7m.appendChild(adminMakeGroup('Latitude', (function() { var inp = adminMakeInput('admin-form-lat', 'e.g., 39.77', row?.latitude ?? ''); inp.type = 'number'; inp.step = 'any'; return inp; })(), 'Required for Map Explorer pin'));
-    row7m.appendChild(adminMakeGroup('Longitude', (function() { var inp = adminMakeInput('admin-form-lng', 'e.g., -86.16', row?.longitude ?? ''); inp.type = 'number'; inp.step = 'any'; return inp; })(), 'Required for Map Explorer pin'));
+    var latGroup = adminMakeGroup('Latitude', (function() { var inp = adminMakeInput('admin-form-lat', 'Auto-filled from city', row?.latitude ?? ''); inp.type = 'number'; inp.step = 'any'; return inp; })(), 'Auto-fills when city + state are set');
+    var lngGroup = adminMakeGroup('Longitude', (function() { var inp = adminMakeInput('admin-form-lng', 'Auto-filled from city', row?.longitude ?? ''); inp.type = 'number'; inp.step = 'any'; return inp; })(), 'Auto-fills when city + state are set');
+    row7m.appendChild(latGroup);
+    row7m.appendChild(lngGroup);
     body.appendChild(row7m);
+
+    /* Auto-geocode: when city loses focus OR state changes, look up coordinates */
+    var geocodeStatus = document.createElement('div');
+    geocodeStatus.id = 'admin-geocode-status';
+    geocodeStatus.style.cssText = 'font-size:11px;color:var(--ies-gray-500);margin-top:-8px;min-height:16px;';
+    body.appendChild(geocodeStatus);
+
+    function tryGeocode() {
+      var city = cityInput.value.trim();
+      var state = stateEl.value;
+      var country = countryEl.value;
+      if (!city || !state) return;
+      /* Skip if lat/lng already manually set */
+      var latEl = latGroup.querySelector('input');
+      var lngEl = lngGroup.querySelector('input');
+      if (!latEl || !lngEl) return;
+      if (latEl.value && lngEl.value && latEl.dataset.manual) return;
+      var countryCode = { US: 'us', CA: 'ca', MX: 'mx' }[country] || 'us';
+      geocodeStatus.textContent = 'Looking up coordinates…';
+      geocodeStatus.style.color = 'var(--ies-blue)';
+      fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(city + ', ' + state + ', ' + countryCode), { headers: { 'Accept': 'application/json' } })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data && data.length > 0) {
+            latEl.value = parseFloat(data[0].lat).toFixed(4);
+            lngEl.value = parseFloat(data[0].lon).toFixed(4);
+            geocodeStatus.innerHTML = '&#10003; Coordinates found: ' + latEl.value + ', ' + lngEl.value;
+            geocodeStatus.style.color = '#059669';
+          } else {
+            geocodeStatus.textContent = 'Could not find coordinates — enter manually';
+            geocodeStatus.style.color = 'var(--ies-orange)';
+          }
+        })
+        .catch(function() {
+          geocodeStatus.textContent = 'Geocode lookup failed — enter coordinates manually';
+          geocodeStatus.style.color = 'var(--ies-red)';
+        });
+    }
+    cityInput.addEventListener('blur', tryGeocode);
+    stateEl.addEventListener('change', tryGeocode);
+    /* Let user override manually — use direct element refs since they may not be in DOM yet */
+    var latInput = latGroup.querySelector('input');
+    var lngInput = lngGroup.querySelector('input');
+    if (latInput) latInput.addEventListener('input', function() { this.dataset.manual = '1'; });
+    if (lngInput) lngInput.addEventListener('input', function() { this.dataset.manual = '1'; });
 
   } else if (table === 'verticals') {
     body.appendChild(adminMakeGroup('Vertical Name', adminMakeInput('admin-form-name', 'e.g., Food & Beverage', row?.vertical_name || '')));
