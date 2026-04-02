@@ -9022,10 +9022,11 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     <!-- CONFIGURATION TAB -->
     <div id="fm-tab-config" class="fm-tab-content" style="display:none;">
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px;">
-        <!-- Vehicle Selection -->
-        <div style="background:#fff;border-radius:10px;border:1px solid var(--ies-gray-200);padding:20px;">
-          <div style="font-weight:600;margin-bottom:16px;color:var(--ies-navy);">Vehicle Types</div>
-          <div style="display:flex;flex-direction:column;gap:12px;" id="fm-vehicle-checks"></div>
+        <!-- Vehicle Selection & Specs -->
+        <div style="background:#fff;border-radius:10px;border:1px solid var(--ies-gray-200);padding:20px;grid-column:1/-1;">
+          <div style="font-weight:600;margin-bottom:16px;color:var(--ies-navy);">Vehicle Types & Specifications</div>
+          <div style="display:none;" id="fm-vehicle-checks"></div>
+          <div style="overflow-x:auto;" id="fm-vehicle-specs-table"></div>
         </div>
 
         <!-- Cost Parameters -->
@@ -9092,9 +9093,12 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
               <thead style="background:var(--ies-gray-150);border-bottom:1px solid var(--ies-gray-300);">
                 <tr>
                   <th style="padding:12px;text-align:left;font-weight:600;">Vehicle Type</th>
-                  <th style="padding:12px;text-align:center;font-weight:600;">Required</th>
-                  <th style="padding:12px;text-align:center;font-weight:600;">Utilization</th>
-                  <th style="padding:12px;text-align:center;font-weight:600;">Annual Cost</th>
+                  <th style="padding:12px;text-align:center;font-weight:600;">Qty</th>
+                  <th style="padding:12px;text-align:right;font-weight:600;">Capacity</th>
+                  <th style="padding:12px;text-align:right;font-weight:600;">MPG</th>
+                  <th style="padding:12px;text-align:right;font-weight:600;">Fuel/Mi</th>
+                  <th style="padding:12px;text-align:right;font-weight:600;">Annual Miles</th>
+                  <th style="padding:12px;text-align:center;font-weight:600;">Vehicle Cost</th>
                 </tr>
               </thead>
               <tbody id="fm-fleet-mix-tbody"></tbody>
@@ -9117,9 +9121,39 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         </div>
 
         <!-- Key Metrics -->
-        <div style="background:#fff;border-radius:10px;border:1px solid var(--ies-gray-200);padding:20px;">
+        <div style="background:#fff;border-radius:10px;border:1px solid var(--ies-gray-200);padding:20px;margin-bottom:20px;">
           <div style="font-weight:600;margin-bottom:16px;color:var(--ies-navy);">Key Performance Metrics</div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;" id="fm-metrics-grid"></div>
+        </div>
+
+        <!-- Lane Assignments -->
+        <div style="background:#fff;border-radius:10px;border:1px solid var(--ies-gray-200);padding:20px;margin-bottom:20px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+            <div style="font-weight:600;color:var(--ies-navy);">Lane Vehicle Assignments</div>
+            <button class="fm-btn-secondary" onclick="fmApp.exportResults()" style="padding:6px 14px;font-size:11px;">Export Results (CSV)</button>
+          </div>
+          <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:12px;">
+              <thead style="background:var(--ies-gray-150);border-bottom:1px solid var(--ies-gray-300);">
+                <tr>
+                  <th style="padding:10px;text-align:left;font-weight:600;">Origin</th>
+                  <th style="padding:10px;text-align:left;font-weight:600;">Destination</th>
+                  <th style="padding:10px;text-align:center;font-weight:600;">Ships/Wk</th>
+                  <th style="padding:10px;text-align:right;font-weight:600;">Avg Wgt</th>
+                  <th style="padding:10px;text-align:center;font-weight:600;">Assigned Vehicle</th>
+                  <th style="padding:10px;text-align:center;font-weight:600;">Trips/Wk</th>
+                  <th style="padding:10px;text-align:right;font-weight:600;">Miles/Wk</th>
+                </tr>
+              </thead>
+              <tbody id="fm-lane-assignments-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Cost Breakdown Waterfall -->
+        <div style="background:#fff;border-radius:10px;border:1px solid var(--ies-gray-200);padding:20px;">
+          <div style="font-weight:600;margin-bottom:16px;color:var(--ies-navy);">Private Fleet Cost Waterfall</div>
+          <div id="fm-cost-waterfall" style="display:flex;align-items:flex-end;gap:8px;height:200px;padding-bottom:8px;"></div>
         </div>
       </div>
 
@@ -30778,11 +30812,11 @@ const fmApp = {
     vehicles: ['dry_van', 'reefer', 'straight_truck']
   },
   vehicleSpecs: {
-    dry_van: { capacity_wgt: 45000, capacity_cube: 3000, cost_per_mile: 1.85, name: 'Dry Van (53ft)' },
-    reefer: { capacity_wgt: 42000, capacity_cube: 2800, cost_per_mile: 2.25, name: 'Reefer (53ft)' },
-    flatbed: { capacity_wgt: 48000, capacity_cube: 3500, cost_per_mile: 2.10, name: 'Flatbed (48ft)' },
-    straight_truck: { capacity_wgt: 12000, capacity_cube: 1200, cost_per_mile: 1.45, name: 'Straight Truck (26ft)' },
-    sprinter_van: { capacity_wgt: 3500, capacity_cube: 400, cost_per_mile: 0.95, name: 'Sprinter Van' }
+    dry_van: { name: 'Dry Van (53ft)', capacity_wgt: 45000, capacity_cube: 3500, mpg: 6.5, capital_cost: 130000, annual_fixed: 35000, insurance_premium: 1.0, fuel_surcharge: 0, tare_wgt: 10500 },
+    reefer: { name: 'Reefer (53ft)', capacity_wgt: 42000, capacity_cube: 2800, mpg: 5.5, capital_cost: 165000, annual_fixed: 45000, insurance_premium: 1.2, fuel_surcharge: 0.08, tare_wgt: 13000 },
+    flatbed: { name: 'Flatbed (48ft)', capacity_wgt: 48000, capacity_cube: 0, mpg: 6.0, capital_cost: 110000, annual_fixed: 30000, insurance_premium: 1.15, fuel_surcharge: 0, tare_wgt: 9500 },
+    straight_truck: { name: 'Straight Truck (26ft)', capacity_wgt: 20000, capacity_cube: 1600, mpg: 7.0, capital_cost: 75000, annual_fixed: 25000, insurance_premium: 0.75, fuel_surcharge: 0, tare_wgt: 14000 },
+    sprinter_van: { name: 'Sprinter Van', capacity_wgt: 3500, capacity_cube: 400, mpg: 14.0, capital_cost: 48000, annual_fixed: 15000, insurance_premium: 0.5, fuel_surcharge: 0, tare_wgt: 6500 }
   },
   costModel: {
     fuel_cost_per_mile: 0.48,        // ATRI 2024: $0.476/mi
@@ -30810,14 +30844,53 @@ const fmApp = {
 
   renderVehicleChecks() {
     const container = document.getElementById('fm-vehicle-checks');
+    const specsContainer = document.getElementById('fm-vehicle-specs-table');
     const keys = Object.keys(this.vehicleSpecs);
-    container.innerHTML = keys.map((key, idx) => `
-      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
-        <input type="checkbox" data-vehicle="${key}" ${this.config.vehicles.includes(key) ? 'checked' : ''}
-               onchange="fmApp.updateVehicleSelection()" />
-        ${this.vehicleSpecs[key].name}
-      </label>
+    // Hidden checkboxes for backward compat
+    container.innerHTML = keys.map(key => `
+      <input type="checkbox" data-vehicle="${key}" ${this.config.vehicles.includes(key) ? 'checked' : ''} style="display:none;" />
     `).join('');
+    // Specs table
+    specsContainer.innerHTML = `
+      <table class="cm-table" style="width:100%;font-size:12px;">
+        <thead><tr>
+          <th style="width:30px;text-align:center;">Use</th>
+          <th>Vehicle Type</th>
+          <th style="text-align:right;">Payload (lbs)</th>
+          <th style="text-align:right;">Cube (ft³)</th>
+          <th style="text-align:right;">MPG</th>
+          <th style="text-align:right;">Capital Cost</th>
+          <th style="text-align:right;">Annual Fixed</th>
+          <th style="text-align:right;">Ins. Factor</th>
+          <th style="text-align:right;">Fuel Surcharge</th>
+        </tr></thead>
+        <tbody>${keys.map(key => {
+          const s = this.vehicleSpecs[key];
+          const checked = this.config.vehicles.includes(key);
+          return `<tr style="${checked ? '' : 'opacity:0.5;'}">
+            <td style="text-align:center;"><input type="checkbox" data-vspec="${key}" ${checked ? 'checked' : ''} onchange="fmApp.toggleVehicle('${key}',this.checked)" style="cursor:pointer;"></td>
+            <td style="font-weight:600;color:var(--ies-navy);">${s.name}</td>
+            <td style="text-align:right;"><input type="number" value="${s.capacity_wgt}" onchange="fmApp.vehicleSpecs['${key}'].capacity_wgt=parseFloat(this.value)" style="width:70px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:11px;text-align:right;"></td>
+            <td style="text-align:right;"><input type="number" value="${s.capacity_cube}" onchange="fmApp.vehicleSpecs['${key}'].capacity_cube=parseFloat(this.value)" style="width:60px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:11px;text-align:right;"></td>
+            <td style="text-align:right;"><input type="number" value="${s.mpg}" step="0.5" onchange="fmApp.vehicleSpecs['${key}'].mpg=parseFloat(this.value)" style="width:50px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:11px;text-align:right;"></td>
+            <td style="text-align:right;">$${s.capital_cost.toLocaleString()}</td>
+            <td style="text-align:right;">$${s.annual_fixed.toLocaleString()}</td>
+            <td style="text-align:right;">${s.insurance_premium.toFixed(2)}x</td>
+            <td style="text-align:right;">${s.fuel_surcharge > 0 ? '+$' + s.fuel_surcharge.toFixed(2) + '/mi' : '—'}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+      <div style="margin-top:8px;font-size:11px;color:var(--ies-gray-400);">Payload, cube, and MPG are editable. Insurance Factor multiplies the base insurance rate. Capital Cost and Annual Fixed show ATRI 2024 benchmarks.</div>
+    `;
+  },
+
+  toggleVehicle(key, checked) {
+    if (checked && !this.config.vehicles.includes(key)) {
+      this.config.vehicles.push(key);
+    } else if (!checked) {
+      this.config.vehicles = this.config.vehicles.filter(v => v !== key);
+    }
+    this.renderVehicleChecks();
   },
 
   updateVehicleSelection() {
@@ -31005,59 +31078,124 @@ const fmApp = {
     this.config.deadhead = parseFloat(document.getElementById('fm-deadhead').value) || 15;
     this.config.serviceLevel = parseFloat(document.getElementById('fm-service-level').value) || 95;
 
+    // ── Intelligent vehicle-to-lane assignment ──
     const vehicleFleet = {};
+    const laneAssignments = [];
     let totalMilesPerWeek = 0;
-    const primaryVehicle = this.config.vehicles[0];
-    const specs = this.vehicleSpecs[primaryVehicle];
+    let totalTripsPerWeek = 0;
+    const cm = this.costModel;
+    const availableVehicles = this.config.vehicles.map(k => ({ key: k, ...this.vehicleSpecs[k] }));
 
     this.config.vehicles.forEach(vtype => { vehicleFleet[vtype] = 0; });
 
+    // Assign best vehicle per lane (smallest that fits weight+cube, preferring lower cost)
     this.lanes.forEach(lane => {
-      const tripWeight = lane.avg_weight * lane.weekly_shipments;
-      const tripsNeeded = Math.ceil(tripWeight / specs.capacity_wgt);
+      const wgt = lane.avg_weight;
+      const cube = lane.avg_cube || 0;
+      // Find best fitting vehicle — smallest capacity that fits, or largest if none fits
+      let best = availableVehicles[0];
+      for (const v of availableVehicles) {
+        if (v.capacity_wgt >= wgt && (v.capacity_cube >= cube || v.capacity_cube === 0)) {
+          if (!best || v.capacity_wgt < best.capacity_wgt || (best.capacity_wgt < wgt)) best = v;
+        }
+      }
+      if (!best) best = availableVehicles[availableVehicles.length - 1]; // fallback to largest
+
+      const tripsPerShipment = Math.ceil(wgt / best.capacity_wgt);
+      const tripsNeeded = tripsPerShipment * lane.weekly_shipments;
       const milesPerTrip = lane.distance_miles || 500;
       const roundTripMiles = milesPerTrip * 2 * (1 + this.config.deadhead / 100);
-      totalMilesPerWeek += (roundTripMiles * tripsNeeded);
+      const laneMilesPerWeek = roundTripMiles * tripsNeeded;
+      totalMilesPerWeek += laneMilesPerWeek;
+      totalTripsPerWeek += tripsNeeded;
+
+      laneAssignments.push({
+        lane, vehicle: best.key, tripsPerWeek: tripsNeeded,
+        milesPerWeek: laneMilesPerWeek, milesPerTrip
+      });
     });
 
-    const tripsPerWeek = this.lanes.reduce((sum, lane) => {
-      const tripWeight = lane.avg_weight * lane.weekly_shipments;
-      return sum + Math.ceil(tripWeight / specs.capacity_wgt);
-    }, 0);
-
+    // Count vehicles needed per type based on trip hours
     const daysPerWeek = 5;
     const hoursPerDay = 10;
     const availableHoursPerWeek = daysPerWeek * hoursPerDay;
-    const hoursPerTrip = ((this.lanes[0]?.distance_miles || 500) * 2) / 55;
-    const tripsPerVehiclePerWeek = Math.floor(availableHoursPerWeek / hoursPerTrip);
-    const vehiclesNeeded = Math.ceil(tripsPerWeek / Math.max(1, tripsPerVehiclePerWeek));
+    const avgSpeed = 55; // mph
 
-    vehicleFleet[primaryVehicle] = vehiclesNeeded;
+    // Group by vehicle type and calculate vehicles needed
+    const byType = {};
+    laneAssignments.forEach(a => {
+      if (!byType[a.vehicle]) byType[a.vehicle] = { trips: 0, miles: 0, hours: 0 };
+      byType[a.vehicle].trips += a.tripsPerWeek;
+      byType[a.vehicle].miles += a.milesPerWeek;
+      const tripHours = (a.lane.distance_miles || 500) * 2 / avgSpeed;
+      byType[a.vehicle].hours += a.tripsPerWeek * tripHours;
+    });
 
-    const totalVehicles = vehiclesNeeded;
+    Object.keys(byType).forEach(vtype => {
+      const data = byType[vtype];
+      const vehiclesFromHours = Math.ceil(data.hours / availableHoursPerWeek);
+      const vehiclesAdjusted = Math.ceil(vehiclesFromHours / (this.config.utilization / 100));
+      vehicleFleet[vtype] = vehiclesAdjusted;
+    });
+
+    const totalVehicles = Object.values(vehicleFleet).reduce((a, b) => a + b, 0);
     const avgDriversPerVehicle = 1.3;
     const totalDrivers = Math.ceil(totalVehicles * avgDriversPerVehicle);
-    // ── Full cost model with all components ──
-    const cm = this.costModel;
+
+    // ── Per-vehicle-type cost model ──
     const annualMiles = Math.round(totalMilesPerWeek * 52);
     const driverBurdenMult = 1 + (cm.driver_benefits_pct / 100) + (cm.payroll_tax_pct / 100);
     const burdenedDriverRate = cm.driver_hourly_rate * driverBurdenMult;
-    const annualDriverCost = totalDrivers * burdenedDriverRate * 2080; // 40hr/wk * 52
-    const annualFuelMaint = annualMiles * (cm.fuel_cost_per_mile + cm.maintenance_per_mile);
-    const annualLease = totalVehicles * cm.vehicle_lease_monthly * 12;
-    const annualInsurance = totalVehicles * cm.annual_insurance_per_vehicle;
+    const annualDriverCost = totalDrivers * burdenedDriverRate * 2080;
+
+    // Fuel cost per vehicle type uses MPG + diesel price
+    const dieselPricePerGal = cm.fuel_cost_per_mile * 6.5; // back-derive diesel price from default mpg
+    let annualFuel = 0;
+    let annualMaint = 0;
+    let annualLease = 0;
+    let annualInsurance = 0;
+    const vehicleCostDetail = {};
+
+    Object.entries(vehicleFleet).forEach(([vtype, count]) => {
+      if (count === 0) return;
+      const spec = this.vehicleSpecs[vtype];
+      const typeMilesPerWeek = byType[vtype] ? byType[vtype].miles : 0;
+      const typeMilesPerYear = typeMilesPerWeek * 52;
+      const fuelPerMile = dieselPricePerGal / spec.mpg + (spec.fuel_surcharge || 0);
+      const typeFuel = typeMilesPerYear * fuelPerMile;
+      const typeMaint = typeMilesPerYear * cm.maintenance_per_mile;
+      const typeLease = count * cm.vehicle_lease_monthly * 12;
+      const typeInsurance = count * cm.annual_insurance_per_vehicle * spec.insurance_premium;
+
+      annualFuel += typeFuel;
+      annualMaint += typeMaint;
+      annualLease += typeLease;
+      annualInsurance += typeInsurance;
+
+      vehicleCostDetail[vtype] = {
+        count, miles: typeMilesPerYear, fuel: typeFuel, maint: typeMaint,
+        lease: typeLease, insurance: typeInsurance, fuelPerMile,
+        total: typeFuel + typeMaint + typeLease + typeInsurance
+      };
+    });
+
+    const annualFuelMaint = annualFuel + annualMaint;
     const subtotal = annualDriverCost + annualFuelMaint + annualLease + annualInsurance;
     const adminOverhead = subtotal * (cm.admin_overhead_pct / 100);
     const privateFleetTotal = subtotal + adminOverhead;
     const costPerMile = annualMiles > 0 ? privateFleetTotal / annualMiles : 0;
 
-    // Common carrier cost: weighted avg rate * annual miles
+    // Common carrier cost: per-lane using vehicle-appropriate rates
     const carrierRateMap = { dry_van: cm.carrier_rate_dry_van, reefer: cm.carrier_rate_reefer, flatbed: cm.carrier_rate_flatbed || 3.25, straight_truck: cm.carrier_rate_dry_van * 0.85, sprinter_van: cm.carrier_rate_dry_van * 0.65 };
-    const avgCarrierRate = this.config.vehicles.reduce((sum, v) => sum + (carrierRateMap[v] || cm.carrier_rate_dry_van), 0) / this.config.vehicles.length;
-    const commonCarrierTotal = annualMiles * avgCarrierRate;
+    let commonCarrierTotal = 0;
+    laneAssignments.forEach(a => {
+      const rate = carrierRateMap[a.vehicle] || cm.carrier_rate_dry_van;
+      commonCarrierTotal += (a.milesPerWeek * 52) * rate;
+    });
+    const avgCarrierRate = annualMiles > 0 ? commonCarrierTotal / annualMiles : 0;
 
-    // GXO dedicated: cost-plus model — GXO owns fleet, charges margin on actual costs
-    const gxoBaseCost = annualFuelMaint + annualLease + annualInsurance + (totalDrivers * cm.driver_hourly_rate * 1.25 * 2080); // GXO gets volume discounts on benefits
+    // GXO dedicated: cost-plus model
+    const gxoBaseCost = annualFuelMaint + annualLease + annualInsurance + (totalDrivers * cm.driver_hourly_rate * 1.25 * 2080);
     const dedicatedFleetTotal = gxoBaseCost * (1 + cm.dedicated_margin_pct / 100);
 
     this.results = {
@@ -31068,9 +31206,12 @@ const fmApp = {
       fleetMix: vehicleFleet,
       totalMilesPerWeek: Math.round(totalMilesPerWeek),
       annual_miles: annualMiles,
-      // Cost breakdown
+      laneAssignments: laneAssignments,
+      vehicleCostDetail: vehicleCostDetail,
       costBreakdown: {
         driverCost: annualDriverCost,
+        fuel: annualFuel,
+        maintenance: annualMaint,
         fuelMaint: annualFuelMaint,
         lease: annualLease,
         insurance: annualInsurance,
@@ -31100,15 +31241,22 @@ const fmApp = {
     document.getElementById('fm-res-cost-per-mile').textContent = '$' + this.results.costPerMile.toFixed(2);
 
     const tbody = document.getElementById('fm-fleet-mix-tbody');
+    const vcd = this.results.vehicleCostDetail || {};
     tbody.innerHTML = Object.entries(this.results.fleetMix).filter(([,count]) => count > 0).map(([vtype, count]) => {
       const spec = this.vehicleSpecs[vtype];
-      const annualCost = (count * this.results.annual_miles * spec.cost_per_mile) + (count * this.costModel.annual_insurance_per_vehicle);
+      const detail = vcd[vtype] || {};
+      const annualMilesType = detail.miles || 0;
+      const fuelPerMi = detail.fuelPerMile || 0;
+      const typeTotalCost = detail.total || 0;
       return `
         <tr style="border-bottom:1px solid var(--ies-gray-200);">
-          <td style="padding:12px;">${spec.name}</td>
+          <td style="padding:12px;font-weight:600;">${spec.name}</td>
           <td style="padding:12px;text-align:center;font-weight:600;">${count}</td>
-          <td style="padding:12px;text-align:center;">${this.config.utilization.toFixed(0)}%</td>
-          <td style="padding:12px;text-align:center;font-weight:600;">$${(annualCost / 1000000).toFixed(2)}M</td>
+          <td style="padding:12px;text-align:right;font-size:11px;">${spec.capacity_wgt.toLocaleString()} lbs / ${spec.capacity_cube.toLocaleString()} ft³</td>
+          <td style="padding:12px;text-align:right;font-size:11px;">${spec.mpg} MPG</td>
+          <td style="padding:12px;text-align:right;font-size:11px;">$${fuelPerMi.toFixed(3)}/mi</td>
+          <td style="padding:12px;text-align:right;font-size:11px;">${(annualMilesType / 1000).toFixed(0)}K mi</td>
+          <td style="padding:12px;text-align:center;font-weight:600;">$${(typeTotalCost / 1000).toFixed(0)}K</td>
         </tr>
       `;
     }).join('');
@@ -31134,7 +31282,8 @@ const fmApp = {
         <div class="fm-cost-card-value">${fmtM(privateFleetCost)}</div>
         <div style="font-size:11px;color:var(--ies-gray-500);line-height:1.6;">
           Drivers: ${fmtM(bd.driverCost)}<br>
-          Fuel+Maint: ${fmtM(bd.fuelMaint)}<br>
+          Fuel: ${fmtM(bd.fuel || bd.fuelMaint * 0.6)}<br>
+          Maint: ${fmtM(bd.maintenance || bd.fuelMaint * 0.4)}<br>
           Lease: ${fmtM(bd.lease)}<br>
           Insurance: ${fmtM(bd.insurance)}<br>
           Overhead: ${fmtM(bd.adminOverhead)}
@@ -31188,6 +31337,8 @@ const fmApp = {
     `;
 
     this.renderSensitivityChart();
+    this.renderLaneAssignments();
+    this.renderCostWaterfall();
   },
 
   renderSensitivityChart() {
@@ -31231,6 +31382,77 @@ const fmApp = {
         }
       }
     });
+  },
+
+  renderLaneAssignments() {
+    const tbody = document.getElementById('fm-lane-assignments-tbody');
+    if (!tbody || !this.results || !this.results.laneAssignments) return;
+    const vc = { dry_van: '#2563eb', reefer: '#06b6d4', flatbed: '#f97316', straight_truck: '#10b981', sprinter_van: '#8b5cf6' };
+    tbody.innerHTML = this.results.laneAssignments.map(a => {
+      const spec = this.vehicleSpecs[a.vehicle];
+      const color = vc[a.vehicle] || '#64748b';
+      return `<tr style="border-bottom:1px solid var(--ies-gray-200);">
+        <td style="padding:10px;">${a.lane.origin}</td>
+        <td style="padding:10px;">${a.lane.destination}</td>
+        <td style="padding:10px;text-align:center;">${a.lane.weekly_shipments}</td>
+        <td style="padding:10px;text-align:right;">${a.lane.avg_weight.toLocaleString()} lbs</td>
+        <td style="padding:10px;text-align:center;"><span style="font-size:11px;padding:3px 8px;border-radius:4px;background:${color}15;color:${color};font-weight:600;">${spec.name}</span></td>
+        <td style="padding:10px;text-align:center;font-weight:600;">${a.tripsPerWeek}</td>
+        <td style="padding:10px;text-align:right;">${Math.round(a.milesPerWeek).toLocaleString()}</td>
+      </tr>`;
+    }).join('');
+  },
+
+  renderCostWaterfall() {
+    const container = document.getElementById('fm-cost-waterfall');
+    if (!container || !this.results) return;
+    const bd = this.results.costBreakdown;
+    const items = [
+      { label: 'Drivers', value: bd.driverCost, color: '#2563eb' },
+      { label: 'Fuel', value: bd.fuel, color: '#f59e0b' },
+      { label: 'Maintenance', value: bd.maintenance, color: '#10b981' },
+      { label: 'Lease/Payment', value: bd.lease, color: '#8b5cf6' },
+      { label: 'Insurance', value: bd.insurance, color: '#ef4444' },
+      { label: 'Overhead', value: bd.adminOverhead, color: '#64748b' }
+    ];
+    const maxVal = Math.max(...items.map(i => i.value));
+    container.innerHTML = items.map(item => {
+      const pct = maxVal > 0 ? (item.value / maxVal * 100) : 0;
+      const totalPct = this.results.privateFleetCost > 0 ? (item.value / this.results.privateFleetCost * 100) : 0;
+      return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;">
+        <div style="font-size:10px;font-weight:700;color:var(--ies-navy);margin-bottom:2px;">$${(item.value/1000).toFixed(0)}K</div>
+        <div style="font-size:9px;color:var(--ies-gray-400);margin-bottom:4px;">${totalPct.toFixed(0)}%</div>
+        <div style="width:100%;max-width:50px;height:${Math.max(pct, 3)}%;background:${item.color};border-radius:6px 6px 0 0;transition:height 0.3s;"></div>
+        <div style="font-size:10px;color:var(--ies-gray-500);margin-top:6px;text-align:center;">${item.label}</div>
+      </div>`;
+    }).join('');
+  },
+
+  exportResults() {
+    if (!this.results) { this.showToast('Calculate fleet first'); return; }
+    const r = this.results;
+    const bd = r.costBreakdown;
+    const fmtM = v => '$' + (v / 1000000).toFixed(3) + 'M';
+    let csv = 'Fleet Modeler Results Export\n\n';
+    csv += 'FLEET SUMMARY\n';
+    csv += `Total Vehicles,${r.totalVehicles}\nTotal Drivers,${r.totalDrivers}\nAnnual Miles,${r.annual_miles}\nCost per Mile,$${r.costPerMile.toFixed(2)}\n\n`;
+    csv += 'VEHICLE MIX\nType,Count,Annual Miles,Fuel Cost,Maint Cost,Lease Cost,Insurance,Total\n';
+    Object.entries(r.vehicleCostDetail || {}).forEach(([vtype, d]) => {
+      csv += `${this.vehicleSpecs[vtype].name},${d.count},${d.miles},$${d.fuel.toFixed(0)},$${d.maint.toFixed(0)},$${d.lease.toFixed(0)},$${d.insurance.toFixed(0)},$${d.total.toFixed(0)}\n`;
+    });
+    csv += '\nCOST BREAKDOWN\n';
+    csv += `Driver Cost,${fmtM(bd.driverCost)}\nFuel,${fmtM(bd.fuel)}\nMaintenance,${fmtM(bd.maintenance)}\nLease/Payment,${fmtM(bd.lease)}\nInsurance,${fmtM(bd.insurance)}\nOverhead,${fmtM(bd.adminOverhead)}\n`;
+    csv += `\nPRIVATE FLEET TOTAL,${fmtM(r.privateFleetCost)}\nDEDICATED FLEET (GXO),${fmtM(r.dedicatedFleetCost)}\nCOMMON CARRIER,${fmtM(r.commonCarrierCost)}\n`;
+    csv += '\nLANE ASSIGNMENTS\nOrigin,Destination,Ships/Wk,Avg Weight,Vehicle,Trips/Wk,Miles/Wk\n';
+    (r.laneAssignments || []).forEach(a => {
+      csv += `${a.lane.origin},${a.lane.destination},${a.lane.weekly_shipments},${a.lane.avg_weight},${this.vehicleSpecs[a.vehicle].name},${a.tripsPerWeek},${Math.round(a.milesPerWeek)}\n`;
+    });
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'fleet_results_' + new Date().toISOString().slice(0,10) + '.csv';
+    a.click();
+    this.showToast('Results exported to CSV');
   },
 
   saveScenario() {
