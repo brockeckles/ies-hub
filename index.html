@@ -183,7 +183,7 @@
   .hub-data-table tr:hover td { background: var(--ies-gray-50); }
 
   /* Sector Pulse — live data modules for Command Center */
-  .sector-pulse { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; align-items: start; }
+  .sector-pulse { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
   @media (max-width: 900px) { .sector-pulse { grid-template-columns: 1fr; } }
   .sector-pulse-card {
     background: #fff; border-radius: 10px; padding: 16px; border: 1px solid var(--ies-gray-200);
@@ -5405,7 +5405,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
   </div>
 
   <!-- Main content: Signal Feed (left) + Charts (right) -->
-  <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px; align-items:start;">
+  <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px;">
     <!-- Unified Signal Feed — height matches charts column -->
     <div class="hub-card" id="feedCard" style="padding:0; overflow:hidden; display:flex; flex-direction:column;">
       <div style="padding:16px 20px; border-bottom:1px solid var(--ies-gray-200); display:flex; align-items:center; justify-content:space-between;">
