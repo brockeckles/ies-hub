@@ -681,8 +681,14 @@
   .wiki-sidebar {
     background: #fff; border-radius: 10px; padding: var(--sp-20); border: 1px solid var(--ies-gray-200);
     align-self: start; position: sticky; top: calc(var(--header-height) + var(--sp-32));
+    max-height: calc(100vh - var(--header-height) - var(--sp-32) - var(--sp-32));
+    overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--ies-gray-300) transparent;
     box-shadow: var(--shadow-md);
   }
+  .wiki-sidebar::-webkit-scrollbar { width: 5px; }
+  .wiki-sidebar::-webkit-scrollbar-track { background: transparent; }
+  .wiki-sidebar::-webkit-scrollbar-thumb { background: var(--ies-gray-300); border-radius: 4px; }
+  .wiki-sidebar::-webkit-scrollbar-thumb:hover { background: var(--ies-gray-400); }
   .wiki-sidebar-title { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--ies-gray-600); font-weight: 800; margin-bottom: var(--sp-16); }
   .wiki-nav-item {
     display: block; padding: var(--sp-8) var(--sp-12); border-radius: 6px; font-size: 13px; font-weight: 500;
