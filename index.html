@@ -14360,6 +14360,7 @@ async function initMap() {
       maxZoom: 8,
       zoomControl: true,
       attributionControl: false,
+      tap: false,           // Prevent Leaflet tap handler from swallowing clicks on circle markers
     });
 
     // Clean, light tile layer (CartoDB Positron — no API key needed)
