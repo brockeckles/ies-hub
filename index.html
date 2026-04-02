@@ -5505,6 +5505,18 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         </ul>
       </div>
 
+      <!-- Competitor Intelligence -->
+      <div class="sector-pulse-card">
+        <div class="sector-pulse-card-header">
+          <div class="sector-pulse-card-icon" style="background:rgba(220,53,69,.08);font-size:15px;">&#x1F3AF;</div>
+          <div class="sector-pulse-card-title">Competitor Intelligence</div>
+          <span class="sector-pulse-card-tag" style="background:rgba(0,71,171,.08);color:var(--ies-blue);">LIVE</span>
+        </div>
+        <div id="spCompetitors">
+          <div style="color:var(--ies-gray-400);font-size:12px;padding:8px 0;">Loading competitors…</div>
+        </div>
+      </div>
+
       <!-- Labor Watch (Union Activity) -->
       <div class="sector-pulse-card">
         <div class="sector-pulse-card-header">
@@ -10326,6 +10338,37 @@ var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 var sb = null;
 try { sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); } catch(e) { console.warn('Supabase init failed:', e); }
 
+// ── Global Vertical Metadata (fetched from master_verticals) ──
+var verticalMeta = {}; // keyed by enum_key: { label, color, icon, id }
+var verticalMetaLoaded = false;
+async function loadVerticalMeta() {
+  if (verticalMetaLoaded) return verticalMeta;
+  try {
+    var { data } = await sb.from('master_verticals').select('id,vertical_name,enum_key,color,icon,status').eq('status', 'active').order('vertical_name');
+    if (data) {
+      data.forEach(function(v) {
+        if (v.enum_key) {
+          verticalMeta[v.enum_key] = { label: v.vertical_name, color: v.color || '#6b7a90', icon: v.icon || '', id: v.id };
+        }
+      });
+      // Also add 'other' fallback
+      if (!verticalMeta.other) verticalMeta.other = { label: 'Other', color: '#6b7a90', icon: '', id: null };
+    }
+    verticalMetaLoaded = true;
+  } catch(e) { console.warn('loadVerticalMeta error:', e); }
+  return verticalMeta;
+}
+function getVerticalLabel(enumKey) { var m = verticalMeta[enumKey]; return m ? m.label : (enumKey || '').replace(/_/g, ' ').replace(/\b\w/g, function(c){ return c.toUpperCase(); }); }
+function getVerticalColor(enumKey) { var m = verticalMeta[enumKey]; return m ? m.color : '#6b7a90'; }
+function getVerticalOptions(selected) {
+  var html = '<option value="">Select...</option>';
+  Object.keys(verticalMeta).forEach(function(key) {
+    var v = verticalMeta[key];
+    html += '<option value="' + key + '"' + (key === selected ? ' selected' : '') + '>' + v.label + '</option>';
+  });
+  return html;
+}
+
 var dieselChartInstance, laborChartInstance, pipelineChartInstance, freightChartInstance;
 var mapInstance = null;
 var marketCache = {};
@@ -13913,11 +13956,43 @@ function navigateBackToDeal() {
 }
 
 // ── SECTOR PULSE LOADERS (live data modules) ──
+async function loadSPCompetitors() {
+  try {
+    var { data: competitors } = await sb.from('master_competitors').select('name, intelligence_score, primary_vertical, status').eq('status', 'active').order('intelligence_score', { ascending: false, nullsFirst: false });
+    var c = document.getElementById('spCompetitors');
+    if (!c || !competitors || !competitors.length) return;
+    // Also get latest news count per competitor
+    var { data: newsCounts } = await sb.from('competitor_news').select('competitor');
+    var countMap = {};
+    if (newsCounts) newsCounts.forEach(function(n) { countMap[n.competitor] = (countMap[n.competitor] || 0) + 1; });
+
+    c.innerHTML = competitors.map(function(comp) {
+      var score = comp.intelligence_score || 0;
+      var scoreColor = score >= 75 ? 'var(--ies-green)' : score >= 50 ? '#f59e0b' : 'var(--ies-red)';
+      var newsCount = countMap[comp.name] || 0;
+      var barWidth = Math.min(score, 100);
+      return '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--ies-gray-50);">' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div style="font-size:12px;font-weight:600;color:var(--ies-navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + comp.name + '</div>' +
+          '<div style="font-size:10px;color:var(--ies-gray-400);">' + newsCount + ' signals</div>' +
+        '</div>' +
+        '<div style="width:80px;">' +
+          '<div style="height:6px;background:var(--ies-gray-100);border-radius:3px;overflow:hidden;">' +
+            '<div style="height:100%;width:' + barWidth + '%;background:' + scoreColor + ';border-radius:3px;transition:width .3s;"></div>' +
+          '</div>' +
+        '</div>' +
+        '<div style="width:32px;text-align:right;font-size:13px;font-weight:700;color:' + scoreColor + ';">' + (score || '—') + '</div>' +
+      '</div>';
+    }).join('');
+  } catch(e) { console.warn('loadSPCompetitors error:', e); }
+}
+
 async function loadSectorPulse() {
   if (!sb) return;
   await Promise.all([
     loadSPAutomation(),
     loadSPVerticals(),
+    loadSPCompetitors(),
     loadSPSupplyChain(),
     loadSPLabor()
   ]);
@@ -13958,11 +14033,9 @@ async function loadSPVerticals() {
     var { data } = await sb.from('vertical_spotlights').select('*').order('as_of_date', { ascending: false });
     var c = document.getElementById('spVerticals');
     if (!c || !data || !data.length) return;
-    var vertLabels = { food_beverage: 'Food & Bev', automotive: 'Automotive', retail_ecommerce: 'Retail & E-Com', healthcare: 'Healthcare', technology: 'Technology' };
-    var vertIcons = { food_beverage: '#e07a2f', automotive: '#6c757d', retail_ecommerce: '#198754', healthcare: '#0d6efd', technology: '#6366f1' };
     c.innerHTML = data.map(function(v) {
-      var name = vertLabels[v.vertical] || v.vertical;
-      var color = vertIcons[v.vertical] || 'var(--ies-gray-600)';
+      var name = getVerticalLabel(v.vertical);
+      var color = getVerticalColor(v.vertical);
       var pipeline = v.pipeline_value ? '$' + (v.pipeline_value / 1e6).toFixed(0) + 'M' : '—';
       return '<div class="sp-vertical-row">' +
         '<div class="sp-vertical-name" style="color:' + color + ';">' + esc(name) + '</div>' +
@@ -14110,6 +14183,7 @@ async function refreshData() {
 // ═══════════════════════════════════════════════════
 async function loadAllData() {
   await Promise.all([
+    loadVerticalMeta(),
     loadDieselChart(),
     loadLaborChart(),
     loadFreightChart(),
@@ -14178,19 +14252,9 @@ async function loadPipelineChart() {
     .order('avg_deal_size', { ascending: false });
   if (!data || !data.length) return;
 
-  const verticalLabels = {
-    retail_ecommerce: 'Retail/E-com', automotive: 'Automotive', food_beverage: 'F&B',
-    technology_electronics: 'Tech/Electronics', industrial_manufacturing: 'Industrial',
-    healthcare_pharma: 'Healthcare'
-  };
-  const verticalColors = {
-    retail_ecommerce: '#00b4d8', automotive: '#e07a2f', food_beverage: '#2ecc71',
-    technology_electronics: '#6b7a90', industrial_manufacturing: '#f39c12', healthcare_pharma: '#e74c3c'
-  };
-
-  const labels = data.map(r => verticalLabels[r.vertical] || r.vertical);
+  const labels = data.map(r => getVerticalLabel(r.vertical));
   const values = data.map(r => parseFloat(r.avg_deal_size) / 1000000);
-  const colors = data.map(r => verticalColors[r.vertical] || '#6b7a90');
+  const colors = data.map(r => getVerticalColor(r.vertical));
 
   const ctx = document.getElementById('pipelineChart');
   if (pipelineChartInstance) pipelineChartInstance.destroy();
@@ -16274,7 +16338,7 @@ function pmShowNewCustomer(returnToOpp) {
   html += '<div class="pm-modal-title">New Customer</div>';
   html += '<div class="pm-form-grid">';
   html += '<div class="pm-form-group full"><label class="pm-form-label">Customer Name</label><input type="text" class="pm-form-input" id="pm-cust-name" placeholder="e.g. Acme Corp"></div>';
-  html += '<div class="pm-form-group"><label class="pm-form-label">Vertical</label><select class="pm-form-input" id="pm-cust-vertical"><option value="">Select...</option><option value="retail_ecommerce">Retail / E-Commerce</option><option value="food_beverage">Food & Beverage</option><option value="automotive">Automotive</option><option value="technology_electronics">Technology / Electronics</option><option value="industrial_manufacturing">Industrial / Manufacturing</option><option value="healthcare_pharma">Healthcare / Pharma</option><option value="consumer_goods">Consumer Goods</option><option value="aerospace_defense">Aerospace / Defense</option><option value="other">Other</option></select></div>';
+  html += '<div class="pm-form-group"><label class="pm-form-label">Vertical</label><select class="pm-form-input" id="pm-cust-vertical">' + getVerticalOptions('') + '</select></div>';
   html += '<div class="pm-form-group"><label class="pm-form-label">Contact</label><input type="text" class="pm-form-input" id="pm-cust-contact" placeholder="e.g. Jane Smith"></div>';
   html += '<div class="pm-form-group full"><label class="pm-form-label">Notes</label><textarea class="pm-form-input" id="pm-cust-notes" rows="2" placeholder="Any notes about this customer..."></textarea></div>';
   html += '</div>';
@@ -16313,11 +16377,7 @@ function pmEditCustomer(id) {
   html += '<div class="pm-modal-title">Edit Customer</div>';
   html += '<div class="pm-form-grid">';
   html += '<div class="pm-form-group full"><label class="pm-form-label">Customer Name</label><input type="text" class="pm-form-input" id="pm-editcust-name" value="' + (c.name||'').replace(/"/g,'&quot;') + '"></div>';
-  html += '<div class="pm-form-group"><label class="pm-form-label">Vertical</label><select class="pm-form-input" id="pm-editcust-vertical"><option value="">Select...</option>';
-  ['retail_ecommerce','food_beverage','automotive','technology_electronics','industrial_manufacturing','healthcare_pharma','consumer_goods','aerospace_defense','other'].forEach(function(v){
-    html += '<option value="'+v+'"'+(v===c.vertical?' selected':'')+' style="text-transform:capitalize;">'+v.replace(/_/g,' ')+'</option>';
-  });
-  html += '</select></div>';
+  html += '<div class="pm-form-group"><label class="pm-form-label">Vertical</label><select class="pm-form-input" id="pm-editcust-vertical">' + getVerticalOptions(c.vertical) + '</select></div>';
   html += '<div class="pm-form-group"><label class="pm-form-label">Contact</label><input type="text" class="pm-form-input" id="pm-editcust-contact" value="' + (c.primary_contact||'').replace(/"/g,'&quot;') + '"></div>';
   html += '<div class="pm-form-group full"><label class="pm-form-label">Notes</label><textarea class="pm-form-input" id="pm-editcust-notes" rows="2">' + (c.notes||'') + '</textarea></div>';
   html += '</div>';
@@ -25435,6 +25495,7 @@ const cmApp = {
             // Load all reference data
             await Promise.all([
                 this.loadRefData('ref_markets', 'markets'),
+                this.loadRefData('master_markets', 'masterMarkets'),
                 this.loadRefData('ref_allowance_profiles', 'allowanceProfiles'),
                 this.loadRefData('ref_most_templates', 'mostTemplates'),
                 this.loadRefData('ref_most_elements', 'mostElements'),
@@ -25618,7 +25679,7 @@ const cmApp = {
 
                     var expandGrid = '<div class="dt-deal-group-expanded-grid">';
                     models.forEach(function(m) {
-                        var market = (self.refData.markets.find(function(mk){ return mk.id === m.market_id; }) || {}).name || 'N/A';
+                        var market = self.getMarketDisplayName(m.market_id);
                         expandGrid += '<div class="dt-landing-card" draggable="true" data-cm-id="' + m.id + '" data-deal-id="' + dealId + '">' +
                             '<div style="cursor:pointer;" onclick="cmApp.openProject(' + m.id + ')">' +
                             '<div class="dt-landing-card-name">' + (m.name || 'Untitled') + '</div>' +
@@ -25640,7 +25701,7 @@ const cmApp = {
 
                 // Render ungrouped cards (draggable)
                 ungrouped.forEach(p => {
-                    var market = (this.refData.markets.find(m => m.id === p.market_id) || {}).name || 'N/A';
+                    var market = this.getMarketDisplayName(p.market_id);
                     const card = document.createElement('div');
                     card.className = 'dt-landing-card';
                     card.setAttribute('draggable', 'true');
@@ -25932,14 +25993,40 @@ const cmApp = {
         }
     },
 
+    // Resolve market display name from UUID — checks master_markets first, then ref_markets
+    getMarketDisplayName(marketUuid) {
+        if (!marketUuid) return 'N/A';
+        // Try master_markets via ref_market_uuid
+        const mm = (this.refData.masterMarkets || []).find(m => m.ref_market_uuid === marketUuid);
+        if (mm) return mm.city + ', ' + (mm.state || '');
+        // Fallback to ref_markets
+        const rm = (this.refData.markets || []).find(m => m.id === marketUuid);
+        if (rm) return rm.name;
+        return 'N/A';
+    },
+
     populateMarketDropdown() {
         const select = document.getElementById('market');
-        this.refData.markets.forEach(m => {
-            const opt = document.createElement('option');
-            opt.value = m.id;
-            opt.textContent = m.name;
-            select.appendChild(opt);
-        });
+        // Use master_markets (admin-managed) as source of truth, map to ref_market_uuid for rate lookups
+        const mm = (this.refData.masterMarkets || []).slice().sort((a, b) => (a.city || '').localeCompare(b.city || ''));
+        if (mm.length > 0) {
+            mm.forEach(m => {
+                if (!m.ref_market_uuid) return; // skip markets without rate data bridge
+                const opt = document.createElement('option');
+                opt.value = m.ref_market_uuid; // UUID for rate table compatibility
+                opt.textContent = m.city + ', ' + (m.state || '');
+                opt.dataset.masterId = m.id;
+                select.appendChild(opt);
+            });
+        } else {
+            // Fallback to legacy ref_markets if master_markets not available
+            this.refData.markets.forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m.id;
+                opt.textContent = m.name;
+                select.appendChild(opt);
+            });
+        }
     },
 
     populateAllowanceDropdown() {
@@ -25953,30 +26040,37 @@ const cmApp = {
     },
 
     updateMarketInfo() {
-        const marketId = document.getElementById('market').value;
+        const marketId = document.getElementById('market').value; // UUID from ref_markets
         const info = this.refData.markets.find(m => m.id == marketId);
+        const masterInfo = (this.refData.masterMarkets || []).find(m => m.ref_market_uuid == marketId);
         const card = document.getElementById('marketInfo');
 
-        if (info) {
-            // Pull facility and labor data for this market
+        if (info || masterInfo) {
+            // Pull facility and labor data for this market (using UUID)
             const facilityRate = this.refData.facilityRates.find(f => f.market_id == marketId);
             const marketLabor = this.refData.laborRates.filter(r => r.market_id == marketId);
             const avgRate = marketLabor.length > 0 ? marketLabor.reduce((s, r) => s + parseFloat(r.hourly_rate || 0), 0) / marketLabor.length : 0;
             const totalOccupancy = facilityRate ? (parseFloat(facilityRate.lease_rate_psf_yr || 0) + parseFloat(facilityRate.cam_rate_psf_yr || 0) + parseFloat(facilityRate.tax_rate_psf_yr || 0) + parseFloat(facilityRate.insurance_rate_psf_yr || 0)) : 0;
 
             // Auto-populate market defaults for OT% and benefit load%
-            const defaultOT = info.default_overtime_pct != null ? info.default_overtime_pct : 5;
+            const defaultOT = (info && info.default_overtime_pct != null) ? info.default_overtime_pct : 5;
             const avgBenefitLoad = marketLabor.length > 0 ? marketLabor.reduce((s, r) => s + parseFloat(r.default_benefit_load_pct || 35), 0) / marketLabor.length : 35;
             const avgBonus = marketLabor.length > 0 ? marketLabor.reduce((s, r) => s + parseFloat(r.default_bonus_pct || 0), 0) / marketLabor.length : 0;
             document.getElementById('overtimePct').value = defaultOT;
             document.getElementById('benefitLoadPct').value = avgBenefitLoad.toFixed(1);
             document.getElementById('bonusPct').value = avgBonus.toFixed(1);
 
+            // Display name from master_markets (City, ST — Region) or fallback to ref_markets
+            const displayName = masterInfo ? (masterInfo.city + ', ' + (masterInfo.state || '')) : (info ? info.name : '');
+            const region = masterInfo ? (masterInfo.region || '') : (info ? (info.region || '') : '');
+            const hasRates = marketLabor.length > 0 || facilityRate;
+
             card.innerHTML = `
-                <div class="cm-info-card-title">${info.name} — ${info.region || ''} ${info.state || ''}</div>
-                <div>Avg Labor Rate: $${avgRate.toFixed(2)}/hr (${marketLabor.length} roles)</div>
+                <div class="cm-info-card-title">${displayName}${region ? ' — ' + region : ''}</div>
+                ${hasRates ? `<div>Avg Labor Rate: $${avgRate.toFixed(2)}/hr (${marketLabor.length} roles)</div>
                 <div>Occupancy Cost: $${totalOccupancy.toFixed(2)}/sqft/yr</div>
-                <div>Default OT: ${defaultOT}% · Benefit Load: ${avgBenefitLoad.toFixed(1)}%</div>
+                <div>Default OT: ${defaultOT}% · Benefit Load: ${avgBenefitLoad.toFixed(1)}%</div>` :
+                `<div style="color:var(--ies-gray-500);font-style:italic;">No rate data yet — add rates in Admin &gt; Reference Data</div>`}
             `;
             card.style.display = 'block';
         } else {
@@ -29728,9 +29822,9 @@ const dealApp = {
         var self = this;
         this.currentDeal.sites.forEach(function(site) {
             var market = '—';
-            if (site.market_id && cmApp.refData && cmApp.refData.markets) {
-                var m = cmApp.refData.markets.find(function(mk){ return mk.id === site.market_id; });
-                if (m) market = m.name;
+            if (site.market_id && cmApp.refData) {
+                market = cmApp.getMarketDisplayName(site.market_id);
+                if (market === 'N/A') market = '—';
             }
             var row = document.createElement('tr');
             row.style.borderBottom = '1px solid var(--ies-gray-100)';
