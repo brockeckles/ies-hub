@@ -2234,9 +2234,24 @@
   .admin-modal { background: white; border-radius: 8px; max-width: 500px; width: 90%; box-shadow: var(--shadow-xl); }
   .admin-modal-header { padding: var(--sp-16) var(--sp-24); border-bottom: 1px solid var(--ies-gray-200); display: flex; justify-content: space-between; align-items: center; }
   .admin-modal-header h3 { margin: 0; font-size: 16px; font-weight: 700; }
-  .admin-modal-body { padding: var(--sp-20); display: flex; flex-direction: column; gap: var(--sp-12); }
-  .admin-modal-body input, .admin-modal-body select, .admin-modal-body textarea { padding: var(--sp-10); border: 1px solid var(--ies-gray-300); border-radius: 6px; font-family: inherit; font-size: 13px; }
-  .admin-modal-actions { display: flex; gap: var(--sp-12); margin-top: var(--sp-20); }
+  .admin-modal-body { padding: var(--sp-24); display: flex; flex-direction: column; gap: var(--sp-16); }
+  .admin-form-group { display: flex; flex-direction: column; gap: 4px; }
+  .admin-form-group label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--ies-gray-600); }
+  .admin-form-group input, .admin-form-group select, .admin-form-group textarea { padding: 10px 12px; border: 1px solid var(--ies-gray-200); border-radius: 6px; font-family: 'Montserrat', sans-serif; font-size: 13px; font-weight: 500; color: var(--ies-navy); background: #fff; transition: border-color .15s, box-shadow .15s; }
+  .admin-form-group input:focus, .admin-form-group select:focus, .admin-form-group textarea:focus { outline: none; border-color: var(--ies-blue); box-shadow: 0 0 0 3px rgba(0,71,171,.1); }
+  .admin-form-group input::placeholder { color: var(--ies-gray-400); font-weight: 400; }
+  .admin-form-group textarea { min-height: 80px; resize: vertical; }
+  .admin-form-group select { appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 5l3 3 3-3' stroke='%23666' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; cursor: pointer; }
+  .admin-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-12); }
+  .admin-form-hint { font-size: 11px; color: var(--ies-gray-400); margin-top: 2px; }
+  .admin-form-error { font-size: 11px; color: var(--ies-red); margin-top: 2px; display: none; }
+  .admin-form-group.has-error input, .admin-form-group.has-error select { border-color: var(--ies-red); }
+  .admin-form-group.has-error .admin-form-error { display: block; }
+  .admin-modal-actions { display: flex; gap: var(--sp-12); margin-top: var(--sp-8); padding-top: var(--sp-16); border-top: 1px solid var(--ies-gray-200); }
+  .admin-toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 20px; border-radius: 10px; font-family: 'Montserrat', sans-serif; font-size: 13px; font-weight: 600; color: #fff; z-index: 1100; transform: translateY(20px); opacity: 0; transition: all .3s ease; pointer-events: none; }
+  .admin-toast.toast-show { transform: translateY(0); opacity: 1; }
+  .admin-toast.toast-success { background: #059669; }
+  .admin-toast.toast-error { background: var(--ies-red); }
   .admin-modal-actions .hub-btn { flex: 1; }
   .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
   .status-green { background: var(--ies-green); }
@@ -34665,9 +34680,95 @@ async function loadAdminTable(table) {
   document.getElementById('admin-table-container').innerHTML = html;
 }
 
+/* ---------- Admin form helpers ---------- */
+var adminFormStates = {
+  US: ['Alabama','Alaska','Arizona','Arkansas','California','Colorado','Connecticut','Delaware','Florida','Georgia','Hawaii','Idaho','Illinois','Indiana','Iowa','Kansas','Kentucky','Louisiana','Maine','Maryland','Massachusetts','Michigan','Minnesota','Mississippi','Missouri','Montana','Nebraska','Nevada','New Hampshire','New Jersey','New Mexico','New York','North Carolina','North Dakota','Ohio','Oklahoma','Oregon','Pennsylvania','Rhode Island','South Carolina','South Dakota','Tennessee','Texas','Utah','Vermont','Virginia','Washington','West Virginia','Wisconsin','Wyoming'],
+  CA: ['Alberta','British Columbia','Manitoba','New Brunswick','Newfoundland and Labrador','Northwest Territories','Nova Scotia','Nunavut','Ontario','Prince Edward Island','Quebec','Saskatchewan','Yukon'],
+  MX: ['Aguascalientes','Baja California','Baja California Sur','Campeche','Chiapas','Chihuahua','Ciudad de México','Coahuila','Colima','Durango','Guanajuato','Guerrero','Hidalgo','Jalisco','México','Michoacán','Morelos','Nayarit','Nuevo León','Oaxaca','Puebla','Querétaro','Quintana Roo','San Luis Potosí','Sinaloa','Sonora','Tabasco','Tamaulipas','Tlaxcala','Veracruz','Yucatán','Zacatecas']
+};
+var adminFormRegions = { US: ['Northeast','Midwest','Southeast','Southwest','West'], CA: ['Eastern Canada','Western Canada','Northern Canada'], MX: ['Northern Mexico','Central Mexico','Southern Mexico'] };
+var adminFormVerticals = [];
+async function adminGetVerticals() {
+  if (adminFormVerticals.length) return adminFormVerticals;
+  var r = await sb.from('master_verticals').select('vertical_name').eq('status','active').order('vertical_name');
+  adminFormVerticals = (r.data || []).map(function(v) { return v.vertical_name; });
+  return adminFormVerticals;
+}
+
+function adminMakeGroup(labelText, inputEl, hint) {
+  var g = document.createElement('div');
+  g.className = 'admin-form-group';
+  var lbl = document.createElement('label');
+  lbl.textContent = labelText;
+  g.appendChild(lbl);
+  g.appendChild(inputEl);
+  if (hint) { var h = document.createElement('div'); h.className = 'admin-form-hint'; h.textContent = hint; g.appendChild(h); }
+  var err = document.createElement('div'); err.className = 'admin-form-error'; g.appendChild(err);
+  return g;
+}
+function adminMakeInput(id, placeholder, value) {
+  var inp = document.createElement('input');
+  inp.type = 'text'; inp.id = id; inp.placeholder = placeholder || ''; inp.value = value || '';
+  return inp;
+}
+function adminMakeSelect(id, options, selected) {
+  var sel = document.createElement('select');
+  sel.id = id;
+  var ph = document.createElement('option'); ph.value = ''; ph.textContent = '— Select —'; ph.disabled = true;
+  if (!selected) ph.selected = true;
+  sel.appendChild(ph);
+  options.forEach(function(opt) {
+    var o = document.createElement('option');
+    o.value = opt; o.textContent = opt;
+    if (opt === selected) o.selected = true;
+    sel.appendChild(o);
+  });
+  return sel;
+}
+function adminMakeTextarea(id, placeholder, value) {
+  var ta = document.createElement('textarea');
+  ta.id = id; ta.placeholder = placeholder || ''; ta.value = value || '';
+  return ta;
+}
+
+function adminPopulateStates(countryVal, stateEl, currentState) {
+  var opts = adminFormStates[countryVal] || adminFormStates['US'];
+  stateEl.innerHTML = '';
+  var ph = document.createElement('option'); ph.value = ''; ph.textContent = '— Select State/Province —'; ph.disabled = true;
+  if (!currentState) ph.selected = true;
+  stateEl.appendChild(ph);
+  opts.forEach(function(s) {
+    var o = document.createElement('option'); o.value = s; o.textContent = s;
+    if (s === currentState) o.selected = true;
+    stateEl.appendChild(o);
+  });
+}
+function adminPopulateRegions(countryVal, regionEl, currentRegion) {
+  var opts = adminFormRegions[countryVal] || adminFormRegions['US'];
+  regionEl.innerHTML = '';
+  var ph = document.createElement('option'); ph.value = ''; ph.textContent = '— Select Region —'; ph.disabled = true;
+  if (!currentRegion) ph.selected = true;
+  regionEl.appendChild(ph);
+  opts.forEach(function(r) {
+    var o = document.createElement('option'); o.value = r; o.textContent = r;
+    if (r === currentRegion) o.selected = true;
+    regionEl.appendChild(o);
+  });
+}
+
+function adminShowToast(msg, type) {
+  var t = document.createElement('div');
+  t.className = 'admin-toast toast-' + (type || 'success');
+  t.textContent = msg;
+  document.body.appendChild(t);
+  requestAnimationFrame(function() { t.classList.add('toast-show'); });
+  setTimeout(function() { t.classList.remove('toast-show'); setTimeout(function() { t.remove(); }, 300); }, 3000);
+}
+
 async function showAdminFormModal(table, rowId) {
   var isNew = !rowId;
-  var title = (isNew ? 'Add ' : 'Edit ') + table.slice(0, -1).charAt(0).toUpperCase() + table.slice(1, -1).slice(1);
+  var titleMap = { accounts: 'Account', competitors: 'Competitor', markets: 'Market', verticals: 'Vertical' };
+  var title = (isNew ? 'Add ' : 'Edit ') + (titleMap[table] || table);
   var row = rowId ? (await sb.from('master_' + table).select('*').eq('id', rowId)).data[0] : null;
 
   var overlay = document.createElement('div');
@@ -34680,36 +34781,99 @@ async function showAdminFormModal(table, rowId) {
 
   var header = document.createElement('div');
   header.className = 'admin-modal-header';
-  header.innerHTML = '<h3>' + title + '</h3><button onclick="closeAdminModal()" style="background:none;border:none;font-size:24px;cursor:pointer;color:var(--ies-gray-600);">×</button>';
+  header.innerHTML = '<h3>' + title + '</h3><button onclick="closeAdminModal()" style="background:none;border:none;font-size:24px;cursor:pointer;color:var(--ies-gray-600);">&times;</button>';
 
   var body = document.createElement('div');
   body.className = 'admin-modal-body';
 
   if (table === 'accounts') {
-    body.innerHTML = '<input type="text" placeholder="Account Name" id="admin-form-name" value="' + (row?.name || '').replace(/"/g, '&quot;') + '"/><input type="text" placeholder="Vertical" id="admin-form-vertical" value="' + (row?.vertical || '').replace(/"/g, '&quot;') + '"/><input type="text" placeholder="Region" id="admin-form-region" value="' + (row?.region || '').replace(/"/g, '&quot;') + '"/><select id="admin-form-type"><option selected>' + (row?.account_type || 'prospect') + '</option><option>prospect</option><option>customer</option><option>won</option><option>lost</option></select>';
+    var verts = await adminGetVerticals();
+    body.appendChild(adminMakeGroup('Account Name', adminMakeInput('admin-form-name', 'e.g., Nike, PepsiCo', row?.name || '')));
+    body.appendChild(adminMakeGroup('Vertical', adminMakeSelect('admin-form-vertical', verts, row?.vertical || '')));
+    body.appendChild(adminMakeGroup('Region', adminMakeInput('admin-form-region', 'e.g., North America, EMEA', row?.region || '')));
+    var row2 = document.createElement('div');
+    row2.className = 'admin-form-row';
+    row2.appendChild(adminMakeGroup('Account Type', adminMakeSelect('admin-form-type', ['prospect','customer','won','lost'], row?.account_type || '')));
+    row2.appendChild(adminMakeGroup('Company Size', adminMakeSelect('admin-form-size', ['enterprise','mid-market','small'], row?.company_size || '')));
+    body.appendChild(row2);
+    var row3 = document.createElement('div');
+    row3.className = 'admin-form-row';
+    row3.appendChild(adminMakeGroup('Status', adminMakeSelect('admin-form-status', ['active','inactive'], row?.status || 'active')));
+    body.appendChild(row3);
+
   } else if (table === 'competitors') {
-    body.innerHTML = '<input type="text" placeholder="Competitor Name" id="admin-form-name" value="' + (row?.name || '').replace(/"/g, '&quot;') + '"/><input type="text" placeholder="Primary Vertical" id="admin-form-vertical" value="' + (row?.primary_vertical || '').replace(/"/g, '&quot;') + '"/><input type="text" placeholder="HQ Location" id="admin-form-hq" value="' + (row?.hq_location || '').replace(/"/g, '&quot;') + '"/>';
+    var verts2 = await adminGetVerticals();
+    body.appendChild(adminMakeGroup('Competitor Name', adminMakeInput('admin-form-name', 'e.g., DHL Supply Chain', row?.name || '')));
+    body.appendChild(adminMakeGroup('Primary Vertical', adminMakeSelect('admin-form-vertical', verts2, row?.primary_vertical || '')));
+    body.appendChild(adminMakeGroup('HQ Location', adminMakeInput('admin-form-hq', 'e.g., Bonn, Germany', row?.hq_location || '')));
+    var row4 = document.createElement('div');
+    row4.className = 'admin-form-row';
+    row4.appendChild(adminMakeGroup('Intelligence Score', (function() { var inp = adminMakeInput('admin-form-score', '0–100', row?.intelligence_score ?? ''); inp.type = 'number'; inp.min = 0; inp.max = 100; return inp; })(), 'Competitive threat assessment (0–100)'));
+    row4.appendChild(adminMakeGroup('Status', adminMakeSelect('admin-form-status', ['active','inactive'], row?.status || 'active')));
+    body.appendChild(row4);
+
   } else if (table === 'markets') {
-    body.innerHTML = '<input type="text" placeholder="City" id="admin-form-city" value="' + (row?.city || '').replace(/"/g, '&quot;') + '"/><input type="text" placeholder="State" id="admin-form-state" value="' + (row?.state || '').replace(/"/g, '&quot;') + '"/><input type="text" placeholder="Region" id="admin-form-region" value="' + (row?.region || '').replace(/"/g, '&quot;') + '"/><select id="admin-form-tier"><option selected>' + (row?.market_tier || 'Tier 1') + '</option><option>Tier 1</option><option>Tier 2</option><option>Tier 3</option></select>';
+    /* Detect current country from existing state if editing */
+    var detectedCountry = 'US';
+    if (row?.state) {
+      if (adminFormStates.CA.indexOf(row.state) !== -1) detectedCountry = 'CA';
+      else if (adminFormStates.MX.indexOf(row.state) !== -1) detectedCountry = 'MX';
+    }
+    var countryEl = adminMakeSelect('admin-form-country', ['US','CA','MX'], detectedCountry);
+    body.appendChild(adminMakeGroup('Country', countryEl));
+
+    body.appendChild(adminMakeGroup('City', adminMakeInput('admin-form-city', 'e.g., Indianapolis', row?.city || '')));
+
+    var stateEl = adminMakeSelect('admin-form-state', [], null);
+    adminPopulateStates(detectedCountry, stateEl, row?.state || '');
+    body.appendChild(adminMakeGroup('State / Province', stateEl));
+
+    var regionEl = adminMakeSelect('admin-form-region', [], null);
+    adminPopulateRegions(detectedCountry, regionEl, row?.region || '');
+    body.appendChild(adminMakeGroup('Region', regionEl));
+
+    /* When country changes, repopulate state & region */
+    countryEl.onchange = function() {
+      adminPopulateStates(countryEl.value, stateEl, '');
+      adminPopulateRegions(countryEl.value, regionEl, '');
+    };
+
+    var row5 = document.createElement('div');
+    row5.className = 'admin-form-row';
+    row5.appendChild(adminMakeGroup('Market Tier', adminMakeSelect('admin-form-tier', ['Tier 1','Tier 2','Tier 3'], row?.market_tier || '')));
+    row5.appendChild(adminMakeGroup('GXO Presence', adminMakeSelect('admin-form-presence', ['yes','no','planned'], row?.gxo_presence || '')));
+    body.appendChild(row5);
+
+    var row6 = document.createElement('div');
+    row6.className = 'admin-form-row';
+    row6.appendChild(adminMakeGroup('Real Estate Cost', adminMakeSelect('admin-form-recost', ['high','medium','low'], row?.real_estate_cost_tier || '')));
+    row6.appendChild(adminMakeGroup('Status', adminMakeSelect('admin-form-status', ['active','inactive'], row?.status || 'active')));
+    body.appendChild(row6);
+
   } else if (table === 'verticals') {
-    body.innerHTML = '<input type="text" placeholder="Vertical Name" id="admin-form-name" value="' + (row?.vertical_name || '').replace(/"/g, '&quot;') + '"/><textarea placeholder="Description" id="admin-form-desc">' + (row?.description || '').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</textarea><select id="admin-form-focus"><option selected>' + (row?.gxo_focus_level || 'medium') + '</option><option>high</option><option>medium</option><option>low</option></select>';
+    body.appendChild(adminMakeGroup('Vertical Name', adminMakeInput('admin-form-name', 'e.g., Food & Beverage', row?.vertical_name || '')));
+    body.appendChild(adminMakeGroup('Description', adminMakeTextarea('admin-form-desc', 'Brief description of the vertical…', row?.description || '')));
+    var row7 = document.createElement('div');
+    row7.className = 'admin-form-row';
+    row7.appendChild(adminMakeGroup('GXO Focus Level', adminMakeSelect('admin-form-focus', ['high','medium','low'], row?.gxo_focus_level || '')));
+    row7.appendChild(adminMakeGroup('Status', adminMakeSelect('admin-form-status', ['active','inactive'], row?.status || 'active')));
+    body.appendChild(row7);
   }
 
   var actions = document.createElement('div');
   actions.className = 'admin-modal-actions';
   var btnSave = document.createElement('button');
-  btnSave.className = 'hub-btn';
-  btnSave.textContent = 'Save';
+  btnSave.className = 'hub-btn hub-btn-primary';
+  btnSave.textContent = isNew ? 'Add ' + (titleMap[table] || '') : 'Save Changes';
   btnSave.onclick = function() { saveAdminRow(table, rowId || null); };
 
   var btnCancel = document.createElement('button');
-  btnCancel.className = 'hub-btn';
-  btnCancel.style.background = 'var(--ies-gray-400)';
+  btnCancel.className = 'hub-btn hub-btn-secondary';
   btnCancel.textContent = 'Cancel';
   btnCancel.onclick = closeAdminModal;
 
-  actions.appendChild(btnSave);
   actions.appendChild(btnCancel);
+  actions.appendChild(btnSave);
 
   body.appendChild(actions);
   modal.appendChild(header);
@@ -34723,42 +34887,73 @@ function closeAdminModal() {
   if (modal) modal.remove();
 }
 
+function adminVal(id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; }
+function adminSetError(id, msg) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  var grp = el.closest('.admin-form-group');
+  if (grp) { grp.classList.add('has-error'); var err = grp.querySelector('.admin-form-error'); if (err) err.textContent = msg; }
+}
+function adminClearErrors() { document.querySelectorAll('.admin-form-group.has-error').forEach(function(g) { g.classList.remove('has-error'); }); }
+
 async function saveAdminRow(table, rowId) {
+  adminClearErrors();
   var isNew = !rowId;
   var data = {};
+  var errors = [];
 
   if (table === 'accounts') {
+    var name = adminVal('admin-form-name');
+    if (!name) { errors.push('admin-form-name'); adminSetError('admin-form-name', 'Account name is required'); }
     data = {
-      name: document.getElementById('admin-form-name').value,
-      vertical: document.getElementById('admin-form-vertical').value,
-      region: document.getElementById('admin-form-region').value,
-      account_type: document.getElementById('admin-form-type').value,
-      status: 'active'
+      name: name,
+      vertical: adminVal('admin-form-vertical'),
+      region: adminVal('admin-form-region'),
+      account_type: adminVal('admin-form-type') || 'prospect',
+      company_size: adminVal('admin-form-size') || null,
+      status: adminVal('admin-form-status') || 'active'
     };
   } else if (table === 'competitors') {
+    var cname = adminVal('admin-form-name');
+    if (!cname) { errors.push('admin-form-name'); adminSetError('admin-form-name', 'Competitor name is required'); }
+    var score = adminVal('admin-form-score');
+    if (score && (isNaN(+score) || +score < 0 || +score > 100)) { errors.push('admin-form-score'); adminSetError('admin-form-score', 'Must be 0–100'); }
     data = {
-      name: document.getElementById('admin-form-name').value,
-      primary_vertical: document.getElementById('admin-form-vertical').value,
-      hq_location: document.getElementById('admin-form-hq').value,
-      status: 'active'
+      name: cname,
+      primary_vertical: adminVal('admin-form-vertical') || null,
+      hq_location: adminVal('admin-form-hq') || null,
+      intelligence_score: score ? +score : null,
+      status: adminVal('admin-form-status') || 'active'
     };
   } else if (table === 'markets') {
+    var city = adminVal('admin-form-city');
+    var state = adminVal('admin-form-state');
+    var region = adminVal('admin-form-region');
+    if (!city) { errors.push('admin-form-city'); adminSetError('admin-form-city', 'City name is required'); }
+    if (!state) { errors.push('admin-form-state'); adminSetError('admin-form-state', 'Please select a state/province'); }
+    if (!region) { errors.push('admin-form-region'); adminSetError('admin-form-region', 'Please select a region'); }
     data = {
-      city: document.getElementById('admin-form-city').value,
-      state: document.getElementById('admin-form-state').value,
-      region: document.getElementById('admin-form-region').value,
-      market_tier: document.getElementById('admin-form-tier').value,
-      gxo_presence: 'yes',
-      status: 'active'
+      city: city,
+      state: state,
+      region: region,
+      country: adminVal('admin-form-country') || 'US',
+      market_tier: adminVal('admin-form-tier') || 'Tier 2',
+      gxo_presence: adminVal('admin-form-presence') || 'no',
+      real_estate_cost_tier: adminVal('admin-form-recost') || null,
+      status: adminVal('admin-form-status') || 'active'
     };
   } else if (table === 'verticals') {
+    var vname = adminVal('admin-form-name');
+    if (!vname) { errors.push('admin-form-name'); adminSetError('admin-form-name', 'Vertical name is required'); }
     data = {
-      vertical_name: document.getElementById('admin-form-name').value,
-      description: document.getElementById('admin-form-desc').value,
-      gxo_focus_level: document.getElementById('admin-form-focus').value,
-      status: 'active'
+      vertical_name: vname,
+      description: adminVal('admin-form-desc') || null,
+      gxo_focus_level: adminVal('admin-form-focus') || 'medium',
+      status: adminVal('admin-form-status') || 'active'
     };
   }
+
+  if (errors.length) { document.getElementById(errors[0]).focus(); return; }
 
   var res;
   if (isNew) {
@@ -34768,9 +34963,11 @@ async function saveAdminRow(table, rowId) {
   }
 
   if (res.error) {
-    alert('Error: ' + res.error.message);
+    adminShowToast('Save failed: ' + res.error.message, 'error');
   } else {
+    adminShowToast((isNew ? 'Added' : 'Updated') + ' successfully', 'success');
     closeAdminModal();
+    adminFormVerticals = []; /* bust cache if verticals changed */
     await loadAdminTable(table);
   }
 }
