@@ -34760,11 +34760,48 @@ async function loadAdminTable(table) {
 
 /* ---------- Admin form helpers ---------- */
 var adminFormStates = {
-  US: ['Alabama','Alaska','Arizona','Arkansas','California','Colorado','Connecticut','Delaware','Florida','Georgia','Hawaii','Idaho','Illinois','Indiana','Iowa','Kansas','Kentucky','Louisiana','Maine','Maryland','Massachusetts','Michigan','Minnesota','Mississippi','Missouri','Montana','Nebraska','Nevada','New Hampshire','New Jersey','New Mexico','New York','North Carolina','North Dakota','Ohio','Oklahoma','Oregon','Pennsylvania','Rhode Island','South Carolina','South Dakota','Tennessee','Texas','Utah','Vermont','Virginia','Washington','West Virginia','Wisconsin','Wyoming'],
-  CA: ['Alberta','British Columbia','Manitoba','New Brunswick','Newfoundland and Labrador','Northwest Territories','Nova Scotia','Nunavut','Ontario','Prince Edward Island','Quebec','Saskatchewan','Yukon'],
-  MX: ['Aguascalientes','Baja California','Baja California Sur','Campeche','Chiapas','Chihuahua','Ciudad de México','Coahuila','Colima','Durango','Guanajuato','Guerrero','Hidalgo','Jalisco','México','Michoacán','Morelos','Nayarit','Nuevo León','Oaxaca','Puebla','Querétaro','Quintana Roo','San Luis Potosí','Sinaloa','Sonora','Tabasco','Tamaulipas','Tlaxcala','Veracruz','Yucatán','Zacatecas']
+  US: ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY'],
+  CA: ['AB','BC','MB','NB','NL','NT','NS','NU','ON','PE','QC','SK','YT'],
+  MX: ['AGU','BCN','BCS','CAM','CHP','CHH','CMX','COA','COL','DUR','GUA','GRO','HID','JAL','MEX','MIC','MOR','NAY','NLE','OAX','PUE','QUE','ROO','SLP','SIN','SON','TAB','TAM','TLA','VER','YUC','ZAC']
+};
+var adminFormStateNames = {
+  AL:'Alabama',AK:'Alaska',AZ:'Arizona',AR:'Arkansas',CA:'California',CO:'Colorado',CT:'Connecticut',DE:'Delaware',FL:'Florida',GA:'Georgia',HI:'Hawaii',ID:'Idaho',IL:'Illinois',IN:'Indiana',IA:'Iowa',KS:'Kansas',KY:'Kentucky',LA:'Louisiana',ME:'Maine',MD:'Maryland',MA:'Massachusetts',MI:'Michigan',MN:'Minnesota',MS:'Mississippi',MO:'Missouri',MT:'Montana',NE:'Nebraska',NV:'Nevada',NH:'New Hampshire',NJ:'New Jersey',NM:'New Mexico',NY:'New York',NC:'North Carolina',ND:'North Dakota',OH:'Ohio',OK:'Oklahoma',OR:'Oregon',PA:'Pennsylvania',RI:'Rhode Island',SC:'South Carolina',SD:'South Dakota',TN:'Tennessee',TX:'Texas',UT:'Utah',VT:'Vermont',VA:'Virginia',WA:'Washington',WV:'West Virginia',WI:'Wisconsin',WY:'Wyoming',
+  AB:'Alberta',BC:'British Columbia',MB:'Manitoba',NB:'New Brunswick',NL:'Newfoundland',NT:'Northwest Territories',NS:'Nova Scotia',NU:'Nunavut',ON:'Ontario',PE:'Prince Edward Island',QC:'Quebec',SK:'Saskatchewan',YT:'Yukon'
+};
+/* State abbreviation → region auto-map */
+var adminStateRegion = {
+  CT:'Northeast',ME:'Northeast',MA:'Northeast',NH:'Northeast',NJ:'Northeast',NY:'Northeast',PA:'Northeast',RI:'Northeast',VT:'Northeast',DE:'Northeast',MD:'Northeast',
+  IL:'Midwest',IN:'Midwest',IA:'Midwest',KS:'Midwest',MI:'Midwest',MN:'Midwest',MO:'Midwest',NE:'Midwest',ND:'Midwest',OH:'Midwest',SD:'Midwest',WI:'Midwest',
+  AL:'Southeast',AR:'Southeast',FL:'Southeast',GA:'Southeast',KY:'Southeast',LA:'Southeast',MS:'Southeast',NC:'Southeast',SC:'Southeast',TN:'Southeast',VA:'Southeast',WV:'Southeast',
+  AZ:'Southwest',NM:'Southwest',OK:'Southwest',TX:'Southwest',
+  AK:'West',CA:'West',CO:'West',HI:'West',ID:'West',MT:'West',NV:'West',OR:'West',UT:'West',WA:'West',WY:'West'
 };
 var adminFormRegions = { US: ['Northeast','Midwest','Southeast','Southwest','West'], CA: ['Eastern Canada','Western Canada','Northern Canada'], MX: ['Northern Mexico','Central Mexico','Southern Mexico'] };
+/* US cities database for autocomplete — city, state abbrev */
+var adminCityDB = [
+  ['Akron','OH'],['Albany','NY'],['Albuquerque','NM'],['Allentown','PA'],['Amarillo','TX'],['Anaheim','CA'],['Anchorage','AK'],['Ann Arbor','MI'],['Atlanta','GA'],['Augusta','GA'],['Aurora','CO'],['Austin','TX'],
+  ['Bakersfield','CA'],['Baltimore','MD'],['Baton Rouge','LA'],['Beaumont','TX'],['Birmingham','AL'],['Boise','ID'],['Boston','MA'],['Bridgeport','CT'],['Brownsville','TX'],['Buffalo','NY'],
+  ['Canton','OH'],['Cedar Rapids','IA'],['Central PA','PA'],['Charleston','SC'],['Charleston','WV'],['Charlotte','NC'],['Chattanooga','TN'],['Chicago','IL'],['Cincinnati','OH'],['Cleveland','OH'],['Colorado Springs','CO'],['Columbia','SC'],['Columbus','GA'],['Columbus','OH'],['Corpus Christi','TX'],
+  ['Dallas','TX'],['Davenport','IA'],['Dayton','OH'],['Denver','CO'],['Des Moines','IA'],['Detroit','MI'],['Durham','NC'],
+  ['El Paso','TX'],['Erie','PA'],['Eugene','OR'],['Evansville','IN'],
+  ['Fayetteville','AR'],['Fort Lauderdale','FL'],['Fort Wayne','IN'],['Fort Worth','TX'],['Fresno','CA'],
+  ['Grand Rapids','MI'],['Greensboro','NC'],['Greenville','SC'],['Gulfport','MS'],
+  ['Harrisburg','PA'],['Hartford','CT'],['Henderson','NV'],['Honolulu','HI'],['Houston','TX'],['Huntsville','AL'],
+  ['Indianapolis','IN'],['Inland Empire','CA'],['Irving','TX'],
+  ['Jackson','MS'],['Jacksonville','FL'],['Jersey City','NJ'],
+  ['Kansas City','KS'],['Kansas City','MO'],['Knoxville','TN'],
+  ['Lafayette','LA'],['Lakeland','FL'],['Lancaster','PA'],['Laredo','TX'],['Las Vegas','NV'],['Lehigh Valley','PA'],['Lexington','KY'],['Lincoln','NE'],['Little Rock','AR'],['Long Beach','CA'],['Los Angeles','CA'],['Louisville','KY'],['Lubbock','TX'],
+  ['Macon','GA'],['Madison','WI'],['McAllen','TX'],['Memphis','TN'],['Mesa','AZ'],['Miami','FL'],['Milwaukee','WI'],['Minneapolis','MN'],['Mobile','AL'],['Montgomery','AL'],
+  ['Nashville','TN'],['New Haven','CT'],['New Orleans','LA'],['New York','NY'],['Newark','NJ'],['Norfolk','VA'],
+  ['Oakland','CA'],['Oklahoma City','OK'],['Omaha','NE'],['Ontario','CA'],['Orlando','FL'],
+  ['Palm Beach','FL'],['Pensacola','FL'],['Peoria','IL'],['Philadelphia','PA'],['Phoenix','AZ'],['Pittsburgh','PA'],['Portland','ME'],['Portland','OR'],['Providence','RI'],
+  ['Raleigh','NC'],['Reno','NV'],['Richmond','VA'],['Riverside','CA'],['Rochester','NY'],['Rockford','IL'],
+  ['Sacramento','CA'],['Salt Lake City','UT'],['San Antonio','TX'],['San Bernardino','CA'],['San Diego','CA'],['San Francisco','CA'],['San Jose','CA'],['Santa Fe','NM'],['Savannah','GA'],['Scranton','PA'],['Seattle','WA'],['Shreveport','LA'],['Sioux Falls','SD'],['South Bend','IN'],['Spokane','WA'],['Springfield','IL'],['Springfield','MO'],['St. Louis','MO'],['St. Paul','MN'],['Stockton','CA'],['Syracuse','NY'],
+  ['Tacoma','WA'],['Tallahassee','FL'],['Tampa','FL'],['Toledo','OH'],['Tracy','CA'],['Trenton','NJ'],['Tucson','AZ'],['Tulsa','OK'],
+  ['Virginia Beach','VA'],
+  ['Waco','TX'],['Washington','DC'],['West Palm Beach','FL'],['Wichita','KS'],['Wilmington','DE'],['Wilmington','NC'],['Winston-Salem','NC'],['Worcester','MA'],
+  ['York','PA'],['Youngstown','OH']
+];
 var adminFormVerticals = [];
 async function adminGetVerticals() {
   if (adminFormVerticals.length) return adminFormVerticals;
@@ -34816,7 +34853,8 @@ function adminPopulateStates(countryVal, stateEl, currentState) {
   if (!currentState) ph.selected = true;
   stateEl.appendChild(ph);
   opts.forEach(function(s) {
-    var o = document.createElement('option'); o.value = s; o.textContent = s;
+    var o = document.createElement('option'); o.value = s;
+    o.textContent = (adminFormStateNames[s] || s) + ' (' + s + ')';
     if (s === currentState) o.selected = true;
     stateEl.appendChild(o);
   });
@@ -34900,8 +34938,18 @@ async function showAdminFormModal(table, rowId) {
     var countryEl = adminMakeSelect('admin-form-country', ['US','CA','MX'], detectedCountry);
     body.appendChild(adminMakeGroup('Country', countryEl));
 
-    var cityInput = adminMakeInput('admin-form-city', 'e.g., Indianapolis', row?.city || '');
-    body.appendChild(adminMakeGroup('City', cityInput));
+    /* City autocomplete input */
+    var cityInput = adminMakeInput('admin-form-city', 'Start typing a city name…', row?.city || '');
+    cityInput.setAttribute('autocomplete', 'off');
+    var cityGroup = adminMakeGroup('City', cityInput);
+    /* Autocomplete dropdown container */
+    var acDropdown = document.createElement('div');
+    acDropdown.className = 'admin-ac-dropdown';
+    acDropdown.style.cssText = 'display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid var(--ies-gray-300);border-radius:var(--radius-sm);max-height:200px;overflow-y:auto;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.15);';
+    /* Make the form group relatively positioned for dropdown */
+    cityGroup.style.position = 'relative';
+    cityGroup.appendChild(acDropdown);
+    body.appendChild(cityGroup);
 
     var stateEl = adminMakeSelect('admin-form-state', [], null);
     adminPopulateStates(detectedCountry, stateEl, row?.state || '');
@@ -34911,11 +34959,90 @@ async function showAdminFormModal(table, rowId) {
     adminPopulateRegions(detectedCountry, regionEl, row?.region || '');
     body.appendChild(adminMakeGroup('Region', regionEl));
 
+    /* City autocomplete logic */
+    var acSelectedIndex = -1;
+    function acRender(matches) {
+      acDropdown.innerHTML = '';
+      if (!matches.length) { acDropdown.style.display = 'none'; return; }
+      matches.forEach(function(m, idx) {
+        var item = document.createElement('div');
+        item.style.cssText = 'padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f0f0f0;';
+        item.innerHTML = '<strong>' + m[0] + '</strong>, ' + m[1] + ' <span style="color:var(--ies-gray-500);font-size:11px;margin-left:4px;">' + (adminStateRegion[m[1]] || '') + '</span>';
+        item.onmouseenter = function() {
+          acDropdown.querySelectorAll('div').forEach(function(d) { d.style.background = ''; });
+          item.style.background = 'var(--ies-gray-100)';
+          acSelectedIndex = idx;
+        };
+        item.onmouseleave = function() { item.style.background = ''; };
+        item.onmousedown = function(e) { e.preventDefault(); acSelect(m); };
+        acDropdown.appendChild(item);
+      });
+      acDropdown.style.display = 'block';
+      acSelectedIndex = -1;
+    }
+    function acSelect(match) {
+      cityInput.value = match[0];
+      acDropdown.style.display = 'none';
+      /* Auto-set state */
+      var stAbbr = match[1];
+      /* Ensure state option exists */
+      if (!stateEl.querySelector('option[value="' + stAbbr + '"]')) {
+        adminPopulateStates(countryEl.value, stateEl, stAbbr);
+      }
+      stateEl.value = stAbbr;
+      /* Auto-set region from state */
+      var autoRegion = adminStateRegion[stAbbr] || '';
+      if (autoRegion) {
+        regionEl.value = autoRegion;
+      }
+      /* Trigger geocode */
+      tryGeocode();
+    }
+    cityInput.addEventListener('input', function() {
+      var q = cityInput.value.trim().toLowerCase();
+      if (q.length < 2) { acDropdown.style.display = 'none'; return; }
+      var country = countryEl.value;
+      var matches;
+      if (country === 'US') {
+        matches = adminCityDB.filter(function(c) { return c[0].toLowerCase().indexOf(q) === 0; }).slice(0, 8);
+        /* Also include partial matches that don't start with q */
+        if (matches.length < 8) {
+          var partial = adminCityDB.filter(function(c) { return c[0].toLowerCase().indexOf(q) > 0; }).slice(0, 8 - matches.length);
+          matches = matches.concat(partial);
+        }
+      } else {
+        matches = [];
+      }
+      acRender(matches);
+    });
+    cityInput.addEventListener('keydown', function(e) {
+      var items = acDropdown.querySelectorAll('div');
+      if (!items.length || acDropdown.style.display === 'none') return;
+      if (e.key === 'ArrowDown') { e.preventDefault(); acSelectedIndex = Math.min(acSelectedIndex + 1, items.length - 1); items.forEach(function(d,i) { d.style.background = i === acSelectedIndex ? 'var(--ies-gray-100)' : ''; }); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); acSelectedIndex = Math.max(acSelectedIndex - 1, 0); items.forEach(function(d,i) { d.style.background = i === acSelectedIndex ? 'var(--ies-gray-100)' : ''; }); }
+      else if (e.key === 'Enter' && acSelectedIndex >= 0) {
+        e.preventDefault();
+        var q2 = cityInput.value.trim().toLowerCase();
+        var country2 = countryEl.value;
+        var m2 = country2 === 'US' ? adminCityDB.filter(function(c) { return c[0].toLowerCase().indexOf(q2) !== -1; }) : [];
+        if (m2[acSelectedIndex]) acSelect(m2[acSelectedIndex]);
+      }
+      else if (e.key === 'Escape') { acDropdown.style.display = 'none'; }
+    });
+    cityInput.addEventListener('blur', function() { setTimeout(function() { acDropdown.style.display = 'none'; }, 200); });
+
     /* When country changes, repopulate state & region */
     countryEl.onchange = function() {
       adminPopulateStates(countryEl.value, stateEl, '');
       adminPopulateRegions(countryEl.value, regionEl, '');
     };
+
+    /* When state changes manually, auto-set region */
+    stateEl.addEventListener('change', function() {
+      var autoReg = adminStateRegion[stateEl.value];
+      if (autoReg) regionEl.value = autoReg;
+      tryGeocode();
+    });
 
     var row5 = document.createElement('div');
     row5.className = 'admin-form-row';
@@ -34925,19 +35052,18 @@ async function showAdminFormModal(table, rowId) {
 
     var row6 = document.createElement('div');
     row6.className = 'admin-form-row';
-    row6.appendChild(adminMakeGroup('Real Estate Cost', adminMakeSelect('admin-form-recost', ['high','medium','low'], row?.real_estate_cost_tier || '')));
     row6.appendChild(adminMakeGroup('Status', adminMakeSelect('admin-form-status', ['active','inactive'], row?.status || 'active')));
     body.appendChild(row6);
 
     var row7m = document.createElement('div');
     row7m.className = 'admin-form-row';
-    var latGroup = adminMakeGroup('Latitude', (function() { var inp = adminMakeInput('admin-form-lat', 'Auto-filled from city', row?.latitude ?? ''); inp.type = 'number'; inp.step = 'any'; return inp; })(), 'Auto-fills when city + state are set');
-    var lngGroup = adminMakeGroup('Longitude', (function() { var inp = adminMakeInput('admin-form-lng', 'Auto-filled from city', row?.longitude ?? ''); inp.type = 'number'; inp.step = 'any'; return inp; })(), 'Auto-fills when city + state are set');
+    var latGroup = adminMakeGroup('Latitude', (function() { var inp = adminMakeInput('admin-form-lat', 'Auto-filled from city', row?.latitude ?? ''); inp.type = 'number'; inp.step = 'any'; return inp; })(), 'Auto-fills when city is selected');
+    var lngGroup = adminMakeGroup('Longitude', (function() { var inp = adminMakeInput('admin-form-lng', 'Auto-filled from city', row?.longitude ?? ''); inp.type = 'number'; inp.step = 'any'; return inp; })(), 'Auto-fills when city is selected');
     row7m.appendChild(latGroup);
     row7m.appendChild(lngGroup);
     body.appendChild(row7m);
 
-    /* Auto-geocode: when city loses focus OR state changes, look up coordinates */
+    /* Auto-geocode status */
     var geocodeStatus = document.createElement('div');
     geocodeStatus.id = 'admin-geocode-status';
     geocodeStatus.style.cssText = 'font-size:11px;color:var(--ies-gray-500);margin-top:-8px;min-height:16px;';
@@ -34948,15 +35074,15 @@ async function showAdminFormModal(table, rowId) {
       var state = stateEl.value;
       var country = countryEl.value;
       if (!city || !state) return;
-      /* Skip if lat/lng already manually set */
       var latEl = latGroup.querySelector('input');
       var lngEl = lngGroup.querySelector('input');
       if (!latEl || !lngEl) return;
       if (latEl.value && lngEl.value && latEl.dataset.manual) return;
+      var stateName = adminFormStateNames[state] || state;
       var countryCode = { US: 'us', CA: 'ca', MX: 'mx' }[country] || 'us';
       geocodeStatus.textContent = 'Looking up coordinates…';
       geocodeStatus.style.color = 'var(--ies-blue)';
-      fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(city + ', ' + state + ', ' + countryCode), { headers: { 'Accept': 'application/json' } })
+      fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(city + ', ' + stateName + ', ' + countryCode), { headers: { 'Accept': 'application/json' } })
         .then(function(r) { return r.json(); })
         .then(function(data) {
           if (data && data.length > 0) {
@@ -34974,9 +35100,6 @@ async function showAdminFormModal(table, rowId) {
           geocodeStatus.style.color = 'var(--ies-red)';
         });
     }
-    cityInput.addEventListener('blur', tryGeocode);
-    stateEl.addEventListener('change', tryGeocode);
-    /* Let user override manually — use direct element refs since they may not be in DOM yet */
     var latInput = latGroup.querySelector('input');
     var lngInput = lngGroup.querySelector('input');
     if (latInput) latInput.addEventListener('input', function() { this.dataset.manual = '1'; });
@@ -35073,7 +35196,6 @@ async function saveAdminRow(table, rowId) {
       country: adminVal('admin-form-country') || 'US',
       market_tier: adminVal('admin-form-tier') || 'Tier 2',
       gxo_presence: adminVal('admin-form-presence') || 'no',
-      real_estate_cost_tier: adminVal('admin-form-recost') || null,
       latitude: latVal ? parseFloat(latVal) : null,
       longitude: lngVal ? parseFloat(lngVal) : null,
       labor_key: city,
