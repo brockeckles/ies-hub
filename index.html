@@ -9196,6 +9196,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     <div id="mostModeTabs" style="display:flex;gap:8px;margin-bottom:24px;">
       <button class="hub-btn" id="mostModeLibrary" onclick="mostApp.switchMode('library')" style="padding:8px 20px;font-size:13px;font-weight:600;">Template Library</button>
       <button class="hub-btn" id="mostModeAnalysis" onclick="mostApp.switchMode('analysis')" style="padding:8px 20px;font-size:13px;font-weight:600;opacity:0.5;">Quick Labor Analysis</button>
+      <button class="hub-btn" id="mostModeComposer" onclick="mostApp.switchMode('composer')" style="padding:8px 20px;font-size:13px;font-weight:600;opacity:0.5;">Workflow Composer</button>
     </div>
 
     <!-- ═══ TEMPLATE LIBRARY VIEW ═══ -->
@@ -9221,7 +9222,13 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
           <option value="each">Each</option>
           <option value="order">Order</option>
         </select>
-        <div style="font-size:12px;color:var(--ies-gray-400);" id="mostTemplateCount">18 templates</div>
+        <select id="mostFilterCategory" class="cm-select" onchange="mostApp.filterTemplates()" style="min-width:140px;">
+          <option value="">All Categories</option>
+          <option value="manual">Manual</option>
+          <option value="mhe">MHE</option>
+          <option value="hybrid">Hybrid</option>
+        </select>
+        <div style="font-size:12px;color:var(--ies-gray-400);" id="mostTemplateCount">30 templates</div>
         <button class="hub-btn" onclick="mostApp.showEditor(null)" style="padding:6px 16px;font-size:12px;font-weight:600;background:var(--ies-orange);color:#fff;border:none;border-radius:6px;cursor:pointer;">+ New Template</button>
       </div>
 
@@ -9284,6 +9291,14 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         <div>
           <label style="font-size:12px;font-weight:600;color:var(--ies-gray-500);display:block;margin-bottom:4px;">Pick Method</label>
           <input type="text" id="mostEdPickMethod" class="cm-input" placeholder="e.g., Discrete, Batch, Cluster" style="width:100%;">
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:var(--ies-gray-500);display:block;margin-bottom:4px;">Labor Category</label>
+          <select id="mostEdCategory" class="cm-select" style="width:100%;">
+            <option value="manual">Manual</option>
+            <option value="mhe">MHE (Material Handling Equipment)</option>
+            <option value="hybrid">Hybrid</option>
+          </select>
         </div>
         <div style="grid-column:1/-1;">
           <label style="font-size:12px;font-weight:600;color:var(--ies-gray-500);display:block;margin-bottom:4px;">Description</label>
@@ -9430,6 +9445,90 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         <div id="qlaScenariosGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;"></div>
       </div>
 
+    </div>
+
+    <!-- ═══ WORKFLOW COMPOSER VIEW ═══ -->
+    <div id="mostComposerView" style="display:none;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+        <div>
+          <div style="font-size:18px;font-weight:700;color:var(--ies-navy);">Workflow Composer</div>
+          <div style="font-size:12px;color:var(--ies-gray-500);margin-top:2px;">Chain MOST templates into end-to-end warehouse workflows to identify bottlenecks and total throughput</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="hub-btn" onclick="mostApp.addComposerStep()" style="padding:6px 16px;font-size:12px;font-weight:600;background:var(--ies-blue);color:#fff;border:none;border-radius:6px;cursor:pointer;">+ Add Step</button>
+          <button class="hub-btn" onclick="mostApp.clearComposer()" style="padding:6px 16px;font-size:12px;font-weight:600;background:var(--ies-gray-100);color:var(--ies-gray-600);border:1px solid var(--ies-gray-200);border-radius:6px;cursor:pointer;">Clear</button>
+        </div>
+      </div>
+
+      <!-- Workflow configuration -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:16px;margin-bottom:24px;">
+        <div>
+          <label style="font-size:12px;font-weight:600;color:var(--ies-gray-500);display:block;margin-bottom:4px;">Workflow Name</label>
+          <input type="text" id="wcWorkflowName" class="cm-input" value="Standard Warehouse Flow" style="width:100%;">
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:var(--ies-gray-500);display:block;margin-bottom:4px;">Target Volume / Day</label>
+          <input type="number" id="wcTargetVolume" class="cm-input" value="5000" min="1" step="100" style="width:100%;" onchange="mostApp.recalcComposer()">
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:var(--ies-gray-500);display:block;margin-bottom:4px;">Shift Hours</label>
+          <input type="number" id="wcShiftHours" class="cm-input" value="8" min="1" max="24" step="0.5" style="width:100%;" onchange="mostApp.recalcComposer()">
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:var(--ies-gray-500);display:block;margin-bottom:4px;">PFD Allowance (%)</label>
+          <input type="number" id="wcPFD" class="cm-input" value="15" min="0" max="50" step="1" style="width:100%;" onchange="mostApp.recalcComposer()">
+        </div>
+      </div>
+
+      <!-- Workflow steps (visual pipeline) -->
+      <div id="wcStepsContainer" style="margin-bottom:24px;">
+        <div style="text-align:center;padding:40px;color:var(--ies-gray-400);font-size:13px;border:2px dashed var(--ies-gray-200);border-radius:10px;">Click "+ Add Step" to build your warehouse workflow pipeline.</div>
+      </div>
+
+      <!-- Workflow results -->
+      <div id="wcResults" style="display:none;">
+        <div style="font-size:16px;font-weight:700;color:var(--ies-navy);margin-bottom:12px;">Workflow Analysis</div>
+
+        <!-- Summary cards -->
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:24px;" id="wcSummaryCards"></div>
+
+        <!-- Bottleneck alert -->
+        <div id="wcBottleneckAlert" style="display:none;margin-bottom:20px;padding:14px 16px;background:rgba(239,68,68,0.06);border-radius:10px;border-left:3px solid #ef4444;"></div>
+
+        <!-- Throughput bar chart -->
+        <div style="margin-bottom:24px;">
+          <div style="font-size:14px;font-weight:700;color:var(--ies-navy);margin-bottom:12px;">Step Throughput Comparison (UPH)</div>
+          <div id="wcBarChart" style="display:flex;align-items:flex-end;gap:8px;height:200px;padding:12px 0;"></div>
+        </div>
+
+        <!-- Labor breakdown by category -->
+        <div style="margin-bottom:24px;">
+          <div style="font-size:14px;font-weight:700;color:var(--ies-navy);margin-bottom:12px;">Labor Breakdown by Category</div>
+          <div id="wcCategoryBreakdown" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;"></div>
+        </div>
+
+        <!-- Detailed step table -->
+        <div>
+          <div style="font-size:14px;font-weight:700;color:var(--ies-navy);margin-bottom:12px;">Step-by-Step Detail</div>
+          <div style="overflow-x:auto;">
+            <table class="cm-table" style="width:100%;font-size:12px;" id="wcDetailTable">
+              <thead><tr>
+                <th style="width:30px;">#</th>
+                <th>Step Name</th>
+                <th>Template</th>
+                <th style="text-align:center;">Category</th>
+                <th style="text-align:right;">Base UPH</th>
+                <th style="text-align:right;">Adj. UPH</th>
+                <th style="text-align:right;">Cycle (sec)</th>
+                <th style="text-align:right;">FTEs Needed</th>
+                <th style="text-align:right;">Hours/Day</th>
+                <th style="text-align:center;">Bottleneck?</th>
+              </tr></thead>
+              <tbody id="wcDetailBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -30686,11 +30785,21 @@ const fmApp = {
     sprinter_van: { capacity_wgt: 3500, capacity_cube: 400, cost_per_mile: 0.95, name: 'Sprinter Van' }
   },
   costModel: {
-    fuel_cost_per_mile: 0.55,
-    maintenance_per_mile: 0.18,
-    driver_hourly_rate: 25,
-    annual_insurance_per_vehicle: 12000,
-    admin_overhead_pct: 10
+    fuel_cost_per_mile: 0.48,        // ATRI 2024: $0.476/mi
+    maintenance_per_mile: 0.198,     // ATRI 2024: $0.198/mi
+    driver_hourly_rate: 28,          // Base hourly (regional) — ATRI 2024
+    driver_benefits_pct: 30,         // Benefits load (health, PTO, 401k)
+    payroll_tax_pct: 7.65,           // FICA (SS 6.2% + Medicare 1.45%)
+    vehicle_lease_monthly: 2500,     // Average monthly lease/payment per vehicle
+    depreciation_per_vehicle_yr: 18000, // Annual depreciation if owned
+    annual_insurance_per_vehicle: 12500, // ATRI 2024: $12,500/vehicle
+    admin_overhead_pct: 10,
+    // Common carrier benchmark rates ($/mi)
+    carrier_rate_dry_van: 2.85,      // Spot market dry van Feb 2026
+    carrier_rate_reefer: 3.75,       // Spot market reefer
+    carrier_rate_flatbed: 3.25,      // Spot market flatbed
+    // GXO dedicated fleet markup/discount
+    dedicated_margin_pct: 12         // GXO margin on dedicated fleet
   },
 
   init() {
@@ -30718,26 +30827,51 @@ const fmApp = {
 
   renderCostParams() {
     const container = document.getElementById('fm-cost-params');
+    const cm = this.costModel;
     container.innerHTML = `
+      <div style="font-size:11px;font-weight:700;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;grid-column:1/-1;">Variable Costs (per mile)</div>
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
-        <span>Fuel ($/mi)</span>
-        <input type="number" id="fm-fuel-cost" value="${this.costModel.fuel_cost_per_mile}" step="0.01" style="width:70px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;">
+        <span style="min-width:130px;">Fuel ($/mi)</span>
+        <input type="number" id="fm-fuel-cost" value="${cm.fuel_cost_per_mile}" step="0.01" style="width:70px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;">
       </label>
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
-        <span>Maintenance ($/mi)</span>
-        <input type="number" id="fm-maint-cost" value="${this.costModel.maintenance_per_mile}" step="0.01" style="width:70px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;">
+        <span style="min-width:130px;">Maintenance ($/mi)</span>
+        <input type="number" id="fm-maint-cost" value="${cm.maintenance_per_mile}" step="0.01" style="width:70px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;">
+      </label>
+      <div style="font-size:11px;font-weight:700;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:.5px;margin:8px 0 4px;grid-column:1/-1;">Driver Costs</div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
+        <span style="min-width:130px;">Base Rate ($/hr)</span>
+        <input type="number" id="fm-driver-rate" value="${cm.driver_hourly_rate}" step="0.5" style="width:70px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;">
       </label>
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
-        <span>Driver Rate ($/hr)</span>
-        <input type="number" id="fm-driver-rate" value="${this.costModel.driver_hourly_rate}" step="0.5" style="width:70px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;">
+        <span style="min-width:130px;">Benefits Load (%)</span>
+        <input type="number" id="fm-driver-benefits" value="${cm.driver_benefits_pct}" step="1" style="width:70px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;">
       </label>
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
-        <span>Insurance ($/vehicle/yr)</span>
-        <input type="number" id="fm-insurance" value="${this.costModel.annual_insurance_per_vehicle}" step="500" style="width:70px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;">
+        <span style="min-width:130px;">Payroll Tax (%)</span>
+        <input type="number" id="fm-payroll-tax" value="${cm.payroll_tax_pct}" step="0.1" style="width:70px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;">
+      </label>
+      <div style="font-size:11px;font-weight:700;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:.5px;margin:8px 0 4px;grid-column:1/-1;">Fixed Costs (per vehicle/year)</div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
+        <span style="min-width:130px;">Lease ($/mo)</span>
+        <input type="number" id="fm-lease" value="${cm.vehicle_lease_monthly}" step="100" style="width:70px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;">
       </label>
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
-        <span>Admin Overhead (%)</span>
-        <input type="number" id="fm-admin" value="${this.costModel.admin_overhead_pct}" step="0.1" style="width:70px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;">
+        <span style="min-width:130px;">Insurance ($/yr)</span>
+        <input type="number" id="fm-insurance" value="${cm.annual_insurance_per_vehicle}" step="500" style="width:70px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;">
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
+        <span style="min-width:130px;">Admin Overhead (%)</span>
+        <input type="number" id="fm-admin" value="${cm.admin_overhead_pct}" step="0.1" style="width:70px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;">
+      </label>
+      <div style="font-size:11px;font-weight:700;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:.5px;margin:8px 0 4px;grid-column:1/-1;">Common Carrier Rates ($/mi benchmark)</div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
+        <span style="min-width:130px;">Dry Van</span>
+        <input type="number" id="fm-carrier-dry" value="${cm.carrier_rate_dry_van}" step="0.05" style="width:70px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;">
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
+        <span style="min-width:130px;">Reefer</span>
+        <input type="number" id="fm-carrier-reefer" value="${cm.carrier_rate_reefer}" step="0.05" style="width:70px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;">
       </label>
     `;
   },
@@ -30856,11 +30990,16 @@ const fmApp = {
       return;
     }
 
-    this.costModel.fuel_cost_per_mile = parseFloat(document.getElementById('fm-fuel-cost').value) || 0.55;
-    this.costModel.maintenance_per_mile = parseFloat(document.getElementById('fm-maint-cost').value) || 0.18;
-    this.costModel.driver_hourly_rate = parseFloat(document.getElementById('fm-driver-rate').value) || 25;
-    this.costModel.annual_insurance_per_vehicle = parseFloat(document.getElementById('fm-insurance').value) || 12000;
+    this.costModel.fuel_cost_per_mile = parseFloat(document.getElementById('fm-fuel-cost').value) || 0.48;
+    this.costModel.maintenance_per_mile = parseFloat(document.getElementById('fm-maint-cost').value) || 0.198;
+    this.costModel.driver_hourly_rate = parseFloat(document.getElementById('fm-driver-rate').value) || 28;
+    this.costModel.driver_benefits_pct = parseFloat(document.getElementById('fm-driver-benefits')?.value) || 30;
+    this.costModel.payroll_tax_pct = parseFloat(document.getElementById('fm-payroll-tax')?.value) || 7.65;
+    this.costModel.vehicle_lease_monthly = parseFloat(document.getElementById('fm-lease')?.value) || 2500;
+    this.costModel.annual_insurance_per_vehicle = parseFloat(document.getElementById('fm-insurance').value) || 12500;
     this.costModel.admin_overhead_pct = parseFloat(document.getElementById('fm-admin').value) || 10;
+    this.costModel.carrier_rate_dry_van = parseFloat(document.getElementById('fm-carrier-dry')?.value) || 2.85;
+    this.costModel.carrier_rate_reefer = parseFloat(document.getElementById('fm-carrier-reefer')?.value) || 3.75;
 
     this.config.utilization = parseFloat(document.getElementById('fm-utilization').value) || 85;
     this.config.deadhead = parseFloat(document.getElementById('fm-deadhead').value) || 15;
@@ -30898,7 +31037,28 @@ const fmApp = {
     const totalVehicles = vehiclesNeeded;
     const avgDriversPerVehicle = 1.3;
     const totalDrivers = Math.ceil(totalVehicles * avgDriversPerVehicle);
-    const costPerMile = (this.costModel.fuel_cost_per_mile + this.costModel.maintenance_per_mile);
+    // ── Full cost model with all components ──
+    const cm = this.costModel;
+    const annualMiles = Math.round(totalMilesPerWeek * 52);
+    const driverBurdenMult = 1 + (cm.driver_benefits_pct / 100) + (cm.payroll_tax_pct / 100);
+    const burdenedDriverRate = cm.driver_hourly_rate * driverBurdenMult;
+    const annualDriverCost = totalDrivers * burdenedDriverRate * 2080; // 40hr/wk * 52
+    const annualFuelMaint = annualMiles * (cm.fuel_cost_per_mile + cm.maintenance_per_mile);
+    const annualLease = totalVehicles * cm.vehicle_lease_monthly * 12;
+    const annualInsurance = totalVehicles * cm.annual_insurance_per_vehicle;
+    const subtotal = annualDriverCost + annualFuelMaint + annualLease + annualInsurance;
+    const adminOverhead = subtotal * (cm.admin_overhead_pct / 100);
+    const privateFleetTotal = subtotal + adminOverhead;
+    const costPerMile = annualMiles > 0 ? privateFleetTotal / annualMiles : 0;
+
+    // Common carrier cost: weighted avg rate * annual miles
+    const carrierRateMap = { dry_van: cm.carrier_rate_dry_van, reefer: cm.carrier_rate_reefer, flatbed: cm.carrier_rate_flatbed || 3.25, straight_truck: cm.carrier_rate_dry_van * 0.85, sprinter_van: cm.carrier_rate_dry_van * 0.65 };
+    const avgCarrierRate = this.config.vehicles.reduce((sum, v) => sum + (carrierRateMap[v] || cm.carrier_rate_dry_van), 0) / this.config.vehicles.length;
+    const commonCarrierTotal = annualMiles * avgCarrierRate;
+
+    // GXO dedicated: cost-plus model — GXO owns fleet, charges margin on actual costs
+    const gxoBaseCost = annualFuelMaint + annualLease + annualInsurance + (totalDrivers * cm.driver_hourly_rate * 1.25 * 2080); // GXO gets volume discounts on benefits
+    const dedicatedFleetTotal = gxoBaseCost * (1 + cm.dedicated_margin_pct / 100);
 
     this.results = {
       totalVehicles,
@@ -30907,7 +31067,20 @@ const fmApp = {
       costPerMile,
       fleetMix: vehicleFleet,
       totalMilesPerWeek: Math.round(totalMilesPerWeek),
-      annual_miles: Math.round(totalMilesPerWeek * 52)
+      annual_miles: annualMiles,
+      // Cost breakdown
+      costBreakdown: {
+        driverCost: annualDriverCost,
+        fuelMaint: annualFuelMaint,
+        lease: annualLease,
+        insurance: annualInsurance,
+        adminOverhead: adminOverhead,
+        burdenedDriverRate: burdenedDriverRate
+      },
+      privateFleetCost: privateFleetTotal,
+      dedicatedFleetCost: dedicatedFleetTotal,
+      commonCarrierCost: commonCarrierTotal,
+      avgCarrierRate: avgCarrierRate
     };
 
     this.renderResults();
@@ -30940,28 +31113,53 @@ const fmApp = {
       `;
     }).join('');
 
-    const privateFleetCost = this.results.annual_miles * this.results.costPerMile +
-                             (this.results.totalDrivers * this.costModel.driver_hourly_rate * 2080) +
-                             (this.results.totalVehicles * this.costModel.annual_insurance_per_vehicle);
-    const dedicatedFleetCost = privateFleetCost * 0.9;
-    const commonCarrierCost = privateFleetCost * 1.15;
-    const savings = privateFleetCost - dedicatedFleetCost;
+    const r = this.results;
+    const bd = r.costBreakdown;
+    const privateFleetCost = r.privateFleetCost;
+    const dedicatedFleetCost = r.dedicatedFleetCost;
+    const commonCarrierCost = r.commonCarrierCost;
+
+    // Determine cheapest option
+    const cheapest = Math.min(privateFleetCost, dedicatedFleetCost, commonCarrierCost);
+    const privateIsLowest = privateFleetCost === cheapest;
+    const dedicatedIsLowest = dedicatedFleetCost === cheapest;
+    const carrierIsLowest = commonCarrierCost === cheapest;
+
+    const fmtM = (v) => '$' + (v / 1000000).toFixed(2) + 'M';
+    const fmtPct = (a, b) => b > 0 ? ((a - b) / b * 100).toFixed(1) + '%' : '—';
 
     document.getElementById('fm-cost-cards').innerHTML = `
-      <div class="fm-cost-card">
-        <div class="fm-cost-card-title">Private Fleet</div>
-        <div class="fm-cost-card-value">$${(privateFleetCost / 1000000).toFixed(2)}M</div>
-        <div style="font-size:12px;color:var(--ies-gray-600);">Full ownership</div>
+      <div class="fm-cost-card" ${privateIsLowest ? 'style="border-color:var(--ies-green);background:linear-gradient(135deg,rgba(0,200,83,.04),rgba(0,200,83,.01));"' : ''}>
+        <div class="fm-cost-card-title">Private Fleet ${privateIsLowest ? '<span style="color:var(--ies-green);font-size:10px;">✓ LOWEST</span>' : ''}</div>
+        <div class="fm-cost-card-value">${fmtM(privateFleetCost)}</div>
+        <div style="font-size:11px;color:var(--ies-gray-500);line-height:1.6;">
+          Drivers: ${fmtM(bd.driverCost)}<br>
+          Fuel+Maint: ${fmtM(bd.fuelMaint)}<br>
+          Lease: ${fmtM(bd.lease)}<br>
+          Insurance: ${fmtM(bd.insurance)}<br>
+          Overhead: ${fmtM(bd.adminOverhead)}
+        </div>
+        <div style="margin-top:6px;font-size:11px;color:var(--ies-gray-400);">All-in cost/mi: $${r.costPerMile.toFixed(2)}</div>
       </div>
-      <div class="fm-cost-card" style="border-color:var(--ies-blue);background:linear-gradient(135deg, rgba(0,71,171,.05), rgba(0,71,171,.02));">
-        <div class="fm-cost-card-title">Dedicated Fleet (GXO)</div>
-        <div class="fm-cost-card-value" style="color:var(--ies-green);">$${(dedicatedFleetCost / 1000000).toFixed(2)}M</div>
-        <div class="fm-cost-card-savings">Saves $${(savings / 1000000).toFixed(2)}M annually</div>
+      <div class="fm-cost-card" ${dedicatedIsLowest ? 'style="border-color:var(--ies-green);background:linear-gradient(135deg,rgba(0,200,83,.04),rgba(0,200,83,.01));"' : 'style="border-color:var(--ies-blue);background:linear-gradient(135deg, rgba(0,71,171,.05), rgba(0,71,171,.02));"'}>
+        <div class="fm-cost-card-title">Dedicated Fleet (GXO) ${dedicatedIsLowest ? '<span style="color:var(--ies-green);font-size:10px;">✓ LOWEST</span>' : ''}</div>
+        <div class="fm-cost-card-value" style="color:${dedicatedIsLowest ? 'var(--ies-green)' : 'var(--ies-blue)'};">${fmtM(dedicatedFleetCost)}</div>
+        <div style="font-size:11px;color:var(--ies-gray-500);line-height:1.6;">
+          GXO manages fleet, drivers, and maintenance.<br>
+          ${this.costModel.dedicated_margin_pct}% management margin included.<br>
+          Volume discounts on benefits and equipment.
+        </div>
+        ${dedicatedFleetCost < privateFleetCost ? '<div class="fm-cost-card-savings">Saves ' + fmtM(privateFleetCost - dedicatedFleetCost) + ' vs private (' + fmtPct(privateFleetCost, dedicatedFleetCost) + ')</div>' : '<div style="margin-top:6px;font-size:11px;color:var(--ies-red);">' + fmtPct(dedicatedFleetCost, privateFleetCost) + ' more than private</div>'}
       </div>
-      <div class="fm-cost-card">
-        <div class="fm-cost-card-title">Common Carrier</div>
-        <div class="fm-cost-card-value" style="color:var(--ies-red);">$${(commonCarrierCost / 1000000).toFixed(2)}M</div>
-        <div style="font-size:12px;color:var(--ies-red);">15% premium vs private</div>
+      <div class="fm-cost-card" ${carrierIsLowest ? 'style="border-color:var(--ies-green);background:linear-gradient(135deg,rgba(0,200,83,.04),rgba(0,200,83,.01));"' : ''}>
+        <div class="fm-cost-card-title">Common Carrier ${carrierIsLowest ? '<span style="color:var(--ies-green);font-size:10px;">✓ LOWEST</span>' : ''}</div>
+        <div class="fm-cost-card-value" style="color:${carrierIsLowest ? 'var(--ies-green)' : 'var(--ies-red)'};">${fmtM(commonCarrierCost)}</div>
+        <div style="font-size:11px;color:var(--ies-gray-500);line-height:1.6;">
+          Spot/contract market rates.<br>
+          Avg rate: $${r.avgCarrierRate.toFixed(2)}/mi<br>
+          No asset ownership or driver management.
+        </div>
+        ${commonCarrierCost > privateFleetCost ? '<div style="margin-top:6px;font-size:11px;color:var(--ies-red);">' + fmtPct(commonCarrierCost, privateFleetCost) + ' more than private</div>' : '<div class="fm-cost-card-savings">Saves ' + fmtM(privateFleetCost - commonCarrierCost) + ' vs private</div>'}
       </div>
     `;
 
@@ -31602,14 +31800,18 @@ const mostApp = {
     var detView = document.getElementById('mostDetailView');
     var edView = document.getElementById('mostEditorView');
     var anaView = document.getElementById('mostAnalysisView');
+    var compView = document.getElementById('mostComposerView');
     var libBtn = document.getElementById('mostModeLibrary');
     var anaBtn = document.getElementById('mostModeAnalysis');
+    var compBtn = document.getElementById('mostModeComposer');
     if (libView) libView.style.display = mode === 'library' ? 'block' : 'none';
     if (detView) detView.style.display = 'none';
     if (edView) edView.style.display = 'none';
     if (anaView) anaView.style.display = mode === 'analysis' ? 'block' : 'none';
+    if (compView) compView.style.display = mode === 'composer' ? 'block' : 'none';
     if (libBtn) libBtn.style.opacity = mode === 'library' ? '1' : '0.5';
     if (anaBtn) anaBtn.style.opacity = mode === 'analysis' ? '1' : '0.5';
+    if (compBtn) compBtn.style.opacity = mode === 'composer' ? '1' : '0.5';
     if (mode === 'analysis') this.initAnalysis();
   },
 
@@ -31621,12 +31823,14 @@ const mostApp = {
     var search = (document.getElementById('mostSearchInput') || {}).value || '';
     var area = (document.getElementById('mostFilterArea') || {}).value || '';
     var uom = (document.getElementById('mostFilterUOM') || {}).value || '';
+    var cat = (document.getElementById('mostFilterCategory') || {}).value || '';
     search = search.toLowerCase();
     return this.templates.filter(function(t) {
       if (area && t.process_area !== area) return false;
       if (uom && t.uom !== uom) return false;
+      if (cat && t.labor_category !== cat) return false;
       if (search) {
-        var haystack = (t.activity_name + ' ' + t.process_area + ' ' + t.equipment_type + ' ' + t.wms_transaction + ' ' + t.uom).toLowerCase();
+        var haystack = (t.activity_name + ' ' + t.process_area + ' ' + t.equipment_type + ' ' + t.wms_transaction + ' ' + t.uom + ' ' + (t.labor_category || '')).toLowerCase();
         if (haystack.indexOf(search) === -1) return false;
       }
       return true;
@@ -31664,13 +31868,20 @@ const mostApp = {
       var totalTmu = parseFloat(t.total_tmu_base) || 0;
       var uph = parseFloat(t.units_per_hour_base) || 0;
       var pickMethod = t.pick_method ? '<span style="font-size:11px;padding:2px 8px;border-radius:4px;background:rgba(100,116,139,0.1);color:var(--ies-gray-500);font-weight:600;">' + t.pick_method + '</span>' : '';
+      var catColors = { manual: { bg: 'rgba(245,158,11,0.1)', text: '#92400e' }, mhe: { bg: 'rgba(59,130,246,0.1)', text: '#1e40af' }, hybrid: { bg: 'rgba(139,92,246,0.1)', text: '#6d28d9' } };
+      var catC = catColors[t.labor_category] || catColors.manual;
+      var catLabel = t.labor_category === 'mhe' ? 'MHE' : (t.labor_category === 'hybrid' ? 'Hybrid' : 'Manual');
+      var catBadge = '<span style="font-size:10px;padding:2px 7px;border-radius:4px;background:' + catC.bg + ';color:' + catC.text + ';font-weight:600;text-transform:uppercase;letter-spacing:0.3px;">' + catLabel + '</span>';
 
       return '<div style="background:var(--ies-gray-50,#f9fafb);border-radius:10px;padding:20px;cursor:pointer;border:1px solid var(--ies-gray-100,#e5e7eb);transition:all 0.15s;" ' +
         'onmouseenter="this.style.borderColor=\'' + ac.border + '\';this.style.boxShadow=\'0 4px 12px rgba(0,0,0,0.08)\'" ' +
         'onmouseleave="this.style.borderColor=\'var(--ies-gray-100,#e5e7eb)\';this.style.boxShadow=\'none\'" ' +
         'onclick="mostApp.showDetail(' + t.id + ')">' +
         '<div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:12px;">' +
-          '<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:4px;background:' + ac.bg + ';color:' + ac.text + ';text-transform:uppercase;letter-spacing:0.5px;">' + t.process_area + '</span>' +
+          '<div style="display:flex;gap:6px;align-items:center;">' +
+            '<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:4px;background:' + ac.bg + ';color:' + ac.text + ';text-transform:uppercase;letter-spacing:0.5px;">' + t.process_area + '</span>' +
+            catBadge +
+          '</div>' +
           pickMethod +
         '</div>' +
         '<div style="font-size:14px;font-weight:700;color:var(--ies-navy);margin-bottom:6px;">' + t.activity_name + '</div>' +
@@ -31703,7 +31914,13 @@ const mostApp = {
     // Header
     html += '<div style="display:flex;align-items:start;justify-content:space-between;margin-bottom:24px;">';
     html += '<div>';
+    var detCatColors = { manual: { bg: 'rgba(245,158,11,0.1)', text: '#92400e' }, mhe: { bg: 'rgba(59,130,246,0.1)', text: '#1e40af' }, hybrid: { bg: 'rgba(139,92,246,0.1)', text: '#6d28d9' } };
+    var detCatC = detCatColors[t.labor_category] || detCatColors.manual;
+    var detCatLabel = t.labor_category === 'mhe' ? 'MHE' : (t.labor_category === 'hybrid' ? 'Hybrid' : 'Manual');
+    html += '<div style="display:flex;gap:8px;align-items:center;">';
     html += '<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:4px;background:' + ac.bg + ';color:' + ac.text + ';text-transform:uppercase;letter-spacing:0.5px;">' + t.process_area + '</span>';
+    html += '<span style="font-size:10px;font-weight:600;padding:3px 8px;border-radius:4px;background:' + detCatC.bg + ';color:' + detCatC.text + ';text-transform:uppercase;letter-spacing:0.3px;">' + detCatLabel + '</span>';
+    html += '</div>';
     html += '<div style="font-size:28px;font-weight:700;color:var(--ies-navy);margin-top:8px;">' + t.activity_name + '</div>';
     html += '<div style="font-size:13px;color:var(--ies-gray-500);margin-top:4px;">' + (t.equipment_type || '') + (t.wms_transaction ? ' &middot; ' + t.wms_transaction : '') + ' &middot; UOM: ' + t.uom + (t.pick_method ? ' &middot; Method: ' + t.pick_method : '') + '</div>';
     html += '</div>';
@@ -31837,6 +32054,7 @@ const mostApp = {
       document.getElementById('mostEdEquipment').value = t.equipment_type || '';
       document.getElementById('mostEdWMS').value = t.wms_transaction || '';
       document.getElementById('mostEdPickMethod').value = t.pick_method || '';
+      document.getElementById('mostEdCategory').value = t.labor_category || 'manual';
       document.getElementById('mostEdDescription').value = t.description || '';
       // Clone elements for editing
       this.editorElements = this.elements
@@ -31852,6 +32070,7 @@ const mostApp = {
       document.getElementById('mostEdEquipment').value = '';
       document.getElementById('mostEdWMS').value = '';
       document.getElementById('mostEdPickMethod').value = '';
+      document.getElementById('mostEdCategory').value = 'manual';
       document.getElementById('mostEdDescription').value = '';
       this.editorElements = [];
     }
@@ -32018,6 +32237,7 @@ const mostApp = {
       equipment_type: document.getElementById('mostEdEquipment').value.trim() || null,
       wms_transaction: document.getElementById('mostEdWMS').value.trim() || null,
       pick_method: document.getElementById('mostEdPickMethod').value.trim() || null,
+      labor_category: document.getElementById('mostEdCategory').value || 'manual',
       description: document.getElementById('mostEdDescription').value.trim() || null,
       total_tmu_base: totalTmu,
       units_per_hour_base: Math.round(uph * 10) / 10,
@@ -32291,6 +32511,245 @@ const mostApp = {
     this.renderScenarios();
   },
 
+  // ═══ WORKFLOW COMPOSER ═══
+  composerSteps: [],
+
+  addComposerStep() {
+    if (!this.templates.length) { showToast('Loading templates...', 'info'); return; }
+    this.composerSteps.push({ templateId: '', stepName: 'Step ' + (this.composerSteps.length + 1), volumeMultiplier: 1 });
+    this.renderComposer();
+  },
+
+  removeComposerStep(idx) {
+    this.composerSteps.splice(idx, 1);
+    this.composerSteps.forEach(function(s, i) { if (s.stepName.match(/^Step \d+$/)) s.stepName = 'Step ' + (i + 1); });
+    this.renderComposer();
+    this.recalcComposer();
+  },
+
+  moveComposerStep(idx, dir) {
+    var newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= this.composerSteps.length) return;
+    var temp = this.composerSteps[idx];
+    this.composerSteps[idx] = this.composerSteps[newIdx];
+    this.composerSteps[newIdx] = temp;
+    this.renderComposer();
+    this.recalcComposer();
+  },
+
+  updateComposerStep(idx, field, value) {
+    if (!this.composerSteps[idx]) return;
+    if (field === 'volumeMultiplier') value = parseFloat(value) || 1;
+    this.composerSteps[idx][field] = value;
+    this.recalcComposer();
+  },
+
+  clearComposer() {
+    this.composerSteps = [];
+    this.renderComposer();
+    var res = document.getElementById('wcResults');
+    if (res) res.style.display = 'none';
+  },
+
+  renderComposer() {
+    var container = document.getElementById('wcStepsContainer');
+    if (!container) return;
+
+    if (this.composerSteps.length === 0) {
+      container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--ies-gray-400);font-size:13px;border:2px dashed var(--ies-gray-200);border-radius:10px;">Click "+ Add Step" to build your warehouse workflow pipeline.</div>';
+      return;
+    }
+
+    var self = this;
+    var html = '<div style="display:flex;align-items:stretch;gap:0;overflow-x:auto;padding-bottom:8px;">';
+
+    this.composerSteps.forEach(function(step, idx) {
+      var t = step.templateId ? self.templates.find(function(x) { return String(x.id) === String(step.templateId); }) : null;
+      var ac = t ? self._areaColor(t.process_area) : { bg: 'var(--ies-gray-50)', border: 'var(--ies-gray-200)', text: 'var(--ies-gray-400)' };
+      var uph = t ? (parseFloat(t.units_per_hour_base) || 0) : 0;
+
+      // Template dropdown
+      var selHtml = '<select class="cm-select" style="width:100%;font-size:11px;padding:3px 6px;" onchange="mostApp.updateComposerStep(' + idx + ',\'templateId\',this.value)">';
+      selHtml += '<option value="">Select template...</option>';
+      var grouped = {};
+      self.templates.forEach(function(tmpl) {
+        if (tmpl.is_active === false) return;
+        if (!grouped[tmpl.process_area]) grouped[tmpl.process_area] = [];
+        grouped[tmpl.process_area].push(tmpl);
+      });
+      Object.keys(grouped).sort().forEach(function(area) {
+        selHtml += '<optgroup label="' + area + '">';
+        grouped[area].forEach(function(tmpl) {
+          selHtml += '<option value="' + tmpl.id + '"' + (String(tmpl.id) === String(step.templateId) ? ' selected' : '') + '>' + tmpl.activity_name + '</option>';
+        });
+        selHtml += '</optgroup>';
+      });
+      selHtml += '</select>';
+
+      // Arrow connector between steps
+      if (idx > 0) {
+        html += '<div style="display:flex;align-items:center;padding:0 4px;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--ies-gray-300)" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg></div>';
+      }
+
+      // Step card
+      html += '<div style="min-width:200px;max-width:240px;background:var(--ies-gray-50);border-radius:10px;padding:14px;border:2px solid ' + ac.border + ';flex-shrink:0;">';
+      // Step header with move/delete controls
+      html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">';
+      html += '<input type="text" class="cm-input" value="' + (step.stepName || '').replace(/"/g, '&quot;') + '" onchange="mostApp.updateComposerStep(' + idx + ',\'stepName\',this.value)" style="font-size:12px;font-weight:700;color:var(--ies-navy);padding:2px 6px;width:100px;border:1px solid transparent;background:transparent;" onfocus="this.style.borderColor=\'var(--ies-gray-200)\';this.style.background=\'#fff\'" onblur="this.style.borderColor=\'transparent\';this.style.background=\'transparent\'">';
+      html += '<div style="display:flex;gap:2px;">';
+      if (idx > 0) html += '<button onclick="mostApp.moveComposerStep(' + idx + ',-1)" style="background:none;border:none;cursor:pointer;padding:2px;font-size:12px;color:var(--ies-gray-400);" title="Move left">&#9664;</button>';
+      if (idx < self.composerSteps.length - 1) html += '<button onclick="mostApp.moveComposerStep(' + idx + ',1)" style="background:none;border:none;cursor:pointer;padding:2px;font-size:12px;color:var(--ies-gray-400);" title="Move right">&#9654;</button>';
+      html += '<button onclick="mostApp.removeComposerStep(' + idx + ')" style="background:none;border:none;cursor:pointer;padding:2px;font-size:12px;color:#dc2626;" title="Remove">&times;</button>';
+      html += '</div></div>';
+      // Template selector
+      html += selHtml;
+      // Volume multiplier
+      html += '<div style="margin-top:8px;"><label style="font-size:10px;color:var(--ies-gray-400);display:block;margin-bottom:2px;">Volume Ratio</label>';
+      html += '<input type="number" class="cm-input" value="' + (step.volumeMultiplier || 1) + '" min="0.01" max="100" step="0.1" style="width:100%;font-size:11px;padding:3px 6px;" onchange="mostApp.updateComposerStep(' + idx + ',\'volumeMultiplier\',this.value)"></div>';
+      // Quick metrics
+      if (t) {
+        var catColors = { manual: '#92400e', mhe: '#1e40af', hybrid: '#6d28d9' };
+        var catLabel = t.labor_category === 'mhe' ? 'MHE' : (t.labor_category === 'hybrid' ? 'Hybrid' : 'Manual');
+        html += '<div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;">';
+        html += '<span style="font-size:18px;font-weight:700;color:var(--ies-orange);">' + uph.toFixed(0) + ' <span style="font-size:10px;font-weight:400;color:var(--ies-gray-400);">UPH</span></span>';
+        html += '<span style="font-size:10px;padding:2px 6px;border-radius:3px;background:rgba(100,116,139,0.1);color:' + (catColors[t.labor_category] || '#92400e') + ';font-weight:600;">' + catLabel + '</span>';
+        html += '</div>';
+      }
+      html += '</div>';
+    });
+
+    html += '</div>';
+    container.innerHTML = html;
+  },
+
+  recalcComposer() {
+    var steps = this.composerSteps;
+    if (steps.length === 0) { var r = document.getElementById('wcResults'); if (r) r.style.display = 'none'; return; }
+
+    var self = this;
+    var targetVol = parseFloat(document.getElementById('wcTargetVolume').value) || 5000;
+    var shiftHrs = parseFloat(document.getElementById('wcShiftHours').value) || 8;
+    var pfd = parseFloat(document.getElementById('wcPFD').value) || 0;
+    var pfdFactor = 100 / (100 + pfd);
+
+    var stepData = [];
+    var minUph = Infinity;
+    var bottleneckIdx = -1;
+    var totalFtes = 0;
+    var totalHours = 0;
+    var catHours = { manual: 0, mhe: 0, hybrid: 0 };
+
+    steps.forEach(function(step, idx) {
+      var t = step.templateId ? self.templates.find(function(x) { return String(x.id) === String(step.templateId); }) : null;
+      var baseUph = t ? (parseFloat(t.units_per_hour_base) || 0) : 0;
+      var adjUph = baseUph > 0 ? baseUph * pfdFactor : 0;
+      var stepVol = targetVol * (step.volumeMultiplier || 1);
+      var hours = adjUph > 0 ? stepVol / adjUph : 0;
+      var ftes = shiftHrs > 0 ? hours / shiftHrs : 0;
+      var cycleSec = baseUph > 0 ? (3600 / baseUph) : 0;
+      var cat = t ? (t.labor_category || 'manual') : 'manual';
+
+      totalFtes += ftes;
+      totalHours += hours;
+      if (cat && hours > 0) catHours[cat] = (catHours[cat] || 0) + hours;
+
+      if (adjUph > 0 && adjUph < minUph) { minUph = adjUph; bottleneckIdx = idx; }
+
+      stepData.push({ step: step, template: t, baseUph: baseUph, adjUph: adjUph, stepVol: stepVol, hours: hours, ftes: ftes, cycleSec: cycleSec, category: cat, idx: idx });
+    });
+
+    // Effective throughput = bottleneck UPH
+    var effectiveUph = minUph < Infinity ? minUph : 0;
+    var totalHeadcount = Math.ceil(totalFtes);
+
+    // Show results
+    var res = document.getElementById('wcResults');
+    if (res) res.style.display = stepData.some(function(s) { return s.template; }) ? 'block' : 'none';
+
+    // Summary cards
+    var cards = document.getElementById('wcSummaryCards');
+    if (cards) {
+      cards.innerHTML =
+        '<div style="background:var(--ies-gray-50);border-radius:10px;padding:16px;text-align:center;"><div style="font-size:28px;font-weight:700;color:var(--ies-orange);">' + effectiveUph.toFixed(0) + '</div><div style="font-size:11px;color:var(--ies-gray-400);margin-top:4px;">Effective UPH</div></div>' +
+        '<div style="background:var(--ies-gray-50);border-radius:10px;padding:16px;text-align:center;"><div style="font-size:28px;font-weight:700;color:var(--ies-navy);">' + totalFtes.toFixed(1) + '</div><div style="font-size:11px;color:var(--ies-gray-400);margin-top:4px;">Total FTEs</div></div>' +
+        '<div style="background:var(--ies-gray-50);border-radius:10px;padding:16px;text-align:center;"><div style="font-size:28px;font-weight:700;color:var(--ies-navy);">' + totalHeadcount + '</div><div style="font-size:11px;color:var(--ies-gray-400);margin-top:4px;">Headcount</div></div>' +
+        '<div style="background:var(--ies-gray-50);border-radius:10px;padding:16px;text-align:center;"><div style="font-size:28px;font-weight:700;color:var(--ies-navy);">' + totalHours.toFixed(1) + '</div><div style="font-size:11px;color:var(--ies-gray-400);margin-top:4px;">Hours/Day</div></div>' +
+        '<div style="background:var(--ies-gray-50);border-radius:10px;padding:16px;text-align:center;"><div style="font-size:28px;font-weight:700;color:var(--ies-navy);">' + steps.length + '</div><div style="font-size:11px;color:var(--ies-gray-400);margin-top:4px;">Steps</div></div>';
+    }
+
+    // Bottleneck alert
+    var alert = document.getElementById('wcBottleneckAlert');
+    if (alert && bottleneckIdx >= 0) {
+      var bn = stepData[bottleneckIdx];
+      var bnName = bn.template ? bn.template.activity_name : bn.step.stepName;
+      alert.style.display = 'block';
+      alert.innerHTML = '<div style="display:flex;align-items:center;gap:10px;">' +
+        '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>' +
+        '<div><div style="font-size:13px;font-weight:700;color:#dc2626;">Bottleneck Detected: ' + bnName + '</div>' +
+        '<div style="font-size:12px;color:var(--ies-gray-600);margin-top:2px;">This step has the lowest adjusted throughput at <strong>' + bn.adjUph.toFixed(0) + ' UPH</strong>, limiting overall workflow to <strong>' + effectiveUph.toFixed(0) + ' units/hour</strong>. Consider adding labor, changing equipment, or splitting the step.</div></div></div>';
+    } else if (alert) { alert.style.display = 'none'; }
+
+    // Bar chart
+    var chart = document.getElementById('wcBarChart');
+    if (chart && stepData.length > 0) {
+      var maxUph = Math.max.apply(null, stepData.map(function(s) { return s.adjUph || 0; }));
+      if (maxUph === 0) maxUph = 1;
+      chart.innerHTML = stepData.map(function(s, i) {
+        var pct = maxUph > 0 ? ((s.adjUph / maxUph) * 100) : 0;
+        var isBottleneck = i === bottleneckIdx;
+        var barColor = isBottleneck ? '#ef4444' : 'var(--ies-blue)';
+        var label = s.step.stepName;
+        return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;">' +
+          '<div style="font-size:11px;font-weight:700;color:' + (isBottleneck ? '#ef4444' : 'var(--ies-navy)') + ';margin-bottom:4px;">' + (s.adjUph > 0 ? s.adjUph.toFixed(0) : '—') + '</div>' +
+          '<div style="width:100%;max-width:60px;height:' + Math.max(pct, 3) + '%;background:' + barColor + ';border-radius:6px 6px 0 0;transition:height 0.3s;' + (isBottleneck ? 'box-shadow:0 0 8px rgba(239,68,68,0.3);' : '') + '"></div>' +
+          '<div style="font-size:10px;color:var(--ies-gray-500);margin-top:6px;text-align:center;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + label + '">' + label + '</div>' +
+        '</div>';
+      }).join('');
+    }
+
+    // Category breakdown
+    var catDiv = document.getElementById('wcCategoryBreakdown');
+    if (catDiv) {
+      var catLabels = { manual: 'Manual Labor', mhe: 'MHE Operations', hybrid: 'Hybrid' };
+      var catColorsBg = { manual: 'rgba(245,158,11,0.08)', mhe: 'rgba(59,130,246,0.08)', hybrid: 'rgba(139,92,246,0.08)' };
+      var catColorsTx = { manual: '#92400e', mhe: '#1e40af', hybrid: '#6d28d9' };
+      catDiv.innerHTML = ['manual', 'mhe', 'hybrid'].map(function(cat) {
+        var hrs = catHours[cat] || 0;
+        var pctOfTotal = totalHours > 0 ? ((hrs / totalHours) * 100) : 0;
+        var ftesCat = shiftHrs > 0 ? hrs / shiftHrs : 0;
+        return '<div style="background:' + catColorsBg[cat] + ';border-radius:10px;padding:16px;border-left:3px solid ' + catColorsTx[cat] + ';">' +
+          '<div style="font-size:13px;font-weight:700;color:' + catColorsTx[cat] + ';margin-bottom:8px;">' + catLabels[cat] + '</div>' +
+          '<div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="font-size:12px;color:var(--ies-gray-500);">Hours/Day</span><span style="font-size:12px;font-weight:600;color:var(--ies-navy);">' + hrs.toFixed(1) + '</span></div>' +
+          '<div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="font-size:12px;color:var(--ies-gray-500);">FTEs</span><span style="font-size:12px;font-weight:600;color:var(--ies-navy);">' + ftesCat.toFixed(1) + '</span></div>' +
+          '<div style="display:flex;justify-content:space-between;"><span style="font-size:12px;color:var(--ies-gray-500);">% of Total</span><span style="font-size:12px;font-weight:600;color:var(--ies-navy);">' + pctOfTotal.toFixed(0) + '%</span></div>' +
+        '</div>';
+      }).join('');
+    }
+
+    // Detail table
+    var tbody = document.getElementById('wcDetailBody');
+    if (tbody) {
+      tbody.innerHTML = stepData.map(function(s, i) {
+        var isBottleneck = i === bottleneckIdx;
+        var catLabel = s.category === 'mhe' ? 'MHE' : (s.category === 'hybrid' ? 'Hybrid' : 'Manual');
+        var catColor = { manual: '#92400e', mhe: '#1e40af', hybrid: '#6d28d9' }[s.category] || '#92400e';
+        var rowStyle = isBottleneck ? 'background:rgba(239,68,68,0.04);' : (i % 2 === 1 ? 'background:var(--ies-gray-50);' : '');
+        return '<tr style="' + rowStyle + '">' +
+          '<td style="font-weight:600;color:var(--ies-gray-400);">' + (i + 1) + '</td>' +
+          '<td style="font-weight:600;color:var(--ies-navy);">' + s.step.stepName + '</td>' +
+          '<td>' + (s.template ? s.template.activity_name : '<span style="color:var(--ies-gray-300);">Not selected</span>') + '</td>' +
+          '<td style="text-align:center;"><span style="font-size:10px;padding:2px 6px;border-radius:3px;background:rgba(100,116,139,0.1);color:' + catColor + ';font-weight:600;">' + catLabel + '</span></td>' +
+          '<td style="text-align:right;">' + (s.baseUph > 0 ? s.baseUph.toFixed(1) : '—') + '</td>' +
+          '<td style="text-align:right;font-weight:600;">' + (s.adjUph > 0 ? s.adjUph.toFixed(1) : '—') + '</td>' +
+          '<td style="text-align:right;">' + (s.cycleSec > 0 ? s.cycleSec.toFixed(1) : '—') + '</td>' +
+          '<td style="text-align:right;font-weight:600;color:var(--ies-orange);">' + (s.ftes > 0 ? s.ftes.toFixed(2) : '—') + '</td>' +
+          '<td style="text-align:right;">' + (s.hours > 0 ? s.hours.toFixed(1) : '—') + '</td>' +
+          '<td style="text-align:center;">' + (isBottleneck ? '<span style="font-size:11px;font-weight:700;color:#ef4444;padding:2px 8px;border-radius:4px;background:rgba(239,68,68,0.1);">BOTTLENECK</span>' : '') + '</td>' +
+        '</tr>';
+      }).join('');
+    }
+  },
+
   clearAnalysis() {
     this.analysisLines = [];
     this.renderAnalysisTable();
@@ -32309,6 +32768,7 @@ const mostApp = {
         equipment_type: t.equipment_type,
         wms_transaction: t.wms_transaction,
         pick_method: t.pick_method,
+        labor_category: t.labor_category || 'manual',
         description: t.description,
         total_tmu_base: t.total_tmu_base,
         units_per_hour_base: t.units_per_hour_base,
