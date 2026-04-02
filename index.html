@@ -5407,7 +5407,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
   <!-- Main content: Signal Feed (left) + Charts (right) -->
   <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px;">
     <!-- Unified Signal Feed — height matches charts column -->
-    <div class="hub-card" id="feedCard" style="padding:0; overflow:hidden; display:flex; flex-direction:column;">
+    <div class="hub-card" id="feedCard" style="padding:0; overflow:hidden; display:flex; flex-direction:column; height:0; min-height:100%;">
       <div style="padding:16px 20px; border-bottom:1px solid var(--ies-gray-200); display:flex; align-items:center; justify-content:space-between;">
         <div style="font-size:14px; font-weight:700; color:var(--ies-navy);">Intelligence Feed</div>
         <span class="card-badge badge-live">LIVE</span>
@@ -5454,10 +5454,6 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 
   <!-- Sector Pulse — live data modules -->
   <div style="margin-bottom:32px;">
-    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
-      <div style="font-size:14px; font-weight:700; color:var(--ies-navy);">Sector Pulse</div>
-      <div style="font-size:11px; color:var(--ies-gray-400);">Live from Supabase — automation, verticals, supply chain, labor</div>
-    </div>
     <div class="sector-pulse" id="sectorPulseGrid">
 
       <!-- Automation & Robotics -->
