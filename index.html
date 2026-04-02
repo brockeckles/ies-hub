@@ -183,8 +183,8 @@
   .hub-data-table tr:hover td { background: var(--ies-gray-50); }
 
   /* Sector Pulse — live data modules for Command Center */
-  .sector-pulse { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; align-items: start; }
-  .sector-pulse-card:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .sector-pulse { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 1200px) { .sector-pulse { grid-template-columns: repeat(2, 1fr); } }
   @media (max-width: 900px) { .sector-pulse { grid-template-columns: 1fr; } }
   .sector-pulse-card {
     background: #fff; border-radius: 10px; padding: 16px; border: 1px solid var(--ies-gray-200);
@@ -5529,6 +5529,18 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
           <thead><tr><th>Event</th><th>Company</th><th>Location</th><th>Impact</th><th>Status</th></tr></thead>
           <tbody><tr><td colspan="5" style="color:var(--ies-gray-400);">Loading…</td></tr></tbody>
         </table>
+      </div>
+
+      <!-- Tariff & Trade -->
+      <div class="sector-pulse-card">
+        <div class="sector-pulse-card-header">
+          <div class="sector-pulse-card-icon" style="background:rgba(107,122,144,.1);font-size:15px;">&#x1F4DC;</div>
+          <div class="sector-pulse-card-title">Tariff & Trade</div>
+          <span class="sector-pulse-card-tag" style="background:rgba(255,193,7,.08);color:#b58a00;">LIVE</span>
+        </div>
+        <ul class="sp-news-list" id="spTariffTrade">
+          <li class="sp-news-item" style="color:var(--ies-gray-400);">Loading developments…</li>
+        </ul>
       </div>
 
     </div>
@@ -14128,7 +14140,8 @@ async function loadSectorPulse() {
     loadSPVerticals(),
     loadSPCompetitors(),
     loadSPSupplyChain(),
-    loadSPLabor()
+    loadSPLabor(),
+    loadSPTariffTrade()
   ]);
 }
 
@@ -14223,6 +14236,24 @@ async function loadSPLabor() {
       return '<tr><td style="font-weight:600;max-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + esc(u.event_description) + '">' + esc(u.event_description) + '</td><td>' + esc(u.company || '') + '</td><td>' + esc(u.location || '') + '</td><td><span class="sp-status ' + impactClass + '">' + esc(u.impact) + '</span></td><td><span class="sp-status ' + statusClass + '">' + esc(u.status) + '</span></td></tr>';
     }).join('');
   } catch(e) { console.warn('loadSPLabor error:', e); }
+}
+
+async function loadSPTariffTrade() {
+  try {
+    var { data } = await sb.from('tariff_developments').select('*').order('published_date', { ascending: false }).limit(5);
+    var el = document.getElementById('spTariffTrade');
+    if (!el || !data || !data.length) return;
+    el.innerHTML = data.map(function(t) {
+      var d = t.published_date ? new Date(t.published_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+      var effDate = t.effective_date ? new Date(t.effective_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+      var statusColors = { 'Proposed': 'rgba(255,193,7,.12)', 'Enacted': 'rgba(220,53,69,.1)', 'Effective': 'rgba(220,53,69,.15)', 'Under Review': 'rgba(59,130,246,.1)' };
+      var statusTextColors = { 'Proposed': '#b58a00', 'Enacted': 'var(--ies-red)', 'Effective': 'var(--ies-red)', 'Under Review': 'var(--ies-blue)' };
+      var stBg = statusColors[t.status] || 'rgba(107,122,144,.1)';
+      var stTx = statusTextColors[t.status] || 'var(--ies-gray-600)';
+      var titleHtml = t.source_url ? '<a href="' + esc(t.source_url) + '" target="_blank" rel="noopener" style="color:var(--ies-gray-600);text-decoration:none;">' + esc(stripHtml(t.title)) + ' ' + LINK_SVG + '</a>' : esc(stripHtml(t.title));
+      return '<li class="sp-news-item"><span class="sp-news-vendor" style="background:' + stBg + ';color:' + stTx + ';">' + esc(t.status || '') + '</span><span style="flex:1;">' + titleHtml + '</span><span class="sp-news-date">' + (effDate ? 'Eff ' + effDate : d) + '</span></li>';
+    }).join('');
+  } catch(e) { console.warn('loadSPTariffTrade error:', e); }
 }
 
 // ── UNIFIED SIGNAL FEED LOADER (Command Center) ──
