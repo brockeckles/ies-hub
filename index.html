@@ -2966,8 +2966,8 @@
         }
 
         .cm-section-title {
-            font-size: 16px;
-            font-weight: 700;
+            font-size: 20px;
+            font-weight: 600;
             color: var(--ies-navy);
             margin-bottom: 24px;
             padding-bottom: 12px;
@@ -3140,24 +3140,7 @@
             display: none;
         }
 
-        /* Tighten card/table styles */
-        .cm-card {
-            background: white;
-            border: 1px solid var(--ies-gray-200);
-            border-radius: 10px;
-            padding: 14px;
-            margin-bottom: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,.06);
-        }
-
-        .cm-card-title {
-            font-size: 12px;
-            font-weight: 700;
-            color: var(--ies-navy);
-            margin-bottom: 8px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
+        /* Tighten card/table styles (archived — using unified card styles above) */
 
         .cm-table {
             font-size: 12px;
@@ -3177,7 +3160,7 @@
         .cm-field-help {
             display: block;
             font-size: 11px;
-            color: var(--gray-500);
+            color: #94a3b8;
             margin-top: 4px;
         }
 
@@ -3376,7 +3359,11 @@
         .cm-heuristic-info { background: rgba(59,130,246,0.08); border-left: 3px solid #3b82f6; }
         .cm-heuristic .icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 1px; }
         .cm-heuristic .body { flex: 1; }
-        .cm-heuristic .title { font-weight: 600; color: #e2e8f0; }
+        .cm-heuristic .title { font-weight: 600; color: var(--ies-navy); }
+        .cm-heuristic-warn .title { color: #f59e0b; }
+        .cm-heuristic-alert .title { color: #ef4444; }
+        .cm-heuristic-ok .title { color: #10b981; }
+        .cm-heuristic-info .title { color: #3b82f6; }
         .cm-heuristic .detail { color: #94a3b8; margin-top: 2px; }
 
         /* Financial metric cards */
@@ -7980,6 +7967,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
     </div>
     <button class="tour-trigger-icon" onclick="startSectionTour('costmodel')" title="Start guided tour"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
     <div id="topbarControls" style="display:none;align-items:center;gap:12px;flex-shrink:0;">
+      <button class="cm-btn cm-btn-secondary cm-btn-sm" onclick="cmApp.goBackToLanding()" style="white-space:nowrap;">← Back to Models</button>
       <span class="cm-label">Project:</span>
       <select id="projectSelector" class="cm-select" style="min-width:180px;">
         <option value="">-- New Model --</option>
@@ -8245,18 +8233,18 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
                 <div class="cm-card-title">Seasonality Profile</div>
                 <p class="cm-card-description">Monthly volume multipliers relative to average. 1.0 = average month, 1.5 = 50% above average (e.g., holiday peak). Used for peak staffing and cash flow timing.</p>
                 <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;" id="seasonalityGrid">
-                    <div class="cm-field-group"><label class="cm-field-label" style="font-size:11px;">Jan</label><input type="number" class="cm-input cm-seasonality" data-month="0" value="1.0" min="0" max="5" step="0.05" style="width:100%;font-size:12px;text-align:center;"></div>
-                    <div class="cm-field-group"><label class="cm-field-label" style="font-size:11px;">Feb</label><input type="number" class="cm-input cm-seasonality" data-month="1" value="1.0" min="0" max="5" step="0.05" style="width:100%;font-size:12px;text-align:center;"></div>
-                    <div class="cm-field-group"><label class="cm-field-label" style="font-size:11px;">Mar</label><input type="number" class="cm-input cm-seasonality" data-month="2" value="1.0" min="0" max="5" step="0.05" style="width:100%;font-size:12px;text-align:center;"></div>
-                    <div class="cm-field-group"><label class="cm-field-label" style="font-size:11px;">Apr</label><input type="number" class="cm-input cm-seasonality" data-month="3" value="1.0" min="0" max="5" step="0.05" style="width:100%;font-size:12px;text-align:center;"></div>
-                    <div class="cm-field-group"><label class="cm-field-label" style="font-size:11px;">May</label><input type="number" class="cm-input cm-seasonality" data-month="4" value="1.0" min="0" max="5" step="0.05" style="width:100%;font-size:12px;text-align:center;"></div>
-                    <div class="cm-field-group"><label class="cm-field-label" style="font-size:11px;">Jun</label><input type="number" class="cm-input cm-seasonality" data-month="5" value="1.0" min="0" max="5" step="0.05" style="width:100%;font-size:12px;text-align:center;"></div>
-                    <div class="cm-field-group"><label class="cm-field-label" style="font-size:11px;">Jul</label><input type="number" class="cm-input cm-seasonality" data-month="6" value="1.0" min="0" max="5" step="0.05" style="width:100%;font-size:12px;text-align:center;"></div>
-                    <div class="cm-field-group"><label class="cm-field-label" style="font-size:11px;">Aug</label><input type="number" class="cm-input cm-seasonality" data-month="7" value="1.0" min="0" max="5" step="0.05" style="width:100%;font-size:12px;text-align:center;"></div>
-                    <div class="cm-field-group"><label class="cm-field-label" style="font-size:11px;">Sep</label><input type="number" class="cm-input cm-seasonality" data-month="8" value="1.0" min="0" max="5" step="0.05" style="width:100%;font-size:12px;text-align:center;"></div>
-                    <div class="cm-field-group"><label class="cm-field-label" style="font-size:11px;">Oct</label><input type="number" class="cm-input cm-seasonality" data-month="9" value="1.0" min="0" max="5" step="0.05" style="width:100%;font-size:12px;text-align:center;"></div>
-                    <div class="cm-field-group"><label class="cm-field-label" style="font-size:11px;">Nov</label><input type="number" class="cm-input cm-seasonality" data-month="10" value="1.0" min="0" max="5" step="0.05" style="width:100%;font-size:12px;text-align:center;"></div>
-                    <div class="cm-field-group"><label class="cm-field-label" style="font-size:11px;">Dec</label><input type="number" class="cm-input cm-seasonality" data-month="11" value="1.0" min="0" max="5" step="0.05" style="width:100%;font-size:12px;text-align:center;"></div>
+                    <div class="cm-field-group"><label class="cm-field-label">Jan</label><input type="number" class="cm-input cm-seasonality" data-month="0" value="1.0" min="0" max="5" step="0.05" style="width:100%;text-align:center;"></div>
+                    <div class="cm-field-group"><label class="cm-field-label">Feb</label><input type="number" class="cm-input cm-seasonality" data-month="1" value="1.0" min="0" max="5" step="0.05" style="width:100%;text-align:center;"></div>
+                    <div class="cm-field-group"><label class="cm-field-label">Mar</label><input type="number" class="cm-input cm-seasonality" data-month="2" value="1.0" min="0" max="5" step="0.05" style="width:100%;text-align:center;"></div>
+                    <div class="cm-field-group"><label class="cm-field-label">Apr</label><input type="number" class="cm-input cm-seasonality" data-month="3" value="1.0" min="0" max="5" step="0.05" style="width:100%;text-align:center;"></div>
+                    <div class="cm-field-group"><label class="cm-field-label">May</label><input type="number" class="cm-input cm-seasonality" data-month="4" value="1.0" min="0" max="5" step="0.05" style="width:100%;text-align:center;"></div>
+                    <div class="cm-field-group"><label class="cm-field-label">Jun</label><input type="number" class="cm-input cm-seasonality" data-month="5" value="1.0" min="0" max="5" step="0.05" style="width:100%;text-align:center;"></div>
+                    <div class="cm-field-group"><label class="cm-field-label">Jul</label><input type="number" class="cm-input cm-seasonality" data-month="6" value="1.0" min="0" max="5" step="0.05" style="width:100%;text-align:center;"></div>
+                    <div class="cm-field-group"><label class="cm-field-label">Aug</label><input type="number" class="cm-input cm-seasonality" data-month="7" value="1.0" min="0" max="5" step="0.05" style="width:100%;text-align:center;"></div>
+                    <div class="cm-field-group"><label class="cm-field-label">Sep</label><input type="number" class="cm-input cm-seasonality" data-month="8" value="1.0" min="0" max="5" step="0.05" style="width:100%;text-align:center;"></div>
+                    <div class="cm-field-group"><label class="cm-field-label">Oct</label><input type="number" class="cm-input cm-seasonality" data-month="9" value="1.0" min="0" max="5" step="0.05" style="width:100%;text-align:center;"></div>
+                    <div class="cm-field-group"><label class="cm-field-label">Nov</label><input type="number" class="cm-input cm-seasonality" data-month="10" value="1.0" min="0" max="5" step="0.05" style="width:100%;text-align:center;"></div>
+                    <div class="cm-field-group"><label class="cm-field-label">Dec</label><input type="number" class="cm-input cm-seasonality" data-month="11" value="1.0" min="0" max="5" step="0.05" style="width:100%;text-align:center;"></div>
                 </div>
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;">
                     <div style="display:flex;gap:8px;">
@@ -9171,6 +9159,11 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
               <span>Service Level Target (%)</span>
               <input type="number" id="fm-service-level" value="95" min="80" max="99" style="width:60px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;">
             </label>
+            <label style="display:flex;align-items:center;gap:10px;font-size:13px;padding:8px;background:rgba(255, 58, 0, 0.05);border-radius:6px;border:1px solid var(--ies-orange);margin-top:4px;">
+              <input type="checkbox" id="fm-team-driving" onchange="fmApp.config.teamDriving = this.checked; fmApp.updateTeamDrivingDisplay();" style="cursor:pointer;width:16px;height:16px;">
+              <span style="font-weight:600;color:var(--ies-navy);">Enable Team Driving</span>
+              <span style="font-size:11px;color:var(--ies-gray-600);">(2 drivers/truck, ~20 hrs/day, ~250K mi/yr)</span>
+            </label>
           </div>
         </div>
       </div>
@@ -9232,12 +9225,25 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;" id="fm-cost-cards"></div>
         </div>
 
-        <!-- Sensitivity Analysis -->
+        <!-- ATRI Benchmark Comparison -->
+        <div style="background:#fff;border-radius:10px;border:1px solid var(--ies-gray-200);padding:20px;margin-bottom:20px;" id="fm-benchmark-comparison"></div>
+
+        <!-- Volume Sensitivity Analysis -->
         <div style="background:#fff;border-radius:10px;border:1px solid var(--ies-gray-200);padding:20px;margin-bottom:20px;">
-          <div style="font-weight:600;margin-bottom:16px;color:var(--ies-navy);">Sensitivity Analysis</div>
+          <div style="font-weight:600;margin-bottom:16px;color:var(--ies-navy);">Volume Sensitivity Analysis</div>
           <div style="height:300px;">
             <canvas id="fm-sensitivity-chart"></canvas>
           </div>
+        </div>
+
+        <!-- Multi-Axis Sensitivity Analysis -->
+        <div style="background:#fff;border-radius:10px;border:1px solid var(--ies-gray-200);padding:20px;margin-bottom:20px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+            <div style="font-weight:600;color:var(--ies-navy);">Driver Rate & Fuel Price Sensitivity Matrix</div>
+            <button class="fm-btn-secondary" onclick="fmApp.renderSensitivityMatrix()" style="padding:6px 14px;font-size:11px;font-weight:600;">Run Analysis</button>
+          </div>
+          <div style="font-size:12px;color:var(--ies-gray-600);margin-bottom:12px;">Shows total cost per mile as driver rate (rows) and diesel price (columns) vary. Green = low cost, Red = high cost.</div>
+          <div style="overflow-x:auto;" id="fm-sensitivity-matrix-container"></div>
         </div>
 
         <!-- Key Metrics -->
@@ -26616,6 +26622,13 @@ const cmApp = {
         this.switchSection('setup');
     },
 
+    goBackToLanding() {
+        document.getElementById('editorContainer').style.display = 'none';
+        document.getElementById('landingPage').style.display = 'block';
+        document.getElementById('topbarControls').style.display = 'none';
+        this.loadProjects();
+    },
+
     async openProject(id) {
         try {
             const projects = await cmFetchTable('cost_model_projects', 'id=eq.' + id);
@@ -31597,7 +31610,9 @@ const fmApp = {
     utilization: 85,
     deadhead: 15,
     serviceLevel: 95,
-    vehicles: ['dry_van', 'reefer', 'straight_truck']
+    vehicles: ['dry_van', 'reefer', 'straight_truck'],
+    financingMode: 'purchase',  // 'purchase' or 'lease'
+    teamDriving: false  // Enable team driving (2 drivers per truck)
   },
   vehicleSpecs: {
     dry_van: { name: 'Dry Van (53ft)', capacity_wgt: 45000, capacity_cube: 3500, mpg: 6.5, capital_cost: 130000, annual_fixed: 35000, insurance_premium: 1.0, fuel_surcharge: 0, tare_wgt: 10500 },
@@ -31607,27 +31622,44 @@ const fmApp = {
     sprinter_van: { name: 'Sprinter Van', capacity_wgt: 3500, capacity_cube: 400, mpg: 14.0, capital_cost: 48000, annual_fixed: 15000, insurance_premium: 0.5, fuel_surcharge: 0, tare_wgt: 6500 }
   },
   costModel: {
-    fuel_cost_per_mile: 0.54,        // ATRI 2024: $3.51/gal ÷ 6.5 MPG = $0.54/mi
+    diesel_price_per_gal: 3.87,      // EIA 2026: Commercial diesel price ($/gal); affects fuel cost per mile per vehicle MPG
     maintenance_per_mile: 0.198,     // ATRI 2024: $0.198/mi
     driver_hourly_rate: 32,          // Base hourly (regional) — ATRI 2024 $0.79/mi ÷ 2.5 mi/hr avg + benefits load adjustment
     driver_benefits_pct: 30,         // Benefits load (health, PTO, 401k)
     payroll_tax_pct: 7.65,           // FICA (SS 6.2% + Medicare 1.45%)
     vehicle_lease_monthly: 2500,     // Average monthly lease/payment per vehicle
     depreciation_per_vehicle_yr: 18000, // Annual depreciation if owned
-    annual_insurance_per_vehicle: 12500, // ATRI 2024: $0.102/mi = ~$8,160 at 80K mi/yr; full annual premium Class 8: $10,500–$11,000
+    annual_insurance_per_vehicle: 10750, // ATRI 2024: Updated to mid-range $10,500–$11,000/yr for Class 8; scaled per vehicle type via insurance_premium factor
     admin_overhead_pct: 10,
+    // Financing mode parameters
+    vehicle_useful_life: { dry_van: 7, reefer: 7, flatbed: 7, straight_truck: 5, sprinter_van: 4 }, // years
+    vehicle_residual_pct: 0.15,      // Residual value as % of acquisition cost
+    lease_monthly_rates: { dry_van: 2200, reefer: 2500, flatbed: 2300, straight_truck: 1500, sprinter_van: 800 }, // $/mo per vehicle type
     // Common carrier benchmark rates ($/mi)
     carrier_rate_dry_van: 2.85,      // Spot market dry van Feb 2026
     carrier_rate_reefer: 3.75,       // Spot market reefer
     carrier_rate_flatbed: 3.25,      // Spot market flatbed
     // GXO dedicated fleet markup/discount
-    dedicated_margin_pct: 12         // GXO margin on dedicated fleet
+    dedicated_margin_pct: 12,        // GXO margin on dedicated fleet
+    // ATRI 2024 benchmarks ($/mi) for inline comparison
+    atri_benchmarks: {
+      total_cost_per_mile: 2.26,
+      fuel_per_mile: 0.583,
+      driver_wages_per_mile: 0.827,
+      vehicle_lease_purchase_per_mile: 0.296,
+      insurance_per_mile: 0.117,
+      maintenance_per_mile: 0.198,
+      tires_per_mile: 0.048,
+      permits_licenses_per_mile: 0.043,
+      tolls_per_mile: 0.114
+    }
   },
 
   init() {
     this.renderVehicleChecks();
     this.renderCostParams();
     this.renderLanesTable();
+    this.updateTeamDrivingDisplay();
   },
 
   renderVehicleChecks() {
@@ -31690,10 +31722,33 @@ const fmApp = {
     const container = document.getElementById('fm-cost-params');
     const cm = this.costModel;
     container.innerHTML = `
-      <div style="font-size:11px;font-weight:700;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;grid-column:1/-1;">Variable Costs (per mile)</div>
+      <div style="font-size:11px;font-weight:700;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;grid-column:1/-1;">Financing Mode</div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;grid-column:1/-1;">
+        <span style="min-width:130px;">Mode</span>
+        <select id="fm-financing-mode" onchange="fmApp.config.financingMode = this.value; fmApp.renderCostParams();" style="padding:6px 10px;border:1px solid var(--ies-gray-300);border-radius:4px;font-size:13px;">
+          <option value="purchase" ${this.config.financingMode === 'purchase' ? 'selected' : ''}>Purchase (Depreciation)</option>
+          <option value="lease" ${this.config.financingMode === 'lease' ? 'selected' : ''}>Lease (Monthly Payment)</option>
+        </select>
+      </label>
+      ${this.config.financingMode === 'purchase' ? `
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ies-gray-600);grid-column:1/-1;margin-top:4px;">
+        <span style="min-width:130px;">Useful Life (yrs)</span>
+        <input type="text" value="Dry: 7, Straight: 5, Sprinter: 4" disabled style="padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;font-size:11px;background:var(--ies-gray-100);color:var(--ies-gray-500);cursor:not-allowed;">
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ies-gray-600);grid-column:1/-1;">
+        <span style="min-width:130px;">Residual Value</span>
+        <input type="text" value="${(cm.vehicle_residual_pct * 100).toFixed(0)}% of acquisition" disabled style="padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;font-size:11px;background:var(--ies-gray-100);color:var(--ies-gray-500);cursor:not-allowed;">
+      </label>
+      ` : `
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ies-gray-600);grid-column:1/-1;margin-top:4px;">
+        <span style="min-width:130px;">Monthly Rates</span>
+        <input type="text" value="Dry: $2,200, Straight: $1,500, Sprinter: $800" disabled style="padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;font-size:11px;background:var(--ies-gray-100);color:var(--ies-gray-500);cursor:not-allowed;width:250px;">
+      </label>
+      `}
+      <div style="font-size:11px;font-weight:700;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 4px;grid-column:1/-1;">Variable Costs (per mile)</div>
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
-        <span style="min-width:130px;">Fuel ($/mi)</span>
-        <input type="number" id="fm-fuel-cost" value="${cm.fuel_cost_per_mile}" step="0.01" style="width:70px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;">
+        <span style="min-width:130px;">Diesel ($/gal)</span>
+        <input type="number" id="fm-diesel-price" value="${cm.diesel_price_per_gal}" step="0.01" style="width:70px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;">
       </label>
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
         <span style="min-width:130px;">Maintenance ($/mi)</span>
@@ -31735,6 +31790,13 @@ const fmApp = {
         <input type="number" id="fm-carrier-reefer" value="${cm.carrier_rate_reefer}" step="0.05" style="width:70px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;">
       </label>
     `;
+  },
+
+  updateTeamDrivingDisplay() {
+    const checkbox = document.getElementById('fm-team-driving');
+    if (checkbox) {
+      checkbox.checked = this.config.teamDriving;
+    }
   },
 
   renderLanesTable() {
@@ -31851,13 +31913,13 @@ const fmApp = {
       return;
     }
 
-    this.costModel.fuel_cost_per_mile = parseFloat(document.getElementById('fm-fuel-cost').value) || 0.54;
+    this.costModel.diesel_price_per_gal = parseFloat(document.getElementById('fm-diesel-price').value) || 3.87;
     this.costModel.maintenance_per_mile = parseFloat(document.getElementById('fm-maint-cost').value) || 0.198;
     this.costModel.driver_hourly_rate = parseFloat(document.getElementById('fm-driver-rate').value) || 32;
     this.costModel.driver_benefits_pct = parseFloat(document.getElementById('fm-driver-benefits')?.value) || 30;
     this.costModel.payroll_tax_pct = parseFloat(document.getElementById('fm-payroll-tax')?.value) || 7.65;
     this.costModel.vehicle_lease_monthly = parseFloat(document.getElementById('fm-lease')?.value) || 2500;
-    this.costModel.annual_insurance_per_vehicle = parseFloat(document.getElementById('fm-insurance').value) || 12500;
+    this.costModel.annual_insurance_per_vehicle = parseFloat(document.getElementById('fm-insurance').value) || 10750;
     this.costModel.admin_overhead_pct = parseFloat(document.getElementById('fm-admin').value) || 10;
     this.costModel.carrier_rate_dry_van = parseFloat(document.getElementById('fm-carrier-dry')?.value) || 2.85;
     this.costModel.carrier_rate_reefer = parseFloat(document.getElementById('fm-carrier-reefer')?.value) || 3.75;
@@ -31905,8 +31967,9 @@ const fmApp = {
 
     // Count vehicles needed per type based on trip hours
     const daysPerWeek = 5;
-    const hoursPerDay = 10;
-    const availableHoursPerWeek = daysPerWeek * hoursPerDay;
+    // Team driving doubles effective hours per day (20 hrs with mandatory breaks vs 10 hrs solo)
+    const effectiveHoursPerDay = this.config.teamDriving ? 20 : 10;
+    const availableHoursPerWeek = daysPerWeek * effectiveHoursPerDay;
     const avgSpeed = 55; // mph
 
     // Group by vehicle type and calculate vehicles needed
@@ -31927,7 +31990,8 @@ const fmApp = {
     });
 
     const totalVehicles = Object.values(vehicleFleet).reduce((a, b) => a + b, 0);
-    const avgDriversPerVehicle = 1.3;
+    // Team driving: 2 drivers per truck; solo: 1.3 drivers per truck (accounting for PTO, training, etc)
+    const avgDriversPerVehicle = this.config.teamDriving ? 2.0 : 1.3;
     const totalDrivers = Math.ceil(totalVehicles * avgDriversPerVehicle);
 
     // ── Per-vehicle-type cost model ──
@@ -31936,11 +32000,11 @@ const fmApp = {
     const burdenedDriverRate = cm.driver_hourly_rate * driverBurdenMult;
     const annualDriverCost = totalDrivers * burdenedDriverRate * 2080;
 
-    // Fuel cost per vehicle type uses MPG + diesel price
-    const dieselPricePerGal = cm.fuel_cost_per_mile * 6.5; // back-derive diesel price from default mpg
+    // Fuel cost per vehicle type uses diesel price + per-vehicle MPG
+    const dieselPricePerGal = cm.diesel_price_per_gal;
     let annualFuel = 0;
     let annualMaint = 0;
-    let annualLease = 0;
+    let annualVehicleCost = 0; // Lease or depreciation depending on mode
     let annualInsurance = 0;
     const vehicleCostDetail = {};
 
@@ -31949,26 +32013,40 @@ const fmApp = {
       const spec = this.vehicleSpecs[vtype];
       const typeMilesPerWeek = byType[vtype] ? byType[vtype].miles : 0;
       const typeMilesPerYear = typeMilesPerWeek * 52;
-      const fuelPerMile = dieselPricePerGal / spec.mpg + (spec.fuel_surcharge || 0);
+      const fuelPerMile = (dieselPricePerGal / spec.mpg) + (spec.fuel_surcharge || 0);
       const typeFuel = typeMilesPerYear * fuelPerMile;
       const typeMaint = typeMilesPerYear * cm.maintenance_per_mile;
-      const typeLease = count * cm.vehicle_lease_monthly * 12;
       const typeInsurance = count * cm.annual_insurance_per_vehicle * spec.insurance_premium;
+
+      // Calculate vehicle cost: lease or depreciation based on financing mode
+      let typeVehicleCost = 0;
+      if (this.config.financingMode === 'lease') {
+        // Lease mode: use per-vehicle type monthly rates
+        const monthlyRate = cm.lease_monthly_rates[vtype] || cm.vehicle_lease_monthly;
+        typeVehicleCost = count * monthlyRate * 12;
+      } else {
+        // Purchase mode: calculate straight-line depreciation
+        const usefulLife = cm.vehicle_useful_life[vtype] || 7;
+        const residualValue = spec.capital_cost * cm.vehicle_residual_pct;
+        const annualDepreciation = (spec.capital_cost - residualValue) / usefulLife;
+        typeVehicleCost = count * annualDepreciation;
+      }
 
       annualFuel += typeFuel;
       annualMaint += typeMaint;
-      annualLease += typeLease;
+      annualVehicleCost += typeVehicleCost;
       annualInsurance += typeInsurance;
 
       vehicleCostDetail[vtype] = {
         count, miles: typeMilesPerYear, fuel: typeFuel, maint: typeMaint,
-        lease: typeLease, insurance: typeInsurance, fuelPerMile,
-        total: typeFuel + typeMaint + typeLease + typeInsurance
+        vehicleCost: typeVehicleCost, insurance: typeInsurance, fuelPerMile,
+        total: typeFuel + typeMaint + typeVehicleCost + typeInsurance,
+        financingMode: this.config.financingMode
       };
     });
 
     const annualFuelMaint = annualFuel + annualMaint;
-    const subtotal = annualDriverCost + annualFuelMaint + annualLease + annualInsurance;
+    const subtotal = annualDriverCost + annualFuelMaint + annualVehicleCost + annualInsurance;
     const adminOverhead = subtotal * (cm.admin_overhead_pct / 100);
     const privateFleetTotal = subtotal + adminOverhead;
     const costPerMile = annualMiles > 0 ? privateFleetTotal / annualMiles : 0;
@@ -31983,7 +32061,7 @@ const fmApp = {
     const avgCarrierRate = annualMiles > 0 ? commonCarrierTotal / annualMiles : 0;
 
     // GXO dedicated: cost-plus model
-    const gxoBaseCost = annualFuelMaint + annualLease + annualInsurance + (totalDrivers * cm.driver_hourly_rate * 1.25 * 2080);
+    const gxoBaseCost = annualFuelMaint + annualVehicleCost + annualInsurance + (totalDrivers * cm.driver_hourly_rate * 1.25 * 2080);
     const dedicatedFleetTotal = gxoBaseCost * (1 + cm.dedicated_margin_pct / 100);
 
     this.results = {
@@ -32001,11 +32079,12 @@ const fmApp = {
         fuel: annualFuel,
         maintenance: annualMaint,
         fuelMaint: annualFuelMaint,
-        lease: annualLease,
+        vehicleCost: annualVehicleCost,
         insurance: annualInsurance,
         adminOverhead: adminOverhead,
         burdenedDriverRate: burdenedDriverRate
       },
+      financingMode: this.config.financingMode,
       privateFleetCost: privateFleetTotal,
       dedicatedFleetCost: dedicatedFleetTotal,
       commonCarrierCost: commonCarrierTotal,
@@ -32063,6 +32142,7 @@ const fmApp = {
 
     const fmtM = (v) => '$' + (v / 1000000).toFixed(2) + 'M';
     const fmtPct = (a, b) => b > 0 ? ((a - b) / b * 100).toFixed(1) + '%' : '—';
+    const vehicleCostLabel = r.financingMode === 'lease' ? 'Lease' : 'Depreciation';
 
     document.getElementById('fm-cost-cards').innerHTML = `
       <div class="fm-cost-card" ${privateIsLowest ? 'style="border-color:var(--ies-green);background:linear-gradient(135deg,rgba(0,200,83,.04),rgba(0,200,83,.01));"' : ''}>
@@ -32072,7 +32152,7 @@ const fmApp = {
           Drivers: ${fmtM(bd.driverCost)}<br>
           Fuel: ${fmtM(bd.fuel || bd.fuelMaint * 0.6)}<br>
           Maint: ${fmtM(bd.maintenance || bd.fuelMaint * 0.4)}<br>
-          Lease: ${fmtM(bd.lease)}<br>
+          ${vehicleCostLabel}: ${fmtM(bd.vehicleCost)}<br>
           Insurance: ${fmtM(bd.insurance)}<br>
           Overhead: ${fmtM(bd.adminOverhead)}
         </div>
@@ -32099,6 +32179,9 @@ const fmApp = {
         ${commonCarrierCost > privateFleetCost ? '<div style="margin-top:6px;font-size:11px;color:var(--ies-red);">' + fmtPct(commonCarrierCost, privateFleetCost) + ' more than private</div>' : '<div class="fm-cost-card-savings">Saves ' + fmtM(privateFleetCost - commonCarrierCost) + ' vs private</div>'}
       </div>
     `;
+
+    // Render ATRI Benchmark Comparison
+    this.renderBenchmarkComparison();
 
     const annualShipments = this.lanes.reduce((sum, l) => sum + (l.weekly_shipments * 52), 0);
     const costPerShipment = privateFleetCost / Math.max(1, annualShipments);
@@ -32195,11 +32278,12 @@ const fmApp = {
     const container = document.getElementById('fm-cost-waterfall');
     if (!container || !this.results) return;
     const bd = this.results.costBreakdown;
+    const vehicleLabel = this.results.financingMode === 'lease' ? 'Lease' : 'Depreciation';
     const items = [
       { label: 'Drivers', value: bd.driverCost, color: '#2563eb' },
       { label: 'Fuel', value: bd.fuel, color: '#f59e0b' },
       { label: 'Maintenance', value: bd.maintenance, color: '#10b981' },
-      { label: 'Lease/Payment', value: bd.lease, color: '#8b5cf6' },
+      { label: vehicleLabel, value: bd.vehicleCost, color: '#8b5cf6' },
       { label: 'Insurance', value: bd.insurance, color: '#ef4444' },
       { label: 'Overhead', value: bd.adminOverhead, color: '#64748b' }
     ];
@@ -32216,6 +32300,201 @@ const fmApp = {
     }).join('');
   },
 
+  renderBenchmarkComparison() {
+    const container = document.getElementById('fm-benchmark-comparison');
+    if (!container || !this.results) return;
+
+    const r = this.results;
+    const bd = r.costBreakdown;
+    const ab = this.costModel.atri_benchmarks;
+    const annualMiles = r.annual_miles;
+
+    // Calculate actual per-mile costs
+    const actual = {
+      total: r.costPerMile,
+      fuel: annualMiles > 0 ? bd.fuel / annualMiles : 0,
+      driverWages: annualMiles > 0 ? bd.driverCost / annualMiles : 0,
+      vehicleLeaseDepreciation: annualMiles > 0 ? bd.vehicleCost / annualMiles : 0,
+      insurance: annualMiles > 0 ? bd.insurance / annualMiles : 0,
+      maintenance: annualMiles > 0 ? bd.maintenance / annualMiles : 0
+    };
+
+    // Calculate variances (% difference from ATRI)
+    const getVariance = (actual, benchmark) => benchmark > 0 ? ((actual - benchmark) / benchmark * 100) : 0;
+    const getVarianceColor = (variance) => {
+      if (Math.abs(variance) <= 10) return '#00c853';  // green
+      if (Math.abs(variance) <= 25) return '#ffc107';  // yellow
+      return '#f44336'; // red
+    };
+
+    const rows = [
+      { category: 'Total Operating Cost', actual: actual.total, benchmark: ab.total_cost_per_mile },
+      { category: 'Fuel', actual: actual.fuel, benchmark: ab.fuel_per_mile },
+      { category: 'Driver Wages', actual: actual.driverWages, benchmark: ab.driver_wages_per_mile },
+      { category: 'Vehicle Lease/Depreciation', actual: actual.vehicleLeaseDepreciation, benchmark: ab.vehicle_lease_purchase_per_mile },
+      { category: 'Insurance', actual: actual.insurance, benchmark: ab.insurance_per_mile },
+      { category: 'Maintenance', actual: actual.maintenance, benchmark: ab.maintenance_per_mile }
+    ];
+
+    container.innerHTML = `
+      <div style="font-weight:600;margin-bottom:16px;color:var(--ies-navy);">ATRI Benchmark Comparison (2024)</div>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead style="background:var(--ies-gray-150);border-bottom:2px solid var(--ies-gray-300);">
+            <tr>
+              <th style="padding:12px;text-align:left;font-weight:600;">Category</th>
+              <th style="padding:12px;text-align:right;font-weight:600;">Your Cost/Mi</th>
+              <th style="padding:12px;text-align:right;font-weight:600;">ATRI Benchmark</th>
+              <th style="padding:12px;text-align:right;font-weight:600;">Variance</th>
+              <th style="padding:12px;text-align:center;font-weight:600;">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(row => {
+              const variance = getVariance(row.actual, row.benchmark);
+              const varianceColor = getVarianceColor(variance);
+              const statusText = Math.abs(variance) <= 10 ? 'On target' : (variance > 0 ? 'Above benchmark' : 'Below benchmark');
+              return `
+              <tr style="border-bottom:1px solid var(--ies-gray-200);">
+                <td style="padding:12px;font-weight:500;color:var(--ies-navy);">${row.category}</td>
+                <td style="padding:12px;text-align:right;font-weight:600;">$${row.actual.toFixed(3)}/mi</td>
+                <td style="padding:12px;text-align:right;">$${row.benchmark.toFixed(3)}/mi</td>
+                <td style="padding:12px;text-align:right;font-weight:600;color:${varianceColor};">${variance > 0 ? '+' : ''}${variance.toFixed(1)}%</td>
+                <td style="padding:12px;text-align:center;">
+                  <span style="padding:4px 10px;border-radius:4px;font-size:11px;font-weight:600;background:${varianceColor}20;color:${varianceColor};">
+                    ${statusText}
+                  </span>
+                </td>
+              </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+      <div style="margin-top:12px;padding:12px;background:var(--ies-gray-100);border-radius:6px;font-size:11px;color:var(--ies-gray-600);line-height:1.5;">
+        <strong>ATRI Data Source:</strong> American Transportation Research Institute 2024. Green indicates within ±10% of benchmark, yellow ±10-25%, red &gt;25% variance.
+      </div>
+    `;
+  },
+
+  renderSensitivityMatrix() {
+    if (!this.results) return;
+    const container = document.getElementById('fm-sensitivity-matrix-container');
+    if (!container) return;
+
+    // Driver hourly rates to test: $25, $28, $30, $32, $35, $38
+    const driverRates = [25, 28, 30, 32, 35, 38];
+    // Diesel prices to test: $3.25, $3.50, $3.75, $4.00, $4.25, $4.50
+    const dieselPrices = [3.25, 3.50, 3.75, 4.00, 4.25, 4.50];
+
+    // Save current values
+    const origDriverRate = this.costModel.driver_hourly_rate;
+    const origDieselPrice = this.costModel.diesel_price_per_gal;
+
+    // Current scenario location for highlighting
+    let currentRowIdx = driverRates.indexOf(origDriverRate);
+    let currentColIdx = dieselPrices.indexOf(origDieselPrice);
+
+    // Find closest if exact match not found
+    if (currentRowIdx === -1) {
+      currentRowIdx = driverRates.reduce((nearest, rate, idx) =>
+        Math.abs(rate - origDriverRate) < Math.abs(driverRates[nearest] - origDriverRate) ? idx : nearest, 0);
+    }
+    if (currentColIdx === -1) {
+      currentColIdx = dieselPrices.reduce((nearest, price, idx) =>
+        Math.abs(price - origDieselPrice) < Math.abs(dieselPrices[nearest] - origDieselPrice) ? idx : nearest, 0);
+    }
+
+    // Generate matrix data
+    const matrix = driverRates.map((driverRate, rowIdx) => {
+      return dieselPrices.map((dieselPrice, colIdx) => {
+        // Temporarily set values
+        this.costModel.driver_hourly_rate = driverRate;
+        this.costModel.diesel_price_per_gal = dieselPrice;
+
+        // Calculate cost per mile with current parameters
+        // This is simplified — we use existing results structure
+        const cm = this.costModel;
+        const r = this.results;
+        const bd = r.costBreakdown;
+
+        // Recalculate affected costs
+        const driverBurdenMult = 1 + (cm.driver_benefits_pct / 100) + (cm.payroll_tax_pct / 100);
+        const burdenedRate = driverRate * driverBurdenMult;
+        const driverCostAdjusted = r.totalDrivers * burdenedRate * 2080;
+
+        // Calculate fuel cost based on vehicle mix
+        let fuelAdjusted = 0;
+        Object.entries(r.vehicleCostDetail || {}).forEach(([vtype, detail]) => {
+          const spec = this.vehicleSpecs[vtype];
+          const fuelPerMile = (dieselPrice / spec.mpg) + (spec.fuel_surcharge || 0);
+          fuelAdjusted += detail.miles * fuelPerMile;
+        });
+
+        // Total cost adjusted
+        const subtotal = driverCostAdjusted + fuelAdjusted + bd.maintenance + bd.vehicleCost + bd.insurance;
+        const adminOverhead = subtotal * (cm.admin_overhead_pct / 100);
+        const privateFleetTotal = subtotal + adminOverhead;
+        const costPerMile = r.annual_miles > 0 ? privateFleetTotal / r.annual_miles : 0;
+
+        return {
+          driverRate,
+          dieselPrice,
+          costPerMile,
+          isCurrentCell: rowIdx === currentRowIdx && colIdx === currentColIdx
+        };
+      });
+    });
+
+    // Restore original values
+    this.costModel.driver_hourly_rate = origDriverRate;
+    this.costModel.diesel_price_per_gal = origDieselPrice;
+
+    // Color function
+    const getCellColor = (costPerMile) => {
+      if (costPerMile < 2.00) return '#00c853'; // green
+      if (costPerMile < 2.50) return '#ffc107'; // yellow
+      if (costPerMile < 3.00) return '#ff9800'; // orange
+      return '#f44336'; // red
+    };
+
+    // Build table HTML
+    let html = `<table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead>
+        <tr>
+          <th style="padding:8px;text-align:center;font-weight:600;border:1px solid var(--ies-gray-300);background:var(--ies-gray-150);">Driver Rate ($/hr)</th>`;
+
+    dieselPrices.forEach(price => {
+      html += `<th style="padding:8px;text-align:center;font-weight:600;border:1px solid var(--ies-gray-300);background:var(--ies-gray-150);">$${price.toFixed(2)}</th>`;
+    });
+    html += `</tr></thead><tbody>`;
+
+    matrix.forEach((row, rowIdx) => {
+      html += `<tr>
+        <td style="padding:8px;text-align:center;font-weight:600;border:1px solid var(--ies-gray-300);background:var(--ies-gray-150);">$${driverRates[rowIdx]}</td>`;
+
+      row.forEach(cell => {
+        const bgColor = getCellColor(cell.costPerMile);
+        const borderStyle = cell.isCurrentCell ? '2px solid var(--ies-navy)' : '1px solid var(--ies-gray-300)';
+        const fontWeight = cell.isCurrentCell ? '700' : '500';
+        html += `<td style="padding:8px;text-align:center;border:${borderStyle};background:${bgColor}20;font-weight:${fontWeight};">$${cell.costPerMile.toFixed(2)}</td>`;
+      });
+      html += `</tr>`;
+    });
+
+    html += `</tbody></table>`;
+    html += `<div style="margin-top:12px;font-size:11px;color:var(--ies-gray-600);line-height:1.5;">
+      <strong>Note:</strong> <span style="color:#00c853;font-weight:600;">Green</span> = &lt;$2.00/mi (excellent),
+      <span style="color:#ffc107;font-weight:600;">Yellow</span> = $2.00-2.50/mi (good),
+      <span style="color:#ff9800;font-weight:600;">Orange</span> = $2.50-3.00/mi (fair),
+      <span style="color:#f44336;font-weight:600;">Red</span> = &gt;$3.00/mi (high).
+      <strong>Current scenario</strong> shown with navy border.
+    </div>`;
+
+    container.innerHTML = html;
+    this.showToast('Sensitivity matrix generated');
+  },
+
   exportResults() {
     if (!this.results) { this.showToast('Calculate fleet first'); return; }
     const r = this.results;
@@ -32224,12 +32503,13 @@ const fmApp = {
     let csv = 'Fleet Modeler Results Export\n\n';
     csv += 'FLEET SUMMARY\n';
     csv += `Total Vehicles,${r.totalVehicles}\nTotal Drivers,${r.totalDrivers}\nAnnual Miles,${r.annual_miles}\nCost per Mile,$${r.costPerMile.toFixed(2)}\n\n`;
-    csv += 'VEHICLE MIX\nType,Count,Annual Miles,Fuel Cost,Maint Cost,Lease Cost,Insurance,Total\n';
+    const vehicleCostLabel = r.financingMode === 'lease' ? 'Lease Cost' : 'Depreciation Cost';
+    csv += 'VEHICLE MIX\nType,Count,Annual Miles,Fuel Cost,Maint Cost,' + vehicleCostLabel + ',Insurance,Total\n';
     Object.entries(r.vehicleCostDetail || {}).forEach(([vtype, d]) => {
-      csv += `${this.vehicleSpecs[vtype].name},${d.count},${d.miles},$${d.fuel.toFixed(0)},$${d.maint.toFixed(0)},$${d.lease.toFixed(0)},$${d.insurance.toFixed(0)},$${d.total.toFixed(0)}\n`;
+      csv += `${this.vehicleSpecs[vtype].name},${d.count},${d.miles},$${d.fuel.toFixed(0)},$${d.maint.toFixed(0)},$${d.vehicleCost.toFixed(0)},$${d.insurance.toFixed(0)},$${d.total.toFixed(0)}\n`;
     });
     csv += '\nCOST BREAKDOWN\n';
-    csv += `Driver Cost,${fmtM(bd.driverCost)}\nFuel,${fmtM(bd.fuel)}\nMaintenance,${fmtM(bd.maintenance)}\nLease/Payment,${fmtM(bd.lease)}\nInsurance,${fmtM(bd.insurance)}\nOverhead,${fmtM(bd.adminOverhead)}\n`;
+    csv += `Driver Cost,${fmtM(bd.driverCost)}\nFuel,${fmtM(bd.fuel)}\nMaintenance,${fmtM(bd.maintenance)}\n${vehicleCostLabel},${fmtM(bd.vehicleCost)}\nInsurance,${fmtM(bd.insurance)}\nOverhead,${fmtM(bd.adminOverhead)}\n`;
     csv += `\nPRIVATE FLEET TOTAL,${fmtM(r.privateFleetCost)}\nDEDICATED FLEET (GXO),${fmtM(r.dedicatedFleetCost)}\nCOMMON CARRIER,${fmtM(r.commonCarrierCost)}\n`;
     csv += '\nLANE ASSIGNMENTS\nOrigin,Destination,Ships/Wk,Avg Weight,Vehicle,Trips/Wk,Miles/Wk\n';
     (r.laneAssignments || []).forEach(a => {
