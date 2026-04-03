@@ -5471,17 +5471,6 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         </ul>
       </div>
 
-      <!-- Vertical Spotlight -->
-      <div class="sector-pulse-card">
-        <div class="sector-pulse-card-header">
-          <div class="sector-pulse-card-icon" style="background:rgba(0,71,171,.1);font-size:15px;">&#x1F4CA;</div>
-          <div class="sector-pulse-card-title">Vertical Spotlight</div>
-          <span class="sector-pulse-card-tag" style="background:rgba(0,71,171,.08);color:var(--ies-blue);">LIVE</span>
-        </div>
-        <div id="spVerticals">
-          <div style="color:var(--ies-gray-400);font-size:12px;padding:8px 0;">Loading verticals…</div>
-        </div>
-      </div>
 
       <!-- Supply Chain Pulse (Ports + Reshoring) -->
       <div class="sector-pulse-card">
@@ -5501,17 +5490,6 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         </ul>
       </div>
 
-      <!-- Competitor Intelligence -->
-      <div class="sector-pulse-card">
-        <div class="sector-pulse-card-header">
-          <div class="sector-pulse-card-icon" style="background:rgba(220,53,69,.08);font-size:15px;">&#x1F3AF;</div>
-          <div class="sector-pulse-card-title">Competitor Intelligence</div>
-          <span class="sector-pulse-card-tag" style="background:rgba(0,71,171,.08);color:var(--ies-blue);">LIVE</span>
-        </div>
-        <div id="spCompetitors">
-          <div style="color:var(--ies-gray-400);font-size:12px;padding:8px 0;">Loading competitors…</div>
-        </div>
-      </div>
 
       <!-- Labor Watch (Union Activity) -->
       <div class="sector-pulse-card">
@@ -6508,6 +6486,15 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
                 </label>
               </div>
               <div style="margin-bottom:8px;">
+                <label style="font-size:11px;color:var(--ies-gray-600);">Active Pick Face %
+                  <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+                    <input type="range" id="wsc-fwd-pct" min="5" max="100" step="5" value="20" oninput="calcWarehouse()" class="wsc-slider" style="flex:1;margin:0;">
+                    <span id="wsc-fwd-pct-val" style="font-weight:600;color:var(--ies-blue);font-size:12px;min-width:35px;text-align:right;">20%</span>
+                  </div>
+                  <span style="font-size:10px;color:var(--ies-gray-500);margin-top:4px;display:block;">Only this % of total SKUs get forward pick positions</span>
+                </label>
+              </div>
+              <div style="margin-bottom:8px;">
                 <label style="font-size:11px;color:var(--ies-gray-600);">Pick Type
                   <select id="wsc-fwd-type" onchange="calcWarehouse()" class="wsc-select" style="margin-top:4px;font-size:12px;">
                     <option value="pallet">Pallet Pick Faces (~45 sf/loc)</option>
@@ -6763,6 +6750,17 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
             </div>
           </div>
 
+          <!-- Freight Mode Preset -->
+          <div style="margin-bottom:16px;">
+            <label style="font-size:11px;font-weight:700;color:var(--ies-gray-600);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px;">Freight Mode</label>
+            <select id="net-freight-mode" onchange="netApplyFreightMode()" style="width:100%;padding:8px 10px;border:1px solid var(--ies-gray-300);border-radius:6px;font-size:12px;background:#fff;color:var(--ies-navy);cursor:pointer;font-weight:600;">
+              <option value="custom">Custom</option>
+              <option value="tl">Truckload ($2.50/mi)</option>
+              <option value="ltl">LTL ($4.00/mi)</option>
+              <option value="parcel">Parcel ($8.00/mi)</option>
+            </select>
+          </div>
+
           <!-- Transportation rate -->
           <div style="margin-bottom:16px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
@@ -6814,8 +6812,9 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 
           <!-- DC Locations -->
           <div style="background:#fff;border-radius:12px;border:1px solid var(--ies-gray-200);box-shadow:var(--shadow-md);overflow:hidden;">
-            <div style="padding:12px 16px 8px;border-bottom:1px solid var(--ies-gray-100);">
+            <div style="padding:12px 16px 8px;border-bottom:1px solid var(--ies-gray-100);display:flex;justify-content:space-between;align-items:center;">
               <div style="font-size:11px;font-weight:700;color:var(--ies-navy);text-transform:uppercase;letter-spacing:.6px;">Recommended DC Locations</div>
+              <button onclick="netExportResultsCSV()" style="padding:5px 10px;background:linear-gradient(135deg,#0047ab,#003d8a);color:#fff;border:none;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;transition:all .15s;" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform=''">CSV</button>
             </div>
             <div id="net-dc-results" style="padding:14px 16px;font-size:12px;color:var(--ies-gray-700);line-height:1.6;max-height:240px;overflow-y:auto;"></div>
           </div>
@@ -7740,10 +7739,18 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
           </div>
         </div>
         <div style="margin-bottom:16px;">
+          <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-600);text-transform:uppercase;margin-bottom:6px;">Target Close Date</label>
+          <input type="date" id="dealEditCloseDate" style="width:100%;padding:10px 12px;border:1px solid var(--ies-gray-300);border-radius:6px;font-family:Montserrat,sans-serif;font-size:14px;box-sizing:border-box;">
+        </div>
+        <div style="margin-bottom:16px;">
           <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-600);text-transform:uppercase;margin-bottom:6px;">Notes</label>
           <textarea id="dealEditNotes" style="width:100%;padding:10px 12px;border:1px solid var(--ies-gray-300);border-radius:6px;font-family:Montserrat,sans-serif;font-size:14px;min-height:60px;box-sizing:border-box;" placeholder="Deal notes..."></textarea>
         </div>
-        <button onclick="dealApp.saveDealHeader()" style="padding:10px 20px;background:var(--ies-orange);color:#fff;border:none;border-radius:6px;font-family:Montserrat,sans-serif;font-weight:600;font-size:13px;cursor:pointer;">Save Deal Details</button>
+        <div id="dealValidationErrors" style="margin-bottom:12px;"></div>
+        <div style="display:flex;gap:8px;">
+          <button onclick="dealApp.saveDealHeader()" style="padding:10px 20px;background:var(--ies-orange);color:#fff;border:none;border-radius:6px;font-family:Montserrat,sans-serif;font-weight:600;font-size:13px;cursor:pointer;">Save Deal Details</button>
+          <button onclick="dealApp.cloneDeal()" class="hub-btn hub-btn-sm" style="padding:10px 20px;background:var(--ies-gray-200);color:var(--ies-navy);border:1px solid var(--ies-gray-300);border-radius:6px;font-family:Montserrat,sans-serif;font-weight:600;font-size:13px;cursor:pointer;">Clone Deal</button>
+        </div>
       </div>
 
       <!-- Tab bar -->
@@ -14237,8 +14244,6 @@ async function loadSectorPulse() {
   if (!sb) return;
   await Promise.all([
     loadSPAutomation(),
-    loadSPVerticals(),
-    loadSPCompetitors(),
     loadSPSupplyChain(),
     loadSPLabor(),
     loadSPTariffTrade()
@@ -19199,17 +19204,21 @@ function calcWarehouse() { try {
     var fwdSkus = parseInt(document.getElementById('wsc-fwd-skus').value) || 0;
     var fwdDays = parseInt(document.getElementById('wsc-fwd-days').value) || 3;
     var fwdType = document.getElementById('wsc-fwd-type').value;
+    var fwdPickPct = parseInt(document.getElementById('wsc-fwd-pct').value) || 20;
     var obUnitsYr = parseInt(document.getElementById('wsc-ob-units').value) || 0;
     var opDaysYr = parseInt(document.getElementById('wsc-op-days').value) || 250;
 
-    // Pick faces = 1 per SKU (1:1 for now)
-    var pickFaces = fwdSkus;
+    // Update Active Pick Face % display
+    document.getElementById('wsc-fwd-pct-val').textContent = fwdPickPct + '%';
+
+    // Active pick faces = total SKUs × active pick face % (ABC analysis: only fast movers get forward pick)
+    var activeFaces = Math.ceil(fwdSkus * (fwdPickPct / 100));
 
     // SF per location by pick type
     var sfPerLoc = fwdType === 'pallet' ? 45 : 12; // pallet pick face vs carton flow
 
-    // Forward pick area SF = pick faces × sf per location
-    fwdPickSF = pickFaces * sfPerLoc;
+    // Forward pick area SF = active pick faces × sf per location
+    fwdPickSF = activeFaces * sfPerLoc;
 
     // Daily units through forward pick = outbound units / operating days × days of inventory
     var dailyUnits = opDaysYr > 0 ? Math.round(obUnitsYr / opDaysYr) : 0;
@@ -19218,7 +19227,7 @@ function calcWarehouse() { try {
     // Update calculated display
     var fwdCalcEl = document.getElementById('wsc-fwd-calc');
     if (fwdCalcEl) {
-      fwdCalcEl.innerHTML = pickFaces.toLocaleString() + ' pick faces &times; ' + sfPerLoc + ' sf = <strong>' + fwdPickSF.toLocaleString() + ' sf</strong>' +
+      fwdCalcEl.innerHTML = fwdSkus.toLocaleString() + ' total SKUs &times; ' + fwdPickPct + '% = <strong>' + activeFaces.toLocaleString() + ' active faces</strong> &times; ' + sfPerLoc + ' sf = <strong>' + fwdPickSF.toLocaleString() + ' sf</strong>' +
         ' &middot; ' + dailyUnits.toLocaleString() + ' units/day &times; ' + fwdDays + ' days = ' + fwdInventoryUnits.toLocaleString() + ' units stocked';
     }
 
@@ -20027,6 +20036,90 @@ function syncNetPanelHeight() {
 }
 
 // ── RESET ──
+
+
+// ── COG ENHANCEMENT 1: FREIGHT MODE PRESET ──
+function netApplyFreightMode() {
+  var mode = document.getElementById('net-freight-mode').value;
+  var rates = {
+    'tl': 2.50,
+    'ltl': 4.00,
+    'parcel': 8.00
+  };
+  if (mode !== 'custom' && rates[mode]) {
+    document.getElementById('net-rate').value = rates[mode];
+    document.getElementById('net-rate-val').textContent = '$' + rates[mode].toFixed(2) + '/mi';
+    runNetworkOptimization();
+  }
+}
+
+// ── COG ENHANCEMENT 2: CSV EXPORT ──
+function netExportResultsCSV() {
+  var geoPoints = [];
+  for (var i = 0; i < netDemandPoints.length; i++) {
+    var geo = geocodeCity(netDemandPoints[i].city);
+    if (geo && netDemandPoints[i].volume > 0) {
+      geoPoints.push({ lat: geo.lat, lng: geo.lng, weight: netDemandPoints[i].volume, name: geo.name, idx: i });
+    }
+  }
+
+  if (geoPoints.length < 1) {
+    alert('No demand points to export');
+    return;
+  }
+
+  var rate = parseFloat(document.getElementById('net-rate').value) || 2.25;
+  var loadsPerWeek = parseFloat(document.getElementById('net-loads').value) || 2;
+  var clusters = kMeansCOG(geoPoints, netDCCount);
+
+  var csv = 'IES CENTER OF GRAVITY ANALYSIS — RESULTS EXPORT\n\n';
+  csv += 'SCENARIO,' + (document.getElementById('net-scenario-name').value || 'Untitled') + '\n';
+  csv += 'NUM_DCS,' + netDCCount + '\n';
+  csv += 'OUTBOUND_RATE_PER_MI,' + rate + '\n';
+  csv += 'LOADS_PER_WEEK_PER_POINT,' + loadsPerWeek + '\n\n';
+
+  csv += 'DEMAND POINTS\n';
+  csv += 'Name,Latitude,Longitude,Volume,Weight\n';
+  for (var i = 0; i < geoPoints.length; i++) {
+    csv += geoPoints[i].name + ',' + geoPoints[i].lat.toFixed(4) + ',' + geoPoints[i].lng.toFixed(4) + ',' + geoPoints[i].weight + ',' + geoPoints[i].weight + '\n';
+  }
+
+  csv += '\nCENTER OF GRAVITY LOCATIONS\n';
+  csv += 'DC_ID,Latitude,Longitude,Assigned_Points,Total_Volume\n';
+  for (var ci = 0; ci < clusters.length; ci++) {
+    csv += 'DC ' + (ci + 1) + ',' + clusters[ci].center.lat.toFixed(4) + ',' + clusters[ci].center.lng.toFixed(4) + ',' + clusters[ci].members.length + ',' + clusters[ci].totalWeight + '\n';
+  }
+
+  csv += '\nDEMAND POINT ASSIGNMENTS\n';
+  csv += 'Demand_Name,Assigned_DC,Distance_Miles,Annual_Transport_Cost\n';
+  var totalFreightCost = 0;
+  for (var ci2 = 0; ci2 < clusters.length; ci2++) {
+    for (var mi = 0; mi < clusters[ci2].members.length; mi++) {
+      var ptIdx = clusters[ci2].members[mi];
+      var pt = geoPoints[ptIdx];
+      var dist = roadDist(pt.lat, pt.lng, clusters[ci2].center.lat, clusters[ci2].center.lng);
+      var annualCost = dist * rate * loadsPerWeek * 52;
+      totalFreightCost += annualCost;
+      csv += pt.name + ',DC ' + (ci2 + 1) + ',' + dist.toFixed(1) + ',' + annualCost.toFixed(0) + '\n';
+    }
+  }
+
+  csv += '\nSUMMARY METRICS\n';
+  csv += 'Metric,Value\n';
+  csv += 'Total Demand Points,' + geoPoints.length + '\n';
+  csv += 'Total Volume,' + geoPoints.reduce(function(sum, p) { return sum + p.weight; }, 0) + '\n';
+  csv += 'Number of DCs,' + netDCCount + '\n';
+  csv += 'Total Weighted Transport Cost,$' + totalFreightCost.toFixed(0) + '\n';
+
+  var blob = new Blob([csv], { type: 'text/csv' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'cog_results_' + new Date().toISOString().slice(0, 10) + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function resetNetworkTool() {
   netDCCount = 1;
   netDemandPoints = [
@@ -26166,6 +26259,9 @@ const cmApp = {
                 this.loadRefData('ref_overhead_rates', 'overheadRates')
             ]);
 
+            // Seed default reference data if tables are empty
+            this.seedDefaultReferenceData();
+
             // Safe helper — some elements may not exist if section hasn't rendered
             const _el = (id) => document.getElementById(id);
             const _on = (id, evt, fn) => { const el = _el(id); if (el) el.addEventListener(evt, fn); };
@@ -26245,6 +26341,81 @@ const cmApp = {
         } catch (error) {
             console.error(`Error loading ${table}:`, error);
             this.refData[key] = [];
+        }
+    },
+
+    seedDefaultReferenceData() {
+        if (this.refData.facilityRates.length === 0) {
+            this.refData.facilityRates = [
+                { market_id: 'northeast', region: 'Northeast', lease_rate_psf_yr: 8.50, cam_rate_psf_yr: 2.00, tax_rate_psf_yr: 1.50, insurance_rate_psf_yr: 0.50 },
+                { market_id: 'southeast', region: 'Southeast', lease_rate_psf_yr: 5.75, cam_rate_psf_yr: 1.50, tax_rate_psf_yr: 1.00, insurance_rate_psf_yr: 0.50 },
+                { market_id: 'midwest', region: 'Midwest', lease_rate_psf_yr: 5.00, cam_rate_psf_yr: 1.25, tax_rate_psf_yr: 1.00, insurance_rate_psf_yr: 0.25 },
+                { market_id: 'west-coast', region: 'West Coast', lease_rate_psf_yr: 10.50, cam_rate_psf_yr: 2.50, tax_rate_psf_yr: 1.50, insurance_rate_psf_yr: 0.50 },
+                { market_id: 'southwest', region: 'Southwest', lease_rate_psf_yr: 6.50, cam_rate_psf_yr: 1.50, tax_rate_psf_yr: 1.00, insurance_rate_psf_yr: 0.50 }
+            ];
+        }
+        if (this.refData.laborRates.length === 0) {
+            this.refData.laborRates = [
+                { market_id: 'northeast', role_category: 'Direct', role_name: 'Picker', hourly_rate: 19.50, burden_pct: 35, default_benefit_load_pct: 35, default_bonus_pct: 0 },
+                { market_id: 'northeast', role_category: 'Direct', role_name: 'Receiver', hourly_rate: 19.00, burden_pct: 35, default_benefit_load_pct: 35, default_bonus_pct: 0 },
+                { market_id: 'northeast', role_category: 'Indirect', role_name: 'Team Lead', hourly_rate: 24.00, burden_pct: 35, default_benefit_load_pct: 35, default_bonus_pct: 0 },
+                { market_id: 'northeast', role_category: 'Indirect', role_name: 'Supervisor', hourly_rate: 28.00, burden_pct: 35, default_benefit_load_pct: 35, default_bonus_pct: 0 },
+                { market_id: 'northeast', role_category: 'Indirect', role_name: 'Manager', hourly_rate: 42.00, burden_pct: 32, default_benefit_load_pct: 32, default_bonus_pct: 5 },
+                { market_id: 'northeast', role_category: 'Support', role_name: 'Inventory Control', hourly_rate: 20.50, burden_pct: 35, default_benefit_load_pct: 35, default_bonus_pct: 0 },
+                { market_id: 'southeast', role_category: 'Direct', role_name: 'Picker', hourly_rate: 17.00, burden_pct: 35, default_benefit_load_pct: 35, default_bonus_pct: 0 },
+                { market_id: 'southeast', role_category: 'Direct', role_name: 'Receiver', hourly_rate: 16.75, burden_pct: 35, default_benefit_load_pct: 35, default_bonus_pct: 0 },
+                { market_id: 'southeast', role_category: 'Indirect', role_name: 'Team Lead', hourly_rate: 22.00, burden_pct: 35, default_benefit_load_pct: 35, default_bonus_pct: 0 },
+                { market_id: 'southeast', role_category: 'Indirect', role_name: 'Supervisor', hourly_rate: 26.00, burden_pct: 35, default_benefit_load_pct: 35, default_bonus_pct: 0 },
+                { market_id: 'southeast', role_category: 'Indirect', role_name: 'Manager', hourly_rate: 40.00, burden_pct: 32, default_benefit_load_pct: 32, default_bonus_pct: 5 },
+                { market_id: 'southeast', role_category: 'Support', role_name: 'Inventory Control', hourly_rate: 18.50, burden_pct: 35, default_benefit_load_pct: 35, default_bonus_pct: 0 },
+                { market_id: 'midwest', role_category: 'Direct', role_name: 'Picker', hourly_rate: 18.00, burden_pct: 35, default_benefit_load_pct: 35, default_bonus_pct: 0 },
+                { market_id: 'midwest', role_category: 'Direct', role_name: 'Receiver', hourly_rate: 17.75, burden_pct: 35, default_benefit_load_pct: 35, default_bonus_pct: 0 },
+                { market_id: 'midwest', role_category: 'Indirect', role_name: 'Team Lead', hourly_rate: 23.00, burden_pct: 35, default_benefit_load_pct: 35, default_bonus_pct: 0 },
+                { market_id: 'midwest', role_category: 'Indirect', role_name: 'Supervisor', hourly_rate: 27.00, burden_pct: 35, default_benefit_load_pct: 35, default_bonus_pct: 0 },
+                { market_id: 'midwest', role_category: 'Indirect', role_name: 'Manager', hourly_rate: 40.50, burden_pct: 32, default_benefit_load_pct: 32, default_bonus_pct: 5 },
+                { market_id: 'midwest', role_category: 'Support', role_name: 'Inventory Control', hourly_rate: 19.50, burden_pct: 35, default_benefit_load_pct: 35, default_bonus_pct: 0 },
+                { market_id: 'west-coast', role_category: 'Direct', role_name: 'Picker', hourly_rate: 21.50, burden_pct: 35, default_benefit_load_pct: 35, default_bonus_pct: 0 },
+                { market_id: 'west-coast', role_category: 'Direct', role_name: 'Receiver', hourly_rate: 21.00, burden_pct: 35, default_benefit_load_pct: 35, default_bonus_pct: 0 },
+                { market_id: 'west-coast', role_category: 'Indirect', role_name: 'Team Lead', hourly_rate: 26.00, burden_pct: 35, default_benefit_load_pct: 35, default_bonus_pct: 0 },
+                { market_id: 'west-coast', role_category: 'Indirect', role_name: 'Supervisor', hourly_rate: 30.00, burden_pct: 35, default_benefit_load_pct: 35, default_bonus_pct: 0 },
+                { market_id: 'west-coast', role_category: 'Indirect', role_name: 'Manager', hourly_rate: 45.00, burden_pct: 32, default_benefit_load_pct: 32, default_bonus_pct: 5 },
+                { market_id: 'west-coast', role_category: 'Support', role_name: 'Inventory Control', hourly_rate: 22.50, burden_pct: 35, default_benefit_load_pct: 35, default_bonus_pct: 0 },
+                { market_id: 'southwest', role_category: 'Direct', role_name: 'Picker', hourly_rate: 17.50, burden_pct: 35, default_benefit_load_pct: 35, default_bonus_pct: 0 },
+                { market_id: 'southwest', role_category: 'Direct', role_name: 'Receiver', hourly_rate: 17.00, burden_pct: 35, default_benefit_load_pct: 35, default_bonus_pct: 0 },
+                { market_id: 'southwest', role_category: 'Indirect', role_name: 'Team Lead', hourly_rate: 22.50, burden_pct: 35, default_benefit_load_pct: 35, default_bonus_pct: 0 },
+                { market_id: 'southwest', role_category: 'Indirect', role_name: 'Supervisor', hourly_rate: 26.50, burden_pct: 35, default_benefit_load_pct: 35, default_bonus_pct: 0 },
+                { market_id: 'southwest', role_category: 'Indirect', role_name: 'Manager', hourly_rate: 40.50, burden_pct: 32, default_benefit_load_pct: 32, default_bonus_pct: 5 },
+                { market_id: 'southwest', role_category: 'Support', role_name: 'Inventory Control', hourly_rate: 19.00, burden_pct: 35, default_benefit_load_pct: 35, default_bonus_pct: 0 }
+            ];
+        }
+        if (this.refData.utilityRates.length === 0) {
+            this.refData.utilityRates = [
+                { market_id: 'ambient', environment: 'Ambient', avg_monthly_per_sqft: 0.125 },
+                { market_id: 'cooler', environment: 'Cooler', avg_monthly_per_sqft: 0.292 },
+                { market_id: 'freezer', environment: 'Freezer', avg_monthly_per_sqft: 0.500 }
+            ];
+        }
+        if (this.refData.equipmentCatalog.length === 0) {
+            this.refData.equipmentCatalog = [
+                { category: 'Material Handling', equipment_name: 'Forklift (Sit-Down)', monthly_lease: 750, monthly_maintenance: 150, acquisition_cost: 0 },
+                { category: 'Material Handling', equipment_name: 'Reach Truck', monthly_lease: 950, monthly_maintenance: 175, acquisition_cost: 0 },
+                { category: 'Material Handling', equipment_name: 'Pallet Jack (Electric)', monthly_lease: 350, monthly_maintenance: 75, acquisition_cost: 0 },
+                { category: 'Material Handling', equipment_name: 'Order Picker', monthly_lease: 1100, monthly_maintenance: 200, acquisition_cost: 0 },
+                { category: 'Material Handling', equipment_name: 'Walkie Stacker', monthly_lease: 600, monthly_maintenance: 125, acquisition_cost: 0 },
+                { category: 'IT Equipment', equipment_name: 'RF Scanner', monthly_lease: 85, monthly_maintenance: 15, acquisition_cost: 0 },
+                { category: 'IT Equipment', equipment_name: 'Mobile Computer (Vehicle Mount)', monthly_lease: 120, monthly_maintenance: 25, acquisition_cost: 0 },
+                { category: 'IT Equipment', equipment_name: 'Pick-to-Light Module', monthly_lease: 200, monthly_maintenance: 50, acquisition_cost: 0 }
+            ];
+        }
+        if (this.refData.overheadRates.length === 0) {
+            this.refData.overheadRates = [
+                { category: 'Facilities', description: 'Janitorial, HVAC maint, pest control (IFMA benchmark)', monthly_cost: 0.15, cost_type: 'monthly' },
+                { category: 'Facilities', description: 'Property & general liability insurance (Insureon benchmark)', monthly_cost: 0.25, cost_type: 'monthly' },
+                { category: 'Administration', description: 'Office supplies, postage, small tools', annual_cost: 5000, cost_type: 'annual' },
+                { category: 'IT Systems', description: 'WMS license, RF terminals, network infrastructure', annual_cost: 35000, cost_type: 'annual' },
+                { category: 'Compliance', description: 'Safety training, certifications, compliance audit', annual_cost: 8000, cost_type: 'annual' },
+                { category: 'Quality', description: 'Cycle counts, audits, quality assurance programs', annual_cost: 12000, cost_type: 'annual' }
+            ];
         }
     },
 
@@ -30314,7 +30485,9 @@ const dealApp = {
         document.getElementById('dealEditClient').value = deal.client_name || '';
         document.getElementById('dealEditOwner').value = deal.deal_owner || '';
         document.getElementById('dealEditStatus').value = deal.status || 'Draft';
+        document.getElementById('dealEditCloseDate').value = deal.target_close_date || '';
         document.getElementById('dealEditNotes').value = deal.notes || '';
+        document.getElementById('dealValidationErrors').innerHTML = '';
 
         // Populate client datalist
         this.populateClientDatalist();
@@ -30415,6 +30588,23 @@ const dealApp = {
 
         // KPI Cards
         var metricsEl = document.getElementById('dealSummaryMetrics');
+
+        // Check if close date is overdue
+        var closeDate = self.currentDeal.target_close_date;
+        var closeDateDisplay = '—';
+        var closeDateColor = 'var(--ies-gray-400)';
+        var overdueHtml = '';
+        if (closeDate) {
+            var closeDay = new Date(closeDate);
+            var today = new Date();
+            var isOverdue = closeDay < today && self.currentDeal.status !== 'Won' && self.currentDeal.status !== 'Lost';
+            closeDateDisplay = closeDay.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            closeDateColor = isOverdue ? 'var(--ies-orange)' : 'var(--ies-blue)';
+            if (isOverdue) {
+                overdueHtml = '<span style="background:rgba(251,146,60,0.15);color:rgb(251,146,60);padding:2px 6px;border-radius:3px;font-size:10px;font-weight:600;margin-left:8px;display:inline-block;">OVERDUE</span>';
+            }
+        }
+
         var kpis = [
             { label: 'Total Annual Cost', value: self.fmt.currency(agg.totalCost), color: 'var(--ies-orange)' },
             { label: 'Sites', value: sites.length, color: 'var(--ies-blue)' },
@@ -30423,7 +30613,8 @@ const dealApp = {
             { label: 'Est. Revenue Needed', value: self.fmt.currency(revenueNeeded), color: 'var(--ies-green)' },
             { label: 'Startup Investment', value: self.fmt.currency(agg.totalStartup), color: 'var(--ies-orange)' },
             { label: 'Avg Contract Term', value: avgContractYears + ' yrs', color: 'var(--ies-navy)' },
-            { label: 'Cost / Sqft', value: costPerSqft > 0 ? self.fmt.currency(costPerSqft) : '—', color: 'var(--ies-navy)' }
+            { label: 'Cost / Sqft', value: costPerSqft > 0 ? self.fmt.currency(costPerSqft) : '—', color: 'var(--ies-navy)' },
+            { label: 'Target Close Date', value: closeDateDisplay + overdueHtml, color: closeDateColor }
         ];
         metricsEl.innerHTML = kpis.map(function(k) {
             return '<div style="background:#fff;border-radius:10px;border:1px solid var(--ies-gray-200);padding:16px 20px;border-left:4px solid ' + k.color + ';">' +
@@ -30828,14 +31019,37 @@ const dealApp = {
             '<div style="font-size:18px;font-weight:700;color:var(--ies-navy);">' + self.fmt.currency(monthlyRevenue) + '</div></div></div>';
     },
 
+    validateDealHeader() {
+        const errors = [];
+        const dealName = document.getElementById('dealEditName').value.trim();
+
+        if (!dealName) {
+            errors.push('Deal name is required');
+        } else if (dealName.length < 3) {
+            errors.push('Deal name must be at least 3 characters');
+        }
+
+        const errDiv = document.getElementById('dealValidationErrors');
+        if (errors.length > 0) {
+            errDiv.innerHTML = errors.map(e => '<div style="color:#dc3545;font-size:12px;margin-bottom:6px;">• ' + e + '</div>').join('');
+            return false;
+        }
+        errDiv.innerHTML = '';
+        return true;
+    },
+
     async saveDealHeader() {
         try {
+            // Validate inputs
+            if (!this.validateDealHeader()) return;
+
             const updates = {
-                deal_name: document.getElementById('dealEditName').value,
-                client_name: document.getElementById('dealEditClient').value,
-                deal_owner: document.getElementById('dealEditOwner').value,
+                deal_name: document.getElementById('dealEditName').value.trim(),
+                client_name: document.getElementById('dealEditClient').value.trim() || null,
+                deal_owner: document.getElementById('dealEditOwner').value.trim() || null,
                 status: document.getElementById('dealEditStatus').value,
-                notes: document.getElementById('dealEditNotes').value,
+                target_close_date: document.getElementById('dealEditCloseDate').value || null,
+                notes: document.getElementById('dealEditNotes').value.trim() || null,
                 updated_at: new Date().toISOString()
             };
 
@@ -30848,6 +31062,39 @@ const dealApp = {
         } catch (error) {
             console.error('Error saving deal:', error);
             alert('Error saving deal details');
+        }
+    },
+
+    async cloneDeal() {
+        if (!confirm('Clone this deal? A new deal will be created with "Copy of" prepended to the name and close date reset to 90 days from today.')) return;
+
+        try {
+            const today = new Date();
+            const closeDate = new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000);
+            const closeDateStr = closeDate.toISOString().split('T')[0];
+
+            const newDealData = {
+                deal_name: 'Copy of ' + (this.currentDeal.deal_name || 'Untitled'),
+                client_name: this.currentDeal.client_name || null,
+                deal_owner: this.currentDeal.deal_owner || null,
+                status: 'Draft',
+                target_close_date: closeDateStr,
+                notes: this.currentDeal.notes || null,
+                created_at: new Date().toISOString()
+            };
+
+            const result = await cmApiPost('deal_deals', newDealData);
+            const clonedDeal = result[0];
+
+            alert('Deal cloned successfully');
+
+            // Navigate to the new deal's detail view
+            this.currentDeal = clonedDeal;
+            this.currentDeal.sites = [];
+            this.renderDealDetail();
+        } catch (error) {
+            console.error('Error cloning deal:', error);
+            alert('Error cloning deal');
         }
     },
 
@@ -30879,11 +31126,17 @@ const dealApp = {
 
     async createNewDeal(dealName, clientName, dealOwner) {
         try {
+            // Calculate close date as 90 days from today
+            const today = new Date();
+            const closeDate = new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000);
+            const closeDateStr = closeDate.toISOString().split('T')[0];
+
             const newDeal = {
                 deal_name: dealName,
                 client_name: clientName || null,
                 deal_owner: dealOwner || null,
                 status: 'Draft',
+                target_close_date: closeDateStr,
                 notes: null
             };
 
@@ -31354,14 +31607,14 @@ const fmApp = {
     sprinter_van: { name: 'Sprinter Van', capacity_wgt: 3500, capacity_cube: 400, mpg: 14.0, capital_cost: 48000, annual_fixed: 15000, insurance_premium: 0.5, fuel_surcharge: 0, tare_wgt: 6500 }
   },
   costModel: {
-    fuel_cost_per_mile: 0.48,        // ATRI 2024: $0.476/mi
+    fuel_cost_per_mile: 0.54,        // ATRI 2024: $3.51/gal ÷ 6.5 MPG = $0.54/mi
     maintenance_per_mile: 0.198,     // ATRI 2024: $0.198/mi
     driver_hourly_rate: 32,          // Base hourly (regional) — ATRI 2024 $0.79/mi ÷ 2.5 mi/hr avg + benefits load adjustment
     driver_benefits_pct: 30,         // Benefits load (health, PTO, 401k)
     payroll_tax_pct: 7.65,           // FICA (SS 6.2% + Medicare 1.45%)
     vehicle_lease_monthly: 2500,     // Average monthly lease/payment per vehicle
     depreciation_per_vehicle_yr: 18000, // Annual depreciation if owned
-    annual_insurance_per_vehicle: 12500, // ATRI 2024: $12,500/vehicle
+    annual_insurance_per_vehicle: 12500, // ATRI 2024: $0.102/mi = ~$8,160 at 80K mi/yr; full annual premium Class 8: $10,500–$11,000
     admin_overhead_pct: 10,
     // Common carrier benchmark rates ($/mi)
     carrier_rate_dry_van: 2.85,      // Spot market dry van Feb 2026
@@ -31598,7 +31851,7 @@ const fmApp = {
       return;
     }
 
-    this.costModel.fuel_cost_per_mile = parseFloat(document.getElementById('fm-fuel-cost').value) || 0.48;
+    this.costModel.fuel_cost_per_mile = parseFloat(document.getElementById('fm-fuel-cost').value) || 0.54;
     this.costModel.maintenance_per_mile = parseFloat(document.getElementById('fm-maint-cost').value) || 0.198;
     this.costModel.driver_hourly_rate = parseFloat(document.getElementById('fm-driver-rate').value) || 32;
     this.costModel.driver_benefits_pct = parseFloat(document.getElementById('fm-driver-benefits')?.value) || 30;
