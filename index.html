@@ -21817,16 +21817,16 @@ async function fmLoadFleetScenario(id) {
     var scenario = scenarios[0];
     var lanes = await cmFetchTable('fleet_lanes', 'scenario_id=eq.' + id + '&order=id.asc');
 
-    // Map Supabase lanes into fmApp lane format
+    // Map Supabase lanes into fmApp lane format (snake_case to match renderLanesTable)
     fmApp.lanes = (lanes || []).map(function(l) {
       return {
         origin: l.origin || '',
         destination: l.destination || '',
-        weeklyShipments: l.weekly_shipments || 0,
-        avgWeight: l.avg_weight_lbs || 0,
-        avgCube: l.avg_cube_ft3 || 0,
-        deliveryWindow: l.delivery_window || '',
-        distance: l.distance_miles || 0
+        weekly_shipments: l.weekly_shipments || 0,
+        avg_weight: l.avg_weight_lbs || 0,
+        avg_cube: l.avg_cube_ft3 || 0,
+        delivery_window: l.delivery_window || '',
+        distance_miles: l.distance_miles || 0
       };
     });
 
@@ -32637,11 +32637,11 @@ const fmApp = {
             return {
               origin: l.origin || '',
               destination: l.destination || '',
-              weeklyShipments: l.weekly_shipments || 0,
-              avgWeight: l.avg_weight_lbs || 0,
-              avgCube: l.avg_cube_ft3 || 0,
-              deliveryWindow: l.delivery_window || '',
-              distance: l.distance_miles || 0
+              weekly_shipments: l.weekly_shipments || 0,
+              avg_weight: l.avg_weight_lbs || 0,
+              avg_cube: l.avg_cube_ft3 || 0,
+              delivery_window: l.delivery_window || '',
+              distance_miles: l.distance_miles || 0
             };
           }),
           created_at: s.created_at ? new Date(s.created_at).toLocaleString() : ''
