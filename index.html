@@ -21764,16 +21764,19 @@ async function fmLoadScenariosList() {
     var scenarios = await cmFetchTable('fleet_scenarios', 'order=created_at.desc');
     var grid = document.getElementById('fm-landing-grid');
     var empty = document.getElementById('fm-empty-state');
+    var actions = document.querySelector('#fm-landing .dt-landing-actions');
 
     if (!grid) return;
 
     if (scenarios.length === 0) {
       grid.innerHTML = '';
       if (empty) empty.style.display = 'block';
+      if (actions) actions.style.display = 'none';
       return;
     }
 
     if (empty) empty.style.display = 'none';
+    if (actions) actions.style.display = '';
 
     grid.innerHTML = scenarios.map(function(s) {
       return '<div class="dt-landing-card">' +
@@ -32523,22 +32526,53 @@ const fmApp = {
     this.showToast('Results exported to CSV');
   },
 
-  saveScenario() {
+  async saveScenario() {
     const name = prompt('Scenario name:');
     if (!name) return;
 
-    const scenario = {
-      id: Date.now(),
-      name,
-      lanes: JSON.parse(JSON.stringify(this.lanes)),
-      config: JSON.parse(JSON.stringify(this.config)),
-      results: this.results ? JSON.parse(JSON.stringify(this.results)) : null,
-      created_at: new Date().toLocaleString()
-    };
+    try {
+      // Save scenario to Supabase
+      const scenarioData = {
+        name: name,
+        notes: this.config.description || '',
+        config: JSON.parse(JSON.stringify(this.config)),
+        results: this.results ? JSON.parse(JSON.stringify(this.results)) : null
+      };
 
-    this.scenarios.push(scenario);
-    this.renderScenariosListLocal();
-    this.showToast(`Scenario "${name}" saved`);
+      const saved = await cmApiPost('fleet_scenarios', scenarioData);
+      if (!saved || !saved[0]) { this.showToast('Failed to save scenario', 'error'); return; }
+      const scenarioId = saved[0].id;
+
+      // Save lanes to Supabase
+      if (this.lanes && this.lanes.length > 0) {
+        const lanesData = this.lanes.map(l => ({
+          scenario_id: scenarioId,
+          origin: l.origin || '',
+          destination: l.destination || '',
+          weekly_shipments: parseInt(l.weeklyShipments) || parseInt(l.weekly_shipments) || 0,
+          avg_weight_lbs: parseFloat(l.avgWeight) || parseFloat(l.avg_weight_lbs) || 0,
+          avg_cube_ft3: parseFloat(l.avgCube) || parseFloat(l.avg_cube_ft3) || 0,
+          delivery_window: l.deliveryWindow || l.delivery_window || '',
+          distance_miles: parseFloat(l.distance) || parseFloat(l.distance_miles) || 0
+        }));
+        await cmApiPost('fleet_lanes', lanesData);
+      }
+
+      // Also keep in local memory for the Scenarios tab
+      this.scenarios.push({
+        id: scenarioId,
+        name,
+        lanes: JSON.parse(JSON.stringify(this.lanes)),
+        config: JSON.parse(JSON.stringify(this.config)),
+        results: this.results ? JSON.parse(JSON.stringify(this.results)) : null,
+        created_at: new Date().toLocaleString()
+      });
+      this.renderScenariosListLocal();
+      this.showToast(`Scenario "${name}" saved`);
+    } catch (e) {
+      console.error('Error saving scenario:', e);
+      this.showToast('Error saving: ' + e.message, 'error');
+    }
   },
 
   clearScenario() {
