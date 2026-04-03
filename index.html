@@ -6141,6 +6141,18 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
               <input type="number" id="wsc-avgunits" value="350000" min="0" step="1000" oninput="calcWarehouse()" onchange="calcWarehouse()" class="wsc-input" style="color:var(--ies-blue);font-weight:700;">
             </div>
 
+            <div class="wsc-input-group">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <label class="wsc-input-label" style="margin:0;">Surge Capacity Buffer (%)
+                  <span style="font-size:9px;font-weight:600;color:var(--ies-blue);background:rgba(0,71,171,.08);padding:2px 6px;border-radius:3px;margin-left:6px;">Flexibility</span>
+                </label>
+                <span id="wsc-surge-val" style="color:var(--ies-blue);font-weight:700;font-size:13px;">20%</span>
+              </div>
+              <input type="range" id="wsc-surge" min="0" max="50" step="5" value="20" oninput="calcWarehouse()" class="wsc-slider" style="margin-top:8px;">
+              <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--ies-gray-400);margin-top:4px;"><span>0%</span><span>50%</span></div>
+              <div style="font-size:10px;color:var(--ies-gray-500);margin-top:6px;">Additional positions designed for handling receiving surges and seasonal peaks</div>
+            </div>
+
             </div><!-- /wsc-section-body -->
           </div>
 
@@ -6255,6 +6267,33 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
               </div>
               <input type="range" id="wsc-loadht" min="30" max="72" step="2" value="54" oninput="calcWarehouse()" class="wsc-slider" style="margin-top:8px;">
               <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--ies-gray-400);margin-top:4px;"><span>30 in</span><span>72 in</span></div>
+            </div>
+
+            <div class="wsc-input-group">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <label class="wsc-input-label" style="margin:0;">Sprinkler Clearance (in)
+                  <span style="font-size:9px;font-weight:600;color:var(--ies-blue);background:rgba(0,71,171,.08);padding:2px 6px;border-radius:3px;margin-left:6px;">Drives SF</span>
+                </label>
+                <span id="wsc-sprinkler-val" style="color:var(--ies-blue);font-weight:700;font-size:13px;">18</span>
+              </div>
+              <select id="wsc-sprinkler" onchange="toggleSprinklerCustom();calcWarehouse()" class="wsc-select" style="margin-bottom:6px;">
+                <option value="18" selected>18 inches (Standard)</option>
+                <option value="24">24 inches (Extended)</option>
+                <option value="36">36 inches (High Flow)</option>
+                <option value="custom">Custom</option>
+              </select>
+              <input type="number" id="wsc-sprinkler-custom" min="12" max="48" step="1" value="18" oninput="calcWarehouse()" onchange="calcWarehouse()" class="wsc-input" style="display:none;margin-top:6px;" placeholder="Custom clearance (in)">
+              <div style="font-size:10px;color:var(--ies-gray-500);margin-top:4px;">ESFR codes typically require 18-36 in clearance above rack</div>
+            </div>
+
+            <div class="wsc-input-group">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <label class="wsc-input-label" style="margin:0;">Max Stacking Height (ft)
+                  <span style="font-size:9px;font-weight:600;color:#666;background:rgba(0,0,0,.04);padding:2px 6px;border-radius:3px;margin-left:6px;">Auto</span>
+                </label>
+                <span id="wsc-max-stack-ht" style="color:var(--ies-blue);font-weight:700;font-size:13px;">—</span>
+              </div>
+              <div style="font-size:10px;color:var(--ies-gray-500);">Clear height minus sprinkler clearance</div>
             </div>
 
             </div><!-- /wsc-section-body -->
@@ -6414,6 +6453,16 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
               </div>
               <input type="range" id="wsc-dockhr" min="4" max="24" step="1" value="10" oninput="calcWarehouse()" class="wsc-slider" style="accent-color:#b45309;margin-top:8px;">
               <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--ies-gray-400);margin-top:4px;"><span>4 hrs</span><span>24 hrs</span></div>
+            </div>
+
+            <div class="wsc-input-group">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <label class="wsc-input-label" style="margin:0;">Available Dock Wall Length (ft)
+                  <span style="font-size:9px;font-weight:600;color:#7c6b2d;background:rgba(255,193,7,.12);padding:2px 6px;border-radius:3px;margin-left:6px;">Validation</span>
+                </label>
+              </div>
+              <input type="number" id="wsc-dock-wall" value="" min="0" step="1" oninput="calcWarehouse()" onchange="calcWarehouse()" class="wsc-input" placeholder="Leave blank to skip validation" style="color:#b45309;font-weight:700;">
+              <div style="font-size:10px;color:var(--ies-gray-500);margin-top:4px;">Optional: check if dock doors fit on available wall (12 ft on-center standard)</div>
             </div>
 
             </div><!-- /wsc-section-body -->
@@ -8422,6 +8471,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
                             <th>Acquisition</th>
                             <th style="text-align:right;">Monthly/Unit</th>
                             <th style="text-align:right;">Maint/Unit</th>
+                            <th style="text-align:right;">Amort (yrs)</th>
                             <th style="text-align:right;">Annual Cost</th>
                             <th>Driven By</th>
                             <th>Bucket</th>
@@ -18242,6 +18292,15 @@ function toggleFwdPick() {
   if (opts) opts.style.display = cb && cb.checked ? 'block' : 'none';
 }
 
+// Toggle sprinkler custom input visibility (FIX 3)
+function toggleSprinklerCustom() {
+  var select = document.getElementById('wsc-sprinkler');
+  var customInput = document.getElementById('wsc-sprinkler-custom');
+  if (customInput) {
+    customInput.style.display = (select && select.value === 'custom') ? 'block' : 'none';
+  }
+}
+
 // Custom zones management
 var wscCustomZoneCount = 0;
 
@@ -18913,12 +18972,27 @@ function calcWarehouse() { try {
   var aisleW = aisleWidths[aisleType] || 10;
 
   // ── AUTO-CALCULATE RACK LEVELS from clear height & load height ──
+  // FIX 3: Sprinkler clearance now configurable (was hardcoded 18")
+  var sprinklerSelect = document.getElementById('wsc-sprinkler').value;
+  var sprinklerClearanceIn = 18;
+  if (sprinklerSelect === '24') sprinklerClearanceIn = 24;
+  else if (sprinklerSelect === '36') sprinklerClearanceIn = 36;
+  else if (sprinklerSelect === 'custom') {
+    var customVal = parseInt(document.getElementById('wsc-sprinkler-custom').value) || 18;
+    sprinklerClearanceIn = Math.max(12, Math.min(48, customVal));
+  }
+  document.getElementById('wsc-sprinkler-val').textContent = sprinklerClearanceIn;
+
   // Tier height = pallet load height + 6" beam + 4" clearance = loadHeightIn + 10"
-  // Usable height = (clear height in inches) - 18" sprinkler clearance
+  // Usable height = (clear height in inches) - sprinkler clearance (configurable)
   // Levels = floor(usable height / tier height)
   var tierHeightIn = loadHeightIn + 10;
-  var usableHeightIn = (clearHeightFt * 12) - 18;
+  var usableHeightIn = (clearHeightFt * 12) - sprinklerClearanceIn;
   var rackLevels = Math.max(2, Math.floor(usableHeightIn / tierHeightIn));
+
+  // FIX 3: Display max stacking height (clear height minus sprinkler clearance)
+  var maxStackHeightFt = (clearHeightFt * 12 - sprinklerClearanceIn) / 12;
+  document.getElementById('wsc-max-stack-ht').textContent = maxStackHeightFt.toFixed(1) + ' ft';
 
   // Update displayed values
   document.getElementById('wsc-clearht-val').textContent = clearHeightFt;
@@ -18961,7 +19035,13 @@ function calcWarehouse() { try {
   var bufferFactor = 1 + (hcBufPct / 100);
   var grossPalletPositions = Math.ceil(palletPositionsNeeded * bufferFactor);
   var grossShelvPositions = Math.ceil(shelvPositions * bufferFactor);
-  var grossPositions = grossPalletPositions + grossShelvPositions;
+
+  // FIX 2: Surge capacity buffer (additional positions for receiving surges)
+  var surgeBufPct = parseInt(document.getElementById('wsc-surge').value) || 20;
+  document.getElementById('wsc-surge-val').textContent = surgeBufPct + '%';
+  var surgePositions = Math.ceil((grossPalletPositions + grossShelvPositions) * (surgeBufPct / 100));
+  var designedPositions = grossPalletPositions + grossShelvPositions;
+  var grossPositions = designedPositions + surgePositions;
 
   // Avg inventory for utilization calc
   var avgPalletPos = Math.ceil((avgUnits * (pctFullPal + pctCtnPal)) / ((fpUnits > 0 ? fpUnits/fullPalPositions : unitsPerPallet) || unitsPerPallet) * bufferFactor);
@@ -19067,12 +19147,26 @@ function calcWarehouse() { try {
   // ── DOCK SIZING ──
   var inDoors = Math.max(2, Math.ceil(inPal / (pdph * dockHrs)));
   var outDoors = Math.max(2, Math.ceil(outPal / (pdph * dockHrs)));
-  var totalDoors = inDoors + outDoors;
 
-  // Dock area: ~500 sf per door (10ft door width + staging depth for loading/unloading)
+  // FIX 1: Dock sizing formula updated - 700 SF per door (accounts for apron depth)
+  // FIX 1: Apply 25% buffer to door count for surge tolerance
+  var adjustedDoors = Math.ceil((inDoors + outDoors) * 1.25);
+  var totalDoors = adjustedDoors;
+
+  // Dock area: 700 sf per door (10ft door width + 6-8ft apron depth for loading/unloading)
   // Two-sided docks need dock apron on both walls
-  var dockSF = totalDoors * 500;
+  var dockSF = adjustedDoors * 700;
   if (dockConfig === 'two') dockSF = Math.ceil(dockSF * 1.15); // extra apron on second wall
+
+  // FIX 4: Dock wall feasibility validator
+  var dockWallValidation = '';
+  var availableDockWall = parseInt(document.getElementById('wsc-dock-wall').value) || 0;
+  if (availableDockWall > 0) {
+    var requiredWallLength = adjustedDoors * 12; // 12 ft on-center standard
+    if (requiredWallLength > availableDockWall) {
+      dockWallValidation = '<div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:12px;margin-top:12px;color:#991b1b;font-size:12px;"><strong>⚠ Dock Wall Constraint:</strong> Required dock wall (' + requiredWallLength + ' ft for ' + adjustedDoors + ' doors at 12\' spacing) exceeds available wall length (' + availableDockWall + ' ft). Consider reducing doors or adding a second dock face.</div>';
+    }
+  }
 
   // ── RECEIVING & SHIPPING STAGING ──
   // ~15% of daily volume staged at any given time, at ~18 sf per staged pallet (floor + aisle)
@@ -19257,15 +19351,23 @@ function calcWarehouse() { try {
   var storeNames = { single: 'single-deep selective rack', double: 'double-deep rack', bulk: 'bulk floor storage', carton: 'carton flow / shelving', mix: 'mixed rack and bulk' };
   reco += '<strong>' + totalSqFt.toLocaleString() + ' SF Facility \u2014 ' + (storeNames[storeType] || storeType) + '</strong><br>';
   reco += 'Based on <strong>' + peakUnits.toLocaleString() + ' peak units</strong> on-hand (' + Math.round(pctFullPal * 100) + '% full pallet, ' + Math.round(pctCtnPal * 100) + '% carton pallet, ' + Math.round(pctCtnShelv * 100) + '% shelving), ';
-  reco += 'IES sizes <strong>' + grossPalletPositions.toLocaleString() + ' pallet positions</strong>';
-  if (grossShelvPositions > 0) reco += ' + <strong>' + grossShelvPositions.toLocaleString() + ' shelving locations</strong>';
+  reco += 'IES sizes <strong>' + designedPositions.toLocaleString() + ' positions</strong>';
+  if (surgeBufPct > 0) reco += ' + <strong>' + surgePositions.toLocaleString() + ' surge positions (' + surgeBufPct + '%)</strong>';
   reco += ' in ' + storageSF.toLocaleString() + ' sf of storage (' + rackLevels + ' levels at ' + clearHeightFt + ' ft clear). ';
-  reco += 'Dock requirements: <strong>' + totalDoors + ' doors</strong> (' + inDoors + ' inbound, ' + outDoors + ' outbound) based on ' + inPal.toLocaleString() + '/' + outPal.toLocaleString() + ' daily pallets at ' + pdph + ' pallets/door/hr over ' + dockHrs + ' hrs.';
+  reco += 'Dock requirements: <strong>' + totalDoors + ' doors</strong> (' + inDoors + ' inbound, ' + outDoors + ' outbound; adjusted to ' + adjustedDoors + ' with 25% surge buffer) based on ' + inPal.toLocaleString() + '/' + outPal.toLocaleString() + ' daily pallets at ' + pdph + ' pallets/door/hr over ' + dockHrs + ' hrs.';
 
-  if (utilPct < 70) {
+  // FIX 2: Utilization warning if average utilization > 85%
+  if (utilPct > 85) {
+    reco += '<br><br><div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:12px;color:#92400e;font-size:12px;"><strong>⚠ High Utilization:</strong> Average utilization is ' + utilPct + '%. This leaves limited operational flexibility for receiving surges and seasonal peaks. Consider increasing facility size or reducing peak inventory assumptions.</div>';
+  } else if (utilPct < 70) {
     reco += '<br><br><span style="color:#d97706;font-weight:600;">\u26a0 Note:</span> Average utilization is ' + utilPct + '%. The gap between avg (' + avgUnits.toLocaleString() + ') and peak (' + peakUnits.toLocaleString() + ') units is significant \u2014 consider whether the facility is sized for the right scenario.';
   } else if (utilPct > 90) {
     reco += '<br><br><span style="color:#d97706;font-weight:600;">\u26a0 Note:</span> Average utilization is ' + utilPct + '%. This leaves limited flex capacity for receiving surges or seasonal peaks.';
+  }
+
+  // Append dock wall validation warning if applicable (FIX 4)
+  if (dockWallValidation) {
+    reco += dockWallValidation;
   }
 
   if (storeType === 'double') {
@@ -26436,6 +26538,7 @@ const cmApp = {
             document.getElementById('overtimePct').value = p.overtime_pct != null ? p.overtime_pct : 5;
             document.getElementById('benefitLoadPct').value = p.benefit_load_pct != null ? p.benefit_load_pct : 35;
             document.getElementById('bonusPct').value = p.bonus_pct != null ? p.bonus_pct : 0;
+            document.getElementById('laborEscalation').value = p.labor_escalation_pct != null ? p.labor_escalation_pct : 3;
             document.getElementById('rampWeeksLow').value = p.ramp_weeks_low || 2;
             document.getElementById('rampWeeksMed').value = p.ramp_weeks_med || 4;
             document.getElementById('rampWeeksHigh').value = p.ramp_weeks_high || 8;
@@ -26840,6 +26943,7 @@ const cmApp = {
                 monthly_cost: catalogItem ? parseFloat(catalogItem.monthly_lease_cost || 0) : 0,
                 monthly_maintenance: catalogItem ? parseFloat(catalogItem.monthly_maintenance || 0) : 0,
                 acquisition_cost: catalogItem ? parseFloat(catalogItem.purchase_cost || 0) * qty : 0,
+                amort_years: 5,
                 driven_by: drivenBy,
                 source: 'auto',
                 equipment_id: catalogItem ? catalogItem.id : null
@@ -27513,6 +27617,9 @@ const cmApp = {
     getBonusPct() {
         return (parseFloat(document.getElementById('bonusPct').value) || 0) / 100;
     },
+    getLaborEscalationPct() {
+        return (parseFloat(document.getElementById('laborEscalation').value) || 3) / 100;
+    },
 
     // Seasonality helpers
     getSeasonalityProfile() {
@@ -27637,7 +27744,7 @@ const cmApp = {
     _calcFields: {
         laborLines: ['volume','base_uph','hourly_rate','burden_pct','mhe_equipment_id','it_equipment_id','most_template_id'],
         indirectLaborLines: ['headcount','hourly_rate','burden_pct'],
-        equipmentLines: ['quantity','monthly_cost','monthly_maintenance'],
+        equipmentLines: ['quantity','monthly_cost','monthly_maintenance','amort_years'],
         overheadLines: ['monthly_cost','annual_cost'],
         vasLines: ['volume','rate','monthly_cost'],
         startupLines: ['one_time_cost'],
@@ -27990,6 +28097,7 @@ const cmApp = {
                 '<td>' + this._cmInp('text', line.acquisition_type, idx, 'equipmentLines', 'acquisition_type', {w:65, ph:'Lease'}) + '</td>' +
                 '<td>' + this._cmInp('number', line.monthly_cost, idx, 'equipmentLines', 'monthly_cost', {w:65, ph:'$/mo'}) + '</td>' +
                 '<td>' + this._cmInp('number', line.monthly_maintenance, idx, 'equipmentLines', 'monthly_maintenance', {w:65, ph:'Maint'}) + '</td>' +
+                '<td>' + this._cmInp('number', line.amort_years, idx, 'equipmentLines', 'amort_years', {w:45, step:'1', ph:'5'}) + '</td>' +
                 '<td class="cm-table-number" style="font-weight:600;">$' + annualCost.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</td>' +
                 '<td>' + this._cmInp('text', line.driven_by, idx, 'equipmentLines', 'driven_by', {w:80, ph:'Driver'}) + '</td>' +
                 '<td>' + this.bucketSelectHtml('equipment', idx, line.pricing_bucket) + '</td>' +
@@ -28517,7 +28625,7 @@ const cmApp = {
     buildYearlyProjections() {
         const years = this.getContractYears();
         const volGrowth = (parseFloat(document.getElementById('volumeGrowth').value) || 0) / 100;
-        const laborEsc = (parseFloat(document.getElementById('laborEscalation').value) || 3) / 100;
+        const laborEsc = this.getLaborEscalationPct();
         const costEsc = (parseFloat(document.getElementById('annualEscalation').value) || 3) / 100;
         const margin = (parseFloat(document.getElementById('targetMargin').value) || 0) / 100;
 
@@ -29567,7 +29675,8 @@ const cmApp = {
             quantity: 1,
             acquisition_cost: 0,
             monthly_cost: 0,
-            monthly_maintenance: 0
+            monthly_maintenance: 0,
+            amort_years: 5
         });
         this.renderEquipmentTable();
     },
@@ -30001,6 +30110,7 @@ const cmApp = {
                 overtime_pct: parseFloat(document.getElementById('overtimePct').value) || 5,
                 benefit_load_pct: parseFloat(document.getElementById('benefitLoadPct').value) || 35,
                 bonus_pct: parseFloat(document.getElementById('bonusPct').value) || 0,
+                labor_escalation_pct: parseFloat(document.getElementById('laborEscalation').value) || 3,
                 ramp_weeks_low: parseInt(document.getElementById('rampWeeksLow').value) || 2,
                 ramp_weeks_med: parseInt(document.getElementById('rampWeeksMed').value) || 4,
                 ramp_weeks_high: parseInt(document.getElementById('rampWeeksHigh').value) || 8,
@@ -30408,7 +30518,7 @@ const dealApp = {
 
         // Determine max contract years across all sites
         var maxYears = Math.max.apply(null, sites.map(function(s){ return s.contractYears; }).concat([3]));
-        var laborEsc = 0.03; // 3% annual escalation assumption
+        var laborEsc = cmApp.getLaborEscalationPct(); // Read from input instead of hardcoded
 
         // Build multi-year projections for the deal
         var projections = [];
