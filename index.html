@@ -21784,15 +21784,16 @@ async function fmLoadScenariosList() {
     if (actions) actions.style.display = '';
 
     grid.innerHTML = scenarios.map(function(s) {
+      var sid = s.id;
       return '<div class="dt-landing-card">' +
-        '<div onclick="fmLoadFleetScenario(' + s.id + '); fmShowTool()" style="cursor:pointer;">' +
+        '<div onclick="fmLoadFleetScenario(\'' + sid + '\'); fmShowTool()" style="cursor:pointer;">' +
         '<div class="dt-landing-card-name">' + (s.name || 'Untitled') + '</div>' +
         '<div class="dt-landing-card-meta">' + (s.created_at ? new Date(s.created_at).toLocaleDateString() : '') + '</div>' +
         '<div class="dt-landing-card-metric">' + (s.notes ? s.notes.substring(0, 60) + '...' : 'Fleet scenario') + '</div>' +
         '</div>' +
         '<div class="dt-landing-card-actions">' +
-        '<button class="dt-card-btn-copy" onclick="event.stopPropagation(); dtCopyScenario(\'fleet_scenarios\',' + s.id + ',\'fleet\')"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/><path d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2" stroke="currentColor" stroke-width="2"/></svg> Copy</button>' +
-        '<button class="dt-card-btn-delete" onclick="event.stopPropagation(); dtDeleteScenario(\'fleet_scenarios\',' + s.id + ',\'fleet\')"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Delete</button>' +
+        '<button class="dt-card-btn-copy" onclick="event.stopPropagation(); dtCopyScenario(\'fleet_scenarios\',\'' + sid + '\',\'fleet\')"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/><path d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2" stroke="currentColor" stroke-width="2"/></svg> Copy</button>' +
+        '<button class="dt-card-btn-delete" onclick="event.stopPropagation(); dtDeleteScenario(\'fleet_scenarios\',\'' + sid + '\',\'fleet\')"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Delete</button>' +
         '</div></div>';
     }).join('');
   } catch (e) {
@@ -32609,8 +32610,8 @@ const fmApp = {
           <div class="fm-scenario-meta">${s.lanes && s.lanes.length ? s.lanes.length + ' lanes • ' : ''}${s.created_at}</div>
         </div>
         <div style="display:flex;gap:8px;">
-          <button onclick="fmApp.loadScenario(${s.id})" class="fm-btn-primary" style="padding:6px 14px;font-size:12px;">Load</button>
-          <button onclick="fmApp.deleteScenario(${s.id})" style="background:var(--ies-red);color:#fff;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;">Delete</button>
+          <button onclick="fmApp.loadScenario('${s.id}')" class="fm-btn-primary" style="padding:6px 14px;font-size:12px;">Load</button>
+          <button onclick="fmApp.deleteScenario('${s.id}')" style="background:var(--ies-red);color:#fff;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;">Delete</button>
         </div>
       </div>
     `).join('');
