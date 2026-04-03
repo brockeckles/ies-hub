@@ -65,6 +65,15 @@
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
+  /* ── Design tool card hover styles (replaces inline onmouseover/onmouseout) ── */
+  .dt-tool-card { background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04); }
+  .dt-tool-card:hover, .dt-tool-card:focus-visible { border-color:var(--ies-blue);box-shadow:0 4px 16px rgba(0,71,171,.12); }
+  .dt-tool-card.hover-purple:hover, .dt-tool-card.hover-purple:focus-visible { border-color:#8b5cf6;box-shadow:0 4px 16px rgba(139,92,246,.12); }
+  .dt-tool-card.hover-amber:hover, .dt-tool-card.hover-amber:focus-visible { border-color:#f59e0b;box-shadow:0 4px 16px rgba(243,112,33,.12); }
+  /* Button lift effect (replaces inline translateY hover) */
+  .btn-lift { transition:all .15s; }
+  .btn-lift:hover { transform:translateY(-1px); }
+
   body {
     font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
     background: var(--ies-gray-100);
@@ -5126,7 +5135,7 @@
       <svg viewBox="0 0 160 44" width="160" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="gAcc" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#ff3a00"/><stop offset="100%" stop-color="#ff6b35"/></linearGradient></defs><rect x="0" y="4" width="36" height="36" rx="8" fill="url(#gAcc)" opacity="0.12"/><path d="M18 8 L30 14 L30 24 Q30 32 18 38 Q6 32 6 24 L6 14 Z" fill="none" stroke="url(#gAcc)" stroke-width="1.8" opacity="0.5"/><text x="10" y="29" font-family="Montserrat,sans-serif" font-weight="900" font-size="16" fill="url(#gAcc)" letter-spacing="0.5">IES</text><text x="46" y="20" font-family="Montserrat,sans-serif" font-weight="800" font-size="13" fill="#ffffff" letter-spacing="1">Intelligence</text><text x="46" y="35" font-family="Montserrat,sans-serif" font-weight="700" font-size="11" fill="rgba(255,255,255,0.5)" letter-spacing="2.5">HUB</text><rect x="46" y="23" width="24" height="2" rx="1" fill="url(#gAcc)"/></svg>
     </div>
     <div style="font-family:Montserrat,sans-serif;font-size:14px;color:rgba(255,255,255,.5);margin-bottom:20px;">Enter team access code</div>
-    <input id="auth-input" type="password" placeholder="Access code" autofocus
+    <input id="auth-input" type="password" placeholder="Access code" autofocus aria-label="Team access code"
       style="width:100%;padding:12px 16px;border-radius:8px;border:1.5px solid rgba(255,255,255,.15);background:rgba(255,255,255,.06);color:#fff;font-family:Montserrat,sans-serif;font-size:15px;text-align:center;outline:none;"
       onkeydown="if(event.key==='Enter')checkAuth()">
     <button onclick="checkAuth()" style="margin-top:12px;width:100%;padding:12px;border:none;border-radius:8px;background:linear-gradient(135deg,#ff3a00,#ff6b35);color:#fff;font-family:Montserrat,sans-serif;font-weight:700;font-size:14px;cursor:pointer;">Enter</button>
@@ -5135,15 +5144,18 @@
 </div>
 <script>
 function checkAuth(){
-  var code=document.getElementById('auth-input').value.trim().toLowerCase();
+  var authInput=document.getElementById('auth-input');
+  var authGate=document.getElementById('auth-gate');
+  var authError=document.getElementById('auth-error');
+  var code=authInput.value.trim().toLowerCase();
   if(code==='ies2026'||code==='ieshub'){
-    document.getElementById('auth-gate').style.display='none';
+    authGate.style.display='none';
     sessionStorage.setItem('ies-auth','1');
     setTimeout(function(){ anInitTracking(); }, 500);
   } else {
-    document.getElementById('auth-error').style.display='block';
-    document.getElementById('auth-input').style.borderColor='#ef4444';
-    setTimeout(function(){document.getElementById('auth-error').style.display='none';document.getElementById('auth-input').style.borderColor='rgba(255,255,255,.15)';},2000);
+    authError.style.display='block';
+    authInput.style.borderColor='#ef4444';
+    setTimeout(function(){authError.style.display='none';authInput.style.borderColor='rgba(255,255,255,.15)';},2000);
   }
 }
 if(sessionStorage.getItem('ies-auth')==='1'){document.getElementById('auth-gate').style.display='none';}
@@ -5151,7 +5163,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 </script>
 
 <!-- ═══════════════════ HEADER ═══════════════════ -->
-<header class="header">
+<header class="header" role="banner">
   <div class="header-brand">
     <div class="logo"><svg viewBox="0 0 160 44" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="iesAccent" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#ff3a00"/><stop offset="100%" stop-color="#ff6b35"/></linearGradient><linearGradient id="iesShield" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#ff6b35"/><stop offset="100%" stop-color="#ff3a00"/></linearGradient></defs><rect x="0" y="4" width="36" height="36" rx="8" fill="url(#iesShield)" opacity="0.12"/><path d="M18 8 L30 14 L30 24 Q30 32 18 38 Q6 32 6 24 L6 14 Z" fill="none" stroke="url(#iesShield)" stroke-width="1.8" opacity="0.5"/><text x="10" y="29" font-family="Montserrat,sans-serif" font-weight="900" font-size="16" fill="url(#iesAccent)" letter-spacing="0.5">IES</text><text x="46" y="20" font-family="Montserrat,sans-serif" font-weight="800" font-size="13" fill="#ffffff" letter-spacing="1">Intelligence</text><text x="46" y="35" font-family="Montserrat,sans-serif" font-weight="700" font-size="11" fill="rgba(255,255,255,0.5)" letter-spacing="2.5">HUB</text><rect x="46" y="23" width="24" height="2" rx="1" fill="url(#iesAccent)"/></svg></div>
     <div class="divider"></div>
@@ -5159,7 +5171,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
   </div>
   <div class="header-right">
     <div style="position:relative;">
-      <input type="text" class="header-search" id="globalSearch" placeholder="Search hub…" autocomplete="off" oninput="handleSearch(this.value)" onkeydown="searchKeyNav(event)" onfocus="if(this.value.length>=2)handleSearch(this.value)" onblur="setTimeout(function(){document.getElementById('searchResults').style.display='none'},200)">
+      <input type="text" class="header-search" id="globalSearch" placeholder="Search hub…" autocomplete="off" aria-label="Search hub" oninput="handleSearch(this.value)" onkeydown="searchKeyNav(event)" onfocus="if(this.value.length>=2)handleSearch(this.value)" onblur="setTimeout(function(){document.getElementById('searchResults').style.display='none'},200)">
       <div id="searchResults" style="display:none;position:absolute;top:100%;left:0;right:0;margin-top:4px;background:#fff;border:1px solid var(--ies-gray-200);border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.15);max-height:400px;overflow-y:auto;z-index:9999;font-family:Montserrat,sans-serif;"></div>
     </div>
     <div class="header-timestamp" id="headerTimestamp"></div>
@@ -5168,47 +5180,47 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 </header>
 
 <!-- ═══════════════════ SIDEBAR ═══════════════════ -->
-<nav class="sidebar">
+<nav class="sidebar" role="navigation" aria-label="Main navigation">
   <div class="sidebar-section">
-    <div class="sidebar-label">Intelligence</div>
-    <a class="nav-item active" data-section="overview" onclick="navigate('overview', this)">
-      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="8" height="8" fill="none"/><rect x="13" y="3" width="8" height="8" fill="none"/><rect x="3" y="13" width="8" height="8" fill="none"/><rect x="13" y="13" width="8" height="8" fill="none"/></svg></span> Command Center
+    <div class="sidebar-label" id="nav-label-intelligence">Intelligence</div>
+    <a class="nav-item active" href="javascript:void(0)" data-section="overview" onclick="navigate('overview', this)">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="3" y="3" width="8" height="8" fill="none"/><rect x="13" y="3" width="8" height="8" fill="none"/><rect x="3" y="13" width="8" height="8" fill="none"/><rect x="13" y="13" width="8" height="8" fill="none"/></svg></span> Command Center
     </a>
-    <a class="nav-item" data-section="marketmap" onclick="navigate('marketmap', this)">
-      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" fill="none"/><circle cx="12" cy="10" r="3" fill="none"/></svg></span> Market Explorer
+    <a class="nav-item" href="javascript:void(0)" data-section="marketmap" onclick="navigate('marketmap', this)">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" fill="none"/><circle cx="12" cy="10" r="3" fill="none"/></svg></span> Market Explorer
     </a>
   </div>
   <div class="sidebar-section">
-    <div class="sidebar-label">Work</div>
-    <a class="nav-item" data-section="deals" onclick="navigate('deals', this)">
-      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" fill="none"/><rect x="9" y="3" width="6" height="4" rx="1" fill="none"/><path d="M9 14l2 2 4-4" fill="none"/></svg></span> Deal Management
+    <div class="sidebar-label" id="nav-label-work">Work</div>
+    <a class="nav-item" href="javascript:void(0)" data-section="deals" onclick="navigate('deals', this)">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" fill="none"/><rect x="9" y="3" width="6" height="4" rx="1" fill="none"/><path d="M9 14l2 2 4-4" fill="none"/></svg></span> Deal Management
     </a>
-    <a class="nav-item" data-section="designtools" onclick="navigate('designtools', this)">
-      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z" fill="none"/></svg></span> Design Tools
-    </a>
-  </div>
-  <div class="sidebar-section">
-    <div class="sidebar-label">Resources</div>
-    <a class="nav-item" data-section="training" onclick="navigate('training', this)">
-      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M2 5v14c0 1 1 2 2 2h16c1 0 2-1 2-2V5M2 5c0-1 1-2 2-2h16c1 0 2 1 2 2m-18 7h16" fill="none"/></svg></span> Training Wiki
-    </a>
-    <a class="nav-item" data-section="changemanagement" onclick="navigate('changemanagement', this)">
-      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill="none"/><path d="M13 7h-2v5.41l3.29 3.29 1.41-1.41L13 11.59z" fill="none"/><path d="M16.5 3.5l-1 1M7.5 3.5l1 1M12 6v1" fill="none"/></svg></span> Change Management
-    </a>
-    <a class="nav-item" data-section="welcome" onclick="navigate('welcome', this)">
-      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10" fill="none"/><line x1="12" y1="16" x2="12" y2="12" fill="none"/><line x1="12" y1="8" x2="12.01" y2="8" fill="none"/></svg></span> Hub Guide
-    </a>
-    <a class="nav-item" data-section="feedback" onclick="navigate('feedback', this)">
-      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2v10z" fill="none"/><path d="M8 10h.01M12 10h.01M16 10h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span> Ideas & Feedback <span id="fbNavCount" style="font-size:10px;background:var(--ies-orange);color:#fff;padding:1px 6px;border-radius:10px;margin-left:4px;font-weight:700;display:none;"></span>
-    </a>
-    <a class="nav-item" data-section="security" onclick="navigate('security', this)">
-      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="none"/></svg></span> Security
+    <a class="nav-item" href="javascript:void(0)" data-section="designtools" onclick="navigate('designtools', this)">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z" fill="none"/></svg></span> Design Tools
     </a>
   </div>
   <div class="sidebar-section">
-    <div class="sidebar-label">Admin</div>
-    <a class="nav-item" data-section="admin" onclick="navigate('admin', this)">
-      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="1" fill="currentColor"/><path d="M12 2v6m0 4v6M4.22 4.22l4.24 4.24m2.12 2.12l4.24 4.24M2 12h6m4 0h6M4.22 19.78l4.24-4.24m2.12-2.12l4.24-4.24" fill="none"/></svg></span> Reference Data
+    <div class="sidebar-label" id="nav-label-resources">Resources</div>
+    <a class="nav-item" href="javascript:void(0)" data-section="training" onclick="navigate('training', this)">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M2 5v14c0 1 1 2 2 2h16c1 0 2-1 2-2V5M2 5c0-1 1-2 2-2h16c1 0 2 1 2 2m-18 7h16" fill="none"/></svg></span> Training Wiki
+    </a>
+    <a class="nav-item" href="javascript:void(0)" data-section="changemanagement" onclick="navigate('changemanagement', this)">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill="none"/><path d="M13 7h-2v5.41l3.29 3.29 1.41-1.41L13 11.59z" fill="none"/><path d="M16.5 3.5l-1 1M7.5 3.5l1 1M12 6v1" fill="none"/></svg></span> Change Management
+    </a>
+    <a class="nav-item" href="javascript:void(0)" data-section="welcome" onclick="navigate('welcome', this)">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none"/><line x1="12" y1="16" x2="12" y2="12" fill="none"/><line x1="12" y1="8" x2="12.01" y2="8" fill="none"/></svg></span> Hub Guide
+    </a>
+    <a class="nav-item" href="javascript:void(0)" data-section="feedback" onclick="navigate('feedback', this)">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2v10z" fill="none"/><path d="M8 10h.01M12 10h.01M16 10h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span> Ideas & Feedback <span id="fbNavCount" style="font-size:10px;background:var(--ies-orange);color:#fff;padding:1px 6px;border-radius:10px;margin-left:4px;font-weight:700;display:none;"></span>
+    </a>
+    <a class="nav-item" href="javascript:void(0)" data-section="security" onclick="navigate('security', this)">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="none"/></svg></span> Security
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-label" id="nav-label-admin">Admin</div>
+    <a class="nav-item" href="javascript:void(0)" data-section="admin" onclick="navigate('admin', this)">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="12" cy="12" r="1" fill="currentColor"/><path d="M12 2v6m0 4v6M4.22 4.22l4.24 4.24m2.12 2.12l4.24 4.24M2 12h6m4 0h6M4.22 19.78l4.24-4.24m2.12-2.12l4.24-4.24" fill="none"/></svg></span> Reference Data
     </a>
   </div>
   <!-- Analytics nav hidden — access via Ctrl+Shift+A -->
@@ -5231,7 +5243,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 </div>
 
 <!-- ═══════════════════ MAIN CONTENT ═══════════════════ -->
-<div class="main">
+<main class="main" role="main">
 
 <!-- ───── WELCOME PAGE ───── -->
 <div class="section" id="sec-welcome">
@@ -5248,43 +5260,43 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
   </div>
 
   <div class="welcome-features">
-    <div class="welcome-feature feature-live" onclick="navigate('overview', document.querySelector('[data-section=overview]'))" style="cursor:pointer;">
+    <div class="welcome-feature feature-live" role="button" tabindex="0" onclick="navigate('overview', document.querySelector('[data-section=overview]'))" style="cursor:pointer;">
       <div class="welcome-feature-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--ies-orange)" stroke-width="1.5"><rect x="3" y="3" width="8" height="8"/><rect x="13" y="3" width="8" height="8"/><rect x="3" y="13" width="8" height="8"/><rect x="13" y="13" width="8" height="8"/></svg></div>
       <div class="welcome-feature-title">Command Center</div>
       <div class="welcome-feature-desc">Live KPIs, top market alerts from competitor moves, tariff changes, and account signals — all in one view with interactive charts.</div>
       <div style="margin-top:10px;"><span class="wiki-tag" style="background:rgba(25,135,84,.1);color:var(--ies-green);">LIVE</span></div>
     </div>
-    <div class="welcome-feature feature-live" onclick="navigate('marketmap', document.querySelector('[data-section=marketmap]'))" style="cursor:pointer;">
+    <div class="welcome-feature feature-live" role="button" tabindex="0" onclick="navigate('marketmap', document.querySelector('[data-section=marketmap]'))" style="cursor:pointer;">
       <div class="welcome-feature-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--ies-orange)" stroke-width="1.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1118 0z"/><circle cx="12" cy="10" r="3"/></svg></div>
       <div class="welcome-feature-title">Market Explorer</div>
       <div class="welcome-feature-desc">Interactive map of key markets with labor data, real estate rates, freight, active deals, and a full Data Library of market tables — all in one research interface.</div>
       <div style="margin-top:10px;"><span class="wiki-tag" style="background:rgba(25,135,84,.1);color:var(--ies-green);">LIVE</span></div>
     </div>
-    <div class="welcome-feature feature-live" onclick="navigate('training', document.querySelector('[data-section=training]'))" style="cursor:pointer;">
+    <div class="welcome-feature feature-live" role="button" tabindex="0" onclick="navigate('training', document.querySelector('[data-section=training]'))" style="cursor:pointer;">
       <div class="welcome-feature-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--ies-orange)" stroke-width="1.5"><path d="M2 5v14c0 1 1 2 2 2h16c1 0 2-1 2-2V5M2 5c0-1 1-2 2-2h16c1 0 2 1 2 2m-18 7h16"/></svg></div>
       <div class="welcome-feature-title">Training Wiki</div>
       <div class="welcome-feature-desc">Reference guides on warehouse robotics, conveyor systems, and engineering fundamentals — built for the team, by the team.</div>
       <div style="margin-top:10px;"><span class="wiki-tag" style="background:rgba(25,135,84,.1);color:var(--ies-green);">LIVE</span></div>
     </div>
-    <div class="welcome-feature feature-live" onclick="navigate('designtools', document.querySelector('[data-section=designtools]'))" style="cursor:pointer;">
+    <div class="welcome-feature feature-live" role="button" tabindex="0" onclick="navigate('designtools', document.querySelector('[data-section=designtools]'))" style="cursor:pointer;">
       <div class="welcome-feature-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--ies-orange)" stroke-width="1.5"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg></div>
       <div class="welcome-feature-title">Design Tools</div>
       <div class="welcome-feature-desc">7 engineering tools — Center of Gravity, Network Optimization, Warehouse Sizing, Cost Model, Multi-Site Analyzer, Fleet Modeler, and MOST Labor Standards.</div>
       <div style="margin-top:10px;"><span class="wiki-tag" style="background:rgba(25,135,84,.1);color:var(--ies-green);">LIVE</span></div>
     </div>
-    <div class="welcome-feature feature-live" onclick="navigate('deals', document.querySelector('[data-section=deals]'))" style="cursor:pointer;">
+    <div class="welcome-feature feature-live" role="button" tabindex="0" onclick="navigate('deals', document.querySelector('[data-section=deals]'))" style="cursor:pointer;">
       <div class="welcome-feature-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--ies-orange)" stroke-width="1.5"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg></div>
       <div class="welcome-feature-title">Deal Management</div>
       <div class="welcome-feature-desc">Stage-gated deal pipeline with kanban views, forecast vs. actual hours, activity tracking, and deal progression from Pre-Sales through Delivery Handover.</div>
       <div style="margin-top:10px;"><span class="wiki-tag" style="background:rgba(25,135,84,.1);color:var(--ies-green);">LIVE</span></div>
     </div>
-    <div class="welcome-feature feature-live" onclick="navigate('changemanagement', document.querySelector('[data-section=changemanagement]'))" style="cursor:pointer;">
+    <div class="welcome-feature feature-live" role="button" tabindex="0" onclick="navigate('changemanagement', document.querySelector('[data-section=changemanagement]'))" style="cursor:pointer;">
       <div class="welcome-feature-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--ies-orange)" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg></div>
       <div class="welcome-feature-title">Change Management</div>
       <div class="welcome-feature-desc">Track team changes through the ADKAR methodology. Manage activities, build process flowcharts, and auto-advance initiatives as work completes.</div>
       <div style="margin-top:10px;"><span class="wiki-tag" style="background:rgba(25,135,84,.1);color:var(--ies-green);">LIVE</span></div>
     </div>
-    <div class="welcome-feature" onclick="navigate('costmodel', document.querySelector('[data-section=costmodel]'))" style="cursor:pointer;">
+    <div class="welcome-feature" role="button" tabindex="0" onclick="navigate('costmodel', document.querySelector('[data-section=costmodel]'))" style="cursor:pointer;">
       <div class="welcome-feature-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--ies-orange)" stroke-width="1.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6"/></svg></div>
       <div class="welcome-feature-title">Cost Model Builder</div>
       <div class="welcome-feature-desc">Build detailed operational cost models with MOST-driven labor, equipment, real estate, overhead, pricing buckets, and multi-year P&L projections.</div>
@@ -5364,22 +5376,22 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 
   <!-- KPI Strip — single row, no duplication -->
   <div class="kpi-strip">
-    <div class="kpi-card kpi-clickable" onclick="kpiNav('dieselChart')" title="View Diesel Price Trend">
+    <div class="kpi-card kpi-clickable" role="button" tabindex="0" onclick="kpiNav('dieselChart')" title="View Diesel Price Trend">
       <div class="kpi-label">Diesel Index</div>
       <div class="kpi-value" id="ccKpiDiesel">$3.87</div>
       <div class="kpi-sub change-up">▲ +4.2% WoW</div>
     </div>
-    <div class="kpi-card kpi-clickable" onclick="navigate('marketmap', document.querySelector('[data-section=marketmap]'))" title="Explore in Market Explorer">
+    <div class="kpi-card kpi-clickable" role="button" tabindex="0" onclick="navigate('marketmap', document.querySelector('[data-section=marketmap]'))" title="Explore in Market Explorer">
       <div class="kpi-label">Avg Warehouse Rate</div>
       <div class="kpi-value" id="ccKpiRate">$9.42</div>
       <div class="kpi-sub" style="color:var(--ies-gray-600)">PSF/yr NNN</div>
     </div>
-    <div class="kpi-card kpi-clickable" onclick="navigate('marketmap', document.querySelector('[data-section=marketmap]'))" title="Explore in Market Explorer">
+    <div class="kpi-card kpi-clickable" role="button" tabindex="0" onclick="navigate('marketmap', document.querySelector('[data-section=marketmap]'))" title="Explore in Market Explorer">
       <div class="kpi-label">Avg Warehouse Wage</div>
       <div class="kpi-value" id="ccKpiWage">$19.85</div>
       <div class="kpi-sub change-up">▲ +2.1% QoQ</div>
     </div>
-    <div class="kpi-card kpi-clickable" onclick="kpiNav('freightChart')" title="View Freight Rate Trend">
+    <div class="kpi-card kpi-clickable" role="button" tabindex="0" onclick="kpiNav('freightChart')" title="View Freight Rate Trend">
       <div class="kpi-label">Spot Freight (Van)</div>
       <div class="kpi-value" id="ccKpiFreight">$2.18</div>
       <div class="kpi-sub change-down">▼ -1.3% WoW</div>
@@ -5570,7 +5582,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 
   <!-- Data Library — togglable, absorbs Market & Cost + Labor Intel tables -->
   <div class="data-library">
-    <div class="data-library-toggle" onclick="toggleDataLibrary(this)">
+    <div class="data-library-toggle" role="button" tabindex="0" aria-expanded="false" onclick="toggleDataLibrary(this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleDataLibrary(this);}">
       <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
       Data Library — Full Market Tables
       <span class="chevron">▶</span>
@@ -5815,7 +5827,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       </div>
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;">
         <!-- Cost Model Card -->
-        <div onclick="navigate('costmodel', document.querySelector('[data-section=costmodel]'))" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='var(--ies-blue)';this.style.boxShadow='0 4px 16px rgba(0,71,171,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
+        <div class="dt-tool-card" onclick="navigate('costmodel', document.querySelector('[data-section=costmodel]'))">
           <div style="width:48px;height:48px;background:linear-gradient(135deg,var(--ies-blue),#1e5bb8);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;">
             <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
@@ -5826,7 +5838,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
           </div>
         </div>
         <!-- Multi-Site Analyzer Card -->
-        <div onclick="showDesignTool('dt-deals',document.querySelectorAll('#dt-tabs .dt-tab')[2])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='var(--ies-blue)';this.style.boxShadow='0 4px 16px rgba(0,71,171,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
+        <div class="dt-tool-card" onclick="showDesignTool('dt-deals',document.querySelectorAll('#dt-tabs .dt-tab')[2])">
           <div style="width:48px;height:48px;background:linear-gradient(135deg,var(--ies-blue),#1e5bb8);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;">
             <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7a2 2 0 012-2h14a2 2 0 012 2" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 11v6M15 11v6" stroke="#fff" stroke-width="1.2" opacity=".6"/></svg>
           </div>
@@ -5847,7 +5859,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       </div>
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;">
         <!-- Warehouse Sizing Card -->
-        <div onclick="showDesignTool('dt-warehouse',document.querySelectorAll('#dt-tabs .dt-tab')[3])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='#8b5cf6';this.style.boxShadow='0 4px 16px rgba(139,92,246,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
+        <div class="dt-tool-card hover-purple" onclick="showDesignTool('dt-warehouse',document.querySelectorAll('#dt-tabs .dt-tab')[3])">
           <div style="width:48px;height:48px;background:linear-gradient(135deg,#8b5cf6,#6d28d9);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;">
             <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="12" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M3 12h18M8 8v12M16 8v12" stroke="#fff" stroke-width="1.2" opacity=".6"/><path d="M7 5l5-2 5 2" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg>
           </div>
@@ -5858,7 +5870,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
           </div>
         </div>
         <!-- MOST Standards Card -->
-        <div onclick="showDesignTool('dt-most',document.querySelectorAll('#dt-tabs .dt-tab')[4])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='#8b5cf6';this.style.boxShadow='0 4px 16px rgba(139,92,246,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
+        <div class="dt-tool-card hover-purple" onclick="showDesignTool('dt-most',document.querySelectorAll('#dt-tabs .dt-tab')[4])">
           <div style="width:48px;height:48px;background:linear-gradient(135deg,#8b5cf6,#6d28d9);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;">
             <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><path d="M12 8v4l3 3" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="9" stroke="#fff" stroke-width="1.5"/><path d="M16.5 3.5l1 1M7.5 3.5l-1 1" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg>
           </div>
@@ -5879,7 +5891,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       </div>
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;">
         <!-- Center of Gravity Card -->
-        <div onclick="showDesignTool('dt-network',document.querySelectorAll('#dt-tabs .dt-tab')[5])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='var(--ies-blue)';this.style.boxShadow='0 4px 16px rgba(0,71,171,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
+        <div class="dt-tool-card" onclick="showDesignTool('dt-network',document.querySelectorAll('#dt-tabs .dt-tab')[5])">
           <div style="width:48px;height:48px;background:linear-gradient(135deg,#059669,#047857);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;">
             <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5" stroke="#fff" stroke-width="1.5"/><circle cx="18" cy="6" r="2.5" stroke="#fff" stroke-width="1.5"/><circle cx="12" cy="18" r="2.5" stroke="#fff" stroke-width="1.5"/><path d="M8 7l4 9M16 7l-4 9M8.5 6h7" stroke="#fff" stroke-width="1.2" opacity=".6"/></svg>
           </div>
@@ -5890,7 +5902,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
           </div>
         </div>
         <!-- Network Optimization Card -->
-        <div onclick="showDesignTool('dt-netopt',document.querySelectorAll('#dt-tabs .dt-tab')[6])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='var(--ies-blue)';this.style.boxShadow='0 4px 16px rgba(0,71,171,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
+        <div class="dt-tool-card" onclick="showDesignTool('dt-netopt',document.querySelectorAll('#dt-tabs .dt-tab')[6])">
           <div style="width:48px;height:48px;background:linear-gradient(135deg,#059669,#047857);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;">
             <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><path d="M3 21V3h18v18H3z" stroke="#fff" stroke-width="1.5"/><circle cx="8" cy="16" r="2" stroke="#fff" stroke-width="1.5"/><circle cx="16" cy="8" r="2" stroke="#fff" stroke-width="1.5"/><circle cx="16" cy="16" r="2" stroke="#fff" stroke-width="1.5"/><path d="M10 16h4M16 10v4M9.5 14.5l5-5" stroke="#fff" stroke-width="1.2" opacity=".6"/></svg>
           </div>
@@ -5911,7 +5923,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       </div>
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;">
         <!-- Fleet Modeler Card -->
-        <div onclick="showDesignTool('dt-fleet',document.querySelectorAll('#dt-tabs .dt-tab')[7])" style="background:#fff;border-radius:12px;border:1.5px solid var(--ies-gray-200);padding:28px 24px;cursor:pointer;transition:all .25s;box-shadow:0 1px 4px rgba(0,0,0,.04);" onmouseover="this.style.borderColor='#f59e0b';this.style.boxShadow='0 4px 16px rgba(243,112,33,.12)'" onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='0 1px 4px rgba(0,0,0,.04)'">
+        <div class="dt-tool-card hover-amber" onclick="showDesignTool('dt-fleet',document.querySelectorAll('#dt-tabs .dt-tab')[7])">
           <div style="width:48px;height:48px;background:linear-gradient(135deg,#f59e0b,#d97706);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;">
             <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><path d="M1 14l4-6h6l2 3h6a3 3 0 013 3v0H1z" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><circle cx="6" cy="17" r="2" stroke="#fff" stroke-width="1.5"/><circle cx="17" cy="17" r="2" stroke="#fff" stroke-width="1.5"/><path d="M8 17h7" stroke="#fff" stroke-width="1.2"/></svg>
           </div>
@@ -10588,7 +10600,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
   </div>
 </div>
 
-</div><!-- /main -->
+</main><!-- /main -->
 
 <!-- ═══════════════════ JAVASCRIPT ═══════════════════ -->
 <script>
@@ -10597,7 +10609,28 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 var SUPABASE_URL = 'https://dklnwcshrpamzsybjlzb.supabase.co';
 var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRrbG53Y3NocnBhbXpzeWJqbHpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3MTU3NzksImV4cCI6MjA5MDI5MTc3OX0.mj9TIj_rwxfbb9e2vBnA6hNYot5MX8-k1BbGfddAeJs';
 var sb = null;
-try { sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); } catch(e) { console.warn('Supabase init failed:', e); }
+try { sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); } catch(e) { console.warn('Supabase init failed:', e); setTimeout(function(){ showSectionError('sec-welcome', 'Database connection failed. Some features may be unavailable. Try refreshing the page.'); }, 500); }
+
+// ── User-facing error banner utility ──
+function showSectionError(containerId, message) {
+  var container = document.getElementById(containerId);
+  if (!container) return;
+  var existing = container.querySelector('.hub-error-banner');
+  if (existing) existing.remove();
+  var banner = document.createElement('div');
+  banner.className = 'hub-error-banner';
+  banner.style.cssText = 'background:rgba(220,53,69,.06);border:1px solid rgba(220,53,69,.2);border-radius:8px;padding:14px 18px;margin:12px 0;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--ies-red);font-weight:500;';
+  banner.innerHTML = '<svg width="18" height="18" fill="none" viewBox="0 0 24 24" style="flex-shrink:0;"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M12 8v4M12 16h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>' +
+    '<span>' + esc(message) + '</span>' +
+    '<button onclick="this.parentElement.remove()" style="margin-left:auto;background:none;border:none;color:var(--ies-red);cursor:pointer;font-size:16px;line-height:1;padding:0 4px;">&times;</button>';
+  container.prepend(banner);
+}
+function clearSectionError(containerId) {
+  var container = document.getElementById(containerId);
+  if (!container) return;
+  var existing = container.querySelector('.hub-error-banner');
+  if (existing) existing.remove();
+}
 
 // ── Global Vertical Metadata (fetched from master_verticals) ──
 var verticalMeta = {}; // keyed by enum_key: { label, color, icon, id }
@@ -10685,9 +10718,13 @@ async function loadMarketPins() {
 }
 
 // ── NAVIGATION ──
+var _navSections = null;
+var _navItems = null;
 function navigate(section, el) {
-  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  if (!_navSections) _navSections = document.querySelectorAll('.section');
+  if (!_navItems) _navItems = document.querySelectorAll('.nav-item');
+  _navSections.forEach(s => s.classList.remove('active'));
+  _navItems.forEach(n => n.classList.remove('active'));
   var secEl = document.getElementById('sec-' + section);
   if (secEl) secEl.classList.add('active');
   if (el) el.classList.add('active');
@@ -10830,18 +10867,24 @@ function tourNext() {
 function tourPrev() {
   if (tourStep > 0) { tourStep--; renderTourStep(); }
 }
+var _tourEls = null;
+function _getTourEls() {
+  if (!_tourEls) _tourEls = { icon: document.getElementById('tourIcon'), stepLabel: document.getElementById('tourStepLabel'), title: document.getElementById('tourTitle'), desc: document.getElementById('tourDesc'), nextBtn: document.getElementById('tourNextBtn'), dots: document.getElementById('tourDots') };
+  return _tourEls;
+}
 function renderTourStep() {
   var s = TOUR_STEPS[tourStep];
-  document.getElementById('tourIcon').textContent = s.icon;
-  document.getElementById('tourStepLabel').textContent = 'Step ' + (tourStep + 1) + ' of ' + TOUR_STEPS.length;
-  document.getElementById('tourTitle').textContent = s.title;
-  document.getElementById('tourDesc').textContent = s.desc;
-  document.getElementById('tourNextBtn').textContent = tourStep === TOUR_STEPS.length - 1 ? 'Get Started' : 'Next';
-  var dots = '';
+  var el = _getTourEls();
+  el.icon.textContent = s.icon;
+  el.stepLabel.textContent = 'Step ' + (tourStep + 1) + ' of ' + TOUR_STEPS.length;
+  el.title.textContent = s.title;
+  el.desc.textContent = s.desc;
+  el.nextBtn.textContent = tourStep === TOUR_STEPS.length - 1 ? 'Get Started' : 'Next';
+  var dotParts = [];
   for (var i = 0; i < TOUR_STEPS.length; i++) {
-    dots += '<div class="tour-dot' + (i === tourStep ? ' active' : '') + '"></div>';
+    dotParts.push('<div class="tour-dot' + (i === tourStep ? ' active' : '') + '"></div>');
   }
-  document.getElementById('tourDots').innerHTML = dots;
+  el.dots.innerHTML = dotParts.join('');
 }
 
 // ═══════════════════════════════════════════════════
@@ -14234,7 +14277,7 @@ async function loadSPCompetitors() {
       var barWidth = Math.min(score, 100);
       return '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--ies-gray-50);">' +
         '<div style="flex:1;min-width:0;">' +
-          '<div style="font-size:12px;font-weight:600;color:var(--ies-navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + comp.name + '</div>' +
+          '<div style="font-size:12px;font-weight:600;color:var(--ies-navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(comp.name) + '</div>' +
           '<div style="font-size:10px;color:var(--ies-gray-400);">' + newsCount + ' signals</div>' +
         '</div>' +
         '<div style="width:80px;">' +
@@ -14403,7 +14446,8 @@ async function loadSignalFeed() {
     feed.innerHTML = items.map(function(item) {
       var dateStr = item.date ? new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
       var linkSvg = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="display:inline-block;vertical-align:-1px;opacity:.4;margin-left:4px;"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-      var titleHtml = item.url ? '<a href="' + item.url + '" target="_blank" rel="noopener">' + (item.title || 'Signal') + linkSvg + '</a>' : (item.title || 'Signal');
+      var safeUrl = item.url && /^https?:\/\//i.test(item.url) ? esc(item.url) : '';
+      var titleHtml = safeUrl ? '<a href="' + safeUrl + '" target="_blank" rel="noopener">' + esc(item.title || 'Signal') + linkSvg + '</a>' : esc(item.title || 'Signal');
       // Skip excerpt if it's a near-duplicate of the title (Google News auto-snippets)
       var showExcerpt = false;
       if (item.excerpt) {
@@ -14414,10 +14458,10 @@ async function loadSignalFeed() {
         var titleCore = cleanTitle.replace(/\s+\w[\w\s]*$/, ''); // strip trailing source name
         showExcerpt = cleanExcerpt.length > 0 && !titleCore.startsWith(cleanExcerpt.substring(0, 25)) && !cleanExcerpt.startsWith(cleanTitle.substring(0, 25));
       }
-      return '<div class="signal-item" data-signal-type="' + item.type + '">' +
-        '<div class="signal-header"><span class="signal-type signal-type-' + item.type + '">' + item.type + '</span><span class="signal-date">' + dateStr + '</span></div>' +
+      return '<div class="signal-item" data-signal-type="' + esc(item.type) + '">' +
+        '<div class="signal-header"><span class="signal-type signal-type-' + esc(item.type) + '">' + esc(item.type) + '</span><span class="signal-date">' + esc(dateStr) + '</span></div>' +
         '<div class="signal-title">' + titleHtml + '</div>' +
-        (showExcerpt ? '<div class="signal-excerpt">' + item.excerpt + '</div>' : '') +
+        (showExcerpt ? '<div class="signal-excerpt">' + esc(stripHtml(item.excerpt)) + '</div>' : '') +
         '</div>';
     }).join('');
   } catch(e) {
@@ -14647,7 +14691,11 @@ async function loadAlerts() {
 // Sanitize text from RSS feeds to prevent broken HTML rendering
 function esc(str) {
   if (!str) return '';
-  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function escAttr(str) {
+  /* Escape for use inside HTML attribute values (including single-quoted onclick handlers) */
+  return esc(str);
 }
 // Strip HTML tags + encoded entities from RSS content
 function stripHtml(str) {
@@ -15045,7 +15093,8 @@ var pmCurrentOpp = null;
 var pmViewMode = 'kanban'; // kanban | list
 
 async function pmLoadAll() {
-  if (!sb) { console.warn('PM: Supabase not available'); return; }
+  if (!sb) { showSectionError('sec-deals', 'Database connection unavailable. Deal data cannot be loaded.'); return; }
+  clearSectionError('sec-deals');
   try {
     var [custRes, oppRes, hrsRes, updRes, taskRes, genRes] = await Promise.all([
       sb.from('customers').select('*').order('name'),
@@ -15064,8 +15113,7 @@ async function pmLoadAll() {
     pmRenderStats();
     pmRenderPipeline();
     pmPopulateCustomerFilter();
-    // PM data loaded
-  } catch(e) { console.error('PM load error:', e); }
+  } catch(e) { console.error('PM load error:', e); showSectionError('sec-deals', 'Failed to load deal data. Check your connection and try refreshing.'); }
 }
 
 function pmGetCustomerName(id) {
@@ -15880,9 +15928,9 @@ function pmEditTask(taskId) {
   html += '<div class="pm-modal">';
   html += '<div class="pm-modal-title">Edit Task</div>';
   html += '<div class="pm-form-grid">';
-  html += '<div class="pm-form-group full"><label class="pm-form-label">Title</label><input type="text" class="pm-form-input" id="pm-edittask-title" value="' + (t.title||'').replace(/"/g,'&quot;') + '"></div>';
-  html += '<div class="pm-form-group full"><label class="pm-form-label">Description</label><textarea class="pm-form-input" id="pm-edittask-desc" rows="2">' + (t.description||'') + '</textarea></div>';
-  html += '<div class="pm-form-group"><label class="pm-form-label">Assignee</label><input type="text" class="pm-form-input" id="pm-edittask-assignee" value="' + (t.assignee||'').replace(/"/g,'&quot;') + '"></div>';
+  html += '<div class="pm-form-group full"><label class="pm-form-label">Title</label><input type="text" class="pm-form-input" id="pm-edittask-title" value="' + esc(t.title||'') + '"></div>';
+  html += '<div class="pm-form-group full"><label class="pm-form-label">Description</label><textarea class="pm-form-input" id="pm-edittask-desc" rows="2">' + esc(t.description||'') + '</textarea></div>';
+  html += '<div class="pm-form-group"><label class="pm-form-label">Assignee</label><input type="text" class="pm-form-input" id="pm-edittask-assignee" value="' + esc(t.assignee||'') + '"></div>';
   html += '<div class="pm-form-group"><label class="pm-form-label">Status</label><select class="pm-form-input" id="pm-edittask-status">';
   ['todo','in_progress','done','blocked'].forEach(function(s){ html += '<option value="'+s+'"'+(s===t.status?' selected':'')+'>'+s.replace(/_/g,' ')+'</option>'; });
   html += '</select></div>';
@@ -16455,7 +16503,7 @@ function pmShowNewOpportunity() {
   if (pmData.customers.length === 0) {
     html += '<option value="">— No customers yet —</option>';
   } else {
-    pmData.customers.forEach(function(c){ html += '<option value="'+c.id+'">'+c.name+'</option>'; });
+    pmData.customers.forEach(function(c){ html += '<option value="'+esc(c.id)+'">'+esc(c.name)+'</option>'; });
   }
   html += '</select>';
   html += '<div style="margin-top:6px;"><a href="#" onclick="event.preventDefault();document.getElementById(\'pm-modal-container\').innerHTML=\'\';pmShowNewCustomer(true);" style="font-size:12px;color:var(--ies-blue);font-weight:600;">+ Add New Customer</a></div>';
@@ -16516,7 +16564,7 @@ function pmEditOpportunity() {
   html += '<div class="pm-modal">';
   html += '<div class="pm-modal-title">Edit Opportunity</div>';
   html += '<div class="pm-form-grid">';
-  html += '<div class="pm-form-group full"><label class="pm-form-label">Opportunity Name</label><input type="text" class="pm-form-input" id="pm-edit-name" value="' + (o.name||'').replace(/"/g,'&quot;') + '"></div>';
+  html += '<div class="pm-form-group full"><label class="pm-form-label">Opportunity Name</label><input type="text" class="pm-form-input" id="pm-edit-name" value="' + esc(o.name||'') + '"></div>';
   html += '<div class="pm-form-group"><label class="pm-form-label">Stage</label><select class="pm-form-input" id="pm-edit-stage">';
   PM_STAGES.forEach(function(s){ html += '<option value="'+s.key+'"' + (s.key===o.stage?' selected':'') + '>'+s.label+'</option>'; });
   html += '</select></div>';
@@ -16525,13 +16573,13 @@ function pmEditOpportunity() {
     html += '<option value="'+st+'"' + (st===o.status?' selected':'') + '>'+st.replace(/_/g,' ')+'</option>';
   });
   html += '</select></div>';
-  html += '<div class="pm-form-group"><label class="pm-form-label">Facility Type</label><input type="text" class="pm-form-input" id="pm-edit-facility" value="' + (o.facility_type||'').replace(/"/g,'&quot;') + '"></div>';
-  html += '<div class="pm-form-group"><label class="pm-form-label">Total Sqft</label><input type="number" class="pm-form-input" id="pm-edit-sqft" value="' + (o.total_sqft||'') + '"></div>';
-  html += '<div class="pm-form-group"><label class="pm-form-label">State</label><input type="text" class="pm-form-input" id="pm-edit-state" value="' + (o.state||'').replace(/"/g,'&quot;') + '"></div>';
-  html += '<div class="pm-form-group"><label class="pm-form-label">Due Date</label><input type="date" class="pm-form-input" id="pm-edit-due" value="' + (o.due_date||'') + '"></div>';
-  html += '<div class="pm-form-group"><label class="pm-form-label">Solutions Lead</label><input type="text" class="pm-form-input" id="pm-edit-slead" value="' + (o.solutions_lead||'').replace(/"/g,'&quot;') + '"></div>';
-  html += '<div class="pm-form-group"><label class="pm-form-label">Engineering Lead</label><input type="text" class="pm-form-input" id="pm-edit-elead" value="' + (o.engineering_lead||'').replace(/"/g,'&quot;') + '"></div>';
-  html += '<div class="pm-form-group full"><label class="pm-form-label">Notes</label><textarea class="pm-form-input" id="pm-edit-notes" rows="3">' + (o.notes||'') + '</textarea></div>';
+  html += '<div class="pm-form-group"><label class="pm-form-label">Facility Type</label><input type="text" class="pm-form-input" id="pm-edit-facility" value="' + esc(o.facility_type||'') + '"></div>';
+  html += '<div class="pm-form-group"><label class="pm-form-label">Total Sqft</label><input type="number" class="pm-form-input" id="pm-edit-sqft" value="' + esc(o.total_sqft||'') + '"></div>';
+  html += '<div class="pm-form-group"><label class="pm-form-label">State</label><input type="text" class="pm-form-input" id="pm-edit-state" value="' + esc(o.state||'') + '"></div>';
+  html += '<div class="pm-form-group"><label class="pm-form-label">Due Date</label><input type="date" class="pm-form-input" id="pm-edit-due" value="' + esc(o.due_date||'') + '"></div>';
+  html += '<div class="pm-form-group"><label class="pm-form-label">Solutions Lead</label><input type="text" class="pm-form-input" id="pm-edit-slead" value="' + esc(o.solutions_lead||'') + '"></div>';
+  html += '<div class="pm-form-group"><label class="pm-form-label">Engineering Lead</label><input type="text" class="pm-form-input" id="pm-edit-elead" value="' + esc(o.engineering_lead||'') + '"></div>';
+  html += '<div class="pm-form-group full"><label class="pm-form-label">Notes</label><textarea class="pm-form-input" id="pm-edit-notes" rows="3">' + esc(o.notes||'') + '</textarea></div>';
   html += '</div>';
   html += '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">';
   html += '<button class="pm-btn pm-btn-outline" onclick="this.closest(\'.pm-modal-overlay\').remove()">Cancel</button>';
@@ -16716,6 +16764,7 @@ async function dmLoadDeals() {
     dmRenderDealSelect();
   } catch(e) {
     console.error('Error loading deals:', e);
+    showSectionError('sec-deals', 'Failed to load deal list. Check your connection and try refreshing.');
   }
 }
 
@@ -17025,12 +17074,12 @@ function daRenderArtifacts() {
       }
       html += '</div>';
     } else if (artifact.artifact_notes) {
-      html += `<div style="font-size:12px;color:var(--ies-gray-600);line-height:1.4;">${artifact.artifact_notes}</div>`;
+      html += `<div style="font-size:12px;color:var(--ies-gray-600);line-height:1.4;">${esc(artifact.artifact_notes)}</div>`;
     }
 
     html += '<div class="da-card-actions">';
-    html += `<button class="da-btn-open" onclick="daOpenArtifact('${artifact.artifact_type}', '${artifact.artifact_id || ''}')">Open</button>`;
-    html += `<button class="da-btn-remove" onclick="daRemoveArtifact('${artifact.id}')">Remove</button>`;
+    html += `<button class="da-btn-open" onclick="daOpenArtifact('${esc(artifact.artifact_type)}', '${esc(artifact.artifact_id || '')}')">Open</button>`;
+    html += `<button class="da-btn-remove" onclick="daRemoveArtifact('${esc(artifact.id)}')">Remove</button>`;
     html += '</div>';
 
     card.innerHTML = html;
@@ -22467,19 +22516,20 @@ function netoptRenderFacilitiesTable() {
   netoptState.facilities.forEach(f => {
     var row = document.createElement('tr');
     row.style.borderBottom = '1px solid var(--ies-gray-200)';
+    var fid = esc(f.id);
     row.innerHTML = `
-      <td style="padding:12px 16px;"><input type="text" value="${f.name}" class="wsc-input" style="width:100%;font-size:12px;" onchange="netoptState.facilities.find(x=>x.id==='${f.id}').name=this.value;"></td>
-      <td style="padding:12px 16px;"><input type="text" value="${f.city}" class="wsc-input" style="width:100%;font-size:12px;" onchange="netoptState.facilities.find(x=>x.id==='${f.id}').city=this.value;netoptGeocodeFacility('${f.id}');"></td>
-      <td style="padding:12px 16px;text-align:right;"><input type="number" value="${f.capacity}" min="100" step="50" class="wsc-input" style="width:100%;text-align:right;font-size:12px;" onchange="netoptState.facilities.find(x=>x.id==='${f.id}').capacity=parseFloat(this.value);netoptUpdateKPI();"></td>
-      <td style="padding:12px 16px;text-align:right;"><input type="number" value="${f.fixedCost}" min="0" step="0.1" class="wsc-input" style="width:100%;text-align:right;font-size:12px;" onchange="netoptState.facilities.find(x=>x.id==='${f.id}').fixedCost=parseFloat(this.value);netoptUpdateKPI();"></td>
-      <td style="padding:12px 16px;text-align:right;"><input type="number" value="${f.varCost}" min="0" step="0.01" class="wsc-input" style="width:100%;text-align:right;font-size:12px;" onchange="netoptState.facilities.find(x=>x.id==='${f.id}').varCost=parseFloat(this.value);netoptUpdateKPI();"></td>
+      <td style="padding:12px 16px;"><input type="text" value="${esc(f.name)}" class="wsc-input" style="width:100%;font-size:12px;" onchange="netoptState.facilities.find(x=>x.id==='${fid}').name=this.value;"></td>
+      <td style="padding:12px 16px;"><input type="text" value="${esc(f.city)}" class="wsc-input" style="width:100%;font-size:12px;" onchange="netoptState.facilities.find(x=>x.id==='${fid}').city=this.value;netoptGeocodeFacility('${fid}');"></td>
+      <td style="padding:12px 16px;text-align:right;"><input type="number" value="${f.capacity}" min="100" step="50" class="wsc-input" style="width:100%;text-align:right;font-size:12px;" onchange="netoptState.facilities.find(x=>x.id==='${fid}').capacity=parseFloat(this.value);netoptUpdateKPI();"></td>
+      <td style="padding:12px 16px;text-align:right;"><input type="number" value="${f.fixedCost}" min="0" step="0.1" class="wsc-input" style="width:100%;text-align:right;font-size:12px;" onchange="netoptState.facilities.find(x=>x.id==='${fid}').fixedCost=parseFloat(this.value);netoptUpdateKPI();"></td>
+      <td style="padding:12px 16px;text-align:right;"><input type="number" value="${f.varCost}" min="0" step="0.01" class="wsc-input" style="width:100%;text-align:right;font-size:12px;" onchange="netoptState.facilities.find(x=>x.id==='${fid}').varCost=parseFloat(this.value);netoptUpdateKPI();"></td>
       <td style="padding:12px 16px;text-align:center;">
-        <select class="wsc-select" style="width:100%;font-size:12px;" onchange="netoptState.facilities.find(x=>x.id==='${f.id}').status=this.value;">
+        <select class="wsc-select" style="width:100%;font-size:12px;" onchange="netoptState.facilities.find(x=>x.id==='${fid}').status=this.value;">
           <option ${f.status==='Candidate'?'selected':''}>Candidate</option>
           <option ${f.status==='Locked Open'?'selected':''}>Locked Open</option>
         </select>
       </td>
-      <td style="padding:12px 16px;text-align:center;"><button onclick="netoptRemoveFacility('${f.id}')" style="padding:4px 8px;background:#fff;border:1px solid var(--ies-red);color:var(--ies-red);border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;">Remove</button></td>
+      <td style="padding:12px 16px;text-align:center;"><button onclick="netoptRemoveFacility('${fid}')" style="padding:4px 8px;background:#fff;border:1px solid var(--ies-red);color:var(--ies-red);border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;">Remove</button></td>
     `;
     tbody.appendChild(row);
   });
@@ -22492,12 +22542,13 @@ function netoptRenderDemandsTable() {
   netoptState.demands.forEach(d => {
     var row = document.createElement('tr');
     row.style.borderBottom = '1px solid var(--ies-gray-200)';
+    var did = esc(d.id);
     row.innerHTML = `
-      <td style="padding:12px 16px;"><input type="text" value="${d.city}" class="wsc-input" style="width:100%;font-size:12px;" onchange="netoptState.demands.find(x=>x.id==='${d.id}').city=this.value;netoptGeocideDemand('${d.id}');"></td>
-      <td style="padding:12px 16px;"><input type="text" value="${d.state}" class="wsc-input" style="width:100%;font-size:12px;" onchange="netoptState.demands.find(x=>x.id==='${d.id}').state=this.value;"></td>
-      <td style="padding:12px 16px;text-align:right;"><input type="number" value="${d.volume}" min="1" step="10" class="wsc-input" style="width:100%;text-align:right;font-size:12px;" onchange="netoptState.demands.find(x=>x.id==='${d.id}').volume=parseFloat(this.value);netoptUpdateKPI();"></td>
-      <td style="padding:12px 16px;text-align:right;"><input type="number" value="${d.maxMiles}" min="50" step="50" class="wsc-input" style="width:100%;text-align:right;font-size:12px;" onchange="netoptState.demands.find(x=>x.id==='${d.id}').maxMiles=parseFloat(this.value);"></td>
-      <td style="padding:12px 16px;text-align:center;"><button onclick="netoptRemoveDemand('${d.id}')" style="padding:4px 8px;background:#fff;border:1px solid var(--ies-red);color:var(--ies-red);border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;">Remove</button></td>
+      <td style="padding:12px 16px;"><input type="text" value="${esc(d.city)}" class="wsc-input" style="width:100%;font-size:12px;" onchange="netoptState.demands.find(x=>x.id==='${did}').city=this.value;netoptGeocideDemand('${did}');"></td>
+      <td style="padding:12px 16px;"><input type="text" value="${esc(d.state)}" class="wsc-input" style="width:100%;font-size:12px;" onchange="netoptState.demands.find(x=>x.id==='${did}').state=this.value;"></td>
+      <td style="padding:12px 16px;text-align:right;"><input type="number" value="${d.volume}" min="1" step="10" class="wsc-input" style="width:100%;text-align:right;font-size:12px;" onchange="netoptState.demands.find(x=>x.id==='${did}').volume=parseFloat(this.value);netoptUpdateKPI();"></td>
+      <td style="padding:12px 16px;text-align:right;"><input type="number" value="${d.maxMiles}" min="50" step="50" class="wsc-input" style="width:100%;text-align:right;font-size:12px;" onchange="netoptState.demands.find(x=>x.id==='${did}').maxMiles=parseFloat(this.value);"></td>
+      <td style="padding:12px 16px;text-align:center;"><button onclick="netoptRemoveDemand('${did}')" style="padding:4px 8px;background:#fff;border:1px solid var(--ies-red);color:var(--ies-red);border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;">Remove</button></td>
     `;
     tbody.appendChild(row);
   });
@@ -24813,15 +24864,15 @@ async function cmShowEditInitiative() {
   const content = `
     <div class="cm-form-field">
       <label>Initiative Title *</label>
-      <input type="text" id="cm-init-title" value="${init.title}">
+      <input type="text" id="cm-init-title" value="${esc(init.title)}">
     </div>
     <div class="cm-form-field">
       <label>Description</label>
-      <textarea id="cm-init-desc">${init.description || ''}</textarea>
+      <textarea id="cm-init-desc">${esc(init.description || '')}</textarea>
     </div>
     <div class="cm-form-field inline">
       <label>Owner</label>
-      <input type="text" id="cm-init-owner" value="${init.owner || ''}">
+      <input type="text" id="cm-init-owner" value="${esc(init.owner || '')}">
     </div>
     <div class="cm-form-field inline">
       <label>Category</label>
@@ -26557,8 +26608,8 @@ const cmApp = {
                     card.dataset.dealId = '';
                     card.innerHTML = `
                         <div style="cursor:pointer;" onclick="cmApp.openProject(${p.id})">
-                        <div class="dt-landing-card-name">${p.name || 'Untitled'}</div>
-                        <div class="dt-landing-card-meta">${market}</div>
+                        <div class="dt-landing-card-name">${esc(p.name || 'Untitled')}</div>
+                        <div class="dt-landing-card-meta">${esc(market)}</div>
                         <div class="dt-landing-card-metric">$${(p.total_annual_cost || 0).toLocaleString('en-US', {maximumFractionDigits: 0})}/yr</div>
                         <div class="dt-landing-card-meta">${new Date(p.created_at).toLocaleDateString()}</div>
                         </div>
@@ -26575,6 +26626,7 @@ const cmApp = {
             }
         } catch (error) {
             console.error('Error loading projects:', error);
+            showSectionError('sec-costmodel', 'Failed to load cost model projects. Check your connection and try refreshing.');
         }
     },
 
@@ -30424,27 +30476,27 @@ const dealApp = {
             };
 
             card.innerHTML = `
-                <div style="cursor:pointer;" onclick="dealApp.openDeal('${deal.id}')">
+                <div style="cursor:pointer;" onclick="dealApp.openDeal('${esc(deal.id)}')">
                 <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:12px;">
-                    <div style="font-weight:700;font-size:15px;color:var(--ies-navy);flex:1;margin-right:12px;">${deal.deal_name}</div>
-                    <span style="padding:4px 10px;border-radius:4px;font-size:11px;font-weight:600;${statusColors[deal.status] || statusColors['Draft']};white-space:nowrap;">${deal.status}</span>
+                    <div style="font-weight:700;font-size:15px;color:var(--ies-navy);flex:1;margin-right:12px;">${esc(deal.deal_name)}</div>
+                    <span style="padding:4px 10px;border-radius:4px;font-size:11px;font-weight:600;${statusColors[deal.status] || statusColors['Draft']};white-space:nowrap;">${esc(deal.status)}</span>
                 </div>
-                <div style="font-size:12px;color:var(--ies-gray-600);margin-bottom:8px;"><strong>Client:</strong> ${deal.client_name || '—'}</div>
-                <div style="font-size:12px;color:var(--ies-gray-600);margin-bottom:12px;"><strong>Owner:</strong> ${deal.deal_owner || '—'}</div>
+                <div style="font-size:12px;color:var(--ies-gray-600);margin-bottom:8px;"><strong>Client:</strong> ${esc(deal.client_name || '—')}</div>
+                <div style="font-size:12px;color:var(--ies-gray-600);margin-bottom:12px;"><strong>Owner:</strong> ${esc(deal.deal_owner || '—')}</div>
                 <div style="padding-top:12px;border-top:1px solid var(--ies-gray-200);display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;">
                     <div>
                         <div style="color:var(--ies-gray-500);font-weight:500;margin-bottom:2px;">Sites</div>
-                        <div id="card-sites-${deal.id}" style="font-weight:600;color:var(--ies-navy);">—</div>
+                        <div id="card-sites-${esc(deal.id)}" style="font-weight:600;color:var(--ies-navy);">—</div>
                     </div>
                     <div>
                         <div style="color:var(--ies-gray-500);font-weight:500;margin-bottom:2px;">Total Cost</div>
-                        <div id="card-cost-${deal.id}" style="font-weight:600;color:var(--ies-orange);">—</div>
+                        <div id="card-cost-${esc(deal.id)}" style="font-weight:600;color:var(--ies-orange);">—</div>
                     </div>
                 </div>
                 </div>
                 <div class="dt-landing-card-actions">
-                <button class="dt-card-btn-copy" onclick="event.stopPropagation(); dtCopyScenario('deal_deals','${deal.id}','deal')"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/><path d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2" stroke="currentColor" stroke-width="2"/></svg> Copy</button>
-                <button class="dt-card-btn-delete" onclick="event.stopPropagation(); dtDeleteScenario('deal_deals','${deal.id}','deal')"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Delete</button>
+                <button class="dt-card-btn-copy" onclick="event.stopPropagation(); dtCopyScenario('deal_deals','${esc(deal.id)}','deal')"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/><path d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2" stroke="currentColor" stroke-width="2"/></svg> Copy</button>
+                <button class="dt-card-btn-delete" onclick="event.stopPropagation(); dtDeleteScenario('deal_deals','${esc(deal.id)}','deal')"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Delete</button>
                 </div>
             `;
             listView.appendChild(card);
@@ -31699,12 +31751,13 @@ const fmApp = {
         <tbody>${keys.map(key => {
           const s = this.vehicleSpecs[key];
           const checked = this.config.vehicles.includes(key);
+          const k = esc(key);
           return `<tr style="${checked ? '' : 'opacity:0.5;'}">
-            <td style="text-align:center;"><input type="checkbox" data-vspec="${key}" ${checked ? 'checked' : ''} onchange="fmApp.toggleVehicle('${key}',this.checked)" style="cursor:pointer;"></td>
-            <td style="font-weight:600;color:var(--ies-navy);">${s.name}</td>
-            <td style="text-align:right;"><input type="number" value="${s.capacity_wgt}" onchange="fmApp.vehicleSpecs['${key}'].capacity_wgt=parseFloat(this.value)" style="width:70px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:11px;text-align:right;"></td>
-            <td style="text-align:right;"><input type="number" value="${s.capacity_cube}" onchange="fmApp.vehicleSpecs['${key}'].capacity_cube=parseFloat(this.value)" style="width:60px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:11px;text-align:right;"></td>
-            <td style="text-align:right;"><input type="number" value="${s.mpg}" step="0.5" onchange="fmApp.vehicleSpecs['${key}'].mpg=parseFloat(this.value)" style="width:50px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:11px;text-align:right;"></td>
+            <td style="text-align:center;"><input type="checkbox" data-vspec="${k}" ${checked ? 'checked' : ''} onchange="fmApp.toggleVehicle('${k}',this.checked)" style="cursor:pointer;"></td>
+            <td style="font-weight:600;color:var(--ies-navy);">${esc(s.name)}</td>
+            <td style="text-align:right;"><input type="number" value="${s.capacity_wgt}" onchange="fmApp.vehicleSpecs['${k}'].capacity_wgt=parseFloat(this.value)" style="width:70px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:11px;text-align:right;"></td>
+            <td style="text-align:right;"><input type="number" value="${s.capacity_cube}" onchange="fmApp.vehicleSpecs['${k}'].capacity_cube=parseFloat(this.value)" style="width:60px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:11px;text-align:right;"></td>
+            <td style="text-align:right;"><input type="number" value="${s.mpg}" step="0.5" onchange="fmApp.vehicleSpecs['${k}'].mpg=parseFloat(this.value)" style="width:50px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:11px;text-align:right;"></td>
             <td style="text-align:right;">$${s.capital_cost.toLocaleString()}</td>
             <td style="text-align:right;">$${s.annual_fixed.toLocaleString()}</td>
             <td style="text-align:right;">${s.insurance_premium.toFixed(2)}x</td>
@@ -31817,8 +31870,8 @@ const fmApp = {
       ? '<tr><td colspan="8" style="padding:20px;text-align:center;color:var(--ies-gray-600);">No lanes added. Click "Add Lane" or "Load Demo Data"</td></tr>'
       : this.lanes.map((lane, idx) => `
         <tr style="border-bottom:1px solid var(--ies-gray-200);">
-          <td style="padding:12px;"><input type="text" value="${lane.origin}" onchange="fmApp.lanes[${idx}].origin = this.value; fmApp.updateMapIfVisible();" style="width:100%;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;font-size:12px;" placeholder="e.g., Chicago"></td>
-          <td style="padding:12px;"><input type="text" value="${lane.destination}" onchange="fmApp.lanes[${idx}].destination = this.value; fmApp.updateMapIfVisible();" style="width:100%;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;font-size:12px;" placeholder="e.g., Atlanta"></td>
+          <td style="padding:12px;"><input type="text" value="${esc(lane.origin)}" onchange="fmApp.lanes[${idx}].origin = this.value; fmApp.updateMapIfVisible();" style="width:100%;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;font-size:12px;" placeholder="e.g., Chicago"></td>
+          <td style="padding:12px;"><input type="text" value="${esc(lane.destination)}" onchange="fmApp.lanes[${idx}].destination = this.value; fmApp.updateMapIfVisible();" style="width:100%;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;font-size:12px;" placeholder="e.g., Atlanta"></td>
           <td style="padding:12px;text-align:center;"><input type="number" value="${lane.weekly_shipments}" onchange="fmApp.lanes[${idx}].weekly_shipments = parseInt(this.value); fmApp.updateMapIfVisible();" style="width:80px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;font-size:12px;" min="1"></td>
           <td style="padding:12px;text-align:center;"><input type="number" value="${lane.avg_weight}" onchange="fmApp.lanes[${idx}].avg_weight = parseFloat(this.value)" style="width:80px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;font-size:12px;" step="100"></td>
           <td style="padding:12px;text-align:center;"><input type="number" value="${lane.avg_cube}" onchange="fmApp.lanes[${idx}].avg_cube = parseFloat(this.value)" style="width:80px;padding:6px;border:1px solid var(--ies-gray-300);border-radius:4px;font-size:12px;" step="10"></td>
@@ -37033,11 +37086,20 @@ async function switchAdminTab(table) {
 }
 
 async function loadAdminTable(table) {
-  var res = await sb.from('master_' + table).select('*').order('id', { ascending: true });
-  if (res.error) {
-    console.error('Error loading admin table:', res.error);
+  var res;
+  try {
+    res = await sb.from('master_' + table).select('*').order('id', { ascending: true });
+  } catch(e) {
+    console.error('Error loading admin table:', e);
+    showSectionError('sec-admin', 'Failed to load ' + table + ' data. Check your connection and try refreshing.');
     return;
   }
+  if (res.error) {
+    console.error('Error loading admin table:', res.error);
+    showSectionError('sec-admin', 'Failed to load ' + table + ': ' + res.error.message);
+    return;
+  }
+  clearSectionError('sec-admin');
 
   var rows = res.data || [];
   var html = '<table class="admin-data-table"><tbody>';
@@ -37045,22 +37107,22 @@ async function loadAdminTable(table) {
   if (table === 'accounts') {
     html += '<tr><th>Name</th><th>Vertical</th><th>Region</th><th>Type</th><th>Status</th><th>Actions</th></tr>';
     rows.forEach(function(row) {
-      html += '<tr class="data-row"><td><strong>' + row.name + '</strong></td><td>' + (row.vertical || '—') + '</td><td>' + (row.region || '—') + '</td><td><span class="admin-badge">' + (row.account_type || 'prospect') + '</span></td><td><span class="status-dot status-' + (row.status === 'active' ? 'green' : 'gray') + '"></span></td><td><button class="admin-btn-sm" onclick="showAdminFormModal(\'accounts\', ' + row.id + ')">Edit</button> <button class="admin-btn-sm admin-btn-danger" onclick="deleteAdminRow(\'accounts\', ' + row.id + ')">Delete</button></td></tr>';
+      html += '<tr class="data-row"><td><strong>' + esc(row.name) + '</strong></td><td>' + esc(row.vertical || '—') + '</td><td>' + esc(row.region || '—') + '</td><td><span class="admin-badge">' + esc(row.account_type || 'prospect') + '</span></td><td><span class="status-dot status-' + (row.status === 'active' ? 'green' : 'gray') + '"></span></td><td><button class="admin-btn-sm" onclick="showAdminFormModal(\'accounts\', ' + row.id + ')">Edit</button> <button class="admin-btn-sm admin-btn-danger" onclick="deleteAdminRow(\'accounts\', ' + row.id + ')">Delete</button></td></tr>';
     });
   } else if (table === 'competitors') {
     html += '<tr><th>Name</th><th>Vertical</th><th>HQ Location</th><th>Status</th><th>Actions</th></tr>';
     rows.forEach(function(row) {
-      html += '<tr class="data-row"><td><strong>' + row.name + '</strong></td><td>' + (row.primary_vertical || '—') + '</td><td>' + (row.hq_location || '—') + '</td><td><span class="status-dot status-' + (row.status === 'active' ? 'green' : 'gray') + '"></span></td><td><button class="admin-btn-sm" onclick="showAdminFormModal(\'competitors\', ' + row.id + ')">Edit</button> <button class="admin-btn-sm admin-btn-danger" onclick="deleteAdminRow(\'competitors\', ' + row.id + ')">Delete</button></td></tr>';
+      html += '<tr class="data-row"><td><strong>' + esc(row.name) + '</strong></td><td>' + esc(row.primary_vertical || '—') + '</td><td>' + esc(row.hq_location || '—') + '</td><td><span class="status-dot status-' + (row.status === 'active' ? 'green' : 'gray') + '"></span></td><td><button class="admin-btn-sm" onclick="showAdminFormModal(\'competitors\', ' + row.id + ')">Edit</button> <button class="admin-btn-sm admin-btn-danger" onclick="deleteAdminRow(\'competitors\', ' + row.id + ')">Delete</button></td></tr>';
     });
   } else if (table === 'markets') {
     html += '<tr><th>City, State</th><th>Region</th><th>Tier</th><th>GXO Presence</th><th>Actions</th></tr>';
     rows.forEach(function(row) {
-      html += '<tr class="data-row"><td><strong>' + row.city + ', ' + row.state + '</strong></td><td>' + (row.region || '—') + '</td><td><span class="admin-badge">' + (row.market_tier || '—') + '</span></td><td>' + (row.gxo_presence || '—') + '</td><td><button class="admin-btn-sm" onclick="showAdminFormModal(\'markets\', ' + row.id + ')">Edit</button> <button class="admin-btn-sm admin-btn-danger" onclick="deleteAdminRow(\'markets\', ' + row.id + ')">Delete</button></td></tr>';
+      html += '<tr class="data-row"><td><strong>' + esc(row.city) + ', ' + esc(row.state) + '</strong></td><td>' + esc(row.region || '—') + '</td><td><span class="admin-badge">' + esc(row.market_tier || '—') + '</span></td><td>' + esc(row.gxo_presence || '—') + '</td><td><button class="admin-btn-sm" onclick="showAdminFormModal(\'markets\', ' + row.id + ')">Edit</button> <button class="admin-btn-sm admin-btn-danger" onclick="deleteAdminRow(\'markets\', ' + row.id + ')">Delete</button></td></tr>';
     });
   } else if (table === 'verticals') {
     html += '<tr><th>Vertical</th><th>GXO Focus</th><th>Status</th><th>Actions</th></tr>';
     rows.forEach(function(row) {
-      html += '<tr class="data-row"><td><strong>' + row.vertical_name + '</strong></td><td><span class="admin-badge">' + (row.gxo_focus_level || '—') + '</span></td><td><span class="status-dot status-' + (row.status === 'active' ? 'green' : 'gray') + '"></span></td><td><button class="admin-btn-sm" onclick="showAdminFormModal(\'verticals\', ' + row.id + ')">Edit</button> <button class="admin-btn-sm admin-btn-danger" onclick="deleteAdminRow(\'verticals\', ' + row.id + ')">Delete</button></td></tr>';
+      html += '<tr class="data-row"><td><strong>' + esc(row.vertical_name) + '</strong></td><td><span class="admin-badge">' + esc(row.gxo_focus_level || '—') + '</span></td><td><span class="status-dot status-' + (row.status === 'active' ? 'green' : 'gray') + '"></span></td><td><button class="admin-btn-sm" onclick="showAdminFormModal(\'verticals\', ' + row.id + ')">Edit</button> <button class="admin-btn-sm admin-btn-danger" onclick="deleteAdminRow(\'verticals\', ' + row.id + ')">Delete</button></td></tr>';
     });
   }
 
