@@ -9090,6 +9090,11 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 
   <!-- FLEET MODELER TOOL -->
   <div id="fm-tool" style="display:flex;flex-direction:column;gap:20px;">
+    <!-- Back + Action Bar -->
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+      <button class="fm-btn-secondary" onclick="fmShowLanding()" style="padding:6px 14px;font-size:13px;font-weight:600;white-space:nowrap;">← Back to Models</button>
+      <button class="fm-btn-primary" id="fm-calc-btn-top" onclick="fmCalculateFleet()" style="padding:8px 20px;font-size:13px;font-weight:700;white-space:nowrap;">▶ Calculate Fleet Requirements</button>
+    </div>
     <!-- Tab Navigation -->
     <div style="display:flex;gap:8px;border-bottom:2px solid var(--ies-gray-200);overflow-x:auto;">
       <button class="fm-tab active" onclick="fmShowTab('lanes')">Lanes</button>
@@ -9295,7 +9300,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         <div style="font-size:16px;margin-bottom:8px;">No routes to visualize</div>
         <div style="font-size:13px;">Add lanes in the Lanes tab to see the route map</div>
       </div>
-      <div id="fm-map-container" style="display:none;">
+      <div id="fm-map-container" style="display:none;position:relative;">
         <div class="fm-map-container" id="fm-leaflet-map"></div>
         <div class="fm-map-legend" id="fm-map-legend"></div>
       </div>
@@ -21814,11 +21819,13 @@ async function fmLoadFleetScenario(id) {
     // Map Supabase lanes into fmApp lane format
     fmApp.lanes = (lanes || []).map(function(l) {
       return {
-        origin: l.origin || l.origin_city || '',
-        destination: l.destination || l.destination_city || '',
-        distance: l.distance_miles || l.distance || 0,
-        annualVolume: l.annual_volume || l.volume || 0,
-        weight: l.avg_weight || l.weight || 0
+        origin: l.origin || '',
+        destination: l.destination || '',
+        weeklyShipments: l.weekly_shipments || 0,
+        avgWeight: l.avg_weight_lbs || 0,
+        avgCube: l.avg_cube_ft3 || 0,
+        deliveryWindow: l.delivery_window || '',
+        distance: l.distance_miles || 0
       };
     });
 
@@ -32599,19 +32606,53 @@ const fmApp = {
       <div class="fm-scenario-item">
         <div class="fm-scenario-info">
           <div class="fm-scenario-name">${s.name}</div>
-          <div class="fm-scenario-meta">${s.lanes.length} lanes • ${s.created_at}</div>
+          <div class="fm-scenario-meta">${s.lanes && s.lanes.length ? s.lanes.length + ' lanes • ' : ''}${s.created_at}</div>
         </div>
         <div style="display:flex;gap:8px;">
-          <button onclick="fmApp.loadScenario(${s.id})" class="fm-btn-secondary" style="padding:6px 12px;font-size:11px;">Load</button>
-          <button onclick="fmApp.deleteScenario(${s.id})" style="background:var(--ies-red);color:#fff;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;">Delete</button>
+          <button onclick="fmApp.loadScenario(${s.id})" class="fm-btn-primary" style="padding:6px 14px;font-size:12px;">Load</button>
+          <button onclick="fmApp.deleteScenario(${s.id})" style="background:var(--ies-red);color:#fff;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;">Delete</button>
         </div>
       </div>
     `).join('');
   },
 
-  loadScenario(id) {
-    const scenario = this.scenarios.find(s => s.id === id);
-    if (!scenario) return;
+  async loadScenario(id) {
+    // First check local array
+    let scenario = this.scenarios.find(s => s.id === id);
+
+    // If not found locally, fetch from Supabase
+    if (!scenario) {
+      try {
+        const rows = await cmFetchTable('fleet_scenarios', 'id=eq.' + id);
+        if (!rows || rows.length === 0) { this.showToast('Scenario not found', 'error'); return; }
+        const s = rows[0];
+        const lanesRows = await cmFetchTable('fleet_lanes', 'scenario_id=eq.' + id + '&order=id.asc');
+        scenario = {
+          id: s.id,
+          name: s.name || 'Untitled',
+          config: s.config || {},
+          results: s.results || null,
+          lanes: (lanesRows || []).map(function(l) {
+            return {
+              origin: l.origin || '',
+              destination: l.destination || '',
+              weeklyShipments: l.weekly_shipments || 0,
+              avgWeight: l.avg_weight_lbs || 0,
+              avgCube: l.avg_cube_ft3 || 0,
+              deliveryWindow: l.delivery_window || '',
+              distance: l.distance_miles || 0
+            };
+          }),
+          created_at: s.created_at ? new Date(s.created_at).toLocaleString() : ''
+        };
+        // Cache locally
+        this.scenarios.push(scenario);
+      } catch (e) {
+        console.error('Error loading scenario from Supabase:', e);
+        this.showToast('Error loading scenario', 'error');
+        return;
+      }
+    }
 
     this.lanes = JSON.parse(JSON.stringify(scenario.lanes));
     this.config = JSON.parse(JSON.stringify(scenario.config));
@@ -32628,8 +32669,19 @@ const fmApp = {
     this.showToast(`Loaded scenario "${scenario.name}"`);
   },
 
-  deleteScenario(id) {
+  async deleteScenario(id) {
     if (!confirm('Delete this scenario?')) return;
+    try {
+      // Delete from Supabase
+      await fetch(SUPABASE_URL + '/rest/v1/fleet_lanes?scenario_id=eq.' + id, {
+        method: 'DELETE',
+        headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY }
+      });
+      await fetch(SUPABASE_URL + '/rest/v1/fleet_scenarios?id=eq.' + id, {
+        method: 'DELETE',
+        headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY }
+      });
+    } catch (e) { console.error('Error deleting from Supabase:', e); }
     this.scenarios = this.scenarios.filter(s => s.id !== id);
     this.renderScenariosListLocal();
     this.showToast('Scenario deleted');
@@ -32906,6 +32958,39 @@ function fmShowTab(tabName) {
   if (tabName === 'map') {
     // Delay slightly to ensure container is visible
     setTimeout(() => { fmApp.renderMap(); }, 100);
+  }
+
+  // Load scenarios from Supabase when Scenarios tab is opened
+  if (tabName === 'scenarios') {
+    fmLoadScenariosFromSupabase();
+  }
+}
+
+async function fmLoadScenariosFromSupabase() {
+  try {
+    const rows = await cmFetchTable('fleet_scenarios', 'order=created_at.desc');
+    if (!rows || rows.length === 0) {
+      // Keep whatever is in local array (may have unsaved scenarios)
+      fmApp.renderScenariosListLocal();
+      return;
+    }
+    // Merge Supabase scenarios into local array (avoid duplicates by id)
+    const localIds = new Set(fmApp.scenarios.map(s => s.id));
+    for (const s of rows) {
+      if (!localIds.has(s.id)) {
+        fmApp.scenarios.push({
+          id: s.id,
+          name: s.name || 'Untitled',
+          config: s.config || {},
+          results: s.results || null,
+          lanes: [], // lanes loaded on demand when Load is clicked
+          created_at: s.created_at ? new Date(s.created_at).toLocaleString() : ''
+        });
+      }
+    }
+    fmApp.renderScenariosListLocal();
+  } catch (e) {
+    console.error('Error fetching scenarios from Supabase:', e);
   }
 }
 
