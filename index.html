@@ -5949,7 +5949,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         <div class="dt-landing-subtitle">Design optimal warehouse layouts and estimate facility sizing requirements</div>
         <button class="tour-trigger-icon" onclick="startSectionTour('warehouse')" title="Start guided tour" style="margin-top:8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
       </div>
-      <div class="dt-landing-actions">
+      <div id="wsc-landing-actions" class="dt-landing-actions">
         <button class="dt-landing-btn" onclick="wscNewScenario()">+ Create New Scenario</button>
       </div>
       <div id="wsc-landing-grid" class="dt-landing-grid"></div>
@@ -6640,7 +6640,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         <div class="dt-landing-subtitle">Find optimal distribution center locations using demand-weighted analysis</div>
         <button class="tour-trigger-icon" onclick="startSectionTour('cog')" title="Start guided tour" style="margin-top:8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
       </div>
-      <div class="dt-landing-actions">
+      <div id="net-landing-actions" class="dt-landing-actions">
         <button class="dt-landing-btn" onclick="netNewScenario()">+ Create New Scenario</button>
       </div>
       <div id="net-landing-grid" class="dt-landing-grid"></div>
@@ -6853,7 +6853,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         <div class="dt-landing-subtitle">Optimize multi-mode transportation and facility location decisions</div>
         <button class="tour-trigger-icon" onclick="startSectionTour('netopt')" title="Start guided tour" style="margin-top:8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
       </div>
-      <div class="dt-landing-actions">
+      <div id="netopt-landing-actions" class="dt-landing-actions">
         <button class="dt-landing-btn" onclick="netoptNewScenario()">+ Create New Scenario</button>
       </div>
       <div id="netopt-landing-grid" class="dt-landing-grid"></div>
@@ -7692,7 +7692,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         <div class="dt-landing-subtitle">Multi-location warehouse deals with aggregate financials</div>
         <button class="tour-trigger-icon" onclick="startSectionTour('multisite')" title="Start guided tour" style="margin-top:8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
       </div>
-      <div class="dt-landing-actions">
+      <div id="deal-landing-actions" class="dt-landing-actions">
         <button class="dt-landing-btn" onclick="dealApp.showNewDealModal()">+ Create New Deal</button>
       </div>
       <div id="dealListView" class="dt-landing-grid">
@@ -8009,7 +8009,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div class="dt-landing-subtitle">Engineered warehouse costing for 3PL operations</div>
       <button class="tour-trigger-icon" onclick="startSectionTour('costmodel')" title="Start guided tour" style="margin-top:8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
     </div>
-    <div class="dt-landing-actions">
+    <div id="cm-landing-actions" class="dt-landing-actions">
       <button id="newModelBtnLanding" class="dt-landing-btn">+ Create New Model</button>
     </div>
     <div id="projectsList" class="dt-landing-grid"></div>
@@ -9088,7 +9088,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
       <div class="dt-landing-subtitle">Design optimal fleet configurations and compare operational scenarios</div>
       <button class="tour-trigger-icon" onclick="startSectionTour('fleet')" title="Start guided tour" style="margin-top:8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> Guided Tour</button>
     </div>
-    <div class="dt-landing-actions">
+    <div id="fm-landing-actions" class="dt-landing-actions">
       <button class="dt-landing-btn" onclick="fmNewScenario()">+ Create New Scenario</button>
     </div>
     <div id="fm-landing-grid" class="dt-landing-grid"></div>
@@ -10630,6 +10630,14 @@ function clearSectionError(containerId) {
   if (!container) return;
   var existing = container.querySelector('.hub-error-banner');
   if (existing) existing.remove();
+}
+
+// ── Toggle landing empty state vs actions ──
+function dtToggleLandingEmpty(actionsId, emptyId, isEmpty) {
+  var actions = document.getElementById(actionsId);
+  var empty = document.getElementById(emptyId);
+  if (actions) actions.style.display = isEmpty ? 'none' : 'block';
+  if (empty) empty.style.display = isEmpty ? 'block' : 'none';
 }
 
 // ── Global Vertical Metadata (fetched from master_verticals) ──
@@ -21648,17 +21656,16 @@ async function wscLoadScenariosList() {
   try {
     var scenarios = await wscListScenarios(window.activeCostModelProjectId || null);
     var grid = document.getElementById('wsc-landing-grid');
-    var empty = document.getElementById('wsc-empty-state');
 
     if (!grid) return;
 
     if (scenarios.length === 0) {
       grid.innerHTML = '';
-      if (empty) empty.style.display = 'block';
+      dtToggleLandingEmpty('wsc-landing-actions', 'wsc-empty-state', true);
       return;
     }
 
-    if (empty) empty.style.display = 'none';
+    dtToggleLandingEmpty('wsc-landing-actions', 'wsc-empty-state', false);
 
     grid.innerHTML = scenarios.map(function(s) {
       return '<div class="dt-landing-card">' +
@@ -21702,17 +21709,16 @@ async function netLoadScenariosList() {
   try {
     var scenarios = await netListScenarios(window.activeCostModelProjectId || null);
     var grid = document.getElementById('net-landing-grid');
-    var empty = document.getElementById('net-empty-state');
 
     if (!grid) return;
 
     if (scenarios.length === 0) {
       grid.innerHTML = '';
-      if (empty) empty.style.display = 'block';
+      dtToggleLandingEmpty('net-landing-actions', 'net-empty-state', true);
       return;
     }
 
-    if (empty) empty.style.display = 'none';
+    dtToggleLandingEmpty('net-landing-actions', 'net-empty-state', false);
 
     grid.innerHTML = scenarios.map(function(s) {
       return '<div class="dt-landing-card">' +
@@ -21756,17 +21762,16 @@ async function netoptLoadScenariosList() {
   try {
     var scenarios = await netoptListScenarios(window.activeCostModelProjectId || null);
     var grid = document.getElementById('netopt-landing-grid');
-    var empty = document.getElementById('netopt-empty-state');
 
     if (!grid) return;
 
     if (scenarios.length === 0) {
       grid.innerHTML = '';
-      if (empty) empty.style.display = 'block';
+      dtToggleLandingEmpty('netopt-landing-actions', 'netopt-empty-state', true);
       return;
     }
 
-    if (empty) empty.style.display = 'none';
+    dtToggleLandingEmpty('netopt-landing-actions', 'netopt-empty-state', false);
 
     grid.innerHTML = scenarios.map(function(s) {
       return '<div class="dt-landing-card">' +
@@ -21817,20 +21822,16 @@ async function fmLoadScenariosList() {
   try {
     var scenarios = await cmFetchTable('fleet_scenarios', 'order=created_at.desc');
     var grid = document.getElementById('fm-landing-grid');
-    var empty = document.getElementById('fm-empty-state');
-    var actions = document.querySelector('#fm-landing .dt-landing-actions');
 
     if (!grid) return;
 
     if (scenarios.length === 0) {
       grid.innerHTML = '';
-      if (empty) empty.style.display = 'block';
-      if (actions) actions.style.display = 'none';
+      dtToggleLandingEmpty('fm-landing-actions', 'fm-empty-state', true);
       return;
     }
 
-    if (empty) empty.style.display = 'none';
-    if (actions) actions.style.display = '';
+    dtToggleLandingEmpty('fm-landing-actions', 'fm-empty-state', false);
 
     grid.innerHTML = scenarios.map(function(s) {
       var sid = s.id;
@@ -26503,9 +26504,9 @@ const cmApp = {
             projectsList.innerHTML = '';
 
             if (projects.length === 0) {
-                document.getElementById('emptyState').style.display = 'block';
+                dtToggleLandingEmpty('cm-landing-actions', 'emptyState', true);
             } else {
-                document.getElementById('emptyState').style.display = 'none';
+                dtToggleLandingEmpty('cm-landing-actions', 'emptyState', false);
 
                 // Populate project selector (all projects, flat)
                 projects.forEach(p => {
@@ -30458,10 +30459,12 @@ const dealApp = {
 
         if (this.deals.length === 0) {
             listView.style.display = 'none';
-            if (emptyState) emptyState.style.display = 'block';
+            dtToggleLandingEmpty('deal-landing-actions', 'deal-empty-state', true);
             return;
         }
 
+        dtToggleLandingEmpty('deal-landing-actions', 'deal-empty-state', false);
+        listView.style.display = '';
         listView.innerHTML = '';
         this.deals.forEach(deal => {
             const card = document.createElement('div');
