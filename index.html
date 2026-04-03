@@ -10311,7 +10311,7 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
 <div class="section" id="sec-changemanagement">
   <!-- SECTION HEADER -->
   <div class="cm-section-header">
-    <div style="display:flex;align-items:center;gap:16;">
+    <div style="display:flex;align-items:center;gap:16px;">
       <div>
         <h2>Change Management</h2>
       </div>
@@ -14095,7 +14095,7 @@ function searchSelect(idx) {
   if (!item) return;
 
   container.style.display = 'none';
-  document.getElementById('globalSearch').value = '';
+  var _gs = document.getElementById('globalSearch'); if (_gs) _gs.value = '';
   _searchHighlight = -1;
 
   if (item.action) {
@@ -14978,8 +14978,7 @@ document.addEventListener('DOMContentLoaded', function() {
   // Pre-load wiki default content
   if (typeof showWiki === 'function') showWiki('scc-g2p');
   loadAllData().then(() => {
-    console.log('IES Intelligence Hub loaded — Supabase connected ✓');
-    console.log('Project: ' + SUPABASE_URL);
+    // Hub loaded successfully
     // Sync feed card height to charts column (after charts render)
     setTimeout(function() {
       var fc = document.getElementById('feedCard');
@@ -15007,7 +15006,7 @@ document.addEventListener('DOMContentLoaded', function() {
           loadSectorPulse(),
         ]);
         updateTimestamp();
-        console.log('Auto-refresh: alerts, KPIs & sector pulse updated');
+        // Auto-refresh complete
       } catch(e) { console.warn('Auto-refresh failed:', e); }
     }, 300000); // 5 minutes
 
@@ -15065,7 +15064,7 @@ async function pmLoadAll() {
     pmRenderStats();
     pmRenderPipeline();
     pmPopulateCustomerFilter();
-    console.log('PM: Loaded ' + pmData.opportunities.length + ' opps, ' + pmData.customers.length + ' customers, ' + pmData.tasks.length + ' tasks, ' + pmData.generalHours.length + ' gen hrs');
+    // PM data loaded
   } catch(e) { console.error('PM load error:', e); }
 }
 
@@ -17355,7 +17354,7 @@ async function daLinkCostModelToDeal() {
     } else {
       if (typeof netoptToast === 'function') netoptToast('Already linked');
     }
-    console.log('Cost model linked to deal:', dealId);
+    // Cost model linked to deal
   } catch(e) {
     console.error('Error creating deal_artifacts record for cost model:', e);
     alert('Error linking cost model: ' + (e.message || e));
@@ -17402,7 +17401,7 @@ async function daLinkNetoptToDeal() {
     } else {
       if (typeof netoptToast === 'function') netoptToast('Already linked');
     }
-    console.log('NetOpt scenario linked to deal:', dealId);
+    // NetOpt scenario linked to deal
   } catch(e) {
     console.error('Error creating deal_artifacts record for netopt:', e);
     alert('Error linking scenario: ' + (e.message || e));
@@ -17511,11 +17510,12 @@ async function cmCombineModels(dragId, dropId, existingDealId) {
   // If either model already has a deal, auto-merge into that deal
   if (existingDealId) {
     try {
-      await fetch(SUPABASE_URL + '/rest/v1/cost_model_projects?id=eq.' + dragId, {
+      var resp = await fetch(SUPABASE_URL + '/rest/v1/cost_model_projects?id=eq.' + dragId, {
         method: 'PATCH', headers: API_HEADERS, body: JSON.stringify({ deal_deals_id: existingDealId })
       });
+      if (!resp.ok) throw new Error('Failed to link model to deal');
       if (typeof netoptToast === 'function') netoptToast('Added to deal');
-      cmApp.loadProjects();
+      if (typeof cmApp !== 'undefined' && cmApp.loadProjects) cmApp.loadProjects();
     } catch(e) {
       console.error('Error adding to deal:', e);
       alert('Error adding to deal: ' + (e.message || e));
@@ -17528,11 +17528,12 @@ async function cmCombineModels(dragId, dropId, existingDealId) {
     var dragProjects = await cmFetchTable('cost_model_projects', 'id=eq.' + dragId);
     if (dragProjects.length > 0 && dragProjects[0].deal_deals_id) {
       // Auto-merge the drop model into the drag model's deal
-      await fetch(SUPABASE_URL + '/rest/v1/cost_model_projects?id=eq.' + dropId, {
+      var resp = await fetch(SUPABASE_URL + '/rest/v1/cost_model_projects?id=eq.' + dropId, {
         method: 'PATCH', headers: API_HEADERS, body: JSON.stringify({ deal_deals_id: dragProjects[0].deal_deals_id })
       });
+      if (!resp.ok) throw new Error('Failed to merge model into deal');
       if (typeof netoptToast === 'function') netoptToast('Added to deal');
-      cmApp.loadProjects();
+      if (typeof cmApp !== 'undefined' && cmApp.loadProjects) cmApp.loadProjects();
       return;
     }
   } catch(e) { console.error('Error:', e); }
@@ -17619,12 +17620,14 @@ async function cmFinishCombine(modelAId, modelBId) {
     var newDealId = result[0].id;
 
     // Link both cost models to the deal
-    await fetch(SUPABASE_URL + '/rest/v1/cost_model_projects?id=eq.' + modelAId, {
+    var rA = await fetch(SUPABASE_URL + '/rest/v1/cost_model_projects?id=eq.' + modelAId, {
       method: 'PATCH', headers: API_HEADERS, body: JSON.stringify({ deal_deals_id: newDealId })
     });
-    await fetch(SUPABASE_URL + '/rest/v1/cost_model_projects?id=eq.' + modelBId, {
+    if (!rA.ok) console.error('Failed to link model A:', await rA.text());
+    var rB = await fetch(SUPABASE_URL + '/rest/v1/cost_model_projects?id=eq.' + modelBId, {
       method: 'PATCH', headers: API_HEADERS, body: JSON.stringify({ deal_deals_id: newDealId })
     });
+    if (!rB.ok) console.error('Failed to link model B:', await rB.text());
 
     // Close modal and refresh
     var overlay = document.getElementById('cmCombineOverlay');
@@ -21610,14 +21613,14 @@ async function wscLoadScenariosList() {
 
     grid.innerHTML = scenarios.map(function(s) {
       return '<div class="dt-landing-card">' +
-        '<div onclick="wscLoadScenario(' + s.id + '); wscShowTool()" style="cursor:pointer;">' +
+        '<div onclick="wscLoadScenario(\'' + s.id + '\'); wscShowTool()" style="cursor:pointer;">' +
         '<div class="dt-landing-card-name">' + (s.scenario_name || 'Untitled') + '</div>' +
         '<div class="dt-landing-card-meta">' + (s.created_at ? new Date(s.created_at).toLocaleDateString() : '') + '</div>' +
         '<div class="dt-landing-card-metric">SF: ' + (s.facility_sqft ? s.facility_sqft.toLocaleString() : '—') + '</div>' +
         '</div>' +
         '<div class="dt-landing-card-actions">' +
-        '<button class="dt-card-btn-copy" onclick="event.stopPropagation(); dtCopyScenario(\'warehouse_sizing_scenarios\',' + s.id + ',\'wsc\')"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/><path d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2" stroke="currentColor" stroke-width="2"/></svg> Copy</button>' +
-        '<button class="dt-card-btn-delete" onclick="event.stopPropagation(); dtDeleteScenario(\'warehouse_sizing_scenarios\',' + s.id + ',\'wsc\')"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Delete</button>' +
+        '<button class="dt-card-btn-copy" onclick="event.stopPropagation(); dtCopyScenario(\'warehouse_sizing_scenarios\',\'' + s.id + '\',\'wsc\')"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/><path d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2" stroke="currentColor" stroke-width="2"/></svg> Copy</button>' +
+        '<button class="dt-card-btn-delete" onclick="event.stopPropagation(); dtDeleteScenario(\'warehouse_sizing_scenarios\',\'' + s.id + '\',\'wsc\')"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Delete</button>' +
         '</div></div>';
     }).join('');
   } catch (e) {
@@ -21664,14 +21667,14 @@ async function netLoadScenariosList() {
 
     grid.innerHTML = scenarios.map(function(s) {
       return '<div class="dt-landing-card">' +
-        '<div onclick="netLoadScenario(' + s.id + '); netShowTool()" style="cursor:pointer;">' +
+        '<div onclick="netLoadScenario(\'' + s.id + '\'); netShowTool()" style="cursor:pointer;">' +
         '<div class="dt-landing-card-name">' + (s.scenario_name || 'Untitled') + '</div>' +
         '<div class="dt-landing-card-meta">' + (s.created_at ? new Date(s.created_at).toLocaleDateString() : '') + '</div>' +
         '<div class="dt-landing-card-metric">DCs: ' + (s.dc_count || '—') + ' | Freight: $' + (s.result_est_freight ? s.result_est_freight.toLocaleString(undefined, {maximumFractionDigits: 0}) : '—') + '</div>' +
         '</div>' +
         '<div class="dt-landing-card-actions">' +
-        '<button class="dt-card-btn-copy" onclick="event.stopPropagation(); dtCopyScenario(\'network_optimization_scenarios\',' + s.id + ',\'net\')"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/><path d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2" stroke="currentColor" stroke-width="2"/></svg> Copy</button>' +
-        '<button class="dt-card-btn-delete" onclick="event.stopPropagation(); dtDeleteScenario(\'network_optimization_scenarios\',' + s.id + ',\'net\')"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Delete</button>' +
+        '<button class="dt-card-btn-copy" onclick="event.stopPropagation(); dtCopyScenario(\'network_optimization_scenarios\',\'' + s.id + '\',\'net\')"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/><path d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2" stroke="currentColor" stroke-width="2"/></svg> Copy</button>' +
+        '<button class="dt-card-btn-delete" onclick="event.stopPropagation(); dtDeleteScenario(\'network_optimization_scenarios\',\'' + s.id + '\',\'net\')"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Delete</button>' +
         '</div></div>';
     }).join('');
   } catch (e) {
@@ -21718,14 +21721,14 @@ async function netoptLoadScenariosList() {
 
     grid.innerHTML = scenarios.map(function(s) {
       return '<div class="dt-landing-card">' +
-        '<div onclick="netoptLoadScenario(' + s.id + '); netoptShowTool()" style="cursor:pointer;">' +
+        '<div onclick="netoptLoadScenario(\'' + s.id + '\'); netoptShowTool()" style="cursor:pointer;">' +
         '<div class="dt-landing-card-name">' + (s.scenario_name || 'Untitled') + '</div>' +
         '<div class="dt-landing-card-meta">' + (s.created_at ? new Date(s.created_at).toLocaleDateString() : '') + '</div>' +
         '<div class="dt-landing-card-metric">Cost: $' + (s.result_total_cost ? s.result_total_cost.toLocaleString(undefined, {maximumFractionDigits: 0}) : '—') + ' | Mode: ' + (s.solver_mode || '—') + '</div>' +
         '</div>' +
         '<div class="dt-landing-card-actions">' +
-        '<button class="dt-card-btn-copy" onclick="event.stopPropagation(); dtCopyScenario(\'netopt_scenarios\',' + s.id + ',\'netopt\')"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/><path d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2" stroke="currentColor" stroke-width="2"/></svg> Copy</button>' +
-        '<button class="dt-card-btn-delete" onclick="event.stopPropagation(); dtDeleteScenario(\'netopt_scenarios\',' + s.id + ',\'netopt\')"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Delete</button>' +
+        '<button class="dt-card-btn-copy" onclick="event.stopPropagation(); dtCopyScenario(\'netopt_scenarios\',\'' + s.id + '\',\'netopt\')"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/><path d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2" stroke="currentColor" stroke-width="2"/></svg> Copy</button>' +
+        '<button class="dt-card-btn-delete" onclick="event.stopPropagation(); dtDeleteScenario(\'netopt_scenarios\',\'' + s.id + '\',\'netopt\')"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Delete</button>' +
         '</div></div>';
     }).join('');
   } catch (e) {
@@ -25547,7 +25550,7 @@ async function anStartSession() {
       referrer: document.referrer || null,
       is_active: true
     });
-  } catch(e) { console.log('Analytics session error:', e); }
+  } catch(e) { /* analytics session error */ }
 }
 
 async function anTrackPageView(section) {
@@ -25573,7 +25576,7 @@ async function anTrackPageView(section) {
       session_id: anSessionId,
       section: section
     });
-  } catch(e) { console.log('Analytics pageview error:', e); }
+  } catch(e) { /* analytics pageview error */ }
 
   // Update session page count
   try {
@@ -31562,7 +31565,7 @@ const dealApp = {
 
     async updateElementStatus(elementId, newStatus) {
         try {
-            await fetch(SUPABASE_URL + '/rest/v1/project_elements?id=eq.' + elementId, {
+            var resp = await fetch(SUPABASE_URL + '/rest/v1/project_elements?id=eq.' + elementId, {
                 method: 'PATCH',
                 headers: API_HEADERS,
                 body: JSON.stringify({
@@ -31571,6 +31574,7 @@ const dealApp = {
                     updated_at: new Date().toISOString()
                 })
             });
+            if (!resp.ok) console.error('Failed to update element status:', await resp.text());
 
             // Update local state
             var elem = this.dosElements.find(function(e){ return e.id == elementId; });
@@ -31921,20 +31925,20 @@ const fmApp = {
       return;
     }
 
-    this.costModel.diesel_price_per_gal = parseFloat(document.getElementById('fm-diesel-price').value) || 3.87;
-    this.costModel.maintenance_per_mile = parseFloat(document.getElementById('fm-maint-cost').value) || 0.198;
-    this.costModel.driver_hourly_rate = parseFloat(document.getElementById('fm-driver-rate').value) || 32;
+    this.costModel.diesel_price_per_gal = parseFloat(document.getElementById('fm-diesel-price')?.value) || 3.87;
+    this.costModel.maintenance_per_mile = parseFloat(document.getElementById('fm-maint-cost')?.value) || 0.198;
+    this.costModel.driver_hourly_rate = parseFloat(document.getElementById('fm-driver-rate')?.value) || 32;
     this.costModel.driver_benefits_pct = parseFloat(document.getElementById('fm-driver-benefits')?.value) || 30;
     this.costModel.payroll_tax_pct = parseFloat(document.getElementById('fm-payroll-tax')?.value) || 7.65;
     this.costModel.vehicle_lease_monthly = parseFloat(document.getElementById('fm-lease')?.value) || 2500;
-    this.costModel.annual_insurance_per_vehicle = parseFloat(document.getElementById('fm-insurance').value) || 10750;
-    this.costModel.admin_overhead_pct = parseFloat(document.getElementById('fm-admin').value) || 10;
+    this.costModel.annual_insurance_per_vehicle = parseFloat(document.getElementById('fm-insurance')?.value) || 10750;
+    this.costModel.admin_overhead_pct = parseFloat(document.getElementById('fm-admin')?.value) || 10;
     this.costModel.carrier_rate_dry_van = parseFloat(document.getElementById('fm-carrier-dry')?.value) || 2.85;
     this.costModel.carrier_rate_reefer = parseFloat(document.getElementById('fm-carrier-reefer')?.value) || 3.75;
 
-    this.config.utilization = parseFloat(document.getElementById('fm-utilization').value) || 85;
-    this.config.deadhead = parseFloat(document.getElementById('fm-deadhead').value) || 15;
-    this.config.serviceLevel = parseFloat(document.getElementById('fm-service-level').value) || 95;
+    this.config.utilization = parseFloat(document.getElementById('fm-utilization')?.value) || 85;
+    this.config.deadhead = parseFloat(document.getElementById('fm-deadhead')?.value) || 15;
+    this.config.serviceLevel = parseFloat(document.getElementById('fm-service-level')?.value) || 95;
 
     // ── Intelligent vehicle-to-lane assignment ──
     const vehicleFleet = {};
@@ -33485,7 +33489,7 @@ const mostApp = {
       const templatesToAdd = newTemplates.filter(t => !existingNames.has(t.activity_name));
 
       if (templatesToAdd.length === 0) {
-        console.log('All MOST templates already exist; skipping seed');
+        // All MOST templates already exist; skipping seed
         return;
       }
 
@@ -33522,7 +33526,7 @@ const mostApp = {
           if (eRes.error) {
             console.error('Elements insert error for template ' + templateId + ':', eRes.error);
           } else {
-            console.log('Seeded template: ' + tmpl.activity_name + ' with ' + elemRows.length + ' elements');
+            // Seeded template: tmpl.activity_name
           }
         } catch (err) {
           console.error('Seed error for ' + tmpl.activity_name + ':', err);
@@ -33537,7 +33541,7 @@ const mostApp = {
         ]);
         this.templates = (tRes.data || []);
         this.elements = (eRes.data || []);
-        console.log('Seeded ' + templatesToAdd.length + ' new MOST templates');
+        // MOST templates seeded
       }
     } catch (err) {
       console.error('MOST seed error:', err);
