@@ -9173,9 +9173,6 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
         </div>
       </div>
 
-      <div style="margin-top:20px;">
-        <button class="fm-btn-primary" onclick="fmCalculateFleet()">Calculate Fleet Requirements</button>
-      </div>
     </div>
 
     <!-- RESULTS TAB -->
@@ -31962,7 +31959,7 @@ const fmApp = {
       }
       if (!best) best = availableVehicles[availableVehicles.length - 1]; // fallback to largest
 
-      const tripsPerShipment = Math.ceil(wgt / best.capacity_wgt);
+      const tripsPerShipment = wgt > 0 ? Math.ceil(wgt / best.capacity_wgt) : 1;
       const tripsNeeded = tripsPerShipment * lane.weekly_shipments;
       const milesPerTrip = lane.distance_miles || 500;
       const roundTripMiles = milesPerTrip * 2 * (1 + this.config.deadhead / 100);
