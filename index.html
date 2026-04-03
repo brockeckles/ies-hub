@@ -7561,6 +7561,61 @@ window.addEventListener('load', function(){ if(sessionStorage.getItem('ies-auth'
               </div>
             </div>
 
+            <!-- Demand-to-Facility Allocation Table (Enhancement 3) -->
+            <div style="background:#fff;border-radius:12px;border:1px solid var(--ies-gray-200);box-shadow:var(--shadow-md);overflow:hidden;margin-bottom:20px;">
+              <div style="padding:12px 16px 8px;border-bottom:1px solid var(--ies-gray-100);display:flex;justify-content:space-between;align-items:center;">
+                <div style="font-size:11px;font-weight:700;color:var(--ies-navy);text-transform:uppercase;letter-spacing:.6px;">Demand-to-Facility Allocation</div>
+                <button onclick="netoptSortAllocationTable(this)" style="padding:5px 10px;border:1px solid var(--ies-gray-300);background:#fff;border-radius:5px;font-size:11px;font-weight:600;cursor:pointer;color:var(--ies-gray-600);">Sort by Cost</button>
+              </div>
+              <div style="overflow-x:auto;">
+                <table style="width:100%;border-collapse:collapse;font-size:11px;" id="netopt-allocation-table">
+                  <thead style="background:#f8f9fb;border-bottom:1px solid var(--ies-gray-200);">
+                    <tr>
+                      <th style="padding:10px 14px;text-align:left;font-weight:700;color:var(--ies-navy);cursor:pointer;" onclick="netoptSortAllocationTable(this, 'demand')">Demand Point</th>
+                      <th style="padding:10px 14px;text-align:left;font-weight:700;color:var(--ies-navy);cursor:pointer;" onclick="netoptSortAllocationTable(this, 'city')">City</th>
+                      <th style="padding:10px 14px;text-align:right;font-weight:700;color:var(--ies-navy);cursor:pointer;" onclick="netoptSortAllocationTable(this, 'volume')">Volume (K)</th>
+                      <th style="padding:10px 14px;text-align:left;font-weight:700;color:var(--ies-navy);cursor:pointer;" onclick="netoptSortAllocationTable(this, 'facility')">Assigned Facility</th>
+                      <th style="padding:10px 14px;text-align:right;font-weight:700;color:var(--ies-navy);cursor:pointer;" onclick="netoptSortAllocationTable(this, 'distance')">Distance (mi)</th>
+                      <th style="padding:10px 14px;text-align:right;font-weight:700;color:var(--ies-navy);cursor:pointer;" onclick="netoptSortAllocationTable(this, 'cost')">Est. Transport Cost</th>
+                      <th style="padding:10px 14px;text-align:right;font-weight:700;color:var(--ies-navy);cursor:pointer;" onclick="netoptSortAllocationTable(this, 'days')">Delivery Days</th>
+                    </tr>
+                  </thead>
+                  <tbody id="netopt-allocation-tbody">
+                    <!-- Populated by JS -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Sensitivity Analysis Panel (Enhancement 2) -->
+            <div style="background:#fff;border-radius:12px;border:1px solid var(--ies-gray-200);box-shadow:var(--shadow-md);overflow:hidden;margin-bottom:20px;">
+              <div style="padding:12px 16px 8px;border-bottom:1px solid var(--ies-gray-100);display:flex;justify-content:space-between;align-items:center;">
+                <div style="font-size:11px;font-weight:700;color:var(--ies-navy);text-transform:uppercase;letter-spacing:.6px;">Sensitivity Analysis</div>
+                <button onclick="netoptRunSensitivityAnalysis()" style="padding:8px 16px;background:linear-gradient(135deg,#0047ab,#003d94);color:#fff;border:none;border-radius:6px;font-weight:600;font-size:11px;cursor:pointer;transition:all .15s;" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 4px 12px rgba(0,71,171,.25)'" onmouseout="this.style.transform='';this.style.boxShadow=''">Run Sensitivity Analysis</button>
+              </div>
+              <div style="padding:16px;">
+                <div style="font-size:11px;color:var(--ies-gray-500);margin-bottom:12px;">Testing ±10% and ±20% variations on key cost drivers to show impact on total network cost.</div>
+                <div id="netopt-sensitivity-chart-container" style="display:none;height:320px;position:relative;">
+                  <canvas id="netopt-sensitivity-chart"></canvas>
+                </div>
+                <div id="netopt-sensitivity-loading" style="text-align:center;padding:20px;color:var(--ies-gray-500);display:none;">Calculating sensitivity analysis...</div>
+                <div id="netopt-sensitivity-empty" style="text-align:center;padding:20px;color:var(--ies-gray-500);">Click "Run Sensitivity Analysis" to generate tornado chart</div>
+              </div>
+            </div>
+
+            <!-- CSV Export Button (Enhancement 1) -->
+            <div style="background:#fff;border-radius:12px;border:1px solid var(--ies-gray-200);box-shadow:var(--shadow-md);overflow:hidden;padding:16px;">
+              <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                <button onclick="netoptExportResults()" style="padding:10px 20px;background:linear-gradient(135deg,#059669,#047857);color:#fff;border:none;border-radius:7px;font-weight:700;font-size:13px;cursor:pointer;transition:all .15s;box-shadow:0 2px 6px rgba(5,150,105,.25);" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 4px 12px rgba(5,150,105,.3)'" onmouseout="this.style.transform='';this.style.boxShadow='0 2px 6px rgba(5,150,105,.25)'">
+                  <span style="display:flex;align-items:center;gap:6px;">
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M8 16H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v8m-6 6h6m-6 0a2 2 0 1 0 4 0m-4 0a2 2 0 1 1 4 0m-10-4v4m0 0H4"></path></svg>
+                    Export Results CSV
+                  </span>
+                </button>
+                <div style="font-size:11px;color:var(--ies-gray-500);display:flex;align-items:center;padding:0 8px;">Includes scenarios, facilities, allocations, and cost breakdown</div>
+              </div>
+            </div>
+
           </div>
         </div>
 
@@ -23042,6 +23097,9 @@ function netoptRenderResults() {
       cBody.appendChild(row);
     });
   }
+
+  // Render new enhancement features
+  netoptRenderAllocationTable();
 }
 
 // Switch active scenario when user clicks a row in the comparison table
@@ -23591,6 +23649,346 @@ function netoptUpdateHeatLayer() {
       1.0:  '#8b0000'
     }
   }).addTo(netoptState.netoptMap);
+}
+
+// ── NETOPT ENHANCEMENT 1: CSV EXPORT ──
+function netoptExportResults() {
+  var r = netoptState.results;
+  if (!r) { alert('Run optimization first'); return; }
+
+  var csv = 'Network Optimization Results Export\n\n';
+  csv += 'SCENARIO COMPARISON\n';
+  csv += 'Num DCs,Total Cost ($M),Avg Days,1-Day %,2-Day %,3-Day %,4-Day %,5+ Day %,Verdict\n';
+
+  if (r.allScenarios) {
+    r.allScenarios.forEach(function(s, i) {
+      var dp = s.dayPct || { d1:0, d2:0, d3:0, d4:0, d5plus:0 };
+      var verdict = '';
+      if (s._isBestCost) verdict = 'BEST COST';
+      if (s._isBestService) verdict = (verdict ? verdict + '/' : '') + 'BEST SERVICE';
+      csv += s.openFacilities.length + ',' + s.totalCost.toFixed(2) + ',' + (s.avgDeliveryDays ? s.avgDeliveryDays.toFixed(1) : '-');
+      csv += ',' + dp.d1.toFixed(0) + ',' + dp.d2.toFixed(0) + ',' + dp.d3.toFixed(0) + ',' + dp.d4.toFixed(0) + ',' + dp.d5plus.toFixed(0);
+      csv += ',' + (verdict || '-') + '\n';
+    });
+  }
+
+  csv += '\nFACILITY DETAILS\n';
+  csv += 'Name,City,Status,Capacity (K units),Annual Fixed Cost ($M),Variable Cost ($/unit),Assigned Volume (K)\n';
+  r.openFacilities.forEach(function(f) {
+    var assignedVol = r.assignedVolume && r.assignedVolume[f.id] ? r.assignedVolume[f.id] : 0;
+    csv += f.name + ',' + f.city + ',Open,' + (f.capacity || '-') + ',' + (f.fixedCost || 0).toFixed(2);
+    csv += ',' + (f.varCost || 0).toFixed(3) + ',' + assignedVol.toFixed(0) + '\n';
+  });
+
+  csv += '\nDEMAND POINT ALLOCATIONS\n';
+  csv += 'Demand Point,City,Volume (K),Assigned Facility,Distance (mi),Transport Cost ($),Delivery Days\n';
+  netoptState.demands.forEach(function(d) {
+    if (r.openFacilities.length > 0) {
+      var closest = r.openFacilities[0];
+      var minDist = roadDist(d.lat, d.lng, closest.lat, closest.lng);
+      for (var i = 1; i < r.openFacilities.length; i++) {
+        var dist = roadDist(d.lat, d.lng, r.openFacilities[i].lat, r.openFacilities[i].lng);
+        if (dist < minDist) {
+          minDist = dist;
+          closest = r.openFacilities[i];
+        }
+      }
+
+      var vol = (d.volume || 0) * 1000;
+      var mix = netoptState.transport.modeMix || { tl: 1, ltl: 0, parcel: 0 };
+      var tlCost = vol * mix.tl * minDist * (netoptState.transport.tlUnitMile || netoptState.transport.outboundPerUnitMile || 0.0025);
+      var ltlCost = vol * mix.ltl * minDist * (netoptState.transport.ltlUnitMile || netoptState.transport.outboundPerUnitMile || 0.0040);
+      var parcelCost = vol * mix.parcel * (netoptState.transport.parcelUnitCost || 8.50);
+      var transportCost = tlCost + ltlCost + parcelCost;
+
+      var truckSpeed = netoptState.transport.truckSpeedMiPerDay || 500;
+      var groundDays = minDist <= 150 ? 1 : Math.ceil(minDist / truckSpeed) + 1;
+      var parcelDays = minDist <= 50 ? 1 : minDist <= 150 ? 2 : minDist <= 400 ? 3 : minDist <= 800 ? 4 : 5;
+      var groundPct = (mix.tl || 0) + (mix.ltl || 0);
+      var parcelPct = mix.parcel || 0;
+      var transitDays = groundPct > 0 || parcelPct > 0
+        ? (groundDays * groundPct + parcelDays * parcelPct) / (groundPct + parcelPct)
+        : groundDays;
+      transitDays = Math.max(1, Math.round(transitDays * 10) / 10);
+
+      csv += d.name + ',' + d.city + ',' + (d.volume || 0).toFixed(0) + ',' + closest.name + ',' + minDist.toFixed(0);
+      csv += ',' + transportCost.toFixed(0) + ',' + transitDays.toFixed(1) + '\n';
+    }
+  });
+
+  csv += '\nCOST BREAKDOWN\n';
+  csv += 'Component,Amount ($M)\n';
+  csv += 'Facility Fixed Costs,' + r.fixedCostM.toFixed(2) + '\n';
+  csv += 'Transportation Costs,' + r.transportCostM.toFixed(2) + '\n';
+  csv += 'Variable Handling,' + r.varCostM.toFixed(2) + '\n';
+  csv += 'Inventory Carrying,' + r.inventoryCostM.toFixed(2) + '\n';
+  csv += 'TOTAL ANNUAL COST,' + r.totalCost.toFixed(2) + '\n';
+
+  var blob = new Blob([csv], { type: 'text/csv' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'netopt_results_' + new Date().toISOString().slice(0, 10) + '.csv';
+  a.click();
+}
+
+// ── NETOPT ENHANCEMENT 2: SENSITIVITY ANALYSIS ──
+function netoptRunSensitivityAnalysis() {
+  var r = netoptState.results;
+  if (!r) { alert('Run optimization first'); return; }
+
+  var loadingEl = document.getElementById('netopt-sensitivity-loading');
+  var emptyEl = document.getElementById('netopt-sensitivity-empty');
+  var containerEl = document.getElementById('netopt-sensitivity-chart-container');
+
+  if (loadingEl) loadingEl.style.display = 'block';
+  if (emptyEl) emptyEl.style.display = 'none';
+  if (containerEl) containerEl.style.display = 'none';
+
+  // Run sensitivity analysis asynchronously
+  setTimeout(function() {
+    var baseCost = r.totalCost;
+    var results = [];
+
+    // Test parameter variations: -20%, -10%, base, +10%, +20%
+    var variations = [-0.20, -0.10, 0, 0.10, 0.20];
+
+    // 1. Demand volume sensitivity
+    var demandImpacts = [];
+    variations.forEach(function(pct) {
+      var testDemands = netoptState.demands.map(function(d) {
+        return { ...d, volume: d.volume * (1 + pct) };
+      });
+      var testResult = netoptEvaluateConfig(r.openFacilities, testDemands, netoptState.transport, netoptState.constraints);
+      demandImpacts.push(testResult.totalCost);
+    });
+    results.push({ name: 'Demand Volume', impacts: demandImpacts, base: baseCost });
+
+    // 2. Transportation cost rate sensitivity
+    var transportImpacts = [];
+    variations.forEach(function(pct) {
+      var testTransport = { ...netoptState.transport };
+      testTransport.outboundPerUnitMile = testTransport.outboundPerUnitMile * (1 + pct);
+      testTransport.inboundPerUnitMile = testTransport.inboundPerUnitMile * (1 + pct);
+      var testResult = netoptEvaluateConfig(r.openFacilities, netoptState.demands, testTransport, netoptState.constraints);
+      transportImpacts.push(testResult.totalCost);
+    });
+    results.push({ name: 'Transport Rate', impacts: transportImpacts, base: baseCost });
+
+    // 3. Facility fixed costs sensitivity
+    var facilityImpacts = [];
+    variations.forEach(function(pct) {
+      var testFacilities = r.openFacilities.map(function(f) {
+        return { ...f, fixedCost: f.fixedCost * (1 + pct) };
+      });
+      var testResult = netoptEvaluateConfig(testFacilities, netoptState.demands, netoptState.transport, netoptState.constraints);
+      facilityImpacts.push(testResult.totalCost);
+    });
+    results.push({ name: 'Facility Fixed Costs', impacts: facilityImpacts, base: baseCost });
+
+    // 4. Variable handling costs sensitivity
+    var varImpacts = [];
+    variations.forEach(function(pct) {
+      var testFacilities = r.openFacilities.map(function(f) {
+        return { ...f, varCost: f.varCost * (1 + pct) };
+      });
+      var testResult = netoptEvaluateConfig(testFacilities, netoptState.demands, netoptState.transport, netoptState.constraints);
+      varImpacts.push(testResult.totalCost);
+    });
+    results.push({ name: 'Variable Handling', impacts: varImpacts, base: baseCost });
+
+    // Render tornado chart
+    netoptRenderSensitivityChart(results);
+
+    if (loadingEl) loadingEl.style.display = 'none';
+  }, 100);
+}
+
+function netoptRenderSensitivityChart(sensitivityResults) {
+  if (!window.Chart) {
+    alert('Chart.js not available. Please ensure Chart.js is loaded.');
+    return;
+  }
+
+  var chartEl = document.getElementById('netopt-sensitivity-chart');
+  var containerEl = document.getElementById('netopt-sensitivity-chart-container');
+  var emptyEl = document.getElementById('netopt-sensitivity-empty');
+  if (emptyEl) emptyEl.style.display = 'none';
+
+  if (!chartEl || !containerEl) return;
+  containerEl.style.display = 'block';
+
+  // Calculate ranges for each parameter
+  var labels = [];
+  var lowValues = [];
+  var highValues = [];
+  var colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
+  var datasetColors = [];
+
+  sensitivityResults.forEach(function(param, idx) {
+    labels.push(param.name);
+    var baseIdx = 2; // Base is at index 2 (0% variation)
+    var minCost = Math.min.apply(null, param.impacts);
+    var maxCost = Math.max.apply(null, param.impacts);
+    var baseCost = param.impacts[baseIdx];
+    lowValues.push(baseCost - minCost);
+    highValues.push(maxCost - baseCost);
+    datasetColors.push(colors[idx % colors.length]);
+  });
+
+  // Destroy old chart if exists
+  if (chartEl.chart) {
+    chartEl.chart.destroy();
+  }
+
+  // Create horizontal bar chart (tornado style)
+  chartEl.chart = new Chart(chartEl, {
+    type: 'barh',
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: 'Cost Decrease',
+          data: lowValues,
+          backgroundColor: datasetColors.map(c => c + '80'),
+          borderColor: datasetColors,
+          borderWidth: 1
+        },
+        {
+          label: 'Cost Increase',
+          data: highValues,
+          backgroundColor: datasetColors.map(c => c + 'cc'),
+          borderColor: datasetColors,
+          borderWidth: 1
+        }
+      ]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: {
+          stacked: true,
+          title: { display: true, text: 'Impact on Total Cost ($M)', font: { size: 12, weight: 'bold' } },
+          ticks: { callback: function(v) { return '$' + (v/1000000).toFixed(1) + 'M'; } }
+        },
+        y: { stacked: true }
+      },
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 12 } },
+        title: { display: false }
+      }
+    }
+  });
+}
+
+// ── NETOPT ENHANCEMENT 3: DEMAND-TO-FACILITY ALLOCATION TABLE ──
+function netoptRenderAllocationTable() {
+  var r = netoptState.results;
+  if (!r || !r.openFacilities) {
+    var tbody = document.getElementById('netopt-allocation-tbody');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="padding:20px;text-align:center;color:var(--ies-gray-600);">No allocation data available</td></tr>';
+    return;
+  }
+
+  var tbody = document.getElementById('netopt-allocation-tbody');
+  tbody.innerHTML = '';
+
+  var rows = [];
+  netoptState.demands.forEach(function(d) {
+    if (r.openFacilities.length === 0) return;
+
+    var closest = r.openFacilities[0];
+    var minDist = roadDist(d.lat, d.lng, closest.lat, closest.lng);
+    for (var i = 1; i < r.openFacilities.length; i++) {
+      var dist = roadDist(d.lat, d.lng, r.openFacilities[i].lat, r.openFacilities[i].lng);
+      if (dist < minDist) {
+        minDist = dist;
+        closest = r.openFacilities[i];
+      }
+    }
+
+    var vol = (d.volume || 0) * 1000;
+    var mix = netoptState.transport.modeMix || { tl: 1, ltl: 0, parcel: 0 };
+    var tlCost = vol * mix.tl * minDist * (netoptState.transport.tlUnitMile || netoptState.transport.outboundPerUnitMile || 0.0025);
+    var ltlCost = vol * mix.ltl * minDist * (netoptState.transport.ltlUnitMile || netoptState.transport.outboundPerUnitMile || 0.0040);
+    var parcelCost = vol * mix.parcel * (netoptState.transport.parcelUnitCost || 8.50);
+    var transportCost = tlCost + ltlCost + parcelCost;
+
+    var truckSpeed = netoptState.transport.truckSpeedMiPerDay || 500;
+    var groundDays = minDist <= 150 ? 1 : Math.ceil(minDist / truckSpeed) + 1;
+    var parcelDays = minDist <= 50 ? 1 : minDist <= 150 ? 2 : minDist <= 400 ? 3 : minDist <= 800 ? 4 : 5;
+    var groundPct = (mix.tl || 0) + (mix.ltl || 0);
+    var parcelPct = mix.parcel || 0;
+    var transitDays = groundPct > 0 || parcelPct > 0
+      ? (groundDays * groundPct + parcelDays * parcelPct) / (groundPct + parcelPct)
+      : groundDays;
+    transitDays = Math.max(1, Math.round(transitDays * 10) / 10);
+
+    rows.push({
+      demand: d.name,
+      city: d.city,
+      volume: d.volume || 0,
+      facility: closest.name,
+      distance: minDist,
+      cost: transportCost,
+      days: transitDays
+    });
+  });
+
+  rows.forEach(function(row) {
+    var tr = document.createElement('tr');
+    tr.style.borderBottom = '1px solid var(--ies-gray-200)';
+    tr.innerHTML = '<td style="padding:10px 14px;">' + row.demand + '</td>' +
+      '<td style="padding:10px 14px;">' + row.city + '</td>' +
+      '<td style="padding:10px 14px;text-align:right;">' + row.volume.toFixed(0) + '</td>' +
+      '<td style="padding:10px 14px;">' + row.facility + '</td>' +
+      '<td style="padding:10px 14px;text-align:right;">' + row.distance.toFixed(0) + '</td>' +
+      '<td style="padding:10px 14px;text-align:right;">$' + (row.cost / 1000).toFixed(0) + 'K</td>' +
+      '<td style="padding:10px 14px;text-align:right;">' + row.days.toFixed(1) + '</td>';
+    tbody.appendChild(tr);
+  });
+
+  // Store rows for sorting
+  tbody.dataset.rows = JSON.stringify(rows);
+}
+
+function netoptSortAllocationTable(btn, field) {
+  var tbody = document.getElementById('netopt-allocation-tbody');
+  if (!tbody.dataset.rows) return;
+
+  var rows = JSON.parse(tbody.dataset.rows);
+  var isAscending = btn.dataset.sort !== 'asc-' + field;
+
+  if (field) {
+    rows.sort(function(a, b) {
+      var aVal = a[field];
+      var bVal = b[field];
+      if (typeof aVal === 'string') aVal = aVal.toLowerCase();
+      if (typeof bVal === 'string') bVal = bVal.toLowerCase();
+      return isAscending ? (aVal > bVal ? 1 : -1) : (aVal < bVal ? 1 : -1);
+    });
+  }
+
+  // Update button state
+  document.querySelectorAll('#netopt-allocation-table th').forEach(function(th) { th.style.fontWeight = '700'; });
+  btn.style.fontWeight = '800';
+  btn.dataset.sort = (isAscending ? 'asc-' : 'desc-') + (field || '');
+
+  tbody.innerHTML = '';
+  rows.forEach(function(row) {
+    var tr = document.createElement('tr');
+    tr.style.borderBottom = '1px solid var(--ies-gray-200)';
+    tr.innerHTML = '<td style="padding:10px 14px;">' + row.demand + '</td>' +
+      '<td style="padding:10px 14px;">' + row.city + '</td>' +
+      '<td style="padding:10px 14px;text-align:right;">' + row.volume.toFixed(0) + '</td>' +
+      '<td style="padding:10px 14px;">' + row.facility + '</td>' +
+      '<td style="padding:10px 14px;text-align:right;">' + row.distance.toFixed(0) + '</td>' +
+      '<td style="padding:10px 14px;text-align:right;">$' + (row.cost / 1000).toFixed(0) + 'K</td>' +
+      '<td style="padding:10px 14px;text-align:right;">' + row.days.toFixed(1) + '</td>';
+    tbody.appendChild(tr);
+  });
 }
 
 // ── CHANGE MANAGEMENT MODULE ──
@@ -30848,7 +31246,7 @@ const fmApp = {
   costModel: {
     fuel_cost_per_mile: 0.48,        // ATRI 2024: $0.476/mi
     maintenance_per_mile: 0.198,     // ATRI 2024: $0.198/mi
-    driver_hourly_rate: 28,          // Base hourly (regional) — ATRI 2024
+    driver_hourly_rate: 32,          // Base hourly (regional) — ATRI 2024 $0.79/mi ÷ 2.5 mi/hr avg + benefits load adjustment
     driver_benefits_pct: 30,         // Benefits load (health, PTO, 401k)
     payroll_tax_pct: 7.65,           // FICA (SS 6.2% + Medicare 1.45%)
     vehicle_lease_monthly: 2500,     // Average monthly lease/payment per vehicle
@@ -31092,7 +31490,7 @@ const fmApp = {
 
     this.costModel.fuel_cost_per_mile = parseFloat(document.getElementById('fm-fuel-cost').value) || 0.48;
     this.costModel.maintenance_per_mile = parseFloat(document.getElementById('fm-maint-cost').value) || 0.198;
-    this.costModel.driver_hourly_rate = parseFloat(document.getElementById('fm-driver-rate').value) || 28;
+    this.costModel.driver_hourly_rate = parseFloat(document.getElementById('fm-driver-rate').value) || 32;
     this.costModel.driver_benefits_pct = parseFloat(document.getElementById('fm-driver-benefits')?.value) || 30;
     this.costModel.payroll_tax_pct = parseFloat(document.getElementById('fm-payroll-tax')?.value) || 7.65;
     this.costModel.vehicle_lease_monthly = parseFloat(document.getElementById('fm-lease')?.value) || 2500;
@@ -32043,8 +32441,349 @@ const mostApp = {
       ]);
       this.templates = (tRes.data || []);
       this.elements = (eRes.data || []);
+
+      // Seed new templates if they don\'t already exist (Session 2026-04-03)
+      await this.seedNewTemplates();
     } catch(e) { console.error('MOST data load error:', e); }
   },
+
+  async seedNewTemplates() {
+    try {
+      // New templates to add (12 total expanding from 18 to 30)
+      const newTemplates = [
+        // VAS / Value-Add Services (3 templates)
+        {
+          activity_name: 'Kitting / Assembly',
+          process_area: 'VAS',
+          uom: 'unit',
+          equipment_type: 'Pack Station, RF Gun',
+          wms_transaction: 'VAS Kitting',
+          pick_method: null,
+          labor_category: 'manual',
+          description: 'Scan work order, gather components, assemble kit per spec, apply label/barcode, QC visual check, place in container',
+          total_tmu_base: 800,
+          units_per_hour_base: 45,
+          is_active: true,
+          elements: [
+            { element_name: 'Scan work order', most_sequence: 'G4', sequence_type: 'general_move', tmu_value: 75, is_variable: false },
+            { element_name: 'Gather components (3-5 items)', most_sequence: 'G3/B3', sequence_type: 'general_move', tmu_value: 280, is_variable: true, variable_driver: 'component_count', variable_formula: '80 + (count * 50)' },
+            { element_name: 'Assemble kit per spec', most_sequence: 'A3', sequence_type: 'controlled_move', tmu_value: 180, is_variable: false },
+            { element_name: 'Apply label/barcode', most_sequence: 'G1', sequence_type: 'general_move', tmu_value: 100, is_variable: false },
+            { element_name: 'QC visual check', most_sequence: 'A2', sequence_type: 'controlled_move', tmu_value: 120, is_variable: false },
+            { element_name: 'Place in container', most_sequence: 'G1', sequence_type: 'general_move', tmu_value: 65, is_variable: false }
+          ]
+        },
+        {
+          activity_name: 'Relabeling / Rework',
+          process_area: 'VAS',
+          uom: 'unit',
+          equipment_type: 'Label Printer, RF Gun',
+          wms_transaction: 'VAS Relabel',
+          pick_method: null,
+          labor_category: 'manual',
+          description: 'Scan item, remove old label, clean surface, apply new label, scan verify, place on conveyor',
+          total_tmu_base: 600,
+          units_per_hour_base: 60,
+          is_active: true,
+          elements: [
+            { element_name: 'Scan item', most_sequence: 'G4', sequence_type: 'general_move', tmu_value: 70, is_variable: false },
+            { element_name: 'Remove old label', most_sequence: 'A2', sequence_type: 'controlled_move', tmu_value: 140, is_variable: false },
+            { element_name: 'Clean surface', most_sequence: 'A3', sequence_type: 'controlled_move', tmu_value: 100, is_variable: false },
+            { element_name: 'Apply new label', most_sequence: 'G1', sequence_type: 'general_move', tmu_value: 120, is_variable: false },
+            { element_name: 'Scan verify', most_sequence: 'G4', sequence_type: 'general_move', tmu_value: 75, is_variable: false },
+            { element_name: 'Place on conveyor', most_sequence: 'G1', sequence_type: 'general_move', tmu_value: 95, is_variable: false }
+          ]
+        },
+        {
+          activity_name: 'Gift Wrap / Special Packaging',
+          process_area: 'VAS',
+          uom: 'unit',
+          equipment_type: 'Pack Station, Gift Supplies',
+          wms_transaction: 'VAS Gift Wrap',
+          pick_method: null,
+          labor_category: 'manual',
+          description: 'Scan order, select wrap material, wrap item, add ribbon/bow, insert card, place in gift box, apply shipping label',
+          total_tmu_base: 1440,
+          units_per_hour_base: 25,
+          is_active: true,
+          elements: [
+            { element_name: 'Scan order', most_sequence: 'G4', sequence_type: 'general_move', tmu_value: 75, is_variable: false },
+            { element_name: 'Select wrap material', most_sequence: 'G3', sequence_type: 'general_move', tmu_value: 120, is_variable: false },
+            { element_name: 'Wrap item', most_sequence: 'A3', sequence_type: 'controlled_move', tmu_value: 480, is_variable: false },
+            { element_name: 'Add ribbon/bow', most_sequence: 'A3', sequence_type: 'controlled_move', tmu_value: 220, is_variable: false },
+            { element_name: 'Insert card', most_sequence: 'G1', sequence_type: 'general_move', tmu_value: 80, is_variable: false },
+            { element_name: 'Place in gift box', most_sequence: 'G1', sequence_type: 'general_move', tmu_value: 155, is_variable: false },
+            { element_name: 'Apply shipping label', most_sequence: 'G1', sequence_type: 'general_move', tmu_value: 130, is_variable: false }
+          ]
+        },
+        // Returns / Reverse Logistics (2 templates)
+        {
+          activity_name: 'Returns Receiving & Inspection',
+          process_area: 'Returns',
+          uom: 'each',
+          equipment_type: 'RF Gun, Camera/Phone',
+          wms_transaction: 'RMA Receive',
+          pick_method: null,
+          labor_category: 'manual',
+          description: 'Scan RMA, open package, inspect item condition (A/B/C grade), photograph damage if applicable, update disposition in WMS, route to restock/refurb/scrap',
+          total_tmu_base: 1200,
+          units_per_hour_base: 30,
+          is_active: true,
+          elements: [
+            { element_name: 'Scan RMA', most_sequence: 'G4', sequence_type: 'general_move', tmu_value: 75, is_variable: false },
+            { element_name: 'Open package', most_sequence: 'A3', sequence_type: 'controlled_move', tmu_value: 140, is_variable: false },
+            { element_name: 'Inspect item condition (A/B/C grade)', most_sequence: 'A4', sequence_type: 'controlled_move', tmu_value: 320, is_variable: false },
+            { element_name: 'Photograph damage if applicable', most_sequence: 'A3', sequence_type: 'controlled_move', tmu_value: 280, is_variable: true, variable_driver: 'has_damage', variable_formula: '0 if no_damage else 280' },
+            { element_name: 'Update disposition in WMS', most_sequence: 'G4', sequence_type: 'general_move', tmu_value: 180, is_variable: false },
+            { element_name: 'Route to restock/refurb/scrap', most_sequence: 'G3', sequence_type: 'general_move', tmu_value: 205, is_variable: false }
+          ]
+        },
+        {
+          activity_name: 'Returns Restock to Inventory',
+          process_area: 'Returns',
+          uom: 'each',
+          equipment_type: 'Pallet Jack, RF Gun',
+          wms_transaction: 'Returns Putaway',
+          pick_method: null,
+          labor_category: 'hybrid',
+          description: 'Scan approved return, verify condition grade A, relabel if needed, RF-directed putaway location, travel to location, place in slot, confirm putaway',
+          total_tmu_base: 1800,
+          units_per_hour_base: 20,
+          is_active: true,
+          elements: [
+            { element_name: 'Scan approved return', most_sequence: 'G4', sequence_type: 'general_move', tmu_value: 75, is_variable: false },
+            { element_name: 'Verify condition grade A', most_sequence: 'A2', sequence_type: 'controlled_move', tmu_value: 100, is_variable: false },
+            { element_name: 'Relabel if needed', most_sequence: 'G1', sequence_type: 'general_move', tmu_value: 140, is_variable: true, variable_driver: 'needs_label', variable_formula: '0 if already_labeled else 140' },
+            { element_name: 'RF-directed putaway location', most_sequence: 'G4', sequence_type: 'general_move', tmu_value: 85, is_variable: false },
+            { element_name: 'Travel to location', most_sequence: 'B1', sequence_type: 'body_motion', tmu_value: 600, is_variable: true, variable_driver: 'distance_feet', variable_formula: '300 + (distance/100)*150' },
+            { element_name: 'Place in slot', most_sequence: 'A3', sequence_type: 'controlled_move', tmu_value: 320, is_variable: false },
+            { element_name: 'Confirm putaway', most_sequence: 'G4', sequence_type: 'general_move', tmu_value: 80, is_variable: false }
+          ]
+        },
+        // Quality Control / Inventory (2 templates)
+        {
+          activity_name: 'Cycle Count - RF Directed',
+          process_area: 'Picking',
+          uom: 'location',
+          equipment_type: 'RF Gun, Pallet Jack',
+          wms_transaction: 'Cycle Count',
+          pick_method: null,
+          labor_category: 'hybrid',
+          description: 'Receive RF task, travel to location, scan location barcode, count items, enter count in RF, confirm/recount if variance, move to next location',
+          total_tmu_base: 900,
+          units_per_hour_base: 40,
+          is_active: true,
+          elements: [
+            { element_name: 'Receive RF task', most_sequence: 'G4', sequence_type: 'general_move', tmu_value: 50, is_variable: false },
+            { element_name: 'Travel to location', most_sequence: 'B1', sequence_type: 'body_motion', tmu_value: 300, is_variable: true, variable_driver: 'distance_feet', variable_formula: '200 + (distance/100)*100' },
+            { element_name: 'Scan location barcode', most_sequence: 'G4', sequence_type: 'general_move', tmu_value: 75, is_variable: false },
+            { element_name: 'Count items', most_sequence: 'A4', sequence_type: 'controlled_move', tmu_value: 200, is_variable: true, variable_driver: 'item_count', variable_formula: '80 + (count * 30)' },
+            { element_name: 'Enter count in RF', most_sequence: 'G4', sequence_type: 'general_move', tmu_value: 85, is_variable: false },
+            { element_name: 'Confirm/recount if variance', most_sequence: 'A3', sequence_type: 'controlled_move', tmu_value: 140, is_variable: true, variable_driver: 'has_variance', variable_formula: '0 if no_variance else 140' },
+            { element_name: 'Move to next location', most_sequence: 'B1', sequence_type: 'body_motion', tmu_value: 50, is_variable: false }
+          ]
+        },
+        {
+          activity_name: 'Quality Audit - Inbound',
+          process_area: 'Receiving',
+          uom: 'pallet',
+          equipment_type: 'RF Gun',
+          wms_transaction: 'QA Inbound',
+          pick_method: null,
+          labor_category: 'manual',
+          description: 'Select pallet from staging, scan PO/ASN, open cases (sample 10%), check quantity vs PO, check condition/damage, check lot/expiry dates, record results, apply QC pass/fail label',
+          total_tmu_base: 1050,
+          units_per_hour_base: 35,
+          is_active: true,
+          elements: [
+            { element_name: 'Select pallet from staging', most_sequence: 'G3', sequence_type: 'general_move', tmu_value: 100, is_variable: false },
+            { element_name: 'Scan PO/ASN', most_sequence: 'G4', sequence_type: 'general_move', tmu_value: 75, is_variable: false },
+            { element_name: 'Open cases (sample 10%)', most_sequence: 'A3', sequence_type: 'controlled_move', tmu_value: 180, is_variable: true, variable_driver: 'pallet_cases', variable_formula: '40 + (cases * 0.1 * 18)' },
+            { element_name: 'Check quantity vs PO', most_sequence: 'A4', sequence_type: 'controlled_move', tmu_value: 200, is_variable: false },
+            { element_name: 'Check condition/damage', most_sequence: 'A4', sequence_type: 'controlled_move', tmu_value: 180, is_variable: false },
+            { element_name: 'Check lot/expiry dates', most_sequence: 'A3', sequence_type: 'controlled_move', tmu_value: 140, is_variable: true, variable_driver: 'is_perishable', variable_formula: '60 if not_perishable else 140' },
+            { element_name: 'Record results', most_sequence: 'G4', sequence_type: 'general_move', tmu_value: 110, is_variable: false },
+            { element_name: 'Apply QC pass/fail label', most_sequence: 'G1', sequence_type: 'general_move', tmu_value: 65, is_variable: false }
+          ]
+        },
+        // Picking Variants (3 templates)
+        {
+          activity_name: 'Zone Pick - Conveyor Induction',
+          process_area: 'Picking',
+          uom: 'each',
+          equipment_type: 'RF Gun, Conveyor',
+          wms_transaction: 'Pick to Conveyor',
+          pick_method: 'Zone Pick',
+          labor_category: 'hybrid',
+          description: 'Receive pick task, travel to pick face, scan location, pick item, scan item, place on conveyor/tote, confirm pick',
+          total_tmu_base: 206,
+          units_per_hour_base: 175,
+          is_active: true,
+          elements: [
+            { element_name: 'Receive pick task', most_sequence: 'G4', sequence_type: 'general_move', tmu_value: 40, is_variable: false },
+            { element_name: 'Travel to pick face', most_sequence: 'B1', sequence_type: 'body_motion', tmu_value: 35, is_variable: true, variable_driver: 'distance_feet', variable_formula: '20 + (distance/100)*20' },
+            { element_name: 'Scan location', most_sequence: 'G4', sequence_type: 'general_move', tmu_value: 70, is_variable: false },
+            { element_name: 'Pick item', most_sequence: 'G1', sequence_type: 'general_move', tmu_value: 100, is_variable: false },
+            { element_name: 'Scan item', most_sequence: 'G4', sequence_type: 'general_move', tmu_value: 70, is_variable: false },
+            { element_name: 'Place on conveyor/tote', most_sequence: 'G1', sequence_type: 'general_move', tmu_value: 85, is_variable: false },
+            { element_name: 'Confirm pick', most_sequence: 'G4', sequence_type: 'general_move', tmu_value: 40, is_variable: false }
+          ]
+        },
+        {
+          activity_name: 'Cluster Pick - Multi-Order Cart',
+          process_area: 'Picking',
+          uom: 'each',
+          equipment_type: 'RF Gun, Multi-Order Cart',
+          wms_transaction: 'Cluster Pick',
+          pick_method: 'Cluster',
+          labor_category: 'hybrid',
+          description: 'Receive batch assignment (4-8 orders), travel to first pick zone, scan location, pick item, scan item, sort to correct cart position, confirm pick',
+          total_tmu_base: 240,
+          units_per_hour_base: 150,
+          is_active: true,
+          elements: [
+            { element_name: 'Receive batch assignment (4-8 orders)', most_sequence: 'G4', sequence_type: 'general_move', tmu_value: 60, is_variable: true, variable_driver: 'order_count', variable_formula: '30 + (count * 8)' },
+            { element_name: 'Travel to first pick zone', most_sequence: 'B1', sequence_type: 'body_motion', tmu_value: 40, is_variable: false },
+            { element_name: 'Scan location', most_sequence: 'G4', sequence_type: 'general_move', tmu_value: 70, is_variable: false },
+            { element_name: 'Pick item', most_sequence: 'G1', sequence_type: 'general_move', tmu_value: 100, is_variable: false },
+            { element_name: 'Scan item', most_sequence: 'G4', sequence_type: 'general_move', tmu_value: 70, is_variable: false },
+            { element_name: 'Sort to correct cart position', most_sequence: 'A3', sequence_type: 'controlled_move', tmu_value: 120, is_variable: false },
+            { element_name: 'Confirm pick', most_sequence: 'G4', sequence_type: 'general_move', tmu_value: 40, is_variable: false }
+          ]
+        },
+        {
+          activity_name: 'Put-to-Light Sorting',
+          process_area: 'Picking',
+          uom: 'each',
+          equipment_type: 'Put-to-Light Wall, RF Gun',
+          wms_transaction: 'Put-to-Light',
+          pick_method: 'Put-to-Light',
+          labor_category: 'hybrid',
+          description: 'Scan tote/container, system lights target put location, pick item from tote, place in lit compartment, press confirm button, system updates next',
+          total_tmu_base: 165,
+          units_per_hour_base: 220,
+          is_active: true,
+          elements: [
+            { element_name: 'Scan tote/container', most_sequence: 'G4', sequence_type: 'general_move', tmu_value: 75, is_variable: false },
+            { element_name: 'System lights target put location', most_sequence: 'G1', sequence_type: 'general_move', tmu_value: 10, is_variable: false },
+            { element_name: 'Pick item from tote', most_sequence: 'G1', sequence_type: 'general_move', tmu_value: 85, is_variable: false },
+            { element_name: 'Place in lit compartment', most_sequence: 'G1', sequence_type: 'general_move', tmu_value: 80, is_variable: false },
+            { element_name: 'Press confirm button', most_sequence: 'G1', sequence_type: 'general_move', tmu_value: 45, is_variable: false }
+          ]
+        },
+        // Blue Yonder WMS-Specific (2 templates)
+        {
+          activity_name: 'BY LPN Consolidation',
+          process_area: 'Putaway',
+          uom: 'lpn',
+          equipment_type: 'Forklift, RF Gun',
+          wms_transaction: 'LPN Consolidate',
+          pick_method: null,
+          labor_category: 'hybrid',
+          description: 'Receive consolidation task, travel to source LPN, scan source LPN, pick partial contents, travel to target LPN, scan target LPN, place items, confirm consolidation',
+          total_tmu_base: 1440,
+          units_per_hour_base: 25,
+          is_active: true,
+          elements: [
+            { element_name: 'Receive consolidation task', most_sequence: 'G4', sequence_type: 'general_move', tmu_value: 50, is_variable: false },
+            { element_name: 'Travel to source LPN', most_sequence: 'B2', sequence_type: 'body_motion', tmu_value: 250, is_variable: true, variable_driver: 'distance_feet', variable_formula: '150 + (distance/100)*100' },
+            { element_name: 'Scan source LPN', most_sequence: 'G4', sequence_type: 'general_move', tmu_value: 75, is_variable: false },
+            { element_name: 'Pick partial contents', most_sequence: 'G3', sequence_type: 'general_move', tmu_value: 280, is_variable: true, variable_driver: 'item_count', variable_formula: '100 + (count * 45)' },
+            { element_name: 'Travel to target LPN', most_sequence: 'B2', sequence_type: 'body_motion', tmu_value: 250, is_variable: true, variable_driver: 'distance_feet', variable_formula: '150 + (distance/100)*100' },
+            { element_name: 'Scan target LPN', most_sequence: 'G4', sequence_type: 'general_move', tmu_value: 75, is_variable: false },
+            { element_name: 'Place items', most_sequence: 'G3', sequence_type: 'general_move', tmu_value: 200, is_variable: true, variable_driver: 'item_count', variable_formula: '80 + (count * 40)' },
+            { element_name: 'Confirm consolidation', most_sequence: 'G4', sequence_type: 'general_move', tmu_value: 60, is_variable: false }
+          ]
+        },
+        {
+          activity_name: 'BY Directed Replenishment - Min/Max',
+          process_area: 'Replenishment',
+          uom: 'pallet',
+          equipment_type: 'Forklift, RF Gun',
+          wms_transaction: 'Directed Replen',
+          pick_method: null,
+          labor_category: 'mhe',
+          description: 'Receive replen task from BY (auto-triggered at min), travel to reserve, scan reserve LPN, extract pallet, travel to forward pick, scan location, place pallet, confirm task',
+          total_tmu_base: 2400,
+          units_per_hour_base: 15,
+          is_active: true,
+          elements: [
+            { element_name: 'Receive replen task from BY', most_sequence: 'G4', sequence_type: 'general_move', tmu_value: 50, is_variable: false },
+            { element_name: 'Travel to reserve', most_sequence: 'B3', sequence_type: 'body_motion', tmu_value: 450, is_variable: true, variable_driver: 'distance_feet', variable_formula: '300 + (distance/100)*150' },
+            { element_name: 'Scan reserve LPN', most_sequence: 'G4', sequence_type: 'general_move', tmu_value: 75, is_variable: false },
+            { element_name: 'Extract pallet (forklift)', most_sequence: 'B3', sequence_type: 'body_motion', tmu_value: 400, is_variable: false },
+            { element_name: 'Travel to forward pick', most_sequence: 'B3', sequence_type: 'body_motion', tmu_value: 450, is_variable: true, variable_driver: 'distance_feet', variable_formula: '300 + (distance/100)*150' },
+            { element_name: 'Scan location', most_sequence: 'G4', sequence_type: 'general_move', tmu_value: 75, is_variable: false },
+            { element_name: 'Place pallet (forklift)', most_sequence: 'B3', sequence_type: 'body_motion', tmu_value: 380, is_variable: false },
+            { element_name: 'Confirm task', most_sequence: 'G4', sequence_type: 'general_move', tmu_value: 60, is_variable: false }
+          ]
+        }
+      ];
+
+      // Check which templates already exist to avoid duplicates
+      const existingNames = new Set(this.templates.map(t => t.activity_name));
+      const templatesToAdd = newTemplates.filter(t => !existingNames.has(t.activity_name));
+
+      if (templatesToAdd.length === 0) {
+        console.log('All MOST templates already exist; skipping seed');
+        return;
+      }
+
+      // Insert new templates with their elements
+      for (const tmpl of templatesToAdd) {
+        const elements = tmpl.elements;
+        delete tmpl.elements;
+
+        tmpl.is_active = true;
+        tmpl.updated_at = new Date().toISOString();
+
+        try {
+          const iRes = await sb.from('ref_most_templates').insert([tmpl]).select();
+          if (iRes.error) {
+            console.error('Template insert error for ' + tmpl.activity_name + ':', iRes.error);
+            continue;
+          }
+
+          const templateId = iRes.data[0].id;
+          const elemRows = elements.map((el, idx) => ({
+            template_id: templateId,
+            sequence_order: idx + 1,
+            element_name: el.element_name,
+            most_sequence: el.most_sequence,
+            sequence_type: el.sequence_type,
+            tmu_value: el.tmu_value,
+            is_variable: el.is_variable || false,
+            variable_driver: el.variable_driver || null,
+            variable_formula: el.variable_formula || null,
+            notes: null
+          }));
+
+          const eRes = await sb.from('ref_most_elements').insert(elemRows);
+          if (eRes.error) {
+            console.error('Elements insert error for template ' + templateId + ':', eRes.error);
+          } else {
+            console.log('Seeded template: ' + tmpl.activity_name + ' with ' + elemRows.length + ' elements');
+          }
+        } catch (err) {
+          console.error('Seed error for ' + tmpl.activity_name + ':', err);
+        }
+      }
+
+      // Reload data to include new templates
+      if (templatesToAdd.length > 0) {
+        const [tRes, eRes] = await Promise.all([
+          sb.from('ref_most_templates').select('*').order('process_area').order('activity_name'),
+          sb.from('ref_most_elements').select('*').order('template_id').order('sequence_order')
+        ]);
+        this.templates = (tRes.data || []);
+        this.elements = (eRes.data || []);
+        console.log('Seeded ' + templatesToAdd.length + ' new MOST templates');
+      }
+    } catch (err) {
+      console.error('MOST seed error:', err);
+    }
+  },
+
 
   switchMode(mode) {
     this.currentMode = mode;
@@ -34478,7 +35217,7 @@ const deckGen = {
         [
           { text: 'Management', options: { fill: this._B.white } },
           { text: '10', options: { fill: this._B.lightGray } },
-          { text: '$28/hr', options: { fill: this._B.white } },
+          { text: '$32/hr', options: { fill: this._B.white } },
           { text: '$583K', options: { fill: this._B.lightGray } }
         ]
       ];
