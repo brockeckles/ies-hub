@@ -32614,11 +32614,11 @@ const fmApp = {
           scenario_id: scenarioId,
           origin: l.origin || '',
           destination: l.destination || '',
-          weekly_shipments: parseInt(l.weeklyShipments) || parseInt(l.weekly_shipments) || 0,
-          avg_weight_lbs: parseFloat(l.avgWeight) || parseFloat(l.avg_weight_lbs) || 0,
-          avg_cube_ft3: parseFloat(l.avgCube) || parseFloat(l.avg_cube_ft3) || 0,
-          delivery_window: l.deliveryWindow || l.delivery_window || '',
-          distance_miles: parseFloat(l.distance) || parseFloat(l.distance_miles) || 0
+          weekly_shipments: parseInt(l.weekly_shipments) || parseInt(l.weeklyShipments) || 0,
+          avg_weight_lbs: parseFloat(l.avg_weight) || parseFloat(l.avg_weight_lbs) || parseFloat(l.avgWeight) || 0,
+          avg_cube_ft3: parseFloat(l.avg_cube) || parseFloat(l.avg_cube_ft3) || parseFloat(l.avgCube) || 0,
+          delivery_window: l.delivery_window || l.deliveryWindow || '',
+          distance_miles: parseFloat(l.distance_miles) || parseFloat(l.distance) || 0
         }));
         await cmApiPost('fleet_lanes', lanesData);
       }
