@@ -30,6 +30,9 @@ let rootEl = null;
 /** @type {boolean} */
 let isDirty = false;
 
+/** @type {boolean} Track whether user has interacted — suppresses validation on fresh model */
+let userHasInteracted = false;
+
 // ============================================================
 // SECTIONS — 13 nav sections
 // ============================================================
@@ -62,6 +65,7 @@ export async function mount(el) {
   rootEl = el;
   activeSection = 'setup';
   model = createEmptyModel();
+  userHasInteracted = false;
 
   // Render shell
   el.innerHTML = renderShell();
@@ -1256,6 +1260,7 @@ function bindSectionEvents(section, container) {
       }
 
       isDirty = true;
+      if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       // Re-render if the field affects calculated values
       if (shouldRerender(field)) renderSection();
     });
@@ -1406,6 +1411,12 @@ function updateValidation() {
   const el = rootEl?.querySelector('#cm-validation');
   if (!el) return;
 
+  // Don't show validation errors until the user starts working
+  if (!userHasInteracted) {
+    el.innerHTML = '<span style="color: var(--ies-blue); font-weight: 600;">Ready — enter project details to begin</span>';
+    return;
+  }
+
   const warnings = calc.validateModel(model);
   if (warnings.length === 0) {
     el.innerHTML = '<span style="color: var(--ies-green); font-weight: 600;">No issues found</span>';
@@ -1518,14 +1529,40 @@ function createEmptyModel() {
   return {
     id: null,
     projectDetails: { name: '', clientName: '', market: '', environment: '', facilityLocation: '', contractTerm: 5 },
-    volumeLines: [],
+    volumeLines: [
+      { name: 'Receiving (Pallets)', volume: 0, uom: 'pallets', isOutboundPrimary: false },
+      { name: 'Put-Away', volume: 0, uom: 'pallets', isOutboundPrimary: false },
+      { name: 'Orders Shipped', volume: 0, uom: 'orders', isOutboundPrimary: true },
+      { name: 'Each Picks', volume: 0, uom: 'eaches', isOutboundPrimary: false },
+      { name: 'Case Picks', volume: 0, uom: 'cases', isOutboundPrimary: false },
+    ],
     orderProfile: {},
     facility: { totalSqft: 0 },
     shifts: { shiftsPerDay: 1, hoursPerShift: 8, daysPerWeek: 5, weeksPerYear: 52 },
-    laborLines: [],
-    indirectLaborLines: [],
-    equipmentLines: [],
-    overheadLines: [],
+    laborLines: [
+      { activity_name: 'Receiving', process_area: 'Inbound', labor_category: 'direct', volume: 0, base_uph: 200, annual_hours: 0, hourly_rate: 18.00, burden_pct: 30, most_template_id: '', most_template_name: '' },
+      { activity_name: 'Put-Away', process_area: 'Inbound', labor_category: 'direct', volume: 0, base_uph: 180, annual_hours: 0, hourly_rate: 18.00, burden_pct: 30, most_template_id: '', most_template_name: '' },
+      { activity_name: 'Picking', process_area: 'Outbound', labor_category: 'direct', volume: 0, base_uph: 120, annual_hours: 0, hourly_rate: 17.50, burden_pct: 30, most_template_id: '', most_template_name: '' },
+      { activity_name: 'Packing', process_area: 'Outbound', labor_category: 'direct', volume: 0, base_uph: 60, annual_hours: 0, hourly_rate: 16.50, burden_pct: 30, most_template_id: '', most_template_name: '' },
+      { activity_name: 'Shipping', process_area: 'Outbound', labor_category: 'direct', volume: 0, base_uph: 150, annual_hours: 0, hourly_rate: 17.00, burden_pct: 30, most_template_id: '', most_template_name: '' },
+    ],
+    indirectLaborLines: [
+      { role: 'Supervisor', hourly_rate: 28.00, ratio_to_direct: 12, burden_pct: 35 },
+      { role: 'Quality Lead', hourly_rate: 22.00, ratio_to_direct: 5, burden_pct: 35 },
+    ],
+    equipmentLines: [
+      { equipment_name: 'Reach Truck', category: 'MHE', quantity: 0, acquisition_type: 'lease', monthly_lease: 0, acquisition_cost: 0, annual_maintenance: 0, amortization_years: 7, notes: '' },
+      { equipment_name: 'RF Scanners', category: 'IT', quantity: 0, acquisition_type: 'lease', monthly_lease: 0, acquisition_cost: 0, annual_maintenance: 0, amortization_years: 5, notes: '' },
+      { equipment_name: 'Selective Pallet Racking', category: 'Racking', quantity: 0, acquisition_type: 'purchase', monthly_lease: 0, acquisition_cost: 0, annual_maintenance: 0, amortization_years: 15, notes: '' },
+      { equipment_name: 'Dock Levelers', category: 'Dock', quantity: 0, acquisition_type: 'purchase', monthly_lease: 0, acquisition_cost: 0, annual_maintenance: 0, amortization_years: 10, notes: '' },
+      { equipment_name: 'WMS License', category: 'IT', quantity: 1, acquisition_type: 'service', monthly_lease: 0, acquisition_cost: 0, annual_maintenance: 0, amortization_years: 5, notes: 'Annual SaaS license' },
+    ],
+    overheadLines: [
+      { category: 'Utilities', annual_cost: 0, driver: 'sqft', notes: 'Electric + gas' },
+      { category: 'Insurance', annual_cost: 0, driver: 'fixed', notes: '' },
+      { category: 'Maintenance', annual_cost: 0, driver: 'equipment value', notes: '' },
+      { category: 'Supplies', annual_cost: 0, driver: 'per unit shipped', notes: 'Labels, tape, stretch wrap' },
+    ],
     vasLines: [],
     financial: { targetMargin: 12, volumeGrowth: 3, laborEscalation: 4, annualEscalation: 3, discountRate: 10, reinvestRate: 8 },
     startupLines: [],

@@ -140,12 +140,6 @@
             </span>
             <span class="hub-nav-label">Ideas & Feedback</span>
           </div>
-          <div class="hub-nav-item" data-route="security">
-            <span class="hub-nav-icon">
-              <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-            </span>
-            <span class="hub-nav-label">Security</span>
-          </div>
         </div>
 
         <!-- Admin -->
@@ -251,13 +245,13 @@
         load: async () => ({
           mount(el) {
             const tools = [
-              { key: 'cost-model', name: 'Cost Model Builder', desc: '13-section pricing model with P&L', phase: 2 },
-              { key: 'deal-manager', name: 'Multi-Site Analyzer', desc: 'Multi-facility deal comparison', phase: 5 },
-              { key: 'warehouse-sizing', name: 'Warehouse Sizing Calculator', desc: '3D facility planning with elevation views', phase: 3 },
-              { key: 'most-standards', name: 'MOST Labor Standards', desc: 'Template-based labor time studies', phase: 3 },
-              { key: 'center-of-gravity', name: 'Center of Gravity', desc: 'Optimal facility location analysis', phase: 4 },
-              { key: 'network-opt', name: 'Network Optimization', desc: 'TL/LTL/Parcel freight optimization', phase: 4 },
-              { key: 'fleet-modeler', name: 'Fleet Modeler', desc: 'Fleet sizing and route cost analysis', phase: 4 },
+              { key: 'cost-model', name: 'Cost Model Builder', desc: '13-section pricing model with P&L', cat: 'Pricing' },
+              { key: 'deal-manager', name: 'Multi-Site Analyzer', desc: 'Multi-facility deal comparison', cat: 'Deal Strategy' },
+              { key: 'warehouse-sizing', name: 'Warehouse Sizing Calculator', desc: '3D facility planning with elevation views', cat: 'Facility' },
+              { key: 'most-standards', name: 'MOST Labor Standards', desc: 'Template-based labor time studies', cat: 'Labor' },
+              { key: 'center-of-gravity', name: 'Center of Gravity', desc: 'Optimal facility location analysis', cat: 'Logistics' },
+              { key: 'network-opt', name: 'Network Optimization', desc: 'TL/LTL/Parcel freight optimization', cat: 'Logistics' },
+              { key: 'fleet-modeler', name: 'Fleet Modeler', desc: 'Fleet sizing and route cost analysis', cat: 'Logistics' },
             ];
             el.innerHTML = `
               <div class="hub-content-inner">
@@ -267,7 +261,7 @@
                     <div class="hub-card hub-card-interactive" onclick="location.hash='designtools/${t.key}'" style="cursor:pointer;">
                       <div class="flex items-center justify-between mb-2">
                         <h4 class="text-subtitle">${t.name}</h4>
-                        <span class="hub-badge hub-badge-blue">Phase ${t.phase}</span>
+                        <span class="hub-badge hub-badge-blue">${t.cat}</span>
                       </div>
                       <p class="text-body text-muted">${t.desc}</p>
                     </div>
@@ -301,6 +295,7 @@
       // Hub section routes (lazy loaded)
       const hubRoutes = {
         'overview': { title: 'Command Center', path: './hub/command-center/ui.js' },
+        'marketmap': { title: 'Market Explorer', path: './hub/market-explorer/ui.js' },
         'deals': { title: 'Deal Management', path: './hub/deal-management/ui.js' },
         'training': { title: 'Training Wiki', path: './hub/training-wiki/ui.js' },
         'changemanagement': { title: 'Change Management', path: './hub/change-mgmt/ui.js' },

@@ -394,6 +394,16 @@ textarea.hub-input {
 
 .hub-sidebar.collapsed .hub-sidebar-title { display: none; }
 
+/* Keep toggle button accessible when collapsed */
+.hub-sidebar.collapsed .hub-sidebar-header {
+  justify-content: center;
+  padding: var(--sp-3);
+}
+.hub-sidebar.collapsed .hub-sidebar-logo { display: none; }
+.hub-sidebar.collapsed .hub-sidebar-toggle {
+  margin-left: 0 !important;
+}
+
 .hub-sidebar-nav {
   flex: 1;
   overflow-y: auto;
