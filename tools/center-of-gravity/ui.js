@@ -1,0 +1,507 @@
+/**
+ * IES Hub v3 — Center of Gravity UI
+ * Analyzer-pattern layout: top tab bar + full-width content.
+ * Tabs: Points, Analysis, Map, Sensitivity.
+ *
+ * @module tools/center-of-gravity/ui
+ */
+
+import { bus } from '../../shared/event-bus.js';
+import { state } from '../../shared/state.js';
+import * as calc from './calc.js';
+import * as api from './api.js';
+
+// ============================================================
+// STATE
+// ============================================================
+
+/** @type {HTMLElement|null} */
+let rootEl = null;
+
+/** @type {'points' | 'analysis' | 'map' | 'sensitivity'} */
+let activeTab = 'points';
+
+/** @type {import('./types.js').WeightedPoint[]} */
+let points = [];
+
+/** @type {import('./types.js').CogConfig} */
+let config = { ...calc.DEFAULT_CONFIG };
+
+/** @type {import('./types.js').MultiCogResult|null} */
+let cogResult = null;
+
+/** @type {Array<{ k: number, totalWeightedDistance: number, estimatedCost: number, avgDistance: number }>|null} */
+let sensitivityData = null;
+
+/** @type {object|null} */
+let mapInstance = null;
+
+// ============================================================
+// LIFECYCLE
+// ============================================================
+
+/**
+ * Mount the Center of Gravity tool.
+ * @param {HTMLElement} el
+ */
+export async function mount(el) {
+  rootEl = el;
+  activeTab = 'points';
+  points = calc.DEMO_POINTS.map(p => ({ ...p }));
+  config = { ...calc.DEFAULT_CONFIG };
+  cogResult = null;
+  sensitivityData = null;
+
+  el.innerHTML = renderShell();
+  bindShellEvents();
+  renderContent();
+
+  bus.emit('cog:mounted');
+}
+
+/**
+ * Cleanup.
+ */
+export function unmount() {
+  if (mapInstance) { mapInstance.remove(); mapInstance = null; }
+  rootEl = null;
+  bus.emit('cog:unmounted');
+}
+
+// ============================================================
+// SHELL
+// ============================================================
+
+function renderShell() {
+  const tabs = [
+    { key: 'points', label: 'Demand Points' },
+    { key: 'analysis', label: 'Analysis' },
+    { key: 'map', label: 'Map' },
+    { key: 'sensitivity', label: 'Sensitivity' },
+  ];
+
+  return `
+    <div class="hub-content-inner" style="padding:0;display:flex;flex-direction:column;height:100%;">
+      <div style="display:flex;align-items:center;gap:16px;padding:16px 24px 0 24px;flex-shrink:0;">
+        <h2 class="text-page" style="margin:0;">Center of Gravity</h2>
+        <div style="display:flex;gap:8px;margin-left:auto;" id="cog-tabs">
+          ${tabs.map(t => `
+            <button class="hub-btn hub-btn-sm ${t.key === activeTab ? 'hub-btn-primary' : 'hub-btn-secondary'}"
+                    data-tab="${t.key}">${t.label}</button>
+          `).join('')}
+        </div>
+        <button class="hub-btn hub-btn-primary hub-btn-sm hub-btn-icon" id="cog-calculate">
+          ▶ Find Optimal Location
+        </button>
+      </div>
+      <div id="cog-content" style="flex:1;overflow-y:auto;padding:24px;"></div>
+    </div>
+  `;
+}
+
+function bindShellEvents() {
+  if (!rootEl) return;
+
+  rootEl.querySelector('#cog-tabs')?.addEventListener('click', (e) => {
+    const btn = /** @type {HTMLElement} */ (e.target).closest('[data-tab]');
+    if (!btn) return;
+    activeTab = /** @type {any} */ (btn.dataset.tab);
+    rootEl.querySelectorAll('#cog-tabs button').forEach(b => {
+      b.className = `hub-btn hub-btn-sm ${b.dataset.tab === activeTab ? 'hub-btn-primary' : 'hub-btn-secondary'}`;
+    });
+    renderContent();
+  });
+
+  rootEl.querySelector('#cog-calculate')?.addEventListener('click', () => {
+    cogResult = calc.kMeansCog(points, config.numCenters, config.maxIterations);
+    sensitivityData = calc.sensitivityAnalysis(points, 5, config.transportCostPerMile, config.maxIterations);
+    activeTab = 'analysis';
+    rootEl.querySelectorAll('#cog-tabs button').forEach(b => {
+      b.className = `hub-btn hub-btn-sm ${b.dataset.tab === activeTab ? 'hub-btn-primary' : 'hub-btn-secondary'}`;
+    });
+    renderContent();
+  });
+}
+
+function renderContent() {
+  const el = rootEl?.querySelector('#cog-content');
+  if (!el) return;
+
+  switch (activeTab) {
+    case 'points': renderPoints(el); break;
+    case 'analysis': renderAnalysis(el); break;
+    case 'map': renderMap(el); break;
+    case 'sensitivity': renderSensitivity(el); break;
+  }
+}
+
+// ============================================================
+// POINTS TAB
+// ============================================================
+
+function renderPoints(el) {
+  const totalWeight = points.reduce((s, p) => s + p.weight, 0);
+
+  el.innerHTML = `
+    <div style="max-width:900px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <h3 class="text-section" style="margin:0;">Weighted Demand Points</h3>
+        <div style="display:flex;gap:8px;">
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-add-point">+ Add Point</button>
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-load-demo">Load Demo</button>
+        </div>
+      </div>
+
+      <!-- Config -->
+      <div class="hub-card" style="margin-bottom:20px;padding:16px;">
+        <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <label style="font-size:13px;font-weight:600;">Number of Centers (k):</label>
+            <input type="number" value="${config.numCenters}" min="1" max="5" id="cog-k"
+                   style="width:60px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:center;">
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <label style="font-size:13px;font-weight:600;">Transport $/mi:</label>
+            <input type="number" value="${config.transportCostPerMile}" step="0.01" id="cog-cpm"
+                   style="width:80px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
+          </div>
+        </div>
+      </div>
+
+      <!-- Points table -->
+      <div style="max-height:400px;overflow-y:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead style="position:sticky;top:0;background:#fff;">
+            <tr style="border-bottom:2px solid var(--ies-gray-200);">
+              <th style="text-align:left;padding:8px 6px;font-weight:700;">Name</th>
+              <th style="text-align:right;padding:8px 6px;font-weight:700;">Lat</th>
+              <th style="text-align:right;padding:8px 6px;font-weight:700;">Lng</th>
+              <th style="text-align:right;padding:8px 6px;font-weight:700;">Weight</th>
+              <th style="text-align:center;padding:8px 6px;font-weight:700;">Type</th>
+              <th style="text-align:center;padding:8px 6px;"></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${points.map((p, i) => `
+              <tr style="border-bottom:1px solid var(--ies-gray-200);">
+                <td style="padding:6px;font-weight:600;">${p.name || p.id}</td>
+                <td style="padding:6px;text-align:right;">${p.lat.toFixed(2)}</td>
+                <td style="padding:6px;text-align:right;">${p.lng.toFixed(2)}</td>
+                <td style="padding:6px;text-align:right;">${p.weight.toLocaleString()}</td>
+                <td style="padding:6px;text-align:center;">
+                  <span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;
+                    background:${p.type === 'demand' ? '#dbeafe' : p.type === 'supply' ? '#dcfce7' : '#fef3c7'};
+                    color:${p.type === 'demand' ? '#1d4ed8' : p.type === 'supply' ? '#15803d' : '#92400e'};">
+                    ${p.type}
+                  </span>
+                </td>
+                <td style="padding:6px;text-align:center;">
+                  <button class="hub-btn hub-btn-sm hub-btn-secondary" data-pt-del="${i}" style="padding:4px 8px;">✕</button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="hub-card" style="margin-top:20px;background:linear-gradient(135deg,#0a1628,#0d1f3c);color:#fff;padding:16px 20px;">
+        <div style="display:flex;gap:32px;align-items:center;">
+          ${kpi('Points', String(points.length))}
+          ${kpi('Total Weight', totalWeight.toLocaleString())}
+          ${kpi('Centers (k)', String(config.numCenters))}
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Bind config inputs
+  el.querySelector('#cog-k')?.addEventListener('change', (e) => {
+    config.numCenters = Math.max(1, Math.min(5, parseInt(/** @type {HTMLInputElement} */ (e.target).value) || 1));
+  });
+  el.querySelector('#cog-cpm')?.addEventListener('change', (e) => {
+    config.transportCostPerMile = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 2.85;
+  });
+
+  // Delete points
+  el.querySelectorAll('[data-pt-del]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      points.splice(parseInt(/** @type {HTMLElement} */ (btn).dataset.ptDel), 1);
+      renderPoints(el);
+    });
+  });
+
+  el.querySelector('#cog-add-point')?.addEventListener('click', () => {
+    points.push({ id: 'p' + Date.now(), name: 'New Point', lat: 39.83, lng: -98.58, weight: 10000, type: 'demand' });
+    renderPoints(el);
+  });
+
+  el.querySelector('#cog-load-demo')?.addEventListener('click', () => {
+    points = calc.DEMO_POINTS.map(p => ({ ...p }));
+    renderPoints(el);
+  });
+}
+
+// ============================================================
+// ANALYSIS TAB
+// ============================================================
+
+function renderAnalysis(el) {
+  if (!cogResult) {
+    el.innerHTML = '<div class="hub-card"><p class="text-body text-muted">Click "Find Optimal Location" to see results.</p></div>';
+    return;
+  }
+
+  const costEst = calc.estimateTransportCost(cogResult, points, config.transportCostPerMile);
+
+  el.innerHTML = `
+    <div style="max-width:900px;">
+      <!-- KPI Bar -->
+      <div class="hub-card" style="background:linear-gradient(135deg,#0a1628,#0d1f3c);color:#fff;padding:16px 24px;margin-bottom:20px;">
+        <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;">
+          ${kpi('Centers Found', String(cogResult.centers.length))}
+          ${kpi('Iterations', String(cogResult.iterations))}
+          ${kpi('Est. Transport Cost', calc.formatCurrency(costEst.totalCost, { compact: true }))}
+          ${kpi('Avg Cost/Unit', calc.formatCurrency(costEst.avgCostPerUnit))}
+        </div>
+      </div>
+
+      <!-- Center Details -->
+      ${cogResult.centers.map((c, i) => `
+        <div class="hub-card" style="margin-bottom:16px;border-left:4px solid ${clusterColor(i)};">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+            <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${clusterColor(i)};"></span>
+            <span style="font-size:14px;font-weight:700;">Center ${i + 1}: ${c.nearestCity}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;font-size:13px;">
+            <div>
+              <span style="color:var(--ies-gray-400);font-size:11px;text-transform:uppercase;">Location</span>
+              <div style="font-weight:600;">${calc.formatLatLng(c.lat, c.lng)}</div>
+            </div>
+            <div>
+              <span style="color:var(--ies-gray-400);font-size:11px;text-transform:uppercase;">Assigned Weight</span>
+              <div style="font-weight:600;">${c.totalWeight.toLocaleString()}</div>
+            </div>
+            <div>
+              <span style="color:var(--ies-gray-400);font-size:11px;text-transform:uppercase;">Avg Weighted Dist</span>
+              <div style="font-weight:600;">${calc.formatMiles(c.avgWeightedDistance)}</div>
+            </div>
+            <div>
+              <span style="color:var(--ies-gray-400);font-size:11px;text-transform:uppercase;">Max Distance</span>
+              <div style="font-weight:600;">${calc.formatMiles(c.maxDistance)}</div>
+            </div>
+          </div>
+        </div>
+      `).join('')}
+
+      <!-- Assignment Table -->
+      <div class="hub-card" style="padding:16px;">
+        <div style="font-size:14px;font-weight:700;margin-bottom:12px;">Point Assignments</div>
+        <div style="max-height:300px;overflow-y:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead style="position:sticky;top:0;background:#fff;">
+              <tr style="border-bottom:2px solid var(--ies-gray-200);">
+                <th style="text-align:center;padding:6px;">Cluster</th>
+                <th style="text-align:left;padding:6px;">Point</th>
+                <th style="text-align:right;padding:6px;">Weight</th>
+                <th style="text-align:right;padding:6px;">Distance</th>
+                <th style="text-align:right;padding:6px;">Transport Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${cogResult.assignments.map(a => {
+                const pt = points.find(p => p.id === a.pointId);
+                const cost = a.distanceToCenter * (pt?.weight || 0) * config.transportCostPerMile;
+                return `
+                  <tr style="border-bottom:1px solid var(--ies-gray-200);">
+                    <td style="padding:6px;text-align:center;">
+                      <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${clusterColor(a.clusterId)};"></span>
+                    </td>
+                    <td style="padding:6px;font-weight:600;">${pt?.name || a.pointId}</td>
+                    <td style="padding:6px;text-align:right;">${(pt?.weight || 0).toLocaleString()}</td>
+                    <td style="padding:6px;text-align:right;">${calc.formatMiles(a.distanceToCenter)}</td>
+                    <td style="padding:6px;text-align:right;">${calc.formatCurrency(cost, { compact: true })}</td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ============================================================
+// MAP TAB
+// ============================================================
+
+function renderMap(el) {
+  if (!cogResult) {
+    el.innerHTML = '<div class="hub-card"><p class="text-body text-muted">Run analysis first to see the map.</p></div>';
+    return;
+  }
+
+  el.innerHTML = `
+    <div style="display:flex;flex-direction:column;height:100%;">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+        <h3 class="text-section" style="margin:0;">Center of Gravity Map</h3>
+        <span style="font-size:11px;color:var(--ies-gray-400);">${points.length} points • ${cogResult.centers.length} center(s)</span>
+      </div>
+      <div id="cog-map-container" style="flex:1;min-height:500px;border-radius:10px;border:1px solid var(--ies-gray-200);overflow:hidden;"></div>
+      <div style="display:flex;gap:16px;margin-top:12px;font-size:11px;color:var(--ies-gray-400);">
+        <span><span style="display:inline-block;width:14px;height:14px;background:#ef4444;border-radius:50%;vertical-align:middle;border:2px solid #fff;box-shadow:0 0 0 1px #ef4444;"></span> Optimal Center</span>
+        ${cogResult.centers.map((_, i) => `
+          <span><span style="display:inline-block;width:10px;height:10px;background:${clusterColor(i)};border-radius:50%;vertical-align:middle;"></span> Cluster ${i + 1}</span>
+        `).join('')}
+      </div>
+    </div>
+  `;
+
+  requestAnimationFrame(() => initCogMap());
+}
+
+function initCogMap() {
+  const container = rootEl?.querySelector('#cog-map-container');
+  if (!container || !cogResult) return;
+  if (mapInstance) { mapInstance.remove(); mapInstance = null; }
+
+  if (typeof L === 'undefined') {
+    container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:13px;color:var(--ies-gray-400);">Map requires Leaflet.js</div>';
+    return;
+  }
+
+  mapInstance = L.map(container).setView([39.8283, -98.5795], 4);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 18, attribution: '&copy; OpenStreetMap'
+  }).addTo(mapInstance);
+
+  // Demand points colored by cluster
+  cogResult.assignments.forEach(a => {
+    const pt = points.find(p => p.id === a.pointId);
+    if (!pt) return;
+    const color = clusterColor(a.clusterId);
+    const size = Math.max(4, Math.min(10, pt.weight / 10000));
+    const marker = L.circleMarker([pt.lat, pt.lng], {
+      radius: size, fillColor: color, color: color, weight: 1, fillOpacity: 0.7,
+    }).addTo(mapInstance);
+    marker.bindPopup(`<strong>${pt.name || pt.id}</strong><br>Weight: ${pt.weight.toLocaleString()}<br>Cluster: ${a.clusterId + 1}<br>Distance: ${calc.formatMiles(a.distanceToCenter)}`);
+
+    // Line to center
+    const center = cogResult.centers[a.clusterId];
+    if (center) {
+      L.polyline([[pt.lat, pt.lng], [center.lat, center.lng]], {
+        color, weight: 1, opacity: 0.3,
+      }).addTo(mapInstance);
+    }
+  });
+
+  // Center markers (star-like — larger with border)
+  cogResult.centers.forEach((c, i) => {
+    const marker = L.circleMarker([c.lat, c.lng], {
+      radius: 14, fillColor: '#ef4444', color: '#fff', weight: 3, fillOpacity: 0.9,
+    }).addTo(mapInstance);
+    marker.bindPopup(`<strong>Center ${i + 1}</strong><br>${c.nearestCity}<br>Location: ${calc.formatLatLng(c.lat, c.lng)}<br>Avg Distance: ${calc.formatMiles(c.avgWeightedDistance)}`);
+  });
+
+  // Fit bounds
+  const allPts = [...points.map(p => [p.lat, p.lng]), ...cogResult.centers.map(c => [c.lat, c.lng])];
+  if (allPts.length > 0) mapInstance.fitBounds(allPts, { padding: [30, 30] });
+}
+
+// ============================================================
+// SENSITIVITY TAB
+// ============================================================
+
+function renderSensitivity(el) {
+  if (!sensitivityData) {
+    el.innerHTML = '<div class="hub-card"><p class="text-body text-muted">Run analysis first to see sensitivity data.</p></div>';
+    return;
+  }
+
+  const maxCost = Math.max(...sensitivityData.map(d => d.estimatedCost));
+
+  el.innerHTML = `
+    <div style="max-width:800px;">
+      <h3 class="text-section" style="margin-bottom:16px;">Sensitivity: Number of Centers vs. Cost</h3>
+
+      <div class="hub-card" style="padding:20px;margin-bottom:20px;">
+        <div style="font-size:14px;font-weight:700;margin-bottom:16px;">Estimated Annual Transport Cost by Number of Centers</div>
+        ${sensitivityData.map((d, i) => {
+          const pct = maxCost > 0 ? (d.estimatedCost / maxCost) * 100 : 0;
+          const isCurrent = d.k === config.numCenters;
+          return `
+            <div style="margin-bottom:12px;">
+              <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                <span style="font-size:13px;font-weight:${isCurrent ? '700' : '600'};">
+                  k = ${d.k} ${isCurrent ? ' ← current' : ''}
+                </span>
+                <span style="font-size:13px;font-weight:700;">${calc.formatCurrency(d.estimatedCost, { compact: true })}</span>
+              </div>
+              <div style="height:24px;border-radius:6px;background:var(--ies-gray-200);overflow:hidden;">
+                <div style="height:100%;width:${pct}%;background:${isCurrent ? 'var(--ies-blue)' : 'var(--ies-gray-400)'};border-radius:6px;"></div>
+              </div>
+              <div style="font-size:11px;color:var(--ies-gray-400);margin-top:2px;">
+                Avg distance: ${calc.formatMiles(d.avgDistance)}
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+
+      <div class="hub-card" style="padding:20px;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead>
+            <tr style="border-bottom:2px solid var(--ies-gray-200);">
+              <th style="text-align:center;padding:8px;font-weight:700;">k</th>
+              <th style="text-align:right;padding:8px;font-weight:700;">Total Weighted Distance</th>
+              <th style="text-align:right;padding:8px;font-weight:700;">Est. Annual Cost</th>
+              <th style="text-align:right;padding:8px;font-weight:700;">Avg Distance</th>
+              <th style="text-align:right;padding:8px;font-weight:700;">Marginal Savings</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${sensitivityData.map((d, i) => {
+              const prev = i > 0 ? sensitivityData[i - 1].estimatedCost : d.estimatedCost;
+              const savings = prev - d.estimatedCost;
+              return `
+                <tr style="border-bottom:1px solid var(--ies-gray-200);${d.k === config.numCenters ? 'background:#f0f9ff;' : ''}">
+                  <td style="padding:8px;text-align:center;font-weight:700;">${d.k}</td>
+                  <td style="padding:8px;text-align:right;">${Math.round(d.totalWeightedDistance).toLocaleString()}</td>
+                  <td style="padding:8px;text-align:right;font-weight:600;">${calc.formatCurrency(d.estimatedCost, { compact: true })}</td>
+                  <td style="padding:8px;text-align:right;">${calc.formatMiles(d.avgDistance)}</td>
+                  <td style="padding:8px;text-align:right;color:${savings > 0 ? '#22c55e' : '#6b7280'};">${i > 0 ? calc.formatCurrency(savings, { compact: true }) : '—'}</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="hub-card" style="margin-top:16px;background:#f0fdf4;border-color:#22c55e;">
+        <div style="font-size:13px;font-weight:600;color:#15803d;margin-bottom:4px;">Interpretation Guide</div>
+        <div style="font-size:13px;color:#166534;line-height:1.6;">
+          Look for the "elbow" where adding another center yields diminishing returns. If the marginal savings from k to k+1 is less than the fixed cost of an additional facility, the current k is optimal.
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ============================================================
+// HELPERS
+// ============================================================
+
+const CLUSTER_COLORS = ['#0047AB', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899'];
+
+function clusterColor(idx) {
+  return CLUSTER_COLORS[idx % CLUSTER_COLORS.length];
+}
+
+function kpi(label, value, color) {
+  return `
+    <div style="border-right:1px solid rgba(255,255,255,.15);padding-right:24px;">
+      <span style="font-size:11px;font-weight:700;text-transform:uppercase;opacity:0.6;">${label}</span>
+      <div style="font-size:20px;font-weight:800;${color ? `color:${color};` : ''}">${value}</div>
+    </div>
+  `;
+}

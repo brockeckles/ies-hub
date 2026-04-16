@@ -1,0 +1,317 @@
+/**
+ * IES Hub v3 — Admin Panel Calculation Engine
+ * PURE FUNCTIONS ONLY — master data validation, user management, escalation logic, audit log.
+ *
+ * @module hub/admin/calc
+ */
+
+// ============================================================
+// MASTER TABLE DEFINITIONS
+// ============================================================
+
+/** @type {import('./types.js').MasterTableConfig[]} */
+export const MASTER_TABLES = [
+  {
+    id: 'cost_buckets', name: 'Cost Buckets', description: 'Standard cost categories for cost models',
+    tableName: 'master_cost_buckets', rowCount: 9,
+    columns: [
+      { key: 'name', label: 'Bucket Name', type: 'text', required: true, editable: true },
+      { key: 'code', label: 'Code', type: 'text', required: true, editable: true },
+      { key: 'sort_order', label: 'Sort Order', type: 'number', required: true, editable: true },
+      { key: 'active', label: 'Active', type: 'boolean', editable: true },
+    ],
+  },
+  {
+    id: 'vehicle_types', name: 'Vehicle Types', description: 'ATRI-benchmarked vehicle specifications for fleet modeling',
+    tableName: 'master_vehicle_types', rowCount: 5,
+    columns: [
+      { key: 'name', label: 'Vehicle Name', type: 'text', required: true, editable: true },
+      { key: 'payload_lbs', label: 'Payload (lbs)', type: 'number', required: true, editable: true },
+      { key: 'cube_ft3', label: 'Cube (ft³)', type: 'number', required: true, editable: true },
+      { key: 'cpm', label: 'Cost/Mile ($)', type: 'number', required: true, editable: true },
+      { key: 'active', label: 'Active', type: 'boolean', editable: true },
+    ],
+  },
+  {
+    id: 'dos_templates', name: 'DOS Templates', description: 'Deal Operating System stage-gate templates and elements',
+    tableName: 'master_dos_templates', rowCount: 38,
+    columns: [
+      { key: 'name', label: 'Template Name', type: 'text', required: true, editable: true },
+      { key: 'stage', label: 'Stage', type: 'select', required: true, editable: true, options: ['Stage 1', 'Stage 2', 'Stage 3', 'Stage 4', 'Stage 5', 'Stage 6'] },
+      { key: 'required', label: 'Required', type: 'boolean', editable: true },
+      { key: 'sort_order', label: 'Sort Order', type: 'number', editable: true },
+    ],
+  },
+  {
+    id: 'escalation_rates', name: 'Escalation Rates', description: 'Annual cost escalation rates by category',
+    tableName: 'master_escalation_rates', rowCount: 8,
+    columns: [
+      { key: 'category', label: 'Category', type: 'text', required: true, editable: true },
+      { key: 'rate_pct', label: 'Rate (%)', type: 'number', required: true, editable: true },
+      { key: 'year', label: 'Year', type: 'number', required: true, editable: true },
+      { key: 'source', label: 'Source', type: 'text', editable: true },
+    ],
+  },
+  {
+    id: 'sccs', name: 'Supply Chain Capabilities', description: 'The 12 GXO IES Supply Chain Capabilities',
+    tableName: 'master_sccs', rowCount: 12,
+    columns: [
+      { key: 'name', label: 'SCC Name', type: 'text', required: true, editable: true },
+      { key: 'category', label: 'Category', type: 'select', required: true, editable: true, options: ['Strategic', 'Operational', 'Technology'] },
+      { key: 'sort_order', label: 'Sort Order', type: 'number', editable: true },
+    ],
+  },
+];
+
+// ============================================================
+// DEMO DATA
+// ============================================================
+
+/** @type {import('./types.js').UserAccount[]} */
+export const DEMO_USERS = [
+  { id: 'u1', email: 'brockeckles@gmail.com', displayName: 'Brock Eckles', role: 'admin', active: true, lastLogin: '2026-04-16T10:30:00Z' },
+  { id: 'u2', email: 'design.eng1@gxo.com', displayName: 'Design Engineer 1', role: 'editor', active: true, lastLogin: '2026-04-15T14:00:00Z' },
+  { id: 'u3', email: 'design.eng2@gxo.com', displayName: 'Design Engineer 2', role: 'editor', active: true, lastLogin: '2026-04-14T09:00:00Z' },
+  { id: 'u4', email: 'ops.mgr@gxo.com', displayName: 'Operations Manager', role: 'viewer', active: true, lastLogin: '2026-04-10T11:00:00Z' },
+  { id: 'u5', email: 'former.user@gxo.com', displayName: 'Former User', role: 'viewer', active: false, lastLogin: '2026-02-01T08:00:00Z' },
+];
+
+/** @type {import('./types.js').EscalationRule[]} */
+export const DEMO_ESCALATIONS = [
+  { id: 'e1', name: 'Low Gross Margin', metric: 'gross_margin_pct', condition: 'below', threshold: 8, severity: 'critical', active: true, notifyEmail: 'brockeckles@gmail.com' },
+  { id: 'e2', name: 'Low EBITDA', metric: 'ebitda_pct', condition: 'below', threshold: 4, severity: 'warning', active: true, notifyEmail: 'brockeckles@gmail.com' },
+  { id: 'e3', name: 'High Cost Per SqFt', metric: 'cost_per_sqft', condition: 'above', threshold: 18, severity: 'warning', active: true },
+  { id: 'e4', name: 'Long Payback', metric: 'payback_months', condition: 'above', threshold: 24, severity: 'critical', active: false },
+];
+
+/** @type {import('./types.js').AuditLogEntry[]} */
+export const DEMO_AUDIT_LOG = [
+  { id: 'a1', action: 'update', tableName: 'cost_model_projects', recordId: 'cm-7', userId: 'u1', userName: 'Brock Eckles', timestamp: '2026-04-16T10:15:00Z', changes: { gross_margin: { from: 10.5, to: 11.2 } } },
+  { id: 'a2', action: 'create', tableName: 'fleet_scenarios', recordId: 'fs-12', userId: 'u2', userName: 'Design Engineer 1', timestamp: '2026-04-15T16:30:00Z' },
+  { id: 'a3', action: 'update', tableName: 'opportunity_tasks', recordId: 'ot-45', userId: 'u1', userName: 'Brock Eckles', timestamp: '2026-04-15T14:00:00Z', changes: { status: { from: 'pending', to: 'completed' } } },
+  { id: 'a4', action: 'delete', tableName: 'wiki_articles', recordId: 'w-old', userId: 'u1', userName: 'Brock Eckles', timestamp: '2026-04-14T09:00:00Z' },
+  { id: 'a5', action: 'create', tableName: 'change_initiatives', recordId: 'cm3', userId: 'u1', userName: 'Brock Eckles', timestamp: '2026-04-13T11:00:00Z' },
+];
+
+// ============================================================
+// STATS
+// ============================================================
+
+/**
+ * Compute admin panel stats.
+ * @param {import('./types.js').UserAccount[]} users
+ * @param {import('./types.js').MasterTableConfig[]} tables
+ * @param {import('./types.js').EscalationRule[]} escalations
+ * @param {import('./types.js').AuditLogEntry[]} auditLog
+ * @param {string} [referenceDate] — ISO date for 7-day window
+ * @returns {import('./types.js').AdminStats}
+ */
+export function computeStats(users, tables, escalations, auditLog, referenceDate) {
+  const refDate = referenceDate || new Date().toISOString().slice(0, 10);
+  const sevenDaysAgo = new Date(new Date(refDate).getTime() - 7 * 86400000).toISOString();
+
+  return {
+    totalUsers: users.length,
+    activeUsers: users.filter(u => u.active).length,
+    totalTables: tables.length,
+    totalRecords: tables.reduce((s, t) => s + (t.rowCount || 0), 0),
+    activeEscalations: escalations.filter(e => e.active).length,
+    recentAuditEntries: auditLog.filter(a => a.timestamp >= sevenDaysAgo).length,
+  };
+}
+
+// ============================================================
+// VALIDATION
+// ============================================================
+
+/**
+ * Validate a record against table column definitions.
+ * @param {Record<string, any>} record
+ * @param {import('./types.js').ColumnDef[]} columns
+ * @returns {{ valid: boolean, errors: string[] }}
+ */
+export function validateRecord(record, columns) {
+  const errors = [];
+  for (const col of columns) {
+    const val = record[col.key];
+    if (col.required && (val === undefined || val === null || val === '')) {
+      errors.push(`${col.label} is required`);
+    }
+    if (val !== undefined && val !== null && val !== '') {
+      if (col.type === 'number' && typeof val !== 'number' && isNaN(Number(val))) {
+        errors.push(`${col.label} must be a number`);
+      }
+      if (col.type === 'boolean' && typeof val !== 'boolean') {
+        errors.push(`${col.label} must be true or false`);
+      }
+      if (col.type === 'select' && col.options && !col.options.includes(val)) {
+        errors.push(`${col.label} must be one of: ${col.options.join(', ')}`);
+      }
+    }
+  }
+  return { valid: errors.length === 0, errors };
+}
+
+// ============================================================
+// ESCALATION LOGIC
+// ============================================================
+
+/**
+ * Evaluate a metric value against escalation rules.
+ * @param {string} metric — metric key (e.g. 'gross_margin_pct')
+ * @param {number} value
+ * @param {import('./types.js').EscalationRule[]} rules
+ * @returns {import('./types.js').EscalationRule[]} — triggered rules
+ */
+export function evaluateEscalations(metric, value, rules) {
+  return rules.filter(r => {
+    if (!r.active || r.metric !== metric) return false;
+    if (r.condition === 'below') return value < r.threshold;
+    if (r.condition === 'above') return value > r.threshold;
+    return false;
+  });
+}
+
+/**
+ * Check all escalation rules against a set of metrics.
+ * @param {Record<string, number>} metrics — key-value pairs (e.g. { gross_margin_pct: 7.5 })
+ * @param {import('./types.js').EscalationRule[]} rules
+ * @returns {Array<{ rule: import('./types.js').EscalationRule, metricValue: number }>}
+ */
+export function checkAllEscalations(metrics, rules) {
+  const triggered = [];
+  for (const [metric, value] of Object.entries(metrics)) {
+    const matched = evaluateEscalations(metric, value, rules);
+    for (const rule of matched) {
+      triggered.push({ rule, metricValue: value });
+    }
+  }
+  return triggered;
+}
+
+// ============================================================
+// USER MANAGEMENT
+// ============================================================
+
+/**
+ * Filter users.
+ * @param {import('./types.js').UserAccount[]} users
+ * @param {{ role?: string, active?: boolean | 'all' }} filters
+ * @returns {import('./types.js').UserAccount[]}
+ */
+export function filterUsers(users, filters = {}) {
+  let result = users;
+  if (filters.role && filters.role !== 'all') {
+    result = result.filter(u => u.role === filters.role);
+  }
+  if (filters.active !== undefined && filters.active !== 'all') {
+    result = result.filter(u => u.active === filters.active);
+  }
+  return result;
+}
+
+/**
+ * Count users by role.
+ * @param {import('./types.js').UserAccount[]} users
+ * @returns {{ admin: number, editor: number, viewer: number }}
+ */
+export function usersByRole(users) {
+  return {
+    admin: users.filter(u => u.role === 'admin').length,
+    editor: users.filter(u => u.role === 'editor').length,
+    viewer: users.filter(u => u.role === 'viewer').length,
+  };
+}
+
+/**
+ * Find inactive users (no login within N days).
+ * @param {import('./types.js').UserAccount[]} users
+ * @param {string} referenceDate — ISO datetime
+ * @param {number} [days=30]
+ * @returns {import('./types.js').UserAccount[]}
+ */
+export function inactiveUsers(users, referenceDate, days = 30) {
+  const cutoff = new Date(new Date(referenceDate).getTime() - days * 86400000).toISOString();
+  return users.filter(u => u.active && (!u.lastLogin || u.lastLogin < cutoff));
+}
+
+// ============================================================
+// AUDIT LOG
+// ============================================================
+
+/**
+ * Filter audit log entries.
+ * @param {import('./types.js').AuditLogEntry[]} log
+ * @param {{ action?: string, tableName?: string, userId?: string }} filters
+ * @returns {import('./types.js').AuditLogEntry[]}
+ */
+export function filterAuditLog(log, filters = {}) {
+  let result = log;
+  if (filters.action && filters.action !== 'all') {
+    result = result.filter(a => a.action === filters.action);
+  }
+  if (filters.tableName && filters.tableName !== 'all') {
+    result = result.filter(a => a.tableName === filters.tableName);
+  }
+  if (filters.userId && filters.userId !== 'all') {
+    result = result.filter(a => a.userId === filters.userId);
+  }
+  return result;
+}
+
+/**
+ * Count audit actions by type.
+ * @param {import('./types.js').AuditLogEntry[]} log
+ * @returns {{ create: number, update: number, delete: number }}
+ */
+export function auditActionCounts(log) {
+  return {
+    create: log.filter(a => a.action === 'create').length,
+    update: log.filter(a => a.action === 'update').length,
+    delete: log.filter(a => a.action === 'delete').length,
+  };
+}
+
+/**
+ * Get most active users from audit log.
+ * @param {import('./types.js').AuditLogEntry[]} log
+ * @param {number} [limit=5]
+ * @returns {Array<{ userId: string, userName: string, count: number }>}
+ */
+export function mostActiveUsers(log, limit = 5) {
+  const counts = new Map();
+  for (const entry of log) {
+    const key = entry.userId;
+    if (!counts.has(key)) counts.set(key, { userId: key, userName: entry.userName, count: 0 });
+    counts.get(key).count++;
+  }
+  return Array.from(counts.values()).sort((a, b) => b.count - a.count).slice(0, limit);
+}
+
+// ============================================================
+// FORMATTING
+// ============================================================
+
+/** @param {string} dateStr — ISO datetime */
+export function formatDateTime(dateStr) {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  return d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+/** @param {string} action */
+export function actionBadgeColor(action) {
+  const colors = { create: '#16a34a', update: '#2563eb', delete: '#dc2626' };
+  return colors[action] || '#6b7280';
+}
+
+/** @param {string} role */
+export function roleBadgeColor(role) {
+  const colors = { admin: '#7c3aed', editor: '#2563eb', viewer: '#6b7280' };
+  return colors[role] || '#6b7280';
+}
+
+/** @param {string} severity */
+export function severityColor(severity) {
+  return severity === 'critical' ? '#dc2626' : '#d97706';
+}
