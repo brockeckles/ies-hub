@@ -68,7 +68,7 @@ export function baseUph(tmuTotal) {
 
 /**
  * Compute total PFD percentage from an allowance profile.
- * @param {import('./types.js?v=20260417-mE').AllowanceProfile | { personal_pct?: number, fatigue_pct?: number, delay_pct?: number }} profile
+ * @param {import('./types.js?v=20260417-mF').AllowanceProfile | { personal_pct?: number, fatigue_pct?: number, delay_pct?: number }} profile
  * @returns {number} total PFD percent (e.g., 14 for 14%)
  */
 export function totalPfd(profile) {
@@ -107,7 +107,7 @@ export function adjustedCycleTime(tmuTotal, pfdPct) {
 
 /**
  * Sum TMU across elements.
- * @param {import('./types.js?v=20260417-mE').MostElement[]} elements
+ * @param {import('./types.js?v=20260417-mF').MostElement[]} elements
  * @returns {number}
  */
 export function sumElementTmu(elements) {
@@ -116,7 +116,7 @@ export function sumElementTmu(elements) {
 
 /**
  * Count variable vs fixed elements.
- * @param {import('./types.js?v=20260417-mE').MostElement[]} elements
+ * @param {import('./types.js?v=20260417-mF').MostElement[]} elements
  * @returns {{ variable: number, fixed: number, total: number }}
  */
 export function elementBreakdown(elements) {
@@ -128,7 +128,7 @@ export function elementBreakdown(elements) {
 /**
  * Compute effective TMU for a variable element given a complexity factor (0–1).
  * Linear interpolation between variable_min and variable_max.
- * @param {import('./types.js?v=20260417-mE').MostElement} element
+ * @param {import('./types.js?v=20260417-mF').MostElement} element
  * @param {number} [factor=0.5] — 0 = min, 1 = max
  * @returns {number}
  */
@@ -167,9 +167,9 @@ export function computeAnalysisLine(params) {
 
 /**
  * Compute full analysis summary from a set of lines.
- * @param {import('./types.js?v=20260417-mE').AnalysisLine[]} lines
+ * @param {import('./types.js?v=20260417-mF').AnalysisLine[]} lines
  * @param {number} operatingDays — annual operating days
- * @returns {import('./types.js?v=20260417-mE').AnalysisSummary}
+ * @returns {import('./types.js?v=20260417-mF').AnalysisSummary}
  */
 export function computeAnalysisSummary(lines, operatingDays = DEFAULT_OPERATING_DAYS) {
   const result = {
@@ -225,8 +225,8 @@ export function computeWorkflowStep(params) {
 
 /**
  * Analyze a full workflow pipeline.
- * @param {import('./types.js?v=20260417-mE').WorkflowStep[]} steps — with computed adjusted_uph
- * @returns {import('./types.js?v=20260417-mE').WorkflowResult}
+ * @param {import('./types.js?v=20260417-mF').WorkflowStep[]} steps — with computed adjusted_uph
+ * @returns {import('./types.js?v=20260417-mF').WorkflowResult}
  */
 export function analyzeWorkflow(steps) {
   const result = {
@@ -260,7 +260,7 @@ export function analyzeWorkflow(steps) {
 /**
  * Identify workflow bottleneck: the step with lowest adjusted UPH.
  * Returns bottleneck index, UPH, and % impact compared to average.
- * @param {import('./types.js?v=20260417-mE').WorkflowStep[]} steps — with computed adjusted_uph
+ * @param {import('./types.js?v=20260417-mF').WorkflowStep[]} steps — with computed adjusted_uph
  * @returns {{ bottleneckIdx: number, bottleneckUph: number, impactPercent: number }}
  */
 export function calcWorkflowBottleneck(steps) {
@@ -294,7 +294,7 @@ export function calcWorkflowBottleneck(steps) {
 
 /**
  * Break down labor by category (manual / MHE / hybrid) for a set of steps.
- * @param {import('./types.js?v=20260417-mE').WorkflowStep[]} steps
+ * @param {import('./types.js?v=20260417-mF').WorkflowStep[]} steps
  * @returns {{ manual: { hours: number, ftes: number }, mhe: { hours: number, ftes: number }, hybrid: { hours: number, ftes: number } }}
  */
 export function calcCategoryBreakdown(steps) {
@@ -333,12 +333,12 @@ export function calcAnnualizedCost(dailyCost, operatingDays) {
  * Convert analysis lines into Cost Model direct labor lines.
  * This is the integration bridge: MOST analysis → CM laborLines.
  *
- * @param {import('./types.js?v=20260417-mE').AnalysisLine[]} lines
+ * @param {import('./types.js?v=20260417-mF').AnalysisLine[]} lines
  * @param {Object} opts
  * @param {number} opts.operatingDays — annual operating days
  * @param {number} opts.shiftHours — hours per shift
  * @param {number} [opts.defaultBurdenPct=30]
- * @returns {import('./types.js?v=20260417-mE').MostToCmPayload['laborLines']}
+ * @returns {import('./types.js?v=20260417-mF').MostToCmPayload['laborLines']}
  */
 export function convertToCmLaborLines(lines, opts) {
   const opDays = opts.operatingDays || DEFAULT_OPERATING_DAYS;

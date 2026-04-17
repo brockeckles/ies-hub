@@ -4,7 +4,7 @@
  * Replaces v2's 784 raw supabase calls with a centralized client.
  *
  * Usage:
- *   import { db } from './supabase.js?v=20260417-mE';
+ *   import { db } from './supabase.js?v=20260417-mF';
  *
  *   const { data, error } = await db.from('cost_models').select('*').eq('id', 7);
  *   const rows = await db.fetchAll('labor_rates');

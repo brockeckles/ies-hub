@@ -11,24 +11,24 @@
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
   <!-- CDN Libraries (shared — always loaded) -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js?v=20260417-mE"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js?v=20260417-mF"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 
   <!-- CDN Libraries (per-tool — loaded on demand by tool UI) -->
   <!-- Leaflet: COG, NetOpt, Fleet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js?v=20260417-mE" defer></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js?v=20260417-mF" defer></script>
   <!-- Three.js: WSC only -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js?v=20260417-mE" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js?v=20260417-mF" defer></script>
   <!-- SheetJS: Cost Model Excel export (loads as global window.XLSX) -->
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js?v=20260417-mE"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js?v=20260417-mF"></script>
   <!-- PptxGenJS: Deck Generator (re-enabled 2026-04-17 PM) -->
-  <script src="https://cdn.jsdelivr.net/gh/gitbrent/PptxGenJS@3.12.0/dist/pptxgen.bundle.js?v=20260417-mE"></script>
+  <script src="https://cdn.jsdelivr.net/gh/gitbrent/PptxGenJS@3.12.0/dist/pptxgen.bundle.js?v=20260417-mF"></script>
 
   <!-- Module Preloads (shared core) -->
-  <link rel="modulepreload" href="./shared/event-bus.js?v=20260417-mE">
-  <link rel="modulepreload" href="./shared/state.js?v=20260417-mE">
-  <link rel="modulepreload" href="./shared/router.js?v=20260417-mE">
+  <link rel="modulepreload" href="./shared/event-bus.js?v=20260417-mF">
+  <link rel="modulepreload" href="./shared/state.js?v=20260417-mF">
+  <link rel="modulepreload" href="./shared/router.js?v=20260417-mF">
 
   <!-- Design System -->
   <link rel="stylesheet" href="./css/hub.css">
@@ -132,12 +132,6 @@
             </span>
             <span class="hub-nav-label">Change Management</span>
           </div>
-          <div class="hub-nav-item" data-route="welcome">
-            <span class="hub-nav-icon">
-              <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-            </span>
-            <span class="hub-nav-label">Hub Guide</span>
-          </div>
           <div class="hub-nav-item" data-route="feedback">
             <span class="hub-nav-icon">
               <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
@@ -176,11 +170,11 @@
 
   <!-- App Bootstrap -->
   <script type="module">
-    import { auth } from './shared/auth.js?v=20260417-mE';
-    import { router } from './shared/router.js?v=20260417-mE';
-    import { search } from './shared/search.js?v=20260417-mE';
-    import { bus } from './shared/event-bus.js?v=20260417-mE';
-    import { state } from './shared/state.js?v=20260417-mE';
+    import { auth } from './shared/auth.js?v=20260417-mF';
+    import { router } from './shared/router.js?v=20260417-mF';
+    import { search } from './shared/search.js?v=20260417-mF';
+    import { bus } from './shared/event-bus.js?v=20260417-mF';
+    import { state } from './shared/state.js?v=20260417-mF';
 
     // ---- Auth Gate ----
     const authOverlay = document.getElementById('auth-overlay');
@@ -206,42 +200,8 @@
     function initRouter() {
       const outlet = document.getElementById('hub-content');
 
-      // Welcome / Hub Guide (inline — no lazy load needed)
-      router.register('welcome', {
-        title: 'Hub Guide',
-        load: async () => ({
-          mount(el) {
-            el.innerHTML = `
-              <div class="hub-content-inner">
-                <h1 class="text-page mb-6">Welcome to IES Hub</h1>
-                <div class="hub-card mb-4">
-                  <h3 class="text-subtitle mb-2">Solutions Design Platform</h3>
-                  <p class="text-body text-muted">
-                    The IES Intelligence Hub is a unified platform for solutions design,
-                    cost modeling, facility planning, and deal management. Use the sidebar
-                    to navigate between tools and sections.
-                  </p>
-                </div>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--sp-4);">
-                  <div class="hub-card hub-card-interactive" onclick="location.hash='overview'">
-                    <h4 class="text-subtitle mb-2">Command Center</h4>
-                    <p class="text-body text-muted">Market intelligence, alerts, and industry news</p>
-                  </div>
-                  <div class="hub-card hub-card-interactive" onclick="location.hash='deals'">
-                    <h4 class="text-subtitle mb-2">Deal Management</h4>
-                    <p class="text-body text-muted">Pipeline tracking through 6 DOS stages</p>
-                  </div>
-                  <div class="hub-card hub-card-interactive" onclick="location.hash='designtools'">
-                    <h4 class="text-subtitle mb-2">Design Tools</h4>
-                    <p class="text-body text-muted">7 specialized tools for solutions engineering</p>
-                  </div>
-                </div>
-              </div>
-            `;
-          },
-          unmount() {}
-        }),
-      });
+      // (Hub Guide / "welcome" route removed 2026-04-17 PM — Training Wiki
+      // covers onboarding content now; Hub Guide was redundant.)
 
       // Design Tools landing (inline)
       router.register('designtools', {
@@ -280,13 +240,13 @@
 
       // Design Tool sub-routes (lazy loaded)
       const toolRoutes = {
-        'designtools/cost-model': { title: 'Cost Model Builder', path: './tools/cost-model/ui.js?v=20260417-mE' },
-        'designtools/warehouse-sizing': { title: 'Warehouse Sizing Calculator', path: './tools/warehouse-sizing/ui.js?v=20260417-mE' },
-        'designtools/most-standards': { title: 'MOST Labor Standards', path: './tools/most-standards/ui.js?v=20260417-mE' },
-        'designtools/network-opt': { title: 'Network Optimization', path: './tools/network-opt/ui.js?v=20260417-mE' },
-        'designtools/fleet-modeler': { title: 'Fleet Modeler', path: './tools/fleet-modeler/ui.js?v=20260417-mE' },
-        'designtools/center-of-gravity': { title: 'Center of Gravity', path: './tools/center-of-gravity/ui.js?v=20260417-mE' },
-        'designtools/deal-manager': { title: 'Multi-Site Analyzer', path: './tools/deal-manager/ui.js?v=20260417-mE' },
+        'designtools/cost-model': { title: 'Cost Model Builder', path: './tools/cost-model/ui.js?v=20260417-mF' },
+        'designtools/warehouse-sizing': { title: 'Warehouse Sizing Calculator', path: './tools/warehouse-sizing/ui.js?v=20260417-mF' },
+        'designtools/most-standards': { title: 'MOST Labor Standards', path: './tools/most-standards/ui.js?v=20260417-mF' },
+        'designtools/network-opt': { title: 'Network Optimization', path: './tools/network-opt/ui.js?v=20260417-mF' },
+        'designtools/fleet-modeler': { title: 'Fleet Modeler', path: './tools/fleet-modeler/ui.js?v=20260417-mF' },
+        'designtools/center-of-gravity': { title: 'Center of Gravity', path: './tools/center-of-gravity/ui.js?v=20260417-mF' },
+        'designtools/deal-manager': { title: 'Multi-Site Analyzer', path: './tools/deal-manager/ui.js?v=20260417-mF' },
       };
 
       for (const [route, config] of Object.entries(toolRoutes)) {
@@ -298,13 +258,13 @@
 
       // Hub section routes (lazy loaded)
       const hubRoutes = {
-        'overview': { title: 'Command Center', path: './hub/command-center/ui.js?v=20260417-mE' },
-        'marketmap': { title: 'Market Explorer', path: './hub/market-explorer/ui.js?v=20260417-mE' },
-        'deals': { title: 'Deal Management', path: './hub/deal-management/ui.js?v=20260417-mE' },
-        'training': { title: 'Training Wiki', path: './hub/training-wiki/ui.js?v=20260417-mE' },
-        'changemanagement': { title: 'Change Management', path: './hub/change-mgmt/ui.js?v=20260417-mE' },
-        'admin': { title: 'Reference Data', path: './hub/admin/ui.js?v=20260417-mE' },
-        'feedback': { title: 'Ideas & Feedback', path: './hub/feedback/ui.js?v=20260417-mE' },
+        'overview': { title: 'Command Center', path: './hub/command-center/ui.js?v=20260417-mF' },
+        'marketmap': { title: 'Market Explorer', path: './hub/market-explorer/ui.js?v=20260417-mF' },
+        'deals': { title: 'Deal Management', path: './hub/deal-management/ui.js?v=20260417-mF' },
+        'training': { title: 'Training Wiki', path: './hub/training-wiki/ui.js?v=20260417-mF' },
+        'changemanagement': { title: 'Change Management', path: './hub/change-mgmt/ui.js?v=20260417-mF' },
+        'admin': { title: 'Reference Data', path: './hub/admin/ui.js?v=20260417-mF' },
+        'feedback': { title: 'Ideas & Feedback', path: './hub/feedback/ui.js?v=20260417-mF' },
       };
 
       for (const [route, config] of Object.entries(hubRoutes)) {

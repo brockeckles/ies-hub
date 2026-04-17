@@ -4,7 +4,7 @@
  * Each tool gets its own state slice; shared data (user, nav) lives at root.
  *
  * Usage:
- *   import { state } from './state.js?v=20260417-mE';
+ *   import { state } from './state.js?v=20260417-mF';
  *
  *   // Set nested path
  *   state.set('costModel.activeSection', 'labor');
@@ -27,7 +27,7 @@ class StateManager {
     this._store = {
       user: null,         // { email, role, authenticated }
       nav: {
-        section: 'welcome',  // current sidebar section
+        section: 'overview',  // current sidebar section
         tool: null,           // active design tool (if in designtools)
       },
     };
@@ -115,7 +115,7 @@ class StateManager {
    * Reset the store to initial state (useful for testing).
    */
   reset() {
-    this._store = { user: null, nav: { section: 'welcome', tool: null } };
+    this._store = { user: null, nav: { section: 'overview', tool: null } };
     this._subscribers.clear();
   }
 

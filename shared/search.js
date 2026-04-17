@@ -3,14 +3,14 @@
  * Static index + dynamic Supabase search, dropdown UI, keyboard navigation.
  *
  * Usage:
- *   import { search } from './search.js?v=20260417-mE';
+ *   import { search } from './search.js?v=20260417-mF';
  *   search.init(document.querySelector('.hub-search-container'));
  *
  * @module shared/search
  */
 
-import { router } from './router.js?v=20260417-mE';
-import { bus } from './event-bus.js?v=20260417-mE';
+import { router } from './router.js?v=20260417-mF';
+import { bus } from './event-bus.js?v=20260417-mF';
 
 /**
  * @typedef {Object} SearchEntry
@@ -54,7 +54,6 @@ class GlobalSearch {
       { title: 'Design Tools', route: 'designtools', section: 'Work', keywords: ['tools', 'cost model', 'warehouse', 'fleet'] },
       { title: 'Training Wiki', route: 'training', section: 'Resources', keywords: ['wiki', 'knowledge', 'articles'] },
       { title: 'Change Management', route: 'changemanagement', section: 'Resources', keywords: ['change', 'updates'] },
-      { title: 'Hub Guide', route: 'welcome', section: 'Resources', keywords: ['home', 'guide', 'getting started'] },
       { title: 'Ideas & Feedback', route: 'feedback', section: 'Resources', keywords: ['feedback', 'ideas', 'suggestions'] },
       { title: 'Reference Data', route: 'admin', section: 'Admin', keywords: ['admin', 'settings', 'master data'] },
       { title: 'Cost Model Builder', route: 'designtools/cost-model', section: 'Design Tools', keywords: ['pricing', 'P&L', 'labor', 'equipment', 'overhead'] },
