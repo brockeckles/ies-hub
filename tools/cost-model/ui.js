@@ -6,16 +6,16 @@
  * @module tools/cost-model/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-m1';
-import { state } from '../../shared/state.js?v=20260417-m1';
-import * as calc from './calc.js?v=20260417-m1';
-import * as api from './api.js?v=20260417-m1';
+import { bus } from '../../shared/event-bus.js?v=20260417-m2';
+import { state } from '../../shared/state.js?v=20260417-m2';
+import * as calc from './calc.js?v=20260417-m2';
+import * as api from './api.js?v=20260417-m2';
 
 // ============================================================
 // STATE — tool-local reactive state
 // ============================================================
 
-/** @type {import('./types.js?v=20260417-m1').CostModelData} */
+/** @type {import('./types.js?v=20260417-m2').CostModelData} */
 let model = createEmptyModel();
 
 /** @type {Object} */
@@ -747,6 +747,18 @@ function recomputeLineHours(line) {
   line.annual_hours = u > 0 ? v / u : 0;
 }
 
+// ---- MOST schema accessors -------------------------------------------------
+// ref_most_templates uses activity_name / units_per_hour_base / total_tmu_base
+// (not the `name`/`base_uph`/`tmu_total` v3 types.js declared). These helpers
+// read both shapes so we stay robust if the schema is normalized later.
+const mostTplName = (t) => t?.activity_name || t?.name || t?.wms_transaction || '';
+const mostTplUph  = (t) => Number(t?.units_per_hour_base || t?.base_uph || 0);
+const mostTplTmu  = (t) => Number(t?.total_tmu_base || t?.tmu_total || 0);
+// ref_most_elements uses sequence_order / element_name / tmu_value
+const mostElSeq  = (e) => (e?.sequence_order ?? e?.sequence ?? 0);
+const mostElName = (e) => e?.element_name || e?.description || '';
+const mostElTmu  = (e) => Number(e?.tmu_value || e?.tmu || 0);
+
 /**
  * Render the per-row MOST Template picker cell (v3 port of v2 _mostSelectHtml).
  * Groups templates by process_area in canonical warehouse-flow order.
@@ -762,9 +774,11 @@ function renderMostCell(line, idx) {
   const currentTpl = currentId
     ? templates.find(t => String(t.id) === String(currentId))
     : null;
+  const tplUph = currentTpl ? mostTplUph(currentTpl) : 0;
   const isOverridden = currentTpl
     && (line.base_uph || 0) > 0
-    && Math.abs((line.base_uph || 0) - (currentTpl.base_uph || 0)) > 0.5;
+    && tplUph > 0
+    && Math.abs((line.base_uph || 0) - tplUph) > 0.5;
 
   // Group templates by process_area
   const groups = {};
@@ -781,7 +795,7 @@ function renderMostCell(line, idx) {
     optionsHtml += `<optgroup label="${area}">`;
     groups[area].forEach(t => {
       const selected = String(t.id) === String(currentId) ? ' selected' : '';
-      let name = t.name || t.activity_name || `Template ${t.id}`;
+      let name = mostTplName(t) || `Template ${t.id}`;
       if (name.length > 32) name = name.substring(0, 30) + '…';
       optionsHtml += `<option value="${t.id}"${selected}>${name}</option>`;
     });
@@ -793,7 +807,7 @@ function renderMostCell(line, idx) {
     ? `<button class="cm-most-icon" data-action="view-most-template" data-idx="${idx}" data-template-id="${currentTpl.id}" title="View template details" style="background:none;border:none;cursor:pointer;padding:2px 4px;color:var(--ies-blue,#0047AB);font-size:14px;">ⓘ</button>`
     : '';
   const resetBtn = isOverridden
-    ? `<button class="cm-most-icon" data-action="reset-most-uph" data-idx="${idx}" title="Reset UPH to template (${Math.round(currentTpl.base_uph || 0)})" style="background:none;border:none;cursor:pointer;padding:2px 4px;color:#f37021;font-size:13px;font-weight:700;">↺</button>`
+    ? `<button class="cm-most-icon" data-action="reset-most-uph" data-idx="${idx}" title="Reset UPH to template (${Math.round(tplUph)})" style="background:none;border:none;cursor:pointer;padding:2px 4px;color:#f37021;font-size:13px;font-weight:700;">↺</button>`
     : '';
   const overrideBadge = isOverridden
     ? `<div style="display:inline-block;margin-top:2px;padding:1px 6px;background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:0.3px;">OVERRIDE</div>`
@@ -1681,21 +1695,26 @@ function applyMostTemplate(idx, templateId) {
   // overwrite with the new template's default instead of treating it as a manual override.
   const prevTplId = line.most_template_id;
   const prevTpl = prevTplId ? templates.find(t => String(t.id) === String(prevTplId)) : null;
+  const prevTplUph = prevTpl ? mostTplUph(prevTpl) : 0;
   const prevWasDefault = prevTpl
     && (line.base_uph || 0) > 0
-    && Math.abs((line.base_uph || 0) - (prevTpl.base_uph || 0)) <= 0.5;
+    && prevTplUph > 0
+    && Math.abs((line.base_uph || 0) - prevTplUph) <= 0.5;
+
+  const tplName = mostTplName(tpl);
+  const tplUph = mostTplUph(tpl);
 
   line.most_template_id = tpl.id;
-  line.most_template_name = tpl.name || '';
+  line.most_template_name = tplName;
 
-  if (!line.activity_name) line.activity_name = tpl.name || '';
+  if (!line.activity_name) line.activity_name = tplName;
   if (tpl.process_area && !line.process_area) line.process_area = tpl.process_area;
   if (tpl.labor_category && !line.labor_category) line.labor_category = tpl.labor_category;
   if (tpl.uom && !line.uom) line.uom = tpl.uom;
 
   // Only overwrite base_uph when it's zero or was the previous template's default.
   if ((line.base_uph || 0) === 0 || prevWasDefault) {
-    line.base_uph = tpl.base_uph || 0;
+    line.base_uph = tplUph;
   }
 
   recomputeLineHours(line);
@@ -1714,7 +1733,9 @@ function resetMostUph(idx) {
   if (!line || !line.most_template_id) return;
   const tpl = (refData.mostTemplates || []).find(t => String(t.id) === String(line.most_template_id));
   if (!tpl) return;
-  line.base_uph = tpl.base_uph || 0;
+  const uph = mostTplUph(tpl);
+  if (uph <= 0) return; // don't wipe user's uph if template has no uph
+  line.base_uph = uph;
   recomputeLineHours(line);
   isDirty = true;
   renderSection();
@@ -1740,23 +1761,23 @@ async function openMostTemplateDetail(templateId) {
     <div style="padding:20px 24px 12px 24px;border-bottom:1px solid var(--ies-gray-200);">
       <div style="display:flex;align-items:start;gap:12px;">
         <div style="flex:1;min-width:0;">
-          <div style="font-size:16px;font-weight:700;">MOST Template — ${tpl.name || '—'}</div>
-          <div style="font-size:12px;color:var(--ies-gray-400);margin-top:2px;">${tpl.process_area || '—'} · ${tpl.labor_category || '—'} · UOM: ${tpl.uom || '—'}</div>
+          <div style="font-size:16px;font-weight:700;">MOST Template — ${mostTplName(tpl) || '—'}</div>
+          <div style="font-size:12px;color:var(--ies-gray-400);margin-top:2px;">${tpl.process_area || '—'} · ${tpl.labor_category || '—'} · UOM: ${tpl.uom || '—'}${tpl.wms_transaction ? ` · ${tpl.wms_transaction}` : ''}</div>
         </div>
         <button id="cm-most-detail-close" class="hub-btn hub-btn-sm hub-btn-secondary">✕ Close</button>
       </div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px;">
         <div style="background:var(--ies-gray-50);border-radius:6px;padding:10px 12px;">
           <div style="font-size:10px;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:0.5px;">Base UPH</div>
-          <div style="font-size:22px;font-weight:700;color:var(--ies-blue,#0047AB);">${Math.round(tpl.base_uph || 0).toLocaleString()}</div>
+          <div style="font-size:22px;font-weight:700;color:var(--ies-blue,#0047AB);">${Math.round(mostTplUph(tpl)).toLocaleString()}</div>
         </div>
         <div style="background:var(--ies-gray-50);border-radius:6px;padding:10px 12px;">
           <div style="font-size:10px;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:0.5px;">Total TMU</div>
-          <div style="font-size:22px;font-weight:700;color:var(--ies-gray-700);">${Math.round(tpl.tmu_total || 0).toLocaleString()}</div>
+          <div style="font-size:22px;font-weight:700;color:var(--ies-gray-700);">${Math.round(mostTplTmu(tpl)).toLocaleString()}</div>
         </div>
         <div style="background:var(--ies-gray-50);border-radius:6px;padding:10px 12px;">
-          <div style="font-size:10px;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:0.5px;">Elements</div>
-          <div style="font-size:22px;font-weight:700;color:var(--ies-gray-700);">${tpl.element_count ?? '—'}</div>
+          <div style="font-size:10px;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:0.5px;">Equipment</div>
+          <div style="font-size:14px;font-weight:700;color:var(--ies-gray-700);margin-top:6px;">${tpl.equipment_type || '—'}</div>
         </div>
       </div>
       ${tpl.description ? `<div style="margin-top:12px;font-size:12px;color:var(--ies-gray-600);line-height:1.5;">${tpl.description}</div>` : ''}
@@ -1781,18 +1802,18 @@ async function openMostTemplateDetail(templateId) {
   const body = modal.querySelector('#cm-most-detail-body');
   try {
     const elements = await api.fetchMostElements(templateId);
-    const sorted = (elements || []).slice().sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
+    const sorted = (elements || []).slice().sort((a, b) => mostElSeq(a) - mostElSeq(b));
     if (sorted.length === 0) {
       body.innerHTML = `<div style="padding:24px;text-align:center;color:var(--ies-gray-400);font-size:13px;">No MOST elements defined for this template yet.</div>`;
       return;
     }
-    const totalTmu = sorted.reduce((s, e) => s + (e.tmu || 0), 0);
+    const totalTmu = sorted.reduce((s, e) => s + mostElTmu(e), 0);
     const rows = sorted.map((el, i) => `
       <tr style="${i % 2 ? 'background:var(--ies-gray-50);' : ''}">
-        <td style="padding:6px 10px;color:var(--ies-gray-400);">${el.sequence || (i + 1)}</td>
-        <td style="padding:6px 10px;font-weight:500;">${el.description || '—'}</td>
+        <td style="padding:6px 10px;color:var(--ies-gray-400);">${mostElSeq(el) || (i + 1)}</td>
+        <td style="padding:6px 10px;font-weight:500;">${mostElName(el) || '—'}</td>
         <td style="padding:6px 10px;font-family:monospace;font-size:11px;color:var(--ies-gray-500);">${el.most_sequence || '—'}</td>
-        <td style="padding:6px 10px;text-align:right;font-weight:600;">${el.tmu || 0}</td>
+        <td style="padding:6px 10px;text-align:right;font-weight:600;">${mostElTmu(el) || 0}</td>
         <td style="padding:6px 10px;text-align:center;">${el.is_variable ? `<span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px;font-size:11px;">${el.variable_driver || 'Yes'}</span>` : '<span style="color:var(--ies-gray-300);">—</span>'}</td>
       </tr>
     `).join('');
@@ -2162,7 +2183,7 @@ function sectionHasData(key) {
 /**
  * Handle incoming labor lines from MOST tool.
  * Merges or replaces CM laborLines with MOST-derived data.
- * @param {import('../most-standards/types.js?v=20260417-m1').MostToCmPayload} payload
+ * @param {import('../most-standards/types.js?v=20260417-m2').MostToCmPayload} payload
  */
 function handleMostPush(payload) {
   if (!payload?.laborLines?.length) return;
@@ -2200,7 +2221,7 @@ function handleMostPush(payload) {
 /**
  * Handle incoming facility data from Warehouse Sizing Calculator.
  * Populates CM facility section fields.
- * @param {import('../warehouse-sizing/types.js?v=20260417-m1').WscToCmPayload} payload
+ * @param {import('../warehouse-sizing/types.js?v=20260417-m2').WscToCmPayload} payload
  */
 function handleWscPush(payload) {
   if (!payload) return;
