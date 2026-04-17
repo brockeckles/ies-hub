@@ -284,11 +284,15 @@ function sectorPulseCard(title, icon, data, color) {
 }
 
 function alertRow(a) {
-  const sev = {
-    critical: { bg: '#fef2f2', border: '#dc2626', icon: '🔴', label: 'Critical', labelBg: 'rgba(220,38,38,.1)', labelColor: '#dc2626' },
-    warning: { bg: '#fffbeb', border: '#d97706', icon: '🟡', label: 'Warning', labelBg: 'rgba(217,119,6,.1)', labelColor: '#d97706' },
-    info: { bg: '#eff6ff', border: '#2563eb', icon: '🔵', label: 'Info', labelBg: 'rgba(37,99,235,.08)', labelColor: '#2563eb' },
-  }[a.severity] || { bg: '#f9fafb', border: '#9ca3af', icon: '⚪', label: 'Info', labelBg: 'rgba(107,114,128,.08)', labelColor: '#6b7280' };
+  const sevMap = {
+    critical: { bg: '#fef2f2', border: '#dc2626', label: 'Critical', labelBg: 'rgba(220,38,38,.1)', labelColor: '#dc2626' },
+    high:     { bg: '#fff7ed', border: '#ea580c', label: 'High', labelBg: 'rgba(234,88,12,.1)', labelColor: '#ea580c' },
+    warning:  { bg: '#fffbeb', border: '#d97706', label: 'Warning', labelBg: 'rgba(217,119,6,.1)', labelColor: '#d97706' },
+    medium:   { bg: '#fffbeb', border: '#d97706', label: 'Medium', labelBg: 'rgba(217,119,6,.1)', labelColor: '#d97706' },
+    info:     { bg: '#eff6ff', border: '#2563eb', label: 'Info', labelBg: 'rgba(37,99,235,.08)', labelColor: '#2563eb' },
+    low:      { bg: '#f0fdf4', border: '#16a34a', label: 'Low', labelBg: 'rgba(22,163,74,.08)', labelColor: '#16a34a' },
+  };
+  const sev = sevMap[a.severity] || { bg: '#f9fafb', border: '#9ca3af', label: 'Info', labelBg: 'rgba(107,114,128,.08)', labelColor: '#6b7280' };
 
   return `
     <div style="display:flex;align-items:start;gap:8px;padding:10px 14px;border-bottom:1px solid var(--ies-gray-100);border-left:3px solid ${sev.border};background:${sev.bg};cursor:${a.source_url ? 'pointer' : 'default'};" data-alert-url="${a.source_url || ''}">
@@ -347,7 +351,7 @@ function statusTile(name, status, healthy) {
 }
 
 function severityDot(severity) {
-  return { critical: '#dc2626', warning: '#d97706', info: '#2563eb' }[severity] || '#9ca3af';
+  return { critical: '#dc2626', high: '#ea580c', warning: '#d97706', medium: '#d97706', info: '#2563eb', low: '#16a34a' }[severity] || '#9ca3af';
 }
 
 function renderRfpFeed(rfpSignals) {
