@@ -6,10 +6,10 @@
  * @module tools/most-standards/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-mC';
-import { state } from '../../shared/state.js?v=20260417-mC';
-import * as calc from './calc.js?v=20260417-mC';
-import * as api from './api.js?v=20260417-mC';
+import { bus } from '../../shared/event-bus.js?v=20260417-mD';
+import { state } from '../../shared/state.js?v=20260417-mD';
+import * as calc from './calc.js?v=20260417-mD';
+import * as api from './api.js?v=20260417-mD';
 
 // ============================================================
 // STATE — tool-local
@@ -21,13 +21,13 @@ let activeTab = 'library';
 /** @type {HTMLElement|null} */
 let rootEl = null;
 
-/** @type {{ templates: import('./types.js?v=20260417-mC').MostTemplate[], allowanceProfiles: import('./types.js?v=20260417-mC').AllowanceProfile[] }} */
+/** @type {{ templates: import('./types.js?v=20260417-mD').MostTemplate[], allowanceProfiles: import('./types.js?v=20260417-mD').AllowanceProfile[] }} */
 let refData = { templates: [], allowanceProfiles: [] };
 
-/** @type {import('./types.js?v=20260417-mC').MostTemplate|null} */
+/** @type {import('./types.js?v=20260417-mD').MostTemplate|null} */
 let selectedTemplate = null;
 
-/** @type {import('./types.js?v=20260417-mC').MostElement[]} */
+/** @type {import('./types.js?v=20260417-mD').MostElement[]} */
 let selectedElements = [];
 
 /** Template editor state — null if not editing, or a copy of the template being edited */
@@ -54,11 +54,11 @@ function loadSavedScenarios() {
 let filters = { search: '', processArea: '', laborCategory: '' };
 
 // --- Analysis state ---
-/** @type {import('./types.js?v=20260417-mC').LaborAnalysis} */
+/** @type {import('./types.js?v=20260417-mD').LaborAnalysis} */
 let analysis = createEmptyAnalysis();
 
 // --- Workflow state ---
-/** @type {import('./types.js?v=20260417-mC').Workflow} */
+/** @type {import('./types.js?v=20260417-mD').Workflow} */
 let workflow = createEmptyWorkflow();
 
 // ============================================================
@@ -1169,7 +1169,7 @@ function pushToCostModel() {
     defaultBurdenPct: 30,
   });
 
-  /** @type {import('./types.js?v=20260417-mC').MostToCmPayload} */
+  /** @type {import('./types.js?v=20260417-mD').MostToCmPayload} */
   const payload = {
     laborLines: cmLines,
     operatingDays: analysis.operating_days,
@@ -1196,7 +1196,7 @@ function filterTemplates() {
 }
 
 function groupByProcessArea(templates) {
-  /** @type {Record<string, import('./types.js?v=20260417-mC').MostTemplate[]>} */
+  /** @type {Record<string, import('./types.js?v=20260417-mD').MostTemplate[]>} */
   const groups = {};
   for (const t of templates) {
     const area = t.process_area || 'Other';

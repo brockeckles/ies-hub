@@ -6,16 +6,16 @@
  * @module tools/cost-model/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-mC';
-import { state } from '../../shared/state.js?v=20260417-mC';
-import * as calc from './calc.js?v=20260417-mC';
-import * as api from './api.js?v=20260417-mC';
+import { bus } from '../../shared/event-bus.js?v=20260417-mD';
+import { state } from '../../shared/state.js?v=20260417-mD';
+import * as calc from './calc.js?v=20260417-mD';
+import * as api from './api.js?v=20260417-mD';
 
 // ============================================================
 // STATE — tool-local reactive state
 // ============================================================
 
-/** @type {import('./types.js?v=20260417-mC').CostModelData} */
+/** @type {import('./types.js?v=20260417-mD').CostModelData} */
 let model = createEmptyModel();
 
 /** @type {Object} */
@@ -916,6 +916,34 @@ const mostElTmu  = (e) => Number(e?.tmu_value || e?.tmu || 0);
  * @param {any} line
  * @param {number} idx
  */
+/**
+ * Render the Volume cell for a direct-labor row.
+ * Dropdown of volumeLines (by name) + a "Custom" option for ad-hoc values.
+ * Selecting a line syncs line.volume to the chosen volumeLines[].volume
+ * and stores the source index in line.volume_source_idx.
+ */
+function renderLaborVolumeCell(line, idx) {
+  const volumes = model.volumeLines || [];
+  const sourceIdx = (line.volume_source_idx !== undefined && line.volume_source_idx !== null && line.volume_source_idx !== '')
+    ? String(line.volume_source_idx)
+    : 'custom';
+  const options = volumes.map((v, vi) => {
+    const label = `${v.name || ('Vol #' + (vi + 1))} (${(v.volume || 0).toLocaleString()} ${v.uom || ''})`;
+    return `<option value="${vi}"${String(vi) === sourceIdx ? ' selected' : ''}>${label}</option>`;
+  }).join('');
+  return `
+    <div style="display:flex;flex-direction:column;gap:2px;">
+      <select style="width:170px;font-size:11px;" data-labor-volume-source data-idx="${idx}">
+        ${options}
+        <option value="custom"${sourceIdx === 'custom' ? ' selected' : ''}>— Custom —</option>
+      </select>
+      ${sourceIdx === 'custom'
+        ? `<input type="number" value="${line.volume || 0}" style="width:170px;font-size:11px;" data-array="laborLines" data-idx="${idx}" data-field="volume" data-type="number" placeholder="Volume" />`
+        : `<div style="font-size:10px;color:var(--ies-gray-400);padding-left:4px;">= ${(line.volume || 0).toLocaleString()}</div>`}
+    </div>
+  `;
+}
+
 function renderMostCell(line, idx) {
   const templates = (refData.mostTemplates || []).filter(t => t.is_active !== false);
   const currentId = line.most_template_id || '';
@@ -975,6 +1003,7 @@ function renderMostCell(line, idx) {
 function renderLabor() {
   const lines = model.laborLines || [];
   const opHrs = calc.operatingHours(model.shifts || {});
+  const lc = model.laborCosting || (model.laborCosting = {});
   const totalDirect = lines.reduce((s, l) => s + calc.directLineAnnualSimple(l), 0);
   const totalIndirect = (model.indirectLaborLines || []).reduce((s, l) => s + calc.indirectLineAnnualSimple(l, opHrs), 0);
 
@@ -982,7 +1011,37 @@ function renderLabor() {
     <div class="cm-section-header">
       <div>
         <div class="cm-section-title">Labor</div>
-        <div class="cm-section-desc">Direct labor (MOST-driven) and indirect/management labor lines.</div>
+        <div class="cm-section-desc">Direct labor (MOST-driven) and indirect/management labor. Cost factors below are global.</div>
+      </div>
+    </div>
+
+    <!-- Labor Costing Factors — global multipliers that apply across rows -->
+    <div class="hub-card mb-4" style="background:var(--ies-gray-50);">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;">
+        <div class="text-subtitle" style="margin:0;">Labor Costing Factors <span style="font-size:11px;color:var(--ies-gray-400);font-weight:500;">(global)</span></div>
+        <span style="font-size:11px;color:var(--ies-gray-400);">Per-row Burden% in the table below overrides Default Burden for that line.</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(5, minmax(0, 1fr));gap:10px;font-size:12px;">
+        <div class="cm-form-group" style="margin:0;">
+          <label class="cm-form-label" title="Fringe rate applied to base wage for benefits + payroll taxes. Typical 28-35%.">Default Burden %</label>
+          <input class="hub-input" type="number" min="0" max="100" step="0.5" value="${lc.defaultBurdenPct ?? 30}" data-field="laborCosting.defaultBurdenPct" data-type="number" />
+        </div>
+        <div class="cm-form-group" style="margin:0;">
+          <label class="cm-form-label" title="Planned overtime hours as % of regular hours. Each OT hour costs 1.5x. Typical 3-8%.">Overtime %</label>
+          <input class="hub-input" type="number" min="0" max="50" step="0.5" value="${lc.overtimePct ?? 5}" data-field="laborCosting.overtimePct" data-type="number" />
+        </div>
+        <div class="cm-form-group" style="margin:0;">
+          <label class="cm-form-label" title="Health/retirement benefits as % of base wage — layered on top of Burden. Typical 12-18%.">Benefit Load %</label>
+          <input class="hub-input" type="number" min="0" max="50" step="0.5" value="${lc.benefitLoadPct ?? 15}" data-field="laborCosting.benefitLoadPct" data-type="number" />
+        </div>
+        <div class="cm-form-group" style="margin:0;">
+          <label class="cm-form-label" title="PTO days per FTE per year — reduces effective productive hours. Typical 10-20 days.">PTO Days</label>
+          <input class="hub-input" type="number" min="0" max="40" step="1" value="${lc.ptoDays ?? 12}" data-field="laborCosting.ptoDays" data-type="number" />
+        </div>
+        <div class="cm-form-group" style="margin:0;">
+          <label class="cm-form-label" title="Annual % of workforce requiring replacement — drives recruiting/onboarding cost. 3PL warehouses typically see 40-80%.">Turnover %</label>
+          <input class="hub-input" type="number" min="0" max="150" step="1" value="${lc.turnoverPct ?? 45}" data-field="laborCosting.turnoverPct" data-type="number" />
+        </div>
       </div>
     </div>
 
@@ -990,7 +1049,7 @@ function renderLabor() {
       <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-indirect">Auto-Generate Indirect Labor</button>
     </div>
 
-    <div class="text-subtitle mb-2">Direct Labor</div>
+    <div class="text-subtitle mb-2">Direct Labor <span style="font-size:11px;color:var(--ies-gray-400);font-weight:500;">— Volume dropdown pulls from Volumes tab · Equipment includes RF / Voice / AMR alongside MHE</span></div>
     <table class="cm-grid-table">
       <thead>
         <tr><th style="min-width:180px;">MOST Template</th><th>Activity</th><th>Equipment/MHE</th><th>Volume</th><th>UPH</th><th>Hrs/Yr</th><th>FTE</th><th>Rate</th><th>Burden%</th><th class="cm-num">Annual Cost</th><th></th></tr>
@@ -1018,7 +1077,7 @@ function renderLabor() {
                 <option value="manual"${l.equipment_type === 'manual' ? ' selected' : ''}>Manual/Walk</option>
               </select>
             </td>
-            <td><input type="number" value="${l.volume || 0}" style="width:75px;" data-array="laborLines" data-idx="${i}" data-field="volume" data-type="number" /></td>
+            <td>${renderLaborVolumeCell(l, i)}</td>
             <td><input type="number" value="${l.base_uph || 0}" style="width:55px;" data-array="laborLines" data-idx="${i}" data-field="base_uph" data-type="number" /></td>
             <td class="cm-num">${(l.annual_hours || 0).toLocaleString(undefined, {maximumFractionDigits:0})}</td>
             <td class="cm-num">${calc.fte(l, opHrs).toFixed(1)}</td>
@@ -1721,6 +1780,31 @@ function bindSectionEvents(section, container) {
     });
   });
 
+  // Direct-labor Volume source picker — dropdown of volumeLines + "Custom".
+  // Selecting a volume line syncs the labor line's volume to that line's value.
+  container.querySelectorAll('[data-labor-volume-source]').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const idx = parseInt(sel.dataset.idx);
+      const line = (model.laborLines || [])[idx];
+      if (!line) return;
+      const val = sel.value;
+      if (val === 'custom' || val === '') {
+        line.volume_source_idx = null; // user wants manual value
+      } else {
+        const srcIdx = parseInt(val);
+        const src = (model.volumeLines || [])[srcIdx];
+        if (src) {
+          line.volume_source_idx = srcIdx;
+          line.volume = src.volume || 0;
+          recomputeLineHours(line);
+        }
+      }
+      isDirty = true;
+      if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+      renderSection();
+    });
+  });
+
   // Action buttons
   container.querySelectorAll('[data-action]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -2347,7 +2431,7 @@ function sectionHasData(key) {
 /**
  * Handle incoming labor lines from MOST tool.
  * Merges or replaces CM laborLines with MOST-derived data.
- * @param {import('../most-standards/types.js?v=20260417-mC').MostToCmPayload} payload
+ * @param {import('../most-standards/types.js?v=20260417-mD').MostToCmPayload} payload
  */
 function handleMostPush(payload) {
   if (!payload?.laborLines?.length) return;
@@ -2385,7 +2469,7 @@ function handleMostPush(payload) {
 /**
  * Handle incoming facility data from Warehouse Sizing Calculator.
  * Populates CM facility section fields.
- * @param {import('../warehouse-sizing/types.js?v=20260417-mC').WscToCmPayload} payload
+ * @param {import('../warehouse-sizing/types.js?v=20260417-mD').WscToCmPayload} payload
  */
 function handleWscPush(payload) {
   if (!payload) return;
@@ -2504,11 +2588,11 @@ function createEmptyModel() {
     facility: { totalSqft: 150000 },
     shifts: { shiftsPerDay: 1, hoursPerShift: 8, daysPerWeek: 5, weeksPerYear: 52 },
     laborLines: [
-      { activity_name: 'Receiving', process_area: 'Inbound',  labor_category: 'direct', volume: 15000,  base_uph: 200, annual_hours: 15000 / 200,  hourly_rate: 18.00, burden_pct: 30, most_template_id: '', most_template_name: '' },
-      { activity_name: 'Put-Away',  process_area: 'Inbound',  labor_category: 'direct', volume: 15000,  base_uph: 180, annual_hours: 15000 / 180,  hourly_rate: 18.00, burden_pct: 30, most_template_id: '', most_template_name: '' },
-      { activity_name: 'Picking',   process_area: 'Outbound', labor_category: 'direct', volume: 800000, base_uph: 120, annual_hours: 800000 / 120, hourly_rate: 17.50, burden_pct: 30, most_template_id: '', most_template_name: '' },
-      { activity_name: 'Packing',   process_area: 'Outbound', labor_category: 'direct', volume: 80000,  base_uph: 60,  annual_hours: 80000 / 60,   hourly_rate: 16.50, burden_pct: 30, most_template_id: '', most_template_name: '' },
-      { activity_name: 'Shipping',  process_area: 'Outbound', labor_category: 'direct', volume: 80000,  base_uph: 150, annual_hours: 80000 / 150,  hourly_rate: 17.00, burden_pct: 30, most_template_id: '', most_template_name: '' },
+      { activity_name: 'Receiving', process_area: 'Inbound',  labor_category: 'direct', volume_source_idx: 0, volume: 15000,  base_uph: 200, annual_hours: 15000 / 200,  hourly_rate: 18.00, burden_pct: 30, most_template_id: '', most_template_name: '' },
+      { activity_name: 'Put-Away',  process_area: 'Inbound',  labor_category: 'direct', volume_source_idx: 1, volume: 15000,  base_uph: 180, annual_hours: 15000 / 180,  hourly_rate: 18.00, burden_pct: 30, most_template_id: '', most_template_name: '' },
+      { activity_name: 'Picking',   process_area: 'Outbound', labor_category: 'direct', volume_source_idx: 3, volume: 800000, base_uph: 120, annual_hours: 800000 / 120, hourly_rate: 17.50, burden_pct: 30, most_template_id: '', most_template_name: '' },
+      { activity_name: 'Packing',   process_area: 'Outbound', labor_category: 'direct', volume_source_idx: 2, volume: 80000,  base_uph: 60,  annual_hours: 80000 / 60,   hourly_rate: 16.50, burden_pct: 30, most_template_id: '', most_template_name: '' },
+      { activity_name: 'Shipping',  process_area: 'Outbound', labor_category: 'direct', volume_source_idx: 2, volume: 80000,  base_uph: 150, annual_hours: 80000 / 150,  hourly_rate: 17.00, burden_pct: 30, most_template_id: '', most_template_name: '' },
     ],
     indirectLaborLines: [
       { role: 'Supervisor',    hourly_rate: 28.00, ratio_to_direct: 12, burden_pct: 35 },
@@ -2530,6 +2614,7 @@ function createEmptyModel() {
     ],
     vasLines: [],
     financial: { targetMargin: 12, volumeGrowth: 3, laborEscalation: 4, annualEscalation: 3, discountRate: 10, reinvestRate: 8 },
+    laborCosting: { defaultBurdenPct: 30, overtimePct: 5, benefitLoadPct: 15, ptoDays: 12, turnoverPct: 45 },
     startupLines: [],
     pricingBuckets: [
       { id: 'mgmt_fee', name: 'Management Fee', type: 'fixed', uom: 'month' },
