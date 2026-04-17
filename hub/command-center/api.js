@@ -8,7 +8,7 @@
  * @module hub/command-center/api
  */
 
-import { db } from '../../shared/supabase.js?v=20260416-s2';
+import { db } from '../../shared/supabase.js?v=20260417-s1';
 
 /**
  * Fetch all dashboard data. Tries Supabase first, falls back to demo data.
@@ -58,6 +58,8 @@ export async function fetchDashboardData() {
           severity: r.severity || 'info',
           market: r.market || r.market_id || '',
           date: formatRelative(r.created_at || r.date || new Date().toISOString()),
+          source: r.source || '',
+          source_url: r.source_url || '',
         }));
       }
 
@@ -99,30 +101,33 @@ function buildSectorsFromNews(newsRows, fallback) {
   const categorized = { labor: [], freight: [], automation: [], network: [] };
 
   for (const row of newsRows) {
-    const cat = (row.category || row.sector || '').toLowerCase();
+    const hl = (row.headline || row.title || row.summary || '').toLowerCase();
     const item = {
       headline: row.headline || row.title || row.summary || '',
       severity: row.severity || 'info',
+      source: row.source || '',
+      source_url: row.source_url || '',
     };
-    if (cat.includes('labor') || cat.includes('workforce')) categorized.labor.push(item);
-    else if (cat.includes('freight') || cat.includes('transport')) categorized.freight.push(item);
-    else if (cat.includes('autom') || cat.includes('robot') || cat.includes('tech')) categorized.automation.push(item);
-    else if (cat.includes('network') || cat.includes('reshoring') || cat.includes('supply')) categorized.network.push(item);
+    // Keyword-based categorization from headline text
+    if (/labor|wage|worker|workforce|hiring|staffing|employ|strike|union/.test(hl)) categorized.labor.push(item);
+    else if (/freight|truck|tl|ltl|parcel|shipping|logistics|carrier|transport|lane|dock|port/.test(hl)) categorized.freight.push(item);
+    else if (/autom|robot|cobot|amr|agv|tech|ai|machine|conveyor|sortation/.test(hl)) categorized.automation.push(item);
+    else if (/network|reshoring|supply|warehouse|facility|distribution|nearshoring|tariff/.test(hl)) categorized.network.push(item);
     else categorized.network.push(item); // default bucket
   }
 
   return {
-    labor: categorized.labor.length >= 2
-      ? { items: categorized.labor.slice(0, 3), source: 'Live — Supabase' }
+    labor: categorized.labor.length >= 1
+      ? { items: categorized.labor.slice(0, 3), source: 'Live — Competitor Intelligence' }
       : fallback.labor,
-    freight: categorized.freight.length >= 2
-      ? { items: categorized.freight.slice(0, 3), source: 'Live — Supabase' }
+    freight: categorized.freight.length >= 1
+      ? { items: categorized.freight.slice(0, 3), source: 'Live — Competitor Intelligence' }
       : fallback.freight,
-    automation: categorized.automation.length >= 2
-      ? { items: categorized.automation.slice(0, 3), source: 'Live — Supabase' }
+    automation: categorized.automation.length >= 1
+      ? { items: categorized.automation.slice(0, 3), source: 'Live — Competitor Intelligence' }
       : fallback.automation,
-    network: categorized.network.length >= 2
-      ? { items: categorized.network.slice(0, 3), source: 'Live — Supabase' }
+    network: categorized.network.length >= 1
+      ? { items: categorized.network.slice(0, 3), source: 'Live — Competitor Intelligence' }
       : fallback.network,
   };
 }

@@ -6,7 +6,7 @@
  * @module hub/deal-management/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260416-s2';
+import { bus } from '../../shared/event-bus.js?v=20260417-s1';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;

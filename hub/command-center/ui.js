@@ -7,8 +7,8 @@
  * @module hub/command-center/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260416-s2';
-import * as api from './api.js';
+import { bus } from '../../shared/event-bus.js?v=20260417-s1';
+import * as api from './api.js?v=20260417-s1';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -78,12 +78,12 @@ function render() {
       </div>
 
       <!-- Sector Pulse + Market Alerts -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;align-items:start;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
 
         <!-- Sector Pulse -->
         <div>
           <div style="font-size:12px;font-weight:700;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Sector Pulse</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div id="cc-sector-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
             ${sectorPulseCard('Labor Watch', '👷', d.sectors.labor, '#2563eb')}
             ${sectorPulseCard('Freight Rates', '🚛', d.sectors.freight, '#ea580c')}
             ${sectorPulseCard('Automation Watch', '🤖', d.sectors.automation, '#7c3aed')}
@@ -91,10 +91,10 @@ function render() {
           </div>
         </div>
 
-        <!-- Market Alerts -->
+        <!-- Market Alerts (height-matched to sector pulse) -->
         <div style="display:flex;flex-direction:column;">
           <div style="font-size:12px;font-weight:700;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Market Alerts</div>
-          <div class="hub-card" style="padding:0;flex:1;overflow-y:auto;">
+          <div class="hub-card" id="cc-alerts-card" style="padding:0;overflow-y:auto;flex:1;max-height:0;">
             ${d.alerts.length === 0 ? '<div style="padding:16px;text-align:center;color:var(--ies-gray-400);font-size:12px;">No active alerts</div>' :
               d.alerts.map(a => alertRow(a)).join('')}
           </div>
@@ -176,6 +176,20 @@ function render() {
   `;
 
   bindEvents();
+  matchAlertHeight();
+}
+
+/** Match the alerts card height to the sector pulse grid height */
+function matchAlertHeight() {
+  if (!rootEl) return;
+  requestAnimationFrame(() => {
+    const sectorGrid = rootEl?.querySelector('#cc-sector-grid');
+    const alertsCard = rootEl?.querySelector('#cc-alerts-card');
+    if (sectorGrid && alertsCard) {
+      const h = sectorGrid.offsetHeight;
+      alertsCard.style.maxHeight = h + 'px';
+    }
+  });
 }
 
 function bindEvents() {
@@ -236,9 +250,15 @@ function sectorPulseCard(title, icon, data, color) {
         <span style="font-size:12px;font-weight:700;">${title}</span>
       </div>
       ${data.items.map(item => `
-        <div style="display:flex;align-items:center;gap:6px;padding:3px 0;">
-          <span style="width:6px;height:6px;border-radius:50%;background:${severityDot(item.severity)};flex-shrink:0;"></span>
-          <span style="font-size:11px;color:var(--ies-gray-600);flex:1;">${item.headline}</span>
+        <div style="display:flex;align-items:start;gap:6px;padding:3px 0;">
+          <span style="width:6px;height:6px;border-radius:50%;background:${severityDot(item.severity)};flex-shrink:0;margin-top:4px;"></span>
+          <div style="flex:1;">
+            ${item.source_url
+              ? `<a href="${item.source_url}" target="_blank" rel="noopener" style="font-size:11px;color:var(--ies-gray-600);text-decoration:none;" onmouseover="this.style.color='#2563eb';this.style.textDecoration='underline'" onmouseout="this.style.color='var(--ies-gray-600)';this.style.textDecoration='none'">${item.headline}</a>`
+              : `<span style="font-size:11px;color:var(--ies-gray-600);">${item.headline}</span>`
+            }
+            ${item.source ? `<div style="font-size:9px;color:var(--ies-gray-300);">${item.source}</div>` : ''}
+          </div>
         </div>
       `).join('')}
       <div style="font-size:10px;color:var(--ies-gray-300);margin-top:6px;">${data.source}</div>
@@ -259,6 +279,7 @@ function alertRow(a) {
       <div style="flex:1;">
         <div style="font-size:12px;font-weight:600;color:var(--ies-gray-700);">${a.title}</div>
         <div style="font-size:11px;color:var(--ies-gray-400);margin-top:2px;">${a.message}</div>
+        ${a.source_url ? `<a href="${a.source_url}" target="_blank" rel="noopener" style="font-size:10px;color:#2563eb;text-decoration:none;" onclick="event.stopPropagation();" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${a.source || 'Source'} →</a>` : ''}
       </div>
       <span style="font-size:10px;color:var(--ies-gray-300);white-space:nowrap;">${a.date}</span>
     </div>

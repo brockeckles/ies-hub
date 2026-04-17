@@ -6,10 +6,10 @@
  * @module tools/cost-model/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260416-s2';
-import { state } from '../../shared/state.js?v=20260416-s2';
-import * as calc from './calc.js';
-import * as api from './api.js';
+import { bus } from '../../shared/event-bus.js?v=20260417-s1';
+import { state } from '../../shared/state.js?v=20260417-s1';
+import * as calc from './calc.js?v=20260417-s1';
+import * as api from './api.js?v=20260417-s1';
 
 // ============================================================
 // STATE — tool-local reactive state
@@ -664,23 +664,41 @@ function renderLabor() {
     <div class="text-subtitle mb-2">Direct Labor</div>
     <table class="cm-grid-table">
       <thead>
-        <tr><th>Activity</th><th>Volume</th><th>UPH</th><th>Hrs/Yr</th><th>FTE</th><th>Rate</th><th>Burden%</th><th class="cm-num">Annual Cost</th><th></th></tr>
+        <tr><th>Activity</th><th>Equipment/MHE</th><th>Volume</th><th>UPH</th><th>Hrs/Yr</th><th>FTE</th><th>Rate</th><th>Burden%</th><th class="cm-num">Annual Cost</th><th></th></tr>
       </thead>
       <tbody>
         ${lines.map((l, i) => `
           <tr>
-            <td><input value="${l.activity_name || ''}" style="width:120px;" data-array="laborLines" data-idx="${i}" data-field="activity_name" /></td>
+            <td><input value="${l.activity_name || ''}" style="width:110px;" data-array="laborLines" data-idx="${i}" data-field="activity_name" /></td>
+            <td>
+              <select style="width:100px;font-size:11px;" data-array="laborLines" data-idx="${i}" data-field="equipment_type">
+                <option value=""${!l.equipment_type ? ' selected' : ''}>None</option>
+                <option value="reach_truck"${l.equipment_type === 'reach_truck' ? ' selected' : ''}>Reach Truck</option>
+                <option value="sit_down_forklift"${l.equipment_type === 'sit_down_forklift' ? ' selected' : ''}>Sit-Down FL</option>
+                <option value="stand_up_forklift"${l.equipment_type === 'stand_up_forklift' ? ' selected' : ''}>Stand-Up FL</option>
+                <option value="order_picker"${l.equipment_type === 'order_picker' ? ' selected' : ''}>Order Picker</option>
+                <option value="walkie_rider"${l.equipment_type === 'walkie_rider' ? ' selected' : ''}>Walkie Rider</option>
+                <option value="pallet_jack"${l.equipment_type === 'pallet_jack' ? ' selected' : ''}>Pallet Jack</option>
+                <option value="electric_pallet_jack"${l.equipment_type === 'electric_pallet_jack' ? ' selected' : ''}>Elec Pallet Jack</option>
+                <option value="turret_truck"${l.equipment_type === 'turret_truck' ? ' selected' : ''}>Turret Truck</option>
+                <option value="amr"${l.equipment_type === 'amr' ? ' selected' : ''}>AMR/Robot</option>
+                <option value="conveyor"${l.equipment_type === 'conveyor' ? ' selected' : ''}>Conveyor</option>
+                <option value="rf_scanner"${l.equipment_type === 'rf_scanner' ? ' selected' : ''}>RF Scanner</option>
+                <option value="voice_pick"${l.equipment_type === 'voice_pick' ? ' selected' : ''}>Voice Pick</option>
+                <option value="manual"${l.equipment_type === 'manual' ? ' selected' : ''}>Manual/Walk</option>
+              </select>
+            </td>
             <td class="cm-num">${(l.volume || 0).toLocaleString()}</td>
-            <td><input type="number" value="${l.base_uph || 0}" style="width:60px;" data-array="laborLines" data-idx="${i}" data-field="base_uph" data-type="number" /></td>
+            <td><input type="number" value="${l.base_uph || 0}" style="width:55px;" data-array="laborLines" data-idx="${i}" data-field="base_uph" data-type="number" /></td>
             <td class="cm-num">${(l.annual_hours || 0).toLocaleString(undefined, {maximumFractionDigits:0})}</td>
             <td class="cm-num">${calc.fte(l, opHrs).toFixed(1)}</td>
-            <td><input type="number" value="${l.hourly_rate || 0}" style="width:60px;" step="0.5" data-array="laborLines" data-idx="${i}" data-field="hourly_rate" data-type="number" /></td>
-            <td><input type="number" value="${l.burden_pct || 0}" style="width:50px;" data-array="laborLines" data-idx="${i}" data-field="burden_pct" data-type="number" /></td>
+            <td><input type="number" value="${l.hourly_rate || 0}" style="width:55px;" step="0.5" data-array="laborLines" data-idx="${i}" data-field="hourly_rate" data-type="number" /></td>
+            <td><input type="number" value="${l.burden_pct || 0}" style="width:45px;" data-array="laborLines" data-idx="${i}" data-field="burden_pct" data-type="number" /></td>
             <td class="cm-num">${calc.formatCurrency(calc.directLineAnnualSimple(l))}</td>
             <td><button class="cm-delete-btn" data-action="delete-labor" data-idx="${i}">Del</button></td>
           </tr>
         `).join('')}
-        <tr class="cm-total-row"><td colspan="7">Total Direct Labor</td><td class="cm-num">${calc.formatCurrency(totalDirect)}</td><td></td></tr>
+        <tr class="cm-total-row"><td colspan="8">Total Direct Labor</td><td class="cm-num">${calc.formatCurrency(totalDirect)}</td><td></td></tr>
       </tbody>
     </table>
     <button class="cm-add-row-btn" data-action="add-labor">+ Add Labor Line</button>

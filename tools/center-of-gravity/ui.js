@@ -6,10 +6,10 @@
  * @module tools/center-of-gravity/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260416-s2';
-import { state } from '../../shared/state.js?v=20260416-s2';
-import * as calc from './calc.js';
-import * as api from './api.js';
+import { bus } from '../../shared/event-bus.js?v=20260417-s1';
+import { state } from '../../shared/state.js?v=20260417-s1';
+import * as calc from './calc.js?v=20260417-s1';
+import * as api from './api.js?v=20260417-s1';
 
 // ============================================================
 // STATE
@@ -114,7 +114,7 @@ function bindShellEvents() {
 
   rootEl.querySelector('#cog-calculate')?.addEventListener('click', () => {
     cogResult = calc.kMeansCog(points, config.numCenters, config.maxIterations);
-    sensitivityData = calc.sensitivityAnalysis(points, 5, config.transportCostPerMile, config.maxIterations);
+    sensitivityData = calc.sensitivityAnalysis(points, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations);
     activeTab = 'analysis';
     rootEl.querySelectorAll('#cog-tabs button').forEach(b => {
       b.className = `hub-btn hub-btn-sm ${b.dataset.tab === activeTab ? 'hub-btn-primary' : 'hub-btn-secondary'}`;
@@ -153,16 +153,23 @@ function renderPoints(el) {
       </div>
 
       <!-- Config -->
-      <div class="hub-card" style="margin-bottom:20px;padding:16px;">
+      <div class="hub-card" style="margin-bottom:20px;padding:16px;border-left:3px solid var(--ies-blue);">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-400);margin-bottom:10px;">Analysis Configuration</div>
         <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;">
           <div style="display:flex;align-items:center;gap:8px;">
-            <label style="font-size:13px;font-weight:600;">Number of Centers (k):</label>
-            <input type="number" value="${config.numCenters}" min="1" max="5" id="cog-k"
-                   style="width:60px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:center;">
+            <label style="font-size:13px;font-weight:600;">Number of Nodes / Facilities:</label>
+            <input type="number" value="${config.numCenters}" min="1" max="20" id="cog-k"
+                   style="width:70px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:14px;font-weight:700;text-align:center;color:var(--ies-blue);">
+            <span style="font-size:11px;color:var(--ies-gray-400);">How many DC locations to optimize for</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
             <label style="font-size:13px;font-weight:600;">Transport $/mi:</label>
             <input type="number" value="${config.transportCostPerMile}" step="0.01" id="cog-cpm"
+                   style="width:80px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <label style="font-size:13px;font-weight:600;">Max Iterations:</label>
+            <input type="number" value="${config.maxIterations || 100}" min="10" max="500" step="10" id="cog-iter"
                    style="width:80px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
           </div>
         </div>
@@ -216,10 +223,13 @@ function renderPoints(el) {
 
   // Bind config inputs
   el.querySelector('#cog-k')?.addEventListener('change', (e) => {
-    config.numCenters = Math.max(1, Math.min(5, parseInt(/** @type {HTMLInputElement} */ (e.target).value) || 1));
+    config.numCenters = Math.max(1, Math.min(20, parseInt(/** @type {HTMLInputElement} */ (e.target).value) || 1));
   });
   el.querySelector('#cog-cpm')?.addEventListener('change', (e) => {
     config.transportCostPerMile = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 2.85;
+  });
+  el.querySelector('#cog-iter')?.addEventListener('change', (e) => {
+    config.maxIterations = Math.max(10, Math.min(500, parseInt(/** @type {HTMLInputElement} */ (e.target).value) || 100));
   });
 
   // Delete points

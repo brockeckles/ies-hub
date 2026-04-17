@@ -5,7 +5,7 @@
  * @module hub/admin/api
  */
 
-import { db } from '../../shared/supabase.js?v=20260416-s2';
+import { db } from '../../shared/supabase.js?v=20260417-s1';
 
 // ============================================================
 // MASTER DATA

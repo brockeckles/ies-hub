@@ -6,10 +6,10 @@
  * @module tools/fleet-modeler/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260416-s2';
-import { state } from '../../shared/state.js?v=20260416-s2';
-import * as calc from './calc.js';
-import * as api from './api.js';
+import { bus } from '../../shared/event-bus.js?v=20260417-s1';
+import { state } from '../../shared/state.js?v=20260417-s1';
+import * as calc from './calc.js?v=20260417-s1';
+import * as api from './api.js?v=20260417-s1';
 
 // ============================================================
 // STATE
