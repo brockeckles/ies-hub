@@ -6,16 +6,16 @@
  * @module tools/cost-model/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-pc';
-import { state } from '../../shared/state.js?v=20260417-pc';
-import * as calc from './calc.js?v=20260417-pc';
-import * as api from './api.js?v=20260417-pc';
+import { bus } from '../../shared/event-bus.js?v=20260417-m1';
+import { state } from '../../shared/state.js?v=20260417-m1';
+import * as calc from './calc.js?v=20260417-m1';
+import * as api from './api.js?v=20260417-m1';
 
 // ============================================================
 // STATE — tool-local reactive state
 // ============================================================
 
-/** @type {import('./types.js?v=20260417-pc').CostModelData} */
+/** @type {import('./types.js?v=20260417-m1').CostModelData} */
 let model = createEmptyModel();
 
 /** @type {Object} */
@@ -154,6 +154,12 @@ function wireLandingEvents() {
         const full = await api.getModel(id);
         if (full?.project_data) {
           model = { ...createEmptyModel(), ...full.project_data, id: full.id };
+          // Legacy models may have annual_hours=0 on lines with valid volume+uph; repair them.
+          (model.laborLines || []).forEach(l => {
+            if ((l.annual_hours || 0) === 0 && (l.volume || 0) > 0 && (l.base_uph || 0) > 0) {
+              recomputeLineHours(l);
+            }
+          });
           isDirty = false;
           userHasInteracted = false;
           activeSection = 'setup';
@@ -729,6 +735,81 @@ function renderShifts() {
 // SECTIONS 6-13: Stub renderers (will be fully built out)
 // ============================================================
 
+/**
+ * Recompute annual_hours from volume and base_uph for a labor line in place.
+ * Mirrors v2 behavior where picking a MOST template or editing volume/UPH
+ * drives Hrs/Yr = volume / base_uph (no PFD applied — shifts handle allowance elsewhere).
+ * @param {any} line
+ */
+function recomputeLineHours(line) {
+  const v = line.volume || 0;
+  const u = line.base_uph || 0;
+  line.annual_hours = u > 0 ? v / u : 0;
+}
+
+/**
+ * Render the per-row MOST Template picker cell (v3 port of v2 _mostSelectHtml).
+ * Groups templates by process_area in canonical warehouse-flow order.
+ * When a template is assigned, shows:
+ *  • ⓘ info button (view template details modal)
+ *  • "Override" badge + ↺ reset button when line.base_uph diverges from template.base_uph
+ * @param {any} line
+ * @param {number} idx
+ */
+function renderMostCell(line, idx) {
+  const templates = (refData.mostTemplates || []).filter(t => t.is_active !== false);
+  const currentId = line.most_template_id || '';
+  const currentTpl = currentId
+    ? templates.find(t => String(t.id) === String(currentId))
+    : null;
+  const isOverridden = currentTpl
+    && (line.base_uph || 0) > 0
+    && Math.abs((line.base_uph || 0) - (currentTpl.base_uph || 0)) > 0.5;
+
+  // Group templates by process_area
+  const groups = {};
+  templates.forEach(t => {
+    const area = t.process_area || 'Other';
+    (groups[area] = groups[area] || []).push(t);
+  });
+  const areaOrder = ['Receiving', 'Putaway', 'Replenishment', 'Picking', 'Packing', 'Shipping', 'Inventory', 'Returns', 'VAS'];
+  const sortedAreas = areaOrder.filter(k => groups[k])
+    .concat(Object.keys(groups).filter(k => !areaOrder.includes(k)).sort());
+
+  let optionsHtml = '<option value="">— Select —</option>';
+  sortedAreas.forEach(area => {
+    optionsHtml += `<optgroup label="${area}">`;
+    groups[area].forEach(t => {
+      const selected = String(t.id) === String(currentId) ? ' selected' : '';
+      let name = t.name || t.activity_name || `Template ${t.id}`;
+      if (name.length > 32) name = name.substring(0, 30) + '…';
+      optionsHtml += `<option value="${t.id}"${selected}>${name}</option>`;
+    });
+    optionsHtml += '</optgroup>';
+  });
+
+  const hasTemplate = !!currentTpl;
+  const infoBtn = hasTemplate
+    ? `<button class="cm-most-icon" data-action="view-most-template" data-idx="${idx}" data-template-id="${currentTpl.id}" title="View template details" style="background:none;border:none;cursor:pointer;padding:2px 4px;color:var(--ies-blue,#0047AB);font-size:14px;">ⓘ</button>`
+    : '';
+  const resetBtn = isOverridden
+    ? `<button class="cm-most-icon" data-action="reset-most-uph" data-idx="${idx}" title="Reset UPH to template (${Math.round(currentTpl.base_uph || 0)})" style="background:none;border:none;cursor:pointer;padding:2px 4px;color:#f37021;font-size:13px;font-weight:700;">↺</button>`
+    : '';
+  const overrideBadge = isOverridden
+    ? `<div style="display:inline-block;margin-top:2px;padding:1px 6px;background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:0.3px;">OVERRIDE</div>`
+    : '';
+
+  return `
+    <div style="display:flex;flex-direction:column;gap:2px;">
+      <div style="display:flex;align-items:center;gap:2px;">
+        <select data-most-select data-idx="${idx}" style="width:150px;font-size:11px;padding:4px 6px;">${optionsHtml}</select>
+        ${infoBtn}${resetBtn}
+      </div>
+      ${overrideBadge}
+    </div>
+  `;
+}
+
 function renderLabor() {
   const lines = model.laborLines || [];
   const opHrs = calc.operatingHours(model.shifts || {});
@@ -750,11 +831,12 @@ function renderLabor() {
     <div class="text-subtitle mb-2">Direct Labor</div>
     <table class="cm-grid-table">
       <thead>
-        <tr><th>Activity</th><th>Equipment/MHE</th><th>Volume</th><th>UPH</th><th>Hrs/Yr</th><th>FTE</th><th>Rate</th><th>Burden%</th><th class="cm-num">Annual Cost</th><th></th></tr>
+        <tr><th style="min-width:180px;">MOST Template</th><th>Activity</th><th>Equipment/MHE</th><th>Volume</th><th>UPH</th><th>Hrs/Yr</th><th>FTE</th><th>Rate</th><th>Burden%</th><th class="cm-num">Annual Cost</th><th></th></tr>
       </thead>
       <tbody>
         ${lines.map((l, i) => `
           <tr>
+            <td>${renderMostCell(l, i)}</td>
             <td><input value="${l.activity_name || ''}" style="width:110px;" data-array="laborLines" data-idx="${i}" data-field="activity_name" /></td>
             <td>
               <select style="width:100px;font-size:11px;" data-array="laborLines" data-idx="${i}" data-field="equipment_type">
@@ -774,7 +856,7 @@ function renderLabor() {
                 <option value="manual"${l.equipment_type === 'manual' ? ' selected' : ''}>Manual/Walk</option>
               </select>
             </td>
-            <td class="cm-num">${(l.volume || 0).toLocaleString()}</td>
+            <td><input type="number" value="${l.volume || 0}" style="width:75px;" data-array="laborLines" data-idx="${i}" data-field="volume" data-type="number" /></td>
             <td><input type="number" value="${l.base_uph || 0}" style="width:55px;" data-array="laborLines" data-idx="${i}" data-field="base_uph" data-type="number" /></td>
             <td class="cm-num">${(l.annual_hours || 0).toLocaleString(undefined, {maximumFractionDigits:0})}</td>
             <td class="cm-num">${calc.fte(l, opHrs).toFixed(1)}</td>
@@ -784,7 +866,7 @@ function renderLabor() {
             <td><button class="cm-delete-btn" data-action="delete-labor" data-idx="${i}">Del</button></td>
           </tr>
         `).join('')}
-        <tr class="cm-total-row"><td colspan="8">Total Direct Labor</td><td class="cm-num">${calc.formatCurrency(totalDirect)}</td><td></td></tr>
+        <tr class="cm-total-row"><td colspan="9">Total Direct Labor</td><td class="cm-num">${calc.formatCurrency(totalDirect)}</td><td></td></tr>
       </tbody>
     </table>
     <button class="cm-add-row-btn" data-action="add-labor">+ Add Labor Line</button>
@@ -1432,6 +1514,14 @@ function bindSectionEvents(section, container) {
         const idx = parseInt(input.dataset.idx);
         if (arr && arr[idx] !== undefined) {
           arr[idx][field] = val;
+          // Labor: recompute annual_hours + re-render so Hrs/Yr, FTE, Annual Cost, override badge refresh
+          if (input.dataset.array === 'laborLines' && (field === 'volume' || field === 'base_uph')) {
+            recomputeLineHours(arr[idx]);
+            isDirty = true;
+            if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+            renderSection();
+            return;
+          }
         }
       } else {
         // Dot-path assignment
@@ -1445,11 +1535,24 @@ function bindSectionEvents(section, container) {
     });
   });
 
+  // MOST per-row template picker (data-most-select)
+  container.querySelectorAll('[data-most-select]').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const idx = parseInt(sel.dataset.idx);
+      applyMostTemplate(idx, sel.value);
+    });
+  });
+
   // Action buttons
   container.querySelectorAll('[data-action]').forEach(btn => {
     btn.addEventListener('click', () => {
       const action = btn.dataset.action;
       const idx = parseInt(btn.dataset.idx);
+      // Template-detail viewer needs the template id, not just the row idx
+      if (action === 'view-most-template') {
+        openMostTemplateDetail(btn.dataset.templateId);
+        return;
+      }
       handleAction(action, idx);
     });
   });
@@ -1538,9 +1641,186 @@ function handleAction(action, idx) {
       state.set('nav.tool', 'warehouse-sizing');
       window.location.hash = '#designtools/warehouse-sizing';
       return; // don't re-render
+    case 'reset-most-uph':
+      resetMostUph(idx);
+      return; // resetMostUph already re-renders
   }
   isDirty = true;
   renderSection();
+}
+
+// ============================================================
+// MOST TEMPLATE → LABOR LINE INTEGRATION (per-row)
+// ============================================================
+
+/**
+ * Apply (or clear) a MOST template to a specific labor line.
+ * Fills most_template_id / most_template_name; auto-fills activity_name if blank,
+ * base_uph if unset or still matching a previous template, uom if set on template,
+ * process_area + labor_category when we have them. Then recomputes annual_hours.
+ * @param {number} idx
+ * @param {string} templateId — empty string clears the selection
+ */
+function applyMostTemplate(idx, templateId) {
+  const line = model.laborLines?.[idx];
+  if (!line) return;
+
+  if (!templateId) {
+    line.most_template_id = '';
+    line.most_template_name = '';
+    isDirty = true;
+    renderSection();
+    return;
+  }
+
+  const templates = refData.mostTemplates || [];
+  const tpl = templates.find(t => String(t.id) === String(templateId));
+  if (!tpl) return;
+
+  // Was the previous base_uph the old template's default? If so, it's safe to
+  // overwrite with the new template's default instead of treating it as a manual override.
+  const prevTplId = line.most_template_id;
+  const prevTpl = prevTplId ? templates.find(t => String(t.id) === String(prevTplId)) : null;
+  const prevWasDefault = prevTpl
+    && (line.base_uph || 0) > 0
+    && Math.abs((line.base_uph || 0) - (prevTpl.base_uph || 0)) <= 0.5;
+
+  line.most_template_id = tpl.id;
+  line.most_template_name = tpl.name || '';
+
+  if (!line.activity_name) line.activity_name = tpl.name || '';
+  if (tpl.process_area && !line.process_area) line.process_area = tpl.process_area;
+  if (tpl.labor_category && !line.labor_category) line.labor_category = tpl.labor_category;
+  if (tpl.uom && !line.uom) line.uom = tpl.uom;
+
+  // Only overwrite base_uph when it's zero or was the previous template's default.
+  if ((line.base_uph || 0) === 0 || prevWasDefault) {
+    line.base_uph = tpl.base_uph || 0;
+  }
+
+  recomputeLineHours(line);
+
+  isDirty = true;
+  if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+  renderSection();
+}
+
+/**
+ * Reset a labor line's base_uph back to its MOST template default.
+ * @param {number} idx
+ */
+function resetMostUph(idx) {
+  const line = model.laborLines?.[idx];
+  if (!line || !line.most_template_id) return;
+  const tpl = (refData.mostTemplates || []).find(t => String(t.id) === String(line.most_template_id));
+  if (!tpl) return;
+  line.base_uph = tpl.base_uph || 0;
+  recomputeLineHours(line);
+  isDirty = true;
+  renderSection();
+}
+
+/**
+ * Open a read-only modal showing template details and element breakdown.
+ * Elements fetched lazily via api.fetchMostElements on first open for a template.
+ * @param {string} templateId
+ */
+async function openMostTemplateDetail(templateId) {
+  if (!rootEl || !templateId) return;
+  const tpl = (refData.mostTemplates || []).find(t => String(t.id) === String(templateId));
+  if (!tpl) return;
+
+  rootEl.querySelector('#cm-most-detail-modal')?.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'cm-most-detail-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:1000;';
+
+  const header = `
+    <div style="padding:20px 24px 12px 24px;border-bottom:1px solid var(--ies-gray-200);">
+      <div style="display:flex;align-items:start;gap:12px;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:16px;font-weight:700;">MOST Template — ${tpl.name || '—'}</div>
+          <div style="font-size:12px;color:var(--ies-gray-400);margin-top:2px;">${tpl.process_area || '—'} · ${tpl.labor_category || '—'} · UOM: ${tpl.uom || '—'}</div>
+        </div>
+        <button id="cm-most-detail-close" class="hub-btn hub-btn-sm hub-btn-secondary">✕ Close</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px;">
+        <div style="background:var(--ies-gray-50);border-radius:6px;padding:10px 12px;">
+          <div style="font-size:10px;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:0.5px;">Base UPH</div>
+          <div style="font-size:22px;font-weight:700;color:var(--ies-blue,#0047AB);">${Math.round(tpl.base_uph || 0).toLocaleString()}</div>
+        </div>
+        <div style="background:var(--ies-gray-50);border-radius:6px;padding:10px 12px;">
+          <div style="font-size:10px;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:0.5px;">Total TMU</div>
+          <div style="font-size:22px;font-weight:700;color:var(--ies-gray-700);">${Math.round(tpl.tmu_total || 0).toLocaleString()}</div>
+        </div>
+        <div style="background:var(--ies-gray-50);border-radius:6px;padding:10px 12px;">
+          <div style="font-size:10px;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:0.5px;">Elements</div>
+          <div style="font-size:22px;font-weight:700;color:var(--ies-gray-700);">${tpl.element_count ?? '—'}</div>
+        </div>
+      </div>
+      ${tpl.description ? `<div style="margin-top:12px;font-size:12px;color:var(--ies-gray-600);line-height:1.5;">${tpl.description}</div>` : ''}
+    </div>
+  `;
+
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:8px;width:min(760px,92vw);max-height:82vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.2);overflow:hidden;">
+      ${header}
+      <div id="cm-most-detail-body" style="flex:1;overflow-y:auto;padding:16px 20px;">
+        <div style="text-align:center;color:var(--ies-gray-400);font-size:13px;padding:24px;">Loading elements…</div>
+      </div>
+    </div>
+  `;
+  rootEl.appendChild(modal);
+
+  const close = () => modal.remove();
+  modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+  modal.querySelector('#cm-most-detail-close')?.addEventListener('click', close);
+
+  // Lazy-load elements
+  const body = modal.querySelector('#cm-most-detail-body');
+  try {
+    const elements = await api.fetchMostElements(templateId);
+    const sorted = (elements || []).slice().sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
+    if (sorted.length === 0) {
+      body.innerHTML = `<div style="padding:24px;text-align:center;color:var(--ies-gray-400);font-size:13px;">No MOST elements defined for this template yet.</div>`;
+      return;
+    }
+    const totalTmu = sorted.reduce((s, e) => s + (e.tmu || 0), 0);
+    const rows = sorted.map((el, i) => `
+      <tr style="${i % 2 ? 'background:var(--ies-gray-50);' : ''}">
+        <td style="padding:6px 10px;color:var(--ies-gray-400);">${el.sequence || (i + 1)}</td>
+        <td style="padding:6px 10px;font-weight:500;">${el.description || '—'}</td>
+        <td style="padding:6px 10px;font-family:monospace;font-size:11px;color:var(--ies-gray-500);">${el.most_sequence || '—'}</td>
+        <td style="padding:6px 10px;text-align:right;font-weight:600;">${el.tmu || 0}</td>
+        <td style="padding:6px 10px;text-align:center;">${el.is_variable ? `<span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px;font-size:11px;">${el.variable_driver || 'Yes'}</span>` : '<span style="color:var(--ies-gray-300);">—</span>'}</td>
+      </tr>
+    `).join('');
+    body.innerHTML = `
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px;">MOST Element Breakdown (${sorted.length} steps)</div>
+      <div style="border:1px solid var(--ies-gray-200);border-radius:8px;overflow:hidden;">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead><tr style="background:var(--ies-gray-50);">
+            <th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--ies-gray-400);">#</th>
+            <th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--ies-gray-400);">Element</th>
+            <th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--ies-gray-400);">MOST Sequence</th>
+            <th style="padding:8px 10px;text-align:right;font-size:11px;color:var(--ies-gray-400);">TMU</th>
+            <th style="padding:8px 10px;text-align:center;font-size:11px;color:var(--ies-gray-400);">Variable?</th>
+          </tr></thead>
+          <tbody>${rows}
+            <tr style="background:var(--ies-gray-100);font-weight:700;">
+              <td colspan="3" style="padding:8px 10px;text-align:right;">Total TMU</td>
+              <td style="padding:8px 10px;text-align:right;">${totalTmu}</td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    `;
+  } catch (err) {
+    console.warn('[CM] fetchMostElements failed:', err);
+    body.innerHTML = `<div style="padding:24px;text-align:center;color:#b91c1c;font-size:13px;">Could not load elements: ${err?.message || err}</div>`;
+  }
 }
 
 // ============================================================
@@ -1882,7 +2162,7 @@ function sectionHasData(key) {
 /**
  * Handle incoming labor lines from MOST tool.
  * Merges or replaces CM laborLines with MOST-derived data.
- * @param {import('../most-standards/types.js?v=20260417-pc').MostToCmPayload} payload
+ * @param {import('../most-standards/types.js?v=20260417-m1').MostToCmPayload} payload
  */
 function handleMostPush(payload) {
   if (!payload?.laborLines?.length) return;
@@ -1920,7 +2200,7 @@ function handleMostPush(payload) {
 /**
  * Handle incoming facility data from Warehouse Sizing Calculator.
  * Populates CM facility section fields.
- * @param {import('../warehouse-sizing/types.js?v=20260417-pc').WscToCmPayload} payload
+ * @param {import('../warehouse-sizing/types.js?v=20260417-m1').WscToCmPayload} payload
  */
 function handleWscPush(payload) {
   if (!payload) return;
@@ -2017,11 +2297,11 @@ function createEmptyModel() {
     facility: { totalSqft: 150000 },
     shifts: { shiftsPerDay: 1, hoursPerShift: 8, daysPerWeek: 5, weeksPerYear: 52 },
     laborLines: [
-      { activity_name: 'Receiving', process_area: 'Inbound',  labor_category: 'direct', volume: 15000,  base_uph: 200, annual_hours: 0, hourly_rate: 18.00, burden_pct: 30, most_template_id: '', most_template_name: '' },
-      { activity_name: 'Put-Away',  process_area: 'Inbound',  labor_category: 'direct', volume: 15000,  base_uph: 180, annual_hours: 0, hourly_rate: 18.00, burden_pct: 30, most_template_id: '', most_template_name: '' },
-      { activity_name: 'Picking',   process_area: 'Outbound', labor_category: 'direct', volume: 800000, base_uph: 120, annual_hours: 0, hourly_rate: 17.50, burden_pct: 30, most_template_id: '', most_template_name: '' },
-      { activity_name: 'Packing',   process_area: 'Outbound', labor_category: 'direct', volume: 80000,  base_uph: 60,  annual_hours: 0, hourly_rate: 16.50, burden_pct: 30, most_template_id: '', most_template_name: '' },
-      { activity_name: 'Shipping',  process_area: 'Outbound', labor_category: 'direct', volume: 80000,  base_uph: 150, annual_hours: 0, hourly_rate: 17.00, burden_pct: 30, most_template_id: '', most_template_name: '' },
+      { activity_name: 'Receiving', process_area: 'Inbound',  labor_category: 'direct', volume: 15000,  base_uph: 200, annual_hours: 15000 / 200,  hourly_rate: 18.00, burden_pct: 30, most_template_id: '', most_template_name: '' },
+      { activity_name: 'Put-Away',  process_area: 'Inbound',  labor_category: 'direct', volume: 15000,  base_uph: 180, annual_hours: 15000 / 180,  hourly_rate: 18.00, burden_pct: 30, most_template_id: '', most_template_name: '' },
+      { activity_name: 'Picking',   process_area: 'Outbound', labor_category: 'direct', volume: 800000, base_uph: 120, annual_hours: 800000 / 120, hourly_rate: 17.50, burden_pct: 30, most_template_id: '', most_template_name: '' },
+      { activity_name: 'Packing',   process_area: 'Outbound', labor_category: 'direct', volume: 80000,  base_uph: 60,  annual_hours: 80000 / 60,   hourly_rate: 16.50, burden_pct: 30, most_template_id: '', most_template_name: '' },
+      { activity_name: 'Shipping',  process_area: 'Outbound', labor_category: 'direct', volume: 80000,  base_uph: 150, annual_hours: 80000 / 150,  hourly_rate: 17.00, burden_pct: 30, most_template_id: '', most_template_name: '' },
     ],
     indirectLaborLines: [
       { role: 'Supervisor',    hourly_rate: 28.00, ratio_to_direct: 12, burden_pct: 35 },

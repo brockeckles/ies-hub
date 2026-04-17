@@ -9,7 +9,7 @@
 // MASTER TABLE DEFINITIONS
 // ============================================================
 
-/** @type {import('./types.js?v=20260417-pc').MasterTableConfig[]} */
+/** @type {import('./types.js?v=20260417-m1').MasterTableConfig[]} */
 export const MASTER_TABLES = [
   {
     id: 'cost_buckets', name: 'Cost Buckets', description: 'Standard cost categories for cost models',
@@ -67,7 +67,7 @@ export const MASTER_TABLES = [
 // DEMO DATA
 // ============================================================
 
-/** @type {import('./types.js?v=20260417-pc').UserAccount[]} */
+/** @type {import('./types.js?v=20260417-m1').UserAccount[]} */
 export const DEMO_USERS = [
   { id: 'u1', email: 'brockeckles@gmail.com', displayName: 'Brock Eckles', role: 'admin', active: true, lastLogin: '2026-04-16T10:30:00Z' },
   { id: 'u2', email: 'design.eng1@gxo.com', displayName: 'Design Engineer 1', role: 'editor', active: true, lastLogin: '2026-04-15T14:00:00Z' },
@@ -76,7 +76,7 @@ export const DEMO_USERS = [
   { id: 'u5', email: 'former.user@gxo.com', displayName: 'Former User', role: 'viewer', active: false, lastLogin: '2026-02-01T08:00:00Z' },
 ];
 
-/** @type {import('./types.js?v=20260417-pc').EscalationRule[]} */
+/** @type {import('./types.js?v=20260417-m1').EscalationRule[]} */
 export const DEMO_ESCALATIONS = [
   { id: 'e1', name: 'Low Gross Margin', metric: 'gross_margin_pct', condition: 'below', threshold: 8, severity: 'critical', active: true, notifyEmail: 'brockeckles@gmail.com' },
   { id: 'e2', name: 'Low EBITDA', metric: 'ebitda_pct', condition: 'below', threshold: 4, severity: 'warning', active: true, notifyEmail: 'brockeckles@gmail.com' },
@@ -84,7 +84,7 @@ export const DEMO_ESCALATIONS = [
   { id: 'e4', name: 'Long Payback', metric: 'payback_months', condition: 'above', threshold: 24, severity: 'critical', active: false },
 ];
 
-/** @type {import('./types.js?v=20260417-pc').AuditLogEntry[]} */
+/** @type {import('./types.js?v=20260417-m1').AuditLogEntry[]} */
 export const DEMO_AUDIT_LOG = [
   { id: 'a1', action: 'update', tableName: 'cost_model_projects', recordId: 'cm-7', userId: 'u1', userName: 'Brock Eckles', timestamp: '2026-04-16T10:15:00Z', changes: { gross_margin: { from: 10.5, to: 11.2 } } },
   { id: 'a2', action: 'create', tableName: 'fleet_scenarios', recordId: 'fs-12', userId: 'u2', userName: 'Design Engineer 1', timestamp: '2026-04-15T16:30:00Z' },
@@ -99,12 +99,12 @@ export const DEMO_AUDIT_LOG = [
 
 /**
  * Compute admin panel stats.
- * @param {import('./types.js?v=20260417-pc').UserAccount[]} users
- * @param {import('./types.js?v=20260417-pc').MasterTableConfig[]} tables
- * @param {import('./types.js?v=20260417-pc').EscalationRule[]} escalations
- * @param {import('./types.js?v=20260417-pc').AuditLogEntry[]} auditLog
+ * @param {import('./types.js?v=20260417-m1').UserAccount[]} users
+ * @param {import('./types.js?v=20260417-m1').MasterTableConfig[]} tables
+ * @param {import('./types.js?v=20260417-m1').EscalationRule[]} escalations
+ * @param {import('./types.js?v=20260417-m1').AuditLogEntry[]} auditLog
  * @param {string} [referenceDate] — ISO date for 7-day window
- * @returns {import('./types.js?v=20260417-pc').AdminStats}
+ * @returns {import('./types.js?v=20260417-m1').AdminStats}
  */
 export function computeStats(users, tables, escalations, auditLog, referenceDate) {
   const refDate = referenceDate || new Date().toISOString().slice(0, 10);
@@ -127,7 +127,7 @@ export function computeStats(users, tables, escalations, auditLog, referenceDate
 /**
  * Validate a record against table column definitions.
  * @param {Record<string, any>} record
- * @param {import('./types.js?v=20260417-pc').ColumnDef[]} columns
+ * @param {import('./types.js?v=20260417-m1').ColumnDef[]} columns
  * @returns {{ valid: boolean, errors: string[] }}
  */
 export function validateRecord(record, columns) {
@@ -160,8 +160,8 @@ export function validateRecord(record, columns) {
  * Evaluate a metric value against escalation rules.
  * @param {string} metric — metric key (e.g. 'gross_margin_pct')
  * @param {number} value
- * @param {import('./types.js?v=20260417-pc').EscalationRule[]} rules
- * @returns {import('./types.js?v=20260417-pc').EscalationRule[]} — triggered rules
+ * @param {import('./types.js?v=20260417-m1').EscalationRule[]} rules
+ * @returns {import('./types.js?v=20260417-m1').EscalationRule[]} — triggered rules
  */
 export function evaluateEscalations(metric, value, rules) {
   return rules.filter(r => {
@@ -175,8 +175,8 @@ export function evaluateEscalations(metric, value, rules) {
 /**
  * Check all escalation rules against a set of metrics.
  * @param {Record<string, number>} metrics — key-value pairs (e.g. { gross_margin_pct: 7.5 })
- * @param {import('./types.js?v=20260417-pc').EscalationRule[]} rules
- * @returns {Array<{ rule: import('./types.js?v=20260417-pc').EscalationRule, metricValue: number }>}
+ * @param {import('./types.js?v=20260417-m1').EscalationRule[]} rules
+ * @returns {Array<{ rule: import('./types.js?v=20260417-m1').EscalationRule, metricValue: number }>}
  */
 export function checkAllEscalations(metrics, rules) {
   const triggered = [];
@@ -195,9 +195,9 @@ export function checkAllEscalations(metrics, rules) {
 
 /**
  * Filter users.
- * @param {import('./types.js?v=20260417-pc').UserAccount[]} users
+ * @param {import('./types.js?v=20260417-m1').UserAccount[]} users
  * @param {{ role?: string, active?: boolean | 'all' }} filters
- * @returns {import('./types.js?v=20260417-pc').UserAccount[]}
+ * @returns {import('./types.js?v=20260417-m1').UserAccount[]}
  */
 export function filterUsers(users, filters = {}) {
   let result = users;
@@ -212,7 +212,7 @@ export function filterUsers(users, filters = {}) {
 
 /**
  * Count users by role.
- * @param {import('./types.js?v=20260417-pc').UserAccount[]} users
+ * @param {import('./types.js?v=20260417-m1').UserAccount[]} users
  * @returns {{ admin: number, editor: number, viewer: number }}
  */
 export function usersByRole(users) {
@@ -225,10 +225,10 @@ export function usersByRole(users) {
 
 /**
  * Find inactive users (no login within N days).
- * @param {import('./types.js?v=20260417-pc').UserAccount[]} users
+ * @param {import('./types.js?v=20260417-m1').UserAccount[]} users
  * @param {string} referenceDate — ISO datetime
  * @param {number} [days=30]
- * @returns {import('./types.js?v=20260417-pc').UserAccount[]}
+ * @returns {import('./types.js?v=20260417-m1').UserAccount[]}
  */
 export function inactiveUsers(users, referenceDate, days = 30) {
   const cutoff = new Date(new Date(referenceDate).getTime() - days * 86400000).toISOString();
@@ -241,9 +241,9 @@ export function inactiveUsers(users, referenceDate, days = 30) {
 
 /**
  * Filter audit log entries.
- * @param {import('./types.js?v=20260417-pc').AuditLogEntry[]} log
+ * @param {import('./types.js?v=20260417-m1').AuditLogEntry[]} log
  * @param {{ action?: string, tableName?: string, userId?: string }} filters
- * @returns {import('./types.js?v=20260417-pc').AuditLogEntry[]}
+ * @returns {import('./types.js?v=20260417-m1').AuditLogEntry[]}
  */
 export function filterAuditLog(log, filters = {}) {
   let result = log;
@@ -261,7 +261,7 @@ export function filterAuditLog(log, filters = {}) {
 
 /**
  * Count audit actions by type.
- * @param {import('./types.js?v=20260417-pc').AuditLogEntry[]} log
+ * @param {import('./types.js?v=20260417-m1').AuditLogEntry[]} log
  * @returns {{ create: number, update: number, delete: number }}
  */
 export function auditActionCounts(log) {
@@ -274,7 +274,7 @@ export function auditActionCounts(log) {
 
 /**
  * Get most active users from audit log.
- * @param {import('./types.js?v=20260417-pc').AuditLogEntry[]} log
+ * @param {import('./types.js?v=20260417-m1').AuditLogEntry[]} log
  * @param {number} [limit=5]
  * @returns {Array<{ userId: string, userName: string, count: number }>}
  */
