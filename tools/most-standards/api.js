@@ -5,7 +5,7 @@
  * @module tools/most-standards/api
  */
 
-import { db } from '../../shared/supabase.js';
+import { db } from '../../shared/supabase.js?v=20260416-s2';
 
 // ============================================================
 // TEMPLATES

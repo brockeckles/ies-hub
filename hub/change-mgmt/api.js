@@ -5,7 +5,7 @@
  * @module hub/change-mgmt/api
  */
 
-import { db } from '../../shared/supabase.js';
+import { db } from '../../shared/supabase.js?v=20260416-s2';
 
 /**
  * List all change initiatives with nested data.

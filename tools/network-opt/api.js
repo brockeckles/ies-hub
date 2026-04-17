@@ -5,7 +5,7 @@
  * @module tools/network-opt/api
  */
 
-import { db } from '../../shared/supabase.js';
+import { db } from '../../shared/supabase.js?v=20260416-s2';
 
 // ============================================================
 // NETWORK CONFIGS (saved network scenarios)
