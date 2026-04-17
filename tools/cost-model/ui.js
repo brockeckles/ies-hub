@@ -6,16 +6,16 @@
  * @module tools/cost-model/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-p7';
-import { state } from '../../shared/state.js?v=20260417-p7';
-import * as calc from './calc.js?v=20260417-p7';
-import * as api from './api.js?v=20260417-p7';
+import { bus } from '../../shared/event-bus.js?v=20260417-p8';
+import { state } from '../../shared/state.js?v=20260417-p8';
+import * as calc from './calc.js?v=20260417-p8';
+import * as api from './api.js?v=20260417-p8';
 
 // ============================================================
 // STATE — tool-local reactive state
 // ============================================================
 
-/** @type {import('./types.js?v=20260417-p7').CostModelData} */
+/** @type {import('./types.js?v=20260417-p8').CostModelData} */
 let model = createEmptyModel();
 
 /** @type {Object} */
@@ -823,6 +823,7 @@ function renderEquipment() {
 
     <div style="display: flex; gap: 8px; margin-bottom: 16px;">
       <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-equipment">Auto-Generate Equipment</button>
+      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="open-equipment-catalog" title="Browse the GXO equipment reference catalog (${33} items)">📖 Browse Catalog</button>
     </div>
 
     <table class="cm-grid-table">
@@ -1501,6 +1502,9 @@ function handleAction(action, idx) {
     case 'auto-gen-equipment':
       model.equipmentLines = calc.autoGenerateEquipment(model);
       break;
+    case 'open-equipment-catalog':
+      openEquipmentCatalog();
+      return; // modal is async, don't re-render the section yet
     case 'add-overhead':
       model.overheadLines.push({ category: '', description: '', cost_type: 'monthly', monthly_cost: 0 });
       break;
@@ -1533,6 +1537,134 @@ function handleAction(action, idx) {
   }
   isDirty = true;
   renderSection();
+}
+
+// ============================================================
+// EQUIPMENT CATALOG MODAL — browse ref_equipment and pick items
+// ============================================================
+
+/** @type {Array<any>} Cached after first fetch so re-open is instant. */
+let catalogCache = null;
+
+async function openEquipmentCatalog() {
+  if (!rootEl) return;
+  // Remove any existing modal
+  rootEl.querySelector('#cm-eq-catalog-modal')?.remove();
+
+  // Ensure catalog is loaded
+  if (!catalogCache) {
+    try {
+      catalogCache = await api.fetchEquipmentCatalog();
+    } catch (err) {
+      console.warn('[CM] fetchEquipmentCatalog failed:', err);
+      catalogCache = [];
+    }
+  }
+  const items = Array.isArray(catalogCache) ? catalogCache : [];
+  const categories = Array.from(new Set(items.map(i => i.category).filter(Boolean))).sort();
+
+  const modal = document.createElement('div');
+  modal.id = 'cm-eq-catalog-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:1000;';
+
+  const renderRows = (query, cat) => {
+    const q = (query || '').trim().toLowerCase();
+    return items
+      .filter(i => !cat || i.category === cat)
+      .filter(i => !q || `${i.name} ${i.subcategory || ''} ${i.notes || ''}`.toLowerCase().includes(q))
+      .map(i => `
+        <tr data-eq-id="${i.id}" style="cursor:pointer;border-bottom:1px solid var(--ies-gray-100);">
+          <td style="padding:8px 10px;">
+            <div style="font-weight:600;font-size:13px;">${i.name}</div>
+            ${i.subcategory ? `<div style="font-size:11px;color:var(--ies-gray-400);">${i.subcategory}</div>` : ''}
+          </td>
+          <td style="padding:8px 10px;"><span style="font-size:11px;padding:2px 8px;border-radius:12px;background:var(--ies-gray-100);color:var(--ies-gray-600);">${i.category || '—'}</span></td>
+          <td style="padding:8px 10px;text-align:right;font-weight:600;">${i.monthly_lease_cost ? '$' + Number(i.monthly_lease_cost).toLocaleString() : '—'}</td>
+          <td style="padding:8px 10px;text-align:right;font-weight:600;">${i.purchase_cost ? '$' + Number(i.purchase_cost).toLocaleString() : '—'}</td>
+          <td style="padding:8px 10px;text-align:right;">${i.useful_life_years || '—'}</td>
+          <td style="padding:8px 10px;font-size:11px;color:var(--ies-gray-500);max-width:280px;">${(i.capacity_description || '')}</td>
+        </tr>
+      `).join('') || `<tr><td colspan="6" style="padding:24px;text-align:center;color:var(--ies-gray-400);">No items match.</td></tr>`;
+  };
+
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:8px;width:min(960px,92vw);max-height:82vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.2);overflow:hidden;">
+      <div style="padding:20px 24px 12px 24px;border-bottom:1px solid var(--ies-gray-200);">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+          <div>
+            <div style="font-size:16px;font-weight:700;">Equipment Catalog</div>
+            <div style="font-size:12px;color:var(--ies-gray-400);">${items.length} items from the GXO reference catalog — click a row to add it as a new line.</div>
+          </div>
+          <button id="eq-close" class="hub-btn hub-btn-sm hub-btn-secondary" style="margin-left:auto;">✕ Close</button>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <input id="eq-search" class="hub-input" placeholder="Search name, subcategory, notes…" style="flex:1;font-size:13px;" />
+          <select id="eq-cat" class="hub-select" style="width:160px;font-size:13px;">
+            <option value="">All categories</option>
+            ${categories.map(c => `<option value="${c}">${c}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div style="flex:1;overflow-y:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead style="position:sticky;top:0;background:var(--ies-gray-50);z-index:1;">
+            <tr style="border-bottom:2px solid var(--ies-gray-200);">
+              <th style="padding:10px;text-align:left;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Equipment</th>
+              <th style="padding:10px;text-align:left;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Category</th>
+              <th style="padding:10px;text-align:right;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Lease $/mo</th>
+              <th style="padding:10px;text-align:right;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Purchase $</th>
+              <th style="padding:10px;text-align:right;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Life (yrs)</th>
+              <th style="padding:10px;text-align:left;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Capacity / Notes</th>
+            </tr>
+          </thead>
+          <tbody id="eq-tbody">${renderRows('', '')}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+  rootEl.appendChild(modal);
+
+  const close = () => modal.remove();
+  modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+  modal.querySelector('#eq-close')?.addEventListener('click', close);
+
+  const search = /** @type {HTMLInputElement} */ (modal.querySelector('#eq-search'));
+  const catSel = /** @type {HTMLSelectElement} */ (modal.querySelector('#eq-cat'));
+  const tbody  = modal.querySelector('#eq-tbody');
+  const refresh = () => { if (tbody) tbody.innerHTML = renderRows(search.value, catSel.value); };
+  search?.addEventListener('input', refresh);
+  catSel?.addEventListener('change', refresh);
+
+  // Row click → fill a new equipment line, close modal, re-render section
+  modal.querySelector('#eq-tbody')?.addEventListener('click', (e) => {
+    const row = /** @type {HTMLElement} */ (e.target).closest('[data-eq-id]');
+    if (!row) return;
+    const id = row.getAttribute('data-eq-id');
+    const item = items.find(i => i.id === id);
+    if (!item) return;
+    // Map catalog fields → equipment line shape used by createEmptyModel & renderEquipment
+    const hasLease = Number(item.monthly_lease_cost) > 0;
+    const newLine = {
+      equipment_name: item.name || '',
+      category: ['MHE','IT','Racking','Dock','Charging','Office','Security','Conveyor'].includes(item.category) ? item.category : 'MHE',
+      quantity: 1,
+      acquisition_type: hasLease ? 'lease' : 'purchase',
+      monthly_cost: Number(item.monthly_lease_cost) || 0,
+      acquisition_cost: Number(item.purchase_cost) || 0,
+      monthly_maintenance: Number(item.monthly_maintenance) || 0,
+      amort_years: Number(item.useful_life_years) || 5,
+      notes: item.capacity_description || '',
+    };
+    if (!Array.isArray(model.equipmentLines)) model.equipmentLines = [];
+    model.equipmentLines.push(newLine);
+    isDirty = true;
+    close();
+    renderSection();
+    bus.emit('cm:equipment-added-from-catalog', { name: newLine.equipment_name });
+  });
+
+  // Focus search on open
+  search?.focus();
 }
 
 // ============================================================
@@ -1746,7 +1878,7 @@ function sectionHasData(key) {
 /**
  * Handle incoming labor lines from MOST tool.
  * Merges or replaces CM laborLines with MOST-derived data.
- * @param {import('../most-standards/types.js?v=20260417-p7').MostToCmPayload} payload
+ * @param {import('../most-standards/types.js?v=20260417-p8').MostToCmPayload} payload
  */
 function handleMostPush(payload) {
   if (!payload?.laborLines?.length) return;
@@ -1784,7 +1916,7 @@ function handleMostPush(payload) {
 /**
  * Handle incoming facility data from Warehouse Sizing Calculator.
  * Populates CM facility section fields.
- * @param {import('../warehouse-sizing/types.js?v=20260417-p7').WscToCmPayload} payload
+ * @param {import('../warehouse-sizing/types.js?v=20260417-p8').WscToCmPayload} payload
  */
 function handleWscPush(payload) {
   if (!payload) return;
