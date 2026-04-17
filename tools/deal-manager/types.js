@@ -139,4 +139,95 @@
  * @property {string} [created_at]
  */
 
+// ============================================================
+// HOURS TRACKING
+// ============================================================
+
+/**
+ * @typedef {Object} HoursEntry
+ * @property {string} [id]
+ * @property {string} opportunity_id
+ * @property {string} week_start — ISO date (YYYY-MM-DD)
+ * @property {string} hours_type — Sales Design, Engineering, Deal Mgmt, Site Visit, Customer Meeting, Internal Review, Documentation, Other
+ * @property {number} hours
+ * @property {string} [resource]
+ * @property {'forecast' | 'actual'} category
+ * @property {string} [notes]
+ */
+
+// ============================================================
+// TASKS
+// ============================================================
+
+/**
+ * @typedef {Object} Task
+ * @property {string} [id]
+ * @property {string} opportunity_id
+ * @property {string} title
+ * @property {string} [description]
+ * @property {'todo' | 'in_progress' | 'done' | 'blocked'} status
+ * @property {'low' | 'medium' | 'high' | 'critical'} priority
+ * @property {string} [due_date]
+ * @property {number} [estimated_hours]
+ * @property {number} [actual_hours]
+ * @property {string} [assignee]
+ * @property {number} [dos_stage_number]
+ * @property {string} [dos_stage_name]
+ * @property {number} [sort_order]
+ */
+
+// ============================================================
+// WEEKLY UPDATES
+// ============================================================
+
+/**
+ * @typedef {Object} WeeklyUpdate
+ * @property {string} [id]
+ * @property {string} opportunity_id
+ * @property {string} update_date — ISO date (YYYY-MM-DD)
+ * @property {string} [author]
+ * @property {string} body
+ * @property {string} [next_steps]
+ * @property {string} [blockers]
+ */
+
+// ============================================================
+// HOURS SUMMARY
+// ============================================================
+
+/**
+ * @typedef {Object} HoursSummary
+ * @property {number} totalForecast
+ * @property {number} totalActual
+ * @property {number} delta
+ * @property {number} percentUtilized
+ * @property {Array<{ type: string, forecast: number, actual: number }>} byWorkType
+ * @property {Array<{ week: string, forecast: number, actual: number, delta: number }>} byWeek
+ */
+
+// ============================================================
+// TASK PROGRESS
+// ============================================================
+
+/**
+ * @typedef {Object} TaskProgress
+ * @property {number} dosStageNumber
+ * @property {string} dosStageName
+ * @property {number} total
+ * @property {number} done
+ * @property {number} inProgress
+ * @property {number} blocked
+ */
+
+/**
+ * @typedef {Object} TaskSummary
+ * @property {number} total
+ * @property {number} done
+ * @property {number} inProgress
+ * @property {number} blocked
+ * @property {number} percentComplete
+ * @property {Array<TaskProgress>} byStage
+ * @property {Array<{ priority: string, count: number }>} byPriority
+ */
+
 export {};

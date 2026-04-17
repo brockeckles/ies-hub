@@ -52,8 +52,8 @@ export const DOS_STAGES = [
 
 /**
  * Compute per-site financials.
- * @param {import('./types.js').Site} site
- * @returns {import('./types.js').SiteFinancials}
+ * @param {import('./types.js?v=20260417-s2').Site} site
+ * @returns {import('./types.js?v=20260417-s2').SiteFinancials}
  */
 export function computeSiteFinancials(site) {
   const annualCost = site.annualCost || 0;
@@ -78,9 +78,9 @@ export function computeSiteFinancials(site) {
 
 /**
  * Compute deal-level aggregate financials from sites.
- * @param {import('./types.js').Site[]} sites
+ * @param {import('./types.js?v=20260417-s2').Site[]} sites
  * @param {number} [contractTermYears]
- * @returns {import('./types.js').DealFinancials}
+ * @returns {import('./types.js?v=20260417-s2').DealFinancials}
  */
 export function computeDealFinancials(sites, contractTermYears = DEFAULT_CONTRACT_YEARS) {
   if (sites.length === 0) {
@@ -126,7 +126,7 @@ export function computeDealFinancials(sites, contractTermYears = DEFAULT_CONTRAC
 }
 
 /**
- * @returns {import('./types.js').DealFinancials}
+ * @returns {import('./types.js?v=20260417-s2').DealFinancials}
  */
 function emptyFinancials() {
   return {
@@ -203,10 +203,10 @@ export function computeIrr(startup, annualCashFlow, years) {
 
 /**
  * Generate multi-year P&L projection.
- * @param {import('./types.js').DealFinancials} fin
+ * @param {import('./types.js?v=20260417-s2').DealFinancials} fin
  * @param {number} [years]
  * @param {number} [escalationPct]
- * @returns {import('./types.js').MultiYearRow[]}
+ * @returns {import('./types.js?v=20260417-s2').MultiYearRow[]}
  */
 export function generateMultiYearPL(fin, years = DEFAULT_CONTRACT_YEARS, escalationPct = DEFAULT_ESCALATION_PCT) {
   const rows = [];
@@ -232,8 +232,8 @@ export function generateMultiYearPL(fin, years = DEFAULT_CONTRACT_YEARS, escalat
 
 /**
  * Compute progress across DOS stages.
- * @param {import('./types.js').DosStage[]} stages
- * @returns {import('./types.js').StageProgress[]}
+ * @param {import('./types.js?v=20260417-s2').DosStage[]} stages
+ * @returns {import('./types.js?v=20260417-s2').StageProgress[]}
  */
 export function computeStageProgress(stages) {
   return stages.map(stage => {
@@ -256,7 +256,7 @@ export function computeStageProgress(stages) {
 
 /**
  * Compute overall deal completion from stage progress.
- * @param {import('./types.js').StageProgress[]} progress
+ * @param {import('./types.js?v=20260417-s2').StageProgress[]} progress
  * @returns {{ totalElements: number, completedElements: number, overallPct: number, currentStage: string }}
  */
 export function computeOverallProgress(progress) {
@@ -303,7 +303,7 @@ export function evaluateMetric(metric, value) {
 
 /**
  * Evaluate all deal financial metrics.
- * @param {import('./types.js').DealFinancials} fin
+ * @param {import('./types.js?v=20260417-s2').DealFinancials} fin
  * @returns {Array<{ metric: string, value: number, passes: boolean, rating: string, label: string }>}
  */
 export function evaluateAllMetrics(fin) {
@@ -322,7 +322,7 @@ export function evaluateAllMetrics(fin) {
 /**
  * Compute a simple deal health score (0-100).
  * Weighted: margin 35%, EBITDA 25%, payback 20%, NPV 20%.
- * @param {import('./types.js').DealFinancials} fin
+ * @param {import('./types.js?v=20260417-s2').DealFinancials} fin
  * @returns {{ score: number, grade: 'A' | 'B' | 'C' | 'D' | 'F' }}
  */
 export function computeDealScore(fin) {
@@ -348,8 +348,8 @@ function clamp(val, min, max) {
 
 /**
  * Rank sites by cost efficiency.
- * @param {import('./types.js').SiteFinancials[]} siteFins
- * @returns {Array<import('./types.js').SiteFinancials & { rank: number }>}
+ * @param {import('./types.js?v=20260417-s2').SiteFinancials[]} siteFins
+ * @returns {Array<import('./types.js?v=20260417-s2').SiteFinancials & { rank: number }>}
  */
 export function rankSitesByCost(siteFins) {
   const sorted = [...siteFins].sort((a, b) => a.costPerSqft - b.costPerSqft);
@@ -360,7 +360,7 @@ export function rankSitesByCost(siteFins) {
 // DEMO DATA
 // ============================================================
 
-/** @type {import('./types.js').Deal} */
+/** @type {import('./types.js?v=20260417-s2').Deal} */
 export const DEMO_DEAL = {
   dealName: 'Midwest Regional Expansion',
   clientName: 'Acme Corp',
@@ -370,7 +370,7 @@ export const DEMO_DEAL = {
   notes: 'Multi-site expansion with 3 DCs across the Midwest corridor.',
 };
 
-/** @type {import('./types.js').Site[]} */
+/** @type {import('./types.js?v=20260417-s2').Site[]} */
 export const DEMO_SITES = [
   { id: 's1', name: 'Chicago DC', market: 'Midwest', environment: 'Ambient', sqft: 350000, annualCost: 4200000, targetMarginPct: 12, startupCost: 800000, pricingModel: 'cost-plus', annualVolume: 2400000 },
   { id: 's2', name: 'Indianapolis DC', market: 'Midwest', environment: 'Ambient', sqft: 250000, annualCost: 2800000, targetMarginPct: 10, startupCost: 500000, pricingModel: 'cost-plus', annualVolume: 1600000 },
@@ -422,4 +422,184 @@ export function statusBadge(status) {
 /** @param {string} rating @returns {string} */
 export function ratingColor(rating) {
   return { good: '#22c55e', warning: '#f59e0b', fail: '#ef4444' }[rating] || '#6b7280';
+}
+
+// ============================================================
+// HOURS TRACKING CALCULATIONS
+// ============================================================
+
+const HOURS_TYPES = [
+  'Sales Design',
+  'Engineering',
+  'Deal Mgmt',
+  'Site Visit',
+  'Customer Meeting',
+  'Internal Review',
+  'Documentation',
+  'Other'
+];
+
+/**
+ * Calculate hours summary from hours entries.
+ * @param {import('./types.js?v=20260417-s2').HoursEntry[]} hours
+ * @returns {import('./types.js?v=20260417-s2').HoursSummary}
+ */
+export function calcHoursSummary(hours) {
+  const byCategory = {};
+  const byWeek = {};
+
+  hours.forEach(h => {
+    const type = h.hours_type || 'Other';
+    const week = h.week_start || '';
+    const hval = Number(h.hours || 0);
+
+    // By work type
+    if (!byCategory[type]) byCategory[type] = { type, forecast: 0, actual: 0 };
+    if (h.category === 'forecast') byCategory[type].forecast += hval;
+    else if (h.category === 'actual') byCategory[type].actual += hval;
+
+    // By week
+    const weekKey = `${week}|${type}`;
+    if (!byWeek[weekKey]) byWeek[weekKey] = { week, forecast: 0, actual: 0 };
+    if (h.category === 'forecast') byWeek[weekKey].forecast += hval;
+    else if (h.category === 'actual') byWeek[weekKey].actual += hval;
+  });
+
+  const totalForecast = Object.values(byCategory).reduce((s, cat) => s + cat.forecast, 0);
+  const totalActual = Object.values(byCategory).reduce((s, cat) => s + cat.actual, 0);
+  const delta = totalActual - totalForecast;
+  const percentUtilized = totalForecast > 0 ? (totalActual / totalForecast) * 100 : 0;
+
+  const weekArray = Object.values(byWeek)
+    .map(w => ({ ...w, delta: w.actual - w.forecast }))
+    .sort((a, b) => b.week.localeCompare(a.week));
+
+  return {
+    totalForecast,
+    totalActual,
+    delta,
+    percentUtilized,
+    byWorkType: Object.values(byCategory),
+    byWeek: weekArray
+  };
+}
+
+// ============================================================
+// TASK PROGRESS CALCULATIONS
+// ============================================================
+
+/**
+ * Calculate task progress metrics.
+ * @param {import('./types.js?v=20260417-s2').Task[]} tasks
+ * @returns {import('./types.js?v=20260417-s2').TaskSummary}
+ */
+export function calcTaskProgress(tasks) {
+  if (tasks.length === 0) {
+    return {
+      total: 0,
+      done: 0,
+      inProgress: 0,
+      blocked: 0,
+      percentComplete: 0,
+      byStage: [],
+      byPriority: []
+    };
+  }
+
+  // Count overall
+  const total = tasks.length;
+  const done = tasks.filter(t => t.status === 'done').length;
+  const inProgress = tasks.filter(t => t.status === 'in_progress').length;
+  const blocked = tasks.filter(t => t.status === 'blocked').length;
+  const percentComplete = (done / total) * 100;
+
+  // Group by DOS stage
+  const byStageMap = new Map();
+  tasks.forEach(t => {
+    const stageNum = t.dos_stage_number || 0;
+    const stageName = t.dos_stage_name || `Stage ${stageNum}`;
+    const key = `${stageNum}|${stageName}`;
+    if (!byStageMap.has(key)) {
+      byStageMap.set(key, { dosStageNumber: stageNum, dosStageName: stageName, total: 0, done: 0, inProgress: 0, blocked: 0 });
+    }
+    const stage = byStageMap.get(key);
+    stage.total++;
+    if (t.status === 'done') stage.done++;
+    else if (t.status === 'in_progress') stage.inProgress++;
+    else if (t.status === 'blocked') stage.blocked++;
+  });
+
+  const byStage = Array.from(byStageMap.values()).sort((a, b) => a.dosStageNumber - b.dosStageNumber);
+
+  // Group by priority
+  const byPriorityMap = new Map();
+  ['low', 'medium', 'high', 'critical'].forEach(p => {
+    const count = tasks.filter(t => t.priority === p).length;
+    if (count > 0) byPriorityMap.set(p, { priority: p, count });
+  });
+
+  const byPriority = Array.from(byPriorityMap.values());
+
+  return { total, done, inProgress, blocked, percentComplete, byStage, byPriority };
+}
+
+// ============================================================
+// DOS ACTIVITY TEMPLATES
+// ============================================================
+
+/**
+ * Get standard DOS activity templates for a stage.
+ * @param {number} stageNumber — 1-6
+ * @returns {Array<{ title: string, description: string }>}
+ */
+export function getDosActivityTemplates(stageNumber) {
+  const templates = {
+    1: [
+      { title: 'Market Analysis', description: 'Research market conditions and competitive landscape' },
+      { title: 'RFP Review', description: 'Comprehensive review and qualification of customer RFP' },
+      { title: 'Scope Definition', description: 'Define project scope and high-level requirements' },
+      { title: 'Solution Overview', description: 'Present initial solution direction to customer' },
+      { title: 'Customer Profiling', description: 'Develop customer profile and opportunity assessment' }
+    ],
+    2: [
+      { title: 'Volume Analysis', description: 'Analyze customer volume and demand patterns' },
+      { title: 'Complexity Assessment', description: 'Assess solution and operational complexity' },
+      { title: 'Resource Estimation', description: 'Estimate required resources and staffing' },
+      { title: 'Risk Assessment', description: 'Identify and evaluate key risks' },
+      { title: 'Go/No-Go Recommendation', description: 'Make recommendation to proceed with design' },
+      { title: 'Solution Lead Assignment', description: 'Assign Solution Lead for next phase' }
+    ],
+    3: [
+      { title: 'Kickoff Meeting', description: 'Conduct formal project kickoff with customer' },
+      { title: 'Cost Model Build', description: 'Develop comprehensive cost model' },
+      { title: 'Warehouse Sizing', description: 'Size facility requirements and footprint' },
+      { title: 'Network Analysis', description: 'Analyze network design and routing' },
+      { title: 'Labor Standards', description: 'Develop labor productivity standards' },
+      { title: 'Equipment Specification', description: 'Specify equipment and systems requirements' },
+      { title: 'Technology Scope', description: 'Define technology and systems architecture' }
+    ],
+    4: [
+      { title: 'Operations Feasibility', description: 'Validate operations feasibility and requirements' },
+      { title: 'SLA Definition', description: 'Define Service Level Agreements and metrics' },
+      { title: 'KPI Framework', description: 'Establish KPI framework and reporting' },
+      { title: 'Transition Plan', description: 'Develop transition and implementation plan' },
+      { title: 'Contingency Plan', description: 'Develop contingency and risk mitigation plans' }
+    ],
+    5: [
+      { title: 'Executive Summary', description: 'Prepare executive summary for decision makers' },
+      { title: 'Financial Review', description: 'Review and present financial analysis' },
+      { title: 'Risk Mitigation', description: 'Present risk mitigation strategies' },
+      { title: 'Contract Review', description: 'Legal review of contract terms and conditions' },
+      { title: 'Pricing Approval', description: 'Obtain pricing and deal approval' }
+    ],
+    6: [
+      { title: 'Implementation Plan', description: 'Finalize detailed implementation plan' },
+      { title: 'Resource Onboarding', description: 'Onboard resources for delivery' },
+      { title: 'Systems Setup', description: 'Setup systems and technology infrastructure' },
+      { title: 'Go-Live Checklist', description: 'Complete go-live readiness checklist' },
+      { title: 'Handover Documentation', description: 'Prepare handover documentation' }
+    ]
+  };
+
+  return templates[stageNumber] || [];
 }

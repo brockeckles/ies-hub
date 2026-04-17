@@ -31,6 +31,52 @@
  */
 
 /**
+ * @typedef {Object} StorageAllocation
+ * @property {number} fullPallet — percentage full pallet storage (0-100)
+ * @property {number} cartonOnPallet — percentage carton-on-pallet (0-100)
+ * @property {number} cartonOnShelving — percentage carton-on-shelving (0-100)
+ */
+
+/**
+ * @typedef {Object} DockConfig
+ * @property {'single' | 'two'} sided — single-sided (combined doors) or two-sided (separate inbound/outbound)
+ * @property {number} inboundDoors — number of inbound dock doors
+ * @property {number} outboundDoors — number of outbound dock doors
+ * @property {number} palletsPerDockHour — throughput capacity per dock door per hour
+ * @property {number} dockOperatingHours — hours per day dock operates
+ */
+
+/**
+ * @typedef {Object} ProductDimensions
+ * @property {number} unitsPerPallet — standard units per full pallet
+ * @property {number} unitsPerCartonPallet — units per carton on pallet
+ * @property {number} cartonsPerPallet — number of cartons per full pallet
+ * @property {number} unitsPerCartonShelving — units per carton in shelving
+ * @property {number} cartonsPerLocation — cartons per shelving location
+ */
+
+/**
+ * @typedef {Object} ForwardPickConfig
+ * @property {boolean} enabled — whether forward pick area is included
+ * @property {'carton_flow' | 'light_case' | 'heavy_case'} type — pick type determines sqft/module
+ * @property {number} skuCount — number of SKUs in forward pick
+ * @property {number} daysInventory — days of inventory maintained in forward pick (DIOH)
+ * @property {number} outboundUnitsPerDay — daily outbound units
+ */
+
+/**
+ * @typedef {Object} OptionalZone
+ * @property {boolean} enabled
+ * @property {number} sqft
+ */
+
+/**
+ * @typedef {Object} CustomZone
+ * @property {string} name
+ * @property {number} sqft
+ */
+
+/**
  * @typedef {Object} ZoneConfig
  * @property {number} officeSqft — office / mezzanine area
  * @property {number} receiveStagingSqft — receiving staging area
@@ -38,6 +84,15 @@
  * @property {number} chargingSqft — battery charging area
  * @property {number} repackSqft — repack / VAS area
  * @property {number} [otherSqft] — misc non-storage area
+ * @property {import('./types.js?v=20260417-s2').StorageAllocation} [storageAllocation] — mix of storage types
+ * @property {import('./types.js?v=20260417-s2').DockConfig} [dockConfig] — dock configuration
+ * @property {import('./types.js?v=20260417-s2').ProductDimensions} [productDimensions] — product sizing
+ * @property {import('./types.js?v=20260417-s2').ForwardPickConfig} [forwardPick] — forward pick area config
+ * @property {{ vas: OptionalZone, returns: OptionalZone, chargeback: OptionalZone }} [optionalZones] — optional functional zones
+ * @property {import('./types.js?v=20260417-s2').CustomZone[]} [customZones] — user-defined zones
+ * @property {number} [peakUnitsPerDay] — peak daily unit throughput
+ * @property {number} [avgUnitsPerDay] — average daily unit throughput
+ * @property {number} [operatingDaysPerYear] — annual operating days
  */
 
 /**

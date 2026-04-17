@@ -6,10 +6,10 @@
  * @module tools/warehouse-sizing/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-s1';
-import { state } from '../../shared/state.js?v=20260417-s1';
-import * as calc from './calc.js?v=20260417-s1';
-import * as api from './api.js?v=20260417-s1';
+import { bus } from '../../shared/event-bus.js?v=20260417-s2';
+import { state } from '../../shared/state.js?v=20260417-s2';
+import * as calc from './calc.js?v=20260417-s2';
+import * as api from './api.js?v=20260417-s2';
 
 // ============================================================
 // STATE
@@ -21,13 +21,13 @@ let rootEl = null;
 /** @type {'dashboard' | 'elevation' | '3d'} */
 let activeView = 'dashboard';
 
-/** @type {import('./types.js').FacilityConfig} */
+/** @type {import('./types.js?v=20260417-s2').FacilityConfig} */
 let facility = createDefaultFacility();
 
-/** @type {import('./types.js').ZoneConfig} */
+/** @type {import('./types.js?v=20260417-s2').ZoneConfig} */
 let zones = createDefaultZones();
 
-/** @type {import('./types.js').VolumeInputs} */
+/** @type {import('./types.js?v=20260417-s2').VolumeInputs} */
 let volumes = createDefaultVolumes();
 
 /** @type {boolean} */
@@ -289,6 +289,142 @@ function renderConfigPanel() {
         <div class="wsc-config-field"><label>Daily Outbound</label><input type="number" value="${volumes.avgDailyOutbound}" data-vol="avgDailyOutbound" /></div>
       </div>
     </div>
+
+    <!-- Storage Type Allocation -->
+    <div class="wsc-config-section">
+      <div class="wsc-config-title">Storage Type Allocation (%)</div>
+      <div class="wsc-config-field" style="margin-bottom:8px;">
+        <label>Full Pallet: <span id="wsc-alloc-fp" style="font-weight:700;">${(zones.storageAllocation?.fullPallet || 60)}%</span></label>
+        <input type="range" min="0" max="100" value="${zones.storageAllocation?.fullPallet || 60}" data-alloc="fullPallet" style="width:100%;" />
+      </div>
+      <div class="wsc-config-field" style="margin-bottom:8px;">
+        <label>Carton on Pallet: <span id="wsc-alloc-cp" style="font-weight:700;">${(zones.storageAllocation?.cartonOnPallet || 30)}%</span></label>
+        <input type="range" min="0" max="100" value="${zones.storageAllocation?.cartonOnPallet || 30}" data-alloc="cartonOnPallet" style="width:100%;" />
+      </div>
+      <div class="wsc-config-field" style="margin-bottom:8px;">
+        <label>Carton on Shelving: <span id="wsc-alloc-cs" style="font-weight:700;">${(zones.storageAllocation?.cartonOnShelving || 10)}%</span></label>
+        <input type="range" min="0" max="100" value="${zones.storageAllocation?.cartonOnShelving || 10}" data-alloc="cartonOnShelving" style="width:100%;" />
+      </div>
+    </div>
+
+    <!-- Product Dimensions -->
+    <div class="wsc-config-section">
+      <div class="wsc-config-title">Product Dimensions</div>
+      <div class="wsc-config-row">
+        <div class="wsc-config-field"><label>Units/Pallet</label><input type="number" value="${zones.productDimensions?.unitsPerPallet || 48}" data-prod="unitsPerPallet" /></div>
+        <div class="wsc-config-field"><label>Cartons/Pallet</label><input type="number" value="${zones.productDimensions?.cartonsPerPallet || 12}" data-prod="cartonsPerPallet" /></div>
+      </div>
+      <div class="wsc-config-row">
+        <div class="wsc-config-field"><label>Units/Carton</label><input type="number" value="${zones.productDimensions?.unitsPerCartonPallet || 6}" data-prod="unitsPerCartonPallet" /></div>
+        <div class="wsc-config-field"><label>Units/Shelf</label><input type="number" value="${zones.productDimensions?.unitsPerCartonShelving || 6}" data-prod="unitsPerCartonShelving" /></div>
+      </div>
+    </div>
+
+    <!-- Dock Configuration -->
+    <div class="wsc-config-section">
+      <div class="wsc-config-title">Dock Configuration</div>
+      <div class="wsc-config-field" style="margin-bottom:8px;">
+        <label>Dock Layout</label>
+        <select data-dock="sided">
+          <option value="single"${zones.dockConfig?.sided === 'single' ? ' selected' : ''}>Single-Sided</option>
+          <option value="two"${zones.dockConfig?.sided === 'two' ? ' selected' : ''}>Two-Sided</option>
+        </select>
+      </div>
+      <div class="wsc-config-row">
+        <div class="wsc-config-field"><label>Inbound Doors</label><input type="number" value="${zones.dockConfig?.inboundDoors || 10}" data-dock="inboundDoors" /></div>
+        <div class="wsc-config-field"><label>Outbound Doors</label><input type="number" value="${zones.dockConfig?.outboundDoors || 12}" data-dock="outboundDoors" /></div>
+      </div>
+      <div class="wsc-config-row">
+        <div class="wsc-config-field"><label>Pallets/Hr/Door</label><input type="number" value="${zones.dockConfig?.palletsPerDockHour || 12}" step="1" data-dock="palletsPerDockHour" /></div>
+        <div class="wsc-config-field"><label>Operating Hrs</label><input type="number" value="${zones.dockConfig?.dockOperatingHours || 10}" step="0.5" data-dock="dockOperatingHours" /></div>
+      </div>
+    </div>
+
+    <!-- Inventory Parameters -->
+    <div class="wsc-config-section">
+      <div class="wsc-config-title">Inventory Parameters</div>
+      <div class="wsc-config-row">
+        <div class="wsc-config-field"><label>Peak Units/Day</label><input type="number" value="${zones.peakUnitsPerDay || 500000}" data-inv="peakUnitsPerDay" /></div>
+        <div class="wsc-config-field"><label>Avg Units/Day</label><input type="number" value="${zones.avgUnitsPerDay || 350000}" data-inv="avgUnitsPerDay" /></div>
+      </div>
+      <div class="wsc-config-row">
+        <div class="wsc-config-field"><label>Operating Days/Yr</label><input type="number" value="${zones.operatingDaysPerYear || 250}" data-inv="operatingDaysPerYear" /></div>
+      </div>
+    </div>
+
+    <!-- Forward Pick -->
+    <div class="wsc-config-section">
+      <div class="wsc-config-title">Forward Pick Area</div>
+      <div class="wsc-config-field" style="margin-bottom:8px;">
+        <label style="display:flex; align-items:center; gap:6px;">
+          <input type="checkbox" ${zones.forwardPick?.enabled ? 'checked' : ''} data-fwd="enabled" style="margin:0;" />
+          <span>Enable Forward Pick</span>
+        </label>
+      </div>
+      <div class="wsc-config-field" style="margin-bottom:8px; display:${zones.forwardPick?.enabled ? 'block' : 'none'};" id="wsc-fwd-opts">
+        <label>Pick Type</label>
+        <select data-fwd="type">
+          <option value="carton_flow"${zones.forwardPick?.type === 'carton_flow' ? ' selected' : ''}>Carton Flow</option>
+          <option value="light_case"${zones.forwardPick?.type === 'light_case' ? ' selected' : ''}>Light Case</option>
+          <option value="heavy_case"${zones.forwardPick?.type === 'heavy_case' ? ' selected' : ''}>Heavy Case</option>
+        </select>
+      </div>
+      <div class="wsc-config-row" style="display:${zones.forwardPick?.enabled ? 'grid' : 'none'};" id="wsc-fwd-params">
+        <div class="wsc-config-field"><label>SKU Count</label><input type="number" value="${zones.forwardPick?.skuCount || 2000}" data-fwd="skuCount" /></div>
+        <div class="wsc-config-field"><label>Days Inventory</label><input type="number" value="${zones.forwardPick?.daysInventory || 3}" step="0.5" data-fwd="daysInventory" /></div>
+      </div>
+      <div class="wsc-config-field" style="display:${zones.forwardPick?.enabled ? 'block' : 'none'};" id="wsc-fwd-outbound">
+        <label>Outbound Units/Day</label>
+        <input type="number" value="${zones.forwardPick?.outboundUnitsPerDay || 5000}" data-fwd="outboundUnitsPerDay" />
+      </div>
+    </div>
+
+    <!-- Optional Zones -->
+    <div class="wsc-config-section">
+      <div class="wsc-config-title">Optional Zones</div>
+      <div class="wsc-config-field" style="margin-bottom:8px;">
+        <label style="display:flex; align-items:center; gap:6px;">
+          <input type="checkbox" ${zones.optionalZones?.vas?.enabled ? 'checked' : ''} data-opt="vas-enabled" style="margin:0;" />
+          <span>VAS</span>
+        </label>
+      </div>
+      <div class="wsc-config-row" id="wsc-opt-vas-row" style="display:${zones.optionalZones?.vas?.enabled ? 'grid' : 'none'};">
+        <div class="wsc-config-field"><label>VAS SF</label><input type="number" value="${zones.optionalZones?.vas?.sqft || 0}" data-opt="vas-sqft" /></div>
+      </div>
+      <div class="wsc-config-field" style="margin-bottom:8px;">
+        <label style="display:flex; align-items:center; gap:6px;">
+          <input type="checkbox" ${zones.optionalZones?.returns?.enabled ? 'checked' : ''} data-opt="returns-enabled" style="margin:0;" />
+          <span>Returns</span>
+        </label>
+      </div>
+      <div class="wsc-config-row" id="wsc-opt-returns-row" style="display:${zones.optionalZones?.returns?.enabled ? 'grid' : 'none'};">
+        <div class="wsc-config-field"><label>Returns SF</label><input type="number" value="${zones.optionalZones?.returns?.sqft || 0}" data-opt="returns-sqft" /></div>
+      </div>
+      <div class="wsc-config-field" style="margin-bottom:8px;">
+        <label style="display:flex; align-items:center; gap:6px;">
+          <input type="checkbox" ${zones.optionalZones?.chargeback?.enabled ? 'checked' : ''} data-opt="chargeback-enabled" style="margin:0;" />
+          <span>Chargeback</span>
+        </label>
+      </div>
+      <div class="wsc-config-row" id="wsc-opt-chargeback-row" style="display:${zones.optionalZones?.chargeback?.enabled ? 'grid' : 'none'};">
+        <div class="wsc-config-field"><label>Chargeback SF</label><input type="number" value="${zones.optionalZones?.chargeback?.sqft || 0}" data-opt="chargeback-sqft" /></div>
+      </div>
+    </div>
+
+    <!-- Custom Zones -->
+    <div class="wsc-config-section">
+      <div class="wsc-config-title">Custom Zones</div>
+      <div id="wsc-custom-zones-list" style="display:flex; flex-direction:column; gap:6px; margin-bottom:8px;">
+        ${(zones.customZones || []).map((z, i) => `
+          <div style="display:flex; gap:4px; align-items:center;">
+            <input type="text" value="${z.name}" data-custom-name="${i}" placeholder="Zone name" style="flex:1; padding:4px 6px; border:1px solid var(--ies-gray-200); border-radius:4px; font-size:11px;" />
+            <input type="number" value="${z.sqft}" data-custom-sqft="${i}" min="0" placeholder="SF" style="width:80px; padding:4px 6px; border:1px solid var(--ies-gray-200); border-radius:4px; font-size:11px;" />
+            <button data-custom-remove="${i}" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:18px; padding:0; line-height:1;">×</button>
+          </div>
+        `).join('')}
+      </div>
+      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="wsc-add-custom-zone" style="width:100%;">+ Add Custom Zone</button>
+    </div>
   `;
 
   bindConfigEvents(panel);
@@ -324,6 +460,137 @@ function bindConfigEvents(panel) {
       isDirty = true;
       renderContentView();
     });
+  });
+
+  // Storage allocation sliders
+  panel.querySelectorAll('[data-alloc]').forEach(input => {
+    input.addEventListener('change', e => {
+      const field = /** @type {HTMLInputElement} */ (e.target).dataset.alloc;
+      const val = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
+      if (!zones.storageAllocation) zones.storageAllocation = { fullPallet: 60, cartonOnPallet: 30, cartonOnShelving: 10 };
+      zones.storageAllocation[field] = val;
+      // Update display label
+      const label = panel.querySelector(`#wsc-alloc-${field.slice(0, 2)}`);
+      if (label) label.textContent = val + '%';
+      isDirty = true;
+      renderContentView();
+    });
+    input.addEventListener('input', e => {
+      const field = /** @type {HTMLInputElement} */ (e.target).dataset.alloc;
+      const val = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
+      const label = panel.querySelector(`#wsc-alloc-${field.slice(0, 2)}`);
+      if (label) label.textContent = val + '%';
+    });
+  });
+
+  // Product dimension fields
+  panel.querySelectorAll('[data-prod]').forEach(input => {
+    input.addEventListener('change', e => {
+      const field = /** @type {HTMLInputElement} */ (e.target).dataset.prod;
+      const val = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
+      if (!zones.productDimensions) zones.productDimensions = { unitsPerPallet: 48, unitsPerCartonPallet: 6, cartonsPerPallet: 12, unitsPerCartonShelving: 6, cartonsPerLocation: 4 };
+      zones.productDimensions[field] = val;
+      isDirty = true;
+      renderContentView();
+    });
+  });
+
+  // Dock configuration fields
+  panel.querySelectorAll('[data-dock]').forEach(input => {
+    input.addEventListener('change', e => {
+      const field = /** @type {HTMLInputElement} */ (e.target).dataset.dock;
+      const val = input.type === 'number' ? parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0 : /** @type {HTMLInputElement} */ (e.target).value;
+      if (!zones.dockConfig) zones.dockConfig = { sided: 'single', inboundDoors: 10, outboundDoors: 12, palletsPerDockHour: 12, dockOperatingHours: 10 };
+      zones.dockConfig[field] = val;
+      isDirty = true;
+      renderContentView();
+    });
+  });
+
+  // Inventory parameters
+  panel.querySelectorAll('[data-inv]').forEach(input => {
+    input.addEventListener('change', e => {
+      const field = /** @type {HTMLInputElement} */ (e.target).dataset.inv;
+      const val = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
+      zones[field] = val;
+      isDirty = true;
+      renderContentView();
+    });
+  });
+
+  // Forward pick fields
+  panel.querySelectorAll('[data-fwd]').forEach(input => {
+    input.addEventListener('change', e => {
+      const field = /** @type {HTMLInputElement} */ (e.target).dataset.fwd;
+      if (!zones.forwardPick) zones.forwardPick = { enabled: false, type: 'carton_flow', skuCount: 2000, daysInventory: 3, outboundUnitsPerDay: 5000 };
+      if (field === 'enabled') {
+        zones.forwardPick[field] = /** @type {HTMLInputElement} */ (e.target).checked;
+        const opts = panel.querySelector('#wsc-fwd-opts');
+        const params = panel.querySelector('#wsc-fwd-params');
+        const outbound = panel.querySelector('#wsc-fwd-outbound');
+        if (opts) opts.style.display = zones.forwardPick.enabled ? 'block' : 'none';
+        if (params) params.style.display = zones.forwardPick.enabled ? 'grid' : 'none';
+        if (outbound) outbound.style.display = zones.forwardPick.enabled ? 'block' : 'none';
+      } else {
+        const val = input.type === 'number' ? parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0 : /** @type {HTMLInputElement} */ (e.target).value;
+        zones.forwardPick[field] = val;
+      }
+      isDirty = true;
+      renderContentView();
+    });
+  });
+
+  // Optional zone fields
+  panel.querySelectorAll('[data-opt]').forEach(input => {
+    input.addEventListener('change', e => {
+      const key = /** @type {HTMLInputElement} */ (e.target).dataset.opt;
+      if (!zones.optionalZones) zones.optionalZones = { vas: { enabled: false, sqft: 0 }, returns: { enabled: false, sqft: 0 }, chargeback: { enabled: false, sqft: 0 } };
+      if (key.endsWith('-enabled')) {
+        const zone = key.replace('-enabled', '');
+        zones.optionalZones[zone].enabled = /** @type {HTMLInputElement} */ (e.target).checked;
+        const sqftDiv = panel.querySelector(`#wsc-opt-${zone}-row`);
+        if (sqftDiv) sqftDiv.style.display = zones.optionalZones[zone].enabled ? 'grid' : 'none';
+      } else if (key.endsWith('-sqft')) {
+        const zone = key.replace('-sqft', '');
+        zones.optionalZones[zone].sqft = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
+      }
+      isDirty = true;
+      renderContentView();
+    });
+  });
+
+  // Custom zone management
+  panel.querySelectorAll('[data-custom-name], [data-custom-sqft]').forEach(input => {
+    input.addEventListener('change', e => {
+      const idx = parseInt(/** @type {HTMLInputElement} */ (e.target).dataset.customName || /** @type {HTMLInputElement} */ (e.target).dataset.customSqft);
+      if (!zones.customZones) zones.customZones = [];
+      if (e.target.dataset.customName !== undefined) {
+        zones.customZones[idx].name = /** @type {HTMLInputElement} */ (e.target).value;
+      } else {
+        zones.customZones[idx].sqft = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
+      }
+      isDirty = true;
+      renderContentView();
+    });
+  });
+
+  panel.querySelectorAll('[data-custom-remove]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.preventDefault();
+      const idx = parseInt(/** @type {HTMLElement} */ (e.target).dataset.customRemove);
+      if (zones.customZones) zones.customZones.splice(idx, 1);
+      isDirty = true;
+      renderConfigPanel();
+      renderContentView();
+    });
+  });
+
+  panel.querySelector('[data-action="wsc-add-custom-zone"]')?.addEventListener('click', () => {
+    if (!zones.customZones) zones.customZones = [];
+    zones.customZones.push({ name: `Custom Zone ${zones.customZones.length + 1}`, sqft: 2000 });
+    isDirty = true;
+    renderConfigPanel();
+    renderContentView();
   });
 
   // Toolbar
@@ -402,6 +669,11 @@ function renderDashboard() {
   const storage = calc.computeStorage(facility, zones);
   const summary = calc.computeCapacitySummary(facility, zones, volumes);
   const dock = calc.dockUtilization(facility.dockDoors, volumes.avgDailyInbound, volumes.avgDailyOutbound, volumes.peakMultiplier);
+  const dockAnalysis = calc.calcDockAnalysis(facility, zones, volumes);
+  const storageByType = calc.calcStorageByType(facility, zones);
+  const dioh = calc.calcDIOH(zones);
+  const fwdPick = calc.calcForwardPick(zones);
+  const correctedSf = calc.calcSuggestedSF(facility, zones, volumes);
   const zoneBD = calc.zoneBreakdown(zones);
   const elev = calc.elevationParams(facility);
 
@@ -412,7 +684,7 @@ function renderDashboard() {
       <div class="hub-kpi-item"><div class="hub-kpi-label">Storage SF</div><div class="hub-kpi-value">${calc.formatSqft(summary.storageSqft)}</div></div>
       <div class="hub-kpi-item"><div class="hub-kpi-label">Pallet Positions</div><div class="hub-kpi-value">${summary.totalPalletPositions.toLocaleString()}</div></div>
       <div class="hub-kpi-item"><div class="hub-kpi-label">Rack Levels</div><div class="hub-kpi-value">${summary.rackLevels}</div></div>
-      <div class="hub-kpi-item"><div class="hub-kpi-label">Suggested SF</div><div class="hub-kpi-value" style="color:${summary.suggestedSqft > summary.totalSqft ? 'var(--ies-red)' : 'var(--ies-green)'};">${calc.formatSqft(summary.suggestedSqft)}</div></div>
+      <div class="hub-kpi-item"><div class="hub-kpi-label">Corrected SF</div><div class="hub-kpi-value" style="color:${correctedSf > summary.totalSqft ? 'var(--ies-red)' : 'var(--ies-green)'};">${calc.formatSqft(correctedSf)}</div></div>
     </div>
 
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
@@ -423,6 +695,18 @@ function renderDashboard() {
         ${renderUtilBar('Pallet Capacity', summary.capacityUtilizationPct)}
         ${renderUtilBar('Cubic Utilization', summary.cubicUtilizationPct)}
         ${renderUtilBar('Dock Door (Peak)', summary.dockDoorUtilization)}
+      </div>
+
+      <!-- Storage Type Breakdown -->
+      <div class="hub-card">
+        <div class="text-subtitle mb-4">Storage Type Breakdown</div>
+        <table class="cm-grid-table" style="font-size:13px;">
+          <tbody>
+            <tr><td>Full Pallet</td><td class="cm-num">${storageByType.fullPalletPositions.toLocaleString()}</td><td class="cm-num" style="color:var(--ies-gray-400);">pos</td></tr>
+            <tr><td>Carton on Pallet</td><td class="cm-num">${storageByType.cartonOnPalletPositions.toLocaleString()}</td><td class="cm-num" style="color:var(--ies-gray-400);">pos</td></tr>
+            <tr><td>Carton on Shelving</td><td class="cm-num">${storageByType.cartonOnShelvingPositions.toLocaleString()}</td><td class="cm-num" style="color:var(--ies-gray-400);">pos</td></tr>
+          </tbody>
+        </table>
       </div>
 
       <!-- Zone Breakdown -->
@@ -446,6 +730,20 @@ function renderDashboard() {
         </div>
       </div>
 
+      <!-- Dock Analysis -->
+      <div class="hub-card">
+        <div class="text-subtitle mb-4">Dock Analysis</div>
+        <table class="cm-grid-table" style="font-size:13px;">
+          <tbody>
+            <tr><td>Inbound Doors Needed</td><td class="cm-num" style="color:${dockAnalysis.inboundDoorsNeeded > (zones.dockConfig?.inboundDoors || 10) ? 'var(--ies-red)' : 'var(--ies-green)'};">${dockAnalysis.inboundDoorsNeeded}</td></tr>
+            <tr><td>Outbound Doors Needed</td><td class="cm-num" style="color:${dockAnalysis.outboundDoorsNeeded > (zones.dockConfig?.outboundDoors || 12) ? 'var(--ies-red)' : 'var(--ies-green)'};">${dockAnalysis.outboundDoorsNeeded}</td></tr>
+            <tr><td>Inbound Util</td><td class="cm-num">${calc.formatPct(dockAnalysis.inboundUtilization)}</td></tr>
+            <tr><td>Outbound Util</td><td class="cm-num">${calc.formatPct(dockAnalysis.outboundUtilization)}</td></tr>
+            <tr><td>Dock Staging SF</td><td class="cm-num">${calc.formatSqft(dockAnalysis.dockSqft)}</td></tr>
+          </tbody>
+        </table>
+      </div>
+
       <!-- Rack Geometry -->
       <div class="hub-card">
         <div class="text-subtitle mb-4">Rack Geometry</div>
@@ -465,16 +763,63 @@ function renderDashboard() {
         </table>
       </div>
 
-      <!-- Dock Utilization -->
+      <!-- Inventory Metrics -->
       <div class="hub-card">
-        <div class="text-subtitle mb-4">Dock Door Analysis</div>
-        <div class="hub-kpi-bar mb-4">
-          <div class="hub-kpi-item"><div class="hub-kpi-label">Doors</div><div class="hub-kpi-value">${facility.dockDoors}</div></div>
-          <div class="hub-kpi-item"><div class="hub-kpi-label">Doors Needed</div><div class="hub-kpi-value" style="color:${dock.doorsNeeded > facility.dockDoors ? 'var(--ies-red)' : 'var(--ies-green)'};">${dock.doorsNeeded}</div></div>
+        <div class="text-subtitle mb-4">Inventory Metrics</div>
+        <table class="cm-grid-table" style="font-size:13px;">
+          <tbody>
+            <tr><td>Peak Units/Day</td><td class="cm-num">${(zones.peakUnitsPerDay || 500000).toLocaleString()}</td></tr>
+            <tr><td>Avg Units/Day</td><td class="cm-num">${(zones.avgUnitsPerDay || 350000).toLocaleString()}</td></tr>
+            <tr><td>Operating Days/Yr</td><td class="cm-num">${(zones.operatingDaysPerYear || 250)}</td></tr>
+            <tr><td>DIOH (Days)</td><td class="cm-num">${dioh.toFixed(1)}</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Forward Pick -->
+      <div class="hub-card">
+        <div class="text-subtitle mb-4">Forward Pick Area</div>
+        ${zones.forwardPick?.enabled ? `
+          <table class="cm-grid-table" style="font-size:13px;">
+            <tbody>
+              <tr><td>Pick Type</td><td class="cm-num">${(zones.forwardPick.type || 'carton_flow').replace('_', ' ')}</td></tr>
+              <tr><td>SKU Count</td><td class="cm-num">${(zones.forwardPick.skuCount || 0).toLocaleString()}</td></tr>
+              <tr><td>Days Inventory</td><td class="cm-num">${(zones.forwardPick.daysInventory || 0).toFixed(1)}</td></tr>
+              <tr><td>Forward Pick SF</td><td class="cm-num">${calc.formatSqft(fwdPick)}</td></tr>
+            </tbody>
+          </table>
+        ` : `
+          <div style="padding:12px; text-align:center; color:var(--ies-gray-400); font-size:13px;">
+            Forward pick not enabled
+          </div>
+        `}
+      </div>
+
+      <!-- Corrected Suggested SF -->
+      <div class="hub-card">
+        <div class="text-subtitle mb-4">Size Recommendation</div>
+        <div style="font-size:13px;">
+          <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+            <span>Base Suggested SF</span>
+            <span style="font-weight:700;">${calc.formatSqft(summary.suggestedSqft)}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+            <span>+ Dock Staging</span>
+            <span style="font-weight:700;">${calc.formatSqft(dockAnalysis.dockSqft)}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+            <span>+ Forward Pick</span>
+            <span style="font-weight:700;">${calc.formatSqft(fwdPick)}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; margin-bottom:12px;">
+            <span>+ Optional Zones</span>
+            <span style="font-weight:700;">${calc.formatSqft(calc.calcOptionalZones(zones))}</span>
+          </div>
+          <div style="border-top:2px solid var(--ies-blue); padding-top:8px; display:flex; justify-content:space-between;">
+            <span style="font-weight:700;">Corrected Total</span>
+            <span style="font-weight:700; font-size:16px; color:${correctedSf > summary.totalSqft ? 'var(--ies-red)' : 'var(--ies-green)'};">${calc.formatSqft(correctedSf)}</span>
+          </div>
         </div>
-        ${renderUtilBar('Avg Utilization', dock.avgUtil)}
-        ${renderUtilBar('Peak Utilization', dock.peakUtil)}
-        <div style="font-size:11px; color:var(--ies-gray-400); margin-top:8px;">Based on ${calc.DOOR_CAPACITY_PER_DAY} pallets/door/day capacity</div>
       </div>
     </div>
   `;
@@ -840,7 +1185,7 @@ function build3DScene() {
 // ============================================================
 
 function pushToCm() {
-  /** @type {import('./types.js').WscToCmPayload} */
+  /** @type {import('./types.js?v=20260417-s2').WscToCmPayload} */
   const payload = {
     totalSqft: facility.totalSqft || 0,
     clearHeight: facility.clearHeight || 0,
@@ -856,7 +1201,7 @@ function pushToCm() {
 
 /**
  * Handle CM → WSC push (e.g., "Size with Calculator" from CM).
- * @param {import('./types.js').CmToWscPayload} payload
+ * @param {import('./types.js?v=20260417-s2').CmToWscPayload} payload
  */
 function handleCmPush(payload) {
   if (payload.clearHeight) facility.clearHeight = payload.clearHeight;
@@ -900,6 +1245,15 @@ function createDefaultZones() {
     chargingSqft: 2000,
     repackSqft: 3000,
     otherSqft: 0,
+    storageAllocation: { fullPallet: 60, cartonOnPallet: 30, cartonOnShelving: 10 },
+    dockConfig: { sided: 'single', inboundDoors: 10, outboundDoors: 12, palletsPerDockHour: 12, dockOperatingHours: 10 },
+    productDimensions: { unitsPerPallet: 48, unitsPerCartonPallet: 6, cartonsPerPallet: 12, unitsPerCartonShelving: 6, cartonsPerLocation: 4 },
+    forwardPick: { enabled: false, type: 'carton_flow', skuCount: 2000, daysInventory: 3, outboundUnitsPerDay: 5000 },
+    optionalZones: { vas: { enabled: false, sqft: 0 }, returns: { enabled: false, sqft: 0 }, chargeback: { enabled: false, sqft: 0 } },
+    customZones: [],
+    peakUnitsPerDay: 500000,
+    avgUnitsPerDay: 350000,
+    operatingDaysPerYear: 250,
   };
 }
 

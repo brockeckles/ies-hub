@@ -15,7 +15,7 @@
 
 /**
  * Calculate annual operating hours from shift configuration.
- * @param {import('./types.js').ShiftConfig} shifts
+ * @param {import('./types.js?v=20260417-s2').ShiftConfig} shifts
  * @returns {number} annual operating hours per person
  */
 export function operatingHours(shifts) {
@@ -31,7 +31,7 @@ export function operatingHours(shifts) {
 
 /**
  * Fully loaded hourly rate: rate × (1 + burden%) + benefits.
- * @param {import('./types.js').DirectLaborLine | import('./types.js').IndirectLaborLine} line
+ * @param {import('./types.js?v=20260417-s2').DirectLaborLine | import('./types.js?v=20260417-s2').IndirectLaborLine} line
  * @param {Object} [opts]
  * @param {number} [opts.benefitLoadFallback] — default burden fraction if line has no burden_pct
  * @returns {number}
@@ -48,7 +48,7 @@ export function fullyLoadedRate(line, opts = {}) {
 /**
  * Annual cost for a direct labor line.
  * Includes shift differential and overtime adjustments.
- * @param {import('./types.js').DirectLaborLine} line
+ * @param {import('./types.js?v=20260417-s2').DirectLaborLine} line
  * @param {Object} [opts]
  * @param {number} [opts.shiftDiffPct] — shift differential multiplier (0-based, e.g. 0.05 = 5%)
  * @param {number} [opts.otPct] — overtime % (0-based), applied at 1.5× rate
@@ -69,7 +69,7 @@ export function directLineAnnual(line, opts = {}) {
 /**
  * Simplified direct labor annual cost — no shift/OT (for inline cell display).
  * Formula: annual_hours × hourly_rate × (1 + burden%)
- * @param {import('./types.js').DirectLaborLine} line
+ * @param {import('./types.js?v=20260417-s2').DirectLaborLine} line
  * @returns {number}
  */
 export function directLineAnnualSimple(line) {
@@ -82,7 +82,7 @@ export function directLineAnnualSimple(line) {
 /**
  * Annual cost for an indirect labor line.
  * Includes bonus multiplier.
- * @param {import('./types.js').IndirectLaborLine} line
+ * @param {import('./types.js?v=20260417-s2').IndirectLaborLine} line
  * @param {Object} opts
  * @param {number} opts.operatingHours — annual operating hours
  * @param {number} [opts.bonusPct] — bonus % (0-based)
@@ -102,7 +102,7 @@ export function indirectLineAnnual(line, opts) {
 /**
  * Simplified indirect labor annual cost — for inline cell display.
  * Formula: headcount × operatingHours × hourly_rate × (1 + burden%)
- * @param {import('./types.js').IndirectLaborLine} line
+ * @param {import('./types.js?v=20260417-s2').IndirectLaborLine} line
  * @param {number} opHours
  * @returns {number}
  */
@@ -115,7 +115,7 @@ export function indirectLineAnnualSimple(line, opHours) {
 
 /**
  * FTE calculation: annual_hours / operatingHours.
- * @param {import('./types.js').DirectLaborLine} line
+ * @param {import('./types.js?v=20260417-s2').DirectLaborLine} line
  * @param {number} opHours — annual operating hours
  * @returns {number}
  */
@@ -130,8 +130,8 @@ export function fte(line, opHours) {
 
 /**
  * Total annual labor cost (direct + indirect).
- * @param {import('./types.js').DirectLaborLine[]} directLines
- * @param {import('./types.js').IndirectLaborLine[]} indirectLines
+ * @param {import('./types.js?v=20260417-s2').DirectLaborLine[]} directLines
+ * @param {import('./types.js?v=20260417-s2').IndirectLaborLine[]} indirectLines
  * @param {Object} opts
  * @param {number} opts.operatingHours
  * @param {number} [opts.otPct]
@@ -152,8 +152,8 @@ export function totalLaborCost(directLines, indirectLines, opts) {
 
 /**
  * Total FTEs (direct + indirect headcount).
- * @param {import('./types.js').DirectLaborLine[]} directLines
- * @param {import('./types.js').IndirectLaborLine[]} indirectLines
+ * @param {import('./types.js?v=20260417-s2').DirectLaborLine[]} directLines
+ * @param {import('./types.js?v=20260417-s2').IndirectLaborLine[]} indirectLines
  * @param {number} opHours
  * @returns {number}
  */
@@ -176,7 +176,7 @@ export function totalFtes(directLines, indirectLines, opHours) {
  * Annual operating cost for an equipment line.
  * - Lease/service: (monthly_cost + monthly_maintenance) × 12 × qty
  * - Purchase: maintenance only as operating cost
- * @param {import('./types.js').EquipmentLine} line
+ * @param {import('./types.js?v=20260417-s2').EquipmentLine} line
  * @returns {number}
  */
 export function equipLineAnnual(line) {
@@ -194,7 +194,7 @@ export function equipLineAnnual(line) {
 
 /**
  * Total acquisition cost for a purchase equipment line.
- * @param {import('./types.js').EquipmentLine} line
+ * @param {import('./types.js?v=20260417-s2').EquipmentLine} line
  * @returns {number}
  */
 export function equipTotalAcq(line) {
@@ -203,7 +203,7 @@ export function equipTotalAcq(line) {
 
 /**
  * Annual amortization for a purchase equipment line.
- * @param {import('./types.js').EquipmentLine} line
+ * @param {import('./types.js?v=20260417-s2').EquipmentLine} line
  * @returns {number}
  */
 export function equipLineAmort(line) {
@@ -215,7 +215,7 @@ export function equipLineAmort(line) {
 
 /**
  * Full summary for an equipment line (used in equipment table row + pricing).
- * @param {import('./types.js').EquipmentLine} line
+ * @param {import('./types.js?v=20260417-s2').EquipmentLine} line
  * @returns {{ annual: number, capital: number, amort: number, leaseMo: number, maintAnnual: number }}
  */
 export function equipLineSummary(line) {
@@ -233,7 +233,7 @@ export function equipLineSummary(line) {
 /**
  * Annual cost displayed in the equipment table row.
  * Includes amortization for purchase items (different from equipLineAnnual).
- * @param {import('./types.js').EquipmentLine} line
+ * @param {import('./types.js?v=20260417-s2').EquipmentLine} line
  * @returns {number}
  */
 export function equipLineTableCost(line) {
@@ -256,7 +256,7 @@ export function equipLineTableCost(line) {
 
 /**
  * Total annual equipment operating cost (lease/service + maintenance only).
- * @param {import('./types.js').EquipmentLine[]} lines
+ * @param {import('./types.js?v=20260417-s2').EquipmentLine[]} lines
  * @returns {number}
  */
 export function totalEquipmentCost(lines) {
@@ -265,7 +265,7 @@ export function totalEquipmentCost(lines) {
 
 /**
  * Total capital investment (purchase equipment only).
- * @param {import('./types.js').EquipmentLine[]} lines
+ * @param {import('./types.js?v=20260417-s2').EquipmentLine[]} lines
  * @returns {number}
  */
 export function totalEquipmentCapital(lines) {
@@ -279,7 +279,7 @@ export function totalEquipmentCapital(lines) {
 
 /**
  * Total annual equipment amortization (purchase equipment only).
- * @param {import('./types.js').EquipmentLine[]} lines
+ * @param {import('./types.js?v=20260417-s2').EquipmentLine[]} lines
  * @returns {number}
  */
 export function totalEquipmentAmort(lines) {
@@ -292,7 +292,7 @@ export function totalEquipmentAmort(lines) {
 
 /**
  * Annual cost for an overhead line (handles monthly vs annual cost_type).
- * @param {import('./types.js').OverheadLine} line
+ * @param {import('./types.js?v=20260417-s2').OverheadLine} line
  * @returns {number}
  */
 export function overheadLineAnnual(line) {
@@ -304,7 +304,7 @@ export function overheadLineAnnual(line) {
 
 /**
  * Total annual overhead cost.
- * @param {import('./types.js').OverheadLine[]} lines
+ * @param {import('./types.js?v=20260417-s2').OverheadLine[]} lines
  * @returns {number}
  */
 export function totalOverheadCost(lines) {
@@ -318,7 +318,7 @@ export function totalOverheadCost(lines) {
 /**
  * Annual cost for a VAS line.
  * Uses total_cost override if set, otherwise rate × volume.
- * @param {import('./types.js').VASLine} line
+ * @param {import('./types.js?v=20260417-s2').VASLine} line
  * @returns {number}
  */
 export function vasLineAnnual(line) {
@@ -328,7 +328,7 @@ export function vasLineAnnual(line) {
 
 /**
  * Total annual VAS cost.
- * @param {import('./types.js').VASLine[]} lines
+ * @param {import('./types.js?v=20260417-s2').VASLine[]} lines
  * @returns {number}
  */
 export function totalVasCost(lines) {
@@ -341,9 +341,9 @@ export function totalVasCost(lines) {
 
 /**
  * Annual facility cost from square footage and market rates.
- * @param {import('./types.js').FacilityConfig} facility
- * @param {import('./types.js').FacilityRate} [facilityRate]
- * @param {import('./types.js').UtilityRate} [utilityRate]
+ * @param {import('./types.js?v=20260417-s2').FacilityConfig} facility
+ * @param {import('./types.js?v=20260417-s2').FacilityRate} [facilityRate]
+ * @param {import('./types.js?v=20260417-s2').UtilityRate} [utilityRate]
  * @returns {number}
  */
 export function totalFacilityCost(facility, facilityRate, utilityRate) {
@@ -362,9 +362,9 @@ export function totalFacilityCost(facility, facilityRate, utilityRate) {
 
 /**
  * Facility cost breakdown by component.
- * @param {import('./types.js').FacilityConfig} facility
- * @param {import('./types.js').FacilityRate} [facilityRate]
- * @param {import('./types.js').UtilityRate} [utilityRate]
+ * @param {import('./types.js?v=20260417-s2').FacilityConfig} facility
+ * @param {import('./types.js?v=20260417-s2').FacilityRate} [facilityRate]
+ * @param {import('./types.js?v=20260417-s2').UtilityRate} [utilityRate]
  * @returns {{ lease: number, cam: number, tax: number, insurance: number, utility: number, total: number }}
  */
 export function facilityCostBreakdown(facility, facilityRate, utilityRate) {
@@ -387,7 +387,7 @@ export function facilityCostBreakdown(facility, facilityRate, utilityRate) {
 
 /**
  * Total annual startup amortization.
- * @param {import('./types.js').StartupLine[]} lines
+ * @param {import('./types.js?v=20260417-s2').StartupLine[]} lines
  * @param {number} contractYears
  * @returns {number}
  */
@@ -398,7 +398,7 @@ export function totalStartupAmort(lines, contractYears) {
 
 /**
  * Total startup capital (one-time costs).
- * @param {import('./types.js').StartupLine[]} lines
+ * @param {import('./types.js?v=20260417-s2').StartupLine[]} lines
  * @returns {number}
  */
 export function totalStartupCapital(lines) {
@@ -412,21 +412,21 @@ export function totalStartupCapital(lines) {
 /**
  * Compute full cost summary from all model data.
  * @param {Object} params
- * @param {import('./types.js').DirectLaborLine[]} params.laborLines
- * @param {import('./types.js').IndirectLaborLine[]} params.indirectLaborLines
- * @param {import('./types.js').EquipmentLine[]} params.equipmentLines
- * @param {import('./types.js').OverheadLine[]} params.overheadLines
- * @param {import('./types.js').VASLine[]} params.vasLines
- * @param {import('./types.js').StartupLine[]} params.startupLines
- * @param {import('./types.js').FacilityConfig} params.facility
- * @param {import('./types.js').ShiftConfig} params.shifts
- * @param {import('./types.js').FacilityRate} [params.facilityRate]
- * @param {import('./types.js').UtilityRate} [params.utilityRate]
+ * @param {import('./types.js?v=20260417-s2').DirectLaborLine[]} params.laborLines
+ * @param {import('./types.js?v=20260417-s2').IndirectLaborLine[]} params.indirectLaborLines
+ * @param {import('./types.js?v=20260417-s2').EquipmentLine[]} params.equipmentLines
+ * @param {import('./types.js?v=20260417-s2').OverheadLine[]} params.overheadLines
+ * @param {import('./types.js?v=20260417-s2').VASLine[]} params.vasLines
+ * @param {import('./types.js?v=20260417-s2').StartupLine[]} params.startupLines
+ * @param {import('./types.js?v=20260417-s2').FacilityConfig} params.facility
+ * @param {import('./types.js?v=20260417-s2').ShiftConfig} params.shifts
+ * @param {import('./types.js?v=20260417-s2').FacilityRate} [params.facilityRate]
+ * @param {import('./types.js?v=20260417-s2').UtilityRate} [params.utilityRate]
  * @param {number} params.contractYears
  * @param {number} params.targetMarginPct
  * @param {number} params.annualOrders
  * @param {Object} [params.laborOpts] — otPct, bonusPct, benefitLoadFallback
- * @returns {import('./types.js').CostSummary}
+ * @returns {import('./types.js?v=20260417-s2').CostSummary}
  */
 export function computeSummary(params) {
   const opHrs = operatingHours(params.shifts);
@@ -487,8 +487,8 @@ const LEARNING_CURVE_FACTORS = {
  * @param {number} [params.volGrowthPct] — annual volume growth (0-based fraction)
  * @param {number} [params.laborEscPct] — annual labor escalation (0-based fraction)
  * @param {number} [params.costEscPct] — annual cost escalation (0-based fraction)
- * @param {import('./types.js').DirectLaborLine[]} [params.laborLines] — for learning curve calc
- * @returns {{ projections: import('./types.js').YearlyProjection[], startupCapital: number }}
+ * @param {import('./types.js?v=20260417-s2').DirectLaborLine[]} [params.laborLines] — for learning curve calc
+ * @returns {{ projections: import('./types.js?v=20260417-s2').YearlyProjection[], startupCapital: number }}
  */
 export function buildYearlyProjections(params) {
   const {
@@ -514,7 +514,7 @@ export function buildYearlyProjections(params) {
     yr1LearningFactor = totalHours > 0 ? weightedFactor / totalHours : 1.0;
   }
 
-  /** @type {import('./types.js').YearlyProjection[]} */
+  /** @type {import('./types.js?v=20260417-s2').YearlyProjection[]} */
   const projections = [];
 
   for (let yr = 1; yr <= years; yr++) {
@@ -563,14 +563,14 @@ export function buildYearlyProjections(params) {
 
 /**
  * Compute all 12 financial metrics from yearly projections.
- * @param {import('./types.js').YearlyProjection[]} projections
+ * @param {import('./types.js?v=20260417-s2').YearlyProjection[]} projections
  * @param {Object} opts
  * @param {number} opts.startupCapital
  * @param {number} opts.discountRatePct — e.g. 10 for 10%
  * @param {number} opts.reinvestRatePct — e.g. 8 for 8%
  * @param {number} opts.totalFtes
  * @param {number} [opts.fixedCost] — annual fixed cost (for operating leverage)
- * @returns {import('./types.js').FinancialMetrics}
+ * @returns {import('./types.js?v=20260417-s2').FinancialMetrics}
  */
 export function computeFinancialMetrics(projections, opts) {
   const years = projections.length;
@@ -664,7 +664,7 @@ export function computeFinancialMetrics(projections, opts) {
   };
 }
 
-/** @returns {import('./types.js').FinancialMetrics} */
+/** @returns {import('./types.js?v=20260417-s2').FinancialMetrics} */
 function emptyMetrics() {
   return {
     grossMarginPct: 0, ebitdaMarginPct: 0, ebitMarginPct: 0,
@@ -686,13 +686,13 @@ function totalEquipmentCapitalFromProjections(projections) {
 /**
  * Compute cost allocated to each pricing bucket.
  * @param {Object} params
- * @param {import('./types.js').PricingBucket[]} params.buckets
- * @param {import('./types.js').DirectLaborLine[]} params.laborLines
- * @param {import('./types.js').IndirectLaborLine[]} params.indirectLaborLines
- * @param {import('./types.js').EquipmentLine[]} params.equipmentLines
- * @param {import('./types.js').OverheadLine[]} params.overheadLines
- * @param {import('./types.js').VASLine[]} params.vasLines
- * @param {import('./types.js').StartupLine[]} params.startupLines
+ * @param {import('./types.js?v=20260417-s2').PricingBucket[]} params.buckets
+ * @param {import('./types.js?v=20260417-s2').DirectLaborLine[]} params.laborLines
+ * @param {import('./types.js?v=20260417-s2').IndirectLaborLine[]} params.indirectLaborLines
+ * @param {import('./types.js?v=20260417-s2').EquipmentLine[]} params.equipmentLines
+ * @param {import('./types.js?v=20260417-s2').OverheadLine[]} params.overheadLines
+ * @param {import('./types.js?v=20260417-s2').VASLine[]} params.vasLines
+ * @param {import('./types.js?v=20260417-s2').StartupLine[]} params.startupLines
  * @param {number} params.facilityCost — pre-computed facility annual cost
  * @param {number} params.operatingHours
  * @returns {Record<string, number>} — bucket ID → annual cost
@@ -757,13 +757,13 @@ export function computeBucketCosts(params) {
 
 /**
  * Validate a cost model and return warnings.
- * @param {import('./types.js').CostModelData} model
+ * @param {import('./types.js?v=20260417-s2').CostModelData} model
  * @param {Object} [opts]
  * @param {number} [opts.operatingHours]
- * @returns {import('./types.js').ValidationWarning[]}
+ * @returns {import('./types.js?v=20260417-s2').ValidationWarning[]}
  */
 export function validateModel(model, opts = {}) {
-  /** @type {import('./types.js').ValidationWarning[]} */
+  /** @type {import('./types.js?v=20260417-s2').ValidationWarning[]} */
   const warnings = [];
   const pd = model.projectDetails || {};
   const fin = model.financial || {};
@@ -901,4 +901,549 @@ export function formatCurrency(value, opts = {}) {
  */
 export function formatPct(value, decimals = 1) {
   return value.toFixed(decimals) + '%';
+}
+
+// ============================================================
+// AUTO-GENERATION — INDIRECT LABOR
+// ============================================================
+
+/**
+ * Auto-generate indirect labor lines based on span-of-control heuristics.
+ * @param {Object} state — { laborLines, indirectLaborLines, facility, shifts, financial }
+ * @returns {import('./types.js?v=20260417-s2').IndirectLaborLine[]}
+ */
+export function autoGenerateIndirectLabor(state) {
+  const lines = [];
+  const opHrs = operatingHours(state.shifts || {});
+
+  // Calculate total direct FTEs
+  const totalDirectFtes = (state.laborLines || []).reduce((sum, l) => {
+    if (!opHrs || opHrs <= 0) return sum;
+    return sum + ((l.annual_hours || 0) / opHrs);
+  }, 0);
+
+  const totalDirectHC = Math.ceil(totalDirectFtes);
+
+  // Helper to add indirect line
+  const addRole = (name, headcount, rate, burden = 30) => {
+    if (headcount > 0) {
+      lines.push({
+        role_name: name,
+        headcount: Math.ceil(headcount),
+        hourly_rate: rate,
+        burden_pct: burden,
+      });
+    }
+  };
+
+  // 1. Team Leads: 1 per 8 direct FTEs (if >= 3 FTEs)
+  if (totalDirectFtes >= 3) {
+    addRole('Team Lead', Math.ceil(totalDirectFtes / 8), 22);
+  }
+
+  // 2. Supervisors: 1 per 15 FTEs (if >= 8 FTEs)
+  if (totalDirectFtes >= 8) {
+    addRole('Supervisor', Math.ceil(totalDirectFtes / 15), 28);
+  }
+
+  // 3. Operations Manager: 1 for 20+ FTEs, 2 for 80+
+  if (totalDirectFtes >= 20) {
+    const opsManagers = totalDirectFtes >= 80 ? 2 : 1;
+    addRole('Operations Manager', opsManagers, 42);
+  }
+
+  // 4. Inventory Control: 1 per 25 direct FTEs
+  if (totalDirectFtes > 0) {
+    addRole('Inventory Control', Math.ceil(totalDirectFtes / 25), 20);
+  }
+
+  // 5. Receiving/Shipping Clerk: 1 per shift
+  const shiftsPerDay = state.shifts?.shiftsPerDay || 1;
+  addRole('Receiving / Shipping Clerk', Math.max(1, shiftsPerDay), 18);
+
+  // 6. Customer Service: 1 per 500K orders/yr
+  const annualOrders = (state.volumeLines || [])
+    .filter(v => v.isOutboundPrimary)
+    .reduce((s, v) => s + (v.volume || 0), 0) || 0;
+  if (annualOrders >= 500000) {
+    addRole('Customer Service Rep', Math.ceil(annualOrders / 500000), 18);
+  }
+
+  // 7. Returns Processor: 1 per 100K returns/yr (estimate as 5% of outbound orders)
+  const estimatedReturns = annualOrders * 0.05;
+  if (estimatedReturns >= 100000) {
+    addRole('Returns Processor', Math.ceil(estimatedReturns / 100000), 17);
+  }
+
+  // 8. IT Support: 0.5-2 based on FTE count
+  if (totalDirectFtes >= 20) {
+    const itHeadcount = Math.max(0.5, Math.min(2, Math.ceil(totalDirectFtes / 40)));
+    addRole('IT Support', itHeadcount, 35);
+  }
+
+  // 9. Maintenance: 1 per 100K sqft
+  const totalSqft = state.facility?.totalSqft || 0;
+  if (totalSqft >= 100000) {
+    addRole('Maintenance Technician', Math.ceil(totalSqft / 100000), 25);
+  }
+
+  // 10. Janitorial: 1 per 150K sqft (often outsourced, include as benchmark)
+  if (totalSqft >= 150000) {
+    addRole('Janitorial Supervisor', Math.ceil(totalSqft / 150000), 20);
+  }
+
+  // 11. Account Manager: 0.5-1 based on FTE
+  if (totalDirectFtes >= 10) {
+    addRole('Account Manager', totalDirectFtes >= 50 ? 1 : 0.5, 40);
+  }
+
+  // 12. General Manager: 1 if total HC >= 50
+  if (totalDirectHC + lines.reduce((s, l) => s + l.headcount, 0) >= 50) {
+    addRole('General Manager', 1, 55);
+  }
+
+  return lines;
+}
+
+// ============================================================
+// AUTO-GENERATION — EQUIPMENT
+// ============================================================
+
+/**
+ * Auto-generate equipment lines based on labor, facility, and volume.
+ * @param {Object} state
+ * @returns {import('./types.js?v=20260417-s2').EquipmentLine[]}
+ */
+export function autoGenerateEquipment(state) {
+  const lines = [];
+  const opHrs = operatingHours(state.shifts || {});
+  const totalDirectFtes = (state.laborLines || []).reduce((sum, l) => {
+    if (!opHrs || opHrs <= 0) return sum;
+    return sum + ((l.annual_hours || 0) / opHrs);
+  }, 0);
+  const totalIndirectHC = (state.indirectLaborLines || []).reduce((s, l) => s + (l.headcount || 0), 0);
+  const totalHC = Math.ceil(totalDirectFtes) + totalIndirectHC;
+  const sqft = state.facility?.totalSqft || 0;
+  const spareFactor = 1.15;
+
+  // Helper to add equipment
+  const addEquip = (name, category, qty, monthlyLease = 0, acquisitionCost = 0, monthlyMaint = 0, drivenBy = '') => {
+    if (qty > 0) {
+      lines.push({
+        equipment_name: name,
+        category: category || 'Other',
+        quantity: Math.ceil(qty),
+        acquisition_type: acquisitionCost > 0 ? 'purchase' : 'lease',
+        monthly_cost: monthlyLease,
+        acquisition_cost: acquisitionCost,
+        monthly_maintenance: monthlyMaint,
+        amort_years: 5,
+        driven_by: drivenBy,
+      });
+    }
+  };
+
+  // 1. MHE — From labor equipment assignments
+  // Simplified: assume average labor needs 1 MHE per 2-3 FTEs
+  if (totalDirectFtes > 0) {
+    addEquip('Reach Truck', 'MHE', Math.ceil(totalDirectFtes / 3) * spareFactor, 800, 0, 150, 'Direct labor + 15% spare');
+    addEquip('Order Picker', 'MHE', Math.max(0, Math.ceil(totalDirectFtes / 5) * spareFactor), 600, 0, 100, 'Picking labor');
+  }
+
+  // 2. IT — RF terminals, label printers, WiFi
+  if (totalDirectFtes > 0) {
+    addEquip('RF Terminal / Mobile Computer', 'IT', Math.ceil(totalDirectFtes * spareFactor) * 0.3, 150, 0, 20, 'Direct labor coverage (30%)');
+  }
+  addEquip('Label Printer (Thermal)', 'IT', Math.max(1, Math.ceil(totalHC / 50)), 0, 2500, 50, 'Pack stations + Receiving/Shipping');
+  if (sqft > 0) {
+    addEquip('WiFi Access Point', 'IT', Math.max(2, Math.ceil(sqft / 10000)), 100, 0, 20, sqft.toLocaleString() + ' sqft @ 1 per 10K sqft');
+  }
+
+  // 3. Racking — Based on pallet positions
+  const annualPalletsIn = (state.volumeLines || [])
+    .filter(v => v.uom === 'pallet')
+    .reduce((s, v) => s + (v.volume || 0), 0) || 0;
+  if (annualPalletsIn > 0) {
+    const turnsPerYear = 12;
+    const avgPalletsOnHand = Math.ceil(annualPalletsIn / turnsPerYear);
+    const rackPositions = Math.ceil(avgPalletsOnHand * 1.15);
+    addEquip('Selective Pallet Rack', 'Racking', rackPositions, 0, 85, 10,
+      avgPalletsOnHand.toLocaleString() + ' avg pallets + 15% buffer');
+  }
+
+  // 4. Dock Equipment — Levelers based on daily throughput
+  const daysPerYear = (state.shifts?.daysPerWeek || 5) * (state.shifts?.weeksPerYear ?? 52);
+  const dailyPalletsTotal = (annualPalletsIn || 0) / Math.max(1, daysPerYear);
+  if (dailyPalletsTotal > 0) {
+    const dockDoors = Math.max(2, Math.ceil(dailyPalletsTotal / 90));
+    addEquip('Dock Leveler (Hydraulic)', 'Dock', dockDoors, 0, 3500, 200,
+      Math.ceil(dailyPalletsTotal) + ' daily pallets / 90 per door = ' + dockDoors + ' doors');
+  }
+
+  // 5. Charging — 1 station per 6 electric MHE
+  const forkliftCount = lines.filter(l =>
+    l.equipment_name.toLowerCase().includes('truck') ||
+    l.equipment_name.toLowerCase().includes('picker')
+  ).reduce((s, l) => s + l.quantity, 0);
+  if (forkliftCount > 0) {
+    addEquip('Battery Charging Station (6-unit)', 'Charging', Math.max(1, Math.ceil(forkliftCount / 6)), 200, 0, 50,
+      forkliftCount + ' electric MHE units');
+  }
+
+  // 6. Office Build-Out — 120 sqft per indirect HC
+  if (totalIndirectHC > 0) {
+    addEquip('Office Build-Out (sqft)', 'Office', Math.ceil(totalIndirectHC * 120), 0, 45, 5,
+      totalIndirectHC + ' indirect HC @ 120 sqft/person');
+    addEquip('Break Room Build-Out (sqft)', 'Office', Math.max(200, Math.ceil(totalHC * 15)), 0, 30, 3,
+      totalHC + ' total HC @ 15 sqft/person');
+  }
+
+  // 7. Security — 1 camera system per 30K sqft
+  if (sqft >= 50000) {
+    addEquip('Security Camera System (8-cam)', 'Security', Math.max(1, Math.ceil(sqft / 30000)), 200, 0, 100,
+      sqft.toLocaleString() + ' sqft @ 1 system per 30K sqft');
+    addEquip('Access Control System', 'Security', 1, 150, 0, 50, 'Facility entry/exit');
+  }
+
+  // 8. Conveyor — Only for >= 500K orders/yr
+  const annualOrders = (state.volumeLines || [])
+    .filter(v => v.isOutboundPrimary)
+    .reduce((s, v) => s + (v.volume || 0), 0) || 0;
+  if (annualOrders >= 500000) {
+    const conveyorLF = Math.min(500, Math.max(100, Math.ceil(annualOrders / 5000)));
+    addEquip('Belt Conveyor (linear ft)', 'Conveyor', conveyorLF, 2, 0, 10,
+      annualOrders.toLocaleString() + ' orders/yr');
+  }
+
+  return lines;
+}
+
+// ============================================================
+// AUTO-GENERATION — OVERHEAD
+// ============================================================
+
+/**
+ * Auto-generate overhead lines based on sqft, HC, and volume.
+ * @param {Object} state
+ * @returns {import('./types.js?v=20260417-s2').OverheadLine[]}
+ */
+export function autoGenerateOverhead(state) {
+  const lines = [];
+  const opHrs = operatingHours(state.shifts || {});
+  const totalDirectFtes = (state.laborLines || []).reduce((sum, l) => {
+    if (!opHrs || opHrs <= 0) return sum;
+    return sum + ((l.annual_hours || 0) / opHrs);
+  }, 0);
+  const totalIndirectHC = (state.indirectLaborLines || []).reduce((s, l) => s + (l.headcount || 0), 0);
+  const totalHC = Math.ceil(totalDirectFtes) + totalIndirectHC;
+  const sqft = state.facility?.totalSqft || 0;
+  const turnoverPct = 0.43;
+  const annualHires = Math.ceil(totalHC * turnoverPct);
+
+  // Helper
+  const addOh = (category, description, annualCost, costType = 'annual', pricingBucket = '') => {
+    lines.push({
+      category,
+      description,
+      cost_type: costType,
+      annual_cost: costType === 'annual' ? annualCost : 0,
+      monthly_cost: costType === 'monthly' ? annualCost : 0,
+      pricing_bucket: pricingBucket,
+    });
+  };
+
+  // PER-SQFT SCALERS
+  if (sqft > 0) {
+    addOh('Facility Maintenance', 'Janitorial, HVAC maint, pest control, repairs (IFMA benchmark)', sqft * 1.00);
+    addOh('Security', 'Monitoring, camera systems, access control', sqft * 0.12);
+    addOh('Property & Liability Insurance', 'Property, GL, umbrella coverage', sqft * 0.35);
+    addOh('Fire & Life Safety', 'Sprinkler inspection, suppression, extinguishers', sqft * 0.04);
+  }
+
+  // PER-HEADCOUNT SCALERS
+  if (totalHC > 0) {
+    addOh('IT / WMS Licensing', 'BY WMS, RF mgmt, networking, printers, telecom', totalHC * 2500);
+    addOh('HR & Recruiting', 'Payroll, benefits, onboarding + replacement hires', (totalHC * 2500) + (annualHires * 4700));
+    addOh('Workers Comp Insurance', 'Workers comp premiums, warehouse risk class', totalHC * 1250);
+    addOh('Safety & Compliance', 'OSHA compliance, training, safety supplies', totalHC * 800);
+    addOh('Uniforms & PPE', 'Safety vests, gloves, boots, hard hats, eye protection', (totalHC + annualHires) * 400);
+  }
+
+  // PER-UNIT SCALERS
+  const annualOrders = (state.volumeLines || [])
+    .filter(v => v.isOutboundPrimary)
+    .reduce((s, v) => s + (v.volume || 0), 0) || 0;
+  const annualUnitsShipped = annualOrders + ((state.volumeLines || [])
+    .filter(v => v.uom === 'pallet')
+    .reduce((s, v) => s + (v.volume || 0), 0) || 0);
+
+  if (annualUnitsShipped > 0) {
+    addOh('Supplies & Consumables', 'Stretch wrap, labels, tape, dunnage, cleaning', annualUnitsShipped * 0.15);
+  }
+  if (annualOrders > 0) {
+    addOh('Quality & Inspection', 'QC labor overhead, quality systems, audits', annualOrders * 0.25);
+  }
+
+  return lines;
+}
+
+// ============================================================
+// AUTO-GENERATION — STARTUP
+// ============================================================
+
+/**
+ * Auto-generate startup/capital lines.
+ * @param {Object} state
+ * @returns {import('./types.js?v=20260417-s2').StartupLine[]}
+ */
+export function autoGenerateStartup(state) {
+  const lines = [];
+  const opHrs = operatingHours(state.shifts || {});
+  const totalDirectFtes = (state.laborLines || []).reduce((sum, l) => {
+    if (!opHrs || opHrs <= 0) return sum;
+    return sum + ((l.annual_hours || 0) / opHrs);
+  }, 0);
+  const sqft = state.facility?.totalSqft || 0;
+  const contractYears = state.financial?.contractTermYears || state.projectDetails?.contractTerm || 5;
+
+  const addStartup = (description, cost) => {
+    if (cost > 0) {
+      lines.push({
+        description,
+        one_time_cost: Math.ceil(cost),
+      });
+    }
+  };
+
+  // 1. Racking capital — $85/pallet position
+  const annualPalletsIn = (state.volumeLines || [])
+    .filter(v => v.uom === 'pallet')
+    .reduce((s, v) => s + (v.volume || 0), 0) || 0;
+  if (annualPalletsIn > 0) {
+    const turnsPerYear = 12;
+    const avgPalletsOnHand = Math.ceil(annualPalletsIn / turnsPerYear);
+    const rackPositions = Math.ceil(avgPalletsOnHand * 1.15);
+    addStartup('Selective Pallet Racking Installation', rackPositions * 85);
+  }
+
+  // 2. Build-out — $45/sqft office, $30/sqft break room
+  const totalIndirectHC = (state.indirectLaborLines || []).reduce((s, l) => s + (l.headcount || 0), 0);
+  if (totalIndirectHC > 0) {
+    const officeSqft = Math.ceil(totalIndirectHC * 120);
+    addStartup('Office Build-Out', officeSqft * 45);
+    const totalHC = Math.ceil(totalDirectFtes) + totalIndirectHC;
+    const breakSqft = Math.max(200, Math.ceil(totalHC * 15));
+    addStartup('Break Room Build-Out', breakSqft * 30);
+  }
+
+  // 3. IT infrastructure — $0.50/sqft + WMS $50K + $2K/user
+  if (sqft > 0) {
+    addStartup('Network Cabling & Infrastructure', sqft * 0.50);
+  }
+  if (totalDirectFtes > 0) {
+    addStartup('WMS Implementation & Configuration', 50000 + (Math.ceil(totalDirectFtes) * 2000));
+  }
+
+  // 4. EDI setup
+  addStartup('EDI Setup & Customer Integration', 15000);
+
+  // 5. Dock installation — $4,500 per door
+  const daysPerYear = (state.shifts?.daysPerWeek || 5) * (state.shifts?.weeksPerYear ?? 52);
+  const dailyPalletsTotal = (annualPalletsIn || 0) / Math.max(1, daysPerYear);
+  if (dailyPalletsTotal > 0) {
+    const dockDoors = Math.max(2, Math.ceil(dailyPalletsTotal / 90));
+    addStartup('Dock Leveler Installation', dockDoors * 4500);
+  }
+
+  // 6. MHE charging power drops — $3,500 per station
+  const chargingStations = Math.max(0, Math.ceil((state.equipmentLines || [])
+    .filter(l => l.equipment_name?.toLowerCase().includes('charging'))
+    .reduce((s, l) => s + l.quantity, 0)));
+  if (chargingStations > 0) {
+    addStartup('Power Drops for MHE Charging', chargingStations * 3500);
+  }
+
+  // 7. Lighting — $1.25/sqft
+  if (sqft >= 50000) {
+    addStartup('High-Bay LED Lighting Upgrade', sqft * 1.25);
+  }
+
+  // 8. Safety barriers — $0.15/sqft
+  if (sqft >= 50000) {
+    addStartup('Guard Rails & Safety Barriers', sqft * 0.15);
+  }
+
+  // 9. Training / ramp-up — 30% labor inefficiency × ramp weeks
+  if (totalDirectFtes > 0) {
+    const rampWeeks = 8;
+    const hoursPerShift = state.shifts?.hoursPerShift || 8;
+    const daysPerWeek = state.shifts?.daysPerWeek || 5;
+    const rampHours = rampWeeks * daysPerWeek * hoursPerShift;
+    const avgRate = 20;
+    addStartup('Training & Ramp-Up Premium', totalDirectFtes * rampHours * avgRate * 0.30);
+    addStartup('Go-Live Support Team (4 weeks)', 4 * 40 * 180); // PM + IT + Trainer
+  }
+
+  // 10. Contingency — 5% of subtotal
+  const subtotal = lines.reduce((s, l) => s + (l.one_time_cost || 0), 0);
+  addStartup('Contingency (5%)', subtotal * 0.05);
+
+  return lines;
+}
+
+// ============================================================
+// DESIGN HEURISTICS — 10 BENCHMARK CHECKS
+// ============================================================
+
+/**
+ * Generate 10 industry benchmark checks.
+ * @param {Object} state
+ * @param {import('./types.js?v=20260417-s2').CostSummary} summary
+ * @returns {Array<{ type: 'ok'|'warn'|'info', title: string, detail: string }>}
+ */
+export function generateHeuristics(state, summary) {
+  const checks = [];
+
+  if (!summary || !state) return checks;
+
+  const opHrs = operatingHours(state.shifts || {});
+  const totalDirectFtes = (state.laborLines || []).reduce((sum, l) => {
+    if (!opHrs || opHrs <= 0) return sum;
+    return sum + ((l.annual_hours || 0) / opHrs);
+  }, 0);
+  const totalIndirectHC = (state.indirectLaborLines || []).reduce((s, l) => s + (l.headcount || 0), 0);
+  const totalHC = Math.ceil(totalDirectFtes) + totalIndirectHC;
+  const sqft = state.facility?.totalSqft || 0;
+  const annualOrders = (state.volumeLines || [])
+    .filter(v => v.isOutboundPrimary)
+    .reduce((s, v) => s + (v.volume || 0), 0) || 0;
+
+  const pct = (part, whole) => whole > 0 ? (part / whole * 100) : 0;
+
+  // 1. Labor cost %
+  const laborPct = pct(summary.laborCost, summary.totalCost);
+  if (laborPct < 35) {
+    checks.push({ type: 'warn', title: 'Labor % below typical range (' + laborPct.toFixed(0) + '%)',
+      detail: 'Industry benchmark: 40-60%. Low labor may indicate under-staffing or missing indirect roles.' });
+  } else if (laborPct > 65) {
+    checks.push({ type: 'warn', title: 'Labor % above typical range (' + laborPct.toFixed(0) + '%)',
+      detail: 'Industry benchmark: 40-60%. High labor may indicate over-staffing or low automation.' });
+  } else {
+    checks.push({ type: 'ok', title: 'Labor cost share healthy (' + laborPct.toFixed(0) + '%)',
+      detail: 'Within the 40-60% industry range for 3PL warehousing.' });
+  }
+
+  // 2. Facility cost %
+  const facilityPct = pct(summary.facilityCost, summary.totalCost);
+  if (facilityPct > 35) {
+    checks.push({ type: 'warn', title: 'Facility cost high (' + facilityPct.toFixed(0) + '%)',
+      detail: 'Benchmark: 20-35%. Consider higher-density storage or renegotiating lease.' });
+  } else if (facilityPct > 0) {
+    checks.push({ type: 'ok', title: 'Facility cost in range (' + facilityPct.toFixed(0) + '%)',
+      detail: 'Within 20-35% benchmark.' });
+  }
+
+  // 3. Throughput density
+  const ordersPerSqft = sqft > 0 ? annualOrders / sqft : 0;
+  if (ordersPerSqft < 1.5) {
+    checks.push({ type: 'info', title: 'Low throughput density: ' + ordersPerSqft.toFixed(1) + ' orders/sqft/yr',
+      detail: 'Typical ecommerce 3PL: 3-8 orders/sqft/yr. Low density drives up per-unit facility cost.' });
+  } else if (ordersPerSqft > 12) {
+    checks.push({ type: 'warn', title: 'High throughput density: ' + ordersPerSqft.toFixed(1) + ' orders/sqft/yr',
+      detail: 'May need conveyor/sortation or multi-shift to handle in this footprint.' });
+  } else {
+    checks.push({ type: 'ok', title: 'Throughput density healthy: ' + ordersPerSqft.toFixed(1) + ' orders/sqft/yr',
+      detail: 'Within typical 3-8 range for ecommerce facilities.' });
+  }
+
+  // 4. Cost per order
+  if (summary.costPerOrder > 0) {
+    if (summary.costPerOrder < 1.50) {
+      checks.push({ type: 'warn', title: 'Cost/order very low ($' + summary.costPerOrder.toFixed(2) + ')',
+        detail: 'Below $1.50/order is unusual. Check for missing cost components.' });
+    } else if (summary.costPerOrder > 8.00) {
+      checks.push({ type: 'warn', title: 'Cost/order above range ($' + summary.costPerOrder.toFixed(2) + ')',
+        detail: 'Benchmark: $3-6. Higher typical for B2B or low-volume accounts.' });
+    } else {
+      checks.push({ type: 'ok', title: 'Cost/order in range ($' + summary.costPerOrder.toFixed(2) + ')',
+        detail: '$3-6 range is typical for ecommerce 3PL.' });
+    }
+  }
+
+  // 5. Staffing ratio
+  if (totalHC > 0) {
+    const sqftPerFte = sqft / totalHC;
+    if (sqftPerFte > 15000) {
+      checks.push({ type: 'info', title: 'Low staffing density: ' + Math.round(sqftPerFte).toLocaleString() + ' sqft/FTE',
+        detail: 'Typical: 3,000-10,000 sqft/FTE. May indicate high automation or under-staffing.' });
+    } else if (sqftPerFte < 2000) {
+      checks.push({ type: 'warn', title: 'High staffing density: ' + Math.round(sqftPerFte).toLocaleString() + ' sqft/FTE',
+        detail: 'Below 2,000 is crowded. Consider expanding footprint or adding shifts.' });
+    } else {
+      checks.push({ type: 'ok', title: 'Staffing ratio balanced: ' + Math.round(sqftPerFte).toLocaleString() + ' sqft/FTE',
+        detail: 'Within typical 3,000-10,000 range.' });
+    }
+  }
+
+  // 6. Indirect:direct ratio
+  if (totalDirectFtes > 0 && totalIndirectHC > 0) {
+    const indirectRatio = totalIndirectHC / totalDirectFtes;
+    if (indirectRatio > 0.25) {
+      checks.push({ type: 'warn', title: 'Indirect:Direct ratio high (' + (indirectRatio * 100).toFixed(0) + '%)',
+        detail: 'Benchmark: 15-25%. High ratio increases overhead burden per productive hour.' });
+    } else if (indirectRatio < 0.10 && totalDirectFtes > 10) {
+      checks.push({ type: 'warn', title: 'Indirect:Direct ratio low (' + (indirectRatio * 100).toFixed(0) + '%)',
+        detail: 'Below 10% with ' + totalDirectFtes.toFixed(0) + ' FTEs may lack supervisory coverage.' });
+    } else {
+      checks.push({ type: 'ok', title: 'Indirect:Direct ratio healthy (' + (indirectRatio * 100).toFixed(0) + '%)',
+        detail: 'Within 15-25% industry range.' });
+    }
+  }
+
+  // 7. Equipment cost/FTE
+  if (summary.equipmentCost > 0 && totalHC > 0) {
+    const equipPerFte = summary.equipmentCost / totalHC;
+    if (equipPerFte > 25000) {
+      checks.push({ type: 'info', title: 'Equipment cost/FTE high: $' + Math.round(equipPerFte).toLocaleString(),
+        detail: 'Above $25K/FTE suggests high mechanization. Verify MHE counts align with needs.' });
+    }
+  }
+
+  // 8. Overhead share
+  const ohPct = pct(summary.overheadCost, summary.totalCost);
+  if (ohPct > 15) {
+    checks.push({ type: 'warn', title: 'Overhead share high (' + ohPct.toFixed(0) + '%)',
+      detail: 'Benchmark: 8-15% of total. Review for consolidation opportunities.' });
+  } else if (ohPct > 0) {
+    checks.push({ type: 'ok', title: 'Overhead share healthy (' + ohPct.toFixed(0) + '%)',
+      detail: 'Within 8-15% benchmark.' });
+  }
+
+  // 9. Margin sanity
+  const margin = state.financial?.targetMargin || 0;
+  if (margin < 8) {
+    checks.push({ type: 'warn', title: 'Target margin low (' + margin + '%)',
+      detail: 'Typical 3PL target: 10-18%. Below 8% leaves little room for variance.' });
+  } else if (margin > 25) {
+    checks.push({ type: 'info', title: 'Target margin: ' + margin + '%',
+      detail: 'Above 25% may reduce competitiveness. Typical: 12-18%.' });
+  } else {
+    checks.push({ type: 'ok', title: 'Target margin healthy: ' + margin + '%',
+      detail: 'Within 10-18% industry standard.' });
+  }
+
+  // 10. Facility suggestion
+  if (annualOrders > 0 && sqft > 0) {
+    const palletsStored = ((state.volumeLines || [])
+      .filter(v => v.uom === 'pallet')
+      .reduce((s, v) => s + (v.volume || 0), 0) || 0) / 2 / 12;
+    const estPalletArea = palletsStored * 40;
+    const suggestedSqft = Math.round((estPalletArea + (sqft * 0.25)) / 1000) * 1000;
+    if (suggestedSqft > 0 && Math.abs(suggestedSqft - sqft) / sqft > 0.30) {
+      checks.push({ type: 'info', title: 'Suggested facility size: ~' + suggestedSqft.toLocaleString() + ' sqft',
+        detail: 'Current: ' + sqft.toLocaleString() + ' sqft (' + (sqft > suggestedSqft ? 'may be oversized' : 'may be undersized') + ').' });
+    }
+  }
+
+  return checks;
 }

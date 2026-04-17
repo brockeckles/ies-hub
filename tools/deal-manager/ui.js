@@ -1,15 +1,15 @@
 /**
  * IES Hub v3 — Deal Manager (Multi-Site Analyzer) UI
- * Analyzer-pattern layout: top tab bar + full-width content.
- * Views: Deal List (landing), then per-deal: Summary, Sites, Financials, Pipeline.
+ * Analyzer-pattern layout: landing view (Kanban/List), then per-deal detail views.
+ * Tabs: Summary, Sites, Financials, Pipeline, Hours, Tasks, Updates.
  *
  * @module tools/deal-manager/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-s1';
-import { state } from '../../shared/state.js?v=20260417-s1';
-import * as calc from './calc.js?v=20260417-s1';
-import * as api from './api.js?v=20260417-s1';
+import { bus } from '../../shared/event-bus.js?v=20260417-s2';
+import { state } from '../../shared/state.js?v=20260417-s2';
+import * as calc from './calc.js?v=20260417-s2';
+import * as api from './api.js?v=20260417-s2';
 
 // ============================================================
 // STATE
@@ -18,23 +18,45 @@ import * as api from './api.js?v=20260417-s1';
 /** @type {HTMLElement|null} */
 let rootEl = null;
 
-/** @type {'list' | 'summary' | 'sites' | 'financials' | 'pipeline'} */
+/** @type {'list' | 'kanban' | 'summary' | 'sites' | 'financials' | 'pipeline' | 'hours' | 'tasks' | 'updates'} */
 let activeTab = 'list';
 
-/** @type {import('./types.js').Deal|null} */
+/** @type {'kanban' | 'table'} */
+let landingViewMode = 'kanban';
+
+/** @type {import('./types.js?v=20260417-s2').Deal|null} */
 let activeDeal = null;
 
-/** @type {import('./types.js').Site[]} */
+/** @type {import('./types.js?v=20260417-s2').Site[]} */
 let sites = [];
 
-/** @type {import('./types.js').DealFinancials|null} */
+/** @type {import('./types.js?v=20260417-s2').DealFinancials|null} */
 let financials = null;
 
-/** @type {import('./types.js').DosStage[]} */
+/** @type {import('./types.js?v=20260417-s2').DosStage[]} */
 let dosStages = [];
 
-/** @type {import('./types.js').Deal[]} */
+/** @type {import('./types.js?v=20260417-s2').Deal[]} */
 let allDeals = [];
+
+/** @type {import('./types.js?v=20260417-s2').HoursEntry[]} */
+let hoursEntries = [];
+
+/** @type {import('./types.js?v=20260417-s2').Task[]} */
+let tasks = [];
+
+/** @type {import('./types.js?v=20260417-s2').WeeklyUpdate[]} */
+let updates = [];
+
+// DOS stages reference (6 stages: Pre-Sales → Delivery)
+const DOS_STAGE_LABELS = [
+  { number: 1, name: 'Pre-Sales Engagement' },
+  { number: 2, name: 'Deal Qualification' },
+  { number: 3, name: 'Solution Design' },
+  { number: 4, name: 'Operations Review' },
+  { number: 5, name: 'Executive Review' },
+  { number: 6, name: 'Delivery Handover' },
+];
 
 // ============================================================
 // LIFECYCLE
@@ -90,8 +112,17 @@ function renderTabs() {
   const tabBar = rootEl?.querySelector('#dm-tabs');
   if (!tabBar) return;
 
-  if (activeTab === 'list') {
-    tabBar.innerHTML = `<button class="hub-btn hub-btn-sm hub-btn-secondary" id="dm-new-deal">+ New Deal</button>`;
+  if (activeTab === 'list' || activeTab === 'kanban') {
+    tabBar.innerHTML = `
+      <button class="hub-btn hub-btn-sm hub-btn-secondary" id="dm-toggle-view" style="margin-right:8px;">📋 List View</button>
+      <button class="hub-btn hub-btn-sm hub-btn-secondary" id="dm-new-deal">+ New Deal</button>
+    `;
+    tabBar.querySelector('#dm-toggle-view')?.addEventListener('click', () => {
+      landingViewMode = landingViewMode === 'kanban' ? 'table' : 'kanban';
+      activeTab = /** @type {any} */ (landingViewMode === 'kanban' ? 'kanban' : 'list');
+      renderTabs();
+      renderContent();
+    });
     tabBar.querySelector('#dm-new-deal')?.addEventListener('click', () => createNewDeal());
     return;
   }
@@ -101,6 +132,9 @@ function renderTabs() {
     { key: 'sites', label: 'Sites' },
     { key: 'financials', label: 'Financials' },
     { key: 'pipeline', label: 'Pipeline' },
+    { key: 'hours', label: 'Hours' },
+    { key: 'tasks', label: 'Tasks' },
+    { key: 'updates', label: 'Updates' },
   ];
 
   tabBar.innerHTML = `
@@ -112,7 +146,7 @@ function renderTabs() {
   `;
 
   tabBar.querySelector('#dm-back')?.addEventListener('click', () => {
-    activeTab = 'list';
+    activeTab = landingViewMode === 'kanban' ? 'kanban' : 'list';
     activeDeal = null;
     renderTabs();
     renderContent();
@@ -138,16 +172,78 @@ function renderContent() {
   if (!el) return;
 
   switch (activeTab) {
+    case 'kanban': renderKanban(el); break;
     case 'list': renderDealList(el); break;
     case 'summary': renderSummary(el); break;
     case 'sites': renderSites(el); break;
     case 'financials': renderFinancials(el); break;
     case 'pipeline': renderPipeline(el); break;
+    case 'hours': renderHours(el); break;
+    case 'tasks': renderTasksTab(el); break;
+    case 'updates': renderUpdatesTab(el); break;
   }
 }
 
 // ============================================================
-// DEAL LIST (LANDING)
+// KANBAN VIEW (LANDING)
+// ============================================================
+
+function renderKanban(el) {
+  const stages = [
+    { number: 1, name: 'Pre-Sales' },
+    { number: 2, name: 'Deal Qualification' },
+    { number: 3, name: 'Solution Design' },
+    { number: 4, name: 'Operations Review' },
+    { number: 5, name: 'Executive Review' },
+    { number: 6, name: 'Delivery Handover' },
+  ];
+
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;overflow-x:auto;padding:4px;">
+      ${stages.map(stage => {
+        const dealsInStage = allDeals.filter(d => {
+          // Map deal status to DOS stage for display purposes
+          const stageMap = { draft: 1, in_progress: 3, proposal_sent: 5, won: 6, lost: 0 };
+          return stageMap[d.status] === stage.number;
+        });
+
+        return `
+          <div style="flex:0 0 280px;display:flex;flex-direction:column;background:var(--ies-gray-50);border-radius:8px;padding:12px;border:1px solid var(--ies-gray-200);">
+            <div style="font-size:13px;font-weight:700;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid var(--ies-gray-200);display:flex;justify-content:space-between;align-items:center;">
+              <span>${stage.name}</span>
+              <span style="font-size:11px;font-weight:700;background:var(--ies-blue);color:#fff;padding:2px 8px;border-radius:12px;">${dealsInStage.length}</span>
+            </div>
+            ${dealsInStage.length === 0 ? `
+              <div style="text-align:center;padding:20px 0;color:var(--ies-gray-400);font-size:12px;">No deals</div>
+            ` : `
+              <div style="display:flex;flex-direction:column;gap:8px;">
+                ${dealsInStage.map(d => {
+                  const badge = calc.statusBadge(d.status);
+                  return `
+                    <div class="hub-card" style="cursor:pointer;padding:12px;border:1px solid var(--ies-gray-200);" data-deal-id="${d.id}">
+                      <div style="font-size:12px;font-weight:700;margin-bottom:4px;color:var(--ies-navy);">${d.dealName}</div>
+                      <div style="font-size:11px;color:var(--ies-gray-500);margin-bottom:6px;">${d.clientName}</div>
+                      <div style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;background:${badge.bg};color:${badge.color};">${badge.label}</div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            `}
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+
+  el.querySelectorAll('[data-deal-id]').forEach(card => {
+    card.addEventListener('click', async () => {
+      await openDeal(/** @type {HTMLElement} */ (card).dataset.dealId);
+    });
+  });
+}
+
+// ============================================================
+// DEAL LIST (TABLE VIEW — LANDING)
 // ============================================================
 
 function renderDealList(el) {
@@ -183,7 +279,9 @@ function renderDealList(el) {
   `;
 
   el.querySelectorAll('[data-deal-id]').forEach(card => {
-    card.addEventListener('click', () => openDeal(/** @type {HTMLElement} */ (card).dataset.dealId));
+    card.addEventListener('click', async () => {
+      await openDeal(/** @type {HTMLElement} */ (card).dataset.dealId);
+    });
   });
 
   el.querySelector('#dm-first-deal')?.addEventListener('click', () => createNewDeal());
@@ -196,7 +294,7 @@ function createNewDeal() {
   openDeal(id);
 }
 
-function openDeal(id) {
+async function openDeal(id) {
   activeDeal = allDeals.find(d => d.id === id) || null;
   if (!activeDeal) return;
 
@@ -221,6 +319,11 @@ function openDeal(id) {
       status: /** @type {const} */ (i < Math.floor(s.elementCount * 0.6) ? 'complete' : i < Math.floor(s.elementCount * 0.8) ? 'in_progress' : 'not_started'),
     })),
   }));
+
+  // Load hours, tasks, updates
+  hoursEntries = await api.fetchHours(activeDeal.id);
+  tasks = await api.fetchTasks(activeDeal.id);
+  updates = await api.fetchUpdates(activeDeal.id);
 
   activeTab = 'summary';
   renderTabs();
@@ -604,6 +707,511 @@ function cycleElementStatus(elemId) {
       break;
     }
   }
+}
+
+// ============================================================
+// HOURS TAB
+// ============================================================
+
+function renderHours(el) {
+  if (!activeDeal) return;
+
+  const summary = calc.calcHoursSummary(hoursEntries);
+
+  el.innerHTML = `
+    <div style="max-width:1000px;">
+      <!-- Summary Tiles -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">
+        <div class="hub-card" style="padding:16px;">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--ies-gray-400);">Total Forecast</div>
+          <div style="font-size:24px;font-weight:800;color:var(--ies-blue);margin-top:4px;">${summary.totalForecast.toFixed(1)}h</div>
+        </div>
+        <div class="hub-card" style="padding:16px;">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--ies-gray-400);">Total Actual</div>
+          <div style="font-size:24px;font-weight:800;color:var(--ies-green);margin-top:4px;">${summary.totalActual.toFixed(1)}h</div>
+        </div>
+        <div class="hub-card" style="padding:16px;">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--ies-gray-400);">Delta</div>
+          <div style="font-size:24px;font-weight:800;color:${summary.delta >= 0 ? 'var(--ies-red)' : 'var(--ies-green)'};margin-top:4px;">${summary.delta >= 0 ? '+' : ''}${summary.delta.toFixed(1)}h</div>
+        </div>
+        <div class="hub-card" style="padding:16px;">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--ies-gray-400);">Utilized</div>
+          <div style="font-size:24px;font-weight:800;margin-top:4px;">${summary.percentUtilized.toFixed(0)}%</div>
+        </div>
+      </div>
+
+      <!-- Hours Table -->
+      <div class="hub-card" style="padding:16px;margin-bottom:20px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+          <div style="font-size:14px;font-weight:700;">Hours by Week & Work Type</div>
+          <button class="hub-btn hub-btn-sm hub-btn-primary" id="dm-log-hours">+ Log Hours</button>
+        </div>
+        ${hoursEntries.length === 0 ? `
+          <div style="text-align:center;padding:32px;color:var(--ies-gray-400);">No hours logged yet</div>
+        ` : `
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead>
+              <tr style="border-bottom:2px solid var(--ies-gray-200);">
+                <th style="text-align:left;padding:8px;font-weight:700;">Week</th>
+                <th style="text-align:left;padding:8px;font-weight:700;">Work Type</th>
+                <th style="text-align:right;padding:8px;font-weight:700;">Forecast</th>
+                <th style="text-align:right;padding:8px;font-weight:700;">Actual</th>
+                <th style="text-align:right;padding:8px;font-weight:700;">Delta</th>
+                <th style="text-align:right;padding:8px;font-weight:700;"></th>
+              </tr>
+            </thead>
+            <tbody>
+              ${summary.byWeek.map(week => `
+                <tr style="border-bottom:1px solid var(--ies-gray-200);">
+                  <td style="padding:8px;font-weight:600;">${week.week}</td>
+                  <td style="padding:8px;text-transform:capitalize;">${week.forecast > 0 || week.actual > 0 ? 'All Types' : '—'}</td>
+                  <td style="padding:8px;text-align:right;font-weight:600;">${week.forecast}</td>
+                  <td style="padding:8px;text-align:right;font-weight:600;">${week.actual}</td>
+                  <td style="padding:8px;text-align:right;color:${week.delta >= 0 ? 'var(--ies-red)' : 'var(--ies-green)'};">${week.delta >= 0 ? '+' : ''}${week.delta}</td>
+                  <td style="padding:8px;text-align:right;"></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `}
+      </div>
+
+      <!-- By Work Type Breakdown -->
+      <div class="hub-card" style="padding:16px;">
+        <div style="font-size:14px;font-weight:700;margin-bottom:16px;">Breakdown by Work Type</div>
+        ${summary.byWorkType.map(wt => {
+          const total = wt.forecast + wt.actual;
+          if (total === 0) return '';
+          return `
+            <div style="margin-bottom:16px;">
+              <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+                <span style="font-size:12px;font-weight:600;">${wt.type}</span>
+                <span style="font-size:12px;font-weight:700;">F: ${wt.forecast.toFixed(1)}h | A: ${wt.actual.toFixed(1)}h</span>
+              </div>
+              <div style="display:flex;height:20px;border-radius:4px;overflow:hidden;background:var(--ies-gray-200);">
+                ${wt.forecast > 0 ? `<div style="flex:${wt.forecast};background:var(--ies-blue);"></div>` : ''}
+                ${wt.actual > 0 ? `<div style="flex:${wt.actual};background:var(--ies-green);"></div>` : ''}
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+
+  el.querySelector('#dm-log-hours')?.addEventListener('click', () => showLogHoursModal());
+}
+
+function showLogHoursModal() {
+  if (!activeDeal) return;
+  const today = new Date().toISOString().split('T')[0];
+  const Monday = new Date();
+  const day = Monday.getDay();
+  const diff = Monday.getDate() - day + (day === 0 ? -6 : 1);
+  const startOfWeek = new Date(Monday.getFullYear(), Monday.getMonth(), diff);
+  const weekStr = startOfWeek.toISOString().split('T')[0];
+
+  const modal = document.createElement('div');
+  modal.className = 'hub-modal-overlay';
+  modal.innerHTML = `
+    <div class="hub-modal" style="max-width:500px;">
+      <h3 style="margin:0 0 16px 0;">Log Hours</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Week Starting</label>
+          <input type="date" id="dm-log-week" value="${weekStr}" style="width:100%;padding:8px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:13px;">
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Category</label>
+          <select id="dm-log-category" style="width:100%;padding:8px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:13px;">
+            <option value="forecast">Forecast</option>
+            <option value="actual">Actual</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Work Type</label>
+          <select id="dm-log-type" style="width:100%;padding:8px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:13px;">
+            <option value="Sales Design">Sales Design</option>
+            <option value="Engineering">Engineering</option>
+            <option value="Deal Mgmt">Deal Mgmt</option>
+            <option value="Site Visit">Site Visit</option>
+            <option value="Customer Meeting">Customer Meeting</option>
+            <option value="Internal Review">Internal Review</option>
+            <option value="Documentation">Documentation</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Hours</label>
+          <input type="number" id="dm-log-hours-input" min="0" step="0.5" value="0" style="width:100%;padding:8px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:13px;">
+        </div>
+      </div>
+      <div style="margin-bottom:16px;">
+        <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Resource</label>
+        <input type="text" id="dm-log-resource" value="Brock Eckles" style="width:100%;padding:8px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:13px;">
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button class="hub-btn hub-btn-secondary" onclick="this.closest('.hub-modal-overlay').remove()">Cancel</button>
+        <button class="hub-btn hub-btn-primary" id="dm-log-save">Save Hours</button>
+      </div>
+    </div>
+  `;
+  rootEl?.appendChild(modal);
+  modal.querySelector('#dm-log-save')?.addEventListener('click', async () => {
+    const week = (modal.querySelector('#dm-log-week') as HTMLInputElement).value;
+    const hours = parseFloat((modal.querySelector('#dm-log-hours-input') as HTMLInputElement).value) || 0;
+    const type = (modal.querySelector('#dm-log-type') as HTMLSelectElement).value;
+    const resource = (modal.querySelector('#dm-log-resource') as HTMLInputElement).value || 'Brock Eckles';
+    const category = (modal.querySelector('#dm-log-category') as HTMLSelectElement).value;
+
+    if (hours <= 0) { alert('Hours must be greater than 0'); return; }
+    if (!activeDeal) return;
+
+    const entry = { opportunity_id: activeDeal.id, week_start: week, hours_type: type, hours, resource, category };
+    await api.logHours(entry);
+    hoursEntries = await api.fetchHours(activeDeal.id);
+    modal.remove();
+    const el = rootEl?.querySelector('#dm-content');
+    if (el) renderHours(el);
+  });
+}
+
+// ============================================================
+// TASKS TAB
+// ============================================================
+
+function renderTasksTab(el) {
+  if (!activeDeal) return;
+
+  const summary = calc.calcTaskProgress(tasks);
+
+  el.innerHTML = `
+    <div style="max-width:1000px;">
+      <!-- Progress Summary -->
+      <div class="hub-card" style="padding:16px;margin-bottom:20px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <div style="font-size:14px;font-weight:700;">Task Progress</div>
+          <span style="font-size:12px;color:var(--ies-gray-500);">${summary.done}/${summary.total} done</span>
+        </div>
+        <div style="display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--ies-gray-200);">
+          <div style="flex:${summary.done};background:#22c55e;"></div>
+          <div style="flex:${summary.inProgress};background:#0047AB;"></div>
+          <div style="flex:${summary.blocked};background:#ef4444;"></div>
+          <div style="flex:${summary.total - summary.done - summary.inProgress - summary.blocked};background:var(--ies-gray-300);"></div>
+        </div>
+        <div style="display:flex;gap:16px;margin-top:12px;font-size:12px;">
+          <span><strong style="color:var(--ies-green);">${summary.done}</strong> done</span>
+          <span><strong style="color:var(--ies-blue);">${summary.inProgress}</strong> in progress</span>
+          <span><strong style="color:var(--ies-red);">${summary.blocked}</strong> blocked</span>
+        </div>
+      </div>
+
+      <!-- Tasks by Stage -->
+      ${summary.byStage.map(stage => {
+        const stageTasks = tasks.filter(t => t.dos_stage_number === stage.dosStageNumber);
+        return `
+          <div class="hub-card" style="padding:16px;margin-bottom:16px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:12px;border-bottom:2px solid var(--ies-gray-200);">
+              <div>
+                <div style="font-size:13px;font-weight:700;">Stage ${stage.dosStageNumber}: ${stage.dosStageName}</div>
+              </div>
+              <span style="font-size:12px;color:var(--ies-gray-500);">${stage.done}/${stage.total} complete</span>
+            </div>
+            ${stageTasks.length === 0 ? `
+              <div style="padding:16px;text-align:center;color:var(--ies-gray-400);font-size:12px;">No tasks in this stage</div>
+            ` : `
+              <div style="display:flex;flex-direction:column;gap:8px;">
+                ${stageTasks.map(task => {
+                  const statusColor = {
+                    'todo': '#9ca3af',
+                    'in_progress': '#0047AB',
+                    'done': '#22c55e',
+                    'blocked': '#ef4444'
+                  }[task.status] || '#6b7280';
+                  const priorityColor = {
+                    'low': '#6b7280',
+                    'medium': '#0047AB',
+                    'high': '#f59e0b',
+                    'critical': '#ef4444'
+                  }[task.priority] || '#6b7280';
+
+                  return `
+                    <div style="display:flex;align-items:center;gap:12px;padding:10px;border:1px solid var(--ies-gray-200);border-radius:6px;">
+                      <div style="width:20px;height:20px;border:2px solid ${statusColor};border-radius:4px;background:${task.status === 'done' ? statusColor : 'white'};"></div>
+                      <div style="flex:1;">
+                        <div style="font-size:12px;font-weight:600;${task.status === 'done' ? 'text-decoration:line-through;color:var(--ies-gray-400);' : ''}">${task.title}</div>
+                        <div style="display:flex;gap:8px;margin-top:4px;font-size:10px;">
+                          <span style="background:${statusColor};color:white;padding:2px 6px;border-radius:3px;font-weight:600;">${task.status.replace(/_/g,' ')}</span>
+                          <span style="background:${priorityColor};color:white;padding:2px 6px;border-radius:3px;font-weight:600;">${task.priority}</span>
+                          ${task.due_date ? `<span style="color:var(--ies-gray-500);">Due ${task.due_date}</span>` : ''}
+                          ${task.estimated_hours ? `<span style="color:var(--ies-gray-500);">${task.estimated_hours}h</span>` : ''}
+                        </div>
+                      </div>
+                      <button class="hub-btn hub-btn-sm hub-btn-secondary" onclick="alert('Edit task')">Edit</button>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            `}
+          </div>
+        `;
+      }).join('')}
+
+      <!-- Add Task Button -->
+      <div style="display:flex;gap:8px;margin-bottom:20px;">
+        <button class="hub-btn hub-btn-primary" id="dm-add-task">+ Add Task</button>
+        <button class="hub-btn hub-btn-secondary" id="dm-populate-dos">Populate DOS Activities</button>
+      </div>
+    </div>
+  `;
+
+  el.querySelector('#dm-add-task')?.addEventListener('click', () => showNewTaskModal());
+  el.querySelector('#dm-populate-dos')?.addEventListener('click', () => showPopulateDosModal());
+}
+
+function showNewTaskModal() {
+  if (!activeDeal) return;
+  const modal = document.createElement('div');
+  modal.className = 'hub-modal-overlay';
+  modal.innerHTML = `
+    <div class="hub-modal" style="max-width:600px;">
+      <h3 style="margin:0 0 16px 0;">Create Task</h3>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Title</label>
+        <input type="text" id="dm-task-title" placeholder="Task title" style="width:100%;padding:8px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:13px;">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Priority</label>
+          <select id="dm-task-priority" style="width:100%;padding:8px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:13px;">
+            <option value="low">Low</option>
+            <option value="medium" selected>Medium</option>
+            <option value="high">High</option>
+            <option value="critical">Critical</option>
+          </select>
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">DOS Stage</label>
+          <select id="dm-task-stage" style="width:100%;padding:8px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:13px;">
+            <option value="">None</option>
+            ${DOS_STAGE_LABELS.map(s => `<option value="${s.number}">${s.number}: ${s.name}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Assignee</label>
+          <input type="text" id="dm-task-assignee" value="Brock Eckles" style="width:100%;padding:8px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:13px;">
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Due Date</label>
+          <input type="date" id="dm-task-due" style="width:100%;padding:8px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:13px;">
+        </div>
+      </div>
+      <div style="margin-bottom:16px;">
+        <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Estimated Hours</label>
+        <input type="number" id="dm-task-est-hours" min="0" step="0.5" style="width:100%;padding:8px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:13px;">
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button class="hub-btn hub-btn-secondary" onclick="this.closest('.hub-modal-overlay').remove()">Cancel</button>
+        <button class="hub-btn hub-btn-primary" id="dm-task-save">Create Task</button>
+      </div>
+    </div>
+  `;
+  rootEl?.appendChild(modal);
+  modal.querySelector('#dm-task-save')?.addEventListener('click', async () => {
+    if (!activeDeal) return;
+    const title = (modal.querySelector('#dm-task-title') as HTMLInputElement).value.trim();
+    if (!title) { alert('Title required'); return; }
+
+    const task = {
+      opportunity_id: activeDeal.id,
+      title,
+      priority: (modal.querySelector('#dm-task-priority') as HTMLSelectElement).value,
+      status: 'todo' as const,
+      assignee: (modal.querySelector('#dm-task-assignee') as HTMLInputElement).value || null,
+      due_date: (modal.querySelector('#dm-task-due') as HTMLInputElement).value || null,
+      estimated_hours: parseFloat((modal.querySelector('#dm-task-est-hours') as HTMLInputElement).value) || null,
+      dos_stage_number: parseInt((modal.querySelector('#dm-task-stage') as HTMLSelectElement).value) || null,
+    };
+
+    await api.createTask(task);
+    tasks = await api.fetchTasks(activeDeal.id);
+    modal.remove();
+    const el = rootEl?.querySelector('#dm-content');
+    if (el) renderTasksTab(el);
+  });
+}
+
+function showPopulateDosModal() {
+  if (!activeDeal) return;
+  const modal = document.createElement('div');
+  modal.className = 'hub-modal-overlay';
+  modal.innerHTML = `
+    <div class="hub-modal" style="max-width:500px;">
+      <h3 style="margin:0 0 16px 0;">Populate DOS Activities</h3>
+      <p style="color:var(--ies-gray-600);font-size:12px;margin-bottom:16px;">Select stages to add standard activities as tasks.</p>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">
+        ${DOS_STAGE_LABELS.map(s => {
+          const template = calc.getDosActivityTemplates(s.number);
+          return `
+            <label style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--ies-gray-200);border-radius:6px;cursor:pointer;">
+              <input type="checkbox" class="dos-stage-cb" value="${s.number}" style="width:18px;height:18px;accent-color:var(--ies-blue);">
+              <div style="flex:1;">
+                <div style="font-weight:600;">Stage ${s.number}: ${s.name}</div>
+                <div style="font-size:11px;color:var(--ies-gray-500);">${template.length} activities</div>
+              </div>
+            </label>
+          `;
+        }).join('')}
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button class="hub-btn hub-btn-secondary" onclick="this.closest('.hub-modal-overlay').remove()">Cancel</button>
+        <button class="hub-btn hub-btn-primary" id="dm-populate-save">Populate</button>
+      </div>
+    </div>
+  `;
+  rootEl?.appendChild(modal);
+  modal.querySelector('#dm-populate-save')?.addEventListener('click', async () => {
+    if (!activeDeal) return;
+    const selected = Array.from(modal.querySelectorAll('.dos-stage-cb:checked')).map((cb: HTMLInputElement) => parseInt(cb.value));
+    if (selected.length === 0) { alert('Select at least one stage'); return; }
+
+    for (const stageNum of selected) {
+      const templates = calc.getDosActivityTemplates(stageNum);
+      const stageName = DOS_STAGE_LABELS.find(s => s.number === stageNum)?.name || `Stage ${stageNum}`;
+      for (const template of templates) {
+        const task = {
+          opportunity_id: activeDeal.id,
+          title: template.title,
+          description: template.description,
+          status: 'todo' as const,
+          priority: 'medium' as const,
+          dos_stage_number: stageNum,
+          dos_stage_name: stageName,
+        };
+        await api.createTask(task);
+      }
+    }
+
+    tasks = await api.fetchTasks(activeDeal.id);
+    modal.remove();
+    const el = rootEl?.querySelector('#dm-content');
+    if (el) renderTasksTab(el);
+  });
+}
+
+// ============================================================
+// UPDATES TAB
+// ============================================================
+
+function renderUpdatesTab(el) {
+  if (!activeDeal) return;
+
+  el.innerHTML = `
+    <div style="max-width:900px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <h3 class="text-section" style="margin:0;">Weekly Updates</h3>
+        <button class="hub-btn hub-btn-sm hub-btn-primary" id="dm-new-update">+ New Update</button>
+      </div>
+
+      ${updates.length === 0 ? `
+        <div class="hub-card" style="text-align:center;padding:32px;color:var(--ies-gray-400);">
+          No updates yet
+        </div>
+      ` : `
+        <div style="display:flex;flex-direction:column;gap:16px;">
+          ${updates.map(u => `
+            <div class="hub-card" style="padding:16px;border-left:4px solid var(--ies-blue);">
+              <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:12px;">
+                <div>
+                  <div style="font-size:13px;font-weight:700;">${u.update_date}</div>
+                  <div style="font-size:11px;color:var(--ies-gray-500);">${u.author || 'Unknown'}</div>
+                </div>
+                <button class="hub-btn hub-btn-sm hub-btn-secondary" onclick="pmDeleteUpdate('${u.id}')" style="color:var(--ies-red);">Delete</button>
+              </div>
+              <div style="font-size:13px;color:var(--ies-navy);line-height:1.5;margin-bottom:12px;white-space:pre-wrap;">${u.body || ''}</div>
+              ${u.next_steps ? `
+                <div style="padding:10px 12px;background:rgba(37,99,235,.05);border-left:3px solid var(--ies-blue);border-radius:4px;margin-bottom:8px;">
+                  <div style="font-size:11px;font-weight:700;color:var(--ies-blue);text-transform:uppercase;margin-bottom:4px;">Next Steps</div>
+                  <div style="font-size:12px;white-space:pre-wrap;">${u.next_steps}</div>
+                </div>
+              ` : ''}
+              ${u.blockers ? `
+                <div style="padding:10px 12px;background:rgba(239,68,68,.05);border-left:3px solid var(--ies-red);border-radius:4px;">
+                  <div style="font-size:11px;font-weight:700;color:var(--ies-red);text-transform:uppercase;margin-bottom:4px;">Blockers</div>
+                  <div style="font-size:12px;white-space:pre-wrap;">${u.blockers}</div>
+                </div>
+              ` : ''}
+            </div>
+          `).join('')}
+        </div>
+      `}
+    </div>
+  `;
+
+  el.querySelector('#dm-new-update')?.addEventListener('click', () => showNewUpdateModal());
+}
+
+function showNewUpdateModal() {
+  if (!activeDeal) return;
+  const today = new Date().toISOString().split('T')[0];
+  const modal = document.createElement('div');
+  modal.className = 'hub-modal-overlay';
+  modal.innerHTML = `
+    <div class="hub-modal" style="max-width:600px;">
+      <h3 style="margin:0 0 16px 0;">New Weekly Update</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Date</label>
+          <input type="date" id="dm-update-date" value="${today}" style="width:100%;padding:8px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:13px;">
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Author</label>
+          <input type="text" id="dm-update-author" value="Brock Eckles" style="width:100%;padding:8px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:13px;">
+        </div>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Update</label>
+        <textarea id="dm-update-body" placeholder="What happened this week?" style="width:100%;padding:8px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:13px;min-height:100px;font-family:inherit;"></textarea>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Next Steps</label>
+        <textarea id="dm-update-next" placeholder="What's planned next?" style="width:100%;padding:8px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:13px;min-height:60px;font-family:inherit;"></textarea>
+      </div>
+      <div style="margin-bottom:16px;">
+        <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Blockers (optional)</label>
+        <textarea id="dm-update-blockers" placeholder="Any blockers or risks?" style="width:100%;padding:8px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:13px;min-height:60px;font-family:inherit;"></textarea>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button class="hub-btn hub-btn-secondary" onclick="this.closest('.hub-modal-overlay').remove()">Cancel</button>
+        <button class="hub-btn hub-btn-primary" id="dm-update-save">Post Update</button>
+      </div>
+    </div>
+  `;
+  rootEl?.appendChild(modal);
+  modal.querySelector('#dm-update-save')?.addEventListener('click', async () => {
+    if (!activeDeal) return;
+    const body = (modal.querySelector('#dm-update-body') as HTMLTextAreaElement).value.trim();
+    if (!body) { alert('Update body required'); return; }
+
+    const update = {
+      opportunity_id: activeDeal.id,
+      update_date: (modal.querySelector('#dm-update-date') as HTMLInputElement).value,
+      author: (modal.querySelector('#dm-update-author') as HTMLInputElement).value || null,
+      body,
+      next_steps: (modal.querySelector('#dm-update-next') as HTMLTextAreaElement).value.trim() || null,
+      blockers: (modal.querySelector('#dm-update-blockers') as HTMLTextAreaElement).value.trim() || null,
+    };
+
+    await api.createUpdate(update);
+    updates = await api.fetchUpdates(activeDeal.id);
+    modal.remove();
+    const el = rootEl?.querySelector('#dm-content');
+    if (el) renderUpdatesTab(el);
+  });
 }
 
 // ============================================================

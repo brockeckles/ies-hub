@@ -8,7 +8,7 @@
  * @module hub/command-center/api
  */
 
-import { db } from '../../shared/supabase.js?v=20260417-s1';
+import { db } from '../../shared/supabase.js?v=20260417-s2';
 
 /**
  * Fetch all dashboard data. Tries Supabase first, falls back to demo data.
@@ -19,15 +19,17 @@ export async function fetchDashboardData() {
   let kpis = DEMO_KPIS;
   let sectors = DEMO_SECTORS;
   let alerts = DEMO_ALERTS;
+  let rfpSignals = DEMO_RFP_SIGNALS;
 
   try {
     // Attempt to fetch live data from Supabase
-    const [fuelRows, laborRows, freightRows, newsRows, alertRows] = await Promise.all([
+    const [fuelRows, laborRows, freightRows, newsRows, alertRows, rfpRows] = await Promise.all([
       db.fetchAll('fuel_prices').catch(() => []),
       db.fetchAll('labor_markets').catch(() => []),
       db.fetchAll('freight_rates').catch(() => []),
       db.fetchAll('competitor_news').catch(() => []),
       safeAlertFetch(),
+      db.fetchAll('rfp_signals').catch(() => []),
     ]);
 
     // If we got any data, we're connected
@@ -67,6 +69,18 @@ export async function fetchDashboardData() {
       if (newsRows.length) {
         sectors = buildSectorsFromNews(newsRows, sectors);
       }
+
+      // Build RFP signals from live data
+      if (rfpRows.length) {
+        rfpSignals = rfpRows.slice(0, 6).map(r => ({
+          company: r.company || r.account_name || 'Unknown',
+          vertical: r.vertical || r.industry || 'General',
+          volume: r.volume || r.volume_pallets_mo || 'N/A',
+          region: r.region || 'Unknown',
+          stage: r.stage || r.status || 'active',
+          date: formatRelative(r.created_at || r.date || new Date().toISOString()),
+        }));
+      }
     }
   } catch (err) {
     console.warn('[CC] Supabase fetch failed, using demo data:', err.message);
@@ -77,9 +91,84 @@ export async function fetchDashboardData() {
     kpis,
     sectors,
     alerts,
+    rfpSignals,
     pipeline: DEMO_PIPELINE,
     activity: DEMO_ACTIVITY,
   };
+}
+
+/**
+ * Fetch chart-specific data (diesel, freight, labor) for rendering Chart.js
+ * @returns {Promise<ChartData>}
+ */
+export async function fetchChartData() {
+  const diesel = { labels: [], prices: [] };
+  const freight = { labels: [], spot: [], contract: [] };
+  const labor = { regions: [], wages: [] };
+
+  try {
+    // Fetch diesel price data
+    const fuelRows = await db.fetchAll('fuel_prices').catch(() => []);
+    if (fuelRows.length) {
+      const recent = fuelRows.slice(-52); // Last 52 weeks
+      diesel.labels = recent.map(r => {
+        const d = new Date(r.report_date || r.date || new Date().toISOString());
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      });
+      diesel.prices = recent.map(r => parseFloat(r.price_per_gallon || r.price || 3.85));
+    } else {
+      return { diesel: DEMO_DIESEL_CHART, freight: DEMO_FREIGHT_CHART, labor: DEMO_LABOR_CHART };
+    }
+
+    // Fetch freight rate data
+    const freightRows = await db.fetchAll('freight_rates').catch(() => []);
+    if (freightRows.length) {
+      const spotRates = freightRows.filter(r => r.rate_type === 'spot' || r.index_name === 'DAT Spot Van');
+      const contractRates = freightRows.filter(r => r.rate_type === 'contract' || r.index_name === 'DAT Contract Van');
+
+      if (spotRates.length) {
+        freight.labels = spotRates.slice(-26).map(r => {
+          const d = new Date(r.report_date || r.date || new Date().toISOString());
+          return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        });
+        freight.spot = spotRates.slice(-26).map(r => parseFloat(r.rate || 2.15));
+        freight.contract = contractRates.slice(-26).map(r => parseFloat(r.rate || 2.00));
+      }
+    } else {
+      return { diesel: DEMO_DIESEL_CHART, freight: DEMO_FREIGHT_CHART, labor: DEMO_LABOR_CHART };
+    }
+
+    // Fetch labor wage data by region
+    const laborRows = await db.fetchAll('labor_markets').catch(() => []);
+    if (laborRows.length) {
+      const byRegion = {};
+      laborRows.forEach(r => {
+        const region = r.region || r.msa || 'Unknown';
+        const wage = parseFloat(r.avg_wage || r.avgWage || 18);
+        if (!byRegion[region]) byRegion[region] = [];
+        byRegion[region].push(wage);
+      });
+
+      // Average wages by region, take top 5
+      const regionWages = Object.entries(byRegion)
+        .map(([region, wages]) => ({
+          region,
+          wage: wages.reduce((a, b) => a + b, 0) / wages.length
+        }))
+        .sort((a, b) => b.wage - a.wage)
+        .slice(0, 5);
+
+      labor.regions = regionWages.map(r => r.region);
+      labor.wages = regionWages.map(r => r.wage);
+    } else {
+      return { diesel: DEMO_DIESEL_CHART, freight: DEMO_FREIGHT_CHART, labor: DEMO_LABOR_CHART };
+    }
+
+    return { diesel, freight, labor };
+  } catch (err) {
+    console.warn('[CC] Chart data fetch failed, using demo:', err.message);
+    return { diesel: DEMO_DIESEL_CHART, freight: DEMO_FREIGHT_CHART, labor: DEMO_LABOR_CHART };
+  }
 }
 
 // ============================================================
@@ -229,12 +318,39 @@ const DEMO_ACTIVITY = [
   { title: 'Feedback submitted', description: 'Fleet team driving toggle bug reported', time: '4 days ago', color: '#6b7280' },
 ];
 
+const DEMO_RFP_SIGNALS = [
+  { company: 'Kraft Heinz', vertical: 'Food & Beverage', volume: '4,200', region: 'Midwest', stage: 'active', date: '2d ago' },
+  { company: 'Amazon', vertical: 'E-Commerce', volume: '8,500', region: 'West', stage: 'active', date: '3d ago' },
+  { company: 'Target', vertical: 'Retail', volume: '3,100', region: 'Northeast', stage: 'closed', date: '1w ago' },
+  { company: 'Unilever', vertical: 'Consumer Goods', volume: '5,600', region: 'Southeast', stage: 'pending', date: '5d ago' },
+  { company: 'XPO Logistics', vertical: 'Logistics', volume: '2,800', region: 'South', stage: 'active', date: '4d ago' },
+  { company: 'PepsiCo', vertical: 'Beverages', volume: '6,100', region: 'Central', stage: 'pending', date: '1w ago' },
+];
+
+// Demo chart data (52-week diesel, 26-week freight, regional labor)
+const DEMO_DIESEL_CHART = {
+  labels: ['Jan 8', 'Jan 15', 'Jan 22', 'Jan 29', 'Feb 5', 'Feb 12', 'Feb 19', 'Feb 26', 'Mar 5', 'Mar 12', 'Mar 19', 'Mar 26'],
+  prices: [3.65, 3.68, 3.72, 3.78, 3.82, 3.85, 3.84, 3.81, 3.79, 3.76, 3.74, 3.72],
+};
+
+const DEMO_FREIGHT_CHART = {
+  labels: ['Dec 1', 'Dec 8', 'Dec 15', 'Dec 22', 'Dec 29', 'Jan 5', 'Jan 12', 'Jan 19', 'Jan 26', 'Feb 2', 'Feb 9', 'Feb 16'],
+  spot: [2.45, 2.42, 2.40, 2.38, 2.35, 2.32, 2.28, 2.25, 2.22, 2.20, 2.18, 2.15],
+  contract: [2.10, 2.10, 2.10, 2.09, 2.08, 2.07, 2.06, 2.05, 2.04, 2.03, 2.02, 2.00],
+};
+
+const DEMO_LABOR_CHART = {
+  regions: ['Northeast', 'Southeast', 'Midwest', 'Southwest', 'West'],
+  wages: [21.45, 19.80, 18.90, 17.50, 22.10],
+};
+
 /**
  * @typedef {Object} DashboardData
  * @property {boolean} supabaseConnected
  * @property {Object} kpis
  * @property {Object} sectors
  * @property {Array} alerts
+ * @property {Array} rfpSignals
  * @property {Object} pipeline
  * @property {Array} activity
  */

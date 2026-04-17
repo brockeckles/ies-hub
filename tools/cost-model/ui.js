@@ -6,16 +6,16 @@
  * @module tools/cost-model/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-s1';
-import { state } from '../../shared/state.js?v=20260417-s1';
-import * as calc from './calc.js?v=20260417-s1';
-import * as api from './api.js?v=20260417-s1';
+import { bus } from '../../shared/event-bus.js?v=20260417-s2';
+import { state } from '../../shared/state.js?v=20260417-s2';
+import * as calc from './calc.js?v=20260417-s2';
+import * as api from './api.js?v=20260417-s2';
 
 // ============================================================
 // STATE — tool-local reactive state
 // ============================================================
 
-/** @type {import('./types.js').CostModelData} */
+/** @type {import('./types.js?v=20260417-s2').CostModelData} */
 let model = createEmptyModel();
 
 /** @type {Object} */
@@ -661,6 +661,10 @@ function renderLabor() {
       </div>
     </div>
 
+    <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-indirect">Auto-Generate Indirect Labor</button>
+    </div>
+
     <div class="text-subtitle mb-2">Direct Labor</div>
     <table class="cm-grid-table">
       <thead>
@@ -739,6 +743,10 @@ function renderEquipment() {
       </div>
     </div>
 
+    <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-equipment">Auto-Generate Equipment</button>
+    </div>
+
     <table class="cm-grid-table">
       <thead>
         <tr><th>Equipment</th><th>Category</th><th>Qty</th><th>Type</th><th>$/Mo</th><th>Acq Cost</th><th>Maint/Mo</th><th>Amort Yrs</th><th class="cm-num">Annual</th><th></th></tr>
@@ -788,6 +796,11 @@ function renderOverhead() {
         <div class="cm-section-desc">Facility overhead, IT, insurance, and administrative costs.</div>
       </div>
     </div>
+
+    <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-overhead">Auto-Generate Overhead</button>
+    </div>
+
     <table class="cm-grid-table">
       <thead><tr><th>Category</th><th>Description</th><th>Cost Type</th><th>Amount</th><th class="cm-num">Annual</th><th></th></tr></thead>
       <tbody>
@@ -896,6 +909,11 @@ function renderStartup() {
         <div class="cm-section-desc">One-time implementation costs amortized over the ${contractYears}-year contract term.</div>
       </div>
     </div>
+
+    <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-startup">Auto-Generate Start-Up Costs</button>
+    </div>
+
     <table class="cm-grid-table">
       <thead><tr><th>Description</th><th class="cm-num">One-Time Cost</th><th class="cm-num">Annual Amort</th><th class="cm-num">Monthly Amort</th><th></th></tr></thead>
       <tbody>
@@ -1247,6 +1265,14 @@ function renderSummary() {
       </div>
     </div>
 
+    <!-- Design Heuristics -->
+    <div class="hub-card mb-4">
+      <div class="text-subtitle mb-4">Design Heuristics & Benchmarks</div>
+      <div id="cm-heuristics-panel" style="display: grid; grid-template-columns: 1fr; gap: 8px;">
+        ${renderHeuristicsPanel(model, summary)}
+      </div>
+    </div>
+
     <style>
       .cm-metrics-grid {
         display: grid;
@@ -1277,6 +1303,31 @@ function renderMetricCard(label, value, passes) {
       <div class="cm-metric-value">${value}</div>
     </div>
   `;
+}
+
+/** Render heuristics panel with 10 benchmark checks */
+function renderHeuristicsPanel(state, summary) {
+  const checks = calc.generateHeuristics(state, summary);
+  if (!checks || checks.length === 0) {
+    return '<div style="padding: 12px; background: var(--ies-gray-50); border-radius: 6px; font-size: 13px; color: var(--ies-gray-500);">Enter project parameters to see design guidance.</div>';
+  }
+
+  return checks.map(check => {
+    const icon = check.type === 'ok' ? '✓' : check.type === 'warn' ? '⚠' : 'ℹ';
+    const bg = check.type === 'ok' ? 'rgba(32,201,151,0.06)' : check.type === 'warn' ? 'rgba(255,193,7,0.06)' : 'rgba(0,71,171,0.06)';
+    const borderColor = check.type === 'ok' ? 'rgba(32,201,151,0.3)' : check.type === 'warn' ? 'rgba(255,193,7,0.3)' : 'rgba(0,71,171,0.3)';
+    const color = check.type === 'ok' ? '#0d9668' : check.type === 'warn' ? '#ff9800' : '#0047AB';
+
+    return `
+      <div style="padding: 12px; background: ${bg}; border-left: 3px solid ${borderColor}; border-radius: 4px; font-size: 13px;">
+        <div style="display: flex; gap: 8px; margin-bottom: 4px;">
+          <span style="color: ${color}; font-weight: 700; font-size: 16px;">${icon}</span>
+          <div style="font-weight: 600; color: var(--ies-navy); flex: 1;">${check.title}</div>
+        </div>
+        <div style="font-size: 12px; color: var(--ies-gray-600); margin-left: 24px;">${check.detail}</div>
+      </div>
+    `;
+  }).join('');
 }
 
 // ============================================================
@@ -1360,17 +1411,26 @@ function handleAction(action, idx) {
     case 'delete-indirect':
       model.indirectLaborLines.splice(idx, 1);
       break;
+    case 'auto-gen-indirect':
+      model.indirectLaborLines = calc.autoGenerateIndirectLabor(model);
+      break;
     case 'add-equipment':
       model.equipmentLines.push({ equipment_name: '', category: 'MHE', quantity: 1, acquisition_type: 'lease', monthly_cost: 0, monthly_maintenance: 0 });
       break;
     case 'delete-equipment':
       model.equipmentLines.splice(idx, 1);
       break;
+    case 'auto-gen-equipment':
+      model.equipmentLines = calc.autoGenerateEquipment(model);
+      break;
     case 'add-overhead':
       model.overheadLines.push({ category: '', description: '', cost_type: 'monthly', monthly_cost: 0 });
       break;
     case 'delete-overhead':
       model.overheadLines.splice(idx, 1);
+      break;
+    case 'auto-gen-overhead':
+      model.overheadLines = calc.autoGenerateOverhead(model);
       break;
     case 'add-vas':
       model.vasLines.push({ service: '', rate: 0, volume: 0 });
@@ -1383,6 +1443,9 @@ function handleAction(action, idx) {
       break;
     case 'delete-startup':
       model.startupLines.splice(idx, 1);
+      break;
+    case 'auto-gen-startup':
+      model.startupLines = calc.autoGenerateStartup(model);
       break;
     case 'launch-wsc':
       bus.emit('cm:push-to-wsc', { clearHeight: model.facility?.clearHeight || 0, totalSqft: model.facility?.totalSqft || 0 });
@@ -1510,7 +1573,7 @@ function sectionHasData(key) {
 /**
  * Handle incoming labor lines from MOST tool.
  * Merges or replaces CM laborLines with MOST-derived data.
- * @param {import('../most-standards/types.js').MostToCmPayload} payload
+ * @param {import('../most-standards/types.js?v=20260417-s2').MostToCmPayload} payload
  */
 function handleMostPush(payload) {
   if (!payload?.laborLines?.length) return;
@@ -1548,7 +1611,7 @@ function handleMostPush(payload) {
 /**
  * Handle incoming facility data from Warehouse Sizing Calculator.
  * Populates CM facility section fields.
- * @param {import('../warehouse-sizing/types.js').WscToCmPayload} payload
+ * @param {import('../warehouse-sizing/types.js?v=20260417-s2').WscToCmPayload} payload
  */
 function handleWscPush(payload) {
   if (!payload) return;

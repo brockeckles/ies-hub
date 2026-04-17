@@ -5,8 +5,8 @@
  * @module hub/admin/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-s1';
-import * as calc from './calc.js?v=20260417-s1';
+import { bus } from '../../shared/event-bus.js?v=20260417-s2';
+import * as calc from './calc.js?v=20260417-s2';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -70,13 +70,14 @@ function renderMasterData(el) {
   el.innerHTML = `
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;">
       ${calc.MASTER_TABLES.map(t => `
-        <div class="hub-card" style="padding:16px;cursor:pointer;" data-table="${t.id}">
+        <div class="hub-card" style="padding:16px;cursor:pointer;transition:all 0.2s;" data-table="${t.id}">
           <div style="font-size:14px;font-weight:700;margin-bottom:4px;">${t.name}</div>
           <div style="font-size:12px;color:var(--ies-gray-400);margin-bottom:8px;">${t.description}</div>
-          <div style="display:flex;gap:12px;font-size:11px;color:var(--ies-gray-400);">
-            <span>${t.rowCount} records</span>
-            <span>${t.columns.length} columns</span>
+          <div style="display:flex;gap:12px;font-size:11px;color:var(--ies-gray-400);margin-bottom:8px;">
+            <span>📊 ${t.rowCount} records</span>
+            <span>📋 ${t.columns.length} columns</span>
           </div>
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" style="width:100%;margin-top:8px;">View →</button>
         </div>
       `).join('')}
     </div>
@@ -94,25 +95,86 @@ function renderTableDetail(el) {
   const table = activeMasterTable;
   if (!table) return;
 
+  // Sample data for each table
+  const sampleData = {
+    cost_buckets: [
+      { name: 'Management', code: 'MGMT', sort_order: 1, active: true },
+      { name: 'Labor', code: 'LABOR', sort_order: 2, active: true },
+      { name: 'Facility', code: 'FAC', sort_order: 3, active: true },
+      { name: 'Equipment', code: 'EQUIP', sort_order: 4, active: true },
+      { name: 'Overhead', code: 'OH', sort_order: 5, active: true },
+    ],
+    vehicle_types: [
+      { name: 'Sprinter Van', payload_lbs: 3000, cube_ft3: 380, cpm: 2.15, active: true },
+      { name: 'Box Truck (26ft)', payload_lbs: 12000, cube_ft3: 1600, cpm: 3.25, active: true },
+      { name: 'Semi (53ft)', payload_lbs: 43000, cube_ft3: 3400, cpm: 1.85, active: true },
+      { name: 'Straight (28ft)', payload_lbs: 25000, cube_ft3: 2000, cpm: 2.45, active: true },
+      { name: 'Pup Trailer', payload_lbs: 18000, cube_ft3: 1700, cpm: 1.95, active: true },
+    ],
+    dos_templates: [
+      { name: 'Credit Check', stage: 'Stage 1', required: true, sort_order: 1 },
+      { name: 'Cost Model', stage: 'Stage 3', required: true, sort_order: 2 },
+      { name: 'Facility Plan', stage: 'Stage 3', required: true, sort_order: 3 },
+      { name: 'P&L Projection', stage: 'Stage 3', required: false, sort_order: 4 },
+      { name: 'ELT Approval', stage: 'Stage 5', required: true, sort_order: 5 },
+    ],
+    escalation_rates: [
+      { category: 'Labor', rate_pct: 3.5, year: 2026, source: 'BLS' },
+      { category: 'Facility', rate_pct: 2.8, year: 2026, source: 'CRE Data' },
+      { category: 'Equipment', rate_pct: 2.2, year: 2026, source: 'Industrial' },
+      { category: 'Utilities', rate_pct: 4.1, year: 2026, source: 'DOE' },
+    ],
+    sccs: [
+      { name: 'Inbound Logistics', category: 'Operational', sort_order: 1 },
+      { name: 'Warehouse Operations', category: 'Operational', sort_order: 2 },
+      { name: 'Network Design', category: 'Strategic', sort_order: 3 },
+      { name: 'Automation Technology', category: 'Technology', sort_order: 4 },
+      { name: 'Labor Solutions', category: 'Operational', sort_order: 5 },
+    ],
+  };
+
+  const rows = sampleData[table.id] || [];
+
   el.innerHTML = `
-    <button class="hub-btn hub-btn-sm hub-btn-secondary" id="admin-back" style="margin-bottom:16px;">← Back to Tables</button>
-    <div style="margin-bottom:12px;">
-      <span style="font-size:16px;font-weight:700;">${table.name}</span>
-      <span style="font-size:12px;color:var(--ies-gray-400);margin-left:8px;">${table.tableName}</span>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+      <button class="hub-btn hub-btn-sm hub-btn-secondary" id="admin-back">← Back to Tables</button>
+      <h3 style="font-size:16px;font-weight:700;margin:0;flex:1;">${table.name}</h3>
+      <button class="hub-btn hub-btn-sm hub-btn-secondary" id="admin-refresh" title="Refresh data from Supabase">🔄 Refresh</button>
+    </div>
+    <div style="margin-bottom:12px;padding:12px;background:#f0fdf4;border-left:3px solid #22c55e;border-radius:6px;">
+      <div style="font-size:11px;font-weight:700;color:#15803d;text-transform:uppercase;">Sample Data</div>
+      <div style="font-size:12px;color:#166534;">Showing ${rows.length} of ${table.rowCount} configured records. Connect to Supabase to load live data.</div>
     </div>
     <div class="hub-card" style="padding:16px;overflow-x:auto;">
       <table style="width:100%;border-collapse:collapse;font-size:13px;">
         <thead>
-          <tr>${table.columns.map(c => `<th style="text-align:left;padding:8px 12px;border-bottom:2px solid var(--ies-gray-200);font-weight:700;font-size:11px;text-transform:uppercase;color:var(--ies-gray-400);">${c.label}</th>`).join('')}</tr>
+          <tr style="background:var(--ies-gray-50);">
+            ${table.columns.map(c => `<th style="text-align:left;padding:10px 12px;border-bottom:2px solid var(--ies-gray-200);font-weight:700;font-size:11px;text-transform:uppercase;color:var(--ies-gray-600);">${c.label}</th>`).join('')}
+          </tr>
         </thead>
         <tbody>
-          <tr><td colspan="${table.columns.length}" style="padding:16px;text-align:center;color:var(--ies-gray-400);font-size:12px;">Connect to Supabase to view live data. ${table.rowCount} records configured.</td></tr>
+          ${rows.map((row, idx) => `
+            <tr style="border-bottom:1px solid var(--ies-gray-100);${idx % 2 === 0 ? 'background:#fafafa;' : ''}">
+              ${table.columns.map(c => {
+                const val = row[c.key];
+                let display = val;
+                if (c.type === 'boolean') display = val ? '✓' : '✕';
+                if (c.type === 'number') display = typeof val === 'number' ? val.toLocaleString() : val;
+                return `<td style="padding:10px 12px;color:var(--ies-gray-700);">${display || '—'}</td>`;
+              }).join('')}
+            </tr>
+          `).join('')}
+          ${rows.length === 0 ? `<tr><td colspan="${table.columns.length}" style="padding:16px;text-align:center;color:var(--ies-gray-400);font-size:12px;">No sample data available</td></tr>` : ''}
         </tbody>
       </table>
     </div>
   `;
 
   el.querySelector('#admin-back')?.addEventListener('click', () => { activeMasterTable = null; render(); });
+  el.querySelector('#admin-refresh')?.addEventListener('click', () => {
+    // In production, this would re-fetch from Supabase
+    alert('Refreshing from Supabase... (simulated)');
+  });
 }
 
 // ===== USERS =====

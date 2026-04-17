@@ -6,39 +6,59 @@
  * @module tools/most-standards/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-s1';
-import { state } from '../../shared/state.js?v=20260417-s1';
-import * as calc from './calc.js?v=20260417-s1';
-import * as api from './api.js?v=20260417-s1';
+import { bus } from '../../shared/event-bus.js?v=20260417-s2';
+import { state } from '../../shared/state.js?v=20260417-s2';
+import * as calc from './calc.js?v=20260417-s2';
+import * as api from './api.js?v=20260417-s2';
 
 // ============================================================
 // STATE — tool-local
 // ============================================================
 
-/** @type {'library' | 'analysis' | 'workflow'} */
+/** @type {'library' | 'editor' | 'analysis' | 'workflow'} */
 let activeTab = 'library';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
 
-/** @type {{ templates: import('./types.js').MostTemplate[], allowanceProfiles: import('./types.js').AllowanceProfile[] }} */
+/** @type {{ templates: import('./types.js?v=20260417-s2').MostTemplate[], allowanceProfiles: import('./types.js?v=20260417-s2').AllowanceProfile[] }} */
 let refData = { templates: [], allowanceProfiles: [] };
 
-/** @type {import('./types.js').MostTemplate|null} */
+/** @type {import('./types.js?v=20260417-s2').MostTemplate|null} */
 let selectedTemplate = null;
 
-/** @type {import('./types.js').MostElement[]} */
+/** @type {import('./types.js?v=20260417-s2').MostElement[]} */
 let selectedElements = [];
+
+/** Template editor state — null if not editing, or a copy of the template being edited */
+let editorTemplate = null;
+
+/** Editor elements for the current template being edited */
+let editorElements = [];
+
+/** Saved scenarios for Quick Analysis (localStorage-backed) */
+let savedScenarios = [];
+
+// Load saved scenarios from localStorage on startup
+function loadSavedScenarios() {
+  try {
+    const saved = localStorage.getItem('most_scenarios');
+    savedScenarios = saved ? JSON.parse(saved) : [];
+  } catch (err) {
+    console.warn('[MOST] Failed to load scenarios:', err);
+    savedScenarios = [];
+  }
+}
 
 /** Filters for template library */
 let filters = { search: '', processArea: '', laborCategory: '' };
 
 // --- Analysis state ---
-/** @type {import('./types.js').LaborAnalysis} */
+/** @type {import('./types.js?v=20260417-s2').LaborAnalysis} */
 let analysis = createEmptyAnalysis();
 
 // --- Workflow state ---
-/** @type {import('./types.js').Workflow} */
+/** @type {import('./types.js?v=20260417-s2').Workflow} */
 let workflow = createEmptyWorkflow();
 
 // ============================================================
@@ -61,9 +81,13 @@ export async function mount(el) {
   activeTab = 'library';
   selectedTemplate = null;
   selectedElements = [];
+  editorTemplate = null;
+  editorElements = [];
   filters = { search: '', processArea: '', laborCategory: '' };
   analysis = createEmptyAnalysis();
   workflow = createEmptyWorkflow();
+
+  loadSavedScenarios();
 
   el.innerHTML = renderShell();
 
@@ -105,6 +129,7 @@ function renderShell() {
       <!-- Tab Bar -->
       <div class="hub-analyzer-tabs">
         <button class="most-tab hub-tab active" data-tab="library">Template Library</button>
+        <button class="most-tab hub-tab" data-tab="editor">Template Editor</button>
         <button class="most-tab hub-tab" data-tab="analysis">Quick Analysis</button>
         <button class="most-tab hub-tab" data-tab="workflow">Workflow Composer</button>
       </div>
@@ -220,7 +245,7 @@ function renderContent() {
   const container = rootEl?.querySelector('#most-content');
   if (!container) return;
 
-  const renderers = { library: renderLibrary, analysis: renderAnalysis, workflow: renderWorkflowComposer };
+  const renderers = { library: renderLibrary, editor: renderEditor, analysis: renderAnalysis, workflow: renderWorkflowComposer };
   const render = renderers[activeTab];
   if (render) {
     container.innerHTML = render();
@@ -337,7 +362,190 @@ function renderTemplateDetail() {
 }
 
 // ============================================================
-// TAB 2: QUICK LABOR ANALYSIS
+// TAB 2: TEMPLATE EDITOR
+// ============================================================
+
+function renderEditor() {
+  const templates = refData.templates || [];
+  const isEditing = editorTemplate !== null;
+
+  if (!isEditing) {
+    // Template list with create/edit/duplicate/delete actions
+    return `
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+        <div>
+          <div style="font-size:16px; font-weight:700; color:var(--ies-navy);">Template Editor</div>
+          <div style="font-size:13px; color:var(--ies-gray-500);">Create, edit, and manage MOST labor standards templates.</div>
+        </div>
+        <button class="most-push-btn" data-action="create-template">+ New Template</button>
+      </div>
+
+      <table class="cm-grid-table">
+        <thead>
+          <tr>
+            <th>Activity Name</th>
+            <th>Process Area</th>
+            <th>Category</th>
+            <th class="cm-num">Base UPH</th>
+            <th class="cm-num">TMU</th>
+            <th class="cm-num">Elements</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${templates.map(t => `
+            <tr>
+              <td>${t.name}</td>
+              <td>${t.process_area || '—'}</td>
+              <td><span class="most-cat-badge most-cat-${t.labor_category || 'manual'}" style="font-size:10px;">${(t.labor_category || 'manual').toUpperCase()}</span></td>
+              <td class="cm-num">${calc.formatUph(t.base_uph)}</td>
+              <td class="cm-num">${t.tmu_total || 0}</td>
+              <td class="cm-num">${t.element_count || 0}</td>
+              <td>
+                <button class="cm-edit-btn" data-action="edit-template" data-id="${t.id}" style="margin-right:4px;">Edit</button>
+                <button class="cm-edit-btn" data-action="duplicate-template" data-id="${t.id}" style="margin-right:4px;">Dup</button>
+                <button class="cm-delete-btn" data-action="delete-template" data-id="${t.id}">Del</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      ${templates.length === 0 ? '<div style="text-align:center; padding:40px; color:var(--ies-gray-400);">No templates yet. Click "New Template" to create one.</div>' : ''}
+    `;
+  }
+
+  // Template editor form
+  const t = editorTemplate;
+  const totalTmu = calc.sumElementTmu(editorElements);
+  const baseUph = calc.baseUph(totalTmu);
+
+  return `
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+      <div>
+        <div style="font-size:16px; font-weight:700; color:var(--ies-navy);">Edit Template</div>
+        <div style="font-size:13px; color:var(--ies-gray-500);">${t.id ? 'Modify template details and elements' : 'Create a new MOST labor standards template'}</div>
+      </div>
+      <button class="cm-delete-btn" data-action="close-editor">✕ Close</button>
+    </div>
+
+    <!-- Template Metadata -->
+    <div class="hub-card" style="margin-bottom:20px;">
+      <div class="text-subtitle mb-4">Template Details</div>
+      <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:16px;">
+        <div>
+          <label class="cm-form-label">Activity Name *</label>
+          <input class="hub-input" id="edit-tpl-name" value="${t.name || ''}" placeholder="e.g., Case Pick" />
+        </div>
+        <div>
+          <label class="cm-form-label">Process Area *</label>
+          <select class="hub-select" id="edit-tpl-area">
+            <option value="">Select...</option>
+            ${PROCESS_AREAS.map(a => `<option value="${a}"${t.process_area === a ? ' selected' : ''}>${a}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label class="cm-form-label">Labor Category *</label>
+          <select class="hub-select" id="edit-tpl-cat">
+            ${LABOR_CATEGORIES.map(c => `<option value="${c}"${t.labor_category === c ? ' selected' : ''}>${c.toUpperCase()}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label class="cm-form-label">UOM</label>
+          <input class="hub-input" id="edit-tpl-uom" value="${t.uom || 'each'}" />
+        </div>
+        <div>
+          <label class="cm-form-label">Equipment Type</label>
+          <input class="hub-input" id="edit-tpl-equipment" value="${t.equipment_type || ''}" placeholder="e.g., RF Gun, Pick Cart" />
+        </div>
+        <div>
+          <label class="cm-form-label">WMS Transaction</label>
+          <input class="hub-input" id="edit-tpl-wms" value="${t.wms_transaction || ''}" placeholder="e.g., PICK, PUTAWAY" />
+        </div>
+      </div>
+      <div style="margin-top:16px;">
+        <label class="cm-form-label">Description</label>
+        <textarea class="hub-input" id="edit-tpl-desc" placeholder="Describe the operation..." style="height:60px;">${t.description || ''}</textarea>
+      </div>
+
+      <!-- Live Metrics -->
+      <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; margin-top:16px;">
+        <div style="border:1px solid var(--ies-gray-200); border-radius:6px; padding:12px; text-align:center;">
+          <div style="font-size:11px; color:var(--ies-gray-500); font-weight:600;">Base UPH</div>
+          <div style="font-size:20px; font-weight:700; color:var(--ies-blue);" id="edit-live-uph">${calc.formatUph(baseUph)}</div>
+        </div>
+        <div style="border:1px solid var(--ies-gray-200); border-radius:6px; padding:12px; text-align:center;">
+          <div style="font-size:11px; color:var(--ies-gray-500); font-weight:600;">Total TMU</div>
+          <div style="font-size:20px; font-weight:700; color:var(--ies-navy);" id="edit-live-tmu">${totalTmu}</div>
+        </div>
+        <div style="border:1px solid var(--ies-gray-200); border-radius:6px; padding:12px; text-align:center;">
+          <div style="font-size:11px; color:var(--ies-gray-500); font-weight:600;">Cycle Time</div>
+          <div style="font-size:18px; font-weight:700; color:var(--ies-navy);" id="edit-live-cycle">${calc.formatTmu(totalTmu)}</div>
+        </div>
+        <div style="border:1px solid var(--ies-gray-200); border-radius:6px; padding:12px; text-align:center;">
+          <div style="font-size:11px; color:var(--ies-gray-500); font-weight:600;">Elements</div>
+          <div style="font-size:20px; font-weight:700; color:var(--ies-navy);" id="edit-live-count">${editorElements.length}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Element Sequence Editor -->
+    <div class="hub-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <div class="text-subtitle">Element Sequence</div>
+        <button class="cm-add-row-btn" data-action="add-element" style="font-size:12px; padding:6px 12px;">+ Add Element</button>
+      </div>
+
+      ${editorElements.length > 0 ? `
+        <table class="cm-grid-table" style="font-size:12px;">
+          <thead>
+            <tr>
+              <th style="width:40px;">#</th>
+              <th>Element Name</th>
+              <th style="width:120px;">MOST Sequence</th>
+              <th style="width:80px;">Seq Type</th>
+              <th style="width:70px;" class="cm-num">TMU</th>
+              <th style="width:60px;">Variable</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${editorElements.map((el, i) => `
+              <tr>
+                <td>${i + 1}</td>
+                <td><input class="hub-input" type="text" value="${el.description || ''}" data-elem-idx="${i}" data-elem-field="description" style="width:100%; font-size:11px; padding:4px 6px;" /></td>
+                <td><input class="hub-input" type="text" value="${el.most_sequence || ''}" data-elem-idx="${i}" data-elem-field="most_sequence" style="width:100%; font-size:11px; padding:4px 6px; font-family:monospace;" /></td>
+                <td>
+                  <select data-elem-idx="${i}" data-elem-field="sequence_type" style="width:100%; font-size:11px; padding:4px 6px;">
+                    <option value="general_move"${el.sequence_type === 'general_move' ? ' selected' : ''}>General Move</option>
+                    <option value="controlled_move"${el.sequence_type === 'controlled_move' ? ' selected' : ''}>Controlled</option>
+                    <option value="tool_use"${el.sequence_type === 'tool_use' ? ' selected' : ''}>Tool Use</option>
+                    <option value="body_motion"${el.sequence_type === 'body_motion' ? ' selected' : ''}>Body Motion</option>
+                  </select>
+                </td>
+                <td><input class="hub-input" type="number" value="${el.tmu || 0}" data-elem-idx="${i}" data-elem-field="tmu" style="width:100%; font-size:11px; padding:4px 6px;" /></td>
+                <td><input type="checkbox" ${el.is_variable ? 'checked' : ''} data-elem-idx="${i}" data-elem-field="is_variable" style="cursor:pointer;" /></td>
+                <td><button class="cm-delete-btn" data-action="delete-element" data-idx="${i}" style="font-size:12px;">Del</button></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      ` : `
+        <div style="text-align:center; padding:20px; color:var(--ies-gray-400); border:1px dashed var(--ies-gray-200); border-radius:6px;">
+          No elements yet. Click "+ Add Element" to start.
+        </div>
+      `}
+    </div>
+
+    <!-- Save/Cancel Buttons -->
+    <div style="display:flex; gap:8px; margin-top:20px; justify-content:flex-end;">
+      <button class="cm-delete-btn" data-action="close-editor" style="padding:10px 20px;">Cancel</button>
+      <button class="most-push-btn" data-action="save-template" style="padding:10px 20px; font-size:14px;">Save Template</button>
+    </div>
+  `;
+}
+
+// ============================================================
+// TAB 3: QUICK LABOR ANALYSIS
 // ============================================================
 
 function renderAnalysis() {
@@ -452,9 +660,10 @@ function renderAnalysis() {
 function renderAnalysisSummary(summary) {
   const cats = summary.ftesByCategory;
   const totalFte = summary.totalFtes || 1;
+  const annualCost = calc.calcAnnualizedCost(summary.dailyCost, summary.operatingDays);
 
   return `
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 24px;">
+    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-top: 24px;">
       <div class="hub-card">
         <div class="text-subtitle mb-4">Labor Summary</div>
         <div class="hub-kpi-bar">
@@ -462,25 +671,67 @@ function renderAnalysisSummary(summary) {
           <div class="hub-kpi-item"><div class="hub-kpi-label">Headcount</div><div class="hub-kpi-value">${summary.totalHeadcount}</div></div>
           <div class="hub-kpi-item"><div class="hub-kpi-label">Hrs/Day</div><div class="hub-kpi-value">${summary.totalHoursPerDay.toFixed(1)}</div></div>
         </div>
-        <div class="hub-kpi-bar mt-4">
-          <div class="hub-kpi-item"><div class="hub-kpi-label">Daily Cost</div><div class="hub-kpi-value">${formatDollar(summary.dailyCost)}</div></div>
-          <div class="hub-kpi-item"><div class="hub-kpi-label">Annual Cost</div><div class="hub-kpi-value" style="color:var(--ies-blue);">${formatDollar(summary.annualCost)}</div></div>
-        </div>
       </div>
 
       <div class="hub-card">
-        <div class="text-subtitle mb-4">FTEs by Category</div>
-        <div style="display:flex; height:24px; border-radius:4px; overflow:hidden; margin-bottom:12px;">
-          ${cats.manual > 0 ? `<div style="width:${(cats.manual / totalFte * 100).toFixed(0)}%; background:#0047AB;" title="Manual"></div>` : ''}
-          ${cats.mhe > 0 ? `<div style="width:${(cats.mhe / totalFte * 100).toFixed(0)}%; background:#20c997;" title="MHE"></div>` : ''}
-          ${cats.hybrid > 0 ? `<div style="width:${(cats.hybrid / totalFte * 100).toFixed(0)}%; background:#ff9500;" title="Hybrid"></div>` : ''}
-        </div>
-        <div style="display:flex; gap:24px;">
-          <div><span class="most-cat-badge most-cat-manual">MANUAL</span> <span style="font-weight:700; margin-left:4px;">${calc.formatFte(cats.manual)}</span></div>
-          <div><span class="most-cat-badge most-cat-mhe">MHE</span> <span style="font-weight:700; margin-left:4px;">${calc.formatFte(cats.mhe)}</span></div>
-          <div><span class="most-cat-badge most-cat-hybrid">HYBRID</span> <span style="font-weight:700; margin-left:4px;">${calc.formatFte(cats.hybrid)}</span></div>
-        </div>
+        <div class="text-subtitle mb-4">Daily Cost</div>
+        <div style="font-size:32px; font-weight:700; color:var(--ies-blue); margin-bottom:8px;">${formatDollar(summary.dailyCost)}</div>
+        <div style="font-size:12px; color:var(--ies-gray-500);">per day</div>
       </div>
+
+      <div class="hub-card">
+        <div class="text-subtitle mb-4">Annual Cost</div>
+        <div style="font-size:32px; font-weight:700; color:var(--ies-green); margin-bottom:8px;">${formatDollar(annualCost)}</div>
+        <div style="font-size:12px; color:var(--ies-gray-500);">@ ${summary.operatingDays} days/yr</div>
+      </div>
+    </div>
+
+    <div class="hub-card" style="margin-top:16px;">
+      <div class="text-subtitle mb-4">FTEs by Category</div>
+      <div style="display:flex; height:24px; border-radius:4px; overflow:hidden; margin-bottom:12px;">
+        ${cats.manual > 0 ? `<div style="width:${(cats.manual / totalFte * 100).toFixed(0)}%; background:#0047AB;" title="Manual"></div>` : ''}
+        ${cats.mhe > 0 ? `<div style="width:${(cats.mhe / totalFte * 100).toFixed(0)}%; background:#20c997;" title="MHE"></div>` : ''}
+        ${cats.hybrid > 0 ? `<div style="width:${(cats.hybrid / totalFte * 100).toFixed(0)}%; background:#ff9500;" title="Hybrid"></div>` : ''}
+      </div>
+      <div style="display:flex; gap:24px;">
+        <div><span class="most-cat-badge most-cat-manual">MANUAL</span> <span style="font-weight:700; margin-left:4px;">${calc.formatFte(cats.manual)}</span></div>
+        <div><span class="most-cat-badge most-cat-mhe">MHE</span> <span style="font-weight:700; margin-left:4px;">${calc.formatFte(cats.mhe)}</span></div>
+        <div><span class="most-cat-badge most-cat-hybrid">HYBRID</span> <span style="font-weight:700; margin-left:4px;">${calc.formatFte(cats.hybrid)}</span></div>
+      </div>
+    </div>
+
+    <!-- Saved Scenarios -->
+    ${renderSavedScenarios()}
+  `;
+}
+
+function renderSavedScenarios() {
+  return `
+    <div style="margin-top:24px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <div class="text-subtitle">Saved Scenarios</div>
+        <button class="cm-add-row-btn" data-action="save-scenario" style="font-size:12px; padding:6px 12px;">+ Save Current</button>
+      </div>
+      <div id="most-scenarios-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:12px;">
+        ${savedScenarios.map((scenario, idx) => `
+          <div class="hub-card" style="padding:12px; background:var(--ies-gray-50);">
+            <div style="font-size:13px; font-weight:700; color:var(--ies-navy); margin-bottom:4px;">${scenario.name}</div>
+            <div style="font-size:11px; color:var(--ies-gray-500); margin-bottom:8px;">${scenario.timestamp}</div>
+            <div style="font-size:11px; color:var(--ies-gray-600); margin-bottom:8px;">
+              ${scenario.lines} line${scenario.lines !== 1 ? 's' : ''} · ${scenario.pfd}% PFD
+            </div>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:6px; font-size:11px; margin-bottom:8px;">
+              <div><span style="color:var(--ies-gray-500);">FTE:</span> <strong>${scenario.ftes.toFixed(1)}</strong></div>
+              <div><span style="color:var(--ies-gray-500);">HC:</span> <strong>${scenario.headcount}</strong></div>
+            </div>
+            <div style="display:flex; gap:4px;">
+              <button class="cm-edit-btn" data-action="load-scenario" data-idx="${idx}" style="flex:1; font-size:11px; padding:4px 6px;">Load</button>
+              <button class="cm-delete-btn" data-action="delete-scenario" data-idx="${idx}" style="font-size:11px; padding:4px 6px;">Del</button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+      ${savedScenarios.length === 0 ? '<div style="text-align:center; padding:20px; color:var(--ies-gray-400); border:1px dashed var(--ies-gray-200); border-radius:6px; margin-top:8px;">No saved scenarios. Click "+ Save Current" to save your analysis.</div>' : ''}
     </div>
   `;
 }
@@ -717,10 +968,53 @@ function bindContentEvents(container) {
     });
   });
 
+  // Template-specific actions (edit, duplicate, delete)
+  container.querySelectorAll('[data-action="edit-template"]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      try {
+        editorTemplate = await api.getTemplate(id) || null;
+        editorElements = editorTemplate ? await api.listElements(id) : [];
+      } catch (err) {
+        console.warn('[MOST] Failed to load template:', err);
+      }
+      renderContent();
+    });
+  });
+
+  container.querySelectorAll('[data-action="duplicate-template"]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      try {
+        const dup = await api.duplicateTemplate(id);
+        refData.templates = await api.listTemplates();
+        bus.emit('most:template-saved', { id: dup.id });
+      } catch (err) {
+        console.error('[MOST] Duplicate template failed:', err);
+      }
+      renderContent();
+    });
+  });
+
+  container.querySelectorAll('[data-action="delete-template"]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      if (!confirm('Delete this template? This cannot be undone.')) return;
+      try {
+        await api.deleteTemplate(id);
+        refData.templates = await api.listTemplates();
+      } catch (err) {
+        console.error('[MOST] Delete template failed:', err);
+      }
+      renderContent();
+    });
+  });
+
   // Action buttons
   container.querySelectorAll('[data-action]').forEach(btn => {
     const action = btn.dataset.action;
-    if (action === 'select-template' || action === 'close-detail' || action === 'set-template-line') return;
+    if (action === 'select-template' || action === 'close-detail' || action === 'set-template-line' ||
+        action === 'edit-template' || action === 'duplicate-template' || action === 'delete-template') return;
 
     btn.addEventListener('click', () => {
       const idx = parseInt(btn.dataset.idx);
@@ -766,6 +1060,38 @@ function bindContentEvents(container) {
       renderContent();
     });
   });
+
+  // Template editor inputs
+  container.querySelectorAll('[data-elem-field]').forEach(input => {
+    input.addEventListener('change', e => {
+      const idx = parseInt(/** @type {HTMLInputElement} */ (e.target).dataset.elemIdx);
+      const field = /** @type {HTMLInputElement} */ (e.target).dataset.elemField;
+      if (editorElements[idx]) {
+        if (field === 'is_variable') {
+          editorElements[idx][field] = /** @type {HTMLInputElement} */ (e.target).checked;
+        } else if (field === 'tmu') {
+          editorElements[idx][field] = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
+        } else {
+          editorElements[idx][field] = /** @type {HTMLInputElement} */ (e.target).value;
+        }
+        updateEditorMetrics();
+      }
+    });
+  });
+
+  // Scenario load/delete buttons
+  container.querySelectorAll('[data-action="load-scenario"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.idx);
+      loadScenario(idx);
+    });
+  });
+  container.querySelectorAll('[data-action="delete-scenario"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.idx);
+      deleteScenario(idx);
+    });
+  });
 }
 
 // ============================================================
@@ -774,12 +1100,39 @@ function bindContentEvents(container) {
 
 function handleAction(action, idx) {
   switch (action) {
+    // Template Editor
+    case 'create-template':
+      editorTemplate = { id: null, name: '', process_area: '', labor_category: 'manual', uom: 'each', description: '' };
+      editorElements = [];
+      break;
+    case 'close-editor':
+      editorTemplate = null;
+      editorElements = [];
+      break;
+    case 'add-element':
+      editorElements.push(createEmptyElement());
+      updateEditorMetrics();
+      break;
+    case 'delete-element':
+      editorElements.splice(idx, 1);
+      updateEditorMetrics();
+      break;
+    case 'save-template':
+      saveTemplateAction();
+      return;
+
+    // Quick Analysis
+    case 'save-scenario':
+      saveCurrentScenario();
+      return;
     case 'add-analysis-line':
       analysis.lines.push(createEmptyAnalysisLine());
       break;
     case 'delete-analysis-line':
       analysis.lines.splice(idx, 1);
       break;
+
+    // Workflow Composer
     case 'add-wf-step':
       workflow.steps.push(createEmptyWorkflowStep());
       break;
@@ -816,7 +1169,7 @@ function pushToCostModel() {
     defaultBurdenPct: 30,
   });
 
-  /** @type {import('./types.js').MostToCmPayload} */
+  /** @type {import('./types.js?v=20260417-s2').MostToCmPayload} */
   const payload = {
     laborLines: cmLines,
     operatingDays: analysis.operating_days,
@@ -843,7 +1196,7 @@ function filterTemplates() {
 }
 
 function groupByProcessArea(templates) {
-  /** @type {Record<string, import('./types.js').MostTemplate[]>} */
+  /** @type {Record<string, import('./types.js?v=20260417-s2').MostTemplate[]>} */
   const groups = {};
   for (const t of templates) {
     const area = t.process_area || 'Other';
@@ -914,4 +1267,177 @@ function createEmptyWorkflowStep() {
 
 function formatDollar(val) {
   return '$' + (val || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+
+// ============================================================
+// TEMPLATE EDITOR ACTIONS
+// ============================================================
+
+function createEmptyElement() {
+  return {
+    id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
+    template_id: null,
+    sequence: (editorElements.length || 0) + 1,
+    description: '',
+    most_sequence: '',
+    sequence_type: 'general_move',
+    tmu: 0,
+    is_variable: false,
+    variable_driver: null,
+    variable_min: 0,
+    variable_max: 0,
+  };
+}
+
+
+function updateEditorMetrics() {
+  const totalTmu = calc.sumElementTmu(editorElements);
+  const baseUph = calc.baseUph(totalTmu);
+  const container = rootEl?.querySelector('#most-content');
+  if (!container) return;
+
+  const uphEl = container.querySelector('#edit-live-uph');
+  const tmuEl = container.querySelector('#edit-live-tmu');
+  const cycleEl = container.querySelector('#edit-live-cycle');
+  const countEl = container.querySelector('#edit-live-count');
+
+  if (uphEl) uphEl.textContent = calc.formatUph(baseUph);
+  if (tmuEl) tmuEl.textContent = totalTmu;
+  if (cycleEl) cycleEl.textContent = calc.formatTmu(totalTmu);
+  if (countEl) countEl.textContent = editorElements.length;
+}
+
+async function saveTemplateAction() {
+  const container = rootEl?.querySelector('#most-content');
+  if (!container) return;
+
+  const name = /** @type {HTMLInputElement} */ (container.querySelector('#edit-tpl-name')).value || '';
+  const area = /** @type {HTMLInputElement} */ (container.querySelector('#edit-tpl-area')).value || '';
+  const cat = /** @type {HTMLInputElement} */ (container.querySelector('#edit-tpl-cat')).value || 'manual';
+  const uom = /** @type {HTMLInputElement} */ (container.querySelector('#edit-tpl-uom')).value || 'each';
+  const equipment = /** @type {HTMLInputElement} */ (container.querySelector('#edit-tpl-equipment')).value || '';
+  const wms = /** @type {HTMLInputElement} */ (container.querySelector('#edit-tpl-wms')).value || '';
+  const desc = /** @type {HTMLInputElement} */ (container.querySelector('#edit-tpl-desc')).value || '';
+
+  if (!name || !area || editorElements.length === 0) {
+    alert('Activity name, process area, and at least 1 element are required.');
+    return;
+  }
+
+  const totalTmu = calc.sumElementTmu(editorElements);
+  const baseUph = calc.baseUph(totalTmu);
+
+  try {
+    let tpl = editorTemplate || { name, process_area: area, labor_category: cat, uom, equipment_type: equipment, wms_transaction: wms, description: desc };
+
+    if (editorTemplate?.id) {
+      // Update existing
+      tpl = await api.updateTemplate(editorTemplate.id, {
+        name, process_area: area, labor_category: cat, uom, equipment_type: equipment,
+        wms_transaction: wms, description: desc, tmu_total: totalTmu, base_uph: baseUph,
+      });
+      // Update elements
+      for (let i = 0; i < editorElements.length; i++) {
+        const el = editorElements[i];
+        el.sequence = i + 1;
+        el.template_id = tpl.id;
+        if (el.id && !el.id.includes('new')) {
+          await api.updateElement(el.id, el);
+        } else {
+          const newEl = await api.createElement(el);
+          editorElements[i].id = newEl.id;
+        }
+      }
+    } else {
+      // Create new
+      tpl = await api.createTemplate({
+        name, process_area: area, labor_category: cat, uom, equipment_type: equipment,
+        wms_transaction: wms, description: desc, tmu_total: totalTmu, base_uph: baseUph, is_active: true,
+      });
+      // Add elements
+      for (let i = 0; i < editorElements.length; i++) {
+        const el = { ...editorElements[i], sequence: i + 1, template_id: tpl.id };
+        const newEl = await api.createElement(el);
+        editorElements[i].id = newEl.id;
+      }
+    }
+
+    // Reload templates and close editor
+    refData.templates = await api.listTemplates();
+    editorTemplate = null;
+    editorElements = [];
+    bus.emit('most:template-saved', { id: tpl.id });
+    renderContent();
+  } catch (err) {
+    console.error('[MOST] Save template failed:', err);
+    alert('Failed to save template. See console for details.');
+  }
+}
+
+// ============================================================
+// SCENARIO ACTIONS (localStorage-backed)
+// ============================================================
+
+function saveCurrentScenario() {
+  const pfd = analysis.pfd_pct || 14;
+  const lines = analysis.lines.filter(l => l.daily_volume > 0).length;
+
+  if (lines === 0) {
+    alert('Add at least one activity with volume before saving.');
+    return;
+  }
+
+  const summary = calc.computeAnalysisSummary((analysis.lines || []).map(line => {
+    return {
+      ...line,
+      ...calc.computeAnalysisLine({
+        base_uph: line.base_uph,
+        pfd_pct: pfd,
+        daily_volume: line.daily_volume,
+        shift_hours: analysis.shift_hours,
+        hourly_rate: line.hourly_rate || analysis.hourly_rate,
+      }),
+    };
+  }), analysis.operating_days);
+
+  const scenario = {
+    name: `Scenario ${savedScenarios.length + 1}`,
+    timestamp: new Date().toLocaleTimeString(),
+    lines,
+    pfd,
+    shiftHrs: analysis.shift_hours,
+    rate: analysis.hourly_rate || 0,
+    ftes: summary.totalFtes,
+    headcount: summary.totalHeadcount,
+    hours: summary.totalHoursPerDay,
+    dailyCost: summary.dailyCost,
+    annualCost: summary.annualCost,
+    data: JSON.parse(JSON.stringify({ ...analysis })), // deep copy
+  };
+
+  savedScenarios.push(scenario);
+  saveScenariosToStorage();
+  renderContent();
+}
+
+function loadScenario(idx) {
+  if (!savedScenarios[idx]) return;
+  const scenario = savedScenarios[idx];
+  analysis = JSON.parse(JSON.stringify(scenario.data)); // deep copy
+  renderContent();
+}
+
+function deleteScenario(idx) {
+  if (!confirm('Delete this scenario?')) return;
+  savedScenarios.splice(idx, 1);
+  saveScenariosToStorage();
+  renderContent();
+}
+
+function saveScenariosToStorage() {
+  try {
+    localStorage.setItem('most_scenarios', JSON.stringify(savedScenarios));
+  } catch (err) {
+    console.warn('[MOST] Failed to save scenarios:', err);
+  }
 }

@@ -7,10 +7,10 @@
  * @module tools/network-opt/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-s1';
-import { state } from '../../shared/state.js?v=20260417-s1';
-import * as calc from './calc.js?v=20260417-s1';
-import * as api from './api.js?v=20260417-s1';
+import { bus } from '../../shared/event-bus.js?v=20260417-s2';
+import { state } from '../../shared/state.js?v=20260417-s2';
+import * as calc from './calc.js?v=20260417-s2';
+import * as api from './api.js?v=20260417-s2';
 
 // ============================================================
 // STATE
@@ -25,25 +25,25 @@ let activeView = 'setup';
 /** @type {'facilities' | 'demand' | 'modemix' | 'service'} */
 let activeSection = 'facilities';
 
-/** @type {import('./types.js').Facility[]} */
+/** @type {import('./types.js?v=20260417-s2').Facility[]} */
 let facilities = [];
 
-/** @type {import('./types.js').DemandPoint[]} */
+/** @type {import('./types.js?v=20260417-s2').DemandPoint[]} */
 let demands = [];
 
-/** @type {import('./types.js').ModeMix} */
+/** @type {import('./types.js?v=20260417-s2').ModeMix} */
 let modeMix = { tlPct: 30, ltlPct: 40, parcelPct: 30 };
 
-/** @type {import('./types.js').RateCard} */
+/** @type {import('./types.js?v=20260417-s2').RateCard} */
 let rateCard = { ...calc.DEFAULT_RATES };
 
-/** @type {import('./types.js').ServiceConfig} */
+/** @type {import('./types.js?v=20260417-s2').ServiceConfig} */
 let serviceConfig = { ...calc.DEFAULT_SERVICE };
 
-/** @type {import('./types.js').ScenarioResult[]} */
+/** @type {import('./types.js?v=20260417-s2').ScenarioResult[]} */
 let scenarios = [];
 
-/** @type {import('./types.js').ScenarioResult|null} */
+/** @type {import('./types.js?v=20260417-s2').ScenarioResult|null} */
 let activeScenario = null;
 
 /** @type {string|null} */
@@ -51,6 +51,12 @@ let selectedArchetype = null;
 
 /** @type {object|null} map instance */
 let mapInstance = null;
+
+/** @type {import('./types.js?v=20260417-s2').ScenarioResult[]|null} */
+let comparisonResults = null;
+
+/** @type {number|null} */
+let recommendedDCCount = null;
 
 // ============================================================
 // DEMO FACILITIES
@@ -104,6 +110,8 @@ export async function mount(el) {
   scenarios = [];
   activeScenario = null;
   selectedArchetype = null;
+  comparisonResults = null;
+  recommendedDCCount = null;
 
   el.innerHTML = renderShell();
   bindShellEvents();
@@ -230,8 +238,10 @@ function renderSidebar() {
     <span class="text-caption" style="color:var(--ies-gray-400);">ACTIONS</span>
     <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px;">
       <button class="hub-btn hub-btn-primary hub-btn-sm" data-action="run" style="width:100%;">Run Scenario</button>
-      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="add-scenario" style="width:100%;">Add to Comparison</button>
-      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="clear-scenarios" style="width:100%;">Clear Scenarios</button>
+      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="compare-dcs" style="width:100%;font-size:11px;">Compare 1-5 DCs</button>
+      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="exact-solve" style="width:100%;font-size:11px;">Exact Solver</button>
+      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="export-csv" style="width:100%;font-size:11px;">Export CSV</button>
+      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="clear-scenarios" style="width:100%;">Clear All</button>
     </div>
   `;
 
@@ -248,8 +258,10 @@ function renderSidebar() {
     btn.addEventListener('click', () => {
       const action = /** @type {HTMLElement} */ (btn).dataset.action;
       if (action === 'run') runScenario();
-      else if (action === 'add-scenario') addToComparison();
-      else if (action === 'clear-scenarios') { scenarios = []; activeScenario = null; renderContentView(); }
+      else if (action === 'compare-dcs') compareMultipleDCs();
+      else if (action === 'exact-solve') runExactSolver();
+      else if (action === 'export-csv') exportToCSV();
+      else if (action === 'clear-scenarios') { scenarios = []; activeScenario = null; comparisonResults = null; renderContentView(); }
     });
   });
 }
@@ -291,6 +303,102 @@ function addToComparison() {
     b.className = `hub-btn hub-btn-sm ${b.dataset.view === activeView ? 'hub-btn-primary' : 'hub-btn-secondary'}`;
   });
   renderContentView();
+}
+
+function compareMultipleDCs() {
+  if (demands.length === 0) {
+    alert('Please add demand points first.');
+    return;
+  }
+  comparisonResults = calc.multiDCComparison(facilities, demands, modeMix, rateCard, serviceConfig, 5);
+  const rec = calc.recommendOptimalDCs(comparisonResults);
+  recommendedDCCount = rec.recommendedIdx;
+  activeView = 'comparison';
+  rootEl?.querySelectorAll('#no-view-tabs button').forEach(b => {
+    b.className = `hub-btn hub-btn-sm ${b.dataset.view === activeView ? 'hub-btn-primary' : 'hub-btn-secondary'}`;
+  });
+  renderContentView();
+}
+
+function runExactSolver() {
+  if (demands.length === 0) {
+    alert('Please add demand points first.');
+    return;
+  }
+  const openCount = facilities.filter(f => f.isOpen).length;
+  if (openCount === 0) {
+    alert('Please activate at least one facility.');
+    return;
+  }
+  const result = calc.exactSolver(facilities, demands, 5, modeMix, rateCard, serviceConfig);
+  if (!result) {
+    alert('Exact solver search space is too large (>10,000 combinations). Use comparison instead.');
+    return;
+  }
+  comparisonResults = result.scenarios;
+  const rec = calc.recommendOptimalDCs(comparisonResults);
+  recommendedDCCount = rec.recommendedIdx;
+  activeView = 'comparison';
+  rootEl?.querySelectorAll('#no-view-tabs button').forEach(b => {
+    b.className = `hub-btn hub-btn-sm ${b.dataset.view === activeView ? 'hub-btn-primary' : 'hub-btn-secondary'}`;
+  });
+  renderContentView();
+}
+
+function exportToCSV() {
+  if (!activeScenario && !comparisonResults) {
+    alert('Run a scenario first to export data.');
+    return;
+  }
+
+  let csv = 'IES Hub Network Optimization Export\n';
+  csv += new Date().toISOString() + '\n\n';
+
+  // Facilities
+  csv += 'FACILITIES\n';
+  csv += 'Name,City,State,Lat,Lng,Capacity,FixedCost,VarCost,IsOpen\n';
+  facilities.forEach(f => {
+    csv += `${f.name},${f.city || ''},${f.state || ''},${f.lat.toFixed(4)},${f.lng.toFixed(4)},${f.capacity || 0},${f.fixedCost || 0},${f.variableCost || 0},${f.isOpen ? 'Y' : 'N'}\n`;
+  });
+
+  csv += '\nDEMAND POINTS\n';
+  csv += 'ZIP3,Lat,Lng,AnnualDemand,MaxDays,AvgWeight\n';
+  demands.forEach(d => {
+    csv += `${d.zip3 || ''},${d.lat.toFixed(4)},${d.lng.toFixed(4)},${d.annualDemand},${d.maxDays || 3},${d.avgWeight || 25}\n`;
+  });
+
+  if (activeScenario) {
+    csv += '\nSCENARIO: ' + activeScenario.name + '\n';
+    csv += `Total Cost,${activeScenario.totalCost}\n`;
+    csv += `Avg Distance,${activeScenario.avgDistance.toFixed(1)}\n`;
+    csv += `Service Level,${activeScenario.serviceLevel.toFixed(1)}%\n`;
+    csv += `SLA Met,${activeScenario.slaMet}/${activeScenario.slaTotal}\n\n`;
+
+    csv += 'LANE ASSIGNMENTS\n';
+    csv += 'FacilityID,DemandID,Distance,Transit,TLCost,LTLCost,ParcelCost,BlendedCost,MeetsSLA\n';
+    activeScenario.assignments.forEach(a => {
+      csv += `${a.facilityId},${a.demandId},${a.distanceMiles.toFixed(1)},${a.transitDays},${a.tlCost.toFixed(2)},${a.ltlCost.toFixed(2)},${a.parcelCost.toFixed(2)},${a.blendedCost.toFixed(2)},${a.meetsSlA ? 'Y' : 'N'}\n`;
+    });
+  }
+
+  if (comparisonResults) {
+    csv += '\nCOMPARISON RESULTS\n';
+    csv += 'DCCount,TotalCost,AvgDistance,ServiceLevel,SLAMet\n';
+    comparisonResults.forEach((s, i) => {
+      csv += `${i + 1},${s.totalCost.toFixed(2)},${s.avgDistance.toFixed(1)},${s.serviceLevel.toFixed(1)},${s.slaMet}/${s.slaTotal}\n`;
+    });
+  }
+
+  // Download
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `netopt-export-${new Date().getTime()}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 // ============================================================
@@ -700,6 +808,21 @@ function initMap() {
       radius: 10, fillColor: color, color: '#fff', weight: 2, fillOpacity: f.isOpen ? 0.9 : 0.4,
     }).addTo(mapInstance);
     marker.bindPopup(`<strong>${f.name}</strong><br>${f.city}, ${f.state}<br>Capacity: ${(f.capacity || 0).toLocaleString()}<br>${f.isOpen ? 'OPEN' : 'CLOSED'}`);
+
+    // Service zone circle (approximate 2-day radius for open facilities)
+    if (f.isOpen) {
+      // Rough estimate: ~500 miles at 50 mph = 10 hours → ~1 day, so 2-day = ~800 miles
+      const radiusMiles = 800;
+      const radiusMeters = radiusMiles * 1609.34;
+      L.circle([f.lat, f.lng], {
+        radius: radiusMeters,
+        color: color,
+        weight: 1,
+        opacity: 0.2,
+        fillColor: color,
+        fillOpacity: 0.08,
+      }).addTo(mapInstance);
+    }
   });
 
   // Demand markers
@@ -846,15 +969,112 @@ function costCard(label, amount, total) {
 // ============================================================
 
 function renderComparison(el) {
-  if (scenarios.length === 0) {
+  // Show multi-DC comparison if available, otherwise show scenario comparison
+  if (comparisonResults && comparisonResults.length > 0) {
+    renderMultiDCComparison(el);
+  } else if (scenarios.length === 0) {
     el.innerHTML = `
       <div class="hub-card">
-        <p class="text-body text-muted">No scenarios to compare yet. Use "Add to Comparison" in the sidebar to build your comparison set.</p>
+        <p class="text-body text-muted">No scenarios to compare yet. Use "Compare 1-5 DCs" or "Add to Comparison" in the sidebar to build your comparison set.</p>
       </div>
     `;
     return;
+  } else {
+    renderScenarioComparison(el);
   }
+}
 
+function renderMultiDCComparison(el) {
+  const rec = calc.recommendOptimalDCs(comparisonResults);
+
+  el.innerHTML = `
+    <div style="max-width:1200px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <h3 class="text-section" style="margin:0;">DC Network Comparison (1-5 facilities)</h3>
+        <span style="font-size:11px;color:var(--ies-gray-400);">${comparisonResults.length} scenario(s)</span>
+      </div>
+
+      <!-- Recommendation Panel -->
+      <div class="hub-card" style="margin-bottom:20px;background:linear-gradient(135deg,#f0fdf4,#f0f9ff);border:1px solid #22c55e;padding:16px 20px;">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+          <span style="font-size:20px;">✓</span>
+          <span style="font-size:14px;font-weight:700;color:#059669;">RECOMMENDED</span>
+        </div>
+        <div style="font-size:13px;color:var(--ies-gray-700);line-height:1.6;margin-bottom:12px;">
+          <strong>${rec.recommendedIdx + 1} Distribution Centers:</strong> ${rec.recommendation}
+        </div>
+        <div style="display:flex;gap:20px;flex-wrap:wrap;">
+          <div style="background:#fff;padding:12px 16px;border-radius:6px;border:1px solid #22c55e;">
+            <div style="font-size:11px;color:var(--ies-gray-500);font-weight:600;text-transform:uppercase;">Annual Savings</div>
+            <div style="font-size:18px;font-weight:800;color:#059669;">${calc.formatCurrency(rec.savings, { compact: true })}</div>
+            <div style="font-size:10px;color:var(--ies-gray-500);">${calc.formatPct(rec.savingsPct)} vs 1 DC</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Comparison Table -->
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:800px;">
+          <thead>
+            <tr style="border-bottom:2px solid var(--ies-gray-200);background:#f9fafb;">
+              <th style="text-align:left;padding:10px 8px;font-weight:700;">DCs</th>
+              <th style="text-align:right;padding:10px 8px;font-weight:700;">Avg Distance</th>
+              <th style="text-align:right;padding:10px 8px;font-weight:700;">Annual Freight</th>
+              <th style="text-align:right;padding:10px 8px;font-weight:700;">Transit Days</th>
+              <th style="text-align:right;padding:10px 8px;font-weight:700;">Service Level</th>
+              <th style="text-align:right;padding:10px 8px;font-weight:700;">Savings vs 1 DC</th>
+              <th style="text-align:center;padding:10px 8px;font-weight:700;">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${comparisonResults.map((s, i) => {
+              const baseline = comparisonResults[0].totalCost;
+              const savings = baseline - s.totalCost;
+              const savingsPct = baseline > 0 ? (savings / baseline) * 100 : 0;
+              const isRecommended = i === rec.recommendedIdx;
+
+              return `
+                <tr style="border-bottom:1px solid var(--ies-gray-200);background:${isRecommended ? '#f0fdf4' : 'transparent'};">
+                  <td style="padding:10px 8px;font-weight:700;color:var(--ies-navy);">${i + 1}</td>
+                  <td style="padding:10px 8px;text-align:right;">${calc.formatMiles(s.avgDistance)}</td>
+                  <td style="padding:10px 8px;text-align:right;">${calc.formatCurrency(s.costBreakdown.transport, { compact: true })}</td>
+                  <td style="padding:10px 8px;text-align:right;">${s.assignments.length > 0 ? (s.assignments.reduce((sum, a) => sum + a.transitDays, 0) / s.assignments.length).toFixed(1) : '—'} days</td>
+                  <td style="padding:10px 8px;text-align:right;font-weight:600;color:${s.serviceLevel >= 95 ? '#22c55e' : s.serviceLevel >= 90 ? '#f59e0b' : '#ef4444'};">${calc.formatPct(s.serviceLevel)}</td>
+                  <td style="padding:10px 8px;text-align:right;font-weight:700;${savings < 0 ? 'color:#ef4444;' : 'color:#22c55e;'}">${savings >= 0 ? '+' : ''}${calc.formatCurrency(savings, { compact: true })}</td>
+                  <td style="padding:10px 8px;text-align:center;">
+                    ${isRecommended ? '<span style="display:inline-block;padding:4px 12px;background:#22c55e;color:#fff;border-radius:12px;font-size:11px;font-weight:700;">RECOMMENDED</span>' : ''}
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Cost Comparison Chart -->
+      <div class="hub-card" style="margin-top:20px;padding:20px;">
+        <div style="font-size:14px;font-weight:700;margin-bottom:16px;">Total Cost by DC Count</div>
+        <div style="display:flex;align-items:flex-end;gap:12px;height:200px;align-items:flex-end;">
+          ${comparisonResults.map((s, i) => {
+            const maxCost = Math.max(...comparisonResults.map(r => r.totalCost));
+            const pct = maxCost > 0 ? (s.totalCost / maxCost) * 100 : 0;
+            const isRecommended = i === rec.recommendedIdx;
+
+            return `
+              <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;">
+                <div style="width:100%;background:${isRecommended ? '#22c55e' : '#3b82f6'};border-radius:6px 6px 0 0;height:${pct}%;transition:all 0.3s;" title="${calc.formatCurrency(s.totalCost)}"></div>
+                <div style="font-size:12px;font-weight:700;color:var(--ies-navy);">${i + 1} DC</div>
+                <div style="font-size:10px;color:var(--ies-gray-500);">${calc.formatCurrency(s.totalCost, { compact: true })}</div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderScenarioComparison(el) {
   const compared = calc.compareScenarios(scenarios);
 
   el.innerHTML = `

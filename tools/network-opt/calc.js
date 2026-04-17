@@ -162,8 +162,8 @@ export function parcelCost(weight, miles, zoneRates = DEFAULT_RATES.parcelZoneRa
  * Compute blended transportation cost based on mode mix.
  * @param {number} miles
  * @param {number} avgWeight — lbs per shipment
- * @param {import('./types.js').ModeMix} modeMix
- * @param {import('./types.js').RateCard} [rateCard]
+ * @param {import('./types.js?v=20260417-s2').ModeMix} modeMix
+ * @param {import('./types.js?v=20260417-s2').RateCard} [rateCard]
  * @returns {{ tlCost: number, ltlCost: number, parcelCost: number, blendedCost: number }}
  */
 export function blendedLaneCost(miles, avgWeight, modeMix, rateCard = DEFAULT_RATES) {
@@ -186,12 +186,12 @@ export function blendedLaneCost(miles, avgWeight, modeMix, rateCard = DEFAULT_RA
 
 /**
  * Assign each demand point to nearest open facility.
- * @param {import('./types.js').Facility[]} facilities
- * @param {import('./types.js').DemandPoint[]} demands
- * @param {import('./types.js').ModeMix} modeMix
- * @param {import('./types.js').RateCard} [rateCard]
- * @param {import('./types.js').ServiceConfig} [serviceConfig]
- * @returns {import('./types.js').LaneCost[]}
+ * @param {import('./types.js?v=20260417-s2').Facility[]} facilities
+ * @param {import('./types.js?v=20260417-s2').DemandPoint[]} demands
+ * @param {import('./types.js?v=20260417-s2').ModeMix} modeMix
+ * @param {import('./types.js?v=20260417-s2').RateCard} [rateCard]
+ * @param {import('./types.js?v=20260417-s2').ServiceConfig} [serviceConfig]
+ * @returns {import('./types.js?v=20260417-s2').LaneCost[]}
  */
 export function assignDemand(facilities, demands, modeMix, rateCard = DEFAULT_RATES, serviceConfig = DEFAULT_SERVICE) {
   const openFacilities = facilities.filter(f => f.isOpen !== false);
@@ -237,12 +237,12 @@ export function assignDemand(facilities, demands, modeMix, rateCard = DEFAULT_RA
 /**
  * Evaluate a network scenario.
  * @param {string} name
- * @param {import('./types.js').Facility[]} facilities
- * @param {import('./types.js').DemandPoint[]} demands
- * @param {import('./types.js').ModeMix} modeMix
- * @param {import('./types.js').RateCard} [rateCard]
- * @param {import('./types.js').ServiceConfig} [serviceConfig]
- * @returns {import('./types.js').ScenarioResult}
+ * @param {import('./types.js?v=20260417-s2').Facility[]} facilities
+ * @param {import('./types.js?v=20260417-s2').DemandPoint[]} demands
+ * @param {import('./types.js?v=20260417-s2').ModeMix} modeMix
+ * @param {import('./types.js?v=20260417-s2').RateCard} [rateCard]
+ * @param {import('./types.js?v=20260417-s2').ServiceConfig} [serviceConfig]
+ * @returns {import('./types.js?v=20260417-s2').ScenarioResult}
  */
 export function evaluateScenario(name, facilities, demands, modeMix, rateCard, serviceConfig) {
   const assignments = assignDemand(facilities, demands, modeMix, rateCard, serviceConfig);
@@ -277,8 +277,8 @@ export function evaluateScenario(name, facilities, demands, modeMix, rateCard, s
 
 /**
  * Compare multiple scenarios.
- * @param {import('./types.js').ScenarioResult[]} scenarios
- * @returns {Array<import('./types.js').ScenarioResult & { verdict: string, deltaPct: number }>}
+ * @param {import('./types.js?v=20260417-s2').ScenarioResult[]} scenarios
+ * @returns {Array<import('./types.js?v=20260417-s2').ScenarioResult & { verdict: string, deltaPct: number }>}
  */
 export function compareScenarios(scenarios) {
   if (!scenarios.length) return [];
@@ -325,6 +325,222 @@ export function listArchetypes() {
  */
 export function getArchetype(key) {
   return ARCHETYPES[key] || null;
+}
+
+// ============================================================
+// MULTI-DC COMPARISON & OPTIMIZATION
+// ============================================================
+
+/**
+ * Generate all combinations of k items from array (for exact solver).
+ * @param {any[]} arr
+ * @param {number} k
+ * @returns {any[][]}
+ */
+function getCombinations(arr, k) {
+  if (k === 0) return [[]];
+  if (arr.length < k) return [];
+  const results = [];
+  function combine(start, chosen) {
+    if (chosen.length === k) {
+      results.push(chosen.slice());
+      return;
+    }
+    for (let i = start; i <= arr.length - (k - chosen.length); i++) {
+      chosen.push(arr[i]);
+      combine(i + 1, chosen);
+      chosen.pop();
+    }
+  }
+  combine(0, []);
+  return results;
+}
+
+/**
+ * Exact solver: enumerate all combinations of candidate facility locations.
+ * Finds the provably optimal solution by brute force. Returns null if space is too large.
+ * @param {import('./types.js?v=20260417-s2').Facility[]} facilities
+ * @param {import('./types.js?v=20260417-s2').DemandPoint[]} demands
+ * @param {number} maxFacilities — max number of DCs to test
+ * @param {import('./types.js?v=20260417-s2').ModeMix} modeMix
+ * @param {import('./types.js?v=20260417-s2').RateCard} [rateCard]
+ * @param {import('./types.js?v=20260417-s2').ServiceConfig} [serviceConfig]
+ * @returns {{scenarios: import('./types.js?v=20260417-s2').ScenarioResult[], optimal: import('./types.js?v=20260417-s2').ScenarioResult|null} | null}
+ */
+export function exactSolver(facilities, demands, maxFacilities, modeMix, rateCard = DEFAULT_RATES, serviceConfig = DEFAULT_SERVICE) {
+  const openCandidates = facilities.filter(f => f.isOpen !== false);
+  if (openCandidates.length === 0) return null;
+
+  // Check if search space is tractable
+  // Rough estimate: sum of C(n, k) for k=1..min(maxFacilities, n)
+  let totalCombos = 0;
+  for (let k = 1; k <= Math.min(maxFacilities, openCandidates.length); k++) {
+    totalCombos += binomialCoeff(openCandidates.length, k);
+    if (totalCombos > 10000) return null; // Too large
+  }
+
+  const scenarios = [];
+  let optimal = null;
+
+  // Try all subsets from 1 to maxFacilities facilities
+  for (let numFacs = 1; numFacs <= Math.min(maxFacilities, openCandidates.length); numFacs++) {
+    const combos = getCombinations(openCandidates, numFacs);
+
+    for (const combo of combos) {
+      // Create a scenario with this combination of facilities open, others closed
+      const facConfig = facilities.map(f =>
+        combo.find(c => c.id === f.id) ? { ...f, isOpen: true } : { ...f, isOpen: false }
+      );
+      const result = evaluateScenario(`${numFacs} DC`, facConfig, demands, modeMix, rateCard, serviceConfig);
+      scenarios.push(result);
+
+      if (!optimal || result.totalCost < optimal.totalCost) {
+        optimal = result;
+      }
+    }
+  }
+
+  return { scenarios, optimal };
+}
+
+/**
+ * Binomial coefficient C(n, k).
+ * @param {number} n
+ * @param {number} k
+ * @returns {number}
+ */
+function binomialCoeff(n, k) {
+  if (k > n) return 0;
+  if (k === 0 || k === n) return 1;
+  k = Math.min(k, n - k);
+  let result = 1;
+  for (let i = 0; i < k; i++) {
+    result = result * (n - i) / (i + 1);
+  }
+  return Math.round(result);
+}
+
+/**
+ * Run optimization for k=1 through maxDCs, return array of results.
+ * @param {import('./types.js?v=20260417-s2').Facility[]} facilities
+ * @param {import('./types.js?v=20260417-s2').DemandPoint[]} demands
+ * @param {import('./types.js?v=20260417-s2').ModeMix} modeMix
+ * @param {import('./types.js?v=20260417-s2').RateCard} [rateCard]
+ * @param {import('./types.js?v=20260417-s2').ServiceConfig} [serviceConfig]
+ * @param {number} [maxDCs=5]
+ * @returns {import('./types.js?v=20260417-s2').ScenarioResult[]}
+ */
+export function multiDCComparison(facilities, demands, modeMix, rateCard = DEFAULT_RATES, serviceConfig = DEFAULT_SERVICE, maxDCs = 5) {
+  const results = [];
+  const openFacs = facilities.filter(f => f.isOpen !== false);
+  const maxK = Math.min(maxDCs, openFacs.length);
+
+  for (let k = 1; k <= maxK; k++) {
+    // Greedy: select k best facilities by lowest cost
+    const sorted = [...openFacs].sort((a, b) => (a.fixedCost || 0) - (b.fixedCost || 0));
+    const selected = sorted.slice(0, k);
+    const facConfig = facilities.map(f =>
+      selected.find(s => s.id === f.id) ? { ...f, isOpen: true } : { ...f, isOpen: false }
+    );
+    const result = evaluateScenario(`${k} DC${k === 1 ? '' : 's'}`, facConfig, demands, modeMix, rateCard, serviceConfig);
+    results.push(result);
+  }
+
+  return results;
+}
+
+/**
+ * Recommend optimal DC count using elbow method.
+ * Finds where marginal improvement drops below threshold (8%).
+ * @param {import('./types.js?v=20260417-s2').ScenarioResult[]} comparisonResults
+ * @returns {{recommendedIdx: number, recommendation: string, savings: number, savingsPct: number}}
+ */
+export function recommendOptimalDCs(comparisonResults) {
+  if (comparisonResults.length === 0) {
+    return { recommendedIdx: 0, recommendation: 'No scenarios available.', savings: 0, savingsPct: 0 };
+  }
+
+  const baselineCost = comparisonResults[0].totalCost;
+  const threshold = 0.08; // 8% improvement threshold
+  let recommendedIdx = 0;
+  let bestImprovement = 0;
+
+  for (let i = 1; i < comparisonResults.length; i++) {
+    const prevCost = comparisonResults[i - 1].totalCost;
+    const currCost = comparisonResults[i].totalCost;
+    const improvement = (prevCost - currCost) / prevCost;
+
+    if (improvement > threshold && improvement > bestImprovement) {
+      bestImprovement = improvement;
+      recommendedIdx = i;
+    }
+  }
+
+  const rec = comparisonResults[recommendedIdx];
+  const savings = baselineCost - rec.totalCost;
+  const savingsPct = baselineCost > 0 ? (savings / baselineCost) * 100 : 0;
+
+  let narrative = '';
+  if (recommendedIdx === 0) {
+    narrative = 'Single DC provides the most cost-effective network. Additional facilities show diminishing returns.';
+  } else {
+    const numDCs = comparisonResults[recommendedIdx].assignments.length > 0
+      ? Math.max(...comparisonResults[recommendedIdx].assignments.map(a => a.facilityId).filter((v, i, a) => a.indexOf(v) === i)).length
+      : recommendedIdx + 1;
+    narrative = `${recommendedIdx + 1} DCs offer the best balance of cost and service. Adding more facilities yields less than 8% improvement per incremental DC.`;
+  }
+
+  return {
+    recommendedIdx,
+    recommendation: narrative,
+    savings,
+    savingsPct,
+  };
+}
+
+/**
+ * Compute LTL cost with distance-based multiplier and CWT pricing.
+ * @param {number} distance — miles
+ * @param {number} weight — lbs
+ * @param {string} freightClass — e.g., '85', '100', '125' (NMFC class)
+ * @param {import('./types.js?v=20260417-s2').RateCard} [rateCard]
+ * @returns {number}
+ */
+export function calcLTLCost(distance, weight, freightClass, rateCard = DEFAULT_RATES) {
+  // Simplified: use base rate with distance factor and freight class adjustment
+  const distanceFactor = distance > 500 ? 1.15 : distance > 250 ? 1.08 : 1.0;
+  const classMultiplier = {
+    '50': 0.75, '55': 0.85, '60': 0.95, '70': 1.05, '85': 1.15, '100': 1.30, '125': 1.50,
+  }[freightClass] || 1.15;
+
+  const cwt = Math.max(1, weight) / 100;
+  const baseRate = rateCard.ltlBaseRate || 18.50;
+  return cwt * baseRate * classMultiplier * distanceFactor * (1 + (rateCard.fuelSurcharge || 0.12));
+}
+
+/**
+ * Compute parcel cost with zone-based rate card lookup and weight-tiered pricing.
+ * @param {number} distance — miles
+ * @param {number} weight — lbs
+ * @param {string} carrier — e.g., 'ups', 'fedex', 'usps'
+ * @param {import('./types.js?v=20260417-s2').RateCard} [rateCard]
+ * @returns {number}
+ */
+export function calcParcelCost(distance, weight, carrier, rateCard = DEFAULT_RATES) {
+  const zone = parcelZone(distance);
+  const zoneIdx = Math.max(0, Math.min(zone - 2, rateCard.parcelZoneRates.length - 1));
+  const brackets = PARCEL_WEIGHT_BRACKETS;
+
+  // Find weight bracket
+  let bracketIdx = 0;
+  for (let i = 0; i < brackets.length; i++) {
+    if (weight >= brackets[i]) bracketIdx = i;
+  }
+
+  // Carrier adjustment
+  const carrierMult = { ups: 1.0, fedex: 1.05, usps: 0.95 }[carrier.toLowerCase()] || 1.0;
+  const base = rateCard.parcelZoneRates[zoneIdx]?.[bracketIdx] || 15;
+  return base * carrierMult * (1 + (rateCard.fuelSurcharge || 0.12));
 }
 
 // ============================================================

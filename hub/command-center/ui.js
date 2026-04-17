@@ -7,13 +7,18 @@
  * @module hub/command-center/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-s1';
-import * as api from './api.js?v=20260417-s1';
+import { bus } from '../../shared/event-bus.js?v=20260417-s2';
+import * as api from './api.js?v=20260417-s2';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
 let refreshTimer = null;
 let liveData = null;
+
+// Chart.js instances
+let dieselChartInstance = null;
+let freightChartInstance = null;
+let laborChartInstance = null;
 
 export async function mount(el) {
   rootEl = el;
@@ -30,6 +35,7 @@ export async function mount(el) {
 
 export function unmount() {
   if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+  destroyAllCharts();
   rootEl = null;
   bus.emit('command-center:unmounted');
 }
@@ -101,42 +107,33 @@ function render() {
         </div>
       </div>
 
-      <!-- Pipeline KPIs + Quick Launch -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+      <!-- Charts: Diesel, Freight, Labor -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:20px;">
 
-        <!-- Pipeline Snapshot -->
-        <div class="hub-card" style="padding:20px;">
-          <div style="font-size:13px;font-weight:700;margin-bottom:14px;">Pipeline Snapshot</div>
-          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;">
-            ${miniKpi('Active Deals', d.pipeline.activeDeals, '#2563eb')}
-            ${miniKpi('Total Pipeline', '$' + (d.pipeline.totalRevenue / 1e6).toFixed(1) + 'M', '#16a34a')}
-            ${miniKpi('Avg Margin', d.pipeline.avgMargin.toFixed(1) + '%', '#7c3aed')}
-            ${miniKpi('Sites in Design', d.pipeline.totalSites, '#d97706')}
-          </div>
-          <div style="font-size:11px;color:var(--ies-gray-400);margin-bottom:8px;">DOS Stage Distribution</div>
-          <div style="display:flex;gap:4px;height:24px;border-radius:4px;overflow:hidden;">
-            ${d.pipeline.stageCounts.map((c, i) => {
-              const colors = ['#6b7280', '#2563eb', '#7c3aed', '#d97706', '#ea580c', '#16a34a'];
-              const names = ['Qual', 'Disc', 'Design', 'Prop', 'Nego', 'Impl'];
-              const pct = d.pipeline.activeDeals > 0 ? (c / d.pipeline.activeDeals * 100) : 0;
-              return pct > 0 ? `<div style="flex:${c};background:${colors[i]};display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;" title="${names[i]}: ${c}">${c > 0 ? c : ''}</div>` : '';
-            }).join('')}
-          </div>
+        <!-- Diesel Price Trend -->
+        <div class="hub-card" style="padding:16px;display:flex;flex-direction:column;">
+          <div style="font-size:13px;font-weight:700;margin-bottom:12px;">Diesel Price Trend</div>
+          <div id="cc-diesel-chart" style="flex:1;min-height:350px;position:relative;"></div>
         </div>
 
-        <!-- Quick Launch -->
-        <div class="hub-card" style="padding:20px;">
-          <div style="font-size:13px;font-weight:700;margin-bottom:14px;">Design Tools</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-            ${toolTile('Cost Model Builder', 'designtools/cost-model', '#2563eb', 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1.41 16.09V20h-2.67v-1.93c-1.71-.36-3.16-1.46-3.27-3.4h1.96c.1 1.05.82 1.87 2.65 1.87 1.96 0 2.4-.98 2.4-1.59 0-.83-.44-1.61-2.67-2.14-2.48-.6-4.18-1.62-4.18-3.67 0-1.72 1.39-2.84 3.11-3.21V4h2.67v1.95c1.86.45 2.79 1.86 2.85 3.39H14.3c-.05-1.11-.64-1.87-2.22-1.87-1.52 0-2.4.68-2.4 1.64 0 .84.65 1.39 2.67 1.94s4.18 1.36 4.18 3.85c0 1.89-1.44 2.94-3.12 3.19z')}
-            ${toolTile('Warehouse Sizing', 'designtools/warehouse-sizing', '#16a34a', 'M3 21h18V3H3v18zm2-2V5h14v14H5z M7 7h4v4H7V7z M13 7h4v4h-4V7z M7 13h4v4H7v-4z')}
-            ${toolTile('MOST Standards', 'designtools/most-standards', '#ea580c', 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z')}
-            ${toolTile('Network Optimizer', 'designtools/network-opt', '#dc2626', 'M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l5.447 2.724A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7')}
-            ${toolTile('Fleet Modeler', 'designtools/fleet-modeler', '#7c3aed', 'M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0')}
-            ${toolTile('Center of Gravity', 'designtools/center-of-gravity', '#0891b2', 'M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z M15 11a3 3 0 11-6 0 3 3 0 016 0z')}
-            ${toolTile('Multi-Site Analyzer', 'designtools/deal-manager', '#d97706', 'M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7')}
-            ${toolTile('Deal Management', 'deals', '#64748b', 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4')}
-          </div>
+        <!-- Freight Rate Index -->
+        <div class="hub-card" style="padding:16px;display:flex;flex-direction:column;">
+          <div style="font-size:13px;font-weight:700;margin-bottom:12px;">Freight Rate Index</div>
+          <div id="cc-freight-chart" style="flex:1;min-height:350px;position:relative;"></div>
+        </div>
+
+        <!-- Avg Warehouse Wage by Region -->
+        <div class="hub-card" style="padding:16px;display:flex;flex-direction:column;">
+          <div style="font-size:13px;font-weight:700;margin-bottom:12px;">Avg Warehouse Wage by Region</div>
+          <div id="cc-labor-chart" style="flex:1;min-height:350px;position:relative;"></div>
+        </div>
+      </div>
+
+      <!-- RFP Signals Feed -->
+      <div style="margin-bottom:20px;">
+        <div style="font-size:12px;font-weight:700;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">RFP Signals</div>
+        <div class="hub-card" id="cc-rfp-feed" style="padding:0;overflow-y:auto;">
+          ${renderRfpFeed(d.rfpSignals)}
         </div>
       </div>
 
@@ -177,6 +174,7 @@ function render() {
 
   bindEvents();
   matchAlertHeight();
+  initCharts();
 }
 
 /** Match the alerts card height to the sector pulse grid height */
@@ -212,10 +210,11 @@ function bindEvents() {
       return;
     }
 
-    // Alert click -> Market Explorer
-    const alert = target.closest('[data-alert-market]');
-    if (alert) {
-      window.location.hash = 'marketmap';
+    // Alert link -> open source URL in new tab
+    const alertLink = target.closest('[data-alert-link]');
+    if (alertLink) {
+      const url = /** @type {HTMLElement} */ (alertLink).dataset.alertLink;
+      if (url) window.open(url, '_blank');
       return;
     }
   });
@@ -232,9 +231,21 @@ async function refreshNow() {
 function kpiCard(label, value, trend, color, change) {
   const arrow = trend === 'up' ? '↑' : trend === 'down' ? '↓' : '→';
   const trendColor = trend === 'up' ? '#dc2626' : trend === 'down' ? '#16a34a' : 'var(--ies-gray-400)';
-  // For labor/freight, up is bad; for signal, up is good
+
+  // Tooltip content for each KPI
+  const tooltips = {
+    'Diesel Price': 'National average diesel price per gallon (EIA weekly data)',
+    'Labor Tightness': 'Composite index (0-100) measuring warehouse labor availability. Higher = tighter market',
+    'Avg Warehouse Wage': 'Average hourly wage for warehouse workers (BLS data, seasonally adjusted)',
+    'Freight Rate Index': 'Composite index of spot and contract truckload rates (DAT/Coyote benchmarks)',
+    'Market Signal Score': 'Weighted composite of all intelligence signals. Higher = more market activity',
+  };
+
+  const tooltip = tooltips[label] || '';
+  const tooltipStyle = tooltip ? `position:relative;cursor:help;` : '';
+
   return `
-    <div class="hub-card" style="padding:14px;">
+    <div class="hub-card" style="padding:14px;${tooltipStyle}" title="${tooltip}">
       <div style="font-size:11px;color:var(--ies-gray-400);font-weight:600;margin-bottom:6px;">${label}</div>
       <div style="font-size:22px;font-weight:800;color:${color};margin-bottom:4px;">${value}</div>
       <div style="font-size:11px;color:${trendColor};font-weight:600;">${arrow} ${change}</div>
@@ -274,12 +285,12 @@ function alertRow(a) {
   }[a.severity] || { bg: '#f9fafb', border: '#9ca3af', icon: '⚪' };
 
   return `
-    <div style="display:flex;align-items:start;gap:8px;padding:10px 14px;border-bottom:1px solid var(--ies-gray-100);background:${sev.bg};cursor:pointer;" data-alert-market="${a.market || ''}">
+    <div style="display:flex;align-items:start;gap:8px;padding:10px 14px;border-bottom:1px solid var(--ies-gray-100);background:${sev.bg};" data-alert-url="${a.source_url || ''}">
       <span style="font-size:12px;flex-shrink:0;margin-top:1px;">${sev.icon}</span>
       <div style="flex:1;">
         <div style="font-size:12px;font-weight:600;color:var(--ies-gray-700);">${a.title}</div>
         <div style="font-size:11px;color:var(--ies-gray-400);margin-top:2px;">${a.message}</div>
-        ${a.source_url ? `<a href="${a.source_url}" target="_blank" rel="noopener" style="font-size:10px;color:#2563eb;text-decoration:none;" onclick="event.stopPropagation();" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${a.source || 'Source'} →</a>` : ''}
+        ${a.source_url ? `<span style="font-size:10px;color:#2563eb;cursor:pointer;text-decoration:none;" data-alert-link="${a.source_url}">${a.source || 'Source'} →</span>` : ''}
       </div>
       <span style="font-size:10px;color:var(--ies-gray-300);white-space:nowrap;">${a.date}</span>
     </div>
@@ -329,4 +340,218 @@ function statusTile(name, status, healthy) {
 
 function severityDot(severity) {
   return { critical: '#dc2626', warning: '#d97706', info: '#2563eb' }[severity] || '#9ca3af';
+}
+
+function renderRfpFeed(rfpSignals) {
+  if (!rfpSignals || rfpSignals.length === 0) {
+    return '<div style="padding:16px;text-align:center;color:var(--ies-gray-400);font-size:12px;">No RFP signals available</div>';
+  }
+  return rfpSignals.map(rfp => `
+    <div style="display:flex;align-items:start;gap:10px;padding:12px 14px;border-bottom:1px solid var(--ies-gray-100);">
+      <div style="width:32px;height:32px;border-radius:6px;background:var(--ies-gray-100);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--ies-gray-600);flex-shrink:0;">💼</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:12px;font-weight:600;color:var(--ies-gray-700);">${rfp.company}</div>
+        <div style="font-size:11px;color:var(--ies-gray-500);margin-top:2px;">${rfp.vertical} — ${rfp.volume} pallets/mo</div>
+        <div style="display:flex;gap:6px;margin-top:4px;">
+          <span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;background:rgba(37,99,235,.08);color:#2563eb;">${rfp.region}</span>
+          <span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;background:${rfp.stage === 'active' ? 'rgba(22,163,74,.08);color:#16a34a' : rfp.stage === 'closed' ? 'rgba(107,114,128,.08);color:#6b7280' : 'rgba(217,119,6,.08);color:#d97706'};">${rfp.stage}</span>
+        </div>
+      </div>
+      <span style="font-size:10px;color:var(--ies-gray-300);white-space:nowrap;flex-shrink:0;">${rfp.date}</span>
+    </div>
+  `).join('');
+}
+
+/**
+ * Load Chart.js from CDN if not already present, then initialize charts
+ */
+async function ensureChartJs() {
+  if (typeof Chart !== 'undefined') return;
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js';
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Failed to load Chart.js'));
+    document.head.appendChild(script);
+  });
+}
+
+function destroyAllCharts() {
+  if (dieselChartInstance) { dieselChartInstance.destroy(); dieselChartInstance = null; }
+  if (freightChartInstance) { freightChartInstance.destroy(); freightChartInstance = null; }
+  if (laborChartInstance) { laborChartInstance.destroy(); laborChartInstance = null; }
+}
+
+/**
+ * Initialize all three charts after render completes
+ */
+async function initCharts() {
+  if (!rootEl) return;
+  try {
+    await ensureChartJs();
+    await renderCharts();
+  } catch (err) {
+    console.warn('[CC] Chart initialization failed:', err);
+  }
+}
+
+/**
+ * Render the three Chart.js charts with live or demo data
+ */
+async function renderCharts() {
+  if (!rootEl || !liveData) return;
+
+  const chartData = await api.fetchChartData();
+
+  // Diesel Price Trend
+  const dieselCtx = rootEl.querySelector('#cc-diesel-chart canvas');
+  if (!dieselCtx && rootEl.querySelector('#cc-diesel-chart')) {
+    const container = rootEl.querySelector('#cc-diesel-chart');
+    const canvas = document.createElement('canvas');
+    container.appendChild(canvas);
+    renderDieselChart(canvas, chartData.diesel);
+  }
+
+  // Freight Rate Index
+  const freightCtx = rootEl.querySelector('#cc-freight-chart canvas');
+  if (!freightCtx && rootEl.querySelector('#cc-freight-chart')) {
+    const container = rootEl.querySelector('#cc-freight-chart');
+    const canvas = document.createElement('canvas');
+    container.appendChild(canvas);
+    renderFreightChart(canvas, chartData.freight);
+  }
+
+  // Labor Wage by Region
+  const laborCtx = rootEl.querySelector('#cc-labor-chart canvas');
+  if (!laborCtx && rootEl.querySelector('#cc-labor-chart')) {
+    const container = rootEl.querySelector('#cc-labor-chart');
+    const canvas = document.createElement('canvas');
+    container.appendChild(canvas);
+    renderLaborChart(canvas, chartData.labor);
+  }
+}
+
+function renderDieselChart(canvas, data) {
+  destroyAllCharts();
+  try {
+    dieselChartInstance = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: data.labels,
+        datasets: [{
+          label: 'Diesel ($/gal)',
+          data: data.prices,
+          borderColor: '#dc2626',
+          backgroundColor: 'rgba(220,38,38,.06)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 3,
+          pointBackgroundColor: '#dc2626',
+          borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false }
+        },
+        scales: {
+          y: {
+            beginAtZero: false,
+            ticks: { callback: v => '$' + v.toFixed(2) }
+          }
+        }
+      }
+    });
+  } catch (err) {
+    console.warn('[CC] Diesel chart error:', err);
+  }
+}
+
+function renderFreightChart(canvas, data) {
+  try {
+    freightChartInstance = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: data.labels,
+        datasets: [
+          {
+            label: 'Spot Rate ($/mi)',
+            data: data.spot,
+            borderColor: '#2563eb',
+            backgroundColor: 'rgba(37,99,235,.06)',
+            fill: false,
+            tension: 0.3,
+            pointRadius: 2,
+            pointBackgroundColor: '#2563eb',
+            borderWidth: 2
+          },
+          {
+            label: 'Contract Rate ($/mi)',
+            data: data.contract,
+            borderColor: '#7c3aed',
+            backgroundColor: 'rgba(124,58,237,.06)',
+            fill: false,
+            tension: 0.3,
+            pointRadius: 2,
+            pointBackgroundColor: '#7c3aed',
+            borderWidth: 2,
+            borderDash: [5, 5]
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: true, position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } }
+        },
+        scales: {
+          y: {
+            beginAtZero: false,
+            ticks: { callback: v => '$' + v.toFixed(2) }
+          }
+        }
+      }
+    });
+  } catch (err) {
+    console.warn('[CC] Freight chart error:', err);
+  }
+}
+
+function renderLaborChart(canvas, data) {
+  try {
+    laborChartInstance = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels: data.regions,
+        datasets: [{
+          label: 'Avg Hourly Wage',
+          data: data.wages,
+          backgroundColor: data.regions.map((_, i) => {
+            const colors = ['#2563eb', '#16a34a', '#ea580c', '#7c3aed', '#dc2626'];
+            return colors[i % colors.length];
+          }),
+          borderRadius: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        indexAxis: 'y',
+        plugins: {
+          legend: { display: false }
+        },
+        scales: {
+          x: {
+            beginAtZero: true,
+            ticks: { callback: v => '$' + v.toFixed(2) }
+          }
+        }
+      }
+    });
+  } catch (err) {
+    console.warn('[CC] Labor chart error:', err);
+  }
 }

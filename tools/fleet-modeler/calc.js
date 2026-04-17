@@ -12,7 +12,7 @@
 // VEHICLE SPECS (ATRI 2024 benchmarks)
 // ============================================================
 
-/** @type {import('./types.js').VehicleSpec[]} */
+/** @type {import('./types.js?v=20260417-s2').VehicleSpec[]} */
 export const DEFAULT_VEHICLES = [
   { id: 'dry-van', name: 'Dry Van (53ft)', maxPayloadLbs: 45000, maxCubeFt3: 3500, mpg: 6.5, capitalCost: 130000, insuranceFactor: 1.0, fuelSurchargePerMi: 0, enabled: true },
   { id: 'reefer', name: 'Reefer (53ft)', maxPayloadLbs: 42000, maxCubeFt3: 2800, mpg: 5.5, capitalCost: 165000, insuranceFactor: 1.2, fuelSurchargePerMi: 0.08, enabled: true },
@@ -21,7 +21,7 @@ export const DEFAULT_VEHICLES = [
   { id: 'sprinter', name: 'Sprinter Van', maxPayloadLbs: 3500, maxCubeFt3: 400, mpg: 14.0, capitalCost: 48000, insuranceFactor: 0.5, fuelSurchargePerMi: 0, enabled: true },
 ];
 
-/** @type {import('./types.js').FleetConfig} */
+/** @type {import('./types.js?v=20260417-s2').FleetConfig} */
 export const DEFAULT_CONFIG = {
   dieselPricePerGal: 3.85,
   driverCostPerHr: 28.00,
@@ -50,8 +50,8 @@ export const ATRI_2024_CPM = 1.946;
  * Picks the smallest vehicle that can handle the load.
  * @param {number} weightLbs
  * @param {number} cubeFt3
- * @param {import('./types.js').VehicleSpec[]} vehicles
- * @returns {import('./types.js').VehicleSpec|null}
+ * @param {import('./types.js?v=20260417-s2').VehicleSpec[]} vehicles
+ * @returns {import('./types.js?v=20260417-s2').VehicleSpec|null}
  */
 export function bestFitVehicle(weightLbs, cubeFt3, vehicles = DEFAULT_VEHICLES) {
   const enabled = vehicles.filter(v => v.enabled);
@@ -99,10 +99,10 @@ export function roundTripHours(distanceMiles, speedMph = 50) {
 
 /**
  * Assign all lanes to vehicles and compute per-lane costs.
- * @param {import('./types.js').Lane[]} lanes
- * @param {import('./types.js').VehicleSpec[]} vehicles
- * @param {import('./types.js').FleetConfig} config
- * @returns {import('./types.js').LaneAssignment[]}
+ * @param {import('./types.js?v=20260417-s2').Lane[]} lanes
+ * @param {import('./types.js?v=20260417-s2').VehicleSpec[]} vehicles
+ * @param {import('./types.js?v=20260417-s2').FleetConfig} config
+ * @returns {import('./types.js?v=20260417-s2').LaneAssignment[]}
  */
 export function assignLanes(lanes, vehicles = DEFAULT_VEHICLES, config = DEFAULT_CONFIG) {
   return lanes.map(lane => {
@@ -143,7 +143,7 @@ export function assignLanes(lanes, vehicles = DEFAULT_VEHICLES, config = DEFAULT
 
 /**
  * Compute available annual driving hours per vehicle.
- * @param {import('./types.js').FleetConfig} config
+ * @param {import('./types.js?v=20260417-s2').FleetConfig} config
  * @returns {number}
  */
 export function annualDrivingHoursPerVehicle(config = DEFAULT_CONFIG) {
@@ -154,16 +154,16 @@ export function annualDrivingHoursPerVehicle(config = DEFAULT_CONFIG) {
 
 /**
  * Compute fleet composition from lane assignments.
- * @param {import('./types.js').LaneAssignment[]} assignments
- * @param {import('./types.js').VehicleSpec[]} vehicles
- * @param {import('./types.js').FleetConfig} config
- * @returns {import('./types.js').FleetSummary[]}
+ * @param {import('./types.js?v=20260417-s2').LaneAssignment[]} assignments
+ * @param {import('./types.js?v=20260417-s2').VehicleSpec[]} vehicles
+ * @param {import('./types.js?v=20260417-s2').FleetConfig} config
+ * @returns {import('./types.js?v=20260417-s2').FleetSummary[]}
  */
 export function computeFleetComposition(assignments, vehicles = DEFAULT_VEHICLES, config = DEFAULT_CONFIG) {
   const availHours = annualDrivingHoursPerVehicle(config);
 
   // Group assignments by vehicle type
-  /** @type {Map<string, import('./types.js').LaneAssignment[]>} */
+  /** @type {Map<string, import('./types.js?v=20260417-s2').LaneAssignment[]>} */
   const groups = new Map();
   assignments.forEach(a => {
     if (!groups.has(a.vehicleId)) groups.set(a.vehicleId, []);
@@ -209,10 +209,10 @@ export function computeFleetComposition(assignments, vehicles = DEFAULT_VEHICLES
 
 /**
  * Run full fleet analysis: assign lanes, size fleet, compare costs.
- * @param {import('./types.js').Lane[]} lanes
- * @param {import('./types.js').VehicleSpec[]} vehicles
- * @param {import('./types.js').FleetConfig} config
- * @returns {import('./types.js').FleetResult}
+ * @param {import('./types.js?v=20260417-s2').Lane[]} lanes
+ * @param {import('./types.js?v=20260417-s2').VehicleSpec[]} vehicles
+ * @param {import('./types.js?v=20260417-s2').FleetConfig} config
+ * @returns {import('./types.js?v=20260417-s2').FleetResult}
  */
 export function analyzeFleet(lanes, vehicles = DEFAULT_VEHICLES, config = DEFAULT_CONFIG) {
   const assignments = assignLanes(lanes, vehicles, config);
@@ -248,7 +248,7 @@ export function analyzeFleet(lanes, vehicles = DEFAULT_VEHICLES, config = DEFAUL
 /**
  * Compare model cost per mile to ATRI 2024 benchmark.
  * @param {number} modelCpm
- * @returns {import('./types.js').AtriBenchmark}
+ * @returns {import('./types.js?v=20260417-s2').AtriBenchmark}
  */
 export function computeAtriBenchmark(modelCpm) {
   const delta = ATRI_2024_CPM > 0 ? ((modelCpm - ATRI_2024_CPM) / ATRI_2024_CPM) * 100 : 0;
@@ -259,10 +259,220 @@ export function computeAtriBenchmark(modelCpm) {
 }
 
 // ============================================================
+// SENSITIVITY ANALYSIS
+// ============================================================
+
+/**
+ * Generate 6×6 sensitivity matrix (driver rates × diesel prices).
+ * @param {import('./types.js?v=20260417-s2').Lane[]} lanes
+ * @param {import('./types.js?v=20260417-s2').VehicleSpec[]} vehicles
+ * @param {import('./types.js?v=20260417-s2').FleetConfig} config
+ * @returns {import('./types.js?v=20260417-s2').SensitivityMatrix}
+ */
+export function calcSensitivityMatrix(lanes, vehicles = DEFAULT_VEHICLES, config = DEFAULT_CONFIG) {
+  // Driver rates: $25–$38/hr in 6 steps
+  const driverRates = [25, 28, 30, 32, 35, 38];
+  // Diesel prices: $3.25–$4.50/gal in 6 steps
+  const dieselPrices = [3.25, 3.50, 3.75, 4.00, 4.25, 4.50];
+
+  // Current scenario indices for highlighting
+  const currentDriverIdx = driverRates.findIndex(r => Math.abs(r - config.driverCostPerHr) < 0.5) ||
+    driverRates.reduce((near, r, i) => Math.abs(r - config.driverCostPerHr) < Math.abs(driverRates[near] - config.driverCostPerHr) ? i : near, 0);
+  const currentDieselIdx = dieselPrices.findIndex(p => Math.abs(p - config.dieselPricePerGal) < 0.1) ||
+    dieselPrices.reduce((near, p, i) => Math.abs(p - config.dieselPricePerGal) < Math.abs(dieselPrices[near] - config.dieselPricePerGal) ? i : near, 0);
+
+  const matrix = driverRates.map((driverRate, rowIdx) => {
+    return dieselPrices.map((dieselPrice, colIdx) => {
+      // Temporarily override config
+      const tempConfig = { ...config, driverCostPerHr: driverRate, dieselPricePerGal: dieselPrice };
+      const result = analyzeFleet(lanes, vehicles, tempConfig);
+      return {
+        driverRate,
+        dieselPrice,
+        costPerMile: result.avgCostPerMile,
+        isCurrent: rowIdx === currentDriverIdx && colIdx === currentDieselIdx,
+      };
+    });
+  });
+
+  return {
+    rowLabels: driverRates,
+    colLabels: dieselPrices,
+    matrix,
+    currentRow: currentDriverIdx,
+    currentCol: currentDieselIdx,
+  };
+}
+
+/**
+ * Calculate dedicated fleet (GXO) cost model.
+ * Cost-plus: (fuel + maint + vehicle + insurance + driver cost × 1.25) × (1 + margin).
+ * @param {import('./types.js?v=20260417-s2').Lane[]} lanes
+ * @param {import('./types.js?v=20260417-s2').VehicleSpec[]} vehicles
+ * @param {import('./types.js?v=20260417-s2').FleetConfig} config
+ * @returns {{ totalAnnual: number, perMile: number, breakdown: object }}
+ */
+export function calcDedicatedFleet(lanes, vehicles = DEFAULT_VEHICLES, config = DEFAULT_CONFIG) {
+  const result = analyzeFleet(lanes, vehicles, config);
+  const composition = result.fleetComposition;
+
+  let totalFuel = 0, totalMaint = 0, totalVehicle = 0, totalInsurance = 0, totalDriver = 0;
+
+  composition.forEach(f => {
+    totalFuel += f.annualFuelCost;
+    totalMaint += f.annualMaintenanceCost;
+    totalVehicle += f.annualDepreciation;
+    totalInsurance += f.annualInsurance;
+    totalDriver += f.annualDriverCost;
+  });
+
+  // GXO cost-plus: apply 1.25 markup to driver cost, then add margin
+  const margin = config.gxoMarginPct ?? 12;
+  const baseCost = totalFuel + totalMaint + totalVehicle + totalInsurance + (totalDriver * 1.25);
+  const totalAnnual = baseCost * (1 + margin / 100);
+
+  return {
+    totalAnnual,
+    perMile: result.totalAnnualMiles > 0 ? totalAnnual / result.totalAnnualMiles : 0,
+    breakdown: { fuel: totalFuel, maintenance: totalMaint, vehicle: totalVehicle, insurance: totalInsurance, driver: totalDriver },
+  };
+}
+
+/**
+ * Calculate common carrier benchmark cost.
+ * Per-lane: distance × rate/mi × 52 weeks.
+ * @param {import('./types.js?v=20260417-s2').Lane[]} lanes
+ * @param {import('./types.js?v=20260417-s2').FleetConfig} config
+ * @returns {{ totalAnnual: number, perMile: number, lanes: object[] }}
+ */
+export function calcCommonCarrier(lanes, config = DEFAULT_CONFIG) {
+  // Carrier rates by vehicle type ($/mi)
+  const carrierRates = {
+    'dry-van': 3.50,
+    'reefer': 4.00,
+    'flatbed': 3.80,
+    'straight': 2.80,
+    'sprinter': 2.20,
+  };
+
+  const assignments = assignLanes(lanes, DEFAULT_VEHICLES, config);
+  let totalAnnual = 0;
+  let totalMiles = 0;
+
+  const laneDetails = assignments.map(a => {
+    const rate = carrierRates[a.vehicleId] || 3.50;
+    const annualCost = a.annualMiles * rate;
+    totalAnnual += annualCost;
+    totalMiles += a.annualMiles;
+    return {
+      laneId: a.laneId,
+      vehicle: a.vehicleName,
+      rate,
+      annualMiles: a.annualMiles,
+      annualCost,
+    };
+  });
+
+  return {
+    totalAnnual,
+    perMile: totalMiles > 0 ? totalAnnual / totalMiles : 0,
+    lanes: laneDetails,
+  };
+}
+
+/**
+ * Calculate purchase vs lease financing comparison.
+ * @param {import('./types.js?v=20260417-s2').VehicleSpec[]} vehicles
+ * @param {import('./types.js?v=20260417-s2').FleetConfig} config
+ * @returns {{ purchase: object, lease: object }}
+ */
+export function calcFinancingComparison(vehicles = DEFAULT_VEHICLES, config = DEFAULT_CONFIG) {
+  const depYears = config.depreciationYears || 7;
+  const residualPct = 0.15;
+
+  // Purchase mode: straight-line depreciation
+  const purchaseDetail = vehicles.map(v => {
+    const residual = v.capitalCost * residualPct;
+    const annualDepreciation = (v.capitalCost - residual) / depYears;
+    return {
+      vehicleId: v.id,
+      name: v.name,
+      capitalCost: v.capitalCost,
+      usefulLife: depYears,
+      residualValue: residual,
+      annualDepreciation,
+    };
+  });
+
+  // Lease mode: standard monthly rates
+  const leaseMonthlyRates = {
+    'dry-van': 2200,
+    'reefer': 2800,
+    'flatbed': 2000,
+    'straight': 1500,
+    'sprinter': 800,
+  };
+
+  const leaseDetail = vehicles.map(v => {
+    const monthly = leaseMonthlyRates[v.id] || 2200;
+    const annual = monthly * 12;
+    return {
+      vehicleId: v.id,
+      name: v.name,
+      monthlyRate: monthly,
+      annualLeaseCost: annual,
+    };
+  });
+
+  return {
+    purchase: purchaseDetail,
+    lease: leaseDetail,
+  };
+}
+
+/**
+ * Calculate fleet cost under base ±20% volume scenarios.
+ * @param {import('./types.js?v=20260417-s2').Lane[]} lanes
+ * @param {import('./types.js?v=20260417-s2').VehicleSpec[]} vehicles
+ * @param {import('./types.js?v=20260417-s2').FleetConfig} config
+ * @returns {import('./types.js?v=20260417-s2').VolumeSensitivity[]}
+ */
+export function calcVolumeSensitivity(lanes, vehicles = DEFAULT_VEHICLES, config = DEFAULT_CONFIG) {
+  const scenarios = [
+    { label: '-20% Volume', multiplier: 0.8 },
+    { label: '-10% Volume', multiplier: 0.9 },
+    { label: 'Base Case', multiplier: 1.0 },
+    { label: '+10% Volume', multiplier: 1.1 },
+    { label: '+20% Volume', multiplier: 1.2 },
+  ];
+
+  return scenarios.map(s => {
+    // Scale shipment volumes
+    const scaledLanes = lanes.map(l => ({
+      ...l,
+      weeklyShipments: Math.ceil(l.weeklyShipments * s.multiplier),
+    }));
+
+    const result = analyzeFleet(scaledLanes, vehicles, config);
+    return {
+      scenario: s.label,
+      multiplier: s.multiplier,
+      totalVehicles: result.totalVehicles,
+      totalAnnualCost: result.totalAnnualCost,
+      costPerMile: result.avgCostPerMile,
+      variance: {
+        vehicles: result.totalVehicles - analyzeFleet(lanes, vehicles, config).totalVehicles,
+        cost: result.totalAnnualCost - analyzeFleet(lanes, vehicles, config).totalAnnualCost,
+      },
+    };
+  });
+}
+
+// ============================================================
 // DEMO DATA
 // ============================================================
 
-/** @type {import('./types.js').Lane[]} */
+/** @type {import('./types.js?v=20260417-s2').Lane[]} */
 export const DEMO_LANES = [
   { id: 'l1', origin: 'Chicago, IL', destination: 'Indianapolis, IN', weeklyShipments: 12, avgWeightLbs: 32000, avgCubeFt3: 2200, distanceMiles: 182 },
   { id: 'l2', origin: 'Chicago, IL', destination: 'St. Louis, MO', weeklyShipments: 8, avgWeightLbs: 38000, avgCubeFt3: 2800, distanceMiles: 297 },

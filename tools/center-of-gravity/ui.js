@@ -6,10 +6,10 @@
  * @module tools/center-of-gravity/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-s1';
-import { state } from '../../shared/state.js?v=20260417-s1';
-import * as calc from './calc.js?v=20260417-s1';
-import * as api from './api.js?v=20260417-s1';
+import { bus } from '../../shared/event-bus.js?v=20260417-s2';
+import { state } from '../../shared/state.js?v=20260417-s2';
+import * as calc from './calc.js?v=20260417-s2';
+import * as api from './api.js?v=20260417-s2';
 
 // ============================================================
 // STATE
@@ -21,13 +21,13 @@ let rootEl = null;
 /** @type {'points' | 'analysis' | 'map' | 'sensitivity'} */
 let activeTab = 'points';
 
-/** @type {import('./types.js').WeightedPoint[]} */
+/** @type {import('./types.js?v=20260417-s2').WeightedPoint[]} */
 let points = [];
 
-/** @type {import('./types.js').CogConfig} */
+/** @type {import('./types.js?v=20260417-s2').CogConfig} */
 let config = { ...calc.DEFAULT_CONFIG };
 
-/** @type {import('./types.js').MultiCogResult|null} */
+/** @type {import('./types.js?v=20260417-s2').MultiCogResult|null} */
 let cogResult = null;
 
 /** @type {Array<{ k: number, totalWeightedDistance: number, estimatedCost: number, avgDistance: number }>|null} */
@@ -429,11 +429,68 @@ function renderSensitivity(el) {
   }
 
   const maxCost = Math.max(...sensitivityData.map(d => d.estimatedCost));
+  const minCost = Math.min(...sensitivityData.map(d => d.estimatedCost));
+  const costRange = maxCost - minCost;
+
+  // Network summary
+  const optimal = sensitivityData[sensitivityData.length - 1];
+  const baseline = sensitivityData[0];
+  const savings = baseline.estimatedCost - optimal.estimatedCost;
+  const savingsPct = baseline.estimatedCost > 0 ? (savings / baseline.estimatedCost * 100).toFixed(1) : 0;
 
   el.innerHTML = `
-    <div style="max-width:800px;">
+    <div style="max-width:900px;">
       <h3 class="text-section" style="margin-bottom:16px;">Sensitivity: Number of Centers vs. Cost</h3>
 
+      <!-- Network Summary -->
+      <div class="hub-card" style="padding:20px;margin-bottom:20px;background:linear-gradient(135deg,#f0fdf4,#f0fdf4);border-left:4px solid #22c55e;">
+        <div style="font-size:13px;font-weight:700;color:#15803d;margin-bottom:8px;">Optimal Network Summary</div>
+        <div style="font-size:13px;line-height:1.6;color:#166534;">
+          Optimal network of <strong>${cogResult.centers.length}</strong> facilit${cogResult.centers.length === 1 ? 'y' : 'ies'} reduces
+          avg distance to <strong>${cogResult.centers[0] ? calc.formatMiles(cogResult.centers.reduce((s, c) => s + c.avgWeightedDistance, 0) / cogResult.centers.length) : 'N/A'}</strong>
+          per facility, with total annual transport cost of <strong>${calc.formatCurrency(cogResult.assignments ?
+            calc.estimateTransportCost(cogResult, points, config.transportCostPerMile).totalCost : 0)}</strong>.
+          Compared to single facility: <strong>${savingsPct}%</strong> savings.
+        </div>
+      </div>
+
+      <!-- Cost Curve Chart (SVG) -->
+      <div class="hub-card" style="padding:20px;margin-bottom:20px;">
+        <div style="font-size:14px;font-weight:700;margin-bottom:16px;">Cost Curve: Number of Centers vs. Annual Transport Cost</div>
+        <svg width="100%" height="280" style="background:var(--ies-gray-50);border-radius:8px;">
+          <!-- Grid lines -->
+          ${sensitivityData.map((_, i) => {
+            const chartW = Math.max(sensitivityData.length * 60, 300);
+            const x = 60 + (i / (sensitivityData.length - 1)) * chartW;
+            return `<line x1="${x}" y1="30" x2="${x}" y2="240" stroke="var(--ies-gray-200)" stroke-width="1" vector-effect="non-scaling-stroke"/>`;
+          }).join('')}
+          <line x1="50" y1="240" x2="${50 + Math.max(sensitivityData.length * 60, 300)}" y2="240" stroke="var(--ies-gray-400)" stroke-width="2"/>
+          <line x1="50" y1="30" x2="50" y2="240" stroke="var(--ies-gray-400)" stroke-width="2"/>
+
+          <!-- Bars -->
+          ${sensitivityData.map((d, i) => {
+            const chartW = Math.max(sensitivityData.length * 60, 300);
+            const barW = Math.max(40, chartW / sensitivityData.length - 12);
+            const x = 50 + (i + 0.5) / sensitivityData.length * chartW;
+            const barH = costRange > 0 ? ((d.estimatedCost - minCost) / costRange) * 190 : 10;
+            const y = 240 - barH;
+            const isCurrent = d.k === config.numCenters;
+            const color = isCurrent ? '#2563eb' : '#93c5fd';
+            return `
+              <rect x="${x - barW/2}" y="${y}" width="${barW}" height="${barH}" fill="${color}" rx="4"/>
+              <text x="${x}" y="260" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ies-gray-600)">k=${d.k}</text>
+            `;
+          }).join('')}
+
+          <!-- Y-axis labels -->
+          <text x="40" y="250" text-anchor="end" font-size="11" fill="var(--ies-gray-400)">$0</text>
+          <text x="40" y="135" text-anchor="end" font-size="11" fill="var(--ies-gray-400)">${calc.formatCurrency(minCost + costRange/2, { compact: true })}</text>
+          <text x="40" y="35" text-anchor="end" font-size="11" fill="var(--ies-gray-400)">${calc.formatCurrency(maxCost, { compact: true })}</text>
+        </svg>
+        <div style="font-size:11px;color:var(--ies-gray-400);margin-top:8px;">Blue bar indicates current selection (k=${config.numCenters})</div>
+      </div>
+
+      <!-- Cost breakdown -->
       <div class="hub-card" style="padding:20px;margin-bottom:20px;">
         <div style="font-size:14px;font-weight:700;margin-bottom:16px;">Estimated Annual Transport Cost by Number of Centers</div>
         ${sensitivityData.map((d, i) => {

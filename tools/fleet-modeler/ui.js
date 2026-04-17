@@ -6,10 +6,10 @@
  * @module tools/fleet-modeler/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-s1';
-import { state } from '../../shared/state.js?v=20260417-s1';
-import * as calc from './calc.js?v=20260417-s1';
-import * as api from './api.js?v=20260417-s1';
+import { bus } from '../../shared/event-bus.js?v=20260417-s2';
+import { state } from '../../shared/state.js?v=20260417-s2';
+import * as calc from './calc.js?v=20260417-s2';
+import * as api from './api.js?v=20260417-s2';
 
 // ============================================================
 // STATE
@@ -21,16 +21,16 @@ let rootEl = null;
 /** @type {'lanes' | 'config' | 'results' | 'map'} */
 let activeTab = 'lanes';
 
-/** @type {import('./types.js').Lane[]} */
+/** @type {import('./types.js?v=20260417-s2').Lane[]} */
 let lanes = [];
 
-/** @type {import('./types.js').VehicleSpec[]} */
+/** @type {import('./types.js?v=20260417-s2').VehicleSpec[]} */
 let vehicles = calc.DEFAULT_VEHICLES.map(v => ({ ...v }));
 
-/** @type {import('./types.js').FleetConfig} */
+/** @type {import('./types.js?v=20260417-s2').FleetConfig} */
 let config = { ...calc.DEFAULT_CONFIG };
 
-/** @type {import('./types.js').FleetResult|null} */
+/** @type {import('./types.js?v=20260417-s2').FleetResult|null} */
 let result = null;
 
 /** @type {object|null} */
@@ -49,7 +49,7 @@ export async function mount(el) {
   activeTab = 'lanes';
   lanes = calc.DEMO_LANES.map(l => ({ ...l }));
   vehicles = calc.DEFAULT_VEHICLES.map(v => ({ ...v }));
-  config = { ...calc.DEFAULT_CONFIG };
+  config = { ...calc.DEFAULT_CONFIG, leaseMode: false };
   result = null;
 
   el.innerHTML = renderShell();
@@ -146,6 +146,8 @@ function renderLanes(el) {
         <div style="display:flex;gap:8px;">
           <button class="hub-btn hub-btn-sm hub-btn-secondary" id="fm-add-lane">+ Add Lane</button>
           <button class="hub-btn hub-btn-sm hub-btn-secondary" id="fm-load-demo">Load Demo Data</button>
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" id="fm-import-csv">⬆ Import CSV</button>
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" id="fm-export-csv">⬇ Export CSV</button>
         </div>
       </div>
 
@@ -180,6 +182,8 @@ function renderLanes(el) {
         </table>
       </div>
 
+      <input type="file" id="fm-csv-input" accept=".csv" style="display:none;">
+
       <div class="hub-card" style="margin-top:20px;background:linear-gradient(135deg,#0a1628,#0d1f3c);color:#fff;padding:16px 20px;">
         <div style="display:flex;gap:32px;align-items:center;">
           ${kpi('Total Lanes', String(lanes.length))}
@@ -206,6 +210,59 @@ function renderLanes(el) {
     lanes = calc.DEMO_LANES.map(l => ({ ...l }));
     renderLanes(el);
   });
+
+  el.querySelector('#fm-import-csv')?.addEventListener('click', () => {
+    el.querySelector('#fm-csv-input')?.click();
+  });
+
+  el.querySelector('#fm-csv-input')?.addEventListener('change', (e) => {
+    const file = /** @type {HTMLInputElement} */ (e.target).files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const csv = event.target?.result;
+        const lines = String(csv).split('\n');
+        const headers = lines[0].toLowerCase().split(',').map(h => h.trim());
+        lanes = [];
+        for (let i = 1; i < lines.length; i++) {
+          if (!lines[i].trim()) continue;
+          const values = lines[i].split(',').map(v => v.trim());
+          const obj = {};
+          headers.forEach((h, idx) => { obj[h] = values[idx]; });
+          if (obj.origin && obj.destination) {
+            lanes.push({
+              id: 'l' + Date.now() + i,
+              origin: obj.origin,
+              destination: obj.destination,
+              weeklyShipments: parseInt(obj.weekly_shipments) || 1,
+              avgWeightLbs: parseFloat(obj.avg_weight_lbs) || parseFloat(obj.avg_weight) || 5000,
+              avgCubeFt3: parseFloat(obj.avg_cube_ft3) || parseFloat(obj.avg_cube) || 300,
+              distanceMiles: parseFloat(obj.distance_miles) || parseFloat(obj.distance) || 200,
+            });
+          }
+        }
+        renderLanes(el);
+      } catch (err) {
+        console.error('Error importing CSV:', err);
+      }
+    };
+    reader.readAsText(file);
+  });
+
+  el.querySelector('#fm-export-csv')?.addEventListener('click', () => {
+    const csv = ['origin,destination,weekly_shipments,avg_weight_lbs,avg_cube_ft3,distance_miles'];
+    lanes.forEach(lane => {
+      csv.push(`${lane.origin},${lane.destination},${lane.weeklyShipments},${lane.avgWeightLbs},${lane.avgCubeFt3},${lane.distanceMiles}`);
+    });
+    const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'fleet-lanes.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
 }
 
 // ============================================================
@@ -214,7 +271,26 @@ function renderLanes(el) {
 
 function renderConfig(el) {
   el.innerHTML = `
-    <div style="max-width:800px;">
+    <div style="max-width:900px;">
+      <h3 class="text-section" style="margin-bottom:16px;">Financing Mode</h3>
+      <div class="hub-card" style="margin-bottom:20px;padding:16px;">
+        <div style="display:flex;gap:24px;margin-bottom:16px;">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+            <input type="radio" name="fm-financing" value="purchase" ${!config.leaseMode ? 'checked' : ''} id="fm-financing-purchase">
+            <span style="font-weight:600;">Purchase (Depreciation)</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+            <input type="radio" name="fm-financing" value="lease" ${config.leaseMode ? 'checked' : ''} id="fm-financing-lease">
+            <span style="font-weight:600;">Lease (Monthly Payment)</span>
+          </label>
+        </div>
+        <div style="padding:12px;background:var(--ies-gray-100);border-radius:6px;font-size:12px;color:var(--ies-gray-600);">
+          ${!config.leaseMode
+            ? 'Purchase: Straight-line depreciation over 5-7 years with 15% residual value'
+            : 'Lease: Monthly rates vary by vehicle type (Dry Van $2,200-$2,800/mo)'}
+        </div>
+      </div>
+
       <h3 class="text-section" style="margin-bottom:16px;">Vehicle Specifications</h3>
       <div class="hub-card" style="margin-bottom:20px;padding:16px;">
         <table style="width:100%;border-collapse:collapse;font-size:13px;">
@@ -260,9 +336,11 @@ function renderConfig(el) {
           ${cfgInput('GXO Margin', 'gxoMarginPct', config.gxoMarginPct, '%')}
           ${cfgInput('Carrier Premium', 'carrierPremiumPct', config.carrierPremiumPct, '%')}
         </div>
-        <div style="margin-top:16px;display:flex;align-items:center;gap:8px;">
-          <input type="checkbox" id="fm-team" ${config.teamDriving ? 'checked' : ''}>
-          <label for="fm-team" style="font-size:13px;font-weight:600;cursor:pointer;">Team Driving (doubles daily hours)</label>
+        <div style="margin-top:16px;display:flex;gap:20px;">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+            <input type="checkbox" id="fm-team" ${config.teamDriving ? 'checked' : ''}>
+            <span style="font-weight:600;">Team Driving (doubles daily hours, 2 drivers/vehicle)</span>
+          </label>
         </div>
       </div>
     </div>
@@ -273,6 +351,14 @@ function renderConfig(el) {
     cb.addEventListener('change', () => {
       const idx = parseInt(/** @type {HTMLElement} */ (cb).dataset.vehToggle);
       vehicles[idx].enabled = /** @type {HTMLInputElement} */ (cb).checked;
+      renderConfig(el);
+    });
+  });
+
+  // Financing mode
+  el.querySelectorAll('input[name="fm-financing"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      config.leaseMode = /** @type {HTMLInputElement} */ (e.target).value === 'lease';
       renderConfig(el);
     });
   });
@@ -316,7 +402,7 @@ function renderResults(el) {
   const atriColor = { 'BELOW': '#22c55e', 'AT': '#f59e0b', 'ABOVE': '#ef4444' }[r.atriBenchmark.verdict];
 
   el.innerHTML = `
-    <div style="max-width:1000px;">
+    <div style="max-width:1200px;">
       <!-- KPI Bar -->
       <div class="hub-card" style="background:linear-gradient(135deg,#0a1628,#0d1f3c);color:#fff;padding:16px 24px;margin-bottom:20px;">
         <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;">
@@ -365,35 +451,50 @@ function renderResults(el) {
         </table>
       </div>
 
-      <!-- 3-Way Comparison -->
+      <!-- 3-Way Comparison Cards -->
       <div class="hub-card" style="padding:20px;margin-bottom:20px;">
         <div style="font-size:14px;font-weight:700;margin-bottom:16px;">3-Way Cost Comparison</div>
-        ${comparisonBar('Private Fleet', r.comparison.private, r.comparison.carrier, '#0047AB')}
-        ${comparisonBar('Dedicated (GXO)', r.comparison.dedicated, r.comparison.carrier, '#8b5cf6')}
-        ${comparisonBar('Common Carrier', r.comparison.carrier, r.comparison.carrier, '#ef4444')}
-      </div>
-
-      <!-- ATRI Benchmark -->
-      <div class="hub-card" style="padding:20px;margin-bottom:20px;border-left:4px solid ${atriColor};">
-        <div style="font-size:14px;font-weight:700;margin-bottom:8px;">ATRI 2024 Benchmark Comparison</div>
-        <div style="display:flex;gap:40px;font-size:13px;">
-          <div>
-            <span style="color:var(--ies-gray-400);">Your Model:</span>
-            <strong>${calc.formatCpm(r.atriBenchmark.modelCostPerMile)}</strong>
-          </div>
-          <div>
-            <span style="color:var(--ies-gray-400);">ATRI Average:</span>
-            <strong>${calc.formatCpm(r.atriBenchmark.atriCostPerMile)}</strong>
-          </div>
-          <div>
-            <span style="color:var(--ies-gray-400);">Delta:</span>
-            <strong style="color:${atriColor};">${r.atriBenchmark.deltaPct > 0 ? '+' : ''}${r.atriBenchmark.deltaPct.toFixed(1)}%</strong>
-          </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;">
+          ${renderComparisonCard('Private Fleet', r.comparison.private, r.comparison, '#0047AB')}
+          ${renderComparisonCard('Dedicated (GXO)', r.comparison.dedicated, r.comparison, '#8b5cf6')}
+          ${renderComparisonCard('Common Carrier', r.comparison.carrier, r.comparison, '#ef4444')}
         </div>
       </div>
 
+      <!-- ATRI Benchmark Table -->
+      <div class="hub-card" style="padding:20px;margin-bottom:20px;">
+        <div style="font-size:14px;font-weight:700;margin-bottom:16px;">ATRI 2024 Benchmark Comparison</div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead>
+              <tr style="border-bottom:2px solid var(--ies-gray-200);background:var(--ies-gray-100);">
+                <th style="text-align:left;padding:8px;font-weight:700;">Category</th>
+                <th style="text-align:right;padding:8px;font-weight:700;">Your Fleet</th>
+                <th style="text-align:right;padding:8px;font-weight:700;">ATRI 2024</th>
+                <th style="text-align:right;padding:8px;font-weight:700;">Variance</th>
+                <th style="text-align:center;padding:8px;font-weight:700;">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${renderAtriBenchmarkRow('Total CPM', r.atriBenchmark.modelCostPerMile, r.atriBenchmark.atriCostPerMile)}
+              ${renderAtriBenchmarkRow('Fuel/Mi', r.atriBenchmark.modelCostPerMile * 0.26, 0.583)}
+              ${renderAtriBenchmarkRow('Drivers/Mi', r.atriBenchmark.modelCostPerMile * 0.37, 0.827)}
+              ${renderAtriBenchmarkRow('Vehicle/Mi', r.atriBenchmark.modelCostPerMile * 0.13, 0.296)}
+              ${renderAtriBenchmarkRow('Insurance/Mi', r.atriBenchmark.modelCostPerMile * 0.06, 0.117)}
+              ${renderAtriBenchmarkRow('Maintenance/Mi', r.atriBenchmark.modelCostPerMile * 0.08, 0.198)}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Sensitivity Matrix -->
+      ${renderSensitivityMatrixCard()}
+
+      <!-- Volume Sensitivity -->
+      ${renderVolumeSensitivityCard()}
+
       <!-- Lane Assignments -->
-      <div class="hub-card" style="padding:16px;">
+      <div class="hub-card" style="padding:16px;margin-bottom:20px;">
         <div style="font-size:14px;font-weight:700;margin-bottom:12px;">Lane Assignments</div>
         <div style="max-height:300px;overflow-y:auto;">
           <table style="width:100%;border-collapse:collapse;font-size:13px;">
@@ -427,6 +528,11 @@ function renderResults(el) {
       </div>
     </div>
   `;
+
+  // Bind export buttons
+  setTimeout(() => {
+    rootEl?.querySelector('#fm-export-csv')?.addEventListener('click', exportFleetCSV);
+  }, 0);
 }
 
 function comparisonBar(label, amount, maxAmount, color) {
@@ -442,6 +548,156 @@ function comparisonBar(label, amount, maxAmount, color) {
       </div>
     </div>
   `;
+}
+
+function renderComparisonCard(label, amount, comparison, color) {
+  const isLowest = amount === Math.min(comparison.private, comparison.dedicated, comparison.carrier);
+  const variance = Math.max(comparison.private, comparison.dedicated, comparison.carrier) - amount;
+  return `
+    <div style="border:1px solid var(--ies-gray-200);border-radius:8px;padding:16px;${isLowest ? `background:linear-gradient(135deg,${color}08,${color}04);border-color:${color};` : ''} ">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div style="font-size:13px;font-weight:700;">${label}</div>
+        ${isLowest ? `<div style="background:${color};color:#fff;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;">✓ LOWEST</div>` : ''}
+      </div>
+      <div style="font-size:20px;font-weight:800;color:${color};margin-bottom:12px;">${calc.formatCurrency(amount, { compact: true })}</div>
+      <div style="font-size:12px;color:var(--ies-gray-600);line-height:1.6;margin-bottom:8px;">
+        <div>Cost/Mile: <strong>${calc.formatCpm(amount / (result?.totalAnnualMiles || 1))}</strong></div>
+      </div>
+      ${isLowest ? `<div style="font-size:11px;color:${color};font-weight:600;">Saves ${calc.formatCurrency(variance, { compact: true })}</div>` : ''}
+    </div>
+  `;
+}
+
+function renderAtriBenchmarkRow(category, yourValue, atriBenchmark) {
+  const variance = atriBenchmark > 0 ? ((yourValue - atriBenchmark) / atriBenchmark) * 100 : 0;
+  let statusColor = '#22c55e'; // green
+  let statusText = 'On Target';
+  if (Math.abs(variance) > 25) {
+    statusColor = '#ef4444'; // red
+    statusText = variance > 0 ? 'Above' : 'Below';
+  } else if (Math.abs(variance) > 10) {
+    statusColor = '#f59e0b'; // yellow
+    statusText = variance > 0 ? 'Above' : 'Below';
+  }
+  return `
+    <tr style="border-bottom:1px solid var(--ies-gray-200);">
+      <td style="padding:8px;font-weight:600;color:var(--ies-navy);">${category}</td>
+      <td style="padding:8px;text-align:right;font-weight:600;">${calc.formatCpm(yourValue)}</td>
+      <td style="padding:8px;text-align:right;">${calc.formatCpm(atriBenchmark)}</td>
+      <td style="padding:8px;text-align:right;font-weight:600;color:${statusColor};">${variance > 0 ? '+' : ''}${variance.toFixed(1)}%</td>
+      <td style="padding:8px;text-align:center;"><span style="padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:${statusColor}20;color:${statusColor};">${statusText}</span></td>
+    </tr>
+  `;
+}
+
+function renderSensitivityMatrixCard() {
+  try {
+    const matrix = calc.calcSensitivityMatrix(lanes, vehicles, config);
+    const driverRates = matrix.rowLabels;
+    const dieselPrices = matrix.colLabels;
+
+    const getCellColor = (cpm) => {
+      if (cpm < 2.00) return '#22c55e'; // green
+      if (cpm < 2.50) return '#fbbf24'; // yellow
+      if (cpm < 3.00) return '#f97316'; // orange
+      return '#ef4444'; // red
+    };
+
+    let tableHtml = `
+      <div class="hub-card" style="padding:20px;margin-bottom:20px;">
+        <div style="font-size:14px;font-weight:700;margin-bottom:16px;">Sensitivity Analysis: Driver Rate × Diesel Price</div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:11px;">
+            <thead>
+              <tr style="background:var(--ies-gray-100);border-bottom:2px solid var(--ies-gray-200);">
+                <th style="padding:6px;text-align:center;font-weight:700;">Driver/Diesel</th>
+    `;
+
+    dieselPrices.forEach(price => {
+      tableHtml += `<th style="padding:6px;text-align:center;font-weight:700;">${calc.formatCurrency(price, { compact: false }).replace('$', '')}</th>`;
+    });
+
+    tableHtml += `</tr></thead><tbody>`;
+
+    matrix.matrix.forEach((row, rowIdx) => {
+      tableHtml += `<tr><td style="padding:6px;text-align:center;font-weight:700;background:var(--ies-gray-100);">$${driverRates[rowIdx]}</td>`;
+      row.forEach((cell, colIdx) => {
+        const bgColor = getCellColor(cell.costPerMile);
+        const isCurrent = cell.isCurrent;
+        const borderStyle = isCurrent ? '2px solid var(--ies-navy)' : '1px solid var(--ies-gray-200)';
+        tableHtml += `<td style="padding:6px;text-align:center;border:${borderStyle};background:${bgColor}15;font-weight:${isCurrent ? '700' : '500'};">${cell.costPerMile.toFixed(2)}</td>`;
+      });
+      tableHtml += `</tr>`;
+    });
+
+    tableHtml += `</tbody></table></div>
+      <div style="margin-top:12px;font-size:11px;color:var(--ies-gray-600);">
+        <div style="display:flex;gap:16px;flex-wrap:wrap;">
+          <span><span style="display:inline-block;width:12px;height:12px;background:#22c55e;margin-right:4px;"></span>Excellent &lt;$2.00/mi</span>
+          <span><span style="display:inline-block;width:12px;height:12px;background:#fbbf24;margin-right:4px;"></span>Good $2.00-2.50/mi</span>
+          <span><span style="display:inline-block;width:12px;height:12px;background:#f97316;margin-right:4px;"></span>Fair $2.50-3.00/mi</span>
+          <span><span style="display:inline-block;width:12px;height:12px;background:#ef4444;margin-right:4px;"></span>High &gt;$3.00/mi</span>
+        </div>
+        <div style="margin-top:8px;"><strong>Current scenario</strong> shown with navy border.</div>
+      </div>
+    </div>`;
+    return tableHtml;
+  } catch (e) {
+    console.error('Error rendering sensitivity matrix:', e);
+    return '';
+  }
+}
+
+function renderVolumeSensitivityCard() {
+  try {
+    const scenarios = calc.calcVolumeSensitivity(lanes, vehicles, config);
+    return `
+      <div class="hub-card" style="padding:20px;margin-bottom:20px;">
+        <div style="font-size:14px;font-weight:700;margin-bottom:16px;">Volume Sensitivity Analysis</div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead>
+            <tr style="background:var(--ies-gray-100);border-bottom:2px solid var(--ies-gray-200);">
+              <th style="padding:8px;text-align:left;font-weight:700;">Scenario</th>
+              <th style="padding:8px;text-align:right;font-weight:700;">Vehicles</th>
+              <th style="padding:8px;text-align:right;font-weight:700;">Annual Cost</th>
+              <th style="padding:8px;text-align:right;font-weight:700;">Cost/Mile</th>
+              <th style="padding:8px;text-align:right;font-weight:700;">Cost Variance</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${scenarios.map(s => `
+              <tr style="border-bottom:1px solid var(--ies-gray-200);${Math.abs(s.multiplier - 1.0) < 0.01 ? 'background:var(--ies-blue)08;' : ''}">
+                <td style="padding:8px;font-weight:${Math.abs(s.multiplier - 1.0) < 0.01 ? '700' : '500'};">${s.scenario}</td>
+                <td style="padding:8px;text-align:right;">${s.totalVehicles}</td>
+                <td style="padding:8px;text-align:right;">${calc.formatCurrency(s.totalAnnualCost, { compact: true })}</td>
+                <td style="padding:8px;text-align:right;">${calc.formatCpm(s.costPerMile)}</td>
+                <td style="padding:8px;text-align:right;${s.variance.cost < 0 ? 'color:#22c55e;' : 'color:#ef4444;'}">${s.variance.cost > 0 ? '+' : ''}${calc.formatCurrency(s.variance.cost, { compact: true })}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } catch (e) {
+    console.error('Error rendering volume sensitivity:', e);
+    return '';
+  }
+}
+
+function exportFleetCSV() {
+  if (!result) return;
+  const csv = ['origin,destination,weekly_shipments,vehicle,trips_per_week,annual_miles,cost_per_trip'];
+  result.assignments.forEach(a => {
+    const lane = lanes.find(l => l.id === a.laneId);
+    csv.push(`${lane?.origin || ''},${lane?.destination || ''},${lane?.weeklyShipments || ''},${a.vehicleName},${a.tripsPerWeek},${Math.round(a.annualMiles)},${a.perTripCost.toFixed(2)}`);
+  });
+  const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'fleet-results.csv';
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function kpi(label, value, color) {

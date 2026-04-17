@@ -97,4 +97,31 @@
  * @property {'BELOW' | 'AT' | 'ABOVE'} verdict
  */
 
+/**
+ * @typedef {Object} SensitivityCell
+ * @property {number} driverRate
+ * @property {number} dieselPrice
+ * @property {number} costPerMile
+ * @property {boolean} isCurrent
+ */
+
+/**
+ * @typedef {Object} SensitivityMatrix
+ * @property {number[]} rowLabels — driver rates
+ * @property {number[]} colLabels — diesel prices
+ * @property {SensitivityCell[][]} matrix
+ * @property {number} currentRow
+ * @property {number} currentCol
+ */
+
+/**
+ * @typedef {Object} VolumeSensitivity
+ * @property {string} scenario
+ * @property {number} multiplier
+ * @property {number} totalVehicles
+ * @property {number} totalAnnualCost
+ * @property {number} costPerMile
+ * @property {{ vehicles: number, cost: number }} variance
+ */
+
 export {};

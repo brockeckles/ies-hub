@@ -5,8 +5,8 @@
  * @module hub/training-wiki/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-s1';
-import * as calc from './calc.js?v=20260417-s1';
+import { bus } from '../../shared/event-bus.js?v=20260417-s2';
+import * as calc from './calc.js?v=20260417-s2';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;

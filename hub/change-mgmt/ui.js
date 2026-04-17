@@ -5,8 +5,8 @@
  * @module hub/change-mgmt/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-s1';
-import * as calc from './calc.js?v=20260417-s1';
+import { bus } from '../../shared/event-bus.js?v=20260417-s2';
+import * as calc from './calc.js?v=20260417-s2';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -26,6 +26,14 @@ export async function mount(el) {
   bus.emit('change-mgmt:mounted');
 }
 
+let adkarPhases = [
+  { phase: 'Awareness', status: 'completed', description: 'Communicate why change is necessary and business drivers', activities: ['Executive kickoff meeting', 'Stakeholder interviews', 'Draft change impact assessment', 'Communication plan finalized'] },
+  { phase: 'Desire', status: 'in-progress', description: 'Build motivation and desire to participate in and support change', activities: ['Launch newsletter series', 'Town halls with Q&A', 'Early wins highlighted', 'Champions network activated'] },
+  { phase: 'Knowledge', status: 'planned', description: 'Provide knowledge and how-to information to support the change', activities: ['Training curriculum drafted', 'Pilot group identified', 'Knowledge base articles', 'Train-the-trainer program'] },
+  { phase: 'Ability', status: 'not-started', description: 'Enable people to demonstrate the skills and behaviors required', activities: ['Hands-on workshops', 'Job aids and checklists', 'Practice environments', 'Coaching support'] },
+  { phase: 'Reinforcement', status: 'not-started', description: 'Sustain the change through reinforcement and continued support', activities: ['Performance monitoring', 'Feedback loops', 'Recognition programs', 'Continuous improvement review'] },
+];
+
 export function unmount() { rootEl = null; bus.emit('change-mgmt:unmounted'); }
 
 function renderShell() {
@@ -35,6 +43,7 @@ function renderShell() {
         <h2 class="text-page" style="margin:0;">Change Management</h2>
         <div style="display:flex;gap:8px;" id="cm-tabs">
           <button class="hub-btn hub-btn-sm ${activeView === 'list' ? '' : 'hub-btn-secondary'}" data-view="list">Initiatives</button>
+          <button class="hub-btn hub-btn-sm ${activeView === 'adkar' ? '' : 'hub-btn-secondary'}" data-view="adkar">ADKAR Framework</button>
           <button class="hub-btn hub-btn-sm ${activeView === 'timeline' ? '' : 'hub-btn-secondary'}" data-view="timeline">Timeline</button>
         </div>
       </div>
@@ -93,6 +102,7 @@ function renderContent() {
   if (!el) return;
 
   if (activeView === 'detail' && activeInitiative) { renderDetail(el); return; }
+  if (activeView === 'adkar') { renderAdkar(el); return; }
   if (activeView === 'timeline') { renderTimeline(el); return; }
   renderList(el);
 }
@@ -213,6 +223,65 @@ function renderDetail(el) {
   `;
 
   // Back button handled by delegated events at root level
+}
+
+// ===== ADKAR FRAMEWORK VIEW =====
+function renderAdkar(el) {
+  const statusColors = {
+    'not-started': '#d1d5db',
+    'planned': '#fbbf24',
+    'in-progress': '#3b82f6',
+    'completed': '#10b981',
+  };
+
+  el.innerHTML = `
+    <div style="max-width:1200px;">
+      <div style="margin-bottom:24px;">
+        <h3 class="text-section" style="margin:0 0 8px 0;">ADKAR Change Management Framework</h3>
+        <p style="font-size:13px;color:var(--ies-gray-400);margin:0;">The ADKAR model (Awareness, Desire, Knowledge, Ability, Reinforcement) provides a structured approach to organizational change.</p>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;">
+        ${adkarPhases.map((phase, idx) => `
+          <div class="hub-card" style="padding:20px;border-top:4px solid ${statusColors[phase.status]};">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+              <h4 style="font-size:15px;font-weight:700;margin:0;flex:1;">${idx + 1}. ${phase.phase}</h4>
+              <span style="display:inline-block;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;color:#fff;background:${statusColors[phase.status]};text-transform:capitalize;">${phase.status.replace('-', ' ')}</span>
+            </div>
+            <p style="font-size:13px;color:var(--ies-gray-600);margin:0 0 12px 0;line-height:1.5;">${phase.description}</p>
+            <div style="border-top:1px solid var(--ies-gray-200);padding-top:12px;">
+              <div style="font-size:11px;font-weight:700;color:var(--ies-gray-400);text-transform:uppercase;margin-bottom:8px;">Key Activities</div>
+              <ul style="margin:0;padding-left:16px;font-size:13px;">
+                ${phase.activities.map(activity => `<li style="margin:4px 0;color:var(--ies-gray-600);">${activity}</li>`).join('')}
+              </ul>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+
+      <!-- ADKAR Explanation -->
+      <div class="hub-card" style="padding:20px;margin-top:24px;background:#f9fafb;">
+        <div style="font-size:13px;font-weight:700;color:var(--ies-gray-700);margin-bottom:12px;">Framework Overview</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;font-size:13px;line-height:1.6;color:var(--ies-gray-600);">
+          <div>
+            <strong style="color:var(--ies-gray-700);">Awareness</strong> — Help people understand why change is happening. Share business drivers, market pressures, and strategic rationale. One-way communication: leadership to employee.
+          </div>
+          <div>
+            <strong style="color:var(--ies-gray-700);">Desire</strong> — Build personal motivation to engage. Use incentives, success stories, and champions. Create psychological safety. Two-way dialogue and listening.
+          </div>
+          <div>
+            <strong style="color:var(--ies-gray-700);">Knowledge</strong> — Provide training, documentation, and learning resources. Ensure people have the information needed to execute the change effectively.
+          </div>
+          <div>
+            <strong style="color:var(--ies-gray-700);">Ability</strong> — Enable demonstrated performance through practice, coaching, and feedback. Remove barriers and provide job aids. Measure competency.
+          </div>
+          <div>
+            <strong style="color:var(--ies-gray-700);">Reinforcement</strong> — Sustain the change through recognition, continued coaching, and monitoring. Prevent backsliding. Celebrate wins and document lessons learned.
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 // ===== TIMELINE VIEW =====
