@@ -12,8 +12,8 @@
  * @module hub/deck-generator/engine
  */
 
-import { db } from '../../shared/supabase.js?v=20260417-pb';
-import { bus } from '../../shared/event-bus.js?v=20260417-pb';
+import { db } from '../../shared/supabase.js?v=20260417-pc';
+import { bus } from '../../shared/event-bus.js?v=20260417-pc';
 
 /** Fire a toast-notification event on the bus. v2 called window.showToast(msg, level); we emit instead. */
 function showToast(message, level) {

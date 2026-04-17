@@ -5,7 +5,7 @@
  * @module tools/fleet-modeler/api
  */
 
-import { db } from '../../shared/supabase.js?v=20260417-pb';
+import { db } from '../../shared/supabase.js?v=20260417-pc';
 
 // ============================================================
 // SCENARIOS
@@ -79,7 +79,7 @@ export async function duplicateScenario(id) {
 /**
  * List lanes for a scenario.
  * @param {string} scenarioId
- * @returns {Promise<import('./types.js?v=20260417-pb').Lane[]>}
+ * @returns {Promise<import('./types.js?v=20260417-pc').Lane[]>}
  */
 export async function listLanes(scenarioId) {
   const { data, error } = await db.from('fleet_lanes')
@@ -93,7 +93,7 @@ export async function listLanes(scenarioId) {
 /**
  * Save lanes for a scenario (replaces existing).
  * @param {string} scenarioId
- * @param {import('./types.js?v=20260417-pb').Lane[]} lanes
+ * @param {import('./types.js?v=20260417-pc').Lane[]} lanes
  * @returns {Promise<void>}
  */
 export async function saveLanes(scenarioId, lanes) {

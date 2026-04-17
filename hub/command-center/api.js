@@ -176,8 +176,9 @@ export async function fetchChartData() {
 // ============================================================
 
 async function safeAlertFetch() {
-  // Try multiple possible alert tables
-  for (const table of ['market_alerts', 'hub_alerts', 'account_signals']) {
+  // Try tables in order of most-likely-to-exist to minimize console noise. hub_alerts
+  // is the canonical table; the others are historical fallbacks that may not exist.
+  for (const table of ['hub_alerts', 'market_alerts', 'account_signals']) {
     try {
       const rows = await db.fetchAll(table);
       if (rows.length) return rows;
