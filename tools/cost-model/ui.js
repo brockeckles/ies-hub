@@ -6,16 +6,16 @@
  * @module tools/cost-model/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-p9';
-import { state } from '../../shared/state.js?v=20260417-p9';
-import * as calc from './calc.js?v=20260417-p9';
-import * as api from './api.js?v=20260417-p9';
+import { bus } from '../../shared/event-bus.js?v=20260417-pa';
+import { state } from '../../shared/state.js?v=20260417-pa';
+import * as calc from './calc.js?v=20260417-pa';
+import * as api from './api.js?v=20260417-pa';
 
 // ============================================================
 // STATE — tool-local reactive state
 // ============================================================
 
-/** @type {import('./types.js?v=20260417-p9').CostModelData} */
+/** @type {import('./types.js?v=20260417-pa').CostModelData} */
 let model = createEmptyModel();
 
 /** @type {Object} */
@@ -1878,7 +1878,7 @@ function sectionHasData(key) {
 /**
  * Handle incoming labor lines from MOST tool.
  * Merges or replaces CM laborLines with MOST-derived data.
- * @param {import('../most-standards/types.js?v=20260417-p9').MostToCmPayload} payload
+ * @param {import('../most-standards/types.js?v=20260417-pa').MostToCmPayload} payload
  */
 function handleMostPush(payload) {
   if (!payload?.laborLines?.length) return;
@@ -1916,7 +1916,7 @@ function handleMostPush(payload) {
 /**
  * Handle incoming facility data from Warehouse Sizing Calculator.
  * Populates CM facility section fields.
- * @param {import('../warehouse-sizing/types.js?v=20260417-p9').WscToCmPayload} payload
+ * @param {import('../warehouse-sizing/types.js?v=20260417-pa').WscToCmPayload} payload
  */
 function handleWscPush(payload) {
   if (!payload) return;
@@ -2020,11 +2020,12 @@ function createEmptyModel() {
       { role: 'Quality Lead',  hourly_rate: 22.00, ratio_to_direct: 5,  burden_pct: 35 },
     ],
     equipmentLines: [
-      { equipment_name: 'Reach Truck',              category: 'MHE',     quantity: 4,    acquisition_type: 'lease',    monthly_lease: 850, acquisition_cost: 0,     annual_maintenance: 1200, amortization_years: 7,  notes: '' },
-      { equipment_name: 'RF Scanners',              category: 'IT',      quantity: 15,   acquisition_type: 'lease',    monthly_lease: 45,  acquisition_cost: 0,     annual_maintenance: 150,  amortization_years: 5,  notes: '' },
-      { equipment_name: 'Selective Pallet Racking', category: 'Racking', quantity: 3000, acquisition_type: 'purchase', monthly_lease: 0,   acquisition_cost: 95,    annual_maintenance: 2,    amortization_years: 15, notes: 'Position count' },
-      { equipment_name: 'Dock Levelers',            category: 'Dock',    quantity: 20,   acquisition_type: 'purchase', monthly_lease: 0,   acquisition_cost: 4500,  annual_maintenance: 250,  amortization_years: 10, notes: '' },
-      { equipment_name: 'WMS License',              category: 'IT',      quantity: 1,    acquisition_type: 'service',  monthly_lease: 8500,acquisition_cost: 0,     annual_maintenance: 0,    amortization_years: 5,  notes: 'Annual SaaS license' },
+      // Field names match renderEquipment DOM (monthly_cost / monthly_maintenance / amort_years).
+      { equipment_name: 'Reach Truck',              category: 'MHE',     quantity: 4,    acquisition_type: 'lease',    monthly_cost: 850,  acquisition_cost: 0,     monthly_maintenance: 100, amort_years: 7,  notes: '' },
+      { equipment_name: 'RF Scanners',              category: 'IT',      quantity: 15,   acquisition_type: 'lease',    monthly_cost: 45,   acquisition_cost: 0,     monthly_maintenance: 12,  amort_years: 5,  notes: '' },
+      { equipment_name: 'Selective Pallet Racking', category: 'Racking', quantity: 3000, acquisition_type: 'purchase', monthly_cost: 0,    acquisition_cost: 95,    monthly_maintenance: 0,   amort_years: 15, notes: 'Position count' },
+      { equipment_name: 'Dock Levelers',            category: 'Dock',    quantity: 20,   acquisition_type: 'purchase', monthly_cost: 0,    acquisition_cost: 4500,  monthly_maintenance: 21,  amort_years: 10, notes: '' },
+      { equipment_name: 'WMS License',              category: 'IT',      quantity: 1,    acquisition_type: 'service',  monthly_cost: 8500, acquisition_cost: 0,     monthly_maintenance: 0,   amort_years: 5,  notes: 'Annual SaaS license' },
     ],
     overheadLines: [
       { category: 'Utilities',    annual_cost: 180000, driver: 'sqft',             notes: 'Electric + gas ($1.20/sqft)' },

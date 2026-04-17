@@ -11,8 +11,8 @@
 
 /**
  * Compute aggregate stats across all initiatives.
- * @param {import('./types.js?v=20260417-p9').ChangeInitiative[]} initiatives
- * @returns {import('./types.js?v=20260417-p9').InitiativeStats}
+ * @param {import('./types.js?v=20260417-pa').ChangeInitiative[]} initiatives
+ * @returns {import('./types.js?v=20260417-pa').InitiativeStats}
  */
 export function computeStats(initiatives) {
   const allMilestones = initiatives.flatMap(i => i.milestones || []);
@@ -43,8 +43,8 @@ export function computeStats(initiatives) {
  * Milestone score: % completed (40% weight)
  * Stakeholder score: weighted by sentiment & influence (35% weight)
  * Communication score: % completed/sent (25% weight)
- * @param {import('./types.js?v=20260417-p9').ChangeInitiative} initiative
- * @returns {import('./types.js?v=20260417-p9').ReadinessScore}
+ * @param {import('./types.js?v=20260417-pa').ChangeInitiative} initiative
+ * @returns {import('./types.js?v=20260417-pa').ReadinessScore}
  */
 export function computeReadiness(initiative) {
   const milestoneScore = computeMilestoneScore(initiative.milestones || []);
@@ -67,7 +67,7 @@ export function computeReadiness(initiative) {
 
 /**
  * Milestone completion percentage.
- * @param {import('./types.js?v=20260417-p9').Milestone[]} milestones
+ * @param {import('./types.js?v=20260417-pa').Milestone[]} milestones
  * @returns {number} 0-100
  */
 export function computeMilestoneScore(milestones) {
@@ -80,7 +80,7 @@ export function computeMilestoneScore(milestones) {
  * Stakeholder sentiment score weighted by influence.
  * Champion=100, Supporter=75, Neutral=50, Resistant=10.
  * Influence weights: high=3, medium=2, low=1.
- * @param {import('./types.js?v=20260417-p9').Stakeholder[]} stakeholders
+ * @param {import('./types.js?v=20260417-pa').Stakeholder[]} stakeholders
  * @returns {number} 0-100
  */
 export function computeStakeholderScore(stakeholders) {
@@ -102,7 +102,7 @@ export function computeStakeholderScore(stakeholders) {
 
 /**
  * Communication completion percentage (sent + completed count as done).
- * @param {import('./types.js?v=20260417-p9').Communication[]} communications
+ * @param {import('./types.js?v=20260417-pa').Communication[]} communications
  * @returns {number} 0-100
  */
 export function computeCommunicationScore(communications) {
@@ -117,8 +117,8 @@ export function computeCommunicationScore(communications) {
 
 /**
  * Group stakeholders by sentiment.
- * @param {import('./types.js?v=20260417-p9').Stakeholder[]} stakeholders
- * @returns {Record<string, import('./types.js?v=20260417-p9').Stakeholder[]>}
+ * @param {import('./types.js?v=20260417-pa').Stakeholder[]} stakeholders
+ * @returns {Record<string, import('./types.js?v=20260417-pa').Stakeholder[]>}
  */
 export function groupBySentiment(stakeholders) {
   const groups = { champion: [], supporter: [], neutral: [], resistant: [] };
@@ -132,7 +132,7 @@ export function groupBySentiment(stakeholders) {
 
 /**
  * Compute stakeholder influence distribution.
- * @param {import('./types.js?v=20260417-p9').Stakeholder[]} stakeholders
+ * @param {import('./types.js?v=20260417-pa').Stakeholder[]} stakeholders
  * @returns {{ high: number, medium: number, low: number }}
  */
 export function influenceDistribution(stakeholders) {
@@ -145,8 +145,8 @@ export function influenceDistribution(stakeholders) {
 
 /**
  * Identify at-risk stakeholders (resistant + high influence).
- * @param {import('./types.js?v=20260417-p9').Stakeholder[]} stakeholders
- * @returns {import('./types.js?v=20260417-p9').Stakeholder[]}
+ * @param {import('./types.js?v=20260417-pa').Stakeholder[]} stakeholders
+ * @returns {import('./types.js?v=20260417-pa').Stakeholder[]}
  */
 export function atRiskStakeholders(stakeholders) {
   return stakeholders.filter(s => s.sentiment === 'resistant' && s.influence === 'high');
@@ -158,11 +158,11 @@ export function atRiskStakeholders(stakeholders) {
 
 /**
  * Build a unified timeline of events across initiatives.
- * @param {import('./types.js?v=20260417-p9').ChangeInitiative[]} initiatives
- * @returns {import('./types.js?v=20260417-p9').TimelineEvent[]}
+ * @param {import('./types.js?v=20260417-pa').ChangeInitiative[]} initiatives
+ * @returns {import('./types.js?v=20260417-pa').TimelineEvent[]}
  */
 export function buildTimeline(initiatives) {
-  /** @type {import('./types.js?v=20260417-p9').TimelineEvent[]} */
+  /** @type {import('./types.js?v=20260417-pa').TimelineEvent[]} */
   const events = [];
 
   for (const init of initiatives) {
@@ -190,10 +190,10 @@ export function buildTimeline(initiatives) {
 
 /**
  * Filter timeline events by date range.
- * @param {import('./types.js?v=20260417-p9').TimelineEvent[]} events
+ * @param {import('./types.js?v=20260417-pa').TimelineEvent[]} events
  * @param {string} startDate — ISO date
  * @param {string} endDate — ISO date
- * @returns {import('./types.js?v=20260417-p9').TimelineEvent[]}
+ * @returns {import('./types.js?v=20260417-pa').TimelineEvent[]}
  */
 export function filterTimelineByRange(events, startDate, endDate) {
   return events.filter(e => e.date >= startDate && e.date <= endDate);
@@ -201,10 +201,10 @@ export function filterTimelineByRange(events, startDate, endDate) {
 
 /**
  * Get upcoming events (within N days from a reference date).
- * @param {import('./types.js?v=20260417-p9').TimelineEvent[]} events
+ * @param {import('./types.js?v=20260417-pa').TimelineEvent[]} events
  * @param {string} referenceDate — ISO date
  * @param {number} [days=14]
- * @returns {import('./types.js?v=20260417-p9').TimelineEvent[]}
+ * @returns {import('./types.js?v=20260417-pa').TimelineEvent[]}
  */
 export function upcomingEvents(events, referenceDate, days = 14) {
   const ref = new Date(referenceDate);
@@ -220,9 +220,9 @@ export function upcomingEvents(events, referenceDate, days = 14) {
 
 /**
  * Filter initiatives by status.
- * @param {import('./types.js?v=20260417-p9').ChangeInitiative[]} initiatives
+ * @param {import('./types.js?v=20260417-pa').ChangeInitiative[]} initiatives
  * @param {string} status
- * @returns {import('./types.js?v=20260417-p9').ChangeInitiative[]}
+ * @returns {import('./types.js?v=20260417-pa').ChangeInitiative[]}
  */
 export function filterByStatus(initiatives, status) {
   if (!status || status === 'all') return initiatives;
@@ -231,9 +231,9 @@ export function filterByStatus(initiatives, status) {
 
 /**
  * Filter initiatives by priority.
- * @param {import('./types.js?v=20260417-p9').ChangeInitiative[]} initiatives
+ * @param {import('./types.js?v=20260417-pa').ChangeInitiative[]} initiatives
  * @param {string} priority
- * @returns {import('./types.js?v=20260417-p9').ChangeInitiative[]}
+ * @returns {import('./types.js?v=20260417-pa').ChangeInitiative[]}
  */
 export function filterByPriority(initiatives, priority) {
   if (!priority || priority === 'all') return initiatives;
@@ -242,10 +242,10 @@ export function filterByPriority(initiatives, priority) {
 
 /**
  * Sort initiatives.
- * @param {import('./types.js?v=20260417-p9').ChangeInitiative[]} initiatives
+ * @param {import('./types.js?v=20260417-pa').ChangeInitiative[]} initiatives
  * @param {'title' | 'priority' | 'targetDate' | 'status'} sortBy
  * @param {'asc' | 'desc'} [dir='asc']
- * @returns {import('./types.js?v=20260417-p9').ChangeInitiative[]}
+ * @returns {import('./types.js?v=20260417-pa').ChangeInitiative[]}
  */
 export function sortInitiatives(initiatives, sortBy, dir = 'asc') {
   const sorted = [...initiatives];
@@ -272,9 +272,9 @@ export function sortInitiatives(initiatives, sortBy, dir = 'asc') {
 /**
  * Mark milestones as overdue based on reference date.
  * Returns a new array of milestones with updated statuses (does not mutate).
- * @param {import('./types.js?v=20260417-p9').Milestone[]} milestones
+ * @param {import('./types.js?v=20260417-pa').Milestone[]} milestones
  * @param {string} referenceDate — ISO date string
- * @returns {import('./types.js?v=20260417-p9').Milestone[]}
+ * @returns {import('./types.js?v=20260417-pa').Milestone[]}
  */
 export function markOverdueMilestones(milestones, referenceDate) {
   return milestones.map(m => {
@@ -287,7 +287,7 @@ export function markOverdueMilestones(milestones, referenceDate) {
 
 /**
  * Count overdue items across initiatives.
- * @param {import('./types.js?v=20260417-p9').ChangeInitiative[]} initiatives
+ * @param {import('./types.js?v=20260417-pa').ChangeInitiative[]} initiatives
  * @param {string} referenceDate
  * @returns {{ overdueMilestones: number, overdueCommunications: number }}
  */
@@ -346,7 +346,7 @@ export function priorityBadge(priority) {
 // DEMO DATA
 // ============================================================
 
-/** @type {import('./types.js?v=20260417-p9').ChangeInitiative[]} */
+/** @type {import('./types.js?v=20260417-pa').ChangeInitiative[]} */
 export const DEMO_INITIATIVES = [
   {
     id: 'cm1',

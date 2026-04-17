@@ -6,10 +6,10 @@
  * @module tools/warehouse-sizing/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-p9';
-import { state } from '../../shared/state.js?v=20260417-p9';
-import * as calc from './calc.js?v=20260417-p9';
-import * as api from './api.js?v=20260417-p9';
+import { bus } from '../../shared/event-bus.js?v=20260417-pa';
+import { state } from '../../shared/state.js?v=20260417-pa';
+import * as calc from './calc.js?v=20260417-pa';
+import * as api from './api.js?v=20260417-pa';
 
 // ============================================================
 // STATE
@@ -21,13 +21,13 @@ let rootEl = null;
 /** @type {'dashboard' | 'elevation' | '3d'} */
 let activeView = 'dashboard';
 
-/** @type {import('./types.js?v=20260417-p9').FacilityConfig} */
+/** @type {import('./types.js?v=20260417-pa').FacilityConfig} */
 let facility = createDefaultFacility();
 
-/** @type {import('./types.js?v=20260417-p9').ZoneConfig} */
+/** @type {import('./types.js?v=20260417-pa').ZoneConfig} */
 let zones = createDefaultZones();
 
-/** @type {import('./types.js?v=20260417-p9').VolumeInputs} */
+/** @type {import('./types.js?v=20260417-pa').VolumeInputs} */
 let volumes = createDefaultVolumes();
 
 /** @type {boolean} */
@@ -1185,7 +1185,7 @@ function build3DScene() {
 // ============================================================
 
 function pushToCm() {
-  /** @type {import('./types.js?v=20260417-p9').WscToCmPayload} */
+  /** @type {import('./types.js?v=20260417-pa').WscToCmPayload} */
   const payload = {
     totalSqft: facility.totalSqft || 0,
     clearHeight: facility.clearHeight || 0,
@@ -1201,7 +1201,7 @@ function pushToCm() {
 
 /**
  * Handle CM → WSC push (e.g., "Size with Calculator" from CM).
- * @param {import('./types.js?v=20260417-p9').CmToWscPayload} payload
+ * @param {import('./types.js?v=20260417-pa').CmToWscPayload} payload
  */
 function handleCmPush(payload) {
   if (payload.clearHeight) facility.clearHeight = payload.clearHeight;
