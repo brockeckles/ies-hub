@@ -7,10 +7,10 @@
  * @module tools/network-opt/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-mB';
-import { state } from '../../shared/state.js?v=20260417-mB';
-import * as calc from './calc.js?v=20260417-mB';
-import * as api from './api.js?v=20260417-mB';
+import { bus } from '../../shared/event-bus.js?v=20260417-mC';
+import { state } from '../../shared/state.js?v=20260417-mC';
+import * as calc from './calc.js?v=20260417-mC';
+import * as api from './api.js?v=20260417-mC';
 
 // ============================================================
 // STATE
@@ -25,25 +25,25 @@ let activeView = 'setup';
 /** @type {'facilities' | 'demand' | 'modemix' | 'service'} */
 let activeSection = 'facilities';
 
-/** @type {import('./types.js?v=20260417-mB').Facility[]} */
+/** @type {import('./types.js?v=20260417-mC').Facility[]} */
 let facilities = [];
 
-/** @type {import('./types.js?v=20260417-mB').DemandPoint[]} */
+/** @type {import('./types.js?v=20260417-mC').DemandPoint[]} */
 let demands = [];
 
-/** @type {import('./types.js?v=20260417-mB').ModeMix} */
+/** @type {import('./types.js?v=20260417-mC').ModeMix} */
 let modeMix = { tlPct: 30, ltlPct: 40, parcelPct: 30 };
 
-/** @type {import('./types.js?v=20260417-mB').RateCard} */
+/** @type {import('./types.js?v=20260417-mC').RateCard} */
 let rateCard = { ...calc.DEFAULT_RATES };
 
-/** @type {import('./types.js?v=20260417-mB').ServiceConfig} */
+/** @type {import('./types.js?v=20260417-mC').ServiceConfig} */
 let serviceConfig = { ...calc.DEFAULT_SERVICE };
 
-/** @type {import('./types.js?v=20260417-mB').ScenarioResult[]} */
+/** @type {import('./types.js?v=20260417-mC').ScenarioResult[]} */
 let scenarios = [];
 
-/** @type {import('./types.js?v=20260417-mB').ScenarioResult|null} */
+/** @type {import('./types.js?v=20260417-mC').ScenarioResult|null} */
 let activeScenario = null;
 
 /** @type {string|null} */
@@ -52,7 +52,7 @@ let selectedArchetype = null;
 /** @type {object|null} map instance */
 let mapInstance = null;
 
-/** @type {import('./types.js?v=20260417-mB').ScenarioResult[]|null} */
+/** @type {import('./types.js?v=20260417-mC').ScenarioResult[]|null} */
 let comparisonResults = null;
 
 /** @type {number|null} */

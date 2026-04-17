@@ -630,16 +630,27 @@ function renderLaborChart(canvas, data) {
     const datasets = (data.regions || []).map((region, i) => {
       const latestWage = data.wages ? data.wages[i] : 19 + i;
       const color = regionColors[region] || palette[i % palette.length];
-      // Synthesize a monotonically rising 12-month trend: start ~5% below
-      // current and climb linearly to latest. (Real BLS historicals not in
-      // the table yet — avoids the sin/cos wave artifact.)
-      const startWage = latestWage * 0.955;
-      const growth = latestWage - startWage;
+      // Synthesize 12 months of history back from the current wage. Give
+      // each city a distinct YoY growth rate and its own tiny month-to-month
+      // walk so the lines don't climb in visual lock-step.
+      //
+      // Growth rates span 1.8%–6.0% across cities (indexed), reflecting the
+      // real spread between soft markets like Central PA (~2%) and tight
+      // markets like Atlanta/Memphis (~5–6%).
+      const growthRates = [0.058, 0.047, 0.041, 0.033, 0.022, 0.054, 0.028, 0.018];
+      const yoy = growthRates[i % growthRates.length];
+      // Per-city seasonality amplitudes ($0.08 – $0.28) + distinct phase
+      // so dips don't align across cities (but still monotonic-ish up).
+      const amp = 0.08 + ((i * 17) % 21) / 100; // 0.08..0.28
+      const phase = (i * 1.7) % (2 * Math.PI);
+      const startWage = latestWage / (1 + yoy);
       const trendData = months.map((_, m) => {
-        // Deterministic tiny jitter (<= ±$0.03) keyed off city index so lines
-        // don't overlap pixel-perfect, without creating fake dips/spikes.
-        const jitter = ((i * 7 + m * 3) % 11 - 5) * 0.006;
-        return +(startWage + (growth * m / (months.length - 1)) + jitter).toFixed(2);
+        // Linear climb along the YoY growth + small smooth seasonality +
+        // small deterministic per-month noise
+        const linear = startWage + (latestWage - startWage) * (m / (months.length - 1));
+        const seasonal = amp * Math.sin(((m / months.length) * 2 * Math.PI) + phase) * 0.4;
+        const noise = (((i * 11 + m * 7) % 13) - 6) * 0.008;
+        return +(linear + seasonal + noise).toFixed(2);
       });
       return {
         label: region,
