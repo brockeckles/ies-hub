@@ -3,6 +3,6 @@
  * @module hub/deal-management/api
  */
 
-import { db } from '../../shared/supabase.js?v=20260417-m3';
+import { db } from '../../shared/supabase.js?v=20260417-m4';
 
 export {};
