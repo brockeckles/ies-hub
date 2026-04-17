@@ -860,11 +860,11 @@ function showLogHoursModal() {
   `;
   rootEl?.appendChild(modal);
   modal.querySelector('#dm-log-save')?.addEventListener('click', async () => {
-    const week = (modal.querySelector('#dm-log-week').value;
-    const hours = parseFloat((modal.querySelector('#dm-log-hours-input').value) || 0;
-    const type = (modal.querySelector('#dm-log-type').value;
-    const resource = (modal.querySelector('#dm-log-resource').value || 'Brock Eckles';
-    const category = (modal.querySelector('#dm-log-category').value;
+    const week = modal.querySelector('#dm-log-week').value;
+    const hours = parseFloat(modal.querySelector('#dm-log-hours-input').value) || 0;
+    const type = modal.querySelector('#dm-log-type').value;
+    const resource = modal.querySelector('#dm-log-resource').value || 'Brock Eckles';
+    const category = modal.querySelector('#dm-log-category').value;
 
     if (hours <= 0) { alert('Hours must be greater than 0'); return; }
     if (!activeDeal) return;
@@ -1023,18 +1023,18 @@ function showNewTaskModal() {
   rootEl?.appendChild(modal);
   modal.querySelector('#dm-task-save')?.addEventListener('click', async () => {
     if (!activeDeal) return;
-    const title = (modal.querySelector('#dm-task-title').value.trim();
+    const title = modal.querySelector('#dm-task-title').value.trim();
     if (!title) { alert('Title required'); return; }
 
     const task = {
       opportunity_id: activeDeal.id,
       title,
-      priority: (modal.querySelector('#dm-task-priority').value,
+      priority: modal.querySelector('#dm-task-priority').value,
       status: 'todo' as const,
-      assignee: (modal.querySelector('#dm-task-assignee').value || null,
-      due_date: (modal.querySelector('#dm-task-due').value || null,
-      estimated_hours: parseFloat((modal.querySelector('#dm-task-est-hours').value) || null,
-      dos_stage_number: parseInt((modal.querySelector('#dm-task-stage').value) || null,
+      assignee: modal.querySelector('#dm-task-assignee').value || null,
+      due_date: modal.querySelector('#dm-task-due').value || null,
+      estimated_hours: parseFloat(modal.querySelector('#dm-task-est-hours').value) || null,
+      dos_stage_number: parseInt(modal.querySelector('#dm-task-stage').value) || null,
     };
 
     await api.createTask(task);
@@ -1076,7 +1076,7 @@ function showPopulateDosModal() {
   rootEl?.appendChild(modal);
   modal.querySelector('#dm-populate-save')?.addEventListener('click', async () => {
     if (!activeDeal) return;
-    const selected = Array.from(modal.querySelectorAll('.dos-stage-cb:checked')).map((cb: HTMLInputElement) => parseInt(cb.value));
+    const selected = Array.from(modal.querySelectorAll('.dos-stage-cb:checked')).map(cb => parseInt(cb.value));
     if (selected.length === 0) { alert('Select at least one stage'); return; }
 
     for (const stageNum of selected) {
@@ -1194,16 +1194,16 @@ function showNewUpdateModal() {
   rootEl?.appendChild(modal);
   modal.querySelector('#dm-update-save')?.addEventListener('click', async () => {
     if (!activeDeal) return;
-    const body = (modal.querySelector('#dm-update-body').value.trim();
+    const body = modal.querySelector('#dm-update-body').value.trim();
     if (!body) { alert('Update body required'); return; }
 
     const update = {
       opportunity_id: activeDeal.id,
-      update_date: (modal.querySelector('#dm-update-date').value,
-      author: (modal.querySelector('#dm-update-author').value || null,
+      update_date: modal.querySelector('#dm-update-date').value,
+      author: modal.querySelector('#dm-update-author').value || null,
       body,
-      next_steps: (modal.querySelector('#dm-update-next').value.trim() || null,
-      blockers: (modal.querySelector('#dm-update-blockers').value.trim() || null,
+      next_steps: modal.querySelector('#dm-update-next').value.trim() || null,
+      blockers: modal.querySelector('#dm-update-blockers').value.trim() || null,
     };
 
     await api.createUpdate(update);
