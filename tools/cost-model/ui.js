@@ -6,16 +6,16 @@
  * @module tools/cost-model/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-m8';
-import { state } from '../../shared/state.js?v=20260417-m8';
-import * as calc from './calc.js?v=20260417-m8';
-import * as api from './api.js?v=20260417-m8';
+import { bus } from '../../shared/event-bus.js?v=20260417-m9';
+import { state } from '../../shared/state.js?v=20260417-m9';
+import * as calc from './calc.js?v=20260417-m9';
+import * as api from './api.js?v=20260417-m9';
 
 // ============================================================
 // STATE — tool-local reactive state
 // ============================================================
 
-/** @type {import('./types.js?v=20260417-m8').CostModelData} */
+/** @type {import('./types.js?v=20260417-m9').CostModelData} */
 let model = createEmptyModel();
 
 /** @type {Object} */
@@ -146,34 +146,134 @@ function wireLandingEvents() {
     viewMode = 'editor';
     renderCurrentView();
   });
+
+  // Delete button on landing card — confirms, removes row from Supabase, re-renders.
+  rootEl.querySelectorAll('[data-cm-delete]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation(); // don't trigger the card-open handler
+      const id = Number(btn.getAttribute('data-cm-delete'));
+      const name = btn.getAttribute('data-cm-name') || `Model #${id}`;
+      if (!id) return;
+      if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+      try {
+        await api.deleteModel(id);
+        savedModels = savedModels.filter(m => m.id !== id);
+        renderCurrentView();
+      } catch (err) {
+        console.error('[CM] Delete failed:', err);
+        showCmToast('Delete failed: ' + err.message, 'error');
+      }
+    });
+  });
+
   rootEl.querySelectorAll('[data-cm-card]').forEach(card => {
     card.addEventListener('click', async () => {
       const id = Number(card.getAttribute('data-cm-card'));
       if (!id) return;
       try {
         const full = await api.getModel(id);
-        if (full?.project_data) {
+        if (!full) { showCmToast('Model not found — it may have been deleted.', 'error'); return; }
+        // Load logic:
+        //   (a) Modern rows: use project_data jsonb blob directly.
+        //   (b) Legacy rows (no project_data): reconstruct a minimal model from flat columns
+        //       so the user can still open / edit / re-save them. The next save populates
+        //       project_data, upgrading the row in place.
+        if (full.project_data) {
           model = { ...createEmptyModel(), ...full.project_data, id: full.id };
-          // Legacy models may have annual_hours=0 on lines with valid volume+uph; repair them.
-          (model.laborLines || []).forEach(l => {
-            if ((l.annual_hours || 0) === 0 && (l.volume || 0) > 0 && (l.base_uph || 0) > 0) {
-              recomputeLineHours(l);
-            }
-          });
-          isDirty = false;
-          userHasInteracted = false;
-          activeSection = 'setup';
-          viewMode = 'editor';
-          renderCurrentView();
         } else {
-          alert('This model has no saved data.');
+          model = reconstructModelFromFlatRow(full);
+          showCmToast('Legacy model loaded from summary fields. Save to upgrade to the new format.', 'info');
         }
+        // Legacy models may have annual_hours=0 on lines with valid volume+uph; repair them.
+        (model.laborLines || []).forEach(l => {
+          if ((l.annual_hours || 0) === 0 && (l.volume || 0) > 0 && (l.base_uph || 0) > 0) {
+            recomputeLineHours(l);
+          }
+        });
+        isDirty = false;
+        userHasInteracted = false;
+        activeSection = 'setup';
+        viewMode = 'editor';
+        renderCurrentView();
       } catch (err) {
         console.error('[CM] Load failed:', err);
-        alert('Load failed: ' + err.message);
+        showCmToast('Load failed: ' + err.message, 'error');
       }
     });
   });
+}
+
+/**
+ * Build a minimal v3 model object from a row that has only the flat cost_model_projects
+ * columns (no project_data jsonb). Covers rows created before the v3 persistence backfill.
+ * @param {any} row
+ * @returns {object}
+ */
+function reconstructModelFromFlatRow(row) {
+  const empty = createEmptyModel();
+  // Volume columns → volumeLines
+  const volumeMap = [
+    { name: 'Pallets Received',   uom: 'pallets', key: 'vol_pallets_received',   isOut: false },
+    { name: 'Put-Away (Pallets)', uom: 'pallets', key: 'vol_pallets_putaway',    isOut: false },
+    { name: 'Pallets Shipped',    uom: 'pallets', key: 'vol_pallets_shipped',    isOut: true  },
+    { name: 'Cases Picked',       uom: 'cases',   key: 'vol_cases_picked',       isOut: false },
+    { name: 'Eaches Picked',      uom: 'eaches',  key: 'vol_eaches_picked',      isOut: false },
+    { name: 'Orders Packed',      uom: 'orders',  key: 'vol_orders_packed',      isOut: false },
+    { name: 'Replenishments',     uom: 'moves',   key: 'vol_replenishments',     isOut: false },
+    { name: 'Returns Processed',  uom: 'orders',  key: 'vol_returns_processed',  isOut: false },
+    { name: 'VAS Units',          uom: 'eaches',  key: 'vol_vas_units',          isOut: false },
+  ];
+  const volumeLines = volumeMap
+    .filter(v => Number(row[v.key] || 0) > 0)
+    .map(v => ({ name: v.name, volume: Number(row[v.key]), uom: v.uom, isOutboundPrimary: v.isOut }));
+  // If no volumes, keep starter volumes so the form isn't empty
+  return {
+    ...empty,
+    id: row.id,
+    projectDetails: {
+      name: row.name || '',
+      clientName: row.client_name || '',
+      market: row.market_id || '',
+      environment: row.environment_type || '',
+      facilityLocation: '',
+      contractTerm: row.contract_term_years || 5,
+      dealId: row.deal_deals_id || null,
+    },
+    volumeLines: volumeLines.length ? volumeLines : empty.volumeLines,
+    facility: { ...empty.facility, totalSqft: Number(row.facility_sqft || empty.facility.totalSqft) },
+    shifts: {
+      shiftsPerDay: row.shifts_per_day || empty.shifts.shiftsPerDay,
+      hoursPerShift: Number(row.hours_per_shift || empty.shifts.hoursPerShift),
+      daysPerWeek: row.days_per_week || empty.shifts.daysPerWeek,
+      weeksPerYear: row.operating_weeks_per_year || empty.shifts.weeksPerYear,
+    },
+    financial: {
+      ...empty.financial,
+      targetMargin: Number(row.target_margin_pct || empty.financial.targetMargin),
+      annualEscalation: Number(row.labor_escalation_pct || empty.financial.annualEscalation),
+      volumeGrowth: Number(row.annual_volume_growth_pct || empty.financial.volumeGrowth),
+    },
+    pricingBuckets: Array.isArray(row.pricing_buckets) && row.pricing_buckets.length
+      ? row.pricing_buckets
+      : empty.pricingBuckets,
+  };
+}
+
+/**
+ * Small non-blocking toast (replaces alert() which freezes the tab on our live URL).
+ */
+function showCmToast(message, level) {
+  if (!rootEl) return;
+  const color = level === 'error' ? '#dc2626' : level === 'info' ? '#2563eb' : '#16a34a';
+  const bg = level === 'error' ? '#fef2f2' : level === 'info' ? '#eff6ff' : '#f0fdf4';
+  const existing = document.getElementById('cm-toast');
+  if (existing) existing.remove();
+  const el = document.createElement('div');
+  el.id = 'cm-toast';
+  el.style.cssText = `position:fixed;bottom:24px;right:24px;padding:12px 16px;border-radius:8px;border:1px solid ${color};background:${bg};color:${color};font-size:13px;font-weight:600;z-index:9999;max-width:400px;box-shadow:0 4px 12px rgba(0,0,0,.12);`;
+  el.textContent = message;
+  document.body.appendChild(el);
+  setTimeout(() => { if (el.parentNode) el.remove(); }, 5000);
 }
 
 function wireEditorEvents() {
@@ -449,6 +549,21 @@ function renderSection() {
 // SECTION 1: SETUP
 // ============================================================
 
+/** Build a display label for a market row ("Chicago Metro, IL"). */
+function marketLabel(m) {
+  if (!m) return '';
+  const name = m.name || m.market_name || m.abbr || (m.market_id || m.id);
+  const state = m.state || '';
+  return state ? `${name}, ${state}` : name;
+}
+
+/** Return "City, State" for the selected market id, or '' if no match. */
+function deriveLocationString(marketId, markets) {
+  if (!marketId || !Array.isArray(markets)) return '';
+  const m = markets.find(x => (x.market_id || x.id) === marketId);
+  return m ? marketLabel(m) : '';
+}
+
 function renderSetup() {
   const pd = model.projectDetails;
   const markets = (refData.markets && refData.markets.length > 0) ? refData.markets : DEMO_MARKETS_FALLBACK;
@@ -472,23 +587,19 @@ function renderSetup() {
         <input class="hub-input" id="cm-client" value="${pd.clientName || ''}" placeholder="Client name" data-field="projectDetails.clientName" />
       </div>
       <div class="cm-form-group">
-        <label class="cm-form-label">Facility Location</label>
-        <input class="hub-input" id="cm-location" value="${pd.facilityLocation || ''}" placeholder="City, State" data-field="projectDetails.facilityLocation" />
-      </div>
-    </div>
-
-    <div class="cm-form-row">
-      <div class="cm-form-group">
-        <label class="cm-form-label">Market</label>
+        <label class="cm-form-label">Market <span style="font-weight:400;color:var(--ies-gray-400);font-size:11px;">(drives city/state)</span></label>
         <select class="hub-select" id="cm-market" data-field="projectDetails.market">
           <option value="">Select market...</option>
           ${markets.map(m => {
             const id = m.market_id || m.id;
-            const label = m.name || m.market_name || m.abbr || id;
+            const label = marketLabel(m);
             return `<option value="${id}"${id === pd.market ? ' selected' : ''}>${label}</option>`;
           }).join('')}
         </select>
       </div>
+    </div>
+
+    <div class="cm-form-row">
       <div class="cm-form-group">
         <label class="cm-form-label">Environment</label>
         <select class="hub-select" id="cm-env" data-field="projectDetails.environment">
@@ -497,6 +608,10 @@ function renderSetup() {
             `<option value="${e.toLowerCase()}"${pd.environment === e.toLowerCase() ? ' selected' : ''}>${e}</option>`
           ).join('')}
         </select>
+      </div>
+      <div class="cm-form-group">
+        <label class="cm-form-label">City, State <span style="font-weight:400;color:var(--ies-gray-400);font-size:11px;">(derived from market)</span></label>
+        <input class="hub-input" id="cm-location-display" value="${deriveLocationString(pd.market, markets) || pd.facilityLocation || ''}" placeholder="—" readonly style="background:var(--ies-gray-50);color:var(--ies-gray-500);" />
       </div>
     </div>
 
@@ -2183,7 +2298,7 @@ function sectionHasData(key) {
 /**
  * Handle incoming labor lines from MOST tool.
  * Merges or replaces CM laborLines with MOST-derived data.
- * @param {import('../most-standards/types.js?v=20260417-m8').MostToCmPayload} payload
+ * @param {import('../most-standards/types.js?v=20260417-m9').MostToCmPayload} payload
  */
 function handleMostPush(payload) {
   if (!payload?.laborLines?.length) return;
@@ -2221,7 +2336,7 @@ function handleMostPush(payload) {
 /**
  * Handle incoming facility data from Warehouse Sizing Calculator.
  * Populates CM facility section fields.
- * @param {import('../warehouse-sizing/types.js?v=20260417-m8').WscToCmPayload} payload
+ * @param {import('../warehouse-sizing/types.js?v=20260417-m9').WscToCmPayload} payload
  */
 function handleWscPush(payload) {
   if (!payload) return;
@@ -2282,9 +2397,15 @@ function renderLanding() {
             const updated = m.updated_at ? new Date(m.updated_at) : null;
             const updatedStr = updated ? updated.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
             const market = m.market_id ? (marketById[m.market_id] || m.market_id) : null;
+            const safeName = (m.name || 'Untitled Model').replace(/"/g, '&quot;');
             return `
-              <div class="hub-card cm-landing-card" data-cm-card="${m.id}" style="padding:16px;cursor:pointer;transition:all 0.15s;border:1px solid var(--ies-gray-200);">
-                <div style="font-size:14px;font-weight:700;margin-bottom:4px;color:var(--ies-navy);">${m.name || 'Untitled Model'}</div>
+              <div class="hub-card cm-landing-card" data-cm-card="${m.id}" style="padding:16px;cursor:pointer;transition:all 0.15s;border:1px solid var(--ies-gray-200);position:relative;">
+                <button class="cm-landing-delete" data-cm-delete="${m.id}" data-cm-name="${safeName}"
+                        title="Delete this model"
+                        style="position:absolute;top:8px;right:8px;width:24px;height:24px;padding:0;display:flex;align-items:center;justify-content:center;background:transparent;border:none;color:var(--ies-gray-300);cursor:pointer;border-radius:4px;font-size:14px;">
+                  ✕
+                </button>
+                <div style="font-size:14px;font-weight:700;margin-bottom:4px;color:var(--ies-navy);padding-right:24px;">${m.name || 'Untitled Model'}</div>
                 <div style="font-size:12px;color:var(--ies-gray-500);margin-bottom:12px;">${m.client_name || '<span style="color:var(--ies-gray-300);">No client</span>'}</div>
                 <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
                   ${market ? `<span style="font-size:10px;padding:2px 8px;border-radius:12px;background:var(--ies-gray-100);color:var(--ies-gray-600);">${market}</span>` : ''}
