@@ -84,12 +84,12 @@
  * @property {number} chargingSqft — battery charging area
  * @property {number} repackSqft — repack / VAS area
  * @property {number} [otherSqft] — misc non-storage area
- * @property {import('./types.js?v=20260417-mF').StorageAllocation} [storageAllocation] — mix of storage types
- * @property {import('./types.js?v=20260417-mF').DockConfig} [dockConfig] — dock configuration
- * @property {import('./types.js?v=20260417-mF').ProductDimensions} [productDimensions] — product sizing
- * @property {import('./types.js?v=20260417-mF').ForwardPickConfig} [forwardPick] — forward pick area config
+ * @property {import('./types.js?v=20260417-mG').StorageAllocation} [storageAllocation] — mix of storage types
+ * @property {import('./types.js?v=20260417-mG').DockConfig} [dockConfig] — dock configuration
+ * @property {import('./types.js?v=20260417-mG').ProductDimensions} [productDimensions] — product sizing
+ * @property {import('./types.js?v=20260417-mG').ForwardPickConfig} [forwardPick] — forward pick area config
  * @property {{ vas: OptionalZone, returns: OptionalZone, chargeback: OptionalZone }} [optionalZones] — optional functional zones
- * @property {import('./types.js?v=20260417-mF').CustomZone[]} [customZones] — user-defined zones
+ * @property {import('./types.js?v=20260417-mG').CustomZone[]} [customZones] — user-defined zones
  * @property {number} [peakUnitsPerDay] — peak daily unit throughput
  * @property {number} [avgUnitsPerDay] — average daily unit throughput
  * @property {number} [operatingDaysPerYear] — annual operating days

@@ -5,7 +5,11 @@
  * @module hub/market-explorer/ui
  */
 
-import * as calc from './calc.js?v=20260417-mF';
+import * as calc from './calc.js?v=20260417-mG';
+import * as api from './api.js?v=20260417-mG';
+
+// Per-market signal cache: marketId → { news, alerts, fetchedAt }
+const marketSignalCache = new Map();
 
 let rootEl = null;
 let markets = [...calc.DEMO_MARKETS];
@@ -70,6 +74,10 @@ function bindDelegatedEvents() {
     if (detailTab) {
       detailTabActive = /** @type {HTMLElement} */ (detailTab).dataset.detailTab;
       renderDetailContent();
+      // Lazy-load Intelligence tab signals the first time it's viewed per market
+      if (detailTabActive === 'intelligence' && selectedMarket) {
+        loadIntelligenceIfNeeded(selectedMarket);
+      }
       return;
     }
 
@@ -569,23 +577,123 @@ function renderDetailTab(m) {
       `;
 
     case 'intelligence':
-      return `
-        <div>
-          <div class="text-caption text-muted" style="margin-bottom: var(--sp-3);">Recent Market Signals</div>
-          <div style="border: 1px solid var(--ies-gray-200); border-radius: var(--radius-md); padding: var(--sp-3); background: var(--ies-gray-50);">
-            <div class="text-body" style="font-size: 13px; line-height: 1.6; color: var(--ies-gray-600);">
-              <p style="margin: 0 0 8px 0;">• Strong labor market recovery in recent quarters</p>
-              <p style="margin: 0 0 8px 0;">• Industrial vacancy remains competitive at ${calc.fmtPct(m.availabilityPct)}</p>
-              <p style="margin: 0 0 8px 0;">• Freight rates ${m.freightIndex > 95 ? 'elevated' : 'stable'} — monitor quarterly</p>
-              <p style="margin: 0;">• ${m.activeDeals} active deal${m.activeDeals !== 1 ? 's' : ''} in flight</p>
-            </div>
-          </div>
-        </div>
-      `;
+      return renderIntelligencePanel(m);
 
     default:
       return '';
   }
+}
+
+// ============================================================
+// PER-MARKET INTELLIGENCE
+// ============================================================
+
+/** Lazy-fetch signals for a market. Caches the result for 5 minutes. */
+async function loadIntelligenceIfNeeded(market) {
+  const id = market?.id;
+  if (!id) return;
+  const cached = marketSignalCache.get(id);
+  if (cached && (Date.now() - cached.fetchedAt) < 5 * 60 * 1000) return;
+
+  // Show a loading state
+  marketSignalCache.set(id, { news: [], alerts: [], fetchedAt: Date.now(), loading: true });
+  renderDetailContent();
+
+  try {
+    const signals = await api.fetchMarketSignals(market);
+    marketSignalCache.set(id, { ...signals, fetchedAt: Date.now(), loading: false });
+  } catch (err) {
+    marketSignalCache.set(id, { news: [], alerts: [], fetchedAt: Date.now(), loading: false, error: err.message });
+  }
+  // Only re-render if we're still looking at Intelligence for the same market
+  if (selectedMarket?.id === id && detailTabActive === 'intelligence') {
+    renderDetailContent();
+  }
+}
+
+/** Render the Intelligence tab — real signals fuzzy-matched to market name/state. */
+function renderIntelligencePanel(m) {
+  const cache = marketSignalCache.get(m.id);
+  const loading = cache?.loading;
+  const news = cache?.news || [];
+  const alerts = cache?.alerts || [];
+  const hasSignals = news.length > 0 || alerts.length > 0;
+  const footnote = `Signals matched by headline/summary containing "${(m.name || '').split(/[-,/]/)[0].trim()}" or "${m.state || ''}". Some may be tangential — no market_id column exists on these tables yet.`;
+
+  if (loading) {
+    return `
+      <div style="padding: var(--sp-4); text-align:center; color:var(--ies-gray-400); font-size:13px;">
+        Loading recent signals for ${m.name}…
+      </div>
+    `;
+  }
+
+  if (!hasSignals) {
+    return `
+      <div>
+        <div class="text-caption text-muted" style="margin-bottom: var(--sp-3);">Recent Market Signals</div>
+        <div style="border: 1px dashed var(--ies-gray-200); border-radius: var(--radius-md); padding: var(--sp-4); background: var(--ies-gray-50); text-align:center;">
+          <div style="font-size: 13px; color: var(--ies-gray-500); margin-bottom:6px;">No recent signals found for ${m.name}.</div>
+          <div style="font-size: 11px; color: var(--ies-gray-400);">Industry-wide signals are available on the Command Center.</div>
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <div>
+      ${alerts.length > 0 ? `
+        <div class="text-caption text-muted" style="margin-bottom: var(--sp-2);">Active Alerts (${alerts.length})</div>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom: var(--sp-4);">
+          ${alerts.map(a => `
+            <div style="padding:10px 12px;background:var(--ies-gray-50);border:1px solid var(--ies-gray-200);border-radius:6px;font-size:12px;">
+              <div style="font-weight:700;color:var(--ies-gray-700);margin-bottom:3px;">${a.title}</div>
+              ${a.summary ? `<div style="color:var(--ies-gray-500);line-height:1.4;">${a.summary}</div>` : ''}
+              <div style="display:flex;gap:8px;margin-top:4px;font-size:10px;color:var(--ies-gray-400);">
+                ${a.source ? `<span>${a.source}</span>` : ''}
+                <span>${formatDateShort(a.created_at)}</span>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      ` : ''}
+
+      ${news.length > 0 ? `
+        <div class="text-caption text-muted" style="margin-bottom: var(--sp-2);">Competitor & Industry News (${news.length})</div>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom: var(--sp-3);">
+          ${news.map(n => `
+            <div style="padding:10px 12px;background:#fff;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:12px;">
+              <div style="font-weight:600;color:var(--ies-gray-700);margin-bottom:3px;">
+                ${n.source_url ? `<a href="${n.source_url}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;" onmouseover="this.style.color='#2563eb'" onmouseout="this.style.color='inherit'">${n.headline} ↗</a>` : n.headline}
+              </div>
+              ${n.summary ? `<div style="color:var(--ies-gray-500);line-height:1.4;">${n.summary}</div>` : ''}
+              <div style="display:flex;gap:8px;margin-top:4px;font-size:10px;color:var(--ies-gray-400);">
+                ${n.competitor ? `<span style="font-weight:600;">${n.competitor}</span>` : ''}
+                ${n.source ? `<span>${n.source}</span>` : ''}
+                <span>${formatDateShort(n.published_date || n.created_at)}</span>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      ` : ''}
+
+      <div style="margin-top: var(--sp-3); font-size: 10px; color: var(--ies-gray-400); font-style: italic; line-height:1.5;">
+        ${footnote}
+      </div>
+    </div>
+  `;
+}
+
+function formatDateShort(iso) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    const now = new Date();
+    const diffDays = Math.floor((now - d) / (86400000));
+    if (diffDays < 1) return 'Today';
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  } catch { return ''; }
 }
 
 // ============================================================
