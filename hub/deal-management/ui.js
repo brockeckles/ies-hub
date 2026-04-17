@@ -6,7 +6,7 @@
  * @module hub/deal-management/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-p1';
+import { bus } from '../../shared/event-bus.js?v=20260417-p2';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -14,14 +14,15 @@ let viewMode = 'pipeline'; // pipeline | list | detail
 let selectedDeal = null;
 let detailTab = 'overview'; // overview | sites | dos | financials | documents
 
-/** DOS stage definitions */
+/** DOS stage definitions — GXO Deal Operating System 6-stage framework
+ *  (canonical names from public.stages table). */
 const DOS_STAGES = [
-  { id: 1, name: 'Qualification', color: '#6b7280' },
-  { id: 2, name: 'Discovery', color: '#2563eb' },
-  { id: 3, name: 'Solution Design', color: '#7c3aed' },
-  { id: 4, name: 'Proposal', color: '#d97706' },
-  { id: 5, name: 'Negotiation', color: '#ea580c' },
-  { id: 6, name: 'Implementation', color: '#16a34a' },
+  { id: 1, name: 'Pre-Sales Engagement',       color: '#6b7280' },
+  { id: 2, name: 'Deal Qualification',         color: '#2563eb' },
+  { id: 3, name: 'Kick-Off & Solution Design', color: '#7c3aed' },
+  { id: 4, name: 'Operations Review',          color: '#d97706' },
+  { id: 5, name: 'Executive Review',           color: '#ea580c' },
+  { id: 6, name: 'Delivery Handover',          color: '#16a34a' },
 ];
 
 /** DOS templates per stage — from v2 38 templates */

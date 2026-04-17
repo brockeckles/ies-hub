@@ -3,6 +3,6 @@
  * @module hub/wiki/api
  */
 
-import { db } from '../../shared/supabase.js?v=20260417-p1';
+import { db } from '../../shared/supabase.js?v=20260417-p2';
 
 export {};

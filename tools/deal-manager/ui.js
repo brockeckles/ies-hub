@@ -6,10 +6,10 @@
  * @module tools/deal-manager/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-p1';
-import { state } from '../../shared/state.js?v=20260417-p1';
-import * as calc from './calc.js?v=20260417-p1';
-import * as api from './api.js?v=20260417-p1';
+import { bus } from '../../shared/event-bus.js?v=20260417-p2';
+import { state } from '../../shared/state.js?v=20260417-p2';
+import * as calc from './calc.js?v=20260417-p2';
+import * as api from './api.js?v=20260417-p2';
 
 // ============================================================
 // STATE
@@ -24,35 +24,35 @@ let activeTab = 'list';
 /** @type {'kanban' | 'table'} */
 let landingViewMode = 'kanban';
 
-/** @type {import('./types.js?v=20260417-p1').Deal|null} */
+/** @type {import('./types.js?v=20260417-p2').Deal|null} */
 let activeDeal = null;
 
-/** @type {import('./types.js?v=20260417-p1').Site[]} */
+/** @type {import('./types.js?v=20260417-p2').Site[]} */
 let sites = [];
 
-/** @type {import('./types.js?v=20260417-p1').DealFinancials|null} */
+/** @type {import('./types.js?v=20260417-p2').DealFinancials|null} */
 let financials = null;
 
-/** @type {import('./types.js?v=20260417-p1').DosStage[]} */
+/** @type {import('./types.js?v=20260417-p2').DosStage[]} */
 let dosStages = [];
 
-/** @type {import('./types.js?v=20260417-p1').Deal[]} */
+/** @type {import('./types.js?v=20260417-p2').Deal[]} */
 let allDeals = [];
 
-/** @type {import('./types.js?v=20260417-p1').HoursEntry[]} */
+/** @type {import('./types.js?v=20260417-p2').HoursEntry[]} */
 let hoursEntries = [];
 
-/** @type {import('./types.js?v=20260417-p1').Task[]} */
+/** @type {import('./types.js?v=20260417-p2').Task[]} */
 let tasks = [];
 
-/** @type {import('./types.js?v=20260417-p1').WeeklyUpdate[]} */
+/** @type {import('./types.js?v=20260417-p2').WeeklyUpdate[]} */
 let updates = [];
 
 // DOS stages reference (6 stages: Pre-Sales → Delivery)
 const DOS_STAGE_LABELS = [
   { number: 1, name: 'Pre-Sales Engagement' },
   { number: 2, name: 'Deal Qualification' },
-  { number: 3, name: 'Solution Design' },
+  { number: 3, name: 'Kick-Off & Solution Design' },
   { number: 4, name: 'Operations Review' },
   { number: 5, name: 'Executive Review' },
   { number: 6, name: 'Delivery Handover' },
@@ -190,9 +190,9 @@ function renderContent() {
 
 function renderKanban(el) {
   const stages = [
-    { number: 1, name: 'Pre-Sales' },
+    { number: 1, name: 'Pre-Sales Engagement' },
     { number: 2, name: 'Deal Qualification' },
-    { number: 3, name: 'Solution Design' },
+    { number: 3, name: 'Kick-Off & Solution Design' },
     { number: 4, name: 'Operations Review' },
     { number: 5, name: 'Executive Review' },
     { number: 6, name: 'Delivery Handover' },
