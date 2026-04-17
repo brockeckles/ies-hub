@@ -6,10 +6,10 @@
  * @module tools/warehouse-sizing/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-mG';
-import { state } from '../../shared/state.js?v=20260417-mG';
-import * as calc from './calc.js?v=20260417-mG';
-import * as api from './api.js?v=20260417-mG';
+import { bus } from '../../shared/event-bus.js?v=20260417-mH';
+import { state } from '../../shared/state.js?v=20260417-mH';
+import * as calc from './calc.js?v=20260417-mH';
+import * as api from './api.js?v=20260417-mH';
 
 // ============================================================
 // STATE
@@ -21,13 +21,13 @@ let rootEl = null;
 /** @type {'dashboard' | 'elevation' | '3d'} */
 let activeView = 'dashboard';
 
-/** @type {import('./types.js?v=20260417-mG').FacilityConfig} */
+/** @type {import('./types.js?v=20260417-mH').FacilityConfig} */
 let facility = createDefaultFacility();
 
-/** @type {import('./types.js?v=20260417-mG').ZoneConfig} */
+/** @type {import('./types.js?v=20260417-mH').ZoneConfig} */
 let zones = createDefaultZones();
 
-/** @type {import('./types.js?v=20260417-mG').VolumeInputs} */
+/** @type {import('./types.js?v=20260417-mH').VolumeInputs} */
 let volumes = createDefaultVolumes();
 
 /** @type {boolean} */
@@ -90,6 +90,7 @@ function renderShell() {
         <!-- View Toggle Bar -->
         <div style="display:flex; gap:8px; padding:12px 24px; border-bottom:1px solid var(--ies-gray-200); align-items:center;">
           <button class="wsc-view-btn active" data-view="dashboard">Dashboard</button>
+          <button class="wsc-view-btn" data-view="plan" title="Top-down 2D floorplan showing dock doors, storage, and zone allocation (AutoCAD-style)">2D — Plan</button>
           <button class="wsc-view-btn" data-view="elevation" title="2D cross-section showing rack levels, beam heights, and sprinkler clearance">2D — Elevation</button>
           <button class="wsc-view-btn" data-view="3d" title="Interactive 3D model of the facility layout">3D View</button>
           <div style="flex:1;"></div>
@@ -700,12 +701,192 @@ function renderContentView() {
 
   switch (activeView) {
     case 'dashboard': container.innerHTML = renderDashboard(); break;
+    case 'plan':
+      container.innerHTML = renderPlan();
+      requestAnimationFrame(() => drawPlan());
+      break;
     case 'elevation':
       container.innerHTML = renderElevation();
       requestAnimationFrame(() => drawElevation());
       break;
     case '3d': render3DView(container); break;
   }
+}
+
+// ============================================================
+// 2D PLAN VIEW (Top-down floorplan)
+// ============================================================
+
+function renderPlan() {
+  const storage = calc.computeStorage(facility, zones);
+  return `
+    <div class="hub-card">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom: var(--sp-2);">
+        <h3 class="text-subtitle" style="margin:0;">Floorplan (Top-Down)</h3>
+        <span class="text-caption text-muted">Scale: 1 px ≈ ${Math.max(1, Math.round(Math.sqrt((facility.totalSqft || 0) * 1.5) / 800))} ft</span>
+      </div>
+      <canvas id="wsc-plan-canvas" width="900" height="520" style="width:100%; border:1px solid var(--ies-gray-200); border-radius:6px; background:#fff;"></canvas>
+      <div style="margin-top:var(--sp-3); display:flex; flex-wrap:wrap; gap:16px; font-size:11px; color:var(--ies-gray-500);">
+        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:#eff6ff;border:1px solid #93c5fd;border-radius:2px;"></span>Storage</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:#f0fdf4;border:1px solid #86efac;border-radius:2px;"></span>Receive Staging</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:#fef3c7;border:1px solid #fcd34d;border-radius:2px;"></span>Ship Staging</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:#f3e8ff;border:1px solid #c4b5fd;border-radius:2px;"></span>Office</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:#ffedd5;border:1px solid #fdba74;border-radius:2px;"></span>Charging</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:#fecaca;border:1px solid #f87171;border-radius:2px;"></span>Dock Door</span>
+      </div>
+    </div>
+  `;
+}
+
+function drawPlan() {
+  const canvas = rootEl?.querySelector('#wsc-plan-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const cw = canvas.width, ch = canvas.height;
+  ctx.clearRect(0, 0, cw, ch);
+
+  const totalSqft = facility.totalSqft || 0;
+  if (totalSqft <= 0) {
+    ctx.fillStyle = '#9ca3af';
+    ctx.font = '13px Montserrat, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Set facility Total SF to render the floorplan.', cw / 2, ch / 2);
+    return;
+  }
+
+  // Derive building dimensions; use facility.buildingWidth/Depth if set, else approximate
+  // a 1.5:1 rectangle from the total sqft. Footprint in feet.
+  const widthFt  = facility.buildingWidth  || Math.round(Math.sqrt(totalSqft * 1.5));
+  const depthFt  = facility.buildingDepth  || Math.round(totalSqft / Math.max(1, widthFt));
+
+  // Compute a fit-to-canvas scale (pixels per foot) with padding
+  const pad = 48;
+  const usableW = cw - pad * 2;
+  const usableH = ch - pad * 2;
+  const pxPerFt = Math.min(usableW / widthFt, usableH / depthFt);
+
+  const buildingWpx = widthFt * pxPerFt;
+  const buildingHpx = depthFt * pxPerFt;
+  const offsetX = (cw - buildingWpx) / 2;
+  const offsetY = (ch - buildingHpx) / 2;
+
+  // Outer building outline
+  ctx.fillStyle = '#f9fafb';
+  ctx.strokeStyle = '#374151';
+  ctx.lineWidth = 2;
+  ctx.fillRect(offsetX, offsetY, buildingWpx, buildingHpx);
+  ctx.strokeRect(offsetX, offsetY, buildingWpx, buildingHpx);
+
+  // Zone allocations (as fractions of the building)
+  const zoneData = [
+    { key: 'officeSqft',         sqft: zones.officeSqft || 0,         fill: '#f3e8ff', stroke: '#8b5cf6', label: 'Office' },
+    { key: 'receiveStagingSqft', sqft: zones.receiveStagingSqft || 0, fill: '#f0fdf4', stroke: '#16a34a', label: 'Receive Staging' },
+    { key: 'shipStagingSqft',    sqft: zones.shipStagingSqft || 0,    fill: '#fef3c7', stroke: '#d97706', label: 'Ship Staging' },
+    { key: 'chargingSqft',       sqft: zones.chargingSqft || 0,       fill: '#ffedd5', stroke: '#ea580c', label: 'Charging' },
+  ].filter(z => z.sqft > 0);
+
+  // Storage sits inside what's left — draw as a big background band first
+  const storageSqft = Math.max(0, totalSqft - zoneData.reduce((s, z) => s + z.sqft, 0));
+  if (storageSqft > 0) {
+    // Paint full interior with storage color, then zones on top
+    ctx.fillStyle = '#eff6ff';
+    ctx.fillRect(offsetX + 2, offsetY + 2, buildingWpx - 4, buildingHpx - 4);
+
+    // Light rack hatching to hint at rows
+    ctx.strokeStyle = '#bfdbfe';
+    ctx.lineWidth = 1;
+    const rackSpacing = Math.max(14, Math.round(10 * pxPerFt * 3.5)); // every ~35 ft
+    for (let x = offsetX + rackSpacing; x < offsetX + buildingWpx; x += rackSpacing) {
+      ctx.beginPath();
+      ctx.moveTo(x, offsetY + 60);
+      ctx.lineTo(x, offsetY + buildingHpx - 20);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = '#93c5fd';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(offsetX + 2, offsetY + 2, buildingWpx - 4, buildingHpx - 4);
+
+    ctx.fillStyle = '#1e40af';
+    ctx.font = 'bold 13px Montserrat, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(`STORAGE  ${Math.round(storageSqft).toLocaleString()} sqft`, offsetX + buildingWpx / 2, offsetY + buildingHpx / 2);
+  }
+
+  // Carve zone rectangles along the top edge of the building (simple horizontal strip)
+  // Office → receive → ship → charging, left-to-right.
+  let cursorX = offsetX + 4;
+  const zoneHpx = Math.min(buildingHpx * 0.22, 120);
+  for (const z of zoneData) {
+    const fraction = z.sqft / totalSqft;
+    const zoneWpx = Math.max(40, fraction * buildingWpx);
+    if (cursorX + zoneWpx > offsetX + buildingWpx - 4) break; // don't overflow
+    ctx.fillStyle = z.fill;
+    ctx.strokeStyle = z.stroke;
+    ctx.lineWidth = 1;
+    ctx.fillRect(cursorX, offsetY + 4, zoneWpx, zoneHpx);
+    ctx.strokeRect(cursorX, offsetY + 4, zoneWpx, zoneHpx);
+    ctx.fillStyle = '#111827';
+    ctx.font = '11px Montserrat, sans-serif';
+    ctx.textAlign = 'center';
+    if (zoneWpx > 90) {
+      ctx.fillText(z.label, cursorX + zoneWpx / 2, offsetY + zoneHpx / 2 - 2);
+      ctx.fillStyle = '#6b7280';
+      ctx.font = '10px Montserrat, sans-serif';
+      ctx.fillText(`${Math.round(z.sqft).toLocaleString()} sqft`, cursorX + zoneWpx / 2, offsetY + zoneHpx / 2 + 14);
+    }
+    cursorX += zoneWpx + 2;
+  }
+
+  // Dock doors — along the bottom (outbound) and optionally top (inbound if two-sided)
+  const dock = zones.dockConfig || { sided: 'single', inboundDoors: 10, outboundDoors: 12 };
+  const twoSided = dock.sided === 'two';
+  const doorWidthPx = Math.max(8, pxPerFt * 10); // 10 ft doors
+  const doorSpacingPx = Math.max(16, pxPerFt * 14); // 14 ft per door+space
+  const outDoors = Math.min(Math.floor(buildingWpx / doorSpacingPx), dock.outboundDoors || 12);
+  const inDoors  = twoSided ? Math.min(Math.floor(buildingWpx / doorSpacingPx), dock.inboundDoors || 10) : 0;
+
+  function drawDoors(count, yTop, labelAbove) {
+    if (count <= 0) return;
+    const totalDoorW = count * doorSpacingPx;
+    const startX = offsetX + (buildingWpx - totalDoorW) / 2;
+    ctx.fillStyle = '#fecaca';
+    ctx.strokeStyle = '#dc2626';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < count; i++) {
+      const x = startX + i * doorSpacingPx;
+      ctx.fillRect(x, yTop, doorWidthPx, 10);
+      ctx.strokeRect(x, yTop, doorWidthPx, 10);
+    }
+    ctx.fillStyle = '#7f1d1d';
+    ctx.font = 'bold 11px Montserrat, sans-serif';
+    ctx.textAlign = 'center';
+    const labelY = labelAbove ? yTop - 6 : yTop + 24;
+    ctx.fillText(`${count} Dock Doors (${labelAbove ? 'Inbound' : 'Outbound'})`, offsetX + buildingWpx / 2, labelY);
+  }
+  drawDoors(outDoors, offsetY + buildingHpx - 10, false);
+  if (twoSided) drawDoors(inDoors, offsetY, true);
+
+  // Scale bar + building dimension labels
+  ctx.fillStyle = '#6b7280';
+  ctx.font = '10px Montserrat, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(`${widthFt.toLocaleString()} ft`, offsetX + buildingWpx / 2, offsetY + buildingHpx + 36);
+  ctx.save();
+  ctx.translate(offsetX - 16, offsetY + buildingHpx / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText(`${depthFt.toLocaleString()} ft`, 0, 0);
+  ctx.restore();
+
+  // Title
+  ctx.fillStyle = '#111827';
+  ctx.font = 'bold 12px Montserrat, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(facility.name || 'Facility', 12, 22);
+  ctx.fillStyle = '#6b7280';
+  ctx.font = '11px Montserrat, sans-serif';
+  ctx.fillText(`${(totalSqft).toLocaleString()} sqft · clear ht ${facility.clearHeight || 0} ft`, 12, 38);
 }
 
 // ============================================================
@@ -1242,7 +1423,7 @@ function build3DScene() {
 // ============================================================
 
 function pushToCm() {
-  /** @type {import('./types.js?v=20260417-mG').WscToCmPayload} */
+  /** @type {import('./types.js?v=20260417-mH').WscToCmPayload} */
   const payload = {
     totalSqft: facility.totalSqft || 0,
     clearHeight: facility.clearHeight || 0,
@@ -1263,7 +1444,7 @@ function pushToCm() {
 
 /**
  * Handle CM → WSC push (e.g., "Size with Calculator" from CM).
- * @param {import('./types.js?v=20260417-mG').CmToWscPayload} payload
+ * @param {import('./types.js?v=20260417-mH').CmToWscPayload} payload
  */
 function handleCmPush(payload) {
   if (payload.clearHeight) facility.clearHeight = payload.clearHeight;

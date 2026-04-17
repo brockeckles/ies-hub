@@ -6,16 +6,16 @@
  * @module tools/cost-model/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-mG';
-import { state } from '../../shared/state.js?v=20260417-mG';
-import * as calc from './calc.js?v=20260417-mG';
-import * as api from './api.js?v=20260417-mG';
+import { bus } from '../../shared/event-bus.js?v=20260417-mH';
+import { state } from '../../shared/state.js?v=20260417-mH';
+import * as calc from './calc.js?v=20260417-mH';
+import * as api from './api.js?v=20260417-mH';
 
 // ============================================================
 // STATE — tool-local reactive state
 // ============================================================
 
-/** @type {import('./types.js?v=20260417-mG').CostModelData} */
+/** @type {import('./types.js?v=20260417-mH').CostModelData} */
 let model = createEmptyModel();
 
 /** @type {Object} */
@@ -982,20 +982,24 @@ function renderMostCell(line, idx) {
   const infoBtn = hasTemplate
     ? `<button class="cm-most-icon" data-action="view-most-template" data-idx="${idx}" data-template-id="${currentTpl.id}" title="View template details" style="background:none;border:none;cursor:pointer;padding:2px 4px;color:var(--ies-blue,#0047AB);font-size:14px;">ⓘ</button>`
     : '';
+  // When the row's UPH differs from the template's default UPH, style the select
+  // with an amber border instead of a separate 'OVERRIDE' chip + orange reset
+  // button stacked below. Hover the select to see the template UPH; click the
+  // small ↺ to reset. Single row, quieter visual.
   const resetBtn = isOverridden
-    ? `<button class="cm-most-icon" data-action="reset-most-uph" data-idx="${idx}" title="Reset UPH to template (${Math.round(tplUph)})" style="background:none;border:none;cursor:pointer;padding:2px 4px;color:#f37021;font-size:13px;font-weight:700;">↺</button>`
+    ? `<button class="cm-most-icon" data-action="reset-most-uph" data-idx="${idx}" title="Reset UPH to template default (${Math.round(tplUph)})" style="background:none;border:none;cursor:pointer;padding:2px 4px;color:#d97706;font-size:12px;font-weight:700;">↺</button>`
     : '';
-  const overrideBadge = isOverridden
-    ? `<div style="display:inline-block;margin-top:2px;padding:1px 6px;background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:0.3px;">OVERRIDE</div>`
-    : '';
+  const selectStyle = isOverridden
+    ? 'width:150px;font-size:11px;padding:4px 6px;border:1px solid #d97706;background:#fffbeb;'
+    : 'width:150px;font-size:11px;padding:4px 6px;';
+  const selectTitle = isOverridden
+    ? `UPH overridden (template default: ${Math.round(tplUph)}). Click ↺ to reset.`
+    : (hasTemplate ? `Template UPH: ${Math.round(tplUph)}` : 'Pick a MOST template to drive labor UPH');
 
   return `
-    <div style="display:flex;flex-direction:column;gap:2px;">
-      <div style="display:flex;align-items:center;gap:2px;">
-        <select data-most-select data-idx="${idx}" style="width:150px;font-size:11px;padding:4px 6px;">${optionsHtml}</select>
-        ${infoBtn}${resetBtn}
-      </div>
-      ${overrideBadge}
+    <div style="display:flex;align-items:center;gap:2px;">
+      <select data-most-select data-idx="${idx}" style="${selectStyle}" title="${selectTitle}">${optionsHtml}</select>
+      ${infoBtn}${resetBtn}
     </div>
   `;
 }
@@ -1049,10 +1053,10 @@ function renderLabor() {
       <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-indirect">Auto-Generate Indirect Labor</button>
     </div>
 
-    <div class="text-subtitle mb-2">Direct Labor <span style="font-size:11px;color:var(--ies-gray-400);font-weight:500;">— Volume dropdown pulls from Volumes tab · Equipment includes RF / Voice / AMR alongside MHE</span></div>
+    <div class="text-subtitle mb-2">Direct Labor <span style="font-size:11px;color:var(--ies-gray-400);font-weight:500;">— Volume dropdown pulls from Volumes tab · MHE and IT/Device tracked separately</span></div>
     <table class="cm-grid-table">
       <thead>
-        <tr><th style="min-width:180px;">MOST Template</th><th>Activity</th><th>Equipment/MHE</th><th>Volume</th><th>UPH</th><th>Hrs/Yr</th><th>FTE</th><th>Rate</th><th>Burden%</th><th class="cm-num">Annual Cost</th><th></th></tr>
+        <tr><th style="min-width:180px;">MOST Template</th><th>Activity</th><th>MHE</th><th>IT / Device</th><th>Volume</th><th>UPH</th><th>Hrs/Yr</th><th>FTE</th><th>Rate</th><th>Burden%</th><th class="cm-num">Annual Cost</th><th></th></tr>
       </thead>
       <tbody>
         ${lines.map((l, i) => `
@@ -1060,21 +1064,31 @@ function renderLabor() {
             <td>${renderMostCell(l, i)}</td>
             <td><input value="${l.activity_name || ''}" style="width:110px;" data-array="laborLines" data-idx="${i}" data-field="activity_name" /></td>
             <td>
-              <select style="width:100px;font-size:11px;" data-array="laborLines" data-idx="${i}" data-field="equipment_type">
-                <option value=""${!l.equipment_type ? ' selected' : ''}>None</option>
-                <option value="reach_truck"${l.equipment_type === 'reach_truck' ? ' selected' : ''}>Reach Truck</option>
-                <option value="sit_down_forklift"${l.equipment_type === 'sit_down_forklift' ? ' selected' : ''}>Sit-Down FL</option>
-                <option value="stand_up_forklift"${l.equipment_type === 'stand_up_forklift' ? ' selected' : ''}>Stand-Up FL</option>
-                <option value="order_picker"${l.equipment_type === 'order_picker' ? ' selected' : ''}>Order Picker</option>
-                <option value="walkie_rider"${l.equipment_type === 'walkie_rider' ? ' selected' : ''}>Walkie Rider</option>
-                <option value="pallet_jack"${l.equipment_type === 'pallet_jack' ? ' selected' : ''}>Pallet Jack</option>
-                <option value="electric_pallet_jack"${l.equipment_type === 'electric_pallet_jack' ? ' selected' : ''}>Elec Pallet Jack</option>
-                <option value="turret_truck"${l.equipment_type === 'turret_truck' ? ' selected' : ''}>Turret Truck</option>
-                <option value="amr"${l.equipment_type === 'amr' ? ' selected' : ''}>AMR/Robot</option>
-                <option value="conveyor"${l.equipment_type === 'conveyor' ? ' selected' : ''}>Conveyor</option>
-                <option value="rf_scanner"${l.equipment_type === 'rf_scanner' ? ' selected' : ''}>RF Scanner</option>
-                <option value="voice_pick"${l.equipment_type === 'voice_pick' ? ' selected' : ''}>Voice Pick</option>
-                <option value="manual"${l.equipment_type === 'manual' ? ' selected' : ''}>Manual/Walk</option>
+              <select style="width:95px;font-size:11px;" data-array="laborLines" data-idx="${i}" data-field="mhe_type" title="Material handling equipment (MHE) assigned to this activity">
+                <option value=""${!l.mhe_type && !['reach_truck','sit_down_forklift','stand_up_forklift','order_picker','walkie_rider','pallet_jack','electric_pallet_jack','turret_truck','amr','conveyor','manual'].includes(l.equipment_type) ? ' selected' : ''}>None</option>
+                <option value="reach_truck"${(l.mhe_type === 'reach_truck' || l.equipment_type === 'reach_truck') ? ' selected' : ''}>Reach Truck</option>
+                <option value="sit_down_forklift"${(l.mhe_type === 'sit_down_forklift' || l.equipment_type === 'sit_down_forklift') ? ' selected' : ''}>Sit-Down FL</option>
+                <option value="stand_up_forklift"${(l.mhe_type === 'stand_up_forklift' || l.equipment_type === 'stand_up_forklift') ? ' selected' : ''}>Stand-Up FL</option>
+                <option value="order_picker"${(l.mhe_type === 'order_picker' || l.equipment_type === 'order_picker') ? ' selected' : ''}>Order Picker</option>
+                <option value="walkie_rider"${(l.mhe_type === 'walkie_rider' || l.equipment_type === 'walkie_rider') ? ' selected' : ''}>Walkie Rider</option>
+                <option value="pallet_jack"${(l.mhe_type === 'pallet_jack' || l.equipment_type === 'pallet_jack') ? ' selected' : ''}>Pallet Jack</option>
+                <option value="electric_pallet_jack"${(l.mhe_type === 'electric_pallet_jack' || l.equipment_type === 'electric_pallet_jack') ? ' selected' : ''}>Elec Pallet Jack</option>
+                <option value="turret_truck"${(l.mhe_type === 'turret_truck' || l.equipment_type === 'turret_truck') ? ' selected' : ''}>Turret Truck</option>
+                <option value="amr"${(l.mhe_type === 'amr' || l.equipment_type === 'amr') ? ' selected' : ''}>AMR/Robot</option>
+                <option value="conveyor"${(l.mhe_type === 'conveyor' || l.equipment_type === 'conveyor') ? ' selected' : ''}>Conveyor</option>
+                <option value="manual"${(l.mhe_type === 'manual' || l.equipment_type === 'manual') ? ' selected' : ''}>Manual / Walk</option>
+              </select>
+            </td>
+            <td>
+              <select style="width:95px;font-size:11px;" data-array="laborLines" data-idx="${i}" data-field="it_device" title="IT / scanning device assigned to this activity">
+                <option value=""${!l.it_device && !['rf_scanner','voice_pick'].includes(l.equipment_type) ? ' selected' : ''}>None</option>
+                <option value="rf_scanner"${(l.it_device === 'rf_scanner' || l.equipment_type === 'rf_scanner') ? ' selected' : ''}>RF Scanner</option>
+                <option value="voice_pick"${(l.it_device === 'voice_pick' || l.equipment_type === 'voice_pick') ? ' selected' : ''}>Voice Pick</option>
+                <option value="wearable"${l.it_device === 'wearable' ? ' selected' : ''}>Wearable</option>
+                <option value="tablet"${l.it_device === 'tablet' ? ' selected' : ''}>Tablet</option>
+                <option value="vision_system"${l.it_device === 'vision_system' ? ' selected' : ''}>Vision System</option>
+                <option value="pick_to_light"${l.it_device === 'pick_to_light' ? ' selected' : ''}>Pick-to-Light</option>
+                <option value="pick_to_display"${l.it_device === 'pick_to_display' ? ' selected' : ''}>Pick-to-Display</option>
               </select>
             </td>
             <td>${renderLaborVolumeCell(l, i)}</td>
@@ -1087,7 +1101,7 @@ function renderLabor() {
             <td><button class="cm-delete-btn" data-action="delete-labor" data-idx="${i}">Del</button></td>
           </tr>
         `).join('')}
-        <tr class="cm-total-row"><td colspan="9">Total Direct Labor</td><td class="cm-num">${calc.formatCurrency(totalDirect)}</td><td></td></tr>
+        <tr class="cm-total-row"><td colspan="10">Total Direct Labor</td><td class="cm-num">${calc.formatCurrency(totalDirect)}</td><td></td></tr>
       </tbody>
     </table>
     <button class="cm-add-row-btn" data-action="add-labor">+ Add Labor Line</button>
@@ -2431,7 +2445,7 @@ function sectionHasData(key) {
 /**
  * Handle incoming labor lines from MOST tool.
  * Merges or replaces CM laborLines with MOST-derived data.
- * @param {import('../most-standards/types.js?v=20260417-mG').MostToCmPayload} payload
+ * @param {import('../most-standards/types.js?v=20260417-mH').MostToCmPayload} payload
  */
 function handleMostPush(payload) {
   if (!payload?.laborLines?.length) return;
@@ -2469,7 +2483,7 @@ function handleMostPush(payload) {
 /**
  * Handle incoming facility data from Warehouse Sizing Calculator.
  * Populates CM facility section fields.
- * @param {import('../warehouse-sizing/types.js?v=20260417-mG').WscToCmPayload} payload
+ * @param {import('../warehouse-sizing/types.js?v=20260417-mH').WscToCmPayload} payload
  */
 function handleWscPush(payload) {
   if (!payload) return;

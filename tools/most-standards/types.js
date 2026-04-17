@@ -2,24 +2,42 @@
  * IES Hub v3 — MOST Labor Standards Types
  * JSDoc typedefs for templates, elements, allowances, analyses, and workflows.
  *
+ * Aligned with actual Supabase schema as of 2026-04-17:
+ *   ref_most_templates: id bigint, activity_name, process_area, labor_category,
+ *                       equipment_type, pick_method, uom, units_per_hour_base,
+ *                       total_tmu_base, wms_transaction, description, notes,
+ *                       is_active, created_at, updated_at
+ *   ref_most_elements:  id bigint, template_id bigint (FK), sequence_order,
+ *                       sequence_type, element_name, most_sequence, tmu_value,
+ *                       is_variable, variable_driver, variable_formula, notes
+ *
+ * LEGACY ALIAS NOTE: many code paths still read tpl.name / tpl.base_uph /
+ * tpl.tmu_total / el.sequence / el.description / el.tmu. Accessor helpers in
+ * tools/cost-model/ui.js (mostTplName, mostTplUph, mostTplTmu, mostElSeq,
+ * mostElName, mostElTmu) bridge both shapes for robustness. Prefer the real
+ * column names in new code.
+ *
  * @module tools/most-standards/types
  */
 
 // ============================================================
-// CORE ENTITIES — match Supabase ref tables
+// CORE ENTITIES — match Supabase ref tables verbatim
 // ============================================================
 
 /**
  * @typedef {Object} MostTemplate
- * @property {string} id — UUID
- * @property {string} name — e.g., "Case Pick - Manual"
- * @property {string} process_area — Receiving | Putaway | Picking | Packing | Shipping | Inventory
+ * @property {number} id — bigint primary key
+ * @property {string} activity_name — e.g., "Receive & Check-in Cases"
+ * @property {string} process_area — Receiving | Putaway | Replenishment | Picking | Packing | Shipping | Inventory | Returns | VAS
  * @property {string} labor_category — manual | mhe | hybrid
- * @property {string} [description]
+ * @property {string} [equipment_type] — MHE or device assumed by the template (optional)
+ * @property {string} [pick_method] — discrete | batch | wave | zone (optional)
  * @property {string} uom — pallet | case | each | order | line
- * @property {number} tmu_total — sum of element TMUs
- * @property {number} base_uph — 100,000 / tmu_total
- * @property {number} [element_count]
+ * @property {number} units_per_hour_base — base UPH before PFD
+ * @property {number} total_tmu_base — sum of element TMUs
+ * @property {string} [wms_transaction] — associated BY WMS screen/transaction
+ * @property {string} [description]
+ * @property {string} [notes]
  * @property {boolean} [is_active]
  * @property {string} [created_at]
  * @property {string} [updated_at]
@@ -27,22 +45,22 @@
 
 /**
  * @typedef {Object} MostElement
- * @property {string} id — UUID
- * @property {string} template_id — FK → MostTemplate
- * @property {number} sequence — display order (1-based)
- * @property {string} description — e.g., "Walk to pick location"
- * @property {string} most_sequence — MOST sequence model code (e.g., "A6 B6 G1 A1 B0 P3 A0")
- * @property {number} tmu — time measurement units for this element
+ * @property {number} id — bigint primary key
+ * @property {number} template_id — FK → MostTemplate.id
+ * @property {number} sequence_order — display order (1-based)
+ * @property {string} [sequence_type] — GET | PUT | VERIFY | MOVE | etc. (optional categorization)
+ * @property {string} element_name — e.g., "Walk to pick location"
+ * @property {string} [most_sequence] — MOST sequence model code (e.g., "A6 B6 G1 A1 B0 P3 A0")
+ * @property {number} tmu_value — time measurement units for this element
  * @property {boolean} [is_variable] — true if element varies with complexity/distance
  * @property {string} [variable_driver] — e.g., "distance", "weight", "sku_count"
- * @property {number} [variable_min] — min TMU value when variable
- * @property {number} [variable_max] — max TMU value when variable
+ * @property {string} [variable_formula] — optional formula for variable TMU
  * @property {string} [notes]
  */
 
 /**
  * @typedef {Object} AllowanceProfile
- * @property {string} id — UUID
+ * @property {number} id — bigint primary key (table may not exist yet; typedef reserved)
  * @property {string} name — e.g., "Standard Warehouse", "Cold Storage"
  * @property {number} personal_pct — Personal allowance %
  * @property {number} fatigue_pct — Fatigue allowance %
@@ -59,12 +77,12 @@
  * A single activity line in a Quick Labor Analysis.
  * @typedef {Object} AnalysisLine
  * @property {string} id — client-side UUID
- * @property {string} [template_id] — FK → MostTemplate (null if manual entry)
+ * @property {number|string} [template_id] — FK → MostTemplate (null if manual entry)
  * @property {string} activity_name
  * @property {string} process_area
  * @property {string} labor_category — manual | mhe | hybrid
  * @property {string} uom
- * @property {number} base_uph — from template or manual
+ * @property {number} base_uph — from template (units_per_hour_base) or manual
  * @property {number} adjusted_uph — after PFD allowance
  * @property {number} daily_volume
  * @property {number} hours_per_day — daily_volume / adjusted_uph
@@ -92,7 +110,7 @@
  * @typedef {Object} LaborAnalysis
  * @property {string} [id] — UUID (null if unsaved)
  * @property {string} name
- * @property {string} [allowance_profile_id]
+ * @property {number} [allowance_profile_id]
  * @property {number} pfd_pct — applied PFD percentage
  * @property {number} shift_hours — hours per shift (e.g., 8 or 10)
  * @property {number} operating_days — annual operating days (e.g., 260)
@@ -109,7 +127,7 @@
  * A step in a workflow pipeline.
  * @typedef {Object} WorkflowStep
  * @property {string} id — client-side UUID
- * @property {string} [template_id]
+ * @property {number|string} [template_id]
  * @property {string} step_name
  * @property {string} process_area
  * @property {string} labor_category
@@ -149,7 +167,7 @@
 /**
  * Payload emitted on bus 'most:push-to-cm' event.
  * @typedef {Object} MostToCmPayload
- * @property {Array<{ activity_name: string, process_area: string, labor_category: string, annual_hours: number, base_uph: number, volume: number, hourly_rate: number, burden_pct: number, most_template_id: string, most_template_name: string }>} laborLines
+ * @property {Array<{ activity_name: string, process_area: string, labor_category: string, annual_hours: number, base_uph: number, volume: number, hourly_rate: number, burden_pct: number, most_template_id: number|string, most_template_name: string }>} laborLines
  * @property {number} operatingDays
  * @property {number} shiftHours
  */
