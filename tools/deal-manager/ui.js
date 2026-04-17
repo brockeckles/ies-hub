@@ -860,11 +860,11 @@ function showLogHoursModal() {
   `;
   rootEl?.appendChild(modal);
   modal.querySelector('#dm-log-save')?.addEventListener('click', async () => {
-    const week = (modal.querySelector('#dm-log-week') as HTMLInputElement).value;
-    const hours = parseFloat((modal.querySelector('#dm-log-hours-input') as HTMLInputElement).value) || 0;
-    const type = (modal.querySelector('#dm-log-type') as HTMLSelectElement).value;
-    const resource = (modal.querySelector('#dm-log-resource') as HTMLInputElement).value || 'Brock Eckles';
-    const category = (modal.querySelector('#dm-log-category') as HTMLSelectElement).value;
+    const week = (modal.querySelector('#dm-log-week').value;
+    const hours = parseFloat((modal.querySelector('#dm-log-hours-input').value) || 0;
+    const type = (modal.querySelector('#dm-log-type').value;
+    const resource = (modal.querySelector('#dm-log-resource').value || 'Brock Eckles';
+    const category = (modal.querySelector('#dm-log-category').value;
 
     if (hours <= 0) { alert('Hours must be greater than 0'); return; }
     if (!activeDeal) return;
@@ -1023,18 +1023,18 @@ function showNewTaskModal() {
   rootEl?.appendChild(modal);
   modal.querySelector('#dm-task-save')?.addEventListener('click', async () => {
     if (!activeDeal) return;
-    const title = (modal.querySelector('#dm-task-title') as HTMLInputElement).value.trim();
+    const title = (modal.querySelector('#dm-task-title').value.trim();
     if (!title) { alert('Title required'); return; }
 
     const task = {
       opportunity_id: activeDeal.id,
       title,
-      priority: (modal.querySelector('#dm-task-priority') as HTMLSelectElement).value,
+      priority: (modal.querySelector('#dm-task-priority').value,
       status: 'todo' as const,
-      assignee: (modal.querySelector('#dm-task-assignee') as HTMLInputElement).value || null,
-      due_date: (modal.querySelector('#dm-task-due') as HTMLInputElement).value || null,
-      estimated_hours: parseFloat((modal.querySelector('#dm-task-est-hours') as HTMLInputElement).value) || null,
-      dos_stage_number: parseInt((modal.querySelector('#dm-task-stage') as HTMLSelectElement).value) || null,
+      assignee: (modal.querySelector('#dm-task-assignee').value || null,
+      due_date: (modal.querySelector('#dm-task-due').value || null,
+      estimated_hours: parseFloat((modal.querySelector('#dm-task-est-hours').value) || null,
+      dos_stage_number: parseInt((modal.querySelector('#dm-task-stage').value) || null,
     };
 
     await api.createTask(task);
@@ -1194,16 +1194,16 @@ function showNewUpdateModal() {
   rootEl?.appendChild(modal);
   modal.querySelector('#dm-update-save')?.addEventListener('click', async () => {
     if (!activeDeal) return;
-    const body = (modal.querySelector('#dm-update-body') as HTMLTextAreaElement).value.trim();
+    const body = (modal.querySelector('#dm-update-body').value.trim();
     if (!body) { alert('Update body required'); return; }
 
     const update = {
       opportunity_id: activeDeal.id,
-      update_date: (modal.querySelector('#dm-update-date') as HTMLInputElement).value,
-      author: (modal.querySelector('#dm-update-author') as HTMLInputElement).value || null,
+      update_date: (modal.querySelector('#dm-update-date').value,
+      author: (modal.querySelector('#dm-update-author').value || null,
       body,
-      next_steps: (modal.querySelector('#dm-update-next') as HTMLTextAreaElement).value.trim() || null,
-      blockers: (modal.querySelector('#dm-update-blockers') as HTMLTextAreaElement).value.trim() || null,
+      next_steps: (modal.querySelector('#dm-update-next').value.trim() || null,
+      blockers: (modal.querySelector('#dm-update-blockers').value.trim() || null,
     };
 
     await api.createUpdate(update);
