@@ -8,7 +8,7 @@
  * @module hub/command-center/api
  */
 
-import { db } from '../../shared/supabase.js?v=20260417-s2';
+import { db } from '../../shared/supabase.js';
 
 /**
  * Fetch all dashboard data. Tries Supabase first, falls back to demo data.
@@ -293,12 +293,12 @@ const DEMO_SECTORS = {
 };
 
 const DEMO_ALERTS = [
-  { title: 'Labor Squeeze — Inland Empire', message: 'Unemployment below 3.5%. Wage pressure expected to intensify.', severity: 'critical', market: 'rvs', date: '2h ago' },
-  { title: 'Diesel Price Spike', message: 'National avg up $0.12/gal in one week. Fuel surcharges may need adjustment.', severity: 'warning', market: '', date: '4h ago' },
-  { title: 'Savannah Port Volume Surge', message: 'Container throughput up 8% MoM. Warehouse availability tightening.', severity: 'warning', market: 'sav', date: '1d ago' },
-  { title: 'New Tariff Package Announced', message: 'Additional tariffs on imported goods may accelerate reshoring. Monitor IES pipeline impact.', severity: 'info', market: '', date: '1d ago' },
-  { title: 'Columbus Market — New Competitor Entry', message: 'XPO expanding operations in Columbus market. Monitor pricing impact.', severity: 'info', market: 'col', date: '2d ago' },
-  { title: 'Memphis — Favorable Lease Terms', message: 'Industrial vacancy at 6.8%. Several new builds entering market Q3.', severity: 'info', market: 'mem', date: '3d ago' },
+  { title: 'Labor Squeeze — Inland Empire', message: 'Unemployment below 3.5%. Wage pressure expected to intensify.', severity: 'critical', market: 'rvs', date: '2h ago', source: 'BLS', source_url: 'https://www.bls.gov/regions/west/' },
+  { title: 'Diesel Price Spike', message: 'National avg up $0.12/gal in one week. Fuel surcharges may need adjustment.', severity: 'warning', market: '', date: '4h ago', source: 'EIA', source_url: 'https://www.eia.gov/petroleum/gasdiesel/' },
+  { title: 'Savannah Port Volume Surge', message: 'Container throughput up 8% MoM. Warehouse availability tightening.', severity: 'warning', market: 'sav', date: '1d ago', source: 'GPA', source_url: 'https://gaports.com/statistics/' },
+  { title: 'New Tariff Package Announced', message: 'Additional tariffs on imported goods may accelerate reshoring. Monitor IES pipeline impact.', severity: 'info', market: '', date: '1d ago', source: 'Reuters', source_url: 'https://www.reuters.com/business/' },
+  { title: 'Columbus Market — New Competitor Entry', message: 'XPO expanding operations in Columbus market. Monitor pricing impact.', severity: 'info', market: 'col', date: '2d ago', source: 'FreightWaves', source_url: 'https://www.freightwaves.com/' },
+  { title: 'Memphis — Favorable Lease Terms', message: 'Industrial vacancy at 6.8%. Several new builds entering market Q3.', severity: 'info', market: 'mem', date: '3d ago', source: 'CBRE', source_url: 'https://www.cbre.com/insights/reports/' },
 ];
 
 const DEMO_PIPELINE = {
