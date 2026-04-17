@@ -6,10 +6,10 @@
  * @module tools/deal-manager/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-p3';
-import { state } from '../../shared/state.js?v=20260417-p3';
-import * as calc from './calc.js?v=20260417-p3';
-import * as api from './api.js?v=20260417-p3';
+import { bus } from '../../shared/event-bus.js?v=20260417-p4';
+import { state } from '../../shared/state.js?v=20260417-p4';
+import * as calc from './calc.js?v=20260417-p4';
+import * as api from './api.js?v=20260417-p4';
 
 // ============================================================
 // STATE
@@ -24,28 +24,28 @@ let activeTab = 'list';
 /** @type {'kanban' | 'table'} */
 let landingViewMode = 'kanban';
 
-/** @type {import('./types.js?v=20260417-p3').Deal|null} */
+/** @type {import('./types.js?v=20260417-p4').Deal|null} */
 let activeDeal = null;
 
-/** @type {import('./types.js?v=20260417-p3').Site[]} */
+/** @type {import('./types.js?v=20260417-p4').Site[]} */
 let sites = [];
 
-/** @type {import('./types.js?v=20260417-p3').DealFinancials|null} */
+/** @type {import('./types.js?v=20260417-p4').DealFinancials|null} */
 let financials = null;
 
-/** @type {import('./types.js?v=20260417-p3').DosStage[]} */
+/** @type {import('./types.js?v=20260417-p4').DosStage[]} */
 let dosStages = [];
 
-/** @type {import('./types.js?v=20260417-p3').Deal[]} */
+/** @type {import('./types.js?v=20260417-p4').Deal[]} */
 let allDeals = [];
 
-/** @type {import('./types.js?v=20260417-p3').HoursEntry[]} */
+/** @type {import('./types.js?v=20260417-p4').HoursEntry[]} */
 let hoursEntries = [];
 
-/** @type {import('./types.js?v=20260417-p3').Task[]} */
+/** @type {import('./types.js?v=20260417-p4').Task[]} */
 let tasks = [];
 
-/** @type {import('./types.js?v=20260417-p3').WeeklyUpdate[]} */
+/** @type {import('./types.js?v=20260417-p4').WeeklyUpdate[]} */
 let updates = [];
 
 // DOS stages reference (6 stages: Pre-Sales → Delivery)

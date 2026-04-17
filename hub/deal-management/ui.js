@@ -6,7 +6,7 @@
  * @module hub/deal-management/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-p3';
+import { bus } from '../../shared/event-bus.js?v=20260417-p4';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -182,6 +182,14 @@ function bindDelegatedEvents() {
     // Open in design tool
     if (target.closest('[data-action="open-cost-model"]')) { window.location.hash = 'designtools/cost-model'; return; }
     if (target.closest('[data-action="open-multi-site"]')) { window.location.hash = 'designtools/deal-manager'; return; }
+
+    // Deck generation buttons
+    const deckBtn = target.closest('[data-deck]');
+    if (deckBtn) {
+      const deckType = /** @type {HTMLElement} */ (deckBtn).dataset.deck;
+      handleDeckGenClick(deckType);
+      return;
+    }
   });
 }
 
@@ -424,7 +432,75 @@ function renderDealOverview() {
         </div>
       </div>
     </div>
+
+    <!-- Deck Generation -->
+    <div class="hub-card" style="padding:16px;margin-top:16px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+        <div style="font-size:13px;font-weight:700;">Generate Decks</div>
+        <span style="font-size:11px;color:var(--ies-gray-400);">— auto-build GXO-branded PPTX from this deal's data</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-deck="qualification" style="text-align:left;font-size:12px;">
+          <div style="font-weight:700;">Qualification</div>
+          <div style="font-size:10px;color:var(--ies-gray-400);">Stage 2</div>
+        </button>
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-deck="ops_review" style="text-align:left;font-size:12px;">
+          <div style="font-weight:700;">Ops Review</div>
+          <div style="font-size:10px;color:var(--ies-gray-400);">Stage 4</div>
+        </button>
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-deck="elt_approval" style="text-align:left;font-size:12px;">
+          <div style="font-weight:700;">ELT Approval</div>
+          <div style="font-size:10px;color:var(--ies-gray-400);">Stage 5</div>
+        </button>
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-deck="customer_presentation" style="text-align:left;font-size:12px;">
+          <div style="font-weight:700;">Customer Presentation</div>
+          <div style="font-size:10px;color:var(--ies-gray-400);">Stage 5</div>
+        </button>
+      </div>
+      <div id="deck-gen-status" style="margin-top:10px;font-size:12px;color:var(--ies-gray-400);min-height:16px;"></div>
+    </div>
   `;
+}
+
+async function handleDeckGenClick(deckType) {
+  const statusEl = rootEl?.querySelector('#deck-gen-status');
+  if (statusEl) statusEl.innerHTML = `<span style="color:var(--ies-blue);">Generating ${deckType} deck…</span>`;
+  try {
+    const engine = await import('../deck-generator/engine.js?v=20260417-p4');
+    if (!window.PptxGenJS) throw new Error('PptxGenJS not loaded — check CDN in index.html');
+    // Pass demo deal data directly (these demo deals have integer stage + hardcoded fields,
+    // not persisted UUIDs). The engine accepts either a dealId (uuid) or a prebuilt data obj.
+    const d = selectedDeal;
+    const totalSqft = Array.isArray(d?.sites)
+      ? d.sites.reduce((s, site) => s + (site.sqft || 0), 0)
+      : 0;
+    const totalCost = d?.revenue && d?.margin
+      ? d.revenue * (1 - d.margin / 100)
+      : null;
+    const data = {
+      customerName: d?.client || d?.name || '[Customer]',
+      location: Array.isArray(d?.sites) && d.sites[0]?.market ? d.sites[0].market : '[Location TBD]',
+      sqft: totalSqft ? totalSqft.toLocaleString() : '—',
+      headcount: '—',
+      palletsPerDay: '—',
+      palletsPerYear: '—',
+      annualRevenue: d?.revenue ? `$${(d.revenue / 1e6).toFixed(1)}M` : '—',
+      totalCost: totalCost ? `$${(totalCost / 1e6).toFixed(1)}M` : '—',
+      ebitda: d?.revenue && d?.margin ? `$${((d.revenue * d.margin / 100) / 1e6).toFixed(1)}M` : '—',
+      margin: d?.margin ? `${d.margin}%` : '—',
+      ebidtaPercent: d?.margin ? `${d.margin}%` : '—',
+      contractYears: '5',
+      inboundRate: '—',
+      storageRate: '—',
+      pickPackRate: '—',
+      outboundRate: '—'
+    };
+    await engine.generateDeck(deckType, data);
+    if (statusEl) statusEl.innerHTML = `<span style="color:#16a34a;font-weight:600;">✓ Deck downloaded. Check your browser downloads.</span>`;
+  } catch (err) {
+    console.error('[DealMgmt] Deck generation failed:', err);
+    if (statusEl) statusEl.innerHTML = `<span style="color:#dc2626;">Deck failed: ${err.message}</span>`;
+  }
 }
 
 function renderDealSites() {

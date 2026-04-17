@@ -5,7 +5,7 @@
  * @module hub/market-explorer/ui
  */
 
-import * as calc from './calc.js?v=20260417-p3';
+import * as calc from './calc.js?v=20260417-p4';
 
 let rootEl = null;
 let markets = [...calc.DEMO_MARKETS];
