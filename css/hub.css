@@ -263,18 +263,23 @@ textarea.hub-input {
   align-items: center;
   background: linear-gradient(135deg, #0a1628, #0d1f3c, #0a1628);
   border-radius: var(--radius-md);
-  padding: var(--sp-5) var(--sp-6);
-  gap: var(--sp-6);
-  overflow-x: auto;
+  padding: var(--sp-4) var(--sp-3);
+  gap: 0;
+  overflow: hidden; /* no horizontal scroll — items flex-share the width */
+  width: 100%;
 }
 
 .hub-kpi-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 0 var(--sp-6);
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0 var(--sp-3);
   border-right: 1px solid rgba(255, 255, 255, 0.15);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .hub-kpi-item:last-child { border-right: none; }
@@ -289,12 +294,15 @@ textarea.hub-input {
 }
 
 .hub-kpi-value {
-  font-size: var(--fs-hero);
+  font-size: var(--fs-page); /* was --fs-hero — smaller so 5 tiles fit without scroll */
   font-weight: var(--fw-extrabold);
   color: #fff;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.hub-kpi-value.secondary { font-size: var(--fs-page); }
+.hub-kpi-value.secondary { font-size: var(--fs-subtitle); }
 
 /* ---- Badges / Pills ---- */
 .hub-badge {

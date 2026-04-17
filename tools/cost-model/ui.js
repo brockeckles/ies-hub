@@ -6,16 +6,16 @@
  * @module tools/cost-model/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-m9';
-import { state } from '../../shared/state.js?v=20260417-m9';
-import * as calc from './calc.js?v=20260417-m9';
-import * as api from './api.js?v=20260417-m9';
+import { bus } from '../../shared/event-bus.js?v=20260417-mA';
+import { state } from '../../shared/state.js?v=20260417-mA';
+import * as calc from './calc.js?v=20260417-mA';
+import * as api from './api.js?v=20260417-mA';
 
 // ============================================================
 // STATE — tool-local reactive state
 // ============================================================
 
-/** @type {import('./types.js?v=20260417-m9').CostModelData} */
+/** @type {import('./types.js?v=20260417-mA').CostModelData} */
 let model = createEmptyModel();
 
 /** @type {Object} */
@@ -1036,9 +1036,20 @@ function renderEquipment() {
       </div>
     </div>
 
-    <div style="display: flex; gap: 8px; margin-bottom: 16px;">
-      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-equipment">Auto-Generate Equipment</button>
-      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="open-equipment-catalog" title="Browse the GXO equipment reference catalog (${33} items)">📖 Browse Catalog</button>
+    <div style="display: flex; gap: 8px; margin-bottom: 8px; align-items:center;">
+      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-equipment"
+              title="Generates a starting equipment list from your current volumes + labor + facility sqft. Rules:
+• MHE — Reach Trucks (1 per 3 FTEs × 1.15 spare) + Order Pickers (1 per 5 FTEs)
+• IT — RF Terminals (30% of FTEs), Label Printers (1 per 50 HC), WiFi APs (1 per 10K sqft)
+• Racking — Selective Pallet Rack sized to avg pallets on-hand + 15% buffer (assumes 12 turns/yr)
+• Dock — Hydraulic Levelers sized at 90 daily pallets per door
+• Charging — 1 station per 6 electric forklifts
+• Office — Build-out (120 sqft per indirect HC) + Break Room (15 sqft per total HC)
+• Security — 1 camera system per 30K sqft (for ≥50K sqft facilities) + Access Control
+• Conveyor — Belt conveyor linear ft (for ≥500K orders/yr)
+All lines are editable after generation.">⚡ Auto-Generate Equipment</button>
+      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="open-equipment-catalog" title="Browse the GXO equipment reference catalog (33 items with specs, pricing, vendors)">📖 Browse Catalog</button>
+      <span style="font-size:11px;color:var(--ies-gray-400);">Covers MHE · IT · Racking · Dock · Charging · Office · Security · Conveyor — hover Auto-Generate for the sizing rules.</span>
     </div>
 
     <table class="cm-grid-table">
@@ -1423,7 +1434,7 @@ function renderSummary() {
     </div>
 
     <!-- KPI Bar -->
-    <div class="hub-kpi-bar mb-6">
+    <div class="hub-kpi-bar mb-4">
       <div class="hub-kpi-item">
         <div class="hub-kpi-label">Total Cost</div>
         <div class="hub-kpi-value">${calc.formatCurrency(summary.totalCost, {compact: true})}</div>
@@ -1443,6 +1454,17 @@ function renderSummary() {
       <div class="hub-kpi-item">
         <div class="hub-kpi-label">Capital</div>
         <div class="hub-kpi-value">${calc.formatCurrency(summary.equipmentCapital + summary.startupCapital, {compact: true})}</div>
+      </div>
+    </div>
+
+    <!-- Design Heuristics — moved up so they're the FIRST thing after KPIs (per v2 pattern) -->
+    <div class="hub-card mb-4">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <div class="text-subtitle" style="margin:0;">Design Heuristics & Benchmarks</div>
+        <span style="font-size:11px;color:var(--ies-gray-400);">Pass/warn checks against industry norms</span>
+      </div>
+      <div id="cm-heuristics-panel" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+        ${renderHeuristicsPanel(model, summary)}
       </div>
     </div>
 
@@ -1559,13 +1581,7 @@ function renderSummary() {
       </div>
     </div>
 
-    <!-- Design Heuristics -->
-    <div class="hub-card mb-4">
-      <div class="text-subtitle mb-4">Design Heuristics & Benchmarks</div>
-      <div id="cm-heuristics-panel" style="display: grid; grid-template-columns: 1fr; gap: 8px;">
-        ${renderHeuristicsPanel(model, summary)}
-      </div>
-    </div>
+    <!-- (Design Heuristics block moved to top of Summary, right after KPIs) -->
 
     <style>
       .cm-metrics-grid {
@@ -2298,7 +2314,7 @@ function sectionHasData(key) {
 /**
  * Handle incoming labor lines from MOST tool.
  * Merges or replaces CM laborLines with MOST-derived data.
- * @param {import('../most-standards/types.js?v=20260417-m9').MostToCmPayload} payload
+ * @param {import('../most-standards/types.js?v=20260417-mA').MostToCmPayload} payload
  */
 function handleMostPush(payload) {
   if (!payload?.laborLines?.length) return;
@@ -2336,7 +2352,7 @@ function handleMostPush(payload) {
 /**
  * Handle incoming facility data from Warehouse Sizing Calculator.
  * Populates CM facility section fields.
- * @param {import('../warehouse-sizing/types.js?v=20260417-m9').WscToCmPayload} payload
+ * @param {import('../warehouse-sizing/types.js?v=20260417-mA').WscToCmPayload} payload
  */
 function handleWscPush(payload) {
   if (!payload) return;

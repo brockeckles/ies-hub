@@ -5,8 +5,8 @@
  * @module hub/change-mgmt/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-m9';
-import * as calc from './calc.js?v=20260417-m9';
+import { bus } from '../../shared/event-bus.js?v=20260417-mA';
+import * as calc from './calc.js?v=20260417-mA';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
