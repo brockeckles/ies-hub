@@ -11,9 +11,9 @@
 
 /**
  * Search articles by query text. Matches against title, content, tags.
- * @param {import('./types.js?v=20260417-m5').WikiArticle[]} articles
+ * @param {import('./types.js?v=20260417-m6').WikiArticle[]} articles
  * @param {string} query
- * @returns {import('./types.js?v=20260417-m5').WikiSearchResult[]}
+ * @returns {import('./types.js?v=20260417-m6').WikiSearchResult[]}
  */
 export function searchArticles(articles, query) {
   if (!query || query.trim().length === 0) return [];
@@ -75,9 +75,9 @@ export function extractSnippet(content, term, maxLen = 120) {
 
 /**
  * Filter articles by category.
- * @param {import('./types.js?v=20260417-m5').WikiArticle[]} articles
+ * @param {import('./types.js?v=20260417-m6').WikiArticle[]} articles
  * @param {string} categoryId
- * @returns {import('./types.js?v=20260417-m5').WikiArticle[]}
+ * @returns {import('./types.js?v=20260417-m6').WikiArticle[]}
  */
 export function filterByCategory(articles, categoryId) {
   if (!categoryId || categoryId === 'all') return articles;
@@ -86,9 +86,9 @@ export function filterByCategory(articles, categoryId) {
 
 /**
  * Filter articles by status.
- * @param {import('./types.js?v=20260417-m5').WikiArticle[]} articles
+ * @param {import('./types.js?v=20260417-m6').WikiArticle[]} articles
  * @param {string} status
- * @returns {import('./types.js?v=20260417-m5').WikiArticle[]}
+ * @returns {import('./types.js?v=20260417-m6').WikiArticle[]}
  */
 export function filterByStatus(articles, status) {
   if (!status || status === 'all') return articles;
@@ -97,9 +97,9 @@ export function filterByStatus(articles, status) {
 
 /**
  * Filter articles by tag.
- * @param {import('./types.js?v=20260417-m5').WikiArticle[]} articles
+ * @param {import('./types.js?v=20260417-m6').WikiArticle[]} articles
  * @param {string} tag
- * @returns {import('./types.js?v=20260417-m5').WikiArticle[]}
+ * @returns {import('./types.js?v=20260417-m6').WikiArticle[]}
  */
 export function filterByTag(articles, tag) {
   if (!tag) return articles;
@@ -109,10 +109,10 @@ export function filterByTag(articles, tag) {
 
 /**
  * Sort articles.
- * @param {import('./types.js?v=20260417-m5').WikiArticle[]} articles
+ * @param {import('./types.js?v=20260417-m6').WikiArticle[]} articles
  * @param {'title' | 'views' | 'updated' | 'created'} sortBy
  * @param {'asc' | 'desc'} [dir='desc']
- * @returns {import('./types.js?v=20260417-m5').WikiArticle[]}
+ * @returns {import('./types.js?v=20260417-m6').WikiArticle[]}
  */
 export function sortArticles(articles, sortBy, dir = 'desc') {
   const sorted = [...articles];
@@ -137,9 +137,9 @@ export function sortArticles(articles, sortBy, dir = 'desc') {
 
 /**
  * Compute wiki statistics.
- * @param {import('./types.js?v=20260417-m5').WikiArticle[]} articles
- * @param {import('./types.js?v=20260417-m5').WikiCategory[]} categories
- * @returns {import('./types.js?v=20260417-m5').WikiStats}
+ * @param {import('./types.js?v=20260417-m6').WikiArticle[]} articles
+ * @param {import('./types.js?v=20260417-m6').WikiCategory[]} categories
+ * @returns {import('./types.js?v=20260417-m6').WikiStats}
  */
 export function computeStats(articles, categories) {
   const published = articles.filter(a => a.status === 'published');
@@ -160,8 +160,8 @@ export function computeStats(articles, categories) {
 
 /**
  * Count articles per category.
- * @param {import('./types.js?v=20260417-m5').WikiArticle[]} articles
- * @param {import('./types.js?v=20260417-m5').WikiCategory[]} categories
+ * @param {import('./types.js?v=20260417-m6').WikiArticle[]} articles
+ * @param {import('./types.js?v=20260417-m6').WikiCategory[]} categories
  * @returns {Array<{ categoryId: string, categoryName: string, count: number }>}
  */
 export function articlesPerCategory(articles, categories) {
@@ -174,7 +174,7 @@ export function articlesPerCategory(articles, categories) {
 
 /**
  * Get all unique tags with counts.
- * @param {import('./types.js?v=20260417-m5').WikiArticle[]} articles
+ * @param {import('./types.js?v=20260417-m6').WikiArticle[]} articles
  * @returns {Array<{ tag: string, count: number }>}
  */
 export function tagCloud(articles) {
@@ -211,7 +211,7 @@ export function readingTime(content, wpm = 200) {
 // DEMO DATA
 // ============================================================
 
-/** @type {import('./types.js?v=20260417-m5').WikiCategory[]} */
+/** @type {import('./types.js?v=20260417-m6').WikiCategory[]} */
 export const DEMO_CATEGORIES = [
   { id: 'getting-started', name: "Getting Started", icon: '🚀', sortOrder: 1, description: "Onboarding and first steps" },
   { id: 'cost-modeling', name: "Cost Modeling", icon: '💰', sortOrder: 2, description: "Building and reviewing cost models" },
@@ -225,7 +225,7 @@ export const DEMO_CATEGORIES = [
   { id: 'tool-guides', name: "Design Tool Guides", icon: '🧰', sortOrder: 10, description: "How-to guides for each Design Tool" },
 ];
 
-/** @type {import('./types.js?v=20260417-m5').WikiArticle[]} */
+/** @type {import('./types.js?v=20260417-m6').WikiArticle[]} */
 export const DEMO_ARTICLES = [
   // Getting Started
   { id: 'w1', title: 'What is IES Hub?', categoryId: 'getting-started', content: '<p>The IES Intelligence Hub is GXOs unified platform for solutions design, cost modeling, network optimization, and deal management. Built on supply chain domain expertise, the Hub enables solutions engineers to rapidly model complex logistics operations and support the Deal Operating System (DOS) from pre-sales through delivery handover.</p><p>The Intelligence Hub serves three primary audiences: Solutions Engineers designing solutions and building cost models, Operations teams planning facility networks, and Deal Management professionals tracking deals through their lifecycle.</p><p>Key capabilities include detailed cost modeling with 13-section P&L, facility sizing with 3D visualization, MOST-based labor standards, network optimization with multi-modal transportation, and integrated market intelligence. All tools feed common data structures and share results through an event-driven architecture.</p>', summary: 'Overview of the Intelligence Hub, its purpose, and target users', tags: ['onboarding', 'overview', 'getting-started'], author: 'Brock Eckles', status: 'published', viewCount: 342 },

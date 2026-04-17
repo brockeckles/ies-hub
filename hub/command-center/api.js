@@ -23,13 +23,14 @@ export async function fetchDashboardData() {
 
   try {
     // Attempt to fetch live data from Supabase
-    const [fuelRows, laborRows, freightRows, newsRows, alertRows, rfpRows] = await Promise.all([
+    const [fuelRows, laborRows, freightRows, newsRows, alertRows, rfpRows, steelRows] = await Promise.all([
       db.fetchAll('fuel_prices').catch(() => []),
       db.fetchAll('labor_markets').catch(() => []),
       db.fetchAll('freight_rates').catch(() => []),
       db.fetchAll('competitor_news').catch(() => []),
       safeAlertFetch(),
       db.fetchAll('rfp_signals').catch(() => []),
+      db.fetchAll('steel_prices').catch(() => []),
     ]);
 
     // If we got any data, we're connected
@@ -51,6 +52,18 @@ export async function fetchDashboardData() {
         const avgFreight = freightRows.reduce((s, r) => s + (r.rate_index || r.freightIndex || 0), 0) / freightRows.length;
         if (avgFreight > 0) kpis = { ...kpis, freightIndex: avgFreight };
       }
+      if (steelRows.length) {
+        // Latest by report_date
+        const sortedSteel = [...steelRows].sort((a, b) => (b.report_date || '').localeCompare(a.report_date || ''));
+        const latestSteel = sortedSteel[0];
+        if (latestSteel) {
+          const price = parseFloat(latestSteel.price || 0);
+          const wow = parseFloat(latestSteel.wow_change ?? 0);
+          const trend = wow > 0.1 ? 'up' : wow < -0.1 ? 'down' : 'neutral';
+          const change = wow > 0 ? `+${wow.toFixed(1)}% WoW` : wow < 0 ? `${wow.toFixed(1)}% WoW` : 'Flat WoW';
+          if (price > 0) kpis = { ...kpis, steelPrice: price, steelUnit: latestSteel.unit || '$/ton', steelTrend: trend, steelChange: change };
+        }
+      }
 
       // Build alerts from live data
       if (alertRows.length > 0) {
@@ -70,15 +83,24 @@ export async function fetchDashboardData() {
         sectors = buildSectorsFromNews(newsRows, sectors);
       }
 
-      // Build RFP signals from live data
+      // Build RFP signals from live data. rfp_signals schema:
+      //   company, vertical, signal_type, detail, estimated_timeline, confidence (1-5), status
       if (rfpRows.length) {
-        rfpSignals = rfpRows.slice(0, 6).map(r => ({
-          company: r.company || r.account_name || 'Unknown',
-          vertical: r.vertical || r.industry || 'General',
-          volume: r.volume || r.volume_pallets_mo || 'N/A',
-          region: r.region || 'Unknown',
-          stage: r.stage || r.status || 'active',
-          date: formatRelative(r.created_at || r.date || new Date().toISOString()),
+        // Sort by confidence desc then recency; take top 5
+        const sorted = [...rfpRows].sort((a, b) => {
+          const c = (b.confidence || 0) - (a.confidence || 0);
+          if (c !== 0) return c;
+          return (b.created_at || '').localeCompare(a.created_at || '');
+        });
+        rfpSignals = sorted.slice(0, 5).map(r => ({
+          company: r.company || 'Unknown',
+          vertical: formatVertical(r.vertical),
+          signal: r.signal_type || 'Signal',
+          detail: r.detail || '',
+          timeline: r.estimated_timeline || '',
+          confidence: parseInt(r.confidence, 10) || 0,
+          status: r.status || 'active',
+          date: formatRelative(r.created_at || new Date().toISOString()),
         }));
       }
     }
@@ -105,8 +127,22 @@ export async function fetchChartData() {
   const diesel = { labels: [], prices: [] };
   const freight = { labels: [], spot: [], contract: [] };
   const labor = { regions: [], wages: [] };
+  let steel = DEMO_STEEL_CHART;
 
   try {
+    // Steel prices — 26 weeks
+    const steelRows = await db.fetchAll('steel_prices').catch(() => []);
+    if (steelRows.length) {
+      const sorted = [...steelRows].sort((a, b) => (a.report_date || '').localeCompare(b.report_date || ''));
+      steel = {
+        labels: sorted.map(r => {
+          const d = new Date(r.report_date || new Date().toISOString());
+          return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        }),
+        prices: sorted.map(r => parseFloat(r.price || 0)),
+      };
+    }
+
     // Fetch diesel price data
     const fuelRows = await db.fetchAll('fuel_prices').catch(() => []);
     if (fuelRows.length) {
@@ -117,7 +153,7 @@ export async function fetchChartData() {
       });
       diesel.prices = recent.map(r => parseFloat(r.price_per_gallon || r.price || 3.85));
     } else {
-      return { diesel: DEMO_DIESEL_CHART, freight: DEMO_FREIGHT_CHART, labor: DEMO_LABOR_CHART };
+      return { diesel: DEMO_DIESEL_CHART, freight: DEMO_FREIGHT_CHART, labor: DEMO_LABOR_CHART, steel };
     }
 
     // Fetch freight rate data
@@ -135,7 +171,7 @@ export async function fetchChartData() {
         freight.contract = contractRates.slice(-26).map(r => parseFloat(r.rate || 2.00));
       }
     } else {
-      return { diesel: DEMO_DIESEL_CHART, freight: DEMO_FREIGHT_CHART, labor: DEMO_LABOR_CHART };
+      return { diesel: DEMO_DIESEL_CHART, freight: DEMO_FREIGHT_CHART, labor: DEMO_LABOR_CHART, steel };
     }
 
     // Fetch labor wage data by region
@@ -161,14 +197,22 @@ export async function fetchChartData() {
       labor.regions = regionWages.map(r => r.region);
       labor.wages = regionWages.map(r => r.wage);
     } else {
-      return { diesel: DEMO_DIESEL_CHART, freight: DEMO_FREIGHT_CHART, labor: DEMO_LABOR_CHART };
+      return { diesel: DEMO_DIESEL_CHART, freight: DEMO_FREIGHT_CHART, labor: DEMO_LABOR_CHART, steel };
     }
 
-    return { diesel, freight, labor };
+    return { diesel, freight, labor, steel };
   } catch (err) {
     console.warn('[CC] Chart data fetch failed, using demo:', err.message);
-    return { diesel: DEMO_DIESEL_CHART, freight: DEMO_FREIGHT_CHART, labor: DEMO_LABOR_CHART };
+    return { diesel: DEMO_DIESEL_CHART, freight: DEMO_FREIGHT_CHART, labor: DEMO_LABOR_CHART, steel };
   }
+}
+
+/** Normalize enum-like vertical strings ("retail_ecommerce" → "Retail / E-Commerce"). */
+function formatVertical(v) {
+  if (!v) return 'General';
+  const cleaned = String(v).replace(/_/g, ' ').split(' ')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  return cleaned.replace(/Ecommerce/i, 'E-Commerce');
 }
 
 // ============================================================
@@ -256,6 +300,10 @@ const DEMO_KPIS = {
   marketSignal: 73,
   signalTrend: 'neutral',
   signalChange: 'Stable — moderate activity',
+  steelPrice: 835,
+  steelUnit: '$/ton',
+  steelTrend: 'up',
+  steelChange: '+0.8% WoW',
 };
 
 const DEMO_SECTORS = {
@@ -320,12 +368,11 @@ const DEMO_ACTIVITY = [
 ];
 
 const DEMO_RFP_SIGNALS = [
-  { company: 'Kraft Heinz', vertical: 'Food & Beverage', volume: '4,200', region: 'Midwest', stage: 'active', date: '2d ago' },
-  { company: 'Amazon', vertical: 'E-Commerce', volume: '8,500', region: 'West', stage: 'active', date: '3d ago' },
-  { company: 'Target', vertical: 'Retail', volume: '3,100', region: 'Northeast', stage: 'closed', date: '1w ago' },
-  { company: 'Unilever', vertical: 'Consumer Goods', volume: '5,600', region: 'Southeast', stage: 'pending', date: '5d ago' },
-  { company: 'XPO Logistics', vertical: 'Logistics', volume: '2,800', region: 'South', stage: 'active', date: '4d ago' },
-  { company: 'PepsiCo', vertical: 'Beverages', volume: '6,100', region: 'Central', stage: 'pending', date: '1w ago' },
+  { company: 'Rivian',       vertical: 'Automotive',           signal: 'Facility Expansion', detail: 'New parts DC planned in Illinois',                  timeline: '1–3 months',  confidence: 4, status: 'active', date: '3d ago' },
+  { company: 'Target',       vertical: 'Retail / E-Commerce',  signal: 'Leadership Change',  detail: 'New VP Supply Chain from Amazon',                   timeline: '3–6 months',  confidence: 3, status: 'active', date: '1w ago' },
+  { company: 'Peloton',      vertical: 'Consumer Goods',       signal: '10-K Commentary',    detail: '"Evaluating fulfillment partnerships"',             timeline: '3–6 months',  confidence: 3, status: 'active', date: '5d ago' },
+  { company: 'Albertsons',   vertical: 'Food & Beverage',      signal: 'Cost Restructuring', detail: 'Post-merger integration; 3PL evaluation',           timeline: '6–9 months',  confidence: 2, status: 'active', date: '6d ago' },
+  { company: 'Caterpillar',  vertical: 'Industrial Mfg',       signal: 'M&A Activity',       detail: 'Acquired parts distributor; integration likely',    timeline: '6–12 months', confidence: 2, status: 'active', date: '1w ago' },
 ];
 
 // Demo chart data (52-week diesel, 26-week freight, regional labor)
@@ -343,6 +390,11 @@ const DEMO_FREIGHT_CHART = {
 const DEMO_LABOR_CHART = {
   regions: ['Northeast', 'Southeast', 'Midwest', 'Southwest', 'West'],
   wages: [21.45, 19.80, 18.90, 17.50, 22.10],
+};
+
+const DEMO_STEEL_CHART = {
+  labels: ['Oct 10','Oct 17','Oct 24','Oct 31','Nov 7','Nov 14','Nov 21','Nov 28','Dec 5','Dec 12','Dec 19','Dec 26','Jan 2','Jan 9','Jan 16','Jan 23','Jan 30','Feb 6','Feb 13','Feb 20','Feb 27','Mar 6','Mar 13','Mar 20','Mar 27','Apr 3'],
+  prices: [760, 755, 762, 770, 778, 785, 790, 795, 790, 785, 788, 792, 798, 805, 810, 815, 820, 822, 825, 828, 826, 824, 828, 830, 828, 835],
 };
 
 /**

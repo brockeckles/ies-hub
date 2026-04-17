@@ -19,6 +19,7 @@ let liveData = null;
 let dieselChartInstance = null;
 let freightChartInstance = null;
 let laborChartInstance = null;
+let steelChartInstance = null;
 
 export async function mount(el) {
   rootEl = el;
@@ -74,11 +75,12 @@ function render() {
       <!-- Market Intelligence KPIs -->
       <div style="margin-bottom:20px;">
         <div style="font-size:12px;font-weight:700;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Market Intelligence</div>
-        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;">
+        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;">
           ${kpiCard('Diesel Price', '$' + d.kpis.dieselPrice.toFixed(2) + '/gal', d.kpis.dieselTrend, '#dc2626', d.kpis.dieselChange)}
           ${kpiCard('Labor Tightness', d.kpis.laborTightness.toFixed(1), d.kpis.laborTrend, '#2563eb', d.kpis.laborChange)}
           ${kpiCard('Avg Warehouse Wage', '$' + d.kpis.avgWage.toFixed(2) + '/hr', d.kpis.wageTrend, '#7c3aed', d.kpis.wageChange)}
           ${kpiCard('Freight Rate Index', d.kpis.freightIndex.toFixed(0), d.kpis.freightTrend, '#ea580c', d.kpis.freightChange)}
+          ${kpiCard('Steel Price Index', '$' + Math.round(d.kpis.steelPrice).toLocaleString() + ' ' + (d.kpis.steelUnit || '/ton'), d.kpis.steelTrend, '#0891b2', d.kpis.steelChange)}
           ${kpiCard('Market Signal Score', d.kpis.marketSignal.toFixed(0) + '/100', d.kpis.signalTrend, '#16a34a', d.kpis.signalChange)}
         </div>
       </div>
@@ -107,25 +109,31 @@ function render() {
         </div>
       </div>
 
-      <!-- Charts: Diesel, Freight, Labor Wage Trend -->
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:20px;">
+      <!-- Charts: 2x2 grid — Diesel, Freight (top), Wage Trends, Steel Price (bottom) -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
 
         <!-- Diesel Price Trend -->
         <div class="hub-card" style="padding:16px;display:flex;flex-direction:column;">
           <div style="font-size:13px;font-weight:700;margin-bottom:12px;">Diesel Price Trend</div>
-          <div id="cc-diesel-chart" style="flex:1;min-height:280px;position:relative;"></div>
+          <div id="cc-diesel-chart" style="flex:1;min-height:240px;position:relative;"></div>
         </div>
 
         <!-- Freight Rate Index -->
         <div class="hub-card" style="padding:16px;display:flex;flex-direction:column;">
           <div style="font-size:13px;font-weight:700;margin-bottom:12px;">Freight Rate Index</div>
-          <div id="cc-freight-chart" style="flex:1;min-height:280px;position:relative;"></div>
+          <div id="cc-freight-chart" style="flex:1;min-height:240px;position:relative;"></div>
         </div>
 
         <!-- Avg Warehouse Wage Trend (multi-line by region) -->
         <div class="hub-card" style="padding:16px;display:flex;flex-direction:column;">
           <div style="font-size:13px;font-weight:700;margin-bottom:12px;">Warehouse Wage Trends</div>
-          <div id="cc-labor-chart" style="flex:1;min-height:280px;position:relative;"></div>
+          <div id="cc-labor-chart" style="flex:1;min-height:240px;position:relative;"></div>
+        </div>
+
+        <!-- Steel Price Index (CRU HRC weekly) -->
+        <div class="hub-card" style="padding:16px;display:flex;flex-direction:column;">
+          <div style="font-size:13px;font-weight:700;margin-bottom:12px;">Steel Price Index <span style="font-size:10px;color:var(--ies-gray-400);font-weight:500;">— CRU HRC $/ton</span></div>
+          <div id="cc-steel-chart" style="flex:1;min-height:240px;position:relative;"></div>
         </div>
       </div>
 
@@ -239,6 +247,7 @@ function kpiCard(label, value, trend, color, change) {
     'Labor Tightness': 'Composite index (0-100) measuring warehouse labor availability. Higher = tighter market',
     'Avg Warehouse Wage': 'Average hourly wage for warehouse workers (BLS data, seasonally adjusted)',
     'Freight Rate Index': 'Composite index of spot and contract truckload rates (DAT/Coyote benchmarks)',
+    'Steel Price Index': 'CRU HRC (Hot-Rolled Coil) weekly spot price, USD per ton. Key driver of racking, mezzanine and dock costs.',
     'Market Signal Score': 'Weighted composite of all intelligence signals. Higher = more market activity',
   };
 
@@ -284,26 +293,24 @@ function sectorPulseCard(title, icon, data, color) {
 }
 
 function alertRow(a) {
-  const sevMap = {
-    critical: { bg: '#fef2f2', border: '#dc2626', label: 'Critical', labelBg: 'rgba(220,38,38,.1)', labelColor: '#dc2626' },
-    high:     { bg: '#fff7ed', border: '#ea580c', label: 'High', labelBg: 'rgba(234,88,12,.1)', labelColor: '#ea580c' },
-    warning:  { bg: '#fffbeb', border: '#d97706', label: 'Warning', labelBg: 'rgba(217,119,6,.1)', labelColor: '#d97706' },
-    medium:   { bg: '#fffbeb', border: '#d97706', label: 'Medium', labelBg: 'rgba(217,119,6,.1)', labelColor: '#d97706' },
-    info:     { bg: '#eff6ff', border: '#2563eb', label: 'Info', labelBg: 'rgba(37,99,235,.08)', labelColor: '#2563eb' },
-    low:      { bg: '#f0fdf4', border: '#16a34a', label: 'Low', labelBg: 'rgba(22,163,74,.08)', labelColor: '#16a34a' },
-  };
-  const sev = sevMap[a.severity] || { bg: '#f9fafb', border: '#9ca3af', label: 'Info', labelBg: 'rgba(107,114,128,.08)', labelColor: '#6b7280' };
-
+  // Neutralized styling — no severity color coding (per feedback 2026-04-17).
+  // Only surface a link arrow when there's a real source_url; whole row is clickable
+  // if linkable. No inner duplicate link; no severity label chip.
+  const hasLink = !!a.source_url;
+  const linkArrow = hasLink
+    ? `<span style="font-size:11px;color:#2563eb;flex-shrink:0;margin-top:1px;">↗</span>`
+    : '';
+  const sourceLine = a.source
+    ? `<span style="font-size:10px;color:var(--ies-gray-400);">${a.source}</span>`
+    : '';
   return `
-    <div style="display:flex;align-items:start;gap:8px;padding:10px 14px;border-bottom:1px solid var(--ies-gray-100);border-left:3px solid ${sev.border};background:${sev.bg};cursor:${a.source_url ? 'pointer' : 'default'};" data-alert-url="${a.source_url || ''}">
-      <div style="flex:1;">
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
-          <span style="font-size:12px;font-weight:600;color:var(--ies-gray-700);">${a.title}</span>
-          <span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:3px;background:${sev.labelBg};color:${sev.labelColor};text-transform:uppercase;letter-spacing:0.3px;">${sev.label}</span>
-        </div>
-        <div style="font-size:11px;color:var(--ies-gray-400);margin-top:2px;">${a.message}</div>
-        ${a.source_url ? `<span style="font-size:10px;color:#2563eb;cursor:pointer;margin-top:3px;display:inline-block;" data-alert-link="${a.source_url}">${a.source || 'Source'} →</span>` : ''}
+    <div style="display:flex;align-items:start;gap:10px;padding:10px 14px;border-bottom:1px solid var(--ies-gray-100);cursor:${hasLink ? 'pointer' : 'default'};" data-alert-url="${a.source_url || ''}">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:12px;font-weight:600;color:var(--ies-gray-700);margin-bottom:2px;">${a.title}</div>
+        <div style="font-size:11px;color:var(--ies-gray-500);line-height:1.4;">${a.message}</div>
+        ${sourceLine ? `<div style="margin-top:3px;">${sourceLine}</div>` : ''}
       </div>
+      ${linkArrow}
       <span style="font-size:10px;color:var(--ies-gray-300);white-space:nowrap;flex-shrink:0;">${a.date}</span>
     </div>
   `;
@@ -358,20 +365,43 @@ function renderRfpFeed(rfpSignals) {
   if (!rfpSignals || rfpSignals.length === 0) {
     return '<div style="padding:16px;text-align:center;color:var(--ies-gray-400);font-size:12px;">No RFP signals available</div>';
   }
-  return rfpSignals.map(rfp => `
-    <div style="display:flex;align-items:start;gap:10px;padding:12px 14px;border-bottom:1px solid var(--ies-gray-100);">
-      <div style="width:32px;height:32px;border-radius:6px;background:var(--ies-gray-100);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--ies-gray-600);flex-shrink:0;">💼</div>
-      <div style="flex:1;min-width:0;">
-        <div style="font-size:12px;font-weight:600;color:var(--ies-gray-700);">${rfp.company}</div>
-        <div style="font-size:11px;color:var(--ies-gray-500);margin-top:2px;">${rfp.vertical} — ${rfp.volume} pallets/mo</div>
-        <div style="display:flex;gap:6px;margin-top:4px;">
-          <span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;background:rgba(37,99,235,.08);color:#2563eb;">${rfp.region}</span>
-          <span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;background:${rfp.stage === 'active' ? 'rgba(22,163,74,.08);color:#16a34a' : rfp.stage === 'closed' ? 'rgba(107,114,128,.08);color:#6b7280' : 'rgba(217,119,6,.08);color:#d97706'};">${rfp.stage}</span>
+  // Color a signal_type chip based on its theme so the eye can scan categories.
+  const signalColor = (type) => {
+    const t = (type || '').toLowerCase();
+    if (t.includes('expansion') || t.includes('facility')) return { bg: 'rgba(22,163,74,.10)', fg: '#16a34a' };  // green — growth
+    if (t.includes('leadership') || t.includes('change')) return { bg: 'rgba(37,99,235,.10)', fg: '#2563eb' };   // blue — people
+    if (t.includes('cost') || t.includes('restructuring') || t.includes('10-k')) return { bg: 'rgba(217,119,6,.10)', fg: '#d97706' }; // amber — financial
+    if (t.includes('m&a') || t.includes('acquisition')) return { bg: 'rgba(124,58,237,.10)', fg: '#7c3aed' };    // purple — M&A
+    return { bg: 'rgba(107,114,128,.10)', fg: '#6b7280' };
+  };
+  const confidenceDots = (n) => {
+    const filled = Math.max(0, Math.min(5, n || 0));
+    const dots = [];
+    for (let i = 0; i < 5; i++) {
+      dots.push(`<span style="display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:2px;background:${i < filled ? '#16a34a' : '#e5e7eb'};"></span>`);
+    }
+    return dots.join('');
+  };
+
+  return rfpSignals.map(rfp => {
+    const sc = signalColor(rfp.signal);
+    return `
+    <div style="display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-bottom:1px solid var(--ies-gray-100);">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+        <div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;">
+          <span style="font-size:13px;font-weight:700;color:var(--ies-gray-700);white-space:nowrap;">${rfp.company}</span>
+          <span style="font-size:10px;color:var(--ies-gray-400);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${rfp.vertical}</span>
         </div>
+        <span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:3px;background:${sc.bg};color:${sc.fg};text-transform:uppercase;letter-spacing:0.3px;white-space:nowrap;flex-shrink:0;">${rfp.signal}</span>
       </div>
-      <span style="font-size:10px;color:var(--ies-gray-300);white-space:nowrap;flex-shrink:0;">${rfp.date}</span>
-    </div>
-  `).join('');
+      ${rfp.detail ? `<div style="font-size:12px;color:var(--ies-gray-600);line-height:1.4;">${rfp.detail}</div>` : ''}
+      <div style="display:flex;align-items:center;gap:12px;font-size:10px;color:var(--ies-gray-400);">
+        ${rfp.timeline ? `<span>⏱ ${rfp.timeline}</span>` : ''}
+        <span style="display:inline-flex;align-items:center;gap:4px;">Confidence ${confidenceDots(rfp.confidence)}</span>
+        <span style="margin-left:auto;">${rfp.date}</span>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 /**
@@ -392,6 +422,7 @@ function destroyAllCharts() {
   if (dieselChartInstance) { dieselChartInstance.destroy(); dieselChartInstance = null; }
   if (freightChartInstance) { freightChartInstance.destroy(); freightChartInstance = null; }
   if (laborChartInstance) { laborChartInstance.destroy(); laborChartInstance = null; }
+  if (steelChartInstance) { steelChartInstance.destroy(); steelChartInstance = null; }
 }
 
 /**
@@ -440,6 +471,50 @@ async function renderCharts() {
     const canvas = document.createElement('canvas');
     container.appendChild(canvas);
     renderLaborChart(canvas, chartData.labor);
+  }
+
+  // Steel Price Index (CRU HRC)
+  const steelCtx = rootEl.querySelector('#cc-steel-chart canvas');
+  if (!steelCtx && rootEl.querySelector('#cc-steel-chart')) {
+    const container = rootEl.querySelector('#cc-steel-chart');
+    const canvas = document.createElement('canvas');
+    container.appendChild(canvas);
+    renderSteelChart(canvas, chartData.steel);
+  }
+}
+
+function renderSteelChart(canvas, data) {
+  try {
+    steelChartInstance = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: data.labels,
+        datasets: [{
+          label: 'CRU HRC ($/ton)',
+          data: data.prices,
+          borderColor: '#0891b2',
+          backgroundColor: 'rgba(8,145,178,.08)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 2,
+          pointBackgroundColor: '#0891b2',
+          borderWidth: 2,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: {
+            beginAtZero: false,
+            ticks: { callback: v => '$' + v },
+          },
+        },
+      },
+    });
+  } catch (err) {
+    console.warn('[CC] Steel chart error:', err);
   }
 }
 
@@ -534,17 +609,19 @@ function renderFreightChart(canvas, data) {
 
 function renderLaborChart(canvas, data) {
   try {
-    // Convert bar data to multi-line trend data by region
+    // Convert bar data to multi-line trend data by region/market.
+    // Use an index-based palette so cities (MSAs) get distinct colors
+    // even though the hardcoded name→color map only knew census regions.
     const months = ['Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar','Apr','May','Jun'];
+    const palette = ['#2563eb', '#16a34a', '#ea580c', '#7c3aed', '#dc2626', '#0891b2', '#ca8a04', '#be185d'];
     const regionColors = {
-      'Northeast': '#2563eb',
-      'Southeast': '#16a34a',
-      'Midwest': '#ea580c',
-      'Southwest': '#7c3aed',
-      'West': '#dc2626',
+      // Still honor census-region names if the data uses them
+      'Northeast': '#2563eb', 'Southeast': '#16a34a', 'Midwest': '#ea580c',
+      'Southwest': '#7c3aed', 'West': '#dc2626',
     };
     const datasets = (data.regions || []).map((region, i) => {
       const baseWage = data.wages ? data.wages[i] : 19 + i;
+      const color = regionColors[region] || palette[i % palette.length];
       // Generate 12-month trend with slight upward drift and noise
       const trendData = months.map((_, m) => {
         const drift = m * 0.04;
@@ -554,11 +631,11 @@ function renderLaborChart(canvas, data) {
       return {
         label: region,
         data: trendData,
-        borderColor: regionColors[region] || '#6b7280',
+        borderColor: color,
         backgroundColor: 'transparent',
         tension: 0.35,
         pointRadius: 2,
-        pointBackgroundColor: regionColors[region] || '#6b7280',
+        pointBackgroundColor: color,
         borderWidth: 2,
       };
     });
