@@ -6,16 +6,16 @@
  * @module tools/cost-model/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-pa';
-import { state } from '../../shared/state.js?v=20260417-pa';
-import * as calc from './calc.js?v=20260417-pa';
-import * as api from './api.js?v=20260417-pa';
+import { bus } from '../../shared/event-bus.js?v=20260417-pb';
+import { state } from '../../shared/state.js?v=20260417-pb';
+import * as calc from './calc.js?v=20260417-pb';
+import * as api from './api.js?v=20260417-pb';
 
 // ============================================================
 // STATE — tool-local reactive state
 // ============================================================
 
-/** @type {import('./types.js?v=20260417-pa').CostModelData} */
+/** @type {import('./types.js?v=20260417-pb').CostModelData} */
 let model = createEmptyModel();
 
 /** @type {Object} */
@@ -476,7 +476,11 @@ function renderSetup() {
         <label class="cm-form-label">Market</label>
         <select class="hub-select" id="cm-market" data-field="projectDetails.market">
           <option value="">Select market...</option>
-          ${markets.map(m => `<option value="${m.market_id}"${m.market_id === pd.market ? ' selected' : ''}>${m.market_name || m.name || m.market_id}</option>`).join('')}
+          ${markets.map(m => {
+            const id = m.market_id || m.id;
+            const label = m.name || m.market_name || m.abbr || id;
+            return `<option value="${id}"${id === pd.market ? ' selected' : ''}>${label}</option>`;
+          }).join('')}
         </select>
       </div>
       <div class="cm-form-group">
@@ -541,7 +545,7 @@ function renderVolumes() {
             <td><input type="number" value="${l.volume || 0}" style="width:120px;" data-idx="${i}" data-field="volume" data-type="number" /></td>
             <td>
               <select style="width:90px;" data-idx="${i}" data-field="uom">
-                ${['pallet', 'case', 'each', 'order', 'line'].map(u =>
+                ${['pallets', 'cases', 'eaches', 'orders', 'lines', 'units'].map(u =>
                   `<option value="${u}"${l.uom === u ? ' selected' : ''}>${u}</option>`
                 ).join('')}
               </select>
@@ -1878,7 +1882,7 @@ function sectionHasData(key) {
 /**
  * Handle incoming labor lines from MOST tool.
  * Merges or replaces CM laborLines with MOST-derived data.
- * @param {import('../most-standards/types.js?v=20260417-pa').MostToCmPayload} payload
+ * @param {import('../most-standards/types.js?v=20260417-pb').MostToCmPayload} payload
  */
 function handleMostPush(payload) {
   if (!payload?.laborLines?.length) return;
@@ -1916,7 +1920,7 @@ function handleMostPush(payload) {
 /**
  * Handle incoming facility data from Warehouse Sizing Calculator.
  * Populates CM facility section fields.
- * @param {import('../warehouse-sizing/types.js?v=20260417-pa').WscToCmPayload} payload
+ * @param {import('../warehouse-sizing/types.js?v=20260417-pb').WscToCmPayload} payload
  */
 function handleWscPush(payload) {
   if (!payload) return;
@@ -1944,9 +1948,13 @@ function handleWscPush(payload) {
 
 function renderLanding() {
   const count = savedModels.length;
+  // ref_markets primary key is `id` (uuid) with a `name` column; the fallback shape
+  // uses market_id/name. Build a lookup that works for either shape.
   const marketById = {};
   (refData.markets || DEMO_MARKETS_FALLBACK).forEach(m => {
-    marketById[m.market_id] = m.market_name || m.name || m.market_id;
+    const key = m.market_id || m.id;
+    const label = m.name || m.market_name || m.abbr || key;
+    if (key) marketById[key] = label;
   });
   return `
     <div style="padding:32px;max-width:1280px;margin:0 auto;">
