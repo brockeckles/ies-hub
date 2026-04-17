@@ -6,10 +6,10 @@
  * @module tools/deal-manager/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-p2';
-import { state } from '../../shared/state.js?v=20260417-p2';
-import * as calc from './calc.js?v=20260417-p2';
-import * as api from './api.js?v=20260417-p2';
+import { bus } from '../../shared/event-bus.js?v=20260417-p3';
+import { state } from '../../shared/state.js?v=20260417-p3';
+import * as calc from './calc.js?v=20260417-p3';
+import * as api from './api.js?v=20260417-p3';
 
 // ============================================================
 // STATE
@@ -24,28 +24,28 @@ let activeTab = 'list';
 /** @type {'kanban' | 'table'} */
 let landingViewMode = 'kanban';
 
-/** @type {import('./types.js?v=20260417-p2').Deal|null} */
+/** @type {import('./types.js?v=20260417-p3').Deal|null} */
 let activeDeal = null;
 
-/** @type {import('./types.js?v=20260417-p2').Site[]} */
+/** @type {import('./types.js?v=20260417-p3').Site[]} */
 let sites = [];
 
-/** @type {import('./types.js?v=20260417-p2').DealFinancials|null} */
+/** @type {import('./types.js?v=20260417-p3').DealFinancials|null} */
 let financials = null;
 
-/** @type {import('./types.js?v=20260417-p2').DosStage[]} */
+/** @type {import('./types.js?v=20260417-p3').DosStage[]} */
 let dosStages = [];
 
-/** @type {import('./types.js?v=20260417-p2').Deal[]} */
+/** @type {import('./types.js?v=20260417-p3').Deal[]} */
 let allDeals = [];
 
-/** @type {import('./types.js?v=20260417-p2').HoursEntry[]} */
+/** @type {import('./types.js?v=20260417-p3').HoursEntry[]} */
 let hoursEntries = [];
 
-/** @type {import('./types.js?v=20260417-p2').Task[]} */
+/** @type {import('./types.js?v=20260417-p3').Task[]} */
 let tasks = [];
 
-/** @type {import('./types.js?v=20260417-p2').WeeklyUpdate[]} */
+/** @type {import('./types.js?v=20260417-p3').WeeklyUpdate[]} */
 let updates = [];
 
 // DOS stages reference (6 stages: Pre-Sales → Delivery)
@@ -1030,7 +1030,7 @@ function showNewTaskModal() {
       opportunity_id: activeDeal.id,
       title,
       priority: modal.querySelector('#dm-task-priority').value,
-      status: 'todo' as const,
+      status: /** @type {const} */ ('todo'),
       assignee: modal.querySelector('#dm-task-assignee').value || null,
       due_date: modal.querySelector('#dm-task-due').value || null,
       estimated_hours: parseFloat(modal.querySelector('#dm-task-est-hours').value) || null,
@@ -1087,8 +1087,8 @@ function showPopulateDosModal() {
           opportunity_id: activeDeal.id,
           title: template.title,
           description: template.description,
-          status: 'todo' as const,
-          priority: 'medium' as const,
+          status: /** @type {const} */ ('todo'),
+          priority: /** @type {const} */ ('medium'),
           dos_stage_number: stageNum,
           dos_stage_name: stageName,
         };

@@ -3,7 +3,7 @@
  * JSDoc typedefs shared across all tools and modules.
  *
  * Import this file for type hints:
- *   /** @typedef {import('../shared/types.js?v=20260417-p2').CostModel} CostModel *​/
+ *   /** @typedef {import('../shared/types.js?v=20260417-p3').CostModel} CostModel *​/
  *
  * @module shared/types
  */
