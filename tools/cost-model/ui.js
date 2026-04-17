@@ -6,16 +6,16 @@
  * @module tools/cost-model/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-mA';
-import { state } from '../../shared/state.js?v=20260417-mA';
-import * as calc from './calc.js?v=20260417-mA';
-import * as api from './api.js?v=20260417-mA';
+import { bus } from '../../shared/event-bus.js?v=20260417-mB';
+import { state } from '../../shared/state.js?v=20260417-mB';
+import * as calc from './calc.js?v=20260417-mB';
+import * as api from './api.js?v=20260417-mB';
 
 // ============================================================
 // STATE — tool-local reactive state
 // ============================================================
 
-/** @type {import('./types.js?v=20260417-mA').CostModelData} */
+/** @type {import('./types.js?v=20260417-mB').CostModelData} */
 let model = createEmptyModel();
 
 /** @type {Object} */
@@ -118,6 +118,39 @@ export async function mount(el) {
   // Listen for cross-tool push events
   bus.on('most:push-to-cm', handleMostPush);
   bus.on('wsc:push-to-cm', handleWscPush);
+
+  // If WSC pushed data before we mounted, consume the sessionStorage handoff.
+  // This skips the landing page and takes the user straight into the editor
+  // with the WSC facility dimensions applied — the expected behavior of the
+  // "Use in Cost Model →" button.
+  try {
+    const pending = sessionStorage.getItem('wsc_pending_push');
+    if (pending) {
+      const payload = JSON.parse(pending);
+      // Only consume if recent (within 60s) — stale entries shouldn't hijack future opens
+      if (payload && payload.at && (Date.now() - payload.at) < 60000) {
+        sessionStorage.removeItem('wsc_pending_push');
+        // Switch to editor mode first, then apply
+        model = createEmptyModel();
+        isDirty = false;
+        userHasInteracted = false;
+        activeSection = 'facility';
+        viewMode = 'editor';
+        // Apply payload to the fresh model
+        if (payload.totalSqft)    model.facility.totalSqft = payload.totalSqft;
+        if (payload.clearHeight)  model.facility.clearHeight = payload.clearHeight;
+        if (payload.dockDoors)    model.facility.dockDoors = payload.dockDoors;
+        if (payload.officeSqft)   model.facility.officeSqft = payload.officeSqft;
+        if (payload.stagingSqft)  model.facility.stagingSqft = payload.stagingSqft;
+        isDirty = true;
+      } else {
+        // Stale — discard
+        sessionStorage.removeItem('wsc_pending_push');
+      }
+    }
+  } catch (e) {
+    console.warn('[CM] Failed to consume WSC push handoff:', e);
+  }
 
   renderCurrentView();
 
@@ -2314,7 +2347,7 @@ function sectionHasData(key) {
 /**
  * Handle incoming labor lines from MOST tool.
  * Merges or replaces CM laborLines with MOST-derived data.
- * @param {import('../most-standards/types.js?v=20260417-mA').MostToCmPayload} payload
+ * @param {import('../most-standards/types.js?v=20260417-mB').MostToCmPayload} payload
  */
 function handleMostPush(payload) {
   if (!payload?.laborLines?.length) return;
@@ -2352,19 +2385,35 @@ function handleMostPush(payload) {
 /**
  * Handle incoming facility data from Warehouse Sizing Calculator.
  * Populates CM facility section fields.
- * @param {import('../warehouse-sizing/types.js?v=20260417-mA').WscToCmPayload} payload
+ * @param {import('../warehouse-sizing/types.js?v=20260417-mB').WscToCmPayload} payload
  */
 function handleWscPush(payload) {
   if (!payload) return;
 
+  // If WSC fired this while we were still on the landing view, enter the editor
+  // with a fresh model first — otherwise navigateSection is a no-op.
+  if (viewMode === 'landing') {
+    model = createEmptyModel();
+    isDirty = false;
+    userHasInteracted = false;
+    activeSection = 'facility';
+    viewMode = 'editor';
+  }
+
   model.facility = model.facility || {};
-  if (payload.totalSqft) model.facility.totalSqft = payload.totalSqft;
+  if (payload.totalSqft)   model.facility.totalSqft = payload.totalSqft;
   if (payload.clearHeight) model.facility.clearHeight = payload.clearHeight;
-  if (payload.dockDoors) model.facility.dockDoors = payload.dockDoors;
+  if (payload.dockDoors)   model.facility.dockDoors = payload.dockDoors;
+  if (payload.officeSqft)  model.facility.officeSqft = payload.officeSqft;
+  if (payload.stagingSqft) model.facility.stagingSqft = payload.stagingSqft;
 
   isDirty = true;
-  navigateSection('facility');
-  updateValidation();
+  if (viewMode === 'editor') {
+    navigateSection('facility');
+    updateValidation();
+  } else {
+    renderCurrentView();
+  }
 
   bus.emit('cm:facility-updated', { source: 'wsc' });
   console.log('[CM] Received facility data from WSC:', payload);

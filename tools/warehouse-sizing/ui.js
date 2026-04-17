@@ -6,10 +6,10 @@
  * @module tools/warehouse-sizing/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-mA';
-import { state } from '../../shared/state.js?v=20260417-mA';
-import * as calc from './calc.js?v=20260417-mA';
-import * as api from './api.js?v=20260417-mA';
+import { bus } from '../../shared/event-bus.js?v=20260417-mB';
+import { state } from '../../shared/state.js?v=20260417-mB';
+import * as calc from './calc.js?v=20260417-mB';
+import * as api from './api.js?v=20260417-mB';
 
 // ============================================================
 // STATE
@@ -21,13 +21,13 @@ let rootEl = null;
 /** @type {'dashboard' | 'elevation' | '3d'} */
 let activeView = 'dashboard';
 
-/** @type {import('./types.js?v=20260417-mA').FacilityConfig} */
+/** @type {import('./types.js?v=20260417-mB').FacilityConfig} */
 let facility = createDefaultFacility();
 
-/** @type {import('./types.js?v=20260417-mA').ZoneConfig} */
+/** @type {import('./types.js?v=20260417-mB').ZoneConfig} */
 let zones = createDefaultZones();
 
-/** @type {import('./types.js?v=20260417-mA').VolumeInputs} */
+/** @type {import('./types.js?v=20260417-mB').VolumeInputs} */
 let volumes = createDefaultVolumes();
 
 /** @type {boolean} */
@@ -90,8 +90,8 @@ function renderShell() {
         <!-- View Toggle Bar -->
         <div style="display:flex; gap:8px; padding:12px 24px; border-bottom:1px solid var(--ies-gray-200); align-items:center;">
           <button class="wsc-view-btn active" data-view="dashboard">Dashboard</button>
-          <button class="wsc-view-btn" data-view="elevation">Elevation</button>
-          <button class="wsc-view-btn" data-view="3d">3D View</button>
+          <button class="wsc-view-btn" data-view="elevation" title="2D cross-section showing rack levels, beam heights, and sprinkler clearance">2D — Elevation</button>
+          <button class="wsc-view-btn" data-view="3d" title="Interactive 3D model of the facility layout">3D View</button>
           <div style="flex:1;"></div>
           <button class="hub-btn hub-btn-primary hub-btn-sm" data-action="push-to-cm">Use in Cost Model →</button>
         </div>
@@ -684,7 +684,7 @@ function renderDashboard() {
       <div class="hub-kpi-item"><div class="hub-kpi-label">Storage SF</div><div class="hub-kpi-value">${calc.formatSqft(summary.storageSqft)}</div></div>
       <div class="hub-kpi-item"><div class="hub-kpi-label">Pallet Positions</div><div class="hub-kpi-value">${summary.totalPalletPositions.toLocaleString()}</div></div>
       <div class="hub-kpi-item"><div class="hub-kpi-label">Rack Levels</div><div class="hub-kpi-value">${summary.rackLevels}</div></div>
-      <div class="hub-kpi-item"><div class="hub-kpi-label">Corrected SF</div><div class="hub-kpi-value" style="color:${correctedSf > summary.totalSqft ? 'var(--ies-red)' : 'var(--ies-green)'};">${calc.formatSqft(correctedSf)}</div></div>
+      <div class="hub-kpi-item"><div class="hub-kpi-label">Recommended SF</div><div class="hub-kpi-value" style="color:${correctedSf === 0 ? '#fff' : (correctedSf > summary.totalSqft ? 'var(--ies-red)' : 'var(--ies-green)')};" title="${correctedSf === 0 ? 'Enter volumes + zones to see a recommendation' : (correctedSf > summary.totalSqft ? 'Facility is undersized vs. program needs' : 'Facility meets program needs')}">${correctedSf === 0 ? '—' : calc.formatSqft(correctedSf)}</div></div>
     </div>
 
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
@@ -795,29 +795,39 @@ function renderDashboard() {
         `}
       </div>
 
-      <!-- Corrected Suggested SF -->
+      <!-- Size Recommendation -->
       <div class="hub-card">
-        <div class="text-subtitle mb-4">Size Recommendation</div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;">
+          <div class="text-subtitle" style="margin:0;">Size Recommendation</div>
+          <span style="font-size:10px;color:var(--ies-gray-400);">sum of programmatic needs</span>
+        </div>
         <div style="font-size:13px;">
           <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-            <span>Base Suggested SF</span>
+            <span>Base Storage (reserve + pick)</span>
             <span style="font-weight:700;">${calc.formatSqft(summary.suggestedSqft)}</span>
           </div>
           <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-            <span>+ Dock Staging</span>
+            <span>+ Dock Staging (${(zones.dockConfig?.sided === 'two' ? 2 : 1) * Math.max(zones.dockConfig?.inboundDoors || 10, zones.dockConfig?.outboundDoors || 12)} doors × 200 sqft)</span>
             <span style="font-weight:700;">${calc.formatSqft(dockAnalysis.dockSqft)}</span>
           </div>
           <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-            <span>+ Forward Pick</span>
+            <span>+ Forward Pick Area</span>
             <span style="font-weight:700;">${calc.formatSqft(fwdPick)}</span>
           </div>
           <div style="display:flex; justify-content:space-between; margin-bottom:12px;">
-            <span>+ Optional Zones</span>
+            <span>+ Optional Zones (VAS / Returns / Chargeback / Custom)</span>
             <span style="font-weight:700;">${calc.formatSqft(calc.calcOptionalZones(zones))}</span>
           </div>
           <div style="border-top:2px solid var(--ies-blue); padding-top:8px; display:flex; justify-content:space-between;">
-            <span style="font-weight:700;">Corrected Total</span>
-            <span style="font-weight:700; font-size:16px; color:${correctedSf > summary.totalSqft ? 'var(--ies-red)' : 'var(--ies-green)'};">${calc.formatSqft(correctedSf)}</span>
+            <span style="font-weight:700;">Recommended Total</span>
+            <span style="font-weight:700; font-size:16px; color:${correctedSf === 0 ? 'var(--ies-gray-400)' : (correctedSf > summary.totalSqft ? 'var(--ies-red)' : 'var(--ies-green)')};">${correctedSf === 0 ? '—' : calc.formatSqft(correctedSf)}</span>
+          </div>
+          <div style="margin-top:8px;font-size:11px;color:var(--ies-gray-400);line-height:1.4;">
+            ${correctedSf === 0
+              ? 'Enter volumes + configure zones to compute a recommendation.'
+              : (correctedSf > summary.totalSqft
+                  ? `Your facility (${calc.formatSqft(summary.totalSqft)}) is <strong>${calc.formatSqft(correctedSf - summary.totalSqft)} under</strong> the recommended size.`
+                  : `Your facility (${calc.formatSqft(summary.totalSqft)}) has <strong>${calc.formatSqft(summary.totalSqft - correctedSf)} headroom</strong> over the recommendation.`)}
           </div>
         </div>
       </div>
@@ -1185,7 +1195,7 @@ function build3DScene() {
 // ============================================================
 
 function pushToCm() {
-  /** @type {import('./types.js?v=20260417-mA').WscToCmPayload} */
+  /** @type {import('./types.js?v=20260417-mB').WscToCmPayload} */
   const payload = {
     totalSqft: facility.totalSqft || 0,
     clearHeight: facility.clearHeight || 0,
@@ -1193,6 +1203,11 @@ function pushToCm() {
     officeSqft: zones.officeSqft || 0,
     stagingSqft: (zones.receiveStagingSqft || 0) + (zones.shipStagingSqft || 0),
   };
+  // Also stash in sessionStorage so CM can pick it up on mount if it isn't
+  // already mounted (bus event would be lost). CM clears the stash after consuming.
+  try {
+    sessionStorage.setItem('wsc_pending_push', JSON.stringify({ ...payload, at: Date.now() }));
+  } catch {}
   bus.emit('wsc:push-to-cm', payload);
   console.log('[WSC] Pushed facility data to Cost Model:', payload);
   // Navigate to Cost Model Builder
@@ -1201,7 +1216,7 @@ function pushToCm() {
 
 /**
  * Handle CM → WSC push (e.g., "Size with Calculator" from CM).
- * @param {import('./types.js?v=20260417-mA').CmToWscPayload} payload
+ * @param {import('./types.js?v=20260417-mB').CmToWscPayload} payload
  */
 function handleCmPush(payload) {
   if (payload.clearHeight) facility.clearHeight = payload.clearHeight;

@@ -5,11 +5,11 @@
  * @module hub/change-mgmt/api
  */
 
-import { db } from '../../shared/supabase.js?v=20260417-mA';
+import { db } from '../../shared/supabase.js?v=20260417-mB';
 
 /**
  * List all change initiatives with nested data.
- * @returns {Promise<import('./types.js?v=20260417-mA').ChangeInitiative[]>}
+ * @returns {Promise<import('./types.js?v=20260417-mB').ChangeInitiative[]>}
  */
 export async function listInitiatives() {
   const { data, error } = await db.from('change_initiatives').select('*').order('created_at', { ascending: false });
@@ -20,7 +20,7 @@ export async function listInitiatives() {
 /**
  * Get a single initiative by ID.
  * @param {string} id
- * @returns {Promise<import('./types.js?v=20260417-mA').ChangeInitiative|null>}
+ * @returns {Promise<import('./types.js?v=20260417-mB').ChangeInitiative|null>}
  */
 export async function getInitiative(id) {
   return db.fetchById('change_initiatives', id);
@@ -28,8 +28,8 @@ export async function getInitiative(id) {
 
 /**
  * Save (insert or update) an initiative.
- * @param {import('./types.js?v=20260417-mA').ChangeInitiative} initiative
- * @returns {Promise<import('./types.js?v=20260417-mA').ChangeInitiative>}
+ * @param {import('./types.js?v=20260417-mB').ChangeInitiative} initiative
+ * @returns {Promise<import('./types.js?v=20260417-mB').ChangeInitiative>}
  */
 export async function saveInitiative(initiative) {
   const payload = {
@@ -96,7 +96,7 @@ export async function updateCommunicationStatus(initiativeId, commId, status) {
 
 /**
  * Load all change management data.
- * @returns {Promise<{ initiatives: import('./types.js?v=20260417-mA').ChangeInitiative[] }>}
+ * @returns {Promise<{ initiatives: import('./types.js?v=20260417-mB').ChangeInitiative[] }>}
  */
 export async function loadRefData() {
   const initiatives = await listInitiatives();
