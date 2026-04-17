@@ -6,16 +6,16 @@
  * @module tools/cost-model/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-p6';
-import { state } from '../../shared/state.js?v=20260417-p6';
-import * as calc from './calc.js?v=20260417-p6';
-import * as api from './api.js?v=20260417-p6';
+import { bus } from '../../shared/event-bus.js?v=20260417-p7';
+import { state } from '../../shared/state.js?v=20260417-p7';
+import * as calc from './calc.js?v=20260417-p7';
+import * as api from './api.js?v=20260417-p7';
 
 // ============================================================
 // STATE — tool-local reactive state
 // ============================================================
 
-/** @type {import('./types.js?v=20260417-p6').CostModelData} */
+/** @type {import('./types.js?v=20260417-p7').CostModelData} */
 let model = createEmptyModel();
 
 /** @type {Object} */
@@ -189,6 +189,7 @@ function wireEditorEvents() {
   rootEl.querySelector('#cm-new-btn')?.addEventListener('click', handleNew);
   rootEl.querySelector('#cm-save-btn')?.addEventListener('click', handleSave);
   rootEl.querySelector('#cm-load-btn')?.addEventListener('click', handleLoad);
+  rootEl.querySelector('#cm-export-btn')?.addEventListener('click', handleExportExcel);
 
   // Section content
   renderSection();
@@ -225,6 +226,7 @@ function renderShell() {
             <button class="hub-btn hub-btn-primary hub-btn-sm" id="cm-new-btn">New</button>
             <button class="hub-btn hub-btn-secondary hub-btn-sm" id="cm-save-btn">Save</button>
             <button class="hub-btn hub-btn-secondary hub-btn-sm" id="cm-load-btn">Load</button>
+            <button class="hub-btn hub-btn-secondary hub-btn-sm" id="cm-export-btn" title="Download as multi-sheet .xlsx">Export</button>
           </div>
         </div>
         <!-- Section Nav -->
@@ -1571,6 +1573,118 @@ async function handleLoad() {
 }
 
 // ============================================================
+// EXCEL EXPORT — multi-sheet .xlsx via SheetJS CDN (window.XLSX)
+// ============================================================
+
+function handleExportExcel() {
+  if (!window.XLSX) {
+    alert('Excel library not loaded. Refresh the page and try again.');
+    return;
+  }
+  try {
+    const XLSX = window.XLSX;
+    const wb = XLSX.utils.book_new();
+    const pd = model.projectDetails || {};
+
+    // --- Compute summary (best-effort; if it fails we still export raw data) ---
+    let summary = null;
+    try {
+      const outbound = (model.volumeLines || []).find(v => v.isOutboundPrimary);
+      summary = calc.computeSummary({
+        shifts: model.shifts,
+        facility: model.facility,
+        laborLines: model.laborLines || [],
+        indirectLaborLines: model.indirectLaborLines || [],
+        equipmentLines: model.equipmentLines || [],
+        overheadLines: model.overheadLines || [],
+        vasLines: model.vasLines || [],
+        startupLines: model.startupLines || [],
+        contractYears: pd.contractTerm || 5,
+        targetMarginPct: (model.financial && model.financial.targetMargin) || 0,
+        annualOrders: (outbound && outbound.volume) || 1,
+        facilityRate: 0,
+        utilityRate: 0,
+      });
+    } catch (err) {
+      console.warn('[CM] computeSummary failed during export — skipping totals:', err);
+    }
+
+    // --- Sheet 1: Summary ---
+    const rows = [
+      ['IES Cost Model — Export'],
+      ['Generated', new Date().toISOString()],
+      [],
+      ['Project Name',     pd.name || 'Untitled Model'],
+      ['Client',           pd.clientName || '—'],
+      ['Facility Location',pd.facilityLocation || '—'],
+      ['Market',           pd.market || '—'],
+      ['Environment',      pd.environment || '—'],
+      ['Contract Term (yrs)', pd.contractTerm || 5],
+    ];
+    if (summary) {
+      rows.push([]);
+      rows.push(['— Annual Cost Summary —']);
+      rows.push(['Labor Cost',       Math.round(summary.laborCost || 0)]);
+      rows.push(['Facility Cost',    Math.round(summary.facilityCost || 0)]);
+      rows.push(['Equipment Cost',   Math.round(summary.equipmentCost || 0)]);
+      rows.push(['Overhead Cost',    Math.round(summary.overheadCost || 0)]);
+      rows.push(['VAS Cost',         Math.round(summary.vasCost || 0)]);
+      rows.push(['Startup Amortization', Math.round(summary.startupAmort || 0)]);
+      rows.push(['Total Annual Cost',    Math.round(summary.totalCost || 0)]);
+      rows.push(['Total Annual Revenue', Math.round(summary.totalRevenue || 0)]);
+      rows.push(['Target Margin %',      (model.financial && model.financial.targetMargin) || 0]);
+      rows.push(['Total FTEs',           (summary.totalFtes || 0).toFixed(1)]);
+      rows.push(['Cost per Order',       +(summary.costPerOrder || 0).toFixed(2)]);
+      rows.push(['Equipment Capital',    Math.round(summary.equipmentCapital || 0)]);
+      rows.push(['Startup Capital',      Math.round(summary.startupCapital || 0)]);
+    }
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Summary');
+
+    // --- Helper: append an object-array sheet, coping with empty lists ---
+    const appendObjectSheet = (name, arr, fallbackHeader) => {
+      if (!Array.isArray(arr) || arr.length === 0) {
+        const ws = XLSX.utils.aoa_to_sheet([[...fallbackHeader], ['— no data —']]);
+        XLSX.utils.book_append_sheet(wb, ws, name);
+        return;
+      }
+      const ws = XLSX.utils.json_to_sheet(arr);
+      XLSX.utils.book_append_sheet(wb, ws, name);
+    };
+
+    // --- Sheets: Volumes / Labor (Direct, Indirect) / Equipment / Overhead / VAS / Startup / Pricing / Shifts ---
+    appendObjectSheet('Volumes',       model.volumeLines || [],        ['name','volume','uom','isOutboundPrimary']);
+    appendObjectSheet('Labor-Direct',  model.laborLines || [],         ['activity_name','process_area','volume','base_uph','hourly_rate','burden_pct']);
+    appendObjectSheet('Labor-Indirect',model.indirectLaborLines || [], ['role','hourly_rate','ratio_to_direct','burden_pct']);
+    appendObjectSheet('Equipment',     model.equipmentLines || [],     ['equipment_name','category','quantity','acquisition_type','monthly_lease','acquisition_cost','annual_maintenance','amortization_years']);
+    appendObjectSheet('Overhead',      model.overheadLines || [],      ['category','annual_cost','driver','notes']);
+    appendObjectSheet('VAS',           model.vasLines || [],           ['name','annual_cost']);
+    appendObjectSheet('Startup',       model.startupLines || [],       ['category','amount','amortization_years']);
+    appendObjectSheet('Pricing',       model.pricingBuckets || [],     ['id','name','type','uom','rate']);
+
+    // --- Shifts block as a short sheet ---
+    const s = model.shifts || {};
+    const shiftsAOA = [
+      ['Shifts per Day',      s.shiftsPerDay || 1],
+      ['Hours per Shift',     s.hoursPerShift || 8],
+      ['Days per Week',       s.daysPerWeek || 5],
+      ['Weeks per Year',      s.weeksPerYear || 52],
+      ['Facility Total Sqft', (model.facility && model.facility.totalSqft) || 0],
+    ];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(shiftsAOA), 'Facility-Shifts');
+
+    // --- Filename: CM_<projectName>_<yyyy-mm-dd>.xlsx, safe-chars only ---
+    const safeName = (pd.name || 'Untitled_Model').replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 60);
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const fileName = `CM_${safeName}_${dateStr}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+    bus.emit('cm:model-exported', { fileName });
+  } catch (err) {
+    console.error('[CM] Excel export failed:', err);
+    alert('Excel export failed: ' + (err.message || 'unknown error'));
+  }
+}
+
+// ============================================================
 // VALIDATION UI
 // ============================================================
 
@@ -1632,7 +1746,7 @@ function sectionHasData(key) {
 /**
  * Handle incoming labor lines from MOST tool.
  * Merges or replaces CM laborLines with MOST-derived data.
- * @param {import('../most-standards/types.js?v=20260417-p6').MostToCmPayload} payload
+ * @param {import('../most-standards/types.js?v=20260417-p7').MostToCmPayload} payload
  */
 function handleMostPush(payload) {
   if (!payload?.laborLines?.length) return;
@@ -1670,7 +1784,7 @@ function handleMostPush(payload) {
 /**
  * Handle incoming facility data from Warehouse Sizing Calculator.
  * Populates CM facility section fields.
- * @param {import('../warehouse-sizing/types.js?v=20260417-p6').WscToCmPayload} payload
+ * @param {import('../warehouse-sizing/types.js?v=20260417-p7').WscToCmPayload} payload
  */
 function handleWscPush(payload) {
   if (!payload) return;
