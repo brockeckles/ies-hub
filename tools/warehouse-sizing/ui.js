@@ -850,6 +850,8 @@ function pushToCm() {
   };
   bus.emit('wsc:push-to-cm', payload);
   console.log('[WSC] Pushed facility data to Cost Model:', payload);
+  // Navigate to Cost Model Builder
+  window.location.hash = 'designtools/cost-model';
 }
 
 /**

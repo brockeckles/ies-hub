@@ -78,7 +78,7 @@ function render() {
       </div>
 
       <!-- Sector Pulse + Market Alerts -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;align-items:start;">
 
         <!-- Sector Pulse -->
         <div>
@@ -92,9 +92,9 @@ function render() {
         </div>
 
         <!-- Market Alerts -->
-        <div>
+        <div style="display:flex;flex-direction:column;">
           <div style="font-size:12px;font-weight:700;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Market Alerts</div>
-          <div class="hub-card" style="padding:0;max-height:260px;overflow-y:auto;">
+          <div class="hub-card" style="padding:0;flex:1;overflow-y:auto;">
             ${d.alerts.length === 0 ? '<div style="padding:16px;text-align:center;color:var(--ies-gray-400);font-size:12px;">No active alerts</div>' :
               d.alerts.map(a => alertRow(a)).join('')}
           </div>
