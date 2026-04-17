@@ -5,7 +5,7 @@
  * @module hub/market-explorer/ui
  */
 
-import * as calc from './calc.js?v=20260417-m7';
+import * as calc from './calc.js?v=20260417-m8';
 
 let rootEl = null;
 let markets = [...calc.DEMO_MARKETS];
@@ -122,6 +122,16 @@ function bindDelegatedEvents() {
 function render() {
   if (!rootEl) return;
 
+  // Before nuking DOM via innerHTML, tear down the Leaflet map or its internal
+  // references will point at detached nodes (causing the "Loading map..."
+  // stall when returning to the Overview tab or clicking a city).
+  if (mapInstance) {
+    try { mapInstance.remove(); } catch {}
+    mapInstance = null;
+    // Detach marker refs so they don't leak into the next render
+    markets.forEach(m => { if (m._marker) m._marker = null; });
+  }
+
   const filtered = getFiltered();
   const stats = calc.computeStats(filtered);
   const regions = calc.uniqueRegions(markets);
@@ -145,24 +155,12 @@ function render() {
         </div>
       </div>
 
-      <!-- KPI Row -->
-      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-4); margin-bottom: var(--sp-5);">
-        <div class="hub-card" style="text-align: center; padding: var(--sp-4);">
-          <div class="text-caption text-muted" style="margin-bottom: 4px;">Markets Tracked</div>
-          <div class="text-page">${stats.totalMarkets}</div>
-        </div>
-        <div class="hub-card" style="text-align: center; padding: var(--sp-4);">
-          <div class="text-caption text-muted" style="margin-bottom: 4px;">Avg Labor Score</div>
-          <div class="text-page">${calc.scoreBadge(stats.avgLaborScore)}</div>
-        </div>
-        <div class="hub-card" style="text-align: center; padding: var(--sp-4);">
-          <div class="text-caption text-muted" style="margin-bottom: 4px;">Avg Warehouse Wage</div>
-          <div class="text-page">${calc.fmt$(stats.avgWage)}/hr</div>
-        </div>
-        <div class="hub-card" style="text-align: center; padding: var(--sp-4);">
-          <div class="text-caption text-muted" style="margin-bottom: 4px;">Markets with Deals</div>
-          <div class="text-page">${stats.marketsWithDeals}</div>
-        </div>
+      <!-- KPI Row — slimmed inline header, with hover tooltips -->
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-3); margin-bottom: var(--sp-4);">
+        ${meKpi('Markets Tracked', String(stats.totalMarkets), 'Count of MSAs in the filter set (of ' + markets.length + ' total tracked).')}
+        ${meKpi('Avg Labor Score', calc.scoreBadge(stats.avgLaborScore), 'Composite labor-availability score (0-100) for filtered markets. Higher = more available workforce. Inputs: unemployment rate, participation, turnover, time-to-fill.')}
+        ${meKpi('Avg Warehouse Wage', calc.fmt$(stats.avgWage) + '/hr', 'Average hourly warehouse wage (filtered set). BLS OEWS data, seasonally adjusted.')}
+        ${meKpi('Markets with Deals', String(stats.marketsWithDeals), 'Markets in the filtered set that have at least one active deal in the IES pipeline.')}
       </div>
 
       <!-- Tab Bar -->
@@ -234,42 +232,33 @@ function renderTab(filtered, topLabor, topRate) {
 }
 
 function renderOverview(filtered) {
+  // Map full-width — the right-hand "Data Library" table was duplicative of
+  // the Data Library tab below; removed per feedback 2026-04-17.
   return `
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-4);">
-      <!-- Leaflet Map -->
-      <div class="hub-card" style="padding: var(--sp-4); min-height: 520px; position: relative;">
-        <h3 class="text-subtitle" style="margin-bottom: var(--sp-3);">US Market Map</h3>
-        <div id="market-map" style="background: #f0f4f8; border-radius: var(--radius-md); height: 480px; position: relative; overflow: hidden;">
-          <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--ies-gray-500); font-size: 13px;">Loading map...</div>
-        </div>
+    <div class="hub-card" style="padding: var(--sp-4); position: relative;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom: var(--sp-3);">
+        <h3 class="text-subtitle" style="margin: 0;">US Market Map</h3>
+        <span class="text-caption text-muted">${filtered.length} markets shown — click a pin for details</span>
       </div>
+      <div id="market-map" style="background: #f0f4f8; border-radius: var(--radius-md); height: 520px; position: relative; overflow: hidden;">
+        <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--ies-gray-500); font-size: 13px;">Loading map...</div>
+      </div>
+    </div>
+  `;
+}
 
-      <!-- Market List / Data Library -->
-      <div class="hub-card" style="padding: var(--sp-4); max-height: 520px; overflow-y: auto;">
-        <h3 class="text-subtitle" style="margin-bottom: var(--sp-3);">Data Library (${filtered.length})</h3>
-        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
-          <thead>
-            <tr style="border-bottom: 2px solid var(--ies-gray-200); text-align: left;">
-              <th style="padding: 6px 8px;">Market</th>
-              <th style="padding: 6px 8px;">Labor</th>
-              <th style="padding: 6px 8px;">Wage</th>
-              <th style="padding: 6px 8px;">$/sqft</th>
-              <th style="padding: 6px 8px;">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${filtered.map(m => `
-              <tr style="border-bottom: 1px solid var(--ies-gray-100); cursor: pointer;" data-market-row="${m.id}">
-                <td style="padding: 6px 8px; font-weight: 600;">${m.name}</td>
-                <td style="padding: 6px 8px;">${calc.scoreBadge(m.laborScore)}</td>
-                <td style="padding: 6px 8px;">${calc.fmt$(m.avgWage)}</td>
-                <td style="padding: 6px 8px;">${calc.fmt$(m.warehouseRate)}</td>
-                <td style="padding: 6px 8px;">${calc.presenceBadge(m.gxoPresence)}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
+// Small helper — KPI tile with hover tooltip (mirrors CC pattern)
+function meKpi(label, value, tooltip) {
+  return `
+    <div class="hub-card" style="text-align:center; padding: var(--sp-3); position:relative;">
+      <div style="display:flex;align-items:center;justify-content:center;gap:4px;margin-bottom:4px;">
+        <span class="text-caption text-muted">${label}</span>
+        ${tooltip ? `<span class="cc-kpi-tip" style="position:relative;display:inline-flex;">
+          <span style="width:14px;height:14px;border-radius:50%;background:var(--ies-gray-100);color:var(--ies-gray-400);font-size:9px;display:inline-flex;align-items:center;justify-content:center;cursor:help;font-weight:700;">?</span>
+          <span class="cc-kpi-tiptext" style="display:none;position:absolute;left:50%;transform:translateX(-50%);bottom:calc(100% + 6px);width:240px;padding:8px 10px;background:#1e293b;color:#f8fafc;font-size:11px;font-weight:400;line-height:1.4;border-radius:6px;z-index:100;pointer-events:none;text-align:left;box-shadow:0 4px 12px rgba(0,0,0,.25);">${tooltip}</span>
+        </span>` : ''}
       </div>
+      <div class="text-page">${value}</div>
     </div>
   `;
 }

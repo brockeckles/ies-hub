@@ -72,9 +72,8 @@ function render() {
         </div>
       </div>
 
-      <!-- Market Intelligence KPIs -->
+      <!-- Market Intelligence KPIs — section label removed; titles live inside tiles -->
       <div style="margin-bottom:20px;">
-        <div style="font-size:12px;font-weight:700;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Market Intelligence</div>
         <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;">
           ${kpiCard('Diesel Price', '$' + d.kpis.dieselPrice.toFixed(2) + '/gal', d.kpis.dieselTrend, '#dc2626', d.kpis.dieselChange)}
           ${kpiCard('Labor Tightness', d.kpis.laborTightness.toFixed(1), d.kpis.laborTrend, '#2563eb', d.kpis.laborChange)}
@@ -85,24 +84,21 @@ function render() {
         </div>
       </div>
 
-      <!-- Sector Pulse + Market Alerts -->
+      <!-- Sector Pulse + Market Alerts — titles live INSIDE each card for consistency -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
 
-        <!-- Sector Pulse -->
-        <div>
-          <div style="font-size:12px;font-weight:700;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Sector Pulse</div>
-          <div id="cc-sector-grid" style="display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:1fr;gap:10px;">
-            ${sectorPulseCard('Labor Watch', '👷', d.sectors.labor, '#2563eb')}
-            ${sectorPulseCard('Freight Rates', '🚛', d.sectors.freight, '#ea580c')}
-            ${sectorPulseCard('Automation Watch', '🤖', d.sectors.automation, '#7c3aed')}
-            ${sectorPulseCard('Network Insights', '🌐', d.sectors.network, '#16a34a')}
-          </div>
+        <!-- Sector Pulse 2x2 — titles are on the individual tiles -->
+        <div id="cc-sector-grid" style="display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:1fr;gap:10px;">
+          ${sectorPulseCard('Labor Watch', '👷', d.sectors.labor, '#2563eb')}
+          ${sectorPulseCard('Freight Rates', '🚛', d.sectors.freight, '#ea580c')}
+          ${sectorPulseCard('Automation Watch', '🤖', d.sectors.automation, '#7c3aed')}
+          ${sectorPulseCard('Network Insights', '🌐', d.sectors.network, '#16a34a')}
         </div>
 
-        <!-- Market Alerts (height-matched to sector pulse) -->
-        <div style="display:flex;flex-direction:column;">
-          <div style="font-size:12px;font-weight:700;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Market Alerts</div>
-          <div class="hub-card" id="cc-alerts-card" style="padding:0;overflow-y:auto;flex:1;max-height:0;">
+        <!-- Market Alerts — single card with title inside, height matched to sector grid -->
+        <div class="hub-card" id="cc-alerts-card" style="display:flex;flex-direction:column;padding:0;overflow:hidden;">
+          <div style="padding:14px 14px 8px;font-size:13px;font-weight:700;border-bottom:1px solid var(--ies-gray-100);">Market Alerts</div>
+          <div style="overflow-y:auto;flex:1;max-height:0;" id="cc-alerts-list">
             ${d.alerts.length === 0 ? '<div style="padding:16px;text-align:center;color:var(--ies-gray-400);font-size:12px;">No active alerts</div>' :
               d.alerts.map(a => alertRow(a)).join('')}
           </div>
@@ -126,7 +122,7 @@ function render() {
 
         <!-- Avg Warehouse Wage Trend (multi-line by region) -->
         <div class="hub-card" style="padding:16px;display:flex;flex-direction:column;">
-          <div style="font-size:13px;font-weight:700;margin-bottom:12px;">Warehouse Wage Trends</div>
+          <div style="font-size:13px;font-weight:700;margin-bottom:12px;">Warehouse Wage Trends <span style="font-size:10px;color:var(--ies-gray-400);font-weight:500;">— modeled 12-mo rise to current snapshot</span></div>
           <div id="cc-labor-chart" style="flex:1;min-height:240px;position:relative;"></div>
         </div>
 
@@ -137,21 +133,23 @@ function render() {
         </div>
       </div>
 
-      <!-- RFP Signals + Recent Activity (side by side) -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <!-- RFP Signals + Recent Activity — titles INSIDE cards, heights locked equal -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:1fr;gap:16px;">
 
         <!-- RFP Signals Feed -->
-        <div>
-          <div style="font-size:12px;font-weight:700;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">RFP Signals</div>
-          <div class="hub-card" id="cc-rfp-feed" style="padding:0;overflow-y:auto;max-height:300px;">
+        <div class="hub-card" id="cc-rfp-feed" style="padding:0;display:flex;flex-direction:column;overflow:hidden;">
+          <div style="padding:14px 14px 8px;font-size:13px;font-weight:700;border-bottom:1px solid var(--ies-gray-100);">RFP Signals</div>
+          <div style="overflow-y:auto;flex:1;">
             ${renderRfpFeed(d.rfpSignals)}
           </div>
         </div>
 
         <!-- Recent Activity -->
-        <div class="hub-card" style="padding:20px;">
-          <div style="font-size:13px;font-weight:700;margin-bottom:14px;">Recent Activity</div>
-          ${d.activity.map(a => activityItem(a.title, a.description, a.time, a.color)).join('')}
+        <div class="hub-card" style="padding:0;display:flex;flex-direction:column;overflow:hidden;">
+          <div style="padding:14px 14px 8px;font-size:13px;font-weight:700;border-bottom:1px solid var(--ies-gray-100);">Recent Activity</div>
+          <div style="padding:8px 14px 14px;overflow-y:auto;flex:1;">
+            ${d.activity.map(a => activityItem(a.title, a.description, a.time, a.color)).join('')}
+          </div>
         </div>
       </div>
 
@@ -163,15 +161,17 @@ function render() {
   initCharts();
 }
 
-/** Match the alerts card height to the sector pulse grid height */
+/** Match the alerts list area to the sector pulse grid height (minus header) */
 function matchAlertHeight() {
   if (!rootEl) return;
   requestAnimationFrame(() => {
     const sectorGrid = rootEl?.querySelector('#cc-sector-grid');
     const alertsCard = rootEl?.querySelector('#cc-alerts-card');
+    const alertsList = rootEl?.querySelector('#cc-alerts-list');
     if (sectorGrid && alertsCard) {
       const h = sectorGrid.offsetHeight;
-      alertsCard.style.maxHeight = h + 'px';
+      alertsCard.style.height = h + 'px';
+      if (alertsList) alertsList.style.maxHeight = (h - 44) + 'px'; // subtract header height
     }
   });
 }
@@ -628,13 +628,18 @@ function renderLaborChart(canvas, data) {
       'Southwest': '#7c3aed', 'West': '#dc2626',
     };
     const datasets = (data.regions || []).map((region, i) => {
-      const baseWage = data.wages ? data.wages[i] : 19 + i;
+      const latestWage = data.wages ? data.wages[i] : 19 + i;
       const color = regionColors[region] || palette[i % palette.length];
-      // Generate 12-month trend with slight upward drift and noise
+      // Synthesize a monotonically rising 12-month trend: start ~5% below
+      // current and climb linearly to latest. (Real BLS historicals not in
+      // the table yet — avoids the sin/cos wave artifact.)
+      const startWage = latestWage * 0.955;
+      const growth = latestWage - startWage;
       const trendData = months.map((_, m) => {
-        const drift = m * 0.04;
-        const noise = (Math.sin(m * 1.3 + i * 2) * 0.25) + (Math.cos(m * 0.7 + i) * 0.15);
-        return +(baseWage + drift + noise).toFixed(2);
+        // Deterministic tiny jitter (<= ±$0.03) keyed off city index so lines
+        // don't overlap pixel-perfect, without creating fake dips/spikes.
+        const jitter = ((i * 7 + m * 3) % 11 - 5) * 0.006;
+        return +(startWage + (growth * m / (months.length - 1)) + jitter).toFixed(2);
       });
       return {
         label: region,

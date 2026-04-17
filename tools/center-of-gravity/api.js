@@ -5,7 +5,7 @@
  * @module tools/center-of-gravity/api
  */
 
-import { db } from '../../shared/supabase.js?v=20260417-m7';
+import { db } from '../../shared/supabase.js?v=20260417-m8';
 
 // ============================================================
 // SCENARIOS
@@ -13,7 +13,7 @@ import { db } from '../../shared/supabase.js?v=20260417-m7';
 
 /**
  * List all saved COG scenarios.
- * @returns {Promise<import('./types.js?v=20260417-m7').CogScenario[]>}
+ * @returns {Promise<import('./types.js?v=20260417-m8').CogScenario[]>}
  */
 export async function listScenarios() {
   const { data, error } = await db.from('cog_scenarios')
@@ -26,7 +26,7 @@ export async function listScenarios() {
 /**
  * Get a single scenario by ID.
  * @param {string} id
- * @returns {Promise<import('./types.js?v=20260417-m7').CogScenario|null>}
+ * @returns {Promise<import('./types.js?v=20260417-m8').CogScenario|null>}
  */
 export async function getScenario(id) {
   return db.fetchById('cog_scenarios', id);
@@ -34,8 +34,8 @@ export async function getScenario(id) {
 
 /**
  * Save (insert or update) a COG scenario.
- * @param {import('./types.js?v=20260417-m7').CogScenario} scenario
- * @returns {Promise<import('./types.js?v=20260417-m7').CogScenario>}
+ * @param {import('./types.js?v=20260417-m8').CogScenario} scenario
+ * @returns {Promise<import('./types.js?v=20260417-m8').CogScenario>}
  */
 export async function saveScenario(scenario) {
   const payload = {
@@ -64,7 +64,7 @@ export async function deleteScenario(id) {
 /**
  * Duplicate a scenario.
  * @param {string} id
- * @returns {Promise<import('./types.js?v=20260417-m7').CogScenario>}
+ * @returns {Promise<import('./types.js?v=20260417-m8').CogScenario>}
  */
 export async function duplicateScenario(id) {
   const scenario = await getScenario(id);
@@ -79,7 +79,7 @@ export async function duplicateScenario(id) {
 
 /**
  * Load saved scenarios.
- * @returns {Promise<{ scenarios: import('./types.js?v=20260417-m7').CogScenario[] }>}
+ * @returns {Promise<{ scenarios: import('./types.js?v=20260417-m8').CogScenario[] }>}
  */
 export async function loadRefData() {
   const scenarios = await listScenarios();
