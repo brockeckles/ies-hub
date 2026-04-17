@@ -25,7 +25,32 @@ export async function mount(el) {
   statusFilter = 'all';
   sortBy = 'upvotes';
   render();
+  bindDelegatedEvents();
   bus.emit('feedback:mounted');
+}
+
+function bindDelegatedEvents() {
+  if (!rootEl) return;
+
+  rootEl.addEventListener('click', (e) => {
+    const target = /** @type {HTMLElement} */ (e.target);
+
+    const typeBtn = target.closest('[data-type-filter]');
+    if (typeBtn) { typeFilter = /** @type {HTMLElement} */ (typeBtn).dataset.typeFilter; const el = rootEl.querySelector('#fb-content'); if (el) renderBoard(el); return; }
+
+    const statusBtn = target.closest('[data-status-filter]');
+    if (statusBtn) { statusFilter = /** @type {HTMLElement} */ (statusBtn).dataset.statusFilter; const el = rootEl.querySelector('#fb-content'); if (el) renderBoard(el); return; }
+
+    const itemCard = target.closest('[data-item]');
+    if (itemCard) { activeItem = items.find(i => i.id === /** @type {HTMLElement} */ (itemCard).dataset.item); activeView = 'detail'; render(); return; }
+
+    if (target.closest('#fb-back')) { activeView = 'board'; activeItem = null; render(); return; }
+  });
+
+  rootEl.addEventListener('change', (e) => {
+    const target = /** @type {HTMLElement} */ (e.target);
+    if (target.matches('#fb-sort')) { sortBy = /** @type {HTMLSelectElement} */ (target).value; const el = rootEl.querySelector('#fb-content'); if (el) renderBoard(el); }
+  });
 }
 
 export function unmount() { rootEl = null; bus.emit('feedback:unmounted'); }
@@ -101,20 +126,7 @@ function renderBoard(el) {
       `).join('')}
   `;
 
-  el.querySelectorAll('[data-type-filter]').forEach(btn => {
-    btn.addEventListener('click', () => { typeFilter = /** @type {HTMLElement} */ (btn).dataset.typeFilter; renderBoard(el); });
-  });
-  el.querySelectorAll('[data-status-filter]').forEach(btn => {
-    btn.addEventListener('click', () => { statusFilter = /** @type {HTMLElement} */ (btn).dataset.statusFilter; renderBoard(el); });
-  });
-  el.querySelector('#fb-sort')?.addEventListener('change', (e) => { sortBy = /** @type {HTMLSelectElement} */ (e.target).value; renderBoard(el); });
-  el.querySelectorAll('[data-item]').forEach(card => {
-    card.addEventListener('click', () => {
-      activeItem = items.find(i => i.id === /** @type {HTMLElement} */ (card).dataset.item);
-      activeView = 'detail';
-      render();
-    });
-  });
+  // All event handlers are managed via delegated events at root level
 }
 
 function renderDetail(el) {
@@ -156,7 +168,7 @@ function renderDetail(el) {
     </div>
   `;
 
-  el.querySelector('#fb-back')?.addEventListener('click', () => { activeView = 'board'; activeItem = null; render(); });
+  // Back button handled by delegated events at root level
 }
 
 function kpi(label, value, color) {

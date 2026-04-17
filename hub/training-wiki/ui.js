@@ -40,9 +40,44 @@ function renderShell() {
 }
 
 function bindEvents() {
-  rootEl?.querySelector('#wiki-sidebar')?.addEventListener('click', (e) => {
-    const item = /** @type {HTMLElement} */ (e.target).closest('[data-cat]');
-    if (item) { activeCategory = item.dataset.cat; activeArticle = null; renderSidebar(); renderMain(); }
+  if (!rootEl) return;
+
+  rootEl.addEventListener('click', (e) => {
+    const target = /** @type {HTMLElement} */ (e.target);
+
+    // Category click in sidebar
+    const catItem = target.closest('[data-cat]');
+    if (catItem) {
+      activeCategory = /** @type {HTMLElement} */ (catItem).dataset.cat;
+      activeArticle = null;
+      renderSidebar();
+      renderMain();
+      return;
+    }
+
+    // Article card click
+    const articleCard = target.closest('[data-article]');
+    if (articleCard) {
+      activeArticle = articles.find(a => a.id === /** @type {HTMLElement} */ (articleCard).dataset.article);
+      if (activeArticle) activeArticle.viewCount = (activeArticle.viewCount || 0) + 1;
+      renderMain();
+      return;
+    }
+
+    // Back button
+    if (target.closest('#wiki-back')) {
+      activeArticle = null;
+      renderMain();
+      return;
+    }
+  });
+
+  rootEl.addEventListener('input', (e) => {
+    const target = /** @type {HTMLElement} */ (e.target);
+    if (target.matches('#wiki-search')) {
+      searchQuery = /** @type {HTMLInputElement} */ (target).value;
+      renderMain();
+    }
   });
 }
 
@@ -83,10 +118,7 @@ function renderSidebar() {
     </div>
   `;
 
-  el.querySelector('#wiki-search')?.addEventListener('input', (e) => {
-    searchQuery = /** @type {HTMLInputElement} */ (e.target).value;
-    renderMain();
-  });
+  // Search input handled by delegated events at root level
 }
 
 function renderMain() {
@@ -121,13 +153,7 @@ function renderMain() {
     </div>
   `;
 
-  el.querySelectorAll('[data-article]').forEach(card => {
-    card.addEventListener('click', () => {
-      activeArticle = articles.find(a => a.id === /** @type {HTMLElement} */ (card).dataset.article);
-      if (activeArticle) activeArticle.viewCount = (activeArticle.viewCount || 0) + 1;
-      renderMain();
-    });
-  });
+  // Article clicks handled by delegated events at root level
 }
 
 function renderArticle(el) {
@@ -155,5 +181,5 @@ function renderArticle(el) {
     </div>
   `;
 
-  el.querySelector('#wiki-back')?.addEventListener('click', () => { activeArticle = null; renderMain(); });
+  // Back button handled by delegated events at root level
 }

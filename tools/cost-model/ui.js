@@ -34,6 +34,33 @@ let isDirty = false;
 let userHasInteracted = false;
 
 // ============================================================
+// DEMO FALLBACK DATA — used when Supabase ref tables unavailable
+// ============================================================
+
+const DEMO_MARKETS_FALLBACK = [
+  { market_id: 'mem', name: 'Memphis, TN' },
+  { market_id: 'ind', name: 'Indianapolis, IN' },
+  { market_id: 'chi', name: 'Chicago, IL' },
+  { market_id: 'dal', name: 'Dallas-Fort Worth, TX' },
+  { market_id: 'atl', name: 'Atlanta, GA' },
+  { market_id: 'lax', name: 'Los Angeles, CA' },
+  { market_id: 'njy', name: 'Northern NJ / NYC Metro' },
+  { market_id: 'col', name: 'Columbus, OH' },
+  { market_id: 'leh', name: 'Lehigh Valley, PA' },
+  { market_id: 'sav', name: 'Savannah, GA' },
+  { market_id: 'lou', name: 'Louisville, KY' },
+  { market_id: 'pho', name: 'Phoenix, AZ' },
+  { market_id: 'cin', name: 'Cincinnati, OH' },
+  { market_id: 'rvs', name: 'Riverside / Inland Empire, CA' },
+  { market_id: 'nas', name: 'Nashville, TN' },
+  { market_id: 'hou', name: 'Houston, TX' },
+  { market_id: 'kci', name: 'Kansas City, MO' },
+  { market_id: 'rno', name: 'Reno, NV' },
+  { market_id: 'cha', name: 'Charlotte, NC' },
+  { market_id: 'sea', name: 'Seattle-Tacoma, WA' },
+];
+
+// ============================================================
 // SECTIONS — 13 nav sections
 // ============================================================
 
@@ -349,7 +376,7 @@ function renderSection() {
 
 function renderSetup() {
   const pd = model.projectDetails;
-  const markets = refData.markets || [];
+  const markets = (refData.markets && refData.markets.length > 0) ? refData.markets : DEMO_MARKETS_FALLBACK;
 
   return `
     <div class="cm-section-header">

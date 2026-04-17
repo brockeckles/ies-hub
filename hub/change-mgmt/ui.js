@@ -44,15 +44,46 @@ function renderShell() {
 }
 
 function bindEvents() {
-  rootEl?.querySelector('#cm-tabs')?.addEventListener('click', (e) => {
-    const btn = /** @type {HTMLElement} */ (e.target).closest('[data-view]');
-    if (btn) {
-      activeView = btn.dataset.view;
+  if (!rootEl) return;
+
+  rootEl.addEventListener('click', (e) => {
+    const target = /** @type {HTMLElement} */ (e.target);
+
+    // Tab clicks
+    const viewBtn = target.closest('[data-view]');
+    if (viewBtn) {
+      activeView = /** @type {HTMLElement} */ (viewBtn).dataset.view;
       activeInitiative = null;
-      rootEl.querySelector('.hub-content-inner').innerHTML = renderShell().match(/<div class="hub-content-inner"[^>]*>([\s\S]*)<\/div>$/)?.[1] || '';
       rootEl.innerHTML = renderShell();
-      bindEvents();
       renderContent();
+      return;
+    }
+
+    // Filter buttons
+    const filterBtn = target.closest('[data-filter]');
+    if (filterBtn) {
+      statusFilter = /** @type {HTMLElement} */ (filterBtn).dataset.filter;
+      const el = rootEl.querySelector('#cm-content');
+      if (el) renderList(el);
+      return;
+    }
+
+    // Initiative card click
+    const initCard = target.closest('[data-initiative]');
+    if (initCard) {
+      activeInitiative = initiatives.find(i => i.id === /** @type {HTMLElement} */ (initCard).dataset.initiative);
+      activeView = 'detail';
+      rootEl.innerHTML = renderShell();
+      renderContent();
+      return;
+    }
+
+    // Back button
+    if (target.closest('#cm-back')) {
+      activeView = 'list'; activeInitiative = null;
+      rootEl.innerHTML = renderShell();
+      renderContent();
+      return;
     }
   });
 }
@@ -106,18 +137,7 @@ function renderList(el) {
     }).join('')}
   `;
 
-  el.querySelectorAll('[data-filter]').forEach(btn => {
-    btn.addEventListener('click', () => { statusFilter = /** @type {HTMLElement} */ (btn).dataset.filter; renderList(el); });
-  });
-  el.querySelectorAll('[data-initiative]').forEach(card => {
-    card.addEventListener('click', () => {
-      activeInitiative = initiatives.find(i => i.id === /** @type {HTMLElement} */ (card).dataset.initiative);
-      activeView = 'detail';
-      rootEl.innerHTML = renderShell();
-      bindEvents();
-      renderContent();
-    });
-  });
+  // Event delegation handles filter and initiative clicks at root level
 }
 
 // ===== DETAIL VIEW =====
@@ -192,12 +212,7 @@ function renderDetail(el) {
     </div>
   `;
 
-  el.querySelector('#cm-back')?.addEventListener('click', () => {
-    activeView = 'list'; activeInitiative = null;
-    rootEl.innerHTML = renderShell();
-    bindEvents();
-    renderContent();
-  });
+  // Back button handled by delegated events at root level
 }
 
 // ===== TIMELINE VIEW =====
