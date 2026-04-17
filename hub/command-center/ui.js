@@ -91,7 +91,7 @@ function render() {
         <!-- Sector Pulse -->
         <div>
           <div style="font-size:12px;font-weight:700;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Sector Pulse</div>
-          <div id="cc-sector-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div id="cc-sector-grid" style="display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:1fr;gap:10px;">
             ${sectorPulseCard('Labor Watch', '👷', d.sectors.labor, '#2563eb')}
             ${sectorPulseCard('Freight Rates', '🚛', d.sectors.freight, '#ea580c')}
             ${sectorPulseCard('Automation Watch', '🤖', d.sectors.automation, '#7c3aed')}
@@ -294,9 +294,17 @@ function sectorPulseCard(title, icon, data, color) {
 
 function alertRow(a) {
   // Neutralized styling — no severity color coding (per feedback 2026-04-17).
-  // Only surface a link arrow when there's a real source_url; whole row is clickable
-  // if linkable. No inner duplicate link; no severity label chip.
-  const hasLink = !!a.source_url;
+  // Only surface a link arrow when there's a source_url with a real article path
+  // (not a bare domain root like https://www.freightwaves.com/ which the ingest
+  // pipeline sometimes stores when it can't resolve the actual article URL).
+  const isRealLink = (url) => {
+    if (!url) return false;
+    try {
+      const u = new URL(url);
+      return u.pathname && u.pathname !== '/' && u.pathname.length > 1;
+    } catch { return false; }
+  };
+  const hasLink = isRealLink(a.source_url);
   const linkArrow = hasLink
     ? `<span style="font-size:11px;color:#2563eb;flex-shrink:0;margin-top:1px;">↗</span>`
     : '';
@@ -304,7 +312,7 @@ function alertRow(a) {
     ? `<span style="font-size:10px;color:var(--ies-gray-400);">${a.source}</span>`
     : '';
   return `
-    <div style="display:flex;align-items:start;gap:10px;padding:10px 14px;border-bottom:1px solid var(--ies-gray-100);cursor:${hasLink ? 'pointer' : 'default'};" data-alert-url="${a.source_url || ''}">
+    <div style="display:flex;align-items:start;gap:10px;padding:10px 14px;border-bottom:1px solid var(--ies-gray-100);cursor:${hasLink ? 'pointer' : 'default'};" data-alert-url="${hasLink ? a.source_url : ''}">
       <div style="flex:1;min-width:0;">
         <div style="font-size:12px;font-weight:600;color:var(--ies-gray-700);margin-bottom:2px;">${a.title}</div>
         <div style="font-size:11px;color:var(--ies-gray-500);line-height:1.4;">${a.message}</div>
