@@ -6,7 +6,7 @@
  * @module tools/cost-model/api
  */
 
-import { db } from '../../shared/supabase.js?v=20260417-cc2';
+import { db } from '../../shared/supabase.js?v=20260417-p1';
 
 // ============================================================
 // COST MODEL PROJECTS (CRUD)
@@ -17,7 +17,7 @@ import { db } from '../../shared/supabase.js?v=20260417-cc2';
  * @returns {Promise<any[]>}
  */
 export async function listModels() {
-  return db.fetchAll('cost_model_projects', 'id, name, client_name, market, created_at, updated_at');
+  return db.fetchAll('cost_model_projects', 'id, name, client_name, market_id, created_at, updated_at');
 }
 
 /**
@@ -35,13 +35,15 @@ export async function getModel(id) {
  * @returns {Promise<any>}
  */
 export async function createModel(data) {
+  // Store flat fields that match the real cost_model_projects schema (market_id,
+  // environment_type, contract_term_years). Everything else rides in project_data jsonb.
+  const pd = data.projectDetails || {};
   return db.insert('cost_model_projects', {
-    name: data.name || 'Untitled Model',
-    client_name: data.clientName || '',
-    market: data.market || null,
-    environment: data.environment || '',
-    facility_location: data.facilityLocation || '',
-    contract_term: data.contractTerm || 5,
+    name: data.name || pd.name || 'Untitled Model',
+    client_name: data.clientName || pd.clientName || '',
+    market_id: data.market || pd.market || null,
+    environment_type: data.environment || pd.environment || null,
+    contract_term_years: Number(data.contractTerm || pd.contractTerm || 5),
     project_data: data, // Full JSON blob
   });
 }
@@ -53,10 +55,13 @@ export async function createModel(data) {
  * @returns {Promise<any>}
  */
 export async function updateModel(id, data) {
+  const pd = data.projectDetails || {};
   return db.update('cost_model_projects', id, {
-    name: data.name || data.projectDetails?.name || 'Untitled Model',
-    client_name: data.clientName || data.projectDetails?.clientName || '',
-    market: data.market || data.projectDetails?.market || null,
+    name: data.name || pd.name || 'Untitled Model',
+    client_name: data.clientName || pd.clientName || '',
+    market_id: data.market || pd.market || null,
+    environment_type: data.environment || pd.environment || null,
+    contract_term_years: Number(data.contractTerm || pd.contractTerm || 5),
     project_data: data,
     updated_at: new Date().toISOString(),
   });
