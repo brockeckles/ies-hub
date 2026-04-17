@@ -5,11 +5,11 @@
  * @module hub/feedback/api
  */
 
-import { db } from '../../shared/supabase.js?v=20260417-mD';
+import { db } from '../../shared/supabase.js?v=20260417-mE';
 
 /**
  * List all feedback items.
- * @returns {Promise<import('./types.js?v=20260417-mD').FeedbackItem[]>}
+ * @returns {Promise<import('./types.js?v=20260417-mE').FeedbackItem[]>}
  */
 export async function listFeedback() {
   const { data, error } = await db.from('hub_feedback').select('*').order('created_at', { ascending: false });
@@ -20,7 +20,7 @@ export async function listFeedback() {
 /**
  * Get a single feedback item.
  * @param {string} id
- * @returns {Promise<import('./types.js?v=20260417-mD').FeedbackItem|null>}
+ * @returns {Promise<import('./types.js?v=20260417-mE').FeedbackItem|null>}
  */
 export async function getFeedback(id) {
   return db.fetchById('hub_feedback', id);
@@ -28,8 +28,8 @@ export async function getFeedback(id) {
 
 /**
  * Submit new feedback.
- * @param {Omit<import('./types.js?v=20260417-mD').FeedbackItem, 'id' | 'upvotes' | 'upvotedBy' | 'comments'>} item
- * @returns {Promise<import('./types.js?v=20260417-mD').FeedbackItem>}
+ * @param {Omit<import('./types.js?v=20260417-mE').FeedbackItem, 'id' | 'upvotes' | 'upvotedBy' | 'comments'>} item
+ * @returns {Promise<import('./types.js?v=20260417-mE').FeedbackItem>}
  */
 export async function submitFeedback(item) {
   return db.insert('hub_feedback', {
@@ -114,7 +114,7 @@ export async function deleteFeedback(id) {
 
 /**
  * Load all feedback data.
- * @returns {Promise<{ items: import('./types.js?v=20260417-mD').FeedbackItem[] }>}
+ * @returns {Promise<{ items: import('./types.js?v=20260417-mE').FeedbackItem[] }>}
  */
 export async function loadRefData() {
   const items = await listFeedback();

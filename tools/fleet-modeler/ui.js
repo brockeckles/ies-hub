@@ -6,10 +6,10 @@
  * @module tools/fleet-modeler/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-mD';
-import { state } from '../../shared/state.js?v=20260417-mD';
-import * as calc from './calc.js?v=20260417-mD';
-import * as api from './api.js?v=20260417-mD';
+import { bus } from '../../shared/event-bus.js?v=20260417-mE';
+import { state } from '../../shared/state.js?v=20260417-mE';
+import * as calc from './calc.js?v=20260417-mE';
+import * as api from './api.js?v=20260417-mE';
 
 // ============================================================
 // STATE
@@ -21,16 +21,16 @@ let rootEl = null;
 /** @type {'lanes' | 'config' | 'results' | 'map'} */
 let activeTab = 'lanes';
 
-/** @type {import('./types.js?v=20260417-mD').Lane[]} */
+/** @type {import('./types.js?v=20260417-mE').Lane[]} */
 let lanes = [];
 
-/** @type {import('./types.js?v=20260417-mD').VehicleSpec[]} */
+/** @type {import('./types.js?v=20260417-mE').VehicleSpec[]} */
 let vehicles = calc.DEFAULT_VEHICLES.map(v => ({ ...v }));
 
-/** @type {import('./types.js?v=20260417-mD').FleetConfig} */
+/** @type {import('./types.js?v=20260417-mE').FleetConfig} */
 let config = { ...calc.DEFAULT_CONFIG };
 
-/** @type {import('./types.js?v=20260417-mD').FleetResult|null} */
+/** @type {import('./types.js?v=20260417-mE').FleetResult|null} */
 let result = null;
 
 /** @type {object|null} */

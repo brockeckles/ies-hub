@@ -6,10 +6,10 @@
  *   #welcome, #overview, #deals, #designtools/cost-model, #designtools/fleet-modeler
  *
  * Usage:
- *   import { router } from './router.js?v=20260417-mD';
+ *   import { router } from './router.js?v=20260417-mE';
  *
  *   router.register('designtools/cost-model', {
- *     load: () => import('../tools/cost-model/ui.js?v=20260417-mD'),
+ *     load: () => import('../tools/cost-model/ui.js?v=20260417-mE'),
  *     title: 'Cost Model Builder',
  *   });
  *
@@ -18,8 +18,8 @@
  * @module shared/router
  */
 
-import { state } from './state.js?v=20260417-mD';
-import { bus } from './event-bus.js?v=20260417-mD';
+import { state } from './state.js?v=20260417-mE';
+import { bus } from './event-bus.js?v=20260417-mE';
 
 /**
  * @typedef {Object} RouteConfig

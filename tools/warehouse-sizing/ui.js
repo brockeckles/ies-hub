@@ -6,10 +6,10 @@
  * @module tools/warehouse-sizing/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-mD';
-import { state } from '../../shared/state.js?v=20260417-mD';
-import * as calc from './calc.js?v=20260417-mD';
-import * as api from './api.js?v=20260417-mD';
+import { bus } from '../../shared/event-bus.js?v=20260417-mE';
+import { state } from '../../shared/state.js?v=20260417-mE';
+import * as calc from './calc.js?v=20260417-mE';
+import * as api from './api.js?v=20260417-mE';
 
 // ============================================================
 // STATE
@@ -21,13 +21,13 @@ let rootEl = null;
 /** @type {'dashboard' | 'elevation' | '3d'} */
 let activeView = 'dashboard';
 
-/** @type {import('./types.js?v=20260417-mD').FacilityConfig} */
+/** @type {import('./types.js?v=20260417-mE').FacilityConfig} */
 let facility = createDefaultFacility();
 
-/** @type {import('./types.js?v=20260417-mD').ZoneConfig} */
+/** @type {import('./types.js?v=20260417-mE').ZoneConfig} */
 let zones = createDefaultZones();
 
-/** @type {import('./types.js?v=20260417-mD').VolumeInputs} */
+/** @type {import('./types.js?v=20260417-mE').VolumeInputs} */
 let volumes = createDefaultVolumes();
 
 /** @type {boolean} */
@@ -151,6 +151,18 @@ function renderShell() {
         font-family: Montserrat, sans-serif;
         font-size: 13px;
         font-weight: 600;
+      }
+      /* Checkboxes should not stretch — they inherit the wsc-config-field rule otherwise */
+      .wsc-config-field input[type="checkbox"] {
+        width: auto;
+        padding: 0;
+        border: none;
+        margin: 0;
+        flex-shrink: 0;
+      }
+      /* Single-field rows within optional zones render as a 1-col grid, not 2-col */
+      .wsc-config-section .wsc-config-row.single-col {
+        grid-template-columns: 1fr;
       }
       .wsc-config-field input:focus, .wsc-config-field select:focus {
         outline: none;
@@ -373,7 +385,7 @@ function renderConfigPanel() {
         <div class="wsc-config-field"><label>SKU Count</label><input type="number" value="${zones.forwardPick?.skuCount || 2000}" data-fwd="skuCount" /></div>
         <div class="wsc-config-field"><label>Days Inventory</label><input type="number" value="${zones.forwardPick?.daysInventory || 3}" step="0.5" data-fwd="daysInventory" /></div>
       </div>
-      <div class="wsc-config-field" style="display:${zones.forwardPick?.enabled ? 'block' : 'none'};" id="wsc-fwd-outbound">
+      <div class="wsc-config-field" style="display:${zones.forwardPick?.enabled ? 'block' : 'none'}; margin-top:8px;" id="wsc-fwd-outbound">
         <label>Outbound Units/Day</label>
         <input type="number" value="${zones.forwardPick?.outboundUnitsPerDay || 5000}" data-fwd="outboundUnitsPerDay" />
       </div>
@@ -388,7 +400,7 @@ function renderConfigPanel() {
           <span>VAS</span>
         </label>
       </div>
-      <div class="wsc-config-row" id="wsc-opt-vas-row" style="display:${zones.optionalZones?.vas?.enabled ? 'grid' : 'none'};">
+      <div class="wsc-config-row single-col" id="wsc-opt-vas-row" style="display:${zones.optionalZones?.vas?.enabled ? 'grid' : 'none'};">
         <div class="wsc-config-field"><label>VAS SF</label><input type="number" value="${zones.optionalZones?.vas?.sqft || 0}" data-opt="vas-sqft" /></div>
       </div>
       <div class="wsc-config-field" style="margin-bottom:8px;">
@@ -397,7 +409,7 @@ function renderConfigPanel() {
           <span>Returns</span>
         </label>
       </div>
-      <div class="wsc-config-row" id="wsc-opt-returns-row" style="display:${zones.optionalZones?.returns?.enabled ? 'grid' : 'none'};">
+      <div class="wsc-config-row single-col" id="wsc-opt-returns-row" style="display:${zones.optionalZones?.returns?.enabled ? 'grid' : 'none'};">
         <div class="wsc-config-field"><label>Returns SF</label><input type="number" value="${zones.optionalZones?.returns?.sqft || 0}" data-opt="returns-sqft" /></div>
       </div>
       <div class="wsc-config-field" style="margin-bottom:8px;">
@@ -406,7 +418,7 @@ function renderConfigPanel() {
           <span>Chargeback</span>
         </label>
       </div>
-      <div class="wsc-config-row" id="wsc-opt-chargeback-row" style="display:${zones.optionalZones?.chargeback?.enabled ? 'grid' : 'none'};">
+      <div class="wsc-config-row single-col" id="wsc-opt-chargeback-row" style="display:${zones.optionalZones?.chargeback?.enabled ? 'grid' : 'none'};">
         <div class="wsc-config-field"><label>Chargeback SF</label><input type="number" value="${zones.optionalZones?.chargeback?.sqft || 0}" data-opt="chargeback-sqft" /></div>
       </div>
     </div>
@@ -604,21 +616,31 @@ function bindConfigEvents(panel) {
     renderContentView();
   });
 
-  panel.querySelector('[data-action="wsc-save"]')?.addEventListener('click', async () => {
+  panel.querySelector('[data-action="wsc-save"]')?.addEventListener('click', async (e) => {
+    const btn = /** @type {HTMLButtonElement} */ (e.currentTarget);
+    const orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
     try {
       const saved = await api.saveConfig({ ...facility, zones, volumes });
-      facility.id = saved.id;
+      facility.id = saved.id || saved[0]?.id || facility.id;
       isDirty = false;
-      bus.emit('wsc:saved', { id: saved.id });
+      bus.emit('wsc:saved', { id: facility.id });
+      btn.textContent = '✓ Saved';
+      showWscToast(`Saved "${facility.name || 'Untitled'}"`, 'success');
+      setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1800);
     } catch (err) {
-      alert('Save failed: ' + err.message);
+      console.error('[WSC] Save failed:', err);
+      btn.textContent = orig;
+      btn.disabled = false;
+      showWscToast('Save failed: ' + err.message, 'error');
     }
   });
 
   panel.querySelector('[data-action="wsc-load"]')?.addEventListener('click', async () => {
     try {
       const configs = await api.listConfigs();
-      if (!configs.length) { alert('No saved configs.'); return; }
+      if (!configs.length) { showWscToast('No saved configs yet.', 'info'); return; }
       const names = configs.map((c, i) => `${i + 1}. ${c.name || c.config_data?.name || 'Untitled'}`).join('\n');
       const choice = prompt('Select config:\n' + names);
       const idx = parseInt(choice) - 1;
@@ -630,11 +652,36 @@ function bindConfigEvents(panel) {
         isDirty = false;
         renderConfigPanel();
         renderContentView();
+        showWscToast(`Loaded "${facility.name || 'Untitled'}"`, 'success');
       }
     } catch (err) {
-      alert('Load failed: ' + err.message);
+      console.error('[WSC] Load failed:', err);
+      showWscToast('Load failed: ' + err.message, 'error');
     }
   });
+}
+
+/** True when the user has entered enough volume data to compute a meaningful SF recommendation. */
+function hasMeaningfulVolumes(v) {
+  if (!v) return false;
+  const pallets = v.totalPallets || 0;
+  const skus = v.totalSKUs || 0;
+  const daily = (v.avgDailyInbound || 0) + (v.avgDailyOutbound || 0);
+  return pallets > 0 || skus > 0 || daily > 0;
+}
+
+/** Non-blocking success/error toast (bottom-right, 4s). */
+function showWscToast(message, level) {
+  const color = level === 'error' ? '#dc2626' : level === 'info' ? '#2563eb' : '#16a34a';
+  const bg    = level === 'error' ? '#fef2f2' : level === 'info' ? '#eff6ff' : '#f0fdf4';
+  const existing = document.getElementById('wsc-toast');
+  if (existing) existing.remove();
+  const el = document.createElement('div');
+  el.id = 'wsc-toast';
+  el.style.cssText = `position:fixed;bottom:24px;right:24px;padding:12px 16px;border-radius:8px;border:1px solid ${color};background:${bg};color:${color};font-size:13px;font-weight:600;z-index:9999;max-width:400px;box-shadow:0 4px 12px rgba(0,0,0,.12);`;
+  el.textContent = message;
+  document.body.appendChild(el);
+  setTimeout(() => { if (el.parentNode) el.remove(); }, 4000);
 }
 
 // ============================================================
@@ -684,7 +731,7 @@ function renderDashboard() {
       <div class="hub-kpi-item"><div class="hub-kpi-label">Storage SF</div><div class="hub-kpi-value">${calc.formatSqft(summary.storageSqft)}</div></div>
       <div class="hub-kpi-item"><div class="hub-kpi-label">Pallet Positions</div><div class="hub-kpi-value">${summary.totalPalletPositions.toLocaleString()}</div></div>
       <div class="hub-kpi-item"><div class="hub-kpi-label">Rack Levels</div><div class="hub-kpi-value">${summary.rackLevels}</div></div>
-      <div class="hub-kpi-item"><div class="hub-kpi-label">Recommended SF</div><div class="hub-kpi-value" style="color:${correctedSf === 0 ? '#fff' : (correctedSf > summary.totalSqft ? 'var(--ies-red)' : 'var(--ies-green)')};" title="${correctedSf === 0 ? 'Enter volumes + zones to see a recommendation' : (correctedSf > summary.totalSqft ? 'Facility is undersized vs. program needs' : 'Facility meets program needs')}">${correctedSf === 0 ? '—' : calc.formatSqft(correctedSf)}</div></div>
+      <div class="hub-kpi-item"><div class="hub-kpi-label">Recommended SF</div><div class="hub-kpi-value" style="color:${!hasMeaningfulVolumes(volumes) ? '#fff' : (correctedSf > summary.totalSqft ? 'var(--ies-red)' : 'var(--ies-green)')};" title="Recommended SF = Storage Base (pallets/turns × 20 + SKUs × 2, uplifted for support) + Dock Staging + Forward Pick + Optional Zones. Independent of Total SF — compare the two to see if the facility is sized appropriately.">${!hasMeaningfulVolumes(volumes) ? '—' : calc.formatSqft(correctedSf)}</div></div>
     </div>
 
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
@@ -820,11 +867,11 @@ function renderDashboard() {
           </div>
           <div style="border-top:2px solid var(--ies-blue); padding-top:8px; display:flex; justify-content:space-between;">
             <span style="font-weight:700;">Recommended Total</span>
-            <span style="font-weight:700; font-size:16px; color:${correctedSf === 0 ? 'var(--ies-gray-400)' : (correctedSf > summary.totalSqft ? 'var(--ies-red)' : 'var(--ies-green)')};">${correctedSf === 0 ? '—' : calc.formatSqft(correctedSf)}</span>
+            <span style="font-weight:700; font-size:16px; color:${!hasMeaningfulVolumes(volumes) ? 'var(--ies-gray-400)' : (correctedSf > summary.totalSqft ? 'var(--ies-red)' : 'var(--ies-green)')};">${!hasMeaningfulVolumes(volumes) ? '—' : calc.formatSqft(correctedSf)}</span>
           </div>
           <div style="margin-top:8px;font-size:11px;color:var(--ies-gray-400);line-height:1.4;">
-            ${correctedSf === 0
-              ? 'Enter volumes + configure zones to compute a recommendation.'
+            ${!hasMeaningfulVolumes(volumes)
+              ? 'Enter pallet / SKU / daily throughput volumes to compute a recommendation.'
               : (correctedSf > summary.totalSqft
                   ? `Your facility (${calc.formatSqft(summary.totalSqft)}) is <strong>${calc.formatSqft(correctedSf - summary.totalSqft)} under</strong> the recommended size.`
                   : `Your facility (${calc.formatSqft(summary.totalSqft)}) has <strong>${calc.formatSqft(summary.totalSqft - correctedSf)} headroom</strong> over the recommendation.`)}
@@ -1195,7 +1242,7 @@ function build3DScene() {
 // ============================================================
 
 function pushToCm() {
-  /** @type {import('./types.js?v=20260417-mD').WscToCmPayload} */
+  /** @type {import('./types.js?v=20260417-mE').WscToCmPayload} */
   const payload = {
     totalSqft: facility.totalSqft || 0,
     clearHeight: facility.clearHeight || 0,
@@ -1216,7 +1263,7 @@ function pushToCm() {
 
 /**
  * Handle CM → WSC push (e.g., "Size with Calculator" from CM).
- * @param {import('./types.js?v=20260417-mD').CmToWscPayload} payload
+ * @param {import('./types.js?v=20260417-mE').CmToWscPayload} payload
  */
 function handleCmPush(payload) {
   if (payload.clearHeight) facility.clearHeight = payload.clearHeight;
