@@ -6,7 +6,7 @@
  * @module tools/cost-model/api
  */
 
-import { db } from '../../shared/supabase.js?v=20260417-p5';
+import { db } from '../../shared/supabase.js?v=20260417-p6';
 
 // ============================================================
 // COST MODEL PROJECTS (CRUD)
@@ -38,14 +38,17 @@ export async function createModel(data) {
   // Store flat fields that match the real cost_model_projects schema (market_id,
   // environment_type, contract_term_years). Everything else rides in project_data jsonb.
   const pd = data.projectDetails || {};
-  return db.insert('cost_model_projects', {
+  const payload = {
     name: data.name || pd.name || 'Untitled Model',
     client_name: data.clientName || pd.clientName || '',
     market_id: data.market || pd.market || null,
     environment_type: data.environment || pd.environment || null,
     contract_term_years: Number(data.contractTerm || pd.contractTerm || 5),
     project_data: data, // Full JSON blob
-  });
+  };
+  const dealId = pd.dealId || data.dealId;
+  if (dealId) payload.deal_deals_id = dealId;
+  return db.insert('cost_model_projects', payload);
 }
 
 /**
@@ -56,7 +59,7 @@ export async function createModel(data) {
  */
 export async function updateModel(id, data) {
   const pd = data.projectDetails || {};
-  return db.update('cost_model_projects', id, {
+  const payload = {
     name: data.name || pd.name || 'Untitled Model',
     client_name: data.clientName || pd.clientName || '',
     market_id: data.market || pd.market || null,
@@ -64,7 +67,9 @@ export async function updateModel(id, data) {
     contract_term_years: Number(data.contractTerm || pd.contractTerm || 5),
     project_data: data,
     updated_at: new Date().toISOString(),
-  });
+  };
+  payload.deal_deals_id = pd.dealId || data.dealId || null;
+  return db.update('cost_model_projects', id, payload);
 }
 
 /**
@@ -90,6 +95,24 @@ export async function duplicateModel(id) {
   if (data.projectDetails) data.projectDetails.name = data.name;
 
   return createModel(data);
+}
+
+/**
+ * List all deals (for the Link-to-Deal selector in Setup).
+ * Returns a light projection — id, deal_name, client_name — sorted by most-recent.
+ * @returns {Promise<Array<{id:string, deal_name:string, client_name:string|null}>>}
+ */
+export async function listDeals() {
+  try {
+    const { data, error } = await db.from('deal_deals')
+      .select('id, deal_name, client_name, updated_at')
+      .order('updated_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.warn('[CM] listDeals failed:', err);
+    return [];
+  }
 }
 
 // ============================================================

@@ -6,7 +6,7 @@
  * @module hub/deal-management/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-p5';
+import { bus } from '../../shared/event-bus.js?v=20260417-p6';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -139,6 +139,103 @@ export function mount(el) {
   bus.emit('deal-management:mounted');
 }
 
+// ============================================================
+// NEW OPPORTUNITY MODAL
+// ============================================================
+
+function openNewOppModal() {
+  if (!rootEl) return;
+  // Remove any existing modal
+  rootEl.querySelector('#dm-new-opp-modal')?.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'dm-new-opp-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:1000;';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:8px;padding:24px;width:480px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+      <div style="font-size:16px;font-weight:700;margin-bottom:4px;">New Opportunity</div>
+      <div style="font-size:12px;color:var(--ies-gray-400);margin-bottom:20px;">Start tracking a new deal in the pipeline.</div>
+
+      <div style="display:flex;flex-direction:column;gap:14px;">
+        <div>
+          <label style="display:block;font-size:11px;font-weight:700;color:var(--ies-gray-400);margin-bottom:4px;">Deal Name *</label>
+          <input id="opp-name" class="hub-input" placeholder="e.g., Acme Midwest Expansion" style="width:100%;">
+        </div>
+        <div>
+          <label style="display:block;font-size:11px;font-weight:700;color:var(--ies-gray-400);margin-bottom:4px;">Client *</label>
+          <input id="opp-client" class="hub-input" placeholder="e.g., Acme Corp" style="width:100%;">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div>
+            <label style="display:block;font-size:11px;font-weight:700;color:var(--ies-gray-400);margin-bottom:4px;">Initial Stage</label>
+            <select id="opp-stage" class="hub-select" style="width:100%;">
+              ${DOS_STAGES.map(s => `<option value="${s.id}"${s.id === 1 ? ' selected' : ''}>${s.id}. ${s.name}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;font-weight:700;color:var(--ies-gray-400);margin-bottom:4px;">Owner</label>
+            <input id="opp-owner" class="hub-input" placeholder="Your name" style="width:100%;" value="Brock Eckles">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div>
+            <label style="display:block;font-size:11px;font-weight:700;color:var(--ies-gray-400);margin-bottom:4px;">Est. Annual Revenue ($M)</label>
+            <input id="opp-revenue" class="hub-input" type="number" step="0.1" placeholder="e.g., 12.5" style="width:100%;">
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;font-weight:700;color:var(--ies-gray-400);margin-bottom:4px;">Target Margin (%)</label>
+            <input id="opp-margin" class="hub-input" type="number" step="0.1" placeholder="e.g., 11" style="width:100%;">
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px;">
+        <button id="opp-cancel" class="hub-btn hub-btn-sm hub-btn-secondary">Cancel</button>
+        <button id="opp-create" class="hub-btn hub-btn-sm hub-btn-primary">Create Opportunity</button>
+      </div>
+    </div>
+  `;
+  rootEl.appendChild(modal);
+
+  const close = () => modal.remove();
+  modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+  modal.querySelector('#opp-cancel')?.addEventListener('click', close);
+  modal.querySelector('#opp-create')?.addEventListener('click', () => {
+    const name   = /** @type {HTMLInputElement} */ (modal.querySelector('#opp-name')).value.trim();
+    const client = /** @type {HTMLInputElement} */ (modal.querySelector('#opp-client')).value.trim();
+    if (!name || !client) {
+      alert('Deal name and client are required.');
+      return;
+    }
+    const stage   = parseInt(/** @type {HTMLSelectElement} */ (modal.querySelector('#opp-stage')).value, 10) || 1;
+    const owner   = /** @type {HTMLInputElement} */ (modal.querySelector('#opp-owner')).value.trim() || 'Unassigned';
+    const revenue = parseFloat(/** @type {HTMLInputElement} */ (modal.querySelector('#opp-revenue')).value) || 0;
+    const margin  = parseFloat(/** @type {HTMLInputElement} */ (modal.querySelector('#opp-margin')).value) || 0;
+
+    const newDeal = {
+      id: 'd' + (DEALS.length + 1) + '-' + Date.now().toString(36),
+      name,
+      client,
+      stage,
+      sites: [],
+      revenue: Math.round(revenue * 1e6),
+      margin,
+      owner,
+      daysInStage: 0,
+      score: '—',
+      startDate: new Date().toISOString().slice(0, 10),
+      targetClose: null,
+    };
+    DEALS.push(newDeal);
+    close();
+    render(); // re-render pipeline with new deal
+    bus.emit('deal-management:deal-created', { id: newDeal.id });
+  });
+
+  // Focus first field
+  modal.querySelector('#opp-name')?.focus();
+}
+
 export function unmount() { rootEl = null; bus.emit('deal-management:unmounted'); }
 
 // ============================================================
@@ -176,6 +273,12 @@ function bindDelegatedEvents() {
     if (dosEl) {
       const elemId = /** @type {HTMLElement} */ (dosEl).dataset.dosToggle;
       toggleDosElement(elemId);
+      return;
+    }
+
+    // New Opportunity button
+    if (target.closest('[data-action="new-opp"]')) {
+      openNewOppModal();
       return;
     }
 
@@ -227,6 +330,7 @@ function render() {
         <div style="display:flex;gap:8px;">
           <button class="hub-btn hub-btn-sm ${viewMode === 'pipeline' ? '' : 'hub-btn-secondary'}" data-view="pipeline">Pipeline</button>
           <button class="hub-btn hub-btn-sm ${viewMode === 'list' ? '' : 'hub-btn-secondary'}" data-view="list">List</button>
+          <button class="hub-btn hub-btn-sm hub-btn-primary" data-action="new-opp" style="margin-left:8px;">+ New Opportunity</button>
         </div>
       </div>
 
@@ -443,7 +547,7 @@ async function handleDeckGenClick(deckType) {
   const statusEl = rootEl?.querySelector('#deck-gen-status');
   if (statusEl) statusEl.innerHTML = `<span style="color:var(--ies-blue);">Generating ${deckType} deck…</span>`;
   try {
-    const engine = await import('../deck-generator/engine.js?v=20260417-p5');
+    const engine = await import('../deck-generator/engine.js?v=20260417-p6');
     if (!window.PptxGenJS) throw new Error('PptxGenJS not loaded — check CDN in index.html');
     // Pass demo deal data directly (these demo deals have integer stage + hardcoded fields,
     // not persisted UUIDs). The engine accepts either a dealId (uuid) or a prebuilt data obj.

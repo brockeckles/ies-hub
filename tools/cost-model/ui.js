@@ -6,16 +6,16 @@
  * @module tools/cost-model/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-p5';
-import { state } from '../../shared/state.js?v=20260417-p5';
-import * as calc from './calc.js?v=20260417-p5';
-import * as api from './api.js?v=20260417-p5';
+import { bus } from '../../shared/event-bus.js?v=20260417-p6';
+import { state } from '../../shared/state.js?v=20260417-p6';
+import * as calc from './calc.js?v=20260417-p6';
+import * as api from './api.js?v=20260417-p6';
 
 // ============================================================
 // STATE — tool-local reactive state
 // ============================================================
 
-/** @type {import('./types.js?v=20260417-p5').CostModelData} */
+/** @type {import('./types.js?v=20260417-p6').CostModelData} */
 let model = createEmptyModel();
 
 /** @type {Object} */
@@ -32,6 +32,15 @@ let isDirty = false;
 
 /** @type {boolean} Track whether user has interacted — suppresses validation on fresh model */
 let userHasInteracted = false;
+
+/** @type {'landing' | 'editor'} Landing page (saved models) vs editor (builder). */
+let viewMode = 'landing';
+
+/** @type {Array<{id:number,name:string,client_name:string,market_id:string|null,updated_at:string}>} */
+let savedModels = [];
+
+/** @type {Array<{id:string,deal_name:string,client_name:string|null}>} */
+let savedDeals = [];
 
 // ============================================================
 // DEMO FALLBACK DATA — used when Supabase ref tables unavailable
@@ -93,40 +102,97 @@ export async function mount(el) {
   activeSection = 'setup';
   model = createEmptyModel();
   userHasInteracted = false;
+  viewMode = 'landing';
 
-  // Render shell
-  el.innerHTML = renderShell();
-
-  // Wire up sidebar nav
-  el.querySelectorAll('.cm-nav-item').forEach(item => {
-    item.addEventListener('click', () => {
-      const key = item.dataset.section;
-      if (key) navigateSection(key);
-    });
-  });
-
-  // Wire up toolbar
-  el.querySelector('#cm-new-btn')?.addEventListener('click', handleNew);
-  el.querySelector('#cm-save-btn')?.addEventListener('click', handleSave);
-  el.querySelector('#cm-load-btn')?.addEventListener('click', handleLoad);
-
-  // Load reference data
+  // Load reference data + saved models + saved deals in parallel
   try {
-    refData = await api.loadAllRefData();
+    [refData, savedModels, savedDeals] = await Promise.all([
+      api.loadAllRefData().catch(() => ({})),
+      api.listModels().catch(() => []),
+      api.listDeals().catch(() => []),
+    ]);
   } catch (err) {
-    console.warn('[CM] Failed to load ref data:', err);
-    refData = {};
+    console.warn('[CM] Initial load failed:', err);
   }
 
   // Listen for cross-tool push events
   bus.on('most:push-to-cm', handleMostPush);
   bus.on('wsc:push-to-cm', handleWscPush);
 
-  // Render initial section
-  renderSection();
-  updateValidation();
+  renderCurrentView();
 
   bus.emit('cm:mounted');
+}
+
+/** Render whichever view (landing vs editor) is active. Re-wires its events. */
+function renderCurrentView() {
+  if (!rootEl) return;
+  if (viewMode === 'landing') {
+    rootEl.innerHTML = renderLanding();
+    wireLandingEvents();
+  } else {
+    rootEl.innerHTML = renderShell();
+    wireEditorEvents();
+  }
+}
+
+function wireLandingEvents() {
+  if (!rootEl) return;
+  rootEl.querySelector('#cm-create-new')?.addEventListener('click', () => {
+    model = createEmptyModel();
+    isDirty = false;
+    userHasInteracted = false;
+    activeSection = 'setup';
+    viewMode = 'editor';
+    renderCurrentView();
+  });
+  rootEl.querySelectorAll('[data-cm-card]').forEach(card => {
+    card.addEventListener('click', async () => {
+      const id = Number(card.getAttribute('data-cm-card'));
+      if (!id) return;
+      try {
+        const full = await api.getModel(id);
+        if (full?.project_data) {
+          model = { ...createEmptyModel(), ...full.project_data, id: full.id };
+          isDirty = false;
+          userHasInteracted = false;
+          activeSection = 'setup';
+          viewMode = 'editor';
+          renderCurrentView();
+        } else {
+          alert('This model has no saved data.');
+        }
+      } catch (err) {
+        console.error('[CM] Load failed:', err);
+        alert('Load failed: ' + err.message);
+      }
+    });
+  });
+}
+
+function wireEditorEvents() {
+  if (!rootEl) return;
+  // Sidebar nav
+  rootEl.querySelectorAll('.cm-nav-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const key = item.dataset.section;
+      if (key) navigateSection(key);
+    });
+  });
+  // Toolbar
+  rootEl.querySelector('#cm-back-btn')?.addEventListener('click', async () => {
+    // Refresh saved-models list when returning to landing
+    try { savedModels = await api.listModels(); } catch {}
+    viewMode = 'landing';
+    renderCurrentView();
+  });
+  rootEl.querySelector('#cm-new-btn')?.addEventListener('click', handleNew);
+  rootEl.querySelector('#cm-save-btn')?.addEventListener('click', handleSave);
+  rootEl.querySelector('#cm-load-btn')?.addEventListener('click', handleLoad);
+
+  // Section content
+  renderSection();
+  updateValidation();
 }
 
 /**
@@ -153,6 +219,7 @@ function renderShell() {
       <div class="hub-builder-sidebar">
         <!-- Toolbar -->
         <div style="padding: 12px 16px; border-bottom: 1px solid var(--ies-gray-200);">
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cm-back-btn" style="margin-bottom:8px;font-size:11px;">← All Models</button>
           <div class="text-subtitle" style="margin-bottom: 8px;">Cost Model Builder</div>
           <div class="flex gap-2" style="flex-wrap: wrap;">
             <button class="hub-btn hub-btn-primary hub-btn-sm" id="cm-new-btn">New</button>
@@ -426,7 +493,16 @@ function renderSetup() {
         <label class="cm-form-label">Contract Term (Years)</label>
         <input class="hub-input" type="number" id="cm-term" value="${pd.contractTerm || 5}" min="1" max="20" step="1" data-field="projectDetails.contractTerm" data-type="number" />
       </div>
-      <div></div>
+      <div class="cm-form-group">
+        <label class="cm-form-label">Link to Deal <span style="font-weight:400;color:var(--ies-gray-400);">(optional)</span></label>
+        <select class="hub-select" id="cm-deal" data-field="projectDetails.dealId">
+          <option value="">— No linked deal —</option>
+          ${savedDeals.map(d => {
+            const label = d.deal_name + (d.client_name ? ` (${d.client_name})` : '');
+            return `<option value="${d.id}"${d.id === pd.dealId ? ' selected' : ''}>${label}</option>`;
+          }).join('')}
+        </select>
+      </div>
     </div>
   `;
 }
@@ -1486,29 +1562,12 @@ async function handleSave() {
 }
 
 async function handleLoad() {
-  try {
-    const models = await api.listModels();
-    if (models.length === 0) {
-      alert('No saved models found.');
-      return;
-    }
-    // Simple selection — will be replaced with proper modal
-    const names = models.map((m, i) => `${i + 1}. ${m.name} (${m.client_name || 'No client'})`).join('\n');
-    const choice = prompt('Select a model:\n' + names);
-    const idx = parseInt(choice) - 1;
-    if (idx >= 0 && idx < models.length) {
-      const full = await api.getModel(models[idx].id);
-      if (full?.project_data) {
-        model = { ...createEmptyModel(), ...full.project_data, id: full.id };
-        isDirty = false;
-        navigateSection('setup');
-        bus.emit('cm:model-loaded', { id: model.id });
-      }
-    }
-  } catch (err) {
-    console.error('[CM] Load failed:', err);
-    alert('Load failed: ' + err.message);
-  }
+  // The Load button now returns to the landing page where models are shown as cards.
+  // Refreshes the list so any newly-saved model appears.
+  try { savedModels = await api.listModels(); } catch {}
+  if (isDirty && !confirm('You have unsaved changes. Leave this model?')) return;
+  viewMode = 'landing';
+  renderCurrentView();
 }
 
 // ============================================================
@@ -1573,7 +1632,7 @@ function sectionHasData(key) {
 /**
  * Handle incoming labor lines from MOST tool.
  * Merges or replaces CM laborLines with MOST-derived data.
- * @param {import('../most-standards/types.js?v=20260417-p5').MostToCmPayload} payload
+ * @param {import('../most-standards/types.js?v=20260417-p6').MostToCmPayload} payload
  */
 function handleMostPush(payload) {
   if (!payload?.laborLines?.length) return;
@@ -1611,7 +1670,7 @@ function handleMostPush(payload) {
 /**
  * Handle incoming facility data from Warehouse Sizing Calculator.
  * Populates CM facility section fields.
- * @param {import('../warehouse-sizing/types.js?v=20260417-p5').WscToCmPayload} payload
+ * @param {import('../warehouse-sizing/types.js?v=20260417-p6').WscToCmPayload} payload
  */
 function handleWscPush(payload) {
   if (!payload) return;
@@ -1633,43 +1692,99 @@ function handleWscPush(payload) {
 // HELPERS
 // ============================================================
 
+// ============================================================
+// LANDING PAGE — saved-scenarios grid + "+ Create New Model" CTA
+// ============================================================
+
+function renderLanding() {
+  const count = savedModels.length;
+  const marketById = {};
+  (refData.markets || DEMO_MARKETS_FALLBACK).forEach(m => {
+    marketById[m.market_id] = m.market_name || m.name || m.market_id;
+  });
+  return `
+    <div style="padding:32px;max-width:1280px;margin:0 auto;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">
+        <div>
+          <h2 class="text-page" style="margin:0 0 4px 0;">Cost Model Builder</h2>
+          <div style="font-size:13px;color:var(--ies-gray-400);">
+            ${count === 0 ? 'Build a new pricing model from scratch.' : `${count} saved model${count === 1 ? '' : 's'} — pick one to continue, or start fresh.`}
+          </div>
+        </div>
+        <button class="hub-btn hub-btn-primary" id="cm-create-new" style="font-weight:700;">+ Create New Model</button>
+      </div>
+
+      ${count === 0 ? `
+        <div class="hub-card" style="padding:48px;text-align:center;border:2px dashed var(--ies-gray-200);">
+          <div style="font-size:36px;margin-bottom:12px;">📊</div>
+          <div style="font-size:16px;font-weight:700;margin-bottom:6px;">No saved models yet</div>
+          <div style="font-size:13px;color:var(--ies-gray-400);margin-bottom:20px;">Start a pricing model to compute labor, equipment, overhead, and P&amp;L for a facility.</div>
+          <button class="hub-btn hub-btn-primary" id="cm-create-new-alt" onclick="document.getElementById('cm-create-new').click()">+ Create New Model</button>
+        </div>
+      ` : `
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;">
+          ${savedModels.map(m => {
+            const updated = m.updated_at ? new Date(m.updated_at) : null;
+            const updatedStr = updated ? updated.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+            const market = m.market_id ? (marketById[m.market_id] || m.market_id) : null;
+            return `
+              <div class="hub-card cm-landing-card" data-cm-card="${m.id}" style="padding:16px;cursor:pointer;transition:all 0.15s;border:1px solid var(--ies-gray-200);">
+                <div style="font-size:14px;font-weight:700;margin-bottom:4px;color:var(--ies-navy);">${m.name || 'Untitled Model'}</div>
+                <div style="font-size:12px;color:var(--ies-gray-500);margin-bottom:12px;">${m.client_name || '<span style="color:var(--ies-gray-300);">No client</span>'}</div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+                  ${market ? `<span style="font-size:10px;padding:2px 8px;border-radius:12px;background:var(--ies-gray-100);color:var(--ies-gray-600);">${market}</span>` : ''}
+                </div>
+                <div style="font-size:11px;color:var(--ies-gray-400);">Updated ${updatedStr}</div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `}
+    </div>
+    <style>
+      .cm-landing-card:hover { border-color: var(--ies-blue) !important; box-shadow: 0 2px 8px rgba(0,71,171,0.08); transform: translateY(-1px); }
+    </style>
+  `;
+}
+
 function createEmptyModel() {
+  // Starter profile: representative mid-size 150k-sqft eComm DC. Replace values as you go.
   return {
     id: null,
-    projectDetails: { name: '', clientName: '', market: '', environment: '', facilityLocation: '', contractTerm: 5 },
+    projectDetails: { name: '', clientName: '', market: '', environment: '', facilityLocation: '', contractTerm: 5, dealId: null },
     volumeLines: [
-      { name: 'Receiving (Pallets)', volume: 0, uom: 'pallets', isOutboundPrimary: false },
-      { name: 'Put-Away', volume: 0, uom: 'pallets', isOutboundPrimary: false },
-      { name: 'Orders Shipped', volume: 0, uom: 'orders', isOutboundPrimary: true },
-      { name: 'Each Picks', volume: 0, uom: 'eaches', isOutboundPrimary: false },
-      { name: 'Case Picks', volume: 0, uom: 'cases', isOutboundPrimary: false },
+      { name: 'Receiving (Pallets)', volume: 15000, uom: 'pallets', isOutboundPrimary: false },
+      { name: 'Put-Away',            volume: 15000, uom: 'pallets', isOutboundPrimary: false },
+      { name: 'Orders Shipped',      volume: 80000, uom: 'orders',  isOutboundPrimary: true  },
+      { name: 'Each Picks',          volume: 800000, uom: 'eaches', isOutboundPrimary: false },
+      { name: 'Case Picks',          volume: 200000, uom: 'cases',  isOutboundPrimary: false },
     ],
     orderProfile: {},
-    facility: { totalSqft: 0 },
+    facility: { totalSqft: 150000 },
     shifts: { shiftsPerDay: 1, hoursPerShift: 8, daysPerWeek: 5, weeksPerYear: 52 },
     laborLines: [
-      { activity_name: 'Receiving', process_area: 'Inbound', labor_category: 'direct', volume: 0, base_uph: 200, annual_hours: 0, hourly_rate: 18.00, burden_pct: 30, most_template_id: '', most_template_name: '' },
-      { activity_name: 'Put-Away', process_area: 'Inbound', labor_category: 'direct', volume: 0, base_uph: 180, annual_hours: 0, hourly_rate: 18.00, burden_pct: 30, most_template_id: '', most_template_name: '' },
-      { activity_name: 'Picking', process_area: 'Outbound', labor_category: 'direct', volume: 0, base_uph: 120, annual_hours: 0, hourly_rate: 17.50, burden_pct: 30, most_template_id: '', most_template_name: '' },
-      { activity_name: 'Packing', process_area: 'Outbound', labor_category: 'direct', volume: 0, base_uph: 60, annual_hours: 0, hourly_rate: 16.50, burden_pct: 30, most_template_id: '', most_template_name: '' },
-      { activity_name: 'Shipping', process_area: 'Outbound', labor_category: 'direct', volume: 0, base_uph: 150, annual_hours: 0, hourly_rate: 17.00, burden_pct: 30, most_template_id: '', most_template_name: '' },
+      { activity_name: 'Receiving', process_area: 'Inbound',  labor_category: 'direct', volume: 15000,  base_uph: 200, annual_hours: 0, hourly_rate: 18.00, burden_pct: 30, most_template_id: '', most_template_name: '' },
+      { activity_name: 'Put-Away',  process_area: 'Inbound',  labor_category: 'direct', volume: 15000,  base_uph: 180, annual_hours: 0, hourly_rate: 18.00, burden_pct: 30, most_template_id: '', most_template_name: '' },
+      { activity_name: 'Picking',   process_area: 'Outbound', labor_category: 'direct', volume: 800000, base_uph: 120, annual_hours: 0, hourly_rate: 17.50, burden_pct: 30, most_template_id: '', most_template_name: '' },
+      { activity_name: 'Packing',   process_area: 'Outbound', labor_category: 'direct', volume: 80000,  base_uph: 60,  annual_hours: 0, hourly_rate: 16.50, burden_pct: 30, most_template_id: '', most_template_name: '' },
+      { activity_name: 'Shipping',  process_area: 'Outbound', labor_category: 'direct', volume: 80000,  base_uph: 150, annual_hours: 0, hourly_rate: 17.00, burden_pct: 30, most_template_id: '', most_template_name: '' },
     ],
     indirectLaborLines: [
-      { role: 'Supervisor', hourly_rate: 28.00, ratio_to_direct: 12, burden_pct: 35 },
-      { role: 'Quality Lead', hourly_rate: 22.00, ratio_to_direct: 5, burden_pct: 35 },
+      { role: 'Supervisor',    hourly_rate: 28.00, ratio_to_direct: 12, burden_pct: 35 },
+      { role: 'Quality Lead',  hourly_rate: 22.00, ratio_to_direct: 5,  burden_pct: 35 },
     ],
     equipmentLines: [
-      { equipment_name: 'Reach Truck', category: 'MHE', quantity: 0, acquisition_type: 'lease', monthly_lease: 0, acquisition_cost: 0, annual_maintenance: 0, amortization_years: 7, notes: '' },
-      { equipment_name: 'RF Scanners', category: 'IT', quantity: 0, acquisition_type: 'lease', monthly_lease: 0, acquisition_cost: 0, annual_maintenance: 0, amortization_years: 5, notes: '' },
-      { equipment_name: 'Selective Pallet Racking', category: 'Racking', quantity: 0, acquisition_type: 'purchase', monthly_lease: 0, acquisition_cost: 0, annual_maintenance: 0, amortization_years: 15, notes: '' },
-      { equipment_name: 'Dock Levelers', category: 'Dock', quantity: 0, acquisition_type: 'purchase', monthly_lease: 0, acquisition_cost: 0, annual_maintenance: 0, amortization_years: 10, notes: '' },
-      { equipment_name: 'WMS License', category: 'IT', quantity: 1, acquisition_type: 'service', monthly_lease: 0, acquisition_cost: 0, annual_maintenance: 0, amortization_years: 5, notes: 'Annual SaaS license' },
+      { equipment_name: 'Reach Truck',              category: 'MHE',     quantity: 4,    acquisition_type: 'lease',    monthly_lease: 850, acquisition_cost: 0,     annual_maintenance: 1200, amortization_years: 7,  notes: '' },
+      { equipment_name: 'RF Scanners',              category: 'IT',      quantity: 15,   acquisition_type: 'lease',    monthly_lease: 45,  acquisition_cost: 0,     annual_maintenance: 150,  amortization_years: 5,  notes: '' },
+      { equipment_name: 'Selective Pallet Racking', category: 'Racking', quantity: 3000, acquisition_type: 'purchase', monthly_lease: 0,   acquisition_cost: 95,    annual_maintenance: 2,    amortization_years: 15, notes: 'Position count' },
+      { equipment_name: 'Dock Levelers',            category: 'Dock',    quantity: 20,   acquisition_type: 'purchase', monthly_lease: 0,   acquisition_cost: 4500,  annual_maintenance: 250,  amortization_years: 10, notes: '' },
+      { equipment_name: 'WMS License',              category: 'IT',      quantity: 1,    acquisition_type: 'service',  monthly_lease: 8500,acquisition_cost: 0,     annual_maintenance: 0,    amortization_years: 5,  notes: 'Annual SaaS license' },
     ],
     overheadLines: [
-      { category: 'Utilities', annual_cost: 0, driver: 'sqft', notes: 'Electric + gas' },
-      { category: 'Insurance', annual_cost: 0, driver: 'fixed', notes: '' },
-      { category: 'Maintenance', annual_cost: 0, driver: 'equipment value', notes: '' },
-      { category: 'Supplies', annual_cost: 0, driver: 'per unit shipped', notes: 'Labels, tape, stretch wrap' },
+      { category: 'Utilities',    annual_cost: 180000, driver: 'sqft',             notes: 'Electric + gas ($1.20/sqft)' },
+      { category: 'Insurance',    annual_cost: 24000,  driver: 'fixed',            notes: '' },
+      { category: 'Maintenance',  annual_cost: 60000,  driver: 'equipment value',  notes: '' },
+      { category: 'Supplies',     annual_cost: 48000,  driver: 'per unit shipped', notes: 'Labels, tape, stretch wrap' },
     ],
     vasLines: [],
     financial: { targetMargin: 12, volumeGrowth: 3, laborEscalation: 4, annualEscalation: 3, discountRate: 10, reinvestRate: 8 },
