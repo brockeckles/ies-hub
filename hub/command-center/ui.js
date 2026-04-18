@@ -8,7 +8,7 @@
  */
 
 import { bus } from '../../shared/event-bus.js';
-import * as api from './api.js?v=20260418-s5';
+import * as api from './api.js?v=20260418-s6';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -401,19 +401,44 @@ function renderIntelFeed(items, fallbackActivity) {
   if (!items || !items.length) {
     return (fallbackActivity || []).map(a => activityItem(a.title, a.description, a.time, a.color)).join('');
   }
-  return items.slice(0, 25).map(item => `
-    <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--ies-gray-100);">
-      <span style="width:8px;height:8px;border-radius:50%;background:${severityDot(item.severity)};margin-top:5px;flex-shrink:0;"></span>
-      <div style="flex:1;min-width:0;">
-        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:2px;">
-          <span style="font-size:11px;font-weight:800;color:${categoryColor(item.category)};text-transform:uppercase;letter-spacing:.04em;">${item.category || ''}</span>
-          <span style="font-size:13px;font-weight:600;color:var(--ies-gray-800);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeText(item.title)}</span>
+  // Bare-domain guard — ingest pipeline sometimes stores the publisher home
+  // page when it can't resolve the article URL. Only treat real article
+  // paths as clickable to avoid sending users to a generic homepage.
+  const isRealLink = (url) => {
+    if (!url) return false;
+    try {
+      const u = new URL(url);
+      return u.pathname && u.pathname !== '/' && u.pathname.length > 1;
+    } catch { return false; }
+  };
+  return items.slice(0, 25).map(item => {
+    const href = isRealLink(item.source_url) ? item.source_url : '';
+    const clickable = !!href;
+    const openTag = clickable
+      ? `<a href="${href}" target="_blank" rel="noopener" style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--ies-gray-100);text-decoration:none;color:inherit;cursor:pointer;" onmouseover="this.style.background='var(--ies-gray-50)'" onmouseout="this.style.background='transparent'">`
+      : `<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--ies-gray-100);">`;
+    const closeTag = clickable ? `</a>` : `</div>`;
+    const linkIcon = clickable
+      ? `<span style="font-size:11px;color:#2563eb;flex-shrink:0;margin-left:4px;" title="Open article in new tab">↗</span>`
+      : '';
+    const sourceLabel = item.source
+      ? `<span style="font-size:10px;color:var(--ies-gray-400);margin-left:6px;">· ${escapeText(item.source)}</span>`
+      : '';
+    return `
+      ${openTag}
+        <span style="width:8px;height:8px;border-radius:50%;background:${severityDot(item.severity)};margin-top:5px;flex-shrink:0;"></span>
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:2px;">
+            <span style="font-size:11px;font-weight:800;color:${categoryColor(item.category)};text-transform:uppercase;letter-spacing:.04em;">${item.category || ''}</span>
+            <span style="font-size:13px;font-weight:600;color:${clickable ? '#1d4ed8' : 'var(--ies-gray-800)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeText(item.title)}</span>
+            ${linkIcon}
+          </div>
+          ${item.detail ? `<div style="font-size:11px;color:var(--ies-gray-500);line-height:1.4;">${escapeText(item.detail).slice(0, 180)}${sourceLabel}</div>` : (sourceLabel ? `<div style="font-size:11px;color:var(--ies-gray-500);line-height:1.4;">${sourceLabel}</div>` : '')}
         </div>
-        ${item.detail ? `<div style="font-size:11px;color:var(--ies-gray-500);line-height:1.4;">${escapeText(item.detail).slice(0, 180)}</div>` : ''}
-      </div>
-      <span style="font-size:10px;color:var(--ies-gray-400);white-space:nowrap;flex-shrink:0;">${item.relDate || ''}</span>
-    </div>
-  `).join('');
+        <span style="font-size:10px;color:var(--ies-gray-400);white-space:nowrap;flex-shrink:0;">${item.relDate || ''}</span>
+      ${closeTag}
+    `;
+  }).join('');
 }
 
 function categoryColor(cat) {

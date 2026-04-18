@@ -5,7 +5,7 @@
  * popover; the rest of the page stays fully interactive (no modal overlay).
  *
  * Usage:
- *   import { tour } from './shared/tour.js?v=20260418-s5';
+ *   import { tour } from './shared/tour.js?v=20260418-s6';
  *   tour.start('overview');   // start a named tour
  *   tour.next();              // advance manually (normally user clicks)
  *   tour.stop();              // end immediately
@@ -20,7 +20,7 @@
  * @module shared/tour
  */
 
-import { bus } from './event-bus.js?v=20260418-s5';
+import { bus } from './event-bus.js?v=20260418-s6';
 
 // ---------------------------------------------------------------------------
 // Tour definitions — 10 section tours for v3.

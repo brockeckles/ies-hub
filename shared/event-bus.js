@@ -4,7 +4,7 @@
  * Replaces v2's tight coupling between modules.
  *
  * Usage:
- *   import { bus } from './event-bus.js?v=20260418-s5';
+ *   import { bus } from './event-bus.js?v=20260418-s6';
  *   const off = bus.on('cm:model-saved', (data) => { ... });
  *   bus.emit('cm:model-saved', { modelId: 7 });
  *   off(); // unsubscribe
