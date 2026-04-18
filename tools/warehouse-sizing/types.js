@@ -17,7 +17,6 @@
  * @property {number} clearHeight — clear height in feet
  * @property {number} buildingWidth — building width in feet
  * @property {number} buildingDepth — building depth in feet
- * @property {number} dockDoors — total dock doors
  * @property {number} columnSpacingX — column spacing along width (ft)
  * @property {number} columnSpacingY — column spacing along depth (ft)
  * @property {'single' | 'double' | 'bulk' | 'carton' | 'mix'} storageType

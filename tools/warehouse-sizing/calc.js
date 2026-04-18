@@ -32,6 +32,9 @@ export const AISLE_WIDTHS = {
 /** Dock door throughput capacity (pallets/door/day) */
 export const DOOR_CAPACITY_PER_DAY = 40;
 
+/** Dock staging area per door in square feet (door + apron + stage lane) */
+export const DOCK_SF_PER_DOOR = 700;
+
 /** Support area uplift factor for suggested sqft heuristic */
 export const SUPPORT_AREA_UPLIFT = 0.25;
 
@@ -220,8 +223,10 @@ export function computeCapacitySummary(facility, zones, volumes) {
 
   const dailyPallets = (volumes.avgDailyInbound || 0) + (volumes.avgDailyOutbound || 0);
   const peakDaily = dailyPallets * (volumes.peakMultiplier || 1.3);
-  const dockUtil = (facility.dockDoors || 0) > 0
-    ? (peakDaily / ((facility.dockDoors || 1) * DOOR_CAPACITY_PER_DAY)) * 100
+  const dock = zones.dockConfig || { inboundDoors: 10, outboundDoors: 12 };
+  const totalDoors = dock.inboundDoors + dock.outboundDoors;
+  const dockUtil = totalDoors > 0
+    ? (peakDaily / (totalDoors * DOOR_CAPACITY_PER_DAY)) * 100
     : 0;
 
   const suggested = suggestedSqft(volumes);
@@ -332,7 +337,7 @@ export function zoneBreakdown(zones) {
  * @param {import('./types.js?v=20260418-sI').FacilityConfig} facility
  * @returns {import('./types.js?v=20260418-sI').ElevationParams}
  */
-export function elevationParams(facility) {
+export function elevationParams(facility, zones) {
   const dims = {
     palletWidth: facility.palletWidth,
     palletDepth: facility.palletDepth,
@@ -344,6 +349,8 @@ export function elevationParams(facility) {
 
   const st = facility.storageType || 'single';
   const levels = rackLevels(facility.clearHeight || 0, dims);
+  const dock = zones?.dockConfig || { inboundDoors: 10, outboundDoors: 12 };
+  const totalDoors = dock.inboundDoors + dock.outboundDoors;
 
   return {
     buildingWidth: facility.buildingWidth || Math.sqrt((facility.totalSqft || 0) * 1.5),
@@ -354,7 +361,7 @@ export function elevationParams(facility) {
     storageType: st,
     aisleWidth: facility.aisleWidth || AISLE_WIDTHS[st] || 12,
     rackDepthFt: rackDepthFt(st === 'double' ? 'double' : 'single', dims),
-    dockDoors: facility.dockDoors || 0,
+    dockDoors: totalDoors,
   };
 }
 
@@ -391,6 +398,7 @@ export function calcStorageByType(facility, zones) {
 
 /**
  * Calculate dock door requirements and utilization.
+ * Formula: (inbound + outbound) × 1.25 buffer × 700 SF/door × (1.15 if two-sided)
  * @param {import('./types.js?v=20260418-sI').FacilityConfig} facility
  * @param {import('./types.js?v=20260418-sI').ZoneConfig} zones
  * @param {import('./types.js?v=20260418-sI').VolumeInputs} volumes
@@ -398,7 +406,6 @@ export function calcStorageByType(facility, zones) {
  */
 export function calcDockAnalysis(facility, zones, volumes) {
   const dock = zones.dockConfig || { sided: 'single', inboundDoors: 10, outboundDoors: 12, palletsPerDockHour: 12, dockOperatingHours: 10 };
-  const prod = zones.productDimensions || { unitsPerPallet: 48 };
   const peak = volumes.peakMultiplier || 1.3;
   const avg = volumes.avgDailyInbound || 0;
   const out = volumes.avgDailyOutbound || 0;
@@ -413,10 +420,11 @@ export function calcDockAnalysis(facility, zones, volumes) {
   const inboundUtilization = capacity > 0 ? (peakInbound / capacity) * 100 : 0;
   const outboundUtilization = capacity > 0 ? (peakOutbound / capacity) * 100 : 0;
 
-  const totalDoors = (dock.sided === 'two')
-    ? Math.max(dock.inboundDoors, dock.outboundDoors) * 2
-    : Math.max(dock.inboundDoors, dock.outboundDoors);
-  const dockSqft = totalDoors * 200; // 200 sqft per door (staging area)
+  // Dock SF: (inbound + outbound) × 1.25 buffer × 700 SF/door × (1.15 if two-sided)
+  const totalDoors = dock.inboundDoors + dock.outboundDoors;
+  const bufferMultiplier = 1.25;
+  const twoSidedMultiplier = dock.sided === 'two' ? 1.15 : 1.0;
+  const dockSqft = Math.round(totalDoors * bufferMultiplier * DOCK_SF_PER_DOOR * twoSidedMultiplier);
 
   return {
     inboundDoorsNeeded,

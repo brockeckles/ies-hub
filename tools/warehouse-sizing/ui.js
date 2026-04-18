@@ -284,6 +284,23 @@ function bindShellEvents() {
 // CONFIG PANEL (LEFT SIDEBAR)
 // ============================================================
 
+/**
+ * Debounce helper: delays execution until ms has passed without new calls.
+ * @param {Function} fn
+ * @param {number} [ms=100]
+ * @returns {Function}
+ */
+function debounceRender(fn, ms = 100) {
+  let timeoutId = null;
+  return function debounced(...args) {
+    if (timeoutId !== null) clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => {
+      fn(...args);
+      timeoutId = null;
+    }, ms);
+  };
+}
+
 function renderConfigPanel() {
   const panel = rootEl?.querySelector('#wsc-config');
   if (!panel) return;
@@ -324,7 +341,6 @@ function renderConfigPanel() {
         <div class="wsc-config-field"><label>Depth (ft)</label><input type="number" value="${facility.buildingDepth}" data-fac="buildingDepth" /></div>
       </div>
       <div class="wsc-config-row">
-        <div class="wsc-config-field"><label>Dock Doors</label><input type="number" value="${facility.dockDoors}" data-fac="dockDoors" /></div>
         <div class="wsc-config-field">
           <label>Storage Type</label>
           <select data-fac="storageType">
@@ -333,9 +349,9 @@ function renderConfigPanel() {
             ).join('')}
           </select>
         </div>
+        <div class="wsc-config-field"><label>Aisle Width (ft)</label><input type="number" value="${facility.aisleWidth || calc.AISLE_WIDTHS[facility.storageType] || 12}" step="0.5" data-fac="aisleWidth" /></div>
       </div>
       <div class="wsc-config-row">
-        <div class="wsc-config-field"><label>Aisle Width (ft)</label><input type="number" value="${facility.aisleWidth || calc.AISLE_WIDTHS[facility.storageType] || 12}" step="0.5" data-fac="aisleWidth" /></div>
         <div class="wsc-config-field"><label>Col Spacing (ft)</label><input type="number" value="${facility.columnSpacingX || 50}" data-fac="columnSpacingX" /></div>
       </div>
     </div>
@@ -532,33 +548,56 @@ function renderConfigPanel() {
 }
 
 function bindConfigEvents(panel) {
-  // Facility fields
+  const debouncedRender = debounceRender(renderContentView, 100);
+
+  // Facility fields (with input debounce for live update)
   panel.querySelectorAll('[data-fac]').forEach(input => {
-    input.addEventListener('change', e => {
+    const handleChange = (e) => {
       const field = /** @type {HTMLInputElement} */ (e.target).dataset.fac;
       const val = input.type === 'number' ? parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0 : /** @type {HTMLInputElement} */ (e.target).value;
       facility[field] = val;
       isDirty = true;
+    };
+    input.addEventListener('input', (e) => {
+      handleChange(e);
+      debouncedRender();
+    });
+    input.addEventListener('change', (e) => {
+      handleChange(e);
       renderContentView();
     });
   });
 
-  // Zone fields
+  // Zone fields (with input debounce for live update)
   panel.querySelectorAll('[data-zone]').forEach(input => {
-    input.addEventListener('change', e => {
+    const handleChange = (e) => {
       const field = /** @type {HTMLInputElement} */ (e.target).dataset.zone;
       zones[field] = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
       isDirty = true;
+    };
+    input.addEventListener('input', (e) => {
+      handleChange(e);
+      debouncedRender();
+    });
+    input.addEventListener('change', (e) => {
+      handleChange(e);
       renderContentView();
     });
   });
 
-  // Volume fields
+  // Volume fields (with input debounce for live update)
   panel.querySelectorAll('[data-vol]').forEach(input => {
-    input.addEventListener('change', e => {
+    const handleChange = (e) => {
       const field = /** @type {HTMLInputElement} */ (e.target).dataset.vol;
       volumes[field] = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
       isDirty = true;
+    };
+    input.addEventListener('input', (e) => {
+      handleChange(e);
+      debouncedRender();
+    });
+    input.addEventListener('change', (e) => {
+      handleChange(e);
       renderContentView();
     });
   });
@@ -584,44 +623,65 @@ function bindConfigEvents(panel) {
     });
   });
 
-  // Product dimension fields
+  // Product dimension fields (with input debounce for live update)
   panel.querySelectorAll('[data-prod]').forEach(input => {
-    input.addEventListener('change', e => {
+    const handleChange = (e) => {
       const field = /** @type {HTMLInputElement} */ (e.target).dataset.prod;
       const val = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
       if (!zones.productDimensions) zones.productDimensions = { unitsPerPallet: 48, unitsPerCartonPallet: 6, cartonsPerPallet: 12, unitsPerCartonShelving: 6, cartonsPerLocation: 4 };
       zones.productDimensions[field] = val;
       isDirty = true;
+    };
+    input.addEventListener('input', (e) => {
+      handleChange(e);
+      debouncedRender();
+    });
+    input.addEventListener('change', (e) => {
+      handleChange(e);
       renderContentView();
     });
   });
 
-  // Dock configuration fields
+  // Dock configuration fields (with input debounce for live update)
   panel.querySelectorAll('[data-dock]').forEach(input => {
-    input.addEventListener('change', e => {
+    const handleChange = (e) => {
       const field = /** @type {HTMLInputElement} */ (e.target).dataset.dock;
       const val = input.type === 'number' ? parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0 : /** @type {HTMLInputElement} */ (e.target).value;
       if (!zones.dockConfig) zones.dockConfig = { sided: 'single', inboundDoors: 10, outboundDoors: 12, palletsPerDockHour: 12, dockOperatingHours: 10 };
       zones.dockConfig[field] = val;
       isDirty = true;
+    };
+    input.addEventListener('input', (e) => {
+      handleChange(e);
+      debouncedRender();
+    });
+    input.addEventListener('change', (e) => {
+      handleChange(e);
       renderContentView();
     });
   });
 
-  // Inventory parameters
+  // Inventory parameters (with input debounce for live update)
   panel.querySelectorAll('[data-inv]').forEach(input => {
-    input.addEventListener('change', e => {
+    const handleChange = (e) => {
       const field = /** @type {HTMLInputElement} */ (e.target).dataset.inv;
       const val = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
       zones[field] = val;
       isDirty = true;
+    };
+    input.addEventListener('input', (e) => {
+      handleChange(e);
+      debouncedRender();
+    });
+    input.addEventListener('change', (e) => {
+      handleChange(e);
       renderContentView();
     });
   });
 
-  // Forward pick fields
+  // Forward pick fields (with input debounce for live update)
   panel.querySelectorAll('[data-fwd]').forEach(input => {
-    input.addEventListener('change', e => {
+    const handleChange = (e) => {
       const field = /** @type {HTMLInputElement} */ (e.target).dataset.fwd;
       if (!zones.forwardPick) zones.forwardPick = { enabled: false, type: 'carton_flow', skuCount: 2000, daysInventory: 3, outboundUnitsPerDay: 5000 };
       if (field === 'enabled') {
@@ -637,13 +697,20 @@ function bindConfigEvents(panel) {
         zones.forwardPick[field] = val;
       }
       isDirty = true;
+    };
+    input.addEventListener('input', (e) => {
+      handleChange(e);
+      debouncedRender();
+    });
+    input.addEventListener('change', (e) => {
+      handleChange(e);
       renderContentView();
     });
   });
 
-  // Optional zone fields
+  // Optional zone fields (with input debounce for live update)
   panel.querySelectorAll('[data-opt]').forEach(input => {
-    input.addEventListener('change', e => {
+    const handleChange = (e) => {
       const key = /** @type {HTMLInputElement} */ (e.target).dataset.opt;
       if (!zones.optionalZones) zones.optionalZones = { vas: { enabled: false, sqft: 0 }, returns: { enabled: false, sqft: 0 }, chargeback: { enabled: false, sqft: 0 } };
       if (key.endsWith('-enabled')) {
@@ -656,13 +723,20 @@ function bindConfigEvents(panel) {
         zones.optionalZones[zone].sqft = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
       }
       isDirty = true;
+    };
+    input.addEventListener('input', (e) => {
+      handleChange(e);
+      debouncedRender();
+    });
+    input.addEventListener('change', (e) => {
+      handleChange(e);
       renderContentView();
     });
   });
 
-  // Custom zone management
+  // Custom zone management (with input debounce for live update)
   panel.querySelectorAll('[data-custom-name], [data-custom-sqft]').forEach(input => {
-    input.addEventListener('change', e => {
+    const handleChange = (e) => {
       const idx = parseInt(/** @type {HTMLInputElement} */ (e.target).dataset.customName || /** @type {HTMLInputElement} */ (e.target).dataset.customSqft);
       if (!zones.customZones) zones.customZones = [];
       if (e.target.dataset.customName !== undefined) {
@@ -671,6 +745,13 @@ function bindConfigEvents(panel) {
         zones.customZones[idx].sqft = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
       }
       isDirty = true;
+    };
+    input.addEventListener('input', (e) => {
+      handleChange(e);
+      debouncedRender();
+    });
+    input.addEventListener('change', (e) => {
+      handleChange(e);
       renderContentView();
     });
   });
@@ -789,32 +870,32 @@ function hasMeaningfulVolumes(v) {
 function applyVerticalPreset(preset) {
   const presets = {
     'Retail': {
-      totalSqft: 350000, clearHeight: 36, dockDoors: 38,
+      totalSqft: 350000, clearHeight: 36, inboundDoors: 19, outboundDoors: 19,
       storageAlloc: { fullPallet: 55, cartonOnPallet: 30, cartonOnShelving: 15 },
       peakUnitsPerDay: 350000, avgUnitsPerDay: 220000,
     },
     'F&B': {
-      totalSqft: 250000, clearHeight: 32, dockDoors: 32,
+      totalSqft: 250000, clearHeight: 32, inboundDoors: 16, outboundDoors: 16,
       storageAlloc: { fullPallet: 75, cartonOnPallet: 20, cartonOnShelving: 5 },
       peakUnitsPerDay: 220000, avgUnitsPerDay: 160000,
     },
     'Pharma': {
-      totalSqft: 180000, clearHeight: 36, dockDoors: 18,
+      totalSqft: 180000, clearHeight: 36, inboundDoors: 9, outboundDoors: 9,
       storageAlloc: { fullPallet: 30, cartonOnPallet: 30, cartonOnShelving: 40 },
       peakUnitsPerDay: 180000, avgUnitsPerDay: 130000,
     },
     'Apparel': {
-      totalSqft: 280000, clearHeight: 36, dockDoors: 24,
+      totalSqft: 280000, clearHeight: 36, inboundDoors: 12, outboundDoors: 12,
       storageAlloc: { fullPallet: 25, cartonOnPallet: 35, cartonOnShelving: 40 },
       peakUnitsPerDay: 280000, avgUnitsPerDay: 180000,
     },
     'Auto': {
-      totalSqft: 320000, clearHeight: 32, dockDoors: 30,
+      totalSqft: 320000, clearHeight: 32, inboundDoors: 15, outboundDoors: 15,
       storageAlloc: { fullPallet: 60, cartonOnPallet: 30, cartonOnShelving: 10 },
       peakUnitsPerDay: 200000, avgUnitsPerDay: 150000,
     },
     'Ecomm': {
-      totalSqft: 600000, clearHeight: 40, dockDoors: 50,
+      totalSqft: 600000, clearHeight: 40, inboundDoors: 25, outboundDoors: 25,
       storageAlloc: { fullPallet: 30, cartonOnPallet: 40, cartonOnShelving: 30 },
       peakUnitsPerDay: 800000, avgUnitsPerDay: 500000,
     },
@@ -823,7 +904,7 @@ function applyVerticalPreset(preset) {
   if (!p) return;
   facility.totalSqft = p.totalSqft;
   facility.clearHeight = p.clearHeight;
-  facility.dockDoors = p.dockDoors;
+  zones.dockConfig = { ...zones.dockConfig, inboundDoors: p.inboundDoors, outboundDoors: p.outboundDoors };
   zones.storageAllocation = { ...zones.storageAllocation, ...p.storageAlloc };
   zones.peakUnitsPerDay = p.peakUnitsPerDay;
   zones.avgUnitsPerDay = p.avgUnitsPerDay;
@@ -835,12 +916,14 @@ function applyVerticalPreset(preset) {
 
 /** Copy an English summary of the current config to the clipboard. */
 function copySummaryToClipboard() {
+  const dock = zones.dockConfig || { inboundDoors: 10, outboundDoors: 12 };
+  const totalDoors = dock.inboundDoors + dock.outboundDoors;
   const summary = [
     `Warehouse Sizing — ${facility.name || 'Untitled'}`,
     `Total SF: ${facility.totalSqft.toLocaleString()}`,
     `Building: ${facility.buildingWidth} × ${facility.buildingDepth} ft, clear ${facility.clearHeight} ft`,
     `Storage: ${facility.storageType}, aisle ${facility.aisleWidth || ''} ft`,
-    `Dock: ${facility.dockDoors} doors`,
+    `Dock: ${dock.inboundDoors} inbound + ${dock.outboundDoors} outbound = ${totalDoors} doors`,
     `Storage Allocation: ${zones.storageAllocation?.fullPallet || 0}% pallet · ${zones.storageAllocation?.cartonOnPallet || 0}% carton-on-pallet · ${zones.storageAllocation?.cartonOnShelving || 0}% carton-on-shelving`,
     `Volumes: peak ${(zones.peakUnitsPerDay || 0).toLocaleString()}/day · avg ${(zones.avgUnitsPerDay || 0).toLocaleString()}/day`,
   ].join('\n');
@@ -1265,7 +1348,7 @@ function renderUtilBar(label, pct) {
 // ============================================================
 
 function renderElevation() {
-  const elev = calc.elevationParams(facility);
+  const elev = calc.elevationParams(facility, zones);
 
   return `
     <div class="hub-card">
@@ -1540,10 +1623,12 @@ function build3DScene() {
     }
 
     // Dock doors
+    const dock = zones.dockConfig || { inboundDoors: 10, outboundDoors: 12 };
+    const totalDoors = dock.inboundDoors + dock.outboundDoors;
     const doorW = 3 * scale;
     const doorH = 4.5 * scale;
-    for (let i = 0; i < (facility.dockDoors || 0); i++) {
-      const doorZ = -bd * scale / 2 + (i + 1) * (bd * scale / ((facility.dockDoors || 1) + 1));
+    for (let i = 0; i < totalDoors; i++) {
+      const doorZ = -bd * scale / 2 + (i + 1) * (bd * scale / (totalDoors + 1));
       const door = new THREE.Mesh(
         new THREE.BoxGeometry(0.5, doorH, doorW),
         new THREE.MeshStandardMaterial({ color: 0x333333 })
@@ -1605,11 +1690,13 @@ function build3DScene() {
 // ============================================================
 
 function pushToCm() {
+  const dock = zones.dockConfig || { inboundDoors: 10, outboundDoors: 12 };
+  const totalDoors = dock.inboundDoors + dock.outboundDoors;
   /** @type {import('./types.js?v=20260418-sI').WscToCmPayload} */
   const payload = {
     totalSqft: facility.totalSqft || 0,
     clearHeight: facility.clearHeight || 0,
-    dockDoors: facility.dockDoors || 0,
+    dockDoors: totalDoors,
     officeSqft: zones.officeSqft || 0,
     stagingSqft: (zones.receiveStagingSqft || 0) + (zones.shipStagingSqft || 0),
   };
@@ -1648,7 +1735,6 @@ function createDefaultFacility() {
     clearHeight: 32,
     buildingWidth: 300,
     buildingDepth: 500,
-    dockDoors: 24,
     columnSpacingX: 50,
     columnSpacingY: 50,
     storageType: 'single',
