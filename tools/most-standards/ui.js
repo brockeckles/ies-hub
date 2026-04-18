@@ -237,8 +237,10 @@ function renderShell() {
   ];
   const chips = [
     { label: `${refData.templates.length} templates`, kind: 'default' },
-    { label: savedScenarios.length ? `${savedScenarios.length} saved analyses` : 'Stand-alone', kind: savedScenarios.length ? 'linked' : 'standalone' },
-  ];
+    savedScenarios.length
+      ? { label: `${savedScenarios.length} saved analyses`, kind: 'linked' }
+      : null,
+  ].filter(Boolean);
   return `
     <div class="hub-content-inner" style="padding:0;display:flex;flex-direction:column;height: calc(100vh - 48px);">
       ${renderToolHeader({
@@ -1036,17 +1038,21 @@ function bindContentEvents(container) {
     renderContent();
   });
 
-  // Template card clicks
+  // Template card clicks — opens the template in the Editor tab so the
+  // user can see element-sequence detail and make edits in one click.
+  // (The bottom-of-library detail panel was easy to miss because users
+  // never scrolled past the card grid.)
   container.querySelectorAll('[data-action="select-template"]').forEach(card => {
     card.addEventListener('click', async () => {
       const id = card.dataset.id;
-      if (selectedTemplate?.id === id) {
-        selectedTemplate = null;
-        selectedElements = [];
-      } else {
-        selectedTemplate = (refData.templates || []).find(t => t.id === id) || null;
-        try { selectedElements = selectedTemplate ? await api.listElements(id) : []; } catch { selectedElements = []; }
-      }
+      const tpl = (refData.templates || []).find(t => t.id === id);
+      if (!tpl) return;
+      // Load template + its elements, then jump to the Editor tab in edit mode.
+      editorTemplate = { ...tpl };
+      try { editorElements = (await api.listElements(id)) || []; } catch { editorElements = []; }
+      activeTab = 'editor';
+      // Sync the tab strip's active state without re-binding the whole shell.
+      rootEl?.querySelectorAll('#most-tabs button').forEach(t => t.classList.toggle('active', t.dataset.tab === activeTab));
       renderContent();
     });
   });
