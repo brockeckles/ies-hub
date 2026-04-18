@@ -55,6 +55,7 @@
  * @property {boolean} [is_variable] — true if element varies with complexity/distance
  * @property {string} [variable_driver] — e.g., "distance", "weight", "sku_count"
  * @property {string} [variable_formula] — optional formula for variable TMU
+ * @property {number} [freq_per_cycle] — occurrences per work cycle (default 1.0; drives B3 frequency-weighted totals)
  * @property {string} [notes]
  */
 

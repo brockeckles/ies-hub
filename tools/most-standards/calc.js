@@ -68,7 +68,7 @@ export function baseUph(tmuTotal) {
 
 /**
  * Compute total PFD percentage from an allowance profile.
- * @param {import('./types.js?v=20260418-sL').AllowanceProfile | { personal_pct?: number, fatigue_pct?: number, delay_pct?: number }} profile
+ * @param {import('./types.js?v=20260418-sM').AllowanceProfile | { personal_pct?: number, fatigue_pct?: number, delay_pct?: number }} profile
  * @returns {number} total PFD percent (e.g., 14 for 14%)
  */
 export function totalPfd(profile) {
@@ -106,17 +106,129 @@ export function adjustedCycleTime(tmuTotal, pfdPct) {
 // ============================================================
 
 /**
- * Sum TMU across elements.
- * @param {import('./types.js?v=20260418-sL').MostElement[]} elements
+ * Sum TMU across elements (frequency-aware: TMU × freq_per_cycle).
+ * Elements without freq_per_cycle default to 1.0 (every cycle).
+ * @param {import('./types.js?v=20260418-sM').MostElement[]} elements
  * @returns {number}
  */
 export function sumElementTmu(elements) {
+  return (elements || []).reduce((sum, el) => {
+    const freq = el.freq_per_cycle == null ? 1 : Number(el.freq_per_cycle);
+    return sum + (el.tmu_value || 0) * (Number.isFinite(freq) ? freq : 1);
+  }, 0);
+}
+
+/**
+ * Sum raw (unweighted) TMU. Useful when you want to display "what's in
+ * the sequence model" vs "what we charge per cycle".
+ * @param {import('./types.js?v=20260418-sM').MostElement[]} elements
+ * @returns {number}
+ */
+export function sumElementTmuRaw(elements) {
   return (elements || []).reduce((sum, el) => sum + (el.tmu_value || 0), 0);
+}
+
+// ============================================================
+// SEQUENCE VALIDATION (MOST B1)
+// ============================================================
+//
+// MOST recognises a small set of standard sequence kinds. Each row of
+// elements should:
+//   - have a non-empty element_name and a positive tmu_value
+//   - use a recognised sequence_type
+//   - declare freq_per_cycle ≥ 0 (0.5 = every other cycle, 2 = twice per
+//     cycle, 0 = never; warn if 0)
+// Flow rules (advisory): GET should precede PUT in the same template.
+// We surface findings as Issue objects so the UI can render them.
+
+/**
+ * @typedef {Object} SequenceIssue
+ * @property {'error'|'warning'} severity
+ * @property {string} message
+ * @property {number} [elementIndex]
+ */
+
+const VALID_SEQUENCE_TYPES = new Set([
+  'general_move', 'controlled_move', 'tool_use', 'body_motion',
+  // Domain-canonical labels (audit X14 progress towards SME language)
+  'get', 'put', 'verify', 'move', 'walk', 'allow',
+]);
+
+/**
+ * Validate the sequence integrity of a template's element list.
+ * Pure function — returns an array of issues (empty = valid).
+ * @param {import('./types.js?v=20260418-sM').MostElement[]} elements
+ * @returns {SequenceIssue[]}
+ */
+export function validateElementSequence(elements) {
+  /** @type {SequenceIssue[]} */
+  const issues = [];
+  const list = elements || [];
+
+  if (list.length === 0) {
+    issues.push({ severity: 'warning', message: 'Template has no elements yet.' });
+    return issues;
+  }
+
+  // Per-element checks
+  list.forEach((el, idx) => {
+    if (!el.element_name || !String(el.element_name).trim()) {
+      issues.push({ severity: 'error', message: `Element #${idx + 1} is missing a name.`, elementIndex: idx });
+    }
+    if (!(el.tmu_value > 0)) {
+      issues.push({ severity: 'error', message: `Element #${idx + 1} has zero or invalid TMU.`, elementIndex: idx });
+    }
+    if (el.sequence_type && !VALID_SEQUENCE_TYPES.has(el.sequence_type)) {
+      issues.push({ severity: 'warning', message: `Element #${idx + 1} uses an unrecognised sequence type "${el.sequence_type}".`, elementIndex: idx });
+    }
+    const freq = el.freq_per_cycle;
+    if (freq != null) {
+      const f = Number(freq);
+      if (!Number.isFinite(f) || f < 0) {
+        issues.push({ severity: 'error', message: `Element #${idx + 1} has an invalid frequency value (${freq}).`, elementIndex: idx });
+      } else if (f === 0) {
+        issues.push({ severity: 'warning', message: `Element #${idx + 1} has frequency = 0 — it will be excluded from totals. Did you mean to delete it?`, elementIndex: idx });
+      } else if (f > 5) {
+        issues.push({ severity: 'warning', message: `Element #${idx + 1} has unusually high frequency (${f}× per cycle). Verify intent.`, elementIndex: idx });
+      }
+    }
+  });
+
+  // Sequence-order continuity (advisory)
+  const orders = list.map(el => el.sequence_order || 0);
+  const dupes = orders.filter((o, i) => orders.indexOf(o) !== i && o > 0);
+  if (dupes.length > 0) {
+    issues.push({ severity: 'warning', message: `Duplicate sequence_order values detected: ${[...new Set(dupes)].join(', ')}. Reorder cleanly to keep the editor consistent.` });
+  }
+
+  // Domain heuristic: GET before PUT
+  const firstPutIdx = list.findIndex(el => el.sequence_type === 'put');
+  const firstGetIdx = list.findIndex(el => el.sequence_type === 'get');
+  if (firstGetIdx > -1 && firstPutIdx > -1 && firstPutIdx < firstGetIdx) {
+    issues.push({
+      severity: 'warning',
+      message: `PUT element appears before GET — most MOST sequences GET first, then PUT. Verify the order is intentional.`,
+    });
+  }
+
+  return issues;
+}
+
+/**
+ * Element frequency in cycles (clamped, with default 1).
+ * @param {import('./types.js?v=20260418-sM').MostElement} el
+ * @returns {number}
+ */
+export function elementFrequency(el) {
+  const f = el?.freq_per_cycle;
+  if (f == null) return 1;
+  const n = Number(f);
+  return Number.isFinite(n) && n >= 0 ? n : 1;
 }
 
 /**
  * Count variable vs fixed elements.
- * @param {import('./types.js?v=20260418-sL').MostElement[]} elements
+ * @param {import('./types.js?v=20260418-sM').MostElement[]} elements
  * @returns {{ variable: number, fixed: number, total: number }}
  */
 export function elementBreakdown(elements) {
@@ -128,7 +240,7 @@ export function elementBreakdown(elements) {
 /**
  * Compute effective TMU for a variable element given a complexity factor (0–1).
  * Linear interpolation between variable_min and variable_max.
- * @param {import('./types.js?v=20260418-sL').MostElement} element
+ * @param {import('./types.js?v=20260418-sM').MostElement} element
  * @param {number} [factor=0.5] — 0 = min, 1 = max
  * @returns {number}
  */
@@ -167,9 +279,9 @@ export function computeAnalysisLine(params) {
 
 /**
  * Compute full analysis summary from a set of lines.
- * @param {import('./types.js?v=20260418-sL').AnalysisLine[]} lines
+ * @param {import('./types.js?v=20260418-sM').AnalysisLine[]} lines
  * @param {number} operatingDays — annual operating days
- * @returns {import('./types.js?v=20260418-sL').AnalysisSummary}
+ * @returns {import('./types.js?v=20260418-sM').AnalysisSummary}
  */
 export function computeAnalysisSummary(lines, operatingDays = DEFAULT_OPERATING_DAYS) {
   const result = {
@@ -225,8 +337,8 @@ export function computeWorkflowStep(params) {
 
 /**
  * Analyze a full workflow pipeline.
- * @param {import('./types.js?v=20260418-sL').WorkflowStep[]} steps — with computed adjusted_uph
- * @returns {import('./types.js?v=20260418-sL').WorkflowResult}
+ * @param {import('./types.js?v=20260418-sM').WorkflowStep[]} steps — with computed adjusted_uph
+ * @returns {import('./types.js?v=20260418-sM').WorkflowResult}
  */
 export function analyzeWorkflow(steps) {
   const result = {
@@ -260,7 +372,7 @@ export function analyzeWorkflow(steps) {
 /**
  * Identify workflow bottleneck: the step with lowest adjusted UPH.
  * Returns bottleneck index, UPH, and % impact compared to average.
- * @param {import('./types.js?v=20260418-sL').WorkflowStep[]} steps — with computed adjusted_uph
+ * @param {import('./types.js?v=20260418-sM').WorkflowStep[]} steps — with computed adjusted_uph
  * @returns {{ bottleneckIdx: number, bottleneckUph: number, impactPercent: number }}
  */
 export function calcWorkflowBottleneck(steps) {
@@ -294,7 +406,7 @@ export function calcWorkflowBottleneck(steps) {
 
 /**
  * Break down labor by category (manual / MHE / hybrid) for a set of steps.
- * @param {import('./types.js?v=20260418-sL').WorkflowStep[]} steps
+ * @param {import('./types.js?v=20260418-sM').WorkflowStep[]} steps
  * @returns {{ manual: { hours: number, ftes: number }, mhe: { hours: number, ftes: number }, hybrid: { hours: number, ftes: number } }}
  */
 export function calcCategoryBreakdown(steps) {
@@ -334,13 +446,13 @@ export function calcAnnualizedCost(dailyCost, operatingDays) {
  * This is the integration bridge: MOST analysis → CM laborLines.
  * Includes per-line metadata: wms_transaction, equipment_type, pick_method.
  *
- * @param {import('./types.js?v=20260418-sL').AnalysisLine[]} lines
+ * @param {import('./types.js?v=20260418-sM').AnalysisLine[]} lines
  * @param {Object} opts
  * @param {number} opts.operatingDays — annual operating days
  * @param {number} opts.shiftHours — hours per shift
  * @param {number} [opts.defaultBurdenPct=30]
- * @param {Map<string|number, import('./types.js?v=20260418-sL').MostTemplate>} [opts.templateMap] — optional: template_id → template for metadata lookup
- * @returns {import('./types.js?v=20260418-sL').MostToCmPayload['laborLines']}
+ * @param {Map<string|number, import('./types.js?v=20260418-sM').MostTemplate>} [opts.templateMap] — optional: template_id → template for metadata lookup
+ * @returns {import('./types.js?v=20260418-sM').MostToCmPayload['laborLines']}
  */
 export function convertToCmLaborLines(lines, opts) {
   const opDays = opts.operatingDays || DEFAULT_OPERATING_DAYS;

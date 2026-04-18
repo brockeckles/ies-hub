@@ -6,12 +6,12 @@
  * @module tools/most-standards/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sL';
-import { state } from '../../shared/state.js?v=20260418-sL';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sL';
-import * as calc from './calc.js?v=20260418-sL';
-import * as api from './api.js?v=20260418-sL';
-import { getMostTplName, getMostTplBaseUph, getMostTplTmuTotal, getMostElName, getMostElSequence, getMostElTmu } from './types.js?v=20260418-sL';
+import { bus } from '../../shared/event-bus.js?v=20260418-sM';
+import { state } from '../../shared/state.js?v=20260418-sM';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sM';
+import * as calc from './calc.js?v=20260418-sM';
+import * as api from './api.js?v=20260418-sM';
+import { getMostTplName, getMostTplBaseUph, getMostTplTmuTotal, getMostElName, getMostElSequence, getMostElTmu } from './types.js?v=20260418-sM';
 
 // ============================================================
 // STATE — tool-local
@@ -23,13 +23,13 @@ let activeTab = 'library';
 /** @type {HTMLElement|null} */
 let rootEl = null;
 
-/** @type {{ templates: import('./types.js?v=20260418-sL').MostTemplate[], allowanceProfiles: import('./types.js?v=20260418-sL').AllowanceProfile[] }} */
+/** @type {{ templates: import('./types.js?v=20260418-sM').MostTemplate[], allowanceProfiles: import('./types.js?v=20260418-sM').AllowanceProfile[] }} */
 let refData = { templates: [], allowanceProfiles: [] };
 
-/** @type {import('./types.js?v=20260418-sL').MostTemplate|null} */
+/** @type {import('./types.js?v=20260418-sM').MostTemplate|null} */
 let selectedTemplate = null;
 
-/** @type {import('./types.js?v=20260418-sL').MostElement[]} */
+/** @type {import('./types.js?v=20260418-sM').MostElement[]} */
 let selectedElements = [];
 
 /** Template editor state — null if not editing, or a copy of the template being edited */
@@ -130,11 +130,11 @@ function analysisRowToScenario(row) {
 let filters = { search: '', processArea: '', laborCategory: '' };
 
 // --- Analysis state ---
-/** @type {import('./types.js?v=20260418-sL').LaborAnalysis} */
+/** @type {import('./types.js?v=20260418-sM').LaborAnalysis} */
 let analysis = createEmptyAnalysis();
 
 // --- Workflow state ---
-/** @type {import('./types.js?v=20260418-sL').Workflow} */
+/** @type {import('./types.js?v=20260418-sM').Workflow} */
 let workflow = createEmptyWorkflow();
 
 // ============================================================
@@ -605,6 +605,27 @@ function renderEditor() {
         <button class="cm-add-row-btn" data-action="add-element" style="font-size:12px; padding:6px 12px;">+ Add Element</button>
       </div>
 
+      ${(() => {
+        const issues = calc.validateElementSequence(editorElements);
+        if (!issues.length) return '';
+        const errors = issues.filter(i => i.severity === 'error');
+        const warns = issues.filter(i => i.severity === 'warning');
+        return `
+          <div style="margin-bottom:12px;padding:10px 12px;border-radius:6px;
+                      background:${errors.length ? '#fee2e2' : '#fef3c7'};
+                      border:1px solid ${errors.length ? '#fca5a5' : '#fcd34d'};
+                      color:${errors.length ? '#991b1b' : '#92400e'};font-size:12px;">
+            <div style="font-weight:700;margin-bottom:4px;">
+              ${errors.length ? `⚠ ${errors.length} error${errors.length > 1 ? 's' : ''}` : ''}${errors.length && warns.length ? ' · ' : ''}${warns.length ? `${warns.length} warning${warns.length > 1 ? 's' : ''}` : ''} in sequence
+            </div>
+            <ul style="margin:0;padding-left:18px;line-height:1.5;">
+              ${issues.slice(0, 6).map(iss => `<li>${iss.message}</li>`).join('')}
+              ${issues.length > 6 ? `<li style="opacity:0.7;">…and ${issues.length - 6} more</li>` : ''}
+            </ul>
+          </div>
+        `;
+      })()}
+
       ${editorElements.length > 0 ? `
         <table class="cm-grid-table" style="font-size:12px;">
           <thead>
@@ -614,6 +635,7 @@ function renderEditor() {
               <th style="width:120px;">MOST Sequence</th>
               <th style="width:80px;">Seq Type</th>
               <th style="width:70px;" class="cm-num">TMU</th>
+              <th style="width:60px;" class="cm-num" title="Occurrences per work cycle. 1 = every cycle, 0.5 = every other cycle.">Freq/Cyc</th>
               <th style="width:60px;">Variable</th>
               <th></th>
             </tr>
@@ -626,6 +648,12 @@ function renderEditor() {
                 <td><input class="hub-input" type="text" value="${el.most_sequence || ''}" data-elem-idx="${i}" data-elem-field="most_sequence" style="width:100%; font-size:11px; padding:4px 6px; font-family:monospace;" /></td>
                 <td>
                   <select data-elem-idx="${i}" data-elem-field="sequence_type" style="width:100%; font-size:11px; padding:4px 6px;">
+                    <option value="get"${el.sequence_type === 'get' ? ' selected' : ''}>Get</option>
+                    <option value="put"${el.sequence_type === 'put' ? ' selected' : ''}>Put</option>
+                    <option value="move"${el.sequence_type === 'move' ? ' selected' : ''}>Move</option>
+                    <option value="walk"${el.sequence_type === 'walk' ? ' selected' : ''}>Walk</option>
+                    <option value="verify"${el.sequence_type === 'verify' ? ' selected' : ''}>Verify</option>
+                    <option value="allow"${el.sequence_type === 'allow' ? ' selected' : ''}>Allow</option>
                     <option value="general_move"${el.sequence_type === 'general_move' ? ' selected' : ''}>General Move</option>
                     <option value="controlled_move"${el.sequence_type === 'controlled_move' ? ' selected' : ''}>Controlled</option>
                     <option value="tool_use"${el.sequence_type === 'tool_use' ? ' selected' : ''}>Tool Use</option>
@@ -633,6 +661,7 @@ function renderEditor() {
                   </select>
                 </td>
                 <td><input class="hub-input" type="number" value="${getMostElTmu(el) || 0}" data-elem-idx="${i}" data-elem-field="tmu_value" style="width:100%; font-size:11px; padding:4px 6px;" /></td>
+                <td><input class="hub-input" type="number" step="0.01" min="0" value="${el.freq_per_cycle == null ? 1 : el.freq_per_cycle}" data-elem-idx="${i}" data-elem-field="freq_per_cycle" style="width:100%; font-size:11px; padding:4px 6px;" title="Occurrences per cycle (1 = every cycle)" /></td>
                 <td><input type="checkbox" ${el.is_variable ? 'checked' : ''} data-elem-idx="${i}" data-elem-field="is_variable" style="cursor:pointer;" /></td>
                 <td><button class="cm-delete-btn" data-action="delete-element" data-idx="${i}" style="font-size:12px;">Del</button></td>
               </tr>
@@ -1296,7 +1325,7 @@ function pushToCostModel() {
     templateMap,
   });
 
-  /** @type {import('./types.js?v=20260418-sL').MostToCmPayload} */
+  /** @type {import('./types.js?v=20260418-sM').MostToCmPayload} */
   const payload = {
     laborLines: cmLines,
     operatingDays: analysis.operating_days,
@@ -1323,7 +1352,7 @@ function filterTemplates() {
 }
 
 function groupByProcessArea(templates) {
-  /** @type {Record<string, import('./types.js?v=20260418-sL').MostTemplate[]>} */
+  /** @type {Record<string, import('./types.js?v=20260418-sM').MostTemplate[]>} */
   const groups = {};
   for (const t of templates) {
     const area = t.process_area || 'Other';
@@ -1407,8 +1436,9 @@ function createEmptyElement() {
     sequence_order: (editorElements.length || 0) + 1,
     element_name: '',
     most_sequence: '',
-    sequence_type: 'general_move',
+    sequence_type: 'get',
     tmu_value: 0,
+    freq_per_cycle: 1,
     is_variable: false,
     variable_driver: null,
     variable_min: 0,
@@ -1598,7 +1628,7 @@ async function deleteScenario(idx) {
  * One sheet for activity lines, one sheet for the rolled-up summary.
  */
 async function exportAnalysisToXlsx() {
-  const exp = await import('../../shared/export.js?v=20260418-sL');
+  const exp = await import('../../shared/export.js?v=20260418-sM');
   const pfd = analysis.pfd_pct || 14;
   const lineRows = (analysis.lines || []).map(line => {
     const computed = calc.computeAnalysisLine({
