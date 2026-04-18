@@ -8,7 +8,7 @@
  */
 
 import { bus } from '../../shared/event-bus.js';
-import * as api from './api.js?v=20260418-s8';
+import * as api from './api.js?v=20260418-s9';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -92,12 +92,15 @@ function render() {
       </div>
 
       <!-- Two-column body: Signal Stream (2/3) + Right rail (1/3) -->
-      <!-- min-height:75vh + align-items:stretch keeps both columns the same height
-           so the bottoms line up cleanly. -->
-      <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;align-items:stretch;min-height:75vh;">
+      <!-- Fixed grid-template-rows so both columns match height AND the
+           Signal Stream scrolls internally instead of stretching the row
+           to fit all 60 items. -->
+      <div style="display:grid;grid-template-columns:2fr 1fr;grid-template-rows:min(75vh, 720px);gap:16px;align-items:stretch;">
 
         <!-- LEFT — Signal Stream (the unified intelligence feed; replaces Sector Pulse + Market Alerts) -->
-        <div class="hub-card" id="cc-signal-stream" style="padding:0;display:flex;flex-direction:column;overflow:hidden;height:100%;">
+        <!-- min-height:0 is the magic: without it, flex:1 on the inner body
+             can't actually shrink below content height, defeating overflow:auto. -->
+        <div class="hub-card" id="cc-signal-stream" style="padding:0;display:flex;flex-direction:column;overflow:hidden;height:100%;min-height:0;">
           <div style="padding:14px 16px 0;border-bottom:1px solid var(--ies-gray-100);">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
               <div style="font-size:13px;font-weight:700;">Signal Stream</div>
@@ -115,16 +118,16 @@ function render() {
           </div>
         </div>
 
-        <!-- RIGHT rail — Pipeline Snapshot (top, fixed) + RFP Signals (flex-grow to fill) + Tool Shortcuts (bottom, fixed) -->
-        <div style="display:flex;flex-direction:column;gap:16px;height:100%;">
+        <!-- RIGHT rail — Pipeline Snapshot + RFP Signals (flex-grow, internal scroll) + Tool Shortcuts -->
+        <div style="display:flex;flex-direction:column;gap:16px;height:100%;min-height:0;">
           ${renderPipelineSnapshot(d.pipeline)}
 
-          <div class="hub-card" id="cc-rfp-feed" style="padding:0;display:flex;flex-direction:column;overflow:hidden;flex:1 1 0;min-height:200px;">
-            <div style="padding:12px 14px 8px;font-size:13px;font-weight:700;border-bottom:1px solid var(--ies-gray-100);display:flex;align-items:center;justify-content:space-between;">
+          <div class="hub-card" id="cc-rfp-feed" style="padding:0;display:flex;flex-direction:column;overflow:hidden;flex:1 1 0;min-height:0;">
+            <div style="padding:12px 14px 8px;font-size:13px;font-weight:700;border-bottom:1px solid var(--ies-gray-100);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
               RFP Signals
               <span style="font-size:10px;color:var(--ies-gray-400);font-weight:500;">${d.rfpSignals.length} active</span>
             </div>
-            <div style="overflow-y:auto;flex:1;">
+            <div style="overflow-y:auto;flex:1;min-height:0;">
               ${renderRfpFeed(d.rfpSignals)}
             </div>
           </div>
