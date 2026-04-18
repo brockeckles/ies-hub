@@ -6,13 +6,13 @@
  * @module tools/center-of-gravity/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sF';
-import { state } from '../../shared/state.js?v=20260418-sF';
-import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sF';
-import { showToast } from '../../shared/toast.js?v=20260418-sF';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sF';
-import * as calc from './calc.js?v=20260418-sF';
-import * as api from './api.js?v=20260418-sF';
+import { bus } from '../../shared/event-bus.js?v=20260418-sG';
+import { state } from '../../shared/state.js?v=20260418-sG';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sG';
+import { showToast } from '../../shared/toast.js?v=20260418-sG';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sG';
+import * as calc from './calc.js?v=20260418-sG';
+import * as api from './api.js?v=20260418-sG';
 
 // ============================================================
 // STATE
@@ -24,13 +24,13 @@ let rootEl = null;
 /** @type {'points' | 'analysis' | 'map' | 'sensitivity'} */
 let activeTab = 'points';
 
-/** @type {import('./types.js?v=20260418-sF').WeightedPoint[]} */
+/** @type {import('./types.js?v=20260418-sG').WeightedPoint[]} */
 let points = [];
 
-/** @type {import('./types.js?v=20260418-sF').CogConfig} */
+/** @type {import('./types.js?v=20260418-sG').CogConfig} */
 let config = { ...calc.DEFAULT_CONFIG };
 
-/** @type {import('./types.js?v=20260418-sF').MultiCogResult|null} */
+/** @type {import('./types.js?v=20260418-sG').MultiCogResult|null} */
 let cogResult = null;
 
 /** @type {Array<{ k: number, totalWeightedDistance: number, estimatedCost: number, avgDistance: number }>|null} */

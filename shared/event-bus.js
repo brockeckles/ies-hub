@@ -4,7 +4,7 @@
  * Replaces v2's tight coupling between modules.
  *
  * Usage:
- *   import { bus } from './event-bus.js?v=20260418-sF';
+ *   import { bus } from './event-bus.js?v=20260418-sG';
  *   const off = bus.on('cm:model-saved', (data) => { ... });
  *   bus.emit('cm:model-saved', { modelId: 7 });
  *   off(); // unsubscribe
@@ -99,9 +99,31 @@ class EventBus {
   }
 
   /**
-   * Remove all listeners (useful for testing/teardown).
+   * Remove listeners.
+   *
+   * - `clear()` with no arg removes ALL listeners (useful for tests/teardown).
+   * - `clear('event:name')` removes only listeners for that specific event.
+   * - `clear('prefix:*')` removes wildcard listeners registered with that prefix.
+   *
+   * Historically (pre-2026-04-18) this method ignored its argument and always
+   * wiped everything. That caused the X1 breadcrumb bug — tool unmount hooks
+   * called `bus.clear('cm:push-to-wsc')` thinking they were removing one
+   * subscription, but actually nuked every shell-level listener including the
+   * breadcrumb's `nav:changed` handler. Selective clear restores the intent
+   * the call sites already had.
+   *
+   * @param {string} [event]
    */
-  clear() {
+  clear(event) {
+    if (event != null) {
+      if (event.endsWith(':*')) {
+        const prefix = event.slice(0, -1);
+        this._wildcards.delete(prefix);
+      } else {
+        this._listeners.delete(event);
+      }
+      return;
+    }
     this._listeners.clear();
     this._wildcards.clear();
   }

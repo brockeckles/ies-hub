@@ -5,7 +5,7 @@
  * @module tools/deal-manager/api
  */
 
-import { db } from '../../shared/supabase.js?v=20260418-sF';
+import { db } from '../../shared/supabase.js?v=20260418-sG';
 
 // ============================================================
 // DEALS
@@ -13,7 +13,7 @@ import { db } from '../../shared/supabase.js?v=20260418-sF';
 
 /**
  * List all deals.
- * @returns {Promise<import('./types.js?v=20260418-sF').Deal[]>}
+ * @returns {Promise<import('./types.js?v=20260418-sG').Deal[]>}
  */
 export async function listDeals() {
   const { data, error } = await db.from('deal_deals')
@@ -26,7 +26,7 @@ export async function listDeals() {
 /**
  * Get a single deal by ID.
  * @param {string} id
- * @returns {Promise<import('./types.js?v=20260418-sF').Deal|null>}
+ * @returns {Promise<import('./types.js?v=20260418-sG').Deal|null>}
  */
 export async function getDeal(id) {
   return db.fetchById('deal_deals', id);
@@ -34,8 +34,8 @@ export async function getDeal(id) {
 
 /**
  * Save (insert or update) a deal.
- * @param {import('./types.js?v=20260418-sF').Deal} deal
- * @returns {Promise<import('./types.js?v=20260418-sF').Deal>}
+ * @param {import('./types.js?v=20260418-sG').Deal} deal
+ * @returns {Promise<import('./types.js?v=20260418-sG').Deal>}
  */
 export async function saveDeal(deal) {
   const payload = {
@@ -75,7 +75,7 @@ export async function deleteDeal(id) {
 /**
  * List sites linked to a deal.
  * @param {string} dealId
- * @returns {Promise<import('./types.js?v=20260418-sF').Site[]>}
+ * @returns {Promise<import('./types.js?v=20260418-sG').Site[]>}
  */
 export async function listSites(dealId) {
   const { data, error } = await db.from('cost_model_projects')
@@ -121,7 +121,7 @@ export async function listUnlinkedProjects() {
 /**
  * Map a cost_model_projects row to our Site type.
  * @param {object} row
- * @returns {import('./types.js?v=20260418-sF').Site}
+ * @returns {import('./types.js?v=20260418-sG').Site}
  */
 function mapCmProjectToSite(row) {
   return {
@@ -145,7 +145,7 @@ function mapCmProjectToSite(row) {
 /**
  * List DOS elements for a deal (from opportunity_tasks).
  * @param {string} dealId
- * @returns {Promise<import('./types.js?v=20260418-sF').DosStage[]>}
+ * @returns {Promise<import('./types.js?v=20260418-sG').DosStage[]>}
  */
 export async function listDosElements(dealId) {
   const { data, error } = await db.from('opportunity_tasks')
@@ -197,7 +197,7 @@ export async function updateElementStatus(elementId, status) {
 /**
  * List artifacts linked to a deal.
  * @param {string} dealId
- * @returns {Promise<import('./types.js?v=20260418-sF').DealArtifact[]>}
+ * @returns {Promise<import('./types.js?v=20260418-sG').DealArtifact[]>}
  */
 export async function listArtifacts(dealId) {
   const { data, error } = await db.from('deal_artifacts')
@@ -214,7 +214,7 @@ export async function listArtifacts(dealId) {
  * @param {string} artifactType
  * @param {string} artifactId
  * @param {string} [artifactName]
- * @returns {Promise<import('./types.js?v=20260418-sF').DealArtifact>}
+ * @returns {Promise<import('./types.js?v=20260418-sG').DealArtifact>}
  */
 export async function linkArtifact(dealId, artifactType, artifactId, artifactName) {
   return db.insert('deal_artifacts', {
@@ -240,7 +240,7 @@ export async function unlinkArtifact(id) {
 
 /**
  * Load all deal-related data.
- * @returns {Promise<{ deals: import('./types.js?v=20260418-sF').Deal[] }>}
+ * @returns {Promise<{ deals: import('./types.js?v=20260418-sG').Deal[] }>}
  */
 export async function loadRefData() {
   const deals = await listDeals();
@@ -254,7 +254,7 @@ export async function loadRefData() {
 /**
  * Fetch hours for an opportunity.
  * @param {string} opportunityId
- * @returns {Promise<import('./types.js?v=20260418-sF').HoursEntry[]>}
+ * @returns {Promise<import('./types.js?v=20260418-sG').HoursEntry[]>}
  */
 export async function fetchHours(opportunityId) {
   try {
@@ -272,8 +272,8 @@ export async function fetchHours(opportunityId) {
 
 /**
  * Log new hours entry.
- * @param {import('./types.js?v=20260418-sF').HoursEntry} entry
- * @returns {Promise<import('./types.js?v=20260418-sF').HoursEntry>}
+ * @param {import('./types.js?v=20260418-sG').HoursEntry} entry
+ * @returns {Promise<import('./types.js?v=20260418-sG').HoursEntry>}
  */
 export async function logHours(entry) {
   try {
@@ -314,7 +314,7 @@ export async function deleteHours(id) {
 /**
  * Fetch tasks for an opportunity.
  * @param {string} opportunityId
- * @returns {Promise<import('./types.js?v=20260418-sF').Task[]>}
+ * @returns {Promise<import('./types.js?v=20260418-sG').Task[]>}
  */
 export async function fetchTasks(opportunityId) {
   try {
@@ -332,8 +332,8 @@ export async function fetchTasks(opportunityId) {
 
 /**
  * Create a new task.
- * @param {import('./types.js?v=20260418-sF').Task} task
- * @returns {Promise<import('./types.js?v=20260418-sF').Task>}
+ * @param {import('./types.js?v=20260418-sG').Task} task
+ * @returns {Promise<import('./types.js?v=20260418-sG').Task>}
  */
 export async function createTask(task) {
   try {
@@ -361,7 +361,7 @@ export async function createTask(task) {
 /**
  * Update a task.
  * @param {string} id
- * @param {Partial<import('./types.js?v=20260418-sF').Task>} fields
+ * @param {Partial<import('./types.js?v=20260418-sG').Task>} fields
  * @returns {Promise<void>}
  */
 export async function updateTask(id, fields) {
@@ -421,7 +421,7 @@ function mapTaskRow(row) {
 /**
  * Fetch updates for an opportunity.
  * @param {string} opportunityId
- * @returns {Promise<import('./types.js?v=20260418-sF').WeeklyUpdate[]>}
+ * @returns {Promise<import('./types.js?v=20260418-sG').WeeklyUpdate[]>}
  */
 export async function fetchUpdates(opportunityId) {
   try {
@@ -439,8 +439,8 @@ export async function fetchUpdates(opportunityId) {
 
 /**
  * Create a new update.
- * @param {import('./types.js?v=20260418-sF').WeeklyUpdate} update
- * @returns {Promise<import('./types.js?v=20260418-sF').WeeklyUpdate>}
+ * @param {import('./types.js?v=20260418-sG').WeeklyUpdate} update
+ * @returns {Promise<import('./types.js?v=20260418-sG').WeeklyUpdate>}
  */
 export async function createUpdate(update) {
   try {

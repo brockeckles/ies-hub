@@ -11,29 +11,29 @@
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
   <!-- CDN Libraries (shared — always loaded) -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js?v=20260418-sF"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js?v=20260418-sG"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 
   <!-- CDN Libraries (per-tool — loaded on demand by tool UI) -->
   <!-- Leaflet: COG, NetOpt, Fleet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js?v=20260418-sF" defer></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js?v=20260418-sG" defer></script>
   <!-- Leaflet.heat: NetOpt demand heatmap overlay -->
-  <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js?v=20260418-sF" defer></script>
+  <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js?v=20260418-sG" defer></script>
   <!-- Three.js: WSC only -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js?v=20260418-sF" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js?v=20260418-sG" defer></script>
   <!-- SheetJS: Cost Model Excel export (loads as global window.XLSX) -->
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js?v=20260418-sF"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js?v=20260418-sG"></script>
   <!-- PptxGenJS: Deck Generator (re-enabled 2026-04-17 PM) -->
-  <script src="https://cdn.jsdelivr.net/gh/gitbrent/PptxGenJS@3.12.0/dist/pptxgen.bundle.js?v=20260418-sF"></script>
+  <script src="https://cdn.jsdelivr.net/gh/gitbrent/PptxGenJS@3.12.0/dist/pptxgen.bundle.js?v=20260418-sG"></script>
 
   <!-- Module Preloads (shared core) -->
-  <link rel="modulepreload" href="./shared/event-bus.js?v=20260418-sF">
-  <link rel="modulepreload" href="./shared/state.js?v=20260418-sF">
-  <link rel="modulepreload" href="./shared/router.js?v=20260418-sF">
+  <link rel="modulepreload" href="./shared/event-bus.js?v=20260418-sG">
+  <link rel="modulepreload" href="./shared/state.js?v=20260418-sG">
+  <link rel="modulepreload" href="./shared/router.js?v=20260418-sG">
 
   <!-- Design System -->
-  <link rel="stylesheet" href="./css/hub.css?v=20260418-sF">
+  <link rel="stylesheet" href="./css/hub.css?v=20260418-sG">
 </head>
 <body>
 
@@ -194,16 +194,16 @@
 
   <!-- App Bootstrap -->
   <script type="module">
-    import { auth } from './shared/auth.js?v=20260418-sF';
-    import { router } from './shared/router.js?v=20260418-sF';
-    import { search } from './shared/search.js?v=20260418-sF';
-    import { bus } from './shared/event-bus.js?v=20260418-sF';
-    import { state } from './shared/state.js?v=20260418-sF';
+    import { auth } from './shared/auth.js?v=20260418-sG';
+    import { router } from './shared/router.js?v=20260418-sG';
+    import { search } from './shared/search.js?v=20260418-sG';
+    import { bus } from './shared/event-bus.js?v=20260418-sG';
+    import { state } from './shared/state.js?v=20260418-sG';
     // Shared UX modules — self-wire their listeners/guards on import.
-    import { showToast } from './shared/toast.js?v=20260418-sF';
-    import './shared/unsaved-guard.js?v=20260418-sF';
-    import { tour } from './shared/tour.js?v=20260418-sF';
-    import { analytics } from './shared/analytics.js?v=20260418-sF';
+    import { showToast } from './shared/toast.js?v=20260418-sG';
+    import './shared/unsaved-guard.js?v=20260418-sG';
+    import { tour } from './shared/tour.js?v=20260418-sG';
+    import { analytics } from './shared/analytics.js?v=20260418-sG';
     // Expose a couple of helpers for inline handlers + console debugging.
     window.__hubToast = showToast;
     window.__hubTour = tour;
@@ -387,13 +387,13 @@
 
       // Design Tool sub-routes (lazy loaded)
       const toolRoutes = {
-        'designtools/cost-model': { title: 'Cost Model Builder', path: './tools/cost-model/ui.js?v=20260418-sF' },
-        'designtools/warehouse-sizing': { title: 'Warehouse Sizing Calculator', path: './tools/warehouse-sizing/ui.js?v=20260418-sF' },
-        'designtools/most-standards': { title: 'MOST Labor Standards', path: './tools/most-standards/ui.js?v=20260418-sF' },
-        'designtools/network-opt': { title: 'Network Optimization', path: './tools/network-opt/ui.js?v=20260418-sF' },
-        'designtools/fleet-modeler': { title: 'Fleet Modeler', path: './tools/fleet-modeler/ui.js?v=20260418-sF' },
-        'designtools/center-of-gravity': { title: 'Center of Gravity', path: './tools/center-of-gravity/ui.js?v=20260418-sF' },
-        'designtools/deal-manager': { title: 'Multi-Site Analyzer', path: './tools/deal-manager/ui.js?v=20260418-sF' },
+        'designtools/cost-model': { title: 'Cost Model Builder', path: './tools/cost-model/ui.js?v=20260418-sG' },
+        'designtools/warehouse-sizing': { title: 'Warehouse Sizing Calculator', path: './tools/warehouse-sizing/ui.js?v=20260418-sG' },
+        'designtools/most-standards': { title: 'MOST Labor Standards', path: './tools/most-standards/ui.js?v=20260418-sG' },
+        'designtools/network-opt': { title: 'Network Optimization', path: './tools/network-opt/ui.js?v=20260418-sG' },
+        'designtools/fleet-modeler': { title: 'Fleet Modeler', path: './tools/fleet-modeler/ui.js?v=20260418-sG' },
+        'designtools/center-of-gravity': { title: 'Center of Gravity', path: './tools/center-of-gravity/ui.js?v=20260418-sG' },
+        'designtools/deal-manager': { title: 'Multi-Site Analyzer', path: './tools/deal-manager/ui.js?v=20260418-sG' },
       };
 
       for (const [route, config] of Object.entries(toolRoutes)) {
@@ -405,13 +405,13 @@
 
       // Hub section routes (lazy loaded)
       const hubRoutes = {
-        'overview': { title: 'Command Center', path: './hub/command-center/ui.js?v=20260418-sF' },
-        'marketmap': { title: 'Market Explorer', path: './hub/market-explorer/ui.js?v=20260418-sFa' },
-        'deals': { title: 'Deal Management', path: './hub/deal-management/ui.js?v=20260418-sF' },
-        'training': { title: 'Training Wiki', path: './hub/training-wiki/ui.js?v=20260418-sF' },
-        'changemanagement': { title: 'Change Management', path: './hub/change-mgmt/ui.js?v=20260418-sF' },
-        'admin': { title: 'Reference Data', path: './hub/admin/ui.js?v=20260418-sF' },
-        'feedback': { title: 'Ideas & Feedback', path: './hub/feedback/ui.js?v=20260418-sF' },
+        'overview': { title: 'Command Center', path: './hub/command-center/ui.js?v=20260418-sG' },
+        'marketmap': { title: 'Market Explorer', path: './hub/market-explorer/ui.js?v=20260418-sG' },
+        'deals': { title: 'Deal Management', path: './hub/deal-management/ui.js?v=20260418-sG' },
+        'training': { title: 'Training Wiki', path: './hub/training-wiki/ui.js?v=20260418-sG' },
+        'changemanagement': { title: 'Change Management', path: './hub/change-mgmt/ui.js?v=20260418-sG' },
+        'admin': { title: 'Reference Data', path: './hub/admin/ui.js?v=20260418-sG' },
+        'feedback': { title: 'Ideas & Feedback', path: './hub/feedback/ui.js?v=20260418-sG' },
       };
 
       for (const [route, config] of Object.entries(hubRoutes)) {

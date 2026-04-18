@@ -6,13 +6,13 @@
  * @module tools/fleet-modeler/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sF';
-import { state } from '../../shared/state.js?v=20260418-sF';
-import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sF';
-import { showToast } from '../../shared/toast.js?v=20260418-sF';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sF';
-import * as calc from './calc.js?v=20260418-sF';
-import * as api from './api.js?v=20260418-sF';
+import { bus } from '../../shared/event-bus.js?v=20260418-sG';
+import { state } from '../../shared/state.js?v=20260418-sG';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sG';
+import { showToast } from '../../shared/toast.js?v=20260418-sG';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sG';
+import * as calc from './calc.js?v=20260418-sG';
+import * as api from './api.js?v=20260418-sG';
 
 // ============================================================
 // STATE
@@ -24,16 +24,16 @@ let rootEl = null;
 /** @type {'lanes' | 'config' | 'results' | 'map'} */
 let activeTab = 'lanes';
 
-/** @type {import('./types.js?v=20260418-sF').Lane[]} */
+/** @type {import('./types.js?v=20260418-sG').Lane[]} */
 let lanes = [];
 
-/** @type {import('./types.js?v=20260418-sF').VehicleSpec[]} */
+/** @type {import('./types.js?v=20260418-sG').VehicleSpec[]} */
 let vehicles = calc.DEFAULT_VEHICLES.map(v => ({ ...v }));
 
-/** @type {import('./types.js?v=20260418-sF').FleetConfig} */
+/** @type {import('./types.js?v=20260418-sG').FleetConfig} */
 let config = { ...calc.DEFAULT_CONFIG };
 
-/** @type {import('./types.js?v=20260418-sF').FleetResult|null} */
+/** @type {import('./types.js?v=20260418-sG').FleetResult|null} */
 let result = null;
 
 /** @type {object|null} */

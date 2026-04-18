@@ -6,16 +6,16 @@
  * @module tools/cost-model/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sF';
-import { state } from '../../shared/state.js?v=20260418-sF';
-import * as calc from './calc.js?v=20260418-sF';
-import * as api from './api.js?v=20260418-sF';
+import { bus } from '../../shared/event-bus.js?v=20260418-sG';
+import { state } from '../../shared/state.js?v=20260418-sG';
+import * as calc from './calc.js?v=20260418-sG';
+import * as api from './api.js?v=20260418-sG';
 
 // ============================================================
 // STATE — tool-local reactive state
 // ============================================================
 
-/** @type {import('./types.js?v=20260418-sF').CostModelData} */
+/** @type {import('./types.js?v=20260418-sG').CostModelData} */
 let model = createEmptyModel();
 
 /** @type {Object} */
@@ -2443,7 +2443,7 @@ function sectionHasData(key) {
 /**
  * Handle incoming labor lines from MOST tool.
  * Merges or replaces CM laborLines with MOST-derived data.
- * @param {import('../most-standards/types.js?v=20260418-sF').MostToCmPayload} payload
+ * @param {import('../most-standards/types.js?v=20260418-sG').MostToCmPayload} payload
  */
 function handleMostPush(payload) {
   if (!payload?.laborLines?.length) return;
@@ -2481,7 +2481,7 @@ function handleMostPush(payload) {
 /**
  * Handle incoming facility data from Warehouse Sizing Calculator.
  * Populates CM facility section fields.
- * @param {import('../warehouse-sizing/types.js?v=20260418-sF').WscToCmPayload} payload
+ * @param {import('../warehouse-sizing/types.js?v=20260418-sG').WscToCmPayload} payload
  */
 function handleWscPush(payload) {
   if (!payload) return;

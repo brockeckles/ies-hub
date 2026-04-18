@@ -7,13 +7,13 @@
  * @module tools/network-opt/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sF';
-import { state } from '../../shared/state.js?v=20260418-sF';
-import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sF';
-import { showToast } from '../../shared/toast.js?v=20260418-sF';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sF';
-import * as calc from './calc.js?v=20260418-sF';
-import * as api from './api.js?v=20260418-sF';
+import { bus } from '../../shared/event-bus.js?v=20260418-sG';
+import { state } from '../../shared/state.js?v=20260418-sG';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sG';
+import { showToast } from '../../shared/toast.js?v=20260418-sG';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sG';
+import * as calc from './calc.js?v=20260418-sG';
+import * as api from './api.js?v=20260418-sG';
 
 // ============================================================
 // STATE
@@ -28,25 +28,25 @@ let activeView = 'setup';
 /** @type {'facilities' | 'demand' | 'modemix' | 'service'} */
 let activeSection = 'facilities';
 
-/** @type {import('./types.js?v=20260418-sF').Facility[]} */
+/** @type {import('./types.js?v=20260418-sG').Facility[]} */
 let facilities = [];
 
-/** @type {import('./types.js?v=20260418-sF').DemandPoint[]} */
+/** @type {import('./types.js?v=20260418-sG').DemandPoint[]} */
 let demands = [];
 
-/** @type {import('./types.js?v=20260418-sF').ModeMix} */
+/** @type {import('./types.js?v=20260418-sG').ModeMix} */
 let modeMix = { tlPct: 30, ltlPct: 40, parcelPct: 30 };
 
-/** @type {import('./types.js?v=20260418-sF').RateCard} */
+/** @type {import('./types.js?v=20260418-sG').RateCard} */
 let rateCard = { ...calc.DEFAULT_RATES };
 
-/** @type {import('./types.js?v=20260418-sF').ServiceConfig} */
+/** @type {import('./types.js?v=20260418-sG').ServiceConfig} */
 let serviceConfig = { ...calc.DEFAULT_SERVICE };
 
-/** @type {import('./types.js?v=20260418-sF').ScenarioResult[]} */
+/** @type {import('./types.js?v=20260418-sG').ScenarioResult[]} */
 let scenarios = [];
 
-/** @type {import('./types.js?v=20260418-sF').ScenarioResult|null} */
+/** @type {import('./types.js?v=20260418-sG').ScenarioResult|null} */
 let activeScenario = null;
 
 /** @type {string|null} */
@@ -55,7 +55,7 @@ let selectedArchetype = null;
 /** @type {object|null} map instance */
 let mapInstance = null;
 
-/** @type {import('./types.js?v=20260418-sF').ScenarioResult[]|null} */
+/** @type {import('./types.js?v=20260418-sG').ScenarioResult[]|null} */
 let comparisonResults = null;
 
 /** @type {number|null} */
