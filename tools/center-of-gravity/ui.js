@@ -6,13 +6,13 @@
  * @module tools/center-of-gravity/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sH';
-import { state } from '../../shared/state.js?v=20260418-sH';
-import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sH';
-import { showToast } from '../../shared/toast.js?v=20260418-sH';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sH';
-import * as calc from './calc.js?v=20260418-sH';
-import * as api from './api.js?v=20260418-sH';
+import { bus } from '../../shared/event-bus.js?v=20260418-sI';
+import { state } from '../../shared/state.js?v=20260418-sI';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sI';
+import { showToast } from '../../shared/toast.js?v=20260418-sI';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sI';
+import * as calc from './calc.js?v=20260418-sI';
+import * as api from './api.js?v=20260418-sI';
 
 // ============================================================
 // STATE
@@ -24,13 +24,13 @@ let rootEl = null;
 /** @type {'points' | 'analysis' | 'map' | 'sensitivity'} */
 let activeTab = 'points';
 
-/** @type {import('./types.js?v=20260418-sH').WeightedPoint[]} */
+/** @type {import('./types.js?v=20260418-sI').WeightedPoint[]} */
 let points = [];
 
-/** @type {import('./types.js?v=20260418-sH').CogConfig} */
+/** @type {import('./types.js?v=20260418-sI').CogConfig} */
 let config = { ...calc.DEFAULT_CONFIG };
 
-/** @type {import('./types.js?v=20260418-sH').MultiCogResult|null} */
+/** @type {import('./types.js?v=20260418-sI').MultiCogResult|null} */
 let cogResult = null;
 
 /** @type {Array<{ k: number, totalWeightedDistance: number, estimatedCost: number, avgDistance: number }>|null} */
@@ -48,6 +48,7 @@ let mapInstance = null;
  * @param {HTMLElement} el
  */
 let activeScenarioId = null;
+let activeParentCmId = null;
 
 export async function mount(el) {
   rootEl = el;
@@ -75,6 +76,8 @@ async function renderLanding() {
     onNew: () => openEditor(null),
     onOpen: (row) => openEditor(row),
     onDelete: async (row) => { await api.deleteScenario(row.id); },
+    onLink: async (row, cmId) => { await api.linkToCm(row.id, cmId); },
+    onUnlink: async (row) => { await api.unlinkFromCm(row.id); },
     emptyStateHint: 'Find optimal facility locations from weighted demand. Cluster, centroid solver, sensitivity vs k-DC count, and a service-zone map overlay.',
   });
 }
@@ -88,6 +91,7 @@ function openEditor(savedRow) {
   cogResult = d.result || null;
   sensitivityData = null;
   activeScenarioId = savedRow?.id || null;
+  activeParentCmId = savedRow?.parent_cost_model_id || null;
 
   rootEl.innerHTML = renderShell();
   bindShellEvents();
@@ -121,7 +125,9 @@ function renderShell() {
 
   const chips = [
     { label: activeScenarioId ? 'Saved' : 'Draft', kind: activeScenarioId ? 'saved' : 'draft', dot: true },
-    { label: 'Stand-alone', kind: 'standalone', title: 'Not linked to a Cost Model' },
+    activeParentCmId
+      ? { label: 'Linked to CM', kind: 'linked', title: `Linked to Cost Model #${activeParentCmId}` }
+      : { label: 'Stand-alone', kind: 'standalone', title: 'Not linked to a Cost Model' },
   ];
 
   return `

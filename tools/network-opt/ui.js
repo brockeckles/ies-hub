@@ -7,13 +7,13 @@
  * @module tools/network-opt/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sH';
-import { state } from '../../shared/state.js?v=20260418-sH';
-import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sH';
-import { showToast } from '../../shared/toast.js?v=20260418-sH';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sH';
-import * as calc from './calc.js?v=20260418-sH';
-import * as api from './api.js?v=20260418-sH';
+import { bus } from '../../shared/event-bus.js?v=20260418-sI';
+import { state } from '../../shared/state.js?v=20260418-sI';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sI';
+import { showToast } from '../../shared/toast.js?v=20260418-sI';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sI';
+import * as calc from './calc.js?v=20260418-sI';
+import * as api from './api.js?v=20260418-sI';
 
 // ============================================================
 // STATE
@@ -28,25 +28,25 @@ let activeView = 'setup';
 /** @type {'facilities' | 'demand' | 'modemix' | 'service'} */
 let activeSection = 'facilities';
 
-/** @type {import('./types.js?v=20260418-sH').Facility[]} */
+/** @type {import('./types.js?v=20260418-sI').Facility[]} */
 let facilities = [];
 
-/** @type {import('./types.js?v=20260418-sH').DemandPoint[]} */
+/** @type {import('./types.js?v=20260418-sI').DemandPoint[]} */
 let demands = [];
 
-/** @type {import('./types.js?v=20260418-sH').ModeMix} */
+/** @type {import('./types.js?v=20260418-sI').ModeMix} */
 let modeMix = { tlPct: 30, ltlPct: 40, parcelPct: 30 };
 
-/** @type {import('./types.js?v=20260418-sH').RateCard} */
+/** @type {import('./types.js?v=20260418-sI').RateCard} */
 let rateCard = { ...calc.DEFAULT_RATES };
 
-/** @type {import('./types.js?v=20260418-sH').ServiceConfig} */
+/** @type {import('./types.js?v=20260418-sI').ServiceConfig} */
 let serviceConfig = { ...calc.DEFAULT_SERVICE };
 
-/** @type {import('./types.js?v=20260418-sH').ScenarioResult[]} */
+/** @type {import('./types.js?v=20260418-sI').ScenarioResult[]} */
 let scenarios = [];
 
-/** @type {import('./types.js?v=20260418-sH').ScenarioResult|null} */
+/** @type {import('./types.js?v=20260418-sI').ScenarioResult|null} */
 let activeScenario = null;
 
 /** @type {string|null} */
@@ -55,7 +55,7 @@ let selectedArchetype = null;
 /** @type {object|null} map instance */
 let mapInstance = null;
 
-/** @type {import('./types.js?v=20260418-sH').ScenarioResult[]|null} */
+/** @type {import('./types.js?v=20260418-sI').ScenarioResult[]|null} */
 let comparisonResults = null;
 
 /** @type {number|null} */
@@ -102,6 +102,7 @@ const DEMO_DEMANDS = [
  * @param {HTMLElement} el
  */
 let activeConfigId = null;
+let activeParentCmId = null;
 
 export async function mount(el) {
   rootEl = el;
@@ -130,6 +131,8 @@ async function renderLanding() {
     onOpen: (row) => openEditor(row),
     onDelete: async (row) => { await api.deleteConfig(row.id); },
     onCopy: async (row) => await api.duplicateConfig(row.id),
+    onLink: async (row, cmId) => { await api.linkToCm(row.id, cmId); },
+    onUnlink: async (row) => { await api.unlinkFromCm(row.id); },
     emptyStateHint: 'Optimize TL/LTL/Parcel mix across facility and demand sets. Run multi-DC comparisons, exact solves, and heatmap overlays — every scenario saves here.',
   });
 }
@@ -150,6 +153,7 @@ function openEditor(savedRow) {
   comparisonResults = null;
   recommendedDCCount = null;
   activeConfigId = savedRow?.id || null;
+  activeParentCmId = savedRow?.parent_cost_model_id || null;
 
   rootEl.innerHTML = renderShell();
   bindShellEvents();
@@ -182,7 +186,9 @@ function renderShell() {
   const tabs = ['setup', 'map', 'results', 'comparison'].map(v => ({ key: v, label: viewLabel(v) }));
   const chips = [
     { label: activeConfigId ? 'Saved' : 'Draft', kind: activeConfigId ? 'saved' : 'draft', dot: true },
-    { label: scenarios.length ? `${scenarios.length} scenarios run` : 'Stand-alone', kind: scenarios.length ? 'linked' : 'standalone' },
+    activeParentCmId
+      ? { label: 'Linked to CM', kind: 'linked', title: `Linked to Cost Model #${activeParentCmId}` }
+      : { label: scenarios.length ? `${scenarios.length} scenarios run` : 'Stand-alone', kind: scenarios.length ? 'linked' : 'standalone' },
   ];
   return `
     <div class="hub-content-inner" style="padding:0;display:flex;flex-direction:column;height:100%;">

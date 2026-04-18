@@ -3,7 +3,7 @@
  * Access-code gate with session persistence.
  *
  * Usage:
- *   import { auth } from './auth.js?v=20260418-sH';
+ *   import { auth } from './auth.js?v=20260418-sI';
  *
  *   if (!auth.isAuthenticated()) {
  *     auth.showLoginScreen(onSuccess);
@@ -12,8 +12,8 @@
  * @module shared/auth
  */
 
-import { state } from './state.js?v=20260418-sH';
-import { bus } from './event-bus.js?v=20260418-sH';
+import { state } from './state.js?v=20260418-sI';
+import { bus } from './event-bus.js?v=20260418-sI';
 
 /** Valid access codes (case-insensitive) */
 const VALID_CODES = ['ies2026', 'ieshub'];

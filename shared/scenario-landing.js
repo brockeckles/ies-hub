@@ -31,8 +31,8 @@
  * @module shared/scenario-landing
  */
 
-import { db } from './supabase.js?v=20260418-sH';
-import { showToast } from './toast.js?v=20260418-sH';
+import { db } from './supabase.js?v=20260418-sI';
+import { showToast } from './toast.js?v=20260418-sI';
 
 /**
  * @param {HTMLElement} rootEl
@@ -53,6 +53,8 @@ export async function renderScenarioLanding(rootEl, opts) {
     onNew,
     onCopy = null,
     onDelete = null,
+    onLink = null,
+    onUnlink = null,
     emptyStateHint = '',
   } = opts;
 
@@ -84,6 +86,7 @@ export async function renderScenarioLanding(rootEl, opts) {
     getId, getName, getUpdated, getParent, getSubtitle,
     canCopy: typeof onCopy === 'function',
     canDelete: typeof onDelete === 'function',
+    canLink: typeof onLink === 'function',
     emptyStateHint,
   });
 
@@ -124,6 +127,33 @@ export async function renderScenarioLanding(rootEl, opts) {
       return;
     }
 
+    // Row action: link / unlink (chip click acts as link toggle)
+    if (actionBtn && actionBtn.dataset.slRowAction === 'link') {
+      e.stopPropagation();
+      const id = actionBtn.closest('[data-sl-id]').dataset.slId;
+      const scenario = scenarios.find(s => String(getId(s)) === String(id));
+      if (!scenario || !onLink) return;
+      const parent = getParent(scenario) || {};
+      try {
+        if (parent.cmId) {
+          // Already linked → offer to unlink
+          if (!window.confirm(`Unlink "${getName(scenario)}" from its Cost Model?`)) return;
+          if (typeof onUnlink === 'function') await onUnlink(scenario);
+          showToast(`Unlinked "${getName(scenario)}"`, 'success');
+        } else {
+          // Open picker
+          const cmId = await pickCostModel(costModelsById);
+          if (!cmId) return;
+          await onLink(scenario, cmId);
+          showToast(`Linked to ${costModelsById.get(String(cmId)) || 'Cost Model'}`, 'success');
+        }
+        await renderScenarioLanding(rootEl, opts);
+      } catch (err) {
+        showToast(`Link update failed: ${err?.message || err}`, 'error');
+      }
+      return;
+    }
+
     // Row action: delete
     if (actionBtn && actionBtn.dataset.slRowAction === 'delete') {
       e.stopPropagation();
@@ -153,7 +183,7 @@ function renderLoading(toolName) {
 function renderShell({
   toolName, toolKey, accent, scenarios, costModelsById,
   getId, getName, getUpdated, getParent, getSubtitle,
-  canCopy, canDelete, emptyStateHint,
+  canCopy, canDelete, canLink, emptyStateHint,
 }) {
   const total = scenarios.length;
   const linked = scenarios.filter(s => {
@@ -198,7 +228,7 @@ function renderShell({
           ${scenarios.map(s => renderRow({
             s, accent, costModelsById,
             getId, getName, getUpdated, getParent, getSubtitle,
-            canCopy, canDelete,
+            canCopy, canDelete, canLink,
           })).join('')}
         </div>
       `}
@@ -220,7 +250,7 @@ function renderEmpty(toolName, accent, hint) {
   `;
 }
 
-function renderRow({ s, accent, costModelsById, getId, getName, getUpdated, getParent, getSubtitle, canCopy, canDelete }) {
+function renderRow({ s, accent, costModelsById, getId, getName, getUpdated, getParent, getSubtitle, canCopy, canDelete, canLink }) {
   const id = getId(s);
   const name = getName(s) || 'Untitled';
   const updatedRaw = getUpdated(s);
@@ -229,13 +259,20 @@ function renderRow({ s, accent, costModelsById, getId, getName, getUpdated, getP
   const cmName = parent.cmId ? (costModelsById.get(String(parent.cmId)) || `CM #${parent.cmId}`) : null;
   const subtitle = typeof getSubtitle === 'function' ? getSubtitle(s) : '';
 
+  // If canLink, the whole linkage cell becomes a clickable chip-toggle that
+  // opens a CM picker (unlinked → link, linked → confirm unlink).
+  const chipHtml = linkageBadge(parent, cmName, accent);
+  const chipCell = canLink
+    ? `<button type="button" data-sl-row-action="link" aria-label="${parent.cmId ? 'Unlink from Cost Model' : 'Link to Cost Model'}" title="${parent.cmId ? 'Click to unlink' : 'Click to link to a Cost Model'}" style="background:none;border:none;padding:0;cursor:pointer;text-align:left;">${chipHtml}</button>`
+    : chipHtml;
+
   return `
     <div class="sl-row" data-sl-id="${escapeAttr(id)}" style="display:grid;grid-template-columns:minmax(240px,2fr) 1fr 160px 120px;gap:0;padding:12px 16px;border-bottom:1px solid var(--ies-gray-100);cursor:pointer;align-items:center;">
       <div>
         <div style="font-size:14px;font-weight:700;color:#1c1c1c;">${escapeText(name)}</div>
         ${subtitle ? `<div style="font-size:11px;color:var(--ies-gray-500);margin-top:2px;">${escapeText(subtitle)}</div>` : ''}
       </div>
-      <div>${linkageBadge(parent, cmName, accent)}</div>
+      <div>${chipCell}</div>
       <div style="font-size:12px;color:var(--ies-gray-600);">${escapeText(updated)}</div>
       <div style="text-align:right;display:flex;gap:4px;justify-content:flex-end;">
         ${canCopy ? `<button type="button" data-sl-row-action="copy" aria-label="Copy" title="Copy" style="opacity:0;transition:opacity .12s ease;border:1px solid var(--ies-gray-200);background:#fff;border-radius:6px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--ies-gray-600);">
@@ -247,6 +284,48 @@ function renderRow({ s, accent, costModelsById, getId, getName, getUpdated, getP
       </div>
     </div>
   `;
+}
+
+/**
+ * Modal picker for selecting a Cost Model to link a scenario to.
+ * Returns the chosen CM id (string) or null if cancelled.
+ * @param {Map<string,string>} costModelsById
+ * @returns {Promise<string|null>}
+ */
+function pickCostModel(costModelsById) {
+  return new Promise(resolve => {
+    if (!costModelsById || costModelsById.size === 0) {
+      showToast('No saved Cost Models yet. Save a Cost Model first, then come back to link.', 'error');
+      resolve(null);
+      return;
+    }
+    const backdrop = document.createElement('div');
+    backdrop.setAttribute('role', 'dialog');
+    backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;';
+    const options = [...costModelsById.entries()]
+      .map(([id, name]) => `<option value="${escapeAttr(id)}">${escapeText(name)}</option>`)
+      .join('');
+    backdrop.innerHTML = `
+      <div style="background:#fff;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.25);min-width:420px;max-width:90vw;padding:22px;">
+        <div style="font-size:15px;font-weight:800;color:#1c1c1c;margin-bottom:6px;">Link to a Cost Model</div>
+        <div style="font-size:12px;color:var(--ies-gray-500);margin-bottom:14px;">Pick the Cost Model this scenario belongs to. This drives the Linked chip + roll-ups.</div>
+        <select id="sl-pick-cm" class="hub-input" style="width:100%;font-size:13px;padding:8px 10px;">
+          ${options}
+        </select>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px;">
+          <button type="button" id="sl-pick-cancel" class="hub-btn hub-btn-secondary hub-btn-sm">Cancel</button>
+          <button type="button" id="sl-pick-ok" class="hub-btn hub-btn-primary hub-btn-sm">Link</button>
+        </div>
+      </div>`;
+    document.body.appendChild(backdrop);
+    const done = (val) => { backdrop.remove(); resolve(val); };
+    backdrop.querySelector('#sl-pick-cancel').addEventListener('click', () => done(null));
+    backdrop.querySelector('#sl-pick-ok').addEventListener('click', () => {
+      const sel = /** @type {HTMLSelectElement} */ (backdrop.querySelector('#sl-pick-cm'));
+      done(sel.value || null);
+    });
+    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) done(null); });
+  });
 }
 
 function linkageBadge(parent, cmName, accent) {

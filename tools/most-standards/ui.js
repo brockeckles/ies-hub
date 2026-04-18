@@ -6,11 +6,11 @@
  * @module tools/most-standards/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sH';
-import { state } from '../../shared/state.js?v=20260418-sH';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sH';
-import * as calc from './calc.js?v=20260418-sH';
-import * as api from './api.js?v=20260418-sH';
+import { bus } from '../../shared/event-bus.js?v=20260418-sI';
+import { state } from '../../shared/state.js?v=20260418-sI';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sI';
+import * as calc from './calc.js?v=20260418-sI';
+import * as api from './api.js?v=20260418-sI';
 
 // ============================================================
 // STATE — tool-local
@@ -22,13 +22,13 @@ let activeTab = 'library';
 /** @type {HTMLElement|null} */
 let rootEl = null;
 
-/** @type {{ templates: import('./types.js?v=20260418-sH').MostTemplate[], allowanceProfiles: import('./types.js?v=20260418-sH').AllowanceProfile[] }} */
+/** @type {{ templates: import('./types.js?v=20260418-sI').MostTemplate[], allowanceProfiles: import('./types.js?v=20260418-sI').AllowanceProfile[] }} */
 let refData = { templates: [], allowanceProfiles: [] };
 
-/** @type {import('./types.js?v=20260418-sH').MostTemplate|null} */
+/** @type {import('./types.js?v=20260418-sI').MostTemplate|null} */
 let selectedTemplate = null;
 
-/** @type {import('./types.js?v=20260418-sH').MostElement[]} */
+/** @type {import('./types.js?v=20260418-sI').MostElement[]} */
 let selectedElements = [];
 
 /** Template editor state — null if not editing, or a copy of the template being edited */
@@ -55,11 +55,11 @@ function loadSavedScenarios() {
 let filters = { search: '', processArea: '', laborCategory: '' };
 
 // --- Analysis state ---
-/** @type {import('./types.js?v=20260418-sH').LaborAnalysis} */
+/** @type {import('./types.js?v=20260418-sI').LaborAnalysis} */
 let analysis = createEmptyAnalysis();
 
 // --- Workflow state ---
-/** @type {import('./types.js?v=20260418-sH').Workflow} */
+/** @type {import('./types.js?v=20260418-sI').Workflow} */
 let workflow = createEmptyWorkflow();
 
 // ============================================================
@@ -155,7 +155,7 @@ function renderShell() {
     { key: 'library', label: 'Template Library' },
     { key: 'editor', label: 'Template Editor' },
     { key: 'analysis', label: 'Quick Analysis' },
-    { key: 'workflow', label: 'Workflow Composer' },
+    { key: 'workflow', label: 'Workflow Composer · Preview', title: 'Preview — composes templates into a workflow; volume rebalancing + bottleneck chart still in development' },
   ];
   const chips = [
     { label: `${refData.templates.length} templates`, kind: 'default' },
@@ -1195,7 +1195,7 @@ function pushToCostModel() {
     defaultBurdenPct: 30,
   });
 
-  /** @type {import('./types.js?v=20260418-sH').MostToCmPayload} */
+  /** @type {import('./types.js?v=20260418-sI').MostToCmPayload} */
   const payload = {
     laborLines: cmLines,
     operatingDays: analysis.operating_days,
@@ -1222,7 +1222,7 @@ function filterTemplates() {
 }
 
 function groupByProcessArea(templates) {
-  /** @type {Record<string, import('./types.js?v=20260418-sH').MostTemplate[]>} */
+  /** @type {Record<string, import('./types.js?v=20260418-sI').MostTemplate[]>} */
   const groups = {};
   for (const t of templates) {
     const area = t.process_area || 'Other';

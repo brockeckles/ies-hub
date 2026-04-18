@@ -6,13 +6,13 @@
  * @module tools/warehouse-sizing/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sH';
-import { state } from '../../shared/state.js?v=20260418-sH';
-import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sH';
-import { showToast } from '../../shared/toast.js?v=20260418-sH';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sH';
-import * as calc from './calc.js?v=20260418-sH';
-import * as api from './api.js?v=20260418-sH';
+import { bus } from '../../shared/event-bus.js?v=20260418-sI';
+import { state } from '../../shared/state.js?v=20260418-sI';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sI';
+import { showToast } from '../../shared/toast.js?v=20260418-sI';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sI';
+import * as calc from './calc.js?v=20260418-sI';
+import * as api from './api.js?v=20260418-sI';
 
 // ============================================================
 // STATE
@@ -24,13 +24,13 @@ let rootEl = null;
 /** @type {'dashboard' | 'elevation' | '3d'} */
 let activeView = 'dashboard';
 
-/** @type {import('./types.js?v=20260418-sH').FacilityConfig} */
+/** @type {import('./types.js?v=20260418-sI').FacilityConfig} */
 let facility = createDefaultFacility();
 
-/** @type {import('./types.js?v=20260418-sH').ZoneConfig} */
+/** @type {import('./types.js?v=20260418-sI').ZoneConfig} */
 let zones = createDefaultZones();
 
-/** @type {import('./types.js?v=20260418-sH').VolumeInputs} */
+/** @type {import('./types.js?v=20260418-sI').VolumeInputs} */
 let volumes = createDefaultVolumes();
 
 /** @type {boolean} */
@@ -95,6 +95,8 @@ async function renderLanding() {
       clone.name = (clone.name || 'Facility') + ' (Copy)';
       await api.saveConfig(clone);
     },
+    onLink: async (row, cmId) => { await api.linkToCm(row.id, cmId); },
+    onUnlink: async (row) => { await api.unlinkFromCm(row.id); },
     emptyStateHint: 'Size a facility from peak pallets, SKU count, turn rate, and clearance height. Every scenario you save can be linked back to a cost model or deal.',
   });
 }
@@ -105,7 +107,7 @@ function openEditor(savedRow) {
   viewMode = 'editor';
   if (savedRow) {
     const data = savedRow.config_data || savedRow;
-    facility = { ...createDefaultFacility(), ...data, id: savedRow.id };
+    facility = { ...createDefaultFacility(), ...data, id: savedRow.id, parent_cost_model_id: savedRow.parent_cost_model_id || null };
     zones = { ...createDefaultZones(), ...(data.zones || {}) };
     volumes = { ...createDefaultVolumes(), ...(data.volumes || {}) };
   } else {
@@ -143,7 +145,9 @@ function renderShell() {
   ];
   const chips = [
     { label: facility.id ? 'Saved' : 'Draft', kind: facility.id ? 'saved' : 'draft', dot: true },
-    { label: 'Stand-alone', kind: 'standalone', title: 'Not yet pushed into a Cost Model' },
+    facility.parent_cost_model_id
+      ? { label: `Linked to CM`, kind: 'linked', title: `Linked to Cost Model #${facility.parent_cost_model_id}` }
+      : { label: 'Stand-alone', kind: 'standalone', title: 'Not yet pushed into a Cost Model' },
   ];
   return `
     <div class="hub-content-inner" style="padding:0;display:flex;flex-direction:column;height: calc(100vh - 48px);">
@@ -1601,7 +1605,7 @@ function build3DScene() {
 // ============================================================
 
 function pushToCm() {
-  /** @type {import('./types.js?v=20260418-sH').WscToCmPayload} */
+  /** @type {import('./types.js?v=20260418-sI').WscToCmPayload} */
   const payload = {
     totalSqft: facility.totalSqft || 0,
     clearHeight: facility.clearHeight || 0,
@@ -1622,7 +1626,7 @@ function pushToCm() {
 
 /**
  * Handle CM → WSC push (e.g., "Size with Calculator" from CM).
- * @param {import('./types.js?v=20260418-sH').CmToWscPayload} payload
+ * @param {import('./types.js?v=20260418-sI').CmToWscPayload} payload
  */
 function handleCmPush(payload) {
   if (payload.clearHeight) facility.clearHeight = payload.clearHeight;

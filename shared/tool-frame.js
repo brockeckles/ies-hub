@@ -7,7 +7,7 @@
  * tool-specific.
  *
  * Usage:
- *   import { renderToolHeader, renderInputGroup, bindPrimaryActionShortcut } from '../../shared/tool-frame.js?v=20260418-sH';
+ *   import { renderToolHeader, renderInputGroup, bindPrimaryActionShortcut } from '../../shared/tool-frame.js?v=20260418-sI';
  *
  *   el.innerHTML = `
  *     <div class="hub-content-inner" style="padding:0;display:flex;flex-direction:column;height:100%;">

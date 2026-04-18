@@ -4,7 +4,7 @@
  * Each tool gets its own state slice; shared data (user, nav) lives at root.
  *
  * Usage:
- *   import { state } from './state.js?v=20260418-sH';
+ *   import { state } from './state.js?v=20260418-sI';
  *
  *   // Set nested path
  *   state.set('costModel.activeSection', 'labor');

@@ -5,7 +5,7 @@
  * @module tools/fleet-modeler/api
  */
 
-import { db } from '../../shared/supabase.js?v=20260418-sH';
+import { db } from '../../shared/supabase.js?v=20260418-sI';
 
 // ============================================================
 // SCENARIOS
@@ -61,6 +61,23 @@ export async function deleteScenario(id) {
 }
 
 /**
+ * Link a Fleet scenario to a Cost Model.
+ * @param {string} scenarioId
+ * @param {string|number} cmId
+ */
+export async function linkToCm(scenarioId, cmId) {
+  await db.update('fleet_scenarios', scenarioId, { parent_cost_model_id: cmId });
+}
+
+/**
+ * Unlink a Fleet scenario from its Cost Model.
+ * @param {string} scenarioId
+ */
+export async function unlinkFromCm(scenarioId) {
+  await db.update('fleet_scenarios', scenarioId, { parent_cost_model_id: null });
+}
+
+/**
  * Duplicate a fleet scenario.
  * @param {string} id
  * @returns {Promise<object>}
@@ -79,7 +96,7 @@ export async function duplicateScenario(id) {
 /**
  * List lanes for a scenario.
  * @param {string} scenarioId
- * @returns {Promise<import('./types.js?v=20260418-sH').Lane[]>}
+ * @returns {Promise<import('./types.js?v=20260418-sI').Lane[]>}
  */
 export async function listLanes(scenarioId) {
   const { data, error } = await db.from('fleet_lanes')
@@ -93,7 +110,7 @@ export async function listLanes(scenarioId) {
 /**
  * Save lanes for a scenario (replaces existing).
  * @param {string} scenarioId
- * @param {import('./types.js?v=20260418-sH').Lane[]} lanes
+ * @param {import('./types.js?v=20260418-sI').Lane[]} lanes
  * @returns {Promise<void>}
  */
 export async function saveLanes(scenarioId, lanes) {

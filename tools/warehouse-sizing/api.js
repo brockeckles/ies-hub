@@ -5,7 +5,7 @@
  * @module tools/warehouse-sizing/api
  */
 
-import { db } from '../../shared/supabase.js?v=20260418-sH';
+import { db } from '../../shared/supabase.js?v=20260418-sI';
 
 // ============================================================
 // FACILITY CONFIGS
@@ -13,7 +13,7 @@ import { db } from '../../shared/supabase.js?v=20260418-sH';
 
 /**
  * List all saved facility configs.
- * @returns {Promise<import('./types.js?v=20260418-sH').FacilityConfig[]>}
+ * @returns {Promise<import('./types.js?v=20260418-sI').FacilityConfig[]>}
  */
 export async function listConfigs() {
   const { data, error } = await db.from('wsc_facility_configs')
@@ -26,7 +26,7 @@ export async function listConfigs() {
 /**
  * Get a single facility config by ID.
  * @param {string} id
- * @returns {Promise<import('./types.js?v=20260418-sH').FacilityConfig|null>}
+ * @returns {Promise<import('./types.js?v=20260418-sI').FacilityConfig|null>}
  */
 export async function getConfig(id) {
   return db.fetchById('wsc_facility_configs', id);
@@ -56,6 +56,25 @@ export async function saveConfig(config) {
  */
 export async function deleteConfig(id) {
   await db.remove('wsc_facility_configs', id);
+}
+
+/**
+ * Link a WSC scenario to a Cost Model.
+ * @param {string} scenarioId
+ * @param {string|number} cmId
+ * @returns {Promise<void>}
+ */
+export async function linkToCm(scenarioId, cmId) {
+  await db.update('wsc_facility_configs', scenarioId, { parent_cost_model_id: cmId });
+}
+
+/**
+ * Unlink a WSC scenario from its Cost Model.
+ * @param {string} scenarioId
+ * @returns {Promise<void>}
+ */
+export async function unlinkFromCm(scenarioId) {
+  await db.update('wsc_facility_configs', scenarioId, { parent_cost_model_id: null });
 }
 
 /**

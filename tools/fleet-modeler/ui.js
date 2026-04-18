@@ -6,13 +6,13 @@
  * @module tools/fleet-modeler/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sH';
-import { state } from '../../shared/state.js?v=20260418-sH';
-import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sH';
-import { showToast } from '../../shared/toast.js?v=20260418-sH';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sH';
-import * as calc from './calc.js?v=20260418-sH';
-import * as api from './api.js?v=20260418-sH';
+import { bus } from '../../shared/event-bus.js?v=20260418-sI';
+import { state } from '../../shared/state.js?v=20260418-sI';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sI';
+import { showToast } from '../../shared/toast.js?v=20260418-sI';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sI';
+import * as calc from './calc.js?v=20260418-sI';
+import * as api from './api.js?v=20260418-sI';
 
 // ============================================================
 // STATE
@@ -24,16 +24,16 @@ let rootEl = null;
 /** @type {'lanes' | 'config' | 'results' | 'map'} */
 let activeTab = 'lanes';
 
-/** @type {import('./types.js?v=20260418-sH').Lane[]} */
+/** @type {import('./types.js?v=20260418-sI').Lane[]} */
 let lanes = [];
 
-/** @type {import('./types.js?v=20260418-sH').VehicleSpec[]} */
+/** @type {import('./types.js?v=20260418-sI').VehicleSpec[]} */
 let vehicles = calc.DEFAULT_VEHICLES.map(v => ({ ...v }));
 
-/** @type {import('./types.js?v=20260418-sH').FleetConfig} */
+/** @type {import('./types.js?v=20260418-sI').FleetConfig} */
 let config = { ...calc.DEFAULT_CONFIG };
 
-/** @type {import('./types.js?v=20260418-sH').FleetResult|null} */
+/** @type {import('./types.js?v=20260418-sI').FleetResult|null} */
 let result = null;
 
 /** @type {object|null} */
@@ -48,6 +48,7 @@ let mapInstance = null;
  * @param {HTMLElement} el
  */
 let activeScenarioId = null;
+let activeParentCmId = null;
 
 export async function mount(el) {
   rootEl = el;
@@ -75,6 +76,8 @@ async function renderLanding() {
     onNew: () => openEditor(null),
     onOpen: (row) => openEditor(row),
     onDelete: async (row) => { await api.deleteScenario(row.id); },
+    onLink: async (row, cmId) => { await api.linkToCm(row.id, cmId); },
+    onUnlink: async (row) => { await api.unlinkFromCm(row.id); },
     emptyStateHint: 'Size a private fleet from your lane network — vehicles, drivers, fuel, maintenance, ATRI benchmarks, and a 3-way comparison vs dedicated and common carrier.',
   });
 }
@@ -88,6 +91,7 @@ function openEditor(savedRow) {
   config = { ...calc.DEFAULT_CONFIG, leaseMode: false, ...(d.config || {}) };
   result = d.result || null;
   activeScenarioId = savedRow?.id || null;
+  activeParentCmId = savedRow?.parent_cost_model_id || null;
 
   rootEl.innerHTML = renderShell();
   bindShellEvents();
@@ -121,7 +125,9 @@ function renderShell() {
 
   const chips = [
     { label: activeScenarioId ? 'Saved' : 'Draft', kind: activeScenarioId ? 'saved' : 'draft', dot: true },
-    { label: 'Stand-alone', kind: 'standalone', title: 'This fleet is not yet attached to a Cost Model' },
+    activeParentCmId
+      ? { label: 'Linked to CM', kind: 'linked', title: `Linked to Cost Model #${activeParentCmId}` }
+      : { label: 'Stand-alone', kind: 'standalone', title: 'This fleet is not yet attached to a Cost Model' },
   ];
 
   return `
