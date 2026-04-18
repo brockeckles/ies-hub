@@ -6,7 +6,7 @@
  * guard prompts the user to confirm losing changes.
  *
  * Usage:
- *   import { markDirty, markClean } from './shared/unsaved-guard.js?v=20260418-s9';
+ *   import { markDirty, markClean } from './shared/unsaved-guard.js?v=20260418-sA';
  *
  *   // When user edits something:
  *   markDirty('cost-model');
@@ -21,7 +21,7 @@
  * @module shared/unsaved-guard
  */
 
-import { bus } from './event-bus.js?v=20260418-s9';
+import { bus } from './event-bus.js?v=20260418-sA';
 
 /** @type {Set<string>} */
 const dirty = new Set();

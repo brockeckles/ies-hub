@@ -3,7 +3,7 @@
  * Bridges Chart.js (loaded as global `Chart`) with ES module imports.
  *
  * Usage:
- *   import { getChart } from './chart-wrapper.js?v=20260418-s9';
+ *   import { getChart } from './chart-wrapper.js?v=20260418-sA';
  *   const Chart = getChart();
  *   new Chart(ctx, config);
  *
