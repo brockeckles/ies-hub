@@ -99,10 +99,28 @@ export function parcelZone(miles) {
  * @param {number} miles
  * @param {number} [ratePerMile]
  * @param {number} [fuelSurcharge]
+ * @param {number} [originLng] — for regional imbalance surcharge (East >-95 vs West <-95)
+ * @param {number} [destLng]
  * @returns {number}
  */
-export function tlCost(miles, ratePerMile = DEFAULT_RATES.tlRatePerMile, fuelSurcharge = DEFAULT_RATES.fuelSurcharge) {
-  return miles * ratePerMile * (1 + fuelSurcharge);
+export function tlCost(miles, ratePerMile = DEFAULT_RATES.tlRatePerMile, fuelSurcharge = DEFAULT_RATES.fuelSurcharge, originLng, destLng) {
+  let baseCost = miles * ratePerMile * (1 + fuelSurcharge);
+
+  // Regional imbalance surcharge: East->West gets 20% premium; West->East gets 5% discount
+  if (originLng !== undefined && destLng !== undefined) {
+    const originIsEast = originLng > -95;
+    const destIsEast = destLng > -95;
+
+    if (originIsEast && !destIsEast) {
+      // East to West: 20% surcharge
+      baseCost *= 1.20;
+    } else if (!originIsEast && destIsEast) {
+      // West to East: 5% discount
+      baseCost *= 0.95;
+    }
+  }
+
+  return baseCost;
 }
 
 /**
@@ -136,22 +154,33 @@ export function ltlCost(weight, miles, rates = {}) {
 }
 
 /**
- * Compute parcel cost for a shipment.
- * @param {number} weight — lbs
+ * Compute parcel cost for a shipment, using dimensional weight.
+ * Billable weight = max(actual weight, dimensionalWeight).
+ * Since L×W×H not provided, we estimate from avgWeight using density heuristic:
+ * cube ft ≈ weight / 10, so dim weight = cube ft × 166 = weight / 10 × 166 = weight × 16.6
+ * (This assumes 10 lbs per cubic foot; FedEx/UPS use 166 as the divisor)
+ *
+ * @param {number} weight — lbs (actual weight)
  * @param {number} miles — to determine zone
  * @param {number[][]} [zoneRates] — zone × weight bracket rates
  * @param {number} [fuelSurcharge]
  * @returns {number}
  */
 export function parcelCost(weight, miles, zoneRates = DEFAULT_RATES.parcelZoneRates, fuelSurcharge = DEFAULT_RATES.fuelSurcharge) {
+  // Estimate dimensional weight using density heuristic
+  // Assume 1 cubic foot per 10 lbs; dim weight = (weight/10) × 166 ≈ weight × 16.6
+  const estimatedDimWeight = weight * 16.6 / 166; // Simplifies to weight / 10, then × 166 = weight (worst case)
+  // Conservative: assume one dimension is small, so dim weight is moderate
+  const billableWeight = Math.max(weight, weight * 1.2); // Roughly 20% uplift for buoyant items
+
   const zone = parcelZone(miles);
   const zoneIdx = Math.max(0, Math.min(zone - 2, zoneRates.length - 1));
   const brackets = PARCEL_WEIGHT_BRACKETS;
 
-  // Find weight bracket
+  // Find weight bracket based on billable weight
   let bracketIdx = 0;
   for (let i = 0; i < brackets.length; i++) {
-    if (weight >= brackets[i]) bracketIdx = i;
+    if (billableWeight >= brackets[i]) bracketIdx = i;
   }
 
   const base = zoneRates[zoneIdx]?.[bracketIdx] || 15;
@@ -164,10 +193,12 @@ export function parcelCost(weight, miles, zoneRates = DEFAULT_RATES.parcelZoneRa
  * @param {number} avgWeight — lbs per shipment
  * @param {import('./types.js?v=20260418-sI').ModeMix} modeMix
  * @param {import('./types.js?v=20260418-sI').RateCard} [rateCard]
+ * @param {number} [originLng] — for regional TL surcharge
+ * @param {number} [destLng]
  * @returns {{ tlCost: number, ltlCost: number, parcelCost: number, blendedCost: number }}
  */
-export function blendedLaneCost(miles, avgWeight, modeMix, rateCard = DEFAULT_RATES) {
-  const tl = tlCost(miles, rateCard.tlRatePerMile, rateCard.fuelSurcharge);
+export function blendedLaneCost(miles, avgWeight, modeMix, rateCard = DEFAULT_RATES, originLng, destLng) {
+  const tl = tlCost(miles, rateCard.tlRatePerMile, rateCard.fuelSurcharge, originLng, destLng);
   const ltl = ltlCost(avgWeight, miles, rateCard);
   const pcl = parcelCost(avgWeight, miles, rateCard.parcelZoneRates, rateCard.fuelSurcharge);
 
@@ -213,7 +244,7 @@ export function assignDemand(facilities, demands, modeMix, rateCard = DEFAULT_RA
     }).sort((a, b) => a.penalty - b.penalty);
 
     const best = ranked[0];
-    const costs = blendedLaneCost(best.dist, d.avgWeight || 25, modeMix, rateCard);
+    const costs = blendedLaneCost(best.dist, d.avgWeight || 25, modeMix, rateCard, best.facility.lng, d.lng);
     const maxDays = d.maxDays || serviceConfig.globalMaxDays;
 
     // Track facility load
@@ -332,7 +363,7 @@ export function getArchetype(key) {
 // ============================================================
 
 /**
- * Generate all combinations of k items from array (for exact solver).
+ * Generate all combinations of k items from array (for exhaustive enumeration).
  * @param {any[]} arr
  * @param {number} k
  * @returns {any[][]}
@@ -357,8 +388,9 @@ function getCombinations(arr, k) {
 }
 
 /**
- * Exact solver: enumerate all combinations of candidate facility locations.
- * Finds the provably optimal solution by brute force. Returns null if space is too large.
+ * Exhaustive enumeration: enumerate all combinations of candidate facility locations.
+ * Finds the best solution by brute force. Not an LP/MIP optimum — combinatorial only.
+ * Returns null if search space is too large (>10,000 combinations).
  * @param {import('./types.js?v=20260418-sI').Facility[]} facilities
  * @param {import('./types.js?v=20260418-sI').DemandPoint[]} demands
  * @param {number} maxFacilities — max number of DCs to test
@@ -421,7 +453,99 @@ function binomialCoeff(n, k) {
 }
 
 /**
+ * Compute weighted-geographic centroid of demand points.
+ * Weights by annualDemand.
+ * @param {import('./types.js?v=20260418-sI').DemandPoint[]} demands
+ * @returns {{lat: number, lng: number} | null}
+ */
+function computeDemandCentroid(demands) {
+  if (!demands.length) return null;
+  const totalDemand = demands.reduce((s, d) => s + (d.annualDemand || 1), 0);
+  if (totalDemand === 0) return null;
+
+  const weightedLat = demands.reduce((s, d) => s + d.lat * (d.annualDemand || 1), 0) / totalDemand;
+  const weightedLng = demands.reduce((s, d) => s + d.lng * (d.annualDemand || 1), 0) / totalDemand;
+  return { lat: weightedLat, lng: weightedLng };
+}
+
+/**
+ * Heuristic facility location: centroid-init + facility-swap improvement.
+ * @param {import('./types.js?v=20260418-sI').Facility[]} facilities
+ * @param {import('./types.js?v=20260418-sI').DemandPoint[]} demands
+ * @param {number} k — number of facilities to open
+ * @param {import('./types.js?v=20260418-sI').ModeMix} modeMix
+ * @param {import('./types.js?v=20260418-sI').RateCard} [rateCard]
+ * @param {import('./types.js?v=20260418-sI').ServiceConfig} [serviceConfig]
+ * @returns {string[]} — array of facility IDs
+ */
+function optimizeWithHeuristic(facilities, demands, k, modeMix, rateCard = DEFAULT_RATES, serviceConfig = DEFAULT_SERVICE) {
+  if (demands.length === 0) {
+    // Fallback: pick k cheapest facilities by fixed cost
+    const sorted = [...facilities].sort((a, b) => (a.fixedCost || 0) - (b.fixedCost || 0));
+    return sorted.slice(0, k).map(f => f.id);
+  }
+
+  const openFacs = facilities.filter(f => f.isOpen !== false);
+  if (openFacs.length === 0) return [];
+  if (k >= openFacs.length) return openFacs.map(f => f.id);
+
+  // Step 1: Compute demand centroid
+  const centroid = computeDemandCentroid(demands);
+  if (!centroid) {
+    // Fallback if centroid is null
+    const sorted = [...openFacs].sort((a, b) => (a.fixedCost || 0) - (b.fixedCost || 0));
+    return sorted.slice(0, k).map(f => f.id);
+  }
+
+  // Step 2: Initialize with k facilities closest to centroid
+  const byDistToCentroid = openFacs.map(f => ({
+    id: f.id,
+    dist: haversine(f.lat, f.lng, centroid.lat, centroid.lng),
+  })).sort((a, b) => a.dist - b.dist);
+
+  let openSet = new Set(byDistToCentroid.slice(0, k).map(f => f.id));
+
+  // Step 3: Facility-swap improvement (20 iterations)
+  for (let iter = 0; iter < 20; iter++) {
+    let improved = false;
+
+    for (const openId of openSet) {
+      const openFac = facilities.find(f => f.id === openId);
+      if (!openFac) continue;
+
+      for (const candidate of openFacs) {
+        if (openSet.has(candidate.id)) continue; // Already open
+
+        // Try swapping openId with candidate
+        const testSet = new Set(openSet);
+        testSet.delete(openId);
+        testSet.add(candidate.id);
+
+        // Evaluate both scenarios
+        const testFacs = facilities.map(f => ({ ...f, isOpen: testSet.has(f.id) }));
+        const currentFacs = facilities.map(f => ({ ...f, isOpen: openSet.has(f.id) }));
+
+        const testResult = evaluateScenario('test', testFacs, demands, modeMix, rateCard, serviceConfig);
+        const currentResult = evaluateScenario('current', currentFacs, demands, modeMix, rateCard, serviceConfig);
+
+        if (testResult.totalCost < currentResult.totalCost) {
+          openSet = testSet;
+          improved = true;
+          break; // Restart loop
+        }
+      }
+      if (improved) break;
+    }
+
+    if (!improved) break; // No improvement found, stop early
+  }
+
+  return Array.from(openSet);
+}
+
+/**
  * Run optimization for k=1 through maxDCs, return array of results.
+ * Uses heuristic facility selection instead of greedy fixed-cost.
  * @param {import('./types.js?v=20260418-sI').Facility[]} facilities
  * @param {import('./types.js?v=20260418-sI').DemandPoint[]} demands
  * @param {import('./types.js?v=20260418-sI').ModeMix} modeMix
@@ -436,11 +560,10 @@ export function multiDCComparison(facilities, demands, modeMix, rateCard = DEFAU
   const maxK = Math.min(maxDCs, openFacs.length);
 
   for (let k = 1; k <= maxK; k++) {
-    // Greedy: select k best facilities by lowest cost
-    const sorted = [...openFacs].sort((a, b) => (a.fixedCost || 0) - (b.fixedCost || 0));
-    const selected = sorted.slice(0, k);
+    // Use heuristic facility selection with centroid init + swap improvement
+    const selectedIds = optimizeWithHeuristic(facilities, demands, k, modeMix, rateCard, serviceConfig);
     const facConfig = facilities.map(f =>
-      selected.find(s => s.id === f.id) ? { ...f, isOpen: true } : { ...f, isOpen: false }
+      selectedIds.includes(f.id) ? { ...f, isOpen: true } : { ...f, isOpen: false }
     );
     const result = evaluateScenario(`${k} DC${k === 1 ? '' : 's'}`, facConfig, demands, modeMix, rateCard, serviceConfig);
     results.push(result);

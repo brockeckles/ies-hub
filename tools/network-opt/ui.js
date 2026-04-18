@@ -12,6 +12,7 @@ import { state } from '../../shared/state.js?v=20260418-sI';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sI';
 import { showToast } from '../../shared/toast.js?v=20260418-sI';
 import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sI';
+import { downloadXLSX } from '../../shared/export.js?v=20260418-sI';
 import * as calc from './calc.js?v=20260418-sI';
 import * as api from './api.js?v=20260418-sI';
 
@@ -60,6 +61,9 @@ let comparisonResults = null;
 
 /** @type {number|null} */
 let recommendedDCCount = null;
+
+/** @type {number} */
+let maxDCsToTest = 5;
 
 // ============================================================
 // DEMO FACILITIES
@@ -133,7 +137,7 @@ async function renderLanding() {
     onCopy: async (row) => await api.duplicateConfig(row.id),
     onLink: async (row, cmId) => { await api.linkToCm(row.id, cmId); },
     onUnlink: async (row) => { await api.unlinkFromCm(row.id); },
-    emptyStateHint: 'Optimize TL/LTL/Parcel mix across facility and demand sets. Run multi-DC comparisons, exact solves, and heatmap overlays — every scenario saves here.',
+    emptyStateHint: 'Optimize TL/LTL/Parcel mix across facility and demand sets. Run multi-DC comparisons, exhaustive searches, and heatmap overlays — every scenario saves here.',
   });
 }
 
@@ -152,6 +156,7 @@ function openEditor(savedRow) {
   selectedArchetype = null;
   comparisonResults = null;
   recommendedDCCount = null;
+  maxDCsToTest = 5;
   activeConfigId = savedRow?.id || null;
   activeParentCmId = savedRow?.parent_cost_model_id || null;
 
@@ -295,15 +300,22 @@ function renderSidebar() {
     </div>
 
     <div style="border-top:1px solid var(--ies-gray-200);margin:20px 0 16px 0;"></div>
+    <span class="text-caption" style="color:var(--ies-gray-400);">OPTIMIZATION</span>
+    <div style="margin-top:8px;margin-bottom:12px;">
+      <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-600);margin-bottom:4px;">Max DCs to Test</label>
+      <input type="number" id="netopt-max-dcs" min="1" max="20" value="${maxDCsToTest}" style="width:100%;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:12px;"/>
+    </div>
+
+    <div style="border-top:1px solid var(--ies-gray-200);margin:20px 0 16px 0;"></div>
     <span class="text-caption" style="color:var(--ies-gray-400);">ACTIONS</span>
     <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px;">
       <button class="hub-btn hub-btn-primary hub-btn-sm" data-action="run" style="width:100%;">Run Scenario</button>
-      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="compare-dcs" style="width:100%;font-size:11px;">Compare 1-5 DCs</button>
-      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="exact-solve" style="width:100%;font-size:11px;">Exact Solver</button>
+      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="compare-dcs" style="width:100%;font-size:11px;">Compare DCs</button>
+      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="exact-solve" style="width:100%;font-size:11px;">Exhaustive Search</button>
       <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="apply-market-rates" style="width:100%;font-size:11px;">Apply Market Rates</button>
       <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="balance-mode-mix" style="width:100%;font-size:11px;">Balance Mode Mix</button>
       <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="upload-rates-csv" style="width:100%;font-size:11px;">Upload Rate Card CSV</button>
-      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="export-csv" style="width:100%;font-size:11px;">Export CSV</button>
+      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="export-csv" style="width:100%;font-size:11px;">Export XLSX</button>
       <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="clear-scenarios" style="width:100%;">Clear All</button>
       <input type="file" id="netopt-csv-upload" accept=".csv,text/csv" style="display:none;"/>
     </div>
@@ -330,6 +342,17 @@ function renderSidebar() {
       else if (action === 'balance-mode-mix') balanceModeMix();
       else if (action === 'upload-rates-csv') document.getElementById('netopt-csv-upload')?.click();
     });
+  });
+
+  // Max DCs input
+  const maxDcsInput = el.querySelector('#netopt-max-dcs');
+  maxDcsInput?.addEventListener('change', (e) => {
+    const val = parseInt(e.target.value, 10) || 5;
+    maxDCsToTest = Math.max(1, Math.min(20, val));
+    // Clear stale comparison results
+    comparisonResults = null;
+    recommendedDCCount = null;
+    e.target.value = String(maxDCsToTest);
   });
 
   // CSV rate card upload
@@ -457,7 +480,7 @@ function compareMultipleDCs() {
     alert('Please add demand points first.');
     return;
   }
-  comparisonResults = calc.multiDCComparison(facilities, demands, modeMix, rateCard, serviceConfig, 5);
+  comparisonResults = calc.multiDCComparison(facilities, demands, modeMix, rateCard, serviceConfig, maxDCsToTest);
   const rec = calc.recommendOptimalDCs(comparisonResults);
   recommendedDCCount = rec.recommendedIdx;
   activeView = 'comparison';
@@ -477,9 +500,9 @@ function runExactSolver() {
     alert('Please activate at least one facility.');
     return;
   }
-  const result = calc.exactSolver(facilities, demands, 5, modeMix, rateCard, serviceConfig);
+  const result = calc.exactSolver(facilities, demands, maxDCsToTest, modeMix, rateCard, serviceConfig);
   if (!result) {
-    alert('Exact solver search space is too large (>10,000 combinations). Use comparison instead.');
+    alert('Exhaustive search space is too large (>10,000 combinations). Use comparison instead.');
     return;
   }
   comparisonResults = result.scenarios;
@@ -498,54 +521,66 @@ function exportToCSV() {
     return;
   }
 
-  let csv = 'IES Hub Network Optimization Export\n';
-  csv += new Date().toISOString() + '\n\n';
+  const sheets = {};
+  const timestamp = new Date().toISOString();
 
-  // Facilities
-  csv += 'FACILITIES\n';
-  csv += 'Name,City,State,Lat,Lng,Capacity,FixedCost,VarCost,IsOpen\n';
-  facilities.forEach(f => {
-    csv += `${f.name},${f.city || ''},${f.state || ''},${f.lat.toFixed(4)},${f.lng.toFixed(4)},${f.capacity || 0},${f.fixedCost || 0},${f.variableCost || 0},${f.isOpen ? 'Y' : 'N'}\n`;
-  });
+  // Facilities sheet
+  const facilitiesData = [
+    ['Name', 'City', 'State', 'Lat', 'Lng', 'Capacity', 'Fixed Cost', 'Variable Cost', 'Is Open'],
+    ...facilities.map(f => [
+      f.name, f.city || '', f.state || '',
+      parseFloat(f.lat.toFixed(4)),
+      parseFloat(f.lng.toFixed(4)),
+      f.capacity || 0, f.fixedCost || 0, f.variableCost || 0, f.isOpen ? 'Yes' : 'No'
+    ])
+  ];
+  sheets['Facilities'] = facilitiesData;
 
-  csv += '\nDEMAND POINTS\n';
-  csv += 'ZIP3,Lat,Lng,AnnualDemand,MaxDays,AvgWeight\n';
-  demands.forEach(d => {
-    csv += `${d.zip3 || ''},${d.lat.toFixed(4)},${d.lng.toFixed(4)},${d.annualDemand},${d.maxDays || 3},${d.avgWeight || 25}\n`;
-  });
+  // Demand sheet
+  const demandData = [
+    ['ZIP3', 'Lat', 'Lng', 'Annual Demand', 'Max Days', 'Avg Weight (lbs)'],
+    ...demands.map(d => [
+      d.zip3 || '', parseFloat(d.lat.toFixed(4)), parseFloat(d.lng.toFixed(4)),
+      d.annualDemand, d.maxDays || 3, d.avgWeight || 25
+    ])
+  ];
+  sheets['Demand'] = demandData;
 
-  if (activeScenario) {
-    csv += '\nSCENARIO: ' + activeScenario.name + '\n';
-    csv += `Total Cost,${activeScenario.totalCost}\n`;
-    csv += `Avg Distance,${activeScenario.avgDistance.toFixed(1)}\n`;
-    csv += `Service Level,${activeScenario.serviceLevel.toFixed(1)}%\n`;
-    csv += `SLA Met,${activeScenario.slaMet}/${activeScenario.slaTotal}\n\n`;
-
-    csv += 'LANE ASSIGNMENTS\n';
-    csv += 'FacilityID,DemandID,Distance,Transit,TLCost,LTLCost,ParcelCost,BlendedCost,MeetsSLA\n';
-    activeScenario.assignments.forEach(a => {
-      csv += `${a.facilityId},${a.demandId},${a.distanceMiles.toFixed(1)},${a.transitDays},${a.tlCost.toFixed(2)},${a.ltlCost.toFixed(2)},${a.parcelCost.toFixed(2)},${a.blendedCost.toFixed(2)},${a.meetsSlA ? 'Y' : 'N'}\n`;
-    });
+  // Assignments sheet (per scenario)
+  if (activeScenario && activeScenario.assignments.length > 0) {
+    const assignmentsData = [
+      ['Facility ID', 'Demand ID', 'Distance (mi)', 'Transit Days', 'TL Cost', 'LTL Cost', 'Parcel Cost', 'Blended Cost', 'Meets SLA'],
+      ...activeScenario.assignments.map(a => [
+        a.facilityId, a.demandId,
+        parseFloat(a.distanceMiles.toFixed(1)),
+        a.transitDays,
+        parseFloat(a.tlCost.toFixed(2)),
+        parseFloat(a.ltlCost.toFixed(2)),
+        parseFloat(a.parcelCost.toFixed(2)),
+        parseFloat(a.blendedCost.toFixed(2)),
+        a.meetsSlA ? 'Yes' : 'No'
+      ])
+    ];
+    sheets['Assignments'] = assignmentsData;
   }
 
-  if (comparisonResults) {
-    csv += '\nCOMPARISON RESULTS\n';
-    csv += 'DCCount,TotalCost,AvgDistance,ServiceLevel,SLAMet\n';
-    comparisonResults.forEach((s, i) => {
-      csv += `${i + 1},${s.totalCost.toFixed(2)},${s.avgDistance.toFixed(1)},${s.serviceLevel.toFixed(1)},${s.slaMet}/${s.slaTotal}\n`;
-    });
+  // Comparison sheet (multi-scenario)
+  if (comparisonResults && comparisonResults.length > 0) {
+    const comparisonData = [
+      ['DC Count', 'Total Cost', 'Avg Distance (mi)', 'Service Level (%)', 'SLA Met', 'Avg Cost/Unit'],
+      ...comparisonResults.map((s, i) => [
+        i + 1,
+        parseFloat(s.totalCost.toFixed(2)),
+        parseFloat(s.avgDistance.toFixed(1)),
+        parseFloat(s.serviceLevel.toFixed(1)),
+        `${s.slaMet}/${s.slaTotal}`,
+        parseFloat(s.avgCostPerUnit.toFixed(2))
+      ])
+    ];
+    sheets['Comparison'] = comparisonData;
   }
 
-  // Download
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `netopt-export-${new Date().getTime()}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  downloadXLSX(sheets, `netopt-export-${new Date().getTime()}.xlsx`);
 }
 
 // ============================================================
@@ -1077,6 +1112,13 @@ function renderResults(el) {
         ${costCard('Handling', s.costBreakdown.handling, s.totalCost)}
       </div>
 
+      <!-- Primary Actions -->
+      <div style="display:flex;gap:8px;margin-bottom:20px;">
+        <button class="hub-btn hub-btn-primary hub-btn-sm" id="no-push-fleet" style="display:flex;align-items:center;gap:6px;">
+          📊 Push to Fleet
+        </button>
+      </div>
+
       <!-- Assignment Table -->
       <div class="hub-card" style="padding:16px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
@@ -1124,6 +1166,36 @@ function renderResults(el) {
       </div>
     </div>
   `;
+
+  // Bind Push to Fleet button
+  el.querySelector('#no-push-fleet')?.addEventListener('click', () => {
+    if (!activeScenario) return;
+    pushToFleet(activeScenario);
+  });
+}
+
+function pushToFleet(scenario) {
+  if (!scenario || !scenario.assignments) return;
+
+  // Build lanes array from assignments
+  const lanes = scenario.assignments.map(a => {
+    const fac = facilities.find(f => f.id === a.facilityId);
+    const dem = demands.find(d => d.id === a.demandId);
+    if (!fac || !dem) return null;
+
+    return {
+      origin: fac,
+      destination: dem,
+      weeklyShipments: Math.ceil(dem.annualDemand / 52),
+      avgWeightLbs: dem.avgWeight || 25,
+      avgCubeFt3: (dem.avgWeight || 25) / 10, // Rough estimate: 1 cu ft per 10 lbs
+      distanceMiles: a.distanceMiles,
+    };
+  }).filter(Boolean);
+
+  // Emit event for Fleet Modeler to listen
+  bus.emit('netopt:push-to-fleet', { lanes, sourceScenario: scenario.name });
+  showNoToast(`Pushed ${lanes.length} lanes to Fleet Modeler`, 'success');
 }
 
 function kpi(label, value, color) {
