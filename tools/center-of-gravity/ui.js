@@ -6,14 +6,14 @@
  * @module tools/center-of-gravity/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import { state } from '../../shared/state.js?v=20260418-sK';
-import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sK';
-import { showToast } from '../../shared/toast.js?v=20260418-sK';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sK';
-import { downloadCSV } from '../../shared/export.js?v=20260418-sK';
-import * as calc from './calc.js?v=20260418-sK';
-import * as api from './api.js?v=20260418-sK';
+import { bus } from '../../shared/event-bus.js?v=20260418-sM';
+import { state } from '../../shared/state.js?v=20260418-sM';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sM';
+import { showToast } from '../../shared/toast.js?v=20260418-sM';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sM';
+import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
+import * as calc from './calc.js?v=20260418-sM';
+import * as api from './api.js?v=20260418-sM';
 
 // ============================================================
 // STATE
@@ -25,13 +25,13 @@ let rootEl = null;
 /** @type {'points' | 'analysis' | 'map' | 'sensitivity'} */
 let activeTab = 'points';
 
-/** @type {import('./types.js?v=20260418-sK').WeightedPoint[]} */
+/** @type {import('./types.js?v=20260418-sM').WeightedPoint[]} */
 let points = [];
 
-/** @type {import('./types.js?v=20260418-sK').CogConfig} */
+/** @type {import('./types.js?v=20260418-sM').CogConfig} */
 let config = { ...calc.DEFAULT_CONFIG };
 
-/** @type {import('./types.js?v=20260418-sK').MultiCogResult|null} */
+/** @type {import('./types.js?v=20260418-sM').MultiCogResult|null} */
 let cogResult = null;
 
 /** @type {Array<{ k: number, totalWeightedDistance: number, estimatedCost: number, avgDistance: number }>|null} */
@@ -39,6 +39,16 @@ let sensitivityData = null;
 
 /** @type {object|null} */
 let mapInstance = null;
+
+/**
+ * Map overlay options — service-zone rings + heatmap toggles with
+ * a user-editable radii list (comma-separated miles).
+ */
+let mapOptions = {
+  zones: true,
+  heat: true,
+  zoneRadiiMiles: [250, 500, 750],
+};
 
 // ============================================================
 // LIFECYCLE
@@ -427,19 +437,48 @@ function renderMap(el) {
 
   el.innerHTML = `
     <div style="display:flex;flex-direction:column;height:100%;">
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
         <h3 class="text-section" style="margin:0;">Center of Gravity Map</h3>
         <span style="font-size:11px;color:var(--ies-gray-400);">${points.length} points • ${cogResult.centers.length} center(s)</span>
+        <div style="margin-left:auto;display:flex;gap:10px;align-items:center;">
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ies-gray-600);cursor:pointer;">
+            <input type="checkbox" data-cog-toggle="zones" ${mapOptions.zones ? 'checked' : ''} style="margin:0;"> Service zones
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ies-gray-600);cursor:pointer;">
+            <input type="checkbox" data-cog-toggle="heat" ${mapOptions.heat ? 'checked' : ''} style="margin:0;"> Heatmap
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--ies-gray-600);">
+            Radii:
+            <input type="text" data-cog-toggle="radii" value="${mapOptions.zoneRadiiMiles.join(',')}"
+                   style="width:100px;padding:2px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:11px;" title="Comma-separated service ring radii in miles">
+          </label>
+        </div>
       </div>
       <div id="cog-map-container" style="flex:1;min-height:500px;border-radius:10px;border:1px solid var(--ies-gray-200);overflow:hidden;"></div>
-      <div style="display:flex;gap:16px;margin-top:12px;font-size:11px;color:var(--ies-gray-400);">
+      <div style="display:flex;gap:16px;margin-top:12px;font-size:11px;color:var(--ies-gray-400);flex-wrap:wrap;">
         <span><span style="display:inline-block;width:14px;height:14px;background:#ef4444;border-radius:50%;vertical-align:middle;border:2px solid #fff;box-shadow:0 0 0 1px #ef4444;"></span> Optimal Center</span>
         ${cogResult.centers.map((_, i) => `
           <span><span style="display:inline-block;width:10px;height:10px;background:${clusterColor(i)};border-radius:50%;vertical-align:middle;"></span> Cluster ${i + 1}</span>
         `).join('')}
+        ${mapOptions.zones ? `<span style="opacity:0.8;">Rings: ${mapOptions.zoneRadiiMiles.join(' / ')} mi</span>` : ''}
       </div>
     </div>
   `;
+
+  // Wire toggles — delegate on the controls row
+  el.querySelectorAll('[data-cog-toggle]').forEach(input => {
+    input.addEventListener('change', (e) => {
+      const key = /** @type {HTMLElement} */ (e.target).dataset.cogToggle;
+      if (key === 'radii') {
+        const raw = /** @type {HTMLInputElement} */ (e.target).value;
+        const parsed = raw.split(',').map(s => parseFloat(s.trim())).filter(n => Number.isFinite(n) && n > 0);
+        mapOptions.zoneRadiiMiles = parsed.length ? parsed : [250, 500, 750];
+      } else {
+        mapOptions[key] = /** @type {HTMLInputElement} */ (e.target).checked;
+      }
+      renderMap(el);
+    });
+  });
 
   requestAnimationFrame(() => initCogMap());
 }
@@ -458,6 +497,48 @@ function initCogMap() {
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 18, attribution: '&copy; OpenStreetMap'
   }).addTo(mapInstance);
+
+  // Heatmap layer (drawn first so it sits under markers).
+  // We weight each demand point and overlay a soft halo whose radius
+  // scales with weight relative to the max in the dataset.
+  if (mapOptions.heat) {
+    const maxWeight = Math.max(1, ...points.map(p => p.weight || 0));
+    points.forEach(pt => {
+      const w = pt.weight || 0;
+      if (w <= 0) return;
+      const norm = w / maxWeight;
+      // Halo radius in metres: 80km at max weight, 12km at min meaningful weight
+      const haloMetres = 12000 + norm * 68000;
+      L.circle([pt.lat, pt.lng], {
+        radius: haloMetres,
+        color: '#ff5630',
+        weight: 0,
+        fillColor: '#ff5630',
+        fillOpacity: 0.10 + norm * 0.20,    // 0.10 → 0.30
+        interactive: false,
+      }).addTo(mapInstance);
+    });
+  }
+
+  // Service zones — translucent rings around each center at the
+  // configured radii. Sits under the cluster lines so they read clearly.
+  if (mapOptions.zones && Array.isArray(mapOptions.zoneRadiiMiles)) {
+    cogResult.centers.forEach((c, i) => {
+      const color = clusterColor(i);
+      mapOptions.zoneRadiiMiles.forEach((mi, ringIdx) => {
+        L.circle([c.lat, c.lng], {
+          radius: mi * 1609.34,                           // miles → metres
+          color,
+          weight: 1,
+          opacity: 0.5,
+          fillColor: color,
+          fillOpacity: 0.04 + (mapOptions.zoneRadiiMiles.length - ringIdx) * 0.02,
+          dashArray: ringIdx > 0 ? '4 4' : null,
+          interactive: false,
+        }).addTo(mapInstance);
+      });
+    });
+  }
 
   // Demand points colored by cluster
   cogResult.assignments.forEach(a => {
