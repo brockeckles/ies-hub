@@ -99,7 +99,7 @@ export async function listElements(templateId) {
   const { data, error } = await db.from('ref_most_elements')
     .select('*')
     .eq('template_id', templateId)
-    .order('sequence');
+    .order('sequence_order');
   if (error) throw error;
   return data || [];
 }

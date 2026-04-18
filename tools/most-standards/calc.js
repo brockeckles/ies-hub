@@ -111,7 +111,7 @@ export function adjustedCycleTime(tmuTotal, pfdPct) {
  * @returns {number}
  */
 export function sumElementTmu(elements) {
-  return (elements || []).reduce((sum, el) => sum + (el.tmu || 0), 0);
+  return (elements || []).reduce((sum, el) => sum + (el.tmu_value || 0), 0);
 }
 
 /**
@@ -133,9 +133,9 @@ export function elementBreakdown(elements) {
  * @returns {number}
  */
 export function variableElementTmu(element, factor = 0.5) {
-  if (!element.is_variable) return element.tmu || 0;
-  const min = element.variable_min ?? element.tmu;
-  const max = element.variable_max ?? element.tmu;
+  if (!element.is_variable) return element.tmu_value || 0;
+  const min = element.variable_min ?? element.tmu_value;
+  const max = element.variable_max ?? element.tmu_value;
   const f = Math.max(0, Math.min(1, factor));
   return min + (max - min) * f;
 }
@@ -332,24 +332,29 @@ export function calcAnnualizedCost(dailyCost, operatingDays) {
 /**
  * Convert analysis lines into Cost Model direct labor lines.
  * This is the integration bridge: MOST analysis → CM laborLines.
+ * Includes per-line metadata: wms_transaction, equipment_type, pick_method.
  *
  * @param {import('./types.js?v=20260418-sI').AnalysisLine[]} lines
  * @param {Object} opts
  * @param {number} opts.operatingDays — annual operating days
  * @param {number} opts.shiftHours — hours per shift
  * @param {number} [opts.defaultBurdenPct=30]
+ * @param {Map<string|number, import('./types.js?v=20260418-sI').MostTemplate>} [opts.templateMap] — optional: template_id → template for metadata lookup
  * @returns {import('./types.js?v=20260418-sI').MostToCmPayload['laborLines']}
  */
 export function convertToCmLaborLines(lines, opts) {
   const opDays = opts.operatingDays || DEFAULT_OPERATING_DAYS;
   const shiftHrs = opts.shiftHours || 8;
   const burdenPct = opts.defaultBurdenPct ?? 30;
+  const templateMap = opts.templateMap || new Map();
 
   return (lines || []).map(line => {
     const annualVolume = (line.daily_volume || 0) * opDays;
     const annualHours = (line.hours_per_day || 0) * opDays;
 
-    return {
+    // Lookup template for metadata if templateMap provided
+    const template = templateMap.get(line.template_id);
+    const payload = {
       activity_name: line.activity_name || '',
       process_area: line.process_area || '',
       labor_category: line.labor_category || 'manual',
@@ -361,6 +366,15 @@ export function convertToCmLaborLines(lines, opts) {
       most_template_id: line.template_id || '',
       most_template_name: line.activity_name || '',
     };
+
+    // Add optional metadata from template if available
+    if (template) {
+      if (template.wms_transaction) payload.wms_transaction = template.wms_transaction;
+      if (template.equipment_type) payload.equipment_type = template.equipment_type;
+      if (template.pick_method) payload.pick_method = template.pick_method;
+    }
+
+    return payload;
   });
 }
 

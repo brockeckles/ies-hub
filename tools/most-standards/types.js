@@ -167,9 +167,67 @@
 /**
  * Payload emitted on bus 'most:push-to-cm' event.
  * @typedef {Object} MostToCmPayload
- * @property {Array<{ activity_name: string, process_area: string, labor_category: string, annual_hours: number, base_uph: number, volume: number, hourly_rate: number, burden_pct: number, most_template_id: number|string, most_template_name: string }>} laborLines
+ * @property {Array<{ activity_name: string, process_area: string, labor_category: string, annual_hours: number, base_uph: number, volume: number, hourly_rate: number, burden_pct: number, most_template_id: number|string, most_template_name: string, wms_transaction?: string, equipment_type?: string, pick_method?: string }>} laborLines
  * @property {number} operatingDays
  * @property {number} shiftHours
  */
+
+// ============================================================
+// SCHEMA ACCESSOR HELPERS — bridge v2 names to v3 schema
+// ============================================================
+
+/**
+ * Get template activity_name (v3 schema).
+ * @param {MostTemplate} tpl
+ * @returns {string}
+ */
+export function getMostTplName(tpl) {
+  return tpl?.activity_name || '';
+}
+
+/**
+ * Get template base UPH (v3: units_per_hour_base).
+ * @param {MostTemplate} tpl
+ * @returns {number}
+ */
+export function getMostTplBaseUph(tpl) {
+  return tpl?.units_per_hour_base || 0;
+}
+
+/**
+ * Get template total TMU (v3: total_tmu_base).
+ * @param {MostTemplate} tpl
+ * @returns {number}
+ */
+export function getMostTplTmuTotal(tpl) {
+  return tpl?.total_tmu_base || 0;
+}
+
+/**
+ * Get element name (v3: element_name).
+ * @param {MostElement} el
+ * @returns {string}
+ */
+export function getMostElName(el) {
+  return el?.element_name || '';
+}
+
+/**
+ * Get element sequence order (v3: sequence_order).
+ * @param {MostElement} el
+ * @returns {number}
+ */
+export function getMostElSequence(el) {
+  return el?.sequence_order || 0;
+}
+
+/**
+ * Get element TMU value (v3: tmu_value).
+ * @param {MostElement} el
+ * @returns {number}
+ */
+export function getMostElTmu(el) {
+  return el?.tmu_value || 0;
+}
 
 export {};

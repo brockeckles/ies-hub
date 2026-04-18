@@ -11,6 +11,7 @@ import { state } from '../../shared/state.js?v=20260418-sI';
 import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sI';
 import * as calc from './calc.js?v=20260418-sI';
 import * as api from './api.js?v=20260418-sI';
+import { getMostTplName, getMostTplBaseUph, getMostTplTmuTotal, getMostElName, getMostElSequence, getMostElTmu } from './types.js?v=20260418-sI';
 
 // ============================================================
 // STATE — tool-local
@@ -318,17 +319,20 @@ function renderLibrary() {
 
 function renderTemplateCard(t) {
   const isSelected = selectedTemplate?.id === t.id;
+  const tplName = getMostTplName(t);
+  const tplUph = getMostTplBaseUph(t);
+  const tplTmu = getMostTplTmuTotal(t);
   return `
     <div class="most-tpl-card${isSelected ? ' selected' : ''}" data-action="select-template" data-id="${t.id}">
-      <div class="most-tpl-name">${t.name}</div>
+      <div class="most-tpl-name">${tplName}</div>
       <div class="most-tpl-meta">
         <span class="most-cat-badge most-cat-${t.labor_category || 'manual'}">${(t.labor_category || 'manual').toUpperCase()}</span>
         <span>${t.uom || 'each'}</span>
       </div>
       <div class="most-tpl-stats">
-        <div class="most-tpl-stat">${calc.formatUph(t.base_uph)}<span>Base UPH</span></div>
-        <div class="most-tpl-stat">${t.tmu_total || 0}<span>TMU</span></div>
-        <div class="most-tpl-stat">${calc.formatTmu(t.tmu_total || 0)}<span>Cycle Time</span></div>
+        <div class="most-tpl-stat">${calc.formatUph(tplUph)}<span>Base UPH</span></div>
+        <div class="most-tpl-stat">${tplTmu}<span>TMU</span></div>
+        <div class="most-tpl-stat">${calc.formatTmu(tplTmu)}<span>Cycle Time</span></div>
       </div>
     </div>
   `;
@@ -339,12 +343,15 @@ function renderTemplateDetail() {
   if (!t) return '';
 
   const elBreak = calc.elementBreakdown(selectedElements);
+  const tplName = getMostTplName(t);
+  const tplUph = getMostTplBaseUph(t);
+  const tplTmu = getMostTplTmuTotal(t);
 
   return `
     <div class="most-detail-panel">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px;">
         <div>
-          <div style="font-size:18px; font-weight:800; color:var(--ies-navy);">${t.name}</div>
+          <div style="font-size:18px; font-weight:800; color:var(--ies-navy);">${tplName}</div>
           <div style="font-size:13px; color:var(--ies-gray-500); margin-top:4px;">
             ${t.process_area} · <span class="most-cat-badge most-cat-${t.labor_category}">${(t.labor_category || 'manual').toUpperCase()}</span> · ${t.uom || 'each'}
           </div>
@@ -356,9 +363,9 @@ function renderTemplateDetail() {
 
       <!-- KPIs -->
       <div class="hub-kpi-bar mb-4">
-        <div class="hub-kpi-item"><div class="hub-kpi-label">Base UPH</div><div class="hub-kpi-value">${calc.formatUph(t.base_uph)}</div></div>
-        <div class="hub-kpi-item"><div class="hub-kpi-label">Total TMU</div><div class="hub-kpi-value">${t.tmu_total || 0}</div></div>
-        <div class="hub-kpi-item"><div class="hub-kpi-label">Cycle Time</div><div class="hub-kpi-value">${calc.formatTmu(t.tmu_total || 0)}</div></div>
+        <div class="hub-kpi-item"><div class="hub-kpi-label">Base UPH</div><div class="hub-kpi-value">${calc.formatUph(tplUph)}</div></div>
+        <div class="hub-kpi-item"><div class="hub-kpi-label">Total TMU</div><div class="hub-kpi-value">${tplTmu}</div></div>
+        <div class="hub-kpi-item"><div class="hub-kpi-label">Cycle Time</div><div class="hub-kpi-value">${calc.formatTmu(tplTmu)}</div></div>
         <div class="hub-kpi-item"><div class="hub-kpi-label">Elements</div><div class="hub-kpi-value">${elBreak.total} <span style="font-size:11px; font-weight:400; color:var(--ies-gray-400);">(${elBreak.variable} var)</span></div></div>
       </div>
 
@@ -372,11 +379,11 @@ function renderTemplateDetail() {
           <tbody>
             ${selectedElements.map(el => `
               <tr>
-                <td>${el.sequence}</td>
-                <td>${el.description || ''}</td>
+                <td>${getMostElSequence(el)}</td>
+                <td>${getMostElName(el) || ''}</td>
                 <td style="font-family:monospace; font-size:11px; color:var(--ies-gray-500);">${el.most_sequence || ''}</td>
-                <td class="cm-num">${el.tmu || 0}</td>
-                <td class="cm-num">${calc.formatTmu(el.tmu || 0)}</td>
+                <td class="cm-num">${getMostElTmu(el)}</td>
+                <td class="cm-num">${calc.formatTmu(getMostElTmu(el))}</td>
                 <td>${el.is_variable ? '<span style="color:var(--ies-orange); font-weight:600;">Variable</span>' : 'Fixed'}</td>
               </tr>
             `).join('')}
@@ -421,11 +428,11 @@ function renderEditor() {
         <tbody>
           ${templates.map(t => `
             <tr>
-              <td>${t.name}</td>
+              <td>${getMostTplName(t)}</td>
               <td>${t.process_area || '—'}</td>
               <td><span class="most-cat-badge most-cat-${t.labor_category || 'manual'}" style="font-size:10px;">${(t.labor_category || 'manual').toUpperCase()}</span></td>
-              <td class="cm-num">${calc.formatUph(t.base_uph)}</td>
-              <td class="cm-num">${t.tmu_total || 0}</td>
+              <td class="cm-num">${calc.formatUph(getMostTplBaseUph(t))}</td>
+              <td class="cm-num">${getMostTplTmuTotal(t)}</td>
               <td class="cm-num">${t.element_count || 0}</td>
               <td>
                 <button class="cm-edit-btn" data-action="edit-template" data-id="${t.id}" style="margin-right:4px;">Edit</button>
@@ -460,7 +467,7 @@ function renderEditor() {
       <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:16px;">
         <div>
           <label class="cm-form-label">Activity Name *</label>
-          <input class="hub-input" id="edit-tpl-name" value="${t.name || ''}" placeholder="e.g., Case Pick" />
+          <input class="hub-input" id="edit-tpl-name" value="${getMostTplName(t) || ''}" placeholder="e.g., Case Pick" />
         </div>
         <div>
           <label class="cm-form-label">Process Area *</label>
@@ -538,7 +545,7 @@ function renderEditor() {
             ${editorElements.map((el, i) => `
               <tr>
                 <td>${i + 1}</td>
-                <td><input class="hub-input" type="text" value="${el.description || ''}" data-elem-idx="${i}" data-elem-field="description" style="width:100%; font-size:11px; padding:4px 6px;" /></td>
+                <td><input class="hub-input" type="text" value="${getMostElName(el) || ''}" data-elem-idx="${i}" data-elem-field="element_name" style="width:100%; font-size:11px; padding:4px 6px;" /></td>
                 <td><input class="hub-input" type="text" value="${el.most_sequence || ''}" data-elem-idx="${i}" data-elem-field="most_sequence" style="width:100%; font-size:11px; padding:4px 6px; font-family:monospace;" /></td>
                 <td>
                   <select data-elem-idx="${i}" data-elem-field="sequence_type" style="width:100%; font-size:11px; padding:4px 6px;">
@@ -548,7 +555,7 @@ function renderEditor() {
                     <option value="body_motion"${el.sequence_type === 'body_motion' ? ' selected' : ''}>Body Motion</option>
                   </select>
                 </td>
-                <td><input class="hub-input" type="number" value="${el.tmu || 0}" data-elem-idx="${i}" data-elem-field="tmu" style="width:100%; font-size:11px; padding:4px 6px;" /></td>
+                <td><input class="hub-input" type="number" value="${getMostElTmu(el) || 0}" data-elem-idx="${i}" data-elem-field="tmu_value" style="width:100%; font-size:11px; padding:4px 6px;" /></td>
                 <td><input type="checkbox" ${el.is_variable ? 'checked' : ''} data-elem-idx="${i}" data-elem-field="is_variable" style="cursor:pointer;" /></td>
                 <td><button class="cm-delete-btn" data-action="delete-element" data-idx="${i}" style="font-size:12px;">Del</button></td>
               </tr>
@@ -656,7 +663,7 @@ function renderAnalysis() {
                 <option value="">— Manual —</option>
                 ${Object.entries(tplsByArea).map(([area, tpls]) =>
                   `<optgroup label="${area}">
-                    ${tpls.map(t => `<option value="${t.id}"${line.template_id === t.id ? ' selected' : ''}>${t.name}</option>`).join('')}
+                    ${tpls.map(t => `<option value="${t.id}"${line.template_id === t.id ? ' selected' : ''}>${getMostTplName(t)}</option>`).join('')}
                   </optgroup>`
                 ).join('')}
               </select>
@@ -825,7 +832,7 @@ function renderWorkflowComposer() {
                 <option value="">— Select Template —</option>
                 ${Object.entries(tplsByArea).map(([area, tpls]) =>
                   `<optgroup label="${area}">
-                    ${tpls.map(t => `<option value="${t.id}"${step.template_id === t.id ? ' selected' : ''}>${t.name}</option>`).join('')}
+                    ${tpls.map(t => `<option value="${t.id}"${step.template_id === t.id ? ' selected' : ''}>${getMostTplName(t)}</option>`).join('')}
                   </optgroup>`
                 ).join('')}
               </select>
@@ -984,10 +991,10 @@ function bindContentEvents(container) {
       const tpl = (refData.templates || []).find(t => t.id === tplId);
       if (tpl && analysis.lines[idx]) {
         analysis.lines[idx].template_id = tpl.id;
-        analysis.lines[idx].activity_name = tpl.name;
+        analysis.lines[idx].activity_name = getMostTplName(tpl);
         analysis.lines[idx].process_area = tpl.process_area;
         analysis.lines[idx].labor_category = tpl.labor_category || 'manual';
-        analysis.lines[idx].base_uph = tpl.base_uph || 0;
+        analysis.lines[idx].base_uph = getMostTplBaseUph(tpl);
         analysis.lines[idx].uom = tpl.uom || 'each';
       }
       renderContent();
@@ -1078,31 +1085,39 @@ function bindContentEvents(container) {
       const tpl = (refData.templates || []).find(t => t.id === tplId);
       if (tpl && workflow.steps[idx]) {
         workflow.steps[idx].template_id = tpl.id;
-        workflow.steps[idx].step_name = tpl.name;
+        workflow.steps[idx].step_name = getMostTplName(tpl);
         workflow.steps[idx].process_area = tpl.process_area;
         workflow.steps[idx].labor_category = tpl.labor_category || 'manual';
-        workflow.steps[idx].base_uph = tpl.base_uph || 0;
+        workflow.steps[idx].base_uph = getMostTplBaseUph(tpl);
       }
       renderContent();
     });
   });
 
-  // Template editor inputs
+  // Template editor inputs — use input+change with debounce for updateEditorMetrics (F1 P1)
+  let editorMetricsTimeout = null;
+  const debouncedUpdateEditorMetrics = () => {
+    clearTimeout(editorMetricsTimeout);
+    editorMetricsTimeout = setTimeout(() => updateEditorMetrics(), 300);
+  };
+
   container.querySelectorAll('[data-elem-field]').forEach(input => {
-    input.addEventListener('change', e => {
+    const handleUpdate = (e) => {
       const idx = parseInt(/** @type {HTMLInputElement} */ (e.target).dataset.elemIdx);
       const field = /** @type {HTMLInputElement} */ (e.target).dataset.elemField;
       if (editorElements[idx]) {
         if (field === 'is_variable') {
           editorElements[idx][field] = /** @type {HTMLInputElement} */ (e.target).checked;
-        } else if (field === 'tmu') {
+        } else if (field === 'tmu_value') {
           editorElements[idx][field] = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
         } else {
           editorElements[idx][field] = /** @type {HTMLInputElement} */ (e.target).value;
         }
-        updateEditorMetrics();
+        debouncedUpdateEditorMetrics();
       }
-    });
+    };
+    input.addEventListener('input', handleUpdate);
+    input.addEventListener('change', handleUpdate);
   });
 
   // Scenario load/delete buttons
@@ -1128,7 +1143,7 @@ function handleAction(action, idx) {
   switch (action) {
     // Template Editor
     case 'create-template':
-      editorTemplate = { id: null, name: '', process_area: '', labor_category: 'manual', uom: 'each', description: '' };
+      editorTemplate = { id: null, activity_name: '', process_area: '', labor_category: 'manual', uom: 'each', description: '' };
       editorElements = [];
       break;
     case 'close-editor':
@@ -1189,10 +1204,15 @@ function pushToCostModel() {
     return { ...line, ...derived };
   });
 
+  // Build template map for metadata lookup (E1 P0)
+  const templateMap = new Map();
+  (refData.templates || []).forEach(t => templateMap.set(t.id, t));
+
   const cmLines = calc.convertToCmLaborLines(computedLines, {
     operatingDays: analysis.operating_days,
     shiftHours: analysis.shift_hours,
     defaultBurdenPct: 30,
+    templateMap,
   });
 
   /** @type {import('./types.js?v=20260418-sI').MostToCmPayload} */
@@ -1215,7 +1235,7 @@ function filterTemplates() {
     if (filters.laborCategory && t.labor_category !== filters.laborCategory) return false;
     if (filters.search) {
       const q = filters.search.toLowerCase();
-      if (!t.name.toLowerCase().includes(q) && !(t.description || '').toLowerCase().includes(q)) return false;
+      if (!getMostTplName(t).toLowerCase().includes(q) && !(t.description || '').toLowerCase().includes(q)) return false;
     }
     return true;
   });
@@ -1303,11 +1323,11 @@ function createEmptyElement() {
   return {
     id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
     template_id: null,
-    sequence: (editorElements.length || 0) + 1,
-    description: '',
+    sequence_order: (editorElements.length || 0) + 1,
+    element_name: '',
     most_sequence: '',
     sequence_type: 'general_move',
-    tmu: 0,
+    tmu_value: 0,
     is_variable: false,
     variable_driver: null,
     variable_min: 0,
@@ -1354,18 +1374,18 @@ async function saveTemplateAction() {
   const baseUph = calc.baseUph(totalTmu);
 
   try {
-    let tpl = editorTemplate || { name, process_area: area, labor_category: cat, uom, equipment_type: equipment, wms_transaction: wms, description: desc };
+    let tpl = editorTemplate || { activity_name: name, process_area: area, labor_category: cat, uom, equipment_type: equipment, wms_transaction: wms, description: desc };
 
     if (editorTemplate?.id) {
       // Update existing
       tpl = await api.updateTemplate(editorTemplate.id, {
-        name, process_area: area, labor_category: cat, uom, equipment_type: equipment,
-        wms_transaction: wms, description: desc, tmu_total: totalTmu, base_uph: baseUph,
+        activity_name: name, process_area: area, labor_category: cat, uom, equipment_type: equipment,
+        wms_transaction: wms, description: desc, total_tmu_base: totalTmu, units_per_hour_base: baseUph,
       });
       // Update elements
       for (let i = 0; i < editorElements.length; i++) {
         const el = editorElements[i];
-        el.sequence = i + 1;
+        el.sequence_order = i + 1;
         el.template_id = tpl.id;
         if (el.id && !el.id.includes('new')) {
           await api.updateElement(el.id, el);
@@ -1377,12 +1397,12 @@ async function saveTemplateAction() {
     } else {
       // Create new
       tpl = await api.createTemplate({
-        name, process_area: area, labor_category: cat, uom, equipment_type: equipment,
-        wms_transaction: wms, description: desc, tmu_total: totalTmu, base_uph: baseUph, is_active: true,
+        activity_name: name, process_area: area, labor_category: cat, uom, equipment_type: equipment,
+        wms_transaction: wms, description: desc, total_tmu_base: totalTmu, units_per_hour_base: baseUph, is_active: true,
       });
       // Add elements
       for (let i = 0; i < editorElements.length; i++) {
-        const el = { ...editorElements[i], sequence: i + 1, template_id: tpl.id };
+        const el = { ...editorElements[i], sequence_order: i + 1, template_id: tpl.id };
         const newEl = await api.createElement(el);
         editorElements[i].id = newEl.id;
       }
