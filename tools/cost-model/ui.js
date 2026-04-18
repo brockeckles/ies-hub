@@ -6,16 +6,16 @@
  * @module tools/cost-model/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sC';
-import { state } from '../../shared/state.js?v=20260418-sC';
-import * as calc from './calc.js?v=20260418-sC';
-import * as api from './api.js?v=20260418-sC';
+import { bus } from '../../shared/event-bus.js?v=20260418-sD';
+import { state } from '../../shared/state.js?v=20260418-sD';
+import * as calc from './calc.js?v=20260418-sD';
+import * as api from './api.js?v=20260418-sD';
 
 // ============================================================
 // STATE — tool-local reactive state
 // ============================================================
 
-/** @type {import('./types.js?v=20260418-sC').CostModelData} */
+/** @type {import('./types.js?v=20260418-sD').CostModelData} */
 let model = createEmptyModel();
 
 /** @type {Object} */
@@ -2443,7 +2443,7 @@ function sectionHasData(key) {
 /**
  * Handle incoming labor lines from MOST tool.
  * Merges or replaces CM laborLines with MOST-derived data.
- * @param {import('../most-standards/types.js?v=20260418-sC').MostToCmPayload} payload
+ * @param {import('../most-standards/types.js?v=20260418-sD').MostToCmPayload} payload
  */
 function handleMostPush(payload) {
   if (!payload?.laborLines?.length) return;
@@ -2481,7 +2481,7 @@ function handleMostPush(payload) {
 /**
  * Handle incoming facility data from Warehouse Sizing Calculator.
  * Populates CM facility section fields.
- * @param {import('../warehouse-sizing/types.js?v=20260418-sC').WscToCmPayload} payload
+ * @param {import('../warehouse-sizing/types.js?v=20260418-sD').WscToCmPayload} payload
  */
 function handleWscPush(payload) {
   if (!payload) return;
@@ -2535,6 +2535,10 @@ function renderLanding() {
   });
   return `
     <div style="padding:32px;max-width:1280px;margin:0 auto;">
+      <a href="#designtools" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--ies-gray-500);text-decoration:none;margin-bottom:8px;" onmouseover="this.style.color='#ff3a00'" onmouseout="this.style.color='var(--ies-gray-500)'">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        Back to Design Tools
+      </a>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">
         <div>
           <h2 class="text-page" style="margin:0 0 4px 0;">Cost Model Builder</h2>

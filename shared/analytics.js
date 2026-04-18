@@ -6,7 +6,7 @@
  * but never block the UI.
  *
  * Usage:
- *   import { analytics } from './shared/analytics.js?v=20260418-sC';
+ *   import { analytics } from './shared/analytics.js?v=20260418-sD';
  *   analytics.track('feature_used', { feature: 'cm_export_excel' });
  *   analytics.pageView('designtools/cost-model');
  *
@@ -21,7 +21,7 @@
  * @module shared/analytics
  */
 
-import { db } from './supabase.js?v=20260418-sC';
+import { db } from './supabase.js?v=20260418-sD';
 
 const SESSION_KEY = 'ies_hub_analytics_session';
 const SESSION_TTL_MS = 30 * 60 * 1000;

@@ -5,7 +5,7 @@
  * calls. Standardizes the toast UX across every tool.
  *
  * Usage:
- *   import { showToast } from './shared/toast.js?v=20260418-sC';
+ *   import { showToast } from './shared/toast.js?v=20260418-sD';
  *   showToast('Model saved', 'success');
  *   showToast('Save failed: invalid input', 'error');
  *
@@ -21,7 +21,7 @@
  * @module shared/toast
  */
 
-import { bus } from './event-bus.js?v=20260418-sC';
+import { bus } from './event-bus.js?v=20260418-sD';
 
 const STACK_ID = 'hub-toast-stack';
 const MAX_TOASTS = 5;

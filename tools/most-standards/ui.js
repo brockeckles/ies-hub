@@ -6,10 +6,10 @@
  * @module tools/most-standards/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sC';
-import { state } from '../../shared/state.js?v=20260418-sC';
-import * as calc from './calc.js?v=20260418-sC';
-import * as api from './api.js?v=20260418-sC';
+import { bus } from '../../shared/event-bus.js?v=20260418-sD';
+import { state } from '../../shared/state.js?v=20260418-sD';
+import * as calc from './calc.js?v=20260418-sD';
+import * as api from './api.js?v=20260418-sD';
 
 // ============================================================
 // STATE — tool-local
@@ -21,13 +21,13 @@ let activeTab = 'library';
 /** @type {HTMLElement|null} */
 let rootEl = null;
 
-/** @type {{ templates: import('./types.js?v=20260418-sC').MostTemplate[], allowanceProfiles: import('./types.js?v=20260418-sC').AllowanceProfile[] }} */
+/** @type {{ templates: import('./types.js?v=20260418-sD').MostTemplate[], allowanceProfiles: import('./types.js?v=20260418-sD').AllowanceProfile[] }} */
 let refData = { templates: [], allowanceProfiles: [] };
 
-/** @type {import('./types.js?v=20260418-sC').MostTemplate|null} */
+/** @type {import('./types.js?v=20260418-sD').MostTemplate|null} */
 let selectedTemplate = null;
 
-/** @type {import('./types.js?v=20260418-sC').MostElement[]} */
+/** @type {import('./types.js?v=20260418-sD').MostElement[]} */
 let selectedElements = [];
 
 /** Template editor state — null if not editing, or a copy of the template being edited */
@@ -54,11 +54,11 @@ function loadSavedScenarios() {
 let filters = { search: '', processArea: '', laborCategory: '' };
 
 // --- Analysis state ---
-/** @type {import('./types.js?v=20260418-sC').LaborAnalysis} */
+/** @type {import('./types.js?v=20260418-sD').LaborAnalysis} */
 let analysis = createEmptyAnalysis();
 
 // --- Workflow state ---
-/** @type {import('./types.js?v=20260418-sC').Workflow} */
+/** @type {import('./types.js?v=20260418-sD').Workflow} */
 let workflow = createEmptyWorkflow();
 
 // ============================================================
@@ -126,6 +126,13 @@ export function unmount() {
 function renderShell() {
   return `
     <div class="hub-analyzer" style="height: calc(100vh - 48px);">
+      <!-- Back to Design Tools -->
+      <div style="padding:12px 24px 0;">
+        <a href="#designtools" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--ies-gray-500);text-decoration:none;" onmouseover="this.style.color='#0047AB'" onmouseout="this.style.color='var(--ies-gray-500)'">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          Back to Design Tools
+        </a>
+      </div>
       <!-- Tab Bar -->
       <div class="hub-analyzer-tabs">
         <button class="most-tab hub-tab active" data-tab="library">Template Library</button>
@@ -1169,7 +1176,7 @@ function pushToCostModel() {
     defaultBurdenPct: 30,
   });
 
-  /** @type {import('./types.js?v=20260418-sC').MostToCmPayload} */
+  /** @type {import('./types.js?v=20260418-sD').MostToCmPayload} */
   const payload = {
     laborLines: cmLines,
     operatingDays: analysis.operating_days,
@@ -1196,7 +1203,7 @@ function filterTemplates() {
 }
 
 function groupByProcessArea(templates) {
-  /** @type {Record<string, import('./types.js?v=20260418-sC').MostTemplate[]>} */
+  /** @type {Record<string, import('./types.js?v=20260418-sD').MostTemplate[]>} */
   const groups = {};
   for (const t of templates) {
     const area = t.process_area || 'Other';

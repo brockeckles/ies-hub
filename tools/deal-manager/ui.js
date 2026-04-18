@@ -6,10 +6,10 @@
  * @module tools/deal-manager/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sC';
-import { state } from '../../shared/state.js?v=20260418-sC';
-import * as calc from './calc.js?v=20260418-sC';
-import * as api from './api.js?v=20260418-sC';
+import { bus } from '../../shared/event-bus.js?v=20260418-sD';
+import { state } from '../../shared/state.js?v=20260418-sD';
+import * as calc from './calc.js?v=20260418-sD';
+import * as api from './api.js?v=20260418-sD';
 
 // ============================================================
 // STATE
@@ -24,28 +24,28 @@ let activeTab = 'list';
 /** @type {'kanban' | 'table'} */
 let landingViewMode = 'kanban';
 
-/** @type {import('./types.js?v=20260418-sC').Deal|null} */
+/** @type {import('./types.js?v=20260418-sD').Deal|null} */
 let activeDeal = null;
 
-/** @type {import('./types.js?v=20260418-sC').Site[]} */
+/** @type {import('./types.js?v=20260418-sD').Site[]} */
 let sites = [];
 
-/** @type {import('./types.js?v=20260418-sC').DealFinancials|null} */
+/** @type {import('./types.js?v=20260418-sD').DealFinancials|null} */
 let financials = null;
 
-/** @type {import('./types.js?v=20260418-sC').DosStage[]} */
+/** @type {import('./types.js?v=20260418-sD').DosStage[]} */
 let dosStages = [];
 
-/** @type {import('./types.js?v=20260418-sC').Deal[]} */
+/** @type {import('./types.js?v=20260418-sD').Deal[]} */
 let allDeals = [];
 
-/** @type {import('./types.js?v=20260418-sC').HoursEntry[]} */
+/** @type {import('./types.js?v=20260418-sD').HoursEntry[]} */
 let hoursEntries = [];
 
-/** @type {import('./types.js?v=20260418-sC').Task[]} */
+/** @type {import('./types.js?v=20260418-sD').Task[]} */
 let tasks = [];
 
-/** @type {import('./types.js?v=20260418-sC').WeeklyUpdate[]} */
+/** @type {import('./types.js?v=20260418-sD').WeeklyUpdate[]} */
 let updates = [];
 
 // DOS stages reference (6 stages: Pre-Sales → Delivery)
@@ -99,7 +99,13 @@ export function unmount() {
 function renderShell() {
   return `
     <div class="hub-content-inner" style="padding:0;display:flex;flex-direction:column;height:100%;">
-      <div style="display:flex;align-items:center;gap:16px;padding:16px 24px 0 24px;flex-shrink:0;">
+      <div style="padding:12px 24px 0;flex-shrink:0;">
+        <a href="#designtools" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--ies-gray-500);text-decoration:none;" onmouseover="this.style.color='#ff3a00'" onmouseout="this.style.color='var(--ies-gray-500)'">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          Back to Design Tools
+        </a>
+      </div>
+      <div style="display:flex;align-items:center;gap:16px;padding:8px 24px 0 24px;flex-shrink:0;">
         <h2 class="text-page" style="margin:0;">Multi-Site Analyzer</h2>
         <div style="display:flex;gap:8px;margin-left:auto;" id="dm-tabs"></div>
       </div>
