@@ -1951,8 +1951,10 @@ function build3DScene() {
     // Iso-style 3/4 view from front-right-above, looking at the building center
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 5000);
     const dist0 = Math.max(W, D) * 1.4;
-    let theta = Math.PI / 4;        // 45° around Y
-    let phi   = Math.PI / 4;         // 45° elevation
+    // Position camera so the dock face (-Z in our model) is toward the user.
+    // Iso-style 3/4 view from front-right-above looking back at the building.
+    let theta = (3 * Math.PI) / 4;   // 135° — puts camera at +X, -Z (front-right)
+    let phi   = Math.PI / 4;          // 45° elevation
     let dist  = dist0;
     function applyCamera() {
       camera.position.set(
