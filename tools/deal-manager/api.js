@@ -5,7 +5,7 @@
  * @module tools/deal-manager/api
  */
 
-import { db } from '../../shared/supabase.js?v=20260418-sK';
+import { db } from '../../shared/supabase.js?v=20260418-sL';
 
 // ============================================================
 // DEALS
@@ -13,7 +13,7 @@ import { db } from '../../shared/supabase.js?v=20260418-sK';
 
 /**
  * List all deals.
- * @returns {Promise<import('./types.js?v=20260418-sK').Deal[]>}
+ * @returns {Promise<import('./types.js?v=20260418-sL').Deal[]>}
  */
 export async function listDeals() {
   const { data, error } = await db.from('deal_deals')
@@ -26,7 +26,7 @@ export async function listDeals() {
 /**
  * Get a single deal by ID.
  * @param {string} id
- * @returns {Promise<import('./types.js?v=20260418-sK').Deal|null>}
+ * @returns {Promise<import('./types.js?v=20260418-sL').Deal|null>}
  */
 export async function getDeal(id) {
   return db.fetchById('deal_deals', id);
@@ -34,8 +34,8 @@ export async function getDeal(id) {
 
 /**
  * Save (insert or update) a deal.
- * @param {import('./types.js?v=20260418-sK').Deal} deal
- * @returns {Promise<import('./types.js?v=20260418-sK').Deal>}
+ * @param {import('./types.js?v=20260418-sL').Deal} deal
+ * @returns {Promise<import('./types.js?v=20260418-sL').Deal>}
  */
 export async function saveDeal(deal) {
   const payload = {
@@ -75,7 +75,7 @@ export async function deleteDeal(id) {
 /**
  * List sites linked to a deal.
  * @param {string} dealId
- * @returns {Promise<import('./types.js?v=20260418-sK').Site[]>}
+ * @returns {Promise<import('./types.js?v=20260418-sL').Site[]>}
  */
 export async function listSites(dealId) {
   const { data, error } = await db.from('cost_model_projects')
@@ -107,72 +107,128 @@ export async function unlinkSite(projectId) {
 
 /**
  * List unlinked cost model projects (available to add to deals).
- * @returns {Promise<Array<{ id: string, name: string }>>}
+ * Returns the canonical CM columns we expose to the picker.
+ * @returns {Promise<Array<{ id: number, name: string, total_sqft: number, total_annual_cost: number }>>}
  */
 export async function listUnlinkedProjects() {
   const { data, error } = await db.from('cost_model_projects')
-    .select('id, name, total_sqft, total_annual_cost')
+    .select('id, name, facility_sqft, total_annual_cost')
     .is('deal_deals_id', null)
     .order('name');
   if (error) throw error;
-  return data || [];
+  // Normalise the column name so callers can use total_sqft uniformly.
+  return (data || []).map(r => ({
+    id: r.id,
+    name: r.name,
+    total_sqft: r.facility_sqft || 0,
+    total_annual_cost: r.total_annual_cost || 0,
+  }));
 }
 
 /**
  * Map a cost_model_projects row to our Site type.
  * @param {object} row
- * @returns {import('./types.js?v=20260418-sK').Site}
+ * @returns {import('./types.js?v=20260418-sL').Site}
  */
 function mapCmProjectToSite(row) {
   return {
-    id: row.id,
+    id: String(row.id),
     name: row.name || 'Unnamed Site',
-    market: row.market || '',
+    market: row.client_name || '',                  // CM table tracks client_name, not market
     environment: row.environment_type || '',
-    sqft: row.total_sqft || 0,
+    sqft: row.facility_sqft || 0,                   // canonical column is facility_sqft
     annualCost: row.total_annual_cost || 0,
     targetMarginPct: row.target_margin_pct || 0,
     startupCost: row.startup_cost || 0,
     pricingModel: row.pricing_model || 'cost-plus',
-    annualVolume: row.annual_volume || 0,
-    costModelId: row.id, // Link back to CM project ID
+    annualVolume: row.vol_pallets_received || 0,    // closest proxy: inbound pallet volume
+    costModelId: String(row.id),
   };
 }
 
 /**
- * Fetch cost model details and populate CostBreakdown for a site.
- * @param {string} costModelId
- * @returns {Promise<import('./types.js?v=20260418-sK').CostBreakdown|null>}
+ * Fetch cost model details and populate a CostBreakdown for a site.
+ *
+ * Priority order:
+ *  1) cost_model_summary (one row per project — canonical aggregated totals)
+ *  2) Sum the per-section detail tables (cost_model_labor / equipment / overhead / vas)
+ *
+ * Facility cost has no detail table — it's only ever in cost_model_summary, so a project
+ * with only detail rows will show facility = 0 (which is correct for that project state).
+ *
+ * @param {string|number} costModelId
+ * @returns {Promise<import('./types.js?v=20260418-sL').CostBreakdown|null>}
  */
 export async function fetchCostModelBreakdown(costModelId) {
+  // CM project ids are bigints in Postgres
+  const idVal = typeof costModelId === 'string' && /^\d+$/.test(costModelId)
+    ? Number(costModelId)
+    : costModelId;
+
+  /** @type {import('./types.js?v=20260418-sL').CostBreakdown} */
+  const breakdown = {
+    labor: 0,
+    facility: 0,
+    equipment: 0,
+    overhead: 0,
+    vas: 0,
+    transportation: 0,  // not modeled in CM today; placeholder for future fleet/transport push
+  };
+
   try {
-    const { data, error } = await db.from('cost_model_sections')
-      .select('*')
-      .eq('cost_model_project_id', costModelId);
-    if (error) throw error;
+    // 1) Canonical summary
+    const { data: summary } = await db.from('cost_model_summary')
+      .select('total_labor_cost,total_facility_cost,total_equipment_cost,total_overhead_cost,total_vas_cost')
+      .eq('project_id', idVal)
+      .maybeSingle();
 
-    // Aggregate by section type
-    const breakdown = {
-      labor: 0,
-      facility: 0,
-      equipment: 0,
-      overhead: 0,
-      vas: 0,
-      transportation: 0,
-    };
-
-    for (const row of (data || [])) {
-      const section = row.section_type || '';
-      if (breakdown.hasOwnProperty(section)) {
-        breakdown[section] = (breakdown[section] || 0) + (row.annual_cost || 0);
-      }
+    if (summary) {
+      breakdown.labor     = Number(summary.total_labor_cost     || 0);
+      breakdown.facility  = Number(summary.total_facility_cost  || 0);
+      breakdown.equipment = Number(summary.total_equipment_cost || 0);
+      breakdown.overhead  = Number(summary.total_overhead_cost  || 0);
+      breakdown.vas       = Number(summary.total_vas_cost       || 0);
+      const total = breakdown.labor + breakdown.facility + breakdown.equipment + breakdown.overhead + breakdown.vas;
+      if (total > 0) return breakdown;
     }
+
+    // 2) Aggregate detail tables (parallel — faster than serial)
+    const [labor, equipment, overhead, vas] = await Promise.all([
+      db.from('cost_model_labor').select('total_annual_cost').eq('project_id', idVal),
+      db.from('cost_model_equipment').select('total_annual_cost').eq('project_id', idVal),
+      db.from('cost_model_overhead').select('total_annual_cost,annual_cost').eq('project_id', idVal),
+      db.from('cost_model_vas').select('total_annual_cost,total_cost').eq('project_id', idVal),
+    ]);
+    breakdown.labor     = sumColumn(labor.data, ['total_annual_cost']);
+    breakdown.equipment = sumColumn(equipment.data, ['total_annual_cost']);
+    breakdown.overhead  = sumColumn(overhead.data, ['total_annual_cost', 'annual_cost']);
+    breakdown.vas       = sumColumn(vas.data, ['total_annual_cost', 'total_cost']);
 
     return breakdown;
   } catch (e) {
     console.warn('Cost breakdown fetch failed:', e);
     return null;
   }
+}
+
+/**
+ * Sum a set of columns across an array of rows, taking the first non-null value per row.
+ * Used to handle CM tables that have both `total_annual_cost` and a redundant `annual_cost`.
+ * @param {any[]|null|undefined} rows
+ * @param {string[]} cols
+ * @returns {number}
+ */
+function sumColumn(rows, cols) {
+  if (!Array.isArray(rows)) return 0;
+  return rows.reduce((acc, row) => {
+    for (const col of cols) {
+      const v = row?.[col];
+      if (v != null && v !== '') {
+        return acc + Number(v);
+      }
+    }
+    return acc;
+  }, 0);
 }
 
 // ============================================================
@@ -182,7 +238,7 @@ export async function fetchCostModelBreakdown(costModelId) {
 /**
  * List DOS elements for a deal (from opportunity_tasks).
  * @param {string} dealId
- * @returns {Promise<import('./types.js?v=20260418-sK').DosStage[]>}
+ * @returns {Promise<import('./types.js?v=20260418-sL').DosStage[]>}
  */
 export async function listDosElements(dealId) {
   const { data, error } = await db.from('opportunity_tasks')
@@ -234,7 +290,7 @@ export async function updateElementStatus(elementId, status) {
 /**
  * List artifacts linked to a deal.
  * @param {string} dealId
- * @returns {Promise<import('./types.js?v=20260418-sK').DealArtifact[]>}
+ * @returns {Promise<import('./types.js?v=20260418-sL').DealArtifact[]>}
  */
 export async function listArtifacts(dealId) {
   const { data, error } = await db.from('deal_artifacts')
@@ -251,7 +307,7 @@ export async function listArtifacts(dealId) {
  * @param {string} artifactType
  * @param {string} artifactId
  * @param {string} [artifactName]
- * @returns {Promise<import('./types.js?v=20260418-sK').DealArtifact>}
+ * @returns {Promise<import('./types.js?v=20260418-sL').DealArtifact>}
  */
 export async function linkArtifact(dealId, artifactType, artifactId, artifactName) {
   return db.insert('deal_artifacts', {
@@ -277,7 +333,7 @@ export async function unlinkArtifact(id) {
 
 /**
  * Load all deal-related data.
- * @returns {Promise<{ deals: import('./types.js?v=20260418-sK').Deal[] }>}
+ * @returns {Promise<{ deals: import('./types.js?v=20260418-sL').Deal[] }>}
  */
 export async function loadRefData() {
   const deals = await listDeals();
@@ -291,7 +347,7 @@ export async function loadRefData() {
 /**
  * Fetch hours for an opportunity.
  * @param {string} opportunityId
- * @returns {Promise<import('./types.js?v=20260418-sK').HoursEntry[]>}
+ * @returns {Promise<import('./types.js?v=20260418-sL').HoursEntry[]>}
  */
 export async function fetchHours(opportunityId) {
   try {
@@ -309,8 +365,8 @@ export async function fetchHours(opportunityId) {
 
 /**
  * Log new hours entry.
- * @param {import('./types.js?v=20260418-sK').HoursEntry} entry
- * @returns {Promise<import('./types.js?v=20260418-sK').HoursEntry>}
+ * @param {import('./types.js?v=20260418-sL').HoursEntry} entry
+ * @returns {Promise<import('./types.js?v=20260418-sL').HoursEntry>}
  */
 export async function logHours(entry) {
   try {
@@ -351,7 +407,7 @@ export async function deleteHours(id) {
 /**
  * Fetch tasks for an opportunity.
  * @param {string} opportunityId
- * @returns {Promise<import('./types.js?v=20260418-sK').Task[]>}
+ * @returns {Promise<import('./types.js?v=20260418-sL').Task[]>}
  */
 export async function fetchTasks(opportunityId) {
   try {
@@ -369,8 +425,8 @@ export async function fetchTasks(opportunityId) {
 
 /**
  * Create a new task.
- * @param {import('./types.js?v=20260418-sK').Task} task
- * @returns {Promise<import('./types.js?v=20260418-sK').Task>}
+ * @param {import('./types.js?v=20260418-sL').Task} task
+ * @returns {Promise<import('./types.js?v=20260418-sL').Task>}
  */
 export async function createTask(task) {
   try {
@@ -398,7 +454,7 @@ export async function createTask(task) {
 /**
  * Update a task.
  * @param {string} id
- * @param {Partial<import('./types.js?v=20260418-sK').Task>} fields
+ * @param {Partial<import('./types.js?v=20260418-sL').Task>} fields
  * @returns {Promise<void>}
  */
 export async function updateTask(id, fields) {
@@ -458,7 +514,7 @@ function mapTaskRow(row) {
 /**
  * Fetch updates for an opportunity.
  * @param {string} opportunityId
- * @returns {Promise<import('./types.js?v=20260418-sK').WeeklyUpdate[]>}
+ * @returns {Promise<import('./types.js?v=20260418-sL').WeeklyUpdate[]>}
  */
 export async function fetchUpdates(opportunityId) {
   try {
@@ -476,8 +532,8 @@ export async function fetchUpdates(opportunityId) {
 
 /**
  * Create a new update.
- * @param {import('./types.js?v=20260418-sK').WeeklyUpdate} update
- * @returns {Promise<import('./types.js?v=20260418-sK').WeeklyUpdate>}
+ * @param {import('./types.js?v=20260418-sL').WeeklyUpdate} update
+ * @returns {Promise<import('./types.js?v=20260418-sL').WeeklyUpdate>}
  */
 export async function createUpdate(update) {
   try {

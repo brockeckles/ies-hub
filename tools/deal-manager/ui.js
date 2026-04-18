@@ -6,11 +6,11 @@
  * @module tools/deal-manager/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import { state } from '../../shared/state.js?v=20260418-sK';
-import { renderToolHeader } from '../../shared/tool-frame.js?v=20260418-sK';
-import * as calc from './calc.js?v=20260418-sK';
-import * as api from './api.js?v=20260418-sK';
+import { bus } from '../../shared/event-bus.js?v=20260418-sL';
+import { state } from '../../shared/state.js?v=20260418-sL';
+import { renderToolHeader } from '../../shared/tool-frame.js?v=20260418-sL';
+import * as calc from './calc.js?v=20260418-sL';
+import * as api from './api.js?v=20260418-sL';
 
 // ============================================================
 // STATE
@@ -25,28 +25,28 @@ let activeTab = 'list';
 /** @type {'kanban' | 'table'} */
 let landingViewMode = 'kanban';
 
-/** @type {import('./types.js?v=20260418-sK').Deal|null} */
+/** @type {import('./types.js?v=20260418-sL').Deal|null} */
 let activeDeal = null;
 
-/** @type {import('./types.js?v=20260418-sK').Site[]} */
+/** @type {import('./types.js?v=20260418-sL').Site[]} */
 let sites = [];
 
-/** @type {import('./types.js?v=20260418-sK').DealFinancials|null} */
+/** @type {import('./types.js?v=20260418-sL').DealFinancials|null} */
 let financials = null;
 
-/** @type {import('./types.js?v=20260418-sK').DosStage[]} */
+/** @type {import('./types.js?v=20260418-sL').DosStage[]} */
 let dosStages = [];
 
-/** @type {import('./types.js?v=20260418-sK').Deal[]} */
+/** @type {import('./types.js?v=20260418-sL').Deal[]} */
 let allDeals = [];
 
-/** @type {import('./types.js?v=20260418-sK').HoursEntry[]} */
+/** @type {import('./types.js?v=20260418-sL').HoursEntry[]} */
 let hoursEntries = [];
 
-/** @type {import('./types.js?v=20260418-sK').Task[]} */
+/** @type {import('./types.js?v=20260418-sL').Task[]} */
 let tasks = [];
 
-/** @type {import('./types.js?v=20260418-sK').WeeklyUpdate[]} */
+/** @type {import('./types.js?v=20260418-sL').WeeklyUpdate[]} */
 let updates = [];
 
 // DOS stages reference (6 stages: Pre-Sales → Delivery)
@@ -97,86 +97,128 @@ export function unmount() {
 // SHELL
 // ============================================================
 
+// Detail-mode tab definitions (used by header)
+const DETAIL_TABS = [
+  { key: 'summary', label: 'Summary' },
+  { key: 'sites', label: 'Sites' },
+  { key: 'financials', label: 'Financials' },
+  { key: 'pipeline', label: 'Pipeline' },
+  { key: 'hours', label: 'Hours' },
+  { key: 'tasks', label: 'Tasks' },
+  { key: 'updates', label: 'Updates' },
+];
+
+function isLandingView() {
+  return activeTab === 'list' || activeTab === 'kanban';
+}
+
 function renderShell() {
-  // Multi-Site Analyzer's "tabs" content is dynamic and is filled in by renderTabs(),
-  // so we render the header without tabs here and let renderTabs() inject the action rail.
+  const landing = isLandingView();
+  const backAction = landing ? 'dm-tool-back' : 'dm-back';
+  const backLabel = landing ? '← Design Tools' : '← All Deals';
+  const headerTabs = landing ? [] : DETAIL_TABS;
+  // Status chips: portfolio always; deal-status pill only in detail
+  const chips = [{ label: 'Multi-deal portfolio', kind: /** @type {const} */ ('default') }];
+  if (!landing && activeDeal) {
+    const badge = calc.statusBadge(activeDeal.status);
+    /** @type {{label:string,kind:'linked'|'standalone'|'saved'|'draft'|'default',dot?:boolean,title?:string}} */
+    const dealChip = {
+      label: badge.label,
+      kind: activeDeal.status === 'won' ? 'saved' : activeDeal.status === 'draft' ? 'draft' : 'default',
+      dot: true,
+    };
+    chips.push(dealChip);
+  }
+
   return `
     <div class="hub-content-inner" style="padding:0;display:flex;flex-direction:column;height:100%;">
       ${renderToolHeader({
         toolName: 'Multi-Site Analyzer',
         toolKey: 'dm',
-        backAction: 'dm-tool-back',
-        backLabel: '← Design Tools',
-        statusChips: [{ label: 'Multi-deal portfolio', kind: 'default' }],
+        backAction,
+        backLabel,
+        tabs: headerTabs,
+        activeTab: landing ? '' : activeTab,
+        tabsId: 'dm-tabs',
+        statusChips: chips,
       })}
-      <!-- Action rail / tab strip injected by renderTabs() -->
-      <div id="dm-tabs" class="hub-action-rail" style="padding:6px 24px 0 24px;margin-left:0;flex-shrink:0;justify-content:flex-start;"></div>
+      <!-- Landing-mode action rail (hidden in detail mode) -->
+      <div id="dm-action-rail" class="hub-action-rail" style="padding:6px 24px 0 24px;margin-left:0;flex-shrink:0;justify-content:flex-start;display:${landing ? 'flex' : 'none'};">
+        ${landing ? `
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="dm-toggle-view">📋 ${landingViewMode === 'kanban' ? 'List View' : 'Kanban View'}</button>
+          <button class="hub-btn hub-btn-sm hub-btn-primary" data-action="dm-new-deal">+ New Deal</button>
+        ` : ''}
+      </div>
       <div id="dm-content" style="flex:1;overflow-y:auto;padding:24px;"></div>
     </div>
   `;
 }
 
-function renderTabs() {
-  const tabBar = rootEl?.querySelector('#dm-tabs');
-  if (!tabBar) return;
+function bindShellEvents() {
+  if (!rootEl) return;
 
-  if (activeTab === 'list' || activeTab === 'kanban') {
-    tabBar.innerHTML = `
-      <button class="hub-btn hub-btn-sm hub-btn-secondary" id="dm-toggle-view" style="margin-right:8px;">📋 List View</button>
-      <button class="hub-btn hub-btn-sm hub-btn-secondary" id="dm-new-deal">+ New Deal</button>
-    `;
-    tabBar.querySelector('#dm-toggle-view')?.addEventListener('click', () => {
-      landingViewMode = landingViewMode === 'kanban' ? 'table' : 'kanban';
-      activeTab = /** @type {any} */ (landingViewMode === 'kanban' ? 'kanban' : 'list');
-      renderTabs();
+  // Delegated header tab clicks (works for re-renders too)
+  rootEl.addEventListener('click', shellClickHandler);
+}
+
+/** @param {Event} e */
+function shellClickHandler(e) {
+  if (!rootEl) return;
+  const target = /** @type {HTMLElement} */ (e.target);
+  if (!target || !target.closest) return;
+
+  // Tab strip
+  const tabBtn = target.closest('#dm-tabs [data-tab]');
+  if (tabBtn) {
+    const key = /** @type {HTMLElement} */ (tabBtn).dataset.tab;
+    if (key && key !== activeTab) {
+      activeTab = /** @type {any} */ (key);
+      // Update active class on tabs without full re-render
+      rootEl.querySelectorAll('#dm-tabs [data-tab]').forEach(b => {
+        b.classList.toggle('active', /** @type {HTMLElement} */ (b).dataset.tab === activeTab);
+      });
       renderContent();
-    });
-    tabBar.querySelector('#dm-new-deal')?.addEventListener('click', () => createNewDeal());
+    }
     return;
   }
 
-  const tabs = [
-    { key: 'summary', label: 'Summary' },
-    { key: 'sites', label: 'Sites' },
-    { key: 'financials', label: 'Financials' },
-    { key: 'pipeline', label: 'Pipeline' },
-    { key: 'hours', label: 'Hours' },
-    { key: 'tasks', label: 'Tasks' },
-    { key: 'updates', label: 'Updates' },
-  ];
+  // Back to Design Tools (landing-mode back button)
+  if (target.closest('[data-action="dm-tool-back"]')) {
+    window.location.hash = 'designtools';
+    return;
+  }
 
-  tabBar.innerHTML = `
-    <button class="hub-btn hub-btn-sm hub-btn-secondary" id="dm-back" style="margin-right:8px;">← All Deals</button>
-    ${tabs.map(t => `
-      <button class="hub-btn hub-btn-sm ${t.key === activeTab ? 'hub-btn-primary' : 'hub-btn-secondary'}"
-              data-tab="${t.key}">${t.label}</button>
-    `).join('')}
-  `;
-
-  tabBar.querySelector('#dm-back')?.addEventListener('click', () => {
+  // Back to deal list (detail-mode back button)
+  if (target.closest('[data-action="dm-back"]')) {
     activeTab = landingViewMode === 'kanban' ? 'kanban' : 'list';
     activeDeal = null;
-    renderTabs();
-    renderContent();
-  });
+    rerenderShell();
+    return;
+  }
 
-  tabBar.querySelectorAll('[data-tab]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      activeTab = /** @type {any} */ (/** @type {HTMLElement} */ (btn).dataset.tab);
-      tabBar.querySelectorAll('[data-tab]').forEach(b => {
-        b.className = `hub-btn hub-btn-sm ${b.dataset.tab === activeTab ? 'hub-btn-primary' : 'hub-btn-secondary'}`;
-      });
-      renderContent();
-    });
-  });
+  // Landing toggle view
+  if (target.closest('[data-action="dm-toggle-view"]')) {
+    landingViewMode = landingViewMode === 'kanban' ? 'table' : 'kanban';
+    activeTab = /** @type {any} */ (landingViewMode === 'kanban' ? 'kanban' : 'list');
+    rerenderShell();
+    return;
+  }
+
+  // Landing new deal
+  if (target.closest('[data-action="dm-new-deal"]')) {
+    createNewDeal();
+    return;
+  }
 }
 
-function bindShellEvents() {
-  renderTabs();
-  // Back to Design Tools from the shared tool frame
-  rootEl?.querySelector('[data-action="dm-tool-back"]')?.addEventListener('click', () => {
-    window.location.hash = 'designtools';
-  });
+/** Full shell re-render (used when changing landing↔detail context). */
+function rerenderShell() {
+  if (!rootEl) return;
+  // Drop the previous delegated handler before swapping innerHTML to avoid duplicates
+  rootEl.removeEventListener('click', shellClickHandler);
+  rootEl.innerHTML = renderShell();
+  bindShellEvents();
+  renderContent();
 }
 
 function renderContent() {
@@ -338,8 +380,8 @@ async function openDeal(id) {
   updates = await api.fetchUpdates(activeDeal.id);
 
   activeTab = 'summary';
-  renderTabs();
-  renderContent();
+  // Switching from landing to detail — re-render shell so header swaps to detail mode
+  rerenderShell();
 }
 
 // ============================================================
@@ -464,24 +506,29 @@ function renderSites(el) {
     <div style="max-width:900px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
         <h3 class="text-section" style="margin:0;">Linked Sites</h3>
-        <button class="hub-btn hub-btn-sm hub-btn-secondary" id="dm-add-site">+ Add Site</button>
+        <div style="display:flex;gap:8px;">
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" id="dm-link-cm">🔗 Link Cost Model</button>
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" id="dm-add-site">+ Add Empty Site</button>
+        </div>
       </div>
 
       ${sites.length === 0 ? `
         <div class="hub-card" style="text-align:center;padding:32px;">
-          <p class="text-body text-muted">No sites linked to this deal. Add cost model projects as sites.</p>
+          <p class="text-body text-muted">No sites linked to this deal. Click <strong>Link Cost Model</strong> to attach a saved CM project, or add an empty site to type numbers in.</p>
         </div>
       ` : `
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;">
           ${sites.map(s => {
             const sf = financials?.bySite.find(b => b.siteId === s.id);
+            const linked = !!s.costModelId;
             return `
-              <div class="hub-card" style="padding:16px;">
+              <div class="hub-card" style="padding:16px;${linked ? 'border-left:3px solid var(--ies-blue);' : ''}">
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
                   <span style="font-size:14px;font-weight:700;">${s.name}</span>
                   <button class="hub-btn hub-btn-sm hub-btn-secondary" data-unlink="${s.id}" style="padding:4px 8px;">✕</button>
                 </div>
-                <div style="display:flex;gap:8px;margin-bottom:10px;">
+                <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+                  <span class="hub-status-chip ${linked ? 'linked' : 'standalone'} dot" style="font-size:11px;">${linked ? 'CM-linked' : 'Typed data'}</span>
                   ${s.environment ? `<span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;background:#dbeafe;color:#1d4ed8;">${s.environment}</span>` : ''}
                   ${s.market ? `<span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;background:#f3f4f6;color:#6b7280;">${s.market}</span>` : ''}
                 </div>
@@ -508,6 +555,11 @@ function renderSites(el) {
                     Startup: ${calc.formatCurrency(s.startupCost, { compact: true })}
                   </div>
                 ` : ''}
+                ${linked && s.costBreakdown ? `
+                  <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--ies-gray-200);font-size:11px;color:var(--ies-gray-500);">
+                    Breakdown: L ${calc.formatCurrency(s.costBreakdown.labor || 0, { compact: true })} · F ${calc.formatCurrency(s.costBreakdown.facility || 0, { compact: true })} · E ${calc.formatCurrency(s.costBreakdown.equipment || 0, { compact: true })}
+                  </div>
+                ` : ''}
               </div>
             `;
           }).join('')}
@@ -532,6 +584,147 @@ function renderSites(el) {
     financials = calc.computeDealFinancials(sites, activeDeal?.contractTermYears || 5);
     renderSites(el);
   });
+
+  el.querySelector('#dm-link-cm')?.addEventListener('click', () => openLinkCmModal(el));
+}
+
+// ============================================================
+// LINK COST MODEL MODAL
+// ============================================================
+
+/**
+ * Open the Link-CM modal. Loads unlinked CM projects and lets the user
+ * select one to attach to the current deal as a new site.
+ * @param {Element} parentEl  The Sites tab element, re-rendered on link success.
+ */
+async function openLinkCmModal(parentEl) {
+  // Remove any existing modal
+  document.getElementById('dm-link-cm-modal')?.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'dm-link-cm-modal';
+  overlay.style.cssText = `
+    position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:9999;
+    display:flex;align-items:center;justify-content:center;padding:20px;
+  `;
+  overlay.innerHTML = `
+    <div class="hub-card" style="max-width:640px;width:100%;padding:0;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 20px 40px rgba(0,0,0,0.3);">
+      <div style="padding:18px 20px;border-bottom:1px solid var(--ies-gray-200);display:flex;align-items:center;justify-content:space-between;">
+        <h3 style="margin:0;font-size:16px;font-weight:700;">Link Cost Model to Deal</h3>
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="dm-link-cm-close" style="padding:4px 10px;">✕</button>
+      </div>
+      <div id="dm-link-cm-body" style="padding:20px;max-height:60vh;overflow-y:auto;">
+        <div style="text-align:center;padding:32px;color:var(--ies-gray-500);">Loading cost models…</div>
+      </div>
+      <div style="padding:12px 20px;border-top:1px solid var(--ies-gray-200);display:flex;justify-content:flex-end;gap:8px;">
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="dm-link-cm-close">Cancel</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  // Close handlers (click outside card or X button)
+  overlay.addEventListener('click', (e) => {
+    const target = /** @type {HTMLElement} */ (e.target);
+    if (target === overlay || target.closest('[data-action="dm-link-cm-close"]')) {
+      overlay.remove();
+    }
+  });
+
+  const body = overlay.querySelector('#dm-link-cm-body');
+  if (!body) return;
+
+  // Load unlinked CMs
+  let projects = [];
+  try {
+    projects = await api.listUnlinkedProjects();
+  } catch (e) {
+    body.innerHTML = `
+      <div style="padding:24px;background:#fee2e2;border:1px solid #fecaca;border-radius:6px;color:#991b1b;font-size:13px;">
+        Could not load cost models: ${escapeHtml(e.message || 'Unknown error')}<br>
+        <span style="opacity:0.8;">Check your connection and Supabase status, then try again.</span>
+      </div>`;
+    return;
+  }
+
+  if (!projects.length) {
+    body.innerHTML = `
+      <div style="text-align:center;padding:32px;">
+        <div style="font-size:14px;font-weight:700;margin-bottom:8px;">No unlinked cost models found</div>
+        <p class="text-body text-muted" style="margin:0;">Every saved CM project is already attached to a deal. Create a new cost model in the Cost Model Builder first, then come back here to link it.</p>
+      </div>`;
+    return;
+  }
+
+  body.innerHTML = `
+    <p class="text-body text-muted" style="margin:0 0 16px 0;">Select a cost model to attach as a new site on <strong>${escapeHtml(activeDeal?.dealName || '')}</strong>.</p>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      ${projects.map(p => `
+        <button class="hub-card" data-cm-id="${p.id}" style="padding:12px;text-align:left;cursor:pointer;border:1px solid var(--ies-gray-200);background:#fff;">
+          <div style="font-size:14px;font-weight:700;margin-bottom:4px;">${escapeHtml(p.name || 'Unnamed')}</div>
+          <div style="display:flex;gap:16px;font-size:11px;color:var(--ies-gray-500);">
+            <span>${p.total_sqft ? p.total_sqft.toLocaleString() + ' SqFt' : 'SqFt —'}</span>
+            <span>${p.total_annual_cost ? calc.formatCurrency(p.total_annual_cost, { compact: true }) + '/yr' : 'Cost —'}</span>
+          </div>
+        </button>
+      `).join('')}
+    </div>
+  `;
+
+  body.querySelectorAll('[data-cm-id]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const projectId = /** @type {HTMLElement} */ (btn).dataset.cmId;
+      if (!projectId || !activeDeal) return;
+
+      // Visual feedback while linking
+      /** @type {HTMLElement} */ (btn).style.opacity = '0.5';
+      /** @type {HTMLElement} */ (btn).innerHTML += '<div style="font-size:11px;color:var(--ies-blue);margin-top:4px;">Linking…</div>';
+
+      try {
+        // Persist the link only if the deal is actually a saved row (uuid id).
+        // In-memory demo / unsaved deals (`demo-*`, `deal-{timestamp}`) skip persistence
+        // and just attach in memory so the UX works in the showcase flow.
+        const isPersistedDeal = /^[0-9a-f]{8}-[0-9a-f]{4}/i.test(activeDeal.id);
+        if (isPersistedDeal) {
+          await api.linkSite(projectId, activeDeal.id);
+        }
+        // Fetch the CM project row to materialize as a Site
+        const chosen = projects.find(p => p.id === projectId);
+        const breakdown = await api.fetchCostModelBreakdown(projectId);
+        const newSite = {
+          id: 's-cm-' + projectId,
+          name: chosen?.name || 'Linked CM',
+          sqft: chosen?.total_sqft || 0,
+          annualCost: chosen?.total_annual_cost || 0,
+          targetMarginPct: 10,
+          pricingModel: /** @type {const} */ ('cost-plus'),
+          costModelId: projectId,
+          costBreakdown: breakdown || undefined,
+        };
+        sites.push(newSite);
+        financials = calc.computeDealFinancials(sites, activeDeal.contractTermYears || 5);
+        overlay.remove();
+        renderSites(parentEl);
+      } catch (e) {
+        /** @type {HTMLElement} */ (btn).style.opacity = '1';
+        const errDiv = document.createElement('div');
+        errDiv.style.cssText = 'padding:10px;margin-top:12px;background:#fee2e2;border-radius:6px;color:#991b1b;font-size:12px;';
+        errDiv.textContent = 'Link failed: ' + (e.message || 'unknown error');
+        body.appendChild(errDiv);
+      }
+    });
+  });
+}
+
+/** Minimal HTML escape for user-supplied strings in modal content. */
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }
 
 // ============================================================
