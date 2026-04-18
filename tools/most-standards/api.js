@@ -6,6 +6,7 @@
  */
 
 import { db } from '../../shared/supabase.js?v=20260418-sM';
+import { recordAudit } from '../../shared/audit.js?v=20260418-sP';
 
 // ============================================================
 // TEMPLATES
@@ -197,9 +198,13 @@ export async function saveAnalysis(analysis) {
   };
 
   if (analysis.id) {
-    return db.update('most_analyses', analysis.id, payload);
+    const updated = await db.update('most_analyses', analysis.id, payload);
+    recordAudit({ table: 'most_analyses', id: analysis.id, action: 'update', fields: { name: payload.name, line_count: (analysis.lines || []).length } });
+    return updated;
   }
-  return db.insert('most_analyses', payload);
+  const inserted = await db.insert('most_analyses', payload);
+  recordAudit({ table: 'most_analyses', id: inserted?.id, action: 'insert', fields: { name: payload.name, line_count: (analysis.lines || []).length } });
+  return inserted;
 }
 
 /**
@@ -209,6 +214,7 @@ export async function saveAnalysis(analysis) {
  */
 export async function deleteAnalysis(id) {
   await db.remove('most_analyses', id);
+  recordAudit({ table: 'most_analyses', id, action: 'delete' });
 }
 
 /**

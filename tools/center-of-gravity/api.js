@@ -6,6 +6,7 @@
  */
 
 import { db } from '../../shared/supabase.js?v=20260418-sP';
+import { recordAudit } from '../../shared/audit.js?v=20260418-sP';
 
 // ============================================================
 // SCENARIOS
@@ -47,9 +48,13 @@ export async function saveScenario(scenario) {
     },
   };
   if (scenario.id) {
-    return db.update('cog_scenarios', scenario.id, payload);
+    const updated = await db.update('cog_scenarios', scenario.id, payload);
+    recordAudit({ table: 'cog_scenarios', id: scenario.id, action: 'update', fields: { name: payload.name } });
+    return updated;
   }
-  return db.insert('cog_scenarios', payload);
+  const inserted = await db.insert('cog_scenarios', payload);
+  recordAudit({ table: 'cog_scenarios', id: inserted?.id, action: 'insert', fields: { name: payload.name } });
+  return inserted;
 }
 
 /**
@@ -59,6 +64,7 @@ export async function saveScenario(scenario) {
  */
 export async function deleteScenario(id) {
   await db.remove('cog_scenarios', id);
+  recordAudit({ table: 'cog_scenarios', id, action: 'delete' });
 }
 
 /**

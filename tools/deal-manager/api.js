@@ -6,6 +6,7 @@
  */
 
 import { db } from '../../shared/supabase.js?v=20260418-sL';
+import { recordAudit } from '../../shared/audit.js?v=20260418-sP';
 
 // ============================================================
 // DEALS
@@ -47,9 +48,13 @@ export async function saveDeal(deal) {
     contract_term_years: deal.contractTermYears || 5,
   };
   if (deal.id) {
-    return db.update('deal_deals', deal.id, payload);
+    const updated = await db.update('deal_deals', deal.id, payload);
+    recordAudit({ table: 'deal_deals', id: deal.id, action: 'update', fields: { name: payload.deal_name, status: payload.status } });
+    return updated;
   }
-  return db.insert('deal_deals', payload);
+  const inserted = await db.insert('deal_deals', payload);
+  recordAudit({ table: 'deal_deals', id: inserted?.id, action: 'insert', fields: { name: payload.deal_name, status: payload.status } });
+  return inserted;
 }
 
 /**
@@ -94,6 +99,7 @@ export async function listSites(dealId) {
  */
 export async function linkSite(projectId, dealId) {
   await db.update('cost_model_projects', projectId, { deal_deals_id: dealId });
+  recordAudit({ table: 'cost_model_projects', id: projectId, action: 'link', fields: { deal_deals_id: dealId } });
 }
 
 /**
@@ -103,6 +109,7 @@ export async function linkSite(projectId, dealId) {
  */
 export async function unlinkSite(projectId) {
   await db.update('cost_model_projects', projectId, { deal_deals_id: null });
+  recordAudit({ table: 'cost_model_projects', id: projectId, action: 'unlink' });
 }
 
 /**

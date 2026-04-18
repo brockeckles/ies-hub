@@ -6,6 +6,7 @@
  */
 
 import { db } from '../../shared/supabase.js?v=20260418-sP';
+import { recordAudit } from '../../shared/audit.js?v=20260418-sP';
 
 // ============================================================
 // MASTER DATA
@@ -46,8 +47,14 @@ export async function listMasterRecords(tableName) {
  * @returns {Promise<any>}
  */
 export async function saveMasterRecord(tableName, id, payload) {
-  if (id) return db.update(tableName, id, payload);
-  return db.insert(tableName, payload);
+  if (id) {
+    const row = await db.update(tableName, id, payload);
+    recordAudit({ table: tableName, id, action: 'update', fields: payload });
+    return row;
+  }
+  const inserted = await db.insert(tableName, payload);
+  recordAudit({ table: tableName, id: inserted?.id, action: 'insert', fields: payload });
+  return inserted;
 }
 
 /**
@@ -58,6 +65,7 @@ export async function saveMasterRecord(tableName, id, payload) {
  */
 export async function deleteMasterRecord(tableName, id) {
   await db.remove(tableName, id);
+  recordAudit({ table: tableName, id, action: 'delete' });
 }
 
 // ============================================================

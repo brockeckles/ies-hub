@@ -6,6 +6,7 @@
  */
 
 import { db } from '../../shared/supabase.js?v=20260418-sM';
+import { recordAudit } from '../../shared/audit.js?v=20260418-sP';
 
 // ============================================================
 // SCENARIOS
@@ -44,9 +45,13 @@ export async function saveScenario(scenario) {
     results: scenario.results,
   };
   if (scenario.id) {
-    return db.update('fleet_scenarios', scenario.id, payload);
+    const updated = await db.update('fleet_scenarios', scenario.id, payload);
+    recordAudit({ table: 'fleet_scenarios', id: scenario.id, action: 'update', fields: { name: payload.name } });
+    return updated;
   }
-  return db.insert('fleet_scenarios', payload);
+  const inserted = await db.insert('fleet_scenarios', payload);
+  recordAudit({ table: 'fleet_scenarios', id: inserted?.id, action: 'insert', fields: { name: payload.name } });
+  return inserted;
 }
 
 /**
@@ -176,7 +181,9 @@ export async function updateCarrierRate(id, patch) {
   const allowed = ['display_name', 'base_rate_per_mile', 'fuel_surcharge_pct', 'min_charge', 'notes', 'is_active'];
   const payload = Object.fromEntries(Object.entries(patch).filter(([k]) => allowed.includes(k)));
   payload.updated_at = new Date().toISOString();
-  return db.update('ref_fleet_carrier_rates', id, payload);
+  const row = await db.update('ref_fleet_carrier_rates', id, payload);
+  recordAudit({ table: 'ref_fleet_carrier_rates', id, action: 'update', fields: payload });
+  return row;
 }
 
 /**
