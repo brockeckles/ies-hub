@@ -5,8 +5,8 @@
  * @module hub/change-mgmt/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-s3';
-import * as calc from './calc.js?v=20260418-s3';
+import { bus } from '../../shared/event-bus.js?v=20260418-s4';
+import * as calc from './calc.js?v=20260418-s4';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -43,6 +43,7 @@ function renderShell() {
         <h2 class="text-page" style="margin:0;">Change Management</h2>
         <div style="display:flex;gap:8px;" id="cm-tabs">
           <button class="hub-btn hub-btn-sm ${activeView === 'list' ? '' : 'hub-btn-secondary'}" data-view="list">Initiatives</button>
+          <button class="hub-btn hub-btn-sm ${activeView === 'board' ? '' : 'hub-btn-secondary'}" data-view="board">Board</button>
           <button class="hub-btn hub-btn-sm ${activeView === 'adkar' ? '' : 'hub-btn-secondary'}" data-view="adkar">ADKAR Framework</button>
           <button class="hub-btn hub-btn-sm ${activeView === 'timeline' ? '' : 'hub-btn-secondary'}" data-view="timeline">Timeline</button>
         </div>
@@ -104,7 +105,45 @@ function renderContent() {
   if (activeView === 'detail' && activeInitiative) { renderDetail(el); return; }
   if (activeView === 'adkar') { renderAdkar(el); return; }
   if (activeView === 'timeline') { renderTimeline(el); return; }
+  if (activeView === 'board') { renderBoard(el); return; }
   renderList(el);
+}
+
+// ===== BOARD / KANBAN VIEW =====
+function renderBoard(el) {
+  const phases = ['Awareness', 'Desire', 'Knowledge', 'Ability', 'Reinforcement'];
+  const phaseColors = { 'Awareness': '#2563eb', 'Desire': '#7c3aed', 'Knowledge': '#d97706', 'Ability': '#ea580c', 'Reinforcement': '#16a34a' };
+  const byPhase = new Map(phases.map(p => [p, []]));
+  for (const i of initiatives) {
+    // Map initiative to its current ADKAR phase — use the first incomplete phase if available,
+    // otherwise fallback to Awareness.
+    const phase = i.currentAdkarPhase || i.phase || 'Awareness';
+    if (byPhase.has(phase)) byPhase.get(phase).push(i);
+    else byPhase.get('Awareness').push(i);
+  }
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(${phases.length},1fr);gap:10px;overflow-x:auto;">
+      ${phases.map(p => {
+        const items = byPhase.get(p) || [];
+        const color = phaseColors[p];
+        return `
+          <div style="min-width:200px;">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;padding-bottom:8px;border-bottom:3px solid ${color};">
+              <span style="font-size:12px;font-weight:800;color:${color};">${p}</span>
+              <span style="margin-left:auto;font-size:11px;font-weight:700;color:var(--ies-gray-400);">${items.length}</span>
+            </div>
+            ${items.length === 0 ? '<div style="font-size:11px;color:var(--ies-gray-300);padding:8px;">No initiatives</div>' : items.map(init => `
+              <div class="hub-card" style="padding:10px;margin-bottom:8px;cursor:pointer;border-left:3px solid ${color};" data-initiative="${init.id}">
+                <div style="font-size:12px;font-weight:700;margin-bottom:4px;">${init.title || init.name || 'Untitled'}</div>
+                <div style="font-size:10px;color:var(--ies-gray-400);margin-bottom:4px;">${init.owner || 'Unassigned'}</div>
+                <div style="font-size:10px;color:var(--ies-gray-500);">${init.status || 'active'} · Priority ${init.priority || 'P2'}</div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
 }
 
 // ===== LIST VIEW =====

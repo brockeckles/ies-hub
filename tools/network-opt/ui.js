@@ -7,10 +7,10 @@
  * @module tools/network-opt/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-s3';
-import { state } from '../../shared/state.js?v=20260418-s3';
-import * as calc from './calc.js?v=20260418-s3';
-import * as api from './api.js?v=20260418-s3';
+import { bus } from '../../shared/event-bus.js?v=20260418-s4';
+import { state } from '../../shared/state.js?v=20260418-s4';
+import * as calc from './calc.js?v=20260418-s4';
+import * as api from './api.js?v=20260418-s4';
 
 // ============================================================
 // STATE
@@ -25,25 +25,25 @@ let activeView = 'setup';
 /** @type {'facilities' | 'demand' | 'modemix' | 'service'} */
 let activeSection = 'facilities';
 
-/** @type {import('./types.js?v=20260418-s3').Facility[]} */
+/** @type {import('./types.js?v=20260418-s4').Facility[]} */
 let facilities = [];
 
-/** @type {import('./types.js?v=20260418-s3').DemandPoint[]} */
+/** @type {import('./types.js?v=20260418-s4').DemandPoint[]} */
 let demands = [];
 
-/** @type {import('./types.js?v=20260418-s3').ModeMix} */
+/** @type {import('./types.js?v=20260418-s4').ModeMix} */
 let modeMix = { tlPct: 30, ltlPct: 40, parcelPct: 30 };
 
-/** @type {import('./types.js?v=20260418-s3').RateCard} */
+/** @type {import('./types.js?v=20260418-s4').RateCard} */
 let rateCard = { ...calc.DEFAULT_RATES };
 
-/** @type {import('./types.js?v=20260418-s3').ServiceConfig} */
+/** @type {import('./types.js?v=20260418-s4').ServiceConfig} */
 let serviceConfig = { ...calc.DEFAULT_SERVICE };
 
-/** @type {import('./types.js?v=20260418-s3').ScenarioResult[]} */
+/** @type {import('./types.js?v=20260418-s4').ScenarioResult[]} */
 let scenarios = [];
 
-/** @type {import('./types.js?v=20260418-s3').ScenarioResult|null} */
+/** @type {import('./types.js?v=20260418-s4').ScenarioResult|null} */
 let activeScenario = null;
 
 /** @type {string|null} */
@@ -52,7 +52,7 @@ let selectedArchetype = null;
 /** @type {object|null} map instance */
 let mapInstance = null;
 
-/** @type {import('./types.js?v=20260418-s3').ScenarioResult[]|null} */
+/** @type {import('./types.js?v=20260418-s4').ScenarioResult[]|null} */
 let comparisonResults = null;
 
 /** @type {number|null} */
@@ -240,8 +240,12 @@ function renderSidebar() {
       <button class="hub-btn hub-btn-primary hub-btn-sm" data-action="run" style="width:100%;">Run Scenario</button>
       <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="compare-dcs" style="width:100%;font-size:11px;">Compare 1-5 DCs</button>
       <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="exact-solve" style="width:100%;font-size:11px;">Exact Solver</button>
+      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="apply-market-rates" style="width:100%;font-size:11px;">Apply Market Rates</button>
+      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="balance-mode-mix" style="width:100%;font-size:11px;">Balance Mode Mix</button>
+      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="upload-rates-csv" style="width:100%;font-size:11px;">Upload Rate Card CSV</button>
       <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="export-csv" style="width:100%;font-size:11px;">Export CSV</button>
       <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="clear-scenarios" style="width:100%;">Clear All</button>
+      <input type="file" id="netopt-csv-upload" accept=".csv,text/csv" style="display:none;"/>
     </div>
   `;
 
@@ -262,8 +266,91 @@ function renderSidebar() {
       else if (action === 'exact-solve') runExactSolver();
       else if (action === 'export-csv') exportToCSV();
       else if (action === 'clear-scenarios') { scenarios = []; activeScenario = null; comparisonResults = null; renderContentView(); }
+      else if (action === 'apply-market-rates') applyMarketRates();
+      else if (action === 'balance-mode-mix') balanceModeMix();
+      else if (action === 'upload-rates-csv') document.getElementById('netopt-csv-upload')?.click();
     });
   });
+
+  // CSV rate card upload
+  const fileInput = el.querySelector('#netopt-csv-upload');
+  fileInput?.addEventListener('change', handleCsvUpload);
+}
+
+/** Pull latest freight_rates avg from Supabase and apply to rateCard. */
+async function applyMarketRates() {
+  try {
+    const rates = await api.fetchFreightRates();
+    if (!rates || !rates.length) { showNoToast('No market rate data available', 'info'); return; }
+    // Take latest rate per index_name
+    const byIdx = new Map();
+    for (const r of rates) {
+      const k = r.index_name || r.rate_type || 'default';
+      const prev = byIdx.get(k);
+      if (!prev || (r.report_date || '') > (prev.report_date || '')) byIdx.set(k, r);
+    }
+    const spot = Array.from(byIdx.values()).find(r => /spot/i.test(r.rate_type || '') || /spot/i.test(r.index_name || ''));
+    const contract = Array.from(byIdx.values()).find(r => /contract/i.test(r.rate_type || '') || /contract/i.test(r.index_name || ''));
+    const tlPerMile = parseFloat((contract?.rate || spot?.rate || rateCard.tlPerMile || 2.25));
+    rateCard.tlPerMile = tlPerMile;
+    // LTL per lb approximation: TL / (TL capacity ~44000 lb)
+    rateCard.ltlPerLb = Math.max(0.15, tlPerMile / 90);
+    showNoToast(`Applied latest market rates (TL $${tlPerMile.toFixed(2)}/mi)`, 'success');
+    renderContentView();
+  } catch (err) {
+    console.error('[netopt] applyMarketRates failed', err);
+    showNoToast('Market rate fetch failed', 'error');
+  }
+}
+
+/** Auto-balance the TL / LTL / Parcel mix to satisfy the archetype targets
+ *  using average demand weight. Conservative heuristic — see calc.js. */
+function balanceModeMix() {
+  // Weight-based heuristic: heavier avg weight favors TL; lighter favors Parcel.
+  const avgWeight = demands.reduce((s, d) => s + (d.avgWeight || 25), 0) / Math.max(1, demands.length);
+  let tl, ltl, parcel;
+  if (avgWeight > 500) { tl = 70; ltl = 25; parcel = 5; }
+  else if (avgWeight > 100) { tl = 35; ltl = 55; parcel = 10; }
+  else if (avgWeight > 25) { tl = 15; ltl = 45; parcel = 40; }
+  else { tl = 5; ltl = 25; parcel = 70; }
+  modeMix = { tl, ltl, parcel };
+  showNoToast(`Balanced mode mix to avg weight ${avgWeight.toFixed(0)} lb`, 'success');
+  renderContentView();
+}
+
+/** Parse a CSV rate card upload. Expects columns: lane,mode,rate. */
+function handleCsvUpload(e) {
+  const file = /** @type {HTMLInputElement} */ (e.currentTarget).files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const text = String(ev.target.result || '');
+    const lines = text.split(/\r?\n/).filter(Boolean);
+    if (!lines.length) { showNoToast('Empty CSV', 'error'); return; }
+    let applied = 0;
+    for (let i = 1; i < lines.length; i++) {
+      const [_lane, mode, rate] = lines[i].split(',').map(s => s.trim());
+      const r = parseFloat(rate);
+      if (!isNaN(r)) {
+        if (/tl/i.test(mode)) { rateCard.tlPerMile = r; applied++; }
+        else if (/ltl/i.test(mode)) { rateCard.ltlPerLb = r; applied++; }
+        else if (/parcel/i.test(mode)) { rateCard.parcelPerLb = r; applied++; }
+      }
+    }
+    showNoToast(`Rate card CSV applied (${applied} rate${applied === 1 ? '' : 's'})`, 'success');
+    renderContentView();
+  };
+  reader.onerror = () => showNoToast('CSV read failed', 'error');
+  reader.readAsText(file);
+}
+
+function showNoToast(msg, level) {
+  try {
+    const ev = new CustomEvent('toast:show', { detail: { message: msg, level } });
+    // Prefer event bus if present; fall back to console.
+    if (window.__hubToast) window.__hubToast(msg, level);
+    else console.log(`[netopt toast] ${level}: ${msg}`);
+  } catch { console.log(msg); }
 }
 
 function applyArchetype(key) {
@@ -752,6 +839,17 @@ function renderMap(el) {
         <span style="font-size:11px;color:var(--ies-gray-400);">
           ${facilities.filter(f => f.isOpen).length} facilities • ${demands.length} demand points • ${activeScenario?.assignments?.length || 0} lanes
         </span>
+        <div style="margin-left:auto;display:flex;gap:6px;">
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ies-gray-600);cursor:pointer;">
+            <input type="checkbox" data-map-toggle="heat" checked style="margin:0;"/> Heatmap
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ies-gray-600);cursor:pointer;">
+            <input type="checkbox" data-map-toggle="zones" checked style="margin:0;"/> Service zones
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ies-gray-600);cursor:pointer;">
+            <input type="checkbox" data-map-toggle="flows" checked style="margin:0;"/> Flow lines
+          </label>
+        </div>
       </div>
       <div id="no-map-container" style="flex:1;min-height:500px;border-radius:10px;border:1px solid var(--ies-gray-200);overflow:hidden;"></div>
       <div style="display:flex;gap:20px;margin-top:12px;font-size:11px;color:var(--ies-gray-400);">
@@ -798,6 +896,29 @@ function initMap() {
     attribution: '&copy; OpenStreetMap'
   }).addTo(mapInstance);
 
+  // Layer groups so toggles can show/hide each class of overlay
+  const zoneLayer = L.layerGroup().addTo(mapInstance);
+  const flowLayer = L.layerGroup().addTo(mapInstance);
+  let heatLayer = null;
+  if (typeof L.heatLayer === 'function') {
+    const heatPoints = demands.map(d => [d.lat, d.lng, Math.min(1, (d.annualDemand || 0) / 200000)]);
+    heatLayer = L.heatLayer(heatPoints, {
+      radius: 28, blur: 22, minOpacity: 0.35, maxZoom: 10,
+      gradient: { 0.2: '#2563eb', 0.4: '#7c3aed', 0.6: '#ea580c', 0.8: '#dc2626', 1.0: '#b91c1c' },
+    }).addTo(mapInstance);
+  }
+  // Wire up layer toggles.
+  rootEl?.querySelectorAll('[data-map-toggle]').forEach(cb => {
+    cb.addEventListener('change', (e) => {
+      const t = /** @type {HTMLInputElement} */ (e.currentTarget);
+      const key = t.dataset.mapToggle;
+      const on = t.checked;
+      if (key === 'zones') on ? mapInstance.addLayer(zoneLayer) : mapInstance.removeLayer(zoneLayer);
+      else if (key === 'flows') on ? mapInstance.addLayer(flowLayer) : mapInstance.removeLayer(flowLayer);
+      else if (key === 'heat' && heatLayer) on ? mapInstance.addLayer(heatLayer) : mapInstance.removeLayer(heatLayer);
+    });
+  });
+
   // Facility markers
   const facColors = ['#0047AB', '#22c55e', '#8b5cf6', '#f59e0b', '#ec4899', '#06b6d4'];
   const openFacs = facilities.filter(f => f.isOpen);
@@ -821,7 +942,7 @@ function initMap() {
         opacity: 0.2,
         fillColor: color,
         fillOpacity: 0.08,
-      }).addTo(mapInstance);
+      }).addTo(zoneLayer);
     }
   });
 
@@ -841,10 +962,14 @@ function initMap() {
       const dem = demands.find(d => d.id === a.demandId);
       if (!fac || !dem) return;
 
-      const color = a.meetsSlA ? '#22c55e' : '#ef4444';
+      // Color by mode (TL = blue, LTL = orange, Parcel = purple); fall back to SLA color
+      let modeColor = a.meetsSlA ? '#22c55e' : '#ef4444';
+      if (a.tlCost > 0 && a.tlCost <= a.ltlCost && a.tlCost <= a.parcelCost) modeColor = '#0047AB';
+      else if (a.ltlCost > 0 && a.ltlCost <= a.tlCost && a.ltlCost <= a.parcelCost) modeColor = '#ea580c';
+      else if (a.parcelCost > 0) modeColor = '#7c3aed';
       const line = L.polyline([[fac.lat, fac.lng], [dem.lat, dem.lng]], {
-        color, weight: 1.5, opacity: 0.4, dashArray: a.meetsSlA ? null : '5,5',
-      }).addTo(mapInstance);
+        color: modeColor, weight: 1.5, opacity: 0.5, dashArray: a.meetsSlA ? null : '5,5',
+      }).addTo(flowLayer);
       line.bindPopup(`${fac.name} → ZIP ${dem.zip3}<br>Distance: ${calc.formatMiles(a.distanceMiles)}<br>Transit: ${a.transitDays} day(s)<br>Cost: ${calc.formatCurrency(a.blendedCost)}`);
     });
   }

@@ -6,10 +6,10 @@
  * @module tools/warehouse-sizing/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-s3';
-import { state } from '../../shared/state.js?v=20260418-s3';
-import * as calc from './calc.js?v=20260418-s3';
-import * as api from './api.js?v=20260418-s3';
+import { bus } from '../../shared/event-bus.js?v=20260418-s4';
+import { state } from '../../shared/state.js?v=20260418-s4';
+import * as calc from './calc.js?v=20260418-s4';
+import * as api from './api.js?v=20260418-s4';
 
 // ============================================================
 // STATE
@@ -21,13 +21,13 @@ let rootEl = null;
 /** @type {'dashboard' | 'elevation' | '3d'} */
 let activeView = 'dashboard';
 
-/** @type {import('./types.js?v=20260418-s3').FacilityConfig} */
+/** @type {import('./types.js?v=20260418-s4').FacilityConfig} */
 let facility = createDefaultFacility();
 
-/** @type {import('./types.js?v=20260418-s3').ZoneConfig} */
+/** @type {import('./types.js?v=20260418-s4').ZoneConfig} */
 let zones = createDefaultZones();
 
-/** @type {import('./types.js?v=20260418-s3').VolumeInputs} */
+/** @type {import('./types.js?v=20260418-s4').VolumeInputs} */
 let volumes = createDefaultVolumes();
 
 /** @type {boolean} */
@@ -217,6 +217,15 @@ function renderConfigPanel() {
         <button class="hub-btn hub-btn-primary hub-btn-sm" data-action="wsc-new">New</button>
         <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="wsc-save">Save</button>
         <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="wsc-load">Load</button>
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="wsc-copy-summary" title="Copy summary to clipboard">Copy</button>
+      </div>
+      <div style="margin-top:10px;">
+        <div style="font-size:10px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Quick-Start Presets</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;">
+          ${['Retail','F&B','Pharma','Apparel','Auto','Ecomm'].map(p => `
+            <button type="button" class="hub-btn hub-btn-sm" data-preset="${p}" style="font-size:10px;padding:4px 6px;background:var(--ies-gray-50);border:1px solid var(--ies-gray-200);color:var(--ies-gray-700);font-weight:700;">${p}</button>
+          `).join('')}
+        </div>
       </div>
     </div>
 
@@ -617,6 +626,19 @@ function bindConfigEvents(panel) {
     renderContentView();
   });
 
+  // Copy-summary button
+  panel.querySelector('[data-action="wsc-copy-summary"]')?.addEventListener('click', () => {
+    copySummaryToClipboard();
+  });
+
+  // Quick-start presets
+  panel.querySelectorAll('[data-preset]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const preset = /** @type {HTMLElement} */ (e.currentTarget).dataset.preset;
+      applyVerticalPreset(preset);
+    });
+  });
+
   panel.querySelector('[data-action="wsc-save"]')?.addEventListener('click', async (e) => {
     const btn = /** @type {HTMLButtonElement} */ (e.currentTarget);
     const orig = btn.textContent;
@@ -672,6 +694,80 @@ function hasMeaningfulVolumes(v) {
 }
 
 /** Non-blocking success/error toast (bottom-right, 4s). */
+/**
+ * Vertical quick-start presets — adjust facility scale, storage allocation,
+ * and dock config to a typical baseline for the chosen vertical. Users can
+ * still tune any field after applying.
+ * @param {string} preset
+ */
+function applyVerticalPreset(preset) {
+  const presets = {
+    'Retail': {
+      totalSqft: 350000, clearHeight: 36, dockDoors: 38,
+      storageAlloc: { fullPallet: 55, cartonOnPallet: 30, cartonOnShelving: 15 },
+      peakUnitsPerDay: 350000, avgUnitsPerDay: 220000,
+    },
+    'F&B': {
+      totalSqft: 250000, clearHeight: 32, dockDoors: 32,
+      storageAlloc: { fullPallet: 75, cartonOnPallet: 20, cartonOnShelving: 5 },
+      peakUnitsPerDay: 220000, avgUnitsPerDay: 160000,
+    },
+    'Pharma': {
+      totalSqft: 180000, clearHeight: 36, dockDoors: 18,
+      storageAlloc: { fullPallet: 30, cartonOnPallet: 30, cartonOnShelving: 40 },
+      peakUnitsPerDay: 180000, avgUnitsPerDay: 130000,
+    },
+    'Apparel': {
+      totalSqft: 280000, clearHeight: 36, dockDoors: 24,
+      storageAlloc: { fullPallet: 25, cartonOnPallet: 35, cartonOnShelving: 40 },
+      peakUnitsPerDay: 280000, avgUnitsPerDay: 180000,
+    },
+    'Auto': {
+      totalSqft: 320000, clearHeight: 32, dockDoors: 30,
+      storageAlloc: { fullPallet: 60, cartonOnPallet: 30, cartonOnShelving: 10 },
+      peakUnitsPerDay: 200000, avgUnitsPerDay: 150000,
+    },
+    'Ecomm': {
+      totalSqft: 600000, clearHeight: 40, dockDoors: 50,
+      storageAlloc: { fullPallet: 30, cartonOnPallet: 40, cartonOnShelving: 30 },
+      peakUnitsPerDay: 800000, avgUnitsPerDay: 500000,
+    },
+  };
+  const p = presets[preset];
+  if (!p) return;
+  facility.totalSqft = p.totalSqft;
+  facility.clearHeight = p.clearHeight;
+  facility.dockDoors = p.dockDoors;
+  zones.storageAllocation = { ...zones.storageAllocation, ...p.storageAlloc };
+  zones.peakUnitsPerDay = p.peakUnitsPerDay;
+  zones.avgUnitsPerDay = p.avgUnitsPerDay;
+  isDirty = true;
+  renderConfigPanel();
+  renderContentView();
+  showWscToast(`Applied ${preset} preset`, 'success');
+}
+
+/** Copy an English summary of the current config to the clipboard. */
+function copySummaryToClipboard() {
+  const summary = [
+    `Warehouse Sizing — ${facility.name || 'Untitled'}`,
+    `Total SF: ${facility.totalSqft.toLocaleString()}`,
+    `Building: ${facility.buildingWidth} × ${facility.buildingDepth} ft, clear ${facility.clearHeight} ft`,
+    `Storage: ${facility.storageType}, aisle ${facility.aisleWidth || ''} ft`,
+    `Dock: ${facility.dockDoors} doors`,
+    `Storage Allocation: ${zones.storageAllocation?.fullPallet || 0}% pallet · ${zones.storageAllocation?.cartonOnPallet || 0}% carton-on-pallet · ${zones.storageAllocation?.cartonOnShelving || 0}% carton-on-shelving`,
+    `Volumes: peak ${(zones.peakUnitsPerDay || 0).toLocaleString()}/day · avg ${(zones.avgUnitsPerDay || 0).toLocaleString()}/day`,
+  ].join('\n');
+  if (typeof navigator !== 'undefined' && navigator.clipboard) {
+    navigator.clipboard.writeText(summary).then(
+      () => showWscToast('Summary copied to clipboard', 'success'),
+      () => showWscToast('Clipboard write failed', 'error'),
+    );
+  } else {
+    showWscToast('Clipboard not available', 'error');
+  }
+}
+
 function showWscToast(message, level) {
   const color = level === 'error' ? '#dc2626' : level === 'info' ? '#2563eb' : '#16a34a';
   const bg    = level === 'error' ? '#fef2f2' : level === 'info' ? '#eff6ff' : '#f0fdf4';
@@ -1423,7 +1519,7 @@ function build3DScene() {
 // ============================================================
 
 function pushToCm() {
-  /** @type {import('./types.js?v=20260418-s3').WscToCmPayload} */
+  /** @type {import('./types.js?v=20260418-s4').WscToCmPayload} */
   const payload = {
     totalSqft: facility.totalSqft || 0,
     clearHeight: facility.clearHeight || 0,
@@ -1444,7 +1540,7 @@ function pushToCm() {
 
 /**
  * Handle CM → WSC push (e.g., "Size with Calculator" from CM).
- * @param {import('./types.js?v=20260418-s3').CmToWscPayload} payload
+ * @param {import('./types.js?v=20260418-s4').CmToWscPayload} payload
  */
 function handleCmPush(payload) {
   if (payload.clearHeight) facility.clearHeight = payload.clearHeight;

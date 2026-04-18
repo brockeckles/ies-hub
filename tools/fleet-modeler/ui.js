@@ -6,10 +6,10 @@
  * @module tools/fleet-modeler/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-s3';
-import { state } from '../../shared/state.js?v=20260418-s3';
-import * as calc from './calc.js?v=20260418-s3';
-import * as api from './api.js?v=20260418-s3';
+import { bus } from '../../shared/event-bus.js?v=20260418-s4';
+import { state } from '../../shared/state.js?v=20260418-s4';
+import * as calc from './calc.js?v=20260418-s4';
+import * as api from './api.js?v=20260418-s4';
 
 // ============================================================
 // STATE
@@ -21,16 +21,16 @@ let rootEl = null;
 /** @type {'lanes' | 'config' | 'results' | 'map'} */
 let activeTab = 'lanes';
 
-/** @type {import('./types.js?v=20260418-s3').Lane[]} */
+/** @type {import('./types.js?v=20260418-s4').Lane[]} */
 let lanes = [];
 
-/** @type {import('./types.js?v=20260418-s3').VehicleSpec[]} */
+/** @type {import('./types.js?v=20260418-s4').VehicleSpec[]} */
 let vehicles = calc.DEFAULT_VEHICLES.map(v => ({ ...v }));
 
-/** @type {import('./types.js?v=20260418-s3').FleetConfig} */
+/** @type {import('./types.js?v=20260418-s4').FleetConfig} */
 let config = { ...calc.DEFAULT_CONFIG };
 
-/** @type {import('./types.js?v=20260418-s3').FleetResult|null} */
+/** @type {import('./types.js?v=20260418-s4').FleetResult|null} */
 let result = null;
 
 /** @type {object|null} */
@@ -451,6 +451,12 @@ function renderResults(el) {
         </table>
       </div>
 
+      <!-- Cost Waterfall (fixed → variable → total) -->
+      <div class="hub-card" style="padding:20px;margin-bottom:20px;">
+        <div style="font-size:14px;font-weight:700;margin-bottom:16px;">Annual Cost Waterfall</div>
+        ${renderCostWaterfall(r.fleetComposition)}
+      </div>
+
       <!-- 3-Way Comparison Cards -->
       <div class="hub-card" style="padding:20px;margin-bottom:20px;">
         <div style="font-size:14px;font-weight:700;margin-bottom:16px;">3-Way Cost Comparison</div>
@@ -546,6 +552,59 @@ function comparisonBar(label, amount, maxAmount, color) {
       <div style="height:24px;border-radius:6px;background:var(--ies-gray-200);overflow:hidden;">
         <div style="height:100%;width:${pct}%;background:${color};border-radius:6px;"></div>
       </div>
+    </div>
+  `;
+}
+
+/**
+ * Aggregate cost categories across the whole fleet and render as a horizontal
+ * stacked waterfall (fuel → driver → maintenance → depreciation → insurance → total).
+ * @param {Array} fleetComposition
+ */
+function renderCostWaterfall(fleetComposition) {
+  const totals = {
+    fuel: 0, driver: 0, maintenance: 0, depreciation: 0, insurance: 0,
+  };
+  for (const f of fleetComposition) {
+    totals.fuel += f.annualFuelCost || 0;
+    totals.driver += f.annualDriverCost || 0;
+    totals.maintenance += f.annualMaintenanceCost || 0;
+    totals.depreciation += f.annualDepreciation || 0;
+    totals.insurance += f.annualInsurance || 0;
+  }
+  const grand = Object.values(totals).reduce((s, v) => s + v, 0);
+  if (grand === 0) return '<div style="font-size:13px;color:var(--ies-gray-400);">No cost data</div>';
+
+  const steps = [
+    { label: 'Fuel',         value: totals.fuel,         color: '#dc2626', fixedVar: 'variable' },
+    { label: 'Driver',       value: totals.driver,       color: '#2563eb', fixedVar: 'variable' },
+    { label: 'Maintenance',  value: totals.maintenance,  color: '#f59e0b', fixedVar: 'variable' },
+    { label: 'Depreciation', value: totals.depreciation, color: '#7c3aed', fixedVar: 'fixed' },
+    { label: 'Insurance',    value: totals.insurance,    color: '#ec4899', fixedVar: 'fixed' },
+  ];
+
+  const totalFixed = steps.filter(s => s.fixedVar === 'fixed').reduce((s, x) => s + x.value, 0);
+  const totalVariable = steps.filter(s => s.fixedVar === 'variable').reduce((s, x) => s + x.value, 0);
+
+  return `
+    <div style="margin-bottom:14px;">
+      <div style="display:flex;height:32px;border-radius:6px;overflow:hidden;box-shadow:inset 0 0 0 1px var(--ies-gray-200);">
+        ${steps.map(s => `
+          <div style="flex:${s.value};background:${s.color};display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;" title="${s.label}: ${calc.formatCurrency(s.value, { compact: true })}">
+            ${s.value / grand > 0.08 ? `${Math.round((s.value / grand) * 100)}%` : ''}
+          </div>
+        `).join('')}
+      </div>
+      <div style="display:flex;gap:12px;margin-top:8px;font-size:11px;color:var(--ies-gray-600);flex-wrap:wrap;">
+        ${steps.map(s => `
+          <span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:10px;height:10px;background:${s.color};border-radius:2px;"></span>${s.label} ${calc.formatCurrency(s.value, { compact: true })}</span>
+        `).join('')}
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding-top:12px;border-top:1px solid var(--ies-gray-200);">
+      <div><div style="font-size:11px;color:var(--ies-gray-500);font-weight:700;text-transform:uppercase;letter-spacing:.04em;">Fixed Cost</div><div style="font-size:18px;font-weight:800;color:#7c3aed;">${calc.formatCurrency(totalFixed, { compact: true })}</div></div>
+      <div><div style="font-size:11px;color:var(--ies-gray-500);font-weight:700;text-transform:uppercase;letter-spacing:.04em;">Variable Cost</div><div style="font-size:18px;font-weight:800;color:#dc2626;">${calc.formatCurrency(totalVariable, { compact: true })}</div></div>
+      <div><div style="font-size:11px;color:var(--ies-gray-500);font-weight:700;text-transform:uppercase;letter-spacing:.04em;">Total Cost</div><div style="font-size:18px;font-weight:800;color:#1c1c1c;">${calc.formatCurrency(grand, { compact: true })}</div></div>
     </div>
   `;
 }
@@ -739,6 +798,52 @@ function renderMap(el) {
   requestAnimationFrame(() => initFleetMap());
 }
 
+/** Lightweight static geocoder for top US cities — covers all demo lane endpoints. */
+const CITY_GEO = {
+  'Chicago, IL': [41.85, -87.65],
+  'Indianapolis, IN': [39.77, -86.16],
+  'St. Louis, MO': [38.63, -90.20],
+  'Detroit, MI': [42.33, -83.05],
+  'Milwaukee, WI': [43.04, -87.91],
+  'Dallas, TX': [32.78, -96.80],
+  'Houston, TX': [29.76, -95.37],
+  'San Antonio, TX': [29.42, -98.49],
+  'Atlanta, GA': [33.75, -84.39],
+  'Nashville, TN': [36.16, -86.78],
+  'Charlotte, NC': [35.23, -80.84],
+  'Memphis, TN': [35.15, -90.05],
+  'Columbus, OH': [39.96, -82.99],
+  'Cleveland, OH': [41.50, -81.69],
+  'Cincinnati, OH': [39.10, -84.51],
+  'Philadelphia, PA': [39.95, -75.16],
+  'New York, NY': [40.71, -74.01],
+  'Boston, MA': [42.36, -71.06],
+  'Miami, FL': [25.76, -80.19],
+  'Tampa, FL': [27.95, -82.46],
+  'Orlando, FL': [28.54, -81.38],
+  'Phoenix, AZ': [33.45, -112.07],
+  'Los Angeles, CA': [34.05, -118.24],
+  'San Diego, CA': [32.72, -117.16],
+  'San Francisco, CA': [37.77, -122.42],
+  'Seattle, WA': [47.61, -122.33],
+  'Portland, OR': [45.52, -122.68],
+  'Denver, CO': [39.74, -104.99],
+  'Salt Lake City, UT': [40.76, -111.89],
+  'Las Vegas, NV': [36.17, -115.14],
+  'Minneapolis, MN': [44.98, -93.27],
+  'Kansas City, MO': [39.10, -94.58],
+  'Oklahoma City, OK': [35.47, -97.52],
+  'Savannah, GA': [32.08, -81.10],
+};
+
+const VEHICLE_COLORS = {
+  'Dry Van': '#0047AB',
+  'Reefer': '#22c55e',
+  'Flatbed': '#f59e0b',
+  'Straight Truck': '#8b5cf6',
+  'Sprinter': '#ec4899',
+};
+
 function initFleetMap() {
   const container = rootEl?.querySelector('#fm-map-container');
   if (!container) return;
@@ -754,14 +859,37 @@ function initFleetMap() {
     maxZoom: 18, attribution: '&copy; OpenStreetMap'
   }).addTo(mapInstance);
 
-  // Note: Fleet map would need geocoded lane endpoints.
-  // For now, show a placeholder message over the map.
-  const info = L.control({ position: 'topright' });
-  info.onAdd = () => {
-    const div = L.DomUtil.create('div', '');
-    div.style.cssText = 'background:#fff;padding:10px 14px;border-radius:6px;font-size:13px;box-shadow:0 2px 6px rgba(0,0,0,.15);';
-    div.innerHTML = `<strong>${lanes.length} lanes</strong> • ${result?.totalVehicles || 0} vehicles<br><span style="font-size:11px;color:#888;">Route visualization requires geocoded lane endpoints</span>`;
-    return div;
-  };
-  info.addTo(mapInstance);
+  const allPoints = [];
+  let drawn = 0, skipped = 0;
+  for (const lane of lanes) {
+    const o = CITY_GEO[lane.origin];
+    const d = CITY_GEO[lane.destination];
+    if (!o || !d) { skipped++; continue; }
+    drawn++;
+    allPoints.push(o, d);
+    const a = (result?.assignments || []).find(x => x.laneId === lane.id);
+    const color = VEHICLE_COLORS[a?.vehicleName] || '#0047AB';
+    const weight = Math.max(1.5, Math.min(6, (lane.weeklyShipments || 1) / 5));
+    const line = L.polyline([o, d], { color, weight, opacity: 0.7 }).addTo(mapInstance);
+    line.bindPopup(`<strong>${lane.origin} → ${lane.destination}</strong><br>${lane.weeklyShipments}/wk · ${lane.distanceMiles} mi<br>Vehicle: ${a?.vehicleName || '—'}`);
+    // Endpoint markers (small dots)
+    [o, d].forEach((pt, idx) => {
+      L.circleMarker(pt, { radius: 4, fillColor: color, color: '#fff', weight: 1.5, fillOpacity: 0.9 })
+        .addTo(mapInstance)
+        .bindTooltip(idx === 0 ? lane.origin : lane.destination);
+    });
+  }
+
+  if (allPoints.length) mapInstance.fitBounds(allPoints, { padding: [30, 30] });
+
+  if (skipped > 0) {
+    const info = L.control({ position: 'topright' });
+    info.onAdd = () => {
+      const div = L.DomUtil.create('div', '');
+      div.style.cssText = 'background:#fff;padding:8px 12px;border-radius:6px;font-size:11px;box-shadow:0 2px 6px rgba(0,0,0,.15);';
+      div.innerHTML = `<strong>${drawn}</strong> drawn · <strong>${skipped}</strong> lanes skipped (city not in geo table)`;
+      return div;
+    };
+    info.addTo(mapInstance);
+  }
 }
