@@ -135,7 +135,44 @@ function mapCmProjectToSite(row) {
     startupCost: row.startup_cost || 0,
     pricingModel: row.pricing_model || 'cost-plus',
     annualVolume: row.annual_volume || 0,
+    costModelId: row.id, // Link back to CM project ID
   };
+}
+
+/**
+ * Fetch cost model details and populate CostBreakdown for a site.
+ * @param {string} costModelId
+ * @returns {Promise<import('./types.js?v=20260418-sI').CostBreakdown|null>}
+ */
+export async function fetchCostModelBreakdown(costModelId) {
+  try {
+    const { data, error } = await db.from('cost_model_sections')
+      .select('*')
+      .eq('cost_model_project_id', costModelId);
+    if (error) throw error;
+
+    // Aggregate by section type
+    const breakdown = {
+      labor: 0,
+      facility: 0,
+      equipment: 0,
+      overhead: 0,
+      vas: 0,
+      transportation: 0,
+    };
+
+    for (const row of (data || [])) {
+      const section = row.section_type || '';
+      if (breakdown.hasOwnProperty(section)) {
+        breakdown[section] = (breakdown[section] || 0) + (row.annual_cost || 0);
+      }
+    }
+
+    return breakdown;
+  } catch (e) {
+    console.warn('Cost breakdown fetch failed:', e);
+    return null;
+  }
 }
 
 // ============================================================

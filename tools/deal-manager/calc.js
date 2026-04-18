@@ -372,9 +372,9 @@ export const DEMO_DEAL = {
 
 /** @type {import('./types.js?v=20260418-sI').Site[]} */
 export const DEMO_SITES = [
-  { id: 's1', name: 'Chicago DC', market: 'Midwest', environment: 'Ambient', sqft: 350000, annualCost: 4200000, targetMarginPct: 12, startupCost: 800000, pricingModel: 'cost-plus', annualVolume: 2400000 },
-  { id: 's2', name: 'Indianapolis DC', market: 'Midwest', environment: 'Ambient', sqft: 250000, annualCost: 2800000, targetMarginPct: 10, startupCost: 500000, pricingModel: 'cost-plus', annualVolume: 1600000 },
-  { id: 's3', name: 'Columbus DC', market: 'Midwest', environment: 'Cold Chain', sqft: 180000, annualCost: 3100000, targetMarginPct: 14, startupCost: 900000, pricingModel: 'transactional', annualVolume: 1200000 },
+  { id: 's1', name: 'Chicago DC', market: 'Midwest', environment: 'Ambient', sqft: 350000, annualCost: 4200000, targetMarginPct: 16, startupCost: 600000, pricingModel: 'cost-plus', annualVolume: 2400000 },
+  { id: 's2', name: 'Indianapolis DC', market: 'Midwest', environment: 'Ambient', sqft: 250000, annualCost: 2800000, targetMarginPct: 15, startupCost: 350000, pricingModel: 'cost-plus', annualVolume: 1600000 },
+  { id: 's3', name: 'Columbus DC', market: 'Midwest', environment: 'Cold Chain', sqft: 180000, annualCost: 3100000, targetMarginPct: 18, startupCost: 700000, pricingModel: 'transactional', annualVolume: 1200000 },
 ];
 
 // ============================================================

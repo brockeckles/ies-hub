@@ -98,44 +98,8 @@ export function unmount() {
 // ============================================================
 
 function renderShell() {
-  // Multi-Site Analyzer's "tabs" content is dynamic and is filled in by renderTabs(),
-  // so we render the header without tabs here and let renderTabs() inject the action rail.
-  return `
-    <div class="hub-content-inner" style="padding:0;display:flex;flex-direction:column;height:100%;">
-      ${renderToolHeader({
-        toolName: 'Multi-Site Analyzer',
-        toolKey: 'dm',
-        backAction: 'dm-tool-back',
-        backLabel: '← Design Tools',
-        statusChips: [{ label: 'Multi-deal portfolio', kind: 'default' }],
-      })}
-      <!-- Action rail / tab strip injected by renderTabs() -->
-      <div id="dm-tabs" class="hub-action-rail" style="padding:6px 24px 0 24px;margin-left:0;flex-shrink:0;justify-content:flex-start;"></div>
-      <div id="dm-content" style="flex:1;overflow-y:auto;padding:24px;"></div>
-    </div>
-  `;
-}
-
-function renderTabs() {
-  const tabBar = rootEl?.querySelector('#dm-tabs');
-  if (!tabBar) return;
-
-  if (activeTab === 'list' || activeTab === 'kanban') {
-    tabBar.innerHTML = `
-      <button class="hub-btn hub-btn-sm hub-btn-secondary" id="dm-toggle-view" style="margin-right:8px;">📋 List View</button>
-      <button class="hub-btn hub-btn-sm hub-btn-secondary" id="dm-new-deal">+ New Deal</button>
-    `;
-    tabBar.querySelector('#dm-toggle-view')?.addEventListener('click', () => {
-      landingViewMode = landingViewMode === 'kanban' ? 'table' : 'kanban';
-      activeTab = /** @type {any} */ (landingViewMode === 'kanban' ? 'kanban' : 'list');
-      renderTabs();
-      renderContent();
-    });
-    tabBar.querySelector('#dm-new-deal')?.addEventListener('click', () => createNewDeal());
-    return;
-  }
-
-  const tabs = [
+  // Build tabs for detail view
+  const detailTabs = [
     { key: 'summary', label: 'Summary' },
     { key: 'sites', label: 'Sites' },
     { key: 'financials', label: 'Financials' },
@@ -145,37 +109,96 @@ function renderTabs() {
     { key: 'updates', label: 'Updates' },
   ];
 
-  tabBar.innerHTML = `
-    <button class="hub-btn hub-btn-sm hub-btn-secondary" id="dm-back" style="margin-right:8px;">← All Deals</button>
-    ${tabs.map(t => `
-      <button class="hub-btn hub-btn-sm ${t.key === activeTab ? 'hub-btn-primary' : 'hub-btn-secondary'}"
-              data-tab="${t.key}">${t.label}</button>
-    `).join('')}
+  // Determine back action based on current view
+  const isLanding = activeTab === 'list' || activeTab === 'kanban';
+  const backAction = isLanding ? 'dm-tool-back' : 'dm-back';
+  const backLabel = isLanding ? '← Design Tools' : '← All Deals';
+  const headerTabs = isLanding ? [] : detailTabs;
+  const headerChips = activeDeal
+    ? [
+        { label: 'Multi-deal portfolio', kind: 'default' },
+        { label: activeDeal.status === 'draft' ? 'Draft' : activeDeal.status, kind: activeDeal.status === 'draft' ? 'draft' : 'default', dot: true },
+      ]
+    : [{ label: 'Multi-deal portfolio', kind: 'default' }];
+
+  return `
+    <div class="hub-content-inner" style="padding:0;display:flex;flex-direction:column;height:100%;">
+      ${renderToolHeader({
+        toolName: 'Multi-Site Analyzer',
+        toolKey: 'dm',
+        backAction,
+        backLabel,
+        tabs: headerTabs,
+        activeTab,
+        tabsId: 'dm-tabs',
+        statusChips: headerChips,
+      })}
+      <!-- Landing view action buttons injected here if needed -->
+      <div id="dm-action-rail" style="padding:6px 24px 0 24px;margin-left:0;flex-shrink:0;justify-content:flex-start;display:none;"></div>
+      <div id="dm-content" style="flex:1;overflow-y:auto;padding:24px;"></div>
+    </div>
   `;
+}
 
-  tabBar.querySelector('#dm-back')?.addEventListener('click', () => {
-    activeTab = landingViewMode === 'kanban' ? 'kanban' : 'list';
-    activeDeal = null;
-    renderTabs();
-    renderContent();
-  });
+function renderTabs() {
+  // Tabs are now rendered by shared renderToolHeader, so we bind events
+  const actionRail = rootEl?.querySelector('#dm-action-rail');
 
-  tabBar.querySelectorAll('[data-tab]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      activeTab = /** @type {any} */ (/** @type {HTMLElement} */ (btn).dataset.tab);
-      tabBar.querySelectorAll('[data-tab]').forEach(b => {
-        b.className = `hub-btn hub-btn-sm ${b.dataset.tab === activeTab ? 'hub-btn-primary' : 'hub-btn-secondary'}`;
+  if (activeTab === 'list' || activeTab === 'kanban') {
+    // Show action buttons for landing view
+    if (actionRail) {
+      actionRail.style.display = 'flex';
+      actionRail.innerHTML = `
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" id="dm-toggle-view" style="margin-right:8px;">📋 List View</button>
+        <button class="hub-btn hub-btn-sm hub-btn-primary" id="dm-new-deal">+ New Deal</button>
+      `;
+      actionRail.querySelector('#dm-toggle-view')?.addEventListener('click', () => {
+        landingViewMode = landingViewMode === 'kanban' ? 'table' : 'kanban';
+        activeTab = /** @type {any} */ (landingViewMode === 'kanban' ? 'kanban' : 'list');
+        // Re-render shell to update header properly
+        if (rootEl) {
+          rootEl.innerHTML = renderShell();
+          bindShellEvents();
+          renderContent();
+        }
       });
-      renderContent();
-    });
-  });
+      actionRail.querySelector('#dm-new-deal')?.addEventListener('click', () => createNewDeal());
+    }
+    return;
+  }
+
+  // Hide action rail for detail view (tabs are in header)
+  if (actionRail) actionRail.style.display = 'none';
 }
 
 function bindShellEvents() {
   renderTabs();
+
   // Back to Design Tools from the shared tool frame
   rootEl?.querySelector('[data-action="dm-tool-back"]')?.addEventListener('click', () => {
     window.location.hash = 'designtools';
+  });
+
+  // Tab navigation from shared header
+  rootEl?.querySelector('#dm-tabs')?.addEventListener('click', (e) => {
+    const btn = /** @type {HTMLElement} */ (e.target).closest('[data-tab]');
+    if (!btn) return;
+    activeTab = /** @type {any} */ (btn.dataset.tab);
+    rootEl?.querySelectorAll('#dm-tabs [data-tab]').forEach(b => {
+      b.classList.toggle('active', b.dataset.tab === activeTab);
+    });
+    renderContent();
+  });
+
+  // Back button for detail view (goes back to list)
+  rootEl?.querySelectorAll('[data-action="dm-back"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      activeTab = landingViewMode === 'kanban' ? 'kanban' : 'list';
+      activeDeal = null;
+      rootEl?.innerHTML = renderShell();
+      bindShellEvents();
+      renderContent();
+    });
   });
 }
 
@@ -338,8 +361,12 @@ async function openDeal(id) {
   updates = await api.fetchUpdates(activeDeal.id);
 
   activeTab = 'summary';
-  renderTabs();
-  renderContent();
+  // Re-render shell to update header with tabs and status chips
+  if (rootEl) {
+    rootEl.innerHTML = renderShell();
+    bindShellEvents();
+    renderContent();
+  }
 }
 
 // ============================================================

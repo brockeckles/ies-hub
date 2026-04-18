@@ -39,6 +39,7 @@
  * @property {string} [pricingModel] — 'cost-plus', 'transactional', 'hybrid'
  * @property {CostBreakdown} [costBreakdown]
  * @property {number} [annualVolume]
+ * @property {string} [costModelId] — link to Cost Model Builder for this site
  */
 
 /**
