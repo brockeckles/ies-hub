@@ -7,14 +7,14 @@
  * @module tools/network-opt/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import { state } from '../../shared/state.js?v=20260418-sK';
-import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sK';
-import { showToast } from '../../shared/toast.js?v=20260418-sK';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sK';
-import { downloadXLSX } from '../../shared/export.js?v=20260418-sK';
-import * as calc from './calc.js?v=20260418-sK';
-import * as api from './api.js?v=20260418-sK';
+import { bus } from '../../shared/event-bus.js?v=20260418-sM';
+import { state } from '../../shared/state.js?v=20260418-sM';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sM';
+import { showToast } from '../../shared/toast.js?v=20260418-sM';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sM';
+import { downloadXLSX } from '../../shared/export.js?v=20260418-sM';
+import * as calc from './calc.js?v=20260418-sM';
+import * as api from './api.js?v=20260418-sM';
 
 // ============================================================
 // STATE
@@ -29,25 +29,25 @@ let activeView = 'setup';
 /** @type {'facilities' | 'demand' | 'modemix' | 'service'} */
 let activeSection = 'facilities';
 
-/** @type {import('./types.js?v=20260418-sK').Facility[]} */
+/** @type {import('./types.js?v=20260418-sM').Facility[]} */
 let facilities = [];
 
-/** @type {import('./types.js?v=20260418-sK').DemandPoint[]} */
+/** @type {import('./types.js?v=20260418-sM').DemandPoint[]} */
 let demands = [];
 
-/** @type {import('./types.js?v=20260418-sK').ModeMix} */
+/** @type {import('./types.js?v=20260418-sM').ModeMix} */
 let modeMix = { tlPct: 30, ltlPct: 40, parcelPct: 30 };
 
-/** @type {import('./types.js?v=20260418-sK').RateCard} */
+/** @type {import('./types.js?v=20260418-sM').RateCard} */
 let rateCard = { ...calc.DEFAULT_RATES };
 
-/** @type {import('./types.js?v=20260418-sK').ServiceConfig} */
+/** @type {import('./types.js?v=20260418-sM').ServiceConfig} */
 let serviceConfig = { ...calc.DEFAULT_SERVICE };
 
-/** @type {import('./types.js?v=20260418-sK').ScenarioResult[]} */
+/** @type {import('./types.js?v=20260418-sM').ScenarioResult[]} */
 let scenarios = [];
 
-/** @type {import('./types.js?v=20260418-sK').ScenarioResult|null} */
+/** @type {import('./types.js?v=20260418-sM').ScenarioResult|null} */
 let activeScenario = null;
 
 /** @type {string|null} */
@@ -56,7 +56,7 @@ let selectedArchetype = null;
 /** @type {object|null} map instance */
 let mapInstance = null;
 
-/** @type {import('./types.js?v=20260418-sK').ScenarioResult[]|null} */
+/** @type {import('./types.js?v=20260418-sM').ScenarioResult[]|null} */
 let comparisonResults = null;
 
 /** @type {number|null} */
@@ -624,6 +624,7 @@ function renderFacilities(el) {
         <thead>
           <tr style="border-bottom:2px solid var(--ies-gray-200);">
             <th style="text-align:left;padding:8px 6px;font-weight:700;">Active</th>
+            <th style="text-align:left;padding:8px 6px;font-weight:700;" title="Lock this facility's state — the optimizer respects locks during scenario sweeps.">Lock</th>
             <th style="text-align:left;padding:8px 6px;font-weight:700;">Name</th>
             <th style="text-align:left;padding:8px 6px;font-weight:700;">City</th>
             <th style="text-align:left;padding:8px 6px;font-weight:700;">State</th>
@@ -634,10 +635,21 @@ function renderFacilities(el) {
           </tr>
         </thead>
         <tbody>
-          ${facilities.map((f, i) => `
+          ${facilities.map((f, i) => {
+            const lockState = (serviceConfig.lockedOpenIds || []).includes(f.id) ? 'open'
+              : (serviceConfig.lockedClosedIds || []).includes(f.id) ? 'closed'
+              : 'none';
+            return `
             <tr style="border-bottom:1px solid var(--ies-gray-200);${f.isOpen ? '' : 'opacity:0.5;'}">
               <td style="padding:8px 6px;">
-                <input type="checkbox" ${f.isOpen ? 'checked' : ''} data-fac-toggle="${i}" style="cursor:pointer;">
+                <input type="checkbox" ${f.isOpen ? 'checked' : ''} data-fac-toggle="${i}" ${lockState !== 'none' ? 'disabled' : ''} style="cursor:pointer;" title="${lockState !== 'none' ? 'Locked — clear lock to toggle' : ''}">
+              </td>
+              <td style="padding:8px 6px;">
+                <select data-fac-lock="${f.id}" style="font-size:11px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;background:${lockState === 'open' ? '#dbeafe' : lockState === 'closed' ? '#fee2e2' : '#fff'};">
+                  <option value="none"${lockState === 'none' ? ' selected' : ''}>—</option>
+                  <option value="open"${lockState === 'open' ? ' selected' : ''}>🔒 Open</option>
+                  <option value="closed"${lockState === 'closed' ? ' selected' : ''}>🔒 Closed</option>
+                </select>
               </td>
               <td style="padding:8px 6px;font-weight:600;">${f.name}</td>
               <td style="padding:8px 6px;">${f.city || ''}</td>
@@ -649,7 +661,7 @@ function renderFacilities(el) {
                 <button class="hub-btn hub-btn-sm hub-btn-secondary" data-fac-delete="${i}" style="padding:4px 8px;">✕</button>
               </td>
             </tr>
-          `).join('')}
+          `;}).join('')}
         </tbody>
       </table>
 
@@ -677,6 +689,28 @@ function renderFacilities(el) {
     cb.addEventListener('change', () => {
       const idx = parseInt(/** @type {HTMLElement} */ (cb).dataset.facToggle);
       facilities[idx].isOpen = /** @type {HTMLInputElement} */ (cb).checked;
+      renderFacilities(el);
+      renderSidebar();
+    });
+  });
+
+  // Lock facility open/closed — syncs to serviceConfig.lockedOpenIds/lockedClosedIds
+  el.querySelectorAll('[data-fac-lock]').forEach(select => {
+    select.addEventListener('change', () => {
+      const id = /** @type {HTMLElement} */ (select).dataset.facLock;
+      const state = /** @type {HTMLSelectElement} */ (select).value;
+      serviceConfig.lockedOpenIds = (serviceConfig.lockedOpenIds || []).filter(x => x !== id);
+      serviceConfig.lockedClosedIds = (serviceConfig.lockedClosedIds || []).filter(x => x !== id);
+      if (state === 'open') {
+        serviceConfig.lockedOpenIds.push(id);
+        // Locked-open implies isOpen=true
+        const f = facilities.find(x => x.id === id);
+        if (f) f.isOpen = true;
+      } else if (state === 'closed') {
+        serviceConfig.lockedClosedIds.push(id);
+        const f = facilities.find(x => x.id === id);
+        if (f) f.isOpen = false;
+      }
       renderFacilities(el);
       renderSidebar();
     });
@@ -723,6 +757,7 @@ function renderDemand(el) {
               <th style="text-align:right;padding:8px 6px;font-weight:700;">Annual Demand</th>
               <th style="text-align:right;padding:8px 6px;font-weight:700;">Max Days</th>
               <th style="text-align:right;padding:8px 6px;font-weight:700;">Avg Wt (lbs)</th>
+              <th style="text-align:right;padding:8px 6px;font-weight:700;" title="NMFC freight class for LTL costing — drives the class multiplier (50 dense → 0.65×; 500 light → 2.60×). 100 is baseline.">NMFC</th>
               <th style="text-align:center;padding:8px 6px;font-weight:700;"></th>
             </tr>
           </thead>
@@ -735,6 +770,11 @@ function renderDemand(el) {
                 <td style="padding:6px;text-align:right;">${d.annualDemand.toLocaleString()}</td>
                 <td style="padding:6px;text-align:right;">${d.maxDays || 3}</td>
                 <td style="padding:6px;text-align:right;">${d.avgWeight || 25}</td>
+                <td style="padding:6px;text-align:right;">
+                  <select data-dem-nmfc="${i}" style="font-size:11px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;background:#fff;">
+                    ${calc.NMFC_CLASS_CODES.map(c => `<option value="${c}"${(d.nmfcClass || 100) === c ? ' selected' : ''}>${c}</option>`).join('')}
+                  </select>
+                </td>
                 <td style="padding:6px;text-align:center;">
                   <button class="hub-btn hub-btn-sm hub-btn-secondary" data-dem-delete="${i}" style="padding:4px 8px;">✕</button>
                 </td>
@@ -771,8 +811,17 @@ function renderDemand(el) {
     });
   });
 
+  // Per-demand NMFC class — feeds into ltlCost via blendedLaneCost
+  el.querySelectorAll('[data-dem-nmfc]').forEach(select => {
+    select.addEventListener('change', () => {
+      const idx = parseInt(/** @type {HTMLElement} */ (select).dataset.demNmfc);
+      const v = parseInt(/** @type {HTMLSelectElement} */ (select).value);
+      if (demands[idx] && Number.isFinite(v)) demands[idx].nmfcClass = v;
+    });
+  });
+
   el.querySelector('#no-add-demand')?.addEventListener('click', () => {
-    demands.push({ id: 'd' + Date.now(), zip3: '', lat: 39.83, lng: -98.58, annualDemand: 10000, maxDays: 3, avgWeight: 25 });
+    demands.push({ id: 'd' + Date.now(), zip3: '', lat: 39.83, lng: -98.58, annualDemand: 10000, maxDays: 3, avgWeight: 25, nmfcClass: 100 });
     renderDemand(el);
     renderSidebar();
   });
@@ -888,6 +937,19 @@ function renderServiceConfig(el) {
               <span style="font-size:11px;color:var(--ies-gray-400);">${serviceConfig.hardConstraint ? 'Scenarios below target will fail' : 'Soft constraint (warn only)'}</span>
             </label>
           </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--ies-gray-200);padding-top:14px;">
+            <label style="font-size:13px;font-weight:600;" title="Demands beyond this distance from any facility are flagged. 0 disables the constraint.">Max Lane Distance</label>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <input type="number" value="${serviceConfig.maxDistanceMiles ?? 0}" data-svc="maxDistanceMiles" min="0" step="50"
+                     style="width:80px;padding:8px 10px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
+              <span style="font-size:13px;font-weight:600;">mi</span>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--ies-gray-500);">
+            <span>Locked open: <strong>${(serviceConfig.lockedOpenIds || []).length}</strong></span>
+            <span>Locked closed: <strong>${(serviceConfig.lockedClosedIds || []).length}</strong></span>
+            <span style="opacity:0.7;">(set per row in Facilities tab)</span>
+          </div>
         </div>
       </div>
 
@@ -908,6 +970,10 @@ function renderServiceConfig(el) {
       const key = /** @type {HTMLInputElement} */ (e.target).dataset.svc;
       if (key === 'hardConstraint') {
         serviceConfig[key] = /** @type {HTMLInputElement} */ (e.target).checked;
+      } else if (key === 'maxDistanceMiles') {
+        const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
+        // 0 or blank disables the constraint (engine checks for null)
+        serviceConfig.maxDistanceMiles = Number.isFinite(v) && v > 0 ? v : null;
       } else {
         serviceConfig[key] = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
       }
