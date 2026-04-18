@@ -6,14 +6,14 @@
  * @module tools/center-of-gravity/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sM';
-import { state } from '../../shared/state.js?v=20260418-sM';
-import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sM';
-import { showToast } from '../../shared/toast.js?v=20260418-sM';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sM';
-import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
-import * as calc from './calc.js?v=20260418-sM';
-import * as api from './api.js?v=20260418-sM';
+import { bus } from '../../shared/event-bus.js?v=20260418-sN';
+import { state } from '../../shared/state.js?v=20260418-sN';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sN';
+import { showToast } from '../../shared/toast.js?v=20260418-sN';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sN';
+import { downloadCSV } from '../../shared/export.js?v=20260418-sN';
+import * as calc from './calc.js?v=20260418-sN';
+import * as api from './api.js?v=20260418-sN';
 
 // ============================================================
 // STATE
@@ -25,13 +25,13 @@ let rootEl = null;
 /** @type {'points' | 'analysis' | 'map' | 'sensitivity'} */
 let activeTab = 'points';
 
-/** @type {import('./types.js?v=20260418-sM').WeightedPoint[]} */
+/** @type {import('./types.js?v=20260418-sN').WeightedPoint[]} */
 let points = [];
 
-/** @type {import('./types.js?v=20260418-sM').CogConfig} */
+/** @type {import('./types.js?v=20260418-sN').CogConfig} */
 let config = { ...calc.DEFAULT_CONFIG };
 
-/** @type {import('./types.js?v=20260418-sM').MultiCogResult|null} */
+/** @type {import('./types.js?v=20260418-sN').MultiCogResult|null} */
 let cogResult = null;
 
 /** @type {Array<{ k: number, totalWeightedDistance: number, estimatedCost: number, avgDistance: number }>|null} */
@@ -465,7 +465,8 @@ function renderMap(el) {
     </div>
   `;
 
-  // Wire toggles — delegate on the controls row
+  // Wire toggles — only re-init the leaflet map (NOT the whole panel) so
+  // the controls keep focus and we don't get into a render loop.
   el.querySelectorAll('[data-cog-toggle]').forEach(input => {
     input.addEventListener('change', (e) => {
       const key = /** @type {HTMLElement} */ (e.target).dataset.cogToggle;
@@ -476,11 +477,12 @@ function renderMap(el) {
       } else {
         mapOptions[key] = /** @type {HTMLInputElement} */ (e.target).checked;
       }
-      renderMap(el);
+      initCogMap();
     });
   });
 
-  requestAnimationFrame(() => initCogMap());
+  // Defer map init slightly so the container has its final layout size.
+  requestAnimationFrame(() => requestAnimationFrame(() => initCogMap()));
 }
 
 function initCogMap() {
