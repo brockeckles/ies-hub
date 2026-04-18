@@ -6,12 +6,13 @@
  * @module tools/warehouse-sizing/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sE';
-import { state } from '../../shared/state.js?v=20260418-sE';
-import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sE';
-import { showToast } from '../../shared/toast.js?v=20260418-sE';
-import * as calc from './calc.js?v=20260418-sE';
-import * as api from './api.js?v=20260418-sE';
+import { bus } from '../../shared/event-bus.js?v=20260418-sF';
+import { state } from '../../shared/state.js?v=20260418-sF';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sF';
+import { showToast } from '../../shared/toast.js?v=20260418-sF';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sF';
+import * as calc from './calc.js?v=20260418-sF';
+import * as api from './api.js?v=20260418-sF';
 
 // ============================================================
 // STATE
@@ -23,13 +24,13 @@ let rootEl = null;
 /** @type {'dashboard' | 'elevation' | '3d'} */
 let activeView = 'dashboard';
 
-/** @type {import('./types.js?v=20260418-sE').FacilityConfig} */
+/** @type {import('./types.js?v=20260418-sF').FacilityConfig} */
 let facility = createDefaultFacility();
 
-/** @type {import('./types.js?v=20260418-sE').ZoneConfig} */
+/** @type {import('./types.js?v=20260418-sF').ZoneConfig} */
 let zones = createDefaultZones();
 
-/** @type {import('./types.js?v=20260418-sE').VolumeInputs} */
+/** @type {import('./types.js?v=20260418-sF').VolumeInputs} */
 let volumes = createDefaultVolumes();
 
 /** @type {boolean} */
@@ -134,27 +135,41 @@ export function unmount() {
 // ============================================================
 
 function renderShell() {
+  const tabs = [
+    { key: 'dashboard', label: 'Dashboard', title: 'Capacity dashboard with utilization metrics' },
+    { key: 'plan', label: '2D — Plan', title: 'Top-down floorplan showing dock doors, storage, zones' },
+    { key: 'elevation', label: '2D — Elevation', title: 'Cross-section showing rack levels and clearances' },
+    { key: '3d', label: '3D View', title: 'Interactive 3D model of the facility layout' },
+  ];
+  const chips = [
+    { label: facility.id ? 'Saved' : 'Draft', kind: facility.id ? 'saved' : 'draft', dot: true },
+    { label: 'Stand-alone', kind: 'standalone', title: 'Not yet pushed into a Cost Model' },
+  ];
   return `
-    <div class="hub-builder" style="height: calc(100vh - 48px);">
-      <!-- Config Sidebar -->
-      <div class="hub-builder-sidebar" id="wsc-config" style="overflow-y:auto;">
-        <!-- Config content renders here -->
-      </div>
+    <div class="hub-content-inner" style="padding:0;display:flex;flex-direction:column;height: calc(100vh - 48px);">
+      ${renderToolHeader({
+        toolName: 'Warehouse Sizing',
+        toolKey: 'wsc',
+        backAction: 'wsc-back',
+        tabs,
+        activeTab: activeView,
+        tabsId: 'wsc-tabs',
+        statusChips: chips,
+        primaryAction: { label: 'Use in Cost Model →', action: 'push-to-cm', icon: '⇨', title: 'Push this design into a Cost Model (Cmd/Ctrl+Enter)' },
+      })}
 
-      <!-- Content Area -->
-      <div class="hub-builder-content" style="display:flex; flex-direction:column;">
-        <!-- View Toggle Bar -->
-        <div style="display:flex; gap:8px; padding:12px 24px; border-bottom:1px solid var(--ies-gray-200); align-items:center;">
-          <button class="wsc-view-btn active" data-view="dashboard">Dashboard</button>
-          <button class="wsc-view-btn" data-view="plan" title="Top-down 2D floorplan showing dock doors, storage, and zone allocation (AutoCAD-style)">2D — Plan</button>
-          <button class="wsc-view-btn" data-view="elevation" title="2D cross-section showing rack levels, beam heights, and sprinkler clearance">2D — Elevation</button>
-          <button class="wsc-view-btn" data-view="3d" title="Interactive 3D model of the facility layout">3D View</button>
-          <div style="flex:1;"></div>
-          <button class="hub-btn hub-btn-primary hub-btn-sm" data-action="push-to-cm">Use in Cost Model →</button>
+      <div class="hub-builder" style="flex:1;min-height:0;display:grid;grid-template-columns:300px 1fr;">
+        <!-- Config Sidebar -->
+        <div class="hub-builder-sidebar" id="wsc-config" style="overflow-y:auto;border-right:1px solid var(--ies-gray-200);">
+          <!-- Config content renders here -->
         </div>
-        <!-- View Content -->
-        <div id="wsc-content" style="flex:1; overflow-y:auto; padding:24px;">
-          <!-- View content renders here -->
+
+        <!-- Content Area -->
+        <div class="hub-builder-content" style="display:flex; flex-direction:column;min-height:0;">
+          <!-- View Content -->
+          <div id="wsc-content" style="flex:1; overflow-y:auto; padding:24px;">
+            <!-- View content renders here -->
+          </div>
         </div>
       </div>
     </div>
@@ -244,17 +259,21 @@ function renderShell() {
 }
 
 function bindShellEvents() {
-  // View toggle
-  rootEl?.querySelectorAll('.wsc-view-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      activeView = /** @type {any} */ (btn.dataset.view);
-      rootEl?.querySelectorAll('.wsc-view-btn').forEach(b => b.classList.toggle('active', b === btn));
-      renderContentView();
+  // View toggle (now uses [data-tab] from shared tool-frame)
+  rootEl?.querySelector('#wsc-tabs')?.addEventListener('click', (e) => {
+    const btn = /** @type {HTMLElement} */ (e.target).closest('[data-tab]');
+    if (!btn) return;
+    activeView = /** @type {any} */ (btn.dataset.tab);
+    rootEl?.querySelectorAll('#wsc-tabs button').forEach(b => {
+      b.classList.toggle('active', b.dataset.tab === activeView);
     });
+    renderContentView();
   });
 
-  // Push to CM
-  rootEl?.querySelector('[data-action="push-to-cm"]')?.addEventListener('click', pushToCm);
+  // Push to CM — primary action
+  const headerRun = rootEl?.querySelector('[data-primary-action="push-to-cm"]');
+  headerRun?.addEventListener('click', () => { pushToCm(); flashRunButton(headerRun); });
+  bindPrimaryActionShortcut(rootEl, 'push-to-cm');
 }
 
 // ============================================================
@@ -1582,7 +1601,7 @@ function build3DScene() {
 // ============================================================
 
 function pushToCm() {
-  /** @type {import('./types.js?v=20260418-sE').WscToCmPayload} */
+  /** @type {import('./types.js?v=20260418-sF').WscToCmPayload} */
   const payload = {
     totalSqft: facility.totalSqft || 0,
     clearHeight: facility.clearHeight || 0,
@@ -1603,7 +1622,7 @@ function pushToCm() {
 
 /**
  * Handle CM → WSC push (e.g., "Size with Calculator" from CM).
- * @param {import('./types.js?v=20260418-sE').CmToWscPayload} payload
+ * @param {import('./types.js?v=20260418-sF').CmToWscPayload} payload
  */
 function handleCmPush(payload) {
   if (payload.clearHeight) facility.clearHeight = payload.clearHeight;

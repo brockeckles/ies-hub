@@ -6,10 +6,11 @@
  * @module tools/deal-manager/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sE';
-import { state } from '../../shared/state.js?v=20260418-sE';
-import * as calc from './calc.js?v=20260418-sE';
-import * as api from './api.js?v=20260418-sE';
+import { bus } from '../../shared/event-bus.js?v=20260418-sF';
+import { state } from '../../shared/state.js?v=20260418-sF';
+import { renderToolHeader } from '../../shared/tool-frame.js?v=20260418-sF';
+import * as calc from './calc.js?v=20260418-sF';
+import * as api from './api.js?v=20260418-sF';
 
 // ============================================================
 // STATE
@@ -24,28 +25,28 @@ let activeTab = 'list';
 /** @type {'kanban' | 'table'} */
 let landingViewMode = 'kanban';
 
-/** @type {import('./types.js?v=20260418-sE').Deal|null} */
+/** @type {import('./types.js?v=20260418-sF').Deal|null} */
 let activeDeal = null;
 
-/** @type {import('./types.js?v=20260418-sE').Site[]} */
+/** @type {import('./types.js?v=20260418-sF').Site[]} */
 let sites = [];
 
-/** @type {import('./types.js?v=20260418-sE').DealFinancials|null} */
+/** @type {import('./types.js?v=20260418-sF').DealFinancials|null} */
 let financials = null;
 
-/** @type {import('./types.js?v=20260418-sE').DosStage[]} */
+/** @type {import('./types.js?v=20260418-sF').DosStage[]} */
 let dosStages = [];
 
-/** @type {import('./types.js?v=20260418-sE').Deal[]} */
+/** @type {import('./types.js?v=20260418-sF').Deal[]} */
 let allDeals = [];
 
-/** @type {import('./types.js?v=20260418-sE').HoursEntry[]} */
+/** @type {import('./types.js?v=20260418-sF').HoursEntry[]} */
 let hoursEntries = [];
 
-/** @type {import('./types.js?v=20260418-sE').Task[]} */
+/** @type {import('./types.js?v=20260418-sF').Task[]} */
 let tasks = [];
 
-/** @type {import('./types.js?v=20260418-sE').WeeklyUpdate[]} */
+/** @type {import('./types.js?v=20260418-sF').WeeklyUpdate[]} */
 let updates = [];
 
 // DOS stages reference (6 stages: Pre-Sales → Delivery)
@@ -97,18 +98,19 @@ export function unmount() {
 // ============================================================
 
 function renderShell() {
+  // Multi-Site Analyzer's "tabs" content is dynamic and is filled in by renderTabs(),
+  // so we render the header without tabs here and let renderTabs() inject the action rail.
   return `
     <div class="hub-content-inner" style="padding:0;display:flex;flex-direction:column;height:100%;">
-      <div style="padding:12px 24px 0;flex-shrink:0;">
-        <a href="#designtools" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--ies-gray-500);text-decoration:none;" onmouseover="this.style.color='#ff3a00'" onmouseout="this.style.color='var(--ies-gray-500)'">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-          Back to Design Tools
-        </a>
-      </div>
-      <div style="display:flex;align-items:center;gap:16px;padding:8px 24px 0 24px;flex-shrink:0;">
-        <h2 class="text-page" style="margin:0;">Multi-Site Analyzer</h2>
-        <div style="display:flex;gap:8px;margin-left:auto;" id="dm-tabs"></div>
-      </div>
+      ${renderToolHeader({
+        toolName: 'Multi-Site Analyzer',
+        toolKey: 'dm',
+        backAction: 'dm-tool-back',
+        backLabel: '← Design Tools',
+        statusChips: [{ label: 'Multi-deal portfolio', kind: 'default' }],
+      })}
+      <!-- Action rail / tab strip injected by renderTabs() -->
+      <div id="dm-tabs" class="hub-action-rail" style="padding:6px 24px 0 24px;margin-left:0;flex-shrink:0;justify-content:flex-start;"></div>
       <div id="dm-content" style="flex:1;overflow-y:auto;padding:24px;"></div>
     </div>
   `;
@@ -171,6 +173,10 @@ function renderTabs() {
 
 function bindShellEvents() {
   renderTabs();
+  // Back to Design Tools from the shared tool frame
+  rootEl?.querySelector('[data-action="dm-tool-back"]')?.addEventListener('click', () => {
+    window.location.hash = 'designtools';
+  });
 }
 
 function renderContent() {

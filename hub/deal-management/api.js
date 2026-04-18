@@ -6,7 +6,7 @@
  * @module hub/deal-management/api
  */
 
-import { db } from '../../shared/supabase.js?v=20260418-sE';
+import { db } from '../../shared/supabase.js?v=20260418-sF';
 
 /**
  * Fetch the 6 canonical DOS stages.

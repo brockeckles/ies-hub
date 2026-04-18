@@ -6,10 +6,11 @@
  * @module tools/most-standards/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sE';
-import { state } from '../../shared/state.js?v=20260418-sE';
-import * as calc from './calc.js?v=20260418-sE';
-import * as api from './api.js?v=20260418-sE';
+import { bus } from '../../shared/event-bus.js?v=20260418-sF';
+import { state } from '../../shared/state.js?v=20260418-sF';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sF';
+import * as calc from './calc.js?v=20260418-sF';
+import * as api from './api.js?v=20260418-sF';
 
 // ============================================================
 // STATE — tool-local
@@ -21,13 +22,13 @@ let activeTab = 'library';
 /** @type {HTMLElement|null} */
 let rootEl = null;
 
-/** @type {{ templates: import('./types.js?v=20260418-sE').MostTemplate[], allowanceProfiles: import('./types.js?v=20260418-sE').AllowanceProfile[] }} */
+/** @type {{ templates: import('./types.js?v=20260418-sF').MostTemplate[], allowanceProfiles: import('./types.js?v=20260418-sF').AllowanceProfile[] }} */
 let refData = { templates: [], allowanceProfiles: [] };
 
-/** @type {import('./types.js?v=20260418-sE').MostTemplate|null} */
+/** @type {import('./types.js?v=20260418-sF').MostTemplate|null} */
 let selectedTemplate = null;
 
-/** @type {import('./types.js?v=20260418-sE').MostElement[]} */
+/** @type {import('./types.js?v=20260418-sF').MostElement[]} */
 let selectedElements = [];
 
 /** Template editor state — null if not editing, or a copy of the template being edited */
@@ -54,11 +55,11 @@ function loadSavedScenarios() {
 let filters = { search: '', processArea: '', laborCategory: '' };
 
 // --- Analysis state ---
-/** @type {import('./types.js?v=20260418-sE').LaborAnalysis} */
+/** @type {import('./types.js?v=20260418-sF').LaborAnalysis} */
 let analysis = createEmptyAnalysis();
 
 // --- Workflow state ---
-/** @type {import('./types.js?v=20260418-sE').Workflow} */
+/** @type {import('./types.js?v=20260418-sF').Workflow} */
 let workflow = createEmptyWorkflow();
 
 // ============================================================
@@ -91,18 +92,44 @@ export async function mount(el) {
 
   el.innerHTML = renderShell();
 
-  // Wire tab nav
-  el.querySelectorAll('.most-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      activeTab = /** @type {any} */ (tab.dataset.tab);
-      el.querySelectorAll('.most-tab').forEach(t => t.classList.toggle('active', t === tab));
-      renderContent();
-    });
+  // Wire tab nav (shared tool-frame uses [data-tab] + .hub-tab-btn)
+  el.querySelector('#most-tabs')?.addEventListener('click', (e) => {
+    const btn = /** @type {HTMLElement} */ (e.target).closest('[data-tab]');
+    if (!btn) return;
+    activeTab = /** @type {any} */ (btn.dataset.tab);
+    el.querySelectorAll('#most-tabs button').forEach(t => t.classList.toggle('active', t.dataset.tab === activeTab));
+    renderContent();
   });
+
+  // Back to Design Tools
+  el.querySelector('[data-action="most-back"]')?.addEventListener('click', () => {
+    window.location.hash = 'designtools';
+  });
+
+  // Primary action — routes to whichever tab's "run" makes sense
+  const runBtn = el.querySelector('[data-primary-action="most-run"]');
+  runBtn?.addEventListener('click', () => {
+    if (activeTab === 'analysis') {
+      const calcBtn = el.querySelector('#most-analysis-calc, [data-action="most-analyze"]');
+      if (calcBtn) /** @type {HTMLButtonElement} */ (calcBtn).click();
+    } else if (activeTab === 'workflow') {
+      const calcBtn = el.querySelector('[data-action="most-workflow-calc"]');
+      if (calcBtn) /** @type {HTMLButtonElement} */ (calcBtn).click();
+    } else {
+      activeTab = 'analysis';
+      el.querySelectorAll('#most-tabs button').forEach(t => t.classList.toggle('active', t.dataset.tab === activeTab));
+      renderContent();
+    }
+    flashRunButton(runBtn);
+  });
+  bindPrimaryActionShortcut(el, 'most-run');
 
   // Load ref data
   try {
     refData = await api.loadRefData();
+    // Update the ref-data chip after templates load
+    const chip = el.querySelector('.hub-tool-status .hub-status-chip');
+    if (chip) chip.textContent = `${refData.templates.length} templates`;
   } catch (err) {
     console.warn('[MOST] Failed to load ref data:', err);
   }
@@ -124,24 +151,31 @@ export function unmount() {
 // ============================================================
 
 function renderShell() {
+  const tabs = [
+    { key: 'library', label: 'Template Library' },
+    { key: 'editor', label: 'Template Editor' },
+    { key: 'analysis', label: 'Quick Analysis' },
+    { key: 'workflow', label: 'Workflow Composer' },
+  ];
+  const chips = [
+    { label: `${refData.templates.length} templates`, kind: 'default' },
+    { label: savedScenarios.length ? `${savedScenarios.length} saved analyses` : 'Stand-alone', kind: savedScenarios.length ? 'linked' : 'standalone' },
+  ];
   return `
-    <div class="hub-analyzer" style="height: calc(100vh - 48px);">
-      <!-- Back to Design Tools -->
-      <div style="padding:12px 24px 0;">
-        <a href="#designtools" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--ies-gray-500);text-decoration:none;" onmouseover="this.style.color='#0047AB'" onmouseout="this.style.color='var(--ies-gray-500)'">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-          Back to Design Tools
-        </a>
-      </div>
-      <!-- Tab Bar -->
-      <div class="hub-analyzer-tabs">
-        <button class="most-tab hub-tab active" data-tab="library">Template Library</button>
-        <button class="most-tab hub-tab" data-tab="editor">Template Editor</button>
-        <button class="most-tab hub-tab" data-tab="analysis">Quick Analysis</button>
-        <button class="most-tab hub-tab" data-tab="workflow">Workflow Composer</button>
-      </div>
+    <div class="hub-content-inner" style="padding:0;display:flex;flex-direction:column;height: calc(100vh - 48px);">
+      ${renderToolHeader({
+        toolName: 'MOST Labor Standards',
+        toolKey: 'most',
+        backAction: 'most-back',
+        backLabel: '← Design Tools',
+        tabs,
+        activeTab,
+        tabsId: 'most-tabs',
+        statusChips: chips,
+        primaryAction: { label: 'Run Analysis', action: 'most-run', icon: '▶', title: 'Compute labor standards (Cmd/Ctrl+Enter)' },
+      })}
       <!-- Content -->
-      <div class="hub-analyzer-content" id="most-content" style="padding: 24px; overflow-y: auto;">
+      <div class="hub-analyzer-content" id="most-content" style="flex:1;padding: 24px; overflow-y: auto;">
         <!-- Tab content renders here -->
       </div>
     </div>
@@ -1176,7 +1210,7 @@ function pushToCostModel() {
     defaultBurdenPct: 30,
   });
 
-  /** @type {import('./types.js?v=20260418-sE').MostToCmPayload} */
+  /** @type {import('./types.js?v=20260418-sF').MostToCmPayload} */
   const payload = {
     laborLines: cmLines,
     operatingDays: analysis.operating_days,
@@ -1203,7 +1237,7 @@ function filterTemplates() {
 }
 
 function groupByProcessArea(templates) {
-  /** @type {Record<string, import('./types.js?v=20260418-sE').MostTemplate[]>} */
+  /** @type {Record<string, import('./types.js?v=20260418-sF').MostTemplate[]>} */
   const groups = {};
   for (const t of templates) {
     const area = t.process_area || 'Other';

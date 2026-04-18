@@ -6,10 +6,10 @@
  *   #welcome, #overview, #deals, #designtools/cost-model, #designtools/fleet-modeler
  *
  * Usage:
- *   import { router } from './router.js?v=20260418-sE';
+ *   import { router } from './router.js?v=20260418-sF';
  *
  *   router.register('designtools/cost-model', {
- *     load: () => import('../tools/cost-model/ui.js?v=20260418-sE'),
+ *     load: () => import('../tools/cost-model/ui.js?v=20260418-sF'),
  *     title: 'Cost Model Builder',
  *   });
  *
@@ -18,8 +18,8 @@
  * @module shared/router
  */
 
-import { state } from './state.js?v=20260418-sE';
-import { bus } from './event-bus.js?v=20260418-sE';
+import { state } from './state.js?v=20260418-sF';
+import { bus } from './event-bus.js?v=20260418-sF';
 
 /**
  * @typedef {Object} RouteConfig
@@ -98,7 +98,12 @@ class Router {
   // ---- Internal ----
 
   async _onHashChange() {
-    const key = this.current();
+    const rawKey = this.current();
+    // Strip query string ("#marketmap?series=diesel" → "marketmap") so route
+    // matching ignores deep-link parameters. Modules can still read the params
+    // via window.location.hash.
+    const queryIdx = rawKey.indexOf('?');
+    const key = queryIdx >= 0 ? rawKey.slice(0, queryIdx) : rawKey;
 
     // Parse section and tool from key
     const parts = key.split('/');

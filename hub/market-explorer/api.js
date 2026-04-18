@@ -9,7 +9,7 @@
  * @module hub/market-explorer/api
  */
 
-import { db } from '../../shared/supabase.js?v=20260418-sE';
+import { db } from '../../shared/supabase.js?v=20260418-sF';
 
 /**
  * Fetch signals relevant to a given market.

@@ -5,8 +5,8 @@
  * @module hub/training-wiki/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sE';
-import * as calc from './calc.js?v=20260418-sE';
+import { bus } from '../../shared/event-bus.js?v=20260418-sF';
+import * as calc from './calc.js?v=20260418-sF';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -159,21 +159,22 @@ function renderMain() {
 function renderArticle(el) {
   if (!activeArticle) return;
   const cat = categories.find(c => c.id === activeArticle.categoryId);
+  const cleanHtml = calc.normalizeArticleHtml(activeArticle.content || '');
 
   el.innerHTML = `
-    <div style="max-width:800px;">
+    <div style="max-width:880px;">
       <button class="hub-btn hub-btn-sm hub-btn-secondary" id="wiki-back" style="margin-bottom:16px;">← Back to Articles</button>
       <div style="margin-bottom:8px;">
-        <span style="font-size:11px;font-weight:700;color:var(--ies-gray-400);text-transform:uppercase;">${cat?.icon || ''} ${cat?.name || 'Uncategorized'}</span>
+        <span style="font-size:11px;font-weight:700;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:0.04em;">${cat?.icon || ''} ${cat?.name || 'Uncategorized'}</span>
       </div>
-      <h2 style="font-size:20px;font-weight:800;margin:0 0 8px 0;">${activeArticle.title}</h2>
-      <div style="display:flex;gap:16px;font-size:11px;color:var(--ies-gray-400);margin-bottom:20px;">
+      <h2 style="font-size:22px;font-weight:800;margin:0 0 8px 0;color:var(--ies-navy);letter-spacing:-0.01em;">${activeArticle.title}</h2>
+      <div style="display:flex;gap:16px;font-size:11px;color:var(--ies-gray-400);margin-bottom:20px;font-weight:600;">
         <span>By ${activeArticle.author}</span>
         <span>${calc.readingTime(activeArticle.content)} min read</span>
         <span>${(activeArticle.viewCount || 0).toLocaleString()} views</span>
       </div>
-      <div class="hub-card" style="padding:24px;font-size:13px;line-height:1.8;">
-        ${activeArticle.content}
+      <div class="hub-card hub-wiki-article" style="padding:28px 32px;">
+        ${cleanHtml}
       </div>
       <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;">
         ${(activeArticle.tags || []).map(t => `<span style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:600;background:#dbeafe;color:#1d4ed8;">${t}</span>`).join('')}

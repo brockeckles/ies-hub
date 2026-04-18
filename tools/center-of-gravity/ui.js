@@ -6,12 +6,13 @@
  * @module tools/center-of-gravity/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sE';
-import { state } from '../../shared/state.js?v=20260418-sE';
-import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sE';
-import { showToast } from '../../shared/toast.js?v=20260418-sE';
-import * as calc from './calc.js?v=20260418-sE';
-import * as api from './api.js?v=20260418-sE';
+import { bus } from '../../shared/event-bus.js?v=20260418-sF';
+import { state } from '../../shared/state.js?v=20260418-sF';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sF';
+import { showToast } from '../../shared/toast.js?v=20260418-sF';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sF';
+import * as calc from './calc.js?v=20260418-sF';
+import * as api from './api.js?v=20260418-sF';
 
 // ============================================================
 // STATE
@@ -23,13 +24,13 @@ let rootEl = null;
 /** @type {'points' | 'analysis' | 'map' | 'sensitivity'} */
 let activeTab = 'points';
 
-/** @type {import('./types.js?v=20260418-sE').WeightedPoint[]} */
+/** @type {import('./types.js?v=20260418-sF').WeightedPoint[]} */
 let points = [];
 
-/** @type {import('./types.js?v=20260418-sE').CogConfig} */
+/** @type {import('./types.js?v=20260418-sF').CogConfig} */
 let config = { ...calc.DEFAULT_CONFIG };
 
-/** @type {import('./types.js?v=20260418-sE').MultiCogResult|null} */
+/** @type {import('./types.js?v=20260418-sF').MultiCogResult|null} */
 let cogResult = null;
 
 /** @type {Array<{ k: number, totalWeightedDistance: number, estimatedCost: number, avgDistance: number }>|null} */
@@ -118,21 +119,23 @@ function renderShell() {
     { key: 'sensitivity', label: 'Sensitivity' },
   ];
 
+  const chips = [
+    { label: activeScenarioId ? 'Saved' : 'Draft', kind: activeScenarioId ? 'saved' : 'draft', dot: true },
+    { label: 'Stand-alone', kind: 'standalone', title: 'Not linked to a Cost Model' },
+  ];
+
   return `
     <div class="hub-content-inner" style="padding:0;display:flex;flex-direction:column;height:100%;">
-      <div style="display:flex;align-items:center;gap:16px;padding:16px 24px 0 24px;flex-shrink:0;">
-        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="cog-back" title="Back to saved scenarios" style="font-size:11px;">← Scenarios</button>
-        <h2 class="text-page" style="margin:0;">Center of Gravity</h2>
-        <div style="display:flex;gap:8px;margin-left:auto;" id="cog-tabs">
-          ${tabs.map(t => `
-            <button class="hub-btn hub-btn-sm ${t.key === activeTab ? 'hub-btn-primary' : 'hub-btn-secondary'}"
-                    data-tab="${t.key}">${t.label}</button>
-          `).join('')}
-        </div>
-        <button class="hub-btn hub-btn-primary hub-btn-sm hub-btn-icon" id="cog-calculate">
-          ▶ Find Optimal Location
-        </button>
-      </div>
+      ${renderToolHeader({
+        toolName: 'Center of Gravity',
+        toolKey: 'cog',
+        backAction: 'cog-back',
+        tabs,
+        activeTab,
+        tabsId: 'cog-tabs',
+        statusChips: chips,
+        primaryAction: { label: 'Find Optimal Location', action: 'cog-run', icon: '▶', title: 'Run k-means (Cmd/Ctrl+Enter)' },
+      })}
       <div id="cog-content" style="flex:1;overflow-y:auto;padding:24px;"></div>
     </div>
   `;
@@ -146,20 +149,24 @@ function bindShellEvents() {
     if (!btn) return;
     activeTab = /** @type {any} */ (btn.dataset.tab);
     rootEl.querySelectorAll('#cog-tabs button').forEach(b => {
-      b.className = `hub-btn hub-btn-sm ${b.dataset.tab === activeTab ? 'hub-btn-primary' : 'hub-btn-secondary'}`;
+      b.classList.toggle('active', b.dataset.tab === activeTab);
     });
     renderContent();
   });
 
-  rootEl.querySelector('#cog-calculate')?.addEventListener('click', () => {
+  const runBtn = rootEl.querySelector('[data-primary-action="cog-run"]');
+  runBtn?.addEventListener('click', () => {
     cogResult = calc.kMeansCog(points, config.numCenters, config.maxIterations);
     sensitivityData = calc.sensitivityAnalysis(points, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations);
     activeTab = 'analysis';
     rootEl.querySelectorAll('#cog-tabs button').forEach(b => {
-      b.className = `hub-btn hub-btn-sm ${b.dataset.tab === activeTab ? 'hub-btn-primary' : 'hub-btn-secondary'}`;
+      b.classList.toggle('active', b.dataset.tab === activeTab);
     });
     renderContent();
+    flashRunButton(runBtn);
   });
+
+  bindPrimaryActionShortcut(rootEl, 'cog-run');
 }
 
 function renderContent() {

@@ -708,6 +708,532 @@ textarea.hub-input {
 .mb-6 { margin-bottom: var(--sp-6); }
 .hidden { display: none !important; }
 
+/* ============================================================
+   TIER 2 — Unified Tool Frame
+   Shared shell primitives used across every Design Tool so that
+   tool headers, action rails, tab strips, primary actions, and
+   input groups render consistently. Domain inputs + visualization
+   centers remain tool-specific.
+   ============================================================ */
+
+/* Header strip: Back link + tool title + status chips + tabs + primary action */
+.hub-tool-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 24px 0 24px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.hub-tool-header .hub-tool-title {
+  font-family: Montserrat, sans-serif;
+  font-size: var(--fs-page);
+  font-weight: var(--fw-extrabold);
+  color: var(--ies-navy);
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+.hub-tool-header .hub-tool-back {
+  font-size: 11px;
+  font-weight: var(--fw-semibold);
+}
+
+/* Status chip cluster (Linked to CM #7, Saved 2m ago, Draft, etc.) */
+.hub-tool-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.hub-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-bold);
+  background: var(--ies-gray-100);
+  color: var(--ies-gray-600);
+  border: 1px solid var(--ies-gray-200);
+  white-space: nowrap;
+  line-height: 1.4;
+}
+.hub-status-chip.linked { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+.hub-status-chip.standalone { background: var(--ies-gray-50); color: var(--ies-gray-500); border-color: var(--ies-gray-200); }
+.hub-status-chip.saved { background: #f0fdf4; color: #166534; border-color: #bbf7d0; }
+.hub-status-chip.draft { background: #fffbeb; color: #92400e; border-color: #fde68a; }
+.hub-status-chip.dot::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+/* Tab strip — shared tab-bar alternative used inside tool headers */
+.hub-tab-strip {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.hub-tab-strip .hub-tab-btn {
+  padding: 6px 14px;
+  border: 1px solid var(--ies-gray-200);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  font-family: Montserrat, sans-serif;
+  font-size: 13px;
+  font-weight: var(--fw-semibold);
+  color: var(--ies-gray-600);
+  cursor: pointer;
+  transition: all var(--ease-default);
+  line-height: 1.2;
+}
+.hub-tab-strip .hub-tab-btn:hover {
+  border-color: var(--ies-blue);
+  color: var(--ies-blue);
+}
+.hub-tab-strip .hub-tab-btn.active {
+  background: var(--ies-blue);
+  color: #fff;
+  border-color: var(--ies-blue);
+}
+.hub-tab-strip .hub-tab-btn:focus-visible {
+  outline: 2px solid var(--ies-blue);
+  outline-offset: 2px;
+}
+
+/* Action rail — the right-aligned bucket of action buttons on a tool header */
+.hub-action-rail {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+
+/* Primary Run button — orange, owns the Cmd/Ctrl+Enter shortcut */
+.hub-run-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  background: var(--ies-orange);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: Montserrat, sans-serif;
+  font-size: 13px;
+  font-weight: var(--fw-bold);
+  cursor: pointer;
+  line-height: 1.2;
+  transition: background var(--ease-default), transform var(--ease-default);
+  box-shadow: 0 1px 2px rgba(255, 58, 0, 0.18);
+}
+.hub-run-btn:hover { background: #e63300; }
+.hub-run-btn:active { transform: translateY(1px); }
+.hub-run-btn:focus-visible { outline: 2px solid var(--ies-orange); outline-offset: 2px; }
+.hub-run-btn[disabled] { opacity: 0.55; cursor: not-allowed; }
+.hub-run-btn .hub-run-icon {
+  width: 12px;
+  height: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+.hub-run-btn .hub-run-shortcut {
+  font-size: 10px;
+  font-weight: var(--fw-bold);
+  opacity: 0.7;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.18);
+  margin-left: 4px;
+}
+/* Flash-success animation when a run completes */
+.hub-run-btn.ran { animation: hub-run-flash 0.6s ease; }
+@keyframes hub-run-flash {
+  0%   { box-shadow: 0 0 0 0 rgba(34,197,94,0.6); }
+  50%  { box-shadow: 0 0 0 6px rgba(34,197,94,0); }
+  100% { box-shadow: 0 1px 2px rgba(255,58,0,0.18); }
+}
+
+/* Input Groups — consistent label/input/help stack used across all tools */
+.hub-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.hub-input-group > label,
+.hub-input-group .hub-input-label {
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-bold);
+  color: var(--ies-gray-600);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.hub-input-group > .hub-input-help {
+  font-size: 11px;
+  color: var(--ies-gray-400);
+  font-weight: var(--fw-medium);
+  line-height: 1.4;
+}
+.hub-input-group > .hub-input-error {
+  font-size: 11px;
+  color: var(--ies-red);
+  font-weight: var(--fw-semibold);
+  line-height: 1.4;
+}
+.hub-input-group input.hub-input,
+.hub-input-group select.hub-input,
+.hub-input-group textarea.hub-input,
+.hub-input-group > input[type="text"]:not(.hub-input),
+.hub-input-group > input[type="number"]:not(.hub-input),
+.hub-input-group > input[type="email"]:not(.hub-input),
+.hub-input-group > select:not(.hub-input),
+.hub-input-group > textarea:not(.hub-input) {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--ies-gray-200);
+  border-radius: var(--radius-sm);
+  font-family: Montserrat, sans-serif;
+  font-size: 13px;
+  font-weight: var(--fw-semibold);
+  color: var(--ies-gray-800);
+  background: #fff;
+  transition: border-color var(--ease-default), box-shadow var(--ease-default);
+}
+.hub-input-group > input:not([type="checkbox"]):not([type="radio"]):focus,
+.hub-input-group > select:focus,
+.hub-input-group > textarea:focus,
+.hub-input-group input.hub-input:focus,
+.hub-input-group select.hub-input:focus,
+.hub-input-group textarea.hub-input:focus {
+  outline: none;
+  border-color: var(--ies-blue);
+  box-shadow: 0 0 0 3px rgba(0,71,171,0.12);
+}
+
+/* Input Row — horizontal grid of input groups */
+.hub-input-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.hub-input-row.cols-2 { grid-template-columns: repeat(2, 1fr); }
+.hub-input-row.cols-3 { grid-template-columns: repeat(3, 1fr); }
+.hub-input-row.cols-4 { grid-template-columns: repeat(4, 1fr); }
+
+/* Results shelf — collapsible/solid KPI strip below canvas */
+.hub-results-shelf {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 18px;
+  border-top: 1px solid var(--ies-gray-200);
+  background: var(--ies-gray-50);
+  flex-shrink: 0;
+}
+.hub-results-shelf .hub-results-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-bold);
+  color: var(--ies-gray-600);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.hub-results-shelf .hub-results-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+.hub-results-shelf .hub-results-kpi {
+  background: #fff;
+  border: 1px solid var(--ies-gray-200);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.hub-results-shelf .hub-results-kpi .kpi-label {
+  font-size: 10px;
+  font-weight: var(--fw-bold);
+  color: var(--ies-gray-500);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.hub-results-shelf .hub-results-kpi .kpi-value {
+  font-size: 18px;
+  font-weight: var(--fw-extrabold);
+  color: var(--ies-navy);
+  line-height: 1.2;
+}
+
+/* Map toolbar — standardized control strip for Leaflet maps */
+.hub-map-toolbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: rgba(255,255,255,0.95);
+  border: 1px solid var(--ies-gray-200);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+  font-size: 12px;
+  font-weight: var(--fw-semibold);
+  color: var(--ies-gray-700);
+}
+.hub-map-toolbar .hub-map-chip {
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--ies-gray-100);
+  color: var(--ies-gray-600);
+  cursor: pointer;
+  border: 1px solid transparent;
+  font-weight: var(--fw-bold);
+  line-height: 1.3;
+}
+.hub-map-toolbar .hub-map-chip:hover { background: var(--ies-gray-200); }
+.hub-map-toolbar .hub-map-chip.active {
+  background: var(--ies-blue);
+  color: #fff;
+}
+
+/* Training Wiki — article body normalization */
+.hub-wiki-article {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--ies-gray-800);
+  font-family: Montserrat, sans-serif;
+}
+.hub-wiki-article p {
+  margin: 0 0 14px 0;
+  line-height: 1.7;
+}
+.hub-wiki-article p:last-child { margin-bottom: 0; }
+.hub-wiki-article h1,
+.hub-wiki-article h2,
+.hub-wiki-article h3,
+.hub-wiki-article h4 {
+  font-weight: var(--fw-extrabold);
+  color: var(--ies-navy);
+  margin: 24px 0 10px 0;
+  line-height: 1.3;
+}
+.hub-wiki-article h1 { font-size: 22px; }
+.hub-wiki-article h2 { font-size: 18px; }
+.hub-wiki-article h3 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--ies-gray-700); }
+.hub-wiki-article h4 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--ies-gray-600); }
+.hub-wiki-article h1:first-child,
+.hub-wiki-article h2:first-child,
+.hub-wiki-article h3:first-child { margin-top: 0; }
+.hub-wiki-article ul,
+.hub-wiki-article ol {
+  margin: 0 0 14px 0;
+  padding-left: 22px;
+}
+.hub-wiki-article li { margin-bottom: 4px; line-height: 1.6; }
+.hub-wiki-article li p { margin: 0 0 6px 0; }
+.hub-wiki-article strong, .hub-wiki-article b { font-weight: var(--fw-extrabold); color: var(--ies-navy); }
+.hub-wiki-article em, .hub-wiki-article i { font-style: italic; color: var(--ies-gray-700); }
+.hub-wiki-article code {
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12px;
+  background: var(--ies-gray-100);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--ies-gray-800);
+}
+.hub-wiki-article pre {
+  background: var(--ies-gray-800);
+  color: #e8eaed;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+  margin: 0 0 14px 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.hub-wiki-article pre code { background: transparent; color: inherit; padding: 0; }
+.hub-wiki-article blockquote {
+  margin: 0 0 14px 0;
+  padding: 8px 14px;
+  border-left: 3px solid var(--ies-blue);
+  background: #f0f5ff;
+  color: var(--ies-gray-700);
+  font-style: italic;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+.hub-wiki-article table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 16px 0;
+  font-size: 12px;
+}
+.hub-wiki-article th {
+  text-align: left;
+  padding: 8px 10px;
+  background: var(--ies-gray-100);
+  color: var(--ies-gray-700);
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 11px;
+  border-bottom: 2px solid var(--ies-gray-200);
+}
+.hub-wiki-article td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--ies-gray-100);
+  vertical-align: top;
+}
+.hub-wiki-article tr:last-child td { border-bottom: none; }
+.hub-wiki-article hr {
+  border: none;
+  border-top: 1px solid var(--ies-gray-200);
+  margin: 20px 0;
+}
+.hub-wiki-article a {
+  color: var(--ies-blue);
+  text-decoration: none;
+  border-bottom: 1px dotted var(--ies-blue);
+}
+.hub-wiki-article a:hover { border-bottom-style: solid; }
+
+/* v2-ported article helper classes — render consistently in v3 light theme */
+.hub-wiki-article .wiki-breadcrumb {
+  font-size: 11px;
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ies-gray-500);
+  margin-bottom: 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--ies-gray-200);
+}
+.hub-wiki-article .wiki-spec-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0 18px 0;
+  font-size: 12px;
+  border: 1px solid var(--ies-gray-200);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.hub-wiki-article .wiki-spec-table th {
+  background: var(--ies-gray-100);
+  color: var(--ies-gray-700);
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 11px;
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 2px solid var(--ies-gray-200);
+}
+.hub-wiki-article .wiki-spec-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--ies-gray-100);
+  vertical-align: top;
+  color: var(--ies-gray-800);
+  line-height: 1.5;
+}
+.hub-wiki-article .wiki-spec-table tr:last-child td { border-bottom: none; }
+.hub-wiki-article .wiki-spec-table tr:nth-child(even) td { background: var(--ies-gray-50); }
+.hub-wiki-article .wiki-callout {
+  margin: 14px 0;
+  padding: 12px 16px;
+  background: #f0f5ff;
+  border-left: 3px solid var(--ies-blue);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+.hub-wiki-article .wiki-callout p { margin: 0; line-height: 1.6; color: var(--ies-gray-700); }
+.hub-wiki-article .wiki-callout-title {
+  font-weight: var(--fw-extrabold);
+  color: var(--ies-blue);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+/* Inline-styled feature card grids (porting from v2 dark theme) — neutralize */
+.hub-wiki-article .wiki-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin: 14px 0;
+}
+.hub-wiki-article .wiki-card {
+  background: #fff;
+  border: 1px solid var(--ies-gray-200);
+  border-left: 3px solid var(--ies-blue);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  box-shadow: var(--shadow-sm);
+}
+.hub-wiki-article .wiki-card-title {
+  font-size: 13px;
+  font-weight: var(--fw-extrabold);
+  color: var(--ies-navy);
+  margin-bottom: 6px;
+}
+.hub-wiki-article .wiki-card-body {
+  font-size: 12px;
+  color: var(--ies-gray-600);
+  line-height: 1.55;
+}
+.hub-wiki-article .wiki-video-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+}
+.hub-wiki-article .wiki-video-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--ies-gray-50);
+  color: var(--ies-gray-800);
+  text-decoration: none;
+  border: 1px solid var(--ies-gray-200);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: var(--fw-semibold);
+}
+.hub-wiki-article .wiki-video-link:hover {
+  border-color: var(--ies-blue);
+  color: var(--ies-blue);
+}
+.hub-wiki-article .wiki-video-link::before {
+  content: '▶';
+  color: var(--ies-red);
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.hub-wiki-article .wiki-roi {
+  background: var(--ies-gray-50);
+  border: 1px solid var(--ies-gray-200);
+  border-left: 3px solid var(--ies-teal);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  font-size: 13px;
+  line-height: 1.7;
+  margin: 14px 0;
+  color: var(--ies-gray-800);
+}
+.hub-wiki-article .wiki-roi strong { color: var(--ies-navy); }
+
 /* ---- Scrollbar Styling ---- */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }

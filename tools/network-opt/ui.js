@@ -7,12 +7,13 @@
  * @module tools/network-opt/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sE';
-import { state } from '../../shared/state.js?v=20260418-sE';
-import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sE';
-import { showToast } from '../../shared/toast.js?v=20260418-sE';
-import * as calc from './calc.js?v=20260418-sE';
-import * as api from './api.js?v=20260418-sE';
+import { bus } from '../../shared/event-bus.js?v=20260418-sF';
+import { state } from '../../shared/state.js?v=20260418-sF';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sF';
+import { showToast } from '../../shared/toast.js?v=20260418-sF';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sF';
+import * as calc from './calc.js?v=20260418-sF';
+import * as api from './api.js?v=20260418-sF';
 
 // ============================================================
 // STATE
@@ -27,25 +28,25 @@ let activeView = 'setup';
 /** @type {'facilities' | 'demand' | 'modemix' | 'service'} */
 let activeSection = 'facilities';
 
-/** @type {import('./types.js?v=20260418-sE').Facility[]} */
+/** @type {import('./types.js?v=20260418-sF').Facility[]} */
 let facilities = [];
 
-/** @type {import('./types.js?v=20260418-sE').DemandPoint[]} */
+/** @type {import('./types.js?v=20260418-sF').DemandPoint[]} */
 let demands = [];
 
-/** @type {import('./types.js?v=20260418-sE').ModeMix} */
+/** @type {import('./types.js?v=20260418-sF').ModeMix} */
 let modeMix = { tlPct: 30, ltlPct: 40, parcelPct: 30 };
 
-/** @type {import('./types.js?v=20260418-sE').RateCard} */
+/** @type {import('./types.js?v=20260418-sF').RateCard} */
 let rateCard = { ...calc.DEFAULT_RATES };
 
-/** @type {import('./types.js?v=20260418-sE').ServiceConfig} */
+/** @type {import('./types.js?v=20260418-sF').ServiceConfig} */
 let serviceConfig = { ...calc.DEFAULT_SERVICE };
 
-/** @type {import('./types.js?v=20260418-sE').ScenarioResult[]} */
+/** @type {import('./types.js?v=20260418-sF').ScenarioResult[]} */
 let scenarios = [];
 
-/** @type {import('./types.js?v=20260418-sE').ScenarioResult|null} */
+/** @type {import('./types.js?v=20260418-sF').ScenarioResult|null} */
 let activeScenario = null;
 
 /** @type {string|null} */
@@ -54,7 +55,7 @@ let selectedArchetype = null;
 /** @type {object|null} map instance */
 let mapInstance = null;
 
-/** @type {import('./types.js?v=20260418-sE').ScenarioResult[]|null} */
+/** @type {import('./types.js?v=20260418-sF').ScenarioResult[]|null} */
 let comparisonResults = null;
 
 /** @type {number|null} */
@@ -178,19 +179,23 @@ export function unmount() {
 // ============================================================
 
 function renderShell() {
+  const tabs = ['setup', 'map', 'results', 'comparison'].map(v => ({ key: v, label: viewLabel(v) }));
+  const chips = [
+    { label: activeConfigId ? 'Saved' : 'Draft', kind: activeConfigId ? 'saved' : 'draft', dot: true },
+    { label: scenarios.length ? `${scenarios.length} scenarios run` : 'Stand-alone', kind: scenarios.length ? 'linked' : 'standalone' },
+  ];
   return `
     <div class="hub-content-inner" style="padding:0;display:flex;flex-direction:column;height:100%;">
-      <!-- View Tabs -->
-      <div style="display:flex;align-items:center;gap:12px;padding:16px 24px 0 24px;flex-shrink:0;">
-        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="netopt-back" title="Back to saved scenarios" style="font-size:11px;">← Scenarios</button>
-        <h2 class="text-page" style="margin:0;">Network Optimizer</h2>
-        <div style="display:flex;gap:8px;margin-left:auto;" id="no-view-tabs">
-          ${['setup', 'map', 'results', 'comparison'].map(v => `
-            <button class="hub-btn hub-btn-sm ${v === activeView ? 'hub-btn-primary' : 'hub-btn-secondary'}"
-                    data-view="${v}" style="text-transform:capitalize;">${viewLabel(v)}</button>
-          `).join('')}
-        </div>
-      </div>
+      ${renderToolHeader({
+        toolName: 'Network Optimizer',
+        toolKey: 'netopt',
+        backAction: 'netopt-back',
+        tabs,
+        activeTab: activeView,
+        tabsId: 'no-view-tabs',
+        statusChips: chips,
+        primaryAction: { label: 'Run Scenario', action: 'netopt-run', icon: '▶', title: 'Run optimizer (Cmd/Ctrl+Enter)' },
+      })}
 
       <!-- Main area: sidebar + content -->
       <div style="display:flex;flex:1;overflow:hidden;margin-top:12px;">
@@ -213,17 +218,25 @@ function viewLabel(v) {
 function bindShellEvents() {
   if (!rootEl) return;
 
-  // View tabs
+  // View tabs (now [data-tab] from shared tool-frame)
   rootEl.querySelector('#no-view-tabs')?.addEventListener('click', (e) => {
-    const btn = /** @type {HTMLElement} */ (e.target).closest('[data-view]');
+    const btn = /** @type {HTMLElement} */ (e.target).closest('[data-tab]');
     if (!btn) return;
-    activeView = /** @type {any} */ (btn.dataset.view);
-    // Re-render tabs
+    activeView = /** @type {any} */ (btn.dataset.tab);
     rootEl.querySelectorAll('#no-view-tabs button').forEach(b => {
-      b.className = `hub-btn hub-btn-sm ${b.dataset.view === activeView ? 'hub-btn-primary' : 'hub-btn-secondary'}`;
+      b.classList.toggle('active', b.dataset.tab === activeView);
     });
     renderContentView();
   });
+
+  // Header primary action proxies to the existing sidebar Run button so we keep one code path.
+  const headerRun = rootEl.querySelector('[data-primary-action="netopt-run"]');
+  headerRun?.addEventListener('click', () => {
+    const sidebarRun = rootEl.querySelector('[data-action="run"]');
+    if (sidebarRun) /** @type {HTMLButtonElement} */ (sidebarRun).click();
+    flashRunButton(headerRun);
+  });
+  bindPrimaryActionShortcut(rootEl, 'netopt-run');
 
   // Sidebar clicks
   rootEl.querySelector('#no-sidebar')?.addEventListener('click', (e) => {
@@ -417,7 +430,7 @@ function runScenario() {
   activeView = 'results';
   // Update view tabs
   rootEl?.querySelectorAll('#no-view-tabs button').forEach(b => {
-    b.className = `hub-btn hub-btn-sm ${b.dataset.view === activeView ? 'hub-btn-primary' : 'hub-btn-secondary'}`;
+    b.classList.toggle('active', b.dataset.tab === activeView);
   });
   renderContentView();
 }
@@ -428,7 +441,7 @@ function addToComparison() {
   scenarios.push(result);
   activeView = 'comparison';
   rootEl?.querySelectorAll('#no-view-tabs button').forEach(b => {
-    b.className = `hub-btn hub-btn-sm ${b.dataset.view === activeView ? 'hub-btn-primary' : 'hub-btn-secondary'}`;
+    b.classList.toggle('active', b.dataset.tab === activeView);
   });
   renderContentView();
 }
@@ -443,7 +456,7 @@ function compareMultipleDCs() {
   recommendedDCCount = rec.recommendedIdx;
   activeView = 'comparison';
   rootEl?.querySelectorAll('#no-view-tabs button').forEach(b => {
-    b.className = `hub-btn hub-btn-sm ${b.dataset.view === activeView ? 'hub-btn-primary' : 'hub-btn-secondary'}`;
+    b.classList.toggle('active', b.dataset.tab === activeView);
   });
   renderContentView();
 }
@@ -468,7 +481,7 @@ function runExactSolver() {
   recommendedDCCount = rec.recommendedIdx;
   activeView = 'comparison';
   rootEl?.querySelectorAll('#no-view-tabs button').forEach(b => {
-    b.className = `hub-btn hub-btn-sm ${b.dataset.view === activeView ? 'hub-btn-primary' : 'hub-btn-secondary'}`;
+    b.classList.toggle('active', b.dataset.tab === activeView);
   });
   renderContentView();
 }

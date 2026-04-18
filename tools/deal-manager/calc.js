@@ -52,8 +52,8 @@ export const DOS_STAGES = [
 
 /**
  * Compute per-site financials.
- * @param {import('./types.js?v=20260418-sE').Site} site
- * @returns {import('./types.js?v=20260418-sE').SiteFinancials}
+ * @param {import('./types.js?v=20260418-sF').Site} site
+ * @returns {import('./types.js?v=20260418-sF').SiteFinancials}
  */
 export function computeSiteFinancials(site) {
   const annualCost = site.annualCost || 0;
@@ -78,9 +78,9 @@ export function computeSiteFinancials(site) {
 
 /**
  * Compute deal-level aggregate financials from sites.
- * @param {import('./types.js?v=20260418-sE').Site[]} sites
+ * @param {import('./types.js?v=20260418-sF').Site[]} sites
  * @param {number} [contractTermYears]
- * @returns {import('./types.js?v=20260418-sE').DealFinancials}
+ * @returns {import('./types.js?v=20260418-sF').DealFinancials}
  */
 export function computeDealFinancials(sites, contractTermYears = DEFAULT_CONTRACT_YEARS) {
   if (sites.length === 0) {
@@ -126,7 +126,7 @@ export function computeDealFinancials(sites, contractTermYears = DEFAULT_CONTRAC
 }
 
 /**
- * @returns {import('./types.js?v=20260418-sE').DealFinancials}
+ * @returns {import('./types.js?v=20260418-sF').DealFinancials}
  */
 function emptyFinancials() {
   return {
@@ -203,10 +203,10 @@ export function computeIrr(startup, annualCashFlow, years) {
 
 /**
  * Generate multi-year P&L projection.
- * @param {import('./types.js?v=20260418-sE').DealFinancials} fin
+ * @param {import('./types.js?v=20260418-sF').DealFinancials} fin
  * @param {number} [years]
  * @param {number} [escalationPct]
- * @returns {import('./types.js?v=20260418-sE').MultiYearRow[]}
+ * @returns {import('./types.js?v=20260418-sF').MultiYearRow[]}
  */
 export function generateMultiYearPL(fin, years = DEFAULT_CONTRACT_YEARS, escalationPct = DEFAULT_ESCALATION_PCT) {
   const rows = [];
@@ -232,8 +232,8 @@ export function generateMultiYearPL(fin, years = DEFAULT_CONTRACT_YEARS, escalat
 
 /**
  * Compute progress across DOS stages.
- * @param {import('./types.js?v=20260418-sE').DosStage[]} stages
- * @returns {import('./types.js?v=20260418-sE').StageProgress[]}
+ * @param {import('./types.js?v=20260418-sF').DosStage[]} stages
+ * @returns {import('./types.js?v=20260418-sF').StageProgress[]}
  */
 export function computeStageProgress(stages) {
   return stages.map(stage => {
@@ -256,7 +256,7 @@ export function computeStageProgress(stages) {
 
 /**
  * Compute overall deal completion from stage progress.
- * @param {import('./types.js?v=20260418-sE').StageProgress[]} progress
+ * @param {import('./types.js?v=20260418-sF').StageProgress[]} progress
  * @returns {{ totalElements: number, completedElements: number, overallPct: number, currentStage: string }}
  */
 export function computeOverallProgress(progress) {
@@ -303,7 +303,7 @@ export function evaluateMetric(metric, value) {
 
 /**
  * Evaluate all deal financial metrics.
- * @param {import('./types.js?v=20260418-sE').DealFinancials} fin
+ * @param {import('./types.js?v=20260418-sF').DealFinancials} fin
  * @returns {Array<{ metric: string, value: number, passes: boolean, rating: string, label: string }>}
  */
 export function evaluateAllMetrics(fin) {
@@ -322,7 +322,7 @@ export function evaluateAllMetrics(fin) {
 /**
  * Compute a simple deal health score (0-100).
  * Weighted: margin 35%, EBITDA 25%, payback 20%, NPV 20%.
- * @param {import('./types.js?v=20260418-sE').DealFinancials} fin
+ * @param {import('./types.js?v=20260418-sF').DealFinancials} fin
  * @returns {{ score: number, grade: 'A' | 'B' | 'C' | 'D' | 'F' }}
  */
 export function computeDealScore(fin) {
@@ -348,8 +348,8 @@ function clamp(val, min, max) {
 
 /**
  * Rank sites by cost efficiency.
- * @param {import('./types.js?v=20260418-sE').SiteFinancials[]} siteFins
- * @returns {Array<import('./types.js?v=20260418-sE').SiteFinancials & { rank: number }>}
+ * @param {import('./types.js?v=20260418-sF').SiteFinancials[]} siteFins
+ * @returns {Array<import('./types.js?v=20260418-sF').SiteFinancials & { rank: number }>}
  */
 export function rankSitesByCost(siteFins) {
   const sorted = [...siteFins].sort((a, b) => a.costPerSqft - b.costPerSqft);
@@ -360,7 +360,7 @@ export function rankSitesByCost(siteFins) {
 // DEMO DATA
 // ============================================================
 
-/** @type {import('./types.js?v=20260418-sE').Deal} */
+/** @type {import('./types.js?v=20260418-sF').Deal} */
 export const DEMO_DEAL = {
   dealName: 'Midwest Regional Expansion',
   clientName: 'Acme Corp',
@@ -370,7 +370,7 @@ export const DEMO_DEAL = {
   notes: 'Multi-site expansion with 3 DCs across the Midwest corridor.',
 };
 
-/** @type {import('./types.js?v=20260418-sE').Site[]} */
+/** @type {import('./types.js?v=20260418-sF').Site[]} */
 export const DEMO_SITES = [
   { id: 's1', name: 'Chicago DC', market: 'Midwest', environment: 'Ambient', sqft: 350000, annualCost: 4200000, targetMarginPct: 12, startupCost: 800000, pricingModel: 'cost-plus', annualVolume: 2400000 },
   { id: 's2', name: 'Indianapolis DC', market: 'Midwest', environment: 'Ambient', sqft: 250000, annualCost: 2800000, targetMarginPct: 10, startupCost: 500000, pricingModel: 'cost-plus', annualVolume: 1600000 },
@@ -441,8 +441,8 @@ const HOURS_TYPES = [
 
 /**
  * Calculate hours summary from hours entries.
- * @param {import('./types.js?v=20260418-sE').HoursEntry[]} hours
- * @returns {import('./types.js?v=20260418-sE').HoursSummary}
+ * @param {import('./types.js?v=20260418-sF').HoursEntry[]} hours
+ * @returns {import('./types.js?v=20260418-sF').HoursSummary}
  */
 export function calcHoursSummary(hours) {
   const byCategory = {};
@@ -490,8 +490,8 @@ export function calcHoursSummary(hours) {
 
 /**
  * Calculate task progress metrics.
- * @param {import('./types.js?v=20260418-sE').Task[]} tasks
- * @returns {import('./types.js?v=20260418-sE').TaskSummary}
+ * @param {import('./types.js?v=20260418-sF').Task[]} tasks
+ * @returns {import('./types.js?v=20260418-sF').TaskSummary}
  */
 export function calcTaskProgress(tasks) {
   if (tasks.length === 0) {

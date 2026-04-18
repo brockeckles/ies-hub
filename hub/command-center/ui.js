@@ -8,7 +8,7 @@
  */
 
 import { bus } from '../../shared/event-bus.js';
-import * as api from './api.js?v=20260418-sE';
+import * as api from './api.js?v=20260418-sF';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
