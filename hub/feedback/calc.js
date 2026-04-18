@@ -11,8 +11,8 @@
 
 /**
  * Compute feedback stats.
- * @param {import('./types.js?v=20260417-mH').FeedbackItem[]} items
- * @returns {import('./types.js?v=20260417-mH').FeedbackStats}
+ * @param {import('./types.js?v=20260417-mI').FeedbackItem[]} items
+ * @returns {import('./types.js?v=20260417-mI').FeedbackStats}
  */
 export function computeStats(items) {
   const totalUpvotes = items.reduce((s, i) => s + (i.upvotes || 0), 0);
@@ -37,9 +37,9 @@ export function computeStats(items) {
 
 /**
  * Filter feedback by type.
- * @param {import('./types.js?v=20260417-mH').FeedbackItem[]} items
+ * @param {import('./types.js?v=20260417-mI').FeedbackItem[]} items
  * @param {string} type
- * @returns {import('./types.js?v=20260417-mH').FeedbackItem[]}
+ * @returns {import('./types.js?v=20260417-mI').FeedbackItem[]}
  */
 export function filterByType(items, type) {
   if (!type || type === 'all') return items;
@@ -48,9 +48,9 @@ export function filterByType(items, type) {
 
 /**
  * Filter feedback by status.
- * @param {import('./types.js?v=20260417-mH').FeedbackItem[]} items
+ * @param {import('./types.js?v=20260417-mI').FeedbackItem[]} items
  * @param {string} status
- * @returns {import('./types.js?v=20260417-mH').FeedbackItem[]}
+ * @returns {import('./types.js?v=20260417-mI').FeedbackItem[]}
  */
 export function filterByStatus(items, status) {
   if (!status || status === 'all') return items;
@@ -59,9 +59,9 @@ export function filterByStatus(items, status) {
 
 /**
  * Filter feedback by tool.
- * @param {import('./types.js?v=20260417-mH').FeedbackItem[]} items
+ * @param {import('./types.js?v=20260417-mI').FeedbackItem[]} items
  * @param {string} tool
- * @returns {import('./types.js?v=20260417-mH').FeedbackItem[]}
+ * @returns {import('./types.js?v=20260417-mI').FeedbackItem[]}
  */
 export function filterByTool(items, tool) {
   if (!tool || tool === 'all') return items;
@@ -70,9 +70,9 @@ export function filterByTool(items, tool) {
 
 /**
  * Search feedback items.
- * @param {import('./types.js?v=20260417-mH').FeedbackItem[]} items
+ * @param {import('./types.js?v=20260417-mI').FeedbackItem[]} items
  * @param {string} query
- * @returns {import('./types.js?v=20260417-mH').FeedbackItem[]}
+ * @returns {import('./types.js?v=20260417-mI').FeedbackItem[]}
  */
 export function searchFeedback(items, query) {
   if (!query || query.trim().length === 0) return [];
@@ -90,10 +90,10 @@ export function searchFeedback(items, query) {
 
 /**
  * Sort feedback items.
- * @param {import('./types.js?v=20260417-mH').FeedbackItem[]} items
+ * @param {import('./types.js?v=20260417-mI').FeedbackItem[]} items
  * @param {'upvotes' | 'date' | 'priority' | 'status'} sortBy
  * @param {'asc' | 'desc'} [dir='desc']
- * @returns {import('./types.js?v=20260417-mH').FeedbackItem[]}
+ * @returns {import('./types.js?v=20260417-mI').FeedbackItem[]}
  */
 export function sortFeedback(items, sortBy, dir = 'desc') {
   const sorted = [...items];
@@ -120,8 +120,8 @@ export function sortFeedback(items, sortBy, dir = 'desc') {
 
 /**
  * Compute monthly trends.
- * @param {import('./types.js?v=20260417-mH').FeedbackItem[]} items
- * @returns {import('./types.js?v=20260417-mH').FeedbackTrend[]}
+ * @param {import('./types.js?v=20260417-mI').FeedbackItem[]} items
+ * @returns {import('./types.js?v=20260417-mI').FeedbackTrend[]}
  */
 export function computeTrends(items) {
   const monthMap = new Map();
@@ -141,9 +141,9 @@ export function computeTrends(items) {
 
 /**
  * Get top voted items.
- * @param {import('./types.js?v=20260417-mH').FeedbackItem[]} items
+ * @param {import('./types.js?v=20260417-mI').FeedbackItem[]} items
  * @param {number} [limit=5]
- * @returns {import('./types.js?v=20260417-mH').FeedbackItem[]}
+ * @returns {import('./types.js?v=20260417-mI').FeedbackItem[]}
  */
 export function topVoted(items, limit = 5) {
   return [...items].sort((a, b) => (b.upvotes || 0) - (a.upvotes || 0)).slice(0, limit);
@@ -151,7 +151,7 @@ export function topVoted(items, limit = 5) {
 
 /**
  * Get unique tools from feedback items.
- * @param {import('./types.js?v=20260417-mH').FeedbackItem[]} items
+ * @param {import('./types.js?v=20260417-mI').FeedbackItem[]} items
  * @returns {string[]}
  */
 export function uniqueTools(items) {
@@ -164,7 +164,7 @@ export function uniqueTools(items) {
 
 /**
  * Compute resolution rate (completed / (completed + declined + open that are old)).
- * @param {import('./types.js?v=20260417-mH').FeedbackItem[]} items
+ * @param {import('./types.js?v=20260417-mI').FeedbackItem[]} items
  * @returns {number} 0-100
  */
 export function resolutionRate(items) {
@@ -216,7 +216,7 @@ export function typeIcon(type) {
 // DEMO DATA
 // ============================================================
 
-/** @type {import('./types.js?v=20260417-mH').FeedbackItem[]} */
+/** @type {import('./types.js?v=20260417-mI').FeedbackItem[]} */
 export const DEMO_FEEDBACK = [
   {
     id: 'fb1', title: 'Add PDF export to Cost Model Summary', description: 'Would be helpful to export the Summary tab as a PDF for client presentations without using deck generation.',

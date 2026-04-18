@@ -6,16 +6,16 @@
  * @module tools/cost-model/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-mH';
-import { state } from '../../shared/state.js?v=20260417-mH';
-import * as calc from './calc.js?v=20260417-mH';
-import * as api from './api.js?v=20260417-mH';
+import { bus } from '../../shared/event-bus.js?v=20260417-mI';
+import { state } from '../../shared/state.js?v=20260417-mI';
+import * as calc from './calc.js?v=20260417-mI';
+import * as api from './api.js?v=20260417-mI';
 
 // ============================================================
 // STATE — tool-local reactive state
 // ============================================================
 
-/** @type {import('./types.js?v=20260417-mH').CostModelData} */
+/** @type {import('./types.js?v=20260417-mI').CostModelData} */
 let model = createEmptyModel();
 
 /** @type {Object} */
@@ -1008,8 +1008,8 @@ function renderLabor() {
   const lines = model.laborLines || [];
   const opHrs = calc.operatingHours(model.shifts || {});
   const lc = model.laborCosting || (model.laborCosting = {});
-  const totalDirect = lines.reduce((s, l) => s + calc.directLineAnnualSimple(l), 0);
-  const totalIndirect = (model.indirectLaborLines || []).reduce((s, l) => s + calc.indirectLineAnnualSimple(l, opHrs), 0);
+  const totalDirect = lines.reduce((s, l) => s + calc.directLineAnnualSimple(l, lc), 0);
+  const totalIndirect = (model.indirectLaborLines || []).reduce((s, l) => s + calc.indirectLineAnnualSimple(l, opHrs, lc), 0);
 
   return `
     <div class="cm-section-header">
@@ -1053,10 +1053,10 @@ function renderLabor() {
       <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-indirect">Auto-Generate Indirect Labor</button>
     </div>
 
-    <div class="text-subtitle mb-2">Direct Labor <span style="font-size:11px;color:var(--ies-gray-400);font-weight:500;">— Volume dropdown pulls from Volumes tab · MHE and IT/Device tracked separately</span></div>
+    <div class="text-subtitle mb-2">Direct Labor <span style="font-size:11px;color:var(--ies-gray-400);font-weight:500;">— Volume from Volumes tab · MHE and IT/Device separate · Burden % set in Labor Costing Factors above</span></div>
     <table class="cm-grid-table">
       <thead>
-        <tr><th style="min-width:180px;">MOST Template</th><th>Activity</th><th>MHE</th><th>IT / Device</th><th>Volume</th><th>UPH</th><th>Hrs/Yr</th><th>FTE</th><th>Rate</th><th>Burden%</th><th class="cm-num">Annual Cost</th><th></th></tr>
+        <tr><th style="min-width:180px;">MOST Template</th><th>Activity</th><th>MHE</th><th>IT / Device</th><th>Volume</th><th>UPH</th><th>Hrs/Yr</th><th>FTE</th><th>Rate</th><th class="cm-num">Annual Cost</th><th></th></tr>
       </thead>
       <tbody>
         ${lines.map((l, i) => `
@@ -1096,20 +1096,19 @@ function renderLabor() {
             <td class="cm-num">${(l.annual_hours || 0).toLocaleString(undefined, {maximumFractionDigits:0})}</td>
             <td class="cm-num">${calc.fte(l, opHrs).toFixed(1)}</td>
             <td><input type="number" value="${l.hourly_rate || 0}" style="width:55px;" step="0.5" data-array="laborLines" data-idx="${i}" data-field="hourly_rate" data-type="number" /></td>
-            <td><input type="number" value="${l.burden_pct || 0}" style="width:45px;" data-array="laborLines" data-idx="${i}" data-field="burden_pct" data-type="number" /></td>
-            <td class="cm-num">${calc.formatCurrency(calc.directLineAnnualSimple(l))}</td>
+            <td class="cm-num">${calc.formatCurrency(calc.directLineAnnualSimple(l, lc))}</td>
             <td><button class="cm-delete-btn" data-action="delete-labor" data-idx="${i}">Del</button></td>
           </tr>
         `).join('')}
-        <tr class="cm-total-row"><td colspan="10">Total Direct Labor</td><td class="cm-num">${calc.formatCurrency(totalDirect)}</td><td></td></tr>
+        <tr class="cm-total-row"><td colspan="9">Total Direct Labor</td><td class="cm-num">${calc.formatCurrency(totalDirect)}</td><td></td></tr>
       </tbody>
     </table>
     <button class="cm-add-row-btn" data-action="add-labor">+ Add Labor Line</button>
 
-    <div class="text-subtitle mb-2 mt-6">Indirect Labor</div>
+    <div class="text-subtitle mb-2 mt-6">Indirect Labor <span style="font-size:11px;color:var(--ies-gray-400);font-weight:500;">— Burden % set in Labor Costing Factors above</span></div>
     <table class="cm-grid-table">
       <thead>
-        <tr><th>Role</th><th>Headcount</th><th>Rate</th><th>Burden%</th><th class="cm-num">Annual Cost</th><th></th></tr>
+        <tr><th>Role</th><th>Headcount</th><th>Rate</th><th class="cm-num">Annual Cost</th><th></th></tr>
       </thead>
       <tbody>
         ${(model.indirectLaborLines || []).map((l, i) => `
@@ -1117,12 +1116,11 @@ function renderLabor() {
             <td><input value="${l.role_name || ''}" style="width:140px;" data-array="indirectLaborLines" data-idx="${i}" data-field="role_name" /></td>
             <td><input type="number" value="${l.headcount || 0}" style="width:50px;" data-array="indirectLaborLines" data-idx="${i}" data-field="headcount" data-type="number" /></td>
             <td><input type="number" value="${l.hourly_rate || 0}" style="width:60px;" step="0.5" data-array="indirectLaborLines" data-idx="${i}" data-field="hourly_rate" data-type="number" /></td>
-            <td><input type="number" value="${l.burden_pct || 0}" style="width:50px;" data-array="indirectLaborLines" data-idx="${i}" data-field="burden_pct" data-type="number" /></td>
-            <td class="cm-num">${calc.formatCurrency(calc.indirectLineAnnualSimple(l, opHrs))}</td>
+            <td class="cm-num">${calc.formatCurrency(calc.indirectLineAnnualSimple(l, opHrs, lc))}</td>
             <td><button class="cm-delete-btn" data-action="delete-indirect" data-idx="${i}">Del</button></td>
           </tr>
         `).join('')}
-        <tr class="cm-total-row"><td colspan="4">Total Indirect Labor</td><td class="cm-num">${calc.formatCurrency(totalIndirect)}</td><td></td></tr>
+        <tr class="cm-total-row"><td colspan="3">Total Indirect Labor</td><td class="cm-num">${calc.formatCurrency(totalIndirect)}</td><td></td></tr>
       </tbody>
     </table>
     <button class="cm-add-row-btn" data-action="add-indirect">+ Add Indirect Line</button>
@@ -2445,7 +2443,7 @@ function sectionHasData(key) {
 /**
  * Handle incoming labor lines from MOST tool.
  * Merges or replaces CM laborLines with MOST-derived data.
- * @param {import('../most-standards/types.js?v=20260417-mH').MostToCmPayload} payload
+ * @param {import('../most-standards/types.js?v=20260417-mI').MostToCmPayload} payload
  */
 function handleMostPush(payload) {
   if (!payload?.laborLines?.length) return;
@@ -2483,7 +2481,7 @@ function handleMostPush(payload) {
 /**
  * Handle incoming facility data from Warehouse Sizing Calculator.
  * Populates CM facility section fields.
- * @param {import('../warehouse-sizing/types.js?v=20260417-mH').WscToCmPayload} payload
+ * @param {import('../warehouse-sizing/types.js?v=20260417-mI').WscToCmPayload} payload
  */
 function handleWscPush(payload) {
   if (!payload) return;

@@ -6,10 +6,10 @@
  * @module tools/center-of-gravity/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-mH';
-import { state } from '../../shared/state.js?v=20260417-mH';
-import * as calc from './calc.js?v=20260417-mH';
-import * as api from './api.js?v=20260417-mH';
+import { bus } from '../../shared/event-bus.js?v=20260417-mI';
+import { state } from '../../shared/state.js?v=20260417-mI';
+import * as calc from './calc.js?v=20260417-mI';
+import * as api from './api.js?v=20260417-mI';
 
 // ============================================================
 // STATE
@@ -21,13 +21,13 @@ let rootEl = null;
 /** @type {'points' | 'analysis' | 'map' | 'sensitivity'} */
 let activeTab = 'points';
 
-/** @type {import('./types.js?v=20260417-mH').WeightedPoint[]} */
+/** @type {import('./types.js?v=20260417-mI').WeightedPoint[]} */
 let points = [];
 
-/** @type {import('./types.js?v=20260417-mH').CogConfig} */
+/** @type {import('./types.js?v=20260417-mI').CogConfig} */
 let config = { ...calc.DEFAULT_CONFIG };
 
-/** @type {import('./types.js?v=20260417-mH').MultiCogResult|null} */
+/** @type {import('./types.js?v=20260417-mI').MultiCogResult|null} */
 let cogResult = null;
 
 /** @type {Array<{ k: number, totalWeightedDistance: number, estimatedCost: number, avgDistance: number }>|null} */

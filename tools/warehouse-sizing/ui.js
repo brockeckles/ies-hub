@@ -6,10 +6,10 @@
  * @module tools/warehouse-sizing/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-mH';
-import { state } from '../../shared/state.js?v=20260417-mH';
-import * as calc from './calc.js?v=20260417-mH';
-import * as api from './api.js?v=20260417-mH';
+import { bus } from '../../shared/event-bus.js?v=20260417-mI';
+import { state } from '../../shared/state.js?v=20260417-mI';
+import * as calc from './calc.js?v=20260417-mI';
+import * as api from './api.js?v=20260417-mI';
 
 // ============================================================
 // STATE
@@ -21,13 +21,13 @@ let rootEl = null;
 /** @type {'dashboard' | 'elevation' | '3d'} */
 let activeView = 'dashboard';
 
-/** @type {import('./types.js?v=20260417-mH').FacilityConfig} */
+/** @type {import('./types.js?v=20260417-mI').FacilityConfig} */
 let facility = createDefaultFacility();
 
-/** @type {import('./types.js?v=20260417-mH').ZoneConfig} */
+/** @type {import('./types.js?v=20260417-mI').ZoneConfig} */
 let zones = createDefaultZones();
 
-/** @type {import('./types.js?v=20260417-mH').VolumeInputs} */
+/** @type {import('./types.js?v=20260417-mI').VolumeInputs} */
 let volumes = createDefaultVolumes();
 
 /** @type {boolean} */
@@ -1423,7 +1423,7 @@ function build3DScene() {
 // ============================================================
 
 function pushToCm() {
-  /** @type {import('./types.js?v=20260417-mH').WscToCmPayload} */
+  /** @type {import('./types.js?v=20260417-mI').WscToCmPayload} */
   const payload = {
     totalSqft: facility.totalSqft || 0,
     clearHeight: facility.clearHeight || 0,
@@ -1444,7 +1444,7 @@ function pushToCm() {
 
 /**
  * Handle CM → WSC push (e.g., "Size with Calculator" from CM).
- * @param {import('./types.js?v=20260417-mH').CmToWscPayload} payload
+ * @param {import('./types.js?v=20260417-mI').CmToWscPayload} payload
  */
 function handleCmPush(payload) {
   if (payload.clearHeight) facility.clearHeight = payload.clearHeight;
@@ -1501,12 +1501,18 @@ function createDefaultZones() {
 }
 
 function createDefaultVolumes() {
+  // Sized to roughly match the default 150K sqft facility (so Recommended SF
+  // lands in the same ballpark as Total SF on a fresh model). 60K pallets/yr
+  // at 12 turns = 5K on-hand × 20 sqft/position ≈ 100K sqft reserve, plus
+  // 3K SKUs × 2 sqft pick + 1.3x support uplift + dock staging ≈ 140K sqft
+  // — matches the 150K facility with modest headroom. Replace with real
+  // project numbers as you go.
   return {
-    totalPallets: 8000,
-    totalSKUs: 2000,
-    inventoryTurns: 18,
-    avgDailyInbound: 200,
-    avgDailyOutbound: 250,
+    totalPallets: 60000,
+    totalSKUs: 3000,
+    inventoryTurns: 12,
+    avgDailyInbound: 250,
+    avgDailyOutbound: 290,
     peakMultiplier: 1.3,
   };
 }
