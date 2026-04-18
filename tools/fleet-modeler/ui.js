@@ -6,13 +6,13 @@
  * @module tools/fleet-modeler/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sJ';
-import { state } from '../../shared/state.js?v=20260418-sJ';
-import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sJ';
-import { showToast } from '../../shared/toast.js?v=20260418-sJ';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sJ';
-import * as calc from './calc.js?v=20260418-sJ';
-import * as api from './api.js?v=20260418-sJ';
+import { bus } from '../../shared/event-bus.js?v=20260418-sK';
+import { state } from '../../shared/state.js?v=20260418-sK';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sK';
+import { showToast } from '../../shared/toast.js?v=20260418-sK';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sK';
+import * as calc from './calc.js?v=20260418-sK';
+import * as api from './api.js?v=20260418-sK';
 
 // ============================================================
 // STATE
@@ -24,16 +24,16 @@ let rootEl = null;
 /** @type {'lanes' | 'config' | 'results' | 'map'} */
 let activeTab = 'lanes';
 
-/** @type {import('./types.js?v=20260418-sJ').Lane[]} */
+/** @type {import('./types.js?v=20260418-sK').Lane[]} */
 let lanes = [];
 
-/** @type {import('./types.js?v=20260418-sJ').VehicleSpec[]} */
+/** @type {import('./types.js?v=20260418-sK').VehicleSpec[]} */
 let vehicles = calc.DEFAULT_VEHICLES.map(v => ({ ...v }));
 
-/** @type {import('./types.js?v=20260418-sJ').FleetConfig} */
+/** @type {import('./types.js?v=20260418-sK').FleetConfig} */
 let config = { ...calc.DEFAULT_CONFIG };
 
-/** @type {import('./types.js?v=20260418-sJ').FleetResult|null} */
+/** @type {import('./types.js?v=20260418-sK').FleetResult|null} */
 let result = null;
 
 /** @type {object|null} */
@@ -868,7 +868,7 @@ async function exportFleetXLSX() {
 
   try {
     // Dynamically import XLSX utilities
-    const { downloadXLSX } = await import('../../shared/export.js?v=20260418-sJ');
+    const { downloadXLSX } = await import('../../shared/export.js?v=20260418-sK');
 
     // Prepare sheet data
     const sheets = [];

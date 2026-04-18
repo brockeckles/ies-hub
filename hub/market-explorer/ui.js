@@ -5,8 +5,8 @@
  * @module hub/market-explorer/ui
  */
 
-import * as calc from './calc.js?v=20260418-sJ';
-import * as api from './api.js?v=20260418-sJ';
+import * as calc from './calc.js?v=20260418-sK';
+import * as api from './api.js?v=20260418-sK';
 
 // Per-market signal cache: marketId → { news, alerts, fetchedAt }
 const marketSignalCache = new Map();

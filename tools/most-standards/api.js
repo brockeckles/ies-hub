@@ -5,7 +5,7 @@
  * @module tools/most-standards/api
  */
 
-import { db } from '../../shared/supabase.js?v=20260418-sJ';
+import { db } from '../../shared/supabase.js?v=20260418-sK';
 
 // ============================================================
 // TEMPLATES
@@ -16,13 +16,13 @@ import { db } from '../../shared/supabase.js?v=20260418-sJ';
  * @param {Object} [filters]
  * @param {string} [filters.process_area]
  * @param {string} [filters.labor_category]
- * @returns {Promise<import('./types.js?v=20260418-sJ').MostTemplate[]>}
+ * @returns {Promise<import('./types.js?v=20260418-sK').MostTemplate[]>}
  */
 export async function listTemplates(filters = {}) {
   let query = db.from('ref_most_templates').select('*').eq('is_active', true);
   if (filters.process_area) query = query.eq('process_area', filters.process_area);
   if (filters.labor_category) query = query.eq('labor_category', filters.labor_category);
-  const { data, error } = await query.order('process_area').order('name');
+  const { data, error } = await query.order('process_area').order('activity_name');
   if (error) throw error;
   return data || [];
 }
@@ -30,7 +30,7 @@ export async function listTemplates(filters = {}) {
 /**
  * Get a single template by ID.
  * @param {string} id
- * @returns {Promise<import('./types.js?v=20260418-sJ').MostTemplate|null>}
+ * @returns {Promise<import('./types.js?v=20260418-sK').MostTemplate|null>}
  */
 export async function getTemplate(id) {
   return db.fetchById('ref_most_templates', id);
@@ -38,8 +38,8 @@ export async function getTemplate(id) {
 
 /**
  * Create a new template.
- * @param {Partial<import('./types.js?v=20260418-sJ').MostTemplate>} data
- * @returns {Promise<import('./types.js?v=20260418-sJ').MostTemplate>}
+ * @param {Partial<import('./types.js?v=20260418-sK').MostTemplate>} data
+ * @returns {Promise<import('./types.js?v=20260418-sK').MostTemplate>}
  */
 export async function createTemplate(data) {
   return db.insert('ref_most_templates', { ...data, is_active: true });
@@ -48,8 +48,8 @@ export async function createTemplate(data) {
 /**
  * Update an existing template.
  * @param {string} id
- * @param {Partial<import('./types.js?v=20260418-sJ').MostTemplate>} data
- * @returns {Promise<import('./types.js?v=20260418-sJ').MostTemplate>}
+ * @param {Partial<import('./types.js?v=20260418-sK').MostTemplate>} data
+ * @returns {Promise<import('./types.js?v=20260418-sK').MostTemplate>}
  */
 export async function updateTemplate(id, data) {
   return db.update('ref_most_templates', id, data);
@@ -67,7 +67,7 @@ export async function deleteTemplate(id) {
 /**
  * Duplicate a template (with its elements).
  * @param {string} id
- * @returns {Promise<import('./types.js?v=20260418-sJ').MostTemplate>}
+ * @returns {Promise<import('./types.js?v=20260418-sK').MostTemplate>}
  */
 export async function duplicateTemplate(id) {
   const template = await getTemplate(id);
@@ -93,7 +93,7 @@ export async function duplicateTemplate(id) {
 /**
  * List elements for a template, ordered by sequence.
  * @param {string} templateId
- * @returns {Promise<import('./types.js?v=20260418-sJ').MostElement[]>}
+ * @returns {Promise<import('./types.js?v=20260418-sK').MostElement[]>}
  */
 export async function listElements(templateId) {
   const { data, error } = await db.from('ref_most_elements')
@@ -106,8 +106,8 @@ export async function listElements(templateId) {
 
 /**
  * Create a new element.
- * @param {Partial<import('./types.js?v=20260418-sJ').MostElement>} data
- * @returns {Promise<import('./types.js?v=20260418-sJ').MostElement>}
+ * @param {Partial<import('./types.js?v=20260418-sK').MostElement>} data
+ * @returns {Promise<import('./types.js?v=20260418-sK').MostElement>}
  */
 export async function createElement(data) {
   return db.insert('ref_most_elements', data);
@@ -116,8 +116,8 @@ export async function createElement(data) {
 /**
  * Update an element.
  * @param {string} id
- * @param {Partial<import('./types.js?v=20260418-sJ').MostElement>} data
- * @returns {Promise<import('./types.js?v=20260418-sJ').MostElement>}
+ * @param {Partial<import('./types.js?v=20260418-sK').MostElement>} data
+ * @returns {Promise<import('./types.js?v=20260418-sK').MostElement>}
  */
 export async function updateElement(id, data) {
   return db.update('ref_most_elements', id, data);
@@ -149,7 +149,7 @@ export async function reorderElements(updates) {
 
 /**
  * List all allowance profiles.
- * @returns {Promise<import('./types.js?v=20260418-sJ').AllowanceProfile[]>}
+ * @returns {Promise<import('./types.js?v=20260418-sK').AllowanceProfile[]>}
  */
 export async function listAllowanceProfiles() {
   return db.fetchAll('ref_allowance_profiles');
@@ -161,7 +161,7 @@ export async function listAllowanceProfiles() {
 
 /**
  * List saved labor analyses.
- * @returns {Promise<import('./types.js?v=20260418-sJ').LaborAnalysis[]>}
+ * @returns {Promise<import('./types.js?v=20260418-sK').LaborAnalysis[]>}
  */
 export async function listAnalyses() {
   const { data, error } = await db.from('most_analyses')
@@ -174,7 +174,7 @@ export async function listAnalyses() {
 /**
  * Get a single analysis by ID.
  * @param {string} id
- * @returns {Promise<import('./types.js?v=20260418-sJ').LaborAnalysis|null>}
+ * @returns {Promise<import('./types.js?v=20260418-sK').LaborAnalysis|null>}
  */
 export async function getAnalysis(id) {
   return db.fetchById('most_analyses', id);
@@ -182,8 +182,8 @@ export async function getAnalysis(id) {
 
 /**
  * Save (insert or update) a labor analysis.
- * @param {import('./types.js?v=20260418-sJ').LaborAnalysis} analysis
- * @returns {Promise<import('./types.js?v=20260418-sJ').LaborAnalysis>}
+ * @param {import('./types.js?v=20260418-sK').LaborAnalysis} analysis
+ * @returns {Promise<import('./types.js?v=20260418-sK').LaborAnalysis>}
  */
 export async function saveAnalysis(analysis) {
   const payload = {
@@ -234,7 +234,7 @@ export async function unlinkFromCm(analysisId) {
 
 /**
  * Load all reference data in parallel.
- * @returns {Promise<{ templates: import('./types.js?v=20260418-sJ').MostTemplate[], allowanceProfiles: import('./types.js?v=20260418-sJ').AllowanceProfile[] }>}
+ * @returns {Promise<{ templates: import('./types.js?v=20260418-sK').MostTemplate[], allowanceProfiles: import('./types.js?v=20260418-sK').AllowanceProfile[] }>}
  */
 export async function loadRefData() {
   const [templates, allowanceProfiles] = await Promise.all([

@@ -136,9 +136,9 @@ export function aisleModuleWidth(storageType, customAisle, dims = {}) {
 
 /**
  * Compute the full storage calculation from facility and zone config.
- * @param {import('./types.js?v=20260418-sJ').FacilityConfig} facility
- * @param {import('./types.js?v=20260418-sJ').ZoneConfig} zones
- * @returns {import('./types.js?v=20260418-sJ').StorageCalcResult}
+ * @param {import('./types.js?v=20260418-sK').FacilityConfig} facility
+ * @param {import('./types.js?v=20260418-sK').ZoneConfig} zones
+ * @returns {import('./types.js?v=20260418-sK').StorageCalcResult}
  */
 export function computeStorage(facility, zones) {
   const totalSqft = facility.totalSqft || 0;
@@ -206,10 +206,10 @@ export function computeStorage(facility, zones) {
 
 /**
  * Build a full capacity summary combining storage calc with volume inputs.
- * @param {import('./types.js?v=20260418-sJ').FacilityConfig} facility
- * @param {import('./types.js?v=20260418-sJ').ZoneConfig} zones
- * @param {import('./types.js?v=20260418-sJ').VolumeInputs} volumes
- * @returns {import('./types.js?v=20260418-sJ').CapacitySummary}
+ * @param {import('./types.js?v=20260418-sK').FacilityConfig} facility
+ * @param {import('./types.js?v=20260418-sK').ZoneConfig} zones
+ * @param {import('./types.js?v=20260418-sK').VolumeInputs} volumes
+ * @returns {import('./types.js?v=20260418-sK').CapacitySummary}
  */
 export function computeCapacitySummary(facility, zones, volumes) {
   const storage = computeStorage(facility, zones);
@@ -256,7 +256,7 @@ export function computeCapacitySummary(facility, zones, volumes) {
  * Formula: (pallets / turns) × 20 sqft/position + SKU pick area + 25% support uplift
  * Recalibrated from v2 (was 30× inflated). Corrected 2026-04-05.
  *
- * @param {import('./types.js?v=20260418-sJ').VolumeInputs} volumes
+ * @param {import('./types.js?v=20260418-sK').VolumeInputs} volumes
  * @returns {number} suggested total sqft
  */
 export function suggestedSqft(volumes) {
@@ -308,7 +308,7 @@ export function dockUtilization(dockDoors, dailyInbound, dailyOutbound, peakMult
 
 /**
  * Compute non-storage zone allocation breakdown.
- * @param {import('./types.js?v=20260418-sJ').ZoneConfig} zones
+ * @param {import('./types.js?v=20260418-sK').ZoneConfig} zones
  * @returns {{ total: number, breakdown: Array<{ label: string, sqft: number, pct: number }> }}
  */
 export function zoneBreakdown(zones) {
@@ -334,8 +334,8 @@ export function zoneBreakdown(zones) {
 
 /**
  * Compute parameters needed for elevation cross-section rendering.
- * @param {import('./types.js?v=20260418-sJ').FacilityConfig} facility
- * @returns {import('./types.js?v=20260418-sJ').ElevationParams}
+ * @param {import('./types.js?v=20260418-sK').FacilityConfig} facility
+ * @returns {import('./types.js?v=20260418-sK').ElevationParams}
  */
 export function elevationParams(facility, zones) {
   const dims = {
@@ -371,8 +371,8 @@ export function elevationParams(facility, zones) {
 
 /**
  * Calculate storage positions by type based on allocation percentages.
- * @param {import('./types.js?v=20260418-sJ').FacilityConfig} facility
- * @param {import('./types.js?v=20260418-sJ').ZoneConfig} zones
+ * @param {import('./types.js?v=20260418-sK').FacilityConfig} facility
+ * @param {import('./types.js?v=20260418-sK').ZoneConfig} zones
  * @returns {{ fullPalletPositions: number, cartonOnPalletPositions: number, cartonOnShelvingPositions: number, totalPositions: number }}
  */
 export function calcStorageByType(facility, zones) {
@@ -399,9 +399,9 @@ export function calcStorageByType(facility, zones) {
 /**
  * Calculate dock door requirements and utilization.
  * Formula: (inbound + outbound) × 1.25 buffer × 700 SF/door × (1.15 if two-sided)
- * @param {import('./types.js?v=20260418-sJ').FacilityConfig} facility
- * @param {import('./types.js?v=20260418-sJ').ZoneConfig} zones
- * @param {import('./types.js?v=20260418-sJ').VolumeInputs} volumes
+ * @param {import('./types.js?v=20260418-sK').FacilityConfig} facility
+ * @param {import('./types.js?v=20260418-sK').ZoneConfig} zones
+ * @param {import('./types.js?v=20260418-sK').VolumeInputs} volumes
  * @returns {{ inboundDoorsNeeded: number, outboundDoorsNeeded: number, inboundUtilization: number, outboundUtilization: number, dockSqft: number }}
  */
 export function calcDockAnalysis(facility, zones, volumes) {
@@ -441,7 +441,7 @@ export function calcDockAnalysis(facility, zones, volumes) {
 
 /**
  * Calculate Days Inventory On Hand (DIOH) for forward pick sizing.
- * @param {import('./types.js?v=20260418-sJ').ZoneConfig} zones
+ * @param {import('./types.js?v=20260418-sK').ZoneConfig} zones
  * @returns {number} DIOH in days
  */
 export function calcDIOH(zones) {
@@ -454,7 +454,7 @@ export function calcDIOH(zones) {
 
 /**
  * Calculate forward pick area sqft.
- * @param {import('./types.js?v=20260418-sJ').ZoneConfig} zones
+ * @param {import('./types.js?v=20260418-sK').ZoneConfig} zones
  * @returns {number} forward pick area in sqft
  */
 export function calcForwardPick(zones) {
@@ -481,7 +481,7 @@ export function calcForwardPick(zones) {
 
 /**
  * Sum optional and custom zone sqft.
- * @param {import('./types.js?v=20260418-sJ').ZoneConfig} zones
+ * @param {import('./types.js?v=20260418-sK').ZoneConfig} zones
  * @returns {number} total optional zones sqft
  */
 export function calcOptionalZones(zones) {
@@ -502,9 +502,9 @@ export function calcOptionalZones(zones) {
 
 /**
  * Calculate corrected suggested sqft including all zones.
- * @param {import('./types.js?v=20260418-sJ').FacilityConfig} facility
- * @param {import('./types.js?v=20260418-sJ').ZoneConfig} zones
- * @param {import('./types.js?v=20260418-sJ').VolumeInputs} volumes
+ * @param {import('./types.js?v=20260418-sK').FacilityConfig} facility
+ * @param {import('./types.js?v=20260418-sK').ZoneConfig} zones
+ * @param {import('./types.js?v=20260418-sK').VolumeInputs} volumes
  * @returns {number} corrected suggested sqft
  */
 export function calcSuggestedSF(facility, zones, volumes) {
