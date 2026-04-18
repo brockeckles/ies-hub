@@ -5,7 +5,7 @@
  * @module hub/admin/api
  */
 
-import { db } from '../../shared/supabase.js?v=20260418-s7';
+import { db } from '../../shared/supabase.js?v=20260418-s8';
 
 // ============================================================
 // MASTER DATA
@@ -50,7 +50,7 @@ export async function deleteMasterRecord(tableName, id) {
 
 /**
  * List user accounts.
- * @returns {Promise<import('./types.js?v=20260418-s7').UserAccount[]>}
+ * @returns {Promise<import('./types.js?v=20260418-s8').UserAccount[]>}
  */
 export async function listUsers() {
   const { data, error } = await db.from('user_accounts').select('*').order('display_name');
@@ -74,7 +74,7 @@ export async function updateUser(id, updates) {
 
 /**
  * List escalation rules.
- * @returns {Promise<import('./types.js?v=20260418-s7').EscalationRule[]>}
+ * @returns {Promise<import('./types.js?v=20260418-s8').EscalationRule[]>}
  */
 export async function listEscalations() {
   const { data, error } = await db.from('escalation_rules').select('*').order('created_at');
@@ -84,7 +84,7 @@ export async function listEscalations() {
 
 /**
  * Save (insert or update) an escalation rule.
- * @param {import('./types.js?v=20260418-s7').EscalationRule} rule
+ * @param {import('./types.js?v=20260418-s8').EscalationRule} rule
  * @returns {Promise<any>}
  */
 export async function saveEscalation(rule) {
@@ -117,7 +117,7 @@ export async function deleteEscalation(id) {
 /**
  * List audit log entries.
  * @param {number} [limit=100]
- * @returns {Promise<import('./types.js?v=20260418-s7').AuditLogEntry[]>}
+ * @returns {Promise<import('./types.js?v=20260418-s8').AuditLogEntry[]>}
  */
 export async function listAuditLog(limit = 100) {
   const { data, error } = await db.from('audit_log').select('*').order('timestamp', { ascending: false }).limit(limit);
@@ -127,7 +127,7 @@ export async function listAuditLog(limit = 100) {
 
 /**
  * Write an audit log entry.
- * @param {Omit<import('./types.js?v=20260418-s7').AuditLogEntry, 'id'>} entry
+ * @param {Omit<import('./types.js?v=20260418-s8').AuditLogEntry, 'id'>} entry
  * @returns {Promise<void>}
  */
 export async function writeAuditEntry(entry) {

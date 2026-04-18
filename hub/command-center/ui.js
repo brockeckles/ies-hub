@@ -8,7 +8,7 @@
  */
 
 import { bus } from '../../shared/event-bus.js';
-import * as api from './api.js?v=20260418-s7';
+import * as api from './api.js?v=20260418-s8';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -56,6 +56,12 @@ function render() {
   const timeStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
   rootEl.innerHTML = `
+    <style>
+      .cc-kpi-tile:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.08); border-color: var(--ies-gray-300); }
+      .cc-kpi-tile:hover .cc-kpi-tooltip { opacity: 1; }
+      .cc-alert-banner { transition: filter .12s ease; }
+      .cc-alert-banner:hover { filter: brightness(0.97); cursor: pointer; }
+    </style>
     <div class="hub-content-inner" style="padding:24px;max-width:1280px;">
 
       <!-- Header -->
@@ -72,24 +78,26 @@ function render() {
         </div>
       </div>
 
-      <!-- Inline alert banner -->
+      <!-- Inline alert banner — whole banner clickable -> jump to Alerts tab -->
       ${renderInlineAlertBanner(d.alerts)}
 
-      <!-- Vital Signs — 6 KPI tiles WITH inline sparklines (replaces standalone chart grid) -->
+      <!-- Vital Signs — 6 KPI tiles, each clickable -> Market Explorer with drill-down -->
       <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:20px;">
-        ${vitalSignTile('Diesel Price', '$' + d.kpis.dieselPrice.toFixed(2), '/gal', d.kpis.dieselTrend, '#dc2626', d.kpis.dieselChange, d.sparks?.diesel)}
-        ${vitalSignTile('Warehouse Wage', '$' + d.kpis.avgWage.toFixed(2), '/hr', d.kpis.wageTrend, '#7c3aed', d.kpis.wageChange, d.sparks?.wage)}
-        ${vitalSignTile('Warehouse Rate', '$' + (d.kpis.avgWarehouseRate || 0).toFixed(2), '/sf/yr', d.kpis.warehouseRateTrend || 'neutral', '#2563eb', d.kpis.warehouseRateChange || '—', d.sparks?.warehouseRate)}
-        ${vitalSignTile('Freight Index', d.kpis.freightIndex.toFixed(0), '', d.kpis.freightTrend, '#ea580c', d.kpis.freightChange, d.sparks?.freight)}
-        ${vitalSignTile('Steel Index', '$' + Math.round(d.kpis.steelPrice).toLocaleString(), (d.kpis.steelUnit || '/ton').replace('$/', '/'), d.kpis.steelTrend, '#0891b2', d.kpis.steelChange, d.sparks?.steel)}
-        ${vitalSignTile('RFP Signals', String(d.kpis.rfpSignalCount || 0), 'active', d.kpis.rfpSignalTrend || 'neutral', '#16a34a', d.kpis.rfpSignalChange || '—', d.sparks?.rfp)}
+        ${vitalSignTile('Diesel Price', '$' + d.kpis.dieselPrice.toFixed(2), '/gal', d.kpis.dieselTrend, '#dc2626', d.kpis.dieselChange, d.sparks?.diesel, 'marketmap?series=diesel', '26-week range')}
+        ${vitalSignTile('Warehouse Wage', '$' + d.kpis.avgWage.toFixed(2), '/hr', d.kpis.wageTrend, '#7c3aed', d.kpis.wageChange, d.sparks?.wage, 'marketmap?series=wage', '12-month modeled')}
+        ${vitalSignTile('Warehouse Rate', '$' + (d.kpis.avgWarehouseRate || 0).toFixed(2), '/sf/yr', d.kpis.warehouseRateTrend || 'neutral', '#2563eb', d.kpis.warehouseRateChange || '—', d.sparks?.warehouseRate, 'marketmap?series=realestate', '8-quarter range')}
+        ${vitalSignTile('Freight Index', d.kpis.freightIndex.toFixed(0), '', d.kpis.freightTrend, '#ea580c', d.kpis.freightChange, d.sparks?.freight, 'marketmap?series=freight', '26-week range')}
+        ${vitalSignTile('Steel Index', '$' + Math.round(d.kpis.steelPrice).toLocaleString(), (d.kpis.steelUnit || '/ton').replace('$/', '/'), d.kpis.steelTrend, '#0891b2', d.kpis.steelChange, d.sparks?.steel, 'marketmap?series=steel', '26-week CRU HRC')}
+        ${vitalSignTile('RFP Signals', String(d.kpis.rfpSignalCount || 0), 'active', d.kpis.rfpSignalTrend || 'neutral', '#16a34a', d.kpis.rfpSignalChange || '—', d.sparks?.rfp, 'marketmap?series=rfp', '12-week cumulative')}
       </div>
 
       <!-- Two-column body: Signal Stream (2/3) + Right rail (1/3) -->
-      <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;align-items:start;">
+      <!-- min-height:75vh + align-items:stretch keeps both columns the same height
+           so the bottoms line up cleanly. -->
+      <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;align-items:stretch;min-height:75vh;">
 
         <!-- LEFT — Signal Stream (the unified intelligence feed; replaces Sector Pulse + Market Alerts) -->
-        <div class="hub-card" id="cc-signal-stream" style="padding:0;display:flex;flex-direction:column;overflow:hidden;max-height:720px;">
+        <div class="hub-card" id="cc-signal-stream" style="padding:0;display:flex;flex-direction:column;overflow:hidden;height:100%;">
           <div style="padding:14px 16px 0;border-bottom:1px solid var(--ies-gray-100);">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
               <div style="font-size:13px;font-weight:700;">Signal Stream</div>
@@ -107,11 +115,11 @@ function render() {
           </div>
         </div>
 
-        <!-- RIGHT rail — Pipeline Snapshot, RFP Signals, Tool Shortcuts -->
-        <div style="display:flex;flex-direction:column;gap:16px;">
+        <!-- RIGHT rail — Pipeline Snapshot (top, fixed) + RFP Signals (flex-grow to fill) + Tool Shortcuts (bottom, fixed) -->
+        <div style="display:flex;flex-direction:column;gap:16px;height:100%;">
           ${renderPipelineSnapshot(d.pipeline)}
 
-          <div class="hub-card" id="cc-rfp-feed" style="padding:0;display:flex;flex-direction:column;overflow:hidden;max-height:340px;">
+          <div class="hub-card" id="cc-rfp-feed" style="padding:0;display:flex;flex-direction:column;overflow:hidden;flex:1 1 0;min-height:200px;">
             <div style="padding:12px 14px 8px;font-size:13px;font-weight:700;border-bottom:1px solid var(--ies-gray-100);display:flex;align-items:center;justify-content:space-between;">
               RFP Signals
               <span style="font-size:10px;color:var(--ies-gray-400);font-weight:500;">${d.rfpSignals.length} active</span>
@@ -124,8 +132,6 @@ function render() {
           ${renderToolShortcuts()}
         </div>
       </div>
-
-      <p style="margin-top:14px;font-size:11px;color:var(--ies-gray-400);text-align:right;">Looking for full historical charts? They live in <a href="#marketmap" style="color:var(--ies-gray-500);">Market Explorer →</a></p>
     </div>
   `;
 
@@ -134,9 +140,11 @@ function render() {
 
 /**
  * Vital Sign tile — KPI value + delta badge + inline sparkline.
- * Replaces the earlier kpiCard + the separate trend chart grid.
+ * Entire tile is an <a> linking to the Market Explorer drill-down for that
+ * series; a small ↗ icon in the corner signals the affordance, and a
+ * hover tooltip shows min/max + period.
  */
-function vitalSignTile(label, value, unit, trend, color, change, sparkData) {
+function vitalSignTile(label, value, unit, trend, color, change, sparkData, href, periodLabel) {
   const trendArrow = trend === 'up' ? '↑' : trend === 'down' ? '↓' : '→';
   const trendColor = trend === 'up' ? '#dc2626' : trend === 'down' ? '#16a34a' : '#6b7280';
   // For RFP Signals (and other "more is good") we don't want red on uptick.
@@ -144,9 +152,23 @@ function vitalSignTile(label, value, unit, trend, color, change, sparkData) {
   const finalTrendColor = isCountKpi
     ? (trend === 'up' ? '#16a34a' : trend === 'down' ? '#dc2626' : '#6b7280')
     : trendColor;
+
+  // Tooltip content — min/max + period for this KPI's sparkline data.
+  let tipText = '';
+  if (Array.isArray(sparkData) && sparkData.length >= 2) {
+    const min = Math.min(...sparkData);
+    const max = Math.max(...sparkData);
+    const first = sparkData[0];
+    const last = sparkData[sparkData.length - 1];
+    const pct = first > 0 ? ((last - first) / first) * 100 : 0;
+    const fmt = (n) => (Math.abs(n) >= 100 ? n.toFixed(0) : n.toFixed(2));
+    tipText = `${periodLabel || ''}: ${fmt(min)}–${fmt(max)}${pct ? ` · ${pct > 0 ? '+' : ''}${pct.toFixed(1)}%` : ''}`;
+  }
+
   return `
-    <div class="hub-card cc-kpi-tip" style="padding:12px 14px;display:flex;flex-direction:column;gap:6px;cursor:default;position:relative;">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+    <a class="hub-card cc-kpi-tile" href="#${href || 'marketmap'}" data-kpi-tile="1" style="padding:12px 14px;display:flex;flex-direction:column;gap:6px;cursor:pointer;position:relative;text-decoration:none;color:inherit;transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease;">
+      <div style="position:absolute;top:8px;right:10px;color:var(--ies-gray-300);font-size:10px;pointer-events:none;">↗</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;padding-right:14px;">
         <span style="font-size:11px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:.04em;">${label}</span>
         <span style="font-size:11px;font-weight:800;color:${finalTrendColor};">${trendArrow}</span>
       </div>
@@ -156,7 +178,8 @@ function vitalSignTile(label, value, unit, trend, color, change, sparkData) {
       </div>
       ${renderSparkline(sparkData, color)}
       <div style="font-size:10px;color:var(--ies-gray-500);margin-top:2px;">${change}</div>
-    </div>
+      ${tipText ? `<div class="cc-kpi-tooltip" style="position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:#1a1f2e;color:#fff;padding:6px 10px;border-radius:6px;font-size:11px;font-weight:600;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,.25);opacity:0;pointer-events:none;transition:opacity .15s ease;z-index:10;">${tipText}</div>` : ''}
+    </a>
   `;
 }
 
@@ -274,6 +297,21 @@ function bindEvents() {
       return;
     }
 
+    // Top-alert headline click should open the article and NOT bubble up to
+    // the banner's "show alerts" handler.
+    if (target.closest('[data-stop-banner]')) {
+      e.stopPropagation();
+      return;
+    }
+
+    // Alert banner click → switch Signal Stream to Alerts tab + scroll into view
+    if (target.closest('[data-action="show-alerts"]')) {
+      switchIntelTab('alerts');
+      const stream = rootEl.querySelector('#cc-signal-stream');
+      if (stream) stream.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+
     // Tool tile navigation
     const route = target.closest('[data-route]');
     if (route) {
@@ -300,39 +338,39 @@ function bindEvents() {
     // Intelligence Feed tab switch
     const intelTab = target.closest('[data-intel-tab]');
     if (intelTab) {
-      const key = /** @type {HTMLElement} */ (intelTab).dataset.intelTab;
-      const tabs = rootEl.querySelectorAll('[data-intel-tab]');
-      tabs.forEach(t => {
-        const active = t.dataset.intelTab === key;
-        t.classList.toggle('active', active);
-        t.style.background = active ? '#1c1c1c' : '#fff';
-        t.style.color = active ? '#fff' : 'var(--ies-gray-700)';
-        t.style.borderColor = active ? '#1c1c1c' : 'var(--ies-gray-300)';
-      });
-      const body = rootEl.querySelector('#cc-intel-body');
-      if (body && liveData?.intel) {
-        const items = liveData.intel[key] || [];
-        body.innerHTML = renderIntelFeed(items, liveData.activity);
-      }
+      switchIntelTab(/** @type {HTMLElement} */ (intelTab).dataset.intelTab);
       return;
     }
   });
 
-  // KPI tooltip hover (show/hide tiptext on mouseenter/mouseleave)
-  rootEl.addEventListener('mouseenter', (e) => {
-    const tip = /** @type {HTMLElement} */ (e.target).closest('.cc-kpi-tip');
-    if (tip) {
-      const text = tip.querySelector('.cc-kpi-tiptext');
-      if (text) text.style.display = 'block';
+  // Banner keyboard activation (Enter/Space when focused) for accessibility.
+  rootEl.addEventListener('keydown', (e) => {
+    const target = /** @type {HTMLElement} */ (e.target);
+    if (target.closest('[data-action="show-alerts"]') && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      switchIntelTab('alerts');
+      const stream = rootEl.querySelector('#cc-signal-stream');
+      if (stream) stream.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
-  }, true);
-  rootEl.addEventListener('mouseleave', (e) => {
-    const tip = /** @type {HTMLElement} */ (e.target).closest('.cc-kpi-tip');
-    if (tip) {
-      const text = tip.querySelector('.cc-kpi-tiptext');
-      if (text) text.style.display = 'none';
-    }
-  }, true);
+  });
+}
+
+/** Switch the Signal Stream's active category tab and re-render its body. */
+function switchIntelTab(key) {
+  if (!rootEl || !liveData) return;
+  const tabs = rootEl.querySelectorAll('[data-intel-tab]');
+  tabs.forEach(t => {
+    const active = t.dataset.intelTab === key;
+    t.classList.toggle('active', active);
+    t.style.background = active ? '#1c1c1c' : '#fff';
+    t.style.color = active ? '#fff' : 'var(--ies-gray-700)';
+    t.style.borderColor = active ? '#1c1c1c' : 'var(--ies-gray-300)';
+  });
+  const body = rootEl.querySelector('#cc-intel-body');
+  if (body && liveData.intel) {
+    const items = liveData.intel[key] || [];
+    body.innerHTML = renderIntelFeed(items, liveData.activity);
+  }
 }
 
 async function refreshNow() {
@@ -553,11 +591,16 @@ function renderInlineAlertBanner(alerts) {
   if (counts.info) parts.push(`<strong>${counts.info}</strong> info`);
   const summary = parts.join(' &middot; ');
   const top = alerts.slice(0, 1)[0];
-  return `<div style="margin:0 0 16px;padding:10px 14px;border-radius:8px;background:${bg};border:1px solid ${border};color:${text};font-size:12px;font-weight:600;display:flex;align-items:center;gap:14px;">
-    <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:${hasCritical ? '#dc2626' : counts.high > 0 ? '#ea580c' : '#2563eb'};color:#fff;font-weight:800;">!</span>
+  const topUrl = top && top.source_url && top.source_url.length > 'https://'.length ? top.source_url : '';
+  return `<div class="cc-alert-banner" data-action="show-alerts" role="button" tabindex="0" style="margin:0 0 16px;padding:10px 14px;border-radius:8px;background:${bg};border:1px solid ${border};color:${text};font-size:12px;font-weight:600;display:flex;align-items:center;gap:14px;">
+    <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:${hasCritical ? '#dc2626' : counts.high > 0 ? '#ea580c' : '#2563eb'};color:#fff;font-weight:800;flex-shrink:0;">!</span>
     <span style="flex-shrink:0;">${alerts.length} active alert${alerts.length === 1 ? '' : 's'}</span>
     <span style="color:${text};opacity:.8;flex-shrink:0;">${summary}</span>
-    ${top ? `<span style="margin-left:auto;color:${text};opacity:.9;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:420px;">Top: <strong>${escapeText(top.title)}</strong> &middot; ${top.date || ''}</span>` : ''}
+    ${top ? `<span style="margin-left:auto;color:${text};opacity:.9;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:420px;">Top:
+      ${topUrl
+        ? `<a href="${topUrl}" target="_blank" rel="noopener" data-stop-banner="1" style="color:${text};text-decoration:underline;font-weight:700;">${escapeText(top.title)} ↗</a>`
+        : `<strong>${escapeText(top.title)}</strong>`} &middot; ${top.date || ''}</span>` : ''}
+    <span style="font-size:10px;color:${text};opacity:.6;flex-shrink:0;">View all →</span>
   </div>`;
 }
 

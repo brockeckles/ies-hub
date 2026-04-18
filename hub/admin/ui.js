@@ -5,8 +5,8 @@
  * @module hub/admin/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-s7';
-import * as calc from './calc.js?v=20260418-s7';
+import { bus } from '../../shared/event-bus.js?v=20260418-s8';
+import * as calc from './calc.js?v=20260418-s8';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
