@@ -20,10 +20,12 @@ export async function fetchDashboardData() {
   let sectors = DEMO_SECTORS;
   let alerts = DEMO_ALERTS;
   let rfpSignals = DEMO_RFP_SIGNALS;
+  // Hoisted so the intelligence-feed builder below the try can see them.
+  let newsRows = [], rfpRows = [], tariffRows = [], accountRows = [];
 
   try {
     // Attempt to fetch live data from Supabase
-    const [fuelRows, laborRows, freightRows, newsRows, alertRows, rfpRows, steelRows, realEstateRows, tariffRows, accountRows] = await Promise.all([
+    const fetched = await Promise.all([
       db.fetchAll('fuel_prices').catch(() => []),
       db.fetchAll('labor_markets').catch(() => []),
       db.fetchAll('freight_rates').catch(() => []),
@@ -35,6 +37,8 @@ export async function fetchDashboardData() {
       db.fetchAll('tariff_developments').catch(() => []),
       db.fetchAll('account_signals').catch(() => []),
     ]);
+    const [fuelRows, laborRows, freightRows, _news, alertRows, _rfp, steelRows, realEstateRows, _tariff, _accounts] = fetched;
+    newsRows = _news; rfpRows = _rfp; tariffRows = _tariff; accountRows = _accounts;
 
     // If we got any data, we're connected
     if (fuelRows.length || laborRows.length || freightRows.length) {
