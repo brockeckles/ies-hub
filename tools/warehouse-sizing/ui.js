@@ -315,14 +315,6 @@ function renderConfigPanel() {
         <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="wsc-new">New</button>
         <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="wsc-copy-summary" title="Copy summary to clipboard">Copy</button>
       </div>
-      <div style="margin-top:10px;">
-        <div style="font-size:10px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Quick-Start Presets</div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;">
-          ${['Retail','F&B','Pharma','Apparel','Auto','Ecomm'].map(p => `
-            <button type="button" class="hub-btn hub-btn-sm" data-preset="${p}" style="font-size:10px;padding:4px 6px;background:var(--ies-gray-50);border:1px solid var(--ies-gray-200);color:var(--ies-gray-700);font-weight:700;">${p}</button>
-          `).join('')}
-        </div>
-      </div>
     </div>
 
     <!-- Building -->
@@ -1182,9 +1174,9 @@ function drawPlan() {
   const totalDoors = sized.dock.totalDoors || 0;
   const inboundDoors = sized.dock.inboundDoors || 0;
   const outboundDoors = sized.dock.outboundDoors || 0;
-  const twoSided = facility.dockConfig === 'two';
+  const twoSided = (zones.dockConfig?.sided === 'two');
 
-  function drawDoorRow(count, yTop, label, color) {
+  function drawDoorRow(count, yTop, label, color, labelAbove) {
     if (count <= 0) return;
     const doorWPx  = Math.max(6, 8 * pxPerFt);  // 8 ft door
     const doorSpcPx= Math.max(10, 12 * pxPerFt); // 12 ft on-center
@@ -1201,15 +1193,15 @@ function drawPlan() {
     ctx.fillStyle = '#7f1d1d';
     ctx.font = 'bold 10px Montserrat, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(label, X0 + Wpx / 2, yTop + 28);
+    ctx.fillText(label, X0 + Wpx / 2, yTop + (labelAbove ? -6 : 28));
   }
 
   if (twoSided) {
-    drawDoorRow(outboundDoors, Y0 + Hpx - 6, `${outboundDoors} Outbound Doors`, '#fecaca');
-    drawDoorRow(inboundDoors,  Y0 - 6,        `${inboundDoors} Inbound Doors`,  '#bfdbfe');
+    drawDoorRow(outboundDoors, Y0 + Hpx - 6, `${outboundDoors} Outbound Doors`, '#fecaca', false);
+    drawDoorRow(inboundDoors,  Y0 - 6,        `${inboundDoors} Inbound Doors`,  '#bfdbfe', true);
   } else {
     // Single-sided: combine inbound + outbound on the bottom face
-    drawDoorRow(totalDoors, Y0 + Hpx - 6, `${totalDoors} Dock Doors (combined I/O)`, '#fecaca');
+    drawDoorRow(totalDoors, Y0 + Hpx - 6, `${totalDoors} Dock Doors (combined I/O)`, '#fecaca', false);
   }
 
   // ---------- Building dimension labels ----------
@@ -1227,8 +1219,8 @@ function drawPlan() {
   ctx.fillStyle = '#6b7280';
   ctx.font = '10px Montserrat, sans-serif';
   ctx.textAlign = 'left';
-  ctx.fillText('▲ BACK', X0 + 4, Y0 - 8);
-  ctx.fillText('▼ DOCK FACE', X0 + 4, Y0 + Hpx + 22);
+  ctx.fillText(twoSided ? '▲ INBOUND DOCK' : '▲ BACK', X0 + 4, Y0 - 22);
+  ctx.fillText(twoSided ? '▼ OUTBOUND DOCK' : '▼ DOCK FACE', X0 + 4, Y0 + Hpx + 22);
 
   // Title block (top-left, outside building)
   ctx.fillStyle = '#0f172a';
@@ -1904,26 +1896,39 @@ function build3DScene() {
       mx += moduleU;
     }
 
-    // ---------- Dock doors along the FRONT edge (-Z) ----------
+    // ---------- Dock doors ----------
+    // Single-sided: all doors on front (-Z) wall.
+    // Two-sided: outbound on front (-Z), inbound on back (+Z).
+    const twoSided3D = (zones.dockConfig?.sided === 'two');
+    const inDoors  = sized.dock.inboundDoors || 0;
+    const outDoors = sized.dock.outboundDoors || 0;
     const totalDoors = sized.dock.totalDoors || 0;
-    if (totalDoors > 0) {
-      const doorWFt   = 8;          // 8 ft wide
-      const doorHFt   = 9;          // 9 ft tall (standard 9x10 door)
-      const doorWU    = doorWFt * scale;
-      const doorHU    = doorHFt * scale;
-      const doorMat   = new THREE.MeshStandardMaterial({ color: 0x1f2937 });
-      // Spread doors evenly across the front wall, leaving 12 ft margins
-      const usableW   = W - 12 * scale * 2;
-      const spacing   = usableW / (totalDoors + 1);
-      for (let i = 0; i < totalDoors; i++) {
+    const doorWU = 8 * scale;
+    const doorHU = 9 * scale;
+    const outboundMat = new THREE.MeshStandardMaterial({ color: 0x1f2937 });
+    const inboundMat  = new THREE.MeshStandardMaterial({ color: 0x1d4ed8 });
+
+    function placeDoors(count, zEdge, mat) {
+      if (count <= 0) return;
+      const usableW = W - 12 * scale * 2;
+      const spacing = usableW / (count + 1);
+      for (let i = 0; i < count; i++) {
         const dx = -W / 2 + 12 * scale + spacing * (i + 1) - doorWU / 2;
         const door = new THREE.Mesh(
           new THREE.BoxGeometry(doorWU, doorHU, 0.6),
-          doorMat,
+          mat,
         );
-        door.position.set(dx + doorWU / 2, doorHU / 2, -D / 2 + 0.1);
+        door.position.set(dx + doorWU / 2, doorHU / 2, zEdge);
         scene.add(door);
       }
+    }
+
+    if (twoSided3D) {
+      placeDoors(outDoors, -D / 2 + 0.1, outboundMat);
+      placeDoors(inDoors,   D / 2 - 0.1, inboundMat);
+    } else if (totalDoors > 0) {
+      // Combined I/O on the front wall
+      placeDoors(totalDoors, -D / 2 + 0.1, outboundMat);
     }
 
     // ---------- Office cube (front-left corner — already reserved by rack loop) ----------
