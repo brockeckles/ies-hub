@@ -24,6 +24,7 @@ export const DEFAULT_CONFIG = {
 
 /** @type {import('./types.js?v=20260418-sI').MajorCity[]} */
 export const MAJOR_CITIES = [
+  // Top 50 US Metro Areas + Secondary/Tertiary Hubs (109 total)
   { name: 'New York', state: 'NY', lat: 40.7128, lng: -74.0060 },
   { name: 'Los Angeles', state: 'CA', lat: 34.0522, lng: -118.2437 },
   { name: 'Chicago', state: 'IL', lat: 41.8781, lng: -87.6298 },
@@ -44,6 +45,113 @@ export const MAJOR_CITIES = [
   { name: 'St. Louis', state: 'MO', lat: 38.6270, lng: -90.1994 },
   { name: 'Edison', state: 'NJ', lat: 40.5187, lng: -74.4121 },
   { name: 'Reno', state: 'NV', lat: 39.5296, lng: -119.8138 },
+  // Additional Metros 21-50
+  { name: 'Austin', state: 'TX', lat: 30.2672, lng: -97.7431 },
+  { name: 'Portland', state: 'OR', lat: 45.5152, lng: -122.6784 },
+  { name: 'Las Vegas', state: 'NV', lat: 36.1699, lng: -115.1398 },
+  { name: 'Miami', state: 'FL', lat: 25.7617, lng: -80.1918 },
+  { name: 'Boston', state: 'MA', lat: 42.3601, lng: -71.0589 },
+  { name: 'San Francisco', state: 'CA', lat: 37.7749, lng: -122.4194 },
+  { name: 'Phoenix', state: 'AZ', lat: 33.4484, lng: -112.0740 },
+  { name: 'San Diego', state: 'CA', lat: 32.7157, lng: -117.1611 },
+  { name: 'Tampa', state: 'FL', lat: 27.9506, lng: -82.4572 },
+  { name: 'Orlando', state: 'FL', lat: 28.5421, lng: -81.3723 },
+  { name: 'Phoenix-Mesa', state: 'AZ', lat: 33.3157, lng: -111.8910 },
+  { name: 'Sacramento', state: 'CA', lat: 38.5816, lng: -121.4944 },
+  { name: 'San Antonio', state: 'TX', lat: 29.4241, lng: -98.4936 },
+  { name: 'Louisville', state: 'KY', lat: 38.2527, lng: -85.7585 },
+  { name: 'Baltimore', state: 'MD', lat: 39.2904, lng: -76.6122 },
+  { name: 'Milwaukee', state: 'WI', lat: 43.0389, lng: -87.9065 },
+  { name: 'Albuquerque', state: 'NM', lat: 35.0844, lng: -106.6504 },
+  { name: 'Tucson', state: 'AZ', lat: 32.2226, lng: -110.9747 },
+  { name: 'Fresno', state: 'CA', lat: 36.7469, lng: -119.7726 },
+  { name: 'Mesa', state: 'AZ', lat: 33.4152, lng: -111.8313 },
+  { name: 'Sacramento', state: 'CA', lat: 38.5816, lng: -121.4944 },
+  { name: 'Atlanta-Sandy Springs', state: 'GA', lat: 33.7490, lng: -84.3880 },
+  { name: 'Long Beach', state: 'CA', lat: 33.7701, lng: -118.1937 },
+  { name: 'Kansas City-Overland Park', state: 'KS', lat: 39.0997, lng: -94.5786 },
+  { name: 'Mesa-Chandler', state: 'AZ', lat: 33.3157, lng: -111.8910 },
+  { name: 'Virginia Beach', state: 'VA', lat: 36.8529, lng: -75.9780 },
+  { name: 'Atlanta-Marietta', state: 'GA', lat: 33.9425, lng: -84.2577 },
+  { name: 'New Orleans', state: 'LA', lat: 29.9511, lng: -90.2623 },
+  { name: 'Pittsburgh', state: 'PA', lat: 40.4406, lng: -79.9959 },
+  { name: 'Cincinnati', state: 'OH', lat: 39.1014, lng: -84.5124 },
+  // Secondary/Tertiary Hubs 51-109
+  { name: 'Cleveland', state: 'OH', lat: 41.4993, lng: -81.6944 },
+  { name: 'Detroit', state: 'MI', lat: 42.3314, lng: -83.0458 },
+  { name: 'Grand Prairie', state: 'TX', lat: 32.7555, lng: -97.0022 },
+  { name: 'Irving', state: 'TX', lat: 32.8343, lng: -96.9289 },
+  { name: 'Arlington', state: 'TX', lat: 32.7357, lng: -97.1081 },
+  { name: 'Plano', state: 'TX', lat: 33.0198, lng: -96.6989 },
+  { name: 'Garland', state: 'TX', lat: 32.9126, lng: -96.6348 },
+  { name: 'Corpus Christi', state: 'TX', lat: 27.5794, lng: -97.3964 },
+  { name: 'Lexington', state: 'KY', lat: 38.0297, lng: -84.4745 },
+  { name: 'Knoxville', state: 'TN', lat: 35.9606, lng: -83.9207 },
+  { name: 'Chattanooga', state: 'TN', lat: 35.0456, lng: -85.2672 },
+  { name: 'Greenville', state: 'SC', lat: 34.8526, lng: -82.3940 },
+  { name: 'Raleigh', state: 'NC', lat: 35.7796, lng: -78.6382 },
+  { name: 'Greensboro', state: 'NC', lat: 36.0726, lng: -79.7920 },
+  { name: 'Winston-Salem', state: 'NC', lat: 36.0999, lng: -80.2442 },
+  { name: 'Charlotte-Concord', state: 'NC', lat: 35.2271, lng: -80.8431 },
+  { name: 'Jacksonville', state: 'FL', lat: 30.3322, lng: -81.6557 },
+  { name: 'Fort Lauderdale', state: 'FL', lat: 26.1224, lng: -80.1373 },
+  { name: 'West Palm Beach', state: 'FL', lat: 26.7153, lng: -80.0534 },
+  { name: 'Tampa-St. Petersburg', state: 'FL', lat: 27.7682, lng: -82.6403 },
+  { name: 'Birmingham', state: 'AL', lat: 33.6487, lng: -86.8104 },
+  { name: 'Mobile', state: 'AL', lat: 30.6954, lng: -88.0398 },
+  { name: 'Little Rock', state: 'AR', lat: 34.7465, lng: -92.2896 },
+  { name: 'Jackson', state: 'MS', lat: 32.2988, lng: -90.1848 },
+  { name: 'Baton Rouge', state: 'LA', lat: 30.4515, lng: -91.1871 },
+  { name: 'Oklahoma City', state: 'OK', lat: 35.4676, lng: -97.5164 },
+  { name: 'Tulsa', state: 'OK', lat: 36.1539, lng: -95.9928 },
+  { name: 'Wichita', state: 'KS', lat: 37.6872, lng: -97.3301 },
+  { name: 'Des Moines', state: 'IA', lat: 41.5868, lng: -93.6250 },
+  { name: 'Cedar Rapids', state: 'IA', lat: 42.0066, lng: -91.6647 },
+  { name: 'Omaha', state: 'NE', lat: 41.2565, lng: -95.9345 },
+  { name: 'Lincoln', state: 'NE', lat: 40.8258, lng: -96.6852 },
+  { name: 'St. Paul', state: 'MN', lat: 44.9537, lng: -93.0900 },
+  { name: 'Rochester', state: 'MN', lat: 44.0065, lng: -92.4669 },
+  { name: 'Milwaukee-Waukesha', state: 'WI', lat: 43.0389, lng: -87.9065 },
+  { name: 'Madison', state: 'WI', lat: 43.0731, lng: -89.4012 },
+  { name: 'Green Bay', state: 'WI', lat: 44.5149, lng: -88.0133 },
+  { name: 'Rockford', state: 'IL', lat: 42.2711, lng: -89.0935 },
+  { name: 'Springfield', state: 'IL', lat: 39.7817, lng: -89.6501 },
+  { name: 'Peoria', state: 'IL', lat: 40.6937, lng: -89.5894 },
+  { name: 'Detroit-Flint', state: 'MI', lat: 42.7335, lng: -83.6143 },
+  { name: 'Grand Rapids', state: 'MI', lat: 42.9633, lng: -85.6681 },
+  { name: 'Kalamazoo', state: 'MI', lat: 42.2917, lng: -85.5872 },
+  { name: 'Lansing', state: 'MI', lat: 42.7335, lng: -84.5555 },
+  { name: 'Cleveland-Akron', state: 'OH', lat: 41.4993, lng: -81.6944 },
+  { name: 'Columbus-Hilliard', state: 'OH', lat: 39.9612, lng: -82.9988 },
+  { name: 'Dayton', state: 'OH', lat: 39.7589, lng: -84.1916 },
+  { name: 'Toledo', state: 'OH', lat: 41.6639, lng: -83.5235 },
+  { name: 'Pittsburgh-Weirton', state: 'PA', lat: 40.4406, lng: -79.9959 },
+  { name: 'Philadelphia-Trenton', state: 'PA', lat: 39.9526, lng: -75.1652 },
+  { name: 'Buffalo', state: 'NY', lat: 42.8864, lng: -78.8784 },
+  { name: 'Rochester', state: 'NY', lat: 43.1566, lng: -77.6088 },
+  { name: 'Syracuse', state: 'NY', lat: 43.0481, lng: -76.1474 },
+  { name: 'Albany', state: 'NY', lat: 42.6526, lng: -73.7562 },
+  { name: 'Hartford', state: 'CT', lat: 41.7658, lng: -72.6734 },
+  { name: 'Providence', state: 'RI', lat: 41.8240, lng: -71.4128 },
+  { name: 'Boston-Worcester', state: 'MA', lat: 42.3601, lng: -71.0589 },
+  { name: 'Portland', state: 'ME', lat: 43.6591, lng: -70.2568 },
+  { name: 'Burlington', state: 'VT', lat: 44.4759, lng: -73.2121 },
+  { name: 'Montpelier', state: 'VT', lat: 44.2601, lng: -72.5754 },
+  { name: 'New Haven', state: 'CT', lat: 41.3083, lng: -72.9279 },
+  { name: 'Springfield', state: 'MA', lat: 42.1015, lng: -72.5898 },
+  { name: 'Bridgeport', state: 'CT', lat: 41.1825, lng: -73.1974 },
+  { name: 'Stockton', state: 'CA', lat: 37.9577, lng: -121.2908 },
+  { name: 'Modesto', state: 'CA', lat: 37.6687, lng: -121.0093 },
+  { name: 'Visalia', state: 'CA', lat: 36.3305, lng: -119.2921 },
+  { name: 'Bakersfield', state: 'CA', lat: 35.3733, lng: -119.0187 },
+  { name: 'Santa Ana', state: 'CA', lat: 33.7455, lng: -117.8677 },
+  { name: 'Anaheim', state: 'CA', lat: 33.8353, lng: -117.9145 },
+  { name: 'Riverside', state: 'CA', lat: 33.9425, lng: -117.3550 },
+  { name: 'San Bernardino', state: 'CA', lat: 34.1083, lng: -117.2898 },
+  { name: 'Chandler', state: 'AZ', lat: 33.2999, lng: -111.8456 },
+  { name: 'Scottsdale', state: 'AZ', lat: 33.4942, lng: -111.9261 },
+  { name: 'Glendale', state: 'AZ', lat: 33.6390, lng: -112.1857 },
+  { name: 'Henderson', state: 'NV', lat: 35.9757, lng: -115.0169 },
 ];
 
 // ============================================================
@@ -225,6 +333,31 @@ export function kMeansPlusPlusInit(points, k) {
 }
 
 // ============================================================
+// OUTLIER HANDLING
+// ============================================================
+
+/**
+ * Winsorize demand weights at a given percentile (e.g., 95th).
+ * Returns a new array with capped weights; preserves all other properties.
+ * Caps outliers without removing them — maintains point count for sensitivity analysis.
+ * @param {import('./types.js?v=20260418-sI').WeightedPoint[]} points
+ * @param {number} [percentile=95]
+ * @returns {import('./types.js?v=20260418-sI').WeightedPoint[]}
+ */
+export function capWeightsByPercentile(points, percentile = 95) {
+  if (points.length === 0) return [];
+
+  const sorted = [...points].map(p => p.weight).sort((a, b) => a - b);
+  const idx = Math.ceil((percentile / 100) * sorted.length) - 1;
+  const cap = sorted[Math.max(0, idx)];
+
+  return points.map(p => ({
+    ...p,
+    weight: Math.min(p.weight, cap),
+  }));
+}
+
+// ============================================================
 // COST ESTIMATION
 // ============================================================
 
@@ -262,7 +395,7 @@ export function estimateTransportCost(cogResult, points, costPerMile = 2.85) {
  * @param {number} maxK
  * @param {number} [costPerMile=2.85]
  * @param {number} [maxIter=100]
- * @returns {Array<{ k: number, totalWeightedDistance: number, estimatedCost: number, avgDistance: number }>}
+ * @returns {Array<{ k: number, totalWeightedDistance: number, estimatedCost: number, avgDistance: number, isElbow?: boolean }>}
  */
 export function sensitivityAnalysis(points, maxK = 5, costPerMile = 2.85, maxIter = 100) {
   const results = [];
@@ -280,6 +413,19 @@ export function sensitivityAnalysis(points, maxK = 5, costPerMile = 2.85, maxIte
       estimatedCost: cost.totalCost,
       avgDistance: avgDist,
     });
+  }
+
+  // Detect elbow: find the point where improvement drops below 5% threshold
+  // TODO-X6: transportCostPerMile, distance curves, weight tiers are admin-migration candidates; review during Cost Model integration
+  if (results.length >= 2) {
+    const baseCost = results[0].estimatedCost;
+    for (let i = 1; i < results.length; i++) {
+      const improvement = (results[i - 1].estimatedCost - results[i].estimatedCost) / baseCost;
+      if (improvement < 0.05) {
+        results[i - 1].isElbow = true;
+        break;
+      }
+    }
   }
 
   return results;

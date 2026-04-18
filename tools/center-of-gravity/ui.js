@@ -11,6 +11,7 @@ import { state } from '../../shared/state.js?v=20260418-sI';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sI';
 import { showToast } from '../../shared/toast.js?v=20260418-sI';
 import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sI';
+import { downloadCSV } from '../../shared/export.js?v=20260418-sI';
 import * as calc from './calc.js?v=20260418-sI';
 import * as api from './api.js?v=20260418-sI';
 
@@ -317,6 +318,17 @@ function renderAnalysis(el) {
 
   el.innerHTML = `
     <div style="max-width:900px;">
+      <!-- Action Bar -->
+      <div style="display:flex;gap:12px;margin-bottom:16px;align-items:center;">
+        <h3 class="text-section" style="margin:0;flex:1;">Analysis Results</h3>
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-export-csv" style="display:flex;align-items:center;gap:6px;">
+          <span>↓ Export CSV</span>
+        </button>
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-push-netopt" style="display:flex;align-items:center;gap:6px;">
+          <span>Send to NetOpt →</span>
+        </button>
+      </div>
+
       <!-- KPI Bar -->
       <div class="hub-card" style="background:linear-gradient(135deg,#0a1628,#0d1f3c);color:#fff;padding:16px 24px;margin-bottom:20px;">
         <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;">
@@ -391,6 +403,16 @@ function renderAnalysis(el) {
       </div>
     </div>
   `;
+
+  // Bind CSV export
+  el.querySelector('#cog-export-csv')?.addEventListener('click', () => {
+    exportCogAnalysis();
+  });
+
+  // Bind NetOpt push
+  el.querySelector('#cog-push-netopt')?.addEventListener('click', () => {
+    pushToNetOpt();
+  });
 }
 
 // ============================================================
@@ -527,9 +549,12 @@ function renderSensitivity(el) {
             const barH = costRange > 0 ? ((d.estimatedCost - minCost) / costRange) * 190 : 10;
             const y = 240 - barH;
             const isCurrent = d.k === config.numCenters;
-            const color = isCurrent ? '#2563eb' : '#93c5fd';
+            const isElbow = d.isElbow === true;
+            const color = isElbow ? '#f97316' : isCurrent ? '#2563eb' : '#93c5fd';
+            const borderStyle = isElbow ? 'stroke="#ea580c" stroke-width="2"' : '';
             return `
-              <rect x="${x - barW/2}" y="${y}" width="${barW}" height="${barH}" fill="${color}" rx="4"/>
+              <rect x="${x - barW/2}" y="${y}" width="${barW}" height="${barH}" fill="${color}" rx="4" ${borderStyle}/>
+              ${isElbow ? `<text x="${x}" y="${y - 8}" text-anchor="middle" font-size="14" fill="#f97316">★</text>` : ''}
               <text x="${x}" y="260" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ies-gray-600)">k=${d.k}</text>
             `;
           }).join('')}
@@ -539,7 +564,10 @@ function renderSensitivity(el) {
           <text x="40" y="135" text-anchor="end" font-size="11" fill="var(--ies-gray-400)">${calc.formatCurrency(minCost + costRange/2, { compact: true })}</text>
           <text x="40" y="35" text-anchor="end" font-size="11" fill="var(--ies-gray-400)">${calc.formatCurrency(maxCost, { compact: true })}</text>
         </svg>
-        <div style="font-size:11px;color:var(--ies-gray-400);margin-top:8px;">Blue bar indicates current selection (k=${config.numCenters})</div>
+        <div style="font-size:11px;color:var(--ies-gray-400);margin-top:8px;">
+          <span style="margin-right:16px;"><strong style="color:var(--ies-gray-600);">Blue bar</strong> = current selection (k=${config.numCenters})</span>
+          <span><strong style="color:#f97316;">Orange bar ★</strong> = elbow point (optimal k)</span>
+        </div>
       </div>
 
       <!-- Cost breakdown -->
@@ -604,6 +632,85 @@ function renderSensitivity(el) {
       </div>
     </div>
   `;
+}
+
+// ============================================================
+// EXPORT / INTEGRATION
+// ============================================================
+
+/**
+ * Export current analysis to CSV.
+ * Three sections: Summary (6 KPIs), Optimal Centers, Demand Points & Assignments.
+ * F1 (P0) — CSV Export
+ */
+function exportCogAnalysis() {
+  if (!cogResult) {
+    showToast('No analysis results to export', 'warning');
+    return;
+  }
+
+  const costEst = calc.estimateTransportCost(cogResult, points, config.transportCostPerMile);
+  const now = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const filename = `cog-analysis-${now}.csv`;
+
+  // Build CSV sections
+  const sections = [];
+
+  // Section 1: Summary KPIs
+  sections.push('SUMMARY');
+  sections.push('Metric,Value');
+  sections.push(`Number of Centers,${cogResult.centers.length}`);
+  sections.push(`Total Demand Weight,"${points.reduce((s, p) => s + p.weight, 0).toLocaleString()}"`);
+  sections.push(`Estimated Annual Transport Cost,"${calc.formatCurrency(costEst.totalCost).replace(/[$,]/g, '')}"`);
+  sections.push(`Average Cost per Unit,"${calc.formatCurrency(costEst.avgCostPerUnit).replace(/[$,]/g, '')}"`);
+  sections.push(`K-means Iterations,${cogResult.iterations}`);
+  sections.push(`Transport Cost per Mile,$${config.transportCostPerMile}`);
+  sections.push('');
+
+  // Section 2: Optimal Centers
+  sections.push('OPTIMAL CENTERS');
+  sections.push('Center,Latitude,Longitude,Nearest City,Assigned Weight,Avg Weighted Distance (mi),Max Distance (mi)');
+  cogResult.centers.forEach((c, i) => {
+    sections.push(`Center ${i + 1},"${c.lat.toFixed(4)}","${c.lng.toFixed(4)}","${c.nearestCity}","${c.totalWeight.toLocaleString()}","${c.avgWeightedDistance.toFixed(2)}","${c.maxDistance.toFixed(2)}"`);
+  });
+  sections.push('');
+
+  // Section 3: Demand Points & Assignments
+  sections.push('DEMAND POINTS & ASSIGNMENTS');
+  sections.push('Name,Latitude,Longitude,Weight,Assigned To Center,Distance to Center (mi),Transport Cost');
+  cogResult.assignments.forEach(a => {
+    const pt = points.find(p => p.id === a.pointId);
+    const cost = a.distanceToCenter * (pt?.weight || 0) * config.transportCostPerMile;
+    if (pt) {
+      sections.push(`"${pt.name || pt.id}","${pt.lat.toFixed(4)}","${pt.lng.toFixed(4)}","${pt.weight}","Center ${a.clusterId + 1}","${a.distanceToCenter.toFixed(2)}","${cost.toFixed(2)}"`);
+    }
+  });
+
+  const csvContent = sections.join('\n');
+  downloadCSV(csvContent, filename);
+  showToast('Analysis exported successfully', 'success');
+}
+
+/**
+ * Push optimal centers to Network Optimizer as candidate facilities.
+ * X11 (P1) — Push to NetOpt
+ * Emits cog:push-to-netopt event with candidate facility data.
+ */
+function pushToNetOpt() {
+  if (!cogResult) {
+    showToast('No analysis results to push', 'warning');
+    return;
+  }
+
+  const candidates = cogResult.centers.map((c, i) => ({
+    name: `Center ${i + 1} (${c.nearestCity})`,
+    lat: c.lat,
+    lng: c.lng,
+    annualDemand: c.totalWeight,
+  }));
+
+  bus.emit('cog:push-to-netopt', { candidates });
+  showToast(`Pushed ${candidates.length} center(s) to Network Optimizer`, 'success');
 }
 
 // ============================================================
