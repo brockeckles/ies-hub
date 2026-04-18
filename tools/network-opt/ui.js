@@ -7,10 +7,12 @@
  * @module tools/network-opt/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sA';
-import { state } from '../../shared/state.js?v=20260418-sA';
-import * as calc from './calc.js?v=20260418-sA';
-import * as api from './api.js?v=20260418-sA';
+import { bus } from '../../shared/event-bus.js?v=20260418-sB';
+import { state } from '../../shared/state.js?v=20260418-sB';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sB';
+import { showToast } from '../../shared/toast.js?v=20260418-sB';
+import * as calc from './calc.js?v=20260418-sB';
+import * as api from './api.js?v=20260418-sB';
 
 // ============================================================
 // STATE
@@ -25,25 +27,25 @@ let activeView = 'setup';
 /** @type {'facilities' | 'demand' | 'modemix' | 'service'} */
 let activeSection = 'facilities';
 
-/** @type {import('./types.js?v=20260418-sA').Facility[]} */
+/** @type {import('./types.js?v=20260418-sB').Facility[]} */
 let facilities = [];
 
-/** @type {import('./types.js?v=20260418-sA').DemandPoint[]} */
+/** @type {import('./types.js?v=20260418-sB').DemandPoint[]} */
 let demands = [];
 
-/** @type {import('./types.js?v=20260418-sA').ModeMix} */
+/** @type {import('./types.js?v=20260418-sB').ModeMix} */
 let modeMix = { tlPct: 30, ltlPct: 40, parcelPct: 30 };
 
-/** @type {import('./types.js?v=20260418-sA').RateCard} */
+/** @type {import('./types.js?v=20260418-sB').RateCard} */
 let rateCard = { ...calc.DEFAULT_RATES };
 
-/** @type {import('./types.js?v=20260418-sA').ServiceConfig} */
+/** @type {import('./types.js?v=20260418-sB').ServiceConfig} */
 let serviceConfig = { ...calc.DEFAULT_SERVICE };
 
-/** @type {import('./types.js?v=20260418-sA').ScenarioResult[]} */
+/** @type {import('./types.js?v=20260418-sB').ScenarioResult[]} */
 let scenarios = [];
 
-/** @type {import('./types.js?v=20260418-sA').ScenarioResult|null} */
+/** @type {import('./types.js?v=20260418-sB').ScenarioResult|null} */
 let activeScenario = null;
 
 /** @type {string|null} */
@@ -52,7 +54,7 @@ let selectedArchetype = null;
 /** @type {object|null} map instance */
 let mapInstance = null;
 
-/** @type {import('./types.js?v=20260418-sA').ScenarioResult[]|null} */
+/** @type {import('./types.js?v=20260418-sB').ScenarioResult[]|null} */
 let comparisonResults = null;
 
 /** @type {number|null} */
@@ -98,27 +100,65 @@ const DEMO_DEMANDS = [
  * Mount the Network Optimizer.
  * @param {HTMLElement} el
  */
+let activeConfigId = null;
+
 export async function mount(el) {
   rootEl = el;
+  await renderLanding();
+  bus.emit('netopt:mounted');
+}
+
+async function renderLanding() {
+  if (!rootEl) return;
+  await renderScenarioLanding(rootEl, {
+    toolName: 'Network Optimizer',
+    toolKey: 'netopt',
+    accent: '#20c997',
+    list: () => api.listConfigs(),
+    getId: (r) => r.id,
+    getName: (r) => r.name || r.config_data?.name || 'Untitled network',
+    getUpdated: (r) => r.updated_at || r.created_at,
+    getParent: (r) => ({ cmId: r.parent_cost_model_id, dealId: r.parent_deal_id }),
+    getSubtitle: (r) => {
+      const d = r.config_data || {};
+      const nFac = (d.facilities || []).length;
+      const nDem = (d.demands || []).length;
+      return nFac ? `${nFac} facilities · ${nDem} demand points` : '';
+    },
+    onNew: () => openEditor(null),
+    onOpen: (row) => openEditor(row),
+    onDelete: async (row) => { await api.deleteConfig(row.id); },
+    onCopy: async (row) => await api.duplicateConfig(row.id),
+    emptyStateHint: 'Optimize TL/LTL/Parcel mix across facility and demand sets. Run multi-DC comparisons, exact solves, and heatmap overlays — every scenario saves here.',
+  });
+}
+
+function openEditor(savedRow) {
+  if (!rootEl) return;
   activeView = 'setup';
   activeSection = 'facilities';
-  facilities = DEMO_FACILITIES.map(f => ({ ...f }));
-  demands = DEMO_DEMANDS.map(d => ({ ...d }));
-  modeMix = { tlPct: 30, ltlPct: 40, parcelPct: 30 };
-  rateCard = { ...calc.DEFAULT_RATES };
-  serviceConfig = { ...calc.DEFAULT_SERVICE };
+  const d = savedRow?.config_data || {};
+  facilities = (d.facilities && d.facilities.length) ? d.facilities.map(f => ({ ...f })) : DEMO_FACILITIES.map(f => ({ ...f }));
+  demands = (d.demands && d.demands.length) ? d.demands.map(x => ({ ...x })) : DEMO_DEMANDS.map(x => ({ ...x }));
+  modeMix = d.modeMix || { tlPct: 30, ltlPct: 40, parcelPct: 30 };
+  rateCard = d.rateCard || { ...calc.DEFAULT_RATES };
+  serviceConfig = d.serviceConfig || { ...calc.DEFAULT_SERVICE };
   scenarios = [];
   activeScenario = null;
   selectedArchetype = null;
   comparisonResults = null;
   recommendedDCCount = null;
+  activeConfigId = savedRow?.id || null;
 
-  el.innerHTML = renderShell();
+  rootEl.innerHTML = renderShell();
   bindShellEvents();
   renderSidebar();
   renderContentView();
 
-  bus.emit('netopt:mounted');
+  // Wire the "← Scenarios" back button.
+  rootEl.querySelector('[data-action="netopt-back"]')?.addEventListener('click', async () => {
+    await renderLanding();
+  });
 }
 
 /**
@@ -142,6 +182,7 @@ function renderShell() {
     <div class="hub-content-inner" style="padding:0;display:flex;flex-direction:column;height:100%;">
       <!-- View Tabs -->
       <div style="display:flex;align-items:center;gap:12px;padding:16px 24px 0 24px;flex-shrink:0;">
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="netopt-back" title="Back to saved scenarios" style="font-size:11px;">← Scenarios</button>
         <h2 class="text-page" style="margin:0;">Network Optimizer</h2>
         <div style="display:flex;gap:8px;margin-left:auto;" id="no-view-tabs">
           ${['setup', 'map', 'results', 'comparison'].map(v => `

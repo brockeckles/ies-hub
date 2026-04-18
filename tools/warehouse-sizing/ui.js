@@ -6,10 +6,12 @@
  * @module tools/warehouse-sizing/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sA';
-import { state } from '../../shared/state.js?v=20260418-sA';
-import * as calc from './calc.js?v=20260418-sA';
-import * as api from './api.js?v=20260418-sA';
+import { bus } from '../../shared/event-bus.js?v=20260418-sB';
+import { state } from '../../shared/state.js?v=20260418-sB';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sB';
+import { showToast } from '../../shared/toast.js?v=20260418-sB';
+import * as calc from './calc.js?v=20260418-sB';
+import * as api from './api.js?v=20260418-sB';
 
 // ============================================================
 // STATE
@@ -21,13 +23,13 @@ let rootEl = null;
 /** @type {'dashboard' | 'elevation' | '3d'} */
 let activeView = 'dashboard';
 
-/** @type {import('./types.js?v=20260418-sA').FacilityConfig} */
+/** @type {import('./types.js?v=20260418-sB').FacilityConfig} */
 let facility = createDefaultFacility();
 
-/** @type {import('./types.js?v=20260418-sA').ZoneConfig} */
+/** @type {import('./types.js?v=20260418-sB').ZoneConfig} */
 let zones = createDefaultZones();
 
-/** @type {import('./types.js?v=20260418-sA').VolumeInputs} */
+/** @type {import('./types.js?v=20260418-sB').VolumeInputs} */
 let volumes = createDefaultVolumes();
 
 /** @type {boolean} */
@@ -35,6 +37,9 @@ let isDirty = false;
 
 /** @type {{ dispose?: () => void } | null} */
 let scene3d = null;
+
+/** @type {'landing' | 'editor'} — landing shows saved scenarios; editor is the design surface */
+let viewMode = 'landing';
 
 // ============================================================
 // LIFECYCLE
@@ -50,16 +55,67 @@ export async function mount(el) {
   facility = createDefaultFacility();
   zones = createDefaultZones();
   volumes = createDefaultVolumes();
+  viewMode = 'landing';
 
-  el.innerHTML = renderShell();
+  // Listen for CM → WSC push — when CM asks to open a specific scenario,
+  // jump straight to the editor with that config loaded.
+  bus.on('cm:push-to-wsc', async (data) => {
+    viewMode = 'editor';
+    handleCmPush(data);
+  });
+
+  await renderLanding();
+  bus.emit('wsc:mounted');
+}
+
+async function renderLanding() {
+  if (!rootEl) return;
+  await renderScenarioLanding(rootEl, {
+    toolName: 'Warehouse Sizing',
+    toolKey: 'wsc',
+    accent: '#0047AB',
+    list: () => api.listConfigs(),
+    getId: (r) => r.id,
+    getName: (r) => r.name || r.config_data?.name || 'Untitled facility',
+    getUpdated: (r) => r.updated_at || r.created_at,
+    getParent: (r) => ({ cmId: r.parent_cost_model_id, dealId: r.parent_deal_id }),
+    getSubtitle: (r) => {
+      const d = r.config_data || {};
+      const sqft = d.totalSqft ? `${(d.totalSqft / 1000).toFixed(0)}K sf` : null;
+      const city = d.city || d.state || d.name;
+      return [sqft, city].filter(Boolean).join(' · ');
+    },
+    onNew: () => openEditor(null),
+    onOpen: (row) => openEditor(row),
+    onDelete: async (row) => { await api.deleteConfig(row.id); },
+    onCopy: async (row) => {
+      const clone = { ...row };
+      delete clone.id; delete clone.created_at; delete clone.updated_at;
+      clone.name = (clone.name || 'Facility') + ' (Copy)';
+      await api.saveConfig(clone);
+    },
+    emptyStateHint: 'Size a facility from peak pallets, SKU count, turn rate, and clearance height. Every scenario you save can be linked back to a cost model or deal.',
+  });
+}
+
+/** Open the editor, optionally pre-loading a saved scenario. */
+function openEditor(savedRow) {
+  if (!rootEl) return;
+  viewMode = 'editor';
+  if (savedRow) {
+    const data = savedRow.config_data || savedRow;
+    facility = { ...createDefaultFacility(), ...data, id: savedRow.id };
+    zones = { ...createDefaultZones(), ...(data.zones || {}) };
+    volumes = { ...createDefaultVolumes(), ...(data.volumes || {}) };
+  } else {
+    facility = createDefaultFacility();
+    zones = createDefaultZones();
+    volumes = createDefaultVolumes();
+  }
+  rootEl.innerHTML = renderShell();
   bindShellEvents();
   renderConfigPanel();
   renderContentView();
-
-  // Listen for CM → WSC push
-  bus.on('cm:push-to-wsc', handleCmPush);
-
-  bus.emit('wsc:mounted');
 }
 
 /**
@@ -214,9 +270,9 @@ function renderConfigPanel() {
     <div style="padding:12px 16px; border-bottom:1px solid var(--ies-gray-200);">
       <div class="text-subtitle" style="margin-bottom:8px;">Warehouse Sizing</div>
       <div class="flex gap-2" style="flex-wrap:wrap;">
-        <button class="hub-btn hub-btn-primary hub-btn-sm" data-action="wsc-new">New</button>
-        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="wsc-save">Save</button>
-        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="wsc-load">Load</button>
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="wsc-back" title="Back to saved scenarios">← Scenarios</button>
+        <button class="hub-btn hub-btn-primary hub-btn-sm" data-action="wsc-save">Save</button>
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="wsc-new">New</button>
         <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="wsc-copy-summary" title="Copy summary to clipboard">Copy</button>
       </div>
       <div style="margin-top:10px;">
@@ -624,6 +680,13 @@ function bindConfigEvents(panel) {
     isDirty = false;
     renderConfigPanel();
     renderContentView();
+  });
+
+  panel.querySelector('[data-action="wsc-back"]')?.addEventListener('click', async () => {
+    if (isDirty && !confirm('Unsaved changes. Leave for the scenarios list?')) return;
+    isDirty = false;
+    viewMode = 'landing';
+    await renderLanding();
   });
 
   // Copy-summary button
@@ -1519,7 +1582,7 @@ function build3DScene() {
 // ============================================================
 
 function pushToCm() {
-  /** @type {import('./types.js?v=20260418-sA').WscToCmPayload} */
+  /** @type {import('./types.js?v=20260418-sB').WscToCmPayload} */
   const payload = {
     totalSqft: facility.totalSqft || 0,
     clearHeight: facility.clearHeight || 0,
@@ -1540,7 +1603,7 @@ function pushToCm() {
 
 /**
  * Handle CM → WSC push (e.g., "Size with Calculator" from CM).
- * @param {import('./types.js?v=20260418-sA').CmToWscPayload} payload
+ * @param {import('./types.js?v=20260418-sB').CmToWscPayload} payload
  */
 function handleCmPush(payload) {
   if (payload.clearHeight) facility.clearHeight = payload.clearHeight;

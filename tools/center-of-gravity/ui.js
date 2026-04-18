@@ -6,10 +6,12 @@
  * @module tools/center-of-gravity/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sA';
-import { state } from '../../shared/state.js?v=20260418-sA';
-import * as calc from './calc.js?v=20260418-sA';
-import * as api from './api.js?v=20260418-sA';
+import { bus } from '../../shared/event-bus.js?v=20260418-sB';
+import { state } from '../../shared/state.js?v=20260418-sB';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sB';
+import { showToast } from '../../shared/toast.js?v=20260418-sB';
+import * as calc from './calc.js?v=20260418-sB';
+import * as api from './api.js?v=20260418-sB';
 
 // ============================================================
 // STATE
@@ -21,13 +23,13 @@ let rootEl = null;
 /** @type {'points' | 'analysis' | 'map' | 'sensitivity'} */
 let activeTab = 'points';
 
-/** @type {import('./types.js?v=20260418-sA').WeightedPoint[]} */
+/** @type {import('./types.js?v=20260418-sB').WeightedPoint[]} */
 let points = [];
 
-/** @type {import('./types.js?v=20260418-sA').CogConfig} */
+/** @type {import('./types.js?v=20260418-sB').CogConfig} */
 let config = { ...calc.DEFAULT_CONFIG };
 
-/** @type {import('./types.js?v=20260418-sA').MultiCogResult|null} */
+/** @type {import('./types.js?v=20260418-sB').MultiCogResult|null} */
 let cogResult = null;
 
 /** @type {Array<{ k: number, totalWeightedDistance: number, estimatedCost: number, avgDistance: number }>|null} */
@@ -44,19 +46,55 @@ let mapInstance = null;
  * Mount the Center of Gravity tool.
  * @param {HTMLElement} el
  */
+let activeScenarioId = null;
+
 export async function mount(el) {
   rootEl = el;
-  activeTab = 'points';
-  points = calc.DEMO_POINTS.map(p => ({ ...p }));
-  config = { ...calc.DEFAULT_CONFIG };
-  cogResult = null;
-  sensitivityData = null;
+  await renderLanding();
+  bus.emit('cog:mounted');
+}
 
-  el.innerHTML = renderShell();
+async function renderLanding() {
+  if (!rootEl) return;
+  await renderScenarioLanding(rootEl, {
+    toolName: 'Center of Gravity',
+    toolKey: 'cog',
+    accent: '#20c997',
+    list: () => api.listScenarios(),
+    getId: (r) => r.id,
+    getName: (r) => r.name || r.scenario_data?.name || 'Untitled COG analysis',
+    getUpdated: (r) => r.updated_at || r.created_at,
+    getParent: (r) => ({ cmId: r.parent_cost_model_id, dealId: r.parent_deal_id }),
+    getSubtitle: (r) => {
+      const d = r.scenario_data || {};
+      const nPoints = (d.points || []).length;
+      const k = d.config?.k || d.k;
+      return nPoints ? `${nPoints} demand points${k ? ` · ${k}-DC analysis` : ''}` : '';
+    },
+    onNew: () => openEditor(null),
+    onOpen: (row) => openEditor(row),
+    onDelete: async (row) => { await api.deleteScenario(row.id); },
+    emptyStateHint: 'Find optimal facility locations from weighted demand. Cluster, centroid solver, sensitivity vs k-DC count, and a service-zone map overlay.',
+  });
+}
+
+function openEditor(savedRow) {
+  if (!rootEl) return;
+  const d = savedRow?.scenario_data || {};
+  activeTab = 'points';
+  points = (d.points && d.points.length) ? d.points.map(p => ({ ...p })) : calc.DEMO_POINTS.map(p => ({ ...p }));
+  config = { ...calc.DEFAULT_CONFIG, ...(d.config || {}) };
+  cogResult = d.result || null;
+  sensitivityData = null;
+  activeScenarioId = savedRow?.id || null;
+
+  rootEl.innerHTML = renderShell();
   bindShellEvents();
   renderContent();
 
-  bus.emit('cog:mounted');
+  rootEl.querySelector('[data-action="cog-back"]')?.addEventListener('click', async () => {
+    await renderLanding();
+  });
 }
 
 /**
@@ -83,6 +121,7 @@ function renderShell() {
   return `
     <div class="hub-content-inner" style="padding:0;display:flex;flex-direction:column;height:100%;">
       <div style="display:flex;align-items:center;gap:16px;padding:16px 24px 0 24px;flex-shrink:0;">
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="cog-back" title="Back to saved scenarios" style="font-size:11px;">← Scenarios</button>
         <h2 class="text-page" style="margin:0;">Center of Gravity</h2>
         <div style="display:flex;gap:8px;margin-left:auto;" id="cog-tabs">
           ${tabs.map(t => `

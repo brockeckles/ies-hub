@@ -6,10 +6,12 @@
  * @module tools/fleet-modeler/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sA';
-import { state } from '../../shared/state.js?v=20260418-sA';
-import * as calc from './calc.js?v=20260418-sA';
-import * as api from './api.js?v=20260418-sA';
+import { bus } from '../../shared/event-bus.js?v=20260418-sB';
+import { state } from '../../shared/state.js?v=20260418-sB';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sB';
+import { showToast } from '../../shared/toast.js?v=20260418-sB';
+import * as calc from './calc.js?v=20260418-sB';
+import * as api from './api.js?v=20260418-sB';
 
 // ============================================================
 // STATE
@@ -21,16 +23,16 @@ let rootEl = null;
 /** @type {'lanes' | 'config' | 'results' | 'map'} */
 let activeTab = 'lanes';
 
-/** @type {import('./types.js?v=20260418-sA').Lane[]} */
+/** @type {import('./types.js?v=20260418-sB').Lane[]} */
 let lanes = [];
 
-/** @type {import('./types.js?v=20260418-sA').VehicleSpec[]} */
+/** @type {import('./types.js?v=20260418-sB').VehicleSpec[]} */
 let vehicles = calc.DEFAULT_VEHICLES.map(v => ({ ...v }));
 
-/** @type {import('./types.js?v=20260418-sA').FleetConfig} */
+/** @type {import('./types.js?v=20260418-sB').FleetConfig} */
 let config = { ...calc.DEFAULT_CONFIG };
 
-/** @type {import('./types.js?v=20260418-sA').FleetResult|null} */
+/** @type {import('./types.js?v=20260418-sB').FleetResult|null} */
 let result = null;
 
 /** @type {object|null} */
@@ -44,19 +46,55 @@ let mapInstance = null;
  * Mount the Fleet Modeler.
  * @param {HTMLElement} el
  */
+let activeScenarioId = null;
+
 export async function mount(el) {
   rootEl = el;
-  activeTab = 'lanes';
-  lanes = calc.DEMO_LANES.map(l => ({ ...l }));
-  vehicles = calc.DEFAULT_VEHICLES.map(v => ({ ...v }));
-  config = { ...calc.DEFAULT_CONFIG, leaseMode: false };
-  result = null;
+  await renderLanding();
+  bus.emit('fleet:mounted');
+}
 
-  el.innerHTML = renderShell();
+async function renderLanding() {
+  if (!rootEl) return;
+  await renderScenarioLanding(rootEl, {
+    toolName: 'Fleet Modeler',
+    toolKey: 'fleet',
+    accent: '#20c997',
+    list: () => api.listScenarios(),
+    getId: (r) => r.id,
+    getName: (r) => r.name || r.scenario_data?.name || 'Untitled fleet',
+    getUpdated: (r) => r.updated_at || r.created_at,
+    getParent: (r) => ({ cmId: r.parent_cost_model_id, dealId: r.parent_deal_id || r.deal_id }),
+    getSubtitle: (r) => {
+      const d = r.scenario_data || {};
+      const nLanes = (d.lanes || []).length;
+      const nVeh = (d.vehicles || []).length;
+      return nLanes ? `${nLanes} lanes · ${nVeh} vehicle types` : '';
+    },
+    onNew: () => openEditor(null),
+    onOpen: (row) => openEditor(row),
+    onDelete: async (row) => { await api.deleteScenario(row.id); },
+    emptyStateHint: 'Size a private fleet from your lane network — vehicles, drivers, fuel, maintenance, ATRI benchmarks, and a 3-way comparison vs dedicated and common carrier.',
+  });
+}
+
+function openEditor(savedRow) {
+  if (!rootEl) return;
+  const d = savedRow?.scenario_data || {};
+  activeTab = 'lanes';
+  lanes = (d.lanes && d.lanes.length) ? d.lanes.map(l => ({ ...l })) : calc.DEMO_LANES.map(l => ({ ...l }));
+  vehicles = (d.vehicles && d.vehicles.length) ? d.vehicles.map(v => ({ ...v })) : calc.DEFAULT_VEHICLES.map(v => ({ ...v }));
+  config = { ...calc.DEFAULT_CONFIG, leaseMode: false, ...(d.config || {}) };
+  result = d.result || null;
+  activeScenarioId = savedRow?.id || null;
+
+  rootEl.innerHTML = renderShell();
   bindShellEvents();
   renderContent();
 
-  bus.emit('fleet:mounted');
+  rootEl.querySelector('[data-action="fleet-back"]')?.addEventListener('click', async () => {
+    await renderLanding();
+  });
 }
 
 /**
@@ -83,6 +121,7 @@ function renderShell() {
   return `
     <div class="hub-content-inner" style="padding:0;display:flex;flex-direction:column;height:100%;">
       <div style="display:flex;align-items:center;gap:16px;padding:16px 24px 0 24px;flex-shrink:0;">
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="fleet-back" title="Back to saved scenarios" style="font-size:11px;">← Scenarios</button>
         <h2 class="text-page" style="margin:0;">Fleet Modeler</h2>
         <div style="display:flex;gap:8px;margin-left:auto;" id="fm-tabs">
           ${tabs.map(t => `
