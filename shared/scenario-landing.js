@@ -31,8 +31,8 @@
  * @module shared/scenario-landing
  */
 
-import { db } from './supabase.js?v=20260418-sB';
-import { showToast } from './toast.js?v=20260418-sB';
+import { db } from './supabase.js?v=20260418-sC';
+import { showToast } from './toast.js?v=20260418-sC';
 
 /**
  * @param {HTMLElement} rootEl
@@ -170,6 +170,10 @@ function renderShell({
         .sl-row:hover [data-sl-row-action] { opacity: 1; }
       </style>
 
+      <a href="#designtools" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--ies-gray-500);text-decoration:none;margin-bottom:8px;" onmouseover="this.style.color='${accent}'" onmouseout="this.style.color='var(--ies-gray-500)'">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        Back to Design Tools
+      </a>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px;flex-wrap:wrap;">
         <div>
           <h1 class="text-page" style="margin:0;">${escapeText(toolName)}</h1>
