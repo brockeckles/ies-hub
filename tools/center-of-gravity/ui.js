@@ -174,7 +174,7 @@ function bindShellEvents() {
   const runBtn = rootEl.querySelector('[data-primary-action="cog-run"]');
   runBtn?.addEventListener('click', () => {
     cogResult = calc.kMeansCog(points, config.numCenters, config.maxIterations);
-    sensitivityData = calc.sensitivityAnalysis(points, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations);
+    sensitivityData = calc.sensitivityAnalysis(points, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000);
     activeTab = 'analysis';
     rootEl.querySelectorAll('#cog-tabs button').forEach(b => {
       b.classList.toggle('active', b.dataset.tab === activeTab);
@@ -226,9 +226,16 @@ function renderPoints(el) {
             <span style="font-size:11px;color:var(--ies-gray-400);">How many DC locations to optimize for</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
-            <label style="font-size:13px;font-weight:600;">Transport $/mi:</label>
+            <label style="font-size:13px;font-weight:600;">Truck $/mi:</label>
             <input type="number" value="${config.transportCostPerMile}" step="0.01" id="cog-cpm"
                    style="width:80px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
+            <span style="font-size:11px;color:var(--ies-gray-400);">Per-truck rate (e.g. $2.85/mi for 53-ft van)</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <label style="font-size:13px;font-weight:600;">Units / Truck:</label>
+            <input type="number" value="${config.unitsPerTruck || 25000}" step="100" min="1" id="cog-cap"
+                   style="width:90px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
+            <span style="font-size:11px;color:var(--ies-gray-400);">Avg payload (lbs / pallets / orders) per truckload</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
             <label style="font-size:13px;font-weight:600;">Max Iterations:</label>
@@ -291,6 +298,9 @@ function renderPoints(el) {
   el.querySelector('#cog-cpm')?.addEventListener('change', (e) => {
     config.transportCostPerMile = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 2.85;
   });
+  el.querySelector('#cog-cap')?.addEventListener('change', (e) => {
+    config.unitsPerTruck = Math.max(1, parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 25000);
+  });
   el.querySelector('#cog-iter')?.addEventListener('change', (e) => {
     config.maxIterations = Math.max(10, Math.min(500, parseInt(/** @type {HTMLInputElement} */ (e.target).value) || 100));
   });
@@ -324,7 +334,7 @@ function renderAnalysis(el) {
     return;
   }
 
-  const costEst = calc.estimateTransportCost(cogResult, points, config.transportCostPerMile);
+  const costEst = calc.estimateTransportCost(cogResult, points, config.transportCostPerMile, config.unitsPerTruck || 25000);
 
   el.innerHTML = `
     <div style="max-width:900px;">
@@ -344,6 +354,7 @@ function renderAnalysis(el) {
         <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;">
           ${kpi('Centers Found', String(cogResult.centers.length))}
           ${kpi('Iterations', String(cogResult.iterations))}
+          ${kpi('Annual Truckloads', Math.round(costEst.totalTruckloads || 0).toLocaleString())}
           ${kpi('Est. Transport Cost', calc.formatCurrency(costEst.totalCost, { compact: true }))}
           ${kpi('Avg Cost/Unit', calc.formatCurrency(costEst.avgCostPerUnit))}
         </div>
@@ -394,7 +405,9 @@ function renderAnalysis(el) {
             <tbody>
               ${cogResult.assignments.map(a => {
                 const pt = points.find(p => p.id === a.pointId);
-                const cost = a.distanceToCenter * (pt?.weight || 0) * config.transportCostPerMile;
+                const capacity = Math.max(1, config.unitsPerTruck || 25000);
+                const truckloads = (pt?.weight || 0) / capacity;
+                const cost = a.distanceToCenter * truckloads * config.transportCostPerMile;
                 return `
                   <tr style="border-bottom:1px solid var(--ies-gray-200);">
                     <td style="padding:6px;text-align:center;">
@@ -612,7 +625,7 @@ function renderSensitivity(el) {
           Optimal network of <strong>${cogResult.centers.length}</strong> facilit${cogResult.centers.length === 1 ? 'y' : 'ies'} reduces
           avg distance to <strong>${cogResult.centers[0] ? calc.formatMiles(cogResult.centers.reduce((s, c) => s + c.avgWeightedDistance, 0) / cogResult.centers.length) : 'N/A'}</strong>
           per facility, with total annual transport cost of <strong>${calc.formatCurrency(cogResult.assignments ?
-            calc.estimateTransportCost(cogResult, points, config.transportCostPerMile).totalCost : 0)}</strong>.
+            calc.estimateTransportCost(cogResult, points, config.transportCostPerMile, config.unitsPerTruck || 25000).totalCost : 0)}</strong>.
           Compared to single facility: <strong>${savingsPct}%</strong> savings.
         </div>
       </div>
@@ -738,7 +751,7 @@ function exportCogAnalysis() {
     return;
   }
 
-  const costEst = calc.estimateTransportCost(cogResult, points, config.transportCostPerMile);
+  const costEst = calc.estimateTransportCost(cogResult, points, config.transportCostPerMile, config.unitsPerTruck || 25000);
   const now = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
   const filename = `cog-analysis-${now}.csv`;
 
@@ -769,7 +782,9 @@ function exportCogAnalysis() {
   sections.push('Name,Latitude,Longitude,Weight,Assigned To Center,Distance to Center (mi),Transport Cost');
   cogResult.assignments.forEach(a => {
     const pt = points.find(p => p.id === a.pointId);
-    const cost = a.distanceToCenter * (pt?.weight || 0) * config.transportCostPerMile;
+    const capacity = Math.max(1, config.unitsPerTruck || 25000);
+    const truckloads = (pt?.weight || 0) / capacity;
+    const cost = a.distanceToCenter * truckloads * config.transportCostPerMile;
     if (pt) {
       sections.push(`"${pt.name || pt.id}","${pt.lat.toFixed(4)}","${pt.lng.toFixed(4)}","${pt.weight}","Center ${a.clusterId + 1}","${a.distanceToCenter.toFixed(2)}","${cost.toFixed(2)}"`);
     }

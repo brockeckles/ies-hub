@@ -45,7 +45,8 @@
  * @property {number} numCenters — k for k-means (1-5)
  * @property {number} maxIterations — convergence limit
  * @property {boolean} includeSupply — include supply points in weighting
- * @property {number} [transportCostPerMile] — for total cost estimation
+ * @property {number} [transportCostPerMile] — truck $/mi for cost estimation
+ * @property {number} [unitsPerTruck] — converts weight to truckloads (default 25,000 lbs)
  */
 
 /**

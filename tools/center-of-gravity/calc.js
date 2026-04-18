@@ -20,6 +20,11 @@ export const DEFAULT_CONFIG = {
   maxIterations: 100,
   includeSupply: false,
   transportCostPerMile: 2.85,
+  // Truck capacity used to convert "weight × distance" into truckloads × distance.
+  // Default 25,000 lbs (a typical 53-ft dry van payload). If users enter weight
+  // in pallets, set to 26 (pallets per truck). If orders, set to a typical
+  // orders-per-truck number for the operation.
+  unitsPerTruck: 25000,
 };
 
 /** @type {import('./types.js?v=20260418-sP').MajorCity[]} */
@@ -363,26 +368,40 @@ export function capWeightsByPercentile(points, percentile = 95) {
 
 /**
  * Estimate total annual transportation cost from COG analysis.
+ *
+ * Formula: for each point, truckloads_per_year = weight / unitsPerTruck;
+ * annual cost for that point = truckloads × distance × costPerMile.
+ *
+ * The previous formula multiplied `weight × distance × costPerMile` directly,
+ * which treated every unit as riding alone — produced numbers 4-5 orders of
+ * magnitude too large. See the 2026-04-18 SME walkthrough where a 12-point
+ * demo returned $1.4B in annual transport cost.
+ *
  * @param {import('./types.js?v=20260418-sP').MultiCogResult} cogResult
  * @param {import('./types.js?v=20260418-sP').WeightedPoint[]} points
  * @param {number} [costPerMile=2.85]
- * @returns {{ totalCost: number, avgCostPerUnit: number, costByCluster: number[] }}
+ * @param {number} [unitsPerTruck=25000]
+ * @returns {{ totalCost: number, avgCostPerUnit: number, costByCluster: number[], totalTruckloads: number }}
  */
-export function estimateTransportCost(cogResult, points, costPerMile = 2.85) {
+export function estimateTransportCost(cogResult, points, costPerMile = 2.85, unitsPerTruck = 25000) {
+  const capacity = Math.max(1, unitsPerTruck || 1); // guard against /0
   const costByCluster = cogResult.centers.map((_, ci) => {
     return cogResult.assignments
       .filter(a => a.clusterId === ci)
       .reduce((s, a) => {
         const pt = points.find(p => p.id === a.pointId);
-        return s + a.distanceToCenter * (pt?.weight || 0) * costPerMile;
+        const w = pt?.weight || 0;
+        const truckloads = w / capacity;
+        return s + truckloads * a.distanceToCenter * costPerMile;
       }, 0);
   });
 
   const totalCost = costByCluster.reduce((s, c) => s + c, 0);
   const totalWeight = points.reduce((s, p) => s + p.weight, 0);
   const avgCostPerUnit = totalWeight > 0 ? totalCost / totalWeight : 0;
+  const totalTruckloads = totalWeight / capacity;
 
-  return { totalCost, avgCostPerUnit, costByCluster };
+  return { totalCost, avgCostPerUnit, costByCluster, totalTruckloads };
 }
 
 // ============================================================
@@ -397,13 +416,13 @@ export function estimateTransportCost(cogResult, points, costPerMile = 2.85) {
  * @param {number} [maxIter=100]
  * @returns {Array<{ k: number, totalWeightedDistance: number, estimatedCost: number, avgDistance: number, isElbow?: boolean }>}
  */
-export function sensitivityAnalysis(points, maxK = 5, costPerMile = 2.85, maxIter = 100) {
+export function sensitivityAnalysis(points, maxK = 5, costPerMile = 2.85, maxIter = 100, unitsPerTruck = 25000) {
   const results = [];
   const effectiveMaxK = Math.min(maxK, points.length);
 
   for (let k = 1; k <= effectiveMaxK; k++) {
     const cogResult = kMeansCog(points, k, maxIter);
-    const cost = estimateTransportCost(cogResult, points, costPerMile);
+    const cost = estimateTransportCost(cogResult, points, costPerMile, unitsPerTruck);
     const totalWeight = points.reduce((s, p) => s + p.weight, 0);
     const avgDist = totalWeight > 0 ? cogResult.totalWeightedDistance / totalWeight : 0;
 
