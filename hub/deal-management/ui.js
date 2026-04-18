@@ -6,8 +6,8 @@
  * @module hub/deal-management/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-s6';
-import * as api from './api.js?v=20260418-s6';
+import { bus } from '../../shared/event-bus.js?v=20260418-s7';
+import * as api from './api.js?v=20260418-s7';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -1050,7 +1050,7 @@ async function handleDeckGenClick(deckType) {
   const statusEl = rootEl?.querySelector('#deck-gen-status');
   if (statusEl) statusEl.innerHTML = `<span style="color:var(--ies-blue);">Generating ${deckType} deck…</span>`;
   try {
-    const engine = await import('../deck-generator/engine.js?v=20260418-s6');
+    const engine = await import('../deck-generator/engine.js?v=20260418-s7');
     if (!window.PptxGenJS) throw new Error('PptxGenJS not loaded — check CDN in index.html');
     // Pass demo deal data directly (these demo deals have integer stage + hardcoded fields,
     // not persisted UUIDs). The engine accepts either a dealId (uuid) or a prebuilt data obj.

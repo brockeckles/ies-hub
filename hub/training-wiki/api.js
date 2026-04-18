@@ -5,11 +5,11 @@
  * @module hub/training-wiki/api
  */
 
-import { db } from '../../shared/supabase.js?v=20260418-s6';
+import { db } from '../../shared/supabase.js?v=20260418-s7';
 
 /**
  * List all categories.
- * @returns {Promise<import('./types.js?v=20260418-s6').WikiCategory[]>}
+ * @returns {Promise<import('./types.js?v=20260418-s7').WikiCategory[]>}
  */
 export async function listCategories() {
   const { data, error } = await db.from('wiki_categories').select('*').order('sort_order');
@@ -20,7 +20,7 @@ export async function listCategories() {
 /**
  * List articles, optionally filtered.
  * @param {{ categoryId?: string, status?: string }} [filters]
- * @returns {Promise<import('./types.js?v=20260418-s6').WikiArticle[]>}
+ * @returns {Promise<import('./types.js?v=20260418-s7').WikiArticle[]>}
  */
 export async function listArticles(filters = {}) {
   let query = db.from('wiki_articles').select('*');
@@ -34,7 +34,7 @@ export async function listArticles(filters = {}) {
 /**
  * Get a single article.
  * @param {string} id
- * @returns {Promise<import('./types.js?v=20260418-s6').WikiArticle|null>}
+ * @returns {Promise<import('./types.js?v=20260418-s7').WikiArticle|null>}
  */
 export async function getArticle(id) {
   return db.fetchById('wiki_articles', id);
@@ -42,8 +42,8 @@ export async function getArticle(id) {
 
 /**
  * Save (insert or update) an article.
- * @param {import('./types.js?v=20260418-s6').WikiArticle} article
- * @returns {Promise<import('./types.js?v=20260418-s6').WikiArticle>}
+ * @param {import('./types.js?v=20260418-s7').WikiArticle} article
+ * @returns {Promise<import('./types.js?v=20260418-s7').WikiArticle>}
  */
 export async function saveArticle(article) {
   const payload = {
@@ -79,7 +79,7 @@ export async function incrementViews(id) {
 
 /**
  * Load all wiki data.
- * @returns {Promise<{ categories: import('./types.js?v=20260418-s6').WikiCategory[], articles: import('./types.js?v=20260418-s6').WikiArticle[] }>}
+ * @returns {Promise<{ categories: import('./types.js?v=20260418-s7').WikiCategory[], articles: import('./types.js?v=20260418-s7').WikiArticle[] }>}
  */
 export async function loadRefData() {
   const [categories, articles] = await Promise.all([listCategories(), listArticles()]);

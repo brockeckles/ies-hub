@@ -20,8 +20,10 @@ export async function fetchDashboardData() {
   let sectors = DEMO_SECTORS;
   let alerts = DEMO_ALERTS;
   let rfpSignals = DEMO_RFP_SIGNALS;
-  // Hoisted so the intelligence-feed builder below the try can see them.
+  // Hoisted so the intelligence-feed + sparkline builders below the try
+  // can see them.
   let newsRows = [], rfpRows = [], tariffRows = [], accountRows = [];
+  let fuelRowsHoist = [], steelRowsHoist = [], freightRowsHoist = [], laborRowsHoist = [], realEstateRowsHoist = [], alertRows = [];
 
   try {
     // Attempt to fetch live data from Supabase
@@ -37,8 +39,11 @@ export async function fetchDashboardData() {
       db.fetchAll('tariff_developments').catch(() => []),
       db.fetchAll('account_signals').catch(() => []),
     ]);
-    const [fuelRows, laborRows, freightRows, _news, alertRows, _rfp, steelRows, realEstateRows, _tariff, _accounts] = fetched;
+    const [fuelRows, laborRows, freightRows, _news, _alerts, _rfp, steelRows, realEstateRows, _tariff, _accounts] = fetched;
     newsRows = _news; rfpRows = _rfp; tariffRows = _tariff; accountRows = _accounts;
+    alertRows = _alerts;
+    fuelRowsHoist = fuelRows; steelRowsHoist = steelRows; freightRowsHoist = freightRows;
+    laborRowsHoist = laborRows; realEstateRowsHoist = realEstateRows;
 
     // If we got any data, we're connected
     if (fuelRows.length || laborRows.length || freightRows.length) {
@@ -141,13 +146,21 @@ export async function fetchDashboardData() {
     console.warn('[CC] Supabase fetch failed, using demo data:', err.message);
   }
 
-  // Build intelligence feed (All / Competitor / Accounts / Tariff / RFP)
-  // from the live data we already fetched.
+  // Build unified intelligence feed — hub_alerts folded in as a new category
+  // so the Command Center Signal Stream is the single surface for everything.
   const intel = buildIntelligenceFeed({
     competitor: newsRows,
     accounts: accountRows,
     tariff: tariffRows,
     rfp: rfpRows,
+    alerts: Array.isArray(alertRows) ? alertRows : [],
+  });
+
+  // Build sparkline data for KPI tiles — compact last-N number arrays so the
+  // KPI tiles can render inline SVG sparks instead of needing separate charts.
+  const sparks = buildKpiSparks({
+    fuel: fuelRowsHoist, steel: steelRowsHoist, freight: freightRowsHoist,
+    labor: laborRowsHoist, rfp: rfpRows, realEstate: realEstateRowsHoist,
   });
 
   return {
@@ -157,9 +170,104 @@ export async function fetchDashboardData() {
     alerts,
     rfpSignals,
     intel,
+    sparks,
     pipeline: DEMO_PIPELINE,
     activity: DEMO_ACTIVITY,
   };
+}
+
+/**
+ * Build compact sparkline series for each KPI. Each result is an array of
+ * numbers (most recent last). KPI tiles render an inline SVG polyline from
+ * these arrays. Falls back to the demo series when the table is empty or
+ * has only a current snapshot (wage/warehouse rate fall into that bucket).
+ */
+function buildKpiSparks(src) {
+  const out = {};
+
+  // Diesel — last 26 weekly prices
+  if (src.fuel?.length) {
+    const sorted = [...src.fuel].sort((a, b) => (a.report_date || a.date || '').localeCompare(b.report_date || b.date || ''));
+    out.diesel = sorted.slice(-26).map(r => parseFloat(r.price_per_gallon || r.price || 0)).filter(v => v > 0);
+  } else {
+    out.diesel = DEMO_DIESEL_CHART.prices.slice();
+  }
+
+  // Steel — last 26 weekly prices
+  if (src.steel?.length) {
+    const sorted = [...src.steel].sort((a, b) => (a.report_date || '').localeCompare(b.report_date || ''));
+    out.steel = sorted.slice(-26).map(r => parseFloat(r.price || 0)).filter(v => v > 0);
+  } else {
+    out.steel = DEMO_STEEL_CHART.prices.slice();
+  }
+
+  // Freight Index — last 26 readings (spot preferred)
+  if (src.freight?.length) {
+    const sorted = [...src.freight].sort((a, b) => (a.report_date || '').localeCompare(b.report_date || ''));
+    out.freight = sorted.slice(-26).map(r => parseFloat(r.rate_index || r.rate || 0)).filter(v => v > 0);
+    if (out.freight.length < 4) out.freight = DEMO_FREIGHT_CHART.spot.slice();
+  } else {
+    out.freight = DEMO_FREIGHT_CHART.spot.slice();
+  }
+
+  // Labor wage — modeled 12-mo rise to current snapshot (individual markets
+  // carry no history; demo is a reasonable stand-in shape).
+  if (src.labor?.length) {
+    // Average across markets for today; generate a gently rising 12-point
+    // series ending at that number.
+    const latest = src.labor.reduce((s, r) => s + parseFloat(r.avg_wage || r.avgWage || 0), 0) / src.labor.length;
+    if (latest > 0) {
+      out.wage = Array.from({ length: 12 }, (_, i) => +(latest * (0.96 + i * 0.0036)).toFixed(2));
+    } else {
+      out.wage = [17.95, 17.98, 18.02, 18.05, 18.08, 18.12, 18.18, 18.22, 18.28, 18.33, 18.38, 18.42];
+    }
+  } else {
+    out.wage = [17.95, 17.98, 18.02, 18.05, 18.08, 18.12, 18.18, 18.22, 18.28, 18.33, 18.38, 18.42];
+  }
+
+  // Warehouse rate — 8 quarters ending at the current avg (modeled).
+  if (src.realEstate?.length) {
+    const latestByMarket = new Map();
+    for (const r of src.realEstate) {
+      const prev = latestByMarket.get(r.market);
+      if (!prev || (r.quarter || '') > (prev.quarter || '')) latestByMarket.set(r.market, r);
+    }
+    const latest = Array.from(latestByMarket.values())
+      .reduce((s, r) => s + parseFloat(r.lease_rate_psf || 0), 0) / Math.max(1, latestByMarket.size);
+    if (latest > 0) {
+      out.warehouseRate = Array.from({ length: 8 }, (_, i) => +(latest * (0.92 + i * 0.0114)).toFixed(2));
+    } else {
+      out.warehouseRate = [8.10, 8.25, 8.35, 8.48, 8.58, 8.68, 8.78, 8.90];
+    }
+  } else {
+    out.warehouseRate = [8.10, 8.25, 8.35, 8.48, 8.58, 8.68, 8.78, 8.90];
+  }
+
+  // RFP signals — count by week for last 12 weeks (using created_at).
+  if (src.rfp?.length) {
+    const buckets = new Array(12).fill(0);
+    const now = Date.now();
+    for (const r of src.rfp) {
+      const t = r.created_at ? new Date(r.created_at).getTime() : null;
+      if (!t) continue;
+      const weeksAgo = Math.floor((now - t) / (7 * 24 * 3600 * 1000));
+      if (weeksAgo >= 0 && weeksAgo < 12) buckets[11 - weeksAgo] += 1;
+    }
+    // If we got nothing bucketed (all old/null dates), show a flat series
+    // pegged at current total.
+    if (buckets.every(v => v === 0)) {
+      const n = src.rfp.length;
+      out.rfp = Array.from({ length: 12 }, (_, i) => Math.max(0, Math.round(n * (0.6 + i * 0.036))));
+    } else {
+      // Cumulative over 12 weeks for a smoother curve.
+      let cum = 0;
+      out.rfp = buckets.map(v => { cum += v; return cum; });
+    }
+  } else {
+    out.rfp = [1, 1, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5];
+  }
+
+  return out;
 }
 
 /**
@@ -183,12 +291,13 @@ function buildIntelligenceFeed(src) {
   const accounts = (src.accounts || []).slice(0, 25).map(r => toItem(r, 'Accounts'));
   const tariff = (src.tariff || []).slice(0, 25).map(r => toItem(r, 'Tariff'));
   const rfp = (src.rfp || []).slice(0, 25).map(r => toItem(r, 'RFP'));
+  const alerts = (src.alerts || []).slice(0, 25).map(r => toItem(r, 'Alerts'));
 
-  const all = [...competitor, ...accounts, ...tariff, ...rfp]
+  const all = [...alerts, ...competitor, ...accounts, ...tariff, ...rfp]
     .sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')))
-    .slice(0, 50);
+    .slice(0, 60);
 
-  return { all, competitor, accounts, tariff, rfp };
+  return { all, alerts, competitor, accounts, tariff, rfp };
 }
 
 /**

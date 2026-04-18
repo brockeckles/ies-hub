@@ -8,7 +8,7 @@
  */
 
 import { bus } from '../../shared/event-bus.js';
-import * as api from './api.js?v=20260418-s6';
+import * as api from './api.js?v=20260418-s7';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -56,7 +56,7 @@ function render() {
   const timeStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
   rootEl.innerHTML = `
-    <div class="hub-content-inner" style="padding:24px;max-width:1200px;">
+    <div class="hub-content-inner" style="padding:24px;max-width:1280px;">
 
       <!-- Header -->
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
@@ -72,104 +72,178 @@ function render() {
         </div>
       </div>
 
-      <!-- Inline alerts summary banner (top-of-page signal strip) -->
+      <!-- Inline alert banner -->
       ${renderInlineAlertBanner(d.alerts)}
 
-      <!-- Market Intelligence KPIs — section label removed; titles live inside tiles -->
-      <div style="margin-bottom:20px;">
-        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;">
-          ${kpiCard('Diesel Price', '$' + d.kpis.dieselPrice.toFixed(2) + '/gal', d.kpis.dieselTrend, '#dc2626', d.kpis.dieselChange)}
-          ${kpiCard('Avg Warehouse Wage', '$' + d.kpis.avgWage.toFixed(2) + '/hr', d.kpis.wageTrend, '#7c3aed', d.kpis.wageChange)}
-          ${kpiCard('Avg Warehouse Rate', '$' + (d.kpis.avgWarehouseRate || 0).toFixed(2) + '/sf/yr', d.kpis.warehouseRateTrend || 'neutral', '#2563eb', d.kpis.warehouseRateChange || '—')}
-          ${kpiCard('Freight Rate Index', d.kpis.freightIndex.toFixed(0), d.kpis.freightTrend, '#ea580c', d.kpis.freightChange)}
-          ${kpiCard('Steel Price Index', '$' + Math.round(d.kpis.steelPrice).toLocaleString() + ' ' + (d.kpis.steelUnit || '/ton'), d.kpis.steelTrend, '#0891b2', d.kpis.steelChange)}
-          ${kpiCard('Active RFP Signals', String(d.kpis.rfpSignalCount || 0), d.kpis.rfpSignalTrend || 'neutral', '#16a34a', d.kpis.rfpSignalChange || '—')}
-        </div>
+      <!-- Vital Signs — 6 KPI tiles WITH inline sparklines (replaces standalone chart grid) -->
+      <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:20px;">
+        ${vitalSignTile('Diesel Price', '$' + d.kpis.dieselPrice.toFixed(2), '/gal', d.kpis.dieselTrend, '#dc2626', d.kpis.dieselChange, d.sparks?.diesel)}
+        ${vitalSignTile('Warehouse Wage', '$' + d.kpis.avgWage.toFixed(2), '/hr', d.kpis.wageTrend, '#7c3aed', d.kpis.wageChange, d.sparks?.wage)}
+        ${vitalSignTile('Warehouse Rate', '$' + (d.kpis.avgWarehouseRate || 0).toFixed(2), '/sf/yr', d.kpis.warehouseRateTrend || 'neutral', '#2563eb', d.kpis.warehouseRateChange || '—', d.sparks?.warehouseRate)}
+        ${vitalSignTile('Freight Index', d.kpis.freightIndex.toFixed(0), '', d.kpis.freightTrend, '#ea580c', d.kpis.freightChange, d.sparks?.freight)}
+        ${vitalSignTile('Steel Index', '$' + Math.round(d.kpis.steelPrice).toLocaleString(), (d.kpis.steelUnit || '/ton').replace('$/', '/'), d.kpis.steelTrend, '#0891b2', d.kpis.steelChange, d.sparks?.steel)}
+        ${vitalSignTile('RFP Signals', String(d.kpis.rfpSignalCount || 0), 'active', d.kpis.rfpSignalTrend || 'neutral', '#16a34a', d.kpis.rfpSignalChange || '—', d.sparks?.rfp)}
       </div>
 
-      <!-- Sector Pulse + Market Alerts — titles live INSIDE each card for consistency -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+      <!-- Two-column body: Signal Stream (2/3) + Right rail (1/3) -->
+      <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;align-items:start;">
 
-        <!-- Sector Pulse 2x2 — titles are on the individual tiles -->
-        <div id="cc-sector-grid" style="display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:1fr;gap:10px;">
-          ${sectorPulseCard('Labor Watch', '👷', d.sectors.labor, '#2563eb')}
-          ${sectorPulseCard('Freight Rates', '🚛', d.sectors.freight, '#ea580c')}
-          ${sectorPulseCard('Automation Watch', '🤖', d.sectors.automation, '#7c3aed')}
-          ${sectorPulseCard('Network Insights', '🌐', d.sectors.network, '#16a34a')}
-        </div>
-
-        <!-- Market Alerts — single card with title inside, height matched to sector grid -->
-        <div class="hub-card" id="cc-alerts-card" style="display:flex;flex-direction:column;padding:0;overflow:hidden;">
-          <div style="padding:14px 14px 8px;font-size:13px;font-weight:700;border-bottom:1px solid var(--ies-gray-100);">Market Alerts</div>
-          <div style="overflow-y:auto;flex:1;max-height:0;" id="cc-alerts-list">
-            ${d.alerts.length === 0 ? '<div style="padding:16px;text-align:center;color:var(--ies-gray-400);font-size:12px;">No active alerts</div>' :
-              d.alerts.map(a => alertRow(a)).join('')}
-          </div>
-        </div>
-      </div>
-
-      <!-- Charts: 2x2 grid — Diesel, Freight (top), Wage Trends, Steel Price (bottom) -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
-
-        <!-- Diesel Price Trend -->
-        <div class="hub-card" style="padding:16px;display:flex;flex-direction:column;">
-          <div style="font-size:13px;font-weight:700;margin-bottom:12px;">Diesel Price Trend</div>
-          <div id="cc-diesel-chart" style="flex:1;min-height:240px;position:relative;"></div>
-        </div>
-
-        <!-- Freight Rate Index -->
-        <div class="hub-card" style="padding:16px;display:flex;flex-direction:column;">
-          <div style="font-size:13px;font-weight:700;margin-bottom:12px;">Freight Rate Index</div>
-          <div id="cc-freight-chart" style="flex:1;min-height:240px;position:relative;"></div>
-        </div>
-
-        <!-- Avg Warehouse Wage Trend (multi-line by region) -->
-        <div class="hub-card" style="padding:16px;display:flex;flex-direction:column;">
-          <div style="font-size:13px;font-weight:700;margin-bottom:12px;">Warehouse Wage Trends <span style="font-size:10px;color:var(--ies-gray-400);font-weight:500;">— modeled 12-mo rise to current snapshot</span></div>
-          <div id="cc-labor-chart" style="flex:1;min-height:240px;position:relative;"></div>
-        </div>
-
-        <!-- Steel Price Index (CRU HRC weekly) -->
-        <div class="hub-card" style="padding:16px;display:flex;flex-direction:column;">
-          <div style="font-size:13px;font-weight:700;margin-bottom:12px;">Steel Price Index <span style="font-size:10px;color:var(--ies-gray-400);font-weight:500;">— CRU HRC $/ton</span></div>
-          <div id="cc-steel-chart" style="flex:1;min-height:240px;position:relative;"></div>
-        </div>
-      </div>
-
-      <!-- RFP Signals + Intelligence Feed — titles INSIDE cards, heights capped equal -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:1fr;gap:16px;max-height:520px;">
-
-        <!-- RFP Signals Feed -->
-        <div class="hub-card" id="cc-rfp-feed" style="padding:0;display:flex;flex-direction:column;overflow:hidden;">
-          <div style="padding:14px 14px 8px;font-size:13px;font-weight:700;border-bottom:1px solid var(--ies-gray-100);">RFP Signals</div>
-          <div style="overflow-y:auto;flex:1;">
-            ${renderRfpFeed(d.rfpSignals)}
-          </div>
-        </div>
-
-        <!-- Intelligence Feed — tabbed (All / Competitor / Accounts / Tariff / RFP) -->
-        <div class="hub-card" id="cc-intel-feed" style="padding:0;display:flex;flex-direction:column;overflow:hidden;">
-          <div style="padding:14px 14px 0;font-size:13px;font-weight:700;border-bottom:1px solid var(--ies-gray-100);">
-            Intelligence Feed
-            <div style="display:flex;gap:4px;margin-top:8px;overflow-x:auto;">
-              ${['all','competitor','accounts','tariff','rfp'].map((k, i) => `
+        <!-- LEFT — Signal Stream (the unified intelligence feed; replaces Sector Pulse + Market Alerts) -->
+        <div class="hub-card" id="cc-signal-stream" style="padding:0;display:flex;flex-direction:column;overflow:hidden;max-height:720px;">
+          <div style="padding:14px 16px 0;border-bottom:1px solid var(--ies-gray-100);">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+              <div style="font-size:13px;font-weight:700;">Signal Stream</div>
+              <span style="font-size:11px;color:var(--ies-gray-400);">All market intelligence in one place</span>
+            </div>
+            <div style="display:flex;gap:4px;overflow-x:auto;padding-bottom:10px;">
+              ${['all','alerts','competitor','accounts','tariff','rfp'].map((k, i) => `
                 <button type="button" data-intel-tab="${k}" class="cc-intel-tab ${i === 0 ? 'active' : ''}"
-                  style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;border:1px solid ${i === 0 ? '#1c1c1c' : 'var(--ies-gray-300)'};background:${i === 0 ? '#1c1c1c' : '#fff'};color:${i === 0 ? '#fff' : 'var(--ies-gray-700)'};cursor:pointer;text-transform:uppercase;letter-spacing:.04em;">${labelForIntelTab(k)} <span style="opacity:.7;">(${(d.intel?.[k === 'all' ? 'all' : k] || []).length})</span></button>
+                  style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;border:1px solid ${i === 0 ? '#1c1c1c' : 'var(--ies-gray-300)'};background:${i === 0 ? '#1c1c1c' : '#fff'};color:${i === 0 ? '#fff' : 'var(--ies-gray-700)'};cursor:pointer;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;">${labelForIntelTab(k)} <span style="opacity:.7;">(${(d.intel?.[k === 'all' ? 'all' : k] || []).length})</span></button>
               `).join('')}
             </div>
           </div>
-          <div style="padding:8px 14px 14px;overflow-y:auto;flex:1;" id="cc-intel-body">
+          <div style="padding:8px 16px 16px;overflow-y:auto;flex:1;" id="cc-intel-body">
             ${renderIntelFeed(d.intel?.all || [], d.activity)}
           </div>
         </div>
+
+        <!-- RIGHT rail — Pipeline Snapshot, RFP Signals, Tool Shortcuts -->
+        <div style="display:flex;flex-direction:column;gap:16px;">
+          ${renderPipelineSnapshot(d.pipeline)}
+
+          <div class="hub-card" id="cc-rfp-feed" style="padding:0;display:flex;flex-direction:column;overflow:hidden;max-height:340px;">
+            <div style="padding:12px 14px 8px;font-size:13px;font-weight:700;border-bottom:1px solid var(--ies-gray-100);display:flex;align-items:center;justify-content:space-between;">
+              RFP Signals
+              <span style="font-size:10px;color:var(--ies-gray-400);font-weight:500;">${d.rfpSignals.length} active</span>
+            </div>
+            <div style="overflow-y:auto;flex:1;">
+              ${renderRfpFeed(d.rfpSignals)}
+            </div>
+          </div>
+
+          ${renderToolShortcuts()}
+        </div>
       </div>
 
+      <p style="margin-top:14px;font-size:11px;color:var(--ies-gray-400);text-align:right;">Looking for full historical charts? They live in <a href="#marketmap" style="color:var(--ies-gray-500);">Market Explorer →</a></p>
     </div>
   `;
 
   bindEvents();
-  matchAlertHeight();
-  initCharts();
+}
+
+/**
+ * Vital Sign tile — KPI value + delta badge + inline sparkline.
+ * Replaces the earlier kpiCard + the separate trend chart grid.
+ */
+function vitalSignTile(label, value, unit, trend, color, change, sparkData) {
+  const trendArrow = trend === 'up' ? '↑' : trend === 'down' ? '↓' : '→';
+  const trendColor = trend === 'up' ? '#dc2626' : trend === 'down' ? '#16a34a' : '#6b7280';
+  // For RFP Signals (and other "more is good") we don't want red on uptick.
+  const isCountKpi = unit === 'active';
+  const finalTrendColor = isCountKpi
+    ? (trend === 'up' ? '#16a34a' : trend === 'down' ? '#dc2626' : '#6b7280')
+    : trendColor;
+  return `
+    <div class="hub-card cc-kpi-tip" style="padding:12px 14px;display:flex;flex-direction:column;gap:6px;cursor:default;position:relative;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+        <span style="font-size:11px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:.04em;">${label}</span>
+        <span style="font-size:11px;font-weight:800;color:${finalTrendColor};">${trendArrow}</span>
+      </div>
+      <div style="display:flex;align-items:baseline;gap:4px;">
+        <span style="font-size:22px;font-weight:800;color:${color};line-height:1;">${value}</span>
+        ${unit ? `<span style="font-size:11px;color:var(--ies-gray-500);">${unit}</span>` : ''}
+      </div>
+      ${renderSparkline(sparkData, color)}
+      <div style="font-size:10px;color:var(--ies-gray-500);margin-top:2px;">${change}</div>
+    </div>
+  `;
+}
+
+/** Inline SVG sparkline. Returns an empty string if no data. */
+function renderSparkline(data, color) {
+  if (!Array.isArray(data) || data.length < 2) return '';
+  const w = 140, h = 28, pad = 2;
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+  const stepX = (w - pad * 2) / (data.length - 1);
+  const pts = data.map((v, i) => {
+    const x = pad + i * stepX;
+    const y = h - pad - ((v - min) / range) * (h - pad * 2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  // Fill polygon below the line.
+  const fillPts = `${pad},${h - pad} ${pts} ${pad + (data.length - 1) * stepX},${h - pad}`;
+  return `
+    <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:28px;display:block;" preserveAspectRatio="none">
+      <polygon points="${fillPts}" fill="${color}" fill-opacity="0.10"/>
+      <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+    </svg>
+  `;
+}
+
+/** Pipeline Snapshot — active deal count + pipeline $ + stage distribution mini-bar. */
+function renderPipelineSnapshot(p) {
+  if (!p) return '';
+  const totalDeals = p.activeDeals || 0;
+  const stageNames = ['Pre-Sales', 'Qual', 'Design', 'Ops', 'Exec', 'Handover'];
+  const stageColors = ['#6b7280', '#2563eb', '#7c3aed', '#d97706', '#ea580c', '#16a34a'];
+  const counts = p.stageCounts || [];
+  const sumCounts = counts.reduce((s, n) => s + (n || 0), 0) || 1;
+  return `
+    <a href="#deals" class="hub-card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px;text-decoration:none;color:inherit;cursor:pointer;">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div style="font-size:13px;font-weight:700;">Pipeline Snapshot</div>
+        <span style="font-size:11px;color:#2563eb;font-weight:700;">Open Deal Mgmt →</span>
+      </div>
+      <div style="display:flex;gap:14px;align-items:baseline;">
+        <div>
+          <div style="font-size:24px;font-weight:800;color:#1c1c1c;line-height:1;">${totalDeals}</div>
+          <div style="font-size:10px;color:var(--ies-gray-500);font-weight:600;text-transform:uppercase;letter-spacing:.04em;">Active deals</div>
+        </div>
+        <div>
+          <div style="font-size:20px;font-weight:800;color:#16a34a;line-height:1;">$${(p.totalRevenue / 1e6).toFixed(0)}M</div>
+          <div style="font-size:10px;color:var(--ies-gray-500);font-weight:600;text-transform:uppercase;letter-spacing:.04em;">Pipeline</div>
+        </div>
+        <div>
+          <div style="font-size:20px;font-weight:800;color:#7c3aed;line-height:1;">${(p.avgMargin || 0).toFixed(1)}%</div>
+          <div style="font-size:10px;color:var(--ies-gray-500);font-weight:600;text-transform:uppercase;letter-spacing:.04em;">Avg margin</div>
+        </div>
+      </div>
+      <div>
+        <div style="display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--ies-gray-100);">
+          ${counts.map((n, i) => n > 0 ? `<div style="flex:${n};background:${stageColors[i]};" title="${stageNames[i]}: ${n}"></div>` : '').join('')}
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:9px;color:var(--ies-gray-400);font-weight:600;">
+          ${stageNames.map((n, i) => `<span title="${n}: ${counts[i] || 0}">${n}</span>`).join('')}
+        </div>
+      </div>
+    </a>
+  `;
+}
+
+/** Tool Shortcuts — quick-launch into the most-used Design Tools. */
+function renderToolShortcuts() {
+  const tools = [
+    { route: 'designtools/cost-model',       label: 'Cost Model Builder',         color: '#ff3a00' },
+    { route: 'designtools/warehouse-sizing', label: 'Warehouse Sizing',           color: '#0047AB' },
+    { route: 'designtools/network-opt',      label: 'Network Optimization',       color: '#20c997' },
+    { route: 'designtools/fleet-modeler',    label: 'Fleet Modeler',              color: '#20c997' },
+  ];
+  return `
+    <div class="hub-card" style="padding:14px 16px;">
+      <div style="font-size:13px;font-weight:700;margin-bottom:10px;">Tool Shortcuts</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+        ${tools.map(t => `
+          <a href="#${t.route}" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;background:var(--ies-gray-50);text-decoration:none;color:inherit;cursor:pointer;font-size:12px;font-weight:600;color:var(--ies-gray-700);" onmouseover="this.style.background='var(--ies-gray-100)'" onmouseout="this.style.background='var(--ies-gray-50)'">
+            <span style="width:6px;height:24px;border-radius:2px;background:${t.color};flex-shrink:0;"></span>
+            ${t.label}
+          </a>
+        `).join('')}
+      </div>
+    </div>
+  `;
 }
 
 /** Match the alerts list area to the sector pulse grid height (minus header) */
