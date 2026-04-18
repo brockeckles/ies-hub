@@ -6,13 +6,13 @@
  * @module tools/fleet-modeler/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import { state } from '../../shared/state.js?v=20260418-sK';
-import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sK';
-import { showToast } from '../../shared/toast.js?v=20260418-sK';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sK';
-import * as calc from './calc.js?v=20260418-sK';
-import * as api from './api.js?v=20260418-sK';
+import { bus } from '../../shared/event-bus.js?v=20260418-sM';
+import { state } from '../../shared/state.js?v=20260418-sM';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sM';
+import { showToast } from '../../shared/toast.js?v=20260418-sM';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sM';
+import * as calc from './calc.js?v=20260418-sM';
+import * as api from './api.js?v=20260418-sM';
 
 // ============================================================
 // STATE
@@ -24,20 +24,28 @@ let rootEl = null;
 /** @type {'lanes' | 'config' | 'results' | 'map'} */
 let activeTab = 'lanes';
 
-/** @type {import('./types.js?v=20260418-sK').Lane[]} */
+/** @type {import('./types.js?v=20260418-sM').Lane[]} */
 let lanes = [];
 
-/** @type {import('./types.js?v=20260418-sK').VehicleSpec[]} */
+/** @type {import('./types.js?v=20260418-sM').VehicleSpec[]} */
 let vehicles = calc.DEFAULT_VEHICLES.map(v => ({ ...v }));
 
-/** @type {import('./types.js?v=20260418-sK').FleetConfig} */
+/** @type {import('./types.js?v=20260418-sM').FleetConfig} */
 let config = { ...calc.DEFAULT_CONFIG };
 
-/** @type {import('./types.js?v=20260418-sK').FleetResult|null} */
+/** @type {import('./types.js?v=20260418-sM').FleetResult|null} */
 let result = null;
 
 /** @type {object|null} */
 let mapInstance = null;
+
+/**
+ * Carrier rate deck loaded from ref_fleet_carrier_rates.
+ * Stays as the raw row array; calc.indexCarrierDeck materialises a
+ * vehicleType→rate map at run time.
+ * @type {Array<import('./api.js?v=20260418-sM').CarrierRate>}
+ */
+let carrierRateDeck = [];
 
 // ============================================================
 // LIFECYCLE
@@ -118,6 +126,17 @@ function openEditor(savedRow) {
   rootEl.querySelector('[data-action="fleet-back"]')?.addEventListener('click', async () => {
     await renderLanding();
   });
+
+  // Pull the carrier rate deck in the background; re-render Config if user
+  // is already there when it arrives.
+  (async () => {
+    try {
+      carrierRateDeck = await api.listCarrierRates();
+    } catch (e) {
+      carrierRateDeck = api.DEFAULT_CARRIER_RATES;
+    }
+    if (activeTab === 'config') renderContent();
+  })();
 }
 
 /**
@@ -180,7 +199,8 @@ function bindShellEvents() {
 
   const runBtn = rootEl.querySelector('[data-primary-action="fleet-run"]');
   runBtn?.addEventListener('click', () => {
-    result = calc.analyzeFleet(lanes, vehicles, config);
+    const deckMap = carrierRateDeck.length ? calc.indexCarrierDeck(carrierRateDeck) : undefined;
+    result = calc.analyzeFleet(lanes, vehicles, config, deckMap);
     activeTab = 'results';
     rootEl.querySelectorAll('#fm-tabs button').forEach(b => {
       b.classList.toggle('active', b.dataset.tab === activeTab);
@@ -424,6 +444,57 @@ function renderConfig(el) {
           </label>
         </div>
       </div>
+
+      <h3 class="text-section" style="margin-top:24px;margin-bottom:16px;">
+        Common-Carrier Rate Deck
+        <span style="font-size:11px;font-weight:400;color:var(--ies-gray-400);margin-left:8px;">drives the carrier column of the 3-way comparison</span>
+      </h3>
+      <div class="hub-card" style="padding:16px;">
+        ${carrierRateDeck.length === 0 ? `
+          <div style="padding:14px;text-align:center;color:var(--ies-gray-400);font-size:12px;">Loading carrier rate deck…</div>
+        ` : `
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead>
+              <tr style="border-bottom:2px solid var(--ies-gray-200);">
+                <th style="text-align:left;padding:6px;font-weight:700;">Vehicle Type</th>
+                <th style="text-align:right;padding:6px;font-weight:700;">Base Rate</th>
+                <th style="text-align:right;padding:6px;font-weight:700;">Fuel Surcharge</th>
+                <th style="text-align:right;padding:6px;font-weight:700;">Min Charge</th>
+                <th style="text-align:right;padding:6px;font-weight:700;">Effective</th>
+                <th style="text-align:left;padding:6px;font-weight:700;">Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${carrierRateDeck.map(rate => {
+                const eff = (rate.base_rate_per_mile || 0) * (1 + (rate.fuel_surcharge_pct || 0));
+                return `
+                  <tr style="border-bottom:1px solid var(--ies-gray-200);">
+                    <td style="padding:6px;font-weight:600;">${rate.display_name}<div style="font-size:10px;color:var(--ies-gray-400);font-weight:400;">${rate.vehicle_type}</div></td>
+                    <td style="padding:6px;text-align:right;">
+                      <input type="number" step="0.01" value="${rate.base_rate_per_mile}" data-rate-id="${rate.id}" data-rate-field="base_rate_per_mile"
+                             style="width:80px;padding:4px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:12px;text-align:right;">
+                      <span style="font-size:10px;color:var(--ies-gray-400);">/mi</span>
+                    </td>
+                    <td style="padding:6px;text-align:right;">
+                      <input type="number" step="0.01" value="${rate.fuel_surcharge_pct}" data-rate-id="${rate.id}" data-rate-field="fuel_surcharge_pct"
+                             style="width:70px;padding:4px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:12px;text-align:right;">
+                    </td>
+                    <td style="padding:6px;text-align:right;">
+                      <input type="number" step="5" value="${rate.min_charge}" data-rate-id="${rate.id}" data-rate-field="min_charge"
+                             style="width:70px;padding:4px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:12px;text-align:right;">
+                    </td>
+                    <td style="padding:6px;text-align:right;font-weight:600;color:var(--ies-blue);">$${eff.toFixed(2)}/mi</td>
+                    <td style="padding:6px;font-size:11px;color:var(--ies-gray-500);">${rate.notes || ''}</td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+          <div style="margin-top:10px;padding:8px 12px;background:#eff6ff;border-left:3px solid var(--ies-blue);font-size:11px;color:#1e40af;">
+            Edits save to <code>ref_fleet_carrier_rates</code> on blur. Effective rate = base × (1 + fuel surcharge). Click <strong>Calculate Fleet</strong> to recompute the 3-way comparison.
+          </div>
+        `}
+      </div>
     </div>
   `;
 
@@ -433,6 +504,30 @@ function renderConfig(el) {
       const idx = parseInt(/** @type {HTMLElement} */ (cb).dataset.vehToggle);
       vehicles[idx].enabled = /** @type {HTMLInputElement} */ (cb).checked;
       renderConfig(el);
+    });
+  });
+
+  // Carrier rate-deck inline edits — save on blur, also update the in-memory deck
+  el.querySelectorAll('[data-rate-id][data-rate-field]').forEach(input => {
+    input.addEventListener('change', async (e) => {
+      const target = /** @type {HTMLInputElement} */ (e.target);
+      const id = parseInt(target.dataset.rateId);
+      const field = target.dataset.rateField;
+      const val = parseFloat(target.value);
+      if (!Number.isFinite(val)) return;
+      // Update local deck immediately so re-renders show the new effective rate
+      const row = carrierRateDeck.find(r => r.id === id);
+      if (row) row[field] = val;
+      renderConfig(el);
+      // Persist if id is a real Supabase row (negative ids are local fallback defaults)
+      if (id > 0) {
+        try {
+          await api.updateCarrierRate(id, { [field]: val });
+          showToast(`Updated ${row?.display_name || 'rate'}`, 'success');
+        } catch (err) {
+          showToast(`Save failed: ${err.message || 'unknown'}`, 'error');
+        }
+      }
     });
   });
 
@@ -868,7 +963,7 @@ async function exportFleetXLSX() {
 
   try {
     // Dynamically import XLSX utilities
-    const { downloadXLSX } = await import('../../shared/export.js?v=20260418-sK');
+    const { downloadXLSX } = await import('../../shared/export.js?v=20260418-sM');
 
     // Prepare sheet data
     const sheets = [];
