@@ -162,8 +162,8 @@ export function parcelCost(weight, miles, zoneRates = DEFAULT_RATES.parcelZoneRa
  * Compute blended transportation cost based on mode mix.
  * @param {number} miles
  * @param {number} avgWeight — lbs per shipment
- * @param {import('./types.js?v=20260417-mI').ModeMix} modeMix
- * @param {import('./types.js?v=20260417-mI').RateCard} [rateCard]
+ * @param {import('./types.js?v=20260418-s1').ModeMix} modeMix
+ * @param {import('./types.js?v=20260418-s1').RateCard} [rateCard]
  * @returns {{ tlCost: number, ltlCost: number, parcelCost: number, blendedCost: number }}
  */
 export function blendedLaneCost(miles, avgWeight, modeMix, rateCard = DEFAULT_RATES) {
@@ -186,12 +186,12 @@ export function blendedLaneCost(miles, avgWeight, modeMix, rateCard = DEFAULT_RA
 
 /**
  * Assign each demand point to nearest open facility.
- * @param {import('./types.js?v=20260417-mI').Facility[]} facilities
- * @param {import('./types.js?v=20260417-mI').DemandPoint[]} demands
- * @param {import('./types.js?v=20260417-mI').ModeMix} modeMix
- * @param {import('./types.js?v=20260417-mI').RateCard} [rateCard]
- * @param {import('./types.js?v=20260417-mI').ServiceConfig} [serviceConfig]
- * @returns {import('./types.js?v=20260417-mI').LaneCost[]}
+ * @param {import('./types.js?v=20260418-s1').Facility[]} facilities
+ * @param {import('./types.js?v=20260418-s1').DemandPoint[]} demands
+ * @param {import('./types.js?v=20260418-s1').ModeMix} modeMix
+ * @param {import('./types.js?v=20260418-s1').RateCard} [rateCard]
+ * @param {import('./types.js?v=20260418-s1').ServiceConfig} [serviceConfig]
+ * @returns {import('./types.js?v=20260418-s1').LaneCost[]}
  */
 export function assignDemand(facilities, demands, modeMix, rateCard = DEFAULT_RATES, serviceConfig = DEFAULT_SERVICE) {
   const openFacilities = facilities.filter(f => f.isOpen !== false);
@@ -237,12 +237,12 @@ export function assignDemand(facilities, demands, modeMix, rateCard = DEFAULT_RA
 /**
  * Evaluate a network scenario.
  * @param {string} name
- * @param {import('./types.js?v=20260417-mI').Facility[]} facilities
- * @param {import('./types.js?v=20260417-mI').DemandPoint[]} demands
- * @param {import('./types.js?v=20260417-mI').ModeMix} modeMix
- * @param {import('./types.js?v=20260417-mI').RateCard} [rateCard]
- * @param {import('./types.js?v=20260417-mI').ServiceConfig} [serviceConfig]
- * @returns {import('./types.js?v=20260417-mI').ScenarioResult}
+ * @param {import('./types.js?v=20260418-s1').Facility[]} facilities
+ * @param {import('./types.js?v=20260418-s1').DemandPoint[]} demands
+ * @param {import('./types.js?v=20260418-s1').ModeMix} modeMix
+ * @param {import('./types.js?v=20260418-s1').RateCard} [rateCard]
+ * @param {import('./types.js?v=20260418-s1').ServiceConfig} [serviceConfig]
+ * @returns {import('./types.js?v=20260418-s1').ScenarioResult}
  */
 export function evaluateScenario(name, facilities, demands, modeMix, rateCard, serviceConfig) {
   const assignments = assignDemand(facilities, demands, modeMix, rateCard, serviceConfig);
@@ -277,8 +277,8 @@ export function evaluateScenario(name, facilities, demands, modeMix, rateCard, s
 
 /**
  * Compare multiple scenarios.
- * @param {import('./types.js?v=20260417-mI').ScenarioResult[]} scenarios
- * @returns {Array<import('./types.js?v=20260417-mI').ScenarioResult & { verdict: string, deltaPct: number }>}
+ * @param {import('./types.js?v=20260418-s1').ScenarioResult[]} scenarios
+ * @returns {Array<import('./types.js?v=20260418-s1').ScenarioResult & { verdict: string, deltaPct: number }>}
  */
 export function compareScenarios(scenarios) {
   if (!scenarios.length) return [];
@@ -359,13 +359,13 @@ function getCombinations(arr, k) {
 /**
  * Exact solver: enumerate all combinations of candidate facility locations.
  * Finds the provably optimal solution by brute force. Returns null if space is too large.
- * @param {import('./types.js?v=20260417-mI').Facility[]} facilities
- * @param {import('./types.js?v=20260417-mI').DemandPoint[]} demands
+ * @param {import('./types.js?v=20260418-s1').Facility[]} facilities
+ * @param {import('./types.js?v=20260418-s1').DemandPoint[]} demands
  * @param {number} maxFacilities — max number of DCs to test
- * @param {import('./types.js?v=20260417-mI').ModeMix} modeMix
- * @param {import('./types.js?v=20260417-mI').RateCard} [rateCard]
- * @param {import('./types.js?v=20260417-mI').ServiceConfig} [serviceConfig]
- * @returns {{scenarios: import('./types.js?v=20260417-mI').ScenarioResult[], optimal: import('./types.js?v=20260417-mI').ScenarioResult|null} | null}
+ * @param {import('./types.js?v=20260418-s1').ModeMix} modeMix
+ * @param {import('./types.js?v=20260418-s1').RateCard} [rateCard]
+ * @param {import('./types.js?v=20260418-s1').ServiceConfig} [serviceConfig]
+ * @returns {{scenarios: import('./types.js?v=20260418-s1').ScenarioResult[], optimal: import('./types.js?v=20260418-s1').ScenarioResult|null} | null}
  */
 export function exactSolver(facilities, demands, maxFacilities, modeMix, rateCard = DEFAULT_RATES, serviceConfig = DEFAULT_SERVICE) {
   const openCandidates = facilities.filter(f => f.isOpen !== false);
@@ -422,13 +422,13 @@ function binomialCoeff(n, k) {
 
 /**
  * Run optimization for k=1 through maxDCs, return array of results.
- * @param {import('./types.js?v=20260417-mI').Facility[]} facilities
- * @param {import('./types.js?v=20260417-mI').DemandPoint[]} demands
- * @param {import('./types.js?v=20260417-mI').ModeMix} modeMix
- * @param {import('./types.js?v=20260417-mI').RateCard} [rateCard]
- * @param {import('./types.js?v=20260417-mI').ServiceConfig} [serviceConfig]
+ * @param {import('./types.js?v=20260418-s1').Facility[]} facilities
+ * @param {import('./types.js?v=20260418-s1').DemandPoint[]} demands
+ * @param {import('./types.js?v=20260418-s1').ModeMix} modeMix
+ * @param {import('./types.js?v=20260418-s1').RateCard} [rateCard]
+ * @param {import('./types.js?v=20260418-s1').ServiceConfig} [serviceConfig]
  * @param {number} [maxDCs=5]
- * @returns {import('./types.js?v=20260417-mI').ScenarioResult[]}
+ * @returns {import('./types.js?v=20260418-s1').ScenarioResult[]}
  */
 export function multiDCComparison(facilities, demands, modeMix, rateCard = DEFAULT_RATES, serviceConfig = DEFAULT_SERVICE, maxDCs = 5) {
   const results = [];
@@ -452,7 +452,7 @@ export function multiDCComparison(facilities, demands, modeMix, rateCard = DEFAU
 /**
  * Recommend optimal DC count using elbow method.
  * Finds where marginal improvement drops below threshold (8%).
- * @param {import('./types.js?v=20260417-mI').ScenarioResult[]} comparisonResults
+ * @param {import('./types.js?v=20260418-s1').ScenarioResult[]} comparisonResults
  * @returns {{recommendedIdx: number, recommendation: string, savings: number, savingsPct: number}}
  */
 export function recommendOptimalDCs(comparisonResults) {
@@ -503,7 +503,7 @@ export function recommendOptimalDCs(comparisonResults) {
  * @param {number} distance — miles
  * @param {number} weight — lbs
  * @param {string} freightClass — e.g., '85', '100', '125' (NMFC class)
- * @param {import('./types.js?v=20260417-mI').RateCard} [rateCard]
+ * @param {import('./types.js?v=20260418-s1').RateCard} [rateCard]
  * @returns {number}
  */
 export function calcLTLCost(distance, weight, freightClass, rateCard = DEFAULT_RATES) {
@@ -523,7 +523,7 @@ export function calcLTLCost(distance, weight, freightClass, rateCard = DEFAULT_R
  * @param {number} distance — miles
  * @param {number} weight — lbs
  * @param {string} carrier — e.g., 'ups', 'fedex', 'usps'
- * @param {import('./types.js?v=20260417-mI').RateCard} [rateCard]
+ * @param {import('./types.js?v=20260418-s1').RateCard} [rateCard]
  * @returns {number}
  */
 export function calcParcelCost(distance, weight, carrier, rateCard = DEFAULT_RATES) {

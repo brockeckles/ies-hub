@@ -23,7 +23,7 @@ export async function fetchDashboardData() {
 
   try {
     // Attempt to fetch live data from Supabase
-    const [fuelRows, laborRows, freightRows, newsRows, alertRows, rfpRows, steelRows] = await Promise.all([
+    const [fuelRows, laborRows, freightRows, newsRows, alertRows, rfpRows, steelRows, realEstateRows, tariffRows, accountRows] = await Promise.all([
       db.fetchAll('fuel_prices').catch(() => []),
       db.fetchAll('labor_markets').catch(() => []),
       db.fetchAll('freight_rates').catch(() => []),
@@ -31,6 +31,9 @@ export async function fetchDashboardData() {
       safeAlertFetch(),
       db.fetchAll('rfp_signals').catch(() => []),
       db.fetchAll('steel_prices').catch(() => []),
+      db.fetchAll('industrial_real_estate').catch(() => []),
+      db.fetchAll('tariff_developments').catch(() => []),
+      db.fetchAll('account_signals').catch(() => []),
     ]);
 
     // If we got any data, we're connected
@@ -63,6 +66,32 @@ export async function fetchDashboardData() {
           const change = wow > 0 ? `+${wow.toFixed(1)}% WoW` : wow < 0 ? `${wow.toFixed(1)}% WoW` : 'Flat WoW';
           if (price > 0) kpis = { ...kpis, steelPrice: price, steelUnit: latestSteel.unit || '$/ton', steelTrend: trend, steelChange: change };
         }
+      }
+
+      // Industrial Real Estate — avg lease rate ($/sqft/yr NNN) across markets
+      if (realEstateRows.length) {
+        // Latest quarter per market
+        const byMarket = new Map();
+        for (const r of realEstateRows) {
+          const key = r.market;
+          if (!key) continue;
+          const prev = byMarket.get(key);
+          if (!prev || (r.quarter || '') > (prev.quarter || '')) byMarket.set(key, r);
+        }
+        const latest = Array.from(byMarket.values());
+        if (latest.length) {
+          const avgRate = latest.reduce((s, r) => s + parseFloat(r.lease_rate_psf || 0), 0) / latest.length;
+          const avgYoY = latest.reduce((s, r) => s + parseFloat(r.yoy_change || 0), 0) / latest.length;
+          const trend = avgYoY > 0.5 ? 'up' : avgYoY < -0.5 ? 'down' : 'neutral';
+          const change = avgYoY > 0 ? `+${avgYoY.toFixed(1)}% YoY` : avgYoY < 0 ? `${avgYoY.toFixed(1)}% YoY` : 'Flat YoY';
+          kpis = { ...kpis, avgWarehouseRate: avgRate, warehouseRateTrend: trend, warehouseRateChange: change };
+        }
+      }
+
+      // Active RFP Signals count
+      if (rfpRows.length) {
+        const active = rfpRows.filter(r => (r.status || 'active') === 'active').length;
+        kpis = { ...kpis, rfpSignalCount: active, rfpSignalChange: `${active} in pipeline`, rfpSignalTrend: active > 3 ? 'up' : 'neutral' };
       }
 
       // Build alerts from live data
@@ -108,15 +137,54 @@ export async function fetchDashboardData() {
     console.warn('[CC] Supabase fetch failed, using demo data:', err.message);
   }
 
+  // Build intelligence feed (All / Competitor / Accounts / Tariff / RFP)
+  // from the live data we already fetched.
+  const intel = buildIntelligenceFeed({
+    competitor: newsRows,
+    accounts: accountRows,
+    tariff: tariffRows,
+    rfp: rfpRows,
+  });
+
   return {
     supabaseConnected,
     kpis,
     sectors,
     alerts,
     rfpSignals,
+    intel,
     pipeline: DEMO_PIPELINE,
     activity: DEMO_ACTIVITY,
   };
+}
+
+/**
+ * Combine the four intel streams into a single structure with all + per-category.
+ * @param {{competitor: any[], accounts: any[], tariff: any[], rfp: any[]}} src
+ * @returns {{all: any[], competitor: any[], accounts: any[], tariff: any[], rfp: any[]}}
+ */
+function buildIntelligenceFeed(src) {
+  const toItem = (r, category) => ({
+    category,
+    title: r.headline || r.title || r.company || r.signal_type || 'Signal',
+    detail: r.summary || r.detail || r.description || r.message || '',
+    severity: r.severity || 'info',
+    source: r.source || '',
+    source_url: r.source_url || '',
+    at: r.created_at || r.date || r.published_at || null,
+    relDate: formatRelative(r.created_at || r.date || r.published_at || new Date().toISOString()),
+  });
+
+  const competitor = (src.competitor || []).slice(0, 25).map(r => toItem(r, 'Competitor'));
+  const accounts = (src.accounts || []).slice(0, 25).map(r => toItem(r, 'Accounts'));
+  const tariff = (src.tariff || []).slice(0, 25).map(r => toItem(r, 'Tariff'));
+  const rfp = (src.rfp || []).slice(0, 25).map(r => toItem(r, 'RFP'));
+
+  const all = [...competitor, ...accounts, ...tariff, ...rfp]
+    .sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')))
+    .slice(0, 50);
+
+  return { all, competitor, accounts, tariff, rfp };
 }
 
 /**
@@ -304,6 +372,12 @@ const DEMO_KPIS = {
   steelUnit: '$/ton',
   steelTrend: 'up',
   steelChange: '+0.8% WoW',
+  avgWarehouseRate: 8.90,
+  warehouseRateTrend: 'up',
+  warehouseRateChange: '+2.9% YoY',
+  rfpSignalCount: 5,
+  rfpSignalTrend: 'up',
+  rfpSignalChange: '5 in pipeline',
 };
 
 const DEMO_SECTORS = {

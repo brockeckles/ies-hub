@@ -11,24 +11,24 @@
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
   <!-- CDN Libraries (shared — always loaded) -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js?v=20260417-mI"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js?v=20260418-s1"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 
   <!-- CDN Libraries (per-tool — loaded on demand by tool UI) -->
   <!-- Leaflet: COG, NetOpt, Fleet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js?v=20260417-mI" defer></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js?v=20260418-s1" defer></script>
   <!-- Three.js: WSC only -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js?v=20260417-mI" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js?v=20260418-s1" defer></script>
   <!-- SheetJS: Cost Model Excel export (loads as global window.XLSX) -->
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js?v=20260417-mI"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js?v=20260418-s1"></script>
   <!-- PptxGenJS: Deck Generator (re-enabled 2026-04-17 PM) -->
-  <script src="https://cdn.jsdelivr.net/gh/gitbrent/PptxGenJS@3.12.0/dist/pptxgen.bundle.js?v=20260417-mI"></script>
+  <script src="https://cdn.jsdelivr.net/gh/gitbrent/PptxGenJS@3.12.0/dist/pptxgen.bundle.js?v=20260418-s1"></script>
 
   <!-- Module Preloads (shared core) -->
-  <link rel="modulepreload" href="./shared/event-bus.js?v=20260417-mI">
-  <link rel="modulepreload" href="./shared/state.js?v=20260417-mI">
-  <link rel="modulepreload" href="./shared/router.js?v=20260417-mI">
+  <link rel="modulepreload" href="./shared/event-bus.js?v=20260418-s1">
+  <link rel="modulepreload" href="./shared/state.js?v=20260418-s1">
+  <link rel="modulepreload" href="./shared/router.js?v=20260418-s1">
 
   <!-- Design System -->
   <link rel="stylesheet" href="./css/hub.css">
@@ -161,6 +161,28 @@
 
     <!-- Main Content -->
     <main class="hub-main">
+
+      <!-- Top header bar: breadcrumb (left) + action buttons (right) -->
+      <div class="hub-main-header" id="hub-main-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 24px;background:#fff;border-bottom:1px solid var(--ies-gray-200);min-height:44px;">
+        <nav class="hub-breadcrumb" id="hub-breadcrumb" style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:var(--ies-gray-600);min-height:22px;">
+          <!-- rendered by initBreadcrumb() on nav:changed -->
+        </nav>
+        <div class="hub-header-actions" style="display:flex;align-items:center;gap:4px;">
+          <button type="button" id="hub-btn-tour" title="Start guided tour" aria-label="Start guided tour"
+            style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid var(--ies-gray-200);background:#fff;border-radius:8px;color:var(--ies-gray-600);cursor:pointer;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 115.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </button>
+          <button type="button" id="hub-btn-refresh" title="Reload current view (Shift+R)" aria-label="Reload current view"
+            style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid var(--ies-gray-200);background:#fff;border-radius:8px;color:var(--ies-gray-600);cursor:pointer;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+          </button>
+          <button type="button" id="hub-btn-help" title="Help & shortcuts" aria-label="Help"
+            style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid var(--ies-gray-200);background:#fff;border-radius:8px;color:var(--ies-gray-600);cursor:pointer;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0018 8 6 6 0 006 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 018.91 14"/></svg>
+          </button>
+        </div>
+      </div>
+
       <div class="hub-content" id="hub-content">
         <!-- Router mounts views here -->
       </div>
@@ -170,11 +192,20 @@
 
   <!-- App Bootstrap -->
   <script type="module">
-    import { auth } from './shared/auth.js?v=20260417-mI';
-    import { router } from './shared/router.js?v=20260417-mI';
-    import { search } from './shared/search.js?v=20260417-mI';
-    import { bus } from './shared/event-bus.js?v=20260417-mI';
-    import { state } from './shared/state.js?v=20260417-mI';
+    import { auth } from './shared/auth.js?v=20260418-s1';
+    import { router } from './shared/router.js?v=20260418-s1';
+    import { search } from './shared/search.js?v=20260418-s1';
+    import { bus } from './shared/event-bus.js?v=20260418-s1';
+    import { state } from './shared/state.js?v=20260418-s1';
+    // Shared UX modules — self-wire their listeners/guards on import.
+    import { showToast } from './shared/toast.js?v=20260418-s1';
+    import './shared/unsaved-guard.js?v=20260418-s1';
+    import { tour } from './shared/tour.js?v=20260418-s1';
+    import { analytics } from './shared/analytics.js?v=20260418-s1';
+    // Expose a couple of helpers for inline handlers + console debugging.
+    window.__hubToast = showToast;
+    window.__hubTour = tour;
+    window.__hubAnalytics = analytics;
 
     // ---- Auth Gate ----
     const authOverlay = document.getElementById('auth-overlay');
@@ -187,6 +218,8 @@
       initSearch();
       initSidebar();
       initKeyboardShortcuts();
+      initBreadcrumb();
+      initHeaderActions();
     }
 
     if (auth.isAuthenticated()) {
@@ -203,36 +236,148 @@
       // (Hub Guide / "welcome" route removed 2026-04-17 PM — Training Wiki
       // covers onboarding content now; Hub Guide was redundant.)
 
-      // Design Tools landing (inline)
+      // Design Tools landing (inline) — category headers + filter tabs + beta
+      // banner + wiki callout + fuller card descriptions.
       router.register('designtools', {
         title: 'Design Tools',
         load: async () => ({
           mount(el) {
             const tools = [
-              { key: 'cost-model', name: 'Cost Model Builder', desc: '13-section pricing model with P&L', cat: 'Pricing' },
-              { key: 'deal-manager', name: 'Multi-Site Analyzer', desc: 'Multi-facility deal comparison', cat: 'Deal Strategy' },
-              { key: 'warehouse-sizing', name: 'Warehouse Sizing Calculator', desc: '3D facility planning with elevation views', cat: 'Facility' },
-              { key: 'most-standards', name: 'MOST Labor Standards', desc: 'Template-based labor time studies', cat: 'Labor' },
-              { key: 'center-of-gravity', name: 'Center of Gravity', desc: 'Optimal facility location analysis', cat: 'Logistics' },
-              { key: 'network-opt', name: 'Network Optimization', desc: 'TL/LTL/Parcel freight optimization', cat: 'Logistics' },
-              { key: 'fleet-modeler', name: 'Fleet Modeler', desc: 'Fleet sizing and route cost analysis', cat: 'Logistics' },
+              { key: 'cost-model', name: 'Cost Model Builder', category: 'Solutions',
+                desc: '13-section deal pricing engine. Build operating P&Ls, apply market rates and escalation, run sensitivity on margin and payback. Export to Excel, link to a deal.',
+                iconFill: '#ff3a00',
+                iconPath: '<path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 6-6"/>' },
+              { key: 'deal-manager', name: 'Multi-Site Analyzer', category: 'Solutions',
+                desc: 'Compare multiple site scenarios side-by-side — total cost, payback, headcount, facility footprint. Roll up into a single deal view with drag-to-combine.',
+                iconFill: '#ff3a00',
+                iconPath: '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>' },
+              { key: 'warehouse-sizing', name: 'Warehouse Sizing Calculator', category: 'Engineering',
+                desc: 'Size a facility from peak pallets, SKU count, turn rate, and clearance height. Four views — Dashboard, 2D Plan, Elevation, 3D walkthrough. Pushes SF + equipment to Cost Model.',
+                iconFill: '#0047AB',
+                iconPath: '<path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>' },
+              { key: 'most-standards', name: 'MOST Labor Standards', category: 'Engineering',
+                desc: 'Template-based labor time studies. Library of activity → UPH templates tuned to Blue Yonder WMS. Push rows into Cost Model labor section in one click.',
+                iconFill: '#0047AB',
+                iconPath: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>' },
+              { key: 'center-of-gravity', name: 'Center of Gravity', category: 'Logistics',
+                desc: 'Optimal facility siting from customer demand. Weighted-centroid solver, service-zone overlay, and candidate-market ranking with real estate + wage benchmarks.',
+                iconFill: '#20c997',
+                iconPath: '<circle cx="12" cy="10" r="3"/><path d="M12 2a8 8 0 018 8c0 5.5-8 12-8 12s-8-6.5-8-12a8 8 0 018-8z"/>' },
+              { key: 'network-opt', name: 'Network Optimization', category: 'Logistics',
+                desc: 'TL / LTL / Parcel freight mix optimizer. Exact GLPK solver with demand heatmap, flow polylines, sensitivity chart, and CSV rate-card upload. Compare k-DC scenarios.',
+                iconFill: '#20c997',
+                iconPath: '<circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="18" r="3"/><line x1="6" y1="9" x2="6" y2="15"/><line x1="9" y1="6" x2="15" y2="6"/><line x1="18" y1="9" x2="18" y2="15"/><line x1="9" y1="18" x2="15" y2="18"/>' },
+              { key: 'fleet-modeler', name: 'Fleet Modeler', category: 'Logistics',
+                desc: 'Fleet sizing and per-vehicle cost modeling. Lease vs buy vs rent financing, team-driving toggle, ATRI benchmark overlay, 6×6 sensitivity matrix. Route map + waterfall.',
+                iconFill: '#20c997',
+                iconPath: '<rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>' },
             ];
+
+            const categories = ['Solutions', 'Engineering', 'Logistics'];
+            const categoryDesc = {
+              Solutions:   'Deal-facing tools — pricing, comparison, and commercial artifacts.',
+              Engineering: 'Facility + labor engineering — sizing, layout, throughput.',
+              Logistics:   'Network and transportation — siting, routing, fleet.',
+            };
+
             el.innerHTML = `
               <div class="hub-content-inner">
-                <h1 class="text-page mb-6">Design Tools</h1>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--sp-4);">
-                  ${tools.map(t => `
-                    <div class="hub-card hub-card-interactive" onclick="location.hash='designtools/${t.key}'" style="cursor:pointer;">
-                      <div class="flex items-center justify-between mb-2">
-                        <h4 class="text-subtitle">${t.name}</h4>
-                        <span class="hub-badge hub-badge-blue">${t.cat}</span>
-                      </div>
-                      <p class="text-body text-muted">${t.desc}</p>
-                    </div>
-                  `).join('')}
+                <!-- Header -->
+                <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:6px;">
+                  <div>
+                    <h1 class="text-page" style="margin:0;">Design Tools</h1>
+                    <p style="margin:4px 0 0;font-size:13px;color:var(--ies-gray-500);">Seven production tools. Every scenario saves to Supabase and links back to a deal.</p>
+                  </div>
+                  <a href="#training" class="hub-dt-guide-callout" style="text-decoration:none;display:inline-flex;align-items:center;gap:8px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;padding:10px 14px;border-radius:10px;font-weight:700;font-size:12px;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+                    Design Tool Guides →
+                  </a>
+                </div>
+
+                <!-- Beta advisory banner -->
+                <div class="hub-dt-beta-banner" style="margin:14px 0 18px;padding:10px 14px;border-radius:8px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;font-size:12px;font-weight:600;display:flex;align-items:center;gap:10px;">
+                  <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#2563eb;color:#fff;font-weight:800;">β</span>
+                  <span>Design Tools are in active development — calcs are production-grade but layouts may shift session to session. File anything odd in <a href="#feedback" style="color:#1e40af;text-decoration:underline;">Ideas &amp; Feedback</a>.</span>
+                </div>
+
+                <!-- Filter tabs -->
+                <div class="hub-dt-filter-tabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:22px;border-bottom:1px solid var(--ies-gray-200);padding-bottom:12px;">
+                  ${['all', ...tools.map(t => t.key)].map(key => {
+                    const label = key === 'all' ? 'All Tools' : (tools.find(t => t.key === key)?.name || key);
+                    return `<button type="button" data-dt-filter="${key}" class="hub-dt-tab ${key === 'all' ? 'active' : ''}" style="background:${key === 'all' ? '#1c1c1c' : 'transparent'};color:${key === 'all' ? '#fff' : 'var(--ies-gray-700)'};border:1px solid ${key === 'all' ? '#1c1c1c' : 'var(--ies-gray-300)'};border-radius:999px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;">${label}</button>`;
+                  }).join('')}
+                </div>
+
+                <!-- Categorized grids -->
+                <div class="hub-dt-categories">
+                  ${categories.map(cat => {
+                    const catTools = tools.filter(t => t.category === cat);
+                    return `
+                      <section class="hub-dt-category" data-dt-category="${cat}" style="margin-bottom:32px;">
+                        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;">
+                          <h2 style="margin:0;font-size:15px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#1c1c1c;">${cat}</h2>
+                          <span style="font-size:12px;color:var(--ies-gray-500);font-weight:500;">${categoryDesc[cat]}</span>
+                        </div>
+                        <div class="hub-dt-grid" style="display:grid;grid-template-columns:repeat(auto-fill, minmax(320px, 1fr));gap:16px;">
+                          ${catTools.map(t => `
+                            <a href="#designtools/${t.key}" class="hub-dt-card" data-dt-tool="${t.key}" style="display:block;text-decoration:none;color:inherit;background:#fff;border:1px solid var(--ies-gray-200);border-radius:12px;padding:18px;cursor:pointer;transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;">
+                              <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:10px;">
+                                <div style="flex:0 0 auto;width:42px;height:42px;border-radius:10px;background:${t.iconFill};display:flex;align-items:center;justify-content:center;color:#fff;">
+                                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${t.iconPath}</svg>
+                                </div>
+                                <div style="flex:1 1 auto;min-width:0;">
+                                  <h3 style="margin:0;font-size:14px;font-weight:800;color:#1c1c1c;">${t.name}</h3>
+                                  <div style="font-size:11px;color:var(--ies-gray-500);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-top:2px;">${t.category}</div>
+                                </div>
+                              </div>
+                              <p style="margin:0;font-size:13px;line-height:1.5;color:var(--ies-gray-600);">${t.desc}</p>
+                            </a>
+                          `).join('')}
+                        </div>
+                      </section>
+                    `;
+                  }).join('')}
                 </div>
               </div>
             `;
+
+            // Filter tab delegation.
+            const tabs = el.querySelector('.hub-dt-filter-tabs');
+            const cards = () => el.querySelectorAll('.hub-dt-card');
+            const cats = () => el.querySelectorAll('.hub-dt-category');
+            tabs?.addEventListener('click', (e) => {
+              const btn = e.target.closest('[data-dt-filter]');
+              if (!btn) return;
+              const key = btn.dataset.dtFilter;
+              tabs.querySelectorAll('[data-dt-filter]').forEach(b => {
+                const active = b.dataset.dtFilter === key;
+                b.classList.toggle('active', active);
+                b.style.background = active ? '#1c1c1c' : 'transparent';
+                b.style.color = active ? '#fff' : 'var(--ies-gray-700)';
+                b.style.borderColor = active ? '#1c1c1c' : 'var(--ies-gray-300)';
+              });
+              cards().forEach(c => {
+                c.style.display = (key === 'all' || c.dataset.dtTool === key) ? '' : 'none';
+              });
+              cats().forEach(c => {
+                const anyVisible = Array.from(c.querySelectorAll('.hub-dt-card')).some(card => card.style.display !== 'none');
+                c.style.display = anyVisible ? '' : 'none';
+              });
+            });
+
+            // Card hover — subtle lift + orange border.
+            el.querySelectorAll('.hub-dt-card').forEach(card => {
+              card.addEventListener('mouseenter', () => {
+                card.style.transform = 'translateY(-2px)';
+                card.style.boxShadow = '0 6px 16px rgba(0,0,0,.08)';
+                card.style.borderColor = '#ff3a00';
+              });
+              card.addEventListener('mouseleave', () => {
+                card.style.transform = '';
+                card.style.boxShadow = '';
+                card.style.borderColor = 'var(--ies-gray-200)';
+              });
+            });
           },
           unmount() {}
         }),
@@ -240,13 +385,13 @@
 
       // Design Tool sub-routes (lazy loaded)
       const toolRoutes = {
-        'designtools/cost-model': { title: 'Cost Model Builder', path: './tools/cost-model/ui.js?v=20260417-mI' },
-        'designtools/warehouse-sizing': { title: 'Warehouse Sizing Calculator', path: './tools/warehouse-sizing/ui.js?v=20260417-mI' },
-        'designtools/most-standards': { title: 'MOST Labor Standards', path: './tools/most-standards/ui.js?v=20260417-mI' },
-        'designtools/network-opt': { title: 'Network Optimization', path: './tools/network-opt/ui.js?v=20260417-mI' },
-        'designtools/fleet-modeler': { title: 'Fleet Modeler', path: './tools/fleet-modeler/ui.js?v=20260417-mI' },
-        'designtools/center-of-gravity': { title: 'Center of Gravity', path: './tools/center-of-gravity/ui.js?v=20260417-mI' },
-        'designtools/deal-manager': { title: 'Multi-Site Analyzer', path: './tools/deal-manager/ui.js?v=20260417-mI' },
+        'designtools/cost-model': { title: 'Cost Model Builder', path: './tools/cost-model/ui.js?v=20260418-s1' },
+        'designtools/warehouse-sizing': { title: 'Warehouse Sizing Calculator', path: './tools/warehouse-sizing/ui.js?v=20260418-s1' },
+        'designtools/most-standards': { title: 'MOST Labor Standards', path: './tools/most-standards/ui.js?v=20260418-s1' },
+        'designtools/network-opt': { title: 'Network Optimization', path: './tools/network-opt/ui.js?v=20260418-s1' },
+        'designtools/fleet-modeler': { title: 'Fleet Modeler', path: './tools/fleet-modeler/ui.js?v=20260418-s1' },
+        'designtools/center-of-gravity': { title: 'Center of Gravity', path: './tools/center-of-gravity/ui.js?v=20260418-s1' },
+        'designtools/deal-manager': { title: 'Multi-Site Analyzer', path: './tools/deal-manager/ui.js?v=20260418-s1' },
       };
 
       for (const [route, config] of Object.entries(toolRoutes)) {
@@ -258,13 +403,13 @@
 
       // Hub section routes (lazy loaded)
       const hubRoutes = {
-        'overview': { title: 'Command Center', path: './hub/command-center/ui.js?v=20260417-mI' },
-        'marketmap': { title: 'Market Explorer', path: './hub/market-explorer/ui.js?v=20260417-mI' },
-        'deals': { title: 'Deal Management', path: './hub/deal-management/ui.js?v=20260417-mI' },
-        'training': { title: 'Training Wiki', path: './hub/training-wiki/ui.js?v=20260417-mI' },
-        'changemanagement': { title: 'Change Management', path: './hub/change-mgmt/ui.js?v=20260417-mI' },
-        'admin': { title: 'Reference Data', path: './hub/admin/ui.js?v=20260417-mI' },
-        'feedback': { title: 'Ideas & Feedback', path: './hub/feedback/ui.js?v=20260417-mI' },
+        'overview': { title: 'Command Center', path: './hub/command-center/ui.js?v=20260418-s1' },
+        'marketmap': { title: 'Market Explorer', path: './hub/market-explorer/ui.js?v=20260418-s1' },
+        'deals': { title: 'Deal Management', path: './hub/deal-management/ui.js?v=20260418-s1' },
+        'training': { title: 'Training Wiki', path: './hub/training-wiki/ui.js?v=20260418-s1' },
+        'changemanagement': { title: 'Change Management', path: './hub/change-mgmt/ui.js?v=20260418-s1' },
+        'admin': { title: 'Reference Data', path: './hub/admin/ui.js?v=20260418-s1' },
+        'feedback': { title: 'Ideas & Feedback', path: './hub/feedback/ui.js?v=20260418-s1' },
       };
 
       for (const [route, config] of Object.entries(hubRoutes)) {
@@ -334,7 +479,125 @@
           const input = document.querySelector('.hub-search-input');
           if (input) input.focus();
         }
+        // Shift+R — reload current route (dev-friendly)
+        if (e.shiftKey && (e.key === 'R' || e.key === 'r') && !e.metaKey && !e.ctrlKey) {
+          const tag = (e.target && e.target.tagName) || '';
+          if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+          e.preventDefault();
+          reloadCurrentRoute();
+        }
+        // ? — help popover
+        if (e.key === '?' && !e.ctrlKey && !e.metaKey) {
+          const tag = (e.target && e.target.tagName) || '';
+          if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+          toggleHelpPopover();
+        }
       });
+    }
+
+    // ---- Breadcrumb ----
+    const ROUTE_LABELS = {
+      overview: 'Command Center',
+      marketmap: 'Market Explorer',
+      deals: 'Deal Management',
+      designtools: 'Design Tools',
+      training: 'Training Wiki',
+      changemanagement: 'Change Management',
+      feedback: 'Ideas & Feedback',
+      admin: 'Reference Data',
+    };
+    const TOOL_LABELS = {
+      'cost-model': 'Cost Model Builder',
+      'warehouse-sizing': 'Warehouse Sizing Calculator',
+      'most-standards': 'MOST Labor Standards',
+      'network-opt': 'Network Optimization',
+      'fleet-modeler': 'Fleet Modeler',
+      'center-of-gravity': 'Center of Gravity',
+      'deal-manager': 'Multi-Site Analyzer',
+    };
+    function initBreadcrumb() {
+      const el = document.getElementById('hub-breadcrumb');
+      function render({ section, tool }) {
+        if (!el) return;
+        const crumbs = [];
+        const secLabel = ROUTE_LABELS[section] || section;
+        if (tool) {
+          crumbs.push(`<a href="#${section}" style="color:var(--ies-gray-500);text-decoration:none;">${secLabel}</a>`);
+          crumbs.push(`<span style="color:var(--ies-gray-400);">/</span>`);
+          crumbs.push(`<span style="color:var(--ies-gray-800);">${TOOL_LABELS[tool] || tool}</span>`);
+        } else {
+          crumbs.push(`<span style="color:var(--ies-gray-800);">${secLabel}</span>`);
+        }
+        el.innerHTML = crumbs.join('');
+      }
+      bus.on('nav:changed', render);
+      // Initial
+      const initialHash = (window.location.hash.slice(1) || 'overview').split('/');
+      render({ section: initialHash[0], tool: initialHash[1] || null });
+    }
+
+    // ---- Header Action Buttons ----
+    function initHeaderActions() {
+      document.getElementById('hub-btn-refresh')?.addEventListener('click', reloadCurrentRoute);
+      document.getElementById('hub-btn-tour')?.addEventListener('click', () => {
+        const section = (window.location.hash.slice(1) || 'overview').split('/')[0];
+        // Map section → tour name; fall back to 'welcome'.
+        const tourMap = {
+          overview: 'overview', deals: 'deals', designtools: 'designtools',
+          training: 'wiki', admin: 'admin',
+          'designtools/cost-model': 'cost-model',
+          'designtools/warehouse-sizing': 'wsc',
+          'designtools/network-opt': 'netopt',
+          'designtools/most-standards': 'most',
+        };
+        const fullRoute = window.location.hash.slice(1) || 'overview';
+        const tourName = tourMap[fullRoute] || tourMap[section] || 'welcome';
+        if (window.__hubTour) window.__hubTour.start(tourName);
+      });
+      document.getElementById('hub-btn-help')?.addEventListener('click', toggleHelpPopover);
+    }
+
+    function reloadCurrentRoute() {
+      const current = window.location.hash.slice(1) || 'overview';
+      // Force re-mount by navigating to a dummy and back.
+      window.location.hash = '__reload__';
+      setTimeout(() => { window.location.hash = current; }, 10);
+      showToast('Reloaded view', 'info');
+    }
+
+    function toggleHelpPopover() {
+      const existing = document.getElementById('hub-help-popover');
+      if (existing) { existing.remove(); return; }
+      const el = document.createElement('div');
+      el.id = 'hub-help-popover';
+      el.style.cssText = 'position:fixed;top:56px;right:24px;z-index:9997;max-width:340px;background:#fff;border:1px solid var(--ies-gray-200);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.12);padding:16px 18px;font-size:13px;';
+      el.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <div style="font-weight:800;color:#1c1c1c;">Keyboard shortcuts</div>
+          <button type="button" aria-label="Close" style="background:none;border:none;color:var(--ies-gray-500);font-size:18px;cursor:pointer;line-height:1;">×</button>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px;color:var(--ies-gray-700);">
+          <tr><td style="padding:4px 0;"><kbd style="background:#f1f3f5;border:1px solid #dee2e6;border-radius:4px;padding:1px 6px;font-family:monospace;">Ctrl + K</kbd></td><td style="padding:4px 8px;">Global search</td></tr>
+          <tr><td style="padding:4px 0;"><kbd style="background:#f1f3f5;border:1px solid #dee2e6;border-radius:4px;padding:1px 6px;font-family:monospace;">Shift + R</kbd></td><td style="padding:4px 8px;">Reload current view</td></tr>
+          <tr><td style="padding:4px 0;"><kbd style="background:#f1f3f5;border:1px solid #dee2e6;border-radius:4px;padding:1px 6px;font-family:monospace;">?</kbd></td><td style="padding:4px 8px;">Toggle this help</td></tr>
+          <tr><td style="padding:4px 0;"><kbd style="background:#f1f3f5;border:1px solid #dee2e6;border-radius:4px;padding:1px 6px;font-family:monospace;">Esc</kbd></td><td style="padding:4px 8px;">Dismiss tour / modal</td></tr>
+        </table>
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--ies-gray-200);font-size:12px;color:var(--ies-gray-600);">
+          Tip: click the <strong>compass icon</strong> in the header to start a guided tour of whichever page you're on.
+        </div>
+      `;
+      el.querySelector('button').addEventListener('click', () => el.remove());
+      document.body.appendChild(el);
+      // Dismiss on outside click
+      setTimeout(() => {
+        const off = (e) => {
+          if (!el.contains(e.target) && !e.target.closest('#hub-btn-help')) {
+            el.remove();
+            document.removeEventListener('click', off);
+          }
+        };
+        document.addEventListener('click', off);
+      }, 10);
     }
   </script>
 

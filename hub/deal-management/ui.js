@@ -6,13 +6,16 @@
  * @module hub/deal-management/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260417-mI';
+import { bus } from '../../shared/event-bus.js?v=20260418-s1';
+import * as api from './api.js?v=20260418-s1';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
-let viewMode = 'pipeline'; // pipeline | list | detail
+let viewMode = 'pipeline'; // pipeline | list | customers | hours | detail
 let selectedDeal = null;
-let detailTab = 'overview'; // overview | sites | dos | financials | documents
+let detailTab = 'overview'; // overview | sites | dos | financials | documents | strategy
+let dealSearch = '';
+let customerFilter = ''; // empty = all
 
 /** DOS stage definitions — GXO Deal Operating System 6-stage framework
  *  (canonical names from public.stages table). */
@@ -137,6 +140,41 @@ export function mount(el) {
   render();
   bindDelegatedEvents();
   bus.emit('deal-management:mounted');
+
+  // Pull live activity templates from stage_element_templates. Falls back to
+  // the hardcoded DOS_TEMPLATES if the fetch fails (e.g., offline).
+  loadLiveTemplates();
+}
+
+async function loadLiveTemplates() {
+  try {
+    const live = await api.fetchActivityTemplates();
+    if (!live || !Object.keys(live).length) return;
+    // Preserve any progress already made in the hardcoded DOS_TEMPLATES —
+    // if a user checked off something during the session we don't want to
+    // clobber it. Match by trimmed name.
+    const nameMap = new Map();
+    for (const [stage, tpls] of Object.entries(DOS_TEMPLATES)) {
+      for (const t of tpls) {
+        nameMap.set(`${stage}|${(t.name || '').trim().toLowerCase()}`, t.status);
+      }
+    }
+    for (const stageNum of Object.keys(live)) {
+      for (const t of live[stageNum]) {
+        const key = `${stageNum}|${(t.name || '').trim().toLowerCase()}`;
+        t.status = nameMap.get(key) || 'pending';
+      }
+    }
+    // Overwrite in place so existing references pick up new data.
+    for (const k of Object.keys(DOS_TEMPLATES)) delete DOS_TEMPLATES[k];
+    Object.assign(DOS_TEMPLATES, live);
+    // Re-render if we're currently showing DOS data.
+    if (viewMode === 'detail' && detailTab === 'dos') renderDetailContent();
+    else if (viewMode !== 'detail') render();
+    bus.emit('deal-management:templates-loaded', { counts: Object.fromEntries(Object.entries(live).map(([k, v]) => [k, v.length])) });
+  } catch (err) {
+    console.warn('[deal-mgmt] live template load failed', err);
+  }
 }
 
 // ============================================================
@@ -252,6 +290,23 @@ function bindDelegatedEvents() {
     const viewBtn = target.closest('[data-view]');
     if (viewBtn) { viewMode = /** @type {HTMLElement} */ (viewBtn).dataset.view; selectedDeal = null; render(); return; }
 
+    // Clear filters
+    if (target.closest('[data-action="clear-filters"]')) {
+      dealSearch = '';
+      customerFilter = '';
+      render();
+      return;
+    }
+
+    // Customer row click -> filter to that customer and switch to list view
+    const custRow = target.closest('[data-customer]');
+    if (custRow) {
+      customerFilter = /** @type {HTMLElement} */ (custRow).dataset.customer;
+      viewMode = 'list';
+      render();
+      return;
+    }
+
     // Deal card click -> detail view
     const deal = target.closest('[data-deal]');
     if (deal) {
@@ -293,7 +348,113 @@ function bindDelegatedEvents() {
       handleDeckGenClick(deckType);
       return;
     }
+
+    // Stage auto-advance
+    if (target.closest('[data-action="advance-stage"]')) {
+      if (selectedDeal && selectedDeal.stage < 6) {
+        selectedDeal.stage += 1;
+        selectedDeal.daysInStage = 0;
+        renderDetail();
+        bus.emit('toast:show', { message: `Advanced to Stage ${selectedDeal.stage}: ${DOS_STAGES.find(s => s.id === selectedDeal.stage)?.name || ''}`, level: 'success' });
+        bus.emit('deal:stage-advanced', { id: selectedDeal.id, stage: selectedDeal.stage });
+      }
+      return;
+    }
+
+    // Add artifact modal
+    if (target.closest('[data-action="add-artifact"]')) {
+      openAddArtifactModal();
+      return;
+    }
+    // Open artifact
+    const openArt = target.closest('[data-artifact-open]');
+    if (openArt) {
+      const route = /** @type {HTMLElement} */ (openArt).dataset.artifactOpen;
+      if (route) window.location.hash = route;
+      return;
+    }
+    // Unlink artifact
+    const unlinkArt = target.closest('[data-artifact-unlink]');
+    if (unlinkArt) {
+      const artId = /** @type {HTMLElement} */ (unlinkArt).dataset.artifactUnlink;
+      if (selectedDeal) {
+        const list = getArtifacts(selectedDeal.id);
+        const idx = list.findIndex(a => a.id === artId);
+        if (idx >= 0) {
+          list.splice(idx, 1);
+          renderDetailContent();
+          bus.emit('toast:show', { message: 'Artifact unlinked', level: 'success' });
+        }
+      }
+      return;
+    }
+
+    // Strategy list add
+    const addBtn = target.closest('[data-strategy-add]');
+    if (addBtn) {
+      const key = /** @type {HTMLElement} */ (addBtn).dataset.strategyAdd;
+      if (selectedDeal) {
+        const s = getStrategy(selectedDeal.id);
+        if (Array.isArray(s[key])) { s[key].push(''); renderDetailContent(); }
+      }
+      return;
+    }
   });
+
+  // Strategy inputs — debounced via input event
+  rootEl.addEventListener('input', (e) => {
+    const t = /** @type {HTMLElement} */ (e.target);
+    if (!selectedDeal) return;
+    if (t.matches('[data-strategy-field]')) {
+      const s = getStrategy(selectedDeal.id);
+      s[t.dataset.strategyField] = /** @type {HTMLInputElement} */ (t).value;
+    } else if (t.matches('[data-strategy-list]')) {
+      const s = getStrategy(selectedDeal.id);
+      const list = s[t.dataset.strategyList];
+      const idx = parseInt(t.dataset.strategyIdx, 10);
+      if (Array.isArray(list) && !isNaN(idx)) list[idx] = /** @type {HTMLInputElement} */ (t).value;
+    }
+  });
+}
+
+/** Simple modal for linking a new artifact to the current deal. */
+function openAddArtifactModal() {
+  if (!selectedDeal) return;
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:9990;display:flex;align-items:center;justify-content:center;';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:12px;padding:20px;width:440px;max-width:92vw;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+      <div style="font-size:15px;font-weight:800;margin-bottom:12px;">Link artifact to ${escapeAttr(selectedDeal.name)}</div>
+      <label style="display:block;font-size:12px;font-weight:700;color:var(--ies-gray-500);margin-bottom:4px;">Type</label>
+      <select id="art-kind" style="width:100%;padding:6px 10px;border:1px solid var(--ies-gray-300);border-radius:6px;font-size:13px;margin-bottom:10px;background:#fff;">
+        ${Object.entries(ARTIFACT_KINDS).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('')}
+      </select>
+      <label style="display:block;font-size:12px;font-weight:700;color:var(--ies-gray-500);margin-bottom:4px;">Name</label>
+      <input type="text" id="art-name" placeholder="e.g. Wayfair Midwest base case" style="width:100%;padding:6px 10px;border:1px solid var(--ies-gray-300);border-radius:6px;font-size:13px;margin-bottom:10px;"/>
+      <label style="display:block;font-size:12px;font-weight:700;color:var(--ies-gray-500);margin-bottom:4px;">Reference (e.g. cm:7)</label>
+      <input type="text" id="art-ref" placeholder="cm:7 · wsc:11 · fleet:3" style="width:100%;padding:6px 10px;border:1px solid var(--ies-gray-300);border-radius:6px;font-size:13px;margin-bottom:14px;font-family:monospace;"/>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" id="art-cancel">Cancel</button>
+        <button class="hub-btn hub-btn-sm hub-btn-primary" id="art-save">Link</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  overlay.querySelector('#art-cancel').addEventListener('click', close);
+  overlay.querySelector('#art-save').addEventListener('click', () => {
+    const kind = overlay.querySelector('#art-kind').value;
+    const name = overlay.querySelector('#art-name').value.trim();
+    const ref = overlay.querySelector('#art-ref').value.trim();
+    if (!name) { bus.emit('toast:show', { message: 'Name is required', level: 'error' }); return; }
+    const list = getArtifacts(selectedDeal.id);
+    list.push({ id: 'a' + Date.now().toString(36), kind, name, ref, updated: new Date().toISOString().slice(0, 10) });
+    close();
+    renderDetailContent();
+    bus.emit('toast:show', { message: `${ARTIFACT_KINDS[kind]?.label || kind} linked`, level: 'success' });
+  });
+  overlay.querySelector('#art-name').focus();
 }
 
 function toggleDosElement(elemId) {
@@ -323,16 +484,38 @@ function render() {
   const avgMargin = DEALS.filter(d => d.margin > 0).reduce((s, d) => s + d.margin, 0) / DEALS.filter(d => d.margin > 0).length;
   const totalSites = DEALS.reduce((s, d) => s + (Array.isArray(d.sites) ? d.sites.length : d.sites), 0);
 
+  // Distinct customers for the filter dropdown.
+  const customers = Array.from(new Set(DEALS.map(d => d.client))).sort();
+
   rootEl.innerHTML = `
     <div class="hub-content-inner" style="padding:24px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
         <h2 class="text-page" style="margin:0;">Deal Management</h2>
-        <div style="display:flex;gap:8px;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button class="hub-btn hub-btn-sm ${viewMode === 'pipeline' ? '' : 'hub-btn-secondary'}" data-view="pipeline">Pipeline</button>
           <button class="hub-btn hub-btn-sm ${viewMode === 'list' ? '' : 'hub-btn-secondary'}" data-view="list">List</button>
+          <button class="hub-btn hub-btn-sm ${viewMode === 'customers' ? '' : 'hub-btn-secondary'}" data-view="customers">Customers</button>
+          <button class="hub-btn hub-btn-sm ${viewMode === 'hours' ? '' : 'hub-btn-secondary'}" data-view="hours">My Hours</button>
           <button class="hub-btn hub-btn-sm hub-btn-primary" data-action="new-opp" style="margin-left:8px;">+ New Opportunity</button>
         </div>
       </div>
+
+      <!-- Search + Customer filter (hidden on customers/hours views) -->
+      ${(viewMode === 'pipeline' || viewMode === 'list') ? `
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">
+        <div style="position:relative;flex:1;min-width:240px;max-width:380px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ies-gray-400)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="dm-search" placeholder="Search deals by name, customer, or owner…" value="${escapeAttr(dealSearch)}"
+            style="width:100%;padding:6px 10px 6px 32px;border:1px solid var(--ies-gray-300);border-radius:8px;font-size:13px;font-family:Montserrat,sans-serif;"/>
+        </div>
+        <select id="dm-customer-filter" style="padding:6px 10px;border:1px solid var(--ies-gray-300);border-radius:8px;font-size:13px;background:#fff;font-family:Montserrat,sans-serif;">
+          <option value="">All Customers</option>
+          ${customers.map(c => `<option value="${escapeAttr(c)}" ${c === customerFilter ? 'selected' : ''}>${escapeAttr(c)}</option>`).join('')}
+        </select>
+        ${(dealSearch || customerFilter) ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="clear-filters" style="font-size:11px;">Clear filters</button>` : ''}
+        <span style="font-size:11px;color:var(--ies-gray-500);margin-left:auto;">${filteredDeals().length} of ${DEALS.length} deals</span>
+      </div>
+      ` : ''}
 
       <!-- KPI Bar -->
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">
@@ -348,14 +531,56 @@ function render() {
 
   const content = rootEl.querySelector('#dm-content');
   if (viewMode === 'pipeline') renderPipeline(content);
-  else renderList(content);
+  else if (viewMode === 'list') renderList(content);
+  else if (viewMode === 'customers') renderCustomers(content);
+  else if (viewMode === 'hours') renderMyHours(content);
+
+  // Wire search + filter inputs after render.
+  const searchInput = rootEl.querySelector('#dm-search');
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      dealSearch = e.target.value;
+      const c = rootEl.querySelector('#dm-content');
+      if (viewMode === 'pipeline') renderPipeline(c);
+      else if (viewMode === 'list') renderList(c);
+      // Update count without full re-render.
+      const counter = rootEl.querySelector('span[style*="margin-left:auto"]');
+      if (counter) counter.textContent = `${filteredDeals().length} of ${DEALS.length} deals`;
+    });
+  }
+  const filterSelect = rootEl.querySelector('#dm-customer-filter');
+  if (filterSelect) {
+    filterSelect.addEventListener('change', (e) => {
+      customerFilter = e.target.value;
+      render();
+    });
+  }
+}
+
+/** Apply current search + customer filter. */
+function filteredDeals() {
+  const q = (dealSearch || '').trim().toLowerCase();
+  return DEALS.filter(d => {
+    if (customerFilter && d.client !== customerFilter) return false;
+    if (!q) return true;
+    return (
+      (d.name || '').toLowerCase().includes(q) ||
+      (d.client || '').toLowerCase().includes(q) ||
+      (d.owner || '').toLowerCase().includes(q)
+    );
+  });
+}
+
+function escapeAttr(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 function renderPipeline(el) {
+  const visible = filteredDeals();
   el.innerHTML = `
     <div style="display:grid;grid-template-columns:repeat(${DOS_STAGES.length},1fr);gap:10px;overflow-x:auto;">
       ${DOS_STAGES.map(stage => {
-        const stageDeals = DEALS.filter(d => d.stage === stage.id);
+        const stageDeals = visible.filter(d => d.stage === stage.id);
         const stageRevenue = stageDeals.reduce((s, d) => s + d.revenue, 0);
         return `
           <div style="min-width:180px;">
@@ -387,6 +612,7 @@ function renderPipeline(el) {
 }
 
 function renderList(el) {
+  const visible = filteredDeals();
   el.innerHTML = `
     <div class="hub-card" style="padding:0;overflow-x:auto;">
       <table style="width:100%;border-collapse:collapse;font-size:13px;">
@@ -403,7 +629,8 @@ function renderList(el) {
           </tr>
         </thead>
         <tbody>
-          ${DEALS.map(d => {
+          ${visible.length === 0 ? '<tr><td colspan="8" style="padding:20px;text-align:center;color:var(--ies-gray-400);font-size:13px;">No deals match the current filters.</td></tr>' : ''}
+          ${visible.map(d => {
             const stage = DOS_STAGES.find(s => s.id === d.stage);
             const siteCount = Array.isArray(d.sites) ? d.sites.length : d.sites;
             return `
@@ -418,6 +645,121 @@ function renderList(el) {
                 <td style="padding:10px 12px;text-align:right;font-weight:700;color:${d.margin >= 10 ? '#16a34a' : d.margin > 0 ? '#d97706' : 'var(--ies-gray-300)'};">${d.margin > 0 ? d.margin + '%' : '—'}</td>
                 <td style="padding:10px 12px;text-align:center;font-weight:800;color:${d.score.startsWith('A') ? '#16a34a' : d.score !== '—' ? '#2563eb' : 'var(--ies-gray-300)'};">${d.score}</td>
                 <td style="padding:10px 12px;color:var(--ies-gray-500);">${d.owner}</td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+// ============================================================
+// CUSTOMERS VIEW — customer-level rollup
+// ============================================================
+
+function renderCustomers(el) {
+  const byCustomer = new Map();
+  for (const d of DEALS) {
+    const key = d.client || 'Unknown';
+    const entry = byCustomer.get(key) || { client: key, deals: [], revenue: 0, sites: 0, hoursActual: 0, hoursForecast: 0 };
+    entry.deals.push(d);
+    entry.revenue += d.revenue || 0;
+    entry.sites += Array.isArray(d.sites) ? d.sites.length : (d.sites || 0);
+    entry.hoursActual += d.hoursActual || 0;
+    entry.hoursForecast += d.hoursForecast || 0;
+    byCustomer.set(key, entry);
+  }
+  const rows = Array.from(byCustomer.values()).sort((a, b) => b.revenue - a.revenue);
+  el.innerHTML = `
+    <div class="hub-card" style="padding:0;overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="background:var(--ies-gray-50);">
+            <th style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Customer</th>
+            <th style="text-align:center;padding:10px 12px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Deals</th>
+            <th style="text-align:center;padding:10px 12px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Sites</th>
+            <th style="text-align:right;padding:10px 12px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Total Pipeline</th>
+            <th style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Deal Names</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(r => `
+            <tr style="border-bottom:1px solid var(--ies-gray-100);cursor:pointer;" data-customer="${escapeAttr(r.client)}" onmouseover="this.style.background='var(--ies-gray-50)'" onmouseout="this.style.background='transparent'">
+              <td style="padding:10px 12px;font-weight:700;">${escapeAttr(r.client)}</td>
+              <td style="padding:10px 12px;text-align:center;">${r.deals.length}</td>
+              <td style="padding:10px 12px;text-align:center;">${r.sites}</td>
+              <td style="padding:10px 12px;text-align:right;font-weight:600;">$${(r.revenue / 1e6).toFixed(1)}M</td>
+              <td style="padding:10px 12px;color:var(--ies-gray-500);font-size:11px;">${r.deals.map(d => escapeAttr(d.name)).join(' · ')}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+// ============================================================
+// MY HOURS VIEW — forecast vs actual per deal (clearly delineated)
+// ============================================================
+
+function renderMyHours(el) {
+  // Synth per-deal hours if the deal objects don't carry them yet.
+  // Forecast = f(stage, revenue), Actual = partial of forecast.
+  const forecastFor = (d) => Math.round(((d.revenue || 0) / 1e6) * 12 + (d.stage || 1) * 8);
+  const actualFor = (d) => Math.round(forecastFor(d) * (0.1 + (d.stage || 1) * 0.12));
+  const rows = DEALS.map(d => ({
+    id: d.id, name: d.name, client: d.client, stage: d.stage, owner: d.owner,
+    forecast: d.hoursForecast != null ? d.hoursForecast : forecastFor(d),
+    actual:   d.hoursActual   != null ? d.hoursActual   : actualFor(d),
+  }));
+  const totalForecast = rows.reduce((s, r) => s + r.forecast, 0);
+  const totalActual = rows.reduce((s, r) => s + r.actual, 0);
+  const pct = totalForecast > 0 ? (totalActual / totalForecast) * 100 : 0;
+
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;">
+      <div class="hub-card" style="padding:14px;">
+        <div style="font-size:11px;color:var(--ies-gray-500);font-weight:700;text-transform:uppercase;letter-spacing:.04em;">Forecast Hours</div>
+        <div style="font-size:26px;font-weight:800;color:#2563eb;margin-top:6px;">${totalForecast.toLocaleString()}</div>
+        <div style="font-size:11px;color:var(--ies-gray-400);margin-top:2px;">planned across ${rows.length} deal${rows.length === 1 ? '' : 's'}</div>
+      </div>
+      <div class="hub-card" style="padding:14px;">
+        <div style="font-size:11px;color:var(--ies-gray-500);font-weight:700;text-transform:uppercase;letter-spacing:.04em;">Actual Hours</div>
+        <div style="font-size:26px;font-weight:800;color:#16a34a;margin-top:6px;">${totalActual.toLocaleString()}</div>
+        <div style="font-size:11px;color:var(--ies-gray-400);margin-top:2px;">logged to date</div>
+      </div>
+      <div class="hub-card" style="padding:14px;">
+        <div style="font-size:11px;color:var(--ies-gray-500);font-weight:700;text-transform:uppercase;letter-spacing:.04em;">Consumption</div>
+        <div style="font-size:26px;font-weight:800;color:${pct < 100 ? '#7c3aed' : '#dc2626'};margin-top:6px;">${pct.toFixed(0)}%</div>
+        <div style="font-size:11px;color:var(--ies-gray-400);margin-top:2px;">actual / forecast</div>
+      </div>
+    </div>
+
+    <div class="hub-card" style="padding:0;overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="background:var(--ies-gray-50);">
+            <th style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Deal</th>
+            <th style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Customer</th>
+            <th style="text-align:center;padding:10px 12px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Stage</th>
+            <th style="text-align:right;padding:10px 12px;font-size:11px;font-weight:700;color:#2563eb;">Forecast</th>
+            <th style="text-align:right;padding:10px 12px;font-size:11px;font-weight:700;color:#16a34a;">Actual</th>
+            <th style="text-align:right;padding:10px 12px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Δ</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(r => {
+            const delta = r.actual - r.forecast;
+            const stage = DOS_STAGES.find(s => s.id === r.stage);
+            return `
+              <tr style="border-bottom:1px solid var(--ies-gray-100);cursor:pointer;" data-deal="${r.id}" onmouseover="this.style.background='var(--ies-gray-50)'" onmouseout="this.style.background='transparent'">
+                <td style="padding:10px 12px;font-weight:600;">${escapeAttr(r.name)}</td>
+                <td style="padding:10px 12px;color:var(--ies-gray-500);">${escapeAttr(r.client)}</td>
+                <td style="padding:10px 12px;text-align:center;"><span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;color:#fff;background:${stage?.color || '#6b7280'};">${stage?.name || ''}</span></td>
+                <td style="padding:10px 12px;text-align:right;color:#2563eb;font-weight:600;">${r.forecast.toLocaleString()}h</td>
+                <td style="padding:10px 12px;text-align:right;color:#16a34a;font-weight:600;">${r.actual.toLocaleString()}h</td>
+                <td style="padding:10px 12px;text-align:right;font-weight:700;color:${delta < 0 ? '#16a34a' : delta > 0 ? '#dc2626' : 'var(--ies-gray-400)'};">${delta > 0 ? '+' : ''}${delta.toLocaleString()}h</td>
               </tr>
             `;
           }).join('')}
@@ -482,6 +824,8 @@ function renderDetail() {
         <button class="hub-tab ${detailTab === 'sites' ? 'active' : ''}" data-detail-tab="sites">Site Details</button>
         <button class="hub-tab ${detailTab === 'dos' ? 'active' : ''}" data-detail-tab="dos">DOS Elements</button>
         <button class="hub-tab ${detailTab === 'financials' ? 'active' : ''}" data-detail-tab="financials">Financials</button>
+        <button class="hub-tab ${detailTab === 'strategy' ? 'active' : ''}" data-detail-tab="strategy">Win Strategy</button>
+        <button class="hub-tab ${detailTab === 'artifacts' ? 'active' : ''}" data-detail-tab="artifacts">Artifacts</button>
         <button class="hub-tab ${detailTab === 'documents' ? 'active' : ''}" data-detail-tab="documents">Documents</button>
       </div>
 
@@ -501,8 +845,144 @@ function renderDetailContent() {
     case 'sites': el.innerHTML = renderDealSites(); break;
     case 'dos': el.innerHTML = renderDealDos(); break;
     case 'financials': el.innerHTML = renderDealFinancials(); break;
+    case 'strategy': el.innerHTML = renderDealWinStrategy(); break;
+    case 'artifacts': el.innerHTML = renderDealArtifacts(); break;
     case 'documents': el.innerHTML = renderDealDocuments(); break;
   }
+}
+
+// ============================================================
+// WIN STRATEGY TAB
+// ============================================================
+
+/** Per-deal strategy persisted in-memory; in production this lives in
+ *  deal_strategy table.  */
+const _strategyByDeal = new Map();
+
+function getStrategy(dealId) {
+  if (_strategyByDeal.has(dealId)) return _strategyByDeal.get(dealId);
+  // Default seed
+  const d = DEALS.find(x => x.id === dealId);
+  const seeded = {
+    valueProp: d ? `Why GXO wins ${d.client}: scale + automation maturity + DOS rigor.` : '',
+    risks: ['Customer pricing pressure', 'Implementation timeline tight', 'Internal resource constraint'],
+    asks: ['Customer to share 12-mo demand forecast', 'Internal: confirm equipment lead times'],
+    differentiators: ['Locus cobot template ready', 'BY WMS reference deployment', 'Tier-1 carrier rate card'],
+    competitorThreats: 'DHL SC, Ryder',
+  };
+  _strategyByDeal.set(dealId, seeded);
+  return seeded;
+}
+
+function renderDealWinStrategy() {
+  const d = selectedDeal;
+  if (!d) return '';
+  const s = getStrategy(d.id);
+  return `
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;">
+      <div class="hub-card" style="padding:16px;">
+        <div style="font-size:13px;font-weight:700;margin-bottom:10px;">Value Proposition</div>
+        <textarea data-strategy-field="valueProp" rows="4" style="width:100%;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-family:Montserrat,sans-serif;font-size:13px;line-height:1.5;resize:vertical;">${escapeAttr(s.valueProp)}</textarea>
+
+        <div style="font-size:13px;font-weight:700;margin:18px 0 10px;">Differentiators</div>
+        <ul style="margin:0;padding-left:18px;font-size:13px;color:var(--ies-gray-700);line-height:1.7;">
+          ${s.differentiators.map((x, i) => `<li><input type="text" data-strategy-list="differentiators" data-strategy-idx="${i}" value="${escapeAttr(x)}" style="width:100%;border:none;padding:2px 0;font-family:Montserrat,sans-serif;font-size:13px;background:transparent;"/></li>`).join('')}
+        </ul>
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-strategy-add="differentiators" style="font-size:11px;margin-top:6px;">+ Add differentiator</button>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:16px;">
+        <div class="hub-card" style="padding:16px;">
+          <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:#dc2626;">Risks</div>
+          <ul style="margin:0;padding-left:18px;font-size:13px;color:var(--ies-gray-700);line-height:1.7;">
+            ${s.risks.map((x, i) => `<li><input type="text" data-strategy-list="risks" data-strategy-idx="${i}" value="${escapeAttr(x)}" style="width:100%;border:none;padding:2px 0;font-family:Montserrat,sans-serif;font-size:13px;background:transparent;"/></li>`).join('')}
+          </ul>
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" data-strategy-add="risks" style="font-size:11px;margin-top:6px;">+ Add risk</button>
+        </div>
+
+        <div class="hub-card" style="padding:16px;">
+          <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:#d97706;">Open Asks</div>
+          <ul style="margin:0;padding-left:18px;font-size:13px;color:var(--ies-gray-700);line-height:1.7;">
+            ${s.asks.map((x, i) => `<li><input type="text" data-strategy-list="asks" data-strategy-idx="${i}" value="${escapeAttr(x)}" style="width:100%;border:none;padding:2px 0;font-family:Montserrat,sans-serif;font-size:13px;background:transparent;"/></li>`).join('')}
+          </ul>
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" data-strategy-add="asks" style="font-size:11px;margin-top:6px;">+ Add ask</button>
+        </div>
+
+        <div class="hub-card" style="padding:16px;">
+          <div style="font-size:13px;font-weight:700;margin-bottom:8px;">Competitor Threats</div>
+          <input type="text" data-strategy-field="competitorThreats" value="${escapeAttr(s.competitorThreats)}" style="width:100%;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-family:Montserrat,sans-serif;font-size:13px;"/>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ============================================================
+// ARTIFACTS TAB — link CM/WSC/Fleet/NetOpt scenarios to a deal
+// ============================================================
+
+const _artifactsByDeal = new Map();
+
+function getArtifacts(dealId) {
+  if (_artifactsByDeal.has(dealId)) return _artifactsByDeal.get(dealId);
+  const seeded = [
+    { id: 'a1', kind: 'cost_model',       name: 'Wayfair Midwest base case',  ref: 'cm:7',   updated: '2026-04-12' },
+    { id: 'a2', kind: 'warehouse_sizing', name: 'Chicago DC sizing v2',       ref: 'wsc:11', updated: '2026-04-15' },
+  ];
+  _artifactsByDeal.set(dealId, seeded);
+  return seeded;
+}
+
+const ARTIFACT_KINDS = {
+  cost_model:        { label: 'Cost Model',        color: '#ff3a00', route: 'designtools/cost-model' },
+  warehouse_sizing:  { label: 'Warehouse Sizing',  color: '#0047AB', route: 'designtools/warehouse-sizing' },
+  fleet_modeler:     { label: 'Fleet Modeler',     color: '#20c997', route: 'designtools/fleet-modeler' },
+  network_opt:       { label: 'Network Opt',       color: '#20c997', route: 'designtools/network-opt' },
+  most_standards:    { label: 'MOST Standards',    color: '#0047AB', route: 'designtools/most-standards' },
+  deck:              { label: 'Generated Deck',    color: '#7c3aed', route: 'deals' },
+};
+
+function renderDealArtifacts() {
+  const d = selectedDeal;
+  if (!d) return '';
+  const list = getArtifacts(d.id);
+  return `
+    <div class="hub-card" style="padding:0;overflow-x:auto;">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--ies-gray-100);">
+        <div style="font-size:13px;font-weight:700;">Linked Artifacts</div>
+        <button class="hub-btn hub-btn-sm hub-btn-primary" data-action="add-artifact" style="font-size:11px;">+ Link Artifact</button>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="background:var(--ies-gray-50);">
+            <th style="text-align:left;padding:10px 16px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Type</th>
+            <th style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Name</th>
+            <th style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Reference</th>
+            <th style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Updated</th>
+            <th style="text-align:right;padding:10px 16px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${list.length === 0 ? '<tr><td colspan="5" style="padding:18px;text-align:center;color:var(--ies-gray-400);font-size:13px;">No artifacts linked yet. Click <strong>+ Link Artifact</strong> above.</td></tr>' : ''}
+          ${list.map(a => {
+            const kind = ARTIFACT_KINDS[a.kind] || { label: a.kind, color: '#6b7280', route: '' };
+            return `
+              <tr style="border-bottom:1px solid var(--ies-gray-100);">
+                <td style="padding:10px 16px;"><span style="display:inline-block;padding:2px 10px;border-radius:20px;font-size:10px;font-weight:700;color:#fff;background:${kind.color};">${kind.label}</span></td>
+                <td style="padding:10px 12px;font-weight:600;">${escapeAttr(a.name)}</td>
+                <td style="padding:10px 12px;color:var(--ies-gray-500);font-family:monospace;font-size:11px;">${escapeAttr(a.ref)}</td>
+                <td style="padding:10px 12px;color:var(--ies-gray-500);">${escapeAttr(a.updated)}</td>
+                <td style="padding:10px 16px;text-align:right;">
+                  <button class="hub-btn hub-btn-sm hub-btn-secondary" data-artifact-open="${escapeAttr(kind.route)}" style="font-size:11px;">Open →</button>
+                  <button class="hub-btn hub-btn-sm hub-btn-secondary" data-artifact-unlink="${a.id}" style="font-size:11px;color:#dc2626;">Unlink</button>
+                </td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
 }
 
 function renderDealOverview() {
@@ -570,7 +1050,7 @@ async function handleDeckGenClick(deckType) {
   const statusEl = rootEl?.querySelector('#deck-gen-status');
   if (statusEl) statusEl.innerHTML = `<span style="color:var(--ies-blue);">Generating ${deckType} deck…</span>`;
   try {
-    const engine = await import('../deck-generator/engine.js?v=20260417-mI');
+    const engine = await import('../deck-generator/engine.js?v=20260418-s1');
     if (!window.PptxGenJS) throw new Error('PptxGenJS not loaded — check CDN in index.html');
     // Pass demo deal data directly (these demo deals have integer stage + hardcoded fields,
     // not persisted UUIDs). The engine accepts either a dealId (uuid) or a prebuilt data obj.
@@ -644,8 +1124,27 @@ function renderDealSites() {
 function renderDealDos() {
   const d = selectedDeal;
 
+  // Compute stage-advance eligibility: current stage's REQUIRED templates must
+  // all be complete and we must not be on the final stage.
+  const currentTemplates = DOS_TEMPLATES[d.stage] || [];
+  const requiredOpen = currentTemplates.filter(t => t.required && t.status !== 'complete').length;
+  const canAdvance = d.stage < 6 && requiredOpen === 0;
+  const advanceBanner = canAdvance ? `
+    <div class="hub-card" style="padding:14px 16px;background:#f0fdf4;border:1px solid #86efac;display:flex;align-items:center;gap:12px;">
+      <span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:#16a34a;color:#fff;font-weight:800;">✓</span>
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:700;color:#166534;">Stage ${d.stage} requirements met</div>
+        <div style="font-size:11px;color:#15803d;">All required activities for this stage are complete. You can advance to Stage ${d.stage + 1}.</div>
+      </div>
+      <button class="hub-btn hub-btn-sm hub-btn-primary" data-action="advance-stage" style="font-size:12px;">Advance to Stage ${d.stage + 1} →</button>
+    </div>
+  ` : (d.stage < 6 ? `
+    <div style="font-size:11px;color:var(--ies-gray-500);background:var(--ies-gray-50);padding:8px 12px;border-radius:6px;">${requiredOpen} required activit${requiredOpen === 1 ? 'y' : 'ies'} still open in Stage ${d.stage} — finish to unlock auto-advance.</div>
+  ` : '');
+
   return `
     <div style="display:flex;flex-direction:column;gap:12px;">
+      ${advanceBanner}
       ${DOS_STAGES.filter(s => s.id <= d.stage).map(stage => {
         const templates = DOS_TEMPLATES[stage.id] || [];
         const completed = templates.filter(t => t.status === 'complete').length;

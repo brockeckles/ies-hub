@@ -72,15 +72,18 @@ function render() {
         </div>
       </div>
 
+      <!-- Inline alerts summary banner (top-of-page signal strip) -->
+      ${renderInlineAlertBanner(d.alerts)}
+
       <!-- Market Intelligence KPIs — section label removed; titles live inside tiles -->
       <div style="margin-bottom:20px;">
         <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;">
           ${kpiCard('Diesel Price', '$' + d.kpis.dieselPrice.toFixed(2) + '/gal', d.kpis.dieselTrend, '#dc2626', d.kpis.dieselChange)}
-          ${kpiCard('Labor Tightness', d.kpis.laborTightness.toFixed(1), d.kpis.laborTrend, '#2563eb', d.kpis.laborChange)}
           ${kpiCard('Avg Warehouse Wage', '$' + d.kpis.avgWage.toFixed(2) + '/hr', d.kpis.wageTrend, '#7c3aed', d.kpis.wageChange)}
+          ${kpiCard('Avg Warehouse Rate', '$' + (d.kpis.avgWarehouseRate || 0).toFixed(2) + '/sf/yr', d.kpis.warehouseRateTrend || 'neutral', '#2563eb', d.kpis.warehouseRateChange || '—')}
           ${kpiCard('Freight Rate Index', d.kpis.freightIndex.toFixed(0), d.kpis.freightTrend, '#ea580c', d.kpis.freightChange)}
           ${kpiCard('Steel Price Index', '$' + Math.round(d.kpis.steelPrice).toLocaleString() + ' ' + (d.kpis.steelUnit || '/ton'), d.kpis.steelTrend, '#0891b2', d.kpis.steelChange)}
-          ${kpiCard('Market Signal Score', d.kpis.marketSignal.toFixed(0) + '/100', d.kpis.signalTrend, '#16a34a', d.kpis.signalChange)}
+          ${kpiCard('Active RFP Signals', String(d.kpis.rfpSignalCount || 0), d.kpis.rfpSignalTrend || 'neutral', '#16a34a', d.kpis.rfpSignalChange || '—')}
         </div>
       </div>
 
@@ -144,11 +147,19 @@ function render() {
           </div>
         </div>
 
-        <!-- Recent Activity -->
-        <div class="hub-card" style="padding:0;display:flex;flex-direction:column;overflow:hidden;">
-          <div style="padding:14px 14px 8px;font-size:13px;font-weight:700;border-bottom:1px solid var(--ies-gray-100);">Recent Activity</div>
-          <div style="padding:8px 14px 14px;overflow-y:auto;flex:1;">
-            ${d.activity.map(a => activityItem(a.title, a.description, a.time, a.color)).join('')}
+        <!-- Intelligence Feed — tabbed (All / Competitor / Accounts / Tariff / RFP) -->
+        <div class="hub-card" id="cc-intel-feed" style="padding:0;display:flex;flex-direction:column;overflow:hidden;">
+          <div style="padding:14px 14px 0;font-size:13px;font-weight:700;border-bottom:1px solid var(--ies-gray-100);">
+            Intelligence Feed
+            <div style="display:flex;gap:4px;margin-top:8px;overflow-x:auto;">
+              ${['all','competitor','accounts','tariff','rfp'].map((k, i) => `
+                <button type="button" data-intel-tab="${k}" class="cc-intel-tab ${i === 0 ? 'active' : ''}"
+                  style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;border:1px solid ${i === 0 ? '#1c1c1c' : 'var(--ies-gray-300)'};background:${i === 0 ? '#1c1c1c' : '#fff'};color:${i === 0 ? '#fff' : 'var(--ies-gray-700)'};cursor:pointer;text-transform:uppercase;letter-spacing:.04em;">${labelForIntelTab(k)} <span style="opacity:.7;">(${(d.intel?.[k === 'all' ? 'all' : k] || []).length})</span></button>
+              `).join('')}
+            </div>
+          </div>
+          <div style="padding:8px 14px 14px;overflow-y:auto;flex:1;" id="cc-intel-body">
+            ${renderIntelFeed(d.intel?.all || [], d.activity)}
           </div>
         </div>
       </div>
@@ -209,6 +220,26 @@ function bindEvents() {
     if (alertRow) {
       const url = /** @type {HTMLElement} */ (alertRow).dataset.alertUrl;
       if (url) window.open(url, '_blank');
+      return;
+    }
+
+    // Intelligence Feed tab switch
+    const intelTab = target.closest('[data-intel-tab]');
+    if (intelTab) {
+      const key = /** @type {HTMLElement} */ (intelTab).dataset.intelTab;
+      const tabs = rootEl.querySelectorAll('[data-intel-tab]');
+      tabs.forEach(t => {
+        const active = t.dataset.intelTab === key;
+        t.classList.toggle('active', active);
+        t.style.background = active ? '#1c1c1c' : '#fff';
+        t.style.color = active ? '#fff' : 'var(--ies-gray-700)';
+        t.style.borderColor = active ? '#1c1c1c' : 'var(--ies-gray-300)';
+      });
+      const body = rootEl.querySelector('#cc-intel-body');
+      if (body && liveData?.intel) {
+        const items = liveData.intel[key] || [];
+        body.innerHTML = renderIntelFeed(items, liveData.activity);
+      }
       return;
     }
   });
@@ -353,6 +384,82 @@ function activityItem(title, desc, time, color) {
       <span style="font-size:11px;color:var(--ies-gray-300);white-space:nowrap;">${time}</span>
     </div>
   `;
+}
+
+/** Map an intel tab key to its display label. */
+function labelForIntelTab(k) {
+  return ({ all: 'All', competitor: 'Competitor', accounts: 'Accounts', tariff: 'Tariff', rfp: 'RFP' })[k] || k;
+}
+
+/**
+ * Render the intelligence feed list. If there are no live items, falls back
+ * to the curated activity stream.
+ * @param {Array} items
+ * @param {Array} fallbackActivity
+ */
+function renderIntelFeed(items, fallbackActivity) {
+  if (!items || !items.length) {
+    return (fallbackActivity || []).map(a => activityItem(a.title, a.description, a.time, a.color)).join('');
+  }
+  return items.slice(0, 25).map(item => `
+    <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--ies-gray-100);">
+      <span style="width:8px;height:8px;border-radius:50%;background:${severityDot(item.severity)};margin-top:5px;flex-shrink:0;"></span>
+      <div style="flex:1;min-width:0;">
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:2px;">
+          <span style="font-size:11px;font-weight:800;color:${categoryColor(item.category)};text-transform:uppercase;letter-spacing:.04em;">${item.category || ''}</span>
+          <span style="font-size:13px;font-weight:600;color:var(--ies-gray-800);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeText(item.title)}</span>
+        </div>
+        ${item.detail ? `<div style="font-size:11px;color:var(--ies-gray-500);line-height:1.4;">${escapeText(item.detail).slice(0, 180)}</div>` : ''}
+      </div>
+      <span style="font-size:10px;color:var(--ies-gray-400);white-space:nowrap;flex-shrink:0;">${item.relDate || ''}</span>
+    </div>
+  `).join('');
+}
+
+function categoryColor(cat) {
+  return ({ Competitor: '#7c3aed', Accounts: '#0891b2', Tariff: '#d97706', RFP: '#16a34a' })[cat] || '#6b7280';
+}
+
+function escapeText(s) {
+  if (s == null) return '';
+  return String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+}
+
+/**
+ * Render the inline alert summary banner at the top of the page.
+ * Aggregates by severity into a single strip with "X critical · Y high · Z medium".
+ * @param {Array} alerts
+ */
+function renderInlineAlertBanner(alerts) {
+  if (!alerts || !alerts.length) {
+    return `<div style="margin:0 0 16px;padding:8px 14px;border-radius:8px;background:#f0fdf4;border:1px solid #86efac;color:#166534;font-size:12px;font-weight:600;display:flex;align-items:center;gap:10px;">
+      <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#16a34a;color:#fff;font-weight:800;">✓</span>
+      No active market alerts.
+    </div>`;
+  }
+  const counts = { critical: 0, high: 0, medium: 0, info: 0 };
+  for (const a of alerts) {
+    const s = (a.severity || 'info').toLowerCase();
+    const bucket = s === 'critical' ? 'critical' : s === 'high' ? 'high' : (s === 'medium' || s === 'warning') ? 'medium' : 'info';
+    counts[bucket] = (counts[bucket] || 0) + 1;
+  }
+  const hasCritical = counts.critical > 0;
+  const bg = hasCritical ? '#fef2f2' : counts.high > 0 ? '#fff7ed' : '#eff6ff';
+  const border = hasCritical ? '#fecaca' : counts.high > 0 ? '#fed7aa' : '#bfdbfe';
+  const text = hasCritical ? '#991b1b' : counts.high > 0 ? '#9a3412' : '#1e40af';
+  const parts = [];
+  if (counts.critical) parts.push(`<strong>${counts.critical}</strong> critical`);
+  if (counts.high) parts.push(`<strong>${counts.high}</strong> high`);
+  if (counts.medium) parts.push(`<strong>${counts.medium}</strong> medium`);
+  if (counts.info) parts.push(`<strong>${counts.info}</strong> info`);
+  const summary = parts.join(' &middot; ');
+  const top = alerts.slice(0, 1)[0];
+  return `<div style="margin:0 0 16px;padding:10px 14px;border-radius:8px;background:${bg};border:1px solid ${border};color:${text};font-size:12px;font-weight:600;display:flex;align-items:center;gap:14px;">
+    <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:${hasCritical ? '#dc2626' : counts.high > 0 ? '#ea580c' : '#2563eb'};color:#fff;font-weight:800;">!</span>
+    <span style="flex-shrink:0;">${alerts.length} active alert${alerts.length === 1 ? '' : 's'}</span>
+    <span style="color:${text};opacity:.8;flex-shrink:0;">${summary}</span>
+    ${top ? `<span style="margin-left:auto;color:${text};opacity:.9;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:420px;">Top: <strong>${escapeText(top.title)}</strong> &middot; ${top.date || ''}</span>` : ''}
+  </div>`;
 }
 
 function statusTile(name, status, healthy) {
