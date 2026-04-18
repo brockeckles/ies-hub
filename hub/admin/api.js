@@ -5,20 +5,36 @@
  * @module hub/admin/api
  */
 
-import { db } from '../../shared/supabase.js?v=20260418-sK';
+import { db } from '../../shared/supabase.js?v=20260418-sP';
 
 // ============================================================
 // MASTER DATA
 // ============================================================
 
+/** Tables that don't have a sort_order column — fall back to a stable alternative. */
+const ORDER_BY = {
+  ref_multisite_grade_thresholds: 'metric_name',
+  ref_fleet_carrier_rates: 'display_name',
+  accounts: 'company_name',
+  competitors: 'name',
+  master_markets: 'market_code',
+};
+
 /**
- * List records from a master table.
+ * List records from a master table. Defaults to sort_order; falls back to
+ * a per-table column from ORDER_BY for tables without a sort_order column.
  * @param {string} tableName
  * @returns {Promise<any[]>}
  */
 export async function listMasterRecords(tableName) {
-  const { data, error } = await db.from(tableName).select('*').order('sort_order', { ascending: true });
-  if (error) throw error;
+  const orderCol = ORDER_BY[tableName] || 'sort_order';
+  const { data, error } = await db.from(tableName).select('*').order(orderCol, { ascending: true });
+  if (error) {
+    // Fallback: try without ordering if the column doesn't exist
+    const { data: data2, error: err2 } = await db.from(tableName).select('*');
+    if (err2) throw err2;
+    return data2 || [];
+  }
   return data || [];
 }
 
@@ -50,7 +66,7 @@ export async function deleteMasterRecord(tableName, id) {
 
 /**
  * List user accounts.
- * @returns {Promise<import('./types.js?v=20260418-sK').UserAccount[]>}
+ * @returns {Promise<import('./types.js?v=20260418-sP').UserAccount[]>}
  */
 export async function listUsers() {
   const { data, error } = await db.from('user_accounts').select('*').order('display_name');
@@ -74,7 +90,7 @@ export async function updateUser(id, updates) {
 
 /**
  * List escalation rules.
- * @returns {Promise<import('./types.js?v=20260418-sK').EscalationRule[]>}
+ * @returns {Promise<import('./types.js?v=20260418-sP').EscalationRule[]>}
  */
 export async function listEscalations() {
   const { data, error } = await db.from('escalation_rules').select('*').order('created_at');
@@ -84,7 +100,7 @@ export async function listEscalations() {
 
 /**
  * Save (insert or update) an escalation rule.
- * @param {import('./types.js?v=20260418-sK').EscalationRule} rule
+ * @param {import('./types.js?v=20260418-sP').EscalationRule} rule
  * @returns {Promise<any>}
  */
 export async function saveEscalation(rule) {
@@ -117,7 +133,7 @@ export async function deleteEscalation(id) {
 /**
  * List audit log entries.
  * @param {number} [limit=100]
- * @returns {Promise<import('./types.js?v=20260418-sK').AuditLogEntry[]>}
+ * @returns {Promise<import('./types.js?v=20260418-sP').AuditLogEntry[]>}
  */
 export async function listAuditLog(limit = 100) {
   const { data, error } = await db.from('audit_log').select('*').order('timestamp', { ascending: false }).limit(limit);
@@ -127,7 +143,7 @@ export async function listAuditLog(limit = 100) {
 
 /**
  * Write an audit log entry.
- * @param {Omit<import('./types.js?v=20260418-sK').AuditLogEntry, 'id'>} entry
+ * @param {Omit<import('./types.js?v=20260418-sP').AuditLogEntry, 'id'>} entry
  * @returns {Promise<void>}
  */
 export async function writeAuditEntry(entry) {
