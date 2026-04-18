@@ -14,7 +14,7 @@
 
 const EARTH_RADIUS_MI = 3959;
 
-/** @type {import('./types.js?v=20260418-sO').CogConfig} */
+/** @type {import('./types.js?v=20260418-sP').CogConfig} */
 export const DEFAULT_CONFIG = {
   numCenters: 1,
   maxIterations: 100,
@@ -22,7 +22,7 @@ export const DEFAULT_CONFIG = {
   transportCostPerMile: 2.85,
 };
 
-/** @type {import('./types.js?v=20260418-sO').MajorCity[]} */
+/** @type {import('./types.js?v=20260418-sP').MajorCity[]} */
 export const MAJOR_CITIES = [
   // Top 50 US Metro Areas + Secondary/Tertiary Hubs (109 total)
   { name: 'New York', state: 'NY', lat: 40.7128, lng: -74.0060 },
@@ -182,8 +182,8 @@ export function haversine(lat1, lng1, lat2, lng2) {
 /**
  * Compute weighted center of gravity for a set of points.
  * Uses demand-weighted centroid formula.
- * @param {import('./types.js?v=20260418-sO').WeightedPoint[]} points
- * @returns {import('./types.js?v=20260418-sO').CogResult}
+ * @param {import('./types.js?v=20260418-sP').WeightedPoint[]} points
+ * @returns {import('./types.js?v=20260418-sP').CogResult}
  */
 export function computeCog(points) {
   if (points.length === 0) {
@@ -239,10 +239,10 @@ export function findNearestCity(lat, lng) {
 
 /**
  * Run weighted k-means clustering to find optimal locations for k facilities.
- * @param {import('./types.js?v=20260418-sO').WeightedPoint[]} points
+ * @param {import('./types.js?v=20260418-sP').WeightedPoint[]} points
  * @param {number} k — number of centers
  * @param {number} [maxIter=100]
- * @returns {import('./types.js?v=20260418-sO').MultiCogResult}
+ * @returns {import('./types.js?v=20260418-sP').MultiCogResult}
  */
 export function kMeansCog(points, k = 1, maxIter = 100) {
   if (points.length === 0 || k <= 0) {
@@ -301,7 +301,7 @@ export function kMeansCog(points, k = 1, maxIter = 100) {
 /**
  * K-means++ initialization: pick first center randomly, subsequent centers
  * with probability proportional to squared distance from nearest existing center.
- * @param {import('./types.js?v=20260418-sO').WeightedPoint[]} points
+ * @param {import('./types.js?v=20260418-sP').WeightedPoint[]} points
  * @param {number} k
  * @returns {{ lat: number, lng: number }[]}
  */
@@ -340,9 +340,9 @@ export function kMeansPlusPlusInit(points, k) {
  * Winsorize demand weights at a given percentile (e.g., 95th).
  * Returns a new array with capped weights; preserves all other properties.
  * Caps outliers without removing them — maintains point count for sensitivity analysis.
- * @param {import('./types.js?v=20260418-sO').WeightedPoint[]} points
+ * @param {import('./types.js?v=20260418-sP').WeightedPoint[]} points
  * @param {number} [percentile=95]
- * @returns {import('./types.js?v=20260418-sO').WeightedPoint[]}
+ * @returns {import('./types.js?v=20260418-sP').WeightedPoint[]}
  */
 export function capWeightsByPercentile(points, percentile = 95) {
   if (points.length === 0) return [];
@@ -363,8 +363,8 @@ export function capWeightsByPercentile(points, percentile = 95) {
 
 /**
  * Estimate total annual transportation cost from COG analysis.
- * @param {import('./types.js?v=20260418-sO').MultiCogResult} cogResult
- * @param {import('./types.js?v=20260418-sO').WeightedPoint[]} points
+ * @param {import('./types.js?v=20260418-sP').MultiCogResult} cogResult
+ * @param {import('./types.js?v=20260418-sP').WeightedPoint[]} points
  * @param {number} [costPerMile=2.85]
  * @returns {{ totalCost: number, avgCostPerUnit: number, costByCluster: number[] }}
  */
@@ -391,7 +391,7 @@ export function estimateTransportCost(cogResult, points, costPerMile = 2.85) {
 
 /**
  * Run COG analysis for k = 1..maxK and return cost curve.
- * @param {import('./types.js?v=20260418-sO').WeightedPoint[]} points
+ * @param {import('./types.js?v=20260418-sP').WeightedPoint[]} points
  * @param {number} maxK
  * @param {number} [costPerMile=2.85]
  * @param {number} [maxIter=100]
@@ -435,7 +435,7 @@ export function sensitivityAnalysis(points, maxK = 5, costPerMile = 2.85, maxIte
 // DEMO DATA
 // ============================================================
 
-/** @type {import('./types.js?v=20260418-sO').WeightedPoint[]} */
+/** @type {import('./types.js?v=20260418-sP').WeightedPoint[]} */
 export const DEMO_POINTS = [
   { id: 'p1', name: 'New York Metro', lat: 40.7128, lng: -74.0060, weight: 85000, type: 'demand' },
   { id: 'p2', name: 'Los Angeles', lat: 34.0522, lng: -118.2437, weight: 72000, type: 'demand' },

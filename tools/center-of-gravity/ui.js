@@ -6,14 +6,14 @@
  * @module tools/center-of-gravity/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sO';
-import { state } from '../../shared/state.js?v=20260418-sO';
-import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sO';
-import { showToast } from '../../shared/toast.js?v=20260418-sO';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sO';
-import { downloadCSV } from '../../shared/export.js?v=20260418-sO';
-import * as calc from './calc.js?v=20260418-sO';
-import * as api from './api.js?v=20260418-sO';
+import { bus } from '../../shared/event-bus.js?v=20260418-sP';
+import { state } from '../../shared/state.js?v=20260418-sP';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sP';
+import { showToast } from '../../shared/toast.js?v=20260418-sP';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sP';
+import { downloadCSV } from '../../shared/export.js?v=20260418-sP';
+import * as calc from './calc.js?v=20260418-sP';
+import * as api from './api.js?v=20260418-sP';
 
 // ============================================================
 // STATE
@@ -25,13 +25,13 @@ let rootEl = null;
 /** @type {'points' | 'analysis' | 'map' | 'sensitivity'} */
 let activeTab = 'points';
 
-/** @type {import('./types.js?v=20260418-sO').WeightedPoint[]} */
+/** @type {import('./types.js?v=20260418-sP').WeightedPoint[]} */
 let points = [];
 
-/** @type {import('./types.js?v=20260418-sO').CogConfig} */
+/** @type {import('./types.js?v=20260418-sP').CogConfig} */
 let config = { ...calc.DEFAULT_CONFIG };
 
-/** @type {import('./types.js?v=20260418-sO').MultiCogResult|null} */
+/** @type {import('./types.js?v=20260418-sP').MultiCogResult|null} */
 let cogResult = null;
 
 /** @type {Array<{ k: number, totalWeightedDistance: number, estimatedCost: number, avgDistance: number }>|null} */
@@ -481,11 +481,14 @@ function renderMap(el) {
     });
   });
 
-  // Defer map init slightly so the container has its final layout size.
-  // setTimeout is more reliable than rAF here — the Map tab is in a flex
-  // column and Leaflet needs the container to have its computed height
-  // before L.map(); rAF can fire before flex layout finalises.
-  setTimeout(() => initCogMap(), 50);
+  // Init the map. The element has `flex:1` + `min-height:500px` on the
+  // container so it's sized as soon as it's in the DOM — no need to
+  // wait. If initCogMap does hit a zero-height snapshot on first paint
+  // we fall back to a short retry.
+  initCogMap();
+  if (!mapInstance) {
+    setTimeout(() => { if (!mapInstance) initCogMap(); }, 100);
+  }
 }
 
 function initCogMap() {
