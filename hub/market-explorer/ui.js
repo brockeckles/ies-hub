@@ -150,12 +150,12 @@ function render() {
         <h1 class="text-page" style="margin: 0;">Market Explorer</h1>
         <div style="display: flex; gap: var(--sp-3); align-items: center;">
           <input type="text" class="hub-input" placeholder="Search markets..." value="${searchQuery}"
-            data-action="search" style="width: 200px; height: 34px; font-size: 13px;" />
-          <select class="hub-input" data-action="filter-region" style="height: 34px; font-size: 13px;">
+            data-action="search" style="width: 200px; height: 38px; font-size: 13px; padding: 6px 12px; line-height: 1.4;" />
+          <select class="hub-input" data-action="filter-region" style="height: 38px; font-size: 13px; padding: 6px 28px 6px 12px; line-height: 1.4;">
             <option value="all">All Regions</option>
             ${regions.map(r => `<option value="${r}" ${filterRegion === r ? 'selected' : ''}>${r}</option>`).join('')}
           </select>
-          <select class="hub-input" data-action="filter-presence" style="height: 34px; font-size: 13px;">
+          <select class="hub-input" data-action="filter-presence" style="height: 38px; font-size: 13px; padding: 6px 28px 6px 12px; line-height: 1.4;">
             <option value="all">All Presence</option>
             <option value="active" ${filterPresence === 'active' ? 'selected' : ''}>GXO Active</option>
             <option value="target" ${filterPresence === 'target' ? 'selected' : ''}>Target Markets</option>
