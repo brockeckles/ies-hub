@@ -8,7 +8,7 @@
  */
 
 import { bus } from '../../shared/event-bus.js';
-import * as api from './api.js?v=20260418-s4';
+import * as api from './api.js?v=20260418-s5';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -136,8 +136,8 @@ function render() {
         </div>
       </div>
 
-      <!-- RFP Signals + Recent Activity — titles INSIDE cards, heights locked equal -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:1fr;gap:16px;">
+      <!-- RFP Signals + Intelligence Feed — titles INSIDE cards, heights capped equal -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:1fr;gap:16px;max-height:520px;">
 
         <!-- RFP Signals Feed -->
         <div class="hub-card" id="cc-rfp-feed" style="padding:0;display:flex;flex-direction:column;overflow:hidden;">
