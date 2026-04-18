@@ -39,7 +39,100 @@ export const DEFAULT_SERVICE = {
   globalMaxDays: 3,
   truckSpeedMph: 50,
   hardConstraint: false,
+  // Hard constraints (B-series; ignored if empty / null)
+  /** @type {string[]} */ lockedOpenIds: [],
+  /** @type {string[]} */ lockedClosedIds: [],
+  /** @type {number|null} */ maxDistanceMiles: null,
 };
+
+/**
+ * NMFC freight-class multipliers vs class 100 baseline.
+ * Standard 18 classes per ANSI/NMFTA. Lower class = denser freight = lower rate.
+ * Multipliers are typical industry curves (LTL 101 reference) and feed
+ * `ltlCost(weight, miles, { nmfcClass })`.
+ */
+export const NMFC_CLASS_MULTIPLIERS = {
+  50:  0.65,
+  55:  0.72,
+  60:  0.78,
+  65:  0.85,
+  70:  0.92,
+  77.5: 0.97,
+  85:  1.00,
+  92.5: 1.05,
+  100: 1.00,   // baseline
+  110: 1.10,
+  125: 1.20,
+  150: 1.35,
+  175: 1.50,
+  200: 1.65,
+  250: 1.85,
+  300: 2.05,
+  400: 2.30,
+  500: 2.60,
+};
+
+/** All allowed NMFC class codes, sorted ascending — useful for UI selects. */
+export const NMFC_CLASS_CODES = Object.keys(NMFC_CLASS_MULTIPLIERS).map(Number).sort((a, b) => a - b);
+
+/** Look up an NMFC multiplier; falls back to 1.0 (class 100) when unrecognised. */
+export function nmfcMultiplier(classCode) {
+  if (classCode == null || classCode === '') return 1.0;
+  const exact = NMFC_CLASS_MULTIPLIERS[classCode];
+  if (exact != null) return exact;
+  // Round to nearest valid class
+  const codes = NMFC_CLASS_CODES;
+  const closest = codes.reduce((acc, c) => Math.abs(c - classCode) < Math.abs(acc - classCode) ? c : acc, codes[0]);
+  return NMFC_CLASS_MULTIPLIERS[closest] || 1.0;
+}
+
+/**
+ * Regional LTL rate multipliers by census region pair.
+ * - Same region              → 0.95 (intra-region density discount)
+ * - Adjacent region          → 1.00 (baseline)
+ * - Cross-country (W↔E)      → 1.18 (long-haul interline premium)
+ * Regions: 'NE', 'SE', 'MW', 'SW', 'W' (5 census super-regions).
+ */
+export const LTL_REGION_MULTIPLIERS = {
+  same: 0.95,
+  adjacent: 1.00,
+  cross: 1.18,
+};
+
+const REGION_ADJACENCY = {
+  NE: ['NE', 'SE', 'MW'],
+  SE: ['SE', 'NE', 'MW', 'SW'],
+  MW: ['MW', 'NE', 'SE', 'SW', 'W'],
+  SW: ['SW', 'SE', 'MW', 'W'],
+  W:  ['W', 'MW', 'SW'],
+};
+
+/**
+ * Census super-region from longitude/latitude. Coarse but useful for
+ * LTL rate stratification when explicit region tags aren't provided.
+ * @param {number} lat
+ * @param {number} lng
+ * @returns {'NE'|'SE'|'MW'|'SW'|'W'}
+ */
+export function regionForCoord(lat, lng) {
+  if (lng <= -115) return 'W';
+  if (lng <= -100) return lat >= 36 ? 'MW' : 'SW';
+  if (lng <= -85) return lat >= 38 ? 'MW' : 'SE';
+  // East of -85: split on lat for NE vs SE
+  return lat >= 38 ? 'NE' : 'SE';
+}
+
+/**
+ * Multiplier for an LTL lane between two regions.
+ * @param {string} originRegion
+ * @param {string} destRegion
+ */
+export function regionPairMultiplier(originRegion, destRegion) {
+  if (!originRegion || !destRegion) return LTL_REGION_MULTIPLIERS.adjacent;
+  if (originRegion === destRegion) return LTL_REGION_MULTIPLIERS.same;
+  const adj = REGION_ADJACENCY[originRegion] || [];
+  return adj.includes(destRegion) ? LTL_REGION_MULTIPLIERS.adjacent : LTL_REGION_MULTIPLIERS.cross;
+}
 
 // ============================================================
 // DISTANCE & TRANSIT
@@ -125,12 +218,20 @@ export function tlCost(miles, ratePerMile = DEFAULT_RATES.tlRatePerMile, fuelSur
 
 /**
  * Compute LTL cost for a shipment.
+ *
+ * Supports NMFC freight class (multiplier vs class 100) and regional
+ * multipliers (same/adjacent/cross-region). When origin+dest
+ * region codes aren't provided, the regional layer is a no-op.
+ *
  * @param {number} weight — lbs
  * @param {number} miles — for minimum charge calculation
  * @param {Object} [rates]
  * @param {number[]} [rates.weightBreaks]
  * @param {number[]} [rates.breakRates] — $/CWT at each break
  * @param {number} [rates.fuelSurcharge]
+ * @param {number} [rates.nmfcClass] — freight class (50–500); default 100
+ * @param {string} [rates.originRegion] — 'NE'|'SE'|'MW'|'SW'|'W'
+ * @param {string} [rates.destRegion]
  * @returns {number}
  */
 export function ltlCost(weight, miles, rates = {}) {
@@ -138,19 +239,25 @@ export function ltlCost(weight, miles, rates = {}) {
   const bRates = rates.breakRates || DEFAULT_RATES.ltlBreakRates;
   const fsc = rates.fuelSurcharge ?? DEFAULT_RATES.fuelSurcharge;
 
-  // Find applicable rate
+  // Find applicable CWT rate from weight breaks
   let ratePerCwt = bRates[0] || 18.50;
   for (let i = 0; i < breaks.length; i++) {
     if (weight >= breaks[i]) ratePerCwt = bRates[i];
   }
 
   const cwt = Math.max(1, weight) / 100;
-  const base = cwt * ratePerCwt;
+  let base = cwt * ratePerCwt;
+
+  // NMFC freight-class multiplier (B2)
+  base *= nmfcMultiplier(rates.nmfcClass);
 
   // Distance adjustment (longer = higher, simplified)
   const distFactor = miles > 500 ? 1.15 : miles > 250 ? 1.08 : 1.0;
 
-  return base * distFactor * (1 + fsc);
+  // Regional LTL multiplier (B3)
+  const regionMult = regionPairMultiplier(rates.originRegion, rates.destRegion);
+
+  return base * distFactor * regionMult * (1 + fsc);
 }
 
 /**
@@ -197,9 +304,22 @@ export function parcelCost(weight, miles, zoneRates = DEFAULT_RATES.parcelZoneRa
  * @param {number} [destLng]
  * @returns {{ tlCost: number, ltlCost: number, parcelCost: number, blendedCost: number }}
  */
-export function blendedLaneCost(miles, avgWeight, modeMix, rateCard = DEFAULT_RATES, originLng, destLng) {
+export function blendedLaneCost(miles, avgWeight, modeMix, rateCard = DEFAULT_RATES, originLng, destLng, originLat, destLat, nmfcClass) {
   const tl = tlCost(miles, rateCard.tlRatePerMile, rateCard.fuelSurcharge, originLng, destLng);
-  const ltl = ltlCost(avgWeight, miles, rateCard);
+
+  // Derive regions from coords if not already on rateCard
+  const originRegion = rateCard.originRegion
+    || (originLat != null && originLng != null ? regionForCoord(originLat, originLng) : undefined);
+  const destRegion = rateCard.destRegion
+    || (destLat != null && destLng != null ? regionForCoord(destLat, destLng) : undefined);
+
+  const ltl = ltlCost(avgWeight, miles, {
+    ...rateCard,
+    nmfcClass: nmfcClass ?? rateCard.nmfcClass,
+    originRegion,
+    destRegion,
+  });
+
   const pcl = parcelCost(avgWeight, miles, rateCard.parcelZoneRates, rateCard.fuelSurcharge);
 
   const tlPct = (modeMix.tlPct || 0) / 100;
@@ -225,26 +345,46 @@ export function blendedLaneCost(miles, avgWeight, modeMix, rateCard = DEFAULT_RA
  * @returns {import('./types.js?v=20260418-sK').LaneCost[]}
  */
 export function assignDemand(facilities, demands, modeMix, rateCard = DEFAULT_RATES, serviceConfig = DEFAULT_SERVICE) {
-  const openFacilities = facilities.filter(f => f.isOpen !== false);
+  // Hard-constraint enforcement: lockedClosed wins over isOpen + lockedOpen.
+  const lockedClosed = new Set(serviceConfig.lockedClosedIds || []);
+  const lockedOpen = new Set(serviceConfig.lockedOpenIds || []);
+  const openFacilities = facilities.filter(f =>
+    !lockedClosed.has(f.id) && (lockedOpen.has(f.id) || f.isOpen !== false)
+  );
   if (openFacilities.length === 0 || demands.length === 0) return [];
+
+  const maxDist = serviceConfig.maxDistanceMiles;
 
   /** @type {Map<string, number>} */
   const facilityLoad = new Map();
   openFacilities.forEach(f => facilityLoad.set(f.id, 0));
 
   return demands.map(d => {
-    // Sort facilities by distance, penalizing SLA violators
+    // Sort facilities by distance, penalising SLA violators / capacity over.
+    // Hard distance constraint short-circuits to a separate bucket.
     const ranked = openFacilities.map(f => {
       const dist = haversine(f.lat, f.lng, d.lat, d.lng);
       const transit = estimateTransitDays(dist, serviceConfig.truckSpeedMph);
       const maxDays = d.maxDays || serviceConfig.globalMaxDays;
       const slaPenalty = transit > maxDays ? 1e6 : 0;
       const capacityPenalty = f.capacity && (facilityLoad.get(f.id) || 0) >= f.capacity ? 1e8 : 0;
-      return { facility: f, dist, transit, penalty: dist + slaPenalty + capacityPenalty };
+      // Hard distance constraint: penalise so we still pick the closest if no facility qualifies
+      const distancePenalty = (maxDist != null && dist > maxDist) ? 1e7 : 0;
+      return { facility: f, dist, transit, penalty: dist + slaPenalty + capacityPenalty + distancePenalty };
     }).sort((a, b) => a.penalty - b.penalty);
 
     const best = ranked[0];
-    const costs = blendedLaneCost(best.dist, d.avgWeight || 25, modeMix, rateCard, best.facility.lng, d.lng);
+    const costs = blendedLaneCost(
+      best.dist,
+      d.avgWeight || 25,
+      modeMix,
+      rateCard,
+      best.facility.lng,
+      d.lng,
+      best.facility.lat,
+      d.lat,
+      d.nmfcClass
+    );
     const maxDays = d.maxDays || serviceConfig.globalMaxDays;
 
     // Track facility load
@@ -257,6 +397,7 @@ export function assignDemand(facilities, demands, modeMix, rateCard = DEFAULT_RA
       transitDays: best.transit,
       ...costs,
       meetsSlA: best.transit <= maxDays,
+      withinMaxDistance: maxDist == null || best.dist <= maxDist,
     };
   });
 }
