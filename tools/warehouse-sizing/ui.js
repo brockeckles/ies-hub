@@ -1047,55 +1047,67 @@ function drawPlan() {
   ctx.fillRect(X0, Y0, Wpx, Hpx);
   ctx.strokeRect(X0, Y0, Wpx, Hpx);
 
-  // ---------- Compute zone strips along the dock face (front = bottom edge) ----------
-  // Layout convention (top-down view):
+  // ---------- Layout convention (top-down view) ----------
   //   Top edge      = back of building
   //   Bottom edge   = dock face (where trucks pull up)
   //   Strip just inside dock face (bottom)  = Ship Staging  (sized.shipStagingSqft)
   //   Strip just below back-wall (top)      = Receive Staging (sized.recvStagingSqft) — only if non-zero
-  //   Front-left corner inside ship staging = Office (overlay)
-  //   Storage racks fill the rest of the interior
+  //   Front-left corner of storage area     = Office (full-height block; rack loop skips this X range)
+  //   Storage racks fill the rest of the interior between recv + ship strips
   const shipFrac  = Math.min(0.30, (sized.shipStagingSqft / Math.max(1, sized.totalSqft)));
   const recvFrac  = Math.min(0.18, (sized.recvStagingSqft / Math.max(1, sized.totalSqft)));
-  const officeFrac= Math.min(0.18, (sized.officeSqft     / Math.max(1, sized.totalSqft)));
 
   const shipHpx  = Math.max(20, shipFrac  * Hpx);
   const recvHpx  = recvFrac > 0.01 ? Math.max(16, recvFrac * Hpx) : 0;
-  const officeWpx= Math.max(40, officeFrac * Wpx);
-  const officeHpx= Math.min(shipHpx * 0.9, 80);
 
   const storageY = Y0 + recvHpx;
   const storageH = Hpx - recvHpx - shipHpx;
 
+  // Office: dimension as a near-square footprint based on actual sqft.
+  // Placed in the front-left corner of the storage area, abutting the ship
+  // staging strip below it. Rack loop will skip this X range.
+  const officeSideFt = Math.sqrt(Math.max(1, sized.officeSqft));
+  const officeWpx    = Math.min(Wpx * 0.35, officeSideFt * pxPerFt);
+  const officeHpx    = Math.min(storageH * 0.75, officeSideFt * pxPerFt);
+  const officeX      = X0 + 4;
+  const officeY      = storageY + storageH - officeHpx;
+  const officeRightX = officeX + officeWpx + 4 * pxPerFt; // small clearance gap
+
   // ---------- Storage rack rows ----------
-  // Honest geometry: back-to-back rack pairs with aisles between them.
-  // Module width = 2 × rackDepth + aisle (roughly 12 ft + 12 ft = 24 ft per module).
+  // Back-to-back rack pairs with aisles between them.
   const rackDepthFt = elev.rackDepthFt || 4.3;
   const aisleFt     = (facility.aisleWidth || elev.aisleWidth || 12);
-  // Visual module = back-to-back pair (~2× depth) + aisle on one side.
   const moduleFt    = (2 * rackDepthFt) + aisleFt;
   const rackPx      = rackDepthFt * pxPerFt;
   const aislePx     = aisleFt * pxPerFt;
   const modulePx    = moduleFt * pxPerFt;
-  // Margin from side walls so racks don't run into the walls.
   const sideMarginPx = Math.max(8, 6 * pxPerFt);
 
-  // Light storage background
+  // Light storage background fills the storage zone
   ctx.fillStyle = '#f0f7ff';
   ctx.fillRect(X0 + 2, storageY, Wpx - 4, storageH);
 
-  // Draw the rack rows
+  // Rack rows. If a rack column would overlap the office X range AND fall
+  // within the office Y range, that rack is shortened to end above the office.
   ctx.fillStyle = '#ff8c42';
   ctx.strokeStyle = '#c2410c';
   ctx.lineWidth = 1;
   let mx = X0 + sideMarginPx;
   let rackCount = 0;
   while (mx + 2 * rackPx + aislePx < X0 + Wpx - sideMarginPx) {
-    // Back-to-back pair: two thin rectangles separated by a small gap, then an aisle
-    // Leave 8 ft endcap clearance from staging zones above / below
-    const racksTop    = storageY + 8 * pxPerFt;
-    const racksBottom = storageY + storageH - 8 * pxPerFt;
-    const racksH      = Math.max(0, racksBottom - racksTop);
+    const racksTop = storageY + 8 * pxPerFt;
+    let   racksBottom = storageY + storageH - 8 * pxPerFt;
+
+    // If this rack column falls anywhere over the office footprint,
+    // shorten it so it ends a few feet above the office.
+    const colLeft  = mx;
+    const colRight = mx + 2 * rackPx + 2;
+    const overlapsOfficeX = colRight > officeX && colLeft < officeRightX;
+    if (overlapsOfficeX) {
+      racksBottom = Math.min(racksBottom, officeY - 4 * pxPerFt);
+    }
+
+    const racksH = Math.max(0, racksBottom - racksTop);
     if (racksH > 0) {
       ctx.fillRect(mx, racksTop, rackPx, racksH);
       ctx.strokeRect(mx, racksTop, rackPx, racksH);
@@ -1106,17 +1118,18 @@ function drawPlan() {
     mx += modulePx;
   }
 
-  // Storage label
+  // Storage label (top of storage zone, right-aligned to clear the office)
   ctx.fillStyle = '#0f172a';
   ctx.font = 'bold 12px Montserrat, sans-serif';
-  ctx.textAlign = 'left';
+  ctx.textAlign = 'right';
   ctx.fillText(
     `Storage  ·  ${calc.formatSqft(sized.storageSqft)}  ·  ${rackCount} rack rows  ·  ${aisleFt} ft aisles`,
-    X0 + sideMarginPx,
+    X0 + Wpx - sideMarginPx,
     storageY + 14,
   );
+  ctx.textAlign = 'left'; // restore
 
-  // ---------- Receive Staging strip (top) ----------
+  // ---------- Receive Staging strip (top, full-width back wall) ----------
   if (recvHpx > 0) {
     ctx.fillStyle = '#ecfdf5';
     ctx.strokeStyle = '#16a34a';
@@ -1129,35 +1142,39 @@ function drawPlan() {
     ctx.fillText(`Receive Staging  ·  ${calc.formatSqft(sized.recvStagingSqft)}`, X0 + Wpx / 2, Y0 + recvHpx / 2 + 4);
   }
 
-  // ---------- Ship Staging strip (bottom, just inside dock face) ----------
+  // ---------- Ship Staging strip (bottom, dock face, skipping office column) ----------
+  // Office column reaches down to the dock face, so ship staging fills the
+  // remaining width to the right of it.
+  const shipX = officeX + officeWpx + 2;
+  const shipW = X0 + Wpx - 2 - shipX;
   ctx.fillStyle = '#fffbeb';
   ctx.strokeStyle = '#d97706';
   ctx.lineWidth = 1;
-  ctx.fillRect(X0 + 2, Y0 + Hpx - shipHpx, Wpx - 4, shipHpx - 2);
-  ctx.strokeRect(X0 + 2, Y0 + Hpx - shipHpx, Wpx - 4, shipHpx - 2);
+  ctx.fillRect(shipX, Y0 + Hpx - shipHpx, shipW, shipHpx - 2);
+  ctx.strokeRect(shipX, Y0 + Hpx - shipHpx, shipW, shipHpx - 2);
   ctx.fillStyle = '#92400e';
   ctx.font = 'bold 11px Montserrat, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText(`Ship Staging  ·  ${calc.formatSqft(sized.shipStagingSqft)}`, X0 + Wpx / 2, Y0 + Hpx - shipHpx / 2 + 4);
+  if (shipW > 100) {
+    ctx.fillText(`Ship Staging  ·  ${calc.formatSqft(sized.shipStagingSqft)}`, shipX + shipW / 2, Y0 + Hpx - shipHpx / 2 + 4);
+  }
 
-  // ---------- Office (front-left corner, overlapping the ship staging strip) ----------
-  if (officeFrac > 0.005) {
-    const ox = X0 + 4;
-    const oy = Y0 + Hpx - shipHpx + 4;
-    ctx.fillStyle = '#f5f3ff';
-    ctx.strokeStyle = '#8b5cf6';
-    ctx.lineWidth = 1;
-    ctx.fillRect(ox, oy, officeWpx, officeHpx);
-    ctx.strokeRect(ox, oy, officeWpx, officeHpx);
-    ctx.fillStyle = '#5b21b6';
-    ctx.font = 'bold 10px Montserrat, sans-serif';
-    ctx.textAlign = 'center';
-    if (officeWpx > 70 && officeHpx > 24) {
-      ctx.fillText('Office', ox + officeWpx / 2, oy + officeHpx / 2 - 2);
-      ctx.fillStyle = '#6b21a8';
-      ctx.font = '9px Montserrat, sans-serif';
-      ctx.fillText(`${calc.formatSqft(sized.officeSqft)}`, ox + officeWpx / 2, oy + officeHpx / 2 + 12);
-    }
+  // ---------- Office (front-left corner, full block from storage down to dock face) ----------
+  ctx.fillStyle = '#f5f3ff';
+  ctx.strokeStyle = '#8b5cf6';
+  ctx.lineWidth = 1;
+  // Single tall block from officeY down to the dock face (covers part of storage zone + ship-staging zone)
+  const officeBlockH = (Y0 + Hpx) - officeY - 4;
+  ctx.fillRect(officeX, officeY, officeWpx, officeBlockH);
+  ctx.strokeRect(officeX, officeY, officeWpx, officeBlockH);
+  ctx.fillStyle = '#5b21b6';
+  ctx.font = 'bold 11px Montserrat, sans-serif';
+  ctx.textAlign = 'center';
+  if (officeWpx > 50 && officeBlockH > 28) {
+    ctx.fillText('Office', officeX + officeWpx / 2, officeY + officeBlockH / 2 - 4);
+    ctx.fillStyle = '#6b21a8';
+    ctx.font = '10px Montserrat, sans-serif';
+    ctx.fillText(`${calc.formatSqft(sized.officeSqft)}`, officeX + officeWpx / 2, officeY + officeBlockH / 2 + 12);
   }
 
   // ---------- Dock doors at bottom edge, aligned with ship staging ----------
@@ -1845,24 +1862,44 @@ function build3DScene() {
     const rackMatA = new THREE.MeshStandardMaterial({ color: 0xea580c, transparent: true, opacity: 0.55 });
     const rackMatB = new THREE.MeshStandardMaterial({ color: 0xf97316, transparent: true, opacity: 0.55 });
 
+    // Office footprint — computed up-front so racks can avoid it.
+    // Office sits at front-left corner of the storage zone (X-, Z-).
+    const officeFt = Math.sqrt(Math.max(1, sized.officeSqft));
+    const officeU  = officeFt * scale;
+    const officeX0 = -W / 2 + 2;                              // left edge
+    const officeX1 = officeX0 + officeU;                       // right edge
+    const officeZ0 = -D / 2 + stagingU;                        // front edge of storage zone
+    const officeZ1 = officeZ0 + officeU;                       // rear edge of office
+
     let mx = -W / 2 + 6 * scale;
     let rowCount = 0;
     while (mx + 2 * rackDepthU + (aisleFt * scale) < W / 2 - 6 * scale) {
-      const rackGeo = new THREE.BoxGeometry(rackDepthU, rackHeightU, rackLengthU);
-      // Pair of back-to-back rows
-      const r1 = new THREE.Mesh(rackGeo, rackMatA);
-      r1.position.set(mx + rackDepthU / 2, rackHeightU / 2, (rackZStart + rackZEnd) / 2);
-      scene.add(r1);
-      const r2 = new THREE.Mesh(rackGeo, rackMatB);
-      r2.position.set(mx + rackDepthU + 0.5 + rackDepthU / 2, rackHeightU / 2, (rackZStart + rackZEnd) / 2);
-      scene.add(r2);
-      // Subtle wireframe so the rack frames read clearly
-      const wf1 = new THREE.LineSegments(new THREE.EdgesGeometry(rackGeo), new THREE.LineBasicMaterial({ color: 0x9a3412 }));
-      wf1.position.copy(r1.position);
-      scene.add(wf1);
-      const wf2 = new THREE.LineSegments(new THREE.EdgesGeometry(rackGeo), new THREE.LineBasicMaterial({ color: 0x9a3412 }));
-      wf2.position.copy(r2.position);
-      scene.add(wf2);
+      const colLeft  = mx;
+      const colRight = mx + 2 * rackDepthU + 0.5;
+      const overlapsOfficeX = colRight > officeX0 && colLeft < officeX1;
+
+      // If this rack column sits over the office footprint, shorten its
+      // Z-extent so it starts BEHIND the office rather than running
+      // through it.
+      const thisZStart = overlapsOfficeX ? officeZ1 + 2 : rackZStart;
+      const thisZEnd   = rackZEnd;
+      const thisLen    = Math.max(0, thisZEnd - thisZStart);
+      if (thisLen > 4) {
+        const rackGeo = new THREE.BoxGeometry(rackDepthU, rackHeightU, thisLen);
+        const zCenter = (thisZStart + thisZEnd) / 2;
+        const r1 = new THREE.Mesh(rackGeo, rackMatA);
+        r1.position.set(mx + rackDepthU / 2, rackHeightU / 2, zCenter);
+        scene.add(r1);
+        const r2 = new THREE.Mesh(rackGeo, rackMatB);
+        r2.position.set(mx + rackDepthU + 0.5 + rackDepthU / 2, rackHeightU / 2, zCenter);
+        scene.add(r2);
+        const wf1 = new THREE.LineSegments(new THREE.EdgesGeometry(rackGeo), new THREE.LineBasicMaterial({ color: 0x9a3412 }));
+        wf1.position.copy(r1.position);
+        scene.add(wf1);
+        const wf2 = new THREE.LineSegments(new THREE.EdgesGeometry(rackGeo), new THREE.LineBasicMaterial({ color: 0x9a3412 }));
+        wf2.position.copy(r2.position);
+        scene.add(wf2);
+      }
       rowCount += 2;
       mx += moduleU;
     }
@@ -1889,17 +1926,16 @@ function build3DScene() {
       }
     }
 
-    // ---------- Office cube (front-left corner) ----------
+    // ---------- Office cube (front-left corner — already reserved by rack loop) ----------
     if (sized.officeSqft > 0) {
-      const officeFt = Math.sqrt(sized.officeSqft);
-      const oW = officeFt * scale;
-      const oD = officeFt * scale;
-      const oH = 12 * scale;       // 12 ft office ceiling
+      const oW = officeU;             // computed above
+      const oD = officeU;
+      const oH = 12 * scale;          // 12 ft office ceiling
       const officeMesh = new THREE.Mesh(
         new THREE.BoxGeometry(oW, oH, oD),
-        new THREE.MeshStandardMaterial({ color: 0x8b5cf6, transparent: true, opacity: 0.45 }),
+        new THREE.MeshStandardMaterial({ color: 0x8b5cf6, transparent: true, opacity: 0.55 }),
       );
-      officeMesh.position.set(-W / 2 + oW / 2 + 1, oH / 2, -D / 2 + oD / 2 + 1);
+      officeMesh.position.set(officeX0 + oW / 2, oH / 2, officeZ0 + oD / 2);
       scene.add(officeMesh);
       const oEdges = new THREE.LineSegments(new THREE.EdgesGeometry(officeMesh.geometry), new THREE.LineBasicMaterial({ color: 0x5b21b6 }));
       oEdges.position.copy(officeMesh.position);
