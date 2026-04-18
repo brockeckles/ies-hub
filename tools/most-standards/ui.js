@@ -6,12 +6,12 @@
  * @module tools/most-standards/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import { state } from '../../shared/state.js?v=20260418-sK';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sK';
-import * as calc from './calc.js?v=20260418-sK';
-import * as api from './api.js?v=20260418-sK';
-import { getMostTplName, getMostTplBaseUph, getMostTplTmuTotal, getMostElName, getMostElSequence, getMostElTmu } from './types.js?v=20260418-sK';
+import { bus } from '../../shared/event-bus.js?v=20260418-sL';
+import { state } from '../../shared/state.js?v=20260418-sL';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sL';
+import * as calc from './calc.js?v=20260418-sL';
+import * as api from './api.js?v=20260418-sL';
+import { getMostTplName, getMostTplBaseUph, getMostTplTmuTotal, getMostElName, getMostElSequence, getMostElTmu } from './types.js?v=20260418-sL';
 
 // ============================================================
 // STATE — tool-local
@@ -23,13 +23,13 @@ let activeTab = 'library';
 /** @type {HTMLElement|null} */
 let rootEl = null;
 
-/** @type {{ templates: import('./types.js?v=20260418-sK').MostTemplate[], allowanceProfiles: import('./types.js?v=20260418-sK').AllowanceProfile[] }} */
+/** @type {{ templates: import('./types.js?v=20260418-sL').MostTemplate[], allowanceProfiles: import('./types.js?v=20260418-sL').AllowanceProfile[] }} */
 let refData = { templates: [], allowanceProfiles: [] };
 
-/** @type {import('./types.js?v=20260418-sK').MostTemplate|null} */
+/** @type {import('./types.js?v=20260418-sL').MostTemplate|null} */
 let selectedTemplate = null;
 
-/** @type {import('./types.js?v=20260418-sK').MostElement[]} */
+/** @type {import('./types.js?v=20260418-sL').MostElement[]} */
 let selectedElements = [];
 
 /** Template editor state — null if not editing, or a copy of the template being edited */
@@ -38,29 +38,103 @@ let editorTemplate = null;
 /** Editor elements for the current template being edited */
 let editorElements = [];
 
-/** Saved scenarios for Quick Analysis (localStorage-backed) */
+/** Saved scenarios for Quick Analysis (Supabase-backed via api.most_analyses) */
 let savedScenarios = [];
 
-// Load saved scenarios from localStorage on startup
-function loadSavedScenarios() {
+/**
+ * Load saved scenarios from Supabase. Falls back to legacy localStorage
+ * cache if the network is unavailable so the UI is still useful offline.
+ * Migrates any legacy localStorage rows to Supabase on first successful load.
+ */
+async function loadSavedScenarios() {
   try {
-    const saved = localStorage.getItem('most_scenarios');
-    savedScenarios = saved ? JSON.parse(saved) : [];
+    const rows = await api.listAnalyses();
+    savedScenarios = rows.map(row => analysisRowToScenario(row));
+
+    // One-shot migration of legacy localStorage scenarios: push any local-only
+    // entries up to Supabase, then clear the cache so we don't re-import.
+    try {
+      const legacy = JSON.parse(localStorage.getItem('most_scenarios') || '[]');
+      if (Array.isArray(legacy) && legacy.length && !rows.length) {
+        for (const sc of legacy) {
+          const data = sc.data || sc;
+          await api.saveAnalysis({
+            name: sc.name || 'Migrated Scenario',
+            pfd_pct: sc.pfd ?? data.pfd_pct ?? 14,
+            shift_hours: sc.shiftHrs ?? data.shift_hours ?? 8,
+            operating_days: data.operating_days ?? 250,
+            hourly_rate: sc.rate ?? data.hourly_rate ?? 0,
+            lines: data.lines || [],
+          });
+        }
+        const migrated = await api.listAnalyses();
+        savedScenarios = migrated.map(analysisRowToScenario);
+        localStorage.removeItem('most_scenarios');
+        console.info('[MOST] Migrated', legacy.length, 'localStorage scenarios to Supabase');
+      }
+    } catch (migErr) {
+      console.warn('[MOST] Legacy migration skipped:', migErr);
+    }
   } catch (err) {
-    console.warn('[MOST] Failed to load scenarios:', err);
-    savedScenarios = [];
+    console.warn('[MOST] Falling back to localStorage scenarios — Supabase load failed:', err);
+    try {
+      const saved = localStorage.getItem('most_scenarios');
+      savedScenarios = saved ? JSON.parse(saved) : [];
+    } catch {
+      savedScenarios = [];
+    }
   }
+}
+
+/** Map a most_analyses DB row → the in-memory scenario shape used by the UI. */
+function analysisRowToScenario(row) {
+  const data = (row.analysis_data && typeof row.analysis_data === 'object') ? row.analysis_data : {};
+  const lines = data.lines || [];
+  // Recompute summary so display KPIs always match current calc engine
+  const computed = lines.map(line => ({
+    ...line,
+    ...calc.computeAnalysisLine({
+      base_uph: line.base_uph,
+      pfd_pct: row.pfd_pct,
+      daily_volume: line.daily_volume,
+      shift_hours: row.shift_hours,
+      hourly_rate: line.hourly_rate || row.hourly_rate,
+    }),
+  }));
+  const summary = calc.computeAnalysisSummary(computed, row.operating_days || 250);
+  return {
+    id: row.id,
+    name: row.name || 'Untitled',
+    timestamp: row.updated_at ? new Date(row.updated_at).toLocaleString() : '',
+    lines: lines.length,
+    pfd: row.pfd_pct,
+    shiftHrs: row.shift_hours,
+    rate: row.hourly_rate,
+    ftes: summary.totalFtes,
+    headcount: summary.totalHeadcount,
+    hours: summary.totalHoursPerDay,
+    dailyCost: summary.dailyCost,
+    annualCost: summary.annualCost,
+    data: {
+      pfd_pct: row.pfd_pct,
+      shift_hours: row.shift_hours,
+      operating_days: row.operating_days || 250,
+      hourly_rate: row.hourly_rate,
+      lines,
+      allowance_profile_id: row.allowance_profile_id || null,
+    },
+  };
 }
 
 /** Filters for template library */
 let filters = { search: '', processArea: '', laborCategory: '' };
 
 // --- Analysis state ---
-/** @type {import('./types.js?v=20260418-sK').LaborAnalysis} */
+/** @type {import('./types.js?v=20260418-sL').LaborAnalysis} */
 let analysis = createEmptyAnalysis();
 
 // --- Workflow state ---
-/** @type {import('./types.js?v=20260418-sK').Workflow} */
+/** @type {import('./types.js?v=20260418-sL').Workflow} */
 let workflow = createEmptyWorkflow();
 
 // ============================================================
@@ -89,7 +163,10 @@ export async function mount(el) {
   analysis = createEmptyAnalysis();
   workflow = createEmptyWorkflow();
 
-  loadSavedScenarios();
+  // Kick off async load; re-render when scenarios come back
+  loadSavedScenarios().then(() => {
+    if (rootEl && activeTab === 'analysis') renderContent();
+  });
 
   el.innerHTML = renderShell();
 
@@ -744,6 +821,7 @@ function renderSavedScenarios() {
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
         <div class="text-subtitle">Saved Scenarios</div>
         <button class="cm-add-row-btn" data-action="save-scenario" style="font-size:12px; padding:6px 12px;">+ Save Current</button>
+        <button class="cm-add-row-btn" data-action="most-export-xlsx" style="font-size:12px; padding:6px 12px; margin-left:8px;" title="Export current Quick Analysis to Excel (.xlsx)">⬇ Export Excel</button>
       </div>
       <div id="most-scenarios-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:12px;">
         ${savedScenarios.map((scenario, idx) => `
@@ -1166,6 +1244,9 @@ function handleAction(action, idx) {
     case 'save-scenario':
       saveCurrentScenario();
       return;
+    case 'most-export-xlsx':
+      exportAnalysisToXlsx();
+      return;
     case 'add-analysis-line':
       analysis.lines.push(createEmptyAnalysisLine());
       break;
@@ -1215,7 +1296,7 @@ function pushToCostModel() {
     templateMap,
   });
 
-  /** @type {import('./types.js?v=20260418-sK').MostToCmPayload} */
+  /** @type {import('./types.js?v=20260418-sL').MostToCmPayload} */
   const payload = {
     laborLines: cmLines,
     operatingDays: analysis.operating_days,
@@ -1242,7 +1323,7 @@ function filterTemplates() {
 }
 
 function groupByProcessArea(templates) {
-  /** @type {Record<string, import('./types.js?v=20260418-sK').MostTemplate[]>} */
+  /** @type {Record<string, import('./types.js?v=20260418-sL').MostTemplate[]>} */
   const groups = {};
   for (const t of templates) {
     const area = t.process_area || 'Other';
@@ -1424,66 +1505,170 @@ async function saveTemplateAction() {
 // SCENARIO ACTIONS (localStorage-backed)
 // ============================================================
 
-function saveCurrentScenario() {
-  const pfd = analysis.pfd_pct || 14;
-  const lines = analysis.lines.filter(l => l.daily_volume > 0).length;
-
-  if (lines === 0) {
+async function saveCurrentScenario() {
+  const linesWithVolume = (analysis.lines || []).filter(l => l.daily_volume > 0).length;
+  if (linesWithVolume === 0) {
     alert('Add at least one activity with volume before saving.');
     return;
   }
 
-  const summary = calc.computeAnalysisSummary((analysis.lines || []).map(line => {
-    return {
+  const name = prompt('Scenario name:', `Scenario ${savedScenarios.length + 1}`);
+  if (!name) return;
+
+  try {
+    const saved = await api.saveAnalysis({
+      name,
+      pfd_pct: analysis.pfd_pct || 14,
+      shift_hours: analysis.shift_hours || 8,
+      operating_days: analysis.operating_days || 250,
+      hourly_rate: analysis.hourly_rate || 0,
+      allowance_profile_id: analysis.allowance_profile_id || null,
+      lines: analysis.lines || [],
+    });
+    // Refresh the list from Supabase so we get the canonical row (incl. id, timestamps)
+    const rows = await api.listAnalyses();
+    savedScenarios = rows.map(analysisRowToScenario);
+    renderContent();
+  } catch (err) {
+    console.warn('[MOST] saveAnalysis failed, falling back to localStorage:', err);
+    // Fallback: keep the local-only behaviour so the user doesn't lose work
+    const summary = calc.computeAnalysisSummary((analysis.lines || []).map(line => ({
       ...line,
       ...calc.computeAnalysisLine({
         base_uph: line.base_uph,
-        pfd_pct: pfd,
+        pfd_pct: analysis.pfd_pct || 14,
         daily_volume: line.daily_volume,
         shift_hours: analysis.shift_hours,
         hourly_rate: line.hourly_rate || analysis.hourly_rate,
       }),
-    };
-  }), analysis.operating_days);
-
-  const scenario = {
-    name: `Scenario ${savedScenarios.length + 1}`,
-    timestamp: new Date().toLocaleTimeString(),
-    lines,
-    pfd,
-    shiftHrs: analysis.shift_hours,
-    rate: analysis.hourly_rate || 0,
-    ftes: summary.totalFtes,
-    headcount: summary.totalHeadcount,
-    hours: summary.totalHoursPerDay,
-    dailyCost: summary.dailyCost,
-    annualCost: summary.annualCost,
-    data: JSON.parse(JSON.stringify({ ...analysis })), // deep copy
-  };
-
-  savedScenarios.push(scenario);
-  saveScenariosToStorage();
-  renderContent();
+    })), analysis.operating_days);
+    savedScenarios.push({
+      name,
+      timestamp: new Date().toLocaleString(),
+      lines: linesWithVolume,
+      pfd: analysis.pfd_pct,
+      shiftHrs: analysis.shift_hours,
+      rate: analysis.hourly_rate || 0,
+      ftes: summary.totalFtes,
+      headcount: summary.totalHeadcount,
+      hours: summary.totalHoursPerDay,
+      dailyCost: summary.dailyCost,
+      annualCost: summary.annualCost,
+      data: JSON.parse(JSON.stringify({ ...analysis })),
+    });
+    try {
+      localStorage.setItem('most_scenarios', JSON.stringify(savedScenarios));
+    } catch {}
+    renderContent();
+    alert('Saved locally — Supabase save failed: ' + (err.message || 'unknown'));
+  }
 }
 
 function loadScenario(idx) {
   if (!savedScenarios[idx]) return;
   const scenario = savedScenarios[idx];
-  analysis = JSON.parse(JSON.stringify(scenario.data)); // deep copy
+  analysis = JSON.parse(JSON.stringify(scenario.data));
   renderContent();
 }
 
-function deleteScenario(idx) {
+async function deleteScenario(idx) {
   if (!confirm('Delete this scenario?')) return;
+  const sc = savedScenarios[idx];
+  if (!sc) return;
+
+  if (sc.id) {
+    try {
+      await api.deleteAnalysis(sc.id);
+    } catch (err) {
+      console.warn('[MOST] deleteAnalysis failed:', err);
+      alert('Could not delete from Supabase: ' + (err.message || 'unknown'));
+      return;
+    }
+  }
   savedScenarios.splice(idx, 1);
-  saveScenariosToStorage();
+  // Keep localStorage cache in sync (defence-in-depth for offline use)
+  try {
+    localStorage.setItem('most_scenarios', JSON.stringify(savedScenarios.filter(s => !s.id)));
+  } catch {}
   renderContent();
 }
 
-function saveScenariosToStorage() {
-  try {
-    localStorage.setItem('most_scenarios', JSON.stringify(savedScenarios));
-  } catch (err) {
-    console.warn('[MOST] Failed to save scenarios:', err);
-  }
+/**
+ * Export the currently visible Quick Analysis to xlsx via shared/export.js.
+ * One sheet for activity lines, one sheet for the rolled-up summary.
+ */
+async function exportAnalysisToXlsx() {
+  const exp = await import('../../shared/export.js?v=20260418-sL');
+  const pfd = analysis.pfd_pct || 14;
+  const lineRows = (analysis.lines || []).map(line => {
+    const computed = calc.computeAnalysisLine({
+      base_uph: line.base_uph,
+      pfd_pct: pfd,
+      daily_volume: line.daily_volume,
+      shift_hours: analysis.shift_hours,
+      hourly_rate: line.hourly_rate || analysis.hourly_rate,
+    });
+    return {
+      activity: line.activity_name || line.template_name || 'Activity',
+      base_uph: line.base_uph || 0,
+      pfd_pct: pfd,
+      effective_uph: computed.effective_uph || 0,
+      daily_volume: line.daily_volume || 0,
+      hours_per_day: computed.hours_per_day || 0,
+      headcount: computed.headcount || 0,
+      ftes: computed.ftes || 0,
+      hourly_rate: line.hourly_rate || analysis.hourly_rate || 0,
+      daily_cost: computed.daily_cost || 0,
+      annual_cost: computed.annual_cost || 0,
+    };
+  });
+
+  const computedLines = lineRows.map(r => ({ ...r }));
+  const summary = calc.computeAnalysisSummary(computedLines.map(r => ({
+    headcount: r.headcount, ftes: r.ftes, hours_per_day: r.hours_per_day,
+    daily_cost: r.daily_cost, annual_cost: r.annual_cost,
+  })), analysis.operating_days);
+
+  const summaryRows = [
+    { metric: 'Total Headcount', value: summary.totalHeadcount },
+    { metric: 'Total FTEs', value: summary.totalFtes },
+    { metric: 'Total Hours/Day', value: summary.totalHoursPerDay },
+    { metric: 'Daily Cost', value: summary.dailyCost },
+    { metric: 'Annual Cost', value: summary.annualCost },
+    { metric: 'PFD %', value: pfd },
+    { metric: 'Shift Hours', value: analysis.shift_hours },
+    { metric: 'Operating Days/yr', value: analysis.operating_days || 250 },
+    { metric: 'Default Hourly Rate', value: analysis.hourly_rate || 0 },
+  ];
+
+  exp.downloadXLSX({
+    filename: `MOST_Analysis_${new Date().toISOString().slice(0, 10)}.xlsx`,
+    sheets: [
+      {
+        name: 'Activity Lines',
+        rows: lineRows,
+        columns: [
+          { key: 'activity', label: 'Activity' },
+          { key: 'base_uph', label: 'Base UPH', format: 'number', decimals: 1 },
+          { key: 'pfd_pct', label: 'PFD %', format: 'pct' },
+          { key: 'effective_uph', label: 'Effective UPH', format: 'number', decimals: 1 },
+          { key: 'daily_volume', label: 'Daily Volume', format: 'number' },
+          { key: 'hours_per_day', label: 'Hours/Day', format: 'number', decimals: 2 },
+          { key: 'headcount', label: 'Headcount', format: 'number', decimals: 1 },
+          { key: 'ftes', label: 'FTEs', format: 'number', decimals: 2 },
+          { key: 'hourly_rate', label: 'Hourly Rate', format: 'currency', decimals: 2 },
+          { key: 'daily_cost', label: 'Daily Cost', format: 'currency' },
+          { key: 'annual_cost', label: 'Annual Cost', format: 'currency' },
+        ],
+      },
+      {
+        name: 'Summary',
+        rows: summaryRows,
+        columns: [
+          { key: 'metric', label: 'Metric' },
+          { key: 'value', label: 'Value', format: 'number', decimals: 2 },
+        ],
+      },
+    ],
+  });
 }
