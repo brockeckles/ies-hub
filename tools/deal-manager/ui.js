@@ -6,11 +6,11 @@
  * @module tools/deal-manager/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sG';
-import { state } from '../../shared/state.js?v=20260418-sG';
-import { renderToolHeader } from '../../shared/tool-frame.js?v=20260418-sG';
-import * as calc from './calc.js?v=20260418-sG';
-import * as api from './api.js?v=20260418-sG';
+import { bus } from '../../shared/event-bus.js?v=20260418-sH';
+import { state } from '../../shared/state.js?v=20260418-sH';
+import { renderToolHeader } from '../../shared/tool-frame.js?v=20260418-sH';
+import * as calc from './calc.js?v=20260418-sH';
+import * as api from './api.js?v=20260418-sH';
 
 // ============================================================
 // STATE
@@ -25,28 +25,28 @@ let activeTab = 'list';
 /** @type {'kanban' | 'table'} */
 let landingViewMode = 'kanban';
 
-/** @type {import('./types.js?v=20260418-sG').Deal|null} */
+/** @type {import('./types.js?v=20260418-sH').Deal|null} */
 let activeDeal = null;
 
-/** @type {import('./types.js?v=20260418-sG').Site[]} */
+/** @type {import('./types.js?v=20260418-sH').Site[]} */
 let sites = [];
 
-/** @type {import('./types.js?v=20260418-sG').DealFinancials|null} */
+/** @type {import('./types.js?v=20260418-sH').DealFinancials|null} */
 let financials = null;
 
-/** @type {import('./types.js?v=20260418-sG').DosStage[]} */
+/** @type {import('./types.js?v=20260418-sH').DosStage[]} */
 let dosStages = [];
 
-/** @type {import('./types.js?v=20260418-sG').Deal[]} */
+/** @type {import('./types.js?v=20260418-sH').Deal[]} */
 let allDeals = [];
 
-/** @type {import('./types.js?v=20260418-sG').HoursEntry[]} */
+/** @type {import('./types.js?v=20260418-sH').HoursEntry[]} */
 let hoursEntries = [];
 
-/** @type {import('./types.js?v=20260418-sG').Task[]} */
+/** @type {import('./types.js?v=20260418-sH').Task[]} */
 let tasks = [];
 
-/** @type {import('./types.js?v=20260418-sG').WeeklyUpdate[]} */
+/** @type {import('./types.js?v=20260418-sH').WeeklyUpdate[]} */
 let updates = [];
 
 // DOS stages reference (6 stages: Pre-Sales → Delivery)

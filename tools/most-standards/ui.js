@@ -6,11 +6,11 @@
  * @module tools/most-standards/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sG';
-import { state } from '../../shared/state.js?v=20260418-sG';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sG';
-import * as calc from './calc.js?v=20260418-sG';
-import * as api from './api.js?v=20260418-sG';
+import { bus } from '../../shared/event-bus.js?v=20260418-sH';
+import { state } from '../../shared/state.js?v=20260418-sH';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sH';
+import * as calc from './calc.js?v=20260418-sH';
+import * as api from './api.js?v=20260418-sH';
 
 // ============================================================
 // STATE — tool-local
@@ -22,13 +22,13 @@ let activeTab = 'library';
 /** @type {HTMLElement|null} */
 let rootEl = null;
 
-/** @type {{ templates: import('./types.js?v=20260418-sG').MostTemplate[], allowanceProfiles: import('./types.js?v=20260418-sG').AllowanceProfile[] }} */
+/** @type {{ templates: import('./types.js?v=20260418-sH').MostTemplate[], allowanceProfiles: import('./types.js?v=20260418-sH').AllowanceProfile[] }} */
 let refData = { templates: [], allowanceProfiles: [] };
 
-/** @type {import('./types.js?v=20260418-sG').MostTemplate|null} */
+/** @type {import('./types.js?v=20260418-sH').MostTemplate|null} */
 let selectedTemplate = null;
 
-/** @type {import('./types.js?v=20260418-sG').MostElement[]} */
+/** @type {import('./types.js?v=20260418-sH').MostElement[]} */
 let selectedElements = [];
 
 /** Template editor state — null if not editing, or a copy of the template being edited */
@@ -55,11 +55,11 @@ function loadSavedScenarios() {
 let filters = { search: '', processArea: '', laborCategory: '' };
 
 // --- Analysis state ---
-/** @type {import('./types.js?v=20260418-sG').LaborAnalysis} */
+/** @type {import('./types.js?v=20260418-sH').LaborAnalysis} */
 let analysis = createEmptyAnalysis();
 
 // --- Workflow state ---
-/** @type {import('./types.js?v=20260418-sG').Workflow} */
+/** @type {import('./types.js?v=20260418-sH').Workflow} */
 let workflow = createEmptyWorkflow();
 
 // ============================================================
@@ -258,22 +258,7 @@ function renderShell() {
         margin-bottom: 8px;
       }
 
-      .most-push-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 8px 16px;
-        background: var(--ies-blue);
-        color: #fff;
-        border: none;
-        border-radius: 6px;
-        font-family: Montserrat, sans-serif;
-        font-size: 13px;
-        font-weight: 700;
-        cursor: pointer;
-        transition: background 0.15s;
-      }
-      .most-push-btn:hover { background: #003a8c; }
+      /* .most-push-btn removed 2026-04-18 (X2) — buttons now use shared .hub-btn + .hub-btn-primary */
     </style>
   `;
 }
@@ -418,7 +403,7 @@ function renderEditor() {
           <div style="font-size:16px; font-weight:700; color:var(--ies-navy);">Template Editor</div>
           <div style="font-size:13px; color:var(--ies-gray-500);">Create, edit, and manage MOST labor standards templates.</div>
         </div>
-        <button class="most-push-btn" data-action="create-template">+ New Template</button>
+        <button class="hub-btn hub-btn-primary" data-action="create-template">+ New Template</button>
       </div>
 
       <table class="cm-grid-table">
@@ -580,7 +565,7 @@ function renderEditor() {
     <!-- Save/Cancel Buttons -->
     <div style="display:flex; gap:8px; margin-top:20px; justify-content:flex-end;">
       <button class="cm-delete-btn" data-action="close-editor" style="padding:10px 20px;">Cancel</button>
-      <button class="most-push-btn" data-action="save-template" style="padding:10px 20px; font-size:14px;">Save Template</button>
+      <button class="hub-btn hub-btn-primary" data-action="save-template">Save Template</button>
     </div>
   `;
 }
@@ -615,7 +600,7 @@ function renderAnalysis() {
         <div style="font-size:16px; font-weight:700; color:var(--ies-navy);">Quick Labor Analysis</div>
         <div style="font-size:13px; color:var(--ies-gray-500);">Add activities from template library or enter manual standards.</div>
       </div>
-      <button class="most-push-btn" data-action="push-to-cm">Push to Cost Model →</button>
+      <button class="hub-btn hub-btn-primary" data-action="push-to-cm">Push to Cost Model →</button>
     </div>
 
     <!-- Analysis Parameters -->
@@ -1210,7 +1195,7 @@ function pushToCostModel() {
     defaultBurdenPct: 30,
   });
 
-  /** @type {import('./types.js?v=20260418-sG').MostToCmPayload} */
+  /** @type {import('./types.js?v=20260418-sH').MostToCmPayload} */
   const payload = {
     laborLines: cmLines,
     operatingDays: analysis.operating_days,
@@ -1237,7 +1222,7 @@ function filterTemplates() {
 }
 
 function groupByProcessArea(templates) {
-  /** @type {Record<string, import('./types.js?v=20260418-sG').MostTemplate[]>} */
+  /** @type {Record<string, import('./types.js?v=20260418-sH').MostTemplate[]>} */
   const groups = {};
   for (const t of templates) {
     const area = t.process_area || 'Other';

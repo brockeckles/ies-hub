@@ -31,8 +31,8 @@
  * @module shared/scenario-landing
  */
 
-import { db } from './supabase.js?v=20260418-sG';
-import { showToast } from './toast.js?v=20260418-sG';
+import { db } from './supabase.js?v=20260418-sH';
+import { showToast } from './toast.js?v=20260418-sH';
 
 /**
  * @param {HTMLElement} rootEl
@@ -182,7 +182,7 @@ function renderShell({
             ${total > 0 ? `· <strong style="color:${accent};">${linked}</strong> linked, <strong>${standalone}</strong> stand-alone` : ''}
           </p>
         </div>
-        <button type="button" data-sl-action="new" class="hub-btn hub-btn-primary" style="background:${accent};border-color:${accent};font-weight:700;">
+        <button type="button" data-sl-action="new" class="hub-btn hub-btn-primary" style="font-weight:700;">
           + New Scenario
         </button>
       </div>
@@ -213,7 +213,7 @@ function renderEmpty(toolName, accent, hint) {
       <p style="font-size:13px;color:var(--ies-gray-500);margin:0 auto 20px;max-width:460px;line-height:1.5;">
         ${hint ? escapeText(hint) : `Start a new scenario to build your first ${escapeText(toolName)} analysis. Scenarios save automatically as you work and can be linked to a cost model or deal later.`}
       </p>
-      <button type="button" data-sl-action="new" class="hub-btn hub-btn-primary" style="background:${accent};border-color:${accent};font-weight:700;">
+      <button type="button" data-sl-action="new" class="hub-btn hub-btn-primary" style="font-weight:700;">
         + Start New Scenario
       </button>
     </div>

@@ -6,13 +6,13 @@
  * @module tools/warehouse-sizing/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sG';
-import { state } from '../../shared/state.js?v=20260418-sG';
-import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sG';
-import { showToast } from '../../shared/toast.js?v=20260418-sG';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sG';
-import * as calc from './calc.js?v=20260418-sG';
-import * as api from './api.js?v=20260418-sG';
+import { bus } from '../../shared/event-bus.js?v=20260418-sH';
+import { state } from '../../shared/state.js?v=20260418-sH';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sH';
+import { showToast } from '../../shared/toast.js?v=20260418-sH';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sH';
+import * as calc from './calc.js?v=20260418-sH';
+import * as api from './api.js?v=20260418-sH';
 
 // ============================================================
 // STATE
@@ -24,13 +24,13 @@ let rootEl = null;
 /** @type {'dashboard' | 'elevation' | '3d'} */
 let activeView = 'dashboard';
 
-/** @type {import('./types.js?v=20260418-sG').FacilityConfig} */
+/** @type {import('./types.js?v=20260418-sH').FacilityConfig} */
 let facility = createDefaultFacility();
 
-/** @type {import('./types.js?v=20260418-sG').ZoneConfig} */
+/** @type {import('./types.js?v=20260418-sH').ZoneConfig} */
 let zones = createDefaultZones();
 
-/** @type {import('./types.js?v=20260418-sG').VolumeInputs} */
+/** @type {import('./types.js?v=20260418-sH').VolumeInputs} */
 let volumes = createDefaultVolumes();
 
 /** @type {boolean} */
@@ -1601,7 +1601,7 @@ function build3DScene() {
 // ============================================================
 
 function pushToCm() {
-  /** @type {import('./types.js?v=20260418-sG').WscToCmPayload} */
+  /** @type {import('./types.js?v=20260418-sH').WscToCmPayload} */
   const payload = {
     totalSqft: facility.totalSqft || 0,
     clearHeight: facility.clearHeight || 0,
@@ -1622,7 +1622,7 @@ function pushToCm() {
 
 /**
  * Handle CM → WSC push (e.g., "Size with Calculator" from CM).
- * @param {import('./types.js?v=20260418-sG').CmToWscPayload} payload
+ * @param {import('./types.js?v=20260418-sH').CmToWscPayload} payload
  */
 function handleCmPush(payload) {
   if (payload.clearHeight) facility.clearHeight = payload.clearHeight;
