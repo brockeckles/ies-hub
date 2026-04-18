@@ -5,7 +5,7 @@
  * @module tools/network-opt/api
  */
 
-import { db } from '../../shared/supabase.js?v=20260418-sD';
+import { db } from '../../shared/supabase.js?v=20260418-sE';
 
 // ============================================================
 // NETWORK CONFIGS (saved network scenarios)
@@ -13,7 +13,7 @@ import { db } from '../../shared/supabase.js?v=20260418-sD';
 
 /**
  * List all saved network configs.
- * @returns {Promise<import('./types.js?v=20260418-sD').NetworkConfig[]>}
+ * @returns {Promise<import('./types.js?v=20260418-sE').NetworkConfig[]>}
  */
 export async function listConfigs() {
   const { data, error } = await db.from('netopt_configs')
@@ -26,7 +26,7 @@ export async function listConfigs() {
 /**
  * Get a single network config by ID.
  * @param {string} id
- * @returns {Promise<import('./types.js?v=20260418-sD').NetworkConfig|null>}
+ * @returns {Promise<import('./types.js?v=20260418-sE').NetworkConfig|null>}
  */
 export async function getConfig(id) {
   return db.fetchById('netopt_configs', id);
@@ -35,8 +35,8 @@ export async function getConfig(id) {
 /**
  * Save (insert or update) a network config.
  * Stores facilities, demands, modeMix, rateCard, serviceConfig as JSON.
- * @param {import('./types.js?v=20260418-sD').NetworkConfig} config
- * @returns {Promise<import('./types.js?v=20260418-sD').NetworkConfig>}
+ * @param {import('./types.js?v=20260418-sE').NetworkConfig} config
+ * @returns {Promise<import('./types.js?v=20260418-sE').NetworkConfig>}
  */
 export async function saveConfig(config) {
   const payload = {
@@ -68,7 +68,7 @@ export async function deleteConfig(id) {
 /**
  * Duplicate a network config.
  * @param {string} id
- * @returns {Promise<import('./types.js?v=20260418-sD').NetworkConfig>}
+ * @returns {Promise<import('./types.js?v=20260418-sE').NetworkConfig>}
  */
 export async function duplicateConfig(id) {
   const config = await getConfig(id);
@@ -103,7 +103,7 @@ export async function listScenarioResults(configId) {
  * Save a scenario result.
  * @param {string} configId
  * @param {string} name
- * @param {import('./types.js?v=20260418-sD').ScenarioResult} result
+ * @param {import('./types.js?v=20260418-sE').ScenarioResult} result
  * @returns {Promise<object>}
  */
 export async function saveScenarioResult(configId, name, result) {
@@ -130,7 +130,7 @@ export async function deleteScenarioResult(id) {
 /**
  * Fetch US metro demand seed data (zip3 centroids with population weight).
  * Falls back to built-in data if table doesn't exist.
- * @returns {Promise<import('./types.js?v=20260418-sD').DemandPoint[]>}
+ * @returns {Promise<import('./types.js?v=20260418-sE').DemandPoint[]>}
  */
 export async function fetchDemandSeedData() {
   try {
@@ -156,7 +156,7 @@ export async function fetchDemandSeedData() {
 
 /**
  * Fetch common warehouse/DC locations for facility seed data.
- * @returns {Promise<import('./types.js?v=20260418-sD').Facility[]>}
+ * @returns {Promise<import('./types.js?v=20260418-sE').Facility[]>}
  */
 export async function fetchFacilitySeedData() {
   try {
@@ -176,7 +176,7 @@ export async function fetchFacilitySeedData() {
 
 /**
  * Load all reference + saved data in parallel.
- * @returns {Promise<{ configs: import('./types.js?v=20260418-sD').NetworkConfig[], demandSeed: import('./types.js?v=20260418-sD').DemandPoint[], facilitySeed: import('./types.js?v=20260418-sD').Facility[] }>}
+ * @returns {Promise<{ configs: import('./types.js?v=20260418-sE').NetworkConfig[], demandSeed: import('./types.js?v=20260418-sE').DemandPoint[], facilitySeed: import('./types.js?v=20260418-sE').Facility[] }>}
  */
 export async function loadRefData() {
   const [configs, demandSeed, facilitySeed] = await Promise.all([

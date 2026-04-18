@@ -276,16 +276,31 @@ function buildKpiSparks(src) {
  * @returns {{all: any[], competitor: any[], accounts: any[], tariff: any[], rfp: any[]}}
  */
 function buildIntelligenceFeed(src) {
-  const toItem = (r, category) => ({
-    category,
-    title: r.headline || r.title || r.company || r.signal_type || 'Signal',
-    detail: r.summary || r.detail || r.description || r.message || '',
-    severity: r.severity || 'info',
-    source: r.source || '',
-    source_url: r.source_url || '',
-    at: r.created_at || r.date || r.published_at || null,
-    relDate: formatRelative(r.created_at || r.date || r.published_at || new Date().toISOString()),
-  });
+  const toItem = (r, category) => {
+    // Accounts: account_signals rows carry account_name + signal_type as a
+    // pair; surface both so the feed reads "Walmart — Leadership Change"
+    // rather than just the signal type.
+    let title, detail;
+    if (category === 'Accounts') {
+      const acct = r.account_name || r.company || '';
+      const sig = r.signal_type || '';
+      title = acct && sig ? `${acct} — ${sig}` : (acct || sig || 'Account signal');
+      detail = r.detail || r.summary || r.description || r.message || '';
+    } else {
+      title = r.headline || r.title || r.company || r.signal_type || 'Signal';
+      detail = r.summary || r.detail || r.description || r.message || '';
+    }
+    return {
+      category,
+      title,
+      detail,
+      severity: r.severity || 'info',
+      source: r.source || '',
+      source_url: r.source_url || '',
+      at: r.created_at || r.date || r.published_at || r.signal_date || null,
+      relDate: formatRelative(r.created_at || r.date || r.published_at || r.signal_date || new Date().toISOString()),
+    };
+  };
 
   const competitor = (src.competitor || []).slice(0, 25).map(r => toItem(r, 'Competitor'));
   const accounts = (src.accounts || []).slice(0, 25).map(r => toItem(r, 'Accounts'));

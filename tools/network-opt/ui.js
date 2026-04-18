@@ -7,12 +7,12 @@
  * @module tools/network-opt/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sD';
-import { state } from '../../shared/state.js?v=20260418-sD';
-import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sD';
-import { showToast } from '../../shared/toast.js?v=20260418-sD';
-import * as calc from './calc.js?v=20260418-sD';
-import * as api from './api.js?v=20260418-sD';
+import { bus } from '../../shared/event-bus.js?v=20260418-sE';
+import { state } from '../../shared/state.js?v=20260418-sE';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sE';
+import { showToast } from '../../shared/toast.js?v=20260418-sE';
+import * as calc from './calc.js?v=20260418-sE';
+import * as api from './api.js?v=20260418-sE';
 
 // ============================================================
 // STATE
@@ -27,25 +27,25 @@ let activeView = 'setup';
 /** @type {'facilities' | 'demand' | 'modemix' | 'service'} */
 let activeSection = 'facilities';
 
-/** @type {import('./types.js?v=20260418-sD').Facility[]} */
+/** @type {import('./types.js?v=20260418-sE').Facility[]} */
 let facilities = [];
 
-/** @type {import('./types.js?v=20260418-sD').DemandPoint[]} */
+/** @type {import('./types.js?v=20260418-sE').DemandPoint[]} */
 let demands = [];
 
-/** @type {import('./types.js?v=20260418-sD').ModeMix} */
+/** @type {import('./types.js?v=20260418-sE').ModeMix} */
 let modeMix = { tlPct: 30, ltlPct: 40, parcelPct: 30 };
 
-/** @type {import('./types.js?v=20260418-sD').RateCard} */
+/** @type {import('./types.js?v=20260418-sE').RateCard} */
 let rateCard = { ...calc.DEFAULT_RATES };
 
-/** @type {import('./types.js?v=20260418-sD').ServiceConfig} */
+/** @type {import('./types.js?v=20260418-sE').ServiceConfig} */
 let serviceConfig = { ...calc.DEFAULT_SERVICE };
 
-/** @type {import('./types.js?v=20260418-sD').ScenarioResult[]} */
+/** @type {import('./types.js?v=20260418-sE').ScenarioResult[]} */
 let scenarios = [];
 
-/** @type {import('./types.js?v=20260418-sD').ScenarioResult|null} */
+/** @type {import('./types.js?v=20260418-sE').ScenarioResult|null} */
 let activeScenario = null;
 
 /** @type {string|null} */
@@ -54,7 +54,7 @@ let selectedArchetype = null;
 /** @type {object|null} map instance */
 let mapInstance = null;
 
-/** @type {import('./types.js?v=20260418-sD').ScenarioResult[]|null} */
+/** @type {import('./types.js?v=20260418-sE').ScenarioResult[]|null} */
 let comparisonResults = null;
 
 /** @type {number|null} */

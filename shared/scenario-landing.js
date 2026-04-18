@@ -31,8 +31,8 @@
  * @module shared/scenario-landing
  */
 
-import { db } from './supabase.js?v=20260418-sD';
-import { showToast } from './toast.js?v=20260418-sD';
+import { db } from './supabase.js?v=20260418-sE';
+import { showToast } from './toast.js?v=20260418-sE';
 
 /**
  * @param {HTMLElement} rootEl

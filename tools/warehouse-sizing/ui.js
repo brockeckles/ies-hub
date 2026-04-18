@@ -6,12 +6,12 @@
  * @module tools/warehouse-sizing/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sD';
-import { state } from '../../shared/state.js?v=20260418-sD';
-import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sD';
-import { showToast } from '../../shared/toast.js?v=20260418-sD';
-import * as calc from './calc.js?v=20260418-sD';
-import * as api from './api.js?v=20260418-sD';
+import { bus } from '../../shared/event-bus.js?v=20260418-sE';
+import { state } from '../../shared/state.js?v=20260418-sE';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sE';
+import { showToast } from '../../shared/toast.js?v=20260418-sE';
+import * as calc from './calc.js?v=20260418-sE';
+import * as api from './api.js?v=20260418-sE';
 
 // ============================================================
 // STATE
@@ -23,13 +23,13 @@ let rootEl = null;
 /** @type {'dashboard' | 'elevation' | '3d'} */
 let activeView = 'dashboard';
 
-/** @type {import('./types.js?v=20260418-sD').FacilityConfig} */
+/** @type {import('./types.js?v=20260418-sE').FacilityConfig} */
 let facility = createDefaultFacility();
 
-/** @type {import('./types.js?v=20260418-sD').ZoneConfig} */
+/** @type {import('./types.js?v=20260418-sE').ZoneConfig} */
 let zones = createDefaultZones();
 
-/** @type {import('./types.js?v=20260418-sD').VolumeInputs} */
+/** @type {import('./types.js?v=20260418-sE').VolumeInputs} */
 let volumes = createDefaultVolumes();
 
 /** @type {boolean} */
@@ -1582,7 +1582,7 @@ function build3DScene() {
 // ============================================================
 
 function pushToCm() {
-  /** @type {import('./types.js?v=20260418-sD').WscToCmPayload} */
+  /** @type {import('./types.js?v=20260418-sE').WscToCmPayload} */
   const payload = {
     totalSqft: facility.totalSqft || 0,
     clearHeight: facility.clearHeight || 0,
@@ -1603,7 +1603,7 @@ function pushToCm() {
 
 /**
  * Handle CM → WSC push (e.g., "Size with Calculator" from CM).
- * @param {import('./types.js?v=20260418-sD').CmToWscPayload} payload
+ * @param {import('./types.js?v=20260418-sE').CmToWscPayload} payload
  */
 function handleCmPush(payload) {
   if (payload.clearHeight) facility.clearHeight = payload.clearHeight;
