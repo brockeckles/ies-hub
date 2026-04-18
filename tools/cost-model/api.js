@@ -6,7 +6,7 @@
  * @module tools/cost-model/api
  */
 
-import { db } from '../../shared/supabase.js?v=20260418-sI';
+import { db } from '../../shared/supabase.js?v=20260418-sJ';
 
 // ============================================================
 // COST MODEL PROJECTS (CRUD)

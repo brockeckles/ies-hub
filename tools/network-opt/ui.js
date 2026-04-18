@@ -7,14 +7,14 @@
  * @module tools/network-opt/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sI';
-import { state } from '../../shared/state.js?v=20260418-sI';
-import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sI';
-import { showToast } from '../../shared/toast.js?v=20260418-sI';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sI';
-import { downloadXLSX } from '../../shared/export.js?v=20260418-sI';
-import * as calc from './calc.js?v=20260418-sI';
-import * as api from './api.js?v=20260418-sI';
+import { bus } from '../../shared/event-bus.js?v=20260418-sJ';
+import { state } from '../../shared/state.js?v=20260418-sJ';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sJ';
+import { showToast } from '../../shared/toast.js?v=20260418-sJ';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sJ';
+import { downloadXLSX } from '../../shared/export.js?v=20260418-sJ';
+import * as calc from './calc.js?v=20260418-sJ';
+import * as api from './api.js?v=20260418-sJ';
 
 // ============================================================
 // STATE
@@ -29,25 +29,25 @@ let activeView = 'setup';
 /** @type {'facilities' | 'demand' | 'modemix' | 'service'} */
 let activeSection = 'facilities';
 
-/** @type {import('./types.js?v=20260418-sI').Facility[]} */
+/** @type {import('./types.js?v=20260418-sJ').Facility[]} */
 let facilities = [];
 
-/** @type {import('./types.js?v=20260418-sI').DemandPoint[]} */
+/** @type {import('./types.js?v=20260418-sJ').DemandPoint[]} */
 let demands = [];
 
-/** @type {import('./types.js?v=20260418-sI').ModeMix} */
+/** @type {import('./types.js?v=20260418-sJ').ModeMix} */
 let modeMix = { tlPct: 30, ltlPct: 40, parcelPct: 30 };
 
-/** @type {import('./types.js?v=20260418-sI').RateCard} */
+/** @type {import('./types.js?v=20260418-sJ').RateCard} */
 let rateCard = { ...calc.DEFAULT_RATES };
 
-/** @type {import('./types.js?v=20260418-sI').ServiceConfig} */
+/** @type {import('./types.js?v=20260418-sJ').ServiceConfig} */
 let serviceConfig = { ...calc.DEFAULT_SERVICE };
 
-/** @type {import('./types.js?v=20260418-sI').ScenarioResult[]} */
+/** @type {import('./types.js?v=20260418-sJ').ScenarioResult[]} */
 let scenarios = [];
 
-/** @type {import('./types.js?v=20260418-sI').ScenarioResult|null} */
+/** @type {import('./types.js?v=20260418-sJ').ScenarioResult|null} */
 let activeScenario = null;
 
 /** @type {string|null} */
@@ -56,7 +56,7 @@ let selectedArchetype = null;
 /** @type {object|null} map instance */
 let mapInstance = null;
 
-/** @type {import('./types.js?v=20260418-sI').ScenarioResult[]|null} */
+/** @type {import('./types.js?v=20260418-sJ').ScenarioResult[]|null} */
 let comparisonResults = null;
 
 /** @type {number|null} */

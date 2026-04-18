@@ -3,14 +3,14 @@
  * Static index + dynamic Supabase search, dropdown UI, keyboard navigation.
  *
  * Usage:
- *   import { search } from './search.js?v=20260418-sI';
+ *   import { search } from './search.js?v=20260418-sJ';
  *   search.init(document.querySelector('.hub-search-container'));
  *
  * @module shared/search
  */
 
-import { router } from './router.js?v=20260418-sI';
-import { bus } from './event-bus.js?v=20260418-sI';
+import { router } from './router.js?v=20260418-sJ';
+import { bus } from './event-bus.js?v=20260418-sJ';
 
 /**
  * @typedef {Object} SearchEntry

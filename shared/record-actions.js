@@ -5,7 +5,7 @@
  * reimplement the same prompt + Supabase call five times.
  *
  * Usage:
- *   import { copyRecord, deleteRecord } from './shared/record-actions.js?v=20260418-sI';
+ *   import { copyRecord, deleteRecord } from './shared/record-actions.js?v=20260418-sJ';
  *
  *   await copyRecord({
  *     record,
@@ -25,7 +25,7 @@
  * @module shared/record-actions
  */
 
-import { showToast } from './toast.js?v=20260418-sI';
+import { showToast } from './toast.js?v=20260418-sJ';
 
 /**
  * Shallow-clones the given record, strips id/timestamps, appends " (Copy)" to
