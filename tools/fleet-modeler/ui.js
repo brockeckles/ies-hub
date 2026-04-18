@@ -1066,7 +1066,10 @@ function renderMap(el) {
     </div>
   `;
 
-  requestAnimationFrame(() => initFleetMap());
+  // setTimeout(100) so the flex layout settles before L.map(container)
+  // measures height. rAF can fire before paint, leaving the container
+  // at height=0 and the tile layer silently never requests tiles.
+  setTimeout(() => { if (rootEl?.querySelector('#fm-map-container')) initFleetMap(); }, 100);
 }
 
 /** Lightweight static geocoder for top US cities — covers all demo lane endpoints. */

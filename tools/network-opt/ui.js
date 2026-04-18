@@ -1023,8 +1023,11 @@ function renderMap(el) {
     </div>
   `;
 
-  // Initialize Leaflet map
-  requestAnimationFrame(() => initMap());
+  // Initialize Leaflet map — use setTimeout(100) rather than rAF so the
+  // flex layout settles before L.map(container) measures height. rAF fires
+  // before the browser has painted the new panel sizes, so L.map() sees
+  // height=0 and the tile layer never requests tiles.
+  setTimeout(() => { if (rootEl?.querySelector('#no-map-container')) initMap(); }, 100);
 }
 
 function initMap() {
