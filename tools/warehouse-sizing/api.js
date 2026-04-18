@@ -5,7 +5,7 @@
  * @module tools/warehouse-sizing/api
  */
 
-import { db } from '../../shared/supabase.js?v=20260418-sK';
+import { db } from '../../shared/supabase.js?v=20260418-sL';
 
 // ============================================================
 // FACILITY CONFIGS
@@ -13,7 +13,7 @@ import { db } from '../../shared/supabase.js?v=20260418-sK';
 
 /**
  * List all saved facility configs.
- * @returns {Promise<import('./types.js?v=20260418-sK').FacilityConfig[]>}
+ * @returns {Promise<import('./types.js?v=20260418-sL').FacilityConfig[]>}
  */
 export async function listConfigs() {
   const { data, error } = await db.from('wsc_facility_configs')
@@ -26,7 +26,7 @@ export async function listConfigs() {
 /**
  * Get a single facility config by ID.
  * @param {string} id
- * @returns {Promise<import('./types.js?v=20260418-sK').FacilityConfig|null>}
+ * @returns {Promise<import('./types.js?v=20260418-sL').FacilityConfig|null>}
  */
 export async function getConfig(id) {
   return db.fetchById('wsc_facility_configs', id);

@@ -6,13 +6,13 @@
  * @module tools/warehouse-sizing/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import { state } from '../../shared/state.js?v=20260418-sK';
-import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sK';
-import { showToast } from '../../shared/toast.js?v=20260418-sK';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sK';
-import * as calc from './calc.js?v=20260418-sK';
-import * as api from './api.js?v=20260418-sK';
+import { bus } from '../../shared/event-bus.js?v=20260418-sL';
+import { state } from '../../shared/state.js?v=20260418-sL';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sL';
+import { showToast } from '../../shared/toast.js?v=20260418-sL';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sL';
+import * as calc from './calc.js?v=20260418-sL';
+import * as api from './api.js?v=20260418-sL';
 
 // ============================================================
 // STATE
@@ -24,13 +24,13 @@ let rootEl = null;
 /** @type {'dashboard' | 'elevation' | '3d'} */
 let activeView = 'dashboard';
 
-/** @type {import('./types.js?v=20260418-sK').FacilityConfig} */
+/** @type {import('./types.js?v=20260418-sL').FacilityConfig} */
 let facility = createDefaultFacility();
 
-/** @type {import('./types.js?v=20260418-sK').ZoneConfig} */
+/** @type {import('./types.js?v=20260418-sL').ZoneConfig} */
 let zones = createDefaultZones();
 
-/** @type {import('./types.js?v=20260418-sK').VolumeInputs} */
+/** @type {import('./types.js?v=20260418-sL').VolumeInputs} */
 let volumes = createDefaultVolumes();
 
 /** @type {boolean} */
@@ -1158,6 +1158,71 @@ function drawPlan() {
 // DASHBOARD VIEW
 // ============================================================
 
+/**
+ * Convert the UI's (facility, zones, volumes) state into SizingInputs
+ * for the v2-equivalent calc.sizeFacility engine.
+ * @returns {import('./calc.js?v=20260418-sL').SizingInputs}
+ */
+function toSizingInputs() {
+  const alloc = zones.storageAllocation || { fullPallet: 60, cartonOnPallet: 30, cartonOnShelving: 10 };
+  const prod = zones.productDimensions || {};
+  const dock = zones.dockConfig || {};
+  const fp = zones.forwardPick || null;
+  const opt = zones.optionalZones || {};
+  const aisleMap = { 12: 'wide', 10: 'narrow', 6: 'vna' };
+  const aisleType = aisleMap[Math.round(facility.aisleWidth || 0)] || 'narrow';
+
+  const optionalZones = [];
+  if (opt.vas?.enabled) optionalZones.push({ label: 'VAS / Kitting', sqft: opt.vas.sqft || 0 });
+  if (opt.returns?.enabled) optionalZones.push({ label: 'Returns / QC', sqft: opt.returns.sqft || 0 });
+  if (opt.chargeback?.enabled) optionalZones.push({ label: 'Chargeback', sqft: opt.chargeback.sqft || 0 });
+  if (zones.chargingSqft > 0) optionalZones.push({ label: 'Charging / Maint.', sqft: zones.chargingSqft });
+  if (zones.repackSqft > 0) optionalZones.push({ label: 'Repack', sqft: zones.repackSqft });
+
+  return {
+    peakUnits: zones.peakUnitsPerDay || 500000,
+    avgUnits: zones.avgUnitsPerDay || 350000,
+    outboundUnitsYr: (zones.avgUnitsPerDay || 0) * (zones.operatingDaysPerYear || 250),
+    operatingDaysYr: zones.operatingDaysPerYear || 250,
+    fullPalletPct: (alloc.fullPallet || 0) / 100,
+    cartonOnPalletPct: (alloc.cartonOnPallet || 0) / 100,
+    cartonOnShelvingPct: (alloc.cartonOnShelving || 0) / 100,
+    unitsPerPallet: prod.unitsPerPallet || 48,
+    unitsPerCartonPal: prod.unitsPerCartonPallet || 6,
+    cartonsPerPallet: prod.cartonsPerPallet || 12,
+    unitsPerCartonShelv: prod.unitsPerCartonShelving || 6,
+    cartonsPerLocation: prod.cartonsPerLocation || 4,
+    clearHeightFt: facility.clearHeight || 36,
+    loadHeightIn: facility.palletHeight || 48,
+    sprinklerClearanceIn: facility.topClearance || 18,
+    storeType: facility.storageType || 'single',
+    aisleType,
+    bulkDepth: 4,
+    stackHi: 3,
+    mixRackPct: 0.70,
+    honeycombPct: 10,
+    surgePct: 20,
+    inPalletsDay: volumes.avgDailyInbound || 200,
+    outPalletsDay: volumes.avgDailyOutbound || 200,
+    palletsPerDoorHour: dock.palletsPerDockHour || 20,
+    dockHours: dock.dockOperatingHours || 8,
+    dockConfig: dock.sided === 'two' ? 'two' : 'one',
+    availableWallFt: 0,
+    officePct: (facility.totalSqft && zones.officeSqft)
+      ? Math.max(0.02, Math.min(0.15, zones.officeSqft / facility.totalSqft))
+      : 0.05,
+    forwardPick: fp && fp.enabled ? {
+      enabled: true,
+      skus: fp.skuCount || 0,
+      activePickPct: 20,                    // audit default — full UI for this is in B-series
+      pickType: fp.type === 'heavy_case' ? 'pallet' : 'carton',
+      daysInventory: fp.daysInventory || 3,
+    } : null,
+    optionalZones,
+    customZones: (zones.customZones || []).map(z => ({ label: z.name || 'Custom', sqft: z.sqft || 0 })),
+  };
+}
+
 function renderDashboard() {
   const storage = calc.computeStorage(facility, zones);
   const summary = calc.computeCapacitySummary(facility, zones, volumes);
@@ -1170,15 +1235,81 @@ function renderDashboard() {
   const zoneBD = calc.zoneBreakdown(zones);
   const elev = calc.elevationParams(facility);
 
+  // v2-equivalent volume-first sizing (the engine we actually trust).
+  const sized = calc.sizeFacility(toSizingInputs());
+
   return `
-    <!-- KPI Bar -->
+    <!-- KPI Bar — Sized Facility (v2-equivalent volume-first engine) -->
     <div class="hub-kpi-bar mb-6">
-      <div class="hub-kpi-item"><div class="hub-kpi-label">Total SF</div><div class="hub-kpi-value">${calc.formatSqft(summary.totalSqft)}</div></div>
-      <div class="hub-kpi-item"><div class="hub-kpi-label">Storage SF</div><div class="hub-kpi-value">${calc.formatSqft(summary.storageSqft)}</div></div>
-      <div class="hub-kpi-item"><div class="hub-kpi-label">Pallet Positions</div><div class="hub-kpi-value">${summary.totalPalletPositions.toLocaleString()}</div></div>
-      <div class="hub-kpi-item"><div class="hub-kpi-label">Rack Levels</div><div class="hub-kpi-value">${summary.rackLevels}</div></div>
-      <div class="hub-kpi-item"><div class="hub-kpi-label">Recommended SF</div><div class="hub-kpi-value" style="color:${!hasMeaningfulVolumes(volumes) ? '#fff' : (correctedSf > summary.totalSqft ? 'var(--ies-red)' : 'var(--ies-green)')};" title="Recommended SF = Storage Base (pallets/turns × 20 + SKUs × 2, uplifted for support) + Dock Staging + Forward Pick + Optional Zones. Independent of Total SF — compare the two to see if the facility is sized appropriately.">${!hasMeaningfulVolumes(volumes) ? '—' : calc.formatSqft(correctedSf)}</div></div>
+      <div class="hub-kpi-item"><div class="hub-kpi-label">Sized Total SF</div><div class="hub-kpi-value" title="Sum of pallet storage + carton shelving + dock + staging + zones + office, computed from peak units / mix / dock throughput. v2-equivalent engine.">${calc.formatSqft(sized.totalSqft)}</div></div>
+      <div class="hub-kpi-item"><div class="hub-kpi-label">Storage SF</div><div class="hub-kpi-value">${calc.formatSqft(sized.storageSqft)}</div></div>
+      <div class="hub-kpi-item"><div class="hub-kpi-label">Gross Positions</div><div class="hub-kpi-value" title="Designed positions + ${sized.utilization.designed > 0 ? Math.round((sized.positions.surgePositions / sized.utilization.designed) * 100) : 0}% surge buffer">${sized.positions.grossPositions.toLocaleString()}</div></div>
+      <div class="hub-kpi-item"><div class="hub-kpi-label">Rack Levels</div><div class="hub-kpi-value">${sized.rackLevels}</div></div>
+      <div class="hub-kpi-item"><div class="hub-kpi-label">Dock Doors</div><div class="hub-kpi-value" title="${sized.dock.inboundDoors} in + ${sized.dock.outboundDoors} out, +25% surge buffer">${sized.dock.totalDoors}</div></div>
+      <div class="hub-kpi-item"><div class="hub-kpi-label">Avg Util</div><div class="hub-kpi-value" style="color:${sized.utilization.warning === 'high_util' ? 'var(--ies-red)' : sized.utilization.warning === 'low_util' ? 'var(--ies-orange)' : 'var(--ies-green)'};" title="Avg inventory positions / designed positions">${sized.utilization.utilizationPct}%</div></div>
+      <div class="hub-kpi-item"><div class="hub-kpi-label">Existing Bldg SF</div><div class="hub-kpi-value" style="color:${facility.totalSqft >= sized.totalSqft ? 'var(--ies-green)' : 'var(--ies-red)'};" title="Compare existing building Total SF to Sized Total SF — green = adequate, red = under-sized">${calc.formatSqft(facility.totalSqft)}</div></div>
     </div>
+
+    <!-- Sized Facility Recommendation Card -->
+    <div class="hub-card mb-6" style="border-left:4px solid var(--ies-blue);padding:20px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <div>
+          <div class="text-section" style="margin:0;">${calc.formatSqft(sized.totalSqft)} Facility — ${calc.labelForStoreType(sized.storageDetail.storeType)}</div>
+          <div style="font-size:12px;color:var(--ies-gray-500);margin-top:4px;">${escapeHtml(sized.storageDetail.layoutDescription)}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:11px;color:var(--ies-gray-400);text-transform:uppercase;font-weight:700;">SF / Position</div>
+          <div style="font-size:20px;font-weight:800;">${sized.sfPerPosition.toFixed(1)}</div>
+        </div>
+      </div>
+
+      <table class="cm-grid-table" style="font-size:13px;width:100%;">
+        <tbody>
+          <tr><td colspan="2" style="padding-top:8px;font-weight:700;color:var(--ies-blue);font-size:11px;text-transform:uppercase;">Inventory → Positions</td></tr>
+          <tr><td>Full Pallet (${Math.round(sized.meta.normalisedMix.fullPalletPct * 100)}%)</td><td class="cm-num">${sized.positions.fullPalletPositions.toLocaleString()} pos</td></tr>
+          <tr><td>Carton on Pallet (${Math.round(sized.meta.normalisedMix.cartonOnPalletPct * 100)}%)</td><td class="cm-num">${sized.positions.cartonPalletPositions.toLocaleString()} pos</td></tr>
+          <tr><td>Carton Shelving (${Math.round(sized.meta.normalisedMix.cartonOnShelvingPct * 100)}%)</td><td class="cm-num">${sized.positions.shelvingPositions.toLocaleString()} loc</td></tr>
+          <tr><td><strong>Designed (post-honeycomb)</strong></td><td class="cm-num"><strong>${sized.utilization.designed.toLocaleString()} pos</strong></td></tr>
+          <tr><td>+ Surge buffer</td><td class="cm-num">${sized.positions.surgePositions.toLocaleString()} pos</td></tr>
+          <tr style="border-top:2px solid var(--ies-blue);"><td><strong>Gross Positions</strong></td><td class="cm-num"><strong>${sized.positions.grossPositions.toLocaleString()}</strong></td></tr>
+
+          <tr><td colspan="2" style="padding-top:14px;font-weight:700;color:var(--ies-blue);font-size:11px;text-transform:uppercase;">Zone Breakdown</td></tr>
+          ${sized.zoneBreakdown.map(z => `
+            <tr><td>${escapeHtml(z.label)}</td><td class="cm-num">${calc.formatSqft(z.sqft)} <span style="color:var(--ies-gray-400);font-size:11px;">${z.pct}%</span></td></tr>
+          `).join('')}
+          <tr style="border-top:2px solid var(--ies-blue);"><td><strong>Total Facility</strong></td><td class="cm-num"><strong>${calc.formatSqft(sized.totalSqft)}</strong></td></tr>
+        </tbody>
+      </table>
+
+      ${sized.utilization.warning === 'high_util' ? `
+        <div style="margin-top:12px;padding:10px;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;color:#92400e;font-size:12px;">
+          ⚠ <strong>High Utilization (${sized.utilization.utilizationPct}%)</strong> — limited operational flexibility for receiving surges and seasonal peaks. Consider increasing facility size or reducing peak inventory assumptions.
+        </div>
+      ` : sized.utilization.warning === 'low_util' ? `
+        <div style="margin-top:12px;padding:10px;background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;color:#9a3412;font-size:12px;">
+          ⚠ <strong>Low Utilization (${sized.utilization.utilizationPct}%)</strong> — gap between average (${sized.utilization.avg.toLocaleString()}) and peak (${sized.utilization.peak.toLocaleString()}) is significant. Verify the facility is sized for the right scenario.
+        </div>
+      ` : ''}
+
+      ${!sized.dock.dockWallOk ? `
+        <div style="margin-top:8px;padding:10px;background:#fee2e2;border:1px solid #fca5a5;border-radius:6px;color:#991b1b;font-size:12px;">
+          ⚠ <strong>Dock Wall Constraint:</strong> required ${sized.dock.dockWallRequiredFt} ft for ${sized.dock.totalDoors} doors at 12' on-center spacing exceeds available wall length (${sized.dock.dockWallAvailableFt} ft). Consider a second dock face or fewer doors.
+        </div>
+      ` : ''}
+
+      ${facility.totalSqft && facility.totalSqft < sized.totalSqft ? `
+        <div style="margin-top:8px;padding:10px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;color:#7f1d1d;font-size:12px;">
+          Existing building (${calc.formatSqft(facility.totalSqft)}) is <strong>${calc.formatSqft(sized.totalSqft - facility.totalSqft)} under</strong> the sized requirement.
+        </div>
+      ` : facility.totalSqft && facility.totalSqft > sized.totalSqft * 1.05 ? `
+        <div style="margin-top:8px;padding:10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;color:#166534;font-size:12px;">
+          Existing building (${calc.formatSqft(facility.totalSqft)}) has <strong>${calc.formatSqft(facility.totalSqft - sized.totalSqft)} headroom</strong> over the sized requirement.
+        </div>
+      ` : ''}
+    </div>
+
+    <!-- Capacity Analysis (existing-building view) -->
+    <div style="font-size:11px;color:var(--ies-gray-500);margin-bottom:8px;text-transform:uppercase;font-weight:700;">Capacity Analysis (existing-building view)</div>
 
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
       <!-- Storage Utilization -->
@@ -1692,7 +1823,7 @@ function build3DScene() {
 function pushToCm() {
   const dock = zones.dockConfig || { inboundDoors: 10, outboundDoors: 12 };
   const totalDoors = dock.inboundDoors + dock.outboundDoors;
-  /** @type {import('./types.js?v=20260418-sK').WscToCmPayload} */
+  /** @type {import('./types.js?v=20260418-sL').WscToCmPayload} */
   const payload = {
     totalSqft: facility.totalSqft || 0,
     clearHeight: facility.clearHeight || 0,
@@ -1713,7 +1844,7 @@ function pushToCm() {
 
 /**
  * Handle CM → WSC push (e.g., "Size with Calculator" from CM).
- * @param {import('./types.js?v=20260418-sK').CmToWscPayload} payload
+ * @param {import('./types.js?v=20260418-sL').CmToWscPayload} payload
  */
 function handleCmPush(payload) {
   if (payload.clearHeight) facility.clearHeight = payload.clearHeight;
@@ -1783,4 +1914,15 @@ function createDefaultVolumes() {
     avgDailyOutbound: 290,
     peakMultiplier: 1.3,
   };
+}
+
+/** Minimal HTML-escape for user-supplied strings in the dashboard. */
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }
