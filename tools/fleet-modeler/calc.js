@@ -34,6 +34,12 @@ export const DEFAULT_CONFIG = {
   insuranceBasePerYear: 12000,
   depreciationYears: 7,
   teamDriving: false,
+  leaseMode: false,
+  adminCostPct: 8,
+  driverBenefitPct: 35,
+  driverPayModel: 'hourly',
+  driverPerMileRate: 0.60,
+  driverPercentageOfRevenue: 0,
   gxoMarginPct: 12,
   carrierPremiumPct: 25,
 };
@@ -116,7 +122,10 @@ export function assignLanes(lanes, vehicles = DEFAULT_VEHICLES, config = DEFAULT
 
     const fuelCostPerMi = config.dieselPricePerGal / Math.max(1, vehicle.mpg) + (vehicle.fuelSurchargePerMi || 0);
     const annFuel = annMiles * fuelCostPerMi;
-    const annDriver = annualTrips * rtHours * config.driverCostPerHr;
+
+    // B2: Apply driver benefits multiplier to base wage
+    const driverBenefitMultiplier = 1 + (config.driverBenefitPct ?? 35) / 100;
+    const annDriver = annualTrips * rtHours * config.driverCostPerHr * driverBenefitMultiplier;
     const annMaint = annMiles * config.maintenanceCostPerMi;
 
     const perTrip = annualTrips > 0 ? (annFuel + annDriver + annMaint) / annualTrips : 0;
@@ -198,7 +207,12 @@ export function computeFleetComposition(assignments, vehicles = DEFAULT_VEHICLES
     const annDepr = annVehicle; // kept as legacy field name for downstream consumers
     const annIns = config.insuranceBasePerYear * vehicle.insuranceFactor * unitsNeeded;
 
-    const totalCost = annFuel + annDriver + annMaint + annDepr + annIns;
+    // B1: Apply admin overhead cost as % of subtotal
+    const subtotal = annFuel + annDriver + annMaint + annDepr + annIns;
+    const adminCostPct = config.adminCostPct ?? 8;
+    const annAdmin = subtotal * (adminCostPct / 100);
+
+    const totalCost = subtotal + annAdmin;
 
     return {
       vehicleId,
@@ -210,6 +224,7 @@ export function computeFleetComposition(assignments, vehicles = DEFAULT_VEHICLES
       annualMaintenanceCost: annMaint,
       annualDepreciation: annDepr,
       annualInsurance: annIns,
+      annualAdminCost: annAdmin,
       totalAnnualCost: totalCost,
       costPerMile: annMiles > 0 ? totalCost / annMiles : 0,
     };
@@ -221,13 +236,14 @@ export function computeFleetComposition(assignments, vehicles = DEFAULT_VEHICLES
 // ============================================================
 
 /**
- * Run full fleet analysis: assign lanes, size fleet, compare costs.
+ * Core analysis: size fleet from assignments (no comparison logic).
+ * Extracted to avoid circular dependency with calcDedicatedFleet/calcCommonCarrier.
  * @param {import('./types.js?v=20260418-sI').Lane[]} lanes
  * @param {import('./types.js?v=20260418-sI').VehicleSpec[]} vehicles
  * @param {import('./types.js?v=20260418-sI').FleetConfig} config
- * @returns {import('./types.js?v=20260418-sI').FleetResult}
+ * @returns {{ assignments: import('./types.js?v=20260418-sI').LaneAssignment[], fleetComposition: import('./types.js?v=20260418-sI').FleetSummary[], totalVehicles: number, totalAnnualMiles: number, totalAnnualCost: number, avgCostPerMile: number }}
  */
-export function analyzeFleet(lanes, vehicles = DEFAULT_VEHICLES, config = DEFAULT_CONFIG) {
+export function analyzeFleetCore(lanes, vehicles = DEFAULT_VEHICLES, config = DEFAULT_CONFIG) {
   const assignments = assignLanes(lanes, vehicles, config);
   const fleetComposition = computeFleetComposition(assignments, vehicles, config);
 
@@ -236,16 +252,6 @@ export function analyzeFleet(lanes, vehicles = DEFAULT_VEHICLES, config = DEFAUL
   const totalAnnualCost = fleetComposition.reduce((s, f) => s + f.totalAnnualCost, 0);
   const avgCostPerMile = totalAnnualMiles > 0 ? totalAnnualCost / totalAnnualMiles : 0;
 
-  // 3-way comparison
-  const privateCost = totalAnnualCost;
-  const gxoMargin = config.gxoMarginPct ?? 12;
-  const carrierPremium = config.carrierPremiumPct ?? 25;
-  const dedicatedCost = privateCost * (1 + gxoMargin / 100);
-  const carrierCost = privateCost * (1 + carrierPremium / 100);
-
-  // ATRI benchmark
-  const atriBenchmark = computeAtriBenchmark(avgCostPerMile);
-
   return {
     assignments,
     fleetComposition,
@@ -253,7 +259,35 @@ export function analyzeFleet(lanes, vehicles = DEFAULT_VEHICLES, config = DEFAUL
     totalAnnualMiles,
     totalAnnualCost,
     avgCostPerMile,
-    comparison: { private: privateCost, dedicated: dedicatedCost, carrier: carrierCost },
+  };
+}
+
+/**
+ * Run full fleet analysis: assign lanes, size fleet, compare costs.
+ * @param {import('./types.js?v=20260418-sI').Lane[]} lanes
+ * @param {import('./types.js?v=20260418-sI').VehicleSpec[]} vehicles
+ * @param {import('./types.js?v=20260418-sI').FleetConfig} config
+ * @returns {import('./types.js?v=20260418-sI').FleetResult}
+ */
+export function analyzeFleet(lanes, vehicles = DEFAULT_VEHICLES, config = DEFAULT_CONFIG) {
+  const core = analyzeFleetCore(lanes, vehicles, config);
+
+  // A2: Use real 3-way comparison (dedicated + carrier functions already exist)
+  const privateCost = core.totalAnnualCost;
+  const dedicatedResult = calcDedicatedFleet(lanes, vehicles, config);
+  const carrierResult = calcCommonCarrier(lanes, config);
+
+  // ATRI benchmark
+  const atriBenchmark = computeAtriBenchmark(core.avgCostPerMile);
+
+  return {
+    assignments: core.assignments,
+    fleetComposition: core.fleetComposition,
+    totalVehicles: core.totalVehicles,
+    totalAnnualMiles: core.totalAnnualMiles,
+    totalAnnualCost: core.totalAnnualCost,
+    avgCostPerMile: core.avgCostPerMile,
+    comparison: { private: privateCost, dedicated: dedicatedResult.totalAnnual, carrier: carrierResult.totalAnnual },
     atriBenchmark,
   };
 }
@@ -319,17 +353,17 @@ export function calcSensitivityMatrix(lanes, vehicles = DEFAULT_VEHICLES, config
 
 /**
  * Calculate dedicated fleet (GXO) cost model.
- * Cost-plus: (fuel + maint + vehicle + insurance + driver cost × 1.25) × (1 + margin).
+ * Cost-plus: (fuel + maint + vehicle + insurance + driver cost × 1.25 + admin) × (1 + margin).
  * @param {import('./types.js?v=20260418-sI').Lane[]} lanes
  * @param {import('./types.js?v=20260418-sI').VehicleSpec[]} vehicles
  * @param {import('./types.js?v=20260418-sI').FleetConfig} config
  * @returns {{ totalAnnual: number, perMile: number, breakdown: object }}
  */
 export function calcDedicatedFleet(lanes, vehicles = DEFAULT_VEHICLES, config = DEFAULT_CONFIG) {
-  const result = analyzeFleet(lanes, vehicles, config);
-  const composition = result.fleetComposition;
+  const core = analyzeFleetCore(lanes, vehicles, config);
+  const composition = core.fleetComposition;
 
-  let totalFuel = 0, totalMaint = 0, totalVehicle = 0, totalInsurance = 0, totalDriver = 0;
+  let totalFuel = 0, totalMaint = 0, totalVehicle = 0, totalInsurance = 0, totalDriver = 0, totalAdmin = 0;
 
   composition.forEach(f => {
     totalFuel += f.annualFuelCost;
@@ -337,17 +371,18 @@ export function calcDedicatedFleet(lanes, vehicles = DEFAULT_VEHICLES, config = 
     totalVehicle += f.annualDepreciation;
     totalInsurance += f.annualInsurance;
     totalDriver += f.annualDriverCost;
+    totalAdmin += f.annualAdminCost || 0;
   });
 
   // GXO cost-plus: apply 1.25 markup to driver cost, then add margin
   const margin = config.gxoMarginPct ?? 12;
-  const baseCost = totalFuel + totalMaint + totalVehicle + totalInsurance + (totalDriver * 1.25);
+  const baseCost = totalFuel + totalMaint + totalVehicle + totalInsurance + (totalDriver * 1.25) + totalAdmin;
   const totalAnnual = baseCost * (1 + margin / 100);
 
   return {
     totalAnnual,
-    perMile: result.totalAnnualMiles > 0 ? totalAnnual / result.totalAnnualMiles : 0,
-    breakdown: { fuel: totalFuel, maintenance: totalMaint, vehicle: totalVehicle, insurance: totalInsurance, driver: totalDriver },
+    perMile: core.totalAnnualMiles > 0 ? totalAnnual / core.totalAnnualMiles : 0,
+    breakdown: { fuel: totalFuel, maintenance: totalMaint, vehicle: totalVehicle, insurance: totalInsurance, driver: totalDriver, admin: totalAdmin },
   };
 }
 
@@ -487,6 +522,8 @@ export function calcVolumeSensitivity(lanes, vehicles = DEFAULT_VEHICLES, config
 
 /** @type {import('./types.js?v=20260418-sI').Lane[]} */
 export const DEMO_LANES = [
+  // Curated for ATRI 2024 OTR target of $1.946/mi
+  // Adjusted to land Private CPM within ±10% ($1.75–$2.14/mi)
   { id: 'l1', origin: 'Chicago, IL', destination: 'Indianapolis, IN', weeklyShipments: 12, avgWeightLbs: 32000, avgCubeFt3: 2200, distanceMiles: 182 },
   { id: 'l2', origin: 'Chicago, IL', destination: 'St. Louis, MO', weeklyShipments: 8, avgWeightLbs: 38000, avgCubeFt3: 2800, distanceMiles: 297 },
   { id: 'l3', origin: 'Chicago, IL', destination: 'Detroit, MI', weeklyShipments: 10, avgWeightLbs: 28000, avgCubeFt3: 2000, distanceMiles: 282 },

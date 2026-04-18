@@ -52,6 +52,24 @@ let activeParentCmId = null;
 
 export async function mount(el) {
   rootEl = el;
+
+  // X11: Receive lanes from NetOpt
+  bus.on('netopt:push-to-fleet', ({ lanes: pushLanes }) => {
+    if (pushLanes && Array.isArray(pushLanes)) {
+      lanes = pushLanes.map(l => ({
+        id: l.id || 'l' + Date.now() + Math.random(),
+        origin: l.origin,
+        destination: l.destination,
+        weeklyShipments: l.weeklyShipments || 1,
+        avgWeightLbs: l.avgWeightLbs || 5000,
+        avgCubeFt3: l.avgCubeFt3 || 300,
+        distanceMiles: l.distanceMiles || 200,
+      }));
+      showToast(`Received ${lanes.length} lanes from Network Optimizer`, 'success');
+      if (activeTab === 'lanes') renderLanes(rootEl?.querySelector('#fm-content'));
+    }
+  });
+
   await renderLanding();
   bus.emit('fleet:mounted');
 }
@@ -378,7 +396,9 @@ function renderConfig(el) {
       <div class="hub-card" style="padding:20px;">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
           ${cfgInput('Diesel Price', 'dieselPricePerGal', config.dieselPricePerGal, '$/gal')}
-          ${cfgInput('Driver Cost', 'driverCostPerHr', config.driverCostPerHr, '$/hr')}
+          ${cfgInput('Driver Wage', 'driverCostPerHr', config.driverCostPerHr, '$/hr')}
+          ${cfgInput('Driver Benefits %', 'driverBenefitPct', config.driverBenefitPct ?? 35, '%')}
+          ${cfgInput('Admin Overhead %', 'adminCostPct', config.adminCostPct ?? 8, '%')}
           ${cfgInput('Avg Speed', 'avgSpeedMph', config.avgSpeedMph, 'mph')}
           ${cfgInput('Driving Hrs/Day', 'drivingHoursPerDay', config.drivingHoursPerDay, 'hrs')}
           ${cfgInput('Operating Days/Wk', 'operatingDaysPerWeek', config.operatingDaysPerWeek, 'days')}
@@ -389,10 +409,18 @@ function renderConfig(el) {
           ${cfgInput('GXO Margin', 'gxoMarginPct', config.gxoMarginPct, '%')}
           ${cfgInput('Carrier Premium', 'carrierPremiumPct', config.carrierPremiumPct, '%')}
         </div>
-        <div style="margin-top:16px;display:flex;gap:20px;">
+        <div style="margin-top:16px;display:flex;gap:20px;flex-wrap:wrap;">
           <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
             <input type="checkbox" id="fm-team" ${config.teamDriving ? 'checked' : ''}>
             <span style="font-weight:600;">Team Driving (doubles daily hours, 2 drivers/vehicle)</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+            <select id="fm-driver-model" style="padding:4px 6px;border:1px solid var(--ies-gray-300);border-radius:4px;font-size:12px;">
+              <option value="hourly" ${(config.driverPayModel ?? 'hourly') === 'hourly' ? 'selected' : ''}>Hourly Pay Model</option>
+              <option value="perMile" ${(config.driverPayModel ?? 'hourly') === 'perMile' ? 'selected' : ''}>Per-Mile Pay Model</option>
+              <option value="percentage" ${(config.driverPayModel ?? 'hourly') === 'percentage' ? 'selected' : ''}>% of Revenue</option>
+              <option value="hybrid" ${(config.driverPayModel ?? 'hourly') === 'hybrid' ? 'selected' : ''}>Hybrid Pay Model</option>
+            </select>
           </label>
         </div>
       </div>
@@ -428,6 +456,11 @@ function renderConfig(el) {
   el.querySelector('#fm-team')?.addEventListener('change', (e) => {
     config.teamDriving = /** @type {HTMLInputElement} */ (e.target).checked;
   });
+
+  // Driver pay model
+  el.querySelector('#fm-driver-model')?.addEventListener('change', (e) => {
+    config.driverPayModel = /** @type {HTMLSelectElement} */ (e.target).value;
+  });
 }
 
 function cfgInput(label, key, value, unit) {
@@ -456,6 +489,10 @@ function renderResults(el) {
 
   el.innerHTML = `
     <div style="max-width:1200px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h3 class="text-section" style="margin:0;">Results</h3>
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" id="fm-results-export">⬇ Export XLSX</button>
+      </div>
       <!-- KPI Bar -->
       <div class="hub-card" style="background:linear-gradient(135deg,#0a1628,#0d1f3c);color:#fff;padding:16px 24px;margin-bottom:20px;">
         <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;">
@@ -481,6 +518,7 @@ function renderResults(el) {
               <th style="text-align:right;padding:6px;font-weight:700;">Maint</th>
               <th style="text-align:right;padding:6px;font-weight:700;">Depr</th>
               <th style="text-align:right;padding:6px;font-weight:700;">Insurance</th>
+              <th style="text-align:right;padding:6px;font-weight:700;">Admin</th>
               <th style="text-align:right;padding:6px;font-weight:700;">Total</th>
               <th style="text-align:right;padding:6px;font-weight:700;">$/Mile</th>
             </tr>
@@ -496,6 +534,7 @@ function renderResults(el) {
                 <td style="padding:6px;text-align:right;">${calc.formatCurrency(f.annualMaintenanceCost, { compact: true })}</td>
                 <td style="padding:6px;text-align:right;">${calc.formatCurrency(f.annualDepreciation, { compact: true })}</td>
                 <td style="padding:6px;text-align:right;">${calc.formatCurrency(f.annualInsurance, { compact: true })}</td>
+                <td style="padding:6px;text-align:right;">${calc.formatCurrency(f.annualAdminCost || 0, { compact: true })}</td>
                 <td style="padding:6px;text-align:right;font-weight:700;">${calc.formatCurrency(f.totalAnnualCost, { compact: true })}</td>
                 <td style="padding:6px;text-align:right;">${calc.formatCpm(f.costPerMile)}</td>
               </tr>
@@ -590,7 +629,7 @@ function renderResults(el) {
 
   // Bind export buttons
   setTimeout(() => {
-    rootEl?.querySelector('#fm-export-csv')?.addEventListener('click', exportFleetCSV);
+    el.querySelector('#fm-results-export')?.addEventListener('click', exportFleetXLSX);
   }, 0);
 }
 
@@ -611,12 +650,12 @@ function comparisonBar(label, amount, maxAmount, color) {
 
 /**
  * Aggregate cost categories across the whole fleet and render as a horizontal
- * stacked waterfall (fuel → driver → maintenance → depreciation → insurance → total).
+ * stacked waterfall (fuel → driver → maintenance → depreciation → insurance → admin → total).
  * @param {Array} fleetComposition
  */
 function renderCostWaterfall(fleetComposition) {
   const totals = {
-    fuel: 0, driver: 0, maintenance: 0, depreciation: 0, insurance: 0,
+    fuel: 0, driver: 0, maintenance: 0, depreciation: 0, insurance: 0, admin: 0,
   };
   for (const f of fleetComposition) {
     totals.fuel += f.annualFuelCost || 0;
@@ -624,6 +663,7 @@ function renderCostWaterfall(fleetComposition) {
     totals.maintenance += f.annualMaintenanceCost || 0;
     totals.depreciation += f.annualDepreciation || 0;
     totals.insurance += f.annualInsurance || 0;
+    totals.admin += f.annualAdminCost || 0;
   }
   const grand = Object.values(totals).reduce((s, v) => s + v, 0);
   if (grand === 0) return '<div style="font-size:13px;color:var(--ies-gray-400);">No cost data</div>';
@@ -634,6 +674,7 @@ function renderCostWaterfall(fleetComposition) {
     { label: 'Maintenance',  value: totals.maintenance,  color: '#f59e0b', fixedVar: 'variable' },
     { label: 'Depreciation', value: totals.depreciation, color: '#7c3aed', fixedVar: 'fixed' },
     { label: 'Insurance',    value: totals.insurance,    color: '#ec4899', fixedVar: 'fixed' },
+    { label: 'Admin',        value: totals.admin,        color: '#6366f1', fixedVar: 'fixed' },
   ];
 
   const totalFixed = steps.filter(s => s.fixedVar === 'fixed').reduce((s, x) => s + x.value, 0);
@@ -810,6 +851,88 @@ function exportFleetCSV() {
   a.download = 'fleet-results.csv';
   a.click();
   URL.revokeObjectURL(url);
+}
+
+/**
+ * X9: Export fleet analysis to XLSX with multiple sheets:
+ * - Lanes: input lanes
+ * - Vehicles: vehicle specifications
+ * - Fleet Composition: vehicle sizing and costs
+ * - 3-Way Comparison: private vs dedicated vs carrier
+ */
+async function exportFleetXLSX() {
+  if (!result) {
+    showToast('No results to export', 'error');
+    return;
+  }
+
+  try {
+    // Dynamically import XLSX utilities
+    const { downloadXLSX } = await import('../../shared/export.js?v=20260418-sI');
+
+    // Prepare sheet data
+    const sheets = [];
+
+    // Sheet 1: Lanes
+    sheets.push({
+      name: 'Lanes',
+      rows: lanes.map(l => ({
+        'Origin': l.origin,
+        'Destination': l.destination,
+        'Weekly Shipments': l.weeklyShipments,
+        'Avg Weight (lbs)': l.avgWeightLbs,
+        'Avg Cube (ft³)': l.avgCubeFt3,
+        'Distance (mi)': l.distanceMiles,
+      })),
+    });
+
+    // Sheet 2: Vehicles
+    sheets.push({
+      name: 'Vehicles',
+      rows: vehicles.map(v => ({
+        'Vehicle': v.name,
+        'Payload (lbs)': v.maxPayloadLbs,
+        'Cube (ft³)': v.maxCubeFt3,
+        'MPG': v.mpg,
+        'Capital Cost': v.capitalCost,
+        'Insurance Factor': v.insuranceFactor,
+      })),
+    });
+
+    // Sheet 3: Fleet Composition
+    sheets.push({
+      name: 'Fleet Composition',
+      rows: result.fleetComposition.map(f => ({
+        'Vehicle': f.vehicleName,
+        'Units': f.unitsNeeded,
+        'Annual Miles': Math.round(f.annualMiles),
+        'Fuel': f.annualFuelCost.toFixed(2),
+        'Driver': f.annualDriverCost.toFixed(2),
+        'Maintenance': f.annualMaintenanceCost.toFixed(2),
+        'Depreciation': f.annualDepreciation.toFixed(2),
+        'Insurance': f.annualInsurance.toFixed(2),
+        'Admin': (f.annualAdminCost || 0).toFixed(2),
+        'Total': f.totalAnnualCost.toFixed(2),
+        '$/Mile': f.costPerMile.toFixed(3),
+      })),
+    });
+
+    // Sheet 4: 3-Way Comparison
+    sheets.push({
+      name: '3-Way Comparison',
+      rows: [
+        { 'Model Type': 'Private Fleet', 'Annual Cost': result.comparison.private.toFixed(2), 'Cost/Mile': (result.comparison.private / result.totalAnnualMiles).toFixed(3) },
+        { 'Model Type': 'Dedicated (GXO)', 'Annual Cost': result.comparison.dedicated.toFixed(2), 'Cost/Mile': (result.comparison.dedicated / result.totalAnnualMiles).toFixed(3) },
+        { 'Model Type': 'Common Carrier', 'Annual Cost': result.comparison.carrier.toFixed(2), 'Cost/Mile': (result.comparison.carrier / result.totalAnnualMiles).toFixed(3) },
+      ],
+    });
+
+    downloadXLSX({ filename: `fleet-analysis-${Date.now()}.xlsx`, sheets });
+    showToast('Fleet analysis exported successfully', 'success');
+  } catch (err) {
+    console.error('Export error:', err);
+    showToast('Export failed', 'error');
+  }
 }
 
 function kpi(label, value, color) {

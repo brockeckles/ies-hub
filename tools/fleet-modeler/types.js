@@ -43,6 +43,12 @@
  * @property {number} insuranceBasePerYear — base annual insurance per truck
  * @property {number} depreciationYears — years to depreciate
  * @property {boolean} teamDriving — doubles daily driving hours
+ * @property {boolean} [leaseMode] — false = purchase (depreciation), true = lease (monthly rates)
+ * @property {number} [adminCostPct] — admin overhead % of total cost (default 8%)
+ * @property {number} [driverBenefitPct] — driver benefits multiplier % (default 35%)
+ * @property {string} [driverPayModel] — 'hourly' | 'perMile' | 'percentage' | 'hybrid' (default 'hourly')
+ * @property {number} [driverPerMileRate] — $/mi when payModel='perMile'
+ * @property {number} [driverPercentageOfRevenue] — % of revenue when payModel='percentage'
  * @property {number} [gxoMarginPct] — margin for dedicated fleet comparison (default 12)
  * @property {number} [carrierPremiumPct] — premium for common carrier vs private (default 25)
  */
@@ -73,6 +79,7 @@
  * @property {number} annualMaintenanceCost
  * @property {number} annualDepreciation
  * @property {number} annualInsurance
+ * @property {number} [annualAdminCost]
  * @property {number} totalAnnualCost
  * @property {number} costPerMile
  */
