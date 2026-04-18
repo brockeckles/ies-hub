@@ -1021,117 +1021,209 @@ function drawPlan() {
     return;
   }
 
-  // Derive building dimensions; use facility.buildingWidth/Depth if set, else approximate
-  // a 1.5:1 rectangle from the total sqft. Footprint in feet.
+  // Pull sized facility numbers so this view agrees with the dashboard.
+  const sized = calc.sizeFacility(toSizingInputs());
+  const elev = calc.elevationParams(facility);
+
+  // Building dimensions (ft)
   const widthFt  = facility.buildingWidth  || Math.round(Math.sqrt(totalSqft * 1.5));
   const depthFt  = facility.buildingDepth  || Math.round(totalSqft / Math.max(1, widthFt));
 
-  // Compute a fit-to-canvas scale (pixels per foot) with padding
-  const pad = 48;
-  const usableW = cw - pad * 2;
-  const usableH = ch - pad * 2;
+  // Fit-to-canvas with padding for dimension labels
+  const padX = 60, padY = 60;
+  const usableW = cw - padX * 2;
+  const usableH = ch - padY * 2;
   const pxPerFt = Math.min(usableW / widthFt, usableH / depthFt);
 
-  const buildingWpx = widthFt * pxPerFt;
-  const buildingHpx = depthFt * pxPerFt;
-  const offsetX = (cw - buildingWpx) / 2;
-  const offsetY = (ch - buildingHpx) / 2;
+  const Wpx = widthFt * pxPerFt;
+  const Hpx = depthFt * pxPerFt;
+  const X0  = (cw - Wpx) / 2;
+  const Y0  = (ch - Hpx) / 2;
 
-  // Outer building outline
-  ctx.fillStyle = '#f9fafb';
-  ctx.strokeStyle = '#374151';
+  // ---------- Outer shell ----------
+  ctx.fillStyle = '#fafafa';
+  ctx.strokeStyle = '#1f2937';
   ctx.lineWidth = 2;
-  ctx.fillRect(offsetX, offsetY, buildingWpx, buildingHpx);
-  ctx.strokeRect(offsetX, offsetY, buildingWpx, buildingHpx);
+  ctx.fillRect(X0, Y0, Wpx, Hpx);
+  ctx.strokeRect(X0, Y0, Wpx, Hpx);
 
-  // Zone allocations (as fractions of the building)
-  const zoneData = [
-    { key: 'officeSqft',         sqft: zones.officeSqft || 0,         fill: '#f3e8ff', stroke: '#8b5cf6', label: 'Office' },
-    { key: 'receiveStagingSqft', sqft: zones.receiveStagingSqft || 0, fill: '#f0fdf4', stroke: '#16a34a', label: 'Receive Staging' },
-    { key: 'shipStagingSqft',    sqft: zones.shipStagingSqft || 0,    fill: '#fef3c7', stroke: '#d97706', label: 'Ship Staging' },
-    { key: 'chargingSqft',       sqft: zones.chargingSqft || 0,       fill: '#ffedd5', stroke: '#ea580c', label: 'Charging' },
-  ].filter(z => z.sqft > 0);
+  // ---------- Compute zone strips along the dock face (front = bottom edge) ----------
+  // Layout convention (top-down view):
+  //   Top edge      = back of building
+  //   Bottom edge   = dock face (where trucks pull up)
+  //   Strip just inside dock face (bottom)  = Ship Staging  (sized.shipStagingSqft)
+  //   Strip just below back-wall (top)      = Receive Staging (sized.recvStagingSqft) — only if non-zero
+  //   Front-left corner inside ship staging = Office (overlay)
+  //   Storage racks fill the rest of the interior
+  const shipFrac  = Math.min(0.30, (sized.shipStagingSqft / Math.max(1, sized.totalSqft)));
+  const recvFrac  = Math.min(0.18, (sized.recvStagingSqft / Math.max(1, sized.totalSqft)));
+  const officeFrac= Math.min(0.18, (sized.officeSqft     / Math.max(1, sized.totalSqft)));
 
-  // Storage sits inside what's left — draw as a big background band first
-  const storageSqft = Math.max(0, totalSqft - zoneData.reduce((s, z) => s + z.sqft, 0));
-  if (storageSqft > 0) {
-    // Paint full interior with storage color, then zones on top
-    ctx.fillStyle = '#eff6ff';
-    ctx.fillRect(offsetX + 2, offsetY + 2, buildingWpx - 4, buildingHpx - 4);
+  const shipHpx  = Math.max(20, shipFrac  * Hpx);
+  const recvHpx  = recvFrac > 0.01 ? Math.max(16, recvFrac * Hpx) : 0;
+  const officeWpx= Math.max(40, officeFrac * Wpx);
+  const officeHpx= Math.min(shipHpx * 0.9, 80);
 
-    // Light rack hatching to hint at rows
-    ctx.strokeStyle = '#bfdbfe';
-    ctx.lineWidth = 1;
-    const rackSpacing = Math.max(14, Math.round(10 * pxPerFt * 3.5)); // every ~35 ft
-    for (let x = offsetX + rackSpacing; x < offsetX + buildingWpx; x += rackSpacing) {
-      ctx.beginPath();
-      ctx.moveTo(x, offsetY + 60);
-      ctx.lineTo(x, offsetY + buildingHpx - 20);
-      ctx.stroke();
+  const storageY = Y0 + recvHpx;
+  const storageH = Hpx - recvHpx - shipHpx;
+
+  // ---------- Storage rack rows ----------
+  // Honest geometry: back-to-back rack pairs with aisles between them.
+  // Module width = 2 × rackDepth + aisle (roughly 12 ft + 12 ft = 24 ft per module).
+  const rackDepthFt = elev.rackDepthFt || 4.3;
+  const aisleFt     = (facility.aisleWidth || elev.aisleWidth || 12);
+  // Visual module = back-to-back pair (~2× depth) + aisle on one side.
+  const moduleFt    = (2 * rackDepthFt) + aisleFt;
+  const rackPx      = rackDepthFt * pxPerFt;
+  const aislePx     = aisleFt * pxPerFt;
+  const modulePx    = moduleFt * pxPerFt;
+  // Margin from side walls so racks don't run into the walls.
+  const sideMarginPx = Math.max(8, 6 * pxPerFt);
+
+  // Light storage background
+  ctx.fillStyle = '#f0f7ff';
+  ctx.fillRect(X0 + 2, storageY, Wpx - 4, storageH);
+
+  // Draw the rack rows
+  ctx.fillStyle = '#ff8c42';
+  ctx.strokeStyle = '#c2410c';
+  ctx.lineWidth = 1;
+  let mx = X0 + sideMarginPx;
+  let rackCount = 0;
+  while (mx + 2 * rackPx + aislePx < X0 + Wpx - sideMarginPx) {
+    // Back-to-back pair: two thin rectangles separated by a small gap, then an aisle
+    // Leave 8 ft endcap clearance from staging zones above / below
+    const racksTop    = storageY + 8 * pxPerFt;
+    const racksBottom = storageY + storageH - 8 * pxPerFt;
+    const racksH      = Math.max(0, racksBottom - racksTop);
+    if (racksH > 0) {
+      ctx.fillRect(mx, racksTop, rackPx, racksH);
+      ctx.strokeRect(mx, racksTop, rackPx, racksH);
+      ctx.fillRect(mx + rackPx + 2, racksTop, rackPx, racksH);
+      ctx.strokeRect(mx + rackPx + 2, racksTop, rackPx, racksH);
     }
-    ctx.strokeStyle = '#93c5fd';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(offsetX + 2, offsetY + 2, buildingWpx - 4, buildingHpx - 4);
-
-    ctx.fillStyle = '#1e40af';
-    ctx.font = 'bold 13px Montserrat, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(`STORAGE  ${Math.round(storageSqft).toLocaleString()} sqft`, offsetX + buildingWpx / 2, offsetY + buildingHpx / 2);
+    rackCount += 2;
+    mx += modulePx;
   }
 
-  // Carve zone rectangles along the top edge of the building (simple horizontal strip)
-  // Office → receive → ship → charging, left-to-right.
-  let cursorX = offsetX + 4;
-  const zoneHpx = Math.min(buildingHpx * 0.22, 120);
-  for (const z of zoneData) {
-    const fraction = z.sqft / totalSqft;
-    const zoneWpx = Math.max(40, fraction * buildingWpx);
-    if (cursorX + zoneWpx > offsetX + buildingWpx - 4) break; // don't overflow
-    ctx.fillStyle = z.fill;
-    ctx.strokeStyle = z.stroke;
-    ctx.lineWidth = 1;
-    ctx.fillRect(cursorX, offsetY + 4, zoneWpx, zoneHpx);
-    ctx.strokeRect(cursorX, offsetY + 4, zoneWpx, zoneHpx);
-    ctx.fillStyle = '#111827';
-    ctx.font = '11px Montserrat, sans-serif';
-    ctx.textAlign = 'center';
-    if (zoneWpx > 90) {
-      ctx.fillText(z.label, cursorX + zoneWpx / 2, offsetY + zoneHpx / 2 - 2);
-      ctx.fillStyle = '#6b7280';
-      ctx.font = '10px Montserrat, sans-serif';
-      ctx.fillText(`${Math.round(z.sqft).toLocaleString()} sqft`, cursorX + zoneWpx / 2, offsetY + zoneHpx / 2 + 14);
-    }
-    cursorX += zoneWpx + 2;
-  }
+  // Storage label
+  ctx.fillStyle = '#0f172a';
+  ctx.font = 'bold 12px Montserrat, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(
+    `Storage  ·  ${calc.formatSqft(sized.storageSqft)}  ·  ${rackCount} rack rows  ·  ${aisleFt} ft aisles`,
+    X0 + sideMarginPx,
+    storageY + 14,
+  );
 
-  // Dock doors — along the bottom (outbound) and optionally top (inbound if two-sided)
-  const dock = zones.dockConfig || { sided: 'single', inboundDoors: 10, outboundDoors: 12 };
-  const twoSided = dock.sided === 'two';
-  const doorWidthPx = Math.max(8, pxPerFt * 10); // 10 ft doors
-  const doorSpacingPx = Math.max(16, pxPerFt * 14); // 14 ft per door+space
-  const outDoors = Math.min(Math.floor(buildingWpx / doorSpacingPx), dock.outboundDoors || 12);
-  const inDoors  = twoSided ? Math.min(Math.floor(buildingWpx / doorSpacingPx), dock.inboundDoors || 10) : 0;
-
-  function drawDoors(count, yTop, labelAbove) {
-    if (count <= 0) return;
-    const totalDoorW = count * doorSpacingPx;
-    const startX = offsetX + (buildingWpx - totalDoorW) / 2;
-    ctx.fillStyle = '#fecaca';
-    ctx.strokeStyle = '#dc2626';
+  // ---------- Receive Staging strip (top) ----------
+  if (recvHpx > 0) {
+    ctx.fillStyle = '#ecfdf5';
+    ctx.strokeStyle = '#16a34a';
     ctx.lineWidth = 1;
-    for (let i = 0; i < count; i++) {
-      const x = startX + i * doorSpacingPx;
-      ctx.fillRect(x, yTop, doorWidthPx, 10);
-      ctx.strokeRect(x, yTop, doorWidthPx, 10);
-    }
-    ctx.fillStyle = '#7f1d1d';
+    ctx.fillRect(X0 + 2, Y0 + 2, Wpx - 4, recvHpx - 2);
+    ctx.strokeRect(X0 + 2, Y0 + 2, Wpx - 4, recvHpx - 2);
+    ctx.fillStyle = '#166534';
     ctx.font = 'bold 11px Montserrat, sans-serif';
     ctx.textAlign = 'center';
-    const labelY = labelAbove ? yTop - 6 : yTop + 24;
-    ctx.fillText(`${count} Dock Doors (${labelAbove ? 'Inbound' : 'Outbound'})`, offsetX + buildingWpx / 2, labelY);
+    ctx.fillText(`Receive Staging  ·  ${calc.formatSqft(sized.recvStagingSqft)}`, X0 + Wpx / 2, Y0 + recvHpx / 2 + 4);
   }
-  drawDoors(outDoors, offsetY + buildingHpx - 10, false);
-  if (twoSided) drawDoors(inDoors, offsetY, true);
+
+  // ---------- Ship Staging strip (bottom, just inside dock face) ----------
+  ctx.fillStyle = '#fffbeb';
+  ctx.strokeStyle = '#d97706';
+  ctx.lineWidth = 1;
+  ctx.fillRect(X0 + 2, Y0 + Hpx - shipHpx, Wpx - 4, shipHpx - 2);
+  ctx.strokeRect(X0 + 2, Y0 + Hpx - shipHpx, Wpx - 4, shipHpx - 2);
+  ctx.fillStyle = '#92400e';
+  ctx.font = 'bold 11px Montserrat, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(`Ship Staging  ·  ${calc.formatSqft(sized.shipStagingSqft)}`, X0 + Wpx / 2, Y0 + Hpx - shipHpx / 2 + 4);
+
+  // ---------- Office (front-left corner, overlapping the ship staging strip) ----------
+  if (officeFrac > 0.005) {
+    const ox = X0 + 4;
+    const oy = Y0 + Hpx - shipHpx + 4;
+    ctx.fillStyle = '#f5f3ff';
+    ctx.strokeStyle = '#8b5cf6';
+    ctx.lineWidth = 1;
+    ctx.fillRect(ox, oy, officeWpx, officeHpx);
+    ctx.strokeRect(ox, oy, officeWpx, officeHpx);
+    ctx.fillStyle = '#5b21b6';
+    ctx.font = 'bold 10px Montserrat, sans-serif';
+    ctx.textAlign = 'center';
+    if (officeWpx > 70 && officeHpx > 24) {
+      ctx.fillText('Office', ox + officeWpx / 2, oy + officeHpx / 2 - 2);
+      ctx.fillStyle = '#6b21a8';
+      ctx.font = '9px Montserrat, sans-serif';
+      ctx.fillText(`${calc.formatSqft(sized.officeSqft)}`, ox + officeWpx / 2, oy + officeHpx / 2 + 12);
+    }
+  }
+
+  // ---------- Dock doors at bottom edge, aligned with ship staging ----------
+  // Use the sized engine's door count so this view agrees with the KPI bar.
+  const totalDoors = sized.dock.totalDoors || 0;
+  const inboundDoors = sized.dock.inboundDoors || 0;
+  const outboundDoors = sized.dock.outboundDoors || 0;
+  const twoSided = facility.dockConfig === 'two';
+
+  function drawDoorRow(count, yTop, label, color) {
+    if (count <= 0) return;
+    const doorWPx  = Math.max(6, 8 * pxPerFt);  // 8 ft door
+    const doorSpcPx= Math.max(10, 12 * pxPerFt); // 12 ft on-center
+    const totalDoorW = count * doorSpcPx;
+    const startX = X0 + (Wpx - totalDoorW) / 2;
+    ctx.fillStyle = color;
+    ctx.strokeStyle = '#7f1d1d';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < count; i++) {
+      const x = startX + i * doorSpcPx + (doorSpcPx - doorWPx) / 2;
+      ctx.fillRect(x, yTop, doorWPx, 12);
+      ctx.strokeRect(x, yTop, doorWPx, 12);
+    }
+    ctx.fillStyle = '#7f1d1d';
+    ctx.font = 'bold 10px Montserrat, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, X0 + Wpx / 2, yTop + 28);
+  }
+
+  if (twoSided) {
+    drawDoorRow(outboundDoors, Y0 + Hpx - 6, `${outboundDoors} Outbound Doors`, '#fecaca');
+    drawDoorRow(inboundDoors,  Y0 - 6,        `${inboundDoors} Inbound Doors`,  '#bfdbfe');
+  } else {
+    // Single-sided: combine inbound + outbound on the bottom face
+    drawDoorRow(totalDoors, Y0 + Hpx - 6, `${totalDoors} Dock Doors (combined I/O)`, '#fecaca');
+  }
+
+  // ---------- Building dimension labels ----------
+  ctx.fillStyle = '#374151';
+  ctx.font = '11px Montserrat, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(`${widthFt.toLocaleString()} ft`, X0 + Wpx / 2, Y0 + Hpx + 44);
+  ctx.save();
+  ctx.translate(X0 - 22, Y0 + Hpx / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText(`${depthFt.toLocaleString()} ft`, 0, 0);
+  ctx.restore();
+
+  // Compass / orientation
+  ctx.fillStyle = '#6b7280';
+  ctx.font = '10px Montserrat, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('▲ BACK', X0 + 4, Y0 - 8);
+  ctx.fillText('▼ DOCK FACE', X0 + 4, Y0 + Hpx + 22);
+
+  // Title block (top-left, outside building)
+  ctx.fillStyle = '#0f172a';
+  ctx.font = 'bold 13px Montserrat, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(facility.name || 'Facility', 12, 22);
+  ctx.fillStyle = '#6b7280';
+  ctx.font = '11px Montserrat, sans-serif';
+  ctx.fillText(
+    `${calc.formatSqft(sized.totalSqft)} sized  ·  ${calc.formatSqft(facility.totalSqft || 0)} existing  ·  clear ht ${facility.clearHeight || 0} ft`,
+    12, 38,
+  );
 
   // Scale bar + building dimension labels
   ctx.fillStyle = '#6b7280';
@@ -1312,58 +1404,59 @@ function renderDashboard() {
     <div style="font-size:11px;color:var(--ies-gray-500);margin-bottom:8px;text-transform:uppercase;font-weight:700;">Capacity Analysis (existing-building view)</div>
 
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
-      <!-- Storage Utilization -->
+      <!-- Capacity Utilization — tied to sizing engine -->
       <div class="hub-card">
         <div class="text-subtitle mb-4">Capacity Utilization</div>
-        ${renderUtilBar('Storage Area', summary.storageUtilizationPct)}
-        ${renderUtilBar('Pallet Capacity', summary.capacityUtilizationPct)}
-        ${renderUtilBar('Cubic Utilization', summary.cubicUtilizationPct)}
-        ${renderUtilBar('Dock Door (Peak)', summary.dockDoorUtilization)}
+        ${renderUtilBar('Storage SF vs Existing', facility.totalSqft > 0 ? Math.round((sized.storageSqft / facility.totalSqft) * 100) : 0)}
+        ${renderUtilBar('Sized SF vs Existing',   facility.totalSqft > 0 ? Math.round((sized.totalSqft   / facility.totalSqft) * 100) : 0)}
+        ${renderUtilBar('Pallet Position Util',   sized.utilization.utilizationPct)}
+        ${renderUtilBar('Cubic Utilization',      summary.cubicUtilizationPct)}
       </div>
 
-      <!-- Storage Type Breakdown -->
+      <!-- Storage Type Breakdown — same source as Sized Facility card -->
       <div class="hub-card">
         <div class="text-subtitle mb-4">Storage Type Breakdown</div>
         <table class="cm-grid-table" style="font-size:13px;">
           <tbody>
-            <tr><td>Full Pallet</td><td class="cm-num">${storageByType.fullPalletPositions.toLocaleString()}</td><td class="cm-num" style="color:var(--ies-gray-400);">pos</td></tr>
-            <tr><td>Carton on Pallet</td><td class="cm-num">${storageByType.cartonOnPalletPositions.toLocaleString()}</td><td class="cm-num" style="color:var(--ies-gray-400);">pos</td></tr>
-            <tr><td>Carton on Shelving</td><td class="cm-num">${storageByType.cartonOnShelvingPositions.toLocaleString()}</td><td class="cm-num" style="color:var(--ies-gray-400);">pos</td></tr>
+            <tr><td>Full Pallet</td><td class="cm-num">${sized.positions.fullPalletPositions.toLocaleString()}</td><td class="cm-num" style="color:var(--ies-gray-400);">pos</td></tr>
+            <tr><td>Carton on Pallet</td><td class="cm-num">${sized.positions.cartonPalletPositions.toLocaleString()}</td><td class="cm-num" style="color:var(--ies-gray-400);">pos</td></tr>
+            <tr><td>Carton on Shelving</td><td class="cm-num">${sized.positions.shelvingPositions.toLocaleString()}</td><td class="cm-num" style="color:var(--ies-gray-400);">loc</td></tr>
           </tbody>
         </table>
       </div>
 
-      <!-- Zone Breakdown -->
+      <!-- Zone Allocation — same breakdown as Sized Facility -->
       <div class="hub-card">
         <div class="text-subtitle mb-4">Zone Allocation</div>
         <div style="display:flex; height:24px; border-radius:4px; overflow:hidden; margin-bottom:12px;">
-          <div style="width:${summary.storageUtilizationPct}%; background:var(--ies-blue);" title="Storage"></div>
-          <div style="width:${100 - summary.storageUtilizationPct}%; background:var(--ies-gray-200);" title="Non-Storage"></div>
+          ${sized.zoneBreakdown.map((z, i) => {
+            const palette = ['#0047AB', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#94a3b8'];
+            return `<div style="width:${z.pct}%;background:${palette[i % palette.length]};" title="${escapeHtml(z.label)}"></div>`;
+          }).join('')}
         </div>
         <div style="font-size:13px;">
-          <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-            <span style="font-weight:600; color:var(--ies-blue);">Storage</span>
-            <span style="font-weight:700;">${calc.formatSqft(summary.storageSqft)}</span>
-          </div>
-          ${zoneBD.breakdown.map(z => `
-            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-              <span style="color:var(--ies-gray-500);">${z.label}</span>
-              <span style="font-weight:600;">${calc.formatSqft(z.sqft)}</span>
-            </div>
-          `).join('')}
+          ${sized.zoneBreakdown.map((z, i) => {
+            const palette = ['#0047AB', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#94a3b8'];
+            return `
+              <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                <span style="color:${palette[i % palette.length]};font-weight:600;">${escapeHtml(z.label)}</span>
+                <span style="font-weight:700;">${calc.formatSqft(z.sqft)} <span style="color:var(--ies-gray-400);font-weight:400;font-size:11px;">${z.pct}%</span></span>
+              </div>
+            `;
+          }).join('')}
         </div>
       </div>
 
-      <!-- Dock Analysis -->
+      <!-- Dock Analysis — tied to sizing engine so numbers match the KPI bar -->
       <div class="hub-card">
         <div class="text-subtitle mb-4">Dock Analysis</div>
         <table class="cm-grid-table" style="font-size:13px;">
           <tbody>
-            <tr><td>Inbound Doors Needed</td><td class="cm-num" style="color:${dockAnalysis.inboundDoorsNeeded > (zones.dockConfig?.inboundDoors || 10) ? 'var(--ies-red)' : 'var(--ies-green)'};">${dockAnalysis.inboundDoorsNeeded}</td></tr>
-            <tr><td>Outbound Doors Needed</td><td class="cm-num" style="color:${dockAnalysis.outboundDoorsNeeded > (zones.dockConfig?.outboundDoors || 12) ? 'var(--ies-red)' : 'var(--ies-green)'};">${dockAnalysis.outboundDoorsNeeded}</td></tr>
-            <tr><td>Inbound Util</td><td class="cm-num">${calc.formatPct(dockAnalysis.inboundUtilization)}</td></tr>
-            <tr><td>Outbound Util</td><td class="cm-num">${calc.formatPct(dockAnalysis.outboundUtilization)}</td></tr>
-            <tr><td>Dock Staging SF</td><td class="cm-num">${calc.formatSqft(dockAnalysis.dockSqft)}</td></tr>
+            <tr><td>Inbound Doors (sized)</td><td class="cm-num" style="color:var(--ies-blue);">${sized.dock.inboundDoors}</td></tr>
+            <tr><td>Outbound Doors (sized)</td><td class="cm-num" style="color:var(--ies-blue);">${sized.dock.outboundDoors}</td></tr>
+            <tr><td>Total Doors (incl. surge)</td><td class="cm-num" style="font-weight:700;">${sized.dock.totalDoors}</td></tr>
+            <tr><td>Dock Wall Required</td><td class="cm-num" style="color:${sized.dock.dockWallOk ? 'var(--ies-green)' : 'var(--ies-red)'};">${sized.dock.dockWallRequiredFt} ft${sized.dock.dockWallOk ? '' : ` > ${sized.dock.dockWallAvailableFt} ft avail`}</td></tr>
+            <tr><td>Dock Staging SF</td><td class="cm-num">${calc.formatSqft(sized.dockSqft || 0)}</td></tr>
           </tbody>
         </table>
       </div>
@@ -1419,39 +1512,29 @@ function renderDashboard() {
         `}
       </div>
 
-      <!-- Size Recommendation -->
+      <!-- Size Recommendation — single source of truth: same numbers as Sized Facility card -->
       <div class="hub-card">
         <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;">
           <div class="text-subtitle" style="margin:0;">Size Recommendation</div>
-          <span style="font-size:10px;color:var(--ies-gray-400);">sum of programmatic needs</span>
+          <span style="font-size:10px;color:var(--ies-gray-400);">from sizing engine — matches dashboard KPI</span>
         </div>
         <div style="font-size:13px;">
-          <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-            <span>Base Storage (reserve + pick)</span>
-            <span style="font-weight:700;">${calc.formatSqft(summary.suggestedSqft)}</span>
-          </div>
-          <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-            <span>+ Dock Staging (${(zones.dockConfig?.sided === 'two' ? 2 : 1) * Math.max(zones.dockConfig?.inboundDoors || 10, zones.dockConfig?.outboundDoors || 12)} doors × 200 sqft)</span>
-            <span style="font-weight:700;">${calc.formatSqft(dockAnalysis.dockSqft)}</span>
-          </div>
-          <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-            <span>+ Forward Pick Area</span>
-            <span style="font-weight:700;">${calc.formatSqft(fwdPick)}</span>
-          </div>
-          <div style="display:flex; justify-content:space-between; margin-bottom:12px;">
-            <span>+ Optional Zones (VAS / Returns / Chargeback / Custom)</span>
-            <span style="font-weight:700;">${calc.formatSqft(calc.calcOptionalZones(zones))}</span>
-          </div>
-          <div style="border-top:2px solid var(--ies-blue); padding-top:8px; display:flex; justify-content:space-between;">
+          ${sized.zoneBreakdown.map(z => `
+            <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+              <span>${escapeHtml(z.label)}</span>
+              <span style="font-weight:700;">${calc.formatSqft(z.sqft)}</span>
+            </div>
+          `).join('')}
+          <div style="border-top:2px solid var(--ies-blue); padding-top:8px; display:flex; justify-content:space-between;margin-top:6px;">
             <span style="font-weight:700;">Recommended Total</span>
-            <span style="font-weight:700; font-size:16px; color:${!hasMeaningfulVolumes(volumes) ? 'var(--ies-gray-400)' : (correctedSf > summary.totalSqft ? 'var(--ies-red)' : 'var(--ies-green)')};">${!hasMeaningfulVolumes(volumes) ? '—' : calc.formatSqft(correctedSf)}</span>
+            <span style="font-weight:700; font-size:16px; color:${!facility.totalSqft ? 'var(--ies-blue)' : (sized.totalSqft > facility.totalSqft ? 'var(--ies-red)' : 'var(--ies-green)')};">${calc.formatSqft(sized.totalSqft)}</span>
           </div>
           <div style="margin-top:8px;font-size:11px;color:var(--ies-gray-400);line-height:1.4;">
-            ${!hasMeaningfulVolumes(volumes)
-              ? 'Enter pallet / SKU / daily throughput volumes to compute a recommendation.'
-              : (correctedSf > summary.totalSqft
-                  ? `Your facility (${calc.formatSqft(summary.totalSqft)}) is <strong>${calc.formatSqft(correctedSf - summary.totalSqft)} under</strong> the recommended size.`
-                  : `Your facility (${calc.formatSqft(summary.totalSqft)}) has <strong>${calc.formatSqft(summary.totalSqft - correctedSf)} headroom</strong> over the recommendation.`)}
+            ${!facility.totalSqft
+              ? 'Set the existing building Total SF in the Building section to compare against this recommendation.'
+              : (sized.totalSqft > facility.totalSqft
+                  ? `Your facility (${calc.formatSqft(facility.totalSqft)}) is <strong>${calc.formatSqft(sized.totalSqft - facility.totalSqft)} under</strong> the recommended size.`
+                  : `Your facility (${calc.formatSqft(facility.totalSqft)}) has <strong>${calc.formatSqft(facility.totalSqft - sized.totalSqft)} headroom</strong> over the recommendation.`)}
           </div>
         </div>
       </div>
@@ -1660,17 +1743,24 @@ function drawDimH(ctx, x1, x2, y, label) {
 // ============================================================
 
 function render3DView(container) {
+  const sized = calc.sizeFacility(toSizingInputs());
   container.innerHTML = `
-    <div class="hub-card" style="padding:0; overflow:hidden;">
-      <div id="wsc-3d-container" style="width:100%; height:500px;"></div>
-    </div>
-    <div style="font-size:11px; color:var(--ies-gray-400); margin-top:8px;">
-      3D view requires Three.js CDN loaded. Click and drag to orbit.
+    <div class="hub-card" style="padding:16px;">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px;">
+        <h3 class="text-subtitle" style="margin:0;">3D Walkthrough</h3>
+        <span class="text-caption text-muted">
+          ${calc.formatSqft(sized.totalSqft)} sized  ·  ${facility.buildingWidth || '—'} × ${facility.buildingDepth || '—'} ft  ·  clear ht ${facility.clearHeight || 0} ft  ·  ${sized.dock.totalDoors} dock doors
+        </span>
+      </div>
+      <div id="wsc-3d-container" style="width:100%; height:520px; background:#e9eef5; border-radius:6px; overflow:hidden;"></div>
+      <div style="font-size:11px; color:var(--ies-gray-500); margin-top:8px;">
+        Drag to orbit  ·  Scroll to zoom  ·  Racks shown at 50% opacity for floor visibility
+      </div>
     </div>
   `;
 
-  // Defer 3D scene build to next frame
-  requestAnimationFrame(() => build3DScene());
+  // Defer 3D scene build so the flex layout settles first.
+  setTimeout(() => build3DScene(), 80);
 }
 
 function build3DScene() {
@@ -1678,123 +1768,178 @@ function build3DScene() {
   if (!el) return;
 
   try {
-    // Dynamic import of the wrapper (Three.js must be loaded via CDN)
     const THREE = /** @type {any} */ (window).THREE;
     if (!THREE) {
       el.innerHTML = '<div style="padding:40px; text-align:center; color:var(--ies-gray-400);">Three.js not loaded. 3D view unavailable.</div>';
       return;
     }
 
-    const width = el.clientWidth;
-    const height = el.clientHeight || 500;
+    const width  = el.clientWidth || 800;
+    const height = el.clientHeight || 520;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color('#f0f2f5');
+    scene.background = new THREE.Color('#e9eef5');
 
-    const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 2000);
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.shadowMap.enabled = true;
     el.appendChild(renderer.domElement);
 
-    // Lighting
-    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    dirLight.position.set(100, 150, 80);
-    dirLight.castShadow = true;
+    // ---------- Lighting ----------
+    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
+    dirLight.position.set(120, 200, 120);
     scene.add(dirLight);
+    const fillLight = new THREE.DirectionalLight(0xb6c8e3, 0.25);
+    fillLight.position.set(-120, 80, -120);
+    scene.add(fillLight);
 
-    // Build warehouse geometry from facility config
-    const bw = facility.buildingWidth || 200;
-    const bd = facility.buildingDepth || 300;
-    const ch = facility.clearHeight || 32;
-    const scale = 0.5; // 1ft = 0.5 units
+    // ---------- Geometry inputs ----------
+    const bw = facility.buildingWidth  || 300;  // X axis
+    const bd = facility.buildingDepth  || 500;  // Z axis (depth into screen)
+    const ch = facility.clearHeight    || 32;
+    const scale = 0.5;                          // 1 ft = 0.5 units
 
-    // Floor slab
-    const floor = new THREE.Mesh(
-      new THREE.BoxGeometry(bw * scale, 0.5, bd * scale),
-      new THREE.MeshStandardMaterial({ color: 0xcccccc })
-    );
-    floor.position.set(0, -0.25, 0);
-    floor.receiveShadow = true;
+    const W = bw * scale;
+    const D = bd * scale;
+    const H = ch * scale;
+
+    // ---------- Floor with grid ----------
+    const floorGeo = new THREE.BoxGeometry(W, 0.4, D);
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0xd6d3d1 });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.position.y = -0.2;
     scene.add(floor);
 
-    // Walls (wireframe)
-    const wallGeo = new THREE.BoxGeometry(bw * scale, ch * scale, bd * scale);
-    const wallMat = new THREE.MeshStandardMaterial({ color: 0xe0e0e0, transparent: true, opacity: 0.15 });
-    const walls = new THREE.Mesh(wallGeo, wallMat);
-    walls.position.set(0, ch * scale / 2, 0);
-    scene.add(walls);
+    const grid = new THREE.GridHelper(Math.max(W, D), 20, 0x9ca3af, 0xcbd5e1);
+    grid.position.y = 0.05;
+    scene.add(grid);
 
-    // Wall edges
+    // ---------- Wall frame (edges only — keep interior visible) ----------
+    const wallGeo = new THREE.BoxGeometry(W, H, D);
     const edges = new THREE.EdgesGeometry(wallGeo);
-    const edgeLine = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x999999 }));
-    edgeLine.position.copy(walls.position);
+    const edgeLine = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x4b5563, linewidth: 2 }));
+    edgeLine.position.set(0, H / 2, 0);
     scene.add(edgeLine);
 
-    // Simple rack rows
+    // ---------- Rack rows (orange, semi-transparent so we can see through) ----------
     const elev = calc.elevationParams(facility);
-    const moduleW = (elev.rackDepthFt + elev.aisleWidth + elev.rackDepthFt) * scale;
-    const rackH = calc.topOfSteelFt(elev.rackLevels) * scale;
-    const rackColor = 0xff6600;
-    let rx = -bw * scale / 2 + 10 * scale;
-    while (rx + moduleW < bw * scale / 2 - 10 * scale) {
-      const rackGeo = new THREE.BoxGeometry(elev.rackDepthFt * scale, rackH, (bd - 20) * scale);
-      const rackMat = new THREE.MeshStandardMaterial({ color: rackColor, transparent: true, opacity: 0.35 });
-      // Left rack
-      const left = new THREE.Mesh(rackGeo, rackMat);
-      left.position.set(rx + elev.rackDepthFt * scale / 2, rackH / 2, 0);
-      scene.add(left);
-      // Right rack
-      const right = new THREE.Mesh(rackGeo, rackMat);
-      right.position.set(rx + (elev.rackDepthFt + elev.aisleWidth) * scale + elev.rackDepthFt * scale / 2, rackH / 2, 0);
-      scene.add(right);
-      rx += moduleW + 2 * scale;
+    const sized = calc.sizeFacility(toSizingInputs());
+
+    const rackDepthFt = elev.rackDepthFt || 4.3;
+    const aisleFt     = facility.aisleWidth || elev.aisleWidth || 12;
+    const rackHeightFt= calc.topOfSteelFt(elev.rackLevels || 5);
+    const moduleFt    = (2 * rackDepthFt) + aisleFt;
+
+    const rackDepthU  = rackDepthFt * scale;
+    const moduleU     = moduleFt * scale;
+    const rackHeightU = rackHeightFt * scale;
+
+    // Reserve front (-Z, dock face) and back (+Z) margins for staging
+    const stagingFt = 30;            // 30 ft staging strip front + back
+    const stagingU  = stagingFt * scale;
+    const rackZStart = -D / 2 + stagingU;
+    const rackZEnd   =  D / 2 - stagingU;
+    const rackLengthU= Math.max(0, rackZEnd - rackZStart);
+
+    const rackMatA = new THREE.MeshStandardMaterial({ color: 0xea580c, transparent: true, opacity: 0.55 });
+    const rackMatB = new THREE.MeshStandardMaterial({ color: 0xf97316, transparent: true, opacity: 0.55 });
+
+    let mx = -W / 2 + 6 * scale;
+    let rowCount = 0;
+    while (mx + 2 * rackDepthU + (aisleFt * scale) < W / 2 - 6 * scale) {
+      const rackGeo = new THREE.BoxGeometry(rackDepthU, rackHeightU, rackLengthU);
+      // Pair of back-to-back rows
+      const r1 = new THREE.Mesh(rackGeo, rackMatA);
+      r1.position.set(mx + rackDepthU / 2, rackHeightU / 2, (rackZStart + rackZEnd) / 2);
+      scene.add(r1);
+      const r2 = new THREE.Mesh(rackGeo, rackMatB);
+      r2.position.set(mx + rackDepthU + 0.5 + rackDepthU / 2, rackHeightU / 2, (rackZStart + rackZEnd) / 2);
+      scene.add(r2);
+      // Subtle wireframe so the rack frames read clearly
+      const wf1 = new THREE.LineSegments(new THREE.EdgesGeometry(rackGeo), new THREE.LineBasicMaterial({ color: 0x9a3412 }));
+      wf1.position.copy(r1.position);
+      scene.add(wf1);
+      const wf2 = new THREE.LineSegments(new THREE.EdgesGeometry(rackGeo), new THREE.LineBasicMaterial({ color: 0x9a3412 }));
+      wf2.position.copy(r2.position);
+      scene.add(wf2);
+      rowCount += 2;
+      mx += moduleU;
     }
 
-    // Dock doors
-    const dock = zones.dockConfig || { inboundDoors: 10, outboundDoors: 12 };
-    const totalDoors = dock.inboundDoors + dock.outboundDoors;
-    const doorW = 3 * scale;
-    const doorH = 4.5 * scale;
-    for (let i = 0; i < totalDoors; i++) {
-      const doorZ = -bd * scale / 2 + (i + 1) * (bd * scale / (totalDoors + 1));
-      const door = new THREE.Mesh(
-        new THREE.BoxGeometry(0.5, doorH, doorW),
-        new THREE.MeshStandardMaterial({ color: 0x333333 })
+    // ---------- Dock doors along the FRONT edge (-Z) ----------
+    const totalDoors = sized.dock.totalDoors || 0;
+    if (totalDoors > 0) {
+      const doorWFt   = 8;          // 8 ft wide
+      const doorHFt   = 9;          // 9 ft tall (standard 9x10 door)
+      const doorWU    = doorWFt * scale;
+      const doorHU    = doorHFt * scale;
+      const doorMat   = new THREE.MeshStandardMaterial({ color: 0x1f2937 });
+      // Spread doors evenly across the front wall, leaving 12 ft margins
+      const usableW   = W - 12 * scale * 2;
+      const spacing   = usableW / (totalDoors + 1);
+      for (let i = 0; i < totalDoors; i++) {
+        const dx = -W / 2 + 12 * scale + spacing * (i + 1) - doorWU / 2;
+        const door = new THREE.Mesh(
+          new THREE.BoxGeometry(doorWU, doorHU, 0.6),
+          doorMat,
+        );
+        door.position.set(dx + doorWU / 2, doorHU / 2, -D / 2 + 0.1);
+        scene.add(door);
+      }
+    }
+
+    // ---------- Office cube (front-left corner) ----------
+    if (sized.officeSqft > 0) {
+      const officeFt = Math.sqrt(sized.officeSqft);
+      const oW = officeFt * scale;
+      const oD = officeFt * scale;
+      const oH = 12 * scale;       // 12 ft office ceiling
+      const officeMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(oW, oH, oD),
+        new THREE.MeshStandardMaterial({ color: 0x8b5cf6, transparent: true, opacity: 0.45 }),
       );
-      door.position.set(-bw * scale / 2, doorH / 2, doorZ);
-      scene.add(door);
+      officeMesh.position.set(-W / 2 + oW / 2 + 1, oH / 2, -D / 2 + oD / 2 + 1);
+      scene.add(officeMesh);
+      const oEdges = new THREE.LineSegments(new THREE.EdgesGeometry(officeMesh.geometry), new THREE.LineBasicMaterial({ color: 0x5b21b6 }));
+      oEdges.position.copy(officeMesh.position);
+      scene.add(oEdges);
     }
 
-    // Camera position
-    camera.position.set(bw * scale * 0.7, ch * scale * 1.2, bd * scale * 0.5);
-    camera.lookAt(0, ch * scale * 0.3, 0);
+    // ---------- Camera ----------
+    // Iso-style 3/4 view from front-right-above, looking at the building center
+    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 5000);
+    const dist0 = Math.max(W, D) * 1.4;
+    let theta = Math.PI / 4;        // 45° around Y
+    let phi   = Math.PI / 4;         // 45° elevation
+    let dist  = dist0;
+    function applyCamera() {
+      camera.position.set(
+        dist * Math.cos(phi) * Math.sin(theta),
+        dist * Math.sin(phi),
+        dist * Math.cos(phi) * Math.cos(theta),
+      );
+      camera.lookAt(0, H * 0.4, 0);
+    }
+    applyCamera();
 
-    // Simple orbit controls via mouse drag
-    let isDragging = false;
-    let theta = Math.atan2(camera.position.z, camera.position.x);
-    let phi = 0.5;
-    let dist = camera.position.length();
-    let lastX = 0, lastY = 0;
-
+    // Orbit controls (manual)
+    let isDragging = false, lastX = 0, lastY = 0;
     renderer.domElement.addEventListener('mousedown', e => { isDragging = true; lastX = e.clientX; lastY = e.clientY; });
-    window.addEventListener('mouseup', () => { isDragging = false; });
+    window.addEventListener('mouseup',   () => { isDragging = false; });
     renderer.domElement.addEventListener('mousemove', e => {
       if (!isDragging) return;
-      theta -= (e.clientX - lastX) * 0.005;
-      phi = Math.max(0.1, Math.min(Math.PI / 2 - 0.01, phi + (e.clientY - lastY) * 0.005));
-      lastX = e.clientX;
-      lastY = e.clientY;
-      camera.position.set(dist * Math.cos(phi) * Math.cos(theta), dist * Math.sin(phi), dist * Math.cos(phi) * Math.sin(theta));
-      camera.lookAt(0, ch * scale * 0.3, 0);
+      theta -= (e.clientX - lastX) * 0.006;
+      phi    = Math.max(0.1, Math.min(Math.PI / 2 - 0.05, phi + (e.clientY - lastY) * 0.006));
+      lastX  = e.clientX;
+      lastY  = e.clientY;
+      applyCamera();
     });
     renderer.domElement.addEventListener('wheel', e => {
-      dist = Math.max(50, Math.min(500, dist + e.deltaY * 0.5));
-      camera.position.set(dist * Math.cos(phi) * Math.cos(theta), dist * Math.sin(phi), dist * Math.cos(phi) * Math.sin(theta));
-      camera.lookAt(0, ch * scale * 0.3, 0);
-    });
+      dist = Math.max(W * 0.5, Math.min(W * 5, dist + e.deltaY * 0.6));
+      applyCamera();
+      e.preventDefault();
+    }, { passive: false });
 
     // Animate
     function animate() {
