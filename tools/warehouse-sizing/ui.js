@@ -983,13 +983,16 @@ function renderPlan() {
         <span class="text-caption text-muted">Scale: 1 px ≈ ${Math.max(1, Math.round(Math.sqrt((facility.totalSqft || 0) * 1.5) / 800))} ft</span>
       </div>
       <canvas id="wsc-plan-canvas" width="900" height="520" style="width:100%; border:1px solid var(--ies-gray-200); border-radius:6px; background:#fff;"></canvas>
-      <div style="margin-top:var(--sp-3); display:flex; flex-wrap:wrap; gap:16px; font-size:11px; color:var(--ies-gray-500);">
-        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:#eff6ff;border:1px solid #93c5fd;border-radius:2px;"></span>Storage</span>
-        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:#f0fdf4;border:1px solid #86efac;border-radius:2px;"></span>Receive Staging</span>
-        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:#fef3c7;border:1px solid #fcd34d;border-radius:2px;"></span>Ship Staging</span>
-        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:#f3e8ff;border:1px solid #c4b5fd;border-radius:2px;"></span>Office</span>
-        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:#ffedd5;border:1px solid #fdba74;border-radius:2px;"></span>Charging</span>
-        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:#fecaca;border:1px solid #f87171;border-radius:2px;"></span>Dock Door</span>
+      <div style="margin-top:var(--sp-3); display:flex; flex-wrap:wrap; gap:14px; font-size:11px; color:var(--ies-gray-500);">
+        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:#ea580c;border:1px solid #9a3412;border-radius:2px;"></span>Full Pallet Rack</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:#f59e0b;border:1px solid #b45309;border-radius:2px;"></span>Carton on Pallet</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:#0d9488;border:1px solid #0f766e;border-radius:2px;"></span>Carton Shelving</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:#ede9fe;border:1px solid #7c3aed;border-radius:2px;"></span>Forward Pick</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:#ecfdf5;border:1px solid #16a34a;border-radius:2px;"></span>Receive Staging</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:#fffbeb;border:1px solid #d97706;border-radius:2px;"></span>Ship Staging</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:#f5f3ff;border:1px solid #8b5cf6;border-radius:2px;"></span>Office</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:#fecaca;border:1px solid #7f1d1d;border-radius:2px;"></span>Outbound Door</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:#bfdbfe;border:1px solid #1d4ed8;border-radius:2px;"></span>Inbound Door</span>
       </div>
     </div>
   `;
@@ -1079,35 +1082,118 @@ function drawPlan() {
   ctx.fillStyle = '#f0f7ff';
   ctx.fillRect(X0 + 2, storageY, Wpx - 4, storageH);
 
-  // Rack rows. If a rack column would overlap the office X range AND fall
-  // within the office Y range, that rack is shortened to end above the office.
-  ctx.fillStyle = '#ff8c42';
-  ctx.strokeStyle = '#c2410c';
+  // Forward Pick Area: takes a strip along the FRONT of storage (between
+  // racks and ship staging) when enabled. Rack loop will shorten its
+  // racksBottom to clear the FP strip.
+  const fpEnabled = !!zones.forwardPick?.enabled;
+  const fpSqft    = fpEnabled ? Math.max(2000, Math.min(30000, (zones.forwardPick.skuCount || 2000) * 6)) : 0;
+  // Visual strip height: scale FP sqft to footprint width × strip height
+  const fpStripFt = fpEnabled ? Math.min(60, Math.max(20, fpSqft / Math.max(1, widthFt - (officeWpx / pxPerFt + 8)))) : 0;
+  const fpStripPx = fpStripFt * pxPerFt;
+  const fpY       = storageY + storageH - fpStripPx;
+  const fpX       = officeX + officeWpx + 2;
+  const fpW       = X0 + Wpx - 2 - fpX;
+
+  // First pass: count rack columns to allocate by storage mix.
+  let totalCols = 0;
+  {
+    let mxScan = X0 + sideMarginPx;
+    while (mxScan + 2 * rackPx + aislePx < X0 + Wpx - sideMarginPx) {
+      totalCols += 2;
+      mxScan += modulePx;
+    }
+  }
+  const mix = sized.meta?.normalisedMix || { fullPalletPct: 0.6, cartonOnPalletPct: 0.3, cartonOnShelvingPct: 0.1 };
+  const fullPalletCols = Math.round(totalCols * mix.fullPalletPct);
+  const cartonPalletCols = Math.round(totalCols * mix.cartonOnPalletPct);
+  // Remainder = shelving (catches rounding)
+  const shelvingCols = Math.max(0, totalCols - fullPalletCols - cartonPalletCols);
+
+  // Storage type styles: orange = full pallet, amber = carton on pallet,
+  // teal = carton shelving (drawn as shorter, denser blocks).
+  const TYPES = [
+    { count: fullPalletCols,   fill: '#ea580c', stroke: '#9a3412', label: 'Full Pallet'      },
+    { count: cartonPalletCols, fill: '#f59e0b', stroke: '#b45309', label: 'Carton on Pallet' },
+    { count: shelvingCols,     fill: '#0d9488', stroke: '#0f766e', label: 'Carton Shelving'  },
+  ];
+
+  // Rack loop — coloured by storage type, shortened around office and FP.
   ctx.lineWidth = 1;
   let mx = X0 + sideMarginPx;
-  let rackCount = 0;
+  let colIdx = 0;
+  let typeIdx = 0;
+  let typeUsed = 0;
   while (mx + 2 * rackPx + aislePx < X0 + Wpx - sideMarginPx) {
-    const racksTop = storageY + 8 * pxPerFt;
-    let   racksBottom = storageY + storageH - 8 * pxPerFt;
+    // Advance to next type bucket if we've drawn all of the current one
+    while (typeIdx < TYPES.length && typeUsed >= TYPES[typeIdx].count) {
+      typeIdx++;
+      typeUsed = 0;
+    }
+    const t = TYPES[Math.min(typeIdx, TYPES.length - 1)];
+    ctx.fillStyle   = t.fill;
+    ctx.strokeStyle = t.stroke;
 
-    // If this rack column falls anywhere over the office footprint,
-    // shorten it so it ends a few feet above the office.
+    const racksTop = storageY + 8 * pxPerFt;
+    let racksBottom = storageY + storageH - 8 * pxPerFt;
+
+    // Shorten over office
     const colLeft  = mx;
     const colRight = mx + 2 * rackPx + 2;
     const overlapsOfficeX = colRight > officeX && colLeft < officeRightX;
     if (overlapsOfficeX) {
       racksBottom = Math.min(racksBottom, officeY - 4 * pxPerFt);
     }
+    // Shorten over forward-pick strip (front-right of storage)
+    const overlapsFpX = fpEnabled && colRight > fpX && colLeft < (fpX + fpW);
+    if (overlapsFpX) {
+      racksBottom = Math.min(racksBottom, fpY - 4 * pxPerFt);
+    }
 
     const racksH = Math.max(0, racksBottom - racksTop);
     if (racksH > 0) {
-      ctx.fillRect(mx, racksTop, rackPx, racksH);
-      ctx.strokeRect(mx, racksTop, rackPx, racksH);
-      ctx.fillRect(mx + rackPx + 2, racksTop, rackPx, racksH);
-      ctx.strokeRect(mx + rackPx + 2, racksTop, rackPx, racksH);
+      // Carton shelving = shorter rack frames (visually shorter rows + denser hatching)
+      if (t.label === 'Carton Shelving') {
+        // Draw multiple short stacked segments
+        const segH = Math.max(8, racksH / 3);
+        for (let s = 0; s < 3; s++) {
+          const segY = racksTop + s * segH;
+          ctx.fillRect(mx, segY, rackPx, segH * 0.7);
+          ctx.strokeRect(mx, segY, rackPx, segH * 0.7);
+          ctx.fillRect(mx + rackPx + 2, segY, rackPx, segH * 0.7);
+          ctx.strokeRect(mx + rackPx + 2, segY, rackPx, segH * 0.7);
+        }
+      } else {
+        ctx.fillRect(mx, racksTop, rackPx, racksH);
+        ctx.strokeRect(mx, racksTop, rackPx, racksH);
+        ctx.fillRect(mx + rackPx + 2, racksTop, rackPx, racksH);
+        ctx.strokeRect(mx + rackPx + 2, racksTop, rackPx, racksH);
+      }
     }
-    rackCount += 2;
+    typeUsed += 2;
+    colIdx += 2;
     mx += modulePx;
+  }
+
+  // ---------- Forward Pick Area (front strip of storage, when enabled) ----------
+  if (fpEnabled && fpW > 80 && fpStripPx > 12) {
+    ctx.fillStyle = '#ede9fe';
+    ctx.strokeStyle = '#7c3aed';
+    ctx.lineWidth = 1;
+    ctx.fillRect(fpX, fpY, fpW, fpStripPx);
+    ctx.strokeRect(fpX, fpY, fpW, fpStripPx);
+    // Carton-flow lane lines
+    ctx.strokeStyle = '#a78bfa';
+    ctx.lineWidth = 0.5;
+    for (let x = fpX + 4; x < fpX + fpW - 4; x += Math.max(8, 4 * pxPerFt)) {
+      ctx.beginPath();
+      ctx.moveTo(x, fpY + 4);
+      ctx.lineTo(x, fpY + fpStripPx - 4);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#5b21b6';
+    ctx.font = 'bold 11px Montserrat, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(`Forward Pick  ·  ${(zones.forwardPick.type || 'carton flow').replace('_', ' ')}`, fpX + fpW / 2, fpY + fpStripPx / 2 + 4);
   }
 
   // Storage label (top of storage zone, right-aligned to clear the office)
@@ -1115,7 +1201,7 @@ function drawPlan() {
   ctx.font = 'bold 12px Montserrat, sans-serif';
   ctx.textAlign = 'right';
   ctx.fillText(
-    `Storage  ·  ${calc.formatSqft(sized.storageSqft)}  ·  ${rackCount} rack rows  ·  ${aisleFt} ft aisles`,
+    `Storage  ·  ${calc.formatSqft(sized.storageSqft)}  ·  ${totalCols} rack rows  ·  ${aisleFt} ft aisles`,
     X0 + Wpx - sideMarginPx,
     storageY + 14,
   );
@@ -1851,49 +1937,104 @@ function build3DScene() {
     const rackZEnd   =  D / 2 - stagingU;
     const rackLengthU= Math.max(0, rackZEnd - rackZStart);
 
-    const rackMatA = new THREE.MeshStandardMaterial({ color: 0xea580c, transparent: true, opacity: 0.55 });
-    const rackMatB = new THREE.MeshStandardMaterial({ color: 0xf97316, transparent: true, opacity: 0.55 });
+    // Storage-type materials: pallet vs shelving render at different heights.
+    const matFullPallet   = new THREE.MeshStandardMaterial({ color: 0xea580c, transparent: true, opacity: 0.6 });
+    const matCartonPallet = new THREE.MeshStandardMaterial({ color: 0xf59e0b, transparent: true, opacity: 0.6 });
+    const matShelving     = new THREE.MeshStandardMaterial({ color: 0x0d9488, transparent: true, opacity: 0.65 });
+    const wirePallet      = new THREE.LineBasicMaterial({ color: 0x9a3412 });
+    const wireShelving    = new THREE.LineBasicMaterial({ color: 0x0f766e });
 
     // Office footprint — computed up-front so racks can avoid it.
-    // Office sits at front-left corner of the storage zone (X-, Z-).
     const officeFt = Math.sqrt(Math.max(1, sized.officeSqft));
     const officeU  = officeFt * scale;
-    const officeX0 = -W / 2 + 2;                              // left edge
-    const officeX1 = officeX0 + officeU;                       // right edge
+    const officeX0 = -W / 2 + 2;
+    const officeX1 = officeX0 + officeU;
     const officeZ0 = -D / 2 + stagingU;                        // front edge of storage zone
-    const officeZ1 = officeZ0 + officeU;                       // rear edge of office
+    const officeZ1 = officeZ0 + officeU;
+
+    // Forward Pick footprint — strip across the front of storage (zStart..zStart+fpDepth)
+    const fpEnabled3D = !!zones.forwardPick?.enabled;
+    const fpDepthFt   = fpEnabled3D ? Math.min(60, Math.max(20, (zones.forwardPick?.daysInventory || 3) * 8 + 16)) : 0;
+    const fpDepthU    = fpDepthFt * scale;
+    const fpZ0        = rackZStart;                            // matches storage front
+    const fpZ1        = fpZ0 + fpDepthU;
+    const fpX0        = officeX1 + 2;                          // right of office
+    const fpX1        = W / 2 - 2;
+
+    // Count columns to allocate by storage mix
+    let totalCols = 0;
+    {
+      let mxScan = -W / 2 + 6 * scale;
+      while (mxScan + 2 * rackDepthU + (aisleFt * scale) < W / 2 - 6 * scale) {
+        totalCols += 2;
+        mxScan += moduleU;
+      }
+    }
+    const mix = sized.meta?.normalisedMix || { fullPalletPct: 0.6, cartonOnPalletPct: 0.3, cartonOnShelvingPct: 0.1 };
+    const fullPalletCols   = Math.round(totalCols * mix.fullPalletPct);
+    const cartonPalletCols = Math.round(totalCols * mix.cartonOnPalletPct);
+    const shelvingCols     = Math.max(0, totalCols - fullPalletCols - cartonPalletCols);
+    const TYPES = [
+      { count: fullPalletCols,   mat: matFullPallet,   wire: wirePallet,   heightU: rackHeightU,        kind: 'pallet' },
+      { count: cartonPalletCols, mat: matCartonPallet, wire: wirePallet,   heightU: rackHeightU * 0.85, kind: 'pallet' },
+      { count: shelvingCols,     mat: matShelving,     wire: wireShelving, heightU: 6.5 * scale,         kind: 'shelving' },
+    ];
 
     let mx = -W / 2 + 6 * scale;
-    let rowCount = 0;
+    let typeIdx = 0;
+    let typeUsed = 0;
     while (mx + 2 * rackDepthU + (aisleFt * scale) < W / 2 - 6 * scale) {
+      while (typeIdx < TYPES.length && typeUsed >= TYPES[typeIdx].count) {
+        typeIdx++;
+        typeUsed = 0;
+      }
+      const t = TYPES[Math.min(typeIdx, TYPES.length - 1)];
+
       const colLeft  = mx;
       const colRight = mx + 2 * rackDepthU + 0.5;
       const overlapsOfficeX = colRight > officeX0 && colLeft < officeX1;
+      const overlapsFpX     = fpEnabled3D && colRight > fpX0 && colLeft < fpX1;
 
-      // If this rack column sits over the office footprint, shorten its
-      // Z-extent so it starts BEHIND the office rather than running
-      // through it.
-      const thisZStart = overlapsOfficeX ? officeZ1 + 2 : rackZStart;
-      const thisZEnd   = rackZEnd;
-      const thisLen    = Math.max(0, thisZEnd - thisZStart);
+      // Z-extent: shorten if column overlaps office (stops behind office)
+      // OR if it overlaps the forward-pick strip (stops behind FP).
+      let thisZStart = rackZStart;
+      const thisZEnd = rackZEnd;
+      if (overlapsOfficeX) thisZStart = Math.max(thisZStart, officeZ1 + 2);
+      if (overlapsFpX)     thisZStart = Math.max(thisZStart, fpZ1 + 2);
+      const thisLen = Math.max(0, thisZEnd - thisZStart);
+
       if (thisLen > 4) {
-        const rackGeo = new THREE.BoxGeometry(rackDepthU, rackHeightU, thisLen);
         const zCenter = (thisZStart + thisZEnd) / 2;
-        const r1 = new THREE.Mesh(rackGeo, rackMatA);
-        r1.position.set(mx + rackDepthU / 2, rackHeightU / 2, zCenter);
+        const rackGeo = new THREE.BoxGeometry(rackDepthU, t.heightU, thisLen);
+        const r1 = new THREE.Mesh(rackGeo, t.mat);
+        r1.position.set(mx + rackDepthU / 2, t.heightU / 2, zCenter);
         scene.add(r1);
-        const r2 = new THREE.Mesh(rackGeo, rackMatB);
-        r2.position.set(mx + rackDepthU + 0.5 + rackDepthU / 2, rackHeightU / 2, zCenter);
+        const r2 = new THREE.Mesh(rackGeo, t.mat);
+        r2.position.set(mx + rackDepthU + 0.5 + rackDepthU / 2, t.heightU / 2, zCenter);
         scene.add(r2);
-        const wf1 = new THREE.LineSegments(new THREE.EdgesGeometry(rackGeo), new THREE.LineBasicMaterial({ color: 0x9a3412 }));
+        const wf1 = new THREE.LineSegments(new THREE.EdgesGeometry(rackGeo), t.wire);
         wf1.position.copy(r1.position);
         scene.add(wf1);
-        const wf2 = new THREE.LineSegments(new THREE.EdgesGeometry(rackGeo), new THREE.LineBasicMaterial({ color: 0x9a3412 }));
+        const wf2 = new THREE.LineSegments(new THREE.EdgesGeometry(rackGeo), t.wire);
         wf2.position.copy(r2.position);
         scene.add(wf2);
       }
-      rowCount += 2;
+      typeUsed += 2;
       mx += moduleU;
+    }
+
+    // Forward Pick block: medium-height carton-flow strip across the front
+    if (fpEnabled3D && fpX1 > fpX0 + 4 && fpDepthU > 4) {
+      const fpW = fpX1 - fpX0;
+      const fpH = 10 * scale; // 10 ft pick-module height
+      const fpGeo = new THREE.BoxGeometry(fpW, fpH, fpDepthU);
+      const fpMat = new THREE.MeshStandardMaterial({ color: 0x7c3aed, transparent: true, opacity: 0.5 });
+      const fpMesh = new THREE.Mesh(fpGeo, fpMat);
+      fpMesh.position.set((fpX0 + fpX1) / 2, fpH / 2, (fpZ0 + fpZ1) / 2);
+      scene.add(fpMesh);
+      const fpEdges = new THREE.LineSegments(new THREE.EdgesGeometry(fpGeo), new THREE.LineBasicMaterial({ color: 0x5b21b6 }));
+      fpEdges.position.copy(fpMesh.position);
+      scene.add(fpEdges);
     }
 
     // ---------- Dock doors ----------
