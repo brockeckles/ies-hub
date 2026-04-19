@@ -7,6 +7,7 @@
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sP';
 import * as calc from './calc.js?v=20260418-sP';
+import * as api from './api.js?v=20260419-tG';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -241,30 +242,146 @@ function renderEscalations(el) {
 }
 
 // ===== AUDIT LOG =====
+// X15 Phase 2: real audit log state (replaces DEMO_AUDIT_LOG)
+let _auditLogRows = [];
+let _auditFacets = { tables: [], actions: [] };
+let _auditFilter = { entityTable: '', action: '', limit: 200 };
+let _auditLoaded = false;
+
+async function loadAuditData() {
+  try {
+    const [rows, facets] = await Promise.all([
+      api.listAuditLog(_auditFilter),
+      api.listAuditFacets(),
+    ]);
+    _auditLogRows = rows;
+    _auditFacets = facets;
+    _auditLoaded = true;
+  } catch (err) {
+    console.warn('[admin] audit load failed:', err);
+    _auditLogRows = [];
+    _auditFacets = { tables: [], actions: [] };
+    _auditLoaded = true;
+  }
+}
+
 function renderAudit(el) {
-  const log = calc.DEMO_AUDIT_LOG;
-  const counts = calc.auditActionCounts(log);
+  // Kick off load once per mount; re-render when it lands
+  if (!_auditLoaded) {
+    loadAuditData().then(() => renderAudit(el));
+  }
+  const log = _auditLogRows;
+  // Normalize row shape for display — audit_log uses entity_table/entity_id/ts/user_email
+  const rows = log.map(a => ({
+    action:     a.action,
+    tableName:  a.entity_table,
+    recordId:   a.entity_id,
+    userName:   a.user_email || '(anonymous)',
+    timestamp:  a.ts,
+    fields:     a.changed_fields,
+    sessionId:  a.session_id,
+  }));
+  const counts = rows.reduce((m, r) => { m[r.action] = (m[r.action] || 0) + 1; return m; }, {});
+  const pendingBanner = !_auditLoaded
+    ? '<div class="hub-card" style="padding:12px;background:#fef3c7;color:#92400e;margin-bottom:12px;">Loading audit log…</div>'
+    : '';
 
   el.innerHTML = `
-    <div style="display:flex;gap:12px;margin-bottom:16px;">
+    ${pendingBanner}
+    <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
       ${Object.entries(counts).map(([action, count]) => `
         <div class="hub-card" style="padding:8px 16px;text-align:center;">
           <div style="font-size:16px;font-weight:800;color:${calc.actionBadgeColor(action)};">${count}</div>
           <div style="font-size:11px;color:var(--ies-gray-400);text-transform:capitalize;">${action}s</div>
         </div>
       `).join('')}
+      <div class="hub-card" style="padding:8px 16px;text-align:center;">
+        <div style="font-size:16px;font-weight:800;">${rows.length}</div>
+        <div style="font-size:11px;color:var(--ies-gray-400);">Rows shown (limit ${_auditFilter.limit})</div>
+      </div>
     </div>
-    <div class="hub-card" style="padding:16px;">
-      ${log.map(a => `
-        <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--ies-gray-100);">
-          <span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;color:#fff;background:${calc.actionBadgeColor(a.action)};">${a.action}</span>
-          <span style="font-size:13px;flex:1;">${a.tableName} <span style="color:var(--ies-gray-400);">#${a.recordId}</span></span>
-          <span style="font-size:12px;color:var(--ies-gray-500);">${a.userName}</span>
-          <span style="font-size:11px;color:var(--ies-gray-400);">${calc.formatDateTime(a.timestamp)}</span>
+
+    <div class="hub-card" style="padding:12px;margin-bottom:12px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;">
+        Entity:
+        <select data-audit-filter="entityTable" style="font-size:12px;">
+          <option value="">All</option>
+          ${_auditFacets.tables.map(t => `<option value="${t}" ${_auditFilter.entityTable === t ? 'selected' : ''}>${t}</option>`).join('')}
+        </select>
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;">
+        Action:
+        <select data-audit-filter="action" style="font-size:12px;">
+          <option value="">All</option>
+          ${_auditFacets.actions.map(a => `<option value="${a}" ${_auditFilter.action === a ? 'selected' : ''}>${a}</option>`).join('')}
+        </select>
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;">
+        Limit:
+        <select data-audit-filter="limit" style="font-size:12px;">
+          <option value="100" ${_auditFilter.limit === 100 ? 'selected' : ''}>100</option>
+          <option value="200" ${_auditFilter.limit === 200 ? 'selected' : ''}>200</option>
+          <option value="500" ${_auditFilter.limit === 500 ? 'selected' : ''}>500</option>
+          <option value="1000" ${_auditFilter.limit === 1000 ? 'selected' : ''}>1,000</option>
+        </select>
+      </label>
+      <button class="hub-btn" data-audit-refresh>Refresh</button>
+    </div>
+
+    <div class="hub-card" style="padding:12px;">
+      ${rows.length === 0 ? `
+        <div style="padding:24px;text-align:center;color:var(--ies-gray-400);">
+          <em>No audit rows${_auditFilter.entityTable || _auditFilter.action ? ' for current filter' : ''}.</em>
         </div>
-      `).join('')}
+      ` : `
+        <table class="cm-grid-table" style="width:100%;font-size:12px;">
+          <thead>
+            <tr>
+              <th style="text-align:left;width:160px;">When</th>
+              <th style="text-align:left;width:70px;">Action</th>
+              <th style="text-align:left;">Entity</th>
+              <th style="text-align:left;width:120px;">Entity ID</th>
+              <th style="text-align:left;width:180px;">User</th>
+              <th style="text-align:left;">Changed Fields</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(r => {
+              const fieldStr = r.fields && typeof r.fields === 'object'
+                ? Object.keys(r.fields).slice(0, 5).join(', ') + (Object.keys(r.fields).length > 5 ? ` +${Object.keys(r.fields).length - 5}` : '')
+                : '';
+              return `
+                <tr>
+                  <td style="color:var(--ies-gray-500);">${calc.formatDateTime(r.timestamp)}</td>
+                  <td><span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;color:#fff;background:${calc.actionBadgeColor(r.action)};">${r.action}</span></td>
+                  <td><code style="font-size:11px;">${r.tableName || ''}</code></td>
+                  <td style="color:var(--ies-gray-500);font-size:11px;">${r.recordId || ''}</td>
+                  <td style="font-size:11px;">${r.userName}</td>
+                  <td style="font-size:11px;color:var(--ies-gray-500);" title="${JSON.stringify(r.fields || {}).replace(/"/g, '&quot;')}">${fieldStr}</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      `}
     </div>
   `;
+
+  // Wire filter + refresh
+  el.querySelectorAll('[data-audit-filter]').forEach(sel => {
+    sel.addEventListener('change', async () => {
+      const k = sel.dataset.auditFilter;
+      let v = sel.value;
+      if (k === 'limit') v = Number(v) || 200;
+      _auditFilter = { ..._auditFilter, [k]: v };
+      _auditLoaded = false;
+      renderAudit(el);
+    });
+  });
+  el.querySelector('[data-audit-refresh]')?.addEventListener('click', () => {
+    _auditLoaded = false;
+    renderAudit(el);
+  });
 }
 
 // ===== HELPERS =====

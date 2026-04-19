@@ -141,14 +141,43 @@ export async function deleteEscalation(id) {
 // ============================================================
 
 /**
- * List audit log entries.
- * @param {number} [limit=100]
- * @returns {Promise<import('./types.js?v=20260418-sP').AuditLogEntry[]>}
+ * List audit log entries. Schema cols: id, ts, entity_table, entity_id,
+ * action (insert|update|delete|link|unlink), changed_fields jsonb,
+ * session_id, user_email, user_agent.
+ *
+ * @param {Object} [filter]
+ * @param {number} [filter.limit=200]
+ * @param {string} [filter.entityTable]   exact match on entity_table
+ * @param {string} [filter.action]        exact match on action enum
+ * @param {string} [filter.since]         ISO date string; rows ts >= since
+ * @returns {Promise<any[]>}
  */
-export async function listAuditLog(limit = 100) {
-  const { data, error } = await db.from('audit_log').select('*').order('timestamp', { ascending: false }).limit(limit);
-  if (error) throw error;
+export async function listAuditLog(filter = {}) {
+  const { limit = 200, entityTable, action, since } = (typeof filter === 'number' ? { limit: filter } : filter) || {};
+  let q = db.from('audit_log').select('*').order('ts', { ascending: false }).limit(limit);
+  if (entityTable) q = q.eq('entity_table', entityTable);
+  if (action)      q = q.eq('action', action);
+  if (since)       q = q.gte('ts', since);
+  const { data, error } = await q;
+  if (error) { console.warn('[admin] listAuditLog failed:', error); return []; }
   return data || [];
+}
+
+/**
+ * Distinct entity_table + action values so the filter dropdowns can
+ * self-populate. Cheap DISTINCT query.
+ * @returns {Promise<{ tables: string[], actions: string[] }>}
+ */
+export async function listAuditFacets() {
+  const { data, error } = await db.from('audit_log').select('entity_table, action').limit(2000);
+  if (error) return { tables: [], actions: [] };
+  const tables = new Set();
+  const actions = new Set();
+  for (const r of data || []) {
+    if (r.entity_table) tables.add(r.entity_table);
+    if (r.action) actions.add(r.action);
+  }
+  return { tables: Array.from(tables).sort(), actions: Array.from(actions).sort() };
 }
 
 /**
