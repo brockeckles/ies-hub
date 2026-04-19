@@ -611,6 +611,57 @@ export async function saveHeuristicOverrides(projectId, overrides) {
 // SCD — supersede-and-insert helper
 // ============================================================
 
+// ============================================================
+// PHASE 4c — LABOR MARKET PROFILES
+// ============================================================
+
+/**
+ * Fetch the labor market profile for a specific market_id, or null if
+ * none exists. Used by the Labor section's "Use market defaults" button.
+ * @param {string} marketId
+ * @returns {Promise<any|null>}
+ */
+export async function fetchLaborMarketProfile(marketId) {
+  if (!marketId) return null;
+  const { data, error } = await db.from('ref_labor_market_profiles')
+    .select('*').eq('market_id', marketId).maybeSingle();
+  if (error) { console.warn('[CM] fetchLaborMarketProfile failed:', error); return null; }
+  return data;
+}
+
+/**
+ * List all labor market profiles (for admin panel).
+ * @returns {Promise<any[]>}
+ */
+export async function listLaborMarketProfiles() {
+  const { data, error } = await db.from('ref_labor_market_profiles')
+    .select('*, ref_markets(name, state)')
+    .order('id', { ascending: true });
+  if (error) { console.warn('[CM] listLaborMarketProfiles failed:', error); return []; }
+  return data || [];
+}
+
+/**
+ * Save (upsert) the monthly OT/absence profile for a labor row.
+ * Fire-and-forget audit. Used when the user hits Save in the per-row
+ * profile editor.
+ * @param {number} laborId
+ * @param {{ monthly_overtime_profile?: number[]|null, monthly_absence_profile?: number[]|null }} profiles
+ * @returns {Promise<any>}
+ */
+export async function saveLaborMonthlyProfile(laborId, profiles) {
+  if (!laborId) throw new Error('saveLaborMonthlyProfile: laborId required');
+  const payload = {
+    monthly_overtime_profile: profiles?.monthly_overtime_profile ?? null,
+    monthly_absence_profile:  profiles?.monthly_absence_profile  ?? null,
+  };
+  const { data, error } = await db.from('cost_model_labor')
+    .update(payload).eq('id', laborId).select().single();
+  if (error) throw error;
+  recordAudit({ table: 'cost_model_labor', id: laborId, action: 'update', fields: payload }).catch(() => {});
+  return data;
+}
+
 /**
  * Close out a current rate row by setting its effective_end_date and
  * inserting a replacement. Used by the Admin panel when editing rates

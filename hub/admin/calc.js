@@ -135,6 +135,19 @@ export const MASTER_TABLES = [
     ],
   },
   {
+    id: 'labor_market_profiles',
+    name: 'Labor Market Profiles',
+    description: 'Per-market turnover, temp premium, and seasonal OT/absence shape used as defaults when a labor line opts in via "Use market defaults".',
+    tableName: 'ref_labor_market_profiles', rowCount: 0,
+    columns: [
+      { key: 'market_id',              label: 'Market ID',         type: 'text',   required: true, editable: true },
+      { key: 'turnover_pct_annual',    label: 'Turnover %/yr',     type: 'number', editable: true },
+      { key: 'temp_cost_premium_pct',  label: 'Temp Premium %',    type: 'number', editable: true },
+      { key: 'holiday_days_per_year',  label: 'Holiday Days/yr',   type: 'number', editable: true },
+      { key: 'notes',                  label: 'Notes',             type: 'text',   editable: true },
+    ],
+  },
+  {
     id: 'design_heuristics',
     name: 'Design Heuristics Catalog',
     description: 'Standard modeling assumptions (DSO, benefit load, ramp, escalation, etc.) surfaced in the Cost Model Assumptions section. Editing defaults here affects every NEW scenario; approved scenarios stay frozen via rate snapshots.',
