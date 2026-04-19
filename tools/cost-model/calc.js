@@ -37,6 +37,26 @@ export function operatingHours(shifts) {
 // ============================================================
 
 /**
+ * Phase 4a: effective hourly rate after employment-type multipliers.
+ * For `temp_agency` lines, `temp_agency_markup_pct` uplifts the base rate
+ * (e.g. 25 → 1.25×). For `permanent` and `contractor` the base rate is
+ * returned unchanged. This is the single point all downstream labor-cost
+ * functions (directLineAnnual, fullyLoadedRate, monthlyLaborCost, etc.)
+ * flow through, so flipping employment_type automatically re-prices.
+ *
+ * @param {import('./types.js?v=20260418-sK').DirectLaborLine | import('./types.js?v=20260418-sK').IndirectLaborLine} line
+ * @returns {number}
+ */
+export function effectiveHourlyRate(line) {
+  const base = line.hourly_rate || 0;
+  if ((line.employment_type || 'permanent') === 'temp_agency') {
+    const markupFrac = (line.temp_agency_markup_pct || 0) / 100;
+    return base * (1 + markupFrac);
+  }
+  return base;
+}
+
+/**
  * Fully loaded hourly rate: rate × (1 + burden%) + benefits.
  * @param {import('./types.js?v=20260418-sK').DirectLaborLine | import('./types.js?v=20260418-sK').IndirectLaborLine} line
  * @param {Object} [opts]
@@ -44,7 +64,7 @@ export function operatingHours(shifts) {
  * @returns {number}
  */
 export function fullyLoadedRate(line, opts = {}) {
-  const rate = line.hourly_rate || 0;
+  const rate = effectiveHourlyRate(line);
   const burden = line.burden_pct != null
     ? line.burden_pct / 100
     : (opts.benefitLoadFallback ?? 0.30);
@@ -64,7 +84,7 @@ export function fullyLoadedRate(line, opts = {}) {
  */
 export function directLineAnnual(line, opts = {}) {
   const hours = line.annual_hours || 0;
-  const rate = line.hourly_rate || 0;
+  const rate = effectiveHourlyRate(line);
   const burden = line.burden_pct != null
     ? line.burden_pct / 100
     : (opts.benefitLoadFallback ?? 0.30);
@@ -83,7 +103,7 @@ export function directLineAnnual(line, opts = {}) {
  */
 export function directLineAnnualSimple(line, costing) {
   const hours = line.annual_hours || 0;
-  const rate = line.hourly_rate || 0;
+  const rate = effectiveHourlyRate(line);
   const c = costing || {};
   const burden = (c.defaultBurdenPct ?? 30) / 100;
   const benefits = (c.benefitLoadPct ?? 0) / 100;
@@ -102,7 +122,7 @@ export function directLineAnnualSimple(line, costing) {
  */
 export function indirectLineAnnual(line, opts) {
   const hc = line.headcount || 0;
-  const rate = line.hourly_rate || 0;
+  const rate = effectiveHourlyRate(line);
   const burden = line.burden_pct != null
     ? line.burden_pct / 100
     : (opts.benefitLoadFallback ?? 0.30);
@@ -123,7 +143,7 @@ export function indirectLineAnnual(line, opts) {
  */
 export function indirectLineAnnualSimple(line, opHours, costing) {
   const hc = line.headcount || 0;
-  const rate = line.hourly_rate || 0;
+  const rate = effectiveHourlyRate(line);
   const c = costing || {};
   const burden = line.burden_pct != null
     ? line.burden_pct / 100
