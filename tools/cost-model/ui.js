@@ -1186,7 +1186,7 @@ function renderLabor() {
     <div class="text-subtitle mb-2">Direct Labor <span style="font-size:11px;color:var(--ies-gray-400);font-weight:500;">— Volume from Volumes tab · MHE and IT/Device separate · Burden % set in Labor Costing Factors above</span></div>
     <table class="cm-grid-table">
       <thead>
-        <tr><th style="min-width:180px;">MOST Template</th><th>Activity</th><th>MHE</th><th>IT / Device</th><th>Volume</th><th>UPH</th><th>Hrs/Yr</th><th>FTE</th><th>Rate</th><th>Employment</th><th>Markup %</th><th class="cm-num">Annual Cost</th><th title="Monthly OT/absence profile">Profile</th><th></th></tr>
+        <tr><th style="min-width:180px;">MOST Template</th><th>Activity</th><th>MHE</th><th>IT / Device</th><th>Volume</th><th>UPH</th><th>Hrs/Yr</th><th>FTE</th><th>Rate</th><th>Employment</th><th>Markup %</th><th title="Productivity variance for Monte Carlo sensitivity">Var %</th><th class="cm-num">Annual Cost</th><th title="Monthly OT/absence profile">Profile</th><th></th></tr>
       </thead>
       <tbody>
         ${lines.map((l, i) => `
@@ -1238,6 +1238,11 @@ function renderLabor() {
                 data-array="laborLines" data-idx="${i}" data-field="temp_agency_markup_pct" data-type="number"
                 ${(l.employment_type || 'permanent') !== 'temp_agency' ? 'disabled title="Only applies to Temp Agency lines"' : ''} />
             </td>
+            <td>
+              <input type="number" value="${l.performance_variance_pct || 0}" style="width:50px;" step="1" min="0" max="50"
+                data-array="laborLines" data-idx="${i}" data-field="performance_variance_pct" data-type="number"
+                title="Productivity variance (% std dev) for the Monte Carlo sensitivity card" />
+            </td>
             <td class="cm-num">${calc.formatCurrency(calc.directLineAnnualSimple(l, lc))}</td>
             <td>
               <button class="hub-btn" style="padding:2px 6px;font-size:11px;" data-cm-action="edit-labor-profile" data-idx="${i}" title="Edit monthly OT/absence profile">
@@ -1247,7 +1252,7 @@ function renderLabor() {
             <td><button class="cm-delete-btn" data-action="delete-labor" data-idx="${i}">Del</button></td>
           </tr>
         `).join('')}
-        <tr class="cm-total-row"><td colspan="12">Total Direct Labor</td><td class="cm-num">${calc.formatCurrency(totalDirect)}</td><td colspan="2"></td></tr>
+        <tr class="cm-total-row"><td colspan="13">Total Direct Labor</td><td class="cm-num">${calc.formatCurrency(totalDirect)}</td><td colspan="2"></td></tr>
       </tbody>
     </table>
     <button class="cm-add-row-btn" data-action="add-labor">+ Add Labor Line</button>
@@ -3086,7 +3091,7 @@ function handleAction(action, idx) {
       model.volumeLines.splice(idx, 1);
       break;
     case 'add-labor':
-      model.laborLines.push({ activity_name: '', volume: 0, base_uph: 0, annual_hours: 0, hourly_rate: 0, burden_pct: 30, employment_type: 'permanent', temp_agency_markup_pct: 0 });
+      model.laborLines.push({ activity_name: '', volume: 0, base_uph: 0, annual_hours: 0, hourly_rate: 0, burden_pct: 30, employment_type: 'permanent', temp_agency_markup_pct: 0, performance_variance_pct: 0 });
       break;
     case 'delete-labor':
       model.laborLines.splice(idx, 1);
