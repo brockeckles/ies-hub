@@ -7,6 +7,7 @@
  */
 
 import { db } from '../../shared/supabase.js?v=20260418-sK';
+import { recordAudit } from '../../shared/audit.js?v=20260419-sZ';
 
 // ============================================================
 // COST MODEL PROJECTS (CRUD)
@@ -349,3 +350,286 @@ export async function fetchMonthlyProjections(projectId) {
   }
   return data || [];
 }
+
+// ============================================================
+// PHASE 3 — SCENARIOS + SCD + HEURISTICS
+// ============================================================
+
+/**
+ * List all scenarios for a deal. Returns newest first so the sidebar
+ * shows the most-recent child at top.
+ * @param {string} dealId   deal_deals.id (uuid)
+ * @returns {Promise<any[]>}
+ */
+export async function listScenarios(dealId) {
+  const q = db.from('cost_model_scenarios').select('*').order('created_at', { ascending: false });
+  const { data, error } = dealId ? await q.eq('deal_id', dealId) : await q;
+  if (error) { console.warn('[CM] listScenarios failed:', error); return []; }
+  return data || [];
+}
+
+/**
+ * Fetch the scenario row for a specific project_id (1:1). Used to show
+ * status chip on the tool header.
+ * @param {number} projectId
+ * @returns {Promise<any|null>}
+ */
+export async function getScenarioByProject(projectId) {
+  if (!projectId) return null;
+  const { data, error } = await db.from('cost_model_scenarios')
+    .select('*').eq('project_id', projectId).maybeSingle();
+  if (error) { console.warn('[CM] getScenarioByProject failed:', error); return null; }
+  return data;
+}
+
+/**
+ * Create or update a scenario row. Called whenever the user edits the
+ * scenario_label, description, or changes status from draft→review.
+ * @param {Object} payload — partial cost_model_scenarios row
+ * @returns {Promise<any>}
+ */
+export async function saveScenario(payload) {
+  if (!payload) throw new Error('saveScenario: payload required');
+  const clean = { ...payload, updated_at: new Date().toISOString() };
+  let row;
+  if (clean.id) {
+    const { data, error } = await db.from('cost_model_scenarios')
+      .update(clean).eq('id', clean.id).select().single();
+    if (error) throw error;
+    row = data;
+    recordAudit({ table: 'cost_model_scenarios', id: row.id, action: 'update', fields: clean }).catch(() => {});
+  } else {
+    const { data, error } = await db.from('cost_model_scenarios')
+      .insert(clean).select().single();
+    if (error) throw error;
+    row = data;
+    recordAudit({ table: 'cost_model_scenarios', id: row.id, action: 'insert', fields: clean }).catch(() => {});
+  }
+  return row;
+}
+
+/**
+ * Approve a scenario. Fires the approve_scenario RPC which snapshots
+ * all rate cards + heuristics atomically and transitions status.
+ * @param {number} scenarioId
+ * @param {string|null} userEmail
+ * @returns {Promise<Object>} RPC result (counts per rate type)
+ */
+export async function approveScenarioRpc(scenarioId, userEmail) {
+  const payload = { p_scenario_id: Number(scenarioId), p_user_email: userEmail || null };
+  const data = await db.rpc('approve_scenario', payload);
+  recordAudit({ table: 'cost_model_scenarios', id: scenarioId, action: 'update', fields: { status: 'approved', approved_by: userEmail } }).catch(() => {});
+  return data;
+}
+
+/**
+ * Archive a scenario (status='archived'). Preserves snapshots.
+ * @param {number} scenarioId
+ * @returns {Promise<any>}
+ */
+export async function archiveScenario(scenarioId) {
+  const { data, error } = await db.from('cost_model_scenarios')
+    .update({ status: 'archived', updated_at: new Date().toISOString() })
+    .eq('id', scenarioId).select().single();
+  if (error) throw error;
+  recordAudit({ table: 'cost_model_scenarios', id: scenarioId, action: 'update', fields: { status: 'archived' } }).catch(() => {});
+  return data;
+}
+
+/**
+ * Clone a scenario (copy-on-write). Deep-copies the source project row
+ * and every line-table row, then creates a new scenario pointing at the
+ * new project with parent_scenario_id = source. Used when the user
+ * edits an approved scenario.
+ *
+ * @param {number} sourceScenarioId
+ * @param {string|null} newLabel
+ * @returns {Promise<{ scenario: any, projectId: number }>}
+ */
+export async function cloneScenario(sourceScenarioId, newLabel) {
+  // 1. Load source scenario + project + line tables
+  const { data: srcScen, error: scErr } = await db.from('cost_model_scenarios')
+    .select('*').eq('id', sourceScenarioId).single();
+  if (scErr) throw scErr;
+  const srcProjectId = srcScen.project_id;
+  if (!srcProjectId) throw new Error('source scenario has no project');
+
+  const [srcProj, laborRows, eqRows, ohRows, vasRows, volRows] = await Promise.all([
+    db.fetchById('cost_model_projects', srcProjectId),
+    db.fetchAll('cost_model_labor', '*').catch(() => []).then(rs => rs.filter(r => r.project_id === srcProjectId)),
+    db.fetchAll('cost_model_equipment', '*').catch(() => []).then(rs => rs.filter(r => r.project_id === srcProjectId)),
+    db.fetchAll('cost_model_overhead', '*').catch(() => []).then(rs => rs.filter(r => r.project_id === srcProjectId)),
+    db.fetchAll('cost_model_vas', '*').catch(() => []).then(rs => rs.filter(r => r.project_id === srcProjectId)),
+    db.fetchAll('cost_model_volumes', '*').catch(() => []).then(rs => rs.filter(r => r.project_id === srcProjectId)),
+  ]);
+  if (!srcProj) throw new Error('source project missing');
+
+  // 2. Insert a new project with same data, fresh id, and "(child)" label tacked on
+  const newProjPayload = { ...srcProj };
+  delete newProjPayload.id;
+  delete newProjPayload.created_at;
+  delete newProjPayload.updated_at;
+  newProjPayload.name = (srcProj.name || 'Model') + ' — ' + (newLabel || 'Child');
+  newProjPayload.status = 'draft';
+  newProjPayload.scenario_label = newLabel || 'Child';
+  const { data: newProj, error: npErr } = await db.from('cost_model_projects')
+    .insert(newProjPayload).select().single();
+  if (npErr) throw npErr;
+  const newProjectId = newProj.id;
+
+  // 3. Clone line tables (strip id + project_id, set new project_id)
+  const cloneRows = (rows) => rows.map(r => {
+    const c = { ...r };
+    delete c.id; delete c.created_at; delete c.updated_at;
+    c.project_id = newProjectId;
+    return c;
+  });
+  const copies = [
+    ['cost_model_labor', cloneRows(laborRows)],
+    ['cost_model_equipment', cloneRows(eqRows)],
+    ['cost_model_overhead', cloneRows(ohRows)],
+    ['cost_model_vas', cloneRows(vasRows)],
+    ['cost_model_volumes', cloneRows(volRows)],
+  ];
+  for (const [tbl, rows] of copies) {
+    if (!rows.length) continue;
+    const { error } = await db.from(tbl).insert(rows);
+    if (error) console.warn(`[CM] clone ${tbl} failed:`, error);
+  }
+
+  // 4. Create the new scenario row with parent_scenario_id set
+  const newScen = await saveScenario({
+    deal_id: srcScen.deal_id,
+    project_id: newProjectId,
+    parent_scenario_id: sourceScenarioId,
+    scenario_label: newLabel || `${srcScen.scenario_label || 'Scenario'} (child)`,
+    is_baseline: false,
+    status: 'draft',
+  });
+  recordAudit({ table: 'cost_model_scenarios', id: newScen.id, action: 'insert', fields: { parent_scenario_id: sourceScenarioId, via: 'clone' } }).catch(() => {});
+  return { scenario: newScen, projectId: newProjectId };
+}
+
+/**
+ * Fetch all rate snapshots for a scenario, grouped by type. Used when a
+ * scenario is reopened in Archive view.
+ * @param {number} scenarioId
+ * @returns {Promise<Object<string, any[]>>}   { labor: [...], facility: [...], ... }
+ */
+export async function fetchSnapshots(scenarioId) {
+  if (!scenarioId) return {};
+  const { data, error } = await db.from('cost_model_rate_snapshots')
+    .select('*').eq('scenario_id', scenarioId);
+  if (error) { console.warn('[CM] fetchSnapshots failed:', error); return {}; }
+  const out = {};
+  for (const r of data || []) {
+    if (!out[r.rate_card_type]) out[r.rate_card_type] = [];
+    // unwrap snapshot_json for easy consumption
+    out[r.rate_card_type].push({ ...(r.snapshot_json || {}), _version_hash: r.rate_card_version_hash, _captured_at: r.captured_at, _rate_card_id: r.rate_card_id });
+  }
+  return out;
+}
+
+// ============================================================
+// REVISION LOG
+// ============================================================
+
+/**
+ * List all revisions for a scenario (most-recent first).
+ * @param {number} scenarioId
+ * @returns {Promise<any[]>}
+ */
+export async function listRevisions(scenarioId) {
+  if (!scenarioId) return [];
+  const { data, error } = await db.from('cost_model_revisions')
+    .select('*').eq('scenario_id', scenarioId)
+    .order('revision_number', { ascending: false });
+  if (error) { console.warn('[CM] listRevisions failed:', error); return []; }
+  return data || [];
+}
+
+/**
+ * Write a revision row. Caller supplies the fully-formed row (from
+ * calc.scenarios.buildRevisionRow).
+ * @param {Object} row
+ * @returns {Promise<any>}
+ */
+export async function writeRevision(row) {
+  if (!row || !row.scenario_id) throw new Error('writeRevision: scenario_id required');
+  const { data, error } = await db.from('cost_model_revisions').insert(row).select().single();
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Return the current max revision_number for a scenario, or 0 if none.
+ * Used to auto-increment on saveRevision.
+ * @param {number} scenarioId
+ * @returns {Promise<number>}
+ */
+export async function getLatestRevisionNumber(scenarioId) {
+  const { data, error } = await db.from('cost_model_revisions')
+    .select('revision_number').eq('scenario_id', scenarioId)
+    .order('revision_number', { ascending: false }).limit(1).maybeSingle();
+  if (error) return 0;
+  return data?.revision_number || 0;
+}
+
+// ============================================================
+// HEURISTICS CATALOG + OVERRIDES
+// ============================================================
+
+/**
+ * Fetch the ref_design_heuristics catalog.
+ * @returns {Promise<any[]>}
+ */
+export async function fetchDesignHeuristics() {
+  const { data, error } = await db.from('ref_design_heuristics')
+    .select('*').eq('is_active', true).order('sort_order', { ascending: true });
+  if (error) { console.warn('[CM] fetchDesignHeuristics failed:', error); return []; }
+  return data || [];
+}
+
+/**
+ * Save the per-project heuristic_overrides jsonb. Overwrites the whole
+ * map; callers pass the full desired map (not a diff).
+ * @param {number} projectId
+ * @param {Object} overrides
+ * @returns {Promise<any>}
+ */
+export async function saveHeuristicOverrides(projectId, overrides) {
+  if (!projectId) throw new Error('saveHeuristicOverrides: projectId required');
+  const payload = { heuristic_overrides: overrides || {}, updated_at: new Date().toISOString() };
+  const { data, error } = await db.from('cost_model_projects')
+    .update(payload).eq('id', projectId).select('id, heuristic_overrides').single();
+  if (error) throw error;
+  recordAudit({ table: 'cost_model_projects', id: projectId, action: 'update', fields: { heuristic_overrides: overrides } }).catch(() => {});
+  return data;
+}
+
+// ============================================================
+// SCD — supersede-and-insert helper
+// ============================================================
+
+/**
+ * Close out a current rate row by setting its effective_end_date and
+ * inserting a replacement. Used by the Admin panel when editing rates
+ * on an approved-scenarios-present tenant.
+ *
+ * @param {string} table       one of ref_labor_rates / facility / utility / overhead / equipment
+ * @param {string} oldId       the uuid of the row being replaced
+ * @param {Object} newRow      the replacement row data (no id)
+ * @returns {Promise<{ retired: any, created: any }>}
+ */
+export async function superseRateCardRow(table, oldId, newRow) {
+  const today = new Date().toISOString().slice(0, 10);
+  const { data: insertedRow, error: insErr } = await db.from(table).insert(newRow).select().single();
+  if (insErr) throw insErr;
+  const { data: retiredRow, error: retErr } = await db.from(table)
+    .update({ effective_end_date: today, superseded_by_id: insertedRow.id })
+    .eq('id', oldId).select().single();
+  if (retErr) throw retErr;
+  recordAudit({ table, id: oldId, action: 'update', fields: { effective_end_date: today, superseded_by_id: insertedRow.id } }).catch(() => {});
+  return { retired: retiredRow, created: insertedRow };
+}
+
