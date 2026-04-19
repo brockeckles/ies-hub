@@ -1076,7 +1076,7 @@ function renderLabor() {
     <div class="text-subtitle mb-2">Direct Labor <span style="font-size:11px;color:var(--ies-gray-400);font-weight:500;">— Volume from Volumes tab · MHE and IT/Device separate · Burden % set in Labor Costing Factors above</span></div>
     <table class="cm-grid-table">
       <thead>
-        <tr><th style="min-width:180px;">MOST Template</th><th>Activity</th><th>MHE</th><th>IT / Device</th><th>Volume</th><th>UPH</th><th>Hrs/Yr</th><th>FTE</th><th>Rate</th><th>Employment</th><th>Markup %</th><th class="cm-num">Annual Cost</th><th></th></tr>
+        <tr><th style="min-width:180px;">MOST Template</th><th>Activity</th><th>MHE</th><th>IT / Device</th><th>Volume</th><th>UPH</th><th>Hrs/Yr</th><th>FTE</th><th>Rate</th><th>Employment</th><th>Markup %</th><th class="cm-num">Annual Cost</th><th title="Monthly OT/absence profile">Profile</th><th></th></tr>
       </thead>
       <tbody>
         ${lines.map((l, i) => `
@@ -1129,10 +1129,15 @@ function renderLabor() {
                 ${(l.employment_type || 'permanent') !== 'temp_agency' ? 'disabled title="Only applies to Temp Agency lines"' : ''} />
             </td>
             <td class="cm-num">${calc.formatCurrency(calc.directLineAnnualSimple(l, lc))}</td>
+            <td>
+              <button class="hub-btn" style="padding:2px 6px;font-size:11px;" data-cm-action="edit-labor-profile" data-idx="${i}" title="Edit monthly OT/absence profile">
+                ${(Array.isArray(l.monthly_overtime_profile) || Array.isArray(l.monthly_absence_profile)) ? '📊*' : '📊'}
+              </button>
+            </td>
             <td><button class="cm-delete-btn" data-action="delete-labor" data-idx="${i}">Del</button></td>
           </tr>
         `).join('')}
-        <tr class="cm-total-row"><td colspan="11">Total Direct Labor</td><td class="cm-num">${calc.formatCurrency(totalDirect)}</td><td></td></tr>
+        <tr class="cm-total-row"><td colspan="12">Total Direct Labor</td><td class="cm-num">${calc.formatCurrency(totalDirect)}</td><td colspan="2"></td></tr>
       </tbody>
     </table>
     <button class="cm-add-row-btn" data-action="add-labor">+ Add Labor Line</button>
@@ -1902,6 +1907,14 @@ function bindSectionEvents(section, container) {
     });
   });
 
+  // Phase 4b: per-row labor profile editor
+  container.querySelectorAll('[data-cm-action="edit-labor-profile"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.idx);
+      openLaborProfileModal(idx);
+    });
+  });
+
   // --------------------------------------------------------------
   // Phase 3: Assumptions section event wiring
   // --------------------------------------------------------------
@@ -2171,6 +2184,145 @@ async function openCompareModal() {
       </table>
       <p class="cm-subtle" style="margin-top:8px;">Comparisons show the first selected scenario as baseline. Frozen scenarios reflect their snapshot rates; draft scenarios reflect current rates.</p>
     `;
+  });
+}
+
+/**
+ * Per-row monthly OT/absence profile editor (Phase 4b).
+ * Opens a modal with two 12-column rows of percent inputs (one for OT,
+ * one for absence). "Use Market Defaults" pulls from ref_labor_market_profiles
+ * for the project's market.
+ */
+async function openLaborProfileModal(idx) {
+  const line = (model.laborLines || [])[idx];
+  if (!line) return;
+  const otProfile = Array.isArray(line.monthly_overtime_profile) ? [...line.monthly_overtime_profile] : null;
+  const absProfile = Array.isArray(line.monthly_absence_profile) ? [...line.monthly_absence_profile] : null;
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const fmtCell = (val) => (val === null || val === undefined) ? '' : (Number(val) * 100).toFixed(1);
+
+  const overlay = document.createElement('div');
+  overlay.className = 'hub-modal-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:9999;';
+  overlay.innerHTML = `
+    <div style="background:white;border-radius:8px;padding:24px;min-width:780px;max-width:95vw;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div>
+          <h3 style="margin:0;">Monthly OT / Absence Profile</h3>
+          <p class="cm-subtle" style="margin-top:4px;">${line.activity_name || line.role_name || `Line #${idx+1}`} — values are percent (e.g. 5 means 5%)</p>
+        </div>
+        <button class="hub-btn" data-close>×</button>
+      </div>
+      <div style="margin-top:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <strong>Overtime % per month</strong>
+          <button class="hub-btn" style="font-size:11px;" data-clear-ot>Clear (use project flat)</button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(12,1fr);gap:4px;">
+          ${months.map((m, mi) => `
+            <div>
+              <label style="font-size:11px;color:#666;display:block;text-align:center;">${m}</label>
+              <input type="number" step="0.5" min="0" max="200" data-ot-month="${mi}"
+                value="${otProfile ? fmtCell(otProfile[mi]) : ''}"
+                placeholder=""
+                style="width:100%;text-align:right;padding:4px;" />
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      <div style="margin-top:16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <strong>Absence % per month</strong>
+          <button class="hub-btn" style="font-size:11px;" data-clear-abs>Clear (use project flat)</button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(12,1fr);gap:4px;">
+          ${months.map((m, mi) => `
+            <div>
+              <label style="font-size:11px;color:#666;display:block;text-align:center;">${m}</label>
+              <input type="number" step="0.5" min="0" max="100" data-abs-month="${mi}"
+                value="${absProfile ? fmtCell(absProfile[mi]) : ''}"
+                style="width:100%;text-align:right;padding:4px;" />
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:space-between;align-items:center;margin-top:16px;border-top:1px solid #eee;padding-top:12px;">
+        <button class="hub-btn" data-use-market>Use Market Defaults</button>
+        <div style="display:flex;gap:8px;">
+          <button class="hub-btn" data-close>Cancel</button>
+          <button class="hub-btn-primary" data-save>Save Profile</button>
+        </div>
+      </div>
+      <div id="cm-profile-status" style="margin-top:8px;font-size:11px;color:#666;"></div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const status = overlay.querySelector('#cm-profile-status');
+  overlay.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => overlay.remove()));
+
+  // Read inputs into 12-element fractional arrays. Empty cells = null
+  // (means inherit). If ANY cell has a value, missing cells default to 0.
+  const collect = (selectorPrefix) => {
+    const arr = [];
+    let hasAny = false;
+    for (let m = 0; m < 12; m++) {
+      const el = overlay.querySelector(`[${selectorPrefix}="${m}"]`);
+      const v = el?.value?.trim();
+      if (v === '' || v === undefined || v === null) { arr.push(null); }
+      else { hasAny = true; arr.push(Number(v) / 100); }
+    }
+    if (!hasAny) return null;
+    // Replace nulls with 0 so persisted profile is exactly 12 numerics
+    return arr.map(x => x === null ? 0 : x);
+  };
+
+  overlay.querySelector('[data-clear-ot]')?.addEventListener('click', () => {
+    overlay.querySelectorAll('[data-ot-month]').forEach(el => { el.value = ''; });
+  });
+  overlay.querySelector('[data-clear-abs]')?.addEventListener('click', () => {
+    overlay.querySelectorAll('[data-abs-month]').forEach(el => { el.value = ''; });
+  });
+
+  overlay.querySelector('[data-use-market]')?.addEventListener('click', async () => {
+    const market = model.projectDetails?.market;
+    if (!market) { status.textContent = 'No market selected — pick one in Setup first.'; return; }
+    status.textContent = 'Loading market profile…';
+    try {
+      const mp = await api.fetchLaborMarketProfile(market);
+      if (!mp) { status.textContent = 'No labor market profile defined for this market.'; return; }
+      const ot = Array.isArray(mp.peak_month_overtime_pct) ? mp.peak_month_overtime_pct : [];
+      const abs = Array.isArray(mp.peak_month_absence_pct) ? mp.peak_month_absence_pct : [];
+      for (let m = 0; m < 12; m++) {
+        const otEl = overlay.querySelector(`[data-ot-month="${m}"]`);
+        const absEl = overlay.querySelector(`[data-abs-month="${m}"]`);
+        if (otEl && ot[m] !== undefined) otEl.value = (Number(ot[m]) * 100).toFixed(1);
+        if (absEl && abs[m] !== undefined) absEl.value = (Number(abs[m]) * 100).toFixed(1);
+      }
+      status.textContent = `Loaded ${mp.notes || 'market defaults'} — turnover ${mp.turnover_pct_annual}%, temp premium ${mp.temp_cost_premium_pct}%. Click Save to persist to this line.`;
+    } catch (e) { status.textContent = 'Load failed: ' + (e?.message || e); }
+  });
+
+  overlay.querySelector('[data-save]')?.addEventListener('click', async () => {
+    const ot = collect('data-ot-month');
+    const abs = collect('data-abs-month');
+    const otIssue = scenarios.validateMonthlyProfile(ot);
+    if (otIssue) { status.textContent = 'Overtime profile: ' + otIssue; return; }
+    const absIssue = scenarios.validateMonthlyProfile(abs);
+    if (absIssue) { status.textContent = 'Absence profile: ' + absIssue; return; }
+    line.monthly_overtime_profile = ot;
+    line.monthly_absence_profile = abs;
+    if (line.id) {
+      try {
+        await api.saveLaborMonthlyProfile(line.id, {
+          monthly_overtime_profile: ot,
+          monthly_absence_profile: abs,
+        });
+      } catch (e) { status.textContent = 'Save failed: ' + (e?.message || e); return; }
+    } else {
+      isDirty = true;
+    }
+    overlay.remove();
+    renderSection();
   });
 }
 
