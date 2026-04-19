@@ -8,7 +8,7 @@
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sL';
 import { state } from '../../shared/state.js?v=20260418-sL';
-import { renderToolHeader } from '../../shared/tool-frame.js?v=20260419-uC';
+import { renderToolHeader } from '../../shared/tool-frame.js?v=20260419-uE';
 import * as calc from './calc.js?v=20260418-sL';
 import * as api from './api.js?v=20260418-sL';
 
