@@ -303,6 +303,20 @@ test('resolveCalcHeuristics: approved without snapshot → falls through like dr
   eq(out.taxRatePct, 30);
   eq(out.used.tax_rate_pct, 'override');
 });
+test('resolveCalcHeuristics: transient wins over snapshot + override + default (Phase 5b)', () => {
+  const out = resolveCalcHeuristics(APPROVED_SCEN,
+    { heuristics: SNAP_HEURISTICS },
+    { tax_rate_pct: 30 },
+    PROJECT_COLS,
+    { tax_rate_pct: 18 });
+  eq(out.taxRatePct, 18);
+  eq(out.used.tax_rate_pct, 'transient');
+});
+test('resolveCalcHeuristics: empty transient → normal resolution chain', () => {
+  const out = resolveCalcHeuristics(DRAFT_SCEN, null, { tax_rate_pct: 30 }, PROJECT_COLS, {});
+  eq(out.taxRatePct, 30);
+  eq(out.used.tax_rate_pct, 'override');
+});
 test('resolveCalcHeuristics: numeric coercion of NaN override falls to default', () => {
   const out = resolveCalcHeuristics(DRAFT_SCEN, null, { tax_rate_pct: 'not-a-number' }, PROJECT_COLS);
   // Not-a-number override value still "counts" as present (string), so `used` marks override

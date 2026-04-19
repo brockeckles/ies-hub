@@ -569,10 +569,15 @@ export function buildRevisionRow(scenarioId, previousRevisionNumber, changedBy, 
  * units matching buildYearlyProjections (percent values are raw %, not
  * fractions — 25 means 25%).
  *
+ * Phase 5b: accepts an optional `transient` overlay that wins over BOTH
+ * snapshot and override — used by the What-If Studio sliders to preview
+ * values before the user commits them.
+ *
  * @param {Scenario|null} scenario
  * @param {{ heuristics?: Object[] }|null} snapshots  Output of loadScenarioRates
  * @param {Object|null} overrides                    project.heuristic_overrides
  * @param {Object} projectCols                       fallback bag
+ * @param {Object} [transient]                       Phase 5b — highest-priority overlay
  * @returns {{
  *   taxRatePct: number, dsoDays: number, dpoDays: number,
  *   laborPayableDays: number, laborEscPct: number, costEscPct: number,
@@ -586,10 +591,11 @@ export function buildRevisionRow(scenarioId, previousRevisionNumber, changedBy, 
  *   source: 'snapshot'|'override'|'default', used: Object<string, string>
  * }}
  */
-export function resolveCalcHeuristics(scenario, snapshots, overrides, projectCols) {
+export function resolveCalcHeuristics(scenario, snapshots, overrides, projectCols, transient) {
   const heuristicsSnap = snapshots && Array.isArray(snapshots.heuristics) ? snapshots.heuristics : [];
   const o = overrides || {};
   const p = projectCols || {};
+  const t = transient || {};
   const fromSnap = new Map();
   for (const row of heuristicsSnap) {
     // snapshot_json shape (from approve_scenario RPC):
@@ -603,6 +609,11 @@ export function resolveCalcHeuristics(scenario, snapshots, overrides, projectCol
   const isApproved = scenario && scenario.status === 'approved' && fromSnap.size > 0;
   const used = {};
   function pick(key, fallback) {
+    // Phase 5b: transient overlay wins even on approved scenarios (it's a
+    // preview — the user hasn't committed, so no compliance concern).
+    if (Object.prototype.hasOwnProperty.call(t, key) && t[key] !== null && t[key] !== undefined && t[key] !== '') {
+      used[key] = 'transient'; return t[key];
+    }
     if (isApproved && fromSnap.has(key)) { used[key] = 'snapshot'; return fromSnap.get(key); }
     if (Object.prototype.hasOwnProperty.call(o, key) && o[key] !== null && o[key] !== undefined && o[key] !== '') {
       used[key] = 'override'; return o[key];
