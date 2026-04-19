@@ -316,11 +316,11 @@ export async function persistMonthlyFacts(projectId, bundle) {
   }
 
   // Refresh the materialized view. Fire-and-forget: never block the save.
+  // db.rpc throws on error (doesn't return {data,error}); just catch.
   try {
-    const { error } = await db.rpc('refresh_pnl_for_project', { p_project_id: projectId });
-    if (error) console.warn('[CM] fact_pnl_monthly refresh failed:', error);
+    await db.rpc('refresh_pnl_for_project', { p_project_id: projectId });
   } catch (err) {
-    console.warn('[CM] refresh_pnl_for_project threw:', err);
+    console.warn('[CM] refresh_pnl_for_project failed:', err);
   }
 
   return { wrote: { revenue: revRows.length, expense: expRows.length, cashflow: cfRows.length } };
