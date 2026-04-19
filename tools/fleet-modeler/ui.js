@@ -10,7 +10,8 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sM';
 import { state } from '../../shared/state.js?v=20260418-sM';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sM';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260419-uC';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260419-uE';
+import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import * as calc from './calc.js?v=20260418-sM';
 import * as api from './api.js?v=20260418-sM';
 
@@ -57,6 +58,30 @@ let carrierRateDeck = [];
  */
 let activeScenarioId = null;
 let activeParentCmId = null;
+
+// Run-state tracker — flips the "Calculate Fleet" button between orange and
+// the muted "✓ Results current" state based on whether inputs have changed
+// since the last calculate.
+const runState = new RunStateTracker();
+function runStateInputs() {
+  return { lanes, vehicles, config };
+}
+function updateRunButtonState() {
+  if (!rootEl) return;
+  const btn = rootEl.querySelector('[data-primary-action="fleet-run"]');
+  if (!btn) return;
+  const s = runState.state(runStateInputs());
+  const isClean = s === 'clean';
+  btn.classList.toggle('is-clean', isClean);
+  btn.setAttribute('data-run-state', s);
+  const iconSpan = btn.querySelector('.hub-run-icon');
+  const labelSpan = btn.querySelector('span:not(.hub-run-icon):not(.hub-run-shortcut)');
+  if (labelSpan) labelSpan.textContent = isClean ? '✓ Results current' : 'Calculate Fleet';
+  if (iconSpan) iconSpan.style.display = isClean ? 'none' : '';
+  btn.setAttribute('title', isClean
+    ? 'Inputs unchanged since the last calculate — fleet results match the current lanes + config. Click to force a re-run.'
+    : 'Run the analyzer (Cmd/Ctrl+Enter)');
+}
 
 export async function mount(el) {
   rootEl = el;
@@ -118,6 +143,11 @@ function openEditor(savedRow) {
   result = d.result || null;
   activeScenarioId = savedRow?.id || null;
   activeParentCmId = savedRow?.parent_cost_model_id || null;
+  // New editor session — reset run-state. If the saved row already has a
+  // result, treat the loaded inputs as the clean baseline (saved result was
+  // computed against saved inputs).
+  runState.reset();
+  if (result) runState.markClean(runStateInputs());
 
   rootEl.innerHTML = renderShell();
   bindShellEvents();
@@ -144,6 +174,7 @@ function openEditor(savedRow) {
  */
 export function unmount() {
   if (mapInstance) { mapInstance.remove(); mapInstance = null; }
+  runState.reset();
   rootEl = null;
   bus.emit('fleet:unmounted');
 }
@@ -177,7 +208,15 @@ function renderShell() {
         activeTab,
         tabsId: 'fm-tabs',
         statusChips: chips,
-        primaryAction: { label: 'Calculate Fleet', action: 'fleet-run', icon: '▶', title: 'Run the analyzer (Cmd/Ctrl+Enter)' },
+        primaryAction: {
+          label: 'Calculate Fleet',
+          action: 'fleet-run',
+          icon: '▶',
+          title: 'Run the analyzer (Cmd/Ctrl+Enter)',
+          state: runState.state(runStateInputs()),
+          cleanLabel: '✓ Results current',
+          cleanTitle: 'Inputs unchanged since the last calculate — fleet results match the current lanes + config. Click to force a re-run.',
+        },
       })}
       <div id="fm-content" style="flex:1;overflow-y:auto;padding:24px;"></div>
     </div>
@@ -205,7 +244,10 @@ function bindShellEvents() {
     rootEl.querySelectorAll('#fm-tabs button').forEach(b => {
       b.classList.toggle('active', b.dataset.tab === activeTab);
     });
+    // Record the input fingerprint so the button flips to "✓ Results current".
+    runState.markClean(runStateInputs());
     renderContent();
+    updateRunButtonState();
     flashRunButton(runBtn);
   });
 
@@ -216,6 +258,11 @@ function bindShellEvents() {
 function renderContent() {
   const el = rootEl?.querySelector('#fm-content');
   if (!el) return;
+  // Any re-render is a convenient chokepoint to re-evaluate the Run button
+  // state — after user edits, this flips the button back to orange; after
+  // a successful run, the state() call against the freshly-marked-clean
+  // hash returns 'clean'.
+  updateRunButtonState();
 
   switch (activeTab) {
     case 'lanes': renderLanes(el); break;

@@ -50,6 +50,14 @@
  * @property {string} [icon]
  * @property {string} [title]
  * @property {boolean} [primary]
+ * @property {'dirty'|'clean'} [state]   For primary Run buttons. 'clean' renders
+ *   a muted outline "✓ Results current" variant — still clickable to force
+ *   a re-run. 'dirty' (default) is the orange Run button. Tools pass 'clean'
+ *   after a successful run when inputs haven't changed since, and flip back
+ *   to 'dirty' on the next tracked input change.
+ * @property {string} [cleanLabel]       Override for the clean-state label.
+ *   Defaults to "✓ Results current".
+ * @property {string} [cleanTitle]       Override for the clean-state tooltip.
  */
 
 /**
@@ -108,10 +116,24 @@ export function renderToolHeader(opts) {
   // Inline children with no whitespace between spans. The template literal
   // whitespace would otherwise leak into the button's accessible name and
   // (depending on the platform) get spoken/copied as "▶\n  Run Scenario\n  ⌘↵".
+  // Run-state (clean vs dirty): when state === 'clean', render a muted outline
+  // "✓ Results current" variant — still clickable so the user can force a
+  // re-run (Monte Carlo trials, just-want-to-be-sure flows). The default
+  // 'dirty' state renders the standard orange Run button.
+  const isClean = primaryAction && primaryAction.state === 'clean';
+  const primaryLabel = isClean
+    ? (primaryAction.cleanLabel || '✓ Results current')
+    : primaryAction?.label;
+  const primaryIcon = isClean ? '' : primaryAction?.icon;
+  const primaryTitle = isClean
+    ? (primaryAction.cleanTitle || `Inputs unchanged since last run. Click to re-run (${shortcutLabel}).`)
+    : (primaryAction?.title || `Run (${shortcutLabel})`);
+  const primaryClasses = ['hub-btn', 'hub-run-btn'];
+  if (isClean) primaryClasses.push('is-clean');
   const primaryHtml = !primaryAction ? '' : (
-    `<button type="button" class="hub-btn hub-run-btn" data-action="${primaryAction.action}" data-primary-action="${primaryAction.action}" ${primaryAction.title ? `title="${escapeAttr(primaryAction.title)}"` : `title="Run (${shortcutLabel})"`}>` +
-    (primaryAction.icon ? `<span class="hub-run-icon">${escapeHtml(primaryAction.icon)}</span>` : '') +
-    `<span>${escapeHtml(primaryAction.label)}</span>` +
+    `<button type="button" class="${primaryClasses.join(' ')}" data-action="${primaryAction.action}" data-primary-action="${primaryAction.action}" data-run-state="${isClean ? 'clean' : 'dirty'}" title="${escapeAttr(primaryTitle)}">` +
+    (primaryIcon ? `<span class="hub-run-icon">${escapeHtml(primaryIcon)}</span>` : '') +
+    `<span>${escapeHtml(primaryLabel)}</span>` +
     `<span class="hub-run-shortcut">${escapeHtml(shortcutLabel)}</span>` +
     `</button>`
   );

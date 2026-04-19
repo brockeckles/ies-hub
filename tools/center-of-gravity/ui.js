@@ -10,7 +10,8 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sP';
 import { state } from '../../shared/state.js?v=20260418-sP';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sP';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260419-uC';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260419-uE';
+import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sP';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260418-sP';
 import * as calc from './calc.js?v=20260418-sP';
@@ -50,6 +51,29 @@ let mapOptions = {
   heat: true,
   zoneRadiiMiles: [250, 500, 750],
 };
+
+// Run-state tracker — flips the header Run button to "✓ Results current"
+// once a k-means run completes against a stable input set.
+const runState = new RunStateTracker();
+function runStateInputs() {
+  return { points, config };
+}
+function updateRunButtonState() {
+  if (!rootEl) return;
+  const btn = rootEl.querySelector('[data-primary-action="cog-run"]');
+  if (!btn) return;
+  const s = runState.state(runStateInputs());
+  const isClean = s === 'clean';
+  btn.classList.toggle('is-clean', isClean);
+  btn.setAttribute('data-run-state', s);
+  const iconSpan = btn.querySelector('.hub-run-icon');
+  const labelSpan = btn.querySelector('span:not(.hub-run-icon):not(.hub-run-shortcut)');
+  if (labelSpan) labelSpan.textContent = isClean ? '✓ Results current' : 'Find Optimal Location';
+  if (iconSpan) iconSpan.style.display = isClean ? 'none' : '';
+  btn.setAttribute('title', isClean
+    ? 'Inputs unchanged since the last solve — k-means centers match the current points + config. Click to force a re-run.'
+    : 'Run k-means (Cmd/Ctrl+Enter)');
+}
 
 // ============================================================
 // LIFECYCLE
@@ -122,6 +146,11 @@ function openEditor(savedRow) {
   // I-05 — fresh open is clean; only run/edit/etc marks dirty.
   isDirty = false;
   _scenarioName = savedRow?.name || d.name || '';
+  // New editor session — drop the prior scenario's run-state baseline.
+  // If the loaded scenario has a result, treat the loaded inputs as the
+  // baseline (saved row's centers were computed against saved inputs).
+  runState.reset();
+  if (cogResult) runState.markClean(runStateInputs());
 
   rootEl.innerHTML = renderShell();
   bindShellEvents();
@@ -131,6 +160,9 @@ function openEditor(savedRow) {
 /** I-05 — mark editor dirty + refresh the Save button state without a full re-render. */
 let _scenarioName = '';
 function markDirty() {
+  // Run-state check runs regardless of isDirty short-circuit — a repeat edit
+  // against a clean run still needs to flip the Run button back to orange.
+  updateRunButtonState();
   if (isDirty) return;
   isDirty = true;
   guardMarkDirty('cog');
@@ -197,6 +229,7 @@ async function handleSave() {
  */
 export function unmount() {
   if (mapInstance) { mapInstance.remove(); mapInstance = null; }
+  runState.reset();
   rootEl = null;
   bus.emit('cog:unmounted');
 }
@@ -243,7 +276,15 @@ function renderShell() {
             title: activeScenarioId ? 'Update this scenario' : 'Save this scenario to open it again later' },
         ],
         primaryAction: showRunBtn
-          ? { label: 'Find Optimal Location', action: 'cog-run', icon: '▶', title: 'Run k-means (Cmd/Ctrl+Enter)' }
+          ? {
+              label: 'Find Optimal Location',
+              action: 'cog-run',
+              icon: '▶',
+              title: 'Run k-means (Cmd/Ctrl+Enter)',
+              state: runState.state(runStateInputs()),
+              cleanLabel: '✓ Results current',
+              cleanTitle: 'Inputs unchanged since the last solve — k-means centers match the current points + config. Click to force a re-run.',
+            }
           : null,
       })}
       <div id="cog-content" style="flex:1;overflow-y:auto;padding:24px;"></div>
@@ -277,7 +318,11 @@ function bindShellEvents() {
       cogResult = calc.kMeansCog(points, config.numCenters, config.maxIterations);
       sensitivityData = calc.sensitivityAnalysis(points, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000);
       activeTab = 'analysis';
+      // Stash the input fingerprint so the header Run button flips to the
+      // muted "✓ Results current" state until the user edits something.
+      runState.markClean(runStateInputs());
       markDirty(); // I-05 — running produces a new result that deserves saving
+      updateRunButtonState();
       rootEl.innerHTML = renderShell(); // re-render shell so tabs + Save state are fresh
       rootEl.querySelectorAll('#cog-tabs button').forEach(b => {
         b.classList.toggle('active', b.dataset.tab === activeTab);

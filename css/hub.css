@@ -893,6 +893,28 @@ textarea.hub-input {
   100% { box-shadow: 0 1px 2px rgba(255,58,0,0.18); }
 }
 
+/* Run-state: clean (results match current inputs). Muted outline variant —
+   still clickable for force-rerun (Monte Carlo, just-want-to-be-sure). The
+   default 'dirty' state uses the orange button styles above. */
+.hub-run-btn.is-clean {
+  background: #ffffff;
+  color: #15803d;
+  border: 1px solid #16a34a;
+  box-shadow: none;
+}
+.hub-run-btn.is-clean:hover {
+  background: #f0fdf4;
+  border-color: #15803d;
+}
+.hub-run-btn.is-clean .hub-run-shortcut {
+  background: rgba(22, 163, 74, 0.10);
+  color: #15803d;
+  opacity: 0.75;
+}
+.hub-run-btn.is-clean:focus-visible {
+  outline-color: #16a34a;
+}
+
 /* Input Groups — consistent label/input/help stack used across all tools */
 .hub-input-group {
   display: flex;

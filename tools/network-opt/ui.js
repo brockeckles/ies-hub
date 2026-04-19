@@ -11,7 +11,8 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sM';
 import { state } from '../../shared/state.js?v=20260418-sM';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sM';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260419-uC';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260419-uE';
+import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadXLSX } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260418-sM';
 import * as calc from './calc.js?v=20260418-sM';
@@ -109,6 +110,35 @@ const DEMO_DEMANDS = [
 let activeConfigId = null;
 let activeParentCmId = null;
 let isDirty = false;          // I-05 — track unsaved changes
+
+// Run-state tracker: flips the header Run button between orange "dirty"
+// and muted green "✓ Results current" based on whether run inputs have
+// changed since the last successful optimizer run.
+const runState = new RunStateTracker();
+function runStateInputs() {
+  return { facilities, demands, modeMix, rateCard, serviceConfig, maxDCsToTest };
+}
+/**
+ * Update the Run button's visual state in place. Avoids a full shell re-render
+ * when the only thing that changed is the clean/dirty flag.
+ */
+function updateRunButtonState() {
+  if (!rootEl) return;
+  const btn = rootEl.querySelector('[data-primary-action="netopt-run"]');
+  if (!btn) return;
+  const state = runState.state(runStateInputs());
+  const isClean = state === 'clean';
+  btn.classList.toggle('is-clean', isClean);
+  btn.setAttribute('data-run-state', state);
+  // Update the visible label + icon slot
+  const iconSpan = btn.querySelector('.hub-run-icon');
+  const labelSpan = btn.querySelector('span:not(.hub-run-icon):not(.hub-run-shortcut)');
+  if (labelSpan) labelSpan.textContent = isClean ? '✓ Results current' : 'Run Scenario';
+  if (iconSpan) iconSpan.style.display = isClean ? 'none' : '';
+  btn.setAttribute('title', isClean
+    ? 'Inputs unchanged since the last run — optimizer results match the current setup. Click to force a re-run.'
+    : 'Run optimizer (Cmd/Ctrl+Enter)');
+}
 let _configName = '';         // I-05 — persisted name for resave
 
 export async function mount(el) {
@@ -164,6 +194,13 @@ function openEditor(savedRow) {
   activeParentCmId = savedRow?.parent_cost_model_id || null;
   isDirty = false;
   _configName = savedRow?.name || d.name || '';
+  // New editor session — the prior scenario's run-state tracker is stale.
+  // If the loaded scenario already has saved results, we treat that as the
+  // clean baseline (saved row → results were computed against saved inputs).
+  runState.reset();
+  if (savedRow && d.scenarios && d.scenarios.length > 0) {
+    runState.markClean({ facilities, demands, modeMix, rateCard, serviceConfig, maxDCsToTest });
+  }
 
   rootEl.innerHTML = renderShell();
   bindShellEvents();
@@ -180,6 +217,9 @@ function openEditor(savedRow) {
 
 // I-05 — dirty tracking + Save handler
 function markDirty() {
+  // Run-state check runs regardless of isDirty short-circuit — even repeat
+  // edits against a clean run should flip the Run button back to orange.
+  updateRunButtonState();
   if (isDirty) return;
   isDirty = true;
   guardMarkDirty('netopt');
@@ -242,6 +282,7 @@ export function unmount() {
     mapInstance.remove();
     mapInstance = null;
   }
+  runState.reset();
   rootEl = null;
   bus.emit('netopt:unmounted');
 }
@@ -275,7 +316,15 @@ function renderShell() {
             primary: isDirty,
             title: activeConfigId ? 'Update this scenario' : 'Save this scenario so you can reopen it later' },
         ],
-        primaryAction: { label: 'Run Scenario', action: 'netopt-run', icon: '▶', title: 'Run optimizer (Cmd/Ctrl+Enter)' },
+        primaryAction: {
+          label: 'Run Scenario',
+          action: 'netopt-run',
+          icon: '▶',
+          title: 'Run optimizer (Cmd/Ctrl+Enter)',
+          state: runState.state(runStateInputs()),
+          cleanLabel: '✓ Results current',
+          cleanTitle: 'Inputs unchanged since the last run — optimizer results match the current setup. Click to force a re-run.',
+        },
       })}
 
       <!-- Main area: sidebar + content -->
@@ -533,11 +582,15 @@ function runScenario() {
   const result = calc.evaluateScenario(name, facilities, demands, modeMix, rateCard, serviceConfig);
   activeScenario = result;
   activeView = 'results';
+  // Run succeeded — stash the inputs so the header Run button flips to the
+  // muted "✓ Results current" state until the user changes something.
+  runState.markClean(runStateInputs());
   // Update view tabs
   rootEl?.querySelectorAll('#no-view-tabs button').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === activeView);
   });
   renderContentView();
+  updateRunButtonState();
 }
 
 function addToComparison() {
