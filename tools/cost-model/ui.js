@@ -9,9 +9,85 @@
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
+import { showToast } from '../../shared/toast.js?v=20260419-tF';
 import * as calc from './calc.js?v=20260418-sK';
 import * as api from './api.js?v=20260419-sZ';
 import * as scenarios from './calc.scenarios.js?v=20260419-sZ';
+
+// ============================================================
+// Non-blocking modal helpers (replace confirm/prompt/alert).
+// Native dialogs freeze under the Claude-in-Chrome extension and are
+// generally poor UX in SPAs; these return Promises the caller can await.
+// ============================================================
+
+/**
+ * Show a non-blocking confirm modal. Resolves to true/false.
+ * @param {string} message  prompt text (supports \n line breaks)
+ * @param {{ okLabel?: string, cancelLabel?: string, danger?: boolean }} [opts]
+ * @returns {Promise<boolean>}
+ */
+function showConfirm(message, opts = {}) {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'hub-modal-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:9999;';
+    const okBg = opts.danger ? '#dc2626' : 'var(--ies-blue-600)';
+    overlay.innerHTML = `
+      <div style="background:white;border-radius:8px;padding:24px;min-width:420px;max-width:90vw;">
+        <div style="white-space:pre-line;font-size:14px;line-height:1.45;">${String(message).replace(/</g, '&lt;')}</div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+          <button class="hub-btn" data-ans="0">${opts.cancelLabel || 'Cancel'}</button>
+          <button class="hub-btn-primary" data-ans="1" style="${opts.danger ? `background:${okBg};` : ''}">${opts.okLabel || 'Confirm'}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const done = (v) => { overlay.remove(); resolve(v); };
+    overlay.querySelector('[data-ans="0"]')?.addEventListener('click', () => done(false));
+    overlay.querySelector('[data-ans="1"]')?.addEventListener('click', () => done(true));
+    overlay.addEventListener('click', e => { if (e.target === overlay) done(false); });
+    document.addEventListener('keydown', function onKey(e) {
+      if (e.key === 'Escape') { document.removeEventListener('keydown', onKey); done(false); }
+      if (e.key === 'Enter')  { document.removeEventListener('keydown', onKey); done(true); }
+    });
+  });
+}
+
+/**
+ * Show a non-blocking prompt modal. Resolves to the string value or null
+ * if cancelled.
+ * @param {string} message
+ * @param {string} [defaultValue]
+ * @returns {Promise<string|null>}
+ */
+function showPrompt(message, defaultValue = '') {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'hub-modal-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:9999;';
+    overlay.innerHTML = `
+      <div style="background:white;border-radius:8px;padding:24px;min-width:480px;max-width:90vw;">
+        <div style="white-space:pre-line;font-size:14px;line-height:1.45;margin-bottom:10px;">${String(message).replace(/</g, '&lt;')}</div>
+        <input class="hub-input" data-prompt-input style="width:100%;font-size:14px;padding:6px 8px;" value="${String(defaultValue).replace(/"/g, '&quot;')}" />
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+          <button class="hub-btn" data-ans="cancel">Cancel</button>
+          <button class="hub-btn-primary" data-ans="ok">OK</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const input = overlay.querySelector('[data-prompt-input]');
+    setTimeout(() => input?.focus(), 20);
+    const done = (v) => { overlay.remove(); resolve(v); };
+    overlay.querySelector('[data-ans="cancel"]')?.addEventListener('click', () => done(null));
+    overlay.querySelector('[data-ans="ok"]')?.addEventListener('click', () => done(input?.value ?? ''));
+    overlay.addEventListener('click', e => { if (e.target === overlay) done(null); });
+    document.addEventListener('keydown', function onKey(e) {
+      if (e.key === 'Escape') { document.removeEventListener('keydown', onKey); done(null); }
+      if (e.key === 'Enter')  { document.removeEventListener('keydown', onKey); done(input?.value ?? ''); }
+    });
+  });
+}
 
 // ============================================================
 // STATE — tool-local reactive state
@@ -1996,7 +2072,8 @@ function bindSectionEvents(section, container) {
       });
     });
     container.querySelector('[data-cm-action="reset-all-heuristics"]')?.addEventListener('click', async () => {
-      if (!confirm('Reset all heuristics on this scenario to standard defaults?')) return;
+      const ok = await showConfirm('Reset all heuristics on this scenario to standard defaults?', { okLabel: 'Reset' });
+      if (!ok) return;
       heuristicOverrides = {};
       if (model?.projectId) {
         try { await api.saveHeuristicOverrides(model.projectId, heuristicOverrides); } catch (_) {}
@@ -2032,9 +2109,9 @@ function bindSectionEvents(section, container) {
 
     const act = (name) => container.querySelector(`[data-cm-action="${name}"]`);
 
-    act('scenario-save-header')?.addEventListener('click', async () => {
-      // header save is a no-op because field changes already auto-save
-      alert('Saved');
+    act('scenario-save-header')?.addEventListener('click', () => {
+      // Field changes auto-save on blur; this button is just a reassurance
+      showToast('Scenario fields auto-save on change', 'success');
     });
 
     act('scenario-to-review')?.addEventListener('click', async () => {
@@ -2049,13 +2126,19 @@ function bindSectionEvents(section, container) {
     });
     act('scenario-archive')?.addEventListener('click', async () => {
       if (!currentScenario) return;
-      if (!confirm('Archive this scenario? Snapshots are preserved; status moves to "archived".')) return;
+      const ok = await showConfirm('Archive this scenario?\n\nSnapshots are preserved; status moves to "archived".',
+        { okLabel: 'Archive', danger: true });
+      if (!ok) return;
       currentScenario = await api.archiveScenario(currentScenario.id);
+      showToast('Scenario archived', 'success');
       renderSection();
     });
     act('scenario-approve')?.addEventListener('click', async () => {
       if (!currentScenario) return;
-      const ok = confirm('Approve this scenario?\n\nAll active rate cards (labor, facility, utility, overhead, equipment) and the heuristics catalog will be frozen as snapshots. You will no longer be able to edit this scenario — further changes will spawn a child scenario.');
+      const ok = await showConfirm(
+        'Approve this scenario?\n\nAll active rate cards (labor, facility, utility, overhead, equipment) and the heuristics catalog will be frozen as snapshots. You will no longer be able to edit this scenario — further changes will spawn a child scenario.',
+        { okLabel: 'Approve + Freeze', danger: false }
+      );
       if (!ok) return;
       try {
         const email = (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('ies_user_email') : null);
@@ -2076,25 +2159,29 @@ function bindSectionEvents(section, container) {
         renderSection();
       } catch (err) {
         console.error('[CM] approve failed:', err);
-        alert('Approval failed: ' + (err?.message || err));
+        showToast('Approval failed: ' + (err?.message || err), 'error');
       }
     });
     act('scenario-clone')?.addEventListener('click', async () => {
       if (!currentScenario) return;
-      const label = prompt('Label for the new child scenario?', (currentScenario.scenario_label || 'Scenario') + ' (child)');
+      const label = await showPrompt('Label for the new child scenario?',
+        (currentScenario.scenario_label || 'Scenario') + ' (child)');
       if (label === null) return;
       try {
         const { scenario: newScen, projectId: newProjId } = await api.cloneScenario(currentScenario.id, label.trim() || null);
-        alert(`Child scenario #${newScen.id} created on project #${newProjId}. Open it from the list below.`);
+        showToast(`Child scenario #${newScen.id} created on project #${newProjId}. Open it from the list below.`, 'success');
         await ensureScenariosLoaded();
         renderSection();
       } catch (err) {
         console.error('[CM] clone failed:', err);
-        alert('Clone failed: ' + (err?.message || err));
+        showToast('Clone failed: ' + (err?.message || err), 'error');
       }
     });
     act('scenario-init')?.addEventListener('click', async () => {
-      if (!model?.projectId) { alert('Save the project first, then initialize a scenario.'); return; }
+      if (!model?.projectId) {
+        showToast('Save the project first, then initialize a scenario.', 'warning');
+        return;
+      }
       try {
         currentScenario = await api.saveScenario({
           project_id: model.projectId,
@@ -2104,8 +2191,9 @@ function bindSectionEvents(section, container) {
           status: 'draft',
         });
         await ensureScenariosLoaded();
+        showToast('Scenario initialized', 'success');
         renderSection();
-      } catch (err) { alert('Init failed: ' + (err?.message || err)); }
+      } catch (err) { showToast('Init failed: ' + (err?.message || err), 'error'); }
     });
     act('scenarios-compare-picker')?.addEventListener('click', () => {
       openCompareModal();
@@ -2161,7 +2249,7 @@ async function openCompareModal() {
       scenarioId: parseInt(el.dataset.compareId),
       projectId: parseInt(el.dataset.projectId),
     }));
-    if (picked.length < 2 || picked.length > 3) { alert('Pick 2 or 3 scenarios.'); return; }
+    if (picked.length < 2 || picked.length > 3) { showToast('Pick 2 or 3 scenarios to compare.', 'warning'); return; }
     const resultEl = overlay.querySelector('#cm-compare-result');
     resultEl.innerHTML = '<em>Loading projections…</em>';
     // Fetch monthly projections for each picked project; build minimal bundles
@@ -2630,7 +2718,7 @@ async function exportScenarioToXlsx() {
   await ensureScenariosLoaded();
   const payload = buildScenarioExportPayload();
   if (!payload.sheets.some(s => (s.rows || []).length > 0)) {
-    alert('Nothing to export yet — open the Summary section first to build the monthly bundle.');
+    showToast('Nothing to export yet — open the Summary section first to build the monthly bundle.', 'warning');
     return;
   }
   try {
@@ -2649,7 +2737,7 @@ async function exportScenarioToXlsx() {
     }
   } catch (err) {
     console.error('[CM] export failed:', err);
-    alert('Export failed: ' + (err?.message || err));
+    showToast('Export failed: ' + (err?.message || err), 'error');
   }
 }
 
