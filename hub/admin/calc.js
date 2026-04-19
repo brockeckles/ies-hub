@@ -134,6 +134,26 @@ export const MASTER_TABLES = [
       { key: 'is_active',          label: 'Active',        type: 'boolean', editable: true },
     ],
   },
+  {
+    id: 'design_heuristics',
+    name: 'Design Heuristics Catalog',
+    description: 'Standard modeling assumptions (DSO, benefit load, ramp, escalation, etc.) surfaced in the Cost Model Assumptions section. Editing defaults here affects every NEW scenario; approved scenarios stay frozen via rate snapshots.',
+    tableName: 'ref_design_heuristics', rowCount: 0,
+    columns: [
+      { key: 'key',           label: 'Key',           type: 'text', required: true, editable: true },
+      { key: 'label',         label: 'Label',         type: 'text', required: true, editable: true },
+      { key: 'description',   label: 'Description',   type: 'text', editable: true },
+      { key: 'category',      label: 'Category',      type: 'text', required: true, editable: true },
+      { key: 'data_type',     label: 'Data Type',     type: 'text', required: true, editable: true },
+      { key: 'unit',          label: 'Unit',          type: 'text', editable: true },
+      { key: 'default_value', label: 'Default (num)', type: 'number', editable: true },
+      { key: 'default_enum',  label: 'Default (enum)',type: 'text', editable: true },
+      { key: 'min_value',     label: 'Min',           type: 'number', editable: true },
+      { key: 'max_value',     label: 'Max',           type: 'number', editable: true },
+      { key: 'sort_order',    label: 'Sort',          type: 'number', editable: true },
+      { key: 'is_active',     label: 'Active',        type: 'boolean', editable: true },
+    ],
+  },
 ];
 
 // ============================================================

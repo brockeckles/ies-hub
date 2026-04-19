@@ -16,6 +16,7 @@ import { recordAudit } from '../../shared/audit.js?v=20260418-sP';
 const ORDER_BY = {
   ref_multisite_grade_thresholds: 'metric_name',
   ref_fleet_carrier_rates: 'display_name',
+  ref_design_heuristics: 'sort_order',
   accounts: 'company_name',
   competitors: 'name',
   master_markets: 'market_code',
