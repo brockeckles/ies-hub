@@ -517,7 +517,8 @@ export function buildYearlyProjections(params) {
   const useMonthly =
     !!params.useMonthlyEngine ||
     (typeof window !== 'undefined' && window.COST_MODEL_MONTHLY_ENGINE === true);
-  if (useMonthly && params.periods && params.ramp && params.seasonality) {
+  // Require periods; ramp + seasonality are defaulted in the adapter if absent.
+  if (useMonthly && Array.isArray(params.periods) && params.periods.length > 0) {
     const bundle = monthly.buildMonthlyProjections(adaptYearlyToMonthlyParams(params));
     return {
       projections: monthly.groupMonthlyToYearly(bundle, params.years),
