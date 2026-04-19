@@ -786,9 +786,28 @@ function renderSetup() {
         <label class="cm-form-label">Environment</label>
         <select class="hub-select" id="cm-env" data-field="projectDetails.environment">
           <option value="">Select environment...</option>
-          ${['Ecommerce', 'Retail', 'Food & Beverage', 'Industrial', 'Pharmaceutical', 'Automotive', 'Consumer Goods'].map(e =>
-            `<option value="${e.toLowerCase()}"${pd.environment === e.toLowerCase() ? ' selected' : ''}>${e}</option>`
-          ).join('')}
+          ${(() => {
+            const options = [
+              // Climate / facility classification
+              { label: 'Ambient', value: 'ambient' },
+              { label: 'Refrigerated', value: 'refrigerated' },
+              { label: 'Freezer', value: 'freezer' },
+              { label: 'Temperature Controlled', value: 'temperature_controlled' },
+              // Vertical / customer type
+              { label: 'Ecommerce', value: 'ecommerce' },
+              { label: 'Retail', value: 'retail' },
+              { label: 'Food & Beverage', value: 'food & beverage' },
+              { label: 'Industrial', value: 'industrial' },
+              { label: 'Pharmaceutical', value: 'pharmaceutical' },
+              { label: 'Automotive', value: 'automotive' },
+              { label: 'Consumer Goods', value: 'consumer goods' },
+            ];
+            const curLower = String(pd.environment || '').toLowerCase().trim();
+            // Case-insensitive match so "Ambient" or "AMBIENT" from DB still selects
+            return options.map(o =>
+              `<option value="${o.value}"${curLower === o.value.toLowerCase() ? ' selected' : ''}>${o.label}</option>`
+            ).join('');
+          })()}
         </select>
       </div>
       <div class="cm-form-group">
