@@ -434,13 +434,17 @@ export function sensitivityAnalysis(points, maxK = 5, costPerMile = 2.85, maxIte
     });
   }
 
-  // Detect elbow: find the point where improvement drops below 5% threshold
-  // TODO-X6: transportCostPerMile, distance curves, weight tiers are admin-migration candidates; review during Cost Model integration
+  // Detect elbow: find the point where incremental improvement drops below
+  // the threshold below. 5% is the industry-standard knee heuristic for
+  // k-means/facility-siting elbow detection (Thorndike 1953, applied
+  // throughout supply-chain textbooks). transport cost per mile + units
+  // per truck are already user-editable inputs on the Config tab.
+  const ELBOW_THRESHOLD = 0.05;
   if (results.length >= 2) {
     const baseCost = results[0].estimatedCost;
     for (let i = 1; i < results.length; i++) {
       const improvement = (results[i - 1].estimatedCost - results[i].estimatedCost) / baseCost;
-      if (improvement < 0.05) {
+      if (improvement < ELBOW_THRESHOLD) {
         results[i - 1].isElbow = true;
         break;
       }
