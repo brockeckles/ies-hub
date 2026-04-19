@@ -1572,5 +1572,9 @@ export function adaptYearlyToMonthlyParams(p) {
     periods:             p.periods     || [],
     startupLines:        p.startupLines     || [],
     pricingBuckets:      p.pricingBuckets   || [],
+    // Phase 4d — per-line monthly labor cost when laborLines + calcHeur available
+    laborLines:          p.laborLines        || [],
+    calcHeur:            p._calcHeur         || null,
+    marketLaborProfile:  p.marketLaborProfile || null,
   };
 }

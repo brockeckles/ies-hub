@@ -15,8 +15,16 @@
  *   5. Tax = max(0, ebit × tax_rate_pct/100) — uses project rate, not
  *      hardcoded 25%
  *
+ * Phase 4d: when laborLines + calcHeur are supplied, per-period labor cost
+ * is summed from per-line monthlyEffectiveHours × fully-loaded rate,
+ * honoring Phase 4b per-line monthly OT/absence profiles and Phase 4c
+ * market-profile fallbacks. When laborLines is empty the engine falls back
+ * to the Phase 1 aggregate-times-seasonalShare shape for backward compat.
+ *
  * @module tools/cost-model/calc.monthly
  */
+
+import { monthlyEffectiveHours } from './calc.scenarios.js';
 
 // ============================================================
 // TYPEDEFS
@@ -205,6 +213,58 @@ export function validateSeasonality(profile, tolerance = 0.001) {
 }
 
 // ============================================================
+// Phase 4d — PER-LINE MONTHLY LABOR COST
+// ============================================================
+
+/**
+ * Sum per-line monthly labor cost for a specific period.
+ * Each line contributes:
+ *   monthlyEffectiveHours(line, monthIdx, calcHeur, market)
+ *     × (seasonalShare × 12)   // expand fraction → multiplier; 1/12 = flat
+ *     × rampLaborMult × volMult × escLaborMult
+ *     × loadedRate
+ * where loadedRate = effectiveBase × (1 + burden%) + benefits_per_hour
+ * and effectiveBase applies Phase 4a temp_agency_markup_pct.
+ *
+ * Pure function — no I/O. Safe to call in a hot loop.
+ *
+ * @param {Object[]} laborLines
+ * @param {Object} ctx — { calcHeur, marketLaborProfile, calendarMonth,
+ *                         seasonalShare, escLaborMult, volMult, rampLaborMult }
+ * @returns {number}
+ */
+export function computeMonthlyLaborFromLines(laborLines, ctx) {
+  if (!Array.isArray(laborLines) || laborLines.length === 0) return 0;
+  const { calcHeur, marketLaborProfile, calendarMonth,
+          seasonalShare, escLaborMult, volMult, rampLaborMult } = ctx || {};
+  const monthIdx = (((calendarMonth || 1) - 1) % 12 + 12) % 12;
+  const seasonalMult = (Number(seasonalShare) || (1/12)) * 12; // flat season → 1.0
+  const benefitLoadFallbackPct = (calcHeur?.benefitLoadPct ?? 35);
+  let total = 0;
+  for (const line of laborLines) {
+    const hours = monthlyEffectiveHours(line, monthIdx, calcHeur, marketLaborProfile);
+    // Phase 4a: employment-type markup folded into effective base rate
+    const baseRate = Number(line.hourly_rate) || 0;
+    const empType = line.employment_type || 'permanent';
+    const markupFrac = (empType === 'temp_agency')
+      ? (Number(line.temp_agency_markup_pct) || 0) / 100
+      : 0;
+    const effectiveBase = baseRate * (1 + markupFrac);
+    // Loaded rate: burden + benefits (line-level burden takes precedence)
+    const burdenFrac = (line.burden_pct != null)
+      ? Number(line.burden_pct) / 100
+      : benefitLoadFallbackPct / 100;
+    const benefitsPerHr = Number(line.benefits_per_hour) || 0;
+    const loadedRate = effectiveBase * (1 + burdenFrac) + benefitsPerHr;
+    total += hours * loadedRate;
+  }
+  return total * seasonalMult
+              * (Number(rampLaborMult) || 1)
+              * (Number(volMult)       || 1)
+              * (Number(escLaborMult)  || 1);
+}
+
+// ============================================================
 // MAIN MONTHLY ENGINE
 // ============================================================
 
@@ -241,6 +301,10 @@ export function buildMonthlyProjections(params) {
     periods = [],
     startupLines = [],
     pricingBuckets = [],
+    // Phase 4d additions (optional — falls back to aggregate when not supplied)
+    laborLines = [],
+    calcHeur = null,
+    marketLaborProfile = null,
   } = params;
 
   // Slice the passed-in periods to only the contract window
@@ -366,7 +430,19 @@ export function buildMonthlyProjections(params) {
 
     // ---- Expense rows: split by category ----
     // Labor (hourly bucket; salary not split out here — Phase 4 does that)
-    const monthlyLabor = base_labor_cost * escLaborMult * volMult * rampLaborMult / 12 * seasonalShare * 12;
+    // Phase 4d: when laborLines are supplied, build monthly labor from
+    // per-line monthlyEffectiveHours × fully-loaded rate. This surfaces
+    // peak-month OT and summer-absence effects the aggregate path hides.
+    let monthlyLabor;
+    if (laborLines && laborLines.length > 0) {
+      monthlyLabor = computeMonthlyLaborFromLines(
+        laborLines,
+        { calcHeur, marketLaborProfile, calendarMonth: p.calendar_month,
+          seasonalShare, escLaborMult, volMult, rampLaborMult }
+      );
+    } else {
+      monthlyLabor = base_labor_cost * escLaborMult * volMult * rampLaborMult / 12 * seasonalShare * 12;
+    }
     if (monthlyLabor > 0) {
       expenseRows.push({
         project_id, period_id: p.id, expense_line_code: 'LABOR_HOURLY',
