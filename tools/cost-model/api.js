@@ -646,6 +646,53 @@ export async function saveHeuristicOverrides(projectId, overrides) {
 }
 
 // ============================================================
+// PLANNING RATIOS (ref_planning_ratios + overrides)
+// ============================================================
+// Separate from the 26-row ref_design_heuristics system. Richer schema:
+//   applicability filters (vertical/env/automation/market_tier), SCD
+//   versioning (effective_date/effective_end_date), structured values
+//   (array/lookup/tiered), source + citation.
+
+/**
+ * Fetch the planning-ratios category dictionary.
+ * @returns {Promise<any[]>}
+ */
+export async function fetchPlanningRatioCategories() {
+  const { data, error } = await db.from('ref_heuristic_categories')
+    .select('*').order('sort_order', { ascending: true });
+  if (error) { console.warn('[CM] fetchPlanningRatioCategories failed:', error); return []; }
+  return data || [];
+}
+
+/**
+ * Fetch all active planning ratios (the full catalog).
+ * @returns {Promise<any[]>}
+ */
+export async function fetchPlanningRatios() {
+  const { data, error } = await db.from('ref_planning_ratios')
+    .select('*').eq('is_active', true).order('sort_order', { ascending: true });
+  if (error) { console.warn('[CM] fetchPlanningRatios failed:', error); return []; }
+  return data || [];
+}
+
+/**
+ * Save the per-project planning_ratio_overrides jsonb. Full-map overwrite.
+ * Shape: { 'ratio_code': { value, note?, updated_at? } }
+ * @param {number} projectId
+ * @param {Object} overrides
+ * @returns {Promise<any>}
+ */
+export async function savePlanningRatioOverrides(projectId, overrides) {
+  if (!projectId) throw new Error('savePlanningRatioOverrides: projectId required');
+  const payload = { planning_ratio_overrides: overrides || {}, updated_at: new Date().toISOString() };
+  const { data, error } = await db.from('cost_model_projects')
+    .update(payload).eq('id', projectId).select('id, planning_ratio_overrides').single();
+  if (error) throw error;
+  recordAudit({ table: 'cost_model_projects', id: projectId, action: 'update', fields: { planning_ratio_overrides: overrides } }).catch(() => {});
+  return data;
+}
+
+// ============================================================
 // SCD — supersede-and-insert helper
 // ============================================================
 

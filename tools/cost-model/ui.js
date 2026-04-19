@@ -11,8 +11,9 @@ import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import * as calc from './calc.js?v=20260419-uC';
-import * as api from './api.js?v=20260419-uC';
+import * as api from './api.js?v=20260419-uH';
 import * as scenarios from './calc.scenarios.js?v=20260419-sZ';
+import * as planningRatios from '../../shared/planning-ratios.js?v=20260419-uH';
 
 // ============================================================
 // Non-blocking modal helpers (replace confirm/prompt/alert).
@@ -192,6 +193,15 @@ let _heuristicsLoadInFlight = false;
 // until user hits Apply). Highest-priority layer in resolveCalcHeuristics.
 let whatIfTransient = {};
 let _whatIfDebounce = null;
+// Phase 6 — Planning Ratios catalog (ref_planning_ratios + ref_heuristic_categories).
+// Separate from heuristicsCatalog above; this is the richer 142-rule engineering
+// defaults catalog with applicability filters + SCD.
+let planningRatiosCatalog = [];
+let planningRatioCategories = [];
+let planningRatioOverrides = {};
+let _planningRatiosLoadInFlight = false;
+/** UI-only: which category card is expanded. Null = all collapsed. */
+let _planningRatioOpenCategory = null;
 
 // ============================================================
 // LIFECYCLE
@@ -217,6 +227,11 @@ export async function mount(el) {
   _heuristicsLoadInFlight = false;
   heuristicOverrides = {};
   currentMarketLaborProfile = null;
+  // Phase 6 — planning ratios reset (catalog is shared across projects, don't
+  // clear it; but overrides + open-category are per-project/session)
+  planningRatioOverrides = {};
+  _planningRatioOpenCategory = null;
+  _planningRatiosLoadInFlight = false;
 
   // Load reference data + saved models + saved deals + ref_periods in parallel
   try {
@@ -368,6 +383,9 @@ function wireLandingEvents() {
         _scenariosLoadInFlight = false;
         heuristicOverrides = {};
         currentMarketLaborProfile = null;
+        // Phase 6 — planning ratio overrides are per-project
+        planningRatioOverrides = {};
+        _planningRatioOpenCategory = null;
         // Reset Linked Designs cache so the next view fetches fresh for the new model
         linkedDesigns = null;
         _linkedDesignsLoadInFlight = false;
@@ -2359,6 +2377,67 @@ function bindSectionEvents(section, container) {
       }
       renderSection();
     });
+
+    // --------------------------------------------------------------
+    // Phase 6: Planning Ratios event wiring (ref_planning_ratios)
+    // --------------------------------------------------------------
+    if (isPlanningRatiosFlagOn()) {
+      // Lazy-load once; then re-render so the catalog is visible.
+      if (planningRatiosCatalog.length === 0 && !_planningRatiosLoadInFlight) {
+        ensurePlanningRatiosLoaded().then(() => renderSection());
+      }
+      // Toggle category expand/collapse
+      container.querySelectorAll('[data-pr-toggle-category]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const code = btn.dataset.prToggleCategory;
+          _planningRatioOpenCategory = (_planningRatioOpenCategory === code) ? null : code;
+          renderSection();
+        });
+      });
+      // Planning-ratio value override
+      container.querySelectorAll('[data-pr-input]').forEach(inp => {
+        inp.addEventListener('change', async () => {
+          const code = inp.dataset.prInput;
+          const raw = inp.value;
+          const merged = { ...planningRatioOverrides };
+          if (raw === '' || raw === null || raw === undefined) {
+            delete merged[code];
+          } else {
+            const n = Number(raw);
+            if (!Number.isFinite(n)) return;
+            merged[code] = { value: n, updated_at: new Date().toISOString() };
+          }
+          planningRatioOverrides = merged;
+          if (model?.id) {
+            try {
+              await api.savePlanningRatioOverrides(model.id, planningRatioOverrides);
+              isDirty = false;
+            } catch (err) {
+              console.warn('[CM] savePlanningRatioOverrides failed:', err);
+            }
+          } else {
+            model.planningRatioOverrides = planningRatioOverrides;
+            isDirty = true;
+          }
+          renderSection();
+        });
+      });
+      // Reset single planning ratio
+      container.querySelectorAll('[data-cm-action="reset-planning-ratio"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const code = btn.dataset.prCode;
+          const merged = { ...planningRatioOverrides };
+          delete merged[code];
+          planningRatioOverrides = merged;
+          if (model?.id) {
+            try { await api.savePlanningRatioOverrides(model.id, planningRatioOverrides); } catch (_) {}
+          } else {
+            model.planningRatioOverrides = planningRatioOverrides;
+          }
+          renderSection();
+        });
+      });
+    }
   }
 
   // --------------------------------------------------------------
@@ -3429,11 +3508,21 @@ function handleAction(action, idx) {
     case 'delete-indirect':
       model.indirectLaborLines.splice(idx, 1);
       break;
-    case 'auto-gen-indirect':
-      model.indirectLaborLines = calc.autoGenerateIndirectLabor(model);
+    case 'auto-gen-indirect': {
+      // Phase 6 — pull span-of-control from the planning ratios catalog
+      // when the flag is on and we have a loaded catalog. Otherwise calc
+      // falls back to its legacy hardcoded divisors.
+      const prMap = (isPlanningRatiosFlagOn() && planningRatiosCatalog.length)
+        ? planningRatios.resolvePlanningRatios(planningRatiosCatalog, planningRatioOverrides, {
+            vertical: (model.projectDetails && model.projectDetails.vertical) || null,
+            environment_type: (model.projectDetails && model.projectDetails.environment) || null,
+          })
+        : null;
+      model.indirectLaborLines = calc.autoGenerateIndirectLabor(model, { planningRatiosMap: prMap });
       // I-01 — auto-gen paths also need default bucket assignment
       model.indirectLaborLines.forEach(l => { if (!l.pricing_bucket) l.pricing_bucket = defaultBucketFor('indirect'); });
       break;
+    }
     case 'add-equipment':
       model.equipmentLines.push({ equipment_name: '', category: 'MHE', quantity: 1, acquisition_type: 'lease', monthly_cost: 0, monthly_maintenance: 0, pricing_bucket: defaultBucketFor('equipment') });
       break;
@@ -4611,6 +4700,76 @@ const HEURISTIC_CATEGORY_LABELS = {
   ops_escalation: 'Operations & Escalation',
 };
 
+/**
+ * Phase 6 — load the planning-ratios catalog + categories + per-project
+ * overrides. Mirrors ensureHeuristicsLoaded(). Guarded against re-entry.
+ */
+async function ensurePlanningRatiosLoaded() {
+  if (_planningRatiosLoadInFlight) return;
+  _planningRatiosLoadInFlight = true;
+  try {
+    if (planningRatiosCatalog.length === 0 || planningRatioCategories.length === 0) {
+      const [cats, rows] = await Promise.all([
+        api.fetchPlanningRatioCategories().catch(() => []),
+        api.fetchPlanningRatios().catch(() => []),
+      ]);
+      planningRatioCategories = cats || [];
+      planningRatiosCatalog = rows || [];
+    }
+    const projectId = model?.id;
+    if (projectId) {
+      try {
+        const p = await api.getModel(projectId);
+        planningRatioOverrides = (p && p.planning_ratio_overrides) || {};
+      } catch (_) { planningRatioOverrides = {}; }
+    } else {
+      planningRatioOverrides = (model && model.planningRatioOverrides) || {};
+    }
+  } finally {
+    _planningRatiosLoadInFlight = false;
+  }
+}
+
+/**
+ * Feature flag — default ON. Set `window.COST_MODEL_PLANNING_RATIOS = false`
+ * in console to hide the Planning Ratios sub-section without touching code.
+ */
+function isPlanningRatiosFlagOn() {
+  return typeof window === 'undefined' || window.COST_MODEL_PLANNING_RATIOS !== false;
+}
+
+/**
+ * Format a ratio's effective value for display. Coerces percent to "%" and
+ * respects value_unit hints. Structured types (array/lookup/tiered) render
+ * as a terse summary.
+ */
+function formatRatioValue(resolved) {
+  if (!resolved || resolved.value === null || resolved.value === undefined) return '—';
+  const { value, def } = resolved;
+  if (def && (def.value_type === 'array' || def.value_type === 'lookup' || def.value_type === 'tiered')) {
+    if (Array.isArray(value)) return `[${value.length} values]`;
+    if (typeof value === 'object') return `{${Object.keys(value).length} keys}`;
+    return String(value);
+  }
+  const n = Number(value);
+  if (!Number.isFinite(n)) return String(value);
+  if (def && def.value_type === 'percent') return `${(n * 100).toFixed(n >= 0.1 ? 1 : 2)}%`;
+  if (def && def.value_type === 'psf') return `$${n.toFixed(3)}`;
+  if (def && def.value_type === 'per_unit') return `$${n.toLocaleString()}`;
+  return n % 1 === 0 ? String(n) : n.toFixed(2);
+}
+
+/** Returns { value, isStructured } for editor rendering. */
+function ratioEditorValue(code, def) {
+  const ov = planningRatioOverrides[code];
+  if (ov && ov.value !== null && ov.value !== undefined && ov.value !== '') return { value: ov.value, isStructured: false };
+  if (!def) return { value: '', isStructured: false };
+  if (def.value_type === 'array' || def.value_type === 'lookup' || def.value_type === 'tiered') {
+    return { value: null, isStructured: true };
+  }
+  return { value: '', isStructured: false };
+}
+
 function renderAssumptions() {
   const cat = heuristicsCatalog;
   if (!cat || cat.length === 0) {
@@ -4697,7 +4856,127 @@ function renderAssumptions() {
         </table>
       </div>
     `).join('')}
+
+    ${renderPlanningRatios()}
   `;
+}
+
+/**
+ * Phase 6 — render the 142-rule Planning Ratios catalog as a collapsible
+ * library below the 26-row Assumptions. Each category card expands to show
+ * its rules with source + applicability + override. Feature-flagged.
+ */
+function renderPlanningRatios() {
+  if (!isPlanningRatiosFlagOn()) return '';
+  if (!planningRatiosCatalog.length) {
+    return `
+      <div class="cm-card" style="margin-top:24px;">
+        <h3 style="margin-top:0;">Planning Ratios <span class="hub-status-chip" style="margin-left:8px;">Loading…</span></h3>
+        <p class="cm-subtle" style="font-size:12px;margin:0;">Engineering defaults catalog (spans of control, facility ratios, storage PSF, seasonality, …).</p>
+      </div>
+    `;
+  }
+
+  const ctx = {
+    vertical: (model && model.projectDetails && model.projectDetails.vertical) || null,
+    environment_type: (model && model.projectDetails && model.projectDetails.environment) || null,
+    automation_level: null,
+    market_tier: null,
+  };
+  const grouped = planningRatios.groupByCategory(planningRatiosCatalog, planningRatioCategories);
+  const overrideCount = planningRatios.countRatioOverrides(planningRatioOverrides);
+
+  return `
+    <div class="cm-section-header" style="margin-top:32px;padding-top:16px;border-top:2px solid var(--ies-gray-100);">
+      <h2>Planning Ratios
+        ${overrideCount > 0
+          ? `<span class="hub-status-chip" style="margin-left:8px;background:#fbbf24;color:#78350f;">${overrideCount} override${overrideCount === 1 ? '' : 's'}</span>`
+          : `<span class="hub-status-chip" style="margin-left:8px;">${planningRatiosCatalog.length} rules · ${planningRatioCategories.length} categories</span>`}
+      </h2>
+      <p class="cm-subtle">Engineering defaults extracted from the reference 3PL cost model. Spans of control, space ratios, storage $/SF components, seasonality by vertical, asset loaded-cost factors. Override per-scenario; defaults apply to all projects otherwise.</p>
+    </div>
+
+    ${grouped.map(({ category, rows }) => {
+      if (!rows.length) return '';
+      const isOpen = _planningRatioOpenCategory === category.code;
+      const resolvedList = rows.map(r => ({
+        row: r,
+        resolved: planningRatios.lookupRatio(r.ratio_code, ctx, planningRatiosCatalog, planningRatioOverrides),
+      }));
+      const overridesInCategory = resolvedList.filter(x => x.resolved.source === 'override').length;
+      const staleCount = rows.filter(r => planningRatios.isStale(r)).length;
+      return `
+        <div class="cm-card" style="margin-top:12px;padding:0;overflow:hidden;">
+          <button data-pr-toggle-category="${category.code}"
+            style="display:flex;width:100%;align-items:center;gap:10px;padding:14px 16px;border:0;background:#fff;cursor:pointer;text-align:left;border-bottom:${isOpen ? '1px solid var(--ies-gray-100)' : '0'};">
+            <span style="font-size:14px;font-weight:700;flex:1;">${escapeHtml(category.display_name)}</span>
+            ${overridesInCategory > 0 ? `<span class="hub-status-chip" style="background:#fbbf24;color:#78350f;">${overridesInCategory} override${overridesInCategory === 1 ? '' : 's'}</span>` : ''}
+            ${staleCount > 0 ? `<span class="hub-status-chip" style="background:#fef3c7;color:#92400e;" title="${staleCount} row(s) with pre-2022 source — audit recommended">${staleCount} stale</span>` : ''}
+            <span style="font-size:11px;color:var(--ies-gray-400);">${rows.length} rule${rows.length === 1 ? '' : 's'}</span>
+            <span style="font-size:14px;color:var(--ies-gray-400);">${isOpen ? '▾' : '▸'}</span>
+          </button>
+          ${isOpen ? `
+            ${category.description ? `<div style="padding:8px 16px 0;font-size:12px;color:var(--ies-gray-500);">${escapeHtml(category.description)}</div>` : ''}
+            <table class="cm-table" style="width:100%;margin-top:8px;">
+              <thead>
+                <tr>
+                  <th style="text-align:left;">Rule</th>
+                  <th style="text-align:left;width:28%;">Notes</th>
+                  <th style="text-align:right;width:110px;">Default</th>
+                  <th style="text-align:right;width:150px;">Your Value</th>
+                  <th style="text-align:left;width:160px;">Source</th>
+                  <th style="text-align:center;width:50px;"></th>
+                </tr>
+              </thead>
+              <tbody>
+                ${resolvedList.map(({ row: r, resolved }) => {
+                  const structured = r.value_type === 'array' || r.value_type === 'lookup' || r.value_type === 'tiered';
+                  const isOver = resolved.source === 'override';
+                  const stale = planningRatios.isStale(r);
+                  const ov = planningRatioOverrides[r.ratio_code];
+                  const filters = [];
+                  if (r.vertical) filters.push(`v: ${r.vertical}`);
+                  if (r.environment_type) filters.push(`env: ${r.environment_type}`);
+                  if (r.automation_level) filters.push(`auto: ${r.automation_level}`);
+                  if (r.market_tier) filters.push(`tier: ${r.market_tier}`);
+                  return `
+                    <tr data-pr-row="${r.ratio_code}" style="${isOver ? 'background:#fffbeb;' : ''}">
+                      <td style="padding:6px 8px;vertical-align:top;">
+                        <div style="font-weight:600;font-size:13px;">${escapeHtml(r.display_name)}</div>
+                        <div style="font-size:11px;color:var(--ies-gray-500);font-family:monospace;">${escapeHtml(r.ratio_code)}${r.value_unit ? ` · ${escapeHtml(r.value_unit)}` : ''}</div>
+                        ${filters.length ? `<div style="font-size:10px;color:var(--ies-gray-400);margin-top:2px;">${filters.join(' · ')}</div>` : ''}
+                      </td>
+                      <td style="padding:6px 8px;font-size:11px;color:var(--ies-gray-600);vertical-align:top;">${escapeHtml(r.notes || '')}</td>
+                      <td class="cm-num" style="vertical-align:top;">${formatRatioValue({ value: r.value_type === 'array' || r.value_type === 'lookup' || r.value_type === 'tiered' ? r.value_jsonb : r.numeric_value, def: r })}</td>
+                      <td class="cm-num" style="vertical-align:top;">
+                        ${structured
+                          ? `<span style="font-size:11px;color:var(--ies-gray-400);">(structured)</span>`
+                          : `<input class="hub-input" type="number" step="any" data-pr-input="${escapeHtml(r.ratio_code)}" value="${ov && ov.value !== undefined && ov.value !== null ? escapeHtml(String(ov.value)) : ''}" placeholder="${r.numeric_value != null ? r.numeric_value : ''}" style="width:130px;text-align:right;" />`}
+                      </td>
+                      <td style="padding:6px 8px;font-size:11px;color:var(--ies-gray-500);vertical-align:top;">
+                        <div>${escapeHtml(r.source || '')}</div>
+                        ${r.source_detail ? `<div style="font-size:10px;color:var(--ies-gray-400);">${escapeHtml(r.source_detail)}</div>` : ''}
+                        ${stale ? `<div style="margin-top:2px;"><span class="hub-status-chip" style="background:#fef3c7;color:#92400e;font-size:9px;padding:1px 6px;" title="Source pre-2022 — recommend audit before trusting">needs refresh</span></div>` : ''}
+                      </td>
+                      <td style="text-align:center;vertical-align:top;">
+                        ${isOver ? `<button class="hub-btn" style="padding:2px 8px;font-size:11px;" data-cm-action="reset-planning-ratio" data-pr-code="${escapeHtml(r.ratio_code)}" title="Reset to default">↺</button>` : ''}
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          ` : ''}
+        </div>
+      `;
+    }).join('')}
+  `;
+}
+
+/** Tiny escape for user-displayed text pulled from the DB. */
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 }
 
 // ============================================================

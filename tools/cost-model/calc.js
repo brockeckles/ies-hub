@@ -1076,10 +1076,19 @@ export function formatPct(value, decimals = 1) {
 
 /**
  * Auto-generate indirect labor lines based on span-of-control heuristics.
+ *
+ * Phase 6: accepts an optional `planningRatiosMap` (flat code→{value, source}
+ * map, shape returned by `resolvePlanningRatios`). When supplied, spans of
+ * control pull from the ref_planning_ratios catalog (with per-project
+ * overrides) instead of the legacy hardcoded divisors. When NOT supplied,
+ * behavior is unchanged from prior versions.
+ *
  * @param {Object} state — { laborLines, indirectLaborLines, facility, shifts, financial }
+ * @param {Object} [opts]
+ * @param {Object<string, {value: any, source: string}>} [opts.planningRatiosMap]
  * @returns {import('./types.js?v=20260418-sK').IndirectLaborLine[]}
  */
-export function autoGenerateIndirectLabor(state) {
+export function autoGenerateIndirectLabor(state, opts = {}) {
   const lines = [];
   const opHrs = operatingHours(state.shifts || {});
 
@@ -1090,6 +1099,18 @@ export function autoGenerateIndirectLabor(state) {
   }, 0);
 
   const totalDirectHC = Math.ceil(totalDirectFtes);
+
+  // Helper to pull a span-of-control from the planning ratios catalog.
+  // Falls back to the legacy hardcoded divisor when no catalog is provided
+  // or when the code is missing / unusable (0, NaN, non-numeric).
+  const prMap = opts.planningRatiosMap || null;
+  const pr = (code, fallback) => {
+    if (!prMap) return fallback;
+    const r = prMap[code];
+    if (!r || r.value === null || r.value === undefined) return fallback;
+    const n = Number(r.value);
+    return Number.isFinite(n) && n > 0 ? n : fallback;
+  };
 
   // Helper to add indirect line
   const addRole = (name, headcount, rate, burden = 30) => {
@@ -1103,25 +1124,28 @@ export function autoGenerateIndirectLabor(state) {
     }
   };
 
-  // 1. Team Leads: 1 per 8 direct FTEs (if >= 3 FTEs)
+  // 1. Team Leads: catalog 15 per Team Lead; legacy 8.
   if (totalDirectFtes >= 3) {
-    addRole('Team Lead', Math.ceil(totalDirectFtes / 8), 22);
+    addRole('Team Lead', Math.ceil(totalDirectFtes / pr('indirect.team_lead.span', 8)), 22);
   }
 
-  // 2. Supervisors: 1 per 15 FTEs (if >= 8 FTEs)
+  // 2. Supervisors: catalog 25 per Ops Supervisor; legacy 15.
   if (totalDirectFtes >= 8) {
-    addRole('Supervisor', Math.ceil(totalDirectFtes / 15), 28);
+    addRole('Supervisor', Math.ceil(totalDirectFtes / pr('salary.operations_supervisor.span', 15)), 28);
   }
 
-  // 3. Operations Manager: 1 for 20+ FTEs, 2 for 80+
+  // 3. Operations Manager: catalog 75 per mgr; legacy piecewise (1 at 20 FTE, 2 at 80 FTE).
   if (totalDirectFtes >= 20) {
-    const opsManagers = totalDirectFtes >= 80 ? 2 : 1;
+    const perMgr = pr('salary.operations_manager.span', null);
+    const opsManagers = perMgr
+      ? Math.max(1, Math.ceil(totalDirectFtes / perMgr))
+      : (totalDirectFtes >= 80 ? 2 : 1);
     addRole('Operations Manager', opsManagers, 42);
   }
 
-  // 4. Inventory Control: 1 per 25 direct FTEs
+  // 4. Inventory Control: catalog 50 per IC Manager; legacy 25.
   if (totalDirectFtes > 0) {
-    addRole('Inventory Control', Math.ceil(totalDirectFtes / 25), 20);
+    addRole('Inventory Control', Math.ceil(totalDirectFtes / pr('salary.inventory_manager.span', 25)), 20);
   }
 
   // 5. Receiving/Shipping Clerk: 1 per shift
