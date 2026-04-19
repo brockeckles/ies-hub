@@ -9,7 +9,8 @@
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { state } from '../../shared/state.js?v=20260418-sK';
 import * as calc from './calc.js?v=20260418-sK';
-import * as api from './api.js?v=20260418-sK';
+import * as api from './api.js?v=20260419-sZ';
+import * as scenarios from './calc.scenarios.js?v=20260419-sZ';
 
 // ============================================================
 // STATE — tool-local reactive state
@@ -88,7 +89,16 @@ const SECTIONS = [
   { key: 'pricing', label: 'Pricing', icon: 'tag' },
   { key: 'summary', label: 'Summary', icon: 'pie-chart' },
   { key: 'timeline', label: 'Timeline', icon: 'calendar' },
+  { key: 'assumptions', label: 'Assumptions', icon: 'sliders' },
+  { key: 'scenarios', label: 'Scenarios', icon: 'git-branch' },
 ];
+
+// Phase 3 module-local state
+let heuristicsCatalog = [];
+let heuristicOverrides = {};
+let dealScenarios = [];
+let currentScenario = null;
+let currentRevisions = [];
 
 // ============================================================
 // LIFECYCLE
@@ -575,6 +585,8 @@ function renderSection() {
     pricing: renderPricing,
     summary: renderSummary,
     timeline: renderTimeline,
+    assumptions: renderAssumptions,
+    scenarios: renderScenarios,
   };
 
   const render = renderers[activeSection];
@@ -1863,6 +1875,277 @@ function bindSectionEvents(section, container) {
       renderSection();
     });
   });
+
+  // --------------------------------------------------------------
+  // Phase 3: Assumptions section event wiring
+  // --------------------------------------------------------------
+  if (section === 'assumptions') {
+    // First-open: lazy-load catalog + overrides, then re-render
+    if (heuristicsCatalog.length === 0) {
+      ensureHeuristicsLoaded().then(() => renderSection());
+    }
+    // Heuristic value input → merge into overrides jsonb
+    container.querySelectorAll('[data-heuristic-input]').forEach(inp => {
+      const evt = inp.tagName === 'SELECT' ? 'change' : 'change';
+      inp.addEventListener(evt, async (e) => {
+        const key = inp.dataset.heuristicInput;
+        const raw = inp.value;
+        const def = heuristicsCatalog.find(h => h.key === key);
+        if (!def) return;
+        const issue = scenarios.validateHeuristic(def, raw);
+        if (issue) { console.warn('[CM] heuristic validation:', issue); return; }
+        const value = def.data_type === 'enum' ? raw : (raw === '' ? null : Number(raw));
+        const merged = { ...heuristicOverrides };
+        if (value === null || value === undefined || value === '') delete merged[key];
+        else merged[key] = value;
+        heuristicOverrides = merged;
+        // Persist if we have a saved project
+        if (model?.projectId) {
+          try {
+            await api.saveHeuristicOverrides(model.projectId, heuristicOverrides);
+            isDirty = false;
+          } catch (err) {
+            console.warn('[CM] saveHeuristicOverrides failed:', err);
+          }
+        } else {
+          model.heuristicOverrides = heuristicOverrides;
+          isDirty = true;
+        }
+        renderSection();
+      });
+    });
+    // Reset-per-row + reset-all
+    container.querySelectorAll('[data-cm-action="reset-heuristic"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const key = btn.dataset.heuristicKey;
+        const merged = { ...heuristicOverrides };
+        delete merged[key];
+        heuristicOverrides = merged;
+        if (model?.projectId) {
+          try { await api.saveHeuristicOverrides(model.projectId, heuristicOverrides); } catch (_) {}
+        } else {
+          model.heuristicOverrides = heuristicOverrides;
+        }
+        renderSection();
+      });
+    });
+    container.querySelector('[data-cm-action="reset-all-heuristics"]')?.addEventListener('click', async () => {
+      if (!confirm('Reset all heuristics on this scenario to standard defaults?')) return;
+      heuristicOverrides = {};
+      if (model?.projectId) {
+        try { await api.saveHeuristicOverrides(model.projectId, heuristicOverrides); } catch (_) {}
+      } else {
+        model.heuristicOverrides = heuristicOverrides;
+      }
+      renderSection();
+    });
+  }
+
+  // --------------------------------------------------------------
+  // Phase 3: Scenarios section event wiring
+  // --------------------------------------------------------------
+  if (section === 'scenarios') {
+    if (!currentScenario && dealScenarios.length === 0) {
+      ensureScenariosLoaded().then(() => renderSection());
+    }
+    // Field edits on current scenario
+    container.querySelectorAll('[data-scenario-field]').forEach(inp => {
+      inp.addEventListener('change', async () => {
+        const field = inp.dataset.scenarioField;
+        if (!currentScenario) return;
+        const patch = { id: currentScenario.id };
+        if (field === 'label') patch.scenario_label = inp.value;
+        if (field === 'description') patch.scenario_description = inp.value;
+        try {
+          currentScenario = await api.saveScenario(patch);
+          await ensureScenariosLoaded();
+          renderSection();
+        } catch (err) { console.warn('[CM] save scenario field failed:', err); }
+      });
+    });
+
+    const act = (name) => container.querySelector(`[data-cm-action="${name}"]`);
+
+    act('scenario-save-header')?.addEventListener('click', async () => {
+      // header save is a no-op because field changes already auto-save
+      alert('Saved');
+    });
+
+    act('scenario-to-review')?.addEventListener('click', async () => {
+      if (!currentScenario) return;
+      currentScenario = await api.saveScenario({ id: currentScenario.id, status: 'review' });
+      renderSection();
+    });
+    act('scenario-to-draft')?.addEventListener('click', async () => {
+      if (!currentScenario) return;
+      currentScenario = await api.saveScenario({ id: currentScenario.id, status: 'draft' });
+      renderSection();
+    });
+    act('scenario-archive')?.addEventListener('click', async () => {
+      if (!currentScenario) return;
+      if (!confirm('Archive this scenario? Snapshots are preserved; status moves to "archived".')) return;
+      currentScenario = await api.archiveScenario(currentScenario.id);
+      renderSection();
+    });
+    act('scenario-approve')?.addEventListener('click', async () => {
+      if (!currentScenario) return;
+      const ok = confirm('Approve this scenario?\n\nAll active rate cards (labor, facility, utility, overhead, equipment) and the heuristics catalog will be frozen as snapshots. You will no longer be able to edit this scenario — further changes will spawn a child scenario.');
+      if (!ok) return;
+      try {
+        const email = (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('ies_user_email') : null);
+        const result = await api.approveScenarioRpc(currentScenario.id, email);
+        console.log('[CM] approve result:', result);
+        // Write a revision row via the client so the log captures this event
+        try {
+          const prev = await api.getLatestRevisionNumber(currentScenario.id);
+          const row = scenarios.buildRevisionRow(
+            currentScenario.id, prev, email,
+            `Approved — ${result?.snap_labor || 0} labor + ${result?.snap_facility || 0} facility + ${result?.snap_heuristics || 0} heuristic snapshots frozen`,
+            { overrides: heuristicOverrides },
+            { snap_counts: result }
+          );
+          await api.writeRevision(row);
+        } catch (revErr) { console.warn('[CM] writeRevision on approve failed:', revErr); }
+        await ensureScenariosLoaded();
+        renderSection();
+      } catch (err) {
+        console.error('[CM] approve failed:', err);
+        alert('Approval failed: ' + (err?.message || err));
+      }
+    });
+    act('scenario-clone')?.addEventListener('click', async () => {
+      if (!currentScenario) return;
+      const label = prompt('Label for the new child scenario?', (currentScenario.scenario_label || 'Scenario') + ' (child)');
+      if (label === null) return;
+      try {
+        const { scenario: newScen, projectId: newProjId } = await api.cloneScenario(currentScenario.id, label.trim() || null);
+        alert(`Child scenario #${newScen.id} created on project #${newProjId}. Open it from the list below.`);
+        await ensureScenariosLoaded();
+        renderSection();
+      } catch (err) {
+        console.error('[CM] clone failed:', err);
+        alert('Clone failed: ' + (err?.message || err));
+      }
+    });
+    act('scenario-init')?.addEventListener('click', async () => {
+      if (!model?.projectId) { alert('Save the project first, then initialize a scenario.'); return; }
+      try {
+        currentScenario = await api.saveScenario({
+          project_id: model.projectId,
+          deal_id: model?.projectDetails?.dealId || model?.deal_deals_id || null,
+          scenario_label: model?.scenario_label || 'Baseline',
+          is_baseline: true,
+          status: 'draft',
+        });
+        await ensureScenariosLoaded();
+        renderSection();
+      } catch (err) { alert('Init failed: ' + (err?.message || err)); }
+    });
+    act('scenarios-compare-picker')?.addEventListener('click', () => {
+      openCompareModal();
+    });
+    container.querySelectorAll('[data-cm-action="scenario-open"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const projId = parseInt(btn.dataset.projectId);
+        if (!projId) return;
+        // Hand off to the existing open-model flow
+        window.location.hash = `#/cost-model/${projId}`;
+      });
+    });
+  }
+}
+
+/**
+ * Compare-scenarios modal. Lists every scenario on this deal with a
+ * checkbox; pick 2-3 then click Compare. Renders the kpiDelta grid +
+ * monthly P&L delta table using calc.scenarios.compareScenarios.
+ */
+async function openCompareModal() {
+  if (!Array.isArray(dealScenarios) || dealScenarios.length < 2) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'hub-modal-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:9999;';
+  overlay.innerHTML = `
+    <div style="background:white;border-radius:8px;padding:24px;min-width:640px;max-width:95vw;max-height:90vh;overflow:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <h3 style="margin:0;">Compare Scenarios</h3>
+        <button class="hub-btn" data-close>×</button>
+      </div>
+      <p class="cm-subtle" style="margin-top:4px;">Select 2–3 scenarios to diff aligned KPIs + monthly cashflow.</p>
+      <div style="max-height:240px;overflow:auto;margin-top:12px;">
+        ${dealScenarios.map(sc => `
+          <label style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #eee;">
+            <input type="checkbox" data-compare-id="${sc.id}" data-project-id="${sc.project_id}" />
+            <span style="flex:1;">${sc.scenario_label}${sc.is_baseline ? ' ⭐' : ''}</span>
+            <span class="hub-status-chip" style="background:${STATUS_COLORS[sc.status] || '#6b7280'};color:white;">${sc.status}</span>
+          </label>
+        `).join('')}
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+        <button class="hub-btn" data-close>Cancel</button>
+        <button class="hub-btn-primary" data-run-compare>Compare →</button>
+      </div>
+      <div id="cm-compare-result" style="margin-top:16px;"></div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => overlay.remove()));
+  overlay.querySelector('[data-run-compare]').addEventListener('click', async () => {
+    const picked = Array.from(overlay.querySelectorAll('[data-compare-id]:checked')).map(el => ({
+      scenarioId: parseInt(el.dataset.compareId),
+      projectId: parseInt(el.dataset.projectId),
+    }));
+    if (picked.length < 2 || picked.length > 3) { alert('Pick 2 or 3 scenarios.'); return; }
+    const resultEl = overlay.querySelector('#cm-compare-result');
+    resultEl.innerHTML = '<em>Loading projections…</em>';
+    // Fetch monthly projections for each picked project; build minimal bundles
+    const bundles = await Promise.all(picked.map(async (p) => {
+      const monthly = await api.fetchMonthlyProjections(p.projectId).catch(() => []);
+      const summary = monthly.reduce((a, r) => {
+        a.total_revenue += (r.revenue || 0);
+        a.total_opex += (r.opex || 0);
+        a.ebitda += (r.ebitda || 0);
+        a.net_income += (r.net_income || 0);
+        a.capex += (r.capex || 0);
+        return a;
+      }, { total_revenue: 0, total_opex: 0, ebitda: 0, ebit: 0, net_income: 0, capex: 0, npv: 0, irr: 0, payback_months: 0 });
+      const sc = dealScenarios.find(s => s.id === p.scenarioId);
+      return { label: sc?.scenario_label || `#${p.scenarioId}`, summary, monthly };
+    }));
+    // For 2-way: compareScenarios; for 3-way: compare 1-vs-2 and 1-vs-3
+    const a = bundles[0];
+    const comparisons = bundles.slice(1).map(b => ({ bLabel: b.label, cmp: scenarios.compareScenarios(a, b) }));
+    const fmt = n => (n == null ? '—' : (Math.abs(n) > 1e6 ? (n/1e6).toFixed(1)+'M' : Math.abs(n) > 1e3 ? (n/1e3).toFixed(0)+'K' : n.toFixed(0)));
+    const fmtPct = p => (p == null ? '—' : (p > 0 ? '+' : '') + p.toFixed(1) + '%');
+    resultEl.innerHTML = `
+      <table class="cm-table" style="width:100%;">
+        <thead>
+          <tr>
+            <th style="text-align:left;">KPI</th>
+            <th style="text-align:right;">${a.label}</th>
+            ${comparisons.map(c => `<th style="text-align:right;" colspan="2">${c.bLabel}</th>`).join('')}
+          </tr>
+          <tr>
+            <th></th><th></th>
+            ${comparisons.map(() => `<th style="text-align:right;font-size:11px;color:#666;">Value</th><th style="text-align:right;font-size:11px;color:#666;">Δ%</th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>
+          ${['total_revenue','total_opex','ebitda','net_income','capex'].map(k => `
+            <tr>
+              <td style="padding:4px 8px;font-weight:600;">${k}</td>
+              <td class="cm-num">${fmt(a.summary[k])}</td>
+              ${comparisons.map(c => `
+                <td class="cm-num">${fmt(c.cmp.kpiDelta[k].b)}</td>
+                <td class="cm-num" style="color:${(c.cmp.kpiDelta[k].diff || 0) >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};">${fmtPct(c.cmp.kpiDelta[k].pct_change)}</td>
+              `).join('')}
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      <p class="cm-subtle" style="margin-top:8px;">Comparisons show the first selected scenario as baseline. Frozen scenarios reflect their snapshot rates; draft scenarios reflect current rates.</p>
+    `;
+  });
 }
 
 function shouldRerender(field) {
@@ -2847,3 +3130,275 @@ function renderTimeline() {
     </div>
   `;
 }
+
+// ============================================================
+// SECTION 15: ASSUMPTIONS (Phase 3 — design heuristics catalog + overrides)
+// ============================================================
+
+/**
+ * Lazy-load the heuristics catalog + override jsonb. Called from bindSectionEvents
+ * when the Assumptions section is first opened so mount() stays fast.
+ */
+async function ensureHeuristicsLoaded() {
+  if (heuristicsCatalog.length === 0) {
+    try { heuristicsCatalog = await api.fetchDesignHeuristics(); }
+    catch (e) { console.warn('[CM] ensureHeuristicsLoaded:', e); heuristicsCatalog = []; }
+  }
+  // Overrides come from the project jsonb; re-fetch from the active model on each call.
+  const projectId = model?.projectId;
+  if (projectId) {
+    try {
+      const p = await api.getModel(projectId);
+      heuristicOverrides = p?.heuristic_overrides || {};
+    } catch (_) { heuristicOverrides = {}; }
+  } else {
+    // Unsaved model — keep local overrides in the model itself
+    heuristicOverrides = model?.heuristicOverrides || {};
+  }
+}
+
+const HEURISTIC_CATEGORY_LABELS = {
+  financial: 'Financial',
+  working_capital: 'Working Capital',
+  labor: 'Labor',
+  ramp_seasonality: 'Ramp & Seasonality',
+  ops_escalation: 'Operations & Escalation',
+};
+
+function renderAssumptions() {
+  const cat = heuristicsCatalog;
+  if (!cat || cat.length === 0) {
+    return `
+      <div class="cm-section-header">
+        <h2>Assumptions</h2>
+        <p class="cm-subtle">All design heuristics that shape this scenario's math.</p>
+      </div>
+      <div class="cm-empty-state">Loading heuristics catalog…</div>
+    `;
+  }
+
+  const overrideCount = scenarios.countOverrideChanges(cat, heuristicOverrides);
+  const grouped = new Map();
+  for (const h of cat) {
+    if (!grouped.has(h.category)) grouped.set(h.category, []);
+    grouped.get(h.category).push(h);
+  }
+
+  const fmtEffective = (h) => {
+    const eff = scenarios.heuristicEffective(h, heuristicOverrides);
+    if (eff === null || eff === undefined || eff === '') return '—';
+    return String(eff);
+  };
+  const fmtDefault = (h) => {
+    if (h.data_type === 'enum') return h.default_enum || '—';
+    return h.default_value !== null && h.default_value !== undefined ? String(h.default_value) : '—';
+  };
+  const isOverride = (h) => {
+    if (!Object.prototype.hasOwnProperty.call(heuristicOverrides, h.key)) return false;
+    const v = heuristicOverrides[h.key];
+    if (v === null || v === undefined || v === '') return false;
+    const def_val = h.data_type === 'enum' ? h.default_enum : h.default_value;
+    return String(v) !== String(def_val);
+  };
+
+  return `
+    <div class="cm-section-header">
+      <h2>Assumptions
+        ${overrideCount > 0 ? `<span class="hub-status-chip" style="margin-left:8px;background:#fbbf24;color:#78350f;">${overrideCount} override${overrideCount === 1 ? '' : 's'}</span>` : '<span class="hub-status-chip" style="margin-left:8px;">all standard values</span>'}
+      </h2>
+      <p class="cm-subtle">Design heuristics drive the calc engine beyond the external rate cards. Defaults come from GXO/IES standards. Overrides are captured per scenario and frozen at approval time.</p>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button class="hub-btn" data-cm-action="reset-all-heuristics">Reset all to defaults</button>
+      </div>
+    </div>
+
+    ${Array.from(grouped.entries()).map(([category, items]) => `
+      <div class="cm-card" style="margin-top:16px;">
+        <h3 style="margin-top:0;">${HEURISTIC_CATEGORY_LABELS[category] || category}</h3>
+        <table class="cm-table" style="width:100%;">
+          <thead>
+            <tr>
+              <th style="text-align:left;">Heuristic</th>
+              <th style="text-align:left;width:30%;">Description</th>
+              <th style="text-align:right;width:90px;">Default</th>
+              <th style="text-align:right;width:140px;">Your Value</th>
+              <th style="text-align:center;width:70px;">Reset</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items.map(h => `
+              <tr data-heuristic-key="${h.key}" style="${isOverride(h) ? 'background:#fffbeb;' : ''}">
+                <td style="padding:6px 8px;">
+                  <div style="font-weight:600;">${h.label}</div>
+                  <div style="font-size:11px;color:var(--ies-gray-500);">${h.key}${h.unit ? ` · ${h.unit}` : ''}</div>
+                </td>
+                <td style="padding:6px 8px;font-size:12px;color:var(--ies-gray-600);">${h.description || ''}</td>
+                <td class="cm-num">${fmtDefault(h)}</td>
+                <td class="cm-num">
+                  ${h.data_type === 'enum'
+                    ? `<select class="hub-input" data-heuristic-input="${h.key}" style="width:130px;">
+                         ${(Array.isArray(h.allowed_enums) ? h.allowed_enums : []).map(opt => `<option value="${opt}" ${String(heuristicOverrides[h.key] || h.default_enum) === String(opt) ? 'selected' : ''}>${opt}</option>`).join('')}
+                       </select>`
+                    : `<input class="hub-input" type="number" step="any" data-heuristic-input="${h.key}" value="${heuristicOverrides[h.key] !== undefined && heuristicOverrides[h.key] !== null ? heuristicOverrides[h.key] : ''}" placeholder="${fmtDefault(h)}" style="width:120px;text-align:right;" />`
+                  }
+                </td>
+                <td style="text-align:center;">
+                  ${isOverride(h) ? `<button class="hub-btn" style="padding:2px 8px;font-size:11px;" data-cm-action="reset-heuristic" data-heuristic-key="${h.key}">↺</button>` : ''}
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `).join('')}
+  `;
+}
+
+// ============================================================
+// SECTION 16: SCENARIOS (Phase 3 — status + clone + approve + compare)
+// ============================================================
+
+async function ensureScenariosLoaded() {
+  const projectId = model?.projectId;
+  const dealId = model?.projectDetails?.dealId || model?.deal_deals_id;
+  if (projectId) {
+    try { currentScenario = await api.getScenarioByProject(projectId); }
+    catch (_) { currentScenario = null; }
+    if (currentScenario) {
+      try { currentRevisions = await api.listRevisions(currentScenario.id); }
+      catch (_) { currentRevisions = []; }
+    }
+  }
+  if (dealId) {
+    try { dealScenarios = await api.listScenarios(dealId); }
+    catch (_) { dealScenarios = []; }
+  } else {
+    dealScenarios = [];
+  }
+}
+
+const STATUS_COLORS = {
+  draft: '#6b7280',
+  review: '#2563eb',
+  approved: '#059669',
+  archived: '#9ca3af',
+};
+
+function renderScenarios() {
+  const s = currentScenario;
+  const others = dealScenarios.filter(x => !s || x.id !== s.id);
+  const statusColor = s ? (STATUS_COLORS[s.status] || '#6b7280') : '#6b7280';
+
+  return `
+    <div class="cm-section-header">
+      <h2>Scenarios
+        ${s ? `<span class="hub-status-chip" style="margin-left:8px;background:${statusColor};color:white;">${s.status}</span>` : ''}
+      </h2>
+      <p class="cm-subtle">Group alternative designs under one deal. Approve a scenario to freeze its rate cards + heuristics for reproducibility. Edits on approved scenarios create a child.</p>
+    </div>
+
+    ${s ? `
+      <div class="cm-card" style="margin-top:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+          <div style="flex:1;">
+            <label style="font-size:11px;color:var(--ies-gray-500);">SCENARIO LABEL</label>
+            <input class="hub-input" data-scenario-field="label" value="${s.scenario_label || 'Baseline'}" style="font-size:16px;font-weight:600;margin-top:2px;" ${s.status === 'approved' ? 'disabled' : ''} />
+            <div style="margin-top:6px;">
+              <label style="font-size:11px;color:var(--ies-gray-500);">DESCRIPTION</label>
+              <textarea class="hub-input" data-scenario-field="description" rows="2" style="margin-top:2px;width:100%;" ${s.status === 'approved' ? 'disabled' : ''}>${s.scenario_description || ''}</textarea>
+            </div>
+            ${s.is_baseline ? '<div style="margin-top:6px;font-size:11px;color:var(--ies-green);">⭐ Baseline scenario</div>' : ''}
+            ${s.parent_scenario_id ? `<div style="font-size:11px;color:var(--ies-gray-500);">Child of scenario #${s.parent_scenario_id}</div>` : ''}
+            ${s.approved_at ? `<div style="font-size:11px;color:var(--ies-gray-500);margin-top:4px;">Approved ${new Date(s.approved_at).toLocaleString()} · by ${s.approved_by || 'system'}</div>` : ''}
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;min-width:180px;">
+            ${s.status === 'draft' ? `
+              <button class="hub-btn-primary" data-cm-action="scenario-save-header">Save</button>
+              <button class="hub-btn" data-cm-action="scenario-to-review">Move to Review</button>
+              <button class="hub-btn-primary" data-cm-action="scenario-approve" style="background:#059669;">Approve + Freeze Rates</button>
+            ` : ''}
+            ${s.status === 'review' ? `
+              <button class="hub-btn-primary" data-cm-action="scenario-approve" style="background:#059669;">Approve + Freeze Rates</button>
+              <button class="hub-btn" data-cm-action="scenario-to-draft">Back to Draft</button>
+            ` : ''}
+            ${s.status === 'approved' ? `
+              <button class="hub-btn-primary" data-cm-action="scenario-clone">Edit → Spawn Child</button>
+              <button class="hub-btn" data-cm-action="scenario-archive">Archive</button>
+            ` : ''}
+            ${s.status === 'archived' ? `
+              <button class="hub-btn" data-cm-action="scenario-clone">Clone</button>
+            ` : ''}
+          </div>
+        </div>
+      </div>
+    ` : `
+      <div class="cm-card" style="margin-top:12px;background:#fef3c7;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <strong>No scenario record yet.</strong> This project was created before the Phase 3 migration.
+            Click "Initialize scenario" to retroactively add a baseline scenario.
+          </div>
+          <button class="hub-btn-primary" data-cm-action="scenario-init">Initialize scenario</button>
+        </div>
+      </div>
+    `}
+
+    ${dealScenarios.length > 0 ? `
+      <div class="cm-card" style="margin-top:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <h3 style="margin:0;">Sibling scenarios on this deal (${dealScenarios.length})</h3>
+          <button class="hub-btn" data-cm-action="scenarios-compare-picker" ${dealScenarios.length < 2 ? 'disabled title="Need at least 2 scenarios"' : ''}>Compare scenarios →</button>
+        </div>
+        <table class="cm-table" style="margin-top:12px;width:100%;">
+          <thead>
+            <tr>
+              <th style="text-align:left;">Label</th>
+              <th style="text-align:left;width:100px;">Status</th>
+              <th style="text-align:left;width:120px;">Approved</th>
+              <th style="text-align:right;width:90px;">Project #</th>
+              <th style="width:100px;"></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${dealScenarios.map(sc => `
+              <tr>
+                <td style="padding:6px 8px;">${sc.scenario_label}${sc.is_baseline ? ' ⭐' : ''}${s && sc.id === s.id ? ' <em style="color:var(--ies-gray-500);">(current)</em>' : ''}</td>
+                <td><span class="hub-status-chip" style="background:${STATUS_COLORS[sc.status] || '#6b7280'};color:white;">${sc.status}</span></td>
+                <td style="font-size:11px;color:var(--ies-gray-500);">${sc.approved_at ? new Date(sc.approved_at).toLocaleDateString() : '—'}</td>
+                <td class="cm-num">${sc.project_id || '—'}</td>
+                <td>${s && sc.id !== s.id ? `<button class="hub-btn" style="padding:2px 8px;font-size:11px;" data-cm-action="scenario-open" data-scenario-id="${sc.id}" data-project-id="${sc.project_id}">Open</button>` : ''}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    ` : ''}
+
+    ${currentRevisions.length > 0 ? `
+      <div class="cm-card" style="margin-top:16px;">
+        <h3 style="margin-top:0;">Revision log (${currentRevisions.length})</h3>
+        <table class="cm-table" style="width:100%;">
+          <thead>
+            <tr>
+              <th style="text-align:left;width:60px;">Rev</th>
+              <th style="text-align:left;width:160px;">When</th>
+              <th style="text-align:left;width:160px;">Who</th>
+              <th style="text-align:left;">Summary</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${currentRevisions.slice(0, 20).map(r => `
+              <tr>
+                <td><strong>#${r.revision_number}</strong></td>
+                <td style="font-size:11px;">${new Date(r.changed_at).toLocaleString()}</td>
+                <td style="font-size:11px;">${r.changed_by || '(anonymous)'}</td>
+                <td>${r.change_summary || '—'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    ` : ''}
+  `;
+}
+
