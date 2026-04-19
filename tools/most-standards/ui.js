@@ -8,7 +8,7 @@
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sM';
 import { state } from '../../shared/state.js?v=20260418-sM';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sM';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260419-uC';
 import * as calc from './calc.js?v=20260419-uF';
 import * as api from './api.js?v=20260418-sM';
 import { getMostTplName, getMostTplBaseUph, getMostTplTmuTotal, getMostElName, getMostElSequence, getMostElTmu } from './types.js?v=20260418-sM';

@@ -74,6 +74,7 @@ export function showToast(message, level = 'success', opts = {}) {
   const el = document.createElement('div');
   el.className = 'hub-toast';
   el.setAttribute('role', level === 'error' ? 'alert' : 'status');
+  if (opts && opts.persist) el.setAttribute('data-persist', 'true');
   el.style.cssText = [
     'display:flex',
     'align-items:flex-start',
@@ -169,6 +170,21 @@ function wireBus() {
   bus.on('toast:show', (payload) => {
     if (!payload || typeof payload !== 'object') return;
     showToast(payload.message, payload.level || 'info', payload.opts || {});
+  });
+  // Auto-dismiss all visible toasts on route change. Prevents cross-tool
+  // "Loaded 38 demand points" pollution when a user navigates away before
+  // the toast timer expires. (I-04)
+  // Modules that need a toast to survive navigation can pass opts.persist=true.
+  bus.on('nav:changed', () => {
+    const stack = document.getElementById(STACK_ID);
+    if (!stack) return;
+    // Keep only toasts explicitly marked persistent (via data-persist attribute)
+    Array.from(stack.children).forEach((el) => {
+      if (el.getAttribute && el.getAttribute('data-persist') === 'true') return;
+      el.style.opacity = '0';
+      el.style.transform = 'translateX(40px)';
+      setTimeout(() => { if (el.parentNode) el.remove(); }, 200);
+    });
   });
 }
 

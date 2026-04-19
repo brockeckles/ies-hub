@@ -9,9 +9,9 @@
 import { bus } from '../../shared/event-bus.js?v=20260418-sL';
 import { state } from '../../shared/state.js?v=20260418-sL';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sL';
-import { showToast } from '../../shared/toast.js?v=20260418-sL';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sL';
-import * as calc from './calc.js?v=20260418-sL';
+import { showToast } from '../../shared/toast.js?v=20260419-uC';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260419-uC';
+import * as calc from './calc.js?v=20260419-uC';
 import * as api from './api.js?v=20260418-sL';
 
 // ============================================================
@@ -311,33 +311,49 @@ function bindShellEvents() {
     if (!canvas || canvas.id !== 'wsc-plan-canvas' || !_planMeta) return;
     const { X0, Y0, pxPerFt } = _planMeta;
     const { offsetX, offsetY } = canvasMouseCoords(canvas, e);
-    // Hit-test: which zone did the user grab? Iterate in a sensible z-order
-    // (office first since it overlaps ship staging in single-sided mode).
     const order = ['office', 'forwardPick', 'shipStaging'];
+    // Resize-corner hit-test wins over body-move (handles take priority)
     let hit = null;
+    let mode = 'move';
+    let corner = null;
     for (const id of order) {
       const r = _planZoneRects[id];
       if (!r) continue;
-      if (offsetX >= r.x && offsetX <= r.x + r.w && offsetY >= r.y && offsetY <= r.y + r.h) {
-        hit = id;
-        break;
+      const c = _hitCorner(r, offsetX, offsetY);
+      if (c) { hit = id; mode = 'resize'; corner = c; break; }
+    }
+    if (!hit) {
+      for (const id of order) {
+        const r = _planZoneRects[id];
+        if (!r) continue;
+        if (offsetX >= r.x && offsetX <= r.x + r.w && offsetY >= r.y && offsetY <= r.y + r.h) {
+          hit = id;
+          break;
+        }
       }
     }
     if (!hit) return;
     e.preventDefault();
-    const curOverride = zones.layoutOverrides?.[hit];
-    const curXFt = curOverride ? curOverride.x : (_planZoneRects[hit].x - X0) / pxPerFt;
-    const curYFt = curOverride ? curOverride.y : (_planZoneRects[hit].y - Y0) / pxPerFt;
+    const r = _planZoneRects[hit];
+    const curOverride = zones.layoutOverrides?.[hit] || {};
+    const curXFt = (curOverride.x !== undefined) ? curOverride.x : (r.x - X0) / pxPerFt;
+    const curYFt = (curOverride.y !== undefined) ? curOverride.y : (r.y - Y0) / pxPerFt;
+    const curWFt = (curOverride.w !== undefined) ? curOverride.w : r.w / pxPerFt;
+    const curHFt = (curOverride.h !== undefined) ? curOverride.h : r.h / pxPerFt;
     _planDrag = {
       zoneId: hit,
+      mode,                  // 'move' | 'resize'
+      corner,                // 'tl' | 'tr' | 'bl' | 'br' | null
       startMouseXPx: offsetX,
       startMouseYPx: offsetY,
       origXFt: curXFt,
       origYFt: curYFt,
+      origWFt: curWFt,
+      origHFt: curHFt,
       pxPerFt,
     };
     canvas.setPointerCapture(e.pointerId);
-    canvas.style.cursor = 'grabbing';
+    canvas.style.cursor = mode === 'resize' ? 'nwse-resize' : 'grabbing';
   });
 
   rootEl?.addEventListener('pointermove', (e) => {
@@ -347,11 +363,32 @@ function bindShellEvents() {
     const { offsetX, offsetY } = canvasMouseCoords(canvas, e);
     const dxFt = (offsetX - _planDrag.startMouseXPx) / _planDrag.pxPerFt;
     const dyFt = (offsetY - _planDrag.startMouseYPx) / _planDrag.pxPerFt;
-    const snap = 5; // snap to 5 ft grid
-    const newXFt = Math.round((_planDrag.origXFt + dxFt) / snap) * snap;
-    const newYFt = Math.round((_planDrag.origYFt + dyFt) / snap) * snap;
+    const snap = 5;
     if (!zones.layoutOverrides) zones.layoutOverrides = {};
-    zones.layoutOverrides[_planDrag.zoneId] = { x: newXFt, y: newYFt };
+    const cur = zones.layoutOverrides[_planDrag.zoneId] || {};
+    if (_planDrag.mode === 'resize') {
+      // Translate corner-drag into x/y/w/h deltas
+      let newX = _planDrag.origXFt;
+      let newY = _planDrag.origYFt;
+      let newW = _planDrag.origWFt;
+      let newH = _planDrag.origHFt;
+      const c = _planDrag.corner;
+      if (c === 'br') { newW = _planDrag.origWFt + dxFt; newH = _planDrag.origHFt + dyFt; }
+      else if (c === 'tr') { newW = _planDrag.origWFt + dxFt; newY = _planDrag.origYFt + dyFt; newH = _planDrag.origHFt - dyFt; }
+      else if (c === 'bl') { newX = _planDrag.origXFt + dxFt; newW = _planDrag.origWFt - dxFt; newH = _planDrag.origHFt + dyFt; }
+      else if (c === 'tl') { newX = _planDrag.origXFt + dxFt; newW = _planDrag.origWFt - dxFt; newY = _planDrag.origYFt + dyFt; newH = _planDrag.origHFt - dyFt; }
+      // Snap and clamp to a reasonable minimum (10 ft per side)
+      newX = Math.round(newX / snap) * snap;
+      newY = Math.round(newY / snap) * snap;
+      newW = Math.max(10, Math.round(newW / snap) * snap);
+      newH = Math.max(10, Math.round(newH / snap) * snap);
+      zones.layoutOverrides[_planDrag.zoneId] = { ...cur, x: newX, y: newY, w: newW, h: newH };
+    } else {
+      // Move mode — only update x/y, preserve any existing w/h override
+      const newXFt = Math.round((_planDrag.origXFt + dxFt) / snap) * snap;
+      const newYFt = Math.round((_planDrag.origYFt + dyFt) / snap) * snap;
+      zones.layoutOverrides[_planDrag.zoneId] = { ...cur, x: newXFt, y: newYFt };
+    }
     drawPlan();
   });
 
@@ -488,7 +525,7 @@ function renderConfigPanel() {
     <div class="wsc-config-section">
       <div class="wsc-config-title">Volume Requirements</div>
       <div class="wsc-config-row">
-        <div class="wsc-config-field"><label>Pallet Positions</label><input type="number" value="${volumes.totalPallets}" data-vol="totalPallets" /></div>
+        <div class="wsc-config-field"><label title="On-hand pallet positions at peak inventory. If > 0, overrides the units×mix derivation — use this when you have an engineered pallet count from a slotting study or an inventory snapshot.">Pallet Positions <span style="color:var(--ies-gray-500);font-weight:400;">(on-hand)</span></label><input type="number" value="${volumes.totalPallets}" data-vol="totalPallets" /></div>
         <div class="wsc-config-field"><label>Total SKUs</label><input type="number" value="${volumes.totalSKUs}" data-vol="totalSKUs" /></div>
       </div>
       <div class="wsc-config-row">
@@ -496,8 +533,8 @@ function renderConfigPanel() {
         <div class="wsc-config-field"><label>Peak Multiplier</label><input type="number" value="${volumes.peakMultiplier}" step="0.1" data-vol="peakMultiplier" /></div>
       </div>
       <div class="wsc-config-row">
-        <div class="wsc-config-field"><label>Daily Inbound</label><input type="number" value="${volumes.avgDailyInbound}" data-vol="avgDailyInbound" /></div>
-        <div class="wsc-config-field"><label>Daily Outbound</label><input type="number" value="${volumes.avgDailyOutbound}" data-vol="avgDailyOutbound" /></div>
+        <div class="wsc-config-field"><label title="Average inbound pallets/day — drives dock throughput sizing when explicit door counts are blank.">Daily Inbound <span style="color:var(--ies-gray-500);font-weight:400;">(pallets/day)</span></label><input type="number" value="${volumes.avgDailyInbound}" data-vol="avgDailyInbound" /></div>
+        <div class="wsc-config-field"><label title="Average outbound pallets/day — drives dock throughput sizing when explicit door counts are blank.">Daily Outbound <span style="color:var(--ies-gray-500);font-weight:400;">(pallets/day)</span></label><input type="number" value="${volumes.avgDailyOutbound}" data-vol="avgDailyOutbound" /></div>
       </div>
     </div>
 
@@ -542,8 +579,8 @@ function renderConfigPanel() {
         </select>
       </div>
       <div class="wsc-config-row">
-        <div class="wsc-config-field"><label>Inbound Doors</label><input type="number" value="${zones.dockConfig?.inboundDoors || 10}" data-dock="inboundDoors" /></div>
-        <div class="wsc-config-field"><label>Outbound Doors</label><input type="number" value="${zones.dockConfig?.outboundDoors || 12}" data-dock="outboundDoors" /></div>
+        <div class="wsc-config-field"><label title="If > 0, engine uses this explicit count. If 0, engine derives from Daily Inbound × Pallets/Hr × Operating Hrs + 25% surge buffer.">Inbound Doors <span style="color:var(--ies-gray-500);font-weight:400;">(explicit)</span></label><input type="number" value="${zones.dockConfig?.inboundDoors || 10}" data-dock="inboundDoors" /></div>
+        <div class="wsc-config-field"><label title="If > 0, engine uses this explicit count. If 0, engine derives from Daily Outbound × Pallets/Hr × Operating Hrs + 25% surge buffer.">Outbound Doors <span style="color:var(--ies-gray-500);font-weight:400;">(explicit)</span></label><input type="number" value="${zones.dockConfig?.outboundDoors || 12}" data-dock="outboundDoors" /></div>
       </div>
       <div class="wsc-config-row">
         <div class="wsc-config-field"><label>Pallets/Hr/Door</label><input type="number" value="${zones.dockConfig?.palletsPerDockHour || 12}" step="1" data-dock="palletsPerDockHour" /></div>
@@ -555,8 +592,8 @@ function renderConfigPanel() {
     <div class="wsc-config-section">
       <div class="wsc-config-title">Inventory Parameters</div>
       <div class="wsc-config-row">
-        <div class="wsc-config-field"><label>Peak Units/Day</label><input type="number" value="${zones.peakUnitsPerDay || 500000}" data-inv="peakUnitsPerDay" /></div>
-        <div class="wsc-config-field"><label>Avg Units/Day</label><input type="number" value="${zones.avgUnitsPerDay || 350000}" data-inv="avgUnitsPerDay" /></div>
+        <div class="wsc-config-field"><label title="Peak units ON-HAND in inventory at any one time. NOT throughput. The sizing engine converts this to pallet positions via the storage mix and units/pallet ratios. If you have an engineered pallet count, use the Pallet Positions field above instead.">Peak Units On-Hand</label><input type="number" value="${zones.peakUnitsPerDay || 500000}" data-inv="peakUnitsPerDay" /></div>
+        <div class="wsc-config-field"><label title="Average units ON-HAND in inventory. Used for utilization warning band only.">Avg Units On-Hand</label><input type="number" value="${zones.avgUnitsPerDay || 350000}" data-inv="avgUnitsPerDay" /></div>
       </div>
       <div class="wsc-config-row">
         <div class="wsc-config-field"><label>Operating Days/Yr</label><input type="number" value="${zones.operatingDaysPerYear || 250}" data-inv="operatingDaysPerYear" /></div>
@@ -1189,28 +1226,34 @@ function drawPlan() {
   // Reset the rect registry each redraw — overlay hit-testing reads from it.
   _planZoneRects = {};
 
-  // Resolve a zone's rendered top-left, honoring manual layout overrides
-  // when edit mode has captured one. Overrides are stored in building-
-  // relative feet so they survive resolution changes and building resizes.
-  const applyOverride = (zoneId, autoXPx, autoYPx) => {
+  // Resolve a zone's rendered top-left + dimensions, honoring manual layout
+  // overrides when edit mode has captured one. Overrides are stored in
+  // building-relative feet so they survive resolution changes.
+  // Shape: { x, y, w, h } — w/h are optional; falls back to autoWPx/autoHPx
+  // when omitted. Move-drag writes x/y; resize-drag writes w/h.
+  const applyOverride = (zoneId, autoXPx, autoYPx, autoWPx, autoHPx) => {
     const o = zones.layoutOverrides?.[zoneId];
-    if (!o) return { x: autoXPx, y: autoYPx };
-    const x = X0 + (o.x || 0) * pxPerFt;
-    const y = Y0 + (o.y || 0) * pxPerFt;
-    return { x, y };
+    if (!o) return { x: autoXPx, y: autoYPx, w: autoWPx, h: autoHPx };
+    const x = (o.x !== undefined && o.x !== null) ? X0 + o.x * pxPerFt : autoXPx;
+    const y = (o.y !== undefined && o.y !== null) ? Y0 + o.y * pxPerFt : autoYPx;
+    const w = (o.w !== undefined && o.w !== null && autoWPx !== undefined) ? Math.max(20, o.w * pxPerFt) : autoWPx;
+    const h = (o.h !== undefined && o.h !== null && autoHPx !== undefined) ? Math.max(20, o.h * pxPerFt) : autoHPx;
+    return { x, y, w, h };
   };
 
   // Office: dimension as a near-square footprint based on actual sqft.
   // Placed in the front-left corner of the storage area, abutting the ship
   // staging strip below it. Rack loop will skip this X range.
   const officeSideFt = Math.sqrt(Math.max(1, sized.officeSqft));
-  const officeWpx    = Math.min(Wpx * 0.35, officeSideFt * pxPerFt);
-  const officeHpx    = Math.min(storageH * 0.75, officeSideFt * pxPerFt);
+  const _officeAutoW = Math.min(Wpx * 0.35, officeSideFt * pxPerFt);
+  const _officeAutoH = Math.min(storageH * 0.75, officeSideFt * pxPerFt);
   const _officeAutoX = X0 + 4;
-  const _officeAutoY = storageY + storageH - officeHpx;
-  const _officePos   = applyOverride('office', _officeAutoX, _officeAutoY);
+  const _officeAutoY = storageY + storageH - _officeAutoH;
+  const _officePos   = applyOverride('office', _officeAutoX, _officeAutoY, _officeAutoW, _officeAutoH);
   const officeX      = _officePos.x;
   const officeY      = _officePos.y;
+  const officeWpx    = _officePos.w;
+  const officeHpx    = _officePos.h;
   const officeRightX = officeX + officeWpx + 4 * pxPerFt; // small clearance gap
   _planZoneRects.office = { x: officeX, y: officeY, w: officeWpx, h: officeHpx };
 
@@ -1235,13 +1278,15 @@ function drawPlan() {
   const fpSqft    = fpEnabled ? Math.max(2000, Math.min(30000, (zones.forwardPick.skuCount || 2000) * 6)) : 0;
   // Visual strip height: scale FP sqft to footprint width × strip height
   const fpStripFt = fpEnabled ? Math.min(60, Math.max(20, fpSqft / Math.max(1, widthFt - (officeWpx / pxPerFt + 8)))) : 0;
-  const fpStripPx = fpStripFt * pxPerFt;
-  const _fpAutoY  = storageY + storageH - fpStripPx;
+  const _fpAutoStripPx = fpStripFt * pxPerFt;
+  const _fpAutoY  = storageY + storageH - _fpAutoStripPx;
   const _fpAutoX  = officeX + officeWpx + 2;
-  const _fpPos    = applyOverride('forwardPick', _fpAutoX, _fpAutoY);
+  const _fpAutoW  = X0 + Wpx - 2 - _fpAutoX;
+  const _fpPos    = applyOverride('forwardPick', _fpAutoX, _fpAutoY, _fpAutoW, _fpAutoStripPx);
   const fpY       = _fpPos.y;
   const fpX       = _fpPos.x;
-  const fpW       = X0 + Wpx - 2 - fpX;
+  const fpW       = _fpPos.w;
+  const fpStripPx = _fpPos.h;
   if (fpEnabled) {
     _planZoneRects.forwardPick = { x: fpX, y: fpY, w: fpW, h: fpStripPx };
   }
@@ -1407,22 +1452,25 @@ function drawPlan() {
   // remaining width to the right of it.
   const _shipAutoX = officeX + officeWpx + 2;
   const _shipAutoY = Y0 + Hpx - shipHpx;
-  const _shipPos   = applyOverride('shipStaging', _shipAutoX, _shipAutoY);
+  const _shipAutoW = X0 + Wpx - 2 - _shipAutoX;
+  const _shipAutoH = shipHpx - 2;
+  const _shipPos   = applyOverride('shipStaging', _shipAutoX, _shipAutoY, _shipAutoW, _shipAutoH);
   const shipX      = _shipPos.x;
   const shipY      = _shipPos.y;
-  const shipW      = X0 + Wpx - 2 - shipX;
+  const shipW      = _shipPos.w;
+  const shipDrawH  = _shipPos.h;
   ctx.fillStyle = '#fffbeb';
   ctx.strokeStyle = '#d97706';
   ctx.lineWidth = 1;
-  ctx.fillRect(shipX, shipY, shipW, shipHpx - 2);
-  ctx.strokeRect(shipX, shipY, shipW, shipHpx - 2);
+  ctx.fillRect(shipX, shipY, shipW, shipDrawH);
+  ctx.strokeRect(shipX, shipY, shipW, shipDrawH);
   ctx.fillStyle = '#92400e';
   ctx.font = 'bold 11px Montserrat, sans-serif';
   ctx.textAlign = 'center';
   if (shipW > 100) {
-    ctx.fillText(`Ship Staging  ·  ${calc.formatSqft(sized.shipStagingSqft)}`, shipX + shipW / 2, shipY + shipHpx / 2 + 4);
+    ctx.fillText(`Ship Staging  ·  ${calc.formatSqft(sized.shipStagingSqft)}`, shipX + shipW / 2, shipY + shipDrawH / 2 + 4);
   }
-  _planZoneRects.shipStaging = { x: shipX, y: shipY, w: shipW, h: shipHpx - 2 };
+  _planZoneRects.shipStaging = { x: shipX, y: shipY, w: shipW, h: shipDrawH };
 
   // ---------- Office (front-left corner, full block from storage down to dock face) ----------
   ctx.fillStyle = '#f5f3ff';
@@ -1544,7 +1592,48 @@ function drawPlan() {
       ctx.strokeRect(r.x - 2, r.y - 2, r.w + 4, r.h + 4);
     }
     ctx.restore();
+
+    // Corner resize handles — draw small filled squares at the 4 corners of
+    // each draggable zone. Click within HANDLE_PX of a corner initiates a
+    // resize; clicks inside the body still initiate a move.
+    ctx.save();
+    for (const [id, r] of Object.entries(_planZoneRects)) {
+      const color = id === 'office' ? '#8b5cf6'
+                  : id === 'shipStaging' ? '#d97706'
+                  : '#7c3aed';
+      ctx.fillStyle = color;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1;
+      const corners = [
+        { x: r.x, y: r.y },
+        { x: r.x + r.w, y: r.y },
+        { x: r.x, y: r.y + r.h },
+        { x: r.x + r.w, y: r.y + r.h },
+      ];
+      for (const c of corners) {
+        ctx.fillRect(c.x - 4, c.y - 4, 8, 8);
+        ctx.strokeRect(c.x - 4, c.y - 4, 8, 8);
+      }
+    }
+    ctx.restore();
   }
+}
+
+/** Pixel radius around a corner that counts as a resize handle hit. */
+const WSC_RESIZE_HANDLE_PX = 10;
+
+/** Return which corner (if any) of a zone rect `r` the mouse is over. */
+function _hitCorner(r, mx, my) {
+  const corners = [
+    { id: 'tl', x: r.x,       y: r.y },
+    { id: 'tr', x: r.x + r.w, y: r.y },
+    { id: 'bl', x: r.x,       y: r.y + r.h },
+    { id: 'br', x: r.x + r.w, y: r.y + r.h },
+  ];
+  for (const c of corners) {
+    if (Math.abs(mx - c.x) <= WSC_RESIZE_HANDLE_PX && Math.abs(my - c.y) <= WSC_RESIZE_HANDLE_PX) return c.id;
+  }
+  return null;
 }
 
 /** Canvas geometry stash used by drag handlers to convert mouse → feet. */
@@ -1557,7 +1646,7 @@ let _planMeta = null;
 /**
  * Convert the UI's (facility, zones, volumes) state into SizingInputs
  * for the v2-equivalent calc.sizeFacility engine.
- * @returns {import('./calc.js?v=20260418-sL').SizingInputs}
+ * @returns {import('./calc.js?v=20260419-uC').SizingInputs}
  */
 function toSizingInputs() {
   const alloc = zones.storageAllocation || { fullPallet: 60, cartonOnPallet: 30, cartonOnShelving: 10 };
@@ -1604,6 +1693,15 @@ function toSizingInputs() {
     dockHours: dock.dockOperatingHours || 8,
     dockConfig: dock.sided === 'two' ? 'two' : 'one',
     availableWallFt: 0,
+    // Honor explicit dock counts the user typed in the Dock Configuration panel.
+    // Engine still computes a derived value for comparison.
+    inboundDoorsOverride: Number(dock.inboundDoors) || 0,
+    outboundDoorsOverride: Number(dock.outboundDoors) || 0,
+    // Honor explicit pallet position count when user provides it on Volume Requirements.
+    // This is how high-throughput / engineered-inventory facilities should be sized
+    // (otherwise the engine derives positions from peakUnits × mix, which under-sizes
+    // when peakUnits is entered as throughput rather than on-hand inventory).
+    totalPalletsOverride: Number(volumes.totalPallets) || 0,
     officePct: (facility.totalSqft && zones.officeSqft)
       ? Math.max(0.02, Math.min(0.15, zones.officeSqft / facility.totalSqft))
       : 0.05,
@@ -1641,7 +1739,7 @@ function renderDashboard() {
       <div class="hub-kpi-item"><div class="hub-kpi-label">Storage SF</div><div class="hub-kpi-value">${calc.formatSqft(sized.storageSqft)}</div></div>
       <div class="hub-kpi-item"><div class="hub-kpi-label">Gross Positions</div><div class="hub-kpi-value" title="Designed positions + ${sized.utilization.designed > 0 ? Math.round((sized.positions.surgePositions / sized.utilization.designed) * 100) : 0}% surge buffer">${sized.positions.grossPositions.toLocaleString()}</div></div>
       <div class="hub-kpi-item"><div class="hub-kpi-label">Rack Levels</div><div class="hub-kpi-value">${sized.rackLevels}</div></div>
-      <div class="hub-kpi-item"><div class="hub-kpi-label">Dock Doors</div><div class="hub-kpi-value" title="${sized.dock.inboundDoors} in + ${sized.dock.outboundDoors} out, +25% surge buffer">${sized.dock.totalDoors}</div></div>
+      <div class="hub-kpi-item"><div class="hub-kpi-label">Dock Doors</div><div class="hub-kpi-value" title="${sized.dock.inboundDoors} in${sized.dock.inboundDoorsExplicit ? ' (explicit)' : ` (derived; throughput suggests ${sized.dock.inboundDoorsDerived})`} + ${sized.dock.outboundDoors} out${sized.dock.outboundDoorsExplicit ? ' (explicit)' : ` (derived; throughput suggests ${sized.dock.outboundDoorsDerived})`}${(sized.dock.inboundDoorsExplicit || sized.dock.outboundDoorsExplicit) ? '' : ', +25% surge buffer'}">${sized.dock.totalDoors}</div></div>
       <div class="hub-kpi-item"><div class="hub-kpi-label">Avg Util</div><div class="hub-kpi-value" style="color:${sized.utilization.warning === 'high_util' ? 'var(--ies-red)' : sized.utilization.warning === 'low_util' ? 'var(--ies-orange)' : 'var(--ies-green)'};" title="Avg inventory positions / designed positions">${sized.utilization.utilizationPct}%</div></div>
       <div class="hub-kpi-item"><div class="hub-kpi-label">Existing Bldg SF</div><div class="hub-kpi-value" style="color:${facility.totalSqft >= sized.totalSqft ? 'var(--ies-green)' : 'var(--ies-red)'};" title="Compare existing building Total SF to Sized Total SF — green = adequate, red = under-sized">${calc.formatSqft(facility.totalSqft)}</div></div>
     </div>
@@ -1756,9 +1854,9 @@ function renderDashboard() {
         <div class="text-subtitle mb-4">Dock Analysis</div>
         <table class="cm-grid-table" style="font-size:13px;">
           <tbody>
-            <tr><td>Inbound Doors (sized)</td><td class="cm-num" style="color:var(--ies-blue);">${sized.dock.inboundDoors}</td></tr>
-            <tr><td>Outbound Doors (sized)</td><td class="cm-num" style="color:var(--ies-blue);">${sized.dock.outboundDoors}</td></tr>
-            <tr><td>Total Doors (incl. surge)</td><td class="cm-num" style="font-weight:700;">${sized.dock.totalDoors}</td></tr>
+            <tr><td>Inbound Doors ${sized.dock.inboundDoorsExplicit ? '<span style="font-size:10px;background:#dbeafe;color:#1e3a8a;padding:1px 5px;border-radius:3px;margin-left:4px;">EXPLICIT</span>' : `<span style="font-size:10px;background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:3px;margin-left:4px;" title="Throughput-derived. Set explicit count in Dock Configuration to override.">DERIVED</span>`}</td><td class="cm-num" style="color:var(--ies-blue);">${sized.dock.inboundDoors}${!sized.dock.inboundDoorsExplicit ? ` <span style="font-size:11px;color:var(--ies-gray-500);font-weight:400;">(throughput suggests ${sized.dock.inboundDoorsDerived})</span>` : ''}</td></tr>
+            <tr><td>Outbound Doors ${sized.dock.outboundDoorsExplicit ? '<span style="font-size:10px;background:#dbeafe;color:#1e3a8a;padding:1px 5px;border-radius:3px;margin-left:4px;">EXPLICIT</span>' : `<span style="font-size:10px;background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:3px;margin-left:4px;" title="Throughput-derived. Set explicit count in Dock Configuration to override.">DERIVED</span>`}</td><td class="cm-num" style="color:var(--ies-blue);">${sized.dock.outboundDoors}${!sized.dock.outboundDoorsExplicit ? ` <span style="font-size:11px;color:var(--ies-gray-500);font-weight:400;">(throughput suggests ${sized.dock.outboundDoorsDerived})</span>` : ''}</td></tr>
+            <tr><td>Total Doors${(sized.dock.inboundDoorsExplicit || sized.dock.outboundDoorsExplicit) ? '' : ' (incl. 25% surge)'}</td><td class="cm-num" style="font-weight:700;">${sized.dock.totalDoors}</td></tr>
             <tr><td>Dock Wall Required</td><td class="cm-num" style="color:${sized.dock.dockWallOk ? 'var(--ies-green)' : 'var(--ies-red)'};">${sized.dock.dockWallRequiredFt} ft${sized.dock.dockWallOk ? '' : ` > ${sized.dock.dockWallAvailableFt} ft avail`}</td></tr>
             <tr><td>Dock Staging SF</td><td class="cm-num">${calc.formatSqft(sized.dockSqft || 0)}</td></tr>
           </tbody>

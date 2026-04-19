@@ -626,6 +626,12 @@ export const SIZING_DEFAULTS = {
   dockHours: 8,
   dockConfig: 'one',       // 'one' | 'two'
   availableWallFt: 0,      // 0 = constraint not enforced
+  // Optional explicit overrides — if > 0, engine uses these instead of deriving from throughput
+  inboundDoorsOverride: 0,
+  outboundDoorsOverride: 0,
+  // Optional explicit pallet position count — if > 0, bypasses units→pallets derivation
+  // Use this when the user has an engineered pallet count from a slotting study
+  totalPalletsOverride: 0,
   // Other zones
   officePct: 0.05,
   forwardPick: null,       // see ForwardPickInputs
@@ -829,9 +835,15 @@ export function sizeFacility(userInputs = {}) {
   const shelvingPositions = i.cartonsPerLocation > 0
     ? Math.ceil(csCartons / i.cartonsPerLocation) : 0;
 
-  const palletPositionsNeeded = fullPalletPositions + cartonPalletPositions;
+  // If caller supplied an engineered pallet-position count, honour it directly
+  // (from a slotting study, inventory snapshot, etc.) rather than re-deriving
+  // from peakUnits × mix. This is the cleanest way to size to a known inventory.
+  const palletPositionsNeeded = (i.totalPalletsOverride && i.totalPalletsOverride > 0)
+    ? Math.round(i.totalPalletsOverride)
+    : (fullPalletPositions + cartonPalletPositions);
+  const palletPositionsExplicit = !!(i.totalPalletsOverride && i.totalPalletsOverride > 0);
 
-  // Honeycomb buffer
+  // Honeycomb buffer — still applies (even explicit pallet counts need honeycomb loss baked in)
   const buf = 1 + (i.honeycombPct || 0) / 100;
   const grossPalletPositions = Math.ceil(palletPositionsNeeded * buf);
   const grossShelvingPositions = Math.ceil(shelvingPositions * buf);
@@ -890,9 +902,21 @@ export function sizeFacility(userInputs = {}) {
 
   // ── Dock Sizing ──
   const dockDivisor = Math.max(1, i.palletsPerDoorHour) * Math.max(1, i.dockHours);
-  const inboundDoors = Math.max(2, Math.ceil((i.inPalletsDay || 0) / dockDivisor));
-  const outboundDoors = Math.max(2, Math.ceil((i.outPalletsDay || 0) / dockDivisor));
-  const withSurgeBuffer = Math.ceil((inboundDoors + outboundDoors) * 1.25);
+  const inDerived = Math.max(2, Math.ceil((i.inPalletsDay || 0) / dockDivisor));
+  const outDerived = Math.max(2, Math.ceil((i.outPalletsDay || 0) / dockDivisor));
+  // Honor explicit user-supplied door counts when provided. When the user has
+  // told us "I want 28 inbound + 28 outbound", the sizing engine should NOT
+  // re-derive from throughput and quietly give them 8 doors.
+  const inboundOverride = (i.inboundDoorsOverride && i.inboundDoorsOverride > 0) ? Math.round(i.inboundDoorsOverride) : 0;
+  const outboundOverride = (i.outboundDoorsOverride && i.outboundDoorsOverride > 0) ? Math.round(i.outboundDoorsOverride) : 0;
+  const inboundDoors = inboundOverride > 0 ? inboundOverride : inDerived;
+  const outboundDoors = outboundOverride > 0 ? outboundOverride : outDerived;
+  const doorsAreExplicit = inboundOverride > 0 || outboundOverride > 0;
+  // Surge buffer applies only to the derived path. Explicit counts are
+  // the user's engineered answer — no implicit 25% inflation on top.
+  const withSurgeBuffer = doorsAreExplicit
+    ? (inboundDoors + outboundDoors)
+    : Math.ceil((inboundDoors + outboundDoors) * 1.25);
 
   let dockSqft = withSurgeBuffer * 700;
   if (i.dockConfig === 'two') dockSqft = Math.ceil(dockSqft * 1.15);
@@ -1001,6 +1025,11 @@ export function sizeFacility(userInputs = {}) {
       dockWallOk,
       dockWallRequiredFt,
       dockWallAvailableFt: i.availableWallFt || 0,
+      // Provenance — UI can badge values as "explicit" vs "derived from throughput"
+      inboundDoorsExplicit: inboundOverride > 0,
+      outboundDoorsExplicit: outboundOverride > 0,
+      inboundDoorsDerived: inDerived,
+      outboundDoorsDerived: outDerived,
     },
     utilization: {
       peak: i.peakUnits || 0,

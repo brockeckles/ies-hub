@@ -117,6 +117,44 @@ export async function listDeals() {
 }
 
 // ============================================================
+// LINKED DESIGN SCENARIOS (reverse linkage from CM)
+// ============================================================
+
+/**
+ * Fetch all design-tool scenarios linked to a given Cost Model project via
+ * `parent_cost_model_id`. Returns a small projection per row, keyed by tool.
+ * Each tool table is queried independently so a single failure doesn't break
+ * the whole panel.
+ *
+ * @param {number|string} cmId
+ * @returns {Promise<{ wsc:Array, cog:Array, netopt:Array, fleet:Array }>}
+ */
+export async function listLinkedDesignScenarios(cmId) {
+  if (!cmId) return { wsc: [], cog: [], netopt: [], fleet: [] };
+  const out = { wsc: [], cog: [], netopt: [], fleet: [] };
+  const tables = [
+    { key: 'wsc',    table: 'wsc_facility_configs',  nameKey: 'name' },
+    { key: 'cog',    table: 'cog_scenarios',         nameKey: 'name' },
+    { key: 'netopt', table: 'netopt_configs',        nameKey: 'name' },
+    { key: 'fleet',  table: 'fleet_scenarios',       nameKey: 'name' },
+  ];
+  await Promise.all(tables.map(async ({ key, table, nameKey }) => {
+    try {
+      const { data, error } = await db.from(table)
+        .select(`id, ${nameKey}, updated_at, created_at, parent_cost_model_id`)
+        .eq('parent_cost_model_id', cmId)
+        .order('updated_at', { ascending: false });
+      if (error) throw error;
+      out[key] = (data || []).map(r => ({ id: r.id, name: r[nameKey] || 'Untitled', updated: r.updated_at || r.created_at }));
+    } catch (err) {
+      console.warn(`[CM] listLinkedDesignScenarios(${table}) failed:`, err);
+      out[key] = [];
+    }
+  }));
+  return out;
+}
+
+// ============================================================
 // REFERENCE DATA (read-only)
 // ============================================================
 

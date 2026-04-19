@@ -105,16 +105,16 @@ export function renderToolHeader(opts) {
       `).join('')}
     </div>`;
 
-  const primaryHtml = !primaryAction ? '' : `
-    <button type="button"
-            class="hub-btn hub-run-btn"
-            data-action="${primaryAction.action}"
-            data-primary-action="${primaryAction.action}"
-            ${primaryAction.title ? `title="${escapeAttr(primaryAction.title)}"` : `title="Run (${shortcutLabel})"`}>
-      ${primaryAction.icon ? `<span class="hub-run-icon">${escapeHtml(primaryAction.icon)}</span>` : ''}
-      <span>${escapeHtml(primaryAction.label)}</span>
-      <span class="hub-run-shortcut">${escapeHtml(shortcutLabel)}</span>
-    </button>`;
+  // Inline children with no whitespace between spans. The template literal
+  // whitespace would otherwise leak into the button's accessible name and
+  // (depending on the platform) get spoken/copied as "▶\n  Run Scenario\n  ⌘↵".
+  const primaryHtml = !primaryAction ? '' : (
+    `<button type="button" class="hub-btn hub-run-btn" data-action="${primaryAction.action}" data-primary-action="${primaryAction.action}" ${primaryAction.title ? `title="${escapeAttr(primaryAction.title)}"` : `title="Run (${shortcutLabel})"`}>` +
+    (primaryAction.icon ? `<span class="hub-run-icon">${escapeHtml(primaryAction.icon)}</span>` : '') +
+    `<span>${escapeHtml(primaryAction.label)}</span>` +
+    `<span class="hub-run-shortcut">${escapeHtml(shortcutLabel)}</span>` +
+    `</button>`
+  );
 
   const secondariesHtml = secondaryActions.length === 0 ? '' : secondaryActions.map(a => `
     <button type="button"

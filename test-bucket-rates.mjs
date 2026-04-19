@@ -197,6 +197,72 @@ test('monthly engine STILL produces $0 revenue when buckets have no rate AND are
   near(totalRev, 0, 0.01, 'unenriched buckets produce $0 — confirms the bug this test fixes');
 });
 
+// ---- I-01 edge: configurable facility bucket + orphan tracking ----
+
+test('I-01 edge: facility cost routes to user-configured bucket when present', () => {
+  const wayfairBuckets = [
+    { id: 'bk_outbound', name: 'Outbound Fulfillment', type: 'variable', uom: 'order' },
+  ];
+  const costs = computeBucketCosts({
+    buckets: wayfairBuckets,
+    laborLines: [], indirectLaborLines: [], equipmentLines: [],
+    overheadLines: [], vasLines: [], startupLines: [],
+    facilityCost: 6_375_000,
+    operatingHours: 8760,
+    facilityBucketId: 'bk_outbound',
+  });
+  near(costs['bk_outbound'], 6_375_000, 1, 'facility went to configured bucket');
+  assert(costs['_facilityOrphan'] === undefined || costs['_facilityOrphan'] === 0, 'no orphan');
+  assert(costs['_facilityTarget'] === 'bk_outbound', 'target recorded');
+});
+
+test('I-01 edge: facility orphans when no target bucket configured AND none of storage/mgmt_fee/first exist', () => {
+  // Pathological case: empty buckets array, can't route facility cost anywhere
+  const costs = computeBucketCosts({
+    buckets: [],
+    laborLines: [], indirectLaborLines: [], equipmentLines: [],
+    overheadLines: [], vasLines: [], startupLines: [],
+    facilityCost: 6_375_000,
+    operatingHours: 8760,
+  });
+  near(costs['_facilityOrphan'], 6_375_000, 1, 'orphan tracked');
+  near(costs['_unassigned'], 6_375_000, 1, 'rolled to unassigned');
+  assert(costs['_facilityTarget'] === null, 'target null');
+});
+
+test('I-01 edge: facility falls back to first non-startup bucket when storage/mgmt_fee absent', () => {
+  // Wayfair-like: only outbound bucket exists, no storage, no mgmt_fee
+  const wayfairBuckets = [
+    { id: 'bk_outbound', name: 'Outbound', type: 'variable', uom: 'order' },
+  ];
+  const costs = computeBucketCosts({
+    buckets: wayfairBuckets,
+    laborLines: [], indirectLaborLines: [], equipmentLines: [],
+    overheadLines: [], vasLines: [], startupLines: [],
+    facilityCost: 6_375_000,
+    operatingHours: 8760,
+    // no facilityBucketId → should fall back to first non-startup bucket
+  });
+  near(costs['bk_outbound'], 6_375_000, 1, 'fell back to first bucket');
+  assert(costs['_facilityTarget'] === 'bk_outbound', 'target recorded as fallback');
+});
+
+test('I-01 edge: legacy back-compat — facility goes to storage when present', () => {
+  const legacyBuckets = [
+    { id: 'storage',  name: 'Storage',  type: 'fixed', uom: 'month' },
+    { id: 'outbound', name: 'Outbound', type: 'variable', uom: 'order' },
+  ];
+  const costs = computeBucketCosts({
+    buckets: legacyBuckets,
+    laborLines: [], indirectLaborLines: [], equipmentLines: [],
+    overheadLines: [], vasLines: [], startupLines: [],
+    facilityCost: 1_000_000,
+    operatingHours: 8760,
+  });
+  near(costs['storage'], 1_000_000, 1, 'legacy storage routing preserved');
+  assert(costs['_facilityTarget'] === 'storage');
+});
+
 // ---- Summary ----
 console.log('\n');
 if (failed > 0) {

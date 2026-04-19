@@ -9,8 +9,8 @@
 import { bus } from '../../shared/event-bus.js?v=20260418-sP';
 import { state } from '../../shared/state.js?v=20260418-sP';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sP';
-import { showToast } from '../../shared/toast.js?v=20260418-sP';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sP';
+import { showToast } from '../../shared/toast.js?v=20260419-uC';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260419-uC';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sP';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260418-sP';
 import * as calc from './calc.js?v=20260418-sP';
@@ -84,7 +84,21 @@ async function renderLanding() {
       const d = r.scenario_data || {};
       const nPoints = (d.points || []).length;
       const k = d.config?.k || d.k;
-      return nPoints ? `${nPoints} demand points${k ? ` · ${k}-DC analysis` : ''}` : '';
+      const result = d.result || null;
+      const nCenters = result?.centers?.length || 0;
+      // Prefer the most informative subtitle. Some scenarios are seeded with
+      // results only (no points array) — for those, fall back to the result
+      // shape rather than rendering "0 demand points" or empty.
+      if (nPoints > 0) {
+        return `${nPoints} demand points${k ? ` · ${k}-DC analysis` : ''}`;
+      }
+      if (nCenters > 0) {
+        const totalCost = Number(result?.totalCost) || 0;
+        const costStr = totalCost > 0 ? ` · $${(totalCost / 1e6).toFixed(1)}M` : '';
+        return `${nCenters} center${nCenters === 1 ? '' : 's'} (results only)${costStr}`;
+      }
+      if (k) return `${k}-DC analysis (no points yet)`;
+      return '';
     },
     onNew: () => openEditor(null),
     onOpen: (row) => openEditor(row),

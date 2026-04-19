@@ -9,9 +9,9 @@
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
-import { showToast } from '../../shared/toast.js?v=20260419-tF';
-import * as calc from './calc.js?v=20260419-uB';
-import * as api from './api.js?v=20260419-sZ';
+import { showToast } from '../../shared/toast.js?v=20260419-uC';
+import * as calc from './calc.js?v=20260419-uC';
+import * as api from './api.js?v=20260419-uC';
 import * as scenarios from './calc.scenarios.js?v=20260419-sZ';
 
 // ============================================================
@@ -169,6 +169,7 @@ const SECTIONS = [
   { key: 'assumptions', label: 'Assumptions', icon: 'sliders' },
   { key: 'scenarios', label: 'Scenarios', icon: 'git-branch' },
   { key: 'whatif', label: 'What-If Studio', icon: 'trending-up' },
+  { key: 'linked', label: 'Linked Designs', icon: 'link' },
 ];
 
 // Phase 3 module-local state
@@ -330,6 +331,20 @@ function wireLandingEvents() {
         //       project_data, upgrading the row in place.
         if (full.project_data) {
           model = { ...createEmptyModel(), ...full.project_data, id: full.id };
+          // Belt-and-braces: hydrate any project_data fields that are missing or
+          // empty from the row's flat columns. This covers rows where project_data
+          // was seeded by a SQL UPDATE that didn't include every field, or where
+          // project_data and the flat columns drifted out of sync. (I-03)
+          if (!model.projectDetails) model.projectDetails = createEmptyModel().projectDetails;
+          const pdHydrate = model.projectDetails;
+          if (!pdHydrate.environment && full.environment_type) {
+            pdHydrate.environment = String(full.environment_type).toLowerCase();
+          }
+          if (!pdHydrate.market && full.market_id) pdHydrate.market = full.market_id;
+          if (!pdHydrate.clientName && full.client_name) pdHydrate.clientName = full.client_name;
+          if (!pdHydrate.contractTerm && full.contract_term_years) pdHydrate.contractTerm = full.contract_term_years;
+          if (!pdHydrate.dealId && full.deal_deals_id) pdHydrate.dealId = full.deal_deals_id;
+          if (!pdHydrate.name && full.name) pdHydrate.name = full.name;
         } else {
           model = reconstructModelFromFlatRow(full);
           showCmToast('Legacy model loaded from summary fields. Save to upgrade to the new format.', 'info');
@@ -353,6 +368,9 @@ function wireLandingEvents() {
         _scenariosLoadInFlight = false;
         heuristicOverrides = {};
         currentMarketLaborProfile = null;
+        // Reset Linked Designs cache so the next view fetches fresh for the new model
+        linkedDesigns = null;
+        _linkedDesignsLoadInFlight = false;
         renderCurrentView();
       } catch (err) {
         console.error('[CM] Load failed:', err);
@@ -699,6 +717,7 @@ function renderSection() {
     assumptions: renderAssumptions,
     scenarios: renderScenarios,
     whatif: renderWhatIfStudio,
+    linked: renderLinkedDesigns,
   };
 
   const render = renderers[activeSection];
@@ -1455,6 +1474,20 @@ function renderFinancial() {
         <input class="hub-input" type="number" value="${f.reinvestRate || 8}" step="0.5" data-field="financial.reinvestRate" data-type="number" />
       </div>
     </div>
+    <div class="cm-form-row">
+      <div class="cm-form-group">
+        <label class="cm-form-label" title="Which pricing bucket carries the facility cost rollup. Defaults to a bucket named 'storage' if you have one; otherwise routes to Management Fee or your first bucket. (I-01 edge fix)">Facility Cost → Bucket</label>
+        <select class="hub-select" data-field="financial.facilityBucketId">
+          <option value=""${!f.facilityBucketId ? ' selected' : ''}>— Auto (storage → mgmt_fee → first) —</option>
+          ${(model.pricingBuckets || []).map(b =>
+            `<option value="${b.id}"${f.facilityBucketId === b.id ? ' selected' : ''}>${b.name} (${b.type}/${b.uom})</option>`
+          ).join('')}
+        </select>
+      </div>
+      <div class="cm-form-group">
+        <!-- left blank for symmetry; reserved for future financial fields -->
+      </div>
+    </div>
   `;
 }
 
@@ -1522,10 +1555,15 @@ function renderPricing() {
     startupLines: startupWithAmort,
     facilityCost,
     operatingHours: opHrs,
+    // I-01 edge: route facility cost to user-configured bucket. Falls through
+    // to 'storage' → 'mgmt_fee' → first bucket → orphan. Orphans surface in
+    // the table below as an explicit row so they don't silently vanish.
+    facilityBucketId: model.financial?.facilityBucketId || null,
   });
 
   const marginPct = (model.financial?.targetMargin || 0) / 100;
-  const totalCost = Object.entries(bucketCosts).reduce((s, [k, v]) => k !== '_unassigned' ? s + v : s, 0);
+  // Sum only real bucket costs — exclude meta keys ('_unassigned', '_facilityOrphan', '_facilityTarget')
+  const totalCost = Object.entries(bucketCosts).reduce((s, [k, v]) => (typeof v === 'number' && !k.startsWith('_')) ? s + v : s, 0);
   const totalRevenue = totalCost * (1 + marginPct);
 
   // I-02 — single source of truth: same derivation used by monthly engine.
@@ -1588,16 +1626,30 @@ function renderPricing() {
       </tbody>
     </table>
 
-    ${bucketCosts['_unassigned'] > 0 ? `
-      <div class="hub-card mt-4" style="border-left: 3px solid var(--ies-orange); background: rgba(255,193,7,0.06);">
-        <div style="font-size:13px; font-weight:600; color: var(--ies-orange);">
-          ${calc.formatCurrency(bucketCosts['_unassigned'])} in unassigned costs rolled into Management Fee.
-        </div>
-        <div style="font-size:12px; color: var(--ies-gray-500); margin-top:4px;">
-          Assign pricing buckets to labor, equipment, overhead, and VAS lines to distribute costs accurately. Use the table below.
-        </div>
-      </div>
-    ` : ''}
+    ${(() => {
+      // Render orphan banners. Two distinct kinds of orphans:
+      //   (a) facility-cost orphan — facility target bucket missing
+      //   (b) line-cost orphan — lines with no pricing_bucket set
+      const facilityTarget = bucketCosts['_facilityTarget'];
+      const facilityOrphan = bucketCosts['_facilityOrphan'] || 0;
+      const lineUnassigned = bucketCosts['_unassigned'] || 0;
+      const facilityRoutedTo = facilityTarget && buckets.find(b => b.id === facilityTarget);
+      const facilityNote = facilityCost > 0 && facilityRoutedTo
+        ? `Facility cost (${calc.formatCurrency(facilityCost)}) routes to <b>${facilityRoutedTo.name}</b>.`
+        : '';
+      const facilityWarn = facilityOrphan > 0
+        ? `<div style="font-size:13px;font-weight:600;color:var(--ies-red);">⚠ ${calc.formatCurrency(facilityOrphan)} facility cost has no target bucket — pick one in Setup → Financial.</div>`
+        : '';
+      const lineWarn = lineUnassigned > 0
+        ? `<div style="font-size:13px;font-weight:600;color:var(--ies-orange);">${calc.formatCurrency(lineUnassigned)} in unassigned line costs rolled into Management Fee.</div><div style="font-size:12px;color:var(--ies-gray-500);margin-top:4px;">Assign pricing buckets to labor, equipment, overhead, and VAS lines to distribute costs accurately.</div>`
+        : '';
+      const noteRow = facilityNote
+        ? `<div style="font-size:12px;color:var(--ies-gray-500);margin-top:6px;">${facilityNote}</div>`
+        : '';
+      if (!facilityWarn && !lineWarn && !facilityNote) return '';
+      const borderColor = facilityOrphan > 0 ? 'var(--ies-red)' : 'var(--ies-orange)';
+      return `<div class="hub-card mt-4" style="border-left:3px solid ${borderColor};background:rgba(255,193,7,0.06);">${facilityWarn}${lineWarn}${noteRow}</div>`;
+    })()}
 
     <!-- I-01: Line → Bucket assignment table lets users review + reassign every line in one place -->
     ${renderBucketAssignments(buckets)}
@@ -2853,14 +2905,61 @@ function renderWhatIfStudio() {
         <div style="font-weight:700;font-size:14px;margin-bottom:4px;">Live Preview</div>
         <div style="font-size:11px;color:var(--ies-gray-500);margin-bottom:12px;">Updates on slider release. Over the ${model.projectDetails?.contractTerm || 5}-year horizon.</div>
         ${preview ? `
-          <div class="hub-kpi-bar" style="grid-template-columns:repeat(2,1fr);gap:8px;">
-            <div class="hub-kpi-item"><div class="hub-kpi-label">Total Revenue</div><div class="hub-kpi-value">${fmt(preview.totalRev)}</div></div>
-            <div class="hub-kpi-item"><div class="hub-kpi-label">Total Opex</div><div class="hub-kpi-value">${fmt(preview.totalOpex)}</div></div>
-            <div class="hub-kpi-item"><div class="hub-kpi-label">EBITDA</div><div class="hub-kpi-value">${fmt(preview.totalEbitda)}</div></div>
-            <div class="hub-kpi-item"><div class="hub-kpi-label">EBITDA Margin</div><div class="hub-kpi-value">${preview.ebitdaMargin.toFixed(1)}%</div></div>
-            <div class="hub-kpi-item"><div class="hub-kpi-label">Net Income</div><div class="hub-kpi-value">${fmt(preview.totalNI)}</div></div>
-            <div class="hub-kpi-item"><div class="hub-kpi-label">Cum FCF</div><div class="hub-kpi-value" style="color:${preview.cumFcf >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};">${fmt(preview.cumFcf)}</div></div>
+          <div class="cm-whatif-kpis">
+            <div class="cm-whatif-kpi"><div class="cm-whatif-kpi-label">Total Revenue</div><div class="cm-whatif-kpi-value">${fmt(preview.totalRev)}</div></div>
+            <div class="cm-whatif-kpi"><div class="cm-whatif-kpi-label">Total Opex</div><div class="cm-whatif-kpi-value">${fmt(preview.totalOpex)}</div></div>
+            <div class="cm-whatif-kpi"><div class="cm-whatif-kpi-label">EBITDA</div><div class="cm-whatif-kpi-value">${fmt(preview.totalEbitda)}</div></div>
+            <div class="cm-whatif-kpi"><div class="cm-whatif-kpi-label">EBITDA Margin</div><div class="cm-whatif-kpi-value">${preview.ebitdaMargin.toFixed(1)}%</div></div>
+            <div class="cm-whatif-kpi"><div class="cm-whatif-kpi-label">Net Income</div><div class="cm-whatif-kpi-value">${fmt(preview.totalNI)}</div></div>
+            <div class="cm-whatif-kpi"><div class="cm-whatif-kpi-label">Cum FCF</div><div class="cm-whatif-kpi-value" style="color:${preview.cumFcf >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};">${fmt(preview.cumFcf)}</div></div>
           </div>
+          <style>
+            /* What-If preview KPIs live in a narrow right-column card, so we
+               can't use the hub-kpi-bar's auto-fill grid. Labels must wrap
+               fully (not truncate to "T." / "E." / "N."). Container queries
+               give us true column-aware sizing without JS measurement. */
+            .cm-whatif-kpis {
+              container-type: inline-size;
+              display: grid;
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+              gap: 8px;
+            }
+            .cm-whatif-kpi {
+              display: flex;
+              flex-direction: column;
+              padding: 10px;
+              border: 1px solid var(--ies-gray-200);
+              border-radius: 6px;
+              background: #fff;
+              min-width: 0;
+            }
+            .cm-whatif-kpi-label {
+              font-size: clamp(10px, 1.1cqw + 9px, 12px);
+              color: var(--ies-gray-500);
+              font-weight: 600;
+              line-height: 1.25;
+              white-space: normal;        /* allow full label to wrap */
+              overflow: visible;
+              text-overflow: clip;
+              word-break: normal;
+            }
+            .cm-whatif-kpi-value {
+              font-size: clamp(14px, 1.6cqw + 12px, 18px);
+              font-weight: 700;
+              color: var(--ies-gray-900);
+              margin-top: 4px;
+              line-height: 1.1;
+            }
+            /* Collapse to single-column when the preview card is very narrow */
+            @container (max-width: 240px) {
+              .cm-whatif-kpis { grid-template-columns: 1fr; }
+            }
+            /* Fallback for browsers without container-query support */
+            @supports not (container-type: inline-size) {
+              .cm-whatif-kpi-label { font-size: 11px; }
+              .cm-whatif-kpi-value { font-size: 15px; }
+            }
+          </style>
           <div style="margin-top:12px;font-size:11px;color:var(--ies-gray-500);">
             Tip: combine sliders (e.g. DSO↑ + margin↓) to stress-test the deal.
           </div>
@@ -2873,6 +2972,107 @@ function renderWhatIfStudio() {
     </div>
   `;
 }
+// ============================================================
+// LINKED DESIGNS — reverse-direction linkage from CM to design tools
+// ============================================================
+
+// Module-local cache for this render; async load kicks off on section enter.
+let linkedDesigns = null; // { wsc:[], cog:[], netopt:[], fleet:[] }
+let _linkedDesignsLoadInFlight = false;
+
+// Local escape helper (CM ui.js has no shared escapeHtml import)
+function _esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+async function ensureLinkedDesignsLoaded() {
+  if (!model?.id) return;
+  if (linkedDesigns !== null) return;
+  if (_linkedDesignsLoadInFlight) return;
+  _linkedDesignsLoadInFlight = true;
+  try {
+    linkedDesigns = await api.listLinkedDesignScenarios(model.id);
+  } catch (err) {
+    console.warn('[CM] linked-designs load failed:', err);
+    linkedDesigns = { wsc: [], cog: [], netopt: [], fleet: [] };
+  } finally {
+    _linkedDesignsLoadInFlight = false;
+  }
+}
+
+function renderLinkedDesigns() {
+  if (!model?.id) {
+    return `
+      <div class="cm-section-header">
+        <div>
+          <div class="cm-section-title">Linked Designs</div>
+          <div class="cm-section-desc">Save this model before linking design scenarios.</div>
+        </div>
+      </div>`;
+  }
+  if (linkedDesigns === null) {
+    ensureLinkedDesignsLoaded().then(() => renderSection());
+    return `
+      <div class="cm-section-header">
+        <div>
+          <div class="cm-section-title">Linked Designs</div>
+          <div class="cm-section-desc">Loading linked design scenarios…</div>
+        </div>
+      </div>`;
+  }
+  const groups = [
+    { key: 'wsc',    label: 'Warehouse Sizing',   icon: '🏭', route: 'designtools/warehouse-sizing' },
+    { key: 'cog',    label: 'Center of Gravity',  icon: '📍', route: 'designtools/center-of-gravity' },
+    { key: 'netopt', label: 'Network Optimizer',  icon: '🕸',  route: 'designtools/network-opt' },
+    { key: 'fleet',  label: 'Fleet Modeler',      icon: '🚚', route: 'designtools/fleet-modeler' },
+  ];
+  const totalLinked = groups.reduce((s, g) => s + (linkedDesigns[g.key] || []).length, 0);
+
+  return `
+    <div class="cm-section-header">
+      <div>
+        <div class="cm-section-title">Linked Designs</div>
+        <div class="cm-section-desc">Design scenarios pointing back at this Cost Model via <code>parent_cost_model_id</code>. Click a row to open the scenario in its tool.</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="hub-badge hub-badge-info">${totalLinked} linked</span>
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="linked-refresh" title="Re-query linked scenarios">Refresh</button>
+      </div>
+    </div>
+
+    ${totalLinked === 0 ? `
+      <div class="hub-card" style="padding:24px;text-align:center;color:var(--ies-gray-500);font-size:13px;">
+        No design scenarios linked to this Cost Model yet.<br>
+        Open a design tool (WSC / COG / NetOpt / Fleet), save a scenario, and select this Cost Model as its parent.
+      </div>
+    ` : groups.map(g => {
+      const rows = linkedDesigns[g.key] || [];
+      if (rows.length === 0) return '';
+      return `
+        <div class="hub-card mt-4">
+          <div class="text-subtitle mb-2">${g.icon} ${g.label} <span style="color:var(--ies-gray-400);font-weight:500;font-size:11px;">(${rows.length})</span></div>
+          <table class="cm-grid-table" style="font-size:13px;">
+            <thead>
+              <tr><th>Scenario</th><th style="width:160px;">Last Updated</th><th style="width:90px;text-align:right;">Action</th></tr>
+            </thead>
+            <tbody>
+              ${rows.map(r => `
+                <tr>
+                  <td style="font-weight:600;">${_esc(r.name)}</td>
+                  <td style="color:var(--ies-gray-500);">${r.updated ? new Date(r.updated).toLocaleString() : '—'}</td>
+                  <td style="text-align:right;"><a class="hub-btn hub-btn-sm hub-btn-secondary" href="#${g.route}?scenario=${encodeURIComponent(r.id)}" title="Open in ${g.label}" style="font-size:11px;padding:3px 8px;">Open →</a></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }).filter(Boolean).join('')}
+  `;
+}
+
 // ============================================================
 // PHASE 4e — SENSITIVITY (MONTE CARLO) CARD
 // ============================================================
@@ -3187,6 +3387,11 @@ function shouldRerender(field) {
 
 function handleAction(action, idx) {
   switch (action) {
+    case 'linked-refresh':
+      // Force re-query of parent_cost_model_id across design-tool tables.
+      linkedDesigns = null;
+      ensureLinkedDesignsLoaded().then(() => renderSection());
+      return;
     case 'add-volume':
       model.volumeLines.push({ name: '', volume: 0, uom: 'each', isOutboundPrimary: false });
       break;
@@ -4157,6 +4362,7 @@ function computePricingSnapshot(summary, marginFrac, opHrs, contractYears) {
     startupLines: startupWithAmort,
     facilityCost: summary.facilityCost || 0,
     operatingHours: opHrs || 0,
+    facilityBucketId: model.financial?.facilityBucketId || null,
   });
   // Count lines that explicitly lack a pricing_bucket (what goes to _unassigned)
   const unassignedLines = [];

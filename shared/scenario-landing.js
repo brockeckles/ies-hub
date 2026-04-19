@@ -32,7 +32,7 @@
  */
 
 import { db } from './supabase.js?v=20260418-sK';
-import { showToast } from './toast.js?v=20260418-sK';
+import { showToast } from './toast.js?v=20260419-uC';
 
 /**
  * @param {HTMLElement} rootEl

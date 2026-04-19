@@ -804,12 +804,40 @@ export function computeBucketCosts(params) {
     add(l.pricing_bucket, l.annual_amort || 0);
   }
 
-  // Facility → storage bucket
-  add('storage', params.facilityCost);
+  // Facility cost → configurable target bucket (I-01 edge fix).
+  // Resolution order:
+  //   1. params.facilityBucketId (if set and matches an existing bucket)
+  //   2. 'storage' (legacy default — only if it exists)
+  //   3. 'mgmt_fee' (legacy fallback — only if it exists)
+  //   4. first non-startup bucket
+  //   5. _unassigned (and we mark _facilityOrphan so the UI can flag it)
+  let facilityTarget = null;
+  const candidate = params.facilityBucketId;
+  if (candidate && costs[candidate] !== undefined) {
+    facilityTarget = candidate;
+  } else if (costs['storage'] !== undefined) {
+    facilityTarget = 'storage';
+  } else if (costs['mgmt_fee'] !== undefined) {
+    facilityTarget = 'mgmt_fee';
+  } else {
+    const firstNonStartup = (params.buckets || []).find(b => b && b.id && !/startup/i.test(b.id));
+    if (firstNonStartup) facilityTarget = firstNonStartup.id;
+  }
+  if (facilityTarget) {
+    costs[facilityTarget] += (params.facilityCost || 0);
+  } else {
+    costs['_unassigned'] += (params.facilityCost || 0);
+    costs['_facilityOrphan'] = (params.facilityCost || 0);
+  }
+  costs['_facilityTarget'] = facilityTarget;
 
-  // Roll unassigned into mgmt_fee
-  if (costs['_unassigned'] > 0) {
-    costs['mgmt_fee'] = (costs['mgmt_fee'] || 0) + costs['_unassigned'];
+  // Roll line-level unassigned into mgmt_fee (back-compat behavior).
+  // We also preserve `_unassigned` as the standalone orphan amount so the
+  // UI can render an explicit "Unassigned" row in the Pricing table even
+  // when the rolled-into bucket doesn't exist.
+  const unassignedAmount = costs['_unassigned'] || 0;
+  if (unassignedAmount > 0) {
+    costs['mgmt_fee'] = (costs['mgmt_fee'] || 0) + unassignedAmount;
   }
 
   return costs;
