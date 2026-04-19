@@ -27,6 +27,9 @@ import {
   annualEffectiveHoursFromMonthly,
   validateMonthlyProfile,
   flatProfile,
+  simulateLaborVariance,
+  gaussianDraw,
+  mulberry32,
 } from './tools/cost-model/calc.scenarios.js';
 
 let pass = 0, fail = 0;
@@ -383,6 +386,67 @@ test('flatProfile: returns 12-element array of constant value', () => {
   const p = flatProfile(0.07);
   eq(p.length, 12);
   eq(p.every(v => v === 0.07), true);
+});
+
+// ---------------------------------------------------------------------------
+// 5d. PHASE 4e — Monte-Carlo labor variance
+// ---------------------------------------------------------------------------
+console.log('\n--- Phase 4e Monte-Carlo sensitivity ---');
+
+const DETERMINISTIC_LINE = {
+  annual_hours: 2080, hourly_rate: 20, burden_pct: 30,
+  benefits_per_hour: 0, employment_type: 'permanent',
+  temp_agency_markup_pct: 0, performance_variance_pct: 0,
+  monthly_overtime_profile: null, monthly_absence_profile: null,
+};
+const VOLATILE_LINE = { ...DETERMINISTIC_LINE, performance_variance_pct: 15 };
+
+test('simulateLaborVariance: zero-variance line → all trials identical', () => {
+  const rng = mulberry32(42);
+  const r = simulateLaborVariance([DETERMINISTIC_LINE], FALLBACK_HEUR, null, 100, rng);
+  eq(r.p10, r.p50);
+  eq(r.p50, r.p90);
+  // stddev can be ~1e-11 due to floating-point accumulator in sum-of-squares
+  assert(r.stddev < 1e-6, `stddev ${r.stddev} should be essentially zero`);
+});
+test('simulateLaborVariance: empty lines → zero result shape', () => {
+  const r = simulateLaborVariance([], FALLBACK_HEUR, null, 50);
+  eq(r.mean, 0);
+  eq(r.nTrials, 0);
+});
+test('simulateLaborVariance: positive variance → stddev > 0, p10 < p50 < p90', () => {
+  const rng = mulberry32(7);
+  const r = simulateLaborVariance([VOLATILE_LINE], FALLBACK_HEUR, null, 500, rng);
+  assert(r.stddev > 0, 'stddev should be positive');
+  assert(r.p10 < r.p50, `p10 ${r.p10} should be < p50 ${r.p50}`);
+  assert(r.p50 < r.p90, `p50 ${r.p50} should be < p90 ${r.p90}`);
+});
+test('simulateLaborVariance: seeded RNG is deterministic', () => {
+  const r1 = simulateLaborVariance([VOLATILE_LINE], FALLBACK_HEUR, null, 200, mulberry32(999));
+  const r2 = simulateLaborVariance([VOLATILE_LINE], FALLBACK_HEUR, null, 200, mulberry32(999));
+  eq(r1.p10, r2.p10);
+  eq(r1.p50, r2.p50);
+  eq(r1.p90, r2.p90);
+});
+test('simulateLaborVariance: mean within 5% of deterministic target', () => {
+  // Deterministic baseline: 2080 hrs × $26/hr loaded × (1+0.05)(1-0.12) ≈ $49,969
+  const rng = mulberry32(2026);
+  const r = simulateLaborVariance([VOLATILE_LINE], FALLBACK_HEUR, null, 2000, rng);
+  close(r.mean, 49969, 49969 * 0.05, 'mean within 5% of expected');
+});
+test('gaussianDraw: seeded, centered around 0 over 1000 draws', () => {
+  const rng = mulberry32(1);
+  let sum = 0;
+  for (let i = 0; i < 1000; i++) sum += gaussianDraw(rng);
+  const mean = sum / 1000;
+  assert(Math.abs(mean) < 0.15, `mean |${mean}| should be near 0`);
+});
+test('mulberry32: returns values in [0, 1)', () => {
+  const rng = mulberry32(1234);
+  for (let i = 0; i < 100; i++) {
+    const v = rng();
+    assert(v >= 0 && v < 1, `${v} not in [0,1)`);
+  }
 });
 
 // ---------------------------------------------------------------------------

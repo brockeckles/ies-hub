@@ -771,6 +771,124 @@ export function flatProfile(fractionalPct) {
   return Array.from({ length: 12 }, () => v);
 }
 
+// ============================================================
+// PHASE 4e — PERFORMANCE VARIANCE / MONTE CARLO SENSITIVITY
+// ============================================================
+
+/**
+ * Box-Muller standard-normal draw. Wrapped so callers can inject a seeded
+ * RNG for deterministic tests.
+ *
+ * @param {() => number} [rng]
+ * @returns {number}   one draw from N(0, 1)
+ */
+export function gaussianDraw(rng) {
+  const r = typeof rng === 'function' ? rng : Math.random;
+  const u = 1 - r();
+  const v = 1 - r();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+/**
+ * Create a linear-congruential-generator-backed RNG suitable for Monte
+ * Carlo tests. The underlying params are Numerical Recipes classics.
+ *
+ * @param {number} seed
+ * @returns {() => number}
+ */
+export function mulberry32(seed) {
+  let s = seed >>> 0;
+  return function () {
+    s = (s + 0x6D2B79F5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * Average a 12-element monthly profile (Phase 4b) back to a single
+ * annual-average fraction. Useful when the sim doesn't care about month-by-month
+ * shape, only the net impact on annual labor cost.
+ *
+ * Falls back through the Phase 4 chain (line → market → heuristic).
+ *
+ * @param {Object} line
+ * @param {Object} calcHeur
+ * @param {Object|null} marketProfile
+ * @param {'ot'|'absence'} which
+ * @returns {number}    percent (e.g. 7 for 7%)
+ */
+function avgMonthlyProfilePct(line, calcHeur, marketProfile, which) {
+  let total = 0;
+  for (let m = 0; m < 12; m++) {
+    total += (which === 'ot')
+      ? monthlyOvertimePct(line, m, marketProfile, calcHeur?.overtimePct ?? 0)
+      : monthlyAbsencePct(line, m, marketProfile, calcHeur?.absenceAllowancePct ?? 0);
+  }
+  return total / 12;
+}
+
+/**
+ * Monte-Carlo simulate total annual labor cost given per-line
+ * performance_variance_pct. Each trial draws an independent Gaussian
+ * productivity shock per line; shocked hours = annual_hours / (1 + shock),
+ * then the standard loaded-rate × (1+OT)(1−absence) shape applies.
+ *
+ * @param {Object[]} laborLines
+ * @param {Object} calcHeur
+ * @param {Object|null} marketProfile
+ * @param {number} [nTrials=1000]
+ * @param {() => number} [rng]   defaults to Math.random (non-deterministic)
+ * @returns {{ mean:number, p10:number, p50:number, p90:number, stddev:number, nTrials:number, trials:number[] }}
+ */
+export function simulateLaborVariance(laborLines, calcHeur, marketProfile, nTrials, rng) {
+  const N = Number.isInteger(nTrials) && nTrials > 0 ? nTrials : 1000;
+  if (!Array.isArray(laborLines) || laborLines.length === 0) {
+    return { mean: 0, p10: 0, p50: 0, p90: 0, stddev: 0, nTrials: 0, trials: [] };
+  }
+  const benefitLoadFallbackPct = calcHeur?.benefitLoadPct ?? 35;
+  const trials = new Array(N);
+  for (let t = 0; t < N; t++) {
+    let yearTotal = 0;
+    for (const line of laborLines) {
+      const variancePct = Number(line.performance_variance_pct) || 0;
+      const shockStd = variancePct / 100;
+      const shock = shockStd > 0 ? gaussianDraw(rng) * shockStd : 0;
+      // Productivity factor: positive shock = more productive → fewer hours.
+      // Floor at 30% to avoid extreme blowups from long-tail draws.
+      const prodFactor = Math.max(0.3, 1 + shock);
+      const shockedHours = (Number(line.annual_hours) || 0) / prodFactor;
+      // Loaded-rate math (matches computeMonthlyLaborFromLines)
+      const baseRate = Number(line.hourly_rate) || 0;
+      const markup = line.employment_type === 'temp_agency' ? (Number(line.temp_agency_markup_pct) || 0) / 100 : 0;
+      const effBase = baseRate * (1 + markup);
+      const burden = line.burden_pct != null ? Number(line.burden_pct) / 100 : benefitLoadFallbackPct / 100;
+      const loadedRate = effBase * (1 + burden) + (Number(line.benefits_per_hour) || 0);
+      // Apply avg OT / absence from profile (or fallback) to net hours
+      const avgOT = avgMonthlyProfilePct(line, calcHeur, marketProfile, 'ot');
+      const avgAbs = avgMonthlyProfilePct(line, calcHeur, marketProfile, 'absence');
+      const effectiveHours = shockedHours * (1 + avgOT / 100) * (1 - avgAbs / 100);
+      yearTotal += effectiveHours * loadedRate;
+    }
+    trials[t] = yearTotal;
+  }
+  const sorted = trials.slice().sort((a, b) => a - b);
+  const mean = trials.reduce((s, v) => s + v, 0) / N;
+  const pick = p => sorted[Math.max(0, Math.min(N - 1, Math.floor(p * N)))];
+  const stddev = Math.sqrt(trials.reduce((s, v) => s + (v - mean) ** 2, 0) / N);
+  return {
+    nTrials: N,
+    mean,
+    p10: pick(0.10),
+    p50: pick(0.50),
+    p90: pick(0.90),
+    stddev,
+    trials: sorted, // keep for histogram/quantile plots
+  };
+}
+
 /**
  * Given a list of SCD rows, return only the "current" ones — those whose
  * effective_end_date is in the future AND have no superseded_by_id. Useful
