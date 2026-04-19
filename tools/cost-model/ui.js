@@ -101,6 +101,8 @@ let currentScenario = null;
 let currentScenarioSnapshots = null;   // grouped { labor:[], facility:[], ..., heuristics:[] }
 let currentRevisions = [];
 let _lastCalcHeuristics = null;        // set by Summary calc; read by Timeline/Summary banners
+// Phase 4c — cached market labor profile (set when project's market is known)
+let currentMarketLaborProfile = null;
 
 // ============================================================
 // LIFECYCLE
@@ -1551,6 +1553,10 @@ function renderSummary() {
     startupLines: model.startupLines || [],
     pricingBuckets: model.pricingBuckets || [],
     project_id: model.id || 0,
+    // Phase 4d — thread calc heuristics + market profile so the monthly
+    // engine can compute per-line labor cost using Phase 4b profiles.
+    _calcHeur: calcHeur,
+    marketLaborProfile: currentMarketLaborProfile,
     // Diagnostic: carries which keys came from snapshot vs override vs default.
     _heuristicsSource: calcHeur.used,
   });
@@ -1914,6 +1920,14 @@ function bindSectionEvents(section, container) {
       openLaborProfileModal(idx);
     });
   });
+
+  // Phase 4c/d: fire-and-forget market-profile load on Summary/Timeline open
+  if (section === 'summary' || section === 'timeline') {
+    ensureMarketLaborProfileLoaded().then(fresh => {
+      // Only re-render on a truly fresh fetch to avoid an infinite loop.
+      if (fresh) renderSection();
+    });
+  }
 
   // --------------------------------------------------------------
   // Phase 3: Assumptions section event wiring
@@ -3438,6 +3452,23 @@ function renderAssumptions() {
 // ============================================================
 // SECTION 16: SCENARIOS (Phase 3 — status + clone + approve + compare)
 // ============================================================
+
+/**
+ * Phase 4c: fetch the market labor profile for the active market so the
+ * monthly engine can apply per-market OT/absence defaults when a labor
+ * line has no per-line profile set.
+ *
+ * @returns {Promise<boolean>} true if a FRESH fetch happened (caller may re-render)
+ */
+async function ensureMarketLaborProfileLoaded() {
+  const marketId = model?.projectDetails?.market;
+  if (!marketId) { currentMarketLaborProfile = null; return false; }
+  if (currentMarketLaborProfile && currentMarketLaborProfile.market_id === marketId) return false;
+  try {
+    currentMarketLaborProfile = await api.fetchLaborMarketProfile(marketId);
+    return true;
+  } catch (_) { currentMarketLaborProfile = null; return false; }
+}
 
 async function ensureScenariosLoaded() {
   const projectId = model?.projectId;
