@@ -168,6 +168,7 @@ const SECTIONS = [
   { key: 'timeline', label: 'Timeline', icon: 'calendar' },
   { key: 'assumptions', label: 'Assumptions', icon: 'sliders' },
   { key: 'scenarios', label: 'Scenarios', icon: 'git-branch' },
+  { key: 'whatif', label: 'What-If Studio', icon: 'trending-up' },
 ];
 
 // Phase 3 module-local state
@@ -186,6 +187,10 @@ let currentMarketLaborProfile = null;
 let _scenariosLoadInFlight = false;
 let _scenariosLoadedOnce = false;
 let _heuristicsLoadInFlight = false;
+// Phase 5b — What-If Studio transient overlay (preview-only; not persisted
+// until user hits Apply). Highest-priority layer in resolveCalcHeuristics.
+let whatIfTransient = {};
+let _whatIfDebounce = null;
 
 // ============================================================
 // LIFECYCLE
@@ -693,6 +698,7 @@ function renderSection() {
     timeline: renderTimeline,
     assumptions: renderAssumptions,
     scenarios: renderScenarios,
+    whatif: renderWhatIfStudio,
   };
 
   const render = renderers[activeSection];
@@ -1617,13 +1623,15 @@ function renderSummary() {
   });
 
   // Phase 3 close-the-loop: resolve heuristics through the
-  //   approved-snapshot → override → project-column
-  // chain so approved scenarios re-run against their FROZEN values.
+  //   transient (Phase 5b) → approved-snapshot → override → project-column
+  // chain so approved scenarios re-run against their FROZEN values and
+  // the What-If Studio can preview-override without persisting.
   const calcHeur = scenarios.resolveCalcHeuristics(
     currentScenario,
     currentScenarioSnapshots,
     heuristicOverrides,
     fin,
+    whatIfTransient,
   );
 
   // Build multi-year projections
@@ -2034,6 +2042,68 @@ function bindSectionEvents(section, container) {
   container.querySelector('[data-cm-action="export-scenario-xlsx"]')?.addEventListener('click', () => {
     exportScenarioToXlsx();
   });
+
+  // --------------------------------------------------------------
+  // Phase 5b: What-If Studio event wiring
+  // --------------------------------------------------------------
+  if (section === 'whatif') {
+    const applySliderUpdate = (key, raw) => {
+      const v = raw === '' ? '' : Number(raw);
+      whatIfTransient = { ...whatIfTransient, [key]: v };
+      // Mirror the slider and the number input together
+      const slider = container.querySelector(`[data-whatif-slider="${key}"]`);
+      const number = container.querySelector(`[data-whatif-number="${key}"]`);
+      if (slider && String(slider.value) !== String(raw)) slider.value = raw;
+      if (number && String(number.value) !== String(raw)) number.value = raw;
+      // Debounce the full re-render (recompute is cheap but avoid churn on drag)
+      if (_whatIfDebounce) clearTimeout(_whatIfDebounce);
+      _whatIfDebounce = setTimeout(() => { _whatIfDebounce = null; renderSection(); }, 120);
+    };
+
+    container.querySelectorAll('[data-whatif-slider]').forEach(inp => {
+      // input event fires during drag; change fires on release
+      inp.addEventListener('change', () => applySliderUpdate(inp.dataset.whatifSlider, inp.value));
+      // Mirror the number input DURING drag for responsiveness
+      inp.addEventListener('input', () => {
+        const key = inp.dataset.whatifSlider;
+        const number = container.querySelector(`[data-whatif-number="${key}"]`);
+        if (number) number.value = inp.value;
+      });
+    });
+    container.querySelectorAll('[data-whatif-number]').forEach(inp => {
+      inp.addEventListener('change', () => applySliderUpdate(inp.dataset.whatifNumber, inp.value));
+    });
+
+    container.querySelector('[data-cm-action="whatif-reset"]')?.addEventListener('click', async () => {
+      const ok = await showConfirm('Reset all What-If sliders?\n\nThis discards the transient overlay and returns to your persisted assumptions.', { okLabel: 'Reset' });
+      if (!ok) return;
+      whatIfTransient = {};
+      renderSection();
+    });
+
+    container.querySelector('[data-cm-action="whatif-apply"]')?.addEventListener('click', async () => {
+      const keys = Object.keys(whatIfTransient).filter(k => whatIfTransient[k] !== '' && whatIfTransient[k] !== undefined);
+      if (keys.length === 0) return;
+      const msg = `Commit ${keys.length} What-If slider value${keys.length === 1 ? '' : 's'} as scenario overrides?\n\n` +
+                  keys.map(k => `  • ${k} → ${whatIfTransient[k]}`).join('\n') +
+                  `\n\nThis writes to heuristic_overrides on the project and affects every subsequent calc.`;
+      const ok = await showConfirm(msg, { okLabel: 'Apply overrides' });
+      if (!ok) return;
+      // Merge transient into persistent overrides
+      const merged = { ...heuristicOverrides };
+      for (const k of keys) merged[k] = whatIfTransient[k];
+      heuristicOverrides = merged;
+      if (model?.id) {
+        try { await api.saveHeuristicOverrides(model.id, heuristicOverrides); }
+        catch (err) { showToast('Save failed: ' + (err?.message || err), 'error'); return; }
+      } else {
+        model.heuristicOverrides = heuristicOverrides;
+      }
+      whatIfTransient = {};
+      showToast(`Applied ${keys.length} override${keys.length === 1 ? '' : 's'}`, 'success');
+      renderSection();
+    });
+  }
 
   // Phase 4c/d: fire-and-forget market-profile load on Summary/Timeline open
   if (section === 'summary' || section === 'timeline') {
@@ -2483,6 +2553,220 @@ async function openLaborProfileModal(idx) {
   });
 }
 
+// ============================================================
+// PHASE 5b — WHAT-IF STUDIO (transient slider overlay + live KPI)
+// ============================================================
+
+/** Slider config — 11 high-leverage heuristics. */
+const WHATIF_SLIDERS = [
+  { key: 'tax_rate_pct',              label: 'Tax Rate',               group: 'Financial',    min: 0,  max: 50, step: 0.5, unit: '%' },
+  { key: 'discount_rate_pct',         label: 'Discount Rate',          group: 'Financial',    min: 3,  max: 25, step: 0.25, unit: '%' },
+  { key: 'target_margin_pct',         label: 'Target Margin',          group: 'Financial',    min: 0,  max: 30, step: 0.5, unit: '%' },
+  { key: 'annual_volume_growth_pct',  label: 'Volume Growth',          group: 'Financial',    min: -20, max: 30, step: 0.5, unit: '%' },
+  { key: 'dso_days',                  label: 'DSO',                    group: 'WC',           min: 0,  max: 120, step: 1, unit: 'days' },
+  { key: 'dpo_days',                  label: 'DPO',                    group: 'WC',           min: 0,  max: 120, step: 1, unit: 'days' },
+  { key: 'benefit_load_pct',          label: 'Benefit Load',           group: 'Labor',        min: 0,  max: 80, step: 1, unit: '%' },
+  { key: 'overtime_pct',              label: 'Overtime %',             group: 'Labor',        min: 0,  max: 30, step: 0.5, unit: '%' },
+  { key: 'absence_allowance_pct',     label: 'Absence %',              group: 'Labor',        min: 0,  max: 25, step: 0.5, unit: '%' },
+  { key: 'labor_escalation_pct',      label: 'Labor Escalation / yr',  group: 'Escalation',   min: 0,  max: 15, step: 0.25, unit: '%' },
+  { key: 'facility_escalation_pct',   label: 'Facility Escalation',    group: 'Escalation',   min: 0,  max: 15, step: 0.25, unit: '%' },
+];
+
+/**
+ * Return the current effective value for a slider key, preferring transient
+ * → override → catalog default.
+ */
+function whatIfCurrentValue(sliderKey) {
+  if (Object.prototype.hasOwnProperty.call(whatIfTransient, sliderKey) && whatIfTransient[sliderKey] !== '') {
+    return Number(whatIfTransient[sliderKey]);
+  }
+  if (Object.prototype.hasOwnProperty.call(heuristicOverrides, sliderKey) && heuristicOverrides[sliderKey] !== '' && heuristicOverrides[sliderKey] !== null) {
+    return Number(heuristicOverrides[sliderKey]);
+  }
+  const def = (heuristicsCatalog || []).find(h => h.key === sliderKey);
+  return def?.default_value ?? 0;
+}
+
+/** Same, but as a display string so sliders + readouts stay consistent. */
+function whatIfSource(sliderKey) {
+  if (Object.prototype.hasOwnProperty.call(whatIfTransient, sliderKey) && whatIfTransient[sliderKey] !== '') return 'transient';
+  if (Object.prototype.hasOwnProperty.call(heuristicOverrides, sliderKey) && heuristicOverrides[sliderKey] !== '' && heuristicOverrides[sliderKey] !== null) return 'override';
+  return 'default';
+}
+
+/**
+ * Build a minimal what-if preview using the current model + transient overlay.
+ * Returns an object with the same KPI shape the Summary KPI bar uses.
+ */
+function computeWhatIfPreview() {
+  try {
+    const market = model.projectDetails?.market;
+    const fr = (refData.facilityRates || []).find(r => r.market_id === market);
+    const ur = (refData.utilityRates || []).find(r => r.market_id === market);
+    const opHrs = calc.operatingHours(model.shifts || {});
+    const orders = (model.volumeLines || []).find(v => v.isOutboundPrimary)?.volume || 0;
+    const contractYears = model.projectDetails?.contractTerm || 5;
+    const fin = model.financial || {};
+    const summary = calc.computeSummary({
+      laborLines: model.laborLines || [],
+      indirectLaborLines: model.indirectLaborLines || [],
+      equipmentLines: model.equipmentLines || [],
+      overheadLines: model.overheadLines || [],
+      vasLines: model.vasLines || [],
+      startupLines: model.startupLines || [],
+      facility: model.facility || {},
+      shifts: model.shifts || {},
+      facilityRate: fr,
+      utilityRate: ur,
+      contractYears,
+      targetMarginPct: fin.targetMargin || 0,
+      annualOrders: orders || 1,
+    });
+    const calcHeur = scenarios.resolveCalcHeuristics(
+      currentScenario, currentScenarioSnapshots, heuristicOverrides, fin, whatIfTransient,
+    );
+    const projResult = calc.buildYearlyProjections({
+      years: contractYears,
+      baseLaborCost: summary.laborCost,
+      baseFacilityCost: summary.facilityCost,
+      baseEquipmentCost: summary.equipmentCost,
+      baseOverheadCost: summary.overheadCost,
+      baseVasCost: summary.vasCost,
+      startupAmort: summary.startupAmort,
+      startupCapital: summary.startupCapital,
+      baseOrders: orders || 1,
+      marginPct: (calcHeur.targetMarginPct || 0) / 100,
+      volGrowthPct: calcHeur.volGrowthPct / 100,
+      laborEscPct:  calcHeur.laborEscPct  / 100,
+      costEscPct:   calcHeur.costEscPct   / 100,
+      laborLines: model.laborLines || [],
+      taxRatePct: calcHeur.taxRatePct,
+      useMonthlyEngine: typeof window !== 'undefined' && window.COST_MODEL_MONTHLY_ENGINE === true,
+      periods: (refData && refData.periods) || [],
+      ramp: null,
+      seasonality: model.seasonalityProfile || null,
+      preGoLiveMonths: calcHeur.preGoLiveMonths,
+      dsoDays:           calcHeur.dsoDays,
+      dpoDays:           calcHeur.dpoDays,
+      laborPayableDays:  calcHeur.laborPayableDays,
+      startupLines: model.startupLines || [],
+      pricingBuckets: model.pricingBuckets || [],
+      project_id: model.id || 0,
+      _calcHeur: calcHeur,
+      marketLaborProfile: currentMarketLaborProfile,
+    });
+    // Aggregate over the projection horizon
+    const projections = projResult.projections || [];
+    const totalRev = projections.reduce((s, y) => s + (y.revenue || 0), 0);
+    const totalOpex = projections.reduce((s, y) => s + (y.totalCost || 0), 0);
+    const totalEbitda = projections.reduce((s, y) => s + (y.ebitda || 0), 0);
+    const totalNI = projections.reduce((s, y) => s + (y.netIncome || 0), 0);
+    const lastCumFcf = projections.length ? (projections[projections.length - 1].cumFcf || 0) : 0;
+    return {
+      totalRev, totalOpex, totalEbitda, totalNI,
+      ebitdaMargin: totalRev > 0 ? (totalEbitda / totalRev * 100) : 0,
+      cumFcf: lastCumFcf,
+      calcHeur,
+    };
+  } catch (err) {
+    console.warn('[CM] what-if preview failed:', err);
+    return null;
+  }
+}
+
+function renderWhatIfStudio() {
+  // Lazy-load catalog so defaults render
+  if (heuristicsCatalog.length === 0 && !_heuristicsLoadInFlight) {
+    _heuristicsLoadInFlight = true;
+    ensureHeuristicsLoaded()
+      .finally(() => { _heuristicsLoadInFlight = false; })
+      .then(() => renderSection());
+  }
+  const preview = computeWhatIfPreview();
+  const groups = new Map();
+  for (const s of WHATIF_SLIDERS) {
+    if (!groups.has(s.group)) groups.set(s.group, []);
+    groups.get(s.group).push(s);
+  }
+  const activeCount = Object.keys(whatIfTransient).filter(k => whatIfTransient[k] !== '' && whatIfTransient[k] !== undefined).length;
+
+  const fmt = n => (n == null ? '—' : (
+    Math.abs(n) >= 1e6 ? '$' + (n/1e6).toFixed(2) + 'M' :
+    Math.abs(n) >= 1e3 ? '$' + (n/1e3).toFixed(0) + 'K' :
+    '$' + n.toFixed(0)
+  ));
+
+  const sliderRow = s => {
+    const val = whatIfCurrentValue(s.key);
+    const src = whatIfSource(s.key);
+    const srcBadge = src === 'transient'
+      ? '<span class="hub-status-chip" style="background:#7c3aed;color:white;font-size:9px;padding:1px 5px;">live</span>'
+      : src === 'override'
+        ? '<span class="hub-status-chip" style="background:#f59e0b;color:white;font-size:9px;padding:1px 5px;">override</span>'
+        : '<span style="font-size:10px;color:var(--ies-gray-400);">default</span>';
+    return `
+      <div style="display:grid;grid-template-columns:1fr 100px 70px;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+        <div>
+          <div style="font-size:13px;font-weight:500;">${s.label} ${srcBadge}</div>
+          <div style="font-size:11px;color:var(--ies-gray-400);">${s.key}</div>
+        </div>
+        <input type="range" min="${s.min}" max="${s.max}" step="${s.step}" value="${val}"
+          data-whatif-slider="${s.key}" style="width:100%;" />
+        <div style="display:flex;align-items:center;gap:4px;">
+          <input type="number" step="${s.step}" min="${s.min}" max="${s.max}" value="${val}"
+            data-whatif-number="${s.key}" style="width:55px;font-size:12px;text-align:right;" />
+          <span style="font-size:11px;color:var(--ies-gray-400);">${s.unit}</span>
+        </div>
+      </div>
+    `;
+  };
+
+  return `
+    <div class="cm-section-header">
+      <h2>What-If Studio
+        ${activeCount > 0 ? `<span class="hub-status-chip" style="margin-left:8px;background:#7c3aed;color:white;">${activeCount} live override${activeCount === 1 ? '' : 's'}</span>` : '<span class="hub-status-chip" style="margin-left:8px;">baseline</span>'}
+      </h2>
+      <p class="cm-subtle">Drag sliders to preview how heuristic changes move the deal. Changes are <strong>transient</strong> — click Apply to commit as per-scenario overrides, or Reset to discard.</p>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:16px;margin-top:12px;">
+      <div class="cm-card">
+        ${Array.from(groups.entries()).map(([group, items]) => `
+          <div style="margin-bottom:16px;">
+            <div style="font-weight:600;font-size:12px;text-transform:uppercase;color:var(--ies-gray-500);letter-spacing:0.5px;margin-bottom:4px;">${group}</div>
+            ${items.map(sliderRow).join('')}
+          </div>
+        `).join('')}
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;border-top:1px solid #e5e7eb;padding-top:12px;">
+          <button class="hub-btn" data-cm-action="whatif-reset" ${activeCount === 0 ? 'disabled' : ''}>Reset</button>
+          <button class="hub-btn-primary" data-cm-action="whatif-apply" ${activeCount === 0 ? 'disabled' : ''}>Apply as overrides</button>
+        </div>
+      </div>
+
+      <div class="cm-card" style="background:linear-gradient(180deg,#fafaff,#fff);border-left:4px solid #7c3aed;">
+        <div style="font-weight:700;font-size:14px;margin-bottom:4px;">Live Preview</div>
+        <div style="font-size:11px;color:var(--ies-gray-500);margin-bottom:12px;">Updates on slider release. Over the ${model.projectDetails?.contractTerm || 5}-year horizon.</div>
+        ${preview ? `
+          <div class="hub-kpi-bar" style="grid-template-columns:repeat(2,1fr);gap:8px;">
+            <div class="hub-kpi-item"><div class="hub-kpi-label">Total Revenue</div><div class="hub-kpi-value">${fmt(preview.totalRev)}</div></div>
+            <div class="hub-kpi-item"><div class="hub-kpi-label">Total Opex</div><div class="hub-kpi-value">${fmt(preview.totalOpex)}</div></div>
+            <div class="hub-kpi-item"><div class="hub-kpi-label">EBITDA</div><div class="hub-kpi-value">${fmt(preview.totalEbitda)}</div></div>
+            <div class="hub-kpi-item"><div class="hub-kpi-label">EBITDA Margin</div><div class="hub-kpi-value">${preview.ebitdaMargin.toFixed(1)}%</div></div>
+            <div class="hub-kpi-item"><div class="hub-kpi-label">Net Income</div><div class="hub-kpi-value">${fmt(preview.totalNI)}</div></div>
+            <div class="hub-kpi-item"><div class="hub-kpi-label">Cum FCF</div><div class="hub-kpi-value" style="color:${preview.cumFcf >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};">${fmt(preview.cumFcf)}</div></div>
+          </div>
+          <div style="margin-top:12px;font-size:11px;color:var(--ies-gray-500);">
+            Tip: combine sliders (e.g. DSO↑ + margin↓) to stress-test the deal.
+          </div>
+        ` : `
+          <div style="text-align:center;padding:24px;color:var(--ies-gray-400);">
+            <em>No preview available — populate Labor + Pricing sections first.</em>
+          </div>
+        `}
+      </div>
+    </div>
+  `;
+}
 // ============================================================
 // PHASE 4e — SENSITIVITY (MONTE CARLO) CARD
 // ============================================================
