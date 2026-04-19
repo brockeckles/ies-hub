@@ -153,24 +153,39 @@ const DEMO_MARKETS_FALLBACK = [
 // ============================================================
 
 const SECTIONS = [
-  { key: 'setup', label: 'Setup', icon: 'settings' },
-  { key: 'volumes', label: 'Volumes', icon: 'bar-chart' },
-  { key: 'orderProfile', label: 'Order Profile', icon: 'package' },
-  { key: 'facility', label: 'Facility', icon: 'home' },
-  { key: 'shifts', label: 'Shifts', icon: 'clock' },
-  { key: 'labor', label: 'Labor', icon: 'users' },
-  { key: 'equipment', label: 'Equipment', icon: 'truck' },
-  { key: 'overhead', label: 'Overhead', icon: 'layers' },
-  { key: 'vas', label: 'VAS', icon: 'star' },
-  { key: 'financial', label: 'Financial', icon: 'trending-up' },
-  { key: 'startup', label: 'Start-Up / Capital', icon: 'zap' },
-  { key: 'pricing', label: 'Pricing', icon: 'tag' },
-  { key: 'summary', label: 'Summary', icon: 'pie-chart' },
-  { key: 'timeline', label: 'Timeline', icon: 'calendar' },
-  { key: 'assumptions', label: 'Assumptions', icon: 'sliders' },
-  { key: 'scenarios', label: 'Scenarios', icon: 'git-branch' },
-  { key: 'whatif', label: 'What-If Studio', icon: 'trending-up' },
-  { key: 'linked', label: 'Linked Designs', icon: 'link' },
+  { key: 'setup',        label: 'Setup',              icon: 'settings',      group: 'scope' },
+  { key: 'volumes',      label: 'Volumes',            icon: 'bar-chart',     group: 'scope' },
+  { key: 'orderProfile', label: 'Order Profile',      icon: 'package',       group: 'scope' },
+  { key: 'facility',     label: 'Facility',           icon: 'home',          group: 'operation' },
+  { key: 'shifts',       label: 'Shifts',             icon: 'clock',         group: 'operation' },
+  { key: 'labor',        label: 'Labor',              icon: 'users',         group: 'cost' },
+  { key: 'equipment',    label: 'Equipment',          icon: 'truck',         group: 'cost' },
+  { key: 'overhead',     label: 'Overhead',           icon: 'layers',        group: 'cost' },
+  { key: 'vas',          label: 'VAS',                icon: 'star',          group: 'cost' },
+  { key: 'financial',    label: 'Financial',          icon: 'trending-up',   group: 'commercial' },
+  { key: 'startup',      label: 'Start-Up / Capital', icon: 'zap',           group: 'commercial' },
+  { key: 'pricing',      label: 'Pricing',            icon: 'tag',           group: 'commercial' },
+  { key: 'summary',      label: 'Summary',            icon: 'pie-chart',     group: 'output' },
+  { key: 'timeline',     label: 'Timeline',           icon: 'calendar',      group: 'output' },
+  { key: 'scenarios',    label: 'Scenarios',          icon: 'git-branch',    group: 'output' },
+  { key: 'whatif',       label: 'What-If Studio',     icon: 'trending-up',   group: 'analysis' },
+  { key: 'assumptions',  label: 'Assumptions',        icon: 'sliders',       group: 'analysis' },
+  { key: 'linked',       label: 'Linked Designs',     icon: 'link',          group: 'analysis' },
+];
+
+/**
+ * v2 UI — five-phase grouping of the 18 sections. Matches the user's actual
+ * workflow: scope the deal, shape the operation, build the cost stack, set
+ * commercial terms, then analyze. When flag off, sidebar renders as the flat
+ * 18-item list.
+ */
+const SECTION_GROUPS = [
+  { key: 'scope',      label: 'Scope',       description: 'Who, what, where' },
+  { key: 'operation',  label: 'Operation',   description: 'Facility shape + schedule' },
+  { key: 'cost',       label: 'Cost',        description: 'Labor, equipment, overhead, VAS' },
+  { key: 'commercial', label: 'Commercial',  description: 'Financial terms + pricing' },
+  { key: 'output',     label: 'Output',      description: 'P&L, timeline, scenarios' },
+  { key: 'analysis',   label: 'Analysis',    description: 'What-If, assumptions, links' },
 ];
 
 // Phase 3 module-local state
@@ -203,6 +218,18 @@ let _planningRatiosLoadInFlight = false;
 /** UI-only: which category card is expanded. Null = all collapsed. */
 let _planningRatioOpenCategory = null;
 
+// v2 UI redesign (2026-04-19) — feature-flagged redesign of sidebar nav +
+// Labor section. Flip off via `window.COST_MODEL_V2_UI = false` in console
+// to compare against the old layout.
+/** Groups the user has collapsed in the grouped sidebar. */
+let _collapsedNavGroups = new Set();
+/** Which Direct Labor line is currently selected in the master-detail view. */
+let _selectedLaborIdx = 0;
+
+function isCmV2UiOn() {
+  return typeof window === 'undefined' || window.COST_MODEL_V2_UI !== false;
+}
+
 // ============================================================
 // LIFECYCLE
 // ============================================================
@@ -232,6 +259,9 @@ export async function mount(el) {
   planningRatioOverrides = {};
   _planningRatioOpenCategory = null;
   _planningRatiosLoadInFlight = false;
+  // v2 UI — reset transient selection state
+  _selectedLaborIdx = 0;
+  _collapsedNavGroups = new Set();
 
   // Load reference data + saved models + saved deals + ref_periods in parallel
   try {
@@ -386,6 +416,8 @@ function wireLandingEvents() {
         // Phase 6 — planning ratio overrides are per-project
         planningRatioOverrides = {};
         _planningRatioOpenCategory = null;
+        // v2 UI — reset selection on load
+        _selectedLaborIdx = 0;
         // Reset Linked Designs cache so the next view fetches fresh for the new model
         linkedDesigns = null;
         _linkedDesignsLoadInFlight = false;
@@ -480,6 +512,17 @@ function wireEditorEvents() {
       if (key) navigateSection(key);
     });
   });
+  // v2 — group headers toggle their children (full editor re-render
+  // keeps handler wiring simple; groups collapse/expand at local speed)
+  rootEl.querySelectorAll('[data-nav-group-toggle]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const key = btn.dataset.navGroupToggle;
+      if (_collapsedNavGroups.has(key)) _collapsedNavGroups.delete(key);
+      else _collapsedNavGroups.add(key);
+      renderCurrentView();
+    });
+  });
   // Toolbar
   rootEl.querySelector('#cm-back-btn')?.addEventListener('click', async () => {
     // Refresh saved-models list when returning to landing
@@ -532,7 +575,7 @@ function renderShell() {
         </div>
         <!-- Section Nav -->
         <nav style="padding: 8px 0;">
-          ${SECTIONS.map(s => `
+          ${isCmV2UiOn() ? renderGroupedNav() : SECTIONS.map(s => `
             <div class="cm-nav-item${s.key === activeSection ? ' active' : ''}" data-section="${s.key}">
               <span class="cm-nav-check" id="cm-check-${s.key}"></span>
               <span class="cm-nav-label">${s.label}</span>
@@ -762,6 +805,103 @@ function deriveLocationString(marketId, markets) {
   if (!marketId || !Array.isArray(markets)) return '';
   const m = markets.find(x => (x.market_id || x.id) === marketId);
   return m ? marketLabel(m) : '';
+}
+
+// ============================================================
+// v2 UI — Grouped sidebar nav renderer
+// ============================================================
+
+/**
+ * Bucket the 18 nav sections into the 6 logical phases declared in
+ * SECTION_GROUPS. Returns map keyed by group code → array of sections.
+ */
+function _sectionsByGroup() {
+  const map = new Map();
+  for (const g of SECTION_GROUPS) map.set(g.key, []);
+  for (const s of SECTIONS) {
+    if (!map.has(s.group)) map.set(s.group, []);
+    map.get(s.group).push(s);
+  }
+  return map;
+}
+
+/**
+ * Cheap per-section completion check. Returns 'complete' | 'partial' | 'empty'.
+ * Today this is used to color a small dot next to each section and to roll
+ * up into the group-header chip. Heuristic — not rigorous.
+ */
+function _sectionCompleteness(sectionKey) {
+  const m = model || {};
+  switch (sectionKey) {
+    case 'setup': {
+      const pd = m.projectDetails || {};
+      const filled = ['name', 'clientName', 'market', 'environment', 'contractTerm']
+        .filter(k => pd[k] !== null && pd[k] !== undefined && pd[k] !== '').length;
+      if (filled === 5) return 'complete';
+      if (filled === 0) return 'empty';
+      return 'partial';
+    }
+    case 'volumes': {
+      const lines = m.volumeLines || [];
+      if (!lines.length) return 'empty';
+      return lines.some(v => v.isOutboundPrimary) ? 'complete' : 'partial';
+    }
+    case 'orderProfile': {
+      const op = m.orderProfile || {};
+      return (op.linesPerOrder && op.unitsPerLine) ? 'complete' : op.linesPerOrder || op.unitsPerLine ? 'partial' : 'empty';
+    }
+    case 'facility':
+      return (m.facility && m.facility.totalSqft > 0) ? 'complete' : 'empty';
+    case 'shifts':
+      return (m.shifts && m.shifts.shiftsPerDay > 0) ? 'complete' : 'empty';
+    case 'labor':
+      return (m.laborLines && m.laborLines.length > 0) ? 'complete' : 'empty';
+    case 'equipment':
+      return (m.equipmentLines && m.equipmentLines.length > 0) ? 'complete' : 'empty';
+    case 'overhead':
+      return (m.overheadLines && m.overheadLines.length > 0) ? 'complete' : 'empty';
+    case 'vas':
+      return (m.vasLines && m.vasLines.length > 0) ? 'complete' : 'empty';
+    case 'financial':
+      return (m.financial && m.financial.targetMarginPct > 0) ? 'complete' : 'empty';
+    case 'pricing':
+      return (m.pricingBuckets && m.pricingBuckets.length > 0) ? 'complete' : 'empty';
+    default:
+      return 'empty';
+  }
+}
+
+function renderGroupedNav() {
+  const grouped = _sectionsByGroup();
+  return SECTION_GROUPS.map(g => {
+    const sections = grouped.get(g.key) || [];
+    if (!sections.length) return '';
+    const collapsed = _collapsedNavGroups.has(g.key);
+    const completeCount = sections.filter(s => _sectionCompleteness(s.key) === 'complete').length;
+    const groupDot = completeCount === sections.length ? 'complete'
+                    : completeCount > 0                  ? 'partial'
+                    : 'empty';
+    return `
+      <div class="hub-nav-group${collapsed ? ' is-collapsed' : ''}" data-nav-group="${g.key}">
+        <button type="button" class="hub-nav-group__header" data-nav-group-toggle="${g.key}" title="${g.description}">
+          <span class="hub-nav-group__caret">▾</span>
+          <span>${g.label}</span>
+          <span class="hub-completion-dot hub-completion-dot--${groupDot}"></span>
+          <span class="hub-nav-group__count">${completeCount}/${sections.length}</span>
+        </button>
+        <div class="hub-nav-group__items">
+          ${sections.map(s => {
+            const done = _sectionCompleteness(s.key);
+            return `
+              <div class="cm-nav-item${s.key === activeSection ? ' active' : ''}" data-section="${s.key}">
+                <span class="cm-nav-check${done === 'complete' ? ' complete' : ''}" id="cm-check-${s.key}"></span>
+                <span class="cm-nav-label">${s.label}</span>
+              </div>`;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }).join('');
 }
 
 function renderSetup() {
@@ -1191,6 +1331,11 @@ function renderMostCell(line, idx) {
 }
 
 function renderLabor() {
+  if (isCmV2UiOn()) return renderLaborV2();
+  return renderLaborV1();
+}
+
+function renderLaborV1() {
   const lines = model.laborLines || [];
   const opHrs = calc.operatingHours(model.shifts || {});
   const lc = model.laborCosting || (model.laborCosting = {});
@@ -1333,6 +1478,366 @@ function renderLabor() {
     </table>
     <button class="cm-add-row-btn" data-action="add-indirect">+ Add Indirect Line</button>
   `;
+}
+
+// ============================================================
+// v2 LABOR — master-detail layout
+// ============================================================
+
+/**
+ * Short, human labels for employment types used in the compact master list.
+ */
+const EMPLOYMENT_CHIP = {
+  permanent: { label: 'Permanent', variant: 'brand' },
+  temp_agency: { label: 'Temp', variant: 'warn' },
+  contractor: { label: 'Contractor', variant: 'info' },
+};
+
+function renderLaborV2() {
+  const lines = model.laborLines || [];
+  const opHrs = calc.operatingHours(model.shifts || {});
+  const lc = model.laborCosting || (model.laborCosting = {});
+  const totalDirect = lines.reduce((s, l) => s + calc.directLineAnnualSimple(l, lc), 0);
+  const totalIndirect = (model.indirectLaborLines || []).reduce((s, l) => s + calc.indirectLineAnnualSimple(l, opHrs, lc), 0);
+  const totalFtes = lines.reduce((s, l) => s + calc.fte(l, opHrs), 0);
+
+  // Selected index — clamp and default sensibly
+  if (lines.length === 0) _selectedLaborIdx = null;
+  else if (_selectedLaborIdx === null || _selectedLaborIdx === undefined || _selectedLaborIdx >= lines.length) {
+    _selectedLaborIdx = 0;
+  }
+
+  return `
+    <div class="cm-section-header">
+      <div>
+        <div class="cm-section-title">Labor</div>
+        <div class="cm-section-desc">Direct labor (MOST-driven) + indirect/management labor. Cost factors apply across all rows.</div>
+      </div>
+    </div>
+
+    ${renderLaborCostingFactorsV2(lc)}
+    ${renderLaborKpiStripV2(lines.length, totalFtes, totalDirect, totalIndirect)}
+
+    <!-- Master-detail for Direct Labor -->
+    <div style="margin-top:24px;">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;">
+        <div>
+          <h3 class="hub-section-heading" style="margin:0;">Direct Labor</h3>
+          <div class="hub-field__hint">Volume sourced from Volumes tab · MOST template drives UPH</div>
+        </div>
+      </div>
+
+      <div class="hub-master-detail">
+        ${renderLaborMasterPane(lines, opHrs, lc)}
+        ${renderLaborDetailPane(lines, opHrs, lc)}
+      </div>
+    </div>
+
+    <!-- Indirect Labor — keeps the dense table, which fits fine at 4 columns -->
+    <div style="margin-top:28px;">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;">
+        <div>
+          <h3 class="hub-section-heading" style="margin:0;">Indirect / Management Labor</h3>
+          <div class="hub-field__hint">Burden % set in Labor Costing Factors above</div>
+        </div>
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-indirect">↺ Auto-Generate</button>
+      </div>
+
+      <div class="hub-card" style="padding:0;overflow:hidden;">
+        <table class="hub-datatable hub-datatable--dense">
+          <thead>
+            <tr>
+              <th>Role</th>
+              <th class="hub-num" style="width:100px;">Headcount</th>
+              <th class="hub-num" style="width:90px;">Rate</th>
+              <th class="hub-num" style="width:140px;">Annual Cost</th>
+              <th style="width:50px;"></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(model.indirectLaborLines || []).map((l, i) => `
+              <tr>
+                <td><input class="hub-input" value="${escapeAttr(l.role_name || '')}" data-array="indirectLaborLines" data-idx="${i}" data-field="role_name" /></td>
+                <td><input class="hub-input hub-num" type="number" value="${l.headcount || 0}" data-array="indirectLaborLines" data-idx="${i}" data-field="headcount" data-type="number" /></td>
+                <td><input class="hub-input hub-num" type="number" step="0.5" value="${l.hourly_rate || 0}" data-array="indirectLaborLines" data-idx="${i}" data-field="hourly_rate" data-type="number" /></td>
+                <td class="hub-num" style="font-weight:600;">${calc.formatCurrency(calc.indirectLineAnnualSimple(l, opHrs, lc))}</td>
+                <td><button class="cm-delete-btn" data-action="delete-indirect" data-idx="${i}" aria-label="Delete">×</button></td>
+              </tr>
+            `).join('')}
+            ${(model.indirectLaborLines || []).length === 0
+              ? `<tr><td colspan="5" style="padding:24px;text-align:center;color:var(--ies-gray-400);font-size:12px;">No indirect labor yet. Click <strong>Auto-Generate</strong> above, or add a role manually.</td></tr>`
+              : ''}
+          </tbody>
+          ${(model.indirectLaborLines || []).length > 0 ? `
+            <tfoot>
+              <tr style="background:var(--ies-gray-50);font-weight:700;">
+                <td colspan="3" style="padding:10px 12px;font-size:12px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ies-gray-600);">Total Indirect</td>
+                <td class="hub-num" style="padding:10px 12px;">${calc.formatCurrency(totalIndirect)}</td>
+                <td></td>
+              </tr>
+            </tfoot>` : ''}
+        </table>
+      </div>
+      <div style="margin-top:8px;"><button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="add-indirect">+ Add Indirect Role</button></div>
+    </div>
+  `;
+}
+
+function renderLaborCostingFactorsV2(lc) {
+  return `
+    <div class="hub-card" style="padding:16px 20px;background:var(--ies-gray-50);">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;gap:12px;">
+        <h3 class="hub-section-heading" style="margin:0;">Global Costing Factors</h3>
+        <span class="hub-field__hint">Applied across every line. Per-line overrides live in each row's detail pane.</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(5, minmax(0, 1fr));gap:16px;">
+        <div class="hub-field">
+          <label class="hub-field__label" title="Fringe rate applied to base wage for benefits + payroll taxes. Typical 28-35%.">Burden %</label>
+          <input class="hub-input hub-num" type="number" min="0" max="100" step="0.5" value="${lc.defaultBurdenPct ?? 30}" data-field="laborCosting.defaultBurdenPct" data-type="number" />
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label" title="Planned overtime hours as % of regular hours. Each OT hour costs 1.5x. Typical 3-8%.">Overtime %</label>
+          <input class="hub-input hub-num" type="number" min="0" max="50" step="0.5" value="${lc.overtimePct ?? 5}" data-field="laborCosting.overtimePct" data-type="number" />
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label" title="Health/retirement benefits as % of base wage — layered on top of Burden. Typical 12-18%.">Benefits %</label>
+          <input class="hub-input hub-num" type="number" min="0" max="50" step="0.5" value="${lc.benefitLoadPct ?? 15}" data-field="laborCosting.benefitLoadPct" data-type="number" />
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label" title="PTO days per FTE per year — reduces effective productive hours. Typical 10-20 days.">PTO Days</label>
+          <input class="hub-input hub-num" type="number" min="0" max="40" step="1" value="${lc.ptoDays ?? 12}" data-field="laborCosting.ptoDays" data-type="number" />
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label" title="Annual % of workforce requiring replacement. 3PL warehouses typically see 40-80%.">Turnover %</label>
+          <input class="hub-input hub-num" type="number" min="0" max="150" step="1" value="${lc.turnoverPct ?? 45}" data-field="laborCosting.turnoverPct" data-type="number" />
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderLaborKpiStripV2(lineCount, totalFtes, totalDirect, totalIndirect) {
+  return `
+    <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:12px;margin-top:12px;">
+      <div class="hub-card" style="padding:14px 16px;">
+        <div class="hub-field__label">Direct Lines</div>
+        <div style="font-size:22px;font-weight:800;color:var(--ies-navy);line-height:1.1;margin-top:4px;">${lineCount}</div>
+      </div>
+      <div class="hub-card" style="padding:14px 16px;">
+        <div class="hub-field__label">Total Direct FTEs</div>
+        <div style="font-size:22px;font-weight:800;color:var(--ies-navy);line-height:1.1;margin-top:4px;">${totalFtes.toFixed(1)}</div>
+      </div>
+      <div class="hub-card" style="padding:14px 16px;">
+        <div class="hub-field__label">Direct Annual $</div>
+        <div style="font-size:22px;font-weight:800;color:var(--ies-blue);line-height:1.1;margin-top:4px;">${calc.formatCurrency(totalDirect)}</div>
+      </div>
+      <div class="hub-card" style="padding:14px 16px;">
+        <div class="hub-field__label">Indirect Annual $</div>
+        <div style="font-size:22px;font-weight:800;color:var(--ies-blue);line-height:1.1;margin-top:4px;">${calc.formatCurrency(totalIndirect)}</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderLaborMasterPane(lines, opHrs, lc) {
+  return `
+    <div class="hub-master-detail__master">
+      <div class="hub-master-detail__master-header">
+        <span>Lines (${lines.length})</span>
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="add-labor" title="Add a new direct labor line">+ Add</button>
+      </div>
+      <div class="hub-master-detail__master-body">
+        ${lines.length === 0
+          ? `<div class="hub-master-detail__empty"><div style="font-size:28px;margin-bottom:8px;">👥</div>No direct labor lines yet.<br/><span style="color:var(--ies-gray-500);">Click <strong>+ Add</strong> to create one.</span></div>`
+          : lines.map((l, i) => renderLaborMasterItem(l, i, opHrs, lc)).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderLaborMasterItem(l, i, opHrs, lc) {
+  const selected = i === _selectedLaborIdx;
+  const emp = EMPLOYMENT_CHIP[l.employment_type || 'permanent'] || EMPLOYMENT_CHIP.permanent;
+  const fte = calc.fte(l, opHrs);
+  const annualCost = calc.directLineAnnualSimple(l, lc);
+  const activityLabel = l.activity_name || '(unnamed activity)';
+  const hasProfile = Array.isArray(l.monthly_overtime_profile) || Array.isArray(l.monthly_absence_profile);
+  const hasVariance = (l.performance_variance_pct || 0) > 0;
+
+  return `
+    <div class="hub-master-detail__item${selected ? ' is-selected' : ''}" data-labor-select="${i}" title="Click to edit">
+      <div class="hub-master-detail__item-primary">
+        <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(activityLabel)}</span>
+        <span class="hub-master-detail__item-value">${calc.formatCurrency(annualCost)}</span>
+      </div>
+      <div class="hub-master-detail__item-secondary">
+        <span class="hub-chip hub-chip--${emp.variant}">${emp.label}</span>
+        <span>${fte.toFixed(1)} FTE</span>
+        <span>·</span>
+        <span>${(l.base_uph || 0).toLocaleString()} UPH</span>
+        ${hasProfile ? `<span class="hub-chip hub-chip--info" title="Has monthly OT/absence profile">📊</span>` : ''}
+        ${hasVariance ? `<span class="hub-chip hub-chip--warn" title="Variance ±${l.performance_variance_pct}%">±${l.performance_variance_pct}%</span>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+function renderLaborDetailPane(lines, opHrs, lc) {
+  if (lines.length === 0) {
+    return `
+      <div class="hub-master-detail__detail">
+        <div class="hub-master-detail__empty">
+          <div style="font-size:14px;color:var(--ies-gray-600);margin-bottom:6px;">Nothing to edit yet.</div>
+          Add a line from the panel on the left to start defining direct labor.
+        </div>
+      </div>
+    `;
+  }
+  const i = _selectedLaborIdx;
+  const l = lines[i];
+  if (!l) return `<div class="hub-master-detail__detail"><div class="hub-master-detail__empty">Select a line on the left to edit.</div></div>`;
+
+  const hourly = l.hourly_rate || 0;
+  const fte = calc.fte(l, opHrs);
+  const annualCost = calc.directLineAnnualSimple(l, lc);
+  const empType = l.employment_type || 'permanent';
+  const isTemp = empType === 'temp_agency';
+
+  return `
+    <div class="hub-master-detail__detail">
+      <div class="hub-master-detail__detail-header">
+        <h3 class="hub-master-detail__detail-title">${escapeHtml(l.activity_name || `Line ${i + 1}`)}</h3>
+        <div style="display:flex;gap:6px;">
+          <button class="hub-btn hub-btn-secondary hub-btn-sm" data-cm-action="edit-labor-profile" data-idx="${i}" title="Edit monthly OT/absence profile">📊 Profile</button>
+          <button class="cm-delete-btn" data-action="delete-labor" data-idx="${i}" title="Delete this line">Delete</button>
+        </div>
+      </div>
+
+      <!-- Group 1: Activity + MOST -->
+      <div class="hub-detail-group">
+        <h4 class="hub-detail-group__title">Activity</h4>
+        <div class="hub-detail-grid">
+          <div class="hub-field">
+            <label class="hub-field__label">Activity Name</label>
+            <input class="hub-input" value="${escapeAttr(l.activity_name || '')}" data-array="laborLines" data-idx="${i}" data-field="activity_name" placeholder="e.g. Pick — case"/>
+          </div>
+          <div class="hub-field">
+            <label class="hub-field__label">MOST Template</label>
+            ${renderMostCell(l, i)}
+          </div>
+        </div>
+      </div>
+
+      <!-- Group 2: Volume + UPH -->
+      <div class="hub-detail-group">
+        <h4 class="hub-detail-group__title">Volume &amp; Productivity</h4>
+        <div class="hub-detail-grid">
+          <div class="hub-field">
+            <label class="hub-field__label">Volume Source</label>
+            ${renderLaborVolumeCell(l, i)}
+          </div>
+          <div class="hub-field">
+            <label class="hub-field__label">UPH</label>
+            <input class="hub-input hub-num" type="number" step="1" value="${l.base_uph || 0}" data-array="laborLines" data-idx="${i}" data-field="base_uph" data-type="number" />
+          </div>
+          <div class="hub-field">
+            <label class="hub-field__label">Annual Hours</label>
+            <div class="hub-detail-readonly">${(l.annual_hours || 0).toLocaleString(undefined, {maximumFractionDigits:0})}</div>
+          </div>
+          <div class="hub-field">
+            <label class="hub-field__label">FTEs</label>
+            <div class="hub-detail-readonly">${fte.toFixed(2)}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Group 3: Equipment -->
+      <div class="hub-detail-group">
+        <h4 class="hub-detail-group__title">Equipment Assigned</h4>
+        <div class="hub-detail-grid">
+          <div class="hub-field">
+            <label class="hub-field__label">MHE</label>
+            <select class="hub-input" data-array="laborLines" data-idx="${i}" data-field="mhe_type" title="Material-handling equipment">
+              <option value=""${!l.mhe_type && !['reach_truck','sit_down_forklift','stand_up_forklift','order_picker','walkie_rider','pallet_jack','electric_pallet_jack','turret_truck','amr','conveyor','manual'].includes(l.equipment_type) ? ' selected' : ''}>None</option>
+              <option value="reach_truck"${(l.mhe_type === 'reach_truck' || l.equipment_type === 'reach_truck') ? ' selected' : ''}>Reach Truck</option>
+              <option value="sit_down_forklift"${(l.mhe_type === 'sit_down_forklift' || l.equipment_type === 'sit_down_forklift') ? ' selected' : ''}>Sit-Down FL</option>
+              <option value="stand_up_forklift"${(l.mhe_type === 'stand_up_forklift' || l.equipment_type === 'stand_up_forklift') ? ' selected' : ''}>Stand-Up FL</option>
+              <option value="order_picker"${(l.mhe_type === 'order_picker' || l.equipment_type === 'order_picker') ? ' selected' : ''}>Order Picker</option>
+              <option value="walkie_rider"${(l.mhe_type === 'walkie_rider' || l.equipment_type === 'walkie_rider') ? ' selected' : ''}>Walkie Rider</option>
+              <option value="pallet_jack"${(l.mhe_type === 'pallet_jack' || l.equipment_type === 'pallet_jack') ? ' selected' : ''}>Pallet Jack</option>
+              <option value="electric_pallet_jack"${(l.mhe_type === 'electric_pallet_jack' || l.equipment_type === 'electric_pallet_jack') ? ' selected' : ''}>Elec Pallet Jack</option>
+              <option value="turret_truck"${(l.mhe_type === 'turret_truck' || l.equipment_type === 'turret_truck') ? ' selected' : ''}>Turret Truck</option>
+              <option value="amr"${(l.mhe_type === 'amr' || l.equipment_type === 'amr') ? ' selected' : ''}>AMR / Robot</option>
+              <option value="conveyor"${(l.mhe_type === 'conveyor' || l.equipment_type === 'conveyor') ? ' selected' : ''}>Conveyor</option>
+              <option value="manual"${(l.mhe_type === 'manual' || l.equipment_type === 'manual') ? ' selected' : ''}>Manual / Walk</option>
+            </select>
+          </div>
+          <div class="hub-field">
+            <label class="hub-field__label">IT / Device</label>
+            <select class="hub-input" data-array="laborLines" data-idx="${i}" data-field="it_device" title="IT / scanning device">
+              <option value=""${!l.it_device && !['rf_scanner','voice_pick'].includes(l.equipment_type) ? ' selected' : ''}>None</option>
+              <option value="rf_scanner"${(l.it_device === 'rf_scanner' || l.equipment_type === 'rf_scanner') ? ' selected' : ''}>RF Scanner</option>
+              <option value="voice_pick"${(l.it_device === 'voice_pick' || l.equipment_type === 'voice_pick') ? ' selected' : ''}>Voice Pick</option>
+              <option value="wearable"${l.it_device === 'wearable' ? ' selected' : ''}>Wearable</option>
+              <option value="tablet"${l.it_device === 'tablet' ? ' selected' : ''}>Tablet</option>
+              <option value="vision_system"${l.it_device === 'vision_system' ? ' selected' : ''}>Vision System</option>
+              <option value="pick_to_light"${l.it_device === 'pick_to_light' ? ' selected' : ''}>Pick-to-Light</option>
+              <option value="pick_to_display"${l.it_device === 'pick_to_display' ? ' selected' : ''}>Pick-to-Display</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Group 4: Rate & Employment -->
+      <div class="hub-detail-group">
+        <h4 class="hub-detail-group__title">Rate &amp; Employment</h4>
+        <div class="hub-detail-grid">
+          <div class="hub-field">
+            <label class="hub-field__label">Base Hourly Rate</label>
+            <input class="hub-input hub-num" type="number" step="0.25" min="0" value="${hourly}" data-array="laborLines" data-idx="${i}" data-field="hourly_rate" data-type="number" />
+          </div>
+          <div class="hub-field">
+            <label class="hub-field__label">Employment Type</label>
+            <select class="hub-input" data-array="laborLines" data-idx="${i}" data-field="employment_type">
+              <option value="permanent"${empType === 'permanent' ? ' selected' : ''}>Permanent</option>
+              <option value="temp_agency"${empType === 'temp_agency' ? ' selected' : ''}>Temp Agency</option>
+              <option value="contractor"${empType === 'contractor' ? ' selected' : ''}>Contractor</option>
+            </select>
+          </div>
+          <div class="hub-field">
+            <label class="hub-field__label" title="Agency markup over base wage. Only applies to Temp Agency lines.">Temp Agency Markup %</label>
+            <input class="hub-input hub-num" type="number" step="1" min="0" max="100" value="${l.temp_agency_markup_pct || 0}" data-array="laborLines" data-idx="${i}" data-field="temp_agency_markup_pct" data-type="number" ${!isTemp ? 'disabled' : ''} />
+            ${!isTemp ? '<div class="hub-field__hint">(inactive — only for Temp Agency)</div>' : ''}
+          </div>
+          <div class="hub-field">
+            <label class="hub-field__label" title="Productivity variance (% std dev) fed into the Monte Carlo sensitivity card in Summary.">Variance % (Monte Carlo)</label>
+            <input class="hub-input hub-num" type="number" step="1" min="0" max="50" value="${l.performance_variance_pct || 0}" data-array="laborLines" data-idx="${i}" data-field="performance_variance_pct" data-type="number" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Group 5: Output (read-only) -->
+      <div class="hub-detail-group" style="background:var(--ies-gray-50);padding:14px 16px;border-radius:10px;margin:0;">
+        <h4 class="hub-detail-group__title" style="margin-bottom:6px;">Calculated</h4>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;">
+          <div>
+            <div class="hub-field__hint">Annual Cost (this line, loaded)</div>
+            <div style="font-size:22px;font-weight:800;color:var(--ies-blue);line-height:1.1;margin-top:2px;">${calc.formatCurrency(annualCost)}</div>
+          </div>
+          <div style="text-align:right;font-size:12px;color:var(--ies-gray-500);">
+            <div>${fte.toFixed(2)} FTE · ${(l.annual_hours || 0).toLocaleString(undefined, {maximumFractionDigits:0})} hrs/yr</div>
+            <div>Base rate $${hourly.toFixed(2)}/hr · burden applied</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/** Safe attribute-value escape (quotes + basic). */
+function escapeAttr(s) {
+  if (s == null) return '';
+  return String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 }
 
 function renderEquipment() {
@@ -2168,6 +2673,19 @@ function bindSectionEvents(section, container) {
     sel.addEventListener('change', () => {
       const idx = parseInt(sel.dataset.idx);
       applyMostTemplate(idx, sel.value);
+    });
+  });
+
+  // v2 Labor — click a master-detail item to select it (updates detail pane)
+  container.querySelectorAll('[data-labor-select]').forEach(item => {
+    item.addEventListener('click', (e) => {
+      // Don't hijack clicks on inputs/buttons/selects inside the item
+      if (e.target.closest('input, button, select, textarea')) return;
+      const idx = parseInt(item.dataset.laborSelect, 10);
+      if (!Number.isNaN(idx) && idx !== _selectedLaborIdx) {
+        _selectedLaborIdx = idx;
+        renderSection();
+      }
     });
   });
 
@@ -3498,9 +4016,16 @@ function handleAction(action, idx) {
       break;
     case 'add-labor':
       model.laborLines.push({ activity_name: '', volume: 0, base_uph: 0, annual_hours: 0, hourly_rate: 0, burden_pct: 30, employment_type: 'permanent', temp_agency_markup_pct: 0, performance_variance_pct: 0, pricing_bucket: defaultBucketFor('labor') });
+      // v2 UI — select the newly added line so the detail pane opens to it
+      _selectedLaborIdx = model.laborLines.length - 1;
       break;
     case 'delete-labor':
       model.laborLines.splice(idx, 1);
+      // v2 UI — keep selected idx valid after removal
+      if (_selectedLaborIdx !== null) {
+        if (model.laborLines.length === 0) _selectedLaborIdx = null;
+        else if (_selectedLaborIdx >= model.laborLines.length) _selectedLaborIdx = model.laborLines.length - 1;
+      }
       break;
     case 'add-indirect':
       model.indirectLaborLines.push({ role_name: '', headcount: 0, hourly_rate: 0, burden_pct: 30, pricing_bucket: defaultBucketFor('indirect') });
