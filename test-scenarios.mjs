@@ -21,6 +21,12 @@ import {
   buildRevisionRow,
   filterCurrent,
   resolveCalcHeuristics,
+  monthlyOvertimePct,
+  monthlyAbsencePct,
+  monthlyEffectiveHours,
+  annualEffectiveHoursFromMonthly,
+  validateMonthlyProfile,
+  flatProfile,
 } from './tools/cost-model/calc.scenarios.js';
 
 let pass = 0, fail = 0;
@@ -299,6 +305,84 @@ test('resolveCalcHeuristics: numeric coercion of NaN override falls to default',
   // Not-a-number override value still "counts" as present (string), so `used` marks override
   // but numeric coercion inside pick() via n() falls to 25.
   eq(out.taxRatePct, 25);
+});
+
+// ---------------------------------------------------------------------------
+// 5c. PHASE 4b — monthly OT/absence profiles
+// ---------------------------------------------------------------------------
+console.log('\n--- Phase 4b monthly profiles ---');
+
+const FALLBACK_HEUR = { overtimePct: 5, absenceAllowancePct: 12 };
+const MARKET_PROFILE = {
+  peak_month_overtime_pct: [0.04, 0.04, 0.04, 0.04, 0.04, 0.05, 0.05, 0.06, 0.08, 0.10, 0.10, 0.06],
+  peak_month_absence_pct:  [0.10, 0.10, 0.10, 0.10, 0.10, 0.11, 0.12, 0.12, 0.10, 0.10, 0.11, 0.12],
+};
+const LINE_WITH_PROFILE = {
+  annual_hours: 2400,
+  monthly_overtime_profile: [0.05, 0.05, 0.05, 0.05, 0.05, 0.10, 0.10, 0.15, 0.15, 0.10, 0.10, 0.05],
+  monthly_absence_profile: null,
+};
+const LINE_NO_PROFILE = { annual_hours: 2400 };
+
+test('monthlyOvertimePct: per-line profile wins over market + fallback', () => {
+  // Aug = month 7, line says 0.15 → 15%
+  eq(monthlyOvertimePct(LINE_WITH_PROFILE, 7, MARKET_PROFILE, 5), 15);
+});
+test('monthlyOvertimePct: line absent → market profile wins over fallback', () => {
+  // Aug = market 0.06 → 6%
+  eq(monthlyOvertimePct(LINE_NO_PROFILE, 7, MARKET_PROFILE, 5), 6);
+});
+test('monthlyOvertimePct: line absent + no market → fallback', () => {
+  eq(monthlyOvertimePct(LINE_NO_PROFILE, 7, null, 5), 5);
+});
+test('monthlyOvertimePct: profile wrong length is ignored, falls through', () => {
+  const bad = { monthly_overtime_profile: [0.5, 0.5] };
+  eq(monthlyOvertimePct(bad, 7, MARKET_PROFILE, 5), 6);
+});
+
+test('monthlyEffectiveHours: peak Aug w/ 15% OT and 12% absence', () => {
+  // base monthly = 2400/12 = 200
+  // 200 × 1.15 × 0.88 = 202.4
+  const aug = monthlyEffectiveHours(LINE_WITH_PROFILE, 7, FALLBACK_HEUR, MARKET_PROFILE);
+  close(aug, 202.4, 0.01);
+});
+test('monthlyEffectiveHours: profile-less line uses fallback', () => {
+  // 200 × 1.05 × 0.88 = 184.8
+  const may = monthlyEffectiveHours(LINE_NO_PROFILE, 4, FALLBACK_HEUR, null);
+  close(may, 184.8, 0.01);
+});
+
+test('annualEffectiveHoursFromMonthly: line with no profile + flat fallback ≈ annual_hours × (1 + OT) × (1 - absence)', () => {
+  // 2400 × 1.05 × 0.88 = 2217.6
+  const sum = annualEffectiveHoursFromMonthly(LINE_NO_PROFILE, FALLBACK_HEUR, null);
+  close(sum, 2217.6, 0.01);
+});
+test('annualEffectiveHoursFromMonthly: peak profile pulls more hours than flat 5%', () => {
+  // The peak profile averages > 5% OT, so this MUST exceed flat
+  const peak = annualEffectiveHoursFromMonthly(LINE_WITH_PROFILE, FALLBACK_HEUR, null);
+  const flat = annualEffectiveHoursFromMonthly(LINE_NO_PROFILE, FALLBACK_HEUR, null);
+  assert(peak > flat, `peak (${peak.toFixed(2)}) should exceed flat (${flat.toFixed(2)})`);
+});
+
+test('validateMonthlyProfile: null is OK', () => {
+  eq(validateMonthlyProfile(null), null);
+});
+test('validateMonthlyProfile: 11 elements → error', () => {
+  assert(validateMonthlyProfile([0.05,0.05,0.05,0.05,0.05,0.05,0.05,0.05,0.05,0.05,0.05]) !== null);
+});
+test('validateMonthlyProfile: negative → error', () => {
+  assert(validateMonthlyProfile([0.05,0.05,0.05,0.05,0.05,0.05,0.05,0.05,0.05,0.05,0.05,-0.01]) !== null);
+});
+test('validateMonthlyProfile: > 200% → error', () => {
+  assert(validateMonthlyProfile([0.05,0.05,0.05,0.05,0.05,0.05,0.05,0.05,0.05,0.05,0.05,2.5]) !== null);
+});
+test('validateMonthlyProfile: valid 12-element passes', () => {
+  eq(validateMonthlyProfile([0,0.05,0.10,0.05,0,0.07,0.07,0.08,0.10,0.12,0.12,0.08]), null);
+});
+test('flatProfile: returns 12-element array of constant value', () => {
+  const p = flatProfile(0.07);
+  eq(p.length, 12);
+  eq(p.every(v => v === 0.07), true);
 });
 
 // ---------------------------------------------------------------------------

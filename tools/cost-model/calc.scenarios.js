@@ -646,6 +646,131 @@ export function resolveCalcHeuristics(scenario, snapshots, overrides, projectCol
   };
 }
 
+// ============================================================
+// PHASE 4b — MONTHLY LABOR PROFILES (OT + absence)
+// ============================================================
+
+/**
+ * Resolve the OT% for a labor line in a specific calendar month.
+ * Resolution chain:
+ *   per-line monthly profile → market profile (Phase 4c) → project flat
+ *
+ * @param {{ monthly_overtime_profile?: number[]|null }} line
+ * @param {number} monthIndex                   0-11 (0 = January)
+ * @param {{ peak_month_overtime_pct?: number[]|null }|null} marketProfile
+ * @param {number} fallbackPct                  project flat (e.g. 5 for 5%)
+ * @returns {number}                             percent (e.g. 12 for 12%)
+ */
+export function monthlyOvertimePct(line, monthIndex, marketProfile, fallbackPct) {
+  const m = ((Number(monthIndex) % 12) + 12) % 12;
+  const fromLine = Array.isArray(line?.monthly_overtime_profile) && line.monthly_overtime_profile.length === 12
+    ? line.monthly_overtime_profile[m]
+    : null;
+  if (fromLine !== null && fromLine !== undefined) {
+    // Stored as fractions in the catalog convention (0-1) → return as percent for math layer
+    return Number(fromLine) * 100;
+  }
+  const fromMarket = marketProfile && Array.isArray(marketProfile.peak_month_overtime_pct) && marketProfile.peak_month_overtime_pct.length === 12
+    ? marketProfile.peak_month_overtime_pct[m]
+    : null;
+  if (fromMarket !== null && fromMarket !== undefined) {
+    return Number(fromMarket) * 100;
+  }
+  return Number(fallbackPct) || 0;
+}
+
+/**
+ * Resolve absence% for a labor line in a specific calendar month.
+ * Same resolution chain as monthlyOvertimePct.
+ *
+ * @param {{ monthly_absence_profile?: number[]|null }} line
+ * @param {number} monthIndex
+ * @param {{ peak_month_absence_pct?: number[]|null }|null} marketProfile
+ * @param {number} fallbackPct
+ * @returns {number}
+ */
+export function monthlyAbsencePct(line, monthIndex, marketProfile, fallbackPct) {
+  const m = ((Number(monthIndex) % 12) + 12) % 12;
+  const fromLine = Array.isArray(line?.monthly_absence_profile) && line.monthly_absence_profile.length === 12
+    ? line.monthly_absence_profile[m]
+    : null;
+  if (fromLine !== null && fromLine !== undefined) return Number(fromLine) * 100;
+  const fromMarket = marketProfile && Array.isArray(marketProfile.peak_month_absence_pct) && marketProfile.peak_month_absence_pct.length === 12
+    ? marketProfile.peak_month_absence_pct[m]
+    : null;
+  if (fromMarket !== null && fromMarket !== undefined) return Number(fromMarket) * 100;
+  return Number(fallbackPct) || 0;
+}
+
+/**
+ * Effective monthly hours for a labor line, accounting for OT and absence.
+ * Base hours = annual_hours / 12. Then:
+ *   effective = base × (1 + OT/100) × (1 - absence/100)
+ *
+ * @param {{ annual_hours?: number, monthly_overtime_profile?, monthly_absence_profile? }} line
+ * @param {number} monthIndex                                    0-11
+ * @param {{ overtimePct: number, absenceAllowancePct: number }} calcHeur   from resolveCalcHeuristics
+ * @param {Object|null} marketProfile                            optional Phase 4c lookup
+ * @returns {number}
+ */
+export function monthlyEffectiveHours(line, monthIndex, calcHeur, marketProfile) {
+  const baseAnnual = Number(line?.annual_hours) || 0;
+  if (baseAnnual === 0) return 0;
+  const otPct = monthlyOvertimePct(line, monthIndex, marketProfile, calcHeur?.overtimePct ?? 0);
+  const absPct = monthlyAbsencePct(line, monthIndex, marketProfile, calcHeur?.absenceAllowancePct ?? 0);
+  const baseMonthly = baseAnnual / 12;
+  return baseMonthly * (1 + otPct / 100) * (1 - absPct / 100);
+}
+
+/**
+ * Sum monthlyEffectiveHours across all 12 months. Useful for proving
+ * that the sum-of-monthly equals annual_hours when both OT and absence
+ * profiles are flat at the project default.
+ *
+ * @param {Object} line
+ * @param {Object} calcHeur
+ * @param {Object|null} marketProfile
+ * @returns {number}
+ */
+export function annualEffectiveHoursFromMonthly(line, calcHeur, marketProfile) {
+  let total = 0;
+  for (let m = 0; m < 12; m++) total += monthlyEffectiveHours(line, m, calcHeur, marketProfile);
+  return total;
+}
+
+/**
+ * Validate a 12-element profile array. Returns issue string or null.
+ * Allows null (means "inherit"). When provided, must be exactly 12
+ * non-negative numbers ≤ 2.0 (no individual month over 200% sanity check).
+ *
+ * @param {number[]|null|undefined} profile
+ * @returns {string|null}
+ */
+export function validateMonthlyProfile(profile) {
+  if (profile === null || profile === undefined) return null;
+  if (!Array.isArray(profile)) return 'profile must be an array or null';
+  if (profile.length !== 12) return `profile must have exactly 12 entries (got ${profile.length})`;
+  for (let i = 0; i < 12; i++) {
+    const v = Number(profile[i]);
+    if (!Number.isFinite(v)) return `month ${i + 1} must be a number`;
+    if (v < 0) return `month ${i + 1} cannot be negative`;
+    if (v > 2.0) return `month ${i + 1} cannot exceed 2.0 (200%)`;
+  }
+  return null;
+}
+
+/**
+ * Build a flat default profile (all-equal) — convenience for "use project
+ * flat" → write [pct, pct, ..., pct] explicitly so users can edit.
+ *
+ * @param {number} fractionalPct  e.g. 0.05 for 5%
+ * @returns {number[]}
+ */
+export function flatProfile(fractionalPct) {
+  const v = Number(fractionalPct) || 0;
+  return Array.from({ length: 12 }, () => v);
+}
+
 /**
  * Given a list of SCD rows, return only the "current" ones — those whose
  * effective_end_date is in the future AND have no superseded_by_id. Useful
