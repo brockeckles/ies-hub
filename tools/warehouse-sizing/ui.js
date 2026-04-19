@@ -39,6 +39,13 @@ let isDirty = false;
 /** @type {{ dispose?: () => void } | null} */
 let scene3d = null;
 
+/** 2D-plan edit mode: when true, user can drag Office / Ship Staging / Forward Pick. */
+let _planEditMode = false;
+/** Rect registry populated each drawPlan() — keyed by zoneId → {x,y,w,h} in canvas px. */
+let _planZoneRects = {};
+/** Active drag state: { zoneId, startCanvasX, startCanvasY, origOverrideFt, pxPerFt, X0, Y0, Wpx, Hpx } */
+let _planDrag = null;
+
 /** @type {'landing' | 'editor'} — landing shows saved scenarios; editor is the design surface */
 let viewMode = 'landing';
 
@@ -278,6 +285,101 @@ function bindShellEvents() {
   const headerRun = rootEl?.querySelector('[data-primary-action="push-to-cm"]');
   headerRun?.addEventListener('click', () => { pushToCm(); flashRunButton(headerRun); });
   bindPrimaryActionShortcut(rootEl, 'push-to-cm');
+
+  // Root-level delegation for data-wsc-action (toggle-edit-layout, reset-layout).
+  // Using delegation per the event-delegation-pattern memory — renderPlan's
+  // innerHTML rewrite would otherwise drop any per-element listener.
+  rootEl?.addEventListener('click', (e) => {
+    const btn = /** @type {HTMLElement} */ (e.target)?.closest('[data-wsc-action]');
+    if (!btn) return;
+    const action = btn.getAttribute('data-wsc-action');
+    if (action === 'toggle-edit-layout') {
+      _planEditMode = !_planEditMode;
+      renderContentView();
+    } else if (action === 'reset-layout') {
+      zones.layoutOverrides = {};
+      isDirty = true;
+      renderContentView();
+    }
+  });
+
+  // Canvas pointer events for edit-mode dragging. Delegated on rootEl for the
+  // same reason — the canvas is recreated on every plan re-render.
+  rootEl?.addEventListener('pointerdown', (e) => {
+    if (!_planEditMode) return;
+    const canvas = /** @type {HTMLCanvasElement} */ (e.target);
+    if (!canvas || canvas.id !== 'wsc-plan-canvas' || !_planMeta) return;
+    const { X0, Y0, pxPerFt } = _planMeta;
+    const { offsetX, offsetY } = canvasMouseCoords(canvas, e);
+    // Hit-test: which zone did the user grab? Iterate in a sensible z-order
+    // (office first since it overlaps ship staging in single-sided mode).
+    const order = ['office', 'forwardPick', 'shipStaging'];
+    let hit = null;
+    for (const id of order) {
+      const r = _planZoneRects[id];
+      if (!r) continue;
+      if (offsetX >= r.x && offsetX <= r.x + r.w && offsetY >= r.y && offsetY <= r.y + r.h) {
+        hit = id;
+        break;
+      }
+    }
+    if (!hit) return;
+    e.preventDefault();
+    const curOverride = zones.layoutOverrides?.[hit];
+    const curXFt = curOverride ? curOverride.x : (_planZoneRects[hit].x - X0) / pxPerFt;
+    const curYFt = curOverride ? curOverride.y : (_planZoneRects[hit].y - Y0) / pxPerFt;
+    _planDrag = {
+      zoneId: hit,
+      startMouseXPx: offsetX,
+      startMouseYPx: offsetY,
+      origXFt: curXFt,
+      origYFt: curYFt,
+      pxPerFt,
+    };
+    canvas.setPointerCapture(e.pointerId);
+    canvas.style.cursor = 'grabbing';
+  });
+
+  rootEl?.addEventListener('pointermove', (e) => {
+    if (!_planDrag || !_planEditMode) return;
+    const canvas = /** @type {HTMLCanvasElement} */ (e.target);
+    if (!canvas || canvas.id !== 'wsc-plan-canvas') return;
+    const { offsetX, offsetY } = canvasMouseCoords(canvas, e);
+    const dxFt = (offsetX - _planDrag.startMouseXPx) / _planDrag.pxPerFt;
+    const dyFt = (offsetY - _planDrag.startMouseYPx) / _planDrag.pxPerFt;
+    const snap = 5; // snap to 5 ft grid
+    const newXFt = Math.round((_planDrag.origXFt + dxFt) / snap) * snap;
+    const newYFt = Math.round((_planDrag.origYFt + dyFt) / snap) * snap;
+    if (!zones.layoutOverrides) zones.layoutOverrides = {};
+    zones.layoutOverrides[_planDrag.zoneId] = { x: newXFt, y: newYFt };
+    drawPlan();
+  });
+
+  const finishDrag = () => {
+    if (!_planDrag) return;
+    const canvas = rootEl?.querySelector('#wsc-plan-canvas');
+    if (canvas) canvas.style.cursor = 'grab';
+    _planDrag = null;
+    isDirty = true;
+  };
+  rootEl?.addEventListener('pointerup', finishDrag);
+  rootEl?.addEventListener('pointercancel', finishDrag);
+  rootEl?.addEventListener('pointerleave', finishDrag);
+}
+
+/**
+ * Canvas mouse coord helper — converts a pointer event into canvas-space px
+ * (accounting for CSS scaling between the canvas's intrinsic width=900 and
+ * the rendered width).
+ */
+function canvasMouseCoords(canvas, evt) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  return {
+    offsetX: (evt.clientX - rect.left) * scaleX,
+    offsetY: (evt.clientY - rect.top)  * scaleY,
+  };
 }
 
 // ============================================================
@@ -976,13 +1078,32 @@ function renderContentView() {
 
 function renderPlan() {
   const storage = calc.computeStorage(facility, zones);
+  const overrideKeys = Object.keys(zones.layoutOverrides || {});
+  const editing = !!_planEditMode;
   return `
     <div class="hub-card">
-      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom: var(--sp-2);">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom: var(--sp-2);gap:12px;flex-wrap:wrap;">
         <h3 class="text-subtitle" style="margin:0;">Floorplan (Top-Down)</h3>
-        <span class="text-caption text-muted">Scale: 1 px ≈ ${Math.max(1, Math.round(Math.sqrt((facility.totalSqft || 0) * 1.5) / 800))} ft</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="text-caption text-muted">Scale: 1 px ≈ ${Math.max(1, Math.round(Math.sqrt((facility.totalSqft || 0) * 1.5) / 800))} ft</span>
+          ${overrideKeys.length > 0 ? `
+            <button class="hub-btn-link" data-wsc-action="reset-layout" title="Discard manual repositions and revert to auto-layout">
+              ↺ Reset Layout (${overrideKeys.length})
+            </button>
+          ` : ''}
+          <button class="${editing ? 'hub-btn-primary' : 'hub-btn-secondary'}" data-wsc-action="toggle-edit-layout" style="font-size:12px;padding:4px 10px;" title="Drag Office, Ship Staging, and Forward Pick to manually reposition them">
+            ${editing ? '✓ Done Editing' : '✎ Edit Layout'}
+          </button>
+        </div>
       </div>
-      <canvas id="wsc-plan-canvas" width="900" height="520" style="width:100%; border:1px solid var(--ies-gray-200); border-radius:6px; background:#fff;"></canvas>
+      <div style="position:relative;">
+        <canvas id="wsc-plan-canvas" width="900" height="520" style="width:100%; border:1px solid var(--ies-gray-200); border-radius:6px; background:#fff; ${editing ? 'cursor: grab;' : ''}"></canvas>
+        ${editing ? `
+          <div style="margin-top:8px;padding:8px 12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;font-size:12px;color:#1e3a8a;">
+            <strong>Edit mode:</strong> drag Office, Ship Staging, or Forward Pick zones to reposition them. Snaps to 5 ft. Save the model to persist.
+          </div>
+        ` : ''}
+      </div>
       <div style="margin-top:var(--sp-3); display:flex; flex-wrap:wrap; gap:14px; font-size:11px; color:var(--ies-gray-500);">
         <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:#ea580c;border:1px solid #9a3412;border-radius:2px;"></span>Full Pallet Rack</span>
         <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:#f59e0b;border:1px solid #b45309;border-radius:2px;"></span>Carton on Pallet</span>
@@ -1043,20 +1164,41 @@ function drawPlan() {
   ctx.strokeRect(X0, Y0, Wpx, Hpx);
 
   // ---------- Layout convention (top-down view) ----------
-  //   Top edge      = back of building
+  //   Top edge      = back of building (single-sided) or inbound dock face (two-sided)
   //   Bottom edge   = dock face (where trucks pull up)
   //   Strip just inside dock face (bottom)  = Ship Staging  (sized.shipStagingSqft)
-  //   Strip just below back-wall (top)      = Receive Staging (sized.recvStagingSqft) — only if non-zero
+  //   Strip just below back-wall (top)      = Receive Staging (sized.recvStagingSqft)
   //   Front-left corner of storage area     = Office (full-height block; rack loop skips this X range)
   //   Storage racks fill the rest of the interior between recv + ship strips
+  const twoSidedLayout = (zones.dockConfig?.sided === 'two');
   const shipFrac  = Math.min(0.30, (sized.shipStagingSqft / Math.max(1, sized.totalSqft)));
   const recvFrac  = Math.min(0.18, (sized.recvStagingSqft / Math.max(1, sized.totalSqft)));
 
   const shipHpx  = Math.max(20, shipFrac  * Hpx);
-  const recvHpx  = recvFrac > 0.01 ? Math.max(16, recvFrac * Hpx) : 0;
+  // Two-sided dock requires a visible receive-staging strip inboard of the
+  // top dock face, even when the engine returned zero (e.g., user hasn't
+  // entered an inbound volume yet). Force a minimum of 20px in that case so
+  // the top wall visually communicates its dual-use staging function.
+  const recvHpx  = twoSidedLayout
+    ? Math.max(20, recvFrac > 0 ? recvFrac * Hpx : shipHpx * 0.8)
+    : (recvFrac > 0.01 ? Math.max(16, recvFrac * Hpx) : 0);
 
   const storageY = Y0 + recvHpx;
   const storageH = Hpx - recvHpx - shipHpx;
+
+  // Reset the rect registry each redraw — overlay hit-testing reads from it.
+  _planZoneRects = {};
+
+  // Resolve a zone's rendered top-left, honoring manual layout overrides
+  // when edit mode has captured one. Overrides are stored in building-
+  // relative feet so they survive resolution changes and building resizes.
+  const applyOverride = (zoneId, autoXPx, autoYPx) => {
+    const o = zones.layoutOverrides?.[zoneId];
+    if (!o) return { x: autoXPx, y: autoYPx };
+    const x = X0 + (o.x || 0) * pxPerFt;
+    const y = Y0 + (o.y || 0) * pxPerFt;
+    return { x, y };
+  };
 
   // Office: dimension as a near-square footprint based on actual sqft.
   // Placed in the front-left corner of the storage area, abutting the ship
@@ -1064,9 +1206,13 @@ function drawPlan() {
   const officeSideFt = Math.sqrt(Math.max(1, sized.officeSqft));
   const officeWpx    = Math.min(Wpx * 0.35, officeSideFt * pxPerFt);
   const officeHpx    = Math.min(storageH * 0.75, officeSideFt * pxPerFt);
-  const officeX      = X0 + 4;
-  const officeY      = storageY + storageH - officeHpx;
+  const _officeAutoX = X0 + 4;
+  const _officeAutoY = storageY + storageH - officeHpx;
+  const _officePos   = applyOverride('office', _officeAutoX, _officeAutoY);
+  const officeX      = _officePos.x;
+  const officeY      = _officePos.y;
   const officeRightX = officeX + officeWpx + 4 * pxPerFt; // small clearance gap
+  _planZoneRects.office = { x: officeX, y: officeY, w: officeWpx, h: officeHpx };
 
   // ---------- Storage rack rows ----------
   // Back-to-back rack pairs with aisles between them.
@@ -1090,9 +1236,15 @@ function drawPlan() {
   // Visual strip height: scale FP sqft to footprint width × strip height
   const fpStripFt = fpEnabled ? Math.min(60, Math.max(20, fpSqft / Math.max(1, widthFt - (officeWpx / pxPerFt + 8)))) : 0;
   const fpStripPx = fpStripFt * pxPerFt;
-  const fpY       = storageY + storageH - fpStripPx;
-  const fpX       = officeX + officeWpx + 2;
+  const _fpAutoY  = storageY + storageH - fpStripPx;
+  const _fpAutoX  = officeX + officeWpx + 2;
+  const _fpPos    = applyOverride('forwardPick', _fpAutoX, _fpAutoY);
+  const fpY       = _fpPos.y;
+  const fpX       = _fpPos.x;
   const fpW       = X0 + Wpx - 2 - fpX;
+  if (fpEnabled) {
+    _planZoneRects.forwardPick = { x: fpX, y: fpY, w: fpW, h: fpStripPx };
+  }
 
   // First pass: count rack columns to allocate by storage mix.
   let totalCols = 0;
@@ -1151,22 +1303,45 @@ function drawPlan() {
 
     const racksH = Math.max(0, racksBottom - racksTop);
     if (racksH > 0) {
-      // Carton shelving = shorter rack frames (visually shorter rows + denser hatching)
-      if (t.label === 'Carton Shelving') {
-        // Draw multiple short stacked segments
-        const segH = Math.max(8, racksH / 3);
-        for (let s = 0; s < 3; s++) {
-          const segY = racksTop + s * segH;
-          ctx.fillRect(mx, segY, rackPx, segH * 0.7);
-          ctx.strokeRect(mx, segY, rackPx, segH * 0.7);
-          ctx.fillRect(mx + rackPx + 2, segY, rackPx, segH * 0.7);
-          ctx.strokeRect(mx + rackPx + 2, segY, rackPx, segH * 0.7);
+      // Cross-aisle insertion: split long racking runs with ~10 ft cross-aisles
+      // every ~200 ft so forklifts can navigate between rack rows. Mirrors
+      // real-world warehouse layout (OSHA/NFPA egress + turn-around practice).
+      const crossAisleFt = 10; // typical cross-aisle clear width
+      const segmentLenFt = 200; // typical spacing between cross-aisles
+      const rackRunLenFt = racksH / pxPerFt;
+      // Only split when the run is long enough for at least one cross-aisle.
+      const segmentCount = rackRunLenFt > segmentLenFt + crossAisleFt
+        ? Math.max(1, Math.ceil(rackRunLenFt / (segmentLenFt + crossAisleFt)))
+        : 1;
+      const crossAislePx = crossAisleFt * pxPerFt;
+      // Even segment heights so cross-aisles land at predictable positions.
+      const totalCrossAislePx = (segmentCount - 1) * crossAislePx;
+      const perSegmentPx = Math.max(8, (racksH - totalCrossAislePx) / segmentCount);
+
+      const drawSegment = (yTop, segH) => {
+        if (segH <= 0) return;
+        if (t.label === 'Carton Shelving') {
+          // Shelving — denser short stacks inside the segment
+          const sub = Math.max(8, segH / 3);
+          for (let s = 0; s < 3; s++) {
+            const segY = yTop + s * sub;
+            ctx.fillRect(mx, segY, rackPx, sub * 0.7);
+            ctx.strokeRect(mx, segY, rackPx, sub * 0.7);
+            ctx.fillRect(mx + rackPx + 2, segY, rackPx, sub * 0.7);
+            ctx.strokeRect(mx + rackPx + 2, segY, rackPx, sub * 0.7);
+          }
+        } else {
+          ctx.fillRect(mx, yTop, rackPx, segH);
+          ctx.strokeRect(mx, yTop, rackPx, segH);
+          ctx.fillRect(mx + rackPx + 2, yTop, rackPx, segH);
+          ctx.strokeRect(mx + rackPx + 2, yTop, rackPx, segH);
         }
-      } else {
-        ctx.fillRect(mx, racksTop, rackPx, racksH);
-        ctx.strokeRect(mx, racksTop, rackPx, racksH);
-        ctx.fillRect(mx + rackPx + 2, racksTop, rackPx, racksH);
-        ctx.strokeRect(mx + rackPx + 2, racksTop, rackPx, racksH);
+      };
+
+      let segY = racksTop;
+      for (let s = 0; s < segmentCount; s++) {
+        drawSegment(segY, perSegmentPx);
+        segY += perSegmentPx + crossAislePx;
       }
     }
     typeUsed += 2;
@@ -1207,7 +1382,10 @@ function drawPlan() {
   );
   ctx.textAlign = 'left'; // restore
 
-  // ---------- Receive Staging strip (top, full-width back wall) ----------
+  // ---------- Receive Staging strip (top wall) ----------
+  // In two-sided mode this strip doubles as the inboard staging for the
+  // top dock face (inbound doors drawn at Y0 - 6). In single-sided mode it
+  // represents back-wall receive staging when the engine sized one.
   if (recvHpx > 0) {
     ctx.fillStyle = '#ecfdf5';
     ctx.strokeStyle = '#16a34a';
@@ -1217,25 +1395,34 @@ function drawPlan() {
     ctx.fillStyle = '#166534';
     ctx.font = 'bold 11px Montserrat, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(`Receive Staging  ·  ${calc.formatSqft(sized.recvStagingSqft)}`, X0 + Wpx / 2, Y0 + recvHpx / 2 + 4);
+    const recvSqft = sized.recvStagingSqft || 0;
+    const label = recvSqft > 0
+      ? `Receive Staging  ·  ${calc.formatSqft(recvSqft)}`
+      : 'Receive Staging';
+    ctx.fillText(label, X0 + Wpx / 2, Y0 + recvHpx / 2 + 4);
   }
 
   // ---------- Ship Staging strip (bottom, dock face, skipping office column) ----------
   // Office column reaches down to the dock face, so ship staging fills the
   // remaining width to the right of it.
-  const shipX = officeX + officeWpx + 2;
-  const shipW = X0 + Wpx - 2 - shipX;
+  const _shipAutoX = officeX + officeWpx + 2;
+  const _shipAutoY = Y0 + Hpx - shipHpx;
+  const _shipPos   = applyOverride('shipStaging', _shipAutoX, _shipAutoY);
+  const shipX      = _shipPos.x;
+  const shipY      = _shipPos.y;
+  const shipW      = X0 + Wpx - 2 - shipX;
   ctx.fillStyle = '#fffbeb';
   ctx.strokeStyle = '#d97706';
   ctx.lineWidth = 1;
-  ctx.fillRect(shipX, Y0 + Hpx - shipHpx, shipW, shipHpx - 2);
-  ctx.strokeRect(shipX, Y0 + Hpx - shipHpx, shipW, shipHpx - 2);
+  ctx.fillRect(shipX, shipY, shipW, shipHpx - 2);
+  ctx.strokeRect(shipX, shipY, shipW, shipHpx - 2);
   ctx.fillStyle = '#92400e';
   ctx.font = 'bold 11px Montserrat, sans-serif';
   ctx.textAlign = 'center';
   if (shipW > 100) {
-    ctx.fillText(`Ship Staging  ·  ${calc.formatSqft(sized.shipStagingSqft)}`, shipX + shipW / 2, Y0 + Hpx - shipHpx / 2 + 4);
+    ctx.fillText(`Ship Staging  ·  ${calc.formatSqft(sized.shipStagingSqft)}`, shipX + shipW / 2, shipY + shipHpx / 2 + 4);
   }
+  _planZoneRects.shipStaging = { x: shipX, y: shipY, w: shipW, h: shipHpx - 2 };
 
   // ---------- Office (front-left corner, full block from storage down to dock face) ----------
   ctx.fillStyle = '#f5f3ff';
@@ -1262,32 +1449,53 @@ function drawPlan() {
   const outboundDoors = sized.dock.outboundDoors || 0;
   const twoSided = (zones.dockConfig?.sided === 'two');
 
-  function drawDoorRow(count, yTop, label, color, labelAbove) {
+  function drawDoorRow(count, yTop, label, color, labelAbove, xStart, xEnd) {
     if (count <= 0) return;
-    const doorWPx  = Math.max(6, 8 * pxPerFt);  // 8 ft door
-    const doorSpcPx= Math.max(10, 12 * pxPerFt); // 12 ft on-center
-    const totalDoorW = count * doorSpcPx;
-    const startX = X0 + (Wpx - totalDoorW) / 2;
+    const doorWPx   = Math.max(6, 8 * pxPerFt);   // 8 ft door
+    const minSpcPx  = Math.max(10, 12 * pxPerFt); // 12 ft on-center floor (real warehouse standard)
+    // Distribute doors evenly across the given span. Leave an edge margin
+    // equal to one door width so the first/last door isn't flush to the
+    // corner (building corner columns, sprinkler risers, etc.).
+    const edgeMargin = doorWPx * 1.5;
+    const spanStart = xStart + edgeMargin;
+    const spanEnd   = xEnd   - edgeMargin;
+    const span      = Math.max(0, spanEnd - spanStart);
+    // Spacing stretches to fill the span, but never drops below the 12-ft floor.
+    const rawSpc = count > 1 ? span / (count - 1) : 0;
+    const spc = Math.max(minSpcPx, rawSpc);
+    // If doors at minimum spacing exceed the span, fall back to centering.
+    const neededSpan = (count - 1) * spc;
+    const firstX = neededSpan > span
+      ? xStart + (xEnd - xStart - neededSpan) / 2
+      : spanStart;
     ctx.fillStyle = color;
     ctx.strokeStyle = '#7f1d1d';
     ctx.lineWidth = 1;
     for (let i = 0; i < count; i++) {
-      const x = startX + i * doorSpcPx + (doorSpcPx - doorWPx) / 2;
-      ctx.fillRect(x, yTop, doorWPx, 12);
-      ctx.strokeRect(x, yTop, doorWPx, 12);
+      const cx = firstX + i * spc;
+      ctx.fillRect(cx - doorWPx / 2, yTop, doorWPx, 12);
+      ctx.strokeRect(cx - doorWPx / 2, yTop, doorWPx, 12);
     }
     ctx.fillStyle = '#7f1d1d';
     ctx.font = 'bold 10px Montserrat, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(label, X0 + Wpx / 2, yTop + (labelAbove ? -6 : 28));
+    ctx.fillText(label, (xStart + xEnd) / 2, yTop + (labelAbove ? -6 : 28));
   }
 
   if (twoSided) {
-    drawDoorRow(outboundDoors, Y0 + Hpx - 6, `${outboundDoors} Outbound Doors`, '#fecaca', false);
-    drawDoorRow(inboundDoors,  Y0 - 6,        `${inboundDoors} Inbound Doors`,  '#bfdbfe', true);
+    // Two-sided: outbound along the full bottom wall, inbound along the full top wall.
+    drawDoorRow(outboundDoors, Y0 + Hpx - 6, `${outboundDoors} Outbound Doors`, '#fecaca', false, X0, X0 + Wpx);
+    drawDoorRow(inboundDoors,  Y0 - 6,        `${inboundDoors} Inbound Doors`,  '#bfdbfe', true,  X0, X0 + Wpx);
+  } else if (inboundDoors > 0 && outboundDoors > 0) {
+    // Single-sided: bank inbound on the LEFT half and outbound on the RIGHT half
+    // of the bottom wall. Mirrors how real ops separate I/O on one dock face.
+    const mid = X0 + Wpx / 2;
+    const gap = Math.max(8 * pxPerFt, 60); // ≥ 8 ft visual gap between banks
+    drawDoorRow(inboundDoors,  Y0 + Hpx - 6, `${inboundDoors} Inbound`,  '#bfdbfe', false, X0,         mid - gap / 2);
+    drawDoorRow(outboundDoors, Y0 + Hpx - 6, `${outboundDoors} Outbound`, '#fecaca', false, mid + gap / 2, X0 + Wpx);
   } else {
-    // Single-sided: combine inbound + outbound on the bottom face
-    drawDoorRow(totalDoors, Y0 + Hpx - 6, `${totalDoors} Dock Doors (combined I/O)`, '#fecaca', false);
+    // Edge case: only one type of door — distribute across the full wall.
+    drawDoorRow(totalDoors, Y0 + Hpx - 6, `${totalDoors} Dock Doors`, '#fecaca', false, X0, X0 + Wpx);
   }
 
   // ---------- Building dimension labels ----------
@@ -1320,26 +1528,27 @@ function drawPlan() {
     12, 38,
   );
 
-  // Scale bar + building dimension labels
-  ctx.fillStyle = '#6b7280';
-  ctx.font = '10px Montserrat, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText(`${widthFt.toLocaleString()} ft`, offsetX + buildingWpx / 2, offsetY + buildingHpx + 36);
-  ctx.save();
-  ctx.translate(offsetX - 16, offsetY + buildingHpx / 2);
-  ctx.rotate(-Math.PI / 2);
-  ctx.fillText(`${depthFt.toLocaleString()} ft`, 0, 0);
-  ctx.restore();
+  // Stash canvas metadata for pointer-event handlers (edit mode).
+  _planMeta = { X0, Y0, Wpx, Hpx, pxPerFt, canvasEl: canvas };
 
-  // Title
-  ctx.fillStyle = '#111827';
-  ctx.font = 'bold 12px Montserrat, sans-serif';
-  ctx.textAlign = 'left';
-  ctx.fillText(facility.name || 'Facility', 12, 22);
-  ctx.fillStyle = '#6b7280';
-  ctx.font = '11px Montserrat, sans-serif';
-  ctx.fillText(`${(totalSqft).toLocaleString()} sqft · clear ht ${facility.clearHeight || 0} ft`, 12, 38);
+  // Edit-mode overlay: draw a dashed selection frame around each draggable
+  // zone so the user sees what can be moved.
+  if (_planEditMode) {
+    ctx.save();
+    ctx.setLineDash([4, 3]);
+    ctx.lineWidth = 1.5;
+    for (const [id, r] of Object.entries(_planZoneRects)) {
+      ctx.strokeStyle = id === 'office' ? '#8b5cf6'
+                      : id === 'shipStaging' ? '#d97706'
+                      : '#7c3aed';
+      ctx.strokeRect(r.x - 2, r.y - 2, r.w + 4, r.h + 4);
+    }
+    ctx.restore();
+  }
 }
+
+/** Canvas geometry stash used by drag handlers to convert mouse → feet. */
+let _planMeta = null;
 
 // ============================================================
 // DASHBOARD VIEW

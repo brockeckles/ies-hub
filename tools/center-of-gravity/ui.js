@@ -107,10 +107,6 @@ function openEditor(savedRow) {
   rootEl.innerHTML = renderShell();
   bindShellEvents();
   renderContent();
-
-  rootEl.querySelector('[data-action="cog-back"]')?.addEventListener('click', async () => {
-    await renderLanding();
-  });
 }
 
 /**
@@ -141,6 +137,11 @@ function renderShell() {
       : { label: 'Stand-alone', kind: 'standalone', title: 'Not linked to a Cost Model' },
   ];
 
+  // Run Analysis is only meaningful on the Points tab (the input screen) — the
+  // Analysis / Map / Sensitivity tabs render results from a previous run, so
+  // showing a "Run" button there confuses users into thinking they need to
+  // re-run after navigating. Hide it everywhere except Points.
+  const showRunBtn = activeTab === 'points';
   return `
     <div class="hub-content-inner" style="padding:0;display:flex;flex-direction:column;height:100%;">
       ${renderToolHeader({
@@ -151,7 +152,9 @@ function renderShell() {
         activeTab,
         tabsId: 'cog-tabs',
         statusChips: chips,
-        primaryAction: { label: 'Find Optimal Location', action: 'cog-run', icon: '▶', title: 'Run k-means (Cmd/Ctrl+Enter)' },
+        primaryAction: showRunBtn
+          ? { label: 'Find Optimal Location', action: 'cog-run', icon: '▶', title: 'Run k-means (Cmd/Ctrl+Enter)' }
+          : null,
       })}
       <div id="cog-content" style="flex:1;overflow-y:auto;padding:24px;"></div>
     </div>
@@ -161,26 +164,44 @@ function renderShell() {
 function bindShellEvents() {
   if (!rootEl) return;
 
-  rootEl.querySelector('#cog-tabs')?.addEventListener('click', (e) => {
-    const btn = /** @type {HTMLElement} */ (e.target).closest('[data-tab]');
-    if (!btn) return;
-    activeTab = /** @type {any} */ (btn.dataset.tab);
-    rootEl.querySelectorAll('#cog-tabs button').forEach(b => {
-      b.classList.toggle('active', b.dataset.tab === activeTab);
-    });
-    renderContent();
-  });
+  // Root-level delegation so shell-scoped clicks survive any re-renders of
+  // the tool header (per feedback_event_delegation_pattern).
+  rootEl.addEventListener('click', async (e) => {
+    const target = /** @type {HTMLElement} */ (e.target);
+    if (!target) return;
 
-  const runBtn = rootEl.querySelector('[data-primary-action="cog-run"]');
-  runBtn?.addEventListener('click', () => {
-    cogResult = calc.kMeansCog(points, config.numCenters, config.maxIterations);
-    sensitivityData = calc.sensitivityAnalysis(points, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000);
-    activeTab = 'analysis';
-    rootEl.querySelectorAll('#cog-tabs button').forEach(b => {
-      b.classList.toggle('active', b.dataset.tab === activeTab);
-    });
-    renderContent();
-    flashRunButton(runBtn);
+    // Back-to-scenarios button (top-left of tool header).
+    const backBtn = target.closest('[data-action="cog-back"]');
+    if (backBtn) {
+      e.preventDefault();
+      await renderLanding();
+      return;
+    }
+
+    // Primary action: Find Optimal Location / Run k-means.
+    const runBtn = target.closest('[data-primary-action="cog-run"]');
+    if (runBtn) {
+      e.preventDefault();
+      cogResult = calc.kMeansCog(points, config.numCenters, config.maxIterations);
+      sensitivityData = calc.sensitivityAnalysis(points, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000);
+      activeTab = 'analysis';
+      rootEl.querySelectorAll('#cog-tabs button').forEach(b => {
+        b.classList.toggle('active', b.dataset.tab === activeTab);
+      });
+      renderContent();
+      flashRunButton(runBtn);
+      return;
+    }
+
+    // Tab switching. Re-render the full shell so the primary-action button
+    // appears only on the Points tab (conditional primaryAction in renderShell).
+    const tabBtn = target.closest('#cog-tabs [data-tab]');
+    if (tabBtn) {
+      activeTab = /** @type {any} */ (tabBtn.dataset.tab);
+      rootEl.innerHTML = renderShell();
+      renderContent();
+      return;
+    }
   });
 
   bindPrimaryActionShortcut(rootEl, 'cog-run');
@@ -207,12 +228,39 @@ function renderPoints(el) {
 
   el.innerHTML = `
     <div style="max-width:900px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px;flex-wrap:wrap;">
         <h3 class="text-section" style="margin:0;">Weighted Demand Points</h3>
-        <div style="display:flex;gap:8px;">
-          <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-add-point">+ Add Point</button>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <select id="cog-archetype-select" title="Apply a pre-built demand distribution when customer data is sparse" style="padding:7px 10px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;min-width:220px;">
+            <option value="">— Load Archetype —</option>
+            ${Object.entries(calc.COG_ARCHETYPES).map(([k, a]) => `
+              <option value="${k}">${a.name}</option>
+            `).join('')}
+          </select>
+          <input type="number" id="cog-archetype-volume" placeholder="Total units" title="Optional: override the archetype's default total annual volume" style="width:130px;padding:7px 10px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;" />
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-load-archetype" title="Generate demand points from the selected archetype">Apply Archetype</button>
+          <span style="width:1px;height:18px;background:var(--ies-gray-200);"></span>
           <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-load-demo">Load Demo</button>
         </div>
+      </div>
+      <div id="cog-archetype-desc" style="margin-bottom:12px;font-size:12px;color:var(--ies-gray-500);display:none;padding:8px 12px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;"></div>
+
+      <!-- Add Point row with city/state/ZIP lookup -->
+      <div class="hub-card" style="margin-bottom:16px;padding:12px 14px;border-left:3px solid #20c997;">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);flex-shrink:0;">Add Point</div>
+          <input list="cog-city-list" id="cog-lookup-input" placeholder="City, ST or 3-/5-digit ZIP (e.g. Atlanta, GA or 30303)"
+                 style="flex:1;min-width:260px;padding:8px 10px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;" />
+          <input type="number" id="cog-lookup-weight" placeholder="Weight" min="1" step="100" value="10000"
+                 title="Demand weight (units, shipments, pallets, orders — whatever scale your other points use)"
+                 style="width:110px;padding:8px 10px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;text-align:right;" />
+          <button class="hub-btn hub-btn-sm hub-btn-primary" id="cog-lookup-add" title="Look up the location and add it as a demand point">+ Add</button>
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-add-point" title="Add an empty point (manual lat/lng entry in the table)">Blank</button>
+          <div id="cog-lookup-feedback" style="flex-basis:100%;font-size:11px;color:var(--ies-gray-400);"></div>
+        </div>
+        <datalist id="cog-city-list">
+          ${calc.CITY_CENTROIDS.map(c => `<option value="${c.name}, ${c.state}"></option>`).join('')}
+        </datalist>
       </div>
 
       <!-- Config -->
@@ -321,6 +369,77 @@ function renderPoints(el) {
   el.querySelector('#cog-load-demo')?.addEventListener('click', () => {
     points = calc.DEMO_POINTS.map(p => ({ ...p }));
     renderPoints(el);
+  });
+
+  // City/state/ZIP lookup — resolve the input and add a new point at that spot.
+  const lookupInput  = /** @type {HTMLInputElement|null} */ (el.querySelector('#cog-lookup-input'));
+  const lookupWeight = /** @type {HTMLInputElement|null} */ (el.querySelector('#cog-lookup-weight'));
+  const lookupFb     = el.querySelector('#cog-lookup-feedback');
+  const commitLookup = () => {
+    if (!lookupInput) return;
+    const q = lookupInput.value.trim();
+    if (!q) {
+      if (lookupFb) lookupFb.textContent = 'Enter a city, state, or ZIP.';
+      return;
+    }
+    const hit = calc.lookupLocation(q);
+    if (!hit) {
+      if (lookupFb) {
+        lookupFb.textContent = `"${q}" didn't match a known city or ZIP. Try a major US metro (${calc.CITY_CENTROIDS[0].name}, ${calc.CITY_CENTROIDS[0].state}…) or a 3-digit ZIP.`;
+        lookupFb.style.color = 'var(--ies-red)';
+      }
+      return;
+    }
+    const weight = Math.max(1, parseInt(lookupWeight?.value || '10000', 10) || 10000);
+    points.push({
+      id: 'p' + Date.now(),
+      name: hit.name,
+      lat: hit.lat,
+      lng: hit.lng,
+      weight,
+      type: 'demand',
+    });
+    renderPoints(el);
+  };
+  el.querySelector('#cog-lookup-add')?.addEventListener('click', commitLookup);
+  lookupInput?.addEventListener('keydown', (e) => {
+    if (/** @type {KeyboardEvent} */ (e).key === 'Enter') {
+      e.preventDefault();
+      commitLookup();
+    }
+  });
+
+  // Archetype selector — show description when picked
+  const archSelect = /** @type {HTMLSelectElement|null} */ (el.querySelector('#cog-archetype-select'));
+  const archDesc = el.querySelector('#cog-archetype-desc');
+  const archVolInput = /** @type {HTMLInputElement|null} */ (el.querySelector('#cog-archetype-volume'));
+  archSelect?.addEventListener('change', () => {
+    const key = archSelect.value;
+    const a = calc.COG_ARCHETYPES[key];
+    if (a && archDesc) {
+      archDesc.style.display = 'block';
+      archDesc.innerHTML = `<strong>${a.name}</strong> — ${a.desc} <span style="color:var(--ies-gray-400);">Default volume: ${a.defaultTotalUnits.toLocaleString()} units</span>`;
+      if (archVolInput) archVolInput.placeholder = a.defaultTotalUnits.toLocaleString();
+    } else if (archDesc) {
+      archDesc.style.display = 'none';
+    }
+  });
+
+  el.querySelector('#cog-load-archetype')?.addEventListener('click', () => {
+    if (!archSelect?.value) {
+      showToast('Pick an archetype from the dropdown first.', 'warn');
+      return;
+    }
+    const totalUnits = archVolInput?.value ? parseInt(archVolInput.value, 10) : 0;
+    const generated = calc.generateArchetypePoints(archSelect.value, totalUnits || undefined);
+    if (!generated.length) {
+      showToast('Archetype generated 0 points — check the selection.', 'warn');
+      return;
+    }
+    if (points.length > 0 && !confirm(`Replace ${points.length} existing point${points.length === 1 ? '' : 's'} with ${generated.length} archetype-generated points?`)) return;
+    points = generated;
+    renderPoints(el);
+    showToast(`Loaded ${generated.length} demand points from ${calc.COG_ARCHETYPES[archSelect.value].name}.`, 'ok');
   });
 }
 

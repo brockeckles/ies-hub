@@ -1657,7 +1657,7 @@ function renderSummary() {
     costEscPct:   calcHeur.costEscPct   / 100,
     laborLines: model.laborLines || [],
     taxRatePct: calcHeur.taxRatePct,
-    useMonthlyEngine: typeof window !== 'undefined' && window.COST_MODEL_MONTHLY_ENGINE === true,
+    useMonthlyEngine: typeof window !== 'undefined' && window.COST_MODEL_MONTHLY_ENGINE !== false,
     periods: (refData && refData.periods) || [],
     ramp: null,
     seasonality: model.seasonalityProfile || null,
@@ -2646,7 +2646,7 @@ function computeWhatIfPreview() {
       costEscPct:   calcHeur.costEscPct   / 100,
       laborLines: model.laborLines || [],
       taxRatePct: calcHeur.taxRatePct,
-      useMonthlyEngine: typeof window !== 'undefined' && window.COST_MODEL_MONTHLY_ENGINE === true,
+      useMonthlyEngine: typeof window !== 'undefined' && window.COST_MODEL_MONTHLY_ENGINE !== false,
       periods: (refData && refData.periods) || [],
       ramp: null,
       seasonality: model.seasonalityProfile || null,
@@ -3489,7 +3489,7 @@ async function handleSave() {
     // Phase 1: if the monthly engine flag is on and we have the latest
     // projection bundle in memory, persist the monthly facts + refresh the
     // materialized view. Fire-and-forget so a flaky RPC never blocks save.
-    if (typeof window !== 'undefined' && window.COST_MODEL_MONTHLY_ENGINE === true) {
+    if (typeof window !== 'undefined' && window.COST_MODEL_MONTHLY_ENGINE !== false) {
       const bundle = _lastMonthlyBundle;
       if (bundle && model.id) {
         api.persistMonthlyFacts(model.id, bundle)
@@ -3506,6 +3506,84 @@ async function handleSave() {
 /** Cached monthly bundle from the most recent buildYearlyProjections call. */
 let _lastMonthlyBundle = null;
 export function setLastMonthlyBundle(bundle) { _lastMonthlyBundle = bundle; }
+
+/**
+ * Build the monthly bundle on demand so sections other than Summary (notably
+ * Timeline) can render without first requiring a Summary roundtrip. Reads the
+ * current model/refData/heuristic chain the same way Summary does and caches
+ * the result into `_lastMonthlyBundle`.
+ */
+function ensureMonthlyBundle() {
+  if (_lastMonthlyBundle) return _lastMonthlyBundle;
+  if (!model) return null;
+  try {
+    const market = model.projectDetails?.market;
+    const fr = (refData.facilityRates || []).find(r => r.market_id === market);
+    const ur = (refData.utilityRates || []).find(r => r.market_id === market);
+    const orders = (model.volumeLines || []).find(v => v.isOutboundPrimary)?.volume || 0;
+    const contractYears = model.projectDetails?.contractTerm || 5;
+    const fin = model.financial || {};
+    const summary = calc.computeSummary({
+      laborLines: model.laborLines || [],
+      indirectLaborLines: model.indirectLaborLines || [],
+      equipmentLines: model.equipmentLines || [],
+      overheadLines: model.overheadLines || [],
+      vasLines: model.vasLines || [],
+      startupLines: model.startupLines || [],
+      facility: model.facility || {},
+      shifts: model.shifts || {},
+      facilityRate: fr,
+      utilityRate: ur,
+      contractYears,
+      targetMarginPct: fin.targetMargin || 0,
+      annualOrders: orders || 1,
+    });
+    const calcHeur = scenarios.resolveCalcHeuristics(
+      currentScenario,
+      currentScenarioSnapshots,
+      heuristicOverrides,
+      fin,
+      whatIfTransient,
+    );
+    const projResult = calc.buildYearlyProjections({
+      years: contractYears,
+      baseLaborCost: summary.laborCost,
+      baseFacilityCost: summary.facilityCost,
+      baseEquipmentCost: summary.equipmentCost,
+      baseOverheadCost: summary.overheadCost,
+      baseVasCost: summary.vasCost,
+      startupAmort: summary.startupAmort,
+      startupCapital: summary.startupCapital,
+      baseOrders: orders || 1,
+      marginPct: (calcHeur.targetMarginPct || 0) / 100,
+      volGrowthPct: calcHeur.volGrowthPct / 100,
+      laborEscPct:  calcHeur.laborEscPct  / 100,
+      costEscPct:   calcHeur.costEscPct   / 100,
+      laborLines: model.laborLines || [],
+      taxRatePct: calcHeur.taxRatePct,
+      useMonthlyEngine: typeof window !== 'undefined' && window.COST_MODEL_MONTHLY_ENGINE !== false,
+      periods: (refData && refData.periods) || [],
+      ramp: null,
+      seasonality: model.seasonalityProfile || null,
+      preGoLiveMonths: calcHeur.preGoLiveMonths,
+      dsoDays:           calcHeur.dsoDays,
+      dpoDays:           calcHeur.dpoDays,
+      laborPayableDays:  calcHeur.laborPayableDays,
+      startupLines: model.startupLines || [],
+      pricingBuckets: model.pricingBuckets || [],
+      project_id: model.id || 0,
+      _calcHeur: calcHeur,
+      marketLaborProfile: currentMarketLaborProfile,
+      _heuristicsSource: calcHeur.used,
+    });
+    if (projResult && projResult.monthlyBundle) _lastMonthlyBundle = projResult.monthlyBundle;
+    if (calcHeur) _lastCalcHeuristics = calcHeur;
+    return _lastMonthlyBundle;
+  } catch (err) {
+    console.warn('[CM] ensureMonthlyBundle failed:', err);
+    return null;
+  }
+}
 
 async function handleLoad() {
   // The Load button now returns to the landing page where models are shown as cards.
@@ -3913,30 +3991,31 @@ function setNestedValue(obj, path, value) {
  * When the flag is off or no bundle exists, shows a helpful empty state.
  */
 function renderTimeline() {
-  const flagOn = typeof window !== 'undefined' && window.COST_MODEL_MONTHLY_ENGINE === true;
-  const bundle = _lastMonthlyBundle;
+  const flagOn = typeof window !== 'undefined' && window.COST_MODEL_MONTHLY_ENGINE !== false;
   const frozenBanner = renderFrozenBanner();
 
   if (!flagOn) {
     return `
       ${frozenBanner}
       <div class="cm-section">
-        <h2 class="cm-section-title">Timeline <span style="font-size:11px;color:var(--ies-gray-400);font-weight:500;margin-left:8px;">Phase 1 — Preview</span></h2>
+        <h2 class="cm-section-title">Timeline <span style="font-size:11px;color:var(--ies-gray-400);font-weight:500;margin-left:8px;">Legacy mode</span></h2>
         <div class="hub-card" style="background:#fef3c7;border:1px solid #fcd34d;color:#92400e;padding:16px;">
-          <strong>Monthly engine is off.</strong> Enable it in the browser console:
+          <strong>Monthly engine is disabled.</strong> Re-enable it in the browser console to view the timeline:
           <code style="display:block;margin-top:8px;background:#fff;padding:8px;border-radius:4px;font-family:monospace;">window.COST_MODEL_MONTHLY_ENGINE = true;</code>
-          then re-open the Summary section to regenerate the monthly bundle, and come back to Timeline.
         </div>
       </div>
     `;
   }
+
+  // Build the bundle on demand so Timeline works without a Summary round-trip.
+  const bundle = ensureMonthlyBundle();
 
   if (!bundle || !bundle.cashflow || bundle.cashflow.length === 0) {
     return `
       <div class="cm-section">
         <h2 class="cm-section-title">Timeline</h2>
         <div class="hub-card" style="padding:24px;text-align:center;color:var(--ies-gray-400);">
-          No monthly bundle available yet. Open the <strong>Summary</strong> section to run the engine, then return here.
+          Add labor, equipment, and pricing inputs to generate the monthly timeline. Empty models have no cashflow to render.
         </div>
       </div>
     `;

@@ -454,29 +454,55 @@ export function calcDIOH(zones) {
 
 /**
  * Calculate forward pick area sqft.
+ *
+ * Legacy formula (SKUs × DIOH × units_per_carton × module_sqft) produced
+ * dimensional-analysis errors — result scales as SKUs × days × units, which
+ * blew up to tens of millions of sqft for realistic demos. Replaced with the
+ * industry-standard shape used by the v3 sizing engine (sizeFacility):
+ *
+ *   facings = SKUs × activePickPct        (one slot per actively-picked SKU)
+ *   slot_multiplier = ceil(daysInventory / standardLaneDays)  (cap at 5x)
+ *   sqft = facings × slot_multiplier × moduleSqft
+ *
+ * A 2,000-SKU / 3-day / carton-flow forward pick now sizes at ~19K sqft
+ * (vs. 46M under the old formula) — matches the sized.zoneBreakdown row
+ * that the Size Recommendation card already shows.
+ *
  * @param {import('./types.js?v=20260418-sL').ZoneConfig} zones
  * @returns {number} forward pick area in sqft
  */
 export function calcForwardPick(zones) {
-  const pick = zones.forwardPick || { enabled: false, type: 'carton_flow', skuCount: 2000, daysInventory: 3, outboundUnitsPerDay: 5000 };
+  const pick = zones.forwardPick || {
+    enabled: false, type: 'carton_flow', skuCount: 2000,
+    daysInventory: 3, outboundUnitsPerDay: 5000, activePickPct: 100,
+  };
 
   if (!pick.enabled) return 0;
 
-  const dioh = calcDIOH(zones);
-  const prod = zones.productDimensions || { unitsPerCartonShelving: 6 };
-
-  // Carton flow facings = SKUs × DIOH × units per carton
-  const facings = pick.skuCount * dioh * (prod.unitsPerCartonShelving || 6);
-
-  // Module size by type
+  // Module size by pick type
   const modulesByType = {
-    carton_flow: 9.5,    // sqft per carton flow module
-    light_case: 8,       // sqft per light case module
-    heavy_case: 12,      // sqft per heavy case module
+    carton_flow: 9.5,    // sqft per carton flow module (industry avg)
+    light_case:  8,       // sqft per light case module
+    heavy_case:  12,      // sqft per heavy case module
+    pallet:      45,      // sqft per pallet location (drive-through / pallet flow)
   };
   const moduleSqft = modulesByType[pick.type] || 9.5;
 
-  return Math.round(facings * moduleSqft);
+  // Active faces = SKUs that actually get a forward-pick slot. When
+  // activePickPct isn't provided (legacy configs) assume 100%.
+  const activePct = pick.activePickPct != null ? pick.activePickPct : 100;
+  const activeFaces = Math.ceil((pick.skuCount || 0) * activePct / 100);
+
+  // Deeper flow lanes (holding more than one standard lane's worth of
+  // inventory) consume extra sqft. Cap at 5x to prevent runaway sizing for
+  // unusual daysInventory inputs.
+  const standardLaneDays = 3;
+  const slotMultiplier = Math.min(
+    5,
+    Math.max(1, Math.ceil((pick.daysInventory || standardLaneDays) / standardLaneDays)),
+  );
+
+  return Math.round(activeFaces * slotMultiplier * moduleSqft);
 }
 
 /**

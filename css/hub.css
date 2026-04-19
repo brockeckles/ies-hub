@@ -267,6 +267,11 @@ textarea.hub-input {
   gap: 0;
   overflow: hidden; /* no horizontal scroll — items flex-share the width */
   width: 100%;
+  /* Container queries: children size themselves against the bar's actual
+     inline width so wider viewports keep the hero-scale numbers and narrow
+     viewports auto-shrink without clipping or ellipsis. */
+  container-type: inline-size;
+  container-name: hub-kpi-bar;
 }
 
 .hub-kpi-item {
@@ -285,24 +290,48 @@ textarea.hub-input {
 .hub-kpi-item:last-child { border-right: none; }
 
 .hub-kpi-label {
-  font-size: var(--fs-caption);
+  /* 9px floor → 11px ceiling, scaling at 1.1% of container width */
+  font-size: clamp(9px, 1.1cqi, 11px);
   font-weight: var(--fw-bold);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: rgba(255, 255, 255, 0.7);
   margin-bottom: var(--sp-1);
-}
-
-.hub-kpi-value {
-  font-size: var(--fs-page); /* was --fs-hero — smaller so 5 tiles fit without scroll */
-  font-weight: var(--fw-extrabold);
-  color: #fff;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.hub-kpi-value.secondary { font-size: var(--fs-subtitle); }
+.hub-kpi-value {
+  /* 13px floor so 7-tile bars stay legible on 1280 screens; scales to 22px at
+     full width. cqi = 1% of the bar's inline size. */
+  font-size: clamp(13px, 2.1cqi, 22px);
+  font-weight: var(--fw-extrabold);
+  color: #fff;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.15;
+}
+
+.hub-kpi-value.secondary { font-size: clamp(11px, 1.7cqi, 14px); }
+
+/* Fallback for browsers without container-query support — media queries that
+   approximate the scaling so text still fits at common sidebar-open widths. */
+@supports not (container-type: inline-size) {
+  .hub-kpi-value { font-size: var(--fs-page); }
+  .hub-kpi-label { font-size: var(--fs-caption); }
+  @media (max-width: 1400px) {
+    .hub-kpi-value { font-size: 18px; }
+  }
+  @media (max-width: 1200px) {
+    .hub-kpi-value { font-size: 16px; }
+  }
+  @media (max-width: 1000px) {
+    .hub-kpi-value { font-size: 14px; }
+    .hub-kpi-label { font-size: 10px; }
+  }
+}
 
 /* ---- Badges / Pills ---- */
 .hub-badge {

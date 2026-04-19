@@ -536,7 +536,7 @@ export function buildYearlyProjections(params) {
   // when the flag is off or dependencies are missing.
   const useMonthly =
     !!params.useMonthlyEngine ||
-    (typeof window !== 'undefined' && window.COST_MODEL_MONTHLY_ENGINE === true);
+    (typeof window !== 'undefined' && window.COST_MODEL_MONTHLY_ENGINE !== false);
   // Require periods; ramp + seasonality are defaulted in the adapter if absent.
   if (useMonthly && Array.isArray(params.periods) && params.periods.length > 0) {
     const bundle = monthly.buildMonthlyProjections(adaptYearlyToMonthlyParams(params));
