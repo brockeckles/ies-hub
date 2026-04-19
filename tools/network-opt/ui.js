@@ -13,6 +13,7 @@ import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=202604
 import { showToast } from '../../shared/toast.js?v=20260418-sM';
 import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sM';
 import { downloadXLSX } from '../../shared/export.js?v=20260418-sM';
+import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260418-sM';
 import * as calc from './calc.js?v=20260418-sM';
 import * as api from './api.js?v=20260418-sM';
 
@@ -107,6 +108,8 @@ const DEMO_DEMANDS = [
  */
 let activeConfigId = null;
 let activeParentCmId = null;
+let isDirty = false;          // I-05 — track unsaved changes
+let _configName = '';         // I-05 — persisted name for resave
 
 export async function mount(el) {
   rootEl = el;
@@ -159,6 +162,8 @@ function openEditor(savedRow) {
   maxDCsToTest = 5;
   activeConfigId = savedRow?.id || null;
   activeParentCmId = savedRow?.parent_cost_model_id || null;
+  isDirty = false;
+  _configName = savedRow?.name || d.name || '';
 
   rootEl.innerHTML = renderShell();
   bindShellEvents();
@@ -167,8 +172,66 @@ function openEditor(savedRow) {
 
   // Wire the "← Scenarios" back button.
   rootEl.querySelector('[data-action="netopt-back"]')?.addEventListener('click', async () => {
+    if (isDirty && !confirm('You have unsaved changes. Leave anyway?')) return;
+    guardMarkClean('netopt');
     await renderLanding();
   });
+}
+
+// I-05 — dirty tracking + Save handler
+function markDirty() {
+  if (isDirty) return;
+  isDirty = true;
+  guardMarkDirty('netopt');
+  updateHeaderSaveState();
+}
+function updateHeaderSaveState() {
+  if (!rootEl) return;
+  const btn = rootEl.querySelector('[data-action="netopt-save"]');
+  if (!btn) return;
+  btn.removeAttribute('disabled');
+  btn.textContent = isDirty ? (activeConfigId ? '💾 Save' : '💾 Save Scenario') : (activeConfigId ? '✓ Saved' : '💾 Save Scenario');
+  btn.classList.toggle('hub-btn-primary', isDirty);
+  btn.classList.toggle('hub-btn-secondary', !isDirty);
+  const draftChip = rootEl.querySelector('.hub-status-chip.draft, .hub-status-chip.saved');
+  if (draftChip) {
+    draftChip.classList.toggle('saved', !!activeConfigId);
+    draftChip.classList.toggle('draft', !activeConfigId);
+    draftChip.textContent = activeConfigId ? 'Saved' : 'Draft';
+  }
+}
+async function handleSaveNetopt() {
+  try {
+    let name = _configName;
+    if (!activeConfigId) {
+      const defaultName = name || `Network ${new Date().toLocaleDateString()}`;
+      const entered = window.prompt('Name this scenario:', defaultName);
+      if (entered === null) return;
+      name = (entered || '').trim() || defaultName;
+    }
+    const payload = {
+      id: activeConfigId || undefined,
+      name,
+      facilities,
+      demands,
+      modeMix,
+      rateCard,
+      serviceConfig,
+    };
+    const saved = await api.saveConfig(payload);
+    activeConfigId = saved?.id || activeConfigId;
+    _configName = saved?.name || name;
+    isDirty = false;
+    guardMarkClean('netopt');
+    rootEl.innerHTML = renderShell();
+    bindShellEvents();
+    renderSidebar();
+    renderContentView();
+    showToast(`Saved "${_configName}".`, 'ok');
+  } catch (err) {
+    console.error('[NetOpt] save failed:', err);
+    showToast(`Save failed: ${err.message || err}`, 'err');
+  }
 }
 
 /**
@@ -205,6 +268,13 @@ function renderShell() {
         activeTab: activeView,
         tabsId: 'no-view-tabs',
         statusChips: chips,
+        // I-05 — Save button always visible so work persists across tab closes.
+        secondaryActions: [
+          { label: isDirty ? (activeConfigId ? '💾 Save' : '💾 Save Scenario') : (activeConfigId ? '✓ Saved' : '💾 Save Scenario'),
+            action: 'netopt-save',
+            primary: isDirty,
+            title: activeConfigId ? 'Update this scenario' : 'Save this scenario so you can reopen it later' },
+        ],
         primaryAction: { label: 'Run Scenario', action: 'netopt-run', icon: '▶', title: 'Run optimizer (Cmd/Ctrl+Enter)' },
       })}
 
@@ -248,6 +318,9 @@ function bindShellEvents() {
     flashRunButton(headerRun);
   });
   bindPrimaryActionShortcut(rootEl, 'netopt-run');
+
+  // I-05 — Save button (in the header secondaryActions rail).
+  rootEl.querySelector('[data-action="netopt-save"]')?.addEventListener('click', handleSaveNetopt);
 
   // Sidebar clicks
   rootEl.querySelector('#no-sidebar')?.addEventListener('click', (e) => {
@@ -326,6 +399,7 @@ function renderSidebar() {
     btn.addEventListener('click', () => {
       const key = /** @type {HTMLElement} */ (btn).dataset.archetype;
       applyArchetype(key);
+      markDirty();
     });
   });
 
@@ -333,13 +407,15 @@ function renderSidebar() {
   el.querySelectorAll('[data-action]').forEach(btn => {
     btn.addEventListener('click', () => {
       const action = /** @type {HTMLElement} */ (btn).dataset.action;
-      if (action === 'run') runScenario();
-      else if (action === 'compare-dcs') compareMultipleDCs();
-      else if (action === 'exact-solve') runExactSolver();
+      // I-05 — the sidebar's Save button is handled at the shell level.
+      if (action === 'netopt-save') return;
+      if (action === 'run') { runScenario(); markDirty(); }
+      else if (action === 'compare-dcs') { compareMultipleDCs(); markDirty(); }
+      else if (action === 'exact-solve')  { runExactSolver();    markDirty(); }
       else if (action === 'export-csv') exportToCSV();
-      else if (action === 'clear-scenarios') { scenarios = []; activeScenario = null; comparisonResults = null; renderContentView(); }
-      else if (action === 'apply-market-rates') applyMarketRates();
-      else if (action === 'balance-mode-mix') balanceModeMix();
+      else if (action === 'clear-scenarios') { scenarios = []; activeScenario = null; comparisonResults = null; markDirty(); renderContentView(); }
+      else if (action === 'apply-market-rates') { applyMarketRates(); markDirty(); }
+      else if (action === 'balance-mode-mix')   { balanceModeMix();    markDirty(); }
       else if (action === 'upload-rates-csv') document.getElementById('netopt-csv-upload')?.click();
     });
   });
@@ -721,6 +797,7 @@ function renderFacilities(el) {
     btn.addEventListener('click', () => {
       const idx = parseInt(/** @type {HTMLElement} */ (btn).dataset.facDelete);
       facilities.splice(idx, 1);
+      markDirty();
       renderFacilities(el);
       renderSidebar();
     });
@@ -730,6 +807,7 @@ function renderFacilities(el) {
   el.querySelector('#no-add-facility')?.addEventListener('click', () => {
     const id = 'f' + Date.now();
     facilities.push({ id, name: 'New DC', city: '', state: '', lat: 39.8283, lng: -98.5795, capacity: 200000, fixedCost: 1000000, variableCost: 3.00, isOpen: true });
+    markDirty();
     renderFacilities(el);
     renderSidebar();
   });
@@ -806,6 +884,7 @@ function renderDemand(el) {
   el.querySelectorAll('[data-dem-delete]').forEach(btn => {
     btn.addEventListener('click', () => {
       demands.splice(parseInt(/** @type {HTMLElement} */ (btn).dataset.demDelete), 1);
+      markDirty();
       renderDemand(el);
       renderSidebar();
     });
@@ -816,12 +895,13 @@ function renderDemand(el) {
     select.addEventListener('change', () => {
       const idx = parseInt(/** @type {HTMLElement} */ (select).dataset.demNmfc);
       const v = parseInt(/** @type {HTMLSelectElement} */ (select).value);
-      if (demands[idx] && Number.isFinite(v)) demands[idx].nmfcClass = v;
+      if (demands[idx] && Number.isFinite(v)) { demands[idx].nmfcClass = v; markDirty(); }
     });
   });
 
   el.querySelector('#no-add-demand')?.addEventListener('click', () => {
     demands.push({ id: 'd' + Date.now(), zip3: '', lat: 39.83, lng: -98.58, annualDemand: 10000, maxDays: 3, avgWeight: 25, nmfcClass: 100 });
+    markDirty();
     renderDemand(el);
     renderSidebar();
   });

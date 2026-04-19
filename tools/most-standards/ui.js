@@ -144,9 +144,38 @@ let workflow = createEmptyWorkflow();
 const PROCESS_AREAS = ['Receiving', 'Putaway', 'Picking', 'Packing', 'Shipping', 'Inventory'];
 const LABOR_CATEGORIES = ['manual', 'mhe', 'hybrid'];
 
+// MOST-3 — inline SVG icons for editor UI. Using SVG over emoji/text so they
+// render consistently across platforms and support currentColor theming.
+const ICON = {
+  pencil:       `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>`,
+  copy:         `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
+  trash:        `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>`,
+  plus:         `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+  check:        `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
+  chevronLeft:  `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>`,
+  templatesEmpty: `<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>`,
+};
+
 // ============================================================
 // LIFECYCLE
 // ============================================================
+
+/**
+ * MOST-1 — open a template in the Editor tab on tile click.
+ * Loads the template + its elements via api, flips to the Editor tab,
+ * re-renders the shell so the conditional Run button matches, and
+ * renders the editor content.
+ */
+async function openTemplateInEditor(id) {
+  if (!rootEl || !id) return;
+  const tpl = (refData.templates || []).find(t => t.id === id);
+  if (!tpl) return;
+  editorTemplate = { ...tpl };
+  try { editorElements = (await api.listElements(id)) || []; } catch { editorElements = []; }
+  activeTab = 'editor';
+  rootEl.innerHTML = renderShell(); // full re-render so Run button visibility flips + active tab chip updates
+  renderContent();
+}
 
 /**
  * Mount the MOST Labor Standards tool.
@@ -170,35 +199,52 @@ export async function mount(el) {
 
   el.innerHTML = renderShell();
 
-  // Wire tab nav (shared tool-frame uses [data-tab] + .hub-tab-btn)
-  el.querySelector('#most-tabs')?.addEventListener('click', (e) => {
-    const btn = /** @type {HTMLElement} */ (e.target).closest('[data-tab]');
-    if (!btn) return;
-    activeTab = /** @type {any} */ (btn.dataset.tab);
-    el.querySelectorAll('#most-tabs button').forEach(t => t.classList.toggle('active', t.dataset.tab === activeTab));
-    renderContent();
-  });
+  // Root-level event delegation survives shell re-renders (needed so
+  // MOST-2's conditional Run button can toggle on tab change). Per the
+  // event-delegation memo.
+  el.addEventListener('click', (e) => {
+    const target = /** @type {HTMLElement} */ (e.target);
+    if (!target) return;
 
-  // Back to Design Tools
-  el.querySelector('[data-action="most-back"]')?.addEventListener('click', () => {
-    window.location.hash = 'designtools';
-  });
-
-  // Primary action — routes to whichever tab's "run" makes sense
-  const runBtn = el.querySelector('[data-primary-action="most-run"]');
-  runBtn?.addEventListener('click', () => {
-    if (activeTab === 'analysis') {
-      const calcBtn = el.querySelector('#most-analysis-calc, [data-action="most-analyze"]');
-      if (calcBtn) /** @type {HTMLButtonElement} */ (calcBtn).click();
-    } else if (activeTab === 'workflow') {
-      const calcBtn = el.querySelector('[data-action="most-workflow-calc"]');
-      if (calcBtn) /** @type {HTMLButtonElement} */ (calcBtn).click();
-    } else {
-      activeTab = 'analysis';
-      el.querySelectorAll('#most-tabs button').forEach(t => t.classList.toggle('active', t.dataset.tab === activeTab));
+    // Tab switching — re-render the full shell so the primary-action button
+    // appears only on tabs where it does real work.
+    const tabBtn = target.closest('#most-tabs [data-tab]');
+    if (tabBtn) {
+      activeTab = /** @type {any} */ (tabBtn.dataset.tab);
+      el.innerHTML = renderShell();
       renderContent();
+      return;
     }
-    flashRunButton(runBtn);
+
+    // Back to Design Tools
+    if (target.closest('[data-action="most-back"]')) {
+      window.location.hash = 'designtools';
+      return;
+    }
+
+    // Primary action — routes to whichever tab's "run" makes sense
+    const runBtn = target.closest('[data-primary-action="most-run"]');
+    if (runBtn) {
+      if (activeTab === 'analysis') {
+        const calcBtn = el.querySelector('#most-analysis-calc, [data-action="most-analyze"]');
+        if (calcBtn) /** @type {HTMLButtonElement} */ (calcBtn).click();
+      } else if (activeTab === 'workflow') {
+        const calcBtn = el.querySelector('[data-action="most-workflow-calc"]');
+        if (calcBtn) /** @type {HTMLButtonElement} */ (calcBtn).click();
+      }
+      flashRunButton(runBtn);
+      return;
+    }
+
+    // MOST-1 — Template tile clicks (root-level delegation so innerHTML
+    // swaps don't orphan per-element listeners). Also catches clicks on
+    // inner spans/divs inside the card.
+    const tileCard = target.closest('.most-tpl-card[data-action="select-template"]');
+    if (tileCard) {
+      const id = tileCard.getAttribute('data-id');
+      openTemplateInEditor(id);
+      return;
+    }
   });
   bindPrimaryActionShortcut(el, 'most-run');
 
@@ -241,6 +287,12 @@ function renderShell() {
       ? { label: `${savedScenarios.length} saved analyses`, kind: 'linked' }
       : null,
   ].filter(Boolean);
+  // MOST-2 — Run Analysis is only meaningful on Quick Analysis + Workflow
+  // tabs (where the calc fires). On Library + Editor it just jumps to
+  // Analysis, which confuses users into thinking they have to click it
+  // before picking a template. Hide it there.
+  const showRunBtn = activeTab === 'analysis' || activeTab === 'workflow';
+  const primaryActionLabel = activeTab === 'workflow' ? 'Run Workflow' : 'Run Analysis';
   return `
     <div class="hub-content-inner" style="padding:0;display:flex;flex-direction:column;height: calc(100vh - 48px);">
       ${renderToolHeader({
@@ -252,7 +304,9 @@ function renderShell() {
         activeTab,
         tabsId: 'most-tabs',
         statusChips: chips,
-        primaryAction: { label: 'Run Analysis', action: 'most-run', icon: '▶', title: 'Compute labor standards (Cmd/Ctrl+Enter)' },
+        primaryAction: showRunBtn
+          ? { label: primaryActionLabel, action: 'most-run', icon: '▶', title: 'Compute labor standards (Cmd/Ctrl+Enter)' }
+          : null,
       })}
       <!-- Content -->
       <div class="hub-analyzer-content" id="most-content" style="flex:1;padding: 24px; overflow-y: auto;">
@@ -339,6 +393,173 @@ function renderShell() {
       }
 
       /* .most-push-btn removed 2026-04-18 (X2) — buttons now use shared .hub-btn + .hub-btn-primary */
+
+      /* =========================================================
+         MOST-3 — Template Editor refresh (2026-04-19)
+         Replaces dated cm-edit-btn / cm-delete-btn with a clean
+         icon+label action pattern. Tokens all reference the design
+         system standards memo.
+         ========================================================= */
+
+      .most-editor-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 24px;
+        margin-bottom: 24px;
+        padding-bottom: 20px;
+        border-bottom: 1px solid var(--ies-gray-200);
+      }
+      .most-editor-toolbar-actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-shrink: 0;
+      }
+      .most-editor-title {
+        font-size: 20px;
+        font-weight: 800;
+        color: var(--ies-navy);
+        margin: 0;
+        letter-spacing: -0.2px;
+      }
+      .most-editor-subtitle {
+        font-size: 13px;
+        color: var(--ies-gray-500);
+        margin: 4px 0 0 0;
+        font-weight: 500;
+      }
+      .most-editor-breadcrumb {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--ies-gray-500);
+        margin-bottom: 6px;
+        font-weight: 600;
+      }
+      .most-breadcrumb-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        background: none;
+        border: none;
+        padding: 2px 6px;
+        margin-left: -6px;
+        color: var(--ies-gray-500);
+        font-size: 12px;
+        font-weight: 600;
+        font-family: Montserrat, sans-serif;
+        cursor: pointer;
+        border-radius: 4px;
+        transition: all 0.15s ease;
+      }
+      .most-breadcrumb-link:hover {
+        background: var(--ies-gray-100);
+        color: var(--ies-blue);
+      }
+
+      .most-table-card {
+        background: #fff;
+        border: 1px solid var(--ies-gray-200);
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: var(--shadow-sm, 0 1px 2px rgba(0,0,0,0.05));
+      }
+      .most-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      .most-table thead th {
+        background: var(--ies-gray-50);
+        color: var(--ies-gray-500);
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 12px 16px;
+        text-align: left;
+        border-bottom: 1px solid var(--ies-gray-200);
+      }
+      .most-table tbody td {
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--ies-gray-100);
+        color: var(--ies-gray-600);
+        font-weight: 500;
+      }
+      .most-table tbody tr:last-child td { border-bottom: none; }
+      .most-row-hover:hover { background: #f8fafc; }
+      .most-table td.cm-num { text-align: right; font-variant-numeric: tabular-nums; }
+
+      /* Row actions — icon buttons with hover tint */
+      .most-row-actions {
+        display: inline-flex;
+        gap: 4px;
+        align-items: center;
+      }
+      .most-icon-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 5px 10px;
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 6px;
+        color: var(--ies-gray-500);
+        font-family: Montserrat, sans-serif;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.12s ease;
+        white-space: nowrap;
+      }
+      .most-icon-btn:hover {
+        background: rgba(0, 71, 171, 0.08);
+        border-color: rgba(0, 71, 171, 0.15);
+        color: var(--ies-blue);
+      }
+      .most-icon-btn:active { transform: translateY(0.5px); }
+      .most-icon-btn svg { display: block; opacity: 0.85; }
+      .most-icon-btn-danger:hover {
+        background: rgba(220, 53, 69, 0.08);
+        border-color: rgba(220, 53, 69, 0.18);
+        color: var(--ies-red);
+      }
+
+      /* Empty state for the editor list */
+      .most-empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        background: var(--ies-gray-50);
+        border: 1px dashed var(--ies-gray-200);
+        border-radius: 10px;
+      }
+      .most-empty-icon {
+        color: var(--ies-gray-300);
+        margin: 0 auto 16px;
+        display: inline-block;
+      }
+      .most-empty-title {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--ies-navy);
+        margin-bottom: 4px;
+      }
+      .most-empty-body {
+        font-size: 13px;
+        color: var(--ies-gray-500);
+      }
+
+      /* Sticky footer action bar for the edit form */
+      .most-editor-footer {
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+        margin-top: 24px;
+        padding-top: 20px;
+        border-top: 1px solid var(--ies-gray-200);
+      }
     </style>
   `;
 }
@@ -482,47 +703,69 @@ function renderEditor() {
   const isEditing = editorTemplate !== null;
 
   if (!isEditing) {
-    // Template list with create/edit/duplicate/delete actions
+    // MOST-3 — Template list with freshened action buttons + layout.
+    // Replaces the dated cm-edit-btn/cm-delete-btn classes with hub-btn
+    // variants, adds inline SVG icons, and groups the actions in a
+    // bordered action cell so they feel like a unit.
     return `
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+      <div class="most-editor-toolbar">
         <div>
-          <div style="font-size:16px; font-weight:700; color:var(--ies-navy);">Template Editor</div>
-          <div style="font-size:13px; color:var(--ies-gray-500);">Create, edit, and manage MOST labor standards templates.</div>
+          <h3 class="most-editor-title">Template Editor</h3>
+          <p class="most-editor-subtitle">Create, edit, and manage MOST labor standards templates.</p>
         </div>
-        <button class="hub-btn hub-btn-primary" data-action="create-template">+ New Template</button>
+        <button class="hub-btn hub-btn-primary hub-btn-icon" data-action="create-template">
+          ${ICON.plus} New Template
+        </button>
       </div>
 
-      <table class="cm-grid-table">
-        <thead>
-          <tr>
-            <th>Activity Name</th>
-            <th>Process Area</th>
-            <th>Category</th>
-            <th class="cm-num">Base UPH</th>
-            <th class="cm-num">TMU</th>
-            <th class="cm-num">Elements</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          ${templates.map(t => `
-            <tr>
-              <td>${getMostTplName(t)}</td>
-              <td>${t.process_area || '—'}</td>
-              <td><span class="most-cat-badge most-cat-${t.labor_category || 'manual'}" style="font-size:10px;">${(t.labor_category || 'manual').toUpperCase()}</span></td>
-              <td class="cm-num">${calc.formatUph(getMostTplBaseUph(t))}</td>
-              <td class="cm-num">${getMostTplTmuTotal(t)}</td>
-              <td class="cm-num">${t.element_count || 0}</td>
-              <td>
-                <button class="cm-edit-btn" data-action="edit-template" data-id="${t.id}" style="margin-right:4px;">Edit</button>
-                <button class="cm-edit-btn" data-action="duplicate-template" data-id="${t.id}" style="margin-right:4px;">Dup</button>
-                <button class="cm-delete-btn" data-action="delete-template" data-id="${t.id}">Del</button>
-              </td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-      ${templates.length === 0 ? '<div style="text-align:center; padding:40px; color:var(--ies-gray-400);">No templates yet. Click "New Template" to create one.</div>' : ''}
+      ${templates.length === 0 ? `
+        <div class="most-empty-state">
+          <div class="most-empty-icon">${ICON.templatesEmpty}</div>
+          <div class="most-empty-title">No templates yet</div>
+          <div class="most-empty-body">Click <strong>+ New Template</strong> to create your first MOST standard.</div>
+        </div>
+      ` : `
+        <div class="most-table-card">
+          <table class="most-table">
+            <thead>
+              <tr>
+                <th>Activity Name</th>
+                <th>Process Area</th>
+                <th>Category</th>
+                <th class="cm-num">Base UPH</th>
+                <th class="cm-num">TMU</th>
+                <th class="cm-num">Elements</th>
+                <th style="width:160px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${templates.map(t => `
+                <tr class="most-row-hover">
+                  <td style="font-weight:600; color:var(--ies-navy);">${getMostTplName(t)}</td>
+                  <td>${t.process_area || '—'}</td>
+                  <td><span class="most-cat-badge most-cat-${t.labor_category || 'manual'}" style="font-size:10px;">${(t.labor_category || 'manual').toUpperCase()}</span></td>
+                  <td class="cm-num">${calc.formatUph(getMostTplBaseUph(t))}</td>
+                  <td class="cm-num">${getMostTplTmuTotal(t)}</td>
+                  <td class="cm-num">${t.element_count || 0}</td>
+                  <td>
+                    <div class="most-row-actions">
+                      <button class="most-icon-btn" data-action="edit-template" data-id="${t.id}" title="Edit template">
+                        ${ICON.pencil}<span>Edit</span>
+                      </button>
+                      <button class="most-icon-btn" data-action="duplicate-template" data-id="${t.id}" title="Duplicate">
+                        ${ICON.copy}<span>Dup</span>
+                      </button>
+                      <button class="most-icon-btn most-icon-btn-danger" data-action="delete-template" data-id="${t.id}" title="Delete template">
+                        ${ICON.trash}<span>Del</span>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `}
     `;
   }
 
@@ -532,12 +775,20 @@ function renderEditor() {
   const baseUph = calc.baseUph(totalTmu);
 
   return `
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+    <div class="most-editor-toolbar">
       <div>
-        <div style="font-size:16px; font-weight:700; color:var(--ies-navy);">Edit Template</div>
-        <div style="font-size:13px; color:var(--ies-gray-500);">${t.id ? 'Modify template details and elements' : 'Create a new MOST labor standards template'}</div>
+        <div class="most-editor-breadcrumb">
+          <button class="most-breadcrumb-link" data-action="close-editor" title="Back to template list">${ICON.chevronLeft} Templates</button>
+          <span style="color:var(--ies-gray-300);">/</span>
+          <span>${t.id ? 'Edit' : 'New'}</span>
+        </div>
+        <h3 class="most-editor-title">${t.id ? (getMostTplName(t) || 'Edit Template') : 'New Template'}</h3>
+        <p class="most-editor-subtitle">${t.id ? 'Modify template details and elements' : 'Create a new MOST labor standards template'}</p>
       </div>
-      <button class="cm-delete-btn" data-action="close-editor">✕ Close</button>
+      <div class="most-editor-toolbar-actions">
+        <button class="hub-btn hub-btn-secondary" data-action="close-editor">Cancel</button>
+        <button class="hub-btn hub-btn-primary hub-btn-icon" data-action="save-template">${ICON.check} Save Template</button>
+      </div>
     </div>
 
     <!-- Template Metadata -->
@@ -604,7 +855,7 @@ function renderEditor() {
     <div class="hub-card">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
         <div class="text-subtitle">Element Sequence</div>
-        <button class="cm-add-row-btn" data-action="add-element" style="font-size:12px; padding:6px 12px;">+ Add Element</button>
+        <button class="hub-btn hub-btn-sm hub-btn-secondary hub-btn-icon" data-action="add-element">${ICON.plus} Add Element</button>
       </div>
 
       ${(() => {
@@ -665,7 +916,7 @@ function renderEditor() {
                 <td><input class="hub-input" type="number" value="${getMostElTmu(el) || 0}" data-elem-idx="${i}" data-elem-field="tmu_value" style="width:100%; font-size:11px; padding:4px 6px;" /></td>
                 <td><input class="hub-input" type="number" step="0.01" min="0" value="${el.freq_per_cycle == null ? 1 : el.freq_per_cycle}" data-elem-idx="${i}" data-elem-field="freq_per_cycle" style="width:100%; font-size:11px; padding:4px 6px;" title="Occurrences per cycle (1 = every cycle)" /></td>
                 <td><input type="checkbox" ${el.is_variable ? 'checked' : ''} data-elem-idx="${i}" data-elem-field="is_variable" style="cursor:pointer;" /></td>
-                <td><button class="cm-delete-btn" data-action="delete-element" data-idx="${i}" style="font-size:12px;">Del</button></td>
+                <td><button class="most-icon-btn most-icon-btn-danger" data-action="delete-element" data-idx="${i}" title="Remove element">${ICON.trash}</button></td>
               </tr>
             `).join('')}
           </tbody>
@@ -677,10 +928,10 @@ function renderEditor() {
       `}
     </div>
 
-    <!-- Save/Cancel Buttons -->
-    <div style="display:flex; gap:8px; margin-top:20px; justify-content:flex-end;">
-      <button class="cm-delete-btn" data-action="close-editor" style="padding:10px 20px;">Cancel</button>
-      <button class="hub-btn hub-btn-primary" data-action="save-template">Save Template</button>
+    <!-- Save/Cancel Buttons: anchored at the bottom of the editor too, for long scrolls -->
+    <div class="most-editor-footer">
+      <button class="hub-btn hub-btn-secondary" data-action="close-editor">Cancel</button>
+      <button class="hub-btn hub-btn-primary hub-btn-icon" data-action="save-template">${ICON.check} Save Template</button>
     </div>
   `;
 }
@@ -1038,24 +1289,8 @@ function bindContentEvents(container) {
     renderContent();
   });
 
-  // Template card clicks — opens the template in the Editor tab so the
-  // user can see element-sequence detail and make edits in one click.
-  // (The bottom-of-library detail panel was easy to miss because users
-  // never scrolled past the card grid.)
-  container.querySelectorAll('[data-action="select-template"]').forEach(card => {
-    card.addEventListener('click', async () => {
-      const id = card.dataset.id;
-      const tpl = (refData.templates || []).find(t => t.id === id);
-      if (!tpl) return;
-      // Load template + its elements, then jump to the Editor tab in edit mode.
-      editorTemplate = { ...tpl };
-      try { editorElements = (await api.listElements(id)) || []; } catch { editorElements = []; }
-      activeTab = 'editor';
-      // Sync the tab strip's active state without re-binding the whole shell.
-      rootEl?.querySelectorAll('#most-tabs button').forEach(t => t.classList.toggle('active', t.dataset.tab === activeTab));
-      renderContent();
-    });
-  });
+  // MOST-1 — Template tile clicks are now handled via root-level delegation
+  // in mount() so they survive shell re-renders on tab change. See openTemplateInEditor().
 
   // Close detail
   container.querySelector('[data-action="close-detail"]')?.addEventListener('click', () => {

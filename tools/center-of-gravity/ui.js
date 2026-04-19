@@ -12,6 +12,7 @@ import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=202604
 import { showToast } from '../../shared/toast.js?v=20260418-sP';
 import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sP';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sP';
+import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260418-sP';
 import * as calc from './calc.js?v=20260418-sP';
 import * as api from './api.js?v=20260418-sP';
 
@@ -60,6 +61,7 @@ let mapOptions = {
  */
 let activeScenarioId = null;
 let activeParentCmId = null;
+let isDirty = false;            // I-05 — track whether user has unsaved changes
 
 export async function mount(el) {
   rootEl = el;
@@ -103,10 +105,77 @@ function openEditor(savedRow) {
   sensitivityData = null;
   activeScenarioId = savedRow?.id || null;
   activeParentCmId = savedRow?.parent_cost_model_id || null;
+  // I-05 — fresh open is clean; only run/edit/etc marks dirty.
+  isDirty = false;
+  _scenarioName = savedRow?.name || d.name || '';
 
   rootEl.innerHTML = renderShell();
   bindShellEvents();
   renderContent();
+}
+
+/** I-05 — mark editor dirty + refresh the Save button state without a full re-render. */
+let _scenarioName = '';
+function markDirty() {
+  if (isDirty) return;
+  isDirty = true;
+  guardMarkDirty('cog');
+  updateHeaderSaveState();
+}
+function updateHeaderSaveState() {
+  if (!rootEl) return;
+  const btn = rootEl.querySelector('[data-action="cog-save"]');
+  if (!btn) return;
+  btn.removeAttribute('disabled');
+  btn.textContent = isDirty ? (activeScenarioId ? '💾 Save' : '💾 Save Scenario') : (activeScenarioId ? '✓ Saved' : '💾 Save Scenario');
+  btn.classList.toggle('hub-btn-primary', isDirty);
+  btn.classList.toggle('hub-btn-secondary', !isDirty);
+  // Also flip the Draft → Saved status chip in place without full re-render.
+  const draftChip = rootEl.querySelector('.hub-status-chip.draft, .hub-status-chip.saved');
+  if (draftChip) {
+    draftChip.classList.toggle('saved', !!activeScenarioId);
+    draftChip.classList.toggle('draft', !activeScenarioId);
+    draftChip.textContent = activeScenarioId ? 'Saved' : 'Draft';
+  }
+}
+
+/**
+ * I-05 — persist the current editor state. For new scenarios, prompts
+ * for a name; for existing, overwrites in place. Flips Draft → Saved
+ * chip + primary-button state on success.
+ */
+async function handleSave() {
+  try {
+    let name = _scenarioName;
+    if (!activeScenarioId) {
+      // Prompt for a name. Native prompt() is blocked by the Claude-in-Chrome
+      // sandbox per past sessions — use window.prompt inline, which the desktop
+      // app handles fine. If it returns null, user cancelled.
+      const defaultName = name || `COG ${new Date().toLocaleDateString()}`;
+      const entered = window.prompt('Name this scenario:', defaultName);
+      if (entered === null) return;                          // user cancelled
+      name = (entered || '').trim() || defaultName;
+    }
+    const payload = {
+      id: activeScenarioId || undefined,
+      name,
+      points,
+      config,
+      result: cogResult,
+    };
+    const saved = await api.saveScenario(payload);
+    activeScenarioId = saved?.id || activeScenarioId;
+    _scenarioName = saved?.name || name;
+    isDirty = false;
+    guardMarkClean('cog');
+    // Re-render shell so status chip + button classes come through cleanly.
+    rootEl.innerHTML = renderShell();
+    renderContent();
+    showToast(`Saved "${_scenarioName}".`, 'ok');
+  } catch (err) {
+    console.error('[COG] save failed:', err);
+    showToast(`Save failed: ${err.message || err}`, 'err');
+  }
 }
 
 /**
@@ -152,6 +221,13 @@ function renderShell() {
         activeTab,
         tabsId: 'cog-tabs',
         statusChips: chips,
+        // I-05 — Save button is always visible so work isn't lost on tab close.
+        secondaryActions: [
+          { label: isDirty ? (activeScenarioId ? '💾 Save' : '💾 Save Scenario') : (activeScenarioId ? '✓ Saved' : '💾 Save Scenario'),
+            action: 'cog-save',
+            primary: isDirty,
+            title: activeScenarioId ? 'Update this scenario' : 'Save this scenario to open it again later' },
+        ],
         primaryAction: showRunBtn
           ? { label: 'Find Optimal Location', action: 'cog-run', icon: '▶', title: 'Run k-means (Cmd/Ctrl+Enter)' }
           : null,
@@ -174,6 +250,8 @@ function bindShellEvents() {
     const backBtn = target.closest('[data-action="cog-back"]');
     if (backBtn) {
       e.preventDefault();
+      if (isDirty && !confirm('You have unsaved changes. Leave anyway?')) return;
+      guardMarkClean('cog');
       await renderLanding();
       return;
     }
@@ -185,11 +263,21 @@ function bindShellEvents() {
       cogResult = calc.kMeansCog(points, config.numCenters, config.maxIterations);
       sensitivityData = calc.sensitivityAnalysis(points, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000);
       activeTab = 'analysis';
+      markDirty(); // I-05 — running produces a new result that deserves saving
+      rootEl.innerHTML = renderShell(); // re-render shell so tabs + Save state are fresh
       rootEl.querySelectorAll('#cog-tabs button').forEach(b => {
         b.classList.toggle('active', b.dataset.tab === activeTab);
       });
       renderContent();
-      flashRunButton(runBtn);
+      flashRunButton(rootEl.querySelector('[data-primary-action="cog-run"]'));
+      return;
+    }
+
+    // I-05 — Save scenario.
+    const saveBtn = target.closest('[data-action="cog-save"]');
+    if (saveBtn) {
+      e.preventDefault();
+      await handleSave();
       return;
     }
 
@@ -342,32 +430,39 @@ function renderPoints(el) {
   // Bind config inputs
   el.querySelector('#cog-k')?.addEventListener('change', (e) => {
     config.numCenters = Math.max(1, Math.min(20, parseInt(/** @type {HTMLInputElement} */ (e.target).value) || 1));
+    markDirty();
   });
   el.querySelector('#cog-cpm')?.addEventListener('change', (e) => {
     config.transportCostPerMile = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 2.85;
+    markDirty();
   });
   el.querySelector('#cog-cap')?.addEventListener('change', (e) => {
     config.unitsPerTruck = Math.max(1, parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 25000);
+    markDirty();
   });
   el.querySelector('#cog-iter')?.addEventListener('change', (e) => {
     config.maxIterations = Math.max(10, Math.min(500, parseInt(/** @type {HTMLInputElement} */ (e.target).value) || 100));
+    markDirty();
   });
 
   // Delete points
   el.querySelectorAll('[data-pt-del]').forEach(btn => {
     btn.addEventListener('click', () => {
       points.splice(parseInt(/** @type {HTMLElement} */ (btn).dataset.ptDel), 1);
+      markDirty();
       renderPoints(el);
     });
   });
 
   el.querySelector('#cog-add-point')?.addEventListener('click', () => {
     points.push({ id: 'p' + Date.now(), name: 'New Point', lat: 39.83, lng: -98.58, weight: 10000, type: 'demand' });
+    markDirty();
     renderPoints(el);
   });
 
   el.querySelector('#cog-load-demo')?.addEventListener('click', () => {
     points = calc.DEMO_POINTS.map(p => ({ ...p }));
+    markDirty();
     renderPoints(el);
   });
 
@@ -399,6 +494,7 @@ function renderPoints(el) {
       weight,
       type: 'demand',
     });
+    markDirty();
     renderPoints(el);
   };
   el.querySelector('#cog-lookup-add')?.addEventListener('click', commitLookup);
@@ -438,6 +534,7 @@ function renderPoints(el) {
     }
     if (points.length > 0 && !confirm(`Replace ${points.length} existing point${points.length === 1 ? '' : 's'} with ${generated.length} archetype-generated points?`)) return;
     points = generated;
+    markDirty();
     renderPoints(el);
     showToast(`Loaded ${generated.length} demand points from ${calc.COG_ARCHETYPES[archSelect.value].name}.`, 'ok');
   });

@@ -815,6 +815,81 @@ export function computeBucketCosts(params) {
   return costs;
 }
 
+/**
+ * Derive per-bucket rates from assigned costs + margin + volume driver.
+ *
+ * Mirrors the rate math the Pricing Schedule UI shows on-screen so that the
+ * monthly engine (which reads `bucket.rate` literally) can fall back to the
+ * same derived rate when no explicit rate is stored. This is the single
+ * source of truth for "what rate does this bucket actually produce given
+ * the cost rollup."
+ *
+ * @param {Object} params
+ * @param {Array} params.buckets — model.pricingBuckets
+ * @param {Record<string, number>} params.bucketCosts — output of computeBucketCosts
+ * @param {number} params.marginPct — target margin (0-based fraction, e.g. 0.12)
+ * @param {Array} [params.volumeLines] — model.volumeLines (used when bucket.annualVolume is unset)
+ * @returns {Record<string, { rate: number, annualVolume: number, withMargin: number }>}
+ */
+export function computeBucketRates(params) {
+  const { buckets = [], bucketCosts = {}, marginPct = 0, volumeLines = [] } = params;
+
+  // Volume-by-UOM lookup (matches Pricing UI logic)
+  const volumeByUom = {};
+  for (const vl of volumeLines) {
+    const key = vl.uom || 'each';
+    volumeByUom[key] = (volumeByUom[key] || 0) + (Number(vl.volume) || 0);
+  }
+
+  /** @type {Record<string, { rate: number, annualVolume: number, withMargin: number }>} */
+  const out = {};
+  for (const b of buckets) {
+    const cost = bucketCosts[b.id] || 0;
+    const withMargin = cost * (1 + marginPct);
+    // Fixed buckets bill monthly: divide annual cost by 12.
+    // Variable buckets bill per-unit: divide by annual volume for the bucket's UOM.
+    let annualVolume;
+    let rate;
+    if (b.type === 'fixed') {
+      annualVolume = 12;
+      rate = withMargin / 12; // monthly fee
+    } else {
+      annualVolume = Number(b.annualVolume) > 0
+        ? Number(b.annualVolume)
+        : (volumeByUom[b.uom] || 0);
+      rate = annualVolume > 0 ? withMargin / annualVolume : 0;
+    }
+    out[b.id] = { rate, annualVolume, withMargin };
+  }
+  return out;
+}
+
+/**
+ * Return a shallow-copied pricingBuckets array with `rate` and `annualVolume`
+ * filled in from derived values when the bucket didn't have them set
+ * explicitly. Explicit values always win — this is only a fallback so
+ * brand-new models don't render $0 revenue until a user hand-wires each
+ * bucket's rate.
+ *
+ * @param {Object} params — same shape as computeBucketRates
+ * @returns {Array} — pricingBuckets with rate/annualVolume defaulted in
+ */
+export function enrichBucketsWithDerivedRates(params) {
+  const derived = computeBucketRates(params);
+  return (params.buckets || []).map(b => {
+    const d = derived[b.id] || { rate: 0, annualVolume: 0 };
+    const hasExplicitRate = Number(b.rate) > 0;
+    const hasExplicitVol  = Number(b.annualVolume) > 0;
+    return {
+      ...b,
+      rate:         hasExplicitRate ? Number(b.rate)         : d.rate,
+      annualVolume: hasExplicitVol  ? Number(b.annualVolume) : d.annualVolume,
+      // Diagnostic: surface where the value came from so UI can badge it.
+      _rateSource:  hasExplicitRate ? 'explicit' : 'derived',
+    };
+  });
+}
+
 // ============================================================
 // VALIDATION
 // ============================================================

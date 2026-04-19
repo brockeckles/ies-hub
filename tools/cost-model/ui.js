@@ -10,7 +10,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-tF';
-import * as calc from './calc.js?v=20260418-sK';
+import * as calc from './calc.js?v=20260419-uB';
 import * as api from './api.js?v=20260419-sZ';
 import * as scenarios from './calc.scenarios.js?v=20260419-sZ';
 
@@ -1528,12 +1528,10 @@ function renderPricing() {
   const totalCost = Object.entries(bucketCosts).reduce((s, [k, v]) => k !== '_unassigned' ? s + v : s, 0);
   const totalRevenue = totalCost * (1 + marginPct);
 
-  // Find volume driver for each bucket to compute per-unit rate
-  const volumeByUom = {};
-  for (const vl of (model.volumeLines || [])) {
-    const key = vl.uom || 'each';
-    volumeByUom[key] = (volumeByUom[key] || 0) + (vl.volume || 0);
-  }
+  // I-02 — single source of truth: same derivation used by monthly engine.
+  const derivedRates = calc.computeBucketRates({
+    buckets, bucketCosts, marginPct, volumeLines: model.volumeLines || [],
+  });
 
   return `
     <div class="cm-section-header">
@@ -1559,8 +1557,12 @@ function renderPricing() {
         ${buckets.map(b => {
           const cost = bucketCosts[b.id] || 0;
           const withMargin = cost * (1 + marginPct);
-          const vol = b.type === 'fixed' ? 12 : (volumeByUom[b.uom] || 0);
-          const rate = vol > 0 ? withMargin / vol : 0;
+          const d = derivedRates[b.id] || { rate: 0, annualVolume: 0 };
+          const vol = d.annualVolume;
+          // Explicit bucket.rate wins (user set it in the bucket editor);
+          // otherwise fall back to the derived rate so monthly engine matches.
+          const hasExplicit = Number(b.rate) > 0;
+          const rate = hasExplicit ? Number(b.rate) : d.rate;
           return `
             <tr>
               <td style="font-weight:600;">${b.name}</td>
@@ -1569,7 +1571,10 @@ function renderPricing() {
               <td class="cm-num">${calc.formatCurrency(cost)}</td>
               <td class="cm-num" style="font-weight:700;">${calc.formatCurrency(withMargin)}</td>
               <td class="cm-num">${vol > 0 ? vol.toLocaleString() : '—'}</td>
-              <td class="cm-num" style="font-weight:700; color: var(--ies-blue);">${vol > 0 ? calc.formatCurrency(rate, { decimals: 2 }) : '—'}</td>
+              <td class="cm-num" style="font-weight:700; color: var(--ies-blue);">
+                ${vol > 0 || b.type === 'fixed' ? calc.formatCurrency(rate, { decimals: 2 }) : '—'}
+                ${!hasExplicit && (vol > 0 || b.type === 'fixed') ? `<span class="cm-rate-source" title="Derived from assigned costs + margin. Set an explicit rate on the bucket to override.">derived</span>` : ''}
+              </td>
             </tr>
           `;
         }).join('')}
@@ -1589,16 +1594,78 @@ function renderPricing() {
           ${calc.formatCurrency(bucketCosts['_unassigned'])} in unassigned costs rolled into Management Fee.
         </div>
         <div style="font-size:12px; color: var(--ies-gray-500); margin-top:4px;">
-          Assign pricing buckets to labor, equipment, overhead, and VAS lines to distribute costs accurately.
+          Assign pricing buckets to labor, equipment, overhead, and VAS lines to distribute costs accurately. Use the table below.
         </div>
       </div>
     ` : ''}
+
+    <!-- I-01: Line → Bucket assignment table lets users review + reassign every line in one place -->
+    ${renderBucketAssignments(buckets)}
 
     <style>
       .hub-badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.3px; }
       .hub-badge-info { background:rgba(0,71,171,0.1); color:var(--ies-blue); }
       .hub-badge-success { background:rgba(32,201,151,0.1); color:#0d9668; }
+      .cm-rate-source { display:inline-block; margin-left:6px; padding:1px 6px; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.3px; color:var(--ies-gray-500); background:var(--ies-gray-100); border-radius:8px; cursor:help; }
+      .cm-bucket-unassigned { background:rgba(255,193,7,0.1) !important; border-left:2px solid var(--ies-orange); }
+      .cm-bucket-select { width:140px; font-size:12px; padding:3px 4px; }
     </style>
+  `;
+}
+
+/**
+ * I-01 — compact table showing every cost line with its pricing_bucket
+ * dropdown, grouped by source. Lets users reassign without digging
+ * through the individual Labor/Equipment/Overhead grids.
+ */
+function renderBucketAssignments(buckets) {
+  if (!buckets.length) return '';
+  const groups = [
+    { type: 'labor',     label: 'Direct Labor',   arrayName: 'laborLines',         nameField: 'activity_name', lines: model.laborLines || [] },
+    { type: 'indirect',  label: 'Indirect Labor', arrayName: 'indirectLaborLines', nameField: 'role_name',     lines: model.indirectLaborLines || [] },
+    { type: 'equipment', label: 'Equipment',      arrayName: 'equipmentLines',     nameField: 'equipment_name',lines: model.equipmentLines || [] },
+    { type: 'overhead',  label: 'Overhead',       arrayName: 'overheadLines',      nameField: 'category',      lines: model.overheadLines || [] },
+    { type: 'vas',       label: 'VAS',            arrayName: 'vasLines',           nameField: 'service',       lines: model.vasLines || [] },
+    { type: 'startup',   label: 'Startup',        arrayName: 'startupLines',       nameField: 'description',   lines: model.startupLines || [] },
+  ].filter(g => g.lines.length > 0);
+
+  if (groups.length === 0) return '';
+
+  const opts = (selectedId) => `
+    <option value=""${!selectedId ? ' selected' : ''}>— Unassigned —</option>
+    ${buckets.map(b => `<option value="${b.id}"${selectedId === b.id ? ' selected' : ''}>${b.name} (${b.type})</option>`).join('')}
+  `;
+
+  return `
+    <div class="mt-6">
+      <div class="text-subtitle mb-2">Line → Bucket Assignments <span style="font-size:11px;color:var(--ies-gray-400);font-weight:500;">— change where each cost line's dollars route for pricing</span></div>
+      <table class="cm-grid-table">
+        <thead>
+          <tr>
+            <th>Source</th>
+            <th>Line</th>
+            <th>Bucket</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${groups.map(g => g.lines.map((l, i) => {
+            const label = l[g.nameField] || `(unnamed ${g.label.toLowerCase()} #${i + 1})`;
+            const unassigned = !l.pricing_bucket;
+            return `
+              <tr${unassigned ? ' class="cm-bucket-unassigned"' : ''}>
+                <td><span class="hub-badge hub-badge-${g.type === 'labor' || g.type === 'vas' ? 'success' : 'info'}">${g.label}</span></td>
+                <td style="font-weight:500;">${label}</td>
+                <td>
+                  <select class="cm-bucket-select" data-array="${g.arrayName}" data-idx="${i}" data-field="pricing_bucket">
+                    ${opts(l.pricing_bucket)}
+                  </select>
+                </td>
+              </tr>
+            `;
+          }).join('')).join('')}
+        </tbody>
+      </table>
+    </div>
   `;
 }
 
@@ -1641,6 +1708,14 @@ function renderSummary() {
 
   // Build multi-year projections
   const marginFrac = (calcHeur.targetMarginPct || 0) / 100;
+
+  // I-02 FIX — derive missing bucket rates from assigned costs so new
+  // models don't render $0 revenue until someone hand-wires bucket.rate.
+  // I-01 FIX — also capture unassigned-cost rollup for the Summary banner.
+  const pricingSnapshot = computePricingSnapshot(summary, marginFrac, opHrs, contractYears);
+  const enrichedPricingBuckets = pricingSnapshot.buckets;
+  const unassignedCost = pricingSnapshot.bucketCosts['_unassigned'] || 0;
+  const unassignedCount = pricingSnapshot.unassignedCount;
   const projResult = calc.buildYearlyProjections({
     years: contractYears,
     baseLaborCost: summary.laborCost,
@@ -1666,7 +1741,7 @@ function renderSummary() {
     dpoDays:           calcHeur.dpoDays,
     laborPayableDays:  calcHeur.laborPayableDays,
     startupLines: model.startupLines || [],
-    pricingBuckets: model.pricingBuckets || [],
+    pricingBuckets: enrichedPricingBuckets, // I-02: derived rates when unset
     project_id: model.id || 0,
     // Phase 4d — thread calc heuristics + market profile so the monthly
     // engine can compute per-line labor cost using Phase 4b profiles.
@@ -1716,8 +1791,28 @@ function renderSummary() {
 
   const frozenBannerSummary = renderFrozenBanner();
 
+  // I-01 — unassigned cost warning banner. Shows on Summary (not just
+  // Pricing) so users see the silent Management-Fee rollup as soon as
+  // they land on the dashboard.
+  const unassignedBanner = unassignedCost > 0 ? `
+    <div class="hub-card mb-4" style="border-left: 3px solid var(--ies-orange); background: rgba(255,193,7,0.06); padding: 12px 16px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+        <div>
+          <div style="font-size:13px; font-weight:600; color: var(--ies-orange);">
+            ${calc.formatCurrency(unassignedCost)} in unassigned costs — rolled into Management Fee
+          </div>
+          <div style="font-size:12px; color: var(--ies-gray-500); margin-top:2px;">
+            ${unassignedCount} cost line${unassignedCount === 1 ? '' : 's'} ${unassignedCount === 1 ? 'is' : 'are'} missing a pricing bucket. New lines auto-assign a bucket now; fix older lines in the Pricing section.
+          </div>
+        </div>
+        <button class="hub-btn" data-cm-action="go-pricing" style="white-space:nowrap;">Fix in Pricing →</button>
+      </div>
+    </div>
+  ` : '';
+
   return `
     ${frozenBannerSummary}
+    ${unassignedBanner}
     <div class="cm-section-header">
       <div>
         <div class="cm-section-title">Summary Dashboard</div>
@@ -2046,6 +2141,11 @@ function bindSectionEvents(section, container) {
   // Phase 5a: scenario xlsx export (on Summary)
   container.querySelector('[data-cm-action="export-scenario-xlsx"]')?.addEventListener('click', () => {
     exportScenarioToXlsx();
+  });
+
+  // I-01: Summary "Fix in Pricing" shortcut
+  container.querySelector('[data-cm-action="go-pricing"]')?.addEventListener('click', () => {
+    navigateSection('pricing');
   });
 
   // --------------------------------------------------------------
@@ -2630,6 +2730,7 @@ function computeWhatIfPreview() {
     const calcHeur = scenarios.resolveCalcHeuristics(
       currentScenario, currentScenarioSnapshots, heuristicOverrides, fin, whatIfTransient,
     );
+    const whatIfMarginFrac = (calcHeur.targetMarginPct || 0) / 100;
     const projResult = calc.buildYearlyProjections({
       years: contractYears,
       baseLaborCost: summary.laborCost,
@@ -2640,7 +2741,7 @@ function computeWhatIfPreview() {
       startupAmort: summary.startupAmort,
       startupCapital: summary.startupCapital,
       baseOrders: orders || 1,
-      marginPct: (calcHeur.targetMarginPct || 0) / 100,
+      marginPct: whatIfMarginFrac,
       volGrowthPct: calcHeur.volGrowthPct / 100,
       laborEscPct:  calcHeur.laborEscPct  / 100,
       costEscPct:   calcHeur.costEscPct   / 100,
@@ -2655,7 +2756,7 @@ function computeWhatIfPreview() {
       dpoDays:           calcHeur.dpoDays,
       laborPayableDays:  calcHeur.laborPayableDays,
       startupLines: model.startupLines || [],
-      pricingBuckets: model.pricingBuckets || [],
+      pricingBuckets: buildEnrichedPricingBuckets(summary, whatIfMarginFrac, opHrs, contractYears),
       project_id: model.id || 0,
       _calcHeur: calcHeur,
       marketLaborProfile: currentMarketLaborProfile,
@@ -3075,7 +3176,9 @@ async function exportScenarioToXlsx() {
 function shouldRerender(field) {
   return field.includes('shifts.') || field.includes('facility.') ||
          field === 'projectDetails.market' || field === 'projectDetails.contractTerm' ||
-         field === 'financial.targetMargin';
+         field === 'financial.targetMargin' ||
+         // I-01: reassigning a line's bucket shifts the rollup; Pricing tables must re-render.
+         field === 'pricing_bucket';
 }
 
 // ============================================================
@@ -3091,55 +3194,60 @@ function handleAction(action, idx) {
       model.volumeLines.splice(idx, 1);
       break;
     case 'add-labor':
-      model.laborLines.push({ activity_name: '', volume: 0, base_uph: 0, annual_hours: 0, hourly_rate: 0, burden_pct: 30, employment_type: 'permanent', temp_agency_markup_pct: 0, performance_variance_pct: 0 });
+      model.laborLines.push({ activity_name: '', volume: 0, base_uph: 0, annual_hours: 0, hourly_rate: 0, burden_pct: 30, employment_type: 'permanent', temp_agency_markup_pct: 0, performance_variance_pct: 0, pricing_bucket: defaultBucketFor('labor') });
       break;
     case 'delete-labor':
       model.laborLines.splice(idx, 1);
       break;
     case 'add-indirect':
-      model.indirectLaborLines.push({ role_name: '', headcount: 0, hourly_rate: 0, burden_pct: 30 });
+      model.indirectLaborLines.push({ role_name: '', headcount: 0, hourly_rate: 0, burden_pct: 30, pricing_bucket: defaultBucketFor('indirect') });
       break;
     case 'delete-indirect':
       model.indirectLaborLines.splice(idx, 1);
       break;
     case 'auto-gen-indirect':
       model.indirectLaborLines = calc.autoGenerateIndirectLabor(model);
+      // I-01 — auto-gen paths also need default bucket assignment
+      model.indirectLaborLines.forEach(l => { if (!l.pricing_bucket) l.pricing_bucket = defaultBucketFor('indirect'); });
       break;
     case 'add-equipment':
-      model.equipmentLines.push({ equipment_name: '', category: 'MHE', quantity: 1, acquisition_type: 'lease', monthly_cost: 0, monthly_maintenance: 0 });
+      model.equipmentLines.push({ equipment_name: '', category: 'MHE', quantity: 1, acquisition_type: 'lease', monthly_cost: 0, monthly_maintenance: 0, pricing_bucket: defaultBucketFor('equipment') });
       break;
     case 'delete-equipment':
       model.equipmentLines.splice(idx, 1);
       break;
     case 'auto-gen-equipment':
       model.equipmentLines = calc.autoGenerateEquipment(model);
+      model.equipmentLines.forEach(l => { if (!l.pricing_bucket) l.pricing_bucket = defaultBucketFor('equipment'); });
       break;
     case 'open-equipment-catalog':
       openEquipmentCatalog();
       return; // modal is async, don't re-render the section yet
     case 'add-overhead':
-      model.overheadLines.push({ category: '', description: '', cost_type: 'monthly', monthly_cost: 0 });
+      model.overheadLines.push({ category: '', description: '', cost_type: 'monthly', monthly_cost: 0, pricing_bucket: defaultBucketFor('overhead') });
       break;
     case 'delete-overhead':
       model.overheadLines.splice(idx, 1);
       break;
     case 'auto-gen-overhead':
       model.overheadLines = calc.autoGenerateOverhead(model);
+      model.overheadLines.forEach(l => { if (!l.pricing_bucket) l.pricing_bucket = defaultBucketFor('overhead'); });
       break;
     case 'add-vas':
-      model.vasLines.push({ service: '', rate: 0, volume: 0 });
+      model.vasLines.push({ service: '', rate: 0, volume: 0, pricing_bucket: defaultBucketFor('vas') });
       break;
     case 'delete-vas':
       model.vasLines.splice(idx, 1);
       break;
     case 'add-startup':
-      model.startupLines.push({ description: '', one_time_cost: 0 });
+      model.startupLines.push({ description: '', one_time_cost: 0, pricing_bucket: defaultBucketFor('startup') });
       break;
     case 'delete-startup':
       model.startupLines.splice(idx, 1);
       break;
     case 'auto-gen-startup':
       model.startupLines = calc.autoGenerateStartup(model);
+      model.startupLines.forEach(l => { if (!l.pricing_bucket) l.pricing_bucket = defaultBucketFor('startup'); });
       break;
     case 'launch-wsc':
       bus.emit('cm:push-to-wsc', { clearHeight: model.facility?.clearHeight || 0, totalSqft: model.facility?.totalSqft || 0 });
@@ -3450,6 +3558,7 @@ async function openEquipmentCatalog() {
       monthly_maintenance: Number(item.monthly_maintenance) || 0,
       amort_years: Number(item.useful_life_years) || 5,
       notes: item.capacity_description || '',
+      pricing_bucket: defaultBucketFor('equipment'), // I-01 — don't silently roll into Management Fee
     };
     if (!Array.isArray(model.equipmentLines)) model.equipmentLines = [];
     model.equipmentLines.push(newLine);
@@ -3520,6 +3629,7 @@ function ensureMonthlyBundle() {
     const market = model.projectDetails?.market;
     const fr = (refData.facilityRates || []).find(r => r.market_id === market);
     const ur = (refData.utilityRates || []).find(r => r.market_id === market);
+    const opHrs = calc.operatingHours(model.shifts || {});
     const orders = (model.volumeLines || []).find(v => v.isOutboundPrimary)?.volume || 0;
     const contractYears = model.projectDetails?.contractTerm || 5;
     const fin = model.financial || {};
@@ -3545,6 +3655,7 @@ function ensureMonthlyBundle() {
       fin,
       whatIfTransient,
     );
+    const emBMarginFrac = (calcHeur.targetMarginPct || 0) / 100;
     const projResult = calc.buildYearlyProjections({
       years: contractYears,
       baseLaborCost: summary.laborCost,
@@ -3555,7 +3666,7 @@ function ensureMonthlyBundle() {
       startupAmort: summary.startupAmort,
       startupCapital: summary.startupCapital,
       baseOrders: orders || 1,
-      marginPct: (calcHeur.targetMarginPct || 0) / 100,
+      marginPct: emBMarginFrac,
       volGrowthPct: calcHeur.volGrowthPct / 100,
       laborEscPct:  calcHeur.laborEscPct  / 100,
       costEscPct:   calcHeur.costEscPct   / 100,
@@ -3570,7 +3681,7 @@ function ensureMonthlyBundle() {
       dpoDays:           calcHeur.dpoDays,
       laborPayableDays:  calcHeur.laborPayableDays,
       startupLines: model.startupLines || [],
-      pricingBuckets: model.pricingBuckets || [],
+      pricingBuckets: buildEnrichedPricingBuckets(summary, emBMarginFrac, opHrs, contractYears),
       project_id: model.id || 0,
       _calcHeur: calcHeur,
       marketLaborProfile: currentMarketLaborProfile,
@@ -3967,6 +4078,110 @@ function createEmptyModel() {
       { id: 'vas', name: 'VAS', type: 'variable', uom: 'each' },
       { id: 'case_pick', name: 'Case Pick', type: 'variable', uom: 'case' },
     ],
+  };
+}
+
+/**
+ * I-01 helper: pick a sensible default pricing_bucket for a new cost line
+ * so it doesn't silently roll into Management Fee.
+ *
+ * Strategy by line type:
+ *   - labor (direct):  prefer 'outbound', then first variable bucket, then first
+ *   - indirect labor:  prefer 'mgmt_fee', then first fixed bucket, then first
+ *   - equipment:       prefer 'mgmt_fee', then first fixed bucket, then first
+ *   - overhead:        prefer 'mgmt_fee', then first fixed bucket, then first
+ *   - vas:             prefer 'vas',      then first variable bucket, then first
+ *   - startup:         prefer 'mgmt_fee', then first fixed bucket, then first
+ *
+ * Returns null when no buckets exist (caller should leave pricing_bucket unset).
+ */
+function defaultBucketFor(lineType) {
+  const buckets = (model && model.pricingBuckets) || [];
+  if (buckets.length === 0) return null;
+  const byId = (id) => buckets.find(b => b.id === id);
+  const firstOfType = (type) => buckets.find(b => b.type === type);
+  const preference = {
+    labor:    ['outbound', 'pick_pack', 'each_pick', 'case_pick'],
+    indirect: ['mgmt_fee'],
+    equipment:['mgmt_fee'],
+    overhead: ['mgmt_fee'],
+    vas:      ['vas'],
+    startup:  ['mgmt_fee'],
+  }[lineType] || ['mgmt_fee'];
+  for (const id of preference) {
+    if (byId(id)) return id;
+  }
+  // Fallbacks
+  if (['labor', 'vas'].includes(lineType)) {
+    return (firstOfType('variable') || buckets[0]).id;
+  }
+  return (firstOfType('fixed') || buckets[0]).id;
+}
+
+/**
+ * I-02 helper: build a pricingBuckets array with rate + annualVolume
+ * derived from the same cost rollup the Pricing Schedule UI shows.
+ * Explicit bucket.rate values win; this is only the fallback so brand-new
+ * models don't render $0 monthly revenue.
+ *
+ * @param {Object} summary — output of calc.computeSummary
+ * @param {number} marginFrac — target margin as a 0-based fraction
+ * @param {number} opHrs — operating hours per year
+ * @param {number} contractYears — for startup amortization
+ */
+function buildEnrichedPricingBuckets(summary, marginFrac, opHrs, contractYears) {
+  return computePricingSnapshot(summary, marginFrac, opHrs, contractYears).buckets;
+}
+
+/**
+ * Full pricing snapshot for Summary — returns both the enriched buckets
+ * (I-02) and the raw bucket costs including the '_unassigned' pseudo-bucket
+ * (I-01 warning banner).
+ */
+function computePricingSnapshot(summary, marginFrac, opHrs, contractYears) {
+  const startupWithAmort = (model.startupLines || []).map(l => ({
+    ...l,
+    annual_amort: (l.one_time_cost || 0) / Math.max(1, contractYears || 5),
+  }));
+  // Compute WITHOUT unassigned-rollup so we can see the real unassigned total.
+  // The existing computeBucketCosts rolls unassigned into mgmt_fee — we want
+  // the pre-rollup number for the banner, so we recompute from line data.
+  const buckets = model.pricingBuckets || [];
+  const bucketCosts = calc.computeBucketCosts({
+    buckets,
+    laborLines: model.laborLines || [],
+    indirectLaborLines: model.indirectLaborLines || [],
+    equipmentLines: model.equipmentLines || [],
+    overheadLines: model.overheadLines || [],
+    vasLines: model.vasLines || [],
+    startupLines: startupWithAmort,
+    facilityCost: summary.facilityCost || 0,
+    operatingHours: opHrs || 0,
+  });
+  // Count lines that explicitly lack a pricing_bucket (what goes to _unassigned)
+  const unassignedLines = [];
+  const tally = (arr, type) => (arr || []).forEach(l => {
+    if (!l.pricing_bucket) unassignedLines.push({ type, line: l });
+  });
+  tally(model.laborLines, 'labor');
+  tally(model.indirectLaborLines, 'indirect');
+  tally(model.equipmentLines, 'equipment');
+  tally(model.overheadLines, 'overhead');
+  tally(model.vasLines, 'vas');
+  tally(model.startupLines, 'startup');
+
+  const enrichedBuckets = calc.enrichBucketsWithDerivedRates({
+    buckets,
+    bucketCosts,
+    marginPct: marginFrac || 0,
+    volumeLines: model.volumeLines || [],
+  });
+
+  return {
+    buckets: enrichedBuckets,
+    bucketCosts,
+    unassignedCount: unassignedLines.length,
+    unassignedLines,
   };
 }
 
