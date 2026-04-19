@@ -18,6 +18,7 @@ const ORDER_BY = {
   ref_fleet_carrier_rates: 'display_name',
   ref_design_heuristics: 'sort_order',
   ref_labor_market_profiles: 'id',
+  ref_fleet_dedicated_benchmarks: 'id',
   accounts: 'company_name',
   competitors: 'name',
   master_markets: 'market_code',

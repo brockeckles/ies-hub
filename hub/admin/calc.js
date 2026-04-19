@@ -135,6 +135,22 @@ export const MASTER_TABLES = [
     ],
   },
   {
+    id: 'fleet_dedicated_benchmarks',
+    name: 'Fleet Dedicated Benchmarks',
+    description: 'Per-market $/mile benchmarks for dedicated fleet pricing — reference data used during RFP build-out. Dedicated fleet is cost-plus in the calc; these benchmarks help designers validate the derived rate against market reality.',
+    tableName: 'ref_fleet_dedicated_benchmarks', rowCount: 0,
+    columns: [
+      { key: 'market_id',          label: 'Market ID',    type: 'text',   required: true, editable: true },
+      { key: 'vehicle_type',       label: 'Vehicle',      type: 'text',   required: true, editable: true },
+      { key: 'benchmark_per_mile', label: '$/Mile',       type: 'number', required: true, editable: true },
+      { key: 'low_band_per_mile',  label: 'Low Band',     type: 'number', editable: true },
+      { key: 'high_band_per_mile', label: 'High Band',    type: 'number', editable: true },
+      { key: 'source_citation',    label: 'Source',       type: 'text',   editable: true },
+      { key: 'notes',              label: 'Notes',        type: 'text',   editable: true },
+      { key: 'is_active',          label: 'Active',       type: 'boolean', editable: true },
+    ],
+  },
+  {
     id: 'labor_market_profiles',
     name: 'Labor Market Profiles',
     description: 'Per-market turnover, temp premium, and seasonal OT/absence shape used as defaults when a labor line opts in via "Use market defaults".',
