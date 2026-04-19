@@ -852,6 +852,46 @@ function renderModeMix(el) {
           ${renderInput('Fuel Surcharge', 'fuelSurcharge', (rateCard.fuelSurcharge * 100).toFixed(0), '%')}
         </div>
       </div>
+
+      <h3 class="text-section" style="margin:20px 0 16px;">LTL Weight-Break Rate Deck
+        <span style="font-size:11px;font-weight:normal;color:var(--ies-gray-500);margin-left:8px;">$/CWT by shipment weight tier</span>
+      </h3>
+      <div class="hub-card">
+        <table class="cm-grid-table" style="width:100%;font-size:13px;">
+          <thead>
+            <tr>
+              <th style="text-align:left;">Weight Tier (lbs)</th>
+              <th style="text-align:right;width:110px;">$/CWT</th>
+              <th style="text-align:left;color:var(--ies-gray-500);">Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(rateCard.ltlWeightBreaks || calc.DEFAULT_RATES.ltlWeightBreaks).map((wb, i) => {
+              const prev = i === 0 ? 0 : (rateCard.ltlWeightBreaks || calc.DEFAULT_RATES.ltlWeightBreaks)[i - 1];
+              const rate = (rateCard.ltlBreakRates || calc.DEFAULT_RATES.ltlBreakRates)[i] ?? 0;
+              const label = i === 0 ? `< ${wb.toLocaleString()}` : `${prev.toLocaleString()}–${wb.toLocaleString()}`;
+              return `
+                <tr>
+                  <td style="padding:6px 8px;"><strong>${label}</strong></td>
+                  <td style="text-align:right;padding:6px 8px;">
+                    <span style="color:var(--ies-gray-400);">$</span>
+                    <input type="number" step="0.25" min="0" value="${rate}" data-ltl-break-idx="${i}" style="width:75px;text-align:right;" />
+                  </td>
+                  <td style="color:var(--ies-gray-500);font-size:11px;">${['full-truck-like, lowest CWT','class-avg base','class-avg mid','LTL typical','heavy LTL / partial TL','TL crossover tier'][i] || ''}</td>
+                </tr>
+              `;
+            }).join('')}
+            <tr>
+              <td style="padding:6px 8px;">≥ ${(rateCard.ltlWeightBreaks || calc.DEFAULT_RATES.ltlWeightBreaks).slice(-1)[0].toLocaleString()}</td>
+              <td style="text-align:right;padding:6px 8px;color:var(--ies-gray-400);">— uses top tier rate —</td>
+              <td style="color:var(--ies-gray-400);"></td>
+            </tr>
+          </tbody>
+        </table>
+        <div style="margin-top:8px;font-size:11px;color:var(--ies-gray-500);">
+          Rates cascade — engine uses the rate at or below the shipment weight. Changes persist with the scenario.
+        </div>
+      </div>
     </div>
   `;
 
@@ -872,6 +912,19 @@ function renderModeMix(el) {
       let val = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
       if (key === 'fuelSurcharge') val = val / 100;
       rateCard[key] = val;
+    });
+  });
+
+  // Bind LTL weight-break rate deck
+  el.querySelectorAll('input[data-ltl-break-idx]').forEach(input => {
+    input.addEventListener('change', (e) => {
+      const idx = parseInt(/** @type {HTMLInputElement} */ (e.target).dataset.ltlBreakIdx);
+      const val = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
+      if (!Array.isArray(rateCard.ltlBreakRates)) {
+        rateCard.ltlBreakRates = [...calc.DEFAULT_RATES.ltlBreakRates];
+        rateCard.ltlWeightBreaks = [...calc.DEFAULT_RATES.ltlWeightBreaks];
+      }
+      rateCard.ltlBreakRates[idx] = val;
     });
   });
 }
