@@ -103,9 +103,14 @@ export async function fetchDashboardData() {
         kpis = { ...kpis, rfpSignalCount: active, rfpSignalChange: `${active} in pipeline`, rfpSignalTrend: active > 3 ? 'up' : 'neutral' };
       }
 
-      // Build alerts from live data
+      // Build alerts from live data (newest first by created_at/date)
       if (alertRows.length > 0) {
-        alerts = alertRows.slice(0, 8).map(r => ({
+        const sortedAlerts = [...alertRows].sort((a, b) => {
+          const aKey = String(a.created_at || a.date || '');
+          const bKey = String(b.created_at || b.date || '');
+          return bKey.localeCompare(aKey);
+        });
+        alerts = sortedAlerts.slice(0, 8).map(r => ({
           title: r.title || r.headline || 'Market Alert',
           message: r.message || r.summary || r.description || '',
           severity: r.severity || 'info',
@@ -124,12 +129,10 @@ export async function fetchDashboardData() {
       // Build RFP signals from live data. rfp_signals schema:
       //   company, vertical, signal_type, detail, estimated_timeline, confidence (1-5), status
       if (rfpRows.length) {
-        // Sort by confidence desc then recency; take top 5
-        const sorted = [...rfpRows].sort((a, b) => {
-          const c = (b.confidence || 0) - (a.confidence || 0);
-          if (c !== 0) return c;
-          return (b.created_at || '').localeCompare(a.created_at || '');
-        });
+        // Sort by recency (newest first); take top 5
+        const sorted = [...rfpRows].sort((a, b) =>
+          String(b.created_at || '').localeCompare(String(a.created_at || ''))
+        );
         rfpSignals = sorted.slice(0, 5).map(r => ({
           company: r.company || 'Unknown',
           vertical: formatVertical(r.vertical),
@@ -302,14 +305,17 @@ function buildIntelligenceFeed(src) {
     };
   };
 
-  const competitor = (src.competitor || []).slice(0, 25).map(r => toItem(r, 'Competitor'));
-  const accounts = (src.accounts || []).slice(0, 25).map(r => toItem(r, 'Accounts'));
-  const tariff = (src.tariff || []).slice(0, 25).map(r => toItem(r, 'Tariff'));
-  const rfp = (src.rfp || []).slice(0, 25).map(r => toItem(r, 'RFP'));
-  const alerts = (src.alerts || []).slice(0, 25).map(r => toItem(r, 'Alerts'));
+  // Sort each category newest-first (by `at`) before capping, so we don't
+  // drop recent items that happen to appear late in the raw result set.
+  const sortByAtDesc = (a, b) => String(b.at || '').localeCompare(String(a.at || ''));
+  const competitor = (src.competitor || []).map(r => toItem(r, 'Competitor')).sort(sortByAtDesc).slice(0, 25);
+  const accounts = (src.accounts || []).map(r => toItem(r, 'Accounts')).sort(sortByAtDesc).slice(0, 25);
+  const tariff = (src.tariff || []).map(r => toItem(r, 'Tariff')).sort(sortByAtDesc).slice(0, 25);
+  const rfp = (src.rfp || []).map(r => toItem(r, 'RFP')).sort(sortByAtDesc).slice(0, 25);
+  const alerts = (src.alerts || []).map(r => toItem(r, 'Alerts')).sort(sortByAtDesc).slice(0, 25);
 
   const all = [...alerts, ...competitor, ...accounts, ...tariff, ...rfp]
-    .sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')))
+    .sort(sortByAtDesc)
     .slice(0, 60);
 
   return { all, alerts, competitor, accounts, tariff, rfp };
