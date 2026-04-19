@@ -146,6 +146,20 @@ function openEditor(savedRow) {
   // I-05 — fresh open is clean; only run/edit/etc marks dirty.
   isDirty = false;
   _scenarioName = savedRow?.name || d.name || '';
+  // If the saved scenario has a result that's missing downstream fields
+  // (assignments + the per-center-weighted-distance shape renderAnalysis /
+  // renderMap expect), rebuild it from points+config so the full Analysis
+  // and Map tabs render instead of erroring silently. Covers scenarios
+  // that were seeded via SQL with only a summary result payload.
+  if (cogResult && points.length > 0 &&
+      (!Array.isArray(cogResult.assignments) || !cogResult.assignments.length)) {
+    try {
+      cogResult = calc.kMeansCog(points, config.numCenters, config.maxIterations);
+      sensitivityData = calc.sensitivityAnalysis(points, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000);
+    } catch (err) {
+      console.warn('[COG] Result rebuild from saved inputs failed; falling back to partial render:', err);
+    }
+  }
   // New editor session — drop the prior scenario's run-state baseline.
   // If the loaded scenario has a result, treat the loaded inputs as the
   // baseline (saved row's centers were computed against saved inputs).
@@ -608,6 +622,30 @@ function renderAnalysis(el) {
     el.innerHTML = '<div class="hub-card"><p class="text-body text-muted">Click "Find Optimal Location" to see results.</p></div>';
     return;
   }
+  // Guard against partial saved results (e.g., seeded via SQL with summary
+  // fields only). estimateTransportCost reads cogResult.assignments.filter —
+  // without a guard the whole render would throw and the content area would
+  // be left empty.
+  const hasAssignments = Array.isArray(cogResult.assignments) && cogResult.assignments.length > 0;
+  if (!hasAssignments) {
+    el.innerHTML = `
+      <div class="hub-card" style="max-width:900px;border-left:3px solid var(--ies-orange);">
+        <h3 class="text-section" style="margin-top:0;">Results Preview</h3>
+        <p class="text-body">This scenario has summary results but lacks the per-point assignments needed for the full analysis view. Click <strong>Find Optimal Location</strong> above to rebuild the full solve from the current points + config.</p>
+        ${(cogResult.centers || []).length > 0 ? `
+          <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--ies-gray-200);">
+            <div class="text-subtitle">Seeded Centers (${cogResult.centers.length})</div>
+            ${cogResult.centers.map((c, i) => `
+              <div style="margin-top:6px;font-size:13px;">
+                Center ${i + 1}: ${c.lat?.toFixed(3)}, ${c.lng?.toFixed(3)}
+              </div>
+            `).join('')}
+          </div>
+        ` : ''}
+      </div>
+    `;
+    return;
+  }
 
   const costEst = calc.estimateTransportCost(cogResult, points, config.transportCostPerMile, config.unitsPerTruck || 25000);
 
@@ -720,6 +758,18 @@ function renderAnalysis(el) {
 function renderMap(el) {
   if (!cogResult) {
     el.innerHTML = '<div class="hub-card"><p class="text-body text-muted">Run analysis first to see the map.</p></div>';
+    return;
+  }
+  // Guard against partial saved results — map-draw reads cogResult.assignments
+  // to draw center↔point lines. If missing, we'd throw during initLeafletMap.
+  const hasAssignments = Array.isArray(cogResult.assignments) && cogResult.assignments.length > 0;
+  if (!hasAssignments) {
+    el.innerHTML = `
+      <div class="hub-card" style="max-width:900px;border-left:3px solid var(--ies-orange);">
+        <h3 class="text-section" style="margin-top:0;">Map Preview Unavailable</h3>
+        <p class="text-body">This scenario's saved result lacks per-point assignments, so the flow-line map can't be drawn. Click <strong>Find Optimal Location</strong> to rebuild the full solve and see the map.</p>
+      </div>
+    `;
     return;
   }
 
