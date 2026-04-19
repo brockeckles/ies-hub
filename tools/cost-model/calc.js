@@ -509,6 +509,9 @@ export function buildYearlyProjections(params) {
     baseOrders, marginPct,
     volGrowthPct = 0, laborEscPct = 0, costEscPct = 0.03,
     laborLines = [],
+    // Phase 0: per-project tax rate (was hardcoded 25%). Falls back to 25
+    // if the model didn't carry one from cost_model_projects.tax_rate_pct.
+    taxRatePct = 25,
   } = params;
 
   // Learning curve: weighted avg productivity factor for Year 1
@@ -549,12 +552,17 @@ export function buildYearlyProjections(params) {
     const ebit = grossProfit;
     const orders = baseOrders * volMult;
 
-    const taxes = Math.max(0, ebit * 0.25);
+    // Phase 0 fix: per-project tax rate (was hardcoded 25%).
+    const taxes = Math.max(0, ebit * (taxRatePct / 100));
     const netIncome = ebit - taxes;
     const capex = yr === 1 ? startupCapital : 0;
+    // TODO (CM Phase 1): replace 8%-of-revenue working-capital proxy with
+    // DSO/DPO/labor-payable model in calc.monthly.js. This proxy understates
+    // WC volatility on growing accounts and overstates on shrinking ones.
+    const WC_PROXY_PCT = 0.08;
     const workingCapitalChange = yr === 1
-      ? revenue * 0.08
-      : revenue * volGrowthPct * 0.08;
+      ? revenue * WC_PROXY_PCT
+      : revenue * volGrowthPct * WC_PROXY_PCT;
     const operatingCashFlow = netIncome + depreciation - workingCapitalChange;
     const freeCashFlow = operatingCashFlow - capex;
 

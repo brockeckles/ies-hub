@@ -1492,6 +1492,9 @@ function renderSummary() {
     laborEscPct: (fin.laborEscalation || 0) / 100,
     costEscPct: (fin.annualEscalation || 0) / 100,
     laborLines: model.laborLines || [],
+    // Phase 0: thread per-project tax rate (fin.taxRate is sourced from
+    // cost_model_projects.tax_rate_pct on load; defaults to 25 if absent).
+    taxRatePct: fin.taxRate ?? 25,
   });
   const projections = projResult.projections || [];
 
