@@ -98,7 +98,9 @@ let heuristicsCatalog = [];
 let heuristicOverrides = {};
 let dealScenarios = [];
 let currentScenario = null;
+let currentScenarioSnapshots = null;   // grouped { labor:[], facility:[], ..., heuristics:[] }
 let currentRevisions = [];
+let _lastCalcHeuristics = null;        // set by Summary calc; read by Timeline/Summary banners
 
 // ============================================================
 // LIFECYCLE
@@ -1074,7 +1076,7 @@ function renderLabor() {
     <div class="text-subtitle mb-2">Direct Labor <span style="font-size:11px;color:var(--ies-gray-400);font-weight:500;">— Volume from Volumes tab · MHE and IT/Device separate · Burden % set in Labor Costing Factors above</span></div>
     <table class="cm-grid-table">
       <thead>
-        <tr><th style="min-width:180px;">MOST Template</th><th>Activity</th><th>MHE</th><th>IT / Device</th><th>Volume</th><th>UPH</th><th>Hrs/Yr</th><th>FTE</th><th>Rate</th><th class="cm-num">Annual Cost</th><th></th></tr>
+        <tr><th style="min-width:180px;">MOST Template</th><th>Activity</th><th>MHE</th><th>IT / Device</th><th>Volume</th><th>UPH</th><th>Hrs/Yr</th><th>FTE</th><th>Rate</th><th>Employment</th><th>Markup %</th><th class="cm-num">Annual Cost</th><th></th></tr>
       </thead>
       <tbody>
         ${lines.map((l, i) => `
@@ -1114,11 +1116,23 @@ function renderLabor() {
             <td class="cm-num">${(l.annual_hours || 0).toLocaleString(undefined, {maximumFractionDigits:0})}</td>
             <td class="cm-num">${calc.fte(l, opHrs).toFixed(1)}</td>
             <td><input type="number" value="${l.hourly_rate || 0}" style="width:55px;" step="0.5" data-array="laborLines" data-idx="${i}" data-field="hourly_rate" data-type="number" /></td>
+            <td>
+              <select style="width:110px;" data-array="laborLines" data-idx="${i}" data-field="employment_type">
+                <option value="permanent"${(l.employment_type || 'permanent') === 'permanent' ? ' selected' : ''}>Permanent</option>
+                <option value="temp_agency"${l.employment_type === 'temp_agency' ? ' selected' : ''}>Temp Agency</option>
+                <option value="contractor"${l.employment_type === 'contractor' ? ' selected' : ''}>Contractor</option>
+              </select>
+            </td>
+            <td>
+              <input type="number" value="${l.temp_agency_markup_pct || 0}" style="width:55px;" step="1" min="0" max="100"
+                data-array="laborLines" data-idx="${i}" data-field="temp_agency_markup_pct" data-type="number"
+                ${(l.employment_type || 'permanent') !== 'temp_agency' ? 'disabled title="Only applies to Temp Agency lines"' : ''} />
+            </td>
             <td class="cm-num">${calc.formatCurrency(calc.directLineAnnualSimple(l, lc))}</td>
             <td><button class="cm-delete-btn" data-action="delete-labor" data-idx="${i}">Del</button></td>
           </tr>
         `).join('')}
-        <tr class="cm-total-row"><td colspan="9">Total Direct Labor</td><td class="cm-num">${calc.formatCurrency(totalDirect)}</td><td></td></tr>
+        <tr class="cm-total-row"><td colspan="11">Total Direct Labor</td><td class="cm-num">${calc.formatCurrency(totalDirect)}</td><td></td></tr>
       </tbody>
     </table>
     <button class="cm-add-row-btn" data-action="add-labor">+ Add Labor Line</button>
@@ -1493,8 +1507,18 @@ function renderSummary() {
     annualOrders: orders || 1,
   });
 
+  // Phase 3 close-the-loop: resolve heuristics through the
+  //   approved-snapshot → override → project-column
+  // chain so approved scenarios re-run against their FROZEN values.
+  const calcHeur = scenarios.resolveCalcHeuristics(
+    currentScenario,
+    currentScenarioSnapshots,
+    heuristicOverrides,
+    fin,
+  );
+
   // Build multi-year projections
-  const marginFrac = (fin.targetMargin || 0) / 100;
+  const marginFrac = (calcHeur.targetMarginPct || 0) / 100;
   const projResult = calc.buildYearlyProjections({
     years: contractYears,
     baseLaborCost: summary.laborCost,
@@ -1506,27 +1530,26 @@ function renderSummary() {
     startupCapital: summary.startupCapital,
     baseOrders: orders || 1,
     marginPct: marginFrac,
-    volGrowthPct: (fin.volumeGrowth || 0) / 100,
-    laborEscPct: (fin.laborEscalation || 0) / 100,
-    costEscPct: (fin.annualEscalation || 0) / 100,
+    volGrowthPct: calcHeur.volGrowthPct / 100,
+    laborEscPct:  calcHeur.laborEscPct  / 100,
+    costEscPct:   calcHeur.costEscPct   / 100,
     laborLines: model.laborLines || [],
-    // Phase 0: thread per-project tax rate (fin.taxRate is sourced from
-    // cost_model_projects.tax_rate_pct on load; defaults to 25 if absent).
-    taxRatePct: fin.taxRate ?? 25,
-    // Phase 1: optional — if refData.periods loaded (via api.fetchRefPeriods)
-    // and the flag is on, the wrapper will route through the monthly engine.
+    taxRatePct: calcHeur.taxRatePct,
     useMonthlyEngine: typeof window !== 'undefined' && window.COST_MODEL_MONTHLY_ENGINE === true,
     periods: (refData && refData.periods) || [],
-    ramp: null,                      // default medium ramp picked up in adapter
+    ramp: null,
     seasonality: model.seasonalityProfile || null,
-    preGoLiveMonths: fin.preGoLiveMonths || 0,
-    dsoDays: fin.dsoDays ?? 30,
-    dpoDays: fin.dpoDays ?? 30,
-    laborPayableDays: fin.laborPayableDays ?? 14,
+    preGoLiveMonths: calcHeur.preGoLiveMonths,
+    dsoDays:           calcHeur.dsoDays,
+    dpoDays:           calcHeur.dpoDays,
+    laborPayableDays:  calcHeur.laborPayableDays,
     startupLines: model.startupLines || [],
     pricingBuckets: model.pricingBuckets || [],
     project_id: model.id || 0,
+    // Diagnostic: carries which keys came from snapshot vs override vs default.
+    _heuristicsSource: calcHeur.used,
   });
+  _lastCalcHeuristics = calcHeur; // for the frozen-banner in Summary/Timeline
   // Stash the monthly bundle for save-time persistence
   if (projResult && projResult.monthlyBundle) _lastMonthlyBundle = projResult.monthlyBundle;
   const projections = projResult.projections || [];
@@ -1565,7 +1588,10 @@ function renderSummary() {
     grossMargin: 10, ebitda: 8, ebit: 5, roic: 15, mirr: 12, payback: contractYears * 12,
   };
 
+  const frozenBannerSummary = renderFrozenBanner();
+
   return `
+    ${frozenBannerSummary}
     <div class="cm-section-header">
       <div>
         <div class="cm-section-title">Summary Dashboard</div>
@@ -2167,7 +2193,7 @@ function handleAction(action, idx) {
       model.volumeLines.splice(idx, 1);
       break;
     case 'add-labor':
-      model.laborLines.push({ activity_name: '', volume: 0, base_uph: 0, annual_hours: 0, hourly_rate: 0, burden_pct: 30 });
+      model.laborLines.push({ activity_name: '', volume: 0, base_uph: 0, annual_hours: 0, hourly_rate: 0, burden_pct: 30, employment_type: 'permanent', temp_agency_markup_pct: 0 });
       break;
     case 'delete-labor':
       model.laborLines.splice(idx, 1);
@@ -2991,9 +3017,11 @@ function setNestedValue(obj, path, value) {
 function renderTimeline() {
   const flagOn = typeof window !== 'undefined' && window.COST_MODEL_MONTHLY_ENGINE === true;
   const bundle = _lastMonthlyBundle;
+  const frozenBanner = renderFrozenBanner();
 
   if (!flagOn) {
     return `
+      ${frozenBanner}
       <div class="cm-section">
         <h2 class="cm-section-title">Timeline <span style="font-size:11px;color:var(--ies-gray-400);font-weight:500;margin-left:8px;">Phase 1 — Preview</span></h2>
         <div class="hub-card" style="background:#fef3c7;border:1px solid #fcd34d;color:#92400e;padding:16px;">
@@ -3059,6 +3087,7 @@ function renderTimeline() {
   const payback = rows.find(r => r.cum_fcf >= 0 && !r.is_pre_go_live);
 
   return `
+    ${frozenBanner}
     <div class="cm-section">
       <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;">
         <h2 class="cm-section-title" style="margin:0;">Timeline</h2>
@@ -3267,6 +3296,18 @@ async function ensureScenariosLoaded() {
     if (currentScenario) {
       try { currentRevisions = await api.listRevisions(currentScenario.id); }
       catch (_) { currentRevisions = []; }
+      // Phase 3 close-the-loop: pull snapshots so approved scenarios re-run
+      // against their frozen heuristics/rates instead of the live ref_* tables.
+      if (currentScenario.status === 'approved') {
+        try {
+          const grouped = await api.fetchSnapshots(currentScenario.id);
+          currentScenarioSnapshots = grouped || null;
+        } catch (_) { currentScenarioSnapshots = null; }
+      } else {
+        currentScenarioSnapshots = null;
+      }
+    } else {
+      currentScenarioSnapshots = null;
     }
   }
   if (dealId) {
@@ -3275,6 +3316,28 @@ async function ensureScenariosLoaded() {
   } else {
     dealScenarios = [];
   }
+}
+
+/** Returns HTML for the "Reading frozen rates" banner, or empty string. */
+function renderFrozenBanner() {
+  if (!currentScenario || currentScenario.status !== 'approved') return '';
+  if (!currentScenarioSnapshots) return '';
+  const ts = currentScenario.approved_at ? new Date(currentScenario.approved_at).toLocaleDateString() : '';
+  const counts = Object.fromEntries(Object.entries(currentScenarioSnapshots).map(([k, v]) => [k, (v || []).length]));
+  return `
+    <div class="cm-card" style="background:#ecfdf5;border-left:4px solid #059669;margin-bottom:12px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <strong style="color:#065f46;">Reading frozen rates</strong>
+        <span style="font-size:12px;color:#065f46;">
+          Approved ${ts}${currentScenario.approved_by ? ` · by ${currentScenario.approved_by}` : ''}
+          · ${counts.labor || 0} labor · ${counts.facility || 0} facility · ${counts.heuristics || 0} heuristics frozen
+        </span>
+      </div>
+      <div style="font-size:11px;color:#065f46;margin-top:4px;">
+        Edits on this scenario spawn a child. To unfreeze, create a child scenario.
+      </div>
+    </div>
+  `;
 }
 
 const STATUS_COLORS = {

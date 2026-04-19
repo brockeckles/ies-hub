@@ -555,6 +555,98 @@ export function buildRevisionRow(scenarioId, previousRevisionNumber, changedBy, 
 // ============================================================
 
 /**
+ * Build the heuristic map that the monthly calc engine should consume,
+ * applying the full resolution chain:
+ *
+ *   approved-snapshot  →  project override jsonb  →  project column
+ *
+ * `snapshots` is the grouped output of loadScenarioRates (already filtered
+ * for heuristics), `overrides` is the project's live heuristic_overrides
+ * jsonb, and `projectCols` is an object carrying the legacy flat fields
+ * (taxRate, dsoDays, etc.) — the last-resort defaults.
+ *
+ * Returns a record with the keys the calc layer expects, using canonical
+ * units matching buildYearlyProjections (percent values are raw %, not
+ * fractions — 25 means 25%).
+ *
+ * @param {Scenario|null} scenario
+ * @param {{ heuristics?: Object[] }|null} snapshots  Output of loadScenarioRates
+ * @param {Object|null} overrides                    project.heuristic_overrides
+ * @param {Object} projectCols                       fallback bag
+ * @returns {{
+ *   taxRatePct: number, dsoDays: number, dpoDays: number,
+ *   laborPayableDays: number, laborEscPct: number, costEscPct: number,
+ *   equipmentEscPct: number, facilityEscPct: number,
+ *   volGrowthPct: number, targetMarginPct: number,
+ *   preGoLiveMonths: number, absenceAllowancePct: number,
+ *   benefitLoadPct: number, overtimePct: number, bonusPct: number,
+ *   shift2PremiumPct: number, shift3PremiumPct: number,
+ *   rampWeeksLow: number, rampWeeksMed: number, rampWeeksHigh: number,
+ *   unitsPerTruck: number, dockSfPerDoor: number, rackHoneycombPct: number,
+ *   source: 'snapshot'|'override'|'default', used: Object<string, string>
+ * }}
+ */
+export function resolveCalcHeuristics(scenario, snapshots, overrides, projectCols) {
+  const heuristicsSnap = snapshots && Array.isArray(snapshots.heuristics) ? snapshots.heuristics : [];
+  const o = overrides || {};
+  const p = projectCols || {};
+  const fromSnap = new Map();
+  for (const row of heuristicsSnap) {
+    // snapshot_json shape (from approve_scenario RPC):
+    //   { key, label, category, default_value, default_enum, override, effective }
+    if (!row || !row.key) continue;
+    // prefer .effective (what was in force at approval); fall back to default_value
+    let v = row.effective;
+    if (v === undefined || v === null) v = row.default_value ?? row.default_enum;
+    fromSnap.set(row.key, v);
+  }
+  const isApproved = scenario && scenario.status === 'approved' && fromSnap.size > 0;
+  const used = {};
+  function pick(key, fallback) {
+    if (isApproved && fromSnap.has(key)) { used[key] = 'snapshot'; return fromSnap.get(key); }
+    if (Object.prototype.hasOwnProperty.call(o, key) && o[key] !== null && o[key] !== undefined && o[key] !== '') {
+      used[key] = 'override'; return o[key];
+    }
+    used[key] = 'default';
+    return fallback;
+  }
+  const n = (x, d = 0) => { const v = Number(x); return Number.isFinite(v) ? v : d; };
+  return {
+    // Financial
+    taxRatePct:           n(pick('tax_rate_pct',            p.taxRate           ?? 25),   25),
+    targetMarginPct:      n(pick('target_margin_pct',       p.targetMargin      ?? 12),   12),
+    volGrowthPct:         n(pick('annual_volume_growth_pct', p.volumeGrowth      ?? 0),   0),
+    // Working Capital
+    dsoDays:              n(pick('dso_days',                p.dsoDays           ?? 30),   30),
+    dpoDays:              n(pick('dpo_days',                p.dpoDays           ?? 30),   30),
+    laborPayableDays:     n(pick('labor_payable_days',      p.laborPayableDays  ?? 14),   14),
+    preGoLiveMonths:      n(pick('pre_go_live_months',      p.preGoLiveMonths   ?? 0),    0),
+    // Labor
+    benefitLoadPct:       n(pick('benefit_load_pct',        p.benefitLoad       ?? 35),   35),
+    bonusPct:             n(pick('bonus_pct',               p.bonus             ?? 0),    0),
+    overtimePct:          n(pick('overtime_pct',            p.overtime          ?? 5),    5),
+    absenceAllowancePct:  n(pick('absence_allowance_pct',   p.absenceAllowance  ?? 12),   12),
+    shift2PremiumPct:     n(pick('shift_2_premium_pct',     p.shift2Premium     ?? 10),   10),
+    shift3PremiumPct:     n(pick('shift_3_premium_pct',     p.shift3Premium     ?? 15),   15),
+    laborEscPct:          n(pick('labor_escalation_pct',    p.laborEscalation   ?? 3),    3),
+    // Ramp + Seasonality
+    rampWeeksLow:         n(pick('ramp_weeks_low',          p.rampWeeksLow      ?? 2),    2),
+    rampWeeksMed:         n(pick('ramp_weeks_med',          p.rampWeeksMed      ?? 4),    4),
+    rampWeeksHigh:        n(pick('ramp_weeks_high',         p.rampWeeksHigh     ?? 8),    8),
+    // Ops + Escalation
+    equipmentEscPct:      n(pick('equipment_escalation_pct', p.equipmentEscalation ?? 3), 3),
+    facilityEscPct:       n(pick('facility_escalation_pct',  p.facilityEscalation  ?? 3), 3),
+    costEscPct:           n(pick('facility_escalation_pct',  p.annualEscalation    ?? 3), 3),
+    unitsPerTruck:        n(pick('units_per_truck',          p.unitsPerTruck      ?? 25000), 25000),
+    dockSfPerDoor:        n(pick('dock_sf_per_door',         p.dockSfPerDoor      ?? 700),   700),
+    rackHoneycombPct:     n(pick('rack_honeycomb_pct',       p.rackHoneycomb      ?? 20),    20),
+    // Meta
+    source: isApproved ? 'snapshot' : (Object.keys(o).length ? 'mixed' : 'default'),
+    used,
+  };
+}
+
+/**
  * Given a list of SCD rows, return only the "current" ones — those whose
  * effective_end_date is in the future AND have no superseded_by_id. Useful
  * in the UI when the caller has already fetched ref_labor_rates (without

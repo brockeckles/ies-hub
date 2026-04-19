@@ -20,6 +20,7 @@ import {
   spawnChildPayload,
   buildRevisionRow,
   filterCurrent,
+  resolveCalcHeuristics,
 } from './tools/cost-model/calc.scenarios.js';
 
 let pass = 0, fail = 0;
@@ -247,6 +248,57 @@ test('buildRevisionRow: increments revision_number monotonically', () => {
 test('buildRevisionRow: increments from prior', () => {
   const r = buildRevisionRow(5, 3, null, 'Edit', {}, {});
   eq(r.revision_number, 4);
+});
+
+// ---------------------------------------------------------------------------
+// 5b. CLOSE THE PHASE 3 LOOP — calc-side heuristic resolution
+// ---------------------------------------------------------------------------
+console.log('\n--- Calc heuristic resolution (snapshot → override → default) ---');
+
+const SNAP_HEURISTICS = [
+  { key: 'tax_rate_pct', effective: 21, default_value: 25 },
+  { key: 'dso_days',     effective: 60, default_value: 30 },
+];
+const APPROVED_SCEN = { id: 1, status: 'approved' };
+const DRAFT_SCEN    = { id: 2, status: 'draft' };
+const PROJECT_COLS  = { taxRate: 25, dsoDays: 30, dpoDays: 30, laborPayableDays: 14, targetMargin: 12, volumeGrowth: 0, laborEscalation: 3, annualEscalation: 3, preGoLiveMonths: 0 };
+
+test('resolveCalcHeuristics: approved + snapshot → values come from snapshot', () => {
+  const out = resolveCalcHeuristics(APPROVED_SCEN, { heuristics: SNAP_HEURISTICS }, {}, PROJECT_COLS);
+  eq(out.taxRatePct, 21);
+  eq(out.dsoDays, 60);
+  eq(out.used.tax_rate_pct, 'snapshot');
+  eq(out.source, 'snapshot');
+});
+test('resolveCalcHeuristics: draft scenario IGNORES snapshot, uses override → project', () => {
+  const out = resolveCalcHeuristics(DRAFT_SCEN, { heuristics: SNAP_HEURISTICS }, { tax_rate_pct: 30 }, PROJECT_COLS);
+  eq(out.taxRatePct, 30);          // override wins
+  eq(out.used.tax_rate_pct, 'override');
+  eq(out.dsoDays, 30);             // no override, no snapshot → project column
+  eq(out.used.dso_days, 'default');
+});
+test('resolveCalcHeuristics: draft + no override → falls all the way to project column', () => {
+  const out = resolveCalcHeuristics(DRAFT_SCEN, null, {}, PROJECT_COLS);
+  eq(out.taxRatePct, 25);
+  eq(out.dsoDays, 30);
+  eq(out.used.tax_rate_pct, 'default');
+});
+test('resolveCalcHeuristics: approved + snapshot + override → snapshot still wins', () => {
+  // This is the headline Phase 3 invariant: approved means FROZEN.
+  const out = resolveCalcHeuristics(APPROVED_SCEN, { heuristics: SNAP_HEURISTICS }, { tax_rate_pct: 999 }, PROJECT_COLS);
+  eq(out.taxRatePct, 21);
+  eq(out.used.tax_rate_pct, 'snapshot');
+});
+test('resolveCalcHeuristics: approved without snapshot → falls through like draft', () => {
+  const out = resolveCalcHeuristics(APPROVED_SCEN, { heuristics: [] }, { tax_rate_pct: 30 }, PROJECT_COLS);
+  eq(out.taxRatePct, 30);
+  eq(out.used.tax_rate_pct, 'override');
+});
+test('resolveCalcHeuristics: numeric coercion of NaN override falls to default', () => {
+  const out = resolveCalcHeuristics(DRAFT_SCEN, null, { tax_rate_pct: 'not-a-number' }, PROJECT_COLS);
+  // Not-a-number override value still "counts" as present (string), so `used` marks override
+  // but numeric coercion inside pick() via n() falls to 25.
+  eq(out.taxRatePct, 25);
 });
 
 // ---------------------------------------------------------------------------
