@@ -153,38 +153,43 @@ const DEMO_MARKETS_FALLBACK = [
 // ============================================================
 
 const SECTIONS = [
-  { key: 'setup',        label: 'Setup',              icon: 'settings',      group: 'scope' },
-  { key: 'volumes',      label: 'Volumes',            icon: 'bar-chart',     group: 'scope' },
-  { key: 'orderProfile', label: 'Order Profile',      icon: 'package',       group: 'scope' },
-  { key: 'facility',     label: 'Facility',           icon: 'home',          group: 'operation' },
-  { key: 'shifts',       label: 'Shifts',             icon: 'clock',         group: 'operation' },
-  { key: 'labor',        label: 'Labor',              icon: 'users',         group: 'cost' },
-  { key: 'equipment',    label: 'Equipment',          icon: 'truck',         group: 'cost' },
-  { key: 'overhead',     label: 'Overhead',           icon: 'layers',        group: 'cost' },
-  { key: 'vas',          label: 'VAS',                icon: 'star',          group: 'cost' },
-  { key: 'financial',    label: 'Financial',          icon: 'trending-up',   group: 'commercial' },
-  { key: 'startup',      label: 'Start-Up / Capital', icon: 'zap',           group: 'commercial' },
-  { key: 'pricing',      label: 'Pricing',            icon: 'tag',           group: 'commercial' },
-  { key: 'summary',      label: 'Summary',            icon: 'pie-chart',     group: 'output' },
-  { key: 'timeline',     label: 'Timeline',           icon: 'calendar',      group: 'output' },
-  { key: 'scenarios',    label: 'Scenarios',          icon: 'git-branch',    group: 'output' },
-  { key: 'whatif',       label: 'What-If Studio',     icon: 'trending-up',   group: 'analysis' },
-  { key: 'assumptions',  label: 'Assumptions',        icon: 'sliders',       group: 'analysis' },
-  { key: 'linked',       label: 'Linked Designs',     icon: 'link',          group: 'analysis' },
+  // Scope — who, what, where
+  { key: 'setup',          label: 'Setup',              icon: 'settings',      group: 'scope' },
+  { key: 'volumes',        label: 'Volumes',            icon: 'bar-chart',     group: 'scope' },
+  { key: 'orderProfile',   label: 'Order Profile',      icon: 'package',       group: 'scope' },
+  // Structure — framework to build inside (physical + commercial)
+  { key: 'facility',       label: 'Facility',           icon: 'home',          group: 'structure' },
+  { key: 'shifts',         label: 'Shifts',             icon: 'clock',         group: 'structure' },
+  { key: 'pricingBuckets', label: 'Pricing Buckets',    icon: 'layers',        group: 'structure' },
+  { key: 'financial',      label: 'Financial',          icon: 'trending-up',   group: 'structure' },
+  // Cost — the build itself
+  { key: 'labor',          label: 'Labor',              icon: 'users',         group: 'cost' },
+  { key: 'equipment',      label: 'Equipment',          icon: 'truck',         group: 'cost' },
+  { key: 'overhead',       label: 'Overhead',           icon: 'layers',        group: 'cost' },
+  { key: 'vas',            label: 'VAS',                icon: 'star',          group: 'cost' },
+  { key: 'startup',        label: 'Start-Up / Capital', icon: 'zap',           group: 'cost' },
+  // Output — what the model produces
+  { key: 'summary',        label: 'Summary',            icon: 'pie-chart',     group: 'output' },
+  { key: 'pricing',        label: 'Pricing',            icon: 'tag',           group: 'output' },
+  { key: 'timeline',       label: 'Timeline',           icon: 'calendar',      group: 'output' },
+  { key: 'scenarios',      label: 'Scenarios',          icon: 'git-branch',    group: 'output' },
+  // Analysis — iterate + governance
+  { key: 'whatif',         label: 'What-If Studio',     icon: 'trending-up',   group: 'analysis' },
+  { key: 'assumptions',    label: 'Assumptions',        icon: 'sliders',       group: 'analysis' },
+  { key: 'linked',         label: 'Linked Designs',     icon: 'link',          group: 'analysis' },
 ];
 
 /**
- * v2 UI — five-phase grouping of the 18 sections. Matches the user's actual
- * workflow: scope the deal, shape the operation, build the cost stack, set
- * commercial terms, then analyze. When flag off, sidebar renders as the flat
- * 18-item list.
+ * v2 UI — five-phase grouping. Follows the actual build flow: scope the
+ * deal → stand up the framework (facility/shifts/buckets/financial) → build
+ * the cost lines INTO those buckets → see the output → analyze + iterate.
+ * When flag off, sidebar renders as the flat 19-item list.
  */
 const SECTION_GROUPS = [
   { key: 'scope',      label: 'Scope',       description: 'Who, what, where' },
-  { key: 'operation',  label: 'Operation',   description: 'Facility shape + schedule' },
-  { key: 'cost',       label: 'Cost',        description: 'Labor, equipment, overhead, VAS' },
-  { key: 'commercial', label: 'Commercial',  description: 'Financial terms + pricing' },
-  { key: 'output',     label: 'Output',      description: 'P&L, timeline, scenarios' },
+  { key: 'structure',  label: 'Structure',   description: 'Framework: facility, shifts, pricing buckets, financial' },
+  { key: 'cost',       label: 'Cost',        description: 'The build: labor, equipment, overhead, VAS, startup' },
+  { key: 'output',     label: 'Output',      description: 'Summary, pricing rates, timeline, scenarios' },
   { key: 'analysis',   label: 'Analysis',    description: 'What-If, assumptions, links' },
 ];
 
@@ -766,6 +771,7 @@ function renderSection() {
     orderProfile: renderOrderProfile,
     facility: renderFacility,
     shifts: renderShifts,
+    pricingBuckets: renderPricingBuckets,
     labor: renderLabor,
     equipment: renderEquipment,
     overhead: renderOverhead,
@@ -864,6 +870,8 @@ function _sectionCompleteness(sectionKey) {
       return (m.vasLines && m.vasLines.length > 0) ? 'complete' : 'empty';
     case 'financial':
       return (m.financial && m.financial.targetMarginPct > 0) ? 'complete' : 'empty';
+    case 'pricingBuckets':
+      return (m.pricingBuckets && m.pricingBuckets.length > 0) ? 'complete' : 'empty';
     case 'pricing':
       return (m.pricingBuckets && m.pricingBuckets.length > 0) ? 'complete' : 'empty';
     default:
@@ -1548,30 +1556,42 @@ function renderLaborV2() {
           <thead>
             <tr>
               <th>Role</th>
-              <th class="hub-num" style="width:100px;">Headcount</th>
-              <th class="hub-num" style="width:90px;">Rate</th>
-              <th class="hub-num" style="width:140px;">Annual Cost</th>
-              <th style="width:50px;"></th>
+              <th class="hub-num" style="width:90px;">HC</th>
+              <th class="hub-num" style="width:80px;">Rate</th>
+              <th style="width:180px;">Pricing Bucket</th>
+              <th class="hub-num" style="width:130px;">Annual Cost</th>
+              <th style="width:44px;"></th>
             </tr>
           </thead>
           <tbody>
-            ${(model.indirectLaborLines || []).map((l, i) => `
+            ${(model.indirectLaborLines || []).map((l, i) => {
+              const buckets = model.pricingBuckets || [];
+              return `
               <tr>
                 <td><input class="hub-input" value="${escapeAttr(l.role_name || '')}" data-array="indirectLaborLines" data-idx="${i}" data-field="role_name" /></td>
                 <td><input class="hub-input hub-num" type="number" value="${l.headcount || 0}" data-array="indirectLaborLines" data-idx="${i}" data-field="headcount" data-type="number" /></td>
                 <td><input class="hub-input hub-num" type="number" step="0.5" value="${l.hourly_rate || 0}" data-array="indirectLaborLines" data-idx="${i}" data-field="hourly_rate" data-type="number" /></td>
+                <td>
+                  ${buckets.length === 0
+                    ? `<span class="hub-chip hub-chip--danger">no buckets</span>`
+                    : `<select class="hub-input" data-array="indirectLaborLines" data-idx="${i}" data-field="pricing_bucket">
+                        <option value=""${!l.pricing_bucket ? ' selected' : ''}>— Unassigned —</option>
+                        ${buckets.map(b => `<option value="${escapeAttr(b.id)}"${l.pricing_bucket === b.id ? ' selected' : ''}>${escapeHtml(b.name)}</option>`).join('')}
+                       </select>`}
+                </td>
                 <td class="hub-num" style="font-weight:600;">${calc.formatCurrency(calc.indirectLineAnnualSimple(l, opHrs, lc))}</td>
                 <td><button class="cm-delete-btn" data-action="delete-indirect" data-idx="${i}" aria-label="Delete">×</button></td>
               </tr>
-            `).join('')}
+            `;
+            }).join('')}
             ${(model.indirectLaborLines || []).length === 0
-              ? `<tr><td colspan="5" style="padding:24px;text-align:center;color:var(--ies-gray-400);font-size:12px;">No indirect labor yet. Click <strong>Auto-Generate</strong> above, or add a role manually.</td></tr>`
+              ? `<tr><td colspan="6" style="padding:24px;text-align:center;color:var(--ies-gray-400);font-size:12px;">No indirect labor yet. Click <strong>Auto-Generate</strong> above, or add a role manually.</td></tr>`
               : ''}
           </tbody>
           ${(model.indirectLaborLines || []).length > 0 ? `
             <tfoot>
               <tr style="background:var(--ies-gray-50);font-weight:700;">
-                <td colspan="3" style="padding:10px 12px;font-size:12px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ies-gray-600);">Total Indirect</td>
+                <td colspan="4" style="padding:10px 12px;font-size:12px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ies-gray-600);">Total Indirect</td>
                 <td class="hub-num" style="padding:10px 12px;">${calc.formatCurrency(totalIndirect)}</td>
                 <td></td>
               </tr>
@@ -1618,22 +1638,22 @@ function renderLaborCostingFactorsV2(lc) {
 
 function renderLaborKpiStripV2(lineCount, totalFtes, totalDirect, totalIndirect) {
   return `
-    <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:12px;margin-top:12px;">
-      <div class="hub-card" style="padding:14px 16px;">
-        <div class="hub-field__label">Direct Lines</div>
-        <div style="font-size:22px;font-weight:800;color:var(--ies-navy);line-height:1.1;margin-top:4px;">${lineCount}</div>
+    <div class="hub-kpi-strip" style="margin-top:12px;">
+      <div class="hub-kpi-tile">
+        <div class="hub-kpi-tile__label">Direct Lines</div>
+        <div class="hub-kpi-tile__value">${lineCount}</div>
       </div>
-      <div class="hub-card" style="padding:14px 16px;">
-        <div class="hub-field__label">Total Direct FTEs</div>
-        <div style="font-size:22px;font-weight:800;color:var(--ies-navy);line-height:1.1;margin-top:4px;">${totalFtes.toFixed(1)}</div>
+      <div class="hub-kpi-tile">
+        <div class="hub-kpi-tile__label">Total Direct FTEs</div>
+        <div class="hub-kpi-tile__value">${totalFtes.toFixed(1)}</div>
       </div>
-      <div class="hub-card" style="padding:14px 16px;">
-        <div class="hub-field__label">Direct Annual $</div>
-        <div style="font-size:22px;font-weight:800;color:var(--ies-blue);line-height:1.1;margin-top:4px;">${calc.formatCurrency(totalDirect)}</div>
+      <div class="hub-kpi-tile">
+        <div class="hub-kpi-tile__label">Direct Annual $</div>
+        <div class="hub-kpi-tile__value hub-kpi-tile__value--brand">${calc.formatCurrency(totalDirect)}</div>
       </div>
-      <div class="hub-card" style="padding:14px 16px;">
-        <div class="hub-field__label">Indirect Annual $</div>
-        <div style="font-size:22px;font-weight:800;color:var(--ies-blue);line-height:1.1;margin-top:4px;">${calc.formatCurrency(totalIndirect)}</div>
+      <div class="hub-kpi-tile">
+        <div class="hub-kpi-tile__label">Indirect Annual $</div>
+        <div class="hub-kpi-tile__value hub-kpi-tile__value--brand">${calc.formatCurrency(totalIndirect)}</div>
       </div>
     </div>
   `;
@@ -1664,6 +1684,12 @@ function renderLaborMasterItem(l, i, opHrs, lc) {
   const hasProfile = Array.isArray(l.monthly_overtime_profile) || Array.isArray(l.monthly_absence_profile);
   const hasVariance = (l.performance_variance_pct || 0) > 0;
 
+  // Bucket chip — shows which pricing bucket this line feeds
+  const bucket = (model.pricingBuckets || []).find(b => b.id === l.pricing_bucket);
+  const bucketChip = bucket
+    ? `<span class="hub-chip hub-chip--neutral" title="Routes to pricing bucket: ${escapeAttr(bucket.name)}">📦 ${escapeHtml(bucket.name)}</span>`
+    : `<span class="hub-chip hub-chip--danger" title="No pricing bucket assigned — this line's cost will orphan to Management Fee">⚠ no bucket</span>`;
+
   return `
     <div class="hub-master-detail__item${selected ? ' is-selected' : ''}" data-labor-select="${i}" title="Click to edit">
       <div class="hub-master-detail__item-primary">
@@ -1672,9 +1698,8 @@ function renderLaborMasterItem(l, i, opHrs, lc) {
       </div>
       <div class="hub-master-detail__item-secondary">
         <span class="hub-chip hub-chip--${emp.variant}">${emp.label}</span>
-        <span>${fte.toFixed(1)} FTE</span>
-        <span>·</span>
-        <span>${(l.base_uph || 0).toLocaleString()} UPH</span>
+        ${bucketChip}
+        <span>${fte.toFixed(1)} FTE · ${(l.base_uph || 0).toLocaleString()} UPH</span>
         ${hasProfile ? `<span class="hub-chip hub-chip--info" title="Has monthly OT/absence profile">📊</span>` : ''}
         ${hasVariance ? `<span class="hub-chip hub-chip--warn" title="Variance ±${l.performance_variance_pct}%">±${l.performance_variance_pct}%</span>` : ''}
       </div>
@@ -1703,6 +1728,8 @@ function renderLaborDetailPane(lines, opHrs, lc) {
   const empType = l.employment_type || 'permanent';
   const isTemp = empType === 'temp_agency';
 
+  const buckets = model.pricingBuckets || [];
+
   return `
     <div class="hub-master-detail__detail">
       <div class="hub-master-detail__detail-header">
@@ -1713,10 +1740,10 @@ function renderLaborDetailPane(lines, opHrs, lc) {
         </div>
       </div>
 
-      <!-- Group 1: Activity + MOST -->
+      <!-- Group 1: Activity + MOST (2-col) -->
       <div class="hub-detail-group">
         <h4 class="hub-detail-group__title">Activity</h4>
-        <div class="hub-detail-grid">
+        <div class="hub-detail-grid hub-detail-grid--2col">
           <div class="hub-field">
             <label class="hub-field__label">Activity Name</label>
             <input class="hub-input" value="${escapeAttr(l.activity_name || '')}" data-array="laborLines" data-idx="${i}" data-field="activity_name" placeholder="e.g. Pick — case"/>
@@ -1728,10 +1755,10 @@ function renderLaborDetailPane(lines, opHrs, lc) {
         </div>
       </div>
 
-      <!-- Group 2: Volume + UPH -->
+      <!-- Group 2: Volume + UPH (4-col) -->
       <div class="hub-detail-group">
         <h4 class="hub-detail-group__title">Volume &amp; Productivity</h4>
-        <div class="hub-detail-grid">
+        <div class="hub-detail-grid hub-detail-grid--4col">
           <div class="hub-field">
             <label class="hub-field__label">Volume Source</label>
             ${renderLaborVolumeCell(l, i)}
@@ -1751,10 +1778,10 @@ function renderLaborDetailPane(lines, opHrs, lc) {
         </div>
       </div>
 
-      <!-- Group 3: Equipment -->
+      <!-- Group 3: Equipment (2-col) -->
       <div class="hub-detail-group">
         <h4 class="hub-detail-group__title">Equipment Assigned</h4>
-        <div class="hub-detail-grid">
+        <div class="hub-detail-grid hub-detail-grid--2col">
           <div class="hub-field">
             <label class="hub-field__label">MHE</label>
             <select class="hub-input" data-array="laborLines" data-idx="${i}" data-field="mhe_type" title="Material-handling equipment">
@@ -1788,10 +1815,10 @@ function renderLaborDetailPane(lines, opHrs, lc) {
         </div>
       </div>
 
-      <!-- Group 4: Rate & Employment -->
+      <!-- Group 4: Rate & Employment (4-col) -->
       <div class="hub-detail-group">
         <h4 class="hub-detail-group__title">Rate &amp; Employment</h4>
-        <div class="hub-detail-grid">
+        <div class="hub-detail-grid hub-detail-grid--4col">
           <div class="hub-field">
             <label class="hub-field__label">Base Hourly Rate</label>
             <input class="hub-input hub-num" type="number" step="0.25" min="0" value="${hourly}" data-array="laborLines" data-idx="${i}" data-field="hourly_rate" data-type="number" />
@@ -1805,9 +1832,9 @@ function renderLaborDetailPane(lines, opHrs, lc) {
             </select>
           </div>
           <div class="hub-field">
-            <label class="hub-field__label" title="Agency markup over base wage. Only applies to Temp Agency lines.">Temp Agency Markup %</label>
+            <label class="hub-field__label" title="Agency markup over base wage. Only applies to Temp Agency lines.">Temp Markup %</label>
             <input class="hub-input hub-num" type="number" step="1" min="0" max="100" value="${l.temp_agency_markup_pct || 0}" data-array="laborLines" data-idx="${i}" data-field="temp_agency_markup_pct" data-type="number" ${!isTemp ? 'disabled' : ''} />
-            ${!isTemp ? '<div class="hub-field__hint">(inactive — only for Temp Agency)</div>' : ''}
+            ${!isTemp ? '<div class="hub-field__hint">(Temp Agency only)</div>' : ''}
           </div>
           <div class="hub-field">
             <label class="hub-field__label" title="Productivity variance (% std dev) fed into the Monte Carlo sensitivity card in Summary.">Variance % (Monte Carlo)</label>
@@ -1816,15 +1843,35 @@ function renderLaborDetailPane(lines, opHrs, lc) {
         </div>
       </div>
 
-      <!-- Group 5: Output (read-only) -->
-      <div class="hub-detail-group" style="background:var(--ies-gray-50);padding:14px 16px;border-radius:10px;margin:0;">
-        <h4 class="hub-detail-group__title" style="margin-bottom:6px;">Calculated</h4>
+      <!-- Group 5: Pricing Bucket (2-col) — the restored field -->
+      <div class="hub-detail-group">
+        <h4 class="hub-detail-group__title">Cost Routing</h4>
+        <div class="hub-detail-grid hub-detail-grid--2col">
+          <div class="hub-field">
+            <label class="hub-field__label" title="Which pricing bucket this line's cost flows into. Defined in Structure → Pricing Buckets.">Pricing Bucket</label>
+            ${buckets.length === 0
+              ? `<div class="hub-field__error">No buckets defined. <button class="hub-btn hub-btn-secondary hub-btn-sm" data-cm-action="jump-to-buckets" style="padding:2px 8px;font-size:11px;margin-left:6px;">Open Buckets →</button></div>`
+              : `<select class="hub-input" data-array="laborLines" data-idx="${i}" data-field="pricing_bucket">
+                   <option value=""${!l.pricing_bucket ? ' selected' : ''}>— Unassigned —</option>
+                   ${buckets.map(b => `<option value="${escapeAttr(b.id)}"${l.pricing_bucket === b.id ? ' selected' : ''}>${escapeHtml(b.name)} (${b.type}/${b.uom})</option>`).join('')}
+                 </select>`}
+          </div>
+          <div class="hub-field" style="align-self:flex-end;">
+            ${l.pricing_bucket
+              ? `<div class="hub-field__hint">Cost flows to rate card as part of the <strong>${escapeHtml((buckets.find(b => b.id === l.pricing_bucket) || {}).name || '')}</strong> bucket.</div>`
+              : `<div class="hub-field__error">⚠ Unassigned costs are rolled into Management Fee. Pick a bucket above.</div>`}
+          </div>
+        </div>
+      </div>
+
+      <!-- Group 6: Calculated output (read-only callout) -->
+      <div class="hub-detail-group hub-detail-readout" style="background:var(--ies-gray-50);padding:16px 18px;border-radius:10px;margin:0;">
         <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;">
           <div>
-            <div class="hub-field__hint">Annual Cost (this line, loaded)</div>
-            <div style="font-size:22px;font-weight:800;color:var(--ies-blue);line-height:1.1;margin-top:2px;">${calc.formatCurrency(annualCost)}</div>
+            <div class="hub-field__label" style="margin-bottom:4px;">Annual Cost (loaded)</div>
+            <div style="font-size:20px;font-weight:800;color:var(--ies-blue);line-height:1.1;">${calc.formatCurrency(annualCost)}</div>
           </div>
-          <div style="text-align:right;font-size:12px;color:var(--ies-gray-500);">
+          <div style="text-align:right;font-size:12px;color:var(--ies-gray-500);line-height:1.5;">
             <div>${fte.toFixed(2)} FTE · ${(l.annual_hours || 0).toLocaleString(undefined, {maximumFractionDigits:0})} hrs/yr</div>
             <div>Base rate $${hourly.toFixed(2)}/hr · burden applied</div>
           </div>
@@ -2072,6 +2119,129 @@ function renderStartup() {
   `;
 }
 
+// ============================================================
+// SECTION: PRICING BUCKETS (v2 — bucket taxonomy, defined BEFORE cost build)
+// ============================================================
+
+/**
+ * Starter bucket template — 5 canonical 3PL buckets that cover the
+ * typical rate card structure. Seeded when the user clicks "Apply
+ * Starter Template" and the project has no existing buckets.
+ */
+const STARTER_PRICING_BUCKETS = [
+  { id: 'mgmt_fee',  name: 'Management Fee',    type: 'fixed',    uom: 'month',  rate: 0,
+    description: 'Monthly fixed fee covering overhead and management overhead allocation.' },
+  { id: 'storage',   name: 'Storage',           type: 'variable', uom: 'pallet', rate: 0,
+    description: 'Storage cost per pallet position per month. Pass-through of facility cost + storage-specific labor/equipment.' },
+  { id: 'inbound',   name: 'Inbound Handling',  type: 'variable', uom: 'pallet', rate: 0,
+    description: 'Receiving / put-away per inbound pallet. Includes dock, dock-staff, and inbound MHE costs.' },
+  { id: 'pick_pack', name: 'Pick & Pack',       type: 'variable', uom: 'order',  rate: 0,
+    description: 'Order fulfillment rate per outbound order. Primary pricing bucket for e-comm DTC.' },
+  { id: 'vas',       name: 'Value-Added Svcs',  type: 'variable', uom: 'each',   rate: 0,
+    description: 'Kitting, labeling, packaging, returns processing — charge per transaction.' },
+];
+
+const BUCKET_UOM_OPTIONS = [
+  { value: 'month',    label: 'per month' },
+  { value: 'pallet',   label: 'per pallet' },
+  { value: 'order',    label: 'per order' },
+  { value: 'each',     label: 'per unit / each' },
+  { value: 'case',     label: 'per case' },
+  { value: 'line',     label: 'per line' },
+  { value: 'shipment', label: 'per shipment' },
+  { value: 'cube',     label: 'per cube (ft³)' },
+  { value: 'lb',       label: 'per pound' },
+  { value: 'sqft',     label: 'per sqft / month' },
+];
+
+function renderPricingBuckets() {
+  const buckets = model.pricingBuckets || [];
+  const empty = buckets.length === 0;
+
+  return `
+    <div class="cm-section-header">
+      <div>
+        <div class="cm-section-title">Pricing Buckets</div>
+        <div class="cm-section-desc">Define the pricing structure before you build cost lines. Every labor, equipment, overhead, VAS, and startup line routes into one of these buckets, which becomes a line on the customer's rate card.</div>
+      </div>
+    </div>
+
+    ${empty ? `
+      <div class="hub-card" style="margin-bottom:20px;padding:24px;background:var(--ies-gray-50);text-align:center;">
+        <div style="font-size:32px;margin-bottom:8px;">🧱</div>
+        <h3 style="margin:0 0 6px;font-size:16px;font-weight:700;">No pricing buckets yet</h3>
+        <div style="color:var(--ies-gray-500);font-size:13px;margin-bottom:16px;max-width:560px;margin-left:auto;margin-right:auto;line-height:1.5;">
+          Start with the standard 5-bucket template (Management Fee, Storage, Inbound, Pick &amp; Pack, VAS) — typical for most 3PL deals — or define your own from scratch. You can edit, rename, or add buckets at any time.
+        </div>
+        <div style="display:flex;gap:10px;justify-content:center;">
+          <button class="hub-btn hub-btn-primary hub-btn-sm" data-cm-action="apply-bucket-starter">Apply Starter Template</button>
+          <button class="hub-btn hub-btn-secondary hub-btn-sm" data-cm-action="add-bucket">Add Empty Bucket</button>
+        </div>
+      </div>
+    ` : `
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;gap:16px;">
+        <div class="hub-field__hint" style="flex:1;max-width:640px;">
+          <strong style="color:var(--ies-gray-700);">${buckets.length} bucket${buckets.length === 1 ? '' : 's'}.</strong>
+          Each bucket has a pricing type (fixed / variable / cost-plus) and a UOM. Rates are computed in the Pricing step later — or you can set an explicit rate here to override the derivation.
+        </div>
+        <div style="display:flex;gap:8px;flex-shrink:0;">
+          <button class="hub-btn hub-btn-secondary hub-btn-sm" data-cm-action="apply-bucket-starter" title="Reset to the standard 5-bucket template (overwrites current buckets)">↺ Reset to Template</button>
+          <button class="hub-btn hub-btn-primary hub-btn-sm" data-cm-action="add-bucket">+ Add Bucket</button>
+        </div>
+      </div>
+
+      <div class="hub-card" style="padding:0;overflow:hidden;">
+        <table class="hub-datatable">
+          <thead>
+            <tr>
+              <th style="width:30%;">Name</th>
+              <th style="width:140px;">Pricing Type</th>
+              <th style="width:170px;">UOM</th>
+              <th class="hub-num" style="width:140px;">Explicit Rate</th>
+              <th>Description</th>
+              <th style="width:40px;"></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${buckets.map((b, i) => `
+              <tr>
+                <td>
+                  <input class="hub-input" value="${escapeAttr(b.name || '')}" data-array="pricingBuckets" data-idx="${i}" data-field="name" placeholder="e.g. Pick &amp; Pack" />
+                </td>
+                <td>
+                  <select class="hub-input" data-array="pricingBuckets" data-idx="${i}" data-field="type" title="Fixed = flat monthly; Variable = $ per unit of volume; Cost-Plus = pass-through with markup">
+                    <option value="fixed"${(b.type || 'variable') === 'fixed' ? ' selected' : ''}>Fixed</option>
+                    <option value="variable"${b.type === 'variable' ? ' selected' : ''}>Variable</option>
+                    <option value="cost_plus"${b.type === 'cost_plus' ? ' selected' : ''}>Cost-Plus</option>
+                  </select>
+                </td>
+                <td>
+                  <select class="hub-input" data-array="pricingBuckets" data-idx="${i}" data-field="uom">
+                    ${BUCKET_UOM_OPTIONS.map(o => `<option value="${o.value}"${(b.uom || 'order') === o.value ? ' selected' : ''}>${o.label}</option>`).join('')}
+                  </select>
+                </td>
+                <td>
+                  <input class="hub-input hub-num" type="number" step="0.01" min="0" value="${b.rate || 0}" data-array="pricingBuckets" data-idx="${i}" data-field="rate" data-type="number" placeholder="derived" title="Leave 0 to let the Pricing section derive the rate from assigned costs + target margin. Set a value here to lock an explicit rate." />
+                </td>
+                <td>
+                  <input class="hub-input" value="${escapeAttr(b.description || '')}" data-array="pricingBuckets" data-idx="${i}" data-field="description" placeholder="optional note" />
+                </td>
+                <td style="text-align:center;">
+                  <button class="cm-delete-btn" data-cm-action="delete-bucket" data-idx="${i}" aria-label="Delete bucket" title="Delete bucket">×</button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <div style="margin-top:14px;padding:12px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;font-size:12px;color:#1e3a8a;line-height:1.5;">
+        <strong>What happens next:</strong> when you build Labor, Equipment, Overhead, VAS, or Startup lines, each line picks one of these buckets to route its cost into. Buckets with no assigned lines are allowed — they'll just show $0 in the Pricing section. Missing a bucket? Add it here, then go back and re-assign the line.
+      </div>
+    `}
+  `;
+}
+
 function renderPricing() {
   const buckets = model.pricingBuckets || [];
   const market = model.projectDetails?.market;
@@ -2117,9 +2287,18 @@ function renderPricing() {
     <div class="cm-section-header">
       <div>
         <div class="cm-section-title">Pricing Schedule</div>
-        <div class="cm-section-desc">Cost allocation to pricing buckets. Rates include ${calc.formatPct(model.financial?.targetMargin || 0, 1)} target margin.</div>
+        <div class="cm-section-desc">Rate derivation — each bucket's annual cost rolls up from the Cost lines you've assigned, then divides by volume and applies ${calc.formatPct(model.financial?.targetMargin || 0, 1)} target margin. Edit the bucket taxonomy itself in <strong>Structure → Pricing Buckets</strong>.</div>
       </div>
     </div>
+
+    ${buckets.length === 0 ? `
+      <div class="hub-card" style="padding:24px;text-align:center;background:var(--ies-gray-50);margin-bottom:16px;">
+        <div style="font-size:28px;margin-bottom:6px;">🧱</div>
+        <h3 style="margin:0 0 6px;font-size:16px;">No pricing buckets defined</h3>
+        <div style="color:var(--ies-gray-500);font-size:13px;margin-bottom:14px;">Buckets are defined in <strong>Structure → Pricing Buckets</strong>. Without them the cost lines can't be allocated to a rate card.</div>
+        <button class="hub-btn hub-btn-primary hub-btn-sm" data-cm-action="jump-to-buckets">Open Pricing Buckets →</button>
+      </div>
+    ` : ''}
 
     <table class="cm-grid-table">
       <thead>
@@ -2688,6 +2867,38 @@ function bindSectionEvents(section, container) {
       }
     });
   });
+
+  // v2 Labor — up/down arrow keys on the master pane cycle selection
+  // (ignored when focus is inside an input/select/textarea so typing isn't hijacked)
+  if (section === 'labor' && isCmV2UiOn()) {
+    const masterBody = container.querySelector('.hub-master-detail__master-body');
+    if (masterBody) {
+      // Make focusable so it can receive keydown
+      masterBody.setAttribute('tabindex', '0');
+      masterBody.addEventListener('keydown', (e) => {
+        if (e.target !== masterBody) return; // only when pane itself is focused
+        const lines = model.laborLines || [];
+        if (!lines.length) return;
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          _selectedLaborIdx = Math.min(lines.length - 1, (_selectedLaborIdx ?? -1) + 1);
+          renderSection();
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          _selectedLaborIdx = Math.max(0, (_selectedLaborIdx ?? 0) - 1);
+          renderSection();
+        } else if (e.key === 'Home') {
+          e.preventDefault();
+          _selectedLaborIdx = 0;
+          renderSection();
+        } else if (e.key === 'End') {
+          e.preventDefault();
+          _selectedLaborIdx = lines.length - 1;
+          renderSection();
+        }
+      });
+    }
+  }
 
   // Direct-labor Volume source picker — dropdown of volumeLines + "Custom".
   // Selecting a volume line syncs the labor line's volume to that line's value.
@@ -4087,6 +4298,52 @@ function handleAction(action, idx) {
       model.startupLines = calc.autoGenerateStartup(model);
       model.startupLines.forEach(l => { if (!l.pricing_bucket) l.pricing_bucket = defaultBucketFor('startup'); });
       break;
+    // Pricing Buckets (v2 — taxonomy editor in the Structure phase)
+    case 'add-bucket': {
+      model.pricingBuckets = model.pricingBuckets || [];
+      // Generate a unique id slug
+      const nextId = `bucket_${Date.now().toString(36).slice(-5)}`;
+      model.pricingBuckets.push({
+        id: nextId,
+        name: '',
+        type: 'variable',
+        uom: 'order',
+        rate: 0,
+        description: '',
+      });
+      break;
+    }
+    case 'delete-bucket': {
+      const removed = (model.pricingBuckets || [])[idx];
+      model.pricingBuckets.splice(idx, 1);
+      // Null out any lines that referenced this bucket so they show up as
+      // unassigned in the Pricing section (better than silently re-pointing).
+      const reassign = (arr) => {
+        if (!Array.isArray(arr)) return;
+        for (const l of arr) {
+          if (l && l.pricing_bucket === removed?.id) l.pricing_bucket = '';
+        }
+      };
+      reassign(model.laborLines);
+      reassign(model.indirectLaborLines);
+      reassign(model.equipmentLines);
+      reassign(model.overheadLines);
+      reassign(model.vasLines);
+      reassign(model.startupLines);
+      // Clear financial.facilityBucketId if it pointed here
+      if (model.financial && model.financial.facilityBucketId === removed?.id) {
+        model.financial.facilityBucketId = '';
+      }
+      break;
+    }
+    case 'apply-bucket-starter': {
+      // Clone the starter template so mutations don't bleed into the const
+      model.pricingBuckets = STARTER_PRICING_BUCKETS.map(b => ({ ...b }));
+      break;
+    }
+    case 'jump-to-buckets':
+      navigateSection('pricingBuckets');
+      return;
     case 'launch-wsc':
       bus.emit('cm:push-to-wsc', { clearHeight: model.facility?.clearHeight || 0, totalSqft: model.facility?.totalSqft || 0 });
       state.set('nav.tool', 'warehouse-sizing');
