@@ -9,7 +9,7 @@
 import { bus } from '../../shared/event-bus.js?v=20260418-sM';
 import { state } from '../../shared/state.js?v=20260418-sM';
 import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260418-sM';
-import * as calc from './calc.js?v=20260418-sM';
+import * as calc from './calc.js?v=20260419-uF';
 import * as api from './api.js?v=20260418-sM';
 import { getMostTplName, getMostTplBaseUph, getMostTplTmuTotal, getMostElName, getMostElSequence, getMostElTmu } from './types.js?v=20260418-sM';
 
@@ -902,18 +902,26 @@ function renderEditor() {
                 <td><input class="hub-input" type="text" value="${getMostElName(el) || ''}" data-elem-idx="${i}" data-elem-field="element_name" style="width:100%; font-size:11px; padding:4px 6px;" /></td>
                 <td><input class="hub-input" type="text" value="${el.most_sequence || ''}" data-elem-idx="${i}" data-elem-field="most_sequence" style="width:100%; font-size:11px; padding:4px 6px; font-family:monospace;" /></td>
                 <td>
-                  <select data-elem-idx="${i}" data-elem-field="sequence_type" style="width:100%; font-size:11px; padding:4px 6px;">
-                    <option value="get"${el.sequence_type === 'get' ? ' selected' : ''}>Get</option>
-                    <option value="put"${el.sequence_type === 'put' ? ' selected' : ''}>Put</option>
-                    <option value="move"${el.sequence_type === 'move' ? ' selected' : ''}>Move</option>
-                    <option value="walk"${el.sequence_type === 'walk' ? ' selected' : ''}>Walk</option>
-                    <option value="verify"${el.sequence_type === 'verify' ? ' selected' : ''}>Verify</option>
-                    <option value="allow"${el.sequence_type === 'allow' ? ' selected' : ''}>Allow</option>
-                    <option value="general_move"${el.sequence_type === 'general_move' ? ' selected' : ''}>General Move</option>
-                    <option value="controlled_move"${el.sequence_type === 'controlled_move' ? ' selected' : ''}>Controlled</option>
-                    <option value="tool_use"${el.sequence_type === 'tool_use' ? ' selected' : ''}>Tool Use</option>
-                    <option value="body_motion"${el.sequence_type === 'body_motion' ? ' selected' : ''}>Body Motion</option>
-                  </select>
+                  ${(() => {
+                    // Case-insensitive match — DB stores uppercase ("GET"/"PUT"/…);
+                    // catalog options use lowercase. Normalize before comparing.
+                    const seq = (el.sequence_type || '').toString().toLowerCase();
+                    const opt = (val, label) => `<option value="${val}"${seq === val ? ' selected' : ''}>${label}</option>`;
+                    return `
+                      <select data-elem-idx="${i}" data-elem-field="sequence_type" style="width:100%; font-size:11px; padding:4px 6px;">
+                        ${opt('get', 'Get')}
+                        ${opt('put', 'Put')}
+                        ${opt('move', 'Move')}
+                        ${opt('walk', 'Walk')}
+                        ${opt('verify', 'Verify')}
+                        ${opt('allow', 'Allow')}
+                        ${opt('general_move', 'General Move')}
+                        ${opt('controlled_move', 'Controlled')}
+                        ${opt('tool_use', 'Tool Use')}
+                        ${opt('body_motion', 'Body Motion')}
+                      </select>
+                    `;
+                  })()}
                 </td>
                 <td><input class="hub-input" type="number" value="${getMostElTmu(el) || 0}" data-elem-idx="${i}" data-elem-field="tmu_value" style="width:100%; font-size:11px; padding:4px 6px;" /></td>
                 <td><input class="hub-input" type="number" step="0.01" min="0" value="${el.freq_per_cycle == null ? 1 : el.freq_per_cycle}" data-elem-idx="${i}" data-elem-field="freq_per_cycle" style="width:100%; font-size:11px; padding:4px 6px;" title="Occurrences per cycle (1 = every cycle)" /></td>

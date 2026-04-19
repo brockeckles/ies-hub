@@ -178,7 +178,11 @@ export function validateElementSequence(elements) {
     if (!(el.tmu_value > 0)) {
       issues.push({ severity: 'error', message: `Element #${idx + 1} has zero or invalid TMU.`, elementIndex: idx });
     }
-    if (el.sequence_type && !VALID_SEQUENCE_TYPES.has(el.sequence_type)) {
+    // Case-insensitive check: historical data stores uppercase ("GET"/"PUT"/"VERIFY")
+    // while the catalog uses lowercase. Normalize before comparing so data written
+    // pre-2026-04-19 doesn't fire spurious warnings.
+    const seqType = el.sequence_type ? String(el.sequence_type).toLowerCase() : '';
+    if (seqType && !VALID_SEQUENCE_TYPES.has(seqType)) {
       issues.push({ severity: 'warning', message: `Element #${idx + 1} uses an unrecognised sequence type "${el.sequence_type}".`, elementIndex: idx });
     }
     const freq = el.freq_per_cycle;
@@ -201,9 +205,10 @@ export function validateElementSequence(elements) {
     issues.push({ severity: 'warning', message: `Duplicate sequence_order values detected: ${[...new Set(dupes)].join(', ')}. Reorder cleanly to keep the editor consistent.` });
   }
 
-  // Domain heuristic: GET before PUT
-  const firstPutIdx = list.findIndex(el => el.sequence_type === 'put');
-  const firstGetIdx = list.findIndex(el => el.sequence_type === 'get');
+  // Domain heuristic: GET before PUT (case-insensitive — see note above)
+  const lowerSeq = el => (el.sequence_type || '').toString().toLowerCase();
+  const firstPutIdx = list.findIndex(el => lowerSeq(el) === 'put');
+  const firstGetIdx = list.findIndex(el => lowerSeq(el) === 'get');
   if (firstGetIdx > -1 && firstPutIdx > -1 && firstPutIdx < firstGetIdx) {
     issues.push({
       severity: 'warning',
