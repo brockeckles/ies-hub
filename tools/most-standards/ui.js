@@ -1289,8 +1289,16 @@ function bindContentEvents(container) {
     renderContent();
   });
 
-  // MOST-1 — Template tile clicks are now handled via root-level delegation
-  // in mount() so they survive shell re-renders on tab change. See openTemplateInEditor().
+  // MOST-1 — Template tile clicks. Per-element handler provides belt-and-braces
+  // coverage alongside the root-level delegation in mount(). The root-level
+  // handler survives tab-change innerHTML swaps; the per-element handler is
+  // the fast path for the initial render.
+  container.querySelectorAll('.most-tpl-card[data-action="select-template"]').forEach(card => {
+    card.addEventListener('click', () => {
+      const id = card.getAttribute('data-id');
+      if (id) openTemplateInEditor(id);
+    });
+  });
 
   // Close detail
   container.querySelector('[data-action="close-detail"]')?.addEventListener('click', () => {
