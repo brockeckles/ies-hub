@@ -167,11 +167,13 @@ const ICON = {
  * renders the editor content.
  */
 async function openTemplateInEditor(id) {
+  console.log('[MOST] openTemplateInEditor', { id, hasRootEl: !!rootEl, hasRefData: !!refData?.templates });
   if (!rootEl || !id) return;
-  const tpl = (refData.templates || []).find(t => t.id === id);
+  const tpl = (refData.templates || []).find(t => String(t.id) === String(id));
+  console.log('[MOST] found tpl?', !!tpl, 'id=', id, 'sample ids=', (refData.templates || []).slice(0, 3).map(t => t.id));
   if (!tpl) return;
   editorTemplate = { ...tpl };
-  try { editorElements = (await api.listElements(id)) || []; } catch { editorElements = []; }
+  try { editorElements = (await api.listElements(id)) || []; } catch (err) { console.warn('[MOST] listElements failed', err); editorElements = []; }
   activeTab = 'editor';
   rootEl.innerHTML = renderShell(); // full re-render so Run button visibility flips + active tab chip updates
   renderContent();
