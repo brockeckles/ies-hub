@@ -180,6 +180,12 @@ let currentRevisions = [];
 let _lastCalcHeuristics = null;        // set by Summary calc; read by Timeline/Summary banners
 // Phase 4c — cached market labor profile (set when project's market is known)
 let currentMarketLaborProfile = null;
+// Re-entry guards — prevent infinite render loops when the lazy loader fires
+// a post-load renderSection() that then re-triggers bindSectionEvents →
+// which sees the same "not loaded yet" state and schedules ANOTHER load.
+let _scenariosLoadInFlight = false;
+let _scenariosLoadedOnce = false;
+let _heuristicsLoadInFlight = false;
 
 // ============================================================
 // LIFECYCLE
@@ -195,6 +201,16 @@ export async function mount(el) {
   model = createEmptyModel();
   userHasInteracted = false;
   viewMode = 'landing';
+  // Reset Phase 3/4 module state so a prior session's cache doesn't bleed in
+  currentScenario = null;
+  currentScenarioSnapshots = null;
+  currentRevisions = [];
+  dealScenarios = [];
+  _scenariosLoadedOnce = false;
+  _scenariosLoadInFlight = false;
+  _heuristicsLoadInFlight = false;
+  heuristicOverrides = {};
+  currentMarketLaborProfile = null;
 
   // Load reference data + saved models + saved deals + ref_periods in parallel
   try {
@@ -323,6 +339,15 @@ function wireLandingEvents() {
         userHasInteracted = false;
         activeSection = 'setup';
         viewMode = 'editor';
+        // Reset Phase 3/4 module state for the newly loaded project
+        currentScenario = null;
+        currentScenarioSnapshots = null;
+        currentRevisions = [];
+        dealScenarios = [];
+        _scenariosLoadedOnce = false;
+        _scenariosLoadInFlight = false;
+        heuristicOverrides = {};
+        currentMarketLaborProfile = null;
         renderCurrentView();
       } catch (err) {
         console.error('[CM] Load failed:', err);
@@ -2022,9 +2047,15 @@ function bindSectionEvents(section, container) {
   // Phase 3: Assumptions section event wiring
   // --------------------------------------------------------------
   if (section === 'assumptions') {
-    // First-open: lazy-load catalog + overrides, then re-render
-    if (heuristicsCatalog.length === 0) {
-      ensureHeuristicsLoaded().then(() => renderSection());
+    // First-open: lazy-load catalog + overrides, then re-render.
+    // Guarded against re-entry so the post-load renderSection can't
+    // trigger another load if the catalog happens to still be empty
+    // (API error, no rows, etc.).
+    if (heuristicsCatalog.length === 0 && !_heuristicsLoadInFlight) {
+      _heuristicsLoadInFlight = true;
+      ensureHeuristicsLoaded()
+        .finally(() => { _heuristicsLoadInFlight = false; })
+        .then(() => renderSection());
     }
     // Heuristic value input → merge into overrides jsonb
     container.querySelectorAll('[data-heuristic-input]').forEach(inp => {
@@ -2042,9 +2073,9 @@ function bindSectionEvents(section, container) {
         else merged[key] = value;
         heuristicOverrides = merged;
         // Persist if we have a saved project
-        if (model?.projectId) {
+        if (model?.id) {
           try {
-            await api.saveHeuristicOverrides(model.projectId, heuristicOverrides);
+            await api.saveHeuristicOverrides(model.id, heuristicOverrides);
             isDirty = false;
           } catch (err) {
             console.warn('[CM] saveHeuristicOverrides failed:', err);
@@ -2063,8 +2094,8 @@ function bindSectionEvents(section, container) {
         const merged = { ...heuristicOverrides };
         delete merged[key];
         heuristicOverrides = merged;
-        if (model?.projectId) {
-          try { await api.saveHeuristicOverrides(model.projectId, heuristicOverrides); } catch (_) {}
+        if (model?.id) {
+          try { await api.saveHeuristicOverrides(model.id, heuristicOverrides); } catch (_) {}
         } else {
           model.heuristicOverrides = heuristicOverrides;
         }
@@ -2075,8 +2106,8 @@ function bindSectionEvents(section, container) {
       const ok = await showConfirm('Reset all heuristics on this scenario to standard defaults?', { okLabel: 'Reset' });
       if (!ok) return;
       heuristicOverrides = {};
-      if (model?.projectId) {
-        try { await api.saveHeuristicOverrides(model.projectId, heuristicOverrides); } catch (_) {}
+      if (model?.id) {
+        try { await api.saveHeuristicOverrides(model.id, heuristicOverrides); } catch (_) {}
       } else {
         model.heuristicOverrides = heuristicOverrides;
       }
@@ -2088,8 +2119,19 @@ function bindSectionEvents(section, container) {
   // Phase 3: Scenarios section event wiring
   // --------------------------------------------------------------
   if (section === 'scenarios') {
-    if (!currentScenario && dealScenarios.length === 0) {
-      ensureScenariosLoaded().then(() => renderSection());
+    // Lazy-load once per section open. The previous implementation
+    // checked (!currentScenario && dealScenarios.length === 0) and
+    // triggered the loader on every render — which looped forever when
+    // the project genuinely has no scenario record (load returns empty,
+    // condition is still true, re-renders, re-fires load, ...).
+    if (!_scenariosLoadedOnce && !_scenariosLoadInFlight) {
+      _scenariosLoadInFlight = true;
+      ensureScenariosLoaded()
+        .finally(() => {
+          _scenariosLoadInFlight = false;
+          _scenariosLoadedOnce = true;
+        })
+        .then(() => renderSection());
     }
     // Field edits on current scenario
     container.querySelectorAll('[data-scenario-field]').forEach(inp => {
@@ -2178,13 +2220,13 @@ function bindSectionEvents(section, container) {
       }
     });
     act('scenario-init')?.addEventListener('click', async () => {
-      if (!model?.projectId) {
+      if (!model?.id) {
         showToast('Save the project first, then initialize a scenario.', 'warning');
         return;
       }
       try {
         currentScenario = await api.saveScenario({
-          project_id: model.projectId,
+          project_id: model.id,
           deal_id: model?.projectDetails?.dealId || model?.deal_deals_id || null,
           scenario_label: model?.scenario_label || 'Baseline',
           is_baseline: true,
@@ -3741,7 +3783,7 @@ async function ensureHeuristicsLoaded() {
     catch (e) { console.warn('[CM] ensureHeuristicsLoaded:', e); heuristicsCatalog = []; }
   }
   // Overrides come from the project jsonb; re-fetch from the active model on each call.
-  const projectId = model?.projectId;
+  const projectId = model?.id;
   if (projectId) {
     try {
       const p = await api.getModel(projectId);
@@ -3872,7 +3914,7 @@ async function ensureMarketLaborProfileLoaded() {
 }
 
 async function ensureScenariosLoaded() {
-  const projectId = model?.projectId;
+  const projectId = model?.id;
   const dealId = model?.projectDetails?.dealId || model?.deal_deals_id;
   if (projectId) {
     try { currentScenario = await api.getScenarioByProject(projectId); }
