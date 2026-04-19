@@ -8,6 +8,7 @@
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { state } from '../../shared/state.js?v=20260418-sK';
+import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import * as calc from './calc.js?v=20260418-sK';
 import * as api from './api.js?v=20260419-sZ';
 import * as scenarios from './calc.scenarios.js?v=20260419-sZ';
@@ -1608,6 +1609,11 @@ function renderSummary() {
         <div class="cm-section-title">Summary Dashboard</div>
         <div class="cm-section-desc">Cost breakdown, financial metrics, multi-year P&L, and sensitivity analysis.</div>
       </div>
+      <div>
+        <button class="hub-btn-primary" data-cm-action="export-scenario-xlsx" title="Export the active scenario as a 7-sheet Excel workbook">
+          ⬇ Export Scenario XLSX
+        </button>
+      </div>
     </div>
 
     <!-- KPI Bar -->
@@ -1919,6 +1925,11 @@ function bindSectionEvents(section, container) {
       const idx = parseInt(btn.dataset.idx);
       openLaborProfileModal(idx);
     });
+  });
+
+  // Phase 5a: scenario xlsx export (on Summary)
+  container.querySelector('[data-cm-action="export-scenario-xlsx"]')?.addEventListener('click', () => {
+    exportScenarioToXlsx();
   });
 
   // Phase 4c/d: fire-and-forget market-profile load on Summary/Timeline open
@@ -2338,6 +2349,238 @@ async function openLaborProfileModal(idx) {
     overlay.remove();
     renderSection();
   });
+}
+
+// ============================================================
+// PHASE 5a — SCENARIO XLSX EXPORT
+// ============================================================
+
+/**
+ * Build the multi-sheet xlsx payload for the active scenario.
+ * Pure function returning the sheet configuration; caller invokes
+ * downloadXLSX. Kept here (not in calc.*) because it pulls from
+ * module-local state (model, currentScenario, heuristics, etc.).
+ *
+ * @returns {{ filename: string, sheets: any[] }}
+ */
+function buildScenarioExportPayload() {
+  const scen = currentScenario;
+  const snaps = currentScenarioSnapshots;
+  const isFrozen = !!(scen && scen.status === 'approved' && snaps);
+  const bundle = _lastMonthlyBundle;
+  const calcHeur = _lastCalcHeuristics;
+  const proj = model?.projectDetails || {};
+  const fin = model?.financial || {};
+  const nameSlug = (proj.name || 'cost_model')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  const today = new Date().toISOString().slice(0, 10);
+  const filename = `cm_${nameSlug}_${scen?.scenario_label || 'draft'}_${today}.xlsx`.replace(/\s+/g, '_');
+
+  // ----- Sheet 1: Overview -----
+  const overviewRows = [
+    { Field: 'Project Name',        Value: proj.name || '' },
+    { Field: 'Client',              Value: proj.clientName || '' },
+    { Field: 'Market',              Value: (refData.markets || []).find(m => m.id === proj.market)?.name || proj.market || '' },
+    { Field: 'Environment',         Value: proj.environment || '' },
+    { Field: 'Contract Term (yrs)', Value: proj.contractTerm || 5 },
+    { Field: '',                    Value: '' },
+    { Field: 'Scenario ID',         Value: scen?.id ?? '' },
+    { Field: 'Scenario Label',      Value: scen?.scenario_label || 'draft' },
+    { Field: 'Scenario Status',     Value: scen?.status || 'draft' },
+    { Field: 'Is Baseline',         Value: scen?.is_baseline ? 'Yes' : 'No' },
+    { Field: 'Parent Scenario ID',  Value: scen?.parent_scenario_id ?? '' },
+    { Field: 'Approved At',         Value: scen?.approved_at || '' },
+    { Field: 'Approved By',         Value: scen?.approved_by || '' },
+    { Field: '',                    Value: '' },
+    { Field: 'Reading Frozen Rates?', Value: isFrozen ? 'YES — ref_* snapshots' : 'No — live rate cards' },
+    { Field: 'Exported At',         Value: new Date().toISOString() },
+    { Field: 'Exported By',         Value: (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('ies_user_email') : '') || '(anonymous)' },
+  ];
+
+  // ----- Sheet 2: KPI snapshot -----
+  const kpiRows = [];
+  if (bundle && Array.isArray(bundle.cashflow)) {
+    const totalRev = bundle.cashflow.reduce((s, r) => s + (r.revenue || 0), 0);
+    const totalOpex = bundle.cashflow.reduce((s, r) => s + (r.opex || 0), 0);
+    const totalEbitda = bundle.cashflow.reduce((s, r) => s + (r.ebitda || 0), 0);
+    const totalNI = bundle.cashflow.reduce((s, r) => s + (r.net_income || 0), 0);
+    const totalCapex = bundle.cashflow.reduce((s, r) => s + (r.capex || 0), 0);
+    const lastCFCF = bundle.cashflow.length > 0
+      ? bundle.cashflow.reduce((_, r) => r.cumulative_cash_flow, 0)
+      : 0;
+    kpiRows.push({ Metric: 'Total Revenue',        Value: totalRev },
+                 { Metric: 'Total Opex',           Value: totalOpex },
+                 { Metric: 'Total EBITDA',         Value: totalEbitda },
+                 { Metric: 'Total Net Income',     Value: totalNI },
+                 { Metric: 'Total Capex',          Value: totalCapex },
+                 { Metric: 'Ending Cumulative FCF', Value: lastCFCF },
+                 { Metric: 'EBITDA Margin',        Value: totalRev > 0 ? (totalEbitda / totalRev * 100) : 0 });
+  }
+
+  // ----- Sheet 3: Monthly P&L (flat wide view) -----
+  const monthlyRows = [];
+  if (bundle && Array.isArray(bundle.cashflow)) {
+    const periodById = new Map((bundle.periods || []).map(p => [p.id, p]));
+    const revByPeriod = new Map(); const expByPeriod = new Map();
+    for (const r of (bundle.revenue || [])) {
+      if (!revByPeriod.has(r.period_id)) revByPeriod.set(r.period_id, 0);
+      revByPeriod.set(r.period_id, revByPeriod.get(r.period_id) + (r.amount || 0));
+    }
+    for (const e of (bundle.expense || [])) {
+      if (!expByPeriod.has(e.period_id)) expByPeriod.set(e.period_id, {});
+      const m = expByPeriod.get(e.period_id);
+      m[e.expense_line_code] = (m[e.expense_line_code] || 0) + (e.amount || 0);
+    }
+    for (const cf of bundle.cashflow) {
+      const p = periodById.get(cf.period_id);
+      const exp = expByPeriod.get(cf.period_id) || {};
+      monthlyRows.push({
+        Period:        p?.label || '',
+        CalYear:       p?.calendar_year || '',
+        CalMonth:      p?.calendar_month || '',
+        PreGoLive:     p?.is_pre_go_live ? 'Yes' : 'No',
+        Revenue:       cf.revenue || 0,
+        LaborHourly:   exp.LABOR_HOURLY || 0,
+        Facility:      exp.FACILITY || 0,
+        Equipment:     exp.EQUIPMENT_LEASE || 0,
+        Overhead:      exp.OVERHEAD || 0,
+        VAS:           exp.VAS || 0,
+        StartupAmort:  exp.STARTUP_AMORT || 0,
+        Depreciation:  exp.DEPRECIATION || 0,
+        Opex:          cf.opex || 0,
+        GrossProfit:   cf.gross_profit || 0,
+        EBITDA:        cf.ebitda || 0,
+        EBIT:          cf.ebit || 0,
+        Taxes:         cf.taxes || 0,
+        NetIncome:     cf.net_income || 0,
+        Capex:         cf.capex || 0,
+        WC_Delta:      cf.working_capital_change || 0,
+        OperatingCF:   cf.operating_cash_flow || 0,
+        FreeCashFlow:  cf.free_cash_flow || 0,
+        CumFCF:        cf.cumulative_cash_flow || 0,
+      });
+    }
+  }
+
+  // ----- Sheet 4: Labor Lines (per-line detail incl. Phase 4 profile) -----
+  const fmt12 = (arr) => Array.isArray(arr) && arr.length === 12
+    ? arr.map(v => (Number(v) * 100).toFixed(1)).join(', ')
+    : '';
+  const laborRows = (model?.laborLines || []).map((l, i) => ({
+    '#':              i + 1,
+    Activity:         l.activity_name || '',
+    Volume:           l.volume || 0,
+    BaseUPH:          l.base_uph || 0,
+    AnnualHours:      l.annual_hours || 0,
+    Rate:             l.hourly_rate || 0,
+    Burden:           l.burden_pct || 0,
+    Employment:       l.employment_type || 'permanent',
+    TempMarkup:       l.temp_agency_markup_pct || 0,
+    OT_Profile_Pct:   fmt12(l.monthly_overtime_profile),
+    Absence_Profile_Pct: fmt12(l.monthly_absence_profile),
+    MOST_Template:    l.most_template_name || '',
+  }));
+
+  // ----- Sheet 5: Assumptions (heuristics with Used From source) -----
+  const assumptionRows = (heuristicsCatalog || []).map(h => {
+    const eff = scenarios.heuristicEffective(h, heuristicOverrides);
+    let usedFrom = 'default';
+    if (isFrozen && Array.isArray(snaps?.heuristics)) {
+      const snap = snaps.heuristics.find(s => s.key === h.key);
+      if (snap) usedFrom = 'snapshot';
+    } else if (heuristicOverrides && Object.prototype.hasOwnProperty.call(heuristicOverrides, h.key)
+              && heuristicOverrides[h.key] !== '' && heuristicOverrides[h.key] !== null) {
+      usedFrom = 'override';
+    }
+    return {
+      Category:   HEURISTIC_CATEGORY_LABELS[h.category] || h.category,
+      Key:        h.key,
+      Label:      h.label,
+      Default:    h.default_value ?? h.default_enum ?? '',
+      Effective:  eff ?? '',
+      UsedFrom:   usedFrom,
+      Unit:       h.unit || '',
+      Description: h.description || '',
+    };
+  });
+
+  // ----- Sheet 6: Rate Snapshots (only when frozen) -----
+  const snapshotRows = [];
+  if (isFrozen) {
+    for (const [cardType, rows] of Object.entries(snaps || {})) {
+      for (const r of rows) {
+        snapshotRows.push({
+          CardType:    cardType,
+          CardID:      r._rate_card_id || r.id || '',
+          VersionHash: r._version_hash || '',
+          CapturedAt:  r._captured_at || '',
+          Name:        r.role_name || r.building_type || r.category || r.name || r.key || '',
+          Rate:        r.hourly_rate || r.lease_rate_psf_yr || r.monthly_cost || r.purchase_cost || r.default_value || '',
+          Notes:       r.notes || r.label || '',
+        });
+      }
+    }
+  }
+
+  // ----- Sheet 7: Revisions -----
+  const revisionRows = (currentRevisions || []).map(r => ({
+    RevisionNumber: r.revision_number,
+    ChangedAt:      r.changed_at,
+    ChangedBy:      r.changed_by || '',
+    Summary:        r.change_summary || '',
+  }));
+
+  return {
+    filename,
+    sheets: [
+      { name: 'Overview',    rows: overviewRows,    columns: [
+        { key: 'Field', label: 'Field' },
+        { key: 'Value', label: 'Value' },
+      ] },
+      { name: 'KPIs',        rows: kpiRows, columns: [
+        { key: 'Metric', label: 'Metric' },
+        { key: 'Value',  label: 'Value', format: 'number', decimals: 0 },
+      ] },
+      { name: 'Monthly P&L', rows: monthlyRows },
+      { name: 'Labor',       rows: laborRows },
+      { name: 'Assumptions', rows: assumptionRows },
+      { name: 'Snapshots',   rows: snapshotRows.length ? snapshotRows : [{ Note: 'No snapshots — scenario is not approved.' }] },
+      { name: 'Revisions',   rows: revisionRows.length ? revisionRows : [{ Note: 'No revisions logged.' }] },
+    ],
+  };
+}
+
+/**
+ * Export the active scenario as xlsx. Triggered from the Summary
+ * "Export Scenario" button.
+ */
+async function exportScenarioToXlsx() {
+  // Ensure heuristics + scenarios are loaded so export is complete
+  await ensureHeuristicsLoaded();
+  await ensureScenariosLoaded();
+  const payload = buildScenarioExportPayload();
+  if (!payload.sheets.some(s => (s.rows || []).length > 0)) {
+    alert('Nothing to export yet — open the Summary section first to build the monthly bundle.');
+    return;
+  }
+  try {
+    downloadXLSX(payload);
+    // Audit-log the export (fire-and-forget)
+    if (currentScenario?.id) {
+      try {
+        const { recordAudit } = await import('../../shared/audit.js?v=20260419-sZ');
+        recordAudit({
+          table: 'cost_model_scenarios',
+          id: currentScenario.id,
+          action: 'update',
+          fields: { exported_at: new Date().toISOString(), format: 'xlsx' },
+        }).catch(() => {});
+      } catch (_) { /* ignore */ }
+    }
+  } catch (err) {
+    console.error('[CM] export failed:', err);
+    alert('Export failed: ' + (err?.message || err));
+  }
 }
 
 function shouldRerender(field) {
