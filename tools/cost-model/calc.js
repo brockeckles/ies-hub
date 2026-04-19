@@ -6,8 +6,15 @@
  * Every formula that was duplicated across v2 (30+ inline calculations)
  * is now a single-source-of-truth function here.
  *
+ * Phase 1 integration: buildYearlyProjections becomes a thin wrapper that
+ * routes through tools/cost-model/calc.monthly.js when the per-call
+ * `useMonthlyEngine` flag (or window-level COST_MODEL_MONTHLY_ENGINE) is
+ * set. The legacy implementation stays in place as the default.
+ *
  * @module tools/cost-model/calc
  */
+
+import * as monthly from './calc.monthly.js?v=20260418-sV';
 
 // ============================================================
 // OPERATING HOURS
@@ -503,6 +510,22 @@ const LEARNING_CURVE_FACTORS = {
  * @returns {{ projections: import('./types.js?v=20260418-sK').YearlyProjection[], startupCapital: number }}
  */
 export function buildYearlyProjections(params) {
+  // Phase 1 routing: when the monthly engine flag is on AND we have the
+  // dependencies it needs (periods + ramp + seasonality), build the monthly
+  // bundle and aggregate to yearly. Falls back to the legacy yearly path
+  // when the flag is off or dependencies are missing.
+  const useMonthly =
+    !!params.useMonthlyEngine ||
+    (typeof window !== 'undefined' && window.COST_MODEL_MONTHLY_ENGINE === true);
+  if (useMonthly && params.periods && params.ramp && params.seasonality) {
+    const bundle = monthly.buildMonthlyProjections(adaptYearlyToMonthlyParams(params));
+    return {
+      projections: monthly.groupMonthlyToYearly(bundle, params.years),
+      startupCapital: params.startupCapital,
+      monthlyBundle: bundle, // exposed for Timeline UI + reconciliation tests
+    };
+  }
+
   const {
     years, baseLaborCost, baseFacilityCost, baseEquipmentCost,
     baseOverheadCost, baseVasCost, startupAmort, startupCapital,
@@ -1466,4 +1489,67 @@ export function generateHeuristics(state, summary) {
   }
 
   return checks;
+}
+
+// ============================================================
+// PHASE 1 ADAPTER — yearly params → monthly engine inputs
+// ============================================================
+
+/**
+ * Default 5-point allowance learning curve when the project doesn't
+ * pin a specific ramp_profile_id. Matches v2's medium-tier defaults.
+ */
+const DEFAULT_RAMP_MEDIUM = {
+  type: 'medium',
+  wk1_factor:  0.55,
+  wk2_factor:  0.70,
+  wk4_factor:  0.85,
+  wk8_factor:  0.95,
+  wk12_factor: 1.0,
+};
+
+/** Default flat 12-share seasonality. */
+const DEFAULT_FLAT_SEASONALITY = {
+  monthly_shares: Array(12).fill(1 / 12).map((v, i) => i === 11 ? 0.0837 : 0.0833),
+};
+
+/**
+ * Translate the yearly buildYearlyProjections params shape into the
+ * monthly engine's BuildMonthlyParams. The caller is responsible for
+ * supplying `periods` (from ref_periods), `ramp` (from ref_allowance_profiles
+ * if present), and `seasonality` (from project.seasonality_profile).
+ *
+ * Defaults to medium ramp + flat seasonality when those aren't provided
+ * — the engine still produces a sensible bundle.
+ *
+ * @param {Object} p — buildYearlyProjections params (legacy shape)
+ * @returns {Object} buildMonthlyProjections params
+ */
+export function adaptYearlyToMonthlyParams(p) {
+  return {
+    project_id: p.project_id || 0,
+    contract_term_years: p.years,
+    pre_go_live_months: p.preGoLiveMonths || 0,
+    base_labor_cost:     p.baseLaborCost,
+    base_facility_cost:  p.baseFacilityCost,
+    base_equipment_cost: p.baseEquipmentCost,
+    base_overhead_cost:  p.baseOverheadCost,
+    base_vas_cost:       p.baseVasCost,
+    startup_amort:       p.startupAmort,
+    startup_capital:     p.startupCapital,
+    base_orders:         p.baseOrders,
+    margin_pct:          p.marginPct,
+    vol_growth_pct:      p.volGrowthPct || 0,
+    labor_esc_pct:       p.laborEscPct  || 0,
+    cost_esc_pct:        p.costEscPct   || 0,
+    tax_rate_pct:        p.taxRatePct ?? 25,
+    dso_days:            p.dsoDays ?? 30,
+    dpo_days:            p.dpoDays ?? 30,
+    labor_payable_days:  p.laborPayableDays ?? 14,
+    ramp:                p.ramp        || DEFAULT_RAMP_MEDIUM,
+    seasonality:         p.seasonality || DEFAULT_FLAT_SEASONALITY,
+    periods:             p.periods     || [],
+    startupLines:        p.startupLines     || [],
+    pricingBuckets:      p.pricingBuckets   || [],
+  };
 }

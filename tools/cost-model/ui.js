@@ -87,6 +87,7 @@ const SECTIONS = [
   { key: 'startup', label: 'Start-Up / Capital', icon: 'zap' },
   { key: 'pricing', label: 'Pricing', icon: 'tag' },
   { key: 'summary', label: 'Summary', icon: 'pie-chart' },
+  { key: 'timeline', label: 'Timeline', icon: 'calendar' },
 ];
 
 // ============================================================
@@ -104,13 +105,17 @@ export async function mount(el) {
   userHasInteracted = false;
   viewMode = 'landing';
 
-  // Load reference data + saved models + saved deals in parallel
+  // Load reference data + saved models + saved deals + ref_periods in parallel
   try {
-    [refData, savedModels, savedDeals] = await Promise.all([
+    const [rd, models, deals, periods] = await Promise.all([
       api.loadAllRefData().catch(() => ({})),
       api.listModels().catch(() => []),
       api.listDeals().catch(() => []),
+      api.fetchRefPeriods().catch(() => []),
     ]);
+    refData = { ...rd, periods };
+    savedModels = models;
+    savedDeals  = deals;
   } catch (err) {
     console.warn('[CM] Initial load failed:', err);
   }
@@ -569,6 +574,7 @@ function renderSection() {
     startup: renderStartup,
     pricing: renderPricing,
     summary: renderSummary,
+    timeline: renderTimeline,
   };
 
   const render = renderers[activeSection];
@@ -1495,7 +1501,22 @@ function renderSummary() {
     // Phase 0: thread per-project tax rate (fin.taxRate is sourced from
     // cost_model_projects.tax_rate_pct on load; defaults to 25 if absent).
     taxRatePct: fin.taxRate ?? 25,
+    // Phase 1: optional — if refData.periods loaded (via api.fetchRefPeriods)
+    // and the flag is on, the wrapper will route through the monthly engine.
+    useMonthlyEngine: typeof window !== 'undefined' && window.COST_MODEL_MONTHLY_ENGINE === true,
+    periods: (refData && refData.periods) || [],
+    ramp: null,                      // default medium ramp picked up in adapter
+    seasonality: model.seasonalityProfile || null,
+    preGoLiveMonths: fin.preGoLiveMonths || 0,
+    dsoDays: fin.dsoDays ?? 30,
+    dpoDays: fin.dpoDays ?? 30,
+    laborPayableDays: fin.laborPayableDays ?? 14,
+    startupLines: model.startupLines || [],
+    pricingBuckets: model.pricingBuckets || [],
+    project_id: model.id || 0,
   });
+  // Stash the monthly bundle for save-time persistence
+  if (projResult && projResult.monthlyBundle) _lastMonthlyBundle = projResult.monthlyBundle;
   const projections = projResult.projections || [];
 
   // Financial metrics
@@ -2257,11 +2278,27 @@ async function handleSave() {
     }
     isDirty = false;
     bus.emit('cm:model-saved', { id: model.id });
+
+    // Phase 1: if the monthly engine flag is on and we have the latest
+    // projection bundle in memory, persist the monthly facts + refresh the
+    // materialized view. Fire-and-forget so a flaky RPC never blocks save.
+    if (typeof window !== 'undefined' && window.COST_MODEL_MONTHLY_ENGINE === true) {
+      const bundle = _lastMonthlyBundle;
+      if (bundle && model.id) {
+        api.persistMonthlyFacts(model.id, bundle)
+          .then(({ wrote }) => bus.emit('cm:monthly-facts-updated', { project_id: model.id, rows: wrote }))
+          .catch(err => { console.warn('[CM] persistMonthlyFacts failed:', err); bus.emit('cm:pnl-refresh-failed', { project_id: model.id, error: err }); });
+      }
+    }
   } catch (err) {
     console.error('[CM] Save failed:', err);
     alert('Save failed: ' + err.message);
   }
 }
+
+/** Cached monthly bundle from the most recent buildYearlyProjections call. */
+let _lastMonthlyBundle = null;
+export function setLastMonthlyBundle(bundle) { _lastMonthlyBundle = bundle; }
 
 async function handleLoad() {
   // The Load button now returns to the landing page where models are shown as cards.
@@ -2658,4 +2695,155 @@ function setNestedValue(obj, path, value) {
     current = current[parts[i]];
   }
   current[parts[parts.length - 1]] = value;
+}
+
+// ============================================================
+// SECTION 14: TIMELINE (Phase 1)
+// ============================================================
+
+/**
+ * Monthly P&L + cumulative cash flow rendered from the monthly bundle.
+ * When the flag is off or no bundle exists, shows a helpful empty state.
+ */
+function renderTimeline() {
+  const flagOn = typeof window !== 'undefined' && window.COST_MODEL_MONTHLY_ENGINE === true;
+  const bundle = _lastMonthlyBundle;
+
+  if (!flagOn) {
+    return `
+      <div class="cm-section">
+        <h2 class="cm-section-title">Timeline <span style="font-size:11px;color:var(--ies-gray-400);font-weight:500;margin-left:8px;">Phase 1 — Preview</span></h2>
+        <div class="hub-card" style="background:#fef3c7;border:1px solid #fcd34d;color:#92400e;padding:16px;">
+          <strong>Monthly engine is off.</strong> Enable it in the browser console:
+          <code style="display:block;margin-top:8px;background:#fff;padding:8px;border-radius:4px;font-family:monospace;">window.COST_MODEL_MONTHLY_ENGINE = true;</code>
+          then re-open the Summary section to regenerate the monthly bundle, and come back to Timeline.
+        </div>
+      </div>
+    `;
+  }
+
+  if (!bundle || !bundle.cashflow || bundle.cashflow.length === 0) {
+    return `
+      <div class="cm-section">
+        <h2 class="cm-section-title">Timeline</h2>
+        <div class="hub-card" style="padding:24px;text-align:center;color:var(--ies-gray-400);">
+          No monthly bundle available yet. Open the <strong>Summary</strong> section to run the engine, then return here.
+        </div>
+      </div>
+    `;
+  }
+
+  // Aggregate monthly cashflow for the Timeline table
+  const periods = bundle.periods;
+  const byId = new Map(periods.map(p => [p.id, p]));
+  const rows = bundle.cashflow.map(cf => {
+    const p = byId.get(cf.period_id);
+    return {
+      label: p?.label || '',
+      period_index: p?.period_index ?? 0,
+      is_pre_go_live: p?.is_pre_go_live ?? false,
+      revenue: cf.revenue,
+      opex: cf.opex,
+      ebitda: cf.ebitda,
+      net_income: cf.net_income,
+      capex: cf.capex,
+      ocf: cf.operating_cash_flow,
+      fcf: cf.free_cash_flow,
+      cum_fcf: cf.cumulative_cash_flow,
+    };
+  }).sort((a, b) => a.period_index - b.period_index);
+
+  // Year-over-year totals for a quick summary strip
+  const yearly = {};
+  for (const r of rows) {
+    if (r.is_pre_go_live) continue;
+    const yr = Math.floor(r.period_index / 12) + 1;
+    if (!yearly[yr]) yearly[yr] = { revenue: 0, opex: 0, net_income: 0, fcf: 0 };
+    yearly[yr].revenue    += r.revenue;
+    yearly[yr].opex       += r.opex;
+    yearly[yr].net_income += r.net_income;
+    yearly[yr].fcf        += r.fcf;
+  }
+
+  const fmt = (n) => {
+    const a = Math.abs(n);
+    if (a >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+    if (a >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+    return n.toFixed(0);
+  };
+
+  // Cumulative-cash-flow trend colors
+  const payback = rows.find(r => r.cum_fcf >= 0 && !r.is_pre_go_live);
+
+  return `
+    <div class="cm-section">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;">
+        <h2 class="cm-section-title" style="margin:0;">Timeline</h2>
+        <span style="font-size:11px;color:var(--ies-gray-400);">${rows.length} months · Phase 1 monthly engine</span>
+      </div>
+
+      <!-- KPI strip -->
+      <div class="hub-kpi-bar mb-6">
+        <div class="hub-kpi-item"><div class="hub-kpi-label">Total Revenue</div><div class="hub-kpi-value">$${fmt(rows.reduce((s, r) => s + r.revenue, 0))}</div></div>
+        <div class="hub-kpi-item"><div class="hub-kpi-label">Total Opex</div><div class="hub-kpi-value">$${fmt(rows.reduce((s, r) => s + r.opex, 0))}</div></div>
+        <div class="hub-kpi-item"><div class="hub-kpi-label">Cumulative FCF</div><div class="hub-kpi-value" style="color:${rows[rows.length-1].cum_fcf >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};">$${fmt(rows[rows.length-1].cum_fcf)}</div></div>
+        <div class="hub-kpi-item"><div class="hub-kpi-label">Payback Month</div><div class="hub-kpi-value">${payback ? payback.label : '—'}</div></div>
+      </div>
+
+      <!-- Year summary -->
+      <div class="hub-card mb-6">
+        <div class="text-subtitle mb-4">Annual Roll-Up</div>
+        <table class="cm-grid-table" style="width:100%;">
+          <thead><tr><th>Year</th><th class="cm-num">Revenue</th><th class="cm-num">Opex</th><th class="cm-num">Net Income</th><th class="cm-num">FCF</th></tr></thead>
+          <tbody>
+            ${Object.entries(yearly).map(([yr, y]) => `
+              <tr>
+                <td>Y${yr}</td>
+                <td class="cm-num">$${fmt(y.revenue)}</td>
+                <td class="cm-num">$${fmt(y.opex)}</td>
+                <td class="cm-num">$${fmt(y.net_income)}</td>
+                <td class="cm-num" style="color:${y.fcf >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};">$${fmt(y.fcf)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Monthly cashflow table (first 24 months + cumulative) -->
+      <div class="hub-card">
+        <div class="text-subtitle mb-4">Monthly Cashflow (first 24 months)</div>
+        <div style="max-height:400px;overflow-y:auto;">
+          <table class="cm-grid-table" style="width:100%;font-size:12px;">
+            <thead style="position:sticky;top:0;background:#fff;">
+              <tr>
+                <th>Month</th>
+                <th class="cm-num">Revenue</th>
+                <th class="cm-num">Opex</th>
+                <th class="cm-num">EBITDA</th>
+                <th class="cm-num">Net Income</th>
+                <th class="cm-num">CapEx</th>
+                <th class="cm-num">FCF</th>
+                <th class="cm-num">Cum FCF</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.slice(0, 24).map(r => `
+                <tr style="${r.is_pre_go_live ? 'background:#fef3c7;' : ''}">
+                  <td style="font-weight:600;">${r.label}${r.is_pre_go_live ? ' <span style="color:#92400e;font-size:10px;">pre-live</span>' : ''}</td>
+                  <td class="cm-num">$${fmt(r.revenue)}</td>
+                  <td class="cm-num">$${fmt(r.opex)}</td>
+                  <td class="cm-num">$${fmt(r.ebitda)}</td>
+                  <td class="cm-num">$${fmt(r.net_income)}</td>
+                  <td class="cm-num">${r.capex > 0 ? '$' + fmt(r.capex) : '—'}</td>
+                  <td class="cm-num" style="color:${r.fcf >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};">$${fmt(r.fcf)}</td>
+                  <td class="cm-num" style="font-weight:700;color:${r.cum_fcf >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};">$${fmt(r.cum_fcf)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+        ${rows.length > 24 ? `<div style="margin-top:8px;font-size:11px;color:var(--ies-gray-400);">…${rows.length - 24} more months (full 60-month view coming in the Phase 5 assumption studio)</div>` : ''}
+      </div>
+    </div>
+  `;
 }

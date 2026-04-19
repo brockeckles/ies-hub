@@ -255,3 +255,97 @@ export async function loadAllRefData(marketId) {
     pricingAssumptions,
   };
 }
+
+// ============================================================
+// PHASE 1 — Monthly fact tables + materialized view
+// ============================================================
+
+/**
+ * Fetch the global ref_periods table (cached for the session). The monthly
+ * engine needs this as its time axis.
+ * @returns {Promise<Object[]>}
+ */
+let _cachedPeriods = null;
+export async function fetchRefPeriods() {
+  if (_cachedPeriods) return _cachedPeriods;
+  const { data, error } = await db.from('ref_periods')
+    .select('*')
+    .eq('period_type', 'month')
+    .order('period_index', { ascending: true });
+  if (error) throw error;
+  _cachedPeriods = data || [];
+  return _cachedPeriods;
+}
+
+/**
+ * Persist a monthly bundle to the three fact tables. Strategy: per-project
+ * DELETE-then-INSERT (Phase 1 treats each save as an atomic rewrite). After
+ * the writes complete, calls refresh_pnl_for_project(project_id) via RPC
+ * so the dashboard read-model is current.
+ *
+ * Fire-and-forget friendly — if the RPC fails, we emit cm:pnl-refresh-failed
+ * but don't fail the user-facing save.
+ *
+ * @param {number} projectId
+ * @param {{ periods: Object[], revenue: Object[], expense: Object[], cashflow: Object[] }} bundle
+ * @returns {Promise<{ wrote: { revenue: number, expense: number, cashflow: number } }>}
+ */
+export async function persistMonthlyFacts(projectId, bundle) {
+  // Clear prior facts for this project
+  await Promise.all([
+    db.from('cost_model_revenue_monthly').delete().eq('project_id', projectId),
+    db.from('cost_model_expense_monthly').delete().eq('project_id', projectId),
+    db.from('cost_model_cashflow_monthly').delete().eq('project_id', projectId),
+  ]);
+
+  const revRows = (bundle.revenue  || []).map(r => ({ ...r, project_id: projectId }));
+  const expRows = (bundle.expense  || []).map(r => ({ ...r, project_id: projectId }));
+  const cfRows  = (bundle.cashflow || []).map(r => ({ ...r, project_id: projectId }));
+
+  if (revRows.length) {
+    const { error } = await db.from('cost_model_revenue_monthly').insert(revRows);
+    if (error) console.warn('[CM] revenue_monthly insert failed:', error);
+  }
+  if (expRows.length) {
+    const { error } = await db.from('cost_model_expense_monthly').insert(expRows);
+    if (error) console.warn('[CM] expense_monthly insert failed:', error);
+  }
+  if (cfRows.length) {
+    const { error } = await db.from('cost_model_cashflow_monthly').insert(cfRows);
+    if (error) console.warn('[CM] cashflow_monthly insert failed:', error);
+  }
+
+  // Refresh the materialized view. Fire-and-forget: never block the save.
+  try {
+    const { error } = await db.rpc('refresh_pnl_for_project', { p_project_id: projectId });
+    if (error) console.warn('[CM] fact_pnl_monthly refresh failed:', error);
+  } catch (err) {
+    console.warn('[CM] refresh_pnl_for_project threw:', err);
+  }
+
+  return { wrote: { revenue: revRows.length, expense: expRows.length, cashflow: cfRows.length } };
+}
+
+/**
+ * Fetch the monthly view (fact_pnl_monthly) for a project. Prefers the
+ * materialized view for speed; falls back to joining cashflow + periods
+ * directly if the view happens to be empty for this project.
+ *
+ * @param {number} projectId
+ * @returns {Promise<Object[]>}
+ */
+export async function fetchMonthlyProjections(projectId) {
+  const { data, error } = await db.from('fact_pnl_monthly')
+    .select('*')
+    .eq('project_id', projectId)
+    .order('period_index', { ascending: true });
+  if (error) {
+    console.warn('[CM] fact_pnl_monthly read failed, falling back to raw tables:', error);
+    // Fallback: join cost_model_cashflow_monthly with ref_periods
+    const { data: cfData } = await db.from('cost_model_cashflow_monthly')
+      .select('*, ref_periods(period_index, calendar_year, calendar_month, customer_fy_index, label, is_pre_go_live)')
+      .eq('project_id', projectId);
+    return cfData || [];
+  }
+  return data || [];
+}
