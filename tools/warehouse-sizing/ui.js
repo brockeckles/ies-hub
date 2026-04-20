@@ -1226,9 +1226,26 @@ function drawPlan() {
     return;
   }
 
-  // Building dimensions (ft)
-  const widthFt  = facility.buildingWidth  || Math.round(Math.sqrt(totalSqft * 1.5));
-  const depthFt  = facility.buildingDepth  || Math.round(totalSqft / Math.max(1, widthFt));
+  // Building dimensions (ft) — derive from sized SF when either input is
+  // missing OR the user-entered footprint can't fit the sized facility
+  // (prevents the "300×500 = 150K but sized = 578K" rendering where
+  // storage blocks overflow the canvas).
+  //
+  // Brock 2026-04-20: also ensure LANDSCAPE orientation — warehouses
+  // conventionally have the dock face on the long edge, so we always
+  // render widthFt (horizontal) >= depthFt (vertical). Stops the
+  // "weird portrait building" issue when the user's saved values
+  // have depth > width.
+  let widthFt  = Number(facility.buildingWidth)  || 0;
+  let depthFt  = Number(facility.buildingDepth)  || 0;
+  const footprintFits = widthFt > 0 && depthFt > 0 && (widthFt * depthFt) >= totalSqft * 0.98;
+  if (!footprintFits) {
+    // Derive 1.5:1 landscape footprint from sized SF.
+    widthFt  = Math.round(Math.sqrt(totalSqft * 1.5));
+    depthFt  = Math.round(totalSqft / Math.max(1, widthFt));
+  }
+  // Enforce landscape: swap if user input was portrait.
+  if (widthFt < depthFt) [widthFt, depthFt] = [depthFt, widthFt];
 
   // Fit-to-canvas with padding for dimension labels
   const padX = 60, padY = 60;
@@ -2547,8 +2564,12 @@ function createDefaultFacility() {
     // when the user wants it as an explicit target.
     totalSqft: 0,
     clearHeight: 32,
-    buildingWidth: 300,
-    buildingDepth: 500,
+    // Brock 2026-04-20: zero defaults let the plan renderer derive a
+    // landscape footprint from sized SF (1.5:1). User can still type
+    // specific values to override; the renderer auto-swaps if they
+    // yield portrait orientation.
+    buildingWidth: 0,
+    buildingDepth: 0,
     columnSpacingX: 50,
     columnSpacingY: 50,
     storageType: 'single',
