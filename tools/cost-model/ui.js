@@ -3049,6 +3049,7 @@ function renderPricing() {
   });
 
   return `
+    <div class="cm-wide-layout">
     <div class="cm-section-header">
       <div>
         <div class="cm-section-title">Pricing Schedule</div>
@@ -3148,6 +3149,7 @@ function renderPricing() {
       .cm-bucket-unassigned { background:rgba(255,193,7,0.1) !important; border-left:2px solid var(--ies-orange); }
       .cm-bucket-select { width:140px; font-size:12px; padding:3px 4px; }
     </style>
+    </div>
   `;
 }
 
