@@ -791,6 +791,10 @@ function renderSection() {
   if (render) {
     container.innerHTML = render();
     bindSectionEvents(activeSection, container);
+    // Keep sidebar completion dots in lockstep with the section content —
+    // add/delete row actions call renderSection() after mutating model, so
+    // refreshing here covers the non-input mutation paths too.
+    refreshNavCompletion();
   }
 }
 
@@ -869,13 +873,52 @@ function _sectionCompleteness(sectionKey) {
     case 'vas':
       return (m.vasLines && m.vasLines.length > 0) ? 'complete' : 'empty';
     case 'financial':
-      return (m.financial && m.financial.targetMarginPct > 0) ? 'complete' : 'empty';
+      // NB: model writes `targetMargin` (see data-field="financial.targetMargin"
+      // at line ~2106). Prior check read `targetMarginPct` — never true.
+      return (m.financial && (m.financial.targetMargin || 0) > 0) ? 'complete' : 'empty';
     case 'pricingBuckets':
       return (m.pricingBuckets && m.pricingBuckets.length > 0) ? 'complete' : 'empty';
     case 'pricing':
       return (m.pricingBuckets && m.pricingBuckets.length > 0) ? 'complete' : 'empty';
     default:
       return 'empty';
+  }
+}
+
+/**
+ * Lightweight sidebar refresh — recomputes per-section completeness + group
+ * rollups and mutates the existing DOM instead of re-rendering the whole nav.
+ * Called from the field-change handler so that filling in a form flips the
+ * check dot / group count immediately, without triggering a full section
+ * re-render (which would blow away the user's focus and cursor position).
+ */
+function refreshNavCompletion() {
+  if (!rootEl) return;
+  const grouped = _sectionsByGroup();
+  for (const g of SECTION_GROUPS) {
+    const sections = grouped.get(g.key) || [];
+    if (!sections.length) continue;
+    let completeCount = 0;
+    for (const s of sections) {
+      const status = _sectionCompleteness(s.key);
+      if (status === 'complete') completeCount += 1;
+      // Per-section check dot (v2 UI uses .cm-nav-check, legacy uses same id)
+      const check = rootEl.querySelector(`#cm-check-${s.key}`);
+      if (check) check.classList.toggle('complete', status === 'complete');
+    }
+    // Group-level rollup dot + count
+    const groupEl = rootEl.querySelector(`[data-nav-group="${g.key}"]`);
+    if (!groupEl) continue;
+    const groupDot = completeCount === sections.length ? 'complete'
+                   : completeCount > 0                 ? 'partial'
+                   : 'empty';
+    const dot = groupEl.querySelector('.hub-completion-dot');
+    if (dot) {
+      dot.classList.remove('hub-completion-dot--complete', 'hub-completion-dot--partial', 'hub-completion-dot--empty');
+      dot.classList.add(`hub-completion-dot--${groupDot}`);
+    }
+    const count = groupEl.querySelector('.hub-nav-group__count');
+    if (count) count.textContent = `${completeCount}/${sections.length}`;
   }
 }
 
@@ -1314,7 +1357,7 @@ function renderMostCell(line, idx) {
   // button stacked below. Hover the select to see the template UPH; click the
   // small ↺ to reset. Single row, quieter visual.
   const resetBtn = isOverridden
-    ? `<button class="cm-most-icon" data-action="reset-most-uph" data-idx="${idx}" title="Reset UPH to template default (${Math.round(tplUph)})" style="background:none;border:none;cursor:pointer;padding:2px 4px;color:#d97706;font-size:12px;font-weight:700;">↺</button>`
+    ? `<button class="cm-most-icon cm-most-revert" data-action="reset-most-uph" data-idx="${idx}" title="Reset UPH to template default (${Math.round(tplUph)})" aria-label="Reset UPH to template default">↺</button>`
     : '';
   const selectStyle = isOverridden
     ? 'width:150px;font-size:11px;padding:4px 6px;border:1px solid #d97706;background:#fffbeb;'
@@ -2907,6 +2950,11 @@ function bindSectionEvents(section, container) {
 
       isDirty = true;
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+      // Refresh sidebar completion dots + group rollup so checkmarks update
+      // live as the user fills fields — previously only updated on mount /
+      // section navigation, so Order Profile / Financial / VAS / Start-Up /
+      // Pricing Buckets never flipped green without navigating away first.
+      refreshNavCompletion();
       // Re-render if the field affects calculated values
       if (shouldRerender(field)) renderSection();
     });

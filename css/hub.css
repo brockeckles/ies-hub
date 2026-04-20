@@ -1713,6 +1713,42 @@ textarea.hub-input {
   letter-spacing: 0.04em;
 }
 
+/* ---- CM MOST per-row revert button (↺ when UPH is overridden) ---- */
+/* Previously inline-styled at 12px font — too small to read next to the 11px
+   select. Bumped to 16px with a subtle amber pill affordance so it's clearly
+   a clickable control, not decoration. */
+.cm-most-revert {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  margin-left: 2px;
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fcd34d;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  font-weight: 700;
+  flex-shrink: 0;
+  transition: background 0.1s, color 0.1s, transform 0.1s;
+}
+.cm-most-revert:hover {
+  background: #fde68a;
+  color: #92400e;
+  transform: rotate(-30deg);
+}
+.cm-most-revert:active {
+  transform: rotate(-60deg);
+}
+.cm-most-revert:focus-visible {
+  outline: 2px solid var(--ies-blue);
+  outline-offset: 1px;
+}
+
 /* ---- Completion dots (for grouped sidebar nav) ---- */
 .hub-completion-dot {
   display: inline-block;
