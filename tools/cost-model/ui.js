@@ -337,6 +337,31 @@ export async function mount(el) {
     console.warn('[CM] Failed to consume WSC push handoff:', e);
   }
 
+  // Brock 2026-04-20 — MOST→CM sessionStorage handoff (mirror of WSC above).
+  // Without this, clicking "Push to Cost Model →" on MOST silently dropped
+  // the payload because CM wasn't mounted yet to hear the bus emit.
+  try {
+    const pending = sessionStorage.getItem('most_pending_push');
+    if (pending) {
+      const payload = JSON.parse(pending);
+      if (payload && payload.at && (Date.now() - payload.at) < 60000) {
+        sessionStorage.removeItem('most_pending_push');
+        // Make sure we're on the editor, not the landing page
+        if (viewMode !== 'editor') {
+          model = createEmptyModel();
+          isDirty = false;
+          userHasInteracted = false;
+          viewMode = 'editor';
+        }
+        handleMostPush(payload);
+      } else {
+        sessionStorage.removeItem('most_pending_push');
+      }
+    }
+  } catch (e) {
+    console.warn('[CM] Failed to consume MOST push handoff:', e);
+  }
+
   renderCurrentView();
 
   bus.emit('cm:mounted');
@@ -1891,6 +1916,7 @@ function renderLaborV2() {
           <thead>
             <tr>
               <th>Role</th>
+              <th style="width:160px;" title="Pull from Labor Factors position catalog (indirect category). Selecting a position cascades wage + employment + markup onto the row.">Position</th>
               <th class="hub-num" style="width:70px;">HC</th>
               <th class="hub-num" style="width:70px;">Rate</th>
               <th style="width:160px;">Pricing Bucket</th>
@@ -1921,6 +1947,7 @@ function renderLaborV2() {
                   <input class="hub-input" style="width:calc(100% - 90px);display:inline-block;" value="${escapeAttr(l.role_name || '')}" data-array="indirectLaborLines" data-idx="${i}" data-field="role_name" />
                   ${renderHeuristicChip(l)}
                 </td>
+                <td>${renderPositionCell(l, i, 'indirect')}</td>
                 <td><input class="hub-input hub-num" type="number" value="${l.headcount || 0}" data-array="indirectLaborLines" data-idx="${i}" data-field="headcount" data-type="number" /></td>
                 <td><input class="hub-input hub-num" type="number" step="0.5" value="${l.hourly_rate || 0}" data-array="indirectLaborLines" data-idx="${i}" data-field="hourly_rate" data-type="number" /></td>
                 <td>
@@ -1942,25 +1969,25 @@ function renderLaborV2() {
             `;
             }).join('')}
             ${(model.indirectLaborLines || []).length === 0
-              ? `<tr><td colspan="9" style="padding:24px;text-align:center;color:var(--ies-gray-400);font-size:12px;">No indirect labor yet. Click <strong>Auto-Generate</strong> above, or add a role manually.</td></tr>`
+              ? `<tr><td colspan="10" style="padding:24px;text-align:center;color:var(--ies-gray-400);font-size:12px;">No indirect labor yet. Click <strong>Auto-Generate</strong> above, or add a role manually.</td></tr>`
               : ''}
           </tbody>
           ${(model.indirectLaborLines || []).length > 0 ? `
             <tfoot>
               ${_indirectBreakdownCache && _indirectBreakdownCache.seasonal > 0 ? `
                 <tr style="background:rgba(217,119,6,0.06);">
-                  <td colspan="7" style="padding:8px 12px;font-size:12px;font-weight:600;color:var(--ies-orange,#d97706);">↳ Seasonal Uplift (temp / short-term during peak months)</td>
+                  <td colspan="8" style="padding:8px 12px;font-size:12px;font-weight:600;color:var(--ies-orange,#d97706);">↳ Seasonal Uplift (temp / short-term during peak months)</td>
                   <td class="hub-num" style="padding:8px 12px;font-weight:600;color:var(--ies-orange,#d97706);">+${calc.formatCurrency(_indirectBreakdownCache.seasonal)}</td>
                   <td></td>
                 </tr>
                 <tr>
-                  <td colspan="7" style="padding:6px 12px;font-size:12px;color:var(--ies-gray-500);">Baseline year-round</td>
+                  <td colspan="8" style="padding:6px 12px;font-size:12px;color:var(--ies-gray-500);">Baseline year-round</td>
                   <td class="hub-num" style="padding:6px 12px;font-size:12px;color:var(--ies-gray-500);">${calc.formatCurrency(_indirectBreakdownCache.baseline)}</td>
                   <td></td>
                 </tr>
               ` : ''}
               <tr style="background:var(--ies-gray-50);font-weight:700;">
-                <td colspan="7" style="padding:10px 12px;font-size:12px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ies-gray-600);">Total Indirect${_indirectBreakdownCache && _indirectBreakdownCache.seasonal > 0 ? ' (baseline + seasonal)' : ''}</td>
+                <td colspan="8" style="padding:10px 12px;font-size:12px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ies-gray-600);">Total Indirect${_indirectBreakdownCache && _indirectBreakdownCache.seasonal > 0 ? ' (baseline + seasonal)' : ''}</td>
                 <td class="hub-num" style="padding:10px 12px;">${calc.formatCurrency(totalIndirect)}</td>
                 <td></td>
               </tr>
@@ -5882,11 +5909,24 @@ function handleAction(action, idx, btn) {
     case 'jump-to-buckets':
       navigateSection('pricingBuckets');
       return;
-    case 'launch-wsc':
-      bus.emit('cm:push-to-wsc', { clearHeight: model.facility?.clearHeight || 0, totalSqft: model.facility?.totalSqft || 0 });
+    case 'launch-wsc': {
+      // Brock 2026-04-20: cross-tool linkage was broken in this direction.
+      // The bus.emit was happening BEFORE the hash change to WSC, and WSC's
+      // listener is registered inside its mount() — so the event arrived
+      // before anyone was listening and was dropped. WSC→CM already uses a
+      // sessionStorage handoff to survive the mount gap; mirror that here
+      // so CM→WSC lands reliably.
+      const payload = {
+        clearHeight: model.facility?.clearHeight || 0,
+        totalSqft:   model.facility?.totalSqft   || 0,
+        at: Date.now(),
+      };
+      try { sessionStorage.setItem('cm_pending_push', JSON.stringify(payload)); } catch {}
+      bus.emit('cm:push-to-wsc', payload); // still fire — WSC may already be mounted
       state.set('nav.tool', 'warehouse-sizing');
       window.location.hash = '#designtools/warehouse-sizing';
       return; // don't re-render
+    }
     case 'reset-most-uph':
       resetMostUph(idx);
       return; // resetMostUph already re-renders

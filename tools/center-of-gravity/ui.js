@@ -1138,8 +1138,17 @@ function pushToNetOpt() {
     annualDemand: c.totalWeight,
   }));
 
-  bus.emit('cog:push-to-netopt', { candidates });
+  const payload = { candidates, at: Date.now() };
+  // Brock 2026-04-20: NetOpt wasn't even subscribing to this event before
+  // today — the emit was a no-op. Now NetOpt consumes either the
+  // in-session bus event or the sessionStorage handoff (mirrors the
+  // CM↔WSC and MOST→CM patterns). Both are fired so whichever arrives
+  // first wins; the other is a no-op.
+  try { sessionStorage.setItem('cog_pending_push', JSON.stringify(payload)); } catch {}
+  bus.emit('cog:push-to-netopt', payload);
   showToast(`Pushed ${candidates.length} center(s) to Network Optimizer`, 'success');
+  // Navigate so the user lands on the receiving tool with the data applied.
+  window.location.hash = '#designtools/network-opt';
 }
 
 // ============================================================

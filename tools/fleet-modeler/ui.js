@@ -86,25 +86,49 @@ function updateRunButtonState() {
 export async function mount(el) {
   rootEl = el;
 
-  // X11: Receive lanes from NetOpt
-  bus.on('netopt:push-to-fleet', ({ lanes: pushLanes }) => {
-    if (pushLanes && Array.isArray(pushLanes)) {
-      lanes = pushLanes.map(l => ({
-        id: l.id || 'l' + Date.now() + Math.random(),
-        origin: l.origin,
-        destination: l.destination,
-        weeklyShipments: l.weeklyShipments || 1,
-        avgWeightLbs: l.avgWeightLbs || 5000,
-        avgCubeFt3: l.avgCubeFt3 || 300,
-        distanceMiles: l.distanceMiles || 200,
-      }));
-      showToast(`Received ${lanes.length} lanes from Network Optimizer`, 'success');
-      if (activeTab === 'lanes') renderLanes(rootEl?.querySelector('#fm-content'));
+  // X11: Receive lanes from NetOpt (bus — for the in-session case)
+  bus.on('netopt:push-to-fleet', (payload) => applyNetOptHandoff(payload));
+
+  // Brock 2026-04-20: sessionStorage handoff for the NetOpt→Fleet nav case.
+  // The bus emit from NetOpt fires before Fleet mounts, so without this
+  // the payload was being silently dropped on tool-switch.
+  try {
+    const pending = sessionStorage.getItem('netopt_pending_push');
+    if (pending) {
+      const payload = JSON.parse(pending);
+      if (payload && payload.at && (Date.now() - payload.at) < 60000) {
+        sessionStorage.removeItem('netopt_pending_push');
+        applyNetOptHandoff(payload);
+      } else {
+        sessionStorage.removeItem('netopt_pending_push');
+      }
     }
-  });
+  } catch (e) { console.warn('[Fleet] Failed to consume NetOpt handoff:', e); }
 
   await renderLanding();
   bus.emit('fleet:mounted');
+}
+
+/**
+ * Apply NetOpt push into the module-level lanes array. Shared by both
+ * the in-session bus listener and the sessionStorage handoff path.
+ */
+function applyNetOptHandoff(payload) {
+  const pushLanes = payload?.lanes;
+  if (!Array.isArray(pushLanes) || pushLanes.length === 0) return;
+  lanes = pushLanes.map(l => ({
+    id: l.id || 'l' + Date.now() + Math.random(),
+    origin: l.origin,
+    destination: l.destination,
+    weeklyShipments: l.weeklyShipments || 1,
+    avgWeightLbs: l.avgWeightLbs || 5000,
+    avgCubeFt3: l.avgCubeFt3 || 300,
+    distanceMiles: l.distanceMiles || 200,
+  }));
+  if (typeof showToast === 'function') showToast(`Received ${lanes.length} lanes from Network Optimizer`, 'success');
+  if (activeTab === 'lanes' && rootEl?.querySelector('#fm-content')) {
+    renderLanes(rootEl.querySelector('#fm-content'));
+  }
 }
 
 async function renderLanding() {
@@ -174,6 +198,7 @@ function openEditor(savedRow) {
  */
 export function unmount() {
   if (mapInstance) { mapInstance.remove(); mapInstance = null; }
+  bus.clear('netopt:push-to-fleet'); // free the NetOpt handoff listener
   runState.reset();
   rootEl = null;
   bus.emit('fleet:unmounted');

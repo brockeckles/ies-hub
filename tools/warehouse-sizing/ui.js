@@ -69,8 +69,35 @@ export async function mount(el) {
   // jump straight to the editor with that config loaded.
   bus.on('cm:push-to-wsc', async (data) => {
     viewMode = 'editor';
+    // The earlier implementation assumed the editor shell already existed;
+    // when this listener fires during a CM→WSC "Size with Calculator" click,
+    // we're still on the landing view — openEditor builds the shell first,
+    // then handleCmPush applies the payload values.
+    openEditor(null);
     handleCmPush(data);
   });
+
+  // Brock 2026-04-20 — CM→WSC sessionStorage handoff (mirror of the
+  // wsc_pending_push pattern the other direction). The bus.emit from CM's
+  // launch-wsc fires BEFORE WSC mounts, so the event is lost; picking it
+  // up from sessionStorage here is the reliable path.
+  try {
+    const pending = sessionStorage.getItem('cm_pending_push');
+    if (pending) {
+      const payload = JSON.parse(pending);
+      if (payload && payload.at && (Date.now() - payload.at) < 60000) {
+        sessionStorage.removeItem('cm_pending_push');
+        viewMode = 'editor';
+        openEditor(null);
+        handleCmPush(payload);
+        bus.emit('wsc:mounted');
+        return;
+      }
+      sessionStorage.removeItem('cm_pending_push'); // stale — discard
+    }
+  } catch (e) {
+    console.warn('[WSC] Failed to consume CM push handoff:', e);
+  }
 
   await renderLanding();
   bus.emit('wsc:mounted');

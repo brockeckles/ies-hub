@@ -143,8 +143,64 @@ let _configName = '';         // I-05 — persisted name for resave
 
 export async function mount(el) {
   rootEl = el;
+
+  // Brock 2026-04-20 — cross-tool: consume COG→NetOpt handoff if present.
+  // COG's pushToNetOpt emits a bus event + stashes sessionStorage; this
+  // picks the payload up when we mount. The listener below also catches
+  // the in-session emit if both tools happen to be open together.
+  bus.on('cog:push-to-netopt', (payload) => {
+    applyCogHandoff(payload);
+  });
+  try {
+    const pending = sessionStorage.getItem('cog_pending_push');
+    if (pending) {
+      const payload = JSON.parse(pending);
+      if (payload && payload.at && (Date.now() - payload.at) < 60000) {
+        sessionStorage.removeItem('cog_pending_push');
+        openEditor(null);
+        applyCogHandoff(payload);
+        bus.emit('netopt:mounted');
+        return;
+      }
+      sessionStorage.removeItem('cog_pending_push');
+    }
+  } catch (e) { console.warn('[NetOpt] Failed to consume COG handoff:', e); }
+
   await renderLanding();
   bus.emit('netopt:mounted');
+}
+
+/**
+ * Apply COG candidates as NetOpt facility seeds. Called from both the
+ * in-session bus listener and the sessionStorage handoff path. Appends
+ * to the module-level `facilities` array so the editor's Facility panel
+ * renders them; the user can tune fixedCost / variableCost / capacity
+ * before running optimization.
+ * @param {{ candidates?: Array<{ name:string, lat:number, lng:number, annualDemand?:number }> }} payload
+ */
+function applyCogHandoff(payload) {
+  const candidates = Array.isArray(payload?.candidates) ? payload.candidates : [];
+  if (candidates.length === 0) return;
+  for (const c of candidates) {
+    facilities.push({
+      id: 'f' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+      name: c.name || `COG Center ${facilities.length + 1}`,
+      city: '', state: '',
+      lat: Number(c.lat) || 0,
+      lng: Number(c.lng) || 0,
+      capacity: Number(c.annualDemand) || 200000,
+      fixedCost: 1000000,
+      variableCost: 3.00,
+      isOpen: true,
+    });
+  }
+  markDirty();
+  // If the editor shell is rendered, re-render its facility list
+  if (rootEl?.querySelector('#no-facilities-panel')) {
+    renderFacilities(rootEl);
+    renderSidebar();
+  }
+  console.log(`[NetOpt] Received ${candidates.length} facility candidates from COG`);
 }
 
 async function renderLanding() {
@@ -282,6 +338,7 @@ export function unmount() {
     mapInstance.remove();
     mapInstance = null;
   }
+  bus.clear('cog:push-to-netopt'); // free the COG handoff listener
   runState.reset();
   rootEl = null;
   bus.emit('netopt:unmounted');
@@ -1448,9 +1505,13 @@ function pushToFleet(scenario) {
     };
   }).filter(Boolean);
 
-  // Emit event for Fleet Modeler to listen
-  bus.emit('netopt:push-to-fleet', { lanes, sourceScenario: scenario.name });
+  // Emit event for Fleet Modeler to listen + stash for the nav case.
+  const payload = { lanes, sourceScenario: scenario.name, at: Date.now() };
+  try { sessionStorage.setItem('netopt_pending_push', JSON.stringify(payload)); } catch {}
+  bus.emit('netopt:push-to-fleet', payload);
   showNoToast(`Pushed ${lanes.length} lanes to Fleet Modeler`, 'success');
+  // Take the user to Fleet so the handoff is visible.
+  window.location.hash = '#designtools/fleet-modeler';
 }
 
 function kpi(label, value, color) {

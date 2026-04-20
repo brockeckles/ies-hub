@@ -1699,7 +1699,14 @@ function pushToCostModel() {
     shiftHours: analysis.shift_hours,
   };
 
-  bus.emit('most:push-to-cm', payload);
+  // Brock 2026-04-20 — same cross-tool handoff fix as CM↔WSC. The bus emit
+  // fires before CM mounts, so the event is lost. sessionStorage survives
+  // the tool switch; CM's mount() consumes it there.
+  try { sessionStorage.setItem('most_pending_push', JSON.stringify({ ...payload, at: Date.now() })); } catch {}
+  bus.emit('most:push-to-cm', payload); // still fire for the in-session case
+
+  // Navigate the user to CM so they land on the receiving end of the push.
+  window.location.hash = '#designtools/cost-model';
 }
 
 // ============================================================
