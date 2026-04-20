@@ -2009,3 +2009,12 @@ textarea.hub-input {
    one long input value (e.g. "Sit-down Counterbalance Forklift") can
    expand the Equipment column and collapse adjacent columns. */
 .cm-table-equipment { table-layout: fixed; }
+
+/* Hide browser number input spinner arrows inside dense tables — they eat
+   10-16px of visible width from already-tight columns and read as noise. */
+.hub-datatable input[type="number"]::-webkit-outer-spin-button,
+.hub-datatable input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.hub-datatable input[type="number"] { -moz-appearance: textfield; }
