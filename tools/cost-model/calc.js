@@ -22,14 +22,216 @@ import * as monthly from './calc.monthly.js?v=20260420-vN';
 
 /**
  * Calculate annual operating hours from shift configuration.
+ *
+ * Returns SCHEDULED hours per FTE (2080 for 8×5×52). Does NOT subtract PTO or
+ * holidays — those are applied downstream via headcount uplift (see
+ * ptoHeadcountUplift / holidayUplift below). Per Labor Build-Up Logic doc
+ * (2026-04-20 Brock): "When you're paid for the full shift, wage × scheduled
+ * hours is the right payroll number." Setting weeksPerYear = 48 to "account
+ * for PTO" double-counts.
+ *
  * @param {import('./types.js?v=20260418-sK').ShiftConfig} shifts
- * @returns {number} annual operating hours per person
+ * @returns {number} annual scheduled hours per person
  */
 export function operatingHours(shifts) {
   const h = shifts.hoursPerShift || 8;
   const d = shifts.daysPerWeek || 5;
   const w = shifts.weeksPerYear ?? 52;
   return h * d * w;
+}
+
+/**
+ * Productive hours per FTE — for DISPLAY/REPORTING only. Not used directly in
+ * cost math because the Build-Up Logic model treats PTO as headcount uplift
+ * (you hire more people) rather than as hours reduction (each person works
+ * less). This helper tells the user how many hours of billable work each FTE
+ * actually delivers after PF&D, PTO, and holidays.
+ *
+ * @param {import('./types.js?v=20260418-sK').ShiftConfig} shifts
+ * @param {{ directUtilization?: number, ptoPct?: number, holidayPct?: number }} [projectAssumptions]
+ * @returns {number}
+ */
+export function productiveHoursPerFTE(shifts, projectAssumptions = {}) {
+  const scheduled = operatingHours(shifts);
+  const utilization = projectAssumptions.directUtilization ?? 0.85;
+  const ptoPct = projectAssumptions.ptoPct ?? 0.05;
+  const holidayPct = projectAssumptions.holidayPct ?? 0;
+  return scheduled * utilization * (1 - ptoPct) * (1 - holidayPct);
+}
+
+// ============================================================
+// LABOR — BUILD-UP HELPERS (doc: Labor Build-Up Logic 2026-04-20)
+// ============================================================
+
+/**
+ * Effective UPH after PF&D (Direct Utilization) haircut.
+ *
+ * The Build-Up Logic doc's single most important hours decision: the 85%
+ * direct-utilization factor is applied to UPH, not to hours. Captures
+ * personal allowance, fatigue, delay, paid breaks, start-of-shift ramp,
+ * activity-switching overhead — time for which the employee is paid but
+ * cannot be doing the measured work at full MOST-standard rate.
+ *
+ *   effective_uph = base_uph × direct_utilization × (productivity_pct / 100)
+ *
+ * When base_uph = 100 and direct_utilization = 0.85, effective = 85.
+ * Callers then compute hours_required = volume / effective_uph, which yields
+ * the ~15% more hours (and therefore FTEs, and therefore cost) that the
+ * current code is systematically under-counting.
+ *
+ * The optional productivity_pct (default 100) is the MOST "% to standard"
+ * knob already in the analysis grid — a separate axis from PF&D.
+ *
+ * @param {{ base_uph?: number }} line
+ * @param {{ directUtilization?: number, productivity_pct?: number }} [opts]
+ * @returns {number}
+ */
+export function effectiveUPH(line, opts = {}) {
+  const baseUph = Number(line.base_uph) || 0;
+  if (baseUph === 0) return 0;
+  const util = opts.directUtilization ?? 0.85;
+  const prod = (opts.productivity_pct ?? 100) / 100;
+  return baseUph * util * prod;
+}
+
+/**
+ * PTO headcount uplift: hire more people to cover the PTO gap so every shift
+ * stays staffed. Formula: `rawFTEs / (1 - ptoPct)`. With 5% PTO, raw 100 FTEs
+ * becomes 105.26 FTEs.
+ *
+ * Per doc: applies ONLY to permanent labor. Temp doesn't accrue PTO.
+ *
+ * @param {number} rawFTEs
+ * @param {number} ptoPct — fraction (0.05, not 5)
+ * @returns {number}
+ */
+export function ptoHeadcountUplift(rawFTEs, ptoPct) {
+  const p = Math.max(0, Math.min(0.5, Number(ptoPct) || 0));
+  if (p === 0) return rawFTEs;
+  return rawFTEs / (1 - p);
+}
+
+/**
+ * Holiday uplift/reduction. Two treatments:
+ * - `'headcount_uplift'` (Option A): divide by (1 - holidayPct). Appropriate
+ *   for 24/7 e-commerce where holidays need coverage.
+ * - `'reduce_hours'` (Option B): return FTEs unchanged. The reduction instead
+ *   manifests as fewer working-hours-per-FTE upstream (the caller subtracted
+ *   holiday hours from hoursPerFte before computing rawFTEs). Appropriate for
+ *   B2B ops that close on holidays.
+ *
+ * Default treatment is `'reduce_hours'` — aligned with most 3PL B2B deals.
+ *
+ * @param {number} rawFTEs
+ * @param {number} holidayPct — fraction
+ * @param {'reduce_hours'|'headcount_uplift'} [treatment]
+ * @returns {number}
+ */
+export function holidayUplift(rawFTEs, holidayPct, treatment = 'reduce_hours') {
+  if (treatment !== 'headcount_uplift') return rawFTEs;
+  const p = Math.max(0, Math.min(0.5, Number(holidayPct) || 0));
+  if (p === 0) return rawFTEs;
+  return rawFTEs / (1 - p);
+}
+
+/**
+ * Year-specific wage load lookup. `wageLoadByYear` is a 5-element array of
+ * fractions (e.g. `[0.30, 0.3065, 0.3106, 0.3127, 0.3133]` per the doc's
+ * reference schedule). Clamps year to array bounds so Y6+ uses the last
+ * value. If `wageLoadByYear` is missing/empty, falls back to `fallback`.
+ *
+ * Per Brock 2026-04-20: this is the SINGLE consolidated wage load. The legacy
+ * split of `burden_pct` + `benefit_load_pct` was double-dipping — both covered
+ * the same bucket (payroll taxes + workers' comp + health + retirement +
+ * benefits + sick days). Keep `burden_pct` as the canonical 30% input;
+ * `benefit_load_pct` is ignored by the new calc path.
+ *
+ * @param {number[]|null|undefined} wageLoadByYear — fractions
+ * @param {number} year — 1-based (1 = first operational year)
+ * @param {number} [fallback]
+ * @returns {number} fraction (e.g. 0.30 for 30%)
+ */
+export function wageLoadForYear(wageLoadByYear, year, fallback = 0.30) {
+  if (!Array.isArray(wageLoadByYear) || wageLoadByYear.length === 0) return fallback;
+  const y = Math.max(1, Number(year) || 1);
+  const idx = Math.min(y - 1, wageLoadByYear.length - 1);
+  const v = Number(wageLoadByYear[idx]);
+  return (Number.isFinite(v) && v >= 0) ? v : fallback;
+}
+
+/**
+ * Compound wage escalation: `baseWage × (1 + escPct)^(year - 1)`. Year 1
+ * returns base (no escalation). Neg. escPct is clamped to 0; escPct is
+ * expected as a FRACTION (0.03, not 3).
+ *
+ * @param {number} baseWage
+ * @param {number} year — 1-based
+ * @param {number} wageEscFrac — fraction
+ * @returns {number}
+ */
+export function escalatedWage(baseWage, year, wageEscFrac) {
+  const w = Number(baseWage) || 0;
+  const y = Math.max(1, Number(year) || 1);
+  const e = Math.max(0, Number(wageEscFrac) || 0);
+  return w * Math.pow(1 + e, y - 1);
+}
+
+/**
+ * Shift-differential multiplier. `line.shift_2_hours_share` and
+ * `line.shift_3_hours_share` are fractions of this line's hours on evening /
+ * overnight shifts. Premiums are fractions (e.g. 0.10 = 10% uplift).
+ *
+ *   shiftMult = 1 + s2_share × s2_premium + s3_share × s3_premium
+ *
+ * When both shares are 0, returns 1.0 (no differential). Negative values and
+ * values > 1 are clamped.
+ *
+ * @param {{ shift_2_hours_share?: number, shift_3_hours_share?: number }} line
+ * @param {{ shift2Premium?: number, shift3Premium?: number }} [opts]
+ * @returns {number}
+ */
+export function shiftDifferentialMult(line, opts = {}) {
+  const s2share = clamp01(Number(line.shift_2_hours_share) || 0);
+  const s3share = clamp01(Number(line.shift_3_hours_share) || 0);
+  const s2prem = Math.max(0, Number(opts.shift2Premium) || 0);
+  const s3prem = Math.max(0, Number(opts.shift3Premium) || 0);
+  return 1 + s2share * s2prem + s3share * s3prem;
+}
+
+/** @param {number} v */
+function clamp01(v) { return Math.max(0, Math.min(1, v)); }
+
+/**
+ * Resolve the canonical wage load for a labor line. Implements the
+ * consolidation rule (Brock 2026-04-20):
+ *
+ *   Priority:
+ *   1. If line has per-line `burden_pct` → use it (as fraction)
+ *   2. Else fall back to `opts.wageLoadByYear[year-1]` via wageLoadForYear
+ *   3. Else `opts.defaultWageLoadFrac` (0.30)
+ *
+ * `benefit_load_pct` is IGNORED — it was the double-dipping partner and
+ * covers the same bucket as `burden_pct`. Callers should migrate to using
+ * just one of them.
+ *
+ * Temp-agency lines return 0 — the agency markup on their rate is already
+ * the full load; no additional wage load applies.
+ *
+ * @param {{ burden_pct?: number, employment_type?: string }} line
+ * @param {number} year — 1-based
+ * @param {{ wageLoadByYear?: number[], defaultWageLoadFrac?: number }} [opts]
+ * @returns {number} fraction
+ */
+export function wageLoadFracForLine(line, year, opts = {}) {
+  // Temp-agency: rate already includes agency markup; no separate wage load.
+  if ((line.employment_type || 'permanent') === 'temp_agency') return 0;
+  // Per-line override wins
+  if (line.burden_pct != null) {
+    const v = Number(line.burden_pct);
+    if (Number.isFinite(v) && v >= 0) return v / 100;
+  }
+  // Year-schedule
+  return wageLoadForYear(opts.wageLoadByYear, year, opts.defaultWageLoadFrac ?? 0.30);
 }
 
 // ============================================================
