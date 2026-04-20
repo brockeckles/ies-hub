@@ -67,12 +67,20 @@ test('peak line in November (20% OT) costs MORE than January (5% OT)', () => {
   close(ratio, 1.20 / 1.05, 0.02, 'Nov/Jan ratio ≈ 1.143');
 });
 
-test('temp_agency line at 25% markup costs 25% more than permanent baseline', () => {
-  const TEMP_LINE = { ...FLAT_LINE, employment_type: 'temp_agency', temp_agency_markup_pct: 25 };
+test('temp_agency ratio to permanent (doc §3.3: no perm burden on temp)', () => {
+  // Per Labor Build-Up Logic doc §3.3 (Brock 2026-04-20): temp rates already
+  // include the agency's fully-loaded cost (markup covers agency wage load +
+  // profit). Applying perm burden on top was double-counting.
+  //   perm loaded = $20 × (1 + 30%) = $26/hr
+  //   temp loaded = $20 × 1.25 (markup) × (1 + 0%) = $25/hr  (no wage load)
+  // temp/perm ratio = 25/26 ≈ 0.962, so temp costs ~3.8% LESS than perm,
+  // which is the whole reason agencies can operate profitably while still
+  // undercutting permanent labor for the client.
+  const TEMP_LINE = { ...FLAT_LINE, burden_pct: null, employment_type: 'temp_agency', temp_agency_markup_pct: 25 };
   const ctx = { calcHeur: FALLBACK_HEUR, calendarMonth: 1, seasonalShare: 1/12, escLaborMult: 1, volMult: 1, rampLaborMult: 1 };
   const perm = computeMonthlyLaborFromLines([FLAT_LINE], ctx);
   const temp = computeMonthlyLaborFromLines([TEMP_LINE], ctx);
-  close(temp / perm, 1.25, 0.001);
+  close(temp / perm, 25 / 26, 0.002, 'temp/perm ratio = 25/26 (doc §3.3)');
 });
 
 test('two lines sum to individual contributions', () => {

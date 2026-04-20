@@ -27,6 +27,60 @@
 import { monthlyEffectiveHours } from './calc.scenarios.js';
 
 // ============================================================
+// LABOR BUILD-UP HELPERS (inlined from calc.js to avoid cache-bust
+// import cycle). Keep parity with wageLoadFracForLine and
+// shiftDifferentialMult exported from calc.js — any change must be
+// applied to both places. Covered by test-labor-buildup.mjs.
+// Per Brock 2026-04-20 (Labor Build-Up Logic doc): wage load is the
+// SINGLE consolidated employer-side load (was double-dipping via
+// burden + benefits).
+// ============================================================
+
+/**
+ * @param {{burden_pct?:number, employment_type?:string}} line
+ * @param {number} year — 1-based
+ * @param {{wageLoadByYear?:number[], defaultWageLoadFrac?:number}} opts
+ * @returns {number} fraction
+ */
+function wageLoadFracForLineLocal(line, year, opts) {
+  if ((line.employment_type || 'permanent') === 'temp_agency') return 0;
+  if (line.burden_pct != null) {
+    const v = Number(line.burden_pct);
+    if (Number.isFinite(v) && v >= 0) return v / 100;
+  }
+  const schedule = opts?.wageLoadByYear;
+  const fallback = opts?.defaultWageLoadFrac ?? 0.30;
+  if (!Array.isArray(schedule) || schedule.length === 0) return fallback;
+  const y = Math.max(1, Number(year) || 1);
+  const idx = Math.min(y - 1, schedule.length - 1);
+  const v = Number(schedule[idx]);
+  return (Number.isFinite(v) && v >= 0) ? v : fallback;
+}
+
+/**
+ * @param {{shift_2_hours_share?:number, shift_3_hours_share?:number, shift_num?:number}} line
+ * @param {{shift2Premium?:number, shift3Premium?:number}} opts
+ * @returns {number}
+ */
+function shiftDifferentialMultLocal(line, opts) {
+  const o = opts || {};
+  const s2prem = Math.max(0, Number(o.shift2Premium) || 0);
+  const s3prem = Math.max(0, Number(o.shift3Premium) || 0);
+  // Prefer fraction shares when present
+  const hasShares = line.shift_2_hours_share != null || line.shift_3_hours_share != null;
+  if (hasShares) {
+    const s2 = Math.max(0, Math.min(1, Number(line.shift_2_hours_share) || 0));
+    const s3 = Math.max(0, Math.min(1, Number(line.shift_3_hours_share) || 0));
+    return 1 + s2 * s2prem + s3 * s3prem;
+  }
+  // Legacy: integer shift_num (1/2/3) treats the whole line as 100% on that shift
+  const n = Number(line.shift_num) || 1;
+  if (n === 2) return 1 + s2prem;
+  if (n === 3) return 1 + s3prem;
+  return 1;
+}
+
+// ============================================================
 // TYPEDEFS
 // ============================================================
 
@@ -235,28 +289,51 @@ export function validateSeasonality(profile, tolerance = 0.001) {
  */
 export function computeMonthlyLaborFromLines(laborLines, ctx) {
   if (!Array.isArray(laborLines) || laborLines.length === 0) return 0;
-  const { calcHeur, marketLaborProfile, calendarMonth,
-          seasonalShare, escLaborMult, volMult, rampLaborMult } = ctx || {};
+  const {
+    calcHeur, marketLaborProfile, calendarMonth,
+    seasonalShare, escLaborMult, volMult, rampLaborMult,
+    // Phase A Labor Build-Up Logic additions (Brock 2026-04-20):
+    yearIdx = 0,                      // 0-based (year 1 = idx 0)
+    wageLoadByYear = null,            // optional 5-year schedule (fractions)
+    shift2Premium = 0,
+    shift3Premium = 0,
+    ptoPct = 0,                       // permanent-only headcount uplift
+  } = ctx || {};
   const monthIdx = (((calendarMonth || 1) - 1) % 12 + 12) % 12;
   const seasonalMult = (Number(seasonalShare) || (1/12)) * 12; // flat season → 1.0
-  const benefitLoadFallbackPct = (calcHeur?.benefitLoadPct ?? 35);
+  // Per Brock 2026-04-20: wage-load is SINGLE number (was burden+benefits
+  // which double-dipped). `calcHeur.benefitLoadPct` used to be a fallback
+  // for that double-dip; it's now a pure fallback for the consolidated
+  // wage load. Expect live numbers to drop — the 15% benefits-on-top was
+  // the duplicate bucket.
+  const fallbackWageLoadFrac = (calcHeur?.benefitLoadPct ?? 30) / 100;
+  const year = Math.max(1, (Number(yearIdx) || 0) + 1);
+  // PTO multiplier applied once per aggregate (scales like headcount uplift).
+  const p = Math.max(0, Math.min(0.5, Number(ptoPct) || 0));
+  const ptoHcUplift = (p > 0) ? (1 / (1 - p)) : 1;
   let total = 0;
   for (const line of laborLines) {
     const hours = monthlyEffectiveHours(line, monthIdx, calcHeur, marketLaborProfile);
     // Phase 4a: employment-type markup folded into effective base rate
     const baseRate = Number(line.hourly_rate) || 0;
     const empType = line.employment_type || 'permanent';
-    const markupFrac = (empType === 'temp_agency')
+    const isTemp = empType === 'temp_agency';
+    const markupFrac = isTemp
       ? (Number(line.temp_agency_markup_pct) || 0) / 100
       : 0;
     const effectiveBase = baseRate * (1 + markupFrac);
-    // Loaded rate: burden + benefits (line-level burden takes precedence)
-    const burdenFrac = (line.burden_pct != null)
-      ? Number(line.burden_pct) / 100
-      : benefitLoadFallbackPct / 100;
+    // Consolidated wage load (zero for temp lines — already loaded).
+    const wageLoadFrac = wageLoadFracForLineLocal(line, year, {
+      wageLoadByYear,
+      defaultWageLoadFrac: fallbackWageLoadFrac,
+    });
     const benefitsPerHr = Number(line.benefits_per_hour) || 0;
-    const loadedRate = effectiveBase * (1 + burdenFrac) + benefitsPerHr;
-    total += hours * loadedRate;
+    const loadedRate = effectiveBase * (1 + wageLoadFrac) + benefitsPerHr;
+    // Shift differential (dead code in legacy engine — now wired).
+    const shiftMult = shiftDifferentialMultLocal(line, { shift2Premium, shift3Premium });
+    // PTO uplift applies to permanent only (temp doesn't accrue PTO).
+    const ptoMult = isTemp ? 1 : ptoHcUplift;
+    total += hours * loadedRate * shiftMult * ptoMult;
   }
   return total * seasonalMult
               * (Number(rampLaborMult) || 1)
@@ -305,6 +382,12 @@ export function buildMonthlyProjections(params) {
     laborLines = [],
     calcHeur = null,
     marketLaborProfile = null,
+    // Phase A Labor Build-Up Logic additions (Brock 2026-04-20) — all optional.
+    // When absent, calc falls back to the flat benefitLoadPct path.
+    wageLoadByYear = null,    // 5-element array of fractions
+    shift2Premium = 0,        // fraction, e.g. 0.10 for 10%
+    shift3Premium = 0,
+    ptoPct = 0,               // fraction, perm headcount uplift
   } = params;
 
   // Slice the passed-in periods to only the contract window
@@ -438,7 +521,8 @@ export function buildMonthlyProjections(params) {
       monthlyLabor = computeMonthlyLaborFromLines(
         laborLines,
         { calcHeur, marketLaborProfile, calendarMonth: p.calendar_month,
-          seasonalShare, escLaborMult, volMult, rampLaborMult }
+          seasonalShare, escLaborMult, volMult, rampLaborMult,
+          yearIdx, wageLoadByYear, shift2Premium, shift3Premium, ptoPct }
       );
     } else {
       monthlyLabor = base_labor_cost * escLaborMult * volMult * rampLaborMult / 12 * seasonalShare * 12;

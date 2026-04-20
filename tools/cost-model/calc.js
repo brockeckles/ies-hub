@@ -259,100 +259,184 @@ export function effectiveHourlyRate(line) {
 }
 
 /**
- * Fully loaded hourly rate: rate × (1 + burden%) + benefits.
+ * Fully loaded hourly rate: rate × (1 + wage_load%) + benefits_per_hour.
+ *
+ * wage_load is the SINGLE consolidated employer-side cost on top of base
+ * wage (payroll taxes + workers comp + health + retirement + other
+ * benefits). Per Brock 2026-04-20: `benefit_load_pct` used to be added on
+ * top of `burden_pct` which was a double-count (same bucket). Now calc
+ * uses only ONE source.
+ *
+ * `benefits_per_hour` is a distinct per-hour dollar line (rare, legacy) and
+ * is kept additive — it's NOT the same as the % benefit load.
+ *
+ * For temp-agency lines, wage_load resolves to 0 (rate already loaded).
+ *
  * @param {import('./types.js?v=20260418-sK').DirectLaborLine | import('./types.js?v=20260418-sK').IndirectLaborLine} line
  * @param {Object} [opts]
- * @param {number} [opts.benefitLoadFallback] — default burden fraction if line has no burden_pct
+ * @param {number} [opts.benefitLoadFallback] — default wage-load fraction if line has no burden_pct (legacy alias retained)
+ * @param {number[]} [opts.wageLoadByYear]
+ * @param {number} [opts.year]
  * @returns {number}
  */
 export function fullyLoadedRate(line, opts = {}) {
   const rate = effectiveHourlyRate(line);
-  const burden = line.burden_pct != null
-    ? line.burden_pct / 100
-    : (opts.benefitLoadFallback ?? 0.30);
-  const benefits = line.benefits_per_hour || 0;
-  return rate * (1 + burden) + benefits;
+  const wageLoadFrac = wageLoadFracForLine(line, opts.year ?? 1, {
+    wageLoadByYear: opts.wageLoadByYear,
+    defaultWageLoadFrac: opts.benefitLoadFallback ?? 0.30,
+  });
+  const benefitsPerHr = line.benefits_per_hour || 0;
+  return rate * (1 + wageLoadFrac) + benefitsPerHr;
 }
 
 /**
  * Annual cost for a direct labor line.
- * Includes shift differential and overtime adjustments.
+ * Includes shift differential, OT (for hourly-nonexempt only), and
+ * year-specific wage load.
+ *
  * @param {import('./types.js?v=20260418-sK').DirectLaborLine} line
  * @param {Object} [opts]
- * @param {number} [opts.shiftDiffPct] — shift differential multiplier (0-based, e.g. 0.05 = 5%)
  * @param {number} [opts.otPct] — overtime % (0-based), applied at 1.5× rate
- * @param {number} [opts.benefitLoadFallback]
+ * @param {number} [opts.benefitLoadFallback] — fallback wage-load fraction
+ * @param {number[]} [opts.wageLoadByYear] — 5-year wage load schedule
+ * @param {number} [opts.year] — 1-based year, default 1
+ * @param {number} [opts.shift2Premium]
+ * @param {number} [opts.shift3Premium]
  * @returns {number}
  */
 export function directLineAnnual(line, opts = {}) {
   const hours = line.annual_hours || 0;
   const rate = effectiveHourlyRate(line);
-  const burden = line.burden_pct != null
-    ? line.burden_pct / 100
-    : (opts.benefitLoadFallback ?? 0.30);
-  const otMult = 1 + (opts.otPct || 0) * 0.5; // OT hours paid at 1.5×
-  const effectiveRate = rate * (1 + burden) * otMult;
+  const year = opts.year ?? 1;
+  const wageLoadFrac = wageLoadFracForLine(line, year, {
+    wageLoadByYear: opts.wageLoadByYear,
+    defaultWageLoadFrac: opts.benefitLoadFallback ?? 0.30,
+  });
+  // OT only applies to hourly-nonexempt lines. pay_type default 'hourly'.
+  const otEligible = (line.pay_type || 'hourly') === 'hourly';
+  const otMult = otEligible ? (1 + (opts.otPct || 0) * 0.5) : 1.0;
+  // Shift differential pulls fraction fields OR legacy shift_num integer.
+  const shiftMult = shiftDifferentialMultForLine(line, opts);
+  const effectiveRate = rate * (1 + wageLoadFrac) * otMult * shiftMult;
   return hours * effectiveRate;
 }
 
 /**
+ * Resolve shift differential for a line. Prefers `shift_2_hours_share` /
+ * `shift_3_hours_share` when present; falls back to integer `shift_num`
+ * (1/2/3) which treats the whole line as 100% on that shift. If none
+ * are set, multiplier is 1.0 (shift 1 / no differential).
+ *
+ * @param {{ shift_2_hours_share?: number, shift_3_hours_share?: number, shift_num?: number }} line
+ * @param {{ shift2Premium?: number, shift3Premium?: number }} opts
+ * @returns {number}
+ */
+function shiftDifferentialMultForLine(line, opts) {
+  const hasShares = line.shift_2_hours_share != null || line.shift_3_hours_share != null;
+  if (hasShares) return shiftDifferentialMult(line, opts);
+  const n = Number(line.shift_num) || 1;
+  if (n === 2) return 1 + (Number(opts.shift2Premium) || 0);
+  if (n === 3) return 1 + (Number(opts.shift3Premium) || 0);
+  return 1;
+}
+
+/**
  * Simplified direct labor annual cost — no shift/OT (for inline cell display).
- * Formula: annual_hours × hourly_rate × (1 + burden% + benefitLoad%)
- * Burden and benefit load are global (from model.laborCosting).
+ *
+ * Formula: annual_hours × hourly_rate × (1 + wage_load_pct)
+ *
+ * Per Brock 2026-04-20: consolidated to a SINGLE wage load. The legacy
+ * `benefitLoadPct` from `costing` is IGNORED — it was the double-dip
+ * partner of `defaultBurdenPct`.
+ *
+ * Per-line burden_pct still wins when present (supports line-level
+ * override for high-burden roles).
+ *
  * @param {import('./types.js?v=20260418-sK').DirectLaborLine} line
- * @param {{ defaultBurdenPct?: number, benefitLoadPct?: number }} [costing]
+ * @param {{ defaultBurdenPct?: number, wageLoadByYear?: number[], year?: number }} [costing]
  * @returns {number}
  */
 export function directLineAnnualSimple(line, costing) {
   const hours = line.annual_hours || 0;
   const rate = effectiveHourlyRate(line);
   const c = costing || {};
-  const burden = (c.defaultBurdenPct ?? 30) / 100;
-  const benefits = (c.benefitLoadPct ?? 0) / 100;
-  return hours * rate * (1 + burden + benefits);
+  const wageLoadFrac = wageLoadFracForLine(line, c.year ?? 1, {
+    wageLoadByYear: c.wageLoadByYear,
+    defaultWageLoadFrac: (c.defaultBurdenPct ?? 30) / 100,
+  });
+  return hours * rate * (1 + wageLoadFrac);
 }
 
 /**
  * Annual cost for an indirect labor line.
- * Includes bonus multiplier.
+ *
+ * Includes:
+ * - Year-specific wage load via wageLoadFracForLine
+ * - PTO headcount uplift (perm only)
+ * - Bonus multiplier (applied to hourly AND salary now — doc §3.5 notes
+ *   the old "hourly only" rule was inconsistent; salary bonuses are
+ *   typically LARGER than hourly. Users can zero bonusPct for per-line
+ *   exclusion.)
+ * - Shift differential
+ * - OT for hourly-nonexempt (salary exempt skipped)
+ *
  * @param {import('./types.js?v=20260418-sK').IndirectLaborLine} line
  * @param {Object} opts
  * @param {number} opts.operatingHours — annual operating hours
- * @param {number} [opts.bonusPct] — bonus % (0-based)
+ * @param {number} [opts.bonusPct]
+ * @param {number} [opts.otPct]
+ * @param {number} [opts.ptoPct] — default 0 (no uplift) for backward compat
  * @param {number} [opts.benefitLoadFallback]
+ * @param {number[]} [opts.wageLoadByYear]
+ * @param {number} [opts.year]
+ * @param {number} [opts.shift2Premium]
+ * @param {number} [opts.shift3Premium]
  * @returns {number}
  */
 export function indirectLineAnnual(line, opts) {
   const hc = line.headcount || 0;
   const rate = effectiveHourlyRate(line);
-  const burden = line.burden_pct != null
-    ? line.burden_pct / 100
-    : (opts.benefitLoadFallback ?? 0.30);
+  const year = opts.year ?? 1;
+  const wageLoadFrac = wageLoadFracForLine(line, year, {
+    wageLoadByYear: opts.wageLoadByYear,
+    defaultWageLoadFrac: opts.benefitLoadFallback ?? 0.30,
+  });
   const bonusMult = 1 + (opts.bonusPct || 0);
-  return hc * opts.operatingHours * rate * (1 + burden) * bonusMult;
+  const otEligible = (line.pay_type || 'hourly') === 'hourly';
+  const otMult = otEligible ? (1 + (opts.otPct || 0) * 0.5) : 1.0;
+  const shiftMult = shiftDifferentialMultForLine(line, opts);
+  // PTO uplift on headcount (permanent only). Temp indirect is rare; treat
+  // as no uplift.
+  const isTemp = (line.employment_type || 'permanent') === 'temp_agency';
+  const effectiveHc = isTemp ? hc : ptoHeadcountUplift(hc, opts.ptoPct || 0);
+  return effectiveHc * opts.operatingHours * rate * (1 + wageLoadFrac)
+       * bonusMult * otMult * shiftMult;
 }
 
 /**
  * Simplified indirect labor annual cost — for inline cell display.
- * Formula: headcount × operatingHours × hourly_rate × (1 + burden% + benefitLoad%)
- * Burden and benefit load are global (from model.laborCosting). If per-row
- * burden_pct is present (legacy indirect rows), it still overrides — indirect
- * roles can have materially different burden rates (management vs. warehouse).
+ *
+ * Formula: headcount × operatingHours × hourly_rate × (1 + wage_load_pct)
+ *
+ * Per Brock 2026-04-20: consolidated wage load (was double-dipping
+ * burden_pct + benefit_load_pct). Line-level burden_pct still wins when
+ * present — management roles can carry different loads than warehouse.
+ *
  * @param {import('./types.js?v=20260418-sK').IndirectLaborLine} line
  * @param {number} opHours
- * @param {{ defaultBurdenPct?: number, benefitLoadPct?: number }} [costing]
+ * @param {{ defaultBurdenPct?: number, wageLoadByYear?: number[], year?: number }} [costing]
  * @returns {number}
  */
 export function indirectLineAnnualSimple(line, opHours, costing) {
   const hc = line.headcount || 0;
   const rate = effectiveHourlyRate(line);
   const c = costing || {};
-  const burden = line.burden_pct != null
-    ? line.burden_pct / 100
-    : (c.defaultBurdenPct ?? 30) / 100;
-  const benefits = (c.benefitLoadPct ?? 0) / 100;
+  const wageLoadFrac = wageLoadFracForLine(line, c.year ?? 1, {
+    wageLoadByYear: c.wageLoadByYear,
+    defaultWageLoadFrac: (c.defaultBurdenPct ?? 30) / 100,
+  });
   // Baseline year-round cost
-  const baseline = hc * opHours * rate * (1 + burden + benefits);
+  const baseline = hc * opHours * rate * (1 + wageLoadFrac);
   // Seasonal uplift (Brock 2026-04-20): when the line declares extra
   // headcount needed during peak months, add them pro-rated to the
   // months they're on staff + uplifted by a temp-agency markup.
@@ -365,7 +449,7 @@ export function indirectLineAnnualSimple(line, opHours, costing) {
     // Pro-rate to the active portion of the year + apply markup
     const monthFraction = Math.min(12, peakMonths) / 12;
     const markupFactor = 1 + (peakMarkupPct / 100);
-    const seasonalAnnualRate = peakHc * opHours * rate * (1 + burden + benefits);
+    const seasonalAnnualRate = peakHc * opHours * rate * (1 + wageLoadFrac);
     return baseline + (seasonalAnnualRate * monthFraction * markupFactor);
   }
   return baseline;
@@ -383,11 +467,11 @@ export function indirectLineAnnualBreakdown(line, opHours, costing) {
   const hc = line.headcount || 0;
   const rate = effectiveHourlyRate(line);
   const c = costing || {};
-  const burden = line.burden_pct != null
-    ? line.burden_pct / 100
-    : (c.defaultBurdenPct ?? 30) / 100;
-  const benefits = (c.benefitLoadPct ?? 0) / 100;
-  const baseline = hc * opHours * rate * (1 + burden + benefits);
+  const wageLoadFrac = wageLoadFracForLine(line, c.year ?? 1, {
+    wageLoadByYear: c.wageLoadByYear,
+    defaultWageLoadFrac: (c.defaultBurdenPct ?? 30) / 100,
+  });
+  const baseline = hc * opHours * rate * (1 + wageLoadFrac);
   let seasonal = 0;
   const peakHc = Number(line.peak_only_hc) || 0;
   const peakMonths = Number(line.peak_months) || 0;
@@ -395,7 +479,7 @@ export function indirectLineAnnualBreakdown(line, opHours, costing) {
   if (peakHc > 0 && peakMonths > 0) {
     const monthFraction = Math.min(12, peakMonths) / 12;
     const markupFactor = 1 + (peakMarkupPct / 100);
-    seasonal = peakHc * opHours * rate * (1 + burden + benefits) * monthFraction * markupFactor;
+    seasonal = peakHc * opHours * rate * (1 + wageLoadFrac) * monthFraction * markupFactor;
   }
   return { baseline, seasonal, total: baseline + seasonal };
 }
@@ -2509,5 +2593,10 @@ export function adaptYearlyToMonthlyParams(p) {
     laborLines:          p.laborLines        || [],
     calcHeur:            p._calcHeur         || null,
     marketLaborProfile:  p.marketLaborProfile || null,
+    // Phase A Labor Build-Up Logic additions (Brock 2026-04-20):
+    wageLoadByYear:      p.wageLoadByYear    || null,
+    shift2Premium:       Number(p.shift2Premium) || 0,
+    shift3Premium:       Number(p.shift3Premium) || 0,
+    ptoPct:              Number(p.ptoPct)        || 0,
   };
 }

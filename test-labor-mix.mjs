@@ -45,10 +45,15 @@ test('permanent: $20 base + 30% burden + $1 benefits → $27', () => {
   const r = fullyLoadedRate({ hourly_rate: 20, employment_type: 'permanent', burden_pct: 30, benefits_per_hour: 1 });
   close(r, 27, 0.01);
 });
-test('temp_agency: $20 base × 1.25 markup + 30% burden + $1 benefits → $33.50', () => {
-  // effective base $25, × 1.30 = $32.50, + $1 = $33.50
+test('temp_agency: $20 base × 1.25 markup + $1 benefits_per_hour → $26 (no wage load — doc §3.3)', () => {
+  // Per Labor Build-Up Logic doc §3.3 (Brock 2026-04-20): temp rates from the
+  // agency ALREADY INCLUDE the agency's fully-loaded cost (their payroll
+  // taxes, workers' comp, benefits, profit). Applying perm burden on top is
+  // double-counting. New semantics: temp → markup only; benefits_per_hour is
+  // a distinct per-hour dollar line kept additive for rare legacy cases.
+  // effective base $20 × 1.25 = $25; wage load = 0; + $1/hr benefits = $26.
   const r = fullyLoadedRate({ hourly_rate: 20, employment_type: 'temp_agency', temp_agency_markup_pct: 25, burden_pct: 30, benefits_per_hour: 1 });
-  close(r, 33.5, 0.01);
+  close(r, 26, 0.01);
 });
 
 console.log('\n--- directLineAnnual with temp markup ---');
