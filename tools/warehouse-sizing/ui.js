@@ -327,19 +327,6 @@ function bindShellEvents() {
       zones.layoutOverrides = {};
       isDirty = true;
       renderContentView();
-    } else if (action === 'match-sized') {
-      // Brock 2026-04-20 — set existing/target SF = the tool's computed Sized
-      // Total SF. Reinforces that Sized is the primary answer; Existing is
-      // a constraint only when you need it.
-      try {
-        const sized = calc.sizeFacility(toSizingInputs());
-        facility.totalSqft = Math.round(sized.totalSqft || 0);
-        isDirty = true;
-        renderConfigPanel();
-        renderContentView();
-      } catch (err) {
-        console.warn('[WSC] match-sized failed:', err);
-      }
     }
   });
 
@@ -510,31 +497,17 @@ function renderConfigPanel() {
         <input value="${facility.name}" data-fac="name" />
       </div>
       ${(() => {
-        // Compute sized SF to display as the primary total (the tool's answer)
+        // Brock 2026-04-20: Sized Total SF is the tool's primary output.
+        // Existing/Target SF + utilization % were removed — not necessary
+        // or useful when the sizer drives the answer.
         let sizedSqft = 0;
         try { sizedSqft = calc.sizeFacility(toSizingInputs()).totalSqft || 0; } catch {}
-        const existing = Number(facility.totalSqft) || 0;
-        const mismatch = existing > 0 && Math.abs(existing - sizedSqft) > 500;
         return `
-          <div class="wsc-config-field" style="margin-bottom:6px;">
+          <div class="wsc-config-field" style="margin-bottom:8px;">
             <label title="Total facility SF computed by the sizing engine — sum of storage + staging + dock + office. This is the tool's answer to 'how big should this facility be?'">Sized Total SF (computed)</label>
             <div style="padding:6px 10px;background:var(--ies-gray-50);border-radius:6px;font-weight:700;color:var(--ies-blue,#0047AB);">
               ${calc.formatSqft(sizedSqft)}
             </div>
-          </div>
-          <div class="wsc-config-field" style="margin-bottom:8px;">
-            <label style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-              <span title="Optional: the SF of an existing building you're planning to fit into, or a target size for a new build. Drives the floorplan scale and the 'Avg Util' dashboard KPI. Leave 0 to use the Sized value.">Existing / Target SF <span style="color:var(--ies-gray-400);font-weight:400;font-size:11px;">(optional constraint)</span></span>
-              <button type="button" data-wsc-action="match-sized" title="Set Existing/Target SF = Sized Total SF" style="font-size:10px;padding:2px 8px;border:1px solid var(--ies-gray-300);background:#fff;border-radius:4px;cursor:pointer;">↺ Match Sized</button>
-            </label>
-            <input type="number" value="${facility.totalSqft}" data-fac="totalSqft" />
-            ${mismatch ? `
-              <div style="font-size:11px;color:${existing < sizedSqft ? 'var(--ies-red,#dc2626)' : 'var(--ies-orange,#d97706)'};margin-top:4px;">
-                ${existing < sizedSqft
-                  ? `⚠️ Under-sized by ${calc.formatSqft(sizedSqft - existing)} — plan won't fit in ${calc.formatSqft(existing)}.`
-                  : `ℹ️ Over-sized by ${calc.formatSqft(existing - sizedSqft)} — ${((sizedSqft / existing) * 100).toFixed(0)}% utilization.`}
-              </div>
-            ` : ''}
           </div>
         `;
       })()}
@@ -1647,7 +1620,7 @@ function drawPlan() {
   ctx.fillStyle = '#6b7280';
   ctx.font = '11px Montserrat, sans-serif';
   ctx.fillText(
-    `${calc.formatSqft(sized.totalSqft)} sized  ·  ${calc.formatSqft(facility.totalSqft || 0)} existing  ·  clear ht ${facility.clearHeight || 0} ft`,
+    `${calc.formatSqft(sized.totalSqft)} sized  ·  clear ht ${facility.clearHeight || 0} ft`,
     12, 38,
   );
 
@@ -1815,8 +1788,6 @@ function renderDashboard() {
       <div class="hub-kpi-item"><div class="hub-kpi-label">Gross Positions</div><div class="hub-kpi-value" title="Designed positions + ${sized.utilization.designed > 0 ? Math.round((sized.positions.surgePositions / sized.utilization.designed) * 100) : 0}% surge buffer">${sized.positions.grossPositions.toLocaleString()}</div></div>
       <div class="hub-kpi-item"><div class="hub-kpi-label">Rack Levels</div><div class="hub-kpi-value">${sized.rackLevels}</div></div>
       <div class="hub-kpi-item"><div class="hub-kpi-label">Dock Doors</div><div class="hub-kpi-value" title="${sized.dock.inboundDoors} in${sized.dock.inboundDoorsExplicit ? ' (explicit)' : ` (derived; throughput suggests ${sized.dock.inboundDoorsDerived})`} + ${sized.dock.outboundDoors} out${sized.dock.outboundDoorsExplicit ? ' (explicit)' : ` (derived; throughput suggests ${sized.dock.outboundDoorsDerived})`}${(sized.dock.inboundDoorsExplicit || sized.dock.outboundDoorsExplicit) ? '' : ', +25% surge buffer'}">${sized.dock.totalDoors}</div></div>
-      <div class="hub-kpi-item"><div class="hub-kpi-label">Avg Util</div><div class="hub-kpi-value" style="color:${sized.utilization.warning === 'high_util' ? 'var(--ies-red)' : sized.utilization.warning === 'low_util' ? 'var(--ies-orange)' : 'var(--ies-green)'};" title="Avg inventory positions / designed positions">${sized.utilization.utilizationPct}%</div></div>
-      <div class="hub-kpi-item"><div class="hub-kpi-label">Existing Bldg SF</div><div class="hub-kpi-value" style="color:${facility.totalSqft >= sized.totalSqft ? 'var(--ies-green)' : 'var(--ies-red)'};" title="Compare existing building Total SF to Sized Total SF — green = adequate, red = under-sized">${calc.formatSqft(facility.totalSqft)}</div></div>
     </div>
 
     <!-- Sized Facility Recommendation Card -->
@@ -1866,19 +1837,10 @@ function renderDashboard() {
         </div>
       ` : ''}
 
-      ${facility.totalSqft && facility.totalSqft < sized.totalSqft ? `
-        <div style="margin-top:8px;padding:10px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;color:#7f1d1d;font-size:12px;">
-          Existing building (${calc.formatSqft(facility.totalSqft)}) is <strong>${calc.formatSqft(sized.totalSqft - facility.totalSqft)} under</strong> the sized requirement.
-        </div>
-      ` : facility.totalSqft && facility.totalSqft > sized.totalSqft * 1.05 ? `
-        <div style="margin-top:8px;padding:10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;color:#166534;font-size:12px;">
-          Existing building (${calc.formatSqft(facility.totalSqft)}) has <strong>${calc.formatSqft(facility.totalSqft - sized.totalSqft)} headroom</strong> over the sized requirement.
-        </div>
-      ` : ''}
     </div>
 
-    <!-- Capacity Analysis (existing-building view) -->
-    <div style="font-size:11px;color:var(--ies-gray-500);margin-bottom:8px;text-transform:uppercase;font-weight:700;">Capacity Analysis (existing-building view)</div>
+    <!-- Capacity Analysis (vs sized requirement) -->
+    <div style="font-size:11px;color:var(--ies-gray-500);margin-bottom:8px;text-transform:uppercase;font-weight:700;">Capacity Analysis</div>
 
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
       <!-- Capacity Utilization — tied to sizing engine -->
@@ -2004,14 +1966,7 @@ function renderDashboard() {
           `).join('')}
           <div style="border-top:2px solid var(--ies-blue); padding-top:8px; display:flex; justify-content:space-between;margin-top:6px;">
             <span style="font-weight:700;">Recommended Total</span>
-            <span style="font-weight:700; font-size:16px; color:${!facility.totalSqft ? 'var(--ies-blue)' : (sized.totalSqft > facility.totalSqft ? 'var(--ies-red)' : 'var(--ies-green)')};">${calc.formatSqft(sized.totalSqft)}</span>
-          </div>
-          <div style="margin-top:8px;font-size:11px;color:var(--ies-gray-400);line-height:1.4;">
-            ${!facility.totalSqft
-              ? 'Set the existing building Total SF in the Building section to compare against this recommendation.'
-              : (sized.totalSqft > facility.totalSqft
-                  ? `Your facility (${calc.formatSqft(facility.totalSqft)}) is <strong>${calc.formatSqft(sized.totalSqft - facility.totalSqft)} under</strong> the recommended size.`
-                  : `Your facility (${calc.formatSqft(facility.totalSqft)}) has <strong>${calc.formatSqft(facility.totalSqft - sized.totalSqft)} headroom</strong> over the recommendation.`)}
+            <span style="font-weight:700; font-size:16px; color:var(--ies-blue);">${calc.formatSqft(sized.totalSqft)}</span>
           </div>
         </div>
       </div>
@@ -2565,6 +2520,11 @@ function pushToCm() {
  * @param {import('./types.js?v=20260418-sL').CmToWscPayload} payload
  */
 function handleCmPush(payload) {
+  // Brock 2026-04-20: Existing/Target SF field was removed from the UI —
+  // the sizer is the single source of truth. We still stash CM's totalSqft
+  // on facility so a scenario saved from CM doesn't drop the field, but
+  // the editor no longer surfaces it. Clear height still drives the
+  // elevation view, so keep that.
   if (payload.clearHeight) facility.clearHeight = payload.clearHeight;
   if (payload.totalSqft) facility.totalSqft = payload.totalSqft;
   renderConfigPanel();
