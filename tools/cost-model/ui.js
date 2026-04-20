@@ -924,19 +924,19 @@ function renderSetup() {
       </div>
     </div>
 
-    <div class="cm-form-group">
-      <label class="cm-form-label">Project Name</label>
-      <input class="hub-input" id="cm-name" value="${pd.name || ''}" placeholder="e.g., Acme Ecommerce Fulfillment" data-field="projectDetails.name" />
-    </div>
+    <div class="cm-narrow-form">
+      <div class="hub-field hub-field--full">
+        <label class="hub-field__label">Project Name</label>
+        <input class="hub-input" id="cm-name" value="${pd.name || ''}" placeholder="e.g., Acme Ecommerce Fulfillment" data-field="projectDetails.name" />
+      </div>
 
-    <div class="cm-form-row">
-      <div class="cm-form-group">
-        <label class="cm-form-label">Client Name</label>
+      <div class="hub-field">
+        <label class="hub-field__label">Client Name</label>
         <input class="hub-input" id="cm-client" value="${pd.clientName || ''}" placeholder="Client name" data-field="projectDetails.clientName" />
       </div>
-      <div class="cm-form-group">
-        <label class="cm-form-label">Market <span style="font-weight:400;color:var(--ies-gray-400);font-size:11px;">(drives city/state)</span></label>
-        <select class="hub-select" id="cm-market" data-field="projectDetails.market">
+      <div class="hub-field">
+        <label class="hub-field__label">Market</label>
+        <select class="hub-input" id="cm-market" data-field="projectDetails.market">
           <option value="">Select market...</option>
           ${markets.map(m => {
             const id = m.market_id || m.id;
@@ -944,13 +944,12 @@ function renderSetup() {
             return `<option value="${id}"${id === pd.market ? ' selected' : ''}>${label}</option>`;
           }).join('')}
         </select>
+        <div class="hub-field__hint">Drives city / state and facility rate lookup.</div>
       </div>
-    </div>
 
-    <div class="cm-form-row">
-      <div class="cm-form-group">
-        <label class="cm-form-label">Environment</label>
-        <select class="hub-select" id="cm-env" data-field="projectDetails.environment">
+      <div class="hub-field">
+        <label class="hub-field__label">Environment</label>
+        <select class="hub-input" id="cm-env" data-field="projectDetails.environment">
           <option value="">Select environment...</option>
           ${(() => {
             const options = [
@@ -976,26 +975,26 @@ function renderSetup() {
           })()}
         </select>
       </div>
-      <div class="cm-form-group">
-        <label class="cm-form-label">City, State <span style="font-weight:400;color:var(--ies-gray-400);font-size:11px;">(derived from market)</span></label>
+      <div class="hub-field">
+        <label class="hub-field__label">City, State</label>
         <input class="hub-input" id="cm-location-display" value="${deriveLocationString(pd.market, markets) || pd.facilityLocation || ''}" placeholder="—" readonly style="background:var(--ies-gray-50);color:var(--ies-gray-500);" />
+        <div class="hub-field__hint">Derived from selected market.</div>
       </div>
-    </div>
 
-    <div class="cm-form-row">
-      <div class="cm-form-group">
-        <label class="cm-form-label">Contract Term (Years)</label>
+      <div class="hub-field">
+        <label class="hub-field__label">Contract Term (Years)</label>
         <input class="hub-input" type="number" id="cm-term" value="${pd.contractTerm || 5}" min="1" max="20" step="1" data-field="projectDetails.contractTerm" data-type="number" />
       </div>
-      <div class="cm-form-group">
-        <label class="cm-form-label">Link to Deal <span style="font-weight:400;color:var(--ies-gray-400);">(optional)</span></label>
-        <select class="hub-select" id="cm-deal" data-field="projectDetails.dealId">
+      <div class="hub-field">
+        <label class="hub-field__label">Link to Deal</label>
+        <select class="hub-input" id="cm-deal" data-field="projectDetails.dealId">
           <option value="">— No linked deal —</option>
           ${savedDeals.map(d => {
             const label = d.deal_name + (d.client_name ? ` (${d.client_name})` : '');
             return `<option value="${d.id}"${d.id === pd.dealId ? ' selected' : ''}>${label}</option>`;
           }).join('')}
         </select>
+        <div class="hub-field__hint">Optional. Links this cost model to a Deal Manager opportunity.</div>
       </div>
     </div>
   `;
@@ -1067,25 +1066,23 @@ function renderOrderProfile() {
       </div>
     </div>
 
-    <div class="cm-form-row">
-      <div class="cm-form-group">
-        <label class="cm-form-label">Lines Per Order</label>
+    <div class="cm-narrow-form">
+      <div class="hub-field">
+        <label class="hub-field__label">Lines Per Order</label>
         <input class="hub-input" type="number" value="${op.linesPerOrder || ''}" placeholder="e.g., 3.5" step="0.1" data-field="orderProfile.linesPerOrder" data-type="number" />
       </div>
-      <div class="cm-form-group">
-        <label class="cm-form-label">Units Per Line</label>
+      <div class="hub-field">
+        <label class="hub-field__label">Units Per Line</label>
         <input class="hub-input" type="number" value="${op.unitsPerLine || ''}" placeholder="e.g., 1.8" step="0.1" data-field="orderProfile.unitsPerLine" data-type="number" />
       </div>
-    </div>
 
-    <div class="cm-form-row">
-      <div class="cm-form-group">
-        <label class="cm-form-label">Average Order Weight</label>
+      <div class="hub-field">
+        <label class="hub-field__label">Average Order Weight</label>
         <input class="hub-input" type="number" value="${op.avgOrderWeight || ''}" placeholder="e.g., 12.5" step="0.1" data-field="orderProfile.avgOrderWeight" data-type="number" />
       </div>
-      <div class="cm-form-group">
-        <label class="cm-form-label">Weight Unit</label>
-        <select class="hub-select" data-field="orderProfile.weightUnit">
+      <div class="hub-field">
+        <label class="hub-field__label">Weight Unit</label>
+        <select class="hub-input" data-field="orderProfile.weightUnit">
           <option value="lbs"${op.weightUnit === 'lbs' || !op.weightUnit ? ' selected' : ''}>Pounds (lbs)</option>
           <option value="kg"${op.weightUnit === 'kg' ? ' selected' : ''}>Kilograms (kg)</option>
         </select>
@@ -1109,17 +1106,17 @@ function renderFacility() {
       <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="launch-wsc">Size with Calculator →</button>
     </div>
 
-    <div class="cm-form-row-3">
-      <div class="cm-form-group">
-        <label class="cm-form-label">Total Square Footage</label>
+    <div class="cm-narrow-form" style="grid-template-columns: repeat(3, minmax(0, 1fr));">
+      <div class="hub-field">
+        <label class="hub-field__label">Total Square Footage</label>
         <input class="hub-input" type="number" value="${f.totalSqft || ''}" placeholder="e.g., 150000" step="1000" data-field="facility.totalSqft" data-type="number" />
       </div>
-      <div class="cm-form-group">
-        <label class="cm-form-label">Clear Height (ft)</label>
+      <div class="hub-field">
+        <label class="hub-field__label">Clear Height (ft)</label>
         <input class="hub-input" type="number" value="${f.clearHeight || ''}" placeholder="e.g., 32" step="1" data-field="facility.clearHeight" data-type="number" />
       </div>
-      <div class="cm-form-group">
-        <label class="cm-form-label">Dock Doors</label>
+      <div class="hub-field">
+        <label class="hub-field__label">Dock Doors</label>
         <input class="hub-input" type="number" value="${f.dockDoors || ''}" placeholder="e.g., 24" step="1" data-field="facility.dockDoors" data-type="number" />
       </div>
     </div>
@@ -1172,41 +1169,37 @@ function renderShifts() {
       </div>
     </div>
 
-    <div class="cm-form-row">
-      <div class="cm-form-group">
-        <label class="cm-form-label">Shifts Per Day</label>
+    <div class="cm-narrow-form">
+      <div class="hub-field">
+        <label class="hub-field__label">Shifts Per Day</label>
         <input class="hub-input" type="number" value="${s.shiftsPerDay || 1}" min="1" max="3" step="1" data-field="shifts.shiftsPerDay" data-type="number" />
       </div>
-      <div class="cm-form-group">
-        <label class="cm-form-label">Hours Per Shift</label>
+      <div class="hub-field">
+        <label class="hub-field__label">Hours Per Shift</label>
         <input class="hub-input" type="number" value="${s.hoursPerShift || 8}" min="4" max="12" step="0.5" data-field="shifts.hoursPerShift" data-type="number" />
       </div>
-    </div>
-    <div class="cm-form-row">
-      <div class="cm-form-group">
-        <label class="cm-form-label">Days Per Week</label>
+      <div class="hub-field">
+        <label class="hub-field__label">Days Per Week</label>
         <input class="hub-input" type="number" value="${s.daysPerWeek || 5}" min="1" max="7" step="1" data-field="shifts.daysPerWeek" data-type="number" />
       </div>
-      <div class="cm-form-group">
-        <label class="cm-form-label">Weeks Per Year</label>
+      <div class="hub-field">
+        <label class="hub-field__label">Weeks Per Year</label>
         <input class="hub-input" type="number" value="${s.weeksPerYear ?? 52}" min="1" max="52" step="1" data-field="shifts.weeksPerYear" data-type="number" />
       </div>
     </div>
 
-    <div class="hub-card mt-4" style="background: linear-gradient(135deg, #0a1628, #0d1f3c); color: #fff; text-align: center;">
-      <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: rgba(255,255,255,0.6); margin-bottom: 4px;">
-        Annual Operating Hours / Person
-      </div>
-      <div style="font-size: 32px; font-weight: 800;">${opHrs.toLocaleString()}</div>
+    <div class="cm-opshours-card mt-4">
+      <div class="cm-opshours-card__label">Annual Operating Hours / Person</div>
+      <div class="cm-opshours-card__value">${opHrs.toLocaleString()}</div>
     </div>
 
-    <div class="cm-form-row mt-4">
-      <div class="cm-form-group">
-        <label class="cm-form-label">2nd Shift Premium (%)</label>
+    <div class="cm-narrow-form mt-4">
+      <div class="hub-field">
+        <label class="hub-field__label">2nd Shift Premium (%)</label>
         <input class="hub-input" type="number" value="${s.shift2Premium || 0}" step="0.5" data-field="shifts.shift2Premium" data-type="number" />
       </div>
-      <div class="cm-form-group">
-        <label class="cm-form-label">3rd Shift Premium (%)</label>
+      <div class="hub-field">
+        <label class="hub-field__label">3rd Shift Premium (%)</label>
         <input class="hub-input" type="number" value="${s.shift3Premium || 0}" step="0.5" data-field="shifts.shift3Premium" data-type="number" />
       </div>
     </div>
@@ -1892,7 +1885,13 @@ function renderEquipment() {
   const lines = model.equipmentLines || [];
   const total = calc.totalEquipmentCost(lines);
   const capital = calc.totalEquipmentCapital(lines);
+  const lineCount = lines.length;
+  const mheCount = lines.filter(l => l.category === 'MHE').reduce((s, l) => s + (parseInt(l.quantity) || 1), 0);
+  const rackCount = lines.filter(l => l.category === 'Racking').length;
 
+  // Equipment uses a table rather than master-detail because each row has
+  // few enough fields to fit a dense grid legibly. Migrated to hub-datatable
+  // primitives + KPI strip summary on top.
   return `
     <div class="cm-section-header">
       <div>
@@ -1901,7 +1900,29 @@ function renderEquipment() {
       </div>
     </div>
 
-    <div style="display: flex; gap: 8px; margin-bottom: 8px; align-items:center;">
+    <!-- KPI strip — at-a-glance summary (primitives kit) -->
+    ${lineCount > 0 ? `
+      <div class="hub-kpi-strip mb-4">
+        <div class="hub-kpi-tile">
+          <div class="hub-kpi-tile__label">Lines</div>
+          <div class="hub-kpi-tile__value">${lineCount}</div>
+        </div>
+        <div class="hub-kpi-tile">
+          <div class="hub-kpi-tile__label">MHE Units</div>
+          <div class="hub-kpi-tile__value">${mheCount}</div>
+        </div>
+        <div class="hub-kpi-tile">
+          <div class="hub-kpi-tile__label">Annual Operating</div>
+          <div class="hub-kpi-tile__value">${calc.formatCurrency(total, {compact: true})}</div>
+        </div>
+        <div class="hub-kpi-tile">
+          <div class="hub-kpi-tile__label">Capital</div>
+          <div class="hub-kpi-tile__value">${calc.formatCurrency(capital, {compact: true})}</div>
+        </div>
+      </div>
+    ` : ''}
+
+    <div class="cm-section-toolbar">
       <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-equipment"
               title="Generates a starting equipment list from your current volumes + labor + facility sqft. Rules:
 • MHE — Reach Trucks (1 per 3 FTEs × 1.15 spare) + Order Pickers (1 per 5 FTEs)
@@ -1914,44 +1935,60 @@ function renderEquipment() {
 • Conveyor — Belt conveyor linear ft (for ≥500K orders/yr)
 All lines are editable after generation.">⚡ Auto-Generate Equipment</button>
       <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="open-equipment-catalog" title="Browse the GXO equipment reference catalog (33 items with specs, pricing, vendors)">📖 Browse Catalog</button>
-      <span style="font-size:11px;color:var(--ies-gray-400);">Covers MHE · IT · Racking · Dock · Charging · Office · Security · Conveyor — hover Auto-Generate for the sizing rules.</span>
+      <span class="cm-section-toolbar__hint">Covers MHE · IT · Racking · Dock · Charging · Office · Security · Conveyor. Hover Auto-Generate for sizing rules.</span>
     </div>
 
-    <table class="cm-grid-table">
-      <thead>
-        <tr><th>Equipment</th><th>Category</th><th>Qty</th><th>Type</th><th>$/Mo</th><th>Acq Cost</th><th>Maint/Mo</th><th>Amort Yrs</th><th class="cm-num">Annual</th><th></th></tr>
-      </thead>
-      <tbody>
-        ${lines.map((l, i) => `
+    <div class="cm-table-scroll">
+      <table class="hub-datatable hub-datatable--dense">
+        <thead>
           <tr>
-            <td><input value="${l.equipment_name || ''}" style="width:120px;" data-array="equipmentLines" data-idx="${i}" data-field="equipment_name" /></td>
-            <td>
-              <select style="width:80px;" data-array="equipmentLines" data-idx="${i}" data-field="category">
-                ${['MHE', 'IT', 'Racking', 'Dock', 'Charging', 'Office', 'Security', 'Conveyor'].map(c =>
-                  `<option value="${c}"${l.category === c ? ' selected' : ''}>${c}</option>`
-                ).join('')}
-              </select>
-            </td>
-            <td><input type="number" value="${l.quantity || 1}" style="width:45px;" data-array="equipmentLines" data-idx="${i}" data-field="quantity" data-type="number" /></td>
-            <td>
-              <select style="width:80px;" data-array="equipmentLines" data-idx="${i}" data-field="acquisition_type">
-                <option value="lease"${(l.acquisition_type || 'lease') === 'lease' ? ' selected' : ''}>Lease</option>
-                <option value="purchase"${l.acquisition_type === 'purchase' ? ' selected' : ''}>Purchase</option>
-                <option value="service"${l.acquisition_type === 'service' ? ' selected' : ''}>Service</option>
-              </select>
-            </td>
-            <td><input type="number" value="${l.monthly_cost || 0}" style="width:65px;" data-array="equipmentLines" data-idx="${i}" data-field="monthly_cost" data-type="number" /></td>
-            <td><input type="number" value="${l.acquisition_cost || 0}" style="width:75px;" data-array="equipmentLines" data-idx="${i}" data-field="acquisition_cost" data-type="number" /></td>
-            <td><input type="number" value="${l.monthly_maintenance || 0}" style="width:65px;" data-array="equipmentLines" data-idx="${i}" data-field="monthly_maintenance" data-type="number" /></td>
-            <td><input type="number" value="${l.amort_years || 5}" style="width:45px;" data-array="equipmentLines" data-idx="${i}" data-field="amort_years" data-type="number" /></td>
-            <td class="cm-num">${calc.formatCurrency(calc.equipLineTableCost(l))}</td>
-            <td><button class="cm-delete-btn" data-action="delete-equipment" data-idx="${i}">Del</button></td>
+            <th>Equipment</th>
+            <th>Category</th>
+            <th class="hub-num">Qty</th>
+            <th>Type</th>
+            <th class="hub-num">$ / Mo</th>
+            <th class="hub-num">Acq Cost</th>
+            <th class="hub-num">Maint / Mo</th>
+            <th class="hub-num">Amort Yrs</th>
+            <th class="hub-num">Annual</th>
+            <th class="cm-actions"></th>
           </tr>
-        `).join('')}
-        <tr class="cm-total-row"><td colspan="8">Operating Cost</td><td class="cm-num">${calc.formatCurrency(total)}</td><td></td></tr>
-        <tr><td colspan="8" style="font-weight:600; color: var(--ies-gray-500);">Capital Investment</td><td class="cm-num" style="font-weight:600;">${calc.formatCurrency(capital)}</td><td></td></tr>
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          ${lines.map((l, i) => `
+            <tr>
+              <td><input class="hub-input" value="${l.equipment_name || ''}" data-array="equipmentLines" data-idx="${i}" data-field="equipment_name" /></td>
+              <td>
+                <select class="hub-input" data-array="equipmentLines" data-idx="${i}" data-field="category">
+                  ${['MHE', 'IT', 'Racking', 'Dock', 'Charging', 'Office', 'Security', 'Conveyor'].map(c =>
+                    `<option value="${c}"${l.category === c ? ' selected' : ''}>${c}</option>`
+                  ).join('')}
+                </select>
+              </td>
+              <td><input class="hub-input hub-num" type="number" value="${l.quantity || 1}" data-array="equipmentLines" data-idx="${i}" data-field="quantity" data-type="number" /></td>
+              <td>
+                <select class="hub-input" data-array="equipmentLines" data-idx="${i}" data-field="acquisition_type">
+                  <option value="lease"${(l.acquisition_type || 'lease') === 'lease' ? ' selected' : ''}>Lease</option>
+                  <option value="purchase"${l.acquisition_type === 'purchase' ? ' selected' : ''}>Purchase</option>
+                  <option value="service"${l.acquisition_type === 'service' ? ' selected' : ''}>Service</option>
+                </select>
+              </td>
+              <td><input class="hub-input hub-num" type="number" value="${l.monthly_cost || 0}" data-array="equipmentLines" data-idx="${i}" data-field="monthly_cost" data-type="number" /></td>
+              <td><input class="hub-input hub-num" type="number" value="${l.acquisition_cost || 0}" data-array="equipmentLines" data-idx="${i}" data-field="acquisition_cost" data-type="number" /></td>
+              <td><input class="hub-input hub-num" type="number" value="${l.monthly_maintenance || 0}" data-array="equipmentLines" data-idx="${i}" data-field="monthly_maintenance" data-type="number" /></td>
+              <td><input class="hub-input hub-num" type="number" value="${l.amort_years || 5}" data-array="equipmentLines" data-idx="${i}" data-field="amort_years" data-type="number" /></td>
+              <td class="hub-num">${calc.formatCurrency(calc.equipLineTableCost(l))}</td>
+              <td class="cm-actions"><button class="cm-delete-btn" data-action="delete-equipment" data-idx="${i}" title="Delete row">×</button></td>
+            </tr>
+          `).join('')}
+          ${lineCount === 0 ? `
+            <tr><td colspan="10" style="text-align:center;color:var(--ies-gray-400);padding:24px;">No equipment lines yet. Click Auto-Generate Equipment or Add Equipment Line to start.</td></tr>
+          ` : ''}
+          <tr class="cm-total-row"><td colspan="8">Operating Cost</td><td class="hub-num">${calc.formatCurrency(total)}</td><td></td></tr>
+          <tr><td colspan="8" style="font-weight:600; color: var(--ies-gray-500);">Capital Investment</td><td class="hub-num" style="font-weight:600;">${calc.formatCurrency(capital)}</td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
     <button class="cm-add-row-btn" data-action="add-equipment">+ Add Equipment Line</button>
   `;
 }
@@ -1967,31 +2004,46 @@ function renderOverhead() {
       </div>
     </div>
 
-    <div style="display: flex; gap: 8px; margin-bottom: 16px;">
-      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-overhead">Auto-Generate Overhead</button>
+    <div class="cm-section-toolbar">
+      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-overhead">⚡ Auto-Generate Overhead</button>
+      <span class="cm-section-toolbar__hint">One-click seed from facility sqft + headcount. All rows editable.</span>
     </div>
 
-    <table class="cm-grid-table">
-      <thead><tr><th>Category</th><th>Description</th><th>Cost Type</th><th>Amount</th><th class="cm-num">Annual</th><th></th></tr></thead>
-      <tbody>
-        ${lines.map((l, i) => `
+    <div class="cm-table-scroll">
+      <table class="hub-datatable hub-datatable--dense">
+        <thead>
           <tr>
-            <td><input value="${l.category || ''}" style="width:120px;" data-array="overheadLines" data-idx="${i}" data-field="category" /></td>
-            <td><input value="${l.description || ''}" style="width:180px;" data-array="overheadLines" data-idx="${i}" data-field="description" /></td>
-            <td>
-              <select style="width:90px;" data-array="overheadLines" data-idx="${i}" data-field="cost_type">
-                <option value="monthly"${l.cost_type === 'monthly' ? ' selected' : ''}>Monthly</option>
-                <option value="annual"${l.cost_type === 'annual' ? ' selected' : ''}>Annual</option>
-              </select>
-            </td>
-            <td><input type="number" value="${l.cost_type === 'monthly' ? (l.monthly_cost || 0) : (l.annual_cost || 0)}" style="width:90px;" data-array="overheadLines" data-idx="${i}" data-field="${l.cost_type === 'monthly' ? 'monthly_cost' : 'annual_cost'}" data-type="number" /></td>
-            <td class="cm-num">${calc.formatCurrency(calc.overheadLineAnnual(l))}</td>
-            <td><button class="cm-delete-btn" data-action="delete-overhead" data-idx="${i}">Del</button></td>
+            <th style="width:22%;">Category</th>
+            <th style="width:36%;">Description</th>
+            <th style="width:14%;">Cost Type</th>
+            <th style="width:14%;">Amount</th>
+            <th class="hub-num" style="width:12%;">Annual</th>
+            <th class="cm-actions"></th>
           </tr>
-        `).join('')}
-        <tr class="cm-total-row"><td colspan="4">Total Overhead</td><td class="cm-num">${calc.formatCurrency(total)}</td><td></td></tr>
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          ${lines.map((l, i) => `
+            <tr>
+              <td><input class="hub-input" value="${l.category || ''}" data-array="overheadLines" data-idx="${i}" data-field="category" /></td>
+              <td><input class="hub-input" value="${l.description || ''}" data-array="overheadLines" data-idx="${i}" data-field="description" /></td>
+              <td>
+                <select class="hub-input" data-array="overheadLines" data-idx="${i}" data-field="cost_type">
+                  <option value="monthly"${l.cost_type === 'monthly' ? ' selected' : ''}>Monthly</option>
+                  <option value="annual"${l.cost_type === 'annual' ? ' selected' : ''}>Annual</option>
+                </select>
+              </td>
+              <td><input class="hub-input hub-num" type="number" value="${l.cost_type === 'monthly' ? (l.monthly_cost || 0) : (l.annual_cost || 0)}" data-array="overheadLines" data-idx="${i}" data-field="${l.cost_type === 'monthly' ? 'monthly_cost' : 'annual_cost'}" data-type="number" /></td>
+              <td class="hub-num">${calc.formatCurrency(calc.overheadLineAnnual(l))}</td>
+              <td class="cm-actions"><button class="cm-delete-btn" data-action="delete-overhead" data-idx="${i}" title="Delete row">×</button></td>
+            </tr>
+          `).join('')}
+          ${lines.length === 0 ? `
+            <tr><td colspan="6" style="text-align:center;color:var(--ies-gray-400);padding:24px;">No overhead lines yet. Click Auto-Generate or Add Overhead Line.</td></tr>
+          ` : ''}
+          <tr class="cm-total-row"><td colspan="4">Total Overhead</td><td class="hub-num">${calc.formatCurrency(total)}</td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
     <button class="cm-add-row-btn" data-action="add-overhead">+ Add Overhead Line</button>
   `;
 }
@@ -2006,21 +2058,34 @@ function renderVas() {
         <div class="cm-section-desc">Kitting, labeling, special packaging, and other VAS line items.</div>
       </div>
     </div>
-    <table class="cm-grid-table">
-      <thead><tr><th>Service</th><th>Rate</th><th>Volume</th><th class="cm-num">Annual Cost</th><th></th></tr></thead>
-      <tbody>
-        ${lines.map((l, i) => `
+    <div class="cm-table-scroll">
+      <table class="hub-datatable hub-datatable--dense">
+        <thead>
           <tr>
-            <td><input value="${l.service || ''}" style="width:160px;" data-array="vasLines" data-idx="${i}" data-field="service" /></td>
-            <td><input type="number" value="${l.rate || 0}" style="width:70px;" step="0.01" data-array="vasLines" data-idx="${i}" data-field="rate" data-type="number" /></td>
-            <td><input type="number" value="${l.volume || 0}" style="width:90px;" data-array="vasLines" data-idx="${i}" data-field="volume" data-type="number" /></td>
-            <td class="cm-num">${calc.formatCurrency(calc.vasLineAnnual(l))}</td>
-            <td><button class="cm-delete-btn" data-action="delete-vas" data-idx="${i}">Del</button></td>
+            <th style="width:42%;">Service</th>
+            <th style="width:18%;">Rate</th>
+            <th style="width:20%;">Volume</th>
+            <th class="hub-num" style="width:18%;">Annual Cost</th>
+            <th class="cm-actions"></th>
           </tr>
-        `).join('')}
-        <tr class="cm-total-row"><td colspan="3">Total VAS</td><td class="cm-num">${calc.formatCurrency(total)}</td><td></td></tr>
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          ${lines.map((l, i) => `
+            <tr>
+              <td><input class="hub-input" value="${l.service || ''}" data-array="vasLines" data-idx="${i}" data-field="service" /></td>
+              <td><input class="hub-input hub-num" type="number" value="${l.rate || 0}" step="0.01" data-array="vasLines" data-idx="${i}" data-field="rate" data-type="number" /></td>
+              <td><input class="hub-input hub-num" type="number" value="${l.volume || 0}" data-array="vasLines" data-idx="${i}" data-field="volume" data-type="number" /></td>
+              <td class="hub-num">${calc.formatCurrency(calc.vasLineAnnual(l))}</td>
+              <td class="cm-actions"><button class="cm-delete-btn" data-action="delete-vas" data-idx="${i}" title="Delete row">×</button></td>
+            </tr>
+          `).join('')}
+          ${lines.length === 0 ? `
+            <tr><td colspan="5" style="text-align:center;color:var(--ies-gray-400);padding:24px;">No VAS lines yet. Click Add VAS Line to start.</td></tr>
+          ` : ''}
+          <tr class="cm-total-row"><td colspan="3">Total VAS</td><td class="hub-num">${calc.formatCurrency(total)}</td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
     <button class="cm-add-row-btn" data-action="add-vas">+ Add VAS Line</button>
   `;
 }
@@ -2034,48 +2099,44 @@ function renderFinancial() {
         <div class="cm-section-desc">Margin targets, escalation rates, discount rates, and financial thresholds.</div>
       </div>
     </div>
-    <div class="cm-form-row">
-      <div class="cm-form-group">
-        <label class="cm-form-label">Target Margin (%)</label>
+
+    <div class="cm-narrow-form">
+      <div class="hub-field">
+        <label class="hub-field__label">Target Margin (%)</label>
         <input class="hub-input" type="number" value="${f.targetMargin || 12}" step="0.5" data-field="financial.targetMargin" data-type="number" />
       </div>
-      <div class="cm-form-group">
-        <label class="cm-form-label">Volume Growth (%/yr)</label>
+      <div class="hub-field">
+        <label class="hub-field__label">Volume Growth (% / yr)</label>
         <input class="hub-input" type="number" value="${f.volumeGrowth || 3}" step="0.5" data-field="financial.volumeGrowth" data-type="number" />
       </div>
-    </div>
-    <div class="cm-form-row">
-      <div class="cm-form-group">
-        <label class="cm-form-label">Labor Escalation (%/yr)</label>
+
+      <div class="hub-field">
+        <label class="hub-field__label">Labor Escalation (% / yr)</label>
         <input class="hub-input" type="number" value="${f.laborEscalation || 4}" step="0.5" data-field="financial.laborEscalation" data-type="number" />
       </div>
-      <div class="cm-form-group">
-        <label class="cm-form-label">Cost Escalation (%/yr)</label>
+      <div class="hub-field">
+        <label class="hub-field__label">Cost Escalation (% / yr)</label>
         <input class="hub-input" type="number" value="${f.annualEscalation || 3}" step="0.5" data-field="financial.annualEscalation" data-type="number" />
       </div>
-    </div>
-    <div class="cm-form-row">
-      <div class="cm-form-group">
-        <label class="cm-form-label">Discount Rate (%)</label>
+
+      <div class="hub-field">
+        <label class="hub-field__label">Discount Rate (%)</label>
         <input class="hub-input" type="number" value="${f.discountRate || 10}" step="0.5" data-field="financial.discountRate" data-type="number" />
       </div>
-      <div class="cm-form-group">
-        <label class="cm-form-label">Reinvestment Rate (%)</label>
+      <div class="hub-field">
+        <label class="hub-field__label">Reinvestment Rate (%)</label>
         <input class="hub-input" type="number" value="${f.reinvestRate || 8}" step="0.5" data-field="financial.reinvestRate" data-type="number" />
       </div>
-    </div>
-    <div class="cm-form-row">
-      <div class="cm-form-group">
-        <label class="cm-form-label" title="Which pricing bucket carries the facility cost rollup. Defaults to a bucket named 'storage' if you have one; otherwise routes to Management Fee or your first bucket. (I-01 edge fix)">Facility Cost → Bucket</label>
-        <select class="hub-select" data-field="financial.facilityBucketId">
+
+      <div class="hub-field hub-field--full">
+        <label class="hub-field__label" title="Which pricing bucket carries the facility cost rollup. Defaults to a bucket named 'storage' if you have one; otherwise routes to Management Fee or your first bucket. (I-01 edge fix)">Facility Cost → Bucket</label>
+        <select class="hub-input" data-field="financial.facilityBucketId">
           <option value=""${!f.facilityBucketId ? ' selected' : ''}>— Auto (storage → mgmt_fee → first) —</option>
           ${(model.pricingBuckets || []).map(b =>
             `<option value="${b.id}"${f.facilityBucketId === b.id ? ' selected' : ''}>${b.name} (${b.type}/${b.uom})</option>`
           ).join('')}
         </select>
-      </div>
-      <div class="cm-form-group">
-        <!-- left blank for symmetry; reserved for future financial fields -->
+        <div class="hub-field__hint">Auto-selects the sensible default. Override when a client contract requires a specific bucket carry the facility cost rollup.</div>
       </div>
     </div>
   `;
@@ -2094,28 +2155,42 @@ function renderStartup() {
       </div>
     </div>
 
-    <div style="display: flex; gap: 8px; margin-bottom: 16px;">
-      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-startup">Auto-Generate Start-Up Costs</button>
+    <div class="cm-section-toolbar">
+      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-startup">⚡ Auto-Generate Start-Up Costs</button>
+      <span class="cm-section-toolbar__hint">Generates typical 3PL implementation line items (PM, IT, training, travel).</span>
     </div>
 
-    <table class="cm-grid-table">
-      <thead><tr><th>Description</th><th class="cm-num">One-Time Cost</th><th class="cm-num">Annual Amort</th><th class="cm-num">Monthly Amort</th><th></th></tr></thead>
-      <tbody>
-        ${lines.map((l, i) => {
-          const amort = (l.one_time_cost || 0) / Math.max(1, contractYears);
-          return `
-            <tr>
-              <td><input value="${l.description || ''}" style="width:200px;" data-array="startupLines" data-idx="${i}" data-field="description" /></td>
-              <td><input type="number" value="${l.one_time_cost || 0}" style="width:100px;" data-array="startupLines" data-idx="${i}" data-field="one_time_cost" data-type="number" /></td>
-              <td class="cm-num">${calc.formatCurrency(amort)}</td>
-              <td class="cm-num">${calc.formatCurrency(amort / 12)}</td>
-              <td><button class="cm-delete-btn" data-action="delete-startup" data-idx="${i}">Del</button></td>
-            </tr>
-          `;
-        }).join('')}
-        <tr class="cm-total-row"><td>Total</td><td class="cm-num">${calc.formatCurrency(totalCapital)}</td><td class="cm-num">${calc.formatCurrency(totalAmort)}</td><td class="cm-num">${calc.formatCurrency(totalAmort / 12)}</td><td></td></tr>
-      </tbody>
-    </table>
+    <div class="cm-table-scroll">
+      <table class="hub-datatable hub-datatable--dense">
+        <thead>
+          <tr>
+            <th style="width:50%;">Description</th>
+            <th class="hub-num" style="width:16%;">One-Time Cost</th>
+            <th class="hub-num" style="width:14%;">Annual Amort</th>
+            <th class="hub-num" style="width:14%;">Monthly Amort</th>
+            <th class="cm-actions"></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${lines.map((l, i) => {
+            const amort = (l.one_time_cost || 0) / Math.max(1, contractYears);
+            return `
+              <tr>
+                <td><input class="hub-input" value="${l.description || ''}" data-array="startupLines" data-idx="${i}" data-field="description" /></td>
+                <td><input class="hub-input hub-num" type="number" value="${l.one_time_cost || 0}" data-array="startupLines" data-idx="${i}" data-field="one_time_cost" data-type="number" /></td>
+                <td class="hub-num">${calc.formatCurrency(amort)}</td>
+                <td class="hub-num">${calc.formatCurrency(amort / 12)}</td>
+                <td class="cm-actions"><button class="cm-delete-btn" data-action="delete-startup" data-idx="${i}" title="Delete row">×</button></td>
+              </tr>
+            `;
+          }).join('')}
+          ${lines.length === 0 ? `
+            <tr><td colspan="5" style="text-align:center;color:var(--ies-gray-400);padding:24px;">No capital line items yet. Click Auto-Generate or Add Capital Item.</td></tr>
+          ` : ''}
+          <tr class="cm-total-row"><td>Total</td><td class="hub-num">${calc.formatCurrency(totalCapital)}</td><td class="hub-num">${calc.formatCurrency(totalAmort)}</td><td class="hub-num">${calc.formatCurrency(totalAmort / 12)}</td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
     <button class="cm-add-row-btn" data-action="add-startup">+ Add Capital Item</button>
   `;
 }
@@ -2601,27 +2676,27 @@ function renderSummary() {
       </div>
     </div>
 
-    <!-- KPI Bar -->
-    <div class="hub-kpi-bar mb-4">
-      <div class="hub-kpi-item">
-        <div class="hub-kpi-label">Total Cost</div>
-        <div class="hub-kpi-value">${calc.formatCurrency(summary.totalCost, {compact: true})}</div>
+    <!-- KPI Strip (primitives-kit, 5-tile override) -->
+    <div class="hub-kpi-strip mb-4" style="grid-template-columns: repeat(5, minmax(0, 1fr));">
+      <div class="hub-kpi-tile">
+        <div class="hub-kpi-tile__label">Total Cost</div>
+        <div class="hub-kpi-tile__value">${calc.formatCurrency(summary.totalCost, {compact: true})}</div>
       </div>
-      <div class="hub-kpi-item">
-        <div class="hub-kpi-label">Revenue</div>
-        <div class="hub-kpi-value">${calc.formatCurrency(summary.totalRevenue, {compact: true})}</div>
+      <div class="hub-kpi-tile">
+        <div class="hub-kpi-tile__label">Revenue</div>
+        <div class="hub-kpi-tile__value hub-kpi-tile__value--brand">${calc.formatCurrency(summary.totalRevenue, {compact: true})}</div>
       </div>
-      <div class="hub-kpi-item">
-        <div class="hub-kpi-label">Cost/Order</div>
-        <div class="hub-kpi-value">${orders > 0 ? calc.formatCurrency(summary.costPerOrder, {decimals: 2}) : '—'}</div>
+      <div class="hub-kpi-tile">
+        <div class="hub-kpi-tile__label">Cost / Order</div>
+        <div class="hub-kpi-tile__value">${orders > 0 ? calc.formatCurrency(summary.costPerOrder, {decimals: 2}) : '—'}</div>
       </div>
-      <div class="hub-kpi-item">
-        <div class="hub-kpi-label">FTEs</div>
-        <div class="hub-kpi-value">${summary.totalFtes.toFixed(0)}</div>
+      <div class="hub-kpi-tile">
+        <div class="hub-kpi-tile__label">FTEs</div>
+        <div class="hub-kpi-tile__value">${summary.totalFtes.toFixed(0)}</div>
       </div>
-      <div class="hub-kpi-item">
-        <div class="hub-kpi-label">Capital</div>
-        <div class="hub-kpi-value">${calc.formatCurrency(summary.equipmentCapital + summary.startupCapital, {compact: true})}</div>
+      <div class="hub-kpi-tile">
+        <div class="hub-kpi-tile__label">Capital</div>
+        <div class="hub-kpi-tile__value">${calc.formatCurrency(summary.equipmentCapital + summary.startupCapital, {compact: true})}</div>
       </div>
     </div>
 
@@ -2638,10 +2713,10 @@ function renderSummary() {
       </div>
     </div>
 
-    <!-- Cost Breakdown -->
+    <!-- Cost Breakdown — stacked bar + legend (primitives-style) -->
     <div class="hub-card mb-4">
-      <div class="text-subtitle mb-4">Cost Breakdown</div>
-      <div style="display: flex; height: 32px; border-radius: 6px; overflow: hidden; margin-bottom: 16px;">
+      <h3 class="hub-section-heading">Cost Breakdown</h3>
+      <div class="cm-stacked-bar">
         <div style="width:${pcts.labor}%; background: #0047AB;" title="Labor ${pcts.labor}%"></div>
         <div style="width:${pcts.facility}%; background: #20c997;" title="Facility ${pcts.facility}%"></div>
         <div style="width:${pcts.equipment}%; background: #ffc107;" title="Equipment ${pcts.equipment}%"></div>
@@ -2649,7 +2724,7 @@ function renderSummary() {
         <div style="width:${pcts.vas}%; background: #dc3545;" title="VAS ${pcts.vas}%"></div>
         <div style="width:${pcts.startup}%; background: #ff3a00;" title="Start-Up ${pcts.startup}%"></div>
       </div>
-      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+      <div class="cm-stacked-legend">
         ${[
           { label: 'Labor', value: summary.laborCost, pct: pcts.labor, color: '#0047AB' },
           { label: 'Facility', value: summary.facilityCost, pct: pcts.facility, color: '#20c997' },
@@ -2658,20 +2733,20 @@ function renderSummary() {
           { label: 'VAS', value: summary.vasCost, pct: pcts.vas, color: '#dc3545' },
           { label: 'Start-Up', value: summary.startupAmort, pct: pcts.startup, color: '#ff3a00' },
         ].map(c => `
-          <div style="display:flex; align-items:center; gap:8px;">
-            <div style="width:12px; height:12px; border-radius:3px; background:${c.color};"></div>
+          <div class="cm-stacked-legend__item">
+            <span class="cm-stacked-legend__swatch" style="background:${c.color};"></span>
             <div>
-              <div style="font-size:11px; font-weight:600; color:var(--ies-gray-500);">${c.label} (${c.pct}%)</div>
-              <div style="font-size:14px; font-weight:700;">${calc.formatCurrency(c.value, {compact: true})}</div>
+              <div class="hub-field__label" style="text-transform:none; letter-spacing:0;">${c.label} <span style="color:var(--ies-gray-400);font-weight:500;">(${c.pct}%)</span></div>
+              <div class="hub-num" style="font-size:14px; font-weight:700; text-align:left;">${calc.formatCurrency(c.value, {compact: true})}</div>
             </div>
           </div>
         `).join('')}
       </div>
     </div>
 
-    <!-- Financial Metrics Dashboard -->
+    <!-- Financial Metrics — primitives kpi-tile grid -->
     <div class="hub-card mb-4">
-      <div class="text-subtitle mb-4">Financial Metrics</div>
+      <h3 class="hub-section-heading">Financial Metrics</h3>
       <div class="cm-metrics-grid">
         ${renderMetricCard('Gross Margin', calc.formatPct(metrics.grossMarginPct), metrics.grossMarginPct >= (thresholds.grossMargin || 10))}
         ${renderMetricCard('EBITDA Margin', calc.formatPct(metrics.ebitdaMarginPct), metrics.ebitdaMarginPct >= (thresholds.ebitda || 8))}
@@ -2680,55 +2755,55 @@ function renderSummary() {
         ${renderMetricCard('MIRR', calc.formatPct(metrics.mirrPct), metrics.mirrPct >= (thresholds.mirr || 12))}
         ${renderMetricCard('NPV', calc.formatCurrency(metrics.npv, {compact: true}), metrics.npv > 0)}
         ${renderMetricCard('Payback', metrics.paybackMonths > 0 ? metrics.paybackMonths + ' mo' : '—', metrics.paybackMonths > 0 && metrics.paybackMonths <= (thresholds.payback || contractYears * 12))}
-        ${renderMetricCard('Rev/FTE', calc.formatCurrency(metrics.revenuePerFte, {compact: true}), true)}
-        ${renderMetricCard('Contrib/Order', calc.formatCurrency(metrics.contribPerOrder, {decimals: 2}), metrics.contribPerOrder > 0)}
-        ${renderMetricCard('Op Leverage', calc.formatPct(metrics.opLeveragePct), true)}
-        ${renderMetricCard('Contract Value', calc.formatCurrency(metrics.contractValue, {compact: true}), true)}
-        ${renderMetricCard('Total Investment', calc.formatCurrency(metrics.totalInvestment, {compact: true}), true)}
+        ${renderMetricCard('Rev / FTE', calc.formatCurrency(metrics.revenuePerFte, {compact: true}), null)}
+        ${renderMetricCard('Contrib / Order', calc.formatCurrency(metrics.contribPerOrder, {decimals: 2}), metrics.contribPerOrder > 0)}
+        ${renderMetricCard('Op Leverage', calc.formatPct(metrics.opLeveragePct), null)}
+        ${renderMetricCard('Contract Value', calc.formatCurrency(metrics.contractValue, {compact: true}), null)}
+        ${renderMetricCard('Total Investment', calc.formatCurrency(metrics.totalInvestment, {compact: true}), null)}
       </div>
     </div>
 
-    <!-- Multi-Year P&L -->
+    <!-- Multi-Year P&L — primitives hub-datatable -->
     <div class="hub-card mb-4">
-      <div class="text-subtitle mb-4">${contractYears}-Year P&L Projection</div>
-      <div style="overflow-x: auto;">
-        <table class="cm-grid-table">
+      <h3 class="hub-section-heading">${contractYears}-Year P&L Projection</h3>
+      <div class="cm-table-scroll">
+        <table class="hub-datatable hub-datatable--dense">
           <thead>
             <tr>
               <th></th>
-              ${projections.map(p => `<th class="cm-num">Year ${p.year}</th>`).join('')}
+              ${projections.map(p => `<th class="hub-num">Year ${p.year}</th>`).join('')}
             </tr>
           </thead>
           <tbody>
-            <tr><td style="font-weight:600;">Orders</td>${projections.map(p => `<td class="cm-num">${Math.round(p.orders).toLocaleString()}</td>`).join('')}</tr>
-            <tr><td>Labor</td>${projections.map(p => `<td class="cm-num">${calc.formatCurrency(p.labor, {compact: true})}</td>`).join('')}</tr>
-            <tr><td>Facility</td>${projections.map(p => `<td class="cm-num">${calc.formatCurrency(p.facility, {compact: true})}</td>`).join('')}</tr>
-            <tr><td>Equipment</td>${projections.map(p => `<td class="cm-num">${calc.formatCurrency(p.equipment, {compact: true})}</td>`).join('')}</tr>
-            <tr><td>Overhead</td>${projections.map(p => `<td class="cm-num">${calc.formatCurrency(p.overhead, {compact: true})}</td>`).join('')}</tr>
-            <tr><td>VAS</td>${projections.map(p => `<td class="cm-num">${calc.formatCurrency(p.vas, {compact: true})}</td>`).join('')}</tr>
-            <tr><td>Start-Up Amort</td>${projections.map(p => `<td class="cm-num">${calc.formatCurrency(p.startup, {compact: true})}</td>`).join('')}</tr>
-            <tr class="cm-total-row"><td>Total Cost</td>${projections.map(p => `<td class="cm-num">${calc.formatCurrency(p.totalCost, {compact: true})}</td>`).join('')}</tr>
-            <tr style="background:rgba(0,71,171,0.04);"><td style="font-weight:700; color:var(--ies-blue);">Revenue</td>${projections.map(p => `<td class="cm-num" style="font-weight:700; color:var(--ies-blue);">${calc.formatCurrency(p.revenue, {compact: true})}</td>`).join('')}</tr>
-            <tr><td style="font-weight:600;">Gross Profit</td>${projections.map(p => `<td class="cm-num" style="font-weight:600; color:${p.grossProfit >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};">${calc.formatCurrency(p.grossProfit, {compact: true})}</td>`).join('')}</tr>
-            <tr><td>EBITDA</td>${projections.map(p => `<td class="cm-num">${calc.formatCurrency(p.ebitda, {compact: true})}</td>`).join('')}</tr>
-            <tr><td>EBIT</td>${projections.map(p => `<td class="cm-num">${calc.formatCurrency(p.ebit, {compact: true})}</td>`).join('')}</tr>
-            <tr><td>Net Income</td>${projections.map(p => `<td class="cm-num">${calc.formatCurrency(p.netIncome, {compact: true})}</td>`).join('')}</tr>
-            <tr style="border-top:2px solid var(--ies-gray-200);"><td>CapEx</td>${projections.map(p => `<td class="cm-num">${p.capex > 0 ? '(' + calc.formatCurrency(p.capex, {compact: true}) + ')' : '—'}</td>`).join('')}</tr>
-            <tr><td>Free Cash Flow</td>${projections.map(p => `<td class="cm-num" style="font-weight:600; color:${p.freeCashFlow >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};">${calc.formatCurrency(p.freeCashFlow, {compact: true})}</td>`).join('')}</tr>
+            <tr><td style="font-weight:600;">Orders</td>${projections.map(p => `<td class="hub-num">${Math.round(p.orders).toLocaleString()}</td>`).join('')}</tr>
+            <tr><td>Labor</td>${projections.map(p => `<td class="hub-num">${calc.formatCurrency(p.labor, {compact: true})}</td>`).join('')}</tr>
+            <tr><td>Facility</td>${projections.map(p => `<td class="hub-num">${calc.formatCurrency(p.facility, {compact: true})}</td>`).join('')}</tr>
+            <tr><td>Equipment</td>${projections.map(p => `<td class="hub-num">${calc.formatCurrency(p.equipment, {compact: true})}</td>`).join('')}</tr>
+            <tr><td>Overhead</td>${projections.map(p => `<td class="hub-num">${calc.formatCurrency(p.overhead, {compact: true})}</td>`).join('')}</tr>
+            <tr><td>VAS</td>${projections.map(p => `<td class="hub-num">${calc.formatCurrency(p.vas, {compact: true})}</td>`).join('')}</tr>
+            <tr><td>Start-Up Amort</td>${projections.map(p => `<td class="hub-num">${calc.formatCurrency(p.startup, {compact: true})}</td>`).join('')}</tr>
+            <tr class="cm-pnl-row-total"><td>Total Cost</td>${projections.map(p => `<td class="hub-num">${calc.formatCurrency(p.totalCost, {compact: true})}</td>`).join('')}</tr>
+            <tr class="cm-pnl-row-revenue"><td style="font-weight:700; color:var(--ies-blue);">Revenue</td>${projections.map(p => `<td class="hub-num" style="font-weight:700; color:var(--ies-blue);">${calc.formatCurrency(p.revenue, {compact: true})}</td>`).join('')}</tr>
+            <tr><td style="font-weight:600;">Gross Profit</td>${projections.map(p => `<td class="hub-num" style="font-weight:600; color:${p.grossProfit >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};">${calc.formatCurrency(p.grossProfit, {compact: true})}</td>`).join('')}</tr>
+            <tr><td>EBITDA</td>${projections.map(p => `<td class="hub-num">${calc.formatCurrency(p.ebitda, {compact: true})}</td>`).join('')}</tr>
+            <tr><td>EBIT</td>${projections.map(p => `<td class="hub-num">${calc.formatCurrency(p.ebit, {compact: true})}</td>`).join('')}</tr>
+            <tr><td>Net Income</td>${projections.map(p => `<td class="hub-num">${calc.formatCurrency(p.netIncome, {compact: true})}</td>`).join('')}</tr>
+            <tr class="cm-pnl-row-capex"><td>CapEx</td>${projections.map(p => `<td class="hub-num">${p.capex > 0 ? '(' + calc.formatCurrency(p.capex, {compact: true}) + ')' : '—'}</td>`).join('')}</tr>
+            <tr><td>Free Cash Flow</td>${projections.map(p => `<td class="hub-num" style="font-weight:600; color:${p.freeCashFlow >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};">${calc.formatCurrency(p.freeCashFlow, {compact: true})}</td>`).join('')}</tr>
           </tbody>
         </table>
       </div>
     </div>
 
-    <!-- Sensitivity Analysis -->
+    <!-- Sensitivity Analysis — primitives hub-datatable -->
     <div class="hub-card mb-4">
-      <div class="text-subtitle mb-4">Sensitivity Analysis</div>
-      <div style="overflow-x: auto;">
-        <table class="cm-grid-table">
+      <h3 class="hub-section-heading">Sensitivity Analysis</h3>
+      <div class="cm-table-scroll">
+        <table class="hub-datatable hub-datatable--dense">
           <thead>
             <tr>
               <th>Driver</th>
-              ${sensi[0]?.adjustments.map(a => `<th class="cm-num">${a.pct > 0 ? '+' : ''}${a.pct}%</th>`).join('') || ''}
+              ${sensi[0]?.adjustments.map(a => `<th class="hub-num">${a.pct > 0 ? '+' : ''}${a.pct}%</th>`).join('') || ''}
             </tr>
           </thead>
           <tbody>
@@ -2736,9 +2811,9 @@ function renderSummary() {
               <tr>
                 <td style="font-weight:600;">${driver.label}</td>
                 ${driver.adjustments.map(a => `
-                  <td class="cm-num" style="color: ${a.delta > 0 ? 'var(--ies-red)' : a.delta < 0 ? 'var(--ies-green)' : 'inherit'};">
+                  <td class="hub-num" style="color: ${a.delta > 0 ? 'var(--ies-red)' : a.delta < 0 ? 'var(--ies-green)' : 'inherit'};">
                     <div>${calc.formatCurrency(a.totalCost, {compact: true})}</div>
-                    <div style="font-size:11px; opacity:0.7;">${a.delta >= 0 ? '+' : ''}${calc.formatCurrency(a.delta, {compact: true})}</div>
+                    <div class="hub-field__hint" style="text-align:right;">${a.delta >= 0 ? '+' : ''}${calc.formatCurrency(a.delta, {compact: true})}</div>
                   </td>
                 `).join('')}
               </tr>
@@ -2746,41 +2821,28 @@ function renderSummary() {
           </tbody>
         </table>
       </div>
-      <div style="font-size:11px; color:var(--ies-gray-400); margin-top:8px;">
+      <div class="hub-field__hint mt-2">
         Base total cost: ${calc.formatCurrency(summary.totalCost, {compact: true})}. Red = cost increase, green = cost decrease.
       </div>
     </div>
 
     <!-- (Design Heuristics block moved to top of Summary, right after KPIs) -->
-
-    <style>
-      .cm-metrics-grid {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 12px;
-      }
-      .cm-metric-card {
-        padding: 12px;
-        border-radius: 8px;
-        border: 1px solid var(--ies-gray-200);
-        text-align: center;
-      }
-      .cm-metric-card.pass { border-color: rgba(32,201,151,0.4); background: rgba(32,201,151,0.04); }
-      .cm-metric-card.fail { border-color: rgba(220,53,69,0.3); background: rgba(220,53,69,0.04); }
-      .cm-metric-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--ies-gray-500); margin-bottom: 4px; }
-      .cm-metric-value { font-size: 18px; font-weight: 800; }
-      .cm-metric-card.pass .cm-metric-value { color: #0d9668; }
-      .cm-metric-card.fail .cm-metric-value { color: var(--ies-red); }
-    </style>
   `;
 }
 
-/** Render a single metric card with pass/fail coloring */
+/**
+ * Render a single metric card. `passes` semantics:
+ *   true  → green (pass against threshold)
+ *   false → red   (fail against threshold)
+ *   null  → neutral (display-only metric, no judgment applied)
+ * Migrated to primitives kit (hub-kpi-tile base + .cm-metric-card mod).
+ */
 function renderMetricCard(label, value, passes) {
+  const stateClass = passes === null ? 'is-neutral' : (passes ? 'is-pass' : 'is-fail');
   return `
-    <div class="cm-metric-card ${passes ? 'pass' : 'fail'}">
-      <div class="cm-metric-label">${label}</div>
-      <div class="cm-metric-value">${value}</div>
+    <div class="hub-kpi-tile cm-metric-card ${stateClass}">
+      <div class="hub-kpi-tile__label">${label}</div>
+      <div class="hub-kpi-tile__value">${value}</div>
     </div>
   `;
 }
@@ -5377,35 +5439,49 @@ function renderTimeline() {
   // Cumulative-cash-flow trend colors
   const payback = rows.find(r => r.cum_fcf >= 0 && !r.is_pre_go_live);
 
+  const lastCumFcf = rows[rows.length - 1].cum_fcf;
+
   return `
     ${frozenBanner}
     <div class="cm-section">
-      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;">
-        <h2 class="cm-section-title" style="margin:0;">Timeline</h2>
-        <span style="font-size:11px;color:var(--ies-gray-400);">${rows.length} months · Phase 1 monthly engine</span>
+      <div class="cm-timeline-meta">
+        <h2 class="cm-timeline-meta__title">Timeline</h2>
+        <span class="cm-timeline-meta__hint">${rows.length} months · Phase 1 monthly engine</span>
       </div>
 
-      <!-- KPI strip -->
-      <div class="hub-kpi-bar mb-6">
-        <div class="hub-kpi-item"><div class="hub-kpi-label">Total Revenue</div><div class="hub-kpi-value">$${fmt(rows.reduce((s, r) => s + r.revenue, 0))}</div></div>
-        <div class="hub-kpi-item"><div class="hub-kpi-label">Total Opex</div><div class="hub-kpi-value">$${fmt(rows.reduce((s, r) => s + r.opex, 0))}</div></div>
-        <div class="hub-kpi-item"><div class="hub-kpi-label">Cumulative FCF</div><div class="hub-kpi-value" style="color:${rows[rows.length-1].cum_fcf >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};">$${fmt(rows[rows.length-1].cum_fcf)}</div></div>
-        <div class="hub-kpi-item"><div class="hub-kpi-label">Payback Month</div><div class="hub-kpi-value">${payback ? payback.label : '—'}</div></div>
+      <!-- KPI strip (primitives kit) -->
+      <div class="hub-kpi-strip mb-4">
+        <div class="hub-kpi-tile">
+          <div class="hub-kpi-tile__label">Total Revenue</div>
+          <div class="hub-kpi-tile__value hub-kpi-tile__value--brand">$${fmt(rows.reduce((s, r) => s + r.revenue, 0))}</div>
+        </div>
+        <div class="hub-kpi-tile">
+          <div class="hub-kpi-tile__label">Total Opex</div>
+          <div class="hub-kpi-tile__value">$${fmt(rows.reduce((s, r) => s + r.opex, 0))}</div>
+        </div>
+        <div class="hub-kpi-tile">
+          <div class="hub-kpi-tile__label">Cumulative FCF</div>
+          <div class="hub-kpi-tile__value" style="color:${lastCumFcf >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};">$${fmt(lastCumFcf)}</div>
+        </div>
+        <div class="hub-kpi-tile">
+          <div class="hub-kpi-tile__label">Payback Month</div>
+          <div class="hub-kpi-tile__value">${payback ? payback.label : '—'}</div>
+        </div>
       </div>
 
       <!-- Year summary -->
-      <div class="hub-card mb-6">
-        <div class="text-subtitle mb-4">Annual Roll-Up</div>
-        <table class="cm-grid-table" style="width:100%;">
-          <thead><tr><th>Year</th><th class="cm-num">Revenue</th><th class="cm-num">Opex</th><th class="cm-num">Net Income</th><th class="cm-num">FCF</th></tr></thead>
+      <div class="hub-card mb-4">
+        <h3 class="hub-section-heading">Annual Roll-Up</h3>
+        <table class="hub-datatable hub-datatable--dense">
+          <thead><tr><th>Year</th><th class="hub-num">Revenue</th><th class="hub-num">Opex</th><th class="hub-num">Net Income</th><th class="hub-num">FCF</th></tr></thead>
           <tbody>
             ${Object.entries(yearly).map(([yr, y]) => `
               <tr>
                 <td>Y${yr}</td>
-                <td class="cm-num">$${fmt(y.revenue)}</td>
-                <td class="cm-num">$${fmt(y.opex)}</td>
-                <td class="cm-num">$${fmt(y.net_income)}</td>
-                <td class="cm-num" style="color:${y.fcf >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};">$${fmt(y.fcf)}</td>
+                <td class="hub-num">$${fmt(y.revenue)}</td>
+                <td class="hub-num">$${fmt(y.opex)}</td>
+                <td class="hub-num">$${fmt(y.net_income)}</td>
+                <td class="hub-num" style="color:${y.fcf >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};">$${fmt(y.fcf)}</td>
               </tr>
             `).join('')}
           </tbody>
@@ -5414,38 +5490,38 @@ function renderTimeline() {
 
       <!-- Monthly cashflow table (first 24 months + cumulative) -->
       <div class="hub-card">
-        <div class="text-subtitle mb-4">Monthly Cashflow (first 24 months)</div>
-        <div style="max-height:400px;overflow-y:auto;">
-          <table class="cm-grid-table" style="width:100%;font-size:12px;">
-            <thead style="position:sticky;top:0;background:#fff;">
+        <h3 class="hub-section-heading">Monthly Cashflow (first 24 months)</h3>
+        <div class="cm-timeline-monthly-scroll">
+          <table class="hub-datatable hub-datatable--dense">
+            <thead>
               <tr>
                 <th>Month</th>
-                <th class="cm-num">Revenue</th>
-                <th class="cm-num">Opex</th>
-                <th class="cm-num">EBITDA</th>
-                <th class="cm-num">Net Income</th>
-                <th class="cm-num">CapEx</th>
-                <th class="cm-num">FCF</th>
-                <th class="cm-num">Cum FCF</th>
+                <th class="hub-num">Revenue</th>
+                <th class="hub-num">Opex</th>
+                <th class="hub-num">EBITDA</th>
+                <th class="hub-num">Net Income</th>
+                <th class="hub-num">CapEx</th>
+                <th class="hub-num">FCF</th>
+                <th class="hub-num">Cum FCF</th>
               </tr>
             </thead>
             <tbody>
               ${rows.slice(0, 24).map(r => `
-                <tr style="${r.is_pre_go_live ? 'background:#fef3c7;' : ''}">
-                  <td style="font-weight:600;">${r.label}${r.is_pre_go_live ? ' <span style="color:#92400e;font-size:10px;">pre-live</span>' : ''}</td>
-                  <td class="cm-num">$${fmt(r.revenue)}</td>
-                  <td class="cm-num">$${fmt(r.opex)}</td>
-                  <td class="cm-num">$${fmt(r.ebitda)}</td>
-                  <td class="cm-num">$${fmt(r.net_income)}</td>
-                  <td class="cm-num">${r.capex > 0 ? '$' + fmt(r.capex) : '—'}</td>
-                  <td class="cm-num" style="color:${r.fcf >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};">$${fmt(r.fcf)}</td>
-                  <td class="cm-num" style="font-weight:700;color:${r.cum_fcf >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};">$${fmt(r.cum_fcf)}</td>
+                <tr class="${r.is_pre_go_live ? 'cm-timeline-pre-go-live' : ''}">
+                  <td style="font-weight:600;">${r.label}${r.is_pre_go_live ? ' <span class="cm-timeline-pre-go-live-tag">pre-live</span>' : ''}</td>
+                  <td class="hub-num">$${fmt(r.revenue)}</td>
+                  <td class="hub-num">$${fmt(r.opex)}</td>
+                  <td class="hub-num">$${fmt(r.ebitda)}</td>
+                  <td class="hub-num">$${fmt(r.net_income)}</td>
+                  <td class="hub-num">${r.capex > 0 ? '$' + fmt(r.capex) : '—'}</td>
+                  <td class="hub-num" style="color:${r.fcf >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};">$${fmt(r.fcf)}</td>
+                  <td class="hub-num" style="font-weight:700;color:${r.cum_fcf >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};">$${fmt(r.cum_fcf)}</td>
                 </tr>
               `).join('')}
             </tbody>
           </table>
         </div>
-        ${rows.length > 24 ? `<div style="margin-top:8px;font-size:11px;color:var(--ies-gray-400);">…${rows.length - 24} more months (full 60-month view coming in the Phase 5 assumption studio)</div>` : ''}
+        ${rows.length > 24 ? `<div class="hub-field__hint mt-2">…${rows.length - 24} more months (full 60-month view coming in the Phase 5 assumption studio)</div>` : ''}
       </div>
     </div>
   `;
