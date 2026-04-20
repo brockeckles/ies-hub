@@ -4078,7 +4078,7 @@ function bindSectionEvents(section, container) {
         openMostTemplateDetail(btn.dataset.templateId);
         return;
       }
-      handleAction(action, idx);
+      handleAction(action, idx, btn);
     });
   });
 
@@ -5666,7 +5666,7 @@ function shouldRerender(field) {
 // ACTIONS (add/delete rows)
 // ============================================================
 
-function handleAction(action, idx) {
+function handleAction(action, idx, btn) {
   switch (action) {
     case 'linked-refresh':
       // Force re-query of parent_cost_model_id across design-tool tables.
@@ -5761,12 +5761,8 @@ function handleAction(action, idx) {
     case 'goto-section': {
       // Used by the Labor section banner to jump to Labor Factors
       // (section key 'shifts'). See renderLaborFactorsBanner.
-      const target = btn.dataset.section || '';
-      if (target) {
-        activeSection = target;
-        state.set('costModel.activeSection', target);
-        renderSection();
-      }
+      const target = btn && btn.dataset && btn.dataset.section;
+      if (target) navigateSection(target);
       return;
     }
     case 'add-overhead':
