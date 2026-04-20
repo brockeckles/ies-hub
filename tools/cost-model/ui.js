@@ -2499,9 +2499,32 @@ function renderLaborDetailPane(lines, opHrs, lc) {
         </div>
       </div>
 
-      <!-- Group 4: Rate & Employment (4-col) -->
+      <!-- Group 3b: Position (Brock 2026-04-20) — primary lever. Pulls
+           wage/employment/markup from the Labor Factors catalog so those
+           fields become derived (still editable as per-line overrides). -->
       <div class="hub-detail-group">
-        <h4 class="hub-detail-group__title">Rate &amp; Employment</h4>
+        <h4 class="hub-detail-group__title">Position</h4>
+        <div class="hub-detail-grid hub-detail-grid--2col">
+          <div class="hub-field">
+            <label class="hub-field__label" title="Select a role from the Labor Factors Position Catalog. Rate/employment/markup below will pull from the selected position.">Labor Position</label>
+            ${renderPositionCell(l, i, 'direct')}
+            <div class="hub-field__hint">Edit the catalog in <strong>Structure → Labor Factors</strong>.</div>
+          </div>
+          <div class="hub-field" style="align-self:flex-end;">
+            ${l.position_id
+              ? (() => {
+                  const p = ((model.shifts && model.shifts.positions) || []).find(pp => pp.id === l.position_id);
+                  return p ? `<div class="hub-field__hint"><strong>${escapeHtml(p.name)}</strong> · ${p.employment_type === 'temp_agency' ? 'Temp Agency' : p.employment_type === 'contractor' ? 'Contractor' : 'Permanent'} · $${(p.hourly_wage || 0).toFixed(2)}/hr${p.employment_type === 'temp_agency' ? ` · +${p.temp_markup_pct || 0}% mkup` : ''}</div>`
+                         : `<div class="hub-field__hint" style="color:var(--ies-orange);">⚠ Linked position not found</div>`;
+                })()
+              : `<div class="hub-field__hint">No position selected — rate/employment below are used as-is.</div>`}
+          </div>
+        </div>
+      </div>
+
+      <!-- Group 4: Rate & Employment (4-col) — overrides of the Position attrs -->
+      <div class="hub-detail-group">
+        <h4 class="hub-detail-group__title">Rate &amp; Employment <span style="font-size:11px;font-weight:500;color:var(--ies-gray-400);">${l.position_id ? '(pulled from position · edit here to override)' : '(manual)'}</span></h4>
         <div class="hub-detail-grid hub-detail-grid--4col">
           <div class="hub-field">
             <label class="hub-field__label">Base Hourly Rate</label>
