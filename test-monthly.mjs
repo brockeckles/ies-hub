@@ -329,6 +329,75 @@ test('monthlyProjectionView returns ordered, complete view', () => {
   }
 });
 
+// ============================================================
+// 10. PER-CATEGORY ROLLUP (Multi-Year P&L Summary breakdown)
+// ============================================================
+// Regression: groupMonthlyToYearly used to hardcode
+// labor/facility/equipment/overhead/vas/startup to 0, so the Summary
+// Multi-Year P&L per-category rows rendered $0 when the monthly engine
+// was enabled. The fix sums expense rows within each year window by
+// expense_line_code into the matching category.
+test('yearly rollup: labor > 0 when base_labor_cost > 0', () => {
+  const params = baseParams();
+  const bundle = buildMonthlyProjections(params);
+  const yearly = groupMonthlyToYearly(bundle, params.contract_term_years);
+  for (const y of yearly) assert(y.labor > 0, `year ${y.year} labor=${y.labor}`);
+});
+test('yearly rollup: all 6 categories > 0 when their bases are set', () => {
+  const params = baseParams();
+  const bundle = buildMonthlyProjections(params);
+  const yearly = groupMonthlyToYearly(bundle, params.contract_term_years);
+  for (const y of yearly) {
+    assert(y.labor     > 0, `year ${y.year} labor`);
+    assert(y.facility  > 0, `year ${y.year} facility`);
+    assert(y.equipment > 0, `year ${y.year} equipment`);
+    assert(y.overhead  > 0, `year ${y.year} overhead`);
+    assert(y.vas       > 0, `year ${y.year} vas`);
+    assert(y.startup   > 0, `year ${y.year} startup`);
+  }
+});
+test('yearly rollup: labor + facility + equipment + overhead + vas + startup == totalCost (±0.5%)', () => {
+  const params = baseParams();
+  const bundle = buildMonthlyProjections(params);
+  const yearly = groupMonthlyToYearly(bundle, params.contract_term_years);
+  for (const y of yearly) {
+    const sumCategories = y.labor + y.facility + y.equipment + y.overhead + y.vas + y.startup;
+    const drift = Math.abs(sumCategories - y.totalCost) / (y.totalCost || 1);
+    assert(drift <= 0.005, `year ${y.year} categories=${sumCategories.toFixed(2)} totalCost=${y.totalCost.toFixed(2)} drift=${(drift*100).toFixed(3)}%`);
+  }
+});
+test('yearly rollup: startup == annualized startup_amort (matches legacy yearly path)', () => {
+  const params = baseParams();
+  const bundle = buildMonthlyProjections(params);
+  const yearly = groupMonthlyToYearly(bundle, params.contract_term_years);
+  for (const y of yearly) {
+    near(y.startup, params.startup_amort, 0.01, `year ${y.year} startup should equal annual startup_amort:`);
+  }
+});
+test('yearly rollup: labor escalates year over year (vol_growth + labor_esc)', () => {
+  const params = baseParams({ vol_growth_pct: 0.05, labor_esc_pct: 0.04 });
+  const bundle = buildMonthlyProjections(params);
+  const yearly = groupMonthlyToYearly(bundle, params.contract_term_years);
+  // Year 1 has a partial ramp so we skip it; Y2 > Y2 was blocked by ramp.
+  for (let i = 2; i < yearly.length; i++) {
+    assert(yearly[i].labor > yearly[i-1].labor,
+      `Y${yearly[i].year} labor=${yearly[i].labor} should be > Y${yearly[i-1].year} labor=${yearly[i-1].labor}`);
+  }
+});
+test('yearly rollup: zero-cost inputs produce zero category rows (no phantom values)', () => {
+  const params = baseParams({
+    base_labor_cost: 0, base_facility_cost: 0, base_equipment_cost: 0,
+    base_overhead_cost: 0, base_vas_cost: 0, startup_amort: 0,
+  });
+  const bundle = buildMonthlyProjections(params);
+  const yearly = groupMonthlyToYearly(bundle, params.contract_term_years);
+  for (const y of yearly) {
+    assert(y.labor === 0 && y.facility === 0 && y.equipment === 0 &&
+      y.overhead === 0 && y.vas === 0 && y.startup === 0,
+      `year ${y.year} expected all-zero categories, got ${JSON.stringify({labor:y.labor,facility:y.facility,equipment:y.equipment,overhead:y.overhead,vas:y.vas,startup:y.startup})}`);
+  }
+});
+
 // ---- Run + report ----
 console.log(`\n\n${passed} passed, ${failed} failed`);
 if (failures.length) {

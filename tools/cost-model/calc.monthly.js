@@ -664,17 +664,47 @@ export function computeExpenseRows(period, ctx, params) {
  */
 export function groupMonthlyToYearly(bundle, contractTermYears) {
   const idToPeriod = new Map(bundle.periods.map(p => [p.id, p]));
+  // Per-category rollup for the Multi-Year P&L Summary table. Keep these
+  // code sets in sync with the expense_line_code values emitted in
+  // buildMonthlyProjections above. The sum of the 6 categories reconciles
+  // to cashflow.opex for every in-window period, so sumByCategory totals
+  // equal sum('opex') (Year-1+ window excludes pre-go-live PROF_SERV_EXP/
+  // IT_INTEG_EXP/ONBOARD_EXP by period_index >= 0, matching the legacy
+  // yearly path which doesn't model pre-live months).
+  //
+  // startup in the yearly P&L = annual depreciation of startup capital —
+  // DEPRECIATION flows monthly over the whole contract, so per-year sum
+  // reproduces the legacy `startupAmort` value.
+  const CATEGORY_CODES = {
+    labor:     new Set(['LABOR_HOURLY', 'LABOR_SALARY']),
+    facility:  new Set(['FACILITY']),
+    equipment: new Set(['LEASED_EQUIP']),
+    overhead:  new Set(['OVERHEAD']),
+    vas:       new Set(['PASS_THROUGH_EXP']),
+    startup:   new Set(['DEPRECIATION']),
+  };
   const out = [];
   for (let yr = 1; yr <= contractTermYears; yr++) {
-    const yrCfRows = bundle.cashflow.filter(cf => {
-      const p = idToPeriod.get(cf.period_id);
-      return p && p.period_index >= (yr - 1) * 12 && p.period_index < yr * 12;
-    });
+    const inYear = (period_id) => {
+      const p = idToPeriod.get(period_id);
+      return !!p && p.period_index >= (yr - 1) * 12 && p.period_index < yr * 12;
+    };
+    const yrCfRows  = bundle.cashflow.filter(cf => inYear(cf.period_id));
+    const yrExpRows = bundle.expense.filter(e => inYear(e.period_id));
     const sum = (key) => yrCfRows.reduce((s, r) => s + (r[key] || 0), 0);
+    const sumByCategory = (codes) => yrExpRows.reduce(
+      (s, r) => codes.has(r.expense_line_code) ? s + (Number(r.amount) || 0) : s,
+      0,
+    );
     out.push({
       year: yr,
       orders: 0, // Phase 2: derive from monthly volume rows
-      labor: 0, facility: 0, equipment: 0, overhead: 0, vas: 0, startup: 0, // not split here
+      labor:     sumByCategory(CATEGORY_CODES.labor),
+      facility:  sumByCategory(CATEGORY_CODES.facility),
+      equipment: sumByCategory(CATEGORY_CODES.equipment),
+      overhead:  sumByCategory(CATEGORY_CODES.overhead),
+      vas:       sumByCategory(CATEGORY_CODES.vas),
+      startup:   sumByCategory(CATEGORY_CODES.startup),
       totalCost: sum('opex'),
       revenue: sum('revenue'),
       grossProfit: sum('gross_profit'),
