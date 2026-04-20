@@ -1743,6 +1743,10 @@ function renderLaborKpiStripV2(lineCount, totalFtes, totalDirect, totalIndirect)
 }
 
 function renderLaborMasterPane(lines, opHrs, lc) {
+  // Pre-compute total direct labor cost once so each master item can
+  // render its share. Passed into renderLaborMasterItem so it doesn't
+  // re-sum the array N times.
+  const totalDirectCost = lines.reduce((s, l) => s + calc.directLineAnnualSimple(l, lc), 0);
   return `
     <div class="hub-master-detail__master">
       <div class="hub-master-detail__master-header">
@@ -1752,13 +1756,13 @@ function renderLaborMasterPane(lines, opHrs, lc) {
       <div class="hub-master-detail__master-body">
         ${lines.length === 0
           ? `<div class="hub-master-detail__empty"><div style="font-size:28px;margin-bottom:8px;">👥</div>No direct labor lines yet.<br/><span style="color:var(--ies-gray-500);">Click <strong>+ Add</strong> to create one.</span></div>`
-          : lines.map((l, i) => renderLaborMasterItem(l, i, opHrs, lc)).join('')}
+          : lines.map((l, i) => renderLaborMasterItem(l, i, opHrs, lc, totalDirectCost)).join('')}
       </div>
     </div>
   `;
 }
 
-function renderLaborMasterItem(l, i, opHrs, lc) {
+function renderLaborMasterItem(l, i, opHrs, lc, totalDirectCost = 0) {
   const selected = i === _selectedLaborIdx;
   const emp = EMPLOYMENT_CHIP[l.employment_type || 'permanent'] || EMPLOYMENT_CHIP.permanent;
   const fte = calc.fte(l, opHrs);
@@ -1767,11 +1771,25 @@ function renderLaborMasterItem(l, i, opHrs, lc) {
   const hasSeasonality = Array.isArray(l.monthly_overtime_profile) || Array.isArray(l.monthly_absence_profile);
   const hasVariance = (l.performance_variance_pct || 0) > 0;
 
+  // NEW: share-of-total direct labor. Brock ask — helps the team focus on
+  // the big activities driving labor. Shown as a compact pill + a thin
+  // bar underneath the row so scanning the list surfaces outliers fast.
+  const sharePct = totalDirectCost > 0 ? (annualCost / totalDirectCost) * 100 : 0;
+  const shareStr = sharePct >= 10 ? `${sharePct.toFixed(0)}%` : `${sharePct.toFixed(1)}%`;
+  // Color the share chip by magnitude: top-tier lines (>20% of total) get
+  // a subtle blue highlight so eyes go there first.
+  const shareVariant = sharePct >= 20 ? 'info' : 'neutral';
+
   // Bucket chip — shows which pricing bucket this line feeds
   const bucket = (model.pricingBuckets || []).find(b => b.id === l.pricing_bucket);
   const bucketChip = bucket
     ? `<span class="hub-chip hub-chip--neutral" title="Routes to pricing bucket: ${escapeAttr(bucket.name)}">📦 ${escapeHtml(bucket.name)}</span>`
     : `<span class="hub-chip hub-chip--danger" title="No pricing bucket assigned — this line's cost will orphan to Management Fee">⚠ no bucket</span>`;
+
+  // Inline bar visualizing share — helps scan the list at a glance
+  // without reading every percentage. Capped at 100% width.
+  const barWidth = Math.min(100, Math.max(0, sharePct));
+  const barColor = sharePct >= 20 ? 'var(--ies-blue, #0047AB)' : 'var(--ies-gray-300, #d1d5db)';
 
   return `
     <div class="hub-master-detail__item${selected ? ' is-selected' : ''}" data-labor-select="${i}" title="Click to edit">
@@ -1781,10 +1799,14 @@ function renderLaborMasterItem(l, i, opHrs, lc) {
       </div>
       <div class="hub-master-detail__item-secondary">
         <span class="hub-chip hub-chip--${emp.variant}">${emp.label}</span>
+        <span class="hub-chip hub-chip--${shareVariant}" title="${shareStr} of total direct labor cost (${calc.formatCurrency(annualCost)} of ${calc.formatCurrency(totalDirectCost)})">${shareStr} of DL</span>
         ${bucketChip}
         <span>${fte.toFixed(1)} FTE · ${(l.base_uph || 0).toLocaleString()} UPH</span>
         ${hasSeasonality ? `<span class="hub-chip hub-chip--info" title="Has monthly OT/absence seasonality">📊</span>` : ''}
         ${hasVariance ? `<span class="hub-chip hub-chip--warn" title="Variance ±${l.performance_variance_pct}%">±${l.performance_variance_pct}%</span>` : ''}
+      </div>
+      <div class="cm-labor-share-bar" aria-hidden="true" title="${shareStr} of total direct labor">
+        <div class="cm-labor-share-bar__fill" style="width:${barWidth.toFixed(2)}%; background:${barColor};"></div>
       </div>
     </div>
   `;
@@ -3712,6 +3734,11 @@ const WHATIF_SLIDERS = [
   { key: 'benefit_load_pct',          label: 'Benefit Load',           group: 'Labor',        min: 0,  max: 80, step: 1, unit: '%' },
   { key: 'overtime_pct',              label: 'Overtime %',             group: 'Labor',        min: 0,  max: 30, step: 0.5, unit: '%' },
   { key: 'absence_allowance_pct',     label: 'Absence %',              group: 'Labor',        min: 0,  max: 25, step: 0.5, unit: '%' },
+  // Brock 2026-04-20: direct-labor productivity (% to MOST engineered
+  // standard). 100% = pure engineered. Typical trained op: 85–95%.
+  // Flows to labor cost via a 1/prod multiplier on base_uph (lower UPH =
+  // more hours = more $). Matches the MOST productivity_pct concept.
+  { key: 'direct_labor_productivity_pct', label: 'Direct Labor Productivity', group: 'Labor', min: 70, max: 110, step: 0.5, unit: '%' },
   { key: 'labor_escalation_pct',      label: 'Labor Escalation / yr',  group: 'Escalation',   min: 0,  max: 15, step: 0.25, unit: '%' },
   { key: 'facility_escalation_pct',   label: 'Facility Escalation',    group: 'Escalation',   min: 0,  max: 15, step: 0.25, unit: '%' },
 ];
@@ -3728,8 +3755,17 @@ function whatIfCurrentValue(sliderKey) {
     return Number(heuristicOverrides[sliderKey]);
   }
   const def = (heuristicsCatalog || []).find(h => h.key === sliderKey);
-  return def?.default_value ?? 0;
+  if (def?.default_value != null) return def.default_value;
+  // Hard-coded fallback defaults for sliders that may not be in the catalog
+  // (yet). Keeps the slider from rendering at 0 and zeroing out downstream
+  // calcs on first load.
+  return WHATIF_FALLBACK_DEFAULTS[sliderKey] ?? 0;
 }
+
+/** Fallback defaults for sliders not represented in the heuristics catalog. */
+const WHATIF_FALLBACK_DEFAULTS = {
+  direct_labor_productivity_pct: 100,  // 100% = pure MOST engineered (no drag)
+};
 
 /** Same, but as a display string so sliders + readouts stay consistent. */
 function whatIfSource(sliderKey) {
@@ -3739,11 +3775,25 @@ function whatIfSource(sliderKey) {
 }
 
 /**
- * Build a minimal what-if preview using the current model + transient overlay.
- * Returns an object with the same KPI shape the Summary KPI bar uses.
+ * Build a what-if preview using the current model + a transient slider
+ * overlay. When `overlay` is omitted, uses the live `whatIfTransient`. Pass
+ * `{}` to get the baseline (no slider changes) for side-by-side delta
+ * rendering.
+ *
+ * Returns an object mirroring the Summary KPI shape + NPV + baseline
+ * annotations so the UI can compute deltas without re-entering this fn.
+ *
+ * Direct-Labor Productivity (Brock 2026-04-20): when the overlay contains
+ * `direct_labor_productivity_pct` (or when it's resolved from overrides),
+ * we scale labor UPH by (prod/100) — lower prod → lower effective UPH →
+ * more hours for the same volume → higher labor cost. Applied to both the
+ * monthly per-line path and the aggregate fallback.
+ *
+ * @param {Object} [overlay] — transient slider map. Defaults to whatIfTransient.
  */
-function computeWhatIfPreview() {
+function computeWhatIfPreview(overlay) {
   try {
+    const ov = overlay === undefined ? whatIfTransient : (overlay || {});
     const market = model.projectDetails?.market;
     const fr = (refData.facilityRates || []).find(r => r.market_id === market);
     const ur = (refData.utilityRates || []).find(r => r.market_id === market);
@@ -3767,12 +3817,32 @@ function computeWhatIfPreview() {
       annualOrders: orders || 1,
     });
     const calcHeur = scenarios.resolveCalcHeuristics(
-      currentScenario, currentScenarioSnapshots, heuristicOverrides, fin, whatIfTransient,
+      currentScenario, currentScenarioSnapshots, heuristicOverrides, fin, ov,
     );
     const whatIfMarginFrac = (calcHeur.targetMarginPct || 0) / 100;
+
+    // Direct Labor Productivity scaling. Pull from the overlay first, then
+    // from heuristicOverrides, else default to 100 (no drag). Scale is
+    // 100/prod: 90% prod → 1.111× hours → 1.111× labor cost.
+    const dlProd = ov.direct_labor_productivity_pct != null && ov.direct_labor_productivity_pct !== ''
+      ? Number(ov.direct_labor_productivity_pct)
+      : (heuristicOverrides.direct_labor_productivity_pct != null && heuristicOverrides.direct_labor_productivity_pct !== ''
+          ? Number(heuristicOverrides.direct_labor_productivity_pct)
+          : 100);
+    const dlProdClamped = Math.max(1, Math.min(150, Number.isFinite(dlProd) ? dlProd : 100));
+    const laborHoursScale = 100 / dlProdClamped;  // 90 → 1.111, 100 → 1.0, 110 → 0.909
+
+    // Scale labor lines' base_uph (per-line monthly path) + aggregate
+    // laborCost (legacy yearly fallback) so BOTH paths reflect productivity.
+    const scaledLaborLines = (model.laborLines || []).map(l => ({
+      ...l,
+      base_uph: (l.base_uph || 0) / laborHoursScale,  // lower UPH = more hours
+    }));
+    const scaledBaseLaborCost = summary.laborCost * laborHoursScale;
+
     const projResult = calc.buildYearlyProjections({
       years: contractYears,
-      baseLaborCost: summary.laborCost,
+      baseLaborCost: scaledBaseLaborCost,
       baseFacilityCost: summary.facilityCost,
       baseEquipmentCost: summary.equipmentCost,
       baseOverheadCost: summary.overheadCost,
@@ -3784,7 +3854,7 @@ function computeWhatIfPreview() {
       volGrowthPct: calcHeur.volGrowthPct / 100,
       laborEscPct:  calcHeur.laborEscPct  / 100,
       costEscPct:   calcHeur.costEscPct   / 100,
-      laborLines: model.laborLines || [],
+      laborLines: scaledLaborLines,
       taxRatePct: calcHeur.taxRatePct,
       useMonthlyEngine: typeof window !== 'undefined' && window.COST_MODEL_MONTHLY_ENGINE !== false,
       periods: (refData && refData.periods) || [],
@@ -3800,6 +3870,7 @@ function computeWhatIfPreview() {
       _calcHeur: calcHeur,
       marketLaborProfile: currentMarketLaborProfile,
     });
+
     // Aggregate over the projection horizon
     const projections = projResult.projections || [];
     const totalRev = projections.reduce((s, y) => s + (y.revenue || 0), 0);
@@ -3807,10 +3878,33 @@ function computeWhatIfPreview() {
     const totalEbitda = projections.reduce((s, y) => s + (y.ebitda || 0), 0);
     const totalNI = projections.reduce((s, y) => s + (y.netIncome || 0), 0);
     const lastCumFcf = projections.length ? (projections[projections.length - 1].cumFcf || 0) : 0;
+
+    // NPV — so the discount_rate_pct slider has a visible preview effect.
+    // Uses the built-in computeFinancialMetrics (same path Summary uses).
+    const totalFtes = (model.laborLines || []).reduce((s, l) => {
+      if (!opHrs || opHrs <= 0) return s;
+      return s + ((l.annual_hours || 0) / opHrs);
+    }, 0);
+    let npv = 0;
+    try {
+      const metrics = calc.computeFinancialMetrics(projections, {
+        startupCapital: summary.startupCapital || 0,
+        discountRatePct: calcHeur.discountRatePct,
+        reinvestRatePct: calcHeur.reinvestRatePct || 8,
+        totalFtes,
+        fixedCost: summary.facilityCost || 0,
+      });
+      npv = metrics.npv || 0;
+    } catch (metricsErr) {
+      // Metrics are defensive; a failure here shouldn't break the preview.
+      console.warn('[CM] preview metrics computation failed:', metricsErr);
+    }
+
     return {
       totalRev, totalOpex, totalEbitda, totalNI,
       ebitdaMargin: totalRev > 0 ? (totalEbitda / totalRev * 100) : 0,
       cumFcf: lastCumFcf,
+      npv,
       calcHeur,
     };
   } catch (err) {
@@ -3827,7 +3921,13 @@ function renderWhatIfStudio() {
       .finally(() => { _heuristicsLoadInFlight = false; })
       .then(() => renderSection());
   }
+  // Compute BOTH baseline (empty overlay) and current-preview (with
+  // transient overlay) so each KPI can show baseline + delta side-by-
+  // side. Brock 2b: "would it be possible to show the baseline numbers
+  // in the live preview section so the user can clearly see what the
+  // impacts of the changes they're making?"
   const preview = computeWhatIfPreview();
+  const baseline = computeWhatIfPreview({});
   const groups = new Map();
   for (const s of WHATIF_SLIDERS) {
     if (!groups.has(s.group)) groups.set(s.group, []);
@@ -3840,14 +3940,29 @@ function renderWhatIfStudio() {
     Math.abs(n) >= 1e3 ? '$' + (n/1e3).toFixed(0) + 'K' :
     '$' + n.toFixed(0)
   ));
+  // Format delta as ± with color. Returns null-ish string when no
+  // change so render is clean at the baseline state.
+  const fmtDelta = (current, base, formatter = fmt, opts = {}) => {
+    if (current == null || base == null) return '';
+    const delta = current - base;
+    if (Math.abs(delta) < 0.001 * Math.max(Math.abs(base), 1)) return ''; // <0.1% drift, hide
+    const sign = delta >= 0 ? '+' : '−';
+    const absDelta = Math.abs(delta);
+    const pctChange = base !== 0 ? (delta / base) * 100 : 0;
+    const color = delta >= 0 ? (opts.positiveIsGood ? '#16a34a' : '#dc2626') : (opts.positiveIsGood ? '#dc2626' : '#16a34a');
+    return `<div class="cm-whatif-kpi-delta" style="color:${color};">${sign}${formatter(absDelta)} ${Math.abs(pctChange) >= 0.1 ? `(${sign}${Math.abs(pctChange).toFixed(1)}%)` : ''}</div>`;
+  };
 
   const sliderRow = s => {
     const val = whatIfCurrentValue(s.key);
     const src = whatIfSource(s.key);
+    // Source badges now use hub-chip variants instead of hand-rolled colors
+    // so they inherit the design system's pill styling. "Live" was solid
+    // purple (inconsistent with the rest of the app); switched to info-blue.
     const srcBadge = src === 'transient'
-      ? '<span class="hub-status-chip" style="background:#7c3aed;color:white;font-size:9px;padding:1px 5px;">live</span>'
+      ? '<span class="hub-chip hub-chip--info" style="font-size:9px;padding:1px 6px;">live</span>'
       : src === 'override'
-        ? '<span class="hub-status-chip" style="background:#f59e0b;color:white;font-size:9px;padding:1px 5px;">override</span>'
+        ? '<span class="hub-chip hub-chip--warn" style="font-size:9px;padding:1px 6px;">override</span>'
         : '<span style="font-size:10px;color:var(--ies-gray-400);">default</span>';
     return `
       <div style="display:grid;grid-template-columns:1fr 100px 70px;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f3f4f6;">
@@ -3866,87 +3981,70 @@ function renderWhatIfStudio() {
     `;
   };
 
+  // Emit a preview KPI tile with baseline + delta. `positiveIsGood` controls
+  // which direction reads green (revenue up = good; opex up = bad).
+  const kpiTile = (label, current, base, opts = {}) => {
+    const valFmt = opts.formatter || fmt;
+    const valStr = current == null ? '—' : valFmt(current);
+    const baseStr = (base == null || Math.abs((current || 0) - base) < 0.001 * Math.max(Math.abs(base), 1))
+      ? ''
+      : `<div class="cm-whatif-kpi-baseline" title="Baseline (no slider changes)">baseline ${valFmt(base)}</div>`;
+    return `
+      <div class="cm-whatif-kpi">
+        <div class="cm-whatif-kpi-label">${label}</div>
+        <div class="cm-whatif-kpi-value">${valStr}</div>
+        ${fmtDelta(current, base, valFmt, opts)}
+        ${baseStr}
+      </div>
+    `;
+  };
+  const pctFmt = n => (n == null ? '—' : `${n.toFixed(1)}%`);
+
   return `
     <div class="cm-section-header">
       <h2>What-If Studio
-        ${activeCount > 0 ? `<span class="hub-status-chip" style="margin-left:8px;background:#7c3aed;color:white;">${activeCount} live override${activeCount === 1 ? '' : 's'}</span>` : '<span class="hub-status-chip" style="margin-left:8px;">baseline</span>'}
+        ${activeCount > 0
+          ? `<span class="hub-chip hub-chip--info" style="margin-left:8px;">${activeCount} live override${activeCount === 1 ? '' : 's'}</span>`
+          : '<span class="hub-chip" style="margin-left:8px;">baseline</span>'}
       </h2>
       <p class="cm-subtle">Drag sliders to preview how heuristic changes move the deal. Changes are <strong>transient</strong> — click Apply to commit as per-scenario overrides, or Reset to discard.</p>
     </div>
 
     <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:16px;margin-top:12px;">
-      <div class="cm-card">
+      <div class="hub-card">
         ${Array.from(groups.entries()).map(([group, items]) => `
           <div style="margin-bottom:16px;">
             <div style="font-weight:600;font-size:12px;text-transform:uppercase;color:var(--ies-gray-500);letter-spacing:0.5px;margin-bottom:4px;">${group}</div>
             ${items.map(sliderRow).join('')}
           </div>
         `).join('')}
-        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;border-top:1px solid #e5e7eb;padding-top:12px;">
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;border-top:1px solid var(--ies-gray-200);padding-top:12px;">
           <button class="hub-btn" data-cm-action="whatif-reset" ${activeCount === 0 ? 'disabled' : ''}>Reset</button>
-          <button class="hub-btn-primary" data-cm-action="whatif-apply" ${activeCount === 0 ? 'disabled' : ''}>Apply as overrides</button>
+          <button class="hub-btn hub-btn-primary" data-cm-action="whatif-apply" ${activeCount === 0 ? 'disabled' : ''}>Apply as overrides</button>
         </div>
       </div>
 
-      <div class="cm-card" style="background:linear-gradient(180deg,#fafaff,#fff);border-left:4px solid #7c3aed;">
-        <div style="font-weight:700;font-size:14px;margin-bottom:4px;">Live Preview</div>
-        <div style="font-size:11px;color:var(--ies-gray-500);margin-bottom:12px;">Updates on slider release. Over the ${model.projectDetails?.contractTerm || 5}-year horizon.</div>
+      <div class="hub-card cm-whatif-preview-card">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px;">
+          <div style="font-weight:700;font-size:14px;">Live Preview</div>
+          ${activeCount > 0
+            ? `<span class="hub-chip hub-chip--info" style="font-size:10px;">${activeCount} change${activeCount === 1 ? '' : 's'}</span>`
+            : '<span class="hub-chip" style="font-size:10px;">at baseline</span>'}
+        </div>
+        <div style="font-size:11px;color:var(--ies-gray-500);margin-bottom:12px;">
+          Updates on slider release. Over the ${model.projectDetails?.contractTerm || 5}-year horizon.
+          ${activeCount > 0 ? 'Baseline shown for comparison.' : ''}
+        </div>
         ${preview ? `
           <div class="cm-whatif-kpis">
-            <div class="cm-whatif-kpi"><div class="cm-whatif-kpi-label">Total Revenue</div><div class="cm-whatif-kpi-value">${fmt(preview.totalRev)}</div></div>
-            <div class="cm-whatif-kpi"><div class="cm-whatif-kpi-label">Total Opex</div><div class="cm-whatif-kpi-value">${fmt(preview.totalOpex)}</div></div>
-            <div class="cm-whatif-kpi"><div class="cm-whatif-kpi-label">EBITDA</div><div class="cm-whatif-kpi-value">${fmt(preview.totalEbitda)}</div></div>
-            <div class="cm-whatif-kpi"><div class="cm-whatif-kpi-label">EBITDA Margin</div><div class="cm-whatif-kpi-value">${preview.ebitdaMargin.toFixed(1)}%</div></div>
-            <div class="cm-whatif-kpi"><div class="cm-whatif-kpi-label">Net Income</div><div class="cm-whatif-kpi-value">${fmt(preview.totalNI)}</div></div>
-            <div class="cm-whatif-kpi"><div class="cm-whatif-kpi-label">Cum FCF</div><div class="cm-whatif-kpi-value" style="color:${preview.cumFcf >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};">${fmt(preview.cumFcf)}</div></div>
+            ${kpiTile('Total Revenue', preview.totalRev, baseline?.totalRev, { positiveIsGood: true })}
+            ${kpiTile('Total Opex',    preview.totalOpex, baseline?.totalOpex, { positiveIsGood: false })}
+            ${kpiTile('EBITDA',        preview.totalEbitda, baseline?.totalEbitda, { positiveIsGood: true })}
+            ${kpiTile('EBITDA Margin', preview.ebitdaMargin, baseline?.ebitdaMargin, { positiveIsGood: true, formatter: pctFmt })}
+            ${kpiTile('Net Income',    preview.totalNI, baseline?.totalNI, { positiveIsGood: true })}
+            ${kpiTile('NPV',           preview.npv, baseline?.npv, { positiveIsGood: true })}
+            ${kpiTile('Cum FCF',       preview.cumFcf, baseline?.cumFcf, { positiveIsGood: true })}
           </div>
-          <style>
-            /* What-If preview KPIs live in a narrow right-column card, so we
-               can't use the hub-kpi-bar's auto-fill grid. Labels must wrap
-               fully (not truncate to "T." / "E." / "N."). Container queries
-               give us true column-aware sizing without JS measurement. */
-            .cm-whatif-kpis {
-              container-type: inline-size;
-              display: grid;
-              grid-template-columns: repeat(2, minmax(0, 1fr));
-              gap: 8px;
-            }
-            .cm-whatif-kpi {
-              display: flex;
-              flex-direction: column;
-              padding: 10px;
-              border: 1px solid var(--ies-gray-200);
-              border-radius: 6px;
-              background: #fff;
-              min-width: 0;
-            }
-            .cm-whatif-kpi-label {
-              font-size: clamp(10px, 1.1cqw + 9px, 12px);
-              color: var(--ies-gray-500);
-              font-weight: 600;
-              line-height: 1.25;
-              white-space: normal;        /* allow full label to wrap */
-              overflow: visible;
-              text-overflow: clip;
-              word-break: normal;
-            }
-            .cm-whatif-kpi-value {
-              font-size: clamp(14px, 1.6cqw + 12px, 18px);
-              font-weight: 700;
-              color: var(--ies-gray-900);
-              margin-top: 4px;
-              line-height: 1.1;
-            }
-            /* Collapse to single-column when the preview card is very narrow */
-            @container (max-width: 240px) {
-              .cm-whatif-kpis { grid-template-columns: 1fr; }
-            }
-            /* Fallback for browsers without container-query support */
-            @supports not (container-type: inline-size) {
-              .cm-whatif-kpi-label { font-size: 11px; }
-              .cm-whatif-kpi-value { font-size: 15px; }
-            }
-          </style>
           <div style="margin-top:12px;font-size:11px;color:var(--ies-gray-500);">
             Tip: combine sliders (e.g. DSO↑ + margin↓) to stress-test the deal.
           </div>

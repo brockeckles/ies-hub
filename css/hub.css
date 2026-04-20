@@ -1713,6 +1713,87 @@ textarea.hub-input {
   letter-spacing: 0.04em;
 }
 
+/* ---- CM What-If Studio live preview (Brock 2026-04-20) ----
+   Replaces the prior purple-accented gradient card with a neutral
+   hub-card that uses the standard left-accent pattern (info-blue)
+   shared with Wayfair banners, Recommended-SF callouts, etc. Each
+   KPI tile shows value / delta / baseline in a 3-line stack so the
+   user sees impact at a glance without hunting across rows.
+*/
+.cm-whatif-preview-card {
+  border-left: 4px solid var(--ies-blue, #0047AB);
+  background: #fff;
+}
+.cm-whatif-kpis {
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.cm-whatif-kpi {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  border: 1px solid var(--ies-gray-200, #e5e7eb);
+  border-radius: 6px;
+  background: #fff;
+  min-width: 0;
+}
+.cm-whatif-kpi-label {
+  font-size: clamp(10px, 1.1cqw + 9px, 12px);
+  color: var(--ies-gray-500, #6b7280);
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: normal;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.cm-whatif-kpi-value {
+  font-size: clamp(14px, 1.6cqw + 12px, 18px);
+  font-weight: 700;
+  color: var(--ies-gray-900, #111827);
+  margin-top: 3px;
+  line-height: 1.15;
+}
+.cm-whatif-kpi-delta {
+  font-size: 11px;
+  font-weight: 600;
+  margin-top: 2px;
+  line-height: 1.2;
+}
+.cm-whatif-kpi-baseline {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--ies-gray-400, #9ca3af);
+  margin-top: 1px;
+  font-variant-numeric: tabular-nums;
+}
+@container (max-width: 240px) {
+  .cm-whatif-kpis { grid-template-columns: 1fr; }
+}
+@supports not (container-type: inline-size) {
+  .cm-whatif-kpi-label { font-size: 10px; }
+  .cm-whatif-kpi-value { font-size: 15px; }
+}
+
+/* ---- CM Labor master-item share-of-total bar (Brock new #1) ----
+   A thin horizontal bar at the bottom of each direct-labor chip so
+   you can visually scan which activities drive the biggest chunk of
+   direct labor cost. Pairs with a "% of DL" chip in the secondary row.
+*/
+.cm-labor-share-bar {
+  height: 3px;
+  margin-top: 6px;
+  background: var(--ies-gray-100, #f3f4f6);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.cm-labor-share-bar__fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.15s ease;
+}
+
 /* ---- CM MOST per-row revert button (↺ when UPH is overridden) ---- */
 /* Previously inline-styled at 12px font — too small to read next to the 11px
    select. Bumped to 16px with a subtle amber pill affordance so it's clearly
