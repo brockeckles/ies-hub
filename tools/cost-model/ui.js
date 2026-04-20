@@ -10,7 +10,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import * as calc from './calc.js?v=20260420-vS';
+import * as calc from './calc.js?v=20260420-vT';
 import * as api from './api.js?v=20260419-uH';
 import * as scenarios from './calc.scenarios.js?v=20260419-sZ';
 import * as monthlyCalc from './calc.monthly.js?v=20260420-vN';
@@ -1290,7 +1290,15 @@ function renderShifts() {
   const lc = model.laborCosting || (model.laborCosting = {});
   const opHrs = calc.operatingHours(s);
   const paidHrs = (s.hoursPerShift || 8) * (s.daysPerWeek || 5) * (s.weeksPerYear || 52);
-  const productiveHrs = Math.max(0, paidHrs - (Number(s.ptoHoursPerYear) || 0) - (Number(s.holidayHoursPerYear) || 0));
+  // Productive Hours / Person (per doc §2.1/2.2 — display only; cost math
+  // treats PTO as headcount uplift). Reads the new pto_pct / directUtilization
+  // fields stored as percentages (divide by 100 at read).
+  const utilFrac     = (Number(s.directUtilization ?? 85)) / 100;
+  const ptoFrac      = (Number(s.ptoPct            ?? 5))  / 100;
+  const holidayFrac  = (Number(s.holidayPct        ?? 0))  / 100;
+  const productiveHrs = Math.max(0, Math.round(
+    paidHrs * utilFrac * (1 - ptoFrac) * (1 - holidayFrac)
+  ));
   const positions = Array.isArray(s.positions) ? s.positions : [];
   const directCount = positions.filter(p => p.category === 'direct').length;
   const indirectCount = positions.filter(p => p.category === 'indirect').length;
@@ -1372,6 +1380,10 @@ function renderShifts() {
     </div>
 
     <!-- Global Labor Economics -->
+    <!-- Brock 2026-04-20: collapsed Burden% + Benefit Load% → single Wage Load%
+         per Labor Build-Up Logic doc §3.2. Adding both was double-dipping the
+         same bucket (payroll taxes + workers comp + health + retirement +
+         benefits). Canonical = ONE number, 30-31% reference range. -->
     <div class="hub-card mb-4">
       <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;">
         <div class="text-subtitle" style="margin:0;">Global Labor Economics</div>
@@ -1379,19 +1391,15 @@ function renderShifts() {
       </div>
       <div style="display:grid;grid-template-columns:repeat(4, minmax(0, 1fr));gap:12px;">
         <div class="hub-field">
-          <label class="hub-field__label" title="Fringe rate applied to base wage: payroll taxes + workers comp. Typical 25-35%.">Burden %</label>
+          <label class="hub-field__label" title="Single consolidated employer-side load on top of base wage — covers payroll taxes + workers comp + health + retirement + benefits + paid sick. Reference model: 29.99% Y1 → 31.33% Y5 (doc §3.2). Typical 25-35%.">Wage Load %</label>
           <input class="hub-input" type="number" min="0" max="100" step="0.5" value="${lc.defaultBurdenPct ?? 30}" data-field="laborCosting.defaultBurdenPct" data-type="number" />
-        </div>
-        <div class="hub-field">
-          <label class="hub-field__label" title="Health / retirement / paid benefits as % of base wage — layered on top of Burden. Typical 12-18%.">Benefit Load %</label>
-          <input class="hub-input" type="number" min="0" max="50" step="0.5" value="${lc.benefitLoadPct ?? 15}" data-field="laborCosting.benefitLoadPct" data-type="number" />
         </div>
         <div class="hub-field">
           <label class="hub-field__label" title="Planned bonus pay as % of base wage. Blend across all roles.">Bonus %</label>
           <input class="hub-input" type="number" min="0" max="50" step="0.25" value="${s.bonusPct ?? 5}" data-field="shifts.bonusPct" data-type="number" />
         </div>
         <div class="hub-field">
-          <label class="hub-field__label" title="Planned overtime hours as % of regular. Each OT hour costs 1.5×. Typical 3-8%.">Overtime %</label>
+          <label class="hub-field__label" title="Planned overtime hours as % of regular. Each OT hour costs 1.5×. Typical 3-8%. Hourly-nonexempt only — salary roles are exempt (doc §3.4).">Overtime %</label>
           <input class="hub-input" type="number" min="0" max="50" step="0.5" value="${lc.overtimePct ?? 5}" data-field="laborCosting.overtimePct" data-type="number" />
         </div>
         <div class="hub-field">
@@ -1399,12 +1407,23 @@ function renderShifts() {
           <input class="hub-input" type="number" min="0" max="150" step="1" value="${lc.turnoverPct ?? 45}" data-field="laborCosting.turnoverPct" data-type="number" />
         </div>
         <div class="hub-field">
-          <label class="hub-field__label" title="Paid time off hours per FTE per year (vacation + sick). Typical 80-120.">PTO Hours / Year</label>
-          <input class="hub-input" type="number" min="0" max="500" step="8" value="${s.ptoHoursPerYear ?? 80}" data-field="shifts.ptoHoursPerYear" data-type="number" />
+          <label class="hub-field__label" title="PTO as % of scheduled hours. Treated as permanent-headcount uplift (you hire 1/(1-pto%) more people for coverage) — NOT an hours reduction per doc §2.2. Typical 4-8% (≈ 2-4 weeks/yr).">PTO %</label>
+          <input class="hub-input" type="number" min="0" max="20" step="0.5" value="${s.ptoPct ?? 5}" data-field="shifts.ptoPct" data-type="number" />
         </div>
         <div class="hub-field">
-          <label class="hub-field__label" title="Paid holiday hours per FTE per year. Typical 56-80 (7-10 holidays × 8 hrs).">Holiday Hours / Year</label>
-          <input class="hub-input" type="number" min="0" max="200" step="8" value="${s.holidayHoursPerYear ?? 64}" data-field="shifts.holidayHoursPerYear" data-type="number" />
+          <label class="hub-field__label" title="PF&D haircut applied to UPH (not hours) per doc §2.1. Captures personal allowance, fatigue, delay, paid breaks, activity-switching. Reference 85%. Range 75-90%.">Direct Utilization %</label>
+          <input class="hub-input" type="number" min="50" max="100" step="0.5" value="${s.directUtilization ?? 85}" data-field="shifts.directUtilization" data-type="number" />
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label" title="Paid holidays as % of scheduled hours. 8 holidays × 8 hrs / 2080 = 3.08%. Treatment controls whether this reduces hours-per-FTE or uplifts headcount for coverage.">Holiday %</label>
+          <input class="hub-input" type="number" min="0" max="10" step="0.1" value="${s.holidayPct ?? 0}" data-field="shifts.holidayPct" data-type="number" />
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label" title="reduce_hours = 8×5 B2B close on holidays. headcount_uplift = 24/7 e-comm needs coverage.">Holiday Treatment</label>
+          <select class="hub-input" data-field="shifts.holidayTreatment">
+            <option value="reduce_hours"${(s.holidayTreatment || 'reduce_hours') === 'reduce_hours' ? ' selected' : ''}>Reduce hours</option>
+            <option value="headcount_uplift"${s.holidayTreatment === 'headcount_uplift' ? ' selected' : ''}>Headcount uplift</option>
+          </select>
         </div>
       </div>
     </div>
@@ -1661,37 +1680,12 @@ function renderLaborV1() {
       </div>
     </div>
 
-    <!-- Labor Costing Factors — global multipliers that apply across rows -->
-    <div class="hub-card mb-4" style="background:var(--ies-gray-50);">
-      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;">
-        <div class="text-subtitle" style="margin:0;">Labor Costing Factors <span style="font-size:11px;color:var(--ies-gray-400);font-weight:500;">(global)</span></div>
-        <span style="font-size:11px;color:var(--ies-gray-400);">Per-row Burden% in the table below overrides Default Burden for that line.</span>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(5, minmax(0, 1fr));gap:10px;font-size:12px;">
-        <div class="cm-form-group" style="margin:0;">
-          <label class="cm-form-label" title="Fringe rate applied to base wage for benefits + payroll taxes. Typical 28-35%.">Default Burden %</label>
-          <input class="hub-input" type="number" min="0" max="100" step="0.5" value="${lc.defaultBurdenPct ?? 30}" data-field="laborCosting.defaultBurdenPct" data-type="number" />
-        </div>
-        <div class="cm-form-group" style="margin:0;">
-          <label class="cm-form-label" title="Planned overtime hours as % of regular hours. Each OT hour costs 1.5x. Typical 3-8%.">Overtime %</label>
-          <input class="hub-input" type="number" min="0" max="50" step="0.5" value="${lc.overtimePct ?? 5}" data-field="laborCosting.overtimePct" data-type="number" />
-        </div>
-        <div class="cm-form-group" style="margin:0;">
-          <label class="cm-form-label" title="Health/retirement benefits as % of base wage — layered on top of Burden. Typical 12-18%.">Benefit Load %</label>
-          <input class="hub-input" type="number" min="0" max="50" step="0.5" value="${lc.benefitLoadPct ?? 15}" data-field="laborCosting.benefitLoadPct" data-type="number" />
-        </div>
-        <div class="cm-form-group" style="margin:0;">
-          <label class="cm-form-label" title="PTO days per FTE per year — reduces effective productive hours. Typical 10-20 days.">PTO Days</label>
-          <input class="hub-input" type="number" min="0" max="40" step="1" value="${lc.ptoDays ?? 12}" data-field="laborCosting.ptoDays" data-type="number" />
-        </div>
-        <div class="cm-form-group" style="margin:0;">
-          <label class="cm-form-label" title="Annual % of workforce requiring replacement — drives recruiting/onboarding cost. 3PL warehouses typically see 40-80%.">Turnover %</label>
-          <input class="hub-input" type="number" min="0" max="150" step="1" value="${lc.turnoverPct ?? 45}" data-field="laborCosting.turnoverPct" data-type="number" />
-        </div>
-      </div>
-    </div>
+    <!-- Brock 2026-04-20: collapsed to a read-only banner linking to Labor
+         Factors. Burden/Benefits were double-counting; canonical lives on
+         Labor Factors now. See renderLaborFactorsBanner. -->
+    ${renderLaborFactorsBanner(lc, model.shifts)}
 
-    <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+    <div style="display: flex; gap: 8px; margin: 16px 0;">
       <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-indirect">Auto-Generate Indirect Labor</button>
     </div>
 
@@ -1830,7 +1824,7 @@ function renderLaborV2() {
       </div>
     </div>
 
-    ${renderLaborCostingFactorsV2(lc)}
+    ${renderLaborFactorsBanner(lc, model.shifts)}
     ${renderLaborKpiStripV2(lines.length, totalFtes, totalDirect, totalIndirect)}
 
     <!-- Master-detail for Direct Labor -->
@@ -2294,35 +2288,45 @@ function renderMonthlyLaborViewCard() {
   `;
 }
 
-function renderLaborCostingFactorsV2(lc) {
+/**
+ * Read-only summary banner for Labor section — replaces the old "Global
+ * Costing Factors" duplicate card. The editable source of truth lives on
+ * Labor Factors (section key: 'shifts'). This banner just surfaces the
+ * current values inline so the user doesn't have to navigate away to check.
+ *
+ * Brock 2026-04-20: "Burden% + Benefit Load% was double-dipping the same
+ * bucket" — collapsed to ONE Wage Load %. Old per-line `burden_pct` override
+ * still wins; see detail pane.
+ */
+function renderLaborFactorsBanner(lc, shifts) {
+  const s = shifts || {};
+  const wageLoad = lc?.defaultBurdenPct ?? 30;
+  const ot       = lc?.overtimePct      ?? 5;
+  const bonus    = s.bonusPct           ?? 5;
+  const turnover = lc?.turnoverPct      ?? 45;
+  const pto      = s.ptoPct             ?? 5;
+  const util     = s.directUtilization  ?? 85;
+  const chip = (label, value, suffix = '%') => `
+    <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:#fff;border:1px solid var(--ies-gray-200);border-radius:999px;font-size:12px;line-height:1.2;">
+      <span style="color:var(--ies-gray-500);">${label}</span>
+      <span style="font-weight:600;color:var(--ies-gray-800);">${value}${suffix}</span>
+    </span>`;
   return `
-    <div class="hub-card" style="padding:16px 20px;background:var(--ies-gray-50);">
-      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;gap:12px;">
-        <h3 class="hub-section-heading" style="margin:0;">Global Costing Factors</h3>
-        <span class="hub-field__hint">Applied across every line. Per-line overrides live in each row's detail pane.</span>
+    <div class="hub-card" style="padding:12px 16px;background:var(--ies-gray-50);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span style="font-size:12px;color:var(--ies-gray-500);font-weight:500;">Global factors</span>
+        ${chip('Wage Load', wageLoad)}
+        ${chip('OT', ot)}
+        ${chip('Bonus', bonus)}
+        ${chip('Turnover', turnover)}
+        ${chip('PTO', pto)}
+        ${chip('Util', util)}
       </div>
-      <div style="display:grid;grid-template-columns:repeat(5, minmax(0, 1fr));gap:16px;">
-        <div class="hub-field">
-          <label class="hub-field__label" title="Fringe rate applied to base wage for benefits + payroll taxes. Typical 28-35%.">Burden %</label>
-          <input class="hub-input hub-num" type="number" min="0" max="100" step="0.5" value="${lc.defaultBurdenPct ?? 30}" data-field="laborCosting.defaultBurdenPct" data-type="number" />
-        </div>
-        <div class="hub-field">
-          <label class="hub-field__label" title="Planned overtime hours as % of regular hours. Each OT hour costs 1.5x. Typical 3-8%.">Overtime %</label>
-          <input class="hub-input hub-num" type="number" min="0" max="50" step="0.5" value="${lc.overtimePct ?? 5}" data-field="laborCosting.overtimePct" data-type="number" />
-        </div>
-        <div class="hub-field">
-          <label class="hub-field__label" title="Health/retirement benefits as % of base wage — layered on top of Burden. Typical 12-18%.">Benefits %</label>
-          <input class="hub-input hub-num" type="number" min="0" max="50" step="0.5" value="${lc.benefitLoadPct ?? 15}" data-field="laborCosting.benefitLoadPct" data-type="number" />
-        </div>
-        <div class="hub-field">
-          <label class="hub-field__label" title="PTO days per FTE per year — reduces effective productive hours. Typical 10-20 days.">PTO Days</label>
-          <input class="hub-input hub-num" type="number" min="0" max="40" step="1" value="${lc.ptoDays ?? 12}" data-field="laborCosting.ptoDays" data-type="number" />
-        </div>
-        <div class="hub-field">
-          <label class="hub-field__label" title="Annual % of workforce requiring replacement. 3PL warehouses typically see 40-80%.">Turnover %</label>
-          <input class="hub-input hub-num" type="number" min="0" max="150" step="1" value="${lc.turnoverPct ?? 45}" data-field="laborCosting.turnoverPct" data-type="number" />
-        </div>
-      </div>
+      <button class="hub-btn hub-btn-secondary hub-btn-sm"
+              data-action="goto-section" data-section="shifts"
+              title="Edit these factors on the Labor Factors page">
+        Edit in Labor Factors →
+      </button>
     </div>
   `;
 }
@@ -5754,6 +5758,17 @@ function handleAction(action, idx) {
     case 'open-equipment-catalog':
       openEquipmentCatalog();
       return; // modal is async, don't re-render the section yet
+    case 'goto-section': {
+      // Used by the Labor section banner to jump to Labor Factors
+      // (section key 'shifts'). See renderLaborFactorsBanner.
+      const target = btn.dataset.section || '';
+      if (target) {
+        activeSection = target;
+        state.set('costModel.activeSection', target);
+        renderSection();
+      }
+      return;
+    }
     case 'add-overhead':
       model.overheadLines.push({ category: '', description: '', cost_type: 'monthly', monthly_cost: 0, pricing_bucket: defaultBucketFor('overhead') });
       break;
@@ -6721,6 +6736,34 @@ function renderLanding() {
 function migrateLaborLinesToPositions(m) {
   if (!m) return;
   if (!m.shifts) m.shifts = {};
+  // Phase A Labor Build-Up Logic (Brock 2026-04-20): seed the new shift
+  // fields on any project that predates them so the Productive Hours tile
+  // + Global Labor Economics grid render sensible defaults. Backward compat:
+  // legacy ptoHoursPerYear → ptoPct when the latter is missing.
+  const s = m.shifts;
+  if (s.ptoPct == null) {
+    // If legacy ptoHoursPerYear was customized, convert to % of scheduled.
+    // Else default 5% per doc.
+    const paid = (s.hoursPerShift || 8) * (s.daysPerWeek || 5) * (s.weeksPerYear || 52) || 2080;
+    const legacyPtoHrs = Number(s.ptoHoursPerYear);
+    s.ptoPct = (Number.isFinite(legacyPtoHrs) && legacyPtoHrs > 0)
+      ? Math.min(20, Math.round(legacyPtoHrs / paid * 1000) / 10) // 1 decimal place
+      : 5;
+  }
+  if (s.directUtilization == null) s.directUtilization = 85;
+  if (s.holidayPct == null) {
+    // If legacy holidayHoursPerYear was customized, convert to % of scheduled.
+    const paid = (s.hoursPerShift || 8) * (s.daysPerWeek || 5) * (s.weeksPerYear || 52) || 2080;
+    const legacyHolidayHrs = Number(s.holidayHoursPerYear);
+    s.holidayPct = (Number.isFinite(legacyHolidayHrs) && legacyHolidayHrs > 0)
+      ? Math.min(10, Math.round(legacyHolidayHrs / paid * 1000) / 10)
+      : 0;
+  }
+  if (s.holidayTreatment == null) s.holidayTreatment = 'reduce_hours';
+  // Clean up the laborCosting double-dipper: if benefitLoadPct is still
+  // set, leave it in the data (rollback safety) but calc ignores it. The
+  // UI field is removed. See tools/cost-model/calc.js wageLoadFracForLine.
+
   if (!Array.isArray(m.shifts.positions)) m.shifts.positions = [];
   const positions = m.shifts.positions;
 
@@ -6801,6 +6844,15 @@ function createEmptyModel() {
       bonusPct: 5,
       ptoHoursPerYear: 80,
       holidayHoursPerYear: 64,
+      // Phase A Labor Build-Up Logic (Brock 2026-04-20 doc):
+      //   ptoPct              — fraction × 100 (UI %). Headcount uplift per §2.2.
+      //   directUtilization   — PF&D factor × 100. Applied to UPH per §2.1.
+      //   holidayPct          — % of scheduled hours. 8 holidays × 8 hrs / 2080 ≈ 3.08%.
+      //   holidayTreatment    — 'reduce_hours' (B2B) | 'headcount_uplift' (24/7 ecomm).
+      ptoPct: 5,
+      directUtilization: 85,
+      holidayPct: 0,
+      holidayTreatment: 'reduce_hours',
       // Position catalog — seeded empty, auto-populated from existing labor
       // lines on load (migrateLaborLinesToPositions).
       positions: [],
