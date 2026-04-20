@@ -240,6 +240,14 @@ let _selectedLaborIdx = 0;
  */
 let _indirectBreakdownCache = null;
 
+/**
+ * Monthly Labor View year scope — 0 = "All years", 1..N = that specific
+ * contract year. Default Y1 because the intra-year seasonality pattern
+ * is the primary signal; the full contract view conflates seasonality
+ * with volume growth.
+ */
+let _mlvViewYear = 1;
+
 function isCmV2UiOn() {
   return typeof window === 'undefined' || window.COST_MODEL_V2_UI !== false;
 }
@@ -1785,15 +1793,82 @@ function renderMonthlyLaborViewCard() {
   const { summary, months } = view;
   const { direct, byMhe, byIt, indirect } = summary;
 
-  // Mini sparkline — 60 thin bars scaled to the peak-month FTE. The max
-  // bar is blue; others gray. Enough to see the seasonal curve without
-  // pulling in Chart.js.
-  const peak = direct.peakFte || 1;
-  const sparkline = months.map(m => {
-    const pct = peak > 0 ? (m.total_fte / peak) * 100 : 0;
-    const isPeak = Math.abs(m.total_fte - direct.peakFte) < 1e-6;
-    return `<div class="cm-mlv-bar${isPeak ? ' is-peak' : ''}" style="height:${pct.toFixed(1)}%;" title="${m.label}: ${m.total_fte.toFixed(1)} FTE"></div>`;
+  // ── PER-YEAR SCOPE (Brock 2026-04-20) ─────────────────────────────
+  // Flat 60-month sparkline conflated seasonality (intra-year) with
+  // volume growth (year-over-year). Chart now defaults to a single year
+  // so the J-D seasonality curve is legible. Year pills + "All" toggle.
+  const nContractYears = Math.max(1, Math.ceil(months.length / 12));
+  if (_mlvViewYear > nContractYears) _mlvViewYear = 1;
+  const selectedYear = _mlvViewYear; // 0 = All, 1..N = that year
+  const monthsInView = selectedYear === 0
+    ? months
+    : months.filter(m => Math.floor(m.period_index / 12) === selectedYear - 1);
+
+  // Scoped peak / avg / min (replaces contract-wide numbers in KPI strip
+  // when a single year is selected).
+  let scopePeakFte = 0, scopePeakLabel = '';
+  let scopeMinFte  = Number.POSITIVE_INFINITY, scopeMinLabel = '';
+  let scopeSumFte  = 0;
+  for (const m of monthsInView) {
+    if (m.total_fte > scopePeakFte) { scopePeakFte = m.total_fte; scopePeakLabel = m.label; }
+    if (m.total_fte < scopeMinFte)  { scopeMinFte  = m.total_fte; scopeMinLabel  = m.label; }
+    scopeSumFte += m.total_fte;
+  }
+  if (!Number.isFinite(scopeMinFte)) scopeMinFte = 0;
+  const scopeAvgFte = monthsInView.length > 0 ? scopeSumFte / monthsInView.length : 0;
+
+  // Baseline band = min-month FTE in view. Seasonal wedge = total - baseline.
+  // Bars are stacked: gray baseline on bottom (year-round FTE you need
+  // regardless) + orange wedge on top (short-term flex during peak months).
+  const baseline = scopeMinFte;
+  const chartMax = Math.max(1, scopePeakFte);
+
+  // Year pills — Y1..YN + "All". N based on labor lines' period coverage.
+  const yearPills = nContractYears > 1 ? `
+    <div class="cm-mlv-year-pills" role="tablist" aria-label="Contract year">
+      ${Array.from({ length: nContractYears }, (_, i) => i + 1).map(y => `
+        <button class="cm-mlv-year-pill${selectedYear === y ? ' is-active' : ''}" role="tab"
+                aria-selected="${selectedYear === y}" data-action="set-mlv-year" data-idx="${y}"
+                title="Year ${y} of the contract">Y${y}</button>
+      `).join('')}
+      <button class="cm-mlv-year-pill${selectedYear === 0 ? ' is-active' : ''}" role="tab"
+              aria-selected="${selectedYear === 0}" data-action="set-mlv-year" data-idx="0"
+              title="All ${nContractYears} contract years — useful for seeing year-over-year growth on top of seasonality">All</button>
+    </div>
+  ` : '';
+
+  // Chart bars (stacked wedge + baseline).
+  const chartBars = monthsInView.map(m => {
+    const total  = m.total_fte;
+    const wedge  = Math.max(0, total - baseline);
+    const basePct  = chartMax > 0 ? (baseline / chartMax) * 100 : 0;
+    const wedgePct = chartMax > 0 ? (wedge    / chartMax) * 100 : 0;
+    const isPeak = Math.abs(total - scopePeakFte) < 1e-6 && wedge > 0;
+    const tip = `${m.label}: ${total.toFixed(1)} FTE`
+              + ` (baseline ${baseline.toFixed(1)}`
+              + (wedge > 0 ? ` + ${wedge.toFixed(1)} flex` : '')
+              + ')';
+    return `
+      <div class="cm-mlv-bar-col" title="${escapeAttr(tip)}">
+        <div class="cm-mlv-bar-wedge${isPeak ? ' is-peak' : ''}" style="height:${wedgePct.toFixed(1)}%;"></div>
+        <div class="cm-mlv-bar-base" style="height:${basePct.toFixed(1)}%;"></div>
+      </div>
+    `;
   }).join('');
+
+  // X-axis labels — month abbreviations for single year, year markers for "All"
+  const MONTH_ABBR = ['J','F','M','A','M','J','J','A','S','O','N','D'];
+  const xAxis = selectedYear === 0
+    ? monthsInView.map(m => {
+        // Only label every 12th month (first month of each contract year).
+        const isYearStart = (m.period_index % 12) === 0;
+        const yearLabel = isYearStart ? `Y${Math.floor(m.period_index / 12) + 1}` : '';
+        return `<span class="cm-mlv-axis-label${isYearStart ? ' is-year-start' : ''}">${yearLabel}</span>`;
+      }).join('')
+    : monthsInView.map(m => {
+        const abbr = MONTH_ABBR[(m.calendar_month - 1 + 12) % 12] || '';
+        return `<span class="cm-mlv-axis-label">${abbr}</span>`;
+      }).join('');
 
   // Per-type fleet table — one row per MHE type
   const typeRows = (types, labelFn) => {
@@ -1826,71 +1901,97 @@ function renderMonthlyLaborViewCard() {
   };
   const IT_LABELS = { rf_scanner: 'RF Scanner', voice_pick: 'Voice Pick' };
 
-  // How many fleet types have any seasonal flex (used to enable Sync button)
-  const mheTypesWithFlex = Object.entries(byMhe).filter(([, s]) => s.seasonalCount > 0).length;
-  const itTypesWithFlex  = Object.entries(byIt).filter(([, s]) => s.seasonalCount > 0).length;
-  const totalFlexTypes   = mheTypesWithFlex + itTypesWithFlex;
-  const hasIndirectFlex  = (indirect?.seasonalHc || 0) > 0;
+  // Aggregate seasonal flex across all types (drives the inline Sync CTA).
+  const totalFlexMhe = Object.values(byMhe).reduce((s, t) => s + (t.seasonalCount || 0), 0);
+  const totalFlexIt  = Object.values(byIt).reduce((s, t) => s + (t.seasonalCount || 0), 0);
+  const totalFlexHc  = indirect?.seasonalHc || 0;
+  const hasAnyFlex   = totalFlexMhe > 0 || totalFlexIt > 0 || totalFlexHc > 0;
+  const flexParts = [];
+  if (totalFlexMhe > 0) flexParts.push(`<strong>${totalFlexMhe}</strong> MHE unit${totalFlexMhe !== 1 ? 's' : ''}`);
+  if (totalFlexIt > 0)  flexParts.push(`<strong>${totalFlexIt}</strong> IT device${totalFlexIt !== 1 ? 's' : ''}`);
+  if (totalFlexHc > 0)  flexParts.push(`<strong>${totalFlexHc}</strong> indirect HC`);
+
+  // Scope label for KPI sub-line ("Y1 monthly avg" vs "across 60 months")
+  const scopeLbl = selectedYear === 0
+    ? `across ${monthsInView.length} contract months`
+    : `Y${selectedYear} — ${monthsInView.length} months`;
+  const swingPct = scopeMinFte > 0
+    ? `+${(((scopePeakFte / scopeMinFte) - 1) * 100).toFixed(0)}%`
+    : '—';
 
   return `
     <div class="hub-card cm-mlv-card" style="margin-top:28px;padding:20px;">
-      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px;gap:12px;flex-wrap:wrap;">
-        <div>
+      <div class="cm-mlv-header">
+        <div class="cm-mlv-header__title">
           <h3 class="hub-section-heading" style="margin:0;">Monthly Labor View</h3>
           <div class="hub-field__hint">
-            Per-month direct-FTE curve over the ${contractYears}-year contract. Fleet / indirect counts derive from <strong>${shiftsPerDay}</strong>-shift operation.
+            Seasonality of direct labor — how peak staffing swings above the year-round baseline.
+            Use this to size peak MHE rentals and temp indirect staffing. Fleet counts derive from <strong>${shiftsPerDay}</strong>-shift ops.
           </div>
         </div>
-        <div style="display:flex;gap:8px;align-items:center;">
-          <span class="hub-chip hub-chip--info">peak/avg/min staffing</span>
-          ${(totalFlexTypes > 0 || hasIndirectFlex) ? `
-            <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="sync-seasonal-flex"
-                    title="Populate peak_markup_pct on matching Equipment lines (20% default) + peak_only_hc/peak_months/peak_markup_pct on matching Indirect lines (30% temp-agency default, 3 peak months). Non-destructive: leaves your baseline quantity/headcount alone.">
-              ↻ Sync seasonal flex → Equipment / Indirect
-            </button>
-          ` : ''}
-        </div>
+        ${yearPills}
       </div>
 
-      <!-- KPI strip: Peak / Avg / Min Direct FTE -->
-      <div style="display:grid;grid-template-columns:repeat(4, minmax(0, 1fr));gap:12px;margin-top:16px;">
+      <!-- KPI strip — scoped to the currently selected year -->
+      <div class="cm-mlv-kpi-strip">
         <div class="cm-mlv-kpi">
           <div class="cm-mlv-kpi-label">PEAK DIRECT FTE</div>
-          <div class="cm-mlv-kpi-value" style="color:var(--ies-orange, #d97706);">${direct.peakFte.toFixed(1)}</div>
-          <div class="cm-mlv-kpi-sub">${escapeHtml(direct.peakMonthLabel)}</div>
+          <div class="cm-mlv-kpi-value" style="color:var(--ies-orange, #d97706);">${scopePeakFte.toFixed(1)}</div>
+          <div class="cm-mlv-kpi-sub">${escapeHtml(scopePeakLabel)}</div>
         </div>
         <div class="cm-mlv-kpi">
           <div class="cm-mlv-kpi-label">AVG DIRECT FTE</div>
-          <div class="cm-mlv-kpi-value">${direct.avgFte.toFixed(1)}</div>
-          <div class="cm-mlv-kpi-sub">across ${months.length} months</div>
+          <div class="cm-mlv-kpi-value">${scopeAvgFte.toFixed(1)}</div>
+          <div class="cm-mlv-kpi-sub">${scopeLbl}</div>
         </div>
         <div class="cm-mlv-kpi">
-          <div class="cm-mlv-kpi-label">MIN DIRECT FTE</div>
-          <div class="cm-mlv-kpi-value" style="color:var(--ies-blue, #0047AB);">${direct.minFte.toFixed(1)}</div>
-          <div class="cm-mlv-kpi-sub">${escapeHtml(direct.minMonthLabel)}</div>
+          <div class="cm-mlv-kpi-label">BASELINE (MIN)</div>
+          <div class="cm-mlv-kpi-value" style="color:var(--ies-blue, #0047AB);">${scopeMinFte.toFixed(1)}</div>
+          <div class="cm-mlv-kpi-sub">${escapeHtml(scopeMinLabel)}</div>
         </div>
         <div class="cm-mlv-kpi">
-          <div class="cm-mlv-kpi-label">PEAK-TO-MIN Δ</div>
-          <div class="cm-mlv-kpi-value">${(direct.peakFte - direct.minFte).toFixed(1)}</div>
-          <div class="cm-mlv-kpi-sub">${direct.minFte > 0 ? `+${(((direct.peakFte / direct.minFte) - 1) * 100).toFixed(0)}%` : '—'} swing</div>
+          <div class="cm-mlv-kpi-label">PEAK → BASELINE Δ</div>
+          <div class="cm-mlv-kpi-value">${(scopePeakFte - scopeMinFte).toFixed(1)}</div>
+          <div class="cm-mlv-kpi-sub">${swingPct} swing</div>
         </div>
       </div>
 
-      <!-- Sparkline: 60 bars (monthly), peak highlighted -->
-      <div style="margin-top:16px;">
-        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px;">
-          <div class="hub-field__hint">Monthly direct FTE curve</div>
-          <div class="hub-field__hint"><span style="display:inline-block;width:8px;height:8px;background:var(--ies-orange, #d97706);border-radius:1px;margin-right:4px;"></span>peak</div>
+      <!-- Seasonality chart: gray baseline + orange wedge above it -->
+      <div class="cm-mlv-chart-wrap">
+        <div class="cm-mlv-chart-legend">
+          <span class="cm-mlv-legend-swatch cm-mlv-legend-swatch--wedge"></span>
+          <span>Seasonal flex (peak uplift above baseline)</span>
+          <span class="cm-mlv-legend-swatch cm-mlv-legend-swatch--base" style="margin-left:16px;"></span>
+          <span>Baseline (year-round min-month FTE)</span>
         </div>
-        <div class="cm-mlv-sparkline" role="img" aria-label="Monthly direct-labor FTE curve across the contract">
-          ${sparkline}
+        <div class="cm-mlv-chart${selectedYear === 0 ? ' is-all-years' : ''}" role="img"
+             aria-label="Monthly direct-labor FTE curve${selectedYear === 0 ? ' across the full contract' : ` for year ${selectedYear}`}">
+          ${chartBars}
         </div>
-        <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:10px;color:var(--ies-gray-400);">
-          <span>${escapeHtml(months[0]?.label || '')}</span>
-          <span>${escapeHtml(months[Math.floor(months.length / 2)]?.label || '')}</span>
-          <span>${escapeHtml(months[months.length - 1]?.label || '')}</span>
+        <div class="cm-mlv-chart-axis${selectedYear === 0 ? ' is-all-years' : ''}">
+          ${xAxis}
         </div>
       </div>
+
+      <!-- Inline Sync CTA — directly under the chart that surfaces the flex -->
+      ${hasAnyFlex ? `
+        <div class="cm-mlv-flex-cta">
+          <div class="cm-mlv-flex-cta__text">
+            <strong>Peak months</strong> need ${flexParts.join(', ')} above the year-round baseline.
+            Sync these into Equipment (as peak-markup %) and Indirect Labor (as peak-only HC) so the P&L and pricing reflect the seasonal cost.
+          </div>
+          <button class="hub-btn hub-btn-primary hub-btn-sm cm-mlv-flex-cta__btn" data-action="sync-seasonal-flex"
+                  title="Populate peak_markup_pct on matching Equipment lines (20% default) + peak_only_hc/peak_months/peak_markup_pct on matching Indirect lines (30% temp-agency default, 3 peak months). Non-destructive: leaves your baseline quantity/headcount alone.">
+            ↻ Sync flex → Equipment / Indirect
+          </button>
+        </div>
+      ` : `
+        <div class="cm-mlv-flex-cta cm-mlv-flex-cta--empty">
+          <div class="cm-mlv-flex-cta__text">
+            No seasonal flex detected in ${selectedYear === 0 ? 'the full contract' : `Y${selectedYear}`}. Staffing is flat across all ${monthsInView.length} months — nothing to sync.
+          </div>
+        </div>
+      `}
 
       <!-- MHE implications table -->
       <div style="margin-top:20px;">
@@ -5004,6 +5105,11 @@ function handleAction(action, idx) {
     case 'sync-seasonal-flex':
       syncSeasonalFlex();
       return; // syncSeasonalFlex handles its own renderSection + toast
+    case 'set-mlv-year':
+      // `idx` carries the year value (0 = All, 1..N = contract year)
+      _mlvViewYear = Number.isFinite(idx) && idx >= 0 ? idx : 1;
+      renderSection();
+      return;
     case 'open-equipment-catalog':
       openEquipmentCatalog();
       return; // modal is async, don't re-render the section yet

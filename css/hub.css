@@ -553,11 +553,18 @@ textarea.hub-input {
 .hub-builder-form { max-width: var(--form-max-width); }
 
 /* Sections that need the full available width opt out of the 640px cap.
-   Triggers: any section containing a .hub-master-detail (Labor today,
-   more coming) or explicitly wrapped in .cm-wide-layout (Pricing Buckets,
-   future wide sections). */
+   Triggers: any section containing a .hub-master-detail (Labor today),
+   explicitly wrapped in .cm-wide-layout (Pricing Buckets), OR containing
+   any wide data table (Equipment, Overhead, VAS, Start-Up, Timeline, the
+   Multi-Year P&L / Sensitivity tables on Summary, the Monthly Labor View).
+   Without this, `.hub-builder-form` caps the section at 640px and the
+   1040px-min-width data tables force a horizontal scroll even when there's
+   plenty of empty content area to the right. */
 .hub-builder-form:has(.hub-master-detail),
-.hub-builder-form:has(.cm-wide-layout) {
+.hub-builder-form:has(.cm-wide-layout),
+.hub-builder-form:has(.cm-table-scroll),
+.hub-builder-form:has(.cm-timeline-monthly-scroll),
+.hub-builder-form:has(.cm-mlv-card) {
   max-width: var(--content-max-width);
 }
 
@@ -1751,33 +1758,166 @@ textarea.hub-input {
   margin-top: 3px;
   line-height: 1.2;
 }
-.cm-mlv-sparkline {
+/* ---- MLV header + year pills (Brock 2026-04-20 redesign) ----
+   Per-year scope replaces the flat 0-60 sparkline so intra-year
+   seasonality is legible instead of conflated with volume growth. */
+.cm-mlv-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+.cm-mlv-header__title { flex: 1 1 320px; min-width: 280px; }
+
+.cm-mlv-year-pills {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  background: var(--ies-gray-100, #f3f4f6);
+  border-radius: 8px;
+  align-self: flex-start;
+  flex-wrap: wrap;
+}
+.cm-mlv-year-pill {
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ies-gray-600, #4b5563);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  min-width: 36px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.cm-mlv-year-pill:hover { background: #fff; color: var(--ies-gray-900, #111827); }
+.cm-mlv-year-pill.is-active {
+  background: #fff;
+  color: var(--ies-blue, #0047AB);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+}
+.cm-mlv-year-pill:focus-visible {
+  outline: 2px solid var(--ies-blue, #0047AB);
+  outline-offset: 2px;
+}
+
+.cm-mlv-kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+/* ---- Stacked-bar chart: baseline (gray) + seasonal wedge (orange) ---- */
+.cm-mlv-chart-wrap { margin-top: 16px; }
+.cm-mlv-chart-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--ies-gray-500, #6b7280);
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.cm-mlv-legend-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+.cm-mlv-legend-swatch--wedge { background: var(--ies-orange, #d97706); }
+.cm-mlv-legend-swatch--base  { background: var(--ies-gray-300, #d1d5db); }
+
+.cm-mlv-chart {
   display: flex;
   align-items: flex-end;
-  gap: 1px;
-  height: 60px;
-  padding: 4px 0;
+  gap: 4px;
+  height: 100px;
+  padding: 4px 6px;
   background: var(--ies-gray-50, #f9fafb);
   border: 1px solid var(--ies-gray-100, #f3f4f6);
   border-radius: 4px;
 }
-.cm-mlv-bar {
-  flex: 1 1 0;
-  min-width: 2px;
-  min-height: 1px;
-  background: var(--ies-gray-300, #d1d5db);
-  border-radius: 1px 1px 0 0;
-  transition: height 0.15s ease;
+.cm-mlv-chart.is-all-years {
+  gap: 1px;
+  padding: 4px 4px;
 }
-.cm-mlv-bar.is-peak {
+.cm-mlv-bar-col {
+  flex: 1 1 0;
+  min-width: 6px;
+  height: 100%;
+  display: flex;
+  flex-direction: column-reverse; /* base at bottom, wedge on top */
+  border-radius: 2px 2px 0 0;
+  overflow: hidden;
+  transition: filter 0.15s ease;
+}
+.cm-mlv-chart.is-all-years .cm-mlv-bar-col { min-width: 2px; border-radius: 1px 1px 0 0; }
+.cm-mlv-bar-col:hover { filter: brightness(1.08); }
+.cm-mlv-bar-base {
+  width: 100%;
+  background: var(--ies-gray-300, #d1d5db);
+}
+.cm-mlv-bar-wedge {
+  width: 100%;
+  background: rgba(217, 119, 6, 0.5); /* translucent so peak highlight stands out */
+}
+.cm-mlv-bar-wedge.is-peak {
   background: var(--ies-orange, #d97706);
 }
-.cm-mlv-bar:hover {
-  background: var(--ies-blue, #0047AB);
+
+.cm-mlv-chart-axis {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 0 6px;
 }
-.cm-mlv-bar.is-peak:hover {
-  background: #b45309;
+.cm-mlv-chart-axis.is-all-years { gap: 1px; padding: 0 4px; }
+.cm-mlv-axis-label {
+  flex: 1 1 0;
+  min-width: 6px;
+  text-align: center;
+  font-size: 10px;
+  color: var(--ies-gray-400, #9ca3af);
+  font-variant-numeric: tabular-nums;
 }
+.cm-mlv-chart-axis.is-all-years .cm-mlv-axis-label { min-width: 2px; text-align: left; }
+.cm-mlv-axis-label.is-year-start {
+  color: var(--ies-gray-600, #4b5563);
+  font-weight: 600;
+  border-left: 1px solid var(--ies-gray-200, #e5e7eb);
+  padding-left: 2px;
+}
+
+/* ---- Inline Sync CTA — directly under the chart it acts on ---- */
+.cm-mlv-flex-cta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  background: rgba(217, 119, 6, 0.05);
+  border: 1px solid rgba(217, 119, 6, 0.18);
+  border-left: 3px solid var(--ies-orange, #d97706);
+  border-radius: 4px;
+  flex-wrap: wrap;
+}
+.cm-mlv-flex-cta__text {
+  flex: 1 1 320px;
+  font-size: 13px;
+  color: var(--ies-gray-700, #374151);
+  line-height: 1.45;
+}
+.cm-mlv-flex-cta__text strong { color: var(--ies-gray-900, #111827); }
+.cm-mlv-flex-cta__btn { white-space: nowrap; }
+.cm-mlv-flex-cta--empty {
+  background: var(--ies-gray-50, #f9fafb);
+  border: 1px solid var(--ies-gray-200, #e5e7eb);
+  border-left: 3px solid var(--ies-gray-300, #d1d5db);
+}
+.cm-mlv-flex-cta--empty .cm-mlv-flex-cta__text { color: var(--ies-gray-500, #6b7280); }
 
 /* ---- CM What-If Studio live preview (Brock 2026-04-20) ----
    Replaces the prior purple-accented gradient card with a neutral
