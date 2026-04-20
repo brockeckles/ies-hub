@@ -1837,8 +1837,9 @@ function renderLaborDetailPane(lines, opHrs, lc) {
             ${!isTemp ? '<div class="hub-field__hint">(Temp Agency only)</div>' : ''}
           </div>
           <div class="hub-field">
-            <label class="hub-field__label" title="Productivity variance (% std dev) fed into the Monte Carlo sensitivity card in Summary.">Variance % (Monte Carlo)</label>
+            <label class="hub-field__label" title="Productivity variance (% std dev) fed into the Monte Carlo sensitivity card in Summary.">Variance %</label>
             <input class="hub-input hub-num" type="number" step="1" min="0" max="50" value="${l.performance_variance_pct || 0}" data-array="laborLines" data-idx="${i}" data-field="performance_variance_pct" data-type="number" />
+            <div class="hub-field__hint">Monte Carlo σ</div>
           </div>
         </div>
       </div>

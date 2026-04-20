@@ -1405,17 +1405,20 @@ textarea.hub-input {
 }
 
 /* ---- Master-detail layout (used in Labor + future dense sections) ---- */
+/* Container queries let child grids adapt to the PANE width, not viewport
+   width — critical when an outer chrome (Cowork sidebar, dev-tools, etc.)
+   eats into the viewport. */
 .hub-master-detail {
   display: grid;
-  grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
+  grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
   gap: 16px;
   align-items: start;
-  /* Cap overall width so ultra-wide viewports don't stretch the detail pane.
-     Left-aligned (margin-right: auto) since our sidebar is on the left. */
-  max-width: 1180px;
-  margin-right: auto;
+  container-type: inline-size;
+  container-name: master-detail;
 }
-@media (max-width: 960px) {
+/* Only collapse to single-column on genuinely small screens. No max-width
+   cap — let the detail pane use whatever horizontal room it has. */
+@media (max-width: 820px) {
   .hub-master-detail { grid-template-columns: 1fr; }
 }
 .hub-master-detail__master {
@@ -1526,31 +1529,53 @@ textarea.hub-input {
   letter-spacing: 0.06em;
   margin: 0 0 10px 0;
 }
-/* Default grid — auto-fit for sections where column count is content-dependent */
+/* Grid variants — auto-fit with sensible minimums so columns naturally
+   reflow based on the PANE width (via container queries below), not
+   viewport width. */
 .hub-detail-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 14px 18px;
 }
-/* Fixed-column variants — preferred for explicit layouts to avoid the
-   'fields stretch absurdly wide' problem with auto-fit. */
 .hub-detail-grid--2col {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 14px 18px;
 }
 .hub-detail-grid--4col {
   display: grid;
-  grid-template-columns: repeat(4, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 14px 18px;
 }
-@media (max-width: 1100px) {
-  .hub-detail-grid--4col { grid-template-columns: repeat(2, 1fr); }
-}
-@media (max-width: 640px) {
-  .hub-detail-grid--4col,
+/* Container-query refinements: at narrower pane widths, force tighter
+   column counts so fields don't drop to 1-col prematurely. */
+@container master-detail (max-width: 700px) {
+  .hub-detail-grid--4col { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .hub-detail-grid--2col { grid-template-columns: 1fr; }
 }
+@container master-detail (max-width: 480px) {
+  .hub-detail-grid--4col { grid-template-columns: 1fr; }
+}
+
+/* Make sure reused helpers (MOST picker, Volume Source picker) stretch
+   to fill the detail-grid column width instead of their hardcoded px
+   widths. Scoped tightly to .hub-detail-grid so v1 renderers aren't
+   affected. */
+.hub-detail-grid .hub-field input,
+.hub-detail-grid .hub-field select {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.hub-detail-grid [data-most-select],
+.hub-detail-grid [data-labor-volume-source] {
+  width: 100% !important;
+  font-size: 13px !important;
+  padding: 8px 10px !important;
+  height: 40px;
+  min-height: 40px;
+  border: 1px solid var(--ies-gray-200) !important;
+}
+.hub-detail-grid [data-most-select] + * { flex-shrink: 0; }
 
 /* Read-only field — no input chrome, looks like output, not a disabled input */
 .hub-detail-readonly {
