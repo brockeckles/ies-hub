@@ -497,28 +497,58 @@ export function buildMonthlyProjections(params) {
   }
 
   // ---- PASS 2: cashflow rows (need t-1 for delta_*) ----
-  // Build period_index → aggregated revenue/opex/labor maps first
+  // Build period_index → aggregated revenue/opex/labor maps first.
+  //
+  // ACCOUNTING STRUCTURE (Brock 2026-04-20 PM — finance-team-ready audit):
+  //   Revenue
+  //   − COGS            (direct service delivery: labor, facility, equipment, VAS pass-through)
+  //   = Gross Profit
+  //   − SG&A            (management/admin overhead)
+  //   = EBITDA
+  //   − D&A             (startup amortization + equipment amortization)
+  //   = EBIT
+  //   − Taxes           (EBIT × tax_rate, floor 0)
+  //   = Net Income
+  //
+  // Prior to this pass, grossProfit was computed as `revenue − (opex − dep)`,
+  // which is actually EBITDA. That made GP ≡ EBITDA in the P&L — a headline
+  // inconsistency to any reviewer. Splitting COGS vs SG&A gives the standard
+  // stack where GP ≥ EBITDA ≥ EBIT.
+  // Pre-go-live implementation expenses (IT_INTEG_EXP / PROF_SERV_EXP /
+  // ONBOARD_EXP) are one-time transaction costs. GAAP-defensible treatment
+  // is to book them to G&A as incurred → they flow through SG&A so
+  //    ebit = ebitda − dep
+  // holds across both pre-live and operational months. Steady-state
+  // Summary/P&L is only period_index ≥ 0 so this doesn't touch Y1-Y5.
+  const COGS_CODES = new Set(['LABOR_HOURLY', 'LABOR_SALARY', 'FACILITY', 'LEASED_EQUIP', 'PASS_THROUGH_EXP']);
+  const SGA_CODES  = new Set(['OVERHEAD', 'IT_INTEG_EXP', 'PROF_SERV_EXP', 'ONBOARD_EXP']);
+  const DEP_CODES  = new Set(['DEPRECIATION']);
+
   const revByPeriod   = aggregateByPeriod(revenueRows, periods);
   const expByPeriod   = aggregateByPeriod(expenseRows, periods);
+  const cogsByPeriod  = aggregateByPeriod(expenseRows.filter(e => COGS_CODES.has(e.expense_line_code)), periods);
+  const sgaByPeriod   = aggregateByPeriod(expenseRows.filter(e => SGA_CODES.has(e.expense_line_code)), periods);
   const laborByPeriod = aggregateByPeriod(
     expenseRows.filter(e => e.expense_line_code === 'LABOR_HOURLY' || e.expense_line_code === 'LABOR_SALARY'),
     periods,
   );
-  const depByPeriod   = aggregateByPeriod(
-    expenseRows.filter(e => e.expense_line_code === 'DEPRECIATION'),
-    periods,
-  );
+  const depByPeriod   = aggregateByPeriod(expenseRows.filter(e => DEP_CODES.has(e.expense_line_code)), periods);
 
   let prevRev = 0, prevOpex = 0, prevLabor = 0, cumFcf = 0;
   for (const p of scopedPeriods) {
     const revenue = revByPeriod.get(p.period_index) || 0;
     const opex    = expByPeriod.get(p.period_index) || 0;
+    const cogs    = cogsByPeriod.get(p.period_index) || 0;
+    const sga     = sgaByPeriod.get(p.period_index) || 0;
     const labor   = laborByPeriod.get(p.period_index) || 0;
     const dep     = depByPeriod.get(p.period_index) || 0;
 
-    const grossProfit = revenue - (opex - dep); // dep flows through opex but is non-cash
-    const ebitda      = revenue - (opex - dep);
-    const ebit        = revenue - opex;
+    // Standard P&L stack. Note: pre-go-live one-time expenses (IT_INTEG_EXP,
+    // PROF_SERV_EXP, ONBOARD_EXP) are already excluded from scopedPeriods by
+    // period_index ≥ 0 — they don't flow into steady-state COGS or SG&A.
+    const grossProfit = revenue - cogs;
+    const ebitda      = grossProfit - sga;        // = revenue − cogs − sga
+    const ebit        = ebitda - dep;             // = revenue − opex (unchanged)
     const taxes       = Math.max(0, ebit * (tax_rate_pct / 100));
     const netIncome   = ebit - taxes;
 
@@ -545,6 +575,8 @@ export function buildMonthlyProjections(params) {
       period_id: p.id,
       revenue,
       opex,
+      cogs,
+      sga,
       gross_profit: grossProfit,
       ebitda,
       ebit,
@@ -683,7 +715,13 @@ export function groupMonthlyToYearly(bundle, contractTermYears, opts = {}) {
     vas:       new Set(['PASS_THROUGH_EXP']),
     startup:   new Set(['DEPRECIATION']),
   };
+  // COGS / SG&A classification — mirror the sets in buildMonthlyProjections
+  // so per-category rollups feed a proper GP/EBITDA/EBIT stack even if an
+  // older cashflow row is fed in without cogs/sga fields.
+  const COGS_CATS = new Set(['labor', 'facility', 'equipment', 'vas']);
+  const SGA_CATS  = new Set(['overhead']);
   const out = [];
+  let cumFcfRun = 0;
   for (let yr = 1; yr <= contractTermYears; yr++) {
     const inYear = (period_id) => {
       const p = idToPeriod.get(period_id);
@@ -703,27 +741,57 @@ export function groupMonthlyToYearly(bundle, contractTermYears, opts = {}) {
     const baseOrdersY = Number(opts.baseOrders) || 0;
     const volGrowth   = Number(opts.volGrowthPct) || 0;
     const yearOrders  = baseOrdersY * Math.pow(1 + volGrowth, yr - 1);
+
+    const yrLabor     = sumByCategory(CATEGORY_CODES.labor);
+    const yrFacility  = sumByCategory(CATEGORY_CODES.facility);
+    const yrEquipment = sumByCategory(CATEGORY_CODES.equipment);
+    const yrOverhead  = sumByCategory(CATEGORY_CODES.overhead);
+    const yrVas       = sumByCategory(CATEGORY_CODES.vas);
+    const yrStartup   = sumByCategory(CATEGORY_CODES.startup);
+
+    const yrRevenue  = sum('revenue');
+    const yrTotalCost = sum('opex');
+    const yrDep       = sum('depreciation');
+    // Prefer summed fields when present; re-derive from categories when the
+    // cashflow rows predate the cogs/sga split. This makes the P&L GP ≥
+    // EBITDA ≥ EBIT invariant hold regardless of input schema age.
+    const yrCogsRaw = sum('cogs');
+    const yrSgaRaw  = sum('sga');
+    const yrCogs    = yrCogsRaw > 0 ? yrCogsRaw : (yrLabor + yrFacility + yrEquipment + yrVas);
+    const yrSga     = yrSgaRaw  > 0 ? yrSgaRaw  : yrOverhead;
+    const yrGp      = yrRevenue - yrCogs;
+    const yrEbitda  = yrGp - yrSga;
+    const yrEbit    = yrEbitda - yrDep;
+
+    const yrFcf = sum('free_cash_flow');
+    cumFcfRun += yrFcf;
+
     out.push({
       year: yr,
       orders: yearOrders,
-      labor:     sumByCategory(CATEGORY_CODES.labor),
-      facility:  sumByCategory(CATEGORY_CODES.facility),
-      equipment: sumByCategory(CATEGORY_CODES.equipment),
-      overhead:  sumByCategory(CATEGORY_CODES.overhead),
-      vas:       sumByCategory(CATEGORY_CODES.vas),
-      startup:   sumByCategory(CATEGORY_CODES.startup),
-      totalCost: sum('opex'),
-      revenue: sum('revenue'),
-      grossProfit: sum('gross_profit'),
-      ebitda: sum('ebitda'),
-      ebit: sum('ebit'),
-      depreciation: sum('depreciation'),
-      taxes: sum('taxes'),
-      netIncome: sum('net_income'),
-      capex: sum('capex'),
+      labor:     yrLabor,
+      facility:  yrFacility,
+      equipment: yrEquipment,
+      overhead:  yrOverhead,
+      vas:       yrVas,
+      startup:   yrStartup,
+      // COGS / SG&A subtotals (new — let the Summary P&L show the standard
+      // accounting stack: Revenue → GP → EBITDA → EBIT → NI).
+      cogs: yrCogs,
+      sga:  yrSga,
+      totalCost:   yrTotalCost,
+      revenue:     yrRevenue,
+      grossProfit: yrGp,
+      ebitda:      yrEbitda,
+      ebit:        yrEbit,
+      depreciation: yrDep,
+      taxes:       sum('taxes'),
+      netIncome:   sum('net_income'),
+      capex:       sum('capex'),
       workingCapitalChange: sum('working_capital_change'),
-      operatingCashFlow: sum('operating_cash_flow'),
-      freeCashFlow: sum('free_cash_flow'),
+      operatingCashFlow:    sum('operating_cash_flow'),
+      freeCashFlow: yrFcf,
+      cumFcf: cumFcfRun,
     });
   }
   return out;

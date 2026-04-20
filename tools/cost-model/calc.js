@@ -14,7 +14,7 @@
  * @module tools/cost-model/calc
  */
 
-import * as monthly from './calc.monthly.js?v=20260420-vM';
+import * as monthly from './calc.monthly.js?v=20260420-vN';
 
 // ============================================================
 // OPERATING HOURS
@@ -819,6 +819,7 @@ export function buildYearlyProjections(params) {
 
   /** @type {import('./types.js?v=20260418-sK').YearlyProjection[]} */
   const projections = [];
+  let cumFcfRun = 0;
 
   for (let yr = 1; yr <= years; yr++) {
     const volMult = Math.pow(1 + volGrowthPct, yr - 1);
@@ -834,30 +835,42 @@ export function buildYearlyProjections(params) {
     const startup = startupAmort;
     const totalCost = labor + facility + equipment + overhead + vas + startup;
     const revenue = totalCost * (1 + marginPct);
-    const grossProfit = revenue - totalCost;
+    // Accounting stack (parity with monthly engine as of 2026-04-20 audit):
+    //   COGS = Labor + Facility + Equipment + VAS
+    //   SG&A = Overhead
+    //   D&A  = startup amortization
+    //   GP   = Revenue − COGS
+    //   EBITDA = GP − SG&A
+    //   EBIT = EBITDA − D&A = Revenue − totalCost (unchanged)
+    const cogs         = labor + facility + equipment + vas;
+    const sga          = overhead;
     const depreciation = startupAmort;
-    const ebitda = grossProfit + depreciation;
-    const ebit = grossProfit;
+    const grossProfit  = revenue - cogs;
+    const ebitda       = grossProfit - sga;
+    const ebit         = ebitda - depreciation;
     const orders = baseOrders * volMult;
 
     // Phase 0 fix: per-project tax rate (was hardcoded 25%).
     const taxes = Math.max(0, ebit * (taxRatePct / 100));
     const netIncome = ebit - taxes;
     const capex = yr === 1 ? startupCapital : 0;
-    // TODO (CM Phase 1): replace 8%-of-revenue working-capital proxy with
-    // DSO/DPO/labor-payable model in calc.monthly.js. This proxy understates
-    // WC volatility on growing accounts and overstates on shrinking ones.
+    // Legacy 8%-of-revenue working-capital proxy. The monthly engine uses a
+    // defensible DSO/DPO/labor-accrual model — this path fires only when the
+    // monthly engine flag is off or ref_periods is unavailable.
     const WC_PROXY_PCT = 0.08;
     const workingCapitalChange = yr === 1
       ? revenue * WC_PROXY_PCT
       : revenue * volGrowthPct * WC_PROXY_PCT;
     const operatingCashFlow = netIncome + depreciation - workingCapitalChange;
     const freeCashFlow = operatingCashFlow - capex;
+    cumFcfRun += freeCashFlow;
 
     projections.push({
       year: yr, orders, labor, facility, equipment, overhead, vas, startup,
+      cogs, sga,
       totalCost, revenue, grossProfit, ebitda, ebit, depreciation,
       taxes, netIncome, capex, workingCapitalChange, operatingCashFlow, freeCashFlow,
+      cumFcf: cumFcfRun,
       learningMult,
     });
   }
@@ -888,45 +901,100 @@ export function computeFinancialMetrics(projections, opts) {
   const reinvestRate = (opts.reinvestRatePct || 8) / 100;
   const startupCapital   = Number(opts.startupCapital)   || 0;
   const equipmentCapital = Number(opts.equipmentCapital) || 0;
-  // Annual D&A: caller passes the sum of equipment amort + startup amort.
-  // Used to derive a proper EBITDA when the projections path doesn't carry
-  // per-line depreciation (monthly-engine path today treats equipment as
-  // OPEX for purchased items, so ebitda == ebit in the P&L rollup).
+  // Tax rate — needed to compute NOPAT for ROIC. Caller passes the same
+  // taxRatePct threaded through buildYearlyProjections. Defaults 25% for
+  // back-compat with older call sites.
+  const taxRatePct = Number(opts.taxRatePct != null ? opts.taxRatePct : 25);
+  // Annual D&A: caller passes equipment amort + startup amort. Used to
+  // derive a proper EBITDA when the projections path doesn't carry per-line
+  // depreciation (e.g. when cashflow rows predate the cogs/sga split).
   const annualDepreciation = Number(opts.annualDepreciation) || 0;
+  // Average net working capital — optional, used to inflate invested capital
+  // for a defensible ROIC denominator. If omitted, falls back to a DSO-based
+  // proxy derived from Y1 revenue (see below).
+  const avgWorkingCapitalOpt = Number(opts.avgWorkingCapital) || null;
 
-  // Fix (Brock 2026-04-20): totalInvestment now includes equipment capital.
-  // Previously summed projections[].capex — those rows are 0 on the
-  // monthly-engine path so the Summary showed "Total Investment $0" and
-  // cascaded to MIRR = 0 / Payback = 1 month. MIRR + Payback + ROIC now
-  // use this consolidated initial outflow.
+  // totalInvestment — the one-time capital outlay at t=0. Used as the anchor
+  // for MIRR, NPV, and Payback cashflows. Previously summed projections[].capex;
+  // that read $0 on the monthly engine path so the Summary collapsed to
+  // MIRR=0 / Payback=1mo. Now explicit as startup + equipment.
   const totalInvestment = startupCapital + equipmentCapital;
 
   const totalRevenue = projections.reduce((s, p) => s + p.revenue, 0);
   const _totalCost = projections.reduce((s, p) => s + p.totalCost, 0);
-  const totalGrossProfit = totalRevenue - _totalCost;
-  const totalEbitRaw = projections.reduce((s, p) => s + p.ebit, 0);
-  const totalEbitdaRaw = projections.reduce((s, p) => s + p.ebitda, 0);
-  // If the P&L rollup didn't separate D&A (monthly engine treats purchased
-  // equipment as OPEX), derive a "true" EBITDA by adding back the annual
-  // depreciation × years so EBIT Margin < EBITDA Margin as expected. When
-  // the caller passes annualDepreciation: 0, behavior collapses to the
-  // legacy path (ebitda == ebit).
+  const totalEbitRaw = projections.reduce((s, p) => s + (p.ebit || 0), 0);
+  const totalEbitdaRaw = projections.reduce((s, p) => s + (p.ebitda || 0), 0);
+  // Total Gross Profit: prefer the explicit per-year field (monthly engine
+  // now emits the correct value post-2026-04-20 audit). Fall back to
+  // Revenue − COGS if the per-year field is absent, else last-resort to the
+  // legacy Revenue − totalCost (which is actually EBIT, not GP).
+  const totalGpExplicit = projections.reduce((s, p) => s + (p.grossProfit || 0), 0);
+  const totalCogs       = projections.reduce((s, p) => s + (p.cogs || 0), 0);
+  const totalGrossProfit = totalGpExplicit > 0
+    ? totalGpExplicit
+    : (totalCogs > 0 ? totalRevenue - totalCogs : totalRevenue - _totalCost);
+
+  // If the P&L rollup didn't separate D&A, derive a "true" EBITDA by adding
+  // back annual depreciation × years so EBIT Margin < EBITDA Margin holds.
+  // When caller passes annualDepreciation: 0, behavior collapses to the raw path.
   const ebitdaAdjustment = Math.max(0, annualDepreciation * years - Math.max(0, totalEbitdaRaw - totalEbitRaw));
   const totalEbit   = totalEbitRaw;
   const totalEbitda = totalEbitdaRaw + ebitdaAdjustment;
 
-  const grossMarginPct = totalRevenue > 0 ? (totalGrossProfit / totalRevenue) * 100 : 0;
-  const ebitdaMarginPct = totalRevenue > 0 ? (totalEbitda / totalRevenue) * 100 : 0;
-  const ebitMarginPct = totalRevenue > 0 ? (totalEbit / totalRevenue) * 100 : 0;
+  const grossMarginPct  = totalRevenue > 0 ? (totalGrossProfit / totalRevenue) * 100 : 0;
+  const ebitdaMarginPct = totalRevenue > 0 ? (totalEbitda      / totalRevenue) * 100 : 0;
+  const ebitMarginPct   = totalRevenue > 0 ? (totalEbit        / totalRevenue) * 100 : 0;
 
-  // ROIC — average annual EBIT over the invested capital base (startup +
-  // equipment). Falls back to a 10% working-capital proxy if zero.
-  const avgAnnualEbit = totalEbit / years;
-  const investedCapital = totalInvestment > 0 ? totalInvestment : _totalCost * 0.1;
-  const roicPct = investedCapital > 0 ? (avgAnnualEbit / investedCapital) * 100 : 0;
+  // ROIC — NOPAT / Invested Capital (industry-standard). Prior version used
+  // pre-tax EBIT, overstating ROIC by the tax shield; and used only startup
+  // + equipment for IC, so on thin-capital 3PL deals it read ~1000%+. Now:
+  //   NOPAT            = avg annual EBIT × (1 − tax rate)
+  //   Invested Capital = startup + equipment + avg NWC (AR less AP)
+  // AR proxy uses Y1 revenue × DSO/365 and AP proxy uses Y1 COGS × DPO/365
+  // when opts.avgWorkingCapital isn't supplied directly. This keeps ROIC
+  // defensible to a reviewer without requiring full WC forecasting.
+  const avgAnnualEbit   = totalEbit / years;
+  const avgAnnualNopat  = avgAnnualEbit * (1 - taxRatePct / 100);
+  // Working-capital estimate (if caller didn't supply one directly).
+  let estimatedNWC = avgWorkingCapitalOpt;
+  if (estimatedNWC == null) {
+    const dsoDays = Number(opts.dsoDays) || 0;
+    const dpoDays = Number(opts.dpoDays) || 0;
+    if (projections.length > 0 && dsoDays > 0) {
+      const y1 = projections[0];
+      const y1Revenue = Number(y1.revenue) || 0;
+      const y1Cogs    = Number(y1.cogs) || Number(y1.totalCost) || 0;
+      estimatedNWC = Math.max(0, y1Revenue * (dsoDays / 365) - y1Cogs * (dpoDays / 365));
+    } else {
+      estimatedNWC = 0;
+    }
+  }
+  const investedCapitalBase = totalInvestment + estimatedNWC;
+  // Fallback: if capital base is still 0 (e.g. all-lease deal, no DSO),
+  // use 10% of Y1 revenue as a placeholder WC floor so ROIC doesn't divide
+  // by zero and read as a blank tile.
+  const investedCapital = investedCapitalBase > 0
+    ? investedCapitalBase
+    : (projections[0]?.revenue || 0) * 0.10;
+  const roicPct = investedCapital > 0 ? (avgAnnualNopat / investedCapital) * 100 : 0;
 
-  // MIRR — use total initial investment, not just startup capital.
-  const cashFlows = [-totalInvestment, ...projections.map(p => p.grossProfit)];
+  // Build the cashflow vector used by MIRR, NPV, and Payback. Use each year's
+  // FREE CASH FLOW (after tax, after WC changes, after capex) — previously
+  // used grossProfit which was (a) mis-named — actually EBITDA given the
+  // pre-audit formula — and (b) ignored taxes, WC drag, and capex. Using
+  // FCF makes these metrics tie out to the cashflow statement.
+  const fcfSeries = projections.map(p => Number(p.freeCashFlow) || 0);
+  // Year-0 anchor: total outflow = startup + equipment capital (pre-go-live).
+  // Adjust for capex already reflected inside Y1 FCF — if projections[0].capex
+  // equals totalInvestment (monthly engine books capex in Y1), subtracting it
+  // here would double-count. Add the capex back to Y1 FCF so the initial
+  // outflow lives at t=0 and Y1 reflects purely operating cash generation.
+  const y1Capex = Number(projections[0]?.capex) || 0;
+  const year0Outflow = -(totalInvestment || y1Capex);
+  const y1Operating = fcfSeries.length > 0 ? fcfSeries[0] + y1Capex : 0;
+  const cashFlows = [year0Outflow, y1Operating, ...fcfSeries.slice(1)];
+
+  // MIRR — use FCF-based cashflow vector.
   let mirrPct = 0;
   if (totalInvestment > 0 && cashFlows.length > 1) {
     let pvNeg = 0;
@@ -943,19 +1011,22 @@ export function computeFinancialMetrics(projections, opts) {
     }
   }
 
-  // NPV — unchanged but now uses totalInvestment in CF[0] via cashFlows.
+  // NPV — discount the FCF-based cashflow vector at the discount rate.
   let npv = 0;
   for (let i = 0; i < cashFlows.length; i++) {
     npv += cashFlows[i] / Math.pow(1 + discountRate, i);
   }
 
-  // Payback period (months) — now tied to total initial investment.
+  // Payback period (months) — uses FCF now, not grossProfit. Walks monthly
+  // cumulative cash assuming even distribution within each year. If the
+  // deal never pays back within the horizon, caps at contractYears × 12.
   let paybackMonths = years * 12;
   let cumCash = -totalInvestment;
   for (let yr = 0; yr < years; yr++) {
-    const monthlyProfit = projections[yr].grossProfit / 12;
+    const yearCash = yr === 0 ? y1Operating : fcfSeries[yr];
+    const monthlyCash = yearCash / 12;
     for (let m = 0; m < 12; m++) {
-      cumCash += monthlyProfit;
+      cumCash += monthlyCash;
       if (cumCash >= 0) {
         paybackMonths = yr * 12 + m + 1;
         yr = years; // break outer
@@ -964,14 +1035,17 @@ export function computeFinancialMetrics(projections, opts) {
     }
   }
 
-  // Revenue per FTE
+  // Revenue per FTE — Y1 revenue over current total FTE.
   const revenuePerFte = opts.totalFtes > 0 ? projections[0].revenue / opts.totalFtes : 0;
 
-  // Contribution margin per order
+  // Contribution per order — Y1 gross profit ÷ Y1 orders. This is GP/order
+  // now that grossProfit is correctly Rev − COGS (was EBITDA-equivalent
+  // pre-audit, so the number itself changes on fix, labels in UI adjusted
+  // to say "GP / Order" for clarity).
   const yr1 = projections[0];
-  const contribPerOrder = yr1.orders > 0 ? yr1.grossProfit / yr1.orders : 0;
+  const contribPerOrder = yr1.orders > 0 ? (yr1.grossProfit || 0) / yr1.orders : 0;
 
-  // Operating leverage (fixed cost as % of total)
+  // Operating leverage — Y1 fixed cost share of Y1 total cost.
   const opLeveragePct = yr1.totalCost > 0 ? ((opts.fixedCost || 0) / yr1.totalCost) * 100 : 0;
 
   const contractValue = totalRevenue;
@@ -989,6 +1063,10 @@ export function computeFinancialMetrics(projections, opts) {
     opLeveragePct,
     contractValue,
     totalInvestment,
+    // New: exposed for tooltips / defensibility.
+    investedCapital,
+    nopat: avgAnnualNopat,
+    estimatedNwc: estimatedNWC,
   };
 }
 
@@ -1268,14 +1346,16 @@ export function validateModel(model, opts = {}) {
 export function sensitivityTable(baseCosts, baseOrders, adjustments = [-0.10, -0.05, 0.05, 0.10], opts = {}) {
   const baseTotalCost = baseCosts.labor + baseCosts.facility + baseCosts.equipment +
     baseCosts.overhead + baseCosts.vas + baseCosts.startup;
-  // Target margin — used to compute baseline revenue + scenario revenue
-  // under the assumption that pricing is cost+margin. Without this we can
-  // only show ΔCost which is misleading on Volume (cost goes UP on +volume
-  // but revenue goes up MORE given the margin — that's a POSITIVE outcome
-  // for the 3PL, not negative).
+  // Baseline revenue: prefer the caller-supplied Y1 P&L revenue (so Sensitivity
+  // ties out to the Multi-Year P&L row directly above it), else fall back to
+  // the cost+margin assumption. On projects with explicit pricing-bucket rates,
+  // the P&L revenue drifts from cost × (1+margin) — this keeps the sensitivity
+  // footnote "Base GP: $X" consistent with the table.
   const marginPct = Number(opts.marginPct) || 0;
   const marginFrac = marginPct / 100;
-  const baseRevenue = baseTotalCost * (1 + marginFrac);
+  const baseRevenue = (opts.baseRevenue != null && Number(opts.baseRevenue) > 0)
+    ? Number(opts.baseRevenue)
+    : baseTotalCost * (1 + marginFrac);
   const baseGP = baseRevenue - baseTotalCost;
 
   const burdenPct  = Number(opts.burdenPct)  || 0;

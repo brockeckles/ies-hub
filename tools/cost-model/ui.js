@@ -10,10 +10,10 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import * as calc from './calc.js?v=20260420-vP';
+import * as calc from './calc.js?v=20260420-vQ';
 import * as api from './api.js?v=20260419-uH';
 import * as scenarios from './calc.scenarios.js?v=20260419-sZ';
-import * as monthlyCalc from './calc.monthly.js?v=20260420-vM';
+import * as monthlyCalc from './calc.monthly.js?v=20260420-vN';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260419-uH';
 
 // ============================================================
@@ -3499,18 +3499,20 @@ function renderSummary() {
   if (projResult && projResult.monthlyBundle) _lastMonthlyBundle = projResult.monthlyBundle;
   const projections = projResult.projections || [];
 
-  // Financial metrics — Brock 2026-04-20 fixes:
-  //   • totalInvestment now = startup + equipment capital (was $0 because
-  //     projections[].capex was empty on the monthly-engine path)
-  //   • MIRR / Payback / ROIC use the full totalInvestment
-  //   • annualDepreciation (equipment + startup amort) lets the metrics
-  //     fn derive a proper EBITDA when the P&L rollup doesn't separate D&A
+  // Financial metrics — 2026-04-20 PM audit: MIRR/NPV/Payback now use FCF
+  // (not grossProfit), ROIC uses NOPAT with a working-capital-inflated
+  // invested-capital denominator, and EBIT/EBITDA are sourced from the new
+  // monthly-engine COGS/SG&A split. taxRatePct + dso/dpo threaded through
+  // so ROIC/NOPAT reconcile with the P&L's tax line and AR/AP carry.
   const metrics = calc.computeFinancialMetrics(projections, {
     startupCapital: summary.startupCapital,
     equipmentCapital: summary.equipmentCapital,
     annualDepreciation: (summary.equipmentAmort || 0) + (summary.startupAmort || 0),
     discountRatePct: fin.discountRate || 10,
     reinvestRatePct: fin.reinvestRate || 8,
+    taxRatePct:  calcHeur.taxRatePct,
+    dsoDays:     calcHeur.dsoDays,
+    dpoDays:     calcHeur.dpoDays,
     totalFtes: summary.totalFtes,
     fixedCost: summary.facilityCost + summary.overheadCost + summary.startupAmort,
   });
@@ -3535,6 +3537,11 @@ function renderSummary() {
     burdenPct:  lc.defaultBurdenPct ?? 30,
     benefitPct: lc.benefitLoadPct   ?? 15,
     marginPct:  (fin.targetMargin || 0),
+    // 2026-04-20 PM audit: tie sensitivity baseline revenue to the Y1 P&L
+    // row directly above. On projects with explicit pricing-bucket rates
+    // (e.g. Wayfair), the P&L revenue is NOT cost × (1+margin), so the
+    // Base-GP footnote used to contradict the P&L.
+    baseRevenue: p1.revenue,
   });
 
   const pcts = summary.totalCost > 0 ? {
@@ -3668,26 +3675,32 @@ function renderSummary() {
       </div>
     </div>
 
-    <!-- Financial Metrics — primitives kpi-tile grid -->
+    <!-- Financial Metrics — primitives kpi-tile grid. Each tile carries an
+         audit-trail tooltip so finance / pricing reviewers can see exactly
+         how the number was derived without reading the code. -->
     <div class="hub-card mb-4">
       <h3 class="hub-section-heading">Financial Metrics</h3>
       <div class="cm-metrics-grid">
-        ${renderMetricCard('Gross Margin', calc.formatPct(metrics.grossMarginPct), metrics.grossMarginPct >= (thresholds.grossMargin || 10))}
-        ${renderMetricCard('EBITDA Margin', calc.formatPct(metrics.ebitdaMarginPct), metrics.ebitdaMarginPct >= (thresholds.ebitda || 8))}
-        ${renderMetricCard('EBIT Margin', calc.formatPct(metrics.ebitMarginPct), metrics.ebitMarginPct >= (thresholds.ebit || 5))}
-        ${renderMetricCard('ROIC', calc.formatPct(metrics.roicPct), metrics.roicPct >= (thresholds.roic || 15))}
-        ${renderMetricCard('MIRR', calc.formatPct(metrics.mirrPct), metrics.mirrPct >= (thresholds.mirr || 12))}
-        ${renderMetricCard('NPV', calc.formatCurrency(metrics.npv, {compact: true}), metrics.npv > 0)}
-        ${renderMetricCard('Payback', metrics.paybackMonths > 0 ? metrics.paybackMonths + ' mo' : '—', metrics.paybackMonths > 0 && metrics.paybackMonths <= (thresholds.payback || contractYears * 12))}
-        ${renderMetricCard('Rev / FTE', calc.formatCurrency(metrics.revenuePerFte, {compact: true}), null)}
-        ${renderMetricCard('Contrib / Order', calc.formatCurrency(metrics.contribPerOrder, {decimals: 2}), metrics.contribPerOrder > 0)}
-        ${renderMetricCard('Op Leverage', calc.formatPct(metrics.opLeveragePct), null)}
-        ${renderMetricCard('Contract Value', calc.formatCurrency(metrics.contractValue, {compact: true}), null)}
-        ${renderMetricCard('Total Investment', calc.formatCurrency(metrics.totalInvestment, {compact: true}), null)}
+        ${renderMetricCard('Gross Margin', calc.formatPct(metrics.grossMarginPct), metrics.grossMarginPct >= (thresholds.grossMargin || 10), '(Revenue − COGS) / Revenue, horizon total. COGS = Labor + Facility + Equipment + VAS pass-through.')}
+        ${renderMetricCard('EBITDA Margin', calc.formatPct(metrics.ebitdaMarginPct), metrics.ebitdaMarginPct >= (thresholds.ebitda || 8), '(GP − SG&A) / Revenue, horizon total. SG&A = Overhead. Adds back D&A if P&L rolled it through OPEX.')}
+        ${renderMetricCard('EBIT Margin', calc.formatPct(metrics.ebitMarginPct), metrics.ebitMarginPct >= (thresholds.ebit || 5), '(EBITDA − D&A) / Revenue, horizon total. D&A = startup amort + equipment amort.')}
+        ${renderMetricCard('ROIC', calc.formatPct(metrics.roicPct), metrics.roicPct >= (thresholds.roic || 15), `NOPAT / Invested Capital. NOPAT = avg annual EBIT × (1 − ${calcHeur.taxRatePct || 25}% tax). Invested Capital = $${(metrics.investedCapital/1000).toFixed(0)}K (startup + equipment + Y1 working capital estimate of $${((metrics.estimatedNwc||0)/1000).toFixed(0)}K).`)}
+        ${renderMetricCard('MIRR', calc.formatPct(metrics.mirrPct), metrics.mirrPct >= (thresholds.mirr || 12), `Modified IRR of FCF series. Financing rate ${fin.discountRate || 10}%, reinvestment rate ${fin.reinvestRate || 8}%. Uses Y0 outflow of $${(metrics.totalInvestment/1000).toFixed(0)}K plus each year's Free Cash Flow.`)}
+        ${renderMetricCard('NPV', calc.formatCurrency(metrics.npv, {compact: true}), metrics.npv > 0, `NPV of FCF series discounted at ${fin.discountRate || 10}%. Sums [−Total Investment at t=0] + Σ FCF_yr / (1+r)^yr.`)}
+        ${renderMetricCard('Payback', metrics.paybackMonths > 0 ? metrics.paybackMonths + ' mo' : '—', metrics.paybackMonths > 0 && metrics.paybackMonths <= (thresholds.payback || contractYears * 12), 'Months until cumulative FCF first turns positive. Assumes even monthly FCF within each year.')}
+        ${renderMetricCard('Rev / FTE', calc.formatCurrency(metrics.revenuePerFte, {compact: true}), null, `Y1 Revenue ÷ ${summary.totalFtes.toFixed(0)} total FTE. Industry benchmark ~$250K–$400K for fulfillment 3PL.`)}
+        ${renderMetricCard('GP / Order', calc.formatCurrency(metrics.contribPerOrder, {decimals: 2}), metrics.contribPerOrder > 0, 'Y1 Gross Profit ÷ Y1 Orders. GP is Revenue − COGS (site-level direct costs only).')}
+        ${renderMetricCard('Op Leverage', calc.formatPct(metrics.opLeveragePct), null, '(Facility + Overhead + Start-Up Amort) / Y1 Total Cost. Higher = more sensitive to volume swings.')}
+        ${renderMetricCard('Contract Value', calc.formatCurrency(metrics.contractValue, {compact: true}), null, `Sum of Revenue across ${contractYears}-year horizon. a.k.a. Total Contract Value (TCV).`)}
+        ${renderMetricCard('Total Investment', calc.formatCurrency(metrics.totalInvestment, {compact: true}), null, `Startup capital $${(summary.startupCapital/1000).toFixed(0)}K + Equipment capital $${(summary.equipmentCapital/1000).toFixed(0)}K. The Y0 outflow used as the anchor for MIRR/NPV/Payback.`)}
       </div>
     </div>
 
-    <!-- Multi-Year P&L — primitives hub-datatable -->
+    <!-- Multi-Year P&L — standard accounting stack post-2026-04-20 audit:
+         Revenue − COGS = GP − SG&A = EBITDA − D&A = EBIT − Tax = NI;
+         CapEx + ΔWC yields FCF and running Cum FCF. Subtotal rows (COGS /
+         SG&A / EBITDA / EBIT) are bolded with a subtle divider so finance
+         reviewers can trace the stack line-by-line. -->
     <div class="hub-card mb-4">
       <h3 class="hub-section-heading">${contractYears}-Year P&L Projection</h3>
       <div class="cm-table-scroll">
@@ -3700,22 +3713,34 @@ function renderSummary() {
           </thead>
           <tbody>
             <tr><td style="font-weight:600;">Orders</td>${projections.map(p => `<td class="hub-num">${Math.round(p.orders).toLocaleString()}</td>`).join('')}</tr>
-            <tr><td>Labor</td>${projections.map(p => `<td class="hub-num">${calc.formatCurrency(p.labor, {compact: true})}</td>`).join('')}</tr>
-            <tr><td>Facility</td>${projections.map(p => `<td class="hub-num">${calc.formatCurrency(p.facility, {compact: true})}</td>`).join('')}</tr>
-            <tr><td>Equipment</td>${projections.map(p => `<td class="hub-num">${calc.formatCurrency(p.equipment, {compact: true})}</td>`).join('')}</tr>
-            <tr><td>Overhead</td>${projections.map(p => `<td class="hub-num">${calc.formatCurrency(p.overhead, {compact: true})}</td>`).join('')}</tr>
-            <tr><td>VAS</td>${projections.map(p => `<td class="hub-num">${calc.formatCurrency(p.vas, {compact: true})}</td>`).join('')}</tr>
-            <tr><td>Start-Up Amort</td>${projections.map(p => `<td class="hub-num">${calc.formatCurrency(p.startup, {compact: true})}</td>`).join('')}</tr>
-            <tr class="cm-pnl-row-total"><td>Total Cost</td>${projections.map(p => `<td class="hub-num">${calc.formatCurrency(p.totalCost, {compact: true})}</td>`).join('')}</tr>
             <tr class="cm-pnl-row-revenue"><td style="font-weight:700; color:var(--ies-blue);">Revenue</td>${projections.map(p => `<td class="hub-num" style="font-weight:700; color:var(--ies-blue);">${calc.formatCurrency(p.revenue, {compact: true})}</td>`).join('')}</tr>
-            <tr><td style="font-weight:600;">Gross Profit</td>${projections.map(p => `<td class="hub-num" style="font-weight:600; color:${p.grossProfit >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};">${calc.formatCurrency(p.grossProfit, {compact: true})}</td>`).join('')}</tr>
-            <tr><td>EBITDA</td>${projections.map(p => `<td class="hub-num">${calc.formatCurrency(p.ebitda, {compact: true})}</td>`).join('')}</tr>
-            <tr><td>EBIT</td>${projections.map(p => `<td class="hub-num">${calc.formatCurrency(p.ebit, {compact: true})}</td>`).join('')}</tr>
-            <tr><td>Net Income</td>${projections.map(p => `<td class="hub-num">${calc.formatCurrency(p.netIncome, {compact: true})}</td>`).join('')}</tr>
-            <tr class="cm-pnl-row-capex"><td>CapEx</td>${projections.map(p => `<td class="hub-num">${p.capex > 0 ? '(' + calc.formatCurrency(p.capex, {compact: true}) + ')' : '—'}</td>`).join('')}</tr>
-            <tr><td>Free Cash Flow</td>${projections.map(p => `<td class="hub-num" style="font-weight:600; color:${p.freeCashFlow >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};">${calc.formatCurrency(p.freeCashFlow, {compact: true})}</td>`).join('')}</tr>
+
+            <tr><td style="padding-left:16px; color:var(--ies-gray-600);">Labor</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);">${calc.formatCurrency(p.labor, {compact: true})}</td>`).join('')}</tr>
+            <tr><td style="padding-left:16px; color:var(--ies-gray-600);">Facility</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);">${calc.formatCurrency(p.facility, {compact: true})}</td>`).join('')}</tr>
+            <tr><td style="padding-left:16px; color:var(--ies-gray-600);">Equipment</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);">${calc.formatCurrency(p.equipment, {compact: true})}</td>`).join('')}</tr>
+            <tr><td style="padding-left:16px; color:var(--ies-gray-600);">VAS (Pass-through)</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);">${calc.formatCurrency(p.vas, {compact: true})}</td>`).join('')}</tr>
+            <tr style="border-top: 1px dashed var(--ies-gray-200);"><td style="font-weight:600;">Total COGS</td>${projections.map(p => `<td class="hub-num" style="font-weight:600;">${calc.formatCurrency(p.cogs ?? (p.labor + p.facility + p.equipment + p.vas), {compact: true})}</td>`).join('')}</tr>
+            <tr class="cm-pnl-row-total"><td style="font-weight:700;">Gross Profit</td>${projections.map(p => `<td class="hub-num" style="font-weight:700; color:${p.grossProfit >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};">${calc.formatCurrency(p.grossProfit, {compact: true})}</td>`).join('')}</tr>
+
+            <tr><td style="padding-left:16px; color:var(--ies-gray-600);">Overhead (SG&A)</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);">${calc.formatCurrency(p.sga ?? p.overhead, {compact: true})}</td>`).join('')}</tr>
+            <tr style="border-top: 1px dashed var(--ies-gray-200);"><td style="font-weight:700;">EBITDA</td>${projections.map(p => `<td class="hub-num" style="font-weight:700;">${calc.formatCurrency(p.ebitda, {compact: true})}</td>`).join('')}</tr>
+
+            <tr><td style="padding-left:16px; color:var(--ies-gray-600);">Depreciation &amp; Amort.</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);">${calc.formatCurrency(p.depreciation ?? p.startup, {compact: true})}</td>`).join('')}</tr>
+            <tr style="border-top: 1px dashed var(--ies-gray-200);"><td style="font-weight:700;">EBIT</td>${projections.map(p => `<td class="hub-num" style="font-weight:700;">${calc.formatCurrency(p.ebit, {compact: true})}</td>`).join('')}</tr>
+
+            <tr><td style="padding-left:16px; color:var(--ies-gray-600);">Taxes</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);">${calc.formatCurrency(p.taxes || 0, {compact: true})}</td>`).join('')}</tr>
+            <tr style="border-top: 1px dashed var(--ies-gray-200);"><td style="font-weight:700;">Net Income</td>${projections.map(p => `<td class="hub-num" style="font-weight:700; color:${p.netIncome >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};">${calc.formatCurrency(p.netIncome, {compact: true})}</td>`).join('')}</tr>
+
+            <tr class="cm-pnl-row-capex"><td style="padding-left:16px; color:var(--ies-gray-600);">CapEx</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);">${p.capex > 0 ? '(' + calc.formatCurrency(p.capex, {compact: true}) + ')' : '—'}</td>`).join('')}</tr>
+            <tr><td style="padding-left:16px; color:var(--ies-gray-600);">Δ Working Capital</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);">${p.workingCapitalChange ? ((p.workingCapitalChange > 0 ? '(' : '') + calc.formatCurrency(Math.abs(p.workingCapitalChange), {compact: true}) + (p.workingCapitalChange > 0 ? ')' : '')) : '—'}</td>`).join('')}</tr>
+            <tr style="border-top: 1px dashed var(--ies-gray-200);"><td style="font-weight:700;">Free Cash Flow</td>${projections.map(p => `<td class="hub-num" style="font-weight:700; color:${p.freeCashFlow >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};">${calc.formatCurrency(p.freeCashFlow, {compact: true})}</td>`).join('')}</tr>
+            <tr><td style="color:var(--ies-gray-500); font-size:12px;">Cumulative FCF</td>${projections.map(p => `<td class="hub-num" style="color:${(p.cumFcf||0) >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'}; font-size:12px;">${calc.formatCurrency(p.cumFcf || 0, {compact: true})}</td>`).join('')}</tr>
           </tbody>
         </table>
+      </div>
+      <div class="hub-field__hint mt-2" style="font-size:11px; color:var(--ies-gray-500);">
+        Stack: <strong>Revenue − COGS = GP − SG&amp;A = EBITDA − D&amp;A = EBIT − Tax = Net Income.</strong>
+        CapEx + ΔWorking Capital bridge NI to Free Cash Flow. Cum FCF turns positive at payback.
       </div>
     </div>
 
@@ -3757,7 +3782,7 @@ function renderSummary() {
         </table>
       </div>
       <div class="hub-field__hint mt-2">
-        Shown: scenario <strong>Gross Profit</strong> + ΔGP vs baseline. Green = better for the deal, red = worse. Base GP: ${calc.formatCurrency((summary.totalRevenue - summary.totalCost), {compact: true})}. Hover any cell to see the underlying revenue / cost split.
+        Shown: scenario <strong>Gross Profit</strong> + ΔGP vs baseline. Green = better for the deal, red = worse. Base GP (Y1): ${calc.formatCurrency(((p1.revenue || 0) - (p1.totalCost || 0)), {compact: true})}. Hover any cell to see the underlying revenue / cost split.
       </div>
     </div>
 
@@ -3770,12 +3795,16 @@ function renderSummary() {
  *   true  → green (pass against threshold)
  *   false → red   (fail against threshold)
  *   null  → neutral (display-only metric, no judgment applied)
+ * `tooltip` (optional) explains the underlying math — shown on native hover
+ * so finance reviewers can audit how the number was derived without leaving
+ * the page.
  * Migrated to primitives kit (hub-kpi-tile base + .cm-metric-card mod).
  */
-function renderMetricCard(label, value, passes) {
+function renderMetricCard(label, value, passes, tooltip) {
   const stateClass = passes === null ? 'is-neutral' : (passes ? 'is-pass' : 'is-fail');
+  const titleAttr = tooltip ? ` title="${String(tooltip).replace(/"/g, '&quot;')}"` : '';
   return `
-    <div class="hub-kpi-tile cm-metric-card ${stateClass}">
+    <div class="hub-kpi-tile cm-metric-card ${stateClass}"${titleAttr}>
       <div class="hub-kpi-tile__label">${label}</div>
       <div class="hub-kpi-tile__value">${value}</div>
     </div>
@@ -4787,10 +4816,19 @@ function computeWhatIfPreview(overlay) {
     const totalOpex = projections.reduce((s, y) => s + (y.totalCost || 0), 0);
     const totalEbitda = projections.reduce((s, y) => s + (y.ebitda || 0), 0);
     const totalNI = projections.reduce((s, y) => s + (y.netIncome || 0), 0);
-    const lastCumFcf = projections.length ? (projections[projections.length - 1].cumFcf || 0) : 0;
+    // Cum FCF — groupMonthlyToYearly now attaches a running `cumFcf` per year
+    // (post 2026-04-20 PM audit). Previously this field was absent and the
+    // KPI always read $0.
+    const lastCumFcf = projections.length
+      ? (projections[projections.length - 1].cumFcf ?? projections.reduce((s, y) => s + (y.freeCashFlow || 0), 0))
+      : 0;
 
     // NPV — so the discount_rate_pct slider has a visible preview effect.
     // Uses the built-in computeFinancialMetrics (same path Summary uses).
+    // Parity fix (2026-04-20 PM): pass equipmentCapital + annualDepreciation
+    // + taxRatePct + dso/dpo so the What-If baseline NPV matches the Summary
+    // NPV on the same project. Previously omitted, so the two screens read
+    // different NPVs for the unchanged baseline scenario.
     const totalFtes = (model.laborLines || []).reduce((s, l) => {
       if (!opHrs || opHrs <= 0) return s;
       return s + ((l.annual_hours || 0) / opHrs);
@@ -4798,11 +4836,16 @@ function computeWhatIfPreview(overlay) {
     let npv = 0;
     try {
       const metrics = calc.computeFinancialMetrics(projections, {
-        startupCapital: summary.startupCapital || 0,
+        startupCapital:   summary.startupCapital || 0,
+        equipmentCapital: summary.equipmentCapital || 0,
+        annualDepreciation: (summary.equipmentAmort || 0) + (summary.startupAmort || 0),
         discountRatePct: calcHeur.discountRatePct,
         reinvestRatePct: calcHeur.reinvestRatePct || 8,
+        taxRatePct:      calcHeur.taxRatePct,
+        dsoDays:         calcHeur.dsoDays,
+        dpoDays:         calcHeur.dpoDays,
         totalFtes,
-        fixedCost: summary.facilityCost || 0,
+        fixedCost: (summary.facilityCost || 0) + (summary.overheadCost || 0) + (summary.startupAmort || 0),
       });
       npv = metrics.npv || 0;
     } catch (metricsErr) {
