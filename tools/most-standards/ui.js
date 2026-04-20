@@ -356,6 +356,16 @@ function renderShell() {
       .most-cat-mhe { background: rgba(32,201,151,0.1); color: #0d9668; }
       .most-cat-hybrid { background: rgba(255,149,0,0.1); color: #cc7700; }
 
+      /* Q3: visual cue when an analysis line is variable — thin
+         orange leader on the left + subtle wash so the row draws the
+         eye without overwhelming the otherwise-dense table. */
+      .most-row-variable td {
+        background: rgba(255, 149, 0, 0.04);
+      }
+      .most-row-variable td:first-child {
+        box-shadow: inset 3px 0 0 var(--ies-orange, #d97706);
+      }
+
       .most-detail-panel {
         border: 1px solid var(--ies-gray-200);
         border-radius: 8px;
@@ -1069,6 +1079,9 @@ function renderAnalysis() {
           <th>Category</th>
           <th class="cm-num">Base UPH</th>
           <th class="cm-num">Adj UPH</th>
+          <th class="cm-num" title="Check when this line is driven by a variable element (e.g. travel time scales with distance). Surfaces Driver + Formula fields for documentation.">Var?</th>
+          <th title="What drives this line's variable portion — e.g. 'pallets/order', 'units/case', 'distance_ft'. Free-form; for reference + export.">Driver</th>
+          <th title="Reference formula for the variable TMU — e.g. '3 TMU + 0.5 × distance_ft'. Descriptive only, not evaluated.">Formula</th>
           <th class="cm-num">Daily Vol</th>
           <th class="cm-num">Hrs/Day</th>
           <th class="cm-num">FTE</th>
@@ -1080,7 +1093,7 @@ function renderAnalysis() {
       </thead>
       <tbody>
         ${computedLines.map((line, i) => `
-          <tr>
+          <tr${line.is_variable ? ' class="most-row-variable"' : ''}>
             <td>
               <select style="width:160px;" data-action="set-template-line" data-idx="${i}">
                 <option value="">— Manual —</option>
@@ -1093,13 +1106,16 @@ function renderAnalysis() {
             </td>
             <td style="font-size:12px;">${line.process_area || '—'}</td>
             <td><span class="most-cat-badge most-cat-${line.labor_category || 'manual'}">${(line.labor_category || 'manual').toUpperCase()}</span></td>
-            <td><input type="number" value="${line.base_uph || 0}" style="width:60px;" data-line="${i}" data-field="base_uph" /></td>
+            <td><input type="number" value="${line.base_uph || 0}" style="width:60px;" data-line="${i}" data-field="base_uph" data-type="number" /></td>
             <td class="cm-num">${calc.formatUph(line.adjusted_uph)}</td>
-            <td><input type="number" value="${line.daily_volume || 0}" style="width:70px;" data-line="${i}" data-field="daily_volume" /></td>
+            <td style="text-align:center;"><input type="checkbox" data-line="${i}" data-field="is_variable" data-type="checkbox"${line.is_variable ? ' checked' : ''} title="Variable element — driver scales TMU per cycle" /></td>
+            <td><input type="text" value="${(line.variable_driver || '').replace(/"/g, '&quot;')}" style="width:100px;font-size:12px;" data-line="${i}" data-field="variable_driver" data-type="text" placeholder="${line.is_variable ? 'e.g. pallets/order' : '—'}"${!line.is_variable ? ' disabled' : ''} /></td>
+            <td><input type="text" value="${(line.variable_formula || '').replace(/"/g, '&quot;')}" style="width:140px;font-size:12px;" data-line="${i}" data-field="variable_formula" data-type="text" placeholder="${line.is_variable ? 'e.g. 3 + 0.5 × dist' : '—'}"${!line.is_variable ? ' disabled' : ''} /></td>
+            <td><input type="number" value="${line.daily_volume || 0}" style="width:70px;" data-line="${i}" data-field="daily_volume" data-type="number" /></td>
             <td class="cm-num">${line.hours_per_day.toFixed(1)}</td>
             <td class="cm-num">${calc.formatFte(line.fte)}</td>
             <td class="cm-num" style="font-weight:700;">${line.headcount}</td>
-            <td><input type="number" value="${line.hourly_rate || analysis.hourly_rate || 0}" style="width:55px;" step="0.5" data-line="${i}" data-field="hourly_rate" /></td>
+            <td><input type="number" value="${line.hourly_rate || analysis.hourly_rate || 0}" style="width:55px;" step="0.5" data-line="${i}" data-field="hourly_rate" data-type="number" /></td>
             <td class="cm-num">${formatDollar(line.daily_cost)}</td>
             <td><button class="cm-delete-btn" data-action="delete-analysis-line" data-idx="${i}">Del</button></td>
           </tr>
@@ -1393,19 +1409,28 @@ function bindContentEvents(container) {
     });
   });
 
-  // Analysis line field inputs
+  // Analysis line field inputs (type-aware: checkbox / text / number)
   container.querySelectorAll('[data-line]').forEach(input => {
     input.addEventListener('change', e => {
-      const idx = parseInt(/** @type {HTMLInputElement} */ (e.target).dataset.line);
-      const field = /** @type {HTMLInputElement} */ (e.target).dataset.field;
+      const tgt = /** @type {HTMLInputElement} */ (e.target);
+      const idx = parseInt(tgt.dataset.line);
+      const field = tgt.dataset.field;
+      const type = tgt.dataset.type || 'number';
       if (analysis.lines[idx]) {
-        analysis.lines[idx][field] = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
+        let value;
+        if (type === 'checkbox') value = tgt.checked;
+        else if (type === 'text') value = tgt.value;
+        else value = parseFloat(tgt.value) || 0;
+        analysis.lines[idx][field] = value;
         renderContent();
       }
     });
   });
 
-  // Template dropdown in analysis lines
+  // Template dropdown in analysis lines — pre-populate Variable/Driver/Formula
+  // from the template's element list when picking a template. A template
+  // with ANY is_variable element marks the analysis line as variable and
+  // seeds driver/formula from the first variable element.
   container.querySelectorAll('[data-action="set-template-line"]').forEach(select => {
     select.addEventListener('change', e => {
       const idx = parseInt(/** @type {HTMLSelectElement} */ (e.target).dataset.idx);
@@ -1418,6 +1443,18 @@ function bindContentEvents(container) {
         analysis.lines[idx].labor_category = tpl.labor_category || 'manual';
         analysis.lines[idx].base_uph = getMostTplBaseUph(tpl);
         analysis.lines[idx].uom = tpl.uom || 'each';
+        // Q3: seed Variable/Driver/Formula from template
+        const elements = tpl.elements || tpl.element_list || [];
+        const firstVar = elements.find(el => el && el.is_variable);
+        if (firstVar) {
+          analysis.lines[idx].is_variable = true;
+          analysis.lines[idx].variable_driver = firstVar.variable_driver || '';
+          analysis.lines[idx].variable_formula = firstVar.variable_formula || '';
+        } else {
+          analysis.lines[idx].is_variable = false;
+          analysis.lines[idx].variable_driver = '';
+          analysis.lines[idx].variable_formula = '';
+        }
       }
       renderContent();
     });
@@ -1721,6 +1758,15 @@ function createEmptyAnalysisLine() {
     headcount: 0,
     hourly_rate: 0,
     daily_cost: 0,
+    // Q3 v2 parity (Brock 2026-04-20): per-row variable override.
+    // is_variable flags a line as driven by a variable element (doc); when
+    // checked, the Driver + Formula fields surface next to it so the
+    // analyst can record what's driving the variability (e.g. "pallets/
+    // order", "3 TMU + 0.5 × distance_ft"). Pre-populated when the picked
+    // template has a variable element. Stored in analysis_data jsonb.
+    is_variable: false,
+    variable_driver: '',
+    variable_formula: '',
   };
 }
 
@@ -1977,6 +2023,9 @@ async function exportAnalysisToXlsx() {
       pfd_pct: pfd,
       productivity_pct: productivity,
       effective_uph: computed.adjusted_uph || 0,
+      is_variable: line.is_variable ? 'Yes' : '',
+      variable_driver: line.variable_driver || '',
+      variable_formula: line.variable_formula || '',
       daily_volume: line.daily_volume || 0,
       hours_per_day: computed.hours_per_day || 0,
       headcount: computed.headcount || 0,
@@ -2015,7 +2064,11 @@ async function exportAnalysisToXlsx() {
           { key: 'activity', label: 'Activity' },
           { key: 'base_uph', label: 'Base UPH', format: 'number', decimals: 1 },
           { key: 'pfd_pct', label: 'PFD %', format: 'pct' },
+          { key: 'productivity_pct', label: 'Productivity %', format: 'pct' },
           { key: 'effective_uph', label: 'Effective UPH', format: 'number', decimals: 1 },
+          { key: 'is_variable', label: 'Variable?' },
+          { key: 'variable_driver', label: 'Driver' },
+          { key: 'variable_formula', label: 'Formula' },
           { key: 'daily_volume', label: 'Daily Volume', format: 'number' },
           { key: 'hours_per_day', label: 'Hours/Day', format: 'number', decimals: 2 },
           { key: 'headcount', label: 'Headcount', format: 'number', decimals: 1 },
