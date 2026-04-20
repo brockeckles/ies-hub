@@ -4499,6 +4499,40 @@ function computeWhatIfPreview(overlay) {
     }));
     const scaledBaseLaborCost = summary.laborCost * laborHoursScale;
 
+    // When margin or volume sliders are active, re-derive bucket rates
+    // from the overlay values — otherwise explicit rates on Wayfair-style
+    // buckets pin revenue at baseline and the margin slider reads as dead.
+    // For other sliders (DSO, tax rate, labor rate) the explicit rates
+    // remain the defensible pricing and we leave them alone.
+    const marginOverlayActive = ov.target_margin_pct != null && ov.target_margin_pct !== '';
+    const volOverlayActive    = ov.annual_volume_growth_pct != null && ov.annual_volume_growth_pct !== '';
+    const whatIfBuckets = (marginOverlayActive || volOverlayActive)
+      ? (() => {
+          const cleared = (model.pricingBuckets || []).map(b => ({ ...b, rate: 0 }));
+          const bucketCosts = calc.computeBucketCosts({
+            buckets: cleared,
+            laborLines: model.laborLines || [],
+            indirectLaborLines: model.indirectLaborLines || [],
+            equipmentLines: model.equipmentLines || [],
+            overheadLines: model.overheadLines || [],
+            vasLines: model.vasLines || [],
+            startupLines: (model.startupLines || []).map(l => ({
+              ...l,
+              annual_amort: (l.one_time_cost || 0) / Math.max(1, contractYears),
+            })),
+            facilityCost: summary.facilityCost || 0,
+            operatingHours: opHrs || 0,
+            facilityBucketId: model.financial?.facilityBucketId || null,
+          });
+          return calc.enrichBucketsWithDerivedRates({
+            buckets: cleared,
+            bucketCosts,
+            marginPct: whatIfMarginFrac || 0,
+            volumeLines: model.volumeLines || [],
+          });
+        })()
+      : buildEnrichedPricingBuckets(summary, whatIfMarginFrac, opHrs, contractYears);
+
     const projResult = calc.buildYearlyProjections({
       years: contractYears,
       baseLaborCost: scaledBaseLaborCost,
@@ -4524,7 +4558,7 @@ function computeWhatIfPreview(overlay) {
       dpoDays:           calcHeur.dpoDays,
       laborPayableDays:  calcHeur.laborPayableDays,
       startupLines: model.startupLines || [],
-      pricingBuckets: buildEnrichedPricingBuckets(summary, whatIfMarginFrac, opHrs, contractYears),
+      pricingBuckets: whatIfBuckets,
       project_id: model.id || 0,
       _calcHeur: calcHeur,
       marketLaborProfile: currentMarketLaborProfile,
