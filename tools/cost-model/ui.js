@@ -1290,7 +1290,7 @@ function renderShifts() {
   const lc = model.laborCosting || (model.laborCosting = {});
   const opHrs = calc.operatingHours(s);
   const paidHrs = (s.hoursPerShift || 8) * (s.daysPerWeek || 5) * (s.weeksPerYear || 52);
-  // Productive Hours / Person (per doc §2.1/2.2 — display only; cost math
+  // Productive Hours / FTE (per doc §2.1/2.2 — display only; cost math
   // treats PTO as headcount uplift). Reads the new pto_pct / directUtilization
   // fields stored as percentages (divide by 100 at read).
   const utilFrac     = (Number(s.directUtilization ?? 85)) / 100;
@@ -1341,24 +1341,50 @@ function renderShifts() {
     </div>
 
     <!-- Shift Structure -->
+    <!-- Brock 2026-04-20: these are PER FTE values, not facility operating
+         schedule. Labor Build-Up Logic doc appendix: "For a US FT employee
+         on 8-5 M-F: 8 × 5 × 52 = 2,080." A 24/7 facility still has FTEs on
+         2,080-hr schedules — multiple FTEs rotate to cover the calendar. -->
     <div class="hub-card mb-4">
-      <div class="text-subtitle" style="margin:0 0 12px;">Shift Structure</div>
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin:0 0 12px;gap:12px;">
+        <div class="text-subtitle" style="margin:0;">Shift Structure <span style="font-size:11px;color:var(--ies-gray-400);font-weight:500;">(per FTE)</span></div>
+        <span class="hub-field__hint">Each FTE's scheduled work pattern, not facility operating days. Standard US FT: 8 × 5 × 52 = 2,080.</span>
+      </div>
+      ${(() => {
+        // Inline warning if the stored values look like facility-operating
+        // schedule rather than an FTE schedule. Gives Brock a one-click
+        // reset to the doc's reference values.
+        const d = Number(s.daysPerWeek) || 5;
+        const w = Number(s.weeksPerYear ?? 52);
+        const looksWrong = d > 5 || w < 48 || w > 52;
+        if (!looksWrong) return '';
+        return `
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;margin-bottom:12px;background:#fff8e6;border:1px solid #f3d675;border-radius:8px;font-size:12px;">
+            <div>
+              <strong>Heads up:</strong> Days/Week = ${d} and Weeks/Year = ${w} describe <em>facility operating schedule</em>, not a single FTE's work pattern.
+              A 24/7 facility still schedules each FTE for ~2,080 hrs/year (8 × 5 × 52). Multiple FTEs rotate to cover the calendar.
+              Correcting these will also fix Indirect Labor FTE counts and cost downstream.
+            </div>
+            <button class="hub-btn hub-btn-primary hub-btn-sm" data-action="reset-fte-shift-defaults" style="white-space:nowrap;">Reset to 5 × 52</button>
+          </div>
+        `;
+      })()}
       <div style="display:grid;grid-template-columns:repeat(4, minmax(0, 1fr));gap:12px;">
         <div class="hub-field">
-          <label class="hub-field__label">Shifts / Day</label>
+          <label class="hub-field__label" title="Number of shifts the FACILITY runs per day (1-3). Does not affect per-FTE hours — each FTE works one shift.">Shifts / Day <span style="color:var(--ies-gray-400);font-weight:400;">(facility)</span></label>
           <input class="hub-input" type="number" value="${s.shiftsPerDay || 1}" min="1" max="3" step="1" data-field="shifts.shiftsPerDay" data-type="number" />
         </div>
         <div class="hub-field">
-          <label class="hub-field__label">Hours / Shift</label>
+          <label class="hub-field__label" title="Length of ONE shift an FTE works. Includes paid breaks/lunch. Typical 8.0-8.5.">Hours / Shift <span style="color:var(--ies-gray-400);font-weight:400;">(per FTE)</span></label>
           <input class="hub-input" type="number" value="${s.hoursPerShift || 8}" min="4" max="12" step="0.5" data-field="shifts.hoursPerShift" data-type="number" />
         </div>
         <div class="hub-field">
-          <label class="hub-field__label">Days / Week</label>
-          <input class="hub-input" type="number" value="${s.daysPerWeek || 5}" min="1" max="7" step="1" data-field="shifts.daysPerWeek" data-type="number" />
+          <label class="hub-field__label" title="Days each FTE works per week. Typical 5 (M-F) or 4 (compressed 4x10). NOT facility operating days — a 7-day facility still has FTEs on 5-day schedules.">Days / Week <span style="color:var(--ies-gray-400);font-weight:400;">(per FTE)</span></label>
+          <input class="hub-input" type="number" value="${s.daysPerWeek || 5}" min="3" max="5" step="1" data-field="shifts.daysPerWeek" data-type="number" />
         </div>
         <div class="hub-field">
-          <label class="hub-field__label">Weeks / Year</label>
-          <input class="hub-input" type="number" value="${s.weeksPerYear ?? 52}" min="1" max="52" step="1" data-field="shifts.weeksPerYear" data-type="number" />
+          <label class="hub-field__label" title="Weeks per year an FTE is scheduled. Standard = 52 (PTO and holidays are handled separately as headcount uplift / hours reduction).">Weeks / Year <span style="color:var(--ies-gray-400);font-weight:400;">(per FTE)</span></label>
+          <input class="hub-input" type="number" value="${s.weeksPerYear ?? 52}" min="48" max="52" step="1" data-field="shifts.weeksPerYear" data-type="number" />
         </div>
         <div class="hub-field">
           <label class="hub-field__label" title="Pay premium applied to 2nd-shift hours">2nd Shift Premium %</label>
@@ -1368,12 +1394,12 @@ function renderShifts() {
           <label class="hub-field__label" title="Pay premium applied to 3rd-shift hours">3rd Shift Premium %</label>
           <input class="hub-input" type="number" value="${s.shift3Premium || 0}" min="0" max="50" step="0.5" data-field="shifts.shift3Premium" data-type="number" />
         </div>
-        <div class="cm-opshours-card" style="margin:0;">
-          <div class="cm-opshours-card__label">Annual Paid Hours / Person</div>
+        <div class="cm-opshours-card" style="margin:0;" title="Scheduled hours per FTE per year (hours × days × weeks). Doc reference: 2,080 for standard US FT.">
+          <div class="cm-opshours-card__label">Annual Paid Hours / FTE</div>
           <div class="cm-opshours-card__value">${opHrs.toLocaleString()}</div>
         </div>
-        <div class="cm-opshours-card" style="margin:0;" title="Paid hours minus PTO and holidays — what's left for productive work">
-          <div class="cm-opshours-card__label">Productive Hours / Person</div>
+        <div class="cm-opshours-card" style="margin:0;" title="Scheduled × direct_utilization × (1-PTO%) × (1-holiday%). Display only — cost math treats PTO as headcount uplift per doc §2.2.">
+          <div class="cm-opshours-card__label">Productive Hours / FTE</div>
           <div class="cm-opshours-card__value" style="color:var(--ies-blue);">${productiveHrs.toLocaleString()}</div>
         </div>
       </div>
@@ -5764,6 +5790,17 @@ function handleAction(action, idx, btn) {
       const target = btn && btn.dataset && btn.dataset.section;
       if (target) navigateSection(target);
       return;
+    }
+    case 'reset-fte-shift-defaults': {
+      // Brock 2026-04-20: Shift Structure's Days/Week and Weeks/Year are
+      // PER FTE values, not facility operating schedule. Reset to US FT
+      // reference (5 × 52 = 2,080 paid hrs/FTE) per Labor Build-Up Logic
+      // doc appendix. Preserves hoursPerShift (8.0-8.5 both reasonable)
+      // and shiftsPerDay (facility-level, orthogonal to FTE hours).
+      const s = model.shifts || (model.shifts = {});
+      s.daysPerWeek = 5;
+      s.weeksPerYear = 52;
+      break; // fall through to re-render
     }
     case 'add-overhead':
       model.overheadLines.push({ category: '', description: '', cost_type: 'monthly', monthly_cost: 0, pricing_bucket: defaultBucketFor('overhead') });
