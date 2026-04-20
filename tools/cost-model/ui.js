@@ -1549,6 +1549,26 @@ function recomputeLineHours(line) {
 }
 
 /**
+ * Brock 2026-04-20 — Effective UPH per Labor Build-Up Logic doc §2.1:
+ * base_uph × direct_utilization × (productivity_pct/100). This is the
+ * "PF&D haircut on UPH" path the doc flags as the #1 hours-chain gap.
+ *
+ * Reads shifts.directUtilization as percent (85), defaults to 85; reads
+ * line.productivity_pct (defaults 100 = no adjustment). Returns 0 for
+ * lines without a base_uph so the UI can show em-dash.
+ * @param {any} line
+ * @returns {number}
+ */
+function effectiveUphForLine(line) {
+  const baseUph = Number(line.base_uph) || 0;
+  if (baseUph === 0) return 0;
+  const s = model.shifts || {};
+  const utilFrac = ((Number(s.directUtilization) || 85)) / 100;
+  const prodFrac = ((Number(line.productivity_pct) || 100)) / 100;
+  return baseUph * utilFrac * prodFrac;
+}
+
+/**
  * Brock 2026-04-20 — Labor position cell. Renders a dropdown backed by
  * the Labor Factors position catalog. Selecting a position pulls its
  * hourly_wage → line.hourly_rate, employment_type, and temp_markup.
@@ -1754,6 +1774,7 @@ function renderLaborV1() {
 
     <div style="display: flex; gap: 8px; margin: 16px 0;">
       <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-indirect">Auto-Generate Indirect Labor</button>
+      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="apply-pfd-haircut" title="Recompute annual_hours using effective UPH (base_uph × Direct Utilization × productivity_pct) per Labor Build-Up Logic doc §2.1. Corrects the ~15% under-staffing the doc identifies.">Apply PF&amp;D Haircut to Hours</button>
     </div>
 
     <div class="text-subtitle mb-2">Direct Labor <span style="font-size:11px;color:var(--ies-gray-400);font-weight:500;">— Pick a <strong>Position</strong> (rate / employment / markup pull from Labor Factors) · Volume from Volumes tab · MHE and IT/Device separate</span></div>
@@ -1896,11 +1917,12 @@ function renderLaborV2() {
 
     <!-- Master-detail for Direct Labor -->
     <div style="margin-top:24px;">
-      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;gap:12px;flex-wrap:wrap;">
         <div>
           <h3 class="hub-section-heading" style="margin:0;">Direct Labor</h3>
           <div class="hub-field__hint">Volume sourced from Volumes tab · MOST template drives UPH</div>
         </div>
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="apply-pfd-haircut" title="Recompute annual_hours using effective UPH (base_uph × Direct Utilization × productivity_pct) per Labor Build-Up Logic doc §2.1. Corrects the ~15% under-staffing the doc identifies.">Apply PF&amp;D Haircut to Hours</button>
       </div>
 
       <div class="hub-master-detail">
@@ -2550,11 +2572,15 @@ function renderLaborDetailPane(lines, opHrs, lc) {
             ${renderLaborVolumeCell(l, i)}
           </div>
           <div class="hub-field">
-            <label class="hub-field__label">UPH</label>
+            <label class="hub-field__label" title="Base UPH (raw MOST throughput, excludes PF&D)">Base UPH</label>
             <input class="hub-input hub-num" type="number" step="1" value="${l.base_uph || 0}" data-array="laborLines" data-idx="${i}" data-field="base_uph" data-type="number" />
           </div>
           <div class="hub-field">
-            <label class="hub-field__label">Annual Hours</label>
+            <label class="hub-field__label" title="Effective UPH = Base UPH × Direct Utilization × productivity_pct per Labor Build-Up Logic doc §2.1. This is the throughput an operator actually delivers after PF&D.">Effective UPH</label>
+            <div class="hub-detail-readonly" style="color:var(--ies-blue,#0047AB);">${effectiveUphForLine(l).toLocaleString(undefined, {maximumFractionDigits:1})}</div>
+          </div>
+          <div class="hub-field">
+            <label class="hub-field__label" title="Volume ÷ Base UPH. Click 'Apply PF&D Haircut to Hours' above to divide by Effective UPH instead (adds ~15% hours to match reality).">Annual Hours</label>
             <div class="hub-detail-readonly">${(l.annual_hours || 0).toLocaleString(undefined, {maximumFractionDigits:0})}</div>
           </div>
           <div class="hub-field">
@@ -5838,6 +5864,40 @@ function handleAction(action, idx, btn) {
       // (section key 'shifts'). See renderLaborFactorsBanner.
       const target = btn && btn.dataset && btn.dataset.section;
       if (target) navigateSection(target);
+      return;
+    }
+    case 'apply-pfd-haircut': {
+      // Brock 2026-04-20 — Labor Build-Up Logic doc §2.1/§5.2: the
+      // hours-chain was missing the PF&D haircut on UPH. Applying it
+      // sets annual_hours = volume / effectiveUPH, which surfaces the
+      // ~15% additional hours the doc says you actually need.
+      //
+      // Opt-in action (not automatic) so existing projects can verify
+      // the impact before committing.
+      const s = model.shifts || {};
+      const utilPct = Number(s.directUtilization) || 85;
+      let updated = 0;
+      let totalBefore = 0, totalAfter = 0;
+      (model.laborLines || []).forEach(line => {
+        const v = Number(line.volume) || 0;
+        const base = Number(line.base_uph) || 0;
+        if (v <= 0 || base <= 0) return;
+        const eff = effectiveUphForLine(line);
+        if (eff <= 0) return;
+        totalBefore += line.annual_hours || 0;
+        line.annual_hours = v / eff;
+        totalAfter += line.annual_hours;
+        updated++;
+      });
+      isDirty = true;
+      const deltaHrs = totalAfter - totalBefore;
+      const deltaPct = totalBefore > 0 ? (deltaHrs / totalBefore * 100) : 0;
+      const fmtHrs = (n) => Math.round(n).toLocaleString('en-US');
+      showToast(
+        `Applied PF&D haircut (Direct Utilization ${utilPct}%) to ${updated} lines. Total hours ${fmtHrs(totalBefore)} → ${fmtHrs(totalAfter)} (+${deltaPct.toFixed(1)}%).`,
+        'success'
+      );
+      renderSection();
       return;
     }
     case 'reset-fte-shift-defaults': {
