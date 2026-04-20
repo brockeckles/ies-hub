@@ -1395,7 +1395,7 @@ function renderLaborV1() {
     <div class="text-subtitle mb-2">Direct Labor <span style="font-size:11px;color:var(--ies-gray-400);font-weight:500;">— Volume from Volumes tab · MHE and IT/Device separate · Burden % set in Labor Costing Factors above</span></div>
     <table class="cm-grid-table">
       <thead>
-        <tr><th style="min-width:180px;">MOST Template</th><th>Activity</th><th>MHE</th><th>IT / Device</th><th>Volume</th><th>UPH</th><th>Hrs/Yr</th><th>FTE</th><th>Rate</th><th>Employment</th><th>Markup %</th><th title="Productivity variance for Monte Carlo sensitivity">Var %</th><th class="cm-num">Annual Cost</th><th title="Monthly OT/absence profile">Profile</th><th></th></tr>
+        <tr><th style="min-width:180px;">MOST Template</th><th>Activity</th><th>MHE</th><th>IT / Device</th><th>Volume</th><th>UPH</th><th>Hrs/Yr</th><th>FTE</th><th>Rate</th><th>Employment</th><th>Markup %</th><th title="Productivity variance for Monte Carlo sensitivity">Var %</th><th class="cm-num">Annual Cost</th><th title="Monthly OT/absence seasonality">Seasonality</th><th></th></tr>
       </thead>
       <tbody>
         ${lines.map((l, i) => `
@@ -1454,7 +1454,7 @@ function renderLaborV1() {
             </td>
             <td class="cm-num">${calc.formatCurrency(calc.directLineAnnualSimple(l, lc))}</td>
             <td>
-              <button class="hub-btn" style="padding:2px 6px;font-size:11px;" data-cm-action="edit-labor-profile" data-idx="${i}" title="Edit monthly OT/absence profile">
+              <button class="hub-btn" style="padding:2px 6px;font-size:11px;" data-cm-action="edit-labor-seasonality" data-idx="${i}" title="Edit monthly OT/absence seasonality">
                 ${(Array.isArray(l.monthly_overtime_profile) || Array.isArray(l.monthly_absence_profile)) ? '📊*' : '📊'}
               </button>
             </td>
@@ -1681,7 +1681,7 @@ function renderLaborMasterItem(l, i, opHrs, lc) {
   const fte = calc.fte(l, opHrs);
   const annualCost = calc.directLineAnnualSimple(l, lc);
   const activityLabel = l.activity_name || '(unnamed activity)';
-  const hasProfile = Array.isArray(l.monthly_overtime_profile) || Array.isArray(l.monthly_absence_profile);
+  const hasSeasonality = Array.isArray(l.monthly_overtime_profile) || Array.isArray(l.monthly_absence_profile);
   const hasVariance = (l.performance_variance_pct || 0) > 0;
 
   // Bucket chip — shows which pricing bucket this line feeds
@@ -1700,7 +1700,7 @@ function renderLaborMasterItem(l, i, opHrs, lc) {
         <span class="hub-chip hub-chip--${emp.variant}">${emp.label}</span>
         ${bucketChip}
         <span>${fte.toFixed(1)} FTE · ${(l.base_uph || 0).toLocaleString()} UPH</span>
-        ${hasProfile ? `<span class="hub-chip hub-chip--info" title="Has monthly OT/absence profile">📊</span>` : ''}
+        ${hasSeasonality ? `<span class="hub-chip hub-chip--info" title="Has monthly OT/absence seasonality">📊</span>` : ''}
         ${hasVariance ? `<span class="hub-chip hub-chip--warn" title="Variance ±${l.performance_variance_pct}%">±${l.performance_variance_pct}%</span>` : ''}
       </div>
     </div>
@@ -1735,7 +1735,7 @@ function renderLaborDetailPane(lines, opHrs, lc) {
       <div class="hub-master-detail__detail-header">
         <h3 class="hub-master-detail__detail-title">${escapeHtml(l.activity_name || `Line ${i + 1}`)}</h3>
         <div style="display:flex;gap:6px;">
-          <button class="hub-btn hub-btn-secondary hub-btn-sm" data-cm-action="edit-labor-profile" data-idx="${i}" title="Edit monthly OT/absence profile">📊 Profile</button>
+          <button class="hub-btn hub-btn-secondary hub-btn-sm" data-cm-action="edit-labor-seasonality" data-idx="${i}" title="Edit monthly OT/absence seasonality">📊 Seasonality</button>
           <button class="cm-delete-btn" data-action="delete-labor" data-idx="${i}" title="Delete this line">Delete</button>
         </div>
       </div>
@@ -2951,11 +2951,11 @@ function bindSectionEvents(section, container) {
     });
   });
 
-  // Phase 4b: per-row labor profile editor
-  container.querySelectorAll('[data-cm-action="edit-labor-profile"]').forEach(btn => {
+  // Phase 4b: per-row labor seasonality editor (monthly OT/absence)
+  container.querySelectorAll('[data-cm-action="edit-labor-seasonality"]').forEach(btn => {
     btn.addEventListener('click', () => {
       const idx = parseInt(btn.dataset.idx);
-      openLaborProfileModal(idx);
+      openLaborSeasonalityModal(idx);
     });
   });
 
@@ -3402,12 +3402,12 @@ async function openCompareModal() {
 }
 
 /**
- * Per-row monthly OT/absence profile editor (Phase 4b).
+ * Per-row monthly OT/absence seasonality editor (Phase 4b).
  * Opens a modal with two 12-column rows of percent inputs (one for OT,
  * one for absence). "Use Market Defaults" pulls from ref_labor_market_profiles
  * for the project's market.
  */
-async function openLaborProfileModal(idx) {
+async function openLaborSeasonalityModal(idx) {
   const line = (model.laborLines || [])[idx];
   if (!line) return;
   const otProfile = Array.isArray(line.monthly_overtime_profile) ? [...line.monthly_overtime_profile] : null;
@@ -3422,7 +3422,7 @@ async function openLaborProfileModal(idx) {
     <div style="background:white;border-radius:8px;padding:24px;min-width:780px;max-width:95vw;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;">
         <div>
-          <h3 style="margin:0;">Monthly OT / Absence Profile</h3>
+          <h3 style="margin:0;">Monthly OT / Absence Seasonality</h3>
           <p class="cm-subtle" style="margin-top:4px;">${line.activity_name || line.role_name || `Line #${idx+1}`} — values are percent (e.g. 5 means 5%)</p>
         </div>
         <button class="hub-btn" data-close>×</button>
@@ -3464,14 +3464,14 @@ async function openLaborProfileModal(idx) {
         <button class="hub-btn" data-use-market>Use Market Defaults</button>
         <div style="display:flex;gap:8px;">
           <button class="hub-btn" data-close>Cancel</button>
-          <button class="hub-btn-primary" data-save>Save Profile</button>
+          <button class="hub-btn-primary" data-save>Save Seasonality</button>
         </div>
       </div>
-      <div id="cm-profile-status" style="margin-top:8px;font-size:11px;color:#666;"></div>
+      <div id="cm-seasonality-status" style="margin-top:8px;font-size:11px;color:#666;"></div>
     </div>
   `;
   document.body.appendChild(overlay);
-  const status = overlay.querySelector('#cm-profile-status');
+  const status = overlay.querySelector('#cm-seasonality-status');
   overlay.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => overlay.remove()));
 
   // Read inputs into 12-element fractional arrays. Empty cells = null
@@ -3520,9 +3520,9 @@ async function openLaborProfileModal(idx) {
     const ot = collect('data-ot-month');
     const abs = collect('data-abs-month');
     const otIssue = scenarios.validateMonthlyProfile(ot);
-    if (otIssue) { status.textContent = 'Overtime profile: ' + otIssue; return; }
+    if (otIssue) { status.textContent = 'Overtime seasonality: ' + otIssue; return; }
     const absIssue = scenarios.validateMonthlyProfile(abs);
-    if (absIssue) { status.textContent = 'Absence profile: ' + absIssue; return; }
+    if (absIssue) { status.textContent = 'Absence seasonality: ' + absIssue; return; }
     line.monthly_overtime_profile = ot;
     line.monthly_absence_profile = abs;
     if (line.id) {
