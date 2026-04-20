@@ -1713,6 +1713,72 @@ textarea.hub-input {
   letter-spacing: 0.04em;
 }
 
+/* ---- CM Monthly Direct Labor View (Brock 2026-04-20) ----
+   Peak / avg / min FTE across the contract with per-type MHE and IT
+   fleet counts implied by shift structure. Appended below Indirect
+   Labor. Sparkline is a simple flex row of 1-col grid bars — no chart
+   dep; peak month highlighted orange.
+*/
+.cm-mlv-card {
+  background: #fff;
+}
+.cm-mlv-kpi {
+  padding: 10px 12px;
+  border: 1px solid var(--ies-gray-200, #e5e7eb);
+  border-radius: 6px;
+  background: #fff;
+  min-width: 0;
+}
+.cm-mlv-kpi-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ies-gray-500, #6b7280);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  line-height: 1.25;
+}
+.cm-mlv-kpi-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--ies-gray-900, #111827);
+  margin-top: 4px;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.cm-mlv-kpi-sub {
+  font-size: 11px;
+  color: var(--ies-gray-500, #6b7280);
+  margin-top: 3px;
+  line-height: 1.2;
+}
+.cm-mlv-sparkline {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 60px;
+  padding: 4px 0;
+  background: var(--ies-gray-50, #f9fafb);
+  border: 1px solid var(--ies-gray-100, #f3f4f6);
+  border-radius: 4px;
+}
+.cm-mlv-bar {
+  flex: 1 1 0;
+  min-width: 2px;
+  min-height: 1px;
+  background: var(--ies-gray-300, #d1d5db);
+  border-radius: 1px 1px 0 0;
+  transition: height 0.15s ease;
+}
+.cm-mlv-bar.is-peak {
+  background: var(--ies-orange, #d97706);
+}
+.cm-mlv-bar:hover {
+  background: var(--ies-blue, #0047AB);
+}
+.cm-mlv-bar.is-peak:hover {
+  background: #b45309;
+}
+
 /* ---- CM What-If Studio live preview (Brock 2026-04-20) ----
    Replaces the prior purple-accented gradient card with a neutral
    hub-card that uses the standard left-accent pattern (info-blue)

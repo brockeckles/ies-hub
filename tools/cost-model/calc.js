@@ -14,7 +14,7 @@
  * @module tools/cost-model/calc
  */
 
-import * as monthly from './calc.monthly.js?v=20260420-vD';
+import * as monthly from './calc.monthly.js?v=20260420-vG';
 
 // ============================================================
 // OPERATING HOURS

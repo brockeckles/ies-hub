@@ -10,9 +10,10 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import * as calc from './calc.js?v=20260420-vF';
+import * as calc from './calc.js?v=20260420-vG';
 import * as api from './api.js?v=20260419-uH';
 import * as scenarios from './calc.scenarios.js?v=20260419-sZ';
+import * as monthlyCalc from './calc.monthly.js?v=20260420-vG';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260419-uH';
 
 // ============================================================
@@ -1682,6 +1683,249 @@ function renderLaborV2() {
         </table>
       </div>
       <div style="margin-top:8px;"><button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="add-indirect">+ Add Indirect Role</button></div>
+    </div>
+
+    ${renderMonthlyLaborViewCard()}
+  `;
+}
+
+// ============================================================
+// Monthly Direct Labor View (Brock 2026-04-20)
+// ============================================================
+
+/**
+ * Build a Monthly Direct Labor card that surfaces peak / avg / min FTE
+ * across the contract term, per-MHE-type fleet counts implied by shift
+ * structure, same for IT devices, and the seasonal indirect-staffing
+ * implication. Appended below Indirect Labor in the Labor section.
+ */
+function renderMonthlyLaborViewCard() {
+  const lines = model.laborLines || [];
+  if (lines.length === 0) return '';
+  const shifts = model.shifts || {};
+  const annualOpHours = calc.operatingHours(shifts);
+  const shiftsPerDay = Math.max(1, Math.floor(shifts.shiftsPerDay || 1));
+  const contractYears = model.projectDetails?.contractTerm || 5;
+  const fin = model.financial || {};
+  const allPeriods = (refData?.periods || []).filter(p =>
+    p.period_type === 'month' && p.period_index >= 0 && p.period_index < contractYears * 12
+  );
+  // Fallback: if periods table hasn't loaded yet, synthesize a simple axis
+  // so the card renders with best-effort seasonality + growth.
+  const periods = allPeriods.length > 0 ? allPeriods : (() => {
+    const go = new Date(model.projectDetails?.goLiveDate || '2026-01-01');
+    const out = [];
+    for (let i = 0; i < contractYears * 12; i++) {
+      const d = new Date(go.getFullYear(), go.getMonth() + i, 1);
+      out.push({
+        id: i, period_type: 'month', period_index: i,
+        calendar_year: d.getFullYear(), calendar_month: d.getMonth() + 1,
+        label: `M${i + 1}`, is_pre_go_live: false,
+      });
+    }
+    return out;
+  })();
+
+  const calcHeur = scenarios.resolveCalcHeuristics(
+    currentScenario, currentScenarioSnapshots, heuristicOverrides, fin, whatIfTransient,
+  );
+  const view = monthlyCalc.computeMonthlyLaborView({
+    laborLines: lines,
+    periods,
+    annualOpHours,
+    shiftsPerDay,
+    calcHeur,
+    marketLaborProfile: currentMarketLaborProfile || null,
+    ramp: null,
+    seasonality: model.seasonalityProfile || null,
+    volGrowthPct: calcHeur?.volGrowthPct || 0,
+    indirectGenerator: calc.autoGenerateIndirectLabor,
+    state: model,
+  });
+
+  const { summary, months } = view;
+  const { direct, byMhe, byIt, indirect } = summary;
+
+  // Mini sparkline — 60 thin bars scaled to the peak-month FTE. The max
+  // bar is blue; others gray. Enough to see the seasonal curve without
+  // pulling in Chart.js.
+  const peak = direct.peakFte || 1;
+  const sparkline = months.map(m => {
+    const pct = peak > 0 ? (m.total_fte / peak) * 100 : 0;
+    const isPeak = Math.abs(m.total_fte - direct.peakFte) < 1e-6;
+    return `<div class="cm-mlv-bar${isPeak ? ' is-peak' : ''}" style="height:${pct.toFixed(1)}%;" title="${m.label}: ${m.total_fte.toFixed(1)} FTE"></div>`;
+  }).join('');
+
+  // Per-type fleet table — one row per MHE type
+  const typeRows = (types, labelFn) => {
+    const entries = Object.entries(types);
+    if (entries.length === 0) {
+      return `<tr><td colspan="6" style="text-align:center;color:var(--ies-gray-400);padding:12px;font-size:12px;">No lines assigned to this equipment family.</td></tr>`;
+    }
+    return entries.map(([type, s]) => `
+      <tr>
+        <td><strong>${escapeHtml(labelFn ? labelFn(type) : type)}</strong></td>
+        <td class="hub-num">${s.peakFte.toFixed(1)} <span style="color:var(--ies-gray-400);font-size:11px;">(${escapeHtml(s.peakMonthLabel)})</span></td>
+        <td class="hub-num">${s.minFte.toFixed(1)} <span style="color:var(--ies-gray-400);font-size:11px;">(${escapeHtml(s.minMonthLabel)})</span></td>
+        <td class="hub-num" style="font-weight:700;">${s.peakCount}</td>
+        <td class="hub-num">${s.baselineCount}</td>
+        <td class="hub-num">${s.seasonalCount > 0 ? `<span style="color:var(--ies-orange, #d97706);font-weight:600;">+${s.seasonalCount}</span>` : '—'}</td>
+      </tr>
+    `).join('');
+  };
+  const MHE_LABELS = {
+    reach_truck: 'Reach Truck',
+    sit_down_forklift: 'Sit-Down Forklift',
+    stand_up_forklift: 'Stand-Up Forklift',
+    order_picker: 'Order Picker',
+    walkie_rider: 'Walkie Rider',
+    pallet_jack: 'Pallet Jack',
+    electric_pallet_jack: 'Electric Pallet Jack',
+    turret_truck: 'Turret Truck',
+    amr: 'AMR / Robot',
+    conveyor: 'Conveyor',
+  };
+  const IT_LABELS = { rf_scanner: 'RF Scanner', voice_pick: 'Voice Pick' };
+
+  return `
+    <div class="hub-card cm-mlv-card" style="margin-top:28px;padding:20px;">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px;gap:12px;flex-wrap:wrap;">
+        <div>
+          <h3 class="hub-section-heading" style="margin:0;">Monthly Labor View</h3>
+          <div class="hub-field__hint">
+            Per-month direct-FTE curve over the ${contractYears}-year contract. Fleet / indirect counts derive from <strong>${shiftsPerDay}</strong>-shift operation.
+          </div>
+        </div>
+        <span class="hub-chip hub-chip--info">peak/avg/min staffing</span>
+      </div>
+
+      <!-- KPI strip: Peak / Avg / Min Direct FTE -->
+      <div style="display:grid;grid-template-columns:repeat(4, minmax(0, 1fr));gap:12px;margin-top:16px;">
+        <div class="cm-mlv-kpi">
+          <div class="cm-mlv-kpi-label">PEAK DIRECT FTE</div>
+          <div class="cm-mlv-kpi-value" style="color:var(--ies-orange, #d97706);">${direct.peakFte.toFixed(1)}</div>
+          <div class="cm-mlv-kpi-sub">${escapeHtml(direct.peakMonthLabel)}</div>
+        </div>
+        <div class="cm-mlv-kpi">
+          <div class="cm-mlv-kpi-label">AVG DIRECT FTE</div>
+          <div class="cm-mlv-kpi-value">${direct.avgFte.toFixed(1)}</div>
+          <div class="cm-mlv-kpi-sub">across ${months.length} months</div>
+        </div>
+        <div class="cm-mlv-kpi">
+          <div class="cm-mlv-kpi-label">MIN DIRECT FTE</div>
+          <div class="cm-mlv-kpi-value" style="color:var(--ies-blue, #0047AB);">${direct.minFte.toFixed(1)}</div>
+          <div class="cm-mlv-kpi-sub">${escapeHtml(direct.minMonthLabel)}</div>
+        </div>
+        <div class="cm-mlv-kpi">
+          <div class="cm-mlv-kpi-label">PEAK-TO-MIN Δ</div>
+          <div class="cm-mlv-kpi-value">${(direct.peakFte - direct.minFte).toFixed(1)}</div>
+          <div class="cm-mlv-kpi-sub">${direct.minFte > 0 ? `+${(((direct.peakFte / direct.minFte) - 1) * 100).toFixed(0)}%` : '—'} swing</div>
+        </div>
+      </div>
+
+      <!-- Sparkline: 60 bars (monthly), peak highlighted -->
+      <div style="margin-top:16px;">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px;">
+          <div class="hub-field__hint">Monthly direct FTE curve</div>
+          <div class="hub-field__hint"><span style="display:inline-block;width:8px;height:8px;background:var(--ies-orange, #d97706);border-radius:1px;margin-right:4px;"></span>peak</div>
+        </div>
+        <div class="cm-mlv-sparkline" role="img" aria-label="Monthly direct-labor FTE curve across the contract">
+          ${sparkline}
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:10px;color:var(--ies-gray-400);">
+          <span>${escapeHtml(months[0]?.label || '')}</span>
+          <span>${escapeHtml(months[Math.floor(months.length / 2)]?.label || '')}</span>
+          <span>${escapeHtml(months[months.length - 1]?.label || '')}</span>
+        </div>
+      </div>
+
+      <!-- MHE implications table -->
+      <div style="margin-top:20px;">
+        <div style="font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);margin-bottom:6px;">MHE Fleet — implied by line-level assignments ÷ ${shiftsPerDay} shift${shiftsPerDay > 1 ? 's' : ''}</div>
+        <div class="hub-card" style="padding:0;overflow:hidden;">
+          <table class="hub-datatable hub-datatable--dense">
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th class="hub-num">Peak FTE (month)</th>
+                <th class="hub-num">Min FTE (month)</th>
+                <th class="hub-num" title="Count needed at peak month">Peak Count</th>
+                <th class="hub-num" title="Count needed year-round (min-month FTE)">Baseline</th>
+                <th class="hub-num" title="Seasonal flex: candidate for short-term lease">Seasonal Flex</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${typeRows(byMhe, t => MHE_LABELS[t] || t)}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- IT implications table -->
+      <div style="margin-top:16px;">
+        <div style="font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);margin-bottom:6px;">IT / Device Fleet</div>
+        <div class="hub-card" style="padding:0;overflow:hidden;">
+          <table class="hub-datatable hub-datatable--dense">
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th class="hub-num">Peak FTE (month)</th>
+                <th class="hub-num">Min FTE (month)</th>
+                <th class="hub-num">Peak Count</th>
+                <th class="hub-num">Baseline</th>
+                <th class="hub-num">Seasonal Flex</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${typeRows(byIt, t => IT_LABELS[t] || t)}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Indirect implications -->
+      ${indirect ? `
+      <div style="margin-top:16px;">
+        <div style="font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);margin-bottom:6px;">Indirect Staffing — scaled with direct peak vs avg</div>
+        <div class="hub-card" style="padding:14px 16px;background:var(--ies-gray-50);">
+          <div style="display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:12px;margin-bottom:10px;">
+            <div class="cm-mlv-kpi" style="background:#fff;">
+              <div class="cm-mlv-kpi-label">PEAK INDIRECT HC</div>
+              <div class="cm-mlv-kpi-value">${indirect.peakHc}</div>
+              <div class="cm-mlv-kpi-sub">peak direct FTE assumption</div>
+            </div>
+            <div class="cm-mlv-kpi" style="background:#fff;">
+              <div class="cm-mlv-kpi-label">AVG INDIRECT HC</div>
+              <div class="cm-mlv-kpi-value">${indirect.avgHc}</div>
+              <div class="cm-mlv-kpi-sub">avg direct FTE assumption</div>
+            </div>
+            <div class="cm-mlv-kpi" style="background:#fff;">
+              <div class="cm-mlv-kpi-label">SEASONAL FLEX HC</div>
+              <div class="cm-mlv-kpi-value" style="color:var(--ies-orange, #d97706);">${indirect.seasonalHc}</div>
+              <div class="cm-mlv-kpi-sub">candidates for temp staffing</div>
+            </div>
+          </div>
+          ${indirect.byRole && indirect.byRole.some(r => r.seasonalHc > 0) ? `
+            <details style="margin-top:6px;">
+              <summary style="cursor:pointer;font-size:12px;color:var(--ies-gray-600);">Breakdown by role</summary>
+              <table class="hub-datatable hub-datatable--dense" style="margin-top:8px;">
+                <thead><tr><th>Role</th><th class="hub-num">Peak HC</th><th class="hub-num">Avg HC</th><th class="hub-num">Δ Seasonal</th></tr></thead>
+                <tbody>
+                  ${indirect.byRole.map(r => `
+                    <tr>
+                      <td>${escapeHtml(r.role)}</td>
+                      <td class="hub-num">${r.peakHc}</td>
+                      <td class="hub-num">${r.avgHc}</td>
+                      <td class="hub-num">${r.seasonalHc > 0 ? `<span style="color:var(--ies-orange, #d97706);font-weight:600;">+${r.seasonalHc}</span>` : '—'}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </details>
+          ` : ''}
+        </div>
+      </div>
+      ` : ''}
     </div>
   `;
 }

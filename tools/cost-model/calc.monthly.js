@@ -773,3 +773,242 @@ export function monthlyProjectionView(bundle) {
   }
   return view.sort((a, b) => a.period_index - b.period_index);
 }
+
+// ============================================================
+// MONTHLY DIRECT LABOR VIEW (Brock 2026-04-20 — peak/avg/min staffing)
+// ============================================================
+
+/**
+ * Build a per-period monthly view of direct labor FTE + downstream MHE/IT
+ * equipment counts + indirect-staffing implications. Lets the user see
+ * seasonal peaks, decide long-term vs short-term MHE lease mix, and
+ * understand how indirect headcount scales with direct peaks.
+ *
+ * FTE per line per month formula:
+ *   monthlyHours = line.annual_hours / 12
+ *                × seasonalShare(calendarMonth) × 12   // unwind share to multiplier
+ *                × rampMult                            // by month-since-go-live
+ *                × volMult                             // by contract year
+ *                × (1 + OT%) × (1 − absence%)          // OT/absence profiles
+ *   fte = monthlyHours / (annualOpHours / 12)
+ *
+ * MHE/IT count per type at a given FTE level:
+ *   count = ceil(sumFtesOnType / shiftsPerDay)
+ *
+ * (Shift structure: if 10 FTEs are on forklifts across 2 shifts, only
+ * 5 are on-floor at any given time → 5 forklifts. Same for IT devices.)
+ *
+ * @param {Object} params
+ * @param {Array} params.laborLines           — direct labor lines
+ * @param {Period[]} params.periods           — scoped period axis
+ * @param {number} params.annualOpHours       — from calc.operatingHours()
+ * @param {number} params.shiftsPerDay        — from model.shifts.shiftsPerDay
+ * @param {Object} [params.calcHeur]          — for overtimePct, absencePct
+ * @param {Object|null} [params.marketLaborProfile] — Phase 4c monthly OT/abs
+ * @param {Object} [params.ramp]              — RampProfile
+ * @param {Object} [params.seasonality]       — SeasonalityProfile
+ * @param {number} [params.volGrowthPct=0]
+ * @param {Object} [params.indirectGenerator] — fn(state) → indirect lines,
+ *                                              used for peak/avg HC implication
+ * @param {Object} [params.state]             — for indirect generator input
+ * @returns {{ months: Array, summary: Object }}
+ */
+export function computeMonthlyLaborView(params) {
+  const {
+    laborLines = [],
+    periods = [],
+    annualOpHours = 2080,
+    shiftsPerDay = 1,
+    calcHeur = {},
+    marketLaborProfile = null,
+    ramp = null,
+    seasonality = null,
+    volGrowthPct = 0,
+    indirectGenerator = null,
+    state = null,
+  } = params;
+
+  // Normalize seasonality — same treatment as buildMonthlyProjections
+  let sProfile = seasonality;
+  const sCheck = validateSeasonality(sProfile);
+  if (!sCheck.valid && sProfile?.monthly_shares?.length === 12 && sCheck.sum > 0) {
+    sProfile = { monthly_shares: sProfile.monthly_shares.map(v => v / sCheck.sum) };
+  } else if (!sCheck.valid) {
+    sProfile = { monthly_shares: Array(12).fill(1 / 12) };
+  }
+
+  const opHoursPerMonth = annualOpHours > 0 ? annualOpHours / 12 : 0;
+  const shifts = Math.max(1, Math.floor(shiftsPerDay) || 1);
+
+  // Only live months (period_index >= 0). Pre-go-live doesn't staff up.
+  const live = (periods || []).filter(p => p.is_pre_go_live === false && p.period_type !== 'quarter' && p.period_type !== 'year');
+
+  /** @type {Array<{period_index:number, calendar_year:number, calendar_month:number, label:string, total_fte:number, by_line:Object, by_mhe:Object, by_it:Object}>} */
+  const months = [];
+
+  for (const p of live) {
+    const monthSinceGoLive = p.period_index + 1;
+    const yearIdx = Math.floor(p.period_index / 12);
+    // rampFactorForMonth crashes when ramp is null and monthSinceGoLive < 3
+    // (it expects a RampProfile with wk1/2/4/8/12 anchors). If the caller
+    // hasn't set a ramp, treat every month as fully ramped (1.0).
+    const rampMult = ramp ? rampFactorForMonth(ramp, monthSinceGoLive) : 1.0;
+    const seasonalShare = sProfile.monthly_shares[p.calendar_month - 1] ?? (1 / 12);
+    const seasonalMult = seasonalShare * 12; // flat = 1.0
+    const volMult = Math.pow(1 + (volGrowthPct || 0) / 100, yearIdx);
+
+    const byLine = {};
+    const byMhe = {};
+    const byIt = {};
+    let totalFte = 0;
+
+    for (let i = 0; i < laborLines.length; i++) {
+      const line = laborLines[i];
+      const lineId = line.id != null ? String(line.id) : `idx_${i}`;
+      // Effective hours for the calendar month — honors OT/absence profiles
+      // AND the project-default calcHeur.overtimePct / absenceAllowancePct.
+      const calMonth = (((p.calendar_month || 1) - 1) % 12 + 12) % 12;
+      const hours = monthlyEffectiveHours(line, calMonth, calcHeur, marketLaborProfile)
+                  * seasonalMult * rampMult * volMult;
+      const fte = opHoursPerMonth > 0 ? (hours / opHoursPerMonth) : 0;
+
+      byLine[lineId] = { fte, hours, activity: line.activity_name || '' };
+      totalFte += fte;
+
+      // Aggregate by MHE type + IT device — legacy `equipment_type` field is
+      // a compat fallback for projects that pre-date the split.
+      const mheType = line.mhe_type || line.equipment_type || '';
+      if (mheType && mheType !== 'manual') {
+        byMhe[mheType] = (byMhe[mheType] || 0) + fte;
+      }
+      const itDevice = line.it_device || '';
+      if (itDevice) {
+        byIt[itDevice] = (byIt[itDevice] || 0) + fte;
+      }
+    }
+
+    months.push({
+      period_index: p.period_index,
+      calendar_year: p.calendar_year,
+      calendar_month: p.calendar_month,
+      label: p.label,
+      total_fte: totalFte,
+      by_line: byLine,
+      by_mhe: byMhe,
+      by_it: byIt,
+    });
+  }
+
+  // ── SUMMARY: peak / avg / min across all contract months ──
+  const safeFindPeakMonth = (keyFn) => {
+    let best = null;
+    for (const m of months) {
+      const v = keyFn(m);
+      if (best == null || v > best.v) best = { month: m, v };
+    }
+    return best;
+  };
+  const safeFindMinMonth = (keyFn) => {
+    let best = null;
+    for (const m of months) {
+      const v = keyFn(m);
+      if (best == null || v < best.v) best = { month: m, v };
+    }
+    return best;
+  };
+
+  const peakDirect = safeFindPeakMonth(m => m.total_fte) || { month: null, v: 0 };
+  const minDirect = safeFindMinMonth(m => m.total_fte) || { month: null, v: 0 };
+  const avgDirect = months.length ? months.reduce((s, m) => s + m.total_fte, 0) / months.length : 0;
+
+  // ── Per-type roll-up for MHE and IT ──
+  // For each equipment type, compute peak-month FTE (across all months),
+  // avg-month FTE, min-month FTE, and the implied count at each level.
+  const buildTypeSummary = (monthKey) => {
+    /** @type {Object<string, {peakFte:number, avgFte:number, minFte:number, peakMonthLabel:string, minMonthLabel:string, peakCount:number, baselineCount:number, seasonalCount:number}>} */
+    const out = {};
+    // Collect all types that appear in any month
+    const allTypes = new Set();
+    for (const m of months) for (const t of Object.keys(m[monthKey] || {})) allTypes.add(t);
+    for (const type of allTypes) {
+      let peakFte = 0, peakLbl = '', minFte = Infinity, minLbl = '', sum = 0, count = 0;
+      for (const m of months) {
+        const v = (m[monthKey] && m[monthKey][type]) || 0;
+        if (v > peakFte) { peakFte = v; peakLbl = m.label; }
+        if (v < minFte)  { minFte  = v; minLbl  = m.label; }
+        sum += v; count += 1;
+      }
+      if (!Number.isFinite(minFte)) minFte = 0;
+      const avgFte = count > 0 ? sum / count : 0;
+      const peakCount = Math.ceil(peakFte / shifts);
+      const baselineCount = Math.ceil(minFte / shifts);  // min = what you need year-round
+      out[type] = {
+        peakFte, avgFte, minFte,
+        peakMonthLabel: peakLbl, minMonthLabel: minLbl,
+        peakCount, baselineCount,
+        seasonalCount: Math.max(0, peakCount - baselineCount),  // short-term lease candidates
+        avgCount: Math.ceil(avgFte / shifts),
+      };
+    }
+    return out;
+  };
+  const byMheSummary = buildTypeSummary('by_mhe');
+  const byItSummary  = buildTypeSummary('by_it');
+
+  // ── Indirect staffing implication ──
+  // Run autoGenerateIndirectLabor twice: once with peak direct FTE, once
+  // with avg. Delta = seasonal indirect flex that might be rebalanced
+  // via temps during peak.
+  let indirectSummary = null;
+  if (typeof indirectGenerator === 'function' && state) {
+    try {
+      const peakState = { ...state,
+        laborLines: laborLines.map((l, i) => ({ ...l, annual_hours: (peakDirect.month?.by_line?.[l.id != null ? String(l.id) : `idx_${i}`]?.fte || 0) * annualOpHours })),
+      };
+      const avgState = { ...state,
+        laborLines: laborLines.map((l, i) => {
+          const lineId = l.id != null ? String(l.id) : `idx_${i}`;
+          const avgFteThisLine = months.length
+            ? months.reduce((s, m) => s + ((m.by_line?.[lineId]?.fte) || 0), 0) / months.length
+            : 0;
+          return { ...l, annual_hours: avgFteThisLine * annualOpHours };
+        }),
+      };
+      const peakIndirect = indirectGenerator(peakState);
+      const avgIndirect = indirectGenerator(avgState);
+      const peakHc = peakIndirect.reduce((s, r) => s + (r.headcount || 0), 0);
+      const avgHc = avgIndirect.reduce((s, r) => s + (r.headcount || 0), 0);
+      // Merge by role name so we can show per-role peak vs avg
+      const roleMap = {};
+      for (const r of peakIndirect) roleMap[r.role_name] = { role: r.role_name, peakHc: r.headcount, avgHc: 0 };
+      for (const r of avgIndirect) {
+        if (!roleMap[r.role_name]) roleMap[r.role_name] = { role: r.role_name, peakHc: 0, avgHc: r.headcount };
+        else roleMap[r.role_name].avgHc = r.headcount;
+      }
+      indirectSummary = {
+        peakHc, avgHc,
+        seasonalHc: Math.max(0, peakHc - avgHc),
+        byRole: Object.values(roleMap).map(r => ({ ...r, seasonalHc: Math.max(0, r.peakHc - r.avgHc) })),
+      };
+    } catch (err) {
+      console.warn('[CM] Monthly labor view: indirect generator failed', err);
+    }
+  }
+
+  return {
+    months,
+    summary: {
+      direct: {
+        peakFte: peakDirect.v,
+        peakMonthLabel: peakDirect.month?.label || '',
+        avgFte: avgDirect,
+        minFte: minDirect.v,
+        minMonthLabel: minDirect.month?.label || '',
+        shiftsPerDay: shifts,
+      },
+      byMhe: byMheSummary,
+      byIt: byItSummary,
+      indirect: indirectSummary,
+    },
+  };
+}
