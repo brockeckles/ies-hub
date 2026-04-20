@@ -160,7 +160,7 @@ const SECTIONS = [
   { key: 'orderProfile',   label: 'Order Profile',      icon: 'package',       group: 'scope' },
   // Structure — framework to build inside (physical + commercial)
   { key: 'facility',       label: 'Facility',           icon: 'home',          group: 'structure' },
-  { key: 'shifts',         label: 'Shifts',             icon: 'clock',         group: 'structure' },
+  { key: 'shifts',         label: 'Labor Factors',      icon: 'clock',         group: 'structure' },
   { key: 'pricingBuckets', label: 'Pricing Buckets',    icon: 'layers',        group: 'structure' },
   { key: 'financial',      label: 'Financial',          icon: 'trending-up',   group: 'structure' },
   // Cost — the build itself
@@ -422,6 +422,10 @@ function wireLandingEvents() {
             recomputeLineHours(l);
           }
         });
+        // Brock 2026-04-20 — auto-migrate to position catalog. Clusters
+        // existing labor lines by (activity, rate, employment_type) into
+        // distinct positions and stamps position_id on each line.
+        migrateLaborLinesToPositions(model);
         isDirty = false;
         userHasInteracted = false;
         activeSection = 'setup';
@@ -1251,50 +1255,164 @@ function renderFacilityCostCard() {
 // ============================================================
 
 function renderShifts() {
-  const s = model.shifts || {};
+  // Renamed Shifts → Labor Factors (Brock 2026-04-20). Section key stays
+  // 'shifts' for persistence compatibility; only the label changes.
+  const s = model.shifts || (model.shifts = {});
+  const lc = model.laborCosting || (model.laborCosting = {});
   const opHrs = calc.operatingHours(s);
+  const paidHrs = (s.hoursPerShift || 8) * (s.daysPerWeek || 5) * (s.weeksPerYear || 52);
+  const productiveHrs = Math.max(0, paidHrs - (Number(s.ptoHoursPerYear) || 0) - (Number(s.holidayHoursPerYear) || 0));
+  const positions = Array.isArray(s.positions) ? s.positions : [];
+  const directCount = positions.filter(p => p.category === 'direct').length;
+  const indirectCount = positions.filter(p => p.category === 'indirect').length;
+
+  const posRow = (p, i) => `
+    <tr>
+      <td><input class="hub-input" value="${_esc(p.name || '')}" data-array="shifts.positions" data-idx="${i}" data-field="name" /></td>
+      <td>
+        <select class="hub-input" data-array="shifts.positions" data-idx="${i}" data-field="category">
+          <option value="direct"${(p.category || 'direct') === 'direct' ? ' selected' : ''}>Direct</option>
+          <option value="indirect"${p.category === 'indirect' ? ' selected' : ''}>Indirect</option>
+        </select>
+      </td>
+      <td>
+        <select class="hub-input" data-array="shifts.positions" data-idx="${i}" data-field="employment_type">
+          <option value="permanent"${(p.employment_type || 'permanent') === 'permanent' ? ' selected' : ''}>Permanent</option>
+          <option value="temp_agency"${p.employment_type === 'temp_agency' ? ' selected' : ''}>Temp Agency</option>
+          <option value="contractor"${p.employment_type === 'contractor' ? ' selected' : ''}>Contractor</option>
+        </select>
+      </td>
+      <td><input class="hub-input hub-num" type="number" step="0.25" min="0" value="${p.hourly_wage || 0}" data-array="shifts.positions" data-idx="${i}" data-field="hourly_wage" data-type="number" title="Starting hourly wage (before burden/benefits)" /></td>
+      <td><input class="hub-input hub-num" type="number" step="1" min="0" max="100" value="${p.temp_markup_pct || 0}" data-array="shifts.positions" data-idx="${i}" data-field="temp_markup_pct" data-type="number" ${p.employment_type !== 'temp_agency' ? 'disabled title="Only applies to Temp Agency positions"' : 'title="Temp agency markup on top of the base wage"'} /></td>
+      <td>
+        <input type="checkbox" data-array="shifts.positions" data-idx="${i}" data-field="is_salaried" data-type="checkbox"${p.is_salaried ? ' checked' : ''} title="Salaried (uses annual_salary, not hourly_wage × hours)" />
+      </td>
+      <td><input class="hub-input hub-num" type="number" step="1000" min="0" value="${p.annual_salary || 0}" data-array="shifts.positions" data-idx="${i}" data-field="annual_salary" data-type="number" ${!p.is_salaried ? 'disabled title="Only applies when Salaried is checked"' : ''} /></td>
+      <td><input class="hub-input hub-num" type="number" step="0.25" min="0" max="100" value="${p.bonus_pct ?? ''}" placeholder="${s.bonusPct ?? 5}" data-array="shifts.positions" data-idx="${i}" data-field="bonus_pct" data-type="number" title="Leave blank to inherit global bonus %" /></td>
+      <td><input class="hub-input" value="${_esc(p.notes || '')}" data-array="shifts.positions" data-idx="${i}" data-field="notes" /></td>
+      <td><button class="cm-delete-btn" data-action="delete-position" data-idx="${i}" title="Delete position">×</button></td>
+    </tr>
+  `;
 
   return `
+    <div class="cm-wide-layout">
     <div class="cm-section-header">
       <div>
-        <div class="cm-section-title">Shift Configuration</div>
-        <div class="cm-section-desc">Define operating schedule. This drives labor hours and FTE calculations.</div>
+        <div class="cm-section-title">Labor Factors</div>
+        <div class="cm-section-desc">Shift structure + global labor economics + the <strong>position catalog</strong> that drives per-activity rates in the Labor section. Change a position's wage here and every labor line using that position updates automatically.</div>
       </div>
     </div>
 
-    <div class="cm-narrow-form">
-      <div class="hub-field">
-        <label class="hub-field__label">Shifts Per Day</label>
-        <input class="hub-input" type="number" value="${s.shiftsPerDay || 1}" min="1" max="3" step="1" data-field="shifts.shiftsPerDay" data-type="number" />
-      </div>
-      <div class="hub-field">
-        <label class="hub-field__label">Hours Per Shift</label>
-        <input class="hub-input" type="number" value="${s.hoursPerShift || 8}" min="4" max="12" step="0.5" data-field="shifts.hoursPerShift" data-type="number" />
-      </div>
-      <div class="hub-field">
-        <label class="hub-field__label">Days Per Week</label>
-        <input class="hub-input" type="number" value="${s.daysPerWeek || 5}" min="1" max="7" step="1" data-field="shifts.daysPerWeek" data-type="number" />
-      </div>
-      <div class="hub-field">
-        <label class="hub-field__label">Weeks Per Year</label>
-        <input class="hub-input" type="number" value="${s.weeksPerYear ?? 52}" min="1" max="52" step="1" data-field="shifts.weeksPerYear" data-type="number" />
+    <!-- Shift Structure -->
+    <div class="hub-card mb-4">
+      <div class="text-subtitle" style="margin:0 0 12px;">Shift Structure</div>
+      <div style="display:grid;grid-template-columns:repeat(4, minmax(0, 1fr));gap:12px;">
+        <div class="hub-field">
+          <label class="hub-field__label">Shifts / Day</label>
+          <input class="hub-input" type="number" value="${s.shiftsPerDay || 1}" min="1" max="3" step="1" data-field="shifts.shiftsPerDay" data-type="number" />
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label">Hours / Shift</label>
+          <input class="hub-input" type="number" value="${s.hoursPerShift || 8}" min="4" max="12" step="0.5" data-field="shifts.hoursPerShift" data-type="number" />
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label">Days / Week</label>
+          <input class="hub-input" type="number" value="${s.daysPerWeek || 5}" min="1" max="7" step="1" data-field="shifts.daysPerWeek" data-type="number" />
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label">Weeks / Year</label>
+          <input class="hub-input" type="number" value="${s.weeksPerYear ?? 52}" min="1" max="52" step="1" data-field="shifts.weeksPerYear" data-type="number" />
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label" title="Pay premium applied to 2nd-shift hours">2nd Shift Premium %</label>
+          <input class="hub-input" type="number" value="${s.shift2Premium || 0}" min="0" max="50" step="0.5" data-field="shifts.shift2Premium" data-type="number" />
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label" title="Pay premium applied to 3rd-shift hours">3rd Shift Premium %</label>
+          <input class="hub-input" type="number" value="${s.shift3Premium || 0}" min="0" max="50" step="0.5" data-field="shifts.shift3Premium" data-type="number" />
+        </div>
+        <div class="cm-opshours-card" style="margin:0;">
+          <div class="cm-opshours-card__label">Annual Paid Hours / Person</div>
+          <div class="cm-opshours-card__value">${opHrs.toLocaleString()}</div>
+        </div>
+        <div class="cm-opshours-card" style="margin:0;" title="Paid hours minus PTO and holidays — what's left for productive work">
+          <div class="cm-opshours-card__label">Productive Hours / Person</div>
+          <div class="cm-opshours-card__value" style="color:var(--ies-blue);">${productiveHrs.toLocaleString()}</div>
+        </div>
       </div>
     </div>
 
-    <div class="cm-opshours-card mt-4">
-      <div class="cm-opshours-card__label">Annual Operating Hours / Person</div>
-      <div class="cm-opshours-card__value">${opHrs.toLocaleString()}</div>
+    <!-- Global Labor Economics -->
+    <div class="hub-card mb-4">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;">
+        <div class="text-subtitle" style="margin:0;">Global Labor Economics</div>
+        <span class="hub-field__hint">Per-position overrides live in the catalog below.</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4, minmax(0, 1fr));gap:12px;">
+        <div class="hub-field">
+          <label class="hub-field__label" title="Fringe rate applied to base wage: payroll taxes + workers comp. Typical 25-35%.">Burden %</label>
+          <input class="hub-input" type="number" min="0" max="100" step="0.5" value="${lc.defaultBurdenPct ?? 30}" data-field="laborCosting.defaultBurdenPct" data-type="number" />
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label" title="Health / retirement / paid benefits as % of base wage — layered on top of Burden. Typical 12-18%.">Benefit Load %</label>
+          <input class="hub-input" type="number" min="0" max="50" step="0.5" value="${lc.benefitLoadPct ?? 15}" data-field="laborCosting.benefitLoadPct" data-type="number" />
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label" title="Planned bonus pay as % of base wage. Blend across all roles.">Bonus %</label>
+          <input class="hub-input" type="number" min="0" max="50" step="0.25" value="${s.bonusPct ?? 5}" data-field="shifts.bonusPct" data-type="number" />
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label" title="Planned overtime hours as % of regular. Each OT hour costs 1.5×. Typical 3-8%.">Overtime %</label>
+          <input class="hub-input" type="number" min="0" max="50" step="0.5" value="${lc.overtimePct ?? 5}" data-field="laborCosting.overtimePct" data-type="number" />
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label" title="Annual % of workforce turning over — drives recruiting/onboarding cost. 3PL typical 40-80%.">Turnover %</label>
+          <input class="hub-input" type="number" min="0" max="150" step="1" value="${lc.turnoverPct ?? 45}" data-field="laborCosting.turnoverPct" data-type="number" />
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label" title="Paid time off hours per FTE per year (vacation + sick). Typical 80-120.">PTO Hours / Year</label>
+          <input class="hub-input" type="number" min="0" max="500" step="8" value="${s.ptoHoursPerYear ?? 80}" data-field="shifts.ptoHoursPerYear" data-type="number" />
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label" title="Paid holiday hours per FTE per year. Typical 56-80 (7-10 holidays × 8 hrs).">Holiday Hours / Year</label>
+          <input class="hub-input" type="number" min="0" max="200" step="8" value="${s.holidayHoursPerYear ?? 64}" data-field="shifts.holidayHoursPerYear" data-type="number" />
+        </div>
+      </div>
     </div>
 
-    <div class="cm-narrow-form mt-4">
-      <div class="hub-field">
-        <label class="hub-field__label">2nd Shift Premium (%)</label>
-        <input class="hub-input" type="number" value="${s.shift2Premium || 0}" step="0.5" data-field="shifts.shift2Premium" data-type="number" />
+    <!-- Position Catalog -->
+    <div class="hub-card mb-4">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+        <div>
+          <div class="text-subtitle" style="margin:0;">Position Catalog</div>
+          <div class="hub-field__hint">Labor activities select from this catalog. <strong>${directCount}</strong> direct · <strong>${indirectCount}</strong> indirect · <strong>${positions.length}</strong> total.</div>
+        </div>
+        <button class="hub-btn hub-btn-primary hub-btn-sm" data-action="add-position">+ Add Position</button>
       </div>
-      <div class="hub-field">
-        <label class="hub-field__label">3rd Shift Premium (%)</label>
-        <input class="hub-input" type="number" value="${s.shift3Premium || 0}" step="0.5" data-field="shifts.shift3Premium" data-type="number" />
+      <div class="cm-table-scroll">
+        <table class="hub-datatable hub-datatable--dense">
+          <thead>
+            <tr>
+              <th style="min-width:180px;">Position Name</th>
+              <th style="width:100px;">Category</th>
+              <th style="width:130px;">Employment</th>
+              <th class="hub-num" style="width:90px;" title="Starting hourly wage (pre-burden/benefits)">Wage $/hr</th>
+              <th class="hub-num" style="width:90px;" title="Temp-agency markup on base wage (only for Temp Agency positions)">Temp Mkup %</th>
+              <th style="width:70px;text-align:center;" title="Salaried vs hourly">Salaried?</th>
+              <th class="hub-num" style="width:110px;" title="Annual salary (salaried only)">Salary</th>
+              <th class="hub-num" style="width:80px;" title="Position-specific bonus %. Blank = inherit global">Bonus %</th>
+              <th>Notes</th>
+              <th style="width:36px;"></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${positions.length === 0
+              ? `<tr><td colspan="10" style="text-align:center;padding:18px;color:var(--ies-gray-400);"><em>No positions yet. Click <strong>+ Add Position</strong>, or they'll auto-populate from existing labor lines on next load.</em></td></tr>`
+              : positions.map((p, i) => posRow(p, i)).join('')}
+          </tbody>
+        </table>
       </div>
+    </div>
     </div>
   `;
 }
@@ -1313,6 +1431,35 @@ function recomputeLineHours(line) {
   const v = line.volume || 0;
   const u = line.base_uph || 0;
   line.annual_hours = u > 0 ? v / u : 0;
+}
+
+/**
+ * Brock 2026-04-20 — Labor position cell. Renders a dropdown backed by
+ * the Labor Factors position catalog. Selecting a position pulls its
+ * hourly_wage → line.hourly_rate, employment_type, and temp_markup.
+ * Existing per-line rate stays as an override path (editable in the Rate
+ * column); selecting "— None —" leaves position_id null.
+ *
+ * category filter: 'direct' shows direct positions; 'indirect' shows the
+ * indirect subset. Keeps each dropdown lean.
+ */
+function renderPositionCell(line, idx, categoryFilter) {
+  const positions = (model.shifts && model.shifts.positions) || [];
+  const eligible = positions.filter(p => {
+    if (categoryFilter === 'indirect') return p.category === 'indirect';
+    return p.category !== 'indirect'; // 'direct' → anything not flagged indirect
+  });
+  const current = line.position_id || '';
+  return `
+    <select style="width:150px;font-size:11px;" data-whatif-position="${idx}" data-labor-kind="${categoryFilter}" title="Pick a role from the Position Catalog on Labor Factors. Rate pulls from the position.">
+      <option value=""${current ? '' : ' selected'}>— Manual —</option>
+      ${eligible.map(p => `
+        <option value="${p.id}"${current === p.id ? ' selected' : ''}>
+          ${_esc(p.name)}${p.employment_type === 'temp_agency' ? ' · Temp' : ''} · $${(p.hourly_wage || 0).toFixed(2)}
+        </option>
+      `).join('')}
+    </select>
+  `;
 }
 
 // ---- MOST schema accessors -------------------------------------------------
@@ -1519,16 +1666,17 @@ function renderLaborV1() {
       <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-indirect">Auto-Generate Indirect Labor</button>
     </div>
 
-    <div class="text-subtitle mb-2">Direct Labor <span style="font-size:11px;color:var(--ies-gray-400);font-weight:500;">— Volume from Volumes tab · MHE and IT/Device separate · Burden % set in Labor Costing Factors above</span></div>
+    <div class="text-subtitle mb-2">Direct Labor <span style="font-size:11px;color:var(--ies-gray-400);font-weight:500;">— Pick a <strong>Position</strong> (rate / employment / markup pull from Labor Factors) · Volume from Volumes tab · MHE and IT/Device separate</span></div>
     <table class="cm-grid-table">
       <thead>
-        <tr><th style="min-width:180px;">MOST Template</th><th>Activity</th><th>MHE</th><th>IT / Device</th><th>Volume</th><th>UPH</th><th>Hrs/Yr</th><th>FTE</th><th>Rate</th><th>Employment</th><th>Markup %</th><th title="Productivity variance for Monte Carlo sensitivity">Var %</th><th class="cm-num">Annual Cost</th><th title="Monthly OT/absence seasonality">Seasonality</th><th></th></tr>
+        <tr><th style="min-width:180px;">MOST Template</th><th>Activity</th><th style="min-width:150px;" title="Pick a role from the Labor Factors catalog. Rate/employment/markup pull from the position — edit those centrally.">Position</th><th>MHE</th><th>IT / Device</th><th>Volume</th><th>UPH</th><th>Hrs/Yr</th><th>FTE</th><th>Rate</th><th>Employment</th><th>Markup %</th><th title="Productivity variance for Monte Carlo sensitivity">Var %</th><th class="cm-num">Annual Cost</th><th title="Monthly OT/absence seasonality">Seasonality</th><th></th></tr>
       </thead>
       <tbody>
         ${lines.map((l, i) => `
           <tr>
             <td>${renderMostCell(l, i)}</td>
             <td><input value="${l.activity_name || ''}" style="width:110px;" data-array="laborLines" data-idx="${i}" data-field="activity_name" /></td>
+            <td>${renderPositionCell(l, i, 'direct')}</td>
             <td>
               <select style="width:95px;font-size:11px;" data-array="laborLines" data-idx="${i}" data-field="mhe_type" title="Material handling equipment (MHE) assigned to this activity">
                 <option value=""${!l.mhe_type && !['reach_truck','sit_down_forklift','stand_up_forklift','order_picker','walkie_rider','pallet_jack','electric_pallet_jack','turret_truck','amr','conveyor','manual'].includes(l.equipment_type) ? ' selected' : ''}>None</option>
@@ -3643,15 +3791,28 @@ function renderHeuristicsPanel(state, summary) {
 function bindSectionEvents(section, container) {
   // Generic input binding: data-field="path.to.field"
   container.querySelectorAll('[data-field]').forEach(input => {
-    const event = input.tagName === 'SELECT' ? 'change' : 'input';
+    const event = input.tagName === 'SELECT' ? 'change'
+                : input.type === 'checkbox' ? 'change'
+                : 'input';
     input.addEventListener(event, (e) => {
       const field = input.dataset.field;
-      const isNum = input.dataset.type === 'number';
-      const val = isNum ? parseFloat(input.value) || 0 : input.value;
+      const type = input.dataset.type;
+      let val;
+      if (type === 'checkbox' || input.type === 'checkbox') val = input.checked;
+      else if (type === 'number') val = input.value === '' ? null : (parseFloat(input.value) || 0);
+      else val = input.value;
 
-      // Handle array fields (data-array + data-idx)
+      // Handle array fields (data-array + data-idx). data-array supports
+      // dot-paths (e.g. "shifts.positions") so macro-section catalogs can
+      // live alongside top-level arrays like laborLines.
       if (input.dataset.array) {
-        const arr = model[input.dataset.array];
+        const arrPath = input.dataset.array;
+        let arr;
+        if (arrPath.includes('.')) {
+          arr = arrPath.split('.').reduce((o, k) => (o ? o[k] : undefined), model);
+        } else {
+          arr = model[arrPath];
+        }
         const idx = parseInt(input.dataset.idx);
         if (arr && arr[idx] !== undefined) {
           arr[idx][field] = val;
@@ -3682,6 +3843,39 @@ function bindSectionEvents(section, container) {
   });
 
   // MOST per-row template picker (data-most-select)
+  // Position-catalog dropdown on Labor grid — picking a position pulls
+  // wage / employment / markup from the catalog onto the line. Clearing
+  // to "— Manual —" unlinks the position but leaves per-line rate intact.
+  container.querySelectorAll('[data-whatif-position]').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const idx = parseInt(sel.dataset.whatifPosition);
+      const kind = sel.dataset.laborKind || 'direct';
+      const posId = sel.value || null;
+      const positions = (model.shifts && model.shifts.positions) || [];
+      const target = kind === 'indirect' ? (model.indirectLaborLines || []) : (model.laborLines || []);
+      const line = target[idx];
+      if (!line) return;
+      line.position_id = posId;
+      if (posId) {
+        const p = positions.find(pp => pp.id === posId);
+        if (p) {
+          // Pull position attrs onto the line so existing calc paths
+          // (which read line.hourly_rate / line.employment_type /
+          // line.temp_agency_markup_pct) stay defensible.
+          line.hourly_rate = Number(p.hourly_wage) || 0;
+          line.employment_type = p.employment_type || 'permanent';
+          if (p.employment_type === 'temp_agency') {
+            line.temp_agency_markup_pct = Number(p.temp_markup_pct) || 0;
+          }
+          // Use the position name as the activity name hint if line was empty
+          if (!line.activity_name) line.activity_name = p.name;
+        }
+      }
+      isDirty = true;
+      renderSection();
+    });
+  });
+
   container.querySelectorAll('[data-most-select]').forEach(sel => {
     sel.addEventListener('change', () => {
       const idx = parseInt(sel.dataset.idx);
@@ -5408,6 +5602,30 @@ function handleAction(action, idx) {
       _mlvViewYear = Number.isFinite(idx) && idx >= 0 ? idx : 1;
       renderSection();
       return;
+    case 'add-position': {
+      if (!model.shifts) model.shifts = {};
+      if (!Array.isArray(model.shifts.positions)) model.shifts.positions = [];
+      const id = (typeof crypto !== 'undefined' && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : 'pos_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+      model.shifts.positions.push({
+        id, name: 'New Position', category: 'direct', employment_type: 'permanent',
+        hourly_wage: 18.00, annual_salary: 0, temp_markup_pct: 0,
+        bonus_pct: null, is_salaried: false, notes: '',
+      });
+      break;
+    }
+    case 'delete-position': {
+      const positions = (model.shifts && model.shifts.positions) || [];
+      if (positions[idx]) {
+        const delId = positions[idx].id;
+        // Unlink any labor lines pointing at this position
+        (model.laborLines || []).forEach(l => { if (l.position_id === delId) l.position_id = null; });
+        (model.indirectLaborLines || []).forEach(l => { if (l.position_id === delId) l.position_id = null; });
+        positions.splice(idx, 1);
+      }
+      break;
+    }
     case 'open-equipment-catalog':
       openEquipmentCatalog();
       return; // modal is async, don't re-render the section yet
@@ -6258,6 +6476,77 @@ function renderLanding() {
   `;
 }
 
+/**
+ * Brock 2026-04-20 — Labor Factors migration.
+ *
+ * Walks existing labor lines and creates a position catalog by clustering
+ * on (activity_name, hourly_rate, employment_type). Assigns position_id to
+ * each line. Idempotent: if positions already exist, only fills in missing
+ * position_ids on any unmapped lines.
+ *
+ * Indirect labor lines also get positions (category = 'indirect') so the
+ * Labor Factors catalog is comprehensive.
+ */
+function migrateLaborLinesToPositions(m) {
+  if (!m) return;
+  if (!m.shifts) m.shifts = {};
+  if (!Array.isArray(m.shifts.positions)) m.shifts.positions = [];
+  const positions = m.shifts.positions;
+
+  const makePos = (name, category, empType, wage, markup, extras = {}) => {
+    const id = (typeof crypto !== 'undefined' && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : 'pos_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    const p = {
+      id,
+      name,
+      category,                      // 'direct' | 'indirect'
+      employment_type: empType,      // 'permanent' | 'temp_agency' | 'contractor'
+      hourly_wage: Number(wage) || 0,
+      annual_salary: 0,
+      temp_markup_pct: empType === 'temp_agency' ? (Number(markup) || 35) : 0,
+      bonus_pct: null,               // null = inherit from shifts.bonusPct
+      is_salaried: false,
+      notes: '',
+      ...extras,
+    };
+    positions.push(p);
+    return p;
+  };
+
+  // Look up an existing position matching (name, category, empType, wage)
+  const findPos = (name, category, empType, wage) => positions.find(p =>
+    p.name === name
+    && p.category === category
+    && p.employment_type === empType
+    && Math.abs((p.hourly_wage || 0) - (Number(wage) || 0)) < 0.01,
+  );
+
+  // Direct labor lines
+  for (const line of m.laborLines || []) {
+    if (line.position_id && positions.some(p => p.id === line.position_id)) continue;
+    const activity = line.activity_name || 'Direct Labor';
+    const rate = line.hourly_rate || 0;
+    const empType = line.employment_type || 'permanent';
+    const name = empType === 'temp_agency' ? `${activity} (Temp)` : activity;
+    const existing = findPos(name, 'direct', empType, rate);
+    const pos = existing || makePos(name, 'direct', empType, rate, line.temp_agency_markup_pct);
+    line.position_id = pos.id;
+  }
+
+  // Indirect labor lines — category = 'indirect'
+  for (const line of m.indirectLaborLines || []) {
+    if (line.position_id && positions.some(p => p.id === line.position_id)) continue;
+    const role = line.role || 'Indirect Labor';
+    const rate = line.hourly_rate || 0;
+    const empType = line.employment_type || 'permanent';
+    const name = empType === 'temp_agency' ? `${role} (Temp)` : role;
+    const existing = findPos(name, 'indirect', empType, rate);
+    const pos = existing || makePos(name, 'indirect', empType, rate);
+    line.position_id = pos.id;
+  }
+}
+
 function createEmptyModel() {
   // Starter profile: representative mid-size 150k-sqft eComm DC. Replace values as you go.
   return {
@@ -6272,7 +6561,19 @@ function createEmptyModel() {
     ],
     orderProfile: {},
     facility: { totalSqft: 150000 },
-    shifts: { shiftsPerDay: 1, hoursPerShift: 8, daysPerWeek: 5, weeksPerYear: 52 },
+    shifts: {
+      shiftsPerDay: 1, hoursPerShift: 8, daysPerWeek: 5, weeksPerYear: 52,
+      // Brock 2026-04-20: macro Labor Factors — promoted from per-line +
+      // the laborCosting object so the Labor grid can become position-
+      // centric (pick a position, pull the rate). Old per-line hourly_rate
+      // stays as a per-line override.
+      bonusPct: 5,
+      ptoHoursPerYear: 80,
+      holidayHoursPerYear: 64,
+      // Position catalog — seeded empty, auto-populated from existing labor
+      // lines on load (migrateLaborLinesToPositions).
+      positions: [],
+    },
     laborLines: [
       { activity_name: 'Receiving', process_area: 'Inbound',  labor_category: 'direct', volume_source_idx: 0, volume: 15000,  base_uph: 200, annual_hours: 15000 / 200,  hourly_rate: 18.00, burden_pct: 30, most_template_id: '', most_template_name: '' },
       { activity_name: 'Put-Away',  process_area: 'Inbound',  labor_category: 'direct', volume_source_idx: 1, volume: 15000,  base_uph: 180, annual_hours: 15000 / 180,  hourly_rate: 18.00, burden_pct: 30, most_template_id: '', most_template_name: '' },
