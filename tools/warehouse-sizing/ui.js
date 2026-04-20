@@ -327,6 +327,19 @@ function bindShellEvents() {
       zones.layoutOverrides = {};
       isDirty = true;
       renderContentView();
+    } else if (action === 'match-sized') {
+      // Brock 2026-04-20 — set existing/target SF = the tool's computed Sized
+      // Total SF. Reinforces that Sized is the primary answer; Existing is
+      // a constraint only when you need it.
+      try {
+        const sized = calc.sizeFacility(toSizingInputs());
+        facility.totalSqft = Math.round(sized.totalSqft || 0);
+        isDirty = true;
+        renderConfigPanel();
+        renderContentView();
+      } catch (err) {
+        console.warn('[WSC] match-sized failed:', err);
+      }
     }
   });
 
@@ -484,21 +497,49 @@ function renderConfigPanel() {
     </div>
 
     <!-- Building -->
+    <!-- Brock 2026-04-20: Total SF is the tool's OUTPUT, not an input.
+         The sizing engine computes it from peak units, storage type,
+         clear height, aisle width, etc. The editable "Existing / Target
+         SF" field below is now explicitly a CONSTRAINT (e.g., leasing
+         an existing 750K-SF building and want to know if the plan
+         fits), not the driver. -->
     <div class="wsc-config-section">
       <div class="wsc-config-title">Building</div>
       <div class="wsc-config-field" style="margin-bottom:8px;">
         <label>Facility Name</label>
         <input value="${facility.name}" data-fac="name" />
       </div>
+      ${(() => {
+        // Compute sized SF to display as the primary total (the tool's answer)
+        let sizedSqft = 0;
+        try { sizedSqft = calc.sizeFacility(toSizingInputs()).totalSqft || 0; } catch {}
+        const existing = Number(facility.totalSqft) || 0;
+        const mismatch = existing > 0 && Math.abs(existing - sizedSqft) > 500;
+        return `
+          <div class="wsc-config-field" style="margin-bottom:6px;">
+            <label title="Total facility SF computed by the sizing engine — sum of storage + staging + dock + office. This is the tool's answer to 'how big should this facility be?'">Sized Total SF (computed)</label>
+            <div style="padding:6px 10px;background:var(--ies-gray-50);border-radius:6px;font-weight:700;color:var(--ies-blue,#0047AB);">
+              ${calc.formatSqft(sizedSqft)}
+            </div>
+          </div>
+          <div class="wsc-config-field" style="margin-bottom:8px;">
+            <label style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+              <span title="Optional: the SF of an existing building you're planning to fit into, or a target size for a new build. Drives the floorplan scale and the 'Avg Util' dashboard KPI. Leave 0 to use the Sized value.">Existing / Target SF <span style="color:var(--ies-gray-400);font-weight:400;font-size:11px;">(optional constraint)</span></span>
+              <button type="button" data-wsc-action="match-sized" title="Set Existing/Target SF = Sized Total SF" style="font-size:10px;padding:2px 8px;border:1px solid var(--ies-gray-300);background:#fff;border-radius:4px;cursor:pointer;">↺ Match Sized</button>
+            </label>
+            <input type="number" value="${facility.totalSqft}" data-fac="totalSqft" />
+            ${mismatch ? `
+              <div style="font-size:11px;color:${existing < sizedSqft ? 'var(--ies-red,#dc2626)' : 'var(--ies-orange,#d97706)'};margin-top:4px;">
+                ${existing < sizedSqft
+                  ? `⚠️ Under-sized by ${calc.formatSqft(sizedSqft - existing)} — plan won't fit in ${calc.formatSqft(existing)}.`
+                  : `ℹ️ Over-sized by ${calc.formatSqft(existing - sizedSqft)} — ${((sizedSqft / existing) * 100).toFixed(0)}% utilization.`}
+              </div>
+            ` : ''}
+          </div>
+        `;
+      })()}
       <div class="wsc-config-row">
-        <div class="wsc-config-field"><label>Total SF</label><input type="number" value="${facility.totalSqft}" data-fac="totalSqft" /></div>
         <div class="wsc-config-field"><label>Clear Ht (ft)</label><input type="number" value="${facility.clearHeight}" step="1" data-fac="clearHeight" /></div>
-      </div>
-      <div class="wsc-config-row">
-        <div class="wsc-config-field"><label>Width (ft)</label><input type="number" value="${facility.buildingWidth}" data-fac="buildingWidth" /></div>
-        <div class="wsc-config-field"><label>Depth (ft)</label><input type="number" value="${facility.buildingDepth}" data-fac="buildingDepth" /></div>
-      </div>
-      <div class="wsc-config-row">
         <div class="wsc-config-field">
           <label>Storage Type</label>
           <select data-fac="storageType">
@@ -507,9 +548,13 @@ function renderConfigPanel() {
             ).join('')}
           </select>
         </div>
-        <div class="wsc-config-field"><label>Aisle Width (ft)</label><input type="number" value="${facility.aisleWidth || calc.AISLE_WIDTHS[facility.storageType] || 12}" step="0.5" data-fac="aisleWidth" /></div>
       </div>
       <div class="wsc-config-row">
+        <div class="wsc-config-field"><label>Width (ft)</label><input type="number" value="${facility.buildingWidth}" data-fac="buildingWidth" /></div>
+        <div class="wsc-config-field"><label>Depth (ft)</label><input type="number" value="${facility.buildingDepth}" data-fac="buildingDepth" /></div>
+      </div>
+      <div class="wsc-config-row">
+        <div class="wsc-config-field"><label>Aisle Width (ft)</label><input type="number" value="${facility.aisleWidth || calc.AISLE_WIDTHS[facility.storageType] || 12}" step="0.5" data-fac="aisleWidth" /></div>
         <div class="wsc-config-field"><label>Col Spacing (ft)</label><input type="number" value="${facility.columnSpacingX || 50}" data-fac="columnSpacingX" /></div>
       </div>
     </div>
@@ -1192,18 +1237,21 @@ function drawPlan() {
   const cw = canvas.width, ch = canvas.height;
   ctx.clearRect(0, 0, cw, ch);
 
-  const totalSqft = facility.totalSqft || 0;
+  // Pull sized facility numbers so this view agrees with the dashboard.
+  const sized = calc.sizeFacility(toSizingInputs());
+  const elev = calc.elevationParams(facility);
+  // Brock 2026-04-20: floorplan scale uses sized SF (the computed answer)
+  // when the user hasn't set an Existing/Target SF constraint. This way
+  // the 2D view renders as soon as peak units / storage inputs are
+  // populated, without requiring the user to first guess a total SF.
+  const totalSqft = facility.totalSqft || sized.totalSqft || 0;
   if (totalSqft <= 0) {
     ctx.fillStyle = '#9ca3af';
     ctx.font = '13px Montserrat, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('Set facility Total SF to render the floorplan.', cw / 2, ch / 2);
+    ctx.fillText('Enter peak units + storage inputs — the tool will size the floorplan.', cw / 2, ch / 2);
     return;
   }
-
-  // Pull sized facility numbers so this view agrees with the dashboard.
-  const sized = calc.sizeFacility(toSizingInputs());
-  const elev = calc.elevationParams(facility);
 
   // Building dimensions (ft)
   const widthFt  = facility.buildingWidth  || Math.round(Math.sqrt(totalSqft * 1.5));
@@ -2486,9 +2534,16 @@ function build3DScene() {
 function pushToCm() {
   const dock = zones.dockConfig || { inboundDoors: 10, outboundDoors: 12 };
   const totalDoors = dock.inboundDoors + dock.outboundDoors;
+  // Brock 2026-04-20: push the SIZED total SF (tool's computed answer), not
+  // facility.totalSqft (which is the Existing/Target constraint). Falls back
+  // to facility.totalSqft if sizing failed or is zero, so a user with only
+  // an "existing" value can still push it.
+  let sizedSqft = 0;
+  try { sizedSqft = calc.sizeFacility(toSizingInputs()).totalSqft || 0; } catch {}
+  const effectiveTotalSqft = sizedSqft > 0 ? Math.round(sizedSqft) : (facility.totalSqft || 0);
   /** @type {import('./types.js?v=20260418-sL').WscToCmPayload} */
   const payload = {
-    totalSqft: facility.totalSqft || 0,
+    totalSqft: effectiveTotalSqft,
     clearHeight: facility.clearHeight || 0,
     dockDoors: totalDoors,
     officeSqft: zones.officeSqft || 0,
@@ -2525,7 +2580,12 @@ function createDefaultFacility() {
   return {
     id: null,
     name: 'New Facility',
-    totalSqft: 150000,
+    // Brock 2026-04-20: totalSqft is the tool's OUTPUT (computed by
+    // sizeFacility from peak units / storage / clear ht etc.). Starting
+    // at 0 prevents the UI from pretending 150K is a real constraint;
+    // the "Match Sized" button puts the computed value in the field
+    // when the user wants it as an explicit target.
+    totalSqft: 0,
     clearHeight: 32,
     buildingWidth: 300,
     buildingDepth: 500,
