@@ -445,11 +445,44 @@ export function calcDockAnalysis(facility, zones, volumes) {
  * @returns {number} DIOH in days
  */
 export function calcDIOH(zones) {
-  const pick = zones.forwardPick || { enabled: false, daysInventory: 3, outboundUnitsPerDay: 5000 };
-  const avg = zones.avgUnitsPerDay || 350000;
+  // DIOH = Days of Inventory On-Hand = total on-hand units ÷ daily outbound.
+  // Typical 3PL DC: 30–90 days; high-turn retail: 10–30 days.
+  //
+  // Fix history (2026-04-20): prior formula was
+  //   (avgUnitsPerDay × forwardPick.daysInventory) / forwardPick.outboundUnitsPerDay
+  // which multiplied in the forward-pick days-of-cover (a local FP sizing
+  // concept) and divided by the FP-local daily outbound, producing 210 days
+  // on defaults. Forward-pick days-of-cover and facility-level DIOH are
+  // different metrics — don't conflate them.
+  //
+  // Daily outbound priority:
+  //   1. zones.outboundUnitsPerDay (explicit field)
+  //   2. zones.outboundUnitsYr / operatingDaysPerYear (derived)
+  //   3. zones.forwardPick.outboundUnitsPerDay (legacy fallback)
+  //
+  // On-hand priority:
+  //   1. zones.avgUnits (explicit on-hand total, preferred)
+  //   2. zones.avgUnitsPerDay (historical field — treated as on-hand total
+  //      because that's how sizeFacility consumes it; label says "per day"
+  //      but the engine treats it as total for storage sizing).
+  const onHand = (zones.avgUnits && zones.avgUnits > 0)
+    ? zones.avgUnits
+    : (zones.avgUnitsPerDay || 0);
+  if (onHand <= 0) return 0;
 
-  if (pick.outboundUnitsPerDay <= 0) return 0;
-  return (avg * pick.daysInventory) / pick.outboundUnitsPerDay;
+  let daily = 0;
+  if (zones.outboundUnitsPerDay && zones.outboundUnitsPerDay > 0) {
+    daily = zones.outboundUnitsPerDay;
+  } else if (zones.outboundUnitsYr && zones.outboundUnitsYr > 0) {
+    const days = zones.operatingDaysPerYear || 250;
+    daily = zones.outboundUnitsYr / Math.max(1, days);
+  } else {
+    const pick = zones.forwardPick || {};
+    daily = pick.outboundUnitsPerDay || 0;
+  }
+  if (daily <= 0) return 0;
+
+  return onHand / daily;
 }
 
 /**
