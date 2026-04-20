@@ -2297,16 +2297,18 @@ textarea.hub-input {
    with 10 cols + actions) squeeze inputs to 30-40px and truncate text.
    min-width forces horizontal scroll below threshold — readable over
    compact-but-broken. */
-.cm-table-scroll > .hub-datatable { min-width: 720px; }
-/* Equipment has 10 columns — needs more */
-.cm-table-scroll > .hub-datatable.cm-table-equipment { min-width: 1040px; }
+.cm-table-scroll > .hub-datatable { min-width: 680px; }
+/* Equipment has 11 columns — trimmed from 1040 → 960 so it fits at
+   ~1000px content rails (CM has a left nav + right-side padding that
+   eats ~340px on a 1440px viewport) without residual horizontal scroll. */
+.cm-table-scroll > .hub-datatable.cm-table-equipment { min-width: 960px; }
 /* Overhead + VAS + Startup: 5-6 columns, moderate min */
-.cm-table-scroll > .hub-datatable.cm-table-overhead { min-width: 820px; }
-.cm-table-scroll > .hub-datatable.cm-table-vas      { min-width: 680px; }
-.cm-table-scroll > .hub-datatable.cm-table-startup  { min-width: 720px; }
+.cm-table-scroll > .hub-datatable.cm-table-overhead { min-width: 780px; }
+.cm-table-scroll > .hub-datatable.cm-table-vas      { min-width: 640px; }
+.cm-table-scroll > .hub-datatable.cm-table-startup  { min-width: 680px; }
 
 /* Timeline monthly: 8 columns (Month / Rev / Opex / EBITDA / NI / CapEx / FCF / CumFCF) */
-.cm-timeline-monthly-scroll > .hub-datatable { min-width: 820px; }
+.cm-timeline-monthly-scroll > .hub-datatable { min-width: 780px; }
 
 /* Ensure input elements inside data-table cells don't add extra horizontal
    padding that pushes columns wider than declared. Reset the 32px+ input

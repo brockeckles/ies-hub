@@ -2460,17 +2460,17 @@ All lines are editable after generation.">⚡ Auto-Generate Equipment</button>
       <table class="hub-datatable hub-datatable--dense cm-table-equipment">
         <thead>
           <tr>
-            <th style="width:180px;">Equipment</th>
-            <th style="width:100px;">Category</th>
-            <th class="hub-num" style="width:60px;">Qty</th>
-            <th style="width:90px;">Type</th>
-            <th class="hub-num" style="width:90px;">$ / Mo</th>
-            <th class="hub-num" style="width:100px;">Acq Cost</th>
-            <th class="hub-num" style="width:90px;">Maint / Mo</th>
-            <th class="hub-num" style="width:80px;">Amort Yrs</th>
-            <th class="hub-num" style="width:80px;" title="Short-term rental premium applied to extras needed during peak months (from Monthly Labor View seasonal flex). 0 = no seasonal uplift.">Peak %</th>
-            <th class="hub-num" style="width:110px;">Annual</th>
-            <th class="cm-actions" style="width:40px;"></th>
+            <th style="width:160px;">Equipment</th>
+            <th style="width:95px;">Category</th>
+            <th class="hub-num" style="width:54px;">Qty</th>
+            <th style="width:85px;">Type</th>
+            <th class="hub-num" style="width:80px;">$ / Mo</th>
+            <th class="hub-num" style="width:88px;">Acq Cost</th>
+            <th class="hub-num" style="width:82px;">Maint / Mo</th>
+            <th class="hub-num" style="width:72px;">Amort Yrs</th>
+            <th class="hub-num" style="width:68px;" title="Short-term rental premium applied to extras needed during peak months (from Monthly Labor View seasonal flex). 0 = no seasonal uplift.">Peak %</th>
+            <th class="hub-num" style="width:96px;">Annual</th>
+            <th class="cm-actions" style="width:36px;"></th>
           </tr>
         </thead>
         <tbody>
