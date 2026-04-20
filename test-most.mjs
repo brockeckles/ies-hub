@@ -15,6 +15,7 @@ import {
   sumElementTmuRaw,
   validateElementSequence,
   elementFrequency,
+  variableElementTmu,
   computeAnalysisLine,
   computeWorkflowStep,
 } from './tools/most-standards/calc.js';
@@ -122,6 +123,51 @@ const near = (a, b, tol = 0.01) => Math.abs(a - b) <= tol;
   t('elementFrequency: missing defaults to 1', elementFrequency({}) === 1);
   t('elementFrequency: string coerced', elementFrequency({ freq_per_cycle: '2.5' }) === 2.5);
   t('elementFrequency: negative falls back to default 1 (safe)', elementFrequency({ freq_per_cycle: -1 }) === 1);
+}
+
+// ─── variable element (Q3 restore) ───
+{
+  // Non-variable element: returns tmu_value regardless of factor
+  t('variableElementTmu: non-variable returns tmu_value',
+    variableElementTmu({ tmu_value: 50 }, 0.9) === 50);
+  // Variable with min+max: interpolates at factor
+  t('variableElementTmu: factor 0 returns min',
+    variableElementTmu({ is_variable: true, tmu_value: 50, variable_min: 20, variable_max: 80 }, 0) === 20);
+  t('variableElementTmu: factor 1 returns max',
+    variableElementTmu({ is_variable: true, tmu_value: 50, variable_min: 20, variable_max: 80 }, 1) === 80);
+  t('variableElementTmu: factor 0.5 returns midpoint',
+    variableElementTmu({ is_variable: true, tmu_value: 50, variable_min: 20, variable_max: 80 }, 0.5) === 50);
+  // No factor passed → use saved default_factor
+  t('variableElementTmu: default_factor 0.25 honored',
+    variableElementTmu({ is_variable: true, tmu_value: 50, variable_min: 20, variable_max: 80, variable_default_factor: 0.25 }) === 35);
+  // No factor + no default → 0.5 midpoint fallback
+  t('variableElementTmu: no factor, no default = midpoint',
+    variableElementTmu({ is_variable: true, tmu_value: 50, variable_min: 20, variable_max: 80 }) === 50);
+  // Missing min falls back to tmu_value
+  t('variableElementTmu: missing min falls back to tmu_value',
+    variableElementTmu({ is_variable: true, tmu_value: 50, variable_max: 80 }, 0) === 50);
+  // Both bounds missing = constant tmu_value (no silent $0)
+  t('variableElementTmu: no bounds = tmu_value (safe)',
+    variableElementTmu({ is_variable: true, tmu_value: 50 }, 0.8) === 50);
+  // Factor clamping
+  t('variableElementTmu: factor > 1 clamps to 1',
+    variableElementTmu({ is_variable: true, tmu_value: 50, variable_min: 20, variable_max: 80 }, 1.5) === 80);
+  t('variableElementTmu: factor < 0 clamps to 0',
+    variableElementTmu({ is_variable: true, tmu_value: 50, variable_min: 20, variable_max: 80 }, -0.5) === 20);
+}
+{
+  // sumElementTmu now honors variable elements
+  const els = [
+    { tmu_value: 100, freq_per_cycle: 1 },                                              // fixed → 100
+    { is_variable: true, tmu_value: 50, variable_min: 20, variable_max: 80, variable_default_factor: 0.25, freq_per_cycle: 1 }, // 35
+    { is_variable: true, tmu_value: 40, variable_min: 30, variable_max: 60, freq_per_cycle: 2 },                                 // midpoint 45 × 2 = 90
+  ];
+  // total = 100 + 35 + 90 = 225
+  t('sumElementTmu: variable elements interpolate at default_factor',
+    sumElementTmu(els) === 225, `got ${sumElementTmu(els)}`);
+  // Raw (unweighted) still sums tmu_value × freq
+  t('sumElementTmuRaw: unchanged (tmu_value only)',
+    sumElementTmuRaw(els) === 100 + 50 + 40);
 }
 
 // ─── sequence validation ───

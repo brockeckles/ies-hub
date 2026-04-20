@@ -136,15 +136,17 @@ export function effectiveUph(uph, pfdPct, productivityPct = 100) {
 // ============================================================
 
 /**
- * Sum TMU across elements (frequency-aware: TMU × freq_per_cycle).
- * Elements without freq_per_cycle default to 1.0 (every cycle).
+ * Sum TMU across elements (frequency-aware: TMU × freq_per_cycle). Variable
+ * elements interpolate between their min/max at the saved default factor —
+ * see `variableElementTmu`. Elements without freq_per_cycle default to 1.0.
  * @param {import('./types.js?v=20260418-sM').MostElement[]} elements
  * @returns {number}
  */
 export function sumElementTmu(elements) {
   return (elements || []).reduce((sum, el) => {
     const freq = el.freq_per_cycle == null ? 1 : Number(el.freq_per_cycle);
-    return sum + (el.tmu_value || 0) * (Number.isFinite(freq) ? freq : 1);
+    const tmu = el?.is_variable ? variableElementTmu(el) : (el.tmu_value || 0);
+    return sum + tmu * (Number.isFinite(freq) ? freq : 1);
   }, 0);
 }
 
@@ -273,17 +275,33 @@ export function elementBreakdown(elements) {
 }
 
 /**
- * Compute effective TMU for a variable element given a complexity factor (0–1).
- * Linear interpolation between variable_min and variable_max.
+ * Compute effective TMU for a variable element at a given complexity factor (0–1).
+ * Linear interpolation between `variable_min` and `variable_max`, with
+ * graceful fallback to `tmu_value` when either bound is missing.
+ *
+ * Factor precedence:
+ *   1. explicit `factor` arg (for Quick Analysis / Workflow overrides)
+ *   2. element's saved `variable_default_factor`
+ *   3. 0.5 (midpoint)
+ *
  * @param {import('./types.js?v=20260418-sM').MostElement} element
- * @param {number} [factor=0.5] — 0 = min, 1 = max
+ * @param {number} [factor] — 0 = min, 1 = max (optional; defaults to element's saved factor or 0.5)
  * @returns {number}
  */
-export function variableElementTmu(element, factor = 0.5) {
-  if (!element.is_variable) return element.tmu_value || 0;
-  const min = element.variable_min ?? element.tmu_value;
-  const max = element.variable_max ?? element.tmu_value;
-  const f = Math.max(0, Math.min(1, factor));
+export function variableElementTmu(element, factor) {
+  if (!element?.is_variable) return element?.tmu_value || 0;
+  const fSaved = element.variable_default_factor;
+  const fChosen = factor != null
+    ? factor
+    : (fSaved != null ? Number(fSaved) : 0.5);
+  const f = Math.max(0, Math.min(1, Number.isFinite(fChosen) ? fChosen : 0.5));
+  // Fallback chain: when a bound is null/undefined, use tmu_value so the
+  // element still contributes something sensible. If BOTH bounds match
+  // tmu_value (e.g., user flipped the checkbox but never set bounds), the
+  // result is just tmu_value — no silent $0.
+  const base = element.tmu_value || 0;
+  const min = element.variable_min == null ? base : Number(element.variable_min) || base;
+  const max = element.variable_max == null ? base : Number(element.variable_max) || base;
   return min + (max - min) * f;
 }
 

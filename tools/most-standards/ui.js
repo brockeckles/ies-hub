@@ -14,8 +14,8 @@ import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../
 // button is a convenience trigger rather than a discrete compute step, so a
 // "clean/dirty" gate would be misleading here. Revisit if/when MOST gains a
 // heavier recompute path (MOST B4 productivity factor, maybe).
-import * as calc from './calc.js?v=20260420-vE';
-import * as api from './api.js?v=20260420-vE';
+import * as calc from './calc.js?v=20260420-vF';
+import * as api from './api.js?v=20260420-vF';
 import { getMostTplName, getMostTplBaseUph, getMostTplTmuTotal, getMostElName, getMostElSequence, getMostElTmu } from './types.js?v=20260418-sM';
 
 // ============================================================
@@ -905,8 +905,15 @@ function renderEditor() {
             </tr>
           </thead>
           <tbody>
-            ${editorElements.map((el, i) => `
-              <tr>
+            ${editorElements.map((el, i) => {
+              // When is_variable is true, the element's TMU varies with a
+              // workload driver (e.g., walk distance, case weight, SKU count).
+              // A "Variable Detail" row expands below the main row so the
+              // user can specify min/max bounds + driver description + an
+              // optional formula. Collapsed when is_variable is off.
+              const isVar = !!el.is_variable;
+              return `
+              <tr${isVar ? ' class="most-elem-row--variable"' : ''}>
                 <td>${i + 1}</td>
                 <td><input class="hub-input" type="text" value="${getMostElName(el) || ''}" data-elem-idx="${i}" data-elem-field="element_name" style="width:100%; font-size:11px; padding:4px 6px;" /></td>
                 <td><input class="hub-input" type="text" value="${el.most_sequence || ''}" data-elem-idx="${i}" data-elem-field="most_sequence" style="width:100%; font-size:11px; padding:4px 6px; font-family:monospace;" /></td>
@@ -932,12 +939,41 @@ function renderEditor() {
                     `;
                   })()}
                 </td>
-                <td><input class="hub-input" type="number" value="${getMostElTmu(el) || 0}" data-elem-idx="${i}" data-elem-field="tmu_value" style="width:100%; font-size:11px; padding:4px 6px;" /></td>
+                <td><input class="hub-input" type="number" value="${getMostElTmu(el) || 0}" data-elem-idx="${i}" data-elem-field="tmu_value" style="width:100%; font-size:11px; padding:4px 6px;" title="${isVar ? 'TMU at the default factor (midpoint between min/max unless overridden below)' : 'Fixed TMU for this element'}" /></td>
                 <td><input class="hub-input" type="number" step="0.01" min="0" value="${el.freq_per_cycle == null ? 1 : el.freq_per_cycle}" data-elem-idx="${i}" data-elem-field="freq_per_cycle" style="width:100%; font-size:11px; padding:4px 6px;" title="Occurrences per cycle (1 = every cycle)" /></td>
-                <td><input type="checkbox" ${el.is_variable ? 'checked' : ''} data-elem-idx="${i}" data-elem-field="is_variable" style="cursor:pointer;" /></td>
+                <td style="text-align:center;"><input type="checkbox" ${isVar ? 'checked' : ''} data-elem-idx="${i}" data-elem-field="is_variable" style="cursor:pointer;" title="Mark this element as variable (TMU scales with a workload driver)" /></td>
                 <td><button class="most-icon-btn most-icon-btn-danger" data-action="delete-element" data-idx="${i}" title="Remove element">${ICON.trash}</button></td>
               </tr>
-            `).join('')}
+              ${isVar ? `
+              <tr class="most-elem-variable-detail">
+                <td></td>
+                <td colspan="7">
+                  <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; padding:6px 0 4px 4px; border-left:2px solid var(--ies-orange, #f97316); padding-left:8px;">
+                    <div style="flex:0 0 140px;">
+                      <label style="display:block;font-size:10px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:0.3px;margin-bottom:2px;">Driver</label>
+                      <input class="hub-input" type="text" value="${el.variable_driver || ''}" data-elem-idx="${i}" data-elem-field="variable_driver" placeholder="e.g. walk distance (ft)" style="width:100%;font-size:11px;padding:4px 6px;" />
+                    </div>
+                    <div style="flex:0 0 80px;">
+                      <label style="display:block;font-size:10px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:0.3px;margin-bottom:2px;" title="TMU at driver = low / short / simple">Min TMU</label>
+                      <input class="hub-input" type="number" step="0.1" min="0" value="${el.variable_min == null ? '' : el.variable_min}" data-elem-idx="${i}" data-elem-field="variable_min" placeholder="${(getMostElTmu(el) * 0.5).toFixed(1)}" style="width:100%;font-size:11px;padding:4px 6px;" />
+                    </div>
+                    <div style="flex:0 0 80px;">
+                      <label style="display:block;font-size:10px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:0.3px;margin-bottom:2px;" title="TMU at driver = high / long / complex">Max TMU</label>
+                      <input class="hub-input" type="number" step="0.1" min="0" value="${el.variable_max == null ? '' : el.variable_max}" data-elem-idx="${i}" data-elem-field="variable_max" placeholder="${(getMostElTmu(el) * 1.5).toFixed(1)}" style="width:100%;font-size:11px;padding:4px 6px;" />
+                    </div>
+                    <div style="flex:0 0 130px;">
+                      <label style="display:block;font-size:10px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:0.3px;margin-bottom:2px;" title="Default interpolation between min (0) and max (1). 0.5 = midpoint.">Default Factor (0-1)</label>
+                      <input class="hub-input" type="number" step="0.05" min="0" max="1" value="${el.variable_default_factor == null ? 0.5 : el.variable_default_factor}" data-elem-idx="${i}" data-elem-field="variable_default_factor" style="width:100%;font-size:11px;padding:4px 6px;" />
+                    </div>
+                    <div style="flex:1 1 220px; min-width:180px;">
+                      <label style="display:block;font-size:10px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:0.3px;margin-bottom:2px;" title="Optional reference formula — descriptive only, not evaluated yet">Formula (optional reference)</label>
+                      <input class="hub-input" type="text" value="${el.variable_formula || ''}" data-elem-idx="${i}" data-elem-field="variable_formula" placeholder="e.g. 3 TMU + 0.5 × distance_ft" style="width:100%;font-size:11px;padding:4px 6px;" />
+                    </div>
+                  </div>
+                </td>
+              </tr>
+              ` : ''}
+            `;}).join('')}
           </tbody>
         </table>
       ` : `
@@ -1487,6 +1523,13 @@ function bindContentEvents(container) {
     editorMetricsTimeout = setTimeout(() => updateEditorMetrics(), 300);
   };
 
+  // Numeric element fields — parse as float (empty string → null so the
+  // pattern "no override" round-trips through the DB). Boolean fields get
+  // the checked flag. Everything else is raw text.
+  const NUMERIC_FIELDS = new Set([
+    'tmu_value', 'freq_per_cycle',
+    'variable_min', 'variable_max', 'variable_default_factor',
+  ]);
   container.querySelectorAll('[data-elem-field]').forEach(input => {
     const handleUpdate = (e) => {
       const idx = parseInt(/** @type {HTMLInputElement} */ (e.target).dataset.elemIdx);
@@ -1494,8 +1537,14 @@ function bindContentEvents(container) {
       if (editorElements[idx]) {
         if (field === 'is_variable') {
           editorElements[idx][field] = /** @type {HTMLInputElement} */ (e.target).checked;
-        } else if (field === 'tmu_value') {
-          editorElements[idx][field] = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
+          // Flipping the variable checkbox expands/collapses the detail
+          // row — need a full re-render. Preserves input state for
+          // everything else because editorElements is the source of truth.
+          renderContent();
+          return;
+        } else if (NUMERIC_FIELDS.has(field)) {
+          const raw = /** @type {HTMLInputElement} */ (e.target).value;
+          editorElements[idx][field] = raw === '' ? null : (parseFloat(raw) || 0);
         } else {
           editorElements[idx][field] = /** @type {HTMLInputElement} */ (e.target).value;
         }
