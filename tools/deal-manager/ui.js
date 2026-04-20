@@ -10,7 +10,8 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sL';
 import { state } from '../../shared/state.js?v=20260418-sL';
 import { renderToolHeader } from '../../shared/tool-frame.js?v=20260419-uE';
 import * as calc from './calc.js?v=20260418-sL';
-import * as api from './api.js?v=20260418-sL';
+import * as api from './api.js?v=20260420-vE';
+import * as cmApi from '../cost-model/api.js?v=20260419-uH';
 
 // ============================================================
 // STATE
@@ -67,6 +68,12 @@ const DOS_STAGE_LABELS = [
  * Mount the Deal Manager.
  * @param {HTMLElement} el
  */
+/**
+ * Handle to the bus.on('cm:model-saved') subscription so we can unsubscribe
+ * on unmount. Without this the listener leaks across mount/unmount cycles.
+ */
+let _cmSavedUnsub = null;
+
 export async function mount(el) {
   rootEl = el;
   activeTab = 'list';
@@ -82,6 +89,12 @@ export async function mount(el) {
   bindShellEvents();
   renderContent();
 
+  // Multi-Site B4: when a linked CM is saved elsewhere in the app, re-pull
+  // the fresh totals + cost breakdown for any site referencing it. Without
+  // this, editing a CM never propagates to the deal-level P&L until the
+  // user re-navigates to Multi-Site and re-links the CM.
+  _cmSavedUnsub = bus.on('cm:model-saved', handleCmSaved);
+
   bus.emit('deal:mounted');
 }
 
@@ -89,8 +102,60 @@ export async function mount(el) {
  * Cleanup.
  */
 export function unmount() {
+  if (typeof _cmSavedUnsub === 'function') { _cmSavedUnsub(); _cmSavedUnsub = null; }
   rootEl = null;
   bus.emit('deal:unmounted');
+}
+
+/**
+ * Refresh any site whose costModelId matches the just-saved CM. Pulls the
+ * canonical annual cost + sqft + cost breakdown from Supabase, mutates the
+ * in-memory sites array, re-computes deal financials, and re-renders the
+ * active tab. No-ops if the saved CM isn't linked to any site (common case).
+ *
+ * @param {{ id: string|number }} payload — from cost-model/ui.js bus.emit
+ */
+async function handleCmSaved(payload) {
+  if (!payload || !payload.id) return;
+  if (!activeDeal || !sites || !sites.length) return;
+
+  // Find all sites linked to this CM. Normalize to string to match
+  // mapCmProjectToSite — IDs are bigints in Postgres, strings in memory.
+  const savedId = String(payload.id);
+  const affectedIdx = [];
+  sites.forEach((s, i) => {
+    if (s.costModelId && String(s.costModelId) === savedId) affectedIdx.push(i);
+  });
+  if (!affectedIdx.length) return;
+
+  // Pull fresh project row + breakdown in parallel.
+  try {
+    const [project, breakdown] = await Promise.all([
+      cmApi.getModel(payload.id),
+      api.fetchCostModelBreakdown(payload.id),
+    ]);
+    for (const idx of affectedIdx) {
+      const s = sites[idx];
+      sites[idx] = {
+        ...s,
+        // Only overwrite derived fields — preserve name, pricing model,
+        // margin, user-typed volumes, etc.
+        sqft: project?.facility_sqft || s.sqft || 0,
+        annualCost: project?.total_annual_cost || s.annualCost || 0,
+        costBreakdown: breakdown || s.costBreakdown,
+      };
+    }
+    financials = calc.computeDealFinancials(sites, activeDeal.contractTermYears || 5);
+    renderContent();
+    // Nudge the user so it's obvious something changed without being
+    // disruptive — small toast on the active tab.
+    try {
+      const { showToast } = await import('../../shared/toast.js?v=20260420-vE');
+      showToast(`Refreshed ${affectedIdx.length} site${affectedIdx.length > 1 ? 's' : ''} from updated cost model`, 'info');
+    } catch { /* toast is best-effort; don't break the refresh on import failure */ }
+  } catch (err) {
+    console.warn('[Multi-Site] Failed to refresh site(s) after CM save:', err);
+  }
 }
 
 // ============================================================
