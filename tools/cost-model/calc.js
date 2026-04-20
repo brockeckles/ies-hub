@@ -886,27 +886,49 @@ export function computeFinancialMetrics(projections, opts) {
 
   const discountRate = (opts.discountRatePct || 10) / 100;
   const reinvestRate = (opts.reinvestRatePct || 8) / 100;
-  const startupCapital = opts.startupCapital || 0;
+  const startupCapital   = Number(opts.startupCapital)   || 0;
+  const equipmentCapital = Number(opts.equipmentCapital) || 0;
+  // Annual D&A: caller passes the sum of equipment amort + startup amort.
+  // Used to derive a proper EBITDA when the projections path doesn't carry
+  // per-line depreciation (monthly-engine path today treats equipment as
+  // OPEX for purchased items, so ebitda == ebit in the P&L rollup).
+  const annualDepreciation = Number(opts.annualDepreciation) || 0;
+
+  // Fix (Brock 2026-04-20): totalInvestment now includes equipment capital.
+  // Previously summed projections[].capex — those rows are 0 on the
+  // monthly-engine path so the Summary showed "Total Investment $0" and
+  // cascaded to MIRR = 0 / Payback = 1 month. MIRR + Payback + ROIC now
+  // use this consolidated initial outflow.
+  const totalInvestment = startupCapital + equipmentCapital;
 
   const totalRevenue = projections.reduce((s, p) => s + p.revenue, 0);
   const _totalCost = projections.reduce((s, p) => s + p.totalCost, 0);
   const totalGrossProfit = totalRevenue - _totalCost;
-  const totalEbitda = projections.reduce((s, p) => s + p.ebitda, 0);
-  const totalEbit = projections.reduce((s, p) => s + p.ebit, 0);
+  const totalEbitRaw = projections.reduce((s, p) => s + p.ebit, 0);
+  const totalEbitdaRaw = projections.reduce((s, p) => s + p.ebitda, 0);
+  // If the P&L rollup didn't separate D&A (monthly engine treats purchased
+  // equipment as OPEX), derive a "true" EBITDA by adding back the annual
+  // depreciation × years so EBIT Margin < EBITDA Margin as expected. When
+  // the caller passes annualDepreciation: 0, behavior collapses to the
+  // legacy path (ebitda == ebit).
+  const ebitdaAdjustment = Math.max(0, annualDepreciation * years - Math.max(0, totalEbitdaRaw - totalEbitRaw));
+  const totalEbit   = totalEbitRaw;
+  const totalEbitda = totalEbitdaRaw + ebitdaAdjustment;
 
   const grossMarginPct = totalRevenue > 0 ? (totalGrossProfit / totalRevenue) * 100 : 0;
   const ebitdaMarginPct = totalRevenue > 0 ? (totalEbitda / totalRevenue) * 100 : 0;
   const ebitMarginPct = totalRevenue > 0 ? (totalEbit / totalRevenue) * 100 : 0;
 
-  // ROIC
+  // ROIC — average annual EBIT over the invested capital base (startup +
+  // equipment). Falls back to a 10% working-capital proxy if zero.
   const avgAnnualEbit = totalEbit / years;
-  const investedCapital = startupCapital > 0 ? startupCapital : _totalCost * 0.1;
+  const investedCapital = totalInvestment > 0 ? totalInvestment : _totalCost * 0.1;
   const roicPct = investedCapital > 0 ? (avgAnnualEbit / investedCapital) * 100 : 0;
 
-  // MIRR
-  const cashFlows = [-startupCapital, ...projections.map(p => p.grossProfit)];
+  // MIRR — use total initial investment, not just startup capital.
+  const cashFlows = [-totalInvestment, ...projections.map(p => p.grossProfit)];
   let mirrPct = 0;
-  if (startupCapital > 0 && cashFlows.length > 1) {
+  if (totalInvestment > 0 && cashFlows.length > 1) {
     let pvNeg = 0;
     for (let i = 0; i < cashFlows.length; i++) {
       if (cashFlows[i] < 0) pvNeg += cashFlows[i] / Math.pow(1 + discountRate, i);
@@ -921,15 +943,15 @@ export function computeFinancialMetrics(projections, opts) {
     }
   }
 
-  // NPV
+  // NPV — unchanged but now uses totalInvestment in CF[0] via cashFlows.
   let npv = 0;
   for (let i = 0; i < cashFlows.length; i++) {
     npv += cashFlows[i] / Math.pow(1 + discountRate, i);
   }
 
-  // Payback period (months)
+  // Payback period (months) — now tied to total initial investment.
   let paybackMonths = years * 12;
-  let cumCash = -startupCapital;
+  let cumCash = -totalInvestment;
   for (let yr = 0; yr < years; yr++) {
     const monthlyProfit = projections[yr].grossProfit / 12;
     for (let m = 0; m < 12; m++) {
@@ -952,9 +974,7 @@ export function computeFinancialMetrics(projections, opts) {
   // Operating leverage (fixed cost as % of total)
   const opLeveragePct = yr1.totalCost > 0 ? ((opts.fixedCost || 0) / yr1.totalCost) * 100 : 0;
 
-  // Contract value & total investment
   const contractValue = totalRevenue;
-  const totalInvestment = startupCapital + totalEquipmentCapitalFromProjections(projections);
 
   return {
     grossMarginPct,
@@ -1248,25 +1268,24 @@ export function validateModel(model, opts = {}) {
 export function sensitivityTable(baseCosts, baseOrders, adjustments = [-0.10, -0.05, 0.05, 0.10], opts = {}) {
   const baseTotalCost = baseCosts.labor + baseCosts.facility + baseCosts.equipment +
     baseCosts.overhead + baseCosts.vas + baseCosts.startup;
+  // Target margin — used to compute baseline revenue + scenario revenue
+  // under the assumption that pricing is cost+margin. Without this we can
+  // only show ΔCost which is misleading on Volume (cost goes UP on +volume
+  // but revenue goes up MORE given the margin — that's a POSITIVE outcome
+  // for the 3PL, not negative).
+  const marginPct = Number(opts.marginPct) || 0;
+  const marginFrac = marginPct / 100;
+  const baseRevenue = baseTotalCost * (1 + marginFrac);
+  const baseGP = baseRevenue - baseTotalCost;
 
-  // Burden fraction: share of labor bucket that IS the burden/benefits load.
-  // Labor ≈ wages × (1 + burdenPct/100 + benefitPct/100). A 10% adjustment to
-  // BURDEN moves the total labor by 10% × burdenFraction — typically 2-3%,
-  // not 10%. Without this, Burden % and Labor Rate were indistinguishable.
   const burdenPct  = Number(opts.burdenPct)  || 0;
   const benefitPct = Number(opts.benefitPct) || 0;
   const burdenFraction = (burdenPct + benefitPct) > 0
     ? (burdenPct / 100) / (1 + (burdenPct + benefitPct) / 100)
-    : 0.20; // conservative fallback
+    : 0.20;
 
-  // Volume elasticity — volume-driven buckets scale with order volume:
-  //   - Labor:    1.0  (direct labor is the biggest volume lever)
-  //   - VAS:      1.0  (pass-through)
-  //   - Overhead: 0.5  (roughly half is volume-driven — QC, returns,
-  //               CS reps, consumables; rest is fixed)
-  //   - Equipment:0.15 (peak-markup uplift + consumables partially volume-
-  //               driven; base leases are fixed)
-  //   - Facility: 0.0  (lease is fixed regardless of volume)
+  // Per-bucket volume elasticity — only labor, VAS, overhead (partial), and
+  // equipment (partial) move with order volume. Facility + startup do not.
   const VOLUME_ELASTICITY = { labor: 1.0, vas: 1.0, overhead: 0.5, equipment: 0.15, facility: 0, startup: 0 };
 
   const drivers = [
@@ -1278,6 +1297,7 @@ export function sensitivityTable(baseCosts, baseOrders, adjustments = [-0.10, -0
 
   return drivers.map(driver => ({
     label: driver.label,
+    kind: driver.kind,
     adjustments: adjustments.map(adj => {
       const adjusted = { ...baseCosts };
       if (driver.kind === 'volume') {
@@ -1288,7 +1308,6 @@ export function sensitivityTable(baseCosts, baseOrders, adjustments = [-0.10, -0
       } else if (driver.kind === 'labor_rate') {
         adjusted.labor = baseCosts.labor * (1 + adj);
       } else if (driver.kind === 'burden') {
-        // Dampened: only the burdened portion of the labor bucket moves
         adjusted.labor = baseCosts.labor * (1 + adj * burdenFraction);
       } else if (driver.kind === 'facility_rate') {
         adjusted.facility = baseCosts.facility * (1 + adj);
@@ -1296,11 +1315,26 @@ export function sensitivityTable(baseCosts, baseOrders, adjustments = [-0.10, -0
       const totalCost = adjusted.labor + adjusted.facility + adjusted.equipment +
         adjusted.overhead + adjusted.vas + adjusted.startup;
       const orders = driver.kind === 'volume' ? baseOrders * (1 + adj) : baseOrders;
+      // Revenue model: for a 3PL, pricing is cost+margin, so Volume scales
+      // revenue proportionally (order_rate × $/order). Rate/Burden/Facility
+      // don't touch revenue in this scope — they're internal cost levers.
+      const revenue = driver.kind === 'volume'
+        ? baseRevenue * (1 + adj)
+        : baseRevenue;
+      const grossProfit = revenue - totalCost;
       return {
         pct: adj * 100,
         totalCost,
+        revenue,
+        grossProfit,
         costPerOrder: orders > 0 ? totalCost / orders : 0,
+        // Legacy field — cost delta. Kept for back-compat but UI should
+        // prefer gpDelta for correct color semantics.
         delta: totalCost - baseTotalCost,
+        // Preferred: gross-profit delta. POSITIVE = good for the 3PL —
+        // lets the UI color with positiveIsGood=true consistently.
+        gpDelta: grossProfit - baseGP,
+        revenueDelta: revenue - baseRevenue,
       };
     }),
   }));

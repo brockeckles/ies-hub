@@ -1926,7 +1926,275 @@ textarea.hub-input {
    KPI tile shows value / delta / baseline in a 3-line stack so the
    user sees impact at a glance without hunting across rows.
 */
+/* ---- What-If Studio v2 layout (Brock 2026-04-20 redesign) ----
+   Two-column grid with wide right pane (KPI table + trajectory chart +
+   driver-impact bars). Replaces the narrow sidebar that wasted the
+   right half of the content rail. */
+.cm-whatif-layout {
+  display: grid;
+  grid-template-columns: minmax(360px, 42%) 1fr;
+  gap: 16px;
+  margin-top: 12px;
+  align-items: start;
+}
+@media (max-width: 1080px) {
+  .cm-whatif-layout { grid-template-columns: 1fr; }
+}
+
+.cm-whatif-drivers-card { padding: 16px 18px; }
+.cm-whatif-drivers-card__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--ies-gray-200, #e5e7eb);
+}
+.cm-whatif-drivers-card__title {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--ies-gray-900, #111827);
+}
+.cm-whatif-drivers-card__count {
+  font-size: 11px;
+  color: var(--ies-gray-500, #6b7280);
+}
+
+.cm-whatif-group { margin-bottom: 14px; }
+.cm-whatif-group:last-of-type { margin-bottom: 0; }
+.cm-whatif-group__title {
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--ies-gray-500, #6b7280);
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.cm-whatif-slider-row {
+  padding: 7px 0 8px;
+  border-bottom: 1px solid var(--ies-gray-100, #f3f4f6);
+}
+.cm-whatif-slider-row:last-child { border-bottom: 0; }
+.cm-whatif-slider-row__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.cm-whatif-slider-row__label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ies-gray-900, #111827);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.cm-whatif-impact-chip {
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: rgba(0,0,0,0.03);
+  white-space: nowrap;
+}
+
+.cm-whatif-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 14px;
+  border-top: 1px solid var(--ies-gray-200, #e5e7eb);
+  padding-top: 14px;
+}
+
+.cm-whatif-preview-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
 .cm-whatif-preview-card {
+  border-left: 4px solid var(--ies-blue, #0047AB);
+  background: #fff;
+  padding: 16px 18px;
+}
+.cm-whatif-preview-card__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.cm-whatif-preview-card__title {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--ies-gray-900, #111827);
+}
+.cm-whatif-preview-card__sub {
+  font-size: 11px;
+  color: var(--ies-gray-500, #6b7280);
+}
+
+/* 3-col KPI table — Baseline | Scenario | Δ */
+.cm-whatif-kpi-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.cm-whatif-kpi-table thead th {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--ies-gray-500, #6b7280);
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--ies-gray-200, #e5e7eb);
+  text-align: right;
+}
+.cm-whatif-kpi-table thead th:first-child { text-align: left; }
+.cm-whatif-kpi-table tbody td {
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--ies-gray-100, #f3f4f6);
+  font-size: 13px;
+}
+.cm-whatif-kpi-table tbody tr:last-child td { border-bottom: 0; }
+.cm-whatif-kpi-table .cm-whatif-kpi-row__label {
+  font-weight: 600;
+  color: var(--ies-gray-700, #374151);
+}
+.cm-whatif-kpi-table .cm-whatif-kpi-row__baseline { color: var(--ies-gray-500, #6b7280); }
+.cm-whatif-kpi-table .cm-whatif-kpi-row__scenario {
+  font-weight: 700;
+  color: var(--ies-gray-900, #111827);
+}
+.cm-whatif-kpi-table .cm-whatif-kpi-row__delta { font-weight: 600; }
+
+/* Multi-year trajectory chart (SVG) */
+.cm-whatif-chart { }
+.cm-whatif-chart__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.cm-whatif-chart__title {
+  font-size: 13px;
+  color: var(--ies-gray-700, #374151);
+}
+.cm-whatif-chart__title strong { color: var(--ies-gray-900, #111827); }
+.cm-whatif-chart__legend {
+  margin-left: 12px;
+  font-size: 11px;
+  color: var(--ies-gray-500, #6b7280);
+}
+.cm-whatif-chart__swatch {
+  display: inline-block;
+  width: 10px;
+  height: 3px;
+  border-radius: 1px;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+.cm-whatif-chart__swatch--base { background: var(--ies-gray-400, #9ca3af); }
+.cm-whatif-chart__swatch--sce  { background: var(--ies-blue, #0047AB); }
+.cm-whatif-chart__metric-pills {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  background: var(--ies-gray-100, #f3f4f6);
+  border-radius: 8px;
+}
+.cm-whatif-chart__pill {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ies-gray-600, #4b5563);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.cm-whatif-chart__pill:hover { background: #fff; }
+.cm-whatif-chart__pill.is-active {
+  background: #fff;
+  color: var(--ies-blue, #0047AB);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+}
+.cm-whatif-chart__canvas {
+  height: 140px;
+  background: var(--ies-gray-50, #f9fafb);
+  border: 1px solid var(--ies-gray-100, #f3f4f6);
+  border-radius: 4px;
+  padding: 8px;
+}
+.cm-whatif-chart__canvas svg { width: 100%; height: 100%; display: block; }
+.cm-whatif-chart__xaxis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--ies-gray-400, #9ca3af);
+  padding: 0 8px;
+}
+
+/* Driver-impact horizontal bars */
+.cm-whatif-drivers__hint {
+  font-size: 11px;
+  color: var(--ies-gray-500, #6b7280);
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+.cm-whatif-drivers__rows { display: flex; flex-direction: column; gap: 6px; }
+.cm-whatif-drivers__row {
+  display: grid;
+  grid-template-columns: 140px 1fr 90px;
+  align-items: center;
+  gap: 10px;
+}
+.cm-whatif-drivers__label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ies-gray-700, #374151);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cm-whatif-drivers__bar-track {
+  height: 10px;
+  background: var(--ies-gray-100, #f3f4f6);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+.cm-whatif-drivers__bar {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.2s ease;
+}
+.cm-whatif-drivers__value {
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.cm-whatif-drivers-empty {
+  font-size: 12px;
+  color: var(--ies-gray-500, #6b7280);
+  text-align: center;
+  padding: 14px;
+  border: 1px dashed var(--ies-gray-200, #e5e7eb);
+  border-radius: 4px;
+}
+
+/* Legacy — kept for backward compat where .cm-whatif-kpis is still used */
+.cm-whatif-preview-card-legacy {
   border-left: 4px solid var(--ies-blue, #0047AB);
   background: #fff;
 }

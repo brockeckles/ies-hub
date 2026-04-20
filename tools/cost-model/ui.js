@@ -10,7 +10,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import * as calc from './calc.js?v=20260420-vN';
+import * as calc from './calc.js?v=20260420-vP';
 import * as api from './api.js?v=20260419-uH';
 import * as scenarios from './calc.scenarios.js?v=20260419-sZ';
 import * as monthlyCalc from './calc.monthly.js?v=20260420-vM';
@@ -3328,11 +3328,18 @@ function renderSummary() {
   if (projResult && projResult.monthlyBundle) _lastMonthlyBundle = projResult.monthlyBundle;
   const projections = projResult.projections || [];
 
-  // Financial metrics
+  // Financial metrics — Brock 2026-04-20 fixes:
+  //   • totalInvestment now = startup + equipment capital (was $0 because
+  //     projections[].capex was empty on the monthly-engine path)
+  //   • MIRR / Payback / ROIC use the full totalInvestment
+  //   • annualDepreciation (equipment + startup amort) lets the metrics
+  //     fn derive a proper EBITDA when the P&L rollup doesn't separate D&A
   const metrics = calc.computeFinancialMetrics(projections, {
     startupCapital: summary.startupCapital,
-    discountRate: (fin.discountRate || 10) / 100,
-    reinvestRate: (fin.reinvestRate || 8) / 100,
+    equipmentCapital: summary.equipmentCapital,
+    annualDepreciation: (summary.equipmentAmort || 0) + (summary.startupAmort || 0),
+    discountRatePct: fin.discountRate || 10,
+    reinvestRatePct: fin.reinvestRate || 8,
     totalFtes: summary.totalFtes,
     fixedCost: summary.facilityCost + summary.overheadCost + summary.startupAmort,
   });
@@ -3356,6 +3363,7 @@ function renderSummary() {
   const sensi = calc.sensitivityTable(baseCosts, baseOrdersY1, undefined, {
     burdenPct:  lc.defaultBurdenPct ?? 30,
     benefitPct: lc.benefitLoadPct   ?? 15,
+    marginPct:  (fin.targetMargin || 0),
   });
 
   const pcts = summary.totalCost > 0 ? {
@@ -3540,7 +3548,9 @@ function renderSummary() {
       </div>
     </div>
 
-    <!-- Sensitivity Analysis — primitives hub-datatable -->
+    <!-- Sensitivity Analysis — shows Δ Gross Profit (3PL P&L lens):
+         +volume = +revenue and +cost, but net is positive because pricing
+         is cost+margin. Coloring reflects that: green = good for the deal. -->
     <div class="hub-card mb-4">
       <h3 class="hub-section-heading">Sensitivity Analysis</h3>
       <div class="cm-table-scroll">
@@ -3555,19 +3565,28 @@ function renderSummary() {
             ${sensi.map(driver => `
               <tr>
                 <td style="font-weight:600;">${driver.label}</td>
-                ${driver.adjustments.map(a => `
-                  <td class="hub-num" style="color: ${a.delta > 0 ? 'var(--ies-red)' : a.delta < 0 ? 'var(--ies-green)' : 'inherit'};">
-                    <div>${calc.formatCurrency(a.totalCost, {compact: true})}</div>
-                    <div class="hub-field__hint" style="text-align:right;">${a.delta >= 0 ? '+' : ''}${calc.formatCurrency(a.delta, {compact: true})}</div>
-                  </td>
-                `).join('')}
+                ${driver.adjustments.map(a => {
+                  // ΔGP: positive = good (green) for the 3PL. Previously
+                  // we showed ΔTotalCost which read backwards on Volume.
+                  const isPos = a.gpDelta > 0;
+                  const isNeg = a.gpDelta < 0;
+                  const color = isPos ? 'var(--ies-green)' : isNeg ? 'var(--ies-red)' : 'inherit';
+                  const sign  = isPos ? '+' : (isNeg ? '−' : '');
+                  const mag   = Math.abs(a.gpDelta);
+                  return `
+                    <td class="hub-num" style="color:${color};" title="Scenario GP ${calc.formatCurrency(a.grossProfit, {compact: true})} · Revenue ${calc.formatCurrency(a.revenue, {compact: true})} · Cost ${calc.formatCurrency(a.totalCost, {compact: true})}">
+                      <div>${calc.formatCurrency(a.grossProfit, {compact: true})}</div>
+                      <div class="hub-field__hint" style="text-align:right;color:${color};">${sign}${calc.formatCurrency(mag, {compact: true})} GP</div>
+                    </td>
+                  `;
+                }).join('')}
               </tr>
             `).join('')}
           </tbody>
         </table>
       </div>
       <div class="hub-field__hint mt-2">
-        Base total cost: ${calc.formatCurrency(summary.totalCost, {compact: true})}. Red = cost increase, green = cost decrease.
+        Shown: scenario <strong>Gross Profit</strong> + ΔGP vs baseline. Green = better for the deal, red = worse. Base GP: ${calc.formatCurrency((summary.totalRevenue - summary.totalCost), {compact: true})}. Hover any cell to see the underlying revenue / cost split.
       </div>
     </div>
 
@@ -3810,6 +3829,13 @@ function bindSectionEvents(section, container) {
     });
     container.querySelectorAll('[data-whatif-number]').forEach(inp => {
       inp.addEventListener('change', () => applySliderUpdate(inp.dataset.whatifNumber, inp.value));
+    });
+
+    container.querySelectorAll('[data-whatif-metric]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        window._whatIfChartMetric = btn.dataset.whatifMetric;
+        renderSection();
+      });
     });
 
     container.querySelector('[data-cm-action="whatif-reset"]')?.addEventListener('click', async () => {
@@ -4538,12 +4564,39 @@ function computeWhatIfPreview(overlay) {
       ebitdaMargin: totalRev > 0 ? (totalEbitda / totalRev * 100) : 0,
       cumFcf: lastCumFcf,
       npv,
+      // Expose per-year projections so the trajectory chart can render
+      // baseline vs scenario lines without a second compute pass.
+      projections,
       calcHeur,
     };
   } catch (err) {
     console.warn('[CM] what-if preview failed:', err);
     return null;
   }
+}
+
+/**
+ * Per-slider isolated impact — re-runs the preview with an overlay that
+ * contains ONLY this slider's transient value. Returns the ΔNI / Δ Margin
+ * so the drivers panel and impact bars can attribute which slider moves
+ * what. Caveat: ignores interactions between sliders (superposition approx).
+ */
+function _computeWhatIfDriverImpacts(baseline) {
+  if (!baseline) return {};
+  const out = {};
+  const activeKeys = Object.keys(whatIfTransient).filter(
+    k => whatIfTransient[k] !== '' && whatIfTransient[k] !== undefined,
+  );
+  for (const key of activeKeys) {
+    const iso = computeWhatIfPreview({ [key]: whatIfTransient[key] });
+    if (!iso) continue;
+    out[key] = {
+      dNI: iso.totalNI - baseline.totalNI,
+      dEbitda: iso.totalEbitda - baseline.totalEbitda,
+      dMarginPp: iso.ebitdaMargin - baseline.ebitdaMargin, // percentage points
+    };
+  }
+  return out;
 }
 
 function renderWhatIfStudio() {
@@ -4555,137 +4608,290 @@ function renderWhatIfStudio() {
       .then(() => renderSection());
   }
   // Compute BOTH baseline (empty overlay) and current-preview (with
-  // transient overlay) so each KPI can show baseline + delta side-by-
-  // side. Brock 2b: "would it be possible to show the baseline numbers
-  // in the live preview section so the user can clearly see what the
-  // impacts of the changes they're making?"
+  // transient overlay) so KPIs show Baseline | Scenario | Δ in-line.
   const preview = computeWhatIfPreview();
   const baseline = computeWhatIfPreview({});
+  const impacts = _computeWhatIfDriverImpacts(baseline);
+
   const groups = new Map();
   for (const s of WHATIF_SLIDERS) {
     if (!groups.has(s.group)) groups.set(s.group, []);
     groups.get(s.group).push(s);
   }
   const activeCount = Object.keys(whatIfTransient).filter(k => whatIfTransient[k] !== '' && whatIfTransient[k] !== undefined).length;
+  const contractYears = model.projectDetails?.contractTerm || 5;
 
   const fmt = n => (n == null ? '—' : (
     Math.abs(n) >= 1e6 ? '$' + (n/1e6).toFixed(2) + 'M' :
     Math.abs(n) >= 1e3 ? '$' + (n/1e3).toFixed(0) + 'K' :
     '$' + n.toFixed(0)
   ));
-  // Format delta as ± with color. Returns null-ish string when no
-  // change so render is clean at the baseline state.
-  const fmtDelta = (current, base, formatter = fmt, opts = {}) => {
-    if (current == null || base == null) return '';
-    const delta = current - base;
-    if (Math.abs(delta) < 0.001 * Math.max(Math.abs(base), 1)) return ''; // <0.1% drift, hide
-    const sign = delta >= 0 ? '+' : '−';
-    const absDelta = Math.abs(delta);
-    const pctChange = base !== 0 ? (delta / base) * 100 : 0;
-    const color = delta >= 0 ? (opts.positiveIsGood ? '#16a34a' : '#dc2626') : (opts.positiveIsGood ? '#dc2626' : '#16a34a');
-    return `<div class="cm-whatif-kpi-delta" style="color:${color};">${sign}${formatter(absDelta)} ${Math.abs(pctChange) >= 0.1 ? `(${sign}${Math.abs(pctChange).toFixed(1)}%)` : ''}</div>`;
+  const fmtShort = n => (n == null ? '—' : (
+    Math.abs(n) >= 1e6 ? '$' + (n/1e6).toFixed(1) + 'M' :
+    Math.abs(n) >= 1e3 ? '$' + (n/1e3).toFixed(0) + 'K' :
+    '$' + n.toFixed(0)
+  ));
+  const pctFmt = n => (n == null ? '—' : `${n.toFixed(1)}%`);
+  const deltaColor = (delta, positiveIsGood) =>
+    delta === 0 ? 'var(--ies-gray-400, #9ca3af)'
+                : (delta > 0 ? (positiveIsGood ? '#16a34a' : '#dc2626') : (positiveIsGood ? '#dc2626' : '#16a34a'));
+
+  // Per-slider impact chip: "→ +$120K NI" or "→ −0.4pp margin"
+  const impactChip = (key) => {
+    const imp = impacts[key];
+    if (!imp) return '';
+    const v = imp.dNI;
+    if (Math.abs(v) < 1000) return '';
+    const sign = v >= 0 ? '+' : '−';
+    const color = v >= 0 ? '#16a34a' : '#dc2626';
+    return `<span class="cm-whatif-impact-chip" style="color:${color};" title="Isolated impact if only this slider were changed (ignores interactions with other sliders)">→ ${sign}${fmtShort(Math.abs(v))} NI</span>`;
   };
 
   const sliderRow = s => {
     const val = whatIfCurrentValue(s.key);
     const src = whatIfSource(s.key);
-    // Source badges now use hub-chip variants instead of hand-rolled colors
-    // so they inherit the design system's pill styling. "Live" was solid
-    // purple (inconsistent with the rest of the app); switched to info-blue.
     const srcBadge = src === 'transient'
       ? '<span class="hub-chip hub-chip--info" style="font-size:9px;padding:1px 6px;">live</span>'
       : src === 'override'
         ? '<span class="hub-chip hub-chip--warn" style="font-size:9px;padding:1px 6px;">override</span>'
-        : '<span style="font-size:10px;color:var(--ies-gray-400);">default</span>';
+        : '';
     return `
-      <div style="display:grid;grid-template-columns:1fr 100px 70px;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-        <div>
-          <div style="font-size:13px;font-weight:500;">${s.label} ${srcBadge}</div>
-          <div style="font-size:11px;color:var(--ies-gray-400);">${s.key}</div>
+      <div class="cm-whatif-slider-row">
+        <div class="cm-whatif-slider-row__header">
+          <div class="cm-whatif-slider-row__label">
+            <span>${s.label}</span>
+            ${srcBadge}
+            ${impactChip(s.key)}
+          </div>
+          <div style="display:flex;align-items:center;gap:4px;">
+            <input type="number" step="${s.step}" min="${s.min}" max="${s.max}" value="${val}"
+              data-whatif-number="${s.key}" style="width:52px;font-size:12px;text-align:right;padding:2px 4px;" />
+            <span style="font-size:11px;color:var(--ies-gray-400);min-width:24px;">${s.unit}</span>
+          </div>
         </div>
         <input type="range" min="${s.min}" max="${s.max}" step="${s.step}" value="${val}"
-          data-whatif-slider="${s.key}" style="width:100%;" />
-        <div style="display:flex;align-items:center;gap:4px;">
-          <input type="number" step="${s.step}" min="${s.min}" max="${s.max}" value="${val}"
-            data-whatif-number="${s.key}" style="width:55px;font-size:12px;text-align:right;" />
-          <span style="font-size:11px;color:var(--ies-gray-400);">${s.unit}</span>
-        </div>
+          data-whatif-slider="${s.key}" style="width:100%;margin-top:2px;" />
       </div>
     `;
   };
 
-  // Emit a preview KPI tile with baseline + delta. `positiveIsGood` controls
-  // which direction reads green (revenue up = good; opex up = bad).
-  const kpiTile = (label, current, base, opts = {}) => {
-    const valFmt = opts.formatter || fmt;
-    const valStr = current == null ? '—' : valFmt(current);
-    const baseStr = (base == null || Math.abs((current || 0) - base) < 0.001 * Math.max(Math.abs(base), 1))
-      ? ''
-      : `<div class="cm-whatif-kpi-baseline" title="Baseline (no slider changes)">baseline ${valFmt(base)}</div>`;
+  // 3-col KPI row: Baseline | Scenario | Δ
+  const kpiRow = (label, cur, base, opts = {}) => {
+    const f = opts.formatter || fmt;
+    const curStr = cur == null ? '—' : f(cur);
+    const baseStr = base == null ? '—' : f(base);
+    const delta = (cur == null || base == null) ? null : (cur - base);
+    const showDelta = delta != null && Math.abs(delta) >= 0.001 * Math.max(Math.abs(base || 0), 1);
+    const sign = delta >= 0 ? '+' : '−';
+    const pctChange = (delta != null && base !== 0) ? (delta / base) * 100 : null;
+    const color = delta == null ? 'var(--ies-gray-400)' : deltaColor(delta, opts.positiveIsGood);
     return `
-      <div class="cm-whatif-kpi">
-        <div class="cm-whatif-kpi-label">${label}</div>
-        <div class="cm-whatif-kpi-value">${valStr}</div>
-        ${fmtDelta(current, base, valFmt, opts)}
-        ${baseStr}
-      </div>
+      <tr>
+        <td class="cm-whatif-kpi-row__label">${label}</td>
+        <td class="hub-num cm-whatif-kpi-row__baseline">${baseStr}</td>
+        <td class="hub-num cm-whatif-kpi-row__scenario">${curStr}</td>
+        <td class="hub-num cm-whatif-kpi-row__delta" style="color:${color};">
+          ${showDelta
+            ? `${sign}${f(Math.abs(delta))}${pctChange != null && Math.abs(pctChange) >= 0.1 ? ` <span style="color:var(--ies-gray-400);font-size:11px;font-weight:500;">(${sign}${Math.abs(pctChange).toFixed(1)}%)</span>` : ''}`
+            : '—'}
+        </td>
+      </tr>
     `;
   };
-  const pctFmt = n => (n == null ? '—' : `${n.toFixed(1)}%`);
+
+  // Multi-year trajectory chart — two SVG polylines (baseline grey, scenario
+  // colored). Metric key comes from window._whatIfChartMetric (user toggle).
+  const chartMetric = (typeof window !== 'undefined' && window._whatIfChartMetric) || 'netIncome';
+  const METRICS = {
+    netIncome: { label: 'Net Income', pick: p => p.netIncome },
+    ebitda:    { label: 'EBITDA',     pick: p => p.ebitda },
+    revenue:   { label: 'Revenue',    pick: p => p.revenue },
+    freeCashFlow: { label: 'Free Cash Flow', pick: p => p.freeCashFlow ?? p.free_cash_flow },
+  };
+  const metricDef = METRICS[chartMetric] || METRICS.netIncome;
+
+  const trajectoryChart = (() => {
+    const pBase = baseline?.projections || [];
+    const pSce  = preview?.projections  || [];
+    if (pBase.length < 2 || pSce.length < 2) return '';
+    const basePts = pBase.map(metricDef.pick);
+    const scePts  = pSce.map(metricDef.pick);
+    const all = [...basePts, ...scePts];
+    const maxV = Math.max(...all, 0);
+    const minV = Math.min(...all, 0);
+    const range = Math.max(1, maxV - minV);
+    const W = 100, H = 100; // viewBox units; CSS scales to container
+    const toXY = (v, i, n) => {
+      const x = n > 1 ? (i / (n - 1)) * W : 0;
+      const y = H - ((v - minV) / range) * H;
+      return [x, y];
+    };
+    const toPoly = pts => pts.map((v, i) => toXY(v, i, pts.length).join(',')).join(' ');
+    const baseline0 = minV <= 0 && maxV >= 0 ? (H - ((0 - minV) / range) * H) : null;
+    const years = pBase.map((_, i) => `Y${i + 1}`);
+
+    // Render year labels + min/max Y gridline hints
+    return `
+      <div class="cm-whatif-chart">
+        <div class="cm-whatif-chart__header">
+          <div class="cm-whatif-chart__title">
+            <strong>${metricDef.label}</strong> over ${contractYears} years
+            <span class="cm-whatif-chart__legend">
+              <span class="cm-whatif-chart__swatch cm-whatif-chart__swatch--base"></span>baseline
+              <span class="cm-whatif-chart__swatch cm-whatif-chart__swatch--sce" style="margin-left:10px;"></span>scenario
+            </span>
+          </div>
+          <div class="cm-whatif-chart__metric-pills" role="tablist">
+            ${Object.entries(METRICS).map(([k, m]) => `
+              <button class="cm-whatif-chart__pill${chartMetric === k ? ' is-active' : ''}"
+                data-whatif-metric="${k}" title="Chart ${m.label}">${m.label}</button>
+            `).join('')}
+          </div>
+        </div>
+        <div class="cm-whatif-chart__canvas">
+          <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${metricDef.label} trajectory baseline vs scenario">
+            ${baseline0 != null ? `<line x1="0" x2="${W}" y1="${baseline0}" y2="${baseline0}" stroke="var(--ies-gray-200,#e5e7eb)" stroke-dasharray="2 2" stroke-width="0.3" vector-effect="non-scaling-stroke"/>` : ''}
+            <polyline points="${toPoly(basePts)}" fill="none" stroke="var(--ies-gray-400,#9ca3af)" stroke-width="1.8" vector-effect="non-scaling-stroke"/>
+            <polyline points="${toPoly(scePts)}" fill="none" stroke="var(--ies-blue,#0047AB)" stroke-width="2.2" vector-effect="non-scaling-stroke"/>
+            ${scePts.map((v, i) => {
+              const [x, y] = toXY(v, i, scePts.length);
+              return `<circle cx="${x}" cy="${y}" r="1.1" fill="var(--ies-blue,#0047AB)" vector-effect="non-scaling-stroke"><title>Y${i+1}: ${fmt(v)} (baseline ${fmt(basePts[i])})</title></circle>`;
+            }).join('')}
+          </svg>
+        </div>
+        <div class="cm-whatif-chart__xaxis">
+          ${years.map(y => `<span>${y}</span>`).join('')}
+        </div>
+      </div>
+    `;
+  })();
+
+  // Driver-impact horizontal bars — sorted by |ΔNI| desc. Only shown when
+  // at least one slider is active.
+  const driverBars = (() => {
+    const rows = Object.entries(impacts)
+      .map(([key, v]) => ({ key, ...v, slider: WHATIF_SLIDERS.find(s => s.key === key) }))
+      .filter(r => r.slider && Math.abs(r.dNI) >= 1000)
+      .sort((a, b) => Math.abs(b.dNI) - Math.abs(a.dNI));
+    if (rows.length === 0) {
+      return activeCount === 0
+        ? `<div class="cm-whatif-drivers-empty">
+             <em>Move sliders on the left to see which drivers contribute most to the scenario delta.</em>
+           </div>`
+        : `<div class="cm-whatif-drivers-empty">
+             <em>Active sliders are below the $1K materiality threshold.</em>
+           </div>`;
+    }
+    const maxAbs = Math.max(...rows.map(r => Math.abs(r.dNI)));
+    return `
+      <div class="cm-whatif-drivers">
+        <div class="cm-whatif-drivers__hint">
+          Isolated contribution to Net Income — each bar shows what that one slider would move on its own. Does not account for interactions.
+        </div>
+        <div class="cm-whatif-drivers__rows">
+          ${rows.map(r => {
+            const pct = maxAbs > 0 ? Math.abs(r.dNI) / maxAbs * 100 : 0;
+            const isPos = r.dNI > 0;
+            const color = isPos ? '#16a34a' : '#dc2626';
+            const sign = isPos ? '+' : '−';
+            return `
+              <div class="cm-whatif-drivers__row">
+                <div class="cm-whatif-drivers__label">${r.slider.label}</div>
+                <div class="cm-whatif-drivers__bar-track">
+                  <div class="cm-whatif-drivers__bar${isPos ? ' is-pos' : ' is-neg'}" style="width:${pct.toFixed(1)}%;background:${color};"></div>
+                </div>
+                <div class="cm-whatif-drivers__value" style="color:${color};">${sign}${fmtShort(Math.abs(r.dNI))}</div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  })();
 
   return `
-    <div class="cm-section-header">
-      <h2>What-If Studio
-        ${activeCount > 0
-          ? `<span class="hub-chip hub-chip--info" style="margin-left:8px;">${activeCount} live override${activeCount === 1 ? '' : 's'}</span>`
-          : '<span class="hub-chip" style="margin-left:8px;">baseline</span>'}
-      </h2>
-      <p class="cm-subtle">Drag sliders to preview how heuristic changes move the deal. Changes are <strong>transient</strong> — click Apply to commit as per-scenario overrides, or Reset to discard.</p>
-    </div>
-
-    <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:16px;margin-top:12px;">
-      <div class="hub-card">
-        ${Array.from(groups.entries()).map(([group, items]) => `
-          <div style="margin-bottom:16px;">
-            <div style="font-weight:600;font-size:12px;text-transform:uppercase;color:var(--ies-gray-500);letter-spacing:0.5px;margin-bottom:4px;">${group}</div>
-            ${items.map(sliderRow).join('')}
-          </div>
-        `).join('')}
-        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;border-top:1px solid var(--ies-gray-200);padding-top:12px;">
-          <button class="hub-btn" data-cm-action="whatif-reset" ${activeCount === 0 ? 'disabled' : ''}>Reset</button>
-          <button class="hub-btn hub-btn-primary" data-cm-action="whatif-apply" ${activeCount === 0 ? 'disabled' : ''}>Apply as overrides</button>
+    <div class="cm-wide-layout">
+      <div class="cm-section-header">
+        <div>
+          <h2 style="margin:0;">What-If Studio
+            ${activeCount > 0
+              ? `<span class="hub-chip hub-chip--info" style="margin-left:8px;">${activeCount} live override${activeCount === 1 ? '' : 's'}</span>`
+              : '<span class="hub-chip" style="margin-left:8px;">baseline</span>'}
+          </h2>
+          <p class="cm-subtle" style="margin:4px 0 0;">Drag sliders to preview how heuristic changes move the deal. Changes are <strong>transient</strong> — click Apply to commit as per-scenario overrides, or Reset to discard.</p>
         </div>
       </div>
 
-      <div class="hub-card cm-whatif-preview-card">
-        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px;">
-          <div style="font-weight:700;font-size:14px;">Live Preview</div>
-          ${activeCount > 0
-            ? `<span class="hub-chip hub-chip--info" style="font-size:10px;">${activeCount} change${activeCount === 1 ? '' : 's'}</span>`
-            : '<span class="hub-chip" style="font-size:10px;">at baseline</span>'}
+      <div class="cm-whatif-layout">
+        <!-- DRIVERS (left) -->
+        <div class="hub-card cm-whatif-drivers-card">
+          <div class="cm-whatif-drivers-card__header">
+            <span class="cm-whatif-drivers-card__title">Drivers</span>
+            <span class="cm-whatif-drivers-card__count">${WHATIF_SLIDERS.length} levers · ${activeCount} active</span>
+          </div>
+          ${Array.from(groups.entries()).map(([group, items]) => `
+            <div class="cm-whatif-group">
+              <div class="cm-whatif-group__title">${group}</div>
+              ${items.map(sliderRow).join('')}
+            </div>
+          `).join('')}
+          <div class="cm-whatif-actions">
+            <button class="hub-btn" data-cm-action="whatif-reset" ${activeCount === 0 ? 'disabled' : ''}>Reset</button>
+            <button class="hub-btn hub-btn-primary" data-cm-action="whatif-apply" ${activeCount === 0 ? 'disabled' : ''}>Apply as overrides</button>
+          </div>
         </div>
-        <div style="font-size:11px;color:var(--ies-gray-500);margin-bottom:12px;">
-          Updates on slider release. Over the ${model.projectDetails?.contractTerm || 5}-year horizon.
-          ${activeCount > 0 ? 'Baseline shown for comparison.' : ''}
+
+        <!-- PREVIEW (right) -->
+        <div class="cm-whatif-preview-pane">
+          ${preview ? `
+            <!-- 3-col KPI: Baseline | Scenario | Δ -->
+            <div class="hub-card cm-whatif-preview-card">
+              <div class="cm-whatif-preview-card__header">
+                <span class="cm-whatif-preview-card__title">Live Preview</span>
+                <span class="cm-whatif-preview-card__sub">Totals over ${contractYears}-year horizon</span>
+              </div>
+              <table class="cm-whatif-kpi-table">
+                <thead>
+                  <tr>
+                    <th></th>
+                    <th class="hub-num">Baseline</th>
+                    <th class="hub-num">Scenario</th>
+                    <th class="hub-num">Δ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${kpiRow('Total Revenue', preview.totalRev, baseline?.totalRev, { positiveIsGood: true })}
+                  ${kpiRow('Total Opex', preview.totalOpex, baseline?.totalOpex, { positiveIsGood: false })}
+                  ${kpiRow('EBITDA', preview.totalEbitda, baseline?.totalEbitda, { positiveIsGood: true })}
+                  ${kpiRow('EBITDA Margin', preview.ebitdaMargin, baseline?.ebitdaMargin, { positiveIsGood: true, formatter: pctFmt })}
+                  ${kpiRow('Net Income', preview.totalNI, baseline?.totalNI, { positiveIsGood: true })}
+                  ${kpiRow('NPV', preview.npv, baseline?.npv, { positiveIsGood: true })}
+                  ${kpiRow('Cum FCF', preview.cumFcf, baseline?.cumFcf, { positiveIsGood: true })}
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Multi-year trajectory -->
+            <div class="hub-card cm-whatif-preview-card">
+              ${trajectoryChart}
+            </div>
+
+            <!-- Driver impact bars -->
+            <div class="hub-card cm-whatif-preview-card">
+              <div class="cm-whatif-preview-card__header">
+                <span class="cm-whatif-preview-card__title">Driver Impact</span>
+                <span class="cm-whatif-preview-card__sub">What's moving the deal</span>
+              </div>
+              ${driverBars}
+            </div>
+          ` : `
+            <div class="hub-card">
+              <div style="text-align:center;padding:40px;color:var(--ies-gray-400);">
+                <em>No preview available — populate Labor + Pricing sections first.</em>
+              </div>
+            </div>
+          `}
         </div>
-        ${preview ? `
-          <div class="cm-whatif-kpis">
-            ${kpiTile('Total Revenue', preview.totalRev, baseline?.totalRev, { positiveIsGood: true })}
-            ${kpiTile('Total Opex',    preview.totalOpex, baseline?.totalOpex, { positiveIsGood: false })}
-            ${kpiTile('EBITDA',        preview.totalEbitda, baseline?.totalEbitda, { positiveIsGood: true })}
-            ${kpiTile('EBITDA Margin', preview.ebitdaMargin, baseline?.ebitdaMargin, { positiveIsGood: true, formatter: pctFmt })}
-            ${kpiTile('Net Income',    preview.totalNI, baseline?.totalNI, { positiveIsGood: true })}
-            ${kpiTile('NPV',           preview.npv, baseline?.npv, { positiveIsGood: true })}
-            ${kpiTile('Cum FCF',       preview.cumFcf, baseline?.cumFcf, { positiveIsGood: true })}
-          </div>
-          <div style="margin-top:12px;font-size:11px;color:var(--ies-gray-500);">
-            Tip: combine sliders (e.g. DSO↑ + margin↓) to stress-test the deal.
-          </div>
-        ` : `
-          <div style="text-align:center;padding:24px;color:var(--ies-gray-400);">
-            <em>No preview available — populate Labor + Pricing sections first.</em>
-          </div>
-        `}
       </div>
     </div>
   `;
