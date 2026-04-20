@@ -2160,6 +2160,7 @@ function renderPricingBuckets() {
   const empty = buckets.length === 0;
 
   return `
+    <div class="cm-wide-layout">
     <div class="cm-section-header">
       <div>
         <div class="cm-section-title">Pricing Buckets</div>
@@ -2240,6 +2241,7 @@ function renderPricingBuckets() {
         <strong>What happens next:</strong> when you build Labor, Equipment, Overhead, VAS, or Startup lines, each line picks one of these buckets to route its cost into. Buckets with no assigned lines are allowed — they'll just show $0 in the Pricing section. Missing a bucket? Add it here, then go back and re-assign the line.
       </div>
     `}
+    </div>
   `;
 }
 

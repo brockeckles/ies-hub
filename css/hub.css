@@ -552,6 +552,15 @@ textarea.hub-input {
 
 .hub-builder-form { max-width: var(--form-max-width); }
 
+/* Sections that need the full available width opt out of the 640px cap.
+   Triggers: any section containing a .hub-master-detail (Labor today,
+   more coming) or explicitly wrapped in .cm-wide-layout (Pricing Buckets,
+   future wide sections). */
+.hub-builder-form:has(.hub-master-detail),
+.hub-builder-form:has(.cm-wide-layout) {
+  max-width: var(--content-max-width);
+}
+
 /* ---- Layout Pattern B: Analyzer ---- */
 .hub-analyzer {
   display: flex;
@@ -1529,9 +1538,9 @@ textarea.hub-input {
   letter-spacing: 0.06em;
   margin: 0 0 10px 0;
 }
-/* Grid variants — auto-fit with sensible minimums so columns naturally
-   reflow based on the PANE width (via container queries below), not
-   viewport width. */
+/* Grid variants — explicit column counts, collapse via container query
+   based on the PANE width (not viewport). 2-col stays 2-col until the
+   pane is actually narrow; 4-col stays 4-col until there's no room. */
 .hub-detail-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -1539,22 +1548,21 @@ textarea.hub-input {
 }
 .hub-detail-grid--2col {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px 18px;
 }
 .hub-detail-grid--4col {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px 18px;
 }
-/* Container-query refinements: at narrower pane widths, force tighter
-   column counts so fields don't drop to 1-col prematurely. */
-@container master-detail (max-width: 700px) {
+/* Container-query collapse, keyed to the master-detail pane width */
+@container master-detail (max-width: 840px) {
   .hub-detail-grid--4col { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .hub-detail-grid--2col { grid-template-columns: 1fr; }
 }
-@container master-detail (max-width: 480px) {
+@container master-detail (max-width: 560px) {
   .hub-detail-grid--4col { grid-template-columns: 1fr; }
+  .hub-detail-grid--2col { grid-template-columns: 1fr; }
 }
 
 /* Make sure reused helpers (MOST picker, Volume Source picker) stretch
