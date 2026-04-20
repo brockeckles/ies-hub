@@ -1351,21 +1351,29 @@ function renderShifts() {
         <span class="hub-field__hint">Each FTE's scheduled work pattern, not facility operating days. Standard US FT: 8 × 5 × 52 = 2,080.</span>
       </div>
       ${(() => {
-        // Inline warning if the stored values look like facility-operating
-        // schedule rather than an FTE schedule. Gives Brock a one-click
-        // reset to the doc's reference values.
+        // Inline warning if the stored values diverge from the 2,080-hr
+        // standard (8 × 5 × 52) per Labor Build-Up Logic doc appendix.
+        // Brock 2026-04-20: 2,080 is the starting standard; 8.5 hrs/shift
+        // is non-standard even when paid-lunch is common.
+        const h = Number(s.hoursPerShift) || 8;
         const d = Number(s.daysPerWeek) || 5;
         const w = Number(s.weeksPerYear ?? 52);
-        const looksWrong = d > 5 || w < 48 || w > 52;
+        const annual = h * d * w;
+        const looksWrong = Math.abs(annual - 2080) > 1;
         if (!looksWrong) return '';
+        const driftParts = [];
+        if (h !== 8) driftParts.push(`Hours/Shift = ${h}`);
+        if (d !== 5) driftParts.push(`Days/Week = ${d}`);
+        if (w !== 52) driftParts.push(`Weeks/Year = ${w}`);
         return `
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;margin-bottom:12px;background:#fff8e6;border:1px solid #f3d675;border-radius:8px;font-size:12px;">
             <div>
-              <strong>Heads up:</strong> Days/Week = ${d} and Weeks/Year = ${w} describe <em>facility operating schedule</em>, not a single FTE's work pattern.
-              A 24/7 facility still schedules each FTE for ~2,080 hrs/year (8 × 5 × 52). Multiple FTEs rotate to cover the calendar.
+              <strong>Heads up:</strong> ${driftParts.join(', ')} produces <strong>${annual.toLocaleString()} hrs/FTE</strong>
+              — the reference standard per Labor Build-Up Logic doc is <strong>2,080</strong> (8 × 5 × 52).
+              A 24/7 facility still schedules each FTE for 2,080 hrs/year; multiple FTEs rotate to cover the calendar.
               Correcting these will also fix Indirect Labor FTE counts and cost downstream.
             </div>
-            <button class="hub-btn hub-btn-primary hub-btn-sm" data-action="reset-fte-shift-defaults" style="white-space:nowrap;">Reset to 5 × 52</button>
+            <button class="hub-btn hub-btn-primary hub-btn-sm" data-action="reset-fte-shift-defaults" style="white-space:nowrap;">Reset to 2,080 (8 × 5 × 52)</button>
           </div>
         `;
       })()}
@@ -1375,7 +1383,7 @@ function renderShifts() {
           <input class="hub-input" type="number" value="${s.shiftsPerDay || 1}" min="1" max="3" step="1" data-field="shifts.shiftsPerDay" data-type="number" />
         </div>
         <div class="hub-field">
-          <label class="hub-field__label" title="Length of ONE shift an FTE works. Includes paid breaks/lunch. Typical 8.0-8.5.">Hours / Shift <span style="color:var(--ies-gray-400);font-weight:400;">(per FTE)</span></label>
+          <label class="hub-field__label" title="Length of ONE shift an FTE is SCHEDULED for (excludes unpaid meal). Reference standard = 8.0. Setting 8.5 implies paid lunch or additional scheduled time; confirm with payroll before deviating from 8.">Hours / Shift <span style="color:var(--ies-gray-400);font-weight:400;">(per FTE)</span></label>
           <input class="hub-input" type="number" value="${s.hoursPerShift || 8}" min="4" max="12" step="0.5" data-field="shifts.hoursPerShift" data-type="number" />
         </div>
         <div class="hub-field">
@@ -5792,12 +5800,12 @@ function handleAction(action, idx, btn) {
       return;
     }
     case 'reset-fte-shift-defaults': {
-      // Brock 2026-04-20: Shift Structure's Days/Week and Weeks/Year are
-      // PER FTE values, not facility operating schedule. Reset to US FT
-      // reference (5 × 52 = 2,080 paid hrs/FTE) per Labor Build-Up Logic
-      // doc appendix. Preserves hoursPerShift (8.0-8.5 both reasonable)
-      // and shiftsPerDay (facility-level, orthogonal to FTE hours).
+      // Brock 2026-04-20: Shift Structure values are PER FTE, not facility
+      // operating schedule. Reset to the 2,080-hr standard (8 × 5 × 52)
+      // per Labor Build-Up Logic doc appendix. Preserves shiftsPerDay
+      // (facility property, orthogonal to per-FTE hours).
       const s = model.shifts || (model.shifts = {});
+      s.hoursPerShift = 8;
       s.daysPerWeek = 5;
       s.weeksPerYear = 52;
       break; // fall through to re-render
