@@ -1939,19 +1939,19 @@ All lines are editable after generation.">⚡ Auto-Generate Equipment</button>
     </div>
 
     <div class="cm-table-scroll">
-      <table class="hub-datatable hub-datatable--dense">
+      <table class="hub-datatable hub-datatable--dense cm-table-equipment">
         <thead>
           <tr>
-            <th>Equipment</th>
-            <th>Category</th>
-            <th class="hub-num">Qty</th>
-            <th>Type</th>
-            <th class="hub-num">$ / Mo</th>
-            <th class="hub-num">Acq Cost</th>
-            <th class="hub-num">Maint / Mo</th>
-            <th class="hub-num">Amort Yrs</th>
-            <th class="hub-num">Annual</th>
-            <th class="cm-actions"></th>
+            <th style="width:180px;">Equipment</th>
+            <th style="width:100px;">Category</th>
+            <th class="hub-num" style="width:60px;">Qty</th>
+            <th style="width:90px;">Type</th>
+            <th class="hub-num" style="width:90px;">$ / Mo</th>
+            <th class="hub-num" style="width:100px;">Acq Cost</th>
+            <th class="hub-num" style="width:90px;">Maint / Mo</th>
+            <th class="hub-num" style="width:80px;">Amort Yrs</th>
+            <th class="hub-num" style="width:110px;">Annual</th>
+            <th class="cm-actions" style="width:40px;"></th>
           </tr>
         </thead>
         <tbody>
@@ -2010,7 +2010,7 @@ function renderOverhead() {
     </div>
 
     <div class="cm-table-scroll">
-      <table class="hub-datatable hub-datatable--dense">
+      <table class="hub-datatable hub-datatable--dense cm-table-overhead">
         <thead>
           <tr>
             <th style="width:22%;">Category</th>
@@ -2059,7 +2059,7 @@ function renderVas() {
       </div>
     </div>
     <div class="cm-table-scroll">
-      <table class="hub-datatable hub-datatable--dense">
+      <table class="hub-datatable hub-datatable--dense cm-table-vas">
         <thead>
           <tr>
             <th style="width:42%;">Service</th>
@@ -2161,7 +2161,7 @@ function renderStartup() {
     </div>
 
     <div class="cm-table-scroll">
-      <table class="hub-datatable hub-datatable--dense">
+      <table class="hub-datatable hub-datatable--dense cm-table-startup">
         <thead>
           <tr>
             <th style="width:50%;">Description</th>

@@ -1443,12 +1443,12 @@ textarea.hub-input {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  /* height:100% fills the grid row assigned by align-items: stretch so
-     the pane visually matches detail. max-height caps it at viewport
-     so very tall detail panes don't push master off-screen — __master-body
-     scrolls internally instead. */
+  /* height: 100% fills the grid row that align-items: stretch makes equal
+     to the tallest sibling (typically the detail pane). No max-height on
+     the outer element here — max-height would win against stretch, which
+     was capping master at 483px while detail was 733px (250px gap). The
+     __master-body does the overflow scrolling for long item lists. */
   height: 100%;
-  max-height: calc(100vh - 240px);
 }
 .hub-master-detail__master-header {
   padding: 12px 14px;
@@ -1467,6 +1467,10 @@ textarea.hub-input {
   overflow-y: auto;
   flex: 1;
   min-height: 0;
+  /* Belt-and-braces safety cap: if a list has hundreds of items, stop it
+     from pushing the page height to absurd levels. At typical (5-25 item)
+     sizes the grid-row height is the bound; this rarely kicks in. */
+  max-height: calc(100vh - 180px);
 }
 .hub-master-detail__item {
   padding: 12px 14px;
@@ -1654,9 +1658,16 @@ textarea.hub-input {
   color: var(--ies-gray-500);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  white-space: nowrap;
+  /* Allow 2-line wrap rather than ellipsis — at 4-tile or 5-tile strips
+     on narrower containers, labels like "ANNUAL OPERATING" or
+     "CONTRIB / ORDER" don't fit in one line. Reserve height for 2 lines
+     so the tile values still vertically align across a row. */
+  line-height: 1.25;
+  min-height: calc(2 * 11px * 1.25);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 .hub-kpi-tile__value {
   font-size: 20px;
@@ -1956,3 +1967,45 @@ textarea.hub-input {
   font-weight: var(--fw-extrabold);
   font-variant-numeric: tabular-nums;
 }
+
+/* ---- CM Phase 3 follow-up — table min-widths so columns don't cram ---- */
+/* Dense hub-datatables inside .cm-table-scroll need room to breathe.
+   Without a min-width, narrow containers (or CM's 5-column Equipment table
+   with 10 cols + actions) squeeze inputs to 30-40px and truncate text.
+   min-width forces horizontal scroll below threshold — readable over
+   compact-but-broken. */
+.cm-table-scroll > .hub-datatable { min-width: 720px; }
+/* Equipment has 10 columns — needs more */
+.cm-table-scroll > .hub-datatable.cm-table-equipment { min-width: 1040px; }
+/* Overhead + VAS + Startup: 5-6 columns, moderate min */
+.cm-table-scroll > .hub-datatable.cm-table-overhead { min-width: 820px; }
+.cm-table-scroll > .hub-datatable.cm-table-vas      { min-width: 680px; }
+.cm-table-scroll > .hub-datatable.cm-table-startup  { min-width: 720px; }
+
+/* Timeline monthly: 8 columns (Month / Rev / Opex / EBITDA / NI / CapEx / FCF / CumFCF) */
+.cm-timeline-monthly-scroll > .hub-datatable { min-width: 820px; }
+
+/* Ensure input elements inside data-table cells don't add extra horizontal
+   padding that pushes columns wider than declared. Reset the 32px+ input
+   height to fit inside 26-28px rows. */
+.hub-datatable--dense .hub-input {
+  height: 28px;
+  padding: 4px 8px;
+  font-size: 13px;
+}
+
+/* Slight negative margin on cm-delete-btn so the action col doesn't demand
+   excessive width. */
+.hub-datatable .cm-actions .cm-delete-btn {
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 6px;
+  min-width: 22px;
+  font-weight: 700;
+}
+
+/* Enforce explicit column widths on the Equipment table to prevent cells
+   from auto-growing past their declared sizes. Without fixed layout,
+   one long input value (e.g. "Sit-down Counterbalance Forklift") can
+   expand the Equipment column and collapse adjacent columns. */
+.cm-table-equipment { table-layout: fixed; }
