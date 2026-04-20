@@ -2021,7 +2021,7 @@ export function autoGenerateIndirectLabor(state, opts = {}) {
  * @param {Object} state
  * @returns {import('./types.js?v=20260418-sK').EquipmentLine[]}
  */
-export function autoGenerateEquipment(state) {
+export function autoGenerateEquipment(state, opts = {}) {
   const lines = [];
   const opHrs = operatingHours(state.shifts || {});
   const totalDirectFtes = (state.laborLines || []).reduce((sum, l) => {
@@ -2032,6 +2032,29 @@ export function autoGenerateEquipment(state) {
   const totalHC = Math.ceil(totalDirectFtes) + totalIndirectHC;
   const sqft = state.facility?.totalSqft || 0;
   const spareFactor = 1.15;
+  const shiftsPerDay = Math.max(1, Number(state.shifts?.shiftsPerDay) || 1);
+
+  // Brock 2026-04-20 — when an MLV (Monthly Labor View) summary is passed
+  // in, MHE quantities come from PEAK-MONTH FTE per assigned mhe_type ÷
+  // shifts/day rather than the ceil(totalFTE/3) × 1.15 heuristic that was
+  // producing 36 Reach Trucks for Wayfair when the shift-math says 6.
+  // The MLV's `by_mhe[type]` is already sum-of-fractional-FTEs for that
+  // type on a given calendar month; dividing by shifts gives "units you
+  // need on the floor at once" because each FTE is on one shift at a time.
+  //
+  // Falls back to the legacy heuristic when MLV is absent (e.g., autogen
+  // fired before labor is set up) or when the labor lines don't carry
+  // `mhe_type` so nothing aggregates under the type key.
+  const mlv = opts.mlv || null;
+  const peakMheFteFromMlv = (type) => {
+    if (!mlv?.months || !Array.isArray(mlv.months) || mlv.months.length === 0) return null;
+    let peak = 0;
+    for (const m of mlv.months) {
+      const f = (m.by_mhe && m.by_mhe[type]) || 0;
+      if (f > peak) peak = f;
+    }
+    return peak > 0 ? peak : null; // null = "no signal, use heuristic"
+  };
 
   // Helper — accepts explicit financing type per the Asset Defaults Guidance
   // (2026-04-20). Legacy callers without `financing` still work via heuristic
@@ -2073,14 +2096,55 @@ export function autoGenerateEquipment(state) {
 
   // ────────────────────────────────────────────────────────────────
   // 1. MHE — forklifts (Leased per reference model; vendor-financed,
-  //    maintenance included). 1 reach truck per ~3 FTE; 1 picker per ~5.
+  //    maintenance included).
+  //
+  //    Two paths:
+  //    (a) MLV-backed  — when the caller passes computeMonthlyLaborView()
+  //        output via opts.mlv. Qty = ceil(peak_month_fte / shifts) × 1.15
+  //        spare. Matches Brock's mental model: a 3-shift op with 18 FTE
+  //        on reach trucks needs 6 trucks (one per simultaneous FTE),
+  //        not 21 (the old heuristic's implied 1-per-3 coverage over
+  //        total headcount).
+  //    (b) Heuristic — fallback when MLV is absent or labor lines
+  //        don't carry mhe_type. Matches pre-2026-04-20 behavior.
+  //
+  //    Note on drivenBy strings: annotated with "(MLV shift-math)" or
+  //    "(heuristic)" so the Equipment UI can surface which path drove
+  //    the quantity.
   // ────────────────────────────────────────────────────────────────
   if (totalDirectFtes > 0) {
-    addEquip('Reach Truck', 'MHE', Math.ceil(totalDirectFtes / 3) * spareFactor,
-      /*monthlyCost*/ 800, /*acqCost*/ 0, /*maint*/ 150,
-      'Direct labor + 15% spare', 'lease');
-    addEquip('Order Picker', 'MHE', Math.max(0, Math.ceil(totalDirectFtes / 5) * spareFactor),
-      600, 0, 100, 'Picking labor', 'lease');
+    // Reach Truck
+    const reachPeak = peakMheFteFromMlv('reach_truck');
+    const reachQty = (reachPeak != null)
+      ? (reachPeak / shiftsPerDay) * spareFactor
+      : (totalDirectFtes / 3) * spareFactor;
+    const reachDriver = (reachPeak != null)
+      ? `Peak ${reachPeak.toFixed(1)} FTE ÷ ${shiftsPerDay} shifts × 1.15 spare (MLV shift-math)`
+      : `${totalDirectFtes.toFixed(1)} direct FTE / 3 × 1.15 spare (heuristic)`;
+    addEquip('Reach Truck', 'MHE', reachQty,
+      /*monthlyCost*/ 800, /*acqCost*/ 0, /*maint*/ 150, reachDriver, 'lease');
+
+    // Order Picker
+    const pickerPeak = peakMheFteFromMlv('order_picker');
+    const pickerQty = (pickerPeak != null)
+      ? (pickerPeak / shiftsPerDay) * spareFactor
+      : Math.max(0, (totalDirectFtes / 5) * spareFactor);
+    const pickerDriver = (pickerPeak != null)
+      ? `Peak ${pickerPeak.toFixed(1)} FTE ÷ ${shiftsPerDay} shifts × 1.15 spare (MLV shift-math)`
+      : `${totalDirectFtes.toFixed(1)} direct FTE / 5 × 1.15 spare (heuristic)`;
+    addEquip('Order Picker', 'MHE', pickerQty,
+      600, 0, 100, pickerDriver, 'lease');
+
+    // Sit-down forklift — only if MLV reports non-trivial peak. No
+    // heuristic fallback (the prior code didn't generate this type).
+    const forkliftPeak = peakMheFteFromMlv('sit_down_forklift');
+    if (forkliftPeak != null && forkliftPeak >= 0.5) {
+      const forkliftQty = (forkliftPeak / shiftsPerDay) * spareFactor;
+      addEquip('Sit-Down Counterbalance Forklift', 'MHE', forkliftQty,
+        750, 0, 150,
+        `Peak ${forkliftPeak.toFixed(1)} FTE ÷ ${shiftsPerDay} shifts × 1.15 spare (MLV shift-math)`,
+        'lease');
+    }
   }
 
   // ────────────────────────────────────────────────────────────────

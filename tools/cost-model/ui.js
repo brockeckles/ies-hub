@@ -5780,10 +5780,15 @@ function handleAction(action, idx, btn) {
     case 'delete-equipment':
       model.equipmentLines.splice(idx, 1);
       break;
-    case 'auto-gen-equipment':
-      model.equipmentLines = calc.autoGenerateEquipment(model);
+    case 'auto-gen-equipment': {
+      // Brock 2026-04-20 — pass MLV so MHE counts use shift-math, not
+      // the 1-per-3-total-FTE heuristic that over-sizes 3-shift ops.
+      // Falls back cleanly when labor lines don't have mhe_type.
+      const mlvForAutoGen = _tryComputeMlvForEquipment();
+      model.equipmentLines = calc.autoGenerateEquipment(model, { mlv: mlvForAutoGen });
       model.equipmentLines.forEach(l => { if (!l.pricing_bucket) l.pricing_bucket = defaultBucketFor('equipment'); });
       break;
+    }
     case 'sync-seasonal-flex':
       syncSeasonalFlex();
       return; // syncSeasonalFlex handles its own renderSection + toast
