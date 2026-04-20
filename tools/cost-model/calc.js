@@ -149,7 +149,53 @@ export function indirectLineAnnualSimple(line, opHours, costing) {
     ? line.burden_pct / 100
     : (c.defaultBurdenPct ?? 30) / 100;
   const benefits = (c.benefitLoadPct ?? 0) / 100;
-  return hc * opHours * rate * (1 + burden + benefits);
+  // Baseline year-round cost
+  const baseline = hc * opHours * rate * (1 + burden + benefits);
+  // Seasonal uplift (Brock 2026-04-20): when the line declares extra
+  // headcount needed during peak months, add them pro-rated to the
+  // months they're on staff + uplifted by a temp-agency markup.
+  // peak_only_hc + peak_months + peak_markup_pct. All optional — zeros
+  // mean no uplift and baseline is the full annual cost.
+  const peakHc = Number(line.peak_only_hc) || 0;
+  const peakMonths = Number(line.peak_months) || 0;
+  const peakMarkupPct = Number(line.peak_markup_pct) || 0;
+  if (peakHc > 0 && peakMonths > 0) {
+    // Pro-rate to the active portion of the year + apply markup
+    const monthFraction = Math.min(12, peakMonths) / 12;
+    const markupFactor = 1 + (peakMarkupPct / 100);
+    const seasonalAnnualRate = peakHc * opHours * rate * (1 + burden + benefits);
+    return baseline + (seasonalAnnualRate * monthFraction * markupFactor);
+  }
+  return baseline;
+}
+
+/**
+ * Breakdown version — used by UI to show baseline vs seasonal uplift
+ * sub-totals side-by-side.
+ * @param {import('./types.js?v=20260418-sK').IndirectLaborLine} line
+ * @param {number} opHours
+ * @param {Object} [costing]
+ * @returns {{ baseline: number, seasonal: number, total: number }}
+ */
+export function indirectLineAnnualBreakdown(line, opHours, costing) {
+  const hc = line.headcount || 0;
+  const rate = effectiveHourlyRate(line);
+  const c = costing || {};
+  const burden = line.burden_pct != null
+    ? line.burden_pct / 100
+    : (c.defaultBurdenPct ?? 30) / 100;
+  const benefits = (c.benefitLoadPct ?? 0) / 100;
+  const baseline = hc * opHours * rate * (1 + burden + benefits);
+  let seasonal = 0;
+  const peakHc = Number(line.peak_only_hc) || 0;
+  const peakMonths = Number(line.peak_months) || 0;
+  const peakMarkupPct = Number(line.peak_markup_pct) || 0;
+  if (peakHc > 0 && peakMonths > 0) {
+    const monthFraction = Math.min(12, peakMonths) / 12;
+    const markupFactor = 1 + (peakMarkupPct / 100);
+    seasonal = peakHc * opHours * rate * (1 + burden + benefits) * monthFraction * markupFactor;
+  }
+  return { baseline, seasonal, total: baseline + seasonal };
 }
 
 /**
@@ -215,20 +261,83 @@ export function totalFtes(directLines, indirectLines, opHours) {
  * Annual operating cost for an equipment line.
  * - Lease/service: (monthly_cost + monthly_maintenance) × 12 × qty
  * - Purchase: maintenance only as operating cost
+ *
+ * Brock 2026-04-20 — seasonal uplift: when the line carries a
+ * `peak_markup_pct` AND a caller supplies `peakOverflowByMonth` (an array
+ * of 12 non-negative units representing "extras beyond baseline needed in
+ * this calendar month"), the annual cost splits into baseline year-round
+ * + seasonal short-term rental. When those are absent, behavior is
+ * identical to the prior version.
+ *
+ *   baselineAnnual = qty × monthlyRate × 12
+ *   seasonalAnnual = Σ overflow[m] × monthlyRate × (1 + markup/100)
+ *   annualCost     = baselineAnnual + seasonalAnnual
+ *
+ * The line stores only the baseline qty + markup rate; the per-month
+ * overflow is DERIVED at cost-compute time from the Monthly Labor View
+ * FTE curve ÷ shifts. That avoids duplicating the seasonal curve on every
+ * line and keeps the single source of truth in the MLV.
+ *
  * @param {import('./types.js?v=20260418-sK').EquipmentLine} line
+ * @param {number[]} [peakOverflowByMonth] — 12 non-negative month values
  * @returns {number}
  */
-export function equipLineAnnual(line) {
+export function equipLineAnnual(line, peakOverflowByMonth) {
   const qty = line.quantity || 1;
   const type = line.acquisition_type || 'lease';
 
+  let monthlyRate;
   if (type === 'purchase') {
     // Purchase: only maintenance counts as operating expense
-    return (line.monthly_maintenance || 0) * 12 * qty;
+    monthlyRate = (line.monthly_maintenance || 0);
+  } else {
+    // Lease or service: monthly cost + maintenance
+    monthlyRate = (line.monthly_cost || 0) + (line.monthly_maintenance || 0);
   }
-  // Lease or service: monthly cost + maintenance
-  const monthly = (line.monthly_cost || 0) + (line.monthly_maintenance || 0);
-  return monthly * 12 * qty;
+
+  const baselineAnnual = monthlyRate * 12 * qty;
+
+  // Seasonal uplift — only when both overflow data AND markup rate are set
+  const markupPct = Number(line.peak_markup_pct) || 0;
+  if (markupPct > 0 && Array.isArray(peakOverflowByMonth) && peakOverflowByMonth.length === 12) {
+    const markupFactor = 1 + (markupPct / 100);
+    let seasonalAnnual = 0;
+    for (const overflowUnits of peakOverflowByMonth) {
+      const u = Number(overflowUnits) || 0;
+      if (u > 0) seasonalAnnual += u * monthlyRate * markupFactor;
+    }
+    return baselineAnnual + seasonalAnnual;
+  }
+
+  return baselineAnnual;
+}
+
+/**
+ * Split an equipment line's annual cost into baseline + seasonal uplift
+ * sub-totals. Used by the UI to render the two numbers side-by-side so
+ * the cost of seasonal flex is explicit, not buried in the total.
+ *
+ * @param {import('./types.js?v=20260418-sK').EquipmentLine} line
+ * @param {number[]} [peakOverflowByMonth]
+ * @returns {{ baseline: number, seasonal: number, total: number }}
+ */
+export function equipLineAnnualBreakdown(line, peakOverflowByMonth) {
+  const qty = line.quantity || 1;
+  const type = line.acquisition_type || 'lease';
+  const monthlyRate = type === 'purchase'
+    ? (line.monthly_maintenance || 0)
+    : (line.monthly_cost || 0) + (line.monthly_maintenance || 0);
+  const baseline = monthlyRate * 12 * qty;
+  let seasonal = 0;
+  const markupPct = Number(line.peak_markup_pct) || 0;
+  if (markupPct > 0 && Array.isArray(peakOverflowByMonth) && peakOverflowByMonth.length === 12) {
+    const markupFactor = 1 + (markupPct / 100);
+    for (const u of peakOverflowByMonth) {
+      const units = Number(u) || 0;
+      if (units > 0) seasonal += units * monthlyRate * markupFactor;
+    }
+  }
+  return { baseline, seasonal, total: baseline + seasonal };
 }
 
 /**
@@ -275,18 +384,32 @@ export function equipLineSummary(line) {
  * @param {import('./types.js?v=20260418-sK').EquipmentLine} line
  * @returns {number}
  */
-export function equipLineTableCost(line) {
+export function equipLineTableCost(line, peakOverflowByMonth) {
   const qty = line.quantity || 1;
   const type = line.acquisition_type || 'lease';
+  const markupPct = Number(line.peak_markup_pct) || 0;
+  const hasOverflow = markupPct > 0 && Array.isArray(peakOverflowByMonth) && peakOverflowByMonth.length === 12;
 
   if (type === 'purchase') {
-    const maintenance = (line.monthly_maintenance || 0) * 12 * qty;
+    const monthlyRate = (line.monthly_maintenance || 0);
+    const maintenance = monthlyRate * 12 * qty;
     const acqCost = (line.acquisition_cost || 0) * qty;
     const years = Math.max(1, line.amort_years || 5);
-    return maintenance + acqCost / years;
+    let seasonal = 0;
+    if (hasOverflow) {
+      const f = 1 + markupPct / 100;
+      for (const u of peakOverflowByMonth) seasonal += (Number(u) || 0) * monthlyRate * f;
+    }
+    return maintenance + acqCost / years + seasonal;
   }
-  const monthly = ((line.monthly_cost || 0) + (line.monthly_maintenance || 0)) * qty;
-  return monthly * 12;
+  const monthlyRate = (line.monthly_cost || 0) + (line.monthly_maintenance || 0);
+  const baseline = monthlyRate * qty * 12;
+  let seasonal = 0;
+  if (hasOverflow) {
+    const f = 1 + markupPct / 100;
+    for (const u of peakOverflowByMonth) seasonal += (Number(u) || 0) * monthlyRate * f;
+  }
+  return baseline + seasonal;
 }
 
 // ============================================================
@@ -295,11 +418,122 @@ export function equipLineTableCost(line) {
 
 /**
  * Total annual equipment operating cost (lease/service + maintenance only).
+ * When a Monthly Labor View summary is supplied, each line's seasonal
+ * uplift is computed from its matching MHE/IT type curve.
+ *
  * @param {import('./types.js?v=20260418-sK').EquipmentLine[]} lines
+ * @param {Object} [opts]
+ * @param {Object} [opts.mlv] — full computeMonthlyLaborView() result ({months, summary})
+ * @param {number} [opts.shiftsPerDay=1]
  * @returns {number}
  */
-export function totalEquipmentCost(lines) {
-  return lines.reduce((sum, line) => sum + equipLineAnnual(line), 0);
+export function totalEquipmentCost(lines, opts = {}) {
+  const overflowByLine = equipmentOverflowByLine(lines, opts);
+  return lines.reduce((sum, line, i) => sum + equipLineAnnual(line, overflowByLine[i]), 0);
+}
+
+/**
+ * Split total equipment cost into baseline + seasonal uplift sub-totals.
+ * UI uses this to show "Seasonal Uplift: $X" next to the headline total
+ * so the cost of seasonal flex is explicit.
+ *
+ * @param {import('./types.js?v=20260418-sK').EquipmentLine[]} lines
+ * @param {Object} [opts]
+ * @returns {{ baseline: number, seasonal: number, total: number }}
+ */
+export function totalEquipmentCostBreakdown(lines, opts = {}) {
+  const overflowByLine = equipmentOverflowByLine(lines, opts);
+  return lines.reduce((acc, line, i) => {
+    const bd = equipLineAnnualBreakdown(line, overflowByLine[i]);
+    return { baseline: acc.baseline + bd.baseline, seasonal: acc.seasonal + bd.seasonal, total: acc.total + bd.total };
+  }, { baseline: 0, seasonal: 0, total: 0 });
+}
+
+/**
+ * For each equipment line, derive a 12-element overflow-units-per-calendar-
+ * month array from the MLV summary (if provided). Overflow = required
+ * units that month − baseline (line.quantity). Only positive overflow is
+ * non-zero — a month where required < quantity means you have spare, not
+ * a cost saving.
+ *
+ * Matching strategy:
+ *   MHE category line → match by line.mhe_type / line.equipment_name
+ *   IT line           → match by line.it_device / line.equipment_name
+ * Falls back to name substring match if canonical type fields aren't set.
+ *
+ * Returns an array aligned to the lines array — `overflowByLine[i]` is
+ * either `null` (no match, no seasonal uplift) or a 12-element array.
+ *
+ * @param {import('./types.js?v=20260418-sK').EquipmentLine[]} lines
+ * @param {Object} opts
+ * @returns {Array<number[]|null>}
+ */
+export function equipmentOverflowByLine(lines, opts = {}) {
+  const mlv = opts.mlv;
+  const shifts = Math.max(1, Math.floor(opts.shiftsPerDay || 1));
+  if (!mlv || !Array.isArray(lines)) return lines.map(() => null);
+
+  // Build a calendar-month aggregated FTE curve per type from MLV months.
+  // MLV months[] may span multiple contract years; aggregate by calendar
+  // month (1-12) so the worst-case month across years drives the required
+  // units for that month (year-5 peak volume is what you'd size for).
+  const months = mlv.months || null;
+  if (!months || !Array.isArray(months) || months.length === 0) return lines.map(() => null);
+
+  // Aggregate by calendar_month (1-12): max FTE across years for that type
+  // This captures the realistic worst-case: in year 5 volume growth may lift
+  // peak higher, and that's what you'd need equipment for in those months.
+  const byTypeByCalMonth = { mhe: {}, it: {} };
+  for (const m of months) {
+    const cm = m.calendar_month;
+    if (!cm) continue;
+    for (const [type, fte] of Object.entries(m.by_mhe || {})) {
+      if (!byTypeByCalMonth.mhe[type]) byTypeByCalMonth.mhe[type] = Array(12).fill(0);
+      byTypeByCalMonth.mhe[type][cm - 1] = Math.max(byTypeByCalMonth.mhe[type][cm - 1], fte);
+    }
+    for (const [type, fte] of Object.entries(m.by_it || {})) {
+      if (!byTypeByCalMonth.it[type]) byTypeByCalMonth.it[type] = Array(12).fill(0);
+      byTypeByCalMonth.it[type][cm - 1] = Math.max(byTypeByCalMonth.it[type][cm - 1], fte);
+    }
+  }
+
+  return lines.map(line => {
+    const qty = line.quantity || 0;
+    if (qty <= 0) return null;
+
+    // Decide which type bucket to look at
+    const cat = (line.category || '').toLowerCase();
+    const name = (line.equipment_name || '').toLowerCase();
+    const mheType = line.mhe_type || '';
+    const itDevice = line.it_device || '';
+
+    let curve = null;
+    if (mheType && byTypeByCalMonth.mhe[mheType]) {
+      curve = byTypeByCalMonth.mhe[mheType];
+    } else if (itDevice && byTypeByCalMonth.it[itDevice]) {
+      curve = byTypeByCalMonth.it[itDevice];
+    } else if (cat === 'mhe') {
+      // Substring-match the name against available MHE type keys
+      for (const key of Object.keys(byTypeByCalMonth.mhe)) {
+        if (name.includes(key.replace(/_/g, ' ')) || name.includes(key)) {
+          curve = byTypeByCalMonth.mhe[key]; break;
+        }
+      }
+    } else if (cat === 'it') {
+      for (const key of Object.keys(byTypeByCalMonth.it)) {
+        if (name.includes(key.replace(/_/g, ' ')) || name.includes(key)) {
+          curve = byTypeByCalMonth.it[key]; break;
+        }
+      }
+    }
+    if (!curve) return null;
+
+    // Convert per-month FTE to per-month required units, subtract baseline
+    return curve.map(fteThisMonth => {
+      const required = Math.ceil(fteThisMonth / shifts);
+      return Math.max(0, required - qty);
+    });
+  });
 }
 
 /**
@@ -473,7 +707,14 @@ export function computeSummary(params) {
 
   const laborCost = totalLaborCost(params.laborLines, params.indirectLaborLines, laborOpts);
   const facilityCost = totalFacilityCost(params.facility, params.facilityRate, params.utilityRate);
-  const equipmentCost = totalEquipmentCost(params.equipmentLines);
+  // Equipment seasonal uplift: when caller supplies the MLV (Monthly Labor
+  // View output), each line's peak_markup_pct flows through via overflow
+  // per calendar month. Without MLV, behavior reduces to the legacy
+  // qty × monthlyRate × 12 math.
+  const equipmentCost = totalEquipmentCost(params.equipmentLines, {
+    mlv: params.mlv,
+    shiftsPerDay: params.shifts?.shiftsPerDay || 1,
+  });
   const overheadCost = totalOverheadCost(params.overheadLines);
   const vasCost = totalVasCost(params.vasLines);
   const startupAmort = totalStartupAmort(params.startupLines, params.contractYears);

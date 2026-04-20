@@ -10,7 +10,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import * as calc from './calc.js?v=20260420-vG';
+import * as calc from './calc.js?v=20260420-vI';
 import * as api from './api.js?v=20260419-uH';
 import * as scenarios from './calc.scenarios.js?v=20260419-sZ';
 import * as monthlyCalc from './calc.monthly.js?v=20260420-vG';
@@ -231,6 +231,14 @@ let _planningRatioOpenCategory = null;
 let _collapsedNavGroups = new Set();
 /** Which Direct Labor line is currently selected in the master-detail view. */
 let _selectedLaborIdx = 0;
+
+/**
+ * Indirect Labor seasonal-uplift sub-totals — computed inline via an IIFE
+ * inside the tbody render and read by the <tfoot> template literal a few
+ * rows later. Kept module-scope so the two spots don't have to re-run the
+ * reduce. Cleared on each renderLabor call.
+ */
+let _indirectBreakdownCache = null;
 
 function isCmV2UiOn() {
   return typeof window === 'undefined' || window.COST_MODEL_V2_UI !== false;
@@ -1637,16 +1645,30 @@ function renderLaborV2() {
           <thead>
             <tr>
               <th>Role</th>
-              <th class="hub-num" style="width:90px;">HC</th>
-              <th class="hub-num" style="width:80px;">Rate</th>
-              <th style="width:180px;">Pricing Bucket</th>
+              <th class="hub-num" style="width:70px;">HC</th>
+              <th class="hub-num" style="width:70px;">Rate</th>
+              <th style="width:160px;">Pricing Bucket</th>
+              <th class="hub-num" style="width:60px;" title="Extra headcount needed only during peak months (temps, seasonal backfill). 0 = no seasonal flex.">Peak HC</th>
+              <th class="hub-num" style="width:58px;" title="How many months per year the peak headcount is active. Default 3 for Q4 ecomm peaks.">Peak Mo</th>
+              <th class="hub-num" style="width:62px;" title="Temp-agency / short-term markup applied to seasonal headcount's labor cost. Typical 25-35%.">Peak %</th>
               <th class="hub-num" style="width:130px;">Annual Cost</th>
               <th style="width:44px;"></th>
             </tr>
           </thead>
           <tbody>
+            ${(() => {
+              // Compute indirect seasonal-uplift subtotals so the UI can
+              // expose Baseline + Seasonal lines (matches Equipment pattern).
+              const indirectBreakdown = (model.indirectLaborLines || []).reduce((acc, l) => {
+                const bd = calc.indirectLineAnnualBreakdown(l, opHrs, lc);
+                return { baseline: acc.baseline + bd.baseline, seasonal: acc.seasonal + bd.seasonal, total: acc.total + bd.total };
+              }, { baseline: 0, seasonal: 0, total: 0 });
+              _indirectBreakdownCache = indirectBreakdown; // see tfoot
+              return '';
+            })()}
             ${(model.indirectLaborLines || []).map((l, i) => {
               const buckets = model.pricingBuckets || [];
+              const bd = calc.indirectLineAnnualBreakdown(l, opHrs, lc);
               return `
               <tr>
                 <td style="white-space:nowrap;">
@@ -1663,19 +1685,36 @@ function renderLaborV2() {
                         ${buckets.map(b => `<option value="${escapeAttr(b.id)}"${l.pricing_bucket === b.id ? ' selected' : ''}>${escapeHtml(b.name)}</option>`).join('')}
                        </select>`}
                 </td>
-                <td class="hub-num" style="font-weight:600;">${calc.formatCurrency(calc.indirectLineAnnualSimple(l, opHrs, lc))}</td>
+                <td><input class="hub-input hub-num" type="number" min="0" step="1" value="${l.peak_only_hc || 0}" data-array="indirectLaborLines" data-idx="${i}" data-field="peak_only_hc" data-type="number" /></td>
+                <td><input class="hub-input hub-num" type="number" min="0" max="12" step="1" value="${l.peak_months || 0}" data-array="indirectLaborLines" data-idx="${i}" data-field="peak_months" data-type="number" /></td>
+                <td><input class="hub-input hub-num" type="number" min="0" max="100" step="1" value="${l.peak_markup_pct || 0}" data-array="indirectLaborLines" data-idx="${i}" data-field="peak_markup_pct" data-type="number" /></td>
+                <td class="hub-num" style="font-weight:600;" title="${bd.seasonal > 0 ? `Baseline ${calc.formatCurrency(bd.baseline)} + Seasonal ${calc.formatCurrency(bd.seasonal)}` : 'Baseline only'}">
+                  ${calc.formatCurrency(bd.total)}${bd.seasonal > 0 ? `<span style="display:block;font-size:10px;color:var(--ies-orange,#d97706);font-weight:600;">+${calc.formatCurrency(bd.seasonal, {compact:true})} peak</span>` : ''}
+                </td>
                 <td><button class="cm-delete-btn" data-action="delete-indirect" data-idx="${i}" aria-label="Delete">×</button></td>
               </tr>
             `;
             }).join('')}
             ${(model.indirectLaborLines || []).length === 0
-              ? `<tr><td colspan="6" style="padding:24px;text-align:center;color:var(--ies-gray-400);font-size:12px;">No indirect labor yet. Click <strong>Auto-Generate</strong> above, or add a role manually.</td></tr>`
+              ? `<tr><td colspan="9" style="padding:24px;text-align:center;color:var(--ies-gray-400);font-size:12px;">No indirect labor yet. Click <strong>Auto-Generate</strong> above, or add a role manually.</td></tr>`
               : ''}
           </tbody>
           ${(model.indirectLaborLines || []).length > 0 ? `
             <tfoot>
+              ${_indirectBreakdownCache && _indirectBreakdownCache.seasonal > 0 ? `
+                <tr style="background:rgba(217,119,6,0.06);">
+                  <td colspan="7" style="padding:8px 12px;font-size:12px;font-weight:600;color:var(--ies-orange,#d97706);">↳ Seasonal Uplift (temp / short-term during peak months)</td>
+                  <td class="hub-num" style="padding:8px 12px;font-weight:600;color:var(--ies-orange,#d97706);">+${calc.formatCurrency(_indirectBreakdownCache.seasonal)}</td>
+                  <td></td>
+                </tr>
+                <tr>
+                  <td colspan="7" style="padding:6px 12px;font-size:12px;color:var(--ies-gray-500);">Baseline year-round</td>
+                  <td class="hub-num" style="padding:6px 12px;font-size:12px;color:var(--ies-gray-500);">${calc.formatCurrency(_indirectBreakdownCache.baseline)}</td>
+                  <td></td>
+                </tr>
+              ` : ''}
               <tr style="background:var(--ies-gray-50);font-weight:700;">
-                <td colspan="4" style="padding:10px 12px;font-size:12px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ies-gray-600);">Total Indirect</td>
+                <td colspan="7" style="padding:10px 12px;font-size:12px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ies-gray-600);">Total Indirect${_indirectBreakdownCache && _indirectBreakdownCache.seasonal > 0 ? ' (baseline + seasonal)' : ''}</td>
                 <td class="hub-num" style="padding:10px 12px;">${calc.formatCurrency(totalIndirect)}</td>
                 <td></td>
               </tr>
@@ -1787,6 +1826,12 @@ function renderMonthlyLaborViewCard() {
   };
   const IT_LABELS = { rf_scanner: 'RF Scanner', voice_pick: 'Voice Pick' };
 
+  // How many fleet types have any seasonal flex (used to enable Sync button)
+  const mheTypesWithFlex = Object.entries(byMhe).filter(([, s]) => s.seasonalCount > 0).length;
+  const itTypesWithFlex  = Object.entries(byIt).filter(([, s]) => s.seasonalCount > 0).length;
+  const totalFlexTypes   = mheTypesWithFlex + itTypesWithFlex;
+  const hasIndirectFlex  = (indirect?.seasonalHc || 0) > 0;
+
   return `
     <div class="hub-card cm-mlv-card" style="margin-top:28px;padding:20px;">
       <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px;gap:12px;flex-wrap:wrap;">
@@ -1796,7 +1841,15 @@ function renderMonthlyLaborViewCard() {
             Per-month direct-FTE curve over the ${contractYears}-year contract. Fleet / indirect counts derive from <strong>${shiftsPerDay}</strong>-shift operation.
           </div>
         </div>
-        <span class="hub-chip hub-chip--info">peak/avg/min staffing</span>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <span class="hub-chip hub-chip--info">peak/avg/min staffing</span>
+          ${(totalFlexTypes > 0 || hasIndirectFlex) ? `
+            <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="sync-seasonal-flex"
+                    title="Populate peak_markup_pct on matching Equipment lines (20% default) + peak_only_hc/peak_months/peak_markup_pct on matching Indirect lines (30% temp-agency default, 3 peak months). Non-destructive: leaves your baseline quantity/headcount alone.">
+              ↻ Sync seasonal flex → Equipment / Indirect
+            </button>
+          ` : ''}
+        </div>
       </div>
 
       <!-- KPI strip: Peak / Avg / Min Direct FTE -->
@@ -2239,7 +2292,15 @@ function escapeAttr(s) {
 
 function renderEquipment() {
   const lines = model.equipmentLines || [];
-  const total = calc.totalEquipmentCost(lines);
+  // Monthly Labor View supplies per-type FTE curves so each equipment
+  // line with `peak_markup_pct` set can derive its monthly overflow.
+  // Computed once here + re-used per-line; when MLV can't be built
+  // (no labor lines / no periods), overflow is null → baseline-only cost.
+  const mlv = _tryComputeMlvForEquipment();
+  const shiftsPerDay = Math.max(1, Math.floor(model.shifts?.shiftsPerDay || 1));
+  const overflowByLine = calc.equipmentOverflowByLine(lines, { mlv, shiftsPerDay });
+  const breakdown = calc.totalEquipmentCostBreakdown(lines, { mlv, shiftsPerDay });
+  const total = breakdown.total;
   const capital = calc.totalEquipmentCapital(lines);
   const lineCount = lines.length;
   const mheCount = lines.filter(l => l.category === 'MHE').reduce((s, l) => s + (parseInt(l.quantity) || 1), 0);
@@ -2306,12 +2367,20 @@ All lines are editable after generation.">⚡ Auto-Generate Equipment</button>
             <th class="hub-num" style="width:100px;">Acq Cost</th>
             <th class="hub-num" style="width:90px;">Maint / Mo</th>
             <th class="hub-num" style="width:80px;">Amort Yrs</th>
+            <th class="hub-num" style="width:80px;" title="Short-term rental premium applied to extras needed during peak months (from Monthly Labor View seasonal flex). 0 = no seasonal uplift.">Peak %</th>
             <th class="hub-num" style="width:110px;">Annual</th>
             <th class="cm-actions" style="width:40px;"></th>
           </tr>
         </thead>
         <tbody>
-          ${lines.map((l, i) => `
+          ${lines.map((l, i) => {
+            const overflow = overflowByLine[i];
+            const lineBd = calc.equipLineAnnualBreakdown(l, overflow);
+            const seasonalUnits = overflow ? overflow.reduce((s, u) => s + (u || 0), 0) : 0;
+            const peakTooltip = overflow
+              ? `MLV overflow this year: ${seasonalUnits} unit-months above baseline (${overflow.map((u, mi) => u > 0 ? `M${mi+1}:+${u}` : '').filter(Boolean).join(' ') || 'none'})`
+              : 'No MLV match — set a peak markup to activate seasonal uplift when a matching MHE/IT line exists';
+            return `
             <tr>
               <td><input class="hub-input" value="${l.equipment_name || ''}" data-array="equipmentLines" data-idx="${i}" data-field="equipment_name" /></td>
               <td>
@@ -2333,20 +2402,181 @@ All lines are editable after generation.">⚡ Auto-Generate Equipment</button>
               <td><input class="hub-input hub-num" type="number" value="${l.acquisition_cost || 0}" data-array="equipmentLines" data-idx="${i}" data-field="acquisition_cost" data-type="number" /></td>
               <td><input class="hub-input hub-num" type="number" value="${l.monthly_maintenance || 0}" data-array="equipmentLines" data-idx="${i}" data-field="monthly_maintenance" data-type="number" /></td>
               <td><input class="hub-input hub-num" type="number" value="${l.amort_years || 5}" data-array="equipmentLines" data-idx="${i}" data-field="amort_years" data-type="number" /></td>
-              <td class="hub-num">${calc.formatCurrency(calc.equipLineTableCost(l))}</td>
+              <td><input class="hub-input hub-num" type="number" min="0" max="100" step="1" value="${l.peak_markup_pct || 0}" data-array="equipmentLines" data-idx="${i}" data-field="peak_markup_pct" data-type="number" title="${escapeAttr(peakTooltip)}" /></td>
+              <td class="hub-num" title="${lineBd.seasonal > 0 ? `Baseline ${calc.formatCurrency(lineBd.baseline)} + Seasonal ${calc.formatCurrency(lineBd.seasonal)}` : 'Baseline only'}">
+                ${calc.formatCurrency(calc.equipLineTableCost(l, overflow))}${lineBd.seasonal > 0 ? `<span style="display:block;font-size:10px;color:var(--ies-orange,#d97706);font-weight:600;">+${calc.formatCurrency(lineBd.seasonal, {compact:true})} peak</span>` : ''}
+              </td>
               <td class="cm-actions"><button class="cm-delete-btn" data-action="delete-equipment" data-idx="${i}" title="Delete row">×</button></td>
             </tr>
-          `).join('')}
+          `;}).join('')}
           ${lineCount === 0 ? `
-            <tr><td colspan="10" style="text-align:center;color:var(--ies-gray-400);padding:24px;">No equipment lines yet. Click Auto-Generate Equipment or Add Equipment Line to start.</td></tr>
+            <tr><td colspan="11" style="text-align:center;color:var(--ies-gray-400);padding:24px;">No equipment lines yet. Click Auto-Generate Equipment or Add Equipment Line to start.</td></tr>
           ` : ''}
-          <tr class="cm-total-row"><td colspan="8">Operating Cost</td><td class="hub-num">${calc.formatCurrency(total)}</td><td></td></tr>
-          <tr><td colspan="8" style="font-weight:600; color: var(--ies-gray-500);">Capital Investment</td><td class="hub-num" style="font-weight:600;">${calc.formatCurrency(capital)}</td><td></td></tr>
+          ${breakdown.seasonal > 0 ? `
+            <tr style="background:rgba(217,119,6,0.06);">
+              <td colspan="9" style="font-weight:600;color:var(--ies-orange,#d97706);">↳ Seasonal Uplift (short-term rental during peak)</td>
+              <td class="hub-num" style="font-weight:600;color:var(--ies-orange,#d97706);">+${calc.formatCurrency(breakdown.seasonal)}</td>
+              <td></td>
+            </tr>
+            <tr>
+              <td colspan="9" style="font-weight:500;color:var(--ies-gray-500);font-size:12px;">Baseline year-round</td>
+              <td class="hub-num" style="color:var(--ies-gray-500);font-size:12px;">${calc.formatCurrency(breakdown.baseline)}</td>
+              <td></td>
+            </tr>
+          ` : ''}
+          <tr class="cm-total-row"><td colspan="9">Operating Cost${breakdown.seasonal > 0 ? ' (baseline + seasonal)' : ''}</td><td class="hub-num">${calc.formatCurrency(total)}</td><td></td></tr>
+          <tr><td colspan="9" style="font-weight:600; color: var(--ies-gray-500);">Capital Investment</td><td class="hub-num" style="font-weight:600;">${calc.formatCurrency(capital)}</td><td></td></tr>
         </tbody>
       </table>
     </div>
     <button class="cm-add-row-btn" data-action="add-equipment">+ Add Equipment Line</button>
   `;
+}
+
+/**
+ * Sync MLV seasonal flex → Equipment + Indirect lines (Brock 2026-04-20).
+ * Non-destructive: never touches line.quantity or line.headcount. Only sets
+ * peak_markup_pct / peak_only_hc / peak_months — so the user's baseline
+ * inputs are preserved.
+ *
+ * Default markup rates reflect standard short-term rental / temp-agency
+ * premiums; the user can tune them per-line afterward. A default of 0 is
+ * retained for lines where we can't find a match (leaves them baseline-
+ * only). Shows a toast summarizing what was touched.
+ */
+function syncSeasonalFlex() {
+  const mlv = _tryComputeMlvForEquipment();
+  if (!mlv) {
+    showToast('Cannot sync — populate Labor lines first', 'warn');
+    return;
+  }
+  const shiftsPerDay = Math.max(1, Math.floor(model.shifts?.shiftsPerDay || 1));
+  const byMhe = mlv.summary?.byMhe || {};
+  const byIt = mlv.summary?.byIt || {};
+  const indirectSum = mlv.summary?.indirect;
+  const DEFAULT_EQUIP_MARKUP = 20;
+  const DEFAULT_INDIRECT_MARKUP = 30;
+  const DEFAULT_PEAK_MONTHS = 3;
+
+  let equipTouched = 0;
+  let indirectTouched = 0;
+
+  // ── Equipment: set peak_markup_pct where the line matches a type with seasonal flex ──
+  for (const line of (model.equipmentLines || [])) {
+    const cat = (line.category || '').toLowerCase();
+    const name = (line.equipment_name || '').toLowerCase();
+    const mheType = line.mhe_type || '';
+    const itDevice = line.it_device || '';
+
+    let summary = null;
+    if (mheType && byMhe[mheType]) summary = byMhe[mheType];
+    else if (itDevice && byIt[itDevice]) summary = byIt[itDevice];
+    else if (cat === 'mhe') {
+      for (const key of Object.keys(byMhe)) {
+        if (name.includes(key.replace(/_/g, ' ')) || name.includes(key)) { summary = byMhe[key]; break; }
+      }
+    } else if (cat === 'it') {
+      for (const key of Object.keys(byIt)) {
+        if (name.includes(key.replace(/_/g, ' ')) || name.includes(key)) { summary = byIt[key]; break; }
+      }
+    }
+    if (summary && summary.seasonalCount > 0) {
+      // Only set if not already user-configured (non-destructive)
+      if (!line.peak_markup_pct || line.peak_markup_pct === 0) {
+        line.peak_markup_pct = DEFAULT_EQUIP_MARKUP;
+        equipTouched++;
+      }
+    }
+  }
+
+  // ── Indirect: set peak_only_hc + peak_months + peak_markup_pct per-role ──
+  if (indirectSum && indirectSum.byRole && indirectSum.seasonalHc > 0) {
+    const byRole = Object.fromEntries(indirectSum.byRole.map(r => [r.role, r]));
+    for (const line of (model.indirectLaborLines || [])) {
+      const roleMatch = byRole[line.role_name];
+      if (roleMatch && roleMatch.seasonalHc > 0) {
+        // Non-destructive: only fill if unset
+        let changed = false;
+        if (!line.peak_only_hc || line.peak_only_hc === 0) {
+          line.peak_only_hc = roleMatch.seasonalHc;
+          changed = true;
+        }
+        if (!line.peak_months || line.peak_months === 0) {
+          line.peak_months = DEFAULT_PEAK_MONTHS;
+          changed = true;
+        }
+        if (!line.peak_markup_pct || line.peak_markup_pct === 0) {
+          line.peak_markup_pct = DEFAULT_INDIRECT_MARKUP;
+          changed = true;
+        }
+        if (changed) indirectTouched++;
+      }
+    }
+  }
+
+  isDirty = true;
+  refreshNavCompletion();
+  renderSection();
+
+  const parts = [];
+  if (equipTouched > 0) parts.push(`${equipTouched} equipment line${equipTouched === 1 ? '' : 's'} (default ${DEFAULT_EQUIP_MARKUP}% markup)`);
+  if (indirectTouched > 0) parts.push(`${indirectTouched} indirect role${indirectTouched === 1 ? '' : 's'} (${DEFAULT_PEAK_MONTHS} peak months, ${DEFAULT_INDIRECT_MARKUP}% markup)`);
+  if (parts.length === 0) {
+    showToast('Nothing to sync — lines already have seasonal settings or no matches found', 'info');
+  } else {
+    showToast(`Seasonal flex synced: ${parts.join(' + ')}. Tune per-line in Equipment / Indirect.`, 'success');
+  }
+}
+
+/**
+ * Build an MLV computation for the current model — used by Equipment +
+ * Indirect renders to pull the seasonal FTE curve. Wraps computeMonthlyLaborView
+ * with defensive fallbacks so it never throws if the caller's state is
+ * partial (e.g., no labor lines, no periods loaded yet).
+ *
+ * @returns {Object|null} — full MLV result, or null when unbuildable.
+ */
+function _tryComputeMlvForEquipment() {
+  try {
+    const lines = model.laborLines || [];
+    if (!lines.length) return null;
+    const shifts = model.shifts || {};
+    const annualOpHours = calc.operatingHours(shifts);
+    const shiftsPerDay = Math.max(1, Math.floor(shifts.shiftsPerDay || 1));
+    const contractYears = model.projectDetails?.contractTerm || 5;
+    const fin = model.financial || {};
+    let periods = (refData?.periods || []).filter(p =>
+      p.period_type === 'month' && p.period_index >= 0 && p.period_index < contractYears * 12
+    );
+    if (periods.length === 0) {
+      // Synthesize a simple axis if ref_periods hasn't loaded
+      const go = new Date(model.projectDetails?.goLiveDate || '2026-01-01');
+      periods = [];
+      for (let i = 0; i < contractYears * 12; i++) {
+        const d = new Date(go.getFullYear(), go.getMonth() + i, 1);
+        periods.push({
+          id: i, period_type: 'month', period_index: i,
+          calendar_year: d.getFullYear(), calendar_month: d.getMonth() + 1,
+          label: `M${i + 1}`, is_pre_go_live: false,
+        });
+      }
+    }
+    const calcHeur = scenarios.resolveCalcHeuristics(
+      currentScenario, currentScenarioSnapshots, heuristicOverrides, fin, whatIfTransient,
+    );
+    return monthlyCalc.computeMonthlyLaborView({
+      laborLines: lines,
+      periods, annualOpHours, shiftsPerDay,
+      calcHeur,
+      marketLaborProfile: currentMarketLaborProfile || null,
+      ramp: null,
+      seasonality: model.seasonalityProfile || null,
+      volGrowthPct: calcHeur?.volGrowthPct || 0,
+    });
+  } catch (e) {
+    console.warn('[CM] MLV build failed for equipment overflow:', e);
+    return null;
+  }
 }
 
 function renderOverhead() {
@@ -4771,6 +5001,9 @@ function handleAction(action, idx) {
       model.equipmentLines = calc.autoGenerateEquipment(model);
       model.equipmentLines.forEach(l => { if (!l.pricing_bucket) l.pricing_bucket = defaultBucketFor('equipment'); });
       break;
+    case 'sync-seasonal-flex':
+      syncSeasonalFlex();
+      return; // syncSeasonalFlex handles its own renderSection + toast
     case 'open-equipment-catalog':
       openEquipmentCatalog();
       return; // modal is async, don't re-render the section yet
