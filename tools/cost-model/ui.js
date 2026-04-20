@@ -10,7 +10,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import * as calc from './calc.js?v=20260420-vR';
+import * as calc from './calc.js?v=20260420-vS';
 import * as api from './api.js?v=20260419-uH';
 import * as scenarios from './calc.scenarios.js?v=20260419-sZ';
 import * as monthlyCalc from './calc.monthly.js?v=20260420-vN';
@@ -1215,6 +1215,35 @@ function renderFacility() {
       <div class="hub-field">
         <label class="hub-field__label">Dock Doors</label>
         <input class="hub-input" type="number" value="${f.dockDoors || ''}" placeholder="e.g., 24" step="1" data-field="facility.dockDoors" data-type="number" />
+      </div>
+    </div>
+
+    <!-- Design policy inputs — drive the Equipment auto-generator per
+         Asset Defaults Guidance (2026-04-20). Automation level gates
+         conveyor; security tier gates CCTV / access control / guard shack;
+         fenced perimeter adds physical fencing as capital. -->
+    <div class="hub-card mt-4">
+      <div class="text-subtitle mb-3">Design Policy</div>
+      <div class="cm-narrow-form" style="grid-template-columns: repeat(3, minmax(0, 1fr));">
+        <div class="hub-field">
+          <label class="hub-field__label" title="Drives conveyor auto-add. None = manual. Low = minor aids (accordion conveyor). Medium = powered conveyor for pack/takeaway. High = full sortation + pick-to-light.">Automation Level</label>
+          <select class="hub-input" data-field="facility.automationLevel">
+            ${['none','low','medium','high'].map(v => `<option value="${v}"${(f.automationLevel || 'none') === v ? ' selected' : ''}>${v.charAt(0).toUpperCase() + v.slice(1)}</option>`).join('')}
+          </select>
+          <div class="hub-field__hint">Conveyor auto-adds at Medium/High.</div>
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label" title="Drives security auto-add. Tier 1 = alarm only. Tier 2 = + CCTV (TI). Tier 3 = + access control (TI; default). Tier 4 = + guard shack + gate (capital).">Security Tier</label>
+          <select class="hub-input" data-field="facility.securityTier" data-type="number">
+            ${[1,2,3,4].map(v => `<option value="${v}"${Number(f.securityTier ?? 3) === v ? ' selected' : ''}>Tier ${v}</option>`).join('')}
+          </select>
+          <div class="hub-field__hint">Default: 3 (CCTV + access control).</div>
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label" title="Linear feet of perimeter fencing. If > 0, auto-adds Capital fencing at ~$52/LF.">Fenced Perimeter (LF)</label>
+          <input class="hub-input" type="number" value="${f.fencedPerimeterLf || 0}" placeholder="0" step="100" data-field="facility.fencedPerimeterLf" data-type="number" />
+          <div class="hub-field__hint">0 = no fencing.</div>
+        </div>
       </div>
     </div>
 
@@ -2697,14 +2726,29 @@ All lines are editable after generation.">⚡ Auto-Generate Equipment</button>
               </td>
               <td><input class="hub-input hub-num" type="number" value="${l.quantity || 1}" data-array="equipmentLines" data-idx="${i}" data-field="quantity" data-type="number" /></td>
               <td>
-                <select class="hub-input" data-array="equipmentLines" data-idx="${i}" data-field="acquisition_type">
-                  <option value="lease"${(l.acquisition_type || 'lease') === 'lease' ? ' selected' : ''}>Lease</option>
-                  <option value="purchase"${l.acquisition_type === 'purchase' ? ' selected' : ''}>Purchase</option>
-                  <option value="service"${l.acquisition_type === 'service' ? ' selected' : ''}>Service</option>
+                <select class="hub-input" data-array="equipmentLines" data-idx="${i}" data-field="acquisition_type" data-equip-type-flip="${i}" title="Capital = buy + depreciate; Lease = monthly operating lease; TI = built into facility (rolls into rent); Service = per-month managed service (no residual)">
+                  ${(() => {
+                    const norm = calc.normalizeAcqType ? calc.normalizeAcqType(l.acquisition_type) : (l.acquisition_type || 'lease');
+                    return `
+                      <option value="capital"${norm === 'capital' ? ' selected' : ''}>Capital</option>
+                      <option value="lease"${norm === 'lease'     ? ' selected' : ''}>Lease</option>
+                      <option value="ti"${norm === 'ti'           ? ' selected' : ''}>TI</option>
+                      <option value="service"${norm === 'service' ? ' selected' : ''}>Service</option>
+                    `;
+                  })()}
                 </select>
               </td>
               <td><input class="hub-input hub-num" type="number" value="${l.monthly_cost || 0}" data-array="equipmentLines" data-idx="${i}" data-field="monthly_cost" data-type="number" /></td>
-              <td><input class="hub-input hub-num" type="number" value="${l.acquisition_cost || 0}" data-array="equipmentLines" data-idx="${i}" data-field="acquisition_cost" data-type="number" /></td>
+              <td>
+                <input class="hub-input hub-num" type="number" value="${l.acquisition_cost || 0}" data-array="equipmentLines" data-idx="${i}" data-field="acquisition_cost" data-type="number" ${(() => {
+                  const norm = calc.normalizeAcqType ? calc.normalizeAcqType(l.acquisition_type) : (l.acquisition_type || 'lease');
+                  // Visual flag: Capital or TI with $0 acquisition cost reads as broken
+                  // (happens after a lease→capital flip when the catalog didn't populate).
+                  if ((norm === 'capital' || norm === 'ti') && (Number(l.acquisition_cost) || 0) <= 0) {
+                    return `style="border-color: var(--ies-orange, #d97706); background: rgba(255,193,7,0.08);" title="$0 acquisition cost on a ${norm === 'capital' ? 'Capital' : 'TI'} line — set a unit cost or pull from the Equipment Catalog"`;
+                  }
+                  return '';
+                })()} /></td>
               <td><input class="hub-input hub-num" type="number" value="${l.monthly_maintenance || 0}" data-array="equipmentLines" data-idx="${i}" data-field="monthly_maintenance" data-type="number" /></td>
               <td><input class="hub-input hub-num" type="number" value="${l.amort_years || 5}" data-array="equipmentLines" data-idx="${i}" data-field="amort_years" data-type="number" /></td>
               <td><input class="hub-input hub-num" type="number" min="0" max="100" step="1" value="${l.peak_markup_pct || 0}" data-array="equipmentLines" data-idx="${i}" data-field="peak_markup_pct" data-type="number" title="${escapeAttr(peakTooltip)}" /></td>
@@ -3874,6 +3918,21 @@ function bindSectionEvents(section, container) {
             isDirty = true;
             if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
             renderSection();
+            return;
+          }
+          // Equipment: flipping acquisition_type (lease ↔ capital ↔ ti ↔ service)
+          // auto-populates the appropriate cost field from the ref_equipment
+          // catalog if the equipment_name matches, so the user doesn't see
+          // a $0 cost after a flip. (Brock 2026-04-20: this is the "flip lease
+          // to purchase and cost stays 0" bug from the catalog.)
+          if (input.dataset.array === 'equipmentLines' && field === 'acquisition_type') {
+            autoPopulateCostOnAcqTypeFlip(arr[idx], val).then((changed) => {
+              isDirty = true;
+              if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+              // Always re-render so the cost input reflects the pulled value
+              // and the $0 warning styling clears.
+              renderSection();
+            });
             return;
           }
         }
@@ -5651,7 +5710,7 @@ function handleAction(action, idx) {
       break;
     }
     case 'add-equipment':
-      model.equipmentLines.push({ equipment_name: '', category: 'MHE', quantity: 1, acquisition_type: 'lease', monthly_cost: 0, monthly_maintenance: 0, pricing_bucket: defaultBucketFor('equipment') });
+      model.equipmentLines.push({ equipment_name: '', category: 'MHE', quantity: 1, acquisition_type: 'lease', monthly_cost: 0, acquisition_cost: 0, monthly_maintenance: 0, amort_years: 5, pricing_bucket: defaultBucketFor('equipment') });
       break;
     case 'delete-equipment':
       model.equipmentLines.splice(idx, 1);
@@ -5968,6 +6027,78 @@ async function openMostTemplateDetail(templateId) {
 /** @type {Array<any>} Cached after first fetch so re-open is instant. */
 let catalogCache = null;
 
+/**
+ * Find a catalog entry by equipment_name. Returns null if no match.
+ * Uses normalized lowercase compare + substring fallback so "Reach Truck" matches
+ * a catalog entry named "Reach Truck (300\")". Loads the catalog lazily.
+ */
+async function findCatalogMatch(equipmentName) {
+  if (!equipmentName) return null;
+  if (!catalogCache) {
+    try { catalogCache = await api.fetchEquipmentCatalog(); }
+    catch (err) { console.warn('[CM] catalog fetch failed on flip:', err); catalogCache = []; }
+  }
+  const items = Array.isArray(catalogCache) ? catalogCache : [];
+  const q = equipmentName.toLowerCase().trim();
+  // Exact match first
+  let hit = items.find(i => (i.name || '').toLowerCase().trim() === q);
+  if (hit) return hit;
+  // Substring match (either direction): catalog name contains ours OR ours contains catalog name
+  hit = items.find(i => {
+    const n = (i.name || '').toLowerCase();
+    return n && (n.includes(q) || q.includes(n));
+  });
+  return hit || null;
+}
+
+/**
+ * When a user flips an equipment line's acquisition_type, auto-populate the
+ * relevant cost field from the ref_equipment catalog (by name match), so
+ * they don't end up with a $0 cost that silently breaks downstream math.
+ *
+ *   → capital : populate acquisition_cost from catalog.purchase_cost
+ *   → lease   : populate monthly_cost from catalog.monthly_lease_cost
+ *   → service : populate monthly_cost from catalog.monthly_lease_cost
+ *               (service is a monthly fee like lease, with no residual)
+ *   → ti      : populate acquisition_cost from catalog.purchase_cost
+ *               (TI is a one-time upfront built into facility)
+ *
+ * Only sets a field if (a) we have a catalog match AND (b) the target field
+ * is currently $0 or empty. If the user has already typed a custom cost, we
+ * respect it.
+ *
+ * Returns `true` if any value was changed, `false` otherwise.
+ */
+async function autoPopulateCostOnAcqTypeFlip(line, newAcqType) {
+  if (!line) return false;
+  const match = await findCatalogMatch(line.equipment_name);
+  if (!match) return false;
+
+  let changed = false;
+  const t = (newAcqType || '').toLowerCase();
+
+  if (t === 'capital' || t === 'purchase' || t === 'ti') {
+    const cost = Number(match.purchase_cost) || 0;
+    if (cost > 0 && (!line.acquisition_cost || Number(line.acquisition_cost) <= 0)) {
+      line.acquisition_cost = cost;
+      changed = true;
+    }
+  }
+  if (t === 'lease' || t === 'service') {
+    const cost = Number(match.monthly_lease_cost) || 0;
+    if (cost > 0 && (!line.monthly_cost || Number(line.monthly_cost) <= 0)) {
+      line.monthly_cost = cost;
+      changed = true;
+    }
+  }
+  // Also refresh useful life from catalog on any flip to capital (affects amort).
+  if ((t === 'capital' || t === 'purchase') && match.useful_life_years && !line.amort_years) {
+    line.amort_years = Number(match.useful_life_years) || 5;
+    changed = true;
+  }
+  return changed;
+}
+
 async function openEquipmentCatalog() {
   if (!rootEl) return;
   // Remove any existing modal
@@ -6065,12 +6196,20 @@ async function openEquipmentCatalog() {
     const item = items.find(i => i.id === id);
     if (!item) return;
     // Map catalog fields → equipment line shape used by createEmptyModel & renderEquipment
-    const hasLease = Number(item.monthly_lease_cost) > 0;
+    // Pick a sensible default acquisition type from the catalog shape:
+    //   has_lease AND has_purchase → lease (user can flip; purchase cost is pre-populated)
+    //   has_purchase only          → capital (build-to-buy items)
+    //   has_lease only             → lease
+    // Either way, we hydrate BOTH monthly_cost and acquisition_cost from the
+    // catalog so a later type-flip finds the value already present.
+    const hasLease    = Number(item.monthly_lease_cost) > 0;
+    const hasPurchase = Number(item.purchase_cost) > 0;
+    const defaultType = hasLease ? 'lease' : (hasPurchase ? 'capital' : 'lease');
     const newLine = {
       equipment_name: item.name || '',
       category: ['MHE','IT','Racking','Dock','Charging','Office','Security','Conveyor'].includes(item.category) ? item.category : 'MHE',
       quantity: 1,
-      acquisition_type: hasLease ? 'lease' : 'purchase',
+      acquisition_type: defaultType,
       monthly_cost: Number(item.monthly_lease_cost) || 0,
       acquisition_cost: Number(item.purchase_cost) || 0,
       monthly_maintenance: Number(item.monthly_maintenance) || 0,

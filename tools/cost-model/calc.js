@@ -284,14 +284,22 @@ export function totalFtes(directLines, indirectLines, opHours) {
  */
 export function equipLineAnnual(line, peakOverflowByMonth) {
   const qty = line.quantity || 1;
-  const type = line.acquisition_type || 'lease';
+  const type = normalizeAcqType(line.acquisition_type);
 
+  // Acquisition-type → monthly-rate that flows as operating expense:
+  //   capital     — only maintenance (acquisition_cost flows as depreciation, not opex)
+  //   lease       — monthly_cost + maintenance
+  //   service     — monthly_cost (maintenance typically bundled into service fee)
+  //   ti          — $0 opex on the equipment line (cost rolls into facility rent)
   let monthlyRate;
-  if (type === 'purchase') {
-    // Purchase: only maintenance counts as operating expense
+  if (type === 'capital') {
     monthlyRate = (line.monthly_maintenance || 0);
+  } else if (type === 'ti') {
+    monthlyRate = 0;
+  } else if (type === 'service') {
+    monthlyRate = (line.monthly_cost || 0);
   } else {
-    // Lease or service: monthly cost + maintenance
+    // lease (default)
     monthlyRate = (line.monthly_cost || 0) + (line.monthly_maintenance || 0);
   }
 
@@ -323,10 +331,12 @@ export function equipLineAnnual(line, peakOverflowByMonth) {
  */
 export function equipLineAnnualBreakdown(line, peakOverflowByMonth) {
   const qty = line.quantity || 1;
-  const type = line.acquisition_type || 'lease';
-  const monthlyRate = type === 'purchase'
+  const type = normalizeAcqType(line.acquisition_type);
+  const monthlyRate = type === 'capital'
     ? (line.monthly_maintenance || 0)
-    : (line.monthly_cost || 0) + (line.monthly_maintenance || 0);
+    : type === 'ti'      ? 0
+    : type === 'service' ? (line.monthly_cost || 0)
+    : /* lease */          (line.monthly_cost || 0) + (line.monthly_maintenance || 0);
   const baseline = monthlyRate * 12 * qty;
   let seasonal = 0;
   const markupPct = Number(line.peak_markup_pct) || 0;
@@ -341,7 +351,28 @@ export function equipLineAnnualBreakdown(line, peakOverflowByMonth) {
 }
 
 /**
- * Total acquisition cost for a purchase equipment line.
+ * Normalize the acquisition_type field to the canonical 4-way taxonomy.
+ * Per the Asset Defaults Guidance (2026-04-20), the system carries four
+ * financing types:
+ *   capital   — provider buys, depreciates, owns
+ *   lease     — third-party operating lease, monthly opex, no ownership
+ *   ti        — Tenant Improvement (built into facility, amortized via rent)
+ *   service   — managed third-party service, per-month opex with no residual
+ * The legacy value 'purchase' is accepted and aliased to 'capital'.
+ * Unknown values fall back to 'lease' as the safest default.
+ * @param {string|null|undefined} v
+ * @returns {'capital'|'lease'|'ti'|'service'}
+ */
+export function normalizeAcqType(v) {
+  const s = (v || '').toLowerCase();
+  if (s === 'capital' || s === 'purchase') return 'capital';
+  if (s === 'ti')      return 'ti';
+  if (s === 'service') return 'service';
+  return 'lease';
+}
+
+/**
+ * Total acquisition cost on a capital or TI equipment line (qty × unit cost).
  * @param {import('./types.js?v=20260418-sK').EquipmentLine} line
  * @returns {number}
  */
@@ -350,32 +381,57 @@ export function equipTotalAcq(line) {
 }
 
 /**
- * Annual amortization for a purchase equipment line.
+ * Annual depreciation for a CAPITAL equipment line. TI items amortize via
+ * facility rent (not on the equipment line), service items have no capital,
+ * and lease items expense monthly — none of those produce equipment amort.
  * @param {import('./types.js?v=20260418-sK').EquipmentLine} line
  * @returns {number}
  */
 export function equipLineAmort(line) {
-  if ((line.acquisition_type || 'lease') !== 'purchase') return 0;
+  if (normalizeAcqType(line.acquisition_type) !== 'capital') return 0;
   const total = equipTotalAcq(line);
   const years = Math.max(1, line.amort_years || 5);
   return total / years;
 }
 
 /**
- * Full summary for an equipment line (used in equipment table row + pricing).
+ * Full summary for an equipment line. 4-way financing now:
+ *   capital — annual = maintenance only (amort tracked separately as D&A)
+ *   lease   — annual = (monthly_cost + maint) × 12
+ *   ti      — annual = 0 (rolls into facility rent via `tiUpfront`)
+ *   service — annual = monthly_cost × 12 (treated as opex; no capital)
+ *
+ * `tiUpfront` surfaces the Y0 TI outlay so a Summary-level "TI Upfront"
+ * rollup can show the build-out cost without folding it into opex.
  * @param {import('./types.js?v=20260418-sK').EquipmentLine} line
- * @returns {{ annual: number, capital: number, amort: number, leaseMo: number, maintAnnual: number }}
+ * @returns {{ annual: number, capital: number, amort: number, leaseMo: number, maintAnnual: number, tiUpfront: number, serviceMo: number, type: string }}
  */
 export function equipLineSummary(line) {
   const qty = line.quantity || 1;
-  const type = line.acquisition_type || 'lease';
+  const type = normalizeAcqType(line.acquisition_type);
   return {
-    annual: equipLineAnnual(line),
-    capital: type === 'purchase' ? equipTotalAcq(line) : 0,
-    amort: equipLineAmort(line),
-    leaseMo: type !== 'purchase' ? (line.monthly_cost || 0) * qty : 0,
-    maintAnnual: (line.monthly_maintenance || 0) * 12 * qty,
+    annual:       equipLineAnnual(line),
+    capital:      type === 'capital' ? equipTotalAcq(line) : 0,
+    amort:        equipLineAmort(line),
+    leaseMo:      type === 'lease'   ? (line.monthly_cost || 0) * qty : 0,
+    serviceMo:    type === 'service' ? (line.monthly_cost || 0) * qty : 0,
+    tiUpfront:    type === 'ti'      ? equipTotalAcq(line) : 0,
+    maintAnnual:  (line.monthly_maintenance || 0) * 12 * qty,
+    type,
   };
+}
+
+/**
+ * Horizon sum of one-time TI capital outlays — the Y0 cash that flows into
+ * facility build-out. Exposed so the Summary can show a "TI Upfront" card
+ * without mixing TI into opex or into capital-equipment totals.
+ * @param {import('./types.js?v=20260418-sK').EquipmentLine[]} lines
+ * @returns {number}
+ */
+export function totalEquipmentTiUpfront(lines) {
+  return (lines || []).reduce((s, line) => {
+    return normalizeAcqType(line.acquisition_type) === 'ti' ? s + equipTotalAcq(line) : s;
+  }, 0);
 }
 
 /**
@@ -386,11 +442,12 @@ export function equipLineSummary(line) {
  */
 export function equipLineTableCost(line, peakOverflowByMonth) {
   const qty = line.quantity || 1;
-  const type = line.acquisition_type || 'lease';
+  const type = normalizeAcqType(line.acquisition_type);
   const markupPct = Number(line.peak_markup_pct) || 0;
   const hasOverflow = markupPct > 0 && Array.isArray(peakOverflowByMonth) && peakOverflowByMonth.length === 12;
 
-  if (type === 'purchase') {
+  if (type === 'capital') {
+    // Display cost = maintenance + depreciation + seasonal uplift on maintenance rate
     const monthlyRate = (line.monthly_maintenance || 0);
     const maintenance = monthlyRate * 12 * qty;
     const acqCost = (line.acquisition_cost || 0) * qty;
@@ -402,6 +459,22 @@ export function equipLineTableCost(line, peakOverflowByMonth) {
     }
     return maintenance + acqCost / years + seasonal;
   }
+  if (type === 'ti') {
+    // TI = 0 ongoing display cost; cost lives in facility rent.
+    return 0;
+  }
+  if (type === 'service') {
+    // Service = monthly_cost × 12 only; no maintenance line (bundled)
+    const monthlyRate = (line.monthly_cost || 0);
+    const baseline = monthlyRate * qty * 12;
+    let seasonal = 0;
+    if (hasOverflow) {
+      const f = 1 + markupPct / 100;
+      for (const u of peakOverflowByMonth) seasonal += (Number(u) || 0) * monthlyRate * f;
+    }
+    return baseline + seasonal;
+  }
+  // Lease
   const monthlyRate = (line.monthly_cost || 0) + (line.monthly_maintenance || 0);
   const baseline = monthlyRate * qty * 12;
   let seasonal = 0;
@@ -543,7 +616,11 @@ export function equipmentOverflowByLine(lines, opts = {}) {
  */
 export function totalEquipmentCapital(lines) {
   return lines.reduce((sum, line) => {
-    if ((line.acquisition_type || 'lease') === 'purchase') {
+    // Capital items ONLY — TI is facility rent, lease has no capital, service
+    // is pure opex. Previously summed any line with acquisition_type='purchase'
+    // which lumped the building-TI items into equipment capital and inflated
+    // the Total Investment tile on the Summary.
+    if (normalizeAcqType(line.acquisition_type) === 'capital') {
       return sum + equipTotalAcq(line);
     }
     return sum;
@@ -1323,8 +1400,9 @@ export function validateModel(model, opts = {}) {
 
   // Equipment
   for (const line of model.equipmentLines || []) {
-    if ((line.acquisition_type || 'lease') === 'purchase' && (line.acquisition_cost || 0) <= 0) {
-      warnings.push({ level: 'warning', area: 'equipment', message: `"${line.equipment_name}" is marked purchase but has $0 acquisition cost` });
+    const acqType = normalizeAcqType(line.acquisition_type);
+    if ((acqType === 'capital' || acqType === 'ti') && (line.acquisition_cost || 0) <= 0) {
+      warnings.push({ level: 'warning', area: 'equipment', message: `"${line.equipment_name}" is marked ${acqType === 'capital' ? 'Capital' : 'TI'} but has $0 acquisition cost — check the catalog for a default` });
     }
   }
 
@@ -1669,93 +1747,167 @@ export function autoGenerateEquipment(state) {
   const sqft = state.facility?.totalSqft || 0;
   const spareFactor = 1.15;
 
-  // Helper to add equipment
-  const addEquip = (name, category, qty, monthlyLease = 0, acquisitionCost = 0, monthlyMaint = 0, drivenBy = '') => {
+  // Helper — accepts explicit financing type per the Asset Defaults Guidance
+  // (2026-04-20). Legacy callers without `financing` still work via heuristic
+  // fallback, but the auto-gen rules below now always pass the type.
+  const addEquip = (name, category, qty, monthlyCost = 0, acquisitionCost = 0, monthlyMaint = 0, drivenBy = '', financing = null, amortYears = 5) => {
     if (qty > 0) {
+      // Heuristic fallback: if no financing type supplied, infer from cost shape.
+      // Acquisition cost present → capital; else → lease. Legacy call sites.
+      const acq_type = financing || (acquisitionCost > 0 ? 'capital' : 'lease');
       lines.push({
         equipment_name: name,
         category: category || 'Other',
         quantity: Math.ceil(qty),
-        acquisition_type: acquisitionCost > 0 ? 'purchase' : 'lease',
-        monthly_cost: monthlyLease,
+        acquisition_type: acq_type,
+        monthly_cost: monthlyCost,
         acquisition_cost: acquisitionCost,
         monthly_maintenance: monthlyMaint,
-        amort_years: 5,
+        amort_years: amortYears,
         driven_by: drivenBy,
       });
     }
   };
 
-  // 1. MHE — From labor equipment assignments
-  // Simplified: assume average labor needs 1 MHE per 2-3 FTEs
-  if (totalDirectFtes > 0) {
-    addEquip('Reach Truck', 'MHE', Math.ceil(totalDirectFtes / 3) * spareFactor, 800, 0, 150, 'Direct labor + 15% spare');
-    addEquip('Order Picker', 'MHE', Math.max(0, Math.ceil(totalDirectFtes / 5) * spareFactor), 600, 0, 100, 'Picking labor');
-  }
+  // Facility-level policy inputs — defaults per Asset Defaults Guidance.
+  //   automation_level='none' — no conveyor auto-add (was volume-triggered).
+  //   security_tier=3         — reference-template default. Tier 2-3 only
+  //                              triggers electronic security (TI).
+  //   fenced_perimeter_lf=0   — no fencing unless explicitly set.
+  const automationLevel = (state.facility?.automationLevel || state.facility?.automation_level || 'none').toLowerCase();
+  const securityTier    = Number(state.facility?.securityTier ?? state.facility?.security_tier ?? 3);
+  const fencedLf        = Number(state.facility?.fencedPerimeterLf ?? state.facility?.fenced_perimeter_lf ?? 0);
 
-  // 2. IT — RF terminals, label printers, WiFi
-  if (totalDirectFtes > 0) {
-    addEquip('RF Terminal / Mobile Computer', 'IT', Math.ceil(totalDirectFtes * spareFactor) * 0.3, 150, 0, 20, 'Direct labor coverage (30%)');
-  }
-  addEquip('Label Printer (Thermal)', 'IT', Math.max(1, Math.ceil(totalHC / 50)), 0, 2500, 50, 'Pack stations + Receiving/Shipping');
-  if (sqft > 0) {
-    addEquip('WiFi Access Point', 'IT', Math.max(2, Math.ceil(sqft / 10000)), 100, 0, 20, sqft.toLocaleString() + ' sqft @ 1 per 10K sqft');
-  }
-
-  // 3. Racking — Based on pallet positions
+  const annualOrders = (state.volumeLines || [])
+    .filter(v => v.isOutboundPrimary)
+    .reduce((s, v) => s + (v.volume || 0), 0) || 0;
   const annualPalletsIn = (state.volumeLines || [])
     .filter(v => v.uom === 'pallet')
     .reduce((s, v) => s + (v.volume || 0), 0) || 0;
+
+  // ────────────────────────────────────────────────────────────────
+  // 1. MHE — forklifts (Leased per reference model; vendor-financed,
+  //    maintenance included). 1 reach truck per ~3 FTE; 1 picker per ~5.
+  // ────────────────────────────────────────────────────────────────
+  if (totalDirectFtes > 0) {
+    addEquip('Reach Truck', 'MHE', Math.ceil(totalDirectFtes / 3) * spareFactor,
+      /*monthlyCost*/ 800, /*acqCost*/ 0, /*maint*/ 150,
+      'Direct labor + 15% spare', 'lease');
+    addEquip('Order Picker', 'MHE', Math.max(0, Math.ceil(totalDirectFtes / 5) * spareFactor),
+      600, 0, 100, 'Picking labor', 'lease');
+  }
+
+  // ────────────────────────────────────────────────────────────────
+  // 2. IT Infrastructure — Capital per reference model. RF devices,
+  //    printers, WiFi APs, switches. NEVER leased (was lease pre-audit).
+  // ────────────────────────────────────────────────────────────────
+  if (totalDirectFtes > 0) {
+    // RF: ~$2,850 purchase, 3-year life. Flipped from $150/mo lease.
+    addEquip('RF Handheld / Mobile Computer', 'IT',
+      Math.ceil(totalDirectFtes * spareFactor * 0.3),
+      0, 2850, 15, 'Direct labor × 30% coverage', 'capital', 3);
+  }
+  addEquip('Label Printer (Thermal)', 'IT',
+    Math.max(1, Math.ceil(totalHC / 50)),
+    0, 1500, 25, 'Pack stations + Receiving/Shipping', 'capital', 5);
+  if (sqft > 0) {
+    // WiFi AP: ~$540/unit. Flipped from $100/mo lease.
+    addEquip('WiFi Access Point (warehouse)', 'IT',
+      Math.max(2, Math.ceil(sqft / 10000)),
+      0, 540, 0, sqft.toLocaleString() + ' sqft @ 1 per 10K sqft', 'capital', 5);
+    // Network backbone — one 24-port PoE switch per 50K sqft.
+    addEquip('Switch (24-port PoE)', 'IT',
+      Math.max(2, Math.ceil(sqft / 50000)),
+      0, 3024, 0, '1 per 50K sqft', 'capital', 7);
+  }
+
+  // ────────────────────────────────────────────────────────────────
+  // 3. Racking — Leased per reference model. ~$1/position/month +
+  //    ~$0.15/position/month maintenance. Flipped from $85/pos capital.
+  // ────────────────────────────────────────────────────────────────
   if (annualPalletsIn > 0) {
     const turnsPerYear = 12;
     const avgPalletsOnHand = Math.ceil(annualPalletsIn / turnsPerYear);
     const rackPositions = Math.ceil(avgPalletsOnHand * 1.15);
-    addEquip('Selective Pallet Rack', 'Racking', rackPositions, 0, 85, 10,
-      avgPalletsOnHand.toLocaleString() + ' avg pallets + 15% buffer');
+    addEquip('Selective Pallet Rack', 'Racking', rackPositions,
+      /*monthly*/ 1.00, /*acq*/ 0, /*maint*/ 0.15,
+      avgPalletsOnHand.toLocaleString() + ' avg pallets + 15% buffer', 'lease');
   }
 
-  // 4. Dock Equipment — Levelers based on daily throughput
-  const daysPerYear = (state.shifts?.daysPerWeek || 5) * (state.shifts?.weeksPerYear ?? 52);
-  const dailyPalletsTotal = (annualPalletsIn || 0) / Math.max(1, daysPerYear);
-  if (dailyPalletsTotal > 0) {
-    const dockDoors = Math.max(2, Math.ceil(dailyPalletsTotal / 90));
-    addEquip('Dock Leveler (Hydraulic)', 'Dock', dockDoors, 0, 3500, 200,
-      Math.ceil(dailyPalletsTotal) + ' daily pallets / 90 per door = ' + dockDoors + ' doors');
-  }
+  // ────────────────────────────────────────────────────────────────
+  // 4. REMOVED: Dock Levelers (TI — built into facility).
+  //    Dock hardware rolls into facility.rate_psf via the TI allowance.
+  //    Driving it from facility.dock_count × per-dock cost prevents
+  //    double-counting against the equipment capital bucket.
+  // ────────────────────────────────────────────────────────────────
 
-  // 5. Charging — 1 station per 6 electric MHE
+  // ────────────────────────────────────────────────────────────────
+  // 5. Charging — Capital (bundled price approximation). One station
+  //    per ~6 electric MHE units. Acquisition cost ~$1,200/station.
+  // ────────────────────────────────────────────────────────────────
   const forkliftCount = lines.filter(l =>
     l.equipment_name.toLowerCase().includes('truck') ||
     l.equipment_name.toLowerCase().includes('picker')
   ).reduce((s, l) => s + l.quantity, 0);
   if (forkliftCount > 0) {
-    addEquip('Battery Charging Station (6-unit)', 'Charging', Math.max(1, Math.ceil(forkliftCount / 6)), 200, 0, 50,
-      forkliftCount + ' electric MHE units');
+    addEquip('Battery Charging Station', 'Charging',
+      Math.max(1, Math.ceil(forkliftCount / 6)),
+      0, 1200, 50, forkliftCount + ' electric MHE units', 'capital', 7);
   }
 
-  // 6. Office Build-Out — 120 sqft per indirect HC
-  if (totalIndirectHC > 0) {
-    addEquip('Office Build-Out (sqft)', 'Office', Math.ceil(totalIndirectHC * 120), 0, 45, 5,
-      totalIndirectHC + ' indirect HC @ 120 sqft/person');
-    addEquip('Break Room Build-Out (sqft)', 'Office', Math.max(200, Math.ceil(totalHC * 15)), 0, 30, 3,
-      totalHC + ' total HC @ 15 sqft/person');
+  // ────────────────────────────────────────────────────────────────
+  // 6. REMOVED: Office + Break Room Build-Out (TI — facility lease).
+  //    Handled via facility.office_pct_of_total_sf (space heuristics),
+  //    not an equipment capex line.
+  // ────────────────────────────────────────────────────────────────
+
+  // ────────────────────────────────────────────────────────────────
+  // 7. Security — Driven by Security Tier (1-4). Electronic security
+  //    is TI; physical security (fencing, guard shack, gate) is Capital.
+  //    Tier 1 = alarm only; Tier 2 = + CCTV; Tier 3 = + access control
+  //    (default); Tier 4 = + guard shack + gate automation.
+  // ────────────────────────────────────────────────────────────────
+  if (securityTier >= 2 && sqft > 0) {
+    // CCTV — TI (built into facility)
+    addEquip('Security Camera System (head-end)', 'Security', 1,
+      0, 20000, 0, 'Security Tier ' + securityTier, 'ti');
+    const cameraCount = Math.max(4, Math.ceil(sqft / 30000));
+    addEquip('Security Cameras', 'Security', cameraCount,
+      0, 1562, 0, cameraCount + ' cameras (sqft / 30K)', 'ti');
+  }
+  if (securityTier >= 3) {
+    // Access control — TI (default tier)
+    addEquip('Access Control System (head-end)', 'Security', 1,
+      0, 20000, 0, 'Security Tier ' + securityTier, 'ti');
+    addEquip('Employee Entrance (turnstile)', 'Security', 1,
+      0, 2500, 0, 'Security Tier 3+', 'ti');
+  }
+  if (securityTier >= 4) {
+    // Guard shack + gate — Capital (physical)
+    addEquip('External Guard Shack', 'Security', 1,
+      0, 43000, 0, 'Security Tier 4', 'capital', 15);
+    addEquip('Gate Automation', 'Security', 1,
+      0, 25000, 0, 'Security Tier 4', 'capital', 10);
+  }
+  if (fencedLf > 0) {
+    // Physical perimeter — Capital
+    addEquip('Perimeter Fencing', 'Security', fencedLf,
+      0, 52, 0, fencedLf + ' LF', 'capital', 15);
   }
 
-  // 7. Security — 1 camera system per 30K sqft
-  if (sqft >= 50000) {
-    addEquip('Security Camera System (8-cam)', 'Security', Math.max(1, Math.ceil(sqft / 30000)), 200, 0, 100,
-      sqft.toLocaleString() + ' sqft @ 1 system per 30K sqft');
-    addEquip('Access Control System', 'Security', 1, 150, 0, 50, 'Facility entry/exit');
-  }
-
-  // 8. Conveyor — Only for >= 500K orders/yr
-  const annualOrders = (state.volumeLines || [])
-    .filter(v => v.isOutboundPrimary)
-    .reduce((s, v) => s + (v.volume || 0), 0) || 0;
-  if (annualOrders >= 500000) {
-    const conveyorLF = Math.min(500, Math.max(100, Math.ceil(annualOrders / 5000)));
-    addEquip('Belt Conveyor (linear ft)', 'Conveyor', conveyorLF, 2, 0, 10,
-      annualOrders.toLocaleString() + ' orders/yr');
+  // ────────────────────────────────────────────────────────────────
+  // 8. Conveyor — Gated on automation_level. Volume alone doesn't
+  //    imply conveyor (design decision, not a threshold outcome).
+  //    Leased per reference model, $5-8/LF/mo (was $2 pre-audit).
+  // ────────────────────────────────────────────────────────────────
+  if (automationLevel === 'medium' || automationLevel === 'high') {
+    const conveyorLF = automationLevel === 'high'
+      ? Math.min(1500, Math.max(300, Math.ceil(annualOrders / 3000)))
+      : Math.min(500,  Math.max(100, Math.ceil(annualOrders / 5000)));
+    addEquip('Belt Conveyor (linear ft)', 'Conveyor', conveyorLF,
+      /*monthly*/ 6, /*acq*/ 0, /*maint*/ 0,
+      'automation=' + automationLevel + ', ' + annualOrders.toLocaleString() + ' orders/yr',
+      'lease');
   }
 
   return lines;
