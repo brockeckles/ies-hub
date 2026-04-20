@@ -1103,94 +1103,147 @@ export function autoGenerateIndirectLabor(state, opts = {}) {
   // Helper to pull a span-of-control from the planning ratios catalog.
   // Falls back to the legacy hardcoded divisor when no catalog is provided
   // or when the code is missing / unusable (0, NaN, non-numeric).
+  //
+  // Q4 (2026-04-20): when the catalog IS used, also return the resolved
+  // planning-ratio definition + source so we can stamp provenance onto
+  // the generated line (UI surfaces it as an ℹ chip).
   const prMap = opts.planningRatiosMap || null;
+  /**
+   * Resolve a planning-ratio code. Returns { value, source, def } where
+   * source ∈ 'catalog' | 'override' | 'legacy'.
+   * @param {string} code
+   * @param {number|null} fallback
+   */
   const pr = (code, fallback) => {
-    if (!prMap) return fallback;
+    if (!prMap) return { value: fallback, source: 'legacy', def: null };
     const r = prMap[code];
-    if (!r || r.value === null || r.value === undefined) return fallback;
+    if (!r || r.value === null || r.value === undefined) {
+      return { value: fallback, source: 'legacy', def: null };
+    }
     const n = Number(r.value);
-    return Number.isFinite(n) && n > 0 ? n : fallback;
+    if (!Number.isFinite(n) || n <= 0) {
+      return { value: fallback, source: 'legacy', def: null };
+    }
+    return { value: n, source: r.source || 'catalog', def: r.def || null };
   };
 
-  // Helper to add indirect line
-  const addRole = (name, headcount, rate, burden = 30) => {
+  // Helper to add indirect line. When `heuristic` is supplied, stamps
+  // `_heuristic` metadata onto the line so the Indirect Labor UI can
+  // render a provenance chip (ratio name, source, value used, citation).
+  const addRole = (name, headcount, rate, burden = 30, heuristic = null) => {
     if (headcount > 0) {
-      lines.push({
+      const line = {
         role_name: name,
         headcount: Math.ceil(headcount),
         hourly_rate: rate,
         burden_pct: burden,
-      });
+      };
+      if (heuristic) line._heuristic = heuristic;
+      lines.push(line);
     }
   };
+  /**
+   * Shape a heuristic metadata object from a resolved ratio + the legacy
+   * fallback value + a friendly label for the span-of-control ratio used.
+   * When `value` came from the catalog (r.source === 'catalog' or 'override')
+   * we include the source citation so the UI can explain WHERE the 15:1 or
+   * 75:1 figure came from.
+   */
+  const makeHeuristic = (code, resolved, legacyValue, label) => ({
+    code,
+    label,                                  // "Team Lead span of control"
+    value: resolved.value,                  // 15 (catalog) or 8 (legacy)
+    source: resolved.source,                // 'catalog' | 'override' | 'legacy'
+    legacy_value: legacyValue,              // 8 (so UI can show "legacy default")
+    source_detail: resolved.def?.source_detail || null,
+    source_date: resolved.def?.source_date || null,
+    source_citation: resolved.def?.source || null,
+    ratio_id: resolved.def?.id || null,
+  });
 
   // 1. Team Leads: catalog 15 per Team Lead; legacy 8.
   if (totalDirectFtes >= 3) {
-    addRole('Team Lead', Math.ceil(totalDirectFtes / pr('indirect.team_lead.span', 8)), 22);
+    const r = pr('indirect.team_lead.span', 8);
+    addRole('Team Lead', Math.ceil(totalDirectFtes / r.value), 22, 30,
+      makeHeuristic('indirect.team_lead.span', r, 8, 'Team Lead span of control (direct FTEs per lead)'));
   }
 
   // 2. Supervisors: catalog 25 per Ops Supervisor; legacy 15.
   if (totalDirectFtes >= 8) {
-    addRole('Supervisor', Math.ceil(totalDirectFtes / pr('salary.operations_supervisor.span', 15)), 28);
+    const r = pr('salary.operations_supervisor.span', 15);
+    addRole('Supervisor', Math.ceil(totalDirectFtes / r.value), 28, 30,
+      makeHeuristic('salary.operations_supervisor.span', r, 15, 'Ops Supervisor span of control'));
   }
 
   // 3. Operations Manager: catalog 75 per mgr; legacy piecewise (1 at 20 FTE, 2 at 80 FTE).
   if (totalDirectFtes >= 20) {
-    const perMgr = pr('salary.operations_manager.span', null);
-    const opsManagers = perMgr
-      ? Math.max(1, Math.ceil(totalDirectFtes / perMgr))
+    const r = pr('salary.operations_manager.span', null);
+    const opsManagers = r.value
+      ? Math.max(1, Math.ceil(totalDirectFtes / r.value))
       : (totalDirectFtes >= 80 ? 2 : 1);
-    addRole('Operations Manager', opsManagers, 42);
+    // Legacy value here is a piecewise rule, not a single divisor — show "piecewise" in legacy_value
+    addRole('Operations Manager', opsManagers, 42, 30,
+      makeHeuristic('salary.operations_manager.span', r, 'piecewise (1 at 20 FTE, 2 at 80 FTE)', 'Operations Manager span of control'));
   }
 
   // 4. Inventory Control: catalog 50 per IC Manager; legacy 25.
   if (totalDirectFtes > 0) {
-    addRole('Inventory Control', Math.ceil(totalDirectFtes / pr('salary.inventory_manager.span', 25)), 20);
+    const r = pr('salary.inventory_manager.span', 25);
+    addRole('Inventory Control', Math.ceil(totalDirectFtes / r.value), 20, 30,
+      makeHeuristic('salary.inventory_manager.span', r, 25, 'Inventory Control span of control'));
   }
 
-  // 5. Receiving/Shipping Clerk: 1 per shift
+  // 5. Receiving/Shipping Clerk: 1 per shift (fixed legacy rule, no catalog)
   const shiftsPerDay = state.shifts?.shiftsPerDay || 1;
-  addRole('Receiving / Shipping Clerk', Math.max(1, shiftsPerDay), 18);
+  addRole('Receiving / Shipping Clerk', Math.max(1, shiftsPerDay), 18, 30,
+    { code: 'indirect.recv_ship_clerk.per_shift', label: '1 clerk per shift', value: 1, source: 'legacy', legacy_value: 1 });
 
   // 6. Customer Service: 1 per 500K orders/yr
   const annualOrders = (state.volumeLines || [])
     .filter(v => v.isOutboundPrimary)
     .reduce((s, v) => s + (v.volume || 0), 0) || 0;
   if (annualOrders >= 500000) {
-    addRole('Customer Service Rep', Math.ceil(annualOrders / 500000), 18);
+    addRole('Customer Service Rep', Math.ceil(annualOrders / 500000), 18, 30,
+      { code: 'indirect.customer_service.per_500k_orders', label: '1 CS rep per 500K orders/yr', value: 500000, source: 'legacy', legacy_value: 500000 });
   }
 
   // 7. Returns Processor: 1 per 100K returns/yr (estimate as 5% of outbound orders)
   const estimatedReturns = annualOrders * 0.05;
   if (estimatedReturns >= 100000) {
-    addRole('Returns Processor', Math.ceil(estimatedReturns / 100000), 17);
+    addRole('Returns Processor', Math.ceil(estimatedReturns / 100000), 17, 30,
+      { code: 'indirect.returns_processor.per_100k_returns', label: '1 processor per 100K returns/yr (5% of outbound)', value: 100000, source: 'legacy', legacy_value: 100000 });
   }
 
   // 8. IT Support: 0.5-2 based on FTE count
   if (totalDirectFtes >= 20) {
     const itHeadcount = Math.max(0.5, Math.min(2, Math.ceil(totalDirectFtes / 40)));
-    addRole('IT Support', itHeadcount, 35);
+    addRole('IT Support', itHeadcount, 35, 30,
+      { code: 'indirect.it_support.per_40_ftes', label: '0.5–2 IT per direct FTE tier', value: 40, source: 'legacy', legacy_value: 40 });
   }
 
   // 9. Maintenance: 1 per 100K sqft
   const totalSqft = state.facility?.totalSqft || 0;
   if (totalSqft >= 100000) {
-    addRole('Maintenance Technician', Math.ceil(totalSqft / 100000), 25);
+    addRole('Maintenance Technician', Math.ceil(totalSqft / 100000), 25, 30,
+      { code: 'indirect.maintenance.per_100k_sqft', label: '1 maintenance tech per 100K sqft', value: 100000, source: 'legacy', legacy_value: 100000 });
   }
 
   // 10. Janitorial: 1 per 150K sqft (often outsourced, include as benchmark)
   if (totalSqft >= 150000) {
-    addRole('Janitorial Supervisor', Math.ceil(totalSqft / 150000), 20);
+    addRole('Janitorial Supervisor', Math.ceil(totalSqft / 150000), 20, 30,
+      { code: 'indirect.janitorial.per_150k_sqft', label: '1 janitorial supervisor per 150K sqft', value: 150000, source: 'legacy', legacy_value: 150000 });
   }
 
   // 11. Account Manager: 0.5-1 based on FTE
   if (totalDirectFtes >= 10) {
-    addRole('Account Manager', totalDirectFtes >= 50 ? 1 : 0.5, 40);
+    addRole('Account Manager', totalDirectFtes >= 50 ? 1 : 0.5, 40, 30,
+      { code: 'indirect.account_manager.tier', label: '0.5 AM at 10 FTE, 1 AM at 50+ FTE', value: 50, source: 'legacy', legacy_value: 50 });
   }
 
   // 12. General Manager: 1 if total HC >= 50
   if (totalDirectHC + lines.reduce((s, l) => s + l.headcount, 0) >= 50) {
-    addRole('General Manager', 1, 55);
+    addRole('General Manager', 1, 55, 30,
+      { code: 'indirect.general_manager.threshold', label: '1 GM when total HC ≥ 50', value: 50, source: 'legacy', legacy_value: 50 });
   }
 
   return lines;
