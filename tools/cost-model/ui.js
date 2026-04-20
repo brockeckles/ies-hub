@@ -889,6 +889,13 @@ function _sectionCompleteness(sectionKey) {
       return (m.overheadLines && m.overheadLines.length > 0) ? 'complete' : 'empty';
     case 'vas':
       return (m.vasLines && m.vasLines.length > 0) ? 'complete' : 'empty';
+    case 'startup': {
+      // Start-Up / Capital: count any line with a nonzero cost. Blank rows
+      // (auto-seeded placeholders with $0) don't count as "complete".
+      const lines = m.startupLines || [];
+      const hasReal = lines.some(l => (Number(l.one_time_cost) || 0) > 0 || (Number(l.amount) || 0) > 0);
+      return hasReal ? 'complete' : (lines.length > 0 ? 'partial' : 'empty');
+    }
     case 'financial':
       // NB: model writes `targetMargin` (see data-field="financial.targetMargin"
       // at line ~2106). Prior check read `targetMarginPct` — never true.
@@ -897,6 +904,17 @@ function _sectionCompleteness(sectionKey) {
       return (m.pricingBuckets && m.pricingBuckets.length > 0) ? 'complete' : 'empty';
     case 'pricing':
       return (m.pricingBuckets && m.pricingBuckets.length > 0) ? 'complete' : 'empty';
+    // Output / analysis sections are derived views — they have no "input"
+    // to be complete. Return 'na' so the sidebar shows them as available,
+    // not stuck empty. renderGroupedNav treats 'na' like 'complete' for
+    // rollup purposes so the group counts aren't dragged down by views.
+    case 'summary':
+    case 'timeline':
+    case 'scenarios':
+    case 'whatif':
+    case 'assumptions':
+    case 'linked':
+      return 'na';
     default:
       return 'empty';
   }
@@ -916,18 +934,21 @@ function refreshNavCompletion() {
     const sections = grouped.get(g.key) || [];
     if (!sections.length) continue;
     let completeCount = 0;
+    let inputSectionCount = 0;
     for (const s of sections) {
       const status = _sectionCompleteness(s.key);
+      if (status !== 'na') inputSectionCount += 1;
       if (status === 'complete') completeCount += 1;
-      // Per-section check dot (v2 UI uses .cm-nav-check, legacy uses same id)
+      // Per-section check dot — 'na' renders as complete (derived views).
       const check = rootEl.querySelector(`#cm-check-${s.key}`);
-      if (check) check.classList.toggle('complete', status === 'complete');
+      if (check) check.classList.toggle('complete', status === 'complete' || status === 'na');
     }
     // Group-level rollup dot + count
     const groupEl = rootEl.querySelector(`[data-nav-group="${g.key}"]`);
     if (!groupEl) continue;
-    const groupDot = completeCount === sections.length ? 'complete'
-                   : completeCount > 0                 ? 'partial'
+    const groupDot = inputSectionCount === 0                   ? 'complete'
+                   : completeCount === inputSectionCount       ? 'complete'
+                   : completeCount > 0                         ? 'partial'
                    : 'empty';
     const dot = groupEl.querySelector('.hub-completion-dot');
     if (dot) {
@@ -935,7 +956,10 @@ function refreshNavCompletion() {
       dot.classList.add(`hub-completion-dot--${groupDot}`);
     }
     const count = groupEl.querySelector('.hub-nav-group__count');
-    if (count) count.textContent = `${completeCount}/${sections.length}`;
+    if (count) {
+      if (inputSectionCount === 0) count.textContent = '';
+      else count.textContent = `${completeCount}/${inputSectionCount}`;
+    }
   }
 }
 
@@ -945,24 +969,33 @@ function renderGroupedNav() {
     const sections = grouped.get(g.key) || [];
     if (!sections.length) return '';
     const collapsed = _collapsedNavGroups.has(g.key);
-    const completeCount = sections.filter(s => _sectionCompleteness(s.key) === 'complete').length;
-    const groupDot = completeCount === sections.length ? 'complete'
-                    : completeCount > 0                  ? 'partial'
+    // 'na' = derived view (no input to complete) — exclude from denominator,
+    // don't count toward partial/empty. Groups that are all 'na' (Output /
+    // Analysis) render as a clean green dot with no "n/m" count.
+    const inputSections = sections.filter(s => _sectionCompleteness(s.key) !== 'na');
+    const completeCount = inputSections.filter(s => _sectionCompleteness(s.key) === 'complete').length;
+    const hasInputs = inputSections.length > 0;
+    const groupDot = !hasInputs                           ? 'complete'
+                    : completeCount === inputSections.length ? 'complete'
+                    : completeCount > 0                   ? 'partial'
                     : 'empty';
+    const countLabel = hasInputs ? `${completeCount}/${inputSections.length}` : '';
     return `
       <div class="hub-nav-group${collapsed ? ' is-collapsed' : ''}" data-nav-group="${g.key}">
         <button type="button" class="hub-nav-group__header" data-nav-group-toggle="${g.key}" title="${g.description}">
           <span class="hub-nav-group__caret">▾</span>
           <span>${g.label}</span>
           <span class="hub-completion-dot hub-completion-dot--${groupDot}"></span>
-          <span class="hub-nav-group__count">${completeCount}/${sections.length}</span>
+          ${countLabel ? `<span class="hub-nav-group__count">${countLabel}</span>` : ''}
         </button>
         <div class="hub-nav-group__items">
           ${sections.map(s => {
             const done = _sectionCompleteness(s.key);
+            // 'na' renders as complete (green dot) — these are derived views
+            const renderAsComplete = done === 'complete' || done === 'na';
             return `
               <div class="cm-nav-item${s.key === activeSection ? ' active' : ''}" data-section="${s.key}">
-                <span class="cm-nav-check${done === 'complete' ? ' complete' : ''}" id="cm-check-${s.key}"></span>
+                <span class="cm-nav-check${renderAsComplete ? ' complete' : ''}" id="cm-check-${s.key}"></span>
                 <span class="cm-nav-label">${s.label}</span>
               </div>`;
           }).join('')}
@@ -3304,16 +3337,26 @@ function renderSummary() {
     fixedCost: summary.facilityCost + summary.overheadCost + summary.startupAmort,
   });
 
-  // Sensitivity data
+  // Sensitivity data — use Year-1 projection as the base so the driver deltas
+  // tie out to the P&L the user is looking at. Previously we used
+  // steady-state (pre-escalation/pre-learning) base costs which produced
+  // deltas that didn't reconcile with the Multi-Year P&L row the user was
+  // reading immediately below.
+  const p1 = projections[0] || {};
   const baseCosts = {
-    labor: summary.laborCost,
-    facility: summary.facilityCost,
-    equipment: summary.equipmentCost,
-    overhead: summary.overheadCost,
-    vas: summary.vasCost,
-    startup: summary.startupAmort,
+    labor:     p1.labor     ?? summary.laborCost,
+    facility:  p1.facility  ?? summary.facilityCost,
+    equipment: p1.equipment ?? summary.equipmentCost,
+    overhead:  p1.overhead  ?? summary.overheadCost,
+    vas:       p1.vas       ?? summary.vasCost,
+    startup:   p1.startup   ?? summary.startupAmort,
   };
-  const sensi = calc.sensitivityTable(baseCosts, orders || 1);
+  const baseOrdersY1 = p1.orders || orders || 1;
+  const lc = model.laborCosting || {};
+  const sensi = calc.sensitivityTable(baseCosts, baseOrdersY1, undefined, {
+    burdenPct:  lc.defaultBurdenPct ?? 30,
+    benefitPct: lc.benefitLoadPct   ?? 15,
+  });
 
   const pcts = summary.totalCost > 0 ? {
     labor: (summary.laborCost / summary.totalCost * 100).toFixed(0),
@@ -3365,19 +3408,30 @@ function renderSummary() {
       </div>
     </div>
 
-    <!-- KPI Strip (primitives-kit, 5-tile override) -->
+    <!-- KPI Strip (primitives-kit, 5-tile override) — Year-1 figures so they
+         tie out to the Multi-Year P&L's Y1 column immediately below. Prior
+         version used steady-state summary.totalCost/totalRevenue which
+         drifted from Y1 by ~3% (learning curve + escalation averaging),
+         reading as an inconsistency on the Summary page. -->
+    ${(() => {
+      const p1 = projections[0] || {};
+      const y1Cost    = p1.totalCost ?? summary.totalCost;
+      const y1Revenue = p1.revenue   ?? summary.totalRevenue;
+      const y1Orders  = p1.orders    || orders || 0;
+      const y1CostPerOrder = y1Orders > 0 ? y1Cost / y1Orders : 0;
+      return `
     <div class="hub-kpi-strip mb-4" style="grid-template-columns: repeat(5, minmax(0, 1fr));">
-      <div class="hub-kpi-tile">
-        <div class="hub-kpi-tile__label">Total Cost</div>
-        <div class="hub-kpi-tile__value">${calc.formatCurrency(summary.totalCost, {compact: true})}</div>
+      <div class="hub-kpi-tile" title="Year 1 total cost (matches P&L below)">
+        <div class="hub-kpi-tile__label">Y1 Total Cost</div>
+        <div class="hub-kpi-tile__value">${calc.formatCurrency(y1Cost, {compact: true})}</div>
       </div>
-      <div class="hub-kpi-tile">
-        <div class="hub-kpi-tile__label">Revenue</div>
-        <div class="hub-kpi-tile__value hub-kpi-tile__value--brand">${calc.formatCurrency(summary.totalRevenue, {compact: true})}</div>
+      <div class="hub-kpi-tile" title="Year 1 revenue at the target margin">
+        <div class="hub-kpi-tile__label">Y1 Revenue</div>
+        <div class="hub-kpi-tile__value hub-kpi-tile__value--brand">${calc.formatCurrency(y1Revenue, {compact: true})}</div>
       </div>
-      <div class="hub-kpi-tile">
-        <div class="hub-kpi-tile__label">Cost / Order</div>
-        <div class="hub-kpi-tile__value">${orders > 0 ? calc.formatCurrency(summary.costPerOrder, {decimals: 2}) : '—'}</div>
+      <div class="hub-kpi-tile" title="Year 1 cost ÷ Year 1 orders">
+        <div class="hub-kpi-tile__label">Cost / Order (Y1)</div>
+        <div class="hub-kpi-tile__value">${y1Orders > 0 ? calc.formatCurrency(y1CostPerOrder, {decimals: 2}) : '—'}</div>
       </div>
       <div class="hub-kpi-tile">
         <div class="hub-kpi-tile__label">FTEs</div>
@@ -3388,6 +3442,8 @@ function renderSummary() {
         <div class="hub-kpi-tile__value">${calc.formatCurrency(summary.equipmentCapital + summary.startupCapital, {compact: true})}</div>
       </div>
     </div>
+      `;
+    })()}
 
     ${renderSensitivityCard()}
 

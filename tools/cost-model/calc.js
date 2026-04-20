@@ -782,7 +782,10 @@ export function buildYearlyProjections(params) {
   if (useMonthly && Array.isArray(params.periods) && params.periods.length > 0) {
     const bundle = monthly.buildMonthlyProjections(adaptYearlyToMonthlyParams(params));
     return {
-      projections: monthly.groupMonthlyToYearly(bundle, params.years),
+      projections: monthly.groupMonthlyToYearly(bundle, params.years, {
+        baseOrders: params.baseOrders,
+        volGrowthPct: params.volGrowthPct,
+      }),
       startupCapital: params.startupCapital,
       monthlyBundle: bundle, // exposed for Timeline UI + reconciliation tests
     };
@@ -1242,31 +1245,57 @@ export function validateModel(model, opts = {}) {
  * @param {number[]} [adjustments] — e.g. [-0.10, -0.05, 0.05, 0.10]
  * @returns {Array<{ label: string, adjustments: Array<{ pct: number, totalCost: number, costPerOrder: number, delta: number }> }>}
  */
-export function sensitivityTable(baseCosts, baseOrders, adjustments = [-0.10, -0.05, 0.05, 0.10]) {
+export function sensitivityTable(baseCosts, baseOrders, adjustments = [-0.10, -0.05, 0.05, 0.10], opts = {}) {
   const baseTotalCost = baseCosts.labor + baseCosts.facility + baseCosts.equipment +
     baseCosts.overhead + baseCosts.vas + baseCosts.startup;
 
+  // Burden fraction: share of labor bucket that IS the burden/benefits load.
+  // Labor ≈ wages × (1 + burdenPct/100 + benefitPct/100). A 10% adjustment to
+  // BURDEN moves the total labor by 10% × burdenFraction — typically 2-3%,
+  // not 10%. Without this, Burden % and Labor Rate were indistinguishable.
+  const burdenPct  = Number(opts.burdenPct)  || 0;
+  const benefitPct = Number(opts.benefitPct) || 0;
+  const burdenFraction = (burdenPct + benefitPct) > 0
+    ? (burdenPct / 100) / (1 + (burdenPct + benefitPct) / 100)
+    : 0.20; // conservative fallback
+
+  // Volume elasticity — volume-driven buckets scale with order volume:
+  //   - Labor:    1.0  (direct labor is the biggest volume lever)
+  //   - VAS:      1.0  (pass-through)
+  //   - Overhead: 0.5  (roughly half is volume-driven — QC, returns,
+  //               CS reps, consumables; rest is fixed)
+  //   - Equipment:0.15 (peak-markup uplift + consumables partially volume-
+  //               driven; base leases are fixed)
+  //   - Facility: 0.0  (lease is fixed regardless of volume)
+  const VOLUME_ELASTICITY = { labor: 1.0, vas: 1.0, overhead: 0.5, equipment: 0.15, facility: 0, startup: 0 };
+
   const drivers = [
-    { label: 'Volume', key: 'volume' },
-    { label: 'Labor Rate', key: 'labor' },
-    { label: 'Facility Size', key: 'facility' },
-    { label: 'Burden %', key: 'labor' }, // simplified — adjusts labor bucket
+    { label: 'Volume',        kind: 'volume' },
+    { label: 'Labor Rate',    kind: 'labor_rate' },
+    { label: 'Burden %',      kind: 'burden' },
+    { label: 'Facility Rate', kind: 'facility_rate' },
   ];
 
   return drivers.map(driver => ({
     label: driver.label,
     adjustments: adjustments.map(adj => {
-      let adjusted = { ...baseCosts };
-      if (driver.key === 'volume') {
-        // Volume affects labor (proportional) and VAS
+      const adjusted = { ...baseCosts };
+      if (driver.kind === 'volume') {
+        for (const bucket of Object.keys(VOLUME_ELASTICITY)) {
+          const e = VOLUME_ELASTICITY[bucket];
+          adjusted[bucket] = baseCosts[bucket] * (1 + adj * e);
+        }
+      } else if (driver.kind === 'labor_rate') {
         adjusted.labor = baseCosts.labor * (1 + adj);
-        adjusted.vas = baseCosts.vas * (1 + adj);
-      } else {
-        adjusted[driver.key] = baseCosts[driver.key] * (1 + adj);
+      } else if (driver.kind === 'burden') {
+        // Dampened: only the burdened portion of the labor bucket moves
+        adjusted.labor = baseCosts.labor * (1 + adj * burdenFraction);
+      } else if (driver.kind === 'facility_rate') {
+        adjusted.facility = baseCosts.facility * (1 + adj);
       }
       const totalCost = adjusted.labor + adjusted.facility + adjusted.equipment +
         adjusted.overhead + adjusted.vas + adjusted.startup;
-      const orders = driver.label === 'Volume' ? baseOrders * (1 + adj) : baseOrders;
+      const orders = driver.kind === 'volume' ? baseOrders * (1 + adj) : baseOrders;
       return {
         pct: adj * 100,
         totalCost,

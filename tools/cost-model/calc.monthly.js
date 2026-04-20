@@ -662,7 +662,7 @@ export function computeExpenseRows(period, ctx, params) {
  * @param {number} contractTermYears
  * @returns {Object[]} YearlyProjection[]
  */
-export function groupMonthlyToYearly(bundle, contractTermYears) {
+export function groupMonthlyToYearly(bundle, contractTermYears, opts = {}) {
   const idToPeriod = new Map(bundle.periods.map(p => [p.id, p]));
   // Per-category rollup for the Multi-Year P&L Summary table. Keep these
   // code sets in sync with the expense_line_code values emitted in
@@ -696,9 +696,16 @@ export function groupMonthlyToYearly(bundle, contractTermYears) {
       (s, r) => codes.has(r.expense_line_code) ? s + (Number(r.amount) || 0) : s,
       0,
     );
+    // Orders per year = baseOrders × (1 + volGrowthPct)^(yr-1). Mirrors the
+    // legacy yearly path (buildYearlyProjections) so the Multi-Year P&L
+    // Orders row and top-of-summary Cost/Order tile tie out. Bug pre-2026-04-20:
+    // hardcoded to 0 with a Phase 2 TODO.
+    const baseOrdersY = Number(opts.baseOrders) || 0;
+    const volGrowth   = Number(opts.volGrowthPct) || 0;
+    const yearOrders  = baseOrdersY * Math.pow(1 + volGrowth, yr - 1);
     out.push({
       year: yr,
-      orders: 0, // Phase 2: derive from monthly volume rows
+      orders: yearOrders,
       labor:     sumByCategory(CATEGORY_CODES.labor),
       facility:  sumByCategory(CATEGORY_CODES.facility),
       equipment: sumByCategory(CATEGORY_CODES.equipment),
