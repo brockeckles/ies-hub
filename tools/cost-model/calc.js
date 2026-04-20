@@ -934,12 +934,17 @@ export function computeFinancialMetrics(projections, opts) {
     ? totalGpExplicit
     : (totalCogs > 0 ? totalRevenue - totalCogs : totalRevenue - _totalCost);
 
-  // If the P&L rollup didn't separate D&A, derive a "true" EBITDA by adding
-  // back annual depreciation × years so EBIT Margin < EBITDA Margin holds.
-  // When caller passes annualDepreciation: 0, behavior collapses to the raw path.
-  const ebitdaAdjustment = Math.max(0, annualDepreciation * years - Math.max(0, totalEbitdaRaw - totalEbitRaw));
+  // Horizon EBITDA / EBIT come DIRECTLY from the per-year rollup now that
+  // the monthly engine and legacy yearly path both emit the correct values
+  // (post-2026-04-20 Summary audit). The prior `ebitdaAdjustment` logic
+  // silently lifted horizon EBITDA by annualDepreciation × years when the
+  // per-year EBITDA didn't already have D&A separated — that created a drift
+  // where the Financial Metrics tile disagreed with the P&L EBITDA row right
+  // above it. annualDepreciation is now used only for the tooltip; it is
+  // NOT folded into the rollup. If D&A should appear on the P&L, it needs
+  // to flow through the expense pipeline, not be added back here.
   const totalEbit   = totalEbitRaw;
-  const totalEbitda = totalEbitdaRaw + ebitdaAdjustment;
+  const totalEbitda = totalEbitdaRaw;
 
   const grossMarginPct  = totalRevenue > 0 ? (totalGrossProfit / totalRevenue) * 100 : 0;
   const ebitdaMarginPct = totalRevenue > 0 ? (totalEbitda      / totalRevenue) * 100 : 0;
@@ -955,16 +960,26 @@ export function computeFinancialMetrics(projections, opts) {
   // defensible to a reviewer without requiring full WC forecasting.
   const avgAnnualEbit   = totalEbit / years;
   const avgAnnualNopat  = avgAnnualEbit * (1 - taxRatePct / 100);
-  // Working-capital estimate (if caller didn't supply one directly).
+  // Working-capital estimate — defensibility: use the AR/AP balance level
+  // implied by the P&L's own DSO/DPO assumption rather than a parallel
+  // formula. The P&L ΔWC row is the CHANGE in working capital per year;
+  // the relevant quantity for ROIC is the average AR/AP BALANCE tied up in
+  // the deal. At steady state:
+  //   AR_balance ≈ annual_revenue × DSO/365
+  //   AP_balance ≈ annual_COGS    × DPO/365
+  //   NWC_avg    ≈ (horizon_revenue_avg × DSO/365) − (horizon_COGS_avg × DPO/365)
+  // Using horizon averages (rather than Y1 only) smooths ramp + growth so
+  // the ROIC tile holds against a reviewer's whole-horizon view. If the
+  // caller passes `avgWorkingCapital` directly that wins (future hook for
+  // cashflow-statement-derived figures).
   let estimatedNWC = avgWorkingCapitalOpt;
   if (estimatedNWC == null) {
     const dsoDays = Number(opts.dsoDays) || 0;
     const dpoDays = Number(opts.dpoDays) || 0;
     if (projections.length > 0 && dsoDays > 0) {
-      const y1 = projections[0];
-      const y1Revenue = Number(y1.revenue) || 0;
-      const y1Cogs    = Number(y1.cogs) || Number(y1.totalCost) || 0;
-      estimatedNWC = Math.max(0, y1Revenue * (dsoDays / 365) - y1Cogs * (dpoDays / 365));
+      const avgRevenue = totalRevenue / years;
+      const avgCogs    = (totalCogs > 0 ? totalCogs : _totalCost) / years;
+      estimatedNWC = Math.max(0, avgRevenue * (dsoDays / 365) - avgCogs * (dpoDays / 365));
     } else {
       estimatedNWC = 0;
     }

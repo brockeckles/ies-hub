@@ -10,7 +10,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import * as calc from './calc.js?v=20260420-vQ';
+import * as calc from './calc.js?v=20260420-vR';
 import * as api from './api.js?v=20260419-uH';
 import * as scenarios from './calc.scenarios.js?v=20260419-sZ';
 import * as monthlyCalc from './calc.monthly.js?v=20260420-vN';
@@ -3682,9 +3682,9 @@ function renderSummary() {
       <h3 class="hub-section-heading">Financial Metrics</h3>
       <div class="cm-metrics-grid">
         ${renderMetricCard('Gross Margin', calc.formatPct(metrics.grossMarginPct), metrics.grossMarginPct >= (thresholds.grossMargin || 10), '(Revenue − COGS) / Revenue, horizon total. COGS = Labor + Facility + Equipment + VAS pass-through.')}
-        ${renderMetricCard('EBITDA Margin', calc.formatPct(metrics.ebitdaMarginPct), metrics.ebitdaMarginPct >= (thresholds.ebitda || 8), '(GP − SG&A) / Revenue, horizon total. SG&A = Overhead. Adds back D&A if P&L rolled it through OPEX.')}
-        ${renderMetricCard('EBIT Margin', calc.formatPct(metrics.ebitMarginPct), metrics.ebitMarginPct >= (thresholds.ebit || 5), '(EBITDA − D&A) / Revenue, horizon total. D&A = startup amort + equipment amort.')}
-        ${renderMetricCard('ROIC', calc.formatPct(metrics.roicPct), metrics.roicPct >= (thresholds.roic || 15), `NOPAT / Invested Capital. NOPAT = avg annual EBIT × (1 − ${calcHeur.taxRatePct || 25}% tax). Invested Capital = $${(metrics.investedCapital/1000).toFixed(0)}K (startup + equipment + Y1 working capital estimate of $${((metrics.estimatedNwc||0)/1000).toFixed(0)}K).`)}
+        ${renderMetricCard('EBITDA Margin', calc.formatPct(metrics.ebitdaMarginPct), metrics.ebitdaMarginPct >= (thresholds.ebitda || 8), '(Σ EBITDA across horizon) / (Σ Revenue). Horizon totals — ties exactly to the EBITDA row in the P&L below.')}
+        ${renderMetricCard('EBIT Margin', calc.formatPct(metrics.ebitMarginPct), metrics.ebitMarginPct >= (thresholds.ebit || 5), '(Σ EBIT across horizon) / (Σ Revenue). EBIT = EBITDA − D&A. Ties exactly to the EBIT row in the P&L below.')}
+        ${renderMetricCard('ROIC', calc.formatPct(metrics.roicPct), metrics.roicPct >= (thresholds.roic || 15), `NOPAT / Invested Capital. NOPAT = avg annual EBIT × (1 − ${calcHeur.taxRatePct || 25}% tax) = $${((metrics.nopat||0)/1000).toFixed(0)}K. Invested Capital = $${(metrics.investedCapital/1000).toFixed(0)}K = Startup $${(summary.startupCapital/1000).toFixed(0)}K + Equipment $${(summary.equipmentCapital/1000).toFixed(0)}K + avg NWC $${((metrics.estimatedNwc||0)/1000).toFixed(0)}K (horizon-avg Revenue × DSO/365 − horizon-avg COGS × DPO/365).`)}
         ${renderMetricCard('MIRR', calc.formatPct(metrics.mirrPct), metrics.mirrPct >= (thresholds.mirr || 12), `Modified IRR of FCF series. Financing rate ${fin.discountRate || 10}%, reinvestment rate ${fin.reinvestRate || 8}%. Uses Y0 outflow of $${(metrics.totalInvestment/1000).toFixed(0)}K plus each year's Free Cash Flow.`)}
         ${renderMetricCard('NPV', calc.formatCurrency(metrics.npv, {compact: true}), metrics.npv > 0, `NPV of FCF series discounted at ${fin.discountRate || 10}%. Sums [−Total Investment at t=0] + Σ FCF_yr / (1+r)^yr.`)}
         ${renderMetricCard('Payback', metrics.paybackMonths > 0 ? metrics.paybackMonths + ' mo' : '—', metrics.paybackMonths > 0 && metrics.paybackMonths <= (thresholds.payback || contractYears * 12), 'Months until cumulative FCF first turns positive. Assumes even monthly FCF within each year.')}
