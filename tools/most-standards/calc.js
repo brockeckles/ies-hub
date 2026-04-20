@@ -101,6 +101,36 @@ export function adjustedCycleTime(tmuTotal, pfdPct) {
   return 3600 / uph;
 }
 
+/**
+ * Apply BOTH PFD allowance and a productivity factor to a base UPH.
+ *
+ * Real-world MOST practice: engineered standards assume a trained operator
+ * at 100% pace. Most operations actually run at 85–95% of that — learning
+ * curve, engagement variance, task-switch overhead. IEs apply a
+ * "productivity factor" (also called "performance factor" or "% to
+ * standard") on top of PFD to get the planning UPH.
+ *
+ * Formula: effectiveUph = baseUph × (100 / (100 + PFD%)) × (productivity% / 100)
+ *
+ * Default productivity is 100% so callers that don't thread the new param
+ * produce the same numbers as `adjustedUph` (no regression).
+ *
+ * @param {number} uph — base units per hour
+ * @param {number} pfdPct — PFD allowance percentage
+ * @param {number} [productivityPct=100] — productivity factor percent (0-100)
+ * @returns {number} effective UPH
+ */
+export function effectiveUph(uph, pfdPct, productivityPct = 100) {
+  const adj = adjustedUph(uph, pfdPct);
+  if (adj <= 0) return 0;
+  const p = Number.isFinite(productivityPct) ? productivityPct : 100;
+  // Clamp to sane range — user could still type 150 (super-performer) but
+  // 0 or negative would zero out the line silently, which is worse UX than
+  // clamping to 1% minimum.
+  const clamped = Math.max(1, Math.min(150, p));
+  return adj * (clamped / 100);
+}
+
 // ============================================================
 // ELEMENT CALCULATIONS
 // ============================================================
@@ -272,7 +302,14 @@ export function variableElementTmu(element, factor = 0.5) {
  * @returns {{ adjusted_uph: number, hours_per_day: number, fte: number, headcount: number, daily_cost: number }}
  */
 export function computeAnalysisLine(params) {
-  const adjUph = adjustedUph(params.base_uph || 0, params.pfd_pct || 0);
+  // Productivity factor defaults to 100 (no effect) if not provided, so legacy
+  // callers see identical numbers. Planning-ready analyses should supply
+  // params.productivity_pct in the 85–95 range.
+  const adjUph = effectiveUph(
+    params.base_uph || 0,
+    params.pfd_pct || 0,
+    params.productivity_pct == null ? 100 : params.productivity_pct,
+  );
   const hoursPerDay = adjUph > 0 ? (params.daily_volume || 0) / adjUph : 0;
   const shiftHrs = params.shift_hours || 8;
   const fte = shiftHrs > 0 ? hoursPerDay / shiftHrs : 0;
@@ -332,7 +369,11 @@ export function computeAnalysisSummary(lines, operatingDays = DEFAULT_OPERATING_
  * @returns {{ adjusted_uph: number, daily_volume: number, hours_per_day: number, fte: number }}
  */
 export function computeWorkflowStep(params) {
-  const adjUph = adjustedUph(params.base_uph || 0, params.pfd_pct || 0);
+  const adjUph = effectiveUph(
+    params.base_uph || 0,
+    params.pfd_pct || 0,
+    params.productivity_pct == null ? 100 : params.productivity_pct,
+  );
   const dailyVol = (params.target_volume || 0) * (params.volume_ratio ?? 1);
   const hoursPerDay = adjUph > 0 ? dailyVol / adjUph : 0;
   const fte = (params.shift_hours || 8) > 0 ? hoursPerDay / (params.shift_hours || 8) : 0;

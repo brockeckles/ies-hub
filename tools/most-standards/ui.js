@@ -14,8 +14,8 @@ import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../
 // button is a convenience trigger rather than a discrete compute step, so a
 // "clean/dirty" gate would be misleading here. Revisit if/when MOST gains a
 // heavier recompute path (MOST B4 productivity factor, maybe).
-import * as calc from './calc.js?v=20260419-uF';
-import * as api from './api.js?v=20260418-sM';
+import * as calc from './calc.js?v=20260420-vE';
+import * as api from './api.js?v=20260420-vE';
 import { getMostTplName, getMostTplBaseUph, getMostTplTmuTotal, getMostElName, getMostElSequence, getMostElTmu } from './types.js?v=20260418-sM';
 
 // ============================================================
@@ -95,12 +95,15 @@ async function loadSavedScenarios() {
 function analysisRowToScenario(row) {
   const data = (row.analysis_data && typeof row.analysis_data === 'object') ? row.analysis_data : {};
   const lines = data.lines || [];
+  // productivity_pct is stashed inside analysis_data jsonb (no DB column).
+  const productivity = data.productivity_pct == null ? 90 : Number(data.productivity_pct);
   // Recompute summary so display KPIs always match current calc engine
   const computed = lines.map(line => ({
     ...line,
     ...calc.computeAnalysisLine({
       base_uph: line.base_uph,
       pfd_pct: row.pfd_pct,
+      productivity_pct: productivity,
       daily_volume: line.daily_volume,
       shift_hours: row.shift_hours,
       hourly_rate: line.hourly_rate || row.hourly_rate,
@@ -122,6 +125,7 @@ function analysisRowToScenario(row) {
     annualCost: summary.annualCost,
     data: {
       pfd_pct: row.pfd_pct,
+      productivity_pct: productivity,
       shift_hours: row.shift_hours,
       operating_days: row.operating_days || 250,
       hourly_rate: row.hourly_rate,
@@ -958,12 +962,17 @@ function renderEditor() {
 function renderAnalysis() {
   const lines = analysis.lines || [];
   const pfd = analysis.pfd_pct || 14;
+  // Productivity factor: % of engineered standard the operation actually
+  // runs at. Default 90% (planning convention) when the analysis hasn't set
+  // one explicitly. 100% = pure engineered, unachievable in practice.
+  const productivity = analysis.productivity_pct == null ? 90 : analysis.productivity_pct;
 
   // Compute derived fields for display
   const computedLines = lines.map(line => {
     const derived = calc.computeAnalysisLine({
       base_uph: line.base_uph,
       pfd_pct: pfd,
+      productivity_pct: productivity,
       daily_volume: line.daily_volume,
       shift_hours: analysis.shift_hours,
       hourly_rate: line.hourly_rate || analysis.hourly_rate,
@@ -985,7 +994,7 @@ function renderAnalysis() {
     </div>
 
     <!-- Analysis Parameters -->
-    <div style="display:grid; grid-template-columns: repeat(5, 1fr); gap:12px; margin-bottom:20px;">
+    <div style="display:grid; grid-template-columns: repeat(6, 1fr); gap:12px; margin-bottom:20px;">
       <div>
         <label class="cm-form-label">PFD Allowance</label>
         <select class="hub-select" id="most-pfd-select">
@@ -994,8 +1003,12 @@ function renderAnalysis() {
         </select>
       </div>
       <div>
-        <label class="cm-form-label">PFD %</label>
+        <label class="cm-form-label" title="Personal + Fatigue + Delay allowance, applied on top of the MOST standard (formula: adjUPH = baseUPH × 100/(100+PFD%))">PFD %</label>
         <input class="hub-input" type="number" value="${pfd}" step="1" id="most-pfd-input" data-param="pfd_pct" />
+      </div>
+      <div>
+        <label class="cm-form-label" title="Productivity factor (% to standard). 100% = engineered MOST (unattainable in practice). Typical trained operations: 85–95%. Applied AFTER PFD.">Productivity %</label>
+        <input class="hub-input" type="number" value="${productivity}" step="1" min="1" max="150" data-param="productivity_pct" title="Typical 85–95% for trained operations" />
       </div>
       <div>
         <label class="cm-form-label">Shift Hours</label>
@@ -1151,12 +1164,14 @@ function renderSavedScenarios() {
 function renderWorkflowComposer() {
   const steps = workflow.steps || [];
   const pfd = workflow.pfd_pct || 14;
+  const productivity = workflow.productivity_pct == null ? 100 : workflow.productivity_pct;
 
   // Compute derived fields
   const computedSteps = steps.map(step => {
     const derived = calc.computeWorkflowStep({
       base_uph: step.base_uph,
       pfd_pct: pfd,
+      productivity_pct: productivity,
       target_volume: workflow.target_volume_per_day,
       volume_ratio: step.volume_ratio ?? 1,
       shift_hours: workflow.shift_hours,
@@ -1567,10 +1582,12 @@ function handleAction(action, idx) {
 
 function pushToCostModel() {
   const pfd = analysis.pfd_pct || 14;
+  const productivity = analysis.productivity_pct == null ? 90 : analysis.productivity_pct;
   const computedLines = analysis.lines.map(line => {
     const derived = calc.computeAnalysisLine({
       base_uph: line.base_uph,
       pfd_pct: pfd,
+      productivity_pct: productivity,
       daily_volume: line.daily_volume,
       shift_hours: analysis.shift_hours,
       hourly_rate: line.hourly_rate || analysis.hourly_rate,
@@ -1831,6 +1848,7 @@ async function saveCurrentScenario() {
       ...calc.computeAnalysisLine({
         base_uph: line.base_uph,
         pfd_pct: analysis.pfd_pct || 14,
+        productivity_pct: analysis.productivity_pct == null ? 90 : analysis.productivity_pct,
         daily_volume: line.daily_volume,
         shift_hours: analysis.shift_hours,
         hourly_rate: line.hourly_rate || analysis.hourly_rate,
@@ -1894,10 +1912,12 @@ async function deleteScenario(idx) {
 async function exportAnalysisToXlsx() {
   const exp = await import('../../shared/export.js?v=20260418-sM');
   const pfd = analysis.pfd_pct || 14;
+  const productivity = analysis.productivity_pct == null ? 90 : analysis.productivity_pct;
   const lineRows = (analysis.lines || []).map(line => {
     const computed = calc.computeAnalysisLine({
       base_uph: line.base_uph,
       pfd_pct: pfd,
+      productivity_pct: productivity,
       daily_volume: line.daily_volume,
       shift_hours: analysis.shift_hours,
       hourly_rate: line.hourly_rate || analysis.hourly_rate,
@@ -1906,14 +1926,14 @@ async function exportAnalysisToXlsx() {
       activity: line.activity_name || line.template_name || 'Activity',
       base_uph: line.base_uph || 0,
       pfd_pct: pfd,
-      effective_uph: computed.effective_uph || 0,
+      productivity_pct: productivity,
+      effective_uph: computed.adjusted_uph || 0,
       daily_volume: line.daily_volume || 0,
       hours_per_day: computed.hours_per_day || 0,
       headcount: computed.headcount || 0,
-      ftes: computed.ftes || 0,
+      ftes: computed.fte || 0,
       hourly_rate: line.hourly_rate || analysis.hourly_rate || 0,
       daily_cost: computed.daily_cost || 0,
-      annual_cost: computed.annual_cost || 0,
     };
   });
 
@@ -1930,6 +1950,7 @@ async function exportAnalysisToXlsx() {
     { metric: 'Daily Cost', value: summary.dailyCost },
     { metric: 'Annual Cost', value: summary.annualCost },
     { metric: 'PFD %', value: pfd },
+    { metric: 'Productivity %', value: productivity },
     { metric: 'Shift Hours', value: analysis.shift_hours },
     { metric: 'Operating Days/yr', value: analysis.operating_days || 250 },
     { metric: 'Default Hourly Rate', value: analysis.hourly_rate || 0 },

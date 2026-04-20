@@ -194,7 +194,12 @@ export async function saveAnalysis(analysis) {
     operating_days: analysis.operating_days,
     hourly_rate: analysis.hourly_rate,
     allowance_profile_id: analysis.allowance_profile_id || null,
-    analysis_data: { lines: analysis.lines },
+    // productivity_pct has no dedicated column — stash it inside the jsonb
+    // payload so we don't need a schema migration. Loader maps it back out.
+    analysis_data: {
+      lines: analysis.lines,
+      productivity_pct: analysis.productivity_pct == null ? null : Number(analysis.productivity_pct),
+    },
   };
 
   if (analysis.id) {
