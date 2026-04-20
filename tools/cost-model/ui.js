@@ -1280,7 +1280,8 @@ function renderFacilityCostCard() {
   const market = model.projectDetails?.market;
   const fr = (refData.facilityRates || []).find(r => r.market_id === market);
   const ur = (refData.utilityRates || []).find(r => r.market_id === market);
-  const bd = calc.facilityCostBreakdown(model.facility || {}, fr, ur);
+  const tiAmort = calc.tiAmortAnnual(model.equipmentLines || [], model.projectDetails?.contractTerm || 5);
+  const bd = calc.facilityCostBreakdown(model.facility || {}, fr, ur, { tiAmort });
 
   if (bd.total === 0 && !market) {
     return `<div class="hub-card mt-4" style="background: var(--ies-gray-50);"><p class="text-body text-muted">Select a market in Setup to see facility cost calculations.</p></div>`;
@@ -1297,6 +1298,13 @@ function renderFacilityCostCard() {
           <tr><td>Property Tax</td><td class="cm-num">${(fr?.tax_rate_psf_yr || 0).toFixed(2)}</td><td class="cm-num">${calc.formatCurrency(bd.tax)}</td></tr>
           <tr><td>Insurance</td><td class="cm-num">${(fr?.insurance_rate_psf_yr || 0).toFixed(2)}</td><td class="cm-num">${calc.formatCurrency(bd.insurance)}</td></tr>
           <tr><td>Utilities</td><td class="cm-num">${((ur?.avg_monthly_per_sqft || 0) * 12).toFixed(2)}</td><td class="cm-num">${calc.formatCurrency(bd.utility)}</td></tr>
+          ${bd.tiAmort > 0 ? `
+            <tr title="TI (Tenant Improvement) items from Equipment — dock levelers, office build-out, CCTV, etc. — amortize through rent over the contract term per Asset Defaults Guidance.">
+              <td>TI Amortization <span style="font-size:11px;color:var(--ies-gray-400);">(contract term)</span></td>
+              <td class="cm-num">${((bd.tiAmort / ((model.facility?.totalSqft || 1))) || 0).toFixed(2)}</td>
+              <td class="cm-num">${calc.formatCurrency(bd.tiAmort)}</td>
+            </tr>
+          ` : ''}
           <tr class="cm-total-row"><td>Total</td><td></td><td class="cm-num">${calc.formatCurrency(bd.total)}</td></tr>
         </tbody>
       </table>
@@ -3326,8 +3334,9 @@ function renderPricing() {
   const fr = (refData.facilityRates || []).find(r => r.market_id === market);
   const ur = (refData.utilityRates || []).find(r => r.market_id === market);
   const opHrs = calc.operatingHours(model.shifts || {});
-  const facilityCost = calc.totalFacilityCost(model.facility || {}, fr, ur);
   const contractYears = model.projectDetails?.contractTerm || 5;
+  const tiAmort = calc.tiAmortAnnual(model.equipmentLines || [], contractYears);
+  const facilityCost = calc.totalFacilityCost(model.facility || {}, fr, ur, { tiAmort });
 
   // Prep startup lines with annual_amort
   const startupWithAmort = (model.startupLines || []).map(l => ({

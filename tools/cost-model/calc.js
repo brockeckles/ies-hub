@@ -977,12 +977,24 @@ export function totalVasCost(lines) {
 
 /**
  * Annual facility cost from square footage and market rates.
+ *
+ * Brock 2026-04-20 (Asset Defaults Guidance doc): TI (Tenant Improvement)
+ * upfront outlays — dock levelers, office build-out, break room, CCTV —
+ * don't flow as equipment opex or capital. The reference-model design
+ * intent is that TI amortizes through rent over the lease term. This
+ * helper accepts an optional `tiAmort` (annual TI amortization = TI
+ * upfront ÷ contract term years) and folds it into total facility cost
+ * as an additional line. Callers that don't supply tiAmort get the
+ * classic lease+cam+tax+insurance+utility sum (backward compat).
+ *
  * @param {import('./types.js?v=20260418-sK').FacilityConfig} facility
  * @param {import('./types.js?v=20260418-sK').FacilityRate} [facilityRate]
  * @param {import('./types.js?v=20260418-sK').UtilityRate} [utilityRate]
+ * @param {Object} [opts]
+ * @param {number} [opts.tiAmort] — annual TI amortization (fold into facility)
  * @returns {number}
  */
-export function totalFacilityCost(facility, facilityRate, utilityRate) {
+export function totalFacilityCost(facility, facilityRate, utilityRate, opts = {}) {
   const sqft = facility.totalSqft || 0;
   const fr = facilityRate || {};
   const ur = utilityRate || {};
@@ -992,18 +1004,22 @@ export function totalFacilityCost(facility, facilityRate, utilityRate) {
   const tax = sqft * (fr.tax_rate_psf_yr || 0);
   const insurance = sqft * (fr.insurance_rate_psf_yr || 0);
   const utility = sqft * 12 * (ur.avg_monthly_per_sqft || 0);
+  const tiAmort = Math.max(0, Number(opts.tiAmort) || 0);
 
-  return lease + cam + tax + insurance + utility;
+  return lease + cam + tax + insurance + utility + tiAmort;
 }
 
 /**
- * Facility cost breakdown by component.
+ * Facility cost breakdown by component. tiAmort exposed so the UI can
+ * surface "TI Amortization" as a distinct line under rent.
  * @param {import('./types.js?v=20260418-sK').FacilityConfig} facility
  * @param {import('./types.js?v=20260418-sK').FacilityRate} [facilityRate]
  * @param {import('./types.js?v=20260418-sK').UtilityRate} [utilityRate]
- * @returns {{ lease: number, cam: number, tax: number, insurance: number, utility: number, total: number }}
+ * @param {Object} [opts]
+ * @param {number} [opts.tiAmort] — annual TI amortization
+ * @returns {{ lease: number, cam: number, tax: number, insurance: number, utility: number, tiAmort: number, total: number }}
  */
-export function facilityCostBreakdown(facility, facilityRate, utilityRate) {
+export function facilityCostBreakdown(facility, facilityRate, utilityRate, opts = {}) {
   const sqft = facility.totalSqft || 0;
   const fr = facilityRate || {};
   const ur = utilityRate || {};
@@ -1013,8 +1029,25 @@ export function facilityCostBreakdown(facility, facilityRate, utilityRate) {
   const tax = sqft * (fr.tax_rate_psf_yr || 0);
   const insurance = sqft * (fr.insurance_rate_psf_yr || 0);
   const utility = sqft * 12 * (ur.avg_monthly_per_sqft || 0);
+  const tiAmort = Math.max(0, Number(opts.tiAmort) || 0);
 
-  return { lease, cam, tax, insurance, utility, total: lease + cam + tax + insurance + utility };
+  return {
+    lease, cam, tax, insurance, utility, tiAmort,
+    total: lease + cam + tax + insurance + utility + tiAmort,
+  };
+}
+
+/**
+ * Convenience: compute annual TI amortization from equipment lines + contract term.
+ * Returns 0 when there are no TI items or contract term isn't set.
+ * @param {import('./types.js?v=20260418-sK').EquipmentLine[]} equipmentLines
+ * @param {number} contractYears
+ * @returns {number}
+ */
+export function tiAmortAnnual(equipmentLines, contractYears) {
+  const y = Math.max(1, Number(contractYears) || 5);
+  const upfront = totalEquipmentTiUpfront(equipmentLines || []);
+  return upfront > 0 ? upfront / y : 0;
 }
 
 // ============================================================
@@ -1069,7 +1102,9 @@ export function computeSummary(params) {
   const laborOpts = { operatingHours: opHrs, ...(params.laborOpts || {}) };
 
   const laborCost = totalLaborCost(params.laborLines, params.indirectLaborLines, laborOpts);
-  const facilityCost = totalFacilityCost(params.facility, params.facilityRate, params.utilityRate);
+  // Brock 2026-04-20 — TI upfront rolls into facility rent over the lease term.
+  const tiAmort = tiAmortAnnual(params.equipmentLines, params.contractYears);
+  const facilityCost = totalFacilityCost(params.facility, params.facilityRate, params.utilityRate, { tiAmort });
   // Equipment seasonal uplift: when caller supplies the MLV (Monthly Labor
   // View output), each line's peak_markup_pct flows through via overflow
   // per calendar month. Without MLV, behavior reduces to the legacy
