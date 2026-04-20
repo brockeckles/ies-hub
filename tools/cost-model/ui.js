@@ -6029,8 +6029,14 @@ let catalogCache = null;
 
 /**
  * Find a catalog entry by equipment_name. Returns null if no match.
- * Uses normalized lowercase compare + substring fallback so "Reach Truck" matches
- * a catalog entry named "Reach Truck (300\")". Loads the catalog lazily.
+ * Matching strategy (in order of precedence):
+ *   1. Exact case-insensitive match
+ *   2. Substring match either direction ("Reach Truck" ⊂ "Reach Truck 300\"")
+ *   3. Significant-token overlap — rank by % of line's significant tokens
+ *      found in the catalog name. "Sit-down Forklift" matches
+ *      "Sit-Down Counterbalance Forklift" (both tokens found) and scores
+ *      above "Reach Truck" (no overlap).
+ * Loads the catalog lazily.
  */
 async function findCatalogMatch(equipmentName) {
   if (!equipmentName) return null;
@@ -6040,15 +6046,35 @@ async function findCatalogMatch(equipmentName) {
   }
   const items = Array.isArray(catalogCache) ? catalogCache : [];
   const q = equipmentName.toLowerCase().trim();
-  // Exact match first
+  // 1. Exact match
   let hit = items.find(i => (i.name || '').toLowerCase().trim() === q);
   if (hit) return hit;
-  // Substring match (either direction): catalog name contains ours OR ours contains catalog name
+  // 2. Substring either direction
   hit = items.find(i => {
     const n = (i.name || '').toLowerCase();
     return n && (n.includes(q) || q.includes(n));
   });
-  return hit || null;
+  if (hit) return hit;
+  // 3. Token-overlap — pick the catalog entry with the highest fraction of
+  //    significant tokens matched. Filter out "fluff" words so common
+  //    descriptors don't inflate false positives.
+  const STOPWORDS = new Set(['the','a','an','and','or','of','in','for','to','with','per','unit','system','each','pack','mobile','portable']);
+  const tokens = q.split(/[\s\-_,\/()]+/).filter(t => t.length >= 3 && !STOPWORDS.has(t));
+  if (tokens.length === 0) return null;
+  let best = null;
+  let bestScore = 0;
+  for (const item of items) {
+    const name = (item.name || '').toLowerCase();
+    if (!name) continue;
+    const hits = tokens.filter(t => name.includes(t)).length;
+    const score = hits / tokens.length;
+    // Require ≥50% token overlap so noise matches get rejected.
+    if (score >= 0.5 && score > bestScore) {
+      best = item;
+      bestScore = score;
+    }
+  }
+  return best;
 }
 
 /**
