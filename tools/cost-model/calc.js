@@ -14,7 +14,7 @@
  * @module tools/cost-model/calc
  */
 
-import * as monthly from './calc.monthly.js?v=20260420-vN';
+import * as monthly from './calc.monthly.js?v=20260421-vO';
 
 // ============================================================
 // MARGIN / GROSS-UP
@@ -1914,11 +1914,71 @@ export function validateModel(model, opts = {}) {
   }
 
   // Financial
-  if ((fin.targetMargin || 0) <= 0) {
+  const targetMarginPct = Number(fin.targetMargin || 0);
+  if (targetMarginPct <= 0) {
     warnings.push({ level: 'warning', area: 'financial', message: 'Target margin is 0% — revenue will equal cost' });
   }
-  if ((fin.targetMargin || 0) > 50) {
-    warnings.push({ level: 'info', area: 'financial', message: `Target margin of ${fin.targetMargin}% is unusually high for 3PL` });
+  if (targetMarginPct > 50) {
+    warnings.push({ level: 'info', area: 'financial', message: `Target margin of ${targetMarginPct}% is unusually high for 3PL` });
+  }
+
+  // M3 reframed (2026-04-21): achieved margin vs target, driven by overrides.
+  // Under pure cost-plus (no overrides), achieved ≡ target by construction —
+  // validator is silent. When any bucket carries an override, we compute the
+  // bucket-weighted achieved margin and flag 2pp / 5pp shortfalls.
+  //
+  // Thresholds per MD4 recommendation: warn at −2pp, error at −5pp.
+  const buckets = model.pricingBuckets || [];
+  if (buckets.length > 0 && targetMarginPct > 0) {
+    const hasAnyOverride = buckets.some(b => Number(b.rate) > 0);
+    if (hasAnyOverride) {
+      // Re-derive enriched buckets against current cost rollup so the
+      // validator matches what the Pricing Schedule UI displays.
+      const hrsForValidator = opts.operatingHours || operatingHours(model.shifts || {});
+      const startupWithAmort = (model.startupLines || []).map(l => ({
+        ...l,
+        annual_amort: (l.one_time_cost || 0) / Math.max(1, pd.contractTerm || 5),
+      }));
+      // Facility cost may be unknown in the validator context (we don't have
+      // refData here). Pass 0 — any facility routing noise is dwarfed by the
+      // override delta we're checking against.
+      const bucketCosts = computeBucketCosts({
+        buckets,
+        laborLines: model.laborLines || [],
+        indirectLaborLines: model.indirectLaborLines || [],
+        equipmentLines: model.equipmentLines || [],
+        overheadLines: model.overheadLines || [],
+        vasLines: model.vasLines || [],
+        startupLines: startupWithAmort,
+        facilityCost: 0,
+        operatingHours: hrsForValidator,
+        facilityBucketId: fin.facilityBucketId || null,
+      });
+      const enriched = enrichBucketsWithDerivedRates({
+        buckets, bucketCosts,
+        marginPct: targetMarginPct / 100,
+        volumeLines: model.volumeLines || [],
+      });
+      const impact = computeOverrideImpact(enriched);
+      const totalCost = Object.entries(bucketCosts).reduce(
+        (s, [k, v]) => (typeof v === 'number' && !k.startsWith('_')) ? s + v : s, 0);
+      const ach = achievedMargin(impact.totalEffectiveRevenue, totalCost) * 100;
+      const deltaPP = ach - targetMarginPct;
+      const overrideCount = impact.overriddenBucketCount;
+      if (deltaPP <= -5) {
+        warnings.push({
+          level: 'error',
+          area: 'financial',
+          message: `Achieved margin ${ach.toFixed(1)}% is ${Math.abs(deltaPP).toFixed(1)}pp below ${targetMarginPct}% target due to ${overrideCount} bucket override${overrideCount === 1 ? '' : 's'}. Review Pricing Schedule.`,
+        });
+      } else if (deltaPP <= -2) {
+        warnings.push({
+          level: 'warning',
+          area: 'financial',
+          message: `Achieved margin ${ach.toFixed(1)}% is ${Math.abs(deltaPP).toFixed(1)}pp below ${targetMarginPct}% target due to ${overrideCount} bucket override${overrideCount === 1 ? '' : 's'}.`,
+        });
+      }
+    }
   }
 
   // Volumes

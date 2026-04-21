@@ -10,10 +10,10 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import * as calc from './calc.js?v=20260421-vU';
+import * as calc from './calc.js?v=20260421-vV';
 import * as api from './api.js?v=20260419-uH';
 import * as scenarios from './calc.scenarios.js?v=20260419-sZ';
-import * as monthlyCalc from './calc.monthly.js?v=20260420-vN';
+import * as monthlyCalc from './calc.monthly.js?v=20260421-vO';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260419-uH';
 
 // ============================================================
@@ -3640,22 +3640,39 @@ function renderPricing() {
     facilityBucketId: model.financial?.facilityBucketId || null,
   });
 
-  const marginPct = (model.financial?.targetMargin || 0) / 100;
+  const targetMarginPct = (model.financial?.targetMargin || 0);
+  const marginPct = targetMarginPct / 100;
   // Sum only real bucket costs — exclude meta keys ('_unassigned', '_facilityOrphan', '_facilityTarget')
   const totalCost = Object.entries(bucketCosts).reduce((s, [k, v]) => (typeof v === 'number' && !k.startsWith('_')) ? s + v : s, 0);
-  const totalRevenue = totalCost * (1 + marginPct);
+  // Reference-aligned gross-up: Revenue = Cost / (1 − m).
+  const mFracGuarded = Math.min(0.999, Math.max(0, marginPct));
+  const totalRecommendedRevenue = totalCost / (1 - mFracGuarded);
 
-  // I-02 — single source of truth: same derivation used by monthly engine.
-  const derivedRates = calc.computeBucketRates({
+  // Single source of truth — enriched buckets carry recommendedRate +
+  // overrideRate + effective rate, matching what the monthly engine reads.
+  const enriched = calc.enrichBucketsWithDerivedRates({
     buckets, bucketCosts, marginPct, volumeLines: model.volumeLines || [],
   });
+  const impact = calc.computeOverrideImpact(enriched);
+
+  // M3 reframed: achieved margin (from effective rates including overrides)
+  // vs target. Only meaningful when at least one override is present.
+  const achievedMarginFrac = calc.achievedMargin(impact.totalEffectiveRevenue, totalCost);
+  const achievedMarginPct  = achievedMarginFrac * 100;
+  const marginDeltaPP      = achievedMarginPct - targetMarginPct; // in pp
+  const hasAnyOverride     = impact.overriddenBucketCount > 0;
+  // Thresholds: warn at 2pp shortfall, error at 5pp (per MD4 recommendation).
+  const m3Level = !hasAnyOverride ? 'ok'
+    : marginDeltaPP <= -5 ? 'error'
+    : marginDeltaPP <= -2 ? 'warn'
+    : 'ok';
 
   return `
     <div class="cm-wide-layout">
     <div class="cm-section-header">
       <div>
         <div class="cm-section-title">Pricing Schedule</div>
-        <div class="cm-section-desc">Rate derivation — each bucket's annual cost rolls up from the Cost lines you've assigned, then divides by volume and applies ${calc.formatPct(model.financial?.targetMargin || 0, 1)} target margin. Edit the bucket taxonomy itself in <strong>Structure → Pricing Buckets</strong>.</div>
+        <div class="cm-section-desc">Recommended rates derived from cost + ${calc.formatPct(targetMarginPct, 1)} target margin (reference-aligned cost-plus: Revenue = Cost / (1 − margin)). Override any rate inline; the Variance column and Summary banner surface the impact.</div>
       </div>
     </div>
 
@@ -3668,48 +3685,107 @@ function renderPricing() {
       </div>
     ` : ''}
 
-    <table class="cm-grid-table">
+    ${buckets.length > 0 ? `
+    <!-- M3 Achieved-vs-Target Margin banner (only when overrides present) -->
+    <div class="cm-margin-banner cm-margin-${m3Level}">
+      <div class="cm-margin-banner-main">
+        <div class="cm-margin-banner-label">
+          ${m3Level === 'error' ? '⚠ Achieved margin below target' : m3Level === 'warn' ? '⚠ Achieved margin below target' : hasAnyOverride ? '✓ Achieved margin on target' : 'No overrides — achieved margin equals target by construction'}
+        </div>
+        <div class="cm-margin-banner-nums">
+          <span class="cm-margin-tile">
+            <span class="cm-margin-tile-label">Target</span>
+            <span class="cm-margin-tile-value">${targetMarginPct.toFixed(1)}%</span>
+          </span>
+          <span class="cm-margin-tile">
+            <span class="cm-margin-tile-label">Achieved</span>
+            <span class="cm-margin-tile-value ${hasAnyOverride && marginDeltaPP < 0 ? 'cm-margin-value-down' : ''}">${achievedMarginPct.toFixed(1)}%</span>
+          </span>
+          <span class="cm-margin-tile">
+            <span class="cm-margin-tile-label">Δ vs target</span>
+            <span class="cm-margin-tile-value ${marginDeltaPP < 0 ? 'cm-margin-value-down' : marginDeltaPP > 0 ? 'cm-margin-value-up' : ''}">${marginDeltaPP >= 0 ? '+' : ''}${marginDeltaPP.toFixed(1)}pp</span>
+          </span>
+          <span class="cm-margin-tile">
+            <span class="cm-margin-tile-label">Overridden buckets</span>
+            <span class="cm-margin-tile-value">${impact.overriddenBucketCount} / ${buckets.length}</span>
+          </span>
+          <span class="cm-margin-tile">
+            <span class="cm-margin-tile-label">Annual rev impact</span>
+            <span class="cm-margin-tile-value ${impact.totalOverrideDelta < 0 ? 'cm-margin-value-down' : impact.totalOverrideDelta > 0 ? 'cm-margin-value-up' : ''}">${impact.totalOverrideDelta === 0 ? '—' : (impact.totalOverrideDelta >= 0 ? '+' : '') + calc.formatCurrency(impact.totalOverrideDelta, { compact: true })}</span>
+          </span>
+        </div>
+      </div>
+    </div>
+    ` : ''}
+
+    <table class="cm-grid-table cm-pricing-schedule">
       <thead>
         <tr>
           <th>Bucket</th>
           <th>Type</th>
-          <th>UOM</th>
           <th class="cm-num">Annual Cost</th>
-          <th class="cm-num">Margin-Applied</th>
           <th class="cm-num">Volume</th>
-          <th class="cm-num">Rate/Unit</th>
+          <th class="cm-num" title="Recommended = Cost / (1 − target margin) / volume. This is what we'd propose to the customer.">Recommended Rate</th>
+          <th class="cm-num" title="Override rate — leave blank to use recommended. Enter a value to reflect negotiation, competitive pressure, or strategic concession.">Override Rate</th>
+          <th class="cm-num" title="Variance of the override against the recommended rate — annual revenue impact at the bucket's volume.">Variance</th>
+          <th style="width:80px;"></th>
         </tr>
       </thead>
       <tbody>
-        ${buckets.map(b => {
+        ${enriched.map((b, idx) => {
           const cost = bucketCosts[b.id] || 0;
-          const withMargin = cost * (1 + marginPct);
-          const d = derivedRates[b.id] || { rate: 0, annualVolume: 0 };
-          const vol = d.annualVolume;
-          // Explicit bucket.rate wins (user set it in the bucket editor);
-          // otherwise fall back to the derived rate so monthly engine matches.
-          const hasExplicit = Number(b.rate) > 0;
-          const rate = hasExplicit ? Number(b.rate) : d.rate;
+          const rec = Number(b.recommendedRate) || 0;
+          const ovr = b._rateSource === 'override' ? Number(b.rate) : null;
+          const vol = Number(b.annualVolume) || 0;
+          const hasVol = vol > 0 || b.type === 'fixed';
+          const uomSuffix = b.type === 'fixed' ? '/mo' : '/' + (b.uom || 'unit');
+          const recDisplay = hasVol ? calc.formatCurrency(rec, { decimals: rec < 10 ? 4 : 2 }) : '—';
+          const variancePerBucket = impact.perBucket.find(p => p.id === b.id) || { deltaAnnual: 0, deltaPct: 0, isOverridden: false };
+          const vClass = variancePerBucket.deltaAnnual < 0 ? 'cm-variance-down' : variancePerBucket.deltaAnnual > 0 ? 'cm-variance-up' : '';
+          const overrideIdx = (model.pricingBuckets || []).findIndex(pb => pb.id === b.id);
           return `
-            <tr>
-              <td style="font-weight:600;">${b.name}</td>
+            <tr${variancePerBucket.isOverridden ? ' class="cm-row-overridden"' : ''}>
+              <td>
+                <div style="font-weight:600;">${b.name}</div>
+                ${b._rateSource === 'override' ? `<div class="cm-row-override-chip">OVERRIDE</div>` : ''}
+              </td>
               <td><span class="hub-badge hub-badge-${b.type === 'fixed' ? 'info' : 'success'}">${b.type}</span></td>
-              <td>${b.type === 'fixed' ? '/month' : '/' + b.uom}</td>
               <td class="cm-num">${calc.formatCurrency(cost)}</td>
-              <td class="cm-num" style="font-weight:700;">${calc.formatCurrency(withMargin)}</td>
-              <td class="cm-num">${vol > 0 ? vol.toLocaleString() : '—'}</td>
-              <td class="cm-num" style="font-weight:700; color: var(--ies-blue);">
-                ${vol > 0 || b.type === 'fixed' ? calc.formatCurrency(rate, { decimals: 2 }) : '—'}
-                ${!hasExplicit && (vol > 0 || b.type === 'fixed') ? `<span class="cm-rate-source" title="Derived from assigned costs + margin. Set an explicit rate on the bucket to override.">derived</span>` : ''}
+              <td class="cm-num">${hasVol ? (b.type === 'fixed' ? '12 mo' : vol.toLocaleString() + ' ' + (b.uom || '')) : '—'}</td>
+              <td class="cm-num" style="color:var(--ies-gray-600);">${recDisplay}<span class="cm-uom-tick">${uomSuffix}</span></td>
+              <td class="cm-num">
+                <input type="number" step="0.01" min="0"
+                  class="hub-input cm-override-input"
+                  value="${ovr != null ? ovr : ''}"
+                  placeholder="${hasVol ? rec.toFixed(rec < 10 ? 4 : 2) : '—'}"
+                  data-array="pricingBuckets" data-idx="${overrideIdx}" data-field="rate" data-type="number"
+                  title="Leave blank to use recommended rate. Enter a value to override." />
+              </td>
+              <td class="cm-num ${vClass}" style="font-weight:600;">
+                ${variancePerBucket.isOverridden
+                  ? `${variancePerBucket.deltaPct >= 0 ? '+' : ''}${(variancePerBucket.deltaPct * 100).toFixed(1)}%
+                     <div class="cm-variance-abs">${variancePerBucket.deltaAnnual >= 0 ? '+' : ''}${calc.formatCurrency(variancePerBucket.deltaAnnual, { compact: true })}/yr</div>`
+                  : '—'
+                }
+              </td>
+              <td class="cm-num">
+                ${variancePerBucket.isOverridden
+                  ? `<button class="hub-btn hub-btn-xs hub-btn-ghost" data-cm-action="reset-override" data-idx="${overrideIdx}" title="Clear override, revert to recommended">↺ Reset</button>`
+                  : ''
+                }
               </td>
             </tr>
           `;
         }).join('')}
         <tr class="cm-total-row">
-          <td colspan="3">Total</td>
+          <td colspan="2">Total</td>
           <td class="cm-num">${calc.formatCurrency(totalCost)}</td>
-          <td class="cm-num">${calc.formatCurrency(totalRevenue)}</td>
-          <td></td>
+          <td class="cm-num"></td>
+          <td class="cm-num" style="color:var(--ies-gray-600);">${calc.formatCurrency(impact.totalRecommendedRevenue)}/yr</td>
+          <td class="cm-num" style="font-weight:700;">${calc.formatCurrency(impact.totalEffectiveRevenue)}/yr</td>
+          <td class="cm-num ${impact.totalOverrideDelta < 0 ? 'cm-variance-down' : impact.totalOverrideDelta > 0 ? 'cm-variance-up' : ''}" style="font-weight:700;">
+            ${impact.totalOverrideDelta === 0 ? '—' : (impact.totalOverrideDelta >= 0 ? '+' : '') + calc.formatCurrency(impact.totalOverrideDelta, { compact: true }) + '/yr'}
+          </td>
           <td></td>
         </tr>
       </tbody>
@@ -3750,6 +3826,31 @@ function renderPricing() {
       .cm-rate-source { display:inline-block; margin-left:6px; padding:1px 6px; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.3px; color:var(--ies-gray-500); background:var(--ies-gray-100); border-radius:8px; cursor:help; }
       .cm-bucket-unassigned { background:rgba(255,193,7,0.1) !important; border-left:2px solid var(--ies-orange); }
       .cm-bucket-select { width:140px; font-size:12px; padding:3px 4px; }
+      /* M3 achieved-vs-target margin banner */
+      .cm-margin-banner { padding:14px 18px; margin-bottom:16px; border-radius:8px; border:1px solid var(--ies-gray-200); background:#fff; }
+      .cm-margin-banner.cm-margin-ok { border-left:3px solid var(--ies-green, #20c997); }
+      .cm-margin-banner.cm-margin-warn { border-left:3px solid var(--ies-amber, #f59e0b); background:rgba(245,158,11,0.04); }
+      .cm-margin-banner.cm-margin-error { border-left:3px solid var(--ies-red, #dc3545); background:rgba(220,53,69,0.05); }
+      .cm-margin-banner-main { display:flex; flex-direction:column; gap:10px; }
+      .cm-margin-banner-label { font-size:13px; font-weight:600; color:var(--ies-gray-700); }
+      .cm-margin-banner-nums { display:flex; gap:24px; flex-wrap:wrap; }
+      .cm-margin-tile { display:flex; flex-direction:column; gap:2px; }
+      .cm-margin-tile-label { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.4px; color:var(--ies-gray-500); }
+      .cm-margin-tile-value { font-size:20px; font-weight:700; color:var(--ies-gray-900); line-height:1.1; }
+      .cm-margin-value-down { color:var(--ies-red, #dc3545); }
+      .cm-margin-value-up { color:var(--ies-green, #0d9668); }
+      /* Pricing Schedule 3-col */
+      .cm-pricing-schedule .cm-override-input { width:110px; font-size:13px; padding:4px 6px; text-align:right; font-weight:600; }
+      .cm-pricing-schedule .cm-override-input:placeholder-shown { font-weight:400; color:var(--ies-gray-500); }
+      .cm-pricing-schedule .cm-row-overridden { background:rgba(245,158,11,0.06); }
+      .cm-pricing-schedule .cm-row-override-chip { display:inline-block; margin-top:2px; padding:1px 6px; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; color:var(--ies-amber, #f59e0b); background:rgba(245,158,11,0.12); border-radius:6px; }
+      .cm-pricing-schedule .cm-variance-down { color:var(--ies-red, #dc3545); }
+      .cm-pricing-schedule .cm-variance-up { color:var(--ies-green, #0d9668); }
+      .cm-pricing-schedule .cm-variance-abs { font-size:11px; font-weight:500; color:var(--ies-gray-500); margin-top:2px; }
+      .cm-pricing-schedule .cm-uom-tick { font-size:10px; color:var(--ies-gray-400); margin-left:2px; font-weight:400; }
+      .hub-btn-xs { padding:2px 8px; font-size:11px; border-radius:4px; }
+      .hub-btn-ghost { background:transparent; color:var(--ies-gray-600); border:1px solid var(--ies-gray-300); }
+      .hub-btn-ghost:hover { background:var(--ies-gray-50); }
     </style>
     </div>
   `;
@@ -6302,6 +6403,16 @@ function handleAction(action, idx, btn) {
     case 'jump-to-buckets':
       navigateSection('pricingBuckets');
       return;
+    case 'reset-override': {
+      // Clear the override rate on a pricing bucket → reverts to recommended.
+      // idx is the position in model.pricingBuckets.
+      const b = (model.pricingBuckets || [])[idx];
+      if (b) {
+        b.rate = 0;
+        b.overrideReason = null;
+      }
+      break;
+    }
     case 'launch-wsc': {
       // Brock 2026-04-20: cross-tool linkage was broken in this direction.
       // The bus.emit was happening BEFORE the hash change to WSC, and WSC's
