@@ -6,7 +6,7 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sP';
-import * as calc from './calc.js?v=20260418-sP';
+import * as calc from './calc.js?v=20260421-tJ';
 import * as api from './api.js?v=20260419-tG';
 
 /** @type {HTMLElement|null} */

@@ -423,7 +423,19 @@ export function formatDateTime(dateStr) {
 
 /** @param {string} action */
 export function actionBadgeColor(action) {
-  const colors = { create: '#16a34a', update: '#2563eb', delete: '#dc2626' };
+  const colors = {
+    create: '#16a34a',
+    insert: '#16a34a',
+    update: '#2563eb',
+    delete: '#dc2626',
+    link:   '#7c3aed',
+    unlink: '#6b7280',
+    // Margin-override trail (CM 2026-04-21). Amber family so these stand out
+    // from routine CRUD and are visually grouped with each other.
+    'price-override':        '#d97706',
+    'price-override-reset':  '#b45309',
+    'price-override-reason': '#f59e0b',
+  };
   return colors[action] || '#6b7280';
 }
 

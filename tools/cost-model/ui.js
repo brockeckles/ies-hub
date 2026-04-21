@@ -398,6 +398,15 @@ let _selectedLaborIdx = 0;
 let _indirectBreakdownCache = null;
 
 /**
+ * Snapshot of the Pricing Schedule's enriched buckets at the moment the
+ * section last rendered. Feeds the override-audit listener so audit rows
+ * include the recommended rate the user actually saw on screen — not
+ * whatever the model happens to compute later. Cleared on each renderPricing.
+ * @type {{ enriched: Array, bucketCosts: Record<string,number>, ts: number } | null}
+ */
+let _pricingAuditSnapshot = null;
+
+/**
  * Monthly Labor View year scope — 0 = "All years", 1..N = that specific
  * contract year. Default Y1 because the intra-year seasonality pattern
  * is the primary signal; the full contract view conflates seasonality
@@ -3747,6 +3756,10 @@ function renderPricing() {
     buckets, bucketCosts, marginPct, volumeLines: model.volumeLines || [],
   });
   const impact = calc.computeOverrideImpact(enriched);
+  // Snapshot for the override-audit listener — see bindSectionEvents. The
+  // audit row should report what the user SAW, not what gets recomputed
+  // later, so we freeze the enrichment and the bucket-cost rollup here.
+  _pricingAuditSnapshot = { enriched, bucketCosts, ts: Date.now() };
 
   // M3 reframed: achieved margin (from effective rates including overrides)
   // vs target. Only meaningful when at least one override is present.
@@ -4841,6 +4854,87 @@ function bindSectionEvents(section, container) {
         }
       });
     }
+  }
+
+  // Pricing Schedule — override-audit listeners (2026-04-21).
+  // Every commit of an override rate or an override reason fires a
+  // fire-and-forget audit-log write. The generic data-field binder above
+  // mutates model state on each keystroke; we attach a parallel `change`
+  // listener here that runs on blur/commit so we don't flood audit_log
+  // with one row per keystroke.
+  if (section === 'pricing' && model?.id) {
+    // Capture the pre-edit shape for every input/select so the audit row
+    // can diff against what the user started with on this render.
+    /** @type {Map<HTMLElement, number|null>} */
+    const rateBefore = new Map();
+    /** @type {Map<HTMLElement, string|null>} */
+    const reasonBefore = new Map();
+    container.querySelectorAll('.cm-override-input').forEach(input => {
+      const idx = parseInt(input.dataset.idx);
+      const bucket = (model.pricingBuckets || [])[idx];
+      if (!bucket) return;
+      const before = (input.defaultValue === '' || input.defaultValue == null)
+        ? null
+        : parseFloat(input.defaultValue);
+      rateBefore.set(input, Number.isFinite(before) ? before : null);
+    });
+    container.querySelectorAll('.cm-override-reason-select').forEach(sel => {
+      const idx = parseInt(sel.dataset.idx);
+      const bucket = (model.pricingBuckets || [])[idx];
+      if (!bucket) return;
+      reasonBefore.set(sel, bucket.overrideReason || null);
+    });
+    container.querySelectorAll('.cm-override-input').forEach(input => {
+      input.addEventListener('change', () => {
+        const idx = parseInt(input.dataset.idx);
+        const bucket = (model.pricingBuckets || [])[idx];
+        if (!bucket) return;
+        const before = rateBefore.get(input);
+        const after  = input.value === '' ? null : parseFloat(input.value);
+        const afterN = Number.isFinite(after) ? after : null;
+        const beforeN = before == null ? null : Number(before);
+        if (beforeN === afterN) return; // no effective change
+        const eb = (_pricingAuditSnapshot?.enriched || []).find(e => e.id === bucket.id);
+        writeOverrideAuditEvent({
+          action: 'price-override',
+          bucket,
+          oldRate: beforeN,
+          newRate: afterN,
+          recommendedRate: eb ? Number(eb.recommendedRate) || 0 : null,
+          oldReason: bucket.overrideReason || null,
+          newReason: bucket.overrideReason || null,
+        });
+        // Refresh the Pricing Schedule so the Variance column, OVERRIDE chip,
+        // Reset button, M3 banner, and Override Implications tiles all reflect
+        // the committed value live (the generic input handler doesn't re-render
+        // because shouldRerender('rate') is false, for good reason — every
+        // keystroke re-rendering the whole section would be janky).
+        renderSection();
+      });
+    });
+    container.querySelectorAll('.cm-override-reason-select').forEach(sel => {
+      sel.addEventListener('change', () => {
+        const idx = parseInt(sel.dataset.idx);
+        const bucket = (model.pricingBuckets || [])[idx];
+        if (!bucket) return;
+        const before = reasonBefore.get(sel);
+        const after  = sel.value || null;
+        if (before === after) return;
+        const eb = (_pricingAuditSnapshot?.enriched || []).find(e => e.id === bucket.id);
+        writeOverrideAuditEvent({
+          action: 'price-override-reason',
+          bucket,
+          oldRate: Number(bucket.rate) || null,
+          newRate: Number(bucket.rate) || null,
+          recommendedRate: eb ? Number(eb.recommendedRate) || 0 : null,
+          oldReason: before,
+          newReason: after,
+        });
+        // Re-render so the override-reason chip on the row reflects the new
+        // reason immediately (chip rendering is driven by bucket.overrideReason).
+        renderSection();
+      });
+    });
   }
 
   // Direct-labor Volume source picker — dropdown of volumeLines + "Custom".
@@ -6502,6 +6596,61 @@ function syncDerivedTargetMargin() {
 }
 
 // ============================================================
+// OVERRIDE AUDIT TRAIL (2026-04-21)
+// ============================================================
+// Every override mutation (rate set, rate cleared, reason changed) is
+// written to public.audit_log via the shared recordAudit helper. Fires
+// are best-effort — a flaky network must never block the pricing edit.
+// Action values used:
+//   - 'price-override'        — user set or changed a rate override
+//   - 'price-override-reset'  — user cleared an override (via ↺ Reset)
+//   - 'price-override-reason' — user changed the reason on an override
+// Rows are keyed by (entity_table='cost_model_projects', entity_id=project id)
+// so they group under the project in the Admin → Audit Log viewer.
+/**
+ * @param {{
+ *   action: 'price-override'|'price-override-reset'|'price-override-reason',
+ *   bucket: { id: string, name: string, type?: string, uom?: string },
+ *   oldRate?: number|null, newRate?: number|null,
+ *   recommendedRate?: number|null,
+ *   oldReason?: string|null, newReason?: string|null,
+ * }} ev
+ */
+function writeOverrideAuditEvent(ev) {
+  if (!model?.id) return; // unsaved projects can't anchor an audit row
+  if (!ev || !ev.bucket?.id) return;
+  const toNum = v => v == null || v === '' ? null : Number(v);
+  const oldR = toNum(ev.oldRate);
+  const newR = toNum(ev.newRate);
+  const rec  = toNum(ev.recommendedRate);
+  const variancePct =
+    rec != null && rec > 0 && newR != null
+      ? (newR - rec) / rec
+      : null;
+  const fields = {
+    bucket_id:        ev.bucket.id,
+    bucket_name:      ev.bucket.name || '',
+    bucket_type:      ev.bucket.type || null,
+    uom:              ev.bucket.uom || null,
+    old_rate:         oldR,
+    new_rate:         newR,
+    recommended_rate: rec,
+    variance_pct:     variancePct,
+    old_reason:       ev.oldReason || null,
+    new_reason:       ev.newReason || null,
+    delta_abs:        (oldR != null && newR != null) ? (newR - oldR) : null,
+  };
+  import('../../shared/audit.js?v=20260419-sZ').then(mod => {
+    mod.recordAudit({
+      table:  'cost_model_projects',
+      id:     model.id,
+      action: ev.action,
+      fields,
+    }).catch(() => {});
+  }).catch(() => {});
+}
+
+// ============================================================
 // ACTIONS (add/delete rows)
 // ============================================================
 
@@ -6747,6 +6896,21 @@ function handleAction(action, idx, btn) {
       // cleared (null/undefined) from explicit-zero (0).
       const b = (model.pricingBuckets || [])[idx];
       if (b) {
+        // Capture the pre-reset shape BEFORE mutating so the audit row can
+        // report what the user cleared. Fire-and-forget — audit failures
+        // must never block the reset itself.
+        const priorRate   = b.rate;
+        const priorReason = b.overrideReason;
+        const eb = (_pricingAuditSnapshot?.enriched || []).find(e => e.id === b.id);
+        writeOverrideAuditEvent({
+          action: 'price-override-reset',
+          bucket: b,
+          oldRate: priorRate,
+          newRate: null,
+          recommendedRate: eb ? Number(eb.recommendedRate) || 0 : null,
+          oldReason: priorReason,
+          newReason: null,
+        });
         b.rate = null;
         b.overrideReason = null;
       }
