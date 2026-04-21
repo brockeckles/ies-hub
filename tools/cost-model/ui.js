@@ -3831,16 +3831,25 @@ function renderPricing() {
     <!-- M3 Achieved-vs-Target Margin banner (only when overrides present) -->
     <div class="cm-margin-banner cm-margin-${m3Level}">
       <div class="cm-margin-banner-main">
-        <div class="cm-margin-banner-label" title="Computed at reference volumes using the bucket-cost rollup (pre-ramp, pre-learning-curve). Y1 P&L margin in Summary may differ — reference volumes are used here because pricing is set against steady-state cost, not first-year cost.">
+        <div class="cm-margin-banner-label">
           ${m3Copy}
+          <div class="cm-margin-banner-basis">
+            <span class="cm-margin-basis-chip" title="Pricing margin uses steady-state (reference) volumes and cost — the basis you set prices against. Summary tiles use Y1 P&L values which include ramp + learning-curve haircuts; those will read lower and are expected to reconcile to this banner by Y2-Y3 once the site is at steady state.">
+              @ reference volumes
+            </span>
+            <span class="cm-margin-basis-compare">
+              For Y1 P&L-basis (ramped) margin, see
+              <a href="#" class="cm-margin-basis-link" data-cm-nav="summary">Summary → Financial Metrics</a>.
+            </span>
+          </div>
         </div>
         <div class="cm-margin-banner-nums">
           <span class="cm-margin-tile">
             <span class="cm-margin-tile-label">Target</span>
             <span class="cm-margin-tile-value">${targetMarginPct.toFixed(1)}%</span>
           </span>
-          <span class="cm-margin-tile">
-            <span class="cm-margin-tile-label">Achieved</span>
+          <span class="cm-margin-tile" title="What the current Pricing Schedule rates actually deliver against steady-state cost. Matches target by construction when no overrides; deviates by override variance otherwise.">
+            <span class="cm-margin-tile-label">Achieved (ref)</span>
             <span class="cm-margin-tile-value ${hasAnyOverride && marginDeltaPP < 0 ? 'cm-margin-value-down' : ''}">${achievedMarginPct.toFixed(1)}%</span>
           </span>
           <span class="cm-margin-tile">
@@ -3851,8 +3860,8 @@ function renderPricing() {
             <span class="cm-margin-tile-label">Overridden buckets</span>
             <span class="cm-margin-tile-value">${impact.overriddenBucketCount} / ${buckets.length}</span>
           </span>
-          <span class="cm-margin-tile">
-            <span class="cm-margin-tile-label">Annual rev impact</span>
+          <span class="cm-margin-tile" title="Annual revenue delta at reference volumes. Actual Y1 impact is lower by the ramp-up factor; see Summary for Y1-basis numbers.">
+            <span class="cm-margin-tile-label">Annual rev impact (ref)</span>
             <span class="cm-margin-tile-value ${impact.totalOverrideDelta < 0 ? 'cm-margin-value-down' : impact.totalOverrideDelta > 0 ? 'cm-margin-value-up' : ''}">${impact.totalOverrideDelta === 0 ? '—' : (impact.totalOverrideDelta >= 0 ? '+' : '') + calc.formatCurrency(impact.totalOverrideDelta, { compact: true })}</span>
           </span>
         </div>
@@ -4091,6 +4100,13 @@ function renderPricing() {
       .cm-margin-banner.cm-margin-error { border-left:3px solid var(--ies-red, #dc3545); background:rgba(220,53,69,0.05); }
       .cm-margin-banner-main { display:flex; flex-direction:column; gap:10px; }
       .cm-margin-banner-label { font-size:13px; font-weight:600; color:var(--ies-gray-700); }
+      /* Basis disclosure row (2026-04-21 PM) — makes the reference-vs-Y1 reconciliation explicit
+         right under the banner copy instead of burying it in a tooltip. */
+      .cm-margin-banner-basis { display:flex; gap:10px; align-items:center; margin-top:4px; font-weight:400; flex-wrap:wrap; }
+      .cm-margin-basis-chip { display:inline-block; padding:1px 8px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; color:var(--ies-gray-700); background:var(--ies-gray-100, #f3f4f6); border-radius:6px; cursor:help; }
+      .cm-margin-basis-compare { font-size:11px; color:var(--ies-gray-500); }
+      .cm-margin-basis-link { color:var(--ies-blue, #2563eb); text-decoration:underline; }
+      .cm-margin-basis-link:hover { text-decoration:none; }
       .cm-margin-banner-nums { display:flex; gap:24px; flex-wrap:wrap; }
       .cm-margin-tile { display:flex; flex-direction:column; gap:2px; }
       .cm-margin-tile-label { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.4px; color:var(--ies-gray-500); }
@@ -4479,9 +4495,9 @@ function renderSummary() {
     <div class="hub-card mb-4">
       <h3 class="hub-section-heading">Financial Metrics</h3>
       <div class="cm-metrics-grid">
-        ${renderMetricCard('Gross Margin', calc.formatPct(metrics.grossMarginPct), metrics.grossMarginPct >= (thresholds.grossMargin || 10), `(Σ Revenue − Σ COGS) / Σ Revenue, horizon total. COGS = Labor + Facility + Equipment + VAS pass-through. Ties to the Gross Profit subtotal in the P&L below.`)}
-        ${renderMetricCard('EBITDA Margin', calc.formatPct(metrics.ebitdaMarginPct), metrics.ebitdaMarginPct >= (thresholds.ebitda || 8), `(Σ EBITDA across horizon) / (Σ Revenue). EBITDA = GP − SG&A (Overhead + pre-live one-times). Ties exactly to the EBITDA row in the P&L below.`)}
-        ${renderMetricCard('EBIT Margin', calc.formatPct(metrics.ebitMarginPct), metrics.ebitMarginPct >= (thresholds.ebit || 5), '(Σ EBIT across horizon) / (Σ Revenue). EBIT = EBITDA − D&A. Ties exactly to the EBIT row in the P&L below.')}
+        ${renderMetricCard('Gross Margin', calc.formatPct(metrics.grossMarginPct), metrics.grossMarginPct >= (thresholds.grossMargin || 10), `(Σ Revenue − Σ COGS) / Σ Revenue, horizon total. COGS = Labor + Facility + Equipment + VAS pass-through. Ties to the Gross Profit subtotal in the P&L below. Reconciliation: this is the P&L-basis margin (ramp + learning curve included). The Pricing Schedule banner shows the reference-basis (steady-state) achieved margin, which reads higher until the site hits steady state.`)}
+        ${renderMetricCard('EBITDA Margin', calc.formatPct(metrics.ebitdaMarginPct), metrics.ebitdaMarginPct >= (thresholds.ebitda || 8), `(Σ EBITDA across horizon) / (Σ Revenue). EBITDA = GP − SG&A (Overhead + pre-live one-times). Ties exactly to the EBITDA row in the P&L below. Reconciliation: P&L-basis (ramped); Pricing banner shows reference-basis achieved margin.`)}
+        ${renderMetricCard('EBIT Margin', calc.formatPct(metrics.ebitMarginPct), metrics.ebitMarginPct >= (thresholds.ebit || 5), '(Σ EBIT across horizon) / (Σ Revenue). EBIT = EBITDA − D&A. Ties exactly to the EBIT row in the P&L below. Reconciliation: P&L-basis (ramped); Pricing banner shows reference-basis achieved margin.')}
         ${renderMetricCard('ROIC', calc.formatPct(metrics.roicPct), metrics.roicPct >= (thresholds.roic || 15), `NOPAT / Invested Capital. NOPAT = avg annual EBIT × (1 − ${calcHeur.taxRatePct || 25}% tax) = $${((metrics.nopat||0)/1000).toFixed(0)}K. Invested Capital = $${(metrics.investedCapital/1000).toFixed(0)}K = Startup $${(summary.startupCapital/1000).toFixed(0)}K + Equipment $${(summary.equipmentCapital/1000).toFixed(0)}K + avg NWC $${((metrics.estimatedNwc||0)/1000).toFixed(0)}K (horizon-avg Revenue × DSO/365 − horizon-avg COGS × DPO/365).`)}
         ${renderMetricCard('MIRR', calc.formatPct(metrics.mirrPct), metrics.mirrPct >= (thresholds.mirr || 12), `Modified IRR of FCF series. Financing rate ${fin.discountRate || 10}%, reinvestment rate ${fin.reinvestRate || 8}%. Uses Y0 outflow of $${(metrics.totalInvestment/1000).toFixed(0)}K plus each year's Free Cash Flow.`)}
         ${renderMetricCard('NPV', calc.formatCurrency(metrics.npv, {compact: true}), metrics.npv > 0, `NPV of FCF series discounted at ${fin.discountRate || 10}%. Sums [−Total Investment $${(metrics.totalInvestment/1000).toFixed(0)}K at t=0] + Σ FCF_yr / (1+${(fin.discountRate||10)/100})^yr. Ties to the Cumulative FCF row in the P&L (Y5 value) when discount ≈ 0.`)}
@@ -4933,6 +4949,16 @@ function bindSectionEvents(section, container) {
         // Re-render so the override-reason chip on the row reflects the new
         // reason immediately (chip rendering is driven by bucket.overrideReason).
         renderSection();
+      });
+    });
+    // M3-banner "see Summary → Financial Metrics" link — jumps cleanly to
+    // the Y1-basis margin view so finance reviewers can reconcile the two
+    // denominators without hunting through the sidebar.
+    container.querySelectorAll('[data-cm-nav]').forEach(a => {
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        const key = a.dataset.cmNav;
+        if (key) navigateSection(key);
       });
     });
   }
