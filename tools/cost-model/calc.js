@@ -17,6 +17,58 @@
 import * as monthly from './calc.monthly.js?v=20260420-vN';
 
 // ============================================================
+// MARGIN / GROSS-UP
+// ============================================================
+
+/**
+ * Reference-aligned cost-plus revenue gross-up.
+ *
+ *   Revenue = Cost / (1 − margin)
+ *
+ * This is the industry-standard 3PL pricing mechanic (McKinsey cleansheet,
+ * RFP cost-plus responses, customer budget summary). Applied per line/category
+ * throughout the model so the customer-facing pricing schedule displays each
+ * revenue component built up from its own cost.
+ *
+ * **Architectural rule (supersedes the doc's M6):** revenue is DERIVED from
+ * cost + target margin by default ("recommended pricing"). The analyst may
+ * override any line's rate via bucket.rate, in which case achieved margin
+ * diverges from target and the reframed M3 validator flags the gap. Overrides
+ * are first-class — not helpers, not silent defaults.
+ *
+ * Guards marginPct into [0, 0.999] so a misconfigured 100% target doesn't
+ * produce infinite revenue.
+ *
+ * @param {number} cost — the cost base (>= 0)
+ * @param {number} marginPct — fraction, e.g. 0.16 for 16%
+ * @returns {number} cost / (1 − marginPct)
+ */
+export function grossUp(cost, marginPct) {
+  const m = Math.min(0.999, Math.max(0, Number(marginPct) || 0));
+  return (Number(cost) || 0) / (1 - m);
+}
+
+/**
+ * Inverse of grossUp — computes achieved margin given revenue and cost.
+ *
+ *   achievedMargin = (revenue − cost) / revenue
+ *
+ * Used by the reframed M3 validator and the Override Variance panel to
+ * compare against the project's target margin. When no overrides are present,
+ * achievedMargin == target by construction (all rates are derived from target).
+ * The validator only fires when at least one bucket override is present.
+ *
+ * @param {number} revenue
+ * @param {number} cost
+ * @returns {number} margin fraction in [−∞, 1). 0 if revenue <= 0.
+ */
+export function achievedMargin(revenue, cost) {
+  const r = Number(revenue) || 0;
+  if (r <= 0) return 0;
+  return (r - (Number(cost) || 0)) / r;
+}
+
+// ============================================================
 // OPERATING HOURS
 // ============================================================
 
@@ -1129,7 +1181,20 @@ export function computeSummary(params) {
   const startupAmort = totalStartupAmort(params.startupLines, params.contractYears);
 
   const totalCost = laborCost + facilityCost + equipmentCost + overheadCost + vasCost + startupAmort;
-  const totalRevenue = totalCost * (1 + (params.targetMarginPct || 0) / 100);
+  // Reference-aligned cost-plus gross-up: Revenue = Cost / (1 − margin).
+  // Applied per-category so the Pricing Schedule + P&L can display line-level
+  // gross-up per reference Part I §3.2. The sum is mathematically identical
+  // to a one-shot total gross-up; the breakout enables line-level display
+  // and per-category audit tie-out.
+  const marginFrac = Math.min(0.999, Math.max(0, (params.targetMarginPct || 0) / 100));
+  const laborRevenue     = grossUp(laborCost,     marginFrac);
+  const facilityRevenue  = grossUp(facilityCost,  marginFrac);
+  const equipmentRevenue = grossUp(equipmentCost, marginFrac);
+  const overheadRevenue  = grossUp(overheadCost,  marginFrac);
+  const vasRevenue       = grossUp(vasCost,       marginFrac);
+  const startupRevenue   = grossUp(startupAmort,  marginFrac);
+  const totalRevenue     = laborRevenue + facilityRevenue + equipmentRevenue
+                         + overheadRevenue + vasRevenue + startupRevenue;
   const orders = params.annualOrders || 1;
 
   return {
@@ -1141,6 +1206,13 @@ export function computeSummary(params) {
     startupAmort,
     totalCost,
     totalRevenue,
+    // Per-category revenue breakout (reference Part I §3.2)
+    laborRevenue,
+    facilityRevenue,
+    equipmentRevenue,
+    overheadRevenue,
+    vasRevenue,
+    startupRevenue,
     totalFtes: totalFtes(params.laborLines, params.indirectLaborLines, opHrs),
     costPerOrder: totalCost / orders,
     equipmentCapital: totalEquipmentCapital(params.equipmentLines),
@@ -1249,7 +1321,19 @@ export function buildYearlyProjections(params) {
     const vas = baseVasCost * volMult;
     const startup = startupAmort;
     const totalCost = labor + facility + equipment + overhead + vas + startup;
-    const revenue = totalCost * (1 + marginPct);
+    // Reference-aligned gross-up: Revenue = Cost / (1 − margin).
+    // Per-category breakout exposed via laborRevenue/facilityRevenue/etc. for
+    // the Pricing Schedule and P&L line-level display. Sum is identical to the
+    // one-shot total gross-up; the breakout enables category-level audit.
+    const mFrac = Math.min(0.999, Math.max(0, marginPct || 0));
+    const laborRevenue     = labor     / (1 - mFrac);
+    const facilityRevenue  = facility  / (1 - mFrac);
+    const equipmentRevenue = equipment / (1 - mFrac);
+    const overheadRevenue  = overhead  / (1 - mFrac);
+    const vasRevenue       = vas       / (1 - mFrac);
+    const startupRevenue   = startup   / (1 - mFrac);
+    const revenue = laborRevenue + facilityRevenue + equipmentRevenue
+                  + overheadRevenue + vasRevenue + startupRevenue;
     // Accounting stack (parity with monthly engine as of 2026-04-20 audit):
     //   COGS = Labor + Facility + Equipment + VAS
     //   SG&A = Overhead
@@ -1284,6 +1368,11 @@ export function buildYearlyProjections(params) {
       year: yr, orders, labor, facility, equipment, overhead, vas, startup,
       cogs, sga,
       totalCost, revenue, grossProfit, ebitda, ebit, depreciation,
+      // Per-category revenue breakout (reference Part I §3.2) — enables the
+      // customer-facing pricing schedule to display each revenue line grossed
+      // up from its own cost category.
+      laborRevenue, facilityRevenue, equipmentRevenue, overheadRevenue,
+      vasRevenue, startupRevenue,
       taxes, netIncome, capex, workingCapitalChange, operatingCashFlow, freeCashFlow,
       cumFcf: cumFcfRun,
       learningMult,
@@ -1616,18 +1705,22 @@ export function computeBucketCosts(params) {
 }
 
 /**
- * Derive per-bucket rates from assigned costs + margin + volume driver.
+ * Derive recommended per-bucket rates from assigned costs + margin + volume driver.
  *
- * Mirrors the rate math the Pricing Schedule UI shows on-screen so that the
- * monthly engine (which reads `bucket.rate` literally) can fall back to the
- * same derived rate when no explicit rate is stored. This is the single
- * source of truth for "what rate does this bucket actually produce given
- * the cost rollup."
+ * **This is the recommended-pricing engine.** Uses the reference-aligned
+ * gross-up form `Revenue = Cost / (1 − margin)` per `grossUp()` above.
+ * Each bucket gets a rate that, if consumed literally, produces revenue equal
+ * to its cost grossed up to the target margin.
+ *
+ * The UI labels these rates as "Recommended" in the 3-column Pricing Schedule;
+ * analysts can override them via `bucket.rate` (see `enrichBucketsWithDerivedRates`).
+ * When an override is present, achieved margin diverges from target and the
+ * reframed M3 validator surfaces the gap.
  *
  * @param {Object} params
  * @param {Array} params.buckets — model.pricingBuckets
  * @param {Record<string, number>} params.bucketCosts — output of computeBucketCosts
- * @param {number} params.marginPct — target margin (0-based fraction, e.g. 0.12)
+ * @param {number} params.marginPct — target margin (0-based fraction, e.g. 0.16)
  * @param {Array} [params.volumeLines] — model.volumeLines (used when bucket.annualVolume is unset)
  * @returns {Record<string, { rate: number, annualVolume: number, withMargin: number }>}
  */
@@ -1641,11 +1734,14 @@ export function computeBucketRates(params) {
     volumeByUom[key] = (volumeByUom[key] || 0) + (Number(vl.volume) || 0);
   }
 
+  // Reference-aligned gross-up: Cost / (1 − margin). Guarded.
+  const mFrac = Math.min(0.999, Math.max(0, Number(marginPct) || 0));
+
   /** @type {Record<string, { rate: number, annualVolume: number, withMargin: number }>} */
   const out = {};
   for (const b of buckets) {
     const cost = bucketCosts[b.id] || 0;
-    const withMargin = cost * (1 + marginPct);
+    const withMargin = cost / (1 - mFrac); // <-- gross-up form (was cost * (1+m))
     // Fixed buckets bill monthly: divide annual cost by 12.
     // Variable buckets bill per-unit: divide by annual volume for the bucket's UOM.
     let annualVolume;
@@ -1665,29 +1761,102 @@ export function computeBucketRates(params) {
 }
 
 /**
- * Return a shallow-copied pricingBuckets array with `rate` and `annualVolume`
- * filled in from derived values when the bucket didn't have them set
- * explicitly. Explicit values always win — this is only a fallback so
- * brand-new models don't render $0 revenue until a user hand-wires each
- * bucket's rate.
+ * Return a shallow-copied pricingBuckets array with recommended + effective
+ * rates materialized on each bucket.
+ *
+ * **Recommended/Override semantics (2026-04-21 Margin Handling rewire):**
+ *
+ *   - `recommendedRate` — ALWAYS the derived `Cost / (1 − margin)` rate. Never
+ *     null. Displayed in the Recommended column of the Pricing Schedule.
+ *   - `bucket.rate` — the analyst's override. Null/0/unset = "use recommended".
+ *     A positive number = "override to this value." Displayed in the Override
+ *     column; edits write back here.
+ *   - `rate` (on the enriched copy) — the EFFECTIVE rate: override if present,
+ *     else recommended. This is what the monthly engine consumes literally to
+ *     produce revenue.
+ *   - `_rateSource` — `'override'` when bucket.rate is set, else `'recommended'`.
+ *     (Legacy values `'explicit'` / `'derived'` retained as aliases — renamed
+ *     primary to match UI vocabulary.)
+ *   - `overrideReason` — optional free text surfaced in the audit trail when
+ *     an override is set. Passed through untouched if present.
  *
  * @param {Object} params — same shape as computeBucketRates
- * @returns {Array} — pricingBuckets with rate/annualVolume defaulted in
+ * @returns {Array} — pricingBuckets with recommendedRate + effective rate
  */
 export function enrichBucketsWithDerivedRates(params) {
   const derived = computeBucketRates(params);
   return (params.buckets || []).map(b => {
     const d = derived[b.id] || { rate: 0, annualVolume: 0 };
-    const hasExplicitRate = Number(b.rate) > 0;
-    const hasExplicitVol  = Number(b.annualVolume) > 0;
+    const hasOverride    = Number(b.rate) > 0;
+    const hasExplicitVol = Number(b.annualVolume) > 0;
+    const recommendedRate   = d.rate;
+    const effectiveRate     = hasOverride ? Number(b.rate) : recommendedRate;
     return {
       ...b,
-      rate:         hasExplicitRate ? Number(b.rate)         : d.rate,
-      annualVolume: hasExplicitVol  ? Number(b.annualVolume) : d.annualVolume,
-      // Diagnostic: surface where the value came from so UI can badge it.
-      _rateSource:  hasExplicitRate ? 'explicit' : 'derived',
+      // Effective rate — what the monthly engine reads literally. Matches
+      // `rate` field name for back-compat with existing consumers.
+      rate: effectiveRate,
+      annualVolume: hasExplicitVol ? Number(b.annualVolume) : d.annualVolume,
+      // Recommended rate — always populated. UI shows in the Recommended column.
+      recommendedRate,
+      // Override variance diagnostics — driven off bucket.rate (the user input).
+      overrideRate:     hasOverride ? Number(b.rate) : null,
+      overrideReason:   b.overrideReason || null,
+      overrideDelta:    hasOverride ? (Number(b.rate) - recommendedRate) : 0,
+      overrideDeltaPct: hasOverride && recommendedRate > 0
+        ? (Number(b.rate) - recommendedRate) / recommendedRate
+        : 0,
+      // Diagnostic: UI chip label. `'override'` new-primary; `'explicit'` kept
+      // as alias for tests that assert on the old value.
+      _rateSource:  hasOverride ? 'override' : 'recommended',
+      _rateSourceLegacy: hasOverride ? 'explicit' : 'derived',
     };
   });
+}
+
+/**
+ * Roll up override impact across all buckets: total annual revenue delta vs
+ * recommended pricing. Consumed by the Override Variance panel + reframed M3
+ * validator.
+ *
+ * @param {Array} enrichedBuckets — output of enrichBucketsWithDerivedRates
+ * @returns {{ totalRecommendedRevenue: number, totalEffectiveRevenue: number,
+ *             totalOverrideDelta: number, overriddenBucketCount: number,
+ *             perBucket: Array<{ id: string, name: string, recommendedRevenue: number,
+ *                                effectiveRevenue: number, deltaAnnual: number,
+ *                                deltaPct: number, isOverridden: boolean }> }}
+ */
+export function computeOverrideImpact(enrichedBuckets = []) {
+  let totalRecommendedRevenue = 0;
+  let totalEffectiveRevenue   = 0;
+  let overriddenBucketCount   = 0;
+  const perBucket = [];
+  for (const b of enrichedBuckets) {
+    const vol = Number(b.annualVolume) || 0;
+    const recRev = (Number(b.recommendedRate) || 0) * vol;
+    const effRev = (Number(b.rate)            || 0) * vol;
+    const isOver = b._rateSource === 'override';
+    if (isOver) overriddenBucketCount++;
+    totalRecommendedRevenue += recRev;
+    totalEffectiveRevenue   += effRev;
+    perBucket.push({
+      id: b.id,
+      name: b.name || b.id,
+      recommendedRevenue: recRev,
+      effectiveRevenue:   effRev,
+      deltaAnnual:        effRev - recRev,
+      deltaPct:           recRev > 0 ? (effRev - recRev) / recRev : 0,
+      isOverridden:       isOver,
+      overrideReason:     b.overrideReason || null,
+    });
+  }
+  return {
+    totalRecommendedRevenue,
+    totalEffectiveRevenue,
+    totalOverrideDelta: totalEffectiveRevenue - totalRecommendedRevenue,
+    overriddenBucketCount,
+    perBucket,
+  };
 }
 
 // ============================================================

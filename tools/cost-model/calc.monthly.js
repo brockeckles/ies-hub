@@ -500,7 +500,12 @@ export function buildMonthlyProjections(params) {
         + base_vas_cost       * volMult
         + startup_amort
       ) / 12 * seasonalShare * 12; // unwind /12 vs *12 to keep it explicit
-      const monthlyRev = monthlyCost * (1 + margin_pct);
+      // Reference-aligned gross-up form: Revenue = Cost / (1 − margin).
+      // Fires only when no pricingBuckets supplied (legacy fallback).
+      // Matches calc.js `grossUp()` and `computeBucketRates` — single formula
+      // across the model now.
+      const _mFrac = Math.min(0.999, Math.max(0, Number(margin_pct) || 0));
+      const monthlyRev = monthlyCost / (1 - _mFrac);
       revenueRows.push({
         project_id,
         period_id: p.id,

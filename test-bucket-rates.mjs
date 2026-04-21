@@ -66,28 +66,28 @@ test('computeBucketCosts returns $2.0M for outbound and $240K for mgmt_fee', () 
   near(costs['mgmt_fee'], 240_000, 1, 'mgmt_fee cost');
 });
 
-test('derived variable rate = withMargin / annualVolume', () => {
+test('derived variable rate = cost/(1−m) / annualVolume (reference-aligned gross-up)', () => {
   const costs = computeBucketCosts({
     buckets, laborLines, indirectLaborLines: [], equipmentLines, overheadLines,
     vasLines, startupLines, facilityCost: 0, operatingHours: 8760,
   });
   const rates = computeBucketRates({ buckets, bucketCosts: costs, marginPct: 0.12, volumeLines });
-  // outbound: ($2.0M * 1.12) / 1M orders = $2.24/order
-  near(rates['outbound'].rate, 2.24, 0.001);
+  // outbound: ($2.0M / 0.88) / 1M orders = $2.2727/order
+  near(rates['outbound'].rate, 2.272727, 0.001);
   near(rates['outbound'].annualVolume, 1_000_000);
 });
 
-test('derived fixed rate = withMargin / 12 per month', () => {
+test('derived fixed rate = cost/(1−m) / 12 per month', () => {
   const costs = computeBucketCosts({
     buckets, laborLines, indirectLaborLines: [], equipmentLines, overheadLines,
     vasLines, startupLines, facilityCost: 0, operatingHours: 8760,
   });
   const rates = computeBucketRates({ buckets, bucketCosts: costs, marginPct: 0.12, volumeLines });
-  // mgmt_fee: ($240K * 1.12) / 12 = $22,400/month
-  near(rates['mgmt_fee'].rate, 22_400, 0.1);
+  // mgmt_fee: ($240K / 0.88) / 12 = $22,727.27/month
+  near(rates['mgmt_fee'].rate, 22_727.27, 0.5);
 });
 
-test('enrichBucketsWithDerivedRates fills missing rates', () => {
+test('enrichBucketsWithDerivedRates fills recommended rates when no override', () => {
   const costs = computeBucketCosts({
     buckets, laborLines, indirectLaborLines: [], equipmentLines, overheadLines,
     vasLines, startupLines, facilityCost: 0, operatingHours: 8760,
@@ -97,26 +97,36 @@ test('enrichBucketsWithDerivedRates fills missing rates', () => {
   });
   const outbound = enriched.find(b => b.id === 'outbound');
   const mgmt     = enriched.find(b => b.id === 'mgmt_fee');
-  near(outbound.rate, 2.24, 0.001);
-  near(mgmt.rate, 22_400, 0.1);
-  assert(outbound._rateSource === 'derived', 'should tag as derived');
+  near(outbound.rate, 2.272727, 0.001);
+  near(outbound.recommendedRate, 2.272727, 0.001, 'recommendedRate populated');
+  near(mgmt.rate, 22_727.27, 0.5);
+  assert(outbound._rateSource === 'recommended', 'should tag as recommended (no override)');
+  assert(outbound._rateSourceLegacy === 'derived', 'legacy alias preserved');
+  assert(outbound.overrideRate === null, 'no override set');
 });
 
-test('explicit bucket.rate wins over derived', () => {
+test('override bucket.rate wins over recommended, tags as override', () => {
   const costs = computeBucketCosts({
     buckets, laborLines, indirectLaborLines: [], equipmentLines, overheadLines,
     vasLines, startupLines, facilityCost: 0, operatingHours: 8760,
   });
-  const explicitBuckets = [
+  const overrideBuckets = [
     { ...buckets[0] },
-    { ...buckets[1], rate: 5.00 }, // user-pinned
+    { ...buckets[1], rate: 5.00, overrideReason: 'customer counter-offer' },
   ];
   const enriched = enrichBucketsWithDerivedRates({
-    buckets: explicitBuckets, bucketCosts: costs, marginPct: 0.12, volumeLines,
+    buckets: overrideBuckets, bucketCosts: costs, marginPct: 0.12, volumeLines,
   });
   const outbound = enriched.find(b => b.id === 'outbound');
   near(outbound.rate, 5.00);
-  assert(outbound._rateSource === 'explicit', 'should tag as explicit');
+  near(outbound.recommendedRate, 2.272727, 0.001, 'recommended still computed');
+  near(outbound.overrideRate, 5.00, 0.001, 'override captured');
+  assert(outbound._rateSource === 'override', 'should tag as override');
+  assert(outbound._rateSourceLegacy === 'explicit', 'legacy alias preserved');
+  assert(outbound.overrideReason === 'customer counter-offer', 'reason captured');
+  // Variance: override $5.00 vs recommended $2.27 = +$2.73 / +120%
+  near(outbound.overrideDelta, 2.7273, 0.01);
+  near(outbound.overrideDeltaPct, 1.20, 0.01);
 });
 
 // ---- Integration: monthly engine now produces non-zero revenue ----
@@ -160,8 +170,8 @@ test('monthly engine produces non-zero revenue when buckets lack explicit .rate 
   });
 
   const totalRev = bundle.revenue.reduce((s, r) => s + r.amount, 0);
-  // Expected annual revenue = ($2.0M + $240K) * 1.12 = $2.5088M
-  near(totalRev, 2_508_800, 100, 'annual revenue from enriched buckets');
+  // Expected annual revenue = ($2.0M + $240K) / 0.88 = $2,545,454 (reference gross-up)
+  near(totalRev, 2_545_455, 200, 'annual revenue from enriched buckets (gross-up form)');
   assert(totalRev > 0, 'revenue must be non-zero — this is the core I-02 regression');
 });
 
