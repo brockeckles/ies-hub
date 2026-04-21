@@ -12,7 +12,7 @@ import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import * as calc from './calc.js?v=20260421-vX';
 import * as api from './api.js?v=20260419-uH';
-import * as scenarios from './calc.scenarios.js?v=20260419-sZ';
+import * as scenarios from './calc.scenarios.js?v=20260421-vY';
 import * as monthlyCalc from './calc.monthly.js?v=20260421-vP';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260419-uH';
 

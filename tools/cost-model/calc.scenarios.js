@@ -627,6 +627,12 @@ export function resolveCalcHeuristics(scenario, snapshots, overrides, projectCol
     taxRatePct:           n(pick('tax_rate_pct',            p.taxRate           ?? 25),   25),
     targetMarginPct:      n(pick('target_margin_pct',       p.targetMargin      ?? 12),   12),
     volGrowthPct:         n(pick('annual_volume_growth_pct', p.volumeGrowth      ?? 0),   0),
+    // 2026-04-21: the What-If discount-rate slider was landing in the transient
+    // overlay but resolveCalcHeuristics didn't surface it, so calcHeur.discountRatePct
+    // was always undefined and computeFinancialMetrics silently fell back to its 10%
+    // default. Slider appeared to "do nothing." Ditto reinvestRatePct. Now surfaced.
+    discountRatePct:      n(pick('discount_rate_pct',       p.discountRate      ?? 10),   10),
+    reinvestRatePct:      n(pick('reinvest_rate_pct',       p.reinvestRate      ?? 8),    8),
     // Working Capital
     dsoDays:              n(pick('dso_days',                p.dsoDays           ?? 30),   30),
     dpoDays:              n(pick('dpo_days',                p.dpoDays           ?? 30),   30),

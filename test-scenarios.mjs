@@ -312,6 +312,31 @@ test('resolveCalcHeuristics: transient wins over snapshot + override + default (
   eq(out.taxRatePct, 18);
   eq(out.used.tax_rate_pct, 'transient');
 });
+// 2026-04-21 PM (Brock What-If audit): the discount-rate + reinvest-rate sliders
+// in What-If Studio were landing in the transient overlay but weren't surfaced
+// on calcHeur, so computeFinancialMetrics silently fell back to the 10% / 8%
+// defaults — the sliders appeared to "do nothing." Lock the fix.
+test('resolveCalcHeuristics: discount_rate_pct slider surfaces as discountRatePct', () => {
+  const out = resolveCalcHeuristics(DRAFT_SCEN, null, {}, PROJECT_COLS, { discount_rate_pct: 15 });
+  eq(out.discountRatePct, 15);
+  eq(out.used.discount_rate_pct, 'transient');
+});
+test('resolveCalcHeuristics: discount_rate_pct falls back to project.discountRate column', () => {
+  const out = resolveCalcHeuristics(DRAFT_SCEN, null, {}, { discountRate: 12 }, {});
+  eq(out.discountRatePct, 12);
+});
+test('resolveCalcHeuristics: discount_rate_pct default = 10 when nothing set', () => {
+  const out = resolveCalcHeuristics(DRAFT_SCEN, null, {}, {}, {});
+  eq(out.discountRatePct, 10);
+});
+test('resolveCalcHeuristics: reinvest_rate_pct slider surfaces as reinvestRatePct', () => {
+  const out = resolveCalcHeuristics(DRAFT_SCEN, null, {}, PROJECT_COLS, { reinvest_rate_pct: 12 });
+  eq(out.reinvestRatePct, 12);
+});
+test('resolveCalcHeuristics: reinvest_rate_pct default = 8', () => {
+  const out = resolveCalcHeuristics(DRAFT_SCEN, null, {}, {}, {});
+  eq(out.reinvestRatePct, 8);
+});
 test('resolveCalcHeuristics: empty transient → normal resolution chain', () => {
   const out = resolveCalcHeuristics(DRAFT_SCEN, null, { tax_rate_pct: 30 }, PROJECT_COLS, {});
   eq(out.taxRatePct, 30);
