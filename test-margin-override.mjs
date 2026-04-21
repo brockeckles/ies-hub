@@ -255,6 +255,34 @@ test('validateModel M3: ERROR at 5pp+ below target', () => {
   assert(m3.level === 'error', `expected error, got ${m3.level}`);
 });
 
+test('validateModel M3: $0 explicit override tripsvalidator (free-tier service)', () => {
+  // Deliberately zero-priced bucket marked as an explicit override — e.g.,
+  // "free returns" where management wants the $0 rate audited. Prior to the
+  // 2026-04-21 fix, the validator filtered by `rate > 0` only and skipped
+  // this entire banner. The bucket-level enrichment at calc.js:1884 already
+  // treats rateExplicitOverride=true as an override; validator must match.
+  const m = baseValidModel(null);
+  // Mark outbound as a deliberate $0 override (this is the free-tier case).
+  m.pricingBuckets.find(b => b.id === 'outbound').rate = 0;
+  m.pricingBuckets.find(b => b.id === 'outbound').rateExplicitOverride = true;
+  const ws = validateModel(m);
+  const m3 = ws.find(w => /achieved margin/i.test(w.message));
+  assert(m3, 'should produce M3 warning/error on $0 explicit override');
+  assert(m3.level === 'warning' || m3.level === 'error',
+    `expected warning/error, got ${m3.level}`);
+});
+
+test('validateModel M3: $0 rate WITHOUT rateExplicitOverride is silent (legacy default)', () => {
+  // Pre-override projects carry rate=0 from the starter template and should
+  // still read as "recommended" — the back-compat rule.
+  const m = baseValidModel(null);
+  m.pricingBuckets.find(b => b.id === 'outbound').rate = 0;
+  // rateExplicitOverride NOT set — behaves like cleared / default
+  const ws = validateModel(m);
+  const m3 = ws.filter(w => /achieved margin/i.test(w.message));
+  assert(m3.length === 0, `expected silent; got ${JSON.stringify(m3)}`);
+});
+
 // ============================================================
 // computeImplicationsImpact() — Override Implications Panel tile values
 // ============================================================

@@ -10,9 +10,9 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import * as calc from './calc.js?v=20260421-vZ';
+import * as calc from './calc.js?v=20260421-wA';
 import * as api from './api.js?v=20260419-uH';
-import * as scenarios from './calc.scenarios.js?v=20260421-vY';
+import * as scenarios from './calc.scenarios.js?v=20260421-wA';
 import * as monthlyCalc from './calc.monthly.js?v=20260421-vP';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
 
@@ -3936,7 +3936,7 @@ function renderPricing() {
             <span class="cm-margin-tile-value ${hasAnyOverride && marginDeltaPP < 0 ? 'cm-margin-value-down' : ''}">${achievedMarginPct.toFixed(1)}%</span>
           </span>
           ${y1AchievedPct != null ? `
-            <span class="cm-margin-tile" title="Y1 P&L-basis: Y1 EBIT / Y1 Revenue from the monthly engine. Includes ramp + learning-curve haircuts so it reads lower than the reference basis in Y1. Reconciles toward the reference value by Y2-Y3. Shown here to close the reconciliation loop that labeling-only left open.">
+            <span class="cm-margin-tile" title="Y1-only EBIT / Y1 Revenue, from the monthly engine (ramp + learning-curve haircuts included). This reconciles with the Summary → Financial Metrics 'EBIT Margin (contract)' tile's tooltip, which surfaces the Y1 basis alongside the contract-life aggregate. Y1 margin often reads higher than the contract-life aggregate when labor/facility escalation outpace volume growth; they converge in lighter-escalation deals by Y2-Y3.">
               <span class="cm-margin-tile-label">Y1 Actual (ramped)</span>
               <span class="cm-margin-tile-value ${y1VsTargetPP < -2 ? 'cm-margin-value-down' : y1VsTargetPP > 2 ? 'cm-margin-value-up' : ''}">${y1AchievedPct.toFixed(1)}%</span>
             </span>
@@ -4605,9 +4605,24 @@ function renderSummary() {
     <div class="hub-card mb-4">
       <h3 class="hub-section-heading">Financial Metrics</h3>
       <div class="cm-metrics-grid">
-        ${renderMetricCard('Gross Margin', calc.formatPct(metrics.grossMarginPct), metrics.grossMarginPct >= (thresholds.grossMargin || 10), `(Σ Revenue − Σ COGS) / Σ Revenue, horizon total. COGS = Labor + Facility + Equipment + VAS pass-through. Ties to the Gross Profit subtotal in the P&L below. Reconciliation: this is the P&L-basis margin (ramp + learning curve included). The Pricing Schedule banner shows the reference-basis (steady-state) achieved margin, which reads higher until the site hits steady state.`)}
-        ${renderMetricCard('EBITDA Margin', calc.formatPct(metrics.ebitdaMarginPct), metrics.ebitdaMarginPct >= (thresholds.ebitda || 8), `(Σ EBITDA across horizon) / (Σ Revenue). EBITDA = GP − SG&A (Overhead + pre-live one-times). Ties exactly to the EBITDA row in the P&L below. Reconciliation: P&L-basis (ramped); Pricing banner shows reference-basis achieved margin.`)}
-        ${renderMetricCard('EBIT Margin', calc.formatPct(metrics.ebitMarginPct), metrics.ebitMarginPct >= (thresholds.ebit || 5), '(Σ EBIT across horizon) / (Σ Revenue). EBIT = EBITDA − D&A. Ties exactly to the EBIT row in the P&L below. Reconciliation: P&L-basis (ramped); Pricing banner shows reference-basis achieved margin.')}
+        ${(() => {
+          // 2026-04-21 audit: the M3 banner tile on Pricing shows Y1 EBIT margin
+          // (14.7% on Wayfair), while these tiles show 5-year contract-life
+          // aggregate margins (10.4%). Both are correct; the labeling needed to
+          // disambiguate so a Pricing team reviewer can reconcile at a glance.
+          const y1Rev = Number(p1?.revenue || 0);
+          const y1Gp  = Number(p1?.grossProfit || 0);
+          const y1Ebitda = Number(p1?.ebitda || 0);
+          const y1Ebit   = Number(p1?.ebit   || 0);
+          const y1GpPct    = y1Rev > 0 ? (y1Gp     / y1Rev) * 100 : 0;
+          const y1EbitdaPct= y1Rev > 0 ? (y1Ebitda / y1Rev) * 100 : 0;
+          const y1EbitPct  = y1Rev > 0 ? (y1Ebit   / y1Rev) * 100 : 0;
+          return `
+        ${renderMetricCard('Gross Margin (contract)', calc.formatPct(metrics.grossMarginPct), metrics.grossMarginPct >= (thresholds.grossMargin || 10), `Contract-life (${contractYears}-yr) aggregate Gross Margin. Formula: Σ Revenue − Σ COGS, divided by Σ Revenue. COGS = Labor + Facility + Equipment + VAS pass-through. Y1 Gross Margin: ${y1GpPct.toFixed(1)}% — reconciles with the Pricing Schedule M3 banner's "Y1 Actual (ramped)" tile. Contract margin trends lower than Y1 when labor/facility escalation outpace volume growth.`)}
+        ${renderMetricCard('EBITDA Margin (contract)', calc.formatPct(metrics.ebitdaMarginPct), metrics.ebitdaMarginPct >= (thresholds.ebitda || 8), `Contract-life (${contractYears}-yr) aggregate EBITDA Margin. EBITDA = GP − SG&A (Overhead + pre-live one-times). Y1 EBITDA Margin: ${y1EbitdaPct.toFixed(1)}%. Ties exactly to the EBITDA row in the P&L below. Pricing Schedule banner shows the reference-basis (steady-state) achieved margin, which reads higher until the site hits steady state.`)}
+        ${renderMetricCard('EBIT Margin (contract)', calc.formatPct(metrics.ebitMarginPct), metrics.ebitMarginPct >= (thresholds.ebit || 5), `Contract-life (${contractYears}-yr) aggregate EBIT Margin. EBIT = EBITDA − D&A. Y1 EBIT Margin: ${y1EbitPct.toFixed(1)}% — this is the figure the Pricing M3 banner "Y1 Actual (ramped)" tile displays. Ties exactly to the EBIT row in the P&L below.`)}
+          `;
+        })()}
         ${renderMetricCard('ROIC', calc.formatPct(metrics.roicPct), metrics.roicPct >= (thresholds.roic || 15), `NOPAT / Invested Capital. NOPAT = avg annual EBIT × (1 − ${calcHeur.taxRatePct || 25}% tax) = $${((metrics.nopat||0)/1000).toFixed(0)}K. Invested Capital = $${(metrics.investedCapital/1000).toFixed(0)}K = Startup $${(summary.startupCapital/1000).toFixed(0)}K + Equipment $${(summary.equipmentCapital/1000).toFixed(0)}K + avg NWC $${((metrics.estimatedNwc||0)/1000).toFixed(0)}K (horizon-avg Revenue × DSO/365 − horizon-avg COGS × DPO/365).`)}
         ${renderMetricCard('MIRR', calc.formatPct(metrics.mirrPct), metrics.mirrPct >= (thresholds.mirr || 12), `Modified IRR of FCF series. Financing rate ${fin.discountRate || 10}%, reinvestment rate ${fin.reinvestRate || 8}%. Uses Y0 outflow of $${(metrics.totalInvestment/1000).toFixed(0)}K plus each year's Free Cash Flow.`)}
         ${renderMetricCard('NPV', calc.formatCurrency(metrics.npv, {compact: true}), metrics.npv > 0, `NPV of FCF series discounted at ${fin.discountRate || 10}%. Sums [−Total Investment $${(metrics.totalInvestment/1000).toFixed(0)}K at t=0] + Σ FCF_yr / (1+${(fin.discountRate||10)/100})^yr. Ties to the Cumulative FCF row in the P&L (Y5 value) when discount ≈ 0.`)}

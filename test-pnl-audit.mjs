@@ -154,6 +154,27 @@ test('buildYearlyProjections: cumFcf accumulates', () => {
   }
 });
 
+test('buildYearlyProjections: overhead escalates ONLY by costEscPct (no volume-growth mix-in)', () => {
+  // 2026-04-21: legacy path previously compounded cost-escalation with a
+  // hardcoded 30% of volume-growth (e.g. 10% vol growth → overhead ~6%/yr
+  // instead of 3%). The audit aligned it to monthly-engine's cost-escalation-
+  // only rule so the two calc branches reconcile on Y2+.
+  const result = buildYearlyProjections({
+    years: 5, baseLaborCost: 0, baseFacilityCost: 0,
+    baseEquipmentCost: 0, baseOverheadCost: 1_000_000, baseVasCost: 0,
+    startupAmort: 0, startupCapital: 0,
+    baseOrders: 1_000_000, marginPct: 0.16,
+    volGrowthPct: 0.10,  // 10% annual volume growth
+    costEscPct: 0.03,    // 3% cost escalation
+    useMonthlyEngine: false,
+  });
+  // With the fix: overhead Y2 = 1M × 1.03 = 1.030M (3% escalation only).
+  // Without the fix (old bug): overhead Y2 would be 1M × 1.03 × (1+0.10×0.3) = 1.0609M (~6.1%).
+  near(result.projections[1].overhead, 1_030_000, 100, 'Y2 overhead = 1M × (1+costEsc), not mixed');
+  near(result.projections[2].overhead, 1_060_900, 200, 'Y3 overhead = 1M × 1.03²');
+  near(result.projections[4].overhead, 1_125_509, 500, 'Y5 overhead = 1M × 1.03⁴, pure cost esc');
+});
+
 // ============================================================
 // 3. FINANCIAL METRICS — FCF-BASED
 // ============================================================
@@ -239,18 +260,18 @@ test('sensitivityTable: baseRevenue override ties to P&L Y1', () => {
   const withOverride = sensitivityTable(baseCosts, 1_000_000, undefined, {
     marginPct: 15, baseRevenue: 9_000_000,
   });
-  // No-override baseline GP = 7.86M × 1.15 - 7.86M = 1.18M
-  // With-override baseline GP = 9M - 7.86M = 1.14M (drifts from cost+margin)
-  const noOvrBase = noOverride[0].adjustments.find(a => a.pct === 0);
-  const ovrBase = withOverride[0].adjustments.find(a => a.pct === 0);
-  // They both compute 4 scenarios at [-10, -5, 5, 10] — extract the zero-adj reference
-  // via indirect: look at labor -10% case, which in both scenarios doesn't change revenue.
+  // Post-2026-04-21: baseline fallback uses cost-plus `cost / (1 − m)` instead
+  // of the legacy markup `cost × (1 + m)` — on 15% margin the difference is
+  // $1.39M revenue delta. The override path is unchanged.
+  //   No-override baseline rev = 7.86M / (1 − 0.15) = 9.247M
+  //   With-override baseline rev = 9M (driven by pricing buckets)
   const noOvrLabor = noOverride.find(d => d.kind === 'labor_rate').adjustments.find(a => a.pct === -10);
   const ovrLabor   = withOverride.find(d => d.kind === 'labor_rate').adjustments.find(a => a.pct === -10);
-  // revenue should differ between the two calls for labor-rate case (neither scales revenue)
   assert(noOvrLabor.revenue !== ovrLabor.revenue,
     `override should change baseline revenue: noOvr=${noOvrLabor.revenue} vs ovr=${ovrLabor.revenue}`);
   near(ovrLabor.revenue, 9_000_000, 0.01, 'override baseline rev used');
+  near(noOvrLabor.revenue, 7_860_000 / 0.85, 1,
+    'no-override baseline uses cost-plus: cost / (1 − m)');
 });
 
 // ============================================================

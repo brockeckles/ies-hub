@@ -653,7 +653,12 @@ export function resolveCalcHeuristics(scenario, snapshots, overrides, projectCol
     // Ops + Escalation
     equipmentEscPct:      n(pick('equipment_escalation_pct', p.equipmentEscalation ?? 3), 3),
     facilityEscPct:       n(pick('facility_escalation_pct',  p.facilityEscalation  ?? 3), 3),
-    costEscPct:           n(pick('facility_escalation_pct',  p.annualEscalation    ?? 3), 3),
+    // 2026-04-21 audit: was `pick('facility_escalation_pct', ...)` — a
+    // copy-paste typo that silently tied general cost escalation to the
+    // facility key. Routing through `cost_escalation_pct` (with legacy
+    // fallbacks) lets a user tune general-cost escalation independent of
+    // facility.
+    costEscPct:           n(pick('cost_escalation_pct',      p.costEscalation ?? p.annualEscalation ?? 3), 3),
     unitsPerTruck:        n(pick('units_per_truck',          p.unitsPerTruck      ?? 25000), 25000),
     dockSfPerDoor:        n(pick('dock_sf_per_door',         p.dockSfPerDoor      ?? 700),   700),
     rackHoneycombPct:     n(pick('rack_honeycomb_pct',       p.rackHoneycomb      ?? 20),    20),

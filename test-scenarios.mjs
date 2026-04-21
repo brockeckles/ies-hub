@@ -348,6 +348,26 @@ test('resolveCalcHeuristics: numeric coercion of NaN override falls to default',
   // but numeric coercion inside pick() via n() falls to 25.
   eq(out.taxRatePct, 25);
 });
+// 2026-04-21 audit: costEscPct was reading the facility_escalation_pct key
+// (copy-paste typo) — a What-If slider on 'cost_escalation_pct' couldn't move
+// general cost escalation independent of facility. Lock the fix.
+test('resolveCalcHeuristics: cost_escalation_pct slider surfaces as costEscPct independent of facility', () => {
+  const out = resolveCalcHeuristics(DRAFT_SCEN, null, {}, PROJECT_COLS, {
+    cost_escalation_pct: 4,
+    facility_escalation_pct: 2,
+  });
+  eq(out.costEscPct, 4);
+  eq(out.facilityEscPct, 2);
+  eq(out.used.cost_escalation_pct, 'transient');
+});
+test('resolveCalcHeuristics: costEscPct falls back to p.costEscalation then p.annualEscalation then 3', () => {
+  const a = resolveCalcHeuristics(DRAFT_SCEN, null, {}, { costEscalation: 5 }, {});
+  eq(a.costEscPct, 5);
+  const b = resolveCalcHeuristics(DRAFT_SCEN, null, {}, { annualEscalation: 6 }, {});
+  eq(b.costEscPct, 6);
+  const c = resolveCalcHeuristics(DRAFT_SCEN, null, {}, {}, {});
+  eq(c.costEscPct, 3);
+});
 
 // ---------------------------------------------------------------------------
 // 5c. PHASE 4b — monthly OT/absence profiles

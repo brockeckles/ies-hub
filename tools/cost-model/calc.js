@@ -1394,7 +1394,14 @@ export function buildYearlyProjections(params) {
     const labor = baseLaborCost * laborMult * volMult * learningMult;
     const facility = baseFacilityCost * costMult;
     const equipment = baseEquipmentCost * costMult;
-    const overhead = baseOverheadCost * costMult * Math.pow(1 + volGrowthPct * 0.3, yr - 1);
+    // 2026-04-21 audit: overhead had `* Math.pow(1 + volGrowthPct * 0.3, yr - 1)`
+    // tacked on — an undocumented hybrid that compounded cost-escalation with
+    // 30% of volume growth (10% vol growth → overhead escalated at ~6%/yr
+    // instead of 3%). The 0.3 constant was magic. Monthly engine (calc.monthly.js)
+    // uses cost-escalation-only; aligning the legacy path here so both
+    // branches reconcile on Y2+. If volume-elasticity is genuinely wanted in
+    // the future, surface as an explicit heuristic (e.g. `overhead_volume_elasticity_pct`).
+    const overhead = baseOverheadCost * costMult;
     const vas = baseVasCost * volMult;
     const startup = startupAmort;
     const totalCost = labor + facility + equipment + overhead + vas + startup;
@@ -2148,7 +2155,11 @@ export function validateModel(model, opts = {}) {
   // Thresholds per MD4 recommendation: warn at −2pp, error at −5pp.
   const buckets = model.pricingBuckets || [];
   if (buckets.length > 0 && targetMarginPct > 0) {
-    const hasAnyOverride = buckets.some(b => Number(b.rate) > 0);
+    // Mirrors enrichBucketsWithDerivedRates (calc.js:L1884): a deliberate $0
+    // override (free-tier service) carries rateExplicitOverride=true and must
+    // trip the validator even though its numeric rate is 0.
+    const hasAnyOverride = buckets.some(b =>
+      b.rateExplicitOverride === true || Number(b.rate) > 0);
     if (hasAnyOverride) {
       // Re-derive enriched buckets against current cost rollup so the
       // validator matches what the Pricing Schedule UI displays.
@@ -2231,9 +2242,13 @@ export function sensitivityTable(baseCosts, baseOrders, adjustments = [-0.10, -0
   // footnote "Base GP: $X" consistent with the table.
   const marginPct = Number(opts.marginPct) || 0;
   const marginFrac = marginPct / 100;
+  // 2026-04-21 audit: fallback used the legacy markup formula
+  // `cost × (1 + m)` — on 16% margin this is 1.16× vs the correct cost-plus
+  // 1.19× (23% skew in the baseline at the extremes). Aligned with grossUp
+  // at L46-48 so sensitivity and Pricing Schedule share a baseline.
   const baseRevenue = (opts.baseRevenue != null && Number(opts.baseRevenue) > 0)
     ? Number(opts.baseRevenue)
-    : baseTotalCost * (1 + marginFrac);
+    : baseTotalCost / Math.max(0.001, 1 - Math.min(0.999, Math.max(0, marginFrac)));
   const baseGP = baseRevenue - baseTotalCost;
 
   const burdenPct  = Number(opts.burdenPct)  || 0;
