@@ -2130,13 +2130,21 @@ textarea.hub-input {
 /* 2026-04-21 PM (Brock feedback): chart layout restructured so the Y-axis
    has a title + tick labels. Grid columns = [axis title (rotated) | tick
    values | canvas]. The SVG still uses preserveAspectRatio="none" so we
-   render all labels as HTML outside the SVG — embedded <text> would stretch. */
+   render all labels as HTML outside the SVG — embedded <text> would stretch.
+   2026-04-21 evening (Brock overflow report): explicit grid-template-rows
+   + min-height:0 + overflow:hidden cap children at 160px. Without these the
+   SVG's 100×100 viewBox was inheriting canvas width (~523px) via aspect-ratio
+   preservation on ``<svg>`` intrinsic sizing, which stretched the yaxis-ticks
+   border-right all the way down past the Driver Impact panel below. */
 .cm-whatif-chart__plot {
   display: grid;
   grid-template-columns: 18px 56px 1fr;
+  grid-template-rows: 160px;
   gap: 4px;
   align-items: stretch;
   height: 160px;
+  max-height: 160px;
+  overflow: hidden;
 }
 .cm-whatif-chart__yaxis-title {
   font-size: 10px;
@@ -2149,10 +2157,13 @@ textarea.hub-input {
   align-self: center;
   padding: 4px 0;
   white-space: nowrap;
+  min-height: 0;
 }
 .cm-whatif-chart__yaxis-ticks {
   position: relative;
-  height: 100%;
+  height: 160px;
+  max-height: 160px;
+  min-height: 0;
   border-right: 1px solid var(--ies-gray-200, #e5e7eb);
 }
 .cm-whatif-chart__ytick {
@@ -2165,13 +2176,17 @@ textarea.hub-input {
   white-space: nowrap;
 }
 .cm-whatif-chart__canvas {
-  height: 100%;
+  height: 160px;
+  max-height: 160px;
+  min-height: 0;
+  overflow: hidden;
   background: var(--ies-gray-50, #f9fafb);
   border: 1px solid var(--ies-gray-100, #f3f4f6);
   border-radius: 4px;
   padding: 4px 8px;
+  box-sizing: border-box;
 }
-.cm-whatif-chart__canvas svg { width: 100%; height: 100%; display: block; }
+.cm-whatif-chart__canvas svg { width: 100%; height: 100%; display: block; max-height: 100%; }
 .cm-whatif-chart__xaxis-wrap {
   display: grid;
   grid-template-columns: 18px 56px 1fr;
