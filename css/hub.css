@@ -2127,21 +2127,75 @@ textarea.hub-input {
   color: var(--ies-blue, #0047AB);
   box-shadow: 0 1px 2px rgba(0,0,0,0.06);
 }
+/* 2026-04-21 PM (Brock feedback): chart layout restructured so the Y-axis
+   has a title + tick labels. Grid columns = [axis title (rotated) | tick
+   values | canvas]. The SVG still uses preserveAspectRatio="none" so we
+   render all labels as HTML outside the SVG — embedded <text> would stretch. */
+.cm-whatif-chart__plot {
+  display: grid;
+  grid-template-columns: 18px 56px 1fr;
+  gap: 4px;
+  align-items: stretch;
+  height: 160px;
+}
+.cm-whatif-chart__yaxis-title {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: var(--ies-gray-600, #4b5563);
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  text-align: center;
+  align-self: center;
+  padding: 4px 0;
+  white-space: nowrap;
+}
+.cm-whatif-chart__yaxis-ticks {
+  position: relative;
+  height: 100%;
+  border-right: 1px solid var(--ies-gray-200, #e5e7eb);
+}
+.cm-whatif-chart__ytick {
+  position: absolute;
+  right: 4px;
+  transform: translateY(-50%);
+  font-size: 10px;
+  color: var(--ies-gray-500, #6b7280);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .cm-whatif-chart__canvas {
-  height: 140px;
+  height: 100%;
   background: var(--ies-gray-50, #f9fafb);
   border: 1px solid var(--ies-gray-100, #f3f4f6);
   border-radius: 4px;
-  padding: 8px;
+  padding: 4px 8px;
 }
 .cm-whatif-chart__canvas svg { width: 100%; height: 100%; display: block; }
+.cm-whatif-chart__xaxis-wrap {
+  display: grid;
+  grid-template-columns: 18px 56px 1fr;
+  gap: 4px;
+  margin-top: 4px;
+}
+.cm-whatif-chart__xaxis-title {
+  grid-column: 3;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: var(--ies-gray-600, #4b5563);
+  margin-top: 2px;
+  order: 2;
+}
 .cm-whatif-chart__xaxis {
+  grid-column: 3;
   display: flex;
   justify-content: space-between;
-  margin-top: 4px;
   font-size: 10px;
   color: var(--ies-gray-400, #9ca3af);
   padding: 0 8px;
+  order: 1;
 }
 
 /* Driver-impact horizontal bars */

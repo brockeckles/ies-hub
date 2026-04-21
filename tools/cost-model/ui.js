@@ -371,6 +371,7 @@ let currentScenario = null;
 let currentScenarioSnapshots = null;   // grouped { labor:[], facility:[], ..., heuristics:[] }
 let currentRevisions = [];
 let _lastCalcHeuristics = null;        // set by Summary calc; read by Timeline/Summary banners
+let _lastProjections = null;           // yearly projections array from the most recent Summary/Timeline run — enables the M3 banner to show Y1 ramped margin alongside reference-basis
 // Phase 4c — cached market labor profile (set when project's market is known)
 let currentMarketLaborProfile = null;
 // Re-entry guards — prevent infinite render loops when the lazy loader fires
@@ -1688,11 +1689,22 @@ function renderShifts() {
         <div class="text-subtitle" style="margin:0;">Shift Structure</div>
         <span class="hub-field__hint">US FT reference: 2,080 paid hrs / FTE. PTO &amp; holiday hours subtract to give Productive.</span>
       </div>
-      <!-- Row 1: facility shift pattern + premiums -->
+      <!-- Row 1: facility shift pattern + premiums + workweek pattern -->
       <div style="display:grid;grid-template-columns:repeat(4, minmax(0, 1fr));gap:12px;margin-bottom:12px;">
         <div class="hub-field">
           <label class="hub-field__label" title="Number of shifts the FACILITY runs per day (1-3). Facility operating descriptor — does not affect the 2,080 paid hours per FTE.">Shifts / Day <span style="color:var(--ies-gray-400);font-weight:400;">(facility)</span></label>
           <input class="hub-input" type="number" value="${s.shiftsPerDay || 1}" min="1" max="3" step="1" data-field="shifts.shiftsPerDay" data-type="number" />
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label" title="Workweek pattern — operational metadata only. All patterns sum to ~2,080 paid hrs/yr; this tag is for roster reporting and OT-premium scheduling context.">Workweek Pattern</label>
+          <select class="hub-input" data-field="shifts.workweekPattern">
+            <option value="5x8"${(s.workweekPattern || '5x8') === '5x8' ? ' selected' : ''}>5 × 8 (standard)</option>
+            <option value="4x10"${s.workweekPattern === '4x10' ? ' selected' : ''}>4 × 10 (compressed)</option>
+            <option value="9/80"${s.workweekPattern === '9/80' ? ' selected' : ''}>9/80 (biweekly compressed)</option>
+            <option value="3x12"${s.workweekPattern === '3x12' ? ' selected' : ''}>3 × 12 (12-hr shift)</option>
+            <option value="24_7_rotating"${s.workweekPattern === '24_7_rotating' ? ' selected' : ''}>24 / 7 (rotating)</option>
+            <option value="custom"${s.workweekPattern === 'custom' ? ' selected' : ''}>Custom</option>
+          </select>
         </div>
         <div class="hub-field">
           <label class="hub-field__label" title="Pay premium applied to 2nd-shift hours">2nd Shift Premium %</label>
@@ -1702,7 +1714,6 @@ function renderShifts() {
           <label class="hub-field__label" title="Pay premium applied to 3rd-shift hours">3rd Shift Premium %</label>
           <input class="hub-input" type="number" value="${s.shift3Premium || 0}" min="0" max="50" step="0.5" data-field="shifts.shift3Premium" data-type="number" />
         </div>
-        <div></div>
       </div>
       <!-- Row 2: PTO + Holiday hours (the inputs that drive Productive) -->
       <div style="display:grid;grid-template-columns:repeat(4, minmax(0, 1fr));gap:12px;margin-bottom:12px;">
@@ -3768,6 +3779,12 @@ function renderPricing() {
   const ur = (refData.utilityRates || []).find(r => r.market_id === market);
   const opHrs = calc.operatingHours(model.shifts || {});
   const contractYears = model.projectDetails?.contractTerm || 5;
+  // 2026-04-21 PM: ensure Y1 projections are populated so the M3 banner can
+  // show the Y1-ramped actual margin alongside the reference-basis achieved.
+  // ensureMonthlyBundle is cached — no-op on repeat renders in the same session.
+  if (!_lastProjections) {
+    try { ensureMonthlyBundle(); } catch (_) { /* best-effort */ }
+  }
   const tiAmort = calc.tiAmortAnnual(model.equipmentLines || [], contractYears);
   const facilityCost = calc.totalFacilityCost(model.facility || {}, fr, ur, { tiAmort });
 
@@ -3818,6 +3835,18 @@ function renderPricing() {
   const achievedMarginPct  = achievedMarginFrac * 100;
   const marginDeltaPP      = achievedMarginPct - targetMarginPct; // in pp
   const hasAnyOverride     = impact.overriddenBucketCount > 0;
+
+  // 2026-04-21 PM: full computational reconciliation — pull Y1 ramped margin
+  // from the cached projections when Summary has been rendered this session.
+  // When it hasn't, we fall back to "labeling-only" mode (see-Summary link).
+  // This gives the banner BOTH bases when data is available: reference-basis
+  // (steady-state, no ramp) from the Pricing Schedule rollup AND Y1-actual
+  // from the P&L engine (ramp + learning-curve haircut applied).
+  const y1Proj = Array.isArray(_lastProjections) && _lastProjections.length ? _lastProjections[0] : null;
+  const y1AchievedPct = y1Proj && y1Proj.revenue > 0
+    ? ((y1Proj.ebit || (y1Proj.revenue - y1Proj.totalCost)) / y1Proj.revenue) * 100
+    : null;
+  const y1VsTargetPP = y1AchievedPct != null ? y1AchievedPct - targetMarginPct : null;
   // Thresholds: warn at 2pp shortfall, error at 5pp (per MD4 recommendation).
   const m3Level = !hasAnyOverride ? 'ok'
     : marginDeltaPP <= -5 ? 'error'
@@ -3902,11 +3931,17 @@ function renderPricing() {
             <span class="cm-margin-tile-label">Target</span>
             <span class="cm-margin-tile-value">${targetMarginPct.toFixed(1)}%</span>
           </span>
-          <span class="cm-margin-tile" title="What the current Pricing Schedule rates actually deliver against steady-state cost. Matches target by construction when no overrides; deviates by override variance otherwise.">
+          <span class="cm-margin-tile" title="Reference-basis: steady-state cost / volume × effective rates. Matches target by construction when no overrides; deviates by override variance otherwise. Pre-ramp, pre-learning-curve.">
             <span class="cm-margin-tile-label">Achieved (ref)</span>
             <span class="cm-margin-tile-value ${hasAnyOverride && marginDeltaPP < 0 ? 'cm-margin-value-down' : ''}">${achievedMarginPct.toFixed(1)}%</span>
           </span>
-          <span class="cm-margin-tile">
+          ${y1AchievedPct != null ? `
+            <span class="cm-margin-tile" title="Y1 P&L-basis: Y1 EBIT / Y1 Revenue from the monthly engine. Includes ramp + learning-curve haircuts so it reads lower than the reference basis in Y1. Reconciles toward the reference value by Y2-Y3. Shown here to close the reconciliation loop that labeling-only left open.">
+              <span class="cm-margin-tile-label">Y1 Actual (ramped)</span>
+              <span class="cm-margin-tile-value ${y1VsTargetPP < -2 ? 'cm-margin-value-down' : y1VsTargetPP > 2 ? 'cm-margin-value-up' : ''}">${y1AchievedPct.toFixed(1)}%</span>
+            </span>
+          ` : ''}
+          <span class="cm-margin-tile" title="Δ of reference-basis achieved vs target. Drives the banner severity (ok / warn / error). Y1 ramped will differ — see the Y1 Actual tile when populated.">
             <span class="cm-margin-tile-label">Δ vs target</span>
             <span class="cm-margin-tile-value ${marginDeltaPP < 0 ? 'cm-margin-value-down' : marginDeltaPP > 0 ? 'cm-margin-value-up' : ''}">${marginDeltaPP >= 0 ? '+' : ''}${marginDeltaPP.toFixed(1)}pp</span>
           </span>
@@ -4384,6 +4419,9 @@ function renderSummary() {
   // Stash the monthly bundle for save-time persistence
   if (projResult && projResult.monthlyBundle) _lastMonthlyBundle = projResult.monthlyBundle;
   const projections = projResult.projections || [];
+  // Cache for cross-section reads (M3 banner on Pricing page reads Y1 margin
+  // from this to surface ramp-adjusted actual alongside reference-basis).
+  _lastProjections = projections;
 
   // Financial metrics — 2026-04-20 PM audit: MIRR/NPV/Payback now use FCF
   // (not grossProfit), ROIC uses NOPAT with a working-capital-inflated
@@ -6183,7 +6221,31 @@ function renderWhatIfStudio() {
     const baseline0 = minV <= 0 && maxV >= 0 ? (H - ((0 - minV) / range) * H) : null;
     const years = pBase.map((_, i) => `Y${i + 1}`);
 
-    // Render year labels + min/max Y gridline hints
+    // 2026-04-21 PM (Brock feedback): Y-axis needs a title + tick labels so
+    // reviewers can read scale without hovering. Compute 3-5 tick values
+    // (max, zero-crossing if present, min, and a midpoint on each side of
+    // zero where it fits) and render them as HTML outside the SVG — the SVG
+    // uses preserveAspectRatio="none" which stretches any embedded <text>.
+    const ticks = (() => {
+      const out = [{ value: maxV, pct: 0 }];
+      if (baseline0 != null) out.push({ value: 0, pct: baseline0 });
+      out.push({ value: minV, pct: 100 });
+      // Add a midpoint between max and zero (or max and min if no zero crossing)
+      const upperMid = baseline0 != null
+        ? { value: maxV / 2, pct: baseline0 / 2 }
+        : null;
+      if (upperMid && upperMid.pct > 8 && upperMid.pct < (baseline0 ?? 92) - 8) {
+        out.splice(1, 0, upperMid);
+      }
+      return out;
+    })();
+
+    // Y-axis title: "{Metric Name} ($)" for currency metrics, just label otherwise.
+    // All current metrics are currency so we keep "($)" unconditionally but the
+    // code supports swapping in percent/other units if future metrics need it.
+    const yAxisUnit = '$';
+    const yAxisTitle = `${metricDef.label} (${yAxisUnit})`;
+
     return `
       <div class="cm-whatif-chart">
         <div class="cm-whatif-chart__header">
@@ -6201,19 +6263,28 @@ function renderWhatIfStudio() {
             `).join('')}
           </div>
         </div>
-        <div class="cm-whatif-chart__canvas">
-          <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${metricDef.label} trajectory baseline vs scenario">
-            ${baseline0 != null ? `<line x1="0" x2="${W}" y1="${baseline0}" y2="${baseline0}" stroke="var(--ies-gray-200,#e5e7eb)" stroke-dasharray="2 2" stroke-width="0.3" vector-effect="non-scaling-stroke"/>` : ''}
-            <polyline points="${toPoly(basePts)}" fill="none" stroke="var(--ies-gray-400,#9ca3af)" stroke-width="1.8" vector-effect="non-scaling-stroke"/>
-            <polyline points="${toPoly(scePts)}" fill="none" stroke="var(--ies-blue,#0047AB)" stroke-width="2.2" vector-effect="non-scaling-stroke"/>
-            ${scePts.map((v, i) => {
-              const [x, y] = toXY(v, i, scePts.length);
-              return `<circle cx="${x}" cy="${y}" r="1.1" fill="var(--ies-blue,#0047AB)" vector-effect="non-scaling-stroke"><title>Y${i+1}: ${fmt(v)} (baseline ${fmt(basePts[i])})</title></circle>`;
-            }).join('')}
-          </svg>
+        <div class="cm-whatif-chart__plot">
+          <div class="cm-whatif-chart__yaxis-title" title="${metricDef.label} on the vertical axis, all values in ${yAxisUnit === '$' ? 'US dollars' : yAxisUnit}">${yAxisTitle}</div>
+          <div class="cm-whatif-chart__yaxis-ticks" aria-hidden="true">
+            ${ticks.map(t => `<div class="cm-whatif-chart__ytick" style="top:${t.pct.toFixed(1)}%;">${fmt(t.value)}</div>`).join('')}
+          </div>
+          <div class="cm-whatif-chart__canvas">
+            <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${metricDef.label} trajectory baseline vs scenario">
+              ${ticks.map(t => `<line x1="0" x2="${W}" y1="${t.pct}" y2="${t.pct}" stroke="${t.value === 0 ? 'var(--ies-gray-300,#d1d5db)' : 'var(--ies-gray-100,#f3f4f6)'}" stroke-dasharray="${t.value === 0 ? '2 2' : '1 2'}" stroke-width="${t.value === 0 ? '0.3' : '0.25'}" vector-effect="non-scaling-stroke"/>`).join('')}
+              <polyline points="${toPoly(basePts)}" fill="none" stroke="var(--ies-gray-400,#9ca3af)" stroke-width="1.8" vector-effect="non-scaling-stroke"/>
+              <polyline points="${toPoly(scePts)}" fill="none" stroke="var(--ies-blue,#0047AB)" stroke-width="2.2" vector-effect="non-scaling-stroke"/>
+              ${scePts.map((v, i) => {
+                const [x, y] = toXY(v, i, scePts.length);
+                return `<circle cx="${x}" cy="${y}" r="1.1" fill="var(--ies-blue,#0047AB)" vector-effect="non-scaling-stroke"><title>Y${i+1}: ${fmt(v)} (baseline ${fmt(basePts[i])})</title></circle>`;
+              }).join('')}
+            </svg>
+          </div>
         </div>
-        <div class="cm-whatif-chart__xaxis">
-          ${years.map(y => `<span>${y}</span>`).join('')}
+        <div class="cm-whatif-chart__xaxis-wrap">
+          <div class="cm-whatif-chart__xaxis-title">Contract Year</div>
+          <div class="cm-whatif-chart__xaxis">
+            ${years.map(y => `<span>${y}</span>`).join('')}
+          </div>
         </div>
       </div>
     `;
@@ -7752,6 +7823,7 @@ function ensureMonthlyBundle() {
       _heuristicsSource: calcHeur.used,
     });
     if (projResult && projResult.monthlyBundle) _lastMonthlyBundle = projResult.monthlyBundle;
+    if (projResult && projResult.projections) _lastProjections = projResult.projections;
     if (calcHeur) _lastCalcHeuristics = calcHeur;
     return _lastMonthlyBundle;
   } catch (err) {
