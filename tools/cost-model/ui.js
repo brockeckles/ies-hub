@@ -600,22 +600,22 @@ function wireLandingEvents() {
           // splitting the existing targetMargin 37.5/62.5.
           if (!model.financial) model.financial = createEmptyModel().financial;
           const fin = model.financial;
-          if (fin.gaMargin == null || fin.gaMargin === undefined || Number(fin.gaMargin) === 0) {
-            if (full.ga_margin_pct != null) {
-              fin.gaMargin = Number(full.ga_margin_pct);
-            } else {
-              fin.gaMargin = Number((Number(fin.targetMargin || 16) * 0.375).toFixed(2));
-            }
+          const gaMissing  = fin.gaMargin == null || Number(fin.gaMargin) === 0;
+          const mgmtMissing = fin.mgmtFeeMargin == null || Number(fin.mgmtFeeMargin) === 0;
+          if (gaMissing) {
+            fin.gaMargin = full.ga_margin_pct != null
+              ? Number(full.ga_margin_pct)
+              : Number((Number(fin.targetMargin || 16) * 0.375).toFixed(2));
           }
-          if (fin.mgmtFeeMargin == null || fin.mgmtFeeMargin === undefined || Number(fin.mgmtFeeMargin) === 0) {
-            if (full.mgmt_fee_margin_pct != null) {
-              fin.mgmtFeeMargin = Number(full.mgmt_fee_margin_pct);
-            } else {
-              fin.mgmtFeeMargin = Number((Number(fin.targetMargin || 16) * 0.625).toFixed(2));
-            }
+          if (mgmtMissing) {
+            fin.mgmtFeeMargin = full.mgmt_fee_margin_pct != null
+              ? Number(full.mgmt_fee_margin_pct)
+              : Number((Number(fin.targetMargin || 16) * 0.625).toFixed(2));
           }
           // Keep targetMargin as the derived sum (authoritative downstream reader).
           fin.targetMargin = Number((Number(fin.gaMargin || 0) + Number(fin.mgmtFeeMargin || 0)).toFixed(2));
+          // Expose loaded model for quick live-debug (read-only, side-effect free)
+          try { window.__cmLoadedModel = model; } catch (_) {}
         } else {
           model = reconstructModelFromFlatRow(full);
           showCmToast('Legacy model loaded from summary fields. Save to upgrade to the new format.', 'info');
