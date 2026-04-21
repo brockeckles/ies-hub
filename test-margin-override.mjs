@@ -17,8 +17,12 @@ import {
   computeOverrideImpact,
   computeStackedRevenue,
   computeImplicationsImpact,
+  computeSgaOverlay,
   computeSummary,
   buildYearlyProjections,
+  totalStartupAmort,
+  totalStartupCapital,
+  totalStartupAsIncurred,
   validateModel,
 } from './tools/cost-model/calc.js';
 
@@ -325,6 +329,96 @@ test('computeImplicationsImpact: payback shift guarded against pathological case
   });
   assert(isFinite(r.paybackShiftMonths), 'finite');
   assert(Math.abs(r.paybackShiftMonths) <= 600, `capped, got ${r.paybackShiftMonths}`);
+});
+
+// ============================================================
+// computeSgaOverlay() — M2 reference Part I §5
+// ============================================================
+
+test('computeSgaOverlay: default 0 returns 0', () => {
+  near(computeSgaOverlay({ revenue: 10_000_000, sgaOverlayPct: 0 }), 0, 0.01);
+});
+
+test('computeSgaOverlay: 4.5% of gross revenue when applies_to=gross_revenue', () => {
+  near(computeSgaOverlay({ revenue: 10_000_000, sgaOverlayPct: 4.5, appliesTo: 'gross_revenue' }), 450_000, 0.5);
+});
+
+test('computeSgaOverlay: 4.5% of net revenue excludes pass-through', () => {
+  // Gross revenue = $10M. Pass-through (as-incurred, deferred) = $2M. Net = $8M.
+  // Overlay = 4.5% × $8M = $360,000.
+  near(computeSgaOverlay({
+    revenue: 10_000_000, passThroughRevenue: 2_000_000,
+    sgaOverlayPct: 4.5, appliesTo: 'net_revenue',
+  }), 360_000, 0.5);
+});
+
+test('computeSgaOverlay: pct capped at 50%', () => {
+  near(computeSgaOverlay({ revenue: 1_000_000, sgaOverlayPct: 100 }), 500_000, 1,
+    'overlay pct clamped');
+});
+
+test('buildYearlyProjections: sgaOverlayPct flows through to sga + EBITDA', () => {
+  const baseline = buildYearlyProjections({
+    years: 1,
+    baseLaborCost: 2_000_000, baseFacilityCost: 500_000,
+    baseEquipmentCost: 100_000, baseOverheadCost: 100_000, baseVasCost: 0,
+    startupAmort: 0, startupCapital: 0,
+    baseOrders: 1_000_000, marginPct: 0.16,
+    volGrowthPct: 0, laborEscPct: 0, costEscPct: 0,
+    taxRatePct: 25, useMonthlyEngine: false,
+    sgaOverlayPct: 0,
+  });
+  const overlay = buildYearlyProjections({
+    years: 1,
+    baseLaborCost: 2_000_000, baseFacilityCost: 500_000,
+    baseEquipmentCost: 100_000, baseOverheadCost: 100_000, baseVasCost: 0,
+    startupAmort: 0, startupCapital: 0,
+    baseOrders: 1_000_000, marginPct: 0.16,
+    volGrowthPct: 0, laborEscPct: 0, costEscPct: 0,
+    taxRatePct: 25, useMonthlyEngine: false,
+    sgaOverlayPct: 4.5,
+  });
+  // Baseline SGA = overhead category = $100K. EBITDA = revenue − cogs − 100K.
+  // Overlay SGA = $100K + 4.5% × revenue. EBITDA decreases by 4.5% × revenue.
+  const rev = baseline.projections[0].revenue;
+  near(overlay.projections[0].sgaOverlay, rev * 0.045, 1,
+    'overlay = 4.5% × revenue');
+  near(overlay.projections[0].sga - baseline.projections[0].sga, rev * 0.045, 1,
+    'SGA delta = overlay amount');
+  near(overlay.projections[0].ebitda - baseline.projections[0].ebitda, -rev * 0.045, 1,
+    'EBITDA drops by overlay amount');
+});
+
+// ============================================================
+// Startup as-incurred sub-branch (reference Part I §9)
+// ============================================================
+
+test('totalStartupAmort: skips as-incurred lines', () => {
+  const lines = [
+    { description: 'Cap A', one_time_cost: 100_000, billing_type: 'capitalized' },
+    { description: 'PM B',  one_time_cost: 50_000,  billing_type: 'as_incurred' },
+    { description: 'Default', one_time_cost: 30_000 },  // no billing_type → capitalized
+  ];
+  // Amortize $100K + $30K = $130K over 5 years = $26K/yr. Skip $50K as-incurred.
+  near(totalStartupAmort(lines, 5), 26_000, 1);
+});
+
+test('totalStartupCapital: excludes as-incurred lines', () => {
+  const lines = [
+    { one_time_cost: 100_000, billing_type: 'capitalized' },
+    { one_time_cost: 50_000,  billing_type: 'as_incurred' },
+  ];
+  // Capital includes only the $100K capitalized line.
+  near(totalStartupCapital(lines), 100_000, 1);
+});
+
+test('totalStartupAsIncurred: sums only as-incurred lines', () => {
+  const lines = [
+    { one_time_cost: 100_000, billing_type: 'capitalized' },
+    { one_time_cost: 50_000,  billing_type: 'as_incurred' },
+    { one_time_cost: 25_000,  billing_type: 'as_incurred' },
+  ];
+  near(totalStartupAsIncurred(lines), 75_000, 1);
 });
 
 // ============================================================

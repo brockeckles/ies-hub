@@ -14,7 +14,7 @@
  * @module tools/cost-model/calc
  */
 
-import * as monthly from './calc.monthly.js?v=20260421-vO';
+import * as monthly from './calc.monthly.js?v=20260421-vP';
 
 // ============================================================
 // MARGIN / GROSS-UP
@@ -1170,23 +1170,48 @@ export function tiAmortAnnual(equipmentLines, contractYears) {
 // ============================================================
 
 /**
- * Total annual startup amortization.
+ * Total annual startup amortization. Skips lines with `billing_type === 'as_incurred'`
+ * (reference Part I §9 sub-branch: as-incurred startup lines are zero-margin
+ * pass-through, not capitalized + amortized).
+ *
  * @param {import('./types.js?v=20260418-sK').StartupLine[]} lines
  * @param {number} contractYears
  * @returns {number}
  */
 export function totalStartupAmort(lines, contractYears) {
   const years = Math.max(1, contractYears || 5);
-  return lines.reduce((sum, line) => sum + (line.one_time_cost || 0) / years, 0);
+  return lines.reduce((sum, line) => {
+    if (line.billing_type === 'as_incurred') return sum;
+    return sum + (line.one_time_cost || 0) / years;
+  }, 0);
 }
 
 /**
- * Total startup capital (one-time costs).
+ * Total startup capital (one-time costs). Skips `as_incurred` lines — those
+ * are billed-as-incurred, not capitalized.
+ *
  * @param {import('./types.js?v=20260418-sK').StartupLine[]} lines
  * @returns {number}
  */
 export function totalStartupCapital(lines) {
-  return lines.reduce((sum, line) => sum + (line.one_time_cost || 0), 0);
+  return lines.reduce((sum, line) => {
+    if (line.billing_type === 'as_incurred') return sum;
+    return sum + (line.one_time_cost || 0);
+  }, 0);
+}
+
+/**
+ * Total as-incurred startup pass-through. Sum of one-time costs on lines
+ * where `billing_type === 'as_incurred'`. These flow through the P&L as
+ * revenue = expense (zero margin), not amortized.
+ *
+ * @param {import('./types.js?v=20260418-sK').StartupLine[]} lines
+ * @returns {number}
+ */
+export function totalStartupAsIncurred(lines) {
+  return lines.reduce((sum, line) => {
+    return sum + (line.billing_type === 'as_incurred' ? (line.one_time_cost || 0) : 0);
+  }, 0);
 }
 
 // ============================================================
@@ -1394,7 +1419,14 @@ export function buildYearlyProjections(params) {
     //   EBITDA = GP − SG&A
     //   EBIT = EBITDA − D&A = Revenue − totalCost (unchanged)
     const cogs         = labor + facility + equipment + vas;
-    const sga          = overhead;
+    const sgaCategory  = overhead;
+    // M2 (2026-04-21): SG&A overlay per reference Part I §5 — additive to
+    // category-based SG&A. Default 0; non-zero when project opts into
+    // reference-aligned pricing.
+    const sgaOverlay = params.sgaOverlayPct > 0
+      ? revenue * Math.min(0.50, Math.max(0, params.sgaOverlayPct / 100))
+      : 0;
+    const sga          = sgaCategory + sgaOverlay;
     const depreciation = startupAmort;
     const grossProfit  = revenue - cogs;
     const ebitda       = grossProfit - sga;
@@ -1419,6 +1451,8 @@ export function buildYearlyProjections(params) {
     projections.push({
       year: yr, orders, labor, facility, equipment, overhead, vas, startup,
       cogs, sga,
+      // M2 (2026-04-21): expose sgaCategory + sgaOverlay separately for P&L UI
+      sgaCategory, sgaOverlay,
       totalCost, revenue, grossProfit, ebitda, ebit, depreciation,
       // Per-category revenue breakout (reference Part I §3.2) — enables the
       // customer-facing pricing schedule to display each revenue line grossed
@@ -1909,6 +1943,36 @@ export function computeOverrideImpact(enrichedBuckets = []) {
     overriddenBucketCount,
     perBucket,
   };
+}
+
+/**
+ * SG&A overlay per reference Part I §5.
+ *
+ *   overlay = sga_pct × (revenue − pass_through_revenue)     when applies_to='net_revenue'
+ *   overlay = sga_pct × revenue                              when applies_to='gross_revenue'
+ *
+ * Applied between Contribution Margin and EBIT on the P&L. Category-based
+ * SG&A (OVERHEAD + startup amortization codes) remains as-is on cost rows;
+ * this overlay is ADDITIVE and represents unmodeled corporate overhead
+ * common in cost-plus RFP responses.
+ *
+ * Default `sga_overlay_pct = 0` — existing projects see no change. Set to
+ * 4.5 for reference-model-aligned pricing.
+ *
+ * @param {Object} params
+ * @param {number} params.revenue — total revenue for the period
+ * @param {number} [params.passThroughRevenue=0] — revenue from pass-through / as-incurred / deferred lines
+ * @param {number} params.sgaOverlayPct — as percentage (e.g., 4.5)
+ * @param {'net_revenue'|'gross_revenue'} [params.appliesTo='net_revenue']
+ * @returns {number} overlay $ amount (0 when pct is 0 or revenue base is 0)
+ */
+export function computeSgaOverlay({ revenue, passThroughRevenue = 0, sgaOverlayPct, appliesTo = 'net_revenue' }) {
+  const pct = Math.min(0.50, Math.max(0, (Number(sgaOverlayPct) || 0) / 100));
+  if (pct === 0) return 0;
+  const r = Number(revenue) || 0;
+  const pt = Number(passThroughRevenue) || 0;
+  const base = appliesTo === 'gross_revenue' ? r : Math.max(0, r - pt);
+  return base * pct;
 }
 
 /**
@@ -3080,6 +3144,9 @@ export function adaptYearlyToMonthlyParams(p) {
     periods:             p.periods     || [],
     startupLines:        p.startupLines     || [],
     pricingBuckets:      p.pricingBuckets   || [],
+    // M2 (2026-04-21): SG&A overlay pass-through
+    sga_overlay_pct:     Number(p.sgaOverlayPct) || 0,
+    sga_applies_to:      p.sgaAppliesTo || 'net_revenue',
     // Phase 4d — per-line monthly labor cost when laborLines + calcHeur available
     laborLines:          p.laborLines        || [],
     calcHeur:            p._calcHeur         || null,

@@ -378,6 +378,9 @@ export function buildMonthlyProjections(params) {
     periods = [],
     startupLines = [],
     pricingBuckets = [],
+    // M2 (2026-04-21): SG&A overlay — ratio-based corporate allocation
+    sga_overlay_pct = 0,
+    sga_applies_to = 'net_revenue',
     // Phase 4d additions (optional — falls back to aggregate when not supplied)
     laborLines = [],
     calcHeur = null,
@@ -628,16 +631,26 @@ export function buildMonthlyProjections(params) {
     const revenue = revByPeriod.get(p.period_index) || 0;
     const opex    = expByPeriod.get(p.period_index) || 0;
     const cogs    = cogsByPeriod.get(p.period_index) || 0;
-    const sga     = sgaByPeriod.get(p.period_index) || 0;
+    const sgaCategory = sgaByPeriod.get(p.period_index) || 0;
     const labor   = laborByPeriod.get(p.period_index) || 0;
     const dep     = depByPeriod.get(p.period_index) || 0;
+
+    // M2 (2026-04-21): SG&A overlay — ratio-based corporate allocation
+    // on top of category-based SGA. Default 0 means no behavior change.
+    const _sgaOvFrac = Math.min(0.50, Math.max(0, Number(sga_overlay_pct) || 0));
+    const _revBase = sga_applies_to === 'gross_revenue' ? revenue
+      : Math.max(0, revenue - (revenueRows
+          .filter(r => r.period_id === p.id && r.revenue_line_code === 'PASS_THROUGH_REV')
+          .reduce((s, r) => s + r.amount, 0)));
+    const sgaOverlay = _sgaOvFrac > 0 ? _revBase * _sgaOvFrac : 0;
+    const sga = sgaCategory + sgaOverlay;
 
     // Standard P&L stack. Note: pre-go-live one-time expenses (IT_INTEG_EXP,
     // PROF_SERV_EXP, ONBOARD_EXP) are already excluded from scopedPeriods by
     // period_index ≥ 0 — they don't flow into steady-state COGS or SG&A.
     const grossProfit = revenue - cogs;
     const ebitda      = grossProfit - sga;        // = revenue − cogs − sga
-    const ebit        = ebitda - dep;             // = revenue − opex (unchanged)
+    const ebit        = ebitda - dep;             // = revenue − opex − overlay
     const taxes       = Math.max(0, ebit * (tax_rate_pct / 100));
     const netIncome   = ebit - taxes;
 
@@ -666,6 +679,9 @@ export function buildMonthlyProjections(params) {
       opex,
       cogs,
       sga,
+      // M2 (2026-04-21): expose category + overlay separately for P&L UI
+      sga_category: sgaCategory,
+      sga_overlay: sgaOverlay,
       gross_profit: grossProfit,
       ebitda,
       ebit,

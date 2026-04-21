@@ -10,10 +10,10 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import * as calc from './calc.js?v=20260421-vW';
+import * as calc from './calc.js?v=20260421-vX';
 import * as api from './api.js?v=20260419-uH';
 import * as scenarios from './calc.scenarios.js?v=20260419-sZ';
-import * as monthlyCalc from './calc.monthly.js?v=20260421-vO';
+import * as monthlyCalc from './calc.monthly.js?v=20260421-vP';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260419-uH';
 
 // ============================================================
@@ -614,6 +614,20 @@ function wireLandingEvents() {
           }
           // Keep targetMargin as the derived sum (authoritative downstream reader).
           fin.targetMargin = Number((Number(fin.gaMargin || 0) + Number(fin.mgmtFeeMargin || 0)).toFixed(2));
+          // M2 (2026-04-21): pull SG&A overlay + contract type from flat columns
+          if (fin.sgaOverlayPct == null && full.sga_overlay_pct != null) {
+            fin.sgaOverlayPct = Number(full.sga_overlay_pct);
+          }
+          if (fin.sgaAppliesTo == null && full.sga_applies_to != null) {
+            fin.sgaAppliesTo = full.sga_applies_to;
+          }
+          if (!model.projectDetails.contractType && full.contract_type) {
+            model.projectDetails.contractType = full.contract_type;
+          }
+          // M5 (2026-04-21): tax rate from flat column if project_data doesn't carry it
+          if (model.projectDetails.taxRate == null && full.tax_rate_pct != null) {
+            model.projectDetails.taxRate = Number(full.tax_rate_pct);
+          }
           // Expose loaded model for quick live-debug (read-only, side-effect free)
           try { window.__cmLoadedModel = model; } catch (_) {}
         } else {
@@ -3442,6 +3456,20 @@ function renderFinancial() {
         </div>
         <div class="hub-field__hint">Gross-up: Revenue = Cost / (1 − ${total.toFixed(2)}%) = Cost × ${(1 / (1 - total / 100)).toFixed(4)}. The Pricing Schedule displays each bucket's revenue broken into G&amp;A and Mgmt Fee components (reference Part I §4).</div>
       </div>
+      <div class="hub-field hub-field--full">
+        <label class="hub-field__label">Contract Type</label>
+        <select class="hub-input" data-field="projectDetails.contractType">
+          <option value="fixed_variable"${(model.projectDetails?.contractType || 'fixed_variable') === 'fixed_variable' ? ' selected' : ''}>Fixed / Variable (standard bucketed pricing)</option>
+          <option value="open_book"${model.projectDetails?.contractType === 'open_book' ? ' selected' : ''}>Open Book (cost pass-through + declared margin)</option>
+          <option value="unit_rate"${model.projectDetails?.contractType === 'unit_rate' ? ' selected' : ''}>Unit Rate (per-unit rate card emphasis)</option>
+        </select>
+        <div class="hub-field__hint">Reference Part I §9. All three use the cost-plus mechanic; display on the Pricing Schedule differs. Split-Month Billing available as a follow-on.</div>
+      </div>
+      <div class="hub-field">
+        <label class="hub-field__label" title="Ratio-based SG&A overlay applied to net revenue (reference Part I §5). Default 0 = no overlay (rely on Overhead cost rows). Set to 4.5 for reference-model-aligned cost-plus RFP responses.">SG&amp;A Overlay (% of net revenue)</label>
+        <input class="hub-input" type="number" step="0.25" min="0" max="30" value="${f.sgaOverlayPct != null ? f.sgaOverlayPct : 0}" data-field="financial.sgaOverlayPct" data-type="number" />
+        <div class="hub-field__hint">Additive to category-based SG&A (Overhead lines + startup amortization). Default 0. Set to 4.5% for reference-model parity.</div>
+      </div>
       <div class="hub-field">
         <label class="hub-field__label">Volume Growth (% / yr)</label>
         <input class="hub-input" type="number" value="${f.volumeGrowth || 3}" step="0.5" data-field="financial.volumeGrowth" data-type="number" />
@@ -3459,6 +3487,11 @@ function renderFinancial() {
       <div class="hub-field">
         <label class="hub-field__label">Discount Rate (%)</label>
         <input class="hub-input" type="number" value="${f.discountRate || 10}" step="0.5" data-field="financial.discountRate" data-type="number" />
+      </div>
+      <div class="hub-field">
+        <label class="hub-field__label" title="Blended federal + state combined rate. Default 25% ≈ 21% federal (TCJA 2018) + ~4% typical state blend. EBIT &lt; 0 clamp at 0 — no refund generated on operating losses.">Tax Rate (%)</label>
+        <input class="hub-input" type="number" value="${model.projectDetails?.taxRate || 25}" step="0.5" min="0" max="50" data-field="projectDetails.taxRate" data-type="number" />
+        <div class="hub-field__hint">Default 25% (21% federal + ~4% state). EBIT floor at 0 — no negative taxes on loss months.</div>
       </div>
       <div class="hub-field">
         <label class="hub-field__label">Reinvestment Rate (%)</label>
@@ -3501,22 +3534,33 @@ function renderStartup() {
       <table class="hub-datatable hub-datatable--dense cm-table-startup">
         <thead>
           <tr>
-            <th style="width:50%;">Description</th>
-            <th class="hub-num" style="width:16%;">One-Time Cost</th>
-            <th class="hub-num" style="width:14%;">Annual Amort</th>
-            <th class="hub-num" style="width:14%;">Monthly Amort</th>
+            <th style="width:38%;">Description</th>
+            <th class="hub-num" style="width:14%;">One-Time Cost</th>
+            <th style="width:14%;" title="Capitalized = amortized over contract term + grossed up (standard). As-Incurred = zero-margin pass-through (reference Part I §9 sub-branch).">Billing</th>
+            <th class="hub-num" style="width:12%;">Annual Amort</th>
+            <th class="hub-num" style="width:12%;">Monthly Amort</th>
             <th class="cm-actions"></th>
           </tr>
         </thead>
         <tbody>
           ${lines.map((l, i) => {
-            const amort = (l.one_time_cost || 0) / Math.max(1, contractYears);
+            const billingType = l.billing_type || 'capitalized';
+            const isAsIncurred = billingType === 'as_incurred';
+            // As-Incurred lines bypass amortization (pass-through at cost) — the
+            // "Annual Amort" display becomes the one-time cost itself in Y1, 0 after.
+            const amort = isAsIncurred ? 0 : (l.one_time_cost || 0) / Math.max(1, contractYears);
             return `
-              <tr>
+              <tr${isAsIncurred ? ' class="cm-startup-as-incurred"' : ''}>
                 <td><input class="hub-input" value="${l.description || ''}" data-array="startupLines" data-idx="${i}" data-field="description" /></td>
                 <td><input class="hub-input hub-num" type="number" value="${l.one_time_cost || 0}" data-array="startupLines" data-idx="${i}" data-field="one_time_cost" data-type="number" /></td>
-                <td class="hub-num">${calc.formatCurrency(amort)}</td>
-                <td class="hub-num">${calc.formatCurrency(amort / 12)}</td>
+                <td>
+                  <select class="hub-input" data-array="startupLines" data-idx="${i}" data-field="billing_type" title="Capitalized = amortized + grossed up. As-Incurred = zero-margin pass-through (customer pays at cost).">
+                    <option value="capitalized"${billingType === 'capitalized' ? ' selected' : ''}>Capitalized</option>
+                    <option value="as_incurred"${isAsIncurred ? ' selected' : ''}>As-Incurred</option>
+                  </select>
+                </td>
+                <td class="hub-num">${isAsIncurred ? '<span class="cm-as-inc-tag">pass-through</span>' : calc.formatCurrency(amort)}</td>
+                <td class="hub-num">${isAsIncurred ? '—' : calc.formatCurrency(amort / 12)}</td>
                 <td class="cm-actions"><button class="cm-delete-btn" data-action="delete-startup" data-idx="${i}" title="Delete row">×</button></td>
               </tr>
             `;
@@ -3741,12 +3785,23 @@ function renderPricing() {
     discountRatePct: Number(fin.discountRate || 10),
   });
 
+  const contractType = model.projectDetails?.contractType || 'fixed_variable';
+  const contractTypeLabel = {
+    fixed_variable: 'Fixed / Variable',
+    open_book: 'Open Book',
+    unit_rate: 'Unit Rate',
+  }[contractType] || 'Fixed / Variable';
+  const contractTypeDesc = {
+    fixed_variable: `Recommended rates derived from cost + ${calc.formatPct(targetMarginPct, 1)} target margin. Override any rate inline; the Variance column and Summary banner surface the impact.`,
+    open_book: `Open Book — cost is passed through to the customer transparently with a declared ${calc.formatPct(targetMarginPct, 1)} margin on top. Recommended rates shown below are what would produce the stated margin if billed as fixed/variable; actual billing mechanic is line-item cost pass-through.`,
+    unit_rate: `Unit Rate contract — emphasis on per-unit rates below. Derived from cost + ${calc.formatPct(targetMarginPct, 1)} target margin (Revenue = Cost / (1 − margin)). Override any rate inline.`,
+  }[contractType];
   return `
     <div class="cm-wide-layout">
     <div class="cm-section-header">
       <div>
-        <div class="cm-section-title">Pricing Schedule</div>
-        <div class="cm-section-desc">Recommended rates derived from cost + ${calc.formatPct(targetMarginPct, 1)} target margin (reference-aligned cost-plus: Revenue = Cost / (1 − margin)). Override any rate inline; the Variance column and Summary banner surface the impact.</div>
+        <div class="cm-section-title">Pricing Schedule <span class="cm-contract-type-chip cm-contract-${contractType}">${contractTypeLabel}</span></div>
+        <div class="cm-section-desc">${contractTypeDesc}</div>
       </div>
     </div>
 
@@ -3763,7 +3818,7 @@ function renderPricing() {
     <!-- M3 Achieved-vs-Target Margin banner (only when overrides present) -->
     <div class="cm-margin-banner cm-margin-${m3Level}">
       <div class="cm-margin-banner-main">
-        <div class="cm-margin-banner-label">
+        <div class="cm-margin-banner-label" title="Computed at reference volumes using the bucket-cost rollup (pre-ramp, pre-learning-curve). Y1 P&L margin in Summary may differ — reference volumes are used here because pricing is set against steady-state cost, not first-year cost.">
           ${m3Copy}
         </div>
         <div class="cm-margin-banner-nums">
@@ -4013,6 +4068,10 @@ function renderPricing() {
       .cm-bucket-unassigned { background:rgba(255,193,7,0.1) !important; border-left:2px solid var(--ies-orange); }
       .cm-bucket-select { width:140px; font-size:12px; padding:3px 4px; }
       /* M3 achieved-vs-target margin banner */
+      /* Startup "As-Incurred" row styling */
+      .cm-startup-as-incurred { background:rgba(107,76,168,0.05); }
+      .cm-startup-as-incurred td { color:var(--ies-gray-700); }
+      .cm-as-inc-tag { display:inline-block; padding:1px 6px; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.3px; color:#6d4ca8; background:rgba(107,76,168,0.12); border-radius:6px; }
       .cm-margin-banner { padding:14px 18px; margin-bottom:16px; border-radius:8px; border:1px solid var(--ies-gray-200); background:#fff; }
       .cm-margin-banner.cm-margin-ok { border-left:3px solid var(--ies-green, #20c997); }
       .cm-margin-banner.cm-margin-warn { border-left:3px solid var(--ies-amber, #f59e0b); background:rgba(245,158,11,0.04); }
@@ -4039,6 +4098,11 @@ function renderPricing() {
       .hub-btn-xs { padding:2px 8px; font-size:11px; border-radius:4px; }
       .hub-btn-ghost { background:transparent; color:var(--ies-gray-600); border:1px solid var(--ies-gray-300); }
       .hub-btn-ghost:hover { background:var(--ies-gray-50); }
+      /* Contract-type chip on Pricing Schedule header */
+      .cm-contract-type-chip { display:inline-block; margin-left:10px; padding:2px 10px; border-radius:10px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; vertical-align:middle; }
+      .cm-contract-type-chip.cm-contract-fixed_variable { background:rgba(0,71,171,0.1); color:var(--ies-blue); }
+      .cm-contract-type-chip.cm-contract-open_book { background:rgba(107,76,168,0.12); color:#6d4ca8; }
+      .cm-contract-type-chip.cm-contract-unit_rate { background:rgba(32,201,151,0.12); color:#0d9668; }
       /* Override Implications Panel */
       .cm-implications-panel { padding:14px 18px; margin-bottom:16px; border-radius:8px; border:1px solid var(--ies-gray-200); background:#fff; }
       .cm-implications-title { font-size:13px; font-weight:600; color:var(--ies-gray-700); margin-bottom:10px; display:flex; flex-direction:column; gap:3px; }
@@ -4202,6 +4266,9 @@ function renderSummary() {
     startupLines: model.startupLines || [],
     pricingBuckets: enrichedPricingBuckets, // I-02: derived rates when unset
     project_id: model.id || 0,
+    // M2 (2026-04-21): SG&A overlay (default 0 = no behavior change)
+    sgaOverlayPct: Number(model.financial?.sgaOverlayPct) || 0,
+    sgaAppliesTo: model.financial?.sgaAppliesTo || 'net_revenue',
     // Phase 4d — thread calc heuristics + market profile so the monthly
     // engine can compute per-line labor cost using Phase 4b profiles.
     _calcHeur: calcHeur,
@@ -5420,6 +5487,10 @@ const WHATIF_SLIDERS = [
   { key: 'tax_rate_pct',              label: 'Tax Rate',               group: 'Financial',    min: 0,  max: 50, step: 0.5, unit: '%' },
   { key: 'discount_rate_pct',         label: 'Discount Rate',          group: 'Financial',    min: 3,  max: 25, step: 0.25, unit: '%' },
   { key: 'target_margin_pct',         label: 'Target Margin',          group: 'Financial',    min: 0,  max: 30, step: 0.5, unit: '%' },
+  // M4 (2026-04-21): Pricing Discount — uniform multiplier applied to every
+  // bucket's effective rate. Simulates competitive-pressure negotiation
+  // scenarios. −5% = "customer wins a 5% concession across all buckets."
+  { key: 'pricing_discount_pct',      label: 'Pricing Discount',       group: 'Financial',    min: -15, max: 15, step: 0.5, unit: '%' },
   { key: 'annual_volume_growth_pct',  label: 'Volume Growth',          group: 'Financial',    min: -20, max: 30, step: 0.5, unit: '%' },
   { key: 'dso_days',                  label: 'DSO',                    group: 'WC',           min: 0,  max: 120, step: 1, unit: 'days' },
   { key: 'dpo_days',                  label: 'DPO',                    group: 'WC',           min: 0,  max: 120, step: 1, unit: 'days' },
@@ -5457,6 +5528,7 @@ function whatIfCurrentValue(sliderKey) {
 /** Fallback defaults for sliders not represented in the heuristics catalog. */
 const WHATIF_FALLBACK_DEFAULTS = {
   direct_labor_productivity_pct: 100,  // 100% = pure MOST engineered (no drag)
+  pricing_discount_pct: 0,             // M4: 0 = no discount (recommended rates)
 };
 
 /** Same, but as a display string so sliders + readouts stay consistent. */
@@ -5539,6 +5611,11 @@ function computeWhatIfPreview(overlay) {
     // remain the defensible pricing and we leave them alone.
     const marginOverlayActive = ov.target_margin_pct != null && ov.target_margin_pct !== '';
     const volOverlayActive    = ov.annual_volume_growth_pct != null && ov.annual_volume_growth_pct !== '';
+    // M4 (2026-04-21): pricing-discount slider — uniform multiplier on every
+    // bucket's effective rate. Same machinery as per-bucket overrides.
+    const pricingDiscountPct = ov.pricing_discount_pct != null && ov.pricing_discount_pct !== ''
+      ? Number(ov.pricing_discount_pct) : 0;
+    const pricingMult = 1 + pricingDiscountPct / 100;
     const whatIfBuckets = (marginOverlayActive || volOverlayActive)
       ? (() => {
           const cleared = (model.pricingBuckets || []).map(b => ({ ...b, rate: 0 }));
@@ -5565,6 +5642,10 @@ function computeWhatIfPreview(overlay) {
           });
         })()
       : buildEnrichedPricingBuckets(summary, whatIfMarginFrac, opHrs, contractYears);
+    // Apply M4 pricing-discount multiplier AFTER enrichment so it layers on
+    // both explicit and derived rates uniformly.
+    const whatIfBucketsAfterDiscount = pricingMult === 1 ? whatIfBuckets
+      : whatIfBuckets.map(b => ({ ...b, rate: (Number(b.rate) || 0) * pricingMult }));
 
     const projResult = calc.buildYearlyProjections({
       years: contractYears,
@@ -5591,7 +5672,7 @@ function computeWhatIfPreview(overlay) {
       dpoDays:           calcHeur.dpoDays,
       laborPayableDays:  calcHeur.laborPayableDays,
       startupLines: model.startupLines || [],
-      pricingBuckets: whatIfBuckets,
+      pricingBuckets: whatIfBucketsAfterDiscount,
       project_id: model.id || 0,
       _calcHeur: calcHeur,
       marketLaborProfile: currentMarketLaborProfile,
@@ -6386,6 +6467,13 @@ function shouldRerender(field) {
          // M1 (2026-04-21): G&A / Mgmt Fee edits drive the derived total and
          // the Pricing Schedule gross-up; both fields trigger re-render.
          field === 'financial.gaMargin' || field === 'financial.mgmtFeeMargin' ||
+         // M2 (2026-04-21): SG&A overlay affects Summary/P&L but not Pricing Schedule
+         // cost rollup, so re-render is cheap + desirable for live preview.
+         field === 'financial.sgaOverlayPct' ||
+         // Contract type changes Pricing Schedule subtitle + banner
+         field === 'projectDetails.contractType' ||
+         // M5 (2026-04-21): tax rate change re-renders P&L numbers in Summary
+         field === 'projectDetails.taxRate' ||
          // I-01: reassigning a line's bucket shifts the rollup; Pricing tables must re-render.
          field === 'pricing_bucket';
 }
