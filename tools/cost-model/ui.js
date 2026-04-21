@@ -4698,6 +4698,15 @@ function bindSectionEvents(section, container) {
             });
             return;
           }
+          // Startup: flipping billing_type (capitalized ↔ as_incurred) changes
+          // row styling + amort display + pass-through tag. Re-render the
+          // Start-Up table so the affordances match.
+          if (input.dataset.array === 'startupLines' && field === 'billing_type') {
+            isDirty = true;
+            if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+            renderSection();
+            return;
+          }
         }
       } else {
         // Dot-path assignment
