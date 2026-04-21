@@ -1614,20 +1614,20 @@ function renderShifts() {
       </div>
     </div>
 
-    <!-- Shift Structure -->
-    <!-- Brock 2026-04-21: Annual Paid Hours / FTE is hardcoded to the US FT
-         standard 2,080 (8 × 5 × 52). Every legitimate FT pattern — 4×10,
-         9/80, 24/7-with-rotation — sums to the same 2,080. Hours/Shift,
-         Days/Week, Weeks/Year inputs have been removed because they only
-         served to produce non-2,080 results (i.e. errors). Productive Hours
-         = 2,080 − PTO hrs − Holiday hrs; PF&D (Direct Utilization) is a UPH
-         haircut, not a paid-hours haircut. -->
+    <!-- Shift Structure + hours -->
+    <!-- Brock 2026-04-21 pm (UI tightening): PTO Hours + Holiday Hours moved
+         up into this card so they visually connect to the Productive Hours
+         tile they drive. Formula rendered inline under the Productive tile
+         so the relationship reads top-to-bottom: inputs → math → output.
+         (Direct Utilization stayed on the Labor Economics card — it's a UPH
+         haircut, not an hours haircut.) -->
     <div class="hub-card mb-4">
       <div style="display:flex;align-items:baseline;justify-content:space-between;margin:0 0 12px;gap:12px;">
         <div class="text-subtitle" style="margin:0;">Shift Structure</div>
-        <span class="hub-field__hint">US FT reference: 2,080 paid hrs / FTE. PTO &amp; holidays subtract for Productive.</span>
+        <span class="hub-field__hint">US FT reference: 2,080 paid hrs / FTE. PTO &amp; holiday hours subtract to give Productive.</span>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(4, minmax(0, 1fr));gap:12px;">
+      <!-- Row 1: facility shift pattern + premiums -->
+      <div style="display:grid;grid-template-columns:repeat(4, minmax(0, 1fr));gap:12px;margin-bottom:12px;">
         <div class="hub-field">
           <label class="hub-field__label" title="Number of shifts the FACILITY runs per day (1-3). Facility operating descriptor — does not affect the 2,080 paid hours per FTE.">Shifts / Day <span style="color:var(--ies-gray-400);font-weight:400;">(facility)</span></label>
           <input class="hub-input" type="number" value="${s.shiftsPerDay || 1}" min="1" max="3" step="1" data-field="shifts.shiftsPerDay" data-type="number" />
@@ -1641,13 +1641,31 @@ function renderShifts() {
           <input class="hub-input" type="number" value="${s.shift3Premium || 0}" min="0" max="50" step="0.5" data-field="shifts.shift3Premium" data-type="number" />
         </div>
         <div></div>
+      </div>
+      <!-- Row 2: PTO + Holiday hours (the inputs that drive Productive) -->
+      <div style="display:grid;grid-template-columns:repeat(4, minmax(0, 1fr));gap:12px;margin-bottom:12px;">
+        <div class="hub-field">
+          <label class="hub-field__label" title="Paid Time Off (vacation + personal days) — hours per FTE per year. Default 80 = 10 days × 8 hrs. Typical 80-120. Editable per region/role. Subtracts from 2,080 paid hours → Productive.">PTO Hours / Year</label>
+          <input class="hub-input" type="number" min="0" max="400" step="8" value="${ptoHrs}" data-field="shifts.ptoHoursPerYear" data-type="number" />
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label" title="Paid holidays — hours per FTE per year. Default 64 = 8 holidays × 8 hrs. Some regions observe more/fewer. Subtracts from 2,080 paid hours → Productive.">Holiday Hours / Year</label>
+          <input class="hub-input" type="number" min="0" max="200" step="8" value="${holidayHrs}" data-field="shifts.holidayHoursPerYear" data-type="number" />
+        </div>
+        <div></div>
+        <div></div>
+      </div>
+      <!-- Row 3: tiles with inline math -->
+      <div style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:12px;">
         <div class="cm-opshours-card" style="margin:0;" title="US FT standard — 2,080 paid hrs/yr per FTE. Constant across all facility patterns (8×5×52, 4×10, 24/7-with-rotation all sum to 2,080).">
           <div class="cm-opshours-card__label">Annual Paid Hours / FTE</div>
           <div class="cm-opshours-card__value">${paidHrs.toLocaleString()}</div>
+          <div class="cm-opshours-card__formula">US FT standard</div>
         </div>
-        <div class="cm-opshours-card" style="margin:0;" title="2,080 − PTO hrs (${ptoHrs}) − Holiday hrs (${holidayHrs}) = ${productiveHrs}. Edit PTO and Holiday hours in the card below.">
+        <div class="cm-opshours-card" style="margin:0;" title="2,080 − PTO hrs (${ptoHrs}) − Holiday hrs (${holidayHrs}) = ${productiveHrs}.">
           <div class="cm-opshours-card__label">Productive Hours / FTE</div>
           <div class="cm-opshours-card__value" style="color:var(--ies-blue);">${productiveHrs.toLocaleString()}</div>
+          <div class="cm-opshours-card__formula">= 2,080 − ${ptoHrs} PTO − ${holidayHrs} Holiday</div>
         </div>
       </div>
     </div>
@@ -1695,11 +1713,15 @@ function renderShifts() {
       </div>
     </div>
 
-    <!-- Global Labor Economics -->
+    <!-- Labor Economics -->
+    <!-- Brock 2026-04-21 pm: renamed from "Global Labor Economics" and
+         trimmed. PTO + Holiday moved up into Shift Structure (they drive the
+         Productive Hours tile). This card holds rate/productivity factors
+         that feed cost math downstream but don't affect paid/productive hours. -->
     <div class="hub-card mb-4">
       <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;">
-        <div class="text-subtitle" style="margin:0;">Global Labor Economics</div>
-        <span class="hub-field__hint">PTO + Holiday drive Productive Hours above. Per-position overrides live in the catalog below.</span>
+        <div class="text-subtitle" style="margin:0;">Labor Economics</div>
+        <span class="hub-field__hint">Rate + productivity factors. Per-position overrides live in the catalog below.</span>
       </div>
       <div style="display:grid;grid-template-columns:repeat(4, minmax(0, 1fr));gap:12px;">
         <div class="hub-field">
@@ -1717,14 +1739,6 @@ function renderShifts() {
         <div class="hub-field">
           <label class="hub-field__label" title="PF&amp;D haircut applied to UPH (not hours) per doc §2.1. Captures personal allowance, fatigue, delay, paid breaks, activity-switching. Reference 85%. Range 75-90%.">Direct Utilization %</label>
           <input class="hub-input" type="number" min="50" max="100" step="0.5" value="${s.directUtilization ?? 85}" data-field="shifts.directUtilization" data-type="number" />
-        </div>
-        <div class="hub-field">
-          <label class="hub-field__label" title="Paid Time Off (vacation + personal days) — hours per FTE per year. Default 80 = 10 days × 8 hrs. Typical 80-120. Editable per region/role.">PTO Hours / Year</label>
-          <input class="hub-input" type="number" min="0" max="400" step="8" value="${ptoHrs}" data-field="shifts.ptoHoursPerYear" data-type="number" />
-        </div>
-        <div class="hub-field">
-          <label class="hub-field__label" title="Paid holidays — hours per FTE per year. Default 64 = 8 holidays × 8 hrs. Some regions observe more/fewer. Subtracts from 2,080 paid hours to give Productive Hours.">Holiday Hours / Year</label>
-          <input class="hub-input" type="number" min="0" max="200" step="8" value="${holidayHrs}" data-field="shifts.holidayHoursPerYear" data-type="number" />
         </div>
       </div>
     </div>

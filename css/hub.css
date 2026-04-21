@@ -2558,6 +2558,14 @@ textarea.hub-input {
   font-weight: var(--fw-extrabold);
   font-variant-numeric: tabular-nums;
 }
+.cm-opshours-card__formula {
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.55);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
 
 /* ---- Currency-input cell (Brock 2026-04-21 pm) ----
    Wraps a $ prefix alongside a number input in a table cell so
