@@ -8,6 +8,9 @@ import {
   resolvePlanningRatios,
   countRatioOverrides,
   isStale,
+  isStaleForProject,
+  markRatioReviewed,
+  countStaleUnreviewed,
   groupByCategory,
 } from './shared/planning-ratios.js';
 
@@ -200,6 +203,53 @@ const categories = [
   }];
   const r = lookupRatio('only.automotive', { vertical: 'industrial' }, isolatedCatalog, {});
   t('all-disqualified returns missing', r.source === 'missing');
+}
+
+// ── isStaleForProject / markRatioReviewed / countStaleUnreviewed (2026-04-21 PM) ──
+{
+  // Pre-2022 source row — stale in the catalog sense
+  const staleRow = {
+    id: 1, ratio_code: 'x.stale', source_date: '2018-01-01',
+    category_code: 'labor_spans', value_type: 'scalar', numeric_value: 75,
+    effective_date: '2018-01-01', effective_end_date: '9999-12-31', is_active: true,
+  };
+  // Post-2022 row — not stale
+  const freshRow = { ...staleRow, ratio_code: 'x.fresh', source_date: '2024-06-01' };
+
+  t('stale row + no override → stale for project',
+    isStaleForProject(staleRow, {}) === true);
+  t('stale row + override with no reviewed_at → still stale for project',
+    isStaleForProject(staleRow, { 'x.stale': { value: 100 } }) === true);
+  t('stale row + override with reviewed_at → NOT stale for project',
+    isStaleForProject(staleRow, { 'x.stale': { reviewed_at: '2026-04-21' } }) === false);
+  t('fresh row + no override → not stale for project',
+    isStaleForProject(freshRow, {}) === false);
+
+  // markRatioReviewed — immutable update with timestamp
+  const before = { 'x.stale': { value: 80 } };
+  const after = markRatioReviewed(before, 'x.stale', '2026-04-21T10:00:00Z');
+  t('markRatioReviewed is pure (preserves before)', before['x.stale'].reviewed_at === undefined);
+  t('markRatioReviewed preserves existing value', after['x.stale'].value === 80);
+  t('markRatioReviewed stamps reviewed_at', after['x.stale'].reviewed_at === '2026-04-21T10:00:00Z');
+  // Starts from nothing — review a row without prior override
+  const fresh = markRatioReviewed({}, 'x.fresh', '2026-04-21T10:00:00Z');
+  t('markRatioReviewed works when no prior override', fresh['x.fresh'].reviewed_at === '2026-04-21T10:00:00Z');
+
+  // countStaleUnreviewed
+  const catalogWithStale = [staleRow, freshRow,
+    { ...staleRow, ratio_code: 'x.stale2' },
+  ];
+  t('count stale-unreviewed with no overrides = count of stale rows',
+    countStaleUnreviewed(catalogWithStale, {}) === 2);
+  t('count drops after reviewing one',
+    countStaleUnreviewed(catalogWithStale, { 'x.stale': { reviewed_at: '2026-04-21' } }) === 1);
+  t('count drops to 0 after reviewing all',
+    countStaleUnreviewed(catalogWithStale, {
+      'x.stale':  { reviewed_at: '2026-04-21' },
+      'x.stale2': { reviewed_at: '2026-04-21' },
+    }) === 0);
+  t('fresh rows never show up in unreviewed count',
+    countStaleUnreviewed([freshRow], {}) === 0);
 }
 
 // ── Summary ──

@@ -166,6 +166,59 @@ export function isStale(row, thresholdIso) {
 }
 
 /**
+ * Per-project staleness check: a row is "stale for this project" only if the
+ * catalog says it's stale AND the project's override payload doesn't carry a
+ * `reviewed_at` marker for that ratio_code. 2026-04-21 PM addition — lets an
+ * analyst acknowledge "yes I've audited this pre-2022 value for this deal"
+ * without mutating the catalog. The marker is scoped to the project (stored
+ * in planningRatioOverrides[ratio_code].reviewed_at) so other projects still
+ * see the stale chip until they've been reviewed individually.
+ *
+ * @param {PlanningRatio} row
+ * @param {Object<string, RatioOverride>} overrides
+ * @param {string} [thresholdIso]
+ * @returns {boolean}
+ */
+export function isStaleForProject(row, overrides, thresholdIso) {
+  if (!isStale(row, thresholdIso)) return false;
+  const ov = overrides && overrides[row.ratio_code];
+  return !(ov && ov.reviewed_at);
+}
+
+/**
+ * Mark a ratio as reviewed on a project — returns a NEW overrides object with
+ * reviewed_at stamped. Value is preserved (if any); a row with no override
+ * still gets a review marker so it drops off the stale list.
+ *
+ * @param {Object<string, RatioOverride>} overrides
+ * @param {string} ratioCode
+ * @param {string} [isoNow]
+ * @returns {Object<string, RatioOverride>}
+ */
+export function markRatioReviewed(overrides, ratioCode, isoNow) {
+  const now = isoNow || new Date().toISOString();
+  const prev = (overrides && overrides[ratioCode]) || {};
+  return {
+    ...(overrides || {}),
+    [ratioCode]: { ...prev, reviewed_at: now },
+  };
+}
+
+/**
+ * Count rows that are stale AND not yet reviewed on this project.
+ * @param {PlanningRatio[]} catalog
+ * @param {Object<string, RatioOverride>} overrides
+ * @returns {number}
+ */
+export function countStaleUnreviewed(catalog, overrides) {
+  let n = 0;
+  for (const row of catalog || []) {
+    if (isStaleForProject(row, overrides)) n += 1;
+  }
+  return n;
+}
+
+/**
  * Group rows by category_code for UI rendering. Returns an ordered array of
  * {category, rows[]} preserving category sort_order and row sort_order within.
  *

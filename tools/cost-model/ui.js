@@ -14,7 +14,7 @@ import * as calc from './calc.js?v=20260421-vZ';
 import * as api from './api.js?v=20260419-uH';
 import * as scenarios from './calc.scenarios.js?v=20260421-vY';
 import * as monthlyCalc from './calc.monthly.js?v=20260421-vP';
-import * as planningRatios from '../../shared/planning-ratios.js?v=20260419-uH';
+import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
 
 // ============================================================
 // Non-blocking modal helpers (replace confirm/prompt/alert).
@@ -4197,6 +4197,13 @@ function renderPricing() {
       .cm-split-month-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
       .cm-split-month-weighted { margin-top:8px; padding:8px 10px; font-size:12px; color:var(--ies-gray-700); background:#fff; border-radius:6px; border:1px dashed rgba(245,158,11,0.3); }
       .cm-split-month-weighted strong { color:#b45309; font-weight:700; }
+      /* Planning Ratios audit banner (2026-04-21 PM) — surfaces stale catalog
+         rules at the top of the section with two bulk-review actions. */
+      .cm-audit-banner { display:flex; gap:14px; align-items:center; padding:10px 14px; margin-top:10px; background:#fef3c7; border-left:3px solid #d97706; border-radius:6px; }
+      .cm-audit-banner-label { flex:1; font-size:12px; color:#78350f; line-height:1.4; }
+      .cm-audit-banner-label strong { color:#92400e; }
+      .cm-audit-banner-actions { display:flex; gap:6px; flex-shrink:0; }
+      .hub-btn-sm { padding:4px 10px; font-size:11px; }
       /* Override Implications Panel */
       .cm-implications-panel { padding:14px 18px; margin-bottom:16px; border-radius:8px; border:1px solid var(--ies-gray-200); background:#fff; }
       .cm-implications-title { font-size:13px; font-weight:600; color:var(--ies-gray-700); margin-bottom:10px; display:flex; flex-direction:column; gap:3px; }
@@ -5310,6 +5317,61 @@ function bindSectionEvents(section, container) {
           }
           renderSection();
         });
+      });
+      // 2026-04-21 PM — Mark-reviewed: stamp reviewed_at on a single ratio's
+      // override payload so the stale chip goes green on this project only.
+      container.querySelectorAll('[data-cm-action="mark-ratio-reviewed"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const code = btn.dataset.prCode;
+          if (!code) return;
+          planningRatioOverrides = planningRatios.markRatioReviewed(planningRatioOverrides, code);
+          if (model?.id) {
+            try { await api.savePlanningRatioOverrides(model.id, planningRatioOverrides); } catch (_) {}
+          } else {
+            model.planningRatioOverrides = planningRatioOverrides;
+          }
+          renderSection();
+        });
+      });
+      // Bulk: mark every unreviewed-stale ratio as reviewed at once. Useful
+      // when the analyst has done a pass through the numbers and wants the
+      // audit banner to go quiet.
+      container.querySelector('[data-cm-action="mark-all-stale-reviewed"]')?.addEventListener('click', async () => {
+        const stale = (planningRatiosCatalog || []).filter(r =>
+          planningRatios.isStaleForProject(r, planningRatioOverrides));
+        if (stale.length === 0) return;
+        const ok = await showConfirm(
+          `Mark all ${stale.length} stale rule${stale.length === 1 ? '' : 's'} as reviewed for this project?\n\nThis does NOT change any values — it just clears the "needs refresh" chip on rows where you've audited the pre-2022 source. Each project tracks its own review state.`,
+          { okLabel: 'Mark All Reviewed', danger: false }
+        );
+        if (!ok) return;
+        let next = planningRatioOverrides;
+        for (const r of stale) next = planningRatios.markRatioReviewed(next, r.ratio_code);
+        planningRatioOverrides = next;
+        if (model?.id) {
+          try { await api.savePlanningRatioOverrides(model.id, planningRatioOverrides); } catch (_) {}
+        } else {
+          model.planningRatioOverrides = planningRatioOverrides;
+        }
+        showToast(`${stale.length} rule${stale.length === 1 ? '' : 's'} marked reviewed`, 'success');
+        renderSection();
+      });
+      // Bulk: expand every category that contains a stale rule. UI-only —
+      // just for navigation. Doesn't mutate overrides.
+      container.querySelector('[data-cm-action="expand-all-stale-categories"]')?.addEventListener('click', () => {
+        const categoriesWithStale = new Set();
+        for (const r of planningRatiosCatalog || []) {
+          if (planningRatios.isStaleForProject(r, planningRatioOverrides)) {
+            categoriesWithStale.add(r.category_code);
+          }
+        }
+        // UI state only supports ONE open category at a time (accordion-style).
+        // Open the first stale category; the user can click through the others.
+        if (categoriesWithStale.size > 0) {
+          _planningRatioOpenCategory = Array.from(categoriesWithStale)[0];
+          renderSection();
+          showToast(`Expanded "${_planningRatioOpenCategory}". ${categoriesWithStale.size - 1} more categor${categoriesWithStale.size - 1 === 1 ? 'y' : 'ies'} have stale rows.`, 'info');
+        }
       });
     }
   }
@@ -8628,6 +8690,10 @@ function renderPlanningRatios() {
   };
   const grouped = planningRatios.groupByCategory(planningRatiosCatalog, planningRatioCategories);
   const overrideCount = planningRatios.countRatioOverrides(planningRatioOverrides);
+  // 2026-04-21 PM: count stale-unreviewed across all categories for the audit
+  // banner. Once a row is marked reviewed on this project, it's excluded from
+  // this count (even if the catalog source_date is still pre-2022).
+  const staleUnreviewedCount = planningRatios.countStaleUnreviewed(planningRatiosCatalog, planningRatioOverrides);
 
   return `
     <div class="cm-section-header" style="margin-top:32px;padding-top:16px;border-top:2px solid var(--ies-gray-100);">
@@ -8635,8 +8701,22 @@ function renderPlanningRatios() {
         ${overrideCount > 0
           ? `<span class="hub-status-chip" style="margin-left:8px;background:#fbbf24;color:#78350f;">${overrideCount} override${overrideCount === 1 ? '' : 's'}</span>`
           : `<span class="hub-status-chip" style="margin-left:8px;">${planningRatiosCatalog.length} rules · ${planningRatioCategories.length} categories</span>`}
+        ${staleUnreviewedCount > 0
+          ? `<span class="hub-status-chip" style="margin-left:6px;background:#fef3c7;color:#92400e;" title="${staleUnreviewedCount} rule${staleUnreviewedCount === 1 ? '' : 's'} with pre-2022 catalog source that haven't been audited on this project">${staleUnreviewedCount} need${staleUnreviewedCount === 1 ? 's' : ''} audit</span>`
+          : ''}
       </h2>
       <p class="cm-subtle">Engineering defaults extracted from the reference 3PL cost model. Spans of control, space ratios, storage $/SF components, seasonality by vertical, asset loaded-cost factors. Override per-scenario; defaults apply to all projects otherwise.</p>
+      ${staleUnreviewedCount > 0 ? `
+        <div class="cm-audit-banner">
+          <div class="cm-audit-banner-label">
+            <strong>${staleUnreviewedCount}</strong> rule${staleUnreviewedCount === 1 ? '' : 's'} cite a source dated before 2022. Audit the values for this deal, then click "Mark reviewed" on each row (or use the bulk action) to clear the flag.
+          </div>
+          <div class="cm-audit-banner-actions">
+            <button class="hub-btn hub-btn-sm" data-cm-action="expand-all-stale-categories" title="Expand every category that contains a stale rule so you can review them inline.">Show all stale</button>
+            <button class="hub-btn hub-btn-sm" data-cm-action="mark-all-stale-reviewed" title="Stamp every stale rule on this project as reviewed. Doesn't change any values; just clears the audit banner so the page reads clean once you've actually checked the numbers.">Mark all reviewed</button>
+          </div>
+        </div>
+      ` : ''}
     </div>
 
     ${grouped.map(({ category, rows }) => {
@@ -8675,8 +8755,13 @@ function renderPlanningRatios() {
                 ${resolvedList.map(({ row: r, resolved }) => {
                   const structured = r.value_type === 'array' || r.value_type === 'lookup' || r.value_type === 'tiered';
                   const isOver = resolved.source === 'override';
-                  const stale = planningRatios.isStale(r);
+                  // Per-project stale check — the user can "Mark reviewed" to
+                  // quiet the chip on this project without changing the value
+                  // (stored as `reviewed_at` on the override payload).
+                  const stale = planningRatios.isStaleForProject(r, planningRatioOverrides);
+                  const staleInCatalog = planningRatios.isStale(r);
                   const ov = planningRatioOverrides[r.ratio_code];
+                  const reviewedAt = ov && ov.reviewed_at ? ov.reviewed_at : null;
                   const filters = [];
                   if (r.vertical) filters.push(`v: ${r.vertical}`);
                   if (r.environment_type) filters.push(`env: ${r.environment_type}`);
@@ -8699,10 +8784,15 @@ function renderPlanningRatios() {
                       <td style="padding:6px 8px;font-size:11px;color:var(--ies-gray-500);vertical-align:top;">
                         <div>${escapeHtml(r.source || '')}</div>
                         ${r.source_detail ? `<div style="font-size:10px;color:var(--ies-gray-400);">${escapeHtml(r.source_detail)}</div>` : ''}
-                        ${stale ? `<div style="margin-top:2px;"><span class="hub-status-chip" style="background:#fef3c7;color:#92400e;font-size:9px;padding:1px 6px;" title="Source pre-2022 — recommend audit before trusting">needs refresh</span></div>` : ''}
+                        ${stale
+                          ? `<div style="margin-top:2px;"><span class="hub-status-chip" style="background:#fef3c7;color:#92400e;font-size:9px;padding:1px 6px;" title="Source pre-2022 — recommend audit before trusting">needs refresh</span></div>`
+                          : (staleInCatalog && reviewedAt ? `<div style="margin-top:2px;"><span class="hub-status-chip" style="background:#d1fae5;color:#065f46;font-size:9px;padding:1px 6px;" title="Pre-2022 catalog source, but marked reviewed on this project on ${escapeHtml(reviewedAt.slice(0,10))}">✓ audited</span></div>` : '')}
                       </td>
                       <td style="text-align:center;vertical-align:top;">
-                        ${isOver ? `<button class="hub-btn" style="padding:2px 8px;font-size:11px;" data-cm-action="reset-planning-ratio" data-pr-code="${escapeHtml(r.ratio_code)}" title="Reset to default">↺</button>` : ''}
+                        <div style="display:flex;flex-direction:column;gap:3px;align-items:center;">
+                          ${isOver && !reviewedAt ? `<button class="hub-btn" style="padding:2px 8px;font-size:11px;" data-cm-action="reset-planning-ratio" data-pr-code="${escapeHtml(r.ratio_code)}" title="Reset to default">↺</button>` : ''}
+                          ${stale ? `<button class="hub-btn" style="padding:2px 6px;font-size:10px;background:#d1fae5;color:#065f46;border:1px solid #a7f3d0;" data-cm-action="mark-ratio-reviewed" data-pr-code="${escapeHtml(r.ratio_code)}" title="Confirm you've audited this pre-2022 value for this deal. Clears the 'needs refresh' chip on this row and counts toward the audit banner.">✓ Mark reviewed</button>` : ''}
+                        </div>
                       </td>
                     </tr>
                   `;
