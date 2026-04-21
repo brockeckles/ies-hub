@@ -159,22 +159,13 @@ const DEMO_MARKETS_FALLBACK = [
 
 /** Standard role catalog — 14 direct + 29 indirect = 43 positions. */
 const STANDARD_POSITIONS = [
-  // ── DIRECT (14) ── floor-level production roles, hourly ──────────
-  { name: 'Material Handler',          category: 'direct', is_salaried: false, hourly_wage: 18.00, notes: 'Generic warehouse associate (receive / putaway / pick / pack)' },
-  { name: 'Receiver',                  category: 'direct', is_salaried: false, hourly_wage: 18.00, notes: 'Inbound dock — unload, verify, stage' },
-  { name: 'Putaway Operator',          category: 'direct', is_salaried: false, hourly_wage: 19.00, notes: 'Move received stock to storage location' },
-  { name: 'Replenishment Operator',    category: 'direct', is_salaried: false, hourly_wage: 19.00, notes: 'Top off forward-pick locations from reserve' },
-  { name: 'Each Picker',               category: 'direct', is_salaried: false, hourly_wage: 17.50, notes: 'Unit / piece picking' },
-  { name: 'Case Picker',               category: 'direct', is_salaried: false, hourly_wage: 18.00, notes: 'Case-level picking' },
-  { name: 'Pallet Picker',             category: 'direct', is_salaried: false, hourly_wage: 19.00, notes: 'Full-pallet picking' },
-  { name: 'Packer',                    category: 'direct', is_salaried: false, hourly_wage: 16.50, notes: 'Pack + label outbound orders' },
-  { name: 'Loader',                    category: 'direct', is_salaried: false, hourly_wage: 18.00, notes: 'Outbound dock — load trailers' },
-  { name: 'VAS Associate',             category: 'direct', is_salaried: false, hourly_wage: 17.00, notes: 'Value-added services (kitting, labeling, light assembly)' },
-  { name: 'QC / Cycle Counter',        category: 'direct', is_salaried: false, hourly_wage: 19.00, notes: 'Inventory accuracy + quality audits' },
-  { name: 'Forklift Operator',         category: 'direct', is_salaried: false, hourly_wage: 22.00, notes: 'Sit-down counterbalance forklift' },
-  { name: 'Reach Truck Operator',      category: 'direct', is_salaried: false, hourly_wage: 22.50, notes: 'Reach truck / turret truck for VNA' },
-  { name: 'Order Picker Operator',     category: 'direct', is_salaried: false, hourly_wage: 21.00, notes: 'Cherry-picker / stock picker' },
-  { name: 'Yard Jockey',               category: 'direct', is_salaried: false, hourly_wage: 21.00, notes: 'Yard moves / trailer spotting' },
+  // ── DIRECT (3) ── Brock 2026-04-21 pm: key delineator is whether the
+  // associate operates MHE (forklift / reach truck / order picker / etc).
+  // Permanent non-MHE = Material Handler; temp non-MHE = Temp Material
+  // Handler; anything with MHE = Equipment Operator regardless of temp/perm.
+  { name: 'Equipment Operator',        category: 'direct', is_salaried: false, hourly_wage: 22.00, notes: 'Operates MHE (forklift / reach truck / order picker / yard jockey / etc.). Permanent or temp.' },
+  { name: 'Material Handler',          category: 'direct', is_salaried: false, hourly_wage: 18.00, notes: 'Permanent warehouse associate — non-MHE (receive / pick / pack / load / VAS / QC / cycle count).' },
+  { name: 'Temp Material Handler',     category: 'direct', is_salaried: false, hourly_wage: 18.00, temp_markup_pct: 38, employment_type: 'temp_agency', notes: 'Temp-agency warehouse associate — non-MHE. 38% markup on base wage per heuristics §2.3 (contractual wage load).' },
 
   // ── INDIRECT — hourly leads + front-line support (heuristics §2.1) ──
   { name: 'Team Lead',                           category: 'indirect', is_salaried: false, hourly_wage: 22.00, notes: '1 : 15 direct FTE — front-line coordination' },
@@ -215,10 +206,12 @@ const STANDARD_POSITIONS = [
 /** Bumps when STANDARD_POSITIONS changes enough to warrant re-seeding every
  *  existing project on next load. `shifts._catalogVersion` on each model
  *  gates whether auto-migration runs (see migrateLaborLinesToPositions).
- *  v2 (Brock 2026-04-21 pm): removed the legacy activity-named fallback
- *  loop that was re-introducing leftover positions like "Supervisory /
- *  coaching" after the v1 migration wiped them — bump forces re-seed. */
-const CATALOG_VERSION = 2;
+ *  v2: removed legacy activity-named fallback loop.
+ *  v3 (Brock 2026-04-21 pm): collapsed direct roles from 15 → 3 (Equipment
+ *  Operator, Material Handler, Temp Material Handler) per Brock's direction
+ *  that the key delineator is MHE vs non-MHE. Forces re-seed on every
+ *  project so catalog aligns with the simpler taxonomy. */
+const CATALOG_VERSION = 3;
 
 /** Keyword rules mapping a free-text activity/role name onto a standard role
  *  by category. First match wins. Regex-anchored so partial tokens (pick/load)
@@ -226,22 +219,17 @@ const CATALOG_VERSION = 2;
  *  auto-migration to preserve labor-line ↔ position linkage after catalog
  *  wipe. */
 const ROLE_HINT_RULES = [
-  // Direct — floor roles (test BEFORE generic verb matches below)
-  [/\breach[\s-]?truck|\bvna\b|turret/i,                  'direct',   'Reach Truck Operator'],
-  [/\border[\s-]?picker|\bcherry[\s-]?picker/i,           'direct',   'Order Picker Operator'],
-  [/\bforklift|\bsit[\s-]?down|counterbalance/i,          'direct',   'Forklift Operator'],
-  [/\byard|\bspotter\b|trailer\s+move/i,                  'direct',   'Yard Jockey'],
-  [/\breceiv/i,                                           'direct',   'Receiver'],
-  [/\bput[\s-]?away/i,                                    'direct',   'Putaway Operator'],
-  [/\breplen/i,                                           'direct',   'Replenishment Operator'],
-  [/\bpallet[\s-]?pick|\bpallet\b/i,                      'direct',   'Pallet Picker'],
-  [/\bcase[\s-]?pick|\bcase\b/i,                          'direct',   'Case Picker'],
-  [/\beach[\s-]?pick|\bpiece[\s-]?pick|\bunit[\s-]?pick|\beach\b|\bpick/i, 'direct', 'Each Picker'],
-  [/\bpack|\blabel/i,                                     'direct',   'Packer'],
-  [/\bload|outbound|\bship/i,                             'direct',   'Loader'],
-  [/value[\s-]?added|\bvas\b|\bkit|assembly/i,            'direct',   'VAS Associate'],
-  [/\bcycle|\bcount|\baudit|\bqc\b|quality/i,             'direct',   'QC / Cycle Counter'],
-  [/\bmaterial\s*handler|generic/i,                       'direct',   'Material Handler'],
+  // Direct (Brock 2026-04-21 pm): the distinction is MHE vs non-MHE.
+  // Anything mentioning forklift / reach truck / order picker / yard jockey /
+  // MHE / lift → Equipment Operator. Everything else → Material Handler.
+  // (Temp-agency override happens downstream in the migration — Material
+  // Handler + employment_type=temp_agency is resolved to Temp Material Handler.)
+  [/\breach[\s-]?truck|\bvna\b|turret|\bforklift|\bsit[\s-]?down|counterbalance|\border[\s-]?picker|\bcherry[\s-]?picker|\byard\s*jockey|\bjockey|trailer\s+move|\bmhe\b|\blift\s*(?:truck|operator)/i,
+    'direct', 'Equipment Operator'],
+  // Catch-all for any other direct activity — Material Handler is the generic
+  // non-MHE warehouse associate (Brock's delineator).
+  [/\breceiv|\bput[\s-]?away|\breplen|\bpick|\bpack|\blabel|\bload|outbound|\bship|value[\s-]?added|\bvas\b|\bkit|assembly|\bcycle|\bcount|\baudit|\bqc\b|quality|\bmaterial\s*handler|generic|\bunload|\bstock|\btransfer/i,
+    'direct', 'Material Handler'],
 
   // Indirect — hourly leads + front-line (test BEFORE mid/senior mgr to avoid
   // "team lead" matching "manager" first)
@@ -296,7 +284,9 @@ function findStandardRoleByHint(name, category) {
   return null;
 }
 
-/** Normalize STANDARD_POSITIONS into the on-model shape (with id + defaults). */
+/** Normalize STANDARD_POSITIONS into the on-model shape (with id + defaults).
+ *  Respects optional `employment_type` + `temp_markup_pct` on the source
+ *  entry (Temp Material Handler defaults to temp_agency + 38% markup). */
 function materializeStandardPositions() {
   const makeId = () => (typeof crypto !== 'undefined' && crypto.randomUUID)
     ? crypto.randomUUID()
@@ -305,11 +295,11 @@ function materializeStandardPositions() {
     id: makeId(),
     name: p.name,
     category: p.category,
-    employment_type: 'permanent',
+    employment_type: p.employment_type || 'permanent',
     hourly_wage: p.is_salaried ? 0 : (Number(p.hourly_wage) || 0),
     annual_salary: p.is_salaried ? (Number(p.annual_salary) || 0) : 0,
     is_salaried: !!p.is_salaried,
-    temp_markup_pct: 0,
+    temp_markup_pct: Number(p.temp_markup_pct) || 0,
     bonus_pct: null,
     // Per-position Benefit Load override (blank = inherit global total)
     benefit_load_pct: null,
@@ -7241,7 +7231,14 @@ function migrateLaborLinesToPositions(m) {
     const matchByName = (name) => seeded.find(p => p.name === name) || null;
 
     for (const line of m.laborLines || []) {
-      const hint = findStandardRoleByHint(line.activity_name || '', 'direct');
+      let hint = findStandardRoleByHint(line.activity_name || '', 'direct');
+      // Temp-agency override (Brock 2026-04-21 pm): a Material Handler line
+      // with employment_type = temp_agency resolves to Temp Material Handler.
+      // Equipment Operator stays Equipment Operator regardless of temp/perm
+      // (the role IS the MHE operation; the employment_type field flags temp).
+      if (hint && hint.name === 'Material Handler' && line.employment_type === 'temp_agency') {
+        hint = STANDARD_POSITIONS.find(p => p.name === 'Temp Material Handler') || hint;
+      }
       const pos = hint ? matchByName(hint.name) : null;
       line.position_id = pos ? pos.id : null;
     }
