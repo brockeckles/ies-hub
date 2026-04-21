@@ -487,6 +487,91 @@ test('buildYearlyProjections: per-category revenue on each year', () => {
 });
 
 // ============================================================
+// Reset-override semantics (2026-04-21 PM — Brock bug report)
+// ============================================================
+// The ↺ Reset button on the Pricing Schedule must flip an overridden row back
+// to recommended. The handler assigns b.rate = null (prior shipped null/0 edge
+// case). These tests lock the "no override" detection against every shape
+// (null / 0 / '' / undefined / negative) so regressions show up immediately.
+
+function _overrideResetModel(rate) {
+  const buckets = [{
+    id: 'B1',
+    name: 'Outbound Fulfillment',
+    category: 'labor',
+    type: 'variable',
+    uom: 'order',
+    volume_source: 'orders',
+    annualVolume: 1_000_000,
+    rate, // ← the override under test
+    overrideReason: null,
+  }];
+  const enriched = enrichBucketsWithDerivedRates({
+    buckets,
+    bucketCosts: { B1: 500_000 },
+    volumeLines: [{ volume: 1_000_000, isOutboundPrimary: true }],
+    financial: { targetMargin: 20, gaMargin: 6, mgmtFeeMargin: 10 },
+  });
+  return enriched[0];
+}
+
+test('reset-override: rate=null flips _rateSource to recommended', () => {
+  const b = _overrideResetModel(null);
+  assert(b._rateSource === 'recommended', `expected 'recommended', got '${b._rateSource}'`);
+  assert(b.overrideRate === null, 'overrideRate should be null');
+  near(b.rate, b.recommendedRate, 0.01, 'effective rate should equal recommended after reset');
+});
+
+test('reset-override: rate=0 also treated as no-override (back-compat)', () => {
+  // Pre-fix shipping behavior set b.rate = 0; keep that path valid so projects
+  // saved under the old code continue to show as recommended after reload.
+  const b = _overrideResetModel(0);
+  assert(b._rateSource === 'recommended', `expected 'recommended', got '${b._rateSource}'`);
+  near(b.rate, b.recommendedRate, 0.01);
+});
+
+test('reset-override: rate="" treated as no-override', () => {
+  const b = _overrideResetModel('');
+  assert(b._rateSource === 'recommended');
+});
+
+test('reset-override: rate=undefined treated as no-override', () => {
+  const b = _overrideResetModel(undefined);
+  assert(b._rateSource === 'recommended');
+});
+
+test('reset-override: negative rate coerced to no-override', () => {
+  const b = _overrideResetModel(-1);
+  assert(b._rateSource === 'recommended', 'negative rate must not pass the override gate');
+});
+
+test('reset-override: positive override still recognized as override', () => {
+  const b = _overrideResetModel(0.55);
+  assert(b._rateSource === 'override', `expected 'override', got '${b._rateSource}'`);
+  near(b.rate, 0.55, 0.0001, 'effective rate should match the override');
+  assert(b.overrideRate === 0.55, 'overrideRate surface should mirror bucket.rate');
+});
+
+test('reset-override: computeOverrideImpact rollup returns zero delta when all buckets reset', () => {
+  const buckets = [
+    { id: 'B1', name: 'Outbound', category: 'labor', type: 'variable', uom: 'order',
+      volume_source: 'orders', annualVolume: 1_000_000, rate: null },
+    { id: 'B2', name: 'Facility', category: 'facility', type: 'fixed',
+      annualVolume: 12, rate: null },
+  ];
+  const enriched = enrichBucketsWithDerivedRates({
+    buckets,
+    bucketCosts: { B1: 500_000, B2: 120_000 },
+    volumeLines: [{ volume: 1_000_000, isOutboundPrimary: true }],
+    financial: { targetMargin: 16 },
+  });
+  const impact = computeOverrideImpact(enriched);
+  assert(impact.overriddenBucketCount === 0, `expected 0 overridden, got ${impact.overriddenBucketCount}`);
+  near(impact.totalOverrideDelta, 0, 0.01, 'total delta must be zero when no overrides');
+  near(impact.totalEffectiveRevenue, impact.totalRecommendedRevenue, 0.01);
+});
+
+// ============================================================
 // Summary
 // ============================================================
 console.log('\n');

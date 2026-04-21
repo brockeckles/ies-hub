@@ -2981,7 +2981,7 @@ function renderLaborDetailPane(lines, opHrs, lc) {
           <div class="hub-field">
             <label class="hub-field__label" title="Which pricing bucket this line's cost flows into. Defined in Structure → Pricing Buckets.">Pricing Bucket</label>
             ${buckets.length === 0
-              ? `<div class="hub-field__error">No buckets defined. <button class="hub-btn hub-btn-secondary hub-btn-sm" data-cm-action="jump-to-buckets" style="padding:2px 8px;font-size:11px;margin-left:6px;">Open Buckets →</button></div>`
+              ? `<div class="hub-field__error">No buckets defined. <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="jump-to-buckets" style="padding:2px 8px;font-size:11px;margin-left:6px;">Open Buckets →</button></div>`
               : `<select class="hub-input" data-array="laborLines" data-idx="${i}" data-field="pricing_bucket">
                    <option value=""${!l.pricing_bucket ? ' selected' : ''}>— Unassigned —</option>
                    ${buckets.map(b => `<option value="${escapeAttr(b.id)}"${l.pricing_bucket === b.id ? ' selected' : ''}>${escapeHtml(b.name)} (${b.type}/${b.uom})</option>`).join('')}
@@ -3632,8 +3632,8 @@ function renderPricingBuckets() {
           Start with the standard 5-bucket template (Management Fee, Storage, Inbound, Pick &amp; Pack, VAS) — typical for most 3PL deals — or define your own from scratch. You can edit, rename, or add buckets at any time.
         </div>
         <div style="display:flex;gap:10px;justify-content:center;">
-          <button class="hub-btn hub-btn-primary hub-btn-sm" data-cm-action="apply-bucket-starter">Apply Starter Template</button>
-          <button class="hub-btn hub-btn-secondary hub-btn-sm" data-cm-action="add-bucket">Add Empty Bucket</button>
+          <button class="hub-btn hub-btn-primary hub-btn-sm" data-action="apply-bucket-starter">Apply Starter Template</button>
+          <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="add-bucket">Add Empty Bucket</button>
         </div>
       </div>
     ` : `
@@ -3643,8 +3643,8 @@ function renderPricingBuckets() {
           Each bucket has a pricing type (fixed / variable / cost-plus) and a UOM. Rates are computed in the Pricing step later — or you can set an explicit rate here to override the derivation.
         </div>
         <div style="display:flex;gap:8px;flex-shrink:0;">
-          <button class="hub-btn hub-btn-secondary hub-btn-sm" data-cm-action="apply-bucket-starter" title="Reset to the standard 5-bucket template (overwrites current buckets)">↺ Reset to Template</button>
-          <button class="hub-btn hub-btn-primary hub-btn-sm" data-cm-action="add-bucket">+ Add Bucket</button>
+          <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="apply-bucket-starter" title="Reset to the standard 5-bucket template (overwrites current buckets)">↺ Reset to Template</button>
+          <button class="hub-btn hub-btn-primary hub-btn-sm" data-action="add-bucket">+ Add Bucket</button>
         </div>
       </div>
 
@@ -3685,7 +3685,7 @@ function renderPricingBuckets() {
                   <input class="hub-input" value="${escapeAttr(b.description || '')}" data-array="pricingBuckets" data-idx="${i}" data-field="description" placeholder="optional note" />
                 </td>
                 <td style="text-align:center;">
-                  <button class="cm-delete-btn" data-cm-action="delete-bucket" data-idx="${i}" aria-label="Delete bucket" title="Delete bucket">×</button>
+                  <button class="cm-delete-btn" data-action="delete-bucket" data-idx="${i}" aria-label="Delete bucket" title="Delete bucket">×</button>
                 </td>
               </tr>
             `).join('')}
@@ -3810,7 +3810,7 @@ function renderPricing() {
         <div style="font-size:28px;margin-bottom:6px;">🧱</div>
         <h3 style="margin:0 0 6px;font-size:16px;">No pricing buckets defined</h3>
         <div style="color:var(--ies-gray-500);font-size:13px;margin-bottom:14px;">Buckets are defined in <strong>Structure → Pricing Buckets</strong>. Without them the cost lines can't be allocated to a rate card.</div>
-        <button class="hub-btn hub-btn-primary hub-btn-sm" data-cm-action="jump-to-buckets">Open Pricing Buckets →</button>
+        <button class="hub-btn hub-btn-primary hub-btn-sm" data-action="jump-to-buckets">Open Pricing Buckets →</button>
       </div>
     ` : ''}
 
@@ -3951,7 +3951,7 @@ function renderPricing() {
               </td>
               <td class="cm-num">
                 ${variancePerBucket.isOverridden
-                  ? `<button class="hub-btn hub-btn-xs hub-btn-ghost" data-cm-action="reset-override" data-idx="${overrideIdx}" title="Clear override, revert to recommended">↺ Reset</button>`
+                  ? `<button class="hub-btn hub-btn-xs hub-btn-ghost" data-action="reset-override" data-idx="${overrideIdx}" title="Clear override, revert to recommended">↺ Reset</button>`
                   : ''
                 }
               </td>
@@ -6741,10 +6741,13 @@ function handleAction(action, idx, btn) {
       return;
     case 'reset-override': {
       // Clear the override rate on a pricing bucket → reverts to recommended.
-      // idx is the position in model.pricingBuckets.
+      // idx is the position in model.pricingBuckets. Set to null (matches the
+      // "cleared input" shape that data-field binding produces) rather than 0,
+      // so a future "$0 override for free services" edge case can distinguish
+      // cleared (null/undefined) from explicit-zero (0).
       const b = (model.pricingBuckets || [])[idx];
       if (b) {
-        b.rate = 0;
+        b.rate = null;
         b.overrideReason = null;
       }
       break;
