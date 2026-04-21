@@ -5760,7 +5760,11 @@ const WHATIF_SLIDERS = [
   { key: 'annual_volume_growth_pct',  label: 'Volume Growth',          group: 'Financial',    min: -20, max: 30, step: 0.5, unit: '%' },
   { key: 'dso_days',                  label: 'DSO',                    group: 'WC',           min: 0,  max: 120, step: 1, unit: 'days' },
   { key: 'dpo_days',                  label: 'DPO',                    group: 'WC',           min: 0,  max: 120, step: 1, unit: 'days' },
-  { key: 'benefit_load_pct',          label: 'Benefit Load',           group: 'Labor',        min: 0,  max: 80, step: 1, unit: '%' },
+  // Benefit Load removed 2026-04-21 PM (Brock live feedback): slider only
+  // takes effect when per-line wage_load is unset. Post 2026-04-20 single-
+  // source wage-load fix, most labor lines carry their own value so this
+  // was silently quiet on real projects. Manage benefit load on the
+  // Labor Factors card instead — it's a single source of truth now.
   { key: 'overtime_pct',              label: 'Overtime %',             group: 'Labor',        min: 0,  max: 30, step: 0.5, unit: '%' },
   { key: 'absence_allowance_pct',     label: 'Absence %',              group: 'Labor',        min: 0,  max: 25, step: 0.5, unit: '%' },
   // Brock 2026-04-20: direct-labor productivity (% to MOST engineered
@@ -5862,11 +5866,17 @@ function computeWhatIfPreview(overlay) {
     const dlProdClamped = Math.max(1, Math.min(150, Number.isFinite(dlProd) ? dlProd : 100));
     const laborHoursScale = 100 / dlProdClamped;  // 90 → 1.111, 100 → 1.0, 110 → 0.909
 
-    // Scale labor lines' base_uph (per-line monthly path) + aggregate
-    // laborCost (legacy yearly fallback) so BOTH paths reflect productivity.
+    // 2026-04-21 PM (Brock live feedback): Direct Labor Productivity was
+    // scaling base_uph only, but the monthly engine reads `annual_hours`
+    // directly via monthlyEffectiveHours — so the slider was silently dead
+    // when the monthly engine was on (default). Fix: scale annual_hours
+    // alongside base_uph so BOTH paths (per-line monthly and aggregate
+    // yearly fallback) reflect productivity. 90% prod → 1.111× annual_hours
+    // → 1.111× labor cost; 110% prod → 0.909× hours → 0.909× cost.
     const scaledLaborLines = (model.laborLines || []).map(l => ({
       ...l,
-      base_uph: (l.base_uph || 0) / laborHoursScale,  // lower UPH = more hours
+      annual_hours: (l.annual_hours || 0) * laborHoursScale,  // THE one the monthly engine consumes
+      base_uph: (l.base_uph || 0) / laborHoursScale,          // kept in sync for any UPH-reading downstream
     }));
     const scaledBaseLaborCost = summary.laborCost * laborHoursScale;
 
@@ -6006,9 +6016,11 @@ function computeWhatIfPreview(overlay) {
 
 /**
  * Per-slider isolated impact — re-runs the preview with an overlay that
- * contains ONLY this slider's transient value. Returns the ΔNI / Δ Margin
- * so the drivers panel and impact bars can attribute which slider moves
- * what. Caveat: ignores interactions between sliders (superposition approx).
+ * contains ONLY this slider's transient value. Returns deltas across all
+ * the financial-review metrics so the drivers panel can attribute movement
+ * honestly: some sliders only move NPV (Discount Rate), some only move
+ * working capital (DSO/DPO), some move NI/EBITDA/Margin. Caveat: ignores
+ * interactions between sliders (superposition approx).
  */
 function _computeWhatIfDriverImpacts(baseline) {
   if (!baseline) return {};
@@ -6020,9 +6032,12 @@ function _computeWhatIfDriverImpacts(baseline) {
     const iso = computeWhatIfPreview({ [key]: whatIfTransient[key] });
     if (!iso) continue;
     out[key] = {
-      dNI: iso.totalNI - baseline.totalNI,
-      dEbitda: iso.totalEbitda - baseline.totalEbitda,
-      dMarginPp: iso.ebitdaMargin - baseline.ebitdaMargin, // percentage points
+      dNI:       iso.totalNI       - baseline.totalNI,
+      dEbitda:   iso.totalEbitda   - baseline.totalEbitda,
+      dRevenue:  iso.totalRev      - baseline.totalRev,
+      dNPV:      (iso.npv ?? 0)    - (baseline.npv ?? 0),
+      dCumFcf:   (iso.cumFcf ?? 0) - (baseline.cumFcf ?? 0),
+      dMarginPp: iso.ebitdaMargin  - baseline.ebitdaMargin, // percentage points
     };
   }
   return out;
@@ -6132,10 +6147,19 @@ function renderWhatIfStudio() {
   // colored). Metric key comes from window._whatIfChartMetric (user toggle).
   const chartMetric = (typeof window !== 'undefined' && window._whatIfChartMetric) || 'netIncome';
   const METRICS = {
-    netIncome: { label: 'Net Income', pick: p => p.netIncome },
-    ebitda:    { label: 'EBITDA',     pick: p => p.ebitda },
-    revenue:   { label: 'Revenue',    pick: p => p.revenue },
-    freeCashFlow: { label: 'Free Cash Flow', pick: p => p.freeCashFlow ?? p.free_cash_flow },
+    netIncome:    { label: 'Net Income',      pick: p => p.netIncome },
+    ebitda:       { label: 'EBITDA',          pick: p => p.ebitda },
+    revenue:      { label: 'Revenue',         pick: p => p.revenue },
+    freeCashFlow: { label: 'Free Cash Flow',  pick: p => p.freeCashFlow ?? p.free_cash_flow },
+    // 2026-04-21 PM: include NPV/cum-FCF as selectable chart metrics so
+    // Discount Rate / DSO / DPO have a meaningful attribution surface.
+    // NPV is horizon-aggregate (scalar), not per-year; the trajectory chart
+    // still uses per-year metrics, but the driver bars switch to the scalar.
+    // For the chart we plot the cumulative FCF discounted to NPV per-year,
+    // which the baseline projections already expose via cumFcf × discount.
+    // Simplification: for NPV metric, plot cumFcf trajectory as a proxy —
+    // the scalar NPV shown in the KPI panel is the authoritative number.
+    cumFcf:       { label: 'Cum Cash',        pick: p => p.cumFcf },
   };
   const metricDef = METRICS[chartMetric] || METRICS.netIncome;
 
@@ -6195,32 +6219,83 @@ function renderWhatIfStudio() {
     `;
   })();
 
-  // Driver-impact horizontal bars — sorted by |ΔNI| desc. Only shown when
-  // at least one slider is active.
+  // Driver-impact horizontal bars — show every active slider with its
+  // effect on the CURRENTLY-SELECTED chart metric (NI / EBITDA / Revenue /
+  // Free Cash Flow / NPV). Previously filtered at |dNI| ≥ $1K which
+  // silently dropped sliders like Discount Rate (moves NPV only), DSO/DPO
+  // (move FCF timing), and direct-labor productivity (moves everything,
+  // but was dead before today's fix). Now every active slider renders —
+  // even a "—" row when the slider doesn't move the selected metric, so
+  // the reviewer knows the input landed and can switch metrics to see
+  // where the move actually shows up.
   const driverBars = (() => {
-    const rows = Object.entries(impacts)
-      .map(([key, v]) => ({ key, ...v, slider: WHATIF_SLIDERS.find(s => s.key === key) }))
-      .filter(r => r.slider && Math.abs(r.dNI) >= 1000)
-      .sort((a, b) => Math.abs(b.dNI) - Math.abs(a.dNI));
-    if (rows.length === 0) {
-      return activeCount === 0
-        ? `<div class="cm-whatif-drivers-empty">
-             <em>Move sliders on the left to see which drivers contribute most to the scenario delta.</em>
-           </div>`
-        : `<div class="cm-whatif-drivers-empty">
-             <em>Active sliders are below the $1K materiality threshold.</em>
-           </div>`;
+    // Map the chart metric to the corresponding delta field on impacts[key]
+    const driverMetricMap = {
+      netIncome:    { label: 'Net Income',     field: 'dNI',      kind: 'currency' },
+      ebitda:       { label: 'EBITDA',         field: 'dEbitda',  kind: 'currency' },
+      revenue:      { label: 'Revenue',        field: 'dRevenue', kind: 'currency' },
+      freeCashFlow: { label: 'Free Cash Flow', field: 'dCumFcf',  kind: 'currency' },
+      npv:          { label: 'NPV',            field: 'dNPV',     kind: 'currency' },
+    };
+    const dm = driverMetricMap[chartMetric] || driverMetricMap.netIncome;
+    const fieldName = dm.field;
+
+    const allActive = Object.entries(impacts)
+      .map(([key, v]) => ({ key, ...v, slider: WHATIF_SLIDERS.find(s => s.key === key), delta: v[fieldName] || 0 }))
+      .filter(r => r.slider)
+      // Sort by |delta on selected metric| desc, then by any other delta so
+      // sliders that move OTHER metrics still appear below the primary movers.
+      .sort((a, b) => {
+        const ad = Math.abs(a.delta), bd = Math.abs(b.delta);
+        if (ad !== bd) return bd - ad;
+        // Tiebreaker — total abs across all metrics
+        const aOther = Math.abs(a.dNPV || 0) + Math.abs(a.dEbitda || 0) + Math.abs(a.dCumFcf || 0);
+        const bOther = Math.abs(b.dNPV || 0) + Math.abs(b.dEbitda || 0) + Math.abs(b.dCumFcf || 0);
+        return bOther - aOther;
+      });
+
+    if (allActive.length === 0) {
+      return `<div class="cm-whatif-drivers-empty">
+         <em>Move sliders on the left to see which drivers contribute most to the scenario delta.</em>
+       </div>`;
     }
-    const maxAbs = Math.max(...rows.map(r => Math.abs(r.dNI)));
+
+    // Threshold: $100 (not $1K). At $100 we're below the visual noise floor
+    // but still separate real movement from numerical-precision wiggle.
+    const MIN_DELTA = 100;
+    const maxAbs = Math.max(...allActive.map(r => Math.abs(r.delta) || 0), 1);
+
     return `
       <div class="cm-whatif-drivers">
         <div class="cm-whatif-drivers__hint">
-          Isolated contribution to Net Income — each bar shows what that one slider would move on its own. Does not account for interactions.
+          Isolated contribution to <strong>${dm.label}</strong> — each bar shows what that one slider would move on its own. Switch the chart metric above to re-attribute against another metric. Sliders marked "—" don't move the selected metric but may move others.
         </div>
         <div class="cm-whatif-drivers__rows">
-          ${rows.map(r => {
-            const pct = maxAbs > 0 ? Math.abs(r.dNI) / maxAbs * 100 : 0;
-            const isPos = r.dNI > 0;
+          ${allActive.map(r => {
+            const absDelta = Math.abs(r.delta);
+            if (absDelta < MIN_DELTA) {
+              // Slider is active but doesn't meaningfully move the selected
+              // metric. Show a muted row + a hint about where it DID move
+              // (if anywhere) so the reviewer can switch metrics.
+              const movedOn = [];
+              if (Math.abs(r.dNPV)      > MIN_DELTA && fieldName !== 'dNPV')      movedOn.push('NPV');
+              if (Math.abs(r.dCumFcf)   > MIN_DELTA && fieldName !== 'dCumFcf')   movedOn.push('FCF');
+              if (Math.abs(r.dEbitda)   > MIN_DELTA && fieldName !== 'dEbitda')   movedOn.push('EBITDA');
+              if (Math.abs(r.dRevenue)  > MIN_DELTA && fieldName !== 'dRevenue')  movedOn.push('Revenue');
+              if (Math.abs(r.dNI)       > MIN_DELTA && fieldName !== 'dNI')       movedOn.push('NI');
+              const crossHint = movedOn.length
+                ? `<span class="cm-whatif-drivers__crosshint" title="This slider doesn't move ${dm.label} but does move the metrics listed. Switch the chart metric above to see the effect.">moves ${movedOn.join(' · ')}</span>`
+                : `<span class="cm-whatif-drivers__crosshint cm-whatif-drivers__crosshint--none" title="Slider is active but below the $100 materiality threshold on every metric.">no measurable effect</span>`;
+              return `
+                <div class="cm-whatif-drivers__row cm-whatif-drivers__row--muted">
+                  <div class="cm-whatif-drivers__label">${r.slider.label}</div>
+                  <div class="cm-whatif-drivers__bar-track"></div>
+                  <div class="cm-whatif-drivers__value cm-whatif-drivers__value--muted">— ${crossHint}</div>
+                </div>
+              `;
+            }
+            const pct = maxAbs > 0 ? absDelta / maxAbs * 100 : 0;
+            const isPos = r.delta > 0;
             const color = isPos ? '#16a34a' : '#dc2626';
             const sign = isPos ? '+' : '−';
             return `
@@ -6229,7 +6304,7 @@ function renderWhatIfStudio() {
                 <div class="cm-whatif-drivers__bar-track">
                   <div class="cm-whatif-drivers__bar${isPos ? ' is-pos' : ' is-neg'}" style="width:${pct.toFixed(1)}%;background:${color};"></div>
                 </div>
-                <div class="cm-whatif-drivers__value" style="color:${color};">${sign}${fmtShort(Math.abs(r.dNI))}</div>
+                <div class="cm-whatif-drivers__value" style="color:${color};">${sign}${fmtShort(absDelta)}</div>
               </div>
             `;
           }).join('')}

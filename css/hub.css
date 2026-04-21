@@ -2192,6 +2192,37 @@ textarea.hub-input {
   border: 1px dashed var(--ies-gray-200, #e5e7eb);
   border-radius: 4px;
 }
+/* 2026-04-21 PM — muted rows for sliders that don't move the currently-
+   selected metric. Reviewer still sees the slider is active + a cross-hint
+   telling them which metric DOES move (so they can switch the chart metric). */
+.cm-whatif-drivers__row--muted .cm-whatif-drivers__label {
+  color: var(--ies-gray-400, #9ca3af);
+  font-weight: 400;
+}
+.cm-whatif-drivers__value--muted {
+  color: var(--ies-gray-400, #9ca3af);
+  font-weight: 500;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+}
+.cm-whatif-drivers__crosshint {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--ies-gray-100, #f3f4f6);
+  color: var(--ies-gray-600, #4b5563);
+  white-space: nowrap;
+  cursor: help;
+}
+.cm-whatif-drivers__crosshint--none {
+  background: transparent;
+  color: var(--ies-gray-400, #9ca3af);
+  font-weight: 400;
+  font-style: italic;
+}
 
 /* Legacy — kept for backward compat where .cm-whatif-kpis is still used */
 .cm-whatif-preview-card-legacy {
