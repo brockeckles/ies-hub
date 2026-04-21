@@ -49,6 +49,58 @@ export function grossUp(cost, marginPct) {
 }
 
 /**
+ * Reference Part I §4 stacked G&A → Mgmt Fee decomposition.
+ *
+ *   G&A component  = Cost × g / (1 − t)
+ *   Mgmt component = Cost × m / (1 − t)
+ *   Total revenue  = Cost + G&A + Mgmt = Cost / (1 − t)
+ *
+ * Where g = G&A margin fraction, m = Mgmt Fee margin fraction, and t = g + m.
+ *
+ * This is the stacked-layer form that matches the reference model's
+ * Customer Budget Summary semantics: "G&A layered first on cost base,
+ * Mgmt Fee layered on (cost + G&A), total ties to Cost / (1 − t)."
+ *
+ * Derivation: for the layered sum to reconcile with the one-shot gross-up,
+ * (Cost + G&A) × (1 / (1 − m)) must equal Cost / (1 − t), which solves to
+ * G&A = Cost × g / (1 − t) and Mgmt = (Cost + G&A) × m / (1 − m) =
+ * Cost × m / (1 − t). Both components are positive for g, m > 0 and sum to
+ * Cost × t / (1 − t) — the gross-up delta.
+ *
+ * (Note: the doc's Part I §4 formula as literally written produces a
+ * negative G&A component and doesn't reconcile to Cost / (1 − t). This
+ * function implements the algebraically-correct form that matches the
+ * doc's stated layering semantics.)
+ *
+ * @param {Object} params
+ * @param {number} params.cost — cost base for the line
+ * @param {number} params.gaPct — G&A margin as fraction (e.g. 0.06)
+ * @param {number} params.mgmtPct — Mgmt Fee margin as fraction (e.g. 0.10)
+ * @returns {{ cost: number, gaComponent: number, mgmtComponent: number,
+ *             totalRevenue: number, gaPct: number, mgmtPct: number, totalPct: number }}
+ */
+export function computeStackedRevenue({ cost, gaPct, mgmtPct }) {
+  const c = Number(cost) || 0;
+  const g = Math.min(0.999, Math.max(0, Number(gaPct) || 0));
+  const m = Math.min(0.999, Math.max(0, Number(mgmtPct) || 0));
+  const t = Math.min(0.999, g + m);
+  if (t === 0) {
+    return { cost: c, gaComponent: 0, mgmtComponent: 0, totalRevenue: c, gaPct: g, mgmtPct: m, totalPct: t };
+  }
+  const denom = 1 - t;
+  const gaComponent   = c * g / denom;
+  const mgmtComponent = c * m / denom;
+  const totalRevenue  = c + gaComponent + mgmtComponent;
+  return {
+    cost: c,
+    gaComponent,
+    mgmtComponent,
+    totalRevenue,
+    gaPct: g, mgmtPct: m, totalPct: t,
+  };
+}
+
+/**
  * Inverse of grossUp — computes achieved margin given revenue and cost.
  *
  *   achievedMargin = (revenue − cost) / revenue
@@ -1857,6 +1909,100 @@ export function computeOverrideImpact(enrichedBuckets = []) {
     overriddenBucketCount,
     perBucket,
   };
+}
+
+/**
+ * Override Implications Panel — closed-form approximation of how a set of
+ * pricing-bucket overrides propagates through the 5-year P&L.
+ *
+ * Assumptions:
+ *   - Cost is unchanged (overrides only move revenue, not cost lines)
+ *   - SG&A is category-based (not a % of revenue), so SG&A delta = 0
+ *   - EBITDA delta ≡ revenue delta (no cost offset)
+ *   - Net-income delta = revenue delta × (1 − tax_rate), assuming positive EBIT
+ *     both before and after the override
+ *   - FCF delta ≈ net-income delta (D&A and WC swings net out over 5 years)
+ *   - Variable-bucket overrides scale annually with volume growth; fixed-bucket
+ *     overrides are flat. For simplicity we apply volume growth blended —
+ *     acceptable because this is a planning-panel estimate, not the canonical
+ *     P&L (which comes from buildYearlyProjections).
+ *   - 5-year NPV: discount annual FCF deltas at the project's discount rate
+ *   - Payback shift: linear approximation from baseline FCF and ΔFCF in Y1
+ *
+ * For exact numbers, downstream consumers should re-run buildYearlyProjections
+ * with overridden vs recommended bucket rates. This helper is the fast-path
+ * display for the Pricing Schedule's Implications panel.
+ *
+ * @param {Object} params
+ * @param {number} params.totalOverrideDeltaY1 — annual revenue delta from
+ *   computeOverrideImpact (positive = overrides raise revenue; negative = lower)
+ * @param {number} params.baselineAnnualRevenue — recommended-rate annual revenue
+ * @param {number} params.baselineAnnualCost — annual cost (for EBIT check)
+ * @param {number} params.startupCapital — initial outlay (for payback base)
+ * @param {number} [params.years=5]
+ * @param {number} [params.volGrowthPct=0] — as fraction
+ * @param {number} [params.taxRatePct=25] — as %
+ * @param {number} [params.discountRatePct=10] — as %
+ * @returns {{ y1RevDelta: number, y1EbitdaDelta: number, fiveYrNpvDelta: number,
+ *             paybackShiftMonths: number, hasOverrides: boolean }}
+ */
+export function computeImplicationsImpact(params) {
+  const {
+    totalOverrideDeltaY1 = 0,
+    baselineAnnualRevenue = 0,
+    baselineAnnualCost = 0,
+    startupCapital = 0,
+    years = 5,
+    volGrowthPct = 0,
+    taxRatePct = 25,
+    discountRatePct = 10,
+  } = params;
+
+  const hasOverrides = Math.abs(totalOverrideDeltaY1) > 0.5;
+  if (!hasOverrides) {
+    return { y1RevDelta: 0, y1EbitdaDelta: 0, fiveYrNpvDelta: 0, paybackShiftMonths: 0, hasOverrides: false };
+  }
+
+  const taxFrac      = Math.min(0.999, Math.max(0, taxRatePct / 100));
+  const discountFrac = Math.max(0, discountRatePct / 100);
+  const growthFrac   = volGrowthPct / 100;
+
+  const y1RevDelta    = totalOverrideDeltaY1;
+  const y1EbitdaDelta = y1RevDelta; // revenue-only change, cost unchanged
+
+  // 5-yr NPV delta: sum of after-tax FCF deltas, discounted.
+  // Guard the tax shield: if baseline EBIT is negative, tax shield doesn't apply
+  // the same way. Use simple post-tax form.
+  const baselineEbit = baselineAnnualRevenue - baselineAnnualCost;
+  const effectiveTax = baselineEbit > 0 ? taxFrac : 0;
+  let fiveYrNpvDelta = 0;
+  for (let y = 1; y <= years; y++) {
+    const revDeltaY = y1RevDelta * Math.pow(1 + growthFrac, y - 1);
+    const fcfDeltaY = revDeltaY * (1 - effectiveTax);
+    fiveYrNpvDelta += fcfDeltaY / Math.pow(1 + discountFrac, y);
+  }
+
+  // Payback shift (months, linear approximation):
+  //   baseline payback ≈ startupCapital / annualFcfBaseline
+  //   new payback      ≈ startupCapital / (annualFcfBaseline + annualFcfDelta)
+  //   Δpayback = new − baseline
+  // Uses Y1 FCF as the baseline rate (reasonable over the ramp); if baseline
+  // is near-zero the shift is capped.
+  const annualFcfBaseline = (baselineAnnualRevenue - baselineAnnualCost) * (1 - effectiveTax);
+  const annualFcfDelta    = y1RevDelta * (1 - effectiveTax);
+  let paybackShiftMonths = 0;
+  if (startupCapital > 0 && Math.abs(annualFcfBaseline) > 1) {
+    const baselinePaybackYears = startupCapital / annualFcfBaseline;
+    const newFcf = annualFcfBaseline + annualFcfDelta;
+    const newPaybackYears = Math.abs(newFcf) > 1 ? startupCapital / newFcf : baselinePaybackYears * 2;
+    paybackShiftMonths = (newPaybackYears - baselinePaybackYears) * 12;
+    // Guard pathological cases (e.g. override flips FCF sign)
+    if (!isFinite(paybackShiftMonths) || Math.abs(paybackShiftMonths) > 600) {
+      paybackShiftMonths = Math.sign(paybackShiftMonths || 0) * 600;
+    }
+  }
+
+  return { y1RevDelta, y1EbitdaDelta, fiveYrNpvDelta, paybackShiftMonths, hasOverrides: true };
 }
 
 // ============================================================

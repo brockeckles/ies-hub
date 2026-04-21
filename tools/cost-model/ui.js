@@ -10,7 +10,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import * as calc from './calc.js?v=20260421-vV';
+import * as calc from './calc.js?v=20260421-vW';
 import * as api from './api.js?v=20260419-uH';
 import * as scenarios from './calc.scenarios.js?v=20260419-sZ';
 import * as monthlyCalc from './calc.monthly.js?v=20260421-vO';
@@ -684,7 +684,12 @@ function reconstructModelFromFlatRow(row) {
     },
     financial: {
       ...empty.financial,
-      targetMargin: Number(row.target_margin_pct || empty.financial.targetMargin),
+      // M1 (2026-04-21): G&A + Mgmt Fee are the source of truth; targetMargin
+      // is the derived sum. Fall back to target_margin_pct with 37.5/62.5 split
+      // for rows that haven't been migrated yet.
+      gaMargin:      Number(row.ga_margin_pct      ?? (Number(row.target_margin_pct || 16) * 0.375).toFixed(2)),
+      mgmtFeeMargin: Number(row.mgmt_fee_margin_pct ?? (Number(row.target_margin_pct || 16) * 0.625).toFixed(2)),
+      targetMargin:  Number(row.target_margin_pct || empty.financial.targetMargin),
       annualEscalation: Number(row.labor_escalation_pct || empty.financial.annualEscalation),
       volumeGrowth: Number(row.annual_volume_growth_pct || empty.financial.volumeGrowth),
     },
@@ -3380,18 +3385,40 @@ function renderVas() {
 
 function renderFinancial() {
   const f = model.financial || {};
+  // M1 (2026-04-21): G&A + Mgmt Fee are the source of truth; targetMargin
+  // is the derived sum, kept for downstream back-compat. Reference Part I §4
+  // defaults: G&A 6.0, Mgmt Fee 10.0 → Total 16.0.
+  const ga  = Number(f.gaMargin  ?? (Number(f.targetMargin || 16) * 0.375).toFixed(2));
+  const mgmt = Number(f.mgmtFeeMargin ?? (Number(f.targetMargin || 16) * 0.625).toFixed(2));
+  const total = Number((ga + mgmt).toFixed(2));
   return `
     <div class="cm-section-header">
       <div>
         <div class="cm-section-title">Financial Parameters</div>
-        <div class="cm-section-desc">Margin targets, escalation rates, discount rates, and financial thresholds.</div>
+        <div class="cm-section-desc">Margin components (G&A + Mgmt Fee), escalation rates, discount rates, and financial thresholds. Reference-aligned cost-plus: Revenue = Cost / (1 − total margin).</div>
       </div>
     </div>
 
     <div class="cm-narrow-form">
-      <div class="hub-field">
-        <label class="hub-field__label">Target Margin (%)</label>
-        <input class="hub-input" type="number" value="${f.targetMargin || 12}" step="0.5" data-field="financial.targetMargin" data-type="number" />
+      <div class="hub-field hub-field--full">
+        <label class="hub-field__label">Target Margin Components</label>
+        <div class="cm-margin-split">
+          <div class="cm-margin-split-field">
+            <div class="cm-margin-split-sublabel" title="General & Administrative — corporate overhead layer that scales with the deal. Reference model default 6.0%.">G&amp;A Margin (%)</div>
+            <input class="hub-input" type="number" step="0.25" min="0" max="30" value="${ga}" data-field="financial.gaMargin" data-type="number" />
+          </div>
+          <div class="cm-margin-split-op">+</div>
+          <div class="cm-margin-split-field">
+            <div class="cm-margin-split-sublabel" title="Management Fee — margin on top of (cost + G&A). Reference model default 10.0%.">Mgmt Fee Margin (%)</div>
+            <input class="hub-input" type="number" step="0.25" min="0" max="30" value="${mgmt}" data-field="financial.mgmtFeeMargin" data-type="number" />
+          </div>
+          <div class="cm-margin-split-op">=</div>
+          <div class="cm-margin-split-total">
+            <div class="cm-margin-split-sublabel">Total Margin</div>
+            <div class="cm-margin-split-total-value">${total.toFixed(2)}%</div>
+          </div>
+        </div>
+        <div class="hub-field__hint">Gross-up: Revenue = Cost / (1 − ${total.toFixed(2)}%) = Cost × ${(1 / (1 - total / 100)).toFixed(4)}. The Pricing Schedule displays each bucket's revenue broken into G&amp;A and Mgmt Fee components (reference Part I §4).</div>
       </div>
       <div class="hub-field">
         <label class="hub-field__label">Volume Growth (% / yr)</label>
@@ -3666,6 +3693,31 @@ function renderPricing() {
     : marginDeltaPP <= -5 ? 'error'
     : marginDeltaPP <= -2 ? 'warn'
     : 'ok';
+  // UX nit #1: softer copy when delta is negative but within ±2pp tolerance
+  // (banner stays green, but we don't want a triumphant ✓ on a -1.2pp day).
+  const m3Copy = !hasAnyOverride
+    ? 'No overrides — achieved margin equals target by construction'
+    : m3Level === 'error' ? '⚠ Achieved margin well below target'
+    : m3Level === 'warn' ? '⚠ Achieved margin below target'
+    : marginDeltaPP < -0.1 ? `Within tolerance — achieved ${Math.abs(marginDeltaPP).toFixed(1)}pp below target`
+    : marginDeltaPP > 0.1 ? `✓ Achieved margin above target (+${marginDeltaPP.toFixed(1)}pp)`
+    : '✓ Achieved margin on target';
+
+  // Override Implications Panel inputs: run the closed-form helper with the
+  // current recommended/effective/cost baselines + project financial params.
+  const startupCapital = calc.totalStartupCapital(model.startupLines || []);
+  const fin = model.financial || {};
+  const taxRatePct = Number(model.projectDetails?.taxRate ?? 25);
+  const implications = calc.computeImplicationsImpact({
+    totalOverrideDeltaY1: impact.totalOverrideDelta,
+    baselineAnnualRevenue: impact.totalRecommendedRevenue,
+    baselineAnnualCost: totalCost,
+    startupCapital,
+    years: Math.max(1, Math.min(10, Number(model.projectDetails?.contractTerm || 5))),
+    volGrowthPct: Number(fin.volumeGrowth || 0),
+    taxRatePct,
+    discountRatePct: Number(fin.discountRate || 10),
+  });
 
   return `
     <div class="cm-wide-layout">
@@ -3690,7 +3742,7 @@ function renderPricing() {
     <div class="cm-margin-banner cm-margin-${m3Level}">
       <div class="cm-margin-banner-main">
         <div class="cm-margin-banner-label">
-          ${m3Level === 'error' ? '⚠ Achieved margin below target' : m3Level === 'warn' ? '⚠ Achieved margin below target' : hasAnyOverride ? '✓ Achieved margin on target' : 'No overrides — achieved margin equals target by construction'}
+          ${m3Copy}
         </div>
         <div class="cm-margin-banner-nums">
           <span class="cm-margin-tile">
@@ -3713,6 +3765,38 @@ function renderPricing() {
             <span class="cm-margin-tile-label">Annual rev impact</span>
             <span class="cm-margin-tile-value ${impact.totalOverrideDelta < 0 ? 'cm-margin-value-down' : impact.totalOverrideDelta > 0 ? 'cm-margin-value-up' : ''}">${impact.totalOverrideDelta === 0 ? '—' : (impact.totalOverrideDelta >= 0 ? '+' : '') + calc.formatCurrency(impact.totalOverrideDelta, { compact: true })}</span>
           </span>
+        </div>
+      </div>
+    </div>
+    ` : ''}
+
+    ${buckets.length > 0 && implications.hasOverrides ? `
+    <!-- Override Implications Panel (medium scope: Y1 Rev / Y1 EBITDA / 5yr NPV / Payback shift) -->
+    <div class="cm-implications-panel">
+      <div class="cm-implications-title">
+        Override Implications
+        <span class="cm-implications-subtitle">Closed-form estimate of how the current overrides propagate through the P&amp;L. Exact numbers flow into Summary + Multi-Year P&amp;L.</span>
+      </div>
+      <div class="cm-implications-tiles">
+        <div class="cm-impl-tile ${implications.y1RevDelta < 0 ? 'cm-impl-down' : implications.y1RevDelta > 0 ? 'cm-impl-up' : ''}">
+          <div class="cm-impl-tile-label">Y1 Revenue Δ</div>
+          <div class="cm-impl-tile-value">${implications.y1RevDelta >= 0 ? '+' : ''}${calc.formatCurrency(implications.y1RevDelta, { compact: true })}</div>
+          <div class="cm-impl-tile-sub">annual, at current volumes</div>
+        </div>
+        <div class="cm-impl-tile ${implications.y1EbitdaDelta < 0 ? 'cm-impl-down' : implications.y1EbitdaDelta > 0 ? 'cm-impl-up' : ''}">
+          <div class="cm-impl-tile-label">Y1 EBITDA Δ</div>
+          <div class="cm-impl-tile-value">${implications.y1EbitdaDelta >= 0 ? '+' : ''}${calc.formatCurrency(implications.y1EbitdaDelta, { compact: true })}</div>
+          <div class="cm-impl-tile-sub">revenue-only: flows 1:1 to EBITDA</div>
+        </div>
+        <div class="cm-impl-tile ${implications.fiveYrNpvDelta < 0 ? 'cm-impl-down' : implications.fiveYrNpvDelta > 0 ? 'cm-impl-up' : ''}">
+          <div class="cm-impl-tile-label">Contract-Life NPV Δ</div>
+          <div class="cm-impl-tile-value">${implications.fiveYrNpvDelta >= 0 ? '+' : ''}${calc.formatCurrency(implications.fiveYrNpvDelta, { compact: true })}</div>
+          <div class="cm-impl-tile-sub">${model.projectDetails?.contractTerm || 5}-yr, after-tax, @ ${(Number(fin.discountRate || 10)).toFixed(1)}% discount</div>
+        </div>
+        <div class="cm-impl-tile ${implications.paybackShiftMonths > 0 ? 'cm-impl-down' : implications.paybackShiftMonths < 0 ? 'cm-impl-up' : ''}">
+          <div class="cm-impl-tile-label">Payback Shift</div>
+          <div class="cm-impl-tile-value">${Math.abs(implications.paybackShiftMonths) < 0.5 ? '—' : (implications.paybackShiftMonths > 0 ? '+' : '') + implications.paybackShiftMonths.toFixed(1) + ' mo'}</div>
+          <div class="cm-impl-tile-sub">${startupCapital > 0 ? 'vs baseline payback schedule' : 'n/a (no startup capital)'}</div>
         </div>
       </div>
     </div>
@@ -3743,11 +3827,22 @@ function renderPricing() {
           const variancePerBucket = impact.perBucket.find(p => p.id === b.id) || { deltaAnnual: 0, deltaPct: 0, isOverridden: false };
           const vClass = variancePerBucket.deltaAnnual < 0 ? 'cm-variance-down' : variancePerBucket.deltaAnnual > 0 ? 'cm-variance-up' : '';
           const overrideIdx = (model.pricingBuckets || []).findIndex(pb => pb.id === b.id);
+          const reasonValue = b.overrideReason || '';
+          const reasonOptions = [
+            'Customer counter-offer',
+            'Competitive pressure',
+            'Strategic concession',
+            'Pricing error correction',
+            'Market adjustment',
+          ];
           return `
             <tr${variancePerBucket.isOverridden ? ' class="cm-row-overridden"' : ''}>
               <td>
                 <div style="font-weight:600;">${b.name}</div>
-                ${b._rateSource === 'override' ? `<div class="cm-row-override-chip">OVERRIDE</div>` : ''}
+                ${b._rateSource === 'override' ? `
+                  <div class="cm-row-override-chip">OVERRIDE</div>
+                  ${reasonValue ? `<div class="cm-row-override-reason" title="Override reason">${escapeHtml(reasonValue)}</div>` : ''}
+                ` : ''}
               </td>
               <td><span class="hub-badge hub-badge-${b.type === 'fixed' ? 'info' : 'success'}">${b.type}</span></td>
               <td class="cm-num">${calc.formatCurrency(cost)}</td>
@@ -3760,6 +3855,15 @@ function renderPricing() {
                   placeholder="${hasVol ? rec.toFixed(rec < 10 ? 4 : 2) : '—'}"
                   data-array="pricingBuckets" data-idx="${overrideIdx}" data-field="rate" data-type="number"
                   title="Leave blank to use recommended rate. Enter a value to override." />
+                ${variancePerBucket.isOverridden ? `
+                  <select class="hub-input cm-override-reason-select"
+                    data-array="pricingBuckets" data-idx="${overrideIdx}" data-field="overrideReason"
+                    title="Document why this rate was overridden (for audit trail)">
+                    <option value=""${!reasonValue ? ' selected' : ''}>— Reason —</option>
+                    ${reasonOptions.map(r => `<option value="${escapeAttr(r)}"${reasonValue === r ? ' selected' : ''}>${r}</option>`).join('')}
+                    ${reasonValue && !reasonOptions.includes(reasonValue) ? `<option value="${escapeAttr(reasonValue)}" selected>${escapeHtml(reasonValue)}</option>` : ''}
+                  </select>
+                ` : ''}
               </td>
               <td class="cm-num ${vClass}" style="font-weight:600;">
                 ${variancePerBucket.isOverridden
@@ -3790,6 +3894,66 @@ function renderPricing() {
         </tr>
       </tbody>
     </table>
+
+    ${buckets.length > 0 ? (() => {
+      // Customer Budget Summary (reference Part I §4 stacked display)
+      // Each bucket shows: Cost → + G&A layer → + Mgmt Fee layer = Total Revenue
+      // Mirrors the way 3PL pricing proposals decompose each line for the customer.
+      const gaFrac   = (Number(model.financial?.gaMargin)  || 0) / 100;
+      const mgmtFrac = (Number(model.financial?.mgmtFeeMargin) || 0) / 100;
+      if (gaFrac + mgmtFrac <= 0) return '';
+      let totGa = 0, totMgmt = 0, totRev = 0;
+      const rows = enriched.map(b => {
+        const cost = bucketCosts[b.id] || 0;
+        const stack = calc.computeStackedRevenue({ cost, gaPct: gaFrac, mgmtPct: mgmtFrac });
+        totGa   += stack.gaComponent;
+        totMgmt += stack.mgmtComponent;
+        totRev  += stack.totalRevenue;
+        return `
+          <tr>
+            <td style="font-weight:600;">${b.name}</td>
+            <td class="cm-num">${calc.formatCurrency(stack.cost)}</td>
+            <td class="cm-num cm-stack-ga">+${calc.formatCurrency(stack.gaComponent)}</td>
+            <td class="cm-num cm-stack-mgmt">+${calc.formatCurrency(stack.mgmtComponent)}</td>
+            <td class="cm-num" style="font-weight:700;">${calc.formatCurrency(stack.totalRevenue)}</td>
+          </tr>
+        `;
+      }).join('');
+      return `
+        <details class="cm-customer-budget" open>
+          <summary>
+            <span class="cm-cbs-title">Customer Budget Summary</span>
+            <span class="cm-cbs-subtitle">Per-line stacked G&amp;A + Mgmt Fee decomposition (reference Part I §4) — the customer-facing view of how each bucket's recommended revenue is built up from cost.</span>
+          </summary>
+          <table class="cm-grid-table cm-stacked-budget">
+            <thead>
+              <tr>
+                <th>Line</th>
+                <th class="cm-num">Cost</th>
+                <th class="cm-num cm-stack-ga-head">G&amp;A Layer<br><span class="cm-stack-pct">(${(gaFrac*100).toFixed(2)}%)</span></th>
+                <th class="cm-num cm-stack-mgmt-head">Mgmt Fee Layer<br><span class="cm-stack-pct">(${(mgmtFrac*100).toFixed(2)}%)</span></th>
+                <th class="cm-num">= Recommended Revenue</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows}
+              <tr class="cm-total-row">
+                <td>Total</td>
+                <td class="cm-num">${calc.formatCurrency(totalCost)}</td>
+                <td class="cm-num cm-stack-ga">+${calc.formatCurrency(totGa)}</td>
+                <td class="cm-num cm-stack-mgmt">+${calc.formatCurrency(totMgmt)}</td>
+                <td class="cm-num" style="font-weight:700;">${calc.formatCurrency(totRev)}</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="cm-cbs-formula">
+            <span><strong>G&amp;A layer</strong> = Cost / ((1 − ${(gaFrac*100).toFixed(2)}%) / (1 − ${((gaFrac+mgmtFrac)*100).toFixed(2)}%)) − Cost</span>
+            <span><strong>Mgmt Fee layer</strong> = (Cost + G&amp;A) × (1 / (1 − ${(mgmtFrac*100).toFixed(2)}%) − 1)</span>
+            <span>Sum = Cost / (1 − ${((gaFrac+mgmtFrac)*100).toFixed(2)}%) (matches Recommended column above)</span>
+          </div>
+        </details>
+      `;
+    })() : ''}
 
     ${(() => {
       // Render orphan banners. Two distinct kinds of orphans:
@@ -3844,6 +4008,8 @@ function renderPricing() {
       .cm-pricing-schedule .cm-override-input:placeholder-shown { font-weight:400; color:var(--ies-gray-500); }
       .cm-pricing-schedule .cm-row-overridden { background:rgba(245,158,11,0.06); }
       .cm-pricing-schedule .cm-row-override-chip { display:inline-block; margin-top:2px; padding:1px 6px; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; color:var(--ies-amber, #f59e0b); background:rgba(245,158,11,0.12); border-radius:6px; }
+      .cm-pricing-schedule .cm-row-override-reason { margin-top:4px; font-size:10px; font-style:italic; color:var(--ies-gray-500); max-width:180px; line-height:1.3; }
+      .cm-pricing-schedule .cm-override-reason-select { margin-top:4px; width:140px; font-size:10px; padding:2px 4px; text-align:left; font-weight:400; color:var(--ies-gray-700); }
       .cm-pricing-schedule .cm-variance-down { color:var(--ies-red, #dc3545); }
       .cm-pricing-schedule .cm-variance-up { color:var(--ies-green, #0d9668); }
       .cm-pricing-schedule .cm-variance-abs { font-size:11px; font-weight:500; color:var(--ies-gray-500); margin-top:2px; }
@@ -3851,6 +4017,34 @@ function renderPricing() {
       .hub-btn-xs { padding:2px 8px; font-size:11px; border-radius:4px; }
       .hub-btn-ghost { background:transparent; color:var(--ies-gray-600); border:1px solid var(--ies-gray-300); }
       .hub-btn-ghost:hover { background:var(--ies-gray-50); }
+      /* Override Implications Panel */
+      .cm-implications-panel { padding:14px 18px; margin-bottom:16px; border-radius:8px; border:1px solid var(--ies-gray-200); background:#fff; }
+      .cm-implications-title { font-size:13px; font-weight:600; color:var(--ies-gray-700); margin-bottom:10px; display:flex; flex-direction:column; gap:3px; }
+      .cm-implications-subtitle { font-size:11px; font-weight:400; color:var(--ies-gray-500); }
+      .cm-implications-tiles { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px; }
+      .cm-impl-tile { padding:10px 14px; border:1px solid var(--ies-gray-200); border-radius:6px; background:var(--ies-gray-50); }
+      .cm-impl-tile.cm-impl-up { border-left:3px solid var(--ies-green, #20c997); }
+      .cm-impl-tile.cm-impl-down { border-left:3px solid var(--ies-red, #dc3545); }
+      .cm-impl-tile-label { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.4px; color:var(--ies-gray-500); margin-bottom:4px; }
+      .cm-impl-tile-value { font-size:20px; font-weight:700; color:var(--ies-gray-900); line-height:1.1; }
+      .cm-impl-tile.cm-impl-up .cm-impl-tile-value { color:var(--ies-green, #0d9668); }
+      .cm-impl-tile.cm-impl-down .cm-impl-tile-value { color:var(--ies-red, #dc3545); }
+      .cm-impl-tile-sub { font-size:10px; color:var(--ies-gray-500); margin-top:3px; line-height:1.3; }
+      /* Customer Budget Summary (reference Part I §4 stacked G&A + Mgmt display) */
+      .cm-customer-budget { margin-top:20px; border:1px solid var(--ies-gray-200); border-radius:8px; background:#fff; padding:0; }
+      .cm-customer-budget > summary { padding:14px 18px; cursor:pointer; list-style:none; display:flex; flex-direction:column; gap:4px; border-bottom:1px solid transparent; }
+      .cm-customer-budget[open] > summary { border-bottom-color:var(--ies-gray-200); background:var(--ies-gray-50); }
+      .cm-customer-budget > summary::-webkit-details-marker { display:none; }
+      .cm-customer-budget > summary::before { content:'▸ '; color:var(--ies-gray-500); font-size:11px; margin-right:4px; }
+      .cm-customer-budget[open] > summary::before { content:'▾ '; }
+      .cm-cbs-title { font-size:14px; font-weight:600; color:var(--ies-gray-900); }
+      .cm-cbs-subtitle { font-size:12px; color:var(--ies-gray-500); font-weight:400; line-height:1.4; }
+      .cm-stacked-budget { margin:0; border:none; }
+      .cm-stacked-budget th { background:var(--ies-gray-50); }
+      .cm-stack-ga, .cm-stack-ga-head { color:#0a6b9e; }
+      .cm-stack-mgmt, .cm-stack-mgmt-head { color:#6d4ca8; }
+      .cm-stack-pct { font-size:10px; color:var(--ies-gray-500); font-weight:500; }
+      .cm-cbs-formula { padding:10px 18px; font-size:11px; color:var(--ies-gray-500); background:var(--ies-gray-50); border-top:1px solid var(--ies-gray-200); display:flex; flex-direction:column; gap:4px; line-height:1.5; font-family: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, monospace; }
     </style>
     </div>
   `;
@@ -4419,6 +4613,12 @@ function bindSectionEvents(section, container) {
       } else {
         // Dot-path assignment
         setNestedValue(model, field, val);
+        // M1 (2026-04-21): recompute derived targetMargin whenever a component
+        // margin field changes, so every downstream consumer (calc engine,
+        // Pricing Schedule, validateModel, What-If) sees the updated total.
+        if (field === 'financial.gaMargin' || field === 'financial.mgmtFeeMargin') {
+          syncDerivedTargetMargin();
+        }
       }
 
       isDirty = true;
@@ -6161,8 +6361,25 @@ function shouldRerender(field) {
   return field.includes('shifts.') || field.includes('facility.') ||
          field === 'projectDetails.market' || field === 'projectDetails.contractTerm' ||
          field === 'financial.targetMargin' ||
+         // M1 (2026-04-21): G&A / Mgmt Fee edits drive the derived total and
+         // the Pricing Schedule gross-up; both fields trigger re-render.
+         field === 'financial.gaMargin' || field === 'financial.mgmtFeeMargin' ||
          // I-01: reassigning a line's bucket shifts the rollup; Pricing tables must re-render.
          field === 'pricing_bucket';
+}
+
+/**
+ * M1 (2026-04-21): whenever gaMargin or mgmtFeeMargin changes, recompute the
+ * derived `financial.targetMargin` so every downstream consumer keeps working
+ * without needing to know about the split. Called from the generic data-field
+ * input handler.
+ */
+function syncDerivedTargetMargin() {
+  const f = model.financial;
+  if (!f) return;
+  const ga = Number(f.gaMargin) || 0;
+  const mgmt = Number(f.mgmtFeeMargin) || 0;
+  f.targetMargin = Number((ga + mgmt).toFixed(2));
 }
 
 // ============================================================
@@ -7431,7 +7648,7 @@ function createEmptyModel() {
       { category: 'Supplies',     annual_cost: 48000,  driver: 'per unit shipped', notes: 'Labels, tape, stretch wrap' },
     ],
     vasLines: [],
-    financial: { targetMargin: 12, volumeGrowth: 3, laborEscalation: 4, annualEscalation: 3, discountRate: 10, reinvestRate: 8 },
+    financial: { gaMargin: 4.5, mgmtFeeMargin: 7.5, targetMargin: 12, volumeGrowth: 3, laborEscalation: 4, annualEscalation: 3, discountRate: 10, reinvestRate: 8 },
     laborCosting: {
       // Benefit Load buckets sum to defaultBurdenPct (Brock 2026-04-21 pm)
       benefitLoadPayrollTaxesPct:  8.5,

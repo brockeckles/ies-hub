@@ -2489,6 +2489,54 @@ textarea.hub-input {
   background: var(--ies-gray-50);
   border-top: 1px solid var(--ies-gray-200);
 }
+
+/* M1 (2026-04-21): G&A + Mgmt Fee inline split inputs on Financial section */
+.cm-margin-split {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--ies-gray-200);
+  border-radius: 6px;
+  background: var(--ies-gray-50);
+}
+.cm-margin-split-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 140px;
+}
+.cm-margin-split-field .hub-input {
+  width: 100%;
+  text-align: right;
+  font-weight: 600;
+}
+.cm-margin-split-sublabel {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--ies-gray-600);
+}
+.cm-margin-split-op {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ies-gray-400);
+  padding-bottom: 6px;
+}
+.cm-margin-split-total {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 120px;
+  padding: 0 10px;
+}
+.cm-margin-split-total-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--ies-blue);
+  line-height: 1.1;
+}
 .hub-datatable td.cm-actions { width: 1%; white-space: nowrap; }
 .hub-datatable .cm-delete-btn {
   border: 0;

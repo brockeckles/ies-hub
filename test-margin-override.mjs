@@ -15,6 +15,8 @@ import {
   computeBucketRates,
   enrichBucketsWithDerivedRates,
   computeOverrideImpact,
+  computeStackedRevenue,
+  computeImplicationsImpact,
   computeSummary,
   buildYearlyProjections,
   validateModel,
@@ -58,6 +60,45 @@ test('grossUp: 100% margin guard — floors at 99.9% to avoid Infinity', () => {
 
 test('grossUp: negative margin coerces to 0', () => {
   near(grossUp(1000, -0.1), 1000, 0.01);
+});
+
+// ============================================================
+// computeStackedRevenue() — reference Part I §4 two-step decomposition
+// ============================================================
+
+test('computeStackedRevenue: G&A + Mgmt sum equals gross-up total', () => {
+  const r = computeStackedRevenue({ cost: 1_000_000, gaPct: 0.06, mgmtPct: 0.10 });
+  // cost / (1 - 0.16) = 1,190,476.19
+  near(r.totalRevenue, 1_190_476.19, 0.5);
+  // Sum invariant
+  near(r.cost + r.gaComponent + r.mgmtComponent, r.totalRevenue, 0.01, 'stack sum invariant');
+});
+
+test('computeStackedRevenue: 6/10 split matches reference model defaults', () => {
+  // At Cost=$1M, g=0.06, m=0.10, t=0.16:
+  //   G&A component  = 1M × 0.06 / 0.84 = 71,428.57
+  //   Mgmt component = 1M × 0.10 / 0.84 = 119,047.62
+  //   Total revenue  = 1M + 71,428.57 + 119,047.62 = 1,190,476.19 ≡ 1M / 0.84 ✓
+  const r = computeStackedRevenue({ cost: 1_000_000, gaPct: 0.06, mgmtPct: 0.10 });
+  near(r.gaComponent, 71_428.57, 0.5, 'G&A at 6/16 split');
+  near(r.mgmtComponent, 119_047.62, 0.5, 'Mgmt at 10/16 split');
+  near(r.totalRevenue, 1_190_476.19, 0.5, 'reconciles to gross-up');
+  // Layered semantics: (Cost + G&A) × (1 / (1 − m)) must equal totalRevenue.
+  near((r.cost + r.gaComponent) / (1 - 0.10), r.totalRevenue, 0.5, 'layered semantics');
+});
+
+test('computeStackedRevenue: zero margin → zero components', () => {
+  const r = computeStackedRevenue({ cost: 500_000, gaPct: 0, mgmtPct: 0 });
+  near(r.gaComponent, 0, 0.01);
+  near(r.mgmtComponent, 0, 0.01);
+  near(r.totalRevenue, 500_000, 0.01);
+});
+
+test('computeStackedRevenue: handles 0% cost (degenerate)', () => {
+  const r = computeStackedRevenue({ cost: 0, gaPct: 0.06, mgmtPct: 0.10 });
+  near(r.totalRevenue, 0, 0.01);
+  near(r.gaComponent, 0, 0.01);
+  near(r.mgmtComponent, 0, 0.01);
 });
 
 // ============================================================
@@ -208,6 +249,82 @@ test('validateModel M3: ERROR at 5pp+ below target', () => {
   const m3 = ws.find(w => /achieved margin/i.test(w.message));
   assert(m3, 'should produce M3 message');
   assert(m3.level === 'error', `expected error, got ${m3.level}`);
+});
+
+// ============================================================
+// computeImplicationsImpact() — Override Implications Panel tile values
+// ============================================================
+
+test('computeImplicationsImpact: zero override → all tiles zero', () => {
+  const r = computeImplicationsImpact({
+    totalOverrideDeltaY1: 0,
+    baselineAnnualRevenue: 10_000_000, baselineAnnualCost: 8_000_000,
+    startupCapital: 500_000,
+  });
+  assert(!r.hasOverrides, 'hasOverrides false');
+  near(r.y1RevDelta, 0);
+  near(r.y1EbitdaDelta, 0);
+  near(r.fiveYrNpvDelta, 0);
+  near(r.paybackShiftMonths, 0);
+});
+
+test('computeImplicationsImpact: negative override propagates to all tiles', () => {
+  const r = computeImplicationsImpact({
+    totalOverrideDeltaY1: -500_000, // $500K/yr revenue shortfall
+    baselineAnnualRevenue: 10_000_000, baselineAnnualCost: 8_000_000, // EBIT = $2M positive
+    startupCapital: 500_000,
+    years: 5, volGrowthPct: 5, taxRatePct: 25, discountRatePct: 10,
+  });
+  assert(r.hasOverrides, 'hasOverrides true');
+  near(r.y1RevDelta, -500_000, 1);
+  // EBITDA Δ == Revenue Δ (cost unchanged, SG&A category-based)
+  near(r.y1EbitdaDelta, -500_000, 1);
+  // 5-yr NPV Δ: after-tax revenue delta discounted over 5 years w/ 5% growth
+  // Year 1: -500K × 0.75 / 1.10 = -340,909
+  // Year 2: -525K × 0.75 / 1.21 = -325,413
+  // ... NPV should be ~ -$1.5M ballpark
+  assert(r.fiveYrNpvDelta < -1_000_000 && r.fiveYrNpvDelta > -3_000_000,
+    `NPV Δ should be ~ -$1.5M band, got ${r.fiveYrNpvDelta}`);
+  // Payback shift should be positive (payback extends since FCF drops)
+  assert(r.paybackShiftMonths > 0, `payback should extend, got ${r.paybackShiftMonths}`);
+});
+
+test('computeImplicationsImpact: positive override shortens payback', () => {
+  const r = computeImplicationsImpact({
+    totalOverrideDeltaY1: +200_000,
+    baselineAnnualRevenue: 10_000_000, baselineAnnualCost: 8_000_000,
+    startupCapital: 500_000,
+    years: 5, taxRatePct: 25, discountRatePct: 10,
+  });
+  near(r.y1RevDelta, 200_000, 1);
+  assert(r.fiveYrNpvDelta > 0, 'positive override lifts NPV');
+  assert(r.paybackShiftMonths < 0, 'positive override shortens payback');
+});
+
+test('computeImplicationsImpact: no tax shield when baseline EBIT is negative', () => {
+  const r = computeImplicationsImpact({
+    totalOverrideDeltaY1: -100_000,
+    baselineAnnualRevenue: 1_000_000, baselineAnnualCost: 1_500_000, // EBIT = -$500K
+    startupCapital: 0,
+    taxRatePct: 25,
+  });
+  // No tax shield — FCF delta equals revenue delta (not × (1-tax))
+  near(r.y1EbitdaDelta, -100_000, 1);
+  // NPV reflects no tax shield
+  // Year 1: -100K / 1.10 = -90,909, ... over 5 years w/ 0 growth: ~-$379K
+  assert(r.fiveYrNpvDelta < -350_000, `NPV Δ without tax shield, got ${r.fiveYrNpvDelta}`);
+});
+
+test('computeImplicationsImpact: payback shift guarded against pathological cases', () => {
+  // Override flips FCF sign — helper should cap payback shift at ±600 months
+  const r = computeImplicationsImpact({
+    totalOverrideDeltaY1: -5_000_000, // catastrophic override
+    baselineAnnualRevenue: 10_000_000, baselineAnnualCost: 8_000_000,
+    startupCapital: 500_000,
+    taxRatePct: 25,
+  });
+  assert(isFinite(r.paybackShiftMonths), 'finite');
+  assert(Math.abs(r.paybackShiftMonths) <= 600, `capped, got ${r.paybackShiftMonths}`);
 });
 
 // ============================================================
