@@ -212,6 +212,87 @@ const STANDARD_POSITIONS = [
   { name: 'Transportation Routing',              category: 'indirect', is_salaried: true,  annual_salary: 58000, notes: '≥100 distinct carrier lanes triggers' },
 ];
 
+/** Bumps when STANDARD_POSITIONS changes enough to warrant re-seeding every
+ *  existing project on next load. `shifts._catalogVersion` on each model
+ *  gates whether auto-migration runs (see migrateLaborLinesToPositions). */
+const CATALOG_VERSION = 1;
+
+/** Keyword rules mapping a free-text activity/role name onto a standard role
+ *  by category. First match wins. Regex-anchored so partial tokens (pick/load)
+ *  don't over-match on multi-word position names. Used by the one-time
+ *  auto-migration to preserve labor-line ↔ position linkage after catalog
+ *  wipe. */
+const ROLE_HINT_RULES = [
+  // Direct — floor roles (test BEFORE generic verb matches below)
+  [/\breach[\s-]?truck|\bvna\b|turret/i,                  'direct',   'Reach Truck Operator'],
+  [/\border[\s-]?picker|\bcherry[\s-]?picker/i,           'direct',   'Order Picker Operator'],
+  [/\bforklift|\bsit[\s-]?down|counterbalance/i,          'direct',   'Forklift Operator'],
+  [/\byard|\bspotter\b|trailer\s+move/i,                  'direct',   'Yard Jockey'],
+  [/\breceiv/i,                                           'direct',   'Receiver'],
+  [/\bput[\s-]?away/i,                                    'direct',   'Putaway Operator'],
+  [/\breplen/i,                                           'direct',   'Replenishment Operator'],
+  [/\bpallet[\s-]?pick|\bpallet\b/i,                      'direct',   'Pallet Picker'],
+  [/\bcase[\s-]?pick|\bcase\b/i,                          'direct',   'Case Picker'],
+  [/\beach[\s-]?pick|\bpiece[\s-]?pick|\bunit[\s-]?pick|\beach\b|\bpick/i, 'direct', 'Each Picker'],
+  [/\bpack|\blabel/i,                                     'direct',   'Packer'],
+  [/\bload|outbound|\bship/i,                             'direct',   'Loader'],
+  [/value[\s-]?added|\bvas\b|\bkit|assembly/i,            'direct',   'VAS Associate'],
+  [/\bcycle|\bcount|\baudit|\bqc\b|quality/i,             'direct',   'QC / Cycle Counter'],
+  [/\bmaterial\s*handler|generic/i,                       'direct',   'Material Handler'],
+
+  // Indirect — hourly leads + front-line (test BEFORE mid/senior mgr to avoid
+  // "team lead" matching "manager" first)
+  [/\bteam\s*lead/i,                                      'indirect', 'Team Lead'],
+  [/\bline\s*lead/i,                                      'indirect', 'Line Lead'],
+  [/\binventory\s*team\s*lead/i,                          'indirect', 'Inventory Team Lead'],
+  [/\bship(?:ping)?[\s\/]*receiv(?:ing)?\s*team\s*lead/i, 'indirect', 'Shipping/Receiving Team Lead'],
+  [/\bqa\s*coord|quality\s*coord/i,                       'indirect', 'QA Coordinator'],
+  [/\bsr\.?\s*csr|\bsenior\s*csr/i,                       'indirect', 'Senior CSR'],
+  [/\bcsr\b|customer\s*service/i,                         'indirect', 'CSR'],
+  [/\bsecurity\s*guard|\bguard\b/i,                       'indirect', 'Security Guard'],
+
+  // Indirect — salaried supervisors + managers
+  [/\binventory\s*control\s*sup|inv\.?\s*ctrl/i,          'indirect', 'Inventory Control Supervisor'],
+  [/\binventory\s*mgr|inventory\s*manager/i,              'indirect', 'Inventory Manager'],
+  [/\bqa\s*sup|quality\s*sup/i,                           'indirect', 'QA Supervisor'],
+  [/\bqa\s*mgr|quality\s*manager/i,                       'indirect', 'QA Manager'],
+  [/\bops?\s*sup|operations?\s*sup|supervis|\bcoach/i,    'indirect', 'Operations Supervisor'],
+  [/\badmin\s*ops|ops\s*admin/i,                          'indirect', 'Admin Ops Manager'],
+  [/\basst\s*ops|assistant\s*ops/i,                       'indirect', 'Asst Ops Manager'],
+  [/\bindustrial\s*eng|\bie\b/i,                          'indirect', 'Industrial Engineer'],
+  [/\bhr\b|human\s*resources/i,                           'indirect', 'HR-Admin'],
+  [/\bmaint/i,                                            'indirect', 'Maintenance Engineer/Manager'],
+  [/\bsafety\s*coord/i,                                   'indirect', 'Safety Coordinator'],
+  [/\bsafety\s*mgr|safety\s*manager/i,                    'indirect', 'Safety Manager'],
+  [/\bsenior\s*ops|sr\.?\s*ops/i,                         'indirect', 'Senior Ops Manager'],
+  [/\bsoftware\s*super|super\s*user/i,                    'indirect', 'Software Super User'],
+  [/operations?\s*director|\bops?\s*director/i,           'indirect', 'Operations Director'],
+  [/operations?\s*manager|\bops?\s*manager|\bmanager/i,   'indirect', 'Operations Manager'],
+
+  // Indirect — volume-driven
+  [/retail\s*compliance/i,                                'indirect', 'Retail Compliance Specialist'],
+  [/wave\s*task/i,                                        'indirect', 'Wave Tasker'],
+  [/wms|lms|field\s*support/i,                            'indirect', 'WMS/LMS Field Support'],
+  [/transportation|routing/i,                             'indirect', 'Transportation Routing'],
+  [/yard\s*spotter/i,                                     'indirect', 'Yard Spotter'],
+];
+
+/** Return the STANDARD_POSITIONS entry best matching a free-text name by
+ *  keyword rule. Filters by category so a "Supervisor" direct line doesn't
+ *  accidentally match an indirect position. Null if no rule matches. */
+function findStandardRoleByHint(name, category) {
+  const needle = String(name || '');
+  if (!needle.trim()) return null;
+  for (const [re, cat, roleName] of ROLE_HINT_RULES) {
+    if (cat !== category) continue;
+    if (re.test(needle)) {
+      const hit = STANDARD_POSITIONS.find(p => p.name === roleName);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+
 /** Normalize STANDARD_POSITIONS into the on-model shape (with id + defaults). */
 function materializeStandardPositions() {
   const makeId = () => (typeof crypto !== 'undefined' && crypto.randomUUID)
@@ -7145,15 +7226,28 @@ function migrateLaborLinesToPositions(m) {
   // calc engine ignores it.
 
   if (!Array.isArray(m.shifts.positions)) m.shifts.positions = [];
-  // Brock 2026-04-21 pm: seed the 43-role standard catalog when the project
-  // has zero positions AND zero labor lines (net-new project). Existing
-  // projects with labor lines continue through the activity-named migration
-  // path below — user clicks "Replace with Standard Roles" to swap.
-  const noPositions = m.shifts.positions.length === 0;
-  const noLabor = (!m.laborLines || m.laborLines.length === 0)
-                  && (!m.indirectLaborLines || m.indirectLaborLines.length === 0);
-  if (noPositions && noLabor) {
-    m.shifts.positions = materializeStandardPositions();
+  // Brock 2026-04-21 pm (sandbox confirmation): auto-migrate every project
+  // to the 44-role standard catalog exactly once. Catalog version flag on
+  // the shifts blob gates re-seeding so user edits stick on subsequent
+  // loads. Existing labor lines keyword-match to the closest standard role
+  // (Receive → Receiver, Each pick → Each Picker, etc.) so they stay linked
+  // without the user having to re-pick.
+  if (m.shifts._catalogVersion !== CATALOG_VERSION) {
+    const seeded = materializeStandardPositions();
+    m.shifts.positions = seeded;
+    const matchByName = (name) => seeded.find(p => p.name === name) || null;
+
+    for (const line of m.laborLines || []) {
+      const hint = findStandardRoleByHint(line.activity_name || '', 'direct');
+      const pos = hint ? matchByName(hint.name) : null;
+      line.position_id = pos ? pos.id : null;
+    }
+    for (const line of m.indirectLaborLines || []) {
+      const hint = findStandardRoleByHint(line.role || line.activity_name || '', 'indirect');
+      const pos = hint ? matchByName(hint.name) : null;
+      line.position_id = pos ? pos.id : null;
+    }
+    m.shifts._catalogVersion = CATALOG_VERSION;
   }
   const positions = m.shifts.positions;
 
