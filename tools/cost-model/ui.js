@@ -214,8 +214,11 @@ const STANDARD_POSITIONS = [
 
 /** Bumps when STANDARD_POSITIONS changes enough to warrant re-seeding every
  *  existing project on next load. `shifts._catalogVersion` on each model
- *  gates whether auto-migration runs (see migrateLaborLinesToPositions). */
-const CATALOG_VERSION = 1;
+ *  gates whether auto-migration runs (see migrateLaborLinesToPositions).
+ *  v2 (Brock 2026-04-21 pm): removed the legacy activity-named fallback
+ *  loop that was re-introducing leftover positions like "Supervisory /
+ *  coaching" after the v1 migration wiped them — bump forces re-seed. */
+const CATALOG_VERSION = 2;
 
 /** Keyword rules mapping a free-text activity/role name onto a standard role
  *  by category. First match wins. Regex-anchored so partial tokens (pick/load)
@@ -7249,60 +7252,11 @@ function migrateLaborLinesToPositions(m) {
     }
     m.shifts._catalogVersion = CATALOG_VERSION;
   }
-  const positions = m.shifts.positions;
-
-  const makePos = (name, category, empType, wage, markup, extras = {}) => {
-    const id = (typeof crypto !== 'undefined' && crypto.randomUUID)
-      ? crypto.randomUUID()
-      : 'pos_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-    const p = {
-      id,
-      name,
-      category,                      // 'direct' | 'indirect'
-      employment_type: empType,      // 'permanent' | 'temp_agency' | 'contractor'
-      hourly_wage: Number(wage) || 0,
-      annual_salary: 0,
-      temp_markup_pct: empType === 'temp_agency' ? (Number(markup) || 35) : 0,
-      bonus_pct: null,               // null = inherit from shifts.bonusPct
-      is_salaried: false,
-      notes: '',
-      ...extras,
-    };
-    positions.push(p);
-    return p;
-  };
-
-  // Look up an existing position matching (name, category, empType, wage)
-  const findPos = (name, category, empType, wage) => positions.find(p =>
-    p.name === name
-    && p.category === category
-    && p.employment_type === empType
-    && Math.abs((p.hourly_wage || 0) - (Number(wage) || 0)) < 0.01,
-  );
-
-  // Direct labor lines
-  for (const line of m.laborLines || []) {
-    if (line.position_id && positions.some(p => p.id === line.position_id)) continue;
-    const activity = line.activity_name || 'Direct Labor';
-    const rate = line.hourly_rate || 0;
-    const empType = line.employment_type || 'permanent';
-    const name = empType === 'temp_agency' ? `${activity} (Temp)` : activity;
-    const existing = findPos(name, 'direct', empType, rate);
-    const pos = existing || makePos(name, 'direct', empType, rate, line.temp_agency_markup_pct);
-    line.position_id = pos.id;
-  }
-
-  // Indirect labor lines — category = 'indirect'
-  for (const line of m.indirectLaborLines || []) {
-    if (line.position_id && positions.some(p => p.id === line.position_id)) continue;
-    const role = line.role || 'Indirect Labor';
-    const rate = line.hourly_rate || 0;
-    const empType = line.employment_type || 'permanent';
-    const name = empType === 'temp_agency' ? `${role} (Temp)` : role;
-    const existing = findPos(name, 'indirect', empType, rate);
-    const pos = existing || makePos(name, 'indirect', empType, rate);
-    line.position_id = pos.id;
-  }
+  // The legacy loops that auto-created activity-named positions for any
+  // labor line with a null position_id have been removed (Brock 2026-04-21 pm).
+  // After auto-migration, unmatched lines stay unlinked — user picks a role
+  // from the Position dropdown on the Labor section. Creating activity-named
+  // positions silently would re-introduce the mess we just cleaned up.
 }
 
 function createEmptyModel() {
