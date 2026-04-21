@@ -572,6 +572,80 @@ test('reset-override: computeOverrideImpact rollup returns zero delta when all b
 });
 
 // ============================================================
+// UX nit #3 — Explicit $0 override for free-tier services (2026-04-21 PM)
+// ============================================================
+// rateExplicitOverride flag lets a deliberate $0 count as an override, so
+// the bucket shows as overridden and the customer budget summary reads
+// "$0.00 / return" (not "uses recommended rate"). Back-compat preserved:
+// any positive rate is still an override regardless of the flag.
+
+test('explicit-zero override: rate=0 + flag=true → hasOverride=true', () => {
+  const buckets = [{
+    id: 'B1', name: 'Returns', category: 'vas', type: 'variable', uom: 'return',
+    annualVolume: 50_000, rate: 0, rateExplicitOverride: true,
+  }];
+  const enriched = enrichBucketsWithDerivedRates({
+    buckets,
+    bucketCosts: { B1: 100_000 },
+    volumeLines: [{ volume: 50_000, isOutboundPrimary: true }],
+    financial: { targetMargin: 16 },
+  });
+  assert(enriched[0]._rateSource === 'override', `expected 'override' for rate=0 with flag, got '${enriched[0]._rateSource}'`);
+  near(enriched[0].rate, 0, 0.01, 'effective rate should be the explicit $0');
+  near(enriched[0].overrideRate, 0, 0.01, 'overrideRate should mirror the $0 input');
+});
+
+test('explicit-zero override: rate=0 WITHOUT flag still treated as no-override (back-compat)', () => {
+  // Old projects have rate=0 from STARTER_PRICING_BUCKETS default — no flag
+  // means no explicit override. This preserves the current behavior.
+  const buckets = [{
+    id: 'B1', name: 'Returns', category: 'vas', type: 'variable', uom: 'return',
+    annualVolume: 50_000, rate: 0, // no rateExplicitOverride flag
+  }];
+  const enriched = enrichBucketsWithDerivedRates({
+    buckets,
+    bucketCosts: { B1: 100_000 },
+    volumeLines: [{ volume: 50_000, isOutboundPrimary: true }],
+    financial: { targetMargin: 16 },
+  });
+  assert(enriched[0]._rateSource === 'recommended', `expected 'recommended' for rate=0 without flag, got '${enriched[0]._rateSource}'`);
+});
+
+test('explicit-zero override: positive rate still an override regardless of flag', () => {
+  const buckets = [{
+    id: 'B1', name: 'Outbound', category: 'labor', type: 'variable', uom: 'order',
+    annualVolume: 1_000_000, rate: 4.15, rateExplicitOverride: false,
+  }];
+  const enriched = enrichBucketsWithDerivedRates({
+    buckets,
+    bucketCosts: { B1: 500_000 },
+    volumeLines: [{ volume: 1_000_000, isOutboundPrimary: true }],
+    financial: { targetMargin: 16 },
+  });
+  assert(enriched[0]._rateSource === 'override', 'positive rate must always be an override');
+  near(enriched[0].rate, 4.15, 0.0001);
+});
+
+test('explicit-zero override: variance against recommended is -100% and full annual-rev loss', () => {
+  const buckets = [{
+    id: 'B1', name: 'Free returns', category: 'vas', type: 'variable', uom: 'return',
+    annualVolume: 50_000, rate: 0, rateExplicitOverride: true,
+  }];
+  const enriched = enrichBucketsWithDerivedRates({
+    buckets,
+    bucketCosts: { B1: 100_000 },
+    marginPct: 0.16, // 16% target margin, threaded to computeBucketRates
+    volumeLines: [{ volume: 50_000, isOutboundPrimary: true }],
+  });
+  const impact = computeOverrideImpact(enriched);
+  assert(impact.overriddenBucketCount === 1, 'overridden bucket count should be 1');
+  // At 16% target margin, recommended = cost / (1 − 0.16) = 100_000 / 0.84 ≈ 119,048.
+  // Override revenue = $0 × 50_000 = 0. Delta = 0 − 119,048 ≈ -119,048.
+  near(impact.totalOverrideDelta, -119_047.62, 1, 'annual rev delta should equal -full recommended revenue');
+  near(enriched[0].overrideDeltaPct, -1, 0.001, 'deltaPct should be -100%');
+});
+
+// ============================================================
 // Summary
 // ============================================================
 console.log('\n');

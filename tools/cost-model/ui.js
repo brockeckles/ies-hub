@@ -10,7 +10,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import * as calc from './calc.js?v=20260421-vX';
+import * as calc from './calc.js?v=20260421-vZ';
 import * as api from './api.js?v=20260419-uH';
 import * as scenarios from './calc.scenarios.js?v=20260421-vY';
 import * as monthlyCalc from './calc.monthly.js?v=20260421-vP';
@@ -159,11 +159,13 @@ const DEMO_MARKETS_FALLBACK = [
 
 /** Standard role catalog — 14 direct + 29 indirect = 43 positions. */
 const STANDARD_POSITIONS = [
-  // ── DIRECT (3) ── Brock 2026-04-21 pm: key delineator is whether the
+  // ── DIRECT (4) ── Brock 2026-04-21 pm: key delineator is whether the
   // associate operates MHE (forklift / reach truck / order picker / etc).
   // Permanent non-MHE = Material Handler; temp non-MHE = Temp Material
-  // Handler; anything with MHE = Equipment Operator regardless of temp/perm.
-  { name: 'Equipment Operator',        category: 'direct', is_salaried: false, hourly_wage: 22.00, notes: 'Operates MHE (forklift / reach truck / order picker / yard jockey / etc.). Permanent or temp.' },
+  // Handler. Permanent MHE = Equipment Operator; temp MHE = Equipment Operator
+  // (Temp) — 4th catalog entry added 2026-04-21 PM for clean reporting.
+  { name: 'Equipment Operator',        category: 'direct', is_salaried: false, hourly_wage: 22.00, notes: 'Permanent associate operating MHE (forklift / reach truck / order picker / yard jockey / etc.).' },
+  { name: 'Equipment Operator (Temp)', category: 'direct', is_salaried: false, hourly_wage: 22.00, temp_markup_pct: 38, employment_type: 'temp_agency', notes: 'Temp-agency MHE operator. 38% markup on base wage per heuristics §2.3. Catalog entry is distinct from the permanent Equipment Operator for roster reporting clarity.' },
   { name: 'Material Handler',          category: 'direct', is_salaried: false, hourly_wage: 18.00, notes: 'Permanent warehouse associate — non-MHE (receive / pick / pack / load / VAS / QC / cycle count).' },
   { name: 'Temp Material Handler',     category: 'direct', is_salaried: false, hourly_wage: 18.00, temp_markup_pct: 38, employment_type: 'temp_agency', notes: 'Temp-agency warehouse associate — non-MHE. 38% markup on base wage per heuristics §2.3 (contractual wage load).' },
 
@@ -210,8 +212,12 @@ const STANDARD_POSITIONS = [
  *  v3 (Brock 2026-04-21 pm): collapsed direct roles from 15 → 3 (Equipment
  *  Operator, Material Handler, Temp Material Handler) per Brock's direction
  *  that the key delineator is MHE vs non-MHE. Forces re-seed on every
- *  project so catalog aligns with the simpler taxonomy. */
-const CATALOG_VERSION = 3;
+ *  project so catalog aligns with the simpler taxonomy.
+ *  v4 (2026-04-21 later pm): added Equipment Operator (Temp) as a 4th direct
+ *  role — distinct catalog entry for temp MHE operators, mirroring the
+ *  Material Handler / Temp Material Handler split so roster reports can
+ *  differentiate cleanly. */
+const CATALOG_VERSION = 4;
 
 /** Keyword rules mapping a free-text activity/role name onto a standard role
  *  by category. First match wins. Regex-anchored so partial tokens (pick/load)
@@ -222,9 +228,15 @@ const ROLE_HINT_RULES = [
   // Direct (Brock 2026-04-21 pm): the distinction is MHE vs non-MHE.
   // Anything mentioning forklift / reach truck / order picker / yard jockey /
   // MHE / lift → Equipment Operator. Everything else → Material Handler.
-  // (Temp-agency override happens downstream in the migration — Material
-  // Handler + employment_type=temp_agency is resolved to Temp Material Handler.)
-  [/\breach[\s-]?truck|\bvna\b|turret|\bforklift|\bsit[\s-]?down|counterbalance|\border[\s-]?picker|\bcherry[\s-]?picker|\byard\s*jockey|\bjockey|trailer\s+move|\bmhe\b|\blift\s*(?:truck|operator)/i,
+  // Temp-agency override happens downstream in the migration — a matched MHE
+  // line with employment_type=temp_agency resolves to Equipment Operator (Temp)
+  // instead. A matched non-MHE temp line resolves to Temp Material Handler.
+  //
+  // 2026-04-21 PM expansion: added "load trailer", "load outbound/inbound",
+  // "replen to reserve/forward" and pallet-move phrases so Wayfair-shaped
+  // lines auto-match correctly. These activities inherently require MHE
+  // (you can't load a trailer or replen to reserve by hand).
+  [/\breach[\s-]?truck|\bvna\b|turret|\bforklift|\bsit[\s-]?down|counterbalance|\border[\s-]?picker|\bcherry[\s-]?picker|\byard\s*jockey|\bjockey|trailer\s+(?:move|load|unload)|(?:load|unload)\s+(?:outbound|inbound)?\s*(?:trailer|truck)|\breplen\w*\s*(?:to|->)\s*(?:reserve|forward|pick|rack)|\bput[\s-]?away\s*(?:to|->)?\s*(?:reserve|rack|pallet)|\bmhe\b|\blift\s*(?:truck|operator)|pallet\s*(?:move|movement)|\breserve\s+replen|\bfull\s*pallet\s*(?:pick|pull)/i,
     'direct', 'Equipment Operator'],
   // Catch-all for any other direct activity — Material Handler is the generic
   // non-MHE warehouse associate (Brock's delineator).
@@ -2370,9 +2382,9 @@ function renderMonthlyLaborViewCard() {
     return out;
   })();
 
-  const calcHeur = scenarios.resolveCalcHeuristics(
+  const calcHeur = applySplitMonthBilling(scenarios.resolveCalcHeuristics(
     currentScenario, currentScenarioSnapshots, heuristicOverrides, fin, whatIfTransient,
-  );
+  ), model);
   const view = monthlyCalc.computeMonthlyLaborView({
     laborLines: lines,
     periods,
@@ -3313,9 +3325,9 @@ function _tryComputeMlvForEquipment() {
         });
       }
     }
-    const calcHeur = scenarios.resolveCalcHeuristics(
+    const calcHeur = applySplitMonthBilling(scenarios.resolveCalcHeuristics(
       currentScenario, currentScenarioSnapshots, heuristicOverrides, fin, whatIfTransient,
-    );
+    ), model);
     return monthlyCalc.computeMonthlyLaborView({
       laborLines: lines,
       periods, annualOpHours, shiftsPerDay,
@@ -3471,9 +3483,48 @@ function renderFinancial() {
           <option value="fixed_variable"${(model.projectDetails?.contractType || 'fixed_variable') === 'fixed_variable' ? ' selected' : ''}>Fixed / Variable (standard bucketed pricing)</option>
           <option value="open_book"${model.projectDetails?.contractType === 'open_book' ? ' selected' : ''}>Open Book (cost pass-through + declared margin)</option>
           <option value="unit_rate"${model.projectDetails?.contractType === 'unit_rate' ? ' selected' : ''}>Unit Rate (per-unit rate card emphasis)</option>
+          <option value="split_month"${model.projectDetails?.contractType === 'split_month' ? ' selected' : ''}>Split-Month Billing (fixed fee early + variable fee in arrears)</option>
         </select>
-        <div class="hub-field__hint">Reference Part I §9. All three use the cost-plus mechanic; display on the Pricing Schedule differs. Split-Month Billing available as a follow-on.</div>
+        <div class="hub-field__hint">Reference Part I §9. All four use the cost-plus mechanic; display + cash-flow timing differ. Split-Month separates the invoice into a fixed monthly management fee (net-15) and a variable transaction fee (net-30 from month-end).</div>
       </div>
+      ${model.projectDetails?.contractType === 'split_month' ? `
+        <!-- Split-Month billing controls — only visible on split_month contracts -->
+        <div class="hub-field hub-field--full cm-split-month-controls">
+          <div class="cm-split-month-header">
+            <span class="cm-split-month-title">Split-Month Billing Configuration</span>
+            <span class="cm-split-month-subtitle">Customer is invoiced in two cycles per month. The mix + DSO per stream drives cash-flow timing and the weighted-average DSO the engine uses.</span>
+          </div>
+          <div class="cm-split-month-grid">
+            <div class="hub-field">
+              <label class="hub-field__label" title="% of total revenue billed as a fixed monthly management fee at start-of-month (covers overhead, management, facility). Remainder billed as variable transaction fee at end-of-month.">Fixed Fee (% of total rev)</label>
+              <input class="hub-input" type="number" step="5" min="0" max="100" value="${model.projectDetails?.splitBillingFixedPct != null ? model.projectDetails.splitBillingFixedPct : 40}" data-field="projectDetails.splitBillingFixedPct" data-type="number" />
+              <div class="hub-field__hint">30-50% typical. Default 40%.</div>
+            </div>
+            <div class="hub-field">
+              <label class="hub-field__label" title="Days Sales Outstanding for the fixed-fee stream. Typically short — billed day 1, collected net-15.">Fixed-Fee DSO (days)</label>
+              <input class="hub-input" type="number" step="1" min="0" max="90" value="${model.projectDetails?.splitBillingFixedDsoDays != null ? model.projectDetails.splitBillingFixedDsoDays : 15}" data-field="projectDetails.splitBillingFixedDsoDays" data-type="number" />
+              <div class="hub-field__hint">Default 15 days.</div>
+            </div>
+            <div class="hub-field">
+              <label class="hub-field__label" title="DSO for the variable transaction-fee stream. Longer — billed day 30 (month-end), collected net-30 → 60 days after service delivery.">Variable-Fee DSO (days)</label>
+              <input class="hub-input" type="number" step="1" min="0" max="120" value="${model.projectDetails?.splitBillingVariableDsoDays != null ? model.projectDetails.splitBillingVariableDsoDays : 45}" data-field="projectDetails.splitBillingVariableDsoDays" data-type="number" />
+              <div class="hub-field__hint">Default 45 days.</div>
+            </div>
+          </div>
+          ${(() => {
+            const fixedPct = Number(model.projectDetails?.splitBillingFixedPct ?? 40);
+            const fixedDso = Number(model.projectDetails?.splitBillingFixedDsoDays ?? 15);
+            const varDso   = Number(model.projectDetails?.splitBillingVariableDsoDays ?? 45);
+            const weightedDso = (fixedPct / 100) * fixedDso + (1 - fixedPct / 100) * varDso;
+            return `
+              <div class="cm-split-month-weighted">
+                Weighted-average DSO applied to revenue: <strong>${weightedDso.toFixed(1)} days</strong>
+                (= ${fixedPct.toFixed(0)}% × ${fixedDso} + ${(100 - fixedPct).toFixed(0)}% × ${varDso})
+              </div>
+            `;
+          })()}
+        </div>
+      ` : ''}
       <div class="hub-field">
         <label class="hub-field__label" title="Ratio-based SG&A overlay applied to net revenue (reference Part I §5). Default 0 = no overlay (rely on Overhead cost rows). Set to 4.5 for reference-model-aligned cost-plus RFP responses.">SG&amp;A Overlay (% of net revenue)</label>
         <input class="hub-input" type="number" step="0.25" min="0" max="30" value="${f.sgaOverlayPct != null ? f.sgaOverlayPct : 0}" data-field="financial.sgaOverlayPct" data-type="number" />
@@ -3801,13 +3852,16 @@ function renderPricing() {
   const contractType = model.projectDetails?.contractType || 'fixed_variable';
   const contractTypeLabel = {
     fixed_variable: 'Fixed / Variable',
-    open_book: 'Open Book',
-    unit_rate: 'Unit Rate',
+    open_book:      'Open Book',
+    unit_rate:      'Unit Rate',
+    split_month:    'Split-Month Billing',
   }[contractType] || 'Fixed / Variable';
+  const splitFixedPct = Number(model.projectDetails?.splitBillingFixedPct ?? 40);
   const contractTypeDesc = {
     fixed_variable: `Recommended rates derived from cost + ${calc.formatPct(targetMarginPct, 1)} target margin. Override any rate inline; the Variance column and Summary banner surface the impact.`,
-    open_book: `Open Book — cost is passed through to the customer transparently with a declared ${calc.formatPct(targetMarginPct, 1)} margin on top. Recommended rates shown below are what would produce the stated margin if billed as fixed/variable; actual billing mechanic is line-item cost pass-through.`,
-    unit_rate: `Unit Rate contract — emphasis on per-unit rates below. Derived from cost + ${calc.formatPct(targetMarginPct, 1)} target margin (Revenue = Cost / (1 − margin)). Override any rate inline.`,
+    open_book:      `Open Book — cost is passed through to the customer transparently with a declared ${calc.formatPct(targetMarginPct, 1)} margin on top. Recommended rates shown below are what would produce the stated margin if billed as fixed/variable; actual billing mechanic is line-item cost pass-through.`,
+    unit_rate:      `Unit Rate contract — emphasis on per-unit rates below. Derived from cost + ${calc.formatPct(targetMarginPct, 1)} target margin (Revenue = Cost / (1 − margin)). Override any rate inline.`,
+    split_month:    `Split-Month Billing — ${splitFixedPct.toFixed(0)}% of total revenue billed as fixed monthly management fee (start-of-month, net-15) and ${(100 - splitFixedPct).toFixed(0)}% billed as variable transaction fee (month-end, net-30). Recommended rates still derived from cost + ${calc.formatPct(targetMarginPct, 1)} target margin. The weighted-average DSO drives working-capital on the P&L — configure the split on the Financial section.`,
   }[contractType];
   return `
     <div class="cm-wide-layout">
@@ -4132,6 +4186,17 @@ function renderPricing() {
       .cm-contract-type-chip.cm-contract-fixed_variable { background:rgba(0,71,171,0.1); color:var(--ies-blue); }
       .cm-contract-type-chip.cm-contract-open_book { background:rgba(107,76,168,0.12); color:#6d4ca8; }
       .cm-contract-type-chip.cm-contract-unit_rate { background:rgba(32,201,151,0.12); color:#0d9668; }
+      .cm-contract-type-chip.cm-contract-split_month { background:rgba(245,158,11,0.14); color:#b45309; }
+      /* Split-Month controls — visible on the Financial section only when the
+         contract_type is split_month. Laid out as a 3-field grid with a
+         derived-weighted-DSO line beneath. */
+      .cm-split-month-controls { padding:14px 16px; margin-top:4px; border:1px solid rgba(245,158,11,0.25); border-left:3px solid #b45309; border-radius:8px; background:rgba(245,158,11,0.03); }
+      .cm-split-month-header { display:flex; flex-direction:column; gap:2px; margin-bottom:10px; }
+      .cm-split-month-title { font-size:13px; font-weight:700; color:#b45309; letter-spacing:0.2px; }
+      .cm-split-month-subtitle { font-size:11px; color:var(--ies-gray-500); font-weight:400; line-height:1.4; }
+      .cm-split-month-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
+      .cm-split-month-weighted { margin-top:8px; padding:8px 10px; font-size:12px; color:var(--ies-gray-700); background:#fff; border-radius:6px; border:1px dashed rgba(245,158,11,0.3); }
+      .cm-split-month-weighted strong { color:#b45309; font-weight:700; }
       /* Override Implications Panel */
       .cm-implications-panel { padding:14px 18px; margin-bottom:16px; border-radius:8px; border:1px solid var(--ies-gray-200); background:#fff; }
       .cm-implications-title { font-size:13px; font-weight:600; color:var(--ies-gray-700); margin-bottom:10px; display:flex; flex-direction:column; gap:3px; }
@@ -4250,13 +4315,13 @@ function renderSummary() {
   //   transient (Phase 5b) → approved-snapshot → override → project-column
   // chain so approved scenarios re-run against their FROZEN values and
   // the What-If Studio can preview-override without persisting.
-  const calcHeur = scenarios.resolveCalcHeuristics(
+  const calcHeur = applySplitMonthBilling(scenarios.resolveCalcHeuristics(
     currentScenario,
     currentScenarioSnapshots,
     heuristicOverrides,
     fin,
     whatIfTransient,
-  );
+  ), model);
 
   // Build multi-year projections
   const marginFrac = (calcHeur.targetMarginPct || 0) / 100;
@@ -4901,6 +4966,16 @@ function bindSectionEvents(section, container) {
       reasonBefore.set(sel, bucket.overrideReason || null);
     });
     container.querySelectorAll('.cm-override-input').forEach(input => {
+      // 2026-04-21 PM (UX nit #3): maintain rateExplicitOverride flag on every
+      // keystroke. Any non-blank value — including "0" — flags the bucket as
+      // explicitly-overridden. A blank input clears the flag. Runs on 'input'
+      // (per keystroke) so the flag is live before the change-fire audit write.
+      input.addEventListener('input', () => {
+        const idx = parseInt(input.dataset.idx);
+        const bucket = (model.pricingBuckets || [])[idx];
+        if (!bucket) return;
+        bucket.rateExplicitOverride = input.value.trim() !== '';
+      });
       input.addEventListener('change', () => {
         const idx = parseInt(input.dataset.idx);
         const bucket = (model.pricingBuckets || [])[idx];
@@ -5709,9 +5784,9 @@ function computeWhatIfPreview(overlay) {
       targetMarginPct: fin.targetMargin || 0,
       annualOrders: orders || 1,
     });
-    const calcHeur = scenarios.resolveCalcHeuristics(
+    const calcHeur = applySplitMonthBilling(scenarios.resolveCalcHeuristics(
       currentScenario, currentScenarioSnapshots, heuristicOverrides, fin, ov,
-    );
+    ), model);
     const whatIfMarginFrac = (calcHeur.targetMarginPct || 0) / 100;
 
     // Direct Labor Productivity scaling. Pull from the overlay first, then
@@ -6599,8 +6674,13 @@ function shouldRerender(field) {
          // M2 (2026-04-21): SG&A overlay affects Summary/P&L but not Pricing Schedule
          // cost rollup, so re-render is cheap + desirable for live preview.
          field === 'financial.sgaOverlayPct' ||
-         // Contract type changes Pricing Schedule subtitle + banner
+         // Contract type changes Pricing Schedule subtitle + banner +
+         // un/reveals the Split-Month controls block on Financial section.
          field === 'projectDetails.contractType' ||
+         // Split-Month billing fields — drive the weighted-DSO readout + engine
+         field === 'projectDetails.splitBillingFixedPct' ||
+         field === 'projectDetails.splitBillingFixedDsoDays' ||
+         field === 'projectDetails.splitBillingVariableDsoDays' ||
          // M5 (2026-04-21): tax rate change re-renders P&L numbers in Summary
          field === 'projectDetails.taxRate' ||
          // I-01: reassigning a line's bucket shifts the rollup; Pricing tables must re-render.
@@ -6619,6 +6699,36 @@ function syncDerivedTargetMargin() {
   const ga = Number(f.gaMargin) || 0;
   const mgmt = Number(f.mgmtFeeMargin) || 0;
   f.targetMargin = Number((ga + mgmt).toFixed(2));
+}
+
+// ============================================================
+// SPLIT-MONTH BILLING (2026-04-21)
+// ============================================================
+/**
+ * When contract_type is 'split_month', the customer is invoiced in two cycles
+ * per month (fixed monthly management fee early + variable transaction fee in
+ * arrears). Each stream carries its own DSO; the engine sees a single
+ * weighted-average DSO on the revenue side. This helper post-processes
+ * calcHeur to inject that weighted DSO in place of the flat `dsoDays`.
+ *
+ * For other contract types, calcHeur is returned unchanged.
+ *
+ * @param {Object} calcHeur — output of scenarios.resolveCalcHeuristics
+ * @param {Object} cmModel  — the current cost model (we read contract_type + split fields)
+ * @returns {Object} calcHeur, either unchanged or with `dsoDays` overridden
+ */
+function applySplitMonthBilling(calcHeur, cmModel) {
+  if (!calcHeur || !cmModel) return calcHeur;
+  if (cmModel.projectDetails?.contractType !== 'split_month') return calcHeur;
+  const fixedPct = Math.max(0, Math.min(100, Number(cmModel.projectDetails?.splitBillingFixedPct ?? 40))) / 100;
+  const fixedDso = Math.max(0, Number(cmModel.projectDetails?.splitBillingFixedDsoDays ?? 15));
+  const varDso   = Math.max(0, Number(cmModel.projectDetails?.splitBillingVariableDsoDays ?? 45));
+  const weightedDso = fixedPct * fixedDso + (1 - fixedPct) * varDso;
+  return {
+    ...calcHeur,
+    dsoDays: weightedDso,
+    _splitMonthApplied: { fixedPct: fixedPct * 100, fixedDso, varDso, weightedDso },
+  };
 }
 
 // ============================================================
@@ -6939,6 +7049,10 @@ function handleAction(action, idx, btn) {
         });
         b.rate = null;
         b.overrideReason = null;
+        // 2026-04-21 PM (UX nit #3): also clear the explicit-override flag,
+        // otherwise a cleared rate=null with flag=true would still show as
+        // overridden (a new $0 edge case introduced for free-tier services).
+        b.rateExplicitOverride = false;
       }
       break;
     }
@@ -7460,13 +7574,13 @@ function ensureMonthlyBundle() {
       targetMarginPct: fin.targetMargin || 0,
       annualOrders: orders || 1,
     });
-    const calcHeur = scenarios.resolveCalcHeuristics(
+    const calcHeur = applySplitMonthBilling(scenarios.resolveCalcHeuristics(
       currentScenario,
       currentScenarioSnapshots,
       heuristicOverrides,
       fin,
       whatIfTransient,
-    );
+    ), model);
     const emBMarginFrac = (calcHeur.targetMarginPct || 0) / 100;
     const projResult = calc.buildYearlyProjections({
       years: contractYears,
@@ -7886,12 +8000,16 @@ function migrateLaborLinesToPositions(m) {
 
     for (const line of m.laborLines || []) {
       let hint = findStandardRoleByHint(line.activity_name || '', 'direct');
-      // Temp-agency override (Brock 2026-04-21 pm): a Material Handler line
-      // with employment_type = temp_agency resolves to Temp Material Handler.
-      // Equipment Operator stays Equipment Operator regardless of temp/perm
-      // (the role IS the MHE operation; the employment_type field flags temp).
-      if (hint && hint.name === 'Material Handler' && line.employment_type === 'temp_agency') {
-        hint = STANDARD_POSITIONS.find(p => p.name === 'Temp Material Handler') || hint;
+      // Temp-agency overrides (2026-04-21 PM, CATALOG_VERSION bump to 4):
+      //   Material Handler + temp_agency → Temp Material Handler
+      //   Equipment Operator + temp_agency → Equipment Operator (Temp)
+      // Both temp variants carry their own 38% markup via catalog defaults.
+      if (hint && line.employment_type === 'temp_agency') {
+        if (hint.name === 'Material Handler') {
+          hint = STANDARD_POSITIONS.find(p => p.name === 'Temp Material Handler') || hint;
+        } else if (hint.name === 'Equipment Operator') {
+          hint = STANDARD_POSITIONS.find(p => p.name === 'Equipment Operator (Temp)') || hint;
+        }
       }
       const pos = hint ? matchByName(hint.name) : null;
       line.position_id = pos ? pos.id : null;

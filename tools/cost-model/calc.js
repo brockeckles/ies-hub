@@ -1873,7 +1873,15 @@ export function enrichBucketsWithDerivedRates(params) {
   const derived = computeBucketRates(params);
   return (params.buckets || []).map(b => {
     const d = derived[b.id] || { rate: 0, annualVolume: 0 };
-    const hasOverride    = Number(b.rate) > 0;
+    // 2026-04-21 PM (UX nit #3): $0 override for free-tier services.
+    // Historical semantics (`rate > 0`) still hold — any positive rate is an
+    // override, preserving back-compat for projects that never touched the
+    // explicit-flag UI. The NEW path is an explicit flag that lets a deliberate
+    // $0 also count as an override, so a "free returns processing" bucket can
+    // show as overridden with $0.00/return on the customer budget summary.
+    // Set by the Pricing Schedule input handler when user types (including 0);
+    // cleared by the ↺ Reset button and by any cleared-input event.
+    const hasOverride    = b.rateExplicitOverride === true || Number(b.rate) > 0;
     const hasExplicitVol = Number(b.annualVolume) > 0;
     const recommendedRate   = d.rate;
     const effectiveRate     = hasOverride ? Number(b.rate) : recommendedRate;
