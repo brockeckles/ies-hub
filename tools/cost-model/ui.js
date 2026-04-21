@@ -150,14 +150,97 @@ const DEMO_MARKETS_FALLBACK = [
 ];
 
 // ============================================================
+// STANDARD POSITION CATALOG (Brock 2026-04-21 pm)
+// Role-based seed populated on new projects + on "Replace with
+// Standard Roles" action. Sourced from Cost Model Planning
+// Heuristics doc §2.1 (span-driven indirect) + §2.2 (volume-driven
+// indirect) + synthesized BY-WMS direct roles.
+// ============================================================
+
+/** Standard role catalog — 14 direct + 29 indirect = 43 positions. */
+const STANDARD_POSITIONS = [
+  // ── DIRECT (14) ── floor-level production roles, hourly ──────────
+  { name: 'Material Handler',          category: 'direct', is_salaried: false, hourly_wage: 18.00, notes: 'Generic warehouse associate (receive / putaway / pick / pack)' },
+  { name: 'Receiver',                  category: 'direct', is_salaried: false, hourly_wage: 18.00, notes: 'Inbound dock — unload, verify, stage' },
+  { name: 'Putaway Operator',          category: 'direct', is_salaried: false, hourly_wage: 19.00, notes: 'Move received stock to storage location' },
+  { name: 'Replenishment Operator',    category: 'direct', is_salaried: false, hourly_wage: 19.00, notes: 'Top off forward-pick locations from reserve' },
+  { name: 'Each Picker',               category: 'direct', is_salaried: false, hourly_wage: 17.50, notes: 'Unit / piece picking' },
+  { name: 'Case Picker',               category: 'direct', is_salaried: false, hourly_wage: 18.00, notes: 'Case-level picking' },
+  { name: 'Pallet Picker',             category: 'direct', is_salaried: false, hourly_wage: 19.00, notes: 'Full-pallet picking' },
+  { name: 'Packer',                    category: 'direct', is_salaried: false, hourly_wage: 16.50, notes: 'Pack + label outbound orders' },
+  { name: 'Loader',                    category: 'direct', is_salaried: false, hourly_wage: 18.00, notes: 'Outbound dock — load trailers' },
+  { name: 'VAS Associate',             category: 'direct', is_salaried: false, hourly_wage: 17.00, notes: 'Value-added services (kitting, labeling, light assembly)' },
+  { name: 'QC / Cycle Counter',        category: 'direct', is_salaried: false, hourly_wage: 19.00, notes: 'Inventory accuracy + quality audits' },
+  { name: 'Forklift Operator',         category: 'direct', is_salaried: false, hourly_wage: 22.00, notes: 'Sit-down counterbalance forklift' },
+  { name: 'Reach Truck Operator',      category: 'direct', is_salaried: false, hourly_wage: 22.50, notes: 'Reach truck / turret truck for VNA' },
+  { name: 'Order Picker Operator',     category: 'direct', is_salaried: false, hourly_wage: 21.00, notes: 'Cherry-picker / stock picker' },
+  { name: 'Yard Jockey',               category: 'direct', is_salaried: false, hourly_wage: 21.00, notes: 'Yard moves / trailer spotting' },
+
+  // ── INDIRECT — hourly leads + front-line support (heuristics §2.1) ──
+  { name: 'Team Lead',                           category: 'indirect', is_salaried: false, hourly_wage: 22.00, notes: '1 : 15 direct FTE — front-line coordination' },
+  { name: 'Line Lead',                           category: 'indirect', is_salaried: false, hourly_wage: 23.00, notes: '1 : 25 direct FTE — process-area lead' },
+  { name: 'Inventory Team Lead',                 category: 'indirect', is_salaried: false, hourly_wage: 23.00, notes: '1 : 25 inventory FTE' },
+  { name: 'Shipping/Receiving Team Lead',        category: 'indirect', is_salaried: false, hourly_wage: 23.00, notes: '1 : 25 dock FTE' },
+  { name: 'QA Coordinator',                      category: 'indirect', is_salaried: false, hourly_wage: 24.00, notes: '1 : 25 direct FTE — process-support' },
+  { name: 'CSR',                                 category: 'indirect', is_salaried: false, hourly_wage: 22.00, notes: '1 : 50 direct FTE — customer service rep' },
+  { name: 'Senior CSR',                          category: 'indirect', is_salaried: false, hourly_wage: 28.00, notes: '1 : 50 direct FTE — escalation / account CSR' },
+  { name: 'Security Guard',                      category: 'indirect', is_salaried: false, hourly_wage: 20.00, notes: '1 : 50 direct FTE — site security' },
+  { name: 'Yard Spotter',                        category: 'indirect', is_salaried: false, hourly_wage: 22.00, notes: '≥25 daily trailer moves triggers the role (§2.2)' },
+
+  // ── INDIRECT — salaried supervisors, managers, directors ────────────
+  { name: 'Operations Supervisor',               category: 'indirect', is_salaried: true,  annual_salary: 65000, notes: '1 : 25 direct FTE — first-line salaried sup.' },
+  { name: 'Inventory Control Supervisor',        category: 'indirect', is_salaried: true,  annual_salary: 70000, notes: '1 : 50 inventory FTE' },
+  { name: 'Inventory Manager',                   category: 'indirect', is_salaried: true,  annual_salary: 85000, notes: '1 : 50 inventory FTE' },
+  { name: 'QA Supervisor',                       category: 'indirect', is_salaried: true,  annual_salary: 75000, notes: '1 : 50 direct FTE' },
+  { name: 'Safety Coordinator',                  category: 'indirect', is_salaried: true,  annual_salary: 72000, notes: '1 : 50 direct FTE' },
+  { name: 'Operations Manager',                  category: 'indirect', is_salaried: true,  annual_salary: 95000, notes: '1 : 75 direct FTE — mid-level ops mgmt' },
+  { name: 'Admin Ops Manager',                   category: 'indirect', is_salaried: true,  annual_salary: 85000, notes: '1 : 200 direct FTE' },
+  { name: 'Asst Ops Manager',                    category: 'indirect', is_salaried: true,  annual_salary: 75000, notes: '1 : 200 direct FTE' },
+  { name: 'Industrial Engineer',                 category: 'indirect', is_salaried: true,  annual_salary: 82000, notes: '1 : 200 direct FTE' },
+  { name: 'HR-Admin',                            category: 'indirect', is_salaried: true,  annual_salary: 58000, notes: '1 : 200 direct FTE' },
+  { name: 'Maintenance Engineer/Manager',        category: 'indirect', is_salaried: true,  annual_salary: 88000, notes: '1 : 200 direct FTE' },
+  { name: 'QA Manager',                          category: 'indirect', is_salaried: true,  annual_salary: 90000, notes: '1 : 200 direct FTE' },
+  { name: 'Safety Manager',                      category: 'indirect', is_salaried: true,  annual_salary: 90000, notes: '1 : 200 direct FTE' },
+  { name: 'Senior Ops Manager',                  category: 'indirect', is_salaried: true,  annual_salary: 120000, notes: '1 : 200 direct FTE' },
+  { name: 'Software Super User',                 category: 'indirect', is_salaried: true,  annual_salary: 65000, notes: '1 : 200 direct FTE' },
+  { name: 'Operations Director',                 category: 'indirect', is_salaried: true,  annual_salary: 160000, notes: '1 : 400 direct FTE — multi-site or very large single-site' },
+
+  // ── INDIRECT — volume-driven (heuristics §2.2) ──────────────────────
+  { name: 'Retail Compliance Specialist',        category: 'indirect', is_salaried: true,  annual_salary: 62000, notes: '1 : 8-10 retail customers — routing guide + dock compliance' },
+  { name: 'Wave Tasker',                         category: 'indirect', is_salaried: true,  annual_salary: 52000, notes: '1 per 2-shift 8K-order/day op' },
+  { name: 'WMS/LMS Field Support',               category: 'indirect', is_salaried: true,  annual_salary: 70000, notes: '1 per 150 operators' },
+  { name: 'Transportation Routing',              category: 'indirect', is_salaried: true,  annual_salary: 58000, notes: '≥100 distinct carrier lanes triggers' },
+];
+
+/** Normalize STANDARD_POSITIONS into the on-model shape (with id + defaults). */
+function materializeStandardPositions() {
+  const makeId = () => (typeof crypto !== 'undefined' && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : 'pos_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+  return STANDARD_POSITIONS.map(p => ({
+    id: makeId(),
+    name: p.name,
+    category: p.category,
+    employment_type: 'permanent',
+    hourly_wage: p.is_salaried ? 0 : (Number(p.hourly_wage) || 0),
+    annual_salary: p.is_salaried ? (Number(p.annual_salary) || 0) : 0,
+    is_salaried: !!p.is_salaried,
+    temp_markup_pct: 0,
+    bonus_pct: null,
+    // Per-position Benefit Load override (blank = inherit global total)
+    benefit_load_pct: null,
+    notes: p.notes || '',
+  }));
+}
+
+// ============================================================
 // SECTIONS — 13 nav sections
 // ============================================================
 
 const SECTIONS = [
   // Scope — who, what, where
   { key: 'setup',          label: 'Setup',              icon: 'settings',      group: 'scope' },
-  { key: 'volumes',        label: 'Volumes',            icon: 'bar-chart',     group: 'scope' },
-  { key: 'orderProfile',   label: 'Order Profile',      icon: 'package',       group: 'scope' },
+  { key: 'volumes',        label: 'Volumes & Profile',  icon: 'bar-chart',     group: 'scope' },
   // Structure — framework to build inside (physical + commercial)
   { key: 'facility',       label: 'Facility',           icon: 'home',          group: 'structure' },
   { key: 'shifts',         label: 'Labor Factors',      icon: 'clock',         group: 'structure' },
@@ -898,14 +981,18 @@ function _sectionCompleteness(sectionKey) {
       return 'partial';
     }
     case 'volumes': {
+      // Combined Volumes + Order Profile (Brock 2026-04-21 pm)
       const lines = m.volumeLines || [];
-      if (!lines.length) return 'empty';
-      return lines.some(v => v.isOutboundPrimary) ? 'complete' : 'partial';
-    }
-    case 'orderProfile': {
       const op = m.orderProfile || {};
-      return (op.linesPerOrder && op.unitsPerLine) ? 'complete' : op.linesPerOrder || op.unitsPerLine ? 'partial' : 'empty';
+      const hasVolumes = lines.length > 0;
+      const hasStar = lines.some(v => v.isOutboundPrimary);
+      const hasProfile = Boolean(op.linesPerOrder) && Boolean(op.unitsPerLine);
+      if (!hasVolumes && !op.linesPerOrder && !op.unitsPerLine) return 'empty';
+      return (hasVolumes && hasStar && hasProfile) ? 'complete' : 'partial';
     }
+    case 'orderProfile':
+      // Legacy route — nav entry removed but status queries may still hit it.
+      return 'na';
     case 'facility':
       return (m.facility && m.facility.totalSqft > 0) ? 'complete' : 'empty';
     case 'shifts':
@@ -1126,45 +1213,82 @@ function renderSetup() {
 // SECTION 2: VOLUMES
 // ============================================================
 
+// Brock 2026-04-21 pm: Volumes + Order Profile combined into a single
+// "Volumes & Profile" page (both describe demand — how much + what shape).
 function renderVolumes() {
   const lines = model.volumeLines || [];
+  const op = model.orderProfile || {};
   return `
     <div class="cm-section-header">
       <div>
-        <div class="cm-section-title">Annual Volumes</div>
-        <div class="cm-section-desc">Define annual throughput volumes by activity type. Star the primary outbound line for unit cost metrics.</div>
+        <div class="cm-section-title">Volumes &amp; Profile</div>
+        <div class="cm-section-desc">Annual throughput (how much) and order shape (how it arrives). Both describe demand; together they drive labor hours, storage, and unit-cost metrics.</div>
       </div>
     </div>
 
-    <table class="cm-grid-table">
-      <thead>
-        <tr>
-          <th style="width:30px;"></th>
-          <th>Activity</th>
-          <th>Annual Volume</th>
-          <th>UOM</th>
-          <th style="width:60px;"></th>
-        </tr>
-      </thead>
-      <tbody id="cm-volume-rows">
-        ${lines.map((l, i) => `
+    <div class="hub-card mb-4">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;">
+        <div class="text-subtitle" style="margin:0;">Annual Volumes</div>
+        <span class="hub-field__hint">Star the primary outbound line for unit-cost metrics.</span>
+      </div>
+      <table class="cm-grid-table">
+        <thead>
           <tr>
-            <td><button class="cm-star-btn${l.isOutboundPrimary ? ' active' : ''}" data-idx="${i}" title="Set as primary outbound">&#9733;</button></td>
-            <td><input value="${l.name || ''}" style="width:180px;" data-idx="${i}" data-field="name" /></td>
-            <td><input type="number" value="${l.volume || 0}" style="width:120px;" data-idx="${i}" data-field="volume" data-type="number" /></td>
-            <td>
-              <select style="width:90px;" data-idx="${i}" data-field="uom">
-                ${['pallets', 'cases', 'eaches', 'orders', 'lines', 'units'].map(u =>
-                  `<option value="${u}"${l.uom === u ? ' selected' : ''}>${u}</option>`
-                ).join('')}
-              </select>
-            </td>
-            <td><button class="cm-delete-btn" data-action="delete-volume" data-idx="${i}">Delete</button></td>
+            <th style="width:30px;"></th>
+            <th>Activity</th>
+            <th>Annual Volume</th>
+            <th>UOM</th>
+            <th style="width:60px;"></th>
           </tr>
-        `).join('')}
-      </tbody>
-    </table>
-    <button class="cm-add-row-btn" data-action="add-volume">+ Add Volume Line</button>
+        </thead>
+        <tbody id="cm-volume-rows">
+          ${lines.map((l, i) => `
+            <tr>
+              <td><button class="cm-star-btn${l.isOutboundPrimary ? ' active' : ''}" data-idx="${i}" title="Set as primary outbound">&#9733;</button></td>
+              <td><input value="${l.name || ''}" style="width:180px;" data-idx="${i}" data-field="name" /></td>
+              <td><input type="number" value="${l.volume || 0}" style="width:120px;" data-idx="${i}" data-field="volume" data-type="number" /></td>
+              <td>
+                <select style="width:90px;" data-idx="${i}" data-field="uom">
+                  ${['pallets', 'cases', 'eaches', 'orders', 'lines', 'units'].map(u =>
+                    `<option value="${u}"${l.uom === u ? ' selected' : ''}>${u}</option>`
+                  ).join('')}
+                </select>
+              </td>
+              <td><button class="cm-delete-btn" data-action="delete-volume" data-idx="${i}">Delete</button></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      <button class="cm-add-row-btn" data-action="add-volume">+ Add Volume Line</button>
+    </div>
+
+    <div class="hub-card mb-4">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;">
+        <div class="text-subtitle" style="margin:0;">Order Profile</div>
+        <span class="hub-field__hint">Average order characteristics — drives UOM selection on pricing buckets and cost-per-unit math.</span>
+      </div>
+      <div class="cm-narrow-form" style="grid-template-columns:repeat(4, minmax(0, 1fr));">
+        <div class="hub-field">
+          <label class="hub-field__label">Lines Per Order</label>
+          <input class="hub-input" type="number" value="${op.linesPerOrder || ''}" placeholder="e.g., 3.5" step="0.1" data-field="orderProfile.linesPerOrder" data-type="number" />
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label">Units Per Line</label>
+          <input class="hub-input" type="number" value="${op.unitsPerLine || ''}" placeholder="e.g., 1.8" step="0.1" data-field="orderProfile.unitsPerLine" data-type="number" />
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label">Average Order Weight</label>
+          <input class="hub-input" type="number" value="${op.avgOrderWeight || ''}" placeholder="e.g., 12.5" step="0.1" data-field="orderProfile.avgOrderWeight" data-type="number" />
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label">Weight Unit</label>
+          <select class="hub-input" data-field="orderProfile.weightUnit">
+            <option value="lbs"${op.weightUnit === 'lbs' || !op.weightUnit ? ' selected' : ''}>Pounds (lbs)</option>
+            <option value="kg"${op.weightUnit === 'kg' ? ' selected' : ''}>Kilograms (kg)</option>
+          </select>
+        </div>
+      </div>
+    </div>
 
     <style>
       .cm-star-btn { background: none; border: none; cursor: pointer; font-size: 18px; color: var(--ies-gray-300); }
@@ -1175,42 +1299,13 @@ function renderVolumes() {
 }
 
 // ============================================================
-// SECTION 3: ORDER PROFILE
+// SECTION 3: ORDER PROFILE (merged into Volumes 2026-04-21 pm — stub
+// retained for the 'orderProfile' nav key in case legacy routes hit it)
 // ============================================================
 
 function renderOrderProfile() {
-  const op = model.orderProfile || {};
-  return `
-    <div class="cm-section-header">
-      <div>
-        <div class="cm-section-title">Order Profile</div>
-        <div class="cm-section-desc">Average order characteristics for cost-per-unit calculations.</div>
-      </div>
-    </div>
-
-    <div class="cm-narrow-form">
-      <div class="hub-field">
-        <label class="hub-field__label">Lines Per Order</label>
-        <input class="hub-input" type="number" value="${op.linesPerOrder || ''}" placeholder="e.g., 3.5" step="0.1" data-field="orderProfile.linesPerOrder" data-type="number" />
-      </div>
-      <div class="hub-field">
-        <label class="hub-field__label">Units Per Line</label>
-        <input class="hub-input" type="number" value="${op.unitsPerLine || ''}" placeholder="e.g., 1.8" step="0.1" data-field="orderProfile.unitsPerLine" data-type="number" />
-      </div>
-
-      <div class="hub-field">
-        <label class="hub-field__label">Average Order Weight</label>
-        <input class="hub-input" type="number" value="${op.avgOrderWeight || ''}" placeholder="e.g., 12.5" step="0.1" data-field="orderProfile.avgOrderWeight" data-type="number" />
-      </div>
-      <div class="hub-field">
-        <label class="hub-field__label">Weight Unit</label>
-        <select class="hub-input" data-field="orderProfile.weightUnit">
-          <option value="lbs"${op.weightUnit === 'lbs' || !op.weightUnit ? ' selected' : ''}>Pounds (lbs)</option>
-          <option value="kg"${op.weightUnit === 'kg' ? ' selected' : ''}>Kilograms (kg)</option>
-        </select>
-      </div>
-    </div>
-  `;
+  // Delegate to combined Volumes renderer — both sections live there now.
+  return renderVolumes();
 }
 
 // ============================================================
@@ -1270,6 +1365,40 @@ function renderFacility() {
           <div class="hub-field__hint">0 = no fencing.</div>
         </div>
       </div>
+
+      <!-- Security Tier comparison panel (Brock 2026-04-21 pm finance-review
+           readiness). Shows exactly what each tier adds so reviewers don't
+           have to flip the dropdown. Active tier highlighted. -->
+      <details class="mt-3" style="border:1px solid var(--ies-gray-200);border-radius:6px;padding:0;">
+        <summary style="padding:8px 12px;cursor:pointer;font-size:12px;font-weight:600;color:var(--ies-gray-700);background:var(--ies-gray-50);border-radius:6px 6px 0 0;user-select:none;">What changes at each Security Tier?</summary>
+        <div style="padding:12px;">
+          <div style="display:grid;grid-template-columns:repeat(4, minmax(0, 1fr));gap:8px;font-size:11px;">
+            ${[
+              { tier: 1, name: 'Alarm + basics',       adds: ['Burglar alarm', 'Door controls ($75/door)', 'Overhead-door locks ($10/each)', 'Ramp-door mgmt ($300/door)', 'Signage + driver cages', 'C-TPAT baseline'], cost: '$7–12K base', financing: 'Capital' },
+              { tier: 2, name: '+ CCTV',                adds: ['Camera head-end ($20K)', 'Cameras ($1,562/each)'], cost: '+$20K + $1.6K/cam', financing: 'TI' },
+              { tier: 3, name: '+ Access control',      adds: ['Access control head-end ($20K)', 'Badge readers ($1,150/each)', 'Employee entrance ($2.5K)', 'Metal detectors ($5K)'], cost: '+$27K typical', financing: 'TI' },
+              { tier: 4, name: '+ Guard-shack full',    adds: ['External guard shack ($43K)', 'Gate automation ($25K)'], cost: '+$68K', financing: 'Capital' },
+            ].map(t => {
+              const active = Number(f.securityTier ?? 3) === t.tier;
+              return `
+                <div style="padding:10px;border-radius:6px;border:${active ? '2px solid var(--ies-blue)' : '1px solid var(--ies-gray-200)'};background:${active ? '#ecf5ff' : '#fff'};">
+                  <div style="font-weight:700;color:${active ? 'var(--ies-blue)' : 'var(--ies-gray-700)'};margin-bottom:4px;">Tier ${t.tier}${active ? ' ✓' : ''} — ${t.name}</div>
+                  <ul style="margin:0;padding-left:14px;color:var(--ies-gray-600);line-height:1.45;">
+                    ${t.adds.map(a => `<li>${a}</li>`).join('')}
+                  </ul>
+                  <div style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--ies-gray-200);color:var(--ies-gray-500);">
+                    <strong style="color:var(--ies-gray-700);">${t.cost}</strong> · ${t.financing}
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+          <div style="margin-top:10px;font-size:11px;color:var(--ies-gray-500);font-style:italic;">
+            Tiers are cumulative — Tier 3 includes Tier 2 includes Tier 1.
+            Reference: Cost Model Planning Heuristics doc §3.6. Regulated verticals (pharma, hazmat) default to Tier 4; specialty retail to Tier 3; general warehousing can drop to Tier 2.
+          </div>
+        </div>
+      </details>
     </div>
 
     ${renderFacilityCostCard()}
@@ -1321,16 +1450,48 @@ function renderShifts() {
   // 'shifts' for persistence compatibility; only the label changes.
   const s = model.shifts || (model.shifts = {});
   const lc = model.laborCosting || (model.laborCosting = {});
-  // Brock 2026-04-21: Annual Paid Hours / FTE is a fixed US FT standard
-  // (2,080). Productive Hours / FTE = 2,080 − PTO hrs − holiday hrs. Direct
-  // Utilization is a UPH haircut (doc §2.1) and is NOT applied here.
+  // Brock 2026-04-21 pm: PTO hours + Holiday hours are the primary inputs
+  // (editable ints). Annual Paid Hours / FTE stays the constant 2,080.
+  // Productive = 2,080 − PTO hrs − Holiday hrs.
   const paidHrs = calc.ANNUAL_PAID_HOURS_PER_FTE;
   const opHrs = paidHrs;
-  const ptoFrac     = (Number(s.ptoPct     ?? 5)) / 100;
-  const holidayFrac = (Number(s.holidayPct ?? 0)) / 100;
-  const ptoHrs      = Math.round(paidHrs * ptoFrac);
-  const holidayHrs  = Math.round(paidHrs * holidayFrac);
+  const ptoHrs      = Math.max(0, Math.round(Number(s.ptoHoursPerYear     ?? 80)));
+  const holidayHrs  = Math.max(0, Math.round(Number(s.holidayHoursPerYear ?? 64)));
   const productiveHrs = Math.max(0, paidHrs - ptoHrs - holidayHrs);
+  // Legacy fractions for calc-layer compat (calc engine still consumes ptoPct)
+  const ptoFrac     = ptoHrs / paidHrs;
+  const holidayFrac = holidayHrs / paidHrs;
+  // Keep legacy fields in sync so calc adapters + scenario snapshots stay valid
+  s.ptoPct     = Math.round(ptoFrac     * 1000) / 10; // 1-decimal %
+  s.holidayPct = Math.round(holidayFrac * 1000) / 10;
+  // Seed Benefit Load buckets (Brock 2026-04-21 pm — segments the prior flat
+  // Wage Load into Payroll Taxes / Workers Comp / Health & Welfare /
+  // Retirement / Other Leave & Misc). Sum drives the calc engine via
+  // `defaultBurdenPct`. If the project pre-dates buckets, preserve the legacy
+  // total by proportionally scaling the standard splits.
+  if (lc.benefitLoadPayrollTaxesPct == null
+      && lc.benefitLoadWorkersCompPct == null
+      && lc.benefitLoadHealthWelfarePct == null) {
+    const legacyTotal = Number(lc.defaultBurdenPct);
+    const STD = { taxes: 8.5, wc: 3.5, health: 10, retire: 4, other: 6 }; // sums to 32
+    if (Number.isFinite(legacyTotal) && legacyTotal > 0 && Math.abs(legacyTotal - 32) > 0.5) {
+      const scale = legacyTotal / 32;
+      lc.benefitLoadPayrollTaxesPct  = Math.round(STD.taxes  * scale * 100) / 100;
+      lc.benefitLoadWorkersCompPct   = Math.round(STD.wc     * scale * 100) / 100;
+      lc.benefitLoadHealthWelfarePct = Math.round(STD.health * scale * 100) / 100;
+      lc.benefitLoadRetirementPct    = Math.round(STD.retire * scale * 100) / 100;
+      lc.benefitLoadOtherPct         = Math.round(STD.other  * scale * 100) / 100;
+    } else {
+      lc.benefitLoadPayrollTaxesPct  = STD.taxes;
+      lc.benefitLoadWorkersCompPct   = STD.wc;
+      lc.benefitLoadHealthWelfarePct = STD.health;
+      lc.benefitLoadRetirementPct    = STD.retire;
+      lc.benefitLoadOtherPct         = STD.other;
+    }
+  }
+  const benefitLoadTotalPct = computeBenefitLoadTotal(lc);
+  // Total drives calc.defaultBurdenPct — the value the calc engine consumes
+  lc.defaultBurdenPct = Math.round(benefitLoadTotalPct * 100) / 100;
   const positions = Array.isArray(s.positions) ? s.positions : [];
   const directCount = positions.filter(p => p.category === 'direct').length;
   const indirectCount = positions.filter(p => p.category === 'indirect').length;
@@ -1351,13 +1512,20 @@ function renderShifts() {
           <option value="contractor"${p.employment_type === 'contractor' ? ' selected' : ''}>Contractor</option>
         </select>
       </td>
-      <td><input class="hub-input hub-num" type="number" step="0.25" min="0" value="${p.hourly_wage || 0}" data-array="shifts.positions" data-idx="${i}" data-field="hourly_wage" data-type="number" title="Starting hourly wage (before burden/benefits)" /></td>
+      <td class="cm-currency-cell">
+        <span class="cm-currency-prefix">$</span>
+        <input class="hub-input hub-num cm-currency-input" type="number" step="0.25" min="0" value="${p.hourly_wage || 0}" data-array="shifts.positions" data-idx="${i}" data-field="hourly_wage" data-type="number" title="Starting hourly wage (before benefits load)" ${p.is_salaried ? 'disabled title="Salaried position — uses Salary instead"' : ''} />
+      </td>
       <td><input class="hub-input hub-num" type="number" step="1" min="0" max="100" value="${p.temp_markup_pct || 0}" data-array="shifts.positions" data-idx="${i}" data-field="temp_markup_pct" data-type="number" ${p.employment_type !== 'temp_agency' ? 'disabled title="Only applies to Temp Agency positions"' : 'title="Temp agency markup on top of the base wage"'} /></td>
       <td>
         <input type="checkbox" data-array="shifts.positions" data-idx="${i}" data-field="is_salaried" data-type="checkbox"${p.is_salaried ? ' checked' : ''} title="Salaried (uses annual_salary, not hourly_wage × hours)" />
       </td>
-      <td><input class="hub-input hub-num" type="number" step="1000" min="0" value="${p.annual_salary || 0}" data-array="shifts.positions" data-idx="${i}" data-field="annual_salary" data-type="number" ${!p.is_salaried ? 'disabled title="Only applies when Salaried is checked"' : ''} /></td>
+      <td class="cm-currency-cell">
+        <span class="cm-currency-prefix">$</span>
+        <input class="hub-input hub-num cm-currency-input" type="number" step="1000" min="0" value="${p.annual_salary || 0}" data-array="shifts.positions" data-idx="${i}" data-field="annual_salary" data-type="number" ${!p.is_salaried ? 'disabled title="Only applies when Salaried is checked"' : ''} />
+      </td>
       <td><input class="hub-input hub-num" type="number" step="0.25" min="0" max="100" value="${p.bonus_pct ?? ''}" placeholder="${s.bonusPct ?? 5}" data-array="shifts.positions" data-idx="${i}" data-field="bonus_pct" data-type="number" title="Leave blank to inherit global bonus %" /></td>
+      <td><input class="hub-input hub-num" type="number" step="0.25" min="0" max="100" value="${p.benefit_load_pct ?? ''}" placeholder="${(lc.defaultBurdenPct ?? 32).toFixed(1)}" data-array="shifts.positions" data-idx="${i}" data-field="benefit_load_pct" data-type="number" title="Per-position Benefit Load %. Blank = inherit global total from buckets above. Salaried roles often have higher load (health + retirement); hourly lower." /></td>
       <td><input class="hub-input" value="${_esc(p.notes || '')}" data-array="shifts.positions" data-idx="${i}" data-field="notes" /></td>
       <td><button class="cm-delete-btn" data-action="delete-position" data-idx="${i}" title="Delete position">×</button></td>
     </tr>
@@ -1403,28 +1571,63 @@ function renderShifts() {
           <div class="cm-opshours-card__label">Annual Paid Hours / FTE</div>
           <div class="cm-opshours-card__value">${paidHrs.toLocaleString()}</div>
         </div>
-        <div class="cm-opshours-card" style="margin:0;" title="2,080 − PTO hours − Holiday hours. PTO ${Math.round(ptoFrac*100)}% = ${ptoHrs} hrs; Holiday ${Math.round(holidayFrac*100)}% = ${holidayHrs} hrs.">
+        <div class="cm-opshours-card" style="margin:0;" title="2,080 − PTO hrs (${ptoHrs}) − Holiday hrs (${holidayHrs}) = ${productiveHrs}. Edit PTO and Holiday hours in the card below.">
           <div class="cm-opshours-card__label">Productive Hours / FTE</div>
           <div class="cm-opshours-card__value" style="color:var(--ies-blue);">${productiveHrs.toLocaleString()}</div>
         </div>
       </div>
     </div>
 
+    <!-- Benefit Load + Global Economics -->
+    <!-- Brock 2026-04-21 pm: Wage Load → Benefit Load (rename) + segmented
+         into 5 buckets (Payroll Taxes / Workers Comp / Health & Welfare /
+         Retirement / Other Leave & Misc). Total drives the calc engine.
+         Year-scheduled schedule removed; per-position overrides live in
+         the Position Catalog below.
+         PTO + Holiday are now hour inputs (default 80 / 64). No
+         Holiday Treatment dropdown — hours always subtract from 2,080. -->
+    <div class="hub-card mb-4">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+        <div>
+          <div class="text-subtitle" style="margin:0;">Benefit Load %</div>
+          <div class="hub-field__hint">Employer-side loaded costs on top of base wage. Buckets sum to the Total below. Per-position overrides live in the Position Catalog.</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:6px 12px;background:var(--ies-gray-50);border:1px solid var(--ies-gray-200);border-radius:6px;">
+          <span style="font-size:11px;text-transform:uppercase;color:var(--ies-gray-500);letter-spacing:0.5px;">Total Benefit Load</span>
+          <strong style="font-size:16px;color:var(--ies-blue);">${benefitLoadTotalPct.toFixed(2)}%</strong>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(5, minmax(0, 1fr));gap:12px;">
+        <div class="hub-field">
+          <label class="hub-field__label" title="FICA (7.65%) + FUTA + SUTA. Employer share of payroll taxes on base wage + OT + bonus.">Payroll Taxes %</label>
+          <input class="hub-input" type="number" min="0" max="20" step="0.25" value="${lc.benefitLoadPayrollTaxesPct ?? 8.5}" data-field="laborCosting.benefitLoadPayrollTaxesPct" data-type="number" data-recompute-benefit-load="true" />
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label" title="Workers' compensation insurance. Varies by state + job risk class (warehouse typical 2.5-5%).">Workers Comp %</label>
+          <input class="hub-input" type="number" min="0" max="15" step="0.25" value="${lc.benefitLoadWorkersCompPct ?? 3.5}" data-field="laborCosting.benefitLoadWorkersCompPct" data-type="number" data-recompute-benefit-load="true" />
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label" title="Medical + dental + vision + employer-paid life/LTD. Typical 8-12% for 3PL. Higher for salaried.">Health &amp; Welfare %</label>
+          <input class="hub-input" type="number" min="0" max="25" step="0.25" value="${lc.benefitLoadHealthWelfarePct ?? 10}" data-field="laborCosting.benefitLoadHealthWelfarePct" data-type="number" data-recompute-benefit-load="true" />
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label" title="401(k) match + profit sharing. Typical 3-6%. Often higher for salaried positions.">Retirement %</label>
+          <input class="hub-input" type="number" min="0" max="15" step="0.25" value="${lc.benefitLoadRetirementPct ?? 4}" data-field="laborCosting.benefitLoadRetirementPct" data-type="number" data-recompute-benefit-load="true" />
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label" title="Paid sick accrual, bereavement, jury duty, EAP, tuition assistance, disability. Anything not PTO/holidays and not captured elsewhere.">Other Leave &amp; Misc %</label>
+          <input class="hub-input" type="number" min="0" max="15" step="0.25" value="${lc.benefitLoadOtherPct ?? 6}" data-field="laborCosting.benefitLoadOtherPct" data-type="number" data-recompute-benefit-load="true" />
+        </div>
+      </div>
+    </div>
+
     <!-- Global Labor Economics -->
-    <!-- Brock 2026-04-20: collapsed Burden% + Benefit Load% → single Wage Load%
-         per Labor Build-Up Logic doc §3.2. Adding both was double-dipping the
-         same bucket (payroll taxes + workers comp + health + retirement +
-         benefits). Canonical = ONE number, 30-31% reference range. -->
     <div class="hub-card mb-4">
       <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;">
         <div class="text-subtitle" style="margin:0;">Global Labor Economics</div>
-        <span class="hub-field__hint">Per-position overrides live in the catalog below.</span>
+        <span class="hub-field__hint">PTO + Holiday drive Productive Hours above. Per-position overrides live in the catalog below.</span>
       </div>
       <div style="display:grid;grid-template-columns:repeat(4, minmax(0, 1fr));gap:12px;">
-        <div class="hub-field">
-          <label class="hub-field__label" title="Single consolidated employer-side load on top of base wage — covers payroll taxes + workers comp + health + retirement + benefits + paid sick. Reference model: 29.99% Y1 → 31.33% Y5 (doc §3.2). Typical 25-35%.">Wage Load %</label>
-          <input class="hub-input" type="number" min="0" max="100" step="0.5" value="${lc.defaultBurdenPct ?? 30}" data-field="laborCosting.defaultBurdenPct" data-type="number" />
-        </div>
         <div class="hub-field">
           <label class="hub-field__label" title="Planned bonus pay as % of base wage. Blend across all roles.">Bonus %</label>
           <input class="hub-input" type="number" min="0" max="50" step="0.25" value="${s.bonusPct ?? 5}" data-field="shifts.bonusPct" data-type="number" />
@@ -1438,81 +1641,31 @@ function renderShifts() {
           <input class="hub-input" type="number" min="0" max="150" step="1" value="${lc.turnoverPct ?? 45}" data-field="laborCosting.turnoverPct" data-type="number" />
         </div>
         <div class="hub-field">
-          <label class="hub-field__label" title="PTO as % of scheduled hours. Treated as permanent-headcount uplift (you hire 1/(1-pto%) more people for coverage) — NOT an hours reduction per doc §2.2. Typical 4-8% (≈ 2-4 weeks/yr).">PTO %</label>
-          <input class="hub-input" type="number" min="0" max="20" step="0.5" value="${s.ptoPct ?? 5}" data-field="shifts.ptoPct" data-type="number" />
-        </div>
-        <div class="hub-field">
-          <label class="hub-field__label" title="PF&D haircut applied to UPH (not hours) per doc §2.1. Captures personal allowance, fatigue, delay, paid breaks, activity-switching. Reference 85%. Range 75-90%.">Direct Utilization %</label>
+          <label class="hub-field__label" title="PF&amp;D haircut applied to UPH (not hours) per doc §2.1. Captures personal allowance, fatigue, delay, paid breaks, activity-switching. Reference 85%. Range 75-90%.">Direct Utilization %</label>
           <input class="hub-input" type="number" min="50" max="100" step="0.5" value="${s.directUtilization ?? 85}" data-field="shifts.directUtilization" data-type="number" />
         </div>
         <div class="hub-field">
-          <label class="hub-field__label" title="Paid holidays as % of scheduled hours. 8 holidays × 8 hrs / 2080 = 3.08%. Treatment controls whether this reduces hours-per-FTE or uplifts headcount for coverage.">Holiday %</label>
-          <input class="hub-input" type="number" min="0" max="10" step="0.1" value="${s.holidayPct ?? 0}" data-field="shifts.holidayPct" data-type="number" />
+          <label class="hub-field__label" title="Paid Time Off (vacation + personal days) — hours per FTE per year. Default 80 = 10 days × 8 hrs. Typical 80-120. Editable per region/role.">PTO Hours / Year</label>
+          <input class="hub-input" type="number" min="0" max="400" step="8" value="${ptoHrs}" data-field="shifts.ptoHoursPerYear" data-type="number" />
         </div>
         <div class="hub-field">
-          <label class="hub-field__label" title="reduce_hours = 8×5 B2B close on holidays. headcount_uplift = 24/7 e-comm needs coverage.">Holiday Treatment</label>
-          <select class="hub-input" data-field="shifts.holidayTreatment">
-            <option value="reduce_hours"${(s.holidayTreatment || 'reduce_hours') === 'reduce_hours' ? ' selected' : ''}>Reduce hours</option>
-            <option value="headcount_uplift"${s.holidayTreatment === 'headcount_uplift' ? ' selected' : ''}>Headcount uplift</option>
-          </select>
+          <label class="hub-field__label" title="Paid holidays — hours per FTE per year. Default 64 = 8 holidays × 8 hrs. Some regions observe more/fewer. Subtracts from 2,080 paid hours to give Productive Hours.">Holiday Hours / Year</label>
+          <input class="hub-input" type="number" min="0" max="200" step="8" value="${holidayHrs}" data-field="shifts.holidayHoursPerYear" data-type="number" />
         </div>
       </div>
     </div>
-
-    <!-- Year-Scheduled Wage Load (Brock 2026-04-21 — closes Phase B #1) -->
-    <!-- Per Labor Build-Up Logic doc §3.2: wage load drifts year-over-year
-         as health costs escalate, workers-comp renews, and retirement match
-         caps adjust. Reference schedule is Y1 29.99% → Y5 31.33%. When
-         enabled, this overrides the flat "Wage Load %" above per year.
-         When blank or disabled, the flat value applies to every year. -->
-    ${(() => {
-      const sched = Array.isArray(lc.wageLoadByYear) ? lc.wageLoadByYear : [];
-      const enabled = Boolean(lc.wageLoadByYearEnabled);
-      const years = 5;
-      const defaults = [29.99, 30.32, 30.65, 31.00, 31.33]; // doc §3.2
-      return `
-        <div class="hub-card mb-4">
-          <div style="display:flex;align-items:baseline;justify-content:space-between;margin:0 0 6px;gap:12px;flex-wrap:wrap;">
-            <div>
-              <div class="text-subtitle" style="margin:0;">Year-Scheduled Wage Load <span style="font-size:11px;color:var(--ies-gray-400);font-weight:500;">(optional)</span></div>
-              <div class="hub-field__hint">Per-year wage-load overrides. Unchecked = flat ${(lc.defaultBurdenPct ?? 30)}% applies to all years. Per doc §3.2.</div>
-            </div>
-            <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
-              <input type="checkbox" data-field="laborCosting.wageLoadByYearEnabled" data-type="checkbox"${enabled ? ' checked' : ''} />
-              <span>Use year schedule</span>
-            </label>
-          </div>
-          <div style="display:grid;grid-template-columns:repeat(${years + 1}, minmax(0, 1fr));gap:12px;align-items:end;">
-            ${Array.from({ length: years }).map((_, i) => {
-              const v = sched[i];
-              const val = (Number.isFinite(Number(v)) && v !== '' && v !== null) ? v : '';
-              return `
-                <div class="hub-field">
-                  <label class="hub-field__label">Year ${i + 1} %</label>
-                  <input class="hub-input" type="number" min="0" max="100" step="0.01"
-                    value="${val}"
-                    placeholder="${defaults[i]}"
-                    data-array="laborCosting.wageLoadByYear" data-idx="${i}" data-field="_direct" data-type="number"
-                    ${enabled ? '' : 'disabled title="Check \'Use year schedule\' to edit"'} />
-                </div>
-              `;
-            }).join('')}
-            <div style="display:flex;align-items:center;">
-              <button class="hub-btn hub-btn-sm" data-action="seed-wage-load-schedule"${enabled ? '' : ' disabled'} title="Populate Y1-Y5 from Labor Build-Up Logic doc §3.2 reference schedule (29.99 → 31.33)">Use reference</button>
-            </div>
-          </div>
-        </div>
-      `;
-    })()}
 
     <!-- Position Catalog -->
     <div class="hub-card mb-4">
       <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
         <div>
           <div class="text-subtitle" style="margin:0;">Position Catalog</div>
-          <div class="hub-field__hint">Labor activities select from this catalog. <strong>${directCount}</strong> direct · <strong>${indirectCount}</strong> indirect · <strong>${positions.length}</strong> total.</div>
+          <div class="hub-field__hint">Role-based catalog (${STANDARD_POSITIONS.length} standard roles from heuristics doc). Labor activities select from here. <strong>${directCount}</strong> direct · <strong>${indirectCount}</strong> indirect · <strong>${positions.length}</strong> total.</div>
         </div>
-        <button class="hub-btn hub-btn-primary hub-btn-sm" data-action="add-position">+ Add Position</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="replace-with-standard-positions" title="Wipe current positions and seed the 43-role standard catalog (Material Handler, Forklift Operator, Ops Supervisor, etc.). Existing labor lines will unlink from removed positions — re-select them from the dropdown.">↺ Replace with Standard Roles</button>
+          <button class="hub-btn hub-btn-primary hub-btn-sm" data-action="add-position">+ Add Position</button>
+        </div>
       </div>
       <div class="cm-table-scroll">
         <table class="hub-datatable hub-datatable--dense">
@@ -1521,18 +1674,19 @@ function renderShifts() {
               <th style="min-width:180px;">Position Name</th>
               <th style="width:100px;">Category</th>
               <th style="width:130px;">Employment</th>
-              <th class="hub-num" style="width:90px;" title="Starting hourly wage (pre-burden/benefits)">Wage $/hr</th>
+              <th class="hub-num" style="width:100px;" title="Starting hourly wage (pre-benefit load)">Wage $/hr</th>
               <th class="hub-num" style="width:90px;" title="Temp-agency markup on base wage (only for Temp Agency positions)">Temp Mkup %</th>
               <th style="width:70px;text-align:center;" title="Salaried vs hourly">Salaried?</th>
-              <th class="hub-num" style="width:110px;" title="Annual salary (salaried only)">Salary</th>
+              <th class="hub-num" style="width:120px;" title="Annual salary (salaried only)">Salary</th>
               <th class="hub-num" style="width:80px;" title="Position-specific bonus %. Blank = inherit global">Bonus %</th>
+              <th class="hub-num" style="width:100px;" title="Per-position Benefit Load % override. Blank = inherit global total from buckets above. Salaried roles often have higher load (richer health + retirement); hourly lower.">Benefit Load %</th>
               <th>Notes</th>
               <th style="width:36px;"></th>
             </tr>
           </thead>
           <tbody>
             ${positions.length === 0
-              ? `<tr><td colspan="10" style="text-align:center;padding:18px;color:var(--ies-gray-400);"><em>No positions yet. Click <strong>+ Add Position</strong>, or they'll auto-populate from existing labor lines on next load.</em></td></tr>`
+              ? `<tr><td colspan="11" style="text-align:center;padding:18px;color:var(--ies-gray-400);"><em>No positions yet. Click <strong>↺ Replace with Standard Roles</strong> to seed the ${STANDARD_POSITIONS.length}-role catalog, or <strong>+ Add Position</strong> to build manually.</em></td></tr>`
               : positions.map((p, i) => posRow(p, i)).join('')}
           </tbody>
         </table>
@@ -2395,18 +2549,19 @@ function renderMonthlyLaborViewCard() {
  * Labor Factors (section key: 'shifts'). This banner just surfaces the
  * current values inline so the user doesn't have to navigate away to check.
  *
- * Brock 2026-04-20: "Burden% + Benefit Load% was double-dipping the same
- * bucket" — collapsed to ONE Wage Load %. Old per-line `burden_pct` override
- * still wins; see detail pane.
+ * Brock 2026-04-21 pm: renamed Wage Load → Benefit Load. PTO/Holiday now
+ * hours-based. Segmented buckets live on Labor Factors; this banner shows
+ * the rolled-up total. Per-position overrides live in the Position Catalog.
  */
 function renderLaborFactorsBanner(lc, shifts) {
   const s = shifts || {};
-  const wageLoad = lc?.defaultBurdenPct ?? 30;
-  const ot       = lc?.overtimePct      ?? 5;
-  const bonus    = s.bonusPct           ?? 5;
-  const turnover = lc?.turnoverPct      ?? 45;
-  const pto      = s.ptoPct             ?? 5;
-  const util     = s.directUtilization  ?? 85;
+  const benefitLoad = lc?.defaultBurdenPct ?? 32;
+  const ot          = lc?.overtimePct      ?? 5;
+  const bonus       = s.bonusPct           ?? 5;
+  const turnover    = lc?.turnoverPct      ?? 45;
+  const ptoHrs      = Math.max(0, Math.round(Number(s.ptoHoursPerYear     ?? 80)));
+  const holidayHrs  = Math.max(0, Math.round(Number(s.holidayHoursPerYear ?? 64)));
+  const util        = s.directUtilization  ?? 85;
   const chip = (label, value, suffix = '%') => `
     <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:#fff;border:1px solid var(--ies-gray-200);border-radius:999px;font-size:12px;line-height:1.2;">
       <span style="color:var(--ies-gray-500);">${label}</span>
@@ -2416,11 +2571,12 @@ function renderLaborFactorsBanner(lc, shifts) {
     <div class="hub-card" style="padding:12px 16px;background:var(--ies-gray-50);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <span style="font-size:12px;color:var(--ies-gray-500);font-weight:500;">Global factors</span>
-        ${chip('Wage Load', wageLoad)}
+        ${chip('Benefit Load', Number(benefitLoad).toFixed(1))}
         ${chip('OT', ot)}
         ${chip('Bonus', bonus)}
         ${chip('Turnover', turnover)}
-        ${chip('PTO', pto)}
+        ${chip('PTO', ptoHrs, ' hrs')}
+        ${chip('Holiday', holidayHrs, ' hrs')}
         ${chip('Util', util)}
       </div>
       <button class="hub-btn hub-btn-secondary hub-btn-sm"
@@ -3614,7 +3770,6 @@ function renderSummary() {
   const enrichedPricingBuckets = pricingSnapshot.buckets;
   const unassignedCost = pricingSnapshot.bucketCosts['_unassigned'] || 0;
   const unassignedCount = pricingSnapshot.unassignedCount;
-  const wageLoadScheduleFrac = resolveWageLoadScheduleFrac();
   const projResult = calc.buildYearlyProjections({
     years: contractYears,
     baseLaborCost: summary.laborCost,
@@ -3646,11 +3801,9 @@ function renderSummary() {
     // engine can compute per-line labor cost using Phase 4b profiles.
     _calcHeur: calcHeur,
     marketLaborProfile: currentMarketLaborProfile,
-    // Phase B #1 — year-scheduled wage load (Brock 2026-04-21). When
-    // laborCosting.wageLoadByYearEnabled is checked and at least one year
-    // is set, the calc engine uses the per-year override instead of the
-    // flat defaultBurdenPct.
-    wageLoadByYear: wageLoadScheduleFrac,
+    // Year-scheduled wage load was removed 2026-04-21 pm per Brock — Benefit
+    // Load is now a flat total (sum of 5 buckets) with per-position overrides.
+    wageLoadByYear: null,
     // Diagnostic: carries which keys came from snapshot vs override vs default.
     _heuristicsSource: calcHeur.used,
   });
@@ -3841,17 +3994,17 @@ function renderSummary() {
     <div class="hub-card mb-4">
       <h3 class="hub-section-heading">Financial Metrics</h3>
       <div class="cm-metrics-grid">
-        ${renderMetricCard('Gross Margin', calc.formatPct(metrics.grossMarginPct), metrics.grossMarginPct >= (thresholds.grossMargin || 10), '(Revenue − COGS) / Revenue, horizon total. COGS = Labor + Facility + Equipment + VAS pass-through.')}
-        ${renderMetricCard('EBITDA Margin', calc.formatPct(metrics.ebitdaMarginPct), metrics.ebitdaMarginPct >= (thresholds.ebitda || 8), '(Σ EBITDA across horizon) / (Σ Revenue). Horizon totals — ties exactly to the EBITDA row in the P&L below.')}
+        ${renderMetricCard('Gross Margin', calc.formatPct(metrics.grossMarginPct), metrics.grossMarginPct >= (thresholds.grossMargin || 10), `(Σ Revenue − Σ COGS) / Σ Revenue, horizon total. COGS = Labor + Facility + Equipment + VAS pass-through. Ties to the Gross Profit subtotal in the P&L below.`)}
+        ${renderMetricCard('EBITDA Margin', calc.formatPct(metrics.ebitdaMarginPct), metrics.ebitdaMarginPct >= (thresholds.ebitda || 8), `(Σ EBITDA across horizon) / (Σ Revenue). EBITDA = GP − SG&A (Overhead + pre-live one-times). Ties exactly to the EBITDA row in the P&L below.`)}
         ${renderMetricCard('EBIT Margin', calc.formatPct(metrics.ebitMarginPct), metrics.ebitMarginPct >= (thresholds.ebit || 5), '(Σ EBIT across horizon) / (Σ Revenue). EBIT = EBITDA − D&A. Ties exactly to the EBIT row in the P&L below.')}
         ${renderMetricCard('ROIC', calc.formatPct(metrics.roicPct), metrics.roicPct >= (thresholds.roic || 15), `NOPAT / Invested Capital. NOPAT = avg annual EBIT × (1 − ${calcHeur.taxRatePct || 25}% tax) = $${((metrics.nopat||0)/1000).toFixed(0)}K. Invested Capital = $${(metrics.investedCapital/1000).toFixed(0)}K = Startup $${(summary.startupCapital/1000).toFixed(0)}K + Equipment $${(summary.equipmentCapital/1000).toFixed(0)}K + avg NWC $${((metrics.estimatedNwc||0)/1000).toFixed(0)}K (horizon-avg Revenue × DSO/365 − horizon-avg COGS × DPO/365).`)}
         ${renderMetricCard('MIRR', calc.formatPct(metrics.mirrPct), metrics.mirrPct >= (thresholds.mirr || 12), `Modified IRR of FCF series. Financing rate ${fin.discountRate || 10}%, reinvestment rate ${fin.reinvestRate || 8}%. Uses Y0 outflow of $${(metrics.totalInvestment/1000).toFixed(0)}K plus each year's Free Cash Flow.`)}
-        ${renderMetricCard('NPV', calc.formatCurrency(metrics.npv, {compact: true}), metrics.npv > 0, `NPV of FCF series discounted at ${fin.discountRate || 10}%. Sums [−Total Investment at t=0] + Σ FCF_yr / (1+r)^yr.`)}
-        ${renderMetricCard('Payback', metrics.paybackMonths > 0 ? metrics.paybackMonths + ' mo' : '—', metrics.paybackMonths > 0 && metrics.paybackMonths <= (thresholds.payback || contractYears * 12), 'Months until cumulative FCF first turns positive. Assumes even monthly FCF within each year.')}
-        ${renderMetricCard('Rev / FTE', calc.formatCurrency(metrics.revenuePerFte, {compact: true}), null, `Y1 Revenue ÷ ${summary.totalFtes.toFixed(0)} total FTE. Industry benchmark ~$250K–$400K for fulfillment 3PL.`)}
-        ${renderMetricCard('GP / Order', calc.formatCurrency(metrics.contribPerOrder, {decimals: 2}), metrics.contribPerOrder > 0, 'Y1 Gross Profit ÷ Y1 Orders. GP is Revenue − COGS (site-level direct costs only).')}
-        ${renderMetricCard('Op Leverage', calc.formatPct(metrics.opLeveragePct), null, '(Facility + Overhead + Start-Up Amort) / Y1 Total Cost. Higher = more sensitive to volume swings.')}
-        ${renderMetricCard('Contract Value', calc.formatCurrency(metrics.contractValue, {compact: true}), null, `Sum of Revenue across ${contractYears}-year horizon. a.k.a. Total Contract Value (TCV).`)}
+        ${renderMetricCard('NPV', calc.formatCurrency(metrics.npv, {compact: true}), metrics.npv > 0, `NPV of FCF series discounted at ${fin.discountRate || 10}%. Sums [−Total Investment $${(metrics.totalInvestment/1000).toFixed(0)}K at t=0] + Σ FCF_yr / (1+${(fin.discountRate||10)/100})^yr. Ties to the Cumulative FCF row in the P&L (Y5 value) when discount ≈ 0.`)}
+        ${renderMetricCard('Payback', metrics.paybackMonths > 0 ? metrics.paybackMonths + ' mo' : '—', metrics.paybackMonths > 0 && metrics.paybackMonths <= (thresholds.payback || contractYears * 12), `Months until Cumulative FCF first turns positive. Starts at −Total Investment of $${(metrics.totalInvestment/1000).toFixed(0)}K at Y0; adds annual FCF each year. Assumes even monthly FCF within each year. Read Cum FCF row in P&L below to see the crossover.`)}
+        ${renderMetricCard('Rev / FTE', calc.formatCurrency(metrics.revenuePerFte, {compact: true}), null, `Y1 Revenue $${((p1.revenue||0)/1000).toFixed(0)}K ÷ ${summary.totalFtes.toFixed(1)} total FTE. Industry benchmark ~$250K–$400K for fulfillment 3PL. Below benchmark may indicate labor-heavy deal structure.`)}
+        ${renderMetricCard('GP / Order', calc.formatCurrency(metrics.contribPerOrder, {decimals: 2}), metrics.contribPerOrder > 0, `Y1 Gross Profit $${((p1.grossProfit||0)/1000).toFixed(0)}K ÷ Y1 Orders ${((p1.orders||orders||0)/1000).toFixed(0)}K. GP = Revenue − COGS (site-level direct costs only). Useful for unit-economics benchmarking across deals.`)}
+        ${renderMetricCard('Op Leverage', calc.formatPct(metrics.opLeveragePct), null, `(Facility + Overhead + Start-Up Amort) ÷ Y1 Total Cost. Y1 fixed-ish costs: Facility $${((p1.facility||0)/1000).toFixed(0)}K + Overhead $${((p1.overhead||0)/1000).toFixed(0)}K + Startup Amort $${((p1.startup||0)/1000).toFixed(0)}K. Y1 Total Cost $${((p1.totalCost||0)/1000).toFixed(0)}K. Higher = more sensitive to volume swings (less ability to flex).`)}
+        ${renderMetricCard('Contract Value', calc.formatCurrency(metrics.contractValue, {compact: true}), null, `Sum of Revenue across the ${contractYears}-year horizon = Total Contract Value (TCV). Horizon horizon average = $${((metrics.contractValue / Math.max(1, contractYears))/1000).toFixed(0)}K/yr.`)}
         ${renderMetricCard('Total Investment', calc.formatCurrency(metrics.totalInvestment, {compact: true}), null, `Startup capital $${(summary.startupCapital/1000).toFixed(0)}K + Equipment capital $${(summary.equipmentCapital/1000).toFixed(0)}K. EXCLUDES TI Upfront (rolled into facility rent via amortization). The Y0 outflow used as the anchor for MIRR/NPV/Payback.`)}
         ${(summary.tiUpfront || 0) > 0 ? renderMetricCard('TI Upfront', calc.formatCurrency(summary.tiUpfront, {compact: true}), null, `Tenant Improvement outlay at Y0 (dock levelers, office build-out, CCTV, access control, etc.) — per Asset Defaults Guidance, TI does NOT hit Total Investment or D&A. Instead it amortizes over the ${(model.projectDetails?.contractTerm || 5)}-year contract at $${(((summary.tiAmortAnnual)||0)/1000).toFixed(0)}K/yr and shows as a line in Facility Cost.`) : ''}
       </div>
@@ -4081,6 +4234,16 @@ function bindSectionEvents(section, container) {
 
       isDirty = true;
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+      // Benefit Load buckets: any edit should refresh the Total pill + the
+      // underlying defaultBurdenPct the calc engine consumes. Re-render the
+      // section so both update (cheap — Labor Factors is ~1 card + a table).
+      if (input.dataset.recomputeBenefitLoad === 'true') {
+        const lc = model.laborCosting || (model.laborCosting = {});
+        lc.defaultBurdenPct = Math.round(computeBenefitLoadTotal(lc) * 100) / 100;
+        refreshNavCompletion();
+        renderSection();
+        return;
+      }
       // Refresh sidebar completion dots + group rollup so checkmarks update
       // live as the user fills fields — previously only updated on mount /
       // section navigation, so Order Profile / Financial / VAS / Start-Up /
@@ -4110,11 +4273,27 @@ function bindSectionEvents(section, container) {
         if (p) {
           // Pull position attrs onto the line so existing calc paths
           // (which read line.hourly_rate / line.employment_type /
-          // line.temp_agency_markup_pct) stay defensible.
-          line.hourly_rate = Number(p.hourly_wage) || 0;
+          // line.temp_agency_markup_pct / line.burden_pct) stay defensible.
+          // Salaried roles pull annual_salary; hourly roles pull hourly_wage.
+          if (p.is_salaried) {
+            line.hourly_rate = 0;
+            line.annual_salary = Number(p.annual_salary) || 0;
+            line.pay_type = 'salary';
+          } else {
+            line.hourly_rate = Number(p.hourly_wage) || 0;
+            line.pay_type = 'hourly';
+          }
           line.employment_type = p.employment_type || 'permanent';
           if (p.employment_type === 'temp_agency') {
             line.temp_agency_markup_pct = Number(p.temp_markup_pct) || 0;
+          }
+          // Per-position Benefit Load override (Brock 2026-04-21 pm). Null =
+          // inherit global; any number overrides burden_pct for this line.
+          if (p.benefit_load_pct != null && p.benefit_load_pct !== '') {
+            line.burden_pct = Number(p.benefit_load_pct) || 0;
+          } else {
+            // Clear per-line override so global (from buckets) applies
+            line.burden_pct = null;
           }
           // Use the position name as the activity name hint if line was empty
           if (!line.activity_name) line.activity_name = p.name;
@@ -5005,7 +5184,7 @@ function computeWhatIfPreview(overlay) {
       project_id: model.id || 0,
       _calcHeur: calcHeur,
       marketLaborProfile: currentMarketLaborProfile,
-      wageLoadByYear: resolveWageLoadScheduleFrac(),
+      wageLoadByYear: null,
     });
 
     // Aggregate over the projection horizon
@@ -5895,6 +6074,29 @@ function handleAction(action, idx, btn) {
       }
       break;
     }
+    case 'replace-with-standard-positions': {
+      // Brock 2026-04-21 pm: wipe the per-project catalog and seed the
+      // 43-role standard catalog (Material Handler, Forklift Operator,
+      // Ops Supervisor, etc.). Existing labor lines unlink from removed
+      // positions — user reselects via dropdown.
+      const ok = await showConfirm(
+        `Replace the current Position Catalog with the ${STANDARD_POSITIONS.length}-role standard set?\n\n` +
+        `• All existing positions will be removed.\n` +
+        `• Labor lines pointing at removed positions will become unlinked — you'll re-pick their role from the dropdown.\n` +
+        `• Wages + salaries + benefit load overrides on your current positions will be lost.`,
+        { okLabel: 'Replace', danger: true },
+      );
+      if (!ok) return;
+      if (!model.shifts) model.shifts = {};
+      model.shifts.positions = materializeStandardPositions();
+      // Unlink every labor line — the old position_ids no longer exist
+      (model.laborLines || []).forEach(l => { l.position_id = null; });
+      (model.indirectLaborLines || []).forEach(l => { l.position_id = null; });
+      isDirty = true;
+      showToast(`Replaced catalog with ${STANDARD_POSITIONS.length} standard roles. Re-link labor lines via the Position dropdown in the Labor section.`, 'success');
+      renderSection();
+      return;
+    }
     case 'open-equipment-catalog':
       openEquipmentCatalog();
       return; // modal is async, don't re-render the section yet
@@ -5938,14 +6140,6 @@ function handleAction(action, idx, btn) {
       );
       renderSection();
       return;
-    }
-    case 'seed-wage-load-schedule': {
-      // Brock 2026-04-21: Populate Year-Scheduled Wage Load inputs with the
-      // Labor Build-Up Logic doc §3.2 reference schedule (29.99 → 31.33).
-      const lc = model.laborCosting || (model.laborCosting = {});
-      lc.wageLoadByYear = [29.99, 30.32, 30.65, 31.00, 31.33];
-      lc.wageLoadByYearEnabled = true;
-      break;
     }
     case 'add-overhead':
       model.overheadLines.push({ category: '', description: '', cost_type: 'monthly', monthly_cost: 0, pricing_bucket: defaultBucketFor('overhead') });
@@ -6574,7 +6768,7 @@ function ensureMonthlyBundle() {
       project_id: model.id || 0,
       _calcHeur: calcHeur,
       marketLaborProfile: currentMarketLaborProfile,
-      wageLoadByYear: resolveWageLoadScheduleFrac(),
+      wageLoadByYear: null,
       _heuristicsSource: calcHeur.used,
     });
     if (projResult && projResult.monthlyBundle) _lastMonthlyBundle = projResult.monthlyBundle;
@@ -6928,33 +7122,26 @@ function renderLanding() {
 function migrateLaborLinesToPositions(m) {
   if (!m) return;
   if (!m.shifts) m.shifts = {};
-  // Phase A Labor Build-Up Logic (Brock 2026-04-20): seed the new shift
-  // fields on any project that predates them so the Productive Hours tile
-  // + Global Labor Economics grid render sensible defaults. Backward compat:
-  // legacy ptoHoursPerYear → ptoPct when the latter is missing.
+  // Brock 2026-04-21 pm: PTO + Holiday are primary hour-based inputs
+  // (default 80 / 64). Legacy % fields migrate to hours if present; else
+  // default. ptoPct + holidayPct are then derived (2080-based fractions)
+  // for calc-layer compat — ui.js keeps them in sync on every render.
   const s = m.shifts;
-  if (s.ptoPct == null) {
-    // If legacy ptoHoursPerYear was customized, convert to % of scheduled.
-    // Else default 5% per doc.
-    const paid = (s.hoursPerShift || 8) * (s.daysPerWeek || 5) * (s.weeksPerYear || 52) || 2080;
-    const legacyPtoHrs = Number(s.ptoHoursPerYear);
-    s.ptoPct = (Number.isFinite(legacyPtoHrs) && legacyPtoHrs > 0)
-      ? Math.min(20, Math.round(legacyPtoHrs / paid * 1000) / 10) // 1 decimal place
-      : 5;
+  if (s.ptoHoursPerYear == null) {
+    const legacyPct = Number(s.ptoPct);
+    s.ptoHoursPerYear = (Number.isFinite(legacyPct) && legacyPct > 0)
+      ? Math.round(legacyPct / 100 * 2080)
+      : 80; // 10 days × 8 hrs
+  }
+  if (s.holidayHoursPerYear == null) {
+    const legacyPct = Number(s.holidayPct);
+    s.holidayHoursPerYear = (Number.isFinite(legacyPct) && legacyPct > 0)
+      ? Math.round(legacyPct / 100 * 2080)
+      : 64; // 8 holidays × 8 hrs
   }
   if (s.directUtilization == null) s.directUtilization = 85;
-  if (s.holidayPct == null) {
-    // If legacy holidayHoursPerYear was customized, convert to % of scheduled.
-    const paid = (s.hoursPerShift || 8) * (s.daysPerWeek || 5) * (s.weeksPerYear || 52) || 2080;
-    const legacyHolidayHrs = Number(s.holidayHoursPerYear);
-    s.holidayPct = (Number.isFinite(legacyHolidayHrs) && legacyHolidayHrs > 0)
-      ? Math.min(10, Math.round(legacyHolidayHrs / paid * 1000) / 10)
-      : 0;
-  }
-  if (s.holidayTreatment == null) s.holidayTreatment = 'reduce_hours';
-  // Clean up the laborCosting double-dipper: if benefitLoadPct is still
-  // set, leave it in the data (rollback safety) but calc ignores it. The
-  // UI field is removed. See tools/cost-model/calc.js wageLoadFracForLine.
+  // holidayTreatment retired — always reduce_hours. Legacy data can remain,
+  // calc engine ignores it.
 
   if (!Array.isArray(m.shifts.positions)) m.shifts.positions = [];
   const positions = m.shifts.positions;
@@ -7029,37 +7216,25 @@ function createEmptyModel() {
     facility: { totalSqft: 150000 },
     shifts: {
       shiftsPerDay: 1, hoursPerShift: 8, daysPerWeek: 5, weeksPerYear: 52,
-      // Brock 2026-04-20: macro Labor Factors — promoted from per-line +
-      // the laborCosting object so the Labor grid can become position-
-      // centric (pick a position, pull the rate). Old per-line hourly_rate
-      // stays as a per-line override.
+      // Brock 2026-04-21 pm: PTO + Holiday are now hour-based (editable ints).
+      // ptoPct + holidayPct are derived at render time for calc-layer compat;
+      // holidayTreatment is gone (always reduce_hours now).
       bonusPct: 5,
-      ptoHoursPerYear: 80,
-      holidayHoursPerYear: 64,
-      // Phase A Labor Build-Up Logic (Brock 2026-04-20 doc):
-      //   ptoPct              — fraction × 100 (UI %). Headcount uplift per §2.2.
-      //   directUtilization   — PF&D factor × 100. Applied to UPH per §2.1.
-      //   holidayPct          — % of scheduled hours. 8 holidays × 8 hrs / 2080 ≈ 3.08%.
-      //   holidayTreatment    — 'reduce_hours' (B2B) | 'headcount_uplift' (24/7 ecomm).
-      ptoPct: 5,
-      directUtilization: 85,
-      holidayPct: 0,
-      holidayTreatment: 'reduce_hours',
-      // Position catalog — seeded empty, auto-populated from existing labor
-      // lines on load (migrateLaborLinesToPositions).
-      positions: [],
+      ptoHoursPerYear: 80,      // 10 days × 8 hrs (editable)
+      holidayHoursPerYear: 64,  // 8 holidays × 8 hrs (editable)
+      directUtilization: 85,    // PF&D factor × 100. Applied to UPH per §2.1.
+      // Legacy shadows kept for scenario snapshot / calc-layer compat
+      ptoPct: 3.85,     // 80 / 2080
+      holidayPct: 3.08, // 64 / 2080
+      // Position catalog — seeded with the 43-role standard catalog from the
+      // Cost Model Planning Heuristics doc (Brock 2026-04-21 pm). Users pick
+      // roles from this list when creating labor lines.
+      positions: materializeStandardPositions(),
     },
-    laborLines: [
-      { activity_name: 'Receiving', process_area: 'Inbound',  labor_category: 'direct', volume_source_idx: 0, volume: 15000,  base_uph: 200, annual_hours: 15000 / 200,  hourly_rate: 18.00, burden_pct: 30, most_template_id: '', most_template_name: '' },
-      { activity_name: 'Put-Away',  process_area: 'Inbound',  labor_category: 'direct', volume_source_idx: 1, volume: 15000,  base_uph: 180, annual_hours: 15000 / 180,  hourly_rate: 18.00, burden_pct: 30, most_template_id: '', most_template_name: '' },
-      { activity_name: 'Picking',   process_area: 'Outbound', labor_category: 'direct', volume_source_idx: 3, volume: 800000, base_uph: 120, annual_hours: 800000 / 120, hourly_rate: 17.50, burden_pct: 30, most_template_id: '', most_template_name: '' },
-      { activity_name: 'Packing',   process_area: 'Outbound', labor_category: 'direct', volume_source_idx: 2, volume: 80000,  base_uph: 60,  annual_hours: 80000 / 60,   hourly_rate: 16.50, burden_pct: 30, most_template_id: '', most_template_name: '' },
-      { activity_name: 'Shipping',  process_area: 'Outbound', labor_category: 'direct', volume_source_idx: 2, volume: 80000,  base_uph: 150, annual_hours: 80000 / 150,  hourly_rate: 17.00, burden_pct: 30, most_template_id: '', most_template_name: '' },
-    ],
-    indirectLaborLines: [
-      { role: 'Supervisor',    hourly_rate: 28.00, ratio_to_direct: 12, burden_pct: 35 },
-      { role: 'Quality Lead',  hourly_rate: 22.00, ratio_to_direct: 5,  burden_pct: 35 },
-    ],
+    // Labor lines seeded empty — users add activities and pick roles from
+    // the standard Position Catalog (Brock 2026-04-21 pm).
+    laborLines: [],
+    indirectLaborLines: [],
     equipmentLines: [
       // Field names match renderEquipment DOM (monthly_cost / monthly_maintenance / amort_years).
       { equipment_name: 'Reach Truck',              category: 'MHE',     quantity: 4,    acquisition_type: 'lease',    monthly_cost: 850,  acquisition_cost: 0,     monthly_maintenance: 100, amort_years: 7,  notes: '' },
@@ -7076,7 +7251,17 @@ function createEmptyModel() {
     ],
     vasLines: [],
     financial: { targetMargin: 12, volumeGrowth: 3, laborEscalation: 4, annualEscalation: 3, discountRate: 10, reinvestRate: 8 },
-    laborCosting: { defaultBurdenPct: 30, overtimePct: 5, benefitLoadPct: 15, ptoDays: 12, turnoverPct: 45 },
+    laborCosting: {
+      // Benefit Load buckets sum to defaultBurdenPct (Brock 2026-04-21 pm)
+      benefitLoadPayrollTaxesPct:  8.5,
+      benefitLoadWorkersCompPct:   3.5,
+      benefitLoadHealthWelfarePct: 10,
+      benefitLoadRetirementPct:    4,
+      benefitLoadOtherPct:         6,
+      defaultBurdenPct: 32, // sum of buckets — calc-engine consumer
+      overtimePct: 5,
+      turnoverPct: 45,
+    },
     startupLines: [],
     pricingBuckets: [
       { id: 'mgmt_fee', name: 'Management Fee', type: 'fixed', uom: 'month' },
@@ -7144,30 +7329,22 @@ function buildEnrichedPricingBuckets(summary, marginFrac, opHrs, contractYears) 
 }
 
 /**
- * Resolve the year-scheduled wage load from model.laborCosting into the
- * fraction-array shape the calc engine expects. Returns null when disabled
- * or empty — in which case the calc falls back to the flat defaultBurdenPct.
- * Brock 2026-04-21 — Phase B #1 (last finance-review defensibility gap).
+ * Sum the five Benefit Load buckets on `laborCosting` (Payroll Taxes,
+ * Workers Comp, Health & Welfare, Retirement, Other Leave & Misc) into
+ * a single Total Benefit Load %. The total is then written back to
+ * `laborCosting.defaultBurdenPct` — the value every calc-engine call
+ * consumes as the employer-side load. Brock 2026-04-21 pm — segments
+ * the prior flat Wage Load into per-line-itemable buckets.
  */
-function resolveWageLoadScheduleFrac() {
-  const lc = model && model.laborCosting;
-  if (!lc || !lc.wageLoadByYearEnabled) return null;
-  const arr = Array.isArray(lc.wageLoadByYear) ? lc.wageLoadByYear : [];
-  if (arr.length === 0) return null;
-  const out = arr.map(v => {
-    const n = Number(v);
-    if (!Number.isFinite(n) || n < 0) return null;
-    return n / 100; // UI stores as percent; engine consumes fraction
-  });
-  // If every entry is null, treat as absent.
-  if (out.every(v => v === null)) return null;
-  // Forward-fill nulls from previous year, or fall back to flat default.
-  const fallback = (Number(lc.defaultBurdenPct) || 30) / 100;
-  let last = fallback;
-  return out.map(v => {
-    if (v !== null) { last = v; return v; }
-    return last;
-  });
+function computeBenefitLoadTotal(lc) {
+  if (!lc) return 0;
+  return (
+    (Number(lc.benefitLoadPayrollTaxesPct)  || 0) +
+    (Number(lc.benefitLoadWorkersCompPct)   || 0) +
+    (Number(lc.benefitLoadHealthWelfarePct) || 0) +
+    (Number(lc.benefitLoadRetirementPct)    || 0) +
+    (Number(lc.benefitLoadOtherPct)         || 0)
+  );
 }
 
 /**

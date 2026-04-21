@@ -2559,6 +2559,31 @@ textarea.hub-input {
   font-variant-numeric: tabular-nums;
 }
 
+/* ---- Currency-input cell (Brock 2026-04-21 pm) ----
+   Wraps a $ prefix alongside a number input in a table cell so
+   wages/salaries display as currency without losing numeric editing. */
+.cm-currency-cell {
+  position: relative;
+  padding: 4px 6px;
+}
+.cm-currency-prefix {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  color: var(--ies-gray-500);
+  pointer-events: none;
+  font-weight: 500;
+}
+.cm-currency-input {
+  padding-left: 16px !important;
+}
+.cm-currency-input:disabled + .cm-currency-prefix,
+.cm-currency-cell:has(.cm-currency-input:disabled) .cm-currency-prefix {
+  color: var(--ies-gray-300);
+}
+
 /* ---- CM Phase 3 follow-up — table min-widths so columns don't cram ---- */
 /* Dense hub-datatables inside .cm-table-scroll need room to breathe.
    Without a min-width, narrow containers (or CM's 5-column Equipment table
