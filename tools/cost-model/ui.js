@@ -10,7 +10,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import * as calc from './calc.js?v=20260420-vT';
+import * as calc from './calc.js?v=20260421-vU';
 import * as api from './api.js?v=20260419-uH';
 import * as scenarios from './calc.scenarios.js?v=20260419-sZ';
 import * as monthlyCalc from './calc.monthly.js?v=20260420-vN';
@@ -1321,17 +1321,16 @@ function renderShifts() {
   // 'shifts' for persistence compatibility; only the label changes.
   const s = model.shifts || (model.shifts = {});
   const lc = model.laborCosting || (model.laborCosting = {});
-  const opHrs = calc.operatingHours(s);
-  const paidHrs = (s.hoursPerShift || 8) * (s.daysPerWeek || 5) * (s.weeksPerYear || 52);
-  // Productive Hours / FTE (per doc §2.1/2.2 — display only; cost math
-  // treats PTO as headcount uplift). Reads the new pto_pct / directUtilization
-  // fields stored as percentages (divide by 100 at read).
-  const utilFrac     = (Number(s.directUtilization ?? 85)) / 100;
-  const ptoFrac      = (Number(s.ptoPct            ?? 5))  / 100;
-  const holidayFrac  = (Number(s.holidayPct        ?? 0))  / 100;
-  const productiveHrs = Math.max(0, Math.round(
-    paidHrs * utilFrac * (1 - ptoFrac) * (1 - holidayFrac)
-  ));
+  // Brock 2026-04-21: Annual Paid Hours / FTE is a fixed US FT standard
+  // (2,080). Productive Hours / FTE = 2,080 − PTO hrs − holiday hrs. Direct
+  // Utilization is a UPH haircut (doc §2.1) and is NOT applied here.
+  const paidHrs = calc.ANNUAL_PAID_HOURS_PER_FTE;
+  const opHrs = paidHrs;
+  const ptoFrac     = (Number(s.ptoPct     ?? 5)) / 100;
+  const holidayFrac = (Number(s.holidayPct ?? 0)) / 100;
+  const ptoHrs      = Math.round(paidHrs * ptoFrac);
+  const holidayHrs  = Math.round(paidHrs * holidayFrac);
+  const productiveHrs = Math.max(0, paidHrs - ptoHrs - holidayHrs);
   const positions = Array.isArray(s.positions) ? s.positions : [];
   const directCount = positions.filter(p => p.category === 'direct').length;
   const indirectCount = positions.filter(p => p.category === 'indirect').length;
@@ -1374,58 +1373,22 @@ function renderShifts() {
     </div>
 
     <!-- Shift Structure -->
-    <!-- Brock 2026-04-20: these are PER FTE values, not facility operating
-         schedule. Labor Build-Up Logic doc appendix: "For a US FT employee
-         on 8-5 M-F: 8 × 5 × 52 = 2,080." A 24/7 facility still has FTEs on
-         2,080-hr schedules — multiple FTEs rotate to cover the calendar. -->
+    <!-- Brock 2026-04-21: Annual Paid Hours / FTE is hardcoded to the US FT
+         standard 2,080 (8 × 5 × 52). Every legitimate FT pattern — 4×10,
+         9/80, 24/7-with-rotation — sums to the same 2,080. Hours/Shift,
+         Days/Week, Weeks/Year inputs have been removed because they only
+         served to produce non-2,080 results (i.e. errors). Productive Hours
+         = 2,080 − PTO hrs − Holiday hrs; PF&D (Direct Utilization) is a UPH
+         haircut, not a paid-hours haircut. -->
     <div class="hub-card mb-4">
       <div style="display:flex;align-items:baseline;justify-content:space-between;margin:0 0 12px;gap:12px;">
-        <div class="text-subtitle" style="margin:0;">Shift Structure <span style="font-size:11px;color:var(--ies-gray-400);font-weight:500;">(per FTE)</span></div>
-        <span class="hub-field__hint">Each FTE's scheduled work pattern, not facility operating days. Standard US FT: 8 × 5 × 52 = 2,080.</span>
+        <div class="text-subtitle" style="margin:0;">Shift Structure</div>
+        <span class="hub-field__hint">US FT reference: 2,080 paid hrs / FTE. PTO &amp; holidays subtract for Productive.</span>
       </div>
-      ${(() => {
-        // Inline warning if the stored values diverge from the 2,080-hr
-        // standard (8 × 5 × 52) per Labor Build-Up Logic doc appendix.
-        // Brock 2026-04-20: 2,080 is the starting standard; 8.5 hrs/shift
-        // is non-standard even when paid-lunch is common.
-        const h = Number(s.hoursPerShift) || 8;
-        const d = Number(s.daysPerWeek) || 5;
-        const w = Number(s.weeksPerYear ?? 52);
-        const annual = h * d * w;
-        const looksWrong = Math.abs(annual - 2080) > 1;
-        if (!looksWrong) return '';
-        const driftParts = [];
-        if (h !== 8) driftParts.push(`Hours/Shift = ${h}`);
-        if (d !== 5) driftParts.push(`Days/Week = ${d}`);
-        if (w !== 52) driftParts.push(`Weeks/Year = ${w}`);
-        return `
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;margin-bottom:12px;background:#fff8e6;border:1px solid #f3d675;border-radius:8px;font-size:12px;">
-            <div>
-              <strong>Heads up:</strong> ${driftParts.join(', ')} produces <strong>${annual.toLocaleString()} hrs/FTE</strong>
-              — the reference standard per Labor Build-Up Logic doc is <strong>2,080</strong> (8 × 5 × 52).
-              A 24/7 facility still schedules each FTE for 2,080 hrs/year; multiple FTEs rotate to cover the calendar.
-              Correcting these will also fix Indirect Labor FTE counts and cost downstream.
-            </div>
-            <button class="hub-btn hub-btn-primary hub-btn-sm" data-action="reset-fte-shift-defaults" style="white-space:nowrap;">Reset to 2,080 (8 × 5 × 52)</button>
-          </div>
-        `;
-      })()}
       <div style="display:grid;grid-template-columns:repeat(4, minmax(0, 1fr));gap:12px;">
         <div class="hub-field">
-          <label class="hub-field__label" title="Number of shifts the FACILITY runs per day (1-3). Does not affect per-FTE hours — each FTE works one shift.">Shifts / Day <span style="color:var(--ies-gray-400);font-weight:400;">(facility)</span></label>
+          <label class="hub-field__label" title="Number of shifts the FACILITY runs per day (1-3). Facility operating descriptor — does not affect the 2,080 paid hours per FTE.">Shifts / Day <span style="color:var(--ies-gray-400);font-weight:400;">(facility)</span></label>
           <input class="hub-input" type="number" value="${s.shiftsPerDay || 1}" min="1" max="3" step="1" data-field="shifts.shiftsPerDay" data-type="number" />
-        </div>
-        <div class="hub-field">
-          <label class="hub-field__label" title="Length of ONE shift an FTE is SCHEDULED for (excludes unpaid meal). Reference standard = 8.0. Setting 8.5 implies paid lunch or additional scheduled time; confirm with payroll before deviating from 8.">Hours / Shift <span style="color:var(--ies-gray-400);font-weight:400;">(per FTE)</span></label>
-          <input class="hub-input" type="number" value="${s.hoursPerShift || 8}" min="4" max="12" step="0.5" data-field="shifts.hoursPerShift" data-type="number" />
-        </div>
-        <div class="hub-field">
-          <label class="hub-field__label" title="Days each FTE works per week. Typical 5 (M-F) or 4 (compressed 4x10). NOT facility operating days — a 7-day facility still has FTEs on 5-day schedules.">Days / Week <span style="color:var(--ies-gray-400);font-weight:400;">(per FTE)</span></label>
-          <input class="hub-input" type="number" value="${s.daysPerWeek || 5}" min="3" max="5" step="1" data-field="shifts.daysPerWeek" data-type="number" />
-        </div>
-        <div class="hub-field">
-          <label class="hub-field__label" title="Weeks per year an FTE is scheduled. Standard = 52 (PTO and holidays are handled separately as headcount uplift / hours reduction).">Weeks / Year <span style="color:var(--ies-gray-400);font-weight:400;">(per FTE)</span></label>
-          <input class="hub-input" type="number" value="${s.weeksPerYear ?? 52}" min="48" max="52" step="1" data-field="shifts.weeksPerYear" data-type="number" />
         </div>
         <div class="hub-field">
           <label class="hub-field__label" title="Pay premium applied to 2nd-shift hours">2nd Shift Premium %</label>
@@ -1435,11 +1398,12 @@ function renderShifts() {
           <label class="hub-field__label" title="Pay premium applied to 3rd-shift hours">3rd Shift Premium %</label>
           <input class="hub-input" type="number" value="${s.shift3Premium || 0}" min="0" max="50" step="0.5" data-field="shifts.shift3Premium" data-type="number" />
         </div>
-        <div class="cm-opshours-card" style="margin:0;" title="Scheduled hours per FTE per year (hours × days × weeks). Doc reference: 2,080 for standard US FT.">
+        <div></div>
+        <div class="cm-opshours-card" style="margin:0;" title="US FT standard — 2,080 paid hrs/yr per FTE. Constant across all facility patterns (8×5×52, 4×10, 24/7-with-rotation all sum to 2,080).">
           <div class="cm-opshours-card__label">Annual Paid Hours / FTE</div>
-          <div class="cm-opshours-card__value">${opHrs.toLocaleString()}</div>
+          <div class="cm-opshours-card__value">${paidHrs.toLocaleString()}</div>
         </div>
-        <div class="cm-opshours-card" style="margin:0;" title="Scheduled × direct_utilization × (1-PTO%) × (1-holiday%). Display only — cost math treats PTO as headcount uplift per doc §2.2.">
+        <div class="cm-opshours-card" style="margin:0;" title="2,080 − PTO hours − Holiday hours. PTO ${Math.round(ptoFrac*100)}% = ${ptoHrs} hrs; Holiday ${Math.round(holidayFrac*100)}% = ${holidayHrs} hrs.">
           <div class="cm-opshours-card__label">Productive Hours / FTE</div>
           <div class="cm-opshours-card__value" style="color:var(--ies-blue);">${productiveHrs.toLocaleString()}</div>
         </div>
@@ -1494,6 +1458,52 @@ function renderShifts() {
         </div>
       </div>
     </div>
+
+    <!-- Year-Scheduled Wage Load (Brock 2026-04-21 — closes Phase B #1) -->
+    <!-- Per Labor Build-Up Logic doc §3.2: wage load drifts year-over-year
+         as health costs escalate, workers-comp renews, and retirement match
+         caps adjust. Reference schedule is Y1 29.99% → Y5 31.33%. When
+         enabled, this overrides the flat "Wage Load %" above per year.
+         When blank or disabled, the flat value applies to every year. -->
+    ${(() => {
+      const sched = Array.isArray(lc.wageLoadByYear) ? lc.wageLoadByYear : [];
+      const enabled = Boolean(lc.wageLoadByYearEnabled);
+      const years = 5;
+      const defaults = [29.99, 30.32, 30.65, 31.00, 31.33]; // doc §3.2
+      return `
+        <div class="hub-card mb-4">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;margin:0 0 6px;gap:12px;flex-wrap:wrap;">
+            <div>
+              <div class="text-subtitle" style="margin:0;">Year-Scheduled Wage Load <span style="font-size:11px;color:var(--ies-gray-400);font-weight:500;">(optional)</span></div>
+              <div class="hub-field__hint">Per-year wage-load overrides. Unchecked = flat ${(lc.defaultBurdenPct ?? 30)}% applies to all years. Per doc §3.2.</div>
+            </div>
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+              <input type="checkbox" data-field="laborCosting.wageLoadByYearEnabled" data-type="checkbox"${enabled ? ' checked' : ''} />
+              <span>Use year schedule</span>
+            </label>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(${years + 1}, minmax(0, 1fr));gap:12px;align-items:end;">
+            ${Array.from({ length: years }).map((_, i) => {
+              const v = sched[i];
+              const val = (Number.isFinite(Number(v)) && v !== '' && v !== null) ? v : '';
+              return `
+                <div class="hub-field">
+                  <label class="hub-field__label">Year ${i + 1} %</label>
+                  <input class="hub-input" type="number" min="0" max="100" step="0.01"
+                    value="${val}"
+                    placeholder="${defaults[i]}"
+                    data-array="laborCosting.wageLoadByYear" data-idx="${i}" data-field="_direct" data-type="number"
+                    ${enabled ? '' : 'disabled title="Check \'Use year schedule\' to edit"'} />
+                </div>
+              `;
+            }).join('')}
+            <div style="display:flex;align-items:center;">
+              <button class="hub-btn hub-btn-sm" data-action="seed-wage-load-schedule"${enabled ? '' : ' disabled'} title="Populate Y1-Y5 from Labor Build-Up Logic doc §3.2 reference schedule (29.99 → 31.33)">Use reference</button>
+            </div>
+          </div>
+        </div>
+      `;
+    })()}
 
     <!-- Position Catalog -->
     <div class="hub-card mb-4">
@@ -3604,6 +3614,7 @@ function renderSummary() {
   const enrichedPricingBuckets = pricingSnapshot.buckets;
   const unassignedCost = pricingSnapshot.bucketCosts['_unassigned'] || 0;
   const unassignedCount = pricingSnapshot.unassignedCount;
+  const wageLoadScheduleFrac = resolveWageLoadScheduleFrac();
   const projResult = calc.buildYearlyProjections({
     years: contractYears,
     baseLaborCost: summary.laborCost,
@@ -3635,6 +3646,11 @@ function renderSummary() {
     // engine can compute per-line labor cost using Phase 4b profiles.
     _calcHeur: calcHeur,
     marketLaborProfile: currentMarketLaborProfile,
+    // Phase B #1 — year-scheduled wage load (Brock 2026-04-21). When
+    // laborCosting.wageLoadByYearEnabled is checked and at least one year
+    // is set, the calc engine uses the per-year override instead of the
+    // flat defaultBurdenPct.
+    wageLoadByYear: wageLoadScheduleFrac,
     // Diagnostic: carries which keys came from snapshot vs override vs default.
     _heuristicsSource: calcHeur.used,
   });
@@ -3836,7 +3852,8 @@ function renderSummary() {
         ${renderMetricCard('GP / Order', calc.formatCurrency(metrics.contribPerOrder, {decimals: 2}), metrics.contribPerOrder > 0, 'Y1 Gross Profit ÷ Y1 Orders. GP is Revenue − COGS (site-level direct costs only).')}
         ${renderMetricCard('Op Leverage', calc.formatPct(metrics.opLeveragePct), null, '(Facility + Overhead + Start-Up Amort) / Y1 Total Cost. Higher = more sensitive to volume swings.')}
         ${renderMetricCard('Contract Value', calc.formatCurrency(metrics.contractValue, {compact: true}), null, `Sum of Revenue across ${contractYears}-year horizon. a.k.a. Total Contract Value (TCV).`)}
-        ${renderMetricCard('Total Investment', calc.formatCurrency(metrics.totalInvestment, {compact: true}), null, `Startup capital $${(summary.startupCapital/1000).toFixed(0)}K + Equipment capital $${(summary.equipmentCapital/1000).toFixed(0)}K. The Y0 outflow used as the anchor for MIRR/NPV/Payback.`)}
+        ${renderMetricCard('Total Investment', calc.formatCurrency(metrics.totalInvestment, {compact: true}), null, `Startup capital $${(summary.startupCapital/1000).toFixed(0)}K + Equipment capital $${(summary.equipmentCapital/1000).toFixed(0)}K. EXCLUDES TI Upfront (rolled into facility rent via amortization). The Y0 outflow used as the anchor for MIRR/NPV/Payback.`)}
+        ${(summary.tiUpfront || 0) > 0 ? renderMetricCard('TI Upfront', calc.formatCurrency(summary.tiUpfront, {compact: true}), null, `Tenant Improvement outlay at Y0 (dock levelers, office build-out, CCTV, access control, etc.) — per Asset Defaults Guidance, TI does NOT hit Total Investment or D&A. Instead it amortizes over the ${(model.projectDetails?.contractTerm || 5)}-year contract at $${(((summary.tiAmortAnnual)||0)/1000).toFixed(0)}K/yr and shows as a line in Facility Cost.`) : ''}
       </div>
     </div>
 
@@ -4010,6 +4027,27 @@ function bindSectionEvents(section, container) {
           arr = model[arrPath];
         }
         const idx = parseInt(input.dataset.idx);
+        // Scalar-array override (data-field="_direct"): the array holds raw
+        // values, not objects. Auto-create if absent and pad with null out
+        // to the requested idx so later indices can fill in sparsely. Used
+        // by Labor Factors → Year-Scheduled Wage Load (Brock 2026-04-21).
+        if (input.dataset.field === '_direct') {
+          if (!Array.isArray(arr)) {
+            const parts = arrPath.split('.');
+            const last = parts.pop();
+            const parent = parts.length
+              ? parts.reduce((o, k) => { o[k] = o[k] || {}; return o[k]; }, model)
+              : model;
+            parent[last] = [];
+            arr = parent[last];
+          }
+          while (arr.length <= idx) arr.push(null);
+          arr[idx] = (val === '' || val === null) ? null : val;
+          isDirty = true;
+          if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+          refreshNavCompletion();
+          return;
+        }
         if (arr && arr[idx] !== undefined) {
           arr[idx][field] = val;
           // Labor: recompute annual_hours + re-render so Hrs/Yr, FTE, Annual Cost, override badge refresh
@@ -4967,6 +5005,7 @@ function computeWhatIfPreview(overlay) {
       project_id: model.id || 0,
       _calcHeur: calcHeur,
       marketLaborProfile: currentMarketLaborProfile,
+      wageLoadByYear: resolveWageLoadScheduleFrac(),
     });
 
     // Aggregate over the projection horizon
@@ -5900,16 +5939,13 @@ function handleAction(action, idx, btn) {
       renderSection();
       return;
     }
-    case 'reset-fte-shift-defaults': {
-      // Brock 2026-04-20: Shift Structure values are PER FTE, not facility
-      // operating schedule. Reset to the 2,080-hr standard (8 × 5 × 52)
-      // per Labor Build-Up Logic doc appendix. Preserves shiftsPerDay
-      // (facility property, orthogonal to per-FTE hours).
-      const s = model.shifts || (model.shifts = {});
-      s.hoursPerShift = 8;
-      s.daysPerWeek = 5;
-      s.weeksPerYear = 52;
-      break; // fall through to re-render
+    case 'seed-wage-load-schedule': {
+      // Brock 2026-04-21: Populate Year-Scheduled Wage Load inputs with the
+      // Labor Build-Up Logic doc §3.2 reference schedule (29.99 → 31.33).
+      const lc = model.laborCosting || (model.laborCosting = {});
+      lc.wageLoadByYear = [29.99, 30.32, 30.65, 31.00, 31.33];
+      lc.wageLoadByYearEnabled = true;
+      break;
     }
     case 'add-overhead':
       model.overheadLines.push({ category: '', description: '', cost_type: 'monthly', monthly_cost: 0, pricing_bucket: defaultBucketFor('overhead') });
@@ -6538,6 +6574,7 @@ function ensureMonthlyBundle() {
       project_id: model.id || 0,
       _calcHeur: calcHeur,
       marketLaborProfile: currentMarketLaborProfile,
+      wageLoadByYear: resolveWageLoadScheduleFrac(),
       _heuristicsSource: calcHeur.used,
     });
     if (projResult && projResult.monthlyBundle) _lastMonthlyBundle = projResult.monthlyBundle;
@@ -7104,6 +7141,33 @@ function defaultBucketFor(lineType) {
  */
 function buildEnrichedPricingBuckets(summary, marginFrac, opHrs, contractYears) {
   return computePricingSnapshot(summary, marginFrac, opHrs, contractYears).buckets;
+}
+
+/**
+ * Resolve the year-scheduled wage load from model.laborCosting into the
+ * fraction-array shape the calc engine expects. Returns null when disabled
+ * or empty — in which case the calc falls back to the flat defaultBurdenPct.
+ * Brock 2026-04-21 — Phase B #1 (last finance-review defensibility gap).
+ */
+function resolveWageLoadScheduleFrac() {
+  const lc = model && model.laborCosting;
+  if (!lc || !lc.wageLoadByYearEnabled) return null;
+  const arr = Array.isArray(lc.wageLoadByYear) ? lc.wageLoadByYear : [];
+  if (arr.length === 0) return null;
+  const out = arr.map(v => {
+    const n = Number(v);
+    if (!Number.isFinite(n) || n < 0) return null;
+    return n / 100; // UI stores as percent; engine consumes fraction
+  });
+  // If every entry is null, treat as absent.
+  if (out.every(v => v === null)) return null;
+  // Forward-fill nulls from previous year, or fall back to flat default.
+  const fallback = (Number(lc.defaultBurdenPct) || 30) / 100;
+  let last = fallback;
+  return out.map(v => {
+    if (v !== null) { last = v; return v; }
+    return last;
+  });
 }
 
 /**

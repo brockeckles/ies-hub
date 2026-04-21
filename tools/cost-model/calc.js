@@ -21,42 +21,53 @@ import * as monthly from './calc.monthly.js?v=20260420-vN';
 // ============================================================
 
 /**
- * Calculate annual operating hours from shift configuration.
+ * Annual paid hours per FTE — the US full-time reference standard.
  *
- * Returns SCHEDULED hours per FTE (2080 for 8×5×52). Does NOT subtract PTO or
- * holidays — those are applied downstream via headcount uplift (see
- * ptoHeadcountUplift / holidayUplift below). Per Labor Build-Up Logic doc
- * (2026-04-20 Brock): "When you're paid for the full shift, wage × scheduled
- * hours is the right payroll number." Setting weeksPerYear = 48 to "account
- * for PTO" double-counts.
+ * Returns the CONSTANT `2080` regardless of `shifts` input. Per Brock
+ * 2026-04-21: 8 × 5 × 52 = 2,080 IS the standard; every legitimate FT pattern
+ * (including 4×10 compressed workweeks) sums to the same number. A 24/7
+ * facility still schedules each FTE for 2,080 hrs/year — multiple FTEs rotate
+ * to cover the calendar.
  *
- * @param {import('./types.js?v=20260418-sK').ShiftConfig} shifts
- * @returns {number} annual scheduled hours per person
+ * Accepts `shifts` for signature compatibility with existing callers; the
+ * argument is ignored. PTO and holidays are applied downstream as headcount
+ * uplift / hours reduction (see `ptoHeadcountUplift` / `holidayUplift`), not
+ * here.
+ *
+ * @param {import('./types.js?v=20260418-sK').ShiftConfig} [shifts] — ignored
+ * @returns {number} 2080
  */
 export function operatingHours(shifts) {
-  const h = shifts.hoursPerShift || 8;
-  const d = shifts.daysPerWeek || 5;
-  const w = shifts.weeksPerYear ?? 52;
-  return h * d * w;
+  return 2080;
 }
 
+/** US FT paid-hours constant — exported so UI and tests can reference it directly. */
+export const ANNUAL_PAID_HOURS_PER_FTE = 2080;
+
 /**
- * Productive hours per FTE — for DISPLAY/REPORTING only. Not used directly in
- * cost math because the Build-Up Logic model treats PTO as headcount uplift
- * (you hire more people) rather than as hours reduction (each person works
- * less). This helper tells the user how many hours of billable work each FTE
- * actually delivers after PF&D, PTO, and holidays.
+ * Productive hours per FTE — for DISPLAY/REPORTING only. Defined as the
+ * number of paid hours left after subtracting PTO hours and holiday hours
+ * from the 2,080 standard:
  *
- * @param {import('./types.js?v=20260418-sK').ShiftConfig} shifts
- * @param {{ directUtilization?: number, ptoPct?: number, holidayPct?: number }} [projectAssumptions]
+ *   productive = 2080 − (2080 × ptoPct) − (2080 × holidayPct)
+ *              = 2080 × (1 − ptoPct − holidayPct)
+ *
+ * Direct Utilization (PF&D haircut) is NOT applied here. Per Build-Up Logic
+ * doc §2.1/§5.2, direct utilization is a haircut on UPH (see `effectiveUPH`),
+ * not on paid hours — the employee is still paid for the full 2,080; they
+ * just deliver less measured work per hour. Brock 2026-04-21: "the logic used
+ * to drive the two blue tiles is faulty. Right tile should be
+ * [2080 − PTO hours − holiday hours]."
+ *
+ * @param {import('./types.js?v=20260418-sK').ShiftConfig} [shifts] — ignored
+ * @param {{ ptoPct?: number, holidayPct?: number }} [projectAssumptions]
  * @returns {number}
  */
 export function productiveHoursPerFTE(shifts, projectAssumptions = {}) {
-  const scheduled = operatingHours(shifts);
-  const utilization = projectAssumptions.directUtilization ?? 0.85;
   const ptoPct = projectAssumptions.ptoPct ?? 0.05;
   const holidayPct = projectAssumptions.holidayPct ?? 0;
-  return scheduled * utilization * (1 - ptoPct) * (1 - holidayPct);
+  const net = Math.max(0, 1 - ptoPct - holidayPct);
+  return ANNUAL_PAID_HOURS_PER_FTE * net;
 }
 
 // ============================================================
@@ -1135,6 +1146,12 @@ export function computeSummary(params) {
     equipmentCapital: totalEquipmentCapital(params.equipmentLines),
     equipmentAmort: totalEquipmentAmort(params.equipmentLines),
     startupCapital: totalStartupCapital(params.startupLines),
+    // Y0 TI outlay (dock levelers, office build-out, CCTV, etc.). Intentionally
+    // NOT folded into equipmentCapital / totalInvestment — TI rolls into
+    // facility rent via `tiAmortAnnual`. Surfaced here so Summary can show it
+    // as a distinct tile without reaching back into equipmentLines.
+    tiUpfront: totalEquipmentTiUpfront(params.equipmentLines),
+    tiAmortAnnual: tiAmort,
   };
 }
 

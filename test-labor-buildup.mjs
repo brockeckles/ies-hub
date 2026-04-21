@@ -40,27 +40,45 @@ function eq(actual, expected) {
 // HOURS CHAIN
 // ─────────────────────────────────────────────────────────
 
-t('operatingHours = hours × days × weeks (no PTO subtraction)', () => {
+t('operatingHours is the US FT constant 2,080 regardless of input (Brock 2026-04-21)', () => {
   eq(operatingHours({ hoursPerShift: 8, daysPerWeek: 5, weeksPerYear: 52 }), 2080);
 });
 
-t('operatingHours defaults: 8 × 5 × 52 = 2080 when fields missing', () => {
+t('operatingHours returns 2080 for empty shifts', () => {
   eq(operatingHours({}), 2080);
 });
 
-t('productiveHoursPerFTE = scheduled × util × (1-pto) × (1-holiday)', () => {
-  // 2080 × 0.85 × (1 - 0.05) × (1 - 0.03) = 2080 × 0.85 × 0.95 × 0.97 = 1629.4
-  const h = productiveHoursPerFTE(
-    { hoursPerShift: 8, daysPerWeek: 5, weeksPerYear: 52 },
-    { directUtilization: 0.85, ptoPct: 0.05, holidayPct: 0.03 }
-  );
-  approx(h, 2080 * 0.85 * 0.95 * 0.97, 0.5);
+t('operatingHours returns 2080 even if caller passes non-standard hours (decoupled)', () => {
+  // A user who types 8.5×7×51 = 3,034.5 into the model should STILL get 2,080
+  // back. The function is now a named constant; legacy shift fields are
+  // ignored (per Brock 2026-04-21: "eliminate the reset button, 2,080 IS the
+  // default"). Downstream FTE math uses 2,080 as the denominator.
+  eq(operatingHours({ hoursPerShift: 8.5, daysPerWeek: 7, weeksPerYear: 51 }), 2080);
+});
+
+t('productiveHoursPerFTE = 2080 − PTO hrs − Holiday hrs (no util haircut)', () => {
+  // PTO 5% + Holiday 3% → 2080 × (1 − 0.05 − 0.03) = 2080 × 0.92 = 1913.6
+  const h = productiveHoursPerFTE({}, { ptoPct: 0.05, holidayPct: 0.03 });
+  approx(h, 2080 * 0.92, 0.5);
 });
 
 t('productiveHoursPerFTE uses sensible defaults when omitted', () => {
-  // 2080 × 0.85 × 0.95 × 1.0 = 1679.6
+  // Default PTO 5%, Holiday 0% → 2080 × 0.95 = 1976
   const h = productiveHoursPerFTE({});
-  approx(h, 2080 * 0.85 * 0.95, 1);
+  approx(h, 2080 * 0.95, 0.5);
+});
+
+t('productiveHoursPerFTE does NOT apply direct utilization (that is a UPH haircut)', () => {
+  // Passing directUtilization should have NO effect — the field is not read
+  // here. Per doc §2.1/§5.2, PF&D is applied via effectiveUPH to UPH, not to
+  // paid hours.
+  const withUtil = productiveHoursPerFTE({}, { ptoPct: 0.05, holidayPct: 0, directUtilization: 0.50 });
+  const withoutUtil = productiveHoursPerFTE({}, { ptoPct: 0.05, holidayPct: 0 });
+  eq(withUtil, withoutUtil);
+});
+
+t('productiveHoursPerFTE clamps when PTO + holiday > 100%', () => {
+  eq(productiveHoursPerFTE({}, { ptoPct: 0.80, holidayPct: 0.30 }), 0);
 });
 
 t('effectiveUPH = baseUph × directUtilization (PF&D haircut)', () => {

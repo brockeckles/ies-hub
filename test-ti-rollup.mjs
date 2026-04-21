@@ -130,6 +130,23 @@ t('computeSummary: facilityCost includes TI amortization when equipmentLines are
   near(s.facilityCost, 5516800, 1, 'facilityCost with TI');
 });
 
+t('computeSummary: exposes tiUpfront + tiAmortAnnual as distinct summary fields (Brock 2026-04-21)', () => {
+  const s = computeSummary({
+    laborLines: [], indirectLaborLines: [], equipmentLines: MIXED_LINES,
+    overheadLines: [], vasLines: [], startupLines: [],
+    facility: FACILITY, shifts: { shiftsPerDay: 1, hoursPerShift: 8, daysPerWeek: 5, weeksPerYear: 52 },
+    facilityRate: RATE, utilityRate: UTIL,
+    contractYears: 5, targetMarginPct: 12, annualOrders: 0,
+  });
+  // 99K + 450K + 60K = 609K upfront
+  near(s.tiUpfront, 609000, 1, 'summary.tiUpfront');
+  // 609K / 5 = 121,800 amort/yr
+  near(s.tiAmortAnnual, 121800, 1, 'summary.tiAmortAnnual');
+  // equipmentCapital must NOT include TI (it's TI, not capital) — only the
+  // capital line (RF Handheld: 20 × $2,850 = $57,000) should be here
+  near(s.equipmentCapital, 57000, 1, 'summary.equipmentCapital excludes TI');
+});
+
 t('computeSummary: zero contractYears defaults to 5 via clamp', () => {
   const s = computeSummary({
     laborLines: [], indirectLaborLines: [], equipmentLines: MIXED_LINES,
