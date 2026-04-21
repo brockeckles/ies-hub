@@ -35,7 +35,7 @@ function showConfirm(message, opts = {}) {
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:9999;';
     const okBg = opts.danger ? '#dc2626' : 'var(--ies-blue-600)';
     overlay.innerHTML = `
-      <div style="background:white;border-radius:8px;padding:24px;min-width:420px;max-width:90vw;">
+      <div style="background:white;border-radius: 10px;padding:24px;min-width:420px;max-width:90vw;">
         <div style="white-space:pre-line;font-size:14px;line-height:1.45;">${String(message).replace(/</g, '&lt;')}</div>
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
           <button class="hub-btn" data-ans="0">${opts.cancelLabel || 'Cancel'}</button>
@@ -68,7 +68,7 @@ function showPrompt(message, defaultValue = '') {
     overlay.className = 'hub-modal-overlay';
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:9999;';
     overlay.innerHTML = `
-      <div style="background:white;border-radius:8px;padding:24px;min-width:480px;max-width:90vw;">
+      <div style="background:white;border-radius: 10px;padding:24px;min-width:480px;max-width:90vw;">
         <div style="white-space:pre-line;font-size:14px;line-height:1.45;margin-bottom:10px;">${String(message).replace(/</g, '&lt;')}</div>
         <input class="hub-input" data-prompt-input style="width:100%;font-size:14px;padding:6px 8px;" value="${String(defaultValue).replace(/"/g, '&quot;')}" />
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
@@ -337,7 +337,7 @@ const SECTIONS = [
   { key: 'equipment',      label: 'Equipment',          icon: 'truck',         group: 'cost' },
   { key: 'overhead',       label: 'Overhead',           icon: 'layers',        group: 'cost' },
   { key: 'vas',            label: 'VAS',                icon: 'star',          group: 'cost' },
-  { key: 'startup',        label: 'Start-Up / Capital', icon: 'zap',           group: 'cost' },
+  { key: 'startup',        label: 'Start-Up',           icon: 'zap',           group: 'cost' },
   // Output — what the model produces
   { key: 'summary',        label: 'Summary',            icon: 'pie-chart',     group: 'output' },
   { key: 'pricing',        label: 'Pricing',            icon: 'tag',           group: 'output' },
@@ -768,7 +768,7 @@ function showCmToast(message, level) {
   if (existing) existing.remove();
   const el = document.createElement('div');
   el.id = 'cm-toast';
-  el.style.cssText = `position:fixed;bottom:24px;right:24px;padding:12px 16px;border-radius:8px;border:1px solid ${color};background:${bg};color:${color};font-size:13px;font-weight:600;z-index:9999;max-width:400px;box-shadow:0 4px 12px rgba(0,0,0,.12);`;
+  el.style.cssText = `position:fixed;bottom:24px;right:24px;padding:12px 16px;border-radius: 10px;border:1px solid ${color};background:${bg};color:${color};font-size:13px;font-weight:600;z-index:9999;max-width:400px;box-shadow:0 4px 12px rgba(0,0,0,.12);`;
   el.textContent = message;
   document.body.appendChild(el);
   setTimeout(() => { if (el.parentNode) el.remove(); }, 5000);
@@ -1188,10 +1188,18 @@ function refreshNavCompletion() {
     if (!sections.length) continue;
     let completeCount = 0;
     let inputSectionCount = 0;
+    // 2026-04-21 live-walkthrough fix: OUTPUT group has 4 sections (Summary/
+    // Pricing/Timeline/Scenarios) but only one has status != 'na' (pricing).
+    // Previous logic showed "1/1" which read as a bug — user expects 4/4 when
+    // everything is rendered. Fix: count derived-view sections as complete,
+    // use the total section count as the denominator so the chip reflects
+    // what the user sees in the list.
+    let totalComplete = 0;
     for (const s of sections) {
       const status = _sectionCompleteness(s.key);
       if (status !== 'na') inputSectionCount += 1;
       if (status === 'complete') completeCount += 1;
+      if (status === 'complete' || status === 'na') totalComplete += 1;
       // Per-section check dot — 'na' renders as complete (derived views).
       const check = rootEl.querySelector(`#cm-check-${s.key}`);
       if (check) check.classList.toggle('complete', status === 'complete' || status === 'na');
@@ -1210,8 +1218,10 @@ function refreshNavCompletion() {
     }
     const count = groupEl.querySelector('.hub-nav-group__count');
     if (count) {
-      if (inputSectionCount === 0) count.textContent = '';
-      else count.textContent = `${completeCount}/${inputSectionCount}`;
+      // Denominator = total sections in the group (input + derived).
+      // Numerator  = sections that are complete OR 'na' (derived views
+      // always count as rendered so they don't drag the count down).
+      count.textContent = `${totalComplete}/${sections.length}`;
     }
   }
 }
@@ -1222,17 +1232,22 @@ function renderGroupedNav() {
     const sections = grouped.get(g.key) || [];
     if (!sections.length) return '';
     const collapsed = _collapsedNavGroups.has(g.key);
-    // 'na' = derived view (no input to complete) — exclude from denominator,
-    // don't count toward partial/empty. Groups that are all 'na' (Output /
-    // Analysis) render as a clean green dot with no "n/m" count.
+    // 2026-04-21 audit: previously dropped derived views ('na') from the
+    // denominator so OUTPUT (1 input + 3 derived) read "1/1" — misleading
+    // when the user counts 4 items in the list. Now show total/total with
+    // derived views counting as complete so the chip matches what's visible.
     const inputSections = sections.filter(s => _sectionCompleteness(s.key) !== 'na');
     const completeCount = inputSections.filter(s => _sectionCompleteness(s.key) === 'complete').length;
     const hasInputs = inputSections.length > 0;
+    const totalComplete = sections.filter(s => {
+      const st = _sectionCompleteness(s.key);
+      return st === 'complete' || st === 'na';
+    }).length;
     const groupDot = !hasInputs                           ? 'complete'
                     : completeCount === inputSections.length ? 'complete'
                     : completeCount > 0                   ? 'partial'
                     : 'empty';
-    const countLabel = hasInputs ? `${completeCount}/${inputSections.length}` : '';
+    const countLabel = `${totalComplete}/${sections.length}`;
     return `
       <div class="hub-nav-group${collapsed ? ' is-collapsed' : ''}" data-nav-group="${g.key}">
         <button type="button" class="hub-nav-group__header" data-nav-group-toggle="${g.key}" title="${g.description}">
@@ -3764,7 +3779,7 @@ function renderPricingBuckets() {
         </table>
       </div>
 
-      <div style="margin-top:14px;padding:12px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;font-size:12px;color:#1e3a8a;line-height:1.5;">
+      <div style="margin-top:14px;padding:12px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius: 10px;font-size:12px;color:#1e3a8a;line-height:1.5;">
         <strong>What happens next:</strong> when you build Labor, Equipment, Overhead, VAS, or Startup lines, each line picks one of these buckets to route its cost into. Buckets with no assigned lines are allowed — they'll just show $0 in the Pricing section. Missing a bucket? Add it here, then go back and re-assign the line.
       </div>
     `}
@@ -3966,15 +3981,15 @@ function renderPricing() {
         <span class="cm-implications-subtitle">Closed-form estimate of how the current overrides propagate through the P&amp;L. Exact numbers flow into Summary + Multi-Year P&amp;L.</span>
       </div>
       <div class="cm-implications-tiles">
+        <!-- 2026-04-21 audit: merged "Y1 Revenue Δ" + "Y1 EBITDA Δ" into one
+             tile. Revenue-side overrides flow 1:1 to EBITDA (no offsetting
+             cost impact), so showing both as separate tiles produced identical
+             values side-by-side — read as noise, not insight. Single tile
+             with a dual-basis subtitle is cleaner. -->
         <div class="cm-impl-tile ${implications.y1RevDelta < 0 ? 'cm-impl-down' : implications.y1RevDelta > 0 ? 'cm-impl-up' : ''}">
-          <div class="cm-impl-tile-label">Y1 Revenue Δ</div>
+          <div class="cm-impl-tile-label">Y1 Revenue &amp; EBITDA Δ</div>
           <div class="cm-impl-tile-value">${implications.y1RevDelta >= 0 ? '+' : ''}${calc.formatCurrency(implications.y1RevDelta, { compact: true })}</div>
-          <div class="cm-impl-tile-sub">annual, at current volumes</div>
-        </div>
-        <div class="cm-impl-tile ${implications.y1EbitdaDelta < 0 ? 'cm-impl-down' : implications.y1EbitdaDelta > 0 ? 'cm-impl-up' : ''}">
-          <div class="cm-impl-tile-label">Y1 EBITDA Δ</div>
-          <div class="cm-impl-tile-value">${implications.y1EbitdaDelta >= 0 ? '+' : ''}${calc.formatCurrency(implications.y1EbitdaDelta, { compact: true })}</div>
-          <div class="cm-impl-tile-sub">revenue-only: flows 1:1 to EBITDA</div>
+          <div class="cm-impl-tile-sub">annual, @ current volumes · 1:1 revenue→EBITDA</div>
         </div>
         <div class="cm-impl-tile ${implications.fiveYrNpvDelta < 0 ? 'cm-impl-down' : implications.fiveYrNpvDelta > 0 ? 'cm-impl-up' : ''}">
           <div class="cm-impl-tile-label">Contract-Life NPV Δ</div>
@@ -4175,7 +4190,7 @@ function renderPricing() {
       .hub-badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.3px; }
       .hub-badge-info { background:rgba(0,71,171,0.1); color:var(--ies-blue); }
       .hub-badge-success { background:rgba(32,201,151,0.1); color:#0d9668; }
-      .cm-rate-source { display:inline-block; margin-left:6px; padding:1px 6px; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.3px; color:var(--ies-gray-500); background:var(--ies-gray-100); border-radius:8px; cursor:help; }
+      .cm-rate-source { display:inline-block; margin-left:6px; padding:1px 6px; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.3px; color:var(--ies-gray-500); background:var(--ies-gray-100); border-radius: 10px; cursor:help; }
       .cm-bucket-unassigned { background:rgba(255,193,7,0.1) !important; border-left:2px solid var(--ies-orange); }
       .cm-bucket-select { width:140px; font-size:12px; padding:3px 4px; }
       /* M3 achieved-vs-target margin banner */
@@ -4183,7 +4198,7 @@ function renderPricing() {
       .cm-startup-as-incurred { background:rgba(107,76,168,0.05); }
       .cm-startup-as-incurred td { color:var(--ies-gray-700); }
       .cm-as-inc-tag { display:inline-block; padding:1px 6px; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.3px; color:#6d4ca8; background:rgba(107,76,168,0.12); border-radius:6px; }
-      .cm-margin-banner { padding:14px 18px; margin-bottom:16px; border-radius:8px; border:1px solid var(--ies-gray-200); background:#fff; }
+      .cm-margin-banner { padding:14px 18px; margin-bottom:16px; border-radius: 10px; border:1px solid var(--ies-gray-200); background:#fff; }
       .cm-margin-banner.cm-margin-ok { border-left:3px solid var(--ies-green, #20c997); }
       .cm-margin-banner.cm-margin-warn { border-left:3px solid var(--ies-amber, #f59e0b); background:rgba(245,158,11,0.04); }
       .cm-margin-banner.cm-margin-error { border-left:3px solid var(--ies-red, #dc3545); background:rgba(220,53,69,0.05); }
@@ -4225,7 +4240,7 @@ function renderPricing() {
       /* Split-Month controls — visible on the Financial section only when the
          contract_type is split_month. Laid out as a 3-field grid with a
          derived-weighted-DSO line beneath. */
-      .cm-split-month-controls { padding:14px 16px; margin-top:4px; border:1px solid rgba(245,158,11,0.25); border-left:3px solid #b45309; border-radius:8px; background:rgba(245,158,11,0.03); }
+      .cm-split-month-controls { padding:14px 16px; margin-top:4px; border:1px solid rgba(245,158,11,0.25); border-left:3px solid #b45309; border-radius: 10px; background:rgba(245,158,11,0.03); }
       .cm-split-month-header { display:flex; flex-direction:column; gap:2px; margin-bottom:10px; }
       .cm-split-month-title { font-size:13px; font-weight:700; color:#b45309; letter-spacing:0.2px; }
       .cm-split-month-subtitle { font-size:11px; color:var(--ies-gray-500); font-weight:400; line-height:1.4; }
@@ -4240,7 +4255,7 @@ function renderPricing() {
       .cm-audit-banner-actions { display:flex; gap:6px; flex-shrink:0; }
       .hub-btn-sm { padding:4px 10px; font-size:11px; }
       /* Override Implications Panel */
-      .cm-implications-panel { padding:14px 18px; margin-bottom:16px; border-radius:8px; border:1px solid var(--ies-gray-200); background:#fff; }
+      .cm-implications-panel { padding:14px 18px; margin-bottom:16px; border-radius: 10px; border:1px solid var(--ies-gray-200); background:#fff; }
       .cm-implications-title { font-size:13px; font-weight:600; color:var(--ies-gray-700); margin-bottom:10px; display:flex; flex-direction:column; gap:3px; }
       .cm-implications-subtitle { font-size:11px; font-weight:400; color:var(--ies-gray-500); }
       .cm-implications-tiles { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px; }
@@ -4253,7 +4268,7 @@ function renderPricing() {
       .cm-impl-tile.cm-impl-down .cm-impl-tile-value { color:var(--ies-red, #dc3545); }
       .cm-impl-tile-sub { font-size:10px; color:var(--ies-gray-500); margin-top:3px; line-height:1.3; }
       /* Customer Budget Summary (reference Part I §4 stacked G&A + Mgmt display) */
-      .cm-customer-budget { margin-top:20px; border:1px solid var(--ies-gray-200); border-radius:8px; background:#fff; padding:0; }
+      .cm-customer-budget { margin-top:20px; border:1px solid var(--ies-gray-200); border-radius: 10px; background:#fff; padding:0; }
       .cm-customer-budget > summary { padding:14px 18px; cursor:pointer; list-style:none; display:flex; flex-direction:column; gap:4px; border-bottom:1px solid transparent; }
       .cm-customer-budget[open] > summary { border-bottom-color:var(--ies-gray-200); background:var(--ies-gray-50); }
       .cm-customer-budget > summary::-webkit-details-marker { display:none; }
@@ -4315,7 +4330,7 @@ function renderBucketAssignments(buckets) {
                 <td><span class="hub-badge hub-badge-${g.type === 'labor' || g.type === 'vas' ? 'success' : 'info'}">${g.label}</span></td>
                 <td style="font-weight:500;">${label}</td>
                 <td>
-                  <select class="cm-bucket-select" data-array="${g.arrayName}" data-idx="${i}" data-field="pricing_bucket">
+                  <select class="cm-bucket-select" style="min-width:200px;" title="${l.pricing_bucket ? (buckets.find(b => b.id === l.pricing_bucket)?.name || '') : 'Unassigned'}" data-array="${g.arrayName}" data-idx="${i}" data-field="pricing_bucket">
                     ${opts(l.pricing_bucket)}
                   </select>
                 </td>
@@ -4568,25 +4583,29 @@ function renderSummary() {
       </div>
     </div>
 
-    <!-- Cost Breakdown — stacked bar + legend (primitives-style) -->
+    <!-- Cost Breakdown — stacked bar + legend (primitives-style).
+         2026-04-21 audit: swapped the ad-hoc teal/amber/gray/red palette for
+         a brand-aligned ramp anchored by ies-blue (Labor — biggest slice) and
+         ies-orange (Start-Up — smallest, accent). Middle slices step down in
+         blue/slate shades to stay on-brand at a glance. -->
     <div class="hub-card mb-4">
       <h3 class="hub-section-heading">Cost Breakdown</h3>
       <div class="cm-stacked-bar">
-        <div style="width:${pcts.labor}%; background: #0047AB;" title="Labor ${pcts.labor}%"></div>
-        <div style="width:${pcts.facility}%; background: #20c997;" title="Facility ${pcts.facility}%"></div>
-        <div style="width:${pcts.equipment}%; background: #ffc107;" title="Equipment ${pcts.equipment}%"></div>
-        <div style="width:${pcts.overhead}%; background: #6c757d;" title="Overhead ${pcts.overhead}%"></div>
-        <div style="width:${pcts.vas}%; background: #dc3545;" title="VAS ${pcts.vas}%"></div>
-        <div style="width:${pcts.startup}%; background: #ff3a00;" title="Start-Up ${pcts.startup}%"></div>
+        <div style="width:${pcts.labor}%; background: var(--ies-blue, #0047AB);" title="Labor ${pcts.labor}%"></div>
+        <div style="width:${pcts.facility}%; background: #2563eb;" title="Facility ${pcts.facility}%"></div>
+        <div style="width:${pcts.equipment}%; background: #60a5fa;" title="Equipment ${pcts.equipment}%"></div>
+        <div style="width:${pcts.overhead}%; background: #94a3b8;" title="Overhead ${pcts.overhead}%"></div>
+        <div style="width:${pcts.vas}%; background: #cbd5e1;" title="VAS ${pcts.vas}%"></div>
+        <div style="width:${pcts.startup}%; background: var(--ies-orange, #ff3a00);" title="Start-Up ${pcts.startup}%"></div>
       </div>
       <div class="cm-stacked-legend">
         ${[
-          { label: 'Labor', value: summary.laborCost, pct: pcts.labor, color: '#0047AB' },
-          { label: 'Facility', value: summary.facilityCost, pct: pcts.facility, color: '#20c997' },
-          { label: 'Equipment', value: summary.equipmentCost, pct: pcts.equipment, color: '#ffc107' },
-          { label: 'Overhead', value: summary.overheadCost, pct: pcts.overhead, color: '#6c757d' },
-          { label: 'VAS', value: summary.vasCost, pct: pcts.vas, color: '#dc3545' },
-          { label: 'Start-Up', value: summary.startupAmort, pct: pcts.startup, color: '#ff3a00' },
+          { label: 'Labor', value: summary.laborCost, pct: pcts.labor, color: 'var(--ies-blue, #0047AB)' },
+          { label: 'Facility', value: summary.facilityCost, pct: pcts.facility, color: '#2563eb' },
+          { label: 'Equipment', value: summary.equipmentCost, pct: pcts.equipment, color: '#60a5fa' },
+          { label: 'Overhead', value: summary.overheadCost, pct: pcts.overhead, color: '#94a3b8' },
+          { label: 'VAS', value: summary.vasCost, pct: pcts.vas, color: '#cbd5e1' },
+          { label: 'Start-Up', value: summary.startupAmort, pct: pcts.startup, color: 'var(--ies-orange, #ff3a00)' },
         ].map(c => `
           <div class="cm-stacked-legend__item">
             <span class="cm-stacked-legend__swatch" style="background:${c.color};"></span>
@@ -5576,7 +5595,7 @@ async function openCompareModal() {
   overlay.className = 'hub-modal-overlay';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:9999;';
   overlay.innerHTML = `
-    <div style="background:white;border-radius:8px;padding:24px;min-width:640px;max-width:95vw;max-height:90vh;overflow:auto;">
+    <div style="background:white;border-radius: 10px;padding:24px;min-width:640px;max-width:95vw;max-height:90vh;overflow:auto;">
       <div style="display:flex;justify-content:space-between;align-items:center;">
         <h3 style="margin:0;">Compare Scenarios</h3>
         <button class="hub-btn" data-close>×</button>
@@ -5676,7 +5695,7 @@ async function openLaborSeasonalityModal(idx) {
   overlay.className = 'hub-modal-overlay';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:9999;';
   overlay.innerHTML = `
-    <div style="background:white;border-radius:8px;padding:24px;min-width:780px;max-width:95vw;">
+    <div style="background:white;border-radius: 10px;padding:24px;min-width:780px;max-width:95vw;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;">
         <div>
           <h3 style="margin:0;">Monthly OT / Absence Seasonality</h3>
@@ -5840,12 +5859,52 @@ function whatIfCurrentValue(sliderKey) {
   if (Object.prototype.hasOwnProperty.call(heuristicOverrides, sliderKey) && heuristicOverrides[sliderKey] !== '' && heuristicOverrides[sliderKey] !== null) {
     return Number(heuristicOverrides[sliderKey]);
   }
+  // 2026-04-21 audit: several sliders shadow project-level fields (target
+  // margin, tax rate, DSO/DPO, volume growth, escalation). If no override /
+  // transient is set, read the current project value so the slider reflects
+  // live state rather than the catalog default (e.g. Wayfair targetMargin
+  // 11.5% was rendering as catalog default 12%).
+  const projectValue = _whatIfProjectFallback(sliderKey);
+  if (projectValue != null) return projectValue;
   const def = (heuristicsCatalog || []).find(h => h.key === sliderKey);
   if (def?.default_value != null) return def.default_value;
   // Hard-coded fallback defaults for sliders that may not be in the catalog
   // (yet). Keeps the slider from rendering at 0 and zeroing out downstream
   // calcs on first load.
   return WHATIF_FALLBACK_DEFAULTS[sliderKey] ?? 0;
+}
+
+/**
+ * Project-value fallback for sliders that shadow a project-level setting.
+ * Returns a Number if the project carries that value, or null to defer to
+ * the catalog default. Keeps the What-If Studio "baseline" equal to the
+ * project's actual current state instead of a generic catalog figure.
+ */
+function _whatIfProjectFallback(sliderKey) {
+  const fin = model?.financial || {};
+  const pd  = model?.projectDetails || {};
+  switch (sliderKey) {
+    case 'target_margin_pct':
+      return typeof fin.targetMargin === 'number' ? fin.targetMargin : null;
+    case 'tax_rate_pct':
+      return typeof pd.taxRate === 'number' ? pd.taxRate : null;
+    case 'discount_rate_pct':
+      return typeof fin.discountRate === 'number' ? fin.discountRate : null;
+    case 'reinvest_rate_pct':
+      return typeof fin.reinvestRate === 'number' ? fin.reinvestRate : null;
+    case 'annual_volume_growth_pct':
+      return typeof fin.volumeGrowth === 'number' ? fin.volumeGrowth : null;
+    case 'labor_escalation_pct':
+      return typeof fin.laborEscalation === 'number' ? fin.laborEscalation : null;
+    case 'facility_escalation_pct':
+      return typeof fin.facilityEscalation === 'number' ? fin.facilityEscalation : null;
+    case 'dso_days':
+      return typeof fin.dsoDays === 'number' ? fin.dsoDays : null;
+    case 'dpo_days':
+      return typeof fin.dpoDays === 'number' ? fin.dpoDays : null;
+    default:
+      return null;
+  }
 }
 
 /** Fallback defaults for sliders not represented in the heuristics catalog. */
@@ -6342,7 +6401,7 @@ function renderWhatIfStudio() {
 
     if (allActive.length === 0) {
       return `<div class="cm-whatif-drivers-empty">
-         <em>Move sliders on the left to see which drivers contribute most to the scenario delta.</em>
+         <em>Move any slider in the Drivers panel to see which drivers contribute most to the scenario delta.</em>
        </div>`;
     }
 
@@ -7427,7 +7486,7 @@ async function openMostTemplateDetail(templateId) {
   `;
 
   modal.innerHTML = `
-    <div style="background:#fff;border-radius:8px;width:min(760px,92vw);max-height:82vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.2);overflow:hidden;">
+    <div style="background:#fff;border-radius: 10px;width:min(760px,92vw);max-height:82vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.2);overflow:hidden;">
       ${header}
       <div id="cm-most-detail-body" style="flex:1;overflow-y:auto;padding:16px 20px;">
         <div style="text-align:center;color:var(--ies-gray-400);font-size:13px;padding:24px;">Loading elements…</div>
@@ -7461,7 +7520,7 @@ async function openMostTemplateDetail(templateId) {
     `).join('');
     body.innerHTML = `
       <div style="font-size:13px;font-weight:600;margin-bottom:8px;">MOST Element Breakdown (${sorted.length} steps)</div>
-      <div style="border:1px solid var(--ies-gray-200);border-radius:8px;overflow:hidden;">
+      <div style="border:1px solid var(--ies-gray-200);border-radius: 10px;overflow:hidden;">
         <table style="width:100%;border-collapse:collapse;font-size:12px;">
           <thead><tr style="background:var(--ies-gray-50);">
             <th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--ies-gray-400);">#</th>
@@ -7633,7 +7692,7 @@ async function openEquipmentCatalog() {
   };
 
   modal.innerHTML = `
-    <div style="background:#fff;border-radius:8px;width:min(960px,92vw);max-height:82vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.2);overflow:hidden;">
+    <div style="background:#fff;border-radius: 10px;width:min(960px,92vw);max-height:82vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.2);overflow:hidden;">
       <div style="padding:20px 24px 12px 24px;border-bottom:1px solid var(--ies-gray-200);">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
           <div>
@@ -7976,9 +8035,21 @@ function updateValidation() {
   const el = rootEl?.querySelector('#cm-validation');
   if (!el) return;
 
-  // Don't show validation errors until the user starts working
+  // Don't show validation errors until the user starts working, but once a
+  // model is loaded with data, swap the onboarding copy for a quiet "saved"
+  // signal — "Ready — enter project details to begin" on a fully-loaded
+  // Wayfair build reads as stale instructions.
   if (!userHasInteracted) {
-    el.innerHTML = '<span style="color: var(--ies-blue); font-weight: 600;">Ready — enter project details to begin</span>';
+    const hasData = !!(model && (
+      (model.projectDetails?.name) ||
+      (Array.isArray(model.laborLines) && model.laborLines.length) ||
+      (Array.isArray(model.pricingBuckets) && model.pricingBuckets.length)
+    ));
+    if (hasData) {
+      el.innerHTML = '<span style="color: var(--ies-gray-500); font-weight: 500;">✓ Loaded — changes auto-validate on edit</span>';
+    } else {
+      el.innerHTML = '<span style="color: var(--ies-blue); font-weight: 600;">Ready — enter project details to begin</span>';
+    }
     return;
   }
 

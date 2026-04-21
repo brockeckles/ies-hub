@@ -3015,17 +3015,23 @@ export function generateHeuristics(state, summary) {
       detail: 'Within typical 3-8 range for ecommerce facilities.' });
   }
 
-  // 4. Cost per order
+  // 4. Cost per order — benchmark against steady-state cost (not Y1 ramped).
+  // The Summary KPI above uses Y1 cost ÷ Y1 orders (ramp/learning-curve
+  // baked in); this check uses the steady-state figure so the industry
+  // range ($3-6) applies at stabilized run-rate. When they differ, Y1 will
+  // read higher due to Y1 labor inefficiency — reconcile by comparing to
+  // Y2-Y3 P&L rows, which converge to this steady-state figure.
   if (summary.costPerOrder > 0) {
+    const cpoLabel = summary.costPerOrder.toFixed(2);
     if (summary.costPerOrder < 1.50) {
-      checks.push({ type: 'warn', title: 'Cost/order very low ($' + summary.costPerOrder.toFixed(2) + ')',
-        detail: 'Below $1.50/order is unusual. Check for missing cost components.' });
+      checks.push({ type: 'warn', title: 'Cost/order very low ($' + cpoLabel + ', steady-state)',
+        detail: 'Below $1.50/order is unusual. Check for missing cost components. Summary KPI is Y1-basis (higher via ramp); steady-state is the benchmarkable number.' });
     } else if (summary.costPerOrder > 8.00) {
-      checks.push({ type: 'warn', title: 'Cost/order above range ($' + summary.costPerOrder.toFixed(2) + ')',
-        detail: 'Benchmark: $3-6. Higher typical for B2B or low-volume accounts.' });
+      checks.push({ type: 'warn', title: 'Cost/order above range ($' + cpoLabel + ', steady-state)',
+        detail: 'Benchmark: $3-6 at steady state. Higher typical for B2B or low-volume accounts. (Summary KPI shows Y1-basis, which reads higher due to ramp.)' });
     } else {
-      checks.push({ type: 'ok', title: 'Cost/order in range ($' + summary.costPerOrder.toFixed(2) + ')',
-        detail: '$3-6 range is typical for ecommerce 3PL.' });
+      checks.push({ type: 'ok', title: 'Cost/order in range ($' + cpoLabel + ', steady-state)',
+        detail: '$3-6 range is typical for ecommerce 3PL at steady state. Summary KPI is Y1 (ramped); Y2-Y3 P&L rows converge toward this steady-state figure.' });
     }
   }
 
