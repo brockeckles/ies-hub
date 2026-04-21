@@ -6079,22 +6079,23 @@ function handleAction(action, idx, btn) {
       // 43-role standard catalog (Material Handler, Forklift Operator,
       // Ops Supervisor, etc.). Existing labor lines unlink from removed
       // positions — user reselects via dropdown.
-      const ok = await showConfirm(
+      showConfirm(
         `Replace the current Position Catalog with the ${STANDARD_POSITIONS.length}-role standard set?\n\n` +
         `• All existing positions will be removed.\n` +
         `• Labor lines pointing at removed positions will become unlinked — you'll re-pick their role from the dropdown.\n` +
         `• Wages + salaries + benefit load overrides on your current positions will be lost.`,
         { okLabel: 'Replace', danger: true },
-      );
-      if (!ok) return;
-      if (!model.shifts) model.shifts = {};
-      model.shifts.positions = materializeStandardPositions();
-      // Unlink every labor line — the old position_ids no longer exist
-      (model.laborLines || []).forEach(l => { l.position_id = null; });
-      (model.indirectLaborLines || []).forEach(l => { l.position_id = null; });
-      isDirty = true;
-      showToast(`Replaced catalog with ${STANDARD_POSITIONS.length} standard roles. Re-link labor lines via the Position dropdown in the Labor section.`, 'success');
-      renderSection();
+      ).then((ok) => {
+        if (!ok) return;
+        if (!model.shifts) model.shifts = {};
+        model.shifts.positions = materializeStandardPositions();
+        // Unlink every labor line — the old position_ids no longer exist
+        (model.laborLines || []).forEach(l => { l.position_id = null; });
+        (model.indirectLaborLines || []).forEach(l => { l.position_id = null; });
+        isDirty = true;
+        showToast(`Replaced catalog with ${STANDARD_POSITIONS.length} standard roles. Re-link labor lines via the Position dropdown in the Labor section.`, 'success');
+        renderSection();
+      });
       return;
     }
     case 'open-equipment-catalog':
@@ -7144,6 +7145,16 @@ function migrateLaborLinesToPositions(m) {
   // calc engine ignores it.
 
   if (!Array.isArray(m.shifts.positions)) m.shifts.positions = [];
+  // Brock 2026-04-21 pm: seed the 43-role standard catalog when the project
+  // has zero positions AND zero labor lines (net-new project). Existing
+  // projects with labor lines continue through the activity-named migration
+  // path below — user clicks "Replace with Standard Roles" to swap.
+  const noPositions = m.shifts.positions.length === 0;
+  const noLabor = (!m.laborLines || m.laborLines.length === 0)
+                  && (!m.indirectLaborLines || m.indirectLaborLines.length === 0);
+  if (noPositions && noLabor) {
+    m.shifts.positions = materializeStandardPositions();
+  }
   const positions = m.shifts.positions;
 
   const makePos = (name, category, empType, wage, markup, extras = {}) => {
@@ -7226,10 +7237,10 @@ function createEmptyModel() {
       // Legacy shadows kept for scenario snapshot / calc-layer compat
       ptoPct: 3.85,     // 80 / 2080
       holidayPct: 3.08, // 64 / 2080
-      // Position catalog — seeded with the 43-role standard catalog from the
-      // Cost Model Planning Heuristics doc (Brock 2026-04-21 pm). Users pick
-      // roles from this list when creating labor lines.
-      positions: materializeStandardPositions(),
+      // Position catalog — seeded empty here to avoid TDZ on STANDARD_POSITIONS
+      // at module-init time. migrateLaborLinesToPositions() seeds the 43-role
+      // standard catalog on first mount when positions array is empty.
+      positions: [],
     },
     // Labor lines seeded empty — users add activities and pick roles from
     // the standard Position Catalog (Brock 2026-04-21 pm).
