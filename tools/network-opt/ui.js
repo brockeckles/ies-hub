@@ -15,7 +15,7 @@ import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadXLSX } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260418-sM';
-import * as calc from './calc.js?v=20260418-sM';
+import * as calc from './calc.js?v=20260422-xI';
 import * as api from './api.js?v=20260418-sM';
 
 // ============================================================
@@ -493,6 +493,7 @@ function renderSidebar() {
     <span class="text-caption" style="color:var(--ies-gray-400);">ACTIONS</span>
     <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px;">
       <button class="hub-btn hub-btn-primary hub-btn-sm" data-action="run" style="width:100%;">Run Scenario</button>
+      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="find-optimal" style="width:100%;font-size:11px;" title="Weighted k-means on your demand → recommended DC metros. Adds candidate facilities to the list without opening them; you pick which to activate.">🎯 Find Optimal Locations</button>
       <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="compare-dcs" style="width:100%;font-size:11px;">Compare DCs</button>
       <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="exact-solve" style="width:100%;font-size:11px;">Exhaustive Search</button>
       <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="apply-market-rates" style="width:100%;font-size:11px;">Apply Market Rates</button>
@@ -520,6 +521,7 @@ function renderSidebar() {
       // I-05 — the sidebar's Save button is handled at the shell level.
       if (action === 'netopt-save') return;
       if (action === 'run') { runScenario(); markDirty(); }
+      else if (action === 'find-optimal') { findOptimalLocations(); markDirty(); }
       else if (action === 'compare-dcs') { compareMultipleDCs(); markDirty(); }
       else if (action === 'exact-solve')  { runExactSolver();    markDirty(); }
       else if (action === 'export-csv') exportToCSV();
@@ -628,10 +630,74 @@ function applyArchetype(key) {
   selectedArchetype = key;
   modeMix = { ...arch.modeMix };
   serviceConfig = { ...serviceConfig, globalMaxDays: arch.maxDays };
-  // Apply archetype's default maxDays to all demand points
-  demands = demands.map(d => ({ ...d, maxDays: arch.maxDays }));
+
+  // If the user has no demand yet, seed the demo 15-metro demand set and
+  // scale each point proportionally so total annual demand matches this
+  // archetype's baseVolume. Gives the archetype button an IMMEDIATE visible
+  // effect (it was silently updating mode mix only, which felt dead).
+  // When demand exists, we only apply maxDays — don't trample the user's data.
+  if (demands.length === 0) {
+    const baseTotal = DEMO_DEMANDS.reduce((s, d) => s + d.annualDemand, 0);
+    const scale = (arch.baseVolume || baseTotal) / baseTotal;
+    demands = DEMO_DEMANDS.map(d => ({
+      ...d,
+      annualDemand: Math.round(d.annualDemand * scale),
+      maxDays: arch.maxDays,
+    }));
+    showNoToast(`Applied ${arch.name} — seeded ${demands.length} demand points at ${(arch.baseVolume || baseTotal).toLocaleString()} total annual volume`, 'success');
+  } else {
+    demands = demands.map(d => ({ ...d, maxDays: arch.maxDays }));
+    showNoToast(`Applied ${arch.name} — mode mix ${arch.modeMix.tlPct}/${arch.modeMix.ltlPct}/${arch.modeMix.parcelPct} + max ${arch.maxDays}-day service`, 'success');
+  }
   renderSidebar();
-  if (activeView === 'setup') renderContentView();
+  // Re-render whichever view is active so visible state updates (Facilities
+  // counts, Demand table, Service banner).
+  renderContentView();
+}
+
+/**
+ * Run weighted k-means on demand points → recommend N facility metros and
+ * add them to the facility list as candidates (not opened). Restores the
+ * v2 Auto-Recommend capability.
+ */
+function findOptimalLocations() {
+  if (demands.length === 0) {
+    alert('Add demand points first. The optimizer needs demand to cluster against.\n\nTip: pick an Archetype in the sidebar to seed a demo demand set.');
+    return;
+  }
+  const k = Math.max(1, Math.min(maxDCsToTest || 3, 8));
+  const existingCities = facilities.map(f => (f.city || '').toLowerCase().trim()).filter(Boolean);
+  // calc.findOptimalLocations weights by volume + maps each cluster to the
+  // nearest real metro (deduplicated so two close clusters can't collapse
+  // to the same city).
+  const recs = calc.findOptimalLocations(
+    demands.map(d => ({ id: d.id, lat: d.lat, lng: d.lng, volume: d.annualDemand })),
+    k,
+    { excludeCities: existingCities },
+  );
+  if (!recs || recs.length === 0) {
+    alert('Could not recommend locations — check that demand points have lat/lng coordinates.');
+    return;
+  }
+  // Add recommendations as candidate facilities (isOpen false — user picks which to activate).
+  for (const r of recs) {
+    facilities.push({
+      id: r.id,
+      name: r.name,
+      city: r.city,
+      state: r.state,
+      lat: r.lat,
+      lng: r.lng,
+      capacity: Math.max(200000, Math.round(r.clusterWeight * 1.2)),
+      fixedCost: 1_200_000,
+      variableCost: 2.80,
+      isOpen: false,
+    });
+  }
+  activeSection = 'facilities';
+  renderSidebar();
+  renderContentView();
+  showNoToast(`Recommended ${recs.length} DC location${recs.length > 1 ? 's' : ''} based on demand clusters — activate the ones to evaluate, then hit Run Scenario`, 'success');
 }
 
 // ============================================================

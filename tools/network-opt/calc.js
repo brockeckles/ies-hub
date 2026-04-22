@@ -834,3 +834,213 @@ export function formatMiles(miles) {
 export function formatPct(pct) {
   return (pct || 0).toFixed(1) + '%';
 }
+
+// ============================================================
+// FIND OPTIMAL LOCATIONS — weighted k-means on demand
+// ============================================================
+// Restores the v2 "Auto-Recommend Facilities" capability that was dropped
+// in the v2→v3 port. Answers: given my demand, where SHOULD I put DCs?
+// (vs the existing exactSolver which answers: given my facility candidates,
+// which SUBSET should I open?).
+
+/**
+ * Compact US metro candidate table for facility recommendations. 30 top
+ * logistics-relevant metros covering every major demand cluster. Keeps
+ * NetOpt standalone — no cross-tool imports.
+ * @type {Array<{ name:string, state:string, lat:number, lng:number }>}
+ */
+const CANDIDATE_METROS = [
+  { name: 'New York',     state: 'NY', lat: 40.7128, lng: -74.0060 },
+  { name: 'Los Angeles',  state: 'CA', lat: 34.0522, lng: -118.2437 },
+  { name: 'Chicago',      state: 'IL', lat: 41.8781, lng: -87.6298 },
+  { name: 'Houston',      state: 'TX', lat: 29.7604, lng: -95.3698 },
+  { name: 'Dallas',       state: 'TX', lat: 32.7767, lng: -96.7970 },
+  { name: 'Atlanta',      state: 'GA', lat: 33.7490, lng: -84.3880 },
+  { name: 'Memphis',      state: 'TN', lat: 35.1495, lng: -90.0490 },
+  { name: 'Louisville',   state: 'KY', lat: 38.2527, lng: -85.7585 },
+  { name: 'Columbus',     state: 'OH', lat: 39.9612, lng: -82.9988 },
+  { name: 'Indianapolis', state: 'IN', lat: 39.7684, lng: -86.1581 },
+  { name: 'Kansas City',  state: 'MO', lat: 39.0997, lng: -94.5786 },
+  { name: 'St. Louis',    state: 'MO', lat: 38.6270, lng: -90.1994 },
+  { name: 'Denver',       state: 'CO', lat: 39.7392, lng: -104.9903 },
+  { name: 'Phoenix',      state: 'AZ', lat: 33.4484, lng: -112.0740 },
+  { name: 'Las Vegas',    state: 'NV', lat: 36.1699, lng: -115.1398 },
+  { name: 'Salt Lake City', state: 'UT', lat: 40.7608, lng: -111.8910 },
+  { name: 'Seattle',      state: 'WA', lat: 47.6062, lng: -122.3321 },
+  { name: 'Portland',     state: 'OR', lat: 45.5152, lng: -122.6784 },
+  { name: 'San Francisco',state: 'CA', lat: 37.7749, lng: -122.4194 },
+  { name: 'Riverside',    state: 'CA', lat: 33.9806, lng: -117.3755 },
+  { name: 'Miami',        state: 'FL', lat: 25.7617, lng: -80.1918 },
+  { name: 'Orlando',      state: 'FL', lat: 28.5383, lng: -81.3792 },
+  { name: 'Jacksonville', state: 'FL', lat: 30.3322, lng: -81.6557 },
+  { name: 'Charlotte',    state: 'NC', lat: 35.2271, lng: -80.8431 },
+  { name: 'Nashville',    state: 'TN', lat: 36.1627, lng: -86.7816 },
+  { name: 'Philadelphia', state: 'PA', lat: 39.9526, lng: -75.1652 },
+  { name: 'Boston',       state: 'MA', lat: 42.3601, lng: -71.0589 },
+  { name: 'Harrisburg',   state: 'PA', lat: 40.2732, lng: -76.8867 },
+  { name: 'Reno',         state: 'NV', lat: 39.5296, lng: -119.8138 },
+  { name: 'Baltimore',    state: 'MD', lat: 39.2904, lng: -76.6122 },
+];
+
+/**
+ * Find the nearest candidate metro to a lat/lng point.
+ * @param {number} lat
+ * @param {number} lng
+ * @returns {{ name:string, state:string, lat:number, lng:number, distanceMi:number }}
+ */
+function nearestMetro(lat, lng) {
+  let best = CANDIDATE_METROS[0];
+  let bestDist = haversine(lat, lng, best.lat, best.lng);
+  for (let i = 1; i < CANDIDATE_METROS.length; i++) {
+    const c = CANDIDATE_METROS[i];
+    const d = haversine(lat, lng, c.lat, c.lng);
+    if (d < bestDist) { best = c; bestDist = d; }
+  }
+  return { ...best, distanceMi: bestDist };
+}
+
+/**
+ * Deterministic k-means++ initialization using distance² weighting.
+ * Picks highest-weight point first, then each subsequent center is the
+ * point that maximizes (min distance to existing center)² × weight.
+ * Deterministic so the same demand set always yields the same seeds.
+ * @param {Array<{ lat:number, lng:number, weight:number }>} points
+ * @param {number} k
+ * @returns {Array<{ lat:number, lng:number }>}
+ */
+function seedCenters(points, k) {
+  if (points.length === 0 || k <= 0) return [];
+  if (k >= points.length) return points.map(p => ({ lat: p.lat, lng: p.lng }));
+  // First center: highest-weight point (deterministic).
+  const sorted = [...points].sort((a, b) => (b.weight || 0) - (a.weight || 0));
+  const centers = [{ lat: sorted[0].lat, lng: sorted[0].lng }];
+  while (centers.length < k) {
+    let bestIdx = 0;
+    let bestScore = -1;
+    for (let i = 0; i < points.length; i++) {
+      const p = points[i];
+      let minDist = Infinity;
+      for (const c of centers) {
+        const d = haversine(p.lat, p.lng, c.lat, c.lng);
+        if (d < minDist) minDist = d;
+      }
+      // distance² × weight prioritizes far-away heavy clusters
+      const score = minDist * minDist * (p.weight || 1);
+      if (score > bestScore) { bestScore = score; bestIdx = i; }
+    }
+    centers.push({ lat: points[bestIdx].lat, lng: points[bestIdx].lng });
+  }
+  return centers;
+}
+
+/**
+ * Run a weighted k-means on demand points. Each demand contributes its
+ * weight (volume) to the cluster centroid. Returns cluster centers +
+ * per-cluster demand sums.
+ *
+ * @param {Array<{ lat:number, lng:number, weight:number, id?:string }>} points
+ * @param {number} k
+ * @param {number} [maxIter=50]
+ * @returns {Array<{ lat:number, lng:number, totalWeight:number, memberCount:number }>}
+ */
+function weightedKMeans(points, k, maxIter = 50) {
+  const pts = (points || []).filter(p =>
+    Number.isFinite(p.lat) && Number.isFinite(p.lng));
+  if (pts.length === 0 || k <= 0) return [];
+  const K = Math.min(k, pts.length);
+  let centers = seedCenters(pts, K);
+  let assignments = new Array(pts.length).fill(-1);
+  for (let iter = 0; iter < maxIter; iter++) {
+    let changed = false;
+    // Assign
+    for (let i = 0; i < pts.length; i++) {
+      let best = 0, bestDist = Infinity;
+      for (let c = 0; c < centers.length; c++) {
+        const d = haversine(pts[i].lat, pts[i].lng, centers[c].lat, centers[c].lng);
+        if (d < bestDist) { bestDist = d; best = c; }
+      }
+      if (assignments[i] !== best) { assignments[i] = best; changed = true; }
+    }
+    if (!changed && iter > 0) break;
+    // Re-compute weighted centroids
+    for (let c = 0; c < centers.length; c++) {
+      let sumW = 0, sumLat = 0, sumLng = 0, count = 0;
+      for (let i = 0; i < pts.length; i++) {
+        if (assignments[i] !== c) continue;
+        const w = pts[i].weight || 0;
+        sumW += w;
+        sumLat += pts[i].lat * w;
+        sumLng += pts[i].lng * w;
+        count += 1;
+      }
+      if (sumW > 0) centers[c] = { lat: sumLat / sumW, lng: sumLng / sumW };
+    }
+  }
+  // Build result with per-cluster stats
+  return centers.map((c, idx) => {
+    let totalWeight = 0, memberCount = 0;
+    for (let i = 0; i < pts.length; i++) {
+      if (assignments[i] !== idx) continue;
+      totalWeight += (pts[i].weight || 0);
+      memberCount += 1;
+    }
+    return { lat: c.lat, lng: c.lng, totalWeight, memberCount };
+  });
+}
+
+/**
+ * Recommend k facility locations based on demand clustering. Each cluster
+ * center is mapped to its nearest real metro (from CANDIDATE_METROS);
+ * duplicates are deduplicated + fallback metros picked from a ranked list.
+ *
+ * This is the v3 replacement for v2's `netoptAutoRecommendFacilities()`.
+ *
+ * @param {Array<{ lat:number, lng:number, volume?:number, weight?:number, id?:string }>} demands
+ * @param {number} k — number of facilities to recommend
+ * @param {Object} [opts]
+ * @param {Array<string>} [opts.excludeCities] — city names already in use
+ * @returns {Array<{ id:string, name:string, city:string, state:string, lat:number, lng:number,
+ *                   clusterWeight:number, clusterSize:number, distanceToMetroMi:number }>}
+ */
+export function findOptimalLocations(demands, k, opts = {}) {
+  const exclude = new Set((opts.excludeCities || []).map(s => s.toLowerCase().trim()));
+  const points = (demands || [])
+    .filter(d => Number.isFinite(d.lat) && Number.isFinite(d.lng))
+    .map(d => ({
+      id: d.id, lat: d.lat, lng: d.lng,
+      weight: Number(d.weight) || Number(d.volume) || 1,
+    }));
+  if (points.length === 0 || k <= 0) return [];
+  const kBounded = Math.max(1, Math.min(k, points.length, CANDIDATE_METROS.length));
+
+  const clusters = weightedKMeans(points, kBounded);
+  const usedMetros = new Set();
+  const recommendations = [];
+  for (const cl of clusters) {
+    // Find nearest metro not already used (so two close clusters don't collapse to same city)
+    let best = null, bestDist = Infinity;
+    for (const metro of CANDIDATE_METROS) {
+      const key = `${metro.name.toLowerCase()},${metro.state.toLowerCase()}`;
+      if (usedMetros.has(key)) continue;
+      if (exclude.has(`${metro.name.toLowerCase()}, ${metro.state.toLowerCase()}`)) continue;
+      if (exclude.has(metro.name.toLowerCase())) continue;
+      const d = haversine(cl.lat, cl.lng, metro.lat, metro.lng);
+      if (d < bestDist) { bestDist = d; best = metro; }
+    }
+    if (!best) continue;
+    const key = `${best.name.toLowerCase()},${best.state.toLowerCase()}`;
+    usedMetros.add(key);
+    recommendations.push({
+      id: `fac-rec-${Date.now()}-${recommendations.length}`,
+      name: `${best.name} DC`,
+      city: best.name,
+      state: best.state,
+      lat: best.lat,
+      lng: best.lng,
+      clusterWeight: Math.round(cl.totalWeight),
+      clusterSize: cl.memberCount,
+      distanceToMetroMi: +bestDist.toFixed(1),
+    });
+  }
+  return recommendations;
+}

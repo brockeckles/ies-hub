@@ -319,9 +319,19 @@ function bindDelegatedEvents() {
     // Back button
     if (target.closest('[data-action="back"]')) { viewMode = 'pipeline'; selectedDeal = null; render(); return; }
 
-    // Detail tabs
+    // Detail tabs. Tab bar is rendered once in renderDetail() and never
+    // re-rendered on click (only the content pane is), so we have to toggle
+    // the `active` class on the tab buttons directly. Without this, the
+    // clicked tab's text switches but the blue pill stays on "Overview".
     const dtab = target.closest('[data-detail-tab]');
-    if (dtab) { detailTab = /** @type {HTMLElement} */ (dtab).dataset.detailTab; renderDetailContent(); return; }
+    if (dtab) {
+      detailTab = /** @type {HTMLElement} */ (dtab).dataset.detailTab;
+      rootEl?.querySelectorAll('[data-detail-tab]').forEach(btn => {
+        btn.classList.toggle('active', /** @type {HTMLElement} */ (btn).dataset.detailTab === detailTab);
+      });
+      renderDetailContent();
+      return;
+    }
 
     // DOS element toggle
     const dosEl = target.closest('[data-dos-toggle]');
