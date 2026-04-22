@@ -11,13 +11,13 @@ import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import * as calc from './calc.js?v=20260421-xE';
-import * as api from './api.js?v=20260422-xI';
+import * as api from './api.js?v=20260422-xJ';
 import * as scenarios from './calc.scenarios.js?v=20260421-wA';
 import * as monthlyCalc from './calc.monthly.js?v=20260421-xE';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
-import * as shiftPlannerCalc from './shift-planner.js?v=20260422-xI';
-import * as shiftPlannerUi from './shift-planner-ui.js?v=20260422-xI';
-import * as shiftArchetypes from './shift-archetypes.js?v=20260422-xI';
+import * as shiftPlannerCalc from './shift-planner.js?v=20260422-xJ';
+import * as shiftPlannerUi from './shift-planner-ui.js?v=20260422-xJ';
+import * as shiftArchetypes from './shift-archetypes.js?v=20260422-xJ';
 
 // ============================================================
 // Non-blocking modal helpers (replace confirm/prompt/alert).

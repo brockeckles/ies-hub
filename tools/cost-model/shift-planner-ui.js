@@ -17,7 +17,17 @@ import {
   validateShiftMatrix,
   normalizeShiftMatrix,
   deriveShiftHeadcount,
-} from './shift-planner.js?v=20260422-xI';
+  deriveIndirectByShift,
+  deriveHourlyStaffing,
+} from './shift-planner.js?v=20260422-xJ';
+
+/**
+ * Matrix display mode — 'pct' shows editable % inputs (default); 'fte'
+ * shows derived read-only FTE counts per cell so the SD+SME can flip
+ * between allocation-intent vs implied-headcount views.
+ * @type {'pct' | 'fte'}
+ */
+let _matrixMode = 'pct';
 
 /**
  * Return section HTML.
@@ -34,14 +44,25 @@ export function renderShiftPlanningSection(ctx) {
   const volumes = Array.isArray(model.volumeLines) ? model.volumeLines : [];
   const labor = Array.isArray(model.laborLines) ? model.laborLines : [];
   const shiftsCfg = model.shifts || {};
+  // Shift premiums live on model.shifts (NOT model.laborCosting).
+  // Stored as a percent number (5 = 5%). Labor Factors input clamps 0-50.
   const premiumMap = {
-    '2': Number(model.laborCosting?.shift2Premium) || 0,
-    '3': Number(model.laborCosting?.shift3Premium) || 0,
+    '2': Number(model.shifts?.shift2Premium) || 0,
+    '3': Number(model.shifts?.shift3Premium) || 0,
   };
   const derived = deriveShiftHeadcount(alloc, volumes, labor, shiftsCfg, {
     absenceAllowancePct: Number(model.laborCosting?.absenceAllowancePct) || 0,
     shiftPremiumPct: premiumMap,
   });
+  const indirectLines = Array.isArray(model.indirectLaborLines) ? model.indirectLaborLines : [];
+  const indirectByShift = deriveIndirectByShift(indirectLines, derived.byShift || []);
+  const daysPerWeek = Math.max(1, Math.min(7, Math.floor(Number(shiftsCfg.daysPerWeek) || 5)));
+  const hourlyStaffing = deriveHourlyStaffing(
+    alloc.shifts || [],
+    derived.byShift || [],
+    indirectByShift,
+    daysPerWeek,
+  );
   const validation = validateShiftMatrix(alloc);
 
   const archetypeOptions = archetypes
@@ -51,9 +72,10 @@ export function renderShiftPlanningSection(ctx) {
   return `
     <div class="shift-planning">
       ${renderHeader(alloc, archetypes, archetypeOptions, validation)}
-      ${renderMatrixCard(alloc, shiftCount, validation)}
+      ${renderMatrixCard(alloc, shiftCount, validation, derived)}
       ${renderPreviewPanel(derived, shiftCount)}
-      ${renderByShiftCard(derived, alloc)}
+      ${renderByShiftCard(derived, alloc, indirectByShift)}
+      ${renderStaffingHeatmap(hourlyStaffing, daysPerWeek)}
       ${renderFooterNote(alloc)}
     </div>
     <style>
@@ -103,6 +125,34 @@ export function renderShiftPlanningSection(ctx) {
       .sp-shift-card__metric { display: flex; justify-content: space-between; padding: 4px 0; font-size: 12px; }
       .sp-shift-card__metric--bold { font-weight: 600; color: var(--ies-navy); border-top: 1px solid var(--ies-gray-200); padding-top: 6px; margin-top: 4px; }
       .sp-footer-note { font-size: 12px; color: var(--ies-gray-500); padding: 12px 16px 0; font-style: italic; }
+
+      /* Matrix mode toggle pill */
+      .sp-mode-toggle { display: inline-flex; background: var(--ies-gray-100); border-radius: 6px; padding: 2px; gap: 0; }
+      .sp-mode-btn { border: none; background: transparent; color: var(--ies-gray-600); font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 4px; cursor: pointer; transition: all 120ms ease; }
+      .sp-mode-btn:hover { color: var(--ies-navy); }
+      .sp-mode-btn.is-active { background: white; color: var(--ies-blue); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08); }
+
+      /* FTE mode: read-only cells display derived FTE counts instead of % inputs */
+      .sp-cell--readonly { display: inline-block; width: 68px; padding: 6px 8px; text-align: right; font-size: 13px; font-variant-numeric: tabular-nums; color: var(--ies-navy); background: var(--ies-gray-50); border-radius: 4px; border: 1px solid transparent; }
+      .sp-cell--readonly.sp-cell--zero { color: var(--ies-gray-400); background: transparent; }
+
+      /* By-shift card — new 'muted' + 'bold' variants for the tier rows */
+      .sp-shift-card__metric--muted { color: var(--ies-gray-500); font-size: 11px; }
+      .sp-site-indirect { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--ies-gray-200); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; color: var(--ies-gray-600); }
+      .sp-site-indirect strong { margin-right: 6px; }
+
+      /* Staffing heatmap */
+      .sp-heatmap { padding: 16px; }
+      .sp-heatmap h3 { font-size: 14px; font-weight: 600; color: var(--ies-navy); margin: 0 0 12px 0; }
+      .sp-hm { border-collapse: collapse; font-size: 11px; }
+      .sp-hm th { background: var(--ies-gray-50); color: var(--ies-gray-600); font-weight: 600; padding: 4px 8px; border: 1px solid var(--ies-gray-200); text-align: center; }
+      .sp-hm-hour-h { min-width: 48px; font-variant-numeric: tabular-nums; }
+      .sp-hm-day-h { min-width: 64px; }
+      .sp-hm-cell { padding: 6px 4px; border: 1px solid white; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; transition: transform 100ms ease; min-width: 64px; height: 22px; }
+      .sp-hm-cell:hover { transform: scale(1.06); box-shadow: 0 0 0 2px var(--ies-blue); position: relative; z-index: 1; cursor: help; }
+      .sp-hm-cell--zero { background: repeating-linear-gradient(-45deg, #f3f4f6, #f3f4f6 4px, #f9fafb 4px, #f9fafb 8px); color: transparent; }
+      .sp-hm-legend { font-size: 12px; color: var(--ies-gray-600); display: inline-flex; align-items: center; gap: 6px; }
+      .sp-hm-legend-scale { display: inline-block; width: 80px; height: 10px; border-radius: 3px; background: linear-gradient(to right, hsl(215deg 20% 92%), hsl(215deg 70% 50%)); border: 1px solid var(--ies-gray-200); }
     </style>
   `;
 }
@@ -229,6 +279,10 @@ export function bindShiftPlanningEvents(container, ctx) {
       notify();
       return;
     }
+
+    // Matrix display mode toggle
+    if (action === 'set-mode-pct') { _matrixMode = 'pct'; notify(); return; }
+    if (action === 'set-mode-fte') { _matrixMode = 'fte'; notify(); return; }
   });
 }
 
@@ -295,10 +349,20 @@ function renderHeader(alloc, archetypes, archetypeOptions, validation) {
   `;
 }
 
-function renderMatrixCard(alloc, shiftCount, validation) {
+function renderMatrixCard(alloc, shiftCount, validation, derived) {
   const shiftHeaders = alloc.shifts.map(s =>
     `<th class="hub-num">S${s.num}<br><span style="font-weight:400;color:var(--ies-gray-500);text-transform:none;">${fmtHour(s.startHour)}–${fmtHour(s.endHour)}</span></th>`
   ).join('');
+
+  // Lookup table: { fn: { shift: fte } } for FTE-mode rendering.
+  const fteByFnShift = {};
+  if (derived && Array.isArray(derived.byFunctionShift)) {
+    for (const r of derived.byFunctionShift) {
+      if (!fteByFnShift[r.fn]) fteByFnShift[r.fn] = {};
+      fteByFnShift[r.fn][r.shift] = r.fte;
+    }
+  }
+  const isFte = _matrixMode === 'fte';
 
   const rows = FUNCTION_ORDER.map(fn => {
     const row = alloc.matrix[fn];
@@ -306,19 +370,36 @@ function renderMatrixCard(alloc, shiftCount, validation) {
     const zero = sum === 0;
     const off = !zero && Math.abs(sum - 100) > 0.5;
     const totalClass = zero ? 'sp-zero' : off ? 'sp-off' : '';
-    const cells = row.map((v, i) =>
-      `<td class="hub-num"><input class="sp-cell" type="number" min="0" max="100" step="1" value="${Number(v) || 0}" data-sp-cell="${fn},${i}" aria-label="${FUNCTION_META[fn]?.label || fn} S${i + 1}" /></td>`
-    ).join('');
+    const cells = row.map((v, i) => {
+      if (isFte) {
+        const fte = Number(fteByFnShift[fn]?.[i + 1] || 0);
+        const display = zero ? '—' : fte < 0.1 ? '0' : fte.toFixed(1);
+        const cls = zero ? 'sp-cell sp-cell--readonly sp-cell--zero' : 'sp-cell sp-cell--readonly';
+        return `<td class="hub-num"><span class="${cls}" title="${zero ? 'Function not used' : `${fte.toFixed(2)} FTE implied (${(Number(v) || 0).toFixed(0)}% × daily volume / UPH)`}">${display}</span></td>`;
+      }
+      return `<td class="hub-num"><input class="sp-cell" type="number" min="0" max="100" step="1" value="${Number(v) || 0}" data-sp-cell="${fn},${i}" aria-label="${FUNCTION_META[fn]?.label || fn} S${i + 1}" /></td>`;
+    }).join('');
+
+    // Row total reads differently in FTE mode — sum of FTEs across shifts.
+    const fteRowTotal = isFte
+      ? row.reduce((a, _v, i) => a + (Number(fteByFnShift[fn]?.[i + 1]) || 0), 0)
+      : 0;
+    const rowTotalText = isFte
+      ? (zero ? '—' : `${fteRowTotal.toFixed(1)} FTE`)
+      : (zero ? '—' : sum.toFixed(0) + '%');
+    const rowTotalClass = isFte ? (zero ? 'sp-zero' : '') : totalClass;
+
     return `
       <tr>
         <td class="sp-fn-label">${escape(FUNCTION_META[fn]?.label || fn)}
           <span class="sp-fn-tip">${escape(FUNCTION_META[fn]?.tip || '')}</span>
         </td>
         ${cells}
-        <td class="sp-row-total ${totalClass}">${zero ? '—' : sum.toFixed(0) + '%'}</td>
+        <td class="sp-row-total ${rowTotalClass}">${rowTotalText}</td>
         <td class="sp-row-action">
+          ${isFte ? '' : `
           <button type="button" data-sp-action="distribute-evenly" data-sp-fn="${fn}" title="Distribute evenly across shifts">↔ Even</button>
-          <button type="button" data-sp-action="clear-row" data-sp-fn="${fn}" title="Clear this function (not used)">Clear</button>
+          <button type="button" data-sp-action="clear-row" data-sp-fn="${fn}" title="Clear this function (not used)">Clear</button>`}
         </td>
       </tr>
     `;
@@ -349,9 +430,19 @@ function renderMatrixCard(alloc, shiftCount, validation) {
          <button type="button" data-sp-action="normalize-all">Normalize All</button>
        </div>`;
 
+  const modeToggleHtml = `
+    <div class="sp-mode-toggle" role="tablist" aria-label="Matrix display mode">
+      <button type="button" data-sp-action="set-mode-pct" class="sp-mode-btn ${isFte ? '' : 'is-active'}" title="Edit the % of volume allocation">% Allocation</button>
+      <button type="button" data-sp-action="set-mode-fte" class="sp-mode-btn ${isFte ? 'is-active' : ''}" title="Show derived direct FTE per cell">FTE Counts</button>
+    </div>
+  `;
+
   return `
     <div class="hub-card sp-matrix-card">
-      <h3>Throughput Matrix — % of daily volume by shift × function</h3>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin:0 0 12px 0;">
+        <h3 style="margin:0;">Throughput Matrix — ${isFte ? 'direct FTE by shift × function' : '% of daily volume by shift × function'}</h3>
+        ${modeToggleHtml}
+      </div>
       <div style="overflow-x:auto;">
         <table class="sp-matrix">
           <thead>
@@ -412,10 +503,13 @@ function renderPreviewPanel(derived, shiftCount) {
   `;
 }
 
-function renderByShiftCard(derived, alloc) {
+function renderByShiftCard(derived, alloc, indirectByShift) {
   const cards = (derived.byShift || []).map((s, i) => {
     const shiftMeta = alloc.shifts[i] || {};
     const pctOfHc = derived.totals.directHc > 0 ? (s.directHc / derived.totals.directHc * 100) : 0;
+    const ind = indirectByShift?.byShift?.[i] || { supv: 0, indirect: 0, mgmt: 0, admin: 0, total: 0 };
+    const hasIndirect = ind.total > 0;
+    const totalHc = s.directHc + ind.total;
     return `
       <div class="sp-shift-card">
         <div class="sp-shift-card__header">
@@ -425,13 +519,18 @@ function renderByShiftCard(derived, alloc) {
         <div class="sp-shift-card__metric">
           <span>Direct HC</span><span>${s.directHc}</span>
         </div>
-        <div class="sp-shift-card__metric">
-          <span>% of total</span><span>${pctOfHc.toFixed(0)}%</span>
+        ${ind.supv > 0 ? `<div class="sp-shift-card__metric"><span>Supervisors</span><span>${ind.supv}</span></div>` : ''}
+        ${ind.indirect > 0 ? `<div class="sp-shift-card__metric"><span>Team Leads / Support</span><span>${ind.indirect}</span></div>` : ''}
+        <div class="sp-shift-card__metric sp-shift-card__metric--muted">
+          <span>% of direct</span><span>${pctOfHc.toFixed(0)}%</span>
         </div>
-        <div class="sp-shift-card__metric">
+        <div class="sp-shift-card__metric sp-shift-card__metric--muted">
           <span>Hours/yr</span><span>${fmtCompact(s.hours)}</span>
         </div>
         <div class="sp-shift-card__metric sp-shift-card__metric--bold">
+          <span>Total on floor</span><span>${totalHc}</span>
+        </div>
+        <div class="sp-shift-card__metric">
           <span>Labor $/yr</span><span>${fmtDollars(s.costAnnual)}</span>
         </div>
         ${s.premiumAnnual > 0 ? `
@@ -441,12 +540,119 @@ function renderByShiftCard(derived, alloc) {
       </div>
     `;
   }).join('');
+  // Site-level indirect (Ops Mgr / HR / Safety / etc. — 1 per building)
+  const site = indirectByShift?.site;
+  const siteRow = site && site.total > 0 ? `
+    <div class="sp-site-indirect">
+      <strong>Site-level (across all shifts):</strong>
+      ${site.mgmt > 0 ? `<span class="hub-chip hub-chip--neutral">${site.mgmt} Mgr / Director</span>` : ''}
+      ${site.admin > 0 ? `<span class="hub-chip hub-chip--neutral">${site.admin} HR / Safety / IT / Eng</span>` : ''}
+      ${site.supv > 0 ? `<span class="hub-chip hub-chip--neutral">${site.supv} Supervisor</span>` : ''}
+      ${site.indirect > 0 ? `<span class="hub-chip hub-chip--neutral">${site.indirect} Support</span>` : ''}
+    </div>
+  ` : '';
   return `
     <div class="hub-card sp-byshift">
       <h3>Shift Breakdown</h3>
       <div class="sp-byshift-grid">${cards || '<div style="padding:16px;color:var(--ies-gray-500);font-size:13px;">No shift data yet. Apply an archetype or fill the matrix.</div>'}</div>
+      ${siteRow}
     </div>
   `;
+}
+
+/**
+ * Weekly staffing heatmap — 7 (or daysPerWeek) × 24 grid showing total
+ * headcount per hour per day. Cell color intensity scales with total HC
+ * relative to the peak-hour total. Tooltip breaks out direct/supv/indirect/
+ * mgmt/admin. Built from deriveHourlyStaffing output.
+ */
+function renderStaffingHeatmap(hourlyStaffing, daysPerWeek) {
+  if (!hourlyStaffing || !Array.isArray(hourlyStaffing.days)) return '';
+  const { days, peakHourTotal } = hourlyStaffing;
+  // Only show days that are operating (isActive — first `daysPerWeek` days)
+  const activeDays = days.slice(0, daysPerWeek);
+  if (activeDays.length === 0) return '';
+  if (peakHourTotal === 0) {
+    return `
+      <div class="hub-card sp-heatmap">
+        <h3>Weekly Staffing Heatmap</h3>
+        <div style="padding:12px 0;color:var(--ies-gray-500);font-size:13px;">
+          No staffing data yet. Apply an archetype + ensure labor lines have UPH and process_area set.
+        </div>
+      </div>
+    `;
+  }
+
+  const hourLabels = Array.from({ length: 24 }, (_, h) => h);
+
+  // Header row: day names
+  const dayHeaders = activeDays.map(d => `<th class="sp-hm-day-h">${escape(d.label)}</th>`).join('');
+
+  // One row per hour. Each cell's color intensity scales with total/peak.
+  const rows = hourLabels.map(h => {
+    const cells = activeDays.map(d => {
+      const snap = d.hours[h];
+      if (!snap || snap.total === 0) {
+        return `<td class="sp-hm-cell sp-hm-cell--zero" title="${escape(d.label)} ${formatHourOfDay(h)} — 0 on floor"></td>`;
+      }
+      const pct = Math.min(1, snap.total / peakHourTotal);
+      // Scale from pale blue-gray to IES blue
+      const hue = 215;
+      const sat = Math.round(20 + pct * 50);      // 20% → 70%
+      const light = Math.round(92 - pct * 42);    // 92% → 50%
+      const bg = `hsl(${hue}deg ${sat}% ${light}%)`;
+      const textColor = light < 62 ? '#fff' : 'var(--ies-navy)';
+      const tip = `${d.label} ${formatHourOfDay(h)} — ${snap.total} on floor\n` +
+        `  ${snap.direct} direct` +
+        (snap.supv > 0 ? ` · ${snap.supv} supv` : '') +
+        (snap.indirect > 0 ? ` · ${snap.indirect} lead/support` : '') +
+        (snap.mgmt > 0 ? ` · ${snap.mgmt} mgr` : '') +
+        (snap.admin > 0 ? ` · ${snap.admin} admin` : '');
+      return `<td class="sp-hm-cell" style="background:${bg};color:${textColor};" title="${escape(tip)}">${snap.total >= 5 ? snap.total : ''}</td>`;
+    }).join('');
+    return `
+      <tr>
+        <th class="sp-hm-hour-h">${formatHourOfDay(h)}</th>
+        ${cells}
+      </tr>
+    `;
+  }).join('');
+
+  return `
+    <div class="hub-card sp-heatmap">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;">
+        <h3 style="margin:0;">Weekly Staffing Heatmap</h3>
+        <span class="sp-hm-legend">
+          Total HC per hour
+          <span class="sp-hm-legend-scale" aria-hidden="true"></span>
+          <span style="font-variant-numeric:tabular-nums;">peak ${peakHourTotal}</span>
+        </span>
+      </div>
+      <p style="margin:0 0 12px 0;font-size:12px;color:var(--ies-gray-600);max-width:700px;">
+        Each cell is the total on-floor headcount (direct + indirect + supv + mgmt) for that hour of that day.
+        Hover a cell for the breakdown. Shifts that wrap past midnight (S3 11p–8a) correctly show up on both sides
+        of the grid. Site-level roles (Ops Mgr / HR / Safety) are shown during day hours (7a–5p) only.
+      </p>
+      <div style="overflow-x:auto;">
+        <table class="sp-hm">
+          <thead>
+            <tr>
+              <th></th>
+              ${dayHeaders}
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function formatHourOfDay(h) {
+  if (h === 0) return '12a';
+  if (h === 12) return '12p';
+  if (h < 12) return `${h}a`;
+  return `${h - 12}p`;
 }
 
 function renderFooterNote(alloc) {

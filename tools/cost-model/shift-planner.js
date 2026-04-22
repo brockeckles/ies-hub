@@ -365,6 +365,186 @@ export function deriveShiftHeadcount(allocation, volumeLines, laborLines, shifts
 }
 
 /**
+ * Classify an indirect labor role as shift-level (one per shift) vs
+ * site-level (one per building regardless of shift count). Keyword based —
+ * captures the common GXO position catalog without needing a schema column.
+ *
+ * Shift-level: Team Lead, Line Lead, Supervisor, QA Coord, Wave Tasker.
+ * Site-level: Ops Mgr, Director, HR, Admin, Safety, Maintenance, Engineer,
+ *             Routing, CSR, Security, Compliance, anything "Mgr" or "Director".
+ *
+ * @param {{ position?:string, role_name?:string, name?:string, activity?:string, ratio_to_direct?:number }} line
+ * @returns {'shift' | 'site'}
+ */
+export function classifyIndirectScope(line) {
+  const raw = String(line?.position || line?.role_name || line?.name || line?.activity || '').toLowerCase();
+  // Explicit site-level keywords win first
+  if (/manager|director|hr[- ]?admin|\bhr\b|admin[- ]?ops|safety|maintenance|engineer|csr|routing|compliance|security|super user|wms|facilit/.test(raw)) {
+    return 'site';
+  }
+  // Shift-level: leads, supervisors, coordinators, taskers
+  if (/lead|supervisor|coord|tasker|spotter/.test(raw)) {
+    return 'shift';
+  }
+  // Default to site-level (safer — doesn't inflate per-shift HC)
+  return 'site';
+}
+
+/**
+ * Classify an indirect role by management tier for display grouping.
+ * Four tiers: supv (line-level supervision), indirect (team leads / QA / support),
+ * mgmt (managers / directors), admin (HR / safety / IT etc — overhead admin).
+ *
+ * @param {{ position?:string, role_name?:string, name?:string, activity?:string }} line
+ * @returns {'supv' | 'indirect' | 'mgmt' | 'admin'}
+ */
+export function classifyIndirectTier(line) {
+  const raw = String(line?.position || line?.role_name || line?.name || line?.activity || '').toLowerCase();
+  if (/director|sr\.?\s*ops|senior\s*ops|operations\s*manager|ops\s*mgr|ops\s*manager/.test(raw)) return 'mgmt';
+  if (/supervisor/.test(raw)) return 'supv';
+  if (/hr|admin|safety|maintenance|engineer|csr|routing|compliance|security|super user|wms|manager/.test(raw)) return 'admin';
+  return 'indirect';
+}
+
+/**
+ * Derive indirect HC by shift, grouped by tier. Site-level roles stay as
+ * a single site count (displayed once, not per shift). Shift-level roles
+ * are allocated across shifts proportional to direct HC per shift so the
+ * Team Lead ratio actually lands where the direct people are.
+ *
+ * @param {Array<Object>} indirectLines
+ * @param {Array<{ num:number, directHc:number }>} byShiftDirect
+ * @returns {{
+ *   byShift: Array<{ num:number, supv:number, indirect:number, mgmt:number, admin:number, total:number }>,
+ *   site: { supv:number, indirect:number, mgmt:number, admin:number, total:number }
+ * }}
+ */
+export function deriveIndirectByShift(indirectLines, byShiftDirect) {
+  const shiftCount = byShiftDirect?.length || 0;
+  const byShift = [];
+  for (let i = 0; i < shiftCount; i++) {
+    byShift.push({ num: i + 1, supv: 0, indirect: 0, mgmt: 0, admin: 0, total: 0 });
+  }
+  const site = { supv: 0, indirect: 0, mgmt: 0, admin: 0, total: 0 };
+
+  if (!Array.isArray(indirectLines) || shiftCount === 0) return { byShift, site };
+
+  // Sum direct HC for proportional allocation.
+  const totalDirect = byShiftDirect.reduce((a, s) => a + (s.directHc || 0), 0) || 1;
+
+  for (const line of indirectLines) {
+    const scope = classifyIndirectScope(line);
+    const tier = classifyIndirectTier(line);
+    const hc = Number(line.headcount) || Number(line.hc) || Number(line.fte) || 0;
+    if (hc <= 0) continue;
+
+    if (scope === 'site') {
+      site[tier] += hc;
+      site.total += hc;
+    } else {
+      // Shift-level — allocate proportional to direct HC, then round each shift
+      // independently so totals are sensible (not < actual total — we floor/ceil
+      // the bigger shifts first).
+      const shares = byShiftDirect.map(s => (s.directHc || 0) / totalDirect);
+      const rawAlloc = shares.map(sh => sh * hc);
+      const rounded = rawAlloc.map(v => Math.round(v));
+      // Reconcile rounding drift — if the rounded sum is off, adjust the
+      // biggest-share shift by the delta.
+      const drift = hc - rounded.reduce((a, v) => a + v, 0);
+      if (drift !== 0) {
+        let maxIdx = 0;
+        for (let i = 1; i < shares.length; i++) {
+          if (shares[i] > shares[maxIdx]) maxIdx = i;
+        }
+        rounded[maxIdx] = Math.max(0, rounded[maxIdx] + drift);
+      }
+      for (let i = 0; i < shiftCount; i++) {
+        byShift[i][tier] += rounded[i];
+        byShift[i].total += rounded[i];
+      }
+    }
+  }
+
+  return { byShift, site };
+}
+
+/**
+ * Produce an hour-by-weekday staffing grid for the ops walkthrough heatmap.
+ * For each hour of each operating day, sums the direct + indirect HC from
+ * any shift that's active during that hour. Days where a shift doesn't run
+ * get 0 (e.g., S3 running only Mon-Fri has empty Sat/Sun cells).
+ *
+ * For day-1 MVP we assume every shift runs on every operating day of the
+ * week — per-shift days_per_week is a Phase-2 enhancement (flagged in the
+ * design memo §9 open question 2).
+ *
+ * @param {Array<{ num:number, startHour:number, endHour:number }>} shifts
+ * @param {Array<{ num:number, directHc:number }>} byShiftDirect
+ * @param {{ byShift: Array<{ num:number, supv:number, indirect:number, mgmt:number, admin:number, total:number }>, site:{ supv:number, indirect:number, mgmt:number, admin:number, total:number } }} indirectByShift
+ * @param {number} [daysPerWeek=7]
+ * @returns {{
+ *   days: Array<{
+ *     dayIdx: number,
+ *     label: string,
+ *     hours: Array<{ hour:number, direct:number, supv:number, indirect:number, mgmt:number, admin:number, total:number }>
+ *   }>,
+ *   peakHourTotal: number
+ * }}
+ */
+export function deriveHourlyStaffing(shifts, byShiftDirect, indirectByShift, daysPerWeek) {
+  const dayCount = Math.max(1, Math.min(7, Math.floor(Number(daysPerWeek) || 7)));
+  const dayLabels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const isActiveDay = (dayIdx) => dayIdx < dayCount;
+
+  // Precompute "is this shift active at this hour" — handles overnight shifts
+  // (e.g. S3 = 23-7 wraps past midnight).
+  function shiftCoversHour(s, hour) {
+    const startH = ((Number(s.startHour) || 0) + 24) % 24;
+    const endH = ((Number(s.endHour) || 0) + 24) % 24;
+    if (startH === endH) return false;
+    if (startH < endH) return hour >= startH && hour < endH;
+    // Wrap-around (23 -> 7)
+    return hour >= startH || hour < endH;
+  }
+
+  const days = [];
+  let peakHourTotal = 0;
+  for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
+    const active = isActiveDay(dayIdx);
+    const hours = [];
+    for (let hour = 0; hour < 24; hour++) {
+      let direct = 0, supv = 0, indirect = 0, mgmt = 0, admin = 0;
+      if (active && Array.isArray(shifts)) {
+        for (let si = 0; si < shifts.length; si++) {
+          const s = shifts[si];
+          if (!shiftCoversHour(s, hour)) continue;
+          direct += Number(byShiftDirect?.[si]?.directHc) || 0;
+          const ind = indirectByShift?.byShift?.[si];
+          if (ind) {
+            supv += ind.supv; indirect += ind.indirect; mgmt += ind.mgmt; admin += ind.admin;
+          }
+        }
+      }
+      // Site-level indirect/mgmt — present during the building's operating
+      // envelope (roughly any hour where at least one shift is active).
+      // For MVP, attribute site-level to the day-shift window only (7a-5p)
+      // since most mgmt / admin are day-only. Ops SMEs can refine later.
+      if (active) {
+        const site = indirectByShift?.site;
+        if (site && hour >= 7 && hour < 17) {
+          supv += site.supv; indirect += site.indirect; mgmt += site.mgmt; admin += site.admin;
+        }
+      }
+      const total = direct + supv + indirect + mgmt + admin;
+      if (total > peakHourTotal) peakHourTotal = total;
+      hours.push({ hour, direct, supv, indirect, mgmt, admin, total });
+    }
+    days.push({ dayIdx, label: dayLabels[dayIdx], hours });
+  }
+  return { days, peakHourTotal };
+}
+
+/**
  * Split labor lines into per-shift rows when calc_from='matrix'. The engine
  * still sums them back up in buildYearlyProjections — this is purely an
  * exploded labor table for Direct Labor visibility + shift premium math.
