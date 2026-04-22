@@ -17,7 +17,7 @@ import {
   validateShiftMatrix,
   normalizeShiftMatrix,
   deriveShiftHeadcount,
-} from './shift-planner.js?v=20260422-xH';
+} from './shift-planner.js?v=20260422-xI';
 
 /**
  * Return section HTML.
@@ -324,13 +324,20 @@ function renderMatrixCard(alloc, shiftCount, validation) {
     `;
   }).join('');
 
-  // Column totals — sum of each shift's percentages across all functions.
-  // Not required to be 100, informational only.
-  const colTotals = alloc.shifts.map((_, i) => {
+  // "Shift workload mix" — normalized column totals expressed as a share
+  // of the total matrix points. Rows each sum to 100 across shifts, so the
+  // column sums add up to (8 × 100) = 800 at most; this divides by the
+  // actual grand total (which can be <800 if some rows are zero-filled /
+  // unused, like cold-chain Pack or cross-dock Put-Away). Result is a
+  // percentage per shift that reads directly as "Shift 2 carries 48% of
+  // the work" — much clearer than the raw point total.
+  const rawColSums = alloc.shifts.map((_, i) => {
     let s = 0;
     for (const fn of FUNCTION_ORDER) s += Number(alloc.matrix[fn][i]) || 0;
     return s;
   });
+  const grandTotal = rawColSums.reduce((a, v) => a + v, 0);
+  const colMixPct = rawColSums.map(s => grandTotal > 0 ? (s / grandTotal * 100) : 0);
 
   const validationBanner = validation.valid
     ? ''
@@ -359,9 +366,9 @@ function renderMatrixCard(alloc, shiftCount, validation) {
             ${rows}
           </tbody>
           <tfoot>
-            <tr class="sp-col-total-row">
-              <td>Shift volume index</td>
-              ${colTotals.map(c => `<td class="hub-num" style="text-align:right;">${c.toFixed(0)}</td>`).join('')}
+            <tr class="sp-col-total-row" title="Share of total matrix workload — normalized so the row sums to 100%. Tells you which shift carries the most work.">
+              <td>Shift workload mix</td>
+              ${colMixPct.map(c => `<td class="hub-num" style="text-align:right;">${c.toFixed(0)}%</td>`).join('')}
               <td></td>
               <td></td>
             </tr>
