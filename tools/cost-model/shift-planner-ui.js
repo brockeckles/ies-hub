@@ -72,6 +72,7 @@ export function renderShiftPlanningSection(ctx) {
   return `
     <div class="shift-planning">
       ${renderHeader(alloc, archetypes, archetypeOptions, validation)}
+      ${renderStructureCard(shiftsCfg)}
       ${renderMatrixCard(alloc, shiftCount, validation, derived)}
       ${renderPreviewPanel(derived, shiftCount)}
       ${renderByShiftCard(derived, alloc, indirectByShift)}
@@ -125,6 +126,15 @@ export function renderShiftPlanningSection(ctx) {
       .sp-shift-card__metric { display: flex; justify-content: space-between; padding: 4px 0; font-size: 12px; }
       .sp-shift-card__metric--bold { font-weight: 600; color: var(--ies-navy); border-top: 1px solid var(--ies-gray-200); padding-top: 6px; margin-top: 4px; }
       .sp-footer-note { font-size: 12px; color: var(--ies-gray-500); padding: 12px 16px 0; font-style: italic; }
+
+      /* Shift Structure card (2026-04-22 IA reshuffle) */
+      .sp-structure { padding: 16px; }
+      .sp-structure__header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; gap: 16px; flex-wrap: wrap; }
+      .sp-structure__summary { font-size: 12px; color: var(--ies-gray-600); padding: 4px 10px; background: var(--ies-gray-50); border: 1px solid var(--ies-gray-200); border-radius: 12px; font-variant-numeric: tabular-nums; }
+      .sp-structure__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+      .sp-structure__grid .hub-field { min-width: 0; }
+      .sp-structure__workweek { grid-column: span 2; }
+      @media (max-width: 640px) { .sp-structure__workweek { grid-column: auto; } }
 
       /* Matrix mode toggle pill */
       .sp-mode-toggle { display: inline-flex; background: var(--ies-gray-100); border-radius: 6px; padding: 2px; gap: 0; }
@@ -322,6 +332,65 @@ function ensureAllocation(model) {
     }
   }
   return model.shiftAllocation;
+}
+
+/**
+ * Shift Structure card — surfaces all 5 shift-structural fields in one place.
+ * Three of these (hoursPerShift / daysPerWeek / weeksPerYear) were previously
+ * not editable anywhere in the UI — only set at project-create time. Exposing
+ * them here lets the analyst match the model to real facility operating
+ * hours without needing a Supabase edit.
+ *
+ * Uses the generic data-field binder from ui.js (we removed the early-return
+ * for shiftPlanning section), so no custom event wiring needed in this module.
+ */
+function renderStructureCard(shiftsCfg) {
+  const s = shiftsCfg || {};
+  const shiftsPerDay = s.shiftsPerDay || 1;
+  const hoursPerShift = s.hoursPerShift || 8;
+  const daysPerWeek = s.daysPerWeek || 5;
+  const weeksPerYear = s.weeksPerYear || 52;
+  const workweekPattern = s.workweekPattern || '5x8';
+  const operatingHoursPerYear = hoursPerShift * shiftsPerDay * daysPerWeek * weeksPerYear;
+  return `
+    <div class="hub-card sp-structure">
+      <div class="sp-structure__header">
+        <div class="text-subtitle" style="margin:0;">Shift Structure</div>
+        <span class="sp-structure__summary" title="Facility operating hours/year implied by these structure inputs (hours/shift × shifts/day × days/week × weeks/year).">
+          ${operatingHoursPerYear.toLocaleString()} facility operating hrs/yr
+        </span>
+      </div>
+      <div class="sp-structure__grid">
+        <div class="hub-field">
+          <label class="hub-field__label" title="Number of shifts the facility runs per day (1-3). Resizes the Throughput Matrix to match when changed.">Shifts / Day</label>
+          <input class="hub-input" type="number" value="${shiftsPerDay}" min="1" max="3" step="1" data-field="shifts.shiftsPerDay" data-type="number" />
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label" title="Hours per shift. Default 8 (standard), 8.5 or 10 for compressed schedules, 12 for 3x12.">Hours / Shift</label>
+          <input class="hub-input" type="number" value="${hoursPerShift}" min="4" max="24" step="0.5" data-field="shifts.hoursPerShift" data-type="number" />
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label" title="Operating days per week. 5 for standard retail, 7 for 24/7 fulfillment ops.">Days / Week</label>
+          <input class="hub-input" type="number" value="${daysPerWeek}" min="1" max="7" step="1" data-field="shifts.daysPerWeek" data-type="number" />
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label" title="Operating weeks per year. Usually 52 — drop 1-2 for deep-maintenance shutdowns.">Weeks / Year</label>
+          <input class="hub-input" type="number" value="${weeksPerYear}" min="40" max="52" step="1" data-field="shifts.weeksPerYear" data-type="number" />
+        </div>
+        <div class="hub-field sp-structure__workweek">
+          <label class="hub-field__label" title="Workweek pattern — operational metadata. All patterns sum to ~2,080 paid hrs/yr; this tag is for roster reporting and OT-premium scheduling context.">Workweek Pattern</label>
+          <select class="hub-input" data-field="shifts.workweekPattern">
+            <option value="5x8"${workweekPattern === '5x8' ? ' selected' : ''}>5 × 8 (standard)</option>
+            <option value="4x10"${workweekPattern === '4x10' ? ' selected' : ''}>4 × 10 (compressed)</option>
+            <option value="9/80"${workweekPattern === '9/80' ? ' selected' : ''}>9/80 (biweekly compressed)</option>
+            <option value="3x12"${workweekPattern === '3x12' ? ' selected' : ''}>3 × 12 (12-hr shift)</option>
+            <option value="24_7_rotating"${workweekPattern === '24_7_rotating' ? ' selected' : ''}>24 / 7 (rotating)</option>
+            <option value="custom"${workweekPattern === 'custom' ? ' selected' : ''}>Custom</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 function renderHeader(alloc, archetypes, archetypeOptions, validation) {

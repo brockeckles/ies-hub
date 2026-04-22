@@ -11,13 +11,13 @@ import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import * as calc from './calc.js?v=20260421-xE';
-import * as api from './api.js?v=20260422-xM';
+import * as api from './api.js?v=20260422-xN';
 import * as scenarios from './calc.scenarios.js?v=20260421-wA';
 import * as monthlyCalc from './calc.monthly.js?v=20260421-xE';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
-import * as shiftPlannerCalc from './shift-planner.js?v=20260422-xM';
-import * as shiftPlannerUi from './shift-planner-ui.js?v=20260422-xM';
-import * as shiftArchetypes from './shift-archetypes.js?v=20260422-xM';
+import * as shiftPlannerCalc from './shift-planner.js?v=20260422-xN';
+import * as shiftPlannerUi from './shift-planner-ui.js?v=20260422-xN';
+import * as shiftArchetypes from './shift-archetypes.js?v=20260422-xN';
 
 // ============================================================
 // Non-blocking modal helpers (replace confirm/prompt/alert).
@@ -1707,47 +1707,37 @@ function renderShifts() {
     <div class="cm-section-header">
       <div>
         <div class="cm-section-title">Labor Factors</div>
-        <div class="cm-section-desc">Shift structure + global labor economics + the <strong>position catalog</strong> that drives per-activity rates in the Labor section. Change a position's wage here and every labor line using that position updates automatically.</div>
+        <div class="cm-section-desc">Global labor economics (PTO, holidays, benefit load, overtime, shift premiums) + the <strong>position catalog</strong> that drives per-activity rates in the Labor section. Change a position's wage here and every labor line using that position updates automatically. Shift structure (shifts/day, hours/shift, workweek pattern) lives on <strong>Shift Planner</strong>.</div>
       </div>
     </div>
 
-    <!-- Shift Structure + hours -->
-    <!-- Brock 2026-04-21 pm (UI tightening): PTO Hours + Holiday Hours moved
-         up into this card so they visually connect to the Productive Hours
-         tile they drive. Formula rendered inline under the Productive tile
-         so the relationship reads top-to-bottom: inputs → math → output.
-         (Direct Utilization stayed on the Labor Economics card — it's a UPH
-         haircut, not an hours haircut.) -->
+    <!-- Wage Factors (shift premiums, PTO, holiday hours) -->
+    <!-- 2026-04-22 IA reshuffle: this card used to be called "Shift
+         Structure" and held shifts/day + workweek pattern. Those fields
+         moved to Shift Planner. What remains is pure wage-factor
+         economics — premiums + paid-time-off hours that drive the
+         Productive Hours tile. -->
     <div class="hub-card mb-4">
       <div style="display:flex;align-items:baseline;justify-content:space-between;margin:0 0 12px;gap:12px;">
-        <div class="text-subtitle" style="margin:0;">Shift Structure</div>
+        <div class="text-subtitle" style="margin:0;">Wage Factors</div>
         <span class="hub-field__hint">US FT reference: 2,080 paid hrs / FTE. PTO &amp; holiday hours subtract to give Productive.</span>
       </div>
-      <!-- Row 1: facility shift pattern + premiums + workweek pattern -->
+      <!-- IA 2026-04-22: Shifts/Day + Workweek Pattern moved to Shift Planner
+           under "Shift Structure" card. Labor Factors retains only labor
+           COSTING: premiums, PTO, holiday, benefit load, OT, turnover,
+           position catalog. -->
+      <!-- Row 1: shift wage premiums -->
       <div style="display:grid;grid-template-columns:repeat(4, minmax(0, 1fr));gap:12px;margin-bottom:12px;">
         <div class="hub-field">
-          <label class="hub-field__label" title="Number of shifts the FACILITY runs per day (1-3). Facility operating descriptor — does not affect the 2,080 paid hours per FTE.">Shifts / Day <span style="color:var(--ies-gray-400);font-weight:400;">(facility)</span></label>
-          <input class="hub-input" type="number" value="${s.shiftsPerDay || 1}" min="1" max="3" step="1" data-field="shifts.shiftsPerDay" data-type="number" />
-        </div>
-        <div class="hub-field">
-          <label class="hub-field__label" title="Workweek pattern — operational metadata only. All patterns sum to ~2,080 paid hrs/yr; this tag is for roster reporting and OT-premium scheduling context.">Workweek Pattern</label>
-          <select class="hub-input" data-field="shifts.workweekPattern">
-            <option value="5x8"${(s.workweekPattern || '5x8') === '5x8' ? ' selected' : ''}>5 × 8 (standard)</option>
-            <option value="4x10"${s.workweekPattern === '4x10' ? ' selected' : ''}>4 × 10 (compressed)</option>
-            <option value="9/80"${s.workweekPattern === '9/80' ? ' selected' : ''}>9/80 (biweekly compressed)</option>
-            <option value="3x12"${s.workweekPattern === '3x12' ? ' selected' : ''}>3 × 12 (12-hr shift)</option>
-            <option value="24_7_rotating"${s.workweekPattern === '24_7_rotating' ? ' selected' : ''}>24 / 7 (rotating)</option>
-            <option value="custom"${s.workweekPattern === 'custom' ? ' selected' : ''}>Custom</option>
-          </select>
-        </div>
-        <div class="hub-field">
-          <label class="hub-field__label" title="Pay premium applied to 2nd-shift hours">2nd Shift Premium %</label>
+          <label class="hub-field__label" title="Pay premium applied to 2nd-shift hours. Shift structure (shifts/day, workweek pattern) lives on Shift Planner.">2nd Shift Premium %</label>
           <input class="hub-input" type="number" value="${s.shift2Premium || 0}" min="0" max="50" step="0.5" data-field="shifts.shift2Premium" data-type="number" />
         </div>
         <div class="hub-field">
-          <label class="hub-field__label" title="Pay premium applied to 3rd-shift hours">3rd Shift Premium %</label>
+          <label class="hub-field__label" title="Pay premium applied to 3rd-shift hours. Shift structure (shifts/day, workweek pattern) lives on Shift Planner.">3rd Shift Premium %</label>
           <input class="hub-input" type="number" value="${s.shift3Premium || 0}" min="0" max="50" step="0.5" data-field="shifts.shift3Premium" data-type="number" />
         </div>
+        <div></div>
+        <div></div>
       </div>
       <!-- Row 2: PTO + Holiday hours (the inputs that drive Productive) -->
       <div style="display:grid;grid-template-columns:repeat(4, minmax(0, 1fr));gap:12px;margin-bottom:12px;">
@@ -2133,8 +2123,9 @@ function renderShiftPlanning() {
   if (!shiftArchetypes.isArchetypesLoaded() && !_shiftArchetypesLoadInFlight) {
     ensureShiftArchetypesLoaded().then(() => renderSection());
   }
-  // Keep the allocation's shift count in sync with model.shifts.shiftsPerDay,
-  // in case the user changed it on Labor Factors after last visit.
+  // Keep the allocation's shift count in sync with model.shifts.shiftsPerDay.
+  // (Structure fields now live on this same page — 2026-04-22 IA reshuffle —
+  // so the resize triggers right after the user edits Shifts / Day inline.)
   shiftPlannerUi.syncAllocationToShifts(model);
   return shiftPlannerUi.renderShiftPlanningSection({
     model,
@@ -4911,8 +4902,10 @@ function bindSectionEvents(section, container) {
         renderSection();
       },
     });
-    // No data-field inputs inside Shift Planning — early-exit.
-    return;
+    // 2026-04-22 IA reshuffle — Shift Structure fields (shiftsPerDay /
+    // hoursPerShift / daysPerWeek / weeksPerYear / workweekPattern) now
+    // live on the Shift Planner page as data-field inputs. Fall through
+    // to the generic binder below (no `return`) so those inputs get wired.
   }
 
   // Generic input binding: data-field="path.to.field"
