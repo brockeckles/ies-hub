@@ -391,6 +391,12 @@ export function buildMonthlyProjections(params) {
     laborLines = [],
     calcHeur = null,
     marketLaborProfile = null,
+    // Phase 2e follow-up (2026-04-22): 12-element per-calendar-month equipment
+    // expense series (index 0 = January). When provided, replaces the flat
+    // base_equipment_cost / 12 spread — used by rented_mhe lines with
+    // seasonal_months to concentrate cost in peak months. Sum should equal
+    // base_equipment_cost (pre-escalation).
+    equipment_monthly_series = null,
     // Phase A Labor Build-Up Logic additions (Brock 2026-04-20) — all optional.
     // When absent, calc falls back to the flat benefitLoadPct path.
     wageLoadByYear = null,    // 5-element array of fractions
@@ -560,7 +566,19 @@ export function buildMonthlyProjections(params) {
       });
     }
     // Equipment (leased) — uses dedicated equipment escalation
-    const monthlyEquip = base_equipment_cost * escEquipmentMult / 12;
+    //
+    // Phase 2e follow-up (2026-04-22): when equipment_monthly_series is
+    // provided (12 values, index 0 = Jan), use the calendar-month slot so
+    // rented_mhe lines with seasonal_months land in their actual months.
+    // Falls back to base_equipment_cost / 12 smoothing when absent.
+    let monthlyEquip;
+    if (Array.isArray(equipment_monthly_series) && equipment_monthly_series.length === 12) {
+      const cm = p.calendar_month; // 1-12
+      const slot = (cm >= 1 && cm <= 12) ? equipment_monthly_series[cm - 1] : base_equipment_cost / 12;
+      monthlyEquip = slot * escEquipmentMult;
+    } else {
+      monthlyEquip = base_equipment_cost * escEquipmentMult / 12;
+    }
     if (monthlyEquip > 0) {
       expenseRows.push({
         project_id, period_id: p.id, expense_line_code: 'LEASED_EQUIP',

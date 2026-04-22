@@ -1087,6 +1087,39 @@ export function totalRentedMheCost(lines) {
   }, 0);
 }
 
+/**
+ * Phase 2e follow-up (2026-04-22): produce a 12-element array of equipment
+ * expense by calendar month (index 0 = January).
+ *
+ *   Owned / IT / Facility lines — annual cost spread evenly /12
+ *   rented_mhe lines           — qty × monthly_cost added ONLY to each month
+ *                                in seasonal_months (defaults to [10,11,12])
+ *
+ * Used by the monthly engine so Q4 shows the real peak-rental bump rather
+ * than a smoothed /12 spread. Sum across months equals totalEquipmentCost.
+ *
+ * @param {import('./types.js?v=20260418-sK').EquipmentLine[]} lines
+ * @returns {number[]} length-12 array, index 0 = January
+ */
+export function computeEquipmentMonthlySeries(lines) {
+  const series = new Array(12).fill(0);
+  if (!Array.isArray(lines)) return series;
+  for (const line of lines) {
+    if (!line) continue;
+    if (line.line_type === 'rented_mhe') {
+      const qty = Number(line.quantity) || 0;
+      const monthly = (line.monthly_cost || 0) + (line.monthly_maintenance || 0);
+      const months = _normalizeSeasonalMonths(line.seasonal_months);
+      for (const m of months) series[m - 1] += qty * monthly;
+    } else {
+      const annual = equipLineAnnual(line);
+      const perMonth = annual / 12;
+      for (let i = 0; i < 12; i++) series[i] += perMonth;
+    }
+  }
+  return series;
+}
+
 export function totalEquipmentCapital(lines) {
   return lines.reduce((sum, line) => {
     // Capital items ONLY — TI is facility rent, lease has no capital, service
@@ -3370,6 +3403,18 @@ export function adaptYearlyToMonthlyParams(p) {
     base_labor_cost:     p.baseLaborCost,
     base_facility_cost:  p.baseFacilityCost,
     base_equipment_cost: p.baseEquipmentCost,
+    // Phase 2e follow-up (2026-04-22): pass the 12-month equipment series
+    // so rented_mhe lines with seasonal_months actually land in Q4 (or
+    // whichever months) instead of smoothed /12 across the year. Prefer
+    // an explicit series from the caller; otherwise derive from
+    // equipmentLines when available. When null, the monthly engine falls
+    // back to base_equipment_cost / 12 (pre-2e behavior).
+    equipment_monthly_series:
+      (Array.isArray(p.equipmentMonthlySeries) && p.equipmentMonthlySeries.length === 12)
+        ? p.equipmentMonthlySeries
+        : (Array.isArray(p.equipmentLines) && p.equipmentLines.length > 0)
+          ? computeEquipmentMonthlySeries(p.equipmentLines)
+          : null,
     base_overhead_cost:  p.baseOverheadCost,
     base_vas_cost:       p.baseVasCost,
     startup_amort:       p.startupAmort,
