@@ -2637,6 +2637,51 @@ export function autoGenerateEquipment(state, opts = {}) {
     return peak > 0 ? peak : null; // null = "no signal, use heuristic"
   };
 
+  // Phase 2d (2026-04-22): derive the peak / steady / seasonal signal per
+  // MHE type from the MLV. Aggregates across calendar years by calendar_month
+  // (1-12) — same pattern as equipmentOverflowByLine — so a 5-year contract
+  // with Y5 peak higher than Y1 still surfaces the worst-case rental sizing.
+  //
+  // Returns:
+  //   peak           — max monthly FTE (already available)
+  //   steady         — min of non-zero monthly FTEs (represents baseline op)
+  //   seasonalMonths — calendar_months 1-12 where FTE > steady × 1.10
+  //
+  // Returns null when MLV is absent OR no months carry this type (auto-gen
+  // then falls through to the legacy heuristic path for owned-only sizing).
+  const mheSignalFromMlv = (type) => {
+    if (!mlv?.months || !Array.isArray(mlv.months) || mlv.months.length === 0) return null;
+    const byCalMonth = Array(12).fill(0);
+    for (const m of mlv.months) {
+      const cm = m.calendar_month;
+      if (!cm || cm < 1 || cm > 12) continue;
+      const f = (m.by_mhe && m.by_mhe[type]) || 0;
+      if (f > byCalMonth[cm - 1]) byCalMonth[cm - 1] = f;
+    }
+    const nonZero = byCalMonth.filter(f => f > 0);
+    if (nonZero.length === 0) return null;
+    const peak = Math.max(...nonZero);
+    const steady = Math.min(...nonZero);
+    const threshold = steady * 1.10;
+    const seasonalMonths = [];
+    for (let i = 0; i < 12; i++) if (byCalMonth[i] > threshold) seasonalMonths.push(i + 1);
+    return { peak, steady, seasonalMonths };
+  };
+
+  // Peak direct-labor FTE across all types — drives IT equipment sizing
+  // (Phase 2d: IT always sized to peak, not totalDirectFtes which is a
+  // horizon average). Returns totalDirectFtes as a safe fallback when
+  // MLV is unavailable.
+  const peakDirectFteFromMlv = () => {
+    if (!mlv?.months || !Array.isArray(mlv.months) || mlv.months.length === 0) return totalDirectFtes;
+    let peak = 0;
+    for (const m of mlv.months) {
+      const t = Number(m.total_fte) || 0;
+      if (t > peak) peak = t;
+    }
+    return peak > 0 ? peak : totalDirectFtes;
+  };
+
   // Helper — accepts explicit financing type per the Asset Defaults Guidance
   // (2026-04-20). Legacy callers without `financing` still work via heuristic
   // fallback, but the auto-gen rules below now always pass the type.
@@ -2668,6 +2713,28 @@ export function autoGenerateEquipment(state, opts = {}) {
         driven_by: drivenBy,
       });
     }
+  };
+
+  // Phase 2d (2026-04-22): dedicated helper for rented_mhe sibling lines.
+  // Always line_type='rented_mhe' with seasonal_months from the MLV delta.
+  // monthlyCost is the rental rate (maintenance bundled); acquisition_cost
+  // is always 0; peak_markup_pct stays 0 (whole line IS the peak).
+  const addRentedMhe = (name, qty, monthlyCost, seasonalMonths, drivenBy) => {
+    if (qty <= 0) return;
+    if (!Array.isArray(seasonalMonths) || seasonalMonths.length === 0) return;
+    lines.push({
+      equipment_name: name,
+      category: 'MHE',
+      line_type: 'rented_mhe',
+      quantity: Math.ceil(qty),
+      acquisition_type: 'lease', // semantically "rental" — stored as lease
+      monthly_cost: monthlyCost,
+      acquisition_cost: 0,
+      monthly_maintenance: 0,
+      amort_years: 5,
+      seasonal_months: seasonalMonths.slice().sort((a, b) => a - b),
+      driven_by: drivenBy,
+    });
   };
 
   // Facility-level policy inputs — defaults per Asset Defaults Guidance.
@@ -2704,50 +2771,106 @@ export function autoGenerateEquipment(state, opts = {}) {
   //    "(heuristic)" so the Equipment UI can surface which path drove
   //    the quantity.
   // ────────────────────────────────────────────────────────────────
-  if (totalDirectFtes > 0) {
-    // Reach Truck
-    const reachPeak = peakMheFteFromMlv('reach_truck');
-    const reachQty = (reachPeak != null)
-      ? (reachPeak / shiftsPerDay) * spareFactor
-      : (totalDirectFtes / 3) * spareFactor;
-    const reachDriver = (reachPeak != null)
-      ? `Peak ${reachPeak.toFixed(1)} FTE ÷ ${shiftsPerDay} shifts × 1.15 spare (MLV shift-math)`
-      : `${totalDirectFtes.toFixed(1)} direct FTE / 3 × 1.15 spare (heuristic)`;
-    addEquip('Reach Truck', 'MHE', reachQty,
-      /*monthlyCost*/ 800, /*acqCost*/ 0, /*maint*/ 150, reachDriver, 'lease');
+  // Phase 2d (2026-04-22): each MHE type generates an OWNED line sized to
+  // steady-state max-shift HC (small spare), and a RENTED sibling sized to
+  // the peak-vs-steady delta (opex, seasonal_months derived from MLV). When
+  // MLV is absent or the type is flat across months, only the owned line is
+  // generated at the legacy 1.15 spare to preserve pre-2d behavior.
+  //
+  //   OWNED_SPARE  = 1.05 — thin buffer for maintenance downtime on owned fleet
+  //   legacy path  = 1.15 — keeps behavior identical for heuristic / flat MLV
+  //
+  // Default rental rates per Brock 2026-04-22:
+  //   reach_truck        $1,000/mo
+  //   order_picker         $900/mo
+  //   sit_down_forklift  $2,500/mo
+  //   walkie_rider         $650/mo  (not auto-generated today, ready for future)
+  const OWNED_SPARE = 1.05;
+  const emitMheFamily = (config) => {
+    // config: { mheType, ownedName, rentalName, ownedMonthly, ownedMaint,
+    //          rentalMonthly, heuristic: { divisor, when: () => bool, minPeak } }
+    const sig = mheSignalFromMlv(config.mheType);
 
-    // Order Picker
-    const pickerPeak = peakMheFteFromMlv('order_picker');
-    const pickerQty = (pickerPeak != null)
-      ? (pickerPeak / shiftsPerDay) * spareFactor
-      : Math.max(0, (totalDirectFtes / 5) * spareFactor);
-    const pickerDriver = (pickerPeak != null)
-      ? `Peak ${pickerPeak.toFixed(1)} FTE ÷ ${shiftsPerDay} shifts × 1.15 spare (MLV shift-math)`
-      : `${totalDirectFtes.toFixed(1)} direct FTE / 5 × 1.15 spare (heuristic)`;
-    addEquip('Order Picker', 'MHE', pickerQty,
-      600, 0, 100, pickerDriver, 'lease');
+    if (sig) {
+      // MLV-backed path — split into owned + rental if a peak/steady delta exists
+      const steadyQty = Math.ceil((sig.steady / shiftsPerDay) * OWNED_SPARE);
+      const peakShiftFleet = Math.ceil(sig.peak / shiftsPerDay);
+      const rentalQty = Math.max(0, peakShiftFleet - steadyQty);
 
-    // Sit-down forklift — only if MLV reports non-trivial peak. No
-    // heuristic fallback (the prior code didn't generate this type).
-    const forkliftPeak = peakMheFteFromMlv('sit_down_forklift');
-    if (forkliftPeak != null && forkliftPeak >= 0.5) {
-      const forkliftQty = (forkliftPeak / shiftsPerDay) * spareFactor;
-      addEquip('Sit-Down Counterbalance Forklift', 'MHE', forkliftQty,
-        750, 0, 150,
-        `Peak ${forkliftPeak.toFixed(1)} FTE ÷ ${shiftsPerDay} shifts × 1.15 spare (MLV shift-math)`,
-        'lease');
+      if (config.minPeak != null && sig.peak < config.minPeak) return;
+
+      const ownedDriver = `Steady ${sig.steady.toFixed(1)} FTE ÷ ${shiftsPerDay} shifts × 1.05 spare (MLV)`;
+      addEquip(config.ownedName, 'MHE', steadyQty,
+        config.ownedMonthly, 0, config.ownedMaint, ownedDriver, 'lease');
+
+      if (rentalQty > 0 && sig.seasonalMonths.length > 0) {
+        const monthLabels = sig.seasonalMonths.map(n => ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][n-1]);
+        const rentalDriver = `Peak ${sig.peak.toFixed(1)} − steady ${sig.steady.toFixed(1)} = ${(sig.peak - sig.steady).toFixed(1)} FTE ÷ ${shiftsPerDay} = ${rentalQty} rental unit${rentalQty === 1 ? '' : 's'} (${monthLabels.join(', ')} per MLV)`;
+        addRentedMhe(config.rentalName, rentalQty, config.rentalMonthly, sig.seasonalMonths, rentalDriver);
+      }
+    } else if (config.heuristic && config.heuristic.when()) {
+      // Heuristic fallback — owned-only at legacy 1.15 spare. No rental line
+      // without MLV signal (would be guessing).
+      const qty = Math.max(0, (totalDirectFtes / config.heuristic.divisor) * spareFactor);
+      const driver = `${totalDirectFtes.toFixed(1)} direct FTE / ${config.heuristic.divisor} × 1.15 spare (heuristic)`;
+      addEquip(config.ownedName, 'MHE', qty,
+        config.ownedMonthly, 0, config.ownedMaint, driver, 'lease');
     }
+  };
+
+  if (totalDirectFtes > 0) {
+    emitMheFamily({
+      mheType: 'reach_truck',
+      ownedName: 'Reach Truck',
+      rentalName: 'Reach Truck (peak rental)',
+      ownedMonthly: 800, ownedMaint: 150,
+      rentalMonthly: 1000,
+      heuristic: { when: () => true, divisor: 3 },
+    });
+    emitMheFamily({
+      mheType: 'order_picker',
+      ownedName: 'Order Picker',
+      rentalName: 'Order Picker (peak rental)',
+      ownedMonthly: 600, ownedMaint: 100,
+      rentalMonthly: 900,
+      heuristic: { when: () => true, divisor: 5 },
+    });
+    emitMheFamily({
+      mheType: 'sit_down_forklift',
+      ownedName: 'Sit-Down Counterbalance Forklift',
+      rentalName: 'Sit-Down Forklift (peak rental)',
+      ownedMonthly: 750, ownedMaint: 150,
+      rentalMonthly: 2500,
+      minPeak: 0.5,
+      // No heuristic fallback — matches pre-2d behavior (required MLV signal)
+    });
+    emitMheFamily({
+      mheType: 'walkie_rider',
+      ownedName: 'Walkie Rider',
+      rentalName: 'Walkie Rider (peak rental)',
+      ownedMonthly: 450, ownedMaint: 75,
+      rentalMonthly: 650,
+      minPeak: 0.5,
+    });
   }
 
   // ────────────────────────────────────────────────────────────────
   // 2. IT Infrastructure — Capital per reference model. RF devices,
   //    printers, WiFi APs, switches. NEVER leased (was lease pre-audit).
+  //
+  //    Phase 2d (2026-04-22): IT is now sized to PEAK HC, not totalDirectFtes.
+  //    Rental isn't an option for RF/devices (short-term provisioning lead
+  //    time = same as owned), so the peak determines the buy qty.
   // ────────────────────────────────────────────────────────────────
   if (totalDirectFtes > 0) {
-    // RF: ~$2,850 purchase, 3-year life. Flipped from $150/mo lease.
+    // RF: ~$2,850 purchase, 3-year life. Sized to peak HC so Q4 coverage
+    // is built in to the capex plan — no Black-Friday scramble to order devices.
+    const peakDirectFte = peakDirectFteFromMlv();
     addEquip('RF Handheld / Mobile Computer', 'IT',
-      Math.ceil(totalDirectFtes * spareFactor * 0.3),
-      0, 2850, 15, 'Direct labor × 30% coverage', 'capital', 3);
+      Math.ceil(peakDirectFte * spareFactor * 0.3),
+      0, 2850, 15,
+      mlv ? `Peak ${peakDirectFte.toFixed(1)} FTE × 1.15 × 30% coverage (MLV)` : 'Direct labor × 30% coverage (heuristic)',
+      'capital', 3);
   }
   addEquip('Label Printer (Thermal)', 'IT',
     Math.max(1, Math.ceil(totalHC / 50)),
