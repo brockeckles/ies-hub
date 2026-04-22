@@ -10,7 +10,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import * as calc from './calc.js?v=20260422-xU';
+import * as calc from './calc.js?v=20260422-xV';
 import * as api from './api.js?v=20260422-xP';
 import * as scenarios from './calc.scenarios.js?v=20260421-wA';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
@@ -100,6 +100,31 @@ function showPrompt(message, defaultValue = '') {
 
 /** @type {import('./types.js?v=20260418-sK').CostModelData} */
 let model = createEmptyModel();
+
+/**
+ * Seasonality profile presets (Brock 2026-04-22 PM). Each is a 12-element
+ * array of monthly shares summing to 1.000. Used by the Seasonality Profile
+ * card in Volumes & Profile. User-hand-edited shares flip preset to 'custom'.
+ */
+const SEASONALITY_PRESETS = {
+  // Mirrors DEFAULT_FLAT_SEASONALITY in calc.js — 11 × 0.0833 + 1 × 0.0837 ≈ 1.000
+  flat:              [0.0833, 0.0833, 0.0833, 0.0833, 0.0833, 0.0833, 0.0833, 0.0833, 0.0833, 0.0833, 0.0833, 0.0837],
+  // Home-goods / big-box e-com: ~35% of volume lands in Q4, summer ramp Aug-Sep
+  ecom_holiday_peak: [0.070, 0.068, 0.072, 0.070, 0.072, 0.070, 0.080, 0.080, 0.084, 0.100, 0.120, 0.114],
+  // Cold-chain food: concentrated Thanksgiving + Christmas spikes; shoulders otherwise flat
+  cold_chain_food:   [0.076, 0.076, 0.080, 0.080, 0.080, 0.080, 0.080, 0.080, 0.080, 0.080, 0.110, 0.098],
+  // Apparel: two peaks — spring (Mar-Apr) + fall (Sep-Nov), quieter summer
+  apparel_2peak:     [0.072, 0.066, 0.094, 0.098, 0.080, 0.072, 0.070, 0.080, 0.094, 0.092, 0.104, 0.078],
+};
+const SEASONALITY_PRESET_LABELS = {
+  flat: 'Flat',
+  ecom_holiday_peak: 'E-com Holiday Peak',
+  cold_chain_food: 'Cold Chain Food',
+  apparel_2peak: 'Apparel 2-Peak',
+  custom: 'Custom',
+};
+/** Debounce timer for the seasonality per-month input re-render. */
+let _seasonalityRerenderTimer = null;
 
 /** @type {Object} */
 let refData = {};
@@ -1465,11 +1490,89 @@ function renderVolumes() {
       </div>
     </div>
 
+    ${renderSeasonalityProfileCard()}
+
     <style>
       .cm-star-btn { background: none; border: none; cursor: pointer; font-size: 18px; color: var(--ies-gray-300); }
       .cm-star-btn.active { color: var(--ies-orange); }
       .cm-star-btn:hover { color: var(--ies-orange); }
+      .cm-season-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 4px; margin-top: 12px; }
+      .cm-season-cell { display: flex; flex-direction: column; align-items: stretch; gap: 2px; }
+      .cm-season-cell label { font-size: 10px; font-weight: 700; color: var(--ies-gray-500); text-align: center; text-transform: uppercase; }
+      .cm-season-cell input { text-align: center; font-variant-numeric: tabular-nums; padding: 4px 2px; }
+      .cm-season-cell--peak input { background: rgba(217,119,6,0.10); border-color: var(--ies-orange, #d97706); font-weight: 700; }
+      .cm-season-summary { display: flex; align-items: center; gap: 18px; margin-top: 10px; font-size: 12px; color: var(--ies-gray-600); }
+      .cm-season-summary__sum--bad { color: #dc2626; font-weight: 700; }
+      .cm-season-summary__sum--good { color: #16a34a; font-weight: 700; }
     </style>
+  `;
+}
+
+/**
+ * Seasonality Profile editor card (2026-04-22 PM, Brock).
+ *
+ * Closes the gap identified during the Phase 2d live demo: the project-level
+ * `model.seasonalityProfile` field was read in 5 places but never written by
+ * the UI, forcing users into SQL to enable seasonality. This card exposes:
+ *   - Preset dropdown (Flat / E-com Holiday / Cold Chain / Apparel 2-Peak)
+ *   - 12 per-month % inputs with tabular-nums alignment
+ *   - Σ summary + peak/avg ratio + validity badge
+ *   - Apply-preset + Reset buttons
+ *
+ * Data flow: writes to model.seasonalityProfile.monthly_shares[]. That bubbles
+ * downstream into MLV (non-flat FTE distribution) → syncSeasonalFlex CTA →
+ * Phase 2d auto-gen rental siblings → monthly engine series → Summary Peak
+ * Rentals annotation.
+ */
+function renderSeasonalityProfileCard() {
+  const sp = model.seasonalityProfile || {};
+  const shares = Array.isArray(sp.monthly_shares) && sp.monthly_shares.length === 12
+    ? sp.monthly_shares.slice()
+    : new Array(12).fill(1 / 12);
+  const presetName = sp.preset || (Array.isArray(sp.monthly_shares) ? 'custom' : 'flat');
+  const sumPct = shares.reduce((a, b) => a + (Number(b) || 0), 0) * 100;
+  const sumValid = Math.abs(sumPct - 100) < 0.5;
+  const peakMonth = shares.indexOf(Math.max(...shares));
+  const avg = shares.reduce((a, b) => a + b, 0) / 12;
+  const peakOverAvg = avg > 0 ? (shares[peakMonth] / avg) : 1;
+  const MONTH_ABBR = ['J','F','M','A','M','J','J','A','S','O','N','D'];
+  const MONTH_FULL = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `
+    <div class="hub-card mb-4">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px;gap:12px;flex-wrap:wrap;">
+        <div class="text-subtitle" style="margin:0;">Seasonality Profile</div>
+        <span class="hub-field__hint" style="flex:1;min-width:200px;">Monthly volume shares drive the MLV peak-vs-baseline derivation, sync-to-equipment flex, and Phase 2d rental auto-gen. Sums must equal 100%.</span>
+      </div>
+      <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;">
+        <div class="hub-field" style="min-width:220px;">
+          <label class="hub-field__label">Preset</label>
+          <select class="hub-input" data-field="seasonalityProfile.preset" data-cm-action="seasonality-preset-change">
+            <option value="flat"${presetName === 'flat' ? ' selected' : ''}>Flat (1/12 per month)</option>
+            <option value="ecom_holiday_peak"${presetName === 'ecom_holiday_peak' ? ' selected' : ''}>E-com Holiday Peak (Q4 heavy)</option>
+            <option value="cold_chain_food"${presetName === 'cold_chain_food' ? ' selected' : ''}>Cold Chain Food (Thanksgiving/Christmas)</option>
+            <option value="apparel_2peak"${presetName === 'apparel_2peak' ? ' selected' : ''}>Apparel 2-Peak (spring + fall)</option>
+            <option value="custom"${presetName === 'custom' ? ' selected' : ''}>Custom (hand-edited)</option>
+          </select>
+        </div>
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="seasonality-reset" title="Reset to Flat (1/12 per month)">↺ Reset to Flat</button>
+      </div>
+      <div class="cm-season-grid">
+        ${shares.map((v, i) => `
+          <div class="cm-season-cell${i === peakMonth && shares[peakMonth] > 1/12 ? ' cm-season-cell--peak' : ''}" title="${MONTH_FULL[i]}">
+            <label>${MONTH_ABBR[i]}</label>
+            <input class="hub-input hub-num" type="number" min="0" max="100" step="0.1"
+              value="${(Number(v) * 100).toFixed(1)}"
+              data-cm-action="seasonality-month" data-idx="${i}"
+              title="${MONTH_FULL[i]} share of annual volume" />
+          </div>
+        `).join('')}
+      </div>
+      <div class="cm-season-summary">
+        <span>Σ <span class="${sumValid ? 'cm-season-summary__sum--good' : 'cm-season-summary__sum--bad'}">${sumPct.toFixed(1)}%</span>${sumValid ? ' ✓' : ' — must equal 100%'}</span>
+        <span>Peak: <strong>${MONTH_FULL[peakMonth]}</strong> (${(shares[peakMonth] * 100).toFixed(1)}%)</span>
+        <span>Peak / avg: <strong>${(peakOverAvg * 100).toFixed(0)}%</strong></span>
+      </div>
+    </div>
   `;
 }
 
@@ -5401,6 +5504,40 @@ function bindSectionEvents(section, container) {
     });
   });
 
+  // Brock 2026-04-22 PM — project-level Seasonality Profile editor
+  // (new card in Volumes & Profile). Preset dropdown applies a canned
+  // monthly_shares pattern; per-month inputs mutate the array and flip
+  // preset to 'custom' so the user sees their hand-edits aren't reverted.
+  container.querySelectorAll('[data-cm-action="seasonality-preset-change"]').forEach(sel => {
+    sel.addEventListener('change', (e) => {
+      const name = e.target.value;
+      if (name === 'custom') return; // don't auto-apply anything when user picks custom
+      const preset = SEASONALITY_PRESETS[name] || SEASONALITY_PRESETS.flat;
+      model.seasonalityProfile = { preset: name, monthly_shares: preset.slice() };
+      isDirty = true;
+      renderSection();
+      showToast(`Applied "${SEASONALITY_PRESET_LABELS[name]}" profile`, 'success');
+    });
+  });
+  container.querySelectorAll('[data-cm-action="seasonality-month"]').forEach(inp => {
+    inp.addEventListener('input', (e) => {
+      const idx = parseInt(e.target.dataset.idx);
+      if (!(idx >= 0 && idx < 12)) return;
+      if (!model.seasonalityProfile || !Array.isArray(model.seasonalityProfile.monthly_shares)) {
+        model.seasonalityProfile = { preset: 'flat', monthly_shares: new Array(12).fill(1/12) };
+      }
+      const pct = Math.max(0, Math.min(100, parseFloat(e.target.value) || 0));
+      model.seasonalityProfile.monthly_shares[idx] = pct / 100;
+      // Hand-edit flips preset to 'custom' so future preset changes don't
+      // silently clobber the user's tweaks.
+      model.seasonalityProfile.preset = 'custom';
+      isDirty = true;
+      // Debounced re-render so sum/peak summary updates without losing focus
+      clearTimeout(_seasonalityRerenderTimer);
+      _seasonalityRerenderTimer = setTimeout(() => renderSection(), 400);
+    });
+  });
+
   // Phase 5a: scenario xlsx export (on Summary)
   container.querySelector('[data-cm-action="export-scenario-xlsx"]')?.addEventListener('click', () => {
     exportScenarioToXlsx();
@@ -7408,6 +7545,15 @@ function handleAction(action, idx, btn) {
       // default category is 'MHE'. Users re-classify via the Line Type column.
       model.equipmentLines.push({ equipment_name: '', category: 'MHE', line_type: 'owned_mhe', quantity: 1, acquisition_type: 'lease', monthly_cost: 0, acquisition_cost: 0, monthly_maintenance: 0, amort_years: 5, pricing_bucket: defaultBucketFor('equipment') });
       break;
+    case 'seasonality-reset': {
+      // Brock 2026-04-22 PM — resets the seasonality profile to flat 1/12.
+      // Useful when a user loaded a preset and wants to start over.
+      model.seasonalityProfile = { preset: 'flat', monthly_shares: new Array(12).fill(1/12) };
+      isDirty = true;
+      renderSection();
+      showToast('Seasonality reset to flat (1/12 per month)', 'info');
+      return;
+    }
     case 'delete-equipment':
       model.equipmentLines.splice(idx, 1);
       break;

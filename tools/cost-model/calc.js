@@ -2692,10 +2692,19 @@ export function autoGenerateEquipment(state, opts = {}) {
   // Returns:
   //   peak           — max monthly FTE (already available)
   //   steady         — min of non-zero monthly FTEs (represents baseline op)
-  //   seasonalMonths — calendar_months 1-12 where FTE > steady × 1.10
+  //   seasonalMonths — calendar_months 1-12 where FTE > steady × 1.25
+  //
+  // Threshold tuning (2026-04-22 PM, Brock): 1.10 was too permissive — on a
+  // smoothly-ramping ecom profile (Wayfair-style, where Jul-Sep rise 15-20%
+  // above Feb baseline as BTS/early-holiday kick in), 1.10 flagged 6 months
+  // as seasonal when operators only rent for 3 months of true Q4 peak.
+  // 1.25 cleanly separates "summer ramp" from "Q4 spike" and matches
+  // industry convention that rentals are a seasonal flex tool, not a
+  // shoulder-season capacity boost.
   //
   // Returns null when MLV is absent OR no months carry this type (auto-gen
   // then falls through to the legacy heuristic path for owned-only sizing).
+  const SEASONAL_THRESHOLD = 1.25;
   const mheSignalFromMlv = (type) => {
     if (!mlv?.months || !Array.isArray(mlv.months) || mlv.months.length === 0) return null;
     const byCalMonth = Array(12).fill(0);
@@ -2709,7 +2718,7 @@ export function autoGenerateEquipment(state, opts = {}) {
     if (nonZero.length === 0) return null;
     const peak = Math.max(...nonZero);
     const steady = Math.min(...nonZero);
-    const threshold = steady * 1.10;
+    const threshold = steady * SEASONAL_THRESHOLD;
     const seasonalMonths = [];
     for (let i = 0; i < 12; i++) if (byCalMonth[i] > threshold) seasonalMonths.push(i + 1);
     return { peak, steady, seasonalMonths };

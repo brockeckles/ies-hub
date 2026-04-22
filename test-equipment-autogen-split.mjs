@@ -131,13 +131,35 @@ t('tiny peak (<10% above steady) → no rental line', () => {
   const mlv = {
     months: [
       { calendar_month: 2,  total_fte: 100, by_mhe: { reach_truck: 20 }, by_it: {} },
-      // 5% bump — below 1.10 threshold, shouldn't trigger rental
+      // 5% bump — below 1.25 threshold, shouldn't trigger rental
       { calendar_month: 11, total_fte: 105, by_mhe: { reach_truck: 21 }, by_it: {} },
     ],
   };
   const lines = autoGenerateEquipment(state, { mlv });
   const reachRentals = lines.filter(l => l.line_type === 'rented_mhe' && /reach/i.test(l.equipment_name));
   eq(reachRentals.length, 0, 'no rental when bump < 10%');
+});
+
+t('threshold tuning: months between 1.10-1.25× steady are NOT seasonal (Brock 2026-04-22 PM)', () => {
+  // Prior 1.10 threshold caught ecom shoulder-season ramp (Jul-Sep 15-20%
+  // above Feb baseline) as "seasonal" and generated nuisance rental lines.
+  // New 1.25 threshold cleanly separates summer ramp from Q4 peak.
+  const state = baseState();
+  const mlv = {
+    months: [
+      { calendar_month: 2,  total_fte: 100, by_mhe: { reach_truck: 20 }, by_it: {} },
+      // 18% bump — above old 1.10 threshold but below new 1.25. Should NOT trigger rental.
+      { calendar_month: 7,  total_fte: 118, by_mhe: { reach_truck: 23.6 }, by_it: {} },
+      // 50% bump — well above 1.25. Should trigger.
+      { calendar_month: 11, total_fte: 150, by_mhe: { reach_truck: 30 }, by_it: {} },
+    ],
+  };
+  const lines = autoGenerateEquipment(state, { mlv });
+  const rental = lines.find(l => l.line_type === 'rented_mhe' && /reach/i.test(l.equipment_name));
+  assert(rental, 'rental exists from the 50% peak month');
+  // seasonal_months should NOT include July (18% bump, sub-threshold)
+  eq(rental.seasonal_months.includes(7), false, 'July sub-threshold, excluded');
+  eq(rental.seasonal_months.includes(11), true, 'November above threshold, included');
 });
 
 // ────────────────────────────────────────────────────────────────────────────
