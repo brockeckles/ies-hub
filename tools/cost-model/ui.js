@@ -15,9 +15,11 @@ import * as api from './api.js?v=20260422-xP';
 import * as scenarios from './calc.scenarios.js?v=20260421-wA';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
-import * as shiftPlannerCalc from './shift-planner.js?v=20260422-xO';
-import * as shiftPlannerUi from './shift-planner-ui.js?v=20260422-xW';
-import * as shiftArchetypes from './shift-archetypes.js?v=20260422-xO';
+import * as shiftPlannerCalc from './shift-planner.js?v=20260422-xX';
+import * as shiftPlannerUi from './shift-planner-ui.js?v=20260422-xX';
+// shift-archetypes module removed 2026-04-22 EVE along with the throughput-
+// matrix archetype picker. Grid now seeds Even by default. File retained on
+// disk but no longer imported; can be deleted in a future cleanup.
 
 // ============================================================
 // Non-blocking modal helpers (replace confirm/prompt/alert).
@@ -492,12 +494,6 @@ export async function mount(el) {
   // v2 UI — reset transient selection state
   _selectedLaborIdx = 0;
   _collapsedNavGroups = new Set();
-
-  // Kick off Shift Planner catalog fetch in parallel with mount — keeps the
-  // first visit to the Shift Planning section snappy. Silent failure: catalog
-  // falls back to empty if fetch fails; the UI still renders + degrades
-  // gracefully (archetype dropdown shows no options).
-  ensureShiftArchetypesLoaded().catch(() => {});
 
   // Load reference data + saved models + saved deals + ref_periods in parallel
   try {
@@ -2207,37 +2203,16 @@ function renderMostCell(line, idx) {
 // SECTION 5b: SHIFT PLANNING (2026-04-22 — Brock day-1 MVP)
 // ============================================================
 
-/**
- * Shift Planner catalog cache state. Mirrors ensurePlanningRatiosLoaded.
- * The actual archetype rows live in shiftArchetypes module state (SWR cache);
- * this flag just tracks whether we've kicked off the initial load.
- */
-let _shiftArchetypesLoadInFlight = false;
-
-async function ensureShiftArchetypesLoaded() {
-  if (_shiftArchetypesLoadInFlight) return;
-  if (shiftArchetypes.isArchetypesLoaded()) return;
-  _shiftArchetypesLoadInFlight = true;
-  try {
-    await shiftArchetypes.ensureArchetypesLoaded(api);
-  } finally {
-    _shiftArchetypesLoadInFlight = false;
-  }
-}
+// 2026-04-22 EVE (Brock): shift-archetypes catalog prefetch removed along with
+// the throughput-matrix archetype picker. Grid now seeds Even by default via
+// createEvenShiftAllocation in shift-planner-ui.js — no async catalog needed.
 
 function renderShiftPlanning() {
-  // Kick off lazy catalog load; re-render when the fetch resolves.
-  if (!shiftArchetypes.isArchetypesLoaded() && !_shiftArchetypesLoadInFlight) {
-    ensureShiftArchetypesLoaded().then(() => renderSection());
-  }
   // Keep the allocation's shift count in sync with model.shifts.shiftsPerDay.
-  // (Structure fields now live on this same page — 2026-04-22 IA reshuffle —
-  // so the resize triggers right after the user edits Shifts / Day inline.)
+  // (Structure fields live on this same page — 2026-04-22 IA reshuffle — so
+  // the resize triggers right after the user edits Shifts / Day inline.)
   shiftPlannerUi.syncAllocationToShifts(model);
-  return shiftPlannerUi.renderShiftPlanningSection({
-    model,
-    archetypes: shiftArchetypes.getArchetypes(),
-  });
+  return shiftPlannerUi.renderShiftPlanningSection({ model });
 }
 
 function renderLabor() {
@@ -5078,7 +5053,6 @@ function bindSectionEvents(section, container) {
   if (section === 'shiftPlanning') {
     shiftPlannerUi.bindShiftPlanningEvents(container, {
       model,
-      archetypes: shiftArchetypes.getArchetypes(),
       toast: (msg) => { try { showToast(msg); } catch (_) {} },
       onModelChange: () => {
         isDirty = true;

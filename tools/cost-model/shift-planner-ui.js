@@ -12,14 +12,13 @@ import {
   FUNCTION_ORDER,
   FUNCTION_META,
   createEmptyShiftAllocation,
-  applyArchetype as applyArchetypeCalc,
   resizeAllocation,
   validateShiftMatrix,
   normalizeShiftMatrix,
   deriveShiftHeadcount,
   deriveIndirectByShift,
   deriveHourlyStaffing,
-} from './shift-planner.js?v=20260422-xL';
+} from './shift-planner.js?v=20260422-xX';
 
 /**
  * Matrix display mode — 'pct' shows editable % inputs (default); 'fte'
@@ -35,7 +34,7 @@ let _matrixMode = 'pct';
  * @returns {string}
  */
 export function renderShiftPlanningSection(ctx) {
-  const { model, archetypes = [] } = ctx || {};
+  const { model } = ctx || {};
   if (!model) return '<div class="hub-card" style="padding:16px;">No project loaded.</div>';
 
   // Lazy-init the allocation if the model hasn't been touched yet.
@@ -65,13 +64,9 @@ export function renderShiftPlanningSection(ctx) {
   );
   const validation = validateShiftMatrix(alloc);
 
-  const archetypeOptions = archetypes
-    .map(a => `<option value="${escape(a.archetype_ref)}" ${alloc.archetypeRef === a.archetype_ref ? 'selected' : ''}>${escape(a.display_name)}</option>`)
-    .join('');
-
   return `
     <div class="shift-planning">
-      ${renderHeader(alloc, archetypes, archetypeOptions, validation)}
+      ${renderHeader(alloc, [], '', validation)}
       ${renderStructureCard(shiftsCfg)}
       ${renderMatrixCard(alloc, shiftCount, validation, derived)}
       ${renderPreviewPanel(derived, shiftCount)}
@@ -83,9 +78,7 @@ export function renderShiftPlanningSection(ctx) {
       .shift-planning { display: flex; flex-direction: column; gap: 16px; }
       .sp-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 16px; }
       .sp-header__title h2 { margin: 0 0 4px 0; font-size: 18px; font-weight: 600; color: var(--ies-navy); }
-      .sp-header__title p { margin: 0; font-size: 13px; color: var(--ies-gray-600); max-width: 640px; }
-      .sp-archetype-picker { display: flex; gap: 8px; align-items: center; }
-      .sp-archetype-picker select { min-width: 240px; padding: 8px 10px; border: 1px solid var(--ies-gray-300); border-radius: 6px; font-size: 13px; }
+      .sp-header__title p { margin: 0; font-size: 13px; color: var(--ies-gray-600); max-width: 720px; }
       .sp-matrix-card { padding: 16px; }
       .sp-matrix-card h3 { margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: var(--ies-navy); display: flex; align-items: center; gap: 8px; }
       .sp-matrix { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 13px; }
@@ -229,21 +222,10 @@ export function bindShiftPlanningEvents(container, ctx) {
     if (!actionEl) return;
     const action = actionEl.getAttribute('data-sp-action');
 
-    if (action === 'apply-archetype') {
-      const select = container.querySelector('[data-sp-archetype-select]');
-      if (!(select instanceof HTMLSelectElement)) return;
-      const ref = select.value;
-      if (!ref) { toast('Pick an archetype first'); return; }
-      const arch = (ctx.archetypes || []).find(a => a.archetype_ref === ref);
-      if (!arch) { toast('Archetype not found'); return; }
-      const shiftsPerDay = model.shifts?.shiftsPerDay || arch.shifts_per_day || 1;
-      const hoursPerShift = model.shifts?.hoursPerShift || 8;
-      const alloc = applyArchetypeCalc(arch, shiftsPerDay, hoursPerShift);
-      model.shiftAllocation = alloc;
-      toast(`Applied ${arch.display_name} — matrix seeded across ${shiftsPerDay} shift${shiftsPerDay > 1 ? 's' : ''}`);
-      notify();
-      return;
-    }
+    // Note: 'apply-archetype' and 'reset-matrix' actions were removed 2026-04-22 EVE
+    // along with the throughput-matrix archetype picker. Grid now seeds Even by
+    // default (see createEvenShiftAllocation) and users override per-row via
+    // 'distribute-evenly' / 'clear-row' below.
 
     if (action === 'distribute-evenly') {
       const fn = actionEl.getAttribute('data-sp-fn');
@@ -280,16 +262,6 @@ export function bindShiftPlanningEvents(container, ctx) {
       return;
     }
 
-    if (action === 'reset-matrix') {
-      if (!confirm('Clear the entire matrix? Archetype reference will be cleared.')) return;
-      const shiftsPerDay = model.shifts?.shiftsPerDay || 1;
-      const hoursPerShift = model.shifts?.hoursPerShift || 8;
-      model.shiftAllocation = createEmptyShiftAllocation(shiftsPerDay, hoursPerShift);
-      toast('Matrix cleared');
-      notify();
-      return;
-    }
-
     // Matrix display mode toggle
     if (action === 'set-mode-pct') { _matrixMode = 'pct'; notify(); return; }
     if (action === 'set-mode-fte') { _matrixMode = 'fte'; notify(); return; }
@@ -321,17 +293,73 @@ function ensureAllocation(model) {
   if (!model.shiftAllocation) {
     const shiftsPerDay = model.shifts?.shiftsPerDay || 1;
     const hoursPerShift = model.shifts?.hoursPerShift || 8;
-    model.shiftAllocation = createEmptyShiftAllocation(shiftsPerDay, hoursPerShift);
+    // 2026-04-22 EVE: seed with Even split per function (not zeros) so the
+    // preview shows non-zero HC on first load — archetype picker was removed,
+    // so a zero grid would look broken to a fresh user. User overrides per
+    // row via the Even/Clear buttons or typing cells directly.
+    model.shiftAllocation = createEvenShiftAllocation(shiftsPerDay, hoursPerShift);
+  }
+  // Migration: models saved before the archetype picker was removed may have
+  // a zero-filled allocation from createEmptyShiftAllocation — those render as
+  // a grid of 0%/shift with a derived HC of 0, which looks broken now that
+  // there's no "Apply Archetype" affordance to explain it. If the allocation
+  // has never been user-overridden AND every matrix row sums to 0, re-seed
+  // Even so the preview is meaningful. Intentional user Clear edits are
+  // preserved because they flip `overridden` to true.
+  const alloc = model.shiftAllocation;
+  if (alloc && !alloc.overridden) {
+    const hasAnyNonZero = FUNCTION_ORDER.some(fn =>
+      Array.isArray(alloc.matrix?.[fn]) && alloc.matrix[fn].some(v => Number(v) > 0)
+    );
+    if (!hasAnyNonZero) {
+      const n = alloc.shifts?.length || Math.max(1, Math.floor(model.shifts?.shiftsPerDay || 1));
+      for (const fn of FUNCTION_ORDER) alloc.matrix[fn] = evenRow(n);
+    }
   }
   // Safety net: if matrix missing a function key (e.g. from an old persisted
-  // record), fill it with zeros so the renderer never crashes on undefined.
+  // record), fill it with an even split so the preview stays coherent on
+  // legacy models that pre-date certain function keys.
   for (const fn of FUNCTION_ORDER) {
     if (!Array.isArray(model.shiftAllocation.matrix[fn])) {
       const n = model.shiftAllocation.shifts?.length || 1;
-      model.shiftAllocation.matrix[fn] = new Array(n).fill(0);
+      model.shiftAllocation.matrix[fn] = evenRow(n);
     }
   }
   return model.shiftAllocation;
+}
+
+/**
+ * Build an "even split" row summing to 100 with N cells. Drift from floating-
+ * point division is absorbed into cell 0 so the row-sum invariant holds for
+ * the validator. Used by ensureAllocation + createEvenShiftAllocation.
+ * @param {number} n
+ * @returns {number[]}
+ */
+function evenRow(n) {
+  const count = Math.max(1, Math.floor(n));
+  const even = +(100 / count).toFixed(2);
+  const row = new Array(count).fill(even);
+  const drift = +(100 - row.reduce((a, v) => a + v, 0)).toFixed(2);
+  if (Math.abs(drift) > 0.01) row[0] = +(row[0] + drift).toFixed(2);
+  return row;
+}
+
+/**
+ * Build a default-seeded ShiftAllocation where every function row is split
+ * evenly across shifts (100/N per cell). Replaces the previous zero-seed
+ * default now that archetype-based seeding has been removed (2026-04-22 EVE).
+ * Pure function — no DOM / Supabase / side effects.
+ * @param {number} shiftsPerDay
+ * @param {number} [hoursPerShift]
+ * @returns {object}
+ */
+function createEvenShiftAllocation(shiftsPerDay, hoursPerShift) {
+  const alloc = createEmptyShiftAllocation(shiftsPerDay, hoursPerShift);
+  const n = alloc.shifts?.length || Math.max(1, Math.floor(shiftsPerDay));
+  for (const fn of FUNCTION_ORDER) {
+    alloc.matrix[fn] = evenRow(n);
+  }
+  return alloc;
 }
 
 /**
@@ -394,25 +422,16 @@ function renderStructureCard(shiftsCfg) {
 }
 
 function renderHeader(alloc, archetypes, archetypeOptions, validation) {
-  const seededHint = alloc.archetypeRef
-    ? `<span class="hub-chip hub-chip--info" title="Seeded from archetype">${escape(alloc.archetypeRef)}</span>`
-    : alloc.overridden
-      ? `<span class="hub-chip hub-chip--neutral">Custom matrix</span>`
-      : `<span class="hub-chip hub-chip--neutral">Not set</span>`;
+  // 2026-04-22 EVE (Brock): archetype picker removed — project-level Seasonality
+  // Profile handles the "what kind of business is this" signaling. Grid now
+  // seeds to Even split per function by default (see createEvenShiftAllocation),
+  // and users edit cells directly or use per-row Even/Clear. The picker, chip,
+  // and Reset button are gone. Archetype ref no longer written to allocations.
   return `
     <div class="hub-card sp-header">
       <div class="sp-header__title">
         <h2>Shift Planning</h2>
-        <p>Set the % of daily throughput by shift for each functional area. Drives the preview below and feeds the Direct Labor grid when lines are set to <strong>Split by matrix</strong>.</p>
-        <div style="margin-top: 8px;">${seededHint}</div>
-      </div>
-      <div class="sp-archetype-picker">
-        <select data-sp-archetype-select>
-          <option value="">— Apply Archetype —</option>
-          ${archetypeOptions}
-        </select>
-        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-sp-action="apply-archetype">Apply</button>
-        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-sp-action="reset-matrix" title="Clear matrix + archetype reference">Reset</button>
+        <p>Set the % of daily throughput by shift for each functional area. Drives the preview below and feeds the Direct Labor grid when lines are set to <strong>Split by matrix</strong>. Grid starts with an even split across shifts — tweak per row using the <em>Even</em> and <em>Clear</em> buttons, or type cell values directly.</p>
       </div>
     </div>
   `;
