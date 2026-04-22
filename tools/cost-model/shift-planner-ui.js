@@ -405,13 +405,12 @@ function renderMatrixCard(alloc, shiftCount, validation, derived) {
     `;
   }).join('');
 
-  // "Shift workload mix" — normalized column totals expressed as a share
-  // of the total matrix points. Rows each sum to 100 across shifts, so the
-  // column sums add up to (8 × 100) = 800 at most; this divides by the
-  // actual grand total (which can be <800 if some rows are zero-filled /
-  // unused, like cold-chain Pack or cross-dock Put-Away). Result is a
-  // percentage per shift that reads directly as "Shift 2 carries 48% of
-  // the work" — much clearer than the raw point total.
+  // Footer row — content depends on view mode.
+  // In % mode: "Shift workload mix" row — normalized % share of matrix
+  //   points per shift (rows each sum to 100 → column sums add to ≤800;
+  //   we divide by actual grand total so the row sums to 100%).
+  // In FTE mode: "Total FTE per shift" row — sum of every function's
+  //   implied FTE on that shift (matches the Total Direct HC KPI above).
   const rawColSums = alloc.shifts.map((_, i) => {
     let s = 0;
     for (const fn of FUNCTION_ORDER) s += Number(alloc.matrix[fn][i]) || 0;
@@ -419,6 +418,12 @@ function renderMatrixCard(alloc, shiftCount, validation, derived) {
   });
   const grandTotal = rawColSums.reduce((a, v) => a + v, 0);
   const colMixPct = rawColSums.map(s => grandTotal > 0 ? (s / grandTotal * 100) : 0);
+  // FTE column totals — sum of fteByFnShift across all functions per shift.
+  const colFteTotals = alloc.shifts.map((_s, i) => {
+    let total = 0;
+    for (const fn of FUNCTION_ORDER) total += Number(fteByFnShift[fn]?.[i + 1]) || 0;
+    return total;
+  });
 
   const validationBanner = validation.valid
     ? ''
@@ -457,9 +462,13 @@ function renderMatrixCard(alloc, shiftCount, validation, derived) {
             ${rows}
           </tbody>
           <tfoot>
-            <tr class="sp-col-total-row" title="Share of total matrix workload — normalized so the row sums to 100%. Tells you which shift carries the most work.">
-              <td>Shift workload mix</td>
-              ${colMixPct.map(c => `<td class="hub-num" style="text-align:right;">${c.toFixed(0)}%</td>`).join('')}
+            <tr class="sp-col-total-row" title="${isFte ? 'Sum of every function\u2019s implied FTE on each shift — matches Total Direct HC in the preview above.' : 'Share of total matrix workload — normalized so the row sums to 100%. Tells you which shift carries the most work.'}">
+              <td>${isFte ? 'Total FTE per shift' : 'Shift workload mix'}</td>
+              ${
+                isFte
+                  ? colFteTotals.map(c => `<td class="hub-num" style="text-align:right;">${c.toFixed(1)} FTE</td>`).join('')
+                  : colMixPct.map(c => `<td class="hub-num" style="text-align:right;">${c.toFixed(0)}%</td>`).join('')
+              }
               <td></td>
               <td></td>
             </tr>
