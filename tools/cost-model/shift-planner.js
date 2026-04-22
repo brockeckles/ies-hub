@@ -636,36 +636,45 @@ function resizeRow(row, targetLen) {
 }
 
 /**
- * Map a labor line to a functional area. Prefers an explicit `process_area`
- * field (the CM schema's authoritative function tag — "Inbound" / "Picking"
- * / etc.). Falls back to activity / role / position / name keyword matches.
+ * Map a labor line to a functional area. Checks role_name / activity_name
+ * FIRST (most specific — "Picker" / "Packer" / "Putaway Driver"), falls
+ * back to process_area only as a coarse hint when the role_name doesn't
+ * resolve. Wayfair-style models use process_area="Inbound/Outbound/Support"
+ * as a bucket and the actual function lives on role_name — the old order
+ * caused every outbound-bucket role (Picker, Packer, Shipper, VAS Kitter)
+ * to resolve to `ship` and collapse into one function. (Brock 2026-04-22.)
+ *
  * Returns null when nothing matches (line is dropped from matrix derivation).
  */
 export function deriveFunctionForLine(line) {
   if (!line) return null;
-  // Authoritative field wins if present
+
+  // Specific role fields win first — match against role_name / activity / position.
+  const specific = String(line.role_name || line.activity_name || line.activity || line.role || line.position || line.name || '').toLowerCase();
+  if (specific) {
+    if (/put.?away/.test(specific)) return 'putaway';
+    if (/replen/.test(specific)) return 'replenish';
+    if (/pack/.test(specific)) return 'pack';
+    if (/picker|picking|pick\s/.test(specific)) return 'picking';
+    if (/loader|shipper|load\s?truck|dispatch/.test(specific)) return 'ship';
+    if (/receiv|inbound/.test(specific)) return 'inbound';
+    if (/return|rma|reverse/.test(specific)) return 'returns';
+    if (/vas|kitter|kitting|label|assembly/.test(specific)) return 'vas';
+  }
+
+  // Process_area fallback — coarse ("Inbound" / "Outbound" / "Support").
+  // If role_name didn't resolve, treat process_area as a best-guess.
   const proc = String(line.process_area || line.processArea || line.function || '').toLowerCase().trim();
   if (proc) {
-    if (/inbound|receiv/.test(proc)) return 'inbound';
     if (/put.?away/.test(proc)) return 'putaway';
     if (/replen/.test(proc)) return 'replenish';
     if (/pack/.test(proc)) return 'pack';
-    if (/ship|outbound|load/.test(proc)) return 'ship';
+    if (/pick/.test(proc)) return 'picking';
     if (/return|rma|reverse/.test(proc)) return 'returns';
     if (/vas|kit|label|assembly/.test(proc)) return 'vas';
-    if (/pick/.test(proc)) return 'picking';
+    if (/inbound|receiv/.test(proc)) return 'inbound';
+    if (/ship|outbound|load/.test(proc)) return 'ship';
   }
-  // Fallback keyword sweep
-  const raw = String(line.activity_name || line.activity || line.role_name || line.role || line.position || line.name || '').toLowerCase();
-  if (!raw) return null;
-  if (/inbound|receiv/.test(raw)) return 'inbound';
-  if (/put.?away/.test(raw)) return 'putaway';
-  if (/replen/.test(raw)) return 'replenish';
-  if (/pack/.test(raw)) return 'pack';
-  if (/(^|\s)ship|loader|load.truck|dispatch|outbound/.test(raw)) return 'ship';
-  if (/return|rma|reverse/.test(raw)) return 'returns';
-  if (/vas|kitting|label|assembly/.test(raw)) return 'vas';
-  if (/pick/.test(raw)) return 'picking';
   return null;
 }
 
