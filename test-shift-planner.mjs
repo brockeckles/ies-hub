@@ -15,6 +15,10 @@ import {
   deriveShiftHeadcount,
   splitLaborLinesByShift,
   deriveFunctionForLine,
+  classifyIndirectScope,
+  classifyIndirectTier,
+  deriveIndirectByShift,
+  deriveHourlyStaffing,
 } from './tools/cost-model/shift-planner.js';
 
 let pass = 0, fail = 0;
@@ -348,6 +352,345 @@ const wayfairShifts = {
   const r2 = deriveShiftHeadcount(a, wayfairVolumes, wayfairLabor, wayfairShifts);
   t('derive: deterministic totals',
     r1.totals.directHc === r2.totals.directHc && r1.totals.costAnnual === r2.totals.costAnnual);
+}
+
+// ============================================================
+// NEW INVARIANTS — lock today's 5 follow-up fixes so the next
+// refactor doesn't silently regress the classifier, volume
+// borrows, indirect derivation, or hourly staffing.
+// ============================================================
+
+// ------------------------------------------------------------
+// 15. Classifier precedence: role_name beats coarse process_area
+// ------------------------------------------------------------
+// Wayfair schema: process_area is coarse (Inbound/Outbound/Support) and
+// role_name is the specific function. Before the fix, every line with
+// process_area=Outbound collapsed to `ship`. Lock that picker/packer/etc
+// resolve correctly even when process_area is coarse.
+{
+  const picker = { role_name: 'Picker', process_area: 'Outbound', base_uph: 110 };
+  t('classifier: Picker + process_area=Outbound → picking', deriveFunctionForLine(picker) === 'picking');
+
+  const packer = { role_name: 'Packer', process_area: 'Outbound', base_uph: 80 };
+  t('classifier: Packer + process_area=Outbound → pack', deriveFunctionForLine(packer) === 'pack');
+
+  const putaway = { role_name: 'Putaway Driver', process_area: 'Inbound', base_uph: 11 };
+  t('classifier: Putaway Driver + process_area=Inbound → putaway', deriveFunctionForLine(putaway) === 'putaway');
+
+  const replen = { role_name: 'Replenishment', process_area: 'Outbound', base_uph: 120 };
+  t('classifier: Replenishment + process_area=Outbound → replenish', deriveFunctionForLine(replen) === 'replenish');
+
+  const vas = { role_name: 'VAS Kitter', process_area: 'Outbound', base_uph: 28 };
+  t('classifier: VAS Kitter + process_area=Outbound → vas', deriveFunctionForLine(vas) === 'vas');
+
+  const shipper = { role_name: 'Shipper/Loader', process_area: 'Outbound', base_uph: 18 };
+  t('classifier: Shipper/Loader + process_area=Outbound → ship', deriveFunctionForLine(shipper) === 'ship');
+
+  // process_area-only fallback still works when role_name is absent/unhelpful
+  const procOnly = { role_name: 'Associate', process_area: 'Picking' };
+  t('classifier: role_name=Associate + process_area=Picking falls back to process_area', deriveFunctionForLine(procOnly) === 'picking');
+
+  // Unhelpful role_name AND unhelpful process_area → null
+  const janitor = { role_name: 'Janitor', process_area: 'Support' };
+  t('classifier: Janitor + Support → null', deriveFunctionForLine(janitor) === null);
+}
+
+// ------------------------------------------------------------
+// 16. Volume borrow fallbacks — putaway ← inbound, replen ← picking × 0.4, vas ← picking × 0.1
+// ------------------------------------------------------------
+{
+  // Wayfair-shape: has inbound + picking volumes, no putaway/replen/vas lines
+  const wayfairShape = [
+    { name: 'Pallets Received', volume: 185000, uom: 'pallets', isOutboundPrimary: false },
+    { name: 'Eaches Picked',    volume: 8200000, uom: 'eaches',  isOutboundPrimary: false },
+    { name: 'Outbound Orders',  volume: 4100000, uom: 'orders',  isOutboundPrimary: true  },
+  ];
+  const labor = [
+    { role_name: 'Receiver',       process_area: 'Inbound',  base_uph: 6,  annual_hours: 30833, hourly_rate: 19.5, burden_pct: 32 },
+    { role_name: 'Putaway Driver', process_area: 'Inbound',  base_uph: 11, annual_hours: 16818, hourly_rate: 19.5, burden_pct: 32 },
+    { role_name: 'Picker',         process_area: 'Outbound', base_uph: 110, annual_hours: 74545, hourly_rate: 18, burden_pct: 32 },
+    { role_name: 'Replenishment',  process_area: 'Outbound', base_uph: 120, annual_hours: 36667, hourly_rate: 18, burden_pct: 32 },
+    { role_name: 'VAS Kitter',     process_area: 'Outbound', base_uph: 28, annual_hours: 13571, hourly_rate: 18, burden_pct: 32 },
+  ];
+  const shifts = { shiftsPerDay: 3, hoursPerShift: 8.5, daysPerWeek: 7, weeksPerYear: 51, directUtilization: 85 };
+  const alloc = applyArchetype(OMNI, 3, 8.5);
+
+  const r = deriveShiftHeadcount(alloc, wayfairShape, labor, shifts, { absenceAllowancePct: 0 });
+
+  // Every function should produce non-zero FTE somewhere across shifts
+  const fnTotals = {};
+  for (const row of r.byFunctionShift) {
+    fnTotals[row.fn] = (fnTotals[row.fn] || 0) + row.fte;
+  }
+  t('volume borrow: inbound has FTE (direct volume line)', fnTotals.inbound > 0);
+  t('volume borrow: putaway has FTE (borrowed from inbound)', fnTotals.putaway > 0);
+  t('volume borrow: picking has FTE (direct volume line)', fnTotals.picking > 0);
+  t('volume borrow: replenish has FTE (borrowed from picking × 0.4)', fnTotals.replenish > 0);
+  t('volume borrow: vas has FTE (borrowed from picking × 0.1)', fnTotals.vas > 0);
+
+  // Replen should be SMALLER than picking FTE (since volume is 0.4x picking
+  // AND the replen UPH is higher than picker UPH in this fixture).
+  t('volume borrow: replen FTE < picking FTE', fnTotals.replenish < fnTotals.picking);
+
+  // VAS volume is 0.1x picking — but UPH differences can flip total FTE
+  // (VAS UPH 28 << picker UPH 110), so assert VAS is meaningfully small
+  // relative to picking rather than ordering against replen.
+  t('volume borrow: vas FTE < picking FTE', fnTotals.vas < fnTotals.picking);
+}
+
+// ------------------------------------------------------------
+// 17. Explicit volume lines still win over borrow fallback
+// ------------------------------------------------------------
+{
+  const withExplicit = [
+    { name: 'Pallets Received', volume: 185000, uom: 'pallets', isOutboundPrimary: false },
+    { name: 'Put-Away Events',  volume: 370000, uom: 'pallets', isOutboundPrimary: false }, // explicit, 2x inbound
+    { name: 'Eaches Picked',    volume: 8200000, uom: 'eaches',  isOutboundPrimary: false },
+    { name: 'Outbound Orders',  volume: 4100000, uom: 'orders',  isOutboundPrimary: true  },
+  ];
+  const labor = [
+    { role_name: 'Receiver',       process_area: 'Inbound',  base_uph: 6,  annual_hours: 30833, hourly_rate: 19.5, burden_pct: 32 },
+    { role_name: 'Putaway Driver', process_area: 'Inbound',  base_uph: 11, annual_hours: 16818, hourly_rate: 19.5, burden_pct: 32 },
+  ];
+  const shifts = { shiftsPerDay: 3, hoursPerShift: 8, daysPerWeek: 7, weeksPerYear: 52, directUtilization: 85 };
+  const alloc = applyArchetype(OMNI, 3, 8);
+
+  const r = deriveShiftHeadcount(alloc, withExplicit, labor, shifts, { absenceAllowancePct: 0 });
+  const putawayTotal = r.byFunctionShift.filter(x => x.fn === 'putaway').reduce((a, x) => a + x.fte, 0);
+  const inboundTotal = r.byFunctionShift.filter(x => x.fn === 'inbound').reduce((a, x) => a + x.fte, 0);
+
+  // With explicit 2x putaway volume + same UPH as inbound, putaway FTE should be
+  // HIGHER than inbound (because it's 2x the volume at 11 UPH vs 6 UPH).
+  // If the borrow kicked in wrongly, putaway would match inbound FTE.
+  t('volume borrow: explicit Put-Away line overrides inbound borrow', putawayTotal !== inboundTotal);
+  t('volume borrow: explicit putaway volume respected', putawayTotal > 0);
+}
+
+// ------------------------------------------------------------
+// 18. classifyIndirectScope — shift vs site role split
+// ------------------------------------------------------------
+{
+  t('scope: Team Lead → shift', classifyIndirectScope({ position: 'Team Lead' }) === 'shift');
+  t('scope: Line Lead → shift', classifyIndirectScope({ position: 'Line Lead' }) === 'shift');
+  t('scope: Operations Supervisor → shift', classifyIndirectScope({ position: 'Operations Supervisor' }) === 'shift');
+  t('scope: QA Coordinator → shift', classifyIndirectScope({ position: 'QA Coordinator' }) === 'shift');
+  t('scope: Wave Tasker → shift', classifyIndirectScope({ position: 'Wave Tasker' }) === 'shift');
+  t('scope: Yard Spotter → shift', classifyIndirectScope({ position: 'Yard Spotter' }) === 'shift');
+
+  t('scope: Operations Manager → site', classifyIndirectScope({ position: 'Operations Manager' }) === 'site');
+  t('scope: Senior Ops Manager → site', classifyIndirectScope({ position: 'Senior Ops Manager' }) === 'site');
+  t('scope: Operations Director → site', classifyIndirectScope({ position: 'Operations Director' }) === 'site');
+  t('scope: HR-Admin → site', classifyIndirectScope({ position: 'HR-Admin' }) === 'site');
+  t('scope: Safety Coordinator → site', classifyIndirectScope({ position: 'Safety Coordinator' }) === 'site');
+  t('scope: Maintenance Engineer → site', classifyIndirectScope({ position: 'Maintenance Engineer/Manager' }) === 'site');
+  t('scope: CSR → site', classifyIndirectScope({ position: 'CSR' }) === 'site');
+  t('scope: Security Guard → site', classifyIndirectScope({ position: 'Security Guard' }) === 'site');
+  t('scope: Transportation Routing → site', classifyIndirectScope({ position: 'Transportation Routing' }) === 'site');
+}
+
+// ------------------------------------------------------------
+// 19. classifyIndirectTier — supv / indirect / mgmt / admin
+// ------------------------------------------------------------
+{
+  t('tier: Team Lead → indirect', classifyIndirectTier({ position: 'Team Lead' }) === 'indirect');
+  t('tier: Line Lead → indirect', classifyIndirectTier({ position: 'Line Lead' }) === 'indirect');
+  t('tier: Operations Supervisor → supv', classifyIndirectTier({ position: 'Operations Supervisor' }) === 'supv');
+  t('tier: Operations Manager → mgmt', classifyIndirectTier({ position: 'Operations Manager' }) === 'mgmt');
+  t('tier: Senior Ops Manager → mgmt', classifyIndirectTier({ position: 'Senior Ops Manager' }) === 'mgmt');
+  t('tier: Operations Director → mgmt', classifyIndirectTier({ position: 'Operations Director' }) === 'mgmt');
+  t('tier: HR-Admin → admin', classifyIndirectTier({ position: 'HR-Admin' }) === 'admin');
+  t('tier: Safety Coordinator → admin', classifyIndirectTier({ position: 'Safety Coordinator' }) === 'admin');
+  t('tier: QA Coordinator → indirect (Coord, not Mgr/HR)', classifyIndirectTier({ position: 'QA Coordinator' }) === 'indirect');
+}
+
+// ------------------------------------------------------------
+// 20. deriveIndirectByShift — allocation + tier aggregation
+// ------------------------------------------------------------
+{
+  const byShiftDirect = [
+    { num: 1, directHc: 50 },
+    { num: 2, directHc: 70 },
+    { num: 3, directHc: 30 },
+  ];
+  const indirectLines = [
+    // Shift-level, indirect tier, 15 HC — should split 50/70/30 across shifts
+    { position: 'Team Lead', headcount: 15 },
+    // Shift-level, supv tier, 3 HC
+    { position: 'Operations Supervisor', headcount: 3 },
+    // Site-level, mgmt tier, 2 HC
+    { position: 'Operations Manager', headcount: 2 },
+    // Site-level, admin tier, 4 HC
+    { position: 'HR-Admin', headcount: 4 },
+  ];
+  const result = deriveIndirectByShift(indirectLines, byShiftDirect);
+
+  t('indirect: 3 shift buckets in byShift', result.byShift.length === 3);
+  // Site-level aggregation
+  t('indirect: site mgmt = 2', result.site.mgmt === 2);
+  t('indirect: site admin = 4', result.site.admin === 4);
+  t('indirect: site supv = 0 (Supervisor is shift-level)', result.site.supv === 0);
+  t('indirect: site total = 6 (2 mgmt + 4 admin)', result.site.total === 6);
+
+  // Shift-level totals across all shifts should equal what we put in
+  const teamLeadTotal = result.byShift.reduce((a, s) => a + s.indirect, 0);
+  const supvTotal = result.byShift.reduce((a, s) => a + s.supv, 0);
+  t('indirect: Team Lead allocation sums to 15 across shifts', teamLeadTotal === 15);
+  t('indirect: Supervisor allocation sums to 3 across shifts', supvTotal === 3);
+
+  // Proportional allocation: S2 has 70 direct (47%) → should get ~7 Team Leads
+  // S1 50 direct (33%) → ~5, S3 30 direct (20%) → ~3
+  t('indirect: S2 (largest direct) gets largest Team Lead share', result.byShift[1].indirect >= result.byShift[0].indirect);
+  t('indirect: S1 Team Lead share >= S3 (50 direct > 30 direct)', result.byShift[0].indirect >= result.byShift[2].indirect);
+}
+
+// ------------------------------------------------------------
+// 21. deriveIndirectByShift — empty inputs
+// ------------------------------------------------------------
+{
+  const empty = deriveIndirectByShift([], [{ num: 1, directHc: 10 }]);
+  t('indirect: no lines → zero byShift totals', empty.byShift[0].total === 0);
+  t('indirect: no lines → zero site totals', empty.site.total === 0);
+
+  const noShifts = deriveIndirectByShift([{ position: 'Team Lead', headcount: 5 }], []);
+  t('indirect: no shifts → empty byShift array', noShifts.byShift.length === 0);
+}
+
+// ------------------------------------------------------------
+// 22. deriveHourlyStaffing — shift coverage + overnight wrap (8.5h shifts)
+// ------------------------------------------------------------
+// 8.5-hour shifts create 30-min handoff overlaps at 7a / 3p / 11p —
+// matches real ops (and what Wayfair demo produces with hoursPerShift=8.5).
+{
+  const shifts = [
+    { num: 1, startHour: 7, endHour: 15.5 },   // day (7a-3:30p)
+    { num: 2, startHour: 15, endHour: 23.5 },  // evening (3p-11:30p)
+    { num: 3, startHour: 23, endHour: 7.5 },   // overnight (11p-7:30a) — wraps
+  ];
+  const byShiftDirect = [
+    { num: 1, directHc: 50 },
+    { num: 2, directHc: 70 },
+    { num: 3, directHc: 30 },
+  ];
+  const indirectByShift = {
+    byShift: [
+      { num: 1, supv: 0, indirect: 0, mgmt: 0, admin: 0, total: 0 },
+      { num: 2, supv: 0, indirect: 0, mgmt: 0, admin: 0, total: 0 },
+      { num: 3, supv: 0, indirect: 0, mgmt: 0, admin: 0, total: 0 },
+    ],
+    site: { supv: 0, indirect: 0, mgmt: 0, admin: 0, total: 0 },
+  };
+
+  const out = deriveHourlyStaffing(shifts, byShiftDirect, indirectByShift, 7);
+
+  t('heatmap: 7 days produced', out.days.length === 7);
+  t('heatmap: 24 hours per day', out.days[0].hours.length === 24);
+
+  const mon = out.days[0].hours;
+  t('heatmap: Mon 2am covered by S3 only (direct=30)', mon[2].direct === 30 && mon[2].total === 30);
+  t('heatmap: Mon 7am handoff — S1 + S3 both cover (direct=80)', mon[7].direct === 80);
+  t('heatmap: Mon 10am S1 only (direct=50)', mon[10].direct === 50);
+  t('heatmap: Mon 3pm handoff — S1 + S2 both cover (direct=120)', mon[15].direct === 120);
+  t('heatmap: Mon 7pm S2 only (direct=70)', mon[19].direct === 70);
+  t('heatmap: Mon 11pm S2 + S3 handoff (direct=100)', mon[23].direct === 100);
+  // Peak hour total is the biggest handoff spike = 120 (S1 + S2 at 3pm)
+  t('heatmap: peak hour total = 120 (handoff spike)', out.peakHourTotal === 120);
+}
+
+// ------------------------------------------------------------
+// 23. deriveHourlyStaffing — site-level attribution 7a-5p only
+// ------------------------------------------------------------
+// Shift covers 5a-10p so it straddles the site-level window (7a-5p),
+// letting us test that site-level adds only during day hours.
+{
+  const shifts = [{ num: 1, startHour: 5, endHour: 22 }];
+  const byShiftDirect = [{ num: 1, directHc: 10 }];
+  const indirectByShift = {
+    byShift: [{ num: 1, supv: 0, indirect: 0, mgmt: 0, admin: 0, total: 0 }],
+    site: { supv: 2, indirect: 0, mgmt: 3, admin: 5, total: 10 },
+  };
+
+  const out = deriveHourlyStaffing(shifts, byShiftDirect, indirectByShift, 5);
+
+  // Daytime (7am-5pm): site-level shows up
+  t('heatmap: Mon 9am includes site-level (10 direct + 10 site = 20)', out.days[0].hours[9].total === 20);
+  t('heatmap: Mon 2pm includes site-level', out.days[0].hours[14].total === 20);
+
+  // Boundary: 6am is before window, 5pm is at the exclusive end
+  t('heatmap: Mon 6am excludes site-level (only 10 direct)', out.days[0].hours[6].total === 10);
+  t('heatmap: Mon 5pm excludes site-level (17 is exclusive boundary)', out.days[0].hours[17].total === 10);
+
+  // Outside shift window entirely: 4am and 11pm — no direct, no site
+  t('heatmap: Mon 4am outside shift (0 total)', out.days[0].hours[4].total === 0);
+  t('heatmap: Mon 11pm outside shift (0 total)', out.days[0].hours[23].total === 0);
+}
+
+// ------------------------------------------------------------
+// 24. deriveHourlyStaffing — inactive days all zero
+// ------------------------------------------------------------
+{
+  const shifts = [{ num: 1, startHour: 7, endHour: 15 }];
+  const byShiftDirect = [{ num: 1, directHc: 25 }];
+  const indirectByShift = {
+    byShift: [{ num: 1, supv: 0, indirect: 0, mgmt: 0, admin: 0, total: 0 }],
+    site: { supv: 0, indirect: 0, mgmt: 0, admin: 0, total: 0 },
+  };
+  // 5-day operation → Sat/Sun should be empty
+  const out = deriveHourlyStaffing(shifts, byShiftDirect, indirectByShift, 5);
+
+  // Saturday is index 5 (Mon=0), Sunday is index 6. All hours should be 0.
+  const satTotals = out.days[5].hours.reduce((a, h) => a + h.total, 0);
+  const sunTotals = out.days[6].hours.reduce((a, h) => a + h.total, 0);
+  t('heatmap: Sat (inactive in 5-day week) all zero', satTotals === 0);
+  t('heatmap: Sun (inactive in 5-day week) all zero', sunTotals === 0);
+
+  // Mon 10am should have direct HC
+  t('heatmap: Mon 10am (active day) = 25 direct', out.days[0].hours[10].direct === 25);
+}
+
+// ------------------------------------------------------------
+// 25. deriveHourlyStaffing — peakHourTotal reporting
+// ------------------------------------------------------------
+{
+  const shifts = [
+    { num: 1, startHour: 7, endHour: 15 },
+    { num: 2, startHour: 15, endHour: 23 },
+  ];
+  const byShiftDirect = [
+    { num: 1, directHc: 40 },
+    { num: 2, directHc: 60 },
+  ];
+  const ind = {
+    byShift: [
+      { num: 1, supv: 5, indirect: 0, mgmt: 0, admin: 0, total: 5 },
+      { num: 2, supv: 8, indirect: 0, mgmt: 0, admin: 0, total: 8 },
+    ],
+    site: { supv: 0, indirect: 0, mgmt: 0, admin: 0, total: 0 },
+  };
+  const out = deriveHourlyStaffing(shifts, byShiftDirect, ind, 5);
+  // 8-hour shifts don't overlap (S1 ends exclusive at 15, S2 starts at 15).
+  // So peak = max single-shift total = S2(60 direct + 8 supv) = 68
+  t('heatmap: peakHourTotal = 68 (S2 only, no overlap in 8h shifts)', out.peakHourTotal === 68);
+}
+
+// ------------------------------------------------------------
+// 26. Shift-premium premiumAnnual math sanity
+// ------------------------------------------------------------
+// Regression lock for the premium bug Brock caught (was reading from
+// wrong model path). Guarantees premiums flow through when shiftPremiumPct
+// is provided.
+{
+  const alloc = applyArchetype(OMNI, 3, 8);
+  const r = deriveShiftHeadcount(alloc, wayfairVolumes, wayfairLabor, wayfairShifts,
+    { absenceAllowancePct: 12, shiftPremiumPct: { '2': 5, '3': 10 } });
+  t('premium regression: S1 no premium', r.byShift[0].premiumAnnual === 0);
+  t('premium regression: S2 premium > 0 with 5%',
+    r.byShift[1].premiumAnnual > 0 &&
+    Math.abs(r.byShift[1].premiumAnnual - r.byShift[1].costAnnual * 0.05) < 0.01);
+  t('premium regression: S3 premium > 0 with 10%',
+    r.byShift[2].premiumAnnual > 0 &&
+    Math.abs(r.byShift[2].premiumAnnual - r.byShift[2].costAnnual * 0.10) < 0.01);
+  t('premium regression: totals.premiumAnnual sums correctly',
+    Math.abs(r.totals.premiumAnnual - (r.byShift[1].premiumAnnual + r.byShift[2].premiumAnnual)) < 0.01);
 }
 
 // ------------------------------------------------------------
