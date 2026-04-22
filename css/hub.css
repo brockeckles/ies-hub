@@ -2144,7 +2144,11 @@ textarea.hub-input {
   align-items: stretch;
   height: 160px;
   max-height: 160px;
-  overflow: hidden;
+  /* NB: no `overflow: hidden` on the grid container. The tick labels use
+     `transform: translateY(-50%)` so the TOP and BOTTOM ticks straddle the
+     0% / 100% lines by half their text height — clipping the container
+     shaves the ends off those labels. The SVG escape we need to contain
+     is on the canvas child (see .cm-whatif-chart__canvas below). */
 }
 .cm-whatif-chart__yaxis-title {
   font-size: 10px;
