@@ -208,7 +208,7 @@ async function renderLanding() {
   await renderScenarioLanding(rootEl, {
     toolName: 'Network Optimizer',
     toolKey: 'netopt',
-    accent: '#20c997',
+    accent: 'var(--ies-teal)',
     list: () => api.listConfigs(),
     getId: (r) => r.id,
     getName: (r) => r.name || r.config_data?.name || 'Untitled network',
@@ -1426,7 +1426,7 @@ function initMap() {
   });
 
   // Facility markers
-  const facColors = ['#0047AB', '#22c55e', '#8b5cf6', '#f59e0b', '#ec4899', '#06b6d4'];
+  const facColors = ['var(--ies-blue)', '#22c55e', '#8b5cf6', '#f59e0b', '#ec4899', '#06b6d4'];
   const openFacs = facilities.filter(f => f.isOpen);
 
   facilities.forEach((f, i) => {
@@ -1456,7 +1456,7 @@ function initMap() {
   demands.forEach(d => {
     const marker = L.circleMarker([d.lat, d.lng], {
       radius: Math.max(3, Math.min(8, d.annualDemand / 10000)),
-      fillColor: '#ff3a00', color: '#ff3a00', weight: 1, fillOpacity: 0.6,
+      fillColor: 'var(--ies-orange)', color: 'var(--ies-orange)', weight: 1, fillOpacity: 0.6,
     }).addTo(mapInstance);
     marker.bindPopup(`<strong>ZIP3: ${d.zip3 || '—'}</strong><br>Demand: ${d.annualDemand.toLocaleString()}/yr<br>Max transit: ${d.maxDays || 3} days`);
   });
@@ -1470,7 +1470,7 @@ function initMap() {
 
       // Color by mode (TL = blue, LTL = orange, Parcel = purple); fall back to SLA color
       let modeColor = a.meetsSlA ? '#22c55e' : '#ef4444';
-      if (a.tlCost > 0 && a.tlCost <= a.ltlCost && a.tlCost <= a.parcelCost) modeColor = '#0047AB';
+      if (a.tlCost > 0 && a.tlCost <= a.ltlCost && a.tlCost <= a.parcelCost) modeColor = 'var(--ies-blue)';
       else if (a.ltlCost > 0 && a.ltlCost <= a.tlCost && a.ltlCost <= a.parcelCost) modeColor = '#ea580c';
       else if (a.parcelCost > 0) modeColor = '#7c3aed';
       const line = L.polyline([[fac.lat, fac.lng], [dem.lat, dem.lng]], {
@@ -1775,7 +1775,7 @@ function renderScenarioComparison(el) {
           <tbody>
             ${compared.map(s => {
               const verdictColor = {
-                'OPTIMAL': '#22c55e', 'BEST COST': '#0047AB', 'BEST SERVICE': '#8b5cf6',
+                'OPTIMAL': '#22c55e', 'BEST COST': 'var(--ies-blue)', 'BEST SERVICE': '#8b5cf6',
                 'VIABLE': '#6b7280', 'SLA RISK': '#ef4444',
               }[s.verdict] || '#6b7280';
 
@@ -1807,7 +1807,7 @@ function renderScenarioComparison(el) {
           const maxCost = Math.max(...compared.map(sc => sc.totalCost));
           const pct = maxCost > 0 ? (s.totalCost / maxCost) * 100 : 0;
           const verdictColor = {
-            'OPTIMAL': '#22c55e', 'BEST COST': '#0047AB', 'BEST SERVICE': '#8b5cf6',
+            'OPTIMAL': '#22c55e', 'BEST COST': 'var(--ies-blue)', 'BEST SERVICE': '#8b5cf6',
             'VIABLE': '#6b7280', 'SLA RISK': '#ef4444',
           }[s.verdict] || '#6b7280';
 

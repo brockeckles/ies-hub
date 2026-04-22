@@ -1083,7 +1083,7 @@ function renderPipeline(el) {
       <!-- Stage cards -->
       ${dosStages.map((stage, si) => {
         const prog = progress[si];
-        const stageColor = prog.pct === 100 ? '#22c55e' : prog.blocked > 0 ? '#ef4444' : prog.inProgress > 0 ? '#0047AB' : '#6b7280';
+        const stageColor = prog.pct === 100 ? '#22c55e' : prog.blocked > 0 ? '#ef4444' : prog.inProgress > 0 ? 'var(--ies-blue)' : '#6b7280';
 
         return `
           <div class="hub-card" style="margin-bottom:16px;border-left:4px solid ${stageColor};">
@@ -1335,7 +1335,7 @@ function renderTasksTab(el) {
         </div>
         <div style="display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--ies-gray-200);">
           <div style="flex:${summary.done};background:#22c55e;"></div>
-          <div style="flex:${summary.inProgress};background:#0047AB;"></div>
+          <div style="flex:${summary.inProgress};background:var(--ies-blue);"></div>
           <div style="flex:${summary.blocked};background:#ef4444;"></div>
           <div style="flex:${summary.total - summary.done - summary.inProgress - summary.blocked};background:var(--ies-gray-300);"></div>
         </div>
@@ -1364,13 +1364,13 @@ function renderTasksTab(el) {
                 ${stageTasks.map(task => {
                   const statusColor = {
                     'todo': '#9ca3af',
-                    'in_progress': '#0047AB',
+                    'in_progress': 'var(--ies-blue)',
                     'done': '#22c55e',
                     'blocked': '#ef4444'
                   }[task.status] || '#6b7280';
                   const priorityColor = {
                     'low': '#6b7280',
-                    'medium': '#0047AB',
+                    'medium': 'var(--ies-blue)',
                     'high': '#f59e0b',
                     'critical': '#ef4444'
                   }[task.priority] || '#6b7280';
@@ -1666,5 +1666,5 @@ function kpi(label, value, color) {
 }
 
 function scoreColor(grade) {
-  return { A: '#22c55e', B: '#0047AB', C: '#f59e0b', D: '#ef4444', F: '#991b1b' }[grade] || '#6b7280';
+  return { A: '#22c55e', B: 'var(--ies-blue)', C: '#f59e0b', D: '#ef4444', F: '#991b1b' }[grade] || '#6b7280';
 }

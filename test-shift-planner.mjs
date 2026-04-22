@@ -486,6 +486,17 @@ const wayfairShifts = {
   t('scope: CSR → site', classifyIndirectScope({ position: 'CSR' }) === 'site');
   t('scope: Security Guard → site', classifyIndirectScope({ position: 'Security Guard' }) === 'site');
   t('scope: Transportation Routing → site', classifyIndirectScope({ position: 'Transportation Routing' }) === 'site');
+
+  // Regression: indirectLaborLines use `role` field (Wayfair seed). Classifier
+  // must read `role` alongside position / role_name.
+  t('scope: role=Team Lead → shift', classifyIndirectScope({ role: 'Team Lead' }) === 'shift');
+  t('scope: role=Shift Supervisor → shift', classifyIndirectScope({ role: 'Shift Supervisor' }) === 'shift');
+  t('scope: role=Operations Manager → site', classifyIndirectScope({ role: 'Operations Manager' }) === 'site');
+  t('scope: role=IT Support → site', classifyIndirectScope({ role: 'IT Support' }) === 'site');
+  t('scope: role=HR Business Partner → site', classifyIndirectScope({ role: 'HR Business Partner' }) === 'site');
+  t('scope: role=Safety Coordinator → site (safety wins over coord)', classifyIndirectScope({ role: 'Safety Coordinator' }) === 'site');
+  t('scope: role=Quality / Inventory Control → shift', classifyIndirectScope({ role: 'Quality / Inventory Control' }) === 'shift');
+  t('scope: role=Maintenance Technician → site', classifyIndirectScope({ role: 'Maintenance Technician' }) === 'site');
 }
 
 // ------------------------------------------------------------
@@ -501,6 +512,13 @@ const wayfairShifts = {
   t('tier: HR-Admin → admin', classifyIndirectTier({ position: 'HR-Admin' }) === 'admin');
   t('tier: Safety Coordinator → admin', classifyIndirectTier({ position: 'Safety Coordinator' }) === 'admin');
   t('tier: QA Coordinator → indirect (Coord, not Mgr/HR)', classifyIndirectTier({ position: 'QA Coordinator' }) === 'indirect');
+
+  // Regression: `role` field support
+  t('tier: role=Operations Manager → mgmt', classifyIndirectTier({ role: 'Operations Manager' }) === 'mgmt');
+  t('tier: role=Shift Supervisor → supv', classifyIndirectTier({ role: 'Shift Supervisor' }) === 'supv');
+  t('tier: role=Team Lead → indirect', classifyIndirectTier({ role: 'Team Lead' }) === 'indirect');
+  t('tier: role=IT Support → admin', classifyIndirectTier({ role: 'IT Support' }) === 'admin');
+  t('tier: role=Maintenance Technician → admin', classifyIndirectTier({ role: 'Maintenance Technician' }) === 'admin');
 }
 
 // ------------------------------------------------------------

@@ -11,13 +11,13 @@ import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import * as calc from './calc.js?v=20260421-xE';
-import * as api from './api.js?v=20260422-xN';
+import * as api from './api.js?v=20260422-xO';
 import * as scenarios from './calc.scenarios.js?v=20260421-wA';
 import * as monthlyCalc from './calc.monthly.js?v=20260421-xE';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
-import * as shiftPlannerCalc from './shift-planner.js?v=20260422-xN';
-import * as shiftPlannerUi from './shift-planner-ui.js?v=20260422-xN';
-import * as shiftArchetypes from './shift-archetypes.js?v=20260422-xN';
+import * as shiftPlannerCalc from './shift-planner.js?v=20260422-xO';
+import * as shiftPlannerUi from './shift-planner-ui.js?v=20260422-xO';
+import * as shiftArchetypes from './shift-archetypes.js?v=20260422-xO';
 
 // ============================================================
 // Non-blocking modal helpers (replace confirm/prompt/alert).
@@ -4431,7 +4431,12 @@ function renderSummary() {
   const fr = (refData.facilityRates || []).find(r => r.market_id === market);
   const ur = (refData.utilityRates || []).find(r => r.market_id === market);
   const opHrs = calc.operatingHours(model.shifts || {});
-  const orders = (model.volumeLines || []).find(v => v.isOutboundPrimary)?.volume || 0;
+  const outboundStar = (model.volumeLines || []).find(v => v.isOutboundPrimary);
+  const orders = outboundStar?.volume || 0;
+  // Human-readable UOM label for KPI tile ("Order" / "Each" / "Case" / "Unit").
+  // Derived from the starred volume line's UOM so the tile re-labels when the
+  // user changes the outbound-primary star on Volumes & Profile.
+  const outboundUomLabel = formatUomSingular(outboundStar?.uom);
   const contractYears = model.projectDetails?.contractTerm || 5;
   const fin = model.financial || {};
 
@@ -4641,8 +4646,8 @@ function renderSummary() {
         <div class="hub-kpi-tile__label">Y1 Revenue</div>
         <div class="hub-kpi-tile__value hub-kpi-tile__value--brand">${calc.formatCurrency(y1Revenue, {compact: true})}</div>
       </div>
-      <div class="hub-kpi-tile" title="Year 1 cost ÷ Year 1 orders">
-        <div class="hub-kpi-tile__label">Cost / Order (Y1)</div>
+      <div class="hub-kpi-tile" title="Year 1 cost ÷ Year 1 ${outboundUomLabel.toLowerCase()}s">
+        <div class="hub-kpi-tile__label">Cost / ${outboundUomLabel} (Y1)</div>
         <div class="hub-kpi-tile__value">${y1Orders > 0 ? calc.formatCurrency(y1CostPerOrder, {decimals: 2}) : '—'}</div>
       </div>
       <div class="hub-kpi-tile">
@@ -6685,6 +6690,36 @@ function _esc(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/**
+ * Singular, title-cased label for a volume-line UOM. Used by Summary / Pricing
+ * tiles that read "Cost / {UOM}" — the label needs to flip when the user
+ * changes the outbound-primary star on Volumes & Profile.
+ * @param {string|undefined|null} uom
+ * @returns {string}
+ */
+function formatUomSingular(uom) {
+  const raw = String(uom || '').toLowerCase().trim();
+  if (!raw) return 'Order';
+  // Exact matches (plurals + common variants)
+  const map = {
+    'order': 'Order', 'orders': 'Order',
+    'each': 'Each', 'eaches': 'Each', 'unit': 'Unit', 'units': 'Unit',
+    'case': 'Case', 'cases': 'Case',
+    'pallet': 'Pallet', 'pallets': 'Pallet',
+    'carton': 'Carton', 'cartons': 'Carton',
+    'line': 'Line', 'lines': 'Line',
+    'pick': 'Pick', 'picks': 'Pick',
+    'sku': 'SKU', 'skus': 'SKU',
+    'hour': 'Hour', 'hours': 'Hour',
+    'trailer': 'Trailer', 'trailers': 'Trailer',
+    'shipment': 'Shipment', 'shipments': 'Shipment',
+  };
+  if (map[raw]) return map[raw];
+  // Fallback: strip trailing 's', title-case
+  const singular = raw.endsWith('s') ? raw.slice(0, -1) : raw;
+  return singular.charAt(0).toUpperCase() + singular.slice(1);
 }
 
 async function ensureLinkedDesignsLoaded() {

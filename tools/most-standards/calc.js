@@ -596,8 +596,8 @@ export function formatFte(fte) {
  */
 export function categoryColor(category) {
   switch (category) {
-    case 'manual': return '#0047AB';
-    case 'mhe': return '#20c997';
+    case 'manual': return 'var(--ies-blue)';
+    case 'mhe': return 'var(--ies-teal)';
     case 'hybrid': return '#ff9500';
     default: return '#6c757d';
   }

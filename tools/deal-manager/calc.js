@@ -411,7 +411,7 @@ export function formatMonths(months) {
 export function statusBadge(status) {
   const badges = {
     draft: { label: 'Draft', color: '#6b7280', bg: '#f3f4f6' },
-    in_progress: { label: 'In Progress', color: '#0047AB', bg: '#dbeafe' },
+    in_progress: { label: 'In Progress', color: 'var(--ies-blue)', bg: '#dbeafe' },
     proposal_sent: { label: 'Proposal Sent', color: '#92400e', bg: '#fef3c7' },
     won: { label: 'Won', color: '#15803d', bg: '#dcfce7' },
     lost: { label: 'Lost', color: '#991b1b', bg: '#fee2e2' },

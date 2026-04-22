@@ -109,7 +109,7 @@ function render() {
             <div style="display:flex;gap:4px;overflow-x:auto;padding-bottom:10px;">
               ${['all','alerts','competitor','accounts','tariff','rfp'].map((k, i) => `
                 <button type="button" data-intel-tab="${k}" class="cc-intel-tab ${i === 0 ? 'active' : ''}"
-                  style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;border:1px solid ${i === 0 ? '#1c1c1c' : 'var(--ies-gray-300)'};background:${i === 0 ? '#1c1c1c' : '#fff'};color:${i === 0 ? '#fff' : 'var(--ies-gray-700)'};cursor:pointer;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;">${labelForIntelTab(k)} <span style="opacity:.7;">(${(d.intel?.[k === 'all' ? 'all' : k] || []).length})</span></button>
+                  style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;border:1px solid ${i === 0 ? 'var(--ies-navy)' : 'var(--ies-gray-300)'};background:${i === 0 ? 'var(--ies-navy)' : '#fff'};color:${i === 0 ? '#fff' : 'var(--ies-gray-700)'};cursor:pointer;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;">${labelForIntelTab(k)} <span style="opacity:.7;">(${(d.intel?.[k === 'all' ? 'all' : k] || []).length})</span></button>
               `).join('')}
             </div>
           </div>
@@ -225,7 +225,7 @@ function renderPipelineSnapshot(p) {
       </div>
       <div style="display:flex;gap:14px;align-items:baseline;">
         <div>
-          <div style="font-size:24px;font-weight:800;color:#1c1c1c;line-height:1;">${totalDeals}</div>
+          <div style="font-size:24px;font-weight:800;color:var(--ies-navy);line-height:1;">${totalDeals}</div>
           <div style="font-size:10px;color:var(--ies-gray-500);font-weight:600;text-transform:uppercase;letter-spacing:.04em;">Active deals</div>
         </div>
         <div>
@@ -252,10 +252,10 @@ function renderPipelineSnapshot(p) {
 /** Tool Shortcuts — quick-launch into the most-used Design Tools. */
 function renderToolShortcuts() {
   const tools = [
-    { route: 'designtools/cost-model',       label: 'Cost Model Builder',         color: '#ff3a00' },
-    { route: 'designtools/warehouse-sizing', label: 'Warehouse Sizing',           color: '#0047AB' },
-    { route: 'designtools/network-opt',      label: 'Network Optimization',       color: '#20c997' },
-    { route: 'designtools/fleet-modeler',    label: 'Fleet Modeler',              color: '#20c997' },
+    { route: 'designtools/cost-model',       label: 'Cost Model Builder',         color: 'var(--ies-orange)' },
+    { route: 'designtools/warehouse-sizing', label: 'Warehouse Sizing',           color: 'var(--ies-blue)' },
+    { route: 'designtools/network-opt',      label: 'Network Optimization',       color: 'var(--ies-teal)' },
+    { route: 'designtools/fleet-modeler',    label: 'Fleet Modeler',              color: 'var(--ies-teal)' },
   ];
   return `
     <div class="hub-card" style="padding:14px 16px;">
@@ -365,9 +365,9 @@ function switchIntelTab(key) {
   tabs.forEach(t => {
     const active = t.dataset.intelTab === key;
     t.classList.toggle('active', active);
-    t.style.background = active ? '#1c1c1c' : '#fff';
+    t.style.background = active ? 'var(--ies-navy)' : '#fff';
     t.style.color = active ? '#fff' : 'var(--ies-gray-700)';
-    t.style.borderColor = active ? '#1c1c1c' : 'var(--ies-gray-300)';
+    t.style.borderColor = active ? 'var(--ies-navy)' : 'var(--ies-gray-300)';
   });
   const body = rootEl.querySelector('#cc-intel-body');
   if (body && liveData.intel) {

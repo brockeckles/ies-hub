@@ -352,7 +352,7 @@ function renderShell() {
         text-transform: uppercase;
         letter-spacing: 0.3px;
       }
-      .most-cat-manual { background: rgba(0,71,171,0.1); color: #0047AB; }
+      .most-cat-manual { background: rgba(0,71,171,0.1); color: var(--ies-blue); }
       .most-cat-mhe { background: rgba(32,201,151,0.1); color: #0d9668; }
       .most-cat-hybrid { background: rgba(255,149,0,0.1); color: #cc7700; }
 
@@ -384,7 +384,7 @@ function renderShell() {
       .most-filter-bar input, .most-filter-bar select {
         padding: 8px 12px;
         border: 1px solid var(--ies-gray-200);
-        border-radius: 6px;
+        border-radius: 10px;
         font-family: Montserrat, sans-serif;
         font-size: 13px;
         font-weight: 600;
@@ -526,7 +526,7 @@ function renderShell() {
         padding: 5px 10px;
         background: transparent;
         border: 1px solid transparent;
-        border-radius: 6px;
+        border-radius: 10px;
         color: var(--ies-gray-500);
         font-family: Montserrat, sans-serif;
         font-size: 11px;
@@ -853,19 +853,19 @@ function renderEditor() {
 
       <!-- Live Metrics -->
       <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; margin-top:16px;">
-        <div style="border:1px solid var(--ies-gray-200); border-radius:6px; padding:12px; text-align:center;">
+        <div style="border:1px solid var(--ies-gray-200); border-radius: 10px; padding:12px; text-align:center;">
           <div style="font-size:11px; color:var(--ies-gray-500); font-weight:600;">Base UPH</div>
           <div style="font-size:20px; font-weight:700; color:var(--ies-blue);" id="edit-live-uph">${calc.formatUph(baseUph)}</div>
         </div>
-        <div style="border:1px solid var(--ies-gray-200); border-radius:6px; padding:12px; text-align:center;">
+        <div style="border:1px solid var(--ies-gray-200); border-radius: 10px; padding:12px; text-align:center;">
           <div style="font-size:11px; color:var(--ies-gray-500); font-weight:600;">Total TMU</div>
           <div style="font-size:20px; font-weight:700; color:var(--ies-navy);" id="edit-live-tmu">${totalTmu}</div>
         </div>
-        <div style="border:1px solid var(--ies-gray-200); border-radius:6px; padding:12px; text-align:center;">
+        <div style="border:1px solid var(--ies-gray-200); border-radius: 10px; padding:12px; text-align:center;">
           <div style="font-size:11px; color:var(--ies-gray-500); font-weight:600;">Cycle Time</div>
           <div style="font-size:18px; font-weight:700; color:var(--ies-navy);" id="edit-live-cycle">${calc.formatTmu(totalTmu)}</div>
         </div>
-        <div style="border:1px solid var(--ies-gray-200); border-radius:6px; padding:12px; text-align:center;">
+        <div style="border:1px solid var(--ies-gray-200); border-radius: 10px; padding:12px; text-align:center;">
           <div style="font-size:11px; color:var(--ies-gray-500); font-weight:600;">Elements</div>
           <div style="font-size:20px; font-weight:700; color:var(--ies-navy);" id="edit-live-count">${editorElements.length}</div>
         </div>
@@ -885,7 +885,7 @@ function renderEditor() {
         const errors = issues.filter(i => i.severity === 'error');
         const warns = issues.filter(i => i.severity === 'warning');
         return `
-          <div style="margin-bottom:12px;padding:10px 12px;border-radius:6px;
+          <div style="margin-bottom:12px;padding:10px 12px;border-radius: 10px;
                       background:${errors.length ? '#fee2e2' : '#fef3c7'};
                       border:1px solid ${errors.length ? '#fca5a5' : '#fcd34d'};
                       color:${errors.length ? '#991b1b' : '#92400e'};font-size:12px;">
@@ -987,7 +987,7 @@ function renderEditor() {
           </tbody>
         </table>
       ` : `
-        <div style="text-align:center; padding:20px; color:var(--ies-gray-400); border:1px dashed var(--ies-gray-200); border-radius:6px;">
+        <div style="text-align:center; padding:20px; color:var(--ies-gray-400); border:1px dashed var(--ies-gray-200); border-radius: 10px;">
           No elements yet. Click "+ Add Element" to start.
         </div>
       `}
@@ -1170,8 +1170,8 @@ function renderAnalysisSummary(summary) {
     <div class="hub-card" style="margin-top:16px;">
       <div class="text-subtitle mb-4">FTEs by Category</div>
       <div style="display:flex; height:24px; border-radius:4px; overflow:hidden; margin-bottom:12px;">
-        ${cats.manual > 0 ? `<div style="width:${(cats.manual / totalFte * 100).toFixed(0)}%; background:#0047AB;" title="Manual"></div>` : ''}
-        ${cats.mhe > 0 ? `<div style="width:${(cats.mhe / totalFte * 100).toFixed(0)}%; background:#20c997;" title="MHE"></div>` : ''}
+        ${cats.manual > 0 ? `<div style="width:${(cats.manual / totalFte * 100).toFixed(0)}%; background:var(--ies-blue);" title="Manual"></div>` : ''}
+        ${cats.mhe > 0 ? `<div style="width:${(cats.mhe / totalFte * 100).toFixed(0)}%; background:var(--ies-teal);" title="MHE"></div>` : ''}
         ${cats.hybrid > 0 ? `<div style="width:${(cats.hybrid / totalFte * 100).toFixed(0)}%; background:#ff9500;" title="Hybrid"></div>` : ''}
       </div>
       <div style="display:flex; gap:24px;">
@@ -1213,7 +1213,7 @@ function renderSavedScenarios() {
           </div>
         `).join('')}
       </div>
-      ${savedScenarios.length === 0 ? '<div style="text-align:center; padding:20px; color:var(--ies-gray-400); border:1px dashed var(--ies-gray-200); border-radius:6px; margin-top:8px;">No saved scenarios. Click "+ Save Current" to save your analysis.</div>' : ''}
+      ${savedScenarios.length === 0 ? '<div style="text-align:center; padding:20px; color:var(--ies-gray-400); border:1px dashed var(--ies-gray-200); border-radius: 10px; margin-top:8px;">No saved scenarios. Click "+ Save Current" to save your analysis.</div>' : ''}
     </div>
   `;
 }

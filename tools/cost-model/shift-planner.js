@@ -377,13 +377,16 @@ export function deriveShiftHeadcount(allocation, volumeLines, laborLines, shifts
  * @returns {'shift' | 'site'}
  */
 export function classifyIndirectScope(line) {
-  const raw = String(line?.position || line?.role_name || line?.name || line?.activity || '').toLowerCase();
+  // Read chain covers every shape the CM schema uses today:
+  //   indirectLaborLines items often use `role` (Wayfair seed);
+  //   laborLines use `role_name` / `activity_name`; position catalog uses `position`.
+  const raw = String(line?.position || line?.role_name || line?.role || line?.name || line?.activity || '').toLowerCase();
   // Explicit site-level keywords win first
-  if (/manager|director|hr[- ]?admin|\bhr\b|admin[- ]?ops|safety|maintenance|engineer|csr|routing|compliance|security|super user|wms|facilit/.test(raw)) {
+  if (/manager|director|hr[- ]?admin|\bhr\b|admin[- ]?ops|safety|maintenance|engineer|\bit\b|it\s?support|csr|routing|compliance|security|super user|wms|facilit/.test(raw)) {
     return 'site';
   }
-  // Shift-level: leads, supervisors, coordinators, taskers
-  if (/lead|supervisor|coord|tasker|spotter/.test(raw)) {
+  // Shift-level: leads, supervisors, coordinators, taskers, QA/QC, inventory control
+  if (/lead|supervisor|coord|tasker|spotter|\bqa\b|\bqc\b|quality|inventory\s?control/.test(raw)) {
     return 'shift';
   }
   // Default to site-level (safer — doesn't inflate per-shift HC)
@@ -399,10 +402,10 @@ export function classifyIndirectScope(line) {
  * @returns {'supv' | 'indirect' | 'mgmt' | 'admin'}
  */
 export function classifyIndirectTier(line) {
-  const raw = String(line?.position || line?.role_name || line?.name || line?.activity || '').toLowerCase();
+  const raw = String(line?.position || line?.role_name || line?.role || line?.name || line?.activity || '').toLowerCase();
   if (/director|sr\.?\s*ops|senior\s*ops|operations\s*manager|ops\s*mgr|ops\s*manager/.test(raw)) return 'mgmt';
   if (/supervisor/.test(raw)) return 'supv';
-  if (/hr|admin|safety|maintenance|engineer|csr|routing|compliance|security|super user|wms|manager/.test(raw)) return 'admin';
+  if (/hr|admin|safety|maintenance|engineer|\bit\b|it\s?support|csr|routing|compliance|security|super user|wms|manager/.test(raw)) return 'admin';
   return 'indirect';
 }
 

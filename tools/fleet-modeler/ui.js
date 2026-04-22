@@ -136,7 +136,7 @@ async function renderLanding() {
   await renderScenarioLanding(rootEl, {
     toolName: 'Fleet Modeler',
     toolKey: 'fleet',
-    accent: '#20c997',
+    accent: 'var(--ies-teal)',
     list: () => api.listScenarios(),
     getId: (r) => r.id,
     getName: (r) => r.name || r.scenario_data?.name || 'Untitled fleet',
@@ -734,7 +734,7 @@ function renderResults(el) {
       <div class="hub-card" style="padding:20px;margin-bottom:20px;">
         <div style="font-size:14px;font-weight:700;margin-bottom:16px;">3-Way Cost Comparison</div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;">
-          ${renderComparisonCard('Private Fleet', r.comparison.private, r.comparison, '#0047AB')}
+          ${renderComparisonCard('Private Fleet', r.comparison.private, r.comparison, 'var(--ies-blue)')}
           ${renderComparisonCard('Dedicated (GXO)', r.comparison.dedicated, r.comparison, '#8b5cf6')}
           ${renderComparisonCard('Common Carrier', r.comparison.carrier, r.comparison, '#ef4444')}
         </div>
@@ -879,7 +879,7 @@ function renderCostWaterfall(fleetComposition) {
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding-top:12px;border-top:1px solid var(--ies-gray-200);">
       <div><div style="font-size:11px;color:var(--ies-gray-500);font-weight:700;text-transform:uppercase;letter-spacing:.04em;">Fixed Cost</div><div style="font-size:18px;font-weight:800;color:#7c3aed;">${calc.formatCurrency(totalFixed, { compact: true })}</div></div>
       <div><div style="font-size:11px;color:var(--ies-gray-500);font-weight:700;text-transform:uppercase;letter-spacing:.04em;">Variable Cost</div><div style="font-size:18px;font-weight:800;color:#dc2626;">${calc.formatCurrency(totalVariable, { compact: true })}</div></div>
-      <div><div style="font-size:11px;color:var(--ies-gray-500);font-weight:700;text-transform:uppercase;letter-spacing:.04em;">Total Cost</div><div style="font-size:18px;font-weight:800;color:#1c1c1c;">${calc.formatCurrency(grand, { compact: true })}</div></div>
+      <div><div style="font-size:11px;color:var(--ies-gray-500);font-weight:700;text-transform:uppercase;letter-spacing:.04em;">Total Cost</div><div style="font-size:18px;font-weight:800;color:var(--ies-navy);">${calc.formatCurrency(grand, { compact: true })}</div></div>
     </div>
   `;
 }
@@ -1143,7 +1143,7 @@ function renderMap(el) {
       </div>
       <div id="fm-map-container" style="flex:1;min-height:500px;border-radius:10px;border:1px solid var(--ies-gray-200);overflow:hidden;"></div>
       <div style="display:flex;gap:16px;margin-top:12px;font-size:11px;color:var(--ies-gray-400);">
-        <span><span style="display:inline-block;width:20px;height:3px;background:#0047AB;vertical-align:middle;"></span> Dry Van</span>
+        <span><span style="display:inline-block;width:20px;height:3px;background:var(--ies-blue);vertical-align:middle;"></span> Dry Van</span>
         <span><span style="display:inline-block;width:20px;height:3px;background:#22c55e;vertical-align:middle;"></span> Reefer</span>
         <span><span style="display:inline-block;width:20px;height:3px;background:#f59e0b;vertical-align:middle;"></span> Flatbed</span>
         <span><span style="display:inline-block;width:20px;height:3px;background:#8b5cf6;vertical-align:middle;"></span> Straight Truck</span>
@@ -1197,7 +1197,7 @@ const CITY_GEO = {
 };
 
 const VEHICLE_COLORS = {
-  'Dry Van': '#0047AB',
+  'Dry Van': 'var(--ies-blue)',
   'Reefer': '#22c55e',
   'Flatbed': '#f59e0b',
   'Straight Truck': '#8b5cf6',
@@ -1228,7 +1228,7 @@ function initFleetMap() {
     drawn++;
     allPoints.push(o, d);
     const a = (result?.assignments || []).find(x => x.laneId === lane.id);
-    const color = VEHICLE_COLORS[a?.vehicleName] || '#0047AB';
+    const color = VEHICLE_COLORS[a?.vehicleName] || 'var(--ies-blue)';
     const weight = Math.max(1.5, Math.min(6, (lane.weeklyShipments || 1) / 5));
     const line = L.polyline([o, d], { color, weight, opacity: 0.7 }).addTo(mapInstance);
     line.bindPopup(`<strong>${lane.origin} → ${lane.destination}</strong><br>${lane.weeklyShipments}/wk · ${lane.distanceMiles} mi<br>Vehicle: ${a?.vehicleName || '—'}`);

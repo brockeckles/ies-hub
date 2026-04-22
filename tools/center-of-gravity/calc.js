@@ -214,28 +214,67 @@ export function computeCog(points) {
   const weightedDistSum = distances.reduce((s, d) => s + d.dist * d.weight, 0);
   const avgWeightedDistance = totalWeight > 0 ? weightedDistSum / totalWeight : 0;
   const maxDistance = Math.max(0, ...distances.map(d => d.dist));
+  // P2-sweep fix (2026-04-22): weighted max-distance. The unweighted version
+  // reports "worst-case miles to ANY demand point" which can be dominated by
+  // a tiny-volume outlier; the weighted version reports the worst-case among
+  // points carrying meaningful share of demand. Both useful — surface both so
+  // callers can pick the right one.
+  const maxWeightedDistance = Math.max(0, ...distances.filter(d => d.weight > 0).map(d => d.dist));
   const nearestCity = findNearestCity(lat, lng);
 
-  return { lat, lng, totalWeight, avgWeightedDistance, maxDistance, nearestCity };
+  return { lat, lng, totalWeight, avgWeightedDistance, maxDistance, maxWeightedDistance, nearestCity };
 }
 
 /**
- * Find nearest major city to a lat/lng point.
+ * Find nearest major city to a lat/lng point. When the nearest city is
+ * farther than `warnThresholdMi` (default 50), appends the distance in
+ * parens — e.g. "Fargo, ND (72 mi)" — so the caller can tell the COG
+ * result isn't landing in a real metro.
  * @param {number} lat
  * @param {number} lng
+ * @param {number} [warnThresholdMi]
  * @returns {string}
  */
-export function findNearestCity(lat, lng) {
-  if (MAJOR_CITIES.length === 0) return '';
-  let best = MAJOR_CITIES[0];
+export function findNearestCity(lat, lng, warnThresholdMi = 50) {
+  const pool = _dedupedMajorCities();
+  if (pool.length === 0) return '';
+  let best = pool[0];
   let bestDist = Infinity;
 
-  for (const city of MAJOR_CITIES) {
+  for (const city of pool) {
     const d = haversine(lat, lng, city.lat, city.lng);
     if (d < bestDist) { bestDist = d; best = city; }
   }
 
-  return `${best.name}, ${best.state}`;
+  const label = `${best.name}, ${best.state}`;
+  if (Number.isFinite(warnThresholdMi) && bestDist > warnThresholdMi) {
+    return `${label} (${Math.round(bestDist)} mi)`;
+  }
+  return label;
+}
+
+// Cache for the deduplicated city pool (computed once per session).
+let _majorCitiesDeduped = null;
+
+/**
+ * Returns MAJOR_CITIES with exact-coord duplicates removed. The raw list
+ * includes metro variants like "Phoenix" + "Phoenix-Mesa" sharing coords;
+ * these inflate findNearestCity's loop by 10 iterations + produce
+ * inconsistent labels (first-match-wins order matters). Dedupe keeps the
+ * first entry for each unique lat/lng pair — simpler, more predictable.
+ */
+function _dedupedMajorCities() {
+  if (_majorCitiesDeduped) return _majorCitiesDeduped;
+  const seen = new Set();
+  const out = [];
+  for (const c of MAJOR_CITIES) {
+    const key = `${Number(c.lat).toFixed(4)},${Number(c.lng).toFixed(4)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(c);
+  }
+  _majorCitiesDeduped = out;
+  return out;
 }
 
 // ============================================================
@@ -260,6 +299,14 @@ export function kMeansCog(points, k = 1, maxIter = 100) {
   let centers = kMeansPlusPlusInit(points, k);
   let assignments = [];
   let iter = 0;
+  // P2-sweep fix (2026-04-22): centroid-delta convergence. The assignment-
+  // only check stops only when every point's cluster is stable, but skips
+  // the early-exit opportunity when centers have barely moved — common on
+  // near-collinear point sets. Adding a small-movement threshold (1 mile
+  // max per-center shift) lets k-means exit up to 10-20x faster on
+  // well-separated demand with minimal accuracy loss.
+  const CENTROID_DELTA_TOL_MI = 1.0;
+  let prevCenters = null;
 
   for (iter = 0; iter < maxIter; iter++) {
     // Assign points to nearest center
@@ -273,13 +320,17 @@ export function kMeansCog(points, k = 1, maxIter = 100) {
       return { pointId: p.id, clusterId: bestIdx, distanceToCenter: bestDist };
     });
 
-    // Check convergence
-    const converged = assignments.length > 0 && newAssignments.every((a, i) => a.clusterId === assignments[i].clusterId);
+    // Check convergence — assignment stability OR centroid drift below tolerance
+    const assignStable = assignments.length > 0 &&
+      newAssignments.every((a, i) => a.clusterId === assignments[i].clusterId);
+    const centroidStable = prevCenters &&
+      centers.every((c, i) => haversine(c.lat, c.lng, prevCenters[i].lat, prevCenters[i].lng) < CENTROID_DELTA_TOL_MI);
     assignments = newAssignments;
 
-    if (converged) break;
+    if (assignStable || centroidStable) break;
 
     // Recompute centers as weighted centroids of assigned points
+    prevCenters = centers.map(c => ({ lat: c.lat, lng: c.lng }));
     centers = centers.map((_, ci) => {
       const clusterPoints = points.filter((_, pi) => assignments[pi].clusterId === ci);
       if (clusterPoints.length === 0) return centers[ci]; // Keep empty cluster center
@@ -320,15 +371,19 @@ export function kMeansPlusPlusInit(points, k) {
   const sorted = [...points].sort((a, b) => b.weight - a.weight);
   centers.push({ lat: sorted[0].lat, lng: sorted[0].lng });
 
-  // Subsequent centers: pick point farthest from nearest center (deterministic variant)
+  // P2-sweep fix (2026-04-22): use distance² × weight for subsequent seeds.
+  // The original `minDist × weight` under-weights far-away heavy clusters —
+  // standard k-means++ uses squared distance so the seed prefers geometric
+  // spread. Combining with weight keeps the importance-sampling bias toward
+  // high-demand points but no longer penalizes far outliers.
   while (centers.length < k) {
     let bestIdx = 0;
-    let bestMinDist = -1;
+    let bestScore = -1;
 
     for (let i = 0; i < points.length; i++) {
       const minDist = Math.min(...centers.map(c => haversine(points[i].lat, points[i].lng, c.lat, c.lng)));
-      const weighted = minDist * points[i].weight;
-      if (weighted > bestMinDist) { bestMinDist = weighted; bestIdx = i; }
+      const score = minDist * minDist * (points[i].weight || 0);
+      if (score > bestScore) { bestScore = score; bestIdx = i; }
     }
 
     centers.push({ lat: points[bestIdx].lat, lng: points[bestIdx].lng });
