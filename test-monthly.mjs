@@ -398,6 +398,47 @@ test('yearly rollup: zero-cost inputs produce zero category rows (no phantom val
   }
 });
 
+// ---- 2026-04-21 audit: Facility + Equipment escalation separate from cost_esc_pct ----
+test('facility_esc_pct: override escalates facility independent of cost_esc_pct', () => {
+  const y0 = buildMonthlyProjections(baseParams({ cost_esc_pct: 0.03, facility_esc_pct: 0 }));
+  const y1 = buildMonthlyProjections(baseParams({ cost_esc_pct: 0.03, facility_esc_pct: 0.06 }));
+  const yearly0 = groupMonthlyToYearly(y0, 5);
+  const yearly1 = groupMonthlyToYearly(y1, 5);
+  // Y2 facility: y0 at 0% esc, y1 at 6% esc — y1 should be ~6% higher.
+  const ratio = yearly1[1].facility / yearly0[1].facility;
+  near(ratio, 1.06, 0.001, 'Y2 facility ratio with 0% vs 6% facility_esc_pct:');
+  // Y2 equipment: both use cost_esc_pct = 0.03 (fallback, since no equipment_esc_pct supplied) — should match.
+  near(yearly0[1].equipment, yearly1[1].equipment, 1, 'Y2 equipment should match when equipment_esc_pct omitted:');
+});
+test('equipment_esc_pct: override escalates equipment independent of facility + cost', () => {
+  const y0 = buildMonthlyProjections(baseParams({ cost_esc_pct: 0.03, equipment_esc_pct: 0 }));
+  const y1 = buildMonthlyProjections(baseParams({ cost_esc_pct: 0.03, equipment_esc_pct: 0.10 }));
+  const yearly0 = groupMonthlyToYearly(y0, 5);
+  const yearly1 = groupMonthlyToYearly(y1, 5);
+  const ratio = yearly1[1].equipment / yearly0[1].equipment;
+  near(ratio, 1.10, 0.001, 'Y2 equipment ratio with 0% vs 10% equipment_esc_pct:');
+  // Facility shouldn't budge — falls back to cost_esc_pct = 3%.
+  near(yearly0[1].facility, yearly1[1].facility, 1, 'Y2 facility should match when facility_esc_pct omitted:');
+});
+test('facility_esc_pct omitted: falls back to cost_esc_pct (backwards compat)', () => {
+  const y0 = buildMonthlyProjections(baseParams({ cost_esc_pct: 0.05 /* no facility_esc_pct */ }));
+  const y1 = buildMonthlyProjections(baseParams({ cost_esc_pct: 0.05, facility_esc_pct: 0.05 }));
+  const yearly0 = groupMonthlyToYearly(y0, 5);
+  const yearly1 = groupMonthlyToYearly(y1, 5);
+  near(yearly0[2].facility, yearly1[2].facility, 1, 'Y3 facility fallback === explicit when values match:');
+});
+test('overhead escalates pure cost_esc_pct (no volume elasticity mix-in)', () => {
+  // 2026-04-21 audit follow-up: monthly engine's overhead row used to add
+  // `* Math.pow(1 + vol_growth * 0.3, yearIdx)` on top of cost escalation.
+  // This test locks that overhead now escalates cost_esc_pct only.
+  const params = baseParams({ cost_esc_pct: 0.03, vol_growth_pct: 0.10 });
+  const bundle = buildMonthlyProjections(params);
+  const yearly = groupMonthlyToYearly(bundle, 5);
+  const y2Overhead = yearly[1].overhead;
+  const expectedY2 = params.base_overhead_cost * Math.pow(1.03, 1);
+  near(y2Overhead, expectedY2, expectedY2 * 0.005, 'Y2 overhead pure cost_esc (no vol mix-in):');
+});
+
 // ---- Run + report ----
 console.log(`\n\n${passed} passed, ${failed} failed`);
 if (failures.length) {

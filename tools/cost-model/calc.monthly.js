@@ -369,6 +369,12 @@ export function buildMonthlyProjections(params) {
     vol_growth_pct = 0,
     labor_esc_pct = 0,
     cost_esc_pct = 0,
+    // 2026-04-21 audit: facility + equipment escalation were folded into
+    // cost_esc_pct. What-If Facility Escalation slider was silently dead.
+    // Optional params fall back to cost_esc_pct so existing flows are
+    // unchanged; the adapter passes both separately.
+    facility_esc_pct = null,
+    equipment_esc_pct = null,
     tax_rate_pct = 25,
     dso_days = 30,
     dpo_days = 30,
@@ -467,6 +473,8 @@ export function buildMonthlyProjections(params) {
     const seasonalShare = sProfile.monthly_shares[p.calendar_month - 1] ?? (1 / 12);
     const escLaborMult = Math.pow(1 + labor_esc_pct, yearIdx);
     const escCostMult  = Math.pow(1 + cost_esc_pct,  yearIdx);
+    const escFacilityMult  = Math.pow(1 + (facility_esc_pct  != null ? facility_esc_pct  : cost_esc_pct), yearIdx);
+    const escEquipmentMult = Math.pow(1 + (equipment_esc_pct != null ? equipment_esc_pct : cost_esc_pct), yearIdx);
     const volMult      = Math.pow(1 + vol_growth_pct, yearIdx);
 
     // ---- Revenue rows ----
@@ -542,8 +550,8 @@ export function buildMonthlyProjections(params) {
         source_line_table: 'cost_model_labor', source_line_id: null,
       });
     }
-    // Facility — flat across the year
-    const monthlyFacility = base_facility_cost * escCostMult / 12;
+    // Facility — flat across the year, uses dedicated facility escalation
+    const monthlyFacility = base_facility_cost * escFacilityMult / 12;
     if (monthlyFacility > 0) {
       expenseRows.push({
         project_id, period_id: p.id, expense_line_code: 'FACILITY',
@@ -551,8 +559,8 @@ export function buildMonthlyProjections(params) {
         source_line_table: 'cost_model_overhead', source_line_id: null,
       });
     }
-    // Equipment (leased)
-    const monthlyEquip = base_equipment_cost * escCostMult / 12;
+    // Equipment (leased) — uses dedicated equipment escalation
+    const monthlyEquip = base_equipment_cost * escEquipmentMult / 12;
     if (monthlyEquip > 0) {
       expenseRows.push({
         project_id, period_id: p.id, expense_line_code: 'LEASED_EQUIP',
@@ -560,8 +568,12 @@ export function buildMonthlyProjections(params) {
         source_line_table: 'cost_model_equipment', source_line_id: null,
       });
     }
-    // Overhead
-    const monthlyOh = base_overhead_cost * escCostMult * Math.pow(1 + vol_growth_pct * 0.3, yearIdx) / 12;
+    // Overhead — 2026-04-21 audit: aligned with the yearly engine by
+    // removing the `Math.pow(1 + vol_growth_pct * 0.3, yearIdx)` volume-
+    // elasticity multiplier (magic 0.3 constant). Previously overhead
+    // compounded ~6%/yr on a 10% vol-growth deal; now pure cost escalation
+    // like the yearly path. Surface as an explicit heuristic if wanted.
+    const monthlyOh = base_overhead_cost * escCostMult / 12;
     if (monthlyOh > 0) {
       expenseRows.push({
         project_id, period_id: p.id, expense_line_code: 'OVERHEAD',

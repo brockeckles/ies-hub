@@ -14,7 +14,7 @@
  * @module tools/cost-model/calc
  */
 
-import * as monthly from './calc.monthly.js?v=20260421-vP';
+import * as monthly from './calc.monthly.js?v=20260421-xE';
 
 // ============================================================
 // MARGIN / GROSS-UP
@@ -1364,7 +1364,14 @@ export function buildYearlyProjections(params) {
     // Phase 0: per-project tax rate (was hardcoded 25%). Falls back to 25
     // if the model didn't carry one from cost_model_projects.tax_rate_pct.
     taxRatePct = 25,
+    // 2026-04-21 audit: facility + equipment escalation were folded into
+    // costEscPct for every category. What-If slider for Facility Escalation
+    // was silently dead because the engine had no way to escalate facility
+    // separately from equipment/overhead. Now optional + fall back to
+    // costEscPct for backwards compatibility (existing projects unchanged).
   } = params;
+  const facilityEscPct  = params.facilityEscPct  != null ? params.facilityEscPct  : costEscPct;
+  const equipmentEscPct = params.equipmentEscPct != null ? params.equipmentEscPct : costEscPct;
 
   // Learning curve: weighted avg productivity factor for Year 1
   let yr1LearningFactor = 1.0;
@@ -1389,11 +1396,13 @@ export function buildYearlyProjections(params) {
     const volMult = Math.pow(1 + volGrowthPct, yr - 1);
     const laborMult = Math.pow(1 + laborEscPct, yr - 1);
     const costMult = Math.pow(1 + costEscPct, yr - 1);
+    const facilityMult  = Math.pow(1 + facilityEscPct,  yr - 1);
+    const equipmentMult = Math.pow(1 + equipmentEscPct, yr - 1);
 
     const learningMult = yr === 1 ? (1 / yr1LearningFactor) : 1.0;
     const labor = baseLaborCost * laborMult * volMult * learningMult;
-    const facility = baseFacilityCost * costMult;
-    const equipment = baseEquipmentCost * costMult;
+    const facility = baseFacilityCost * facilityMult;
+    const equipment = baseEquipmentCost * equipmentMult;
     // 2026-04-21 audit: overhead had `* Math.pow(1 + volGrowthPct * 0.3, yr - 1)`
     // tacked on — an undocumented hybrid that compounded cost-escalation with
     // 30% of volume growth (10% vol growth → overhead escalated at ~6%/yr
@@ -3164,6 +3173,10 @@ export function adaptYearlyToMonthlyParams(p) {
     vol_growth_pct:      p.volGrowthPct || 0,
     labor_esc_pct:       p.laborEscPct  || 0,
     cost_esc_pct:        p.costEscPct   || 0,
+    // 2026-04-21 audit: pass facility + equipment escalation separately so
+    // the monthly engine can honor What-If slider overrides (was dead before).
+    facility_esc_pct:    p.facilityEscPct  != null ? p.facilityEscPct  : (p.costEscPct || 0),
+    equipment_esc_pct:   p.equipmentEscPct != null ? p.equipmentEscPct : (p.costEscPct || 0),
     tax_rate_pct:        p.taxRatePct ?? 25,
     dso_days:            p.dsoDays ?? 30,
     dpo_days:            p.dpoDays ?? 30,

@@ -483,6 +483,18 @@ function renderConfigPanel() {
       </div>
     </div>
 
+    <!-- 2026-04-21 audit: Quick-Start Verticals. Handler already existed at
+         line ~978 ([data-preset]) — this block connects the applyVerticalPreset
+         function to a UI the user can actually click. -->
+    <div style="padding:10px 16px;background:var(--ies-gray-50);border-bottom:1px solid var(--ies-gray-200);">
+      <div style="font-size:11px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;margin-bottom:6px;">Quick-Start Vertical</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        ${['Retail','F&B','Pharma','Apparel','Auto','Ecomm'].map(p =>
+          `<button class="hub-btn hub-btn-secondary" style="font-size:11px;padding:4px 10px;" data-preset="${p}" title="Seed SF + clear height + dock doors + storage mix from a ${p} reference build">${p}</button>`
+        ).join('')}
+      </div>
+    </div>
+
     <!-- Building -->
     <!-- Brock 2026-04-20: Total SF is the tool's OUTPUT, not an input.
          The sizing engine computes it from peak units, storage type,
@@ -1003,28 +1015,10 @@ function bindConfigEvents(panel) {
     }
   });
 
-  panel.querySelector('[data-action="wsc-load"]')?.addEventListener('click', async () => {
-    try {
-      const configs = await api.listConfigs();
-      if (!configs.length) { showWscToast('No saved configs yet.', 'info'); return; }
-      const names = configs.map((c, i) => `${i + 1}. ${c.name || c.config_data?.name || 'Untitled'}`).join('\n');
-      const choice = prompt('Select config:\n' + names);
-      const idx = parseInt(choice) - 1;
-      if (idx >= 0 && idx < configs.length) {
-        const data = configs[idx].config_data || configs[idx];
-        facility = { ...createDefaultFacility(), ...data, id: configs[idx].id };
-        zones = { ...createDefaultZones(), ...data.zones };
-        volumes = { ...createDefaultVolumes(), ...data.volumes };
-        isDirty = false;
-        renderConfigPanel();
-        renderContentView();
-        showWscToast(`Loaded "${facility.name || 'Untitled'}"`, 'success');
-      }
-    } catch (err) {
-      console.error('[WSC] Load failed:', err);
-      showWscToast('Load failed: ' + err.message, 'error');
-    }
-  });
+  // 2026-04-21 audit: legacy `[data-action="wsc-load"]` prompt()-based loader
+  // removed — scenario loading now flows through the standard scenarioLanding
+  // shell (← Scenarios button at top of config panel). Handler block deleted
+  // rather than left as dead code.
 }
 
 /** True when the user has entered enough volume data to compute a meaningful SF recommendation. */

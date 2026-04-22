@@ -82,9 +82,9 @@ export async function mount(el) {
   financials = null;
   dosStages = [];
   allDeals = [];
-
-  // Use demo data
-  allDeals = [{ ...calc.DEMO_DEAL, id: 'demo-deal-1' }];
+  // 2026-04-21 audit fix: no auto-loaded demo deal. Users now see an empty
+  // state with a "Load Sample Deal" button in the action rail, or can click
+  // "+ New Deal" to start a real multi-site analysis from scratch.
   el.innerHTML = renderShell();
   bindShellEvents();
   renderContent();
@@ -211,6 +211,7 @@ function renderShell() {
       <div id="dm-action-rail" class="hub-action-rail" style="padding:6px 24px 0 24px;margin-left:0;flex-shrink:0;justify-content:flex-start;display:${landing ? 'flex' : 'none'};">
         ${landing ? `
           <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="dm-toggle-view">📋 ${landingViewMode === 'kanban' ? 'List View' : 'Kanban View'}</button>
+          ${allDeals.length === 0 ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="dm-load-sample" title="Seed a sample multi-site deal so you can see what a populated analysis looks like">Load Sample Deal</button>` : ''}
           <button class="hub-btn hub-btn-sm hub-btn-primary" data-action="dm-new-deal">+ New Deal</button>
         ` : ''}
       </div>
@@ -274,6 +275,139 @@ function shellClickHandler(e) {
     createNewDeal();
     return;
   }
+
+  // Load sample deal — seeds the demo deal so users can see a populated
+  // multi-site analysis. Button only renders when allDeals is empty.
+  if (target.closest('[data-action="dm-load-sample"]')) {
+    allDeals = [{ ...calc.DEMO_DEAL, id: 'demo-deal-1' }];
+    rerenderShell();
+    bus.emit('deal:sample-loaded');
+    return;
+  }
+
+  // Delete weekly update — closes the audit finding "pmDeleteUpdate called
+  // but undefined". Uses confirm dialog + api.deleteUpdate then re-renders.
+  const delUpdateBtn = /** @type {HTMLElement|null} */ (target.closest('[data-action="dm-delete-update"]'));
+  if (delUpdateBtn) {
+    const updateId = delUpdateBtn.dataset.updateId;
+    if (updateId && activeDeal && window.confirm('Delete this weekly update? This cannot be undone.')) {
+      (async () => {
+        try {
+          await api.deleteUpdate(updateId);
+          updates = await api.fetchUpdates(activeDeal.id);
+          const el = rootEl?.querySelector('#dm-content');
+          if (el) renderUpdatesTab(el);
+        } catch (err) {
+          console.error('[DM] delete update failed:', err);
+          alert('Failed to delete update — check console.');
+        }
+      })();
+    }
+    return;
+  }
+
+  // Edit task — replaces the former `alert('Edit task')` stub with an inline
+  // edit modal allowing status / priority / title update via api.updateTask.
+  const editTaskBtn = /** @type {HTMLElement|null} */ (target.closest('[data-action="dm-edit-task"]'));
+  if (editTaskBtn) {
+    const taskId = editTaskBtn.dataset.taskId;
+    const task = tasks.find(t => String(t.id) === String(taskId));
+    if (task) showEditTaskModal(task);
+    return;
+  }
+}
+
+/**
+ * Simple edit modal for an existing task. Closes a P0 stub (button was wired
+ * to `onclick="alert('Edit task')"` before 2026-04-21 audit). Reuses the same
+ * modal/form pattern as `showNewUpdateModal`.
+ */
+function showEditTaskModal(task) {
+  if (!activeDeal) return;
+  const modal = document.createElement('div');
+  modal.className = 'hub-modal-overlay';
+  modal.innerHTML = `
+    <div class="hub-modal" style="max-width:560px;">
+      <h3 style="margin:0 0 16px 0;">Edit Task</h3>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Title</label>
+        <input type="text" id="dm-task-title" value="${(task.title || '').replace(/"/g,'&quot;')}" style="width:100%;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Status</label>
+          <select id="dm-task-status" style="width:100%;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;">
+            ${['todo','in_progress','done','blocked'].map(s => `<option value="${s}"${task.status === s ? ' selected' : ''}>${s.replace(/_/g,' ')}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Priority</label>
+          <select id="dm-task-priority" style="width:100%;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;">
+            ${['low','medium','high','critical'].map(p => `<option value="${p}"${task.priority === p ? ' selected' : ''}>${p}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Due date</label>
+          <input type="date" id="dm-task-due" value="${task.due_date || ''}" style="width:100%;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Est. hours</label>
+          <input type="number" step="0.5" id="dm-task-hours" value="${task.estimated_hours || ''}" style="width:100%;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;">
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Assignee</label>
+          <input type="text" id="dm-task-assignee" value="${(task.assigned_to || '').replace(/"/g,'&quot;')}" style="width:100%;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;">
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:space-between;">
+        <button class="hub-btn hub-btn-secondary" data-action="dm-task-delete" style="color:var(--ies-red);">Delete Task</button>
+        <div style="display:flex;gap:8px;">
+          <button class="hub-btn hub-btn-secondary" data-action="dm-task-cancel">Cancel</button>
+          <button class="hub-btn hub-btn-primary" data-action="dm-task-save">Save</button>
+        </div>
+      </div>
+    </div>
+  `;
+  rootEl?.appendChild(modal);
+  modal.addEventListener('click', async (e) => {
+    const t = /** @type {HTMLElement} */ (e.target);
+    if (t === modal || t.closest('[data-action="dm-task-cancel"]')) { modal.remove(); return; }
+    if (t.closest('[data-action="dm-task-save"]')) {
+      const fields = {
+        title: /** @type {HTMLInputElement} */ (modal.querySelector('#dm-task-title')).value.trim() || task.title,
+        status: /** @type {HTMLSelectElement} */ (modal.querySelector('#dm-task-status')).value,
+        priority: /** @type {HTMLSelectElement} */ (modal.querySelector('#dm-task-priority')).value,
+        due_date: /** @type {HTMLInputElement} */ (modal.querySelector('#dm-task-due')).value || null,
+        estimated_hours: Number(/** @type {HTMLInputElement} */ (modal.querySelector('#dm-task-hours')).value) || null,
+        assigned_to: /** @type {HTMLInputElement} */ (modal.querySelector('#dm-task-assignee')).value.trim() || null,
+      };
+      try {
+        await api.updateTask(task.id, fields);
+        tasks = await api.fetchTasks(activeDeal.id);
+        modal.remove();
+        const el = rootEl?.querySelector('#dm-content');
+        if (el) renderTasksTab(el);
+      } catch (err) {
+        console.error('[DM] task update failed:', err);
+        alert('Failed to save task — check console.');
+      }
+    }
+    if (t.closest('[data-action="dm-task-delete"]')) {
+      if (!window.confirm('Delete this task? This cannot be undone.')) return;
+      try {
+        await api.deleteTask(task.id);
+        tasks = await api.fetchTasks(activeDeal.id);
+        modal.remove();
+        const el = rootEl?.querySelector('#dm-content');
+        if (el) renderTasksTab(el);
+      } catch (err) {
+        console.error('[DM] task delete failed:', err);
+        alert('Failed to delete task — check console.');
+      }
+    }
+  });
 }
 
 /** Full shell re-render (used when changing landing↔detail context). */
@@ -417,7 +551,9 @@ async function openDeal(id) {
   activeDeal = allDeals.find(d => d.id === id) || null;
   if (!activeDeal) return;
 
-  // Load demo sites for the demo deal
+  // Demo deal gets seeded sites when explicitly loaded; real deals start
+  // with an empty site list (user adds sites via "+ Link Cost Model" or
+  // "+ Add Empty Site").
   if (id === 'demo-deal-1') {
     sites = calc.DEMO_SITES.map(s => ({ ...s }));
   } else {
@@ -1219,7 +1355,7 @@ function renderTasksTab(el) {
                           ${task.estimated_hours ? `<span style="color:var(--ies-gray-500);">${task.estimated_hours}h</span>` : ''}
                         </div>
                       </div>
-                      <button class="hub-btn hub-btn-sm hub-btn-secondary" onclick="alert('Edit task')">Edit</button>
+                      <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="dm-edit-task" data-task-id="${task.id}">Edit</button>
                     </div>
                   `;
                 }).join('')}
@@ -1400,7 +1536,7 @@ function renderUpdatesTab(el) {
                   <div style="font-size:13px;font-weight:700;">${u.update_date}</div>
                   <div style="font-size:11px;color:var(--ies-gray-500);">${u.author || 'Unknown'}</div>
                 </div>
-                <button class="hub-btn hub-btn-sm hub-btn-secondary" onclick="pmDeleteUpdate('${u.id}')" style="color:var(--ies-red);">Delete</button>
+                <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="dm-delete-update" data-update-id="${u.id}" style="color:var(--ies-red);">Delete</button>
               </div>
               <div style="font-size:13px;color:var(--ies-navy);line-height:1.5;margin-bottom:12px;white-space:pre-wrap;">${u.body || ''}</div>
               ${u.next_steps ? `

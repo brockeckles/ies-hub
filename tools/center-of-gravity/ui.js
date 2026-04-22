@@ -137,7 +137,11 @@ function openEditor(savedRow) {
   if (!rootEl) return;
   const d = savedRow?.scenario_data || {};
   activeTab = 'points';
-  points = (d.points && d.points.length) ? d.points.map(p => ({ ...p })) : calc.DEMO_POINTS.map(p => ({ ...p }));
+  // 2026-04-21 audit fix: new scenarios start EMPTY. Demo points still
+  // reachable via the "Load Demo" button on the Points tab (seedDemo action)
+  // and the Archetypes dropdown. Prior behavior auto-loaded 12 US metros
+  // which confused users into thinking the tool was in demo mode.
+  points = (d.points && d.points.length) ? d.points.map(p => ({ ...p })) : [];
   config = { ...calc.DEFAULT_CONFIG, ...(d.config || {}) };
   cogResult = d.result || null;
   sensitivityData = null;

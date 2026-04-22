@@ -10,10 +10,10 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import * as calc from './calc.js?v=20260421-wA';
+import * as calc from './calc.js?v=20260421-xE';
 import * as api from './api.js?v=20260419-uH';
 import * as scenarios from './calc.scenarios.js?v=20260421-wA';
-import * as monthlyCalc from './calc.monthly.js?v=20260421-vP';
+import * as monthlyCalc from './calc.monthly.js?v=20260421-xE';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
 
 // ============================================================
@@ -4404,6 +4404,10 @@ function renderSummary() {
     volGrowthPct: calcHeur.volGrowthPct / 100,
     laborEscPct:  calcHeur.laborEscPct  / 100,
     costEscPct:   calcHeur.costEscPct   / 100,
+    // 2026-04-21 audit: thread facility + equipment escalation separately so
+    // the What-If Facility Escalation slider actually moves facility P&L.
+    facilityEscPct:  calcHeur.facilityEscPct  / 100,
+    equipmentEscPct: calcHeur.equipmentEscPct / 100,
     laborLines: model.laborLines || [],
     taxRatePct: calcHeur.taxRatePct,
     useMonthlyEngine: typeof window !== 'undefined' && window.COST_MODEL_MONTHLY_ENGINE !== false,
@@ -5985,12 +5989,29 @@ function computeWhatIfPreview(overlay) {
     // alongside base_uph so BOTH paths (per-line monthly and aggregate
     // yearly fallback) reflect productivity. 90% prod → 1.111× annual_hours
     // → 1.111× labor cost; 110% prod → 0.909× hours → 0.909× cost.
+    // 2026-04-21 audit (Brock): Absence % slider was silently dead on
+    // projects where labor lines carry a `monthly_absence_profile` (market
+    // profile resolution). `monthlyAbsencePct` prefers the per-line profile
+    // → market profile → calcHeur fallback, so the slider's calcHeur value
+    // never reached the engine when profiles were set. Fix: when absence is
+    // in the overlay, strip per-line profiles so calcHeur.absenceAllowancePct
+    // becomes authoritative. Below we also clone the market profile with
+    // absence_pct nulled to close the last hop.
+    const absenceOverlayActive = ov.absence_allowance_pct != null && ov.absence_allowance_pct !== '';
     const scaledLaborLines = (model.laborLines || []).map(l => ({
       ...l,
       annual_hours: (l.annual_hours || 0) * laborHoursScale,  // THE one the monthly engine consumes
       base_uph: (l.base_uph || 0) / laborHoursScale,          // kept in sync for any UPH-reading downstream
+      // If absence overlay active, strip per-line profile so calcHeur wins.
+      ...(absenceOverlayActive ? { monthly_absence_profile: null } : {}),
     }));
     const scaledBaseLaborCost = summary.laborCost * laborHoursScale;
+    // Clone market profile without absence array when the overlay is driving
+    // absence. Same rationale as above — ensures calcHeur.absenceAllowancePct
+    // is the effective monthly absence for every month in the preview.
+    const whatIfMarketProfile = absenceOverlayActive && currentMarketLaborProfile
+      ? { ...currentMarketLaborProfile, peak_month_absence_pct: null }
+      : currentMarketLaborProfile;
 
     // When margin or volume sliders are active, re-derive bucket rates
     // from the overlay values — otherwise explicit rates on Wayfair-style
@@ -6049,6 +6070,8 @@ function computeWhatIfPreview(overlay) {
       volGrowthPct: calcHeur.volGrowthPct / 100,
       laborEscPct:  calcHeur.laborEscPct  / 100,
       costEscPct:   calcHeur.costEscPct   / 100,
+      facilityEscPct:  calcHeur.facilityEscPct  / 100,
+      equipmentEscPct: calcHeur.equipmentEscPct / 100,
       laborLines: scaledLaborLines,
       taxRatePct: calcHeur.taxRatePct,
       useMonthlyEngine: typeof window !== 'undefined' && window.COST_MODEL_MONTHLY_ENGINE !== false,
@@ -6063,7 +6086,7 @@ function computeWhatIfPreview(overlay) {
       pricingBuckets: whatIfBucketsAfterDiscount,
       project_id: model.id || 0,
       _calcHeur: calcHeur,
-      marketLaborProfile: currentMarketLaborProfile,
+      marketLaborProfile: whatIfMarketProfile,
       wageLoadByYear: null,
     });
 
@@ -7878,6 +7901,8 @@ function ensureMonthlyBundle() {
       volGrowthPct: calcHeur.volGrowthPct / 100,
       laborEscPct:  calcHeur.laborEscPct  / 100,
       costEscPct:   calcHeur.costEscPct   / 100,
+      facilityEscPct:  calcHeur.facilityEscPct  / 100,
+      equipmentEscPct: calcHeur.equipmentEscPct / 100,
       laborLines: model.laborLines || [],
       taxRatePct: calcHeur.taxRatePct,
       useMonthlyEngine: typeof window !== 'undefined' && window.COST_MODEL_MONTHLY_ENGINE !== false,

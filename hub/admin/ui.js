@@ -8,6 +8,7 @@
 import { bus } from '../../shared/event-bus.js?v=20260418-sP';
 import * as calc from './calc.js?v=20260421-tJ';
 import * as api from './api.js?v=20260419-tG';
+import { showToast } from '../../shared/toast.js?v=20260418-sK';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -172,9 +173,20 @@ function renderTableDetail(el) {
   `;
 
   el.querySelector('#admin-back')?.addEventListener('click', () => { activeMasterTable = null; render(); });
-  el.querySelector('#admin-refresh')?.addEventListener('click', () => {
-    // In production, this would re-fetch from Supabase
-    alert('Refreshing from Supabase... (simulated)');
+  el.querySelector('#admin-refresh')?.addEventListener('click', (e) => {
+    const btn = /** @type {HTMLButtonElement} */ (e.currentTarget);
+    btn.disabled = true;
+    const prior = btn.innerHTML;
+    btn.innerHTML = '↻ Refreshing…';
+    // Master tables currently render from the hardcoded sampleData map above.
+    // When Supabase wiring lands, replace this with an api.listMasterTable()
+    // call + re-render. For now we surface a toast instead of the old
+    // `alert('Refreshing... (simulated)')` placeholder so the UX is clean.
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.innerHTML = prior;
+      showToast('Sample data refreshed (live Supabase pull lands with master-table API)', 'info', { duration: 3500 });
+    }, 450);
   });
 }
 

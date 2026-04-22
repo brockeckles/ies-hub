@@ -235,8 +235,12 @@ function openEditor(savedRow) {
   activeView = 'setup';
   activeSection = 'facilities';
   const d = savedRow?.config_data || {};
-  facilities = (d.facilities && d.facilities.length) ? d.facilities.map(f => ({ ...f })) : DEMO_FACILITIES.map(f => ({ ...f }));
-  demands = (d.demands && d.demands.length) ? d.demands.map(x => ({ ...x })) : DEMO_DEMANDS.map(x => ({ ...x }));
+  // 2026-04-21 audit fix: new configs start EMPTY. Demo network available
+  // via the "Load Sample Network" button on the Facilities section so users
+  // can still reach it intentionally. Prior behavior auto-loaded 5 DCs + 10
+  // demand points on every "New Config".
+  facilities = (d.facilities && d.facilities.length) ? d.facilities.map(f => ({ ...f })) : [];
+  demands = (d.demands && d.demands.length) ? d.demands.map(x => ({ ...x })) : [];
   modeMix = d.modeMix || { tlPct: 30, ltlPct: 40, parcelPct: 30 };
   rateCard = d.rateCard || { ...calc.DEFAULT_RATES };
   serviceConfig = d.serviceConfig || { ...calc.DEFAULT_SERVICE };
@@ -803,8 +807,17 @@ function renderFacilities(el) {
     <div style="max-width:900px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
         <h3 class="text-section" style="margin:0;">Facility Network</h3>
-        <button class="hub-btn hub-btn-sm hub-btn-secondary" id="no-add-facility">+ Add Facility</button>
+        <div style="display:flex;gap:8px;">
+          ${facilities.length === 0 && demands.length === 0 ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" id="no-load-sample" title="Seed 5 candidate DCs + 10 demand points so you can explore the optimizer without entering data.">Load Sample Network</button>` : ''}
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" id="no-add-facility">+ Add Facility</button>
+        </div>
       </div>
+      ${facilities.length === 0 ? `
+        <div class="hub-card" style="padding:24px;text-align:center;background:var(--ies-gray-50);border:1px dashed var(--ies-gray-300);margin-bottom:16px;">
+          <div style="font-size:14px;font-weight:600;color:var(--ies-navy);margin-bottom:8px;">No facilities yet</div>
+          <div style="font-size:12px;color:var(--ies-gray-500);line-height:1.5;">Add candidate DCs one at a time with <b>+ Add Facility</b>, or click <b>Load Sample Network</b> to seed a 5-DC + 10-demand-point US example you can modify.</div>
+        </div>
+      ` : ''}
 
       <table style="width:100%;border-collapse:collapse;font-size:13px;">
         <thead>
@@ -920,6 +933,19 @@ function renderFacilities(el) {
     markDirty();
     renderFacilities(el);
     renderSidebar();
+  });
+
+  // Load sample network — seeds 5 DCs + 10 demand points from the demo
+  // constants so users can try the optimizer without entering data.
+  el.querySelector('#no-load-sample')?.addEventListener('click', () => {
+    facilities = DEMO_FACILITIES.map(f => ({ ...f }));
+    demands   = DEMO_DEMANDS.map(x => ({ ...x }));
+    markDirty();
+    renderFacilities(el);
+    renderSidebar();
+    if (typeof window !== 'undefined' && window.__iesToast) {
+      window.__iesToast(`Loaded sample network — ${facilities.length} DCs + ${demands.length} demand points`, 'success');
+    }
   });
 }
 

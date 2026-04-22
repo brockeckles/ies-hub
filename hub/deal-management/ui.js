@@ -212,7 +212,7 @@ function openNewOppModal() {
           </div>
           <div>
             <label style="display:block;font-size:11px;font-weight:700;color:var(--ies-gray-400);margin-bottom:4px;">Owner</label>
-            <input id="opp-owner" class="hub-input" placeholder="Your name" style="width:100%;" value="Brock Eckles">
+            <input id="opp-owner" class="hub-input" placeholder="Your name" style="width:100%;">
           </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">

@@ -161,7 +161,11 @@ function openEditor(savedRow) {
   if (!rootEl) return;
   const d = savedRow?.scenario_data || {};
   activeTab = 'lanes';
-  lanes = (d.lanes && d.lanes.length) ? d.lanes.map(l => ({ ...l })) : calc.DEMO_LANES.map(l => ({ ...l }));
+  // 2026-04-21 audit fix: lanes start EMPTY on new scenarios. Demo lanes
+  // still accessible via the "Load Demo Data" button. vehicles catalog stays
+  // pre-populated (day-cab / sleeper / box truck with ATRI rates) since it's
+  // a reference list every scenario needs, not scenario-specific data.
+  lanes = (d.lanes && d.lanes.length) ? d.lanes.map(l => ({ ...l })) : [];
   vehicles = (d.vehicles && d.vehicles.length) ? d.vehicles.map(v => ({ ...v })) : calc.DEFAULT_VEHICLES.map(v => ({ ...v }));
   config = { ...calc.DEFAULT_CONFIG, leaseMode: false, ...(d.config || {}) };
   result = d.result || null;
