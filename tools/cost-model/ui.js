@@ -2276,9 +2276,9 @@ function renderLaborV2() {
       <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;">
         <div>
           <h3 class="hub-section-heading" style="margin:0;">Indirect / Management Labor</h3>
-          <div class="hub-field__hint">Burden % set in Labor Costing Factors above</div>
+          <div class="hub-field__hint">Burden % set in Labor Costing Factors above${(model.indirectLaborLines || []).length > 0 ? ` · <span style="color:var(--ies-gray-500);">${(model.indirectLaborLines || []).length} rows auto-generated — click Regenerate to replace</span>` : ''}</div>
         </div>
-        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-indirect">↺ Auto-Generate</button>
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-indirect">${(model.indirectLaborLines || []).length > 0 ? '↻ Regenerate' : '↺ Auto-Generate'}</button>
       </div>
 
       <div class="hub-card" style="padding:0;overflow:hidden;">
@@ -3125,9 +3125,9 @@ function renderEquipment() {
 • Office — Build-out (120 sqft per indirect HC) + Break Room (15 sqft per total HC)
 • Security — 1 camera system per 30K sqft (for ≥50K sqft facilities) + Access Control
 • Conveyor — Belt conveyor linear ft (for ≥500K orders/yr)
-All lines are editable after generation.">⚡ Auto-Generate Equipment</button>
+All lines are editable after generation.">${(model.equipmentLines || []).length > 0 ? '↻ Regenerate Equipment' : '⚡ Auto-Generate Equipment'}</button>
       <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="open-equipment-catalog" title="Browse the GXO equipment reference catalog (33 items with specs, pricing, vendors)">📖 Browse Catalog</button>
-      <span class="cm-section-toolbar__hint">Covers MHE · IT · Racking · Dock · Charging · Office · Security · Conveyor. Hover Auto-Generate for sizing rules.</span>
+      <span class="cm-section-toolbar__hint">${(model.equipmentLines || []).length > 0 ? `<b>${(model.equipmentLines || []).length} rows auto-generated</b> — click Regenerate to replace. ` : ''}Covers MHE · IT · Racking · Dock · Charging · Office · Security · Conveyor. Hover for sizing rules.</span>
     </div>
 
     <div class="cm-table-scroll">
@@ -3381,8 +3381,8 @@ function renderOverhead() {
     </div>
 
     <div class="cm-section-toolbar">
-      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-overhead">⚡ Auto-Generate Overhead</button>
-      <span class="cm-section-toolbar__hint">One-click seed from facility sqft + headcount. All rows editable.</span>
+      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-overhead">${(model.overheadLines || []).length > 0 ? '↻ Regenerate Overhead' : '⚡ Auto-Generate Overhead'}</button>
+      <span class="cm-section-toolbar__hint">${(model.overheadLines || []).length > 0 ? `<b>${(model.overheadLines || []).length} rows auto-generated</b> — click Regenerate to replace. ` : ''}One-click seed from facility sqft + headcount. All rows editable.</span>
     </div>
 
     <div class="cm-table-scroll">
@@ -3612,8 +3612,8 @@ function renderStartup() {
     </div>
 
     <div class="cm-section-toolbar">
-      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-startup">⚡ Auto-Generate Start-Up Costs</button>
-      <span class="cm-section-toolbar__hint">Generates typical 3PL implementation line items (PM, IT, training, travel).</span>
+      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-startup">${(model.startupLines || []).length > 0 ? '↻ Regenerate Start-Up Costs' : '⚡ Auto-Generate Start-Up Costs'}</button>
+      <span class="cm-section-toolbar__hint">${(model.startupLines || []).length > 0 ? `<b>${(model.startupLines || []).length} rows auto-generated</b> — click Regenerate to replace. ` : ''}Generates typical 3PL implementation line items (PM, IT, training, travel).</span>
     </div>
 
     <div class="cm-table-scroll">
@@ -7137,9 +7137,16 @@ function handleAction(action, idx, btn) {
             environment_type: (model.projectDetails && model.projectDetails.environment) || null,
           })
         : null;
+      const _priorIndirectCount = (model.indirectLaborLines || []).length;
       model.indirectLaborLines = calc.autoGenerateIndirectLabor(model, { planningRatiosMap: prMap });
       // I-01 — auto-gen paths also need default bucket assignment
       model.indirectLaborLines.forEach(l => { if (!l.pricing_bucket) l.pricing_bucket = defaultBucketFor('indirect'); });
+      showToast(
+        _priorIndirectCount > 0
+          ? `Regenerated Indirect Labor — replaced ${_priorIndirectCount} rows with ${model.indirectLaborLines.length} new.`
+          : `Auto-generated ${model.indirectLaborLines.length} Indirect Labor rows.`,
+        'success',
+      );
       break;
     }
     case 'add-equipment':
@@ -7153,8 +7160,15 @@ function handleAction(action, idx, btn) {
       // the 1-per-3-total-FTE heuristic that over-sizes 3-shift ops.
       // Falls back cleanly when labor lines don't have mhe_type.
       const mlvForAutoGen = _tryComputeMlvForEquipment();
+      const _priorEqCount = (model.equipmentLines || []).length;
       model.equipmentLines = calc.autoGenerateEquipment(model, { mlv: mlvForAutoGen });
       model.equipmentLines.forEach(l => { if (!l.pricing_bucket) l.pricing_bucket = defaultBucketFor('equipment'); });
+      showToast(
+        _priorEqCount > 0
+          ? `Regenerated Equipment — replaced ${_priorEqCount} rows with ${model.equipmentLines.length} new.`
+          : `Auto-generated ${model.equipmentLines.length} Equipment rows.`,
+        'success',
+      );
       break;
     }
     case 'sync-seasonal-flex':
@@ -7263,10 +7277,18 @@ function handleAction(action, idx, btn) {
     case 'delete-overhead':
       model.overheadLines.splice(idx, 1);
       break;
-    case 'auto-gen-overhead':
+    case 'auto-gen-overhead': {
+      const _priorOhCount = (model.overheadLines || []).length;
       model.overheadLines = calc.autoGenerateOverhead(model);
       model.overheadLines.forEach(l => { if (!l.pricing_bucket) l.pricing_bucket = defaultBucketFor('overhead'); });
+      showToast(
+        _priorOhCount > 0
+          ? `Regenerated Overhead — replaced ${_priorOhCount} rows with ${model.overheadLines.length} new.`
+          : `Auto-generated ${model.overheadLines.length} Overhead rows.`,
+        'success',
+      );
       break;
+    }
     case 'add-vas':
       model.vasLines.push({ service: '', rate: 0, volume: 0, pricing_bucket: defaultBucketFor('vas') });
       break;
@@ -7279,10 +7301,18 @@ function handleAction(action, idx, btn) {
     case 'delete-startup':
       model.startupLines.splice(idx, 1);
       break;
-    case 'auto-gen-startup':
+    case 'auto-gen-startup': {
+      const _priorSuCount = (model.startupLines || []).length;
       model.startupLines = calc.autoGenerateStartup(model);
       model.startupLines.forEach(l => { if (!l.pricing_bucket) l.pricing_bucket = defaultBucketFor('startup'); });
+      showToast(
+        _priorSuCount > 0
+          ? `Regenerated Start-Up — replaced ${_priorSuCount} rows with ${model.startupLines.length} new.`
+          : `Auto-generated ${model.startupLines.length} Start-Up rows.`,
+        'success',
+      );
       break;
+    }
     // Pricing Buckets (v2 — taxonomy editor in the Structure phase)
     case 'add-bucket': {
       model.pricingBuckets = model.pricingBuckets || [];

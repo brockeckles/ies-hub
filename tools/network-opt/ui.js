@@ -888,6 +888,7 @@ function renderFacilities(el) {
     cb.addEventListener('change', () => {
       const idx = parseInt(/** @type {HTMLElement} */ (cb).dataset.facToggle);
       facilities[idx].isOpen = /** @type {HTMLInputElement} */ (cb).checked;
+      markDirty();  // audit: missing — open/closed toggle didn't invalidate Run.
       renderFacilities(el);
       renderSidebar();
     });
@@ -910,6 +911,7 @@ function renderFacilities(el) {
         const f = facilities.find(x => x.id === id);
         if (f) f.isOpen = false;
       }
+      markDirty();  // audit: missing — lock-state change didn't invalidate Run.
       renderFacilities(el);
       renderSidebar();
     });
@@ -1117,6 +1119,8 @@ function renderModeMix(el) {
       const key = /** @type {HTMLInputElement} */ (e.target).dataset.key;
       const val = parseInt(/** @type {HTMLInputElement} */ (e.target).value);
       modeMix[key] = val;
+      markDirty();  // 2026-04-21 audit: was missing — Run button stayed
+                    // "✓ Results current" after mix slider moved.
       renderModeMix(el);
     });
   });
@@ -1128,6 +1132,7 @@ function renderModeMix(el) {
       let val = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
       if (key === 'fuelSurcharge') val = val / 100;
       rateCard[key] = val;
+      markDirty();  // audit: missing — rate-card edits didn't invalidate Run.
     });
   });
 
@@ -1141,6 +1146,7 @@ function renderModeMix(el) {
         rateCard.ltlWeightBreaks = [...calc.DEFAULT_RATES.ltlWeightBreaks];
       }
       rateCard.ltlBreakRates[idx] = val;
+      markDirty();  // audit: missing — LTL break-rate edits didn't invalidate Run.
     });
   });
 }
@@ -1246,6 +1252,7 @@ function renderServiceConfig(el) {
       } else {
         serviceConfig[key] = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
       }
+      markDirty();  // 2026-04-21 audit: missing — service-config edits didn't invalidate Run.
     };
     input.addEventListener('change', handler);
   });

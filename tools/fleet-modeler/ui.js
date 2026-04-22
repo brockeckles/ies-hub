@@ -182,6 +182,11 @@ function openEditor(savedRow) {
   renderContent();
 
   rootEl.querySelector('[data-action="fleet-back"]')?.addEventListener('click', async () => {
+    // 2026-04-21 audit: NetOpt already guarded its back button; Fleet didn't.
+    // If inputs have diverged from the last successful Calculate, warn before
+    // jumping to scenarios (user may have unsaved edits).
+    const state = runState.state(runStateInputs());
+    if (state === 'dirty' && result && !confirm('You have unsaved changes since the last calculate. Leave anyway?')) return;
     await renderLanding();
   });
 
@@ -579,6 +584,7 @@ function renderConfig(el) {
     cb.addEventListener('change', () => {
       const idx = parseInt(/** @type {HTMLElement} */ (cb).dataset.vehToggle);
       vehicles[idx].enabled = /** @type {HTMLInputElement} */ (cb).checked;
+      updateRunButtonState();  // 2026-04-21 audit — flip Run button to dirty
       renderConfig(el);
     });
   });
@@ -611,6 +617,7 @@ function renderConfig(el) {
   el.querySelectorAll('input[name="fm-financing"]').forEach(radio => {
     radio.addEventListener('change', (e) => {
       config.leaseMode = /** @type {HTMLInputElement} */ (e.target).value === 'lease';
+      updateRunButtonState();
       renderConfig(el);
     });
   });
@@ -620,17 +627,20 @@ function renderConfig(el) {
     input.addEventListener('change', (e) => {
       const key = /** @type {HTMLInputElement} */ (e.target).dataset.cfg;
       config[key] = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
+      updateRunButtonState();  // 2026-04-21 audit — config edits now flip Run button.
     });
   });
 
   // Team driving
   el.querySelector('#fm-team')?.addEventListener('change', (e) => {
     config.teamDriving = /** @type {HTMLInputElement} */ (e.target).checked;
+    updateRunButtonState();
   });
 
   // Driver pay model
   el.querySelector('#fm-driver-model')?.addEventListener('change', (e) => {
     config.driverPayModel = /** @type {HTMLSelectElement} */ (e.target).value;
+    updateRunButtonState();
   });
 }
 

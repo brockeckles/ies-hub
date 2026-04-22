@@ -403,7 +403,7 @@ function renderPoints(el) {
             `).join('')}
           </select>
           <input type="number" id="cog-archetype-volume" placeholder="Total units" title="Optional: override the archetype's default total annual volume" style="width:130px;padding:7px 10px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;" />
-          <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-load-archetype" title="Generate demand points from the selected archetype">Apply Archetype</button>
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-load-archetype" title="Pick an archetype from the dropdown first" disabled style="opacity:0.5;cursor:not-allowed;">Apply Archetype</button>
           <span style="width:1px;height:18px;background:var(--ies-gray-200);"></span>
           <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-load-demo">Load Demo</button>
         </div>
@@ -589,6 +589,14 @@ function renderPoints(el) {
   archSelect?.addEventListener('change', () => {
     const key = archSelect.value;
     const a = calc.COG_ARCHETYPES[key];
+    // 2026-04-21 audit: enable/disable Apply Archetype button based on selection
+    const applyBtn = /** @type {HTMLButtonElement|null} */ (el.querySelector('#cog-load-archetype'));
+    if (applyBtn) {
+      applyBtn.disabled = !key;
+      applyBtn.style.opacity = key ? '1' : '0.5';
+      applyBtn.style.cursor = key ? 'pointer' : 'not-allowed';
+      applyBtn.title = key ? `Generate demand points from the ${a?.name || ''} archetype` : 'Pick an archetype from the dropdown first';
+    }
     if (a && archDesc) {
       archDesc.style.display = 'block';
       archDesc.innerHTML = `<strong>${a.name}</strong> — ${a.desc} <span style="color:var(--ies-gray-400);">Default volume: ${a.defaultTotalUnits.toLocaleString()} units</span>`;
