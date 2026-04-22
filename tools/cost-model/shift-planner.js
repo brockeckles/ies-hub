@@ -456,16 +456,30 @@ function resizeRow(row, targetLen) {
 }
 
 /**
- * Map a labor line to a functional area. Uses position, activity name,
- * or function field. Returns null when nothing matches (line is dropped
- * from matrix derivation).
+ * Map a labor line to a functional area. Prefers an explicit `process_area`
+ * field (the CM schema's authoritative function tag — "Inbound" / "Picking"
+ * / etc.). Falls back to activity / role / position / name keyword matches.
+ * Returns null when nothing matches (line is dropped from matrix derivation).
  */
 export function deriveFunctionForLine(line) {
   if (!line) return null;
-  const raw = String(line.function || line.activity || line.position || line.role || line.name || '').toLowerCase();
+  // Authoritative field wins if present
+  const proc = String(line.process_area || line.processArea || line.function || '').toLowerCase().trim();
+  if (proc) {
+    if (/inbound|receiv/.test(proc)) return 'inbound';
+    if (/put.?away/.test(proc)) return 'putaway';
+    if (/replen/.test(proc)) return 'replenish';
+    if (/pack/.test(proc)) return 'pack';
+    if (/ship|outbound|load/.test(proc)) return 'ship';
+    if (/return|rma|reverse/.test(proc)) return 'returns';
+    if (/vas|kit|label|assembly/.test(proc)) return 'vas';
+    if (/pick/.test(proc)) return 'picking';
+  }
+  // Fallback keyword sweep
+  const raw = String(line.activity_name || line.activity || line.role_name || line.role || line.position || line.name || '').toLowerCase();
   if (!raw) return null;
   if (/inbound|receiv/.test(raw)) return 'inbound';
-  if (/putaway|put.away/.test(raw)) return 'putaway';
+  if (/put.?away/.test(raw)) return 'putaway';
   if (/replen/.test(raw)) return 'replenish';
   if (/pack/.test(raw)) return 'pack';
   if (/(^|\s)ship|loader|load.truck|dispatch|outbound/.test(raw)) return 'ship';
@@ -487,14 +501,16 @@ function computeDailyVolumeByFunction(volumeLines, operatingDays) {
     if (!rawName) continue;
     const vol = Number(v.volume) || 0;
     const daily = vol / opDays;
-    if (/receiving|inbound/.test(rawName)) out.inbound += daily;
+    // Match tense-flexibly: "Pallets Received", "Receiving", "Inbound" all → inbound
+    if (/receiv|inbound/.test(rawName)) out.inbound += daily;
     else if (/put.?away/.test(rawName)) out.putaway += daily;
     else if (/replen/.test(rawName)) out.replenish += daily;
     else if (/pack/.test(rawName)) out.pack += daily;
-    else if (/ship/.test(rawName) || /outbound/.test(rawName)) out.ship += daily;
+    else if (/pick/.test(rawName)) out.picking += daily;
+    else if (/ship|outbound/.test(rawName)) out.ship += daily;
     else if (/return/.test(rawName)) out.returns += daily;
     else if (/vas|kit|label|assembly/.test(rawName)) out.vas += daily;
-    // "Orders" / "Each Picks" / "Case Picks" fall through to the outbound fallback below
+    // "Orders" falls through to the outbound fallback below
   }
 
   // Second pass: if key fulfillment functions (picking/pack/ship) are still
@@ -525,11 +541,15 @@ function computeUphByFunction(laborLines) {
   for (const fn of FUNCTION_ORDER) { out[fn] = 0; weights[fn] = 0; }
   if (!Array.isArray(laborLines)) return out;
   for (const line of laborLines) {
+    // Skip indirect-labor lines — matrix drives direct HC only.
+    if (line.labor_category && line.labor_category !== 'direct') continue;
     const fn = deriveFunctionForLine(line);
     if (!fn) continue;
-    const uph = Number(line.uph) || Number(line.UPH) || 0;
+    // CM schema uses base_uph (primary) + falls back to uph/UPH on older models
+    const uph = Number(line.base_uph) || Number(line.uph) || Number(line.UPH) || 0;
     if (uph <= 0) continue;
-    const weight = (Number(line.headcount) || Number(line.hc) || 1);
+    // Weight by annual_hours (proxy for size) when no HC field present
+    const weight = (Number(line.headcount) || Number(line.hc) || Number(line.annual_hours) || 1);
     out[fn] += uph * weight;
     weights[fn] += weight;
   }
@@ -544,7 +564,14 @@ function computeWeightedLoadedRate(laborLines) {
   let numer = 0;
   let denom = 0;
   for (const line of laborLines) {
-    const rate = Number(line.fully_loaded_rate) || Number(line.hourly_rate) || 0;
+    if (line.labor_category && line.labor_category !== 'direct') continue;
+    // Prefer explicit fully_loaded_rate; otherwise build from hourly_rate × (1 + burden_pct/100)
+    let rate = Number(line.fully_loaded_rate) || 0;
+    if (!rate) {
+      const hr = Number(line.hourly_rate) || 0;
+      const burden = Number(line.burden_pct) || 0;
+      rate = hr > 0 ? hr * (1 + burden / 100) : 0;
+    }
     const hours = Number(line.annual_hours) || 0;
     if (rate <= 0 || hours <= 0) continue;
     numer += rate * hours;

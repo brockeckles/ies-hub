@@ -70,11 +70,14 @@ const CROSS_DOCK = {
   },
 };
 
+// Test fixture: daily picking volume = 22,000 orders/day × 260 op days/yr.
+// No explicit "Each Picks" line — the outbound-primary ("Orders Shipped") flows
+// into picking/pack/ship via the fallback path. This matches the wiring doc
+// §7 hand-math where picking_daily_volume = 22,000.
 const wayfairVolumes = [
   { name: 'Receiving (Pallets)', volume: 15000, uom: 'pallets', isOutboundPrimary: false },
   { name: 'Put-Away',            volume: 15000, uom: 'pallets', isOutboundPrimary: false },
   { name: 'Orders Shipped',      volume: 22000 * 260, uom: 'orders',  isOutboundPrimary: true  },
-  { name: 'Each Picks',          volume: 600000, uom: 'eaches', isOutboundPrimary: false },
 ];
 const wayfairLabor = [
   { id: 'pick',  activity: 'Picking',     position: 'Picker',   uph: 110, headcount: 36, annual_hours: 74545, hourly_rate: 18, fully_loaded_rate: 26 },
