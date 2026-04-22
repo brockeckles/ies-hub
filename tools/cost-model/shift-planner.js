@@ -723,6 +723,16 @@ function computeDailyVolumeByFunction(volumeLines, operatingDays) {
     }
   }
 
+  // Third pass — inferred borrows for functions users rarely declare as
+  // separate volume lines. These follow physical logic:
+  //   putaway  ← inbound (every received pallet gets put away)
+  //   replenish ← picking × 0.4 (typical replen events per pick)
+  //   vas       ← picking × 0.1 (if there's any picking but no VAS line, assume light)
+  // Users with explicit lines keep winning since first-pass already set the fn.
+  if (out.putaway === 0 && out.inbound > 0) out.putaway = out.inbound;
+  if (out.replenish === 0 && out.picking > 0) out.replenish = out.picking * 0.4;
+  if (out.vas === 0 && out.picking > 0) out.vas = out.picking * 0.1;
+
   return out;
 }
 

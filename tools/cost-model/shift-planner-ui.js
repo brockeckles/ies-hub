@@ -19,7 +19,7 @@ import {
   deriveShiftHeadcount,
   deriveIndirectByShift,
   deriveHourlyStaffing,
-} from './shift-planner.js?v=20260422-xK';
+} from './shift-planner.js?v=20260422-xL';
 
 /**
  * Matrix display mode — 'pct' shows editable % inputs (default); 'fte'
