@@ -17,7 +17,7 @@ import {
   validateShiftMatrix,
   normalizeShiftMatrix,
   deriveShiftHeadcount,
-} from './shift-planner.js?v=20260422-xG';
+} from './shift-planner.js?v=20260422-xH';
 
 /**
  * Return section HTML.

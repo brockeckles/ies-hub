@@ -495,22 +495,24 @@ function computeDailyVolumeByFunction(volumeLines, operatingDays) {
   if (!Array.isArray(volumeLines) || volumeLines.length === 0) return out;
   const opDays = Math.max(1, operatingDays);
 
-  // First pass: any explicit volume mapping wins.
+  // First pass: first-match-wins per function. Accumulating would double-count
+  // when a project has multiple volume lines matching the same keyword (e.g.
+  // Wayfair has "Pallets Received" AND "Cases Received" — only one should
+  // drive inbound math). Users can pre-process if they want finer granularity.
   for (const v of volumeLines) {
     const rawName = String(v.name || v.label || '').toLowerCase();
     if (!rawName) continue;
     const vol = Number(v.volume) || 0;
     const daily = vol / opDays;
     // Match tense-flexibly: "Pallets Received", "Receiving", "Inbound" all → inbound
-    if (/receiv|inbound/.test(rawName)) out.inbound += daily;
-    else if (/put.?away/.test(rawName)) out.putaway += daily;
-    else if (/replen/.test(rawName)) out.replenish += daily;
-    else if (/pack/.test(rawName)) out.pack += daily;
-    else if (/pick/.test(rawName)) out.picking += daily;
-    else if (/ship|outbound/.test(rawName)) out.ship += daily;
-    else if (/return/.test(rawName)) out.returns += daily;
-    else if (/vas|kit|label|assembly/.test(rawName)) out.vas += daily;
-    // "Orders" falls through to the outbound fallback below
+    if (out.inbound === 0 && /receiv|inbound/.test(rawName)) { out.inbound = daily; continue; }
+    if (out.putaway === 0 && /put.?away/.test(rawName)) { out.putaway = daily; continue; }
+    if (out.replenish === 0 && /replen/.test(rawName)) { out.replenish = daily; continue; }
+    if (out.pack === 0 && /pack/.test(rawName)) { out.pack = daily; continue; }
+    if (out.picking === 0 && /pick/.test(rawName)) { out.picking = daily; continue; }
+    if (out.ship === 0 && /ship|outbound/.test(rawName)) { out.ship = daily; continue; }
+    if (out.returns === 0 && /return/.test(rawName)) { out.returns = daily; continue; }
+    if (out.vas === 0 && /vas|kit|label|assembly/.test(rawName)) { out.vas = daily; continue; }
   }
 
   // Second pass: if key fulfillment functions (picking/pack/ship) are still
