@@ -16,7 +16,7 @@ import * as scenarios from './calc.scenarios.js?v=20260421-wA';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
 import * as shiftPlannerCalc from './shift-planner.js?v=20260422-xO';
-import * as shiftPlannerUi from './shift-planner-ui.js?v=20260422-xO';
+import * as shiftPlannerUi from './shift-planner-ui.js?v=20260422-xW';
 import * as shiftArchetypes from './shift-archetypes.js?v=20260422-xO';
 
 // ============================================================
@@ -5094,9 +5094,26 @@ function bindSectionEvents(section, container) {
   }
 
   // Generic input binding: data-field="path.to.field"
+  //
+  // Event selection:
+  //   - <select> / checkbox inputs → 'change'
+  //   - Opt-in: any field carrying `data-field-commit="change"` → 'change'
+  //   - Everything else → 'input' (live-updates the model on every keystroke)
+  //
+  // Why the opt-in: for fields whose `setNestedValue → shouldRerender` path
+  // triggers a full `renderSection()` (which re-builds the section's innerHTML
+  // and destroys the in-progress input), the 'input' event steals focus on
+  // every keystroke, so the user can never type a multi-digit number like
+  // "10" — the first keystroke commits "1" and focus is lost. The Shift
+  // Structure fields (shifts.shiftsPerDay / hoursPerShift / daysPerWeek /
+  // weeksPerYear) are explicitly marked with data-field-commit="change" so
+  // they commit on blur/Enter and the user can type a full value. (Brock
+  // 2026-04-22: "Shift Structure tile doesn't appear to do anything.")
   container.querySelectorAll('[data-field]').forEach(input => {
+    const commit = input.dataset.fieldCommit;
     const event = input.tagName === 'SELECT' ? 'change'
                 : input.type === 'checkbox' ? 'change'
+                : commit === 'change' ? 'change'
                 : 'input';
     input.addEventListener(event, (e) => {
       const field = input.dataset.field;

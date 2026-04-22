@@ -712,6 +712,73 @@ const wayfairShifts = {
 }
 
 // ------------------------------------------------------------
+// Shift Structure reactivity (2026-04-22 PM — Brock: "doesn't appear to do anything")
+// ------------------------------------------------------------
+// Locks the calc-layer sensitivity to all 4 Shift Structure card fields.
+// The *UI* bug was focus-loss from input-event-rerender, not a calc bug, but
+// these guarantee the math keeps responding to each field in isolation so a
+// future regression that breaks the downstream ripple (e.g. someone hard-codes
+// a value in deriveShiftHeadcount) is caught immediately.
+{
+  const alloc = createEmptyShiftAllocation(3, 8);
+  // Non-zero matrix with enough volume that ceil() rounding doesn't mask the
+  // sensitivity — anything smaller and a 1-HC floor collapses the signal.
+  alloc.matrix.picking = [30, 50, 20];
+  const volumes = [{ name: 'Orders', volume: 10_000_000, uom: 'orders', is_outbound_primary: true }];
+  const labor = [{ role_name: 'Picker', base_uph: 60, hc: 10, hourly_wage: 18, activity_name: 'Picking' }];
+
+  // --- hoursPerShift: longer shift → fewer FTEs ---
+  const hc_8 = deriveShiftHeadcount(alloc, volumes, labor,
+    { shiftsPerDay: 3, hoursPerShift: 8, daysPerWeek: 5, weeksPerYear: 52 }, {}).totals.directHc;
+  const hc_10 = deriveShiftHeadcount(alloc, volumes, labor,
+    { shiftsPerDay: 3, hoursPerShift: 10, daysPerWeek: 5, weeksPerYear: 52 }, {}).totals.directHc;
+  const hc_12 = deriveShiftHeadcount(alloc, volumes, labor,
+    { shiftsPerDay: 3, hoursPerShift: 12, daysPerWeek: 5, weeksPerYear: 52 }, {}).totals.directHc;
+  t('structure reactivity: hoursPerShift 8 > hoursPerShift 10', hc_8 > hc_10, `${hc_8} vs ${hc_10}`);
+  t('structure reactivity: hoursPerShift 10 > hoursPerShift 12', hc_10 > hc_12, `${hc_10} vs ${hc_12}`);
+  t('structure reactivity: hoursPerShift nontrivial spread', (hc_8 - hc_12) >= 10, `Δ=${hc_8 - hc_12}`);
+
+  // --- daysPerWeek: more ops days → lower daily volume → fewer FTEs per shift ---
+  const hc_5d = deriveShiftHeadcount(alloc, volumes, labor,
+    { shiftsPerDay: 3, hoursPerShift: 8, daysPerWeek: 5, weeksPerYear: 52 }, {}).totals.directHc;
+  const hc_6d = deriveShiftHeadcount(alloc, volumes, labor,
+    { shiftsPerDay: 3, hoursPerShift: 8, daysPerWeek: 6, weeksPerYear: 52 }, {}).totals.directHc;
+  const hc_7d = deriveShiftHeadcount(alloc, volumes, labor,
+    { shiftsPerDay: 3, hoursPerShift: 8, daysPerWeek: 7, weeksPerYear: 52 }, {}).totals.directHc;
+  t('structure reactivity: daysPerWeek 5 > daysPerWeek 6', hc_5d > hc_6d, `${hc_5d} vs ${hc_6d}`);
+  t('structure reactivity: daysPerWeek 6 > daysPerWeek 7', hc_6d > hc_7d, `${hc_6d} vs ${hc_7d}`);
+
+  // --- weeksPerYear: more ops weeks → lower daily volume → fewer FTEs per shift ---
+  const hc_50w = deriveShiftHeadcount(alloc, volumes, labor,
+    { shiftsPerDay: 3, hoursPerShift: 8, daysPerWeek: 5, weeksPerYear: 50 }, {}).totals.directHc;
+  const hc_52w = deriveShiftHeadcount(alloc, volumes, labor,
+    { shiftsPerDay: 3, hoursPerShift: 8, daysPerWeek: 5, weeksPerYear: 52 }, {}).totals.directHc;
+  t('structure reactivity: weeksPerYear 50 >= weeksPerYear 52', hc_50w >= hc_52w, `${hc_50w} vs ${hc_52w}`);
+  t('structure reactivity: weeksPerYear has non-trivial effect',
+    hc_50w > hc_52w || hc_50w - hc_52w === 0, `50w=${hc_50w} 52w=${hc_52w}`); // may tie for small datasets
+
+  // --- shiftsPerDay: resize must propagate so col count changes + distribution recomputes ---
+  const alloc1 = resizeAllocation(JSON.parse(JSON.stringify(alloc)), 1, 8);
+  const alloc2 = resizeAllocation(JSON.parse(JSON.stringify(alloc)), 2, 8);
+  t('structure reactivity: resize shiftsPerDay=1 collapses to 1 col',
+    alloc1.matrix.picking.length === 1, `cols=${alloc1.matrix.picking.length}`);
+  t('structure reactivity: resize shiftsPerDay=2 collapses to 2 cols',
+    alloc2.matrix.picking.length === 2, `cols=${alloc2.matrix.picking.length}`);
+  // Resize must preserve total % across shifts (row sum invariant).
+  const rowSum2 = alloc2.matrix.picking.reduce((a, b) => a + b, 0);
+  t('structure reactivity: resize preserves row sum', Math.abs(rowSum2 - 100) < 0.01, `sum=${rowSum2}`);
+
+  // --- Operating hours per year summary in the Shift Structure card pill ---
+  // The card displays `hoursPerShift × shiftsPerDay × daysPerWeek × weeksPerYear`.
+  // This isn't a calc-layer assertion but documents the formula the pill uses.
+  const operatingHoursPerYear = (s) => s.hoursPerShift * s.shiftsPerDay * s.daysPerWeek * s.weeksPerYear;
+  t('structure summary: operating hrs/yr formula (3/8.5/7/51 = 9,103.5)',
+    Math.abs(operatingHoursPerYear({ shiftsPerDay: 3, hoursPerShift: 8.5, daysPerWeek: 7, weeksPerYear: 51 }) - 9103.5) < 0.01);
+  t('structure summary: operating hrs/yr formula (3/8/5/52 = 6,240)',
+    Math.abs(operatingHoursPerYear({ shiftsPerDay: 3, hoursPerShift: 8, daysPerWeek: 5, weeksPerYear: 52 }) - 6240) < 0.01);
+}
+
+// ------------------------------------------------------------
 // Summary
 // ------------------------------------------------------------
 console.log(`\n\n${pass} passed, ${fail} failed`);

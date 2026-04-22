@@ -363,19 +363,19 @@ function renderStructureCard(shiftsCfg) {
       <div class="sp-structure__grid">
         <div class="hub-field">
           <label class="hub-field__label" title="Number of shifts the facility runs per day (1-3). Resizes the Throughput Matrix to match when changed.">Shifts / Day</label>
-          <input class="hub-input" type="number" value="${shiftsPerDay}" min="1" max="3" step="1" data-field="shifts.shiftsPerDay" data-type="number" />
+          <input class="hub-input" type="number" value="${shiftsPerDay}" min="1" max="3" step="1" data-field="shifts.shiftsPerDay" data-type="number" data-field-commit="change" />
         </div>
         <div class="hub-field">
           <label class="hub-field__label" title="Hours per shift. Default 8 (standard), 8.5 or 10 for compressed schedules, 12 for 3x12.">Hours / Shift</label>
-          <input class="hub-input" type="number" value="${hoursPerShift}" min="4" max="24" step="0.5" data-field="shifts.hoursPerShift" data-type="number" />
+          <input class="hub-input" type="number" value="${hoursPerShift}" min="4" max="24" step="0.5" data-field="shifts.hoursPerShift" data-type="number" data-field-commit="change" />
         </div>
         <div class="hub-field">
           <label class="hub-field__label" title="Operating days per week. 5 for standard retail, 7 for 24/7 fulfillment ops.">Days / Week</label>
-          <input class="hub-input" type="number" value="${daysPerWeek}" min="1" max="7" step="1" data-field="shifts.daysPerWeek" data-type="number" />
+          <input class="hub-input" type="number" value="${daysPerWeek}" min="1" max="7" step="1" data-field="shifts.daysPerWeek" data-type="number" data-field-commit="change" />
         </div>
         <div class="hub-field">
           <label class="hub-field__label" title="Operating weeks per year. Usually 52 — drop 1-2 for deep-maintenance shutdowns.">Weeks / Year</label>
-          <input class="hub-input" type="number" value="${weeksPerYear}" min="40" max="52" step="1" data-field="shifts.weeksPerYear" data-type="number" />
+          <input class="hub-input" type="number" value="${weeksPerYear}" min="40" max="52" step="1" data-field="shifts.weeksPerYear" data-type="number" data-field-commit="change" />
         </div>
         <div class="hub-field sp-structure__workweek">
           <label class="hub-field__label" title="Workweek pattern — operational metadata. All patterns sum to ~2,080 paid hrs/yr; this tag is for roster reporting and OT-premium scheduling context.">Workweek Pattern</label>
