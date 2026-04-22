@@ -12,6 +12,7 @@
 import {
   equipLineAnnual,
   equipLineAnnualBreakdown,
+  equipLineTableCost,
   _normalizeSeasonalMonths,
   totalEquipmentCost,
 } from './tools/cost-model/calc.js';
@@ -202,6 +203,24 @@ t('totalEquipmentCost: mixed owned + rented + IT', () => {
   // IT:    48 × 15 × 12 = 8,640
   // Total: 254,640
   near(totalEquipmentCost(lines), 254640, 0.5);
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// 6. Table display cost matches annual cost for rented_mhe (Phase 2b fix)
+// ────────────────────────────────────────────────────────────────────────────
+
+t('equipLineTableCost rented_mhe: matches equipLineAnnual', () => {
+  const line = {
+    line_type: 'rented_mhe',
+    quantity: 12,
+    monthly_cost: 800,
+    monthly_maintenance: 150,
+    seasonal_months: [10, 11, 12],
+  };
+  const table = equipLineTableCost(line);
+  const annual = equipLineAnnual(line);
+  eq(table, annual, 'table display agrees with annual aggregator');
+  eq(table, 12 * 950 * 3);
 });
 
 // ────────────────────────────────────────────────────────────────────────────

@@ -891,6 +891,15 @@ export function totalEquipmentTiUpfront(lines) {
  * @returns {number}
  */
 export function equipLineTableCost(line, peakOverflowByMonth) {
+  // Phase 2b (2026-04-22): rented_mhe is seasonal-only. Annual = qty ×
+  // monthly × seasonal_months.length. Match equipLineAnnual behavior so
+  // the row's Annual column agrees with the aggregator's total.
+  if (line.line_type === 'rented_mhe') {
+    const rentalQty = Number(line.quantity) || 0;
+    const months = _normalizeSeasonalMonths(line.seasonal_months);
+    const monthly = (line.monthly_cost || 0) + (line.monthly_maintenance || 0);
+    return rentalQty * monthly * months.length;
+  }
   const qty = line.quantity || 1;
   const type = normalizeAcqType(line.acquisition_type);
   const markupPct = Number(line.peak_markup_pct) || 0;
