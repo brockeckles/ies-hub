@@ -687,6 +687,20 @@ export function equipLineAnnual(line, peakOverflowByMonth) {
   const qty = line.quantity || 1;
   const type = normalizeAcqType(line.acquisition_type);
 
+  // Phase 2b (2026-04-22): rented_mhe lines have a fundamentally different
+  // cost profile — their entire annual cost is seasonal (no baseline).
+  //   annualCost = qty × monthly_cost × seasonal_months.length
+  // No peak_markup_pct on these lines (no overflow concept — the whole line
+  // IS the rental). seasonal_months defaults to [10,11,12] when empty.
+  // Rental qty=0 means "no rental" and returns $0 — doesn't default to 1
+  // like other types (where qty=0 is typically a misconfig to flag).
+  if (line.line_type === 'rented_mhe') {
+    const rentalQty = Number(line.quantity) || 0;
+    const months = _normalizeSeasonalMonths(line.seasonal_months);
+    const monthly = (line.monthly_cost || 0) + (line.monthly_maintenance || 0);
+    return rentalQty * monthly * months.length;
+  }
+
   // Acquisition-type → monthly-rate that flows as operating expense:
   //   capital     — only maintenance (acquisition_cost flows as depreciation, not opex)
   //   lease       — monthly_cost + maintenance
@@ -722,6 +736,30 @@ export function equipLineAnnual(line, peakOverflowByMonth) {
 }
 
 /**
+ * Normalize `seasonal_months` to a clean sorted unique int[] in 1-12.
+ * Accepts: number[], comma-separated string, null/undefined.
+ * Defaults to [10,11,12] (Oct-Dec omni-channel peak) when empty/missing.
+ * Exported for tests. Private helper for equip cost functions.
+ * @param {unknown} raw
+ * @returns {number[]}
+ */
+export function _normalizeSeasonalMonths(raw) {
+  const DEFAULT = [10, 11, 12];
+  if (raw == null) return DEFAULT;
+  let arr;
+  if (Array.isArray(raw)) arr = raw;
+  else if (typeof raw === 'string') arr = raw.split(/[,\s]+/).filter(Boolean);
+  else return DEFAULT;
+  const out = [];
+  for (const v of arr) {
+    const n = Math.floor(Number(v));
+    if (Number.isFinite(n) && n >= 1 && n <= 12 && !out.includes(n)) out.push(n);
+  }
+  if (out.length === 0) return DEFAULT;
+  return out.sort((a, b) => a - b);
+}
+
+/**
  * Split an equipment line's annual cost into baseline + seasonal uplift
  * sub-totals. Used by the UI to render the two numbers side-by-side so
  * the cost of seasonal flex is explicit, not buried in the total.
@@ -732,6 +770,17 @@ export function equipLineAnnual(line, peakOverflowByMonth) {
  */
 export function equipLineAnnualBreakdown(line, peakOverflowByMonth) {
   const qty = line.quantity || 1;
+
+  // Phase 2b (2026-04-22): rented_mhe is seasonal-only. No baseline, no
+  // peak_markup_pct path — the whole line's cost accrues in seasonal_months.
+  if (line.line_type === 'rented_mhe') {
+    const rentalQty = Number(line.quantity) || 0;
+    const months = _normalizeSeasonalMonths(line.seasonal_months);
+    const monthly = (line.monthly_cost || 0) + (line.monthly_maintenance || 0);
+    const seasonal = rentalQty * monthly * months.length;
+    return { baseline: 0, seasonal, total: seasonal };
+  }
+
   const type = normalizeAcqType(line.acquisition_type);
   const monthlyRate = type === 'capital'
     ? (line.monthly_maintenance || 0)

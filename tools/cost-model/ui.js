@@ -10,7 +10,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import * as calc from './calc.js?v=20260422-xP';
+import * as calc from './calc.js?v=20260422-xQ';
 import * as api from './api.js?v=20260422-xP';
 import * as scenarios from './calc.scenarios.js?v=20260421-wA';
 import * as monthlyCalc from './calc.monthly.js?v=20260421-xE';
@@ -3266,33 +3266,83 @@ Owned Facility — racking/dock/charging/office/security/conveyor">Line Type</th
                 </select>
               </td>
               <td><input class="hub-input hub-num" type="number" value="${l.quantity || 1}" data-array="equipmentLines" data-idx="${i}" data-field="quantity" data-type="number" /></td>
-              <td>
-                <select class="hub-input" data-array="equipmentLines" data-idx="${i}" data-field="acquisition_type" data-equip-type-flip="${i}" title="Capital = buy + depreciate; Lease = monthly operating lease; TI = built into facility (rolls into rent); Service = per-month managed service (no residual)">
-                  ${(() => {
-                    const norm = calc.normalizeAcqType ? calc.normalizeAcqType(l.acquisition_type) : (l.acquisition_type || 'lease');
-                    return `
-                      <option value="capital"${norm === 'capital' ? ' selected' : ''}>Capital</option>
-                      <option value="lease"${norm === 'lease'     ? ' selected' : ''}>Lease</option>
-                      <option value="ti"${norm === 'ti'           ? ' selected' : ''}>TI</option>
-                      <option value="service"${norm === 'service' ? ' selected' : ''}>Service</option>
-                    `;
-                  })()}
-                </select>
-              </td>
-              <td><input class="hub-input hub-num" type="number" value="${l.monthly_cost || 0}" data-array="equipmentLines" data-idx="${i}" data-field="monthly_cost" data-type="number" /></td>
-              <td>
-                <input class="hub-input hub-num" type="number" value="${l.acquisition_cost || 0}" data-array="equipmentLines" data-idx="${i}" data-field="acquisition_cost" data-type="number" ${(() => {
-                  const norm = calc.normalizeAcqType ? calc.normalizeAcqType(l.acquisition_type) : (l.acquisition_type || 'lease');
-                  // Visual flag: Capital or TI with $0 acquisition cost reads as broken
-                  // (happens after a lease→capital flip when the catalog didn't populate).
-                  if ((norm === 'capital' || norm === 'ti') && (Number(l.acquisition_cost) || 0) <= 0) {
-                    return `style="border-color: var(--ies-orange, #d97706); background: rgba(255,193,7,0.08);" title="$0 acquisition cost on a ${norm === 'capital' ? 'Capital' : 'TI'} line — set a unit cost or pull from the Equipment Catalog"`;
-                  }
-                  return '';
-                })()} /></td>
-              <td><input class="hub-input hub-num" type="number" value="${l.monthly_maintenance || 0}" data-array="equipmentLines" data-idx="${i}" data-field="monthly_maintenance" data-type="number" /></td>
-              <td><input class="hub-input hub-num" type="number" value="${l.amort_years || 5}" data-array="equipmentLines" data-idx="${i}" data-field="amort_years" data-type="number" /></td>
-              <td><input class="hub-input hub-num" type="number" min="0" max="100" step="1" value="${l.peak_markup_pct || 0}" data-array="equipmentLines" data-idx="${i}" data-field="peak_markup_pct" data-type="number" title="${escapeAttr(peakTooltip)}" /></td>
+              ${(() => {
+                // Phase 2b (2026-04-22): financing cells switch by line_type.
+                //   owned_mhe / owned_facility — original UI, all 4 financing options
+                //   rented_mhe                 — lease-locked, acq disabled, amort_years
+                //                                repurposed as seasonal_months picker,
+                //                                peak_markup_pct disabled
+                //   it_equipment               — capital-locked, "Amort Yrs" title shifts
+                //                                to "Refresh Cycle (yrs)"
+                const lt = l.line_type || 'owned_facility';
+                const norm = calc.normalizeAcqType ? calc.normalizeAcqType(l.acquisition_type) : (l.acquisition_type || 'lease');
+                const isRented = lt === 'rented_mhe';
+                const isIt = lt === 'it_equipment';
+                const smStr = (() => {
+                  // Normalize seasonal_months for display — array or missing → "10,11,12"
+                  const mo = Array.isArray(l.seasonal_months) ? l.seasonal_months.filter(n => Number.isInteger(n) && n >= 1 && n <= 12) : null;
+                  return (mo && mo.length) ? mo.join(',') : '10,11,12';
+                })();
+                const MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                const smTooltip = (() => {
+                  const parsed = smStr.split(',').map(Number).filter(n => n >= 1 && n <= 12);
+                  return parsed.length
+                    ? `Peak rental active in: ${parsed.map(n => MONTH_ABBR[n-1]).join(', ')}`
+                    : 'Enter peak months as comma-separated numbers 1-12 (defaults to 10,11,12 for Oct-Dec)';
+                })();
+                const renterDisabledStyle = 'style="background:var(--ies-gray-100,#f3f4f6);color:var(--ies-gray-400,#9ca3af);cursor:not-allowed;"';
+                return `
+                  <td>
+                    ${isRented ? `
+                      <select class="hub-input" disabled title="Rented MHE is opex-only — lease is the only option" ${renterDisabledStyle}>
+                        <option selected>Rental</option>
+                      </select>
+                    ` : isIt ? `
+                      <select class="hub-input" data-array="equipmentLines" data-idx="${i}" data-field="acquisition_type" data-equip-type-flip="${i}" title="IT Equipment is always capital (refresh-cycle amortized); change with care.">
+                        <option value="capital" selected>Capital</option>
+                        <option value="lease"${norm === 'lease' ? ' selected' : ''}>Lease</option>
+                      </select>
+                    ` : `
+                      <select class="hub-input" data-array="equipmentLines" data-idx="${i}" data-field="acquisition_type" data-equip-type-flip="${i}" title="Capital = buy + depreciate; Lease = monthly operating lease; TI = built into facility (rolls into rent); Service = per-month managed service (no residual)">
+                        <option value="capital"${norm === 'capital' ? ' selected' : ''}>Capital</option>
+                        <option value="lease"${norm === 'lease'     ? ' selected' : ''}>Lease</option>
+                        <option value="ti"${norm === 'ti'           ? ' selected' : ''}>TI</option>
+                        <option value="service"${norm === 'service' ? ' selected' : ''}>Service</option>
+                      </select>
+                    `}
+                  </td>
+                  <td><input class="hub-input hub-num" type="number" value="${l.monthly_cost || 0}" data-array="equipmentLines" data-idx="${i}" data-field="monthly_cost" data-type="number" ${isRented ? 'title="Peak rental monthly rate per unit (default rates: reach $1,000 / walkie $650 / sit-down $2,500 / picker $900). Applied only in seasonal months."' : ''}/></td>
+                  <td>
+                    ${isRented ? `
+                      <input class="hub-input hub-num" type="number" value="0" disabled ${renterDisabledStyle} title="Rentals have no acquisition cost" />
+                    ` : `
+                      <input class="hub-input hub-num" type="number" value="${l.acquisition_cost || 0}" data-array="equipmentLines" data-idx="${i}" data-field="acquisition_cost" data-type="number" ${(() => {
+                        if ((norm === 'capital' || norm === 'ti') && (Number(l.acquisition_cost) || 0) <= 0) {
+                          return `style="border-color: var(--ies-orange, #d97706); background: rgba(255,193,7,0.08);" title="$0 acquisition cost on a ${norm === 'capital' ? 'Capital' : 'TI'} line — set a unit cost or pull from the Equipment Catalog"`;
+                        }
+                        return '';
+                      })()} />
+                    `}
+                  </td>
+                  <td><input class="hub-input hub-num" type="number" value="${l.monthly_maintenance || 0}" data-array="equipmentLines" data-idx="${i}" data-field="monthly_maintenance" data-type="number" ${isRented ? 'title="Optional maintenance uplift per rental unit — typically bundled into the rental rate, so leave 0"' : ''}/></td>
+                  <td>
+                    ${isRented ? `
+                      <input class="hub-input" type="text" value="${smStr}" data-array="equipmentLines" data-idx="${i}" data-field="seasonal_months" data-type="season-months" title="${escapeAttr(smTooltip)}" style="font-size:11px;text-align:center;" />
+                    ` : isIt ? `
+                      <input class="hub-input hub-num" type="number" value="${l.amort_years || 5}" data-array="equipmentLines" data-idx="${i}" data-field="amort_years" data-type="number" title="Refresh Cycle (yrs) — how often IT devices are replaced. Typical: 3 yrs RF/handhelds, 5 yrs printers/APs, 7 yrs switches." />
+                    ` : `
+                      <input class="hub-input hub-num" type="number" value="${l.amort_years || 5}" data-array="equipmentLines" data-idx="${i}" data-field="amort_years" data-type="number" />
+                    `}
+                  </td>
+                  <td>
+                    ${isRented ? `
+                      <input class="hub-input hub-num" type="number" value="0" disabled ${renterDisabledStyle} title="Rented lines are 100% seasonal — no additional peak-% markup needed" />
+                    ` : `
+                      <input class="hub-input hub-num" type="number" min="0" max="100" step="1" value="${l.peak_markup_pct || 0}" data-array="equipmentLines" data-idx="${i}" data-field="peak_markup_pct" data-type="number" title="${escapeAttr(peakTooltip)}" />
+                    `}
+                  </td>
+                `;
+              })()}
               <td class="hub-num" title="${lineBd.seasonal > 0 ? `Baseline ${calc.formatCurrency(lineBd.baseline)} + Seasonal ${calc.formatCurrency(lineBd.seasonal)}` : 'Baseline only'}">
                 ${calc.formatCurrency(calc.equipLineTableCost(l, overflow))}${lineBd.seasonal > 0 ? `<span style="display:block;font-size:10px;color:var(--ies-orange,#d97706);font-weight:600;">+${calc.formatCurrency(lineBd.seasonal, {compact:true})} peak</span>` : ''}
               </td>
@@ -4941,6 +4991,18 @@ function bindSectionEvents(section, container) {
       let val;
       if (type === 'checkbox' || input.type === 'checkbox') val = input.checked;
       else if (type === 'number') val = input.value === '' ? null : (parseFloat(input.value) || 0);
+      else if (type === 'season-months') {
+        // Phase 2b (2026-04-22): rented_mhe seasonal_months field. Parse the
+        // comma-/whitespace-separated user input into an int[] 1-12. Invalid
+        // entries silently dropped; empty → default [10,11,12]. Dedup + sort.
+        const parsed = [];
+        for (const tok of String(input.value || '').split(/[,\s]+/)) {
+          if (!tok) continue;
+          const n = Math.floor(Number(tok));
+          if (Number.isFinite(n) && n >= 1 && n <= 12 && !parsed.includes(n)) parsed.push(n);
+        }
+        val = parsed.length ? parsed.sort((a, b) => a - b) : [10, 11, 12];
+      }
       else val = input.value;
 
       // Handle array fields (data-array + data-idx). data-array supports
@@ -4999,6 +5061,32 @@ function bindSectionEvents(section, container) {
               // and the $0 warning styling clears.
               renderSection();
             });
+            return;
+          }
+          // Equipment: flipping line_type re-renders so the financing cells
+          // switch between owned-mhe / rented-mhe / it-equipment / owned-
+          // facility layouts (Phase 2b, 2026-04-22). Also resets seasonal_months
+          // to [10,11,12] default when a line becomes rented_mhe for the first
+          // time so the user sees sensible defaults.
+          if (input.dataset.array === 'equipmentLines' && field === 'line_type') {
+            if (val === 'rented_mhe' && !Array.isArray(arr[idx].seasonal_months)) {
+              arr[idx].seasonal_months = [10, 11, 12];
+            }
+            if (val === 'it_equipment' && (arr[idx].acquisition_type || 'lease') !== 'capital') {
+              // IT lines are always capital — flip the financing type to match
+              arr[idx].acquisition_type = 'capital';
+            }
+            isDirty = true;
+            if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+            renderSection();
+            return;
+          }
+          // Equipment: seasonal_months text input re-renders so the tooltip
+          // refreshes with the human-readable month names.
+          if (input.dataset.array === 'equipmentLines' && field === 'seasonal_months') {
+            isDirty = true;
+            if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+            renderSection();
             return;
           }
           // Startup: flipping billing_type (capitalized ↔ as_incurred) changes
