@@ -15,6 +15,7 @@ import {
   equipLineTableCost,
   _normalizeSeasonalMonths,
   totalEquipmentCost,
+  totalRentedMheCost,
 } from './tools/cost-model/calc.js';
 
 let pass = 0, fail = 0;
@@ -224,6 +225,32 @@ t('equipLineTableCost rented_mhe: matches equipLineAnnual', () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
+// 7. totalRentedMheCost — Phase 2e helper for Summary sub-slice
+// ────────────────────────────────────────────────────────────────────────────
+
+t('totalRentedMheCost: zero when no rentals', () => {
+  const lines = [
+    { line_type: 'owned_mhe', quantity: 10, acquisition_type: 'lease', monthly_cost: 800, monthly_maintenance: 150 },
+    { line_type: 'it_equipment', quantity: 48, acquisition_type: 'capital', acquisition_cost: 2850, monthly_maintenance: 15 },
+  ];
+  eq(totalRentedMheCost(lines), 0);
+});
+
+t('totalRentedMheCost: sums only rented_mhe lines', () => {
+  const lines = [
+    { line_type: 'owned_mhe', quantity: 10, acquisition_type: 'lease', monthly_cost: 800, monthly_maintenance: 150 },
+    { line_type: 'rented_mhe', quantity: 3, monthly_cost: 1000, seasonal_months: [10,11,12] },
+    { line_type: 'rented_mhe', quantity: 2, monthly_cost: 900, seasonal_months: [11,12] },
+  ];
+  // 3 × 1000 × 3 + 2 × 900 × 2 = 9000 + 3600 = 12,600
+  eq(totalRentedMheCost(lines), 12600);
+});
+
+t('totalRentedMheCost: handles null/empty gracefully', () => {
+  eq(totalRentedMheCost(null), 0);
+  eq(totalRentedMheCost([]), 0);
+  eq(totalRentedMheCost([null, undefined, { line_type: 'owned_mhe' }]), 0);
+});
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

@@ -10,7 +10,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import * as calc from './calc.js?v=20260422-xR';
+import * as calc from './calc.js?v=20260422-xS';
 import * as api from './api.js?v=20260422-xP';
 import * as scenarios from './calc.scenarios.js?v=20260421-wA';
 import * as monthlyCalc from './calc.monthly.js?v=20260421-xE';
@@ -4758,22 +4758,32 @@ function renderSummary() {
         <div style="width:${pcts.startup}%; background: var(--ies-orange, #ff3a00);" title="Start-Up ${pcts.startup}%"></div>
       </div>
       <div class="cm-stacked-legend">
-        ${[
-          { label: 'Labor', value: summary.laborCost, pct: pcts.labor, color: 'var(--ies-blue, #0047AB)' },
-          { label: 'Facility', value: summary.facilityCost, pct: pcts.facility, color: '#2563eb' },
-          { label: 'Equipment', value: summary.equipmentCost, pct: pcts.equipment, color: '#60a5fa' },
-          { label: 'Overhead', value: summary.overheadCost, pct: pcts.overhead, color: '#94a3b8' },
-          { label: 'VAS', value: summary.vasCost, pct: pcts.vas, color: '#cbd5e1' },
-          { label: 'Start-Up', value: summary.startupAmort, pct: pcts.startup, color: 'var(--ies-orange, #ff3a00)' },
-        ].map(c => `
-          <div class="cm-stacked-legend__item">
-            <span class="cm-stacked-legend__swatch" style="background:${c.color};"></span>
-            <div>
-              <div class="hub-field__label" style="text-transform:none; letter-spacing:0;">${c.label} <span style="color:var(--ies-gray-400);font-weight:500;">(${c.pct}%)</span></div>
-              <div class="hub-num" style="font-size:14px; font-weight:700; text-align:left;">${calc.formatCurrency(c.value, {compact: true})}</div>
+        ${(() => {
+          // Phase 2e (2026-04-22): compute Peak Rentals sub-slice of Equipment
+          // so the Summary cost breakdown explicitly surfaces seasonal rental
+          // opex. The Equipment total already includes it; this just annotates.
+          const rentalCost = calc.totalRentedMheCost(model.equipmentLines || []);
+          return [
+            { label: 'Labor', value: summary.laborCost, pct: pcts.labor, color: 'var(--ies-blue, #0047AB)' },
+            { label: 'Facility', value: summary.facilityCost, pct: pcts.facility, color: '#2563eb' },
+            { label: 'Equipment', value: summary.equipmentCost, pct: pcts.equipment, color: '#60a5fa',
+              subAnnotation: rentalCost > 0
+                ? `of which ${calc.formatCurrency(rentalCost, {compact: true})} peak rentals (Oct-Dec opex)`
+                : null },
+            { label: 'Overhead', value: summary.overheadCost, pct: pcts.overhead, color: '#94a3b8' },
+            { label: 'VAS', value: summary.vasCost, pct: pcts.vas, color: '#cbd5e1' },
+            { label: 'Start-Up', value: summary.startupAmort, pct: pcts.startup, color: 'var(--ies-orange, #ff3a00)' },
+          ].map(c => `
+            <div class="cm-stacked-legend__item">
+              <span class="cm-stacked-legend__swatch" style="background:${c.color};"></span>
+              <div>
+                <div class="hub-field__label" style="text-transform:none; letter-spacing:0;">${c.label} <span style="color:var(--ies-gray-400);font-weight:500;">(${c.pct}%)</span></div>
+                <div class="hub-num" style="font-size:14px; font-weight:700; text-align:left;">${calc.formatCurrency(c.value, {compact: true})}</div>
+                ${c.subAnnotation ? `<div style="font-size:11px;font-style:italic;color:var(--ies-orange,#d97706);margin-top:2px;">${c.subAnnotation}</div>` : ''}
+              </div>
             </div>
-          </div>
-        `).join('')}
+          `).join('');
+        })()}
       </div>
     </div>
 

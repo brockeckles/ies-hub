@@ -1073,6 +1073,20 @@ export function equipmentOverflowByLine(lines, opts = {}) {
  * @param {import('./types.js?v=20260418-sK').EquipmentLine[]} lines
  * @returns {number}
  */
+/**
+ * Phase 2e (2026-04-22): subset of totalEquipmentCost attributable to
+ * `rented_mhe` lines only. Drives the "Peak Rentals" sub-slice annotation
+ * in the Summary Cost Breakdown. Zero-cost when no rentals exist.
+ * @param {import('./types.js?v=20260418-sK').EquipmentLine[]} lines
+ * @returns {number}
+ */
+export function totalRentedMheCost(lines) {
+  return (lines || []).reduce((sum, line) => {
+    if (line && line.line_type === 'rented_mhe') return sum + equipLineAnnual(line);
+    return sum;
+  }, 0);
+}
+
 export function totalEquipmentCapital(lines) {
   return lines.reduce((sum, line) => {
     // Capital items ONLY — TI is facility rent, lease has no capital, service
