@@ -11,10 +11,13 @@ import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import * as calc from './calc.js?v=20260421-xE';
-import * as api from './api.js?v=20260419-uH';
+import * as api from './api.js?v=20260422-xF';
 import * as scenarios from './calc.scenarios.js?v=20260421-wA';
 import * as monthlyCalc from './calc.monthly.js?v=20260421-xE';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
+import * as shiftPlannerCalc from './shift-planner.js?v=20260422-xF';
+import * as shiftPlannerUi from './shift-planner-ui.js?v=20260422-xF';
+import * as shiftArchetypes from './shift-archetypes.js?v=20260422-xF';
 
 // ============================================================
 // Non-blocking modal helpers (replace confirm/prompt/alert).
@@ -330,6 +333,7 @@ const SECTIONS = [
   // Structure — framework to build inside (physical + commercial)
   { key: 'facility',       label: 'Facility',           icon: 'home',          group: 'structure' },
   { key: 'shifts',         label: 'Labor Factors',      icon: 'clock',         group: 'structure' },
+  { key: 'shiftPlanning',  label: 'Shift Planning',     icon: 'grid',          group: 'structure' },
   { key: 'pricingBuckets', label: 'Pricing Buckets',    icon: 'layers',        group: 'structure' },
   { key: 'financial',      label: 'Financial',          icon: 'trending-up',   group: 'structure' },
   // Cost — the build itself
@@ -463,6 +467,12 @@ export async function mount(el) {
   // v2 UI — reset transient selection state
   _selectedLaborIdx = 0;
   _collapsedNavGroups = new Set();
+
+  // Kick off Shift Planner catalog fetch in parallel with mount — keeps the
+  // first visit to the Shift Planning section snappy. Silent failure: catalog
+  // falls back to empty if fetch fails; the UI still renders + degrades
+  // gracefully (archetype dropdown shows no options).
+  ensureShiftArchetypesLoaded().catch(() => {});
 
   // Load reference data + saved models + saved deals + ref_periods in parallel
   try {
@@ -1037,6 +1047,7 @@ function renderSection() {
     orderProfile: renderOrderProfile,
     facility: renderFacility,
     shifts: renderShifts,
+    shiftPlanning: renderShiftPlanning,
     pricingBuckets: renderPricingBuckets,
     labor: renderLabor,
     equipment: renderEquipment,
@@ -1134,6 +1145,14 @@ function _sectionCompleteness(sectionKey) {
       return (m.facility && m.facility.totalSqft > 0) ? 'complete' : 'empty';
     case 'shifts':
       return (m.shifts && m.shifts.shiftsPerDay > 0) ? 'complete' : 'empty';
+    case 'shiftPlanning': {
+      const a = m.shiftAllocation;
+      if (!a || !a.matrix) return 'empty';
+      const anyNonZero = Object.values(a.matrix || {}).some(row =>
+        Array.isArray(row) && row.some(v => Number(v) > 0));
+      if (!anyNonZero) return 'empty';
+      return 'complete';
+    }
     case 'labor':
       return (m.laborLines && m.laborLines.length > 0) ? 'complete' : 'empty';
     case 'equipment':
@@ -2087,6 +2106,42 @@ function renderMostCell(line, idx) {
   `;
 }
 
+// ============================================================
+// SECTION 5b: SHIFT PLANNING (2026-04-22 — Brock day-1 MVP)
+// ============================================================
+
+/**
+ * Shift Planner catalog cache state. Mirrors ensurePlanningRatiosLoaded.
+ * The actual archetype rows live in shiftArchetypes module state (SWR cache);
+ * this flag just tracks whether we've kicked off the initial load.
+ */
+let _shiftArchetypesLoadInFlight = false;
+
+async function ensureShiftArchetypesLoaded() {
+  if (_shiftArchetypesLoadInFlight) return;
+  if (shiftArchetypes.isArchetypesLoaded()) return;
+  _shiftArchetypesLoadInFlight = true;
+  try {
+    await shiftArchetypes.ensureArchetypesLoaded(api);
+  } finally {
+    _shiftArchetypesLoadInFlight = false;
+  }
+}
+
+function renderShiftPlanning() {
+  // Kick off lazy catalog load; re-render when the fetch resolves.
+  if (!shiftArchetypes.isArchetypesLoaded() && !_shiftArchetypesLoadInFlight) {
+    ensureShiftArchetypesLoaded().then(() => renderSection());
+  }
+  // Keep the allocation's shift count in sync with model.shifts.shiftsPerDay,
+  // in case the user changed it on Labor Factors after last visit.
+  shiftPlannerUi.syncAllocationToShifts(model);
+  return shiftPlannerUi.renderShiftPlanningSection({
+    model,
+    archetypes: shiftArchetypes.getArchetypes(),
+  });
+}
+
 function renderLabor() {
   if (isCmV2UiOn()) return renderLaborV2();
   return renderLaborV1();
@@ -2807,6 +2862,35 @@ function renderLaborMasterPane(lines, opHrs, lc) {
   `;
 }
 
+/**
+ * Build the Shift chip for a Direct Labor master-pane row. Shows how the
+ * line relates to the Shift Planning matrix (explicit, split, or unset).
+ *
+ * Returns a chip HTML string, or '' when there's no signal to show.
+ * Brock 2026-04-22 — day-1 MVP surface for Shift Planner on Direct Labor.
+ */
+function buildShiftChipForLine(l) {
+  if (!l) return '';
+  // Explicit override wins
+  if (l.shift === 'floating' || l.shift === 'Floating') {
+    return `<span class="hub-chip hub-chip--brand" title="Floating across shifts (no pin)">Floating</span>`;
+  }
+  const s = Number(l.shift);
+  if (Number.isFinite(s) && s > 0) {
+    return `<span class="hub-chip hub-chip--brand" title="Manually assigned to Shift ${s}">S${s}</span>`;
+  }
+  // Matrix-driven path: allocation exists AND the line maps to a function AND
+  // that row has any non-zero cell → "Split".
+  const alloc = model && model.shiftAllocation;
+  if (!alloc || !alloc.matrix) return '';
+  const fn = shiftPlannerCalc.deriveFunctionForLine(l);
+  if (!fn) return '';
+  const row = alloc.matrix[fn];
+  if (!Array.isArray(row) || !row.some(v => Number(v) > 0)) return '';
+  const tip = row.map((v, i) => `S${i + 1}: ${(Number(v) || 0).toFixed(0)}%`).join(' · ');
+  return `<span class="hub-chip hub-chip--info" title="Split via Shift Planning matrix — ${escapeAttr(tip)}">Split</span>`;
+}
+
 function renderLaborMasterItem(l, i, opHrs, lc, totalDirectCost = 0) {
   const selected = i === _selectedLaborIdx;
   const emp = EMPLOYMENT_CHIP[l.employment_type || 'permanent'] || EMPLOYMENT_CHIP.permanent;
@@ -2831,6 +2915,13 @@ function renderLaborMasterItem(l, i, opHrs, lc, totalDirectCost = 0) {
     ? `<span class="hub-chip hub-chip--neutral" title="Routes to pricing bucket: ${escapeAttr(bucket.name)}">📦 ${escapeHtml(bucket.name)}</span>`
     : `<span class="hub-chip hub-chip--danger" title="No pricing bucket assigned — this line's cost will orphan to Management Fee">⚠ no bucket</span>`;
 
+  // Shift chip (2026-04-22 Brock) — surfaces how this line relates to the
+  // Shift Planning matrix. Three states:
+  //   explicit shift (S1/S2/S3/Floating) → brand chip, user manually pinned
+  //   matrix-driven (allocation exists + line has a matchable function)   → info chip "Split"
+  //   no matrix, no explicit shift                                         → nothing (clean)
+  const shiftChip = buildShiftChipForLine(l);
+
   // Inline bar visualizing share — helps scan the list at a glance
   // without reading every percentage. Capped at 100% width.
   const barWidth = Math.min(100, Math.max(0, sharePct));
@@ -2846,6 +2937,7 @@ function renderLaborMasterItem(l, i, opHrs, lc, totalDirectCost = 0) {
         <span class="hub-chip hub-chip--${emp.variant}">${emp.label}</span>
         <span class="hub-chip hub-chip--${shareVariant}" title="${shareStr} of total direct labor cost (${calc.formatCurrency(annualCost)} of ${calc.formatCurrency(totalDirectCost)})">${shareStr} of DL</span>
         ${bucketChip}
+        ${shiftChip}
         <span>${fte.toFixed(1)} FTE · ${(l.base_uph || 0).toLocaleString()} UPH</span>
         ${hasSeasonality ? `<span class="hub-chip hub-chip--info" title="Has monthly OT/absence seasonality">📊</span>` : ''}
         ${hasVariance ? `<span class="hub-chip hub-chip--warn" title="Variance ±${l.performance_variance_pct}%">±${l.performance_variance_pct}%</span>` : ''}
@@ -4804,6 +4896,25 @@ function renderHeuristicsPanel(state, summary) {
 // ============================================================
 
 function bindSectionEvents(section, container) {
+  // Section-specific event delegation — wired BEFORE the generic data-field
+  // binder so delegated handlers can run without collision. Shift Planning
+  // uses data-sp-cell / data-sp-action and does not use data-field.
+  if (section === 'shiftPlanning') {
+    shiftPlannerUi.bindShiftPlanningEvents(container, {
+      model,
+      archetypes: shiftArchetypes.getArchetypes(),
+      toast: (msg) => { try { showToast(msg); } catch (_) {} },
+      onModelChange: () => {
+        isDirty = true;
+        if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+        refreshNavCompletion();
+        renderSection();
+      },
+    });
+    // No data-field inputs inside Shift Planning — early-exit.
+    return;
+  }
+
   // Generic input binding: data-field="path.to.field"
   container.querySelectorAll('[data-field]').forEach(input => {
     const event = input.tagName === 'SELECT' ? 'change'
@@ -8451,6 +8562,9 @@ function createEmptyModel() {
       { id: 'vas', name: 'VAS', type: 'variable', uom: 'each' },
       { id: 'case_pick', name: 'Case Pick', type: 'variable', uom: 'case' },
     ],
+    // Shift Planning (2026-04-22 — Brock day-1 MVP). Null on new projects so
+    // the section renders an empty matrix; lazy-created on first visit.
+    shiftAllocation: null,
   };
 }
 

@@ -693,6 +693,22 @@ export async function savePlanningRatioOverrides(projectId, overrides) {
 }
 
 // ============================================================
+// SHIFT PLANNER — ref_shift_archetype_defaults catalog
+// ============================================================
+
+/**
+ * Fetch the shift archetype catalog (admin-editable % matrices by vertical).
+ * Powers the "Apply Archetype" dropdown in the Shift Planning section.
+ * @returns {Promise<any[]>}
+ */
+export async function fetchShiftArchetypes() {
+  const { data, error } = await db.from('ref_shift_archetype_defaults')
+    .select('*').eq('is_active', true).order('sort_order', { ascending: true });
+  if (error) { console.warn('[CM] fetchShiftArchetypes failed:', error); return []; }
+  return data || [];
+}
+
+// ============================================================
 // SCD — supersede-and-insert helper
 // ============================================================
 
