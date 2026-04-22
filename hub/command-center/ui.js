@@ -526,15 +526,40 @@ function renderIntelFeed(items, fallbackActivity) {
       return u.pathname && u.pathname !== '/' && u.pathname.length > 1;
     } catch { return false; }
   };
+  // 2026-04-22 — when the ingest pipeline fails to populate source_url for a
+  // news-style alert (Apr 20+ regression on hub_alerts), fall back to a Google
+  // News search link so Brock can still click through to the article. Internal
+  // pipeline items (stage reminders, deal deadlines) stay unlinked — a search
+  // link for "NYC Micro-Fulfillment Center — exec review OVERDUE" would leak
+  // internal content and isn't useful.
+  const INTERNAL_PATTERNS = /\b(OVERDUE|exec.?review|ops.?review|(review|stage),?\s+due|TODAY|TODAY\b|\bstage\b|(\d+\s+days\s+away))/i;
+  const looksInternal = (item) => {
+    if ((item.source || '').toLowerCase().includes('ies pipeline')) return true;
+    if (INTERNAL_PATTERNS.test(item.title || '')) return true;
+    return false;
+  };
+  const googleNewsSearch = (title) => {
+    // Strip trailing " — detail" so the query focuses on the headline noun
+    const clean = String(title || '').split(/\s[—–-]\s/)[0].trim();
+    if (!clean) return '';
+    return `https://www.google.com/search?tbm=nws&q=${encodeURIComponent(clean)}`;
+  };
   return items.slice(0, 25).map(item => {
-    const href = isRealLink(item.source_url) ? item.source_url : '';
+    let href = isRealLink(item.source_url) ? item.source_url : '';
+    let isFallback = false;
+    if (!href && !looksInternal(item)) {
+      href = googleNewsSearch(item.title);
+      isFallback = !!href;
+    }
     const clickable = !!href;
     const openTag = clickable
       ? `<a href="${href}" target="_blank" rel="noopener" style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--ies-gray-100);text-decoration:none;color:inherit;cursor:pointer;" onmouseover="this.style.background='var(--ies-gray-50)'" onmouseout="this.style.background='transparent'">`
       : `<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--ies-gray-100);">`;
     const closeTag = clickable ? `</a>` : `</div>`;
     const linkIcon = clickable
-      ? `<span style="font-size:11px;color:#2563eb;flex-shrink:0;margin-left:4px;" title="Open article in new tab">↗</span>`
+      ? (isFallback
+          ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-left:4px;"><title>Search for article (ingest missing URL)</title><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`
+          : `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-left:4px;"><title>Open article in new tab</title><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>`)
       : '';
     const sourceLabel = item.source
       ? `<span style="font-size:10px;color:var(--ies-gray-400);margin-left:6px;">· ${escapeText(item.source)}</span>`
@@ -594,7 +619,19 @@ function renderInlineAlertBanner(alerts) {
   if (counts.info) parts.push(`<strong>${counts.info}</strong> info`);
   const summary = parts.join(' &middot; ');
   const top = alerts.slice(0, 1)[0];
-  const topUrl = top && top.source_url && top.source_url.length > 'https://'.length ? top.source_url : '';
+  // 2026-04-22 — same fallback pattern as renderIntelFeed: if source_url is
+  // missing and the alert isn't an internal pipeline reminder, link to Google
+  // News search on the headline. Keeps the banner actionable when ingest
+  // fails to populate URLs.
+  const topInternal = top && (
+    /ies pipeline/i.test(top.source || '') ||
+    /\b(OVERDUE|exec.?review|ops.?review|(review|stage),?\s+due|TODAY|\bstage\b)/i.test(top.title || '')
+  );
+  let topUrl = top && top.source_url && top.source_url.length > 'https://'.length ? top.source_url : '';
+  if (!topUrl && top && !topInternal && top.title) {
+    const clean = String(top.title).split(/\s[—–-]\s/)[0].trim();
+    if (clean) topUrl = `https://www.google.com/search?tbm=nws&q=${encodeURIComponent(clean)}`;
+  }
   return `<div class="cc-alert-banner" data-action="show-alerts" role="button" tabindex="0" style="margin:0 0 16px;padding:10px 14px;border-radius:8px;background:${bg};border:1px solid ${border};color:${text};font-size:12px;font-weight:600;display:flex;align-items:center;gap:14px;">
     <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:${hasCritical ? '#dc2626' : counts.high > 0 ? '#ea580c' : '#2563eb'};color:#fff;font-weight:800;flex-shrink:0;">!</span>
     <span style="flex-shrink:0;">${alerts.length} active alert${alerts.length === 1 ? '' : 's'}</span>

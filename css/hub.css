@@ -2751,10 +2751,12 @@ textarea.hub-input {
    min-width forces horizontal scroll below threshold — readable over
    compact-but-broken. */
 .cm-table-scroll > .hub-datatable { min-width: 680px; }
-/* Equipment has 11 columns — trimmed from 1040 → 960 so it fits at
-   ~1000px content rails (CM has a left nav + right-side padding that
-   eats ~340px on a 1440px viewport) without residual horizontal scroll. */
-.cm-table-scroll > .hub-datatable.cm-table-equipment { min-width: 960px; }
+/* Equipment has 12 columns post-Phase-2a (added Line Type enum). Bumped
+   960 → 1100px to fit the enum dropdowns' longest options ("Owned Facility",
+   "IT Equipment") without truncation. Horizontal scroll kicks in below
+   ~1100px viewport which is a narrower laptop than the CM panel supports
+   anyway. */
+.cm-table-scroll > .hub-datatable.cm-table-equipment { min-width: 1100px; }
 /* Overhead + VAS + Startup: 5-6 columns, moderate min */
 .cm-table-scroll > .hub-datatable.cm-table-overhead { min-width: 780px; }
 .cm-table-scroll > .hub-datatable.cm-table-vas      { min-width: 640px; }

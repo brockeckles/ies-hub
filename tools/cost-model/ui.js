@@ -3221,15 +3221,15 @@ All lines are editable after generation.">${(model.equipmentLines || []).length 
       <table class="hub-datatable hub-datatable--dense cm-table-equipment">
         <thead>
           <tr>
-            <th style="width:160px;">Equipment</th>
-            <th style="width:115px;" title="Peak-capacity classification (2026-04-22 Phase 2a).
+            <th style="width:150px;">Equipment</th>
+            <th style="width:135px;" title="Peak-capacity classification (2026-04-22 Phase 2a).
 Owned MHE — permanent fleet, sized to steady-state HC
 Rented MHE — short-term peak rental (Phase 2b+ seasonal opex)
 IT Equipment — RF/printers/AP, always owned, sized to peak HC
 Owned Facility — racking/dock/charging/office/security/conveyor">Line Type</th>
-            <th style="width:95px;">Category</th>
+            <th style="width:100px;">Category</th>
             <th class="hub-num" style="width:54px;">Qty</th>
-            <th style="width:85px;">Type</th>
+            <th style="width:100px;">Type</th>
             <th class="hub-num" style="width:80px;">$ / Mo</th>
             <th class="hub-num" style="width:88px;">Acq Cost</th>
             <th class="hub-num" style="width:82px;">Maint / Mo</th>
