@@ -10,13 +10,13 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import * as calc from './calc.js?v=20260422-xV';
+import * as calc from './calc.js?v=20260422-xY';
 import * as api from './api.js?v=20260422-xP';
 import * as scenarios from './calc.scenarios.js?v=20260421-wA';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
 import * as shiftPlannerCalc from './shift-planner.js?v=20260422-xX';
-import * as shiftPlannerUi from './shift-planner-ui.js?v=20260422-xX';
+import * as shiftPlannerUi from './shift-planner-ui.js?v=20260422-xY';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
 // disk but no longer imported; can be deleted in a future cleanup.
@@ -1810,8 +1810,17 @@ function renderShifts() {
     <div class="cm-section-header">
       <div>
         <div class="cm-section-title">Labor Factors</div>
-        <div class="cm-section-desc">Global labor economics (PTO, holidays, benefit load, overtime, shift premiums) + the <strong>position catalog</strong> that drives per-activity rates in the Labor section. Change a position's wage here and every labor line using that position updates automatically. Shift structure (shifts/day, hours/shift, workweek pattern) lives on <strong>Shift Planner</strong>.</div>
+        <div class="cm-section-desc">Global labor economics (PTO, holidays, benefit load, overtime, shift premiums) + the <strong>position catalog</strong> that drives per-activity rates in the Labor section. Change a position's wage here and every labor line using that position updates automatically.</div>
       </div>
+    </div>
+
+    <!-- Shift Structure — same card as on Shift Planning. Surfaced here too
+         because these fields are the most fundamental labor-calc inputs: they
+         define operating hrs/yr, which is the denominator for every FTE and
+         every annual_hours rollup. Editing in either location updates the
+         same model.shifts.* fields via data-field. (Brock 2026-04-22 EVE.) -->
+    <div class="mb-4">
+      ${shiftPlannerUi.renderStructureCard(model.shifts, { mount: 'labor' })}
     </div>
 
     <!-- Wage Factors (shift premiums, PTO, holiday hours) -->

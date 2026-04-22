@@ -15,6 +15,7 @@
  */
 
 import * as monthly from './calc.monthly.js?v=20260421-xE';
+import { deriveFunctionForLine as _deriveFunctionForLine } from './shift-planner.js?v=20260422-xX';
 
 // ============================================================
 // MARGIN / GROSS-UP
@@ -2842,6 +2843,43 @@ export function autoGenerateEquipment(state, opts = {}) {
   //   sit_down_forklift  $2,500/mo
   //   walkie_rider         $650/mo  (not auto-generated today, ready for future)
   const OWNED_SPARE = 1.05;
+
+  // 2026-04-22 EVE (Brock): the old `sig.steady / shiftsPerDay` divisor assumed
+  // FTE splits evenly across shifts. When the Shift Planner matrix skews (say
+  // picking 30/50/20), that flat assumption undersizes for the peak shift —
+  // S2 needs 50% of picking FTE on the floor at once, not 33%. Replace the
+  // divisor with a *peak-shift fraction* read from the matrix: the max of
+  // (row[s] / rowSum) across the functions that any line of this mhe_type
+  // serves. Legacy behavior preserved when:
+  //   - no allocation on the model (e.g., fresh projects, pre-Shift-Planner models)
+  //   - no labor line carries this mhe_type
+  //   - every relevant row is all-zero or Even (max == 1/shiftsPerDay → no change)
+  //
+  // In all fallbacks, peakShiftFraction returns 1 / shiftsPerDay so the
+  // computed qty matches the pre-2026-04-22-EVE behavior exactly.
+  const peakShiftFractionForMheType = (mheType) => {
+    const flatFraction = 1 / Math.max(1, shiftsPerDay);
+    const alloc = state.shiftAllocation;
+    if (!alloc || !alloc.matrix) return flatFraction;
+    const laborLines = Array.isArray(state.laborLines) ? state.laborLines : [];
+    let peakFraction = 0;
+    let matchedAny = false;
+    for (const line of laborLines) {
+      if (line.mhe_type !== mheType) continue;
+      const fn = _deriveFunctionForLine(line);
+      if (!fn) continue;
+      const row = alloc.matrix[fn];
+      if (!Array.isArray(row) || row.length === 0) continue;
+      const rowSum = row.reduce((a, b) => a + (Number(b) || 0), 0);
+      if (rowSum <= 0) continue;
+      const maxCell = Math.max(...row.map(v => Number(v) || 0));
+      const fraction = maxCell / rowSum;
+      if (fraction > peakFraction) peakFraction = fraction;
+      matchedAny = true;
+    }
+    return matchedAny && peakFraction > 0 ? peakFraction : flatFraction;
+  };
+
   const emitMheFamily = (config) => {
     // config: { mheType, ownedName, rentalName, ownedMonthly, ownedMaint,
     //          rentalMonthly, heuristic: { divisor, when: () => bool, minPeak } }
@@ -2849,24 +2887,34 @@ export function autoGenerateEquipment(state, opts = {}) {
 
     if (sig) {
       // MLV-backed path — split into owned + rental if a peak/steady delta exists
-      const steadyQty = Math.ceil((sig.steady / shiftsPerDay) * OWNED_SPARE);
-      const peakShiftFleet = Math.ceil(sig.peak / shiftsPerDay);
+      const peakFrac = peakShiftFractionForMheType(config.mheType);
+      const flatFrac = 1 / Math.max(1, shiftsPerDay);
+      const matrixSkew = peakFrac > flatFrac + 0.001; // true when matrix genuinely skews
+      const steadyQty = Math.ceil(sig.steady * peakFrac * OWNED_SPARE);
+      const peakShiftFleet = Math.ceil(sig.peak * peakFrac);
       const rentalQty = Math.max(0, peakShiftFleet - steadyQty);
 
       if (config.minPeak != null && sig.peak < config.minPeak) return;
 
-      const ownedDriver = `Steady ${sig.steady.toFixed(1)} FTE ÷ ${shiftsPerDay} shifts × 1.05 spare (MLV)`;
+      const shiftShareNote = matrixSkew
+        ? ` × ${(peakFrac * 100).toFixed(0)}% peak-shift share`
+        : ` ÷ ${shiftsPerDay} shifts`;
+      const ownedDriver = `Steady ${sig.steady.toFixed(1)} FTE${shiftShareNote} × 1.05 spare (MLV${matrixSkew ? ' + matrix' : ''})`;
       addEquip(config.ownedName, 'MHE', steadyQty,
         config.ownedMonthly, 0, config.ownedMaint, ownedDriver, 'lease');
 
       if (rentalQty > 0 && sig.seasonalMonths.length > 0) {
         const monthLabels = sig.seasonalMonths.map(n => ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][n-1]);
-        const rentalDriver = `Peak ${sig.peak.toFixed(1)} − steady ${sig.steady.toFixed(1)} = ${(sig.peak - sig.steady).toFixed(1)} FTE ÷ ${shiftsPerDay} = ${rentalQty} rental unit${rentalQty === 1 ? '' : 's'} (${monthLabels.join(', ')} per MLV)`;
+        const rentalShiftNote = matrixSkew
+          ? ` × ${(peakFrac * 100).toFixed(0)}% peak-shift share`
+          : ` ÷ ${shiftsPerDay}`;
+        const rentalDriver = `Peak ${sig.peak.toFixed(1)} − steady ${sig.steady.toFixed(1)} = ${(sig.peak - sig.steady).toFixed(1)} FTE${rentalShiftNote} = ${rentalQty} rental unit${rentalQty === 1 ? '' : 's'} (${monthLabels.join(', ')} per MLV${matrixSkew ? ' + matrix' : ''})`;
         addRentedMhe(config.rentalName, rentalQty, config.rentalMonthly, sig.seasonalMonths, rentalDriver);
       }
     } else if (config.heuristic && config.heuristic.when()) {
       // Heuristic fallback — owned-only at legacy 1.15 spare. No rental line
-      // without MLV signal (would be guessing).
+      // without MLV signal (would be guessing). Peak-shift matrix weighting
+      // only kicks in on the MLV-backed path; the heuristic is already coarse.
       const qty = Math.max(0, (totalDirectFtes / config.heuristic.divisor) * spareFactor);
       const driver = `${totalDirectFtes.toFixed(1)} direct FTE / ${config.heuristic.divisor} × 1.15 spare (heuristic)`;
       addEquip(config.ownedName, 'MHE', qty,

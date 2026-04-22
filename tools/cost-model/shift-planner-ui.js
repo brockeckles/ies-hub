@@ -372,18 +372,54 @@ function createEvenShiftAllocation(shiftsPerDay, hoursPerShift) {
  * Uses the generic data-field binder from ui.js (we removed the early-return
  * for shiftPlanning section), so no custom event wiring needed in this module.
  */
-function renderStructureCard(shiftsCfg) {
+/**
+ * Render the Shift Structure card. Exported so it can also be mounted on the
+ * Labor Factors page — Shift Structure is a labor-calc input (drives FTE math
+ * via operating hrs/yr) and a shift-planning input (drives matrix column count
+ * + heatmap grid), so it makes sense to surface in both places. Both mounts
+ * bind to the same `model.shifts.*` fields via data-field, so editing from
+ * either location updates the single source of truth; when the user navigates
+ * to the other section, it re-renders from fresh model state.
+ *
+ * @param {Object} shiftsCfg  — model.shifts
+ * @param {{ mount?: string }} [opts]  — mount='labor' shows a cross-page breadcrumb
+ * @returns {string} HTML — self-contained (scoped CSS travels with the card)
+ */
+export function renderStructureCard(shiftsCfg, opts) {
   const s = shiftsCfg || {};
+  const mount = opts?.mount || 'shift-planning';
   const shiftsPerDay = s.shiftsPerDay || 1;
   const hoursPerShift = s.hoursPerShift || 8;
   const daysPerWeek = s.daysPerWeek || 5;
   const weeksPerYear = s.weeksPerYear || 52;
   const workweekPattern = s.workweekPattern || '5x8';
   const operatingHoursPerYear = hoursPerShift * shiftsPerDay * daysPerWeek * weeksPerYear;
+  // Mount-specific breadcrumb — tells the user this exact card is also surfaced
+  // on the other page, and editing either ripples through since both bind to
+  // model.shifts.*. Subtle so it doesn't shout; informational only.
+  const crossRef = mount === 'labor'
+    ? `<span class="sp-structure__crossref" title="This card also appears on Shift Planning. Edit from either location — the underlying fields are the same.">↔ also on Shift Planning</span>`
+    : `<span class="sp-structure__crossref" title="This card also appears on Labor Factors. Edit from either location — the underlying fields are the same.">↔ also on Labor Factors</span>`;
   return `
+    <style>
+      /* Shift Structure card — self-contained so it renders correctly whether
+         it's mounted on Shift Planning or Labor Factors. Duplicates the rules
+         emitted by renderShiftPlanningSection; browsers handle the overlap. */
+      .sp-structure { padding: 16px; }
+      .sp-structure__header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; gap: 16px; flex-wrap: wrap; }
+      .sp-structure__summary { font-size: 12px; color: var(--ies-gray-600); padding: 4px 10px; background: var(--ies-gray-50); border: 1px solid var(--ies-gray-200); border-radius: 12px; font-variant-numeric: tabular-nums; }
+      .sp-structure__crossref { font-size: 11px; color: var(--ies-gray-500); font-style: italic; cursor: help; }
+      .sp-structure__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+      .sp-structure__grid .hub-field { min-width: 0; }
+      .sp-structure__workweek { grid-column: span 2; }
+      @media (max-width: 640px) { .sp-structure__workweek { grid-column: auto; } }
+    </style>
     <div class="hub-card sp-structure">
       <div class="sp-structure__header">
-        <div class="text-subtitle" style="margin:0;">Shift Structure</div>
+        <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;">
+          <div class="text-subtitle" style="margin:0;">Shift Structure</div>
+          ${crossRef}
+        </div>
         <span class="sp-structure__summary" title="Facility operating hours/year implied by these structure inputs (hours/shift × shifts/day × days/week × weeks/year).">
           ${operatingHoursPerYear.toLocaleString()} facility operating hrs/yr
         </span>
