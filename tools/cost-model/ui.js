@@ -10,8 +10,8 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import * as calc from './calc.js?v=20260421-xE';
-import * as api from './api.js?v=20260422-xO';
+import * as calc from './calc.js?v=20260422-xP';
+import * as api from './api.js?v=20260422-xP';
 import * as scenarios from './calc.scenarios.js?v=20260421-wA';
 import * as monthlyCalc from './calc.monthly.js?v=20260421-xE';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
@@ -676,6 +676,10 @@ function wireLandingEvents() {
         // existing labor lines by (activity, rate, employment_type) into
         // distinct positions and stamps position_id on each line.
         migrateLaborLinesToPositions(model);
+        // Brock 2026-04-22 — Phase 2a: back-fill EquipmentLine.line_type from
+        // legacy `category` field for projects saved before the peak-capacity
+        // rewrite. Idempotent — only touches lines missing the new field.
+        api.backfillEquipmentLineTypes(model);
         isDirty = false;
         userHasInteracted = false;
         activeSection = 'setup';
@@ -3218,6 +3222,11 @@ All lines are editable after generation.">${(model.equipmentLines || []).length 
         <thead>
           <tr>
             <th style="width:160px;">Equipment</th>
+            <th style="width:115px;" title="Peak-capacity classification (2026-04-22 Phase 2a).
+Owned MHE — permanent fleet, sized to steady-state HC
+Rented MHE — short-term peak rental (Phase 2b+ seasonal opex)
+IT Equipment — RF/printers/AP, always owned, sized to peak HC
+Owned Facility — racking/dock/charging/office/security/conveyor">Line Type</th>
             <th style="width:95px;">Category</th>
             <th class="hub-num" style="width:54px;">Qty</th>
             <th style="width:85px;">Type</th>
@@ -3241,6 +3250,14 @@ All lines are editable after generation.">${(model.equipmentLines || []).length 
             return `
             <tr>
               <td><input class="hub-input" value="${l.equipment_name || ''}" data-array="equipmentLines" data-idx="${i}" data-field="equipment_name" /></td>
+              <td>
+                <select class="hub-input" data-array="equipmentLines" data-idx="${i}" data-field="line_type" title="Peak-capacity classification. Drives financing UI (Phase 2b) and auto-gen split (Phase 2d).">
+                  <option value="owned_mhe"${l.line_type === 'owned_mhe' ? ' selected' : ''}>Owned MHE</option>
+                  <option value="rented_mhe"${l.line_type === 'rented_mhe' ? ' selected' : ''}>Rented MHE</option>
+                  <option value="it_equipment"${l.line_type === 'it_equipment' ? ' selected' : ''}>IT Equipment</option>
+                  <option value="owned_facility"${l.line_type === 'owned_facility' ? ' selected' : ''}>Owned Facility</option>
+                </select>
+              </td>
               <td>
                 <select class="hub-input" data-array="equipmentLines" data-idx="${i}" data-field="category">
                   ${['MHE', 'IT', 'Racking', 'Dock', 'Charging', 'Office', 'Security', 'Conveyor'].map(c =>
@@ -3283,22 +3300,22 @@ All lines are editable after generation.">${(model.equipmentLines || []).length 
             </tr>
           `;}).join('')}
           ${lineCount === 0 ? `
-            <tr><td colspan="11" style="text-align:center;color:var(--ies-gray-400);padding:24px;">No equipment lines yet. Click Auto-Generate Equipment or Add Equipment Line to start.</td></tr>
+            <tr><td colspan="12" style="text-align:center;color:var(--ies-gray-400);padding:24px;">No equipment lines yet. Click Auto-Generate Equipment or Add Equipment Line to start.</td></tr>
           ` : ''}
           ${breakdown.seasonal > 0 ? `
             <tr style="background:rgba(217,119,6,0.06);">
-              <td colspan="9" style="font-weight:600;color:var(--ies-orange,#d97706);">↳ Seasonal Uplift (short-term rental during peak)</td>
+              <td colspan="10" style="font-weight:600;color:var(--ies-orange,#d97706);">↳ Seasonal Uplift (short-term rental during peak)</td>
               <td class="hub-num" style="font-weight:600;color:var(--ies-orange,#d97706);">+${calc.formatCurrency(breakdown.seasonal)}</td>
               <td></td>
             </tr>
             <tr>
-              <td colspan="9" style="font-weight:500;color:var(--ies-gray-500);font-size:12px;">Baseline year-round</td>
+              <td colspan="10" style="font-weight:500;color:var(--ies-gray-500);font-size:12px;">Baseline year-round</td>
               <td class="hub-num" style="color:var(--ies-gray-500);font-size:12px;">${calc.formatCurrency(breakdown.baseline)}</td>
               <td></td>
             </tr>
           ` : ''}
-          <tr class="cm-total-row"><td colspan="9">Operating Cost${breakdown.seasonal > 0 ? ' (baseline + seasonal)' : ''}</td><td class="hub-num">${calc.formatCurrency(total)}</td><td></td></tr>
-          <tr><td colspan="9" style="font-weight:600; color: var(--ies-gray-500);">Capital Investment</td><td class="hub-num" style="font-weight:600;">${calc.formatCurrency(capital)}</td><td></td></tr>
+          <tr class="cm-total-row"><td colspan="10">Operating Cost${breakdown.seasonal > 0 ? ' (baseline + seasonal)' : ''}</td><td class="hub-num">${calc.formatCurrency(total)}</td><td></td></tr>
+          <tr><td colspan="10" style="font-weight:600; color: var(--ies-gray-500);">Capital Investment</td><td class="hub-num" style="font-weight:600;">${calc.formatCurrency(capital)}</td><td></td></tr>
         </tbody>
       </table>
     </div>
@@ -7289,7 +7306,9 @@ function handleAction(action, idx, btn) {
       break;
     }
     case 'add-equipment':
-      model.equipmentLines.push({ equipment_name: '', category: 'MHE', quantity: 1, acquisition_type: 'lease', monthly_cost: 0, acquisition_cost: 0, monthly_maintenance: 0, amort_years: 5, pricing_bucket: defaultBucketFor('equipment') });
+      // Phase 2a (2026-04-22): new blank rows default to owned_mhe since the
+      // default category is 'MHE'. Users re-classify via the Line Type column.
+      model.equipmentLines.push({ equipment_name: '', category: 'MHE', line_type: 'owned_mhe', quantity: 1, acquisition_type: 'lease', monthly_cost: 0, acquisition_cost: 0, monthly_maintenance: 0, amort_years: 5, pricing_bucket: defaultBucketFor('equipment') });
       break;
     case 'delete-equipment':
       model.equipmentLines.splice(idx, 1);

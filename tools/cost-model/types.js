@@ -100,6 +100,18 @@
  * @typedef {Object} EquipmentLine
  * @property {string} equipment_name
  * @property {string} [category] — 'MHE' | 'IT' | 'Racking' | 'Dock' | 'Charging' | 'Office' | 'Security' | 'Conveyor'
+ * @property {('owned_mhe'|'rented_mhe'|'it_equipment'|'owned_facility')} [line_type]
+ *   Peak-capacity classification (2026-04-22 Phase 2a). Derived from `category`
+ *   on legacy projects via adapter in api.js. Phases 2b+ surface financing UI
+ *   switches + auto-gen split on this value:
+ *     owned_mhe      — permanent MHE fleet sized to steady-state max-shift HC
+ *     rented_mhe     — short-term peak-only rental (opex, seasonal_months)
+ *     it_equipment   — RF/printers/AP/switches, always owned, sized to PEAK HC
+ *     owned_facility — racking/dock/charging/office/security/conveyor
+ *   Phase 2a is non-breaking — no math change, field is additive.
+ * @property {number[]} [seasonal_months] — 1-12. Used by rented_mhe lines in
+ *   Phase 2b+ to flag which months the rental is active. Derived from the MLV
+ *   peak-vs-steady delta when auto-gen fills this.
  * @property {number} quantity
  * @property {'lease'|'purchase'|'service'} [acquisition_type]
  * @property {number} [monthly_cost] — lease/service monthly

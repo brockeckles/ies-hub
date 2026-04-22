@@ -2582,6 +2582,16 @@ export function autoGenerateEquipment(state, opts = {}) {
   // Helper — accepts explicit financing type per the Asset Defaults Guidance
   // (2026-04-20). Legacy callers without `financing` still work via heuristic
   // fallback, but the auto-gen rules below now always pass the type.
+  //
+  // Phase 2a (2026-04-22): also stamps `line_type` on every generated row so
+  // newly auto-generated projects carry the peak-capacity classification from
+  // day 1. Mapping mirrors the back-fill adapter in api.js.
+  const categoryToLineType = (c) => {
+    const cat = String(c || '').trim().toLowerCase();
+    if (cat === 'mhe') return 'owned_mhe';
+    if (cat === 'it')  return 'it_equipment';
+    return 'owned_facility';
+  };
   const addEquip = (name, category, qty, monthlyCost = 0, acquisitionCost = 0, monthlyMaint = 0, drivenBy = '', financing = null, amortYears = 5) => {
     if (qty > 0) {
       // Heuristic fallback: if no financing type supplied, infer from cost shape.
@@ -2590,6 +2600,7 @@ export function autoGenerateEquipment(state, opts = {}) {
       lines.push({
         equipment_name: name,
         category: category || 'Other',
+        line_type: categoryToLineType(category),
         quantity: Math.ceil(qty),
         acquisition_type: acq_type,
         monthly_cost: monthlyCost,

@@ -98,6 +98,51 @@ export async function duplicateModel(id) {
   return createModel(data);
 }
 
+// ============================================================
+// MIGRATIONS / HYDRATION (pure, idempotent)
+// ============================================================
+
+/**
+ * Map a legacy `category` string to a `line_type` enum value. Pure.
+ * @param {string} category
+ * @returns {('owned_mhe'|'rented_mhe'|'it_equipment'|'owned_facility')}
+ */
+function categoryToLineType(category) {
+  const cat = String(category || '').trim().toLowerCase();
+  if (cat === 'mhe') return 'owned_mhe';
+  if (cat === 'it')  return 'it_equipment';
+  // 'Racking' | 'Dock' | 'Charging' | 'Office' | 'Security' | 'Conveyor' | 'Other'
+  return 'owned_facility';
+}
+
+/**
+ * Phase 2a back-fill: assign a `line_type` to every EquipmentLine that lacks
+ * one, deriving it from the legacy `category` field. Idempotent — lines that
+ * already carry a valid `line_type` are left untouched.
+ *
+ * No cost math changes from this migration — it adds a classification field
+ * that Phase 2b+ financing switches and 2d+ auto-gen splits key off of.
+ * Legacy projects have no rented_mhe lines, so the back-fill is conservative:
+ * all existing MHE rows become owned_mhe; the rental line type is only
+ * created fresh via auto-gen after Phase 2d ships.
+ *
+ * @param {Object} model — Cost Model project data
+ * @returns {number} count of lines that were updated (0 if all already typed)
+ */
+export function backfillEquipmentLineTypes(model) {
+  if (!model || !Array.isArray(model.equipmentLines)) return 0;
+  const VALID = new Set(['owned_mhe','rented_mhe','it_equipment','owned_facility']);
+  let n = 0;
+  for (const line of model.equipmentLines) {
+    if (!line) continue;
+    if (!VALID.has(line.line_type)) {
+      line.line_type = categoryToLineType(line.category);
+      n++;
+    }
+  }
+  return n;
+}
+
 /**
  * List all deals (for the Link-to-Deal selector in Setup).
  * Returns a light projection — id, deal_name, client_name — sorted by most-recent.
