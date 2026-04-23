@@ -535,7 +535,8 @@ function renderForgotPasswordModal(opts = {}) {
   overlay.id = 'hub-forgot-pw-overlay';
   overlay.className = 'hub-auth-overlay';
   overlay.style.background = 'rgba(10, 22, 40, 0.55)';
-  overlay.style.zIndex = '9998';
+  // Stacks above the persistent login overlay (z-index 9999 from .hub-auth-overlay).
+  overlay.style.zIndex = '10000';
   overlay.innerHTML = `
     <div class="hub-auth-card" role="dialog" aria-modal="true" aria-label="Reset password" style="text-align:left;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
@@ -673,7 +674,10 @@ function renderRecoverySetPasswordModal(opts = {}) {
   overlay.id = 'hub-recovery-pw-overlay';
   overlay.className = 'hub-auth-overlay';
   overlay.style.background = 'rgba(10, 22, 40, 0.70)';
-  overlay.style.zIndex = '9999';
+  // Must stack above both the persistent login overlay (9999) and the
+  // forgot-password modal (10000) — recovery can be reached directly from
+  // either state via cross-tab PASSWORD_RECOVERY delivery.
+  overlay.style.zIndex = '10001';
   overlay.innerHTML = `
     <div class="hub-auth-card" role="dialog" aria-modal="true" aria-label="Set a new password" style="text-align:left;">
       <div style="margin-bottom:14px;">
