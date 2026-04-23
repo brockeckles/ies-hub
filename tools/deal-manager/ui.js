@@ -11,7 +11,7 @@ import { state } from '../../shared/state.js?v=20260418-sL';
 import { renderToolHeader } from '../../shared/tool-frame.js?v=20260419-uE';
 import * as calc from './calc.js?v=20260418-sL';
 import * as api from './api.js?v=20260420-vE';
-import * as cmApi from '../cost-model/api.js?v=20260419-uH';
+import * as cmApi from '../cost-model/api.js?v=20260423-xQ';
 
 // ============================================================
 // STATE

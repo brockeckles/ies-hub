@@ -419,13 +419,16 @@ export async function persistMonthlyFacts(projectId, bundle) {
  * @returns {Promise<Object[]>}
  */
 export async function fetchMonthlyProjections(projectId) {
-  const { data, error } = await db.from('fact_pnl_monthly')
-    .select('*')
-    .eq('project_id', projectId)
-    .order('period_index', { ascending: true });
+  // Slice 3.9: fact_pnl_monthly is no longer exposed via the PostgREST API
+  // (advisor: materialized_view_in_api). Call the SECURITY DEFINER RPC
+  // `get_pnl_monthly` instead — it applies my/team/shared scoping by the
+  // parent cost_model_projects row and returns the ordered monthly rows.
+  const { data, error } = await db.rpc('get_pnl_monthly', { p_project_id: projectId });
   if (error) {
-    console.warn('[CM] fact_pnl_monthly read failed, falling back to raw tables:', error);
-    // Fallback: join cost_model_cashflow_monthly with ref_periods
+    console.warn('[CM] get_pnl_monthly RPC failed, falling back to raw tables:', error);
+    // Fallback: join cost_model_cashflow_monthly with ref_periods. The
+    // underlying tables already enforce Slice 3.3 owner/team/visibility RLS
+    // via the parent cost_model_projects row, so this path stays safe.
     const { data: cfData } = await db.from('cost_model_cashflow_monthly')
       .select('*, ref_periods(period_index, calendar_year, calendar_month, customer_fy_index, label, is_pre_go_live)')
       .eq('project_id', projectId);
