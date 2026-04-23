@@ -1,13 +1,19 @@
 /**
- * IES Hub v3 — Authentication (Phase 3, Slice 3.5)
+ * IES Hub v3 — Authentication (Phase 3, Slice 3.6)
  *
  * Supabase email/password only. Code-mode (`ies2026` / `ieshub`) is gone as
  * of Slice 3.5 — every user is a real auth.users row with a real uid. The
  * login-form component stays isolated so the Entra swap in Phase 7+ is a
  * component swap, not a session-layer rewrite.
  *
+ * Slice 3.6 adds the in-app password-change UX so the 4 pilots can rotate
+ * their temp passwords without a Supabase email roundtrip. `changePassword`
+ * re-authenticates with the current password before applying the update —
+ * this prevents an unattended-session attack (someone walks past an open
+ * laptop and silently reassigns the account).
+ *
  * Usage:
- *   import { auth } from './auth.js?v=20260423-y4';
+ *   import { auth } from './auth.js?v=20260423-y5';
  *
  *   await auth.bootstrapSession();            // call once before gate check
  *   if (!auth.isAuthenticated()) {
@@ -16,6 +22,8 @@
  *   auth.getUser();                            // → { id, email } | null
  *   auth.getMode();                            // → 'password' | null
  *   await auth.loginWithPassword(email, pw);   // → { ok, user?, error? }
+ *   await auth.changePassword(currentPw, newPw); // → { ok, error? }
+ *   auth.renderChangePasswordModal({ onClose });
  *   await auth.logout();
  *
  * @module shared/auth
@@ -143,6 +151,61 @@ async function loginWithPassword(email, password) {
     });
     if (error) return { ok: false, error: error.message || 'Sign-in failed' };
     return { ok: true, user: data?.user, session: data?.session };
+  } catch (err) {
+    return { ok: false, error: err?.message || 'Unknown error' };
+  }
+}
+
+/**
+ * Minimum acceptable length for a new password. Supabase's default policy
+ * is 6, we go a touch tighter — keeps temp-password rotations honest
+ * without making real passwords annoying to type.
+ */
+const MIN_PASSWORD_LENGTH = 8;
+
+/**
+ * Change the signed-in user's password. We reverify the current password
+ * via signInWithPassword first so an unattended session can't be silently
+ * re-keyed by a passerby — Supabase's updateUser does NOT require it on
+ * its own. On success the supabase-js client emits USER_UPDATED, which the
+ * onAuthStateChange listener in bootstrapSession picks up; we additionally
+ * emit `auth:password_changed` so audit/UI subscribers get a typed event.
+ *
+ * @param {string} currentPassword
+ * @param {string} newPassword
+ * @returns {Promise<{ok:boolean, error?:string}>}
+ */
+async function changePassword(currentPassword, newPassword) {
+  const u = getUser();
+  if (!u || !u.email) {
+    return { ok: false, error: 'Not signed in' };
+  }
+  if (!currentPassword) {
+    return { ok: false, error: 'Enter your current password' };
+  }
+  if (!newPassword || newPassword.length < MIN_PASSWORD_LENGTH) {
+    return { ok: false, error: `New password must be at least ${MIN_PASSWORD_LENGTH} characters` };
+  }
+  if (newPassword === currentPassword) {
+    return { ok: false, error: 'New password must be different from current password' };
+  }
+  try {
+    const client = db.getClient();
+    // Step 1: reverify current password.
+    const { error: reauthError } = await client.auth.signInWithPassword({
+      email: u.email,
+      password: currentPassword,
+    });
+    if (reauthError) {
+      return { ok: false, error: 'Current password is incorrect' };
+    }
+    // Step 2: apply new password to the active session.
+    const { error: updateError } = await client.auth.updateUser({ password: newPassword });
+    if (updateError) {
+      return { ok: false, error: updateError.message || 'Password update failed' };
+    }
+    bus.emit('auth:password_changed', { email: u.email, id: u.id });
+    return { ok: true };
   } catch (err) {
     return { ok: false, error: err?.message || 'Unknown error' };
   }
@@ -291,6 +354,157 @@ function renderLoginScreen(overlay, onSuccess) {
   setTimeout(() => emailInput.focus(), 100);
 }
 
+/**
+ * Render the change-password modal. Centered overlay with backdrop. Reuses
+ * the .hub-auth-* class vocabulary so visuals match the login card. Does
+ * not depend on any view router state — safe to call from anywhere once a
+ * user is signed in.
+ *
+ * @param {{onClose?: () => void, onSuccess?: () => void}} [opts]
+ */
+function renderChangePasswordModal(opts = {}) {
+  const { onClose, onSuccess } = opts;
+  // Single-instance guard — clicking the menu item twice doesn't stack modals.
+  const existing = document.getElementById('hub-change-pw-overlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'hub-change-pw-overlay';
+  overlay.className = 'hub-auth-overlay';
+  overlay.style.background = 'rgba(10, 22, 40, 0.55)';
+  overlay.innerHTML = `
+    <div class="hub-auth-card" role="dialog" aria-modal="true" aria-label="Change password" style="text-align:left;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <h2 class="hub-auth-title" style="margin:0;font-size:18px;">Change password</h2>
+        <button type="button" id="cp-close" aria-label="Close"
+          style="background:none;border:none;color:var(--ies-gray-500);font-size:22px;line-height:1;cursor:pointer;padding:0 4px;">×</button>
+      </div>
+      <p class="hub-auth-subtitle" style="margin-bottom:16px;text-align:left;">
+        Reverify your current password, then set a new one. Minimum 8 characters.
+      </p>
+
+      <div class="hub-auth-error" id="cp-error" role="alert"></div>
+
+      <div class="hub-auth-pane">
+        <label class="hub-auth-label" for="cp-current">Current password</label>
+        <input type="password" class="hub-input hub-auth-input" id="cp-current"
+          autocomplete="current-password" placeholder="Current password" />
+
+        <label class="hub-auth-label" for="cp-new" style="margin-top:10px;">New password</label>
+        <input type="password" class="hub-input hub-auth-input" id="cp-new"
+          autocomplete="new-password" placeholder="At least 8 characters" />
+
+        <label class="hub-auth-label" for="cp-confirm" style="margin-top:10px;">Confirm new password</label>
+        <input type="password" class="hub-input hub-auth-input" id="cp-confirm"
+          autocomplete="new-password" placeholder="Re-enter new password" />
+
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px;">
+          <button type="button" class="hub-btn hub-btn-secondary" id="cp-cancel">Cancel</button>
+          <button type="button" class="hub-btn hub-btn-primary" id="cp-submit">Change password</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const errorEl = /** @type {HTMLElement} */ (overlay.querySelector('#cp-error'));
+  const currentInput = /** @type {HTMLInputElement} */ (overlay.querySelector('#cp-current'));
+  const newInput = /** @type {HTMLInputElement} */ (overlay.querySelector('#cp-new'));
+  const confirmInput = /** @type {HTMLInputElement} */ (overlay.querySelector('#cp-confirm'));
+  const submitBtn = /** @type {HTMLButtonElement} */ (overlay.querySelector('#cp-submit'));
+  const cancelBtn = /** @type {HTMLButtonElement} */ (overlay.querySelector('#cp-cancel'));
+  const closeBtn = /** @type {HTMLButtonElement} */ (overlay.querySelector('#cp-close'));
+
+  function showError(msg) {
+    errorEl.textContent = msg;
+    errorEl.classList.add('visible');
+  }
+  function clearError() {
+    errorEl.classList.remove('visible');
+    errorEl.textContent = '';
+  }
+  function close() {
+    overlay.remove();
+    document.removeEventListener('keydown', onKey);
+    if (typeof onClose === 'function') onClose();
+  }
+  function onKey(e) {
+    if (e.key === 'Escape') close();
+  }
+  document.addEventListener('keydown', onKey);
+
+  // Click outside the card → dismiss.
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) close();
+  });
+  cancelBtn.addEventListener('click', close);
+  closeBtn.addEventListener('click', close);
+
+  async function attemptChange() {
+    clearError();
+    const current = currentInput.value;
+    const next = newInput.value;
+    const confirm = confirmInput.value;
+    if (!current || !next || !confirm) {
+      showError('Fill in all three fields');
+      return;
+    }
+    if (next !== confirm) {
+      showError('New password and confirmation do not match');
+      confirmInput.focus();
+      return;
+    }
+    submitBtn.disabled = true;
+    cancelBtn.disabled = true;
+    const orig = submitBtn.textContent;
+    submitBtn.textContent = 'Changing…';
+    try {
+      const res = await changePassword(current, next);
+      if (res.ok) {
+        // Briefly show success then dismiss.
+        errorEl.textContent = 'Password changed.';
+        errorEl.style.color = 'var(--ies-blue)';
+        errorEl.classList.add('visible');
+        setTimeout(() => {
+          if (typeof onSuccess === 'function') onSuccess();
+          close();
+        }, 700);
+      } else {
+        showError(res.error || 'Password change failed');
+        // Clear new-pw fields on failure so the user retypes them — the
+        // current-pw value usually stays correct so we leave it alone.
+        if (/current password/i.test(res.error || '')) {
+          currentInput.value = '';
+          currentInput.focus();
+        } else {
+          newInput.value = '';
+          confirmInput.value = '';
+          newInput.focus();
+        }
+        submitBtn.disabled = false;
+        cancelBtn.disabled = false;
+        submitBtn.textContent = orig;
+      }
+    } catch (err) {
+      showError(err?.message || 'Unknown error');
+      submitBtn.disabled = false;
+      cancelBtn.disabled = false;
+      submitBtn.textContent = orig;
+    }
+  }
+
+  submitBtn.addEventListener('click', attemptChange);
+  // Enter on any input submits.
+  for (const el of [currentInput, newInput, confirmInput]) {
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') attemptChange();
+      else clearError();
+    });
+  }
+
+  setTimeout(() => currentInput.focus(), 50);
+}
+
 export const auth = {
   // Session lifecycle
   bootstrapSession,
@@ -301,8 +515,10 @@ export const auth = {
 
   // Auth actions
   loginWithPassword,
+  changePassword,
   logout,
 
   // UI
   renderLoginScreen,
+  renderChangePasswordModal,
 };

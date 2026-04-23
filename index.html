@@ -179,14 +179,17 @@
           <!-- rendered by initBreadcrumb() on nav:changed -->
         </nav>
         <div class="hub-header-actions" style="display:flex;align-items:center;gap:6px;">
-          <!-- User chip / sign-out (Slice 3.2). Text is populated by initHeaderActions. -->
-          <button type="button" class="hub-user-chip hidden" id="hub-btn-signout" title="Sign out" aria-label="Sign out">
+          <!-- User chip (Slice 3.2 → 3.6). Click opens an account menu with
+               Change password + Sign out. Text is populated by renderUserChip. -->
+          <button type="button" class="hub-user-chip hidden" id="hub-btn-user" title="Account" aria-label="Account menu" aria-haspopup="menu" aria-expanded="false">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-              <polyline points="16 17 21 12 16 7"/>
-              <line x1="21" y1="12" x2="9" y2="12"/>
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
             </svg>
             <span class="hub-user-chip-label" id="hub-user-chip-label">Signed in</span>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="opacity:.7;">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
           </button>
           <button type="button" id="hub-btn-tour" title="Start guided tour" aria-label="Start guided tour"
             style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid var(--ies-gray-200);background:#fff;border-radius:8px;color:var(--ies-gray-600);cursor:pointer;">
@@ -212,7 +215,7 @@
 
   <!-- App Bootstrap -->
   <script type="module">
-    import { auth } from './shared/auth.js?v=20260423-y4';
+    import { auth } from './shared/auth.js?v=20260423-y5';
     import { router } from './shared/router.js?v=20260418-sK';
     import { search } from './shared/search.js?v=20260418-sK';
     import { bus } from './shared/event-bus.js?v=20260418-sK';
@@ -275,21 +278,19 @@
     });
 
     function renderUserChip() {
-      const chip = document.getElementById('hub-btn-signout');
+      const chip = document.getElementById('hub-btn-user');
       const label = document.getElementById('hub-user-chip-label');
       if (!chip || !label) return;
-      const mode = auth.getMode();
-      if (mode === 'password') {
+      // Slice 3.5 made password the only mode; null means signed-out.
+      if (auth.getMode() === 'password') {
         const u = auth.getUser();
         label.textContent = u?.email || 'Signed in';
-        chip.title = `Signed in as ${u?.email || 'user'} — click to sign out`;
-        chip.classList.remove('hidden');
-      } else if (mode === 'code') {
-        label.textContent = 'Access code';
-        chip.title = 'Access-code session — click to sign out';
+        chip.title = `Signed in as ${u?.email || 'user'}`;
         chip.classList.remove('hidden');
       } else {
         chip.classList.add('hidden');
+        // Make sure a stale popover doesn't survive logout.
+        document.getElementById('hub-user-popover')?.remove();
       }
     }
 
@@ -622,9 +623,58 @@
       });
       document.getElementById('hub-btn-help')?.addEventListener('click', toggleHelpPopover);
 
-      // Sign-out chip (Slice 3.2). Single click signs out of whichever
-      // path is active (supabase or legacy code) and re-renders login.
-      document.getElementById('hub-btn-signout')?.addEventListener('click', async () => {
+      // Account chip (Slice 3.6). Click toggles a small popover with
+      // Change password + Sign out. Opening the popover does not commit
+      // any action — the user has to pick one or click outside.
+      document.getElementById('hub-btn-user')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleUserPopover();
+      });
+    }
+
+    function toggleUserPopover() {
+      const existing = document.getElementById('hub-user-popover');
+      const chip = document.getElementById('hub-btn-user');
+      if (existing) {
+        existing.remove();
+        chip?.setAttribute('aria-expanded', 'false');
+        return;
+      }
+      const el = document.createElement('div');
+      el.id = 'hub-user-popover';
+      el.setAttribute('role', 'menu');
+      el.style.cssText = 'position:fixed;top:48px;right:24px;z-index:9997;min-width:200px;background:#fff;border:1px solid var(--ies-gray-200);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.12);padding:6px;font-size:13px;';
+      el.innerHTML = `
+        <button type="button" role="menuitem" id="hub-menu-changepw"
+          style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:8px 10px;border:none;background:none;border-radius:6px;font-size:13px;font-weight:600;color:var(--ies-navy);cursor:pointer;font-family:inherit;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Change password…
+        </button>
+        <div style="height:1px;background:var(--ies-gray-200);margin:4px 6px;"></div>
+        <button type="button" role="menuitem" id="hub-menu-signout"
+          style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:8px 10px;border:none;background:none;border-radius:6px;font-size:13px;font-weight:600;color:var(--ies-navy);cursor:pointer;font-family:inherit;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          Sign out
+        </button>
+      `;
+      // Hover styles via JS — keeps css/hub.css free of one-offs.
+      for (const btn of el.querySelectorAll('button')) {
+        btn.addEventListener('mouseenter', () => { btn.style.background = 'var(--ies-gray-100, #f1f3f5)'; });
+        btn.addEventListener('mouseleave', () => { btn.style.background = 'none'; });
+      }
+      document.body.appendChild(el);
+      chip?.setAttribute('aria-expanded', 'true');
+
+      el.querySelector('#hub-menu-changepw')?.addEventListener('click', () => {
+        el.remove();
+        chip?.setAttribute('aria-expanded', 'false');
+        auth.renderChangePasswordModal({
+          onSuccess: () => showToast('Password changed', 'success'),
+        });
+      });
+      el.querySelector('#hub-menu-signout')?.addEventListener('click', async () => {
+        el.remove();
+        chip?.setAttribute('aria-expanded', 'false');
         try {
           await auth.logout();
           showToast('Signed out', 'info');
@@ -632,6 +682,18 @@
           showToast('Sign-out failed: ' + (err?.message || err), 'error');
         }
       });
+
+      // Dismiss on outside click.
+      setTimeout(() => {
+        const off = (evt) => {
+          if (!el.contains(evt.target) && !evt.target.closest('#hub-btn-user')) {
+            el.remove();
+            chip?.setAttribute('aria-expanded', 'false');
+            document.removeEventListener('click', off);
+          }
+        };
+        document.addEventListener('click', off);
+      }, 10);
     }
 
     function reloadCurrentRoute() {
