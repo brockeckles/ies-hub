@@ -16,7 +16,7 @@
  * event, surface a dedicated set-new-password modal, and call updateUser.
  *
  * Usage:
- *   import { auth } from './auth.js?v=20260423-y6';
+ *   import { auth } from './auth.js?v=20260423-y7';
  *
  *   await auth.bootstrapSession();            // call once before gate check
  *   if (!auth.isAuthenticated()) {
