@@ -215,7 +215,7 @@
 
   <!-- App Bootstrap -->
   <script type="module">
-    import { auth } from './shared/auth.js?v=20260423-y5';
+    import { auth } from './shared/auth.js?v=20260423-y6';
     import { router } from './shared/router.js?v=20260418-sK';
     import { search } from './shared/search.js?v=20260418-sK';
     import { bus } from './shared/event-bus.js?v=20260418-sK';
@@ -257,7 +257,34 @@
     // Top-level await is fine inside type="module" scripts.
     await auth.bootstrapSession();
 
-    if (auth.isAuthenticated()) {
+    // Shared helper used by both the post-bootstrap check below and the
+    // bus.on('auth:recovery_started') handler — keeps the two paths from
+    // diverging if a recovery event fires before/after bus listeners
+    // attach (supabase-js dispatches PASSWORD_RECOVERY asynchronously,
+    // but we don't want to rely on the microtask timing lining up).
+    function openRecoveryModal() {
+      hubApp.classList.add('hidden');
+      authOverlay.classList.remove('hidden');
+      authOverlay.style.opacity = '1';
+      if (!authOverlay.querySelector('.hub-auth-card')) {
+        auth.renderLoginScreen(authOverlay, bootApp);
+      }
+      auth.renderRecoverySetPasswordModal({
+        onSuccess: () => {
+          authOverlay.classList.add('hidden');
+          showToast('Password updated. You are signed in.', 'success');
+          bootApp();
+        },
+      });
+    }
+
+    if (auth.isInRecovery()) {
+      // Recovery token landed in the URL — fire the modal directly.
+      // auth.renderLoginScreen is painted first so cancelling drops the
+      // user onto the login card, not a blank page.
+      auth.renderLoginScreen(authOverlay, bootApp);
+      openRecoveryModal();
+    } else if (auth.isAuthenticated()) {
       authOverlay.classList.add('hidden');
       bootApp();
     } else {
@@ -275,6 +302,17 @@
       authOverlay.classList.remove('hidden');
       authOverlay.style.opacity = '1';
       auth.renderLoginScreen(authOverlay, bootApp);
+    });
+
+    // Slice 3.10 — recovery link was clicked mid-session (not at boot).
+    // Post-bootstrap check above handles the boot-time case; this catches
+    // the rarer "user had app open, clicked reset link in another tab"
+    // pattern where supabase-js cross-tab session sync delivers the
+    // event after the gate has already run.
+    bus.on('auth:recovery_started', () => {
+      // Guard against double-open: if the modal is already up, skip.
+      if (document.getElementById('hub-recovery-pw-overlay')) return;
+      openRecoveryModal();
     });
 
     function renderUserChip() {

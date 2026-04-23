@@ -8,7 +8,7 @@
  * code-mode entirely).
  *
  * Usage:
- *   import { recordAudit } from '../../shared/audit.js?v=20260423-y4';
+ *   import { recordAudit } from '../../shared/audit.js?v=20260423-y5';
  *
  *   await recordAudit({
  *     table: 'most_analyses',
@@ -28,7 +28,7 @@
  */
 
 import { db } from './supabase.js?v=20260423-y1';
-import { auth } from './auth.js?v=20260423-y5';
+import { auth } from './auth.js?v=20260423-y6';
 
 /**
  * Get-or-create the per-browser session identifier.

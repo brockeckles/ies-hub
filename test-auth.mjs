@@ -45,6 +45,10 @@ function makeFakeSupabase() {
   // Stored passwords by email — seeded by signInWithPassword on first use
   // (the test "creates" the user implicitly by signing in successfully).
   const passwords = new Map();
+  // Slice 3.10 — track resetPasswordForEmail invocations so tests can
+  // assert what was sent without subscribing to the real network.
+  const resetCalls = [];
+  let nextResetError = null;
   function emit(evt, s) { for (const fn of listeners) fn(evt, s); }
   return {
     createClient(_url, _key, opts) {
@@ -52,6 +56,14 @@ function makeFakeSupabase() {
         _opts: opts,
         auth: {
           async getSession() { return { data: { session }, error: null }; },
+          async resetPasswordForEmail(email, reqOpts) {
+            resetCalls.push({ email, opts: reqOpts || null });
+            if (nextResetError) {
+              const err = nextResetError; nextResetError = null;
+              return { data: null, error: err };
+            }
+            return { data: {}, error: null };
+          },
           async signInWithPassword({ email, password }) {
             // The literal string 'bad' is a hard-fail for legacy tests that
             // didn't model the password store. Otherwise: if a stored
@@ -103,7 +115,25 @@ function makeFakeSupabase() {
           __emit: emit,
           __setPassword(email, password) { passwords.set(email, password); },
           __getPassword(email) { return passwords.get(email); },
-          __reset() { passwords.clear(); session = null; },
+          __getResetCalls() { return resetCalls.slice(); },
+          __setNextResetError(err) { nextResetError = err; },
+          __fireRecovery(email) {
+            // Simulate what supabase-js does when the recovery token in the
+            // URL has been consumed — set a short-lived session and fire
+            // PASSWORD_RECOVERY so the auth module's listener sees it.
+            session = {
+              access_token: 'recov-tok-' + email,
+              refresh_token: 'recov-rt-' + email,
+              user: { id: 'uid-' + email, email },
+            };
+            emit('PASSWORD_RECOVERY', session);
+          },
+          __reset() {
+            passwords.clear();
+            resetCalls.length = 0;
+            nextResetError = null;
+            session = null;
+          },
         },
         from() { return {}; },
       };
@@ -138,7 +168,7 @@ async function test(name, fn) {
 }
 const assert = (cond, msg = 'assertion failed') => { if (!cond) throw new Error(msg); };
 
-const { auth } = await import('./shared/auth.js?v=20260423-y5');
+const { auth } = await import('./shared/auth.js?v=20260423-y6');
 const { bus } = await import('./shared/event-bus.js?v=20260418-sK');
 
 // ─── Tests ──────────────────────────────────────────────────────────────
@@ -292,6 +322,141 @@ await test('changePassword: success emits auth:password_changed event', async ()
   assert(res.ok === true, 'change must succeed');
   assert(payload && payload.email === 'cp6@gxo.com', 'event must carry the email');
   assert(payload && /^uid-/.test(payload.id || ''), 'event must carry the uid');
+});
+
+// ─── Slice 3.10: password reset + recovery ──────────────────────────────
+
+// Helper: grab the raw supabase client so we can poke the test-only
+// __* hooks without leaking them into the auth module surface.
+async function rawClient() {
+  const { db } = await import('./shared/supabase.js?v=20260423-y1');
+  return db.getClient();
+}
+
+await test('recovery API surface exists', async () => {
+  assert(typeof auth.requestPasswordReset === 'function', 'requestPasswordReset must exist');
+  assert(typeof auth.completePasswordRecovery === 'function', 'completePasswordRecovery must exist');
+  assert(typeof auth.renderForgotPasswordModal === 'function', 'renderForgotPasswordModal must exist');
+  assert(typeof auth.renderRecoverySetPasswordModal === 'function', 'renderRecoverySetPasswordModal must exist');
+  assert(typeof auth.isInRecovery === 'function', 'isInRecovery must exist');
+});
+
+await test('requestPasswordReset: rejects empty email', async () => {
+  await reset();
+  await auth.bootstrapSession();
+  const res = await auth.requestPasswordReset('');
+  assert(res.ok === false, 'must fail with empty email');
+  assert(/email/i.test(res.error || ''), 'error must reference email');
+});
+
+await test('requestPasswordReset: rejects malformed email', async () => {
+  await reset();
+  await auth.bootstrapSession();
+  const res = await auth.requestPasswordReset('not-an-email');
+  assert(res.ok === false, 'must fail with malformed email');
+  assert(/valid email/i.test(res.error || ''), 'error must mention valid email');
+});
+
+await test('requestPasswordReset: success returns ok and calls supabase', async () => {
+  await reset();
+  await auth.bootstrapSession();
+  const c = await rawClient();
+  const before = c.auth.__getResetCalls().length;
+  const res = await auth.requestPasswordReset('pilot@gxo.com');
+  assert(res.ok === true, 'must succeed');
+  const after = c.auth.__getResetCalls();
+  assert(after.length === before + 1, 'must invoke supabase once');
+  assert(after[after.length - 1].email === 'pilot@gxo.com', 'email must match');
+});
+
+await test('requestPasswordReset: trims email before sending', async () => {
+  await reset();
+  await auth.bootstrapSession();
+  const c = await rawClient();
+  await auth.requestPasswordReset('  spaced@gxo.com  ');
+  const calls = c.auth.__getResetCalls();
+  assert(calls[calls.length - 1].email === 'spaced@gxo.com', 'email must be trimmed');
+});
+
+await test('requestPasswordReset: surfaces supabase errors (rate limit)', async () => {
+  await reset();
+  await auth.bootstrapSession();
+  const c = await rawClient();
+  c.auth.__setNextResetError({ message: 'For security purposes, you can only request this once every 60 seconds' });
+  const res = await auth.requestPasswordReset('rate@gxo.com');
+  assert(res.ok === false, 'must fail');
+  assert(/60 seconds/i.test(res.error || ''), 'error must pass through rate-limit message');
+});
+
+await test('PASSWORD_RECOVERY event: sets recovery mode + emits bus event', async () => {
+  await reset();
+  await auth.bootstrapSession();
+  let recoveryPayload = null;
+  const off = bus.on('auth:recovery_started', (p) => { recoveryPayload = p; });
+  const c = await rawClient();
+  c.auth.__fireRecovery('recover@gxo.com');
+  if (typeof off === 'function') off();
+  assert(auth.isInRecovery() === true, 'recovery flag must be set');
+  assert(auth.getMode() === 'recovery', "mode must be 'recovery'");
+  assert(auth.isAuthenticated() === false, 'recovery session is NOT authenticated');
+  assert(recoveryPayload && recoveryPayload.email === 'recover@gxo.com', 'bus payload must carry email');
+  assert(recoveryPayload && /^uid-/.test(recoveryPayload.id || ''), 'bus payload must carry uid');
+});
+
+await test('completePasswordRecovery: rejects when not in recovery', async () => {
+  await reset();
+  await auth.bootstrapSession();
+  const res = await auth.completePasswordRecovery('newSecret999');
+  assert(res.ok === false, 'must fail outside recovery');
+  assert(/recovery/i.test(res.error || ''), 'error must mention recovery');
+});
+
+await test('completePasswordRecovery: rejects too-short password', async () => {
+  await reset();
+  await auth.bootstrapSession();
+  const c = await rawClient();
+  c.auth.__fireRecovery('short@gxo.com');
+  const res = await auth.completePasswordRecovery('short');
+  assert(res.ok === false, 'must fail');
+  assert(/8 character/i.test(res.error || ''), 'error must mention 8-char minimum');
+  // Still in recovery after validation failure.
+  assert(auth.isInRecovery() === true, 'validation failure must not drop recovery state');
+});
+
+await test('completePasswordRecovery: success updates password, clears recovery, emits event', async () => {
+  await reset();
+  await auth.bootstrapSession();
+  const c = await rawClient();
+  // Pre-seed an old password so we can prove the update actually takes.
+  c.auth.__setPassword('revive@gxo.com', 'oldTempPw!');
+  c.auth.__fireRecovery('revive@gxo.com');
+  let payload = null;
+  const off = bus.on('auth:password_changed', (p) => { payload = p; });
+  const res = await auth.completePasswordRecovery('brandNewPw123');
+  if (typeof off === 'function') off();
+  assert(res.ok === true, 'recovery completion must succeed');
+  assert(auth.isInRecovery() === false, 'recovery flag must clear on success');
+  assert(c.auth.__getPassword('revive@gxo.com') === 'brandNewPw123', 'stored password must update');
+  assert(payload && payload.email === 'revive@gxo.com', 'auth:password_changed must fire with email');
+  // And the old password is dead — prove end-to-end.
+  await auth.logout();
+  const old = await auth.loginWithPassword('revive@gxo.com', 'oldTempPw!');
+  assert(old.ok === false, 'old temp password must no longer work');
+  const fresh = await auth.loginWithPassword('revive@gxo.com', 'brandNewPw123');
+  assert(fresh.ok === true, 'new password must sign user back in');
+});
+
+await test('recovery-then-logout: cancel button path clears recovery state', async () => {
+  await reset();
+  await auth.bootstrapSession();
+  const c = await rawClient();
+  c.auth.__fireRecovery('cancel@gxo.com');
+  assert(auth.isInRecovery() === true, 'recovery should be active');
+  // Simulate user hitting "Sign out" on the recovery modal.
+  await auth.logout();
+  assert(auth.isInRecovery() === false, 'logout must clear recovery state');
+  assert(auth.isAuthenticated() === false, 'must be unauthenticated');
+  assert(auth.getMode() === null, 'mode must be null after logout');
 });
 
 // ─── Summary ────────────────────────────────────────────────────────────
