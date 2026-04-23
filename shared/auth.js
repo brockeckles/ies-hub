@@ -15,10 +15,12 @@
  * via Supabase auth logs — multiple scanner IPs consumed the token, then
  * Brock's legitimate click landed on a 403 "token expired".
  *
- * Slice 3.11 replaces the link with a 6-digit OTP code. User enters email,
- * gets an email with the code in the body, types it into the app. Nothing
- * for a scanner to click; the code can't be "consumed" by being read. The
- * legacy link still works (fallback for personal / non-corporate accounts).
+ * Slice 3.11 replaces the link with a numeric OTP code (Supabase default
+ * is 6 digits, projects with stricter policies may issue 8). User enters
+ * email, gets an email with the code in the body, types it into the app.
+ * Nothing for a scanner to click; the code can't be "consumed" by being
+ * read. The legacy link still works (fallback for personal / non-corporate
+ * accounts).
  *
  * Flow:
  *   email → requestPasswordReset → email with code arrives →
@@ -27,7 +29,7 @@
  *   completePasswordRecovery → signed in.
  *
  * Usage:
- *   import { auth } from './auth.js?v=20260423-y8';
+ *   import { auth } from './auth.js?v=20260423-y9';
  *
  *   await auth.bootstrapSession();            // call once before gate check
  *   if (!auth.isAuthenticated()) {
@@ -627,7 +629,7 @@ function renderForgotPasswordModal(opts = {}) {
       <!-- Step 1: email -->
       <div class="hub-auth-pane" id="fp-email-pane">
         <p class="hub-auth-subtitle" style="margin:0 0 14px 0;text-align:left;">
-          Enter the email you use to sign in. We'll send a 6-digit verification
+          Enter the email you use to sign in. We'll email you a verification
           code — enter it on the next screen to set a new password.
         </p>
 
@@ -646,14 +648,14 @@ function renderForgotPasswordModal(opts = {}) {
       <div class="hub-auth-pane" id="fp-code-pane" style="display:none;">
         <p class="hub-auth-subtitle" style="margin:0 0 14px 0;text-align:left;">
           If an account exists for <strong id="fp-email-echo"></strong> we just
-          sent a 6-digit code. Enter it below. (Check spam too — corporate
+          sent a verification code. Enter it below. (Check spam too — corporate
           filters sometimes delay it by a minute or two.)
         </p>
 
         <label class="hub-auth-label" for="fp-code">Verification code</label>
         <input type="text" class="hub-input hub-auth-input" id="fp-code"
-          autocomplete="one-time-code" inputmode="numeric" pattern="\\d{6}"
-          maxlength="8" placeholder="123456"
+          autocomplete="one-time-code" inputmode="numeric" pattern="\\d{4,10}"
+          maxlength="10" placeholder="Enter the code from your email"
           style="font-size:18px;letter-spacing:3px;text-align:center;" />
 
         <div style="display:flex;gap:8px;justify-content:space-between;align-items:center;margin-top:18px;">
