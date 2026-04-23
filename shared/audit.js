@@ -88,7 +88,11 @@ export async function recordAudit(entry) {
   try {
     if (!entry || !entry.table || !entry.action) return;
     const who = currentIdentity();
-    await db.insert('audit_log', {
+    // IMPORTANT: do NOT chain .select() here. Under Slice 3.3 RLS (tightened
+    // 2026-04-23) anon has no SELECT policy on audit_log — admin-only — so a
+    // `return=representation` insert would fail. A bare .insert() uses
+    // Prefer: return=minimal and works for both anon (code-mode) and authed.
+    const { error } = await db.from('audit_log').insert({
       entity_table: entry.table,
       entity_id: entry.id != null ? String(entry.id) : null,
       action: entry.action,
@@ -98,6 +102,7 @@ export async function recordAudit(entry) {
       user_email: who.email,      // display mirror only
       user_agent: typeof navigator !== 'undefined' ? (navigator.userAgent || '').slice(0, 200) : null,
     });
+    if (error) throw error;
   } catch (err) {
     // Audit writes are best-effort. Log and move on so the user's save
     // doesn't get blocked by network/RLS failures.
