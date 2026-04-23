@@ -28,7 +28,7 @@
  */
 
 import { db } from './supabase.js?v=20260423-y1';
-import { auth } from './auth.js?v=20260423-y7';
+import { auth } from './auth.js?v=20260423-y8';
 
 /**
  * Get-or-create the per-browser session identifier.

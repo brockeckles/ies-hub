@@ -1,5 +1,5 @@
 /**
- * IES Hub v3 — Authentication (Phase 3, Slice 3.10)
+ * IES Hub v3 — Authentication (Phase 3, Slice 3.11)
  *
  * Supabase email/password only. Code-mode (`ies2026` / `ieshub`) is gone as
  * of Slice 3.5 — every user is a real auth.users row with a real uid. The
@@ -8,15 +8,26 @@
  *
  * Slice 3.6 added in-app password rotation (changePassword reverify-then-update).
  *
- * Slice 3.10 closes the "locked-out pilot" gap: a pilot who forgets their
- * password and signs out can now recover themselves via email. Supabase sends
- * a time-limited recovery link to the user's inbox; clicking it lands back at
- * the hub with a short-lived recovery session (the supabase-js client auto-
- * detects the token in the URL and fires PASSWORD_RECOVERY). We catch that
- * event, surface a dedicated set-new-password modal, and call updateUser.
+ * Slice 3.10 shipped email-link password recovery. DEAD on corporate inboxes:
+ * Microsoft 365 Safe Links (and similar Proofpoint/Mimecast gateways) pre-
+ * clicks every URL in inbound mail at delivery time, burning Supabase's
+ * one-time recovery token before the human sees the email. Verified live
+ * via Supabase auth logs — multiple scanner IPs consumed the token, then
+ * Brock's legitimate click landed on a 403 "token expired".
+ *
+ * Slice 3.11 replaces the link with a 6-digit OTP code. User enters email,
+ * gets an email with the code in the body, types it into the app. Nothing
+ * for a scanner to click; the code can't be "consumed" by being read. The
+ * legacy link still works (fallback for personal / non-corporate accounts).
+ *
+ * Flow:
+ *   email → requestPasswordReset → email with code arrives →
+ *   code → verifyRecoveryOtp → PASSWORD_RECOVERY fires →
+ *   existing recovery-set-password modal opens →
+ *   completePasswordRecovery → signed in.
  *
  * Usage:
- *   import { auth } from './auth.js?v=20260423-y7';
+ *   import { auth } from './auth.js?v=20260423-y8';
  *
  *   await auth.bootstrapSession();            // call once before gate check
  *   if (!auth.isAuthenticated()) {
@@ -26,6 +37,7 @@
  *   auth.getMode();                            // → 'password' | 'recovery' | null
  *   await auth.loginWithPassword(email, pw);   // → { ok, user?, error? }
  *   await auth.requestPasswordReset(email);    // → { ok, error? }
+ *   await auth.verifyRecoveryOtp(email, code); // → { ok, user?, error? }
  *   await auth.completePasswordRecovery(newPw); // → { ok, error? }
  *   await auth.changePassword(currentPw, newPw); // → { ok, error? }
  *   auth.renderChangePasswordModal({ onClose });
@@ -323,6 +335,62 @@ async function requestPasswordReset(email, opts = {}) {
 }
 
 /**
+ * Verify a 6-digit recovery OTP (Slice 3.11 — scanner-proof alternative to
+ * the link flow). Microsoft 365 Safe Links and similar corporate email
+ * security gateways pre-click links in inbound email, burning Supabase's
+ * one-time recovery token before the human sees it. A 6-digit code in the
+ * email body can't be "clicked" by a scanner — the user copy-pastes it
+ * into the app and we verify server-side.
+ *
+ * On success, supabase-js establishes a recovery session and emits
+ * PASSWORD_RECOVERY via onAuthStateChange — that's caught by
+ * bootstrapSession's listener and flipped into _recoveryMode, which the
+ * app uses to open the set-new-password modal. No code change needed
+ * downstream: the OTP path joins the same PASSWORD_RECOVERY rails as the
+ * legacy link path.
+ *
+ * @param {string} email — must match the email used in requestPasswordReset
+ * @param {string} code  — the 6-digit token from the email
+ * @returns {Promise<{ok:boolean, error?:string}>}
+ */
+async function verifyRecoveryOtp(email, code) {
+  const cleanEmail = String(email || '').trim();
+  const cleanCode = String(code || '').replace(/\s/g, '');
+  if (!cleanEmail) {
+    return { ok: false, error: 'Missing email' };
+  }
+  if (!cleanCode) {
+    return { ok: false, error: 'Enter the 6-digit code from the email' };
+  }
+  // Supabase codes are 6 digits; be permissive about length in the validator
+  // so if they change the format later we fail server-side with a real error
+  // instead of a confusing local one.
+  if (!/^\d{4,10}$/.test(cleanCode)) {
+    return { ok: false, error: 'Code should be digits only' };
+  }
+  try {
+    const client = db.getClient();
+    const { data, error } = await client.auth.verifyOtp({
+      email: cleanEmail,
+      token: cleanCode,
+      type: 'recovery',
+    });
+    if (error) {
+      // Common case: "Token has expired or is invalid" when the user takes
+      // longer than 1 hour (default) to enter the code. Pass through.
+      return { ok: false, error: error.message || 'Invalid or expired code' };
+    }
+    // supabase-js fires PASSWORD_RECOVERY on the onAuthStateChange listener
+    // registered in bootstrapSession — that handler sets _recoveryMode and
+    // emits auth:recovery_started. The app's gate opens the set-password
+    // modal; nothing more to do here.
+    return { ok: true, user: data?.user };
+  } catch (err) {
+    return { ok: false, error: err?.message || 'Unknown error' };
+  }
+}
+
+/**
  * Complete a password recovery by setting the new password on the recovery
  * session. Called from the recovery-set-password modal. Differs from
  * changePassword in two ways: (1) no reverify-with-current-password step
@@ -518,11 +586,20 @@ function renderLoginScreen(overlay, onSuccess) {
 }
 
 /**
- * Render the "Forgot password?" modal. Dispatched from the login screen.
- * Collects an email, calls requestPasswordReset, then shows a generic
- * confirmation regardless of whether the email was recognized. Keeps the
- * modal open with a "Done" button so mobile/desktop flows are the same
- * (no auto-dismiss that might race with the user re-reading the message).
+ * Render the "Forgot password?" modal — two-step OTP flow (Slice 3.11).
+ *
+ * Step 1 (email-pane): user enters email → requestPasswordReset → email with
+ *   6-digit code sent.
+ * Step 2 (code-pane):  user enters code → verifyRecoveryOtp → Supabase fires
+ *   PASSWORD_RECOVERY → bootstrapSession listener opens the set-password
+ *   modal (renderRecoverySetPasswordModal). This modal then dismisses itself
+ *   so the user sees a clean stack: login card dimmed, set-password modal
+ *   on top, nothing else competing.
+ *
+ * The link embedded in the recovery email still works — scanner-consumed or
+ * not — because clicking it also fires PASSWORD_RECOVERY via the existing
+ * `?code=` path. OTP is the primary, scanner-proof path; the link is a
+ * fallback for personal-email accounts where Safe Links doesn't pre-scan.
  *
  * @param {{onClose?: () => void, defaultEmail?: string}} [opts]
  */
@@ -540,18 +617,20 @@ function renderForgotPasswordModal(opts = {}) {
   overlay.innerHTML = `
     <div class="hub-auth-card" role="dialog" aria-modal="true" aria-label="Reset password" style="text-align:left;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-        <h2 class="hub-auth-title" style="margin:0;font-size:18px;">Reset password</h2>
+        <h2 class="hub-auth-title" id="fp-heading" style="margin:0;font-size:18px;">Reset password</h2>
         <button type="button" id="fp-close" aria-label="Close"
           style="background:none;border:none;color:var(--ies-gray-500);font-size:22px;line-height:1;cursor:pointer;padding:0 4px;">×</button>
       </div>
-      <p class="hub-auth-subtitle" style="margin-bottom:16px;text-align:left;">
-        Enter the email you use to sign in. We'll send a reset link — click it to
-        set a new password.
-      </p>
 
       <div class="hub-auth-error" id="fp-error" role="alert"></div>
 
-      <div class="hub-auth-pane" id="fp-form-pane">
+      <!-- Step 1: email -->
+      <div class="hub-auth-pane" id="fp-email-pane">
+        <p class="hub-auth-subtitle" style="margin:0 0 14px 0;text-align:left;">
+          Enter the email you use to sign in. We'll send a 6-digit verification
+          code — enter it on the next screen to set a new password.
+        </p>
+
         <label class="hub-auth-label" for="fp-email">Email</label>
         <input type="email" class="hub-input hub-auth-input" id="fp-email"
           autocomplete="email" placeholder="name@gxo.com" spellcheck="false"
@@ -559,18 +638,33 @@ function renderForgotPasswordModal(opts = {}) {
 
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px;">
           <button type="button" class="hub-btn hub-btn-secondary" id="fp-cancel">Cancel</button>
-          <button type="button" class="hub-btn hub-btn-primary" id="fp-submit">Send reset link</button>
+          <button type="button" class="hub-btn hub-btn-primary" id="fp-send-btn">Send code</button>
         </div>
       </div>
 
-      <div class="hub-auth-pane" id="fp-done-pane" style="display:none;">
-        <p style="margin:0 0 12px 0;color:var(--ies-navy);">
-          If an account exists for that address, a reset link is on its way.
-          Check your inbox (and spam folder) — the link expires in about an
-          hour. Closing this dialog won't cancel it.
+      <!-- Step 2: code entry -->
+      <div class="hub-auth-pane" id="fp-code-pane" style="display:none;">
+        <p class="hub-auth-subtitle" style="margin:0 0 14px 0;text-align:left;">
+          If an account exists for <strong id="fp-email-echo"></strong> we just
+          sent a 6-digit code. Enter it below. (Check spam too — corporate
+          filters sometimes delay it by a minute or two.)
         </p>
-        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
-          <button type="button" class="hub-btn hub-btn-primary" id="fp-done">Done</button>
+
+        <label class="hub-auth-label" for="fp-code">Verification code</label>
+        <input type="text" class="hub-input hub-auth-input" id="fp-code"
+          autocomplete="one-time-code" inputmode="numeric" pattern="\\d{6}"
+          maxlength="8" placeholder="123456"
+          style="font-size:18px;letter-spacing:3px;text-align:center;" />
+
+        <div style="display:flex;gap:8px;justify-content:space-between;align-items:center;margin-top:18px;">
+          <button type="button" id="fp-resend"
+            style="background:none;border:none;padding:4px 6px;font-size:12px;color:var(--ies-gray-500, #6b7280);cursor:pointer;text-decoration:underline;text-decoration-color:rgba(0,0,0,.2);font-family:inherit;">
+            Didn't get a code? Resend
+          </button>
+          <div style="display:flex;gap:8px;">
+            <button type="button" class="hub-btn hub-btn-secondary" id="fp-back">Back</button>
+            <button type="button" class="hub-btn hub-btn-primary" id="fp-verify-btn">Verify code</button>
+          </div>
         </div>
       </div>
     </div>
@@ -578,23 +672,37 @@ function renderForgotPasswordModal(opts = {}) {
   document.body.appendChild(overlay);
 
   const errorEl = /** @type {HTMLElement} */ (overlay.querySelector('#fp-error'));
+  const emailPane = /** @type {HTMLElement} */ (overlay.querySelector('#fp-email-pane'));
+  const codePane = /** @type {HTMLElement} */ (overlay.querySelector('#fp-code-pane'));
   const emailInput = /** @type {HTMLInputElement} */ (overlay.querySelector('#fp-email'));
-  const submitBtn = /** @type {HTMLButtonElement} */ (overlay.querySelector('#fp-submit'));
+  const codeInput = /** @type {HTMLInputElement} */ (overlay.querySelector('#fp-code'));
+  const emailEcho = /** @type {HTMLElement} */ (overlay.querySelector('#fp-email-echo'));
+  const sendBtn = /** @type {HTMLButtonElement} */ (overlay.querySelector('#fp-send-btn'));
+  const verifyBtn = /** @type {HTMLButtonElement} */ (overlay.querySelector('#fp-verify-btn'));
   const cancelBtn = /** @type {HTMLButtonElement} */ (overlay.querySelector('#fp-cancel'));
   const closeBtn = /** @type {HTMLButtonElement} */ (overlay.querySelector('#fp-close'));
-  const doneBtn = /** @type {HTMLButtonElement} */ (overlay.querySelector('#fp-done'));
-  const formPane = /** @type {HTMLElement} */ (overlay.querySelector('#fp-form-pane'));
-  const donePane = /** @type {HTMLElement} */ (overlay.querySelector('#fp-done-pane'));
+  const backBtn = /** @type {HTMLButtonElement} */ (overlay.querySelector('#fp-back'));
+  const resendLink = /** @type {HTMLButtonElement} */ (overlay.querySelector('#fp-resend'));
+
+  /** Email locked in after step 1 succeeds — used for verifyOtp in step 2. */
+  let pendingEmail = '';
 
   if (defaultEmail) emailInput.value = defaultEmail;
 
   function showError(msg) {
     errorEl.textContent = msg;
+    errorEl.style.color = '';
+    errorEl.classList.add('visible');
+  }
+  function showInfo(msg) {
+    errorEl.textContent = msg;
+    errorEl.style.color = 'var(--ies-blue)';
     errorEl.classList.add('visible');
   }
   function clearError() {
     errorEl.classList.remove('visible');
     errorEl.textContent = '';
+    errorEl.style.color = '';
   }
   function close() {
     overlay.remove();
@@ -606,7 +714,41 @@ function renderForgotPasswordModal(opts = {}) {
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
   cancelBtn.addEventListener('click', close);
   closeBtn.addEventListener('click', close);
-  doneBtn.addEventListener('click', close);
+
+  // After PASSWORD_RECOVERY fires (either via OTP verify OR a fallback link
+  // click), the app's boot code opens the set-password modal. Close this
+  // modal automatically when that happens so the user only sees one modal
+  // stacked on the login card.
+  const unsubRecovery = bus.on('auth:recovery_started', () => {
+    try { close(); } catch { /* already closed */ }
+  });
+  // Make sure we clean up the listener if the modal is dismissed before
+  // recovery happens (e.g. user cancels).
+  const origClose = close;
+  function closeAndUnsub() {
+    try { if (typeof unsubRecovery === 'function') unsubRecovery(); } catch { /* ok */ }
+    origClose();
+  }
+  cancelBtn.removeEventListener('click', close);
+  closeBtn.removeEventListener('click', close);
+  cancelBtn.addEventListener('click', closeAndUnsub);
+  closeBtn.addEventListener('click', closeAndUnsub);
+
+  function goToCodePane() {
+    emailPane.style.display = 'none';
+    codePane.style.display = '';
+    emailEcho.textContent = pendingEmail;
+    setTimeout(() => codeInput.focus(), 50);
+  }
+  function goToEmailPane() {
+    codePane.style.display = 'none';
+    emailPane.style.display = '';
+    setTimeout(() => emailInput.focus(), 50);
+  }
+  backBtn.addEventListener('click', () => {
+    clearError();
+    goToEmailPane();
+  });
 
   async function attemptSend() {
     clearError();
@@ -615,37 +757,103 @@ function renderForgotPasswordModal(opts = {}) {
       showError('Enter your email');
       return;
     }
-    submitBtn.disabled = true;
+    sendBtn.disabled = true;
     cancelBtn.disabled = true;
-    const orig = submitBtn.textContent;
-    submitBtn.textContent = 'Sending…';
+    const orig = sendBtn.textContent;
+    sendBtn.textContent = 'Sending…';
     try {
       const res = await requestPasswordReset(email);
       if (res.ok) {
-        // Swap to confirmation pane. We intentionally do NOT differentiate
-        // "email sent" from "email not recognized" — prevents enumeration.
-        formPane.style.display = 'none';
-        donePane.style.display = '';
-        setTimeout(() => doneBtn.focus(), 50);
+        // Do not reveal whether the email exists — always advance to code
+        // entry. If the email is bogus, verify will just fail at step 2 with
+        // "Invalid or expired code".
+        pendingEmail = email;
+        goToCodePane();
       } else {
-        // Only hard errors (rate limit, transport) surface here.
-        showError(res.error || 'Could not send reset email');
-        submitBtn.disabled = false;
-        cancelBtn.disabled = false;
-        submitBtn.textContent = orig;
+        showError(res.error || 'Could not send reset code');
       }
     } catch (err) {
       showError(err?.message || 'Unknown error');
-      submitBtn.disabled = false;
+    } finally {
+      sendBtn.disabled = false;
       cancelBtn.disabled = false;
-      submitBtn.textContent = orig;
+      sendBtn.textContent = orig;
     }
   }
 
-  submitBtn.addEventListener('click', attemptSend);
+  async function attemptVerify() {
+    clearError();
+    const code = codeInput.value.trim();
+    if (!code) {
+      showError('Enter the code from the email');
+      return;
+    }
+    verifyBtn.disabled = true;
+    backBtn.disabled = true;
+    const orig = verifyBtn.textContent;
+    verifyBtn.textContent = 'Verifying…';
+    try {
+      const res = await verifyRecoveryOtp(pendingEmail, code);
+      if (res.ok) {
+        // PASSWORD_RECOVERY will fire on the bus listener we wired above;
+        // that closes this modal and opens the set-password modal. Show a
+        // transient "success" beat so there's no flash of nothing.
+        showInfo('Code verified. Opening password reset…');
+      } else {
+        showError(res.error || 'Code is invalid or expired');
+        codeInput.select();
+      }
+    } catch (err) {
+      showError(err?.message || 'Unknown error');
+    } finally {
+      verifyBtn.disabled = false;
+      backBtn.disabled = false;
+      verifyBtn.textContent = orig;
+    }
+  }
+
+  async function attemptResend() {
+    clearError();
+    if (!pendingEmail) {
+      // Shouldn't happen — guard anyway.
+      goToEmailPane();
+      return;
+    }
+    resendLink.disabled = true;
+    const orig = resendLink.textContent;
+    resendLink.textContent = 'Sending…';
+    try {
+      const res = await requestPasswordReset(pendingEmail);
+      if (res.ok) {
+        showInfo('New code sent. Check your inbox (and spam).');
+      } else {
+        // Rate-limited (60s between requests) surfaces here.
+        showError(res.error || 'Could not resend code');
+      }
+    } catch (err) {
+      showError(err?.message || 'Unknown error');
+    } finally {
+      resendLink.disabled = false;
+      resendLink.textContent = orig;
+    }
+  }
+
+  sendBtn.addEventListener('click', attemptSend);
+  verifyBtn.addEventListener('click', attemptVerify);
+  resendLink.addEventListener('click', attemptResend);
   emailInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') attemptSend();
     else clearError();
+  });
+  codeInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') attemptVerify();
+    else clearError();
+  });
+  // Strip anything non-digit from pasted codes (users commonly paste "123 456"
+  // or "123-456" from the email).
+  codeInput.addEventListener('input', () => {
+    const cleaned = codeInput.value.replace(/\D/g, '');
+    if (cleaned !== codeInput.value) codeInput.value = cleaned;
   });
 
   setTimeout(() => emailInput.focus(), 50);
@@ -683,7 +891,7 @@ function renderRecoverySetPasswordModal(opts = {}) {
       <div style="margin-bottom:14px;">
         <h2 class="hub-auth-title" style="margin:0 0 4px 0;font-size:18px;">Set a new password</h2>
         <p class="hub-auth-subtitle" style="margin:0;text-align:left;font-size:13px;">
-          Reset link verified ${emailHint}. Choose a new password (minimum 8 characters).
+          Code verified ${emailHint}. Choose a new password (minimum 8 characters).
         </p>
       </div>
 
@@ -949,6 +1157,7 @@ export const auth = {
   loginWithPassword,
   changePassword,
   requestPasswordReset,
+  verifyRecoveryOtp,
   completePasswordRecovery,
   logout,
 

@@ -49,6 +49,11 @@ function makeFakeSupabase() {
   // assert what was sent without subscribing to the real network.
   const resetCalls = [];
   let nextResetError = null;
+  // Slice 3.11 — model the server-side OTP store + track verifyOtp calls.
+  // Codes are seeded by resetPasswordForEmail and consumed by verifyOtp;
+  // mirrors Supabase's one-time recovery semantics.
+  const recoveryCodes = new Map();
+  const verifyOtpCalls = [];
   function emit(evt, s) { for (const fn of listeners) fn(evt, s); }
   return {
     createClient(_url, _key, opts) {
@@ -62,7 +67,35 @@ function makeFakeSupabase() {
               const err = nextResetError; nextResetError = null;
               return { data: null, error: err };
             }
+            // Generate a deterministic 6-digit code so tests can "receive"
+            // the code in the email and feed it to verifyOtp.
+            const code = '123456';
+            recoveryCodes.set(email, code);
             return { data: {}, error: null };
+          },
+          async verifyOtp({ email, token, type }) {
+            // Slice 3.11 — only 'recovery' is in scope here. Other types
+            // would just mirror the same code-match machinery but aren't
+            // exercised in this test file.
+            verifyOtpCalls.push({ email, token, type });
+            if (type !== 'recovery') {
+              return { data: null, error: { message: `Unsupported type: ${type}` } };
+            }
+            const expected = recoveryCodes.get(email);
+            if (!expected || expected !== token) {
+              return { data: null, error: { message: 'Token has expired or is invalid' } };
+            }
+            // Establish a recovery session the same way the real /verify
+            // endpoint does, and fire PASSWORD_RECOVERY so the auth.js
+            // listener flips _recoveryMode and emits auth:recovery_started.
+            session = {
+              access_token: 'recov-tok-' + email,
+              refresh_token: 'recov-rt-' + email,
+              user: { id: 'uid-' + email, email },
+            };
+            recoveryCodes.delete(email);  // one-time use
+            emit('PASSWORD_RECOVERY', session);
+            return { data: { session, user: session.user }, error: null };
           },
           async signInWithPassword({ email, password }) {
             // The literal string 'bad' is a hard-fail for legacy tests that
@@ -117,6 +150,8 @@ function makeFakeSupabase() {
           __getPassword(email) { return passwords.get(email); },
           __getResetCalls() { return resetCalls.slice(); },
           __setNextResetError(err) { nextResetError = err; },
+          __getVerifyOtpCalls() { return verifyOtpCalls.slice(); },
+          __setRecoveryCode(email, code) { recoveryCodes.set(email, code); },
           __fireRecovery(email) {
             // Simulate what supabase-js does when the recovery token in the
             // URL has been consumed — set a short-lived session and fire
@@ -131,6 +166,8 @@ function makeFakeSupabase() {
           __reset() {
             passwords.clear();
             resetCalls.length = 0;
+            recoveryCodes.clear();
+            verifyOtpCalls.length = 0;
             nextResetError = null;
             session = null;
           },
@@ -168,7 +205,7 @@ async function test(name, fn) {
 }
 const assert = (cond, msg = 'assertion failed') => { if (!cond) throw new Error(msg); };
 
-const { auth } = await import('./shared/auth.js?v=20260423-y7');
+const { auth } = await import('./shared/auth.js?v=20260423-y8');
 const { bus } = await import('./shared/event-bus.js?v=20260418-sK');
 
 // ─── Tests ──────────────────────────────────────────────────────────────
@@ -457,6 +494,108 @@ await test('recovery-then-logout: cancel button path clears recovery state', asy
   assert(auth.isInRecovery() === false, 'logout must clear recovery state');
   assert(auth.isAuthenticated() === false, 'must be unauthenticated');
   assert(auth.getMode() === null, 'mode must be null after logout');
+});
+
+// ─── Slice 3.11: OTP-based recovery ─────────────────────────────────────
+
+await test('OTP surface: verifyRecoveryOtp is exported', async () => {
+  assert(typeof auth.verifyRecoveryOtp === 'function', 'auth.verifyRecoveryOtp must exist');
+});
+
+await test('verifyRecoveryOtp: rejects missing email', async () => {
+  await reset();
+  await auth.bootstrapSession();
+  const res = await auth.verifyRecoveryOtp('', '123456');
+  assert(res.ok === false, 'must fail');
+  assert(/email/i.test(res.error || ''), 'error must mention email');
+});
+
+await test('verifyRecoveryOtp: rejects missing code', async () => {
+  await reset();
+  await auth.bootstrapSession();
+  const res = await auth.verifyRecoveryOtp('pilot@gxo.com', '');
+  assert(res.ok === false, 'must fail');
+  assert(/code/i.test(res.error || ''), 'error must mention code');
+});
+
+await test('verifyRecoveryOtp: rejects non-numeric code', async () => {
+  await reset();
+  await auth.bootstrapSession();
+  const res = await auth.verifyRecoveryOtp('pilot@gxo.com', 'ABC123');
+  assert(res.ok === false, 'must fail');
+  assert(/digit/i.test(res.error || ''), 'error must mention digits');
+});
+
+await test('verifyRecoveryOtp: wrong code surfaces Supabase error', async () => {
+  await reset();
+  await auth.bootstrapSession();
+  await auth.requestPasswordReset('otp1@gxo.com');
+  const res = await auth.verifyRecoveryOtp('otp1@gxo.com', '999999');
+  assert(res.ok === false, 'wrong code must fail');
+  assert(/expired|invalid/i.test(res.error || ''), 'error must match Supabase message');
+});
+
+await test('verifyRecoveryOtp: correct code fires PASSWORD_RECOVERY + sets recovery mode', async () => {
+  await reset();
+  await auth.bootstrapSession();
+  await auth.requestPasswordReset('otp2@gxo.com');
+  let recoveryPayload = null;
+  const off = bus.on('auth:recovery_started', (p) => { recoveryPayload = p; });
+  const res = await auth.verifyRecoveryOtp('otp2@gxo.com', '123456');
+  if (typeof off === 'function') off();
+  assert(res.ok === true, 'correct code must succeed');
+  assert(auth.isInRecovery() === true, 'recovery flag must flip on');
+  assert(auth.getMode() === 'recovery', "mode must be 'recovery'");
+  assert(recoveryPayload && recoveryPayload.email === 'otp2@gxo.com',
+    'bus event must carry the email');
+});
+
+await test('verifyRecoveryOtp: full end-to-end — request → verify → set password → sign in', async () => {
+  await reset();
+  await auth.bootstrapSession();
+  const c = await rawClient();
+  // Pre-seed old password so we can prove it's replaced.
+  c.auth.__setPassword('otp3@gxo.com', 'oldTempPw!');
+  // Step 1: request.
+  const reqRes = await auth.requestPasswordReset('otp3@gxo.com');
+  assert(reqRes.ok === true, 'request must succeed');
+  // Step 2: verify with the code the fake generated.
+  const verifyRes = await auth.verifyRecoveryOtp('otp3@gxo.com', '123456');
+  assert(verifyRes.ok === true, 'verify must succeed');
+  assert(auth.isInRecovery() === true, 'must be in recovery after verify');
+  // Step 3: set new password.
+  const doneRes = await auth.completePasswordRecovery('brandNewPw999');
+  assert(doneRes.ok === true, 'completion must succeed');
+  assert(auth.isInRecovery() === false, 'recovery must clear on success');
+  assert(c.auth.__getPassword('otp3@gxo.com') === 'brandNewPw999', 'password must be updated');
+  // Step 4: prove the new password signs the user in from a fresh session.
+  await auth.logout();
+  const login = await auth.loginWithPassword('otp3@gxo.com', 'brandNewPw999');
+  assert(login.ok === true, 'new password must sign the user in');
+});
+
+await test('verifyRecoveryOtp: token is one-time — reusing same code fails', async () => {
+  await reset();
+  await auth.bootstrapSession();
+  await auth.requestPasswordReset('otp4@gxo.com');
+  const first = await auth.verifyRecoveryOtp('otp4@gxo.com', '123456');
+  assert(first.ok === true, 'first verify must succeed');
+  // Reset the recovery flag manually (simulating what completePasswordRecovery
+  // or logout would do) so the precondition check doesn't short-circuit.
+  await auth.logout();
+  const second = await auth.verifyRecoveryOtp('otp4@gxo.com', '123456');
+  assert(second.ok === false, 'reused code must fail');
+  assert(/expired|invalid/i.test(second.error || ''), 'Supabase-style error expected');
+});
+
+await test('verifyRecoveryOtp: strips whitespace from pasted codes', async () => {
+  await reset();
+  await auth.bootstrapSession();
+  await auth.requestPasswordReset('otp5@gxo.com');
+  // User pastes "123 456" or "123-456" — only the inner whitespace handling
+  // lives in verifyRecoveryOtp; hyphens/commas would be stripped at UI level.
+  const res = await auth.verifyRecoveryOtp('otp5@gxo.com', '123 456');
+  assert(res.ok === true, 'inner-whitespace should be stripped');
 });
 
 // ─── Summary ────────────────────────────────────────────────────────────
