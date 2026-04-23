@@ -95,8 +95,8 @@ async function test(name, fn) {
 const assert = (c, m = 'assert fail') => { if (!c) throw new Error(m); };
 
 // ─── Load modules after globals are in place ─────────────────────────────
-const { auth } = await import('./shared/auth.js?v=20260423-z2');
-const { recordAudit } = await import('./shared/audit.js?v=20260423-y5');
+const { auth } = await import('./shared/auth.js?v=20260423-z3');
+const { recordAudit } = await import('./shared/audit.js?v=20260423-y6');
 
 async function resetAuth() {
   globalThis.sessionStorage.clear();

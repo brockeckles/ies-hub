@@ -6,7 +6,7 @@
  */
 
 import { db } from '../../shared/supabase.js?v=20260423-y1';
-import { recordAudit } from '../../shared/audit.js?v=20260423-y5';
+import { recordAudit } from '../../shared/audit.js?v=20260423-y6';
 
 // ============================================================
 // TEMPLATES

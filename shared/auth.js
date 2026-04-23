@@ -552,10 +552,14 @@ function renderLoginScreen(overlay, onSuccess) {
         <button class="hub-btn hub-btn-primary w-full" id="auth-signin-btn" style="margin-top:14px;">
           Sign In
         </button>
-        <div style="margin-top:10px;text-align:center;">
+        <div style="margin-top:10px;text-align:center;display:flex;justify-content:center;gap:18px;">
           <button type="button" id="auth-forgot-link"
             style="background:none;border:none;padding:4px 6px;font-size:12px;color:var(--ies-gray-500, #6b7280);cursor:pointer;text-decoration:underline;text-decoration-color:rgba(0,0,0,.2);font-family:inherit;">
             Forgot password?
+          </button>
+          <button type="button" id="auth-invite-link"
+            style="background:none;border:none;padding:4px 6px;font-size:12px;color:var(--ies-gray-500, #6b7280);cursor:pointer;text-decoration:underline;text-decoration-color:rgba(0,0,0,.2);font-family:inherit;">
+            I was invited
           </button>
         </div>
       </div>
@@ -638,6 +642,18 @@ function renderLoginScreen(overlay, onSuccess) {
     // for the common case of "I got Invalid email/password twice, let me
     // just reset".
     renderForgotPasswordModal({ defaultEmail: emailInput.value.trim() });
+  });
+
+  // Slice 3.16 — "I was invited" path. Opens the accept-invite modal; on
+  // success it fires onSuccess which we route to the same fadeOutAndBoot
+  // the password flow uses.
+  const inviteLink = /** @type {HTMLButtonElement} */ (overlay.querySelector('#auth-invite-link'));
+  inviteLink?.addEventListener('click', () => {
+    clearError();
+    renderAcceptInviteModal({
+      defaultEmail: emailInput.value.trim(),
+      onSuccess: fadeOutAndBoot,
+    });
   });
 
   setTimeout(() => emailInput.focus(), 100);
@@ -1202,6 +1218,314 @@ function renderChangePasswordModal(opts = {}) {
   setTimeout(() => currentInput.focus(), 50);
 }
 
+/* -------------------------------------------------------------------------- */
+/* Invites (Slice 3.16) — admin-triggered, OTP-based, scanner-proof           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Slice 3.16 — POST to the invite-user edge function with the signed-in
+ * user's JWT. The edge function checks profiles.role='admin' on the
+ * service-role side and calls auth.admin.inviteUserByEmail, passing
+ * full_name / invited_team_id / invited_role in user_metadata so the
+ * handle_new_user trigger lands the profile row with the correct scope
+ * in one transaction. Supabase mails the (customized, OTP-first) invite
+ * template to the invitee.
+ *
+ * @param {{email:string, full_name:string, team_id:string, role:'member'|'admin'}} params
+ * @returns {Promise<{ok:boolean, code?:string, error?:string, user_id?:string, team_name?:string}>}
+ */
+async function inviteUser({ email, full_name, team_id, role }) {
+  try {
+    const client = db.getClient();
+    const { data: sess } = await client.auth.getSession();
+    const token = sess?.session?.access_token;
+    if (!token) return { ok: false, error: 'Not signed in' };
+
+    // Call the edge function via supabase-js so we reuse the project's
+    // base URL + anon apikey + the user's JWT header automatically.
+    const { data, error } = await client.functions.invoke('invite-user', {
+      body: {
+        email,
+        full_name,
+        team_id,
+        role,
+        redirect_to: getRecoveryRedirectUrl(),
+      },
+      // supabase-js auto-adds Authorization: Bearer <access_token> when a
+      // session is active, but be explicit so a future refactor of the
+      // session-bootstrap path cannot silently drop the header.
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (error) {
+      // functions.invoke returns a FunctionsHttpError for non-2xx; the
+      // JSON body from the edge function is on error.context if parseable.
+      let code = 'invoke_error';
+      let message = error.message || 'Invite failed';
+      try {
+        // supabase-js v2.45+ exposes the raw Response on FunctionsHttpError.context
+        if (error.context && typeof error.context.json === 'function') {
+          const body = await error.context.json();
+          if (body && body.code) code = body.code;
+          if (body && body.error) message = body.error;
+        }
+      } catch { /* body unreadable — keep defaults */ }
+      return { ok: false, code, error: message };
+    }
+
+    if (!data || data.ok === false) {
+      return { ok: false, code: data?.code, error: data?.error || 'Invite failed' };
+    }
+    return {
+      ok: true,
+      user_id: data.user_id,
+      team_name: data.team_name,
+      email: data.email,
+      role: data.role,
+      full_name: data.full_name,
+    };
+  } catch (err) {
+    return { ok: false, error: err?.message || 'Unknown error' };
+  }
+}
+
+/**
+ * Invitee-side: verify the invite OTP from the email. Establishes a full
+ * session (SIGNED_IN, not PASSWORD_RECOVERY) because the user doesn't have
+ * a password yet. Caller then MUST call setInitialPassword() to make the
+ * account usable for future logins.
+ *
+ * @param {string} email — the email admin used (must match exactly)
+ * @param {string} code  — the OTP from the invite email
+ * @returns {Promise<{ok:boolean, error?:string}>}
+ */
+async function verifyInviteOtp(email, code) {
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  const cleanCode = String(code || '').replace(/\s/g, '');
+  if (!cleanEmail) return { ok: false, error: 'Missing email' };
+  if (!cleanCode)  return { ok: false, error: 'Enter the verification code from the email' };
+  if (!/^\d{4,10}$/.test(cleanCode)) return { ok: false, error: 'Code should be digits only' };
+  try {
+    const client = db.getClient();
+    const { data, error } = await client.auth.verifyOtp({
+      email: cleanEmail,
+      token: cleanCode,
+      type: 'invite',
+    });
+    if (error) return { ok: false, error: error.message || 'Invalid or expired code' };
+    // supabase-js will fire SIGNED_IN via onAuthStateChange; bootstrapSession's
+    // listener picks that up and updates state. Nothing more to do here.
+    return { ok: true, user: data?.user };
+  } catch (err) {
+    return { ok: false, error: err?.message || 'Unknown error' };
+  }
+}
+
+/**
+ * Slice 3.16 — set the first password on an invite-accepted session.
+ * Unlike changePassword there is no reverify step (the emailed OTP already
+ * proved identity). Unlike completePasswordRecovery we don't flip
+ * _recoveryMode because invite verification gives us a normal signed-in
+ * session, not a recovery session.
+ *
+ * @param {string} newPassword
+ * @returns {Promise<{ok:boolean, error?:string}>}
+ */
+async function setInitialPassword(newPassword) {
+  if (!newPassword || newPassword.length < MIN_PASSWORD_LENGTH) {
+    return { ok: false, error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` };
+  }
+  if (!_currentSession) {
+    return { ok: false, error: 'No active session — verify the invite code first' };
+  }
+  try {
+    const client = db.getClient();
+    const { data, error } = await client.auth.updateUser({ password: newPassword });
+    if (error) return { ok: false, error: error.message || 'Password set failed' };
+    const email = data?.user?.email || _currentUser?.email || '';
+    const id = data?.user?.id || _currentUser?.id || '';
+    if (email && id) bus.emit('auth:password_changed', { email, id });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err?.message || 'Unknown error' };
+  }
+}
+
+/**
+ * Render the "Accept invite" modal. Opened from the login screen via the
+ * "I was invited" link. Single-pane: email + code + new password all on
+ * one form. On submit: verifyInviteOtp → setInitialPassword → signed in.
+ *
+ * Differs from the recovery modal (which is two-pane: email→code then
+ * set-password) because for invites the admin has already triggered the
+ * email, so there's no "request code" step for the invitee. They already
+ * have the code in their inbox.
+ *
+ * @param {{onClose?: () => void, onSuccess?: () => void, defaultEmail?: string}} [opts]
+ */
+function renderAcceptInviteModal(opts = {}) {
+  const { onClose, onSuccess, defaultEmail } = opts;
+  const existing = document.getElementById('hub-accept-invite-overlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'hub-accept-invite-overlay';
+  overlay.className = 'hub-auth-overlay';
+  overlay.style.background = 'rgba(10, 22, 40, 0.55)';
+  // Above the persistent login overlay (9999).
+  overlay.style.zIndex = '10000';
+  overlay.innerHTML = `
+    <div class="hub-auth-card" role="dialog" aria-modal="true" aria-label="Accept invite" style="text-align:left;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <h2 class="hub-auth-title" style="margin:0;font-size:18px;">Accept invite</h2>
+        <button type="button" id="ai-close" aria-label="Close"
+          style="background:none;border:none;color:var(--ies-gray-500);font-size:22px;line-height:1;cursor:pointer;padding:0 4px;">×</button>
+      </div>
+      <p class="hub-auth-subtitle" style="margin:0 0 14px 0;text-align:left;">
+        Enter the email your invite was sent to, the verification code from
+        that email, and a new password for the hub. Minimum 8 characters.
+      </p>
+
+      <div class="hub-auth-error" id="ai-error" role="alert"></div>
+
+      <div class="hub-auth-pane">
+        <label class="hub-auth-label" for="ai-email">Email</label>
+        <input type="email" class="hub-input hub-auth-input" id="ai-email"
+          autocomplete="email" placeholder="name@gxo.com" spellcheck="false"
+          autocapitalize="off" />
+
+        <label class="hub-auth-label" for="ai-code" style="margin-top:10px;">Verification code</label>
+        <input type="text" class="hub-input hub-auth-input" id="ai-code"
+          autocomplete="one-time-code" inputmode="numeric" pattern="\\d{4,10}"
+          maxlength="10" placeholder="Enter the code from your email"
+          style="font-size:18px;letter-spacing:3px;text-align:center;" />
+
+        <label class="hub-auth-label" for="ai-new" style="margin-top:10px;">New password</label>
+        <input type="password" class="hub-input hub-auth-input" id="ai-new"
+          autocomplete="new-password" placeholder="At least 8 characters" />
+
+        <label class="hub-auth-label" for="ai-confirm" style="margin-top:10px;">Confirm password</label>
+        <input type="password" class="hub-input hub-auth-input" id="ai-confirm"
+          autocomplete="new-password" placeholder="Re-enter new password" />
+
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px;">
+          <button type="button" class="hub-btn hub-btn-secondary" id="ai-cancel">Cancel</button>
+          <button type="button" class="hub-btn hub-btn-primary" id="ai-submit">Accept & sign in</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const errorEl = /** @type {HTMLElement} */ (overlay.querySelector('#ai-error'));
+  const emailInput = /** @type {HTMLInputElement} */ (overlay.querySelector('#ai-email'));
+  const codeInput = /** @type {HTMLInputElement} */ (overlay.querySelector('#ai-code'));
+  const newInput = /** @type {HTMLInputElement} */ (overlay.querySelector('#ai-new'));
+  const confirmInput = /** @type {HTMLInputElement} */ (overlay.querySelector('#ai-confirm'));
+  const submitBtn = /** @type {HTMLButtonElement} */ (overlay.querySelector('#ai-submit'));
+  const cancelBtn = /** @type {HTMLButtonElement} */ (overlay.querySelector('#ai-cancel'));
+  const closeBtn = /** @type {HTMLButtonElement} */ (overlay.querySelector('#ai-close'));
+
+  if (defaultEmail) emailInput.value = defaultEmail;
+
+  function showError(msg) {
+    errorEl.textContent = msg;
+    errorEl.style.color = '';
+    errorEl.classList.add('visible');
+  }
+  function showInfo(msg) {
+    errorEl.textContent = msg;
+    errorEl.style.color = 'var(--ies-blue)';
+    errorEl.classList.add('visible');
+  }
+  function clearError() {
+    errorEl.classList.remove('visible');
+    errorEl.textContent = '';
+    errorEl.style.color = '';
+  }
+  function close() {
+    overlay.remove();
+    document.removeEventListener('keydown', onKey);
+    if (typeof onClose === 'function') onClose();
+  }
+  function onKey(e) { if (e.key === 'Escape') close(); }
+  document.addEventListener('keydown', onKey);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  cancelBtn.addEventListener('click', close);
+  closeBtn.addEventListener('click', close);
+
+  // Pasted codes from email often have spaces or hyphens — strip on input.
+  codeInput.addEventListener('input', () => {
+    const cleaned = codeInput.value.replace(/\D/g, '');
+    if (cleaned !== codeInput.value) codeInput.value = cleaned;
+  });
+
+  async function attemptAccept() {
+    clearError();
+    const email = emailInput.value.trim();
+    const code  = codeInput.value.trim();
+    const next  = newInput.value;
+    const conf  = confirmInput.value;
+
+    if (!email) { showError('Enter your email'); emailInput.focus(); return; }
+    if (!code)  { showError('Enter the verification code'); codeInput.focus(); return; }
+    if (!next || !conf) { showError('Set a password'); newInput.focus(); return; }
+    if (next !== conf)  { showError('Passwords do not match'); confirmInput.focus(); return; }
+    if (next.length < MIN_PASSWORD_LENGTH) {
+      showError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
+      newInput.focus();
+      return;
+    }
+
+    submitBtn.disabled = true;
+    cancelBtn.disabled = true;
+    const orig = submitBtn.textContent;
+    submitBtn.textContent = 'Verifying…';
+    try {
+      const v = await verifyInviteOtp(email, code);
+      if (!v.ok) {
+        showError(v.error || 'Code is invalid or expired');
+        codeInput.select();
+        submitBtn.disabled = false;
+        cancelBtn.disabled = false;
+        submitBtn.textContent = orig;
+        return;
+      }
+      submitBtn.textContent = 'Setting password…';
+      const p = await setInitialPassword(next);
+      if (!p.ok) {
+        showError(p.error || 'Could not set password');
+        // Keep the session alive so the user can retry the password; they
+        // can't re-verify because their OTP has been consumed.
+        submitBtn.disabled = false;
+        cancelBtn.disabled = false;
+        submitBtn.textContent = orig;
+        return;
+      }
+      showInfo('Account ready. Signing you in…');
+      setTimeout(() => {
+        if (typeof onSuccess === 'function') onSuccess();
+        overlay.remove();
+      }, 700);
+    } catch (err) {
+      showError(err?.message || 'Unknown error');
+      submitBtn.disabled = false;
+      cancelBtn.disabled = false;
+      submitBtn.textContent = orig;
+    }
+  }
+
+  submitBtn.addEventListener('click', attemptAccept);
+  for (const el of [emailInput, codeInput, newInput, confirmInput]) {
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') attemptAccept();
+      else clearError();
+    });
+  }
+
+  setTimeout(() => (defaultEmail ? codeInput : emailInput).focus(), 50);
+}
+
 export const auth = {
   // Session lifecycle
   bootstrapSession,
@@ -1225,9 +1549,15 @@ export const auth = {
   completePasswordRecovery,
   logout,
 
+  // Invites (Slice 3.16)
+  inviteUser,
+  verifyInviteOtp,
+  setInitialPassword,
+
   // UI
   renderLoginScreen,
   renderChangePasswordModal,
   renderForgotPasswordModal,
   renderRecoverySetPasswordModal,
+  renderAcceptInviteModal,
 };

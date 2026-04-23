@@ -7345,7 +7345,7 @@ async function exportScenarioToXlsx() {
     // Audit-log the export (fire-and-forget)
     if (currentScenario?.id) {
       try {
-        const { recordAudit } = await import('../../shared/audit.js?v=20260423-y5');
+        const { recordAudit } = await import('../../shared/audit.js?v=20260423-y6');
         recordAudit({
           table: 'cost_model_scenarios',
           id: currentScenario.id,
@@ -7472,7 +7472,7 @@ function writeOverrideAuditEvent(ev) {
     new_reason:       ev.newReason || null,
     delta_abs:        (oldR != null && newR != null) ? (newR - oldR) : null,
   };
-  import('../../shared/audit.js?v=20260423-y5').then(mod => {
+  import('../../shared/audit.js?v=20260423-y6').then(mod => {
     mod.recordAudit({
       table:  'cost_model_projects',
       id:     model.id,

@@ -6,7 +6,8 @@
  */
 
 import { db } from '../../shared/supabase.js?v=20260423-y1';
-import { recordAudit } from '../../shared/audit.js?v=20260423-y5';
+import { recordAudit } from '../../shared/audit.js?v=20260423-y6';
+import { auth } from '../../shared/auth.js?v=20260423-z3';
 
 // ============================================================
 // MASTER DATA
@@ -188,6 +189,61 @@ export async function listAuditFacets() {
  */
 export async function writeAuditEntry(entry) {
   await db.insert('audit_log', entry);
+}
+
+// ============================================================
+// INVITES (Slice 3.16)
+// ============================================================
+
+/**
+ * List teams for the Invite User modal's team dropdown. RLS on public.teams
+ * already restricts to teams the caller can see, so admins see all their
+ * teams and non-admins get their own team (harmless — the edge function
+ * enforces admin role regardless).
+ *
+ * @returns {Promise<{id:string,name:string}[]>}
+ */
+export async function listTeams() {
+  const { data, error } = await db.from('teams').select('id, name').order('name');
+  if (error) {
+    console.warn('[admin] listTeams failed:', error);
+    return [];
+  }
+  return data || [];
+}
+
+/**
+ * Wrapper that delegates to auth.inviteUser (which POSTs to the invite-user
+ * edge function with the caller's JWT). We also write an audit_log row on
+ * success so the Admin → Audit tab shows the invite as an admin action
+ * with attribution. Failures are not audited — there's no entity to attach
+ * the row to.
+ *
+ * @param {{email:string, full_name:string, team_id:string, role:'member'|'admin'}} params
+ * @returns {Promise<{ok:boolean, code?:string, error?:string, user_id?:string, team_name?:string}>}
+ */
+export async function inviteUser(params) {
+  const res = await auth.inviteUser(params);
+  if (res.ok && res.user_id) {
+    try {
+      recordAudit({
+        table: 'profiles',
+        id: res.user_id,
+        action: 'insert',
+        fields: {
+          email: params.email,
+          full_name: params.full_name,
+          team_id: params.team_id,
+          role: params.role,
+          invited: true,
+        },
+      });
+    } catch (err) {
+      // Audit is best-effort — don't fail the invite on an audit write.
+      console.warn('[admin] invite audit failed:', err?.message || err);
+    }
+  }
+  return res;
 }
 
 // ============================================================

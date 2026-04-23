@@ -7,7 +7,7 @@
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sP';
 import * as calc from './calc.js?v=20260423-z3';
-import * as api from './api.js?v=20260423-z3';
+import * as api from './api.js?v=20260423-z4';
 import { showToast } from '../../shared/toast.js?v=20260418-sK';
 
 /** @type {HTMLElement|null} */
@@ -296,6 +296,7 @@ function renderActivity(el) {
         ● ${onlineNow} online now · refreshed ${lastLoadRel}
       </span>
       <span style="flex:1;"></span>
+      <button class="hub-btn hub-btn-sm" data-activity-invite title="Invite a new pilot user via email">+ Invite user</button>
       <button class="hub-btn hub-btn-sm hub-btn-secondary" data-activity-refresh title="Re-fetch events from Supabase">🔄 Refresh</button>
     </div>
 
@@ -363,6 +364,193 @@ function renderActivity(el) {
     await loadActivityData(true);
     if (activeTab === 'activity' && rootEl && rootEl.contains(el)) renderActivity(el);
   });
+  el.querySelector('[data-activity-invite]')?.addEventListener('click', () => {
+    renderInviteUserModal({
+      onSuccess: async () => {
+        // New pilot = new row on the activity roster. Force-refresh so the
+        // admin sees the invitee immediately (even though they haven't
+        // accepted yet — profile row is pre-created by handle_new_user).
+        await loadActivityData(true);
+        if (activeTab === 'activity' && rootEl && rootEl.contains(el)) renderActivity(el);
+      },
+    });
+  });
+}
+
+// ===== INVITE USER MODAL (Slice 3.16) =====
+/**
+ * Open the Invite User modal. Loads teams on first paint, validates inputs
+ * client-side, calls api.inviteUser which POSTs to the invite-user edge
+ * function. On success: toast + onSuccess callback (typically refresh
+ * the User Activity roster). On failure: inline error, keep the modal open
+ * so the admin can fix and retry.
+ *
+ * @param {{onSuccess?: () => void}} [opts]
+ */
+function renderInviteUserModal(opts = {}) {
+  const { onSuccess } = opts;
+  const existing = document.getElementById('hub-invite-user-overlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'hub-invite-user-overlay';
+  overlay.className = 'hub-auth-overlay';
+  overlay.style.background = 'rgba(10, 22, 40, 0.55)';
+  overlay.style.zIndex = '10000';
+  overlay.innerHTML = `
+    <div class="hub-auth-card" role="dialog" aria-modal="true" aria-label="Invite user" style="text-align:left;max-width:440px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <h2 class="hub-auth-title" style="margin:0;font-size:18px;">Invite user</h2>
+        <button type="button" id="iu-close" aria-label="Close"
+          style="background:none;border:none;color:var(--ies-gray-500);font-size:22px;line-height:1;cursor:pointer;padding:0 4px;">×</button>
+      </div>
+      <p class="hub-auth-subtitle" style="margin:0 0 14px 0;text-align:left;">
+        Sends an email with a verification code. The invitee enters the code
+        on the sign-in page and sets their own password.
+      </p>
+
+      <div class="hub-auth-error" id="iu-error" role="alert"></div>
+
+      <div class="hub-auth-pane">
+        <label class="hub-auth-label" for="iu-name">Full name</label>
+        <input type="text" class="hub-input hub-auth-input" id="iu-name"
+          autocomplete="off" placeholder="Jane Smith" />
+
+        <label class="hub-auth-label" for="iu-email" style="margin-top:10px;">Email</label>
+        <input type="email" class="hub-input hub-auth-input" id="iu-email"
+          autocomplete="off" placeholder="name@gxo.com" spellcheck="false"
+          autocapitalize="off" />
+
+        <label class="hub-auth-label" for="iu-team" style="margin-top:10px;">Team</label>
+        <select class="hub-input hub-auth-input" id="iu-team">
+          <option value="">Loading teams…</option>
+        </select>
+
+        <label class="hub-auth-label" style="margin-top:10px;">Role</label>
+        <div style="display:flex;gap:16px;margin-top:4px;">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
+            <input type="radio" name="iu-role" value="member" checked />
+            Member
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
+            <input type="radio" name="iu-role" value="admin" />
+            Admin
+          </label>
+        </div>
+
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px;">
+          <button type="button" class="hub-btn hub-btn-secondary" id="iu-cancel">Cancel</button>
+          <button type="button" class="hub-btn hub-btn-primary" id="iu-submit">Send invite</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const errorEl   = /** @type {HTMLElement} */ (overlay.querySelector('#iu-error'));
+  const nameInput = /** @type {HTMLInputElement} */ (overlay.querySelector('#iu-name'));
+  const emailInput= /** @type {HTMLInputElement} */ (overlay.querySelector('#iu-email'));
+  const teamSel   = /** @type {HTMLSelectElement} */ (overlay.querySelector('#iu-team'));
+  const submitBtn = /** @type {HTMLButtonElement} */ (overlay.querySelector('#iu-submit'));
+  const cancelBtn = /** @type {HTMLButtonElement} */ (overlay.querySelector('#iu-cancel'));
+  const closeBtn  = /** @type {HTMLButtonElement} */ (overlay.querySelector('#iu-close'));
+
+  function showError(msg) {
+    errorEl.textContent = msg;
+    errorEl.style.color = '';
+    errorEl.classList.add('visible');
+  }
+  function showInfo(msg) {
+    errorEl.textContent = msg;
+    errorEl.style.color = 'var(--ies-blue)';
+    errorEl.classList.add('visible');
+  }
+  function clearError() {
+    errorEl.classList.remove('visible');
+    errorEl.textContent = '';
+    errorEl.style.color = '';
+  }
+  function close() {
+    overlay.remove();
+    document.removeEventListener('keydown', onKey);
+  }
+  function onKey(e) { if (e.key === 'Escape') close(); }
+  document.addEventListener('keydown', onKey);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  cancelBtn.addEventListener('click', close);
+  closeBtn.addEventListener('click', close);
+
+  // Load teams async. Default-select Solutions Design if present (most
+  // invites will be members of the founder team).
+  (async () => {
+    try {
+      const teams = await api.listTeams();
+      teamSel.innerHTML = teams.length
+        ? teams.map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('')
+        : '<option value="">No teams yet</option>';
+      const sd = teams.find(t => t.name === 'Solutions Design');
+      if (sd) teamSel.value = sd.id;
+    } catch (err) {
+      teamSel.innerHTML = '<option value="">Could not load teams</option>';
+      showError('Could not load teams: ' + (err?.message || err));
+    }
+  })();
+
+  async function attemptInvite() {
+    clearError();
+    const full_name = nameInput.value.trim();
+    const email     = emailInput.value.trim().toLowerCase();
+    const team_id   = teamSel.value;
+    const roleEl    = /** @type {HTMLInputElement} */ (overlay.querySelector('input[name="iu-role"]:checked'));
+    const role      = roleEl?.value || 'member';
+
+    if (!full_name) { showError('Enter a name'); nameInput.focus(); return; }
+    if (!email)     { showError('Enter an email'); emailInput.focus(); return; }
+    if (!team_id)   { showError('Pick a team'); teamSel.focus(); return; }
+
+    submitBtn.disabled = true;
+    cancelBtn.disabled = true;
+    const orig = submitBtn.textContent;
+    submitBtn.textContent = 'Sending…';
+    try {
+      const res = await api.inviteUser({ email, full_name, team_id, role });
+      if (!res.ok) {
+        // Map known codes to friendlier text.
+        if (res.code === 'already_exists') {
+          showError(`${email} already has an account. Use "Forgot password?" to send them a reset code.`);
+        } else if (res.code === 'not_admin') {
+          showError('Only admins can invite users.');
+        } else {
+          showError(res.error || 'Invite failed');
+        }
+        submitBtn.disabled = false;
+        cancelBtn.disabled = false;
+        submitBtn.textContent = orig;
+        return;
+      }
+      showInfo(`Invite sent to ${email}. They should receive an email with a code.`);
+      showToast(`Invite sent to ${email}`, 'success', { duration: 4000 });
+      setTimeout(() => {
+        if (typeof onSuccess === 'function') onSuccess();
+        close();
+      }, 900);
+    } catch (err) {
+      showError(err?.message || 'Unknown error');
+      submitBtn.disabled = false;
+      cancelBtn.disabled = false;
+      submitBtn.textContent = orig;
+    }
+  }
+
+  submitBtn.addEventListener('click', attemptInvite);
+  for (const el of [nameInput, emailInput]) {
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') attemptInvite();
+      else clearError();
+    });
+  }
+
+  setTimeout(() => nameInput.focus(), 50);
 }
 
 function escapeHtml(s) {

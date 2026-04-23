@@ -249,7 +249,7 @@ async function test(name, fn) {
 }
 const assert = (cond, msg = 'assertion failed') => { if (!cond) throw new Error(msg); };
 
-const { auth } = await import('./shared/auth.js?v=20260423-z2');
+const { auth } = await import('./shared/auth.js?v=20260423-z3');
 const { bus } = await import('./shared/event-bus.js?v=20260418-sK');
 
 // ─── Tests ──────────────────────────────────────────────────────────────
