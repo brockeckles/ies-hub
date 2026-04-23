@@ -66,9 +66,22 @@ function mirroredEmail() {
 /**
  * Read identity for the current audit row. Password-mode → {id, email};
  * code-mode (or signed out) → {id: null, email: null}. Never throws.
+ *
+ * Callers can pass an explicit `override` (captured BEFORE an async
+ * round-trip) to avoid a race where `auth._currentUser` is momentarily
+ * null during a token refresh fired by an intervening network call.
+ * This was the root cause of the Slice 3.16 invite audit regression:
+ * recordAudit ran after the ~1–3s edge-fn await, and could read
+ * _currentUser mid-refresh, producing user_id=null while the legacy
+ * email mirror stayed populated.
+ *
+ * @param {{id?:string|null, email?:string|null}} [override]
  * @returns {{ id: string|null, email: string|null }}
  */
-function currentIdentity() {
+function currentIdentity(override) {
+  if (override && override.id) {
+    return { id: override.id, email: override.email || mirroredEmail() || null };
+  }
   try {
     const u = auth?.getUser?.();
     if (u && u.id) {
@@ -82,12 +95,18 @@ function currentIdentity() {
 
 /**
  * Record an audit-log entry. Fire-and-forget; never throws.
- * @param {{ table:string, id?:string|number|null, action:'insert'|'update'|'delete'|'link'|'unlink', fields?:Object }} entry
+ *
+ * `entry.actor` is an optional identity override (`{id, email}`). Pass it
+ * whenever the audit call follows an awaited network round-trip — capture
+ * `auth.getUser()` BEFORE the await, then forward it here, so a transient
+ * auth event during the await cannot null out the attribution.
+ *
+ * @param {{ table:string, id?:string|number|null, action:'insert'|'update'|'delete'|'link'|'unlink', fields?:Object, actor?:{id?:string|null,email?:string|null} }} entry
  */
 export async function recordAudit(entry) {
   try {
     if (!entry || !entry.table || !entry.action) return;
-    const who = currentIdentity();
+    const who = currentIdentity(entry.actor);
     // IMPORTANT: do NOT chain .select() here. Under Slice 3.3 RLS (tightened
     // 2026-04-23) anon has no SELECT policy on audit_log — admin-only — so a
     // `return=representation` insert would fail. A bare .insert() uses

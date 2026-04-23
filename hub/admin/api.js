@@ -6,7 +6,7 @@
  */
 
 import { db } from '../../shared/supabase.js?v=20260423-y1';
-import { recordAudit } from '../../shared/audit.js?v=20260423-y6';
+import { recordAudit } from '../../shared/audit.js?v=20260423-y7';
 import { auth } from '../../shared/auth.js?v=20260423-z3';
 
 // ============================================================
@@ -223,6 +223,13 @@ export async function listTeams() {
  * @returns {Promise<{ok:boolean, code?:string, error?:string, user_id?:string, team_name?:string}>}
  */
 export async function inviteUser(params) {
+  // Snapshot the acting admin BEFORE the edge-fn round-trip. During that
+  // ~1–3s await a transient auth event (e.g. TOKEN_REFRESHED with a
+  // momentarily-null session delivered by supabase-js) can null out the
+  // in-memory _currentUser, which would make a post-await currentIdentity()
+  // lookup fall through to {id:null, email: <legacy mirror>}. Capturing up
+  // front gives recordAudit a stable actor to attribute the row to.
+  const actor = auth.getUser() || null;
   const res = await auth.inviteUser(params);
   if (res.ok && res.user_id) {
     try {
@@ -237,6 +244,7 @@ export async function inviteUser(params) {
           role: params.role,
           invited: true,
         },
+        actor,
       });
     } catch (err) {
       // Audit is best-effort — don't fail the invite on an audit write.

@@ -7,7 +7,7 @@
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sP';
 import * as calc from './calc.js?v=20260423-z3';
-import * as api from './api.js?v=20260423-z4';
+import * as api from './api.js?v=20260423-z5';
 import { showToast } from '../../shared/toast.js?v=20260418-sK';
 
 /** @type {HTMLElement|null} */

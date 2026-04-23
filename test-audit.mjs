@@ -96,7 +96,7 @@ const assert = (c, m = 'assert fail') => { if (!c) throw new Error(m); };
 
 // ─── Load modules after globals are in place ─────────────────────────────
 const { auth } = await import('./shared/auth.js?v=20260423-z3');
-const { recordAudit } = await import('./shared/audit.js?v=20260423-y6');
+const { recordAudit } = await import('./shared/audit.js?v=20260423-y7');
 
 async function resetAuth() {
   globalThis.sessionStorage.clear();
@@ -163,6 +163,46 @@ await test('invalid input: no table or action skips insert silently', async () =
   assert(_lastInsert === null, 'must not insert without action');
   await recordAudit({ action: 'insert' });
   assert(_lastInsert === null, 'must not insert without table');
+});
+
+// ─── Actor override (Slice 3.16 follow-up) ──────────────────────────────
+// recordAudit accepts an optional `actor` to attribute a row to an
+// identity captured BEFORE an async round-trip (e.g. an edge-fn invite).
+// This pins the attribution so a transient auth event during the await
+// cannot null out the user_id. See shared/audit.js currentIdentity().
+
+await test('actor override: uses captured identity over live auth', async () => {
+  await resetAuth();
+  await auth.bootstrapSession();
+  await auth.loginWithPassword('live@gxo.com', 'secret');
+  // Now clear the in-memory session to simulate the race where
+  // _currentUser goes momentarily null during a token refresh.
+  await auth.logout();
+  await recordAudit({
+    table: 'profiles',
+    id: 'invitee-uid',
+    action: 'insert',
+    fields: { email: 'invitee@gxo.com', invited: true },
+    actor: { id: 'captured-admin-uid', email: 'captured-admin@gxo.com' },
+  });
+  assert(_lastInsert.row.user_id === 'captured-admin-uid', 'user_id uses actor.id — was ' + _lastInsert.row.user_id);
+  assert(_lastInsert.row.user_email === 'captured-admin@gxo.com', 'user_email uses actor.email — was ' + _lastInsert.row.user_email);
+  assert(_lastInsert.row.entity_id === 'invitee-uid', 'entity_id still the target');
+});
+
+await test('actor override: ignored when actor.id is missing', async () => {
+  await resetAuth();
+  await auth.bootstrapSession();
+  await auth.loginWithPassword('fallback@gxo.com', 'secret');
+  // actor without id → fall through to live auth identity
+  await recordAudit({
+    table: 'profiles',
+    id: 'x',
+    action: 'update',
+    actor: { id: null, email: 'stale@gxo.com' },
+  });
+  assert(_lastInsert.row.user_id === 'uid-fallback@gxo.com', 'falls back to live auth when override.id missing — was ' + _lastInsert.row.user_id);
+  assert(_lastInsert.row.user_email === 'fallback@gxo.com', 'falls back to live email too');
 });
 
 await test('post-logout: reverts to null user_id', async () => {

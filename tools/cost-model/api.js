@@ -7,7 +7,7 @@
  */
 
 import { db } from '../../shared/supabase.js?v=20260423-y1';
-import { recordAudit } from '../../shared/audit.js?v=20260423-y6';
+import { recordAudit } from '../../shared/audit.js?v=20260423-y7';
 
 // ============================================================
 // COST MODEL PROJECTS (CRUD)
