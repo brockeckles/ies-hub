@@ -283,12 +283,18 @@ function renderAudit(el) {
     loadAuditData().then(() => renderAudit(el));
   }
   const log = _auditLogRows;
-  // Normalize row shape for display — audit_log uses entity_table/entity_id/ts/user_email
+  // Normalize row shape for display. Slice 3.4: rows carry user_id (uuid)
+  // when captured under real auth; user_email is the display mirror only.
+  // Rows with no user_id are code-mode / pre-auth sessions — we label
+  // them explicitly so the migration progress is easy to eyeball here.
   const rows = log.map(a => ({
     action:     a.action,
     tableName:  a.entity_table,
     recordId:   a.entity_id,
-    userName:   a.user_email || '(anonymous)',
+    userName:   a.user_id
+      ? (a.user_email || a.user_id.slice(0, 8) + '…')
+      : (a.user_email || 'Code session'),
+    authed:     !!a.user_id,
     timestamp:  a.ts,
     fields:     a.changed_fields,
     sessionId:  a.session_id,
@@ -368,7 +374,10 @@ function renderAudit(el) {
                   <td><span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;color:#fff;background:${calc.actionBadgeColor(r.action)};">${r.action}</span></td>
                   <td><code style="font-size:11px;">${r.tableName || ''}</code></td>
                   <td style="color:var(--ies-gray-500);font-size:11px;">${r.recordId || ''}</td>
-                  <td style="font-size:11px;">${r.userName}</td>
+                  <td style="font-size:11px;" title="${r.authed ? 'Authenticated user (auth.uid)' : 'Pre-auth / code session'}">
+                    ${r.authed ? '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#10b981;margin-right:6px;vertical-align:middle;"></span>' : ''}
+                    ${r.userName}
+                  </td>
                   <td style="font-size:11px;color:var(--ies-gray-500);" title="${JSON.stringify(r.fields || {}).replace(/"/g, '&quot;')}">${fieldStr}</td>
                 </tr>
               `;

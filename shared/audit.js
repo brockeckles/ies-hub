@@ -1,12 +1,14 @@
 /**
- * IES Hub v3 — shared audit-log writer (X15)
+ * IES Hub v3 — shared audit-log writer (X15 closed in Slice 3.4)
  *
- * Records mutations to a central public.audit_log table. Until real
- * auth is wired we use a per-session id (random uuid stashed in
- * sessionStorage) so rows from one browser session can be grouped.
+ * Records mutations to a central public.audit_log table. With Slice 3.2
+ * auth wired, every row now carries a real `user_id uuid` when the user
+ * is signed in via email/password; code-mode sessions write NULL user_id
+ * + NULL user_email (they're pre-identity by design — Slice 3.5 removes
+ * code-mode entirely).
  *
  * Usage:
- *   import { recordAudit } from '../../shared/audit.js?v=20260418-sP';
+ *   import { recordAudit } from '../../shared/audit.js?v=20260423-y1';
  *
  *   await recordAudit({
  *     table: 'most_analyses',
@@ -19,10 +21,14 @@
  * NEVER block the actual user mutation — every saveX call wraps it
  * in fire-and-forget so a flaky network doesn't degrade the editor.
  *
+ * Entra-swap seam: identity is read via auth.getUser().id which resolves
+ * to auth.uid() — that claim survives the OIDC swap unchanged.
+ *
  * @module shared/audit
  */
 
 import { db } from './supabase.js?v=20260423-y1';
+import { auth } from './auth.js?v=20260423-y1';
 
 /**
  * Get-or-create the per-browser session identifier.
@@ -42,11 +48,12 @@ export function sessionId() {
 }
 
 /**
- * Pull a user email if one is present. Today the auth gate just sets
- * a code in sessionStorage; if/when SSO lands this becomes the real id.
+ * Legacy email mirror. auth.js writes sessionStorage['ies_user_email']
+ * on sign-in so older read-sites keep working; we read it as a fallback
+ * here for consistency but the true source is auth.getUser().
  * @returns {string|null}
  */
-function currentUserEmail() {
+function mirroredEmail() {
   try {
     return sessionStorage.getItem('ies_user_email')
       || localStorage.getItem('ies_user_email')
@@ -57,19 +64,38 @@ function currentUserEmail() {
 }
 
 /**
+ * Read identity for the current audit row. Password-mode → {id, email};
+ * code-mode (or signed out) → {id: null, email: null}. Never throws.
+ * @returns {{ id: string|null, email: string|null }}
+ */
+function currentIdentity() {
+  try {
+    const u = auth?.getUser?.();
+    if (u && u.id) {
+      return { id: u.id, email: u.email || mirroredEmail() || null };
+    }
+  } catch { /* auth module not ready — fall through */ }
+  // Code-mode or pre-bootstrap: no UUID to attribute. Email stays null
+  // too; the legacy mirror is only populated by password sign-in now.
+  return { id: null, email: mirroredEmail() };
+}
+
+/**
  * Record an audit-log entry. Fire-and-forget; never throws.
  * @param {{ table:string, id?:string|number|null, action:'insert'|'update'|'delete'|'link'|'unlink', fields?:Object }} entry
  */
 export async function recordAudit(entry) {
   try {
     if (!entry || !entry.table || !entry.action) return;
+    const who = currentIdentity();
     await db.insert('audit_log', {
       entity_table: entry.table,
       entity_id: entry.id != null ? String(entry.id) : null,
       action: entry.action,
       changed_fields: entry.fields ? entry.fields : null,
       session_id: sessionId(),
-      user_email: currentUserEmail(),
+      user_id: who.id,            // uuid | null — real identity (Slice 3.4)
+      user_email: who.email,      // display mirror only
       user_agent: typeof navigator !== 'undefined' ? (navigator.userAgent || '').slice(0, 200) : null,
     });
   } catch (err) {
