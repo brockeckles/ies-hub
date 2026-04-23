@@ -22,7 +22,7 @@
  * @module shared/audit
  */
 
-import { db } from './supabase.js?v=20260418-sP';
+import { db } from './supabase.js?v=20260423-y1';
 
 /**
  * Get-or-create the per-browser session identifier.

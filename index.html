@@ -178,7 +178,16 @@
         <nav class="hub-breadcrumb" id="hub-breadcrumb" style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:var(--ies-gray-600);min-height:22px;">
           <!-- rendered by initBreadcrumb() on nav:changed -->
         </nav>
-        <div class="hub-header-actions" style="display:flex;align-items:center;gap:4px;">
+        <div class="hub-header-actions" style="display:flex;align-items:center;gap:6px;">
+          <!-- User chip / sign-out (Slice 3.2). Text is populated by initHeaderActions. -->
+          <button type="button" class="hub-user-chip hidden" id="hub-btn-signout" title="Sign out" aria-label="Sign out">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+            <span class="hub-user-chip-label" id="hub-user-chip-label">Signed in</span>
+          </button>
           <button type="button" id="hub-btn-tour" title="Start guided tour" aria-label="Start guided tour"
             style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid var(--ies-gray-200);background:#fff;border-radius:8px;color:var(--ies-gray-600);cursor:pointer;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 115.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
@@ -203,7 +212,7 @@
 
   <!-- App Bootstrap -->
   <script type="module">
-    import { auth } from './shared/auth.js?v=20260418-sK';
+    import { auth } from './shared/auth.js?v=20260423-y1';
     import { router } from './shared/router.js?v=20260418-sK';
     import { search } from './shared/search.js?v=20260418-sK';
     import { bus } from './shared/event-bus.js?v=20260418-sK';
@@ -218,12 +227,19 @@
     window.__hubTour = tour;
     window.__hubAnalytics = analytics;
 
-    // ---- Auth Gate ----
+    // ---- Auth Gate (Slice 3.2: hybrid password + legacy code) ----
     const authOverlay = document.getElementById('auth-overlay');
     const hubApp = document.getElementById('hub-app');
+    let _appBooted = false;
 
     function bootApp() {
       hubApp.classList.remove('hidden');
+      if (_appBooted) {
+        // Returning from a re-login — just refresh the user chip and exit.
+        renderUserChip();
+        return;
+      }
+      _appBooted = true;
       initRouter();
       initNav();
       initSearch();
@@ -231,13 +247,50 @@
       initKeyboardShortcuts();
       initBreadcrumb();
       initHeaderActions();
+      renderUserChip();
     }
+
+    // Restore a cached Supabase session before deciding auth state.
+    // Top-level await is fine inside type="module" scripts.
+    await auth.bootstrapSession();
 
     if (auth.isAuthenticated()) {
       authOverlay.classList.add('hidden');
       bootApp();
     } else {
       auth.renderLoginScreen(authOverlay, bootApp);
+    }
+
+    // Keep the user chip in sync with auth state so logout-in-another-tab
+    // or a token refresh updates the header without a page reload.
+    bus.on('auth:login', () => renderUserChip());
+    bus.on('auth:logout', () => {
+      renderUserChip();
+      // Return to the login overlay instead of leaving the app visible
+      // with no session. bootApp() will no-op the init work on return.
+      hubApp.classList.add('hidden');
+      authOverlay.classList.remove('hidden');
+      authOverlay.style.opacity = '1';
+      auth.renderLoginScreen(authOverlay, bootApp);
+    });
+
+    function renderUserChip() {
+      const chip = document.getElementById('hub-btn-signout');
+      const label = document.getElementById('hub-user-chip-label');
+      if (!chip || !label) return;
+      const mode = auth.getMode();
+      if (mode === 'password') {
+        const u = auth.getUser();
+        label.textContent = u?.email || 'Signed in';
+        chip.title = `Signed in as ${u?.email || 'user'} — click to sign out`;
+        chip.classList.remove('hidden');
+      } else if (mode === 'code') {
+        label.textContent = 'Access code';
+        chip.title = 'Access-code session — click to sign out';
+        chip.classList.remove('hidden');
+      } else {
+        chip.classList.add('hidden');
+      }
     }
 
     // ---- Router Setup ----
@@ -568,6 +621,17 @@
         if (window.__hubTour) window.__hubTour.start(tourName);
       });
       document.getElementById('hub-btn-help')?.addEventListener('click', toggleHelpPopover);
+
+      // Sign-out chip (Slice 3.2). Single click signs out of whichever
+      // path is active (supabase or legacy code) and re-renders login.
+      document.getElementById('hub-btn-signout')?.addEventListener('click', async () => {
+        try {
+          await auth.logout();
+          showToast('Signed out', 'info');
+        } catch (err) {
+          showToast('Sign-out failed: ' + (err?.message || err), 'error');
+        }
+      });
     }
 
     function reloadCurrentRoute() {

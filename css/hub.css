@@ -643,6 +643,73 @@ textarea.hub-input {
 
 .hub-auth-error.visible { display: block; }
 
+/* Slice 3.2 additions — label, pane switcher, secondary link. */
+.hub-auth-label {
+  display: block;
+  text-align: left;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+  color: var(--ies-gray-600);
+  margin-bottom: var(--sp-1);
+}
+
+.hub-auth-pane {
+  text-align: left;
+}
+
+.hub-auth-pane .hub-auth-input {
+  margin-bottom: 0; /* spacing is handled by the label margin-top */
+  text-align: left;
+}
+
+.hub-auth-footer {
+  text-align: center;
+  font-size: var(--fs-caption);
+}
+
+.hub-auth-link {
+  color: var(--ies-gray-500);
+  font-weight: var(--fw-semibold);
+  text-decoration: none;
+  border-bottom: 1px dotted var(--ies-gray-300);
+  padding-bottom: 1px;
+}
+.hub-auth-link:hover {
+  color: var(--ies-navy);
+  border-bottom-color: var(--ies-navy);
+}
+
+.hub-auth-pane.hidden { display: none; }
+
+/* Header "sign out" affordance (Slice 3.2). */
+.hub-user-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--ies-gray-200);
+  background: #fff;
+  border-radius: 8px;
+  color: var(--ies-gray-700);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hub-user-chip:hover {
+  background: var(--ies-gray-50);
+  color: var(--ies-navy);
+}
+.hub-user-chip svg { flex-shrink: 0; }
+.hub-user-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ---- Global Search ---- */
 .hub-search-container {
   position: relative;

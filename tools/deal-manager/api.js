@@ -5,7 +5,7 @@
  * @module tools/deal-manager/api
  */
 
-import { db } from '../../shared/supabase.js?v=20260418-sL';
+import { db } from '../../shared/supabase.js?v=20260423-y1';
 import { recordAudit } from '../../shared/audit.js?v=20260418-sP';
 
 // ============================================================

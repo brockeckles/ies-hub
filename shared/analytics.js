@@ -21,7 +21,7 @@
  * @module shared/analytics
  */
 
-import { db } from './supabase.js?v=20260418-sK';
+import { db } from './supabase.js?v=20260423-y1';
 
 const SESSION_KEY = 'ies_hub_analytics_session';
 const SESSION_TTL_MS = 30 * 60 * 1000;

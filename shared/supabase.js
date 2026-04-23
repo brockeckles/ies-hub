@@ -16,11 +16,22 @@
 const SUPABASE_URL = 'https://dklnwcshrpamzsybjlzb.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRrbG53Y3NocnBhbXpzeWJqbHpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3MTU3NzksImV4cCI6MjA5MDI5MTc3OX0.mj9TIj_rwxfbb9e2vBnA6hNYot5MX8-k1BbGfddAeJs';
 
+/**
+ * Storage key for the Supabase auth session.
+ * Namespaced per deployment so v2/v3 never cross-read.
+ * Keep in sync with shared/auth.js.
+ */
+const SESSION_STORAGE_KEY = 'ies_hub_v3_sb_session';
+
 /** @type {import('@supabase/supabase-js').SupabaseClient | null} */
 let _client = null;
 
 /**
- * Get or create the Supabase client.
+ * Get or create the Supabase client. Configured with persistent auth so
+ * logging in on one tab survives reload and carries across tabs in the
+ * same origin. Keep this singleton — two clients would fight over the
+ * session.
+ *
  * Requires supabase-js loaded as global `supabase`.
  * @returns {import('@supabase/supabase-js').SupabaseClient}
  */
@@ -32,8 +43,25 @@ function getClient() {
     throw new Error('Supabase JS library not loaded. Ensure the CDN script is included.');
   }
 
+  // Auth options are passed even before any user logs in — this just
+  // tells the client *how* to track a session when one eventually lands.
+  // Anonymous calls still work identically; tables without RLS lockdown
+  // behave the same until Slice 3.3 tightens the policies.
   // @ts-ignore
-  _client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  _client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: {
+      // Persist across reload so users don't have to log in every tab.
+      persistSession: true,
+      autoRefreshToken: true,
+      // Detect session from URL for future password-reset / magic-link
+      // flows (Slice 3.6). Harmless when no auth params are present.
+      detectSessionInUrl: true,
+      storageKey: SESSION_STORAGE_KEY,
+      // storage defaults to window.localStorage in browsers; spelled out
+      // so we can swap to sessionStorage later if Security requires it.
+      storage: (typeof window !== 'undefined' && window.localStorage) || undefined,
+    },
+  });
   return _client;
 }
 
