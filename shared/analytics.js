@@ -26,7 +26,7 @@ import { db } from './supabase.js?v=20260423-y1';
 // Admin → User Activity view can roll up per-user. Lazy-resolved at event
 // time (not import time) so a reload that fires page_view before the
 // session has bootstrapped still records whatever id is available.
-import { auth } from './auth.js?v=20260423-y9';
+import { auth } from './auth.js?v=20260423-z2';
 
 const SESSION_KEY = 'ies_hub_analytics_session';
 const SESSION_TTL_MS = 30 * 60 * 1000;

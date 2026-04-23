@@ -152,13 +152,13 @@
         </div>
 
         <!-- Admin -->
-        <div class="hub-nav-group">
+        <div class="hub-nav-group" id="hub-nav-group-admin" style="display:none;">
           <div class="hub-nav-group-label">Admin</div>
           <div class="hub-nav-item" data-route="admin">
             <span class="hub-nav-icon">
               <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
             </span>
-            <span class="hub-nav-label">Reference Data</span>
+            <span class="hub-nav-label">Admin</span>
           </div>
         </div>
 
@@ -215,9 +215,9 @@
 
   <!-- App Bootstrap -->
   <script type="module">
-    import { auth } from './shared/auth.js?v=20260423-y9';
+    import { auth } from './shared/auth.js?v=20260423-z2';
     import { router } from './shared/router.js?v=20260418-sK';
-    import { search } from './shared/search.js?v=20260418-sK';
+    import { search } from './shared/search.js?v=20260423-z2';
     import { bus } from './shared/event-bus.js?v=20260418-sK';
     import { state } from './shared/state.js?v=20260418-sK';
     // Shared UX modules — self-wire their listeners/guards on import.
@@ -238,11 +238,18 @@
     function bootApp() {
       hubApp.classList.remove('hidden');
       if (_appBooted) {
-        // Returning from a re-login — just refresh the user chip and exit.
+        // Returning from a re-login — just refresh the user chip and
+        // re-apply admin gating (a different user may have signed in).
         renderUserChip();
+        applyAdminGating();
         return;
       }
       _appBooted = true;
+      // Slice 3.14 — gate the Admin route BEFORE initRouter() kicks off
+      // its first hashchange. If a non-admin deep-linked into #admin the
+      // initial render jumps them to #overview, so we never mount the
+      // admin module for them even briefly.
+      applyAdminGating();
       initRouter();
       initNav();
       initSearch();
@@ -252,6 +259,39 @@
       initHeaderActions();
       renderUserChip();
     }
+
+    // ---- Admin nav + route gating (Slice 3.14) ----
+    // Fire-and-forget: hides the Admin nav group while the role lookup is
+    // in flight, reveals it if the user is admin. If they tried to deep-
+    // link into #admin, bounces them to #overview with a toast.
+    // Safe to call multiple times — loadRole() is idempotent per user.
+    async function applyAdminGating() {
+      const adminGroup = document.getElementById('hub-nav-group-admin');
+      // Hidden by default in the HTML; leave it hidden until role resolves.
+      try {
+        await auth.loadRole();
+      } catch (err) {
+        console.warn('[admin-gating] loadRole threw:', err);
+      }
+      const admin = auth.isAdmin();
+      if (adminGroup) adminGroup.style.display = admin ? '' : 'none';
+      // If someone who's not admin is currently AT or heading INTO #admin,
+      // bounce them. Covers reloads, bookmarks, and stale links.
+      const onAdmin = (window.location.hash === '#admin' || window.location.hash.startsWith('#admin/'));
+      if (!admin && onAdmin) {
+        window.location.hash = 'overview';
+        try { showToast('Admin is restricted to admin users.', 'info'); } catch {}
+      }
+    }
+
+    // Safety net: catch any later hashchange (nav click, back button,
+    // manual URL edit) that would land a non-admin on #admin.
+    window.addEventListener('hashchange', () => {
+      if (!auth.isAdmin() && (window.location.hash === '#admin' || window.location.hash.startsWith('#admin/'))) {
+        window.location.hash = 'overview';
+        try { showToast('Admin is restricted to admin users.', 'info'); } catch {}
+      }
+    });
 
     // Restore a cached Supabase session before deciding auth state.
     // Top-level await is fine inside type="module" scripts.
@@ -511,7 +551,7 @@
         'deals': { title: 'Deal Management', path: './hub/deal-management/ui.js?v=20260422-xI' },
         'training': { title: 'Training Wiki', path: './hub/training-wiki/ui.js?v=20260418-sK' },
         'changemanagement': { title: 'Change Management', path: './hub/change-mgmt/ui.js?v=20260418-sK' },
-        'admin': { title: 'Reference Data', path: './hub/admin/ui.js?v=20260423-z1' },
+        'admin': { title: 'Admin', path: './hub/admin/ui.js?v=20260423-z2' },
         'feedback': { title: 'Ideas & Feedback', path: './hub/feedback/ui.js?v=20260418-sK' },
       };
 
@@ -610,7 +650,7 @@
         training: 'Training Wiki',
         changemanagement: 'Change Management',
         feedback: 'Ideas & Feedback',
-        admin: 'Reference Data',
+        admin: 'Admin',
       };
       const TOOL_LABELS = {
         'cost-model': 'Cost Model Builder',

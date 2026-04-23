@@ -45,6 +45,10 @@ function makeFakeSupabase() {
   // Stored passwords by email — seeded by signInWithPassword on first use
   // (the test "creates" the user implicitly by signing in successfully).
   const passwords = new Map();
+  // Slice 3.14 — minimal profile table mock so loadRole() can be exercised
+  // end-to-end without hitting the network. Keyed by user.id; set via
+  // __setProfileRole(email, role). Defaults to absent (maybeSingle → null).
+  const profileRoles = new Map();
   // Slice 3.10 — track resetPasswordForEmail invocations so tests can
   // assert what was sent without subscribing to the real network.
   const resetCalls = [];
@@ -170,9 +174,49 @@ function makeFakeSupabase() {
             verifyOtpCalls.length = 0;
             nextResetError = null;
             session = null;
+            profileRoles.clear();
+          },
+          // Slice 3.14 helpers
+          __setProfileRole(userIdOrEmail, role) {
+            // Accept either a raw uuid or an email (for symmetry with the
+            // fake login which mints id = 'uid-' + email).
+            const id = String(userIdOrEmail || '').startsWith('uid-')
+              ? userIdOrEmail
+              : 'uid-' + userIdOrEmail;
+            profileRoles.set(id, role);
           },
         },
-        from() { return {}; },
+        // Slice 3.14 — only the profiles query chain is mocked. Any other
+        // table returns a harmless empty-result chain so it doesn't trip
+        // up tests that don't care about the DB.
+        from(tableName) {
+          if (tableName === 'profiles') {
+            return {
+              select(_cols) {
+                let filterId = null;
+                return {
+                  eq(col, val) { if (col === 'id') filterId = val; return this; },
+                  async maybeSingle() {
+                    const role = filterId != null ? profileRoles.get(filterId) : null;
+                    return {
+                      data: role != null ? { role } : null,
+                      error: null,
+                    };
+                  },
+                };
+              },
+            };
+          }
+          // Fallback — empty-result shape so unrelated tests keep working.
+          return {
+            select() {
+              return {
+                eq() { return this; },
+                async maybeSingle() { return { data: null, error: null }; },
+              };
+            },
+          };
+        },
       };
     },
   };
@@ -205,7 +249,7 @@ async function test(name, fn) {
 }
 const assert = (cond, msg = 'assertion failed') => { if (!cond) throw new Error(msg); };
 
-const { auth } = await import('./shared/auth.js?v=20260423-y9');
+const { auth } = await import('./shared/auth.js?v=20260423-z2');
 const { bus } = await import('./shared/event-bus.js?v=20260418-sK');
 
 // ─── Tests ──────────────────────────────────────────────────────────────
@@ -596,6 +640,73 @@ await test('verifyRecoveryOtp: strips whitespace from pasted codes', async () =>
   // lives in verifyRecoveryOtp; hyphens/commas would be stripped at UI level.
   const res = await auth.verifyRecoveryOtp('otp5@gxo.com', '123 456');
   assert(res.ok === true, 'inner-whitespace should be stripped');
+});
+
+// ─── Role (Slice 3.14) ──────────────────────────────────────────────────
+await test('role: initial state is unloaded and not admin', async () => {
+  await reset();
+  await auth.bootstrapSession();
+  assert(auth.getRole() === null, 'role must start null');
+  assert(auth.isAdmin() === false, 'isAdmin must default false');
+  assert(auth.isRoleLoaded() === false, 'isRoleLoaded must start false');
+});
+
+await test('role: loadRole with no session resolves to null and marks loaded', async () => {
+  await reset();
+  await auth.bootstrapSession();
+  const r = await auth.loadRole();
+  assert(r === null, 'no session → null role');
+  assert(auth.isRoleLoaded() === true, 'must flip isRoleLoaded true even with no session');
+  assert(auth.isAdmin() === false, 'no-session → not admin');
+});
+
+await test('role: loadRole reads admin role from profiles for the signed-in user', async () => {
+  await reset();
+  await auth.bootstrapSession();
+  // Seed the fake profile row BEFORE login; it's keyed by the uid that
+  // signInWithPassword mints (uid-<email>).
+  const { db } = await import('./shared/supabase.js?v=20260423-y1');
+  db.getClient().auth.__setProfileRole('admin@gxo.com', 'admin');
+  await auth.loginWithPassword('admin@gxo.com', 'secret');
+  const r = await auth.loadRole();
+  assert(r === 'admin', `expected admin, got ${r}`);
+  assert(auth.isAdmin() === true, 'isAdmin must be true');
+  assert(auth.getRole() === 'admin', 'getRole must return admin');
+});
+
+await test('role: non-admin user resolves to role string but isAdmin stays false', async () => {
+  await reset();
+  await auth.bootstrapSession();
+  const { db } = await import('./shared/supabase.js?v=20260423-y1');
+  db.getClient().auth.__setProfileRole('member@gxo.com', 'member');
+  await auth.loginWithPassword('member@gxo.com', 'secret');
+  const r = await auth.loadRole();
+  assert(r === 'member', `expected member, got ${r}`);
+  assert(auth.isAdmin() === false, 'member → not admin');
+});
+
+await test('role: missing profiles row resolves to null (safest default)', async () => {
+  await reset();
+  await auth.bootstrapSession();
+  // No __setProfileRole call → maybeSingle returns { data: null }
+  await auth.loginWithPassword('ghost@gxo.com', 'secret');
+  const r = await auth.loadRole();
+  assert(r === null, 'missing profile → null');
+  assert(auth.isAdmin() === false, 'missing profile → not admin (safe default)');
+});
+
+await test('role: logout clears cached role', async () => {
+  await reset();
+  await auth.bootstrapSession();
+  const { db } = await import('./shared/supabase.js?v=20260423-y1');
+  db.getClient().auth.__setProfileRole('admin2@gxo.com', 'admin');
+  await auth.loginWithPassword('admin2@gxo.com', 'secret');
+  await auth.loadRole();
+  assert(auth.isAdmin() === true, 'pre-logout: admin');
+  await auth.logout();
+  assert(auth.isAdmin() === false, 'post-logout: not admin');
+  assert(auth.getRole() === null, 'post-logout: role null');
+  assert(auth.isRoleLoaded() === false, 'post-logout: isRoleLoaded back to false');
 });
 
 // ─── Summary ────────────────────────────────────────────────────────────

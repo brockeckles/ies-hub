@@ -55,7 +55,7 @@ class GlobalSearch {
       { title: 'Training Wiki', route: 'training', section: 'Resources', keywords: ['wiki', 'knowledge', 'articles'] },
       { title: 'Change Management', route: 'changemanagement', section: 'Resources', keywords: ['change', 'updates'] },
       { title: 'Ideas & Feedback', route: 'feedback', section: 'Resources', keywords: ['feedback', 'ideas', 'suggestions'] },
-      { title: 'Reference Data', route: 'admin', section: 'Admin', keywords: ['admin', 'settings', 'master data'] },
+      { title: 'Admin', route: 'admin', section: 'Admin', keywords: ['admin', 'settings', 'master data', 'reference data', 'users', 'user activity', 'escalations', 'audit'] },
       { title: 'Cost Model Builder', route: 'designtools/cost-model', section: 'Design Tools', keywords: ['pricing', 'P&L', 'labor', 'equipment', 'overhead'] },
       { title: 'Multi-Site Analyzer', route: 'designtools/deal-manager', section: 'Design Tools', keywords: ['deal', 'sites', 'compare'] },
       { title: 'Warehouse Sizing Calculator', route: 'designtools/warehouse-sizing', section: 'Design Tools', keywords: ['warehouse', 'sqft', '3D', 'facility'] },

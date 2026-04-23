@@ -43,7 +43,7 @@ function render() {
   rootEl.innerHTML = `
     <div class="hub-content-inner" style="padding:24px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
-        <h2 class="text-page" style="margin:0;">Admin Panel</h2>
+        <h2 class="text-page" style="margin:0;">Admin</h2>
         <div style="display:flex;gap:8px;" id="admin-tabs">
           ${['tables', 'users', 'activity', 'escalations', 'audit'].map(t => `
             <button class="hub-btn hub-btn-sm ${t === activeTab ? '' : 'hub-btn-secondary'}" data-tab="${t}">${

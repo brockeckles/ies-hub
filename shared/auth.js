@@ -29,7 +29,7 @@
  *   completePasswordRecovery → signed in.
  *
  * Usage:
- *   import { auth } from './auth.js?v=20260423-y9';
+ *   import { auth } from './auth.js?v=20260423-z2';
  *
  *   await auth.bootstrapSession();            // call once before gate check
  *   if (!auth.isAuthenticated()) {
@@ -158,6 +158,10 @@ async function bootstrapSession() {
         if (evt === 'SIGNED_IN') bus.emit('auth:login', { mode: 'password', email: session.user.email, id: session.user.id });
       } else if (evt === 'SIGNED_OUT') {
         _recoveryMode = false;
+        // Slice 3.14 — in case SIGNED_OUT arrives via another tab (not the
+        // local logout() call), make sure role cache is also cleared here.
+        _currentRole = null;
+        _roleLoaded = false;
         state.set('user', null);
         mirrorEmailToLegacy(null);
         bus.emit('auth:logout');
@@ -203,6 +207,53 @@ function getMode() {
   if (_recoveryMode) return 'recovery';
   return _currentSession ? 'password' : null;
 }
+
+// ─── Role (Slice 3.14) ──────────────────────────────────────────────────
+// Cached from public.profiles.role the first time we have a session. Kept
+// here (not in state) so nav-gating code can call it synchronously after
+// loadRole() has completed once. Cleared on logout so a re-login as a
+// different user doesn't inherit the previous role.
+let _currentRole = null;
+let _roleLoaded = false;
+
+/**
+ * Fetch the signed-in user's profile.role. Idempotent: a second call with
+ * the same user_id is a no-op. On failure (network, RLS, missing profile
+ * row) we leave _currentRole = null, which the isAdmin() caller treats as
+ * "not admin" — the safest default for a nav-gating use case.
+ *
+ * @returns {Promise<string|null>}
+ */
+async function loadRole() {
+  const u = getUser();
+  if (!u || !u.id) { _currentRole = null; _roleLoaded = true; return null; }
+  try {
+    const { data, error } = await db.from('profiles')
+      .select('role')
+      .eq('id', u.id)
+      .maybeSingle();
+    if (error) {
+      console.warn('[auth] loadRole failed:', error);
+      _currentRole = null;
+    } else {
+      _currentRole = data && data.role ? String(data.role) : null;
+    }
+  } catch (err) {
+    console.warn('[auth] loadRole threw:', err);
+    _currentRole = null;
+  }
+  _roleLoaded = true;
+  return _currentRole;
+}
+
+/** @returns {string|null} */
+function getRole() { return _currentRole; }
+
+/** @returns {boolean} */
+function isAdmin() { return _currentRole === 'admin'; }
+
+/** @returns {boolean} true once loadRole() has completed once (success or fail). */
+function isRoleLoaded() { return _roleLoaded; }
 
 /**
  * Sign in with email + password against Supabase Auth.
@@ -442,6 +493,11 @@ async function logout() {
   _currentSession = null;
   _currentUser = null;
   _recoveryMode = false;
+  // Slice 3.14 — clear cached role so a re-login under a different account
+  // doesn't inherit the previous user's admin state. isAdmin() now returns
+  // false until loadRole() finishes for the new session.
+  _currentRole = null;
+  _roleLoaded = false;
   mirrorEmailToLegacy(null);
   state.set('user', null);
   bus.emit('auth:logout');
@@ -1154,6 +1210,12 @@ export const auth = {
   getSession,
   getUser,
   getMode,
+
+  // Role (Slice 3.14)
+  loadRole,
+  getRole,
+  isAdmin,
+  isRoleLoaded,
 
   // Auth actions
   loginWithPassword,

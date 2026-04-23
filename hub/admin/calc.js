@@ -465,7 +465,7 @@ export const ROUTE_LABELS = {
   overviewold: 'Home (old)',
   dealmanager: 'Deal Manager',
   dashboards: 'Dashboards',
-  admin: 'Admin Panel',
+  admin: 'Admin',
   feedback: 'Feedback',
   commandcenter: 'Command Center',
   'designtools/cost-model': 'Cost Model Builder',
