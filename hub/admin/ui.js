@@ -12,7 +12,7 @@ import { showToast } from '../../shared/toast.js?v=20260418-sK';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
-let activeTab = 'tables'; // tables | users | activity | escalations | audit
+let activeTab = 'tables'; // tables | activity | escalations | audit
 let activeMasterTable = null;
 
 // Slice 3.13 — User Activity tab state. Keyed outside render() so a
@@ -45,7 +45,7 @@ function render() {
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
         <h2 class="text-page" style="margin:0;">Admin</h2>
         <div style="display:flex;gap:8px;" id="admin-tabs">
-          ${['tables', 'users', 'activity', 'escalations', 'audit'].map(t => `
+          ${['tables', 'activity', 'escalations', 'audit'].map(t => `
             <button class="hub-btn hub-btn-sm ${t === activeTab ? '' : 'hub-btn-secondary'}" data-tab="${t}">${
               t === 'tables' ? 'Master Data'
               : t === 'activity' ? 'User Activity'
@@ -54,8 +54,7 @@ function render() {
           `).join('')}
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">
-        ${kpi('Users', `${stats.activeUsers}/${stats.totalUsers}`, '#2563eb')}
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;">
         ${kpi('Tables', stats.totalTables, '#7c3aed')}
         ${kpi('Records', stats.totalRecords, '#16a34a')}
         ${kpi('Active Rules', stats.activeEscalations, '#d97706')}
@@ -82,10 +81,14 @@ function render() {
 
   switch (activeTab) {
     case 'tables': renderMasterData(el); break;
-    case 'users': renderUsers(el); break;
     case 'activity': renderActivity(el); break;
     case 'escalations': renderEscalations(el); break;
     case 'audit': renderAudit(el); break;
+    // 'users' tab was removed in Slice 3.15 — the demo roster (John Smith
+    // et al.) was misleading given we now have 5 real profiles. The User
+    // Activity tab is the single source of truth for who's in the hub.
+    // Real user management (invite / promote / deactivate) will land as
+    // its own slice with working API wiring, not as a demo placeholder.
   }
 }
 
@@ -215,45 +218,11 @@ function renderTableDetail(el) {
 }
 
 // ===== USERS =====
-function renderUsers(el) {
-  const users = calc.DEMO_USERS;
-  const byRole = calc.usersByRole(users);
-
-  el.innerHTML = `
-    <div style="display:flex;gap:12px;margin-bottom:16px;">
-      ${Object.entries(byRole).map(([role, count]) => `
-        <div class="hub-card" style="padding:8px 16px;text-align:center;">
-          <div style="font-size:16px;font-weight:800;color:${calc.roleBadgeColor(role)};">${count}</div>
-          <div style="font-size:11px;color:var(--ies-gray-400);text-transform:capitalize;">${role}s</div>
-        </div>
-      `).join('')}
-    </div>
-    <div class="hub-card" style="padding:16px;overflow-x:auto;">
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">
-        <thead>
-          <tr>
-            <th style="text-align:left;padding:8px;border-bottom:2px solid var(--ies-gray-200);font-size:11px;font-weight:700;color:var(--ies-gray-400);">Name</th>
-            <th style="text-align:left;padding:8px;border-bottom:2px solid var(--ies-gray-200);font-size:11px;font-weight:700;color:var(--ies-gray-400);">Email</th>
-            <th style="text-align:left;padding:8px;border-bottom:2px solid var(--ies-gray-200);font-size:11px;font-weight:700;color:var(--ies-gray-400);">Role</th>
-            <th style="text-align:left;padding:8px;border-bottom:2px solid var(--ies-gray-200);font-size:11px;font-weight:700;color:var(--ies-gray-400);">Status</th>
-            <th style="text-align:left;padding:8px;border-bottom:2px solid var(--ies-gray-200);font-size:11px;font-weight:700;color:var(--ies-gray-400);">Last Login</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${users.map(u => `
-            <tr style="border-bottom:1px solid var(--ies-gray-100);">
-              <td style="padding:8px;font-weight:600;">${u.displayName}</td>
-              <td style="padding:8px;color:var(--ies-gray-400);">${u.email}</td>
-              <td style="padding:8px;"><span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;color:#fff;background:${calc.roleBadgeColor(u.role)};">${u.role}</span></td>
-              <td style="padding:8px;"><span style="color:${u.active ? '#16a34a' : '#dc2626'};font-weight:700;font-size:12px;">${u.active ? 'Active' : 'Inactive'}</span></td>
-              <td style="padding:8px;font-size:12px;color:var(--ies-gray-400);">${calc.formatDateTime(u.lastLogin)}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>
-  `;
-}
+// Removed in Slice 3.15 — rendered calc.DEMO_USERS (John Smith / Sarah Connor /
+// etc.), which undermined credibility once real pilots were seated. The real
+// roster lives in the User Activity tab (email, role, last login, usage).
+// When real user management lands — invite, role-change, deactivate — it
+// should reuse listUsers() from api.js, not re-introduce a demo surface.
 
 // ===== USER ACTIVITY (Slice 3.13) =====
 async function loadActivityData(forceRefresh = false) {
