@@ -211,7 +211,8 @@ export async function loadUserActivityInputs(opts = {}) {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
   const [profilesRes, eventsRes] = await Promise.all([
-    db.from('profiles').select('id, email, display_name, role, team_id, created_at'),
+    // NOTE: the column is `full_name` in public.profiles (not display_name)
+    db.from('profiles').select('id, email, full_name, role, team_id, created_at'),
     // Cap at a large-but-bounded number so we never accidentally pull the
     // entire table during growth. 50k is >> current volume (~1200 rows
     // over 5 days) and still fast to aggregate client-side.

@@ -532,12 +532,14 @@ export function summarizeUserActivity(profiles, events, opts = {}) {
 
   // Build one row per profile; profiles with no events still show in the
   // table with "never logged in" so admins can see who hasn't touched it.
+  // Column is `full_name` in public.profiles; accept `display_name` too so
+  // any existing fixtures / callers that pass a different shape still work.
   const rows = (profiles || []).map((p) => {
     const evs = byUser.get(p.id) || [];
     return rollup({
       userId: p.id,
       email: p.email || '',
-      displayName: p.display_name || p.email || '(no name)',
+      displayName: p.full_name || p.display_name || p.email || '(no name)',
       role: p.role || 'member',
       team_id: p.team_id || null,
       events: evs,
