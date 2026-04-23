@@ -1,8 +1,9 @@
-// test-rls-isolation.mjs — Slice 3.7 RLS isolation suite
+// test-rls-isolation.mjs — Slice 3.7 + 3.8 RLS isolation suite
 //
-// Full authed-persona isolation tests for the Slice 3.3 RLS policies. This is
+// Full authed-persona isolation tests for the Slice 3.3 (deal tables) and
+// Slice 3.8 (master/ref tables, SECURITY INVOKER views) RLS policies. This is
 // the "Full isolation suite with multiple real users" that test-rls.mjs
-// (Slice 3.3 smoke) deferred to 3.7.
+// (Slice 3.3 smoke) deferred to 3.7, with Slice 3.8 coverage added on top.
 //
 // Personas:
 //   A = rls-test-a@ies-hub.test  (member, rls-test-team)
@@ -21,6 +22,9 @@
 //   7. JOIN inheritance on cost_model_labor child
 //   8. audit_log SELECT blocked for members
 //   9. admin bypass on cross-team row + audit_log (gated on BROCK_PASS)
+//  10. [Slice 3.8] Anon denied + member SELECT works on 5 master/ref tables
+//  11. [Slice 3.8] Member INSERT rejected on master/ref tables (admin-only write)
+//  12. [Slice 3.8] SECURITY INVOKER views still readable by authed member
 //
 // All test rows carry the "rls-iso-" marker prefix so anything left behind
 // after a crash is trivially findable. Teardown deletes everything via
@@ -134,7 +138,7 @@ async function run() {
     return;
   }
 
-  console.log('Slice 3.7 RLS isolation suite (authed REST calls against live Supabase)');
+  console.log('Slice 3.7 + 3.8 RLS isolation suite (authed REST calls against live Supabase)');
   console.log('');
 
   let tokA, tokB, tokC;
@@ -338,6 +342,62 @@ async function run() {
     console.log('\nBlock 8 — audit_log SELECT (admin-only)');
     expect200Empty(`A (member) audit_log SELECT → 0 rows`,
       await rest('GET', 'audit_log', { token: tokA, params: '?select=id&limit=1' }));
+
+    // ─── Block 10: Slice 3.8 master/ref tables — anon denied + member SELECT works
+    console.log('\nBlock 10 — Slice 3.8 master/ref tables: anon denied + member SELECT');
+    {
+      const slice38Tables = [
+        'master_accounts', 'master_competitors', 'master_markets',
+        'master_verticals', 'ref_multisite_grade_thresholds',
+      ];
+      for (const t of slice38Tables) {
+        const anonRes = await rest('GET', t, { params: '?select=id&limit=1' });
+        expect200Empty(`anon GET ${t} → 0 rows`, anonRes);
+
+        const memberRes = await rest('GET', t, { token: tokA, params: '?select=id&limit=1' });
+        if (memberRes.status === 200 && Array.isArray(memberRes.body) && memberRes.body.length >= 1) {
+          ok(`A (member) GET ${t} → ${memberRes.body.length} row${memberRes.body.length === 1 ? '' : 's'}`);
+        } else bad(`A (member) GET ${t}`, `status=${memberRes.status} body=${JSON.stringify(memberRes.body).slice(0, 180)}`);
+      }
+    }
+
+    // ─── Block 11: Slice 3.8 member INSERT rejected (admin-only write) ───
+    console.log('\nBlock 11 — Slice 3.8 member INSERT rejected (admin-only write)');
+    {
+      // One representative per shape — NOT NULL cols filled with rls-iso- markers.
+      const writeAttempts = [
+        { table: 'master_accounts',
+          row:   { name: `rls-iso-acct-${Date.now()}`, vertical: 'Retail', region: 'Northeast' } },
+        { table: 'master_competitors',
+          row:   { name: `rls-iso-comp-${Date.now()}`, primary_vertical: 'Retail' } },
+        { table: 'master_verticals',
+          row:   { vertical_name: `rls-iso-vert-${Date.now()}` } },
+        { table: 'master_markets',
+          row:   { city: `rls-iso-city-${Date.now()}`, state: 'ZZ', region: 'Northeast', market_tier: 'Tier 3' } },
+        { table: 'ref_multisite_grade_thresholds',
+          row:   { metric_name: `rls-iso-metric-${Date.now()}`, label: 'rls-iso' } },
+      ];
+      for (const { table, row } of writeAttempts) {
+        const r = await rest('POST', table, { token: tokA, body: row, prefer: 'return=representation' });
+        expectRejected(`A (member) INSERT into ${table} rejected`, r);
+      }
+    }
+
+    // ─── Block 12: Slice 3.8 SECURITY INVOKER views readable by member ───
+    console.log('\nBlock 12 — Slice 3.8 SECURITY INVOKER views readable by authed member');
+    {
+      const views = [
+        'ref_labor_rates_current', 'ref_overhead_rates_current',
+        'ref_utility_rates_current', 'ref_facility_rates_current',
+        'ref_equipment_current',
+      ];
+      for (const v of views) {
+        const r = await rest('GET', v, { token: tokA, params: '?select=id&limit=1' });
+        if (r.status === 200 && Array.isArray(r.body)) {
+          ok(`A (member) GET ${v} → status=200 (security_invoker passes through authed read)`);
+        } else bad(`A (member) GET ${v}`, `status=${r.status} body=${JSON.stringify(r.body).slice(0, 180)}`);
+      }
+    }
 
     // ─── Block 9: admin bypass — gated on BROCK_PASS ──────────────
     if (BROCK_PASS) {
