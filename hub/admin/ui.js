@@ -6,14 +6,25 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sP';
-import * as calc from './calc.js?v=20260421-tJ';
-import * as api from './api.js?v=20260419-tG';
+import * as calc from './calc.js?v=20260423-z1';
+import * as api from './api.js?v=20260423-z1';
 import { showToast } from '../../shared/toast.js?v=20260418-sK';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
-let activeTab = 'tables'; // tables | users | escalations | audit
+let activeTab = 'tables'; // tables | users | activity | escalations | audit
 let activeMasterTable = null;
+
+// Slice 3.13 — User Activity tab state. Keyed outside render() so a
+// re-render doesn't re-fetch. Invalidated by the Refresh button and by
+// the 60s auto-refresh timer in renderActivity.
+let _activityRows = [];
+let _activityKpis = null;
+let _activityLoaded = false;
+let _activityLoading = false;
+let _activityLastLoad = 0;
+let _activityTimer = null;
+let _activityWindowDays = 7;
 
 export async function mount(el) {
   rootEl = el;
@@ -34,8 +45,12 @@ function render() {
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
         <h2 class="text-page" style="margin:0;">Admin Panel</h2>
         <div style="display:flex;gap:8px;" id="admin-tabs">
-          ${['tables', 'users', 'escalations', 'audit'].map(t => `
-            <button class="hub-btn hub-btn-sm ${t === activeTab ? '' : 'hub-btn-secondary'}" data-tab="${t}">${t === 'tables' ? 'Master Data' : t.charAt(0).toUpperCase() + t.slice(1)}</button>
+          ${['tables', 'users', 'activity', 'escalations', 'audit'].map(t => `
+            <button class="hub-btn hub-btn-sm ${t === activeTab ? '' : 'hub-btn-secondary'}" data-tab="${t}">${
+              t === 'tables' ? 'Master Data'
+              : t === 'activity' ? 'User Activity'
+              : t.charAt(0).toUpperCase() + t.slice(1)
+            }</button>
           `).join('')}
         </div>
       </div>
@@ -57,9 +72,18 @@ function render() {
   const el = rootEl.querySelector('#admin-content');
   if (!el) return;
 
+  // Switch tabs → cancel any pending auto-refresh timer owned by the
+  // previous tab (currently just activity). Cheap and prevents stray
+  // background re-renders into a detached DOM.
+  if (activeTab !== 'activity' && _activityTimer) {
+    clearTimeout(_activityTimer);
+    _activityTimer = null;
+  }
+
   switch (activeTab) {
     case 'tables': renderMasterData(el); break;
     case 'users': renderUsers(el); break;
+    case 'activity': renderActivity(el); break;
     case 'escalations': renderEscalations(el); break;
     case 'audit': renderAudit(el); break;
   }
@@ -229,6 +253,157 @@ function renderUsers(el) {
       </table>
     </div>
   `;
+}
+
+// ===== USER ACTIVITY (Slice 3.13) =====
+async function loadActivityData(forceRefresh = false) {
+  if (_activityLoading) return;
+  if (_activityLoaded && !forceRefresh) return;
+  _activityLoading = true;
+  try {
+    const inputs = await api.loadUserActivityInputs({ days: _activityWindowDays });
+    _activityRows = calc.summarizeUserActivity(inputs.profiles, inputs.events);
+    _activityKpis = calc.activityKpis(_activityRows);
+    _activityLoaded = true;
+    _activityLastLoad = Date.now();
+  } catch (err) {
+    console.warn('[admin] activity load failed:', err);
+    _activityRows = [];
+    _activityKpis = null;
+    _activityLoaded = true; // show empty state rather than spinning forever
+  } finally {
+    _activityLoading = false;
+  }
+}
+
+function renderActivity(el) {
+  // First paint: kick off load, show skeleton, re-render on completion.
+  if (!_activityLoaded) {
+    loadActivityData().then(() => renderActivity(el));
+  }
+
+  // Schedule a background refresh every 60s while this tab is open.
+  if (_activityTimer) clearTimeout(_activityTimer);
+  _activityTimer = setTimeout(async () => {
+    await loadActivityData(true);
+    // Only re-render if we're still on the activity tab and the root
+    // element is still mounted — router swap may have moved on.
+    if (activeTab === 'activity' && rootEl && rootEl.contains(el)) {
+      renderActivity(el);
+    }
+  }, 60_000);
+
+  const rows = _activityRows;
+  const kpis = _activityKpis || {};
+  const nowMs = Date.now();
+  const loadingBanner = !_activityLoaded
+    ? '<div class="hub-card" style="padding:12px;background:#fef3c7;color:#92400e;margin-bottom:12px;">Loading activity…</div>'
+    : '';
+
+  const kpi = (label, value, sub, color) => `
+    <div class="hub-card" style="padding:12px 16px;">
+      <div style="font-size:11px;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:0.04em;font-weight:700;">${label}</div>
+      <div style="font-size:22px;font-weight:800;color:${color || '#111827'};margin-top:2px;">${value}</div>
+      ${sub ? `<div style="font-size:11px;color:var(--ies-gray-400);margin-top:2px;">${sub}</div>` : ''}
+    </div>
+  `;
+
+  const activeTotal = kpis.totalPilots != null ? `${kpis.activeWindow || 0} / ${kpis.totalPilots}` : '—';
+  const onlineNow = kpis.onlineNow != null ? kpis.onlineNow : 0;
+  const totalPV = kpis.pageViews != null ? kpis.pageViews : 0;
+  const medSession = kpis.medianSessionMin != null ? `${kpis.medianSessionMin} min` : '—';
+  const lastLoadRel = _activityLastLoad ? calc.relativeAgo(_activityLastLoad, nowMs) : 'never';
+
+  el.innerHTML = `
+    ${loadingBanner}
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+      <span style="font-size:13px;color:var(--ies-gray-400);">
+        Window:
+        <select data-activity-window style="font-size:12px;margin-left:6px;">
+          ${[1, 7, 14, 30].map(d => `<option value="${d}" ${_activityWindowDays === d ? 'selected' : ''}>Last ${d}d</option>`).join('')}
+        </select>
+      </span>
+      <span style="font-size:12px;color:var(--ies-gray-400);">
+        ● ${onlineNow} online now · refreshed ${lastLoadRel}
+      </span>
+      <span style="flex:1;"></span>
+      <button class="hub-btn hub-btn-sm hub-btn-secondary" data-activity-refresh title="Re-fetch events from Supabase">🔄 Refresh</button>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;">
+      ${kpi('Active pilots', activeTotal, `in last ${_activityWindowDays}d`, '#2563eb')}
+      ${kpi('Online now', onlineNow, 'seen in last 15 min', onlineNow ? '#16a34a' : '#6b7280')}
+      ${kpi('Page views', totalPV, `across pilots, ${_activityWindowDays}d`, '#7c3aed')}
+      ${kpi('Median session', medSession, 'duration across pilots', '#d97706')}
+    </div>
+
+    <div class="hub-card" style="padding:16px;overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr>
+            <th style="text-align:left;padding:8px;border-bottom:2px solid var(--ies-gray-200);font-size:11px;font-weight:700;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:0.04em;">User</th>
+            <th style="text-align:left;padding:8px;border-bottom:2px solid var(--ies-gray-200);font-size:11px;font-weight:700;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:0.04em;">Role</th>
+            <th style="text-align:left;padding:8px;border-bottom:2px solid var(--ies-gray-200);font-size:11px;font-weight:700;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:0.04em;">Last login</th>
+            <th style="text-align:right;padding:8px;border-bottom:2px solid var(--ies-gray-200);font-size:11px;font-weight:700;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:0.04em;">Sessions</th>
+            <th style="text-align:right;padding:8px;border-bottom:2px solid var(--ies-gray-200);font-size:11px;font-weight:700;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:0.04em;">Page views</th>
+            <th style="text-align:left;padding:8px;border-bottom:2px solid var(--ies-gray-200);font-size:11px;font-weight:700;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:0.04em;">Most-used</th>
+            <th style="text-align:right;padding:8px;border-bottom:2px solid var(--ies-gray-200);font-size:11px;font-weight:700;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:0.04em;">Median</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.length === 0 && _activityLoaded ? `
+            <tr><td colspan="7" style="padding:16px;text-align:center;color:var(--ies-gray-400);font-size:12px;">No activity yet. Events start landing as soon as a pilot loads the hub.</td></tr>
+          ` : rows.map(r => {
+            const roleColor = calc.roleBadgeColor(r.role);
+            const noActivity = r.lastLogin === null;
+            return `
+            <tr style="border-bottom:1px solid var(--ies-gray-100);${r.onlineNow ? 'background:#ecfdf5;' : ''}">
+              <td style="padding:8px;">
+                <div style="font-weight:600;display:flex;align-items:center;gap:6px;">
+                  ${r.onlineNow ? '<span title="Online now" style="width:7px;height:7px;border-radius:50%;background:#16a34a;display:inline-block;"></span>' : ''}
+                  ${escapeHtml(r.displayName)}
+                </div>
+                <div style="font-size:11px;color:var(--ies-gray-400);">${escapeHtml(r.email || '')}</div>
+              </td>
+              <td style="padding:8px;">
+                ${r.role && r.role !== '—' ? `<span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;color:#fff;background:${roleColor};">${escapeHtml(r.role)}</span>` : '<span style="color:var(--ies-gray-400);font-size:12px;">—</span>'}
+              </td>
+              <td style="padding:8px;font-size:12px;${noActivity ? 'color:#dc2626;' : 'color:var(--ies-gray-400);'}">
+                ${noActivity ? 'never' : calc.relativeAgo(r.lastLogin, nowMs)}
+              </td>
+              <td style="padding:8px;text-align:right;font-variant-numeric:tabular-nums;">${r.sessionsInWindow || 0}</td>
+              <td style="padding:8px;text-align:right;font-variant-numeric:tabular-nums;">${r.pageViewsInWindow || 0}</td>
+              <td style="padding:8px;font-size:12px;color:var(--ies-gray-400);">${r.mostUsedRoute ? escapeHtml(calc.humanRouteLabel(r.mostUsedRoute)) : '—'}</td>
+              <td style="padding:8px;text-align:right;font-variant-numeric:tabular-nums;${r.medianSessionMin == null ? 'color:var(--ies-gray-400);' : ''}">${r.medianSessionMin != null ? r.medianSessionMin + ' min' : '—'}</td>
+            </tr>
+          `;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  el.querySelector('[data-activity-refresh]')?.addEventListener('click', async () => {
+    await loadActivityData(true);
+    if (activeTab === 'activity' && rootEl && rootEl.contains(el)) renderActivity(el);
+  });
+  el.querySelector('[data-activity-window]')?.addEventListener('change', async (e) => {
+    const next = parseInt(/** @type {HTMLSelectElement} */ (e.target).value, 10);
+    if (!Number.isFinite(next) || next <= 0) return;
+    _activityWindowDays = next;
+    await loadActivityData(true);
+    if (activeTab === 'activity' && rootEl && rootEl.contains(el)) renderActivity(el);
+  });
+}
+
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 // ===== ESCALATIONS =====

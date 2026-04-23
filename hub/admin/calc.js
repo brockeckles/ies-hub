@@ -449,3 +449,238 @@ export function roleBadgeColor(role) {
 export function severityColor(severity) {
   return severity === 'critical' ? '#dc2626' : '#d97706';
 }
+
+// ============================================================
+// USER ACTIVITY (Slice 3.13)
+// ============================================================
+
+/**
+ * Route → human label map. Keeps the table reading "Cost Model Builder"
+ * instead of "designtools/cost-model/p-l". Exhaustive for top-level routes;
+ * falls back to the route string itself for anything unmatched.
+ * @type {Record<string, string>}
+ */
+export const ROUTE_LABELS = {
+  overview: 'Home',
+  overviewold: 'Home (old)',
+  dealmanager: 'Deal Manager',
+  dashboards: 'Dashboards',
+  admin: 'Admin Panel',
+  feedback: 'Feedback',
+  commandcenter: 'Command Center',
+  'designtools/cost-model': 'Cost Model Builder',
+  'designtools/warehouse-sizing': 'Warehouse Sizing',
+  'designtools/deal-manager': 'Deal Manager',
+  'designtools/fleet-modeler': 'Fleet Modeler',
+  'designtools/center-of-gravity': 'Center of Gravity',
+  'designtools/most-standards': 'MOST Labor Standards',
+  'designtools/network-opt': 'Network Optimizer',
+  designtools: 'Design Tools',
+  'deck-generator': 'Deck Generator',
+  'training-wiki': 'Training Wiki',
+  'market-explorer': 'Market Explorer',
+  'change-mgmt': 'Change Management',
+  wiki: 'Wiki',
+};
+
+export function humanRouteLabel(route) {
+  if (!route) return '—';
+  // Strip tab suffixes the router appends (e.g. cost-model/p-l → cost-model)
+  // by matching the longest prefix we know.
+  if (ROUTE_LABELS[route]) return ROUTE_LABELS[route];
+  const parts = route.split('/');
+  for (let i = parts.length; i > 0; i--) {
+    const prefix = parts.slice(0, i).join('/');
+    if (ROUTE_LABELS[prefix]) return ROUTE_LABELS[prefix];
+  }
+  return route;
+}
+
+/**
+ * Collapse analytics_events rows into one object per pilot in `profiles`,
+ * with rollups over the event window. Only events in the last `windowDays`
+ * days are counted for the "this week" metrics. Events with NULL user_id
+ * (pre-Slice-3.13 or fired pre-login) are bucketed into a synthetic
+ * "Anonymous" row so we can see the volume without losing it.
+ *
+ * Shape returned per row:
+ *   userId, email, displayName, role, team_id,
+ *   lastLogin        — ISO timestamp of most recent session_start
+ *   sessionsInWindow — distinct session_id count inside the window
+ *   pageViewsInWindow
+ *   totalEventsInWindow
+ *   mostUsedRoute    — route with the highest count inside the window
+ *   medianSessionMin — median duration of session_end rows, rounded to 1 decimal
+ *   onlineNow        — true if any event in last `onlineWithinMs` ms
+ *   firstSeen        — ISO timestamp of earliest event we have for this user
+ *
+ * @param {any[]} profiles
+ * @param {any[]} events
+ * @param {{ now?: number, onlineWithinMs?: number }} [opts]
+ */
+export function summarizeUserActivity(profiles, events, opts = {}) {
+  const now = opts.now || Date.now();
+  const onlineWithinMs = opts.onlineWithinMs || 15 * 60 * 1000; // 15 min
+
+  // Bucket events by user_id (string, or '__anon__' for nulls).
+  const byUser = new Map();
+  for (const ev of events || []) {
+    const key = ev.user_id || '__anon__';
+    if (!byUser.has(key)) byUser.set(key, []);
+    byUser.get(key).push(ev);
+  }
+
+  // Build one row per profile; profiles with no events still show in the
+  // table with "never logged in" so admins can see who hasn't touched it.
+  const rows = (profiles || []).map((p) => {
+    const evs = byUser.get(p.id) || [];
+    return rollup({
+      userId: p.id,
+      email: p.email || '',
+      displayName: p.display_name || p.email || '(no name)',
+      role: p.role || 'member',
+      team_id: p.team_id || null,
+      events: evs,
+      now, onlineWithinMs,
+    });
+  });
+
+  // Append the Anonymous bucket only if we actually have un-attributed
+  // events. Keeps the table from showing a ghost row when everyone is
+  // attributed.
+  const anon = byUser.get('__anon__') || [];
+  if (anon.length) {
+    rows.push(rollup({
+      userId: null,
+      email: '',
+      displayName: 'Anonymous / pre-login',
+      role: '—',
+      team_id: null,
+      events: anon,
+      now, onlineWithinMs,
+    }));
+  }
+
+  // Sort: online first, then by most recent activity desc, then by email.
+  rows.sort((a, b) => {
+    if (a.onlineNow !== b.onlineNow) return a.onlineNow ? -1 : 1;
+    const at = a.lastLogin ? Date.parse(a.lastLogin) : 0;
+    const bt = b.lastLogin ? Date.parse(b.lastLogin) : 0;
+    if (at !== bt) return bt - at;
+    return String(a.email).localeCompare(String(b.email));
+  });
+  return rows;
+}
+
+function rollup({ userId, email, displayName, role, team_id, events, now, onlineWithinMs }) {
+  if (!events.length) {
+    return {
+      userId, email, displayName, role, team_id,
+      lastLogin: null,
+      firstSeen: null,
+      sessionsInWindow: 0,
+      pageViewsInWindow: 0,
+      totalEventsInWindow: 0,
+      mostUsedRoute: null,
+      medianSessionMin: null,
+      onlineNow: false,
+    };
+  }
+  let lastLogin = null;     // latest session_start (ISO)
+  let firstSeen = null;     // earliest event (ISO)
+  let mostRecentEventAt = 0;
+  const sessions = new Set();
+  let pageViews = 0;
+  const routeCounts = new Map();
+  const durationsMin = [];
+
+  for (const ev of events) {
+    const t = Date.parse(ev.created_at);
+    if (firstSeen === null || t < Date.parse(firstSeen)) firstSeen = ev.created_at;
+    if (t > mostRecentEventAt) mostRecentEventAt = t;
+    if (ev.session_id) sessions.add(ev.session_id);
+    if (ev.event === 'page_view') {
+      pageViews += 1;
+      const r = ev.route || 'overview';
+      routeCounts.set(r, (routeCounts.get(r) || 0) + 1);
+    }
+    if (ev.event === 'session_start') {
+      if (!lastLogin || t > Date.parse(lastLogin)) lastLogin = ev.created_at;
+    }
+    if (ev.event === 'session_end' && ev.payload && typeof ev.payload.duration_ms === 'number') {
+      durationsMin.push(ev.payload.duration_ms / 60000);
+    }
+  }
+
+  let mostUsedRoute = null;
+  if (routeCounts.size) {
+    const sorted = [...routeCounts.entries()].sort((a, b) => b[1] - a[1]);
+    mostUsedRoute = sorted[0][0];
+  }
+
+  let medianSessionMin = null;
+  if (durationsMin.length) {
+    durationsMin.sort((a, b) => a - b);
+    const mid = Math.floor(durationsMin.length / 2);
+    const m = durationsMin.length % 2 ? durationsMin[mid] : (durationsMin[mid - 1] + durationsMin[mid]) / 2;
+    medianSessionMin = Math.round(m * 10) / 10;
+  }
+
+  return {
+    userId, email, displayName, role, team_id,
+    lastLogin,
+    firstSeen,
+    sessionsInWindow: sessions.size,
+    pageViewsInWindow: pageViews,
+    totalEventsInWindow: events.length,
+    mostUsedRoute,
+    medianSessionMin,
+    onlineNow: (now - mostRecentEventAt) <= onlineWithinMs,
+  };
+}
+
+/**
+ * Top-row KPIs derived from the per-user rollup. Kept pure so it's trivial
+ * to unit-test against fixture arrays.
+ */
+export function activityKpis(rows) {
+  const r = rows || [];
+  const realPilots = r.filter(x => x.userId);
+  const activeWindow = realPilots.filter(x => x.sessionsInWindow > 0).length;
+  const onlineNow = realPilots.filter(x => x.onlineNow).length;
+  const pageViews = realPilots.reduce((s, x) => s + (x.pageViewsInWindow || 0), 0);
+  const medians = realPilots.map(x => x.medianSessionMin).filter(x => x != null);
+  medians.sort((a, b) => a - b);
+  const medianOfMedians = medians.length
+    ? (medians.length % 2
+        ? medians[Math.floor(medians.length / 2)]
+        : (medians[medians.length / 2 - 1] + medians[medians.length / 2]) / 2)
+    : null;
+  return {
+    activeWindow,
+    totalPilots: realPilots.length,
+    onlineNow,
+    pageViews,
+    medianSessionMin: medianOfMedians,
+  };
+}
+
+/**
+ * Format a timestamp as "2h ago", "3d ago", "—" style. Short, table-dense.
+ */
+export function relativeAgo(iso, nowMs) {
+  if (!iso) return '—';
+  const t = typeof iso === 'number' ? iso : Date.parse(iso);
+  if (!t) return '—';
+  const now = nowMs || Date.now();
+  const diffSec = Math.max(0, Math.round((now - t) / 1000));
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const diffMin = Math.round(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.round(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.round(diffHr / 24);
+  if (diffDay < 7) return `${diffDay}d ago`;
+  const d = new Date(t);
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}

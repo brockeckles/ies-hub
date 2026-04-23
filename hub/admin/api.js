@@ -191,6 +191,51 @@ export async function writeAuditEntry(entry) {
 }
 
 // ============================================================
+// USER ACTIVITY (Slice 3.13)
+// ============================================================
+
+/**
+ * Fetch raw inputs for the User Activity admin view: every pilot in
+ * public.profiles, plus every analytics_events row from the last `days`
+ * days. Aggregation happens in calc.js — this layer only loads.
+ *
+ * RLS on analytics_events already restricts SELECT to admins via
+ * `current_user_is_admin()`; a non-admin who calls this gets an empty
+ * events array and the view renders "no activity yet" across the board.
+ *
+ * @param {{ days?: number }} [opts]
+ * @returns {Promise<{ profiles: any[], events: any[] }>}
+ */
+export async function loadUserActivityInputs(opts = {}) {
+  const days = Number.isFinite(opts.days) ? opts.days : 7;
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+
+  const [profilesRes, eventsRes] = await Promise.all([
+    db.from('profiles').select('id, email, display_name, role, team_id, created_at'),
+    // Cap at a large-but-bounded number so we never accidentally pull the
+    // entire table during growth. 50k is >> current volume (~1200 rows
+    // over 5 days) and still fast to aggregate client-side.
+    db.from('analytics_events')
+      .select('id, event, session_id, session_started_at, route, user_id, created_at, payload')
+      .gte('created_at', since)
+      .order('created_at', { ascending: false })
+      .limit(50000),
+  ]);
+
+  if (profilesRes.error) {
+    console.warn('[admin] loadUserActivityInputs profiles failed:', profilesRes.error);
+  }
+  if (eventsRes.error) {
+    console.warn('[admin] loadUserActivityInputs events failed:', eventsRes.error);
+  }
+
+  return {
+    profiles: profilesRes.data || [],
+    events: eventsRes.data || [],
+  };
+}
+
+// ============================================================
 // LOAD ALL
 // ============================================================
 

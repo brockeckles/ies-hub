@@ -6,7 +6,7 @@
  * but never block the UI.
  *
  * Usage:
- *   import { analytics } from './shared/analytics.js?v=20260418-sK';
+ *   import { analytics } from './shared/analytics.js?v=20260423-z1';
  *   analytics.track('feature_used', { feature: 'cm_export_excel' });
  *   analytics.pageView('designtools/cost-model');
  *
@@ -22,6 +22,11 @@
  */
 
 import { db } from './supabase.js?v=20260423-y1';
+// Slice 3.13 — attribute analytics events to the authenticated pilot so the
+// Admin → User Activity view can roll up per-user. Lazy-resolved at event
+// time (not import time) so a reload that fires page_view before the
+// session has bootstrapped still records whatever id is available.
+import { auth } from './auth.js?v=20260423-y9';
 
 const SESSION_KEY = 'ies_hub_analytics_session';
 const SESSION_TTL_MS = 30 * 60 * 1000;
@@ -74,6 +79,12 @@ function touchSession() {
 function track(event, payload = {}) {
   if (!event) return Promise.resolve();
   touchSession();
+  // Slice 3.13 — resolve user_id at event time so a session_start fired
+  // before auth.bootstrap completes still gets stamped once login lands
+  // on any subsequent event. Pre-auth events (landing-page page_view, for
+  // example) just write NULL, which is expected and shown as "anon" in
+  // the admin view.
+  const user = safeGetUser();
   const row = {
     event,
     payload: payload || {},
@@ -81,11 +92,22 @@ function track(event, payload = {}) {
     session_started_at: _sessionStart ? new Date(_sessionStart).toISOString() : null,
     route: typeof window !== 'undefined' ? (window.location.hash.slice(1) || 'overview') : null,
     user_agent: typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 240) : null,
+    user_id: user && user.id ? user.id : null,
   };
   return writeRow(row).catch((err) => {
     // Analytics failures must never break the UI.
     console.debug('[analytics] write failed (non-fatal)', err);
   });
+}
+
+/**
+ * Read auth.getUser() without letting a throw from the auth module break
+ * analytics. The auth module is generally synchronous, but we never want a
+ * crash here to cascade into the tracked codepath.
+ */
+function safeGetUser() {
+  try { return auth && typeof auth.getUser === 'function' ? auth.getUser() : null; }
+  catch { return null; }
 }
 
 /** Fire a page_view event. */
@@ -106,11 +128,13 @@ async function writeRow(row) {
 function endSession() {
   if (!_sessionId) return;
   const dur = Date.now() - _sessionStart;
+  const user = safeGetUser();
   const payload = {
     event: 'session_end',
     payload: { duration_ms: dur },
     session_id: _sessionId,
     route: typeof window !== 'undefined' ? (window.location.hash.slice(1) || 'overview') : null,
+    user_id: user && user.id ? user.id : null,
   };
   // Best-effort — may be cancelled by the browser on unload.
   writeRow(payload);
