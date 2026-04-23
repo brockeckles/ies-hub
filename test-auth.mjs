@@ -1,10 +1,11 @@
-// test-auth.mjs — Slice 3.2 session lifecycle (shared/auth.js)
+// test-auth.mjs — Slice 3.5 session lifecycle (shared/auth.js)
 //
-// Covers the JS surface we own: dual-path login, session bootstrap from
+// Covers the JS surface we own: password login, session bootstrap from
 // persisted state, logout, mode/user accessors, onAuthStateChange wiring.
-// We stub the supabase-js CDN global with a fake client so the module can
-// be exercised in Node. This is NOT an RLS/isolation test — those live
-// in Slice 3.7.
+// Code-mode tests are gone as of Slice 3.5 — the legacy access-code path
+// has been removed. We stub the supabase-js CDN global with a fake client
+// so the module can be exercised in Node. This is NOT an RLS/isolation
+// test — those live in Slice 3.7 + test-rls.mjs.
 //
 // Run: node test-auth.mjs
 
@@ -19,7 +20,6 @@ class StorageShim {
 globalThis.sessionStorage = new StorageShim();
 globalThis.localStorage = new StorageShim();
 globalThis.window = { localStorage: globalThis.localStorage };
-// navigator is a read-only builtin in Node ≥18; only define it if absent.
 if (!('navigator' in globalThis) || !globalThis.navigator) {
   Object.defineProperty(globalThis, 'navigator', {
     value: { userAgent: 'test-auth-node' },
@@ -27,7 +27,6 @@ if (!('navigator' in globalThis) || !globalThis.navigator) {
     configurable: true,
   });
 }
-// Node provides globalThis.crypto in ≥19 — only shim if missing.
 if (!globalThis.crypto) {
   Object.defineProperty(globalThis, 'crypto', {
     value: { randomUUID: () => 't-' + Math.random().toString(36).slice(2) },
@@ -37,7 +36,6 @@ if (!globalThis.crypto) {
 }
 
 // ─── Fake supabase-js ────────────────────────────────────────────────────
-// Tracks current session and fires onAuthStateChange when it flips.
 function makeFakeSupabase() {
   let session = null;
   const listeners = new Set();
@@ -60,9 +58,6 @@ function makeFakeSupabase() {
             emit('SIGNED_IN', session);
             return { data: { session, user: session.user }, error: null };
           },
-          async signUp({ email }) {
-            return { data: { user: { id: 'new-' + email, email } }, error: null };
-          },
           async signOut() {
             session = null;
             emit('SIGNED_OUT', null);
@@ -78,7 +73,6 @@ function makeFakeSupabase() {
               },
             };
           },
-          // Test-only hooks
           __setSession(s) { session = s; },
           __getListenerCount() { return listeners.size; },
           __emit: emit,
@@ -88,24 +82,17 @@ function makeFakeSupabase() {
     },
   };
 }
-// Singleton — the supabase.js module caches its client on first call, so
-// we must not swap this out between tests. Instead, clear its session
-// through the __setSession hook we exposed on the fake.
 globalThis.supabase = makeFakeSupabase();
 
-// Reset helper for between-test isolation. Clears browser storage, the
-// fake supabase session, AND any lingering auth-module state via logout().
 async function reset() {
   globalThis.sessionStorage.clear();
   globalThis.localStorage.clear();
-  // Reach through the cached client (populated on first getClient call) to
-  // wipe its session without re-creating the supabase global.
   try {
     const { db } = await import('./shared/supabase.js?v=20260423-y1');
     const client = db.getClient();
     if (client?.auth?.__setSession) client.auth.__setSession(null);
   } catch { /* first-run: auth.bootstrap creates the client below */ }
-  await auth.logout(); // force-clears module-level _currentSession/_codeMode
+  await auth.logout();
 }
 
 // ─── Test runner ─────────────────────────────────────────────────────────
@@ -122,10 +109,7 @@ async function test(name, fn) {
 }
 const assert = (cond, msg = 'assertion failed') => { if (!cond) throw new Error(msg); };
 
-// ─── Load module AFTER globals are in place ─────────────────────────────
-// Because supabase.js imports into a module singleton, each test file gets
-// its own instance. We import once and drive it through multiple scenarios.
-const { auth } = await import('./shared/auth.js?v=20260423-y1');
+const { auth } = await import('./shared/auth.js?v=20260423-y4');
 
 // ─── Tests ──────────────────────────────────────────────────────────────
 
@@ -135,30 +119,6 @@ await test('initial state: not authenticated, no mode, no user', async () => {
   assert(!auth.isAuthenticated(), 'should not be authenticated with nothing stored');
   assert(auth.getMode() === null, 'mode should be null');
   assert(auth.getUser() === null, 'user should be null');
-});
-
-await test('legacy code login: ies2026 (case-insensitive) works', async () => {
-  await reset();
-  await auth.bootstrapSession();
-  const ok = auth.loginWithCode('IES2026');
-  assert(ok === true, 'loginWithCode should return true');
-  assert(auth.isAuthenticated(), 'should be authenticated after code');
-  assert(auth.getMode() === 'code', 'mode should be code');
-  assert(auth.getUser() === null, 'code mode must not have a user — identity is null');
-});
-
-await test('legacy code login: rejects bad code', async () => {
-  await reset();
-  await auth.bootstrapSession();
-  assert(auth.loginWithCode('wrong') === false, 'bad code must reject');
-  assert(!auth.isAuthenticated(), 'should still be unauthenticated');
-});
-
-await test('legacy code login: back-compat alias auth.login(code) works', async () => {
-  await reset();
-  await auth.bootstrapSession();
-  assert(auth.login('ieshub') === true, 'legacy .login alias must accept ieshub');
-  assert(auth.getMode() === 'code');
 });
 
 await test('password login: success updates session, user, mode', async () => {
@@ -192,7 +152,7 @@ await test('password login: mirrors email into sessionStorage for legacy consume
   );
 });
 
-await test('logout: clears session, code flag, state, and legacy email', async () => {
+await test('logout: clears session, state, and legacy email mirror', async () => {
   await reset();
   await auth.bootstrapSession();
   await auth.loginWithPassword('out@gxo.com', 'secret');
@@ -206,52 +166,21 @@ await test('logout: clears session, code flag, state, and legacy email', async (
   );
 });
 
-await test('logout from code mode: clears legacy code flag', async () => {
-  await reset();
-  await auth.bootstrapSession();
-  auth.loginWithCode('ies2026');
-  assert(auth.isAuthenticated());
-  await auth.logout();
-  assert(!auth.isAuthenticated(), 'code-mode logout must unauth');
-  assert(
-    globalThis.sessionStorage.getItem('ies_hub_v3_auth') === null,
-    'legacy code flag must be cleared'
-  );
-});
-
-await test('password login: supersedes a lingering code flag', async () => {
-  await reset();
-  // Simulate a legacy session then upgrading to password.
-  globalThis.sessionStorage.setItem('ies_hub_v3_auth', 'true');
-  await auth.bootstrapSession();
-  assert(auth.getMode() === 'code', 'restored code session');
-  await auth.loginWithPassword('upgrade@gxo.com', 'secret');
-  assert(auth.getMode() === 'password', 'password wins over code');
-  assert(
-    globalThis.sessionStorage.getItem('ies_hub_v3_auth') === null,
-    'code flag cleared when real auth lands'
-  );
-});
-
-await test('validateCode: pure check, no side-effects', async () => {
-  await reset();
-  await auth.bootstrapSession();
-  assert(auth.validateCode('ies2026') === true);
-  assert(auth.validateCode('IesHub') === true, 'case-insensitive');
-  assert(auth.validateCode('nope') === false);
-  assert(!auth.isAuthenticated(), 'validate must not log in');
-});
-
 await test('bootstrap idempotent: second call does not double-subscribe', async () => {
   await reset();
   await auth.bootstrapSession();
   await auth.bootstrapSession();
   await auth.bootstrapSession();
-  // If we're still here the module handled duplicate calls cleanly.
-  // Listener count would grow without de-dup; we can't read it from the
-  // auth module directly, but we can confirm no exceptions fire and
-  // the public API still behaves.
   assert(!auth.isAuthenticated(), 'still unauthenticated');
+});
+
+await test('code-mode API is gone: no loginWithCode, no validateCode, no login alias', async () => {
+  await reset();
+  await auth.bootstrapSession();
+  // Slice 3.5 removed these — if any sneak back in, this test fails loudly.
+  assert(typeof auth.loginWithCode === 'undefined', 'loginWithCode must be removed');
+  assert(typeof auth.validateCode === 'undefined', 'validateCode must be removed');
+  assert(typeof auth.login === 'undefined', 'login(code) alias must be removed');
 });
 
 // ─── Summary ────────────────────────────────────────────────────────────

@@ -46,7 +46,7 @@
 </head>
 <body>
 
-  <!-- Auth Overlay (shown until valid access code) -->
+  <!-- Auth Overlay (shown until a Supabase session is restored or the user signs in) -->
   <div class="hub-auth-overlay" id="auth-overlay"></div>
 
   <!-- App Shell (hidden until authenticated) -->
@@ -212,7 +212,7 @@
 
   <!-- App Bootstrap -->
   <script type="module">
-    import { auth } from './shared/auth.js?v=20260423-y1';
+    import { auth } from './shared/auth.js?v=20260423-y4';
     import { router } from './shared/router.js?v=20260418-sK';
     import { search } from './shared/search.js?v=20260418-sK';
     import { bus } from './shared/event-bus.js?v=20260418-sK';

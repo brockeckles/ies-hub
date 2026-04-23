@@ -95,8 +95,8 @@ async function test(name, fn) {
 const assert = (c, m = 'assert fail') => { if (!c) throw new Error(m); };
 
 // ─── Load modules after globals are in place ─────────────────────────────
-const { auth } = await import('./shared/auth.js?v=20260423-y1');
-const { recordAudit } = await import('./shared/audit.js?v=20260423-y1');
+const { auth } = await import('./shared/auth.js?v=20260423-y4');
+const { recordAudit } = await import('./shared/audit.js?v=20260423-y3');
 
 async function resetAuth() {
   globalThis.sessionStorage.clear();
@@ -118,13 +118,9 @@ await test('pre-bootstrap: user_id + user_email null', async () => {
   assert(_lastInsert.row.user_email === null, 'user_email null when unauthed');
 });
 
-await test('code mode: user_id null (code has no identity)', async () => {
-  await resetAuth();
-  await auth.bootstrapSession();
-  auth.loginWithCode('ies2026');
-  await recordAudit({ table: 'most_analyses', id: 42, action: 'update' });
-  assert(_lastInsert.row.user_id === null, 'code mode writes user_id=null');
-});
+// code-mode test removed in Slice 3.5 — the path no longer exists. The
+// pre-bootstrap null-identity case above now covers the same contract:
+// when there's no Supabase session, recordAudit writes user_id=null.
 
 await test('password mode: user_id + user_email populated', async () => {
   await resetAuth();
