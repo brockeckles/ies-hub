@@ -255,6 +255,187 @@ function isAdmin() { return _currentRole === 'admin'; }
 /** @returns {boolean} true once loadRole() has completed once (success or fail). */
 function isRoleLoaded() { return _roleLoaded; }
 
+// ─── MFA (Phase 4.5 tranche-2, Slice MFA-01) ─────────────────────────────
+//
+// TOTP enrollment + challenge helpers. Pair with shared/mfa-ui.js (which
+// renders the modals) and the index.html boot gate (which calls
+// requiresMfa() after loadRole() and mounts the UI before bootApp()).
+//
+// Supabase-side contract: the anon client's auth.mfa namespace handles
+// all the crypto; we just shape errors to { ok, error } tuples and expose
+// aal helpers. After a successful challenge (or first-time enrollment
+// verify), supabase-js upgrades the JWT from aal1 → aal2 in place and
+// fires TOKEN_REFRESHED on the onAuthStateChange listener above.
+//
+// On the DB side, current_user_is_admin() is hardened to require
+// auth.jwt()->>'aal' = 'aal2' (see paired migration) — so the UI gate and
+// RLS gate defend the same boundary from two sides.
+
+/**
+ * List all MFA factors on the signed-in user. Returns an empty array on
+ * error (so callers can treat "no factors" and "couldn't check" the same
+ * way — in both cases we should fall through to enrollment).
+ *
+ * @returns {Promise<Array<{id:string, friendly_name:string|null, factor_type:string, status:string}>>}
+ */
+async function listFactors() {
+  try {
+    const client = db.getClient();
+    const { data, error } = await client.auth.mfa.listFactors();
+    if (error) { console.warn('[auth] listFactors:', error); return []; }
+    // Supabase returns { all, totp, phone }. `all` is the canonical list.
+    return Array.isArray(data?.all) ? data.all : [];
+  } catch (err) {
+    console.warn('[auth] listFactors threw:', err);
+    return [];
+  }
+}
+
+/**
+ * True if the signed-in user has at least one verified TOTP factor.
+ * @returns {Promise<boolean>}
+ */
+async function hasEnrolledFactors() {
+  const factors = await listFactors();
+  return factors.some((f) => f.factor_type === 'totp' && f.status === 'verified');
+}
+
+/**
+ * Read the current session's AAL level. Uses supabase-js
+ * getAuthenticatorAssuranceLevel() which decodes the JWT 'aal' claim.
+ *
+ * @returns {Promise<'aal1'|'aal2'|null>}
+ */
+async function getAalLevel() {
+  try {
+    const client = db.getClient();
+    const { data } = await client.auth.mfa.getAuthenticatorAssuranceLevel();
+    const lvl = data?.currentLevel;
+    if (lvl === 'aal1' || lvl === 'aal2') return lvl;
+    return null;
+  } catch (err) {
+    console.warn('[auth] getAalLevel threw:', err);
+    return null;
+  }
+}
+
+/**
+ * True if the signed-in user is an admin and the session is not yet
+ * aal2-verified. The index.html boot gate calls this after loadRole()
+ * resolves; if true, it mounts shared/mfa-ui.js on top of the auth
+ * overlay and blocks bootApp() until the modal reports success.
+ *
+ * Non-admins: returns false regardless of aal — we don't MFA-gate
+ * non-admin users in Phase 4.5. That decision is re-evaluated in Phase 5
+ * if any pilot role gets write access to sensitive tables.
+ *
+ * @returns {Promise<boolean>}
+ */
+async function requiresMfa() {
+  if (!isAdmin()) return false;
+  const lvl = await getAalLevel();
+  return lvl !== 'aal2';
+}
+
+/**
+ * Start TOTP enrollment. Returns QR code (SVG string), manual secret, and
+ * the factorId to hand back to verifyEnrollment() after the user types
+ * the 6-digit code.
+ *
+ * The factor lands with status='unverified'. Only verifyEnrollment()
+ * flips it to 'verified' and upgrades the session to aal2.
+ *
+ * @param {string} friendlyName  Shown in auth.mfa.listFactors().
+ * @returns {Promise<{ok:true, factorId:string, qrCode:string, secret:string, uri:string} | {ok:false, error:string}>}
+ */
+async function enrollTotp(friendlyName) {
+  try {
+    const client = db.getClient();
+    // Reuse an unverified factor if one already exists from a prior attempt
+    // — Supabase won't let you enroll twice with the same friendlyName.
+    const existing = await listFactors();
+    const stale = existing.find((f) => f.factor_type === 'totp' && f.status === 'unverified');
+    if (stale) {
+      try { await client.auth.mfa.unenroll({ factorId: stale.id }); } catch {}
+    }
+
+    const { data, error } = await client.auth.mfa.enroll({
+      factorType: 'totp',
+      friendlyName: friendlyName || 'IES Hub Admin',
+    });
+    if (error) return { ok: false, error: error.message || 'Enrollment failed' };
+    return {
+      ok: true,
+      factorId: data.id,
+      qrCode: data.totp?.qr_code || '',
+      secret: data.totp?.secret || '',
+      uri: data.totp?.uri || '',
+    };
+  } catch (err) {
+    return { ok: false, error: err?.message || 'Enrollment failed' };
+  }
+}
+
+/**
+ * Confirm the 6-digit code against a pending enrollment. On success the
+ * factor flips to 'verified' and the session upgrades to aal2 (no
+ * separate login required).
+ *
+ * @param {string} factorId
+ * @param {string} code  6-digit TOTP.
+ * @returns {Promise<{ok:true} | {ok:false, error:string}>}
+ */
+async function verifyEnrollment(factorId, code) {
+  try {
+    const client = db.getClient();
+    const { error } = await client.auth.mfa.challengeAndVerify({ factorId, code });
+    if (error) return { ok: false, error: error.message || 'Verification failed' };
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err?.message || 'Verification failed' };
+  }
+}
+
+/**
+ * Challenge + verify in one shot for a returning admin. Cheaper round
+ * trip than separate challenge() + verify() calls, and safer — no
+ * challengeId to lose between promise hops.
+ *
+ * @param {string} factorId
+ * @param {string} code  6-digit TOTP.
+ * @returns {Promise<{ok:true} | {ok:false, error:string}>}
+ */
+async function verifyChallenge(factorId, code) {
+  try {
+    const client = db.getClient();
+    const { error } = await client.auth.mfa.challengeAndVerify({ factorId, code });
+    if (error) return { ok: false, error: error.message || 'Verification failed' };
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err?.message || 'Verification failed' };
+  }
+}
+
+/**
+ * Remove a factor. Used by recovery flows and (later) an admin panel
+ * "reset my MFA" option. Does not sign the user out — they remain at
+ * whatever aal they were before.
+ *
+ * @param {string} factorId
+ * @returns {Promise<{ok:true} | {ok:false, error:string}>}
+ */
+async function unenrollFactor(factorId) {
+  try {
+    const client = db.getClient();
+    const { error } = await client.auth.mfa.unenroll({ factorId });
+    if (error) return { ok: false, error: error.message || 'Unenroll failed' };
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err?.message || 'Unenroll failed' };
+  }
+}
+
+
 /**
  * Sign in with email + password against Supabase Auth.
  * onAuthStateChange handles state/bus side-effects — this just reports.
@@ -1539,6 +1720,15 @@ export const auth = {
   loadRole,
   getRole,
   isAdmin,
+  // MFA (Phase 4.5 tranche-2, Slice MFA-01)
+  listFactors,
+  hasEnrolledFactors,
+  getAalLevel,
+  requiresMfa,
+  enrollTotp,
+  verifyEnrollment,
+  verifyChallenge,
+  unenrollFactor,
   isRoleLoaded,
 
   // Auth actions
