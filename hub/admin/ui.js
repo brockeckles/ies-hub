@@ -9,10 +9,38 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sP';
 import * as calc from './calc.js?v=20260423-z3';
 import * as api from './api.js?v=20260423-z5';
 import { showToast } from '../../shared/toast.js?v=20260418-sK';
+import { getEnv, getEnvLabel, getProjectRef } from '../../shared/supabase.js?v=20260424-A1';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
 let activeTab = 'tables'; // tables | activity | escalations | audit
+
+/**
+ * Slice 4.2 env chip — STAGING (orange) / PROD (green). Sourced from
+ * shared/supabase.js so there's one source of truth for which project
+ * the client is hitting.
+ * @returns {string} HTML snippet
+ */
+function renderEnvChip() {
+  let env, label, ref;
+  try { env = getEnv(); label = getEnvLabel(); ref = getProjectRef(); }
+  catch { return ''; }
+  const isProd = env === 'prod';
+  const bg = isProd ? '#dcfce7' : '#ffedd5';
+  const fg = isProd ? '#166534' : '#9a3412';
+  const bd = isProd ? '#bbf7d0' : '#fed7aa';
+  const dot = isProd ? '#16a34a' : '#ea580c';
+  return `
+    <span class="hub-env-chip" data-env="${env}" title="Supabase project: ${ref}"
+      style="display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;
+             background:${bg};color:${fg};border:1px solid ${bd};font-size:11px;font-weight:700;
+             letter-spacing:0.04em;line-height:1;text-transform:uppercase;">
+      <span style="width:6px;height:6px;border-radius:50%;background:${dot};display:inline-block;"></span>
+      ${label}
+    </span>
+  `;
+}
+
 let activeMasterTable = null;
 
 // Slice 3.13 — User Activity tab state. Keyed outside render() so a
@@ -43,7 +71,10 @@ function render() {
   rootEl.innerHTML = `
     <div class="hub-content-inner" style="padding:24px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
-        <h2 class="text-page" style="margin:0;">Admin</h2>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <h2 class="text-page" style="margin:0;">Admin</h2>
+          ${renderEnvChip()}
+        </div>
         <div style="display:flex;gap:8px;" id="admin-tabs">
           ${['tables', 'activity', 'escalations', 'audit'].map(t => `
             <button class="hub-btn hub-btn-sm ${t === activeTab ? '' : 'hub-btn-secondary'}" data-tab="${t}">${

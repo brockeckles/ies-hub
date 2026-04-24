@@ -21,7 +21,7 @@
  * @module shared/analytics
  */
 
-import { db } from './supabase.js?v=20260423-y1';
+import { db } from './supabase.js?v=20260424-A1';
 // Slice 3.13 — attribute analytics events to the authenticated pilot so the
 // Admin → User Activity view can roll up per-user. Lazy-resolved at event
 // time (not import time) so a reload that fires page_view before the

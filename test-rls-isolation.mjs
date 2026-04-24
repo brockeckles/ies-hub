@@ -44,12 +44,15 @@
 // Requires network access to dklnwcshrpamzsybjlzb.supabase.co. If offline
 // the whole suite SKIPs (exit 0) so local runs never block CI.
 
-const SUPABASE_URL = 'https://dklnwcshrpamzsybjlzb.supabase.co';
-const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRrbG53Y3NocnBhbXpzeWJqbHpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3MTU3NzksImV4cCI6MjA5MDI5MTc3OX0.mj9TIj_rwxfbb9e2vBnA6hNYot5MX8-k1BbGfddAeJs';
+// Slice 4.2: env-overridable so the same suite runs against prod OR staging.
+// Defaults are prod constants (same values used pre-4.2). Override via:
+//   SUPABASE_URL, SUPABASE_ANON_KEY, RLS_TEST_TEAM_ID, RLS_SD_TEAM_ID
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://dklnwcshrpamzsybjlzb.supabase.co';
+const ANON_KEY = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRrbG53Y3NocnBhbXpzeWJqbHpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3MTU3NzksImV4cCI6MjA5MDI5MTc3OX0.mj9TIj_rwxfbb9e2vBnA6hNYot5MX8-k1BbGfddAeJs';
 
 // ─── Seeded persona constants (from Slice 3.7 seed) ────────────────────
-const TEST_TEAM_ID = 'd24708c3-c4a8-49bd-8f6d-648e278344ea'; // rls-test-team
-const SD_TEAM_ID   = 'd3e79133-18e5-4441-8b57-84920385cd8d'; // Solutions Design
+const TEST_TEAM_ID = process.env.RLS_TEST_TEAM_ID || 'd24708c3-c4a8-49bd-8f6d-648e278344ea'; // rls-test-team
+const SD_TEAM_ID   = process.env.RLS_SD_TEAM_ID   || 'd3e79133-18e5-4441-8b57-84920385cd8d'; // Solutions Design
 
 const PERSONAS = {
   A: {
@@ -73,6 +76,8 @@ const PERSONAS = {
 };
 const BROCK_EMAIL = 'brock.eckles@gxo.com';
 const BROCK_PASS  = process.env.BROCK_PASS;
+
+console.log(`[rls-iso] url=${SUPABASE_URL} sd_team=${SD_TEAM_ID}`);
 
 // ─── Runner state ──────────────────────────────────────────────────────
 let pass = 0;

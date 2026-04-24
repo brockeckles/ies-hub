@@ -56,7 +56,7 @@
  * @module shared/auth
  */
 
-import { db } from './supabase.js?v=20260423-y1';
+import { db } from './supabase.js?v=20260424-A1';
 import { state } from './state.js?v=20260418-sK';
 import { bus } from './event-bus.js?v=20260418-sK';
 

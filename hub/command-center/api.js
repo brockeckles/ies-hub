@@ -8,7 +8,7 @@
  * @module hub/command-center/api
  */
 
-import { db } from '../../shared/supabase.js';
+import { db } from '../../shared/supabase.js?v=20260424-A1';
 
 /**
  * Fetch all dashboard data. Tries Supabase first, falls back to demo data.
