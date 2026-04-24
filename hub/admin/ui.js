@@ -10,15 +10,22 @@ import * as calc from './calc.js?v=20260423-z3';
 import * as api from './api.js?v=20260423-z5';
 import { showToast } from '../../shared/toast.js?v=20260418-sK';
 import { getEnv, getEnvLabel, getProjectRef } from '../../shared/supabase.js?v=20260424-A1';
+import { getBuildInfo, getBuildInfoSync } from '../../shared/build-info.js?v=20260424-A2';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
 let activeTab = 'tables'; // tables | activity | escalations | audit
 
 /**
- * Slice 4.2 env chip — STAGING (orange) / PROD (green). Sourced from
- * shared/supabase.js so there's one source of truth for which project
- * the client is hitting.
+ * Env + version chip. Slice 4.2 (env) + Slice 4.4 (version suffix).
+ * Sourced from shared/supabase.js (env) and shared/build-info.js (tag),
+ * so there's one source of truth for both.
+ *
+ * Renders as "<dot> PROD · 2026.04.24-5f3dfcf" (green) or
+ *            "<dot> STAGING · 2026.04.24-5f3dfcf" (orange).
+ * If build-info hasn't resolved yet, only the env label shows; mount()
+ * awaits getBuildInfo() and re-renders once it does.
+ *
  * @returns {string} HTML snippet
  */
 function renderEnvChip() {
@@ -30,13 +37,19 @@ function renderEnvChip() {
   const fg = isProd ? '#166534' : '#9a3412';
   const bd = isProd ? '#bbf7d0' : '#fed7aa';
   const dot = isProd ? '#16a34a' : '#ea580c';
+  const info = getBuildInfoSync();
+  const versionSuffix = info && info.tag && info.tag !== 'dev'
+    ? `<span style="opacity:0.75;text-transform:none;font-weight:500;letter-spacing:0;">· ${info.tag}</span>`
+    : '';
+  const titleSuffix = info && info.tag ? ` · build ${info.tag}` : '';
   return `
-    <span class="hub-env-chip" data-env="${env}" title="Supabase project: ${ref}"
+    <span class="hub-env-chip" data-env="${env}" title="Supabase project: ${ref}${titleSuffix}"
       style="display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;
              background:${bg};color:${fg};border:1px solid ${bd};font-size:11px;font-weight:700;
              letter-spacing:0.04em;line-height:1;text-transform:uppercase;">
       <span style="width:6px;height:6px;border-radius:50%;background:${dot};display:inline-block;"></span>
       ${label}
+      ${versionSuffix}
     </span>
   `;
 }
@@ -60,6 +73,9 @@ export async function mount(el) {
   activeMasterTable = null;
   render();
   bus.emit('admin:mounted');
+  // Slice 4.4 — re-render once build-info resolves so the env chip
+  // picks up the version suffix. Cheap no-op if already cached.
+  getBuildInfo().then(() => { if (rootEl) render(); }).catch(() => {});
 }
 
 export function unmount() { rootEl = null; bus.emit('admin:unmounted'); }
