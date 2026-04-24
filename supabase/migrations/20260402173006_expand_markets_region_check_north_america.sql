@@ -1,0 +1,2 @@
+ALTER TABLE public.master_markets DROP CONSTRAINT master_markets_region_check;
+ALTER TABLE public.master_markets ADD CONSTRAINT master_markets_region_check CHECK (region = ANY (ARRAY['Northeast','Midwest','Southeast','Southwest','West','Eastern Canada','Western Canada','Northern Canada','Northern Mexico','Central Mexico','Southern Mexico']));

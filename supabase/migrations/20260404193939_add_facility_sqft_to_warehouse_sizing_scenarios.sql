@@ -1,0 +1,1 @@
+ALTER TABLE warehouse_sizing_scenarios ADD COLUMN facility_sqft integer;

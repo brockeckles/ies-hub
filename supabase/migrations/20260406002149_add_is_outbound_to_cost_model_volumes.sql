@@ -1,0 +1,1 @@
+ALTER TABLE cost_model_volumes ADD COLUMN is_outbound boolean DEFAULT false;

@@ -1,0 +1,61 @@
+-- =============================================================================
+-- IES Hub — Phase 4 Slice 4.3 — Staging Hygiene Fold-In
+-- =============================================================================
+-- Purpose: Resolve the schema drift that Slice 4.2 surfaced when seeding staging.
+--          This migration is IDEMPOTENT and safe to re-apply on both environments.
+--
+-- Author:  Brock + Claude (Cowork)
+-- Created: 2026-04-24
+-- Scope:   master_markets.ref_market_uuid column (schema drift)
+--
+-- Background (see Slice 4.2 landing memory):
+--   Phase 3 migration timestamped 20260328171545 created master_markets WITHOUT
+--   a ref_market_uuid column. An ad-hoc ALTER TABLE was applied to prod via
+--   execute_sql at some point during early Command Center work, but was never
+--   captured as a migration file — so when staging replayed the migration
+--   ledger in Slice 4.1 to achieve "schema parity", it came up without the
+--   column. Meanwhile the trg_provision_market_intel BEFORE INSERT trigger on
+--   master_markets references NEW.ref_market_uuid and therefore breaks any
+--   INSERT on staging (worked around in 4.2 with DISABLE TRIGGER -> INSERT ->
+--   ENABLE TRIGGER, but that's not a sustainable path).
+--
+--   This migration adds the column with IF NOT EXISTS so that:
+--     - Applied against STAGING: adds the column, trigger now works.
+--     - Applied against PROD:    no-op (column already exists).
+--
+-- Other Slice 4.2 hygiene items that are NOT fixable via SQL migration
+-- (tracked in the Slice 4.3 landing memory for dashboard follow-up):
+--
+--   1. disable_signup on staging
+--      Verified 2026-04-24: prod=true (Slice 3.12), staging=false.
+--      Fix path: Supabase dashboard -> Authentication -> Sign in / Providers ->
+--      Email provider -> "Allow new user signups" OFF. Requires UI toggle,
+--      not a DDL change. Staging signup will be disabled as part of this
+--      slice's landing checklist.
+--
+--   2. Leaked-password protection on staging
+--      Verified 2026-04-24: advisor surfaces auth_leaked_password_protection
+--      WARN on staging; prod has it enabled (Slice 3.9).
+--      Fix path: Supabase dashboard -> Authentication -> Policies -> Password
+--      protection -> enable HaveIBeenPwned check. Also a UI toggle.
+--
+--   3. auth.users NULL-token quirk (Supabase-internal)
+--      When seeding auth.users via direct SQL INSERT (rather than the signup
+--      endpoint), Supabase requires confirmation_token, recovery_token,
+--      email_change_token_current, email_change_token_new, phone_change_token,
+--      and reauthentication_token to be '' rather than NULL, or login throws
+--      HTTP 500 "Database error querying schema". Worked around in 4.2 with
+--      COALESCE(..., '') on each insert. Not our bug, not addressable via
+--      migration -- just documented so future direct-insert seeding knows the
+--      shape to produce.
+--
+-- Rollback: ALTER TABLE public.master_markets DROP COLUMN IF EXISTS ref_market_uuid;
+--           (but the trigger needs the column, so dropping it will re-break
+--           INSERTs on whichever env lost the column)
+-- =============================================================================
+
+ALTER TABLE public.master_markets
+  ADD COLUMN IF NOT EXISTS ref_market_uuid uuid NULL;
+
+COMMENT ON COLUMN public.master_markets.ref_market_uuid IS
+  'FK-ish link to ref_markets.id populated by trg_provision_market_intel. Added via Slice 4.3 hygiene migration to resolve prod/staging drift.';

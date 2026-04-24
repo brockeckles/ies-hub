@@ -1,0 +1,1 @@
+ALTER TABLE cost_model_projects ADD COLUMN deal_deals_id uuid REFERENCES deal_deals(id) ON DELETE SET NULL;

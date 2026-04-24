@@ -1,0 +1,1 @@
+ALTER TABLE cost_model_equipment ADD COLUMN IF NOT EXISTS unit_cost NUMERIC;
