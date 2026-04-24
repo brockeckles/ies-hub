@@ -1,0 +1,152 @@
+# IES Hub v3 — Continuous Integration
+#
+# Phase 4 Slice 4.5 — gate every push to main (and every PR) on the same
+# test suite that protects prod. Two jobs:
+#
+#   pure-tests      → runs on pull_request + push(main). Network-free.
+#                     29 files exercising calc/shared/tool modules against
+#                     in-memory mocks. Must pass before any merge.
+#
+#   live-net-tests  → runs only on push(main), against the STAGING Supabase
+#                     project (yswhxtpkfhvfbucyhads). Proves anon RLS
+#                     posture + signup-disabled invariant still hold after
+#                     the merged change. Retry-once on network errors.
+#                     Skipped with warning if SUPABASE_STAGING_URL secret
+#                     is missing (e.g. on a forked PR).
+#
+# test-invite.mjs is the fourth live-net test in the repo but is NOT
+# executed here — staging doesn't have the invite-user edge function
+# deployed yet. Tracked as a follow-up (see 4.5 landing memory).
+#
+# Secrets expected (set via GitHub → Settings → Secrets and variables →
+# Actions):
+#   SUPABASE_STAGING_URL         https://yswhxtpkfhvfbucyhads.supabase.co
+#   SUPABASE_STAGING_ANON_KEY    <staging anon key from shared/supabase.js>
+#   RLS_SD_TEAM_ID_STAGING       41e18634-d33c-483b-96a1-01a52f05d552
+#
+# The three rls-test persona passwords match the defaults baked into
+# test-rls-isolation.mjs, so no secret is needed for them.
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Only one CI run per branch at a time — cancel stale runs on push.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pure-tests:
+    name: Pure tests (network-free)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run pure test suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          LIVE_NET="test-invite.mjs test-rls.mjs test-rls-isolation.mjs test-signup-disabled.mjs"
+          fail=0
+          ran=0
+          for f in test-*.mjs; do
+            skip=0
+            for lt in $LIVE_NET; do
+              [ "$f" = "$lt" ] && skip=1
+            done
+            [ $skip -eq 1 ] && continue
+            ran=$((ran+1))
+            echo "::group::$f"
+            if node "$f"; then
+              echo "  ✓ $f"
+            else
+              echo "  ✗ $f"
+              fail=$((fail+1))
+            fi
+            echo "::endgroup::"
+          done
+          echo
+          echo "Pure suite: $ran ran, $fail failed"
+          exit $fail
+
+  live-net-tests:
+    name: Live-net tests (staging)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Only run on merges into main. Pull requests never touch live-net
+    # (prevents a fork PR from exhausting the staging budget).
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: pure-tests
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_STAGING_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_STAGING_ANON_KEY }}
+      RLS_SD_TEAM_ID: ${{ secrets.RLS_SD_TEAM_ID_STAGING }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check secrets available
+        id: check_secrets
+        shell: bash
+        run: |
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_ANON_KEY:-}" ]; then
+            echo "::warning::SUPABASE_STAGING_URL or SUPABASE_STAGING_ANON_KEY not set — skipping live-net job (job exits 0)."
+            echo "Set secrets in GitHub → Settings → Secrets and variables → Actions."
+            echo "have_secrets=false" >> "$GITHUB_OUTPUT"
+          else
+            # Belt-and-braces: refuse to proceed unless the URL points at staging.
+            case "$SUPABASE_URL" in
+              *yswhxtpkfhvfbucyhads*)
+                echo "✓ staging URL confirmed"
+                echo "have_secrets=true" >> "$GITHUB_OUTPUT"
+                ;;
+              *)
+                echo "::error::SUPABASE_URL does not point at staging ($SUPABASE_URL) — refusing to run"
+                exit 1
+                ;;
+            esac
+          fi
+
+      - name: Run live-net suite (retry once on transient fail)
+        if: steps.check_secrets.outputs.have_secrets == 'true'
+        shell: bash
+        run: |
+          set -uo pipefail
+          LIVE_NET="test-rls.mjs test-signup-disabled.mjs test-rls-isolation.mjs"
+          fail=0
+          for f in $LIVE_NET; do
+            echo "::group::$f"
+            if node "$f"; then
+              echo "  ✓ $f (first try)"
+            else
+              echo "  ⟳ $f first attempt failed — retrying once"
+              sleep 3
+              if node "$f"; then
+                echo "  ✓ $f (retry)"
+              else
+                echo "  ✗ $f (both attempts failed)"
+                fail=$((fail+1))
+              fi
+            fi
+            echo "::endgroup::"
+          done
+          echo
+          echo "Live-net suite: $fail failed"
+          exit $fail

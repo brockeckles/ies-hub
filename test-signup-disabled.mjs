@@ -16,13 +16,19 @@
 // If this fails with HTTP 200 on the signup probe → someone re-enabled
 // public signups. Close the hole immediately.
 
-const SUPABASE_URL = 'https://dklnwcshrpamzsybjlzb.supabase.co';
+// Env-parameterized (Slice 4.5): CI-on-main sets these to the staging
+// project (staging had `disable_signup` toggled ON in Slice 4.3 so the
+// invariant holds there too). Local dev defaults to prod so the manual
+// `node test-signup-disabled.mjs` flow is unchanged.
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://dklnwcshrpamzsybjlzb.supabase.co';
 // Same anon key that ships in shared/supabase.js — this is the exact
 // capability a malicious actor has. If signup is closed for THIS key, it is
 // closed for everyone anon. (Service-role key bypasses the toggle and is
 // how admin.createUser still works; we do NOT test that here.)
 const ANON_KEY =
+  process.env.SUPABASE_ANON_KEY ||
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRrbG53Y3NocnBhbXpzeWJqbHpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3MTU3NzksImV4cCI6MjA5MDI5MTc3OX0.mj9TIj_rwxfbb9e2vBnA6hNYot5MX8-k1BbGfddAeJs';
+console.log(`[signup-disabled] url=${SUPABASE_URL}`);
 
 let pass = 0, fail = 0;
 const failures = [];

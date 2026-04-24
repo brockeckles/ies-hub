@@ -13,8 +13,12 @@
 // Requires network access to dklnwcshrpamzsybjlzb.supabase.co. If offline
 // the whole suite is SKIPPED (exit 0) so this test never blocks CI locally.
 
-const SUPABASE_URL = 'https://dklnwcshrpamzsybjlzb.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRrbG53Y3NocnBhbXpzeWJqbHpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3MTU3NzksImV4cCI6MjA5MDI5MTc3OX0.mj9TIj_rwxfbb9e2vBnA6hNYot5MX8-k1BbGfddAeJs';
+// Env-parameterized (Slice 4.5): CI-on-main sets these to the staging
+// project; local dev falls back to prod so `node test-rls.mjs` still works
+// with no env configured.
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://dklnwcshrpamzsybjlzb.supabase.co';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRrbG53Y3NocnBhbXpzeWJqbHpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3MTU3NzksImV4cCI6MjA5MDI5MTc3OX0.mj9TIj_rwxfbb9e2vBnA6hNYot5MX8-k1BbGfddAeJs';
+console.log(`[rls] url=${SUPABASE_URL}`);
 
 let pass = 0;
 let fail = 0;

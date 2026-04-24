@@ -19,9 +19,15 @@
 // Run: node test-invite.mjs
 // Expected: 10/10 pass.
 
-const SUPABASE_URL = 'https://dklnwcshrpamzsybjlzb.supabase.co';
+// Env-parameterized (Slice 4.5) for consistency, though this suite is NOT
+// in the CI live-net-on-main job yet (staging doesn't have the invite-user
+// edge function deployed — tracked as a follow-up). Defaults to prod so
+// manual `node test-invite.mjs` keeps working.
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://dklnwcshrpamzsybjlzb.supabase.co';
 const ANON_KEY =
+  process.env.SUPABASE_ANON_KEY ||
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRrbG53Y3NocnBhbXpzeWJqbHpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3MTU3NzksImV4cCI6MjA5MDI5MTc3OX0.mj9TIj_rwxfbb9e2vBnA6hNYot5MX8-k1BbGfddAeJs';
+console.log(`[invite] url=${SUPABASE_URL}`);
 
 // Synthetic non-admin user in rls-test-team. Same creds used by
 // test-rls-isolation.mjs — there's already a valid session path for this
