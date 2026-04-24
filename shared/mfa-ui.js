@@ -168,12 +168,26 @@ async function renderEnrollModal(overlay, { onPass, onLogout }) {
   function clearError() { errorEl.classList.remove('visible'); errorEl.textContent = ''; }
 
   // 1. Call enroll() and paint the QR.
+  //    Supabase returns qr_code as a data URI (data:image/svg+xml;utf-8,<svg...>),
+  //    NOT a raw SVG string — so we render it via <img src> rather than
+  //    innerHTML, which would leak the URI prefix as visible text.
   let factorId = null;
   try {
     const res = await auth.enrollTotp('IES Hub Admin');
     if (!res.ok) throw new Error(res.error || 'enroll failed');
     factorId = res.factorId;
-    qrHost.innerHTML = res.qrCode || '<span style="color:#b91c1c;font-size:12px;">QR not returned</span>';
+    qrHost.innerHTML = '';
+    if (res.qrCode) {
+      const img = document.createElement('img');
+      img.alt = 'TOTP QR code';
+      img.src = res.qrCode;
+      img.style.width = '200px';
+      img.style.height = '200px';
+      img.style.display = 'block';
+      qrHost.appendChild(img);
+    } else {
+      qrHost.innerHTML = '<span style="color:#b91c1c;font-size:12px;">QR not returned</span>';
+    }
     secretHost.textContent = res.secret || '(secret unavailable)';
   } catch (err) {
     qrHost.innerHTML = '<span style="color:#b91c1c;font-size:12px;">Could not start enrollment.</span>';
