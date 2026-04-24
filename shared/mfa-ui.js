@@ -3,8 +3,9 @@
  *
  * Enrollment + challenge modals for TOTP-based MFA. Painted on top of the
  * auth overlay AFTER a password sign-in but BEFORE the app shell boots,
- * whenever the signed-in user is an admin and the session AAL is not
- * 'aal2' (see `auth.requiresMfa()`).
+ * whenever the signed-in user's session AAL is not 'aal2' — Phase 4.5
+ * Slice MFA-01 shipped the gate for admin-tier; Slice HYG-04 extended it
+ * to every authenticated user. See `auth.requiresMfa()`.
  *
  * Two flows:
  *   - Enrollment:  user has no verified TOTP factor → walks through QR +
@@ -23,7 +24,7 @@
  * @module shared/mfa-ui
  */
 
-import { auth } from './auth.js?v=20260424-mfa1';
+import { auth } from './auth.js?v=20260424-hyg04';
 
 // ─── Public entry point ──────────────────────────────────────────────────
 
@@ -111,7 +112,7 @@ async function renderEnrollModal(overlay, { onPass, onLogout }) {
       </div>
       <h1 class="hub-auth-title">Set up two-factor auth</h1>
       <p class="hub-auth-subtitle" style="margin-bottom:14px;">
-        Admin accounts now require MFA. Scan the QR below with your
+        Two-factor authentication is required for this Hub. Scan the QR below with your
         authenticator app (Authy, 1Password, Google Authenticator, etc.)
         then enter the 6-digit code.
       </p>
@@ -173,7 +174,7 @@ async function renderEnrollModal(overlay, { onPass, onLogout }) {
   //    innerHTML, which would leak the URI prefix as visible text.
   let factorId = null;
   try {
-    const res = await auth.enrollTotp('IES Hub Admin');
+    const res = await auth.enrollTotp('IES Hub');
     if (!res.ok) throw new Error(res.error || 'enroll failed');
     factorId = res.factorId;
     qrHost.innerHTML = '';

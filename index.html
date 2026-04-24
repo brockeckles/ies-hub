@@ -215,7 +215,7 @@
 
   <!-- App Bootstrap -->
   <script type="module">
-    import { auth } from './shared/auth.js?v=20260424-mfa1';
+    import { auth } from './shared/auth.js?v=20260424-hyg04';
     import { router } from './shared/router.js?v=20260418-sK';
     import { search } from './shared/search.js?v=20260423-z2';
     import { bus } from './shared/event-bus.js?v=20260418-sK';
@@ -225,7 +225,7 @@
     import './shared/unsaved-guard.js?v=20260418-sK';
     import { tour } from './shared/tour.js?v=20260418-sK';
     import { analytics } from './shared/analytics.js?v=20260423-z1';
-    import { openMfaGate } from './shared/mfa-ui.js?v=20260424-mfa2';
+    import { openMfaGate } from './shared/mfa-ui.js?v=20260424-hyg04';
     // Expose a couple of helpers for inline handlers + console debugging.
     window.__hubToast = showToast;
     window.__hubTour = tour;
@@ -318,13 +318,14 @@
       });
     }
 
-    // ---- Post-login MFA gate (Phase 4.5 tranche-2, Slice MFA-01) ----
-    // Admins must finish a TOTP challenge before the app shell mounts.
-    // Non-admins (and aal2-already admins) fall through to bootApp()
-    // immediately. Used by every path that produces a "we are now
-    // authenticated" moment: the boot-time isAuthenticated() branch,
-    // renderLoginScreen's onSuccess, the post-logout re-login path, and
-    // recovery's onSuccess.
+    // ---- Post-login MFA gate (Phase 4.5 tranche-2, Slices MFA-01 + HYG-04) ----
+    // Every signed-in user must finish a TOTP challenge (or enrollment) before
+    // the app shell mounts. Admin-tier shipped in MFA-01 (2026-04-24 AM); HYG-04
+    // extended the same gate to member-tier (2026-04-24 PM) — satisfies
+    // CIS Control 6.3. Aal2-already users fall through to bootApp() immediately.
+    // Used by every path that produces a "we are now authenticated" moment:
+    // the boot-time isAuthenticated() branch, renderLoginScreen's onSuccess,
+    // the post-logout re-login path, and recovery's onSuccess.
     async function afterLogin() {
       try { await auth.loadRole(); }
       catch (err) { console.warn('[mfa-gate] loadRole threw:', err); }

@@ -320,19 +320,23 @@ async function getAalLevel() {
 }
 
 /**
- * True if the signed-in user is an admin and the session is not yet
- * aal2-verified. The index.html boot gate calls this after loadRole()
- * resolves; if true, it mounts shared/mfa-ui.js on top of the auth
- * overlay and blocks bootApp() until the modal reports success.
+ * True if the signed-in user's session is not yet aal2-verified. The
+ * index.html boot gate calls this after loadRole() resolves; if true, it
+ * mounts shared/mfa-ui.js on top of the auth overlay and blocks bootApp()
+ * until the modal reports success.
  *
- * Non-admins: returns false regardless of aal — we don't MFA-gate
- * non-admin users in Phase 4.5. That decision is re-evaluated in Phase 5
- * if any pilot role gets write access to sensitive tables.
+ * Phase 4.5 Slice HYG-04 extends the MFA floor from admin-only to every
+ * authenticated user. Admin MFA (Slice MFA-01) shipped first so admins
+ * couldn't get locked out during rollout; HYG-04 removes the admin guard
+ * below so members also have to clear the gate. Satisfies CIS Control 6.3
+ * (Require MFA for Externally-Exposed Applications) — the app-layer gate
+ * is the primary enforcement; RLS continues to team-scope as defense-in-
+ * depth. SQL helper public.current_user_is_aal2() is available for any
+ * future policy-level hardening.
  *
  * @returns {Promise<boolean>}
  */
 async function requiresMfa() {
-  if (!isAdmin()) return false;
   const lvl = await getAalLevel();
   return lvl !== 'aal2';
 }
