@@ -88,6 +88,17 @@ let activeScenarioId = null;
 let activeParentCmId = null;
 let isDirty = false;            // I-05 — track whether user has unsaved changes
 
+// COG-F4 / COG-F2 — debounced auto-recalc + autosave timers.
+// Auto-recalc fires only after the first manual run (so we don't surprise
+// users who haven't asked for a result yet). Autosave fires only on
+// already-saved scenarios (activeScenarioId set) — a brand-new scenario
+// still demands a name via the prompt() flow on the first manual save.
+let _autoRunTimer = null;
+let _autoSaveTimer = null;
+const AUTO_RUN_DELAY_MS = 600;
+const AUTO_SAVE_DELAY_MS = 1500;
+let _autoSaveInFlight = false;
+
 export async function mount(el) {
   rootEl = el;
   await renderLanding();
@@ -184,10 +195,91 @@ function markDirty() {
   // Run-state check runs regardless of isDirty short-circuit — a repeat edit
   // against a clean run still needs to flip the Run button back to orange.
   updateRunButtonState();
+  // COG-F4 — schedule a debounced auto-recompute if there's already a result
+  // on screen (don't surprise users who haven't run yet).
+  scheduleAutoRun();
+  // COG-F2 — schedule a debounced autosave for already-saved scenarios.
+  scheduleAutoSave();
   if (isDirty) return;
   isDirty = true;
   guardMarkDirty('cog');
   updateHeaderSaveState();
+}
+
+/**
+ * COG-F4 — recompute centers + sensitivity in place without a full re-render
+ * of the editor shell. Mirrors the body of the `cog-run` click handler.
+ */
+function runOptimizeAndRender() {
+  if (!rootEl) return;
+  const _solvePts = _pointsForSolve();
+  if (!_solvePts.length) return; // nothing to solve against
+  cogResult = calc.kMeansCog(_solvePts, config.numCenters, config.maxIterations);
+  sensitivityData = calc.sensitivityAnalysis(
+    _solvePts,
+    Math.max(config.numCenters, 5),
+    config.transportCostPerMile,
+    config.maxIterations,
+    config.unitsPerTruck || 25000,
+    config.fixedCostPerDC || 0,
+  );
+  runState.markClean(runStateInputs());
+  updateRunButtonState();
+  // Re-render content without flipping tabs out from under the user.
+  renderContent();
+}
+
+/**
+ * COG-F4 — debounce auto-recalc. Fires only when a result is already on
+ * screen so the first run remains explicit.
+ */
+function scheduleAutoRun() {
+  if (!cogResult) return;
+  if (_autoRunTimer) clearTimeout(_autoRunTimer);
+  _autoRunTimer = setTimeout(() => {
+    _autoRunTimer = null;
+    try { runOptimizeAndRender(); } catch (err) { console.error('[COG] auto-recalc failed:', err); }
+  }, AUTO_RUN_DELAY_MS);
+}
+
+/**
+ * COG-F2 — debounced autosave. Fires only when activeScenarioId is set
+ * (i.e., the scenario already has a name + DB row). Brand-new scenarios
+ * still go through the manual prompt() flow on the first save.
+ */
+function scheduleAutoSave() {
+  if (!activeScenarioId) return;
+  if (_autoSaveTimer) clearTimeout(_autoSaveTimer);
+  _autoSaveTimer = setTimeout(async () => {
+    _autoSaveTimer = null;
+    if (_autoSaveInFlight) return;
+    _autoSaveInFlight = true;
+    try {
+      // Wait for any pending auto-run to settle so we save the freshest result.
+      if (_autoRunTimer) {
+        clearTimeout(_autoRunTimer);
+        _autoRunTimer = null;
+        try { runOptimizeAndRender(); } catch (_) { /* swallow */ }
+      }
+      const payload = {
+        id: activeScenarioId,
+        name: _scenarioName,
+        points,
+        config,
+        result: cogResult,
+      };
+      await api.saveScenario(payload);
+      isDirty = false;
+      guardMarkClean('cog');
+      updateHeaderSaveState();
+    } catch (err) {
+      // Silent failure on autosave — keep the dirty flag so the user can
+      // still hit the manual Save button. Console-log for diagnostics.
+      console.error('[COG] autosave failed:', err);
+    } finally {
+      _autoSaveInFlight = false;
+    }
+  }, AUTO_SAVE_DELAY_MS);
 }
 function updateHeaderSaveState() {
   if (!rootEl) return;
