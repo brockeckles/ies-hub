@@ -1469,6 +1469,22 @@ function renderSetup() {
 function renderVolumes() {
   const lines = model.volumeLines || [];
   const op = model.orderProfile || {};
+  // CM-VOL-1: derive daily-avg + peak-month tiles from primary outbound +
+  // seasonality. Falls back gracefully when no primary set / no seasonality.
+  const primaryLine = lines.find(l => l.isOutboundPrimary) || lines[0] || null;
+  const annualVolume = primaryLine ? Number(primaryLine.volume) || 0 : 0;
+  const opDaysPerYr = (model.facility && Number(model.facility.opDaysPerYear)) || 250;
+  const dailyAvg = annualVolume > 0 && opDaysPerYr > 0 ? annualVolume / opDaysPerYr : 0;
+  const sp = model.seasonalityProfile || {};
+  const monthlyShares = Array.isArray(sp.monthly_shares) && sp.monthly_shares.length === 12
+    ? sp.monthly_shares
+    : SEASONALITY_PRESETS.flat;
+  const peakIdx = monthlyShares.reduce((iMax, v, i, a) => v > a[iMax] ? i : iMax, 0);
+  const peakShare = monthlyShares[peakIdx] || 0;
+  const peakMonthVol = annualVolume * peakShare;
+  const peakMonthLbl = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][peakIdx];
+  const fmtN = (n) => n >= 1e6 ? (n/1e6).toFixed(1) + 'M' : n >= 1e3 ? (n/1e3).toFixed(1) + 'K' : Math.round(n).toLocaleString();
+  const primaryUom = primaryLine?.uom || 'units';
   return `
     <div class="cm-section-header">
       <div>
@@ -1476,6 +1492,22 @@ function renderVolumes() {
         <div class="cm-section-desc">Annual throughput (how much) and order shape (how it arrives). Both describe demand; together they drive labor hours, storage, and unit-cost metrics.</div>
       </div>
     </div>
+    ${annualVolume > 0 ? `
+    <div class="hub-kpi-bar mb-4">
+      <div class="hub-kpi-item" title="Annual primary outbound volume / Operating days per year (${opDaysPerYr})">
+        <div class="hub-kpi-label">Daily Avg</div>
+        <div class="hub-kpi-value">${fmtN(dailyAvg)} <span style="font-size:11px;color:var(--ies-gray-500);font-weight:400;">${primaryUom}/day</span></div>
+      </div>
+      <div class="hub-kpi-item" title="Peak month volume — annual volume × the largest monthly share from the Seasonality Profile (${(peakShare*100).toFixed(1)}% in ${peakMonthLbl})">
+        <div class="hub-kpi-label">Peak Month</div>
+        <div class="hub-kpi-value">${fmtN(peakMonthVol)} <span style="font-size:11px;color:var(--ies-gray-500);font-weight:400;">${primaryUom} (${peakMonthLbl})</span></div>
+      </div>
+      <div class="hub-kpi-item" title="Peak / Daily-Avg ratio — uplift used by labor + dock + storage planning">
+        <div class="hub-kpi-label">Peak Ratio</div>
+        <div class="hub-kpi-value">${dailyAvg > 0 ? ((peakMonthVol / 21) / dailyAvg).toFixed(2) + 'x' : '—'}</div>
+      </div>
+    </div>
+    ` : ''}
 
     <div class="hub-card mb-4">
       <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;">
@@ -1496,7 +1528,12 @@ function renderVolumes() {
           ${lines.map((l, i) => `
             <tr>
               <td><button class="cm-star-btn${l.isOutboundPrimary ? ' active' : ''}" data-idx="${i}" title="Set as primary outbound">&#9733;</button></td>
-              <td><input value="${l.name || ''}" style="width:180px;" data-idx="${i}" data-field="name" /></td>
+              <td>
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <input value="${l.name || ''}" style="width:180px;" data-idx="${i}" data-field="name" />
+                  ${l.source ? `<span class="cm-vol-src cm-vol-src--${l.source}" title="Volume source: ${l.source === 'wsc' ? 'pulled from Warehouse Sizing' : l.source === 'netopt' ? 'pulled from Network Optimizer' : 'manually entered'}">${l.source === 'wsc' ? 'WSC' : l.source === 'netopt' ? 'NETOPT' : 'MANUAL'}</span>` : ''}
+                </div>
+              </td>
               <td><input type="number" value="${l.volume || 0}" style="width:120px;" data-idx="${i}" data-field="volume" data-type="number" /></td>
               <td>
                 <select style="width:90px;" data-idx="${i}" data-field="uom">
@@ -1547,6 +1584,11 @@ function renderVolumes() {
       .cm-star-btn { background: none; border: none; cursor: pointer; font-size: 18px; color: var(--ies-gray-300); }
       .cm-star-btn.active { color: var(--ies-orange); }
       .cm-star-btn:hover { color: var(--ies-orange); }
+      /* CM-VOL-3 — volume-source chip */
+      .cm-vol-src { display: inline-block; padding: 1px 6px; border-radius: 8px; font-size: 9px; font-weight: 700; letter-spacing: 0.04em; }
+      .cm-vol-src--wsc { background: rgba(32, 201, 151, 0.15); color: #117a55; border: 1px solid rgba(32,201,151,0.3); }
+      .cm-vol-src--netopt { background: rgba(13, 110, 253, 0.12); color: #0c4ea2; border: 1px solid rgba(13,110,253,0.3); }
+      .cm-vol-src--manual { background: rgba(108, 117, 125, 0.12); color: #495057; border: 1px solid rgba(108,117,125,0.3); }
       .cm-season-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 4px; margin-top: 12px; }
       .cm-season-cell { display: flex; flex-direction: column; align-items: stretch; gap: 2px; }
       .cm-season-cell label { font-size: 10px; font-weight: 700; color: var(--ies-gray-500); text-align: center; text-transform: uppercase; }
@@ -2373,7 +2415,7 @@ function renderLaborV1() {
     <div class="text-subtitle mb-2">Direct Labor <span style="font-size:11px;color:var(--ies-gray-400);font-weight:500;">— Pick a <strong>Position</strong> (rate / employment / markup pull from Labor Factors) · Volume from Volumes tab · MHE and IT/Device separate</span></div>
     <table class="cm-grid-table">
       <thead>
-        <tr><th style="min-width:180px;">MOST Template</th><th>Activity</th><th style="min-width:150px;" title="Pick a role from the Labor Factors catalog. Rate/employment/markup pull from the position — edit those centrally.">Position</th><th>MHE</th><th>IT / Device</th><th>Volume</th><th>UPH</th><th>Hrs/Yr</th><th>FTE</th><th>Rate</th><th>Employment</th><th>Markup %</th><th title="Productivity variance for Monte Carlo sensitivity">Var %</th><th class="cm-num">Annual Cost</th><th title="Monthly OT/absence seasonality">Seasonality</th><th></th></tr>
+        <tr><th style="min-width:180px;">MOST Template</th><th>Activity</th><th style="min-width:150px;" title="Pick a role from the Labor Factors catalog. Rate/employment/markup pull from the position — edit those centrally.">Position</th><th>MHE</th><th>IT / Device</th><th>Volume</th><th>UPH</th><th>Hrs/Yr</th><th>FTE</th><th>Rate</th><th>Employment</th><th>Markup %</th><th title="Productivity variance for Monte Carlo sensitivity">Var %</th><th title="Activity complexity tier - drives the Year-1 learning-curve haircut. low=0.95, medium=0.85 (default), high=0.75. Read by calc.js learning multiplier.">Complexity</th><th class="cm-num">Annual Cost</th><th title="Monthly OT/absence seasonality">Seasonality</th><th></th></tr>
       </thead>
       <tbody>
         ${lines.map((l, i) => `
@@ -2430,6 +2472,13 @@ function renderLaborV1() {
               <input type="number" value="${l.performance_variance_pct || 0}" style="width:50px;" step="1" min="0" max="50"
                 data-array="laborLines" data-idx="${i}" data-field="performance_variance_pct" data-type="number"
                 title="Productivity variance (% std dev) for the Monte Carlo sensitivity card" />
+            </td>
+            <td>
+              <select style="width:95px;font-size:11px;" data-array="laborLines" data-idx="${i}" data-field="complexity_tier" title="Activity complexity tier - drives Year-1 learning-curve factor (low=0.95, medium=0.85, high=0.75)">
+                <option value="low"${l.complexity_tier === 'low' ? ' selected' : ''}>Low</option>
+                <option value="medium"${(l.complexity_tier || 'medium') === 'medium' ? ' selected' : ''}>Medium</option>
+                <option value="high"${l.complexity_tier === 'high' ? ' selected' : ''}>High</option>
+              </select>
             </td>
             <td class="cm-num">${calc.formatCurrency(calc.directLineAnnualSimple(l, lc))}</td>
             <td>
@@ -8784,6 +8833,7 @@ function handleNetOptPush(payload) {
       volume: demand,
       uom: 'order',
       isOutboundPrimary: true,
+      source: 'netopt', // CM-VOL-3
     };
     if (idx >= 0) {
       model.volumeLines[idx] = { ...model.volumeLines[idx], ...seeded };
