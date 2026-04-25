@@ -127,6 +127,7 @@ async function renderLanding() {
     onNew: () => openEditor(null),
     onOpen: (row) => openEditor(row),
     onDelete: async (row) => { await api.deleteScenario(row.id); },
+    onCopy: async (row) => { await api.duplicateScenario(row.id); },
     onLink: async (row, cmId) => { await api.linkToCm(row.id, cmId); },
     onUnlink: async (row) => { await api.unlinkFromCm(row.id); },
     emptyStateHint: 'Find optimal facility locations from weighted demand. Cluster, centroid solver, sensitivity vs k-DC count, and a service-zone map overlay.',

@@ -619,6 +619,25 @@ function wireLandingEvents() {
     });
   });
 
+  // Duplicate button on landing card — clones row in Supabase, re-renders.
+  rootEl.querySelectorAll('[data-cm-duplicate]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation(); // don't trigger the card-open handler
+      const id = Number(btn.getAttribute('data-cm-duplicate'));
+      const name = btn.getAttribute('data-cm-name') || `Model #${id}`;
+      if (!id) return;
+      try {
+        await api.duplicateModel(id);
+        savedModels = await api.listModels();
+        renderCurrentView();
+        showCmToast(`Duplicated "${name}".`, 'success');
+      } catch (err) {
+        console.error('[CM] Duplicate failed:', err);
+        showCmToast('Duplicate failed: ' + err.message, 'error');
+      }
+    });
+  });
+
   rootEl.querySelectorAll('[data-cm-card]').forEach(card => {
     card.addEventListener('click', async () => {
       const id = Number(card.getAttribute('data-cm-card'));
@@ -8680,6 +8699,11 @@ function renderLanding() {
             const safeName = (m.name || 'Untitled Model').replace(/"/g, '&quot;');
             return `
               <div class="hub-card cm-landing-card" data-cm-card="${m.id}" style="padding:16px;cursor:pointer;transition:all 0.15s;border:1px solid var(--ies-gray-200);position:relative;">
+                <button class="cm-landing-duplicate" data-cm-duplicate="${m.id}" data-cm-name="${safeName}"
+                        title="Duplicate this model"
+                        style="position:absolute;top:8px;right:36px;width:24px;height:24px;padding:0;display:flex;align-items:center;justify-content:center;background:transparent;border:none;color:var(--ies-gray-300);cursor:pointer;border-radius:4px;font-size:13px;">
+                  ⎘
+                </button>
                 <button class="cm-landing-delete" data-cm-delete="${m.id}" data-cm-name="${safeName}"
                         title="Delete this model"
                         style="position:absolute;top:8px;right:8px;width:24px;height:24px;padding:0;display:flex;align-items:center;justify-content:center;background:transparent;border:none;color:var(--ies-gray-300);cursor:pointer;border-radius:4px;font-size:14px;">
@@ -8699,6 +8723,8 @@ function renderLanding() {
     </div>
     <style>
       .cm-landing-card:hover { border-color: var(--ies-blue) !important; box-shadow: 0 2px 8px rgba(0,71,171,0.08); transform: translateY(-1px); }
+      .cm-landing-delete:hover { color: #e23d3d !important; background: rgba(226,61,61,0.08) !important; }
+      .cm-landing-duplicate:hover { color: var(--ies-blue) !important; background: rgba(0,71,171,0.08) !important; }
     </style>
   `;
 }

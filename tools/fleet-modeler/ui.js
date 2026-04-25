@@ -151,6 +151,7 @@ async function renderLanding() {
     onNew: () => openEditor(null),
     onOpen: (row) => openEditor(row),
     onDelete: async (row) => { await api.deleteScenario(row.id); },
+    onCopy: async (row) => { await api.duplicateScenario(row.id); },
     onLink: async (row, cmId) => { await api.linkToCm(row.id, cmId); },
     onUnlink: async (row) => { await api.unlinkFromCm(row.id); },
     emptyStateHint: 'Size a private fleet from your lane network — vehicles, drivers, fuel, maintenance, ATRI benchmarks, and a 3-way comparison vs dedicated and common carrier.',

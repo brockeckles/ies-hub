@@ -512,9 +512,15 @@ function renderDealList(el) {
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;">
           ${allDeals.map(d => {
             const badge = calc.statusBadge(d.status);
+            const safeName = (d.dealName || 'Deal').replace(/"/g, '&quot;');
             return `
-              <div class="hub-card" style="cursor:pointer;" data-deal-id="${d.id}">
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+              <div class="hub-card dm-landing-card" style="cursor:pointer;position:relative;" data-deal-id="${d.id}">
+                <button class="dm-landing-delete" data-deal-delete="${d.id}" data-deal-name="${safeName}"
+                        title="Delete this deal"
+                        style="position:absolute;top:8px;right:8px;width:24px;height:24px;padding:0;display:flex;align-items:center;justify-content:center;background:transparent;border:none;color:var(--ies-gray-300);cursor:pointer;border-radius:4px;font-size:14px;z-index:2;">
+                  ✕
+                </button>
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-right:24px;">
                   <span style="font-size:14px;font-weight:700;">${d.dealName}</span>
                   <span style="display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;background:${badge.bg};color:${badge.color};">${badge.label}</span>
                 </div>
@@ -532,8 +538,28 @@ function renderDealList(el) {
   `;
 
   el.querySelectorAll('[data-deal-id]').forEach(card => {
-    card.addEventListener('click', async () => {
+    card.addEventListener('click', async (ev) => {
+      // Don't open the deal if the user clicked the delete button.
+      if (/** @type {HTMLElement} */ (ev.target).closest('[data-deal-delete]')) return;
       await openDeal(/** @type {HTMLElement} */ (card).dataset.dealId);
+    });
+  });
+
+  el.querySelectorAll('[data-deal-delete]').forEach(btn => {
+    btn.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
+      const id = /** @type {HTMLElement} */ (btn).getAttribute('data-deal-delete');
+      const name = /** @type {HTMLElement} */ (btn).getAttribute('data-deal-name') || 'this deal';
+      if (!id) return;
+      if (!confirm(`Delete "${name}"? Linked sites/CMs are NOT deleted, only the deal record. This cannot be undone.`)) return;
+      try {
+        await api.deleteDeal(id);
+        allDeals = allDeals.filter(x => x.id !== id);
+        renderDealList(el);
+      } catch (err) {
+        console.error('[DM] deleteDeal failed:', err);
+        alert('Could not delete deal: ' + (err.message || 'unknown'));
+      }
     });
   });
 

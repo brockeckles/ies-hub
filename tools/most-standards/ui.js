@@ -1208,6 +1208,7 @@ function renderSavedScenarios() {
             </div>
             <div style="display:flex; gap:4px;">
               <button class="cm-edit-btn" data-action="load-scenario" data-idx="${idx}" style="flex:1; font-size:11px; padding:4px 6px;">Load</button>
+              <button class="cm-edit-btn" data-action="copy-scenario" data-idx="${idx}" title="Duplicate this scenario" style="font-size:11px; padding:4px 6px;">Copy</button>
               <button class="cm-delete-btn" data-action="delete-scenario" data-idx="${idx}" style="font-size:11px; padding:4px 6px;">Del</button>
             </div>
           </div>
@@ -1614,6 +1615,12 @@ function bindContentEvents(container) {
       deleteScenario(idx);
     });
   });
+  container.querySelectorAll('[data-action="copy-scenario"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.idx);
+      copyScenario(idx);
+    });
+  });
 }
 
 // ============================================================
@@ -1646,6 +1653,9 @@ function handleAction(action, idx) {
     // Quick Analysis
     case 'save-scenario':
       saveCurrentScenario();
+      return;
+    case 'copy-scenario':
+      copyScenario(idx);
       return;
     case 'most-export-xlsx':
       exportAnalysisToXlsx();
@@ -2014,6 +2024,32 @@ async function deleteScenario(idx) {
     localStorage.setItem('most_scenarios', JSON.stringify(savedScenarios.filter(s => !s.id)));
   } catch {}
   renderContent();
+}
+
+async function copyScenario(idx) {
+  const sc = savedScenarios[idx];
+  if (!sc) return;
+  const proposed = `${sc.name} (Copy)`;
+  const newName = prompt('Name for the duplicate scenario:', proposed);
+  if (!newName) return;
+  try {
+    await api.saveAnalysis({
+      name: newName,
+      pfd_pct: sc.data?.pfd_pct,
+      productivity_pct: sc.data?.productivity_pct,
+      shift_hours: sc.data?.shift_hours,
+      operating_days: sc.data?.operating_days,
+      hourly_rate: sc.data?.hourly_rate,
+      allowance_profile_id: sc.data?.allowance_profile_id || null,
+      lines: (sc.data?.lines || []).map(l => ({ ...l })),
+    });
+    const rows = await api.listAnalyses();
+    savedScenarios = rows.map(analysisRowToScenario);
+    renderContent();
+  } catch (err) {
+    console.warn('[MOST] copyScenario failed:', err);
+    alert('Could not duplicate scenario: ' + (err.message || 'unknown'));
+  }
 }
 
 /**
