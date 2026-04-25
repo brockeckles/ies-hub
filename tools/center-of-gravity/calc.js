@@ -29,6 +29,12 @@ export const DEFAULT_CONFIG = {
   // 0 = transport-only model (legacy behavior); >0 = true U-curve where
   // sensitivityAnalysis adds k * fixedCostPerDC to the total cost.
   fixedCostPerDC: 0,
+  // H1 fix (2026-04-25 EVE): outlier weight capping. Default OFF — when ON,
+  // demand weights are winsorized at the configured percentile before k-means
+  // and sensitivity analysis. Defends the COG from being dragged toward a
+  // single big-volume customer (~30%+ of network volume).
+  outlierCapEnabled: false,
+  outlierCapPercentile: 95,
 };
 
 /** @type {import('./types.js?v=20260418-sP').MajorCity[]} */

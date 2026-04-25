@@ -14,7 +14,7 @@ import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sP';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260418-sP';
-import * as calc from './calc.js?v=20260425-s5';
+import * as calc from './calc.js?v=20260425-s6';
 import * as api from './api.js?v=20260418-sP';
 
 // ============================================================
@@ -159,8 +159,9 @@ function openEditor(savedRow) {
   if (cogResult && points.length > 0 &&
       (!Array.isArray(cogResult.assignments) || !cogResult.assignments.length)) {
     try {
-      cogResult = calc.kMeansCog(points, config.numCenters, config.maxIterations);
-      sensitivityData = calc.sensitivityAnalysis(points, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0);
+      const _solvePts = _pointsForSolve();
+      cogResult = calc.kMeansCog(_solvePts, config.numCenters, config.maxIterations);
+      sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0);
     } catch (err) {
       console.warn('[COG] Result rebuild from saved inputs failed; falling back to partial render:', err);
     }
@@ -257,6 +258,16 @@ export function unmount() {
 // SHELL
 // ============================================================
 
+function _pointsForSolve() {
+  // H1: optionally winsorize point weights to a percentile cap before
+  // running k-means / sensitivity. Mitigates a single mega-shipper
+  // dominating the centroid in real customer data.
+  if (config.outlierCapEnabled) {
+    return calc.capWeightsByPercentile(points, config.outlierCapPercentile || 95);
+  }
+  return points;
+}
+
 function renderShell() {
   const tabs = [
     { key: 'points', label: 'Demand Points' },
@@ -334,8 +345,9 @@ function bindShellEvents() {
     const runBtn = target.closest('[data-primary-action="cog-run"]');
     if (runBtn) {
       e.preventDefault();
-      cogResult = calc.kMeansCog(points, config.numCenters, config.maxIterations);
-      sensitivityData = calc.sensitivityAnalysis(points, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0);
+      const _solvePts = _pointsForSolve();
+      cogResult = calc.kMeansCog(_solvePts, config.numCenters, config.maxIterations);
+      sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0);
       activeTab = 'analysis';
       // Stash the input fingerprint so the header Run button flips to the
       // muted "✓ Results current" state until the user edits something.
@@ -463,6 +475,18 @@ function renderPoints(el) {
                    style="width:120px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
             <span style="font-size:11px;color:var(--ies-gray-400);">0 = transport only · >0 = real U-curve (e.g. $1.5M)</span>
           </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <label style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="checkbox" id="cog-outlier-toggle" ${config.outlierCapEnabled ? 'checked' : ''}
+                     style="cursor:pointer;">
+              Cap outlier weights at
+            </label>
+            <input type="number" value="${config.outlierCapPercentile || 95}" min="80" max="99" step="1" id="cog-outlier-percentile"
+                   ${config.outlierCapEnabled ? '' : 'disabled'}
+                   title="Winsorize: any point heavier than the Nth-percentile weight is clipped DOWN to that cap before solving. Use when one mega-shipper distorts the centroid."
+                   style="width:60px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;${config.outlierCapEnabled ? '' : 'opacity:0.5;'}">
+            <span style="font-size:11px;color:var(--ies-gray-400);">th percentile · prevents one mega-account from owning the centroid</span>
+          </div>
         </div>
       </div>
 
@@ -531,6 +555,17 @@ function renderPoints(el) {
   });
   el.querySelector('#cog-fixed-cost')?.addEventListener('change', (e) => {
     config.fixedCostPerDC = Math.max(0, parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0);
+    markDirty();
+  });
+  el.querySelector('#cog-outlier-toggle')?.addEventListener('change', (e) => {
+    config.outlierCapEnabled = /** @type {HTMLInputElement} */ (e.target).checked;
+    markDirty();
+    // Re-render points panel so the percentile input enable-state flips
+    renderPoints(el);
+  });
+  el.querySelector('#cog-outlier-percentile')?.addEventListener('change', (e) => {
+    const v = parseInt(/** @type {HTMLInputElement} */ (e.target).value);
+    config.outlierCapPercentile = Math.max(80, Math.min(99, isFinite(v) ? v : 95));
     markDirty();
   });
 
