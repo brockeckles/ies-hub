@@ -394,10 +394,13 @@ function renderShell() {
         },
       })}
 
+      <!-- P1 #6 — process-flow chip strip (Setup -> Optimize -> Run -> Compare). Populated by renderProcessFlow(). -->
+      <div id="no-process-flow" style="margin-top:8px;"></div>
+
       <!-- Main area: sidebar + content -->
-      <div style="display:flex;flex:1;overflow:hidden;margin-top:12px;">
+      <div style="display:flex;flex:1;overflow:hidden;">
         <!-- Sidebar -->
-        <div id="no-sidebar" style="width:220px;flex-shrink:0;border-right:1px solid var(--ies-gray-200);padding:16px;overflow-y:auto;">
+        <div id="no-sidebar" style="width:232px;flex-shrink:0;border-right:1px solid var(--ies-gray-200);padding:14px 12px;overflow-y:auto;">
         </div>
         <!-- Content -->
         <div id="no-content" style="flex:1;overflow-y:auto;padding:24px;">
@@ -446,6 +449,120 @@ function bindShellEvents() {
     renderSidebar();
     if (activeView === 'setup') renderContentView();
   });
+
+  // P1 #6 — process-flow chip clicks. Each chip jumps to the canonical view+section
+  // for that phase. The phase chip strip is purely a navigation-and-status surface;
+  // the content tabs (no-view-tabs) and sidebar sections both still work.
+  rootEl.querySelector('#no-process-flow')?.addEventListener('click', (e) => {
+    const chip = /** @type {HTMLElement} */ (e.target).closest('[data-phase]');
+    if (!chip) return;
+    jumpToPhase(/** @type {any} */ (chip.dataset.phase));
+  });
+}
+
+// ============================================================
+// PROCESS FLOW (P1 #6 — 2026-04-25 EVE)
+// ============================================================
+// Horizontal chip strip showing the user's progress through the optimization
+// workflow: Setup -> Optimize -> Run -> Compare. Each chip is clickable and
+// jumps the view+sidebar to the canonical entry point for that phase. Status
+// is computed from current state (presence of demand/facilities/results/comparison).
+
+/** @returns {{setup: 'pending'|'active'|'complete', optimize: 'pending'|'active'|'complete', run: 'pending'|'active'|'complete', compare: 'pending'|'active'|'complete'}} */
+function phaseStatus() {
+  const hasDemand = demands.length > 0;
+  const hasFacilities = facilities.length > 0;
+  const hasOpenFacilities = facilities.some(f => f.isOpen);
+  const hasResult = !!activeScenario;
+  const hasComparison = Array.isArray(comparisonResults) && comparisonResults.length > 0;
+
+  const setupComplete = hasDemand && hasFacilities;
+  const optimizeComplete = hasOpenFacilities && hasDemand;
+
+  return {
+    setup: setupComplete ? 'complete' : (hasDemand || hasFacilities ? 'active' : 'pending'),
+    optimize: optimizeComplete ? 'complete' : (setupComplete ? 'active' : 'pending'),
+    run: hasResult ? 'complete' : (optimizeComplete ? 'active' : 'pending'),
+    compare: hasComparison ? 'complete' : (hasResult ? 'active' : 'pending'),
+  };
+}
+
+function renderProcessFlow() {
+  const el = rootEl?.querySelector('#no-process-flow');
+  if (!el) return;
+  const s = phaseStatus();
+  const phases = [
+    { key: 'setup',    num: 1, label: 'Setup',    sub: 'Demand + facilities' },
+    { key: 'optimize', num: 2, label: 'Optimize', sub: 'Find candidates · balance' },
+    { key: 'run',      num: 3, label: 'Run',      sub: 'Compute cost + service' },
+    { key: 'compare',  num: 4, label: 'Compare',  sub: 'k-sweep + sensitivity' },
+  ];
+  // Pending: gray. Active: solid blue. Complete: green check.
+  const styleFor = (status) => {
+    if (status === 'complete') return { circleBg: 'var(--ies-green, #047857)', label: 'var(--ies-green, #047857)', circleFg: '#fff', icon: '✓' };
+    if (status === 'active')   return { circleBg: 'var(--ies-blue)',           label: 'var(--ies-blue)',           circleFg: '#fff', icon: null };
+    return                              { circleBg: 'var(--ies-gray-300)',     label: 'var(--ies-gray-500)',       circleFg: '#fff', icon: null };
+  };
+  el.innerHTML = `
+    <div style="display:flex;align-items:stretch;gap:0;padding:8px 14px 10px 14px;background:var(--ies-gray-50, #f9fafb);border-bottom:1px solid var(--ies-gray-200);">
+      ${phases.map((p, idx) => {
+        const status = s[p.key];
+        const c = styleFor(status);
+        const display = c.icon || String(p.num);
+        return `
+          <div data-phase="${p.key}"
+               role="button" tabindex="0"
+               style="flex:1;display:flex;align-items:center;gap:9px;cursor:pointer;padding:5px 8px;border-radius:6px;min-width:0;transition:background .15s;"
+               onmouseover="this.style.background='var(--ies-gray-100)'"
+               onmouseout="this.style.background='transparent'"
+               title="Jump to ${p.label} (status: ${status})">
+            <div style="width:26px;height:26px;border-radius:50%;background:${c.circleBg};color:${c.circleFg};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0;">
+              ${display}
+            </div>
+            <div style="display:flex;flex-direction:column;line-height:1.2;min-width:0;">
+              <span style="font-size:12px;font-weight:700;color:${c.label};">${p.label}</span>
+              <span style="font-size:10px;color:var(--ies-gray-500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.sub}</span>
+            </div>
+          </div>
+          ${idx < phases.length - 1 ? `
+            <div style="display:flex;align-items:center;color:var(--ies-gray-300);font-size:13px;padding:0 2px;flex-shrink:0;">▶</div>
+          ` : ''}
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+/** @param {'setup'|'optimize'|'run'|'compare'} phase */
+function jumpToPhase(phase) {
+  switch (phase) {
+    case 'setup':
+      activeView = 'setup';
+      // If demand isn't loaded yet, that's the natural starting point.
+      activeSection = (demands.length === 0) ? 'demand' : 'facilities';
+      break;
+    case 'optimize':
+      activeView = 'setup';
+      activeSection = 'modemix';
+      // Surface the OPTIMIZE block in the sidebar.
+      setTimeout(() => {
+        rootEl?.querySelector('#no-sidebar [data-phase-block="optimize"]')
+              ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 60);
+      break;
+    case 'run':
+      activeView = 'results';
+      break;
+    case 'compare':
+      activeView = 'comparison';
+      break;
+  }
+  // Sync the tool-frame view-tab buttons.
+  rootEl?.querySelectorAll('#no-view-tabs button').forEach(b => {
+    b.classList.toggle('active', b.getAttribute('data-tab') === activeView);
+  });
+  renderSidebar();
+  renderContentView();
 }
 
 // ============================================================
@@ -456,57 +573,107 @@ function renderSidebar() {
   const el = rootEl?.querySelector('#no-sidebar');
   if (!el) return;
 
-  const sections = [
-    { key: 'facilities', label: 'Facilities', icon: '🏭', count: facilities.filter(f => f.isOpen).length + '/' + facilities.length },
-    { key: 'demand', label: 'Demand Points', icon: '📍', count: String(demands.length) },
-    { key: 'modemix', label: 'Mode Mix', icon: '🚛', count: '' },
-    { key: 'service', label: 'Service Config', icon: '⏱', count: '' },
+  // P1 #6 — sidebar reorganized into Setup -> Optimize -> Run/Review -> Utilities phase blocks.
+  // Sections (Demand/Facilities/Mode Mix/Service Config) are split across SETUP and OPTIMIZE
+  // by their nature: SETUP holds raw inputs (demand, candidate facilities) + archetype quick-seed;
+  // OPTIMIZE holds cost/service assumptions (mode mix, service) + the actions that act on inputs
+  // (Find Optimal, Balance, Apply Rates, Upload CSV) + the Max-DCs sweep ceiling.
+  const status = phaseStatus();
+  const setupSections = [
+    { key: 'demand',     label: 'Demand Points', icon: '📍', count: String(demands.length) },
+    { key: 'facilities', label: 'Facilities',    icon: '🏭', count: facilities.filter(f => f.isOpen).length + '/' + facilities.length },
+  ];
+  const optimizeSections = [
+    { key: 'modemix', label: 'Mode Mix',       icon: '🚛', count: '' },
+    { key: 'service', label: 'Service Config', icon: '⏱',  count: '' },
   ];
 
+  const phaseBadge = (num, status) => {
+    const bg = status === 'complete' ? 'var(--ies-green, #047857)' : status === 'active' ? 'var(--ies-blue)' : 'var(--ies-gray-300)';
+    const display = status === 'complete' ? '✓' : String(num);
+    return `<div style="width:18px;height:18px;border-radius:50%;background:${bg};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:10px;flex-shrink:0;">${display}</div>`;
+  };
+  const phaseHeader = (num, label, status, sub) => `
+    <div style="display:flex;align-items:center;gap:8px;margin:0 0 6px 0;padding:0 2px;">
+      ${phaseBadge(num, status)}
+      <span class="text-caption" style="color:var(--ies-gray-500);font-weight:700;letter-spacing:0.5px;font-size:10px;">${label}</span>
+    </div>
+    <div style="font-size:10px;color:var(--ies-gray-400);margin:0 0 8px 28px;line-height:1.3;">${sub}</div>
+  `;
+  const renderSection = (s) => `
+    <div data-section="${s.key}" style="display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:6px;cursor:pointer;margin-bottom:3px;
+         background:${s.key === activeSection ? 'var(--ies-blue)' : 'transparent'};
+         color:${s.key === activeSection ? '#fff' : 'var(--ies-gray-600)'};">
+      <span style="font-size:14px;">${s.icon}</span>
+      <span style="font-size:12px;font-weight:600;flex:1;">${s.label}</span>
+      ${s.count ? `<span style="font-size:10px;font-weight:700;opacity:0.75;">${s.count}</span>` : ''}
+    </div>
+  `;
+
   el.innerHTML = `
-    <div style="margin-bottom:16px;">
-      <span class="text-caption" style="color:var(--ies-gray-400);">CONFIGURATION</span>
+    <!-- PHASE 1: SETUP -->
+    <div data-phase-block="setup" style="margin-bottom:6px;">
+      ${phaseHeader(1, 'SETUP', status.setup, 'Add demand and candidate facilities.')}
+      ${setupSections.map(renderSection).join('')}
+
+      <details style="margin:8px 0 4px 0;" ${selectedArchetype ? 'open' : ''}>
+        <summary style="font-size:10px;color:var(--ies-gray-500);cursor:pointer;padding:5px 4px;font-weight:700;letter-spacing:0.4px;">
+          QUICK-SEED · ARCHETYPES ▾
+        </summary>
+        <div style="margin-top:4px;padding-left:2px;">
+          ${calc.listArchetypes().map(a => `
+            <button class="hub-btn hub-btn-sm hub-btn-secondary" data-archetype="${a.key}"
+                    style="width:100%;margin-bottom:4px;font-size:10px;text-align:left;padding:4px 8px;${selectedArchetype === a.key ? 'border-color:var(--ies-blue);color:var(--ies-blue);' : ''}">
+              ${a.name}
+            </button>
+          `).join('')}
+        </div>
+      </details>
     </div>
-    ${sections.map(s => `
-      <div data-section="${s.key}" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:6px;cursor:pointer;margin-bottom:4px;
-           background:${s.key === activeSection ? 'var(--ies-blue)' : 'transparent'};
-           color:${s.key === activeSection ? '#fff' : 'var(--ies-gray-600)'};">
-        <span style="font-size:16px;">${s.icon}</span>
-        <span style="font-size:13px;font-weight:600;flex:1;">${s.label}</span>
-        ${s.count ? `<span style="font-size:11px;font-weight:700;opacity:0.7;">${s.count}</span>` : ''}
+
+    <div style="border-top:1px solid var(--ies-gray-200);margin:10px 0;"></div>
+
+    <!-- PHASE 2: OPTIMIZE -->
+    <div data-phase-block="optimize" style="margin-bottom:6px;">
+      ${phaseHeader(2, 'OPTIMIZE', status.optimize, 'Find candidates, balance modes, and apply rates.')}
+      ${optimizeSections.map(renderSection).join('')}
+
+      <div style="display:flex;flex-direction:column;gap:5px;margin-top:8px;">
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="find-optimal" style="width:100%;font-size:11px;text-align:left;padding:6px 10px;" title="Weighted k-means on your demand → recommended DC metros. Adds candidate facilities to the list without opening them; you pick which to activate.">🎯 Find Optimal Locations</button>
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="balance-mode-mix" style="width:100%;font-size:11px;text-align:left;padding:6px 10px;" title="Auto-balance TL/LTL/Parcel mix to match average demand weight">⚖ Balance Mode Mix</button>
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="apply-market-rates" style="width:100%;font-size:11px;text-align:left;padding:6px 10px;" title="Pull latest spot/contract rates from market data and apply to rate card">💲 Apply Market Rates</button>
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="upload-rates-csv" style="width:100%;font-size:11px;text-align:left;padding:6px 10px;">📤 Upload Rate Card CSV</button>
       </div>
-    `).join('')}
 
-    <div style="border-top:1px solid var(--ies-gray-200);margin:20px 0 16px 0;"></div>
-    <span class="text-caption" style="color:var(--ies-gray-400);">ARCHETYPES</span>
-    <div style="margin-top:8px;">
-      ${calc.listArchetypes().map(a => `
-        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-archetype="${a.key}"
-                style="width:100%;margin-bottom:6px;font-size:11px;text-align:left;${selectedArchetype === a.key ? 'border-color:var(--ies-blue);color:var(--ies-blue);' : ''}">
-          ${a.name}
-        </button>
-      `).join('')}
+      <div style="margin-top:10px;padding:6px 4px;">
+        <label style="display:block;font-size:10px;font-weight:700;color:var(--ies-gray-500);margin-bottom:4px;letter-spacing:0.3px;">MAX DCs TO TEST (k-sweep)</label>
+        <input type="number" id="netopt-max-dcs" min="1" max="20" value="${maxDCsToTest}" style="width:100%;padding:5px 7px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:11px;"/>
+      </div>
     </div>
 
-    <div style="border-top:1px solid var(--ies-gray-200);margin:20px 0 16px 0;"></div>
-    <span class="text-caption" style="color:var(--ies-gray-400);">OPTIMIZATION</span>
-    <div style="margin-top:8px;margin-bottom:12px;">
-      <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-600);margin-bottom:4px;">Max DCs to Test</label>
-      <input type="number" id="netopt-max-dcs" min="1" max="20" value="${maxDCsToTest}" style="width:100%;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:12px;"/>
+    <div style="border-top:1px solid var(--ies-gray-200);margin:10px 0;"></div>
+
+    <!-- PHASE 3 + 4: RUN & REVIEW -->
+    <div data-phase-block="run" style="margin-bottom:6px;">
+      ${phaseHeader(3, 'RUN & REVIEW', status.run, 'Compute, compare, and search.')}
+      <div style="display:flex;flex-direction:column;gap:5px;">
+        <button class="hub-btn hub-btn-primary hub-btn-sm" data-action="run" style="width:100%;font-weight:700;padding:7px 10px;">▶ Run Scenario</button>
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="compare-dcs" style="width:100%;font-size:11px;text-align:left;padding:6px 10px;" title="Sweep k from 1 to Max DCs and chart the cost-vs-k curve with elbow point">📊 Compare DCs (k-sweep)</button>
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="exact-solve" style="width:100%;font-size:11px;text-align:left;padding:6px 10px;" title="Brute-force enumeration of all C(n,k) combinations — best for small candidate sets (≤10)">🧮 Exhaustive Search</button>
+      </div>
     </div>
 
-    <div style="border-top:1px solid var(--ies-gray-200);margin:20px 0 16px 0;"></div>
-    <span class="text-caption" style="color:var(--ies-gray-400);">ACTIONS</span>
-    <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px;">
-      <button class="hub-btn hub-btn-primary hub-btn-sm" data-action="run" style="width:100%;">Run Scenario</button>
-      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="find-optimal" style="width:100%;font-size:11px;" title="Weighted k-means on your demand → recommended DC metros. Adds candidate facilities to the list without opening them; you pick which to activate.">🎯 Find Optimal Locations</button>
-      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="compare-dcs" style="width:100%;font-size:11px;">Compare DCs</button>
-      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="exact-solve" style="width:100%;font-size:11px;">Exhaustive Search</button>
-      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="apply-market-rates" style="width:100%;font-size:11px;">Apply Market Rates</button>
-      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="balance-mode-mix" style="width:100%;font-size:11px;">Balance Mode Mix</button>
-      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="upload-rates-csv" style="width:100%;font-size:11px;">Upload Rate Card CSV</button>
-      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="export-csv" style="width:100%;font-size:11px;">Export XLSX</button>
-      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="clear-scenarios" style="width:100%;">Clear All</button>
+    <div style="border-top:1px solid var(--ies-gray-200);margin:10px 0;"></div>
+
+    <!-- UTILITIES -->
+    <div data-phase-block="utilities">
+      <div style="display:flex;align-items:center;gap:8px;margin:0 0 8px 0;padding:0 2px;">
+        <span class="text-caption" style="color:var(--ies-gray-400);font-weight:700;letter-spacing:0.5px;font-size:10px;">UTILITIES</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px;">
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="export-csv" style="width:100%;font-size:11px;text-align:left;padding:6px 10px;">📥 Export XLSX</button>
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="clear-scenarios" style="width:100%;font-size:11px;text-align:left;padding:6px 10px;color:var(--ies-red, #b91c1c);">🗑 Clear All</button>
+      </div>
       <input type="file" id="netopt-csv-upload" accept=".csv,text/csv" style="display:none;"/>
     </div>
   `;
@@ -552,6 +719,9 @@ function renderSidebar() {
   // CSV rate card upload
   const fileInput = el.querySelector('#netopt-csv-upload');
   fileInput?.addEventListener('change', handleCsvUpload);
+
+  // P1 #6 — keep the process-flow chip strip in sync with sidebar render.
+  renderProcessFlow();
 }
 
 /** Pull latest freight_rates avg from Supabase and apply to rateCard. */
