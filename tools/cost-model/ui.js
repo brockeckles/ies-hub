@@ -771,6 +771,18 @@ function wireLandingEvents() {
       }
     });
   });
+
+  // CM-LND-1 (2026-04-25): persist deal-group collapse state to localStorage
+  // so users don't have to re-collapse on every navigation back to the landing.
+  rootEl.querySelectorAll('details[data-cm-deal-group]').forEach(det => {
+    det.addEventListener('toggle', () => {
+      const key = det.getAttribute('data-cm-deal-group');
+      let collapsed = {};
+      try { collapsed = JSON.parse(localStorage.getItem('cm-deal-group-collapsed') || '{}'); } catch {}
+      if (det.open) delete collapsed[key]; else collapsed[key] = true;
+      try { localStorage.setItem('cm-deal-group-collapsed', JSON.stringify(collapsed)); } catch {}
+    });
+  });
 }
 
 /**
@@ -8844,36 +8856,80 @@ function renderLanding() {
           <div style="font-size:13px;color:var(--ies-gray-400);margin-bottom:20px;">Start a pricing model to compute labor, equipment, overhead, and P&amp;L for a facility.</div>
           <button class="hub-btn hub-btn-primary" id="cm-create-new-alt" onclick="document.getElementById('cm-create-new').click()">+ Create New Model</button>
         </div>
-      ` : `
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;">
-          ${savedModels.map(m => {
-            const updated = m.updated_at ? new Date(m.updated_at) : null;
-            const updatedStr = updated ? updated.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
-            const market = m.market_id ? (marketById[m.market_id] || m.market_id) : null;
-            const safeName = (m.name || 'Untitled Model').replace(/"/g, '&quot;');
-            return `
-              <div class="hub-card cm-landing-card" data-cm-card="${m.id}" style="padding:16px;cursor:pointer;transition:all 0.15s;border:1px solid var(--ies-gray-200);position:relative;">
-                <button class="cm-landing-duplicate" data-cm-duplicate="${m.id}" data-cm-name="${safeName}"
-                        title="Duplicate this model"
-                        style="position:absolute;top:8px;right:36px;width:24px;height:24px;padding:0;display:flex;align-items:center;justify-content:center;background:transparent;border:none;color:var(--ies-gray-300);cursor:pointer;border-radius:4px;font-size:13px;">
-                  ⎘
-                </button>
-                <button class="cm-landing-delete" data-cm-delete="${m.id}" data-cm-name="${safeName}"
-                        title="Delete this model"
-                        style="position:absolute;top:8px;right:8px;width:24px;height:24px;padding:0;display:flex;align-items:center;justify-content:center;background:transparent;border:none;color:var(--ies-gray-300);cursor:pointer;border-radius:4px;font-size:14px;">
-                  ✕
-                </button>
-                <div style="font-size:14px;font-weight:700;margin-bottom:4px;color:var(--ies-navy);padding-right:24px;">${m.name || 'Untitled Model'}</div>
-                <div style="font-size:12px;color:var(--ies-gray-500);margin-bottom:12px;">${m.client_name || '<span style="color:var(--ies-gray-300);">No client</span>'}</div>
-                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
-                  ${market ? `<span style="font-size:10px;padding:2px 8px;border-radius:12px;background:var(--ies-gray-100);color:var(--ies-gray-600);">${market}</span>` : ''}
-                </div>
-                <div style="font-size:11px;color:var(--ies-gray-400);">Updated ${updatedStr}</div>
+      ` : (() => {
+        // CM-LND-1 (2026-04-25): group saved models by linked deal so users
+        // can collapse families of scenarios. Models with no deal id get
+        // their own "Unassigned" group at the bottom. Collapse state is
+        // persisted in localStorage so it survives navigation.
+        const dealById = {};
+        (savedDeals || []).forEach(d => { if (d?.id) dealById[d.id] = d; });
+        const groups = new Map();
+        for (const m of savedModels) {
+          const key = m.deal_deals_id || '__unassigned__';
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key).push(m);
+        }
+        // Read collapse state
+        let collapsed = {};
+        try { collapsed = JSON.parse(localStorage.getItem('cm-deal-group-collapsed') || '{}'); } catch {}
+        // Sort groups: real deals first (by deal_name), unassigned last
+        const orderedKeys = [...groups.keys()].sort((a, b) => {
+          if (a === '__unassigned__') return 1;
+          if (b === '__unassigned__') return -1;
+          const an = (dealById[a]?.deal_name || a).toLowerCase();
+          const bn = (dealById[b]?.deal_name || b).toLowerCase();
+          return an < bn ? -1 : an > bn ? 1 : 0;
+        });
+        const renderCard = (m) => {
+          const updated = m.updated_at ? new Date(m.updated_at) : null;
+          const updatedStr = updated ? updated.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+          const market = m.market_id ? (marketById[m.market_id] || m.market_id) : null;
+          const safeName = (m.name || 'Untitled Model').replace(/"/g, '&quot;');
+          return `
+            <div class="hub-card cm-landing-card" data-cm-card="${m.id}" style="padding:16px;cursor:pointer;transition:all 0.15s;border:1px solid var(--ies-gray-200);position:relative;">
+              <button class="cm-landing-duplicate" data-cm-duplicate="${m.id}" data-cm-name="${safeName}"
+                      title="Duplicate this model"
+                      style="position:absolute;top:8px;right:36px;width:24px;height:24px;padding:0;display:flex;align-items:center;justify-content:center;background:transparent;border:none;color:var(--ies-gray-300);cursor:pointer;border-radius:4px;font-size:13px;">
+                ⎘
+              </button>
+              <button class="cm-landing-delete" data-cm-delete="${m.id}" data-cm-name="${safeName}"
+                      title="Delete this model"
+                      style="position:absolute;top:8px;right:8px;width:24px;height:24px;padding:0;display:flex;align-items:center;justify-content:center;background:transparent;border:none;color:var(--ies-gray-300);cursor:pointer;border-radius:4px;font-size:14px;">
+                ✕
+              </button>
+              <div style="font-size:14px;font-weight:700;margin-bottom:4px;color:var(--ies-navy);padding-right:24px;">${m.name || 'Untitled Model'}</div>
+              <div style="font-size:12px;color:var(--ies-gray-500);margin-bottom:12px;">${m.client_name || '<span style=\"color:var(--ies-gray-300);\">No client</span>'}</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+                ${market ? `<span style="font-size:10px;padding:2px 8px;border-radius:12px;background:var(--ies-gray-100);color:var(--ies-gray-600);">${market}</span>` : ''}
               </div>
-            `;
-          }).join('')}
-        </div>
-      `}
+              <div style="font-size:11px;color:var(--ies-gray-400);">Updated ${updatedStr}</div>
+            </div>
+          `;
+        };
+        return orderedKeys.map(key => {
+          const items = groups.get(key) || [];
+          const deal = dealById[key];
+          const heading = key === '__unassigned__' ? 'Unassigned' : (deal?.deal_name || 'Untitled deal');
+          const subtitle = key === '__unassigned__'
+            ? 'Models not linked to a deal'
+            : (deal?.client_name ? deal.client_name : '');
+          const isOpen = !collapsed[key];
+          return `
+            <details data-cm-deal-group="${key}" ${isOpen ? 'open' : ''} style="margin-bottom:18px;">
+              <summary style="cursor:pointer;padding:8px 12px;background:var(--ies-gray-50);border:1px solid var(--ies-gray-200);border-radius:8px;display:flex;align-items:center;justify-content:space-between;user-select:none;">
+                <div style="display:flex;align-items:center;gap:10px;">
+                  <span style="font-size:14px;font-weight:700;color:var(--ies-navy);">${heading}</span>
+                  ${subtitle ? `<span style="font-size:12px;color:var(--ies-gray-500);">· ${subtitle}</span>` : ''}
+                </div>
+                <span style="font-size:11px;color:var(--ies-gray-500);background:var(--ies-gray-100);padding:2px 8px;border-radius:10px;">${items.length} model${items.length === 1 ? '' : 's'}</span>
+              </summary>
+              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-top:14px;">
+                ${items.map(renderCard).join('')}
+              </div>
+            </details>
+          `;
+        }).join('');
+      })()}
     </div>
     <style>
       .cm-landing-card:hover { border-color: var(--ies-blue) !important; box-shadow: 0 2px 8px rgba(0,71,171,0.08); transform: translateY(-1px); }

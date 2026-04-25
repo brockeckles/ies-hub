@@ -18,7 +18,8 @@ import { recordAudit } from '../../shared/audit.js?v=20260423-y7';
  * @returns {Promise<any[]>}
  */
 export async function listModels() {
-  return db.fetchAll('cost_model_projects', 'id, name, client_name, market_id, created_at, updated_at');
+  // CM-LND-1 (2026-04-25): include deal_deals_id so the landing can group by deal.
+  return db.fetchAll('cost_model_projects', 'id, name, client_name, market_id, deal_deals_id, created_at, updated_at');
 }
 
 /**
