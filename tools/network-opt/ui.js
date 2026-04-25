@@ -15,8 +15,9 @@ import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadXLSX } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260418-sM';
-import * as calc from './calc.js?v=20260422-xI';
+import * as calc from './calc.js?v=20260425-s2';
 import * as api from './api.js?v=20260418-sM';
+import { createChart } from '../../shared/cdn-wrappers/chart-wrapper.js?v=20260418-sK';
 
 // ============================================================
 // STATE
@@ -60,6 +61,7 @@ let mapInstance = null;
 
 /** @type {import('./types.js?v=20260418-sM').ScenarioResult[]|null} */
 let comparisonResults = null;
+let costChartInstance = null; // Chart.js handle for Compare-tab cost-vs-k curve; destroyed before each re-render.
 
 /** @type {number|null} */
 let recommendedDCCount = null;
@@ -1723,27 +1725,110 @@ function renderMultiDCComparison(el) {
         </table>
       </div>
 
-      <!-- Cost Comparison Chart -->
+      <!-- Cost-vs-DC-Count Sensitivity Curve (slice 2 — kneedle-annotated line chart) -->
       <div class="hub-card" style="margin-top:20px;padding:20px;">
-        <div style="font-size:14px;font-weight:700;margin-bottom:16px;">Total Cost by DC Count</div>
-        <div style="display:flex;align-items:flex-end;gap:12px;height:200px;align-items:flex-end;">
-          ${comparisonResults.map((s, i) => {
-            const maxCost = Math.max(...comparisonResults.map(r => r.totalCost));
-            const pct = maxCost > 0 ? (s.totalCost / maxCost) * 100 : 0;
-            const isRecommended = i === rec.recommendedIdx;
-
-            return `
-              <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;">
-                <div style="width:100%;background:${isRecommended ? '#22c55e' : '#3b82f6'};border-radius:6px 6px 0 0;height:${pct}%;transition:all 0.3s;" title="${calc.formatCurrency(s.totalCost)}"></div>
-                <div style="font-size:12px;font-weight:700;color:var(--ies-navy);">${i + 1} DC</div>
-                <div style="font-size:10px;color:var(--ies-gray-500);">${calc.formatCurrency(s.totalCost, { compact: true })}</div>
-              </div>
-            `;
-          }).join('')}
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
+          <div style="font-size:14px;font-weight:700;">Total Cost vs. DC Count</div>
+          <div style="font-size:11px;color:var(--ies-gray-500);">
+            Inflection: <strong style="color:#16a34a;">${rec.recommendedIdx + 1} DC${rec.recommendedIdx === 0 ? '' : 's'}</strong> · detected via kneedle (Satopaa et al. 2011)
+          </div>
+        </div>
+        <div style="position:relative;height:280px;">
+          <canvas id="netopt-multidc-cost-chart" aria-label="Total cost vs. DC count"></canvas>
+        </div>
+        <div style="margin-top:8px;font-size:11px;color:var(--ies-gray-500);line-height:1.5;">
+          The green-highlighted point is the cost-vs-k inflection — where adding another facility no longer pays for itself in transport savings. Total cost includes facility, transport, and handling.
         </div>
       </div>
     </div>
   `;
+
+  // Render the cost-vs-k line chart now that the canvas is in the DOM.
+  // Chart.js is loaded as a global via index.html; createChart() wraps it.
+  const canvas = el.querySelector('#netopt-multidc-cost-chart');
+  if (canvas && typeof window !== 'undefined' && /** @type {any} */ (window).Chart) {
+    if (costChartInstance) {
+      try { costChartInstance.destroy(); } catch {}
+      costChartInstance = null;
+    }
+    const labels = comparisonResults.map((_, i) => `${i + 1} DC${i === 0 ? '' : 's'}`);
+    const totals = comparisonResults.map(r => r.totalCost);
+    const transports = comparisonResults.map(r => r.costBreakdown?.transport || 0);
+    const facilities = comparisonResults.map(r => r.costBreakdown?.facility || 0);
+    // Highlight the inflection point with a larger green marker; others stay
+    // small and blue.
+    const totalPointRadii = totals.map((_, i) => i === rec.recommendedIdx ? 9 : 4);
+    const totalPointColors = totals.map((_, i) => i === rec.recommendedIdx ? '#16a34a' : '#1e40af');
+
+    costChartInstance = createChart(/** @type {HTMLCanvasElement} */ (canvas), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Total Cost',
+            data: totals,
+            borderColor: '#1e40af',
+            backgroundColor: 'rgba(30, 64, 175, 0.1)',
+            borderWidth: 2.5,
+            tension: 0.25,
+            fill: true,
+            pointRadius: totalPointRadii,
+            pointHoverRadius: totalPointRadii.map(r => r + 2),
+            pointBackgroundColor: totalPointColors,
+            pointBorderColor: totalPointColors,
+            order: 0,
+          },
+          {
+            label: 'Transport',
+            data: transports,
+            borderColor: '#94a3b8',
+            backgroundColor: 'transparent',
+            borderWidth: 1.5,
+            borderDash: [6, 4],
+            tension: 0.25,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            order: 1,
+          },
+          {
+            label: 'Facility',
+            data: facilities,
+            borderColor: '#fb923c',
+            backgroundColor: 'transparent',
+            borderWidth: 1.5,
+            borderDash: [3, 4],
+            tension: 0.25,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            order: 2,
+          },
+        ],
+      },
+      options: {
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              callback: (v) => calc.formatCurrency(/** @type {number} */ (v), { compact: true }),
+            },
+            title: { display: true, text: 'Annual cost' },
+          },
+          x: {
+            title: { display: true, text: 'Distribution centers (k)' },
+          },
+        },
+        plugins: {
+          legend: { position: 'bottom' },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => `${ctx.dataset.label}: ${calc.formatCurrency(/** @type {number} */ (ctx.parsed.y))}` + (ctx.dataset.label === 'Total Cost' && ctx.dataIndex === rec.recommendedIdx ? '  (inflection point)' : ''),
+            },
+          },
+        },
+      },
+    });
+  }
 }
 
 function renderScenarioComparison(el) {

@@ -714,44 +714,85 @@ export function multiDCComparison(facilities, demands, modeMix, rateCard = DEFAU
 }
 
 /**
- * Recommend optimal DC count using elbow method.
- * Finds where marginal improvement drops below threshold (8%).
+ * Recommend optimal DC count via the kneedle algorithm (Satopaa et al. 2011).
+ *
+ * Replaces the prior 8%-step-improvement scan, which would terminate as soon
+ * as it found ANY step exceeding 8% — biasing toward the smallest k that
+ * showed material savings rather than the true inflection. Kneedle fits the
+ * "elbow" by finding the point furthest below the chord between the endpoint
+ * scenarios on the cost-vs-k curve.
+ *
+ * Generalized to handle U-shapes: NetOpt's totalCost includes facility cost
+ * (grows with k) + transport (shrinks with k) + handling, so the curve has
+ * a real minimum, not just diminishing returns. For monotonic curves the
+ * kneedle marks the elbow; for U-curves it marks the point closest to the
+ * cost-optimal k (which is also the point furthest below the chord).
+ *
+ * Falls back to picking the absolute lowest-total-cost scenario when the
+ * curve is too linear for a meaningful inflection (max chord-distance below
+ * the MIN_KNEE_GAP threshold).
+ *
  * @param {import('./types.js?v=20260418-sM').ScenarioResult[]} comparisonResults
  * @returns {{recommendedIdx: number, recommendation: string, savings: number, savingsPct: number}}
  */
 export function recommendOptimalDCs(comparisonResults) {
-  if (comparisonResults.length === 0) {
+  if (!comparisonResults || comparisonResults.length === 0) {
     return { recommendedIdx: 0, recommendation: 'No scenarios available.', savings: 0, savingsPct: 0 };
   }
+  if (comparisonResults.length === 1) {
+    return { recommendedIdx: 0, recommendation: 'Only one scenario evaluated — add more facility candidates to compare k-DC alternatives.', savings: 0, savingsPct: 0 };
+  }
 
-  const baselineCost = comparisonResults[0].totalCost;
-  const threshold = 0.08; // 8% improvement threshold
-  let recommendedIdx = 0;
-  let bestImprovement = 0;
+  const MIN_KNEE_GAP = 0.05;
+  const ys = comparisonResults.map(r => r.totalCost);
+  const yMin = Math.min(...ys);
+  const yMax = Math.max(...ys);
+  const yRange = (yMax - yMin) || 1;
+  const N = ys.length;
+  // Normalize x to [0,1] across the indices, y to [0,1] across cost range.
+  const xn = ys.map((_, i) => i / (N - 1));
+  const yn = ys.map(y => (y - yMin) / yRange);
+  const yStart = yn[0];
+  const yEnd = yn[N - 1];
 
-  for (let i = 1; i < comparisonResults.length; i++) {
-    const prevCost = comparisonResults[i - 1].totalCost;
-    const currCost = comparisonResults[i].totalCost;
-    const improvement = (prevCost - currCost) / prevCost;
-
-    if (improvement > threshold && improvement > bestImprovement) {
-      bestImprovement = improvement;
-      recommendedIdx = i;
+  let bestIdx = 0;
+  let bestDist = -Infinity;
+  for (let i = 0; i < N; i++) {
+    // Chord from (0, yStart) to (1, yEnd); below-chord distance at i:
+    const chordY = yStart + xn[i] * (yEnd - yStart);
+    const dist = chordY - yn[i];
+    if (dist > bestDist) {
+      bestDist = dist;
+      bestIdx = i;
     }
   }
 
+  // Choose recommendation: kneedle if it's a real inflection AND not at an
+  // endpoint; otherwise pick the cheapest k.
+  let recommendedIdx;
+  let usedKneedle;
+  if (bestDist > MIN_KNEE_GAP && bestIdx > 0 && bestIdx < N - 1) {
+    recommendedIdx = bestIdx;
+    usedKneedle = true;
+  } else {
+    recommendedIdx = ys.indexOf(yMin);
+    usedKneedle = false;
+  }
+
+  const baselineCost = comparisonResults[0].totalCost;
   const rec = comparisonResults[recommendedIdx];
   const savings = baselineCost - rec.totalCost;
   const savingsPct = baselineCost > 0 ? (savings / baselineCost) * 100 : 0;
 
-  let narrative = '';
+  let narrative;
   if (recommendedIdx === 0) {
-    narrative = 'Single DC provides the most cost-effective network. Additional facilities show diminishing returns.';
+    narrative = 'Single DC is the lowest-cost scenario evaluated; adding facilities only adds net cost in this comparison.';
+  } else if (recommendedIdx === N - 1 && !usedKneedle) {
+    narrative = `${recommendedIdx + 1} DCs is the cheapest evaluated, but the curve is still trending down — extend "Max DCs to test" to confirm the true minimum.`;
+  } else if (usedKneedle) {
+    narrative = `${recommendedIdx + 1} DCs is the inflection point on the cost-vs-DC-count curve — the best balance of transport savings against added facility cost.`;
   } else {
-    const numDCs = comparisonResults[recommendedIdx].assignments.length > 0
-      ? Math.max(...comparisonResults[recommendedIdx].assignments.map(a => a.facilityId).filter((v, i, a) => a.indexOf(v) === i)).length
-      : recommendedIdx + 1;
-    narrative = `${recommendedIdx + 1} DCs offer the best balance of cost and service. Adding more facilities yields less than 8% improvement per incremental DC.`;
+    narrative = `${recommendedIdx + 1} DCs is the lowest-cost scenario evaluated; the curve is near-linear so the elbow isn't sharp.`;
   }
 
   return {
