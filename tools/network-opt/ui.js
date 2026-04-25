@@ -1574,11 +1574,12 @@ function renderMap(el) {
         </div>
       </div>
       <div id="no-map-container" style="flex:1;min-height:500px;border-radius:10px;border:1px solid var(--ies-gray-200);overflow:hidden;"></div>
-      <div style="display:flex;gap:20px;margin-top:12px;font-size:11px;color:var(--ies-gray-400);">
+      <div style="display:flex;gap:20px;margin-top:12px;font-size:11px;color:var(--ies-gray-400);flex-wrap:wrap;">
         <span><span style="display:inline-block;width:12px;height:12px;background:var(--ies-blue);border-radius:50%;vertical-align:middle;"></span> Facility (open)</span>
         <span><span style="display:inline-block;width:12px;height:12px;background:var(--ies-gray-300);border-radius:50%;vertical-align:middle;"></span> Facility (closed)</span>
         <span><span style="display:inline-block;width:12px;height:12px;background:var(--ies-orange);border-radius:50%;vertical-align:middle;"></span> Demand point</span>
-        <span><span style="display:inline-block;width:20px;height:2px;background:#22c55e;vertical-align:middle;"></span> SLA met</span>
+        <span><span style="display:inline-block;width:20px;height:5px;background:var(--ies-blue);vertical-align:middle;"></span> Heavy lane</span>
+        <span><span style="display:inline-block;width:20px;height:1px;background:var(--ies-blue);vertical-align:middle;"></span> Light lane</span>
         <span><span style="display:inline-block;width:20px;height:2px;background:#ef4444;vertical-align:middle;border-style:dashed;border-width:1px 0;"></span> SLA missed</span>
       </div>
     </div>
@@ -1616,9 +1617,10 @@ function initMap() {
 
   mapInstance = L.map(container).setView([39.8283, -98.5795], 4);
 
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 18,
-    attribution: '&copy; OpenStreetMap'
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    maxZoom: 19,
+    subdomains: 'abcd',
+    attribution: '&copy; <a href="https://carto.com/attributions">CARTO</a> · OpenStreetMap'
   }).addTo(mapInstance);
 
   // Layer groups so toggles can show/hide each class of overlay
@@ -1655,19 +1657,25 @@ function initMap() {
     }).addTo(mapInstance);
     marker.bindPopup(`<strong>${f.name}</strong><br>${f.city}, ${f.state}<br>Capacity: ${(f.capacity || 0).toLocaleString()}<br>${f.isOpen ? 'OPEN' : 'CLOSED'}`);
 
-    // Service zone circle (approximate 2-day radius for open facilities)
+    // D2: service zone radius computed from serviceConfig.
+    //   miles = truckSpeedMph × 10 driving-hours/day × globalMaxDays
+    // For SLA defaults (50 mph × 3 days) → 1500 miles, which is the
+    // honest 2-day-with-driver-rest band most carriers commit to.
     if (f.isOpen) {
-      // Rough estimate: ~500 miles at 50 mph = 10 hours → ~1 day, so 2-day = ~800 miles
-      const radiusMiles = 800;
+      const speed = serviceConfig.truckSpeedMph || 50;
+      const days  = serviceConfig.globalMaxDays || 2;
+      const radiusMiles  = speed * 10 * days;
       const radiusMeters = radiusMiles * 1609.34;
       L.circle([f.lat, f.lng], {
         radius: radiusMeters,
         color: color,
         weight: 1,
-        opacity: 0.2,
+        opacity: 0.25,
         fillColor: color,
-        fillOpacity: 0.08,
-      }).addTo(zoneLayer);
+        fillOpacity: 0.07,
+      }).addTo(zoneLayer)
+        .bindTooltip(`${days}-day service radius (~${radiusMiles.toLocaleString()} mi)`,
+                     { sticky: true, opacity: 0.9 });
     }
   });
 
@@ -1680,8 +1688,16 @@ function initMap() {
     marker.bindPopup(`<strong>ZIP3: ${d.zip3 || '—'}</strong><br>Demand: ${d.annualDemand.toLocaleString()}/yr<br>Max transit: ${d.maxDays || 3} days`);
   });
 
-  // Flow lines from assignments
+  // Flow lines from assignments — D1 width scales with lane volume.
   if (activeScenario?.assignments) {
+    // Pre-compute the max lane demand so widths are normalised across the
+    // current scenario instead of using an absolute scale that can collapse
+    // (e.g. a 1M-unit national network) or saturate (e.g. a 10k regional one).
+    const laneDemands = activeScenario.assignments.map(a => {
+      const dem = demands.find(d => d.id === a.demandId);
+      return dem?.annualDemand || 0;
+    });
+    const maxLane = Math.max(1, ...laneDemands);
     activeScenario.assignments.forEach(a => {
       const fac = facilities.find(f => f.id === a.facilityId);
       const dem = demands.find(d => d.id === a.demandId);
@@ -1692,10 +1708,16 @@ function initMap() {
       if (a.tlCost > 0 && a.tlCost <= a.ltlCost && a.tlCost <= a.parcelCost) modeColor = 'var(--ies-blue)';
       else if (a.ltlCost > 0 && a.ltlCost <= a.tlCost && a.ltlCost <= a.parcelCost) modeColor = '#ea580c';
       else if (a.parcelCost > 0) modeColor = '#7c3aed';
+
+      // D1: weight ∈ [1, 7] px proportional to lane share of max demand.
+      // Sqrt curve keeps small lanes visible without dwarfing the big ones.
+      const norm = Math.sqrt((dem.annualDemand || 0) / maxLane);
+      const weight = 1 + norm * 6;
+
       const line = L.polyline([[fac.lat, fac.lng], [dem.lat, dem.lng]], {
-        color: modeColor, weight: 1.5, opacity: 0.5, dashArray: a.meetsSlA ? null : '5,5',
+        color: modeColor, weight, opacity: 0.55, dashArray: a.meetsSlA ? null : '5,5',
       }).addTo(flowLayer);
-      line.bindPopup(`${fac.name} → ZIP ${dem.zip3}<br>Distance: ${calc.formatMiles(a.distanceMiles)}<br>Transit: ${a.transitDays} day(s)<br>Cost: ${calc.formatCurrency(a.blendedCost)}`);
+      line.bindPopup(`${fac.name} → ZIP ${dem.zip3}<br>Annual demand: ${(dem.annualDemand || 0).toLocaleString()}<br>Distance: ${calc.formatMiles(a.distanceMiles)}<br>Transit: ${a.transitDays} day(s)<br>Cost: ${calc.formatCurrency(a.blendedCost)}`);
     });
   }
 
