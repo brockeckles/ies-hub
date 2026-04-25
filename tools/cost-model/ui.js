@@ -10,7 +10,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import * as calc from './calc.js?v=20260422-xY';
+import * as calc from './calc.js?v=20260425-s4';
 import * as api from './api.js?v=20260423-xQ';
 import * as scenarios from './calc.scenarios.js?v=20260421-wA';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
@@ -1718,7 +1718,49 @@ function renderFacility() {
       </details>
     </div>
 
+    ${renderFacilityOverridePanel()}
     ${renderFacilityCostCard()}
+  `;
+}
+
+/**
+ * CM-FAC-1 (2026-04-25): per-deal override panel for facility seed rates.
+ * Lets users override the market lease+CAM+tax+insurance bundle, the utility
+ * rate, and tack on a maintenance/repair %. All three fields are optional —
+ * blank means "use the market seed". Stored on model.facility.overrides.
+ */
+function renderFacilityOverridePanel() {
+  const ov = (model.facility && model.facility.overrides) || {};
+  const _hasOv = (k) => ov[k] != null && Number.isFinite(Number(ov[k])) && Number(ov[k]) >= 0;
+  const hasAny = ['ratePerSfYr','utilPerSfMo','maintPct'].some(_hasOv);
+  return `
+    <details class="hub-card mt-4" ${hasAny ? 'open' : ''} style="border:1px solid var(--ies-gray-200);">
+      <summary style="cursor:pointer;font-weight:600;padding:4px 0;display:flex;align-items:center;justify-content:space-between;">
+        <span>Override Market Rates ${hasAny ? '<span style="font-size:11px;color:#92400e;background:#fef3c7;padding:2px 6px;border-radius:3px;margin-left:6px;">Active</span>' : '<span style="font-size:11px;color:var(--ies-gray-500);font-weight:400;margin-left:6px;">— optional, per-deal adjustments</span>'}</span>
+      </summary>
+      <div style="padding-top:10px;">
+        <div class="cm-narrow-form" style="grid-template-columns: repeat(3, minmax(0, 1fr));">
+          <div class="hub-field">
+            <label class="hub-field__label" title="Replaces lease + CAM + tax + insurance combined ($/SF/Yr). Useful when you have a known all-in rent number.">Rent ($/SF/Yr)</label>
+            <input class="hub-input" type="number" step="0.10" min="0" value="${_hasOv('ratePerSfYr') ? ov.ratePerSfYr : ''}" placeholder="market" data-field="facility.overrides.ratePerSfYr" data-type="number" />
+            <div class="hub-field__hint">Blank = use market</div>
+          </div>
+          <div class="hub-field">
+            <label class="hub-field__label" title="Replaces market utility rate ($/SF/Mo).">Utilities ($/SF/Mo)</label>
+            <input class="hub-input" type="number" step="0.01" min="0" value="${_hasOv('utilPerSfMo') ? ov.utilPerSfMo : ''}" placeholder="market" data-field="facility.overrides.utilPerSfMo" data-type="number" />
+            <div class="hub-field__hint">Blank = use market</div>
+          </div>
+          <div class="hub-field">
+            <label class="hub-field__label" title="Maintenance/repair as % of base rent (industry typical 0.5–2%). Adds on top of base rent.">Maintenance %</label>
+            <input class="hub-input" type="number" step="0.1" min="0" value="${_hasOv('maintPct') ? ov.maintPct : ''}" placeholder="0" data-field="facility.overrides.maintPct" data-type="number" />
+            <div class="hub-field__hint">% of base rent</div>
+          </div>
+        </div>
+        <div style="margin-top:10px;display:flex;justify-content:flex-end;">
+          <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="clear-facility-overrides" ${hasAny ? '' : 'disabled style="opacity:0.5;cursor:not-allowed;"'}>Clear all overrides</button>
+        </div>
+      </div>
+    </details>
   `;
 }
 
@@ -1733,17 +1775,36 @@ function renderFacilityCostCard() {
     return `<div class="hub-card mt-4" style="background: var(--ies-gray-50);"><p class="text-body text-muted">Select a market in Setup to see facility cost calculations.</p></div>`;
   }
 
+  const sqft = (model.facility?.totalSqft || 0);
+  const ovFlags = bd.overrideFlags || {};
+  const amberCellStyle = 'background:#fef3c7;';
+  // When rent override is active, collapse the four base-rent rows into a single Rent row.
+  const baseRentRows = ovFlags.rent
+    ? `<tr title="Override active — replaces lease + CAM + tax + insurance" style="${amberCellStyle}">
+         <td>Rent (override)</td>
+         <td class="cm-num">${sqft > 0 ? (bd.lease / sqft).toFixed(2) : '0.00'}</td>
+         <td class="cm-num">${calc.formatCurrency(bd.lease)}</td>
+       </tr>`
+    : `<tr><td>Lease</td><td class="cm-num">${(fr?.lease_rate_psf_yr || 0).toFixed(2)}</td><td class="cm-num">${calc.formatCurrency(bd.lease)}</td></tr>
+       <tr><td>CAM</td><td class="cm-num">${(fr?.cam_rate_psf_yr || 0).toFixed(2)}</td><td class="cm-num">${calc.formatCurrency(bd.cam)}</td></tr>
+       <tr><td>Property Tax</td><td class="cm-num">${(fr?.tax_rate_psf_yr || 0).toFixed(2)}</td><td class="cm-num">${calc.formatCurrency(bd.tax)}</td></tr>
+       <tr><td>Insurance</td><td class="cm-num">${(fr?.insurance_rate_psf_yr || 0).toFixed(2)}</td><td class="cm-num">${calc.formatCurrency(bd.insurance)}</td></tr>`;
+  const utilStyle = ovFlags.util ? `style="${amberCellStyle}"` : '';
+  const utilLabel = ovFlags.util ? 'Utilities (override)' : 'Utilities';
+  const utilPsf = ovFlags.util && sqft > 0 ? (bd.utility / sqft) : ((ur?.avg_monthly_per_sqft || 0) * 12);
   return `
     <div class="hub-card mt-4">
       <div class="text-subtitle mb-4">Annual Facility Cost Breakdown</div>
       <table class="cm-grid-table">
         <thead><tr><th>Component</th><th class="cm-num">$/PSF/Yr</th><th class="cm-num">Annual Cost</th></tr></thead>
         <tbody>
-          <tr><td>Lease</td><td class="cm-num">${(fr?.lease_rate_psf_yr || 0).toFixed(2)}</td><td class="cm-num">${calc.formatCurrency(bd.lease)}</td></tr>
-          <tr><td>CAM</td><td class="cm-num">${(fr?.cam_rate_psf_yr || 0).toFixed(2)}</td><td class="cm-num">${calc.formatCurrency(bd.cam)}</td></tr>
-          <tr><td>Property Tax</td><td class="cm-num">${(fr?.tax_rate_psf_yr || 0).toFixed(2)}</td><td class="cm-num">${calc.formatCurrency(bd.tax)}</td></tr>
-          <tr><td>Insurance</td><td class="cm-num">${(fr?.insurance_rate_psf_yr || 0).toFixed(2)}</td><td class="cm-num">${calc.formatCurrency(bd.insurance)}</td></tr>
-          <tr><td>Utilities</td><td class="cm-num">${((ur?.avg_monthly_per_sqft || 0) * 12).toFixed(2)}</td><td class="cm-num">${calc.formatCurrency(bd.utility)}</td></tr>
+          ${baseRentRows}
+          <tr ${utilStyle}><td>${utilLabel}</td><td class="cm-num">${utilPsf.toFixed(2)}</td><td class="cm-num">${calc.formatCurrency(bd.utility)}</td></tr>
+          ${ovFlags.maint ? `<tr title="Maintenance/repair add-on (% of base rent)" style="${amberCellStyle}">
+            <td>Maintenance (override)</td>
+            <td class="cm-num">${sqft > 0 ? (bd.maintenance / sqft).toFixed(2) : '0.00'}</td>
+            <td class="cm-num">${calc.formatCurrency(bd.maintenance)}</td>
+          </tr>` : ''}
           ${bd.tiAmort > 0 ? `
             <tr title="TI (Tenant Improvement) items from Equipment — dock levelers, office build-out, CCTV, etc. — amortize through rent over the contract term per Asset Defaults Guidance.">
               <td>TI Amortization <span style="font-size:11px;color:var(--ies-gray-400);">(contract term)</span></td>
@@ -7834,6 +7895,14 @@ function handleAction(action, idx, btn) {
         // overridden (a new $0 edge case introduced for free-tier services).
         b.rateExplicitOverride = false;
       }
+      break;
+    }
+    case 'clear-facility-overrides': {
+      // CM-FAC-1: wipe all per-deal facility overrides and re-render the section.
+      if (model.facility) {
+        delete model.facility.overrides;
+      }
+      markDirty();
       break;
     }
     case 'launch-wsc': {

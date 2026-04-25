@@ -1245,16 +1245,48 @@ export function facilityCostBreakdown(facility, facilityRate, utilityRate, opts 
   const fr = facilityRate || {};
   const ur = utilityRate || {};
 
-  const lease = sqft * (fr.lease_rate_psf_yr || 0);
-  const cam = sqft * (fr.cam_rate_psf_yr || 0);
-  const tax = sqft * (fr.tax_rate_psf_yr || 0);
-  const insurance = sqft * (fr.insurance_rate_psf_yr || 0);
-  const utility = sqft * 12 * (ur.avg_monthly_per_sqft || 0);
+  // 2026-04-25 (CM-FAC-1): per-deal overrides on market seed rates.
+  // facility.overrides is the source of truth; opts.facilityOverride is a
+  // deprecated escape hatch but accepted for API symmetry.
+  const ov = (facility.overrides && typeof facility.overrides === 'object')
+    ? facility.overrides
+    : (opts.facilityOverride || {});
+  // null/undefined/'' should NOT activate the override — Number(null) is 0
+  // which would otherwise pass `>= 0` and zero out market rates by accident.
+  const _hasOv = (v) => v != null && v !== '' && Number.isFinite(Number(v)) && Number(v) >= 0;
+  const ratePerSfYrOv = Number(ov.ratePerSfYr);
+  const utilPerSfMoOv = Number(ov.utilPerSfMo);
+  const maintPctOv    = Number(ov.maintPct);
+  const usingRentOv = _hasOv(ov.ratePerSfYr);
+  const usingUtilOv = _hasOv(ov.utilPerSfMo);
+  const usingMaint  = _hasOv(ov.maintPct) && Number(ov.maintPct) > 0;
+
+  let lease, cam, tax, insurance;
+  if (usingRentOv) {
+    // Single override replaces lease + cam + tax + insurance combined.
+    // We park the entire amount on `lease` and zero out the others so the
+    // breakdown still totals correctly without confusing the rendered table.
+    lease = sqft * ratePerSfYrOv;
+    cam = 0; tax = 0; insurance = 0;
+  } else {
+    lease = sqft * (fr.lease_rate_psf_yr || 0);
+    cam = sqft * (fr.cam_rate_psf_yr || 0);
+    tax = sqft * (fr.tax_rate_psf_yr || 0);
+    insurance = sqft * (fr.insurance_rate_psf_yr || 0);
+  }
+  const utility = usingUtilOv
+    ? sqft * 12 * utilPerSfMoOv
+    : sqft * 12 * (ur.avg_monthly_per_sqft || 0);
   const tiAmort = Math.max(0, Number(opts.tiAmort) || 0);
+  // Maintenance/Repair adds on top of base rent (industry common practice
+  // is 0.5–2% of base rent for repairs, HVAC service, paint touch-ups).
+  const baseRent = lease + cam + tax + insurance;
+  const maintenance = usingMaint ? baseRent * (maintPctOv / 100) : 0;
 
   return {
-    lease, cam, tax, insurance, utility, tiAmort,
-    total: lease + cam + tax + insurance + utility + tiAmort,
+    lease, cam, tax, insurance, utility, tiAmort, maintenance,
+    overrideFlags: { rent: usingRentOv, util: usingUtilOv, maint: usingMaint },
+    total: lease + cam + tax + insurance + utility + tiAmort + maintenance,
   };
 }
 
