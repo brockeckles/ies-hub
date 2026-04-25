@@ -12,12 +12,22 @@
 /** Earth radius in miles for Haversine */
 const EARTH_RADIUS_MI = 3959;
 
-/** Default rate card */
+/** Default rate card.
+ *
+ * SYNTHETIC TARIFF — calibrated to public LTL rate-base ranges (CzarLite-style:
+ * $20–$50/CWT base for standard LTL, weight-break thresholds at 500/1k/2k/5k/10k/20k lb,
+ * 30–50% mid-shipper discount off published, 10–18% FSC). Replace with contract rates
+ * before quoting. Sources: Hatfield & Associates, Trans Logistics, FreightWise. */
 export const DEFAULT_RATES = {
   tlRatePerMile: 2.85,
   ltlBaseRate: 18.50, // $/CWT
-  ltlWeightBreaks: [500, 1000, 2000, 5000, 10000],
-  ltlBreakRates: [22.00, 18.50, 15.00, 12.50, 10.00],
+  // Weight breaks for the class-100 baseline row. Other classes derive via NMFC_CLASS_MULTIPLIERS.
+  ltlWeightBreaks: [500, 1000, 2000, 5000, 10000, 20000],
+  ltlBreakRates:   [22.00, 18.50, 15.00, 12.50, 10.00, 8.50],
+  // Discount % off published tariff (typical mid-size shipper: 30-50%; large: 50-70%).
+  ltlDiscountPct: 50,
+  // Minimum charge floor per shipment (typical industry $90-$120 absolute minimum).
+  ltlMinCharge: 110,
   parcelZoneRates: [
     // Zones 2-8, weight brackets: 1lb, 5lb, 10lb, 25lb, 50lb, 70lb
     [8.50, 11.20, 14.80, 22.50, 35.00, 45.00],   // Zone 2
@@ -99,6 +109,25 @@ export const LTL_REGION_MULTIPLIERS = {
   cross: 1.18,
 };
 
+/** Region codes in canonical UI / matrix order. */
+export const REGION_CODES = ['NE', 'SE', 'MW', 'SW', 'W'];
+
+/**
+ * Default 5x5 region-pair multiplier matrix. Symmetric by design but stored
+ * as a full grid so users can override individual lanes (e.g., NE→W premium
+ * vs W→NE backhaul). Indexed by [origin][dest] using REGION_CODES order.
+ *
+ * Default values derived from the same/adjacent/cross buckets above and
+ * REGION_ADJACENCY (NE-SE-MW-SW-W chain). Editable per-cell in the rate-card UI.
+ */
+export const DEFAULT_LTL_REGION_MATRIX = {
+  NE: { NE: 0.95, SE: 1.00, MW: 1.00, SW: 1.18, W: 1.18 },
+  SE: { NE: 1.00, SE: 0.95, MW: 1.00, SW: 1.00, W: 1.18 },
+  MW: { NE: 1.00, SE: 1.00, MW: 0.95, SW: 1.00, W: 1.00 },
+  SW: { NE: 1.18, SE: 1.00, MW: 1.00, SW: 0.95, W: 1.00 },
+  W:  { NE: 1.18, SE: 1.18, MW: 1.00, SW: 1.00, W: 0.95 },
+};
+
 const REGION_ADJACENCY = {
   NE: ['NE', 'SE', 'MW'],
   SE: ['SE', 'NE', 'MW', 'SW'],
@@ -126,12 +155,34 @@ export function regionForCoord(lat, lng) {
  * Multiplier for an LTL lane between two regions.
  * @param {string} originRegion
  * @param {string} destRegion
+ * @param {Object<string,Object<string,number>>} [matrix] — optional 5x5 override
  */
-export function regionPairMultiplier(originRegion, destRegion) {
+export function regionPairMultiplier(originRegion, destRegion, matrix) {
   if (!originRegion || !destRegion) return LTL_REGION_MULTIPLIERS.adjacent;
+  if (matrix && matrix[originRegion] && Number.isFinite(matrix[originRegion][destRegion])) {
+    return matrix[originRegion][destRegion];
+  }
   if (originRegion === destRegion) return LTL_REGION_MULTIPLIERS.same;
   const adj = REGION_ADJACENCY[originRegion] || [];
   return adj.includes(destRegion) ? LTL_REGION_MULTIPLIERS.adjacent : LTL_REGION_MULTIPLIERS.cross;
+}
+
+/**
+ * Derive the full 18-class × 6-weight-break tariff matrix from the class-100
+ * baseline row + NMFC class multipliers. Returns an object keyed by class code,
+ * each value an array of $/CWT rates aligned to ltlWeightBreaks.
+ *
+ * @param {number[]} baseRow — class-100 $/CWT rates aligned to ltlWeightBreaks
+ * @param {Object<number,number>} [multipliers] — defaults to NMFC_CLASS_MULTIPLIERS
+ * @returns {Object<string,number[]>}
+ */
+export function deriveClassWeightMatrix(baseRow, multipliers = NMFC_CLASS_MULTIPLIERS) {
+  const out = {};
+  for (const code of NMFC_CLASS_CODES) {
+    const mult = multipliers[code] ?? 1.0;
+    out[code] = baseRow.map(r => +(r * mult).toFixed(2));
+  }
+  return out;
 }
 
 // ============================================================
@@ -235,9 +286,11 @@ export function tlCost(miles, ratePerMile = DEFAULT_RATES.tlRatePerMile, fuelSur
  * @returns {number}
  */
 export function ltlCost(weight, miles, rates = {}) {
-  const breaks = rates.weightBreaks || DEFAULT_RATES.ltlWeightBreaks;
-  const bRates = rates.breakRates || DEFAULT_RATES.ltlBreakRates;
+  const breaks = rates.ltlWeightBreaks || rates.weightBreaks || DEFAULT_RATES.ltlWeightBreaks;
+  const bRates = rates.ltlBreakRates || rates.breakRates || DEFAULT_RATES.ltlBreakRates;
   const fsc = rates.fuelSurcharge ?? DEFAULT_RATES.fuelSurcharge;
+  const discountPct = Number.isFinite(rates.ltlDiscountPct) ? rates.ltlDiscountPct : DEFAULT_RATES.ltlDiscountPct;
+  const minCharge = Number.isFinite(rates.ltlMinCharge) ? rates.ltlMinCharge : DEFAULT_RATES.ltlMinCharge;
 
   // Find applicable CWT rate from weight breaks
   let ratePerCwt = bRates[0] || 18.50;
@@ -254,10 +307,20 @@ export function ltlCost(weight, miles, rates = {}) {
   // Distance adjustment (longer = higher, simplified)
   const distFactor = miles > 500 ? 1.15 : miles > 250 ? 1.08 : 1.0;
 
-  // Regional LTL multiplier (B3)
-  const regionMult = regionPairMultiplier(rates.originRegion, rates.destRegion);
+  // Regional LTL multiplier (B3) — consults editable 5x5 matrix if provided.
+  const regionMult = regionPairMultiplier(rates.originRegion, rates.destRegion, rates.ltlRegionMatrix);
 
-  return base * distFactor * regionMult * (1 + fsc);
+  // Tariff cost before discount / FSC
+  let charge = base * distFactor * regionMult;
+
+  // Apply discount off published tariff (industry typical 30-70%)
+  charge *= (1 - Math.max(0, Math.min(95, discountPct)) / 100);
+
+  // Apply fuel surcharge (carrier-driven, indexed weekly off DOE diesel)
+  charge *= (1 + fsc);
+
+  // Enforce minimum charge floor
+  return Math.max(minCharge, charge);
 }
 
 /**

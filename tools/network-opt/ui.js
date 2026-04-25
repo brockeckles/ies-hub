@@ -15,7 +15,7 @@ import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadXLSX } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260418-sM';
-import * as calc from './calc.js?v=20260425-s8';
+import * as calc from './calc.js?v=20260425-s9';
 import * as api from './api.js?v=20260425-s9';
 import { createChart } from '../../shared/cdn-wrappers/chart-wrapper.js?v=20260418-sK';
 
@@ -1373,54 +1373,7 @@ function renderModeMix(el) {
         </div>
       </div>
 
-      <h3 class="text-section" style="margin-bottom:16px;">Rate Card</h3>
-      <div class="hub-card">
-        <div style="display:flex;flex-direction:column;gap:12px;">
-          ${renderInput('TL Rate per Mile', 'tlRatePerMile', rateCard.tlRatePerMile, '$')}
-          ${renderInput('LTL Base Rate ($/CWT)', 'ltlBaseRate', rateCard.ltlBaseRate, '$')}
-          ${renderInput('Fuel Surcharge', 'fuelSurcharge', (rateCard.fuelSurcharge * 100).toFixed(0), '%')}
-        </div>
-      </div>
-
-      <h3 class="text-section" style="margin:20px 0 16px;">LTL Weight-Break Rate Deck
-        <span style="font-size:11px;font-weight:normal;color:var(--ies-gray-500);margin-left:8px;">$/CWT by shipment weight tier</span>
-      </h3>
-      <div class="hub-card">
-        <table class="cm-grid-table" style="width:100%;font-size:13px;">
-          <thead>
-            <tr>
-              <th style="text-align:left;">Weight Tier (lbs)</th>
-              <th style="text-align:right;width:110px;">$/CWT</th>
-              <th style="text-align:left;color:var(--ies-gray-500);">Notes</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${(rateCard.ltlWeightBreaks || calc.DEFAULT_RATES.ltlWeightBreaks).map((wb, i) => {
-              const prev = i === 0 ? 0 : (rateCard.ltlWeightBreaks || calc.DEFAULT_RATES.ltlWeightBreaks)[i - 1];
-              const rate = (rateCard.ltlBreakRates || calc.DEFAULT_RATES.ltlBreakRates)[i] ?? 0;
-              const label = i === 0 ? `< ${wb.toLocaleString()}` : `${prev.toLocaleString()}–${wb.toLocaleString()}`;
-              return `
-                <tr>
-                  <td style="padding:6px 8px;"><strong>${label}</strong></td>
-                  <td style="text-align:right;padding:6px 8px;">
-                    <span style="color:var(--ies-gray-400);">$</span>
-                    <input type="number" step="0.25" min="0" value="${rate}" data-ltl-break-idx="${i}" style="width:75px;text-align:right;" />
-                  </td>
-                  <td style="color:var(--ies-gray-500);font-size:11px;">${['full-truck-like, lowest CWT','class-avg base','class-avg mid','LTL typical','heavy LTL / partial TL','TL crossover tier'][i] || ''}</td>
-                </tr>
-              `;
-            }).join('')}
-            <tr>
-              <td style="padding:6px 8px;">≥ ${(rateCard.ltlWeightBreaks || calc.DEFAULT_RATES.ltlWeightBreaks).slice(-1)[0].toLocaleString()}</td>
-              <td style="text-align:right;padding:6px 8px;color:var(--ies-gray-400);">— uses top tier rate —</td>
-              <td style="color:var(--ies-gray-400);"></td>
-            </tr>
-          </tbody>
-        </table>
-        <div style="margin-top:8px;font-size:11px;color:var(--ies-gray-500);">
-          Rates cascade — engine uses the rate at or below the shipment weight. Changes persist with the scenario.
-        </div>
-      </div>
+      ${renderRateCardEditor()}
     </div>
   `;
 
@@ -1436,30 +1389,230 @@ function renderModeMix(el) {
     });
   });
 
-  // Bind rate inputs
+  // Bind rate-card scalars (TL $/mi, LTL Base $/CWT, FSC %, Discount %, Min Charge $)
   el.querySelectorAll('input[data-rate]').forEach(input => {
     input.addEventListener('change', (e) => {
       const key = /** @type {HTMLInputElement} */ (e.target).dataset.rate;
       let val = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
       if (key === 'fuelSurcharge') val = val / 100;
       rateCard[key] = val;
-      markDirty();  // audit: missing — rate-card edits didn't invalidate Run.
+      markDirty();
+      // Re-render so derived matrix preview reflects the new base value.
+      renderModeMix(el);
     });
   });
 
-  // Bind LTL weight-break rate deck
+  // Bind class-100 base row (6 weight breaks)
   el.querySelectorAll('input[data-ltl-break-idx]').forEach(input => {
     input.addEventListener('change', (e) => {
       const idx = parseInt(/** @type {HTMLInputElement} */ (e.target).dataset.ltlBreakIdx);
       const val = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
-      if (!Array.isArray(rateCard.ltlBreakRates)) {
+      // Normalize: scenarios saved with the legacy 5-break shape get extended to 6 on first edit.
+      if (!Array.isArray(rateCard.ltlBreakRates) || rateCard.ltlBreakRates.length < 6) {
         rateCard.ltlBreakRates = [...calc.DEFAULT_RATES.ltlBreakRates];
         rateCard.ltlWeightBreaks = [...calc.DEFAULT_RATES.ltlWeightBreaks];
       }
       rateCard.ltlBreakRates[idx] = val;
-      markDirty();  // audit: missing — LTL break-rate edits didn't invalidate Run.
+      markDirty();
+      renderModeMix(el);
     });
   });
+
+  // Bind 5x5 LTL region-pair matrix
+  el.querySelectorAll('input[data-region-orig]').forEach(input => {
+    input.addEventListener('change', (e) => {
+      const t = /** @type {HTMLInputElement} */ (e.target);
+      const orig = t.dataset.regionOrig;
+      const dest = t.dataset.regionDest;
+      const val = parseFloat(t.value);
+      if (!Number.isFinite(val) || val < 0) return;
+      if (!rateCard.ltlRegionMatrix) {
+        rateCard.ltlRegionMatrix = JSON.parse(JSON.stringify(calc.DEFAULT_LTL_REGION_MATRIX));
+      }
+      rateCard.ltlRegionMatrix[orig] = rateCard.ltlRegionMatrix[orig] || {};
+      rateCard.ltlRegionMatrix[orig][dest] = val;
+      markDirty();
+    });
+  });
+
+  // Reset region matrix to defaults
+  el.querySelector('[data-action="reset-region-matrix"]')?.addEventListener('click', () => {
+    rateCard.ltlRegionMatrix = JSON.parse(JSON.stringify(calc.DEFAULT_LTL_REGION_MATRIX));
+    markDirty();
+    renderModeMix(el);
+  });
+
+  // Reset rate card to synthetic-tariff defaults
+  el.querySelector('[data-action="reset-rate-card"]')?.addEventListener('click', () => {
+    if (!confirm('Reset all rate-card values to the synthetic-tariff defaults? This will overwrite TL/LTL/FSC/discount/min charge, the class-100 weight-break row, and the region matrix.')) return;
+    rateCard = { ...calc.DEFAULT_RATES, ltlRegionMatrix: JSON.parse(JSON.stringify(calc.DEFAULT_LTL_REGION_MATRIX)) };
+    markDirty();
+    renderModeMix(el);
+  });
+}
+
+/**
+ * Rate-card editor — synthetic-tariff banner + scalar inputs (TL/LTL/FSC/discount/min charge)
+ * + class-100 base weight-break row + collapsible 18-class derived matrix preview
+ * + 5x5 region-pair multiplier grid.
+ *
+ * No real carrier rate base is published online (CzarLite is licensed; carrier tariffs are
+ * proprietary). Defaults are calibrated to industry-typical ranges from public sources
+ * cited in the banner. All values overrideable per scenario.
+ */
+function renderRateCardEditor() {
+  const breaks = (rateCard.ltlWeightBreaks && rateCard.ltlWeightBreaks.length === 6)
+    ? rateCard.ltlWeightBreaks
+    : calc.DEFAULT_RATES.ltlWeightBreaks;
+  const baseRow = (rateCard.ltlBreakRates && rateCard.ltlBreakRates.length === 6)
+    ? rateCard.ltlBreakRates
+    : (rateCard.ltlBreakRates && rateCard.ltlBreakRates.length === 5)
+      ? [...rateCard.ltlBreakRates, calc.DEFAULT_RATES.ltlBreakRates[5]]  // legacy 5-break extends to 6
+      : calc.DEFAULT_RATES.ltlBreakRates;
+  const discountPct = Number.isFinite(rateCard.ltlDiscountPct) ? rateCard.ltlDiscountPct : calc.DEFAULT_RATES.ltlDiscountPct;
+  const minCharge = Number.isFinite(rateCard.ltlMinCharge) ? rateCard.ltlMinCharge : calc.DEFAULT_RATES.ltlMinCharge;
+  const regionMatrix = rateCard.ltlRegionMatrix || calc.DEFAULT_LTL_REGION_MATRIX;
+
+  // Derived 18-class × 6-weight matrix from base row × NMFC multipliers (read-only preview).
+  const derived = calc.deriveClassWeightMatrix(baseRow);
+
+  const breakLabels = breaks.map((wb, i) => {
+    const prev = i === 0 ? 0 : breaks[i - 1];
+    return i === 0 ? `<${wb.toLocaleString()}` : `${prev.toLocaleString()}–${wb.toLocaleString()}`;
+  });
+  const tierNotes = ['min/short-zone', 'class-avg base', 'class-avg mid', 'LTL typical', 'heavy LTL', 'partial-TL crossover'];
+
+  return `
+    <h3 class="text-section" style="margin-bottom:8px;">Rate Card
+      <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="reset-rate-card" style="font-size:10px;padding:3px 8px;margin-left:10px;vertical-align:middle;">↻ Reset to defaults</button>
+    </h3>
+
+    <!-- Synthetic-tariff disclaimer banner -->
+    <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#78350f;line-height:1.5;">
+      <div style="font-weight:700;margin-bottom:4px;">⚠ Synthetic tariff — replace with contract rates before quoting</div>
+      Defaults are calibrated to public LTL rate-base ranges (CzarLite-style: $20–$50/CWT class-100 base, 30–50% mid-shipper discount off published, 10–18% FSC). No real carrier rate base is freely published. Sources:
+      <a href="https://hatfieldandassociates.com/which-ltl-rate-base-is-right-for-you-understanding-czarlite-carrier-tariffs-and-more/" target="_blank" rel="noopener" style="color:#78350f;text-decoration:underline;">Hatfield &amp; Associates</a> ·
+      <a href="https://www.freightwisellc.com/2019-7-1-the-value-of-a-standardized-rate-base/" target="_blank" rel="noopener" style="color:#78350f;text-decoration:underline;">FreightWise</a> ·
+      <a href="https://www.translogisticsinc.com/blog/ltl-jargon" target="_blank" rel="noopener" style="color:#78350f;text-decoration:underline;">Trans Logistics</a>.
+    </div>
+
+    <!-- Rate-card scalars -->
+    <div class="hub-card" style="margin-bottom:16px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 20px;">
+        ${renderInput('TL Rate per Mile', 'tlRatePerMile', rateCard.tlRatePerMile, '$')}
+        ${renderInput('LTL Base Rate ($/CWT)', 'ltlBaseRate', rateCard.ltlBaseRate, '$')}
+        ${renderInput('Fuel Surcharge', 'fuelSurcharge', (rateCard.fuelSurcharge * 100).toFixed(0), '%')}
+        ${renderInput('Discount off Tariff', 'ltlDiscountPct', discountPct, '%')}
+        ${renderInput('Min Charge', 'ltlMinCharge', minCharge, '$')}
+      </div>
+      <div style="margin-top:10px;font-size:11px;color:var(--ies-gray-500);line-height:1.5;">
+        Discount applies to the tariff before FSC. Min Charge is the absolute floor per shipment (typical industry $90–$120). FSC is carrier-set; current public benchmark range is 10–18%.
+      </div>
+    </div>
+
+    <!-- Class-100 base weight-break row (the canonical editable row; other classes derive from this) -->
+    <h3 class="text-section" style="margin:18px 0 10px;">LTL Class-100 Base Tariff
+      <span style="font-size:11px;font-weight:normal;color:var(--ies-gray-500);margin-left:8px;">$/CWT by weight tier — other classes derive via NMFC multipliers</span>
+    </h3>
+    <div class="hub-card">
+      <table class="cm-grid-table" style="width:100%;font-size:13px;">
+        <thead>
+          <tr>
+            <th style="text-align:left;">Weight Tier (lbs)</th>
+            <th style="text-align:right;width:110px;">$/CWT</th>
+            <th style="text-align:left;color:var(--ies-gray-500);">Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${breaks.map((wb, i) => `
+            <tr>
+              <td style="padding:6px 8px;"><strong>${breakLabels[i]}</strong></td>
+              <td style="text-align:right;padding:6px 8px;">
+                <span style="color:var(--ies-gray-400);">$</span>
+                <input type="number" step="0.25" min="0" value="${baseRow[i]}" data-ltl-break-idx="${i}" style="width:75px;text-align:right;" />
+              </td>
+              <td style="color:var(--ies-gray-500);font-size:11px;">${tierNotes[i] || ''}</td>
+            </tr>
+          `).join('')}
+          <tr>
+            <td style="padding:6px 8px;color:var(--ies-gray-500);">≥ ${breaks.slice(-1)[0].toLocaleString()}</td>
+            <td style="text-align:right;padding:6px 8px;color:var(--ies-gray-400);">— top tier rate —</td>
+            <td style="color:var(--ies-gray-400);"></td>
+          </tr>
+        </tbody>
+      </table>
+      <div style="margin-top:8px;font-size:11px;color:var(--ies-gray-500);">
+        Rates cascade — engine uses the rate at or below shipment weight. Edit a row above to shift the entire 18-class derived matrix.
+      </div>
+    </div>
+
+    <!-- Derived 18-class × 6-weight matrix (read-only preview) -->
+    <details style="margin-top:14px;">
+      <summary style="cursor:pointer;font-size:12px;color:var(--ies-gray-600);font-weight:600;padding:6px 0;">
+        ▸ Show full 18-class derived matrix (108 cells, read-only)
+      </summary>
+      <div class="hub-card" style="margin-top:8px;overflow-x:auto;">
+        <table style="width:100%;font-size:11px;border-collapse:collapse;">
+          <thead>
+            <tr style="background:var(--ies-gray-50);">
+              <th style="text-align:left;padding:5px 8px;border:1px solid var(--ies-gray-200);">NMFC Class</th>
+              <th style="text-align:right;padding:5px 6px;border:1px solid var(--ies-gray-200);">Mult</th>
+              ${breakLabels.map(l => `<th style="text-align:right;padding:5px 6px;border:1px solid var(--ies-gray-200);font-weight:600;">${l}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            ${calc.NMFC_CLASS_CODES.map(code => {
+              const row = derived[code] || [];
+              const mult = calc.NMFC_CLASS_MULTIPLIERS[code] ?? 1.0;
+              const isBaseline = code === 100;
+              return `<tr style="${isBaseline ? 'background:#eff6ff;font-weight:600;' : ''}">
+                <td style="padding:4px 8px;border:1px solid var(--ies-gray-200);">${code}${isBaseline ? ' ★' : ''}</td>
+                <td style="padding:4px 6px;border:1px solid var(--ies-gray-200);text-align:right;color:var(--ies-gray-500);">${mult.toFixed(2)}×</td>
+                ${row.map(r => `<td style="padding:4px 6px;border:1px solid var(--ies-gray-200);text-align:right;">$${r.toFixed(2)}</td>`).join('')}
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+        <div style="margin-top:8px;font-size:11px;color:var(--ies-gray-500);">
+          ★ baseline (class 100). Per-class rate = class-100 rate × NMFC multiplier. Edit the base tariff above to recalculate every cell.
+        </div>
+      </div>
+    </details>
+
+    <!-- 5x5 region-pair multiplier matrix -->
+    <h3 class="text-section" style="margin:18px 0 10px;">LTL Region-Pair Multipliers
+      <span style="font-size:11px;font-weight:normal;color:var(--ies-gray-500);margin-left:8px;">5×5 origin → destination grid (US census super-regions)</span>
+      <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="reset-region-matrix" style="font-size:10px;padding:3px 8px;margin-left:10px;vertical-align:middle;">↻ Reset matrix</button>
+    </h3>
+    <div class="hub-card">
+      <table style="width:100%;font-size:12px;border-collapse:collapse;">
+        <thead>
+          <tr style="background:var(--ies-gray-50);">
+            <th style="text-align:left;padding:6px 8px;border:1px solid var(--ies-gray-200);">Origin ↓ / Dest →</th>
+            ${calc.REGION_CODES.map(d => `<th style="text-align:center;padding:6px 8px;border:1px solid var(--ies-gray-200);font-weight:700;">${d}</th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>
+          ${calc.REGION_CODES.map(o => `
+            <tr>
+              <td style="padding:6px 8px;border:1px solid var(--ies-gray-200);font-weight:700;background:var(--ies-gray-50);">${o}</td>
+              ${calc.REGION_CODES.map(d => {
+                const v = (regionMatrix[o] && Number.isFinite(regionMatrix[o][d])) ? regionMatrix[o][d] : 1.0;
+                const isDiag = o === d;
+                return `<td style="padding:4px 6px;border:1px solid var(--ies-gray-200);text-align:center;${isDiag ? 'background:#f0fdf4;' : ''}">
+                  <input type="number" step="0.01" min="0" value="${v.toFixed(2)}" data-region-orig="${o}" data-region-dest="${d}" style="width:55px;text-align:right;font-size:11px;padding:2px 4px;" />
+                </td>`;
+              }).join('')}
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      <div style="margin-top:8px;font-size:11px;color:var(--ies-gray-500);line-height:1.5;">
+        Diagonal (same-region, green) defaults to <b>0.95×</b> (intra-region density discount). Adjacent pairs <b>1.00×</b>. Cross-country pairs (NE↔W, NE↔SW, SE↔W) <b>1.18×</b> (long-haul interline premium).
+        Origin/destination region is auto-derived from facility &amp; demand lat/lng using US census super-regions (NE, SE, MW, SW, W).
+      </div>
+    </div>
+  `;
 }
 
 function renderSlider(label, key, value) {
