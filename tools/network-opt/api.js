@@ -6,6 +6,7 @@
  */
 
 import { db } from '../../shared/supabase.js?v=20260424-A1';
+import * as auth from '../../shared/auth.js?v=20260423-A1';
 
 // ============================================================
 // NETWORK CONFIGS (saved network scenarios)
@@ -53,6 +54,12 @@ export async function saveConfig(config) {
   if (config.id) {
     return db.update('netopt_configs', config.id, payload);
   }
+  // 2026-04-25: RLS INSERT policy on netopt_configs is
+  //   WITH CHECK (owner_id = auth.uid())
+  // so we MUST set owner_id at insert time. Without this, every save
+  // fails with 'new row violates row-level security policy'.
+  const u = auth.getUser?.();
+  if (u?.id) payload.owner_id = u.id;
   return db.insert('netopt_configs', payload);
 }
 
@@ -92,9 +99,11 @@ export async function duplicateConfig(id) {
   if (!config) throw new Error('Config not found');
 
   const { id: _, created_at, updated_at, ...rest } = config;
+  const u = auth.getUser?.();
   return db.insert('netopt_configs', {
     ...rest,
     name: (rest.name || 'Network') + ' (Copy)',
+    ...(u?.id ? { owner_id: u.id } : {}),
   });
 }
 
