@@ -624,7 +624,7 @@ function renderSidebar() {
 
       <details style="margin:4px 0 8px 16px;border-left:2px solid var(--ies-gray-200);padding-left:10px;" ${selectedArchetype ? 'open' : ''}>
         <summary style="font-size:10px;color:var(--ies-gray-500);cursor:pointer;padding:4px 2px;font-weight:700;letter-spacing:0.4px;">
-          QUICK-SEED · ARCHETYPES ▾
+          QUICK-SEED · ARCHETYPES
         </summary>
         <div style="margin-top:4px;padding-left:2px;">
           ${calc.listArchetypes().map(a => `
