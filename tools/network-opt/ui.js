@@ -15,7 +15,7 @@ import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadXLSX } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260418-sM';
-import * as calc from './calc.js?v=20260425-s9';
+import * as calc from './calc.js?v=20260425-s10';
 import * as api from './api.js?v=20260425-s11';
 import { createChart } from '../../shared/cdn-wrappers/chart-wrapper.js?v=20260418-sK';
 
@@ -1418,6 +1418,49 @@ function renderModeMix(el) {
     });
   });
 
+  // Bind per-cell class-matrix overrides (click any cell, type a $ value)
+  // Storing on rateCard.ltlClassMatrixOverrides (sparse map keyed `${classCode}-${weightBreakIdx}`).
+  // ltlCost() in calc.js consults this map and uses the override DIRECTLY as
+  // the final $/CWT rate (skipping the class multiplier) when present.
+  el.querySelectorAll('input[data-class-code][data-break-idx]').forEach(input => {
+    input.addEventListener('change', (e) => {
+      const t = /** @type {HTMLInputElement} */ (e.target);
+      const code = parseInt(t.dataset.classCode, 10);
+      const idx = parseInt(t.dataset.breakIdx, 10);
+      const val = parseFloat(t.value);
+      if (!Number.isFinite(val) || val < 0) return;
+      if (!rateCard.ltlClassMatrixOverrides) rateCard.ltlClassMatrixOverrides = {};
+      // If user typed exactly the formula value, treat it as a no-op (don't
+      // create a phantom override that prevents recalculation when the base
+      // row changes).
+      const baseRow = rateCard.ltlBreakRates && rateCard.ltlBreakRates.length === 6
+        ? rateCard.ltlBreakRates : calc.DEFAULT_RATES.ltlBreakRates;
+      const mult = calc.NMFC_CLASS_MULTIPLIERS[code] ?? 1.0;
+      const formula = +(baseRow[idx] * mult).toFixed(2);
+      if (Math.abs(val - formula) < 0.005) {
+        delete rateCard.ltlClassMatrixOverrides[`${code}-${idx}`];
+      } else {
+        rateCard.ltlClassMatrixOverrides[`${code}-${idx}`] = val;
+      }
+      markDirty();
+      renderModeMix(el);
+    });
+  });
+
+  // Per-cell reset (only present on overridden cells)
+  el.querySelectorAll('button[data-action="reset-class-cell"]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const t = /** @type {HTMLElement} */ (e.currentTarget);
+      const code = t.dataset.classCode;
+      const idx = t.dataset.breakIdx;
+      if (rateCard.ltlClassMatrixOverrides) {
+        delete rateCard.ltlClassMatrixOverrides[`${code}-${idx}`];
+      }
+      markDirty();
+      renderModeMix(el);
+    });
+  });
+
   // Bind 5x5 LTL region-pair matrix
   el.querySelectorAll('input[data-region-orig]').forEach(input => {
     input.addEventListener('change', (e) => {
@@ -1473,8 +1516,12 @@ function renderRateCardEditor() {
   const minCharge = Number.isFinite(rateCard.ltlMinCharge) ? rateCard.ltlMinCharge : calc.DEFAULT_RATES.ltlMinCharge;
   const regionMatrix = rateCard.ltlRegionMatrix || calc.DEFAULT_LTL_REGION_MATRIX;
 
-  // Derived 18-class × 6-weight matrix from base row × NMFC multipliers (read-only preview).
-  const derived = calc.deriveClassWeightMatrix(baseRow);
+  // Derived 18-class × 6-weight matrix from base row × NMFC multipliers.
+  // Per-cell overrides (sparse map keyed `${classCode}-${weightBreakIdx}`) win
+  // over the formula and skip the class multiplier — user-edited cells become
+  // the final $/CWT rate for that (class, weight-break) pair.
+  const overrides = rateCard.ltlClassMatrixOverrides || {};
+  const derived = calc.deriveClassWeightMatrix(baseRow, undefined, overrides);
 
   const breakLabels = breaks.map((wb, i) => {
     const prev = i === 0 ? 0 : breaks[i - 1];
@@ -1549,7 +1596,7 @@ function renderRateCardEditor() {
     <!-- Derived 18-class × 6-weight matrix (read-only preview) -->
     <details style="margin-top:14px;">
       <summary style="cursor:pointer;font-size:12px;color:var(--ies-gray-600);font-weight:600;padding:6px 0;">
-        ▸ Show full 18-class derived matrix (108 cells, read-only)
+        ▸ Show full 18-class derived matrix (108 cells, click any cell to override)
       </summary>
       <div class="hub-card" style="margin-top:8px;overflow-x:auto;">
         <table style="width:100%;font-size:11px;border-collapse:collapse;">
@@ -1568,13 +1615,26 @@ function renderRateCardEditor() {
               return `<tr style="${isBaseline ? 'background:#eff6ff;font-weight:600;' : ''}">
                 <td style="padding:4px 8px;border:1px solid var(--ies-gray-200);">${code}${isBaseline ? ' ★' : ''}</td>
                 <td style="padding:4px 6px;border:1px solid var(--ies-gray-200);text-align:right;color:var(--ies-gray-500);">${mult.toFixed(2)}×</td>
-                ${row.map(r => `<td style="padding:4px 6px;border:1px solid var(--ies-gray-200);text-align:right;">$${r.toFixed(2)}</td>`).join('')}
+                ${row.map((r, i) => {
+                  const key = `${code}-${i}`;
+                  const isOverride = Object.prototype.hasOwnProperty.call(overrides, key) && Number.isFinite(overrides[key]);
+                  return `<td style="padding:2px 4px;border:1px solid var(--ies-gray-200);text-align:right;${isOverride ? 'background:#fef3c7;' : ''}">
+                    <span style="display:inline-flex;align-items:center;gap:3px;justify-content:flex-end;">
+                      <span style="font-size:10px;color:var(--ies-gray-500);">$</span>
+                      <input type="number" step="0.01" min="0" value="${r.toFixed(2)}"
+                        data-class-code="${code}" data-break-idx="${i}"
+                        title="${isOverride ? 'Override — click ↺ to revert to formula' : 'Click to override this cell ($/CWT)'}"
+                        style="width:54px;text-align:right;font-size:11px;padding:2px 4px;${isOverride ? 'font-weight:700;color:#92400e;' : ''}" />
+                      ${isOverride ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="reset-class-cell" data-class-code="${code}" data-break-idx="${i}" style="font-size:9px;padding:1px 4px;line-height:1;" title="Reset to formula">↺</button>` : ''}
+                    </span>
+                  </td>`;
+                }).join('')}
               </tr>`;
             }).join('')}
           </tbody>
         </table>
         <div style="margin-top:8px;font-size:11px;color:var(--ies-gray-500);">
-          ★ baseline (class 100). Per-class rate = class-100 rate × NMFC multiplier. Edit the base tariff above to recalculate every cell.
+          ★ baseline (class 100). Per-class rate = class-100 rate × NMFC multiplier. Edit the base tariff above to recalculate every cell, or override an individual cell directly (overridden cells show in <span style="background:#fef3c7;padding:0 4px;border-radius:2px;">amber</span> and skip the class multiplier — the override IS the final $/CWT rate). Click ↺ to revert a cell to the formula.
         </div>
       </div>
     </details>

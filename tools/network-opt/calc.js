@@ -176,11 +176,15 @@ export function regionPairMultiplier(originRegion, destRegion, matrix) {
  * @param {Object<number,number>} [multipliers] — defaults to NMFC_CLASS_MULTIPLIERS
  * @returns {Object<string,number[]>}
  */
-export function deriveClassWeightMatrix(baseRow, multipliers = NMFC_CLASS_MULTIPLIERS) {
+export function deriveClassWeightMatrix(baseRow, multipliers = NMFC_CLASS_MULTIPLIERS, overrides = null) {
   const out = {};
   for (const code of NMFC_CLASS_CODES) {
     const mult = multipliers[code] ?? 1.0;
-    out[code] = baseRow.map(r => +(r * mult).toFixed(2));
+    out[code] = baseRow.map((r, i) => {
+      const ov = overrides && overrides[`${code}-${i}`];
+      if (Number.isFinite(ov) && ov >= 0) return +(+ov).toFixed(2);
+      return +(r * mult).toFixed(2);
+    });
   }
   return out;
 }
@@ -293,16 +297,25 @@ export function ltlCost(weight, miles, rates = {}) {
   const minCharge = Number.isFinite(rates.ltlMinCharge) ? rates.ltlMinCharge : DEFAULT_RATES.ltlMinCharge;
 
   // Find applicable CWT rate from weight breaks
+  let breakIdx = 0;
   let ratePerCwt = bRates[0] || 18.50;
   for (let i = 0; i < breaks.length; i++) {
-    if (weight >= breaks[i]) ratePerCwt = bRates[i];
+    if (weight >= breaks[i]) { ratePerCwt = bRates[i]; breakIdx = i; }
   }
 
   const cwt = Math.max(1, weight) / 100;
-  let base = cwt * ratePerCwt;
-
-  // NMFC freight-class multiplier (B2)
-  base *= nmfcMultiplier(rates.nmfcClass);
+  const classCode = Number.isFinite(rates.nmfcClass) ? rates.nmfcClass : 100;
+  let base;
+  // Per-cell override: if user overrode the (class, weight-break) cell, use it
+  // directly and SKIP the class multiplier (override is the final per-CWT rate).
+  const ov = rates.ltlClassMatrixOverrides && rates.ltlClassMatrixOverrides[`${classCode}-${breakIdx}`];
+  if (Number.isFinite(ov) && ov >= 0) {
+    base = cwt * (+ov);
+  } else {
+    base = cwt * ratePerCwt;
+    // NMFC freight-class multiplier (B2)
+    base *= nmfcMultiplier(rates.nmfcClass);
+  }
 
   // Distance adjustment (longer = higher, simplified)
   const distFactor = miles > 500 ? 1.15 : miles > 250 ? 1.08 : 1.0;
