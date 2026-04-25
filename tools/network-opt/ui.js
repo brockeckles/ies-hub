@@ -65,6 +65,9 @@ let costChartInstance = null; // Chart.js handle for Compare-tab cost-vs-k curve
 
 /** @type {number|null} */
 let recommendedDCCount = null;
+// Slice A (2026-04-25): pre-flight gate on Run. When set, the Results pane
+// renders a blocking guidance panel instead of fake zero-cost KPIs.
+let runBlockReason = null;
 
 /** @type {number} */
 let maxDCsToTest = 5;
@@ -251,6 +254,7 @@ function openEditor(savedRow) {
   selectedArchetype = null;
   comparisonResults = null;
   recommendedDCCount = null;
+  runBlockReason = null;
   maxDCsToTest = 5;
   activeConfigId = savedRow?.id || null;
   activeParentCmId = savedRow?.parent_cost_model_id || null;
@@ -707,6 +711,30 @@ function findOptimalLocations() {
 // ============================================================
 
 function runScenario() {
+  // Slice A: refuse to compute against incomplete inputs. Surface the reason
+  // inline on the Results tab rather than producing fake $0 KPIs that look
+  // valid (the run-state chip would otherwise flip to clean against garbage).
+  if (demands.length === 0) {
+    runBlockReason = 'no-demand';
+    activeScenario = null;
+    activeView = 'results';
+    rootEl?.querySelectorAll('#no-view-tabs button').forEach(b => {
+      b.classList.toggle('active', b.dataset.tab === activeView);
+    });
+    renderContentView();
+    return;
+  }
+  if (facilities.filter(f => f.isOpen).length === 0) {
+    runBlockReason = 'no-open-facilities';
+    activeScenario = null;
+    activeView = 'results';
+    rootEl?.querySelectorAll('#no-view-tabs button').forEach(b => {
+      b.classList.toggle('active', b.dataset.tab === activeView);
+    });
+    renderContentView();
+    return;
+  }
+  runBlockReason = null;
   const name = `Scenario ${scenarios.length + 1} — ${facilities.filter(f => f.isOpen).length} DCs`;
   const result = calc.evaluateScenario(name, facilities, demands, modeMix, rateCard, serviceConfig);
   activeScenario = result;
@@ -880,12 +908,24 @@ function renderFacilities(el) {
           <button class="hub-btn hub-btn-sm hub-btn-secondary" id="no-add-facility">+ Add Facility</button>
         </div>
       </div>
-      ${facilities.length === 0 ? `
+      ${facilities.length === 0 ? (demands.length > 0 ? `
+        <div class="hub-card" style="padding:24px;text-align:center;background:#f0fdf4;border:1px dashed #86efac;margin-bottom:16px;">
+          <div style="display:inline-flex;align-items:center;gap:6px;background:#dcfce7;color:#166534;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700;margin-bottom:12px;">
+            <span>✓</span><span>${demands.length} demand point${demands.length === 1 ? '' : 's'} loaded</span>
+          </div>
+          <div style="font-size:14px;font-weight:600;color:var(--ies-navy);margin-bottom:6px;">Step 2 of 3 — add candidate facilities</div>
+          <div style="font-size:12px;color:var(--ies-gray-600);line-height:1.5;margin-bottom:14px;">Demand is ready. Now seed candidate DC locations by clustering against your demand, or add them one at a time.</div>
+          <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+            <button class="hub-btn hub-btn-sm hub-btn-primary" id="no-find-optimal-empty" style="display:inline-flex;align-items:center;gap:6px;">🎯 Find Optimal Locations</button>
+            <button class="hub-btn hub-btn-sm hub-btn-secondary" id="no-add-facility-empty">+ Add Facility manually</button>
+          </div>
+        </div>
+      ` : `
         <div class="hub-card" style="padding:24px;text-align:center;background:var(--ies-gray-50);border:1px dashed var(--ies-gray-300);margin-bottom:16px;">
           <div style="font-size:14px;font-weight:600;color:var(--ies-navy);margin-bottom:8px;">No facilities yet</div>
-          <div style="font-size:12px;color:var(--ies-gray-500);line-height:1.5;">Add candidate DCs one at a time with <b>+ Add Facility</b>, or click <b>Load Sample Network</b> to seed a 5-DC + 10-demand-point US example you can modify.</div>
+          <div style="font-size:12px;color:var(--ies-gray-500);line-height:1.5;">Add candidate DCs one at a time with <b>+ Add Facility</b>, or click <b>Load Sample Network</b> to seed a 5-DC + 10-demand-point US example you can modify. To load demand from an industry preset first, pick one under <b>ARCHETYPES</b> in the sidebar.</div>
         </div>
-      ` : ''}
+      `) : ''}
 
       <table style="width:100%;border-collapse:collapse;font-size:13px;">
         <thead>
@@ -997,12 +1037,19 @@ function renderFacilities(el) {
   });
 
   // Add facility
-  el.querySelector('#no-add-facility')?.addEventListener('click', () => {
+  function _addBlankFacility() {
     const id = 'f' + Date.now();
     facilities.push({ id, name: 'New DC', city: '', state: '', lat: 39.8283, lng: -98.5795, capacity: 200000, fixedCost: 1000000, variableCost: 3.00, isOpen: true });
     markDirty();
     renderFacilities(el);
     renderSidebar();
+  }
+  el.querySelector('#no-add-facility')?.addEventListener('click', _addBlankFacility);
+  // Slice B (2026-04-25): empty-state CTAs when demand is loaded but facilities are empty.
+  el.querySelector('#no-add-facility-empty')?.addEventListener('click', _addBlankFacility);
+  el.querySelector('#no-find-optimal-empty')?.addEventListener('click', () => {
+    findOptimalLocations();
+    markDirty();
   });
 
   // Load sample network — seeds 5 DCs + 10 demand points from the demo
@@ -1495,6 +1542,60 @@ function initMap() {
 
 function renderResults(el) {
   if (!activeScenario) {
+    // Slice A: distinguish between "never run" and "run was blocked by missing inputs".
+    if (runBlockReason === 'no-demand') {
+      el.innerHTML = `
+        <div class="hub-card" style="padding:24px;background:#fef2f2;border:1px solid #fecaca;">
+          <div style="display:inline-flex;align-items:center;gap:6px;background:#fee2e2;color:#991b1b;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700;margin-bottom:12px;">
+            <span>⚠</span><span>Run blocked</span>
+          </div>
+          <div style="font-size:14px;font-weight:700;color:var(--ies-navy);margin-bottom:6px;">No demand to run against</div>
+          <div style="font-size:13px;color:var(--ies-gray-600);line-height:1.5;margin-bottom:14px;">The optimizer needs demand points before it can produce cost or service-level results. Either pick an industry preset under <b>ARCHETYPES</b> in the sidebar, or open the <b>Demand Points</b> section and add them manually.</div>
+          <button class="hub-btn hub-btn-sm hub-btn-primary" id="no-results-go-demand">Go to Demand Points</button>
+        </div>`;
+      el.querySelector('#no-results-go-demand')?.addEventListener('click', () => {
+        activeSection = 'demand';
+        activeView = 'setup';
+        rootEl?.querySelectorAll('#no-view-tabs button').forEach(b => {
+          b.classList.toggle('active', b.dataset.tab === activeView);
+        });
+        renderSidebar();
+        renderContentView();
+      });
+      return;
+    }
+    if (runBlockReason === 'no-open-facilities') {
+      const total = facilities.length;
+      const hint = total === 0
+        ? 'You have no candidate facilities yet. Click <b>Find Optimal Locations</b> in the sidebar to seed candidates from a k-means cluster of your demand, or add them manually.'
+        : `You have ${total} facilit${total === 1 ? 'y' : 'ies'} on the list but none are <b>Active</b>. Tick the Active checkbox on at least one row in <b>Setup → Facilities</b>, or click <b>Find Optimal Locations</b> to add more candidates.`;
+      el.innerHTML = `
+        <div class="hub-card" style="padding:24px;background:#fffbeb;border:1px solid #fde68a;">
+          <div style="display:inline-flex;align-items:center;gap:6px;background:#fef3c7;color:#92400e;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700;margin-bottom:12px;">
+            <span>⚠</span><span>Run blocked</span>
+          </div>
+          <div style="font-size:14px;font-weight:700;color:var(--ies-navy);margin-bottom:6px;">No active facilities to evaluate</div>
+          <div style="font-size:13px;color:var(--ies-gray-600);line-height:1.5;margin-bottom:14px;">${hint}</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="hub-btn hub-btn-sm hub-btn-primary" id="no-results-find-optimal" style="display:inline-flex;align-items:center;gap:6px;">🎯 Find Optimal Locations</button>
+            <button class="hub-btn hub-btn-sm hub-btn-secondary" id="no-results-go-facilities">Open Facilities tab</button>
+          </div>
+        </div>`;
+      el.querySelector('#no-results-find-optimal')?.addEventListener('click', () => {
+        findOptimalLocations();
+        markDirty();
+      });
+      el.querySelector('#no-results-go-facilities')?.addEventListener('click', () => {
+        activeSection = 'facilities';
+        activeView = 'setup';
+        rootEl?.querySelectorAll('#no-view-tabs button').forEach(b => {
+          b.classList.toggle('active', b.dataset.tab === activeView);
+        });
+        renderSidebar();
+        renderContentView();
+      });
+      return;
+    }
     el.innerHTML = `<div class="hub-card"><p class="text-body text-muted">Run a scenario first to see results here.</p></div>`;
     return;
   }
@@ -1649,7 +1750,7 @@ function renderComparison(el) {
   } else if (scenarios.length === 0) {
     el.innerHTML = `
       <div class="hub-card">
-        <p class="text-body text-muted">No scenarios to compare yet. Use "Compare 1-5 DCs" or "Add to Comparison" in the sidebar to build your comparison set.</p>
+        <p class="text-body text-muted">No comparison run yet. Click <b>Compare DCs</b> in the sidebar to evaluate 1-N DC configurations and surface the cost-vs-k inflection.</p>
       </div>
     `;
     return;
