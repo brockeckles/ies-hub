@@ -305,6 +305,12 @@ export function parcelCost(weight, miles, zoneRates = DEFAULT_RATES.parcelZoneRa
  * @returns {{ tlCost: number, ltlCost: number, parcelCost: number, blendedCost: number }}
  */
 export function blendedLaneCost(miles, avgWeight, modeMix, rateCard = DEFAULT_RATES, originLng, destLng, originLat, destLat, nmfcClass) {
+  // E4/E5 fix (2026-04-25 EVE): same-facility / same-ZIP lanes have no transport cost.
+  // Previously LTL & Parcel still produced their minimum-bracket charge against a 0-mile lane,
+  // which surfaced as $6 LTL / $25 Parcel / $11 blended on Lane Assignments — dimensionally wrong.
+  if (!isFinite(miles) || miles <= 0) {
+    return { tlCost: 0, ltlCost: 0, parcelCost: 0, blendedCost: 0 };
+  }
   const tl = tlCost(miles, rateCard.tlRatePerMile, rateCard.fuelSurcharge, originLng, destLng);
 
   // Derive regions from coords if not already on rateCard
@@ -463,7 +469,7 @@ export function compareScenarios(scenarios) {
     let verdict = 'VIABLE';
     if (s.totalCost === bestCost) verdict = 'BEST COST';
     if (s.serviceLevel === bestService && s.serviceLevel > 0) verdict = verdict === 'BEST COST' ? 'OPTIMAL' : 'BEST SERVICE';
-    if (s.serviceLevel < 90) verdict = 'SLA RISK';
+    if (s.serviceLevel < 90) verdict = 'SERVICE RISK';
 
     return { ...s, verdict, deltaPct };
   });

@@ -15,7 +15,7 @@ import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadXLSX } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260418-sM';
-import * as calc from './calc.js?v=20260425-s2';
+import * as calc from './calc.js?v=20260425-s5';
 import * as api from './api.js?v=20260418-sM';
 import { createChart } from '../../shared/cdn-wrappers/chart-wrapper.js?v=20260418-sK';
 
@@ -1783,8 +1783,8 @@ function renderResults(el) {
           ${kpi('Total Cost', calc.formatCurrency(s.totalCost, { compact: true }))}
           ${kpi('Cost/Unit', calc.formatCurrency(s.avgCostPerUnit))}
           ${kpi('Avg Distance', calc.formatMiles(s.avgDistance))}
-          ${kpi('Service Level', calc.formatPct(s.serviceLevel), slaColor)}
-          ${kpi('SLA Met', `${s.slaMet}/${s.slaTotal}`)}
+          ${kpi('Service Level', calc.formatPct(s.serviceLevel), slaColor, '% of lanes whose blended transit time is within the SLA window (≤ each demand point\'s maxDays). 95+ green, 90-94 amber, <90 red.')}
+          ${kpi('Coverage', `${s.slaMet}/${s.slaTotal} lanes`, undefined, 'Lanes meeting SLA window / total lanes evaluated.')}
           ${kpi('Total Demand', s.totalDemand.toLocaleString())}
         </div>
       </div>
@@ -1793,7 +1793,7 @@ function renderResults(el) {
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:20px;">
         ${costCard('Facility Costs', s.costBreakdown.facility, s.totalCost)}
         ${costCard('Transportation', s.costBreakdown.transport, s.totalCost)}
-        ${costCard('Handling', s.costBreakdown.handling, s.totalCost)}
+        ${costCard('Handling', s.costBreakdown.handling, s.totalCost, 'Handling = Σ (annualDemand × facility.variableCost) across all assigned demand. Variable cost is per-unit handling, set on each facility row (defaults $2.80–$4.00/unit on the demo network).')}
       </div>
 
       <!-- Primary Actions -->
@@ -1886,20 +1886,20 @@ function pushToFleet(scenario) {
   window.location.hash = '#designtools/fleet-modeler';
 }
 
-function kpi(label, value, color) {
+function kpi(label, value, color, tooltip) {
   return `
-    <div style="border-right:1px solid rgba(255,255,255,.15);padding-right:24px;">
-      <span style="font-size:11px;font-weight:700;text-transform:uppercase;opacity:0.6;">${label}</span>
+    <div ${tooltip ? `title="${tooltip.replace(/"/g, '&quot;')}"` : ''} style="border-right:1px solid rgba(255,255,255,.15);padding-right:24px;${tooltip ? 'cursor:help;' : ''}">
+      <span style="font-size:11px;font-weight:700;text-transform:uppercase;opacity:0.6;">${label}${tooltip ? ' <span style="opacity:0.5;">ⓘ</span>' : ''}</span>
       <div style="font-size:20px;font-weight:800;${color ? `color:${color};` : ''}">${value}</div>
     </div>
   `;
 }
 
-function costCard(label, amount, total) {
+function costCard(label, amount, total, tooltip) {
   const pct = total > 0 ? (amount / total) * 100 : 0;
   return `
-    <div class="hub-card" style="padding:16px;">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--ies-gray-400);margin-bottom:8px;">${label}</div>
+    <div class="hub-card" ${tooltip ? `title="${tooltip.replace(/"/g, '&quot;')}"` : ''} style="padding:16px;${tooltip ? 'cursor:help;' : ''}">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--ies-gray-400);margin-bottom:8px;">${label}${tooltip ? ' <span style="opacity:0.5;">ⓘ</span>' : ''}</div>
       <div style="font-size:20px;font-weight:800;margin-bottom:8px;">${calc.formatCurrency(amount, { compact: true })}</div>
       <div style="height:6px;border-radius:3px;background:var(--ies-gray-200);overflow:hidden;">
         <div style="height:100%;width:${Math.min(100, pct)}%;background:var(--ies-blue);border-radius:3px;"></div>
@@ -2132,7 +2132,7 @@ function renderScenarioComparison(el) {
             ${compared.map(s => {
               const verdictColor = {
                 'OPTIMAL': '#22c55e', 'BEST COST': 'var(--ies-blue)', 'BEST SERVICE': '#8b5cf6',
-                'VIABLE': '#6b7280', 'SLA RISK': '#ef4444',
+                'VIABLE': '#6b7280', 'SERVICE RISK': '#ef4444',
               }[s.verdict] || '#6b7280';
 
               return `
@@ -2164,7 +2164,7 @@ function renderScenarioComparison(el) {
           const pct = maxCost > 0 ? (s.totalCost / maxCost) * 100 : 0;
           const verdictColor = {
             'OPTIMAL': '#22c55e', 'BEST COST': 'var(--ies-blue)', 'BEST SERVICE': '#8b5cf6',
-            'VIABLE': '#6b7280', 'SLA RISK': '#ef4444',
+            'VIABLE': '#6b7280', 'SERVICE RISK': '#ef4444',
           }[s.verdict] || '#6b7280';
 
           return `
