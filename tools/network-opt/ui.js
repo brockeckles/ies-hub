@@ -1823,6 +1823,9 @@ function renderResults(el) {
         <button class="hub-btn hub-btn-primary hub-btn-sm" id="no-push-fleet" style="display:flex;align-items:center;gap:6px;">
           📊 Push to Fleet
         </button>
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" id="no-push-cm" title="Seed Cost Model with this scenario's annual demand + total transport cost so you can iterate downstream P&amp;L from a sized network." style="display:flex;align-items:center;gap:6px;">
+          💵 Push to Cost Model
+        </button>
       </div>
 
       <!-- Assignment Table -->
@@ -1878,6 +1881,11 @@ function renderResults(el) {
     if (!activeScenario) return;
     pushToFleet(activeScenario);
   });
+  // Bind Push to Cost Model — seeds CM with total annual demand + transport cost
+  el.querySelector('#no-push-cm')?.addEventListener('click', () => {
+    if (!activeScenario) return;
+    pushToCostModel(activeScenario);
+  });
 }
 
 function pushToFleet(scenario) {
@@ -1906,6 +1914,37 @@ function pushToFleet(scenario) {
   showNoToast(`Pushed ${lanes.length} lanes to Fleet Modeler`, 'success');
   // Take the user to Fleet so the handoff is visible.
   window.location.hash = '#designtools/fleet-modeler';
+}
+
+/**
+ * Push the network scenario downstream into the Cost Model.
+ * Sends total annual demand + transport cost so CM can seed Volumes
+ * with a primary "Outbound Orders" line and stash transport as a
+ * pre-known cost reference for the user to validate against CM's
+ * own labor/handling math.
+ *
+ * Mirrors the WSC→CM and MOST→CM patterns: bus.emit + sessionStorage,
+ * then navigate. CM consumes whichever arrives first.
+ */
+function pushToCostModel(scenario) {
+  if (!scenario) return;
+  const totalDemand = demands.reduce((s, d) => s + (d.annualDemand || 0), 0);
+  const totalTransport = scenario.totalCost || (scenario.costBreakdown?.transport || 0);
+  const openFacs = facilities.filter(f => f.isOpen).length;
+  const payload = {
+    sourceScenario: scenario.name || 'NetOpt scenario',
+    totalAnnualDemand: totalDemand,
+    transportCost: scenario.costBreakdown?.transport || 0,
+    facilityCost:  scenario.costBreakdown?.facility  || 0,
+    handlingCost:  scenario.costBreakdown?.handling  || 0,
+    totalCost:     scenario.totalCost || totalTransport,
+    openFacilities: openFacs,
+    at: Date.now(),
+  };
+  try { sessionStorage.setItem('netopt_pending_cm_push', JSON.stringify(payload)); } catch {}
+  bus.emit('netopt:push-to-cm', payload);
+  showNoToast(`Pushed ${totalDemand.toLocaleString()} annual units + transport cost to Cost Model`, 'success');
+  window.location.hash = '#designtools/cost-model';
 }
 
 function kpi(label, value, color, tooltip) {

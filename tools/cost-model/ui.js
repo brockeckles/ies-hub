@@ -513,6 +513,7 @@ export async function mount(el) {
   // Listen for cross-tool push events
   bus.on('most:push-to-cm', handleMostPush);
   bus.on('wsc:push-to-cm', handleWscPush);
+  bus.on('netopt:push-to-cm', handleNetOptPush);
 
   // If WSC pushed data before we mounted, consume the sessionStorage handoff.
   // This skips the landing page and takes the user straight into the editor
@@ -570,6 +571,28 @@ export async function mount(el) {
     }
   } catch (e) {
     console.warn('[CM] Failed to consume MOST push handoff:', e);
+  }
+
+  // Brock 2026-04-25 — NetOpt->CM sessionStorage handoff (mirror MOST/WSC).
+  try {
+    const pending = sessionStorage.getItem('netopt_pending_cm_push');
+    if (pending) {
+      const payload = JSON.parse(pending);
+      if (payload && payload.at && (Date.now() - payload.at) < 60000) {
+        sessionStorage.removeItem('netopt_pending_cm_push');
+        if (viewMode !== 'editor') {
+          model = createEmptyModel();
+          isDirty = false;
+          userHasInteracted = false;
+          viewMode = 'editor';
+        }
+        handleNetOptPush(payload);
+      } else {
+        sessionStorage.removeItem('netopt_pending_cm_push');
+      }
+    }
+  } catch (e) {
+    console.warn('[CM] Failed to consume NetOpt push handoff:', e);
   }
 
   renderCurrentView();
@@ -870,6 +893,7 @@ function wireEditorEvents() {
  */
 export function unmount() {
   bus.clear('most:push-to-cm');
+  bus.clear('netopt:push-to-cm');
   bus.clear('wsc:push-to-cm');
   if (isDirty) {
     console.log('[CM] Unmounting with unsaved changes');
@@ -8647,6 +8671,67 @@ function handleWscPush(payload) {
 
   bus.emit('cm:facility-updated', { source: 'wsc' });
   console.log('[CM] Received facility data from WSC:', payload);
+}
+
+// ============================================================
+// NetOpt -> CM INTEGRATION
+// ============================================================
+
+/**
+ * Handle incoming network scenario from Network Optimizer.
+ * Seeds Volumes (Outbound Orders) with totalAnnualDemand and stashes
+ * transport / facility / handling cost benchmarks on the model so the
+ * Cost Model author can validate their own bottom-up math against the
+ * upstream network design.
+ */
+function handleNetOptPush(payload) {
+  if (!payload) return;
+
+  if (viewMode === 'landing') {
+    model = createEmptyModel();
+    isDirty = false;
+    userHasInteracted = false;
+    viewMode = 'editor';
+  }
+
+  const demand = Number(payload.totalAnnualDemand) || 0;
+  if (demand > 0) {
+    model.volumeLines = Array.isArray(model.volumeLines) ? model.volumeLines : [];
+    const idx = model.volumeLines.findIndex(v => v.isOutboundPrimary);
+    const seeded = {
+      name: 'Outbound Orders (from NetOpt)',
+      volume: demand,
+      uom: 'order',
+      isOutboundPrimary: true,
+    };
+    if (idx >= 0) {
+      model.volumeLines[idx] = { ...model.volumeLines[idx], ...seeded };
+    } else {
+      model.volumeLines = model.volumeLines.map(v => ({ ...v, isOutboundPrimary: false }));
+      model.volumeLines.unshift(seeded);
+    }
+  }
+
+  model.netoptBenchmark = {
+    sourceScenario: payload.sourceScenario || 'NetOpt scenario',
+    transportCost: Number(payload.transportCost) || 0,
+    facilityCost:  Number(payload.facilityCost)  || 0,
+    handlingCost:  Number(payload.handlingCost)  || 0,
+    totalCost:     Number(payload.totalCost)     || 0,
+    openFacilities: Number(payload.openFacilities) || 0,
+    receivedAt: Date.now(),
+  };
+
+  isDirty = true;
+  navigateSection('volumes');
+  updateValidation();
+
+  bus.emit('cm:netopt-applied', {
+    source: 'netopt',
+    demand,
+    transportCost: model.netoptBenchmark.transportCost,
+  });
+  console.log('[CM] Received NetOpt scenario:', model.netoptBenchmark);
 }
 
 // ============================================================
