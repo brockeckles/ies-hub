@@ -14,7 +14,7 @@ import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sP';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260418-sP';
-import * as calc from './calc.js?v=20260425-s3';
+import * as calc from './calc.js?v=20260425-s4';
 import * as api from './api.js?v=20260418-sP';
 
 // ============================================================
@@ -960,6 +960,11 @@ function renderSensitivity(el) {
   // In U-curve mode the minimum is the cost-optimal k (whichever bar is shortest).
   const minIdx = sensitivityData.findIndex(d => d.totalCost === minCost);
   const optimalK = sensitivityData[minIdx]?.k ?? sensitivityData[sensitivityData.length - 1].k;
+  // Whether the cost-optimal k is at an interior bar (true U-shape) or at a
+  // boundary (k=1 because fixed cost dominates, or k=max because fixed cost
+  // is too low to ever offset the next DC). Drives whether the ★ marker
+  // shows on the chart and what copy the legend / disclosure uses.
+  const hasInteriorMin = hasFixedCost && minIdx > 0 && minIdx < sensitivityData.length - 1;
 
   // Network summary
   const optimal = sensitivityData[sensitivityData.length - 1];
@@ -1039,7 +1044,9 @@ function renderSensitivity(el) {
           ${hasFixedCost ? `
             <span style="margin-right:16px;"><strong style="color:#1d4ed8;">Blue</strong> = transport cost</span>
             <span style="margin-right:16px;"><strong style="color:#fb923c;">Orange</strong> = facility fixed cost (${calc.formatCurrency(config.fixedCostPerDC, { compact: true })}/yr × k)</span>
-            <span><strong style="color:#16a34a;">★</strong> = cost-optimal k = ${optimalK} (kneedle minimum on the U-curve)</span>
+            ${hasInteriorMin
+              ? `<span><strong style="color:#16a34a;">★</strong> = cost-optimal k = ${optimalK} (interior minimum of the U-curve)</span>`
+              : `<span><strong style="color:var(--ies-gray-600);">Cost-optimal k = ${optimalK}</strong> — boundary minimum (no interior U-shape at this fixed cost)</span>`}
           ` : `
             <span style="margin-right:16px;"><strong style="color:var(--ies-gray-600);">Blue bar</strong> = current selection (k=${config.numCenters})</span>
             <span><strong style="color:#f97316;">Orange bar ★</strong> = knee point (max curvature on cost curve)</span>
@@ -1102,12 +1109,14 @@ function renderSensitivity(el) {
       </div>
 
       ${hasFixedCost ? `
-        <div class="hub-card" style="margin-top:16px;background:#f0fdf4;border-color:#22c55e;">
-          <div style="font-size:13px;font-weight:600;color:#15803d;margin-bottom:6px;">How to read this curve — true U-curve mode</div>
-          <div style="font-size:13px;color:#166534;line-height:1.6;">
+        <div class="hub-card" style="margin-top:16px;background:${hasInteriorMin ? '#f0fdf4' : '#fffbeb'};border-color:${hasInteriorMin ? '#22c55e' : '#f59e0b'};">
+          <div style="font-size:13px;font-weight:600;color:${hasInteriorMin ? '#15803d' : '#92400e'};margin-bottom:6px;">How to read this curve — ${hasInteriorMin ? 'true U-curve mode' : 'fixed-cost dominates'}</div>
+          <div style="font-size:13px;color:${hasInteriorMin ? '#166534' : '#78350f'};line-height:1.6;">
             Each bar is a <strong>stack</strong>: blue = outbound transport cost, orange = facility fixed cost (k × ${calc.formatCurrency(config.fixedCostPerDC, { compact: true })}/yr). Stack height = total annual cost.
             <br/><br/>
-            The green <strong>★</strong> marks the cost-optimal k = <strong>${optimalK}</strong> — found via the kneedle algorithm (Satopaa et al. 2011), which on a U-curve resolves to the bar with the lowest total. Adding more DCs past k=${optimalK} starts to cost more in fixed overhead than it saves in transport.
+            ${hasInteriorMin
+              ? `The green <strong>★</strong> marks the cost-optimal k = <strong>${optimalK}</strong> — the bar with the lowest total. Adding more DCs past k=${optimalK} costs more in fixed overhead than it saves in transport; using fewer DCs costs more in transport than it saves in fixed cost.`
+              : `The total-cost minimum sits at <strong>k = ${optimalK}</strong> (boundary). At this fixed-cost level, every additional DC adds more fixed overhead than it removes in transport savings — so the optimum is to consolidate. Lower the <strong>Fixed $ / DC / yr</strong> input to surface an interior U-curve optimum.`}
             <br/><br/>
             Tweak the <strong>Fixed $ / DC / yr</strong> input on the Demand Points tab to test sensitivity. Higher fixed cost → optimum shifts left (fewer DCs); lower fixed cost → optimum shifts right (more DCs).
           </div>

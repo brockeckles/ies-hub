@@ -549,8 +549,28 @@ export function sensitivityAnalysis(points, maxK = 5, costPerMile = 2.85, maxIte
         bestIdx = i;
       }
     }
-    if (bestIdx > 0 && bestIdx < N - 1 && bestDist > MIN_KNEE_GAP) {
-      results[bestIdx].isElbow = true;
+    // Mark the optimum only when it represents a meaningful pick:
+    //   - Transport-only (fixedCostPerDC = 0): the curve is monotonically
+    //     non-increasing, so the kneedle elbow is the diminishing-returns
+    //     inflection — the canonical "knee" interpretation.
+    //   - U-curve mode (fixedCostPerDC > 0): the curve has a real total-cost
+    //     minimum. Use the GLOBAL MINIMUM directly rather than the kneedle —
+    //     kneedle picks the point of maximum curvature, which on an
+    //     asymmetric U sits one bar past the trough and would mis-direct
+    //     the user. Only mark when the minimum is at an interior point;
+    //     when fixed cost dominates and the optimum is k=1 (boundary),
+    //     the marker is suppressed (the legend chip explains why).
+    const hasFixedCostMode = fixedTerm > 0;
+    const minIdxGlobal = ys.indexOf(yMin);
+    const minIsInterior = minIdxGlobal > 0 && minIdxGlobal < N - 1;
+    if (hasFixedCostMode) {
+      if (minIsInterior) {
+        results[minIdxGlobal].isElbow = true;
+      }
+    } else {
+      if (bestIdx > 0 && bestIdx < N - 1 && bestDist > MIN_KNEE_GAP) {
+        results[bestIdx].isElbow = true;
+      }
     }
   }
 
