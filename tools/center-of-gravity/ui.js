@@ -14,7 +14,7 @@ import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sP';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260418-sP';
-import * as calc from './calc.js?v=20260425-s1';
+import * as calc from './calc.js?v=20260425-s3';
 import * as api from './api.js?v=20260418-sP';
 
 // ============================================================
@@ -160,7 +160,7 @@ function openEditor(savedRow) {
       (!Array.isArray(cogResult.assignments) || !cogResult.assignments.length)) {
     try {
       cogResult = calc.kMeansCog(points, config.numCenters, config.maxIterations);
-      sensitivityData = calc.sensitivityAnalysis(points, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000);
+      sensitivityData = calc.sensitivityAnalysis(points, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0);
     } catch (err) {
       console.warn('[COG] Result rebuild from saved inputs failed; falling back to partial render:', err);
     }
@@ -335,7 +335,7 @@ function bindShellEvents() {
     if (runBtn) {
       e.preventDefault();
       cogResult = calc.kMeansCog(points, config.numCenters, config.maxIterations);
-      sensitivityData = calc.sensitivityAnalysis(points, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000);
+      sensitivityData = calc.sensitivityAnalysis(points, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0);
       activeTab = 'analysis';
       // Stash the input fingerprint so the header Run button flips to the
       // muted "✓ Results current" state until the user edits something.
@@ -456,6 +456,13 @@ function renderPoints(el) {
             <input type="number" value="${config.maxIterations || 100}" min="10" max="500" step="10" id="cog-iter"
                    style="width:80px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
           </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <label style="font-size:13px;font-weight:600;">Fixed $ / DC / yr:</label>
+            <input type="number" value="${config.fixedCostPerDC || 0}" step="50000" min="0" id="cog-fixed-cost"
+                   title="Annual fully-loaded fixed cost per DC (rent + labor + IT + depreciation). Set to a non-zero value (e.g. $1,500,000) to model a true U-curve on the Sensitivity tab. Leave at 0 for a transport-only curve."
+                   style="width:120px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
+            <span style="font-size:11px;color:var(--ies-gray-400);">0 = transport only · >0 = real U-curve (e.g. $1.5M)</span>
+          </div>
         </div>
       </div>
 
@@ -520,6 +527,10 @@ function renderPoints(el) {
   });
   el.querySelector('#cog-iter')?.addEventListener('change', (e) => {
     config.maxIterations = Math.max(10, Math.min(500, parseInt(/** @type {HTMLInputElement} */ (e.target).value) || 100));
+    markDirty();
+  });
+  el.querySelector('#cog-fixed-cost')?.addEventListener('change', (e) => {
+    config.fixedCostPerDC = Math.max(0, parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0);
     markDirty();
   });
 
@@ -942,9 +953,13 @@ function renderSensitivity(el) {
     return;
   }
 
-  const maxCost = Math.max(...sensitivityData.map(d => d.estimatedCost));
-  const minCost = Math.min(...sensitivityData.map(d => d.estimatedCost));
+  const hasFixedCost = (config.fixedCostPerDC || 0) > 0;
+  const maxCost = Math.max(...sensitivityData.map(d => d.totalCost));
+  const minCost = Math.min(...sensitivityData.map(d => d.totalCost));
   const costRange = maxCost - minCost;
+  // In U-curve mode the minimum is the cost-optimal k (whichever bar is shortest).
+  const minIdx = sensitivityData.findIndex(d => d.totalCost === minCost);
+  const optimalK = sensitivityData[minIdx]?.k ?? sensitivityData[sensitivityData.length - 1].k;
 
   // Network summary
   const optimal = sensitivityData[sensitivityData.length - 1];
@@ -981,22 +996,38 @@ function renderSensitivity(el) {
           <line x1="50" y1="240" x2="${50 + Math.max(sensitivityData.length * 60, 300)}" y2="240" stroke="var(--ies-gray-400)" stroke-width="2"/>
           <line x1="50" y1="30" x2="50" y2="240" stroke="var(--ies-gray-400)" stroke-width="2"/>
 
-          <!-- Bars -->
+          <!-- Bars: stacked Transport (blue) + Facility (orange) when fixed cost > 0;
+               single-color bars in transport-only mode. Bar height ∝ (totalCost - minCost),
+               so on a U-curve the lowest bar = the optimum and the kneedle ★ lands on it. -->
           ${sensitivityData.map((d, i) => {
             const chartW = Math.max(sensitivityData.length * 60, 300);
             const barW = Math.max(40, chartW / sensitivityData.length - 12);
             const x = 50 + (i + 0.5) / sensitivityData.length * chartW;
-            const barH = costRange > 0 ? ((d.estimatedCost - minCost) / costRange) * 190 : 10;
-            const y = 240 - barH;
+            const totalH = costRange > 0 ? ((d.totalCost - minCost) / costRange) * 190 : 10;
+            const transportH = d.totalCost > 0 ? totalH * (d.transportCost / d.totalCost) : totalH;
+            const facilityH = totalH - transportH;
+            const yTotal = 240 - totalH;
+            const yTransport = 240 - transportH; // transport sits at the bottom
             const isCurrent = d.k === config.numCenters;
             const isElbow = d.isElbow === true;
-            const color = isElbow ? '#f97316' : isCurrent ? '#2563eb' : '#93c5fd';
-            const borderStyle = isElbow ? 'stroke="#ea580c" stroke-width="2"' : '';
-            return `
-              <rect x="${x - barW/2}" y="${y}" width="${barW}" height="${barH}" fill="${color}" rx="4" ${borderStyle}/>
-              ${isElbow ? `<text x="${x}" y="${y - 8}" text-anchor="middle" font-size="14" fill="#f97316">★</text>` : ''}
-              <text x="${x}" y="260" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ies-gray-600)">k=${d.k}</text>
-            `;
+            const stroke = isElbow ? 'stroke="#ea580c" stroke-width="2"' : '';
+            if (hasFixedCost) {
+              const transportColor = isCurrent ? '#1d4ed8' : '#3b82f6';
+              const facilityColor = isCurrent ? '#c2410c' : '#fb923c';
+              return `
+                <rect x="${x - barW/2}" y="${yTransport}" width="${barW}" height="${transportH}" fill="${transportColor}" rx="0"/>
+                <rect x="${x - barW/2}" y="${yTotal}" width="${barW}" height="${facilityH}" fill="${facilityColor}" rx="4" ${stroke}/>
+                ${isElbow ? `<text x="${x}" y="${yTotal - 8}" text-anchor="middle" font-size="14" fill="#16a34a" font-weight="700">★</text>` : ''}
+                <text x="${x}" y="260" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ies-gray-600)">k=${d.k}</text>
+              `;
+            } else {
+              const color = isElbow ? '#f97316' : isCurrent ? '#2563eb' : '#93c5fd';
+              return `
+                <rect x="${x - barW/2}" y="${yTotal}" width="${barW}" height="${totalH}" fill="${color}" rx="4" ${stroke}/>
+                ${isElbow ? `<text x="${x}" y="${yTotal - 8}" text-anchor="middle" font-size="14" fill="#f97316">★</text>` : ''}
+                <text x="${x}" y="260" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ies-gray-600)">k=${d.k}</text>
+              `;
+            }
           }).join('')}
 
           <!-- Y-axis labels -->
@@ -1005,8 +1036,14 @@ function renderSensitivity(el) {
           <text x="40" y="35" text-anchor="end" font-size="11" fill="var(--ies-gray-400)">${calc.formatCurrency(maxCost, { compact: true })}</text>
         </svg>
         <div style="font-size:11px;color:var(--ies-gray-400);margin-top:8px;">
-          <span style="margin-right:16px;"><strong style="color:var(--ies-gray-600);">Blue bar</strong> = current selection (k=${config.numCenters})</span>
-          <span><strong style="color:#f97316;">Orange bar ★</strong> = knee point (max curvature on cost curve)</span>
+          ${hasFixedCost ? `
+            <span style="margin-right:16px;"><strong style="color:#1d4ed8;">Blue</strong> = transport cost</span>
+            <span style="margin-right:16px;"><strong style="color:#fb923c;">Orange</strong> = facility fixed cost (${calc.formatCurrency(config.fixedCostPerDC, { compact: true })}/yr × k)</span>
+            <span><strong style="color:#16a34a;">★</strong> = cost-optimal k = ${optimalK} (kneedle minimum on the U-curve)</span>
+          ` : `
+            <span style="margin-right:16px;"><strong style="color:var(--ies-gray-600);">Blue bar</strong> = current selection (k=${config.numCenters})</span>
+            <span><strong style="color:#f97316;">Orange bar ★</strong> = knee point (max curvature on cost curve)</span>
+          `}
         </div>
       </div>
 
@@ -1064,16 +1101,29 @@ function renderSensitivity(el) {
         </table>
       </div>
 
-      <div class="hub-card" style="margin-top:16px;background:#fffbeb;border-color:#f59e0b;">
-        <div style="font-size:13px;font-weight:600;color:#92400e;margin-bottom:6px;">How to read this curve</div>
-        <div style="font-size:13px;color:#78350f;line-height:1.6;">
-          This chart plots <strong>outbound transport cost only</strong> — facility fixed cost (rent, labor, IT, depreciation) is <strong>not</strong> modeled here. Because there is no fixed-cost term, the curve is monotonically non-increasing in k: more centers can only reduce or hold transport cost, never raise it.
-          <br/><br/>
-          The orange ★ marks the <strong>knee</strong> &mdash; the point of maximum curvature on the normalized cost curve, computed via the kneedle algorithm (Satopaa et al. 2011). It is the natural "diminishing returns" inflection, <em>not</em> a true total-cost minimum.
-          <br/><br/>
-          To pick a real optimum, compare the <strong>Marginal Savings</strong> column above against your in-house annual fixed cost per DC (typically $1–3M fully loaded for a mid-size 3PL facility). The right k is where marginal transport savings stop covering the marginal fixed cost of standing up another site.
+      ${hasFixedCost ? `
+        <div class="hub-card" style="margin-top:16px;background:#f0fdf4;border-color:#22c55e;">
+          <div style="font-size:13px;font-weight:600;color:#15803d;margin-bottom:6px;">How to read this curve — true U-curve mode</div>
+          <div style="font-size:13px;color:#166534;line-height:1.6;">
+            Each bar is a <strong>stack</strong>: blue = outbound transport cost, orange = facility fixed cost (k × ${calc.formatCurrency(config.fixedCostPerDC, { compact: true })}/yr). Stack height = total annual cost.
+            <br/><br/>
+            The green <strong>★</strong> marks the cost-optimal k = <strong>${optimalK}</strong> — found via the kneedle algorithm (Satopaa et al. 2011), which on a U-curve resolves to the bar with the lowest total. Adding more DCs past k=${optimalK} starts to cost more in fixed overhead than it saves in transport.
+            <br/><br/>
+            Tweak the <strong>Fixed $ / DC / yr</strong> input on the Demand Points tab to test sensitivity. Higher fixed cost → optimum shifts left (fewer DCs); lower fixed cost → optimum shifts right (more DCs).
+          </div>
         </div>
-      </div>
+      ` : `
+        <div class="hub-card" style="margin-top:16px;background:#fffbeb;border-color:#f59e0b;">
+          <div style="font-size:13px;font-weight:600;color:#92400e;margin-bottom:6px;">How to read this curve</div>
+          <div style="font-size:13px;color:#78350f;line-height:1.6;">
+            This chart plots <strong>outbound transport cost only</strong> — facility fixed cost (rent, labor, IT, depreciation) is <strong>not</strong> modeled here. Because there is no fixed-cost term, the curve is monotonically non-increasing in k: more centers can only reduce or hold transport cost, never raise it.
+            <br/><br/>
+            The orange ★ marks the <strong>knee</strong> &mdash; the point of maximum curvature on the normalized cost curve, computed via the kneedle algorithm (Satopaa et al. 2011). It is the natural "diminishing returns" inflection, <em>not</em> a true total-cost minimum.
+            <br/><br/>
+            <strong>Tip:</strong> Set <strong>Fixed $ / DC / yr</strong> on the Demand Points tab (e.g. $1,500,000) to switch this chart into a true U-curve and let the kneedle find the cost-optimal k for you.
+          </div>
+        </div>
+      `}
     </div>
   `;
 }

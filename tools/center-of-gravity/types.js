@@ -47,6 +47,7 @@
  * @property {boolean} includeSupply — include supply points in weighting
  * @property {number} [transportCostPerMile] — truck $/mi for cost estimation
  * @property {number} [unitsPerTruck] — converts weight to truckloads (default 25,000 lbs)
+ * @property {number} [fixedCostPerDC] — annual $/year fixed cost per facility (rent+labor+IT+depreciation). 0 = transport-only model. >0 = real U-curve.
  */
 
 /**

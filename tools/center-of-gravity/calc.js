@@ -25,6 +25,10 @@ export const DEFAULT_CONFIG = {
   // in pallets, set to 26 (pallets per truck). If orders, set to a typical
   // orders-per-truck number for the operation.
   unitsPerTruck: 25000,
+  // Annual fully-loaded fixed cost per DC (rent + labor + IT + depreciation).
+  // 0 = transport-only model (legacy behavior); >0 = true U-curve where
+  // sensitivityAnalysis adds k * fixedCostPerDC to the total cost.
+  fixedCostPerDC: 0,
 };
 
 /** @type {import('./types.js?v=20260418-sP').MajorCity[]} */
@@ -464,66 +468,88 @@ export function estimateTransportCost(cogResult, points, costPerMile = 2.85, uni
 // ============================================================
 
 /**
- * Run COG analysis for k = 1..maxK and return cost curve.
- * @param {import('./types.js?v=20260418-sP').WeightedPoint[]} points
+ * Run COG analysis for k = 1..maxK and return a cost curve.
+ *
+ * If `fixedCostPerDC` > 0, each row's `totalCost` includes a
+ * `k * fixedCostPerDC` facility term, producing a real U-curve with a true
+ * cost-optimum k. If `fixedCostPerDC` = 0, the curve is transport-only and
+ * monotonically non-increasing in k (legacy behavior).
+ *
+ * Each row exposes `transportCost`, `facilityCost`, `totalCost` so the UI
+ * can render a stacked breakdown. `estimatedCost` is aliased to `totalCost`
+ * for back-compat with existing chart code.
+ *
+ * @param {import('./types.js?v=20260425-s3').WeightedPoint[]} points
  * @param {number} maxK
  * @param {number} [costPerMile=2.85]
  * @param {number} [maxIter=100]
- * @returns {Array<{ k: number, totalWeightedDistance: number, estimatedCost: number, avgDistance: number, isElbow?: boolean }>}
+ * @param {number} [unitsPerTruck=25000]
+ * @param {number} [fixedCostPerDC=0]  Annual fixed cost per facility ($/year).
+ * @returns {Array<{ k: number, totalWeightedDistance: number, transportCost: number, facilityCost: number, totalCost: number, estimatedCost: number, avgDistance: number, isElbow?: boolean }>}
  */
-export function sensitivityAnalysis(points, maxK = 5, costPerMile = 2.85, maxIter = 100, unitsPerTruck = 25000) {
+export function sensitivityAnalysis(points, maxK = 5, costPerMile = 2.85, maxIter = 100, unitsPerTruck = 25000, fixedCostPerDC = 0) {
   const results = [];
   const effectiveMaxK = Math.min(maxK, points.length);
+  const fixedTerm = Math.max(0, Number(fixedCostPerDC) || 0);
 
   for (let k = 1; k <= effectiveMaxK; k++) {
     const cogResult = kMeansCog(points, k, maxIter);
     const cost = estimateTransportCost(cogResult, points, costPerMile, unitsPerTruck);
     const totalWeight = points.reduce((s, p) => s + p.weight, 0);
     const avgDist = totalWeight > 0 ? cogResult.totalWeightedDistance / totalWeight : 0;
+    const transportCost = cost.totalCost;
+    const facilityCost = k * fixedTerm;
+    const totalCost = transportCost + facilityCost;
 
     results.push({
       k,
       totalWeightedDistance: cogResult.totalWeightedDistance,
-      estimatedCost: cost.totalCost,
+      transportCost,
+      facilityCost,
+      totalCost,
+      estimatedCost: totalCost, // back-compat alias
       avgDistance: avgDist,
     });
   }
 
   // Detect knee point on the cost curve via the kneedle algorithm
   // (Satopaa et al. 2011): normalize x and y to [0,1], then find the point
-  // with maximum perpendicular distance below the chord from (k_min, y_max)
-  // to (k_max, y_min). For a monotonically decreasing cost curve this is the
-  // point of maximum curvature — the canonical "elbow." Robust to local
-  // rebounds where a single noisy step recovers above the prior trend
-  // (the previous early-break threshold scan flagged the wrong k in those
-  // cases). Guard: require the max chord-distance to exceed MIN_KNEE_GAP
-  // so a near-linear curve doesn't get a meaningless flag.
+  // furthest below the chord from (xMin, yStart) to (xMax, yEnd).
   //
-  // NOTE: this curve is OUTBOUND TRANSPORT ONLY — there is no facility
-  // fixed-cost term in estimateTransportCost, so cost is monotonically
-  // non-increasing in k. The knee marks diminishing returns, not a true
-  // total-cost minimum. UI copy must reflect this.
+  // Generalized form: works for monotonic-decreasing curves (transport-only,
+  // fixedCostPerDC = 0) AND U-shaped curves (fixedCostPerDC > 0). For a
+  // U-curve the chord from yStart to yEnd cuts above the dip, and the point
+  // of maximum below-chord distance is the cost-optimal k. For a monotonic
+  // curve the same calculation finds the elbow / max-curvature point.
+  //
+  // Guard: require the max chord-distance to exceed MIN_KNEE_GAP so a
+  // near-linear curve doesn't get a meaningless flag.
   const MIN_KNEE_GAP = 0.05;
   if (results.length >= 3) {
+    const N = results.length;
     const xMin = results[0].k;
-    const xMax = results[results.length - 1].k;
-    const yMax = results[0].estimatedCost;
-    const yMin = results[results.length - 1].estimatedCost;
+    const xMax = results[N - 1].k;
+    const ys = results.map(r => r.totalCost);
+    const yMin = Math.min(...ys);
+    const yMax = Math.max(...ys);
     const xRange = (xMax - xMin) || 1;
     const yRange = (yMax - yMin) || 1;
+    const yStart = (results[0].totalCost - yMin) / yRange;
+    const yEnd = (results[N - 1].totalCost - yMin) / yRange;
     let bestIdx = -1;
     let bestDist = -Infinity;
-    for (let i = 0; i < results.length; i++) {
+    for (let i = 0; i < N; i++) {
       const xn = (results[i].k - xMin) / xRange;
-      const yn = (results[i].estimatedCost - yMin) / yRange;
-      // Chord goes from (0,1) to (1,0); distance below chord = (1 - xn) - yn
-      const dist = (1 - xn) - yn;
+      const yn = (results[i].totalCost - yMin) / yRange;
+      // Chord at xn: y = yStart + xn * (yEnd - yStart). Below-chord distance:
+      const chordY = yStart + xn * (yEnd - yStart);
+      const dist = chordY - yn;
       if (dist > bestDist) {
         bestDist = dist;
         bestIdx = i;
       }
     }
-    if (bestIdx > 0 && bestIdx < results.length - 1 && bestDist > MIN_KNEE_GAP) {
+    if (bestIdx > 0 && bestIdx < N - 1 && bestDist > MIN_KNEE_GAP) {
       results[bestIdx].isElbow = true;
     }
   }
