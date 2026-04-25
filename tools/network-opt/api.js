@@ -6,7 +6,7 @@
  */
 
 import { db } from '../../shared/supabase.js?v=20260424-A1';
-import * as auth from '../../shared/auth.js?v=20260423-A1';
+import { auth } from '../../shared/auth.js?v=20260423-A1';
 
 // ============================================================
 // NETWORK CONFIGS (saved network scenarios)
@@ -54,12 +54,19 @@ export async function saveConfig(config) {
   if (config.id) {
     return db.update('netopt_configs', config.id, payload);
   }
-  // 2026-04-25: RLS INSERT policy on netopt_configs is
+  // 2026-04-25 (PM fix): RLS INSERT policy on netopt_configs is
   //   WITH CHECK (owner_id = auth.uid())
   // so we MUST set owner_id at insert time. Without this, every save
   // fails with 'new row violates row-level security policy'.
-  const u = auth.getUser?.();
-  if (u?.id) payload.owner_id = u.id;
+  // Earlier same-day fix used `import * as auth` which gave a module
+  // namespace where `auth.getUser` was undefined — the optional
+  // chaining swallowed it silently and owner_id was never stamped.
+  // Now using named import + hard failure if no user.
+  const u = auth.getUser();
+  if (!u?.id) {
+    throw new Error('Save failed: you are not signed in. Please sign in and try again.');
+  }
+  payload.owner_id = u.id;
   return db.insert('netopt_configs', payload);
 }
 
@@ -99,11 +106,14 @@ export async function duplicateConfig(id) {
   if (!config) throw new Error('Config not found');
 
   const { id: _, created_at, updated_at, ...rest } = config;
-  const u = auth.getUser?.();
+  const u = auth.getUser();
+  if (!u?.id) {
+    throw new Error('Duplicate failed: you are not signed in. Please sign in and try again.');
+  }
   return db.insert('netopt_configs', {
     ...rest,
     name: (rest.name || 'Network') + ' (Copy)',
-    ...(u?.id ? { owner_id: u.id } : {}),
+    owner_id: u.id,
   });
 }
 
