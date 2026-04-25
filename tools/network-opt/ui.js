@@ -1860,12 +1860,8 @@ function renderResults(el) {
         </div>
       </div>
 
-      <!-- Cost Breakdown -->
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:20px;">
-        ${costCard('Facility Costs', s.costBreakdown.facility, s.totalCost)}
-        ${costCard('Transportation', s.costBreakdown.transport, s.totalCost)}
-        ${costCard('Handling', s.costBreakdown.handling, s.totalCost, 'Handling = Σ (annualDemand × facility.variableCost) across all assigned demand. Variable cost is per-unit handling, set on each facility row (defaults $2.80–$4.00/unit on the demo network).')}
-      </div>
+      <!-- Cost Breakdown (unified stacked bar — 2026-04-25) -->
+      ${costBreakdownBar(s.costBreakdown, s.totalCost)}
 
       <!-- Primary Actions -->
       <div style="display:flex;gap:8px;margin-bottom:20px;">
@@ -2015,6 +2011,62 @@ function costCard(label, amount, total, tooltip) {
         <div style="height:100%;width:${Math.min(100, pct)}%;background:var(--ies-blue);border-radius:3px;"></div>
       </div>
       <div style="font-size:11px;color:var(--ies-gray-400);margin-top:4px;">${pct.toFixed(1)}% of total</div>
+    </div>
+  `;
+}
+
+/**
+ * Unified Cost Breakdown card with a single stacked horizontal bar.
+ * Replaces the 3-card grid that made small slices (transport at 0.9%) read
+ * as buried metrics rather than as part of one whole.
+ *
+ * Layout:
+ *   - top row: dollar totals + percent for each bucket (3 columns)
+ *   - middle: a single stacked bar with 3 segments (Facility / Transport / Handling)
+ *   - bottom: legend dots + tooltip on Handling.
+ *
+ * 2026-04-25 — driven by Brock UX feedback ('should those three tiles be
+ * combined into a singular graphic?').
+ */
+function costBreakdownBar(breakdown, total) {
+  const fac = Number(breakdown.facility) || 0;
+  const trn = Number(breakdown.transport) || 0;
+  const hnd = Number(breakdown.handling) || 0;
+  const safeTot = total > 0 ? total : (fac + trn + hnd) || 1;
+  const facPct = (fac / safeTot) * 100;
+  const trnPct = (trn / safeTot) * 100;
+  const hndPct = (hnd / safeTot) * 100;
+  const swatch = (color) => `<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${color};margin-right:6px;vertical-align:middle;"></span>`;
+  const COLOR_FAC = '#1d4ed8';   // navy
+  const COLOR_TRN = '#0891b2';   // teal
+  const COLOR_HND = '#f59e0b';   // amber
+  const handlingTip = 'Handling = Σ (annualDemand × facility.variableCost) across all assigned demand. Variable cost is per-unit handling, set on each facility row (defaults $2.80–$4.00/unit on the demo network).';
+  const cell = (label, amt, pct, color, tip) => `
+    <div style="flex:1;padding:0 12px;border-left:1px solid var(--ies-gray-200);">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--ies-gray-400);margin-bottom:6px;">${swatch(color)}${label}${tip ? ` <span style=\"opacity:0.5;cursor:help;\" title=\"${tip.replace(/\"/g, '&quot;')}\">ⓘ</span>` : ''}</div>
+      <div style="font-size:22px;font-weight:800;color:var(--ies-navy);line-height:1;">${calc.formatCurrency(amt, { compact: true })}</div>
+      <div style="font-size:12px;color:var(--ies-gray-500);margin-top:4px;">${pct.toFixed(1)}% of total</div>
+    </div>`;
+  return `
+    <div class="hub-card" style="padding:18px;margin-bottom:20px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--ies-gray-500);letter-spacing:0.5px;">Cost Breakdown</div>
+        <div style="font-size:12px;color:var(--ies-gray-500);">${calc.formatCurrency(safeTot, { compact: true })} total</div>
+      </div>
+      <div style="display:flex;align-items:flex-start;margin-bottom:14px;">
+        <div style="flex:1;padding:0 12px 0 0;">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--ies-gray-400);margin-bottom:6px;">${swatch(COLOR_FAC)}Facility</div>
+          <div style="font-size:22px;font-weight:800;color:var(--ies-navy);line-height:1;">${calc.formatCurrency(fac, { compact: true })}</div>
+          <div style="font-size:12px;color:var(--ies-gray-500);margin-top:4px;">${facPct.toFixed(1)}% of total</div>
+        </div>
+        ${cell('Transportation', trn, trnPct, COLOR_TRN)}
+        ${cell('Handling', hnd, hndPct, COLOR_HND, handlingTip)}
+      </div>
+      <div style="display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--ies-gray-200);" title="Facility ${facPct.toFixed(1)}% • Transport ${trnPct.toFixed(1)}% • Handling ${hndPct.toFixed(1)}%">
+        ${facPct > 0 ? `<div style="width:${facPct}%;background:${COLOR_FAC};"></div>` : ''}
+        ${trnPct > 0 ? `<div style="width:${trnPct}%;background:${COLOR_TRN};"></div>` : ''}
+        ${hndPct > 0 ? `<div style="width:${hndPct}%;background:${COLOR_HND};"></div>` : ''}
+      </div>
     </div>
   `;
 }
