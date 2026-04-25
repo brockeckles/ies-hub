@@ -239,7 +239,9 @@ async function renderLanding() {
 function openEditor(savedRow) {
   if (!rootEl) return;
   activeView = 'setup';
-  activeSection = 'facilities';
+  // 2026-04-25 PM (Brock walkthrough): land on step 1 (Demand Points), not step 2 (Facilities).
+  // Demand drives every downstream step; Facilities are candidates that depend on demand placement.
+  activeSection = 'demand';
   const d = savedRow?.config_data || {};
   // 2026-04-21 audit fix: new configs start EMPTY. Demo network available
   // via the "Load Sample Network" button on the Facilities section so users
@@ -614,12 +616,14 @@ function renderSidebar() {
 
   el.innerHTML = `
     <!-- PHASE 1: SETUP -->
+    <!-- 2026-04-25 PM: Archetypes are demand presets — render them between Demand and Facilities
+         so they visually attach to Demand, not Facilities. -->
     <div data-phase-block="setup" style="margin-bottom:6px;">
       ${phaseHeader(1, 'SETUP', status.setup, 'Add demand and candidate facilities.')}
-      ${setupSections.map(renderSection).join('')}
+      ${renderSection(setupSections[0])}
 
-      <details style="margin:8px 0 4px 0;" ${selectedArchetype ? 'open' : ''}>
-        <summary style="font-size:10px;color:var(--ies-gray-500);cursor:pointer;padding:5px 4px;font-weight:700;letter-spacing:0.4px;">
+      <details style="margin:4px 0 8px 16px;border-left:2px solid var(--ies-gray-200);padding-left:10px;" ${selectedArchetype ? 'open' : ''}>
+        <summary style="font-size:10px;color:var(--ies-gray-500);cursor:pointer;padding:4px 2px;font-weight:700;letter-spacing:0.4px;">
           QUICK-SEED · ARCHETYPES ▾
         </summary>
         <div style="margin-top:4px;padding-left:2px;">
@@ -631,6 +635,8 @@ function renderSidebar() {
           `).join('')}
         </div>
       </details>
+
+      ${renderSection(setupSections[1])}
     </div>
 
     <div style="border-top:1px solid var(--ies-gray-200);margin:10px 0;"></div>
