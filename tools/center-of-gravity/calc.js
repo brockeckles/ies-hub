@@ -489,20 +489,42 @@ export function sensitivityAnalysis(points, maxK = 5, costPerMile = 2.85, maxIte
     });
   }
 
-  // Detect elbow: find the point where incremental improvement drops below
-  // the threshold below. 5% is the industry-standard knee heuristic for
-  // k-means/facility-siting elbow detection (Thorndike 1953, applied
-  // throughout supply-chain textbooks). transport cost per mile + units
-  // per truck are already user-editable inputs on the Config tab.
-  const ELBOW_THRESHOLD = 0.05;
-  if (results.length >= 2) {
-    const baseCost = results[0].estimatedCost;
-    for (let i = 1; i < results.length; i++) {
-      const improvement = (results[i - 1].estimatedCost - results[i].estimatedCost) / baseCost;
-      if (improvement < ELBOW_THRESHOLD) {
-        results[i - 1].isElbow = true;
-        break;
+  // Detect knee point on the cost curve via the kneedle algorithm
+  // (Satopaa et al. 2011): normalize x and y to [0,1], then find the point
+  // with maximum perpendicular distance below the chord from (k_min, y_max)
+  // to (k_max, y_min). For a monotonically decreasing cost curve this is the
+  // point of maximum curvature — the canonical "elbow." Robust to local
+  // rebounds where a single noisy step recovers above the prior trend
+  // (the previous early-break threshold scan flagged the wrong k in those
+  // cases). Guard: require the max chord-distance to exceed MIN_KNEE_GAP
+  // so a near-linear curve doesn't get a meaningless flag.
+  //
+  // NOTE: this curve is OUTBOUND TRANSPORT ONLY — there is no facility
+  // fixed-cost term in estimateTransportCost, so cost is monotonically
+  // non-increasing in k. The knee marks diminishing returns, not a true
+  // total-cost minimum. UI copy must reflect this.
+  const MIN_KNEE_GAP = 0.05;
+  if (results.length >= 3) {
+    const xMin = results[0].k;
+    const xMax = results[results.length - 1].k;
+    const yMax = results[0].estimatedCost;
+    const yMin = results[results.length - 1].estimatedCost;
+    const xRange = (xMax - xMin) || 1;
+    const yRange = (yMax - yMin) || 1;
+    let bestIdx = -1;
+    let bestDist = -Infinity;
+    for (let i = 0; i < results.length; i++) {
+      const xn = (results[i].k - xMin) / xRange;
+      const yn = (results[i].estimatedCost - yMin) / yRange;
+      // Chord goes from (0,1) to (1,0); distance below chord = (1 - xn) - yn
+      const dist = (1 - xn) - yn;
+      if (dist > bestDist) {
+        bestDist = dist;
+        bestIdx = i;
       }
+    }
+    if (bestIdx > 0 && bestIdx < results.length - 1 && bestDist > MIN_KNEE_GAP) {
+      results[bestIdx].isElbow = true;
     }
   }
 

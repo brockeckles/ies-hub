@@ -14,7 +14,7 @@ import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sP';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260418-sP';
-import * as calc from './calc.js?v=20260418-sP';
+import * as calc from './calc.js?v=20260425-s1';
 import * as api from './api.js?v=20260418-sP';
 
 // ============================================================
@@ -1005,7 +1005,7 @@ function renderSensitivity(el) {
         </svg>
         <div style="font-size:11px;color:var(--ies-gray-400);margin-top:8px;">
           <span style="margin-right:16px;"><strong style="color:var(--ies-gray-600);">Blue bar</strong> = current selection (k=${config.numCenters})</span>
-          <span><strong style="color:#f97316;">Orange bar ★</strong> = elbow point (optimal k)</span>
+          <span><strong style="color:#f97316;">Orange bar ★</strong> = knee point (max curvature on cost curve)</span>
         </div>
       </div>
 
@@ -1063,10 +1063,14 @@ function renderSensitivity(el) {
         </table>
       </div>
 
-      <div class="hub-card" style="margin-top:16px;background:#f0fdf4;border-color:#22c55e;">
-        <div style="font-size:13px;font-weight:600;color:#15803d;margin-bottom:4px;">Interpretation Guide</div>
-        <div style="font-size:13px;color:#166534;line-height:1.6;">
-          Look for the "elbow" where adding another center yields diminishing returns. If the marginal savings from k to k+1 is less than the fixed cost of an additional facility, the current k is optimal.
+      <div class="hub-card" style="margin-top:16px;background:#fffbeb;border-color:#f59e0b;">
+        <div style="font-size:13px;font-weight:600;color:#92400e;margin-bottom:6px;">How to read this curve</div>
+        <div style="font-size:13px;color:#78350f;line-height:1.6;">
+          This chart plots <strong>outbound transport cost only</strong> — facility fixed cost (rent, labor, IT, depreciation) is <strong>not</strong> modeled here. Because there is no fixed-cost term, the curve is monotonically non-increasing in k: more centers can only reduce or hold transport cost, never raise it.
+          <br/><br/>
+          The orange ★ marks the <strong>knee</strong> &mdash; the point of maximum curvature on the normalized cost curve, computed via the kneedle algorithm (Satopaa et al. 2011). It is the natural "diminishing returns" inflection, <em>not</em> a true total-cost minimum.
+          <br/><br/>
+          To pick a real optimum, compare the <strong>Marginal Savings</strong> column above against your in-house annual fixed cost per DC (typically $1–3M fully loaded for a mid-size 3PL facility). The right k is where marginal transport savings stop covering the marginal fixed cost of standing up another site.
         </div>
       </div>
     </div>

@@ -584,7 +584,7 @@ function balanceModeMix() {
   else if (avgWeight > 100) { tl = 35; ltl = 55; parcel = 10; }
   else if (avgWeight > 25) { tl = 15; ltl = 45; parcel = 40; }
   else { tl = 5; ltl = 25; parcel = 70; }
-  modeMix = { tl, ltl, parcel };
+  modeMix = { tlPct: tl, ltlPct: ltl, parcelPct: parcel };
   showNoToast(`Balanced mode mix to avg weight ${avgWeight.toFixed(0)} lb`, 'success');
   renderContentView();
 }
