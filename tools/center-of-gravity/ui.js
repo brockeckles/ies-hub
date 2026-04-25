@@ -14,7 +14,7 @@ import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sP';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260418-sP';
-import * as calc from './calc.js?v=20260425-s4';
+import * as calc from './calc.js?v=20260425-s5';
 import * as api from './api.js?v=20260418-sP';
 
 // ============================================================
@@ -864,8 +864,14 @@ function initCogMap() {
   }
 
   mapInstance = L.map(container).setView([39.8283, -98.5795], 4);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 18, attribution: '&copy; OpenStreetMap'
+  // E1 fix (2026-04-25 EVE): CartoDB Voyager replaces OSM raw tiles. Voyager
+  // has stronger state-boundary contrast and clearer city labels at zoom 4-6
+  // (the typical CoG-result zoom band) which makes the result legible during
+  // customer presentations. Falls back to OSM if cartocdn fails to load.
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    maxZoom: 19,
+    subdomains: 'abcd',
+    attribution: '&copy; <a href="https://carto.com/attributions">CARTO</a> · OpenStreetMap'
   }).addTo(mapInstance);
 
   // Heatmap layer (drawn first so it sits under markers).

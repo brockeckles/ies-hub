@@ -33,7 +33,8 @@ export const DEFAULT_CONFIG = {
 
 /** @type {import('./types.js?v=20260418-sP').MajorCity[]} */
 export const MAJOR_CITIES = [
-  // Top 50 US Metro Areas + Secondary/Tertiary Hubs (109 total)
+  // Top 50 US Metro Areas + Secondary/Tertiary Hubs (109 cities). Used by findNearestCity
+  // for snap-to-metro labeling on COG results. (Punchlist B1 — covers the v2 NET_CITIES coverage gap.)
   { name: 'New York', state: 'NY', lat: 40.7128, lng: -74.0060 },
   { name: 'Los Angeles', state: 'CA', lat: 34.0522, lng: -118.2437 },
   { name: 'Chicago', state: 'IL', lat: 41.8781, lng: -87.6298 },
@@ -201,10 +202,14 @@ export function computeCog(points) {
 
   const totalWeight = points.reduce((s, p) => s + Math.max(0, p.weight), 0);
   if (totalWeight === 0) {
-    // Unweighted centroid
+    // A4 fix (2026-04-25 EVE): unweighted-fallback was silent. We now flag
+    // the result with `unweightedFallback: true` so the UI can show a
+    // warning banner and console.warn so anyone running with devtools open
+    // sees the degradation immediately.
+    console.warn('[CoG] All demand-point weights are zero — falling back to geometric centroid. Add nonzero weights for true center-of-gravity.');
     const lat = points.reduce((s, p) => s + p.lat, 0) / points.length;
     const lng = points.reduce((s, p) => s + p.lng, 0) / points.length;
-    return { lat, lng, totalWeight: 0, avgWeightedDistance: 0, maxDistance: 0, nearestCity: findNearestCity(lat, lng) };
+    return { lat, lng, totalWeight: 0, avgWeightedDistance: 0, maxDistance: 0, nearestCity: findNearestCity(lat, lng), unweightedFallback: true };
   }
 
   const lat = points.reduce((s, p) => s + p.lat * p.weight, 0) / totalWeight;
