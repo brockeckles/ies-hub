@@ -751,58 +751,142 @@ function optimizeWithHeuristic(facilities, demands, k, modeMix, rateCard = DEFAU
   if (openFacs.length === 0) return [];
   if (k >= openFacs.length) return openFacs.map(f => f.id);
 
-  // Step 1: Compute demand centroid
-  const centroid = computeDemandCentroid(demands);
-  if (!centroid) {
-    // Fallback if centroid is null
-    const sorted = [...openFacs].sort((a, b) => (a.fixedCost || 0) - (b.fixedCost || 0));
-    return sorted.slice(0, k).map(f => f.id);
+  // NET-A2 — when the candidate set is small enough, enumerate all C(n,k)
+  // combinations exhaustively. Beats local search on tractable instances.
+  const exhaustiveCombos = binomialCoeff(openFacs.length, k);
+  if (exhaustiveCombos > 0 && exhaustiveCombos <= 1500) {
+    let bestIds = openFacs.slice(0, k).map(f => f.id);
+    let bestCost = Infinity;
+    const combos = getCombinations(openFacs, k);
+    for (const combo of combos) {
+      const ids = new Set(combo.map(f => f.id));
+      const facConfig = facilities.map(f => ({ ...f, isOpen: ids.has(f.id) }));
+      const r = evaluateScenario('exhaustive', facConfig, demands, modeMix, rateCard, serviceConfig);
+      if (r.totalCost < bestCost) {
+        bestCost = r.totalCost;
+        bestIds = combo.map(f => f.id);
+      }
+    }
+    return bestIds;
   }
 
-  // Step 2: Initialize with k facilities closest to centroid
-  const byDistToCentroid = openFacs.map(f => ({
-    id: f.id,
-    dist: haversine(f.lat, f.lng, centroid.lat, centroid.lng),
-  })).sort((a, b) => a.dist - b.dist);
+  // NET-A2 — multi-start local search for larger candidate sets.
+  // Three distinct seed strategies feed swap-improvement; we keep the best.
+  const centroid = computeDemandCentroid(demands);
+  /** @type {Set<string>[]} */
+  const seeds = [];
 
-  let openSet = new Set(byDistToCentroid.slice(0, k).map(f => f.id));
+  // Seed 1: closest-to-demand-centroid (the classic init)
+  if (centroid) {
+    const byDistToCentroid = openFacs.map(f => ({
+      id: f.id,
+      score: haversine(f.lat, f.lng, centroid.lat, centroid.lng),
+    })).sort((a, b) => a.score - b.score);
+    seeds.push(new Set(byDistToCentroid.slice(0, k).map(s => s.id)));
+  }
 
-  // Step 3: Facility-swap improvement (20 iterations)
+  // Seed 2: greedy-add by marginal cost reduction. Start empty; iteratively
+  // add the candidate that most reduces total cost. This is the
+  // standard greedy heuristic for facility location and tends to land in
+  // a different basin than centroid-init.
+  {
+    const chosen = new Set();
+    const remaining = openFacs.map(f => f.id);
+    let bestSetCost = Infinity;
+    for (let i = 0; i < k; i++) {
+      let bestAddId = null;
+      let bestAddCost = Infinity;
+      for (const candId of remaining) {
+        const test = new Set(chosen);
+        test.add(candId);
+        const facConfig = facilities.map(f => ({ ...f, isOpen: test.has(f.id) }));
+        const r = evaluateScenario('greedy-add', facConfig, demands, modeMix, rateCard, serviceConfig);
+        if (r.totalCost < bestAddCost) {
+          bestAddCost = r.totalCost;
+          bestAddId = candId;
+        }
+      }
+      if (bestAddId == null) break;
+      chosen.add(bestAddId);
+      bestSetCost = bestAddCost;
+      const idx = remaining.indexOf(bestAddId);
+      if (idx >= 0) remaining.splice(idx, 1);
+    }
+    if (chosen.size === k) seeds.push(chosen);
+  }
+
+  // Seed 3: cheapest-by-fixed-cost (the historical fallback). Useful when
+  // fixed costs dominate transport — keeps multi-start from converging to
+  // a single basin.
+  {
+    const sorted = [...openFacs].sort((a, b) => (a.fixedCost || 0) - (b.fixedCost || 0));
+    seeds.push(new Set(sorted.slice(0, k).map(f => f.id)));
+  }
+
+  // De-duplicate seeds (sets with identical members).
+  const seenKeys = new Set();
+  /** @type {Set<string>[]} */
+  const dedupedSeeds = [];
+  for (const seed of seeds) {
+    const key = Array.from(seed).sort().join('|');
+    if (seenKeys.has(key)) continue;
+    seenKeys.add(key);
+    dedupedSeeds.push(seed);
+  }
+
+  // Swap-improve every seed; keep the best result.
+  let bestIds = null;
+  let bestCost = Infinity;
+  for (const seed of dedupedSeeds) {
+    const improved = swapImprove(seed, facilities, openFacs, demands, modeMix, rateCard, serviceConfig);
+    const facConfig = facilities.map(f => ({ ...f, isOpen: improved.has(f.id) }));
+    const r = evaluateScenario('multi-start', facConfig, demands, modeMix, rateCard, serviceConfig);
+    if (r.totalCost < bestCost) {
+      bestCost = r.totalCost;
+      bestIds = Array.from(improved);
+    }
+  }
+
+  return bestIds || Array.from(dedupedSeeds[0] || new Set());
+}
+
+/**
+ * NET-A2 — extracted swap-improvement local search. Iterates k * (n-k)
+ * candidate swaps; first-improvement strategy with a 20-iter budget.
+ * @param {Set<string>} seed
+ * @param {import('./types.js?v=20260418-sM').Facility[]} facilities
+ * @param {import('./types.js?v=20260418-sM').Facility[]} openFacs
+ * @param {import('./types.js?v=20260418-sM').DemandPoint[]} demands
+ * @param {import('./types.js?v=20260418-sM').ModeMix} modeMix
+ * @param {import('./types.js?v=20260418-sM').RateCard} rateCard
+ * @param {import('./types.js?v=20260418-sM').ServiceConfig} serviceConfig
+ * @returns {Set<string>}
+ */
+function swapImprove(seed, facilities, openFacs, demands, modeMix, rateCard, serviceConfig) {
+  let openSet = new Set(seed);
   for (let iter = 0; iter < 20; iter++) {
     let improved = false;
-
     for (const openId of openSet) {
-      const openFac = facilities.find(f => f.id === openId);
-      if (!openFac) continue;
-
       for (const candidate of openFacs) {
-        if (openSet.has(candidate.id)) continue; // Already open
-
-        // Try swapping openId with candidate
+        if (openSet.has(candidate.id)) continue;
         const testSet = new Set(openSet);
         testSet.delete(openId);
         testSet.add(candidate.id);
-
-        // Evaluate both scenarios
         const testFacs = facilities.map(f => ({ ...f, isOpen: testSet.has(f.id) }));
         const currentFacs = facilities.map(f => ({ ...f, isOpen: openSet.has(f.id) }));
-
         const testResult = evaluateScenario('test', testFacs, demands, modeMix, rateCard, serviceConfig);
         const currentResult = evaluateScenario('current', currentFacs, demands, modeMix, rateCard, serviceConfig);
-
         if (testResult.totalCost < currentResult.totalCost) {
           openSet = testSet;
           improved = true;
-          break; // Restart loop
+          break;
         }
       }
       if (improved) break;
     }
-
-    if (!improved) break; // No improvement found, stop early
+    if (!improved) break;
   }
-
-  return Array.from(openSet);
+  return openSet;
 }
 
 /**
