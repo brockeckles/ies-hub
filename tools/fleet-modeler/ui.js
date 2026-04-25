@@ -12,7 +12,7 @@ import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=202604
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260419-uE';
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
-import * as calc from './calc.js?v=20260418-sM';
+import * as calc from './calc.js?v=20260425-s3';
 import * as api from './api.js?v=20260418-sM';
 
 // ============================================================

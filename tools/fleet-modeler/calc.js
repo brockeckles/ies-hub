@@ -125,7 +125,33 @@ export function assignLanes(lanes, vehicles = DEFAULT_VEHICLES, config = DEFAULT
 
     // B2: Apply driver benefits multiplier to base wage
     const driverBenefitMultiplier = 1 + (config.driverBenefitPct ?? 35) / 100;
-    const annDriver = annualTrips * rtHours * config.driverCostPerHr * driverBenefitMultiplier;
+    // FLE-B3: Branch on driverPayModel. Prior code always used hourly math;
+    // perMile/percentage/hybrid options in the UI silently no-op'd. Now:
+    //   hourly     — drivingHours × hourlyRate × benefitMult (legacy behavior)
+    //   perMile    — annMiles × perMileRate × benefitMult
+    //   percentage — revenue × pct/100 (× benefitMult if W-2; here we leave
+    //                benefits OFF since percentage of revenue typically goes
+    //                to owner-operator 1099s who carry their own benefits)
+    //   hybrid     — hourly + perMile, both with benefits
+    // For percentage with no lane revenue field, we synthesize revenue as
+    // annMiles × $2.50/mi (industry benchmark all-in linehaul) so the math
+    // doesn't go to $0.
+    const payModel = config.driverPayModel || 'hourly';
+    const perMileRate = Number(config.driverPerMileRate ?? 0.60);
+    const pctOfRev    = Number(config.driverPercentageOfRevenue ?? 0);
+    const synthRevPerMi = 2.50;
+    let annDriver;
+    if (payModel === 'perMile') {
+      annDriver = annMiles * perMileRate * driverBenefitMultiplier;
+    } else if (payModel === 'percentage') {
+      const annRev = annMiles * synthRevPerMi;
+      annDriver = annRev * (pctOfRev / 100);
+    } else if (payModel === 'hybrid') {
+      annDriver = (annualTrips * rtHours * config.driverCostPerHr + annMiles * perMileRate) * driverBenefitMultiplier;
+    } else {
+      // hourly (default)
+      annDriver = annualTrips * rtHours * config.driverCostPerHr * driverBenefitMultiplier;
+    }
     const annMaint = annMiles * config.maintenanceCostPerMi;
 
     const perTrip = annualTrips > 0 ? (annFuel + annDriver + annMaint) / annualTrips : 0;
