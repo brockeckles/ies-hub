@@ -354,10 +354,23 @@ export function assignDemand(facilities, demands, modeMix, rateCard = DEFAULT_RA
   // Hard-constraint enforcement: lockedClosed wins over isOpen + lockedOpen.
   const lockedClosed = new Set(serviceConfig.lockedClosedIds || []);
   const lockedOpen = new Set(serviceConfig.lockedOpenIds || []);
+  // Open facilities must also have FINITE lat/lng — a NaN-coord facility
+  // would corrupt the haversine sort (NaN comparisons are unstable, so the
+  // bad facility can end up "best" and propagate NaN distance + $0 transport
+  // through the rest of the pipeline). Bug-fix 2026-04-25: filter those out
+  // here rather than masking later. validateScenarioInputs() surfaces them
+  // to the user up-front; this is the defensive belt-and-suspenders pass.
   const openFacilities = facilities.filter(f =>
-    !lockedClosed.has(f.id) && (lockedOpen.has(f.id) || f.isOpen !== false)
+    !lockedClosed.has(f.id) &&
+    (lockedOpen.has(f.id) || f.isOpen !== false) &&
+    Number.isFinite(Number(f.lat)) && Number.isFinite(Number(f.lng))
   );
-  if (openFacilities.length === 0 || demands.length === 0) return [];
+  // Demands likewise must have finite lat/lng — without coords there's no
+  // distance to compute and the assignment is meaningless.
+  const validDemands = demands.filter(d =>
+    Number.isFinite(Number(d.lat)) && Number.isFinite(Number(d.lng))
+  );
+  if (openFacilities.length === 0 || validDemands.length === 0) return [];
 
   const maxDist = serviceConfig.maxDistanceMiles;
 
@@ -365,18 +378,27 @@ export function assignDemand(facilities, demands, modeMix, rateCard = DEFAULT_RA
   const facilityLoad = new Map();
   openFacilities.forEach(f => facilityLoad.set(f.id, 0));
 
-  return demands.map(d => {
+  return validDemands.map(d => {
+    const dLat = Number(d.lat);
+    const dLng = Number(d.lng);
+    const dDemand = Number(d.annualDemand) || 0;
     // Sort facilities by distance, penalising SLA violators / capacity over.
     // Hard distance constraint short-circuits to a separate bucket.
     const ranked = openFacilities.map(f => {
-      const dist = haversine(f.lat, f.lng, d.lat, d.lng);
+      const fLat = Number(f.lat);
+      const fLng = Number(f.lng);
+      const dist = haversine(fLat, fLng, dLat, dLng);
       const transit = estimateTransitDays(dist, serviceConfig.truckSpeedMph);
       const maxDays = d.maxDays || serviceConfig.globalMaxDays;
       const slaPenalty = transit > maxDays ? 1e6 : 0;
-      const capacityPenalty = f.capacity && (facilityLoad.get(f.id) || 0) >= f.capacity ? 1e8 : 0;
+      const fCap = Number(f.capacity) || 0;
+      const capacityPenalty = fCap && (facilityLoad.get(f.id) || 0) >= fCap ? 1e8 : 0;
       // Hard distance constraint: penalise so we still pick the closest if no facility qualifies
       const distancePenalty = (maxDist != null && dist > maxDist) ? 1e7 : 0;
-      return { facility: f, dist, transit, penalty: dist + slaPenalty + capacityPenalty + distancePenalty };
+      // Defensive: if dist is somehow NaN despite the input filter, push it
+      // to the bottom of the ranking instead of letting it sort unstably.
+      const safeDist = Number.isFinite(dist) ? dist : 1e9;
+      return { facility: f, dist: safeDist, transit, penalty: safeDist + slaPenalty + capacityPenalty + distancePenalty };
     }).sort((a, b) => a.penalty - b.penalty);
 
     const best = ranked[0];
@@ -385,16 +407,16 @@ export function assignDemand(facilities, demands, modeMix, rateCard = DEFAULT_RA
       d.avgWeight || 25,
       modeMix,
       rateCard,
-      best.facility.lng,
-      d.lng,
-      best.facility.lat,
-      d.lat,
+      Number(best.facility.lng),
+      dLng,
+      Number(best.facility.lat),
+      dLat,
       d.nmfcClass
     );
     const maxDays = d.maxDays || serviceConfig.globalMaxDays;
 
     // Track facility load
-    facilityLoad.set(best.facility.id, (facilityLoad.get(best.facility.id) || 0) + d.annualDemand);
+    facilityLoad.set(best.facility.id, (facilityLoad.get(best.facility.id) || 0) + dDemand);
 
     return {
       facilityId: best.facility.id,
@@ -425,17 +447,34 @@ export function assignDemand(facilities, demands, modeMix, rateCard = DEFAULT_RA
 export function evaluateScenario(name, facilities, demands, modeMix, rateCard, serviceConfig) {
   const assignments = assignDemand(facilities, demands, modeMix, rateCard, serviceConfig);
 
-  const totalTransport = assignments.reduce((s, a) => s + a.blendedCost * ((demands.find(d => d.id === a.demandId)?.annualDemand || 0) / 52), 0); // weekly cost × 52 approximation
-  const totalFacility = facilities.filter(f => f.isOpen !== false).reduce((s, f) => s + (f.fixedCost || 0), 0);
+  // 2026-04-25 hardening: coerce every numeric field to Number to handle
+  // form-input strings ("85000") + saved-config edge cases. The prior
+  // `(d.annualDemand || 0)` returned the original string in arithmetic
+  // (which JS coerces correctly *most* of the time), but produced 0 when
+  // the field was an empty string. Same pattern fixed for variableCost,
+  // fixedCost, blendedCost, and distanceMiles.
+  const totalTransport = assignments.reduce((s, a) => {
+    const blended = Number(a.blendedCost) || 0;
+    const dem = demands.find(d => d.id === a.demandId);
+    const annual = Number(dem?.annualDemand) || 0;
+    return s + blended * (annual / 52);
+  }, 0);
+  const totalFacility = facilities.filter(f => f.isOpen !== false).reduce((s, f) => s + (Number(f.fixedCost) || 0), 0);
   const totalHandling = demands.reduce((s, d) => {
-    const fac = facilities.find(f => f.id === assignments.find(a => a.demandId === d.id)?.facilityId);
-    return s + (d.annualDemand || 0) * (fac?.variableCost || 0);
+    const asg = assignments.find(a => a.demandId === d.id);
+    const fac = asg ? facilities.find(f => f.id === asg.facilityId) : null;
+    const annual = Number(d.annualDemand) || 0;
+    const vc = Number(fac?.variableCost) || 0;
+    return s + annual * vc;
   }, 0);
 
-  const totalDemand = demands.reduce((s, d) => s + (d.annualDemand || 0), 0);
+  const totalDemand = demands.reduce((s, d) => s + (Number(d.annualDemand) || 0), 0);
   const totalCost = totalFacility + totalTransport + totalHandling;
-  const avgDist = assignments.length > 0
-    ? assignments.reduce((s, a) => s + a.distanceMiles, 0) / assignments.length
+  // Avg distance: average of finite distances only — guards against a single
+  // bad assignment poisoning the average to NaN.
+  const finiteDists = assignments.map(a => Number(a.distanceMiles)).filter(x => Number.isFinite(x));
+  const avgDist = finiteDists.length > 0
+    ? finiteDists.reduce((s, x) => s + x, 0) / finiteDists.length
     : 0;
   const slaMet = assignments.filter(a => a.meetsSlA).length;
 
@@ -1090,4 +1129,45 @@ export function findOptimalLocations(demands, k, opts = {}) {
     });
   }
   return recommendations;
+}
+
+
+/**
+ * Pre-flight validator for Run Scenario. Checks that every input numeric
+ * field actually parses to a finite number — surfaces specific issues so
+ * the user can fix them rather than seeing NaN/0 in results.
+ *
+ * Bug-fix 2026-04-25: prior runs would silently absorb bad inputs (a single
+ * facility with a blank lat would produce NaN avg distance + $0 transport
+ * + $0 handling because of NaN-comparison instability in the assignment
+ * sort). Now we refuse to run and tell the user which row is broken.
+ *
+ * @param {import('./types.js?v=20260418-sM').Facility[]} facilities
+ * @param {import('./types.js?v=20260418-sM').DemandPoint[]} demands
+ * @returns {{ ok: boolean, errors: string[], warnings: string[] }}
+ */
+export function validateScenarioInputs(facilities, demands) {
+  const errors = [];
+  const warnings = [];
+  const openFacs = (facilities || []).filter(f => f.isOpen !== false);
+  if (openFacs.length === 0) errors.push('No facilities are activated. Open at least one DC before running.');
+  if (!demands || demands.length === 0) errors.push('No demand points loaded. Add demand or pick an Archetype.');
+  for (const f of openFacs) {
+    const label = f.name || f.id || '(unnamed facility)';
+    if (!Number.isFinite(Number(f.lat)) || !Number.isFinite(Number(f.lng))) {
+      errors.push(`Facility "${label}" is missing valid lat/lng coordinates.`);
+    }
+    if (!Number.isFinite(Number(f.fixedCost))) warnings.push(`Facility "${label}" has no fixed cost — facility cost will be $0.`);
+    if (!Number.isFinite(Number(f.variableCost))) warnings.push(`Facility "${label}" has no variable cost — handling cost contribution will be $0.`);
+  }
+  for (const d of (demands || [])) {
+    const label = d.zip3 ? `zip3 ${d.zip3}` : (d.id || '(unnamed demand)');
+    if (!Number.isFinite(Number(d.lat)) || !Number.isFinite(Number(d.lng))) {
+      errors.push(`Demand "${label}" is missing valid lat/lng coordinates.`);
+    }
+    if (!Number.isFinite(Number(d.annualDemand)) || Number(d.annualDemand) <= 0) {
+      warnings.push(`Demand "${label}" has no annual volume — it will not contribute to transport or handling cost.`);
+    }
+  }
+  return { ok: errors.length === 0, errors, warnings };
 }

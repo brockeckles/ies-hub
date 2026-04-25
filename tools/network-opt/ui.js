@@ -15,7 +15,7 @@ import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadXLSX } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260418-sM';
-import * as calc from './calc.js?v=20260425-s5';
+import * as calc from './calc.js?v=20260425-s8';
 import * as api from './api.js?v=20260418-sM';
 import { createChart } from '../../shared/cdn-wrappers/chart-wrapper.js?v=20260418-sK';
 
@@ -68,6 +68,7 @@ let recommendedDCCount = null;
 // Slice A (2026-04-25): pre-flight gate on Run. When set, the Results pane
 // renders a blocking guidance panel instead of fake zero-cost KPIs.
 let runBlockReason = null;
+let runBlockDetail = null; // detail object from validateScenarioInputs (errors + warnings)
 
 /** @type {number} */
 let maxDCsToTest = 5;
@@ -255,6 +256,7 @@ function openEditor(savedRow) {
   comparisonResults = null;
   recommendedDCCount = null;
   runBlockReason = null;
+  runBlockDetail = null;
   maxDCsToTest = 5;
   activeConfigId = savedRow?.id || null;
   activeParentCmId = savedRow?.parent_cost_model_id || null;
@@ -904,7 +906,25 @@ function runScenario() {
     renderContentView();
     return;
   }
+  // 2026-04-25 bug-fix: validate every facility/demand before running. A
+  // single facility with a blank lat would corrupt the assignment sort and
+  // produce NaN avg distance / $0 transport / $0 handling — an easy
+  // mistake from manual edits or a CoG handoff with bad coords. The gate
+  // now refuses to run and tells the user which row is broken.
+  const validation = calc.validateScenarioInputs(facilities, demands);
+  if (!validation.ok) {
+    runBlockReason = 'invalid-inputs';
+    runBlockDetail = validation;
+    activeScenario = null;
+    activeView = 'results';
+    rootEl?.querySelectorAll('#no-view-tabs button').forEach(b => {
+      b.classList.toggle('active', b.dataset.tab === activeView);
+    });
+    renderContentView();
+    return;
+  }
   runBlockReason = null;
+  runBlockDetail = null;
   const name = `Scenario ${scenarios.length + 1} — ${facilities.filter(f => f.isOpen).length} DCs`;
   const result = calc.evaluateScenario(name, facilities, demands, modeMix, rateCard, serviceConfig);
   activeScenario = result;
@@ -1785,6 +1805,35 @@ function renderResults(el) {
         });
         renderSidebar();
         renderContentView();
+      });
+      return;
+    }
+    if (runBlockReason === 'invalid-inputs' && runBlockDetail) {
+      const errs = (runBlockDetail.errors || []).map(e => `<li>${e}</li>`).join('');
+      const warns = (runBlockDetail.warnings || []).map(w => `<li>${w}</li>`).join('');
+      el.innerHTML = `
+        <div class="hub-card" style="padding:24px;background:#fef2f2;border:1px solid #fecaca;">
+          <div style="display:inline-flex;align-items:center;gap:6px;background:#fee2e2;color:#991b1b;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700;margin-bottom:12px;">
+            <span>⚠</span><span>Run blocked — invalid inputs</span>
+          </div>
+          <div style="font-size:14px;font-weight:700;color:var(--ies-navy);margin-bottom:6px;">Some rows are missing required values</div>
+          <div style="font-size:13px;color:var(--ies-gray-600);line-height:1.5;margin-bottom:10px;">A facility with a blank lat/lng (or a demand without coordinates) would corrupt the optimizer math and silently produce <code>NaN</code> distance and \$0 cost results. Fix the rows below and re-run.</div>
+          ${errs ? `<div style="font-size:13px;color:#991b1b;margin-bottom:6px;"><b>Errors:</b><ul style="margin:6px 0 12px 18px;">${errs}</ul></div>` : ''}
+          ${warns ? `<div style="font-size:13px;color:#92400e;margin-bottom:6px;"><b>Warnings:</b><ul style="margin:6px 0 12px 18px;">${warns}</ul></div>` : ''}
+          <div style="display:flex;gap:8px;">
+            <button class="hub-btn hub-btn-sm hub-btn-primary" id="no-results-go-fix-fac">Open Facilities</button>
+            <button class="hub-btn hub-btn-sm hub-btn-secondary" id="no-results-go-fix-dem">Open Demand</button>
+          </div>
+        </div>`;
+      el.querySelector('#no-results-go-fix-fac')?.addEventListener('click', () => {
+        activeSection = 'facilities'; activeView = 'setup';
+        rootEl?.querySelectorAll('#no-view-tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === activeView));
+        renderSidebar(); renderContentView();
+      });
+      el.querySelector('#no-results-go-fix-dem')?.addEventListener('click', () => {
+        activeSection = 'demand'; activeView = 'setup';
+        rootEl?.querySelectorAll('#no-view-tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === activeView));
+        renderSidebar(); renderContentView();
       });
       return;
     }
