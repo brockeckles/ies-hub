@@ -11,7 +11,7 @@ import { state } from '../../shared/state.js?v=20260418-sL';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sL';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260419-uE';
-import * as calc from './calc.js?v=20260420-vE';
+import * as calc from './calc.js?v=20260425-s8';
 import * as api from './api.js?v=20260418-sL';
 
 // ============================================================
@@ -1779,7 +1779,13 @@ function toSizingInputs() {
 function renderDashboard() {
   const storage = calc.computeStorage(facility, zones);
   const summary = calc.computeCapacitySummary(facility, zones, volumes);
-  const dock = calc.dockUtilization(facility.dockDoors, volumes.avgDailyInbound, volumes.avgDailyOutbound, volumes.peakMultiplier);
+  // WSC-A1: collapse facility.dockDoors -> zones.dockConfig as the single
+  // source of truth. facility.dockDoors used to be a separate field that
+  // could drift from zones.dockConfig (which the door-allocation UI actually
+  // edits). Derive total doors from zones every render.
+  const _dockCfg = zones.dockConfig || { inboundDoors: 10, outboundDoors: 12 };
+  const _totalDoors = (_dockCfg.inboundDoors || 0) + (_dockCfg.outboundDoors || 0) || (facility.dockDoors || 0);
+  const dock = calc.dockUtilization(_totalDoors, volumes.avgDailyInbound, volumes.avgDailyOutbound, volumes.peakMultiplier);
   const dockAnalysis = calc.calcDockAnalysis(facility, zones, volumes);
   const storageByType = calc.calcStorageByType(facility, zones);
   const dioh = calc.calcDIOH(zones);

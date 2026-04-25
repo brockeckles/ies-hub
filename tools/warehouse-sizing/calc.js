@@ -32,8 +32,13 @@ export const AISLE_WIDTHS = {
 /** Dock door throughput capacity (pallets/door/day) */
 export const DOOR_CAPACITY_PER_DAY = 40;
 
-/** Dock staging area per door in square feet (door + apron + stage lane) */
-export const DOCK_SF_PER_DOOR = 700;
+/** Dock staging area per door in square feet (door + apron + stage lane).
+ *  WSC-B1 (2026-04-25): bumped 700 -> 1500. v2 used 1500-2500; 700 was an
+ *  understatement that produced unrealistically tight dock SF. 1500 is the
+ *  low end of v2's range and matches industry rule-of-thumb for cross-dock
+ *  + stage zone per door.
+ */
+export const DOCK_SF_PER_DOOR = 1500;
 
 /** Support area uplift factor for suggested sqft heuristic */
 export const SUPPORT_AREA_UPLIFT = 0.25;
