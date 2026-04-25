@@ -14,7 +14,7 @@ import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sP';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260418-sP';
-import * as calc from './calc.js?v=20260425-s6';
+import * as calc from './calc.js?v=20260425-s7';
 import * as api from './api.js?v=20260418-sP';
 
 // ============================================================
@@ -49,6 +49,7 @@ let mapInstance = null;
 let mapOptions = {
   zones: true,
   heat: true,
+  labels: true,
   zoneRadiiMiles: [250, 500, 750],
 };
 
@@ -716,6 +717,9 @@ function renderAnalysis(el) {
         <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-export-csv" style="display:flex;align-items:center;gap:6px;">
           <span>↓ Export CSV</span>
         </button>
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-export-geojson" style="display:flex;align-items:center;gap:6px;" title="GeoJSON file with centers + assignments — opens directly in QGIS, kepler.gl, or any GIS tool">
+          <span>↓ Export GeoJSON</span>
+        </button>
         <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-push-netopt" style="display:flex;align-items:center;gap:6px;">
           <span>Send to NetOpt →</span>
         </button>
@@ -804,6 +808,11 @@ function renderAnalysis(el) {
     exportCogAnalysis();
   });
 
+  // Bind GeoJSON export (F1 — open in any GIS tool)
+  el.querySelector('#cog-export-geojson')?.addEventListener('click', () => {
+    exportCogGeoJSON();
+  });
+
   // Bind NetOpt push
   el.querySelector('#cog-push-netopt')?.addEventListener('click', () => {
     pushToNetOpt();
@@ -843,6 +852,9 @@ function renderMap(el) {
           </label>
           <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ies-gray-600);cursor:pointer;">
             <input type="checkbox" data-cog-toggle="heat" ${mapOptions.heat ? 'checked' : ''} style="margin:0;"> Heatmap
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ies-gray-600);cursor:pointer;" title="Show 'C1 Memphis' tooltips above each centroid">
+            <input type="checkbox" data-cog-toggle="labels" ${mapOptions.labels !== false ? 'checked' : ''} style="margin:0;"> Center labels
           </label>
           <label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--ies-gray-600);">
             Radii:
@@ -888,7 +900,27 @@ function renderMap(el) {
   }
 }
 
+function _ensureCogStyleInjected() {
+  if (document.getElementById('cog-style-inline')) return;
+  const styleEl = document.createElement('style');
+  styleEl.id = 'cog-style-inline';
+  styleEl.textContent = `
+.leaflet-tooltip.cog-center-label {
+  background: rgba(255,255,255,0.92);
+  border: 1px solid #ef4444;
+  border-radius: 6px;
+  padding: 3px 7px;
+  font-size: 11px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+  white-space: nowrap;
+}
+.leaflet-tooltip.cog-center-label::before { display: none; }
+  `;
+  document.head.appendChild(styleEl);
+}
+
 function initCogMap() {
+  _ensureCogStyleInjected();
   const container = rootEl?.querySelector('#cog-map-container');
   if (!container || !cogResult) return;
   if (mapInstance) { mapInstance.remove(); mapInstance = null; }
@@ -971,12 +1003,19 @@ function initCogMap() {
     }
   });
 
-  // Center markers (star-like — larger with border)
+  // Center markers (star-like — larger with border) + permanent label
+  // E3/E4 — labels read at print resolution and on screenshot exports.
   cogResult.centers.forEach((c, i) => {
     const marker = L.circleMarker([c.lat, c.lng], {
       radius: 14, fillColor: '#ef4444', color: '#fff', weight: 3, fillOpacity: 0.9,
     }).addTo(mapInstance);
     marker.bindPopup(`<strong>Center ${i + 1}</strong><br>${c.nearestCity}<br>Location: ${calc.formatLatLng(c.lat, c.lng)}<br>Avg Distance: ${calc.formatMiles(c.avgWeightedDistance)}`);
+    if (mapOptions.labels !== false) {
+      marker.bindTooltip(
+        `<span style="font-weight:700;color:#0a1628;">C${i + 1}</span> <span style="color:#475569;">${c.nearestCity}</span>`,
+        { permanent: true, direction: 'top', offset: [0, -10], className: 'cog-center-label', opacity: 0.95 }
+      );
+    }
   });
 
   // Fit bounds
@@ -1235,6 +1274,97 @@ function exportCogAnalysis() {
   const csvContent = sections.join('\n');
   downloadCSV(csvContent, filename);
   showToast('Analysis exported successfully', 'success');
+}
+
+/**
+ * Export current analysis to GeoJSON FeatureCollection.
+ * Includes optimal centers as Point features, demand points as Point features
+ * with cluster + cost metadata, and center↔demand lines as LineString features.
+ * F1 — opens directly in QGIS, kepler.gl, Mapbox, ArcGIS, etc.
+ */
+function exportCogGeoJSON() {
+  if (!cogResult) {
+    showToast('No analysis results to export', 'warning');
+    return;
+  }
+
+  const capacity = Math.max(1, config.unitsPerTruck || 25000);
+  const features = [];
+
+  // Centers (red star points)
+  cogResult.centers.forEach((c, i) => {
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [c.lng, c.lat] },
+      properties: {
+        kind: 'center',
+        cluster_id: i,
+        label: `Center ${i + 1}`,
+        nearest_city: c.nearestCity,
+        assigned_weight: c.totalWeight,
+        avg_weighted_distance_mi: Number(c.avgWeightedDistance.toFixed(2)),
+        max_distance_mi: Number(c.maxDistance.toFixed(2)),
+      },
+    });
+  });
+
+  // Demand points + center↔point lines
+  cogResult.assignments.forEach(a => {
+    const pt = points.find(p => p.id === a.pointId);
+    if (!pt) return;
+    const truckloads = (pt.weight || 0) / capacity;
+    const cost = a.distanceToCenter * truckloads * config.transportCostPerMile;
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [pt.lng, pt.lat] },
+      properties: {
+        kind: 'demand_point',
+        name: pt.name || pt.id,
+        cluster_id: a.clusterId,
+        weight: pt.weight,
+        distance_to_center_mi: Number(a.distanceToCenter.toFixed(2)),
+        annual_transport_cost: Number(cost.toFixed(2)),
+      },
+    });
+    const center = cogResult.centers[a.clusterId];
+    if (center) {
+      features.push({
+        type: 'Feature',
+        geometry: {
+          type: 'LineString',
+          coordinates: [[pt.lng, pt.lat], [center.lng, center.lat]],
+        },
+        properties: {
+          kind: 'assignment_line',
+          cluster_id: a.clusterId,
+          point_name: pt.name || pt.id,
+          distance_mi: Number(a.distanceToCenter.toFixed(2)),
+        },
+      });
+    }
+  });
+
+  const fc = {
+    type: 'FeatureCollection',
+    properties: {
+      generated: new Date().toISOString(),
+      n_centers: cogResult.centers.length,
+      n_demand_points: points.length,
+      transport_cost_per_mile: config.transportCostPerMile,
+      units_per_truck: capacity,
+    },
+    features,
+  };
+
+  const now = new Date().toISOString().split('T')[0];
+  const filename = `cog-analysis-${now}.geojson`;
+  const blob = new Blob([JSON.stringify(fc, null, 2)], { type: 'application/geo+json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 0);
+  showToast('GeoJSON exported successfully', 'success');
 }
 
 /**
