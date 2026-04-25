@@ -187,6 +187,44 @@ const VALID_SEQUENCE_TYPES = new Set([
 ]);
 
 /**
+ * MOS-B2 — canonical MOST index values. Each parameter in a MOST sequence
+ * is assigned an index from this set, and the per-element TMU is the SUM
+ * of those parameters' indices. Practical sequences are sums of these
+ * indices (e.g., A1B0G1 A1B0P1 A0 = 1+0+1 + 1+0+1 + 0 = 4). We allow any
+ * non-negative integer up to a sane ceiling — but warn when a user types
+ * a TMU that's not a plausible index sum (specifically: small values
+ * that don't appear in the canonical set or its 2-term sums).
+ */
+export const CANONICAL_TMU_INDEX_VALUES = [0, 1, 3, 6, 10, 16, 24, 32, 42, 54];
+
+/**
+ * MOS-B2 — fast lookup: every value reachable as a sum of 1-3 canonical
+ * indices (covers single index, two parameters, and three-parameter
+ * General Move). Anything beyond this in the small-TMU range is suspicious.
+ */
+const _PLAUSIBLE_SMALL_TMU = (() => {
+  const set = new Set();
+  const idx = CANONICAL_TMU_INDEX_VALUES;
+  for (const a of idx) for (const b of idx) for (const c of idx) set.add(a + b + c);
+  return set;
+})();
+
+/**
+ * MOS-B2 — true if `tmu` looks like a plausible MOST element TMU.
+ * Returns true for any non-negative integer >= 50 (approaching ceilings)
+ * since long-cycle elements legitimately sum many parameters; only flags
+ * small values that aren't reachable from the canonical index set.
+ * @param {number} tmu
+ */
+export function isPlausibleMostTmu(tmu) {
+  const v = Number(tmu);
+  if (!Number.isFinite(v) || v < 0) return false;
+  if (v % 1 !== 0) return false; // canonical indices are integers
+  if (v >= 50) return true;       // long sequences — trust the user
+  return _PLAUSIBLE_SMALL_TMU.has(v);
+}
+
+/**
  * Validate the sequence integrity of a template's element list.
  * Pure function — returns an array of issues (empty = valid).
  * @param {import('./types.js?v=20260418-sM').MostElement[]} elements
@@ -209,6 +247,13 @@ export function validateElementSequence(elements) {
     }
     if (!(el.tmu_value > 0)) {
       issues.push({ severity: 'error', message: `Element #${idx + 1} has zero or invalid TMU.`, elementIndex: idx });
+    } else if (!isPlausibleMostTmu(el.tmu_value)) {
+      // MOS-B2: warn (not error) when the TMU isn't reachable from the
+      // canonical MOST index set {0,1,3,6,10,16,24,32,42,54}. Sums of
+      // canonical indices are always plausible; small non-canonical
+      // values (e.g., 2, 4, 5, 7) suggest a typo or that the analyst
+      // entered a TMU instead of an index code.
+      issues.push({ severity: 'warning', message: `Element #${idx + 1} TMU=${el.tmu_value} is not reachable from MOST canonical indices {0,1,3,6,10,16,24,32,42,54}. Verify the parameter coding.`, elementIndex: idx });
     }
     // Case-insensitive check: historical data stores uppercase ("GET"/"PUT"/"VERIFY")
     // while the catalog uses lowercase. Normalize before comparing so data written

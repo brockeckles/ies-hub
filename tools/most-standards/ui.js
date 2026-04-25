@@ -14,7 +14,7 @@ import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../
 // button is a convenience trigger rather than a discrete compute step, so a
 // "clean/dirty" gate would be misleading here. Revisit if/when MOST gains a
 // heavier recompute path (MOST B4 productivity factor, maybe).
-import * as calc from './calc.js?v=20260420-vF';
+import * as calc from './calc.js?v=20260425-s3';
 import * as api from './api.js?v=20260420-vF';
 import { getMostTplName, getMostTplBaseUph, getMostTplTmuTotal, getMostElName, getMostElSequence, getMostElTmu } from './types.js?v=20260418-sM';
 
