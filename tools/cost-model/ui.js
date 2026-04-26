@@ -6443,6 +6443,26 @@ function bindSectionEvents(section, container) {
   // weeksPerYear) are explicitly marked with data-field-commit="change" so
   // they commit on blur/Enter and the user can type a full value. (Brock
   // 2026-04-22: "Shift Structure tile doesn't appear to do anything.")
+  // CM-IMPL-1 (2026-04-26) — direct scalar dot-path inputs that don't
+  // also carry data-field (e.g., implementationTimeline.goLiveWeek).
+  // Wired before the generic [data-field] binder so we don't double-bind.
+  container.querySelectorAll('[data-field-direct]:not([data-field])').forEach(input => {
+    const event = input.tagName === 'SELECT' ? 'change'
+                : input.type === 'checkbox' ? 'change'
+                : 'change';
+    input.addEventListener(event, () => {
+      const path = input.dataset.fieldDirect;
+      const parts = path.split('.');
+      const last = parts.pop();
+      const parent = parts.reduce((o, k) => { o[k] = o[k] || {}; return o[k]; }, model);
+      const v = (input.dataset.type === 'number') ? (parseFloat(input.value) || 0) : input.value;
+      parent[last] = v;
+      isDirty = true;
+      if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+      refreshNavCompletion();
+    });
+  });
+
   container.querySelectorAll('[data-field]').forEach(input => {
     const commit = input.dataset.fieldCommit;
     const event = input.tagName === 'SELECT' ? 'change'
