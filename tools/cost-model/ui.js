@@ -4710,9 +4710,113 @@ Owned Facility — racking/dock/charging/office/security/conveyor">Line Type</th
           ` : ''}
           <tr class="cm-total-row"><td colspan="10">Operating Cost${breakdown.seasonal > 0 ? ' (baseline + seasonal)' : ''}</td><td class="hub-num">${calc.formatCurrency(total)}</td><td></td></tr>
           <tr><td colspan="10" style="font-weight:600; color: var(--ies-gray-500);">Capital Investment</td><td class="hub-num" style="font-weight:600;">${calc.formatCurrency(capital)}</td><td></td></tr>
+          ${(() => {
+            // EQ-3: surface IT vs non-IT capital split below the total so
+            // buy-to-peak IT capex is distinct from MHE/racking purchases.
+            const split = calc.equipmentCapitalByType(lines);
+            if (split.total <= 0) return '';
+            return `
+              <tr style="font-size:11px;color:var(--ies-gray-500);">
+                <td colspan="10" style="text-align:right;padding-right:8px;">↳ IT capex / non-IT capex</td>
+                <td class="hub-num" title="EQ-3: IT equipment (RF terminals, printers, APs) capital split out from MHE/racking/conveyor capital. IT refresh cycles (3-7 yrs) differ from MHE life (10+ yrs), so deal modelers want this separated.">${calc.formatCurrency(split.itCapital, {compact:true})} / ${calc.formatCurrency(split.nonItCapital, {compact:true})}</td>
+                <td></td>
+              </tr>
+            `;
+          })()}
         </tbody>
       </table>
     </div>
+
+    ${(() => {
+      // EQ-1 + EQ-2: Own vs Rent vs Buy-to-Peak ROI compare panel.
+      // Only renders when there are MHE lines with cost data — otherwise
+      // the comparison is meaningless. Honors the contract term so the
+      // 5-year default reflects real deal length.
+      const mheLines = lines.filter(l => l && l.category === 'MHE');
+      if (mheLines.length === 0) return '';
+      const contractYrs = parseInt(model.projectDetails?.contractTerm) || 5;
+      const peakOverflowByMHE = mheLines.map(line => {
+        const idx = lines.indexOf(line);
+        return overflowByLine[idx] || null;
+      });
+      const roi = calc.totalEquipment3WayRoi(lines, { peakOverflowByLine: lines.map((_, i) => overflowByLine[i]), years: contractYrs });
+      // Wins/savings vs the worst alternative for headline framing.
+      const ownVsRent = roi.rentYearRound - roi.ownYearRound;
+      const buyToPeakVsOwn = roi.ownYearRound - roi.buyToPeak;
+      const cheapestPretty = roi.cheapest === 'buy_to_peak' ? 'Buy-to-Peak' : roi.cheapest === 'own' ? 'Own Year-Round' : 'Rent Year-Round';
+      const cheapestColor = roi.cheapest === 'buy_to_peak' ? '#0ea5e9' : roi.cheapest === 'own' ? '#10b981' : '#d97706';
+      return `
+      <div class="hub-card" style="margin-top:24px;border-left:4px solid ${cheapestColor};padding:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:12px;">
+          <div>
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-400);">MHE ROI · Own vs Rent vs Buy-to-Peak</div>
+            <div style="font-size:13px;color:var(--ies-gray-500);margin-top:2px;">${roi.mheLineCount} MHE line(s) · ${contractYrs}-year horizon · cheapest: <strong style="color:${cheapestColor};">${cheapestPretty}</strong></div>
+          </div>
+          <div style="font-size:11px;color:var(--ies-gray-400);max-width:340px;text-align:right;line-height:1.5;">Own = capital ÷ amort + maint · Rent = $/mo × 12 × qty · Buy-to-Peak = own steady-state + rent peak overflow.</div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;">
+          <div style="border:2px solid ${roi.cheapest==='own'?'#10b981':'#e5e7eb'};border-radius:8px;padding:12px;background:${roi.cheapest==='own'?'rgba(16,185,129,0.05)':'#fff'};">
+            <div style="font-size:11px;font-weight:700;color:#10b981;letter-spacing:0.5px;">OWN YEAR-ROUND</div>
+            <div style="font-size:22px;font-weight:700;color:var(--ies-blue);margin-top:4px;">${calc.formatCurrency(roi.ownYearRound, {compact:true})}</div>
+            <div style="font-size:11px;color:var(--ies-gray-500);margin-top:4px;">Capital amortized + maintenance over ${contractYrs} yr</div>
+          </div>
+          <div style="border:2px solid ${roi.cheapest==='rent'?'#d97706':'#e5e7eb'};border-radius:8px;padding:12px;background:${roi.cheapest==='rent'?'rgba(217,119,6,0.05)':'#fff'};">
+            <div style="font-size:11px;font-weight:700;color:#d97706;letter-spacing:0.5px;">RENT YEAR-ROUND</div>
+            <div style="font-size:22px;font-weight:700;color:var(--ies-blue);margin-top:4px;">${calc.formatCurrency(roi.rentYearRound, {compact:true})}</div>
+            <div style="font-size:11px;color:var(--ies-gray-500);margin-top:4px;">Monthly rate × 12 × qty × ${contractYrs} yr</div>
+          </div>
+          <div style="border:2px solid ${roi.cheapest==='buy_to_peak'?'#0ea5e9':'#e5e7eb'};border-radius:8px;padding:12px;background:${roi.cheapest==='buy_to_peak'?'rgba(14,165,233,0.05)':'#fff'};">
+            <div style="font-size:11px;font-weight:700;color:#0ea5e9;letter-spacing:0.5px;">BUY-TO-PEAK ✓</div>
+            <div style="font-size:22px;font-weight:700;color:var(--ies-blue);margin-top:4px;">${calc.formatCurrency(roi.buyToPeak, {compact:true})}</div>
+            <div style="font-size:11px;color:var(--ies-gray-500);margin-top:4px;">Own steady-state + rent peak overflow</div>
+          </div>
+        </div>
+
+        <!-- EQ-2: per-line break-even table -->
+        <div style="font-size:12px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Per-Line Break-Even (Peak Months / yr where Rent wins)</div>
+        <div style="overflow-x:auto;">
+          <table class="hub-datatable hub-datatable--dense" style="width:100%;font-size:12px;">
+            <thead>
+              <tr>
+                <th style="text-align:left;">Line</th>
+                <th class="hub-num">Qty</th>
+                <th class="hub-num" title="Per-unit cost of owning (capital ÷ amort_yrs + maintenance × 12)">Annual Own / Unit</th>
+                <th class="hub-num" title="Monthly rental rate per unit (from $/Mo column or 1.5%/mo of acq cost as fallback)">Rent $/Mo / Unit</th>
+                <th class="hub-num" title="Peak months/year at which renting matches the cost of owning. <0.5 = Always Rent · >12 = Always Own. Anything in-between = the buy-to-peak sweet spot.">Break-Even (mo/yr)</th>
+                <th>Verdict</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${roi.perLine.map(({ line, roi: lr }) => {
+                if (!lr) return '';
+                const verdictPretty = lr.verdict === 'always_own' ? '🟢 Always Own' : lr.verdict === 'always_rent' ? '🟠 Always Rent' : lr.verdict === 'buy_to_peak' ? '🔵 Buy-to-Peak' : '⚪ Tied';
+                const beStr = lr.breakEvenPeakMonths >= 12 ? '> 12' : lr.breakEvenPeakMonths < 0.5 ? '< 0.5' : lr.breakEvenPeakMonths.toFixed(1);
+                return `
+                  <tr>
+                    <td>${escapeAttr(line.equipment_name || '(unnamed)')}</td>
+                    <td class="hub-num">${lr.qtyBaseline}</td>
+                    <td class="hub-num">${calc.formatCurrency(lr.annualOwnPerUnit, {compact:true})}</td>
+                    <td class="hub-num">${calc.formatCurrency(lr.monthlyRentPerUnit, {compact:true})}</td>
+                    <td class="hub-num"><strong>${beStr}</strong>${lr.peakMonths > 0 ? ` <span style="color:var(--ies-gray-400);font-size:10px;">(${lr.peakMonths} actual)</span>` : ''}</td>
+                    <td>${verdictPretty}</td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+        ${roi.cheapest === 'buy_to_peak' && buyToPeakVsOwn > 0 ? `
+          <div style="margin-top:12px;padding:10px 12px;background:rgba(14,165,233,0.07);border-left:3px solid #0ea5e9;border-radius:4px;font-size:12px;color:var(--ies-blue);">
+            <strong>Buy-to-Peak saves ${calc.formatCurrency(buyToPeakVsOwn, {compact:true})}</strong> over Own Year-Round across ${contractYrs} yr — own steady-state and rent the seasonal overflow only when peak labor demands it.
+          </div>` : ''}
+        ${roi.cheapest === 'own' && ownVsRent > 0 ? `
+          <div style="margin-top:12px;padding:10px 12px;background:rgba(16,185,129,0.07);border-left:3px solid #10b981;border-radius:4px;font-size:12px;color:#065f46;">
+            <strong>Own Year-Round saves ${calc.formatCurrency(ownVsRent, {compact:true})}</strong> over Rent Year-Round across ${contractYrs} yr — at this utilization, capital recovery beats short-term rental.
+          </div>` : ''}
+      </div>
+    `;
+    })()}
+
     <button class="cm-add-row-btn" data-action="add-equipment">+ Add Equipment Line</button>
   `;
 }

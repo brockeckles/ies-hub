@@ -1143,6 +1143,154 @@ export function totalEquipmentAmort(lines) {
   return lines.reduce((sum, line) => sum + equipLineAmort(line), 0);
 }
 
+/**
+ * EQ-1/EQ-2 — 3-way ROI comparison for MHE lines: Own year-round vs Rent
+ * year-round vs Buy-to-Peak (own steady-state, rent overflow). Computes a
+ * per-line 5-year TCO under each strategy plus the break-even peak duration
+ * where rent overtakes own. Operates on MHE category only — racking, IT,
+ * facility lines are structurally not "rent vs own" decisions.
+ *
+ * Formulas (all annualized over `years` then summed):
+ *   OWN year-round   = capital amortized over amort_years × years held
+ *                      + (monthly_maintenance × 12) × years
+ *                      Capital piece prorates: if years > amort_years, only
+ *                      one acquisition; if years < amort_years, charge
+ *                      (capital × years / amort_years) — straight-line.
+ *   RENT year-round  = (monthly_cost × 12) × qty × years
+ *                      uses the line's monthly_cost as the rental rate
+ *                      regardless of acquisition_type (we assume the user
+ *                      entered an MHE rental rate when toggling rent UI;
+ *                      fallback: 1.5% of acquisition_cost / month industry rule)
+ *   BUY-TO-PEAK      = OWN cost on steady-state qty + RENT cost on peak qty
+ *                      for the months above baseline (from peakOverflow)
+ *
+ * Break-even peak months (EQ-2):
+ *   The number of peak months/year at which Rent annual cost equals Own
+ *   annual cost (capital amort + maintenance, baseline qty=1):
+ *     break_even = annual_own_per_unit / monthly_rent_per_unit
+ *   If break_even > 12, "Always Own". If break_even < 0.5, "Always Rent".
+ *
+ * @param {import('./types.js?v=20260418-sK').EquipmentLine} line
+ * @param {Array<number>|null} peakOverflowByMonth — qty above baseline by month (from MLV)
+ * @param {number} [years=5] — comparison horizon (default = typical contract length)
+ * @returns {{
+ *   ownYearRound: number,
+ *   rentYearRound: number,
+ *   buyToPeak: number,
+ *   breakEvenPeakMonths: number,
+ *   verdict: 'always_own'|'always_rent'|'buy_to_peak'|'tied',
+ *   monthlyRentPerUnit: number,
+ *   annualOwnPerUnit: number,
+ *   peakMonths: number,
+ *   qtyBaseline: number
+ * }}
+ */
+export function equipLine3WayRoi(line, peakOverflowByMonth, years = 5) {
+  if (!line) return null;
+  const qty = Math.max(1, parseInt(line.quantity) || 1);
+  const acqCost = parseFloat(line.acquisition_cost) || 0;
+  const amortYrs = Math.max(1, parseInt(line.amort_years) || 5);
+  const maintMo = parseFloat(line.monthly_maintenance) || 0;
+  let rentMo = parseFloat(line.monthly_cost) || 0;
+  // Industry-rule fallback when user didn't enter a rent rate but did enter
+  // acquisition cost (1.5%/mo of acq cost — typical short-term MHE rental).
+  if (rentMo <= 0 && acqCost > 0) rentMo = acqCost * 0.015;
+
+  // Per-unit annualized own cost: straight-line capital + maintenance.
+  const annualCapitalPerUnit = amortYrs > 0 ? (acqCost / amortYrs) : 0;
+  const annualMaintPerUnit = maintMo * 12;
+  const annualOwnPerUnit = annualCapitalPerUnit + annualMaintPerUnit;
+
+  // Strategy totals (over `years` for entire qty).
+  const ownYearRound = annualOwnPerUnit * qty * years;
+  const rentYearRound = rentMo * 12 * qty * years;
+
+  // Buy-to-peak: own baseline qty year-round + rent overflow only in months
+  // where MLV indicates peak demand. Without MLV data, fall back to seasonal_months
+  // length × overflow ≈ 0.2 × qty (industry default 20% peak swing).
+  let peakUnitMonths = 0;
+  let peakMonths = 0;
+  if (peakOverflowByMonth && peakOverflowByMonth.length) {
+    peakUnitMonths = peakOverflowByMonth.reduce((s, u) => s + Math.max(0, u || 0), 0);
+    peakMonths = peakOverflowByMonth.filter(u => (u || 0) > 0).length;
+  } else if (Array.isArray(line.seasonal_months) && line.seasonal_months.length > 0) {
+    // No MLV — use line's own seasonal_months × 20% qty overflow as proxy.
+    peakMonths = line.seasonal_months.length;
+    peakUnitMonths = peakMonths * Math.max(1, Math.round(qty * 0.2));
+  }
+  const buyToPeak = (annualOwnPerUnit * qty * years) + (rentMo * peakUnitMonths * years);
+
+  // Break-even peak months: rent_mo × N == annual_own_per_unit (per single unit)
+  const breakEvenPeakMonths = rentMo > 0 ? (annualOwnPerUnit / rentMo) : 999;
+
+  // Verdict logic — pick the cheapest of the three.
+  let verdict;
+  if (breakEvenPeakMonths >= 12) verdict = 'always_own';
+  else if (breakEvenPeakMonths <= 0.5) verdict = 'always_rent';
+  else if (peakMonths > 0 && buyToPeak < ownYearRound && buyToPeak < rentYearRound) verdict = 'buy_to_peak';
+  else if (Math.abs(ownYearRound - rentYearRound) < 0.01) verdict = 'tied';
+  else verdict = ownYearRound < rentYearRound ? 'always_own' : 'always_rent';
+
+  return {
+    ownYearRound,
+    rentYearRound,
+    buyToPeak,
+    breakEvenPeakMonths,
+    verdict,
+    monthlyRentPerUnit: rentMo,
+    annualOwnPerUnit,
+    peakMonths,
+    qtyBaseline: qty,
+  };
+}
+
+/**
+ * EQ-1 — Roll up 3-way ROI across all MHE lines. Aggregates totals and
+ * reports per-strategy savings vs the current line_type configuration.
+ *
+ * @param {Array<import('./types.js?v=20260418-sK').EquipmentLine>} lines
+ * @param {{ peakOverflowByLine?: Array<Array<number>|null>, years?: number }} [opts]
+ */
+export function totalEquipment3WayRoi(lines, opts = {}) {
+  const years = opts.years || 5;
+  const overflowByLine = opts.peakOverflowByLine || [];
+  const mheLines = (lines || []).filter(l => l && l.category === 'MHE');
+  let ownYearRound = 0, rentYearRound = 0, buyToPeak = 0;
+  const perLine = mheLines.map((line, i) => {
+    const overflow = overflowByLine[i] || null;
+    const r = equipLine3WayRoi(line, overflow, years);
+    if (r) {
+      ownYearRound += r.ownYearRound;
+      rentYearRound += r.rentYearRound;
+      buyToPeak += r.buyToPeak;
+    }
+    return { line, roi: r };
+  });
+  // Cheapest strategy wins.
+  const min = Math.min(ownYearRound, rentYearRound, buyToPeak);
+  let cheapest;
+  if (min === buyToPeak && buyToPeak > 0 && buyToPeak < ownYearRound && buyToPeak < rentYearRound) cheapest = 'buy_to_peak';
+  else if (min === ownYearRound) cheapest = 'own';
+  else cheapest = 'rent';
+  return { ownYearRound, rentYearRound, buyToPeak, perLine, cheapest, years, mheLineCount: mheLines.length };
+}
+
+/**
+ * EQ-3 — IT capex separated from total capital. Returns { itCapital, nonItCapital, total }.
+ */
+export function equipmentCapitalByType(lines) {
+  const out = { itCapital: 0, nonItCapital: 0, total: 0 };
+  (lines || []).forEach(line => {
+    if (normalizeAcqType(line.acquisition_type) !== 'capital') return;
+    const cap = equipTotalAcq(line);
+    out.total += cap;
+    const isIt = (line.line_type === 'it_equipment') || (line.category === 'IT');
+    if (isIt) out.itCapital += cap;
+    else out.nonItCapital += cap;
+  });
+  return out;
+}
+
 // ============================================================
 // OVERHEAD
 // ============================================================
