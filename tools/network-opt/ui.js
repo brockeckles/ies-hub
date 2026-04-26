@@ -1295,7 +1295,7 @@ function renderDemand(el) {
               <th style="text-align:right;padding:8px 6px;font-weight:700;">Max Days</th>
               <th style="text-align:right;padding:8px 6px;font-weight:700;">Avg Wt (lbs)</th>
               <th style="text-align:right;padding:8px 6px;font-weight:700;" title="NMFC freight class for LTL costing — drives the class multiplier (50 dense → 0.65×; 500 light → 2.60×). 100 is baseline.">NMFC</th>
-              <th style="text-align:center;padding:8px 6px;font-weight:700;" title="UN-classified hazmat shipment — drives ~12% TL premium and route restrictions.">Haz</th>
+              <th style="text-align:left;padding:8px 6px;font-weight:700;" title="UN hazmat class (1.1 explosives → 9 misc). Blank = none. Drives ~12% TL premium and route restrictions.">Hazmat</th>
               <th style="text-align:right;padding:8px 6px;font-weight:700;" title="Annual demand distribution profile. Drives peak-month sizing.">Seasonality</th>
               <th style="text-align:right;padding:8px 6px;font-weight:700;" title="Order cadence. Drives LTL↔TL break-even — low frequency favors LTL even at higher per-mile rates.">Frequency</th>
               <th style="text-align:center;padding:8px 6px;font-weight:700;"></th>
@@ -1315,8 +1315,11 @@ function renderDemand(el) {
                     ${calc.NMFC_CLASS_CODES.map(c => `<option value="${c}"${(d.nmfcClass || 100) === c ? ' selected' : ''}>${c}</option>`).join('')}
                   </select>
                 </td>
-                <td style="padding:6px;text-align:center;">
-                  <input type="checkbox" data-dem-hazmat="${i}"${d.hazmat ? ' checked' : ''} title="Hazmat shipment — adds TL premium + route restrictions" />
+                <td style="padding:6px;text-align:left;">
+                  <select data-dem-hazmat-class="${i}" title="UN hazmat class (blank = none)" style="font-size:11px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;background:#fff;max-width:170px;">
+                    <option value=""${!d.hazmatClass && !d.hazmat ? ' selected' : ''}>— none —</option>
+                    ${calc.HAZMAT_CLASSES.map(c => `<option value="${c}"${(d.hazmatClass === c || (!d.hazmatClass && d.hazmat && c.startsWith('9 '))) ? ' selected' : ''}>${c}</option>`).join('')}
+                  </select>
                 </td>
                 <td style="padding:6px;text-align:right;">
                   <select data-dem-seasonality="${i}" style="font-size:11px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;background:#fff;">
@@ -1374,11 +1377,17 @@ function renderDemand(el) {
     });
   });
 
-  // Per-demand hazmat flag — surfaced for run pre-flight + future hazmat costing
-  el.querySelectorAll('[data-dem-hazmat]').forEach(box => {
-    box.addEventListener('change', () => {
-      const idx = parseInt(/** @type {HTMLElement} */ (box).dataset.demHazmat);
-      if (demands[idx]) { demands[idx].hazmat = /** @type {HTMLInputElement} */ (box).checked; markDirty(); }
+  // P2-1 — Per-demand hazmat class. UN class catalog dropdown (replaces binary
+  // checkbox). Mirrors to legacy d.hazmat boolean for any consumer reading the
+  // old field.
+  el.querySelectorAll('[data-dem-hazmat-class]').forEach(select => {
+    select.addEventListener('change', () => {
+      const idx = parseInt(/** @type {HTMLElement} */ (select).dataset.demHazmatClass);
+      const v = /** @type {HTMLSelectElement} */ (select).value;
+      if (!demands[idx]) return;
+      demands[idx].hazmatClass = v || '';
+      demands[idx].hazmat = !!v;
+      markDirty();
     });
   });
 
