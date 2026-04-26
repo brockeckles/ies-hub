@@ -40,6 +40,14 @@ export const DEFAULT_CONFIG = {
   // and capacity must agree. Supported: lb, cwt, pallets, units, cases,
   // orders, revenue.
   weightUnit: 'lb',
+  // COG-B2: candidate facility list. When `snapToCandidates` is on, k-means
+  // centers get snapped to the closest candidate after solve — turning the
+  // free centroid into a constrained pick from a known site list (existing
+  // GXO buildings, REIT inventory, M&A targets). Empty list = behaves like
+  // before (free centroid).
+  /** @type {Array<{ label?: string, lat: number, lng: number }>} */
+  candidateFacilities: [],
+  snapToCandidates: false,
 };
 
 // CoG weight-unit metadata — drives label text + step sizes in the UI.
@@ -387,6 +395,78 @@ export function kMeansCog(points, k = 1, maxIter = 100) {
   }, 0);
 
   return { centers: centerResults, assignments, totalWeightedDistance, iterations: iter };
+}
+
+/**
+ * COG-B2 — Snap each k-means center to the nearest user-supplied candidate
+ * facility. Used when the analyst already has a fixed list of available
+ * sites (existing 3PL footprint, M&A targets, REIT inventory) and wants
+ * the optimizer to pick *from that list* rather than reporting a free-form
+ * lat/lng. Returns a NEW MultiCogResult with centers swapped to candidates
+ * and assignments / distances recomputed.
+ *
+ * @param {import('./types.js?v=20260418-sP').MultiCogResult} mcr — output of kMeansCog
+ * @param {import('./types.js?v=20260418-sP').WeightedPoint[]} points
+ * @param {Array<{ label?: string, lat: number, lng: number }>} candidates
+ * @returns {import('./types.js?v=20260418-sP').MultiCogResult}
+ */
+export function snapCentersToCandidates(mcr, points, candidates) {
+  const cleaned = (candidates || []).filter(c => Number.isFinite(+c.lat) && Number.isFinite(+c.lng));
+  if (!mcr || !mcr.centers || mcr.centers.length === 0 || cleaned.length === 0) return mcr;
+
+  // Pick one candidate per center, picking the closest unused candidate
+  // first. If candidates < centers, allow reuse so we still return k
+  // centers. If candidates > centers, drop the rest.
+  const used = new Set();
+  const snappedCenters = mcr.centers.map(c => {
+    let bestIdx = -1;
+    let bestDist = Infinity;
+    for (let i = 0; i < cleaned.length; i++) {
+      if (used.has(i) && cleaned.length >= mcr.centers.length) continue;
+      const d = haversine(c.lat, c.lng, +cleaned[i].lat, +cleaned[i].lng);
+      if (d < bestDist) { bestDist = d; bestIdx = i; }
+    }
+    if (bestIdx === -1) return c;
+    used.add(bestIdx);
+    const cand = cleaned[bestIdx];
+    return { ...c, lat: +cand.lat, lng: +cand.lng, candidateLabel: cand.label || `Candidate ${bestIdx + 1}`, snappedFromLat: c.lat, snappedFromLng: c.lng };
+  });
+
+  // Recompute assignments + cluster KPIs against the snapped centers.
+  const assignments = points.map(p => {
+    let bestIdx = 0; let bestDist = Infinity;
+    for (let i = 0; i < snappedCenters.length; i++) {
+      const d = haversine(p.lat, p.lng, snappedCenters[i].lat, snappedCenters[i].lng);
+      if (d < bestDist) { bestDist = d; bestIdx = i; }
+    }
+    return { pointId: p.id, clusterId: bestIdx, distanceToCenter: bestDist };
+  });
+
+  // Refresh per-center KPIs (avg/max distance) using the snapped points.
+  const refreshedCenters = snappedCenters.map((c, ci) => {
+    const clusterPoints = points.filter((_, pi) => assignments[pi].clusterId === ci);
+    if (clusterPoints.length === 0) return { ...c, totalWeight: 0, avgWeightedDistance: 0, maxDistance: 0, nearestCity: c.candidateLabel || findNearestCity(c.lat, c.lng) };
+    const totalWeight = clusterPoints.reduce((s, p) => s + Math.max(0, p.weight), 0);
+    const distances = clusterPoints.map(p => ({ dist: haversine(c.lat, c.lng, p.lat, p.lng), weight: p.weight }));
+    const weightedDistSum = distances.reduce((s, d) => s + d.dist * d.weight, 0);
+    const avgWeightedDistance = totalWeight > 0 ? weightedDistSum / totalWeight : 0;
+    const maxDistance = Math.max(0, ...distances.map(d => d.dist));
+    const maxWeightedDistance = Math.max(0, ...distances.filter(d => d.weight > 0).map(d => d.dist));
+    return { ...c, totalWeight, avgWeightedDistance, maxDistance, maxWeightedDistance, nearestCity: c.candidateLabel || findNearestCity(c.lat, c.lng) };
+  });
+
+  const totalWeightedDistance = assignments.reduce((s, a) => {
+    const pt = points.find(p => p.id === a.pointId);
+    return s + a.distanceToCenter * (pt?.weight || 0);
+  }, 0);
+
+  return {
+    centers: refreshedCenters,
+    assignments,
+    totalWeightedDistance,
+    iterations: mcr.iterations,
+    snappedToCandidates: true,
+  };
 }
 
 /**

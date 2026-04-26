@@ -173,6 +173,9 @@ function openEditor(savedRow) {
     try {
       const _solvePts = _pointsForSolve();
       cogResult = calc.kMeansCog(_solvePts, config.numCenters, config.maxIterations);
+      if (config.snapToCandidates && (config.candidateFacilities || []).length > 0) {
+        cogResult = calc.snapCentersToCandidates(cogResult, _solvePts, config.candidateFacilities);
+      }
       sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0);
     } catch (err) {
       console.warn('[COG] Result rebuild from saved inputs failed; falling back to partial render:', err);
@@ -215,6 +218,9 @@ function runOptimizeAndRender() {
   const _solvePts = _pointsForSolve();
   if (!_solvePts.length) return; // nothing to solve against
   cogResult = calc.kMeansCog(_solvePts, config.numCenters, config.maxIterations);
+      if (config.snapToCandidates && (config.candidateFacilities || []).length > 0) {
+        cogResult = calc.snapCentersToCandidates(cogResult, _solvePts, config.candidateFacilities);
+      }
   sensitivityData = calc.sensitivityAnalysis(
     _solvePts,
     Math.max(config.numCenters, 5),
@@ -440,6 +446,9 @@ function bindShellEvents() {
       e.preventDefault();
       const _solvePts = _pointsForSolve();
       cogResult = calc.kMeansCog(_solvePts, config.numCenters, config.maxIterations);
+      if (config.snapToCandidates && (config.candidateFacilities || []).length > 0) {
+        cogResult = calc.snapCentersToCandidates(cogResult, _solvePts, config.candidateFacilities);
+      }
       sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0);
       activeTab = 'analysis';
       // Stash the input fingerprint so the header Run button flips to the
@@ -549,7 +558,7 @@ function renderPoints(el) {
             <select id="cog-weight-unit" style="padding:7px 10px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;">
               ${calc.WEIGHT_UNIT_OPTIONS.map(u => `<option value="${u.value}"${(config.weightUnit||'lb')===u.value?' selected':''}>${u.label}</option>`).join('')}
             </select>
-            <span style="font-size:11px;color:var(--ies-gray-400);">Cost rate below is $/${(calc.getWeightUnitMeta(config.weightUnit||'lb').rateUnit || 'lb-mi')}-truck-mile</span>
+            <span style="font-size:11px;color:var(--ies-gray-400);" title="The Truck $/mi rate is per truck-mile regardless of weight unit. Weight Unit only changes how demand totals are bucketed into truckloads via the capacity below.">Cost rate is per truck-mile · weight unit drives demand → truckloads</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
             <label style="font-size:13px;font-weight:600;">Truck $/mi:</label>
@@ -588,6 +597,25 @@ function renderPoints(el) {
             <span style="font-size:11px;color:var(--ies-gray-400);">th percentile · prevents one mega-account from owning the centroid</span>
           </div>
         </div>
+      </div>
+
+      <!-- COG-B2 — Candidate Facilities (snap k-means centers to a fixed list) -->
+      <div class="hub-card" style="margin-bottom:20px;padding:16px;border-left:3px solid var(--ies-blue-light, #60a5fa);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:12px;flex-wrap:wrap;">
+          <div>
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-400);">Candidate Facilities <span style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--ies-gray-300);">(optional)</span></div>
+            <div style="font-size:11px;color:var(--ies-gray-400);margin-top:2px;">Snap solver centers to a fixed list of available sites (existing GXO buildings, REIT inventory, M&amp;A targets) instead of free lat/lng centroids.</div>
+          </div>
+          <label style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;" title="When ON, k-means runs as usual then each center is moved to the nearest candidate facility from the list below. Distances + sensitivity are recomputed against the snapped sites.">
+            <input type="checkbox" id="cog-snap-toggle" ${config.snapToCandidates ? 'checked' : ''} style="cursor:pointer;">
+            Snap solver centers to candidates
+          </label>
+        </div>
+        <textarea id="cog-candidate-list" rows="4"
+                  placeholder="One per line — Label, Lat, Lng &#10;Examples: &#10;ATL DC, 33.7490, -84.3880 &#10;DFW DC, 32.7767, -96.7970 &#10;LAX DC, 33.9425, -118.4081"
+                  style="width:100%;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-family:monospace;line-height:1.5;${config.snapToCandidates ? '' : 'opacity:0.55;'}"
+                  ${config.snapToCandidates ? '' : 'disabled'}>${(config.candidateFacilities || []).map(c => `${c.label || ''}, ${c.lat}, ${c.lng}`).join('\n')}</textarea>
+        <div id="cog-candidate-feedback" style="font-size:11px;color:var(--ies-gray-400);margin-top:4px;">${(config.candidateFacilities || []).length ? `${(config.candidateFacilities || []).length} candidate site(s) loaded` : 'No candidates yet — paste lines above when you want to constrain the solver.'}</div>
       </div>
 
       <!-- Points table -->
@@ -679,6 +707,44 @@ function renderPoints(el) {
   el.querySelector('#cog-outlier-percentile')?.addEventListener('change', (e) => {
     const v = parseInt(/** @type {HTMLInputElement} */ (e.target).value);
     config.outlierCapPercentile = Math.max(80, Math.min(99, isFinite(v) ? v : 95));
+    markDirty();
+  });
+
+  // COG-B2 — Snap-to-candidates toggle. When ON, k-means centers get moved to
+  // the nearest candidate facility from the textarea below before reporting.
+  el.querySelector('#cog-snap-toggle')?.addEventListener('change', (e) => {
+    config.snapToCandidates = /** @type {HTMLInputElement} */ (e.target).checked;
+    markDirty();
+    renderPoints(el); // re-render so the textarea enable-state flips
+  });
+  el.querySelector('#cog-candidate-list')?.addEventListener('change', (e) => {
+    const raw = /** @type {HTMLTextAreaElement} */ (e.target).value || '';
+    // Accept "Label, lat, lng" OR "lat, lng" — one per line. Skip blanks/comments.
+    const parsed = [];
+    raw.split(/\r?\n/).forEach(line => {
+      const t = line.trim();
+      if (!t || t.startsWith('#')) return;
+      const parts = t.split(',').map(s => s.trim());
+      let label, lat, lng;
+      if (parts.length >= 3) {
+        label = parts.slice(0, parts.length - 2).join(', ');
+        lat = parseFloat(parts[parts.length - 2]);
+        lng = parseFloat(parts[parts.length - 1]);
+      } else if (parts.length === 2) {
+        lat = parseFloat(parts[0]);
+        lng = parseFloat(parts[1]);
+      }
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        parsed.push({ label: label || `Site ${parsed.length + 1}`, lat, lng });
+      }
+    });
+    config.candidateFacilities = parsed;
+    const fb = el.querySelector('#cog-candidate-feedback');
+    if (fb) {
+      fb.textContent = parsed.length
+        ? `${parsed.length} candidate site(s) loaded`
+        : 'No valid lines parsed — format: Label, Lat, Lng (one per line)';
+    }
     markDirty();
   });
 
@@ -854,6 +920,7 @@ function renderAnalysis(el) {
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
             <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${clusterColor(i)};"></span>
             <span style="font-size:14px;font-weight:700;">Center ${i + 1}: ${c.nearestCity}</span>
+            ${c.candidateLabel ? `<span title="K-means picked this from your candidate list. Free centroid was ${calc.formatLatLng(c.snappedFromLat, c.snappedFromLng)}." style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;background:#dbeafe;color:#1d4ed8;letter-spacing:0.4px;">SNAPPED → ${c.candidateLabel}</span>` : ''}
           </div>
           <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;font-size:13px;">
             <div>
