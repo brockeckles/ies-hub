@@ -30,6 +30,14 @@
  * @property {number} [maxDays] — SLA transit time (default 3)
  * @property {'TL' | 'LTL' | 'Parcel' | 'Mixed'} [mode]
  * @property {number} [avgWeight] — lbs per shipment
+ *
+ * NET-C3 extensions (2026-04-26):
+ * @property {boolean} [hazmat] — UN-classified hazmat shipment (drives ~12% TL premium, restricts route choices, requires placards/training)
+ * @property {string}  [hazmatClass] — UN class (1.1 explosives → 9 misc); blank = none
+ * @property {('uniform'|'holiday'|'spring'|'summer'|'back_to_school'|'custom')} [seasonality] — peak-month profile; default 'uniform'
+ * @property {number[]} [monthlyShare] — 12-element % distribution (sums to 100); used when seasonality='custom'
+ * @property {('daily'|'weekly'|'biweekly'|'monthly'|'irregular')} [frequency] — order cadence; drives LTL vs TL break-even
+ * @property {number} [freqPerWeek] — explicit weekly shipment count (overrides frequency bucket if set)
  */
 
 /**

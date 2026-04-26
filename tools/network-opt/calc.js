@@ -39,6 +39,16 @@ export const DEFAULT_RATES = {
     [22.00, 29.50, 39.00, 59.00, 91.00, 117.00], // Zone 8
   ],
   fuelSurcharge: 0.12,
+  // NET-C1 — Per-lane rate overrides. Each entry shadows the global rates
+  // for a specific origin→destination pair when both keys match. Use facility
+  // ids, demand-point ids, region codes, or '*' wildcards. First match wins.
+  /** @type {Array<{
+   *    originId?: string|null, destId?: string|null,
+   *    originRegion?: string, destRegion?: string,
+   *    tlRatePerMile?: number, ltlMinCharge?: number,
+   *    ltlDiscountPct?: number, fuelSurcharge?: number, parcelZoneOverride?: number
+   *  }>} */
+  laneRates: [],
 };
 
 export const PARCEL_WEIGHT_BRACKETS = [1, 5, 10, 25, 50, 70];
@@ -84,6 +94,69 @@ export const NMFC_CLASS_MULTIPLIERS = {
 
 /** All allowed NMFC class codes, sorted ascending — useful for UI selects. */
 export const NMFC_CLASS_CODES = Object.keys(NMFC_CLASS_MULTIPLIERS).map(Number).sort((a, b) => a - b);
+
+/**
+ * Seasonality profile catalog for NET-C3.
+ * Each profile is a 12-element monthlyShare array (% of annual demand) summing to ~100.
+ * Drives peak-month inventory and capacity sizing in NetOpt facility runs.
+ * Months are Jan→Dec (index 0 = Jan).
+ */
+export const SEASONALITY_PROFILES = {
+  uniform:        [8.33, 8.33, 8.33, 8.33, 8.33, 8.33, 8.33, 8.33, 8.33, 8.33, 8.33, 8.37],
+  holiday:        [5.0,  5.0,  5.5,  6.0,  6.5,  7.0,  7.5,  8.5,  9.5, 12.0, 14.0, 13.5],
+  spring:         [5.5,  6.5,  9.0, 12.0, 14.0, 12.5, 10.0,  8.5,  7.5,  6.0,  4.5,  4.0],
+  summer:         [4.5,  5.0,  6.0,  7.5,  9.5, 12.5, 13.5, 12.5, 10.0,  8.0,  6.0,  5.0],
+  back_to_school: [5.0,  5.0,  5.5,  6.0,  6.5,  8.0, 11.5, 14.5, 11.5,  9.0,  9.0,  8.5],
+};
+
+/** Profile keys exposed to the UI seasonality selector (custom is added inline). */
+export const SEASONALITY_PROFILE_KEYS = Object.keys(SEASONALITY_PROFILES);
+
+/** Resolve a seasonality profile key (or 'custom') to a 12-element monthly share array. */
+export function monthlyShareForProfile(profile, customShare) {
+  if (profile === 'custom' && Array.isArray(customShare) && customShare.length === 12) return customShare;
+  return SEASONALITY_PROFILES[profile] || SEASONALITY_PROFILES.uniform;
+}
+
+/**
+ * Frequency bucket → average shipments per week. Drives the LTL↔TL break-even
+ * (low frequency favors LTL even at higher per-mile rates because cubic utilization is poor).
+ */
+export const FREQUENCY_PER_WEEK = {
+  daily:    5.0,
+  weekly:   1.0,
+  biweekly: 0.5,
+  monthly:  0.23,   // ~1/4.33
+  irregular: 0.1,
+};
+
+export const FREQUENCY_OPTIONS = ['daily', 'weekly', 'biweekly', 'monthly', 'irregular'];
+
+/** Resolve a frequency label/explicit weekly count → numeric shipments per week. */
+export function freqPerWeekForBucket(frequency, explicit) {
+  if (Number.isFinite(explicit) && explicit > 0) return explicit;
+  return FREQUENCY_PER_WEEK[frequency] ?? 1.0;
+}
+
+/** UN hazmat classes 1-9 — surfaced in the demand-point table when hazmat=true. */
+export const HAZMAT_CLASSES = [
+  '1.1 Explosives',
+  '1.4 Explosives (low hazard)',
+  '2.1 Flammable Gas',
+  '2.2 Non-Flammable Gas',
+  '2.3 Toxic Gas',
+  '3 Flammable Liquid',
+  '4.1 Flammable Solid',
+  '4.2 Spontaneously Combustible',
+  '4.3 Dangerous When Wet',
+  '5.1 Oxidizer',
+  '5.2 Organic Peroxide',
+  '6.1 Toxic',
+  '6.2 Infectious',
+  '7 Radioactive',
+  '8 Corrosive',
+  '9 Misc.',
+];
 
 /** Look up an NMFC multiplier; falls back to 1.0 (class 100) when unrecognised. */
 export function nmfcMultiplier(classCode) {
@@ -212,15 +285,47 @@ export function haversine(lat1, lng1, lat2, lng2) {
 
 /**
  * Estimate transit days from distance and truck speed.
+ *
+ * NET-B5 (2026-04-26) — previously rounded `driving_hours / 11` which
+ * assumed pure driving with no load/unload/dwell/rest interruptions.
+ * Real-world FTL transit always includes:
+ *   • Load time at origin     ~2 hrs
+ *   • Unload time at dest     ~2 hrs
+ *   • Mandatory 30-min rest after 8 hrs driving (HOS §395.3(a)(3)(ii))
+ *   • Optional intermediate dwell at stops  (set per-lane)
+ * The HOS day is also bounded by the 14-hour on-duty window, not just
+ * 11 driving hrs — so total wall-clock per day is 14, not 11.
+ *
  * @param {number} miles
  * @param {number} [speedMph=50]
- * @param {number} [hoursPerDay=11] — HOS driving hours
- * @returns {number} transit days (rounded up)
+ * @param {object} [opts]
+ * @param {number} [opts.drivingHoursPerDay=11] — HOS §395.3(a)(3)(i)
+ * @param {number} [opts.onDutyHoursPerDay=14]  — HOS §395.3(a)(2) wall-clock window
+ * @param {number} [opts.loadHours=2]
+ * @param {number} [opts.unloadHours=2]
+ * @param {number} [opts.dwellHoursPerStop=0]   — extra dwell at intermediate stops
+ * @param {number} [opts.intermediateStops=0]
+ * @returns {number} transit days (rounded up to whole days)
  */
-export function estimateTransitDays(miles, speedMph = 50, hoursPerDay = 11) {
+export function estimateTransitDays(miles, speedMph = 50, opts = {}) {
   if (miles <= 0) return 0;
+  // Backwards-compat: old signature was (miles, speedMph, hoursPerDay).
+  // If a number was passed where opts goes, treat it as drivingHoursPerDay.
+  if (typeof opts === 'number') opts = { drivingHoursPerDay: opts };
+  const drivingPerDay = Math.max(1, opts.drivingHoursPerDay || 11);
+  const onDutyPerDay  = Math.max(drivingPerDay, opts.onDutyHoursPerDay || 14);
+  const loadHrs       = opts.loadHours == null ? 2 : Math.max(0, opts.loadHours);
+  const unloadHrs     = opts.unloadHours == null ? 2 : Math.max(0, opts.unloadHours);
+  const dwellPerStop  = Math.max(0, opts.dwellHoursPerStop || 0);
+  const stops         = Math.max(0, opts.intermediateStops || 0);
+
   const drivingHours = miles / Math.max(1, speedMph);
-  return Math.ceil(drivingHours / hoursPerDay);
+  // 30-min mandatory rest break after every 8 cumulative driving hours.
+  const restBreakHours = 0.5 * Math.floor(drivingHours / 8);
+  const wallClockHours = drivingHours + restBreakHours + loadHrs + unloadHrs + (dwellPerStop * stops);
+
+  // Multi-day: each day caps at on-duty wall clock (14 hrs).
+  return Math.ceil(wallClockHours / onDutyPerDay);
 }
 
 /**
@@ -241,6 +346,37 @@ export function parcelZone(miles) {
 // ============================================================
 // TRANSPORTATION COSTING
 // ============================================================
+
+/**
+ * NET-C1 — Resolve effective rate card for a specific OD pair by overlaying
+ * any matching lane-override entries on top of the base rate card. First
+ * matching `laneRates` row wins (so put the most-specific entries first).
+ * A row matches when ALL of its present keys equal the supplied values:
+ *   - originId / destId       — exact id match (or '*' wildcard, or null=any)
+ *   - originRegion / destRegion — region-code match
+ *
+ * @param {object} rateCard
+ * @param {object} ctx — {originId?, destId?, originRegion?, destRegion?}
+ * @returns {object} merged rate card with overrides applied
+ */
+export function resolveLaneRates(rateCard, ctx = {}) {
+  if (!rateCard || !Array.isArray(rateCard.laneRates) || rateCard.laneRates.length === 0) {
+    return rateCard || {};
+  }
+  const wild = v => v === '*' || v == null;
+  const match = (a, b) => wild(a) || wild(b) || a === b;
+  const lane = rateCard.laneRates.find(r =>
+    match(r.originId, ctx.originId) &&
+    match(r.destId, ctx.destId) &&
+    match(r.originRegion, ctx.originRegion) &&
+    match(r.destRegion, ctx.destRegion)
+  );
+  if (!lane) return rateCard;
+  // Strip the matcher fields so they don't leak into downstream rate
+  // consumers; keep only the actual rate-override fields.
+  const { originId: _a, destId: _b, originRegion: _c, destRegion: _d, ...overrides } = lane;
+  return { ...rateCard, ...overrides, _laneOverrideApplied: true, _laneOverrideKey: `${ctx.originId || '*'}→${ctx.destId || '*'}` };
+}
 
 /**
  * Compute TL (truckload) cost for a lane.
@@ -380,7 +516,13 @@ export function parcelCost(weight, miles, zoneRates = DEFAULT_RATES.parcelZoneRa
  * @param {number} [destLng]
  * @returns {{ tlCost: number, ltlCost: number, parcelCost: number, blendedCost: number }}
  */
-export function blendedLaneCost(miles, avgWeight, modeMix, rateCard = DEFAULT_RATES, originLng, destLng, originLat, destLat, nmfcClass) {
+export function blendedLaneCost(miles, avgWeight, modeMix, rateCard = DEFAULT_RATES, originLng, destLng, originLat, destLat, nmfcClass, ctx) {
+  // NET-C1 — apply per-lane overrides if a matching row exists. ctx is
+  // optional + shapes to { originId, destId } from the caller. When omitted
+  // the rate card flows through unchanged (backwards compat).
+  if (ctx && rateCard && Array.isArray(rateCard.laneRates) && rateCard.laneRates.length) {
+    rateCard = resolveLaneRates(rateCard, ctx);
+  }
   // E4/E5 fix (2026-04-25 EVE): same-facility / same-ZIP lanes have no transport cost.
   // Previously LTL & Parcel still produced their minimum-bracket charge against a 0-mile lane,
   // which surfaced as $6 LTL / $25 Parcel / $11 blended on Lane Assignments — dimensionally wrong.

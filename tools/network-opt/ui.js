@@ -15,8 +15,8 @@ import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadXLSX } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260418-sM';
-import * as calc from './calc.js?v=20260425-s11';
-import * as api from './api.js?v=20260425-s11';
+import * as calc from './calc.js?v=20260425-s12';
+import * as api from './api.js?v=20260425-s12';
 import { createChart } from '../../shared/cdn-wrappers/chart-wrapper.js?v=20260418-sK';
 
 // ============================================================
@@ -1285,6 +1285,9 @@ function renderDemand(el) {
               <th style="text-align:right;padding:8px 6px;font-weight:700;">Max Days</th>
               <th style="text-align:right;padding:8px 6px;font-weight:700;">Avg Wt (lbs)</th>
               <th style="text-align:right;padding:8px 6px;font-weight:700;" title="NMFC freight class for LTL costing — drives the class multiplier (50 dense → 0.65×; 500 light → 2.60×). 100 is baseline.">NMFC</th>
+              <th style="text-align:center;padding:8px 6px;font-weight:700;" title="UN-classified hazmat shipment — drives ~12% TL premium and route restrictions.">Haz</th>
+              <th style="text-align:right;padding:8px 6px;font-weight:700;" title="Annual demand distribution profile. Drives peak-month sizing.">Seasonality</th>
+              <th style="text-align:right;padding:8px 6px;font-weight:700;" title="Order cadence. Drives LTL↔TL break-even — low frequency favors LTL even at higher per-mile rates.">Frequency</th>
               <th style="text-align:center;padding:8px 6px;font-weight:700;"></th>
             </tr>
           </thead>
@@ -1300,6 +1303,19 @@ function renderDemand(el) {
                 <td style="padding:6px;text-align:right;">
                   <select data-dem-nmfc="${i}" style="font-size:11px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;background:#fff;">
                     ${calc.NMFC_CLASS_CODES.map(c => `<option value="${c}"${(d.nmfcClass || 100) === c ? ' selected' : ''}>${c}</option>`).join('')}
+                  </select>
+                </td>
+                <td style="padding:6px;text-align:center;">
+                  <input type="checkbox" data-dem-hazmat="${i}"${d.hazmat ? ' checked' : ''} title="Hazmat shipment — adds TL premium + route restrictions" />
+                </td>
+                <td style="padding:6px;text-align:right;">
+                  <select data-dem-seasonality="${i}" style="font-size:11px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;background:#fff;">
+                    ${['uniform','holiday','spring','summer','back_to_school','custom'].map(s => `<option value="${s}"${(d.seasonality || 'uniform') === s ? ' selected' : ''}>${s.replace('_',' ')}</option>`).join('')}
+                  </select>
+                </td>
+                <td style="padding:6px;text-align:right;">
+                  <select data-dem-frequency="${i}" style="font-size:11px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;background:#fff;">
+                    ${calc.FREQUENCY_OPTIONS.map(f => `<option value="${f}"${(d.frequency || 'weekly') === f ? ' selected' : ''}>${f}</option>`).join('')}
                   </select>
                 </td>
                 <td style="padding:6px;text-align:center;">
@@ -1348,8 +1364,34 @@ function renderDemand(el) {
     });
   });
 
+  // Per-demand hazmat flag — surfaced for run pre-flight + future hazmat costing
+  el.querySelectorAll('[data-dem-hazmat]').forEach(box => {
+    box.addEventListener('change', () => {
+      const idx = parseInt(/** @type {HTMLElement} */ (box).dataset.demHazmat);
+      if (demands[idx]) { demands[idx].hazmat = /** @type {HTMLInputElement} */ (box).checked; markDirty(); }
+    });
+  });
+
+  // Per-demand seasonality profile — drives peak-month sizing
+  el.querySelectorAll('[data-dem-seasonality]').forEach(select => {
+    select.addEventListener('change', () => {
+      const idx = parseInt(/** @type {HTMLElement} */ (select).dataset.demSeasonality);
+      const v = /** @type {HTMLSelectElement} */ (select).value;
+      if (demands[idx]) { demands[idx].seasonality = v; markDirty(); }
+    });
+  });
+
+  // Per-demand frequency bucket — drives LTL↔TL break-even
+  el.querySelectorAll('[data-dem-frequency]').forEach(select => {
+    select.addEventListener('change', () => {
+      const idx = parseInt(/** @type {HTMLElement} */ (select).dataset.demFrequency);
+      const v = /** @type {HTMLSelectElement} */ (select).value;
+      if (demands[idx]) { demands[idx].frequency = v; markDirty(); }
+    });
+  });
+
   el.querySelector('#no-add-demand')?.addEventListener('click', () => {
-    demands.push({ id: 'd' + Date.now(), zip3: '', lat: 39.83, lng: -98.58, annualDemand: 10000, maxDays: 3, avgWeight: 25, nmfcClass: 100 });
+    demands.push({ id: 'd' + Date.now(), zip3: '', lat: 39.83, lng: -98.58, annualDemand: 10000, maxDays: 3, avgWeight: 25, nmfcClass: 100, hazmat: false, seasonality: 'uniform', frequency: 'weekly' });
     markDirty();
     renderDemand(el);
     renderSidebar();
