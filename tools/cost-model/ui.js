@@ -2579,13 +2579,13 @@ function renderVolumes() {
               <td><button class="cm-star-btn${l.isOutboundPrimary ? ' active' : ''}" data-idx="${i}" title="Set as primary outbound">&#9733;</button></td>
               <td>
                 <div style="display:flex;align-items:center;gap:6px;">
-                  <input value="${l.name || ''}" style="width:180px;" data-idx="${i}" data-field="name" />
+                  <input value="${l.name || ''}" style="width:180px;" data-array="volumeLines" data-idx="${i}" data-field="name" />
                   ${l.source ? `<span class="cm-vol-src cm-vol-src--${l.source}" title="Volume source: ${l.source === 'wsc' ? 'pulled from Warehouse Sizing' : l.source === 'netopt' ? 'pulled from Network Optimizer' : 'manually entered'}">${l.source === 'wsc' ? 'WSC' : l.source === 'netopt' ? 'NETOPT' : 'MANUAL'}</span>` : ''}
                 </div>
               </td>
-              <td><input type="number" value="${l.volume || 0}" style="width:120px;" data-idx="${i}" data-field="volume" data-type="number" /></td>
+              <td><input type="number" value="${l.volume || 0}" style="width:120px;" data-array="volumeLines" data-idx="${i}" data-field="volume" data-type="number" /></td>
               <td>
-                <select style="width:90px;" data-idx="${i}" data-field="uom">
+                <select style="width:90px;" data-array="volumeLines" data-idx="${i}" data-field="uom">
                   ${['pallets', 'cases', 'eaches', 'orders', 'lines', 'units'].map(u =>
                     `<option value="${u}"${l.uom === u ? ' selected' : ''}>${u}</option>`
                   ).join('')}
@@ -7571,7 +7571,33 @@ async function openCompareModal() {
       `;
     };
 
+    // Sanity-check: when scenarios produce identical surfaced metrics (no monthly
+    // projections + identical inputs), the grid looks "broken" because every column
+    // matches every other column. Surface an advisory banner so the user knows it's
+    // an upstream save/Run issue, not the modal failing to differentiate.
+    const allKpisZero = bundles.every(b =>
+      b.summary.total_revenue === 0 && b.summary.total_opex === 0 &&
+      b.summary.ebitda === 0 && b.summary.capex === 0
+    );
+    const inputsHash = (b) => JSON.stringify({
+      hc: b.inputs.totalHC, sqft: b.inputs.sqft, margin: b.inputs.margin,
+      vol: b.inputs.volumeByUom,
+      buckets: (b.buckets || []).map(x => ({ l: x.label || x.name, r: x.rate, rec: x.recommendedRate })),
+    });
+    const baselineHash = inputsHash(bundles[0]);
+    const allInputsIdentical = bundles.every(b => inputsHash(b) === baselineHash);
+    const advisoryParts = [];
+    if (allKpisZero) advisoryParts.push('No monthly projections found for any picked scenario — open each one and click <strong>Save</strong> (or run the calc) to generate revenue/opex/EBITDA before comparing.');
+    if (allInputsIdentical && bundles.length >= 2) advisoryParts.push('Picked scenarios have <strong>identical inputs</strong> on volumes / pricing / labor / facility / margin. If you edited a scenario expecting a difference, confirm the edit landed in the right row and that you clicked Save.');
+    const advisoryBanner = advisoryParts.length ? `
+      <div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:#78350f;">
+        <strong>⚠ Compare advisory:</strong>
+        <ul style="margin:6px 0 0 18px;padding:0;">${advisoryParts.map(p => `<li style="margin:2px 0;">${p}</li>`).join('')}</ul>
+      </div>
+    ` : '';
+
     resultEl.innerHTML = `
+      ${advisoryBanner}
       <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:6px;">
         <div class="cm-subtle">Δ% colors: green = better for the deal vs. baseline; red = worse. Lower-is-better metrics (opex, capex, cost/HC, sqft) invert. Pricing rates use the effective rate (override → recommended).</div>
         <div style="display:flex;gap:6px;">
