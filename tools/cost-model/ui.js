@@ -10,7 +10,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import * as calc from './calc.js?v=20260425-s4';
+import * as calc from './calc.js?v=20260426-s8';
 import * as api from './api.js?v=20260423-xQ';
 import * as scenarios from './calc.scenarios.js?v=20260421-wA';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
@@ -4142,6 +4142,7 @@ function renderPricingBuckets() {
           Each bucket has a pricing type (fixed / variable / cost-plus) and a UOM. Rates are computed in the Pricing step later — or you can set an explicit rate here to override the derivation.
         </div>
         <div style="display:flex;gap:8px;flex-shrink:0;">
+          <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-assign-buckets" title="Walk all cost lines and assign each one to the bucket suggested by its role / type. Existing assignments are kept.">↻ Auto-assign Lines</button>
           <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="apply-bucket-starter" title="Reset to the standard 5-bucket template (overwrites current buckets)">↺ Reset to Template</button>
           <button class="hub-btn hub-btn-primary hub-btn-sm" data-action="add-bucket">+ Add Bucket</button>
         </div>
@@ -7892,6 +7893,22 @@ function handleAction(action, idx, btn) {
       break;
     }
     // Pricing Buckets (v2 — taxonomy editor in the Structure phase)
+    case 'auto-assign-buckets': {
+      // CM-PRC-1 — auto-assign pricing_bucket on every line that doesn't have one.
+      const before = JSON.stringify({
+        labor: (model.laborLines||[]).map(l=>l.pricing_bucket||null),
+        ind:   (model.indirectLaborLines||[]).map(l=>l.pricing_bucket||null),
+        eq:    (model.equipmentLines||[]).map(l=>l.pricing_bucket||null),
+        ov:    (model.overheadLines||[]).map(l=>l.pricing_bucket||null),
+        vas:   (model.vasLines||[]).map(l=>l.pricing_bucket||null),
+        st:    (model.startupLines||[]).map(l=>l.pricing_bucket||null),
+      });
+      const out = calc.autoAssignBuckets(model, { overwrite: false });
+      try { showToast(`Auto-assigned ${out.assigned} line${out.assigned===1?'':'s'} (${out.skipped} kept, ${out.unmatched} no match).`, out.assigned > 0 ? 'success' : 'info'); } catch {}
+      markDirty();
+      render();
+      return;
+    }
     case 'add-bucket': {
       model.pricingBuckets = model.pricingBuckets || [];
       // Generate a unique id slug

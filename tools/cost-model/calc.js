@@ -1848,6 +1848,106 @@ function totalEquipmentCapitalFromProjections(projections) {
 // PRICING SCHEDULE
 // ============================================================
 
+
+// CM-PRC-1 — bucket auto-assignment heuristic.
+// Maps a cost line to the most likely pricing bucket based on the line's
+// metadata. Conservative: returns null when no signal matches, leaving the
+// UI dropdown unset rather than guessing wrong. Caller can then prompt user.
+//
+// Heuristics (most-specific first):
+//   1. Line type → category (overhead/startup → mgmt; vas → vas; equipment → first variable bucket)
+//   2. Role/title keyword match — pick/pack → pick_pack, receive/inbound → inbound, etc.
+//   3. Labor activity (MOST template) keyword match
+//   4. Fallback: first non-mgmt/non-startup variable bucket
+const ROLE_TO_BUCKET_HINTS = [
+  { kws: ['pick', 'pack', 'fulfill', 'order picker', 'packer'],          bucket: 'pick_pack' },
+  { kws: ['receive', 'receiver', 'inbound', 'unload', 'put-away', 'putaway', 'dock worker', 'dock supervisor'], bucket: 'inbound' },
+  { kws: ['storage', 'replen', 'replenishment', 'cycle count', 'inventory control'], bucket: 'storage' },
+  { kws: ['vas', 'kitting', 'kit', 'label', 'rework', 'returns', 'qa', 'quality'], bucket: 'vas' },
+  { kws: ['manager', 'supervisor', 'admin', 'clerk', 'lead', 'director', 'foreman'], bucket: 'mgmt_fee' },
+];
+
+/**
+ * Suggest a pricing bucket for a single cost line.
+ * @param {object} line — a labor/equipment/overhead/vas/startup line
+ * @param {string} lineType — 'labor' | 'indirectLabor' | 'equipment' | 'overhead' | 'vas' | 'startup'
+ * @param {Array<{id:string, name:string, type:string, uom:string}>} buckets
+ * @returns {string|null} bucket id (or null if no confident match)
+ */
+export function suggestBucket(line, lineType, buckets = []) {
+  if (!Array.isArray(buckets) || buckets.length === 0) return null;
+  const has = (id) => buckets.some(b => b && b.id === id);
+  const firstNonMgmt = () => {
+    const b = buckets.find(b => b && b.id && !/mgmt|management|startup/i.test(b.id));
+    return b ? b.id : (buckets[0] ? buckets[0].id : null);
+  };
+  const firstVariable = () => {
+    const b = buckets.find(b => b && b.type === 'variable' && !/mgmt|management|startup/i.test(b.id));
+    return b ? b.id : firstNonMgmt();
+  };
+
+  // Type-based fast paths
+  if (lineType === 'overhead' || lineType === 'startup') return has('mgmt_fee') ? 'mgmt_fee' : firstNonMgmt();
+  if (lineType === 'vas') return has('vas') ? 'vas' : firstVariable();
+  if (lineType === 'equipment') return firstVariable();
+
+  // Role/title keyword search (labor / indirectLabor)
+  const blob = [
+    line && line.role,
+    line && line.title,
+    line && line.position,
+    line && line.activity,
+    line && line.most_template,
+    line && line.most_activity,
+    line && line.description,
+  ].filter(Boolean).join(' ').toLowerCase();
+
+  if (blob) {
+    for (const hint of ROLE_TO_BUCKET_HINTS) {
+      if (hint.kws.some(kw => blob.includes(kw))) {
+        return has(hint.bucket) ? hint.bucket : firstNonMgmt();
+      }
+    }
+  }
+
+  // No confident match
+  return null;
+}
+
+/**
+ * Auto-assign pricing_bucket on every line that doesn't already have one.
+ * Mutates a shallow-cloned model and returns it (caller is responsible for
+ * persisting). Lines with an existing pricing_bucket are left untouched.
+ *
+ * @param {object} model
+ * @param {{ overwrite?: boolean }} [opts] — if overwrite=true, replaces existing
+ * @returns {{ model: object, assigned: number, skipped: number, unmatched: number }}
+ */
+export function autoAssignBuckets(model, opts = {}) {
+  const overwrite = !!opts.overwrite;
+  const buckets = Array.isArray(model && model.pricingBuckets) ? model.pricingBuckets : [];
+  if (buckets.length === 0) return { model, assigned: 0, skipped: 0, unmatched: 0 };
+
+  let assigned = 0, skipped = 0, unmatched = 0;
+  const sweep = (arr, lineType) => {
+    if (!Array.isArray(arr)) return;
+    for (const l of arr) {
+      if (!l) continue;
+      if (l.pricing_bucket && !overwrite) { skipped++; continue; }
+      const sug = suggestBucket(l, lineType, buckets);
+      if (sug) { l.pricing_bucket = sug; assigned++; }
+      else { unmatched++; }
+    }
+  };
+  sweep(model.laborLines,         'labor');
+  sweep(model.indirectLaborLines, 'indirectLabor');
+  sweep(model.equipmentLines,     'equipment');
+  sweep(model.overheadLines,      'overhead');
+  sweep(model.vasLines,           'vas');
+  sweep(model.startupLines,       'startup');
+  return { model, assigned, skipped, unmatched };
+}
+
 /**
  * Compute cost allocated to each pricing bucket.
  * @param {Object} params
