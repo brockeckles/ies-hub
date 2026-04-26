@@ -306,6 +306,57 @@ export function analyzeFleet(lanes, vehicles = DEFAULT_VEHICLES, config = DEFAUL
   // ATRI benchmark
   const atriBenchmark = computeAtriBenchmark(core.avgCostPerMile);
 
+  // FLE-D1: surface per-component cost build-up for all three models so
+  // the UI can render a side-by-side build-up table (Fuel/Maint/Vehicle/
+  // Insurance/Driver/Admin/Margin) instead of just three roll-up totals.
+  const privateBreakdown = (() => {
+    let fuel = 0, maint = 0, vehicle = 0, ins = 0, driver = 0, admin = 0;
+    core.fleetComposition.forEach(f => {
+      fuel += f.annualFuelCost || 0;
+      maint += f.annualMaintenanceCost || 0;
+      vehicle += f.annualDepreciation || 0;
+      ins += f.annualInsurance || 0;
+      driver += f.annualDriverCost || 0;
+      admin += f.annualAdminCost || 0;
+    });
+    return { fuel, maintenance: maint, vehicle, insurance: ins, driver, admin, markup: 0, margin: 0 };
+  })();
+  const dedDriver = dedicatedResult.breakdown.driver || 0;
+  const dedMarkupOnDriver = dedDriver * 0.25; // 1.25x markup on driver cost
+  const margin = (config.gxoMarginPct ?? 12) / 100;
+  const dedBaseCost = (dedicatedResult.breakdown.fuel || 0)
+                   + (dedicatedResult.breakdown.maintenance || 0)
+                   + (dedicatedResult.breakdown.vehicle || 0)
+                   + (dedicatedResult.breakdown.insurance || 0)
+                   + (dedDriver * 1.25)
+                   + (dedicatedResult.breakdown.admin || 0);
+  const dedicatedBreakdown = {
+    fuel: dedicatedResult.breakdown.fuel || 0,
+    maintenance: dedicatedResult.breakdown.maintenance || 0,
+    vehicle: dedicatedResult.breakdown.vehicle || 0,
+    insurance: dedicatedResult.breakdown.insurance || 0,
+    driver: dedDriver,
+    admin: dedicatedResult.breakdown.admin || 0,
+    markup: dedMarkupOnDriver,
+    margin: dedBaseCost * margin,
+  };
+  // Common Carrier breakdown derives base × fuel-surcharge from FALLBACK_CARRIER_RATES.
+  // We approximate the split as 70% line-haul, 18% fuel surcharge, 12% fixed/min charges.
+  const carrierTotal = carrierResult.totalAnnual || 0;
+  const carrierBreakdown = {
+    fuel: 0,
+    maintenance: 0,
+    vehicle: 0,
+    insurance: 0,
+    driver: 0,
+    admin: 0,
+    markup: 0,
+    margin: 0,
+    lineHaul: carrierTotal * 0.70,
+    fuelSurcharge: carrierTotal * 0.18,
+    minCharges: carrierTotal * 0.12,
+  };
+
   return {
     assignments: core.assignments,
     fleetComposition: core.fleetComposition,
@@ -313,7 +364,14 @@ export function analyzeFleet(lanes, vehicles = DEFAULT_VEHICLES, config = DEFAUL
     totalAnnualMiles: core.totalAnnualMiles,
     totalAnnualCost: core.totalAnnualCost,
     avgCostPerMile: core.avgCostPerMile,
-    comparison: { private: privateCost, dedicated: dedicatedResult.totalAnnual, carrier: carrierResult.totalAnnual },
+    comparison: {
+      private: privateCost,
+      dedicated: dedicatedResult.totalAnnual,
+      carrier: carrierResult.totalAnnual,
+      privateBreakdown,
+      dedicatedBreakdown,
+      carrierBreakdown,
+    },
     atriBenchmark,
   };
 }

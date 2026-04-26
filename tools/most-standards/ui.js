@@ -14,8 +14,8 @@ import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../
 // button is a convenience trigger rather than a discrete compute step, so a
 // "clean/dirty" gate would be misleading here. Revisit if/when MOST gains a
 // heavier recompute path (MOST B4 productivity factor, maybe).
-import * as calc from './calc.js?v=20260425-s3';
-import * as api from './api.js?v=20260420-vF';
+import * as calc from './calc.js?v=20260426-s1';
+import * as api from './api.js?v=20260426-s1';
 import { getMostTplName, getMostTplBaseUph, getMostTplTmuTotal, getMostElName, getMostElSequence, getMostElTmu } from './types.js?v=20260418-sM';
 
 // ============================================================
@@ -129,6 +129,10 @@ function analysisRowToScenario(row) {
       shift_hours: row.shift_hours,
       operating_days: row.operating_days || 250,
       hourly_rate: row.hourly_rate,
+      // MOS-E3 + MOS-B5: per-category rates + learning curve are stashed
+      // in analysis_data jsonb. Default sensibly when missing for legacy rows.
+      rates_by_category: data.rates_by_category || null,
+      learning_curve_pct: data.learning_curve_pct == null ? 100 : Number(data.learning_curve_pct),
       lines,
       allowance_profile_id: row.allowance_profile_id || null,
     },
@@ -926,7 +930,24 @@ function renderEditor() {
               <tr${isVar ? ' class="most-elem-row--variable"' : ''}>
                 <td>${i + 1}</td>
                 <td><input class="hub-input" type="text" value="${getMostElName(el) || ''}" data-elem-idx="${i}" data-elem-field="element_name" style="width:100%; font-size:11px; padding:4px 6px;" /></td>
-                <td><input class="hub-input" type="text" value="${el.most_sequence || ''}" data-elem-idx="${i}" data-elem-field="most_sequence" style="width:100%; font-size:11px; padding:4px 6px; font-family:monospace;" /></td>
+                <td>
+                  <input class="hub-input" type="text" value="${el.most_sequence || ''}" data-elem-idx="${i}" data-elem-field="most_sequence" style="width:100%; font-size:11px; padding:4px 6px; font-family:monospace;" />
+                  ${(() => {
+                    // MOS-B1 + MOS-C4: parse the MOST shorthand and surface a
+                    // live readout (sum-of-indices x 10 = model TMU). Errors
+                    // tint red so the analyst sees malformed atoms instantly.
+                    const seq = el.most_sequence || '';
+                    if (!seq.trim()) return '';
+                    const r = calc.parseMostSequence(seq);
+                    if (!r.valid) {
+                      return `<div style="font-size:10px;color:#b91c1c;margin-top:2px;font-family:monospace;" title="${(r.errors || []).join(' | ')}">err</div>`;
+                    }
+                    const warn = (r.warnings || []).length > 0;
+                    const color = warn ? '#92400e' : 'var(--ies-gray-500)';
+                    const tip = warn ? r.warnings.join(' | ') : `Σ index=${r.indexSum}, model TMU=${r.modelTmu} (sum × 10).`;
+                    return `<div style="font-size:10px;color:${color};margin-top:2px;font-family:monospace;" title="${tip}">Σ${r.indexSum} → ${r.modelTmu} TMU${warn ? ' ⚠' : ''}</div>`;
+                  })()}
+                </td>
                 <td>
                   ${(() => {
                     // Case-insensitive match — DB stores uppercase ("GET"/"PUT"/…);
@@ -941,9 +962,9 @@ function renderEditor() {
                         ${opt('walk', 'Walk')}
                         ${opt('verify', 'Verify')}
                         ${opt('allow', 'Allow')}
-                        ${opt('general_move', 'General Move')}
-                        ${opt('controlled_move', 'Controlled')}
-                        ${opt('tool_use', 'Tool Use')}
+                        ${opt('general_move', 'General Move (ABG · ABP · A)')}
+                        ${opt('controlled_move', 'Controlled (ABG · MXI · A)')}
+                        ${opt('tool_use', 'Tool Use (ABG · ABP · ABT · ABP · A)')}
                         ${opt('body_motion', 'Body Motion')}
                       </select>
                     `;
@@ -1015,14 +1036,29 @@ function renderAnalysis() {
 
   // Compute derived fields for display
   const computedLines = lines.map(line => {
-    const derived = calc.computeAnalysisLine({
+    const effRate = calc.resolveCategoryRate(
+      analysis.rates_by_category, line.labor_category, analysis.hourly_rate, line.hourly_rate);
+    // MOS-B5: learning-curve adjusts adjusted UPH after PFD/productivity.
+    const lc = analysis.learning_curve_pct == null ? 100 : analysis.learning_curve_pct;
+    const baseDerived = calc.computeAnalysisLine({
       base_uph: line.base_uph,
       pfd_pct: pfd,
       productivity_pct: productivity,
       daily_volume: line.daily_volume,
       shift_hours: analysis.shift_hours,
-      hourly_rate: line.hourly_rate || analysis.hourly_rate,
+      hourly_rate: effRate,
     });
+    const lcUph = calc.applyLearningCurve(baseDerived.adjusted_uph, lc);
+    const lcHours = lcUph > 0 ? (line.daily_volume || 0) / lcUph : 0;
+    const lcFte = (analysis.shift_hours || 8) > 0 ? lcHours / (analysis.shift_hours || 8) : 0;
+    const lcCost = lcHours * effRate;
+    const derived = {
+      adjusted_uph: lcUph,
+      hours_per_day: lcHours,
+      fte: lcFte,
+      headcount: Math.ceil(lcFte),
+      daily_cost: lcCost,
+    };
     return { ...line, ...derived };
   });
 
@@ -1049,7 +1085,7 @@ function renderAnalysis() {
     ` : ''}
 
     <!-- Analysis Parameters -->
-    <div style="display:grid; grid-template-columns: repeat(6, 1fr); gap:12px; margin-bottom:20px;">
+    <div style="display:grid; grid-template-columns: repeat(6, 1fr); gap:12px; margin-bottom:14px;">
       <div>
         <label class="cm-form-label">PFD Allowance</label>
         <select class="hub-select" id="most-pfd-select">
@@ -1058,7 +1094,7 @@ function renderAnalysis() {
         </select>
       </div>
       <div>
-        <label class="cm-form-label" title="Personal + Fatigue + Delay allowance, applied on top of the MOST standard (formula: adjUPH = baseUPH × 100/(100+PFD%))">PFD %</label>
+        <label class="cm-form-label" title="Personal + Fatigue + Delay allowance. By convention IES applies PFD on UPH (adjUPH = baseUPH x 100/(100+PFD%)). Mathematically equivalent to PFD on TMU since hours scale linearly.">PFD %</label>
         <input class="hub-input" type="number" value="${pfd}" step="1" id="most-pfd-input" data-param="pfd_pct" />
       </div>
       <div>
@@ -1074,8 +1110,28 @@ function renderAnalysis() {
         <input class="hub-input" type="number" value="${analysis.operating_days}" step="1" data-param="operating_days" />
       </div>
       <div>
-        <label class="cm-form-label">Default $/Hr</label>
+        <label class="cm-form-label" title="Fallback hourly rate when category rates and per-line rate are blank.">Default $/Hr</label>
         <input class="hub-input" type="number" value="${analysis.hourly_rate}" step="0.5" data-param="hourly_rate" />
+      </div>
+    </div>
+
+    <!-- MOS-E3: per-category labor rates + MOS-B5: learning curve -->
+    <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; margin-bottom:20px;padding:10px 12px;background:var(--ies-gray-50);border:1px solid var(--ies-gray-200);border-radius:10px;">
+      <div>
+        <label class="cm-form-label" title="Manual labor rate. Lines tagged MANUAL inherit this when no per-line rate is set.">$/Hr — Manual</label>
+        <input class="hub-input" type="number" value="${(analysis.rates_by_category && analysis.rates_by_category.manual) || 0}" step="0.5" data-rate-cat="manual" />
+      </div>
+      <div>
+        <label class="cm-form-label" title="MHE (powered equipment) labor rate -- typically higher than manual due to certification + premium.">$/Hr — MHE</label>
+        <input class="hub-input" type="number" value="${(analysis.rates_by_category && analysis.rates_by_category.mhe) || 0}" step="0.5" data-rate-cat="mhe" />
+      </div>
+      <div>
+        <label class="cm-form-label" title="Hybrid (mixed manual + MHE) labor rate.">$/Hr — Hybrid</label>
+        <input class="hub-input" type="number" value="${(analysis.rates_by_category && analysis.rates_by_category.hybrid) || 0}" step="0.5" data-rate-cat="hybrid" />
+      </div>
+      <div>
+        <label class="cm-form-label" title="Learning curve productivity index. 100 = mature operator at engineered standard, 50 = new operator at half throughput. Multiplies adjusted UPH.">Learning Curve %</label>
+        <input class="hub-input" type="number" value="${analysis.learning_curve_pct == null ? 100 : analysis.learning_curve_pct}" min="10" max="120" step="5" data-param="learning_curve_pct" />
       </div>
     </div>
 
@@ -1124,7 +1180,7 @@ function renderAnalysis() {
             <td class="cm-num">${line.hours_per_day.toFixed(1)}</td>
             <td class="cm-num">${calc.formatFte(line.fte)}</td>
             <td class="cm-num" style="font-weight:700;">${line.headcount}</td>
-            <td><input type="number" value="${line.hourly_rate || analysis.hourly_rate || 0}" style="width:55px;" step="0.5" data-line="${i}" data-field="hourly_rate" data-type="number" /></td>
+            <td><input type="number" value="${line.hourly_rate || (analysis.rates_by_category && analysis.rates_by_category[line.labor_category || 'manual']) || analysis.hourly_rate || 0}" style="width:55px;" step="0.5" data-line="${i}" data-field="hourly_rate" data-type="number" title="Per-line override. Blank/0 falls back to ${(line.labor_category||'manual').toUpperCase()} category rate." /></td>
             <td class="cm-num">${formatDollar(line.daily_cost)}</td>
             <td><button class="cm-delete-btn" data-action="delete-analysis-line" data-idx="${i}">Del</button></td>
           </tr>
@@ -1413,8 +1469,24 @@ function bindContentEvents(container) {
   // Analysis parameter inputs
   container.querySelectorAll('[data-param]').forEach(input => {
     input.addEventListener('change', e => {
-      const param = /** @type {HTMLInputElement} */ (e.target).dataset.param;
-      analysis[param] = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
+      const tgt = /** @type {HTMLInputElement} */ (e.target);
+      const param = tgt.dataset.param;
+      analysis[param] = parseFloat(tgt.value) || 0;
+      // MOS-D3: typing a custom PFD% disconnects the line from the saved
+      // allowance profile so the PFD dropdown reverts to "Custom" — keeps
+      // the two controls coherent.
+      if (param === 'pfd_pct') analysis.allowance_profile_id = null;
+      renderContent();
+    });
+  });
+
+  // MOS-E3: per-category rate inputs
+  container.querySelectorAll('[data-rate-cat]').forEach(input => {
+    input.addEventListener('change', e => {
+      const tgt = /** @type {HTMLInputElement} */ (e.target);
+      const cat = tgt.dataset.rateCat;
+      if (!analysis.rates_by_category) analysis.rates_by_category = { manual: 0, mhe: 0, hybrid: 0 };
+      analysis.rates_by_category[cat] = parseFloat(tgt.value) || 0;
       renderContent();
     });
   });
@@ -1689,14 +1761,29 @@ function pushToCostModel() {
   const pfd = analysis.pfd_pct || 14;
   const productivity = analysis.productivity_pct == null ? 90 : analysis.productivity_pct;
   const computedLines = analysis.lines.map(line => {
-    const derived = calc.computeAnalysisLine({
+    const effRate = calc.resolveCategoryRate(
+      analysis.rates_by_category, line.labor_category, analysis.hourly_rate, line.hourly_rate);
+    // MOS-B5: learning-curve adjusts adjusted UPH after PFD/productivity.
+    const lc = analysis.learning_curve_pct == null ? 100 : analysis.learning_curve_pct;
+    const baseDerived = calc.computeAnalysisLine({
       base_uph: line.base_uph,
       pfd_pct: pfd,
       productivity_pct: productivity,
       daily_volume: line.daily_volume,
       shift_hours: analysis.shift_hours,
-      hourly_rate: line.hourly_rate || analysis.hourly_rate,
+      hourly_rate: effRate,
     });
+    const lcUph = calc.applyLearningCurve(baseDerived.adjusted_uph, lc);
+    const lcHours = lcUph > 0 ? (line.daily_volume || 0) / lcUph : 0;
+    const lcFte = (analysis.shift_hours || 8) > 0 ? lcHours / (analysis.shift_hours || 8) : 0;
+    const lcCost = lcHours * effRate;
+    const derived = {
+      adjusted_uph: lcUph,
+      hours_per_day: lcHours,
+      fte: lcFte,
+      headcount: Math.ceil(lcFte),
+      daily_cost: lcCost,
+    };
     return { ...line, ...derived };
   });
 
@@ -1763,7 +1850,13 @@ function createEmptyAnalysis() {
     pfd_pct: 14,
     shift_hours: 8,
     operating_days: 260,
+    // MOS-E3: legacy single rate kept for backwards compat. Effective per-line
+    // rate is now resolved via resolveCategoryRate(rates_by_category, ...).
     hourly_rate: 18,
+    rates_by_category: { manual: 18, mhe: 22, hybrid: 20 },
+    // MOS-B5: learning-curve productivity index (100 = mature operator).
+    // Multiplies adjusted UPH; default 100 = no effect.
+    learning_curve_pct: 100,
     lines: [],
   };
 }
@@ -1951,10 +2044,14 @@ async function saveCurrentScenario() {
     const saved = await api.saveAnalysis({
       name,
       pfd_pct: analysis.pfd_pct || 14,
+      productivity_pct: analysis.productivity_pct == null ? 90 : analysis.productivity_pct,
       shift_hours: analysis.shift_hours || 8,
       operating_days: analysis.operating_days || 250,
       hourly_rate: analysis.hourly_rate || 0,
       allowance_profile_id: analysis.allowance_profile_id || null,
+      // MOS-E3 + MOS-B5: forward per-category rates + learning curve
+      rates_by_category: analysis.rates_by_category || null,
+      learning_curve_pct: analysis.learning_curve_pct == null ? 100 : analysis.learning_curve_pct,
       lines: analysis.lines || [],
     });
     // Refresh the list from Supabase so we get the canonical row (incl. id, timestamps)
@@ -2041,6 +2138,8 @@ async function copyScenario(idx) {
       operating_days: sc.data?.operating_days,
       hourly_rate: sc.data?.hourly_rate,
       allowance_profile_id: sc.data?.allowance_profile_id || null,
+      rates_by_category: sc.data?.rates_by_category || null,
+      learning_curve_pct: sc.data?.learning_curve_pct == null ? 100 : sc.data.learning_curve_pct,
       lines: (sc.data?.lines || []).map(l => ({ ...l })),
     });
     const rows = await api.listAnalyses();

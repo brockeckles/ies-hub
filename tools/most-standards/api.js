@@ -199,6 +199,11 @@ export async function saveAnalysis(analysis) {
     analysis_data: {
       lines: analysis.lines,
       productivity_pct: analysis.productivity_pct == null ? null : Number(analysis.productivity_pct),
+      // MOS-E3: per-category rate map (manual/mhe/hybrid). Stashed in jsonb so
+      // we don't need a schema migration; loader maps it back out.
+      rates_by_category: analysis.rates_by_category || null,
+      // MOS-B5: learning-curve productivity index (100 = mature operator).
+      learning_curve_pct: analysis.learning_curve_pct == null ? null : Number(analysis.learning_curve_pct),
     },
   };
 

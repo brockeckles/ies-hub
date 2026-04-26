@@ -647,3 +647,131 @@ export function categoryColor(category) {
     default: return '#6c757d';
   }
 }
+
+
+// ============================================================
+// MOS-B1: MOST sequence model parser
+// ============================================================
+//
+// MOST shorthand: each parameter is a letter (A, B, G, M, X, I, P, F, L,
+// T, V, R) followed by a canonical index (one of 0,1,3,6,10,16,24,32,42,54).
+// The TMU per atom is the index value; per-element TMU = sum-of-indices x 10.
+// Example: "A6 B0 G1 A1 B0 P3 A0" -> 6+0+1+1+0+3+0 = 11 -> 110 model TMU.
+
+/** MOST parameter alphabet -- single-letter codes used in the General Move,
+ * Controlled Move, Tool Use, and Body Motion sequence models. */
+export const MOST_PARAM_LETTERS = ['A', 'B', 'G', 'M', 'X', 'I', 'P', 'F', 'L', 'T', 'V', 'R', 'C', 'D', 'S', 'W'];
+
+/**
+ * MOS-B1 -- Parse a MOST sequence string into atoms + a model-TMU total.
+ * Returns { valid, atoms, indexSum, modelTmu, warnings, errors }.
+ *
+ * Atoms are tokenized on whitespace; commas/hyphens are tolerated.
+ * Each atom must match [A-Z]{1,2}\d+ -- the leading letter is the
+ * parameter code and the trailing integer is the canonical MOST index.
+ *
+ *   - errors[] -- the input is malformed (unrecognized atoms, non-integer
+ *     indices, empty input).
+ *   - warnings[] -- atoms that parse but use an out-of-range index (e.g.
+ *     `A2`, since 2 is not in {0,1,3,6,10,16,24,32,42,54}).
+ *
+ * `modelTmu` is the summed canonical index x 10. This is the TMU implied
+ * by the sequence model; the analyst's saved tmu_value may diverge if
+ * the element bundles multiple cycles or if the sequence is decorative.
+ *
+ * @param {string} sequence
+ * @returns {{ valid: boolean, atoms: Array<{letter:string,index:number,raw:string}>, indexSum: number, modelTmu: number, warnings: string[], errors: string[] }}
+ */
+export function parseMostSequence(sequence) {
+  /** @type {string[]} */ const warnings = [];
+  /** @type {string[]} */ const errors = [];
+  /** @type {Array<{letter:string,index:number,raw:string}>} */ const atoms = [];
+  let indexSum = 0;
+
+  const raw = (sequence == null ? '' : String(sequence)).trim();
+  if (!raw) {
+    return { valid: false, atoms, indexSum: 0, modelTmu: 0, warnings, errors: ['Empty sequence.'] };
+  }
+
+  const tokens = raw.split(/[\s,;\-]+/).filter(Boolean);
+  const ATOM_RE = /^([A-Za-z]{1,2})(\d+)$/;
+  const validLetters = new Set(MOST_PARAM_LETTERS);
+  const canonicalIdx = new Set(CANONICAL_TMU_INDEX_VALUES);
+
+  for (const tok of tokens) {
+    const m = ATOM_RE.exec(tok);
+    if (!m) {
+      errors.push(`"${tok}" is not a valid MOST atom (expected like A6, B0, P3).`);
+      continue;
+    }
+    const letter = m[1].toUpperCase();
+    const index = parseInt(m[2], 10);
+    if (!validLetters.has(letter[0])) {
+      warnings.push(`Atom "${tok}" uses an unrecognised parameter letter "${letter}". Standard MOST letters: ${MOST_PARAM_LETTERS.join(', ')}.`);
+    }
+    if (!canonicalIdx.has(index)) {
+      warnings.push(`Atom "${tok}" uses non-canonical index ${index}. Canonical MOST indices: ${CANONICAL_TMU_INDEX_VALUES.join(', ')}.`);
+    }
+    atoms.push({ letter, index, raw: tok });
+    indexSum += index;
+  }
+
+  return {
+    valid: errors.length === 0,
+    atoms,
+    indexSum,
+    modelTmu: indexSum * 10,
+    warnings,
+    errors,
+  };
+}
+
+// ============================================================
+// MOS-B5: Learning curve factor
+// ============================================================
+
+/**
+ * MOS-B5 -- Apply a learning-curve factor to a baseline UPH.
+ *
+ * `learningCurvePct` is a productivity index (100 = mature operator,
+ * 50 = brand-new operator at half throughput). Defaults to 100 (no
+ * effect) so existing analyses see identical numbers.
+ *
+ * @param {number} uph
+ * @param {number} [learningCurvePct]
+ * @returns {number}
+ */
+export function applyLearningCurve(uph, learningCurvePct) {
+  if (learningCurvePct == null) return uph;
+  const pct = Number(learningCurvePct);
+  if (!Number.isFinite(pct) || pct <= 0) return uph;
+  return (uph || 0) * (pct / 100);
+}
+
+// ============================================================
+// MOS-E3: Per-category labor rates
+// ============================================================
+
+/**
+ * MOS-E3 -- Resolve the effective hourly rate for an analysis line.
+ * Precedence (first non-zero wins):
+ *   1. lineRate (per-line override)
+ *   2. ratesByCategory[category] (per-category rate map)
+ *   3. fallback (legacy single analysis.hourly_rate)
+ *
+ * @param {Object} [ratesByCategory]
+ * @param {string} [category]
+ * @param {number} [fallback]
+ * @param {number} [lineRate]
+ * @returns {number}
+ */
+export function resolveCategoryRate(ratesByCategory, category, fallback, lineRate) {
+  const lr = Number(lineRate);
+  if (Number.isFinite(lr) && lr > 0) return lr;
+  if (ratesByCategory && category) {
+    const cr = Number(ratesByCategory[category]);
+    if (Number.isFinite(cr) && cr > 0) return cr;
+  }
+  const fb = Number(fallback);
+  return Number.isFinite(fb) && fb > 0 ? fb : 0;
+}

@@ -12,7 +12,7 @@ import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=202604
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260419-uE';
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
-import * as calc from './calc.js?v=20260425-s3';
+import * as calc from './calc.js?v=20260426-s1';
 import * as api from './api.js?v=20260418-sM';
 
 // ============================================================
@@ -741,6 +741,9 @@ function renderResults(el) {
         </div>
       </div>
 
+      <!-- FLE-D1: Side-by-side cost build-up across all three models -->
+      ${renderCostBuildupCard(r)}
+
       <!-- ATRI Benchmark Table -->
       <div class="hub-card" style="padding:20px;margin-bottom:20px;">
         <div style="font-size:14px;font-weight:700;margin-bottom:16px;">ATRI 2024 Benchmark Comparison</div>
@@ -881,6 +884,63 @@ function renderCostWaterfall(fleetComposition) {
       <div><div style="font-size:11px;color:var(--ies-gray-500);font-weight:700;text-transform:uppercase;letter-spacing:.04em;">Fixed Cost</div><div style="font-size:18px;font-weight:800;color:#7c3aed;">${calc.formatCurrency(totalFixed, { compact: true })}</div></div>
       <div><div style="font-size:11px;color:var(--ies-gray-500);font-weight:700;text-transform:uppercase;letter-spacing:.04em;">Variable Cost</div><div style="font-size:18px;font-weight:800;color:#dc2626;">${calc.formatCurrency(totalVariable, { compact: true })}</div></div>
       <div><div style="font-size:11px;color:var(--ies-gray-500);font-weight:700;text-transform:uppercase;letter-spacing:.04em;">Total Cost</div><div style="font-size:18px;font-weight:800;color:var(--ies-navy);">${calc.formatCurrency(grand, { compact: true })}</div></div>
+    </div>
+  `;
+}
+
+function renderCostBuildupCard(r) {
+  // Cost build-up rows. Private + Dedicated share fuel/maint/vehicle/ins/
+  // driver/admin lines; Dedicated additionally surfaces a 25% markup-on-
+  // driver line and an explicit margin row. Carrier uses a different
+  // shape (Line-Haul / Fuel Surcharge / Min Charges) so we render its
+  // value as a dash for the GXO-style rows and split it out instead.
+  const pb = (r.comparison && r.comparison.privateBreakdown) || {};
+  const db = (r.comparison && r.comparison.dedicatedBreakdown) || {};
+  const cb = (r.comparison && r.comparison.carrierBreakdown) || {};
+  const fmt = v => calc.formatCurrency(v || 0, { compact: true });
+  const row = (label, p, d, c, hint) => `
+    <tr style="border-bottom:1px solid var(--ies-gray-100);">
+      <td style="padding:6px 8px;font-weight:600;color:var(--ies-gray-700);" title="${hint || ''}">${label}</td>
+      <td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;">${p == null ? '—' : fmt(p)}</td>
+      <td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;">${d == null ? '—' : fmt(d)}</td>
+      <td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;">${c == null ? '—' : fmt(c)}</td>
+    </tr>`;
+
+  return `
+    <div class="hub-card" style="padding:20px;margin-bottom:20px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div style="font-size:14px;font-weight:700;">Annual Cost Build-Up — All Three Models</div>
+        <div style="font-size:11px;color:var(--ies-gray-500);">Side-by-side. — = not applicable for that model.</div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+        <thead>
+          <tr style="border-bottom:2px solid var(--ies-gray-200);background:var(--ies-gray-50);">
+            <th style="padding:8px;text-align:left;font-weight:700;color:var(--ies-gray-500);">Cost Component</th>
+            <th style="padding:8px;text-align:right;font-weight:700;color:var(--ies-blue);">Private</th>
+            <th style="padding:8px;text-align:right;font-weight:700;color:#8b5cf6;">Dedicated (GXO)</th>
+            <th style="padding:8px;text-align:right;font-weight:700;color:#ef4444;">Common Carrier</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${row('Fuel', pb.fuel, db.fuel, null, 'Diesel × annual miles')}
+          ${row('Maintenance', pb.maintenance, db.maintenance, null, 'Tires + scheduled maint + repairs')}
+          ${row('Vehicle (Depreciation)', pb.vehicle, db.vehicle, null, 'Annual depreciation / lease')}
+          ${row('Insurance', pb.insurance, db.insurance, null, 'Liability + physical damage')}
+          ${row('Driver Wages', pb.driver, db.driver, null, 'Base driver compensation')}
+          ${row('Admin / Overhead', pb.admin, db.admin, null, 'Dispatch, fleet manager, back office')}
+          ${row('Driver Markup (1.25×)', null, db.markup, null, 'Dedicated includes a 25% markup on driver cost (cost-plus pricing)')}
+          ${row('GXO Margin', null, db.margin, null, 'Margin applied on top of cost-plus base')}
+          ${row('Line-Haul', null, null, cb.lineHaul, '~70% of carrier billable spend')}
+          ${row('Fuel Surcharge', null, null, cb.fuelSurcharge, '~18% of carrier billable spend')}
+          ${row('Minimum Charges', null, null, cb.minCharges, '~12% of carrier billable spend (weekly min × 52)')}
+          <tr style="border-top:2px solid var(--ies-gray-300);background:var(--ies-gray-50);font-weight:700;">
+            <td style="padding:8px;">Total Annual</td>
+            <td style="padding:8px;text-align:right;color:var(--ies-blue);">${fmt(r.comparison.private)}</td>
+            <td style="padding:8px;text-align:right;color:#8b5cf6;">${fmt(r.comparison.dedicated)}</td>
+            <td style="padding:8px;text-align:right;color:#ef4444;">${fmt(r.comparison.carrier)}</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   `;
 }

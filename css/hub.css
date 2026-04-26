@@ -2865,3 +2865,75 @@ textarea.hub-input {
   margin: 0;
 }
 .hub-datatable input[type="number"] { -moz-appearance: textfield; }
+
+/* ============================================================
+ * Shared cost-model grid table -- extracted from tools/cost-model/ui.js
+ * so MOST + WSC + admin tables get correct column spacing without
+ * needing CM to be opened first. (MOS-D1)
+ * ============================================================ */
+.cm-grid-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.cm-grid-table th {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--ies-gray-500);
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 2px solid var(--ies-gray-200);
+  white-space: nowrap;
+}
+.cm-grid-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--ies-gray-100);
+  vertical-align: middle;
+}
+.cm-grid-table input,
+.cm-grid-table select {
+  padding: 6px 8px;
+  border: 1px solid var(--ies-gray-200);
+  border-radius: 4px;
+  font-family: Montserrat, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+}
+.cm-grid-table input:focus,
+.cm-grid-table select:focus {
+  outline: none;
+  border-color: var(--ies-blue);
+  box-shadow: 0 0 0 2px rgba(0,71,171,0.1);
+}
+.cm-num { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.cm-total-row td { font-weight: 700; border-top: 2px solid var(--ies-gray-300); background: var(--ies-gray-50); }
+.cm-add-row-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 6px 12px;
+  background: none;
+  border: 1px dashed var(--ies-gray-300);
+  border-radius: 6px;
+  color: var(--ies-blue);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: Montserrat, sans-serif;
+}
+.cm-add-row-btn:hover { border-color: var(--ies-blue); background: rgba(0,71,171,0.04); }
+.cm-delete-btn {
+  background: none;
+  border: none;
+  color: var(--ies-red);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: Montserrat, sans-serif;
+}
+.cm-delete-btn:hover { background: rgba(220,53,69,0.08); }
