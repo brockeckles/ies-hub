@@ -3534,16 +3534,36 @@ export function generateHeuristics(state, summary) {
       detail: 'Within 10-18% industry standard.' });
   }
 
-  // 10. Facility suggestion
+  // 10. Facility suggestion (CM-HEUR-1 fix — Brock 2026-04-26)
+  //
+  // Prior form had `suggestedSqft = round((palletArea + sqft*0.25)/1000)*1000`,
+  // where the `sqft*0.25` term was meant as an allowance for aisles/staging
+  // but accidentally referenced the CURRENT sqft (self-referential). When a
+  // model had no pallet-UOM volume, palletArea collapsed to 0 and the formula
+  // produced 0.25× current — every model flunked the 30% divergence gate and
+  // emitted a misleading "may be oversized" suggestion built on math noise.
+  //
+  // Fix: (a) only fire when there's real pallet-UOM volume to anchor the
+  // estimate, and (b) use a defensible "55% net storage utilization" rule of
+  // thumb — pallet area / 0.55 adds aisle + cross-aisle + staging + dock.
+  // Still rough; the message points users at WSC for a sized recommendation.
   if (annualOrders > 0 && sqft > 0) {
     const palletsStored = ((state.volumeLines || [])
       .filter(v => v.uom === 'pallet')
       .reduce((s, v) => s + (v.volume || 0), 0) || 0) / 2 / 12;
-    const estPalletArea = palletsStored * 40;
-    const suggestedSqft = Math.round((estPalletArea + (sqft * 0.25)) / 1000) * 1000;
-    if (suggestedSqft > 0 && Math.abs(suggestedSqft - sqft) / sqft > 0.30) {
-      checks.push({ type: 'info', title: 'Suggested facility size: ~' + suggestedSqft.toLocaleString() + ' sqft',
-        detail: 'Current: ' + sqft.toLocaleString() + ' sqft (' + (sqft > suggestedSqft ? 'may be oversized' : 'may be undersized') + ').' });
+    if (palletsStored > 0) {
+      const estPalletArea = palletsStored * 40;
+      // 55% net storage utilization → divide by 0.55, round to nearest 1K
+      const suggestedSqft = Math.round((estPalletArea / 0.55) / 1000) * 1000;
+      if (suggestedSqft > 0 && Math.abs(suggestedSqft - sqft) / sqft > 0.30) {
+        checks.push({
+          type: 'info',
+          title: 'Suggested facility size: ~' + suggestedSqft.toLocaleString() + ' sqft',
+          detail: 'Current: ' + sqft.toLocaleString() + ' sqft (' +
+            (sqft > suggestedSqft ? 'may be oversized' : 'may be undersized') +
+            '). Rough estimate from pallet inventory × aisle/staging allowance — run Warehouse Sizing for a fully-sized recommendation.',
+        });
+      }
     }
   }
 

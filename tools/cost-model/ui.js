@@ -11,7 +11,7 @@ import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260424-hyg04';
-import * as calc from './calc.js?v=20260426-s9';
+import * as calc from './calc.js?v=20260426-s10';
 import * as api from './api.js?v=20260426-s9';
 import * as scenarios from './calc.scenarios.js?v=20260421-wA';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
@@ -398,7 +398,7 @@ const SECTIONS = [
   // Output — what the model produces
   { key: 'summary',        label: 'Summary',            icon: 'pie-chart',     group: 'output' },
   { key: 'pricing',        label: 'Pricing',            icon: 'tag',           group: 'output' },
-  { key: 'timeline',       label: 'Timeline',           icon: 'calendar',      group: 'output' },
+  { key: 'timeline',       label: 'Cashflow & P&L',           icon: 'calendar',      group: 'output' },
   { key: 'scenarios',      label: 'Scenarios',          icon: 'git-branch',    group: 'output' },
   // Analysis — iterate + governance
   { key: 'whatif',         label: 'What-If Studio',     icon: 'trending-up',   group: 'analysis' },
@@ -416,7 +416,7 @@ const SECTION_GROUPS = [
   { key: 'scope',      label: 'Scope',       description: 'Who, what, where' },
   { key: 'structure',  label: 'Structure',   description: 'Framework: facility, shifts, pricing buckets, financial' },
   { key: 'cost',       label: 'Cost',        description: 'The build: labor, equipment, overhead, VAS, startup' },
-  { key: 'output',     label: 'Output',      description: 'Summary, pricing rates, timeline, scenarios' },
+  { key: 'output',     label: 'Output',      description: 'Summary, pricing rates, cashflow & P&L, scenarios' },
   { key: 'analysis',   label: 'Analysis',    description: 'What-If, assumptions, links' },
 ];
 
@@ -429,6 +429,11 @@ let currentScenarioSnapshots = null;   // grouped { labor:[], facility:[], ..., 
 let currentRevisions = [];
 let _lastCalcHeuristics = null;        // set by Summary calc; read by Timeline/Summary banners
 let _lastProjections = null;           // yearly projections array from the most recent Summary/Timeline run — enables the M3 banner to show Y1 ramped margin alongside reference-basis
+// Position-catalog notes redesign (Brock 2026-04-26): notes used to be a sliver
+// inline <input> at the end of each row. Now they live in a per-row collapsible
+// sub-row holding a real <textarea>. Track which rows are expanded via id Set
+// so state survives section re-renders within the same view session.
+const _expandedPositionIds = new Set();
 // Phase 4c — cached market labor profile (set when project's market is known)
 let currentMarketLaborProfile = null;
 // Re-entry guards — prevent infinite render loops when the lazy loader fires
@@ -963,12 +968,23 @@ function wireEditorEvents() {
   // Section content
   renderSection();
   updateValidation();
+
+  // CM-NAV-1 (Brock 2026-04-26) — keyboard shortcuts. Mount-scoped: registers
+  // a single document-level handler that no-ops when CM is unmounted.
+  _initKeyboardShortcuts();
+
+  // CM-INSP-1 (Brock 2026-04-26) — hover progressive disclosure on KPI tiles.
+  // Idempotent + uses document-level delegation so it survives renderSection
+  // re-builds without per-render re-binding.
+  _initDisclose();
 }
 
 /**
  * Cleanup on unmount.
  */
 export function unmount() {
+  _teardownKeyboardShortcuts();
+  _hideDisclose();
   bus.clear('most:push-to-cm');
   bus.clear('netopt:push-to-cm');
   bus.clear('wsc:push-to-cm');
@@ -977,6 +993,469 @@ export function unmount() {
   }
   rootEl = null;
   bus.emit('cm:unmounted');
+}
+
+// ============================================================
+// CM-NAV-1 — Keyboard Shortcuts (Brock 2026-04-26)
+// ============================================================
+//
+// Lightweight global shortcuts scoped to the active CM mount. Skips when the
+// user is typing in an input/textarea/select/contenteditable so we never
+// hijack data entry. Pressing `?` opens an inline cheatsheet overlay.
+//
+// Shortcuts:
+//   ?            — Show keyboard shortcut help
+//   [   /   ]    — Previous / next CM section (sidebar order)
+//   Cmd/Ctrl+S   — Save current model (preventDefault on browser default)
+//   Cmd/Ctrl+K   — Jump-to-section quick search (focuses sidebar; future)
+//   g s          — Go to Summary
+//   g p          — Go to Pricing
+//   g c          — Go to Cashflow & P&L
+//   g w          — Go to What-If Studio
+//   g f          — Go to Facility
+//   g l          — Go to Labor
+//   Esc          — Close help overlay (modal Esc handlers still own their scope)
+//
+// `g`-prefix chords clear themselves after 1.5 s. Help overlay is built on
+// demand — no DOM cost when not invoked.
+
+let _kbdGActive = false;
+let _kbdGTimer = null;
+let _kbdHandler = null;
+
+function _isTypingInField(target) {
+  if (!target || !(target instanceof Element)) return false;
+  if (target.matches('input, textarea, select, [contenteditable="true"]')) return true;
+  // Some hub-input wrappers use contenteditable on inner spans
+  if (target.closest('[contenteditable="true"]')) return true;
+  return false;
+}
+
+function _kbdResetGPrefix() {
+  _kbdGActive = false;
+  if (_kbdGTimer) { clearTimeout(_kbdGTimer); _kbdGTimer = null; }
+}
+
+function _initKeyboardShortcuts() {
+  if (_kbdHandler) return; // idempotent
+  _kbdHandler = (e) => {
+    // Only when CM is actually mounted to a live DOM node
+    if (!rootEl || !rootEl.isConnected) return;
+    // Don't hijack typing
+    if (_isTypingInField(e.target)) {
+      // Allow Cmd/Ctrl+S to fall through even when in fields (save shortcut
+      // is universally expected). All others bail.
+      if (!((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S'))) return;
+    }
+
+    // Cmd/Ctrl+S → save (intercept browser default)
+    if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) {
+      e.preventDefault();
+      _kbdResetGPrefix();
+      try { handleSave(); } catch (err) { console.warn('[CM] kbd save failed:', err); }
+      return;
+    }
+
+    // Esc → close help overlay if open (other modals own their own Esc)
+    if (e.key === 'Escape') {
+      const help = document.getElementById('cm-kbd-help-overlay');
+      if (help) { help.remove(); e.preventDefault(); return; }
+      _kbdResetGPrefix();
+      return;
+    }
+
+    // ? → help
+    if (e.key === '?' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      _showKeyboardHelpOverlay();
+      _kbdResetGPrefix();
+      return;
+    }
+
+    // [ / ] → prev / next section
+    if ((e.key === '[' || e.key === ']') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      _kbdResetGPrefix();
+      const idx = SECTIONS.findIndex(s => s.key === activeSection);
+      if (idx < 0) return;
+      const nextIdx = e.key === ']' ? Math.min(idx + 1, SECTIONS.length - 1) : Math.max(idx - 1, 0);
+      const target = SECTIONS[nextIdx];
+      if (target && target.key !== activeSection) {
+        navigateSection(target.key);
+        _flashShortcutToast(target.label);
+      }
+      return;
+    }
+
+    // g + letter chord
+    if (_kbdGActive) {
+      const chord = e.key.toLowerCase();
+      const map = {
+        s: 'summary',
+        p: 'pricing',
+        c: 'timeline',  // 'c' for Cashflow & P&L (the renamed page)
+        w: 'whatif',
+        f: 'facility',
+        l: 'labor',
+      };
+      if (map[chord]) {
+        e.preventDefault();
+        _kbdResetGPrefix();
+        navigateSection(map[chord]);
+        const sec = SECTIONS.find(x => x.key === map[chord]);
+        if (sec) _flashShortcutToast(sec.label);
+        return;
+      }
+      // Unknown chord — drop the prefix
+      _kbdResetGPrefix();
+      return;
+    }
+    if (e.key === 'g' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      _kbdGActive = true;
+      _flashShortcutToast('g…', { mini: true });
+      _kbdGTimer = setTimeout(_kbdResetGPrefix, 1500);
+      return;
+    }
+  };
+  document.addEventListener('keydown', _kbdHandler);
+}
+
+function _teardownKeyboardShortcuts() {
+  if (_kbdHandler) {
+    document.removeEventListener('keydown', _kbdHandler);
+    _kbdHandler = null;
+  }
+  _kbdResetGPrefix();
+}
+
+/**
+ * Tiny non-blocking toast in the bottom-right that confirms a shortcut
+ * landed (e.g. "→ Summary" or "g…"). Auto-fades after 800 ms (mini) /
+ * 1200 ms (full).
+ */
+function _flashShortcutToast(label, opts = {}) {
+  const mini = !!opts.mini;
+  const id = 'cm-kbd-flash';
+  document.getElementById(id)?.remove();
+  const el = document.createElement('div');
+  el.id = id;
+  el.style.cssText = `
+    position: fixed; bottom: 24px; right: 24px; z-index: 99999;
+    background: rgba(15, 23, 42, 0.92); color: #fff;
+    padding: 8px 14px; border-radius: 6px;
+    font-size: 13px; font-weight: 500; font-family: inherit;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.18);
+    pointer-events: none; opacity: 0; transform: translateY(4px);
+    transition: opacity 0.12s ease, transform 0.12s ease;
+  `;
+  el.textContent = mini ? label : '→ ' + label;
+  document.body.appendChild(el);
+  // Force a tick before transitioning in
+  requestAnimationFrame(() => {
+    el.style.opacity = '1';
+    el.style.transform = 'translateY(0)';
+  });
+  setTimeout(() => {
+    el.style.opacity = '0';
+    el.style.transform = 'translateY(4px)';
+    setTimeout(() => el.remove(), 200);
+  }, mini ? 700 : 1100);
+}
+
+/**
+ * Render the cheatsheet overlay. Built on demand. Click outside or Esc closes.
+ */
+function _showKeyboardHelpOverlay() {
+  document.getElementById('cm-kbd-help-overlay')?.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'cm-kbd-help-overlay';
+  overlay.style.cssText = `
+    position: fixed; inset: 0; background: rgba(15,23,42,0.45);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 99998; padding: 20px;
+  `;
+  const panel = document.createElement('div');
+  panel.style.cssText = `
+    background: #fff; border-radius: 10px;
+    width: 100%; max-width: 540px;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.22);
+    font-family: inherit;
+  `;
+  const kbd = (k) => `<kbd style="display:inline-block;padding:2px 7px;border:1px solid #cbd5e1;border-bottom-width:2px;border-radius:4px;background:#f8fafc;color:#0f172a;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;font-weight:600;">${k}</kbd>`;
+  const row = (keys, desc) => `
+    <div style="display:flex;align-items:center;gap:14px;padding:7px 0;border-bottom:1px dashed #e5e7eb;">
+      <div style="flex:0 0 168px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;">${keys}</div>
+      <div style="flex:1;font-size:13px;color:#334155;">${desc}</div>
+    </div>
+  `;
+  panel.innerHTML = `
+    <div style="padding:18px 22px 12px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <div style="font-size:15px;font-weight:700;color:#0f172a;">Keyboard Shortcuts</div>
+        <div style="font-size:12px;color:#64748b;margin-top:2px;">Cost Model — press <kbd style="font-size:10px;padding:1px 5px;border:1px solid #cbd5e1;border-radius:3px;font-family:ui-monospace,Menlo,monospace;">?</kbd> any time to reopen</div>
+      </div>
+      <button id="cm-kbd-help-close" style="border:0;background:transparent;font-size:20px;line-height:1;cursor:pointer;color:#64748b;padding:4px 8px;">×</button>
+    </div>
+    <div style="padding:8px 22px 18px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#64748b;margin:8px 0 4px;">Navigation</div>
+      ${row(`${kbd('[')} ${kbd(']')}`, 'Previous / next section')}
+      ${row(`${kbd('g')} ${kbd('s')}`, 'Go to <strong>Summary</strong>')}
+      ${row(`${kbd('g')} ${kbd('p')}`, 'Go to <strong>Pricing</strong>')}
+      ${row(`${kbd('g')} ${kbd('c')}`, 'Go to <strong>Cashflow &amp; P&amp;L</strong>')}
+      ${row(`${kbd('g')} ${kbd('w')}`, 'Go to <strong>What-If Studio</strong>')}
+      ${row(`${kbd('g')} ${kbd('f')}`, 'Go to <strong>Facility</strong>')}
+      ${row(`${kbd('g')} ${kbd('l')}`, 'Go to <strong>Labor</strong>')}
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#64748b;margin:14px 0 4px;">Actions</div>
+      ${row(`${kbd('⌘ / Ctrl')} ${kbd('S')}`, 'Save current model')}
+      ${row(`${kbd('?')}`, 'Show this cheatsheet')}
+      ${row(`${kbd('Esc')}`, 'Close cheatsheet / dismiss overlay')}
+      <div style="margin-top:14px;padding:10px 12px;background:#f8fafc;border-radius:6px;font-size:11.5px;color:#475569;line-height:1.5;">
+        Shortcuts are disabled while typing in inputs (except <kbd style="font-size:10px;padding:1px 5px;border:1px solid #cbd5e1;border-radius:3px;font-family:ui-monospace,Menlo,monospace;">⌘S</kbd>). The <kbd style="font-size:10px;padding:1px 5px;border:1px solid #cbd5e1;border-radius:3px;font-family:ui-monospace,Menlo,monospace;">g</kbd>-prefix waits 1.5 s for a follow-up letter.
+      </div>
+    </div>
+  `;
+  overlay.appendChild(panel);
+  document.body.appendChild(overlay);
+  panel.querySelector('#cm-kbd-help-close')?.addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+}
+
+// ============================================================
+// CM-INSP-1 — Hover Progressive Disclosure (Brock 2026-04-26)
+// ============================================================
+//
+// Sister of CM-PROV-1 (click-based P&L cell inspector). Adds a styled hover
+// popover to the most prominent "result" affordances on Summary and the
+// Cashflow & P&L page so users can see the underlying breakdown without
+// committing to a click. Surface area is kept small on purpose: just the 5
+// Summary KPI tiles and 4 Cashflow & P&L KPI tiles. Both surfaces use the
+// same `data-cm-disclose="<key>"` attribute and the same hover handler.
+//
+// Why hover (vs. always-visible): KPI tiles are the demo's headline numbers
+// — keeping the breakdown one mouse-distance away preserves the at-a-glance
+// scan but lets a curious viewer say "where did $4.2M come from?" without
+// breaking flow.
+
+let _discloseShowTimer = null;
+let _discloseHideTimer = null;
+let _discloseEl = null;
+let _discloseInited = false;
+
+function _initDisclose() {
+  if (_discloseInited) return;
+  _discloseInited = true;
+  // Delegate at document level so the handler survives renderSection()
+  // re-builds. Filters by the [data-cm-disclose] attribute on enter target.
+  document.addEventListener('mouseover', (e) => {
+    if (!rootEl || !rootEl.isConnected) return;
+    const tile = e.target instanceof Element ? e.target.closest('[data-cm-disclose]') : null;
+    if (!tile) return;
+    if (!rootEl.contains(tile)) return; // only CM-owned tiles
+    if (_discloseHideTimer) { clearTimeout(_discloseHideTimer); _discloseHideTimer = null; }
+    // Tiny delay so a fast pass-through doesn't pop the panel
+    if (_discloseShowTimer) clearTimeout(_discloseShowTimer);
+    _discloseShowTimer = setTimeout(() => _showDisclose(tile), 180);
+  });
+  document.addEventListener('mouseout', (e) => {
+    const tile = e.target instanceof Element ? e.target.closest('[data-cm-disclose]') : null;
+    if (!tile) return;
+    if (_discloseShowTimer) { clearTimeout(_discloseShowTimer); _discloseShowTimer = null; }
+    // Grace period so user can move into the popover (in case we add
+    // interactive content later); for now just hide cleanly.
+    if (_discloseHideTimer) clearTimeout(_discloseHideTimer);
+    _discloseHideTimer = setTimeout(_hideDisclose, 100);
+  });
+  // Hide on scroll/resize — popover position would otherwise drift
+  window.addEventListener('scroll', _hideDisclose, true);
+  window.addEventListener('resize', _hideDisclose);
+}
+
+function _hideDisclose() {
+  if (_discloseEl) { _discloseEl.remove(); _discloseEl = null; }
+  if (_discloseShowTimer) { clearTimeout(_discloseShowTimer); _discloseShowTimer = null; }
+  if (_discloseHideTimer) { clearTimeout(_discloseHideTimer); _discloseHideTimer = null; }
+}
+
+function _showDisclose(tile) {
+  const key = tile.dataset.cmDisclose;
+  const html = _buildDiscloseHTML(key);
+  if (!html) { _hideDisclose(); return; }
+  _hideDisclose(); // belt-and-suspenders cleanup
+  const pop = document.createElement('div');
+  pop.id = 'cm-disclose-popover';
+  pop.className = 'cm-disclose-popover';
+  pop.innerHTML = html;
+  document.body.appendChild(pop);
+  _discloseEl = pop;
+  // Position above the tile, centered horizontally, with a small arrow.
+  const tr = tile.getBoundingClientRect();
+  const pr = pop.getBoundingClientRect();
+  const margin = 10;
+  let left = tr.left + tr.width / 2 - pr.width / 2;
+  left = Math.max(margin, Math.min(left, window.innerWidth - pr.width - margin));
+  let top = tr.top - pr.height - 12;
+  let placement = 'above';
+  if (top < margin) {
+    // Not enough room above — flip below the tile
+    top = tr.bottom + 12;
+    placement = 'below';
+  }
+  pop.style.left = `${Math.round(left + window.scrollX)}px`;
+  pop.style.top = `${Math.round(top + window.scrollY)}px`;
+  pop.dataset.placement = placement;
+  // Arrow: position the ::after via inline custom property so it points at
+  // the tile's horizontal center even when the popover is clamped to viewport.
+  const arrowX = tr.left + tr.width / 2 - left;
+  pop.style.setProperty('--cm-disclose-arrow-x', `${Math.round(arrowX)}px`);
+  // Fade in
+  requestAnimationFrame(() => pop.classList.add('cm-disclose-popover--visible'));
+}
+
+const _fmt$ = (n) => {
+  if (!Number.isFinite(n)) return '—';
+  const a = Math.abs(n);
+  if (a >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
+  if (a >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
+  return '$' + n.toFixed(0);
+};
+const _fmtN = (n) => Number.isFinite(n) ? n.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—';
+
+function _discloseRow(label, value, hint) {
+  return `
+    <div class="cm-disclose-row">
+      <div class="cm-disclose-row__label">${label}${hint ? `<span class="cm-disclose-row__hint">${hint}</span>` : ''}</div>
+      <div class="cm-disclose-row__value">${value}</div>
+    </div>`;
+}
+function _discloseHeader(title, formula) {
+  return `
+    <div class="cm-disclose-head">
+      <div class="cm-disclose-title">${title}</div>
+      ${formula ? `<div class="cm-disclose-formula">${formula}</div>` : ''}
+    </div>`;
+}
+function _discloseFooter(text) {
+  return `<div class="cm-disclose-foot">${text}</div>`;
+}
+
+/**
+ * Build the popover HTML for a given data-cm-disclose key. Returns null
+ * when there's no current calc context (e.g. user is viewing an empty model).
+ */
+function _buildDiscloseHTML(key) {
+  const ctx = _lastProvenanceContext;
+  // Summary tiles
+  if (key && key.startsWith('summary-')) {
+    if (!ctx) return null;
+    const p1 = ctx.projections?.[0] || {};
+    const s = ctx.summary || {};
+    if (key === 'summary-y1-cost') {
+      const total = p1.totalCost || 0;
+      return _discloseHeader('Y1 Total Cost', 'Σ(direct labor + indirect labor + facility + equipment + overhead + VAS) + Σ(start-up amortization)') +
+        _discloseRow('Labor', _fmt$(p1.labor), 'direct + indirect') +
+        _discloseRow('Facility', _fmt$(p1.facility)) +
+        _discloseRow('Equipment', _fmt$(p1.equipment)) +
+        _discloseRow('Overhead', _fmt$(p1.overhead)) +
+        _discloseRow('VAS', _fmt$(p1.vas)) +
+        _discloseRow('Start-Up amort.', _fmt$(p1.startupAmort || s.startupAmort)) +
+        `<div class="cm-disclose-total">${_discloseRow('Total', _fmt$(total))}</div>` +
+        _discloseFooter('Year-1 figure includes the learning-curve uplift on labor. Click any cost row in the P&L below for the full formula.');
+    }
+    if (key === 'summary-y1-revenue') {
+      const margin = ctx.marginFrac || 0;
+      return _discloseHeader('Y1 Revenue', `cost ÷ (1 − margin)`) +
+        _discloseRow('Y1 Cost', _fmt$(p1.totalCost)) +
+        _discloseRow('Target Margin', `${(margin * 100).toFixed(1)}%`) +
+        _discloseRow('Divisor (1 − margin)', `${(1 - margin).toFixed(3)}`) +
+        `<div class="cm-disclose-total">${_discloseRow('Revenue', _fmt$(p1.revenue))}</div>` +
+        _discloseFooter('Cost-plus build-up. Override per-bucket pricing in <strong>Pricing Buckets</strong> to deviate from the global target margin.');
+    }
+    if (key === 'summary-y1-cost-per-order') {
+      const orders = p1.orders || ctx.baseOrders || 0;
+      const cpo = orders > 0 ? p1.totalCost / orders : 0;
+      return _discloseHeader('Cost / Unit (Y1)', 'Y1 Total Cost ÷ Y1 Outbound Volume') +
+        _discloseRow('Y1 Total Cost', _fmt$(p1.totalCost)) +
+        _discloseRow('Y1 Outbound Volume', _fmtN(orders), 'starred line on Volumes & Profile') +
+        `<div class="cm-disclose-total">${_discloseRow('Per Unit', '$' + cpo.toFixed(2))}</div>` +
+        _discloseFooter('Anchored to the outbound-primary volume line (the line with the ★ on Volumes & Profile). Change the star to re-base.');
+    }
+    if (key === 'summary-ftes') {
+      return _discloseHeader('Total FTEs', 'Σ direct laborLines.fte + Σ indirectLaborLines.fte') +
+        _discloseRow('Direct FTEs', (s.directFtes || 0).toFixed(1)) +
+        _discloseRow('Indirect FTEs', (s.indirectFtes || 0).toFixed(1)) +
+        `<div class="cm-disclose-total">${_discloseRow('Total', (s.totalFtes || 0).toFixed(1))}</div>` +
+        _discloseFooter('FTE = annual_hours ÷ operating-hours. Operating-hours come from <strong>Labor Factors → Shift Structure</strong>.');
+    }
+    if (key === 'summary-capital') {
+      return _discloseHeader('Total Capital', 'Equipment up-front + Start-Up up-front') +
+        _discloseRow('Equipment Capital', _fmt$(s.equipmentCapital), 'purchased MHE / racking / IT') +
+        _discloseRow('Start-Up Capital', _fmt$(s.startupCapital), 'one-time, not amortized into opex') +
+        `<div class="cm-disclose-total">${_discloseRow('Total', _fmt$((s.equipmentCapital || 0) + (s.startupCapital || 0)))}</div>` +
+        _discloseFooter('Hits Year-0 cash flow. Drives the −Investment leg of NPV / Payback below.');
+    }
+    return null;
+  }
+  // Cashflow & P&L tiles — read from the monthly bundle
+  if (key && key.startsWith('cf-')) {
+    const bundle = _lastMonthlyBundle;
+    const cf = bundle?.cashflow;
+    if (!cf || !cf.length) return null;
+    const periods = bundle.periods || [];
+    const byId = new Map(periods.map(p => [p.id, p]));
+    const live = cf
+      .map(r => ({ ...r, _p: byId.get(r.period_id) }))
+      .filter(r => r._p && !r._p.is_pre_go_live);
+    const totalRev = cf.reduce((sum, r) => sum + (r.revenue || 0), 0);
+    const totalOpex = cf.reduce((sum, r) => sum + (r.opex || 0), 0);
+    const lastCum = cf.length ? cf[cf.length - 1].cumulative_cash_flow || 0 : 0;
+    if (key === 'cf-total-revenue') {
+      // Show top 3 contributing months + tail
+      const sorted = [...cf].sort((a, b) => (b.revenue || 0) - (a.revenue || 0)).slice(0, 3);
+      const rows = sorted.map(r => _discloseRow(byId.get(r.period_id)?.label || '—', _fmt$(r.revenue || 0))).join('');
+      const otherCount = cf.length - sorted.length;
+      const otherTotal = totalRev - sorted.reduce((s, r) => s + (r.revenue || 0), 0);
+      return _discloseHeader('Total Revenue', 'Σ monthly revenue across the contract') +
+        rows +
+        (otherCount > 0 ? _discloseRow(`+ ${otherCount} other months`, _fmt$(otherTotal)) : '') +
+        `<div class="cm-disclose-total">${_discloseRow('Total', _fmt$(totalRev))}</div>` +
+        _discloseFooter('Driven by the Pricing Schedule × monthly volume × seasonality share.');
+    }
+    if (key === 'cf-total-opex') {
+      const sorted = [...cf].sort((a, b) => (b.opex || 0) - (a.opex || 0)).slice(0, 3);
+      const rows = sorted.map(r => _discloseRow(byId.get(r.period_id)?.label || '—', _fmt$(r.opex || 0))).join('');
+      const otherCount = cf.length - sorted.length;
+      const otherTotal = totalOpex - sorted.reduce((s, r) => s + (r.opex || 0), 0);
+      return _discloseHeader('Total Opex', 'Σ monthly opex across the contract') +
+        rows +
+        (otherCount > 0 ? _discloseRow(`+ ${otherCount} other months`, _fmt$(otherTotal)) : '') +
+        `<div class="cm-disclose-total">${_discloseRow('Total', _fmt$(totalOpex))}</div>` +
+        _discloseFooter('Labor + facility + equipment + overhead + VAS, with monthly seasonality and ramp applied.');
+    }
+    if (key === 'cf-cum-fcf') {
+      const investment = (live[0]?.cum_fcf ?? lastCum) - lastCum; // rough: not great
+      // Better: pull from y0 marker if present
+      const y0Investment = (cf[0] && cf[0].cumulative_cash_flow != null) ? -cf[0].cumulative_cash_flow : null;
+      return _discloseHeader('Cumulative FCF', 'starts at −Total Investment (Y0); each month adds (operating cash flow − capex)') +
+        (y0Investment != null ? _discloseRow('Y0 Investment', _fmt$(-y0Investment), 'equipment + start-up capital') : '') +
+        _discloseRow('Σ Operating CF', _fmt$(cf.reduce((s, r) => s + (r.operating_cash_flow || 0), 0))) +
+        _discloseRow('Σ CapEx', _fmt$(cf.reduce((s, r) => s + (r.capex || 0), 0)), 'replacement / refresh') +
+        `<div class="cm-disclose-total">${_discloseRow('Ending Cum FCF', _fmt$(lastCum))}</div>` +
+        _discloseFooter('Crosses zero at <strong>Payback Month</strong>. Heavy capex in late years can dip cum FCF temporarily.');
+    }
+    if (key === 'cf-payback') {
+      const payback = cf.find(r => (r.cumulative_cash_flow || 0) >= 0 && !(byId.get(r.period_id)?.is_pre_go_live));
+      const total = cf.length;
+      const idx = payback ? cf.indexOf(payback) : -1;
+      return _discloseHeader('Payback Month', 'first month Cumulative FCF ≥ 0') +
+        _discloseRow('Month label', payback ? (byId.get(payback.period_id)?.label || '—') : 'Not reached') +
+        _discloseRow('Month index', idx >= 0 ? `${idx + 1} of ${total}` : '—') +
+        _discloseRow('Cum FCF at payback', payback ? _fmt$(payback.cumulative_cash_flow || 0) : '—') +
+        _discloseFooter('Earlier payback = quicker recovery of up-front capital. Industry rule of thumb: payback ≤ 24 months for "good" 3PL deals.');
+    }
+    return null;
+  }
+  return null;
 }
 
 // ============================================================
@@ -2434,8 +2913,23 @@ function renderShifts() {
   const directCount = positions.filter(p => p.category === 'direct').length;
   const indirectCount = positions.filter(p => p.category === 'indirect').length;
 
-  const posRow = (p, i) => `
-    <tr>
+  const posRow = (p, i) => {
+    const isExpanded = !!(p.id && _expandedPositionIds.has(p.id));
+    const noteText = (p.notes || '').trim();
+    const hasNote = noteText.length > 0;
+    const previewLen = 28;
+    const preview = hasNote
+      ? (noteText.length > previewLen ? noteText.slice(0, previewLen) + '…' : noteText)
+      : '+ Add note';
+    const noteBtnLabel = hasNote
+      ? `<span style="font-size:13px;line-height:1;">📝</span> <span class="cm-pos-note-preview">${_esc(preview)}</span>`
+      : `<span class="cm-pos-note-empty">${_esc(preview)}</span>`;
+    const chevron = isExpanded ? '▾' : '▸';
+    const noteBtnTitle = hasNote
+      ? 'Click to edit this position\'s notes'
+      : 'Click to add notes for this position';
+    const mainRow = `
+    <tr${isExpanded ? ' class="cm-pos-row-expanded"' : ''}>
       <td><input class="hub-input" value="${_esc(p.name || '')}" data-array="shifts.positions" data-idx="${i}" data-field="name" /></td>
       <td>
         <select class="hub-input" data-array="shifts.positions" data-idx="${i}" data-field="category">
@@ -2464,10 +2958,38 @@ function renderShifts() {
       </td>
       <td><input class="hub-input hub-num" type="number" step="0.25" min="0" max="100" value="${p.bonus_pct ?? ''}" placeholder="${s.bonusPct ?? 5}" data-array="shifts.positions" data-idx="${i}" data-field="bonus_pct" data-type="number" title="Leave blank to inherit global bonus %" /></td>
       <td><input class="hub-input hub-num" type="number" step="0.25" min="0" max="100" value="${p.benefit_load_pct ?? ''}" placeholder="${(lc.defaultBurdenPct ?? 32).toFixed(1)}" data-array="shifts.positions" data-idx="${i}" data-field="benefit_load_pct" data-type="number" title="Per-position Benefit Load %. Blank = inherit global total from buckets above. Salaried roles often have higher load (health + retirement); hourly lower." /></td>
-      <td><input class="hub-input" value="${_esc(p.notes || '')}" data-array="shifts.positions" data-idx="${i}" data-field="notes" /></td>
+      <td>
+        <button type="button"
+                class="cm-pos-note-btn${hasNote ? ' cm-pos-note-btn--filled' : ' cm-pos-note-btn--empty'}${isExpanded ? ' cm-pos-note-btn--open' : ''}"
+                data-action="toggle-position-notes" data-idx="${i}"
+                title="${noteBtnTitle}">
+          <span class="cm-pos-note-chev">${chevron}</span> ${noteBtnLabel}
+        </button>
+      </td>
       <td><button class="cm-delete-btn" data-action="delete-position" data-idx="${i}" title="Delete position">×</button></td>
     </tr>
   `;
+    if (!isExpanded) return mainRow;
+    const notesRow = `
+    <tr class="cm-pos-notes-row">
+      <td colspan="11" style="padding:0;background:var(--ies-gray-50, #f9fafb);">
+        <div style="padding:12px 16px;border-top:1px dashed var(--ies-gray-200, #e5e7eb);">
+          <label class="hub-field__label" style="display:block;margin-bottom:6px;font-size:12px;color:var(--ies-gray-600, #475569);">
+            Notes — <strong>${_esc(p.name || 'Untitled position')}</strong>
+            <span class="hub-field__hint" style="font-weight:400;margin-left:6px;">Free-form. Saves on focus loss.</span>
+          </label>
+          <textarea class="hub-input cm-pos-notes-textarea"
+                    rows="3"
+                    style="width:100%;min-height:64px;resize:vertical;font-family:inherit;font-size:13px;line-height:1.45;"
+                    placeholder="e.g., 1 per 2-shift 8K-order/day op · backfilled by Group Leads · only on peak days"
+                    data-array="shifts.positions" data-idx="${i}" data-field="notes"
+                    data-field-commit="change">${_esc(p.notes || '')}</textarea>
+        </div>
+      </td>
+    </tr>
+  `;
+    return mainRow + notesRow;
+  };
 
   return `
     <div class="cm-wide-layout">
@@ -5557,23 +6079,23 @@ function renderSummary() {
       const y1CostPerOrder = y1Orders > 0 ? y1Cost / y1Orders : 0;
       return `
     <div class="hub-kpi-strip mb-4" style="grid-template-columns: repeat(5, minmax(0, 1fr));">
-      <div class="hub-kpi-tile" title="Year 1 total cost (matches P&L below)">
+      <div class="hub-kpi-tile" data-cm-disclose="summary-y1-cost" title="Hover for breakdown · Year 1 total cost">
         <div class="hub-kpi-tile__label">Y1 Total Cost</div>
         <div class="hub-kpi-tile__value">${calc.formatCurrency(y1Cost, {compact: true})}</div>
       </div>
-      <div class="hub-kpi-tile" title="Year 1 revenue at the target margin">
+      <div class="hub-kpi-tile" data-cm-disclose="summary-y1-revenue" title="Hover for breakdown · Year 1 revenue at target margin">
         <div class="hub-kpi-tile__label">Y1 Revenue</div>
         <div class="hub-kpi-tile__value hub-kpi-tile__value--brand">${calc.formatCurrency(y1Revenue, {compact: true})}</div>
       </div>
-      <div class="hub-kpi-tile" title="Year 1 cost ÷ Year 1 ${outboundUomLabel.toLowerCase()}s">
+      <div class="hub-kpi-tile" data-cm-disclose="summary-y1-cost-per-order" title="Hover for breakdown · Year 1 cost ÷ Year 1 ${outboundUomLabel.toLowerCase()}s">
         <div class="hub-kpi-tile__label">Cost / ${outboundUomLabel} (Y1)</div>
         <div class="hub-kpi-tile__value">${y1Orders > 0 ? calc.formatCurrency(y1CostPerOrder, {decimals: 2}) : '—'}</div>
       </div>
-      <div class="hub-kpi-tile">
+      <div class="hub-kpi-tile" data-cm-disclose="summary-ftes" title="Hover for breakdown · Direct + indirect FTEs">
         <div class="hub-kpi-tile__label">FTEs</div>
         <div class="hub-kpi-tile__value">${summary.totalFtes.toFixed(0)}</div>
       </div>
-      <div class="hub-kpi-tile">
+      <div class="hub-kpi-tile" data-cm-disclose="summary-capital" title="Hover for breakdown · Equipment + start-up capital">
         <div class="hub-kpi-tile__label">Capital</div>
         <div class="hub-kpi-tile__value">${calc.formatCurrency(summary.equipmentCapital + summary.startupCapital, {compact: true})}</div>
       </div>
@@ -8589,9 +9111,32 @@ function handleAction(action, idx, btn) {
         // Unlink any labor lines pointing at this position
         (model.laborLines || []).forEach(l => { if (l.position_id === delId) l.position_id = null; });
         (model.indirectLaborLines || []).forEach(l => { if (l.position_id === delId) l.position_id = null; });
+        if (delId) _expandedPositionIds.delete(delId);
         positions.splice(idx, 1);
       }
       break;
+    }
+    case 'toggle-position-notes': {
+      // Brock 2026-04-26 — replaces the old sliver-width inline notes <input>
+      // with a per-row collapsible textarea sub-row. Identity by position id
+      // (uuid or fallback string) so state survives row reorders within the
+      // session. Skip persisting through markDirty — UI-only state.
+      const positions = (model.shifts && model.shifts.positions) || [];
+      const pos = positions[idx];
+      if (!pos) break;
+      const pid = pos.id;
+      if (!pid) break;
+      if (_expandedPositionIds.has(pid)) _expandedPositionIds.delete(pid);
+      else _expandedPositionIds.add(pid);
+      renderSection();
+      // Auto-focus the textarea if we just opened it
+      if (_expandedPositionIds.has(pid)) {
+        setTimeout(() => {
+          const ta = rootEl?.querySelector(`textarea[data-array="shifts.positions"][data-idx="${idx}"][data-field="notes"]`);
+          if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+        }, 0);
+      }
+      return; // already re-rendered, skip the default markDirty branch
     }
     case 'replace-with-standard-positions': {
       // Brock 2026-04-21 pm: wipe the per-project catalog and seed the
@@ -10176,9 +10721,9 @@ function renderTimeline() {
     return `
       ${frozenBanner}
       <div class="cm-section">
-        <h2 class="cm-section-title">Timeline <span style="font-size:11px;color:var(--ies-gray-400);font-weight:500;margin-left:8px;">Legacy mode</span></h2>
+        <h2 class="cm-section-title">Cashflow &amp; P&amp;L <span style="font-size:11px;color:var(--ies-gray-400);font-weight:500;margin-left:8px;">Legacy mode</span></h2>
         <div class="hub-card" style="background:#fef3c7;border:1px solid #fcd34d;color:#92400e;padding:16px;">
-          <strong>Monthly engine is disabled.</strong> Re-enable it in the browser console to view the timeline:
+          <strong>Monthly engine is disabled.</strong> Re-enable it in the browser console to view the cashflow projection:
           <code style="display:block;margin-top:8px;background:#fff;padding:8px;border-radius:4px;font-family:monospace;">window.COST_MODEL_MONTHLY_ENGINE = true;</code>
         </div>
       </div>
@@ -10191,9 +10736,9 @@ function renderTimeline() {
   if (!bundle || !bundle.cashflow || bundle.cashflow.length === 0) {
     return `
       <div class="cm-section">
-        <h2 class="cm-section-title">Timeline</h2>
+        <h2 class="cm-section-title">Cashflow &amp; P&amp;L</h2>
         <div class="hub-card" style="padding:24px;text-align:center;color:var(--ies-gray-400);">
-          Add labor, equipment, and pricing inputs to generate the monthly timeline. Empty models have no cashflow to render.
+          Add labor, equipment, and pricing inputs to generate the monthly cashflow & P&L. Empty models have no data to render.
         </div>
       </div>
     `;
@@ -10247,25 +10792,25 @@ function renderTimeline() {
     ${frozenBanner}
     <div class="cm-section">
       <div class="cm-timeline-meta">
-        <h2 class="cm-timeline-meta__title">Timeline</h2>
+        <h2 class="cm-timeline-meta__title">Cashflow &amp; P&amp;L</h2>
         <span class="cm-timeline-meta__hint">${rows.length} months · Phase 1 monthly engine</span>
       </div>
 
-      <!-- KPI strip (primitives kit) -->
+      <!-- KPI strip (primitives kit) — hover any tile for breakdown -->
       <div class="hub-kpi-strip mb-4">
-        <div class="hub-kpi-tile">
+        <div class="hub-kpi-tile" data-cm-disclose="cf-total-revenue" title="Hover for breakdown · Sum of all monthly revenue">
           <div class="hub-kpi-tile__label">Total Revenue</div>
           <div class="hub-kpi-tile__value hub-kpi-tile__value--brand">$${fmt(rows.reduce((s, r) => s + r.revenue, 0))}</div>
         </div>
-        <div class="hub-kpi-tile">
+        <div class="hub-kpi-tile" data-cm-disclose="cf-total-opex" title="Hover for breakdown · Sum of all monthly opex">
           <div class="hub-kpi-tile__label">Total Opex</div>
           <div class="hub-kpi-tile__value">$${fmt(rows.reduce((s, r) => s + r.opex, 0))}</div>
         </div>
-        <div class="hub-kpi-tile">
+        <div class="hub-kpi-tile" data-cm-disclose="cf-cum-fcf" title="Hover for breakdown · Cumulative free cash flow at end of contract">
           <div class="hub-kpi-tile__label">Cumulative FCF</div>
           <div class="hub-kpi-tile__value" style="color:${lastCumFcf >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};">$${fmt(lastCumFcf)}</div>
         </div>
-        <div class="hub-kpi-tile">
+        <div class="hub-kpi-tile" data-cm-disclose="cf-payback" title="Hover for breakdown · First month cumulative FCF turns positive">
           <div class="hub-kpi-tile__label">Payback Month</div>
           <div class="hub-kpi-tile__value">${payback ? payback.label : '—'}</div>
         </div>
