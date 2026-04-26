@@ -141,6 +141,21 @@ export function aisleModuleWidth(storageType, customAisle, dims = {}) {
 
 /**
  * Compute the full storage calculation from facility and zone config.
+ *
+ * WSC-A2 / A3 / B2 (2026-04-25) — building dimensions DRIVE the calc:
+ *  - When facility.buildingWidth and buildingDepth are set, the storage
+ *    rectangle is bounded by those dimensions (minus dock face clearance).
+ *  - Rack levels use the canonical v2 formula `sizingRackLevels` (load-height +
+ *    sprinkler clearance aware, bounded [2,7]) — same engine as sizeFacility.
+ *  - Aisle count = floor(storageWidth / aisleModuleWidth) where module
+ *    incorporates rack type (single/double depth) AND user-specified aisle
+ *    width — so 6 ft VNA aisles produce ~2x more positions than 12 ft wide.
+ *  - When dims aren't set, fall back to the prior sqrt(SF*1.5) heuristic but
+ *    flag in the return that geometry is heuristic.
+ *
+ * The result of this function and `sizeFacility` reconcile to the same numbers
+ * when fed equivalent inputs (canonical level formula, same aisle module).
+ *
  * @param {import('./types.js?v=20260418-sL').FacilityConfig} facility
  * @param {import('./types.js?v=20260418-sL').ZoneConfig} zones
  * @returns {import('./types.js?v=20260418-sL').StorageCalcResult}
@@ -148,17 +163,23 @@ export function aisleModuleWidth(storageType, customAisle, dims = {}) {
 export function computeStorage(facility, zones) {
   const totalSqft = facility.totalSqft || 0;
   const clearH = facility.clearHeight || 0;
-  const width = facility.buildingWidth || Math.sqrt(totalSqft * 1.5);
-  const depth = facility.buildingDepth || (totalSqft / (width || 1));
+  const widthIn = +facility.buildingWidth || 0;
+  const depthIn = +facility.buildingDepth || 0;
   const st = facility.storageType || 'single';
 
   // Non-storage area
   const nonStorage = (zones.officeSqft || 0) + (zones.receiveStagingSqft || 0) +
     (zones.shipStagingSqft || 0) + (zones.chargingSqft || 0) +
     (zones.repackSqft || 0) + (zones.otherSqft || 0);
-  const storageSqft = Math.max(0, totalSqft - nonStorage);
 
-  // Dimensions
+  // Total facility footprint: prefer width × depth when both set, fall back
+  // to facility.totalSqft. When BOTH are set and disagree, the dimensions
+  // win — they're the physical constraint.
+  const dimsTotal = (widthIn > 0 && depthIn > 0) ? widthIn * depthIn : 0;
+  const totalForStorage = dimsTotal > 0 ? dimsTotal : totalSqft;
+  const storageSqft = Math.max(0, totalForStorage - nonStorage);
+
+  // Pallet dimensions
   const dims = {
     palletWidth: facility.palletWidth,
     palletDepth: facility.palletDepth,
@@ -168,27 +189,49 @@ export function computeStorage(facility, zones) {
     topClearance: facility.topClearance,
   };
 
-  const levels = rackLevels(clearH, dims);
+  // Canonical rack levels (matches sizeFacility — load-height + sprinkler aware)
+  const levels = sizingRackLevels(
+    clearH,
+    facility.palletHeight ?? DEFAULTS.palletHeight,
+    facility.topClearance ?? DEFAULTS.topClearance,
+  );
   const posH = positionHeightFt(dims);
   const usable = usableHeightFt(clearH, dims.topClearance);
+
+  // Bay width and aisle module — drive geometry-bounded position count
   const bw = bayWidthFt(dims);
-  const aisle = facility.aisleWidth || AISLE_WIDTHS[st] || 12;
   const moduleW = aisleModuleWidth(st, facility.aisleWidth, dims);
+  const bd = rackDepthFt(st === 'double' ? 'double' : 'single', dims);
 
-  // How many aisle modules fit in the storage width?
-  const storageWidth = Math.sqrt(storageSqft * 1.5);
+  // Storage rectangle: when buildingWidth set, use it (minus dock-side
+  // clearance — assume the long dim is the storage width). When BOTH
+  // dims are set, use the LONGER as storage width (warehouses orient
+  // racks across the long axis to maximize aisle count).
+  let storageWidth = 0;
+  let storageDepth = 0;
+  let geometryIsHeuristic = false;
+  if (widthIn > 0 && depthIn > 0) {
+    storageWidth = Math.max(widthIn, depthIn);
+    // Reserve ~30 ft along the dock face (12 ft door + 18 ft staging)
+    // before storage starts. This is approximate — the sizing engine
+    // computes precise dock+staging SF in zone breakdown.
+    const dockSetback = 30;
+    const usableDepth = Math.max(0, Math.min(widthIn, depthIn) - dockSetback);
+    storageDepth = usableDepth;
+  } else {
+    // Heuristic fallback: assume 1.5:1 aspect ratio
+    storageWidth = Math.sqrt(storageSqft * 1.5);
+    storageDepth = storageWidth > 0 ? storageSqft / storageWidth : 0;
+    geometryIsHeuristic = true;
+  }
+
   const aisleCount = moduleW > 0 ? Math.floor(storageWidth / moduleW) : 0;
-
-  // How many bays fit along depth?
-  const storageDepth = aisleCount > 0 ? storageSqft / storageWidth : 0;
   const bayCount = bw > 0 ? Math.floor(storageDepth / bw) : 0;
 
-  // Positions: aisles × 2 sides × bays × levels
+  // Positions per bay = levels × (1 single | 2 double)
   const depthMultiplier = st === 'double' ? 2 : 1;
   const posPerBay = levels * depthMultiplier;
   const totalPositions = aisleCount * 2 * bayCount * posPerBay;
-
-  const bd = rackDepthFt(st === 'double' ? 'double' : 'single', dims);
 
   return {
     rackLevels: levels,
@@ -199,9 +242,10 @@ export function computeStorage(facility, zones) {
     bayCountPerAisle: bayCount,
     totalPalletPositions: totalPositions,
     storageSqft,
-    storageUtilization: totalSqft > 0 ? storageSqft / totalSqft : 0,
+    storageUtilization: totalForStorage > 0 ? storageSqft / totalForStorage : 0,
     usableHeight: usable,
     positionHeight: posH,
+    geometryIsHeuristic,
   };
 }
 

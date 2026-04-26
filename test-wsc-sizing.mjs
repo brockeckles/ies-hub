@@ -133,5 +133,97 @@ const t = (name, cond, extra = '') => {
   t('DIOH DTC ecomm: 1.5M / 15K = 100 days', Math.round(dioh) === 100, `got ${dioh}`);
 }
 
+
+// ============================================================
+// WSC-A2 / A3 / B2 (2026-04-25) — building dimensions drive storage geometry
+// ============================================================
+import { computeStorage } from './tools/warehouse-sizing/calc.js';
+
+{
+  // Heuristic fallback: no buildingWidth/Depth → flagged heuristic
+  const r = computeStorage(
+    { totalSqft: 500000, clearHeight: 36, storageType: 'single', aisleWidth: 10,
+      palletHeight: 48, topClearance: 18 },
+    { officeSqft: 25000 }
+  );
+  t('A2 heuristic flag set when no dims', r.geometryIsHeuristic === true);
+  t('A2 heuristic still produces positions', r.totalPalletPositions > 0);
+}
+{
+  // With dims: HEURISTIC flag clears, dims drive geometry
+  const r = computeStorage(
+    { totalSqft: 500000, buildingWidth: 800, buildingDepth: 625,
+      clearHeight: 36, storageType: 'single', aisleWidth: 10,
+      palletHeight: 48, topClearance: 18 },
+    { officeSqft: 25000 }
+  );
+  t('A2 measured flag when dims set', r.geometryIsHeuristic === false);
+  t('A2 storage SF reflects dims × dims − non-storage',
+    r.storageSqft === 800 * 625 - 25000,
+    `expected ${800*625 - 25000} got ${r.storageSqft}`);
+}
+{
+  // Aisle width drives module count: 6 ft VNA gives more positions than 12 ft wide
+  const wide = computeStorage(
+    { totalSqft: 500000, buildingWidth: 800, buildingDepth: 625,
+      clearHeight: 36, storageType: 'single', aisleWidth: 12,
+      palletHeight: 48, topClearance: 18 },
+    { officeSqft: 25000 }
+  );
+  const vna = computeStorage(
+    { totalSqft: 500000, buildingWidth: 800, buildingDepth: 625,
+      clearHeight: 36, storageType: 'single', aisleWidth: 6,
+      palletHeight: 48, topClearance: 18 },
+    { officeSqft: 25000 }
+  );
+  t('B2 VNA produces > wide aisles',
+    vna.aisleCount > wide.aisleCount,
+    `wide=${wide.aisleCount} vna=${vna.aisleCount}`);
+  t('B2 VNA produces > wide positions',
+    vna.totalPalletPositions > wide.totalPalletPositions);
+}
+{
+  // Double-deep produces ~2x positions of single in same footprint
+  const single = computeStorage(
+    { totalSqft: 500000, buildingWidth: 800, buildingDepth: 625,
+      clearHeight: 36, storageType: 'single', aisleWidth: 10,
+      palletHeight: 48, topClearance: 18 },
+    { officeSqft: 25000 }
+  );
+  const dbl = computeStorage(
+    { totalSqft: 500000, buildingWidth: 800, buildingDepth: 625,
+      clearHeight: 36, storageType: 'double', aisleWidth: 10,
+      palletHeight: 48, topClearance: 18 },
+    { officeSqft: 25000 }
+  );
+  t('A3 double > single positions in same footprint',
+    dbl.totalPalletPositions > single.totalPalletPositions,
+    `single=${single.totalPalletPositions} double=${dbl.totalPalletPositions}`);
+}
+{
+  // Rack levels canonical formula: 36 ft clear + 48" load + 18" sprinkler →
+  // floor((36*12 - 18) / (48+10)) = floor(414/58) = 7, capped at 7
+  const r = computeStorage(
+    { totalSqft: 500000, buildingWidth: 800, buildingDepth: 625,
+      clearHeight: 36, storageType: 'single', aisleWidth: 10,
+      palletHeight: 48, topClearance: 18 },
+    { officeSqft: 25000 }
+  );
+  t('A3 canonical levels match v2 formula', r.rackLevels === 7,
+    `got ${r.rackLevels}`);
+}
+{
+  // Lower clear height → fewer levels, bounded ≥ 2
+  const low = computeStorage(
+    { totalSqft: 500000, buildingWidth: 800, buildingDepth: 625,
+      clearHeight: 16, storageType: 'single', aisleWidth: 10,
+      palletHeight: 48, topClearance: 18 },
+    { officeSqft: 25000 }
+  );
+  t('A3 low clear height → bounded levels',
+    low.rackLevels >= 2 && low.rackLevels <= 7,
+    `got ${low.rackLevels}`);
+}
+
 console.log(`\n\n${pass}/${pass + fail} passed`);
 if (fail > 0) process.exit(1);

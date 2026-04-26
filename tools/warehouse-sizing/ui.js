@@ -11,7 +11,7 @@ import { state } from '../../shared/state.js?v=20260418-sL';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sL';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260419-uE';
-import * as calc from './calc.js?v=20260425-s8';
+import * as calc from './calc.js?v=20260425-s9';
 import * as api from './api.js?v=20260418-sL';
 
 // ============================================================
@@ -1917,21 +1917,28 @@ function renderDashboard() {
         </table>
       </div>
 
-      <!-- Rack Geometry -->
+      <!-- Rack & Aisle Geometry (WSC-C1: renamed from "Rack Geometry" — IE-standard term) -->
       <div class="hub-card">
-        <div class="text-subtitle mb-4">Rack Geometry</div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px;">
+          <div class="text-subtitle" style="margin:0;">Rack &amp; Aisle Geometry</div>
+          ${storage.geometryIsHeuristic
+            ? `<span style="font-size:10px;background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:3px;" title="Building Width × Depth not set — geometry assumes a 1.5:1 rectangle from total SF. Set Width / Depth on the Building card for measured geometry.">HEURISTIC</span>`
+            : `<span style="font-size:10px;background:#dcfce7;color:#166534;padding:2px 6px;border-radius:3px;" title="Geometry computed from facility.buildingWidth × buildingDepth.">MEASURED</span>`
+          }
+        </div>
         <table class="cm-grid-table" style="font-size:13px;">
           <tbody>
-            <tr><td>Rack Levels</td><td class="cm-num" style="font-weight:700;">${storage.rackLevels}</td></tr>
+            <tr><td>Rack Levels</td><td class="cm-num" style="font-weight:700;" title="Bounded [2, 7]. Formula: floor((clearHt × 12 − sprinkler_clearance) / (load_height + 10\")).">${storage.rackLevels}</td></tr>
             <tr><td>Level Height</td><td class="cm-num">${calc.formatFt(storage.positionHeight)}</td></tr>
             <tr><td>Top of Steel</td><td class="cm-num">${calc.formatFt(calc.topOfSteelFt(storage.rackLevels))}</td></tr>
             <tr><td>Usable Height</td><td class="cm-num">${calc.formatFt(storage.usableHeight)}</td></tr>
             <tr><td>Sprinkler Clearance</td><td class="cm-num">${calc.formatFt(elev.topClearanceFt)}</td></tr>
             <tr><td>Bay Width</td><td class="cm-num">${calc.formatFt(storage.bayWidth)}</td></tr>
             <tr><td>Rack Depth</td><td class="cm-num">${calc.formatFt(storage.bayDepth)}</td></tr>
-            <tr><td>Aisle Width</td><td class="cm-num">${calc.formatFt(elev.aisleWidth)}</td></tr>
-            <tr><td>Aisle Count</td><td class="cm-num">${storage.aisleCount}</td></tr>
-            <tr><td>Bays/Aisle</td><td class="cm-num">${storage.bayCountPerAisle}</td></tr>
+            <tr><td>Aisle Width</td><td class="cm-num" title="${facility.aisleWidth ? 'User-set' : 'Default for ' + facility.storageType}">${calc.formatFt(elev.aisleWidth)}</td></tr>
+            <tr><td>Aisle Count</td><td class="cm-num" title="${storage.geometryIsHeuristic ? 'Estimated from total SF assuming 1.5:1 aspect ratio.' : 'floor(buildingWidth / aisleModuleWidth) where module = rack-depth + aisle + rack-depth.'}">${storage.aisleCount}</td></tr>
+            <tr><td>Bays/Aisle</td><td class="cm-num" title="${storage.geometryIsHeuristic ? 'Estimated from total SF.' : 'floor((buildingDepth − dockSetback) / bayWidth). 30 ft reserved at dock face.'}">${storage.bayCountPerAisle}</td></tr>
+            <tr><td>Total Geom Positions</td><td class="cm-num" title="aisleCount × 2 sides × bays × levels${facility.storageType === 'double' ? ' × 2 (double-deep)' : ''}. Compare to Sized Gross Positions above to spot capacity gaps.">${storage.totalPalletPositions.toLocaleString()}</td></tr>
           </tbody>
         </table>
       </div>
