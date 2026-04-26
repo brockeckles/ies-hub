@@ -4697,6 +4697,18 @@ function renderPricingBuckets() {
 }
 
 function renderPricing() {
+  // CM-VAR-1: hydrate variance display prefs on legacy models that pre-date
+  // the uiPrefs namespace. Cheap defensive default — runs every render but
+  // only mutates when the keys are missing.
+  if (!model.uiPrefs) model.uiPrefs = {};
+  if (model.uiPrefs.varianceMode !== 'pct' && model.uiPrefs.varianceMode !== 'abs' && model.uiPrefs.varianceMode !== 'both') {
+    model.uiPrefs.varianceMode = 'both';
+  }
+  if (typeof model.uiPrefs.varianceSeparateColumn !== 'boolean') {
+    model.uiPrefs.varianceSeparateColumn = false;
+  }
+  const _varMode = model.uiPrefs.varianceMode;
+  const _varSep  = !!model.uiPrefs.varianceSeparateColumn && _varMode === 'both';
   const buckets = model.pricingBuckets || [];
   const market = model.projectDetails?.market;
   const fr = (refData.facilityRates || []).find(r => r.market_id === market);
@@ -4914,6 +4926,21 @@ function renderPricing() {
     </div>
     ` : ''}
 
+    ${buckets.length > 0 ? `
+    <!-- CM-VAR-1 (2026-04-26): Variance display toggle. Causal-style flexibility — pick how variance is rendered. Stored on model.uiPrefs so it travels with the model. -->
+    <div class="cm-var-toggle-bar" role="toolbar" aria-label="Variance display options">
+      <span class="cm-var-toggle-label">Variance display:</span>
+      <div class="cm-var-toggle-group" role="group">
+        <button type="button" class="cm-var-toggle-btn ${_varMode === 'pct' ? 'is-active' : ''}" data-action="set-var-mode" data-mode="pct" aria-pressed="${_varMode === 'pct'}" title="Show only the % delta vs recommended rate">% only</button>
+        <button type="button" class="cm-var-toggle-btn ${_varMode === 'abs' ? 'is-active' : ''}" data-action="set-var-mode" data-mode="abs" aria-pressed="${_varMode === 'abs'}" title="Show only the annual $ revenue impact">$ only</button>
+        <button type="button" class="cm-var-toggle-btn ${_varMode === 'both' ? 'is-active' : ''}" data-action="set-var-mode" data-mode="both" aria-pressed="${_varMode === 'both'}" title="Show both % and $ in the variance cell">% + $</button>
+      </div>
+      <label class="cm-var-toggle-sep ${_varMode === 'both' ? '' : 'is-disabled'}" title="${_varMode === 'both' ? 'Break $ into its own column for tighter scanning' : 'Available when display mode is % + $'}">
+        <input type="checkbox" data-action="toggle-var-sep" ${_varSep ? 'checked' : ''} ${_varMode === 'both' ? '' : 'disabled'} />
+        <span>Separate column for $</span>
+      </label>
+    </div>
+    ` : ''}
     <table class="cm-grid-table cm-pricing-schedule">
       <thead>
         <tr>
@@ -4923,7 +4950,11 @@ function renderPricing() {
           <th class="cm-num">Volume</th>
           <th class="cm-num" title="Recommended = Cost / (1 − target margin) / volume. This is what we'd propose to the customer.">Recommended Rate</th>
           <th class="cm-num" title="Override rate — leave blank to use recommended. Enter a value to reflect negotiation, competitive pressure, or strategic concession.">Override Rate</th>
-          <th class="cm-num" title="Variance of the override against the recommended rate — annual revenue impact at the bucket's volume.">Variance</th>
+          ${_varSep
+            ? `<th class="cm-num" title="% delta of override vs recommended rate.">% Variance</th>
+               <th class="cm-num" title="Annual revenue impact at the bucket's volume.">$ Variance</th>`
+            : `<th class="cm-num" title="Variance of the override against the recommended rate — ${_varMode === 'pct' ? '% delta of the override.' : _varMode === 'abs' ? 'annual revenue impact at the bucket' + String.fromCharCode(0x2019) + 's volume.' : '% delta plus annual revenue impact at the bucket' + String.fromCharCode(0x2019) + 's volume.'}">${_varMode === 'pct' ? '% Variance' : _varMode === 'abs' ? '$ Variance' : 'Variance'}</th>`
+          }
           <th style="width:80px;"></th>
         </tr>
       </thead>
@@ -4977,13 +5008,29 @@ function renderPricing() {
                   </select>
                 ` : ''}
               </td>
-              <td class="cm-num ${vClass}" style="font-weight:600;">
-                ${variancePerBucket.isOverridden
-                  ? `${variancePerBucket.deltaPct >= 0 ? '+' : ''}${(variancePerBucket.deltaPct * 100).toFixed(1)}%
-                     <div class="cm-variance-abs">${variancePerBucket.deltaAnnual >= 0 ? '+' : ''}${calc.formatCurrency(variancePerBucket.deltaAnnual, { compact: true })}/yr</div>`
-                  : '—'
+              ${(() => {
+                // CM-VAR-1: render variance cells per uiPrefs. When _varSep is on,
+                // emit two cells (% then $); otherwise one cell formatted by mode.
+                if (!variancePerBucket.isOverridden) {
+                  return _varSep
+                    ? `<td class="cm-num">—</td><td class="cm-num">—</td>`
+                    : `<td class="cm-num">—</td>`;
                 }
-              </td>
+                const pctStr = `${variancePerBucket.deltaPct >= 0 ? '+' : ''}${(variancePerBucket.deltaPct * 100).toFixed(1)}%`;
+                const absStr = `${variancePerBucket.deltaAnnual >= 0 ? '+' : ''}${calc.formatCurrency(variancePerBucket.deltaAnnual, { compact: true })}/yr`;
+                if (_varSep) {
+                  return `<td class="cm-num ${vClass}" style="font-weight:600;">${pctStr}</td>` +
+                         `<td class="cm-num ${vClass}" style="font-weight:600;">${absStr}</td>`;
+                }
+                if (_varMode === 'pct') {
+                  return `<td class="cm-num ${vClass}" style="font-weight:600;" title="${absStr}">${pctStr}</td>`;
+                }
+                if (_varMode === 'abs') {
+                  return `<td class="cm-num ${vClass}" style="font-weight:600;" title="${pctStr}">${absStr}</td>`;
+                }
+                // 'both' (stacked, current default)
+                return `<td class="cm-num ${vClass}" style="font-weight:600;">${pctStr}<div class="cm-variance-abs">${absStr}</div></td>`;
+              })()}
               <td class="cm-num">
                 ${variancePerBucket.isOverridden
                   ? `<button class="hub-btn hub-btn-xs hub-btn-ghost" data-action="reset-override" data-idx="${overrideIdx}" title="Clear override, revert to recommended">↺ Reset</button>`
@@ -4999,9 +5046,26 @@ function renderPricing() {
           <td class="cm-num"></td>
           <td class="cm-num" style="color:var(--ies-gray-600);">${calc.formatCurrency(impact.totalRecommendedRevenue)}/yr</td>
           <td class="cm-num" style="font-weight:700;">${calc.formatCurrency(impact.totalEffectiveRevenue)}/yr</td>
-          <td class="cm-num ${impact.totalOverrideDelta < 0 ? 'cm-variance-down' : impact.totalOverrideDelta > 0 ? 'cm-variance-up' : ''}" style="font-weight:700;">
-            ${impact.totalOverrideDelta === 0 ? '—' : (impact.totalOverrideDelta >= 0 ? '+' : '') + calc.formatCurrency(impact.totalOverrideDelta, { compact: true }) + '/yr'}
-          </td>
+          ${(() => {
+            // CM-VAR-1 total row: aggregate % is delta vs recommended-revenue.
+            const tDelta = impact.totalOverrideDelta;
+            const tCls = tDelta < 0 ? 'cm-variance-down' : tDelta > 0 ? 'cm-variance-up' : '';
+            const tRecRev = impact.totalRecommendedRevenue || 0;
+            const totPct = tRecRev > 0 ? tDelta / tRecRev : 0;
+            const tPctStr = tDelta === 0 ? '—' : `${totPct >= 0 ? '+' : ''}${(totPct * 100).toFixed(1)}%`;
+            const tAbsStr = tDelta === 0 ? '—' : `${tDelta >= 0 ? '+' : ''}${calc.formatCurrency(tDelta, { compact: true })}/yr`;
+            if (_varSep) {
+              return `<td class="cm-num ${tCls}" style="font-weight:700;">${tPctStr}</td>` +
+                     `<td class="cm-num ${tCls}" style="font-weight:700;">${tAbsStr}</td>`;
+            }
+            if (_varMode === 'pct') {
+              return `<td class="cm-num ${tCls}" style="font-weight:700;" title="${tAbsStr}">${tPctStr}</td>`;
+            }
+            if (_varMode === 'abs') {
+              return `<td class="cm-num ${tCls}" style="font-weight:700;" title="${tPctStr}">${tAbsStr}</td>`;
+            }
+            return `<td class="cm-num ${tCls}" style="font-weight:700;">${tDelta === 0 ? '—' : tPctStr + '<div class="cm-variance-abs">' + tAbsStr + '</div>'}</td>`;
+          })()}
           <td></td>
         </tr>
       </tbody>
@@ -5137,6 +5201,18 @@ function renderPricing() {
       .cm-pricing-schedule .cm-variance-up { color:var(--ies-green, #0d9668); }
       .cm-pricing-schedule .cm-variance-abs { font-size:11px; font-weight:500; color:var(--ies-gray-500); margin-top:2px; }
       .cm-pricing-schedule .cm-uom-tick { font-size:10px; color:var(--ies-gray-400); margin-left:2px; font-weight:400; }
+      /* CM-VAR-1 — variance display toggle bar */
+      .cm-var-toggle-bar { display:flex; align-items:center; gap:14px; flex-wrap:wrap; padding:8px 12px; margin:0 0 10px; background:var(--ies-gray-50, #f8fafc); border:1px solid var(--ies-gray-200, #e5e7eb); border-radius:8px; font-size:12px; color:var(--ies-gray-700); }
+      .cm-var-toggle-label { font-weight:600; color:var(--ies-gray-600); text-transform:uppercase; letter-spacing:0.4px; font-size:10px; }
+      .cm-var-toggle-group { display:inline-flex; border:1px solid var(--ies-gray-300, #d1d5db); border-radius:6px; overflow:hidden; background:#fff; }
+      .cm-var-toggle-btn { padding:4px 10px; font-size:12px; font-weight:600; color:var(--ies-gray-600); background:#fff; border:none; border-right:1px solid var(--ies-gray-200, #e5e7eb); cursor:pointer; transition:background 0.15s ease, color 0.15s ease; }
+      .cm-var-toggle-btn:last-child { border-right:none; }
+      .cm-var-toggle-btn:hover { background:var(--ies-gray-100, #f3f4f6); color:var(--ies-gray-900); }
+      .cm-var-toggle-btn.is-active { background:var(--ies-blue, #2563eb); color:#fff; }
+      .cm-var-toggle-btn.is-active:hover { background:var(--ies-blue, #2563eb); color:#fff; }
+      .cm-var-toggle-sep { display:inline-flex; align-items:center; gap:6px; cursor:pointer; user-select:none; }
+      .cm-var-toggle-sep.is-disabled { opacity:0.5; cursor:not-allowed; }
+      .cm-var-toggle-sep input[type="checkbox"] { accent-color:var(--ies-blue, #2563eb); cursor:inherit; }
       .hub-btn-xs { padding:2px 8px; font-size:11px; border-radius:4px; }
       .hub-btn-ghost { background:transparent; color:var(--ies-gray-600); border:1px solid var(--ies-gray-300); }
       .hub-btn-ghost:hover { background:var(--ies-gray-50); }
@@ -8474,6 +8550,22 @@ function handleAction(action, idx, btn) {
     case 'jump-to-buckets':
       navigateSection('pricingBuckets');
       return;
+    case 'set-var-mode': {
+      // CM-VAR-1: switch the Pricing Schedule variance display mode.
+      const mode = btn?.dataset?.mode;
+      if (mode !== 'pct' && mode !== 'abs' && mode !== 'both') return;
+      if (!model.uiPrefs) model.uiPrefs = {};
+      model.uiPrefs.varianceMode = mode;
+      // Disable the separate-column flag when mode isn't 'both' (it has no meaning).
+      if (mode !== 'both') model.uiPrefs.varianceSeparateColumn = false;
+      break;
+    }
+    case 'toggle-var-sep': {
+      // CM-VAR-1: flip the separate-column flag (only meaningful in 'both' mode).
+      if (!model.uiPrefs) model.uiPrefs = {};
+      model.uiPrefs.varianceSeparateColumn = !model.uiPrefs.varianceSeparateColumn;
+      break;
+    }
     case 'reset-override': {
       // Clear the override rate on a pricing bucket → reverts to recommended.
       // idx is the position in model.pricingBuckets. Set to null (matches the
@@ -9707,6 +9799,13 @@ function createEmptyModel() {
     // Shift Planning (2026-04-22 — Brock day-1 MVP). Null on new projects so
     // the section renders an empty matrix; lazy-created on first visit.
     shiftAllocation: null,
+    // CM-VAR-1 (2026-04-26) — variance display preferences for the
+    // Pricing Schedule. Travels with the model so colleagues opening the
+    // same record see the same display. varianceMode: 'pct' | 'abs' | 'both'.
+    uiPrefs: {
+      varianceMode: 'both',
+      varianceSeparateColumn: false,
+    },
   };
 }
 
