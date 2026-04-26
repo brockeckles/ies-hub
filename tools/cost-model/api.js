@@ -834,3 +834,20 @@ export async function superseRateCardRow(table, oldId, newRow) {
   return { retired: retiredRow, created: insertedRow };
 }
 
+
+/**
+ * CM-LND-2 — partial-update helper used by drag-to-reassign on the landing
+ * page. Patches only `deal_deals_id` + `updated_at` so we don't have to
+ * round-trip the full project_data jsonb just to move a model between
+ * deal groups.
+ *
+ * @param {number} modelId
+ * @param {string|null} dealId — pass null to send the model back to "Unassigned"
+ * @returns {Promise<any>}
+ */
+export async function reassignModelToDeal(modelId, dealId) {
+  return db.update('cost_model_projects', modelId, {
+    deal_deals_id: dealId || null,
+    updated_at: new Date().toISOString(),
+  });
+}

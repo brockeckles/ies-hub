@@ -12,7 +12,7 @@ import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260424-hyg04';
 import * as calc from './calc.js?v=20260426-s10';
-import * as api from './api.js?v=20260426-s9';
+import * as api from './api.js?v=20260426-s10';
 import * as scenarios from './calc.scenarios.js?v=20260421-wA';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
@@ -831,6 +831,68 @@ function wireLandingEvents() {
       try { collapsed = JSON.parse(localStorage.getItem('cm-deal-group-collapsed') || '{}'); } catch {}
       if (det.open) delete collapsed[key]; else collapsed[key] = true;
       try { localStorage.setItem('cm-deal-group-collapsed', JSON.stringify(collapsed)); } catch {}
+    });
+  });
+
+  // CM-LND-2 (2026-04-26): drag-to-reassign — drop a card on a different
+  // deal group's summary header to move it. Same-group drops are no-ops.
+  // Persists via api.reassignModelToDeal (partial update — no project_data
+  // round-trip). Confirms before persisting; toasts on result.
+  let _cmDragInfo = null;
+  rootEl.querySelectorAll('.cm-landing-card').forEach(card => {
+    card.addEventListener('dragstart', (e) => {
+      const id = Number(card.getAttribute('data-cm-card'));
+      const name = card.getAttribute('data-cm-name') || `Model #${id}`;
+      const fromKey = card.closest('details[data-cm-deal-group]')?.getAttribute('data-cm-deal-group') || '__unassigned__';
+      _cmDragInfo = { id, name, fromKey };
+      card.classList.add('cm-landing-card--dragging');
+      try {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', String(id));
+      } catch (_) {}
+    });
+    card.addEventListener('dragend', () => {
+      card.classList.remove('cm-landing-card--dragging');
+      _cmDragInfo = null;
+      rootEl.querySelectorAll('.cm-landing-group--dragover').forEach(el => el.classList.remove('cm-landing-group--dragover'));
+    });
+  });
+
+  rootEl.querySelectorAll('details[data-cm-deal-group]').forEach(det => {
+    const summary = det.querySelector('summary');
+    if (!summary) return;
+    const myKey = det.getAttribute('data-cm-deal-group');
+    summary.addEventListener('dragover', (e) => {
+      if (!_cmDragInfo) return;
+      if (_cmDragInfo.fromKey === myKey) return; // self-drop is a no-op
+      e.preventDefault();
+      try { e.dataTransfer.dropEffect = 'move'; } catch (_) {}
+      summary.classList.add('cm-landing-group--dragover');
+    });
+    summary.addEventListener('dragleave', () => {
+      summary.classList.remove('cm-landing-group--dragover');
+    });
+    summary.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      summary.classList.remove('cm-landing-group--dragover');
+      if (!_cmDragInfo) return;
+      if (myKey === _cmDragInfo.fromKey) return;
+      const targetDealId = myKey === '__unassigned__' ? null : myKey;
+      const targetLabel = summary.querySelector('span')?.textContent?.trim() || (myKey === '__unassigned__' ? 'Unassigned' : myKey);
+      const sourceName = _cmDragInfo.name;
+      const movedId = _cmDragInfo.id;
+      _cmDragInfo = null;
+      const ok = await showConfirm(`Move "${sourceName}" to "${targetLabel}"?`, { okLabel: 'Move' });
+      if (!ok) return;
+      try {
+        await api.reassignModelToDeal(movedId, targetDealId);
+        savedModels = await api.listModels();
+        renderCurrentView();
+        showCmToast(`Moved "${sourceName}" to "${targetLabel}".`, 'success');
+      } catch (err) {
+        console.error('[CM-LND-2] Reassign failed:', err);
+        showCmToast('Move failed: ' + (err && err.message ? err.message : err), 'error');
+      }
     });
   });
 }
@@ -10353,13 +10415,13 @@ function renderLanding() {
           const market = m.market_id ? (marketById[m.market_id] || m.market_id) : null;
           const safeName = (m.name || 'Untitled Model').replace(/"/g, '&quot;');
           return `
-            <div class="hub-card cm-landing-card" data-cm-card="${m.id}" style="padding:16px;cursor:pointer;transition:all 0.15s;border:1px solid var(--ies-gray-200);position:relative;">
-              <button class="cm-landing-duplicate" data-cm-duplicate="${m.id}" data-cm-name="${safeName}"
+            <div class="hub-card cm-landing-card" data-cm-card="${m.id}" data-cm-name="${safeName}" draggable="true" style="padding:16px;cursor:pointer;transition:all 0.15s;border:1px solid var(--ies-gray-200);position:relative;">
+              <button class="cm-landing-duplicate" data-cm-duplicate="${m.id}" data-cm-name="${safeName}" draggable="false"
                       title="Duplicate this model"
                       style="position:absolute;top:8px;right:36px;width:24px;height:24px;padding:0;display:flex;align-items:center;justify-content:center;background:transparent;border:none;color:var(--ies-gray-300);cursor:pointer;border-radius:4px;font-size:13px;">
                 ⎘
               </button>
-              <button class="cm-landing-delete" data-cm-delete="${m.id}" data-cm-name="${safeName}"
+              <button class="cm-landing-delete" data-cm-delete="${m.id}" data-cm-name="${safeName}" draggable="false"
                       title="Delete this model"
                       style="position:absolute;top:8px;right:8px;width:24px;height:24px;padding:0;display:flex;align-items:center;justify-content:center;background:transparent;border:none;color:var(--ies-gray-300);cursor:pointer;border-radius:4px;font-size:14px;">
                 ✕
@@ -10402,6 +10464,22 @@ function renderLanding() {
       .cm-landing-card:hover { border-color: var(--ies-blue) !important; box-shadow: 0 2px 8px rgba(0,71,171,0.08); transform: translateY(-1px); }
       .cm-landing-delete:hover { color: #e23d3d !important; background: rgba(226,61,61,0.08) !important; }
       .cm-landing-duplicate:hover { color: var(--ies-blue) !important; background: rgba(0,71,171,0.08) !important; }
+      /* CM-LND-2 — drag-to-reassign visuals */
+      .cm-landing-card[draggable="true"] { cursor: grab; }
+      .cm-landing-card[draggable="true"]:active { cursor: grabbing; }
+      .cm-landing-card.cm-landing-card--dragging { opacity: 0.4; }
+      details[data-cm-deal-group] > summary.cm-landing-group--dragover {
+        background: #eff6ff !important;
+        border-color: var(--ies-blue) !important;
+        box-shadow: 0 0 0 2px rgba(0,71,171,0.18) inset;
+      }
+      details[data-cm-deal-group] > summary.cm-landing-group--dragover::after {
+        content: "Drop to move here";
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--ies-blue);
+        margin-left: 12px;
+      }
     </style>
   `;
 }
