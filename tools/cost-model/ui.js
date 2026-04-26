@@ -5108,131 +5108,184 @@ function renderVas() {
 function renderFinancial() {
   const f = model.financial || {};
   // M1 (2026-04-21): G&A + Mgmt Fee are the source of truth; targetMargin
-  // is the derived sum, kept for downstream back-compat. Reference Part I §4
-  // defaults: G&A 6.0, Mgmt Fee 10.0 → Total 16.0.
+  // is the derived sum, kept for downstream back-compat. Defaults: G&A 6.0,
+  // Mgmt Fee 10.0 → Total 16.0.
   const ga  = Number(f.gaMargin  ?? (Number(f.targetMargin || 16) * 0.375).toFixed(2));
   const mgmt = Number(f.mgmtFeeMargin ?? (Number(f.targetMargin || 16) * 0.625).toFixed(2));
   const total = Number((ga + mgmt).toFixed(2));
+  const grossUpFactor = (1 / (1 - total / 100)).toFixed(2);
+  const contractType = model.projectDetails?.contractType || 'fixed_variable';
+  const buckets = model.pricingBuckets || [];
+  const storageBucket = buckets.find(b => /storage/i.test(b.name || b.id || ''));
+  const mgmtFeeBucket = buckets.find(b => /mgmt|manage/i.test(b.name || b.id || ''));
+  const autoBucket = storageBucket || mgmtFeeBucket || buckets[0];
+  const autoLabel = autoBucket
+    ? `Auto — routes to ${autoBucket.name}`
+    : 'Auto — Storage bucket if available, otherwise Management Fee';
+
   return `
     <div class="cm-section-header">
       <div>
-        <div class="cm-section-title">Financial Parameters</div>
-        <div class="cm-section-desc">Margin components (G&A + Mgmt Fee), escalation rates, discount rates, and financial thresholds. Reference-aligned cost-plus: Revenue = Cost / (1 − total margin).</div>
+        <div class="cm-section-title">Financial Assumptions</div>
+        <div class="cm-section-desc">Margin build-up, growth rates, return targets, and how costs flow into pricing buckets. Revenue is calculated cost-plus: <strong>Revenue = Cost ÷ (1 − Total Margin)</strong>.</div>
       </div>
     </div>
 
-    <div class="cm-narrow-form">
-      <div class="hub-field hub-field--full">
-        <label class="hub-field__label">Target Margin Components</label>
-        <div class="cm-margin-split">
-          <div class="cm-margin-split-field">
-            <div class="cm-margin-split-sublabel" title="General & Administrative — corporate overhead layer that scales with the deal. Reference model default 6.0%.">G&amp;A Margin (%)</div>
-            <input class="hub-input" type="number" step="0.25" min="0" max="30" value="${ga}" data-field="financial.gaMargin" data-type="number" />
+    <div class="cm-fin-grid">
+
+      <!-- ============== Card 1 — Margin & Pricing ============== -->
+      <section class="cm-fin-section">
+        <header class="cm-fin-section__header">
+          <h3>Margin &amp; Pricing</h3>
+          <p>The components that build revenue on top of cost, and how the deal is invoiced.</p>
+        </header>
+
+        <div class="hub-field hub-field--full">
+          <label class="hub-field__label">Target Margin Components</label>
+          <div class="cm-margin-split">
+            <div class="cm-margin-split-field">
+              <div class="cm-margin-split-sublabel" title="Corporate overhead layer that scales with the deal. Typical default 6%.">G&amp;A Margin (%)</div>
+              <input class="hub-input" type="number" step="0.25" min="0" max="30" value="${ga}" data-field="financial.gaMargin" data-type="number" />
+            </div>
+            <div class="cm-margin-split-op">+</div>
+            <div class="cm-margin-split-field">
+              <div class="cm-margin-split-sublabel" title="Management fee margin layered on top of cost + G&A. Typical default 10%.">Mgmt Fee Margin (%)</div>
+              <input class="hub-input" type="number" step="0.25" min="0" max="30" value="${mgmt}" data-field="financial.mgmtFeeMargin" data-type="number" />
+            </div>
+            <div class="cm-margin-split-op">=</div>
+            <div class="cm-margin-split-total">
+              <div class="cm-margin-split-sublabel">Total Margin</div>
+              <div class="cm-margin-split-total-value">${total.toFixed(2)}%</div>
+            </div>
           </div>
-          <div class="cm-margin-split-op">+</div>
-          <div class="cm-margin-split-field">
-            <div class="cm-margin-split-sublabel" title="Management Fee — margin on top of (cost + G&A). Reference model default 10.0%.">Mgmt Fee Margin (%)</div>
-            <input class="hub-input" type="number" step="0.25" min="0" max="30" value="${mgmt}" data-field="financial.mgmtFeeMargin" data-type="number" />
-          </div>
-          <div class="cm-margin-split-op">=</div>
-          <div class="cm-margin-split-total">
-            <div class="cm-margin-split-sublabel">Total Margin</div>
-            <div class="cm-margin-split-total-value">${total.toFixed(2)}%</div>
-          </div>
+          <div class="hub-field__hint">Every $1 of cost generates <strong>$${grossUpFactor}</strong> of revenue. The Pricing Schedule shows each bucket\'s revenue broken into G&amp;A and management-fee components.</div>
         </div>
-        <div class="hub-field__hint">Gross-up: Revenue = Cost / (1 − ${total.toFixed(2)}%) = Cost × ${(1 / (1 - total / 100)).toFixed(4)}. The Pricing Schedule displays each bucket's revenue broken into G&amp;A and Mgmt Fee components (reference Part I §4).</div>
-      </div>
-      <div class="hub-field hub-field--full">
-        <label class="hub-field__label">Contract Type</label>
-        <select class="hub-input" data-field="projectDetails.contractType">
-          <option value="fixed_variable"${(model.projectDetails?.contractType || 'fixed_variable') === 'fixed_variable' ? ' selected' : ''}>Fixed / Variable (standard bucketed pricing)</option>
-          <option value="open_book"${model.projectDetails?.contractType === 'open_book' ? ' selected' : ''}>Open Book (cost pass-through + declared margin)</option>
-          <option value="unit_rate"${model.projectDetails?.contractType === 'unit_rate' ? ' selected' : ''}>Unit Rate (per-unit rate card emphasis)</option>
-          <option value="split_month"${model.projectDetails?.contractType === 'split_month' ? ' selected' : ''}>Split-Month Billing (fixed fee early + variable fee in arrears)</option>
-        </select>
-        <div class="hub-field__hint">Reference Part I §9. All four use the cost-plus mechanic; display + cash-flow timing differ. Split-Month separates the invoice into a fixed monthly management fee (net-15) and a variable transaction fee (net-30 from month-end).</div>
-      </div>
-      ${model.projectDetails?.contractType === 'split_month' ? `
-        <!-- Split-Month billing controls — only visible on split_month contracts -->
-        <div class="hub-field hub-field--full cm-split-month-controls">
-          <div class="cm-split-month-header">
-            <span class="cm-split-month-title">Split-Month Billing Configuration</span>
-            <span class="cm-split-month-subtitle">Customer is invoiced in two cycles per month. The mix + DSO per stream drives cash-flow timing and the weighted-average DSO the engine uses.</span>
-          </div>
-          <div class="cm-split-month-grid">
-            <div class="hub-field">
-              <label class="hub-field__label" title="% of total revenue billed as a fixed monthly management fee at start-of-month (covers overhead, management, facility). Remainder billed as variable transaction fee at end-of-month.">Fixed Fee (% of total rev)</label>
-              <input class="hub-input" type="number" step="5" min="0" max="100" value="${model.projectDetails?.splitBillingFixedPct != null ? model.projectDetails.splitBillingFixedPct : 40}" data-field="projectDetails.splitBillingFixedPct" data-type="number" />
-              <div class="hub-field__hint">30-50% typical. Default 40%.</div>
+
+        <div class="hub-field hub-field--full" style="margin-top:14px;">
+          <label class="hub-field__label">Contract Type</label>
+          <select class="hub-input" data-field="projectDetails.contractType">
+            <option value="fixed_variable"${contractType === 'fixed_variable' ? ' selected' : ''}>Fixed / Variable (standard bucketed pricing)</option>
+            <option value="open_book"${contractType === 'open_book' ? ' selected' : ''}>Open Book (cost pass-through + declared margin)</option>
+            <option value="unit_rate"${contractType === 'unit_rate' ? ' selected' : ''}>Unit Rate (per-unit rate-card emphasis)</option>
+            <option value="split_month"${contractType === 'split_month' ? ' selected' : ''}>Split-Month Billing (fixed monthly fee + variable arrears)</option>
+          </select>
+          <div class="hub-field__hint">All four use the cost-plus formula above. They differ only in how the invoice is presented and when cash arrives. Split-Month divides the bill into a fixed management fee (paid net-15) and a variable transaction fee (paid net-30 from month-end).</div>
+        </div>
+
+        ${contractType === 'split_month' ? `
+          <div class="hub-field hub-field--full cm-split-month-controls" style="margin-top:14px;">
+            <div class="cm-split-month-header">
+              <span class="cm-split-month-title">Split-Month Billing Configuration</span>
+              <span class="cm-split-month-subtitle">The customer is invoiced in two cycles per month. Mix and DSO per stream determine the weighted-average DSO used in the cash-flow engine.</span>
             </div>
-            <div class="hub-field">
-              <label class="hub-field__label" title="Days Sales Outstanding for the fixed-fee stream. Typically short — billed day 1, collected net-15.">Fixed-Fee DSO (days)</label>
-              <input class="hub-input" type="number" step="1" min="0" max="90" value="${model.projectDetails?.splitBillingFixedDsoDays != null ? model.projectDetails.splitBillingFixedDsoDays : 15}" data-field="projectDetails.splitBillingFixedDsoDays" data-type="number" />
-              <div class="hub-field__hint">Default 15 days.</div>
-            </div>
-            <div class="hub-field">
-              <label class="hub-field__label" title="DSO for the variable transaction-fee stream. Longer — billed day 30 (month-end), collected net-30 → 60 days after service delivery.">Variable-Fee DSO (days)</label>
-              <input class="hub-input" type="number" step="1" min="0" max="120" value="${model.projectDetails?.splitBillingVariableDsoDays != null ? model.projectDetails.splitBillingVariableDsoDays : 45}" data-field="projectDetails.splitBillingVariableDsoDays" data-type="number" />
-              <div class="hub-field__hint">Default 45 days.</div>
-            </div>
-          </div>
-          ${(() => {
-            const fixedPct = Number(model.projectDetails?.splitBillingFixedPct ?? 40);
-            const fixedDso = Number(model.projectDetails?.splitBillingFixedDsoDays ?? 15);
-            const varDso   = Number(model.projectDetails?.splitBillingVariableDsoDays ?? 45);
-            const weightedDso = (fixedPct / 100) * fixedDso + (1 - fixedPct / 100) * varDso;
-            return `
-              <div class="cm-split-month-weighted">
-                Weighted-average DSO applied to revenue: <strong>${weightedDso.toFixed(1)} days</strong>
-                (= ${fixedPct.toFixed(0)}% × ${fixedDso} + ${(100 - fixedPct).toFixed(0)}% × ${varDso})
+            <div class="cm-split-month-grid">
+              <div class="hub-field">
+                <label class="hub-field__label" title="Share of total revenue billed as a fixed monthly management fee at start-of-month. Covers overhead, management, facility. The remainder is billed as a variable transaction fee at month-end.">Fixed Fee (% of total revenue)</label>
+                <input class="hub-input" type="number" step="5" min="0" max="100" value="${model.projectDetails?.splitBillingFixedPct != null ? model.projectDetails.splitBillingFixedPct : 40}" data-field="projectDetails.splitBillingFixedPct" data-type="number" />
+                <div class="hub-field__hint">30–50% typical. Default 40%.</div>
               </div>
-            `;
-          })()}
+              <div class="hub-field">
+                <label class="hub-field__label" title="Days Sales Outstanding for the fixed-fee stream. Short — billed day 1, collected net-15.">Fixed-Fee DSO (days)</label>
+                <input class="hub-input" type="number" step="1" min="0" max="90" value="${model.projectDetails?.splitBillingFixedDsoDays != null ? model.projectDetails.splitBillingFixedDsoDays : 15}" data-field="projectDetails.splitBillingFixedDsoDays" data-type="number" />
+                <div class="hub-field__hint">Default 15 days.</div>
+              </div>
+              <div class="hub-field">
+                <label class="hub-field__label" title="DSO for the variable transaction-fee stream. Longer — billed day 30 (month-end), collected net-30 → ~60 days after service delivery.">Variable-Fee DSO (days)</label>
+                <input class="hub-input" type="number" step="1" min="0" max="120" value="${model.projectDetails?.splitBillingVariableDsoDays != null ? model.projectDetails.splitBillingVariableDsoDays : 45}" data-field="projectDetails.splitBillingVariableDsoDays" data-type="number" />
+                <div class="hub-field__hint">Default 45 days.</div>
+              </div>
+            </div>
+            ${(() => {
+              const fixedPct = Number(model.projectDetails?.splitBillingFixedPct ?? 40);
+              const fixedDso = Number(model.projectDetails?.splitBillingFixedDsoDays ?? 15);
+              const varDso   = Number(model.projectDetails?.splitBillingVariableDsoDays ?? 45);
+              const weightedDso = (fixedPct / 100) * fixedDso + (1 - fixedPct / 100) * varDso;
+              return `
+                <div class="cm-split-month-weighted">
+                  Weighted-average DSO applied to revenue: <strong>${weightedDso.toFixed(1)} days</strong>
+                  (= ${fixedPct.toFixed(0)}% × ${fixedDso} + ${(100 - fixedPct).toFixed(0)}% × ${varDso})
+                </div>
+              `;
+            })()}
+          </div>
+        ` : ''}
+      </section>
+
+      <!-- ============== Card 2 — Year-Over-Year Growth ============== -->
+      <section class="cm-fin-section">
+        <header class="cm-fin-section__header">
+          <h3>Year-Over-Year Growth</h3>
+          <p>Annual rates that compound across the multi-year P&amp;L.</p>
+        </header>
+        <div class="cm-fin-row cm-fin-row--3">
+          <div class="hub-field">
+            <label class="hub-field__label">Volume Growth (% / yr)</label>
+            <input class="hub-input" type="number" value="${f.volumeGrowth || 3}" step="0.5" data-field="financial.volumeGrowth" data-type="number" />
+            <div class="hub-field__hint">Applied to inbound, outbound, and storage volumes for years 2+.</div>
+          </div>
+          <div class="hub-field">
+            <label class="hub-field__label">Labor Escalation (% / yr)</label>
+            <input class="hub-input" type="number" value="${f.laborEscalation || 4}" step="0.5" data-field="financial.laborEscalation" data-type="number" />
+            <div class="hub-field__hint">Annual wage inflation. Often higher than general cost escalation.</div>
+          </div>
+          <div class="hub-field">
+            <label class="hub-field__label">Cost Escalation (% / yr)</label>
+            <input class="hub-input" type="number" value="${f.annualEscalation || 3}" step="0.5" data-field="financial.annualEscalation" data-type="number" />
+            <div class="hub-field__hint">Non-labor cost growth (utilities, materials, services).</div>
+          </div>
         </div>
-      ` : ''}
-      <div class="hub-field">
-        <label class="hub-field__label" title="Ratio-based SG&A overlay applied to net revenue (reference Part I §5). Default 0 = no overlay (rely on Overhead cost rows). Set to 4.5 for reference-model-aligned cost-plus RFP responses.">SG&amp;A Overlay (% of net revenue)</label>
-        <input class="hub-input" type="number" step="0.25" min="0" max="30" value="${f.sgaOverlayPct != null ? f.sgaOverlayPct : 0}" data-field="financial.sgaOverlayPct" data-type="number" />
-        <div class="hub-field__hint">Additive to category-based SG&A (Overhead lines + startup amortization). Default 0. Set to 4.5% for reference-model parity.</div>
-      </div>
-      <div class="hub-field">
-        <label class="hub-field__label">Volume Growth (% / yr)</label>
-        <input class="hub-input" type="number" value="${f.volumeGrowth || 3}" step="0.5" data-field="financial.volumeGrowth" data-type="number" />
-      </div>
+      </section>
 
-      <div class="hub-field">
-        <label class="hub-field__label">Labor Escalation (% / yr)</label>
-        <input class="hub-input" type="number" value="${f.laborEscalation || 4}" step="0.5" data-field="financial.laborEscalation" data-type="number" />
-      </div>
-      <div class="hub-field">
-        <label class="hub-field__label">Cost Escalation (% / yr)</label>
-        <input class="hub-input" type="number" value="${f.annualEscalation || 3}" step="0.5" data-field="financial.annualEscalation" data-type="number" />
-      </div>
+      <!-- ============== Card 3 — Returns & Tax ============== -->
+      <section class="cm-fin-section">
+        <header class="cm-fin-section__header">
+          <h3>Returns &amp; Tax</h3>
+          <p>Inputs to NPV, MIRR, and after-tax cash-flow projections.</p>
+        </header>
+        <div class="cm-fin-row cm-fin-row--3">
+          <div class="hub-field">
+            <label class="hub-field__label">Discount Rate / WACC (%)</label>
+            <input class="hub-input" type="number" value="${f.discountRate || 10}" step="0.5" data-field="financial.discountRate" data-type="number" />
+            <div class="hub-field__hint">Used for NPV and MIRR. Typically 8–12% for 3PL contracts.</div>
+          </div>
+          <div class="hub-field">
+            <label class="hub-field__label">Tax Rate (%)</label>
+            <input class="hub-input" type="number" value="${model.projectDetails?.taxRate || 25}" step="0.5" min="0" max="50" data-field="projectDetails.taxRate" data-type="number" />
+            <div class="hub-field__hint">Federal + state blend. Default 25%. Operating losses don\'t generate refunds.</div>
+          </div>
+          <div class="hub-field">
+            <label class="hub-field__label">Reinvestment Rate (%)</label>
+            <input class="hub-input" type="number" value="${f.reinvestRate || 8}" step="0.5" data-field="financial.reinvestRate" data-type="number" />
+            <div class="hub-field__hint">Assumed return on reinvested cash. Used in MIRR calculation.</div>
+          </div>
+        </div>
+      </section>
 
-      <div class="hub-field">
-        <label class="hub-field__label">Discount Rate (%)</label>
-        <input class="hub-input" type="number" value="${f.discountRate || 10}" step="0.5" data-field="financial.discountRate" data-type="number" />
-      </div>
-      <div class="hub-field">
-        <label class="hub-field__label" title="Blended federal + state combined rate. Default 25% ≈ 21% federal (TCJA 2018) + ~4% typical state blend. EBIT &lt; 0 clamp at 0 — no refund generated on operating losses.">Tax Rate (%)</label>
-        <input class="hub-input" type="number" value="${model.projectDetails?.taxRate || 25}" step="0.5" min="0" max="50" data-field="projectDetails.taxRate" data-type="number" />
-        <div class="hub-field__hint">Default 25% (21% federal + ~4% state). EBIT floor at 0 — no negative taxes on loss months.</div>
-      </div>
-      <div class="hub-field">
-        <label class="hub-field__label">Reinvestment Rate (%)</label>
-        <input class="hub-input" type="number" value="${f.reinvestRate || 8}" step="0.5" data-field="financial.reinvestRate" data-type="number" />
-      </div>
+      <!-- ============== Card 4 — Cost Recovery ============== -->
+      <section class="cm-fin-section">
+        <header class="cm-fin-section__header">
+          <h3>Cost Recovery</h3>
+          <p>How specific cost categories are routed into the pricing buckets the customer sees.</p>
+        </header>
+        <div class="cm-fin-row cm-fin-row--2">
+          <div class="hub-field">
+            <label class="hub-field__label">SG&amp;A Overlay (% of net revenue)</label>
+            <input class="hub-input" type="number" step="0.25" min="0" max="30" value="${f.sgaOverlayPct != null ? f.sgaOverlayPct : 0}" data-field="financial.sgaOverlayPct" data-type="number" />
+            <div class="hub-field__hint">Optional flat overlay on net revenue, on top of any Overhead and start-up amortization rows. Leave at 0 unless your reference model requires it (4.5% is the typical reference value).</div>
+          </div>
+          <div class="hub-field">
+            <label class="hub-field__label">Facility Cost Recovery</label>
+            <select class="hub-input" data-field="financial.facilityBucketId">
+              <option value=""${!f.facilityBucketId ? ' selected' : ''}>${autoLabel}</option>
+              ${buckets.map(b =>
+                `<option value="${b.id}"${f.facilityBucketId === b.id ? ' selected' : ''}>${b.name} (${b.type}/${b.uom})</option>`
+              ).join('')}
+            </select>
+            <div class="hub-field__hint">Facility expenses (lease, CAM, utilities, maintenance) are recovered through one of your pricing buckets. The default routes them into Storage, since pallet positions are what occupy the building. Override only when a client contract requires a specific bucket.</div>
+          </div>
+        </div>
+      </section>
 
-      <div class="hub-field hub-field--full">
-        <label class="hub-field__label" title="Which pricing bucket carries the facility cost rollup. Defaults to a bucket named 'storage' if you have one; otherwise routes to Management Fee or your first bucket. (I-01 edge fix)">Facility Cost → Bucket</label>
-        <select class="hub-input" data-field="financial.facilityBucketId">
-          <option value=""${!f.facilityBucketId ? ' selected' : ''}>— Auto (storage → mgmt_fee → first) —</option>
-          ${(model.pricingBuckets || []).map(b =>
-            `<option value="${b.id}"${f.facilityBucketId === b.id ? ' selected' : ''}>${b.name} (${b.type}/${b.uom})</option>`
-          ).join('')}
-        </select>
-        <div class="hub-field__hint">Auto-selects the sensible default. Override when a client contract requires a specific bucket carry the facility cost rollup.</div>
-      </div>
     </div>
   `;
 }
