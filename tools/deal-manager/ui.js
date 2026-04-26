@@ -500,7 +500,7 @@ function renderKanban(el) {
                 ${dealsInStage.map(d => {
                   const badge = calc.statusBadge(d.status);
                   return `
-                    <div class="hub-card" style="cursor:pointer;padding:12px;border:1px solid var(--ies-gray-200);" data-deal-id="${d.id}">
+                    <div class="hub-card dm-deal-card" draggable="true" style="cursor:pointer;padding:12px;border:1px solid var(--ies-gray-200);" data-deal-id="${d.id}" data-drag-deal-id="${d.id}">
                       <div style="font-size:12px;font-weight:700;margin-bottom:4px;color:var(--ies-navy);">${d.dealName}</div>
                       <div style="font-size:11px;color:var(--ies-gray-500);margin-bottom:6px;">${d.clientName}</div>
                       <div style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;background:${badge.bg};color:${badge.color};">${badge.label}</div>
@@ -519,6 +519,207 @@ function renderKanban(el) {
     card.addEventListener('click', async () => {
       await openDeal(/** @type {HTMLElement} */ (card).dataset.dealId);
     });
+  });
+  bindDragToCombine(el);
+}
+
+// ============================================================
+// MUL-G1 — DRAG-TO-COMBINE WIRING
+// ============================================================
+
+/**
+ * Wire HTML5 drag-and-drop on .dm-deal-card elements within `scope`.
+ * Source: dragstart caches the deal id. Target: dragover sets a highlight
+ * outline + dataTransfer.dropEffect=link; drop opens openCombinePreview().
+ */
+function bindDragToCombine(scope) {
+  scope.querySelectorAll('.dm-deal-card').forEach(card => {
+    const c = /** @type {HTMLElement} */ (card);
+    c.addEventListener('dragstart', e => {
+      dragSourceDealId = c.dataset.dragDealId || null;
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'link';
+        e.dataTransfer.setData('text/plain', dragSourceDealId || '');
+      }
+      c.style.opacity = '0.5';
+    });
+    c.addEventListener('dragend', () => {
+      dragSourceDealId = null;
+      c.style.opacity = '';
+      scope.querySelectorAll('.dm-deal-card').forEach(o => {
+        /** @type {HTMLElement} */ (o).style.outline = '';
+        /** @type {HTMLElement} */ (o).style.outlineOffset = '';
+      });
+    });
+    c.addEventListener('dragover', e => {
+      const tgt = c.dataset.dragDealId;
+      if (!dragSourceDealId || dragSourceDealId === tgt) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'link';
+      c.style.outline = '2px dashed var(--ies-blue)';
+      c.style.outlineOffset = '2px';
+    });
+    c.addEventListener('dragleave', () => {
+      c.style.outline = '';
+      c.style.outlineOffset = '';
+    });
+    c.addEventListener('drop', async e => {
+      e.preventDefault();
+      e.stopPropagation();
+      const tgt = c.dataset.dragDealId;
+      if (!dragSourceDealId || !tgt || dragSourceDealId === tgt) return;
+      const srcId = dragSourceDealId;
+      dragSourceDealId = null;
+      c.style.outline = '';
+      c.style.outlineOffset = '';
+      await openCombinePreview(srcId, tgt);
+    });
+  });
+}
+
+/**
+ * Open the combined-deal preview modal. Loads sites for both deals,
+ * pipes them through calc.combineDeals(), and renders the synthetic
+ * roll-up financials. The user picks a cannibalization % and either
+ * cancels, "Save as new combined deal", or "Move all sites to target".
+ */
+async function openCombinePreview(srcId, tgtId) {
+  const dealA = allDeals.find(d => String(d.id) === String(srcId));
+  const dealB = allDeals.find(d => String(d.id) === String(tgtId));
+  if (!dealA || !dealB) {
+    showToast('Deals not found for combine', 'error');
+    return;
+  }
+  let sitesA = [];
+  let sitesB = [];
+  try {
+    sitesA = await api.listSites(dealA.id);
+    sitesB = await api.listSites(dealB.id);
+  } catch (err) {
+    showToast('Failed to load sites: ' + (err && err.message || err), 'error');
+    return;
+  }
+  combineResult = calc.combineDeals(
+    { sites: sitesA, dealName: dealA.dealName },
+    { sites: sitesB, dealName: dealB.dealName },
+    { cannibalizationPct: 0, contractTermYears: dealA.contractTermYears || dealB.contractTermYears || 5 }
+  );
+
+  const fmt = calc.formatCurrency;
+  const overlay = document.createElement('div');
+  overlay.className = 'hub-modal-overlay';
+  overlay.innerHTML = `
+    <div class="hub-modal" style="max-width:720px;">
+      <h3 style="margin:0 0 4px 0;">Combine Deals — Preview</h3>
+      <div style="font-size:12px;color:var(--ies-gray-500);margin-bottom:16px;">
+        <b>${dealA.dealName}</b> + <b>${dealB.dealName}</b> · ${(sitesA.length + sitesB.length)} sites total
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;">
+        <div class="hub-card" style="padding:12px;text-align:center;">
+          <div style="font-size:11px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;">Combined Annual Revenue</div>
+          <div id="dm-cmb-rev" style="font-size:22px;font-weight:800;">${fmt(combineResult.financials.totalAnnualRevenue || 0, { compact: true })}</div>
+        </div>
+        <div class="hub-card" style="padding:12px;text-align:center;">
+          <div style="font-size:11px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;">EBITDA %</div>
+          <div id="dm-cmb-ebitda" style="font-size:22px;font-weight:800;">${calc.formatPct(combineResult.financials.ebitdaPct || 0)}</div>
+        </div>
+        <div class="hub-card" style="padding:12px;text-align:center;">
+          <div style="font-size:11px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;">Score</div>
+          <div id="dm-cmb-score" style="font-size:22px;font-weight:800;">${(combineResult.score?.score || 0).toFixed(0)} <span style="font-size:13px;color:var(--ies-gray-400);">${combineResult.score?.grade || ''}</span></div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:16px;">
+        <label style="display:block;font-size:12px;font-weight:700;margin-bottom:6px;">Cross-Deal Cannibalization (%)
+          <span style="color:var(--ies-gray-400);font-weight:400;">— shave revenue to model overlap between the two books</span>
+        </label>
+        <input type="range" id="dm-cmb-cann" min="0" max="30" step="1" value="0" style="width:100%;">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--ies-gray-400);">
+          <span>0%</span>
+          <span id="dm-cmb-cann-val" style="font-weight:700;color:var(--ies-navy);">0%</span>
+          <span>30%</span>
+        </div>
+      </div>
+
+      <div style="font-size:11px;color:var(--ies-gray-500);margin-bottom:12px;">
+        <b>Save as new combined deal:</b> creates a new "${dealA.dealName} + ${dealB.dealName}" container with the cannibalization % applied.<br>
+        <b>Move all sites to ${dealB.dealName}:</b> re-links every site from the source deal onto the target. Source deal becomes site-less but stays.
+      </div>
+
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button class="hub-btn hub-btn-secondary" data-action="dm-cmb-cancel">Cancel</button>
+        <button class="hub-btn hub-btn-secondary" data-action="dm-cmb-move" title="Re-link sites from source onto target">Move sites → ${dealB.dealName}</button>
+        <button class="hub-btn hub-btn-primary" data-action="dm-cmb-save">Save combined deal</button>
+      </div>
+    </div>
+  `;
+  rootEl?.appendChild(overlay);
+
+  const cannSlider = /** @type {HTMLInputElement} */ (overlay.querySelector('#dm-cmb-cann'));
+  const cannLabel = overlay.querySelector('#dm-cmb-cann-val');
+  const revEl = overlay.querySelector('#dm-cmb-rev');
+  const ebitdaEl = overlay.querySelector('#dm-cmb-ebitda');
+  const scoreEl = overlay.querySelector('#dm-cmb-score');
+  cannSlider?.addEventListener('input', () => {
+    const c = parseFloat(cannSlider.value) || 0;
+    if (cannLabel) cannLabel.textContent = c + '%';
+    combineResult = calc.combineDeals(
+      { sites: sitesA, dealName: dealA.dealName },
+      { sites: sitesB, dealName: dealB.dealName },
+      { cannibalizationPct: c, contractTermYears: dealA.contractTermYears || dealB.contractTermYears || 5 }
+    );
+    if (revEl) revEl.textContent = fmt(combineResult.financials.totalAnnualRevenue || 0, { compact: true });
+    if (ebitdaEl) ebitdaEl.textContent = calc.formatPct(combineResult.financials.ebitdaPct || 0);
+    if (scoreEl) scoreEl.innerHTML = `${(combineResult.score?.score || 0).toFixed(0)} <span style="font-size:13px;color:var(--ies-gray-400);">${combineResult.score?.grade || ''}</span>`;
+  });
+
+  overlay.querySelector('[data-action="dm-cmb-cancel"]')?.addEventListener('click', () => overlay.remove());
+
+  overlay.querySelector('[data-action="dm-cmb-move"]')?.addEventListener('click', async () => {
+    if (!confirm(`Move all ${sitesA.length} sites from "${dealA.dealName}" to "${dealB.dealName}"? Source deal will keep its metadata but become site-less.`)) return;
+    try {
+      for (const s of sitesA) {
+        await api.linkSite(s.id, dealB.id);
+      }
+      showToast(`Moved ${sitesA.length} sites to ${dealB.dealName}`, 'success');
+      overlay.remove();
+      rerenderShell();
+    } catch (err) {
+      showToast('Move failed: ' + (err && err.message || err), 'error');
+    }
+  });
+
+  overlay.querySelector('[data-action="dm-cmb-save"]')?.addEventListener('click', async () => {
+    try {
+      const cann = parseFloat(cannSlider.value) || 0;
+      const newDeal = await api.saveDeal({
+        dealName: `${dealA.dealName} + ${dealB.dealName}`,
+        clientName: dealA.clientName === dealB.clientName ? dealA.clientName : `${dealA.clientName || '—'} & ${dealB.clientName || '—'}`,
+        dealOwner: dealA.dealOwner || dealB.dealOwner || '',
+        status: 'in_progress',
+        contractTermYears: dealA.contractTermYears || dealB.contractTermYears || 5,
+        notes: `Combined from "${dealA.dealName}" and "${dealB.dealName}" with ${cann}% cannibalization assumption.`,
+      });
+      const newId = newDeal?.id || newDeal?.deals_id || ('deal-' + Date.now());
+      // Mirror the persisted record into in-memory allDeals so it shows up
+      // immediately in the kanban / list without requiring a remount.
+      allDeals.push({
+        id: newId,
+        dealName: `${dealA.dealName} + ${dealB.dealName}`,
+        clientName: dealA.clientName === dealB.clientName ? dealA.clientName : `${dealA.clientName || '—'} & ${dealB.clientName || '—'}`,
+        dealOwner: dealA.dealOwner || dealB.dealOwner || '',
+        status: 'in_progress',
+        contractTermYears: dealA.contractTermYears || dealB.contractTermYears || 5,
+        notes: `Combined from "${dealA.dealName}" and "${dealB.dealName}" with ${cann}% cannibalization assumption.`,
+      });
+      // Site-link policy: leave originals attached, just record an audit note.
+      // The combined deal is a *roll-up scenario*, not a destructive merge.
+      showToast(`Combined deal saved (${cann}% cannibalization). Originals preserved.`, 'success');
+      overlay.remove();
+      rerenderShell();
+    } catch (err) {
+      showToast('Save failed: ' + (err && err.message || err), 'error');
+    }
   });
 }
 
@@ -541,7 +742,7 @@ function renderDealList(el) {
             const badge = calc.statusBadge(d.status);
             const safeName = (d.dealName || 'Deal').replace(/"/g, '&quot;');
             return `
-              <div class="hub-card dm-landing-card" style="cursor:pointer;position:relative;" data-deal-id="${d.id}">
+              <div class="hub-card dm-landing-card dm-deal-card" draggable="true" style="cursor:pointer;position:relative;" data-deal-id="${d.id}" data-drag-deal-id="${d.id}">
                 <button class="dm-landing-delete" data-deal-delete="${d.id}" data-deal-name="${safeName}"
                         title="Delete this deal"
                         style="position:absolute;top:8px;right:8px;width:24px;height:24px;padding:0;display:flex;align-items:center;justify-content:center;background:transparent;border:none;color:var(--ies-gray-300);cursor:pointer;border-radius:4px;font-size:14px;z-index:2;">
@@ -591,6 +792,9 @@ function renderDealList(el) {
   });
 
   el.querySelector('#dm-first-deal')?.addEventListener('click', () => createNewDeal());
+
+  // MUL-G1: drag-to-combine on the landing-list deal cards
+  bindDragToCombine(el);
 }
 
 function createNewDeal() {
