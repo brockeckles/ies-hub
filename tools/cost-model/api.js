@@ -851,3 +851,179 @@ export async function reassignModelToDeal(modelId, dealId) {
     updated_at: new Date().toISOString(),
   });
 }
+
+// ============================================================
+// CM-SET-2 — DEFAULT REFERENCE DATA SEEDS
+// ============================================================
+
+/**
+ * CM-SET-2 — built-in reference defaults. Used to bootstrap a fresh Supabase
+ * project so the Cost Model can run against real per-market rates rather
+ * than hard-coded fallbacks. Idempotent: rows are matched by natural keys
+ * before insert, so re-running is safe.
+ *
+ * @returns {Promise<{
+ *   marketsAdded: number,
+ *   laborRatesAdded: number,
+ *   equipmentAdded: number,
+ *   facilityRatesAdded: number,
+ *   utilityRatesAdded: number,
+ *   overheadRatesAdded: number
+ * }>}
+ */
+export async function seedDefaultRefData() {
+  const stats = { marketsAdded: 0, laborRatesAdded: 0, equipmentAdded: 0, facilityRatesAdded: 0, utilityRatesAdded: 0, overheadRatesAdded: 0 };
+
+  // ── Markets ────────────────────────────────────────────────
+  const defaultMarkets = [
+    { market_id: 'mem', name: 'Memphis', state: 'TN' },
+    { market_id: 'ind', name: 'Indianapolis', state: 'IN' },
+    { market_id: 'chi', name: 'Chicago', state: 'IL' },
+    { market_id: 'dal', name: 'Dallas-Fort Worth', state: 'TX' },
+    { market_id: 'atl', name: 'Atlanta', state: 'GA' },
+    { market_id: 'lax', name: 'Los Angeles', state: 'CA' },
+    { market_id: 'njy', name: 'Northern NJ / NYC Metro', state: 'NJ' },
+    { market_id: 'col', name: 'Columbus', state: 'OH' },
+    { market_id: 'leh', name: 'Lehigh Valley', state: 'PA' },
+    { market_id: 'sav', name: 'Savannah', state: 'GA' },
+    { market_id: 'lou', name: 'Louisville', state: 'KY' },
+    { market_id: 'pho', name: 'Phoenix', state: 'AZ' },
+    { market_id: 'cin', name: 'Cincinnati', state: 'OH' },
+    { market_id: 'rvs', name: 'Riverside / Inland Empire', state: 'CA' },
+    { market_id: 'nas', name: 'Nashville', state: 'TN' },
+    { market_id: 'hou', name: 'Houston', state: 'TX' },
+    { market_id: 'kci', name: 'Kansas City', state: 'MO' },
+    { market_id: 'rno', name: 'Reno', state: 'NV' },
+    { market_id: 'cha', name: 'Charlotte', state: 'NC' },
+    { market_id: 'sea', name: 'Seattle-Tacoma', state: 'WA' },
+  ];
+  try {
+    const existing = await db.fetchAll('master_markets').catch(() => []);
+    const have = new Set((existing || []).map(m => m.market_id || m.id));
+    const toAdd = defaultMarkets.filter(m => !have.has(m.market_id));
+    if (toAdd.length) {
+      await db.from('master_markets').insert(toAdd);
+      stats.marketsAdded = toAdd.length;
+    }
+  } catch (e) { console.warn('[seedDefaultRefData] markets:', e); }
+
+  // ── Labor rates ────────────────────────────────────────────
+  // Industry hourly base × per-market multiplier.
+  const positions = [
+    { name: 'Equipment Operator', base: 22.00 },
+    { name: 'Material Handler', base: 18.00 },
+    { name: 'Lead', base: 24.00 },
+    { name: 'Supervisor', base: 35.00 },
+    { name: 'Manager', base: 48.00 },
+    { name: 'Clerk', base: 19.50 },
+  ];
+  const marketMult = {
+    mem: 0.95, ind: 0.97, chi: 1.10, dal: 1.05, atl: 1.02, lax: 1.30,
+    njy: 1.25, col: 0.97, leh: 1.05, sav: 0.92, lou: 0.94, pho: 1.04,
+    cin: 0.95, rvs: 1.15, nas: 1.00, hou: 1.05, kci: 0.93, rno: 1.10,
+    cha: 0.98, sea: 1.20,
+  };
+  try {
+    const existing = await db.fetchAll('master_labor_rates').catch(() => []);
+    const have = new Set((existing || []).map(r => `${r.market_id}|${r.position_name}`));
+    const toAdd = [];
+    for (const mid of Object.keys(marketMult)) {
+      for (const p of positions) {
+        const key = `${mid}|${p.name}`;
+        if (have.has(key)) continue;
+        toAdd.push({ market_id: mid, position_name: p.name, hourly_wage: +(p.base * marketMult[mid]).toFixed(2), effective_start_date: new Date().toISOString().slice(0, 10) });
+      }
+    }
+    if (toAdd.length) {
+      await db.from('master_labor_rates').insert(toAdd);
+      stats.laborRatesAdded = toAdd.length;
+    }
+  } catch (e) { console.warn('[seedDefaultRefData] labor rates:', e); }
+
+  // ── Equipment catalog ──────────────────────────────────────
+  const equipment = [
+    { equipment_name: 'Reach Truck',          category: 'MHE', acquisition_cost: 38000,  monthly_lease_cost: 1100, monthly_rental_cost: 1000, amort_years: 10 },
+    { equipment_name: 'Sit-Down Forklift',    category: 'MHE', acquisition_cost: 32000,  monthly_lease_cost: 950,  monthly_rental_cost: 2500, amort_years: 10 },
+    { equipment_name: 'Walkie Pallet Jack',   category: 'MHE', acquisition_cost: 4500,   monthly_lease_cost: 200,  monthly_rental_cost: 650,  amort_years: 7 },
+    { equipment_name: 'Order Picker',         category: 'MHE', acquisition_cost: 36000,  monthly_lease_cost: 1050, monthly_rental_cost: 900,  amort_years: 10 },
+    { equipment_name: 'Yard Jockey',          category: 'MHE', acquisition_cost: 95000,  monthly_lease_cost: 2800, monthly_rental_cost: 4500, amort_years: 8 },
+    { equipment_name: 'RF Terminal',          category: 'IT',  acquisition_cost: 1800,   monthly_lease_cost: 65,   monthly_rental_cost: 0,    amort_years: 3 },
+    { equipment_name: 'Label Printer',        category: 'IT',  acquisition_cost: 1200,   monthly_lease_cost: 45,   monthly_rental_cost: 0,    amort_years: 5 },
+    { equipment_name: 'WiFi Access Point',    category: 'IT',  acquisition_cost: 600,    monthly_lease_cost: 0,    monthly_rental_cost: 0,    amort_years: 5 },
+    { equipment_name: 'Network Switch',       category: 'IT',  acquisition_cost: 4500,   monthly_lease_cost: 0,    monthly_rental_cost: 0,    amort_years: 7 },
+    { equipment_name: 'Workstation/PC',       category: 'IT',  acquisition_cost: 1500,   monthly_lease_cost: 0,    monthly_rental_cost: 0,    amort_years: 4 },
+    { equipment_name: 'Selective Pallet Rack',category: 'Racking', acquisition_cost: 95, monthly_lease_cost: 0,    monthly_rental_cost: 0,    amort_years: 15 },
+    { equipment_name: 'Drive-In Rack',        category: 'Racking', acquisition_cost: 130,monthly_lease_cost: 0,    monthly_rental_cost: 0,    amort_years: 15 },
+    { equipment_name: 'Hydraulic Dock Leveler', category: 'Dock', acquisition_cost: 4200, monthly_lease_cost: 0,   monthly_rental_cost: 0,    amort_years: 12 },
+    { equipment_name: 'Charging Station',     category: 'Charging', acquisition_cost: 2800, monthly_lease_cost: 0, monthly_rental_cost: 0,   amort_years: 10 },
+    { equipment_name: 'Office Build-Out (sqft)', category: 'Office', acquisition_cost: 145, monthly_lease_cost: 0, monthly_rental_cost: 0,   amort_years: 10 },
+    { equipment_name: 'Camera/Security System',category: 'Security', acquisition_cost: 8500, monthly_lease_cost: 0, monthly_rental_cost: 0,  amort_years: 8 },
+    { equipment_name: 'Belt Conveyor (lin ft)',category: 'Conveyor', acquisition_cost: 220, monthly_lease_cost: 0, monthly_rental_cost: 0,   amort_years: 12 },
+  ];
+  try {
+    const existing = await db.fetchAll('master_equipment_catalog').catch(() => []);
+    const have = new Set((existing || []).map(r => r.equipment_name));
+    const toAdd = equipment.filter(e => !have.has(e.equipment_name));
+    if (toAdd.length) {
+      await db.from('master_equipment_catalog').insert(toAdd);
+      stats.equipmentAdded = toAdd.length;
+    }
+  } catch (e) { console.warn('[seedDefaultRefData] equipment catalog:', e); }
+
+  // ── Facility rates ($/sqft/yr triple-net by market) ────────
+  const facilityBase = 5.50;
+  try {
+    const existing = await db.fetchAll('master_facility_rates').catch(() => []);
+    const have = new Set((existing || []).map(r => r.market_id));
+    const toAdd = [];
+    for (const mid of Object.keys(marketMult)) {
+      if (have.has(mid)) continue;
+      toAdd.push({
+        market_id: mid,
+        rate_per_sqft_yr: +(facilityBase * marketMult[mid]).toFixed(2),
+        effective_start_date: new Date().toISOString().slice(0, 10),
+      });
+    }
+    if (toAdd.length) {
+      await db.from('master_facility_rates').insert(toAdd);
+      stats.facilityRatesAdded = toAdd.length;
+    }
+  } catch (e) { console.warn('[seedDefaultRefData] facility rates:', e); }
+
+  // ── Utility rates ($/kWh by market) ────────────────────────
+  const kwh = { mem: 0.10, ind: 0.10, chi: 0.12, dal: 0.10, atl: 0.11, lax: 0.18, njy: 0.16, col: 0.10, leh: 0.13, sav: 0.11, lou: 0.10, pho: 0.13, cin: 0.10, rvs: 0.18, nas: 0.10, hou: 0.10, kci: 0.10, rno: 0.13, cha: 0.10, sea: 0.10 };
+  try {
+    const existing = await db.fetchAll('master_utility_rates').catch(() => []);
+    const have = new Set((existing || []).map(r => r.market_id));
+    const toAdd = Object.keys(kwh).filter(mid => !have.has(mid)).map(mid => ({
+      market_id: mid,
+      rate_per_kwh: kwh[mid],
+      effective_start_date: new Date().toISOString().slice(0, 10),
+    }));
+    if (toAdd.length) {
+      await db.from('master_utility_rates').insert(toAdd);
+      stats.utilityRatesAdded = toAdd.length;
+    }
+  } catch (e) { console.warn('[seedDefaultRefData] utility rates:', e); }
+
+  // ── Overhead rate categories ───────────────────────────────
+  const overhead = [
+    { overhead_category: 'Insurance',          monthly_cost: 4500 },
+    { overhead_category: 'Office Supplies',    monthly_cost: 1200 },
+    { overhead_category: 'IT Services',        monthly_cost: 6500 },
+    { overhead_category: 'Janitorial',         monthly_cost: 3200 },
+    { overhead_category: 'Pest Control',       monthly_cost: 350 },
+    { overhead_category: 'Travel & Training',  monthly_cost: 2800 },
+  ];
+  try {
+    const existing = await db.fetchAll('master_overhead_rates').catch(() => []);
+    const have = new Set((existing || []).map(r => r.overhead_category));
+    const toAdd = overhead.filter(o => !have.has(o.overhead_category));
+    if (toAdd.length) {
+      await db.from('master_overhead_rates').insert(toAdd);
+      stats.overheadRatesAdded = toAdd.length;
+    }
+  } catch (e) { console.warn('[seedDefaultRefData] overhead rates:', e); }
+
+  return stats;
+}

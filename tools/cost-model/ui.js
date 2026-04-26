@@ -12,7 +12,7 @@ import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260424-hyg04';
 import * as calc from './calc.js?v=20260426-s10';
-import * as api from './api.js?v=20260426-s10';
+import * as api from './api.js?v=20260426-s11';
 import * as scenarios from './calc.scenarios.js?v=20260421-wA';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
@@ -2504,6 +2504,47 @@ function renderSetup() {
           }).join('')}
         </select>
         <div class="hub-field__hint">Optional. Links this cost model to a Deal Manager opportunity.</div>
+      </div>
+    </div>
+
+    <!-- CM-SET-2 — Reference Data Status -->
+    <div class="hub-card" style="margin-top:24px;padding:16px;border-left:3px solid var(--ies-blue);">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-400);">Reference Data Status</div>
+          <div style="font-size:12px;color:var(--ies-gray-500);margin-top:2px;">Counts of master data loaded from Supabase. The model can run on fallback defaults when these are empty, but seeded references unlock per-market facility / utility / labor rates and the equipment / overhead catalogs.</div>
+        </div>
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-cm-action="seed-default-refdata"
+                title="Push the built-in industry defaults to Supabase: 20 markets, ~80 labor rate rows, 33 equipment catalog rows, 20 facility rate rows, 6 overhead categories. Existing rows are NOT overwritten — this only fills gaps. Idempotent.">⚡ Seed Defaults</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:12px;font-size:12px;">
+        ${(() => {
+          const cats = [
+            ['Markets', refData.markets?.length || 0, 20],
+            ['Labor rates', refData.laborRates?.length || 0, 60],
+            ['Equipment catalog', refData.equipment?.length || 0, 33],
+            ['Facility rates', refData.facilityRates?.length || 0, 20],
+            ['Utility rates', refData.utilityRates?.length || 0, 20],
+            ['Overhead rates', refData.overheadRates?.length || 0, 6],
+            ['MOST templates', refData.mostTemplates?.length || 0, 30],
+            ['Allowance profiles', refData.allowanceProfiles?.length || 0, 8],
+          ];
+          return cats.map(([label, count, target]) => {
+            const pct = Math.min(100, Math.round((count / target) * 100));
+            const ok = count >= target * 0.8;
+            const empty = count === 0;
+            const color = empty ? '#dc2626' : ok ? '#10b981' : '#d97706';
+            return `
+              <div style="border:1px solid var(--ies-gray-200);border-radius:6px;padding:8px 10px;">
+                <div style="font-weight:700;color:${color};">${count}<span style="color:var(--ies-gray-400);font-weight:500;font-size:11px;"> / ${target} target</span></div>
+                <div style="color:var(--ies-gray-500);">${label}</div>
+                <div style="height:3px;background:var(--ies-gray-100);border-radius:2px;margin-top:4px;overflow:hidden;">
+                  <div style="height:100%;width:${pct}%;background:${color};"></div>
+                </div>
+              </div>
+            `;
+          }).join('');
+        })()}
       </div>
     </div>
   `;
@@ -5525,6 +5566,11 @@ function renderPricing() {
         <div class="cm-section-title">Pricing Schedule <span class="cm-contract-type-chip cm-contract-${contractType}">${contractTypeLabel}</span></div>
         <div class="cm-section-desc">${contractTypeDesc}</div>
       </div>
+      <div style="display:flex;gap:8px;">
+        <button class="hub-btn" data-cm-action="pricing-compare-scenarios"
+                title="Side-by-side rate-card comparison — pick another scenario on this deal and see Recommended/Override/Effective rates aligned per bucket with Δ% deltas. Same engine as the Summary Compare modal but auto-scoped to pricing."
+                ${(dealScenarios||[]).length < 2 ? 'disabled' : ''}>⇄ Compare Pricing</button>
+      </div>
     </div>
 
     ${buckets.length === 0 ? `
@@ -7037,6 +7083,33 @@ function bindSectionEvents(section, container) {
     }
     openCompareModal();
   });
+  // CM-SET-2 — Seed default reference data into Supabase. Idempotent upsert
+  // path: the api layer skips rows that already exist (matched by natural keys).
+  container.querySelector('[data-cm-action="seed-default-refdata"]')?.addEventListener('click', async () => {
+    if (!confirm('Seed default reference data into Supabase? Existing rows are kept; only missing rows are inserted.')) return;
+    showToast('Seeding reference data — this may take a few seconds…', 'info');
+    try {
+      const result = await api.seedDefaultRefData();
+      showToast(`Seeded: ${result.marketsAdded} markets, ${result.laborRatesAdded} labor rates, ${result.equipmentAdded} catalog items, ${result.facilityRatesAdded} facility rates, ${result.overheadRatesAdded} overhead rows.`, 'success');
+      // Re-fetch + re-render so counts update.
+      const rd = await api.loadAllRefData();
+      refData = { ...rd, periods: refData.periods || [] };
+      renderSection();
+    } catch (err) {
+      console.warn('[CM-SET-2] seedDefaultRefData failed:', err);
+      showToast('Seed failed — see console for details.', 'error');
+    }
+  });
+  // CM-PRC-3: focused Pricing comparison entry-point on the Pricing Schedule header.
+  // Opens the same compare modal but pre-flags the pricing-buckets section so
+  // the user lands directly in the rate-card view without scrolling past KPIs.
+  container.querySelector('[data-cm-action="pricing-compare-scenarios"]')?.addEventListener('click', () => {
+    if (!Array.isArray(dealScenarios) || dealScenarios.length < 2) {
+      showToast('Need at least 2 scenarios on this deal to compare pricing. Spawn a child scenario first.', 'warning');
+      return;
+    }
+    openCompareModal({ focus: 'pricing' });
+  });
 
   // I-01: Summary "Fix in Pricing" shortcut
   container.querySelector('[data-cm-action="go-pricing"]')?.addEventListener('click', () => {
@@ -7472,7 +7545,7 @@ function bindSectionEvents(section, container) {
  * Entry points: "Compare scenarios →" button on Scenarios section AND on
  * the Summary section header (so it surfaces during demo walkthroughs).
  */
-async function openCompareModal() {
+async function openCompareModal(opts = {}) {
   if (!Array.isArray(dealScenarios) || dealScenarios.length < 2) {
     showToast('Need at least 2 scenarios on this deal to compare.', 'warning');
     return;
@@ -7507,6 +7580,26 @@ async function openCompareModal() {
   `;
   document.body.appendChild(overlay);
   overlay.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => overlay.remove()));
+  // CM-PRC-3 — when entry was the Pricing Schedule's "Compare Pricing" button,
+  // pre-tick all scenarios + auto-run the compare and scroll to the pricing anchor.
+  if (opts && opts.focus === 'pricing') {
+    overlay.querySelectorAll('[data-compare-id]').forEach((el, i) => {
+      // Pre-tick up to 4 scenarios. Already-checked stay checked.
+      if (i < 4) /** @type {HTMLInputElement} */ (el).checked = true;
+    });
+    // Auto-run after the DOM settles so the result placeholder exists.
+    setTimeout(() => {
+      const runBtn = /** @type {HTMLButtonElement} */ (overlay.querySelector('[data-run-compare]'));
+      if (runBtn) {
+        runBtn.click();
+        // After the result re-renders (Promise.all on getModel), scroll to the anchor.
+        setTimeout(() => {
+          const anchor = overlay.querySelector('#cm-cmp-pricing-anchor');
+          if (anchor) anchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 600);
+      }
+    }, 60);
+  }
 
   overlay.querySelector('[data-run-compare]').addEventListener('click', async () => {
     const picked = Array.from(overlay.querySelectorAll('[data-compare-id]:checked')).map(el => ({
@@ -7725,7 +7818,7 @@ async function openCompareModal() {
           ${kpiRow('EBITDA Margin', 'margin_pct',  { fmt: fmtPct })}
 
           ${orderedLabels.length > 0 ? `
-            <tr><td colspan="${colCount + 1}" style="padding:10px 10px 4px;background:var(--ies-gray-50);font-size:11px;font-weight:600;letter-spacing:0.04em;color:var(--ies-gray-500);">PRICING SCHEDULE (EFFECTIVE RATE)</td></tr>
+            <tr id="cm-cmp-pricing-anchor"><td colspan="${colCount + 1}" style="padding:10px 10px 4px;background:var(--ies-gray-50);font-size:11px;font-weight:600;letter-spacing:0.04em;color:var(--ies-gray-500);">PRICING SCHEDULE (EFFECTIVE RATE)</td></tr>
             ${orderedLabels.map(meta => bucketRow(meta)).join('')}
           ` : ''}
 
