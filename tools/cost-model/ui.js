@@ -5534,7 +5534,10 @@ function renderSummary() {
         <div class="cm-section-title">Summary Dashboard</div>
         <div class="cm-section-desc">Cost breakdown, financial metrics, multi-year P&L, and sensitivity analysis.</div>
       </div>
-      <div>
+      <div style="display:flex;gap:8px;">
+        <button class="hub-btn" data-cm-action="summary-compare-scenarios" title="Side-by-side compare 2–4 scenarios on this deal — KPIs, pricing buckets, inputs" ${dealScenarios.length < 2 ? 'disabled' : ''}>
+          ⇄ Compare Scenarios
+        </button>
         <button class="hub-btn-primary" data-cm-action="export-scenario-xlsx" title="Export the active scenario as a 7-sheet Excel workbook">
           ⬇ Export Scenario XLSX
         </button>
@@ -6304,6 +6307,14 @@ function bindSectionEvents(section, container) {
   container.querySelector('[data-cm-action="export-scenario-xlsx"]')?.addEventListener('click', () => {
     exportScenarioToXlsx();
   });
+  // CM-SCN-1: cross-section entry-point for Compare Scenarios on the Summary header.
+  container.querySelector('[data-cm-action="summary-compare-scenarios"]')?.addEventListener('click', () => {
+    if (!Array.isArray(dealScenarios) || dealScenarios.length < 2) {
+      showToast('Need at least 2 scenarios on this deal to compare. Spawn a child from the Scenarios section first.', 'warning');
+      return;
+    }
+    openCompareModal();
+  });
 
   // I-01: Summary "Fix in Pricing" shortcut
   container.querySelector('[data-cm-action="go-pricing"]')?.addEventListener('click', () => {
@@ -6723,28 +6734,45 @@ function bindSectionEvents(section, container) {
 }
 
 /**
- * Compare-scenarios modal. Lists every scenario on this deal with a
- * checkbox; pick 2-3 then click Compare. Renders the kpiDelta grid +
- * monthly P&L delta table using calc.scenarios.compareScenarios.
+ * CM-SCN-1 (2026-04-26) — First-class scenario compare modal.
+ *
+ * Promotes scenario comparison from a thin delta grid (rows) to a wide
+ * scenarios-as-columns view with three rolled-up sections:
+ *   1. Headline KPIs (revenue / opex / ebitda / net income / capex / margin %)
+ *   2. Pricing Schedule — effective rate per bucket, aligned by label
+ *   3. Inputs — total HC, volume by UOM, building sqft, target margin
+ *
+ * Picks 2–4 scenarios. The first picked is treated as the comparison
+ * baseline; other columns show value + Δ% (color-coded). Pricing pulls
+ * `project_data.pricingBuckets[*].rate` (effective override) for each
+ * scenario and falls back to recommendedRate when override absent.
+ *
+ * Entry points: "Compare scenarios →" button on Scenarios section AND on
+ * the Summary section header (so it surfaces during demo walkthroughs).
  */
 async function openCompareModal() {
-  if (!Array.isArray(dealScenarios) || dealScenarios.length < 2) return;
+  if (!Array.isArray(dealScenarios) || dealScenarios.length < 2) {
+    showToast('Need at least 2 scenarios on this deal to compare.', 'warning');
+    return;
+  }
   const overlay = document.createElement('div');
   overlay.className = 'hub-modal-overlay';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:9999;';
   overlay.innerHTML = `
-    <div style="background:white;border-radius: 10px;padding:24px;min-width:640px;max-width:95vw;max-height:90vh;overflow:auto;">
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <h3 style="margin:0;">Compare Scenarios</h3>
+    <div style="background:white;border-radius:10px;padding:24px;width:1180px;max-width:95vw;max-height:92vh;overflow:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
+        <div>
+          <h3 style="margin:0;">Compare Scenarios</h3>
+          <p class="cm-subtle" style="margin-top:4px;">Select 2–4 scenarios. First picked is the baseline; other columns show Δ% vs. baseline.</p>
+        </div>
         <button class="hub-btn" data-close>×</button>
       </div>
-      <p class="cm-subtle" style="margin-top:4px;">Select 2–3 scenarios to diff aligned KPIs + monthly cashflow.</p>
-      <div style="max-height:240px;overflow:auto;margin-top:12px;">
+      <div style="margin-top:12px;display:grid;grid-template-columns:repeat(2,1fr);gap:6px 16px;max-height:200px;overflow:auto;border:1px solid var(--ies-gray-200);border-radius:6px;padding:8px 12px;">
         ${dealScenarios.map(sc => `
-          <label style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #eee;">
-            <input type="checkbox" data-compare-id="${sc.id}" data-project-id="${sc.project_id}" />
-            <span style="flex:1;">${sc.scenario_label}${sc.is_baseline ? ' ⭐' : ''}</span>
-            <span class="hub-status-chip" style="background:${STATUS_COLORS[sc.status] || '#6b7280'};color:white;">${sc.status}</span>
+          <label style="display:flex;align-items:center;gap:8px;padding:4px 0;">
+            <input type="checkbox" data-compare-id="${sc.id}" data-project-id="${sc.project_id}" ${sc.is_baseline ? 'checked' : ''} />
+            <span style="flex:1;font-size:13px;">${sc.scenario_label}${sc.is_baseline ? ' ⭐' : ''}</span>
+            <span class="hub-status-chip" style="background:${STATUS_COLORS[sc.status] || '#6b7280'};color:white;font-size:10px;">${sc.status}</span>
           </label>
         `).join('')}
       </div>
@@ -6757,61 +6785,248 @@ async function openCompareModal() {
   `;
   document.body.appendChild(overlay);
   overlay.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => overlay.remove()));
+
   overlay.querySelector('[data-run-compare]').addEventListener('click', async () => {
     const picked = Array.from(overlay.querySelectorAll('[data-compare-id]:checked')).map(el => ({
       scenarioId: parseInt(el.dataset.compareId),
       projectId: parseInt(el.dataset.projectId),
     }));
-    if (picked.length < 2 || picked.length > 3) { showToast('Pick 2 or 3 scenarios to compare.', 'warning'); return; }
+    if (picked.length < 2 || picked.length > 4) {
+      showToast('Pick 2–4 scenarios to compare.', 'warning');
+      return;
+    }
     const resultEl = overlay.querySelector('#cm-compare-result');
-    resultEl.innerHTML = '<em>Loading projections…</em>';
-    // Fetch monthly projections for each picked project; build minimal bundles
+    resultEl.innerHTML = '<em>Loading scenarios…</em>';
+
     const bundles = await Promise.all(picked.map(async (p) => {
-      const monthly = await api.fetchMonthlyProjections(p.projectId).catch(() => []);
-      const summary = monthly.reduce((a, r) => {
+      const [monthly, proj] = await Promise.all([
+        api.fetchMonthlyProjections(p.projectId).catch(() => []),
+        api.getModel(p.projectId).catch(() => null),
+      ]);
+      const summary = (monthly || []).reduce((a, r) => {
         a.total_revenue += (r.revenue || 0);
-        a.total_opex += (r.opex || 0);
-        a.ebitda += (r.ebitda || 0);
-        a.net_income += (r.net_income || 0);
-        a.capex += (r.capex || 0);
+        a.total_opex   += (r.opex || 0);
+        a.ebitda       += (r.ebitda || 0);
+        a.net_income   += (r.net_income || 0);
+        a.capex        += (r.capex || 0);
         return a;
-      }, { total_revenue: 0, total_opex: 0, ebitda: 0, ebit: 0, net_income: 0, capex: 0, npv: 0, irr: 0, payback_months: 0 });
+      }, { total_revenue: 0, total_opex: 0, ebitda: 0, net_income: 0, capex: 0 });
+      summary.margin_pct = summary.total_revenue > 0 ? summary.ebitda / summary.total_revenue : 0;
       const sc = dealScenarios.find(s => s.id === p.scenarioId);
-      return { label: sc?.scenario_label || `#${p.scenarioId}`, summary, monthly };
+      const pdata = proj?.project_data || {};
+      const laborLines = Array.isArray(pdata.laborLines) ? pdata.laborLines : [];
+      const totalHC = laborLines.reduce((s, l) => s + (Number(l.fte) || 0), 0);
+      const totalLaborCost = laborLines.reduce((s, l) => {
+        const hrs = Number(l.annual_hours) || 0;
+        const rate = Number(l.rate) || 0;
+        return s + hrs * rate;
+      }, 0);
+      const avgCostPerHC = totalHC > 0 ? totalLaborCost / totalHC : 0;
+      const volumeLines = Array.isArray(pdata.volumeLines) ? pdata.volumeLines : [];
+      const volumeByUom = {};
+      for (const vl of volumeLines) {
+        const k = vl.uom || 'each';
+        volumeByUom[k] = (volumeByUom[k] || 0) + (Number(vl.volume) || 0);
+      }
+      const sqft = Number(pdata?.facility?.totalSqft || pdata?.facility?.sqft || 0);
+      const margin = Number(pdata?.financial?.targetMargin || 0);
+      const buckets = Array.isArray(pdata.pricingBuckets) ? pdata.pricingBuckets : [];
+      return {
+        label: sc?.scenario_label || `#${p.scenarioId}`,
+        status: sc?.status || 'unknown',
+        is_baseline: !!sc?.is_baseline,
+        scenarioId: p.scenarioId,
+        projectId: p.projectId,
+        summary,
+        inputs: { totalHC, avgCostPerHC, volumeByUom, sqft, margin },
+        buckets,
+      };
     }));
-    // For 2-way: compareScenarios; for 3-way: compare 1-vs-2 and 1-vs-3
-    const a = bundles[0];
-    const comparisons = bundles.slice(1).map(b => ({ bLabel: b.label, cmp: scenarios.compareScenarios(a, b) }));
-    const fmt = n => (n == null ? '—' : (Math.abs(n) > 1e6 ? (n/1e6).toFixed(1)+'M' : Math.abs(n) > 1e3 ? (n/1e3).toFixed(0)+'K' : n.toFixed(0)));
-    const fmtPct = p => (p == null ? '—' : (p > 0 ? '+' : '') + p.toFixed(1) + '%');
+
+    const fmtMoney = n => (n == null || !isFinite(n)) ? '—'
+      : Math.abs(n) >= 1e6 ? '$' + (n/1e6).toFixed(2) + 'M'
+      : Math.abs(n) >= 1e3 ? '$' + (n/1e3).toFixed(0) + 'K'
+      : '$' + n.toFixed(0);
+    const fmtNum = n => (n == null || !isFinite(n)) ? '—' : Math.abs(n) >= 1e6 ? (n/1e6).toFixed(2)+'M' : Math.abs(n) >= 1e3 ? (n/1e3).toFixed(1)+'K' : n.toFixed(0);
+    const fmtRate = n => (n == null || !isFinite(n) || n === 0) ? '—' : '$' + n.toFixed(2);
+    const fmtPct = n => (n == null || !isFinite(n)) ? '—' : (n*100).toFixed(1) + '%';
+    const deltaCell = (val, base, opts={}) => {
+      if (val == null || base == null || !isFinite(val) || !isFinite(base) || base === 0) return '';
+      const d = (val - base) / Math.abs(base);
+      if (Math.abs(d) < 0.005) return '';
+      const arrow = d > 0 ? '↑' : '↓';
+      const inv = !!opts.lowerIsBetter;
+      const goodGreen = (d > 0) !== inv;
+      const color = goodGreen ? 'var(--ies-green)' : 'var(--ies-red)';
+      return `<span style="color:${color};font-size:11px;margin-left:4px;">${arrow}${(Math.abs(d)*100).toFixed(0)}%</span>`;
+    };
+
+    const baselineBuckets = bundles[0].buckets;
+    const seenLabels = new Set();
+    const orderedLabels = [];
+    for (const b of baselineBuckets) {
+      const lbl = b.label || b.name || `Bucket ${b.id}`;
+      if (!seenLabels.has(lbl)) { seenLabels.add(lbl); orderedLabels.push({ label: lbl, uom: b.uom, type: b.type }); }
+    }
+    for (const bundle of bundles.slice(1)) {
+      for (const b of bundle.buckets) {
+        const lbl = b.label || b.name || `Bucket ${b.id}`;
+        if (!seenLabels.has(lbl)) { seenLabels.add(lbl); orderedLabels.push({ label: lbl, uom: b.uom, type: b.type }); }
+      }
+    }
+    const bucketRateForBundle = (bundle, lbl) => {
+      const b = bundle.buckets.find(x => (x.label || x.name) === lbl);
+      if (!b) return null;
+      const override = Number(b.rate);
+      if (isFinite(override) && override > 0) return override;
+      const rec = Number(b.recommendedRate);
+      return isFinite(rec) && rec > 0 ? rec : null;
+    };
+
+    const uomSet = new Set();
+    bundles.forEach(b => Object.keys(b.inputs.volumeByUom).forEach(u => uomSet.add(u)));
+    const uoms = Array.from(uomSet);
+
+    const colCount = bundles.length;
+    const colWidthPct = Math.floor(70 / colCount);
+
+    const colHeaders = bundles.map((b, i) => `
+      <th style="text-align:right;padding:8px;${i === 0 ? 'background:#fef3c7;' : ''}width:${colWidthPct}%;">
+        <div style="font-weight:600;font-size:13px;">${b.label}${b.is_baseline ? ' ⭐' : ''}</div>
+        <div style="font-size:10px;color:var(--ies-gray-500);font-weight:400;margin-top:2px;">
+          <span class="hub-status-chip" style="background:${STATUS_COLORS[b.status] || '#6b7280'};color:white;font-size:9px;padding:1px 4px;">${b.status}</span>
+          ${i === 0 ? '<span style="margin-left:6px;color:#92400e;">baseline</span>' : ''}
+        </div>
+      </th>
+    `).join('');
+
+    const kpiRow = (label, key, opts={}) => {
+      const fmt = opts.fmt || fmtMoney;
+      const base = bundles[0].summary[key];
+      return `
+        <tr>
+          <td style="padding:6px 10px;">${label}</td>
+          ${bundles.map((b, i) => `
+            <td class="cm-num" style="padding:6px 10px;${i === 0 ? 'background:#fef3c7;' : ''}">
+              ${fmt(b.summary[key])}${i > 0 ? deltaCell(b.summary[key], base, opts) : ''}
+            </td>
+          `).join('')}
+        </tr>
+      `;
+    };
+
+    const inputRow = (label, getter, opts={}) => {
+      const fmt = opts.fmt || fmtNum;
+      const base = getter(bundles[0]);
+      return `
+        <tr>
+          <td style="padding:6px 10px;">${label}</td>
+          ${bundles.map((b, i) => {
+            const v = getter(b);
+            return `
+              <td class="cm-num" style="padding:6px 10px;${i === 0 ? 'background:#fef3c7;' : ''}">
+                ${fmt(v)}${i > 0 ? deltaCell(v, base, opts) : ''}
+              </td>
+            `;
+          }).join('')}
+        </tr>
+      `;
+    };
+
+    const bucketRow = (meta) => {
+      const base = bucketRateForBundle(bundles[0], meta.label);
+      return `
+        <tr>
+          <td style="padding:6px 10px;">
+            ${meta.label}
+            <span style="font-size:10px;color:var(--ies-gray-500);margin-left:6px;">${meta.type === 'fixed' ? 'fixed/mo' : '/'+meta.uom}</span>
+          </td>
+          ${bundles.map((b, i) => {
+            const v = bucketRateForBundle(b, meta.label);
+            return `
+              <td class="cm-num" style="padding:6px 10px;${i === 0 ? 'background:#fef3c7;' : ''}">
+                ${fmtRate(v)}${i > 0 ? deltaCell(v, base, { lowerIsBetter: false }) : ''}
+              </td>
+            `;
+          }).join('')}
+        </tr>
+      `;
+    };
+
     resultEl.innerHTML = `
-      <table class="cm-table" style="width:100%;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:6px;">
+        <div class="cm-subtle">Δ% colors: green = better for the deal vs. baseline; red = worse. Lower-is-better metrics (opex, capex, cost/HC, sqft) invert. Pricing rates use the effective rate (override → recommended).</div>
+        <div style="display:flex;gap:6px;">
+          <button class="hub-btn" data-copy-table title="Copy the comparison as TSV (paste into Excel / Google Sheets / Slides)">Copy as table</button>
+        </div>
+      </div>
+      <table class="cm-table cm-compare-table" style="width:100%;border-collapse:collapse;">
         <thead>
           <tr>
-            <th style="text-align:left;">KPI</th>
-            <th style="text-align:right;">${a.label}</th>
-            ${comparisons.map(c => `<th style="text-align:right;" colspan="2">${c.bLabel}</th>`).join('')}
-          </tr>
-          <tr>
-            <th></th><th></th>
-            ${comparisons.map(() => `<th style="text-align:right;font-size:11px;color:#666;">Value</th><th style="text-align:right;font-size:11px;color:#666;">Δ%</th>`).join('')}
+            <th style="text-align:left;padding:8px;width:30%;background:var(--ies-gray-50);">Metric</th>
+            ${colHeaders}
           </tr>
         </thead>
         <tbody>
-          ${['total_revenue','total_opex','ebitda','net_income','capex'].map(k => `
-            <tr>
-              <td style="padding:4px 8px;font-weight:600;">${k}</td>
-              <td class="cm-num">${fmt(a.summary[k])}</td>
-              ${comparisons.map(c => `
-                <td class="cm-num">${fmt(c.cmp.kpiDelta[k].b)}</td>
-                <td class="cm-num" style="color:${(c.cmp.kpiDelta[k].diff || 0) >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};">${fmtPct(c.cmp.kpiDelta[k].pct_change)}</td>
-              `).join('')}
-            </tr>
-          `).join('')}
+          <tr><td colspan="${colCount + 1}" style="padding:10px 10px 4px;background:var(--ies-gray-50);font-size:11px;font-weight:600;letter-spacing:0.04em;color:var(--ies-gray-500);">HEADLINE KPIs (LIFE-OF-CONTRACT)</td></tr>
+          ${kpiRow('Total Revenue', 'total_revenue')}
+          ${kpiRow('Total Opex',    'total_opex',  { lowerIsBetter: true })}
+          ${kpiRow('EBITDA',        'ebitda')}
+          ${kpiRow('Net Income',    'net_income')}
+          ${kpiRow('CapEx',         'capex',       { lowerIsBetter: true })}
+          ${kpiRow('EBITDA Margin', 'margin_pct',  { fmt: fmtPct })}
+
+          ${orderedLabels.length > 0 ? `
+            <tr><td colspan="${colCount + 1}" style="padding:10px 10px 4px;background:var(--ies-gray-50);font-size:11px;font-weight:600;letter-spacing:0.04em;color:var(--ies-gray-500);">PRICING SCHEDULE (EFFECTIVE RATE)</td></tr>
+            ${orderedLabels.map(meta => bucketRow(meta)).join('')}
+          ` : ''}
+
+          <tr><td colspan="${colCount + 1}" style="padding:10px 10px 4px;background:var(--ies-gray-50);font-size:11px;font-weight:600;letter-spacing:0.04em;color:var(--ies-gray-500);">INPUTS</td></tr>
+          ${inputRow('Total Headcount (FTE)', b => b.inputs.totalHC, { fmt: n => (n == null ? '—' : n.toFixed(1)) })}
+          ${inputRow('Avg Cost / HC',         b => b.inputs.avgCostPerHC, { fmt: fmtMoney, lowerIsBetter: true })}
+          ${uoms.map(u => inputRow(`Volume — ${u}`, b => b.inputs.volumeByUom[u] || 0)).join('')}
+          ${inputRow('Building Sqft',         b => b.inputs.sqft, { lowerIsBetter: true })}
+          ${inputRow('Target Margin',         b => b.inputs.margin / 100, { fmt: fmtPct })}
         </tbody>
       </table>
-      <p class="cm-subtle" style="margin-top:8px;">Comparisons show the first selected scenario as baseline. Frozen scenarios reflect their snapshot rates; draft scenarios reflect current rates.</p>
+      <p class="cm-subtle" style="margin-top:8px;">Approved scenarios reflect frozen snapshots; draft/review scenarios reflect their current saved inputs. Open any scenario to drill in.</p>
     `;
+
+    overlay.querySelector('[data-copy-table]')?.addEventListener('click', () => {
+      const rows = [];
+      rows.push(['Metric', ...bundles.map(b => b.label + (b.is_baseline ? ' (baseline)' : ''))]);
+      const pushKpi = (label, key, opts={}) => {
+        const fmt = opts.fmt || fmtMoney;
+        rows.push([label, ...bundles.map(b => fmt(b.summary[key]).replace(/[↑↓]/g,''))]);
+      };
+      rows.push(['HEADLINE KPIs']);
+      pushKpi('Total Revenue', 'total_revenue');
+      pushKpi('Total Opex',    'total_opex');
+      pushKpi('EBITDA',        'ebitda');
+      pushKpi('Net Income',    'net_income');
+      pushKpi('CapEx',         'capex');
+      pushKpi('EBITDA Margin', 'margin_pct', { fmt: fmtPct });
+      if (orderedLabels.length) {
+        rows.push(['PRICING SCHEDULE (EFFECTIVE RATE)']);
+        orderedLabels.forEach(m => {
+          rows.push([`${m.label} (${m.type === 'fixed' ? 'fixed/mo' : '/'+m.uom})`,
+            ...bundles.map(b => fmtRate(bucketRateForBundle(b, m.label)))]);
+        });
+      }
+      rows.push(['INPUTS']);
+      rows.push(['Total Headcount (FTE)', ...bundles.map(b => (b.inputs.totalHC || 0).toFixed(1))]);
+      rows.push(['Avg Cost / HC',         ...bundles.map(b => fmtMoney(b.inputs.avgCostPerHC))]);
+      uoms.forEach(u => rows.push([`Volume — ${u}`, ...bundles.map(b => fmtNum(b.inputs.volumeByUom[u] || 0))]));
+      rows.push(['Building Sqft',         ...bundles.map(b => fmtNum(b.inputs.sqft))]);
+      rows.push(['Target Margin',         ...bundles.map(b => fmtPct((b.inputs.margin || 0) / 100))]);
+      const tsv = rows.map(r => r.join('\t')).join('\n');
+      navigator.clipboard.writeText(tsv).then(() => {
+        showToast('Compare table copied as TSV — paste into Excel / Sheets / Slides.', 'success');
+      }).catch(err => {
+        console.warn('[CM] copy compare TSV failed:', err);
+        showToast('Copy failed — check console.', 'error');
+      });
+    });
   });
 }
 
@@ -10599,7 +10814,7 @@ function renderScenarios() {
       <div class="cm-card" style="margin-top:16px;">
         <div style="display:flex;justify-content:space-between;align-items:center;">
           <h3 style="margin:0;">Sibling scenarios on this deal (${dealScenarios.length})</h3>
-          <button class="hub-btn" data-cm-action="scenarios-compare-picker" ${dealScenarios.length < 2 ? 'disabled title="Need at least 2 scenarios"' : ''}>Compare scenarios →</button>
+          <button class="hub-btn-primary" data-cm-action="scenarios-compare-picker" ${dealScenarios.length < 2 ? 'disabled title="Need at least 2 scenarios"' : ''} title="Side-by-side compare 2–4 scenarios — KPIs, pricing, inputs">⇄ Compare scenarios →</button>
         </div>
         <table class="cm-table" style="margin-top:12px;width:100%;">
           <thead>
