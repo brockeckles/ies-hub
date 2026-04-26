@@ -61,13 +61,15 @@
 
 /**
  * @typedef {Object} AllowanceProfile
- * @property {number} id — bigint primary key (table may not exist yet; typedef reserved)
- * @property {string} name — e.g., "Standard Warehouse", "Cold Storage"
+ * @property {number} id — bigint primary key
+ * @property {string} profile_name — e.g., "Standard Ambient Warehouse", "Cold Storage"
  * @property {number} personal_pct — Personal allowance %
  * @property {number} fatigue_pct — Fatigue allowance %
  * @property {number} delay_pct — Delay allowance %
- * @property {number} total_pfd_pct — personal + fatigue + delay
- * @property {string} [description]
+ * @property {number} [total_pfd_pct] — personal + fatigue + delay (denormalized; recomputed on save)
+ * @property {string} [environment_type] — 'ambient' | 'cold' | 'frozen'
+ * @property {string} [notes]
+ * @property {boolean} [is_default]
  */
 
 // ============================================================

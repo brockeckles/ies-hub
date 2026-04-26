@@ -14,8 +14,8 @@ import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../
 // button is a convenience trigger rather than a discrete compute step, so a
 // "clean/dirty" gate would be misleading here. Revisit if/when MOST gains a
 // heavier recompute path (MOST B4 productivity factor, maybe).
-import * as calc from './calc.js?v=20260426-s1';
-import * as api from './api.js?v=20260426-s1';
+import * as calc from './calc.js?v=20260426-s2';
+import * as api from './api.js?v=20260426-s2';
 import { getMostTplName, getMostTplBaseUph, getMostTplTmuTotal, getMostElName, getMostElSequence, getMostElTmu } from './types.js?v=20260418-sM';
 
 // ============================================================
@@ -552,7 +552,13 @@ function renderShell() {
         color: var(--ies-red);
       }
 
-      /* Empty state for the editor list */
+      /* MOS-F2: Drag-reorder visuals for editor element rows */
+      .most-elem-row[draggable="true"] { transition: background 0.12s ease, opacity 0.12s ease; }
+      .most-elem-row--dragging { opacity: 0.45; background: var(--ies-gray-50); }
+      .most-elem-row--drop-target { box-shadow: inset 0 -3px 0 0 var(--ies-blue, #0047ab); }
+      .most-elem-row--variable { background: rgba(249, 115, 22, 0.04); }
+
+            /* Empty state for the editor list */
       .most-empty-state {
         text-align: center;
         padding: 60px 20px;
@@ -602,6 +608,44 @@ function renderContent() {
   if (render) {
     container.innerHTML = render();
     bindContentEvents(container);
+  }
+}
+
+/**
+ * MOS-D4: re-render the active tab while preserving focus + caret position
+ * on the input the user is typing into. Without this, every Analysis-tab
+ * field change blew away focus mid-tab — making rapid data entry painful.
+ * The selector strategy keys on data-line/data-param/data-rate-cat/data-wf
+ * pairs which uniquely identify each input across renders.
+ */
+function rerenderPreservingFocus() {
+  const container = rootEl?.querySelector('#most-content');
+  if (!container) { renderContent(); return; }
+  const active = document.activeElement;
+  let selector = null;
+  let selStart = null;
+  let selEnd = null;
+  if (active && active.dataset && container.contains(active)) {
+    const ds = active.dataset;
+    if (ds.line != null && ds.field) selector = `[data-line="${ds.line}"][data-field="${ds.field}"]`;
+    else if (ds.param) selector = `[data-param="${ds.param}"]`;
+    else if (ds.rateCat) selector = `[data-rate-cat="${ds.rateCat}"]`;
+    else if (ds.wf) selector = `[data-wf="${ds.wf}"]`;
+    else if (ds.wfStep != null && ds.field) selector = `[data-wf-step="${ds.wfStep}"][data-field="${ds.field}"]`;
+    else if (ds.elemIdx != null && ds.elemField) selector = `[data-elem-idx="${ds.elemIdx}"][data-elem-field="${ds.elemField}"]`;
+    if (active.selectionStart != null && typeof active.selectionStart === 'number') {
+      try { selStart = active.selectionStart; selEnd = active.selectionEnd; } catch (_) {}
+    }
+  }
+  renderContent();
+  if (selector) {
+    const next = container.querySelector(selector);
+    if (next instanceof HTMLElement) {
+      next.focus();
+      if (selStart != null && next instanceof HTMLInputElement && next.type !== 'checkbox' && next.type !== 'number') {
+        try { next.setSelectionRange(selStart, selEnd); } catch (_) {}
+      }
+    }
   }
 }
 
@@ -908,6 +952,7 @@ function renderEditor() {
         <table class="cm-grid-table" style="font-size:12px;">
           <thead>
             <tr>
+              <th style="width:24px;" title="Drag to reorder"></th>
               <th style="width:40px;">#</th>
               <th>Element Name</th>
               <th style="width:120px;">MOST Sequence</th>
@@ -927,7 +972,8 @@ function renderEditor() {
               // optional formula. Collapsed when is_variable is off.
               const isVar = !!el.is_variable;
               return `
-              <tr${isVar ? ' class="most-elem-row--variable"' : ''}>
+              <tr class="most-elem-row${isVar ? ' most-elem-row--variable' : ''}" draggable="true" data-elem-row="${i}">
+                <td style="text-align:center;cursor:grab;color:var(--ies-gray-400);user-select:none;font-size:14px;line-height:1;" title="Drag to reorder">⠿</td>
                 <td>${i + 1}</td>
                 <td><input class="hub-input" type="text" value="${getMostElName(el) || ''}" data-elem-idx="${i}" data-elem-field="element_name" style="width:100%; font-size:11px; padding:4px 6px;" /></td>
                 <td>
@@ -978,7 +1024,7 @@ function renderEditor() {
               ${isVar ? `
               <tr class="most-elem-variable-detail">
                 <td></td>
-                <td colspan="7">
+                <td colspan="8">
                   <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; padding:6px 0 4px 4px; border-left:2px solid var(--ies-orange, #f97316); padding-left:8px;">
                     <div style="flex:0 0 140px;">
                       <label style="display:block;font-size:10px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:0.3px;margin-bottom:2px;">Driver</label>
@@ -1087,10 +1133,13 @@ function renderAnalysis() {
     <!-- Analysis Parameters -->
     <div style="display:grid; grid-template-columns: repeat(6, 1fr); gap:12px; margin-bottom:14px;">
       <div>
-        <label class="cm-form-label">PFD Allowance</label>
+        <div style="display:flex;align-items:center;gap:6px;justify-content:space-between;">
+          <label class="cm-form-label" style="margin:0;">PFD Allowance</label>
+          <button type="button" class="hub-btn hub-btn-sm hub-btn-secondary" data-action="manage-allowance-profiles" title="Create / edit / delete allowance profiles" style="font-size:10px;padding:2px 8px;line-height:1.3;">Manage…</button>
+        </div>
         <select class="hub-select" id="most-pfd-select">
           <option value="">Custom</option>
-          ${allowProfiles.map(p => `<option value="${p.id}" data-pfd="${calc.totalPfd(p)}"${analysis.allowance_profile_id === p.id ? ' selected' : ''}>${p.name} (${calc.totalPfd(p)}%)</option>`).join('')}
+          ${allowProfiles.map(p => `<option value="${p.id}" data-pfd="${calc.totalPfd(p)}"${analysis.allowance_profile_id === p.id ? ' selected' : ''}>${p.profile_name || p.name || 'Profile #' + p.id} (${calc.totalPfd(p)}%)</option>`).join('')}
         </select>
       </div>
       <div>
@@ -1476,7 +1525,7 @@ function bindContentEvents(container) {
       // allowance profile so the PFD dropdown reverts to "Custom" — keeps
       // the two controls coherent.
       if (param === 'pfd_pct') analysis.allowance_profile_id = null;
-      renderContent();
+      rerenderPreservingFocus();
     });
   });
 
@@ -1487,7 +1536,7 @@ function bindContentEvents(container) {
       const cat = tgt.dataset.rateCat;
       if (!analysis.rates_by_category) analysis.rates_by_category = { manual: 0, mhe: 0, hybrid: 0 };
       analysis.rates_by_category[cat] = parseFloat(tgt.value) || 0;
-      renderContent();
+      rerenderPreservingFocus();
     });
   });
 
@@ -1504,7 +1553,7 @@ function bindContentEvents(container) {
         else if (type === 'text') value = tgt.value;
         else value = parseFloat(tgt.value) || 0;
         analysis.lines[idx][field] = value;
-        renderContent();
+        rerenderPreservingFocus();
       }
     });
   });
@@ -1674,6 +1723,54 @@ function bindContentEvents(container) {
     input.addEventListener('change', handleUpdate);
   });
 
+  // MOS-F2: Drag-reorder for editor element rows.
+  // We attach a single delegated set of handlers on the table body so we
+  // don't have to re-wire on every render. The actual reorder happens by
+  // mutating editorElements + re-rendering (focus is preserved by the
+  // surgical updateEditorMetrics path; for ordering the full re-render is
+  // OK because the user's hand is on the mouse, not in a text field).
+  let dragSourceIdx = null;
+  container.querySelectorAll('[data-elem-row]').forEach(tr => {
+    tr.addEventListener('dragstart', (e) => {
+      const idx = Number((e.currentTarget instanceof HTMLElement) ? e.currentTarget.getAttribute('data-elem-row') : NaN);
+      if (!Number.isFinite(idx)) return;
+      dragSourceIdx = idx;
+      const ev = /** @type {DragEvent} */ (e);
+      if (ev.dataTransfer) {
+        ev.dataTransfer.effectAllowed = 'move';
+        try { ev.dataTransfer.setData('text/plain', String(idx)); } catch (_) {}
+      }
+      tr.classList?.add('most-elem-row--dragging');
+    });
+    tr.addEventListener('dragend', () => {
+      tr.classList?.remove('most-elem-row--dragging');
+      container.querySelectorAll('.most-elem-row--drop-target').forEach(n => n.classList.remove('most-elem-row--drop-target'));
+      dragSourceIdx = null;
+    });
+    tr.addEventListener('dragover', (e) => {
+      // Allow drop
+      e.preventDefault();
+      const ev = /** @type {DragEvent} */ (e);
+      if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move';
+      tr.classList?.add('most-elem-row--drop-target');
+    });
+    tr.addEventListener('dragleave', () => tr.classList?.remove('most-elem-row--drop-target'));
+    tr.addEventListener('drop', (e) => {
+      e.preventDefault();
+      tr.classList?.remove('most-elem-row--drop-target');
+      const targetIdx = Number((e.currentTarget instanceof HTMLElement) ? e.currentTarget.getAttribute('data-elem-row') : NaN);
+      const sourceIdx = dragSourceIdx;
+      dragSourceIdx = null;
+      if (!Number.isFinite(targetIdx) || sourceIdx == null || sourceIdx === targetIdx) return;
+      if (sourceIdx < 0 || sourceIdx >= editorElements.length) return;
+      const [moved] = editorElements.splice(sourceIdx, 1);
+      editorElements.splice(targetIdx, 0, moved);
+      // Re-stamp sequence_order so save preserves it
+      editorElements.forEach((el, i) => { el.sequence_order = i + 1; });
+      renderContent();
+    });
+  });
+
   // Scenario load/delete buttons
   container.querySelectorAll('[data-action="load-scenario"]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1749,8 +1846,208 @@ function handleAction(action, idx) {
     case 'push-to-cm':
       pushToCostModel();
       return; // don't re-render
+
+    // MOS-F5: Allowance profile CRUD
+    case 'manage-allowance-profiles':
+      showAllowanceProfileModal();
+      return;
   }
   renderContent();
+}
+
+// ============================================================
+// MOS-F5 — ALLOWANCE PROFILE CRUD MODAL
+// ============================================================
+
+/**
+ * Opens a modal that lists current ref_allowance_profiles rows and lets the
+ * user create / edit / delete them inline. On save, refreshes refData and
+ * re-renders the Analysis tab so the dropdown reflects the change.
+ */
+function showAllowanceProfileModal() {
+  const profiles = (refData.allowanceProfiles || []).slice();
+  const overlay = document.createElement('div');
+  overlay.className = 'hub-modal-overlay';
+  overlay.style.zIndex = '9999';
+  overlay.innerHTML = renderAllowanceProfileModal(profiles);
+  document.body.appendChild(overlay);
+
+  const close = () => overlay.remove();
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  overlay.querySelector('[data-action="ap-close"]')?.addEventListener('click', close);
+
+  const tbody = overlay.querySelector('#ap-tbody');
+  if (!tbody) return;
+
+  // Track local edits so we can save in one pass.
+  /** @type {Record<string|number, any>} */
+  const dirty = {};
+  /** @type {any[]} */
+  const newRows = [];
+
+  function updateRow(id, field, val) {
+    if (typeof id === 'string' && id.startsWith('new:')) {
+      const i = Number(id.slice(4));
+      newRows[i][field] = val;
+    } else {
+      if (!dirty[id]) dirty[id] = {};
+      dirty[id][field] = val;
+    }
+  }
+
+  // Bind input changes (delegated)
+  tbody.addEventListener('input', e => {
+    const tgt = e.target;
+    if (!(tgt instanceof HTMLInputElement) && !(tgt instanceof HTMLSelectElement)) return;
+    const id = tgt.dataset.apId;
+    const field = tgt.dataset.apField;
+    if (!id || !field) return;
+    let val = tgt.value;
+    if (['personal_pct','fatigue_pct','delay_pct'].includes(field)) val = parseFloat(val) || 0;
+    updateRow(id, field, val);
+    // Live-update the displayed total in the row
+    const row = tgt.closest('tr');
+    if (row) {
+      const get = (f) => {
+        const inp = row.querySelector(`[data-ap-field="${f}"]`);
+        return inp ? (parseFloat(inp.value) || 0) : 0;
+      };
+      const total = get('personal_pct') + get('fatigue_pct') + get('delay_pct');
+      const totalCell = row.querySelector('[data-ap-total]');
+      if (totalCell) totalCell.textContent = total.toFixed(1) + '%';
+    }
+  });
+
+  // Delete (per-row)
+  tbody.addEventListener('click', async (e) => {
+    const tgt = e.target;
+    if (!(tgt instanceof HTMLElement)) return;
+    const btn = tgt.closest('[data-action="ap-delete"]');
+    if (!btn) return;
+    const id = btn.getAttribute('data-id');
+    if (!id) return;
+    if (id.startsWith('new:')) {
+      // remove unsaved row from local list
+      const i = Number(id.slice(4));
+      newRows[i] = null;
+      btn.closest('tr')?.remove();
+      return;
+    }
+    if (!confirm('Delete this allowance profile? Analyses currently using it will fall back to Custom PFD.')) return;
+    btn.disabled = true;
+    try {
+      await api.deleteAllowanceProfile(id);
+      btn.closest('tr')?.remove();
+      // Mark for refresh
+      dirty[id] = '__deleted__';
+    } catch (err) {
+      alert('Delete failed: ' + (err?.message || err));
+      btn.disabled = false;
+    }
+  });
+
+  // Add new row
+  overlay.querySelector('[data-action="ap-add"]')?.addEventListener('click', () => {
+    const row = { profile_name: 'New Profile', personal_pct: 5, fatigue_pct: 4, delay_pct: 5, environment_type: 'ambient' };
+    const i = newRows.length;
+    newRows.push(row);
+    const tr = document.createElement('tr');
+    tr.innerHTML = renderAllowanceProfileRow(row, 'new:' + i, true);
+    tbody.appendChild(tr);
+  });
+
+  // Save all
+  overlay.querySelector('[data-action="ap-save"]')?.addEventListener('click', async (e) => {
+    const btn = /** @type {HTMLButtonElement} */ (e.currentTarget);
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+    try {
+      // Updates first
+      for (const id of Object.keys(dirty)) {
+        if (dirty[id] === '__deleted__') continue;
+        const patch = dirty[id];
+        if (!patch || Object.keys(patch).length === 0) continue;
+        await api.updateAllowanceProfile(id, patch);
+      }
+      // New rows
+      for (const row of newRows) {
+        if (!row) continue;
+        await api.createAllowanceProfile(row);
+      }
+      // Refresh refData
+      try {
+        const fresh = await api.listAllowanceProfiles();
+        refData.allowanceProfiles = fresh || [];
+      } catch (_) {}
+      overlay.remove();
+      rerenderPreservingFocus();
+    } catch (err) {
+      alert('Save failed: ' + (err?.message || err));
+      btn.disabled = false;
+      btn.textContent = 'Save All';
+    }
+  });
+}
+
+function renderAllowanceProfileRow(p, id, isNew) {
+  const total = ((+p.personal_pct || 0) + (+p.fatigue_pct || 0) + (+p.delay_pct || 0)).toFixed(1);
+  const env = p.environment_type || 'ambient';
+  const ENV_OPTIONS = ['ambient','cold','frozen','outdoor','clean_room'];
+  return `
+    <td><input class="hub-input" type="text" value="${(p.profile_name || '').replace(/"/g,'&quot;')}" data-ap-id="${id}" data-ap-field="profile_name" style="width:100%;font-size:12px;padding:4px 6px;" /></td>
+    <td>
+      <select class="hub-select" data-ap-id="${id}" data-ap-field="environment_type" style="font-size:12px;padding:4px 6px;">
+        ${ENV_OPTIONS.map(v => `<option value="${v}"${v === env ? ' selected' : ''}>${v}</option>`).join('')}
+      </select>
+    </td>
+    <td><input class="hub-input" type="number" min="0" max="50" step="0.5" value="${p.personal_pct || 0}" data-ap-id="${id}" data-ap-field="personal_pct" style="width:60px;font-size:12px;padding:4px 6px;" /></td>
+    <td><input class="hub-input" type="number" min="0" max="50" step="0.5" value="${p.fatigue_pct || 0}" data-ap-id="${id}" data-ap-field="fatigue_pct" style="width:60px;font-size:12px;padding:4px 6px;" /></td>
+    <td><input class="hub-input" type="number" min="0" max="50" step="0.5" value="${p.delay_pct || 0}" data-ap-id="${id}" data-ap-field="delay_pct" style="width:60px;font-size:12px;padding:4px 6px;" /></td>
+    <td class="cm-num" style="font-weight:700;color:var(--ies-navy);" data-ap-total>${total}%</td>
+    <td><button class="cm-delete-btn" data-action="ap-delete" data-id="${id}" title="${isNew ? 'Discard new row' : 'Delete profile'}">${isNew ? 'Discard' : 'Delete'}</button></td>
+  `;
+}
+
+function renderAllowanceProfileModal(profiles) {
+  return `
+    <div class="hub-modal" style="max-width:880px;width:95%;max-height:85vh;overflow:auto;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <h3 style="margin:0;font-size:16px;font-weight:700;">Manage Allowance Profiles</h3>
+        <button class="cm-delete-btn" data-action="ap-close" style="font-size:16px;">✕</button>
+      </div>
+      <p style="color:var(--ies-gray-600);font-size:12px;margin-bottom:12px;line-height:1.4;">
+        PFD profiles drive the Personal + Fatigue + Delay allowance applied to base UPH on the Analysis tab.
+        Edit values inline, add new profiles via <strong>+ Add Profile</strong>, then click <strong>Save All</strong>.
+        Changes write directly to <code>ref_allowance_profiles</code>.
+      </p>
+      <div style="overflow-x:auto;border:1px solid var(--ies-gray-200);border-radius:8px;">
+        <table class="cm-grid-table" style="font-size:12px;width:100%;">
+          <thead>
+            <tr>
+              <th>Profile Name</th>
+              <th style="width:120px;">Environment</th>
+              <th class="cm-num">Personal %</th>
+              <th class="cm-num">Fatigue %</th>
+              <th class="cm-num">Delay %</th>
+              <th class="cm-num">Total PFD</th>
+              <th style="width:80px;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="ap-tbody">
+            ${profiles.map(p => `<tr>${renderAllowanceProfileRow(p, p.id, false)}</tr>`).join('')}
+            ${profiles.length === 0 ? '<tr><td colspan="7" style="padding:16px;text-align:center;color:var(--ies-gray-400);">No profiles yet — click + Add Profile to create one.</td></tr>' : ''}
+          </tbody>
+        </table>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:space-between;margin-top:14px;align-items:center;">
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="ap-add">+ Add Profile</button>
+        <div style="display:flex;gap:8px;">
+          <button class="hub-btn hub-btn-secondary" data-action="ap-close">Cancel</button>
+          <button class="hub-btn hub-btn-primary" data-action="ap-save">Save All</button>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 // ============================================================

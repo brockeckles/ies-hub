@@ -156,6 +156,50 @@ export async function listAllowanceProfiles() {
   return db.fetchAll('ref_allowance_profiles');
 }
 
+/**
+ * Create a new allowance profile.
+ * MOS-F5: CRUD support for the Analysis-tab profile picker.
+ * @param {{ profile_name: string, personal_pct?: number, fatigue_pct?: number, delay_pct?: number, environment_type?: string, notes?: string }} data
+ */
+export async function createAllowanceProfile(data) {
+  const row = {
+    profile_name: data.profile_name,
+    personal_pct: data.personal_pct == null ? 0 : Number(data.personal_pct),
+    fatigue_pct:  data.fatigue_pct  == null ? 0 : Number(data.fatigue_pct),
+    delay_pct:    data.delay_pct    == null ? 0 : Number(data.delay_pct),
+    environment_type: data.environment_type || 'ambient',
+    notes: data.notes || null,
+    is_default: false,
+  };
+  const { data: result, error } = await db.from('ref_allowance_profiles').insert(row).select().single();
+  if (error) throw error;
+  try { await recordAudit({ entity: 'most_allowance_profile', entityId: String(result.id), action: 'create', meta: { profile_name: row.profile_name } }); } catch (_) {}
+  return result;
+}
+
+/**
+ * Update an allowance profile.
+ * @param {number|string} id
+ * @param {object} patch — any subset of profile fields
+ */
+export async function updateAllowanceProfile(id, patch) {
+  const { data: result, error } = await db.from('ref_allowance_profiles').update(patch).eq('id', id).select().single();
+  if (error) throw error;
+  try { await recordAudit({ entity: 'most_allowance_profile', entityId: String(id), action: 'update', meta: { fields: Object.keys(patch) } }); } catch (_) {}
+  return result;
+}
+
+/**
+ * Delete an allowance profile.
+ * @param {number|string} id
+ */
+export async function deleteAllowanceProfile(id) {
+  const { error } = await db.from('ref_allowance_profiles').delete().eq('id', id);
+  if (error) throw error;
+  try { await recordAudit({ entity: 'most_allowance_profile', entityId: String(id), action: 'delete' }); } catch (_) {}
+  return true;
+}
+
 // ============================================================
 // LABOR ANALYSES (saved analyses)
 // ============================================================
