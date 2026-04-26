@@ -395,6 +395,7 @@ const SECTIONS = [
   { key: 'overhead',       label: 'Overhead',           icon: 'layers',        group: 'cost' },
   { key: 'vas',            label: 'VAS',                icon: 'star',          group: 'cost' },
   { key: 'startup',        label: 'Start-Up',           icon: 'zap',           group: 'cost' },
+  { key: 'implementation', label: 'Implementation',     icon: 'flag',          group: 'cost' },
   // Output — what the model produces
   { key: 'summary',        label: 'Summary',            icon: 'pie-chart',     group: 'output' },
   { key: 'pricing',        label: 'Pricing',            icon: 'tag',           group: 'output' },
@@ -2182,6 +2183,7 @@ function renderSection() {
     vas: renderVas,
     financial: renderFinancial,
     startup: renderStartup,
+    implementation: renderImplementation,
     pricing: renderPricing,
     summary: renderSummary,
     timeline: renderTimeline,
@@ -6467,6 +6469,18 @@ function bindSectionEvents(section, container) {
       }
       else val = input.value;
 
+      // Handle direct scalar dot-path fields (data-field-direct="implementationTimeline.goLiveWeek")
+      if (input.dataset.fieldDirect) {
+        const path = input.dataset.fieldDirect;
+        const parts = path.split('.');
+        const last = parts.pop();
+        const parent = parts.reduce((o, k) => { o[k] = o[k] || {}; return o[k]; }, model);
+        parent[last] = (input.dataset.type === 'number') ? (parseFloat(input.value) || 0) : input.value;
+        isDirty = true;
+        if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+        refreshNavCompletion();
+        return;
+      }
       // Handle array fields (data-array + data-idx). data-array supports
       // dot-paths (e.g. "shifts.positions") so macro-section catalogs can
       // live alongside top-level arrays like laborLines.
@@ -9084,6 +9098,45 @@ function handleAction(action, idx, btn) {
         else if (_selectedLaborIdx >= model.laborLines.length) _selectedLaborIdx = model.laborLines.length - 1;
       }
       break;
+    // CM-IMPL-1 (2026-04-26) — Implementation phase / ramp actions
+    case 'impl-add-phase': {
+      if (!model.implementationTimeline) model.implementationTimeline = createEmptyModel().implementationTimeline;
+      const phs = model.implementationTimeline.phases = model.implementationTimeline.phases || [];
+      const lastEnd = phs.reduce((mx, p) => Math.max(mx, (p.startWeek || 0) + (p.durationWeeks || 0)), 0);
+      phs.push({ id: `phase_${Date.now()}`, name: 'New Phase', startWeek: lastEnd, durationWeeks: 4, owner: '', color: '#64748b' });
+      break;
+    }
+    case 'impl-delete-phase':
+      if (model.implementationTimeline && Array.isArray(model.implementationTimeline.phases)) {
+        model.implementationTimeline.phases.splice(idx, 1);
+      }
+      break;
+    case 'impl-resize-ramps': {
+      const it = model.implementationTimeline;
+      if (!it) return;
+      const target_n = Math.max(1, Math.min(24, Number(it.rampMonths) || 6));
+      const reshape = (arr) => {
+        const cur = (arr || []).map(v => Number(v) || 0);
+        if (cur.length === target_n) return cur;
+        if (cur.length === 0) return Array(target_n).fill(0).map((_, i) => Math.round(40 + (60 * (i + 1) / target_n)));
+        const out = [];
+        for (let i = 0; i < target_n; i++) {
+          const srcIdx = (i / Math.max(1, target_n - 1)) * (cur.length - 1);
+          const lo = Math.floor(srcIdx), hi = Math.ceil(srcIdx);
+          const f = srcIdx - lo;
+          out.push(Math.round(cur[lo] * (1 - f) + cur[hi] * f));
+        }
+        return out;
+      };
+      it.volumeRamp = reshape(it.volumeRamp);
+      it.headcountRamp = reshape(it.headcountRamp);
+      showToast(`Ramp curves resized to ${target_n} months.`, 'success');
+      break;
+    }
+    case 'impl-reset-defaults':
+      model.implementationTimeline = createEmptyModel().implementationTimeline;
+      showToast('Implementation Timeline reset to defaults.', 'success');
+      break;
     case 'add-indirect':
       model.indirectLaborLines.push({ role_name: '', headcount: 0, hourly_rate: 0, burden_pct: 30, pricing_bucket: defaultBucketFor('indirect') });
       break;
@@ -10624,6 +10677,26 @@ function createEmptyModel() {
       turnoverPct: 45,
     },
     startupLines: [],
+    // CM-IMPL-1 (2026-04-26) — Implementation Timeline. Default 16-wk
+    // mobilization to go-live + 6-mo volume/headcount ramp curve.
+    // Used by renderImplementation() and (in future) by the monthly engine
+    // to derive ramp burn vs. steady-state cost. Keep simple shape so the
+    // section can edit it without bespoke handlers.
+    implementationTimeline: {
+      goLiveWeek: 16,
+      rampMonths: 6,
+      phases: [
+        { id: 'mobilization', name: 'Mobilization & Kickoff',     startWeek: 0,  durationWeeks: 2,  owner: 'PM',     color: '#0047AB' },
+        { id: 'site_setup',   name: 'Site Setup & Fit-Out',       startWeek: 2,  durationWeeks: 6,  owner: 'Ops',    color: '#0891b2' },
+        { id: 'it_cutover',   name: 'IT / WMS Cutover',           startWeek: 6,  durationWeeks: 4,  owner: 'IT',     color: '#7c3aed' },
+        { id: 'training',     name: 'Hiring & Training',          startWeek: 10, durationWeeks: 4,  owner: 'HR',     color: '#d97706' },
+        { id: 'go_live',      name: 'Go-Live & Stabilize',        startWeek: 14, durationWeeks: 4,  owner: 'Ops',    color: '#16a34a' },
+        { id: 'ramp',         name: 'Volume Ramp to Steady-State', startWeek: 16, durationWeeks: 24, owner: 'Ops',    color: '#94a3b8' },
+      ],
+      // % of steady-state by month after go-live (idx 0 = month 1)
+      volumeRamp:    [40, 60, 75, 85, 92, 100],
+      headcountRamp: [55, 70, 85, 95, 100, 100],
+    },
     pricingBuckets: [
       { id: 'mgmt_fee', name: 'Management Fee', type: 'fixed', uom: 'month' },
       { id: 'storage', name: 'Storage', type: 'variable', uom: 'pallet' },
@@ -10791,6 +10864,336 @@ function setNestedValue(obj, path, value) {
  * Monthly P&L + cumulative cash flow rendered from the monthly bundle.
  * When the flag is off or no bundle exists, shows a helpful empty state.
  */
+// ============================================================
+// IMPLEMENTATION TIMELINE (CM-IMPL-1, 2026-04-26)
+// ============================================================
+//
+// Project-management view of the deal's stand-up: mobilization → site
+// setup → IT cutover → training → go-live → volume ramp. Distinct from
+// Cashflow & P&L (which shows post-go-live monthly $ flows). This section
+// captures the WHEN of implementation: phase Gantt + ramp curves that
+// scale steady-state FTE/volume into months 1-N after go-live.
+//
+// Model shape:
+//   model.implementationTimeline = {
+//     goLiveWeek:     number,           // week of contract start when ops go live
+//     rampMonths:     number,           // months from go-live to steady-state
+//     phases:         Array<{id, name, startWeek, durationWeeks, owner, color}>,
+//     volumeRamp:     number[],         // % of steady-state by month
+//     headcountRamp:  number[],         // % of steady-state FTE by month
+//   }
+//
+// All edits flow through the standard data-array delegation handler so
+// no bespoke wiring is needed beyond add/delete row buttons.
+
+function renderImplementation() {
+  // Lazy-init for legacy models that pre-date the section
+  if (!model.implementationTimeline) {
+    model.implementationTimeline = createEmptyModel().implementationTimeline;
+  }
+  const it = model.implementationTimeline;
+  const phases = Array.isArray(it.phases) ? it.phases : [];
+  const volumeRamp = Array.isArray(it.volumeRamp) ? it.volumeRamp : [];
+  const headcountRamp = Array.isArray(it.headcountRamp) ? it.headcountRamp : [];
+
+  // Compute total implementation timeline span (max end-week across all phases)
+  const totalWeeks = phases.reduce((mx, ph) =>
+    Math.max(mx, (Number(ph.startWeek) || 0) + (Number(ph.durationWeeks) || 0)), 0
+  ) || 24;
+  const goLiveWeek = Number(it.goLiveWeek) || 16;
+  const rampMonths = Number(it.rampMonths) || volumeRamp.length || 6;
+
+  // Pull steady-state metrics from current model so the ramp curves
+  // have real $/FTE numbers to project against.
+  const opHrs = calc.operatingHours(model.shifts || {});
+  const lc = model.laborCosting || {};
+  const totalFtes = (model.laborLines || []).reduce((s, l) => s + calc.fte(l, opHrs), 0);
+  const steadyDirectCost = (model.laborLines || []).reduce((s, l) =>
+    s + calc.directLineAnnualSimple(l, lc), 0);
+  const steadyMonthlyCost = steadyDirectCost / 12;
+
+  // Total implementation spend = sum of startupLines (one-time setup outlay)
+  const totalImplSpend = (model.startupLines || []).reduce((s, l) =>
+    s + (Number(l.cost) || Number(l.annual_cost) || 0), 0);
+
+  // Build week-bar Gantt — week ticks every 4 weeks for readability
+  const tickInterval = totalWeeks <= 16 ? 2 : 4;
+  const ticks = [];
+  for (let w = 0; w <= totalWeeks; w += tickInterval) ticks.push(w);
+  if (ticks[ticks.length - 1] !== totalWeeks) ticks.push(totalWeeks);
+
+  return `
+    <div class="cm-section-header">
+      <div class="cm-section-header__intro">
+        <div>
+          <h2>Implementation <span class="hub-status-chip cm-chip-info cm-chip-xs">project plan</span></h2>
+          <div class="cm-section-desc">Phase plan + ramp curves from contract sign through steady-state. Volume / headcount ramp scales the steady-state numbers from <strong>Labor</strong> and <strong>Volumes</strong> across months 1-${rampMonths} after go-live.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- KPI strip -->
+    <div class="hub-kpi-strip" style="margin-bottom:16px;">
+      <div class="hub-kpi-tile" title="Calendar week of contract start when ops officially begin handling volume">
+        <div class="hub-kpi-tile__label">Go-Live Week</div>
+        <div class="hub-kpi-tile__value hub-kpi-tile__value--brand">W${goLiveWeek}</div>
+      </div>
+      <div class="hub-kpi-tile" title="Months from go-live to steady-state operations">
+        <div class="hub-kpi-tile__label">Ramp Period</div>
+        <div class="hub-kpi-tile__value">${rampMonths} mo</div>
+      </div>
+      <div class="hub-kpi-tile" title="Total implementation phases on the plan">
+        <div class="hub-kpi-tile__label">Phases</div>
+        <div class="hub-kpi-tile__value">${phases.length}</div>
+      </div>
+      <div class="hub-kpi-tile" title="Sum of all start-up lines — one-time outlay before steady-state operations">
+        <div class="hub-kpi-tile__label">Implementation Spend</div>
+        <div class="hub-kpi-tile__value" style="color:var(--ies-orange,#d97706);">${calc.formatCurrency(totalImplSpend)}</div>
+      </div>
+    </div>
+
+    <!-- Phase Gantt -->
+    <div class="cm-card" style="margin-bottom:16px;">
+      <div class="cm-section-header__intro" style="margin-bottom:12px;">
+        <div>
+          <h3 style="margin:0;font-size:14px;font-weight:700;color:var(--ies-navy);">Phase Plan</h3>
+          <div class="cm-subtle" style="font-size:12px;">Drag start week / duration in the table below to reshape. Bars below visualize the schedule.</div>
+        </div>
+        <div class="cm-section-header__actions">
+          <button class="hub-btn hub-btn-sm" data-action="impl-add-phase" title="Add a new phase to the plan">+ Add Phase</button>
+        </div>
+      </div>
+
+      <!-- Gantt visualization -->
+      <div class="cm-impl-gantt" style="margin:8px 0 16px;">
+        <div class="cm-impl-gantt__ruler">
+          <div class="cm-impl-gantt__ruler-label">&nbsp;</div>
+          <div class="cm-impl-gantt__ruler-track" style="position:relative;height:18px;border-bottom:1px solid var(--ies-gray-200);">
+            ${ticks.map(w => `
+              <div style="position:absolute;left:${(w / totalWeeks * 100).toFixed(2)}%;top:0;bottom:0;border-left:1px dashed var(--ies-gray-200);">
+                <span style="position:absolute;top:0;left:2px;font-size:10px;color:var(--ies-gray-500);font-weight:600;">W${w}</span>
+              </div>
+            `).join('')}
+            <div style="position:absolute;left:${(goLiveWeek / totalWeeks * 100).toFixed(2)}%;top:-4px;bottom:-4px;border-left:2px solid var(--ies-green,#16a34a);" title="Go-Live (W${goLiveWeek})">
+              <span style="position:absolute;top:-14px;left:-26px;font-size:9px;font-weight:700;color:var(--ies-green,#16a34a);background:#fff;padding:1px 4px;border-radius:3px;border:1px solid var(--ies-green,#16a34a);white-space:nowrap;">GO-LIVE</span>
+            </div>
+          </div>
+        </div>
+        ${phases.map((ph, i) => {
+          const startPct = (Number(ph.startWeek) || 0) / totalWeeks * 100;
+          const widthPct = Math.max(0.5, (Number(ph.durationWeeks) || 0) / totalWeeks * 100);
+          return `
+            <div class="cm-impl-gantt__row">
+              <div class="cm-impl-gantt__ruler-label" title="${escapeAttr(ph.name || '')}">${escapeHtml(ph.name || `Phase ${i + 1}`)}</div>
+              <div class="cm-impl-gantt__ruler-track" style="position:relative;height:24px;">
+                <div class="cm-impl-gantt__bar" style="position:absolute;left:${startPct.toFixed(2)}%;width:${widthPct.toFixed(2)}%;top:4px;bottom:4px;background:${ph.color || 'var(--ies-blue)'};border-radius:4px;display:flex;align-items:center;padding:0 6px;color:#fff;font-size:10px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escapeAttr(ph.name)} — W${ph.startWeek} to W${(ph.startWeek || 0) + (ph.durationWeeks || 0)} (${ph.durationWeeks}w)${ph.owner ? ' · ' + ph.owner : ''}">
+                  ${escapeHtml(ph.owner || '')} · ${ph.durationWeeks}w
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+
+      <!-- Editable phase table -->
+      <table class="cm-table" style="width:100%;">
+        <thead>
+          <tr>
+            <th style="width:32%;">Phase</th>
+            <th style="width:13%;">Owner</th>
+            <th style="width:13%;text-align:right;">Start Week</th>
+            <th style="width:13%;text-align:right;">Duration (wk)</th>
+            <th style="width:13%;text-align:right;">End Week</th>
+            <th style="width:10%;">Color</th>
+            <th style="width:6%;"></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${phases.length === 0 ? `
+            <tr><td colspan="7" class="cm-empty-state" style="text-align:center;padding:24px;color:var(--ies-gray-400);">No phases defined. Click <strong>+ Add Phase</strong> to start.</td></tr>
+          ` : phases.map((ph, i) => {
+            const endWeek = (Number(ph.startWeek) || 0) + (Number(ph.durationWeeks) || 0);
+            return `
+              <tr>
+                <td><input class="hub-input" value="${escapeAttr(ph.name || '')}" data-array="implementationTimeline.phases" data-idx="${i}" data-field="name" placeholder="Phase name" /></td>
+                <td><input class="hub-input" value="${escapeAttr(ph.owner || '')}" data-array="implementationTimeline.phases" data-idx="${i}" data-field="owner" placeholder="PM / IT / Ops" /></td>
+                <td><input class="hub-input hub-num" type="number" min="0" step="1" value="${Number(ph.startWeek) || 0}" data-array="implementationTimeline.phases" data-idx="${i}" data-field="startWeek" data-type="number" /></td>
+                <td><input class="hub-input hub-num" type="number" min="0" step="1" value="${Number(ph.durationWeeks) || 0}" data-array="implementationTimeline.phases" data-idx="${i}" data-field="durationWeeks" data-type="number" /></td>
+                <td style="text-align:right;font-weight:600;color:var(--ies-gray-600);">W${endWeek}</td>
+                <td><input type="color" value="${escapeAttr(ph.color || '#0047AB')}" data-array="implementationTimeline.phases" data-idx="${i}" data-field="color" style="width:36px;height:26px;padding:0;border:1px solid var(--ies-gray-200);border-radius:4px;cursor:pointer;" /></td>
+                <td style="text-align:center;"><button class="cm-delete-btn" data-action="impl-delete-phase" data-idx="${i}" title="Delete phase">×</button></td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Ramp curves: 2-col grid -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+
+      <!-- Volume Ramp -->
+      <div class="cm-card">
+        <div class="cm-section-header__intro" style="margin-bottom:8px;">
+          <div>
+            <h3 style="margin:0;font-size:14px;font-weight:700;color:var(--ies-navy);">Volume Ramp</h3>
+            <div class="cm-subtle" style="font-size:12px;">% of steady-state volume by month after go-live</div>
+          </div>
+        </div>
+        ${renderImplRampTable('volumeRamp', volumeRamp, 'Volume')}
+        ${renderImplRampSparkline(volumeRamp, '#0047AB')}
+      </div>
+
+      <!-- Headcount Ramp -->
+      <div class="cm-card">
+        <div class="cm-section-header__intro" style="margin-bottom:8px;">
+          <div>
+            <h3 style="margin:0;font-size:14px;font-weight:700;color:var(--ies-navy);">Headcount Ramp</h3>
+            <div class="cm-subtle" style="font-size:12px;">% of steady-state direct FTE by month after go-live</div>
+          </div>
+        </div>
+        ${renderImplRampTable('headcountRamp', headcountRamp, 'FTE')}
+        ${renderImplRampSparkline(headcountRamp, '#d97706')}
+      </div>
+    </div>
+
+    <!-- Ramp Burn Estimate (read-only, derives from labor + ramp curves) -->
+    <div class="cm-card">
+      <div class="cm-section-header__intro" style="margin-bottom:8px;">
+        <div>
+          <h3 style="margin:0;font-size:14px;font-weight:700;color:var(--ies-navy);">Ramp Burn Estimate <span class="hub-status-chip cm-chip-info cm-chip-xs">read-only</span></h3>
+          <div class="cm-subtle" style="font-size:12px;">Direct labor cost during each ramp month — multiplies steady-state monthly direct labor (${calc.formatCurrency(steadyMonthlyCost)}) by the headcount ramp %. Steady-state baseline: <strong>${totalFtes.toFixed(1)} FTE</strong> · <strong>${calc.formatCurrency(steadyDirectCost)}</strong>/yr.</div>
+        </div>
+      </div>
+      <table class="cm-table" style="width:100%;">
+        <thead>
+          <tr>
+            <th>Month After Go-Live</th>
+            <th style="text-align:right;">Headcount %</th>
+            <th style="text-align:right;">Implied FTE</th>
+            <th style="text-align:right;">Volume %</th>
+            <th style="text-align:right;">Direct Labor Cost</th>
+            <th style="text-align:right;">Δ vs steady-state</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${headcountRamp.map((pct, i) => {
+            const hcPct = Number(pct) || 0;
+            const volPct = Number(volumeRamp[i]) || 0;
+            const impliedFte = totalFtes * (hcPct / 100);
+            const monthlyCost = steadyMonthlyCost * (hcPct / 100);
+            const delta = monthlyCost - steadyMonthlyCost;
+            const deltaColor = delta < 0 ? 'var(--ies-green,#16a34a)' : (delta > 0 ? 'var(--ies-red,#dc2626)' : 'var(--ies-gray-500)');
+            return `
+              <tr>
+                <td><strong>Month ${i + 1}</strong></td>
+                <td style="text-align:right;">${hcPct}%</td>
+                <td style="text-align:right;">${impliedFte.toFixed(1)}</td>
+                <td style="text-align:right;color:var(--ies-gray-500);">${volPct}%</td>
+                <td style="text-align:right;font-weight:600;">${calc.formatCurrency(monthlyCost)}</td>
+                <td style="text-align:right;color:${deltaColor};">${delta === 0 ? '—' : (delta > 0 ? '+' : '') + calc.formatCurrency(delta)}</td>
+              </tr>
+            `;
+          }).join('')}
+          <tr style="background:var(--ies-gray-50);font-weight:700;border-top:2px solid var(--ies-gray-200);">
+            <td>Steady-state (Month ${headcountRamp.length + 1}+)</td>
+            <td style="text-align:right;">100%</td>
+            <td style="text-align:right;">${totalFtes.toFixed(1)}</td>
+            <td style="text-align:right;color:var(--ies-gray-500);">100%</td>
+            <td style="text-align:right;">${calc.formatCurrency(steadyMonthlyCost)}</td>
+            <td style="text-align:right;color:var(--ies-gray-500);">baseline</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Settings strip -->
+    <div class="cm-card" style="margin-top:16px;">
+      <div class="cm-section-header__intro" style="margin-bottom:8px;">
+        <div>
+          <h3 style="margin:0;font-size:14px;font-weight:700;color:var(--ies-navy);">Settings</h3>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:14px;">
+        <div class="hub-field">
+          <label class="hub-field__label">Go-Live Week (W#)</label>
+          <input class="hub-input hub-num" type="number" min="0" step="1" value="${goLiveWeek}" data-field-direct="implementationTimeline.goLiveWeek" data-type="number" />
+          <div class="hub-field__hint">Week of contract start when operations begin.</div>
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label">Ramp Period (months)</label>
+          <input class="hub-input hub-num" type="number" min="1" max="24" step="1" value="${rampMonths}" data-field-direct="implementationTimeline.rampMonths" data-type="number" />
+          <div class="hub-field__hint">Months from go-live to steady-state. Click <strong>Resize Ramps</strong> below if you change this.</div>
+        </div>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px;">
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="impl-resize-ramps" title="Re-shape volume + headcount ramp arrays to match the Ramp Period above">Resize Ramp Curves</button>
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="impl-reset-defaults" title="Reset all phases + ramp curves to defaults">Reset to Defaults</button>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Helper: render a one-row editable table for a ramp curve array.
+ * Uses the _direct scalar-array pattern in the data-array handler.
+ */
+function renderImplRampTable(arrayKey, values, label) {
+  return `
+    <table class="cm-table" style="width:100%;">
+      <thead>
+        <tr>
+          <th>${escapeHtml(label)} %</th>
+          ${values.map((_, i) => `<th style="text-align:center;">M${i + 1}</th>`).join('')}
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>%</strong></td>
+          ${values.map((v, i) => `
+            <td style="text-align:center;">
+              <input class="hub-input hub-num" type="number" min="0" max="200" step="5" value="${Number(v) || 0}"
+                data-array="implementationTimeline.${arrayKey}" data-idx="${i}" data-field="_direct" data-type="number"
+                style="width:56px;text-align:center;" />
+            </td>
+          `).join('')}
+        </tr>
+      </tbody>
+    </table>
+  `;
+}
+
+/**
+ * Helper: render an inline SVG sparkline for a ramp curve. No
+ * external chart library — this is a small visualization.
+ */
+function renderImplRampSparkline(values, color) {
+  if (!values || values.length === 0) return '';
+  const w = 240, h = 60, pad = 6;
+  const maxVal = Math.max(100, ...values.map(v => Number(v) || 0));
+  const stepX = (w - 2 * pad) / Math.max(1, values.length - 1);
+  const points = values.map((v, i) => {
+    const x = pad + i * stepX;
+    const y = h - pad - ((Number(v) || 0) / maxVal) * (h - 2 * pad);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  // Steady-state reference line at 100%
+  const ssY = h - pad - (100 / maxVal) * (h - 2 * pad);
+  return `
+    <div style="margin-top:8px;text-align:center;">
+      <svg viewBox="0 0 ${w} ${h}" style="width:100%;max-width:${w}px;height:${h}px;" aria-hidden="true">
+        <line x1="${pad}" y1="${ssY}" x2="${w - pad}" y2="${ssY}" stroke="var(--ies-gray-300)" stroke-dasharray="3,3" stroke-width="1" />
+        <polyline points="${points}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" />
+        ${values.map((v, i) => {
+          const x = pad + i * stepX;
+          const y = h - pad - ((Number(v) || 0) / maxVal) * (h - 2 * pad);
+          return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="${color}" />`;
+        }).join('')}
+      </svg>
+    </div>
+  `;
+}
+
 function renderTimeline() {
   const flagOn = typeof window !== 'undefined' && window.COST_MODEL_MONTHLY_ENGINE !== false;
   const frozenBanner = renderFrozenBanner();

@@ -3356,3 +3356,53 @@ textarea.hub-input {
   background: var(--ies-gray-100);
   margin: 28px 0 20px;
 }
+
+/* ============================================================
+   CM-IMPL-1 — Implementation Timeline (2026-04-26)
+   ============================================================ */
+.cm-impl-gantt {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--ies-gray-50);
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid var(--ies-gray-200);
+}
+.cm-impl-gantt__ruler {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.cm-impl-gantt__row {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 8px;
+  align-items: center;
+}
+.cm-impl-gantt__row + .cm-impl-gantt__row {
+  border-top: 1px dashed var(--ies-gray-200);
+}
+.cm-impl-gantt__ruler-label {
+  font-size: 11px;
+  color: var(--ies-gray-700);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 8px;
+}
+.cm-impl-gantt__ruler-track {
+  background: rgba(255,255,255,0.5);
+  border-radius: 3px;
+}
+.cm-impl-gantt__bar {
+  cursor: default;
+  box-shadow: 0 1px 2px rgba(15,23,42,0.08);
+  transition: filter 0.15s ease;
+}
+.cm-impl-gantt__bar:hover {
+  filter: brightness(1.08);
+}
