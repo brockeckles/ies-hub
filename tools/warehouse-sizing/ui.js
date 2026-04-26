@@ -11,7 +11,7 @@ import { state } from '../../shared/state.js?v=20260418-sL';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sL';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260419-uE';
-import * as calc from './calc.js?v=20260425-s9';
+import * as calc from './calc.js?v=20260425-s10';
 import * as api from './api.js?v=20260418-sL';
 
 // ============================================================
@@ -645,16 +645,42 @@ function renderConfigPanel() {
       </div>
     </div>
 
-    <!-- Inventory Parameters -->
+    <!-- Inventory (WSC-B3 2026-04-25: explicit unit-based section with daily outbound for DIOH) -->
     <div class="wsc-config-section">
-      <div class="wsc-config-title">Inventory Parameters</div>
+      <div class="wsc-config-title">Inventory</div>
       <div class="wsc-config-row">
         <div class="wsc-config-field"><label title="Peak units ON-HAND in inventory at any one time. NOT throughput. The sizing engine converts this to pallet positions via the storage mix and units/pallet ratios. If you have an engineered pallet count, use the Pallet Positions field above instead.">Peak Units On-Hand</label><input type="number" value="${zones.peakUnitsPerDay || 500000}" data-inv="peakUnitsPerDay" /></div>
-        <div class="wsc-config-field"><label title="Average units ON-HAND in inventory. Used for utilization warning band only.">Avg Units On-Hand</label><input type="number" value="${zones.avgUnitsPerDay || 350000}" data-inv="avgUnitsPerDay" /></div>
+        <div class="wsc-config-field"><label title="Average units ON-HAND in inventory. Drives DIOH and utilization warning band.">Avg Units On-Hand</label><input type="number" value="${zones.avgUnitsPerDay || 350000}" data-inv="avgUnitsPerDay" /></div>
       </div>
       <div class="wsc-config-row">
-        <div class="wsc-config-field"><label>Operating Days/Yr</label><input type="number" value="${zones.operatingDaysPerYear || 250}" data-inv="operatingDaysPerYear" /></div>
+        <div class="wsc-config-field"><label title="Operating days per year — used to convert annual outbound volumes to daily.">Operating Days/Yr</label><input type="number" value="${zones.operatingDaysPerYear || 250}" data-inv="operatingDaysPerYear" /></div>
+        <div class="wsc-config-field"><label title="Daily outbound units — primary driver of DIOH. If 0, the engine derives from outboundUnitsYr / operatingDays, then falls back to forwardPick.outboundUnitsPerDay.">Daily Outbound (units)</label><input type="number" value="${zones.outboundUnitsPerDay || 0}" data-inv="outboundUnitsPerDay" /></div>
       </div>
+      <!-- Derivation summary: shows the user how units → pallet positions math runs -->
+      ${(() => {
+        const alloc = zones.storageAllocation || { fullPallet: 60, cartonOnPallet: 30, cartonOnShelving: 10 };
+        const prod = zones.productDimensions || {};
+        const peak = zones.peakUnitsPerDay || 500000;
+        const upp = prod.unitsPerPallet || 48;
+        const ucp = prod.unitsPerCartonPallet || 6;
+        const cpp = prod.cartonsPerPallet || 12;
+        const ucs = prod.unitsPerCartonShelving || 6;
+        const cpl = prod.cartonsPerLocation || 4;
+        const fpUnits = Math.round(peak * (alloc.fullPallet || 0) / 100);
+        const cpUnits = Math.round(peak * (alloc.cartonOnPallet || 0) / 100);
+        const csUnits = Math.round(peak * (alloc.cartonOnShelving || 0) / 100);
+        const fpPos = upp > 0 ? Math.ceil(fpUnits / upp) : 0;
+        const cpPos = (ucp > 0 && cpp > 0) ? Math.ceil(cpUnits / ucp / cpp) : 0;
+        const csLoc = (ucs > 0 && cpl > 0) ? Math.ceil(csUnits / ucs / cpl) : 0;
+        return `
+          <div style="margin-top:10px;padding:8px 10px;background:var(--ies-gray-50);border-radius:4px;font-size:11px;color:var(--ies-gray-700);">
+            <div style="font-weight:700;margin-bottom:4px;color:var(--ies-gray-500);text-transform:uppercase;font-size:10px;">Units → Positions derivation</div>
+            <div>Full Pallet: ${peak.toLocaleString()} × ${alloc.fullPallet||0}% / ${upp} = <strong>${fpPos.toLocaleString()} pos</strong></div>
+            <div>Carton/Pallet: ${peak.toLocaleString()} × ${alloc.cartonOnPallet||0}% / ${ucp} / ${cpp} = <strong>${cpPos.toLocaleString()} pos</strong></div>
+            <div>Carton/Shelving: ${peak.toLocaleString()} × ${alloc.cartonOnShelving||0}% / ${ucs} / ${cpl} = <strong>${csLoc.toLocaleString()} loc</strong></div>
+          </div>
+        `;
+      })()}
     </div>
 
     <!-- Forward Pick -->
@@ -1726,7 +1752,14 @@ function toSizingInputs() {
   return {
     peakUnits: zones.peakUnitsPerDay || 500000,
     avgUnits: zones.avgUnitsPerDay || 350000,
-    outboundUnitsYr: (zones.avgUnitsPerDay || 0) * (zones.operatingDaysPerYear || 250),
+    // WSC-B6 (2026-04-25): prefer the explicit dailyOutbound field; only
+    // fall back to (avgUnitsPerDay × operatingDays) when blank. The legacy
+    // path stuffed avgUnits *as on-hand* into outboundUnitsYr which was
+    // dimensionally wrong; sizingEngine doesn't use outboundUnitsYr for
+    // sizing anyway, but keep it for downstream callers.
+    outboundUnitsYr: zones.outboundUnitsPerDay && zones.outboundUnitsPerDay > 0
+      ? zones.outboundUnitsPerDay * (zones.operatingDaysPerYear || 250)
+      : (zones.avgUnitsPerDay || 0) * (zones.operatingDaysPerYear || 250),
     operatingDaysYr: zones.operatingDaysPerYear || 250,
     fullPalletPct: (alloc.fullPallet || 0) / 100,
     cartonOnPalletPct: (alloc.cartonOnPallet || 0) / 100,
@@ -1787,7 +1820,10 @@ function renderDashboard() {
   const _totalDoors = (_dockCfg.inboundDoors || 0) + (_dockCfg.outboundDoors || 0) || (facility.dockDoors || 0);
   const dock = calc.dockUtilization(_totalDoors, volumes.avgDailyInbound, volumes.avgDailyOutbound, volumes.peakMultiplier);
   const dockAnalysis = calc.calcDockAnalysis(facility, zones, volumes);
-  const storageByType = calc.calcStorageByType(facility, zones);
+  // WSC-A5 (2026-04-25): calcStorageByType produced fake "positions" for
+  // carton-on-shelving (treated 1 shelf location as 1 pallet position).
+  // Dashboard now reads sized.positions.shelvingPositions (loc) directly,
+  // so this call is dead. Removed.
   const dioh = calc.calcDIOH(zones);
   const fwdPick = calc.calcForwardPick(zones);
   const correctedSf = calc.calcSuggestedSF(facility, zones, volumes);
@@ -1863,20 +1899,36 @@ function renderDashboard() {
       <!-- Capacity Utilization — tied to sizing engine -->
       <div class="hub-card">
         <div class="text-subtitle mb-4">Capacity Utilization</div>
-        ${renderUtilBar('Storage SF vs Existing', facility.totalSqft > 0 ? Math.round((sized.storageSqft / facility.totalSqft) * 100) : 0)}
-        ${renderUtilBar('Sized SF vs Existing',   facility.totalSqft > 0 ? Math.round((sized.totalSqft   / facility.totalSqft) * 100) : 0)}
-        ${renderUtilBar('Pallet Position Util',   sized.utilization.utilizationPct)}
-        ${renderUtilBar('Cubic Utilization',      summary.cubicUtilizationPct)}
+        ${renderUtilBar('Storage SF vs Existing',
+          facility.totalSqft > 0 ? Math.round((sized.storageSqft / facility.totalSqft) * 100) : 0,
+          { mode: 'cap', tooltip: 'Sized storage SF / facility.totalSqft. >95% means storage alone consumes all available SF — no room for staging, dock, office.' })}
+        ${renderUtilBar('Sized SF vs Existing',
+          facility.totalSqft > 0 ? Math.round((sized.totalSqft / facility.totalSqft) * 100) : 0,
+          { mode: 'cap', tooltip: 'Sized total SF / facility.totalSqft. >100% means the engineered facility does not fit in the existing footprint.' })}
+        ${renderUtilBar('Pallet Position Util',
+          sized.utilization.utilizationPct,
+          { mode: 'band', tooltip: 'Average inventory positions / designed positions. Healthy band 70-90%. Below 70% = over-built; above 90% = no slack for receiving surges or seasonal peaks. (WSC-D4 fix: was inverted as cap-mode.)' })}
+        ${renderUtilBar('Cubic Utilization',
+          summary.cubicUtilizationPct,
+          { mode: 'cap', tooltip: 'Pallet cube (positions × bay W × rack D × level H) / building cube (storage SF × usable Ht). High % = dense vertical use.' })}
       </div>
 
-      <!-- Storage Type Breakdown — same source as Sized Facility card -->
+      <!-- Capacity Reconciliation — bridge the two ways the tool counts positions (WSC-A4) -->
       <div class="hub-card">
-        <div class="text-subtitle mb-4">Storage Type Breakdown</div>
+        <div class="text-subtitle mb-4">Capacity Reconciliation</div>
         <table class="cm-grid-table" style="font-size:13px;">
           <tbody>
-            <tr><td>Full Pallet</td><td class="cm-num">${sized.positions.fullPalletPositions.toLocaleString()}</td><td class="cm-num" style="color:var(--ies-gray-400);">pos</td></tr>
-            <tr><td>Carton on Pallet</td><td class="cm-num">${sized.positions.cartonPalletPositions.toLocaleString()}</td><td class="cm-num" style="color:var(--ies-gray-400);">pos</td></tr>
-            <tr><td>Carton on Shelving</td><td class="cm-num">${sized.positions.shelvingPositions.toLocaleString()}</td><td class="cm-num" style="color:var(--ies-gray-400);">loc</td></tr>
+            <tr><td title="What the building geometrically holds, given building width × depth × clear height × storage type × aisle width. Bounded by physics, not demand.">Geom Capacity (max)</td>
+                <td class="cm-num" style="color:var(--ies-blue);font-weight:700;">${storage.totalPalletPositions.toLocaleString()}</td></tr>
+            <tr><td title="What the customer's inventory NEEDS, derived from peak units × storage mix ÷ units-per-pallet, plus honeycomb buffer.">Designed (need)</td>
+                <td class="cm-num" style="font-weight:700;">${sized.utilization.designed.toLocaleString()}</td></tr>
+            <tr><td title="Designed positions / Geometric capacity. Low = building is over-sized for inventory; >100% = building cannot physically hold the engineered position count.">Geom Util</td>
+                <td class="cm-num" style="color:${storage.totalPalletPositions > 0 && (sized.utilization.designed / storage.totalPalletPositions) > 1 ? 'var(--ies-red)' : 'inherit'};">
+                  ${storage.totalPalletPositions > 0 ? Math.round((sized.utilization.designed / storage.totalPalletPositions) * 100) + '%' : '—'}
+                </td></tr>
+            <tr><td colspan="2" style="padding-top:8px;font-size:11px;color:var(--ies-gray-500);font-style:italic;">
+              Geometric capacity is what the building can hold. Designed positions are what the customer needs. Two different lenses on the same facility.
+            </td></tr>
           </tbody>
         </table>
       </div>
@@ -1951,7 +2003,7 @@ function renderDashboard() {
             <tr><td>Peak Units/Day</td><td class="cm-num">${(zones.peakUnitsPerDay || 500000).toLocaleString()}</td></tr>
             <tr><td>Avg Units/Day</td><td class="cm-num">${(zones.avgUnitsPerDay || 350000).toLocaleString()}</td></tr>
             <tr><td>Operating Days/Yr</td><td class="cm-num">${(zones.operatingDaysPerYear || 250)}</td></tr>
-            <tr><td>DIOH (Days)</td><td class="cm-num">${dioh.toFixed(1)}</td></tr>
+            <tr><td title="Days Inventory On-Hand = avgUnits / dailyOutbound. Typical 3PL DC: 30-90 days; high-turn retail: 10-30 days; DTC ecomm: 60-120 days. Sources: zones.outboundUnitsPerDay → outboundUnitsYr/operatingDays → forwardPick.outboundUnitsPerDay (legacy).">DIOH (Days)</td><td class="cm-num">${dioh.toFixed(1)}</td></tr>
           </tbody>
         </table>
       </div>
@@ -1998,10 +2050,41 @@ function renderDashboard() {
   `;
 }
 
-function renderUtilBar(label, pct) {
-  const color = pct > 95 ? 'var(--ies-red)' : pct > 80 ? 'var(--ies-orange)' : 'var(--ies-green)';
+/**
+ * Render a labeled utilization bar.
+ *
+ * @param {string} label
+ * @param {number} pct
+ * @param {Object} [opts]
+ * @param {'cap'|'band'|'hi'} [opts.mode='cap'] — color semantics:
+ *   - 'cap' (default): higher is worse. > 95 red, > 80 orange, else green.
+ *     Use for "% of available space consumed" metrics.
+ *   - 'band': healthy band of 70-90%. < 60 / > 95 red, 60-70 / 90-95 orange,
+ *     70-90 green. Use for utilization that should sit in an operational
+ *     sweet spot (Pallet Position Util — too low = over-built, too high =
+ *     no slack for surges).
+ *   - 'hi': higher is better (rare; left for parity).
+ * @param {string} [opts.tooltip]
+ * @returns {string}
+ */
+function renderUtilBar(label, pct, opts = {}) {
+  const mode = opts.mode || 'cap';
+  let color;
+  if (mode === 'band') {
+    if (pct < 60 || pct > 95) color = 'var(--ies-red)';
+    else if (pct < 70 || pct > 90) color = 'var(--ies-orange)';
+    else color = 'var(--ies-green)';
+  } else if (mode === 'hi') {
+    if (pct < 50) color = 'var(--ies-red)';
+    else if (pct < 70) color = 'var(--ies-orange)';
+    else color = 'var(--ies-green)';
+  } else {
+    // 'cap' (default)
+    color = pct > 95 ? 'var(--ies-red)' : pct > 80 ? 'var(--ies-orange)' : 'var(--ies-green)';
+  }
+  const tip = opts.tooltip ? `title="${opts.tooltip}"` : '';
   return `
-    <div style="margin-bottom:12px;">
+    <div style="margin-bottom:12px;" ${tip}>
       <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:2px;">
         <span style="font-weight:600;">${label}</span>
         <span style="font-weight:700; color:${color};">${calc.formatPct(pct)}</span>

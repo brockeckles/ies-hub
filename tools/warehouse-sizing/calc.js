@@ -419,25 +419,55 @@ export function elevationParams(facility, zones) {
 // ============================================================
 
 /**
- * Calculate storage positions by type based on allocation percentages.
+ * Calculate storage positions by type — REAL math, not naive allocation.
+ *
+ * WSC-A5 (2026-04-25): the prior implementation pretended carton-on-shelving
+ * had pallet "positions" by multiplying geometric capacity by allocation
+ * percentage. That is dimensionally wrong: shelving holds *carton locations*,
+ * not pallets. A 10% shelving allocation in a 100K-pos building does NOT mean
+ * 10K shelving positions — it means a shelving footprint sized for 10% of
+ * peak units, which translates via cartonsPerLocation into a different
+ * (and generally smaller) location count.
+ *
+ * This implementation delegates to the unit-based derivation that
+ * sizeFacility uses: peakUnits × allocation% / unitsPerPallet (or per
+ * carton hierarchy for shelving). Returns BOTH counts and units consumed
+ * so callers can present the right denomination.
+ *
  * @param {import('./types.js?v=20260418-sL').FacilityConfig} facility
  * @param {import('./types.js?v=20260418-sL').ZoneConfig} zones
- * @returns {{ fullPalletPositions: number, cartonOnPalletPositions: number, cartonOnShelvingPositions: number, totalPositions: number }}
+ * @returns {{ fullPalletPositions: number, cartonOnPalletPositions: number, cartonOnShelvingLocations: number, totalPositions: number }}
  */
 export function calcStorageByType(facility, zones) {
-  const storage = computeStorage(facility, zones);
-  const totalPos = storage.totalPalletPositions;
   const alloc = zones.storageAllocation || { fullPallet: 60, cartonOnPallet: 30, cartonOnShelving: 10 };
+  const prod = zones.productDimensions || {};
+  const peakUnits = zones.peakUnitsPerDay || 0;
 
-  const fullPalletPct = (alloc.fullPallet || 0) / 100;
-  const cartonOnPalletPct = (alloc.cartonOnPallet || 0) / 100;
-  const cartonOnShelvingPct = (alloc.cartonOnShelving || 0) / 100;
+  const fpUnits = Math.round(peakUnits * (alloc.fullPallet || 0) / 100);
+  const cpUnits = Math.round(peakUnits * (alloc.cartonOnPallet || 0) / 100);
+  const csUnits = Math.round(peakUnits * (alloc.cartonOnShelving || 0) / 100);
+
+  const upp = prod.unitsPerPallet || 48;
+  const ucp = prod.unitsPerCartonPallet || 6;
+  const cpp = prod.cartonsPerPallet || 12;
+  const ucs = prod.unitsPerCartonShelving || 6;
+  const cpl = prod.cartonsPerLocation || 4;
+
+  const fullPalletPositions = upp > 0 ? Math.ceil(fpUnits / upp) : 0;
+  const cartonOnPalletPositions = (ucp > 0 && cpp > 0)
+    ? Math.ceil(cpUnits / ucp / cpp)
+    : 0;
+  const cartonOnShelvingLocations = (ucs > 0 && cpl > 0)
+    ? Math.ceil(csUnits / ucs / cpl)
+    : 0;
 
   return {
-    fullPalletPositions: Math.round(totalPos * fullPalletPct),
-    cartonOnPalletPositions: Math.round(totalPos * cartonOnPalletPct),
-    cartonOnShelvingPositions: Math.round(totalPos * cartonOnShelvingPct),
-    totalPositions: totalPos,
+    fullPalletPositions,
+    cartonOnPalletPositions,
+    cartonOnShelvingLocations,
+    // Note: total mixes pallet positions + shelf locations. They are
+    // different units of capacity — present them separately when displaying.
+    totalPositions: fullPalletPositions + cartonOnPalletPositions + cartonOnShelvingLocations,
   };
 }
 
