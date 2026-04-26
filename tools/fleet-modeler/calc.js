@@ -42,6 +42,16 @@ export const DEFAULT_CONFIG = {
   driverPercentageOfRevenue: 0,
   gxoMarginPct: 12,
   carrierPremiumPct: 25,
+  // FLE-B4 — empty miles back as % of loaded miles (industry default ~15%)
+  deadheadPct: 15,
+  // FLE-B5 — dock/waiting hours per trip (driver paid but not driving)
+  detentionHoursPerTrip: 2,
+  // FLE-B6 — split tires/tolls/permits out of maintenanceCostPerMi
+  tiresCostPerMi: 0.04,
+  tollsCostPerMi: 0.025,
+  permitsPerYear: 850,
+  // FLE-C2 — second-driver salary added when teamDriving=true
+  teamSecondDriverHrlyMult: 1.0,
 };
 
 /** ATRI 2024 average operating cost per mile for truckload */
@@ -118,10 +128,18 @@ export function assignLanes(lanes, vehicles = DEFAULT_VEHICLES, config = DEFAULT
     const rtHours = roundTripHours(lane.distanceMiles, config.avgSpeedMph);
 
     const annualTrips = trips * config.operatingWeeksPerYear;
-    const annMiles = annualTrips * rtMiles;
+    // FLE-B4: deadhead = empty miles back. annLoadedMiles = trips × rtMiles (already round-trip).
+    // For private-fleet asset-based moves we treat deadhead as additional empty
+    // miles on top of the configured route — i.e. the truck doesn't always
+    // get a backhaul. annDeadheadMiles = annLoadedMiles × deadheadPct/100.
+    const annLoadedMiles = annualTrips * rtMiles;
+    const deadheadPct = Number(config.deadheadPct ?? 15);
+    const annDeadheadMiles = annLoadedMiles * (deadheadPct / 100);
+    const annMiles = annLoadedMiles + annDeadheadMiles;
 
     const fuelCostPerMi = config.dieselPricePerGal / Math.max(1, vehicle.mpg) + (vehicle.fuelSurchargePerMi || 0);
     const annFuel = annMiles * fuelCostPerMi;
+    const annDeadheadCost = annDeadheadMiles * fuelCostPerMi;
 
     // B2: Apply driver benefits multiplier to base wage
     const driverBenefitMultiplier = 1 + (config.driverBenefitPct ?? 35) / 100;
@@ -152,9 +170,34 @@ export function assignLanes(lanes, vehicles = DEFAULT_VEHICLES, config = DEFAULT
       // hourly (default)
       annDriver = annualTrips * rtHours * config.driverCostPerHr * driverBenefitMultiplier;
     }
+    // FLE-B5 — detention/dock-waiting hours paid but not driving
+    const detentionHrsPerTrip = Number(config.detentionHoursPerTrip ?? 0);
+    const annDetentionCost = annualTrips * detentionHrsPerTrip * config.driverCostPerHr * driverBenefitMultiplier;
+    annDriver += annDetentionCost;
+    // FLE-C2 — team driving doubles HOS daily hours but ALSO requires a 2nd
+    // driver. Add a second driver's wages on the same trip hours (× multiplier).
+    if (config.teamDriving) {
+      const teamMult = Number(config.teamSecondDriverHrlyMult ?? 1.0);
+      annDriver += annualTrips * rtHours * config.driverCostPerHr * driverBenefitMultiplier * teamMult;
+    }
+    // FLE-B6 — split tires/tolls out of maintenance. Maintenance now =
+    // pure shop-labor + parts; tires/tolls track separately so build-up
+    // shows them as their own line items.
     const annMaint = annMiles * config.maintenanceCostPerMi;
+    const annTires = annMiles * Number(config.tiresCostPerMi ?? 0);
+    const annTolls = annMiles * Number(config.tollsCostPerMi ?? 0);
 
-    const perTrip = annualTrips > 0 ? (annFuel + annDriver + annMaint) / annualTrips : 0;
+    // FLE-C3 — HOS feasibility check: if rtHours > drivingHoursPerDay × maxDays
+    // (default 5), flag the lane. For team driving the daily limit doubles.
+    const dailyDriveLimit = Number(config.drivingHoursPerDay ?? 11) *
+      (config.teamDriving ? 2 : 1);
+    const hosMaxDaysAvail = Number(config.operatingDaysPerWeek ?? 5);
+    const hosMaxDriveHours = dailyDriveLimit * hosMaxDaysAvail;
+    const hosFeasible = rtHours <= hosMaxDriveHours;
+    const hosWarning = hosFeasible ? null :
+      `Round-trip ${rtHours.toFixed(1)}h exceeds HOS budget ${hosMaxDriveHours.toFixed(1)}h (${dailyDriveLimit}h/day × ${hosMaxDaysAvail} days).`;
+
+    const perTrip = annualTrips > 0 ? (annFuel + annDriver + annMaint + annTires + annTolls) / annualTrips : 0;
 
     return {
       laneId: lane.id,
@@ -164,10 +207,18 @@ export function assignLanes(lanes, vehicles = DEFAULT_VEHICLES, config = DEFAULT
       roundTripMiles: rtMiles,
       roundTripHours: rtHours,
       annualMiles: annMiles,
+      annualLoadedMiles: annLoadedMiles,
+      annualDeadheadMiles: annDeadheadMiles,
       annualFuelCost: annFuel,
+      annualDeadheadFuelCost: annDeadheadCost,
+      annualDetentionCost: annDetentionCost,
       annualDriverCost: annDriver,
       annualMaintenanceCost: annMaint,
+      annualTiresCost: annTires,
+      annualTollsCost: annTolls,
       perTripCost: perTrip,
+      hosFeasible,
+      hosWarning,
     };
   });
 }
@@ -217,6 +268,10 @@ export function computeFleetComposition(assignments, vehicles = DEFAULT_VEHICLES
     const annFuel = laneAssignments.reduce((s, a) => s + a.annualFuelCost, 0);
     const annDriver = laneAssignments.reduce((s, a) => s + a.annualDriverCost, 0);
     const annMaint = laneAssignments.reduce((s, a) => s + a.annualMaintenanceCost, 0);
+    // FLE-B6 — tires/tolls broken out, plus annual permits prorated by units
+    const annTires = laneAssignments.reduce((s, a) => s + (a.annualTiresCost || 0), 0);
+    const annTolls = laneAssignments.reduce((s, a) => s + (a.annualTollsCost || 0), 0);
+    const permitsPerYr = Number(config.permitsPerYear ?? 0);
     // Vehicle cost — purchase (depreciation) vs lease (monthly rate).
     // config.leaseMode: false = purchase (straight-line depreciation with residual),
     //                   true  = lease (monthly rate × 12 × units).
@@ -233,8 +288,10 @@ export function computeFleetComposition(assignments, vehicles = DEFAULT_VEHICLES
     const annDepr = annVehicle; // kept as legacy field name for downstream consumers
     const annIns = config.insuranceBasePerYear * vehicle.insuranceFactor * unitsNeeded;
 
-    // B1: Apply admin overhead cost as % of subtotal
-    const subtotal = annFuel + annDriver + annMaint + annDepr + annIns;
+    // FLE-B6 — permits is annual fixed (× units)
+    const annPermits = permitsPerYr * unitsNeeded;
+    // B1: Apply admin overhead cost as % of subtotal (now includes tires/tolls/permits)
+    const subtotal = annFuel + annDriver + annMaint + annTires + annTolls + annPermits + annDepr + annIns;
     const adminCostPct = config.adminCostPct ?? 8;
     const annAdmin = subtotal * (adminCostPct / 100);
 
@@ -248,6 +305,9 @@ export function computeFleetComposition(assignments, vehicles = DEFAULT_VEHICLES
       annualFuelCost: annFuel,
       annualDriverCost: annDriver,
       annualMaintenanceCost: annMaint,
+      annualTiresCost: annTires,
+      annualTollsCost: annTolls,
+      annualPermitsCost: annPermits,
       annualDepreciation: annDepr,
       annualInsurance: annIns,
       annualAdminCost: annAdmin,
@@ -311,6 +371,7 @@ export function analyzeFleet(lanes, vehicles = DEFAULT_VEHICLES, config = DEFAUL
   // Insurance/Driver/Admin/Margin) instead of just three roll-up totals.
   const privateBreakdown = (() => {
     let fuel = 0, maint = 0, vehicle = 0, ins = 0, driver = 0, admin = 0;
+    let tires = 0, tolls = 0, permits = 0;
     core.fleetComposition.forEach(f => {
       fuel += f.annualFuelCost || 0;
       maint += f.annualMaintenanceCost || 0;
@@ -318,8 +379,11 @@ export function analyzeFleet(lanes, vehicles = DEFAULT_VEHICLES, config = DEFAUL
       ins += f.annualInsurance || 0;
       driver += f.annualDriverCost || 0;
       admin += f.annualAdminCost || 0;
+      tires += f.annualTiresCost || 0;
+      tolls += f.annualTollsCost || 0;
+      permits += f.annualPermitsCost || 0;
     });
-    return { fuel, maintenance: maint, vehicle, insurance: ins, driver, admin, markup: 0, margin: 0 };
+    return { fuel, maintenance: maint, vehicle, insurance: ins, driver, admin, markup: 0, margin: 0, tires, tolls, permits };
   })();
   const dedDriver = dedicatedResult.breakdown.driver || 0;
   const dedMarkupOnDriver = dedDriver * 0.25; // 1.25x markup on driver cost
@@ -373,6 +437,61 @@ export function analyzeFleet(lanes, vehicles = DEFAULT_VEHICLES, config = DEFAUL
       carrierBreakdown,
     },
     atriBenchmark,
+    // FLE-C3 — collect HOS violations across lane assignments for UI surface
+    hosViolations: core.assignments.filter(a => a.hosWarning).map(a => ({
+      laneId: a.laneId,
+      vehicleName: a.vehicleName,
+      roundTripHours: a.roundTripHours,
+      message: a.hosWarning,
+    })),
+    // FLE-D4 — break-even analytics (cost-per-mile crossover by mode)
+    breakEven: calcBreakEven({ privateCost, dedicatedCost: dedicatedResult.totalAnnual, carrierCost: carrierResult.totalAnnual, totalAnnualMiles: core.totalAnnualMiles }),
+  };
+}
+
+/**
+ * FLE-D4 — Compute break-even analytics across the three modes.
+ * Returns the cost curves (annual$ vs annual miles) plus the crossover
+ * miles where Private intersects Dedicated and Carrier.
+ *
+ * Method: assume linear cost-per-mile inside the operating range. The
+ * crossover happens where annualMiles × privateCpm = annualMiles × otherCpm,
+ * which only equals at zero miles in pure variable-rate models — so we
+ * derive a "fixed-cost" component for Private (vehicle + insurance +
+ * permits, which don't scale with miles) and find:
+ *
+ *   miles* = privateFixed / (otherCpm - privateVariableCpm)
+ *
+ * If otherCpm <= privateVariableCpm the modes never cross within the
+ * positive-miles range; we return null for that crossover and the UI
+ * paints "no crossover".
+ *
+ * @param {{privateCost:number,dedicatedCost:number,carrierCost:number,totalAnnualMiles:number}} args
+ */
+export function calcBreakEven({ privateCost, dedicatedCost, carrierCost, totalAnnualMiles }) {
+  const miles = Math.max(1, totalAnnualMiles || 0);
+  const privCpm = privateCost / miles;
+  const dedCpm = dedicatedCost / miles;
+  const carrCpm = carrierCost / miles;
+  // Approximate Private fixed cost as ~30% of total (vehicle dep + ins +
+  // permits + admin). The remaining 70% is variable (fuel + driver + maint).
+  const privateFixed = privateCost * 0.30;
+  const privateVarCpm = (privateCost - privateFixed) / miles;
+  const dedCross = dedCpm > privateVarCpm
+    ? privateFixed / (dedCpm - privateVarCpm)
+    : null;
+  const carrCross = carrCpm > privateVarCpm
+    ? privateFixed / (carrCpm - privateVarCpm)
+    : null;
+  return {
+    privateCpm: privCpm,
+    dedicatedCpm: dedCpm,
+    carrierCpm: carrCpm,
+    privateFixed,
+    privateVariableCpm: privateVarCpm,
+    dedicatedCrossoverMiles: dedCross,
+    carrierCrossoverMiles: carrCross,
+    currentMiles: miles,
   };
 }
 
@@ -400,11 +519,19 @@ export function computeAtriBenchmark(modelCpm) {
  * @param {import('./types.js?v=20260418-sM').FleetConfig} config
  * @returns {import('./types.js?v=20260418-sM').SensitivityMatrix}
  */
-export function calcSensitivityMatrix(lanes, vehicles = DEFAULT_VEHICLES, config = DEFAULT_CONFIG) {
-  // Driver rates: $25–$38/hr in 6 steps
-  const driverRates = [25, 28, 30, 32, 35, 38];
-  // Diesel prices: $3.25–$4.50/gal in 6 steps
-  const dieselPrices = [3.25, 3.50, 3.75, 4.00, 4.25, 4.50];
+export function calcSensitivityMatrix(lanes, vehicles = DEFAULT_VEHICLES, config = DEFAULT_CONFIG, ranges) {
+  // FLE-F1: ranges = { driverMin, driverMax, dieselMin, dieselMax, steps }
+  // Generates a `steps`×`steps` matrix between caller-supplied bounds.
+  // Defaults preserve legacy 6×6 matrix on $25–$38/hr × $3.25–$4.50/gal.
+  const r = ranges || {};
+  const steps = Math.max(3, Math.min(10, Number(r.steps ?? 6)));
+  const driverMin = Number(r.driverMin ?? 25);
+  const driverMax = Number(r.driverMax ?? 38);
+  const dieselMin = Number(r.dieselMin ?? 3.25);
+  const dieselMax = Number(r.dieselMax ?? 4.50);
+  const seq = (lo, hi, n) => Array.from({ length: n }, (_, i) => Math.round((lo + (hi - lo) * (i / (n - 1))) * 100) / 100);
+  const driverRates = seq(driverMin, driverMax, steps);
+  const dieselPrices = seq(dieselMin, dieselMax, steps);
 
   // Current scenario indices for highlighting
   const currentDriverIdx = driverRates.findIndex(r => Math.abs(r - config.driverCostPerHr) < 0.5) ||

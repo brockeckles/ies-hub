@@ -12,7 +12,7 @@ import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=202604
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260419-uE';
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
-import * as calc from './calc.js?v=20260426-s1';
+import * as calc from './calc.js?v=20260426-s2';
 import * as api from './api.js?v=20260418-sM';
 
 // ============================================================
@@ -47,6 +47,10 @@ let mapInstance = null;
  * @type {Array<import('./api.js?v=20260418-sM').CarrierRate>}
  */
 let carrierRateDeck = [];
+
+// FLE-F1 — sensitivity matrix range controls. Persisted on `config`-adjacent
+// state so re-renders preserve user-tuned bounds.
+let sensRange = { driverMin: 25, driverMax: 38, dieselMin: 3.25, dieselMax: 4.50, steps: 6 };
 
 // ============================================================
 // LIFECYCLE
@@ -222,6 +226,7 @@ function renderShell() {
   const tabs = [
     { key: 'lanes', label: 'Lanes' },
     { key: 'config', label: 'Configuration' },
+    { key: 'ratedeck', label: 'Rate Deck' },
     { key: 'results', label: 'Results' },
     { key: 'map', label: 'Route Map' },
   ];
@@ -302,6 +307,7 @@ function renderContent() {
   switch (activeTab) {
     case 'lanes': renderLanes(el); break;
     case 'config': renderConfig(el); break;
+    case 'ratedeck': renderRateDeck(el); break;
     case 'results': renderResults(el); break;
     case 'map': renderMap(el); break;
   }
@@ -506,8 +512,13 @@ function renderConfig(el) {
           ${cfgInput('Operating Days/Wk', 'operatingDaysPerWeek', config.operatingDaysPerWeek, 'days')}
           ${cfgInput('Utilization', 'utilizationPct', config.utilizationPct, '%')}
           ${cfgInput('Maintenance', 'maintenanceCostPerMi', config.maintenanceCostPerMi, '$/mi')}
+          ${cfgInput('Tires', 'tiresCostPerMi', config.tiresCostPerMi ?? 0.04, '$/mi')}
+          ${cfgInput('Tolls', 'tollsCostPerMi', config.tollsCostPerMi ?? 0.025, '$/mi')}
+          ${cfgInput('Permits', 'permitsPerYear', config.permitsPerYear ?? 850, '$/yr')}
           ${cfgInput('Insurance Base', 'insuranceBasePerYear', config.insuranceBasePerYear, '$/yr')}
           ${cfgInput('Depreciation', 'depreciationYears', config.depreciationYears, 'yrs')}
+          ${cfgInput('Deadhead %', 'deadheadPct', config.deadheadPct ?? 15, '%')}
+          ${cfgInput('Detention Hrs/Trip', 'detentionHoursPerTrip', config.detentionHoursPerTrip ?? 2, 'hrs')}
           ${cfgInput('GXO Margin', 'gxoMarginPct', config.gxoMarginPct, '%')}
           ${cfgInput('Carrier Premium', 'carrierPremiumPct', config.carrierPremiumPct, '%')}
         </div>
@@ -527,55 +538,8 @@ function renderConfig(el) {
         </div>
       </div>
 
-      <h3 class="text-section" style="margin-top:24px;margin-bottom:16px;">
-        Common-Carrier Rate Deck
-        <span style="font-size:11px;font-weight:400;color:var(--ies-gray-400);margin-left:8px;">drives the carrier column of the 3-way comparison</span>
-      </h3>
-      <div class="hub-card" style="padding:16px;">
-        ${carrierRateDeck.length === 0 ? `
-          <div style="padding:14px;text-align:center;color:var(--ies-gray-400);font-size:12px;">Loading carrier rate deck…</div>
-        ` : `
-          <table style="width:100%;border-collapse:collapse;font-size:13px;">
-            <thead>
-              <tr style="border-bottom:2px solid var(--ies-gray-200);">
-                <th style="text-align:left;padding:6px;font-weight:700;">Vehicle Type</th>
-                <th style="text-align:right;padding:6px;font-weight:700;">Base Rate</th>
-                <th style="text-align:right;padding:6px;font-weight:700;">Fuel Surcharge</th>
-                <th style="text-align:right;padding:6px;font-weight:700;">Min Charge</th>
-                <th style="text-align:right;padding:6px;font-weight:700;">Effective</th>
-                <th style="text-align:left;padding:6px;font-weight:700;">Notes</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${carrierRateDeck.map(rate => {
-                const eff = (rate.base_rate_per_mile || 0) * (1 + (rate.fuel_surcharge_pct || 0));
-                return `
-                  <tr style="border-bottom:1px solid var(--ies-gray-200);">
-                    <td style="padding:6px;font-weight:600;">${rate.display_name}<div style="font-size:10px;color:var(--ies-gray-400);font-weight:400;">${rate.vehicle_type}</div></td>
-                    <td style="padding:6px;text-align:right;">
-                      <input type="number" step="0.01" value="${rate.base_rate_per_mile}" data-rate-id="${rate.id}" data-rate-field="base_rate_per_mile"
-                             style="width:80px;padding:4px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:12px;text-align:right;">
-                      <span style="font-size:10px;color:var(--ies-gray-400);">/mi</span>
-                    </td>
-                    <td style="padding:6px;text-align:right;">
-                      <input type="number" step="0.01" value="${rate.fuel_surcharge_pct}" data-rate-id="${rate.id}" data-rate-field="fuel_surcharge_pct"
-                             style="width:70px;padding:4px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:12px;text-align:right;">
-                    </td>
-                    <td style="padding:6px;text-align:right;">
-                      <input type="number" step="5" value="${rate.min_charge}" data-rate-id="${rate.id}" data-rate-field="min_charge"
-                             style="width:70px;padding:4px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:12px;text-align:right;">
-                    </td>
-                    <td style="padding:6px;text-align:right;font-weight:600;color:var(--ies-blue);">$${eff.toFixed(2)}/mi</td>
-                    <td style="padding:6px;font-size:11px;color:var(--ies-gray-500);">${rate.notes || ''}</td>
-                  </tr>
-                `;
-              }).join('')}
-            </tbody>
-          </table>
-          <div style="margin-top:10px;padding:8px 12px;background:#eff6ff;border-left:3px solid var(--ies-blue);font-size:11px;color:#1e40af;">
-            Edits save to <code>ref_fleet_carrier_rates</code> on blur. Effective rate = base × (1 + fuel surcharge). Click <strong>Calculate Fleet</strong> to recompute the 3-way comparison.
-          </div>
-        `}
+      <div style="padding:14px;background:var(--ies-gray-50);border-radius:6px;font-size:12px;color:var(--ies-gray-600);margin-top:24px;">
+        <strong>Carrier Rate Deck</strong> moved to its own tab. Open <em>Rate Deck</em> above to edit base rate, fuel surcharge, min charge, and notes per vehicle class.
       </div>
     </div>
   `;
@@ -657,6 +621,89 @@ function cfgInput(label, key, value, unit) {
 }
 
 // ============================================================
+// RATE DECK TAB (FLE-A3)
+// ============================================================
+
+function renderRateDeck(el) {
+  el.innerHTML = `
+    <div style="max-width:1100px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <div>
+          <h3 class="text-section" style="margin:0 0 4px 0;">Common-Carrier Rate Deck</h3>
+          <div style="font-size:12px;color:var(--ies-gray-500);">Edits save to <code>ref_fleet_carrier_rates</code> on blur. Effective rate = base × (1 + fuel surcharge). Used by the carrier column of the 3-way comparison.</div>
+        </div>
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" id="fm-rd-add">+ Add Class</button>
+      </div>
+      <div class="hub-card" style="padding:16px;">
+        ${carrierRateDeck.length === 0 ? `
+          <div style="padding:14px;text-align:center;color:var(--ies-gray-400);font-size:12px;">Loading carrier rate deck…</div>
+        ` : `
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead>
+              <tr style="border-bottom:2px solid var(--ies-gray-200);">
+                <th style="text-align:left;padding:6px;font-weight:700;">Vehicle Type</th>
+                <th style="text-align:right;padding:6px;font-weight:700;">Base Rate</th>
+                <th style="text-align:right;padding:6px;font-weight:700;">Fuel Surcharge</th>
+                <th style="text-align:right;padding:6px;font-weight:700;">Min Charge</th>
+                <th style="text-align:right;padding:6px;font-weight:700;">Effective</th>
+                <th style="text-align:left;padding:6px;font-weight:700;">Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${carrierRateDeck.map(rate => {
+                const eff = (rate.base_rate_per_mile || 0) * (1 + (rate.fuel_surcharge_pct || 0));
+                return `
+                  <tr style="border-bottom:1px solid var(--ies-gray-200);">
+                    <td style="padding:6px;font-weight:600;">${rate.display_name}<div style="font-size:10px;color:var(--ies-gray-400);font-weight:400;">${rate.vehicle_type}</div></td>
+                    <td style="padding:6px;text-align:right;">
+                      <input type="number" step="0.01" value="${rate.base_rate_per_mile}" data-rate-id="${rate.id}" data-rate-field="base_rate_per_mile"
+                             style="width:80px;padding:4px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:12px;text-align:right;">
+                      <span style="font-size:10px;color:var(--ies-gray-400);">/mi</span>
+                    </td>
+                    <td style="padding:6px;text-align:right;">
+                      <input type="number" step="0.01" value="${rate.fuel_surcharge_pct}" data-rate-id="${rate.id}" data-rate-field="fuel_surcharge_pct"
+                             style="width:70px;padding:4px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:12px;text-align:right;">
+                    </td>
+                    <td style="padding:6px;text-align:right;">
+                      <input type="number" step="5" value="${rate.min_charge}" data-rate-id="${rate.id}" data-rate-field="min_charge"
+                             style="width:70px;padding:4px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:12px;text-align:right;">
+                    </td>
+                    <td style="padding:6px;text-align:right;font-weight:600;color:var(--ies-blue);">$${eff.toFixed(2)}/mi</td>
+                    <td style="padding:6px;font-size:11px;color:var(--ies-gray-500);"><input type="text" value="${(rate.notes || '').replace(/"/g, '&quot;')}" data-rate-id="${rate.id}" data-rate-field="notes" style="width:100%;padding:4px 6px;border:1px solid transparent;border-radius:4px;font-size:11px;background:transparent;"></td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        `}
+      </div>
+    </div>
+  `;
+
+  // Inline edits — same handler shape as Configuration tab
+  el.querySelectorAll('[data-rate-id][data-rate-field]').forEach(input => {
+    input.addEventListener('change', async (e) => {
+      const target = /** @type {HTMLInputElement} */ (e.target);
+      const id = parseInt(target.dataset.rateId);
+      const field = target.dataset.rateField;
+      let val = target.type === 'number' ? parseFloat(target.value) : target.value;
+      if (target.type === 'number' && !Number.isFinite(val)) return;
+      const row = carrierRateDeck.find(r => r.id === id);
+      if (row) row[field] = val;
+      renderRateDeck(el);
+      if (id > 0) {
+        try {
+          await api.updateCarrierRate(id, { [field]: val });
+          showToast(`Updated ${row?.display_name || 'rate'}`, 'success');
+        } catch (err) {
+          showToast(`Save failed: ${err.message || 'unknown'}`, 'error');
+        }
+      }
+    });
+  });
+}
+
+// ============================================================
 // RESULTS TAB
 // ============================================================
 
@@ -673,7 +720,10 @@ function renderResults(el) {
     <div style="max-width:1200px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
         <h3 class="text-section" style="margin:0;">Results</h3>
-        <button class="hub-btn hub-btn-sm hub-btn-secondary" id="fm-results-export">⬇ Export XLSX</button>
+        <div style="display:flex;gap:8px;">
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" id="fm-results-export">⬇ Export XLSX</button>
+          <button class="hub-btn hub-btn-sm hub-btn-primary" id="fm-results-push-cm" title="Stash fleet costs on the active cost-model scenario">→ Push to Cost Model</button>
+        </div>
       </div>
       <!-- KPI Bar -->
       <div class="hub-card" style="background:linear-gradient(135deg,#0a1628,#0d1f3c);color:#fff;padding:16px 24px;margin-bottom:20px;">
@@ -770,6 +820,12 @@ function renderResults(el) {
         </div>
       </div>
 
+      <!-- FLE-C3: HOS feasibility warnings -->
+      ${renderHosWarnings(r)}
+
+      <!-- FLE-D4: Break-even miles chart -->
+      ${renderBreakEvenCard(r)}
+
       <!-- Sensitivity Matrix -->
       ${renderSensitivityMatrixCard()}
 
@@ -812,9 +868,45 @@ function renderResults(el) {
     </div>
   `;
 
-  // Bind export buttons
+  // Bind export buttons + push-to-CM + sensitivity range inputs
   setTimeout(() => {
     el.querySelector('#fm-results-export')?.addEventListener('click', exportFleetXLSX);
+
+    // FLE-G1 — push fleet results to active Cost Model scenario.
+    el.querySelector('#fm-results-push-cm')?.addEventListener('click', async () => {
+      if (!result) return;
+      try {
+        const payload = {
+          source: 'fleet-modeler',
+          scenarioId: activeScenarioId,
+          totalAnnualCost: result.totalAnnualCost,
+          totalAnnualMiles: result.totalAnnualMiles,
+          avgCostPerMile: result.avgCostPerMile,
+          comparison: result.comparison,
+          breakEven: result.breakEven,
+        };
+        // Stash on the bus — cost-model listens on 'fleet:push'.
+        bus.emit('fleet:push', payload);
+        showToast('Fleet costs pushed to Cost Model bus', 'success');
+      } catch (err) {
+        showToast(`Push failed: ${err.message || 'unknown'}`, 'error');
+      }
+    });
+
+    // FLE-F1 — sensitivity matrix range inputs trigger a re-render of the
+    // Results tab (cheap; the matrix recomputes inside the helper).
+    el.querySelectorAll('[data-sens-range]').forEach(input => {
+      input.addEventListener('change', (e) => {
+        const k = e.target.dataset.sensRange;
+        const v = parseFloat(e.target.value);
+        if (!Number.isFinite(v)) return;
+        sensRange = { ...sensRange, [k]: v };
+        // Sanity-clamp inverted bounds
+        if (sensRange.driverMin >= sensRange.driverMax) sensRange.driverMax = sensRange.driverMin + 1;
+        if (sensRange.dieselMin >= sensRange.dieselMax) sensRange.dieselMax = sensRange.dieselMin + 0.25;
+        renderResults(el);
+      });
+    });
   }, 0);
 }
 
@@ -923,7 +1015,10 @@ function renderCostBuildupCard(r) {
         </thead>
         <tbody>
           ${row('Fuel', pb.fuel, db.fuel, null, 'Diesel × annual miles')}
-          ${row('Maintenance', pb.maintenance, db.maintenance, null, 'Tires + scheduled maint + repairs')}
+          ${row('Maintenance', pb.maintenance, db.maintenance, null, 'Scheduled maint + repairs (tires/tolls broken out below)')}
+          ${row('Tires', pb.tires, null, null, 'Replacement tire $/mi × annual miles')}
+          ${row('Tolls', pb.tolls, null, null, 'Tolls $/mi × annual miles')}
+          ${row('Permits', pb.permits, null, null, 'Annual licensing + permits per truck × units')}
           ${row('Vehicle (Depreciation)', pb.vehicle, db.vehicle, null, 'Annual depreciation / lease')}
           ${row('Insurance', pb.insurance, db.insurance, null, 'Liability + physical damage')}
           ${row('Driver Wages', pb.driver, db.driver, null, 'Base driver compensation')}
@@ -987,7 +1082,7 @@ function renderAtriBenchmarkRow(category, yourValue, atriBenchmark) {
 
 function renderSensitivityMatrixCard() {
   try {
-    const matrix = calc.calcSensitivityMatrix(lanes, vehicles, config);
+    const matrix = calc.calcSensitivityMatrix(lanes, vehicles, config, sensRange);
     const driverRates = matrix.rowLabels;
     const dieselPrices = matrix.colLabels;
 
@@ -998,9 +1093,17 @@ function renderSensitivityMatrixCard() {
       return '#ef4444'; // red
     };
 
+    const rngInput = (key, val, step, min, max) => `<input type="number" data-sens-range="${key}" value="${val}" step="${step}" min="${min}" max="${max}" style="width:60px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:11px;text-align:right;">`;
     let tableHtml = `
       <div class="hub-card" style="padding:20px;margin-bottom:20px;">
-        <div style="font-size:14px;font-weight:700;margin-bottom:16px;">Sensitivity Analysis: Driver Rate × Diesel Price</div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
+          <div style="font-size:14px;font-weight:700;">Sensitivity Analysis: Driver Rate × Diesel Price</div>
+          <div style="display:flex;gap:14px;font-size:11px;color:var(--ies-gray-600);align-items:center;flex-wrap:wrap;">
+            <span>Driver $/hr ${rngInput('driverMin', sensRange.driverMin, 1, 10, 60)}–${rngInput('driverMax', sensRange.driverMax, 1, 10, 60)}</span>
+            <span>Diesel $/gal ${rngInput('dieselMin', sensRange.dieselMin, 0.05, 1, 8)}–${rngInput('dieselMax', sensRange.dieselMax, 0.05, 1, 8)}</span>
+            <span>Steps ${rngInput('steps', sensRange.steps, 1, 3, 10)}</span>
+          </div>
+        </div>
         <div style="overflow-x:auto;">
           <table style="width:100%;border-collapse:collapse;font-size:11px;">
             <thead>
@@ -1077,6 +1180,78 @@ function renderVolumeSensitivityCard() {
     console.error('Error rendering volume sensitivity:', e);
     return '';
   }
+}
+
+// FLE-C3 — surface HOS feasibility violations (lanes that don't fit
+// the daily driving budget × operating days). Returns '' when feasible.
+function renderHosWarnings(r) {
+  const v = (r && r.hosViolations) || [];
+  if (v.length === 0) return '';
+  return `
+    <div class="hub-card" style="padding:14px;margin-bottom:20px;border-left:4px solid #ef4444;background:#fef2f2;">
+      <div style="font-size:13px;font-weight:700;color:#991b1b;margin-bottom:8px;">⚠ HOS Feasibility Warnings (${v.length})</div>
+      <ul style="margin:0;padding-left:18px;font-size:12px;color:#7f1d1d;">
+        ${v.map(x => {
+          const lane = lanes.find(l => l.id === x.laneId);
+          const laneStr = lane ? `${lane.origin} → ${lane.destination}` : x.laneId;
+          return `<li><strong>${laneStr}</strong> (${x.vehicleName}) — ${x.message}</li>`;
+        }).join('')}
+      </ul>
+      <div style="margin-top:8px;font-size:11px;color:var(--ies-gray-500);">Add team driving, split the route, or relax operating-days/HOS daily limit to clear.</div>
+    </div>
+  `;
+}
+
+// FLE-D4 — Break-even mileage chart. Cost-per-mile vs annual miles, with
+// crossover annotations between Private vs Dedicated and Private vs Carrier.
+function renderBreakEvenCard(r) {
+  const be = r.breakEven;
+  if (!be) return '';
+  const fmt = (v) => v == null ? 'No crossover (Private always wins on $/mi)' : Math.round(v).toLocaleString() + ' mi/yr';
+  // Build a simple SVG plot of $/mi vs annual miles using sample x points
+  const xMin = 50000;
+  const xMax = Math.max(be.currentMiles * 1.5, 1500000);
+  const samples = 30;
+  const xs = Array.from({ length: samples }, (_, i) => xMin + (xMax - xMin) * (i / (samples - 1)));
+  const privateAt = (m) => (be.privateFixed + be.privateVariableCpm * m) / m;
+  const dedAt = () => be.dedicatedCpm;
+  const carrAt = () => be.carrierCpm;
+  const yMax = Math.max(privateAt(xMin), be.dedicatedCpm, be.carrierCpm) * 1.15;
+  const yMin = Math.min(...xs.map(privateAt), be.dedicatedCpm, be.carrierCpm) * 0.85;
+  const W = 560, H = 200, PADL = 50, PADB = 28, PADT = 12, PADR = 16;
+  const xToPx = (x) => PADL + (W - PADL - PADR) * ((x - xMin) / (xMax - xMin));
+  const yToPx = (y) => PADT + (H - PADT - PADB) * (1 - (y - yMin) / (yMax - yMin));
+  const privPath = xs.map((x, i) => `${i === 0 ? 'M' : 'L'}${xToPx(x).toFixed(1)},${yToPx(privateAt(x)).toFixed(1)}`).join(' ');
+  const dedY = yToPx(be.dedicatedCpm);
+  const carrY = yToPx(be.carrierCpm);
+  const curX = xToPx(be.currentMiles);
+  return `
+    <div class="hub-card" style="padding:20px;margin-bottom:20px;">
+      <div style="font-size:14px;font-weight:700;margin-bottom:8px;">Break-Even Miles — Private vs Dedicated vs Carrier</div>
+      <div style="font-size:12px;color:var(--ies-gray-500);margin-bottom:12px;">Below break-even, Private's fixed costs dominate. Above break-even, Private wins on $/mi.</div>
+      <svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="xMidYMid meet" style="background:var(--ies-gray-50);border-radius:6px;">
+        <line x1="${PADL}" y1="${H - PADB}" x2="${W - PADR}" y2="${H - PADB}" stroke="var(--ies-gray-300)" stroke-width="1"/>
+        <line x1="${PADL}" y1="${PADT}" x2="${PADL}" y2="${H - PADB}" stroke="var(--ies-gray-300)" stroke-width="1"/>
+        <text x="${PADL - 6}" y="${PADT + 6}" font-size="10" text-anchor="end" fill="var(--ies-gray-500)">${yMax.toFixed(2)}</text>
+        <text x="${PADL - 6}" y="${H - PADB - 2}" font-size="10" text-anchor="end" fill="var(--ies-gray-500)">${yMin.toFixed(2)}</text>
+        <text x="${W / 2}" y="${H - 6}" font-size="10" text-anchor="middle" fill="var(--ies-gray-500)">Annual Miles</text>
+        <text x="14" y="${H / 2}" font-size="10" text-anchor="middle" fill="var(--ies-gray-500)" transform="rotate(-90 14 ${H / 2})">$/mi</text>
+        <line x1="${PADL}" y1="${dedY}" x2="${W - PADR}" y2="${dedY}" stroke="#8b5cf6" stroke-width="2" stroke-dasharray="4 3"/>
+        <line x1="${PADL}" y1="${carrY}" x2="${W - PADR}" y2="${carrY}" stroke="#ef4444" stroke-width="2" stroke-dasharray="4 3"/>
+        <path d="${privPath}" fill="none" stroke="var(--ies-blue)" stroke-width="2.5"/>
+        <line x1="${curX}" y1="${PADT}" x2="${curX}" y2="${H - PADB}" stroke="var(--ies-gray-400)" stroke-width="1" stroke-dasharray="2 2"/>
+        <circle cx="${curX}" cy="${yToPx(privateAt(be.currentMiles))}" r="4" fill="var(--ies-blue)"/>
+        <text x="${W - PADR - 4}" y="${dedY - 4}" font-size="10" text-anchor="end" fill="#8b5cf6" font-weight="700">Dedicated $${be.dedicatedCpm.toFixed(2)}/mi</text>
+        <text x="${W - PADR - 4}" y="${carrY - 4}" font-size="10" text-anchor="end" fill="#ef4444" font-weight="700">Carrier $${be.carrierCpm.toFixed(2)}/mi</text>
+        <text x="${PADL + 6}" y="${PADT + 14}" font-size="10" fill="var(--ies-blue)" font-weight="700">Private (curve) — fixed ÷ miles + variable</text>
+      </svg>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px;font-size:12px;">
+        <div><div style="color:var(--ies-gray-500);font-size:11px;font-weight:700;text-transform:uppercase;">Current Miles</div><div style="font-weight:700;">${Math.round(be.currentMiles).toLocaleString()}/yr</div></div>
+        <div><div style="color:#8b5cf6;font-size:11px;font-weight:700;text-transform:uppercase;">Vs Dedicated Crossover</div><div style="font-weight:700;">${fmt(be.dedicatedCrossoverMiles)}</div></div>
+        <div><div style="color:#ef4444;font-size:11px;font-weight:700;text-transform:uppercase;">Vs Carrier Crossover</div><div style="font-weight:700;">${fmt(be.carrierCrossoverMiles)}</div></div>
+      </div>
+    </div>
+  `;
 }
 
 function exportFleetCSV() {
