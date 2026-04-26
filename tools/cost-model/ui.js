@@ -532,12 +532,23 @@ export async function mount(el) {
         userHasInteracted = false;
         activeSection = 'facility';
         viewMode = 'editor';
-        // Apply payload to the fresh model
-        if (payload.totalSqft)    model.facility.totalSqft = payload.totalSqft;
-        if (payload.clearHeight)  model.facility.clearHeight = payload.clearHeight;
-        if (payload.dockDoors)    model.facility.dockDoors = payload.dockDoors;
-        if (payload.officeSqft)   model.facility.officeSqft = payload.officeSqft;
-        if (payload.stagingSqft)  model.facility.stagingSqft = payload.stagingSqft;
+        // Apply payload to the fresh model.
+        // WSC-J1 (2026-04-25): WSC now sends 13 fields (was 5). CM stores them
+        // additively on model.facility — every write is guarded by truthy check
+        // so blank WSC values never clobber CM defaults.
+        if (payload.totalSqft)        model.facility.totalSqft = payload.totalSqft;
+        if (payload.storageSqft)      model.facility.storageSqft = payload.storageSqft;
+        if (payload.clearHeight)      model.facility.clearHeight = payload.clearHeight;
+        if (payload.buildingWidth)    model.facility.buildingWidth = payload.buildingWidth;
+        if (payload.buildingDepth)    model.facility.buildingDepth = payload.buildingDepth;
+        if (payload.dockDoors)        model.facility.dockDoors = payload.dockDoors;
+        if (payload.inboundDoors)     model.facility.inboundDoors = payload.inboundDoors;
+        if (payload.outboundDoors)    model.facility.outboundDoors = payload.outboundDoors;
+        if (payload.officeSqft)       model.facility.officeSqft = payload.officeSqft;
+        if (payload.stagingSqft)      model.facility.stagingSqft = payload.stagingSqft;
+        if (payload.palletPositions)  model.facility.palletPositions = payload.palletPositions;
+        if (payload.sfPerPosition)    model.facility.sfPerPosition = payload.sfPerPosition;
+        if (payload.peakUnitsPerDay)  model.facility.peakUnitsPerDay = payload.peakUnitsPerDay;
         isDirty = true;
       } else {
         // Stale — discard
@@ -8785,11 +8796,20 @@ function handleWscPush(payload) {
   }
 
   model.facility = model.facility || {};
-  if (payload.totalSqft)   model.facility.totalSqft = payload.totalSqft;
-  if (payload.clearHeight) model.facility.clearHeight = payload.clearHeight;
-  if (payload.dockDoors)   model.facility.dockDoors = payload.dockDoors;
-  if (payload.officeSqft)  model.facility.officeSqft = payload.officeSqft;
-  if (payload.stagingSqft) model.facility.stagingSqft = payload.stagingSqft;
+  // WSC-J1 (2026-04-25): mirror of the sessionStorage handoff branch above.
+  if (payload.totalSqft)        model.facility.totalSqft = payload.totalSqft;
+  if (payload.storageSqft)      model.facility.storageSqft = payload.storageSqft;
+  if (payload.clearHeight)      model.facility.clearHeight = payload.clearHeight;
+  if (payload.buildingWidth)    model.facility.buildingWidth = payload.buildingWidth;
+  if (payload.buildingDepth)    model.facility.buildingDepth = payload.buildingDepth;
+  if (payload.dockDoors)        model.facility.dockDoors = payload.dockDoors;
+  if (payload.inboundDoors)     model.facility.inboundDoors = payload.inboundDoors;
+  if (payload.outboundDoors)    model.facility.outboundDoors = payload.outboundDoors;
+  if (payload.officeSqft)       model.facility.officeSqft = payload.officeSqft;
+  if (payload.stagingSqft)      model.facility.stagingSqft = payload.stagingSqft;
+  if (payload.palletPositions)  model.facility.palletPositions = payload.palletPositions;
+  if (payload.sfPerPosition)    model.facility.sfPerPosition = payload.sfPerPosition;
+  if (payload.peakUnitsPerDay)  model.facility.peakUnitsPerDay = payload.peakUnitsPerDay;
 
   isDirty = true;
   if (viewMode === 'editor') {

@@ -158,12 +158,27 @@
 
 /**
  * Payload emitted on bus 'wsc:push-to-cm' event.
+ *
+ * WSC-J1 (2026-04-25): expanded from 5 fields to 13. CM now receives the
+ * geometry, dock split, storage capacity, and inventory drivers WSC has
+ * already engineered, so CM doesn't have to re-guess them in its facility
+ * section. CM-side handler treats every field as additive — only writes
+ * if WSC has a positive value, never clears CM's existing data.
+ *
  * @typedef {Object} WscToCmPayload
- * @property {number} totalSqft
+ * @property {number} totalSqft        — sized total SF (engineered, not existing)
+ * @property {number} storageSqft      — storage-only SF (subset of totalSqft)
  * @property {number} clearHeight
- * @property {number} dockDoors
+ * @property {number} buildingWidth    — feet
+ * @property {number} buildingDepth    — feet
+ * @property {number} dockDoors        — total (in + out)
+ * @property {number} inboundDoors
+ * @property {number} outboundDoors
  * @property {number} officeSqft
- * @property {number} stagingSqft — receive + ship staging
+ * @property {number} stagingSqft      — receive + ship staging
+ * @property {number} palletPositions  — gross positions (designed + surge)
+ * @property {number} sfPerPosition
+ * @property {number} peakUnitsPerDay  — peak inventory on-hand (drives sizing)
  */
 
 /**

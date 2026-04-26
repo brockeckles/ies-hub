@@ -11,7 +11,7 @@ import { state } from '../../shared/state.js?v=20260418-sL';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sL';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260419-uE';
-import * as calc from './calc.js?v=20260425-s10';
+import * as calc from './calc.js?v=20260425-s11';
 import * as api from './api.js?v=20260418-sL';
 
 // ============================================================
@@ -1064,50 +1064,93 @@ function hasMeaningfulVolumes(v) {
  * @param {string} preset
  */
 function applyVerticalPreset(preset) {
+  // WSC-E1 (2026-04-25): presets used to drive ~5 fields (totalSqft, clearHeight,
+  // doors x2, peakUnits, avgUnits). Now drives 18 fields covering the geometry
+  // (width/depth), dock throughput (palletsPerHour/operatingHours/sided), inventory
+  // (outboundUnits, operatingDays), storage type (storeType, aisleWidth), product
+  // dims (unitsPerPallet/cartonsPerPallet etc.), and storage allocation. Tuned per
+  // vertical from typical 3PL profiles. Users still override after apply.
   const presets = {
     'Retail': {
-      totalSqft: 350000, clearHeight: 36, inboundDoors: 19, outboundDoors: 19,
+      totalSqft: 350000, clearHeight: 36, buildingWidth: 700, buildingDepth: 500,
+      inboundDoors: 19, outboundDoors: 19, palletsPerDockHour: 12, dockOperatingHours: 10, sided: 'two',
+      storeType: 'selective', aisleWidth: 11,
       storageAlloc: { fullPallet: 55, cartonOnPallet: 30, cartonOnShelving: 15 },
-      peakUnitsPerDay: 350000, avgUnitsPerDay: 220000,
+      productDims: { unitsPerPallet: 56, unitsPerCartonPallet: 8, cartonsPerPallet: 14, unitsPerCartonShelving: 8, cartonsPerLocation: 4 },
+      peakUnitsPerDay: 350000, avgUnitsPerDay: 220000, outboundUnitsPerDay: 200000, operatingDaysPerYear: 312,
     },
     'F&B': {
-      totalSqft: 250000, clearHeight: 32, inboundDoors: 16, outboundDoors: 16,
+      totalSqft: 250000, clearHeight: 32, buildingWidth: 600, buildingDepth: 420,
+      inboundDoors: 16, outboundDoors: 16, palletsPerDockHour: 14, dockOperatingHours: 12, sided: 'two',
+      storeType: 'selective', aisleWidth: 12,
       storageAlloc: { fullPallet: 75, cartonOnPallet: 20, cartonOnShelving: 5 },
-      peakUnitsPerDay: 220000, avgUnitsPerDay: 160000,
+      productDims: { unitsPerPallet: 80, unitsPerCartonPallet: 12, cartonsPerPallet: 18, unitsPerCartonShelving: 8, cartonsPerLocation: 4 },
+      peakUnitsPerDay: 220000, avgUnitsPerDay: 160000, outboundUnitsPerDay: 150000, operatingDaysPerYear: 350,
     },
     'Pharma': {
-      totalSqft: 180000, clearHeight: 36, inboundDoors: 9, outboundDoors: 9,
+      totalSqft: 180000, clearHeight: 36, buildingWidth: 500, buildingDepth: 360,
+      inboundDoors: 9, outboundDoors: 9, palletsPerDockHour: 10, dockOperatingHours: 10, sided: 'single',
+      storeType: 'vna', aisleWidth: 6,
       storageAlloc: { fullPallet: 30, cartonOnPallet: 30, cartonOnShelving: 40 },
-      peakUnitsPerDay: 180000, avgUnitsPerDay: 130000,
+      productDims: { unitsPerPallet: 40, unitsPerCartonPallet: 4, cartonsPerPallet: 16, unitsPerCartonShelving: 4, cartonsPerLocation: 6 },
+      peakUnitsPerDay: 180000, avgUnitsPerDay: 130000, outboundUnitsPerDay: 110000, operatingDaysPerYear: 260,
     },
     'Apparel': {
-      totalSqft: 280000, clearHeight: 36, inboundDoors: 12, outboundDoors: 12,
+      totalSqft: 280000, clearHeight: 36, buildingWidth: 600, buildingDepth: 467,
+      inboundDoors: 12, outboundDoors: 12, palletsPerDockHour: 12, dockOperatingHours: 10, sided: 'single',
+      storeType: 'selective', aisleWidth: 10,
       storageAlloc: { fullPallet: 25, cartonOnPallet: 35, cartonOnShelving: 40 },
-      peakUnitsPerDay: 280000, avgUnitsPerDay: 180000,
+      productDims: { unitsPerPallet: 240, unitsPerCartonPallet: 24, cartonsPerPallet: 20, unitsPerCartonShelving: 24, cartonsPerLocation: 6 },
+      peakUnitsPerDay: 280000, avgUnitsPerDay: 180000, outboundUnitsPerDay: 160000, operatingDaysPerYear: 312,
     },
     'Auto': {
-      totalSqft: 320000, clearHeight: 32, inboundDoors: 15, outboundDoors: 15,
+      totalSqft: 320000, clearHeight: 32, buildingWidth: 660, buildingDepth: 485,
+      inboundDoors: 15, outboundDoors: 15, palletsPerDockHour: 11, dockOperatingHours: 10, sided: 'two',
+      storeType: 'selective', aisleWidth: 11,
       storageAlloc: { fullPallet: 60, cartonOnPallet: 30, cartonOnShelving: 10 },
-      peakUnitsPerDay: 200000, avgUnitsPerDay: 150000,
+      productDims: { unitsPerPallet: 48, unitsPerCartonPallet: 6, cartonsPerPallet: 16, unitsPerCartonShelving: 6, cartonsPerLocation: 4 },
+      peakUnitsPerDay: 200000, avgUnitsPerDay: 150000, outboundUnitsPerDay: 130000, operatingDaysPerYear: 312,
     },
     'Ecomm': {
-      totalSqft: 600000, clearHeight: 40, inboundDoors: 25, outboundDoors: 25,
+      totalSqft: 600000, clearHeight: 40, buildingWidth: 900, buildingDepth: 667,
+      inboundDoors: 25, outboundDoors: 25, palletsPerDockHour: 12, dockOperatingHours: 12, sided: 'two',
+      storeType: 'selective', aisleWidth: 11,
       storageAlloc: { fullPallet: 30, cartonOnPallet: 40, cartonOnShelving: 30 },
-      peakUnitsPerDay: 800000, avgUnitsPerDay: 500000,
+      productDims: { unitsPerPallet: 96, unitsPerCartonPallet: 12, cartonsPerPallet: 20, unitsPerCartonShelving: 12, cartonsPerLocation: 5 },
+      peakUnitsPerDay: 800000, avgUnitsPerDay: 500000, outboundUnitsPerDay: 450000, operatingDaysPerYear: 350,
     },
   };
   const p = presets[preset];
   if (!p) return;
+  // Facility scale + geometry
   facility.totalSqft = p.totalSqft;
   facility.clearHeight = p.clearHeight;
-  zones.dockConfig = { ...zones.dockConfig, inboundDoors: p.inboundDoors, outboundDoors: p.outboundDoors };
+  facility.buildingWidth = p.buildingWidth;
+  facility.buildingDepth = p.buildingDepth;
+  // Storage type + aisle
+  facility.storageType = p.storeType;
+  facility.aisleWidth = p.aisleWidth;
+  // Dock — preserve existing dockConfig keys, override the preset-driven ones
+  zones.dockConfig = {
+    ...zones.dockConfig,
+    inboundDoors: p.inboundDoors,
+    outboundDoors: p.outboundDoors,
+    palletsPerDockHour: p.palletsPerDockHour,
+    dockOperatingHours: p.dockOperatingHours,
+    sided: p.sided,
+  };
+  // Storage allocation + product dimensions
   zones.storageAllocation = { ...zones.storageAllocation, ...p.storageAlloc };
+  zones.productDimensions = { ...zones.productDimensions, ...p.productDims };
+  // Inventory
   zones.peakUnitsPerDay = p.peakUnitsPerDay;
   zones.avgUnitsPerDay = p.avgUnitsPerDay;
+  zones.outboundUnitsPerDay = p.outboundUnitsPerDay;
+  zones.operatingDaysPerYear = p.operatingDaysPerYear;
   isDirty = true;
   renderConfigPanel();
   renderContentView();
-  showWscToast(`Applied ${preset} preset`, 'success');
+  showWscToast(`Applied ${preset} preset (18 fields)`, 'success');
 }
 
 /** Copy an English summary of the current config to the clipboard. */
@@ -1784,7 +1827,22 @@ function toSizingInputs() {
     palletsPerDoorHour: dock.palletsPerDockHour || 20,
     dockHours: dock.dockOperatingHours || 8,
     dockConfig: dock.sided === 'two' ? 'two' : 'one',
-    availableWallFt: 0,
+    // WSC-B10 (2026-04-25): wire dock-wall feasibility validator.
+    // Dock face = the longer of buildingWidth/buildingDepth (assume the dock
+    // sits on the longer wall). For two-sided layouts, doors split across
+    // opposing walls so each face needs only half — the validator already
+    // accounts for total door count vs available, so we provide raw face-length.
+    // Subtract 40 ft for corner walls + fire egress + columns.
+    availableWallFt: (() => {
+      const bw = facility.buildingWidth || 0;
+      const bd = facility.buildingDepth || 0;
+      if (!bw || !bd) return 0;             // dimensions blank → constraint disabled
+      const sided = (zones.dockConfig && zones.dockConfig.sided) || 'single';
+      const longestWall = Math.max(bw, bd);
+      const usable = Math.max(0, longestWall - 40);
+      // Two-sided uses TWO walls of equal length, so total available is 2× usable.
+      return sided === 'two' ? usable * 2 : usable;
+    })(),
     // Honor explicit dock counts the user typed in the Dock Configuration panel.
     // Engine still computes a derived value for comparison.
     inboundDoorsOverride: Number(dock.inboundDoors) || 0,
@@ -1840,6 +1898,7 @@ function renderDashboard() {
       <div class="hub-kpi-item"><div class="hub-kpi-label">Storage SF</div><div class="hub-kpi-value">${calc.formatSqft(sized.storageSqft)}</div></div>
       <div class="hub-kpi-item"><div class="hub-kpi-label">Gross Positions</div><div class="hub-kpi-value" title="Designed positions + ${sized.utilization.designed > 0 ? Math.round((sized.positions.surgePositions / sized.utilization.designed) * 100) : 0}% surge buffer">${sized.positions.grossPositions.toLocaleString()}</div></div>
       <div class="hub-kpi-item"><div class="hub-kpi-label">Rack Levels</div><div class="hub-kpi-value">${sized.rackLevels}</div></div>
+      <div class="hub-kpi-item"><div class="hub-kpi-label">SF / Position</div><div class="hub-kpi-value" title="Total facility SF / gross positions. Lower = denser. Selective racking 8-12; VNA 5-8; Drive-in 3-5.">${sized.sfPerPosition.toFixed(1)}</div></div>
       <div class="hub-kpi-item"><div class="hub-kpi-label">Dock Doors</div><div class="hub-kpi-value" title="${sized.dock.inboundDoors} in${sized.dock.inboundDoorsExplicit ? ' (explicit)' : ` (derived; throughput suggests ${sized.dock.inboundDoorsDerived})`} + ${sized.dock.outboundDoors} out${sized.dock.outboundDoorsExplicit ? ' (explicit)' : ` (derived; throughput suggests ${sized.dock.outboundDoorsDerived})`}${(sized.dock.inboundDoorsExplicit || sized.dock.outboundDoorsExplicit) ? '' : ', +25% surge buffer'}">${sized.dock.totalDoors}</div></div>
     </div>
 
@@ -2027,25 +2086,10 @@ function renderDashboard() {
         `}
       </div>
 
-      <!-- Size Recommendation — single source of truth: same numbers as Sized Facility card -->
-      <div class="hub-card">
-        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;">
-          <div class="text-subtitle" style="margin:0;">Size Recommendation</div>
-          <span style="font-size:10px;color:var(--ies-gray-400);">from sizing engine — matches dashboard KPI</span>
-        </div>
-        <div style="font-size:13px;">
-          ${sized.zoneBreakdown.map(z => `
-            <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
-              <span>${escapeHtml(z.label)}</span>
-              <span style="font-weight:700;">${calc.formatSqft(z.sqft)}</span>
-            </div>
-          `).join('')}
-          <div style="border-top:2px solid var(--ies-blue); padding-top:8px; display:flex; justify-content:space-between;margin-top:6px;">
-            <span style="font-weight:700;">Recommended Total</span>
-            <span style="font-weight:700; font-size:16px; color:var(--ies-blue);">${calc.formatSqft(sized.totalSqft)}</span>
-          </div>
-        </div>
-      </div>
+      <!-- WSC-D5 (2026-04-25): "Size Recommendation" card removed. It duplicated the Zone Allocation
+           card (both rendered sized.zoneBreakdown). The Sized Facility Recommendation card at the top
+           of the dashboard is the canonical "single source" summary; the Zone Allocation card here adds
+           the visualization. Two breakdowns of the same numbers was three places to keep in sync. -->
     </div>
   `;
 }
@@ -2595,21 +2639,33 @@ function build3DScene() {
 
 function pushToCm() {
   const dock = zones.dockConfig || { inboundDoors: 10, outboundDoors: 12 };
-  const totalDoors = dock.inboundDoors + dock.outboundDoors;
+  const totalDoors = (dock.inboundDoors || 0) + (dock.outboundDoors || 0);
   // Brock 2026-04-20: push the SIZED total SF (tool's computed answer), not
   // facility.totalSqft (which is the Existing/Target constraint). Falls back
   // to facility.totalSqft if sizing failed or is zero, so a user with only
   // an "existing" value can still push it.
-  let sizedSqft = 0;
-  try { sizedSqft = calc.sizeFacility(toSizingInputs()).totalSqft || 0; } catch {}
+  let sized = null;
+  try { sized = calc.sizeFacility(toSizingInputs()); } catch {}
+  const sizedSqft = (sized && sized.totalSqft) || 0;
   const effectiveTotalSqft = sizedSqft > 0 ? Math.round(sizedSqft) : (facility.totalSqft || 0);
+  // WSC-J1 (2026-04-25): payload expanded from 5 fields to 13. CM uses the
+  // additional fields to seed facility geometry, dock split, and pallet
+  // positions for the equipment line — it no longer has to re-derive them.
   /** @type {import('./types.js?v=20260418-sL').WscToCmPayload} */
   const payload = {
     totalSqft: effectiveTotalSqft,
+    storageSqft: (sized && sized.storageSqft) ? Math.round(sized.storageSqft) : 0,
     clearHeight: facility.clearHeight || 0,
+    buildingWidth: facility.buildingWidth || 0,
+    buildingDepth: facility.buildingDepth || 0,
     dockDoors: totalDoors,
+    inboundDoors: dock.inboundDoors || 0,
+    outboundDoors: dock.outboundDoors || 0,
     officeSqft: zones.officeSqft || 0,
     stagingSqft: (zones.receiveStagingSqft || 0) + (zones.shipStagingSqft || 0),
+    palletPositions: (sized && sized.positions && sized.positions.grossPositions) || 0,
+    sfPerPosition: (sized && sized.sfPerPosition) || 0,
+    peakUnitsPerDay: zones.peakUnitsPerDay || 0,
   };
   // Also stash in sessionStorage so CM can pick it up on mount if it isn't
   // already mounted (bus event would be lost). CM clears the stash after consuming.
