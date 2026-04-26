@@ -32,6 +32,48 @@ export const THRESHOLDS = {
   costPerSqft: { max: 18, target: 12, label: 'Cost/SqFt' },
 };
 
+/** MUL-A2 — Default weights for computeDealScore. Sum to 1.0. */
+export const DEFAULT_SCORE_WEIGHTS = {
+  margin: 0.35,
+  ebitda: 0.25,
+  payback: 0.20,
+  npv: 0.20,
+};
+
+/** MUL-A3 — Default grade thresholds (score floor for each grade). */
+export const DEFAULT_GRADE_THRESHOLDS = {
+  A: 90,
+  B: 75,
+  C: 60,
+  D: 45,
+  // anything below D = F
+};
+
+/**
+ * MUL-D1 — Per-component escalation defaults. Allows operating cost to
+ * escalate at one rate, revenue at another (as 3PL contracts often do
+ * because labor index ≠ CPI ≠ negotiated rate-card cap), and startup
+ * not at all (one-time spend).
+ */
+export const DEFAULT_ESCALATION_BY_COMPONENT = {
+  revenue: 3.0,
+  cost: 3.0,
+  startup: 0,
+};
+
+/**
+ * MUL-C1 — Industry-standard markup applied to transactional/cost-pass
+ * pricing models. Cost-plus uses targetMarginPct directly (price = cost
+ * / (1 - margin)). The other models bill back cost with a fixed markup.
+ */
+export const DEFAULT_PRICING_MARKUPS = {
+  'cost-plus': null,        // uses targetMarginPct
+  'transactional': 0.12,    // 12% markup on cost basis
+  'cost-pass-through': 0.08, // pass-through with 8% mgmt fee
+  'fixed-fee': null,        // uses targetMarginPct (with revenue cap)
+  'hybrid': 0.10,           // blended fixed-fee + transactional
+};
+
 // ============================================================
 // DOS STAGES (reference)
 // ============================================================
@@ -58,9 +100,33 @@ export const DOS_STAGES = [
 export function computeSiteFinancials(site) {
   const annualCost = site.annualCost || 0;
   const marginPct = site.targetMarginPct || 0;
-  const annualRevenue = marginPct > 0 ? annualCost / (1 - marginPct / 100) : annualCost;
+  const pricingModel = site.pricingModel || 'cost-plus';
+  const markup = DEFAULT_PRICING_MARKUPS[pricingModel];
+  const annualVolume = Number(site.annualVolume || 0);
+  // MUL-C2: per-volume rate (override). When site has a perVolumeRate set,
+  // use it × annualVolume as the revenue basis; otherwise fall back to
+  // model-specific defaults below.
+  const ratePerVolume = Number(site.perVolumeRate || 0);
+
+  let annualRevenue;
+  if (ratePerVolume > 0 && annualVolume > 0) {
+    // Volume-based revenue (units × rate). Margin emerges; doesn't drive price.
+    annualRevenue = ratePerVolume * annualVolume;
+  } else if (pricingModel === 'cost-plus' || pricingModel === 'fixed-fee') {
+    // Standard cost-plus: price = cost / (1 - margin). For fixed-fee we use
+    // the same target-margin pricing but cap at a fixed annual figure.
+    annualRevenue = marginPct > 0 ? annualCost / (1 - marginPct / 100) : annualCost;
+  } else if (markup != null) {
+    // Transactional / cost-pass-through / hybrid: rev = cost × (1 + markup)
+    annualRevenue = annualCost * (1 + markup);
+  } else {
+    annualRevenue = annualCost;
+  }
+
   const grossMarginPct = annualRevenue > 0 ? ((annualRevenue - annualCost) / annualRevenue) * 100 : 0;
   const costPerSqft = site.sqft > 0 ? annualCost / site.sqft : 0;
+  const costPerVolume = annualVolume > 0 ? annualCost / annualVolume : 0;
+  const revenuePerVolume = annualVolume > 0 ? annualRevenue / annualVolume : 0;
 
   return {
     siteId: site.id,
@@ -69,6 +135,10 @@ export function computeSiteFinancials(site) {
     annualRevenue,
     grossMarginPct,
     costPerSqft,
+    pricingModel,
+    annualVolume,
+    costPerVolume,
+    revenuePerVolume,
   };
 }
 
@@ -82,10 +152,14 @@ export function computeSiteFinancials(site) {
  * @param {number} [contractTermYears]
  * @returns {import('./types.js?v=20260418-sL').DealFinancials}
  */
-export function computeDealFinancials(sites, contractTermYears = DEFAULT_CONTRACT_YEARS) {
+export function computeDealFinancials(sites, contractTermYears = DEFAULT_CONTRACT_YEARS, opts = {}) {
   if (sites.length === 0) {
     return emptyFinancials();
   }
+
+  // MUL-D3 + MUL-D4 — overhead and discount-rate are now caller-tunable.
+  const ebitdaOverheadPct = Number(opts.ebitdaOverheadPct ?? EBITDA_OVERHEAD_PCT);
+  const discountRate = Number(opts.discountRate ?? DISCOUNT_RATE);
 
   const bySite = sites.map(s => computeSiteFinancials(s));
   const totalAnnualCost = bySite.reduce((s, sf) => s + sf.annualCost, 0);
@@ -93,15 +167,16 @@ export function computeDealFinancials(sites, contractTermYears = DEFAULT_CONTRAC
   const grossMarginPct = totalAnnualRevenue > 0
     ? ((totalAnnualRevenue - totalAnnualCost) / totalAnnualRevenue) * 100
     : 0;
-  const ebitdaPct = grossMarginPct - EBITDA_OVERHEAD_PCT;
+  const ebitdaPct = grossMarginPct - ebitdaOverheadPct;
   const totalStartupCost = sites.reduce((s, site) => s + (site.startupCost || 0), 0);
   const totalSqft = sites.reduce((s, site) => s + (site.sqft || 0), 0);
+  const totalAnnualVolume = sites.reduce((s, site) => s + Number(site.annualVolume || 0), 0);
 
   const annualGrossProfit = totalAnnualRevenue - totalAnnualCost;
   const annualEbitda = totalAnnualRevenue * (ebitdaPct / 100);
 
-  // NPV
-  const npv = computeNpv(totalStartupCost, annualEbitda, contractTermYears);
+  // NPV (uses caller-supplied discount rate)
+  const npv = computeNpv(totalStartupCost, annualEbitda, contractTermYears, discountRate);
 
   // Payback
   const paybackMonths = computePaybackMonths(totalStartupCost, annualEbitda);
@@ -114,13 +189,18 @@ export function computeDealFinancials(sites, contractTermYears = DEFAULT_CONTRAC
     totalAnnualRevenue,
     grossMarginPct,
     ebitdaPct,
+    ebitdaOverheadPct,
+    discountRate,
     totalStartupCost,
     npv,
     paybackMonths,
     irr,
     totalSqft,
+    totalAnnualVolume,
     costPerSqft: totalSqft > 0 ? totalAnnualCost / totalSqft : 0,
     revenuePerSqft: totalSqft > 0 ? totalAnnualRevenue / totalSqft : 0,
+    costPerVolume: totalAnnualVolume > 0 ? totalAnnualCost / totalAnnualVolume : 0,
+    revenuePerVolume: totalAnnualVolume > 0 ? totalAnnualRevenue / totalAnnualVolume : 0,
     bySite,
   };
 }
@@ -208,19 +288,41 @@ export function computeIrr(startup, annualCashFlow, years) {
  * @param {number} [escalationPct]
  * @returns {import('./types.js?v=20260418-sL').MultiYearRow[]}
  */
-export function generateMultiYearPL(fin, years = DEFAULT_CONTRACT_YEARS, escalationPct = DEFAULT_ESCALATION_PCT) {
+export function generateMultiYearPL(fin, years = DEFAULT_CONTRACT_YEARS, escalation = DEFAULT_ESCALATION_PCT) {
   const rows = [];
   let cumCashFlow = -(fin.totalStartupCost || 0);
 
+  // MUL-D1 — accept either a scalar (legacy) or an object
+  // { revenue, cost } so revenue and cost can escalate independently.
+  // Common pattern: revenue capped at 2.5%/yr CPI escalator while cost
+  // tracks 4-5% labor index.
+  const escRev = typeof escalation === 'object'
+    ? Number(escalation.revenue ?? DEFAULT_ESCALATION_PCT)
+    : Number(escalation);
+  const escCost = typeof escalation === 'object'
+    ? Number(escalation.cost ?? DEFAULT_ESCALATION_PCT)
+    : Number(escalation);
+
   for (let yr = 1; yr <= years; yr++) {
-    const escFactor = Math.pow(1 + escalationPct / 100, yr - 1);
-    const revenue = fin.totalAnnualRevenue * escFactor;
-    const cost = fin.totalAnnualCost * escFactor;
+    const revFactor = Math.pow(1 + escRev / 100, yr - 1);
+    const costFactor = Math.pow(1 + escCost / 100, yr - 1);
+    const revenue = fin.totalAnnualRevenue * revFactor;
+    const cost = fin.totalAnnualCost * costFactor;
     const grossProfit = revenue - cost;
-    const ebitda = revenue * (fin.ebitdaPct / 100);
+    // EBITDA% drifts as margins compress when cost escalates faster
+    const annualGm = revenue > 0 ? ((revenue - cost) / revenue) * 100 : 0;
+    const overhead = Number(fin.ebitdaOverheadPct ?? EBITDA_OVERHEAD_PCT);
+    const annualEbitdaPct = annualGm - overhead;
+    const ebitda = revenue * (annualEbitdaPct / 100);
     cumCashFlow += ebitda;
 
-    rows.push({ year: yr, revenue, cost, grossProfit, ebitda, cumulativeCashFlow: cumCashFlow });
+    rows.push({
+      year: yr, revenue, cost, grossProfit, ebitda, cumulativeCashFlow: cumCashFlow,
+      grossMarginPct: annualGm,
+      ebitdaPct: annualEbitdaPct,
+      revenueEscPct: escRev,
+      costEscPct: escCost,
+    });
   }
 
   return rows;
@@ -325,17 +427,34 @@ export function evaluateAllMetrics(fin) {
  * @param {import('./types.js?v=20260418-sL').DealFinancials} fin
  * @returns {{ score: number, grade: 'A' | 'B' | 'C' | 'D' | 'F' }}
  */
-export function computeDealScore(fin) {
+export function computeDealScore(fin, opts = {}) {
   // Normalize each metric to 0-100
   const marginScore = clamp(fin.grossMarginPct / 15 * 100, 0, 100);
   const ebitdaScore = clamp(fin.ebitdaPct / 10 * 100, 0, 100);
   const paybackScore = fin.paybackMonths > 0 ? clamp((36 - fin.paybackMonths) / 36 * 100, 0, 100) : 0;
   const npvScore = fin.npv > 0 ? clamp(100, 0, 100) : clamp(50 + (fin.npv / 100000) * 50, 0, 100);
 
-  const score = Math.round(marginScore * 0.35 + ebitdaScore * 0.25 + paybackScore * 0.20 + npvScore * 0.20);
-  const grade = score >= 90 ? 'A' : score >= 75 ? 'B' : score >= 60 ? 'C' : score >= 45 ? 'D' : 'F';
+  // MUL-A2 — weights configurable (sums to 1.0 normalized).
+  const w = { ...DEFAULT_SCORE_WEIGHTS, ...(opts.weights || {}) };
+  const wSum = (w.margin || 0) + (w.ebitda || 0) + (w.payback || 0) + (w.npv || 0);
+  const norm = wSum > 0 ? wSum : 1;
 
-  return { score, grade };
+  const score = Math.round(
+    (marginScore * (w.margin || 0)
+     + ebitdaScore * (w.ebitda || 0)
+     + paybackScore * (w.payback || 0)
+     + npvScore * (w.npv || 0)) / norm
+  );
+
+  // MUL-A3 — grade thresholds configurable.
+  const th = { ...DEFAULT_GRADE_THRESHOLDS, ...(opts.gradeThresholds || {}) };
+  const grade = score >= th.A ? 'A'
+    : score >= th.B ? 'B'
+    : score >= th.C ? 'C'
+    : score >= th.D ? 'D'
+    : 'F';
+
+  return { score, grade, weights: w, thresholds: th, components: { marginScore, ebitdaScore, paybackScore, npvScore } };
 }
 
 function clamp(val, min, max) {
@@ -354,6 +473,79 @@ function clamp(val, min, max) {
 export function rankSitesByCost(siteFins) {
   const sorted = [...siteFins].sort((a, b) => a.costPerSqft - b.costPerSqft);
   return sorted.map((sf, i) => ({ ...sf, rank: i + 1 }));
+}
+
+// ============================================================
+// MUL-G3 — SENSITIVITY GRID
+// ============================================================
+
+/**
+ * Two-axis sensitivity grid over deal-level financials.
+ * Sweeps a chosen X-axis (cost%, margin%, escalation%, volume%) against
+ * a Y-axis, recomputes the deal at each cell, and returns score + npv +
+ * ebitda% for visualization.
+ *
+ * @param {import('./types.js?v=20260418-sL').Site[]} sites
+ * @param {{years:number, opts:object, xAxis:string, xRange:number[], yAxis:string, yRange:number[]}} cfg
+ */
+export function calcDealSensitivity(sites, cfg) {
+  const { years = DEFAULT_CONTRACT_YEARS, opts = {}, xAxis = 'costPct', xRange = [-10, -5, 0, 5, 10], yAxis = 'marginPct', yRange = [-3, -1.5, 0, 1.5, 3] } = cfg || {};
+  const apply = (axis, delta) => {
+    const out = sites.map(s => ({ ...s }));
+    if (axis === 'costPct') out.forEach(s => { s.annualCost = (s.annualCost || 0) * (1 + delta / 100); });
+    else if (axis === 'marginPct') out.forEach(s => { s.targetMarginPct = (s.targetMarginPct || 0) + delta; });
+    else if (axis === 'volumePct') out.forEach(s => { s.annualVolume = (s.annualVolume || 0) * (1 + delta / 100); s.annualCost = (s.annualCost || 0) * (1 + delta / 100); });
+    else if (axis === 'startupPct') out.forEach(s => { s.startupCost = (s.startupCost || 0) * (1 + delta / 100); });
+    return out;
+  };
+  const grid = yRange.map(y => xRange.map(x => {
+    const flexed = apply(yAxis, y);
+    const flexed2 = (() => { const o = flexed.map(s => ({...s})); apply(xAxis, x).forEach((v,i) => o[i] = { ...o[i], ...v }); return o; })();
+    // Re-apply x to flexed (idempotent helper above wasn't ideal; redo cleanly):
+    const sites2 = apply(yAxis, y);
+    if (xAxis === 'costPct') sites2.forEach(s => { s.annualCost = (s.annualCost || 0) * (1 + x / 100); });
+    else if (xAxis === 'marginPct') sites2.forEach(s => { s.targetMarginPct = (s.targetMarginPct || 0) + x; });
+    else if (xAxis === 'volumePct') sites2.forEach(s => { s.annualVolume = (s.annualVolume || 0) * (1 + x / 100); s.annualCost = (s.annualCost || 0) * (1 + x / 100); });
+    else if (xAxis === 'startupPct') sites2.forEach(s => { s.startupCost = (s.startupCost || 0) * (1 + x / 100); });
+    const fin = computeDealFinancials(sites2, years, opts);
+    const sc = computeDealScore(fin, opts);
+    return {
+      x, y,
+      score: sc.score,
+      grade: sc.grade,
+      ebitdaPct: fin.ebitdaPct,
+      npv: fin.npv,
+      paybackMonths: fin.paybackMonths,
+    };
+  }));
+  return { xAxis, yAxis, xRange, yRange, grid };
+}
+
+/**
+ * MUL-G1 — Combine two deals into a single roll-up scenario. Used by
+ * drag-to-combine in the UI. Returns a synthetic "combined" deal whose
+ * sites are the concatenation, with optional cross-deal cannibalization
+ * percentage on revenue (to model overlap between the two books).
+ *
+ * @param {{sites:any[], dealName:string}} dealA
+ * @param {{sites:any[], dealName:string}} dealB
+ * @param {{cannibalizationPct?:number, contractTermYears?:number, opts?:object}} cfg
+ */
+export function combineDeals(dealA, dealB, cfg = {}) {
+  const cann = Number(cfg.cannibalizationPct ?? 0);
+  const sites = [...(dealA.sites || []), ...(dealB.sites || [])].map(s => ({ ...s }));
+  if (cann > 0) {
+    sites.forEach(s => { s.annualCost = (s.annualCost || 0) * (1 - cann / 100); });
+  }
+  const fin = computeDealFinancials(sites, cfg.contractTermYears || DEFAULT_CONTRACT_YEARS, cfg.opts || {});
+  const score = computeDealScore(fin, cfg.opts || {});
+  return {
+    dealName: `${dealA.dealName || 'Deal A'} + ${dealB.dealName || 'Deal B'}`,
+    sites,
+    financials: fin,
+    score,
+    cannibalizationPct: cann,
+  };
 }
 
 // ============================================================

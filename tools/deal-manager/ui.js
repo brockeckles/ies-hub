@@ -9,8 +9,8 @@
 import { bus } from '../../shared/event-bus.js?v=20260418-sL';
 import { state } from '../../shared/state.js?v=20260418-sL';
 import { renderToolHeader } from '../../shared/tool-frame.js?v=20260419-uE';
-import * as calc from './calc.js?v=20260418-sL';
-import * as api from './api.js?v=20260420-vE';
+import * as calc from './calc.js?v=20260426-s3';
+import * as api from './api.js?v=20260426-s3';
 import * as cmApi from '../cost-model/api.js?v=20260423-xQ';
 
 // ============================================================
@@ -22,6 +22,29 @@ let rootEl = null;
 
 /** @type {'list' | 'kanban' | 'summary' | 'sites' | 'financials' | 'pipeline' | 'hours' | 'tasks' | 'updates'} */
 let activeTab = 'list';
+// MUL-D1/D3/D4 — deal-financial overrides (per-session, applied to the
+// active deal). UI exposes these in the Financials tab.
+let dealConfig = {
+  ebitdaOverheadPct: 8,
+  discountRate: 10,         // expressed as percent (UI), divided by 100 inside calc
+  escalationRevenuePct: 3,
+  escalationCostPct: 3,
+  scoreWeights: { margin: 0.35, ebitda: 0.25, payback: 0.20, npv: 0.20 },
+  gradeThresholds: { A: 90, B: 75, C: 60, D: 45 },
+};
+// MUL-G1 — drag-to-combine state. tracks the deal currently being dragged
+// (id) and shows a combined-preview when dropped on another deal card.
+let dragSourceDealId = null;
+// Last drag target (for combined-preview reveal)
+let combineResult = null;
+// MUL-G3 — sensitivity grid axes/ranges (per-session)
+let sensCfg = {
+  xAxis: 'costPct', yAxis: 'marginPct',
+  xRange: [-10, -5, 0, 5, 10],
+  yRange: [-3, -1.5, 0, 1.5, 3],
+};
+// MUL-G2 — selected deal IDs for side-by-side comparison
+let compareDealIds = [];
 
 /** @type {'kanban' | 'table'} */
 let landingViewMode = 'kanban';
@@ -167,6 +190,8 @@ const DETAIL_TABS = [
   { key: 'summary', label: 'Summary' },
   { key: 'sites', label: 'Sites' },
   { key: 'financials', label: 'Financials' },
+  { key: 'sensitivity', label: 'Sensitivity' },
+  { key: 'compare', label: 'Compare' },
   { key: 'pipeline', label: 'Pipeline' },
   { key: 'hours', label: 'Hours' },
   { key: 'tasks', label: 'Tasks' },
@@ -430,6 +455,8 @@ function renderContent() {
     case 'summary': renderSummary(el); break;
     case 'sites': renderSites(el); break;
     case 'financials': renderFinancials(el); break;
+    case 'sensitivity': renderSensitivity(el); break;
+    case 'compare': renderCompare(el); break;
     case 'pipeline': renderPipeline(el); break;
     case 'hours': renderHours(el); break;
     case 'tasks': renderTasksTab(el); break;
@@ -666,8 +693,10 @@ function renderSummary(el) {
         </div>
         <span style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;background:${badge.bg};color:${badge.color};">${badge.label}</span>
         <div style="margin-left:auto;text-align:center;">
-          <div style="font-size:32px;font-weight:800;color:${scoreColor(score.grade)};">${score.grade}</div>
-          <div style="font-size:11px;font-weight:700;color:var(--ies-gray-400);">SCORE ${score.score}</div>
+          <div style="display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:50%;background:${scoreBg(score.grade)};border:2px solid ${scoreColor(score.grade)};">
+            <div style="font-size:26px;font-weight:800;line-height:1;color:${scoreColor(score.grade)};">${score.grade}</div>
+          </div>
+          <div style="font-size:11px;font-weight:700;color:var(--ies-gray-400);margin-top:4px;">SCORE ${score.score}</div>
         </div>
       </div>
 
@@ -703,7 +732,7 @@ function renderSummary(el) {
           <div style="font-size:14px;font-weight:700;margin-bottom:12px;">DOS Progress</div>
           <div style="margin-bottom:12px;">
             <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-              <span style="font-size:13px;font-weight:600;">Overall: ${overall.currentStage}</span>
+              <span style="font-size:13px;font-weight:600;color:var(--ies-gray-700);">Overall completion <span style="font-weight:400;color:var(--ies-gray-500);">— current stage:</span> <strong>${overall.currentStage}</strong></span>
               <span style="font-size:13px;font-weight:700;">${overall.overallPct.toFixed(0)}%</span>
             </div>
             <div style="height:8px;border-radius:4px;background:var(--ies-gray-200);overflow:hidden;">
@@ -993,9 +1022,25 @@ function escapeHtml(s) {
 function renderFinancials(el) {
   if (!financials || !activeDeal) return;
 
-  const plRows = calc.generateMultiYearPL(financials, activeDeal.contractTermYears || 5);
-  const score = calc.computeDealScore(financials);
-  const metrics = calc.evaluateAllMetrics(financials);
+  // MUL-D3/D4 — recompute deal financials honoring the dealConfig overrides
+  // for EBITDA overhead and discount rate so all downstream metrics
+  // (EBITDA%, NPV, IRR, score) reflect the user's tuning.
+  const overrideOpts = {
+    ebitdaOverheadPct: Number(dealConfig.ebitdaOverheadPct),
+    discountRate: Number(dealConfig.discountRate) / 100,
+  };
+  const fin = calc.computeDealFinancials(sites, activeDeal.contractTermYears || 5, overrideOpts);
+  const plRows = calc.generateMultiYearPL(fin, activeDeal.contractTermYears || 5, {
+    revenue: Number(dealConfig.escalationRevenuePct),
+    cost: Number(dealConfig.escalationCostPct),
+  });
+  const score = calc.computeDealScore(fin, {
+    weights: dealConfig.scoreWeights,
+    gradeThresholds: dealConfig.gradeThresholds,
+  });
+  const metrics = calc.evaluateAllMetrics(fin);
+  // Use the recomputed `fin` for the rest of the render (renamed local).
+  const financialsLocal = fin;
 
   el.innerHTML = `
     <div style="max-width:1000px;">
@@ -1018,15 +1063,15 @@ function renderFinancials(el) {
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">
         <div class="hub-card" style="padding:14px;">
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--ies-gray-400);">NPV (${activeDeal.contractTermYears || 5}yr)</div>
-          <div style="font-size:20px;font-weight:800;color:${financials.npv >= 0 ? '#22c55e' : '#ef4444'};">${calc.formatCurrency(financials.npv, { compact: true })}</div>
+          <div style="font-size:20px;font-weight:800;color:${financialsLocal.npv >= 0 ? '#22c55e' : '#ef4444'};">${calc.formatCurrency(financialsLocal.npv, { compact: true })}</div>
         </div>
         <div class="hub-card" style="padding:14px;">
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--ies-gray-400);">IRR</div>
-          <div style="font-size:20px;font-weight:800;">${calc.formatPct(financials.irr * 100)}</div>
+          <div style="font-size:20px;font-weight:800;">${calc.formatPct(financialsLocal.irr * 100)}</div>
         </div>
         <div class="hub-card" style="padding:14px;">
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--ies-gray-400);">Revenue/SqFt</div>
-          <div style="font-size:20px;font-weight:800;">${calc.formatCurrency(financials.revenuePerSqft)}</div>
+          <div style="font-size:20px;font-weight:800;">${calc.formatCurrency(financialsLocal.revenuePerSqft)}</div>
         </div>
         <div class="hub-card" style="padding:14px;">
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--ies-gray-400);">Deal Score</div>
@@ -1034,9 +1079,29 @@ function renderFinancials(el) {
         </div>
       </div>
 
+      <!-- MUL-D3/D4/D1: Deal financial config knobs -->
+      <div class="hub-card" style="padding:16px;margin-bottom:20px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <div style="font-size:14px;font-weight:700;">Deal Financial Config</div>
+          <span style="font-size:11px;color:var(--ies-gray-500);">EBITDA, NPV discount, and revenue/cost escalation tuning</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:10px;">
+          ${cfgKnob('EBITDA Overhead %', 'ebitdaOverheadPct', dealConfig.ebitdaOverheadPct, '%', '0.5', 'SGA + D&A burden subtracted from gross margin')}
+          ${cfgKnob('Discount Rate', 'discountRate', dealConfig.discountRate, '%', '0.5', 'NPV discount rate')}
+          ${cfgKnob('Revenue Escalator', 'escalationRevenuePct', dealConfig.escalationRevenuePct, '%/yr', '0.25', 'Year-over-year revenue uplift in P&L')}
+          ${cfgKnob('Cost Escalator', 'escalationCostPct', dealConfig.escalationCostPct, '%/yr', '0.25', 'Year-over-year cost uplift in P&L')}
+        </div>
+        <div style="margin-top:14px;display:grid;grid-template-columns:repeat(auto-fit, minmax(170px, 1fr));gap:10px;font-size:11px;color:var(--ies-gray-500);">
+          <div><strong>Score Weights:</strong> M ${(dealConfig.scoreWeights.margin*100).toFixed(0)}% / E ${(dealConfig.scoreWeights.ebitda*100).toFixed(0)}% / P ${(dealConfig.scoreWeights.payback*100).toFixed(0)}% / N ${(dealConfig.scoreWeights.npv*100).toFixed(0)}%</div>
+          <div><strong>Grade Thresholds:</strong> A ≥ ${dealConfig.gradeThresholds.A} · B ≥ ${dealConfig.gradeThresholds.B} · C ≥ ${dealConfig.gradeThresholds.C} · D ≥ ${dealConfig.gradeThresholds.D}</div>
+        </div>
+      </div>
+
       <!-- Multi-Year P&L -->
       <div class="hub-card" style="padding:16px;margin-bottom:20px;">
-        <div style="font-size:14px;font-weight:700;margin-bottom:12px;">Multi-Year P&L Projection</div>
+        <div style="font-size:14px;font-weight:700;margin-bottom:12px;">Multi-Year P&L Projection
+          <span style="font-size:11px;font-weight:400;color:var(--ies-gray-500);">— Revenue ${dealConfig.escalationRevenuePct}% / Cost ${dealConfig.escalationCostPct}%/yr</span>
+        </div>
         <table style="width:100%;border-collapse:collapse;font-size:13px;">
           <thead>
             <tr style="border-bottom:2px solid var(--ies-gray-200);">
@@ -1066,8 +1131,8 @@ function renderFinancials(el) {
       <!-- Cost breakdown by site -->
       <div class="hub-card" style="padding:20px;">
         <div style="font-size:14px;font-weight:700;margin-bottom:16px;">Cost by Site</div>
-        ${financials.bySite.map(sf => {
-          const pct = financials.totalAnnualCost > 0 ? (sf.annualCost / financials.totalAnnualCost) * 100 : 0;
+        ${financialsLocal.bySite.map(sf => {
+          const pct = financialsLocal.totalAnnualCost > 0 ? (sf.annualCost / financialsLocal.totalAnnualCost) * 100 : 0;
           return `
             <div style="margin-bottom:12px;">
               <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
@@ -1083,6 +1148,20 @@ function renderFinancials(el) {
       </div>
     </div>
   `;
+
+  // MUL-D1/D3/D4 — bind cfg knob inputs; on change update dealConfig and
+  // re-render this tab so the metrics + P&L flow with the new values.
+  setTimeout(() => {
+    el.querySelectorAll('input[data-deal-cfg]').forEach(input => {
+      input.addEventListener('change', (e) => {
+        const k = /** @type {HTMLInputElement} */ (e.target).dataset.dealCfg;
+        const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
+        if (!Number.isFinite(v)) return;
+        dealConfig = { ...dealConfig, [k]: v };
+        renderFinancials(el);
+      });
+    });
+  }, 0);
 }
 
 // ============================================================
@@ -1691,6 +1770,196 @@ function kpi(label, value, color) {
   `;
 }
 
+// ============================================================
+// MUL-G3 — SENSITIVITY TAB
+// ============================================================
+
+function renderSensitivity(el) {
+  if (!activeDeal || sites.length === 0) {
+    el.innerHTML = '<div class="hub-card"><p class="text-body text-muted">Add at least one site to see sensitivity analysis.</p></div>';
+    return;
+  }
+  const sens = calc.calcDealSensitivity(sites, {
+    years: activeDeal.contractTermYears || 5,
+    opts: {
+      ebitdaOverheadPct: Number(dealConfig.ebitdaOverheadPct),
+      discountRate: Number(dealConfig.discountRate) / 100,
+      weights: dealConfig.scoreWeights,
+      gradeThresholds: dealConfig.gradeThresholds,
+    },
+    xAxis: sensCfg.xAxis, xRange: sensCfg.xRange,
+    yAxis: sensCfg.yAxis, yRange: sensCfg.yRange,
+  });
+  const axisLabel = (k) => ({
+    costPct: 'Cost % delta', marginPct: 'Margin pp delta', volumePct: 'Volume % delta', startupPct: 'Startup % delta',
+  })[k] || k;
+  const cellBg = (g) => scoreBg(g);
+  const cellFg = (g) => scoreColor(g);
+  el.innerHTML = `
+    <div style="max-width:1000px;">
+      <div class="hub-card" style="padding:16px;margin-bottom:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+          <div>
+            <div style="font-size:14px;font-weight:700;">Sensitivity Grid</div>
+            <div style="font-size:12px;color:var(--ies-gray-500);margin-top:2px;">Each cell flexes the X-axis variable on top of the Y-axis variable, then re-scores the deal.</div>
+          </div>
+          <div style="display:flex;gap:14px;font-size:12px;align-items:center;flex-wrap:wrap;">
+            <label>X-axis <select data-sens-axis="x" style="padding:4px 8px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:12px;">
+              ${['costPct','marginPct','volumePct','startupPct'].map(k => `<option value="${k}" ${sensCfg.xAxis === k ? 'selected' : ''}>${axisLabel(k)}</option>`).join('')}
+            </select></label>
+            <label>Y-axis <select data-sens-axis="y" style="padding:4px 8px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:12px;">
+              ${['costPct','marginPct','volumePct','startupPct'].map(k => `<option value="${k}" ${sensCfg.yAxis === k ? 'selected' : ''}>${axisLabel(k)}</option>`).join('')}
+            </select></label>
+          </div>
+        </div>
+      </div>
+
+      <div class="hub-card" style="padding:16px;">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead>
+            <tr style="background:var(--ies-gray-100);">
+              <th style="padding:8px;text-align:center;font-weight:700;color:var(--ies-gray-500);">${axisLabel(sens.yAxis)} \\ ${axisLabel(sens.xAxis)}</th>
+              ${sens.xRange.map(x => `<th style="padding:8px;text-align:center;font-weight:700;">${x > 0 ? '+' : ''}${x}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            ${sens.grid.map((row, r) => `
+              <tr>
+                <td style="padding:8px;text-align:center;font-weight:700;background:var(--ies-gray-100);">${sens.yRange[r] > 0 ? '+' : ''}${sens.yRange[r]}</td>
+                ${row.map(c => `
+                  <td style="padding:10px;text-align:center;background:${cellBg(c.grade)};border:1px solid var(--ies-gray-100);">
+                    <div style="font-size:14px;font-weight:800;color:${cellFg(c.grade)};">${c.grade}</div>
+                    <div style="font-size:11px;color:var(--ies-gray-600);">${c.score} pts</div>
+                    <div style="font-size:10px;color:var(--ies-gray-500);">${c.ebitdaPct.toFixed(1)}% EBITDA</div>
+                  </td>
+                `).join('')}
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+  setTimeout(() => {
+    el.querySelectorAll('[data-sens-axis]').forEach(sel => {
+      sel.addEventListener('change', (e) => {
+        const which = e.target.dataset.sensAxis;
+        const v = e.target.value;
+        sensCfg = { ...sensCfg, [which === 'x' ? 'xAxis' : 'yAxis']: v };
+        renderSensitivity(el);
+      });
+    });
+  }, 0);
+}
+
+// ============================================================
+// MUL-G2 — COMPARE TAB
+// ============================================================
+
+function renderCompare(el) {
+  if (!activeDeal) return;
+  // Default: include the active deal + first 2 others
+  if (compareDealIds.length === 0) {
+    compareDealIds = [activeDeal.id, ...allDeals.filter(d => d.id !== activeDeal.id).slice(0, 2).map(d => d.id)];
+  }
+  const candidates = allDeals.length ? allDeals : [activeDeal];
+  const selected = compareDealIds.map(id => candidates.find(d => d.id === id)).filter(Boolean);
+  const computed = selected.map(d => {
+    const dSites = (d.id === activeDeal.id) ? sites : (d._sites || []);
+    const fin = calc.computeDealFinancials(dSites, d.contractTermYears || 5, {
+      ebitdaOverheadPct: Number(dealConfig.ebitdaOverheadPct),
+      discountRate: Number(dealConfig.discountRate) / 100,
+    });
+    const sc = calc.computeDealScore(fin, { weights: dealConfig.scoreWeights, gradeThresholds: dealConfig.gradeThresholds });
+    return { deal: d, fin, score: sc, sitesCount: dSites.length };
+  });
+  el.innerHTML = `
+    <div style="max-width:1100px;">
+      <div class="hub-card" style="padding:16px;margin-bottom:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+          <div>
+            <div style="font-size:14px;font-weight:700;">Side-by-Side Comparison</div>
+            <div style="font-size:12px;color:var(--ies-gray-500);margin-top:2px;">Compare up to 4 deals across financial KPIs. Active deal pinned in column 1.</div>
+          </div>
+          <div style="font-size:12px;">
+            <select id="dm-compare-add" style="padding:4px 8px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:12px;">
+              <option value="">+ Add deal to compare…</option>
+              ${candidates.filter(d => !compareDealIds.includes(d.id)).map(d => `<option value="${d.id}">${d.dealName}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="hub-card" style="padding:16px;overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:680px;">
+          <thead>
+            <tr style="border-bottom:2px solid var(--ies-gray-200);">
+              <th style="text-align:left;padding:8px;font-weight:700;color:var(--ies-gray-500);">Metric</th>
+              ${computed.map(c => `<th style="text-align:right;padding:8px;font-weight:700;">${c.deal.dealName}${c.deal.id === activeDeal.id ? ' <span style="font-size:10px;color:var(--ies-blue);">(active)</span>' : ` <button class="hub-btn-icon" data-compare-remove="${c.deal.id}" title="Remove" style="border:0;background:transparent;cursor:pointer;color:var(--ies-gray-400);">×</button>`}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            ${cmpRow('Sites', computed, c => c.sitesCount)}
+            ${cmpRow('Total SqFt', computed, c => c.fin.totalSqft.toLocaleString())}
+            ${cmpRow('Annual Revenue', computed, c => calc.formatCurrency(c.fin.totalAnnualRevenue, { compact: true }))}
+            ${cmpRow('Annual Cost', computed, c => calc.formatCurrency(c.fin.totalAnnualCost, { compact: true }))}
+            ${cmpRow('Gross Margin %', computed, c => calc.formatPct(c.fin.grossMarginPct))}
+            ${cmpRow('EBITDA %', computed, c => calc.formatPct(c.fin.ebitdaPct))}
+            ${cmpRow('NPV', computed, c => calc.formatCurrency(c.fin.npv, { compact: true }))}
+            ${cmpRow('Payback', computed, c => calc.formatMonths(c.fin.paybackMonths))}
+            ${cmpRow('Score', computed, c => `<span style="display:inline-block;padding:2px 8px;border-radius:10px;background:${scoreBg(c.score.grade)};color:${scoreColor(c.score.grade)};font-weight:700;">${c.score.grade} (${c.score.score})</span>`)}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+  setTimeout(() => {
+    el.querySelector('#dm-compare-add')?.addEventListener('change', (e) => {
+      const v = e.target.value;
+      if (v) {
+        compareDealIds.push(v);
+        renderCompare(el);
+      }
+    });
+    el.querySelectorAll('[data-compare-remove]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.compareRemove;
+        compareDealIds = compareDealIds.filter(x => x !== id);
+        renderCompare(el);
+      });
+    });
+  }, 0);
+}
+
+function cmpRow(label, computed, getter) {
+  return `
+    <tr style="border-bottom:1px solid var(--ies-gray-100);">
+      <td style="padding:8px;font-weight:600;color:var(--ies-gray-700);">${label}</td>
+      ${computed.map(c => `<td style="padding:8px;text-align:right;font-variant-numeric:tabular-nums;">${getter(c)}</td>`).join('')}
+    </tr>
+  `;
+}
+
+function cfgKnob(label, key, value, unit, step, hint) {
+  return `
+    <div style="display:flex;flex-direction:column;gap:4px;">
+      <span style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--ies-gray-500);" title="${hint || ''}">${label}</span>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <input type="number" data-deal-cfg="${key}" value="${value}" step="${step}" style="flex:1;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:13px;font-weight:600;text-align:right;">
+        <span style="font-size:11px;color:var(--ies-gray-500);width:36px;">${unit}</span>
+      </div>
+    </div>
+  `;
+}
+
 function scoreColor(grade) {
-  return { A: '#22c55e', B: 'var(--ies-blue)', C: '#f59e0b', D: '#ef4444', F: '#991b1b' }[grade] || '#6b7280';
+  // MUL-A4 — softened palette. F was solid #991b1b which read as a hard
+  // accusation in demos; new value is a desaturated coral that signals
+  // "needs work" without dominating the deal header.
+  return { A: '#22c55e', B: 'var(--ies-blue)', C: '#f59e0b', D: '#f87171', F: '#dc8a8a' }[grade] || '#6b7280';
+}
+
+/** MUL-A4 — tinted background for the score badge (subtle, never >12% alpha). */
+function scoreBg(grade) {
+  return { A: '#22c55e15', B: 'var(--ies-blue)15', C: '#f59e0b15', D: '#f8717115', F: '#dc8a8a18' }[grade] || '#6b728018';
 }
