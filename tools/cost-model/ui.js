@@ -10,8 +10,9 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import * as calc from './calc.js?v=20260426-s8';
-import * as api from './api.js?v=20260423-xQ';
+import { auth } from '../../shared/auth.js?v=20260424-hyg04';
+import * as calc from './calc.js?v=20260426-s9';
+import * as api from './api.js?v=20260426-s9';
 import * as scenarios from './calc.scenarios.js?v=20260421-wA';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
@@ -139,6 +140,11 @@ let rootEl = null;
 
 /** @type {boolean} */
 let isDirty = false;
+
+/** @type {string|null} ISO timestamp of the last successful save, OR the loaded model's updated_at. */
+let lastSavedAt = null;
+/** @type {string|null} Email of the user who performed the last save in this session. Null on fresh load. */
+let lastSavedBy = null;
 
 /** @type {boolean} Track whether user has interacted — suppresses validation on fresh model */
 let userHasInteracted = false;
@@ -686,6 +692,9 @@ function wireLandingEvents() {
         //       project_data, upgrading the row in place.
         if (full.project_data) {
           model = { ...createEmptyModel(), ...full.project_data, id: full.id };
+          // CM-SAVE-1 — Hydrate save-state from the loaded row's updated_at; clear by-user (set on next save).
+          lastSavedAt = full.updated_at || full.created_at || null;
+          lastSavedBy = null;
           // Belt-and-braces: hydrate any project_data fields that are missing or
           // empty from the row's flat columns. This covers rows where project_data
           // was seeded by a SQL UPDATE that didn't include every field, or where
@@ -738,6 +747,9 @@ function wireLandingEvents() {
           try { window.__cmLoadedModel = model; } catch (_) {}
         } else {
           model = reconstructModelFromFlatRow(full);
+          // CM-SAVE-1 — Hydrate save-state from the legacy row.
+          lastSavedAt = full.updated_at || full.created_at || null;
+          lastSavedBy = null;
           showCmToast('Legacy model loaded from summary fields. Save to upgrade to the new format.', 'info');
         }
         // Legacy models may have annual_hours=0 on lines with valid volume+uph; repair them.
@@ -776,6 +788,8 @@ function wireLandingEvents() {
         linkedDesigns = null;
         _linkedDesignsLoadInFlight = false;
         renderCurrentView();
+        // CM-SAVE-1 — Chip is rendered by renderCurrentView; refresh to push the loaded timestamp.
+        refreshSaveStateChip();
       } catch (err) {
         console.error('[CM] Load failed:', err);
         showCmToast('Load failed: ' + err.message, 'error');
@@ -929,6 +943,39 @@ export function unmount() {
 // SHELL RENDERING
 // ============================================================
 
+/**
+ * CM-SAVE-1 — Format the last-saved state for the toolbar chip.
+ * Returns "—" when the model has never been saved (or is brand-new).
+ */
+function formatSaveStateChip() {
+  if (!lastSavedAt) return 'Not yet saved';
+  let when;
+  try {
+    const d = new Date(lastSavedAt);
+    if (Number.isNaN(d.getTime())) return 'Saved';
+    const today = new Date();
+    const sameDay = d.toDateString() === today.toDateString();
+    when = sameDay
+      ? d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+      : d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  } catch { return 'Saved'; }
+  const who = lastSavedBy ? ` by ${lastSavedBy.split('@')[0]}` : '';
+  return `Saved ${when}${who}`;
+}
+
+/**
+ * CM-SAVE-1 — Replace the chip's contents in place after a save / load.
+ * Safe to call when the chip isn't mounted (no-op).
+ */
+function refreshSaveStateChip() {
+  const chip = rootEl?.querySelector('#cm-save-state-chip');
+  if (!chip) return;
+  const text = formatSaveStateChip();
+  chip.textContent = text;
+  chip.title = lastSavedAt ? `Last saved ${new Date(lastSavedAt).toLocaleString()}` : 'Save the model to record an audit timestamp';
+  chip.dataset.cmState = lastSavedAt ? 'saved' : 'unsaved';
+}
+
 function renderShell() {
   return `
     <div class="hub-builder" style="height: calc(100vh - 48px);">
@@ -944,6 +991,13 @@ function renderShell() {
             <button class="hub-btn hub-btn-secondary hub-btn-sm" id="cm-load-btn">Load</button>
             <button class="hub-btn hub-btn-secondary hub-btn-sm" id="cm-export-btn" title="Download as multi-sheet .xlsx">Export</button>
           </div>
+          <!-- CM-SAVE-1 — Persistent save-state chip (audit-trail visibility) -->
+          <div id="cm-save-state-chip" data-cm-state="unsaved"
+               style="margin-top:8px;font-size:11px;color:var(--ies-gray-600,#4b5563);
+                      background:var(--ies-gray-100,#f3f4f6);border:1px solid var(--ies-gray-200,#e5e7eb);
+                      border-radius:4px;padding:4px 8px;display:inline-block;line-height:1.3;
+                      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;"
+               title="Save the model to record an audit timestamp">Not yet saved</div>
         </div>
         <!-- Section Nav -->
         <nav style="padding: 8px 0;">
@@ -8444,6 +8498,10 @@ async function handleNew() {
   if (isDirty && !confirm('You have unsaved changes. Start a new model?')) return;
   model = createEmptyModel();
   isDirty = false;
+  // CM-SAVE-1 — Reset save-state on a brand-new model.
+  lastSavedAt = null;
+  lastSavedBy = null;
+  refreshSaveStateChip();
   activeSection = 'setup';
   navigateSection('setup');
 }
@@ -8457,6 +8515,10 @@ async function handleSave() {
       model.id = saved.id;
     }
     isDirty = false;
+    // CM-SAVE-1 — Capture audit metadata for the toolbar chip.
+    lastSavedAt = new Date().toISOString();
+    try { lastSavedBy = auth.getUser()?.email || lastSavedBy || null; } catch { /* ignore — chip falls back to time-only */ }
+    refreshSaveStateChip();
     bus.emit('cm:model-saved', { id: model.id });
 
     // Phase 1: if the monthly engine flag is on and we have the latest
