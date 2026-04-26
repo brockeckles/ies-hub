@@ -146,6 +146,26 @@ let lastSavedAt = null;
 /** @type {string|null} Email of the user who performed the last save in this session. Null on fresh load. */
 let lastSavedBy = null;
 
+/**
+ * CM-PROV-1 — Cell-level formula inspector context.
+ * Stashed by renderSummary() each time it runs so the provenance panel can
+ * rebuild its content without re-running buildYearlyProjections. Holds the
+ * inputs needed to explain any P&L cell (escalation rates, base costs,
+ * orders, calc heuristics).
+ * @type {null | {
+ *   projections: any[],
+ *   summary: any,
+ *   calcHeur: any,
+ *   marginFrac: number,
+ *   contractYears: number,
+ *   baseOrders: number,
+ *   computedAt: string,
+ * }}
+ */
+let _lastProvenanceContext = null;
+/** @type {{rowKey:string, year:number}|null} Tracks which cell the panel is currently explaining. */
+let _activeProvCell = null;
+
 /** @type {boolean} Track whether user has interacted — suppresses validation on fresh model */
 let userHasInteracted = false;
 
@@ -976,6 +996,391 @@ function refreshSaveStateChip() {
   chip.dataset.cmState = lastSavedAt ? 'saved' : 'unsaved';
 }
 
+// ============================================================
+// CM-PROV-1 — Cell-level Formula Inspector
+// ============================================================
+// Click any P&L cell → side panel slides in from the right with the formula
+// that produced the cell, the named inputs feeding it (with values), and the
+// timestamp the projection was computed. Pattern lifted from Hebbia /
+// Macabacus / OAK provenance UX. Highest-leverage CM UX investment per the
+// 2026-04-26 market audit.
+
+/**
+ * Format helpers — kept tight & local so the panel HTML is readable.
+ */
+function _fmtMoney(v) {
+  if (v == null || !Number.isFinite(v)) return '—';
+  try { return calc.formatCurrency(v, { compact: true }); }
+  catch (_) { return '$' + Math.round(v).toLocaleString(); }
+}
+function _fmtPct(v, digits = 1) {
+  if (v == null || !Number.isFinite(v)) return '—';
+  return (v * 100).toFixed(digits) + '%';
+}
+function _fmtNum(v) {
+  if (v == null || !Number.isFinite(v)) return '—';
+  return Math.round(v).toLocaleString();
+}
+
+/**
+ * Build the provenance record for a single P&L cell.
+ *
+ * @param {string} rowKey  — one of: orders, revenue, labor, facility, equipment, vas,
+ *                          cogs, grossProfit, sga, ebitda, depreciation, ebit,
+ *                          taxes, netIncome, capex, workingCapitalChange,
+ *                          freeCashFlow, cumFcf
+ * @param {number} year    — 1-based year index
+ * @returns {null | { label, formula, value, inputs:Array<{label,value,source}>, notes?:string }}
+ */
+function getCellProvenance(rowKey, year) {
+  const ctx = _lastProvenanceContext;
+  if (!ctx) return null;
+  const idx = year - 1;
+  const p = ctx.projections[idx];
+  if (!p) return null;
+  const ch = ctx.calcHeur || {};
+  const s = ctx.summary || {};
+  const mFrac = ctx.marginFrac;
+
+  // Cumulative escalation factor for human display ("compounded 9.3% by Y4")
+  const compound = (rate, n) => Math.pow(1 + rate, n - 1) - 1;
+  const volMult = Math.pow(1 + (ch.volGrowthPct || 0) / 100, year - 1);
+  const laborMult = Math.pow(1 + (ch.laborEscPct || 0) / 100, year - 1);
+  const facilityMult = Math.pow(1 + ((ch.facilityEscPct ?? ch.costEscPct) || 0) / 100, year - 1);
+  const equipmentMult = Math.pow(1 + ((ch.equipmentEscPct ?? ch.costEscPct) || 0) / 100, year - 1);
+  const costMult = Math.pow(1 + (ch.costEscPct || 0) / 100, year - 1);
+
+  switch (rowKey) {
+    case 'orders':
+      return {
+        label: `Orders (Year ${year})`,
+        formula: 'orders = baseOrders × (1 + volGrowth)^(year − 1)',
+        value: p.orders,
+        inputs: [
+          { label: 'Base Orders (Y1)', value: _fmtNum(ctx.baseOrders), source: 'Volumes & Profile → starred outbound line' },
+          { label: 'Volume Growth', value: ((ch.volGrowthPct || 0).toFixed(1) + '%/yr'), source: 'Heuristics' },
+          { label: 'Cumulative growth', value: _fmtPct(compound((ch.volGrowthPct || 0) / 100, year)), source: `Compounded over ${year - 1} year(s)` },
+        ],
+      };
+
+    case 'labor':
+      return {
+        label: `Labor Cost (Year ${year})`,
+        formula: 'labor = baseLaborCost × (1 + laborEsc)^(yr−1) × (1 + volGrowth)^(yr−1)' + (year === 1 ? ' × (1 / yr1LearningFactor)' : ''),
+        value: p.labor,
+        inputs: [
+          { label: 'Base Labor Cost', value: _fmtMoney(s.laborCost), source: 'Sum of laborLines + indirectLaborLines' },
+          { label: 'Labor Escalation', value: ((ch.laborEscPct || 0).toFixed(1) + '%/yr'), source: 'Heuristics' },
+          { label: 'Volume Growth', value: ((ch.volGrowthPct || 0).toFixed(1) + '%/yr'), source: 'Heuristics' },
+          { label: 'Combined multiplier', value: (laborMult * volMult).toFixed(3) + '×', source: `Y${year} of ${ctx.contractYears}` },
+          ...(year === 1 ? [{ label: 'Y1 Learning Curve', value: ((p.learningMult || 1).toFixed(3) + '×'), source: 'Weighted complexity_tier across labor lines' }] : []),
+        ],
+        notes: year === 1
+          ? 'Year 1 includes a productivity ramp: new hires reach standard productivity over time. Higher complexity → bigger Y1 cost uplift.'
+          : 'No learning-curve in Y2+: standard productivity is assumed.',
+      };
+
+    case 'facility':
+      return {
+        label: `Facility Cost (Year ${year})`,
+        formula: 'facility = baseFacilityCost × (1 + facilityEsc)^(yr − 1)',
+        value: p.facility,
+        inputs: [
+          { label: 'Base Facility Cost', value: _fmtMoney(s.facilityCost), source: 'Facility rent + utilities + TI amort + property tax' },
+          { label: 'Facility Escalation', value: (((ch.facilityEscPct ?? ch.costEscPct) || 0).toFixed(1) + '%/yr'), source: ch.facilityEscPct != null ? 'Heuristics → Facility Esc' : 'Heuristics → Cost Esc (default)' },
+          { label: 'Cumulative escalation', value: _fmtPct(compound(((ch.facilityEscPct ?? ch.costEscPct) || 0) / 100, year)), source: `Compounded over ${year - 1} year(s)` },
+        ],
+        notes: 'No volume escalator — facility cost is structurally fixed. Add square footage or change market rate to move the base.',
+      };
+
+    case 'equipment':
+      return {
+        label: `Equipment Cost (Year ${year})`,
+        formula: 'equipment = baseEquipmentCost × (1 + equipmentEsc)^(yr − 1)',
+        value: p.equipment,
+        inputs: [
+          { label: 'Base Equipment Cost', value: _fmtMoney(s.equipmentCost), source: 'Sum of equipmentLines (own + rent + IT + 3-way)' },
+          { label: 'Equipment Escalation', value: (((ch.equipmentEscPct ?? ch.costEscPct) || 0).toFixed(1) + '%/yr'), source: ch.equipmentEscPct != null ? 'Heuristics → Equipment Esc' : 'Heuristics → Cost Esc (default)' },
+          { label: 'Cumulative escalation', value: _fmtPct(compound(((ch.equipmentEscPct ?? ch.costEscPct) || 0) / 100, year)), source: `Compounded over ${year - 1} year(s)` },
+        ],
+      };
+
+    case 'vas':
+      return {
+        label: `VAS (Pass-through) — Year ${year}`,
+        formula: 'vas = baseVasCost × (1 + volGrowth)^(yr − 1)',
+        value: p.vas,
+        inputs: [
+          { label: 'Base VAS Cost', value: _fmtMoney(s.vasCost), source: 'Sum of vasLines' },
+          { label: 'Volume Growth', value: ((ch.volGrowthPct || 0).toFixed(1) + '%/yr'), source: 'Heuristics' },
+          { label: 'Cumulative growth', value: _fmtPct(compound((ch.volGrowthPct || 0) / 100, year)), source: `Compounded over ${year - 1} year(s)` },
+        ],
+        notes: 'VAS scales with volume, not cost-of-living. No escalation rate applied.',
+      };
+
+    case 'overhead':
+    case 'sga': {
+      const v = p.sga ?? p.overhead;
+      const inputs = [
+        { label: 'Base Overhead Cost', value: _fmtMoney(s.overheadCost), source: 'Sum of overheadLines (annualized)' },
+        { label: 'Cost Escalation', value: ((ch.costEscPct || 0).toFixed(1) + '%/yr'), source: 'Heuristics' },
+        { label: 'Cumulative escalation', value: _fmtPct(compound((ch.costEscPct || 0) / 100, year)), source: `Compounded over ${year - 1} year(s)` },
+      ];
+      if (p.sgaOverlay && p.sgaOverlay > 0) {
+        inputs.push({ label: 'SG&A Overlay', value: _fmtMoney(p.sgaOverlay), source: 'Financial → SG&A Overlay %' });
+      }
+      return {
+        label: `Overhead / SG&A (Year ${year})`,
+        formula: (p.sgaOverlay && p.sgaOverlay > 0)
+          ? 'sga = sgaCategory + (revenue × sgaOverlayPct)\nsgaCategory = baseOverhead × (1 + costEsc)^(yr − 1)'
+          : 'overhead = baseOverheadCost × (1 + costEsc)^(yr − 1)',
+        value: v,
+        inputs,
+        notes: 'No volume scalar (audit 2026-04-21 removed an undocumented 30% volume-elasticity term).',
+      };
+    }
+
+    case 'revenue':
+      return {
+        label: `Revenue (Year ${year})`,
+        formula: 'revenue = totalCost ÷ (1 − targetMargin)\nbreakout: each category grossed up at the same margin',
+        value: p.revenue,
+        inputs: [
+          { label: 'Total Cost (Y' + year + ')', value: _fmtMoney(p.totalCost), source: 'Labor + Facility + Equipment + Overhead + VAS + Startup' },
+          { label: 'Target Margin', value: _fmtPct(mFrac, 2), source: 'Financial → Target Margin %' },
+          { label: 'Implied Cost / Revenue', value: _fmtPct(p.revenue > 0 ? (p.totalCost / p.revenue) : 0), source: 'Year ' + year + ' P&L' },
+          { label: 'Labor revenue', value: _fmtMoney(p.laborRevenue), source: 'labor ÷ (1 − margin)' },
+          { label: 'Facility revenue', value: _fmtMoney(p.facilityRevenue), source: 'facility ÷ (1 − margin)' },
+          { label: 'Equipment revenue', value: _fmtMoney(p.equipmentRevenue), source: 'equipment ÷ (1 − margin)' },
+          { label: 'Overhead revenue', value: _fmtMoney(p.overheadRevenue), source: 'overhead ÷ (1 − margin)' },
+          { label: 'VAS revenue', value: _fmtMoney(p.vasRevenue), source: 'vas ÷ (1 − margin)' },
+        ],
+        notes: 'Reference cost-plus pricing per Part I §3.2. Each category grossed up at the same margin, then summed.',
+      };
+
+    case 'cogs':
+      return {
+        label: `COGS (Year ${year})`,
+        formula: 'cogs = labor + facility + equipment + vas',
+        value: p.cogs ?? (p.labor + p.facility + p.equipment + p.vas),
+        inputs: [
+          { label: 'Labor', value: _fmtMoney(p.labor), source: 'Year ' + year + ' Labor row' },
+          { label: 'Facility', value: _fmtMoney(p.facility), source: 'Year ' + year + ' Facility row' },
+          { label: 'Equipment', value: _fmtMoney(p.equipment), source: 'Year ' + year + ' Equipment row' },
+          { label: 'VAS', value: _fmtMoney(p.vas), source: 'Year ' + year + ' VAS row' },
+        ],
+        notes: 'Site-level direct costs. Excludes Overhead (SG&A), D&A, taxes.',
+      };
+
+    case 'grossProfit':
+      return {
+        label: `Gross Profit (Year ${year})`,
+        formula: 'grossProfit = revenue − cogs',
+        value: p.grossProfit,
+        inputs: [
+          { label: 'Revenue', value: _fmtMoney(p.revenue), source: 'Year ' + year + ' Revenue row' },
+          { label: 'COGS', value: _fmtMoney(p.cogs ?? (p.labor + p.facility + p.equipment + p.vas)), source: 'Year ' + year + ' Total COGS row' },
+          { label: 'GP %', value: _fmtPct(p.revenue > 0 ? p.grossProfit / p.revenue : 0), source: '' },
+        ],
+      };
+
+    case 'ebitda':
+      return {
+        label: `EBITDA (Year ${year})`,
+        formula: 'ebitda = grossProfit − sga',
+        value: p.ebitda,
+        inputs: [
+          { label: 'Gross Profit', value: _fmtMoney(p.grossProfit), source: 'Year ' + year + ' GP row' },
+          { label: 'SG&A', value: _fmtMoney(p.sga ?? p.overhead), source: 'Year ' + year + ' Overhead row' },
+          { label: 'EBITDA %', value: _fmtPct(p.revenue > 0 ? p.ebitda / p.revenue : 0), source: '' },
+        ],
+      };
+
+    case 'depreciation':
+      return {
+        label: `D&A (Year ${year})`,
+        formula: 'depreciation = startupAmort  (constant across all years)',
+        value: p.depreciation ?? p.startup,
+        inputs: [
+          { label: 'Startup Amort.', value: _fmtMoney(s.startupAmort), source: 'Sum of startupLines ÷ contract term' },
+          { label: 'Contract Term', value: ctx.contractYears + ' yr', source: 'Project Details' },
+        ],
+        notes: 'Equipment capital is excluded (own_then_buy treatment). TI is folded into Facility cost via amortization.',
+      };
+
+    case 'ebit':
+      return {
+        label: `EBIT (Year ${year})`,
+        formula: 'ebit = ebitda − depreciation',
+        value: p.ebit,
+        inputs: [
+          { label: 'EBITDA', value: _fmtMoney(p.ebitda), source: 'Year ' + year + ' EBITDA row' },
+          { label: 'D&A', value: _fmtMoney(p.depreciation ?? p.startup), source: 'Year ' + year + ' D&A row' },
+        ],
+      };
+
+    case 'taxes':
+      return {
+        label: `Taxes (Year ${year})`,
+        formula: 'taxes = max(0, ebit × taxRate)',
+        value: p.taxes || 0,
+        inputs: [
+          { label: 'EBIT', value: _fmtMoney(p.ebit), source: 'Year ' + year + ' EBIT row' },
+          { label: 'Tax Rate', value: ((ch.taxRatePct || 25).toFixed(1) + '%'), source: 'Heuristics → Tax Rate' },
+        ],
+        notes: 'Loss years zero out — no NOL carryforward modeled.',
+      };
+
+    case 'netIncome':
+      return {
+        label: `Net Income (Year ${year})`,
+        formula: 'netIncome = ebit − taxes',
+        value: p.netIncome,
+        inputs: [
+          { label: 'EBIT', value: _fmtMoney(p.ebit), source: 'Year ' + year + ' EBIT row' },
+          { label: 'Taxes', value: _fmtMoney(p.taxes || 0), source: 'Year ' + year + ' Taxes row' },
+          { label: 'NI %', value: _fmtPct(p.revenue > 0 ? p.netIncome / p.revenue : 0), source: '' },
+        ],
+      };
+
+    case 'capex':
+      return {
+        label: `CapEx (Year ${year})`,
+        formula: year === 1 ? 'capex_y1 = startupCapital  (Y2+ = 0)' : 'capex = 0  (no recurring CapEx in this model)',
+        value: p.capex,
+        inputs: [
+          { label: 'Startup Capital', value: _fmtMoney(s.startupCapital), source: 'Sum of startupLines marked is_capital' },
+          { label: 'Year', value: 'Y' + year + ' of ' + ctx.contractYears, source: '' },
+        ],
+        notes: year === 1 ? 'All startup capital hits Y0/Y1 cash flow.' : 'No replacement-CapEx modeled — assumes assets last the contract.',
+      };
+
+    case 'workingCapitalChange':
+      return {
+        label: `Δ Working Capital (Year ${year})`,
+        formula: year === 1 ? 'ΔWC_Y1 = revenue × 8%' : 'ΔWC = revenue × volGrowth × 8%',
+        value: p.workingCapitalChange,
+        inputs: [
+          { label: 'Revenue', value: _fmtMoney(p.revenue), source: 'Year ' + year + ' Revenue row' },
+          { label: 'Volume Growth', value: ((ch.volGrowthPct || 0).toFixed(1) + '%/yr'), source: 'Heuristics' },
+          { label: 'WC Proxy', value: '8% of revenue', source: 'Legacy yearly engine constant' },
+        ],
+        notes: 'Yearly engine uses an 8% revenue proxy. The monthly engine (when enabled) uses a defensible DSO/DPO/labor-accrual model instead.',
+      };
+
+    case 'freeCashFlow':
+      return {
+        label: `Free Cash Flow (Year ${year})`,
+        formula: 'fcf = (ni + d&a − ΔWC) − capex',
+        value: p.freeCashFlow,
+        inputs: [
+          { label: 'Net Income', value: _fmtMoney(p.netIncome), source: 'Year ' + year + ' NI row' },
+          { label: 'D&A', value: _fmtMoney(p.depreciation ?? p.startup), source: 'Add-back (non-cash)' },
+          { label: 'Δ Working Capital', value: _fmtMoney(p.workingCapitalChange), source: 'Year ' + year + ' ΔWC row (subtracted)' },
+          { label: 'CapEx', value: _fmtMoney(p.capex), source: 'Year ' + year + ' CapEx row (subtracted)' },
+          { label: 'Operating CF', value: _fmtMoney(p.operatingCashFlow), source: 'NI + D&A − ΔWC' },
+        ],
+      };
+
+    case 'cumFcf':
+      return {
+        label: `Cumulative FCF (Year ${year})`,
+        formula: 'cumFcf = Σ freeCashFlow from Y1 to Y' + year,
+        value: p.cumFcf,
+        inputs: [
+          { label: 'This Year FCF', value: _fmtMoney(p.freeCashFlow), source: 'Year ' + year + ' FCF row' },
+          { label: 'Prior Cum FCF', value: _fmtMoney(p.cumFcf - p.freeCashFlow), source: year > 1 ? `Year ${year - 1} Cum FCF` : 'Year 0 baseline (0)' },
+        ],
+        notes: 'Crossover from negative to positive marks the Payback point used in the Summary KPIs.',
+      };
+  }
+  return null;
+}
+
+/** Render the panel HTML. Returns the inner content (panel container is in renderShell). */
+function renderProvenancePanelInner() {
+  if (!_activeProvCell) {
+    return `<div style="padding:32px 16px;text-align:center;color:var(--ies-gray-500);font-size:13px;line-height:1.5;">
+      <div style="font-size:14px;font-weight:600;color:var(--ies-gray-700);margin-bottom:8px;">Cell-level formula inspector</div>
+      <div>Click any value in the P&L table to see the formula that produced it, the inputs feeding it, and how to change it.</div>
+    </div>`;
+  }
+  const prov = getCellProvenance(_activeProvCell.rowKey, _activeProvCell.year);
+  if (!prov) {
+    return `<div style="padding:24px;color:var(--ies-gray-500);font-size:13px;">No provenance available for this cell.</div>`;
+  }
+  const computedAt = _lastProvenanceContext?.computedAt;
+  const computedAtStr = computedAt ? new Date(computedAt).toLocaleString() : '—';
+
+  return `
+    <div style="padding:14px 16px;border-bottom:1px solid var(--ies-gray-200);">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);font-weight:700;">Cell Inspector</div>
+        <button id="cm-prov-close" class="hub-btn hub-btn-sm hub-btn-secondary" style="padding:2px 8px;font-size:11px;line-height:1.4;">Close ✕</button>
+      </div>
+      <div style="font-size:15px;font-weight:700;color:var(--ies-navy,#0F1B2E);margin-top:4px;">${prov.label}</div>
+      <div style="font-size:22px;font-weight:700;color:var(--ies-blue,#0047AB);margin-top:6px;">${_fmtMoney(prov.value)}</div>
+    </div>
+
+    <div style="padding:14px 16px;border-bottom:1px solid var(--ies-gray-200);background:var(--ies-gray-50,#f9fafb);">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);font-weight:700;margin-bottom:6px;">Formula</div>
+      <pre style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.45;background:#fff;border:1px solid var(--ies-gray-200);border-radius:4px;padding:8px 10px;white-space:pre-wrap;word-break:break-word;color:var(--ies-gray-800,#1f2937);margin:0;">${prov.formula.replace(/</g, '&lt;')}</pre>
+    </div>
+
+    <div style="padding:14px 16px;${prov.notes ? 'border-bottom:1px solid var(--ies-gray-200);' : ''}">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);font-weight:700;margin-bottom:8px;">Inputs feeding this cell</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        ${prov.inputs.map(inp => `
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;font-size:12.5px;line-height:1.4;">
+            <div style="flex:1;min-width:0;">
+              <div style="font-weight:600;color:var(--ies-gray-800,#1f2937);">${inp.label}</div>
+              ${inp.source ? `<div style="font-size:11px;color:var(--ies-gray-500);">${inp.source}</div>` : ''}
+            </div>
+            <div style="font-weight:700;color:var(--ies-navy,#0F1B2E);font-variant-numeric:tabular-nums;white-space:nowrap;">${inp.value}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+
+    ${prov.notes ? `<div style="padding:12px 16px;background:#fff7ed;border-bottom:1px solid var(--ies-gray-200);font-size:11.5px;line-height:1.5;color:var(--ies-gray-700,#374151);"><strong style="color:#9a3412;">Note:</strong> ${prov.notes}</div>` : ''}
+
+    <div style="padding:10px 16px;font-size:10.5px;color:var(--ies-gray-500);line-height:1.4;">
+      Computed ${computedAtStr}<br>
+      Year ${_activeProvCell.year} of ${_lastProvenanceContext?.contractYears || '—'} · row key <code style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10.5px;background:var(--ies-gray-100);padding:1px 4px;border-radius:3px;">${_activeProvCell.rowKey}</code>
+    </div>
+  `;
+}
+
+/** Open the panel for a specific cell. */
+function openProvenancePanel(rowKey, year) {
+  _activeProvCell = { rowKey, year };
+  refreshProvenancePanel();
+}
+
+/** Close the panel. */
+function closeProvenancePanel() {
+  _activeProvCell = null;
+  refreshProvenancePanel();
+}
+
+/** Re-render panel contents. Safe to call when no panel exists in the DOM. */
+function refreshProvenancePanel() {
+  const panel = rootEl?.querySelector('#cm-provenance-panel');
+  const inner = rootEl?.querySelector('#cm-provenance-panel-inner');
+  if (!panel || !inner) return;
+  inner.innerHTML = renderProvenancePanelInner();
+  panel.dataset.cmOpen = _activeProvCell ? 'true' : 'false';
+  panel.style.transform = _activeProvCell ? 'translateX(0)' : 'translateX(110%)';
+  // Highlight the active cell
+  rootEl.querySelectorAll('[data-cm-cell].is-active').forEach(el => el.classList.remove('is-active'));
+  if (_activeProvCell) {
+    const sel = `[data-cm-cell="${_activeProvCell.rowKey}"][data-cm-year="${_activeProvCell.year}"]`;
+    rootEl.querySelector(sel)?.classList.add('is-active');
+  }
+  // Wire close button (rebuilt every time inner is rebuilt)
+  rootEl.querySelector('#cm-prov-close')?.addEventListener('click', closeProvenancePanel);
+}
+
 function renderShell() {
   return `
     <div class="hub-builder" style="height: calc(100vh - 48px);">
@@ -1018,6 +1423,17 @@ function renderShell() {
           <!-- Section content renders here -->
         </div>
       </div>
+
+      <!-- CM-PROV-1 — Cell-level formula inspector side panel -->
+      <aside id="cm-provenance-panel"
+             data-cm-open="false"
+             style="position:fixed; top:48px; right:0; width:380px; max-width:92vw; height:calc(100vh - 48px);
+                    background:#fff; border-left:1px solid var(--ies-gray-200,#e5e7eb);
+                    box-shadow:-6px 0 16px rgba(15,27,46,0.08);
+                    transform:translateX(110%); transition:transform 220ms ease;
+                    z-index:1100; overflow-y:auto;">
+        <div id="cm-provenance-panel-inner"></div>
+      </aside>
     </div>
 
     <style>
@@ -1058,6 +1474,11 @@ function renderShell() {
         border-width: 0 2px 2px 0;
         transform: rotate(45deg);
       }
+
+      /* CM-PROV-1 — clickable P&L cells + side-panel polish */
+      [data-cm-cell] { cursor: pointer; transition: background-color 0.12s ease, outline 0.12s ease; }
+      [data-cm-cell]:hover { background-color: rgba(0,71,171,0.06); }
+      [data-cm-cell].is-active { outline: 2px solid var(--ies-blue,#0047AB); outline-offset: -2px; background-color: rgba(0,71,171,0.08); }
 
       .cm-form-group { margin-bottom: 20px; }
       .cm-form-label {
@@ -4908,9 +5329,23 @@ function renderSummary() {
     _heuristicsSource: calcHeur.used,
   });
   _lastCalcHeuristics = calcHeur; // for the frozen-banner in Summary/Timeline
+  // CM-PROV-1 — stash the inputs the cell-inspector panel needs to explain
+  // any P&L cell. Refreshed every Summary render so heuristic / what-if
+  // changes flow through immediately.
+  _lastProvenanceContext = {
+    projections: [], // populated below once `projections` is in scope
+    summary,
+    calcHeur,
+    marginFrac,
+    contractYears,
+    baseOrders: orders || 1,
+    computedAt: new Date().toISOString(),
+  };
   // Stash the monthly bundle for save-time persistence
   if (projResult && projResult.monthlyBundle) _lastMonthlyBundle = projResult.monthlyBundle;
   const projections = projResult.projections || [];
+  // CM-PROV-1 — finish wiring the provenance ctx now that projections exist.
+  if (_lastProvenanceContext) _lastProvenanceContext.projections = projections;
   // Cache for cross-section reads (M3 banner on Pricing page reads Y1 margin
   // from this to surface ramp-adjusted actual alongside reference-basis).
   _lastProjections = projections;
@@ -5158,29 +5593,29 @@ function renderSummary() {
             </tr>
           </thead>
           <tbody>
-            <tr><td style="font-weight:600;">Orders</td>${projections.map(p => `<td class="hub-num">${Math.round(p.orders).toLocaleString()}</td>`).join('')}</tr>
-            <tr class="cm-pnl-row-revenue"><td style="font-weight:700; color:var(--ies-blue);">Revenue</td>${projections.map(p => `<td class="hub-num" style="font-weight:700; color:var(--ies-blue);">${calc.formatCurrency(p.revenue, {compact: true})}</td>`).join('')}</tr>
+            <tr><td style="font-weight:600;">Orders</td>${projections.map(p => `<td class="hub-num" data-cm-cell="orders" data-cm-year="${p.year}" title="Click for formula details">${Math.round(p.orders).toLocaleString()}</td>`).join('')}</tr>
+            <tr class="cm-pnl-row-revenue"><td style="font-weight:700; color:var(--ies-blue);">Revenue</td>${projections.map(p => `<td class="hub-num" style="font-weight:700; color:var(--ies-blue);" data-cm-cell="revenue" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.revenue, {compact: true})}</td>`).join('')}</tr>
 
-            <tr><td style="padding-left:16px; color:var(--ies-gray-600);">Labor</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);">${calc.formatCurrency(p.labor, {compact: true})}</td>`).join('')}</tr>
-            <tr><td style="padding-left:16px; color:var(--ies-gray-600);">Facility</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);">${calc.formatCurrency(p.facility, {compact: true})}</td>`).join('')}</tr>
-            <tr><td style="padding-left:16px; color:var(--ies-gray-600);">Equipment</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);">${calc.formatCurrency(p.equipment, {compact: true})}</td>`).join('')}</tr>
-            <tr><td style="padding-left:16px; color:var(--ies-gray-600);">VAS (Pass-through)</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);">${calc.formatCurrency(p.vas, {compact: true})}</td>`).join('')}</tr>
-            <tr style="border-top: 1px dashed var(--ies-gray-200);"><td style="font-weight:600;">Total COGS</td>${projections.map(p => `<td class="hub-num" style="font-weight:600;">${calc.formatCurrency(p.cogs ?? (p.labor + p.facility + p.equipment + p.vas), {compact: true})}</td>`).join('')}</tr>
-            <tr class="cm-pnl-row-total"><td style="font-weight:700;">Gross Profit</td>${projections.map(p => `<td class="hub-num" style="font-weight:700; color:${p.grossProfit >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};">${calc.formatCurrency(p.grossProfit, {compact: true})}</td>`).join('')}</tr>
+            <tr><td style="padding-left:16px; color:var(--ies-gray-600);">Labor</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);" data-cm-cell="labor" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.labor, {compact: true})}</td>`).join('')}</tr>
+            <tr><td style="padding-left:16px; color:var(--ies-gray-600);">Facility</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);" data-cm-cell="facility" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.facility, {compact: true})}</td>`).join('')}</tr>
+            <tr><td style="padding-left:16px; color:var(--ies-gray-600);">Equipment</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);" data-cm-cell="equipment" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.equipment, {compact: true})}</td>`).join('')}</tr>
+            <tr><td style="padding-left:16px; color:var(--ies-gray-600);">VAS (Pass-through)</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);" data-cm-cell="vas" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.vas, {compact: true})}</td>`).join('')}</tr>
+            <tr style="border-top: 1px dashed var(--ies-gray-200);"><td style="font-weight:600;">Total COGS</td>${projections.map(p => `<td class="hub-num" style="font-weight:600;" data-cm-cell="cogs" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.cogs ?? (p.labor + p.facility + p.equipment + p.vas), {compact: true})}</td>`).join('')}</tr>
+            <tr class="cm-pnl-row-total"><td style="font-weight:700;">Gross Profit</td>${projections.map(p => `<td class="hub-num" style="font-weight:700; color:${p.grossProfit >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};" data-cm-cell="grossProfit" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.grossProfit, {compact: true})}</td>`).join('')}</tr>
 
-            <tr><td style="padding-left:16px; color:var(--ies-gray-600);">Overhead (SG&A)</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);">${calc.formatCurrency(p.sga ?? p.overhead, {compact: true})}</td>`).join('')}</tr>
-            <tr style="border-top: 1px dashed var(--ies-gray-200);"><td style="font-weight:700;">EBITDA</td>${projections.map(p => `<td class="hub-num" style="font-weight:700;">${calc.formatCurrency(p.ebitda, {compact: true})}</td>`).join('')}</tr>
+            <tr><td style="padding-left:16px; color:var(--ies-gray-600);">Overhead (SG&A)</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);" data-cm-cell="sga" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.sga ?? p.overhead, {compact: true})}</td>`).join('')}</tr>
+            <tr style="border-top: 1px dashed var(--ies-gray-200);"><td style="font-weight:700;">EBITDA</td>${projections.map(p => `<td class="hub-num" style="font-weight:700;" data-cm-cell="ebitda" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.ebitda, {compact: true})}</td>`).join('')}</tr>
 
-            <tr><td style="padding-left:16px; color:var(--ies-gray-600);">Depreciation &amp; Amort.</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);">${calc.formatCurrency(p.depreciation ?? p.startup, {compact: true})}</td>`).join('')}</tr>
-            <tr style="border-top: 1px dashed var(--ies-gray-200);"><td style="font-weight:700;">EBIT</td>${projections.map(p => `<td class="hub-num" style="font-weight:700;">${calc.formatCurrency(p.ebit, {compact: true})}</td>`).join('')}</tr>
+            <tr><td style="padding-left:16px; color:var(--ies-gray-600);">Depreciation &amp; Amort.</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);" data-cm-cell="depreciation" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.depreciation ?? p.startup, {compact: true})}</td>`).join('')}</tr>
+            <tr style="border-top: 1px dashed var(--ies-gray-200);"><td style="font-weight:700;">EBIT</td>${projections.map(p => `<td class="hub-num" style="font-weight:700;" data-cm-cell="ebit" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.ebit, {compact: true})}</td>`).join('')}</tr>
 
-            <tr><td style="padding-left:16px; color:var(--ies-gray-600);">Taxes</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);">${calc.formatCurrency(p.taxes || 0, {compact: true})}</td>`).join('')}</tr>
-            <tr style="border-top: 1px dashed var(--ies-gray-200);"><td style="font-weight:700;">Net Income</td>${projections.map(p => `<td class="hub-num" style="font-weight:700; color:${p.netIncome >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};">${calc.formatCurrency(p.netIncome, {compact: true})}</td>`).join('')}</tr>
+            <tr><td style="padding-left:16px; color:var(--ies-gray-600);">Taxes</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);" data-cm-cell="taxes" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.taxes || 0, {compact: true})}</td>`).join('')}</tr>
+            <tr style="border-top: 1px dashed var(--ies-gray-200);"><td style="font-weight:700;">Net Income</td>${projections.map(p => `<td class="hub-num" style="font-weight:700; color:${p.netIncome >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};" data-cm-cell="netIncome" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.netIncome, {compact: true})}</td>`).join('')}</tr>
 
-            <tr class="cm-pnl-row-capex"><td style="padding-left:16px; color:var(--ies-gray-600);">CapEx</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);">${p.capex > 0 ? '(' + calc.formatCurrency(p.capex, {compact: true}) + ')' : '—'}</td>`).join('')}</tr>
-            <tr><td style="padding-left:16px; color:var(--ies-gray-600);">Δ Working Capital</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);">${p.workingCapitalChange ? ((p.workingCapitalChange > 0 ? '(' : '') + calc.formatCurrency(Math.abs(p.workingCapitalChange), {compact: true}) + (p.workingCapitalChange > 0 ? ')' : '')) : '—'}</td>`).join('')}</tr>
-            <tr style="border-top: 1px dashed var(--ies-gray-200);"><td style="font-weight:700;">Free Cash Flow</td>${projections.map(p => `<td class="hub-num" style="font-weight:700; color:${p.freeCashFlow >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};">${calc.formatCurrency(p.freeCashFlow, {compact: true})}</td>`).join('')}</tr>
-            <tr><td style="color:var(--ies-gray-500); font-size:12px;">Cumulative FCF</td>${projections.map(p => `<td class="hub-num" style="color:${(p.cumFcf||0) >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'}; font-size:12px;">${calc.formatCurrency(p.cumFcf || 0, {compact: true})}</td>`).join('')}</tr>
+            <tr class="cm-pnl-row-capex"><td style="padding-left:16px; color:var(--ies-gray-600);">CapEx</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);" data-cm-cell="capex" data-cm-year="${p.year}" title="Click for formula details">${p.capex > 0 ? '(' + calc.formatCurrency(p.capex, {compact: true}) + ')' : '—'}</td>`).join('')}</tr>
+            <tr><td style="padding-left:16px; color:var(--ies-gray-600);">Δ Working Capital</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);" data-cm-cell="workingCapitalChange" data-cm-year="${p.year}" title="Click for formula details">${p.workingCapitalChange ? ((p.workingCapitalChange > 0 ? '(' : '') + calc.formatCurrency(Math.abs(p.workingCapitalChange), {compact: true}) + (p.workingCapitalChange > 0 ? ')' : '')) : '—'}</td>`).join('')}</tr>
+            <tr style="border-top: 1px dashed var(--ies-gray-200);"><td style="font-weight:700;">Free Cash Flow</td>${projections.map(p => `<td class="hub-num" style="font-weight:700; color:${p.freeCashFlow >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};" data-cm-cell="freeCashFlow" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.freeCashFlow, {compact: true})}</td>`).join('')}</tr>
+            <tr><td style="color:var(--ies-gray-500); font-size:12px;">Cumulative FCF</td>${projections.map(p => `<td class="hub-num" style="color:${(p.cumFcf||0) >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'}; font-size:12px;" data-cm-cell="cumFcf" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.cumFcf || 0, {compact: true})}</td>`).join('')}</tr>
           </tbody>
         </table>
       </div>
@@ -5854,6 +6289,32 @@ function bindSectionEvents(section, container) {
       // Only re-render on a truly fresh fetch to avoid an infinite loop.
       if (fresh) renderSection();
     });
+  }
+
+  // CM-PROV-1 — wire P&L cell click delegation. Per
+  // feedback_event_delegation_pattern.md: bind at the section container so
+  // re-rendered cells stay clickable.
+  if (section === 'summary') {
+    container.addEventListener('click', (e) => {
+      const cell = e.target.closest('[data-cm-cell]');
+      if (!cell) return;
+      const rowKey = cell.dataset.cmCell;
+      const year = parseInt(cell.dataset.cmYear, 10);
+      if (!rowKey || !Number.isFinite(year)) return;
+      // Toggle: clicking the active cell again closes the panel.
+      if (_activeProvCell && _activeProvCell.rowKey === rowKey && _activeProvCell.year === year) {
+        closeProvenancePanel();
+      } else {
+        openProvenancePanel(rowKey, year);
+      }
+    });
+    // Refresh panel state whenever Summary re-renders so the active cell
+    // highlight (and panel contents) reflect the latest projections.
+    refreshProvenancePanel();
+  } else if (_activeProvCell) {
+    // Leaving the Summary section closes any open inspector — the panel
+    // would otherwise reference stale cells.
+    closeProvenancePanel();
   }
 
   // --------------------------------------------------------------
