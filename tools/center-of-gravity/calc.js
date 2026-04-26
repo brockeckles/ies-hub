@@ -35,7 +35,27 @@ export const DEFAULT_CONFIG = {
   // single big-volume customer (~30%+ of network volume).
   outlierCapEnabled: false,
   outlierCapPercentile: 95,
+  // CM-PRC-1 sibling: weight unit governs label text on the truck-capacity
+  // input + demand-point table column. Math is unit-agnostic — user weights
+  // and capacity must agree. Supported: lb, cwt, pallets, units, cases,
+  // orders, revenue.
+  weightUnit: 'lb',
 };
+
+// CoG weight-unit metadata — drives label text + step sizes in the UI.
+export const WEIGHT_UNIT_OPTIONS = [
+  { value: 'lb',       label: 'Pounds (lb)',     short: 'lbs',     defaultCap: 25000, step: 100,    rateUnit: 'lb-mi'      },
+  { value: 'cwt',      label: 'Hundredweight (cwt)', short: 'cwt', defaultCap: 250,   step: 1,      rateUnit: 'cwt-mi'     },
+  { value: 'pallets',  label: 'Pallets',         short: 'pallets', defaultCap: 26,    step: 1,      rateUnit: 'pallet-mi'  },
+  { value: 'units',    label: 'Units',           short: 'units',   defaultCap: 5000,  step: 100,    rateUnit: 'unit-mi'    },
+  { value: 'cases',    label: 'Cases',           short: 'cases',   defaultCap: 1500,  step: 50,     rateUnit: 'case-mi'    },
+  { value: 'orders',   label: 'Orders',          short: 'orders',  defaultCap: 250,   step: 10,     rateUnit: 'order-mi'   },
+  { value: 'revenue',  label: 'Revenue ($)',     short: '$',       defaultCap: 50000, step: 1000,   rateUnit: '$-mi'       },
+];
+
+export function getWeightUnitMeta(unit) {
+  return WEIGHT_UNIT_OPTIONS.find(u => u.value === unit) || WEIGHT_UNIT_OPTIONS[0];
+}
 
 /** @type {import('./types.js?v=20260418-sP').MajorCity[]} */
 export const MAJOR_CITIES = [

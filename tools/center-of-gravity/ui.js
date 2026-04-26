@@ -14,7 +14,7 @@ import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sP';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260418-sP';
-import * as calc from './calc.js?v=20260425-s7';
+import * as calc from './calc.js?v=20260426-s9';
 import * as api from './api.js?v=20260418-sP';
 
 // ============================================================
@@ -545,16 +545,23 @@ function renderPoints(el) {
             <span style="font-size:11px;color:var(--ies-gray-400);">How many DC locations to optimize for</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
+            <label style="font-size:13px;font-weight:600;" title="Unit your demand 'weight' values are in. Math doesn't care which unit you pick — capacity below must use the same one. Drives label text everywhere weight appears.">Weight Unit:</label>
+            <select id="cog-weight-unit" style="padding:7px 10px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;">
+              ${calc.WEIGHT_UNIT_OPTIONS.map(u => `<option value="${u.value}"${(config.weightUnit||'lb')===u.value?' selected':''}>${u.label}</option>`).join('')}
+            </select>
+            <span style="font-size:11px;color:var(--ies-gray-400);">Cost rate below is $/${(calc.getWeightUnitMeta(config.weightUnit||'lb').rateUnit || 'lb-mi')}-truck-mile</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
             <label style="font-size:13px;font-weight:600;">Truck $/mi:</label>
             <input type="number" value="${config.transportCostPerMile}" step="0.01" id="cog-cpm"
                    style="width:80px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
             <span style="font-size:11px;color:var(--ies-gray-400);">Per-truck rate (e.g. $2.85/mi for 53-ft van)</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
-            <label style="font-size:13px;font-weight:600;">Units / Truck:</label>
-            <input type="number" value="${config.unitsPerTruck || 25000}" step="100" min="1" id="cog-cap"
+            <label style="font-size:13px;font-weight:600;">${calc.getWeightUnitMeta(config.weightUnit||'lb').short.charAt(0).toUpperCase()+calc.getWeightUnitMeta(config.weightUnit||'lb').short.slice(1)} / Truck:</label>
+            <input type="number" value="${config.unitsPerTruck || 25000}" step="${calc.getWeightUnitMeta(config.weightUnit||'lb').step}" min="1" id="cog-cap"
                    style="width:90px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-            <span style="font-size:11px;color:var(--ies-gray-400);">Avg payload (lbs / pallets / orders) per truckload</span>
+            <span style="font-size:11px;color:var(--ies-gray-400);">Avg payload (${calc.getWeightUnitMeta(config.weightUnit||'lb').short}) per truckload</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
             <label style="font-size:13px;font-weight:600;">Max Iterations:</label>
@@ -637,6 +644,19 @@ function renderPoints(el) {
   el.querySelector('#cog-cpm')?.addEventListener('change', (e) => {
     config.transportCostPerMile = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 2.85;
     markDirty();
+  });
+  el.querySelector('#cog-weight-unit')?.addEventListener('change', (e) => {
+    const v = /** @type {HTMLSelectElement} */ (e.target).value || 'lb';
+    config.weightUnit = v;
+    // If user is on a unit's default capacity, re-seed capacity to match the
+    // new unit's default (so labels stay coherent). If they've customized
+    // capacity, leave it alone.
+    const meta = calc.getWeightUnitMeta(v);
+    const cur = config.unitsPerTruck;
+    const wasOnAnyDefault = calc.WEIGHT_UNIT_OPTIONS.some(u => u.defaultCap === cur);
+    if (wasOnAnyDefault) config.unitsPerTruck = meta.defaultCap;
+    markDirty();
+    render();
   });
   el.querySelector('#cog-cap')?.addEventListener('change', (e) => {
     config.unitsPerTruck = Math.max(1, parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 25000);
