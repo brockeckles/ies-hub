@@ -940,6 +940,26 @@ function wireEditorEvents() {
   rootEl.querySelector('#cm-load-btn')?.addEventListener('click', handleLoad);
   rootEl.querySelector('#cm-export-btn')?.addEventListener('click', handleExportExcel);
 
+  // CM-PROV-1 — root-level click delegation for the P&L cell inspector.
+  // Per feedback_event_delegation_pattern.md: bind at the stable root so
+  // the listener survives every renderShell()/renderCurrentView() pass.
+  // (The previous container-scoped binding was wiped any time renderShell
+  // re-rendered the editor — e.g. nav-group toggle or async profile load.)
+  rootEl.addEventListener('click', (e) => {
+    if (activeSection !== 'summary') return;
+    const cell = e.target.closest('[data-cm-cell]');
+    if (!cell) return;
+    if (!cell.closest('#cm-section-content')) return;
+    const rowKey = cell.dataset.cmCell;
+    const year = parseInt(cell.dataset.cmYear, 10);
+    if (!rowKey || !Number.isFinite(year)) return;
+    if (_activeProvCell && _activeProvCell.rowKey === rowKey && _activeProvCell.year === year) {
+      closeProvenancePanel();
+    } else {
+      openProvenancePanel(rowKey, year);
+    }
+  });
+
   // Section content
   renderSection();
   updateValidation();
@@ -6291,29 +6311,14 @@ function bindSectionEvents(section, container) {
     });
   }
 
-  // CM-PROV-1 — wire P&L cell click delegation. Per
-  // feedback_event_delegation_pattern.md: bind at the section container so
-  // re-rendered cells stay clickable.
+  // CM-PROV-1 — Click delegation now lives on rootEl in wireEditorEvents()
+  // so it survives renderShell()/renderCurrentView() passes. Here we only
+  // refresh the panel state on each Summary render (so active-cell outline
+  // re-applies after innerHTML replacement) and close the panel when the
+  // user navigates away from Summary.
   if (section === 'summary') {
-    container.addEventListener('click', (e) => {
-      const cell = e.target.closest('[data-cm-cell]');
-      if (!cell) return;
-      const rowKey = cell.dataset.cmCell;
-      const year = parseInt(cell.dataset.cmYear, 10);
-      if (!rowKey || !Number.isFinite(year)) return;
-      // Toggle: clicking the active cell again closes the panel.
-      if (_activeProvCell && _activeProvCell.rowKey === rowKey && _activeProvCell.year === year) {
-        closeProvenancePanel();
-      } else {
-        openProvenancePanel(rowKey, year);
-      }
-    });
-    // Refresh panel state whenever Summary re-renders so the active cell
-    // highlight (and panel contents) reflect the latest projections.
     refreshProvenancePanel();
   } else if (_activeProvCell) {
-    // Leaving the Summary section closes any open inspector — the panel
-    // would otherwise reference stale cells.
     closeProvenancePanel();
   }
 
