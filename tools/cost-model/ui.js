@@ -1529,33 +1529,226 @@ function _buildDiscloseHTML(key) {
  * CM-SAVE-1 — Format the last-saved state for the toolbar chip.
  * Returns "—" when the model has never been saved (or is brand-new).
  */
-function formatSaveStateChip() {
-  if (!lastSavedAt) return 'Not yet saved';
-  let when;
+function formatSavedWhen() {
+  if (!lastSavedAt) return '';
   try {
     const d = new Date(lastSavedAt);
-    if (Number.isNaN(d.getTime())) return 'Saved';
+    if (Number.isNaN(d.getTime())) return '';
     const today = new Date();
     const sameDay = d.toDateString() === today.toDateString();
-    when = sameDay
+    const when = sameDay
       ? d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
       : d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    const who = lastSavedBy ? ` · ${lastSavedBy.split('@')[0]}` : '';
+    return `Saved ${when}${who}`;
   } catch { return 'Saved'; }
-  const who = lastSavedBy ? ` by ${lastSavedBy.split('@')[0]}` : '';
-  return `Saved ${when}${who}`;
 }
 
 /**
- * CM-SAVE-1 — Replace the chip's contents in place after a save / load.
+ * CM-SAVE-1 + EVE8 — Tri-state save chip (Draft / Modified / Saved).
+ *  - Draft: no model.id yet (never saved this session)
+ *  - Modified: has model.id AND isDirty (loaded model with unsaved edits)
+ *  - Saved: has model.id AND !isDirty (everything persisted)
+ * Below the chip, a smaller line shows the last-saved audit timestamp.
  * Safe to call when the chip isn't mounted (no-op).
  */
 function refreshSaveStateChip() {
   const chip = rootEl?.querySelector('#cm-save-state-chip');
+  const whenEl = rootEl?.querySelector('#cm-save-state-when');
   if (!chip) return;
-  const text = formatSaveStateChip();
-  chip.textContent = text;
-  chip.title = lastSavedAt ? `Last saved ${new Date(lastSavedAt).toLocaleString()}` : 'Save the model to record an audit timestamp';
-  chip.dataset.cmState = lastSavedAt ? 'saved' : 'unsaved';
+  const hasId = !!model?.id;
+  const draft = !hasId;
+  const modified = hasId && !!isDirty;
+  const saved = hasId && !isDirty;
+  // Reset → reapply state class (preserve `.dot` from base markup so the
+  // current-color dot stays in sync with the new state's text color).
+  chip.classList.remove('draft', 'modified', 'saved');
+  if (draft)   { chip.classList.add('draft');    chip.textContent = 'Draft'; }
+  else if (modified) { chip.classList.add('modified'); chip.textContent = 'Modified'; }
+  else /* saved */   { chip.classList.add('saved');    chip.textContent = 'Saved'; }
+  chip.dataset.cmState = draft ? 'draft' : (modified ? 'modified' : 'saved');
+  chip.title = lastSavedAt
+    ? `Last saved ${new Date(lastSavedAt).toLocaleString()}`
+    : (draft ? 'Brand-new model — Save to capture an audit timestamp' : 'Save to capture the latest changes');
+  if (whenEl) whenEl.textContent = formatSavedWhen();
+  // EVE8 — Save/Load/New flows toggle this; KPI strip should follow so it
+  // re-renders on the new model's data the moment a load completes.
+  refreshHeaderKpis();
+}
+
+// ============================================================
+// EVE8 — Sticky KPI strip
+// ============================================================
+// 5-metric strip pinned to the top of the content scroll container so the
+// headline numbers (Cost/Unit · Y1 Revenue · Y1 Margin · Total FTEs · NPV)
+// stay visible while the user moves between sections. Mirrors NetOpt's
+// gradient-navy KPI bar pattern (see hub.css `.hub-kpi-bar`).
+
+/** Compute the 5 header KPIs from the current model. Returns { ready, items }. */
+function computeHeaderKpis() {
+  try {
+    const market = model?.projectDetails?.market;
+    const fr = (refData?.facilityRates || []).find(r => r.market_id === market);
+    const ur = (refData?.utilityRates  || []).find(r => r.market_id === market);
+    const outboundStar = (model?.volumeLines || []).find(v => v.isOutboundPrimary);
+    const orders = outboundStar?.volume || 0;
+    const outboundUomLabel = formatUomSingular(outboundStar?.uom);
+    const contractYears = model?.projectDetails?.contractTerm || 5;
+    const fin = model?.financial || {};
+
+    // Bail out cheaply when there's effectively no model yet — keeps the
+    // strip blank on empty Setup pages instead of flashing $0.
+    if (!orders) {
+      return {
+        ready: false,
+        items: [
+          { label: `Cost / Unit`,   value: '—', hint: 'Set outbound volume on the Volumes section to populate.' },
+          { label: 'Y1 Revenue',    value: '—' },
+          { label: 'Margin (Y1)',   value: '—' },
+          { label: 'Total FTEs',    value: '—' },
+          { label: `NPV (${contractYears}yr)`, value: '—' },
+        ],
+      };
+    }
+
+    const summary = calc.computeSummary({
+      laborLines: model.laborLines || [],
+      indirectLaborLines: model.indirectLaborLines || [],
+      equipmentLines: model.equipmentLines || [],
+      overheadLines: model.overheadLines || [],
+      vasLines: model.vasLines || [],
+      startupLines: model.startupLines || [],
+      facility: model.facility || {},
+      shifts: model.shifts || {},
+      facilityRate: fr,
+      utilityRate: ur,
+      contractYears,
+      targetMarginPct: fin.targetMargin || 0,
+      annualOrders: orders,
+    });
+
+    const marginFrac = (fin.targetMargin || 0) / 100;
+    const projResult = calc.buildYearlyProjections({
+      years: contractYears,
+      baseLaborCost:     summary.laborCost,
+      baseFacilityCost:  summary.facilityCost,
+      baseEquipmentCost: summary.equipmentCost,
+      baseOverheadCost:  summary.overheadCost,
+      baseVasCost:       summary.vasCost,
+      startupAmort:      summary.startupAmort,
+      startupCapital:    summary.startupCapital,
+      baseOrders:        orders,
+      marginPct:         marginFrac,
+      volGrowthPct:      (fin.volGrowth      || 0) / 100,
+      laborEscPct:       (fin.laborEsc       || 0) / 100,
+      costEscPct:        (fin.costEsc        || 0) / 100,
+      facilityEscPct:    (fin.facilityEsc != null ? fin.facilityEsc : (fin.costEsc || 0)) / 100,
+      equipmentEscPct:   (fin.equipmentEsc != null ? fin.equipmentEsc : (fin.costEsc || 0)) / 100,
+      laborLines: model.laborLines || [],
+      taxRatePct: fin.taxRate != null ? fin.taxRate : 25,
+      useMonthlyEngine: typeof window !== 'undefined' && window.COST_MODEL_MONTHLY_ENGINE !== false,
+      periods: (refData && refData.periods) || [],
+      ramp: null,
+      seasonality: model.seasonalityProfile || null,
+      preGoLiveMonths:   fin.preGoLiveMonths   || 0,
+      dsoDays:           fin.dsoDays           || 0,
+      dpoDays:           fin.dpoDays           || 0,
+      laborPayableDays:  fin.laborPayableDays  || 0,
+      startupLines: model.startupLines || [],
+      pricingBuckets: model.pricingBuckets || [],
+      project_id: model.id || 0,
+      sgaOverlayPct: Number(fin.sgaOverlayPct) || 0,
+      sgaAppliesTo:  fin.sgaAppliesTo || 'net_revenue',
+      wageLoadByYear: null,
+    });
+    const projections = (projResult && projResult.projections) || [];
+    const y1 = projections[0] || null;
+    const metrics = calc.computeFinancialMetrics(projections, {
+      startupCapital:      summary.startupCapital,
+      equipmentCapital:    summary.equipmentCapital,
+      annualDepreciation:  (summary.equipmentAmort || 0) + (summary.startupAmort || 0),
+      discountRatePct:     fin.discountRate || 10,
+      reinvestRatePct:     fin.reinvestRate || 8,
+      taxRatePct:          fin.taxRate != null ? fin.taxRate : 25,
+      dsoDays:             fin.dsoDays || 0,
+      dpoDays:             fin.dpoDays || 0,
+      totalFtes:           summary.totalFtes,
+      fixedCost:           summary.facilityCost + summary.overheadCost + summary.startupAmort,
+    });
+
+    const costPerUnit = summary.costPerOrder || 0;
+    const y1Revenue   = y1?.revenue || 0;
+    const y1Margin    = (y1 && y1.revenue > 0) ? ((y1.grossProfit || 0) / y1.revenue) * 100 : 0;
+    const totalFtes   = summary.totalFtes || 0;
+    const npv         = (metrics && metrics.npv) || 0;
+
+    return {
+      ready: true,
+      items: [
+        {
+          label: `Cost / ${outboundUomLabel || 'Unit'}`,
+          value: costPerUnit > 0
+            ? calc.formatCurrency(costPerUnit, { decimals: costPerUnit < 10 ? 2 : 0 })
+            : '—',
+          hint: 'Total operating cost ÷ outbound primary volume. Drives the headline pricing rate.',
+        },
+        {
+          label: 'Y1 Revenue',
+          value: y1Revenue > 0 ? calc.formatCurrency(y1Revenue, { compact: true }) : '—',
+          hint: 'Year-1 revenue from the multi-year P&L (ramped, escalation-aware).',
+        },
+        {
+          label: 'Margin (Y1)',
+          value: y1Revenue > 0 ? calc.formatPct(y1Margin, 1) : '—',
+          hint: 'Y1 gross profit ÷ revenue. Often lower than your target margin in early years until the ramp completes.',
+        },
+        {
+          label: 'Total FTEs',
+          value: totalFtes > 0 ? totalFtes.toFixed(1) : '—',
+          hint: 'Direct + indirect headcount at steady-state operating hours.',
+        },
+        {
+          label: `NPV (${contractYears}yr)`,
+          value: npv !== 0 ? calc.formatCurrency(npv, { compact: true }) : '—',
+          hint: `Net present value over the ${contractYears}-year contract at ${fin.discountRate || 10}% discount rate.`,
+        },
+      ],
+    };
+  } catch (err) {
+    console.warn('[CM] header KPI compute failed:', err);
+    return { ready: false, items: [] };
+  }
+}
+
+let _kpiRefreshTimer = null;
+/**
+ * Render the sticky KPI strip from current model state. Pass `{ debounce: true }`
+ * from per-keystroke input handlers; the trailing call coalesces 200ms of edits.
+ */
+function refreshHeaderKpis(opts) {
+  if (opts && opts.debounce) {
+    if (_kpiRefreshTimer) clearTimeout(_kpiRefreshTimer);
+    _kpiRefreshTimer = setTimeout(() => { _kpiRefreshTimer = null; refreshHeaderKpis(); }, 200);
+    return;
+  }
+  const host = rootEl?.querySelector('#cm-header-kpis');
+  if (!host) return;
+  const kpis = computeHeaderKpis();
+  if (!kpis.items.length) {
+    host.innerHTML = '';
+    host.classList.remove('is-ready');
+    return;
+  }
+  host.innerHTML = `
+    <div class="hub-kpi-bar">
+      ${kpis.items.map(it => `
+        <div class="hub-kpi-item" ${it.hint ? `title="${escapeAttr(it.hint)}"` : ''}>
+          <span class="hub-kpi-label">${escapeHtml(it.label)}</span>
+          <span class="hub-kpi-value">${escapeHtml(it.value)}</span>
+        </div>
+      `).join('')}
+    </div>`;
+  host.classList.toggle('is-ready', !!kpis.ready);
 }
 
 // ============================================================
@@ -1958,13 +2151,12 @@ function renderShell() {
             <button class="hub-btn hub-btn-secondary hub-btn-sm" id="cm-load-btn">Load</button>
             <button class="hub-btn hub-btn-secondary hub-btn-sm" id="cm-export-btn" title="Download as multi-sheet .xlsx">Export</button>
           </div>
-          <!-- CM-SAVE-1 — Persistent save-state chip (audit-trail visibility) -->
-          <div id="cm-save-state-chip" data-cm-state="unsaved"
-               style="margin-top:8px;font-size:11px;color:var(--ies-gray-600,#4b5563);
-                      background:var(--ies-gray-100,#f3f4f6);border:1px solid var(--ies-gray-200,#e5e7eb);
-                      border-radius:4px;padding:4px 8px;display:inline-block;line-height:1.3;
-                      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;"
-               title="Save the model to record an audit timestamp">Not yet saved</div>
+          <!-- CM-SAVE-1 + EVE8 tri-state pill — Draft / Modified / Saved -->
+          <div class="cm-save-state-row" style="margin-top:8px;display:flex;flex-direction:column;gap:4px;">
+            <span class="hub-status-chip dot draft" id="cm-save-state-chip"
+                  data-cm-state="draft" title="Save the model to record an audit timestamp">Draft</span>
+            <span id="cm-save-state-when" style="font-size:10px;color:var(--ies-gray-500);line-height:1.2;"></span>
+          </div>
         </div>
         <!-- Section Nav -->
         <nav style="padding: 8px 0;">
@@ -1981,6 +2173,8 @@ function renderShell() {
 
       <!-- Content Area -->
       <div class="hub-builder-content" id="cm-content">
+        <!-- EVE8 — Sticky KPI strip (always-visible 5-metric header) -->
+        <div class="cm-header-kpis" id="cm-header-kpis"></div>
         <div class="hub-builder-form" id="cm-section-content">
           <!-- Section content renders here -->
         </div>
@@ -2201,6 +2395,9 @@ function renderSection() {
     // add/delete row actions call renderSection() after mutating model, so
     // refreshing here covers the non-input mutation paths too.
     refreshNavCompletion();
+    // EVE8 — KPI strip refreshes on every section render so values stay
+    // in lockstep with whatever the user is currently editing.
+    refreshHeaderKpis();
   }
 }
 
@@ -2329,6 +2526,9 @@ function _sectionCompleteness(sectionKey) {
  * re-render (which would blow away the user's focus and cursor position).
  */
 function refreshNavCompletion() {
+  // EVE8 — KPI strip lives in the same edit-cadence; debounce so per-
+  // keystroke recalcs coalesce within 200ms.
+  refreshHeaderKpis({ debounce: true });
   if (!rootEl) return;
   const grouped = _sectionsByGroup();
   for (const g of SECTION_GROUPS) {

@@ -3468,3 +3468,118 @@ textarea.hub-input {
 .cm-impl-gantt__bar:hover {
   filter: brightness(1.08);
 }
+
+/* ============================================================
+   EVE8 — Cost Model sticky KPI strip + sidebar polish
+   ============================================================
+   1) Pin a 5-tile KPI bar (`.hub-kpi-bar` borrowed from NetOpt) to the top
+      of the CM content scroll container. Stays visible while the user
+      moves between the 12 sections so the headline cost/unit, margin,
+      FTE, and NPV numbers always read where the eye expects them.
+   2) Tighten the existing 12-section sidebar to NetOpt's visual hierarchy:
+      sharper active-state pill, gradient accent, monospace dot scale,
+      crisper group dividers. NO IA changes — same sections, same nesting.
+   3) Tri-state save chip: layer dot color on `.hub-status-chip.draft|.modified|.saved`
+      so the leading dot adopts the same hue as the chip text. */
+
+.cm-header-kpis {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  /* Match `.hub-builder-content` padding (var(--sp-6) = 24px on each side)
+     so the strip aligns flush with section content below it. The negative
+     margins claw back the parent's padding so the bar spans the full
+     content width edge-to-edge — the navy gradient looks anemic when
+     centered inside a 24px gutter. */
+  margin: calc(var(--sp-6) * -1) calc(var(--sp-6) * -1) var(--sp-5);
+  padding: var(--sp-3) var(--sp-6) var(--sp-3);
+  background: var(--ies-gray-50);
+  border-bottom: 1px solid var(--ies-gray-200);
+  /* Drop a faint shadow as section content scrolls under the bar so the
+     pinned-overlay relationship is legible. */
+  box-shadow: 0 1px 0 rgba(15,23,42,0.04);
+}
+.cm-header-kpis:empty {
+  /* Hide the strip on landing / pre-mount when there's nothing to display.
+     Avoids a 1px strip ghost line above empty section content. */
+  display: none;
+}
+.cm-header-kpis .hub-kpi-bar {
+  /* Slightly tighter than the NetOpt scenario header — CM has narrower
+     content area than NetOpt's analyzer pane, so we shave the vertical
+     padding rather than letting tiles wrap. */
+  padding: var(--sp-3) var(--sp-2);
+  border-radius: var(--radius-md);
+}
+.cm-header-kpis .hub-kpi-item {
+  padding: 0 var(--sp-3);
+}
+/* Subtle "I'm recalculating" pulse — host element gets `.is-ready` after
+   the first successful compute, so on initial mount we render a faint
+   placeholder bar (set later when computeHeaderKpis returns ready=true). */
+.cm-header-kpis:not(.is-ready) .hub-kpi-bar {
+  opacity: 0.85;
+}
+
+/* ---- Tri-state save chip dot — matches text color of state ---- */
+.hub-status-chip.draft.dot::before    { background: #92400e; }
+.hub-status-chip.modified.dot::before { background: #92400e; }
+.hub-status-chip.saved.dot::before    { background: #166534; }
+
+/* ---- CM sidebar polish ---- */
+/* Crisper active state — gradient accent + heavier left rail. Same blue
+   palette as the existing styling so the change reads as polish, not a
+   redesign. */
+.cm-nav-item {
+  position: relative;
+  /* Tighter type for denser scan — was 13px / 600. */
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.1px;
+  border-left-width: 3px;
+  padding: 7px 16px;
+}
+.cm-nav-item.active {
+  background: linear-gradient(90deg, rgba(0,71,171,0.10), rgba(0,71,171,0.02));
+  color: var(--ies-navy);
+  font-weight: 700;
+  border-left-color: var(--ies-blue);
+}
+.cm-nav-item.active::after {
+  /* Faint right-edge marker — borrowed from NetOpt's tab-active treatment.
+     Tiny but legible, helps the active section read as the focus point in
+     the sidebar even with completion dots in play. */
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background: var(--ies-blue);
+  border-radius: 1px;
+  opacity: 0.5;
+}
+/* Hover on inactive items — softer than current full-blue text. */
+.cm-nav-item:not(.active):hover {
+  background: rgba(0,71,171,0.04);
+  color: var(--ies-navy);
+}
+
+/* Group headers — crisper divider above each section group so the
+   Setup / Inputs / Operations / Financials / Output groupings read
+   as a clear vertical hierarchy (NetOpt's tab-strip uses a bottom
+   divider; sidebar gets the same treatment between groups). */
+.hub-nav-group + .hub-nav-group {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--ies-gray-100);
+}
+.hub-nav-group__header {
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: var(--ies-gray-600);
+  text-transform: uppercase;
+  font-size: 10px;
+  padding: 8px 16px 4px;
+}
+
