@@ -15,8 +15,8 @@ import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadXLSX } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260418-sM';
-import * as calc from './calc.js?v=20260425-s12';
-import * as api from './api.js?v=20260425-s12';
+import * as calc from './calc.js?v=20260426-s13';
+import * as api from './api.js?v=20260426-s13';
 import { createChart } from '../../shared/cdn-wrappers/chart-wrapper.js?v=20260418-sK';
 
 // ============================================================
@@ -303,11 +303,16 @@ function updateHeaderSaveState() {
   btn.textContent = isDirty ? (activeConfigId ? '💾 Save' : '💾 Save Scenario') : (activeConfigId ? '✓ Saved' : '💾 Save Scenario');
   btn.classList.toggle('hub-btn-primary', isDirty);
   btn.classList.toggle('hub-btn-secondary', !isDirty);
-  const draftChip = rootEl.querySelector('.hub-status-chip.draft, .hub-status-chip.saved');
-  if (draftChip) {
-    draftChip.classList.toggle('saved', !!activeConfigId);
-    draftChip.classList.toggle('draft', !activeConfigId);
-    draftChip.textContent = activeConfigId ? 'Saved' : 'Draft';
+  // P2-2 — chip is tri-state, keep all 3 classes consistent with current state.
+  const stateChip = rootEl.querySelector('.hub-status-chip.draft, .hub-status-chip.saved, .hub-status-chip.modified');
+  if (stateChip) {
+    const draft = !activeConfigId;
+    const modified = !!activeConfigId && isDirty;
+    const saved = !!activeConfigId && !isDirty;
+    stateChip.classList.toggle('draft', draft);
+    stateChip.classList.toggle('saved', saved);
+    stateChip.classList.toggle('modified', modified);
+    stateChip.textContent = draft ? 'Draft' : (modified ? 'Modified' : 'Saved');
   }
 }
 async function handleSaveNetopt() {
@@ -365,7 +370,12 @@ export function unmount() {
 function renderShell() {
   const tabs = ['setup', 'map', 'results', 'comparison'].map(v => ({ key: v, label: viewLabel(v) }));
   const chips = [
-    { label: activeConfigId ? 'Saved' : 'Draft', kind: activeConfigId ? 'saved' : 'draft', dot: true },
+    // P2-2 tri-state: Draft (no DB row) / Modified (DB row but dirty) / Saved (DB row, clean).
+    {
+      label: !activeConfigId ? 'Draft' : (isDirty ? 'Modified' : 'Saved'),
+      kind:  !activeConfigId ? 'draft' : (isDirty ? 'modified' : 'saved'),
+      dot: true,
+    },
     activeParentCmId
       ? { label: 'Linked to CM', kind: 'linked', title: `Linked to Cost Model #${activeParentCmId}` }
       : { label: scenarios.length ? `${scenarios.length} scenarios run` : 'Stand-alone', kind: scenarios.length ? 'linked' : 'standalone' },
@@ -1534,6 +1544,65 @@ function renderModeMix(el) {
     markDirty();
     renderModeMix(el);
   });
+
+  // ─────────────────────────────────────────────────────────────
+  // NET-C1 Lane Rate Overrides — bindings
+  // ─────────────────────────────────────────────────────────────
+  el.querySelector('[data-action="add-lane-override"]')?.addEventListener('click', () => {
+    if (!Array.isArray(rateCard.laneRates)) rateCard.laneRates = [];
+    rateCard.laneRates.push({});
+    markDirty();
+    renderModeMix(el);
+  });
+
+  el.querySelectorAll('button[data-action="delete-lane"]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const idx = parseInt(/** @type {HTMLElement} */ (e.currentTarget).dataset.laneIdx, 10);
+      if (Array.isArray(rateCard.laneRates) && idx >= 0 && idx < rateCard.laneRates.length) {
+        rateCard.laneRates.splice(idx, 1);
+        markDirty();
+        renderModeMix(el);
+      }
+    });
+  });
+
+  el.querySelectorAll('select[data-lane-idx]').forEach(sel => {
+    sel.addEventListener('change', (e) => {
+      const t = /** @type {HTMLSelectElement} */ (e.currentTarget);
+      const idx = parseInt(t.dataset.laneIdx, 10);
+      const key = t.dataset.laneKey;
+      if (!Array.isArray(rateCard.laneRates) || !rateCard.laneRates[idx]) return;
+      const v = t.value;
+      if (v === '') {
+        delete rateCard.laneRates[idx][key];
+      } else {
+        rateCard.laneRates[idx][key] = v;
+      }
+      markDirty();
+    });
+  });
+
+  el.querySelectorAll('input[data-lane-idx]').forEach(input => {
+    input.addEventListener('change', (e) => {
+      const t = /** @type {HTMLInputElement} */ (e.currentTarget);
+      const idx = parseInt(t.dataset.laneIdx, 10);
+      const key = t.dataset.laneKey;
+      if (!Array.isArray(rateCard.laneRates) || !rateCard.laneRates[idx]) return;
+      const raw = t.value.trim();
+      if (raw === '') {
+        delete rateCard.laneRates[idx][key];
+      } else {
+        const v = parseFloat(raw);
+        if (!Number.isFinite(v) || v < 0) return;
+        // FSC stored as fraction (0-1); other fields as raw values.
+        rateCard.laneRates[idx][key] = (key === 'fuelSurcharge') ? (v / 100) : v;
+      }
+      markDirty();
+      // Re-render header count chip.
+      const header = el.querySelector('h3 + .hub-card');
+      if (header) renderModeMix(el);
+    });
+  });
 }
 
 /**
@@ -1714,6 +1783,86 @@ function renderRateCardEditor() {
         Origin/destination region is auto-derived from facility &amp; demand lat/lng using US census super-regions (NE, SE, MW, SW, W).
       </div>
     </div>
+
+    <!-- NET-C1 — Lane Rate Overrides (sparse list applied OD-pair-first by resolveLaneRates) -->
+    <h3 class="text-section" style="margin:18px 0 10px;">Lane Rate Overrides
+      <span style="font-size:11px;font-weight:normal;color:var(--ies-gray-500);margin-left:8px;">${(rateCard.laneRates || []).length} lane${(rateCard.laneRates || []).length === 1 ? '' : 's'} overriding base card</span>
+      <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="add-lane-override" style="font-size:10px;padding:3px 8px;margin-left:10px;vertical-align:middle;">+ Add Lane Override</button>
+    </h3>
+    <div class="hub-card">
+      <div style="font-size:11px;color:var(--ies-gray-500);margin-bottom:10px;line-height:1.5;">
+        First matching row wins — put the most-specific entries (origin+destination IDs) above wildcard or region-only rows.
+        Use <code style="background:var(--ies-gray-100);padding:1px 4px;border-radius:2px;">*</code> or leave blank to wildcard a key. Override fields ($/mi, $/CWT, FSC, Discount) are applied on top of the base rate card; blank = inherit.
+      </div>
+      ${(rateCard.laneRates || []).length === 0 ? `
+        <div style="padding:18px;text-align:center;color:var(--ies-gray-400);font-size:12px;font-style:italic;border:1px dashed var(--ies-gray-200);border-radius:6px;">
+          No lane overrides yet. Click "+ Add Lane Override" to define a custom rate for a specific OD pair, region pair, or any combination.
+        </div>
+      ` : `
+        <table style="width:100%;font-size:11px;border-collapse:collapse;">
+          <thead>
+            <tr style="background:var(--ies-gray-50);">
+              <th style="text-align:left;padding:6px;border:1px solid var(--ies-gray-200);">Origin ID</th>
+              <th style="text-align:left;padding:6px;border:1px solid var(--ies-gray-200);">Dest ID</th>
+              <th style="text-align:left;padding:6px;border:1px solid var(--ies-gray-200);">O Region</th>
+              <th style="text-align:left;padding:6px;border:1px solid var(--ies-gray-200);">D Region</th>
+              <th style="text-align:right;padding:6px;border:1px solid var(--ies-gray-200);">TL $/mi</th>
+              <th style="text-align:right;padding:6px;border:1px solid var(--ies-gray-200);">LTL $/CWT</th>
+              <th style="text-align:right;padding:6px;border:1px solid var(--ies-gray-200);">FSC %</th>
+              <th style="text-align:right;padding:6px;border:1px solid var(--ies-gray-200);">Disc %</th>
+              <th style="text-align:center;padding:6px;border:1px solid var(--ies-gray-200);"></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rateCard.laneRates.map((lr, i) => {
+              const facOpts = ['<option value=""></option>', '<option value="*">*</option>'].concat(
+                facilities.map(f => `<option value="${f.id}"${lr.originId === f.id ? ' selected' : ''}>${f.id} — ${f.name || f.city || ''}</option>`)
+              ).join('');
+              // NET-C1 — destId is typically a demand point (customer), but allow
+              // facilities too for inter-DC override scenarios. Group as optgroups.
+              const demOpts = demands.map(dd => `<option value="${dd.id}"${lr.destId === dd.id ? ' selected' : ''}>${dd.id}${dd.zip3 ? ` — ZIP ${dd.zip3}` : ''}</option>`).join('');
+              const facDestOpts = facilities.map(f => `<option value="${f.id}"${lr.destId === f.id ? ' selected' : ''}>${f.id} — ${f.name || f.city || ''}</option>`).join('');
+              const facOptsDest = `<option value=""></option><option value="*">*</option><optgroup label="Demand points">${demOpts}</optgroup><optgroup label="Facilities">${facDestOpts}</optgroup>`;
+              const regOpts = ['<option value=""></option>', '<option value="*">*</option>'].concat(
+                calc.REGION_CODES.map(r => `<option value="${r}"${lr.originRegion === r ? ' selected' : ''}>${r}</option>`)
+              ).join('');
+              const regOptsDest = ['<option value=""></option>', '<option value="*">*</option>'].concat(
+                calc.REGION_CODES.map(r => `<option value="${r}"${lr.destRegion === r ? ' selected' : ''}>${r}</option>`)
+              ).join('');
+              return `<tr>
+                <td style="padding:3px 4px;border:1px solid var(--ies-gray-200);">
+                  <select data-lane-idx="${i}" data-lane-key="originId" style="width:100%;font-size:10px;padding:2px;">${facOpts}</select>
+                </td>
+                <td style="padding:3px 4px;border:1px solid var(--ies-gray-200);">
+                  <select data-lane-idx="${i}" data-lane-key="destId" style="width:100%;font-size:10px;padding:2px;">${facOptsDest}</select>
+                </td>
+                <td style="padding:3px 4px;border:1px solid var(--ies-gray-200);">
+                  <select data-lane-idx="${i}" data-lane-key="originRegion" style="width:100%;font-size:10px;padding:2px;">${regOpts}</select>
+                </td>
+                <td style="padding:3px 4px;border:1px solid var(--ies-gray-200);">
+                  <select data-lane-idx="${i}" data-lane-key="destRegion" style="width:100%;font-size:10px;padding:2px;">${regOptsDest}</select>
+                </td>
+                <td style="padding:3px 4px;border:1px solid var(--ies-gray-200);text-align:right;">
+                  <input type="number" step="0.05" min="0" value="${lr.tlRatePerMile != null ? lr.tlRatePerMile : ''}" data-lane-idx="${i}" data-lane-key="tlRatePerMile" placeholder="—" style="width:60px;font-size:11px;padding:2px 4px;text-align:right;">
+                </td>
+                <td style="padding:3px 4px;border:1px solid var(--ies-gray-200);text-align:right;">
+                  <input type="number" step="0.50" min="0" value="${lr.ltlBaseRate != null ? lr.ltlBaseRate : ''}" data-lane-idx="${i}" data-lane-key="ltlBaseRate" placeholder="—" style="width:60px;font-size:11px;padding:2px 4px;text-align:right;">
+                </td>
+                <td style="padding:3px 4px;border:1px solid var(--ies-gray-200);text-align:right;">
+                  <input type="number" step="0.5" min="0" max="100" value="${lr.fuelSurcharge != null ? (lr.fuelSurcharge * 100).toFixed(1) : ''}" data-lane-idx="${i}" data-lane-key="fuelSurcharge" placeholder="—" style="width:50px;font-size:11px;padding:2px 4px;text-align:right;">
+                </td>
+                <td style="padding:3px 4px;border:1px solid var(--ies-gray-200);text-align:right;">
+                  <input type="number" step="1" min="0" max="100" value="${lr.ltlDiscountPct != null ? lr.ltlDiscountPct : ''}" data-lane-idx="${i}" data-lane-key="ltlDiscountPct" placeholder="—" style="width:50px;font-size:11px;padding:2px 4px;text-align:right;">
+                </td>
+                <td style="padding:3px 4px;border:1px solid var(--ies-gray-200);text-align:center;">
+                  <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="delete-lane" data-lane-idx="${i}" style="font-size:10px;padding:2px 6px;line-height:1;">✕</button>
+                </td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      `}
+    </div>
   `;
 }
 
@@ -1821,6 +1970,18 @@ function renderServiceConfig(el) {
       markDirty();  // 2026-04-21 audit: missing — service-config edits didn't invalidate Run.
     };
     input.addEventListener('change', handler);
+  });
+
+  // NET-B5 reset — restore HOS defaults for the 6 transit-day opts only.
+  el.querySelector('[data-action="reset-transit-opts"]')?.addEventListener('click', () => {
+    serviceConfig.drivingHoursPerDay = 11;
+    serviceConfig.onDutyHoursPerDay  = 14;
+    serviceConfig.loadHours          = 2;
+    serviceConfig.unloadHours        = 2;
+    serviceConfig.intermediateStops  = 0;
+    serviceConfig.dwellHoursPerStop  = 0;
+    markDirty();
+    renderServiceConfig(el);
   });
 }
 

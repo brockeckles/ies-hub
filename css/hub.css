@@ -875,6 +875,7 @@ textarea.hub-input {
 .hub-status-chip.standalone { background: var(--ies-gray-50); color: var(--ies-gray-500); border-color: var(--ies-gray-200); }
 .hub-status-chip.saved { background: #f0fdf4; color: #166534; border-color: #bbf7d0; }
 .hub-status-chip.draft { background: #fffbeb; color: #92400e; border-color: #fde68a; }
+.hub-status-chip.modified { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
 .hub-status-chip.dot::before {
   content: '';
   display: inline-block;

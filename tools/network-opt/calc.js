@@ -63,6 +63,15 @@ export const DEFAULT_SERVICE = {
   /** @type {string[]} */ lockedOpenIds: [],
   /** @type {string[]} */ lockedClosedIds: [],
   /** @type {number|null} */ maxDistanceMiles: null,
+  // NET-B5 — transit-day model opts. Picked up by estimateTransitDays via
+  // the (miles, speedMph, opts) signature when serviceConfig is forwarded as
+  // opts. Defaults match HOS §395.3 (11hr drive, 14hr on-duty, 2hr load+unload).
+  drivingHoursPerDay: 11,
+  onDutyHoursPerDay: 14,
+  loadHours: 2,
+  unloadHours: 2,
+  dwellHoursPerStop: 0,
+  intermediateStops: 0,
 };
 
 /**
@@ -113,9 +122,30 @@ export const SEASONALITY_PROFILES = {
 export const SEASONALITY_PROFILE_KEYS = Object.keys(SEASONALITY_PROFILES);
 
 /** Resolve a seasonality profile key (or 'custom') to a 12-element monthly share array. */
-export function monthlyShareForProfile(profile, customShare) {
+export function monthlySharesForProfile(profile, customShare) {
   if (profile === 'custom' && Array.isArray(customShare) && customShare.length === 12) return customShare;
   return SEASONALITY_PROFILES[profile] || SEASONALITY_PROFILES.uniform;
+}
+
+/**
+ * Return the share-of-annual-demand (in %) for ONE month of a seasonality profile.
+ * monthIdx is clamped to 0..11 (Jan..Dec).
+ */
+export function monthlyShareAtIdx(profile, monthIdx, customShare) {
+  const arr = monthlySharesForProfile(profile, customShare);
+  const i = Math.min(11, Math.max(0, Math.round(Number(monthIdx) || 0)));
+  return arr[i];
+}
+
+/**
+ * Legacy alias — returns the 12-element ARRAY for a profile. Despite the
+ * singular name, this does NOT take a monthIdx; passing a number as the 2nd
+ * arg is silently ignored. Use `monthlyShareAtIdx` for single-month lookup,
+ * or `monthlySharesForProfile` for the explicit array contract.
+ * @deprecated 2026-04-26 — name was confusing; kept as alias for compat.
+ */
+export function monthlyShareForProfile(profile, customShare) {
+  return monthlySharesForProfile(profile, customShare);
 }
 
 /**
@@ -307,24 +337,42 @@ export function haversine(lat1, lng1, lat2, lng2) {
  * @param {number} [opts.intermediateStops=0]
  * @returns {number} transit days (rounded up to whole days)
  */
-export function estimateTransitDays(miles, speedMph = 50, opts = {}) {
-  if (miles <= 0) return 0;
+export function estimateTransitDays(miles, speedMphOrOpts = 50, opts = {}) {
+  if (!Number.isFinite(miles) || miles <= 0) return 0;
+
+  // Polymorphic 2nd arg: accept either a numeric speedMph (legacy) or an
+  // opts object (new, intuitive). Also defends against null/undefined and
+  // non-numeric speedMph values that previously yielded NaN transit days.
+  let speedMph;
+  if (speedMphOrOpts && typeof speedMphOrOpts === 'object' && !Array.isArray(speedMphOrOpts)) {
+    // (miles, opts)
+    opts = speedMphOrOpts;
+    speedMph = 50;
+  } else {
+    const n = Number(speedMphOrOpts);
+    speedMph = (Number.isFinite(n) && n > 0) ? n : 50;
+  }
+
   // Backwards-compat: old signature was (miles, speedMph, hoursPerDay).
   // If a number was passed where opts goes, treat it as drivingHoursPerDay.
   if (typeof opts === 'number') opts = { drivingHoursPerDay: opts };
-  const drivingPerDay = Math.max(1, opts.drivingHoursPerDay || 11);
-  const onDutyPerDay  = Math.max(drivingPerDay, opts.onDutyHoursPerDay || 14);
-  const loadHrs       = opts.loadHours == null ? 2 : Math.max(0, opts.loadHours);
-  const unloadHrs     = opts.unloadHours == null ? 2 : Math.max(0, opts.unloadHours);
-  const dwellPerStop  = Math.max(0, opts.dwellHoursPerStop || 0);
-  const stops         = Math.max(0, opts.intermediateStops || 0);
+  if (!opts || typeof opts !== 'object' || Array.isArray(opts)) opts = {};
 
-  const drivingHours = miles / Math.max(1, speedMph);
+  const drivingPerDay = Math.max(1, Number(opts.drivingHoursPerDay) || 11);
+  const onDutyPerDay  = Math.max(drivingPerDay, Number(opts.onDutyHoursPerDay) || 14);
+  const loadHrs       = opts.loadHours == null ? 2 : Math.max(0, Number(opts.loadHours) || 0);
+  const unloadHrs     = opts.unloadHours == null ? 2 : Math.max(0, Number(opts.unloadHours) || 0);
+  const dwellPerStop  = Math.max(0, Number(opts.dwellHoursPerStop) || 0);
+  const stops         = Math.max(0, Number(opts.intermediateStops) || 0);
+
+  const drivingHours = miles / speedMph;
   // 30-min mandatory rest break after every 8 cumulative driving hours.
   const restBreakHours = 0.5 * Math.floor(drivingHours / 8);
   const wallClockHours = drivingHours + restBreakHours + loadHrs + unloadHrs + (dwellPerStop * stops);
 
   // Multi-day: each day caps at on-duty wall clock (14 hrs).
+  // (drivingPerDay is the floor for onDutyPerDay above, ensuring on-duty
+  // can't drop below the driving limit.)
   return Math.ceil(wallClockHours / onDutyPerDay);
 }
 
@@ -606,7 +654,10 @@ export function assignDemand(facilities, demands, modeMix, rateCard = DEFAULT_RA
       const fLat = Number(f.lat);
       const fLng = Number(f.lng);
       const dist = haversine(fLat, fLng, dLat, dLng);
-      const transit = estimateTransitDays(dist, serviceConfig.truckSpeedMph);
+      // NET-B5 — forward the full serviceConfig so estimateTransitDays can
+      // pick up driving/on-duty/load/unload/dwell/stops opts. Backwards-compat
+      // safe: a stale config without those keys falls through to defaults.
+      const transit = estimateTransitDays(dist, serviceConfig.truckSpeedMph, serviceConfig);
       const maxDays = d.maxDays || serviceConfig.globalMaxDays;
       const slaPenalty = transit > maxDays ? 1e6 : 0;
       const fCap = Number(f.capacity) || 0;
@@ -620,16 +671,25 @@ export function assignDemand(facilities, demands, modeMix, rateCard = DEFAULT_RA
     }).sort((a, b) => a.penalty - b.penalty);
 
     const best = ranked[0];
+    // NET-C1 — pass OD context so resolveLaneRates can apply matching overrides.
+    const fLatN = Number(best.facility.lat), fLngN = Number(best.facility.lng);
+    const laneCtx = {
+      originId: best.facility.id,
+      destId:   d.id,
+      originRegion: regionForCoord(fLatN, fLngN),
+      destRegion:   regionForCoord(dLat, dLng),
+    };
     const costs = blendedLaneCost(
       best.dist,
       d.avgWeight || 25,
       modeMix,
       rateCard,
-      Number(best.facility.lng),
+      fLngN,
       dLng,
-      Number(best.facility.lat),
+      fLatN,
       dLat,
-      d.nmfcClass
+      d.nmfcClass,
+      laneCtx
     );
     const maxDays = d.maxDays || serviceConfig.globalMaxDays;
 
