@@ -10984,7 +10984,9 @@ function renderAssumptions() {
     return `
       <div class="cm-section-header">
         <h2>Assumptions</h2>
-        <p class="cm-subtle">All design heuristics that shape this scenario's math.</p>
+        <div class="cm-section-header__intro">
+          <p class="cm-subtle">All design heuristics that shape this scenario's math.</p>
+        </div>
       </div>
       <div class="cm-empty-state">Loading heuristics catalog…</div>
     `;
@@ -11017,35 +11019,39 @@ function renderAssumptions() {
   return `
     <div class="cm-section-header">
       <h2>Assumptions
-        ${overrideCount > 0 ? `<span class="hub-status-chip" style="margin-left:8px;background:#fbbf24;color:#78350f;">${overrideCount} override${overrideCount === 1 ? '' : 's'}</span>` : '<span class="hub-status-chip" style="margin-left:8px;">all standard values</span>'}
+        ${overrideCount > 0
+          ? `<span class="hub-status-chip cm-chip-warn">${overrideCount} override${overrideCount === 1 ? '' : 's'}</span>`
+          : `<span class="hub-status-chip cm-chip-info">all standard values</span>`}
       </h2>
-      <p class="cm-subtle">Design heuristics drive the calc engine beyond the external rate cards. Defaults come from GXO/IES standards. Overrides are captured per scenario and frozen at approval time.</p>
-      <div style="display:flex;gap:8px;margin-top:8px;">
-        <button class="hub-btn" data-cm-action="reset-all-heuristics">Reset all to defaults</button>
+      <div class="cm-section-header__intro">
+        <p class="cm-subtle">Design heuristics drive the calc engine beyond the external rate cards. Defaults come from GXO/IES standards. Overrides are captured per scenario and frozen at approval time.</p>
+        <div class="cm-section-header__actions">
+          <button class="hub-btn hub-btn-sm" data-cm-action="reset-all-heuristics">↺ Reset all to defaults</button>
+        </div>
       </div>
     </div>
 
     ${Array.from(grouped.entries()).map(([category, items]) => `
-      <div class="cm-card" style="margin-top:16px;">
-        <h3 style="margin-top:0;">${HEURISTIC_CATEGORY_LABELS[category] || category}</h3>
-        <table class="cm-table" style="width:100%;">
+      <div class="cm-card">
+        <h3>${HEURISTIC_CATEGORY_LABELS[category] || category}</h3>
+        <table class="cm-table">
           <thead>
             <tr>
-              <th style="text-align:left;">Heuristic</th>
-              <th style="text-align:left;width:30%;">Description</th>
-              <th style="text-align:right;width:90px;">Default</th>
-              <th style="text-align:right;width:140px;">Your Value</th>
-              <th style="text-align:center;width:70px;">Reset</th>
+              <th>Heuristic</th>
+              <th style="width:30%;">Description</th>
+              <th class="cm-th-num" style="width:90px;">Default</th>
+              <th class="cm-th-num" style="width:140px;">Your Value</th>
+              <th class="cm-th-center" style="width:70px;">Reset</th>
             </tr>
           </thead>
           <tbody>
             ${items.map(h => `
-              <tr data-heuristic-key="${h.key}" style="${isOverride(h) ? 'background:#fffbeb;' : ''}">
-                <td style="padding:6px 8px;">
-                  <div style="font-weight:600;">${h.label}</div>
-                  <div style="font-size:11px;color:var(--ies-gray-500);">${h.key}${h.unit ? ` · ${h.unit}` : ''}</div>
+              <tr data-heuristic-key="${h.key}"${isOverride(h) ? ' class="cm-row--override"' : ''}>
+                <td>
+                  <div class="cm-cell-title">${h.label}</div>
+                  <div class="cm-cell-meta">${h.key}${h.unit ? ` · ${h.unit}` : ''}</div>
                 </td>
-                <td style="padding:6px 8px;font-size:12px;color:var(--ies-gray-600);">${h.description || ''}</td>
+                <td class="cm-cell-notes">${h.description || ''}</td>
                 <td class="cm-num">${fmtDefault(h)}</td>
                 <td class="cm-num">
                   ${h.data_type === 'enum'
@@ -11056,7 +11062,7 @@ function renderAssumptions() {
                   }
                 </td>
                 <td style="text-align:center;">
-                  ${isOverride(h) ? `<button class="hub-btn" style="padding:2px 8px;font-size:11px;" data-cm-action="reset-heuristic" data-heuristic-key="${h.key}">↺</button>` : ''}
+                  ${isOverride(h) ? `<button class="hub-btn hub-btn-sm" data-cm-action="reset-heuristic" data-heuristic-key="${h.key}" title="Reset to default">↺</button>` : ''}
                 </td>
               </tr>
             `).join('')}
@@ -11078,9 +11084,10 @@ function renderPlanningRatios() {
   if (!isPlanningRatiosFlagOn()) return '';
   if (!planningRatiosCatalog.length) {
     return `
-      <div class="cm-card" style="margin-top:24px;">
-        <h3 style="margin-top:0;">Planning Ratios <span class="hub-status-chip" style="margin-left:8px;">Loading…</span></h3>
-        <p class="cm-subtle" style="font-size:12px;margin:0;">Engineering defaults catalog (spans of control, facility ratios, storage PSF, seasonality, …).</p>
+      <div class="cm-section-divider"></div>
+      <div class="cm-card">
+        <h3>Planning Ratios <span class="hub-status-chip cm-chip-info">Loading…</span></h3>
+        <p class="cm-subtle">Engineering defaults catalog (spans of control, facility ratios, storage PSF, seasonality, …).</p>
       </div>
     `;
   }
@@ -11099,16 +11106,19 @@ function renderPlanningRatios() {
   const staleUnreviewedCount = planningRatios.countStaleUnreviewed(planningRatiosCatalog, planningRatioOverrides);
 
   return `
-    <div class="cm-section-header" style="margin-top:32px;padding-top:16px;border-top:2px solid var(--ies-gray-100);">
+    <div class="cm-section-divider"></div>
+    <div class="cm-section-header">
       <h2>Planning Ratios
         ${overrideCount > 0
-          ? `<span class="hub-status-chip" style="margin-left:8px;background:#fbbf24;color:#78350f;">${overrideCount} override${overrideCount === 1 ? '' : 's'}</span>`
-          : `<span class="hub-status-chip" style="margin-left:8px;">${planningRatiosCatalog.length} rules · ${planningRatioCategories.length} categories</span>`}
+          ? `<span class="hub-status-chip cm-chip-warn">${overrideCount} override${overrideCount === 1 ? '' : 's'}</span>`
+          : `<span class="hub-status-chip cm-chip-info">${planningRatiosCatalog.length} rules · ${planningRatioCategories.length} categories</span>`}
         ${staleUnreviewedCount > 0
-          ? `<span class="hub-status-chip" style="margin-left:6px;background:#fef3c7;color:#92400e;" title="${staleUnreviewedCount} rule${staleUnreviewedCount === 1 ? '' : 's'} with pre-2022 catalog source that haven't been audited on this project">${staleUnreviewedCount} need${staleUnreviewedCount === 1 ? 's' : ''} audit</span>`
+          ? `<span class="hub-status-chip cm-chip-stale" title="${staleUnreviewedCount} rule${staleUnreviewedCount === 1 ? '' : 's'} with pre-2022 catalog source that haven't been audited on this project">${staleUnreviewedCount} need${staleUnreviewedCount === 1 ? 's' : ''} audit</span>`
           : ''}
       </h2>
-      <p class="cm-subtle">Engineering defaults extracted from the reference 3PL cost model. Spans of control, space ratios, storage $/SF components, seasonality by vertical, asset loaded-cost factors. Override per-scenario; defaults apply to all projects otherwise.</p>
+      <div class="cm-section-header__intro">
+        <p class="cm-subtle">Engineering defaults extracted from the reference 3PL cost model. Spans of control, space ratios, storage $/SF components, seasonality by vertical, asset loaded-cost factors. Override per-scenario; defaults apply to all projects otherwise.</p>
+      </div>
       ${staleUnreviewedCount > 0 ? `
         <div class="cm-audit-banner">
           <div class="cm-audit-banner-label">
@@ -11132,26 +11142,25 @@ function renderPlanningRatios() {
       const overridesInCategory = resolvedList.filter(x => x.resolved.source === 'override').length;
       const staleCount = rows.filter(r => planningRatios.isStale(r)).length;
       return `
-        <div class="cm-card" style="margin-top:12px;padding:0;overflow:hidden;">
-          <button data-pr-toggle-category="${category.code}"
-            style="display:flex;width:100%;align-items:center;gap:10px;padding:14px 16px;border:0;background:#fff;cursor:pointer;text-align:left;border-bottom:${isOpen ? '1px solid var(--ies-gray-100)' : '0'};">
-            <span style="font-size:14px;font-weight:700;flex:1;">${escapeHtml(category.display_name)}</span>
-            ${overridesInCategory > 0 ? `<span class="hub-status-chip" style="background:#fbbf24;color:#78350f;">${overridesInCategory} override${overridesInCategory === 1 ? '' : 's'}</span>` : ''}
-            ${staleCount > 0 ? `<span class="hub-status-chip" style="background:#fef3c7;color:#92400e;" title="${staleCount} row(s) with pre-2022 source — audit recommended">${staleCount} stale</span>` : ''}
-            <span style="font-size:11px;color:var(--ies-gray-400);">${rows.length} rule${rows.length === 1 ? '' : 's'}</span>
-            <span style="font-size:14px;color:var(--ies-gray-400);">${isOpen ? '▾' : '▸'}</span>
+        <div class="cm-card cm-card--collapsible" data-open="${isOpen ? 'true' : 'false'}">
+          <button class="cm-card-toggle" data-pr-toggle-category="${category.code}">
+            <span class="cm-card-toggle__title">${escapeHtml(category.display_name)}</span>
+            ${overridesInCategory > 0 ? `<span class="hub-status-chip cm-chip-warn">${overridesInCategory} override${overridesInCategory === 1 ? '' : 's'}</span>` : ''}
+            ${staleCount > 0 ? `<span class="hub-status-chip cm-chip-stale" title="${staleCount} row(s) with pre-2022 source — audit recommended">${staleCount} stale</span>` : ''}
+            <span class="cm-card-toggle__count">${rows.length} rule${rows.length === 1 ? '' : 's'}</span>
+            <span class="cm-card-toggle__caret">${isOpen ? '▾' : '▸'}</span>
           </button>
           ${isOpen ? `
-            ${category.description ? `<div style="padding:8px 16px 0;font-size:12px;color:var(--ies-gray-500);">${escapeHtml(category.description)}</div>` : ''}
-            <table class="cm-table" style="width:100%;margin-top:8px;">
+            ${category.description ? `<p class="cm-card-body__hint" style="padding:10px 16px 0;">${escapeHtml(category.description)}</p>` : ''}
+            <table class="cm-table">
               <thead>
                 <tr>
-                  <th style="text-align:left;">Rule</th>
-                  <th style="text-align:left;width:28%;">Notes</th>
-                  <th style="text-align:right;width:110px;">Default</th>
-                  <th style="text-align:right;width:150px;">Your Value</th>
-                  <th style="text-align:left;width:160px;">Source</th>
-                  <th style="text-align:center;width:50px;"></th>
+                  <th>Rule</th>
+                  <th style="width:28%;">Notes</th>
+                  <th class="cm-th-num" style="width:110px;">Default</th>
+                  <th class="cm-th-num" style="width:150px;">Your Value</th>
+                  <th style="width:160px;">Source</th>
+                  <th class="cm-th-center" style="width:50px;"></th>
                 </tr>
               </thead>
               <tbody>
@@ -11171,30 +11180,30 @@ function renderPlanningRatios() {
                   if (r.automation_level) filters.push(`auto: ${r.automation_level}`);
                   if (r.market_tier) filters.push(`tier: ${r.market_tier}`);
                   return `
-                    <tr data-pr-row="${r.ratio_code}" style="${isOver ? 'background:#fffbeb;' : ''}">
-                      <td style="padding:6px 8px;vertical-align:top;">
-                        <div style="font-weight:600;font-size:13px;">${escapeHtml(r.display_name)}</div>
-                        <div style="font-size:11px;color:var(--ies-gray-500);font-family:monospace;">${escapeHtml(r.ratio_code)}${r.value_unit ? ` · ${escapeHtml(r.value_unit)}` : ''}</div>
-                        ${filters.length ? `<div style="font-size:10px;color:var(--ies-gray-400);margin-top:2px;">${filters.join(' · ')}</div>` : ''}
+                    <tr data-pr-row="${r.ratio_code}"${isOver ? ' class="cm-row--override"' : ''}>
+                      <td>
+                        <div class="cm-cell-title">${escapeHtml(r.display_name)}</div>
+                        <div class="cm-cell-meta">${escapeHtml(r.ratio_code)}${r.value_unit ? ` · ${escapeHtml(r.value_unit)}` : ''}</div>
+                        ${filters.length ? `<div class="cm-cell-filters">${filters.map(f => `<span>${escapeHtml(f)}</span>`).join('')}</div>` : ''}
                       </td>
-                      <td style="padding:6px 8px;font-size:11px;color:var(--ies-gray-600);vertical-align:top;">${escapeHtml(r.notes || '')}</td>
-                      <td class="cm-num" style="vertical-align:top;">${formatRatioValue({ value: r.value_type === 'array' || r.value_type === 'lookup' || r.value_type === 'tiered' ? r.value_jsonb : r.numeric_value, def: r })}</td>
-                      <td class="cm-num" style="vertical-align:top;">
+                      <td class="cm-cell-notes">${escapeHtml(r.notes || '')}</td>
+                      <td class="cm-num">${formatRatioValue({ value: r.value_type === 'array' || r.value_type === 'lookup' || r.value_type === 'tiered' ? r.value_jsonb : r.numeric_value, def: r })}</td>
+                      <td class="cm-num">
                         ${structured
                           ? `<span style="font-size:11px;color:var(--ies-gray-400);">(structured)</span>`
                           : `<input class="hub-input" type="number" step="any" data-pr-input="${escapeHtml(r.ratio_code)}" value="${ov && ov.value !== undefined && ov.value !== null ? escapeHtml(String(ov.value)) : ''}" placeholder="${r.numeric_value != null ? r.numeric_value : ''}" style="width:130px;text-align:right;" />`}
                       </td>
-                      <td style="padding:6px 8px;font-size:11px;color:var(--ies-gray-500);vertical-align:top;">
+                      <td class="cm-cell-source">
                         <div>${escapeHtml(r.source || '')}</div>
-                        ${r.source_detail ? `<div style="font-size:10px;color:var(--ies-gray-400);">${escapeHtml(r.source_detail)}</div>` : ''}
+                        ${r.source_detail ? `<div class="cm-cell-source__detail">${escapeHtml(r.source_detail)}</div>` : ''}
                         ${stale
-                          ? `<div style="margin-top:2px;"><span class="hub-status-chip" style="background:#fef3c7;color:#92400e;font-size:9px;padding:1px 6px;" title="Source pre-2022 — recommend audit before trusting">needs refresh</span></div>`
-                          : (staleInCatalog && reviewedAt ? `<div style="margin-top:2px;"><span class="hub-status-chip" style="background:#d1fae5;color:#065f46;font-size:9px;padding:1px 6px;" title="Pre-2022 catalog source, but marked reviewed on this project on ${escapeHtml(reviewedAt.slice(0,10))}">✓ audited</span></div>` : '')}
+                          ? `<div style="margin-top:4px;"><span class="hub-status-chip cm-chip-stale cm-chip-xs" title="Source pre-2022 — recommend audit before trusting">needs refresh</span></div>`
+                          : (staleInCatalog && reviewedAt ? `<div style="margin-top:4px;"><span class="hub-status-chip cm-chip-success cm-chip-xs" title="Pre-2022 catalog source, but marked reviewed on this project on ${escapeHtml(reviewedAt.slice(0,10))}">✓ audited</span></div>` : '')}
                       </td>
-                      <td style="text-align:center;vertical-align:top;">
-                        <div style="display:flex;flex-direction:column;gap:3px;align-items:center;">
-                          ${isOver && !reviewedAt ? `<button class="hub-btn" style="padding:2px 8px;font-size:11px;" data-cm-action="reset-planning-ratio" data-pr-code="${escapeHtml(r.ratio_code)}" title="Reset to default">↺</button>` : ''}
-                          ${stale ? `<button class="hub-btn" style="padding:2px 6px;font-size:10px;background:#d1fae5;color:#065f46;border:1px solid #a7f3d0;" data-cm-action="mark-ratio-reviewed" data-pr-code="${escapeHtml(r.ratio_code)}" title="Confirm you've audited this pre-2022 value for this deal. Clears the 'needs refresh' chip on this row and counts toward the audit banner.">✓ Mark reviewed</button>` : ''}
+                      <td style="text-align:center;">
+                        <div class="cm-row-actions">
+                          ${isOver && !reviewedAt ? `<button class="hub-btn hub-btn-sm" data-cm-action="reset-planning-ratio" data-pr-code="${escapeHtml(r.ratio_code)}" title="Reset to default">↺</button>` : ''}
+                          ${stale ? `<button class="hub-btn hub-btn-sm" data-cm-action="mark-ratio-reviewed" data-pr-code="${escapeHtml(r.ratio_code)}" title="Confirm you've audited this pre-2022 value for this deal." style="background:#d1fae5;color:#065f46;border-color:#a7f3d0;">✓ Mark reviewed</button>` : ''}
                         </div>
                       </td>
                     </tr>

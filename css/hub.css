@@ -3149,3 +3149,210 @@ textarea.hub-input {
   font-family: Montserrat, sans-serif;
 }
 .cm-delete-btn:hover { background: rgba(220,53,69,0.08); }
+
+/* ============================================================
+   Cost-Model — Assumptions & Planning Ratios surface
+   Added 2026-04-26 for CM-AES-1: page was held together by
+   inline styles only. These classes give the surface a
+   coherent rhythm — section header → grouped cards → tables.
+   ============================================================ */
+
+.cm-section-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 0 14px;
+  border-bottom: 1px solid var(--ies-gray-100);
+  margin-bottom: 16px;
+}
+.cm-section-header h2 {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ies-navy);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+.cm-section-header__intro {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.cm-section-header__intro > .cm-subtle { flex: 1; min-width: 240px; }
+.cm-section-header__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.cm-subtle {
+  margin: 0;
+  color: var(--ies-gray-600);
+  font-size: 13px;
+  line-height: 1.45;
+  max-width: 760px;
+}
+
+.cm-card {
+  background: #fff;
+  border: 1px solid var(--ies-gray-200);
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+.cm-card + .cm-card { margin-top: 12px; }
+.cm-card > h3:first-child {
+  margin: 0 0 14px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ies-gray-700);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cm-card--collapsible { padding: 0; overflow: hidden; }
+
+.cm-card-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 0;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: var(--ies-navy);
+  transition: background 0.12s ease;
+}
+.cm-card-toggle:hover { background: var(--ies-gray-50); }
+.cm-card-toggle__title { font-size: 14px; font-weight: 700; flex: 1; color: var(--ies-navy); }
+.cm-card-toggle__count { font-size: 11px; color: var(--ies-gray-500); }
+.cm-card-toggle__caret { font-size: 12px; color: var(--ies-gray-400); width: 14px; text-align: center; }
+.cm-card[data-open="true"] > .cm-card-toggle { border-bottom: 1px solid var(--ies-gray-100); }
+.cm-card[data-open="true"] > .cm-card-toggle__caret { color: var(--ies-blue); }
+.cm-card-body { padding: 12px 16px 16px; }
+.cm-card-body__hint { font-size: 12px; color: var(--ies-gray-500); margin: 0 0 8px; }
+
+.cm-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.cm-table thead th {
+  text-align: left;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ies-gray-500);
+  background: var(--ies-gray-50);
+  padding: 10px;
+  border-bottom: 1px solid var(--ies-gray-200);
+  white-space: nowrap;
+}
+.cm-table thead th.cm-th-num { text-align: right; }
+.cm-table thead th.cm-th-center { text-align: center; }
+.cm-table tbody td {
+  padding: 10px;
+  border-bottom: 1px solid var(--ies-gray-100);
+  vertical-align: top;
+}
+.cm-table tbody tr:last-child td { border-bottom: 0; }
+.cm-table tbody tr:hover td { background: var(--ies-gray-50); }
+.cm-table tbody tr.cm-row--override td { background: #fffbeb; }
+.cm-table tbody tr.cm-row--override:hover td { background: #fef3c7; }
+
+.cm-cell-title { font-weight: 600; color: var(--ies-navy); font-size: 13px; line-height: 1.3; }
+.cm-cell-meta {
+  font-size: 11px;
+  color: var(--ies-gray-500);
+  margin-top: 2px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  word-break: break-all;
+}
+.cm-cell-filters {
+  font-size: 10px;
+  color: var(--ies-gray-400);
+  margin-top: 4px;
+  letter-spacing: 0.02em;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.cm-cell-filters span {
+  background: var(--ies-gray-100);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.cm-cell-notes { font-size: 12px; color: var(--ies-gray-600); line-height: 1.4; }
+.cm-cell-source { font-size: 11px; color: var(--ies-gray-500); line-height: 1.35; }
+.cm-cell-source__detail { font-size: 10px; color: var(--ies-gray-400); margin-top: 1px; }
+
+.cm-row-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  justify-content: center;
+}
+
+.cm-empty-state {
+  text-align: center;
+  padding: 40px 16px;
+  color: var(--ies-gray-500);
+  font-size: 13px;
+  background: var(--ies-gray-50);
+  border: 1px dashed var(--ies-gray-200);
+  border-radius: 8px;
+}
+
+.cm-audit-banner {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-left: 4px solid #f59e0b;
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.cm-audit-banner-label {
+  flex: 1;
+  font-size: 13px;
+  color: #78350f;
+  line-height: 1.4;
+  min-width: 220px;
+}
+.cm-audit-banner-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* Status chip color variants — layered on .hub-status-chip */
+.hub-status-chip.cm-chip-warn    { background: #fef3c7; color: #92400e; border-color: #fde68a; }
+.hub-status-chip.cm-chip-info    { background: var(--ies-gray-100); color: var(--ies-gray-600); border-color: var(--ies-gray-200); }
+.hub-status-chip.cm-chip-stale   { background: #fef3c7; color: #92400e; border-color: #fde68a; }
+.hub-status-chip.cm-chip-success { background: #d1fae5; color: #065f46; border-color: #a7f3d0; }
+.hub-status-chip.cm-chip-xs      { font-size: 9px; padding: 1px 6px; }
+
+/* Sub-section divider — Planning Ratios sits below Heuristics */
+.cm-section-divider {
+  height: 1px;
+  background: var(--ies-gray-100);
+  margin: 28px 0 20px;
+}
