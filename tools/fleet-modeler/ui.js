@@ -260,10 +260,11 @@ function renderShell() {
         description: TAB_DESC[activeTab] || TAB_DESC.lanes,
         subtitle: TAB_LABEL[activeTab] || '',
         primaryAction: {
-          label: 'Calculate Fleet',
+          // XT-SCOPE-1 (2026-04-27 EVE2) — standardized "Run" verb.
+          label: 'Run',
           action: 'fleet-run',
           icon: '▶',
-          title: 'Run the analyzer (Cmd/Ctrl+Enter)',
+          title: 'Run fleet analyzer (Cmd/Ctrl+Enter)',
           state: runState.state(runStateInputs()),
           cleanLabel: '✓ Results current',
           cleanTitle: 'Inputs unchanged since the last calculate — fleet results match the current lanes + config. Click to force a re-run.',

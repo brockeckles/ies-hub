@@ -406,10 +406,11 @@ function renderShell() {
         ],
         primaryAction: showRunBtn
           ? {
-              label: 'Find Optimal Location',
+              // XT-SCOPE-1 (2026-04-27 EVE2) — standardized "Run" verb.
+              label: 'Run',
               action: 'cog-run',
               icon: '▶',
-              title: 'Run k-means (Cmd/Ctrl+Enter)',
+              title: 'Run k-means center-of-gravity (Cmd/Ctrl+Enter)',
               state: runState.state(runStateInputs()),
               cleanLabel: '✓ Results current',
               cleanTitle: 'Inputs unchanged since the last solve — k-means centers match the current points + config. Click to force a re-run.',

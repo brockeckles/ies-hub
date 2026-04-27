@@ -457,10 +457,12 @@ function renderShell() {
             title: activeConfigId ? 'Update this scenario' : 'Save this scenario so you can reopen it later' },
         ],
         primaryAction: {
-          label: 'Run Scenario',
+          // XT-SCOPE-1 (2026-04-27 EVE2) — all 3 design tools now use "Run"
+          // as the primary verb, with the descriptor in the title attr.
+          label: 'Run',
           action: 'netopt-run',
           icon: '▶',
-          title: 'Run optimizer (Cmd/Ctrl+Enter)',
+          title: 'Run network optimizer (Cmd/Ctrl+Enter)',
           state: runState.state(runStateInputs()),
           cleanLabel: '✓ Results current',
           cleanTitle: 'Inputs unchanged since the last run — optimizer results match the current setup. Click to force a re-run.',
