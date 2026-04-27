@@ -395,7 +395,7 @@ function currentPhase() {
   if (activeView === 'comparison') return 'compare';
   if (activeView === 'results' || activeView === 'map') return 'run';
   // Setup view splits into Inputs vs Parameters by section.
-  if (activeSection === 'modemix' || activeSection === 'service') return 'parameters';
+  if (activeSection === 'modemix' || activeSection === 'rates' || activeSection === 'service') return 'parameters';
   return 'inputs';
 }
 /** Set the phase and seed activeView/activeSection appropriately. */
@@ -448,7 +448,9 @@ function renderShell() {
         // 2026-04-27 EVE — Export and Clear lifted from sidebar utilities.
         secondaryActions: [
           { label: '📥 Export', action: 'export-csv', title: 'Export scenarios to XLSX' },
-          { label: '🗑 Clear',  action: 'clear-scenarios', title: 'Clear all run scenarios' },
+          // NO-SCOPE-7 — Clear All is destructive (wipes all run scenarios) and
+          // only meaningful in the Compare phase where scenarios live.
+          ...(currentPhase() === 'compare' ? [{ label: '🗑 Clear', action: 'clear-scenarios', title: 'Clear all run scenarios' }] : []),
           { label: isDirty ? (activeConfigId ? '💾 Save' : '💾 Save Scenario') : (activeConfigId ? '✓ Saved' : '💾 Save Scenario'),
             action: 'netopt-save',
             primary: isDirty,
@@ -625,172 +627,16 @@ function jumpToPhase(phase) {
 // ============================================================
 
 function renderSidebar() {
-  // 2026-04-27 EVE: sidebar removed from shell (Option B redesign). All
-  // former sidebar contents — sections, archetype seeds, action buttons,
-  // Max DCs input, utilities — were lifted into the phase content areas
-  // (renderInputsPhase / renderParametersPhase / renderRunPhase) or to
-  // the header secondaryActions rail (Export, Clear). This function is
-  // kept as a no-op for compat with existing call sites; bindShellEvents
-  // / renderProcessFlow do all the wiring now.
+  // 2026-04-27 EVE2 (NO-SCOPE-9): sidebar was removed from the shell in EVE1.
+  // All former sidebar contents live in their phase content areas
+  // (renderInputsPhase / renderParametersPhase / renderRunPhase /
+  // renderComparePhase) or the header secondaryActions rail. The ~160-line
+  // dead body that followed this comment was deleted in EVE2 — this is now
+  // a true no-op kept only for backward compatibility with historical call
+  // sites. Renderers should call renderContentView() (which calls
+  // renderProcessFlow internally) instead of renderSidebar() directly.
   return;
-  // eslint-disable-next-line no-unreachable
-  const el = rootEl?.querySelector('#no-sidebar');
-  if (!el) return;
-
-  // P1 #6 — sidebar reorganized into Setup -> Optimize -> Run/Review -> Utilities phase blocks.
-  // Sections (Demand/Facilities/Mode Mix/Service Config) are split across SETUP and OPTIMIZE
-  // by their nature: SETUP holds raw inputs (demand, candidate facilities) + archetype quick-seed;
-  // OPTIMIZE holds cost/service assumptions (mode mix, service) + the actions that act on inputs
-  // (Find Optimal, Balance, Apply Rates, Upload CSV) + the Max-DCs sweep ceiling.
-  const status = phaseStatus();
-  const setupSections = [
-    { key: 'demand',     label: 'Demand Points', icon: '📍', count: String(demands.length) },
-    { key: 'facilities', label: 'Facilities',    icon: '🏭', count: facilities.filter(f => f.isOpen).length + '/' + facilities.length },
-  ];
-  const optimizeSections = [
-    { key: 'modemix', label: 'Mode Mix',       icon: '🚛', count: '' },
-    { key: 'service', label: 'Service Config', icon: '⏱',  count: '' },
-  ];
-
-  const phaseBadge = (num, status) => {
-    const bg = status === 'complete' ? 'var(--ies-green, #047857)' : status === 'active' ? 'var(--ies-blue)' : 'var(--ies-gray-300)';
-    const display = status === 'complete' ? '✓' : String(num);
-    return `<div style="width:18px;height:18px;border-radius:50%;background:${bg};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:10px;flex-shrink:0;">${display}</div>`;
-  };
-  const phaseHeader = (num, label, status, sub) => `
-    <div style="display:flex;align-items:center;gap:8px;margin:0 0 6px 0;padding:0 2px;">
-      ${phaseBadge(num, status)}
-      <span class="text-caption" style="color:var(--ies-gray-500);font-weight:700;letter-spacing:0.5px;font-size:10px;">${label}</span>
-    </div>
-    <div style="font-size:10px;color:var(--ies-gray-400);margin:0 0 8px 28px;line-height:1.3;">${sub}</div>
-  `;
-  const renderSection = (s) => `
-    <div data-section="${s.key}" style="display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:6px;cursor:pointer;margin-bottom:3px;
-         background:${s.key === activeSection ? 'var(--ies-blue)' : 'transparent'};
-         color:${s.key === activeSection ? '#fff' : 'var(--ies-gray-600)'};">
-      <span style="font-size:14px;">${s.icon}</span>
-      <span style="font-size:12px;font-weight:600;flex:1;">${s.label}</span>
-      ${s.count ? `<span style="font-size:10px;font-weight:700;opacity:0.75;">${s.count}</span>` : ''}
-    </div>
-  `;
-
-  el.innerHTML = `
-    <!-- PHASE 1: SETUP -->
-    <!-- 2026-04-25 PM: Archetypes are demand presets — render them between Demand and Facilities
-         so they visually attach to Demand, not Facilities. -->
-    <div data-phase-block="setup" style="margin-bottom:6px;">
-      ${phaseHeader(1, 'SETUP', status.setup, 'Add demand and candidate facilities.')}
-      ${renderSection(setupSections[0])}
-
-      <details style="margin:4px 0 8px 16px;border-left:2px solid var(--ies-gray-200);padding-left:10px;" ${selectedArchetype ? 'open' : ''}>
-        <summary style="font-size:10px;color:var(--ies-gray-500);cursor:pointer;padding:4px 2px;font-weight:700;letter-spacing:0.4px;">
-          QUICK-SEED · ARCHETYPES
-        </summary>
-        <div style="margin-top:4px;padding-left:2px;">
-          ${calc.listArchetypes().map(a => `
-            <button class="hub-btn hub-btn-sm hub-btn-secondary" data-archetype="${a.key}"
-                    style="width:100%;margin-bottom:4px;font-size:10px;text-align:left;padding:4px 8px;${selectedArchetype === a.key ? 'border-color:var(--ies-blue);color:var(--ies-blue);' : ''}">
-              ${a.name}
-            </button>
-          `).join('')}
-        </div>
-      </details>
-
-      ${renderSection(setupSections[1])}
-    </div>
-
-    <div style="border-top:1px solid var(--ies-gray-200);margin:10px 0;"></div>
-
-    <!-- PHASE 2: OPTIMIZE -->
-    <div data-phase-block="optimize" style="margin-bottom:6px;">
-      ${phaseHeader(2, 'OPTIMIZE', status.optimize, 'Find candidates, balance modes, and apply rates.')}
-      ${optimizeSections.map(renderSection).join('')}
-
-      <div style="display:flex;flex-direction:column;gap:5px;margin-top:8px;">
-        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="find-optimal" style="width:100%;font-size:11px;text-align:left;padding:6px 10px;" title="Weighted k-means on your demand → recommended DC metros. Adds candidate facilities to the list without opening them; you pick which to activate.">🎯 Find Optimal Locations</button>
-        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="balance-mode-mix" style="width:100%;font-size:11px;text-align:left;padding:6px 10px;" title="Auto-balance TL/LTL/Parcel mix to match average demand weight">⚖ Balance Mode Mix</button>
-        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="apply-market-rates" style="width:100%;font-size:11px;text-align:left;padding:6px 10px;" title="Pull latest spot/contract rates from market data and apply to rate card">💲 Apply Market Rates</button>
-        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="upload-rates-csv" style="width:100%;font-size:11px;text-align:left;padding:6px 10px;">📤 Upload Rate Card CSV</button>
-      </div>
-
-      <div style="margin-top:10px;padding:6px 4px;">
-        <label style="display:block;font-size:10px;font-weight:700;color:var(--ies-gray-500);margin-bottom:4px;letter-spacing:0.3px;">MAX DCs TO TEST (k-sweep)</label>
-        <input type="number" id="netopt-max-dcs" min="1" max="20" value="${maxDCsToTest}" style="width:100%;padding:5px 7px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:11px;"/>
-      </div>
-    </div>
-
-    <div style="border-top:1px solid var(--ies-gray-200);margin:10px 0;"></div>
-
-    <!-- PHASE 3 + 4: RUN & REVIEW -->
-    <div data-phase-block="run" style="margin-bottom:6px;">
-      ${phaseHeader(3, 'RUN & REVIEW', status.run, 'Compute, compare, and search.')}
-      <div style="display:flex;flex-direction:column;gap:5px;">
-        <button class="hub-btn hub-btn-primary hub-btn-sm" data-action="run" style="width:100%;font-weight:700;padding:7px 10px;">▶ Run Scenario</button>
-        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="optimize-network" style="width:100%;font-size:11px;text-align:left;padding:6px 10px;" title="Sweeps k from 1 to Max DCs and picks the best subset of candidates for each. Auto-uses exhaustive search when combinations ≤ 10,000 (provably optimal); otherwise falls back to a multi-start heuristic.">🎯 Optimize Network</button>
-      </div>
-    </div>
-
-    <div style="border-top:1px solid var(--ies-gray-200);margin:10px 0;"></div>
-
-    <!-- UTILITIES -->
-    <div data-phase-block="utilities">
-      <div style="display:flex;align-items:center;gap:8px;margin:0 0 8px 0;padding:0 2px;">
-        <span class="text-caption" style="color:var(--ies-gray-400);font-weight:700;letter-spacing:0.5px;font-size:10px;">UTILITIES</span>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:5px;">
-        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="export-csv" style="width:100%;font-size:11px;text-align:left;padding:6px 10px;">📥 Export XLSX</button>
-        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="clear-scenarios" style="width:100%;font-size:11px;text-align:left;padding:6px 10px;color:var(--ies-red, #b91c1c);">🗑 Clear All</button>
-      </div>
-      <input type="file" id="netopt-csv-upload" accept=".csv,text/csv" style="display:none;"/>
-    </div>
-  `;
-
-  // Archetype buttons
-  el.querySelectorAll('[data-archetype]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const key = /** @type {HTMLElement} */ (btn).dataset.archetype;
-      applyArchetype(key);
-      markDirty();
-    });
-  });
-
-  // Action buttons
-  el.querySelectorAll('[data-action]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const action = /** @type {HTMLElement} */ (btn).dataset.action;
-      // I-05 — the sidebar's Save button is handled at the shell level.
-      if (action === 'netopt-save') return;
-      if (action === 'run') { runScenario(); markDirty(); }
-      else if (action === 'find-optimal') { findOptimalLocations(); markDirty(); }
-      else if (action === 'optimize-network') { optimizeNetwork(); markDirty(); }
-      // Legacy actions still wired so saved keyboard shortcuts / deep-links keep working
-      else if (action === 'compare-dcs')      { optimizeNetwork({ force: 'heuristic' });  markDirty(); }
-      else if (action === 'exact-solve')      { optimizeNetwork({ force: 'exhaustive' }); markDirty(); }
-      else if (action === 'export-csv') exportToCSV();
-      else if (action === 'clear-scenarios') { scenarios = []; activeScenario = null; comparisonResults = null; markDirty(); renderContentView(); }
-      else if (action === 'apply-market-rates') { applyMarketRates(); markDirty(); }
-      else if (action === 'balance-mode-mix')   { balanceModeMix();    markDirty(); }
-      else if (action === 'upload-rates-csv') document.getElementById('netopt-csv-upload')?.click();
-    });
-  });
-
-  // Max DCs input
-  const maxDcsInput = el.querySelector('#netopt-max-dcs');
-  maxDcsInput?.addEventListener('change', (e) => {
-    const val = parseInt(e.target.value, 10) || 5;
-    maxDCsToTest = Math.max(1, Math.min(20, val));
-    // Clear stale comparison results
-    comparisonResults = null;
-    recommendedDCCount = null;
-    e.target.value = String(maxDCsToTest);
-  });
-
-  // CSV rate card upload
-  const fileInput = el.querySelector('#netopt-csv-upload');
-  fileInput?.addEventListener('change', handleCsvUpload);
-
-  // P1 #6 — keep the process-flow chip strip in sync with sidebar render.
-  renderProcessFlow();
+  /* legacy body deleted 2026-04-27 EVE2 — see commit history */
 }
 
 /** Pull latest freight_rates avg from Supabase and apply to rateCard. */
@@ -1234,24 +1080,15 @@ function renderArchetypeSeedBar() {
     </div>`;
 }
 
-/** Tools panel shown in the right column of the Parameters phase. */
-function renderToolsPanel() {
-  return `
-    <div class="hub-card" style="padding:14px;align-self:start;position:sticky;top:14px;">
-      <div style="font-size:11px;font-weight:700;letter-spacing:0.4px;color:var(--ies-gray-500);margin-bottom:10px;text-transform:uppercase;">Tools</div>
-      <div style="display:flex;flex-direction:column;gap:6px;">
-        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="find-optimal" style="text-align:left;font-size:12px;padding:6px 10px;" title="Weighted k-means on your demand → recommended DC metros. Adds candidate facilities to the list without opening them.">🎯 Find Optimal Locations</button>
-        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="balance-mode-mix" style="text-align:left;font-size:12px;padding:6px 10px;" title="Auto-balance TL/LTL/Parcel mix to match average demand weight">⚖ Balance Mode Mix</button>
-        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="apply-market-rates" style="text-align:left;font-size:12px;padding:6px 10px;" title="Pull latest spot/contract rates from market data and apply to rate card">💲 Apply Market Rates</button>
-        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="upload-rates-csv" style="text-align:left;font-size:12px;padding:6px 10px;">📤 Upload Rate Card CSV</button>
-        <button class="hub-btn hub-btn-sm hub-btn-primary"   data-action="optimize-network" style="text-align:left;font-size:12px;padding:6px 10px;" title="Sweeps k from 1 to Max DCs and picks the best subset of candidates for each. Auto-uses exhaustive search when combinations ≤ 10,000.">🎯 Optimize Network (k-sweep)</button>
-      </div>
-      <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--ies-gray-200);">
-        <label style="display:block;font-size:10px;font-weight:700;letter-spacing:0.3px;color:var(--ies-gray-500);margin-bottom:6px;text-transform:uppercase;">Max DCs to test</label>
-        <input type="number" id="netopt-max-dcs" min="1" max="20" value="${maxDCsToTest}" style="width:100%;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:12px;"/>
-      </div>
-    </div>`;
-}
+// renderToolsPanel — DELETED 2026-04-27 EVE2 (NO-SCOPE-1/2/3/4/5/8).
+// The right-rail Tools panel hosted five actions belonging on five different
+// surfaces. They were re-allocated:
+//   Find Optimal Locations   → Inputs · Facilities header (NO-SCOPE-1)
+//   Balance Mode Mix         → Mode Mix sub-tab inline
+//   Apply Market Rates       → Rate Card panel header (NO-SCOPE-4)
+//   Upload Rate Card CSV     → Rate Card panel header (NO-SCOPE-5)
+//   Optimize Network k-sweep → Compare phase header (NO-SCOPE-2)
+//   Max DCs to test          → travels with Optimize Network (NO-SCOPE-3)
 
 // ============================================================
 // PHASE RENDERERS (2026-04-27 EVE)
@@ -1277,26 +1114,25 @@ function renderInputsPhase(el) {
 }
 
 function renderParametersPhase(el) {
-  if (activeSection !== 'modemix' && activeSection !== 'service') activeSection = 'modemix';
+  // 2026-04-27 EVE2 (NO-SCOPE-6 + NO-SCOPE-8): three sub-tabs replace
+  // the prior 2-tab + right-column-tools-panel layout. Mode Mix is now a
+  // pure mode-allocation surface; Rate Card lives in its own sub-tab.
+  if (!['modemix', 'rates', 'service'].includes(activeSection)) activeSection = 'modemix';
   const subTabs = renderSubTabStrip([
     { key: 'modemix', label: '🚛 Mode Mix' },
+    { key: 'rates',   label: '💲 Rate Card' },
     { key: 'service', label: '⏱ Service Config' },
   ], activeSection, 'section');
   el.innerHTML = `
-    <div style="padding:18px 24px 24px;display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:24px;">
-      <div style="min-width:0;">
-        ${subTabs}
-        <div id="np-phase-inner" style="margin-top:18px;"></div>
-      </div>
-      <div>
-        ${renderToolsPanel()}
-      </div>
+    <div style="padding:18px 24px 24px;">
+      ${subTabs}
+      <div id="np-phase-inner" style="margin-top:18px;"></div>
     </div>`;
   const inner = el.querySelector('#np-phase-inner');
-  if (activeSection === 'service') renderServiceConfig(inner);
-  else                              renderModeMix(inner);
+  if      (activeSection === 'service') renderServiceConfig(inner);
+  else if (activeSection === 'rates')   renderRateCardPhase(inner);
+  else                                  renderModeMix(inner);
   bindPhaseSubTabClicks(el);
-  bindToolsPanelClicks(el);
 }
 
 function renderRunPhase(el) {
@@ -1319,7 +1155,39 @@ function renderRunPhase(el) {
 }
 
 function renderComparePhase(el) {
-  el.innerHTML = `<div style="padding:18px 24px 24px;" id="np-phase-inner"></div>`;
+  // 2026-04-27 EVE2 (NO-SCOPE-2 + NO-SCOPE-3): Optimize Network k-sweep is the
+  // primary action of the Compare phase — it produces the data this phase
+  // exists to display. Max DCs travels with it.
+  el.innerHTML = `
+    <div style="padding:18px 24px 24px;">
+      <div class="hub-card" style="padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:280px;">
+          <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;color:var(--ies-gray-500);text-transform:uppercase;">Run k-sweep</div>
+          <div style="font-size:12px;color:var(--ies-gray-500);margin-top:3px;line-height:1.5;">Sweeps k from 1 to <em>Max DCs</em> and picks the best subset of candidates for each. Auto-uses exhaustive search when combinations ≤ 10,000 (provably optimal); otherwise multi-start heuristic.</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--ies-gray-600);">
+            Max DCs
+            <input type="number" id="netopt-max-dcs" min="1" max="20" value="${maxDCsToTest}" style="width:60px;padding:5px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:12px;text-align:right;"/>
+          </label>
+          <button class="hub-btn hub-btn-sm hub-btn-primary" data-action="optimize-network" style="font-size:12px;padding:6px 12px;font-weight:700;">🎯 Optimize Network</button>
+        </div>
+      </div>
+      <div id="np-phase-inner"></div>
+    </div>
+  `;
+  // Wire compare-header actions.
+  el.querySelector('[data-action="optimize-network"]')?.addEventListener('click', () => {
+    optimizeNetwork();
+    markDirty();
+  });
+  el.querySelector('#netopt-max-dcs')?.addEventListener('change', (e) => {
+    const val = parseInt(/** @type {HTMLInputElement} */ (e.target).value, 10) || 5;
+    maxDCsToTest = Math.max(1, Math.min(20, val));
+    comparisonResults = null;
+    recommendedDCCount = null;
+    /** @type {HTMLInputElement} */ (e.target).value = String(maxDCsToTest);
+  });
   renderComparison(el.querySelector('#np-phase-inner'));
 }
 
@@ -1351,26 +1219,8 @@ function bindArchetypeButtons(scope) {
     });
   });
 }
-function bindToolsPanelClicks(scope) {
-  scope.querySelectorAll('[data-action]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const action = /** @type {HTMLElement} */ (btn).dataset.action;
-      if      (action === 'find-optimal')         { findOptimalLocations(); markDirty(); }
-      else if (action === 'optimize-network')     { optimizeNetwork();     markDirty(); }
-      else if (action === 'balance-mode-mix')     { balanceModeMix();      markDirty(); }
-      else if (action === 'apply-market-rates')   { applyMarketRates();    markDirty(); }
-      else if (action === 'upload-rates-csv')     document.getElementById('netopt-csv-upload')?.click();
-    });
-  });
-  const maxDcsInput = scope.querySelector('#netopt-max-dcs');
-  maxDcsInput?.addEventListener('change', (e) => {
-    const val = parseInt(e.target.value, 10) || 5;
-    maxDCsToTest = Math.max(1, Math.min(20, val));
-    comparisonResults = null;
-    recommendedDCCount = null;
-    e.target.value = String(maxDCsToTest);
-  });
-}
+// bindToolsPanelClicks — DELETED 2026-04-27 EVE2 (NO-SCOPE-8). Tools panel
+// removed; per-section actions are now wired locally in their renderers.
 
 // Legacy renderSetup retained for any caller still dispatching by section.
 function renderSetup(el) {
@@ -1389,6 +1239,7 @@ function renderFacilities(el) {
         <h3 class="text-section" style="margin:0;">Facility Network</h3>
         <div style="display:flex;gap:8px;">
           ${facilities.length === 0 && demands.length === 0 ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" id="no-load-sample" title="Seed 5 candidate DCs + 10 demand points so you can explore the optimizer without entering data.">Load Sample Network</button>` : ''}
+          ${demands.length > 0 ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" id="no-find-optimal-header" title="Weighted k-means on your demand → recommended DC metros. Adds candidate facilities to the list without opening them.">🎯 Find Optimal Locations</button>` : ''}
           <button class="hub-btn hub-btn-sm hub-btn-secondary" id="no-add-facility">+ Add Facility</button>
         </div>
       </div>
@@ -1529,6 +1380,10 @@ function renderFacilities(el) {
     renderSidebar();
   }
   el.querySelector('#no-add-facility')?.addEventListener('click', _addBlankFacility);
+  el.querySelector('#no-find-optimal-header')?.addEventListener('click', () => {
+    findOptimalLocations();
+    markDirty();
+  });
   // Slice B (2026-04-25): empty-state CTAs when demand is loaded but facilities are empty.
   el.querySelector('#no-add-facility-empty')?.addEventListener('click', _addBlankFacility);
   el.querySelector('#no-find-optimal-empty')?.addEventListener('click', () => {
@@ -1696,9 +1551,14 @@ function renderDemand(el) {
 }
 
 function renderModeMix(el) {
+  // 2026-04-27 EVE2 (NO-SCOPE-6): Mode Mix is now mode-allocation only.
+  // Rate Card moved to its own renderRateCardPhase sub-tab.
   el.innerHTML = `
-    <div style="max-width:500px;">
-      <h3 class="text-section" style="margin-bottom:16px;">Transportation Mode Mix</h3>
+    <div style="max-width:560px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px;">
+        <h3 class="text-section" style="margin:0;">Transportation Mode Mix</h3>
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="balance-mode-mix" title="Auto-balance TL/LTL/Parcel mix to match average demand weight" style="font-size:11px;padding:5px 10px;">⚖ Balance Mode Mix</button>
+      </div>
 
       <div class="hub-card" style="margin-bottom:20px;">
         <div style="display:flex;flex-direction:column;gap:16px;">
@@ -1712,9 +1572,17 @@ function renderModeMix(el) {
         </div>
       </div>
 
-      ${renderRateCardEditor()}
+      <div style="font-size:12px;color:var(--ies-gray-500);line-height:1.5;">
+        Per-lane TL / LTL / Parcel allocation. Rates that drive these costs live in the <b>Rate Card</b> sub-tab.
+      </div>
     </div>
   `;
+
+  // Balance Mode Mix is a section-local action (was in the old Tools panel).
+  el.querySelector('[data-action="balance-mode-mix"]')?.addEventListener('click', () => {
+    balanceModeMix();
+    markDirty();
+  });
 
   // Bind sliders
   el.querySelectorAll('input[type="range"]').forEach(input => {
@@ -1728,179 +1596,8 @@ function renderModeMix(el) {
     });
   });
 
-  // Bind rate-card scalars (TL $/mi, LTL Base $/CWT, FSC %, Discount %, Min Charge $)
-  el.querySelectorAll('input[data-rate]').forEach(input => {
-    input.addEventListener('change', (e) => {
-      const key = /** @type {HTMLInputElement} */ (e.target).dataset.rate;
-      let val = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
-      if (key === 'fuelSurcharge') val = val / 100;
-      rateCard[key] = val;
-      markDirty();
-      // Re-render so derived matrix preview reflects the new base value.
-      renderModeMix(el);
-    });
-  });
-
-  // Bind class-100 base row (6 weight breaks)
-  el.querySelectorAll('input[data-ltl-break-idx]').forEach(input => {
-    input.addEventListener('change', (e) => {
-      const idx = parseInt(/** @type {HTMLInputElement} */ (e.target).dataset.ltlBreakIdx);
-      const val = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
-      // Normalize: scenarios saved with the legacy 5-break shape get extended to 6 on first edit.
-      if (!Array.isArray(rateCard.ltlBreakRates) || rateCard.ltlBreakRates.length < 6) {
-        rateCard.ltlBreakRates = [...calc.DEFAULT_RATES.ltlBreakRates];
-        rateCard.ltlWeightBreaks = [...calc.DEFAULT_RATES.ltlWeightBreaks];
-      }
-      rateCard.ltlBreakRates[idx] = val;
-      markDirty();
-      renderModeMix(el);
-    });
-  });
-
-  // Bind per-cell class-matrix overrides (click any cell, type a $ value)
-  // Storing on rateCard.ltlClassMatrixOverrides (sparse map keyed `${classCode}-${weightBreakIdx}`).
-  // ltlCost() in calc.js consults this map and uses the override DIRECTLY as
-  // the final $/CWT rate (skipping the class multiplier) when present.
-  el.querySelectorAll('input[data-class-code][data-break-idx]').forEach(input => {
-    input.addEventListener('change', (e) => {
-      const t = /** @type {HTMLInputElement} */ (e.target);
-      const code = parseInt(t.dataset.classCode, 10);
-      const idx = parseInt(t.dataset.breakIdx, 10);
-      const val = parseFloat(t.value);
-      if (!Number.isFinite(val) || val < 0) return;
-      if (!rateCard.ltlClassMatrixOverrides) rateCard.ltlClassMatrixOverrides = {};
-      // If user typed exactly the formula value, treat it as a no-op (don't
-      // create a phantom override that prevents recalculation when the base
-      // row changes).
-      const baseRow = rateCard.ltlBreakRates && rateCard.ltlBreakRates.length === 6
-        ? rateCard.ltlBreakRates : calc.DEFAULT_RATES.ltlBreakRates;
-      const mult = calc.NMFC_CLASS_MULTIPLIERS[code] ?? 1.0;
-      const formula = +(baseRow[idx] * mult).toFixed(2);
-      if (Math.abs(val - formula) < 0.005) {
-        delete rateCard.ltlClassMatrixOverrides[`${code}-${idx}`];
-      } else {
-        rateCard.ltlClassMatrixOverrides[`${code}-${idx}`] = val;
-      }
-      markDirty();
-      renderModeMix(el);
-    });
-  });
-
-  // Per-cell reset (only present on overridden cells)
-  el.querySelectorAll('button[data-action="reset-class-cell"]').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      const t = /** @type {HTMLElement} */ (e.currentTarget);
-      const code = t.dataset.classCode;
-      const idx = t.dataset.breakIdx;
-      if (rateCard.ltlClassMatrixOverrides) {
-        delete rateCard.ltlClassMatrixOverrides[`${code}-${idx}`];
-      }
-      markDirty();
-      renderModeMix(el);
-    });
-  });
-
-  // Bind 5x5 LTL region-pair matrix
-  el.querySelectorAll('input[data-region-orig]').forEach(input => {
-    input.addEventListener('change', (e) => {
-      const t = /** @type {HTMLInputElement} */ (e.target);
-      const orig = t.dataset.regionOrig;
-      const dest = t.dataset.regionDest;
-      const val = parseFloat(t.value);
-      if (!Number.isFinite(val) || val < 0) return;
-      if (!rateCard.ltlRegionMatrix) {
-        rateCard.ltlRegionMatrix = JSON.parse(JSON.stringify(calc.DEFAULT_LTL_REGION_MATRIX));
-      }
-      rateCard.ltlRegionMatrix[orig] = rateCard.ltlRegionMatrix[orig] || {};
-      rateCard.ltlRegionMatrix[orig][dest] = val;
-      markDirty();
-    });
-  });
-
-  // Reset region matrix to defaults
-  el.querySelector('[data-action="reset-region-matrix"]')?.addEventListener('click', () => {
-    rateCard.ltlRegionMatrix = JSON.parse(JSON.stringify(calc.DEFAULT_LTL_REGION_MATRIX));
-    markDirty();
-    renderModeMix(el);
-  });
-
-  // Reset rate card to synthetic-tariff defaults
-  el.querySelector('[data-action="reset-rate-card"]')?.addEventListener('click', () => {
-    if (!confirm('Reset all rate-card values to the synthetic-tariff defaults? This will overwrite TL/LTL/FSC/discount/min charge, the class-100 weight-break row, and the region matrix.')) return;
-    rateCard = { ...calc.DEFAULT_RATES, ltlRegionMatrix: JSON.parse(JSON.stringify(calc.DEFAULT_LTL_REGION_MATRIX)) };
-    markDirty();
-    renderModeMix(el);
-  });
-
-  // ─────────────────────────────────────────────────────────────
-  // NET-C1 Lane Rate Overrides — bindings
-  // ─────────────────────────────────────────────────────────────
-  el.querySelector('[data-action="add-lane-override"]')?.addEventListener('click', () => {
-    if (!Array.isArray(rateCard.laneRates)) rateCard.laneRates = [];
-    rateCard.laneRates.push({});
-    markDirty();
-    renderModeMix(el);
-  });
-
-  el.querySelectorAll('button[data-action="delete-lane"]').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      const idx = parseInt(/** @type {HTMLElement} */ (e.currentTarget).dataset.laneIdx, 10);
-      if (Array.isArray(rateCard.laneRates) && idx >= 0 && idx < rateCard.laneRates.length) {
-        rateCard.laneRates.splice(idx, 1);
-        markDirty();
-        renderModeMix(el);
-      }
-    });
-  });
-
-  el.querySelectorAll('select[data-lane-idx]').forEach(sel => {
-    sel.addEventListener('change', (e) => {
-      const t = /** @type {HTMLSelectElement} */ (e.currentTarget);
-      const idx = parseInt(t.dataset.laneIdx, 10);
-      const key = t.dataset.laneKey;
-      if (!Array.isArray(rateCard.laneRates) || !rateCard.laneRates[idx]) return;
-      const v = t.value;
-      if (v === '') {
-        delete rateCard.laneRates[idx][key];
-      } else {
-        rateCard.laneRates[idx][key] = v;
-      }
-      markDirty();
-    });
-  });
-
-  el.querySelectorAll('input[data-lane-idx]').forEach(input => {
-    input.addEventListener('change', (e) => {
-      const t = /** @type {HTMLInputElement} */ (e.currentTarget);
-      const idx = parseInt(t.dataset.laneIdx, 10);
-      const key = t.dataset.laneKey;
-      if (!Array.isArray(rateCard.laneRates) || !rateCard.laneRates[idx]) return;
-      const raw = t.value.trim();
-      if (raw === '') {
-        delete rateCard.laneRates[idx][key];
-      } else {
-        const v = parseFloat(raw);
-        if (!Number.isFinite(v) || v < 0) return;
-        // FSC stored as fraction (0-1); other fields as raw values.
-        rateCard.laneRates[idx][key] = (key === 'fuelSurcharge') ? (v / 100) : v;
-      }
-      markDirty();
-      // Re-render header count chip.
-      const header = el.querySelector('h3 + .hub-card');
-      if (header) renderModeMix(el);
-    });
-  });
 }
 
-/**
- * Rate-card editor — synthetic-tariff banner + scalar inputs (TL/LTL/FSC/discount/min charge)
- * + class-100 base weight-break row + collapsible 18-class derived matrix preview
- * + 5x5 region-pair multiplier grid.
- *
- * No real carrier rate base is published online (CzarLite is licensed; carrier tariffs are
- * proprietary). Defaults are calibrated to industry-typical ranges from public sources
- * cited in the banner. All values overrideable per scenario.
- */
 function renderRateCardEditor() {
   const breaks = (rateCard.ltlWeightBreaks && rateCard.ltlWeightBreaks.length === 6)
     ? rateCard.ltlWeightBreaks
@@ -2152,6 +1849,210 @@ function renderRateCardEditor() {
     </div>
   `;
 }
+
+
+// 2026-04-27 EVE2 (NO-SCOPE-6/4/5): Rate Card is now its own Parameters
+// sub-tab. Apply Market Rates + Upload Rate Card CSV are inline section
+// actions; previously they lived in the right-rail Tools panel (deleted).
+function renderRateCardPhase(el) {
+  el.innerHTML = `
+    <div style="max-width:1100px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap;">
+        <div>
+          <h3 class="text-section" style="margin:0;">Rate Card</h3>
+          <div style="font-size:12px;color:var(--ies-gray-500);margin-top:4px;">TL per-mile · LTL class-100 tariff + multipliers + 5×5 region matrix · lane overrides · parcel zones.</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="apply-market-rates" title="Pull latest spot/contract rates from market data and apply to rate card" style="font-size:11px;padding:5px 10px;">💲 Apply Market Rates</button>
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="upload-rates-csv" title="Upload a rate-card CSV (TL/LTL columns)" style="font-size:11px;padding:5px 10px;">📤 Upload Rate Card CSV</button>
+        </div>
+      </div>
+      ${renderRateCardEditor()}
+    </div>
+  `;
+
+  // Section actions
+  el.querySelector('[data-action="apply-market-rates"]')?.addEventListener('click', () => {
+    applyMarketRates();
+    markDirty();
+  });
+  el.querySelector('[data-action="upload-rates-csv"]')?.addEventListener('click', () => {
+    document.getElementById('netopt-csv-upload')?.click();
+  });
+
+  // Bind rate-card scalars (TL $/mi, LTL Base $/CWT, FSC %, Discount %, Min Charge $)
+  el.querySelectorAll('input[data-rate]').forEach(input => {
+    input.addEventListener('change', (e) => {
+      const key = /** @type {HTMLInputElement} */ (e.target).dataset.rate;
+      let val = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
+      if (key === 'fuelSurcharge') val = val / 100;
+      rateCard[key] = val;
+      markDirty();
+      // Re-render so derived matrix preview reflects the new base value.
+      renderRateCardPhase(el);
+    });
+  });
+
+  // Bind class-100 base row (6 weight breaks)
+  el.querySelectorAll('input[data-ltl-break-idx]').forEach(input => {
+    input.addEventListener('change', (e) => {
+      const idx = parseInt(/** @type {HTMLInputElement} */ (e.target).dataset.ltlBreakIdx);
+      const val = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
+      // Normalize: scenarios saved with the legacy 5-break shape get extended to 6 on first edit.
+      if (!Array.isArray(rateCard.ltlBreakRates) || rateCard.ltlBreakRates.length < 6) {
+        rateCard.ltlBreakRates = [...calc.DEFAULT_RATES.ltlBreakRates];
+        rateCard.ltlWeightBreaks = [...calc.DEFAULT_RATES.ltlWeightBreaks];
+      }
+      rateCard.ltlBreakRates[idx] = val;
+      markDirty();
+      renderRateCardPhase(el);
+    });
+  });
+
+  // Bind per-cell class-matrix overrides (click any cell, type a $ value)
+  // Storing on rateCard.ltlClassMatrixOverrides (sparse map keyed `${classCode}-${weightBreakIdx}`).
+  // ltlCost() in calc.js consults this map and uses the override DIRECTLY as
+  // the final $/CWT rate (skipping the class multiplier) when present.
+  el.querySelectorAll('input[data-class-code][data-break-idx]').forEach(input => {
+    input.addEventListener('change', (e) => {
+      const t = /** @type {HTMLInputElement} */ (e.target);
+      const code = parseInt(t.dataset.classCode, 10);
+      const idx = parseInt(t.dataset.breakIdx, 10);
+      const val = parseFloat(t.value);
+      if (!Number.isFinite(val) || val < 0) return;
+      if (!rateCard.ltlClassMatrixOverrides) rateCard.ltlClassMatrixOverrides = {};
+      // If user typed exactly the formula value, treat it as a no-op (don't
+      // create a phantom override that prevents recalculation when the base
+      // row changes).
+      const baseRow = rateCard.ltlBreakRates && rateCard.ltlBreakRates.length === 6
+        ? rateCard.ltlBreakRates : calc.DEFAULT_RATES.ltlBreakRates;
+      const mult = calc.NMFC_CLASS_MULTIPLIERS[code] ?? 1.0;
+      const formula = +(baseRow[idx] * mult).toFixed(2);
+      if (Math.abs(val - formula) < 0.005) {
+        delete rateCard.ltlClassMatrixOverrides[`${code}-${idx}`];
+      } else {
+        rateCard.ltlClassMatrixOverrides[`${code}-${idx}`] = val;
+      }
+      markDirty();
+      renderRateCardPhase(el);
+    });
+  });
+
+  // Per-cell reset (only present on overridden cells)
+  el.querySelectorAll('button[data-action="reset-class-cell"]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const t = /** @type {HTMLElement} */ (e.currentTarget);
+      const code = t.dataset.classCode;
+      const idx = t.dataset.breakIdx;
+      if (rateCard.ltlClassMatrixOverrides) {
+        delete rateCard.ltlClassMatrixOverrides[`${code}-${idx}`];
+      }
+      markDirty();
+      renderRateCardPhase(el);
+    });
+  });
+
+  // Bind 5x5 LTL region-pair matrix
+  el.querySelectorAll('input[data-region-orig]').forEach(input => {
+    input.addEventListener('change', (e) => {
+      const t = /** @type {HTMLInputElement} */ (e.target);
+      const orig = t.dataset.regionOrig;
+      const dest = t.dataset.regionDest;
+      const val = parseFloat(t.value);
+      if (!Number.isFinite(val) || val < 0) return;
+      if (!rateCard.ltlRegionMatrix) {
+        rateCard.ltlRegionMatrix = JSON.parse(JSON.stringify(calc.DEFAULT_LTL_REGION_MATRIX));
+      }
+      rateCard.ltlRegionMatrix[orig] = rateCard.ltlRegionMatrix[orig] || {};
+      rateCard.ltlRegionMatrix[orig][dest] = val;
+      markDirty();
+    });
+  });
+
+  // Reset region matrix to defaults
+  el.querySelector('[data-action="reset-region-matrix"]')?.addEventListener('click', () => {
+    rateCard.ltlRegionMatrix = JSON.parse(JSON.stringify(calc.DEFAULT_LTL_REGION_MATRIX));
+    markDirty();
+    renderRateCardPhase(el);
+  });
+
+  // Reset rate card to synthetic-tariff defaults
+  el.querySelector('[data-action="reset-rate-card"]')?.addEventListener('click', () => {
+    if (!confirm('Reset all rate-card values to the synthetic-tariff defaults? This will overwrite TL/LTL/FSC/discount/min charge, the class-100 weight-break row, and the region matrix.')) return;
+    rateCard = { ...calc.DEFAULT_RATES, ltlRegionMatrix: JSON.parse(JSON.stringify(calc.DEFAULT_LTL_REGION_MATRIX)) };
+    markDirty();
+    renderRateCardPhase(el);
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // NET-C1 Lane Rate Overrides — bindings
+  // ─────────────────────────────────────────────────────────────
+  el.querySelector('[data-action="add-lane-override"]')?.addEventListener('click', () => {
+    if (!Array.isArray(rateCard.laneRates)) rateCard.laneRates = [];
+    rateCard.laneRates.push({});
+    markDirty();
+    renderRateCardPhase(el);
+  });
+
+  el.querySelectorAll('button[data-action="delete-lane"]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const idx = parseInt(/** @type {HTMLElement} */ (e.currentTarget).dataset.laneIdx, 10);
+      if (Array.isArray(rateCard.laneRates) && idx >= 0 && idx < rateCard.laneRates.length) {
+        rateCard.laneRates.splice(idx, 1);
+        markDirty();
+        renderRateCardPhase(el);
+      }
+    });
+  });
+
+  el.querySelectorAll('select[data-lane-idx]').forEach(sel => {
+    sel.addEventListener('change', (e) => {
+      const t = /** @type {HTMLSelectElement} */ (e.currentTarget);
+      const idx = parseInt(t.dataset.laneIdx, 10);
+      const key = t.dataset.laneKey;
+      if (!Array.isArray(rateCard.laneRates) || !rateCard.laneRates[idx]) return;
+      const v = t.value;
+      if (v === '') {
+        delete rateCard.laneRates[idx][key];
+      } else {
+        rateCard.laneRates[idx][key] = v;
+      }
+      markDirty();
+    });
+  });
+
+  el.querySelectorAll('input[data-lane-idx]').forEach(input => {
+    input.addEventListener('change', (e) => {
+      const t = /** @type {HTMLInputElement} */ (e.currentTarget);
+      const idx = parseInt(t.dataset.laneIdx, 10);
+      const key = t.dataset.laneKey;
+      if (!Array.isArray(rateCard.laneRates) || !rateCard.laneRates[idx]) return;
+      const raw = t.value.trim();
+      if (raw === '') {
+        delete rateCard.laneRates[idx][key];
+      } else {
+        const v = parseFloat(raw);
+        if (!Number.isFinite(v) || v < 0) return;
+        // FSC stored as fraction (0-1); other fields as raw values.
+        rateCard.laneRates[idx][key] = (key === 'fuelSurcharge') ? (v / 100) : v;
+      }
+      markDirty();
+      // Re-render header count chip.
+      const header = el.querySelector('h3 + .hub-card');
+      if (header) renderRateCardPhase(el);
+    });
+  });
+}
+
+/**
+ * Rate-card editor — synthetic-tariff banner + scalar inputs (TL/LTL/FSC/discount/min charge)
+ * + class-100 base weight-break row + collapsible 18-class derived matrix preview
+ * + 5x5 region-pair multiplier grid.
+ *
+ * No real carrier rate base is published online (CzarLite is licensed; carrier tariffs are
+ * proprietary). Defaults are calibrated to industry-typical ranges from public sources
+ * cited in the banner. All values overrideable per scenario.
+ */
 
 function renderSlider(label, key, value) {
   return `
@@ -2488,8 +2389,8 @@ function renderResults(el) {
     if (runBlockReason === 'no-open-facilities') {
       const total = facilities.length;
       const hint = total === 0
-        ? 'You have no candidate facilities yet. Open the <b>Parameters</b> phase and click <b>Find Optimal Locations</b> in the Tools panel to seed candidates from a k-means cluster of your demand, or add them manually.'
-        : `You have ${total} facilit${total === 1 ? 'y' : 'ies'} on the list but none are <b>Active</b>. Tick the Active checkbox on at least one row in <b>Inputs → Facilities</b>, or click <b>Find Optimal Locations</b> in the Parameters phase Tools panel to add more candidates.`;
+        ? 'You have no candidate facilities yet. Open <b>Inputs → Facilities</b> and click <b>🎯 Find Optimal Locations</b> to seed candidates from a k-means cluster of your demand, or add them manually.'
+        : `You have ${total} facilit${total === 1 ? 'y' : 'ies'} on the list but none are <b>Active</b>. Tick the Active checkbox on at least one row in <b>Inputs → Facilities</b>, or click <b>🎯 Find Optimal Locations</b> in the Facilities header to add more candidates.`;
       el.innerHTML = `
         <div class="hub-card" style="padding:24px;background:#fffbeb;border:1px solid #fde68a;">
           <div style="display:inline-flex;align-items:center;gap:6px;background:#fef3c7;color:#92400e;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700;margin-bottom:12px;">
@@ -2498,14 +2399,9 @@ function renderResults(el) {
           <div style="font-size:14px;font-weight:700;color:var(--ies-navy);margin-bottom:6px;">No active facilities to evaluate</div>
           <div style="font-size:13px;color:var(--ies-gray-600);line-height:1.5;margin-bottom:14px;">${hint}</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="hub-btn hub-btn-sm hub-btn-primary" id="no-results-find-optimal" style="display:inline-flex;align-items:center;gap:6px;">🎯 Find Optimal Locations</button>
-            <button class="hub-btn hub-btn-sm hub-btn-secondary" id="no-results-go-facilities">Open Facilities tab</button>
+            <button class="hub-btn hub-btn-sm hub-btn-primary" id="no-results-go-facilities" style="display:inline-flex;align-items:center;gap:6px;">→ Open Inputs · Facilities</button>
           </div>
         </div>`;
-      el.querySelector('#no-results-find-optimal')?.addEventListener('click', () => {
-        findOptimalLocations();
-        markDirty();
-      });
       el.querySelector('#no-results-go-facilities')?.addEventListener('click', () => {
         activeSection = 'facilities';
         activeView = 'setup';
@@ -2791,7 +2687,7 @@ function renderComparison(el) {
   } else if (scenarios.length === 0) {
     el.innerHTML = `
       <div class="hub-card">
-        <p class="text-body text-muted">No optimization run yet. Open the <b>Parameters</b> phase and click <b>🎯 Optimize Network (k-sweep)</b> in the Tools panel to evaluate the best subset of candidates for each network size 1..N. The tool auto-picks brute-force enumeration when the search space is small (provably optimal) and a multi-start heuristic otherwise.</p>
+        <p class="text-body text-muted">No optimization run yet. Set <b>Max DCs</b> above and click <b>🎯 Optimize Network</b> to evaluate the best subset of candidates for each network size 1..N. The tool auto-picks brute-force enumeration when the search space is small (provably optimal) and a multi-start heuristic otherwise.</p>
       </div>
     `;
     return;
