@@ -61,6 +61,8 @@ let mapInstance = null;
 
 /** @type {import('./types.js?v=20260418-sM').ScenarioResult[]|null} */
 let comparisonResults = null;
+/** Metadata about the most recent optimization run (algo + combo count + reason). */
+let _optimizationMeta = null;
 let costChartInstance = null; // Chart.js handle for Compare-tab cost-vs-k curve; destroyed before each re-render.
 
 /** @type {number|null} */
@@ -681,8 +683,7 @@ function renderSidebar() {
       ${phaseHeader(3, 'RUN & REVIEW', status.run, 'Compute, compare, and search.')}
       <div style="display:flex;flex-direction:column;gap:5px;">
         <button class="hub-btn hub-btn-primary hub-btn-sm" data-action="run" style="width:100%;font-weight:700;padding:7px 10px;">▶ Run Scenario</button>
-        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="compare-dcs" style="width:100%;font-size:11px;text-align:left;padding:6px 10px;" title="Sweep k from 1 to Max DCs and chart the cost-vs-k curve with elbow point">📊 Compare DCs (k-sweep)</button>
-        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="exact-solve" style="width:100%;font-size:11px;text-align:left;padding:6px 10px;" title="Brute-force enumeration of all C(n,k) combinations — best for small candidate sets (≤10)">🧮 Exhaustive Search</button>
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="optimize-network" style="width:100%;font-size:11px;text-align:left;padding:6px 10px;" title="Sweeps k from 1 to Max DCs and picks the best subset of candidates for each. Auto-uses exhaustive search when combinations ≤ 10,000 (provably optimal); otherwise falls back to a multi-start heuristic.">🎯 Optimize Network</button>
       </div>
     </div>
 
@@ -718,8 +719,10 @@ function renderSidebar() {
       if (action === 'netopt-save') return;
       if (action === 'run') { runScenario(); markDirty(); }
       else if (action === 'find-optimal') { findOptimalLocations(); markDirty(); }
-      else if (action === 'compare-dcs') { compareMultipleDCs(); markDirty(); }
-      else if (action === 'exact-solve')  { runExactSolver();    markDirty(); }
+      else if (action === 'optimize-network') { optimizeNetwork(); markDirty(); }
+      // Legacy actions still wired so saved keyboard shortcuts / deep-links keep working
+      else if (action === 'compare-dcs')      { optimizeNetwork({ force: 'heuristic' });  markDirty(); }
+      else if (action === 'exact-solve')      { optimizeNetwork({ force: 'exhaustive' }); markDirty(); }
       else if (action === 'export-csv') exportToCSV();
       else if (action === 'clear-scenarios') { scenarios = []; activeScenario = null; comparisonResults = null; markDirty(); renderContentView(); }
       else if (action === 'apply-market-rates') { applyMarketRates(); markDirty(); }
@@ -972,12 +975,57 @@ function addToComparison() {
   renderContentView();
 }
 
-function compareMultipleDCs() {
+// 2026-04-27 — Replaces the prior compareMultipleDCs + runExactSolver pair
+// ("Compare DCs (k-sweep)" + "🧮 Exhaustive Search"). Single entry point;
+// auto-picks the algorithm based on combinatorial size of the candidate set.
+//
+// User-visible benefit: one fewer decision to make. They click "🎯 Optimize
+// Network", we tell them after which algorithm we used (provably-optimal
+// brute force vs. multi-start heuristic) so the algorithmic detail is
+// visible but no longer a *choice* the user has to make.
+//
+// @param {{ force?: 'heuristic' | 'exhaustive' }} [opts]
+function optimizeNetwork(opts = {}) {
   if (demands.length === 0) {
     alert('Please add demand points first.');
     return;
   }
-  comparisonResults = calc.multiDCComparison(facilities, demands, modeMix, rateCard, serviceConfig, maxDCsToTest);
+  const candidates = facilities.filter(f => f.isOpen !== false);
+  if (candidates.length === 0) {
+    alert('Please activate at least one facility candidate to consider in the optimization.');
+    return;
+  }
+  // Estimate combinatorial size: sum of C(n, k) for k=1..min(maxDCsToTest, n)
+  const n = candidates.length;
+  const kCap = Math.min(maxDCsToTest, n);
+  let totalCombos = 0;
+  for (let k = 1; k <= kCap; k++) totalCombos += _binomial(n, k);
+  const exhaustiveOK = totalCombos > 0 && totalCombos <= 10000;
+  const algo = opts.force === 'heuristic'  ? 'heuristic'
+             : opts.force === 'exhaustive' ? 'exhaustive'
+             : (exhaustiveOK ? 'exhaustive' : 'heuristic');
+
+  if (algo === 'exhaustive') {
+    const result = calc.exactSolver(facilities, demands, maxDCsToTest, modeMix, rateCard, serviceConfig);
+    if (!result) {
+      // Forced exhaustive but search space too large (>10,000 cap inside calc) —
+      // transparently fall back to heuristic instead of erroring on the user.
+      console.warn('[netopt] exhaustive solver returned null — falling back to heuristic');
+      _runHeuristicOptimize(n, totalCombos, kCap, candidates, /*reasonOverride*/ 'exhaustive_too_large');
+      return;
+    }
+    comparisonResults = result.scenarios;
+    _optimizationMeta = {
+      algorithm: 'exhaustive',
+      candidateCount: n,
+      kCap,
+      totalCombos,
+      reason: 'tractable',
+    };
+  } else {
+    _runHeuristicOptimize(n, totalCombos, kCap, candidates, exhaustiveOK ? 'forced' : 'too_large');
+  }
+
   const rec = calc.recommendOptimalDCs(comparisonResults);
   recommendedDCCount = rec.recommendedIdx;
   activeView = 'comparison';
@@ -987,29 +1035,25 @@ function compareMultipleDCs() {
   renderContentView();
 }
 
-function runExactSolver() {
-  if (demands.length === 0) {
-    alert('Please add demand points first.');
-    return;
-  }
-  const openCount = facilities.filter(f => f.isOpen).length;
-  if (openCount === 0) {
-    alert('Please activate at least one facility.');
-    return;
-  }
-  const result = calc.exactSolver(facilities, demands, maxDCsToTest, modeMix, rateCard, serviceConfig);
-  if (!result) {
-    alert('Exhaustive search space is too large (>10,000 combinations). Use comparison instead.');
-    return;
-  }
-  comparisonResults = result.scenarios;
-  const rec = calc.recommendOptimalDCs(comparisonResults);
-  recommendedDCCount = rec.recommendedIdx;
-  activeView = 'comparison';
-  rootEl?.querySelectorAll('#no-view-tabs button').forEach(b => {
-    b.classList.toggle('active', b.dataset.tab === activeView);
-  });
-  renderContentView();
+function _runHeuristicOptimize(n, totalCombos, kCap, candidates, reason) {
+  comparisonResults = calc.multiDCComparison(facilities, demands, modeMix, rateCard, serviceConfig, maxDCsToTest);
+  _optimizationMeta = {
+    algorithm: 'heuristic',
+    candidateCount: n,
+    kCap,
+    totalCombos,
+    reason, // 'forced' | 'too_large' | 'exhaustive_too_large'
+  };
+}
+
+/** Compute C(n, k). Local copy because calc's binomialCoeff isn't exported. */
+function _binomial(n, k) {
+  if (k < 0 || k > n) return 0;
+  if (k === 0 || k === n) return 1;
+  k = Math.min(k, n - k);
+  let r = 1;
+  for (let i = 0; i < k; i++) r = r * (n - i) / (i + 1);
+  return Math.round(r);
 }
 
 function exportToCSV() {
@@ -2518,7 +2562,7 @@ function renderComparison(el) {
   } else if (scenarios.length === 0) {
     el.innerHTML = `
       <div class="hub-card">
-        <p class="text-body text-muted">No comparison run yet. Click <b>Compare DCs</b> in the sidebar to evaluate 1-N DC configurations and surface the cost-vs-k inflection.</p>
+        <p class="text-body text-muted">No optimization run yet. Click <b>🎯 Optimize Network</b> in the sidebar to evaluate the best subset of candidates for each network size 1..N. The tool auto-picks brute-force enumeration when the search space is small (provably optimal) and a multi-start heuristic otherwise.</p>
       </div>
     `;
     return;
@@ -2527,14 +2571,36 @@ function renderComparison(el) {
   }
 }
 
+
+/** Small chip describing how the most recent optimization was solved. */
+function renderOptimizationChip(meta) {
+  if (!meta) return '';
+  const isExact = meta.algorithm === 'exhaustive';
+  const bg = isExact ? '#dbeafe' : '#fef3c7';
+  const fg = isExact ? '#1e40af' : '#92400e';
+  const kCap = meta.kCap;
+  const totalCombos = (meta.totalCombos || 0).toLocaleString();
+  const label = isExact
+    ? `Optimal · tried all ${totalCombos} combinations`
+    : (meta.reason === 'too_large' || meta.reason === 'exhaustive_too_large'
+        ? `Best found · heuristic (${totalCombos} combos exceeded the 10k exhaustive ceiling)`
+        : `Best found · multi-start heuristic`);
+  const title = isExact
+    ? `Exhaustive enumeration: tried every C(n,k) subset for k=1..${kCap}, picked the lowest-cost one. Provably optimal within the candidate set.`
+    : `Multi-start swap-improvement heuristic. Fast on large candidate sets but not guaranteed optimal.`;
+  return `<span title="${title}" style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;background:${bg};color:${fg};">${label}</span>`;
+}
 function renderMultiDCComparison(el) {
   const rec = calc.recommendOptimalDCs(comparisonResults);
 
   el.innerHTML = `
     <div style="max-width:1200px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-        <h3 class="text-section" style="margin:0;">DC Network Comparison (1-5 facilities)</h3>
-        <span style="font-size:11px;color:var(--ies-gray-400);">${comparisonResults.length} scenario(s)</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+        <h3 class="text-section" style="margin:0;">DC Network Comparison (1-${comparisonResults.length} facilities)</h3>
+        <div style="display:flex;align-items:center;gap:8px;">
+          ${_optimizationMeta ? renderOptimizationChip(_optimizationMeta) : ''}
+          <span style="font-size:11px;color:var(--ies-gray-400);">${comparisonResults.length} scenario(s)</span>
+        </div>
       </div>
 
       <!-- Recommendation Panel -->
