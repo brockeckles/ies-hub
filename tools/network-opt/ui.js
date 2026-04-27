@@ -11,7 +11,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sM';
 import { state } from '../../shared/state.js?v=20260418-sM';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sM';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260419-uE';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton, renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2';
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadXLSX } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260418-sM';
@@ -517,12 +517,12 @@ function bindShellEvents() {
   // CSV rate card upload (the file input lives at shell level so it survives phase re-renders).
   rootEl.querySelector('#netopt-csv-upload')?.addEventListener('change', handleCsvUpload);
 
-  // Phase stepper — single primary nav. Each chip jumps to the canonical
-  // (view, section) tuple for that phase via setPhase().
-  rootEl.querySelector('#no-process-flow')?.addEventListener('click', (e) => {
-    const chip = /** @type {HTMLElement} */ (e.target).closest('[data-phase]');
-    if (!chip) return;
-    jumpToPhase(/** @type {any} */ (chip.dataset.phase));
+  // Phase stepper — single primary nav. Wired via the shared
+  // bindPhaseStepper helper (XT-SCOPE-3). The callback maps the clicked
+  // phase to (view, section) via setPhase + jumpToPhase, then re-renders
+  // the content view.
+  bindPhaseStepper(rootEl.querySelector('#no-process-flow'), (phase) => {
+    jumpToPhase(/** @type {any} */ (phase));
     renderContentView();
   });
 }
@@ -555,17 +555,17 @@ function phaseStatus() {
 }
 
 function renderProcessFlow() {
-  // 2026-04-27 EVE: this is now the SINGLE primary nav surface (Option B
-  // stepper-driven wizard). Bigger circles, larger type, and the active
-  // phase reads off currentPhase() so the stepper stays in sync when
-  // any other code path nudges activeView/activeSection.
+  // 2026-04-27 EVE2 (XT-SCOPE-3): now delegates to the shared
+  // renderPhaseStepper in shared/tool-frame.js so CoG + Fleet can re-use
+  // the same chrome. Tool-specific knowledge stays here: phase definitions,
+  // status mapping, and the click → setPhase + renderContentView wiring.
   const el = rootEl?.querySelector('#no-process-flow');
   if (!el) return;
   const s = phaseStatus();
   const active = currentPhase();
   const phases = [
     { key: 'inputs',     num: 1, label: 'Inputs',     sub: 'Demand & facilities',          statusKey: 'setup'    },
-    { key: 'parameters', num: 2, label: 'Parameters', sub: 'Modes, service, tools',         statusKey: 'optimize' },
+    { key: 'parameters', num: 2, label: 'Parameters', sub: 'Modes, rates, service',         statusKey: 'optimize' },
     { key: 'run',        num: 3, label: 'Run',        sub: 'Map, KPIs, results',            statusKey: 'run'      },
     { key: 'compare',    num: 4, label: 'Compare',    sub: 'k-sweep & sensitivity',         statusKey: 'compare'  },
   ];
@@ -574,35 +574,10 @@ function renderProcessFlow() {
     if (status === 'complete') return { circleBg: 'var(--ies-green, #047857)', circleFg: '#fff', label: 'var(--ies-green, #047857)', icon: '✓', ring: false };
     return { circleBg: 'var(--ies-gray-200)', circleFg: 'var(--ies-gray-600)', label: 'var(--ies-gray-600)', icon: null, ring: false };
   };
-  el.innerHTML = `
-    <div style="display:flex;align-items:stretch;gap:0;padding:14px 24px 14px 24px;background:#fff;border-bottom:1px solid var(--ies-gray-200);box-shadow:0 1px 0 rgba(0,0,0,0.02);">
-      ${phases.map((p, idx) => {
-        const status = s[p.statusKey];
-        const c = styleFor(p.key, status);
-        const display = c.icon || String(p.num);
-        const isActive = (p.key === active);
-        return `
-          <div data-phase="${p.key}"
-               role="button" tabindex="0"
-               style="flex:1;display:flex;align-items:center;gap:12px;cursor:pointer;padding:8px 12px;border-radius:8px;min-width:0;transition:background .15s;${isActive ? 'background:var(--ies-blue-50, #eff6ff);' : ''}"
-               onmouseover="this.style.background='${isActive ? 'var(--ies-blue-50, #eff6ff)' : 'var(--ies-gray-50, #f9fafb)'}'"
-               onmouseout="this.style.background='${isActive ? 'var(--ies-blue-50, #eff6ff)' : 'transparent'}'"
-               title="Jump to ${p.label}">
-            <div style="width:34px;height:34px;border-radius:50%;background:${c.circleBg};color:${c.circleFg};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;flex-shrink:0;${c.ring ? 'box-shadow:0 0 0 3px var(--ies-blue-100, #dbeafe);' : ''}">
-              ${display}
-            </div>
-            <div style="display:flex;flex-direction:column;line-height:1.25;min-width:0;">
-              <span style="font-size:14px;font-weight:700;color:${c.label};letter-spacing:0.2px;">${p.label}</span>
-              <span style="font-size:11px;color:var(--ies-gray-500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.sub}</span>
-            </div>
-          </div>
-          ${idx < phases.length - 1 ? `
-            <div style="display:flex;align-items:center;color:var(--ies-gray-300);font-size:18px;padding:0 6px;flex-shrink:0;">›</div>
-          ` : ''}
-        `;
-      }).join('')}
-    </div>
-  `;
+  el.innerHTML = renderPhaseStepper({
+    phases: phases.map(p => ({ key: p.key, num: p.num, label: p.label, sub: p.sub, status: s[p.statusKey] })),
+    activePhase: active,
+  });
 }
 
 /** @param {'inputs'|'parameters'|'run'|'compare'} phase */
