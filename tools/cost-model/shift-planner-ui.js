@@ -18,7 +18,12 @@ import {
   deriveShiftHeadcount,
   deriveIndirectByShift,
   deriveHourlyStaffing,
-} from './shift-planner.js?v=20260422-xX';
+  DOW_ORDER,
+  defaultActiveDays,
+  defaultDowVolumeMultipliers,
+  defaultDowPremiumPct,
+  normalizeShiftActiveDays,
+} from './shift-planner.js?v=20260427-pm3-s2';
 
 /**
  * Matrix display mode — 'pct' shows editable % inputs (default); 'fte'
@@ -39,10 +44,29 @@ export function renderShiftPlanningSection(ctx) {
 
   // Lazy-init the allocation if the model hasn't been touched yet.
   const alloc = ensureAllocation(model);
+  // SP-2: ensure each shift carries activeDays — auto-migrate from the
+  // global daysPerWeek for legacy saved models.
+  const dpwForMigration = Math.max(1, Math.min(7, Math.floor(Number(model.shifts?.daysPerWeek) || 5)));
+  alloc.shifts = normalizeShiftActiveDays(alloc.shifts || [], dpwForMigration);
   const shiftCount = alloc.shifts?.length || (model.shifts?.shiftsPerDay || 1);
   const volumes = Array.isArray(model.volumeLines) ? model.volumeLines : [];
   const labor = Array.isArray(model.laborLines) ? model.laborLines : [];
-  const shiftsCfg = model.shifts || {};
+  // SP-2/SP-3: lazy-init DOW vectors AS ARRAYS on model.shifts. This is
+  // critical — the generic data-field binder uses `setNestedValue(obj, path, v)`
+  // which creates plain objects on missing path segments. If the array isn't
+  // pre-allocated, `data-field="shifts.dowVolumeMultipliers.3"` would write
+  // into `{ '3': 0.5 }` (object) and the subsequent `Array.isArray()` guards
+  // would discard the user's edit.
+  if (!model.shifts) model.shifts = {};
+  if (!Array.isArray(model.shifts.dowVolumeMultipliers) || model.shifts.dowVolumeMultipliers.length !== 7) {
+    model.shifts.dowVolumeMultipliers = defaultDowVolumeMultipliers(dpwForMigration);
+  }
+  if (!Array.isArray(model.shifts.dowPremiumPct) || model.shifts.dowPremiumPct.length !== 7) {
+    model.shifts.dowPremiumPct = defaultDowPremiumPct();
+  }
+  const shiftsCfg = model.shifts;
+  const dowVolumeMultipliers = shiftsCfg.dowVolumeMultipliers;
+  const dowPremiumPct = shiftsCfg.dowPremiumPct;
   // Shift premiums live on model.shifts (NOT model.laborCosting).
   // Stored as a percent number (5 = 5%). Labor Factors input clamps 0-50.
   const premiumMap = {
@@ -52,6 +76,8 @@ export function renderShiftPlanningSection(ctx) {
   const derived = deriveShiftHeadcount(alloc, volumes, labor, shiftsCfg, {
     absenceAllowancePct: Number(model.laborCosting?.absenceAllowancePct) || 0,
     shiftPremiumPct: premiumMap,
+    dowVolumeMultipliers,
+    dowPremiumPct,
   });
   const indirectLines = Array.isArray(model.indirectLaborLines) ? model.indirectLaborLines : [];
   const indirectByShift = deriveIndirectByShift(indirectLines, derived.byShift || []);
@@ -68,6 +94,7 @@ export function renderShiftPlanningSection(ctx) {
     <div class="shift-planning">
       ${renderHeader(alloc, [], '', validation)}
       ${renderStructureCard(shiftsCfg)}
+      ${renderDowPatternsCard(alloc, shiftsCfg, dowVolumeMultipliers, dowPremiumPct, derived)}
       ${renderMatrixCard(alloc, shiftCount, validation, derived)}
       ${renderPreviewPanel(derived, shiftCount)}
       ${renderByShiftCard(derived, alloc, indirectByShift)}
@@ -266,6 +293,59 @@ export function bindShiftPlanningEvents(container, ctx) {
     if (action === 'set-mode-pct') { _matrixMode = 'pct'; notify(); return; }
     if (action === 'set-mode-fte') { _matrixMode = 'fte'; notify(); return; }
   });
+
+  // SP-2/SP-3: DOW pattern card actions (active-day toggle, reset, weekend-OT)
+  container.addEventListener('click', (e) => {
+    const target = e.target;
+    if (!(target instanceof HTMLElement)) return;
+    const actionEl = target.closest('[data-action]');
+    if (!actionEl) return;
+    const action = actionEl.getAttribute('data-action');
+
+    // Per-shift active-day toggle
+    if (action === 'sp-toggle-active-day') {
+      const sIdx = parseInt(actionEl.getAttribute('data-shift-idx') || '-1', 10);
+      const dIdx = parseInt(actionEl.getAttribute('data-day-idx') || '-1', 10);
+      if (sIdx < 0 || dIdx < 0 || dIdx > 6) return;
+      const alloc = ensureAllocation(model);
+      // Migrate-on-touch: fill activeDays from current daysPerWeek if missing.
+      const dpw = Math.max(1, Math.min(7, Math.floor(Number(model.shifts?.daysPerWeek) || 5)));
+      if (!Array.isArray(alloc.shifts[sIdx]?.activeDays) || alloc.shifts[sIdx].activeDays.length !== 7) {
+        alloc.shifts[sIdx].activeDays = defaultActiveDays(dpw);
+      }
+      alloc.shifts[sIdx].activeDays[dIdx] = !alloc.shifts[sIdx].activeDays[dIdx];
+      alloc.overridden = true;
+      alloc.audit = { ...(alloc.audit || {}), lastEditedAt: new Date().toISOString() };
+      notify();
+      return;
+    }
+
+    if (action === 'sp-reset-dow-volume') {
+      if (!model.shifts) model.shifts = {};
+      const dpw = Math.max(1, Math.min(7, Math.floor(Number(model.shifts.daysPerWeek) || 5)));
+      model.shifts.dowVolumeMultipliers = defaultDowVolumeMultipliers(dpw);
+      notify();
+      return;
+    }
+    if (action === 'sp-set-dow-volume-uniform') {
+      if (!model.shifts) model.shifts = {};
+      model.shifts.dowVolumeMultipliers = [1, 1, 1, 1, 1, 1, 1];
+      notify();
+      return;
+    }
+    if (action === 'sp-reset-dow-premium') {
+      if (!model.shifts) model.shifts = {};
+      model.shifts.dowPremiumPct = defaultDowPremiumPct();
+      notify();
+      return;
+    }
+    if (action === 'sp-set-dow-premium-weekend') {
+      if (!model.shifts) model.shifts = {};
+      model.shifts.dowPremiumPct = [0, 0, 0, 0, 0, 50, 100];
+      notify();
+      return;
+    }
+  });
 }
 
 /**
@@ -453,6 +533,147 @@ export function renderStructureCard(shiftsCfg, opts) {
           </select>
         </div>
       </div>
+    </div>
+  `;
+}
+
+/**
+ * Render the SP-2/SP-3 Day-of-Week Patterns card. Three sub-sections:
+ *
+ *   1. Per-shift Active Days — a 7-pill row per shift letting the user mark
+ *      which days each shift runs. Default Mon-Fri based on the global
+ *      daysPerWeek; overrides let a 24/7 op declare S1=M-F, S2=Sat-Sun.
+ *
+ *   2. Volume by DOW (SP-2) — 7 cells of multipliers on daily volume. Sum
+ *      collapses to the shift's effective operating-days-per-week. Default
+ *      `[1,1,1,1,1,0,0]` (M-F uniform), but Sat=0.5 / Sun=0 captures the
+ *      typical e-comm half-day-Saturday pattern. Resets via Reset button.
+ *
+ *   3. Premium % by DOW (SP-3) — 7 cells of weekend-OT percentages added
+ *      to the labor cost on each DOW. 0 across the week by default;
+ *      common pattern: Sat=50, Sun=100. Multiplied through dowWeightedPremiumFactor
+ *      so the per-shift cost reflects the right blend.
+ *
+ * All inputs bind to model.shifts.dowVolumeMultipliers[i] / dowPremiumPct[i] /
+ * shifts[i].activeDays[d] via the standard data-field binder. Values are
+ * lazy-defaulted on render so legacy projects don't need a migration step.
+ */
+function renderDowPatternsCard(alloc, shiftsCfg, dowVolumeMultipliers, dowPremiumPct, derived) {
+  const shifts = Array.isArray(alloc.shifts) ? alloc.shifts : [];
+  // Effective operating-days/yr from the just-computed derivation, indexed
+  // by shift number for the per-row chip.
+  const opDaysByShift = {};
+  for (const r of (derived?.byShift || [])) opDaysByShift[r.num] = r.operatingDays;
+  const weeksPerYear = Math.max(1, Number(shiftsCfg?.weeksPerYear) || 52);
+  const dpwGlobal = Math.max(1, Math.min(7, Math.floor(Number(shiftsCfg?.daysPerWeek) || 5)));
+  const dowSum = dowVolumeMultipliers.reduce((a, v) => a + (Number(v) || 0), 0);
+  const dowAnyPremium = dowPremiumPct.some(v => Number(v) > 0);
+  const shortDow = ['M','T','W','T','F','S','S'];
+
+  // Per-shift active-days pill rows
+  const shiftRows = shifts.map(s => {
+    const sNum = s.num;
+    const act = Array.isArray(s.activeDays) && s.activeDays.length === 7
+      ? s.activeDays
+      : defaultActiveDays(dpwGlobal);
+    const opDays = opDaysByShift[sNum] != null ? Math.round(opDaysByShift[sNum]) : '—';
+    const activeCount = act.filter(Boolean).length;
+    const pills = act.map((on, d) => `
+      <button type="button" class="sp-dow-pill ${on ? 'is-on' : ''}" data-action="sp-toggle-active-day"
+              data-shift-idx="${sNum - 1}" data-day-idx="${d}"
+              title="${on ? 'Active' : 'Inactive'} — ${DOW_ORDER[d]}">${shortDow[d]}</button>
+    `).join('');
+    return `
+      <div class="sp-dow-shift-row">
+        <div class="sp-dow-shift-label">
+          <strong>S${sNum}</strong>
+          <span class="sp-dow-shift-meta">${activeCount}d/wk · ${opDays} op-days/yr</span>
+        </div>
+        <div class="sp-dow-pills">${pills}</div>
+      </div>`;
+  }).join('');
+
+  // Volume DOW multiplier inputs
+  const volCells = dowVolumeMultipliers.map((v, d) => `
+    <div class="sp-dow-cell">
+      <label class="sp-dow-cell__label" title="${DOW_ORDER[d]}">${shortDow[d]}</label>
+      <input class="hub-input sp-dow-input" type="number" min="0" max="2" step="0.05"
+             value="${Number(v).toFixed(2)}"
+             data-field="shifts.dowVolumeMultipliers.${d}" data-type="number" data-field-commit="change" />
+    </div>`).join('');
+
+  // Premium % DOW inputs
+  const premCells = dowPremiumPct.map((v, d) => `
+    <div class="sp-dow-cell">
+      <label class="sp-dow-cell__label" title="${DOW_ORDER[d]} OT premium">${shortDow[d]}</label>
+      <input class="hub-input sp-dow-input" type="number" min="0" max="200" step="5"
+             value="${Number(v) || 0}"
+             data-field="shifts.dowPremiumPct.${d}" data-type="number" data-field-commit="change" />
+      <span class="sp-dow-suffix">%</span>
+    </div>`).join('');
+
+  return `
+    <style>
+      .sp-dow-card { padding: 16px; }
+      .sp-dow-card__header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; gap: 16px; flex-wrap: wrap; }
+      .sp-dow-card__title { font-size: 14px; font-weight: 600; color: var(--ies-navy); margin: 0; display: flex; align-items: center; gap: 8px; }
+      .sp-dow-card__pill { font-size: 11px; color: var(--ies-gray-600); padding: 3px 9px; background: var(--ies-gray-50); border: 1px solid var(--ies-gray-200); border-radius: 12px; font-variant-numeric: tabular-nums; }
+      .sp-dow-card__pill.warn { background: #fef3c7; color: #92400e; border-color: #fde68a; }
+      .sp-dow-card__sub { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--ies-gray-500); margin: 16px 0 8px 0; }
+      .sp-dow-card__sub:first-of-type { margin-top: 0; }
+      .sp-dow-shifts { display: flex; flex-direction: column; gap: 6px; }
+      .sp-dow-shift-row { display: grid; grid-template-columns: 140px 1fr; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--ies-gray-100); }
+      .sp-dow-shift-row:last-child { border-bottom: none; }
+      .sp-dow-shift-label strong { font-size: 13px; color: var(--ies-navy); display: block; }
+      .sp-dow-shift-meta { font-size: 11px; color: var(--ies-gray-500); }
+      .sp-dow-pills { display: flex; gap: 4px; flex-wrap: wrap; }
+      .sp-dow-pill {
+        width: 30px; height: 28px; padding: 0; border: 1px solid var(--ies-gray-300);
+        border-radius: 4px; background: white; color: var(--ies-gray-500);
+        font-size: 12px; font-weight: 600; cursor: pointer; transition: all 120ms ease;
+        font-variant-numeric: tabular-nums;
+      }
+      .sp-dow-pill:hover { border-color: var(--ies-blue); color: var(--ies-blue); }
+      .sp-dow-pill.is-on {
+        background: var(--ies-blue); color: #fff; border-color: var(--ies-blue);
+      }
+      .sp-dow-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+      .sp-dow-cell { display: flex; flex-direction: column; align-items: center; gap: 2px; position: relative; }
+      .sp-dow-cell__label { font-size: 11px; font-weight: 600; color: var(--ies-gray-500); text-transform: uppercase; }
+      .sp-dow-input { text-align: center; font-variant-numeric: tabular-nums; padding: 6px 4px; font-size: 13px; }
+      .sp-dow-suffix { position: absolute; right: 6px; top: 26px; font-size: 10px; color: var(--ies-gray-400); }
+      .sp-dow-help { font-size: 11px; color: var(--ies-gray-500); margin-top: 4px; }
+      .sp-dow-actions { display: flex; gap: 8px; margin-top: 8px; }
+      .sp-dow-actions button { font-size: 11px; padding: 4px 10px; border: 1px solid var(--ies-gray-300); background: white; border-radius: 4px; color: var(--ies-gray-600); cursor: pointer; }
+      .sp-dow-actions button:hover { border-color: var(--ies-blue); color: var(--ies-blue); }
+    </style>
+    <div class="hub-card sp-dow-card">
+      <div class="sp-dow-card__header">
+        <h3 class="sp-dow-card__title">
+          Day-of-Week Patterns
+          <span class="sp-dow-card__pill" title="Sum of DOW volume multipliers — equals effective operating days/week for shifts that run all 7 days.">${dowSum.toFixed(2)} eff. days/wk</span>
+          ${dowAnyPremium ? '<span class="sp-dow-card__pill warn" title="Weekend OT premium configured.">OT premium on</span>' : ''}
+        </h3>
+        <span class="sp-dow-card__pill" title="Project's weeks/year">× ${weeksPerYear} wk/yr</span>
+      </div>
+
+      <div class="sp-dow-card__sub">Active Days per Shift <span style="text-transform:none;font-weight:400;color:var(--ies-gray-400);">(SP-2 — click pills to toggle)</span></div>
+      <div class="sp-dow-shifts">${shiftRows}</div>
+
+      <div class="sp-dow-card__sub">Volume Multiplier by DOW <span style="text-transform:none;font-weight:400;color:var(--ies-gray-400);">(1.00 = full weekday volume; 0.50 = half; 0 = closed)</span></div>
+      <div class="sp-dow-grid">${volCells}</div>
+      <div class="sp-dow-actions">
+        <button type="button" data-action="sp-reset-dow-volume" title="Reset to 1.0 for first ${dpwGlobal} days, 0 thereafter">Reset to default</button>
+        <button type="button" data-action="sp-set-dow-volume-uniform" title="All 7 days at 1.0 — round-the-week ops">All 7d × 1.0</button>
+      </div>
+
+      <div class="sp-dow-card__sub">Labor Premium % by DOW <span style="text-transform:none;font-weight:400;color:var(--ies-gray-400);">(SP-3 — typical Sat 50% + Sun 100% for weekend OT)</span></div>
+      <div class="sp-dow-grid">${premCells}</div>
+      <div class="sp-dow-actions">
+        <button type="button" data-action="sp-reset-dow-premium" title="Zero out all DOW premiums">Reset to 0</button>
+        <button type="button" data-action="sp-set-dow-premium-weekend" title="Apply Sat 50% + Sun 100%">Apply weekend OT (50/100)</button>
+      </div>
+      <div class="sp-dow-help">DOW premiums multiply through into the per-shift annual cost via a weighted factor (sum across active days × volume mul × (1 + premium%)). Backward compat: with all-zero premiums the multiplier is 1.0 and cost matches legacy.</div>
     </div>
   `;
 }

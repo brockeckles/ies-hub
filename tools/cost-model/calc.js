@@ -15,7 +15,7 @@
  */
 
 import * as monthly from './calc.monthly.js?v=20260421-xE';
-import { deriveFunctionForLine as _deriveFunctionForLine } from './shift-planner.js?v=20260422-xX';
+import { deriveFunctionForLine as _deriveFunctionForLine } from './shift-planner.js?v=20260427-pm3-s2';
 
 // ============================================================
 // MARGIN / GROSS-UP

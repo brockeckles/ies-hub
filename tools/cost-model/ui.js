@@ -16,8 +16,8 @@ import * as api from './api.js?v=20260427-s9';
 import * as scenarios from './calc.scenarios.js?v=20260421-wA';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
-import * as shiftPlannerCalc from './shift-planner.js?v=20260422-xX';
-import * as shiftPlannerUi from './shift-planner-ui.js?v=20260422-xY';
+import * as shiftPlannerCalc from './shift-planner.js?v=20260427-pm3-s2';
+import * as shiftPlannerUi from './shift-planner-ui.js?v=20260427-pm3-s2';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
 // disk but no longer imported; can be deleted in a future cleanup.

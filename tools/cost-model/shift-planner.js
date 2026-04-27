@@ -52,6 +52,131 @@ const DEFAULT_SHIFT_WINDOWS = [
   { startHour: 0,  endHour: 8  },
 ];
 
+// Day-of-week order — Mon..Sun. Used to index activeDays / dowVolumeMultipliers
+// / dowPremiumPct arrays. Aligned with `deriveHourlyStaffing` heatmap labels.
+export const DOW_ORDER = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+/**
+ * Build a default 7-element activeDays mask from a global daysPerWeek count.
+ * Days 0..N-1 are active, N..6 are inactive. So daysPerWeek=5 yields
+ * `[true,true,true,true,true,false,false]` (Mon-Fri).
+ *
+ * @param {number} daysPerWeek
+ * @returns {boolean[]}
+ */
+export function defaultActiveDays(daysPerWeek) {
+  const n = Math.max(1, Math.min(7, Math.floor(Number(daysPerWeek) || 5)));
+  return DOW_ORDER.map((_, i) => i < n);
+}
+
+/**
+ * Default DOW volume-multiplier vector. Active days get 1.0, inactive 0.0.
+ * Callers (UI) override per-DOW (e.g., Sat at 0.5, Sun at 0) to express
+ * weekend volume falloff.
+ *
+ * @param {number} daysPerWeek
+ * @returns {number[]}
+ */
+export function defaultDowVolumeMultipliers(daysPerWeek) {
+  const mask = defaultActiveDays(daysPerWeek);
+  return mask.map(active => active ? 1 : 0);
+}
+
+/**
+ * Default DOW premium %. Zero across the week — UI overrides Sat/Sun for
+ * weekend OT premium (SP-3).
+ *
+ * @returns {number[]}
+ */
+export function defaultDowPremiumPct() {
+  return new Array(7).fill(0);
+}
+
+/**
+ * Normalize per-shift activeDays. If a shift lacks `activeDays`, derive
+ * from the global daysPerWeek. Also clamps to length 7 + coerces to bool.
+ * Returns a NEW shifts array — does not mutate.
+ *
+ * @param {Array<Object>} shifts
+ * @param {number} daysPerWeek
+ * @returns {Array<Object>}
+ */
+export function normalizeShiftActiveDays(shifts, daysPerWeek) {
+  if (!Array.isArray(shifts)) return [];
+  const fallback = defaultActiveDays(daysPerWeek);
+  return shifts.map(s => {
+    if (!s) return s;
+    if (Array.isArray(s.activeDays) && s.activeDays.length === 7) {
+      return { ...s, activeDays: s.activeDays.map(v => Boolean(v)) };
+    }
+    return { ...s, activeDays: fallback.slice() };
+  });
+}
+
+/**
+ * Compute the effective operating days/year for a single shift, given its
+ * activeDays mask + the project's DOW volume multipliers + weeks/year.
+ *   = sum_d (activeDays[d] ? dowMul[d] : 0) × weeksPerYear
+ *
+ * For backward compat: a shift that runs uniform M-F (activeDays =
+ * [1,1,1,1,1,0,0]) with default dowMul (all 1s on active days) and
+ * 52 weeks/yr returns 5 × 52 = 260 days — identical to the legacy
+ * `daysPerWeek × weeksPerYear` calc.
+ *
+ * @param {{activeDays?: boolean[]}} shift
+ * @param {number[]} dowVolumeMultipliers
+ * @param {number} weeksPerYear
+ * @returns {number}
+ */
+export function effectiveOperatingDaysForShift(shift, dowVolumeMultipliers, weeksPerYear) {
+  const days = (shift && Array.isArray(shift.activeDays) && shift.activeDays.length === 7)
+    ? shift.activeDays
+    : defaultActiveDays(5);
+  const muls = (Array.isArray(dowVolumeMultipliers) && dowVolumeMultipliers.length === 7)
+    ? dowVolumeMultipliers
+    : new Array(7).fill(1);
+  let sum = 0;
+  for (let d = 0; d < 7; d++) {
+    if (days[d]) sum += Number(muls[d]) || 0;
+  }
+  const wks = Math.max(1, Number(weeksPerYear) || 52);
+  return sum * wks;
+}
+
+/**
+ * Compute a DOW-weighted premium factor for a shift's labor cost. Returns
+ * a multiplier ≥ 1.0 that's applied to the shift's annual labor cost.
+ *   factor = sum_d active_d × dowMul_d × (1 + premium_d/100)
+ *          / sum_d active_d × dowMul_d
+ * If denominator is 0 (shift runs zero days) returns 1.0.
+ *
+ * @param {{activeDays?: boolean[]}} shift
+ * @param {number[]} dowVolumeMultipliers
+ * @param {number[]} dowPremiumPct
+ * @returns {number}
+ */
+export function dowWeightedPremiumFactor(shift, dowVolumeMultipliers, dowPremiumPct) {
+  const days = (shift && Array.isArray(shift.activeDays) && shift.activeDays.length === 7)
+    ? shift.activeDays
+    : defaultActiveDays(5);
+  const muls = (Array.isArray(dowVolumeMultipliers) && dowVolumeMultipliers.length === 7)
+    ? dowVolumeMultipliers
+    : new Array(7).fill(1);
+  const prems = (Array.isArray(dowPremiumPct) && dowPremiumPct.length === 7)
+    ? dowPremiumPct
+    : new Array(7).fill(0);
+  let weighted = 0;
+  let denom = 0;
+  for (let d = 0; d < 7; d++) {
+    if (!days[d]) continue;
+    const w = Number(muls[d]) || 0;
+    const p = Number(prems[d]) || 0;
+    weighted += w * (1 + p / 100);
+    denom += w;
+  }
+  return denom > 0 ? weighted / denom : 1;
+}
+
 // ============================================================
 // PUBLIC API
 // ============================================================
@@ -228,11 +353,17 @@ export function normalizeShiftMatrix(allocation, nowIso) {
  * @param {number} [opts.absenceAllowancePct]
  * @param {Record<string,number>} [opts.shiftPremiumPct]  e.g. { '2': 5, '3': 10 }
  * @param {number} [opts.operatingDaysPerYear]
+ * @param {number[]} [opts.dowVolumeMultipliers]   7-element Mon..Sun multiplier
+ *   on daily volume. Default `[1,1,1,1,1,0,0]` (M-F uniform, weekend off).
+ *   SP-2: lets users express weekend volume falloff (e.g., Sat at 0.5).
+ * @param {number[]} [opts.dowPremiumPct]   7-element Mon..Sun additive labor
+ *   premium %. Default `[0,0,0,0,0,0,0]`. SP-3: typical Sat=50 Sun=100 for
+ *   weekend OT shifts.
  * @returns {{
- *   byShift: Array<{ num:number, directHc:number, hours:number, costAnnual:number, premiumAnnual:number }>,
+ *   byShift: Array<{ num:number, directHc:number, hours:number, costAnnual:number, premiumAnnual:number, operatingDays:number, dowPremiumFactor:number }>,
  *   byFunctionShift: Array<{ fn:string, shift:number, volume:number, hours:number, fte:number }>,
  *   byRole: Array<{ roleId:(string|number), shift:number, hours:number, fte:number, cost:number }>,
- *   totals: { directHc:number, hoursAnnual:number, costAnnual:number, peakShift:number|null, premiumAnnual:number }
+ *   totals: { directHc:number, hoursAnnual:number, costAnnual:number, peakShift:number|null, premiumAnnual:number, dowPremiumAnnual:number }
  * }}
  */
 export function deriveShiftHeadcount(allocation, volumeLines, laborLines, shifts, opts) {
@@ -241,7 +372,7 @@ export function deriveShiftHeadcount(allocation, volumeLines, laborLines, shifts
     byShift: [],
     byFunctionShift: [],
     byRole: [],
-    totals: { directHc: 0, hoursAnnual: 0, costAnnual: 0, peakShift: null, premiumAnnual: 0 },
+    totals: { directHc: 0, hoursAnnual: 0, costAnnual: 0, peakShift: null, premiumAnnual: 0, dowPremiumAnnual: 0 },
   };
   if (!allocation || !allocation.matrix) return emptyResult;
 
@@ -253,7 +384,35 @@ export function deriveShiftHeadcount(allocation, volumeLines, laborLines, shifts
   const hoursPerShift = Number(shifts?.hoursPerShift) || 8;
   const daysPerWeek = Number(shifts?.daysPerWeek) || 5;
   const weeksPerYear = Number(shifts?.weeksPerYear) || 52;
-  const operatingDays = Number(o.operatingDaysPerYear) || (daysPerWeek * weeksPerYear);
+
+  // SP-2/SP-3: per-DOW multipliers. Default = active days at 1, inactive at 0.
+  // When the project hasn't customized dowVolumeMultipliers, this collapses to
+  // the legacy daysPerWeek×weeksPerYear math (per-shift activeDays defaults to
+  // `defaultActiveDays(daysPerWeek)`).
+  const dowMul = (Array.isArray(o.dowVolumeMultipliers) && o.dowVolumeMultipliers.length === 7)
+    ? o.dowVolumeMultipliers
+    : defaultDowVolumeMultipliers(daysPerWeek);
+  const dowPrem = (Array.isArray(o.dowPremiumPct) && o.dowPremiumPct.length === 7)
+    ? o.dowPremiumPct
+    : defaultDowPremiumPct();
+
+  // Per-shift active days (auto-migrated from global daysPerWeek if missing).
+  const normalizedShifts = normalizeShiftActiveDays(allocation.shifts || [], daysPerWeek);
+
+  // Operating-days-per-year is now per-shift (SP-2 enabler). The matrix calc
+  // below uses each shift's effective operating days. The old global
+  // `operatingDays` is preserved as a fallback for shift-less callers + the
+  // by-function rollup (which doesn't yet split by shift).
+  const fallbackOperatingDays = Number(o.operatingDaysPerYear) || (daysPerWeek * weeksPerYear);
+  const opDaysByShift = normalizedShifts.map(s =>
+    effectiveOperatingDaysForShift(s, dowMul, weeksPerYear) || fallbackOperatingDays
+  );
+  // Average across shifts for the per-function volume calc — the matrix
+  // splits this by shift weight, so an avg keeps the existing total math
+  // accurate when shifts share the same DOW pattern (the common case).
+  const operatingDays = opDaysByShift.length > 0
+    ? opDaysByShift.reduce((a, v) => a + v, 0) / opDaysByShift.length
+    : fallbackOperatingDays;
 
   // Productive-hours factor: applied to raw shift hours to get FTE.
   // We only apply absenceAllowancePct here — directUtilization (PF&D) is
@@ -289,7 +448,12 @@ export function deriveShiftHeadcount(allocation, volumeLines, laborLines, shifts
       const vol = dailyVol * (pct / 100);
       // Daily hours needed for this shift+fn.
       const hoursDay = uph > 0 ? vol / uph : 0;
-      const hoursAnnual = hoursDay * operatingDays;
+      // SP-2: each shift now has its own effective operating-days/yr based
+      // on per-shift activeDays + DOW volume multipliers. A shift that runs
+      // 7 days at 1.0× has 365 op-days; a shift that runs M-F + Sat at 0.5
+      // has 5.5 × 52 = 286 op-days.
+      const opDaysShift = opDaysByShift[s] || operatingDays;
+      const hoursAnnual = hoursDay * opDaysShift;
       const fte = hoursDay / productiveHoursPerShift;
       byFunctionShift.push({ fn, shift: s + 1, volume: vol, hours: hoursAnnual, fte });
       shiftHours[s] += hoursAnnual;
@@ -303,11 +467,24 @@ export function deriveShiftHeadcount(allocation, volumeLines, laborLines, shifts
   let totalDirectHc = 0;
   let totalCost = 0;
   let totalPremium = 0;
+  let totalDowPremium = 0;
   for (let s = 0; s < shiftCount; s++) {
     const hoursAnnual = shiftHours[s];
-    const fteExact = hoursAnnual > 0 ? hoursAnnual / (productiveHoursPerShift * operatingDays) : 0;
+    const opDaysShift = opDaysByShift[s] || operatingDays;
+    const fteExact = hoursAnnual > 0 && opDaysShift > 0
+      ? hoursAnnual / (productiveHoursPerShift * opDaysShift)
+      : 0;
     const hc = Math.ceil(fteExact);
-    const costAnnual = hoursAnnual * loadedHourlyRate;
+    // Base annual cost (before any premium adjustment).
+    const baseCostAnnual = hoursAnnual * loadedHourlyRate;
+    // SP-3: DOW-weighted premium factor — multiplies base cost so weekend
+    // labor lands at higher unit cost than weekday labor for the same shift.
+    // Factor=1.0 when no DOW premium configured (all-zero `dowPremiumPct`).
+    const dowFactor = dowWeightedPremiumFactor(normalizedShifts[s], dowMul, dowPrem);
+    const costAnnual = baseCostAnnual * dowFactor;
+    const dowPremiumAnnual = costAnnual - baseCostAnnual;
+    // Existing shift-tier premium (Shift 2/3 differential) applies to the
+    // already DOW-weighted cost so it compounds correctly.
     const premiumPct = (o.shiftPremiumPct && o.shiftPremiumPct[String(s + 1)]) || 0;
     const premium = costAnnual * (premiumPct / 100);
     byShift.push({
@@ -316,10 +493,14 @@ export function deriveShiftHeadcount(allocation, volumeLines, laborLines, shifts
       hours: hoursAnnual,
       costAnnual,
       premiumAnnual: premium,
+      operatingDays: opDaysShift,
+      dowPremiumFactor: dowFactor,
+      dowPremiumAnnual,
     });
     totalDirectHc += hc;
     totalCost += costAnnual;
     totalPremium += premium;
+    totalDowPremium += dowPremiumAnnual;
     if (hc > peakHc) { peakHc = hc; peakShift = s + 1; }
   }
 
@@ -360,6 +541,7 @@ export function deriveShiftHeadcount(allocation, volumeLines, laborLines, shifts
       costAnnual: totalCost,
       peakShift,
       premiumAnnual: totalPremium,
+      dowPremiumAnnual: totalDowPremium,
     },
   };
 }
@@ -477,14 +659,16 @@ export function deriveIndirectByShift(indirectLines, byShiftDirect) {
  * any shift that's active during that hour. Days where a shift doesn't run
  * get 0 (e.g., S3 running only Mon-Fri has empty Sat/Sun cells).
  *
- * For day-1 MVP we assume every shift runs on every operating day of the
- * week — per-shift days_per_week is a Phase-2 enhancement (flagged in the
- * design memo §9 open question 2).
+ * 2026-04-27 (SP-2): per-shift `activeDays` is now honored. A shift with
+ * `activeDays = [1,1,1,1,1,0,0]` shows direct HC Mon-Fri and 0 on weekend
+ * cells; a 24/7 shift with all-true activeDays fills all 7 days.
+ * The `daysPerWeek` arg is now optional and only used as a fallback for
+ * shifts that lack `activeDays` (older saved configs).
  *
- * @param {Array<{ num:number, startHour:number, endHour:number }>} shifts
+ * @param {Array<{ num:number, startHour:number, endHour:number, activeDays?:boolean[] }>} shifts
  * @param {Array<{ num:number, directHc:number }>} byShiftDirect
  * @param {{ byShift: Array<{ num:number, supv:number, indirect:number, mgmt:number, admin:number, total:number }>, site:{ supv:number, indirect:number, mgmt:number, admin:number, total:number } }} indirectByShift
- * @param {number} [daysPerWeek=7]
+ * @param {number} [daysPerWeek=7]   fallback when a shift lacks activeDays
  * @returns {{
  *   days: Array<{
  *     dayIdx: number,
@@ -495,9 +679,27 @@ export function deriveIndirectByShift(indirectLines, byShiftDirect) {
  * }}
  */
 export function deriveHourlyStaffing(shifts, byShiftDirect, indirectByShift, daysPerWeek) {
-  const dayCount = Math.max(1, Math.min(7, Math.floor(Number(daysPerWeek) || 7)));
+  const fallbackMask = defaultActiveDays(daysPerWeek);
   const dayLabels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-  const isActiveDay = (dayIdx) => dayIdx < dayCount;
+
+  // Per-shift activeDays: read from shift if provided, else fall back to
+  // the global daysPerWeek-derived mask. Returns 7-element bool array.
+  function shiftActiveOnDay(shift, dayIdx) {
+    if (!shift) return false;
+    const mask = (Array.isArray(shift.activeDays) && shift.activeDays.length === 7)
+      ? shift.activeDays
+      : fallbackMask;
+    return Boolean(mask[dayIdx]);
+  }
+  // Whether ANY shift runs on this day — drives site-level mgmt/admin
+  // attribution (which is present whenever the building's operating).
+  function buildingActiveOnDay(dayIdx) {
+    if (!Array.isArray(shifts)) return false;
+    for (let i = 0; i < shifts.length; i++) {
+      if (shiftActiveOnDay(shifts[i], dayIdx)) return true;
+    }
+    return false;
+  }
 
   // Precompute "is this shift active at this hour" — handles overnight shifts
   // (e.g. S3 = 23-7 wraps past midnight).
@@ -513,13 +715,15 @@ export function deriveHourlyStaffing(shifts, byShiftDirect, indirectByShift, day
   const days = [];
   let peakHourTotal = 0;
   for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
-    const active = isActiveDay(dayIdx);
+    const buildingOpen = buildingActiveOnDay(dayIdx);
     const hours = [];
     for (let hour = 0; hour < 24; hour++) {
       let direct = 0, supv = 0, indirect = 0, mgmt = 0, admin = 0;
-      if (active && Array.isArray(shifts)) {
+      if (Array.isArray(shifts)) {
         for (let si = 0; si < shifts.length; si++) {
           const s = shifts[si];
+          // Per-shift activeDays gate (SP-2 enabler).
+          if (!shiftActiveOnDay(s, dayIdx)) continue;
           if (!shiftCoversHour(s, hour)) continue;
           direct += Number(byShiftDirect?.[si]?.directHc) || 0;
           const ind = indirectByShift?.byShift?.[si];
@@ -532,7 +736,7 @@ export function deriveHourlyStaffing(shifts, byShiftDirect, indirectByShift, day
       // envelope (roughly any hour where at least one shift is active).
       // For MVP, attribute site-level to the day-shift window only (7a-5p)
       // since most mgmt / admin are day-only. Ops SMEs can refine later.
-      if (active) {
+      if (buildingOpen) {
         const site = indirectByShift?.site;
         if (site && hour >= 7 && hour < 17) {
           supv += site.supv; indirect += site.indirect; mgmt += site.mgmt; admin += site.admin;
@@ -601,17 +805,27 @@ function clampShiftCount(n) {
   return v;
 }
 
-/** Build a shifts-metadata array of the given length with sensible time windows. */
+/** Build a shifts-metadata array of the given length with sensible time windows.
+ *  Each shift gets a default `activeDays` mask (Mon-Fri = 5 days) — callers
+ *  override per-shift via the UI when an op runs different DOW patterns
+ *  (e.g., S1 M-F + S2 7-day for 24/7 fulfillment). */
 function buildDefaultShifts(n, hoursPerShift, existing) {
   const hrs = Number(hoursPerShift) || 8;
   const out = [];
+  const defaultMask = defaultActiveDays(5);
   for (let i = 0; i < n; i++) {
     const from = existing && existing[i];
-    if (from) { out.push({ ...from, num: i + 1 }); continue; }
+    if (from) {
+      const activeDays = Array.isArray(from.activeDays) && from.activeDays.length === 7
+        ? from.activeDays.map(v => Boolean(v))
+        : defaultMask.slice();
+      out.push({ ...from, num: i + 1, activeDays });
+      continue;
+    }
     const base = DEFAULT_SHIFT_WINDOWS[i] || DEFAULT_SHIFT_WINDOWS[DEFAULT_SHIFT_WINDOWS.length - 1];
     // Honor the project's hoursPerShift when deriving endHour from startHour.
     const endHour = (base.startHour + hrs) % 24;
-    out.push({ num: i + 1, startHour: base.startHour, endHour });
+    out.push({ num: i + 1, startHour: base.startHour, endHour, activeDays: defaultMask.slice() });
   }
   return out;
 }
