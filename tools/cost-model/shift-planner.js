@@ -806,26 +806,30 @@ function clampShiftCount(n) {
 }
 
 /** Build a shifts-metadata array of the given length with sensible time windows.
- *  Each shift gets a default `activeDays` mask (Mon-Fri = 5 days) — callers
- *  override per-shift via the UI when an op runs different DOW patterns
- *  (e.g., S1 M-F + S2 7-day for 24/7 fulfillment). */
+ *  When `existing` is supplied with explicit `activeDays`, that customization
+ *  is preserved. Otherwise activeDays is left ABSENT — `normalizeShiftActiveDays`
+ *  / `effectiveOperatingDaysForShift` lazily derive it from the global
+ *  daysPerWeek at calc time, preserving the legacy "global daysPerWeek
+ *  rolls forward to all shifts uniformly" behavior. SP-2 customization
+ *  happens via the UI toggle which sets activeDays explicitly. */
 function buildDefaultShifts(n, hoursPerShift, existing) {
   const hrs = Number(hoursPerShift) || 8;
   const out = [];
-  const defaultMask = defaultActiveDays(5);
   for (let i = 0; i < n; i++) {
     const from = existing && existing[i];
     if (from) {
-      const activeDays = Array.isArray(from.activeDays) && from.activeDays.length === 7
-        ? from.activeDays.map(v => Boolean(v))
-        : defaultMask.slice();
-      out.push({ ...from, num: i + 1, activeDays });
+      const next = { ...from, num: i + 1 };
+      // Preserve per-shift activeDays when previously set (UI customization).
+      if (Array.isArray(from.activeDays) && from.activeDays.length === 7) {
+        next.activeDays = from.activeDays.map(v => Boolean(v));
+      }
+      out.push(next);
       continue;
     }
     const base = DEFAULT_SHIFT_WINDOWS[i] || DEFAULT_SHIFT_WINDOWS[DEFAULT_SHIFT_WINDOWS.length - 1];
     // Honor the project's hoursPerShift when deriving endHour from startHour.
     const endHour = (base.startHour + hrs) % 24;
-    out.push({ num: i + 1, startHour: base.startHour, endHour, activeDays: defaultMask.slice() });
+    out.push({ num: i + 1, startHour: base.startHour, endHour });
   }
   return out;
 }
