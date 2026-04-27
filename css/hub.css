@@ -3486,37 +3486,51 @@ textarea.hub-input {
   position: sticky;
   top: 0;
   z-index: 5;
-  /* Match `.hub-builder-content` padding (var(--sp-6) = 24px on each side)
-     so the strip aligns flush with section content below it. The negative
-     margins claw back the parent's padding so the bar spans the full
-     content width edge-to-edge — the navy gradient looks anemic when
-     centered inside a 24px gutter. */
-  margin: calc(var(--sp-6) * -1) calc(var(--sp-6) * -1) var(--sp-5);
-  padding: var(--sp-3) var(--sp-6) var(--sp-3);
-  background: var(--ies-gray-50);
-  border-bottom: 1px solid var(--ies-gray-200);
-  /* Drop a faint shadow as section content scrolls under the bar so the
-     pinned-overlay relationship is legible. */
-  box-shadow: 0 1px 0 rgba(15,23,42,0.04);
+  /* Sit in the same column as section content. The prior edge-to-edge
+     framing put the bar's left edge 24px farther left than the page-name
+     header below ("Project Setup") and the form fields underneath, which
+     read as a column-misalignment break. Now the bar's left/right edges
+     line up with form content; only the BACKDROP behind it (the strip's
+     small breathing zone above + below) extends edge-to-edge so the
+     pinned-overlay relationship still reads on scroll. */
+  margin: 0 0 var(--sp-6);
+  padding: 0;
 }
 .cm-header-kpis:empty {
-  /* Hide the strip on landing / pre-mount when there's nothing to display.
-     Avoids a 1px strip ghost line above empty section content. */
   display: none;
+  margin: 0;
 }
 .cm-header-kpis .hub-kpi-bar {
-  /* Slightly tighter than the NetOpt scenario header — CM has narrower
-     content area than NetOpt's analyzer pane, so we shave the vertical
-     padding rather than letting tiles wrap. */
-  padding: var(--sp-3) var(--sp-2);
+  /* More vertical breathing room — labels/values had nowhere to sit
+     before. 16/12 vertical padding gives a strip ~58px tall with the
+     trimmed type below, vs. the prior ~50px which felt cramped. */
+  padding: 16px var(--sp-4);
   border-radius: var(--radius-md);
+  /* Stronger shadow so the bar reads as a lifted card sitting above
+     the section content column rather than a flat dark slab. */
+  box-shadow: 0 6px 16px rgba(10, 22, 40, 0.18);
 }
 .cm-header-kpis .hub-kpi-item {
+  /* Crisper tile divider on dark navy. */
+  border-right-color: rgba(255,255,255,0.18);
   padding: 0 var(--sp-3);
+  gap: 4px;
 }
-/* Subtle "I'm recalculating" pulse — host element gets `.is-ready` after
-   the first successful compute, so on initial mount we render a faint
-   placeholder bar (set later when computeHeaderKpis returns ready=true). */
+/* Cap value type so $17.0M / 149.2 / 17.9% feel proportionate to strip
+   height. Base .hub-kpi-value clamps to 22px at full width, which reads
+   oversized inside CM's narrower content column. */
+.cm-header-kpis .hub-kpi-value {
+  font-size: clamp(13px, 1.6cqi, 17px);
+  line-height: 1.15;
+  margin-top: 2px;
+}
+.cm-header-kpis .hub-kpi-label {
+  font-size: clamp(9px, 1cqi, 10px);
+  letter-spacing: 0.6px;
+  margin-bottom: 2px;
+}
+/* Subtle "I'm recalculating" pulse — host element gets `.is-ready`
+   after the first successful compute. */
 .cm-header-kpis:not(.is-ready) .hub-kpi-bar {
   opacity: 0.85;
 }
