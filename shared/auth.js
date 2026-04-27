@@ -639,7 +639,7 @@ async function verifyRecoveryOtp(email, code) {
  * @param {string} newPassword
  * @returns {Promise<{ok:boolean, error?:string}>}
  */
-async function completePasswordRecovery(newPassword) {
+async function completePasswordRecovery(newPassword, opts = {}) {
   if (!_recoveryMode) {
     return { ok: false, error: 'No active recovery session' };
   }
@@ -648,6 +648,53 @@ async function completePasswordRecovery(newPassword) {
   }
   try {
     const client = db.getClient();
+
+    // 2026-04-27 — MFA AAL2 elevation for the recovery flow.
+    //
+    // Supabase rejects auth.updateUser({password}) with the error
+    // "AAL2 session is required to update email or password when MFA
+    // is enabled" when the user has any verified MFA factor. The
+    // email-OTP recovery session starts at AAL1, so the prior
+    // implementation hit this wall every time an MFA-enrolled user
+    // tried to reset their password (caught live 2026-04-27 AM —
+    // Brock's account was unblocked by deleting his MFA factor via
+    // SQL, which is not a workflow we want to repeat).
+    //
+    // New flow: before calling updateUser, check for verified TOTP
+    // factors. If none — proceed as before (preserves the no-MFA
+    // path's behavior unchanged). If one exists, the caller MUST
+    // supply opts.mfaCode (a 6-digit TOTP). We run challenge + verify,
+    // which elevates the session to AAL2, then updateUser succeeds.
+    //
+    // The modal layer (renderRecoverySetPasswordModal in this file)
+    // handles the two-pass dance: first call returns
+    // { ok:false, error:'MFA_AAL2_REQUIRED' } to signal "show the
+    // TOTP input"; modal collects the code, calls back with it.
+    let factors = null;
+    try {
+      const { data: f } = await client.auth.mfa.listFactors();
+      factors = f;
+    } catch (_) {
+      // listFactors failure should NOT block the recovery flow for
+      // non-MFA users — fall through and let updateUser surface the
+      // canonical error if MFA really was required.
+    }
+    const verifiedTotp = factors?.totp?.find?.((x) => x.status === 'verified') || null;
+    if (verifiedTotp) {
+      if (!opts.mfaCode) {
+        return { ok: false, error: 'MFA_AAL2_REQUIRED', mfaFactorName: verifiedTotp.friendly_name || null };
+      }
+      const { data: chal, error: chalErr } = await client.auth.mfa.challenge({ factorId: verifiedTotp.id });
+      if (chalErr) return { ok: false, error: chalErr.message || 'MFA challenge failed' };
+      const { error: verifyErr } = await client.auth.mfa.verify({
+        factorId: verifiedTotp.id,
+        challengeId: chal.id,
+        code: opts.mfaCode,
+      });
+      if (verifyErr) return { ok: false, error: verifyErr.message || 'Invalid 6-digit code' };
+      // Session is now AAL2 — proceed.
+    }
+
     const { data, error } = await client.auth.updateUser({ password: newPassword });
     if (error) {
       // Common case: "New password should be different from the old password"
@@ -1127,6 +1174,82 @@ function renderForgotPasswordModal(opts = {}) {
  * the recovery session is a dead-end state: the only legal action is either
  * "set new password" or "sign out and start over".
  *
+/**
+ * 2026-04-27 — Inline TOTP prompt for the recovery flow's AAL2 elevation.
+ * Replaces the password card body with a code input + verify/cancel pair,
+ * resolves with the entered code (or null if user cancelled). Caller restores
+ * the original card body via DOM removal of the modal — we don't try to
+ * "unwind" the card here since the password fields are already validated
+ * and we're going straight to the next state on success.
+ *
+ * @param {HTMLElement} card        — the .hub-auth-card the prompt mounts into
+ * @param {HTMLElement} errorEl     — existing error element (re-used for messaging)
+ * @param {string|null} factorName  — friendly name from completePasswordRecovery's
+ *                                     first-pass response, or null
+ * @returns {Promise<string|null>}
+ */
+function promptForTotpCode(card, errorEl, factorName) {
+  return new Promise((resolve) => {
+    // Snapshot the current card HTML so we can restore on cancel
+    const originalHtml = card.innerHTML;
+    const factorLabel = factorName ? ` (${factorName})` : '';
+    card.innerHTML = `
+      <div class="hub-auth-logo" aria-hidden="true">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+        </svg>
+      </div>
+      <h1 class="hub-auth-title">Confirm with your authenticator</h1>
+      <p class="hub-auth-subtitle" style="margin-bottom:14px;">
+        Two-factor auth is required for password changes. Open your authenticator
+        app${factorLabel} and enter the 6-digit code to finish.
+      </p>
+      <div class="hub-auth-error" id="recovery-mfa-error" role="alert"></div>
+      <label class="hub-auth-label" for="recovery-mfa-code">6-digit code</label>
+      <input
+        type="text"
+        class="hub-input hub-auth-input"
+        id="recovery-mfa-code"
+        placeholder="123456"
+        inputmode="numeric"
+        autocomplete="one-time-code"
+        maxlength="6"
+        pattern="[0-9]{6}"
+        style="letter-spacing:.25em;text-align:center;font-size:18px;"
+      />
+      <button class="hub-btn hub-btn-primary w-full" id="recovery-mfa-verify" style="margin-top:14px;" disabled>
+        Verify and continue
+      </button>
+      <button class="hub-btn w-full" id="recovery-mfa-cancel" style="margin-top:8px;">Cancel</button>
+    `;
+    const codeInput = card.querySelector('#recovery-mfa-code');
+    const verifyBtn = card.querySelector('#recovery-mfa-verify');
+    const cancelBtn = card.querySelector('#recovery-mfa-cancel');
+    codeInput.addEventListener('input', () => {
+      const v = codeInput.value.replace(/\D/g, '').slice(0, 6);
+      if (v !== codeInput.value) codeInput.value = v;
+      verifyBtn.disabled = v.length !== 6;
+    });
+    codeInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !verifyBtn.disabled) verifyBtn.click();
+    });
+    verifyBtn.addEventListener('click', () => {
+      const code = codeInput.value.trim();
+      // Restore the original password card so attemptSet's success branch
+      // can update errorEl with the "Password updated…" message in place.
+      card.innerHTML = originalHtml;
+      resolve(code);
+    });
+    cancelBtn.addEventListener('click', () => {
+      card.innerHTML = originalHtml;
+      resolve(null);
+    });
+    setTimeout(() => codeInput.focus(), 0);
+  });
+}
+
+/**
  * @param {{onSuccess?: () => void}} [opts]
  */
 function renderRecoverySetPasswordModal(opts = {}) {
@@ -1215,7 +1338,26 @@ function renderRecoverySetPasswordModal(opts = {}) {
     const orig = submitBtn.textContent;
     submitBtn.textContent = 'Saving…';
     try {
-      const res = await completePasswordRecovery(next);
+      let res = await completePasswordRecovery(next);
+      // 2026-04-27 — MFA AAL2 two-pass: when the user has a verified
+      // TOTP factor, completePasswordRecovery first returns
+      // MFA_AAL2_REQUIRED. Show an inline TOTP prompt, collect the
+      // code, then re-call with opts.mfaCode set. Only one pass for
+      // users without MFA (the verifiedTotp guard short-circuits
+      // before this branch).
+      if (!res.ok && res.error === 'MFA_AAL2_REQUIRED') {
+        submitBtn.textContent = orig;
+        const code = await promptForTotpCode(card, errorEl, res.mfaFactorName);
+        if (code === null) {
+          // Cancelled
+          submitBtn.disabled = false;
+          cancelBtn.disabled = false;
+          return;
+        }
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Verifying…';
+        res = await completePasswordRecovery(next, { mfaCode: code });
+      }
       if (res.ok) {
         errorEl.textContent = 'Password updated. Signing you in…';
         errorEl.style.color = 'var(--ies-blue)';

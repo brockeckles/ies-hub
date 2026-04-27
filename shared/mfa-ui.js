@@ -111,10 +111,25 @@ async function renderEnrollModal(overlay, { onPass, onLogout }) {
         </svg>
       </div>
       <h1 class="hub-auth-title">Set up two-factor auth</h1>
-      <p class="hub-auth-subtitle" style="margin-bottom:14px;">
-        Two-factor authentication is required for this Hub. Scan the QR below with your
-        authenticator app (Authy, 1Password, Google Authenticator, etc.)
-        then enter the 6-digit code.
+      <p class="hub-auth-subtitle" style="margin-bottom:10px;">
+        Two-factor authentication is required for the Hub. You'll use an
+        authenticator app on your phone to generate a 6-digit code at sign-in.
+      </p>
+
+      <!-- 2026-04-27 PM (Brock walkthrough): explicit "which app" panel.
+           Lu got stuck at enrollment because she didn't know which app to use,
+           and the prior subtitle just listed three options as a parenthetical.
+           Most GXO employees already have Microsoft Authenticator installed
+           for Outlook / Teams MFA — calling that out reduces the perceived
+           friction of "do I really need to install another random app?". -->
+      <div style="background:rgba(0,71,171,0.06);border:1px solid rgba(0,71,171,0.18);border-radius:8px;padding:10px 12px;margin:0 0 14px;font-size:12px;color:var(--ies-gray-700,#374151);line-height:1.5;">
+        <div style="font-weight:700;color:var(--ies-navy,#0a1628);margin-bottom:4px;">Recommended apps</div>
+        <div><strong>Microsoft Authenticator</strong> — most GXO employees already have it installed for Outlook / Teams MFA. <span style="color:var(--ies-gray-500,#6b7280);">No extra install needed.</span></div>
+        <div style="margin-top:3px;"><strong>Google Authenticator</strong> · <strong>1Password</strong> · <strong>Authy</strong> — any of these also work if Microsoft Authenticator isn't on your phone.</div>
+      </div>
+
+      <p class="hub-auth-subtitle" style="margin:0 0 8px;font-size:13px;">
+        Scan the QR below with your chosen app, then enter the 6-digit code it shows you.
       </p>
 
       <div class="hub-auth-error" id="mfa-error" role="alert"></div>
