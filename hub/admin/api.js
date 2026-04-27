@@ -274,7 +274,11 @@ export async function loadUserActivityInputs(opts = {}) {
   const days = Number.isFinite(opts.days) ? opts.days : 7;
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
-  const [profilesRes, eventsRes, loginsRes] = await Promise.all([
+  // NOTE: db.rpc unwraps to the data array directly (and throws on error),
+  // unlike db.from(...).select(...) which returns {data, error}. Wrap the rpc
+  // in catch so a single RPC failure (e.g., admin guard rejection on a
+  // non-admin) doesn't take down the whole inputs fetch.
+  const [profilesRes, eventsRes, authLogins] = await Promise.all([
     // NOTE: the column is `full_name` in public.profiles (not display_name)
     db.from('profiles').select('id, email, full_name, role, team_id, created_at'),
     // Cap at a large-but-bounded number so we never accidentally pull the
@@ -289,7 +293,10 @@ export async function loadUserActivityInputs(opts = {}) {
     // via admin-gated SECURITY DEFINER RPC. Telemetry-derived lastLogin from
     // session_start events was always null because session_start fires before
     // auth bootstraps, so user_id stamping is racy/empty.
-    db.rpc('admin_list_user_logins'),
+    db.rpc('admin_list_user_logins').catch((err) => {
+      console.warn('[admin] admin_list_user_logins rpc failed:', err?.message || err);
+      return [];
+    }),
   ]);
 
   if (profilesRes.error) {
@@ -298,14 +305,11 @@ export async function loadUserActivityInputs(opts = {}) {
   if (eventsRes.error) {
     console.warn('[admin] loadUserActivityInputs events failed:', eventsRes.error);
   }
-  if (loginsRes.error) {
-    console.warn('[admin] loadUserActivityInputs logins failed:', loginsRes.error);
-  }
 
   return {
     profiles: profilesRes.data || [],
     events: eventsRes.data || [],
-    authLogins: loginsRes.data || [],
+    authLogins: Array.isArray(authLogins) ? authLogins : [],
   };
 }
 
