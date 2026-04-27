@@ -1014,7 +1014,27 @@ function optimizeNetwork(opts = {}) {
       _runHeuristicOptimize(n, totalCombos, kCap, candidates, /*reasonOverride*/ 'exhaustive_too_large');
       return;
     }
-    comparisonResults = result.scenarios;
+    // exactSolver returns every C(n,k) combination across k=1..kCap. Reduce to
+    // the BEST scenario per k so the comparison table reads as a clean
+    // 1..kCap k-sweep — the same shape multiDCComparison produces — and the
+    // "Recommended N DCs" panel correctly maps recommendedIdx → DC count.
+    const bestPerK = new Map();
+    for (const sc of result.scenarios) {
+      // exactSolver names each scenario "${numFacs} DC" (calc.js evaluateScenario
+      // call), so the open-DC count is parseable from the name. Fall back to
+      // counting distinct facility ids in the assignments if the name format
+      // ever changes.
+      let openCount = 0;
+      const m = /^(\d+)\s*DC/i.exec(String(sc.name || ""));
+      if (m) openCount = parseInt(m[1], 10);
+      if (!openCount && Array.isArray(sc.assignments)) {
+        openCount = new Set(sc.assignments.map(a => a.facilityId).filter(Boolean)).size;
+      }
+      if (!openCount) continue;
+      const prev = bestPerK.get(openCount);
+      if (!prev || sc.totalCost < prev.totalCost) bestPerK.set(openCount, sc);
+    }
+    comparisonResults = [...bestPerK.keys()].sort((a, b) => a - b).map(k => bestPerK.get(k));
     _optimizationMeta = {
       algorithm: 'exhaustive',
       candidateCount: n,
@@ -2596,7 +2616,7 @@ function renderMultiDCComparison(el) {
   el.innerHTML = `
     <div style="max-width:1200px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
-        <h3 class="text-section" style="margin:0;">DC Network Comparison (1-${comparisonResults.length} facilities)</h3>
+        <h3 class="text-section" style="margin:0;">DC Network Comparison (1-${_optimizationMeta?.kCap || comparisonResults.length} facilities)</h3>
         <div style="display:flex;align-items:center;gap:8px;">
           ${_optimizationMeta ? renderOptimizationChip(_optimizationMeta) : ''}
           <span style="font-size:11px;color:var(--ies-gray-400);">${comparisonResults.length} scenario(s)</span>
