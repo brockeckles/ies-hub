@@ -10,7 +10,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sP';
 import { state } from '../../shared/state.js?v=20260418-sP';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sP';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260419-uE';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton, renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2';
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sP';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260418-sP';
@@ -25,7 +25,12 @@ import * as api from './api.js?v=20260418-sP';
 let rootEl = null;
 
 /** @type {'points' | 'analysis' | 'map' | 'sensitivity'} */
-let activeTab = 'points';
+// 2026-04-27 EVE2 (COG-SCOPE-1): activeTab replaced with phase + sub-tab.
+//   activePhase: 'inputs' | 'parameters' | 'run'
+//   runSubTab:   'numbers' | 'map' | 'sensitivity' (only meaningful when
+//                activePhase === 'run')
+let activePhase = 'inputs';
+let runSubTab = 'numbers';
 
 /** @type {import('./types.js?v=20260418-sP').WeightedPoint[]} */
 let points = [];
@@ -149,7 +154,8 @@ async function renderLanding() {
 function openEditor(savedRow) {
   if (!rootEl) return;
   const d = savedRow?.scenario_data || {};
-  activeTab = 'points';
+  activePhase = 'inputs';
+  runSubTab = 'numbers';
   // 2026-04-21 audit fix: new scenarios start EMPTY. Demo points still
   // reachable via the "Load Demo" button on the Points tab (seedDemo action)
   // and the Archetypes dropdown. Prior behavior auto-loaded 12 US metros
@@ -368,13 +374,9 @@ function _pointsForSolve() {
 }
 
 function renderShell() {
-  const tabs = [
-    { key: 'points', label: 'Demand Points' },
-    { key: 'analysis', label: 'Analysis' },
-    { key: 'map', label: 'Map' },
-    { key: 'sensitivity', label: 'Sensitivity' },
-  ];
-
+  // 2026-04-27 EVE2 (COG-SCOPE-1): tabs replaced with horizontal phase
+  // stepper (Inputs → Parameters → Run). Run sub-tabs (Numbers / Map /
+  // Sensitivity) live inside the Run phase canvas.
   const chips = [
     { label: activeScenarioId ? 'Saved' : 'Draft', kind: activeScenarioId ? 'saved' : 'draft', dot: true },
     activeParentCmId
@@ -382,20 +384,12 @@ function renderShell() {
       : { label: 'Stand-alone', kind: 'standalone', title: 'Not linked to a Cost Model' },
   ];
 
-  // Run Analysis is only meaningful on the Points tab (the input screen) — the
-  // Analysis / Map / Sensitivity tabs render results from a previous run, so
-  // showing a "Run" button there confuses users into thinking they need to
-  // re-run after navigating. Hide it everywhere except Points.
-  const showRunBtn = activeTab === 'points';
   return `
     <div class="hub-content-inner" style="padding:0;display:flex;flex-direction:column;height:100%;">
       ${renderToolHeader({
         toolName: 'Center of Gravity',
         toolKey: 'cog',
         backAction: 'cog-back',
-        tabs,
-        activeTab,
-        tabsId: 'cog-tabs',
         statusChips: chips,
         // I-05 — Save button is always visible so work isn't lost on tab close.
         secondaryActions: [
@@ -404,22 +398,46 @@ function renderShell() {
             primary: isDirty,
             title: activeScenarioId ? 'Update this scenario' : 'Save this scenario to open it again later' },
         ],
-        primaryAction: showRunBtn
-          ? {
-              // XT-SCOPE-1 (2026-04-27 EVE2) — standardized "Run" verb.
-              label: 'Run',
-              action: 'cog-run',
-              icon: '▶',
-              title: 'Run k-means center-of-gravity (Cmd/Ctrl+Enter)',
-              state: runState.state(runStateInputs()),
-              cleanLabel: '✓ Results current',
-              cleanTitle: 'Inputs unchanged since the last solve — k-means centers match the current points + config. Click to force a re-run.',
-            }
-          : null,
+        primaryAction: {
+          // XT-SCOPE-1 — standardized "Run" verb.
+          label: 'Run',
+          action: 'cog-run',
+          icon: '▶',
+          title: 'Run k-means center-of-gravity (Cmd/Ctrl+Enter)',
+          state: runState.state(runStateInputs()),
+          cleanLabel: '✓ Results current',
+          cleanTitle: 'Inputs unchanged since the last solve — k-means centers match the current points + config. Click to force a re-run.',
+        },
       })}
+      <div id="cog-process-flow"></div>
       <div id="cog-content" style="flex:1;overflow-y:auto;padding:24px;"></div>
     </div>
   `;
+}
+
+// 2026-04-27 EVE2 (COG-SCOPE-1): phase status driven by current state.
+function cogPhaseStatus() {
+  const inputsComplete = points.length > 0;
+  const runComplete = !!cogResult;
+  return {
+    inputs:     inputsComplete ? 'complete' : 'active',
+    parameters: runComplete ? 'complete' : (inputsComplete ? 'active' : 'pending'),
+    run:        runComplete ? 'complete' : (inputsComplete ? 'active' : 'pending'),
+  };
+}
+
+function renderCogStepper() {
+  const el = rootEl?.querySelector('#cog-process-flow');
+  if (!el) return;
+  const s = cogPhaseStatus();
+  el.innerHTML = renderPhaseStepper({
+    phases: [
+      { key: 'inputs',     num: 1, label: 'Inputs',     sub: 'Demand points + seeds',         status: s.inputs },
+      { key: 'parameters', num: 2, label: 'Parameters', sub: 'k, $/mi, capacity, candidates',  status: s.parameters },
+      { key: 'run',        num: 3, label: 'Run',        sub: 'Numbers, map, sensitivity',      status: s.run },
+    ],
+    activePhase: activePhase,
+  });
 }
 
 function bindShellEvents() {
@@ -451,15 +469,21 @@ function bindShellEvents() {
         cogResult = calc.snapCentersToCandidates(cogResult, _solvePts, config.candidateFacilities);
       }
       sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0);
-      activeTab = 'analysis';
-      // Stash the input fingerprint so the header Run button flips to the
-      // muted "✓ Results current" state until the user edits something.
+      // 2026-04-27 EVE2 (COG-SCOPE-3): after a run, jump to Run phase /
+      // Numbers sub-tab so the user immediately sees the centers.
+      activePhase = 'run';
+      runSubTab = 'numbers';
       runState.markClean(runStateInputs());
       markDirty(); // I-05 — running produces a new result that deserves saving
       updateRunButtonState();
-      rootEl.innerHTML = renderShell(); // re-render shell so tabs + Save state are fresh
-      rootEl.querySelectorAll('#cog-tabs button').forEach(b => {
-        b.classList.toggle('active', b.dataset.tab === activeTab);
+      rootEl.innerHTML = renderShell();
+      renderCogStepper();
+      bindPhaseStepper(rootEl.querySelector('#cog-process-flow'), (phase) => {
+        activePhase = phase;
+        rootEl.innerHTML = renderShell();
+        renderCogStepper();
+        bindPhaseStepper(rootEl.querySelector('#cog-process-flow'), arguments.callee);
+        renderContent();
       });
       renderContent();
       flashRunButton(rootEl.querySelector('[data-primary-action="cog-run"]'));
@@ -474,15 +498,28 @@ function bindShellEvents() {
       return;
     }
 
-    // Tab switching. Re-render the full shell so the primary-action button
-    // appears only on the Points tab (conditional primaryAction in renderShell).
-    const tabBtn = target.closest('#cog-tabs [data-tab]');
-    if (tabBtn) {
-      activeTab = /** @type {any} */ (tabBtn.dataset.tab);
-      rootEl.innerHTML = renderShell();
+    // Run-phase sub-tab clicks (Numbers | Map | Sensitivity).
+    const subTab = target.closest('[data-cog-runsub]');
+    if (subTab) {
+      runSubTab = /** @type {any} */ (subTab.getAttribute('data-cog-runsub'));
       renderContent();
       return;
     }
+  });
+
+  // Phase stepper — wired via the shared helper (COG-SCOPE-1 + XT-SCOPE-3).
+  bindPhaseStepper(rootEl.querySelector('#cog-process-flow'), (phase) => {
+    activePhase = /** @type {any} */ (phase);
+    rootEl.innerHTML = renderShell();
+    renderCogStepper();
+    // Re-bind on each shell re-render — the prior container is gone.
+    bindPhaseStepper(rootEl.querySelector('#cog-process-flow'), (next) => {
+      activePhase = /** @type {any} */ (next);
+      rootEl.innerHTML = renderShell();
+      renderCogStepper();
+      renderContent();
+    });
+    renderContent();
   });
 
   bindPrimaryActionShortcut(rootEl, 'cog-run');
@@ -492,167 +529,117 @@ function renderContent() {
   const el = rootEl?.querySelector('#cog-content');
   if (!el) return;
 
-  switch (activeTab) {
-    case 'points': renderPoints(el); break;
-    case 'analysis': renderAnalysis(el); break;
-    case 'map': renderMap(el); break;
-    case 'sensitivity': renderSensitivity(el); break;
+  // 2026-04-27 EVE2 (COG-SCOPE-1/2/3): phase-driven dispatch. Inputs is the
+  // pure points surface; Parameters holds Analysis Config + Candidate
+  // Facilities (lifted off the old Demand Points tab); Run hosts Numbers /
+  // Map / Sensitivity sub-tabs over a single solve.
+  switch (activePhase) {
+    case 'inputs':     renderInputsPhase(el); break;
+    case 'parameters': renderParametersPhase(el); break;
+    case 'run':        renderRunPhase(el); break;
+    default:           renderInputsPhase(el);
   }
+  renderCogStepper();
 }
 
 // ============================================================
 // POINTS TAB
 // ============================================================
 
-function renderPoints(el) {
+function renderInputsPhase(el) {
+  // 2026-04-27 EVE2 (COG-SCOPE-1/2/5): pure Inputs surface — seeders +
+  // add-point row + points table + KPI bar. Analysis Configuration and
+  // Candidate Facilities moved to renderParametersPhase below.
   const totalWeight = points.reduce((s, p) => s + p.weight, 0);
 
+  // COG-SCOPE-5: tighten the seeder hierarchy. All three seed mechanisms
+  // (Apply Archetype + Load Demo + Add Point) sit in one Seeders card so
+  // the user reads the full menu at a glance.
   el.innerHTML = `
-    <div style="max-width:900px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px;flex-wrap:wrap;">
-        <h3 class="text-section" style="margin:0;">Weighted Demand Points</h3>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <select id="cog-archetype-select" title="Apply a pre-built demand distribution when customer data is sparse" style="padding:7px 10px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;min-width:220px;">
-            <option value="">— Load Archetype —</option>
-            ${Object.entries(calc.COG_ARCHETYPES).map(([k, a]) => `
-              <option value="${k}">${a.name}</option>
-            `).join('')}
-          </select>
-          <input type="number" id="cog-archetype-volume" placeholder="Total units" title="Optional: override the archetype's default total annual volume" style="width:130px;padding:7px 10px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;" />
-          <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-load-archetype" title="Pick an archetype from the dropdown first" disabled style="opacity:0.5;cursor:not-allowed;">Apply Archetype</button>
-          <span style="width:1px;height:18px;background:var(--ies-gray-200);"></span>
-          <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-load-demo">Load Demo</button>
-        </div>
-      </div>
-      <div id="cog-archetype-desc" style="margin-bottom:12px;font-size:12px;color:var(--ies-gray-500);display:none;padding:8px 12px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;"></div>
-
-      <!-- Add Point row with city/state/ZIP lookup -->
-      <div class="hub-card" style="margin-bottom:16px;padding:12px 14px;border-left:3px solid #20c997;">
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);flex-shrink:0;">Add Point</div>
-          <input list="cog-city-list" id="cog-lookup-input" placeholder="City, ST or 3-/5-digit ZIP (e.g. Atlanta, GA or 30303)"
-                 style="flex:1;min-width:260px;padding:8px 10px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;" />
-          <input type="number" id="cog-lookup-weight" placeholder="Weight" min="1" step="100" value="10000"
-                 title="Demand weight (units, shipments, pallets, orders — whatever scale your other points use)"
-                 style="width:110px;padding:8px 10px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;text-align:right;" />
-          <button class="hub-btn hub-btn-sm hub-btn-primary" id="cog-lookup-add" title="Look up the location and add it as a demand point">+ Add</button>
-          <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-add-point" title="Add an empty point (manual lat/lng entry in the table)">Blank</button>
-          <div id="cog-lookup-feedback" style="flex-basis:100%;font-size:11px;color:var(--ies-gray-400);"></div>
-        </div>
-        <datalist id="cog-city-list">
-          ${calc.CITY_CENTROIDS.map(c => `<option value="${c.name}, ${c.state}"></option>`).join('')}
-        </datalist>
-      </div>
-
-      <!-- Config -->
-      <div class="hub-card" style="margin-bottom:20px;padding:16px;border-left:3px solid var(--ies-blue);">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-400);margin-bottom:10px;">Analysis Configuration</div>
-        <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;">
-          <div style="display:flex;align-items:center;gap:8px;">
-            <label style="font-size:13px;font-weight:600;">Number of Nodes / Facilities:</label>
-            <input type="number" value="${config.numCenters}" min="1" max="20" id="cog-k"
-                   style="width:70px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:14px;font-weight:700;text-align:center;color:var(--ies-blue);">
-            <span style="font-size:11px;color:var(--ies-gray-400);">How many DC locations to optimize for</span>
+    <div style="max-width:920px;">
+      <!-- Seeders card -->
+      <div class="hub-card" style="margin-bottom:16px;padding:14px 16px;border-left:3px solid #20c997;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);margin-bottom:10px;">Seed demand points</div>
+        <div style="display:grid;grid-template-columns:1fr;gap:10px;">
+          <!-- Add a single point via city/ZIP lookup -->
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <div style="font-size:11px;font-weight:600;color:var(--ies-gray-500);width:90px;flex-shrink:0;">Add one</div>
+            <input list="cog-city-list" id="cog-lookup-input" placeholder="City, ST or 3-/5-digit ZIP (e.g. Atlanta, GA or 30303)"
+                   style="flex:1;min-width:240px;padding:8px 10px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;" />
+            <input type="number" id="cog-lookup-weight" placeholder="Weight" min="1" step="100" value="10000"
+                   title="Demand weight (units, shipments, pallets, orders)"
+                   style="width:110px;padding:8px 10px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;text-align:right;" />
+            <button class="hub-btn hub-btn-sm hub-btn-primary" id="cog-lookup-add" title="Look up the location and add it as a demand point">+ Add</button>
+            <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-add-point" title="Add an empty point (manual lat/lng entry in the table)">Blank</button>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <label style="font-size:13px;font-weight:600;" title="Unit your demand 'weight' values are in. Math doesn't care which unit you pick — capacity below must use the same one. Drives label text everywhere weight appears.">Weight Unit:</label>
-            <select id="cog-weight-unit" style="padding:7px 10px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;">
-              ${calc.WEIGHT_UNIT_OPTIONS.map(u => `<option value="${u.value}"${(config.weightUnit||'lb')===u.value?' selected':''}>${u.label}</option>`).join('')}
+          <div id="cog-lookup-feedback" style="font-size:11px;color:var(--ies-gray-400);padding-left:100px;"></div>
+
+          <!-- Bulk-seed via archetype or demo fixture -->
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--ies-gray-200);padding-top:10px;">
+            <div style="font-size:11px;font-weight:600;color:var(--ies-gray-500);width:90px;flex-shrink:0;">Bulk seed</div>
+            <select id="cog-archetype-select" title="Apply a pre-built demand distribution when customer data is sparse" style="flex:1;min-width:200px;padding:7px 10px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;">
+              <option value="">— Pick an archetype —</option>
+              ${Object.entries(calc.COG_ARCHETYPES).map(([k, a]) => `
+                <option value="${k}">${a.name}</option>
+              `).join('')}
             </select>
-            <span style="font-size:11px;color:var(--ies-gray-400);" title="The Truck $/mi rate is per truck-mile regardless of weight unit. Weight Unit only changes how demand totals are bucketed into truckloads via the capacity below.">Cost rate is per truck-mile · weight unit drives demand → truckloads</span>
+            <input type="number" id="cog-archetype-volume" placeholder="Total units (optional)" title="Optional: override the archetype's default total annual volume" style="width:170px;padding:7px 10px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;" />
+            <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-load-archetype" title="Pick an archetype from the dropdown first" disabled style="opacity:0.5;cursor:not-allowed;">Apply Archetype</button>
+            <span style="width:1px;height:18px;background:var(--ies-gray-200);"></span>
+            <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-load-demo" title="Load a 10-point US demo fixture so you can explore the tool without entering data">Load Demo</button>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <label style="font-size:13px;font-weight:600;">Truck $/mi:</label>
-            <input type="number" value="${config.transportCostPerMile}" step="0.01" id="cog-cpm"
-                   style="width:80px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-            <span style="font-size:11px;color:var(--ies-gray-400);">Per-truck rate (e.g. $2.85/mi for 53-ft van)</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <label style="font-size:13px;font-weight:600;">${calc.getWeightUnitMeta(config.weightUnit||'lb').short.charAt(0).toUpperCase()+calc.getWeightUnitMeta(config.weightUnit||'lb').short.slice(1)} / Truck:</label>
-            <input type="number" value="${config.unitsPerTruck || 25000}" step="${calc.getWeightUnitMeta(config.weightUnit||'lb').step}" min="1" id="cog-cap"
-                   style="width:90px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-            <span style="font-size:11px;color:var(--ies-gray-400);">Avg payload (${calc.getWeightUnitMeta(config.weightUnit||'lb').short}) per truckload</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <label style="font-size:13px;font-weight:600;">Max Iterations:</label>
-            <input type="number" value="${config.maxIterations || 100}" min="10" max="500" step="10" id="cog-iter"
-                   style="width:80px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-          </div>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <label style="font-size:13px;font-weight:600;">Fixed $ / DC / yr:</label>
-            <input type="number" value="${config.fixedCostPerDC || 0}" step="50000" min="0" id="cog-fixed-cost"
-                   title="Annual fully-loaded fixed cost per DC (rent + labor + IT + depreciation). Set to a non-zero value (e.g. $1,500,000) to model a true U-curve on the Sensitivity tab. Leave at 0 for a transport-only curve."
-                   style="width:120px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-            <span style="font-size:11px;color:var(--ies-gray-400);">0 = transport only · >0 = real U-curve (e.g. $1.5M)</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <label style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;cursor:pointer;">
-              <input type="checkbox" id="cog-outlier-toggle" ${config.outlierCapEnabled ? 'checked' : ''}
-                     style="cursor:pointer;">
-              Cap outlier weights at
-            </label>
-            <input type="number" value="${config.outlierCapPercentile || 95}" min="80" max="99" step="1" id="cog-outlier-percentile"
-                   ${config.outlierCapEnabled ? '' : 'disabled'}
-                   title="Winsorize: any point heavier than the Nth-percentile weight is clipped DOWN to that cap before solving. Use when one mega-shipper distorts the centroid."
-                   style="width:60px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;${config.outlierCapEnabled ? '' : 'opacity:0.5;'}">
-            <span style="font-size:11px;color:var(--ies-gray-400);">th percentile · prevents one mega-account from owning the centroid</span>
-          </div>
-        </div>
-      </div>
+          <div id="cog-archetype-desc" style="font-size:12px;color:var(--ies-gray-500);display:none;padding:8px 12px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;margin-left:100px;"></div>
 
-      <!-- COG-B2 — Candidate Facilities (snap k-means centers to a fixed list) -->
-      <div class="hub-card" style="margin-bottom:20px;padding:16px;border-left:3px solid var(--ies-blue-light, #60a5fa);">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:12px;flex-wrap:wrap;">
-          <div>
-            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-400);">Candidate Facilities <span style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--ies-gray-300);">(optional)</span></div>
-            <div style="font-size:11px;color:var(--ies-gray-400);margin-top:2px;">Snap solver centers to a fixed list of available sites (existing GXO buildings, REIT inventory, M&amp;A targets) instead of free lat/lng centroids.</div>
-          </div>
-          <label style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;" title="When ON, k-means runs as usual then each center is moved to the nearest candidate facility from the list below. Distances + sensitivity are recomputed against the snapped sites.">
-            <input type="checkbox" id="cog-snap-toggle" ${config.snapToCandidates ? 'checked' : ''} style="cursor:pointer;">
-            Snap solver centers to candidates
-          </label>
+          <datalist id="cog-city-list">
+            ${calc.CITY_CENTROIDS.map(c => `<option value="${c.name}, ${c.state}"></option>`).join('')}
+          </datalist>
         </div>
-        <textarea id="cog-candidate-list" rows="4"
-                  placeholder="One per line — Label, Lat, Lng &#10;Examples: &#10;ATL DC, 33.7490, -84.3880 &#10;DFW DC, 32.7767, -96.7970 &#10;LAX DC, 33.9425, -118.4081"
-                  style="width:100%;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-family:monospace;line-height:1.5;${config.snapToCandidates ? '' : 'opacity:0.55;'}"
-                  ${config.snapToCandidates ? '' : 'disabled'}>${(config.candidateFacilities || []).map(c => `${c.label || ''}, ${c.lat}, ${c.lng}`).join('\n')}</textarea>
-        <div id="cog-candidate-feedback" style="font-size:11px;color:var(--ies-gray-400);margin-top:4px;">${(config.candidateFacilities || []).length ? `${(config.candidateFacilities || []).length} candidate site(s) loaded` : 'No candidates yet — paste lines above when you want to constrain the solver.'}</div>
       </div>
 
       <!-- Points table -->
-      <div style="max-height:400px;overflow-y:auto;">
-        <table style="width:100%;border-collapse:collapse;font-size:13px;">
-          <thead style="position:sticky;top:0;background:#fff;">
-            <tr style="border-bottom:2px solid var(--ies-gray-200);">
-              <th style="text-align:left;padding:8px 6px;font-weight:700;">Name</th>
-              <th style="text-align:right;padding:8px 6px;font-weight:700;">Lat</th>
-              <th style="text-align:right;padding:8px 6px;font-weight:700;">Lng</th>
-              <th style="text-align:right;padding:8px 6px;font-weight:700;">Weight</th>
-              <th style="text-align:center;padding:8px 6px;font-weight:700;">Type</th>
-              <th style="text-align:center;padding:8px 6px;"></th>
-            </tr>
-          </thead>
-          <tbody>
-            ${points.map((p, i) => `
-              <tr style="border-bottom:1px solid var(--ies-gray-200);">
-                <td style="padding:6px;font-weight:600;">${p.name || p.id}</td>
-                <td style="padding:6px;text-align:right;">${p.lat.toFixed(2)}</td>
-                <td style="padding:6px;text-align:right;">${p.lng.toFixed(2)}</td>
-                <td style="padding:6px;text-align:right;">${p.weight.toLocaleString()}</td>
-                <td style="padding:6px;text-align:center;">
-                  <span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;
-                    background:${p.type === 'demand' ? '#dbeafe' : p.type === 'supply' ? '#dcfce7' : '#fef3c7'};
-                    color:${p.type === 'demand' ? '#1d4ed8' : p.type === 'supply' ? '#15803d' : '#92400e'};">
-                    ${p.type}
-                  </span>
-                </td>
-                <td style="padding:6px;text-align:center;">
-                  <button class="hub-btn hub-btn-sm hub-btn-secondary" data-pt-del="${i}" style="padding:4px 8px;">✕</button>
-                </td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
+      <div class="hub-card" style="padding:14px 16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <h3 class="text-section" style="margin:0;">Weighted Demand Points</h3>
+          <span style="font-size:12px;color:var(--ies-gray-500);">${points.length} point${points.length === 1 ? '' : 's'}</span>
+        </div>
+        ${points.length === 0 ? `
+          <div style="padding:24px;text-align:center;color:var(--ies-gray-400);font-size:12px;border:1px dashed var(--ies-gray-300);border-radius:6px;">No points yet — use the seeders above to add a few.</div>
+        ` : `
+          <div style="max-height:400px;overflow-y:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+              <thead style="position:sticky;top:0;background:#fff;">
+                <tr style="border-bottom:2px solid var(--ies-gray-200);">
+                  <th style="text-align:left;padding:8px 6px;font-weight:700;">Name</th>
+                  <th style="text-align:right;padding:8px 6px;font-weight:700;">Lat</th>
+                  <th style="text-align:right;padding:8px 6px;font-weight:700;">Lng</th>
+                  <th style="text-align:right;padding:8px 6px;font-weight:700;">Weight</th>
+                  <th style="text-align:center;padding:8px 6px;font-weight:700;">Type</th>
+                  <th style="text-align:center;padding:8px 6px;"></th>
+                </tr>
+              </thead>
+              <tbody>
+                ${points.map((p, i) => `
+                  <tr style="border-bottom:1px solid var(--ies-gray-200);">
+                    <td style="padding:6px;font-weight:600;">${p.name || p.id}</td>
+                    <td style="padding:6px;text-align:right;">${p.lat.toFixed(2)}</td>
+                    <td style="padding:6px;text-align:right;">${p.lng.toFixed(2)}</td>
+                    <td style="padding:6px;text-align:right;">${p.weight.toLocaleString()}</td>
+                    <td style="padding:6px;text-align:center;">
+                      <span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;
+                        background:${p.type === 'demand' ? '#dbeafe' : p.type === 'supply' ? '#dcfce7' : '#fef3c7'};
+                        color:${p.type === 'demand' ? '#1d4ed8' : p.type === 'supply' ? '#15803d' : '#92400e'};">
+                        ${p.type}
+                      </span>
+                    </td>
+                    <td style="padding:6px;text-align:center;">
+                      <button class="hub-btn hub-btn-sm hub-btn-secondary" data-pt-del="${i}" style="padding:4px 8px;">✕</button>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `}
       </div>
 
       <div class="hub-card" style="margin-top:20px;background:linear-gradient(135deg,#0a1628,#0d1f3c);color:#fff;padding:16px 20px;">
@@ -665,112 +652,28 @@ function renderPoints(el) {
     </div>
   `;
 
-  // Bind config inputs
-  el.querySelector('#cog-k')?.addEventListener('change', (e) => {
-    config.numCenters = Math.max(1, Math.min(20, parseInt(/** @type {HTMLInputElement} */ (e.target).value) || 1));
-    markDirty();
-  });
-  el.querySelector('#cog-cpm')?.addEventListener('change', (e) => {
-    config.transportCostPerMile = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 2.85;
-    markDirty();
-  });
-  el.querySelector('#cog-weight-unit')?.addEventListener('change', (e) => {
-    const v = /** @type {HTMLSelectElement} */ (e.target).value || 'lb';
-    config.weightUnit = v;
-    // If user is on a unit's default capacity, re-seed capacity to match the
-    // new unit's default (so labels stay coherent). If they've customized
-    // capacity, leave it alone.
-    const meta = calc.getWeightUnitMeta(v);
-    const cur = config.unitsPerTruck;
-    const wasOnAnyDefault = calc.WEIGHT_UNIT_OPTIONS.some(u => u.defaultCap === cur);
-    if (wasOnAnyDefault) config.unitsPerTruck = meta.defaultCap;
-    markDirty();
-    render();
-  });
-  el.querySelector('#cog-cap')?.addEventListener('change', (e) => {
-    config.unitsPerTruck = Math.max(1, parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 25000);
-    markDirty();
-  });
-  el.querySelector('#cog-iter')?.addEventListener('change', (e) => {
-    config.maxIterations = Math.max(10, Math.min(500, parseInt(/** @type {HTMLInputElement} */ (e.target).value) || 100));
-    markDirty();
-  });
-  el.querySelector('#cog-fixed-cost')?.addEventListener('change', (e) => {
-    config.fixedCostPerDC = Math.max(0, parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0);
-    markDirty();
-  });
-  el.querySelector('#cog-outlier-toggle')?.addEventListener('change', (e) => {
-    config.outlierCapEnabled = /** @type {HTMLInputElement} */ (e.target).checked;
-    markDirty();
-    // Re-render points panel so the percentile input enable-state flips
-    renderPoints(el);
-  });
-  el.querySelector('#cog-outlier-percentile')?.addEventListener('change', (e) => {
-    const v = parseInt(/** @type {HTMLInputElement} */ (e.target).value);
-    config.outlierCapPercentile = Math.max(80, Math.min(99, isFinite(v) ? v : 95));
-    markDirty();
-  });
-
-  // COG-B2 — Snap-to-candidates toggle. When ON, k-means centers get moved to
-  // the nearest candidate facility from the textarea below before reporting.
-  el.querySelector('#cog-snap-toggle')?.addEventListener('change', (e) => {
-    config.snapToCandidates = /** @type {HTMLInputElement} */ (e.target).checked;
-    markDirty();
-    renderPoints(el); // re-render so the textarea enable-state flips
-  });
-  el.querySelector('#cog-candidate-list')?.addEventListener('change', (e) => {
-    const raw = /** @type {HTMLTextAreaElement} */ (e.target).value || '';
-    // Accept "Label, lat, lng" OR "lat, lng" — one per line. Skip blanks/comments.
-    const parsed = [];
-    raw.split(/\r?\n/).forEach(line => {
-      const t = line.trim();
-      if (!t || t.startsWith('#')) return;
-      const parts = t.split(',').map(s => s.trim());
-      let label, lat, lng;
-      if (parts.length >= 3) {
-        label = parts.slice(0, parts.length - 2).join(', ');
-        lat = parseFloat(parts[parts.length - 2]);
-        lng = parseFloat(parts[parts.length - 1]);
-      } else if (parts.length === 2) {
-        lat = parseFloat(parts[0]);
-        lng = parseFloat(parts[1]);
-      }
-      if (Number.isFinite(lat) && Number.isFinite(lng)) {
-        parsed.push({ label: label || `Site ${parsed.length + 1}`, lat, lng });
-      }
-    });
-    config.candidateFacilities = parsed;
-    const fb = el.querySelector('#cog-candidate-feedback');
-    if (fb) {
-      fb.textContent = parsed.length
-        ? `${parsed.length} candidate site(s) loaded`
-        : 'No valid lines parsed — format: Label, Lat, Lng (one per line)';
-    }
-    markDirty();
-  });
-
-  // Delete points
+  // Delete point
   el.querySelectorAll('[data-pt-del]').forEach(btn => {
     btn.addEventListener('click', () => {
       points.splice(parseInt(/** @type {HTMLElement} */ (btn).dataset.ptDel), 1);
       markDirty();
-      renderPoints(el);
+      renderInputsPhase(el);
     });
   });
 
   el.querySelector('#cog-add-point')?.addEventListener('click', () => {
     points.push({ id: 'p' + Date.now(), name: 'New Point', lat: 39.83, lng: -98.58, weight: 10000, type: 'demand' });
     markDirty();
-    renderPoints(el);
+    renderInputsPhase(el);
   });
 
   el.querySelector('#cog-load-demo')?.addEventListener('click', () => {
     points = calc.DEMO_POINTS.map(p => ({ ...p }));
     markDirty();
-    renderPoints(el);
+    renderInputsPhase(el);
   });
 
-  // City/state/ZIP lookup — resolve the input and add a new point at that spot.
+  // City/state/ZIP lookup → resolve and append a point.
   const lookupInput  = /** @type {HTMLInputElement|null} */ (el.querySelector('#cog-lookup-input'));
   const lookupWeight = /** @type {HTMLInputElement|null} */ (el.querySelector('#cog-lookup-weight'));
   const lookupFb     = el.querySelector('#cog-lookup-feedback');
@@ -790,16 +693,9 @@ function renderPoints(el) {
       return;
     }
     const weight = Math.max(1, parseInt(lookupWeight?.value || '10000', 10) || 10000);
-    points.push({
-      id: 'p' + Date.now(),
-      name: hit.name,
-      lat: hit.lat,
-      lng: hit.lng,
-      weight,
-      type: 'demand',
-    });
+    points.push({ id: 'p' + Date.now(), name: hit.name, lat: hit.lat, lng: hit.lng, weight, type: 'demand' });
     markDirty();
-    renderPoints(el);
+    renderInputsPhase(el);
   };
   el.querySelector('#cog-lookup-add')?.addEventListener('click', commitLookup);
   lookupInput?.addEventListener('keydown', (e) => {
@@ -809,14 +705,13 @@ function renderPoints(el) {
     }
   });
 
-  // Archetype selector — show description when picked
+  // Archetype seeder
   const archSelect = /** @type {HTMLSelectElement|null} */ (el.querySelector('#cog-archetype-select'));
   const archDesc = el.querySelector('#cog-archetype-desc');
   const archVolInput = /** @type {HTMLInputElement|null} */ (el.querySelector('#cog-archetype-volume'));
   archSelect?.addEventListener('change', () => {
     const key = archSelect.value;
     const a = calc.COG_ARCHETYPES[key];
-    // 2026-04-21 audit: enable/disable Apply Archetype button based on selection
     const applyBtn = /** @type {HTMLButtonElement|null} */ (el.querySelector('#cog-load-archetype'));
     if (applyBtn) {
       applyBtn.disabled = !key;
@@ -847,9 +742,223 @@ function renderPoints(el) {
     if (points.length > 0 && !confirm(`Replace ${points.length} existing point${points.length === 1 ? '' : 's'} with ${generated.length} archetype-generated points?`)) return;
     points = generated;
     markDirty();
-    renderPoints(el);
+    renderInputsPhase(el);
     showToast(`Loaded ${generated.length} demand points from ${calc.COG_ARCHETYPES[archSelect.value].name}.`, 'ok');
   });
+}
+
+function renderParametersPhase(el) {
+  // 2026-04-27 EVE2 (COG-SCOPE-2/6): Analysis Configuration + Candidate
+  // Facilities cards lifted off the old Demand Points tab. "Number of
+  // Nodes / Facilities" renamed to "Centers (k)".
+  const wmeta = calc.getWeightUnitMeta(config.weightUnit || 'lb');
+  el.innerHTML = `
+    <div style="max-width:900px;">
+      <!-- Analysis Configuration (COG-SCOPE-2 lift) -->
+      <div class="hub-card" style="margin-bottom:20px;padding:16px;border-left:3px solid var(--ies-blue);">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-400);margin-bottom:10px;">Analysis Configuration</div>
+        <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <label style="font-size:13px;font-weight:600;">Centers (k):</label>
+            <input type="number" value="${config.numCenters}" min="1" max="20" id="cog-k"
+                   style="width:70px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:14px;font-weight:700;text-align:center;color:var(--ies-blue);">
+            <span style="font-size:11px;color:var(--ies-gray-400);">How many DC locations to optimize for</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <label style="font-size:13px;font-weight:600;" title="Unit your demand 'weight' values are in. Math doesn't care which unit you pick — capacity below must use the same one. Drives label text everywhere weight appears.">Weight Unit:</label>
+            <select id="cog-weight-unit" style="padding:7px 10px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;">
+              ${calc.WEIGHT_UNIT_OPTIONS.map(u => `<option value="${u.value}"${(config.weightUnit||'lb')===u.value?' selected':''}>${u.label}</option>`).join('')}
+            </select>
+            <span style="font-size:11px;color:var(--ies-gray-400);" title="The Truck $/mi rate is per truck-mile regardless of weight unit. Weight Unit only changes how demand totals are bucketed into truckloads via the capacity below.">Cost rate is per truck-mile · weight unit drives demand → truckloads</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <label style="font-size:13px;font-weight:600;">Truck $/mi:</label>
+            <input type="number" value="${config.transportCostPerMile}" step="0.01" id="cog-cpm"
+                   style="width:80px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
+            <span style="font-size:11px;color:var(--ies-gray-400);">Per-truck rate (e.g. $2.85/mi for 53-ft van)</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <label style="font-size:13px;font-weight:600;">${wmeta.short.charAt(0).toUpperCase()+wmeta.short.slice(1)} / Truck:</label>
+            <input type="number" value="${config.unitsPerTruck || 25000}" step="${wmeta.step}" min="1" id="cog-cap"
+                   style="width:90px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
+            <span style="font-size:11px;color:var(--ies-gray-400);">Avg payload (${wmeta.short}) per truckload</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <label style="font-size:13px;font-weight:600;">Max Iterations:</label>
+            <input type="number" value="${config.maxIterations || 100}" min="10" max="500" step="10" id="cog-iter"
+                   style="width:80px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <label style="font-size:13px;font-weight:600;">Fixed $ / DC / yr:</label>
+            <input type="number" value="${config.fixedCostPerDC || 0}" step="50000" min="0" id="cog-fixed-cost"
+                   title="Annual fully-loaded fixed cost per DC (rent + labor + IT + depreciation). Set to a non-zero value (e.g. $1,500,000) to model a true U-curve on the Sensitivity tab. Leave at 0 for a transport-only curve."
+                   style="width:120px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
+            <span style="font-size:11px;color:var(--ies-gray-400);">0 = transport only · >0 = real U-curve (e.g. $1.5M)</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <label style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="checkbox" id="cog-outlier-toggle" ${config.outlierCapEnabled ? 'checked' : ''}
+                     style="cursor:pointer;">
+              Cap outlier weights at
+            </label>
+            <input type="number" value="${config.outlierCapPercentile || 95}" min="80" max="99" step="1" id="cog-outlier-percentile"
+                   ${config.outlierCapEnabled ? '' : 'disabled'}
+                   title="Winsorize: any point heavier than the Nth-percentile weight is clipped DOWN to that cap before solving."
+                   style="width:60px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;${config.outlierCapEnabled ? '' : 'opacity:0.5;'}">
+            <span style="font-size:11px;color:var(--ies-gray-400);">th percentile · prevents one mega-account from owning the centroid</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Candidate Facilities (COG-B2 — snap k-means centers to a fixed list) -->
+      <div class="hub-card" style="margin-bottom:20px;padding:16px;border-left:3px solid var(--ies-blue-light, #60a5fa);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:12px;flex-wrap:wrap;">
+          <div>
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-400);">Candidate Facilities <span style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--ies-gray-300);">(optional)</span></div>
+            <div style="font-size:11px;color:var(--ies-gray-400);margin-top:2px;">Snap solver centers to a fixed list of available sites (existing GXO buildings, REIT inventory, M&amp;A targets) instead of free lat/lng centroids.</div>
+          </div>
+          <label style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;" title="When ON, k-means runs as usual then each center is moved to the nearest candidate facility from the list below.">
+            <input type="checkbox" id="cog-snap-toggle" ${config.snapToCandidates ? 'checked' : ''} style="cursor:pointer;">
+            Snap solver centers to candidates
+          </label>
+        </div>
+        <textarea id="cog-candidate-list" rows="4"
+                  placeholder="One per line — Label, Lat, Lng &#10;Examples: &#10;ATL DC, 33.7490, -84.3880 &#10;DFW DC, 32.7767, -96.7970 &#10;LAX DC, 33.9425, -118.4081"
+                  style="width:100%;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-family:monospace;line-height:1.5;${config.snapToCandidates ? '' : 'opacity:0.55;'}"
+                  ${config.snapToCandidates ? '' : 'disabled'}>${(config.candidateFacilities || []).map(c => `${c.label || ''}, ${c.lat}, ${c.lng}`).join('\n')}</textarea>
+        <div id="cog-candidate-feedback" style="font-size:11px;color:var(--ies-gray-400);margin-top:4px;">${(config.candidateFacilities || []).length ? `${(config.candidateFacilities || []).length} candidate site(s) loaded` : 'No candidates yet — paste lines above when you want to constrain the solver.'}</div>
+      </div>
+    </div>
+  `;
+
+  // Bind config inputs (lifted from old renderPoints).
+  el.querySelector('#cog-k')?.addEventListener('change', (e) => {
+    config.numCenters = Math.max(1, Math.min(20, parseInt(/** @type {HTMLInputElement} */ (e.target).value) || 1));
+    markDirty();
+  });
+  el.querySelector('#cog-cpm')?.addEventListener('change', (e) => {
+    config.transportCostPerMile = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 2.85;
+    markDirty();
+  });
+  el.querySelector('#cog-weight-unit')?.addEventListener('change', (e) => {
+    const v = /** @type {HTMLSelectElement} */ (e.target).value || 'lb';
+    config.weightUnit = v;
+    const meta = calc.getWeightUnitMeta(v);
+    const cur = config.unitsPerTruck;
+    const wasOnAnyDefault = calc.WEIGHT_UNIT_OPTIONS.some(u => u.defaultCap === cur);
+    if (wasOnAnyDefault) config.unitsPerTruck = meta.defaultCap;
+    markDirty();
+    renderParametersPhase(el);
+  });
+  el.querySelector('#cog-cap')?.addEventListener('change', (e) => {
+    config.unitsPerTruck = Math.max(1, parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 25000);
+    markDirty();
+  });
+  el.querySelector('#cog-iter')?.addEventListener('change', (e) => {
+    config.maxIterations = Math.max(10, Math.min(500, parseInt(/** @type {HTMLInputElement} */ (e.target).value) || 100));
+    markDirty();
+  });
+  el.querySelector('#cog-fixed-cost')?.addEventListener('change', (e) => {
+    config.fixedCostPerDC = Math.max(0, parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0);
+    markDirty();
+  });
+  el.querySelector('#cog-outlier-toggle')?.addEventListener('change', (e) => {
+    config.outlierCapEnabled = /** @type {HTMLInputElement} */ (e.target).checked;
+    markDirty();
+    renderParametersPhase(el);
+  });
+  el.querySelector('#cog-outlier-percentile')?.addEventListener('change', (e) => {
+    const v = parseInt(/** @type {HTMLInputElement} */ (e.target).value);
+    config.outlierCapPercentile = Math.max(80, Math.min(99, isFinite(v) ? v : 95));
+    markDirty();
+  });
+
+  el.querySelector('#cog-snap-toggle')?.addEventListener('change', (e) => {
+    config.snapToCandidates = /** @type {HTMLInputElement} */ (e.target).checked;
+    markDirty();
+    renderParametersPhase(el);
+  });
+  el.querySelector('#cog-candidate-list')?.addEventListener('change', (e) => {
+    const raw = /** @type {HTMLTextAreaElement} */ (e.target).value || '';
+    const parsed = [];
+    raw.split(/\r?\n/).forEach(line => {
+      const t = line.trim();
+      if (!t || t.startsWith('#')) return;
+      const parts = t.split(',').map(s => s.trim());
+      let label, lat, lng;
+      if (parts.length >= 3) {
+        label = parts.slice(0, parts.length - 2).join(', ');
+        lat = parseFloat(parts[parts.length - 2]);
+        lng = parseFloat(parts[parts.length - 1]);
+      } else if (parts.length === 2) {
+        lat = parseFloat(parts[0]);
+        lng = parseFloat(parts[1]);
+      }
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        parsed.push({ label: label || `Site ${parsed.length + 1}`, lat, lng });
+      }
+    });
+    config.candidateFacilities = parsed;
+    const fb = el.querySelector('#cog-candidate-feedback');
+    if (fb) {
+      fb.textContent = parsed.length
+        ? `${parsed.length} candidate site(s) loaded`
+        : 'No valid lines parsed — format: Label, Lat, Lng (one per line)';
+    }
+    markDirty();
+  });
+}
+
+function renderRunPhase(el) {
+  // 2026-04-27 EVE2 (COG-SCOPE-3/4): one phase, three views over a single
+  // solve. Header KPI strip surfaces Recommended k (from sensitivityData)
+  // alongside the existing centers/cost summary.
+  const subTabs = [
+    { key: 'numbers',     label: '📊 Numbers' },
+    { key: 'map',         label: '🗺 Map' },
+    { key: 'sensitivity', label: '📈 Sensitivity' },
+  ];
+  // COG-SCOPE-4: Recommended k tile when sensitivity has a recommendation.
+  let recK = null;
+  if (Array.isArray(sensitivityData) && sensitivityData.length > 0) {
+    // Look for the entry flagged as the recommended elbow / U-curve minimum.
+    const flagged = sensitivityData.find(d => d.isRecommended) || sensitivityData.find(d => d.recommended);
+    if (flagged) recK = flagged.k;
+    else {
+      // Fallback: the entry with the lowest totalCost.
+      const min = sensitivityData.reduce((m, d) => (m == null || (d.totalCost != null && d.totalCost < m.totalCost)) ? d : m, null);
+      if (min) recK = min.k;
+    }
+  }
+
+  el.innerHTML = `
+    <div style="max-width:1100px;">
+      <!-- Sub-tab strip -->
+      <div style="display:flex;gap:0;border-bottom:1px solid var(--ies-gray-200);margin-bottom:18px;">
+        ${subTabs.map(t => `
+          <button class="hub-btn" data-cog-runsub="${t.key}"
+                  style="background:transparent;border:0;border-bottom:2px solid ${t.key === runSubTab ? 'var(--ies-blue)' : 'transparent'};border-radius:0;padding:10px 18px;font-size:13px;font-weight:${t.key === runSubTab ? '700' : '500'};color:${t.key === runSubTab ? 'var(--ies-blue)' : 'var(--ies-gray-600)'};cursor:pointer;">
+            ${t.label}
+          </button>
+        `).join('')}
+      </div>
+
+      ${cogResult && recK != null ? `
+        <div class="hub-card" style="background:linear-gradient(135deg,#f0fdf4,#f0f9ff);border:1px solid #22c55e;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+          <div style="font-size:11px;font-weight:700;letter-spacing:0.4px;color:#059669;text-transform:uppercase;">Recommended k</div>
+          <div style="font-size:22px;font-weight:800;color:#059669;line-height:1;">${recK}</div>
+          <div style="font-size:11px;color:var(--ies-gray-500);flex:1;">Sensitivity ${(Array.isArray(sensitivityData) ? sensitivityData.length : 0)} k tested · click <b>Sensitivity</b> sub-tab for the curve.</div>
+        </div>
+      ` : ''}
+
+      <div id="cog-run-inner"></div>
+    </div>
+  `;
+
+  const inner = el.querySelector('#cog-run-inner');
+  if (runSubTab === 'map')         renderMap(inner);
+  else if (runSubTab === 'sensitivity') renderSensitivity(inner);
+  else                              renderAnalysis(inner);
 }
 
 // ============================================================
