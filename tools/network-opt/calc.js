@@ -1328,7 +1328,119 @@ const CANDIDATE_METROS = [
   { name: 'Harrisburg',   state: 'PA', lat: 40.2732, lng: -76.8867 },
   { name: 'Reno',         state: 'NV', lat: 39.5296, lng: -119.8138 },
   { name: 'Baltimore',    state: 'MD', lat: 39.2904, lng: -76.6122 },
+  { name: 'Allentown',    state: 'PA', lat: 40.6084, lng: -75.4902 },
+  { name: 'Edison',       state: 'NJ', lat: 40.5187, lng: -74.4121 },
+  { name: 'Lehigh Valley',state: 'PA', lat: 40.6259, lng: -75.4686 },
+  { name: 'Cincinnati',   state: 'OH', lat: 39.1031, lng: -84.5120 },
+  { name: 'Detroit',      state: 'MI', lat: 42.3314, lng: -83.0458 },
+  { name: 'Minneapolis',  state: 'MN', lat: 44.9778, lng: -93.2650 },
+  { name: 'Tampa',        state: 'FL', lat: 27.9506, lng: -82.4572 },
+  { name: 'San Antonio',  state: 'TX', lat: 29.4241, lng: -98.4936 },
+  { name: 'Austin',       state: 'TX', lat: 30.2672, lng: -97.7431 },
+  { name: 'Pittsburgh',   state: 'PA', lat: 40.4406, lng: -79.9959 },
+  { name: 'Cleveland',    state: 'OH', lat: 41.4993, lng: -81.6944 },
 ];
+
+/**
+ * 2026-04-27 — Lookup map (city,state → {lat,lng}) for normalizing legacy
+ * facility/demand rows that were saved without lat/lng. Built from
+ * CANDIDATE_METROS at module load. Case-insensitive on city + state.
+ */
+const _CITY_LATLNG = (() => {
+  const map = new Map();
+  for (const m of CANDIDATE_METROS) {
+    const key = `${m.name.toLowerCase()}|${(m.state || '').toLowerCase()}`;
+    map.set(key, { lat: m.lat, lng: m.lng });
+    // Also index by city alone (last write wins) so partial matches resolve
+    map.set(m.name.toLowerCase(), { lat: m.lat, lng: m.lng });
+  }
+  return map;
+})();
+
+/**
+ * Look up lat/lng by city + optional state. Returns null if not in the
+ * candidate metro set. Case-insensitive.
+ * @param {string} city
+ * @param {string} [state]
+ * @returns {{ lat:number, lng:number } | null}
+ */
+export function lookupCityLatLng(city, state) {
+  if (!city) return null;
+  const c = String(city).trim().toLowerCase();
+  if (!c) return null;
+  const s = String(state || '').trim().toLowerCase();
+  return _CITY_LATLNG.get(`${c}|${s}`) || _CITY_LATLNG.get(c) || null;
+}
+
+/**
+ * 2026-04-27 — Normalize a facility loaded from a saved scenario. Maps
+ * legacy field names (active/perUnit/costPerUnit) to current schema
+ * (isOpen/variableCost), and back-fills lat/lng by city/state lookup
+ * when missing. Mutates the input. Returns the same object for chaining.
+ *
+ * Bug-fix context: NetOpt's saved-scenario JSON drift accumulated several
+ * facility shapes over the project's life. Some users loaded scenarios
+ * where facilities lacked lat/lng entirely (no input field on the table
+ * to fix in-app), so Run Scenario errored "Facility X is missing valid
+ * lat/lng coordinates" with no recourse short of re-creating the facility.
+ *
+ * @param {any} f
+ * @returns {any}
+ */
+export function normalizeFacility(f) {
+  if (!f || typeof f !== 'object') return f;
+  // Field-name aliases
+  if (f.isOpen === undefined) {
+    if (typeof f.active === 'boolean') f.isOpen = f.active;
+    else if (f.status === 'Active' || f.status === 'Open') f.isOpen = true;
+    else if (f.status === 'Candidate' || f.status === 'Closed') f.isOpen = false;
+    else f.isOpen = true;
+  }
+  if (f.variableCost === undefined) {
+    if (Number.isFinite(Number(f.perUnit)))     f.variableCost = Number(f.perUnit);
+    else if (Number.isFinite(Number(f.costPerUnit))) f.variableCost = Number(f.costPerUnit);
+    else if (Number.isFinite(Number(f.varCost)))     f.variableCost = Number(f.varCost);
+  }
+  // Back-fill lat/lng by city/state when missing
+  const latN = Number(f.lat), lngN = Number(f.lng);
+  if (!Number.isFinite(latN) || !Number.isFinite(lngN)) {
+    const hit = lookupCityLatLng(f.city, f.state);
+    if (hit) {
+      f.lat = hit.lat;
+      f.lng = hit.lng;
+    }
+  }
+  return f;
+}
+
+/**
+ * 2026-04-27 — Demand counterpart of normalizeFacility. Maps legacy
+ * `volume` → `annualDemand`, back-fills lat/lng by zip3 (no-op if not
+ * resolvable; user can pick the row and re-add) or by city, and ensures
+ * a numeric annualDemand exists.
+ *
+ * @param {any} d
+ * @returns {any}
+ */
+export function normalizeDemand(d) {
+  if (!d || typeof d !== 'object') return d;
+  if (d.annualDemand === undefined) {
+    if (Number.isFinite(Number(d.volume))) d.annualDemand = Number(d.volume);
+    else if (Number.isFinite(Number(d.demand))) d.annualDemand = Number(d.demand);
+  }
+  // Treat the rare 'zip' alias as zip3
+  if (!d.zip3 && d.zip) d.zip3 = d.zip;
+  // Back-fill lat/lng from city if available (rare in demand rows but cheap)
+  const latN = Number(d.lat), lngN = Number(d.lng);
+  if (!Number.isFinite(latN) || !Number.isFinite(lngN)) {
+    if (d.city) {
+      const hit = lookupCityLatLng(d.city, d.state);
+      if (hit) { d.lat = hit.lat; d.lng = hit.lng; }
+    }
+  }
+  return d;
+}
+
 
 /**
  * Find the nearest candidate metro to a lat/lng point.

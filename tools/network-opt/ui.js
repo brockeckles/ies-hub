@@ -15,7 +15,7 @@ import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadXLSX } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260418-sM';
-import * as calc from './calc.js?v=20260426-s13';
+import * as calc from './calc.js?v=20260427-s14';
 import * as api from './api.js?v=20260426-s13';
 import { createChart } from '../../shared/cdn-wrappers/chart-wrapper.js?v=20260418-sK';
 
@@ -247,8 +247,13 @@ function openEditor(savedRow) {
   // via the "Load Sample Network" button on the Facilities section so users
   // can still reach it intentionally. Prior behavior auto-loaded 5 DCs + 10
   // demand points on every "New Config".
-  facilities = (d.facilities && d.facilities.length) ? d.facilities.map(f => ({ ...f })) : [];
-  demands = (d.demands && d.demands.length) ? d.demands.map(x => ({ ...x })) : [];
+  // 2026-04-27 — Normalize on load. Saved scenarios accumulated several
+  // shape variants over time (active/perUnit instead of isOpen/variableCost,
+  // facilities saved without lat/lng, demands saved as `volume` not
+  // `annualDemand`). normalizeFacility/normalizeDemand back-fill those so
+  // legacy rows stop tripping the Run validator.
+  facilities = (d.facilities && d.facilities.length) ? d.facilities.map(f => calc.normalizeFacility({ ...f })) : [];
+  demands = (d.demands && d.demands.length) ? d.demands.map(x => calc.normalizeDemand({ ...x })) : [];
   modeMix = d.modeMix || { tlPct: 30, ltlPct: 40, parcelPct: 30 };
   rateCard = d.rateCard || { ...calc.DEFAULT_RATES };
   serviceConfig = d.serviceConfig || { ...calc.DEFAULT_SERVICE };
@@ -1305,9 +1310,9 @@ function renderDemand(el) {
             ${demands.map((d, i) => `
               <tr style="border-bottom:1px solid var(--ies-gray-200);">
                 <td style="padding:6px;font-weight:600;">${d.zip3 || '—'}</td>
-                <td style="padding:6px;text-align:right;">${d.lat.toFixed(2)}</td>
-                <td style="padding:6px;text-align:right;">${d.lng.toFixed(2)}</td>
-                <td style="padding:6px;text-align:right;">${d.annualDemand.toLocaleString()}</td>
+                <td style="padding:6px;text-align:right;">${Number.isFinite(Number(d.lat)) ? Number(d.lat).toFixed(2) : '<span style="color:#dc2626;" title="Missing — re-add this row or set the city to auto-resolve">—</span>'}</td>
+                <td style="padding:6px;text-align:right;">${Number.isFinite(Number(d.lng)) ? Number(d.lng).toFixed(2) : '<span style="color:#dc2626;" title="Missing — re-add this row or set the city to auto-resolve">—</span>'}</td>
+                <td style="padding:6px;text-align:right;">${Number.isFinite(Number(d.annualDemand)) ? Number(d.annualDemand).toLocaleString() : '0'}</td>
                 <td style="padding:6px;text-align:right;">${d.maxDays || 3}</td>
                 <td style="padding:6px;text-align:right;">${d.avgWeight || 25}</td>
                 <td style="padding:6px;text-align:right;">
