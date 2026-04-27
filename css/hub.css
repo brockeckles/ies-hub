@@ -3286,6 +3286,19 @@ textarea.hub-input {
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 .cm-card + .cm-card { margin-top: 12px; }
+/* 2026-04-27 AM9 — negate the vertical-stacking margin when .cm-card pairs
+   sit side-by-side inside a grid row. The +adjacent-sibling rule above is
+   meant for vertically-stacked cards on the same page; in a 2-column grid
+   it adds a 12px push to the SECOND card that ends up shrinking its
+   effective height (cards stretch to row height; the margin eats from
+   that envelope), producing visibly mismatched card heights. Brock spotted
+   this on Implementation's Volume Ramp + Headcount Ramp pair (12px gap). */
+[style*="grid-template-columns:1fr 1fr"] > .cm-card + .cm-card,
+[style*="grid-template-columns: 1fr 1fr"] > .cm-card + .cm-card,
+[style*="grid-template-columns:repeat(2"] > .cm-card + .cm-card,
+[style*="grid-template-columns: repeat(2"] > .cm-card + .cm-card {
+  margin-top: 0;
+}
 .cm-card > h3:first-child {
   margin: 0 0 14px;
   font-size: 12px;
