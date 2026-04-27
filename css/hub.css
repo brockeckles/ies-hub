@@ -3486,19 +3486,38 @@ textarea.hub-input {
   position: sticky;
   top: 0;
   z-index: 5;
-  /* Sit in the same column as section content. The prior edge-to-edge
-     framing put the bar's left edge 24px farther left than the page-name
-     header below ("Project Setup") and the form fields underneath, which
-     read as a column-misalignment break. Now the bar's left/right edges
-     line up with form content; only the BACKDROP behind it (the strip's
-     small breathing zone above + below) extends edge-to-edge so the
-     pinned-overlay relationship still reads on scroll. */
-  margin: 0 0 var(--sp-6);
-  padding: 0;
+  /* Match the form column below it. .hub-builder-form (the section
+     wrapper) caps at var(--form-max-width); without the same cap, the
+     bar's right edge ran far past 'Project Name'/'Client Name' inputs,
+     which read as a tabbed indent on the form vs. a wider header. */
+  max-width: var(--form-max-width);
+  /* Claw back .hub-builder-content's top padding (var(--sp-6) = 24px)
+     so the host's own backdrop covers the gutter ABOVE the bar — without
+     this, scrolled section content (e.g. 'Shift Structure' on Labor
+     Factors) was visible behind/above the navy bar as it scrolled past. */
+  margin: calc(var(--sp-6) * -1) 0 var(--sp-6);
+  padding: var(--sp-6) 0 0;
+  /* Solid white backdrop so scrolled content is fully obscured under
+     the navy bar and through the gutter zone above. */
+  background: #fff;
 }
 .cm-header-kpis:empty {
   display: none;
   margin: 0;
+  padding: 0;
+  background: transparent;
+}
+/* Wide-layout sections opt the FORM into var(--content-max-width); the
+   KPI bar should follow so it stays edge-aligned with the form below.
+   Mirror the same opt-in selectors used on .hub-builder-form. */
+.hub-builder-content:has(.hub-master-detail) .cm-header-kpis,
+.hub-builder-content:has(.cm-wide-layout) .cm-header-kpis,
+.hub-builder-content:has(.cm-table-scroll) .cm-header-kpis,
+.hub-builder-content:has(.cm-timeline-monthly-scroll) .cm-header-kpis,
+.hub-builder-content:has(.cm-mlv-card) .cm-header-kpis,
+.hub-builder-content:has(.cm-season-grid) .cm-header-kpis,
+.hub-builder-content:has(.cm-fin-grid) .cm-header-kpis {
+  max-width: var(--content-max-width);
 }
 .cm-header-kpis .hub-kpi-bar {
   /* More vertical breathing room — labels/values had nowhere to sit
