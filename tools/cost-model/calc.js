@@ -2742,6 +2742,30 @@ export function formatPct(value, decimals = 1) {
   return value.toFixed(decimals) + '%';
 }
 
+/**
+ * Format a plain number with thousands separators (en-US locale).
+ * Use this for read-only numeric displays that aren't currency or percent —
+ * e.g. headcount, square footage, hours, units, throughput. NOT for input
+ * values (HTML <input type="number"> won't accept comma-separated text).
+ *
+ * 2026-04-27 AM10 — added during the Phase 1 thousands-separator sweep
+ * (Brock walkthrough: "some use it, while others don't"). Architectural
+ * note: formatting helpers belong in the UI layer, not calc; they're here
+ * for the moment because formatCurrency/formatPct already lived here. A
+ * future Phase 2 should hoist the trio out to shared/format.js.
+ *
+ * @param {number} value — raw number
+ * @param {number} [decimals=0] — fractional digits
+ * @returns {string} '7,323,691' or '134.2', etc. NaN/null/undefined → '—'
+ */
+export function formatNumber(value, decimals = 0) {
+  if (value == null || !Number.isFinite(value)) return '—';
+  return value.toLocaleString('en-US', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+}
+
 // ============================================================
 // AUTO-GENERATION — INDIRECT LABOR
 // ============================================================
