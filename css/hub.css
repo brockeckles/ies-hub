@@ -3640,13 +3640,49 @@ textarea.hub-input {
 
 /* The original `.cm-section-header` (page name + description text inside
    the form) is the SOURCE OF TRUTH for the title/desc text — `refreshHeaderKpis`
-   reads it and re-renders it inside the navy bar. Hide the original so it
-   doesn't appear twice. Cashflow & P&L renders its h2 inside `.cm-timeline-meta`
-   (with a useful months-count hint sibling — only the title hides), and
-   Shift Planning lives in an external module with its own `.sp-header` card. */
-#cm-section-content .cm-section-header,
+   reads it and re-renders it inside the navy bar.
+   
+   2026-04-27 AM6 fix: hide ONLY the title + description elements, NOT the
+   entire `.cm-section-header` — six sections (Facility, Pricing Schedule,
+   Summary, Linked Designs, Assumptions, Planning Ratios) embed action
+   buttons ("Size with Calculator →", scenario compare, export, refresh,
+   reset, etc.) directly inside the header element. Hiding the whole
+   thing nukes those buttons. Brock walkthrough caught the WSC link
+   regression on Facility — same class of bug as the AM3 selector
+   over-broadening.
+   
+   Strategy: hide title-bearing nodes (title, desc, intro wrappers, raw
+   h1/h2/h3, .cm-subtle) and strip the chrome from the host header so it
+   reads as a clean actions strip. If no buttons remain, the empty header
+   collapses via the :has() guard at the bottom. */
+#cm-section-content .cm-section-header .cm-section-title,
+#cm-section-content .cm-section-header .cm-section-desc,
+#cm-section-content .cm-section-header > h1,
+#cm-section-content .cm-section-header > h2,
+#cm-section-content .cm-section-header > h3,
+#cm-section-content .cm-section-header > p,
+#cm-section-content .cm-section-header > .cm-subtle,
+#cm-section-content .cm-section-header__intro,
+#cm-section-content .cm-section-header > div:has(> .cm-section-title),
+#cm-section-content .cm-section-header > div:has(> h2),
 #cm-section-content .cm-timeline-meta__title,
 #cm-section-content .sp-header {
+  display: none;
+}
+/* Strip the chrome — what remains is an actions row (or nothing).
+   Right-align so action buttons hug the right edge consistently. */
+#cm-section-content .cm-section-header {
+  border-bottom: none;
+  padding: 0;
+  margin: 0 0 12px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+/* Collapse the header entirely when it has no actionable children left
+   (most sections have just title+desc, nothing else). */
+#cm-section-content .cm-section-header:not(:has(button)):not(:has(a.hub-btn)):not(:has(.hub-btn)):not(:has(.hub-btn-primary)) {
   display: none;
 }
 
