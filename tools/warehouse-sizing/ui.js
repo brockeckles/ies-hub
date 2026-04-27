@@ -486,7 +486,10 @@ function renderConfigPanel() {
     <div style="padding:12px 16px; border-bottom:1px solid var(--ies-gray-200);">
       <div class="text-subtitle" style="margin-bottom:8px;">Warehouse Sizing</div>
       <div class="flex gap-2" style="flex-wrap:wrap;">
-        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="wsc-back" title="Back to saved scenarios">← Scenarios</button>
+        <!-- 2026-04-27 EVE: removed redundant ← Scenarios button — tool-frame.js
+             already renders one in the top header strip. The local one in this
+             toolbar created two stacked buttons (top one was unwired, since
+             the click handler was scoped to #wsc-config). -->
         <button class="hub-btn hub-btn-primary hub-btn-sm" data-action="wsc-save">Save</button>
         <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="wsc-new">New</button>
         <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="wsc-copy-summary" title="Copy summary to clipboard">Copy</button>
@@ -1010,7 +1013,12 @@ function bindConfigEvents(panel) {
     renderContentView();
   });
 
-  panel.querySelector('[data-action="wsc-back"]')?.addEventListener('click', async () => {
+  // 2026-04-27 EVE: wsc-back delegated on rootEl. The button now lives in
+  // tool-frame.js's top header strip (outside #wsc-config), so a panel-scoped
+  // listener never fired. Delegated on root so any data-action="wsc-back"
+  // click — wherever it lives in the tool DOM — routes here.
+  rootEl?.addEventListener('click', async (e) => {
+    if (!(/** @type {HTMLElement} */ (e.target))?.closest?.('[data-action="wsc-back"]')) return;
     if (isDirty && !confirm('Unsaved changes. Leave for the scenarios list?')) return;
     isDirty = false;
     viewMode = 'landing';

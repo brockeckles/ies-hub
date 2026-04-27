@@ -374,8 +374,55 @@ export function unmount() {
 // SHELL
 // ============================================================
 
+// ============================================================
+// PHASE STATE (2026-04-27 EVE — stepper-driven wizard redesign)
+// ============================================================
+// The shell collapsed THREE redundant nav surfaces (top tab strip + chip
+// strip + sidebar) into ONE primary nav: a horizontal phase stepper.
+// activeView and activeSection are kept as the underlying state — the
+// phase stepper just maps clicks to (view, section) tuples.
+//
+// Phase mapping:
+//   inputs     → activeView 'setup' + activeSection 'demand' | 'facilities'
+//   parameters → activeView 'setup' + activeSection 'modemix' | 'service'
+//   run        → activeView 'results' (map + KPIs + table on one canvas)
+//   compare    → activeView 'comparison'
+//
+// Existing call sites that set activeView/activeSection directly keep
+// working — the derived phase auto-follows.
+/** @returns {'inputs'|'parameters'|'run'|'compare'} */
+function currentPhase() {
+  if (activeView === 'comparison') return 'compare';
+  if (activeView === 'results' || activeView === 'map') return 'run';
+  // Setup view splits into Inputs vs Parameters by section.
+  if (activeSection === 'modemix' || activeSection === 'service') return 'parameters';
+  return 'inputs';
+}
+/** Set the phase and seed activeView/activeSection appropriately. */
+function setPhase(phase) {
+  switch (phase) {
+    case 'inputs':
+      activeView = 'setup';
+      if (activeSection !== 'demand' && activeSection !== 'facilities') {
+        activeSection = (demands.length === 0) ? 'demand' : 'facilities';
+      }
+      break;
+    case 'parameters':
+      activeView = 'setup';
+      if (activeSection !== 'modemix' && activeSection !== 'service') {
+        activeSection = 'modemix';
+      }
+      break;
+    case 'run':
+      activeView = 'results';
+      break;
+    case 'compare':
+      activeView = 'comparison';
+      break;
+  }
+}
+
 function renderShell() {
-  const tabs = ['setup', 'map', 'results', 'comparison'].map(v => ({ key: v, label: viewLabel(v) }));
   const chips = [
     // P2-2 tri-state: Draft (no DB row) / Modified (DB row but dirty) / Saved (DB row, clean).
     {
@@ -393,12 +440,15 @@ function renderShell() {
         toolName: 'Network Optimizer',
         toolKey: 'netopt',
         backAction: 'netopt-back',
-        tabs,
-        activeTab: activeView,
-        tabsId: 'no-view-tabs',
+        // 2026-04-27 EVE: top tab strip removed — the phase stepper below is
+        // now the SINGLE primary nav. Tabs (setup/map/results/comparison)
+        // were redundant with stepper phases (inputs/parameters/run/compare).
         statusChips: chips,
         // I-05 — Save button always visible so work persists across tab closes.
+        // 2026-04-27 EVE — Export and Clear lifted from sidebar utilities.
         secondaryActions: [
+          { label: '📥 Export', action: 'export-csv', title: 'Export scenarios to XLSX' },
+          { label: '🗑 Clear',  action: 'clear-scenarios', title: 'Clear all run scenarios' },
           { label: isDirty ? (activeConfigId ? '💾 Save' : '💾 Save Scenario') : (activeConfigId ? '✓ Saved' : '💾 Save Scenario'),
             action: 'netopt-save',
             primary: isDirty,
@@ -415,18 +465,17 @@ function renderShell() {
         },
       })}
 
-      <!-- P1 #6 — process-flow chip strip (Setup -> Optimize -> Run -> Compare). Populated by renderProcessFlow(). -->
-      <div id="no-process-flow" style="margin-top:8px;"></div>
+      <!-- 2026-04-27 EVE: phase stepper is the SINGLE primary nav surface.
+           Renders into #no-process-flow (kept for compat with existing
+           renderProcessFlow); now styled bigger / bolder per Option B. -->
+      <div id="no-process-flow"></div>
 
-      <!-- Main area: sidebar + content -->
+      <!-- Main area: full-bleed content (sidebar removed). -->
       <div style="display:flex;flex:1;overflow:hidden;">
-        <!-- Sidebar -->
-        <div id="no-sidebar" style="width:232px;flex-shrink:0;border-right:1px solid var(--ies-gray-200);padding:14px 12px;overflow-y:auto;">
-        </div>
-        <!-- Content -->
-        <div id="no-content" style="flex:1;overflow-y:auto;padding:24px;">
+        <div id="no-content" style="flex:1;overflow-y:auto;padding:0;">
         </div>
       </div>
+      <input type="file" id="netopt-csv-upload" accept=".csv,text/csv" style="display:none;"/>
     </div>
   `;
 }
@@ -439,22 +488,14 @@ function viewLabel(v) {
 function bindShellEvents() {
   if (!rootEl) return;
 
-  // View tabs (now [data-tab] from shared tool-frame)
-  rootEl.querySelector('#no-view-tabs')?.addEventListener('click', (e) => {
-    const btn = /** @type {HTMLElement} */ (e.target).closest('[data-tab]');
-    if (!btn) return;
-    activeView = /** @type {any} */ (btn.dataset.tab);
-    rootEl.querySelectorAll('#no-view-tabs button').forEach(b => {
-      b.classList.toggle('active', b.dataset.tab === activeView);
-    });
-    renderContentView();
-  });
+  // 2026-04-27 EVE: top tab strip removed (Option B redesign) — phase
+  // stepper below is the single primary nav. View-tabs handler obsolete.
 
-  // Header primary action proxies to the existing sidebar Run button so we keep one code path.
+  // Header primary action — direct call (no sidebar Run button to proxy through).
   const headerRun = rootEl.querySelector('[data-primary-action="netopt-run"]');
   headerRun?.addEventListener('click', () => {
-    const sidebarRun = rootEl.querySelector('[data-action="run"]');
-    if (sidebarRun) /** @type {HTMLButtonElement} */ (sidebarRun).click();
+    runScenario();
+    markDirty();
     flashRunButton(headerRun);
   });
   bindPrimaryActionShortcut(rootEl, 'netopt-run');
@@ -462,22 +503,23 @@ function bindShellEvents() {
   // I-05 — Save button (in the header secondaryActions rail).
   rootEl.querySelector('[data-action="netopt-save"]')?.addEventListener('click', handleSaveNetopt);
 
-  // Sidebar clicks
-  rootEl.querySelector('#no-sidebar')?.addEventListener('click', (e) => {
-    const item = /** @type {HTMLElement} */ (e.target).closest('[data-section]');
-    if (!item) return;
-    activeSection = /** @type {any} */ (item.dataset.section);
-    renderSidebar();
-    if (activeView === 'setup') renderContentView();
+  // Header secondaryActions: Export + Clear (lifted from sidebar utilities).
+  rootEl.querySelector('[data-action="export-csv"]')?.addEventListener('click', exportToCSV);
+  rootEl.querySelector('[data-action="clear-scenarios"]')?.addEventListener('click', () => {
+    scenarios = []; activeScenario = null; comparisonResults = null;
+    markDirty(); renderContentView();
   });
 
-  // P1 #6 — process-flow chip clicks. Each chip jumps to the canonical view+section
-  // for that phase. The phase chip strip is purely a navigation-and-status surface;
-  // the content tabs (no-view-tabs) and sidebar sections both still work.
+  // CSV rate card upload (the file input lives at shell level so it survives phase re-renders).
+  rootEl.querySelector('#netopt-csv-upload')?.addEventListener('change', handleCsvUpload);
+
+  // Phase stepper — single primary nav. Each chip jumps to the canonical
+  // (view, section) tuple for that phase via setPhase().
   rootEl.querySelector('#no-process-flow')?.addEventListener('click', (e) => {
     const chip = /** @type {HTMLElement} */ (e.target).closest('[data-phase]');
     if (!chip) return;
     jumpToPhase(/** @type {any} */ (chip.dataset.phase));
+    renderContentView();
   });
 }
 
@@ -509,44 +551,49 @@ function phaseStatus() {
 }
 
 function renderProcessFlow() {
+  // 2026-04-27 EVE: this is now the SINGLE primary nav surface (Option B
+  // stepper-driven wizard). Bigger circles, larger type, and the active
+  // phase reads off currentPhase() so the stepper stays in sync when
+  // any other code path nudges activeView/activeSection.
   const el = rootEl?.querySelector('#no-process-flow');
   if (!el) return;
   const s = phaseStatus();
+  const active = currentPhase();
   const phases = [
-    { key: 'setup',    num: 1, label: 'Setup',    sub: 'Demand + facilities' },
-    { key: 'optimize', num: 2, label: 'Optimize', sub: 'Find candidates · balance' },
-    { key: 'run',      num: 3, label: 'Run',      sub: 'Compute cost + service' },
-    { key: 'compare',  num: 4, label: 'Compare',  sub: 'k-sweep + sensitivity' },
+    { key: 'inputs',     num: 1, label: 'Inputs',     sub: 'Demand & facilities',          statusKey: 'setup'    },
+    { key: 'parameters', num: 2, label: 'Parameters', sub: 'Modes, service, tools',         statusKey: 'optimize' },
+    { key: 'run',        num: 3, label: 'Run',        sub: 'Map, KPIs, results',            statusKey: 'run'      },
+    { key: 'compare',    num: 4, label: 'Compare',    sub: 'k-sweep & sensitivity',         statusKey: 'compare'  },
   ];
-  // Pending: gray. Active: solid blue. Complete: green check.
-  const styleFor = (status) => {
-    if (status === 'complete') return { circleBg: 'var(--ies-green, #047857)', label: 'var(--ies-green, #047857)', circleFg: '#fff', icon: '✓' };
-    if (status === 'active')   return { circleBg: 'var(--ies-blue)',           label: 'var(--ies-blue)',           circleFg: '#fff', icon: null };
-    return                              { circleBg: 'var(--ies-gray-300)',     label: 'var(--ies-gray-500)',       circleFg: '#fff', icon: null };
+  const styleFor = (phaseKey, status) => {
+    if (phaseKey === active) return { circleBg: 'var(--ies-blue)', circleFg: '#fff', label: 'var(--ies-blue)', icon: null, ring: true };
+    if (status === 'complete') return { circleBg: 'var(--ies-green, #047857)', circleFg: '#fff', label: 'var(--ies-green, #047857)', icon: '✓', ring: false };
+    return { circleBg: 'var(--ies-gray-200)', circleFg: 'var(--ies-gray-600)', label: 'var(--ies-gray-600)', icon: null, ring: false };
   };
   el.innerHTML = `
-    <div style="display:flex;align-items:stretch;gap:0;padding:8px 14px 10px 14px;background:var(--ies-gray-50, #f9fafb);border-bottom:1px solid var(--ies-gray-200);">
+    <div style="display:flex;align-items:stretch;gap:0;padding:14px 24px 14px 24px;background:#fff;border-bottom:1px solid var(--ies-gray-200);box-shadow:0 1px 0 rgba(0,0,0,0.02);">
       ${phases.map((p, idx) => {
-        const status = s[p.key];
-        const c = styleFor(status);
+        const status = s[p.statusKey];
+        const c = styleFor(p.key, status);
         const display = c.icon || String(p.num);
+        const isActive = (p.key === active);
         return `
           <div data-phase="${p.key}"
                role="button" tabindex="0"
-               style="flex:1;display:flex;align-items:center;gap:9px;cursor:pointer;padding:5px 8px;border-radius:6px;min-width:0;transition:background .15s;"
-               onmouseover="this.style.background='var(--ies-gray-100)'"
-               onmouseout="this.style.background='transparent'"
-               title="Jump to ${p.label} (status: ${status})">
-            <div style="width:26px;height:26px;border-radius:50%;background:${c.circleBg};color:${c.circleFg};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0;">
+               style="flex:1;display:flex;align-items:center;gap:12px;cursor:pointer;padding:8px 12px;border-radius:8px;min-width:0;transition:background .15s;${isActive ? 'background:var(--ies-blue-50, #eff6ff);' : ''}"
+               onmouseover="this.style.background='${isActive ? 'var(--ies-blue-50, #eff6ff)' : 'var(--ies-gray-50, #f9fafb)'}'"
+               onmouseout="this.style.background='${isActive ? 'var(--ies-blue-50, #eff6ff)' : 'transparent'}'"
+               title="Jump to ${p.label}">
+            <div style="width:34px;height:34px;border-radius:50%;background:${c.circleBg};color:${c.circleFg};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;flex-shrink:0;${c.ring ? 'box-shadow:0 0 0 3px var(--ies-blue-100, #dbeafe);' : ''}">
               ${display}
             </div>
-            <div style="display:flex;flex-direction:column;line-height:1.2;min-width:0;">
-              <span style="font-size:12px;font-weight:700;color:${c.label};">${p.label}</span>
-              <span style="font-size:10px;color:var(--ies-gray-500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.sub}</span>
+            <div style="display:flex;flex-direction:column;line-height:1.25;min-width:0;">
+              <span style="font-size:14px;font-weight:700;color:${c.label};letter-spacing:0.2px;">${p.label}</span>
+              <span style="font-size:11px;color:var(--ies-gray-500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.sub}</span>
             </div>
           </div>
           ${idx < phases.length - 1 ? `
-            <div style="display:flex;align-items:center;color:var(--ies-gray-300);font-size:13px;padding:0 2px;flex-shrink:0;">▶</div>
+            <div style="display:flex;align-items:center;color:var(--ies-gray-300);font-size:18px;padding:0 6px;flex-shrink:0;">›</div>
           ` : ''}
         `;
       }).join('')}
@@ -554,28 +601,15 @@ function renderProcessFlow() {
   `;
 }
 
-/** @param {'setup'|'optimize'|'run'|'compare'} phase */
+/** @param {'inputs'|'parameters'|'run'|'compare'} phase */
 function jumpToPhase(phase) {
+  setPhase(phase);
   switch (phase) {
-    case 'setup':
-      activeView = 'setup';
-      // If demand isn't loaded yet, that's the natural starting point.
-      activeSection = (demands.length === 0) ? 'demand' : 'facilities';
-      break;
-    case 'optimize':
-      activeView = 'setup';
-      activeSection = 'modemix';
-      // Surface the OPTIMIZE block in the sidebar.
-      setTimeout(() => {
-        rootEl?.querySelector('#no-sidebar [data-phase-block="optimize"]')
-              ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 60);
-      break;
+    case 'inputs':
+    case 'parameters':
     case 'run':
-      activeView = 'results';
-      break;
     case 'compare':
-      activeView = 'comparison';
+      // setPhase already aligned activeView/activeSection.
       break;
   }
   // Sync the tool-frame view-tab buttons.
@@ -591,6 +625,15 @@ function jumpToPhase(phase) {
 // ============================================================
 
 function renderSidebar() {
+  // 2026-04-27 EVE: sidebar removed from shell (Option B redesign). All
+  // former sidebar contents — sections, archetype seeds, action buttons,
+  // Max DCs input, utilities — were lifted into the phase content areas
+  // (renderInputsPhase / renderParametersPhase / renderRunPhase) or to
+  // the header secondaryActions rail (Export, Clear). This function is
+  // kept as a no-op for compat with existing call sites; bindShellEvents
+  // / renderProcessFlow do all the wiring now.
+  return;
+  // eslint-disable-next-line no-unreachable
   const el = rootEl?.querySelector('#no-sidebar');
   if (!el) return;
 
@@ -864,7 +907,7 @@ function applyArchetype(key) {
  */
 function findOptimalLocations() {
   if (demands.length === 0) {
-    alert('Add demand points first. The optimizer needs demand to cluster against.\n\nTip: pick an Archetype in the sidebar to seed a demo demand set.');
+    alert('Add demand points first. The optimizer needs demand to cluster against.\n\nTip: pick an industry preset from the Quick-seed bar above the Demand table to load a demo demand set.');
     return;
   }
   const k = Math.max(1, Math.min(maxDCsToTest || 3, 8));
@@ -1151,19 +1194,185 @@ function exportToCSV() {
 function renderContentView() {
   const el = rootEl?.querySelector('#no-content');
   if (!el) return;
-
-  switch (activeView) {
-    case 'setup': renderSetup(el); break;
-    case 'map': renderMap(el); break;
-    case 'results': renderResults(el); break;
-    case 'comparison': renderComparison(el); break;
+  // 2026-04-27 EVE: phase-driven dispatcher (Option B stepper redesign).
+  const phase = currentPhase();
+  switch (phase) {
+    case 'inputs':     renderInputsPhase(el);     break;
+    case 'parameters': renderParametersPhase(el); break;
+    case 'run':        renderRunPhase(el);        break;
+    case 'compare':    renderComparePhase(el);    break;
   }
+  renderProcessFlow();
 }
 
 // ============================================================
-// SETUP VIEW
+// SUB-TAB / TOOLS HELPERS (2026-04-27 EVE — stepper redesign)
 // ============================================================
+/** Inline sub-tab strip used inside Inputs / Parameters / Run phases. */
+function renderSubTabStrip(items, activeKey, dataAttr = 'section') {
+  return `
+    <div style="display:flex;gap:0;border-bottom:1px solid var(--ies-gray-200);margin-bottom:0;">
+      ${items.map(it => `
+        <button class="hub-btn" data-${dataAttr}="${it.key}"
+                style="background:transparent;border:0;border-bottom:2px solid ${it.key === activeKey ? 'var(--ies-blue)' : 'transparent'};border-radius:0;padding:10px 18px;font-size:13px;font-weight:${it.key === activeKey ? '700' : '500'};color:${it.key === activeKey ? 'var(--ies-blue)' : 'var(--ies-gray-600)'};cursor:pointer;">
+          ${it.label}${it.count != null ? ` <span style="opacity:0.65;font-weight:600;">${it.count}</span>` : ''}
+        </button>
+      `).join('')}
+    </div>`;
+}
 
+/** Quick-seed archetype bar shown above the Inputs phase content. */
+function renderArchetypeSeedBar() {
+  return `
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--ies-gray-50,#f9fafb);border:1px solid var(--ies-gray-200);border-radius:8px;margin-top:14px;flex-wrap:wrap;">
+      <span style="font-size:11px;font-weight:700;letter-spacing:0.4px;color:var(--ies-gray-500);text-transform:uppercase;">Quick-seed</span>
+      ${calc.listArchetypes().map(a => `
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-archetype="${a.key}"
+                style="font-size:11px;padding:4px 10px;${selectedArchetype === a.key ? 'border-color:var(--ies-blue);color:var(--ies-blue);' : ''}"
+                title="${a.description || a.name}">${a.name}</button>
+      `).join('')}
+    </div>`;
+}
+
+/** Tools panel shown in the right column of the Parameters phase. */
+function renderToolsPanel() {
+  return `
+    <div class="hub-card" style="padding:14px;align-self:start;position:sticky;top:14px;">
+      <div style="font-size:11px;font-weight:700;letter-spacing:0.4px;color:var(--ies-gray-500);margin-bottom:10px;text-transform:uppercase;">Tools</div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="find-optimal" style="text-align:left;font-size:12px;padding:6px 10px;" title="Weighted k-means on your demand → recommended DC metros. Adds candidate facilities to the list without opening them.">🎯 Find Optimal Locations</button>
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="balance-mode-mix" style="text-align:left;font-size:12px;padding:6px 10px;" title="Auto-balance TL/LTL/Parcel mix to match average demand weight">⚖ Balance Mode Mix</button>
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="apply-market-rates" style="text-align:left;font-size:12px;padding:6px 10px;" title="Pull latest spot/contract rates from market data and apply to rate card">💲 Apply Market Rates</button>
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="upload-rates-csv" style="text-align:left;font-size:12px;padding:6px 10px;">📤 Upload Rate Card CSV</button>
+        <button class="hub-btn hub-btn-sm hub-btn-primary"   data-action="optimize-network" style="text-align:left;font-size:12px;padding:6px 10px;" title="Sweeps k from 1 to Max DCs and picks the best subset of candidates for each. Auto-uses exhaustive search when combinations ≤ 10,000.">🎯 Optimize Network (k-sweep)</button>
+      </div>
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--ies-gray-200);">
+        <label style="display:block;font-size:10px;font-weight:700;letter-spacing:0.3px;color:var(--ies-gray-500);margin-bottom:6px;text-transform:uppercase;">Max DCs to test</label>
+        <input type="number" id="netopt-max-dcs" min="1" max="20" value="${maxDCsToTest}" style="width:100%;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:12px;"/>
+      </div>
+    </div>`;
+}
+
+// ============================================================
+// PHASE RENDERERS (2026-04-27 EVE)
+// ============================================================
+function renderInputsPhase(el) {
+  // Default to demand if section isn't an Inputs section.
+  if (activeSection !== 'demand' && activeSection !== 'facilities') activeSection = 'demand';
+  const subTabs = renderSubTabStrip([
+    { key: 'demand',     label: '📍 Demand Points', count: demands.length },
+    { key: 'facilities', label: '🏭 Facilities',   count: `${facilities.filter(f => f.isOpen).length}/${facilities.length}` },
+  ], activeSection, 'section');
+  el.innerHTML = `
+    <div style="padding:18px 24px 24px;">
+      ${subTabs}
+      ${activeSection === 'demand' ? renderArchetypeSeedBar() : ''}
+      <div id="np-phase-inner" style="margin-top:18px;"></div>
+    </div>`;
+  const inner = el.querySelector('#np-phase-inner');
+  if (activeSection === 'facilities') renderFacilities(inner);
+  else                                renderDemand(inner);
+  bindPhaseSubTabClicks(el);
+  bindArchetypeButtons(el);
+}
+
+function renderParametersPhase(el) {
+  if (activeSection !== 'modemix' && activeSection !== 'service') activeSection = 'modemix';
+  const subTabs = renderSubTabStrip([
+    { key: 'modemix', label: '🚛 Mode Mix' },
+    { key: 'service', label: '⏱ Service Config' },
+  ], activeSection, 'section');
+  el.innerHTML = `
+    <div style="padding:18px 24px 24px;display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:24px;">
+      <div style="min-width:0;">
+        ${subTabs}
+        <div id="np-phase-inner" style="margin-top:18px;"></div>
+      </div>
+      <div>
+        ${renderToolsPanel()}
+      </div>
+    </div>`;
+  const inner = el.querySelector('#np-phase-inner');
+  if (activeSection === 'service') renderServiceConfig(inner);
+  else                              renderModeMix(inner);
+  bindPhaseSubTabClicks(el);
+  bindToolsPanelClicks(el);
+}
+
+function renderRunPhase(el) {
+  // Sub-tabs: Map | Numbers (results table). activeView holds the sub-view.
+  if (activeView !== 'map' && activeView !== 'results') activeView = 'results';
+  const subView = activeView === 'map' ? 'map' : 'results';
+  const subTabs = renderSubTabStrip([
+    { key: 'map',     label: '🗺 Map' },
+    { key: 'results', label: '📈 Numbers' },
+  ], subView, 'runsub');
+  el.innerHTML = `
+    <div style="padding:18px 24px 24px;display:flex;flex-direction:column;height:100%;">
+      ${subTabs}
+      <div id="np-phase-inner" style="flex:1;margin-top:16px;min-height:0;"></div>
+    </div>`;
+  const inner = el.querySelector('#np-phase-inner');
+  if (subView === 'map') renderMap(inner);
+  else                    renderResults(inner);
+  bindRunPhaseSubTabs(el);
+}
+
+function renderComparePhase(el) {
+  el.innerHTML = `<div style="padding:18px 24px 24px;" id="np-phase-inner"></div>`;
+  renderComparison(el.querySelector('#np-phase-inner'));
+}
+
+// ============================================================
+// PHASE-LOCAL EVENT BINDERS
+// ============================================================
+function bindPhaseSubTabClicks(scope) {
+  scope.querySelectorAll('[data-section]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      activeSection = /** @type {any} */ (btn.dataset.section);
+      renderContentView();
+    });
+  });
+}
+function bindRunPhaseSubTabs(scope) {
+  scope.querySelectorAll('[data-runsub]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      activeView = /** @type {any} */ (btn.dataset.runsub);
+      renderContentView();
+    });
+  });
+}
+function bindArchetypeButtons(scope) {
+  scope.querySelectorAll('[data-archetype]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = /** @type {HTMLElement} */ (btn).dataset.archetype;
+      applyArchetype(key);
+      markDirty();
+    });
+  });
+}
+function bindToolsPanelClicks(scope) {
+  scope.querySelectorAll('[data-action]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const action = /** @type {HTMLElement} */ (btn).dataset.action;
+      if      (action === 'find-optimal')         { findOptimalLocations(); markDirty(); }
+      else if (action === 'optimize-network')     { optimizeNetwork();     markDirty(); }
+      else if (action === 'balance-mode-mix')     { balanceModeMix();      markDirty(); }
+      else if (action === 'apply-market-rates')   { applyMarketRates();    markDirty(); }
+      else if (action === 'upload-rates-csv')     document.getElementById('netopt-csv-upload')?.click();
+    });
+  });
+  const maxDcsInput = scope.querySelector('#netopt-max-dcs');
+  maxDcsInput?.addEventListener('change', (e) => {
+    const val = parseInt(e.target.value, 10) || 5;
+    maxDCsToTest = Math.max(1, Math.min(20, val));
+    comparisonResults = null;
+    recommendedDCCount = null;
+    e.target.value = String(maxDCsToTest);
+  });
+}
+
+// Legacy renderSetup retained for any caller still dispatching by section.
 function renderSetup(el) {
   switch (activeSection) {
     case 'facilities': renderFacilities(el); break;
@@ -1198,7 +1407,7 @@ function renderFacilities(el) {
       ` : `
         <div class="hub-card" style="padding:24px;text-align:center;background:var(--ies-gray-50);border:1px dashed var(--ies-gray-300);margin-bottom:16px;">
           <div style="font-size:14px;font-weight:600;color:var(--ies-navy);margin-bottom:8px;">No facilities yet</div>
-          <div style="font-size:12px;color:var(--ies-gray-500);line-height:1.5;">Add candidate DCs one at a time with <b>+ Add Facility</b>, or click <b>Load Sample Network</b> to seed a 5-DC + 10-demand-point US example you can modify. To load demand from an industry preset first, pick one under <b>ARCHETYPES</b> in the sidebar.</div>
+          <div style="font-size:12px;color:var(--ies-gray-500);line-height:1.5;">Add candidate DCs one at a time with <b>+ Add Facility</b>, or click <b>Load Sample Network</b> to seed a 5-DC + 10-demand-point US example you can modify. To load demand from an industry preset first, switch to the <b>Demand</b> tab and pick one from the Quick-seed bar.</div>
         </div>
       `) : ''}
 
@@ -2262,7 +2471,7 @@ function renderResults(el) {
             <span>⚠</span><span>Run blocked</span>
           </div>
           <div style="font-size:14px;font-weight:700;color:var(--ies-navy);margin-bottom:6px;">No demand to run against</div>
-          <div style="font-size:13px;color:var(--ies-gray-600);line-height:1.5;margin-bottom:14px;">The optimizer needs demand points before it can produce cost or service-level results. Either pick an industry preset under <b>ARCHETYPES</b> in the sidebar, or open the <b>Demand Points</b> section and add them manually.</div>
+          <div style="font-size:13px;color:var(--ies-gray-600);line-height:1.5;margin-bottom:14px;">The optimizer needs demand points before it can produce cost or service-level results. Either pick an industry preset from the Quick-seed bar in the <b>Inputs</b> phase, or open <b>Demand Points</b> and add them manually.</div>
           <button class="hub-btn hub-btn-sm hub-btn-primary" id="no-results-go-demand">Go to Demand Points</button>
         </div>`;
       el.querySelector('#no-results-go-demand')?.addEventListener('click', () => {
@@ -2279,8 +2488,8 @@ function renderResults(el) {
     if (runBlockReason === 'no-open-facilities') {
       const total = facilities.length;
       const hint = total === 0
-        ? 'You have no candidate facilities yet. Click <b>Find Optimal Locations</b> in the sidebar to seed candidates from a k-means cluster of your demand, or add them manually.'
-        : `You have ${total} facilit${total === 1 ? 'y' : 'ies'} on the list but none are <b>Active</b>. Tick the Active checkbox on at least one row in <b>Setup → Facilities</b>, or click <b>Find Optimal Locations</b> to add more candidates.`;
+        ? 'You have no candidate facilities yet. Open the <b>Parameters</b> phase and click <b>Find Optimal Locations</b> in the Tools panel to seed candidates from a k-means cluster of your demand, or add them manually.'
+        : `You have ${total} facilit${total === 1 ? 'y' : 'ies'} on the list but none are <b>Active</b>. Tick the Active checkbox on at least one row in <b>Inputs → Facilities</b>, or click <b>Find Optimal Locations</b> in the Parameters phase Tools panel to add more candidates.`;
       el.innerHTML = `
         <div class="hub-card" style="padding:24px;background:#fffbeb;border:1px solid #fde68a;">
           <div style="display:inline-flex;align-items:center;gap:6px;background:#fef3c7;color:#92400e;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700;margin-bottom:12px;">
@@ -2582,7 +2791,7 @@ function renderComparison(el) {
   } else if (scenarios.length === 0) {
     el.innerHTML = `
       <div class="hub-card">
-        <p class="text-body text-muted">No optimization run yet. Click <b>🎯 Optimize Network</b> in the sidebar to evaluate the best subset of candidates for each network size 1..N. The tool auto-picks brute-force enumeration when the search space is small (provably optimal) and a multi-start heuristic otherwise.</p>
+        <p class="text-body text-muted">No optimization run yet. Open the <b>Parameters</b> phase and click <b>🎯 Optimize Network (k-sweep)</b> in the Tools panel to evaluate the best subset of candidates for each network size 1..N. The tool auto-picks brute-force enumeration when the search space is small (provably optimal) and a multi-start heuristic otherwise.</p>
       </div>
     `;
     return;

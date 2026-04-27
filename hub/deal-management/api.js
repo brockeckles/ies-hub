@@ -84,10 +84,20 @@ export async function fetchActivityTemplates() {
  */
 export async function listRealDeals() {
   try {
-    const [deals, models] = await Promise.all([
+    // 2026-04-27 EVE: also fetch ref_markets so Site Details can render the
+    // market NAME instead of the raw FK uuid. ref_markets is small (~20 rows
+    // last we checked) and read-only ref data, so the extra round-trip is
+    // cheap. .catch fallback keeps deals listing functional even if ref_markets
+    // is gated by RLS or unreachable — sites just fall back to "—".
+    const [deals, models, marketRows] = await Promise.all([
       db.fetchAll('deal_deals', 'id, deal_name, client_name, deal_owner, status, current_stage_id, created_at, updated_at'),
       db.fetchAll('cost_model_projects', 'id, name, scenario_label, client_name, market_id, facility_sqft, target_margin_pct, total_annual_cost, deal_deals_id, updated_at'),
+      db.fetchAll('ref_markets', 'id, name').catch(() => []),
     ]);
+    const marketNameById = new Map();
+    for (const m of marketRows || []) {
+      if (m && m.id) marketNameById.set(m.id, m.name || '');
+    }
     const byDeal = new Map();
     for (const m of models || []) {
       const k = m.deal_deals_id;
@@ -104,10 +114,17 @@ export async function listRealDeals() {
       const sitesMap = new Map();
       for (const m of attached) {
         const k = `${m.market_id || ''}|${m.name || ''}`;
+        // 2026-04-27 EVE: resolve market_id to display name. Sites tab was
+        // showing raw UUIDs — this lookup gets the human-readable market.
+        // Fall back to the FK string when the lookup misses (legacy data),
+        // and to "—" when no market_id at all.
+        const marketName = m.market_id
+          ? (marketNameById.get(m.market_id) || m.market_id)
+          : '—';
         if (!sitesMap.has(k)) {
           sitesMap.set(k, {
             name: m.name || 'Unnamed Site',
-            market: m.market_id || '',
+            market: marketName,
             sqft: Number(m.facility_sqft) || 0,
             type: '—',
             modelCount: 0,
