@@ -529,15 +529,30 @@ textarea.hub-input {
 }
 
 /* ---- Layout Pattern A: Builder ---- */
+/* IMPORTANT: `min-height: 0` on the flex container AND its flex children
+   is required so the children's intrinsic min-content height cannot push
+   `.hub-builder` past its parent (`.hub-content`). Without this, tall
+   sidebar/content forces `.hub-content` to scroll its OWN container —
+   which then fights with `.hub-builder-content`'s sticky `.cm-header-kpis`
+   (sticky binds to its nearest scrolling ancestor, the inner
+   `.hub-builder-content`; when the OUTER `.hub-content` also scrolls,
+   the sticky bar drifts up with it and content bleeds above/below the
+   navy KPI tile). The explicit `max-height: 100%` is belt-and-braces:
+   even if a future child sets a min-height, the builder still caps at
+   parent. Symptom this fixed: 2026-04-27 morning — KPI bar drifting
+   53px and the page-name title (e.g. "Equipment") peeking through. */
 .hub-builder {
   display: flex;
   height: 100%;
+  max-height: 100%;
+  min-height: 0;
   gap: 0;
 }
 
 .hub-builder-sidebar {
   width: 220px;
   min-width: 220px;
+  min-height: 0;
   background: #fff;
   border-right: 1px solid var(--ies-gray-200);
   overflow-y: auto;
@@ -546,6 +561,7 @@ textarea.hub-input {
 
 .hub-builder-content {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: var(--sp-6);
 }
