@@ -10,7 +10,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sL';
 import { state } from '../../shared/state.js?v=20260418-sL';
 import { renderToolHeader } from '../../shared/tool-frame.js?v=20260427-pm3-s1';
 import * as calc from './calc.js?v=20260426-s3';
-import * as api from './api.js?v=20260426-s3';
+import * as api from './api.js?v=20260427-pm3-s2';
 import * as cmApi from '../cost-model/api.js?v=20260423-xQ';
 
 // ============================================================
@@ -60,6 +60,22 @@ let financials = null;
 
 /** @type {import('./types.js?v=20260418-sL').DosStage[]} */
 let dosStages = [];
+
+/**
+ * MUL-F2 cache: DB-loaded stage templates. Loaded on first openDeal,
+ * memoized for the lifetime of the mount. Falls back to calc.DOS_STAGES
+ * (a constant) when the DB read fails (e.g. staging schema drift, RLS,
+ * offline). Each stage carries `elements: [...]` populated from
+ * stage_element_templates.
+ *
+ * @type {{ templateVersion: { id:number, version:number, version_name:string|null }|null,
+ *          stages: Array<{ id:number, stage_number:number, stage_name:string,
+ *                          description:string|null, element_count:number,
+ *                          elements: Array<Object> }> } | null}
+ */
+let stageTemplateBundle = null;
+/** @type {'fresh'|'pending'|'fallback'} */
+let stageTemplateSource = 'fresh';
 
 /** @type {import('./types.js?v=20260418-sL').Deal[]} */
 let allDeals = [];
@@ -127,6 +143,9 @@ export async function mount(el) {
 export function unmount() {
   if (typeof _cmSavedUnsub === 'function') { _cmSavedUnsub(); _cmSavedUnsub = null; }
   rootEl = null;
+  // Reset MUL-F2 stage-template cache so the next mount reloads fresh.
+  stageTemplateBundle = null;
+  stageTemplateSource = 'fresh';
   bus.emit('deal:unmounted');
 }
 
@@ -829,6 +848,85 @@ function createNewDeal() {
   openDeal(id);
 }
 
+/**
+ * MUL-F2: load stage templates from Supabase, with hardcoded fallback.
+ * Memoized on `stageTemplateBundle` — only fetches once per mount cycle.
+ * On error (RLS, offline, staging-no-table), gracefully falls back to the
+ * calc.DOS_STAGES constant so the UI still renders.
+ */
+async function ensureStageTemplates() {
+  if (stageTemplateBundle) return stageTemplateBundle;
+  if (stageTemplateSource === 'pending') return null;
+  stageTemplateSource = 'pending';
+  try {
+    const bundle = await api.fetchStageTemplates();
+    if (!bundle || !Array.isArray(bundle.stages) || bundle.stages.length === 0) {
+      throw new Error('empty stage_templates result');
+    }
+    stageTemplateBundle = bundle;
+    stageTemplateSource = 'fresh';
+    return bundle;
+  } catch (err) {
+    console.warn('[Deal Manager] Stage templates fetch failed — falling back to calc.DOS_STAGES constant.', err);
+    // Synthesize a bundle from the local fallback constant so callers can use
+    // the same shape regardless of DB state.
+    stageTemplateBundle = {
+      templateVersion: null,
+      stages: calc.DOS_STAGES.map((s) => ({
+        id: -s.number,
+        stage_number: s.number,
+        stage_name: s.name,
+        description: null,
+        element_count: s.elementCount,
+        elements: Array.from({ length: s.elementCount }, (_, i) => ({
+          id: -(s.number * 1000 + i),
+          element_name: `Element ${i + 1}`,
+          description: null,
+          responsible_workstream: 'solutions',
+          element_type: 'deliverable',
+          sort_order: i,
+        })),
+      })),
+    };
+    stageTemplateSource = 'fallback';
+    return stageTemplateBundle;
+  }
+}
+
+/**
+ * Build the in-memory `dosStages` array (UI shape) from the loaded template
+ * bundle. Element status is seeded for new deals (60% complete / 20% in
+ * progress / 20% not started) — once persistence wires through, this will
+ * read from `project_elements` rather than the seed pattern.
+ */
+function buildDosStagesFromTemplates(bundle) {
+  if (!bundle || !Array.isArray(bundle.stages)) return [];
+  return bundle.stages.map(stage => ({
+    stageNumber: stage.stage_number,
+    stageName: stage.stage_name,
+    elements: (stage.elements && stage.elements.length > 0
+      ? stage.elements
+      : Array.from({ length: stage.element_count || 0 }, (_, i) => ({
+          id: -(stage.stage_number * 1000 + i),
+          element_name: `Element ${i + 1}`,
+          element_type: 'deliverable',
+          responsible_workstream: 'solutions',
+        }))
+    ).map((el, i) => ({
+      id: el.id != null ? `el-${stage.stage_number}-${el.id}` : `el-${stage.stage_number}-${i}`,
+      name: el.element_name || `Element ${i + 1}`,
+      elementType: el.element_type || 'deliverable',
+      workstream: el.responsible_workstream || 'solutions',
+      // Seed status — placeholder until project_elements persistence lands.
+      status: /** @type {const} */ (
+        i < Math.floor((stage.element_count || 0) * 0.6) ? 'complete'
+        : i < Math.floor((stage.element_count || 0) * 0.8) ? 'in_progress'
+        : 'not_started'
+      ),
+    })),
+  }));
+}
+
 async function openDeal(id) {
   activeDeal = allDeals.find(d => d.id === id) || null;
   if (!activeDeal) return;
@@ -844,18 +942,11 @@ async function openDeal(id) {
 
   financials = calc.computeDealFinancials(sites, activeDeal.contractTermYears || 5);
 
-  // Build demo DOS stages
-  dosStages = calc.DOS_STAGES.map(s => ({
-    stageNumber: s.number,
-    stageName: s.name,
-    elements: Array.from({ length: s.elementCount }, (_, i) => ({
-      id: `el-${s.number}-${i}`,
-      name: `Element ${i + 1}`,
-      elementType: 'deliverable',
-      workstream: 'solutions',
-      status: /** @type {const} */ (i < Math.floor(s.elementCount * 0.6) ? 'complete' : i < Math.floor(s.elementCount * 0.8) ? 'in_progress' : 'not_started'),
-    })),
-  }));
+  // MUL-F2 — DOS stages now load from public.stages + stage_element_templates.
+  // Falls back to calc.DOS_STAGES constant when the DB query errors (offline,
+  // staging schema drift, RLS denial). Memoized via ensureStageTemplates().
+  const tplBundle = await ensureStageTemplates();
+  dosStages = buildDosStagesFromTemplates(tplBundle);
 
   // Load hours, tasks, updates
   hoursEntries = await api.fetchHours(activeDeal.id);

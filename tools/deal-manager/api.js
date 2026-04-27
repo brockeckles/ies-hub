@@ -57,6 +57,97 @@ export async function saveDeal(deal) {
   return inserted;
 }
 
+// ============================================================
+// STAGE TEMPLATES (MUL-F2 — DOS framework, DB-backed)
+// ============================================================
+
+/**
+ * Fetch the active DOS stage template set: rows of stages plus their
+ * element templates. Replaces the hardcoded `DOS_STAGES` constant in calc.js
+ * (which now serves as fallback only).
+ *
+ * Read access on the underlying tables is gated by an "Authenticated users
+ * can read ..." RLS policy on prod (verified 2026-04-27). Staging may not
+ * have these tables yet (schema drift acknowledged in slice 4.3) — callers
+ * should catch and fall back to the hardcoded constant.
+ *
+ * @returns {Promise<{
+ *   templateVersion: { id:number, version:number, version_name:string|null }|null,
+ *   stages: Array<{
+ *     id:number, stage_number:number, stage_name:string,
+ *     description:string|null, element_count:number,
+ *     elements: Array<{
+ *       id:number, element_name:string, description:string|null,
+ *       responsible_workstream:string|null, element_type:string|null,
+ *       sort_order:number
+ *     }>
+ *   }>
+ * }>}
+ */
+export async function fetchStageTemplates() {
+  // Pick the active template version (MVP: assume single active version).
+  const { data: tvRows, error: tvErr } = await db.from('template_versions')
+    .select('id, version, version_name')
+    .eq('is_active', true)
+    .order('version', { ascending: false })
+    .limit(1);
+  if (tvErr) throw tvErr;
+  const templateVersion = (tvRows && tvRows[0]) || null;
+
+  // Pull active stages — filter to the active version when one exists, else
+  // any active row (defensive against deployments where template_version_id
+  // wasn't backfilled).
+  let stagesQuery = db.from('stages')
+    .select('id, stage_number, stage_name, description, template_version_id, is_active')
+    .eq('is_active', true)
+    .order('stage_number', { ascending: true });
+  if (templateVersion) stagesQuery = stagesQuery.eq('template_version_id', templateVersion.id);
+  const { data: stageRows, error: stagesErr } = await stagesQuery;
+  if (stagesErr) throw stagesErr;
+  if (!Array.isArray(stageRows) || stageRows.length === 0) {
+    return { templateVersion, stages: [] };
+  }
+
+  // Pull element templates for these stages in one round-trip.
+  const stageIds = stageRows.map(r => r.id);
+  let elQuery = db.from('stage_element_templates')
+    .select('id, stage_id, element_name, description, responsible_workstream, element_type, sort_order, is_template, template_version_id')
+    .eq('is_template', true)
+    .in('stage_id', stageIds)
+    .order('sort_order', { ascending: true });
+  if (templateVersion) elQuery = elQuery.eq('template_version_id', templateVersion.id);
+  const { data: elementRows, error: elErr } = await elQuery;
+  if (elErr) throw elErr;
+
+  // Group elements per stage.
+  const byStage = new Map(stageRows.map(s => [s.id, []]));
+  for (const e of (elementRows || [])) {
+    if (!byStage.has(e.stage_id)) continue;
+    byStage.get(e.stage_id).push({
+      id: e.id,
+      element_name: e.element_name,
+      description: e.description,
+      responsible_workstream: e.responsible_workstream,
+      element_type: e.element_type,
+      sort_order: e.sort_order || 0,
+    });
+  }
+
+  const stages = stageRows.map(s => {
+    const els = byStage.get(s.id) || [];
+    return {
+      id: s.id,
+      stage_number: s.stage_number,
+      stage_name: s.stage_name,
+      description: s.description,
+      element_count: els.length,
+      elements: els,
+    };
+  });
+
+  return { templateVersion, stages };
+}
+
 /**
  * Delete a deal and unlink its sites.
  * @param {string} id
