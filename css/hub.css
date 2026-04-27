@@ -3662,10 +3662,10 @@ textarea.hub-input {
 #cm-section-content .cm-section-header > h3,
 #cm-section-content .cm-section-header > p,
 #cm-section-content .cm-section-header > .cm-subtle,
-#cm-section-content .cm-section-header__intro > p,
-#cm-section-content .cm-section-header__intro > .cm-subtle,
-#cm-section-content .cm-section-header__intro > div:has(> h2),
-#cm-section-content .cm-section-header__intro > div:has(> .cm-section-title),
+#cm-section-content .cm-section-header > .cm-section-header__intro > p,
+#cm-section-content .cm-section-header > .cm-section-header__intro > .cm-subtle,
+#cm-section-content .cm-section-header > .cm-section-header__intro > div:has(> h2),
+#cm-section-content .cm-section-header > .cm-section-header__intro > div:has(> .cm-section-title),
 #cm-section-content .cm-section-header > div:has(> .cm-section-title),
 #cm-section-content .cm-section-header > div:has(> h2),
 #cm-section-content .cm-timeline-meta__title,
@@ -3673,12 +3673,18 @@ textarea.hub-input {
   display: none;
 }
 /* `.cm-section-header__intro` is the wrapper Implementation/Assumptions
-   use; it contains the title text AND (in some sections) an actions slot.
-   Don't hide the wrapper itself — only hide its TEXT children — so the
-   nested `.cm-section-header__actions` button strip still renders.
+   use INSIDE the page-top `.cm-section-header`; it contains the title
+   text AND (in some sections) an actions slot. Don't hide the wrapper
+   itself — only hide its TEXT children — so the nested
+   `.cm-section-header__actions` button strip still renders.
    2026-04-27 AM6 — Brock walkthrough caught this for Assumptions'
-   "Reset all to defaults" which lives inside the intro wrapper. */
-#cm-section-content .cm-section-header__intro {
+   "Reset all to defaults" which lives inside the intro wrapper.
+   2026-04-27 AM7 — scope the override to ONLY .cm-section-header__intro
+   that's a child of the page-top .cm-section-header. The same class is
+   reused by inner cards (Phase Plan, ramp cards, Ramp Burn) — don't
+   right-align THEIR titles, that's how Brock spotted the Phase Plan
+   header drifting right. */
+#cm-section-content .cm-section-header > .cm-section-header__intro {
   display: flex;
   justify-content: flex-end;
   align-items: center;

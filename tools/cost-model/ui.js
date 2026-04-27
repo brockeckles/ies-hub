@@ -11587,11 +11587,23 @@ function renderImplementation() {
         <div class="cm-impl-gantt__ruler">
           <div class="cm-impl-gantt__ruler-label">&nbsp;</div>
           <div class="cm-impl-gantt__ruler-track" style="position:relative;height:18px;border-bottom:1px solid var(--ies-gray-200);">
-            ${ticks.map(w => `
+${(() => {
+              // 2026-04-27 AM7: right-align the LAST tick's label (the one at 100%)
+              // instead of left-aligning it, so it doesn't extend past the gantt
+              // right edge. All earlier ticks keep the left-of-line layout because
+              // their right-side neighbours give the label room to breathe.
+              const lastIdx = ticks.length - 1;
+              return ticks.map((w, i) => {
+                const isLast = i === lastIdx;
+                const labelStyle = isLast
+                  ? 'position:absolute;top:0;right:2px;font-size:10px;color:var(--ies-gray-500);font-weight:600;'
+                  : 'position:absolute;top:0;left:2px;font-size:10px;color:var(--ies-gray-500);font-weight:600;';
+                return `
               <div style="position:absolute;left:${(w / totalWeeks * 100).toFixed(2)}%;top:0;bottom:0;border-left:1px dashed var(--ies-gray-200);">
-                <span style="position:absolute;top:0;left:2px;font-size:10px;color:var(--ies-gray-500);font-weight:600;">W${w}</span>
-              </div>
-            `).join('')}
+                <span style="${labelStyle}">W${w}</span>
+              </div>`;
+              }).join('');
+            })()}
             <div style="position:absolute;left:${(goLiveWeek / totalWeeks * 100).toFixed(2)}%;top:-4px;bottom:-4px;border-left:2px solid var(--ies-green,#16a34a);" title="Go-Live (W${goLiveWeek})">
               <span style="position:absolute;top:-14px;left:-26px;font-size:9px;font-weight:700;color:var(--ies-green,#16a34a);background:#fff;padding:1px 4px;border-radius:3px;border:1px solid var(--ies-green,#16a34a);white-space:nowrap;">GO-LIVE</span>
             </div>
@@ -11733,6 +11745,7 @@ function renderImplementation() {
           </tr>
         </tbody>
       </table>
+      </div>
     </div>
 
   `;
@@ -11771,18 +11784,26 @@ function renderImplRampPanel(arrayKey, values, label, color) {
   const ssYPct = (1 - 100 / maxVal) * 100;
   return `
     <div class="cm-impl-ramp" style="margin-top:8px;">
-      <!-- chart -->
-      <div class="cm-impl-ramp__chart" style="position:relative;height:140px;display:flex;align-items:flex-end;gap:6px;padding:8px 0 0;border-bottom:1px solid var(--ies-gray-200);">
+      <!-- chart. 2026-04-27 AM7: bar value labels moved to absolute
+           positioning ABOVE each bar's top edge so the column's vertical
+           layout = bar height only. Previously the in-column value label
+           ate ~14px of column height, pushing the 100% bar's top BELOW
+           the dashed reference line (which sits at top:0 of the chart).
+           Now the bar truly fills 100% of column height when pct=100 and
+           the dashed line sits at the same Y as the bar top. Reserved
+           18px padding-top on the chart container for the floating
+           labels above the tallest bars. -->
+      <div class="cm-impl-ramp__chart" style="position:relative;height:140px;display:flex;align-items:flex-end;gap:6px;padding:18px 0 0;border-bottom:1px solid var(--ies-gray-200);">
         <!-- 100% reference -->
-        <div title="Steady-state reference (100%)" style="position:absolute;left:0;right:0;top:${ssYPct.toFixed(1)}%;border-top:1px dashed ${color};opacity:0.55;pointer-events:none;">
+        <div title="Steady-state reference (100%)" style="position:absolute;left:0;right:0;top:calc(18px + ${ssYPct.toFixed(1)}% * (140 - 18) / 140);border-top:1px dashed ${color};opacity:0.55;pointer-events:none;">
           <span style="position:absolute;right:0;top:-9px;font-size:10px;font-weight:600;color:${color};background:#fff;padding:0 4px;">100% steady-state</span>
         </div>
         ${values.map((v, i) => {
           const pct = Number(v) || 0;
           const hPct = (pct / maxVal) * 100;
           return `
-            <div class="cm-impl-ramp__col" style="flex:1 1 0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;" title="Month ${i + 1}: ${pct}% of ${label === 'Volume' ? 'volume' : 'FTE'} steady-state">
-              <div class="cm-impl-ramp__bar-value" style="font-size:11px;font-weight:700;color:${color};margin-bottom:3px;">${pct}%</div>
+            <div class="cm-impl-ramp__col" style="flex:1 1 0;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;" title="Month ${i + 1}: ${pct}% of ${label === 'Volume' ? 'volume' : 'FTE'} steady-state">
+              <div class="cm-impl-ramp__bar-value" style="position:absolute;left:0;right:0;bottom:calc(${hPct.toFixed(1)}% + 2px);font-size:11px;font-weight:700;color:${color};text-align:center;pointer-events:none;">${pct}%</div>
               <div class="cm-impl-ramp__bar" style="width:100%;max-width:48px;height:${hPct.toFixed(1)}%;background:${color};border-radius:4px 4px 0 0;min-height:2px;transition:height 0.18s ease;"></div>
             </div>
           `;
