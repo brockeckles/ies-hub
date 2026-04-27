@@ -10,7 +10,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sM';
 import { state } from '../../shared/state.js?v=20260418-sM';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sM';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260427-pm3-s1';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton, renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2';
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import * as calc from './calc.js?v=20260426-s2';
 import * as api from './api.js?v=20260418-sM';
@@ -23,7 +23,9 @@ import * as api from './api.js?v=20260418-sM';
 let rootEl = null;
 
 /** @type {'lanes' | 'config' | 'results' | 'map'} */
-let activeTab = 'lanes';
+let activePhase = 'inputs';
+let paramsSubTab = 'vehicles';
+let runSubTab = 'cost';
 
 /** @type {import('./types.js?v=20260418-sM').Lane[]} */
 let lanes = [];
@@ -130,7 +132,7 @@ function applyNetOptHandoff(payload) {
     distanceMiles: l.distanceMiles || 200,
   }));
   if (typeof showToast === 'function') showToast(`Received ${lanes.length} lanes from Network Optimizer`, 'success');
-  if (activeTab === 'lanes' && rootEl?.querySelector('#fm-content')) {
+  if (activePhase === 'inputs' && rootEl?.querySelector('#fm-content')) {
     renderLanes(rootEl.querySelector('#fm-content'));
   }
 }
@@ -165,7 +167,9 @@ async function renderLanding() {
 function openEditor(savedRow) {
   if (!rootEl) return;
   const d = savedRow?.scenario_data || {};
-  activeTab = 'lanes';
+  activePhase = 'inputs';
+  paramsSubTab = 'vehicles';
+  runSubTab = 'cost';
   // 2026-04-21 audit fix: lanes start EMPTY on new scenarios. Demo lanes
   // still accessible via the "Load Demo Data" button. vehicles catalog stays
   // pre-populated (day-cab / sleeper / box truck with ATRI rates) since it's
@@ -203,7 +207,7 @@ function openEditor(savedRow) {
     } catch (e) {
       carrierRateDeck = api.DEFAULT_CARRIER_RATES;
     }
-    if (activeTab === 'config') renderContent();
+    if (activePhase === 'parameters') renderContent();
   })();
 }
 
@@ -223,14 +227,7 @@ export function unmount() {
 // ============================================================
 
 function renderShell() {
-  const tabs = [
-    { key: 'lanes', label: 'Lanes' },
-    { key: 'config', label: 'Configuration' },
-    { key: 'ratedeck', label: 'Rate Deck' },
-    { key: 'results', label: 'Results' },
-    { key: 'map', label: 'Route Map' },
-  ];
-
+  // 2026-04-27 EVE2 (FLE-SCOPE-1): tabs replaced with phase stepper.
   const chips = [
     { label: activeScenarioId ? 'Saved' : 'Draft', kind: activeScenarioId ? 'saved' : 'draft', dot: true },
     activeParentCmId
@@ -238,91 +235,194 @@ function renderShell() {
       : { label: 'Stand-alone', kind: 'standalone', title: 'This fleet is not yet attached to a Cost Model' },
   ];
 
-  // Per-tab navy banner descriptions (CM page-name lift pattern, 2026-04-27).
-  const TAB_DESC = {
-    lanes:    'Define your lane mix — origin/destination, miles, weekly trips, weight, and equipment type. The lane list drives every downstream calc.',
-    config:   'Set the financing model (own/lease/rent), driver economics (single vs team, hourly rate, benefits), fuel + maintenance + ATRI overlay assumptions.',
-    ratedeck: 'Compute the cost-per-mile rate deck — base + variable cost, allocation to deadhead, and quoted vs incurred margin per lane.',
-    results:  'Per-vehicle and fleet-wide results — operating cost, profitability, utilization, and a 6×6 sensitivity matrix flexing fuel × wage assumptions.',
-    map:      'Geographic route map — colored polylines per lane sized by trip volume; toggle ATRI lane benchmarks to compare vs national averages.',
-  };
-  const TAB_LABEL = { lanes: 'Lanes', config: 'Configuration', ratedeck: 'Rate Deck', results: 'Results', map: 'Route Map' };
   return `
     <div class="hub-content-inner" style="padding:0;display:flex;flex-direction:column;height:100%;">
       ${renderToolHeader({
         toolName: 'Fleet Modeler',
         toolKey: 'fleet',
         backAction: 'fleet-back',
-        tabs,
-        activeTab,
-        tabsId: 'fm-tabs',
         statusChips: chips,
-        description: TAB_DESC[activeTab] || TAB_DESC.lanes,
-        subtitle: TAB_LABEL[activeTab] || '',
         primaryAction: {
-          // XT-SCOPE-1 (2026-04-27 EVE2) — standardized "Run" verb.
+          // XT-SCOPE-1 — standardized "Run" verb.
           label: 'Run',
           action: 'fleet-run',
           icon: '▶',
           title: 'Run fleet analyzer (Cmd/Ctrl+Enter)',
           state: runState.state(runStateInputs()),
           cleanLabel: '✓ Results current',
-          cleanTitle: 'Inputs unchanged since the last calculate — fleet results match the current lanes + config. Click to force a re-run.',
+          cleanTitle: 'Inputs unchanged since the last run — fleet results match the current lanes + config. Click to force a re-run.',
         },
       })}
+      <div id="fm-process-flow"></div>
       <div id="fm-content" style="flex:1;overflow-y:auto;padding:24px;"></div>
     </div>
   `;
 }
 
+// 2026-04-27 EVE2 (FLE-SCOPE-1): stepper status driven by current state.
+function fleetPhaseStatus() {
+  const inputsComplete = lanes.length > 0;
+  const runComplete = !!result;
+  return {
+    inputs:     inputsComplete ? 'complete' : 'active',
+    parameters: runComplete ? 'complete' : (inputsComplete ? 'active' : 'pending'),
+    run:        runComplete ? 'complete' : (inputsComplete ? 'active' : 'pending'),
+  };
+}
+
+function renderFleetStepper() {
+  const el = rootEl?.querySelector('#fm-process-flow');
+  if (!el) return;
+  const s = fleetPhaseStatus();
+  el.innerHTML = renderPhaseStepper({
+    phases: [
+      { key: 'inputs',     num: 1, label: 'Inputs',     sub: 'Lane mix',                       status: s.inputs },
+      { key: 'parameters', num: 2, label: 'Parameters', sub: 'Vehicles, costs, rate deck',     status: s.parameters },
+      { key: 'run',        num: 3, label: 'Run',        sub: 'Cost, compare, sensitivity, map', status: s.run },
+    ],
+    activePhase: activePhase,
+  });
+}
+
+// 2026-04-27 EVE2 (FLE-SCOPE-8): HOS feasibility check that runs upstream
+// of the Run button. If any lane fails, surface a warning chip near the
+// header so the user notices BEFORE they trust the comparison numbers.
+function renderHosFeasibilityChip() {
+  if (!Array.isArray(lanes) || lanes.length === 0) return;
+  const dailyHrs = Number(config.drivingHoursPerDay ?? 11) * (config.teamDriving ? 2 : 1);
+  const days = Number(config.operatingDaysPerWeek ?? 5);
+  const speed = Number(config.avgSpeedMph ?? 50);
+  const budget = dailyHrs * days;
+  const failing = lanes.filter(l => {
+    const rtMiles = (Number(l.distanceMiles) || 0) * 2;
+    const rtHrs = rtMiles / Math.max(1, speed);
+    return rtHrs > budget;
+  });
+  if (failing.length === 0) {
+    const stale = rootEl?.querySelector('#fm-hos-chip');
+    if (stale) stale.remove();
+    return;
+  }
+  const stepperEl = rootEl?.querySelector('#fm-process-flow');
+  if (!stepperEl) return;
+  const existing = rootEl.querySelector('#fm-hos-chip');
+  if (existing) existing.remove();
+  const chip = document.createElement('div');
+  chip.id = 'fm-hos-chip';
+  chip.style.cssText = 'background:#fef2f2;border:1px solid #fecaca;color:#991b1b;padding:8px 14px;font-size:12px;line-height:1.5;display:flex;align-items:center;gap:10px;';
+  chip.innerHTML = `<span style="font-weight:700;">⚠ HOS feasibility:</span> ${failing.length} of ${lanes.length} lane${failing.length===1?'':'s'} exceed${failing.length===1?'s':''} the ${budget.toFixed(0)}h weekly driving budget. The 3-way comparison will reflect this — open <b>Run · Feasibility</b> for details.`;
+  stepperEl.parentNode.insertBefore(chip, stepperEl.nextSibling);
+}
+
 function bindShellEvents() {
   if (!rootEl) return;
 
-  rootEl.querySelector('#fm-tabs')?.addEventListener('click', (e) => {
-    const btn = /** @type {HTMLElement} */ (e.target).closest('[data-tab]');
-    if (!btn) return;
-    activeTab = /** @type {any} */ (btn.dataset.tab);
-    rootEl.querySelectorAll('#fm-tabs button').forEach(b => {
-      b.classList.toggle('active', b.dataset.tab === activeTab);
-    });
+  bindPhaseStepper(rootEl.querySelector('#fm-process-flow'), (phase) => {
+    activePhase = /** @type {any} */ (phase);
     renderContent();
+  });
+
+  rootEl.addEventListener('click', (e) => {
+    const psub = /** @type {HTMLElement} */ (e.target).closest('[data-fm-paramssub]');
+    if (psub) {
+      paramsSubTab = /** @type {any} */ (psub.getAttribute('data-fm-paramssub'));
+      renderContent();
+      return;
+    }
+    const rsub = /** @type {HTMLElement} */ (e.target).closest('[data-fm-runsub]');
+    if (rsub) {
+      runSubTab = /** @type {any} */ (rsub.getAttribute('data-fm-runsub'));
+      renderContent();
+      return;
+    }
   });
 
   const runBtn = rootEl.querySelector('[data-primary-action="fleet-run"]');
   runBtn?.addEventListener('click', () => {
     const deckMap = carrierRateDeck.length ? calc.indexCarrierDeck(carrierRateDeck) : undefined;
     result = calc.analyzeFleet(lanes, vehicles, config, deckMap);
-    activeTab = 'results';
-    rootEl.querySelectorAll('#fm-tabs button').forEach(b => {
-      b.classList.toggle('active', b.dataset.tab === activeTab);
-    });
-    // Record the input fingerprint so the button flips to "✓ Results current".
+    activePhase = 'run';
+    runSubTab = 'cost';
     runState.markClean(runStateInputs());
     renderContent();
     updateRunButtonState();
     flashRunButton(runBtn);
   });
 
-  // Keyboard shortcut: Cmd/Ctrl+Enter to run
   bindPrimaryActionShortcut(rootEl, 'fleet-run');
 }
 
 function renderContent() {
   const el = rootEl?.querySelector('#fm-content');
   if (!el) return;
-  // Any re-render is a convenient chokepoint to re-evaluate the Run button
-  // state — after user edits, this flips the button back to orange; after
-  // a successful run, the state() call against the freshly-marked-clean
-  // hash returns 'clean'.
   updateRunButtonState();
+  renderFleetStepper();
+  renderHosFeasibilityChip();
 
-  switch (activeTab) {
-    case 'lanes': renderLanes(el); break;
-    case 'config': renderConfig(el); break;
-    case 'ratedeck': renderRateDeck(el); break;
-    case 'results': renderResults(el); break;
-    case 'map': renderMap(el); break;
+  switch (activePhase) {
+    case 'inputs':     renderLanes(el); break;
+    case 'parameters': renderParametersPhase(el); break;
+    case 'run':        renderRunPhase(el); break;
+    default:           renderLanes(el);
   }
+}
+
+function renderParametersPhase(el) {
+  const subTabs = [
+    { key: 'vehicles',  label: '🚛 Vehicles' },
+    { key: 'operating', label: '💰 Operating Costs' },
+    { key: 'ratedeck',  label: '📋 Rate Deck' },
+  ];
+  el.innerHTML = `
+    <div style="display:flex;gap:0;border-bottom:1px solid var(--ies-gray-200);margin-bottom:18px;">
+      ${subTabs.map(t => `
+        <button class="hub-btn" data-fm-paramssub="${t.key}"
+                style="background:transparent;border:0;border-bottom:2px solid ${t.key === paramsSubTab ? 'var(--ies-blue)' : 'transparent'};border-radius:0;padding:10px 18px;font-size:13px;font-weight:${t.key === paramsSubTab ? '700' : '500'};color:${t.key === paramsSubTab ? 'var(--ies-blue)' : 'var(--ies-gray-600)'};cursor:pointer;">
+          ${t.label}
+        </button>
+      `).join('')}
+    </div>
+    <div id="fm-params-inner"></div>
+  `;
+  const inner = el.querySelector('#fm-params-inner');
+  if      (paramsSubTab === 'operating') renderOperatingSubTab(inner);
+  else if (paramsSubTab === 'ratedeck')  renderRateDeck(inner);
+  else                                    renderVehiclesSubTab(inner);
+}
+
+function renderRunPhase(el) {
+  if (!result) {
+    el.innerHTML = `
+      <div class="hub-card" style="padding:24px;text-align:center;">
+        <div style="font-size:14px;color:var(--ies-gray-500);">No fleet calc yet. Add lanes (Inputs phase), tune assumptions (Parameters), then click <b>Run</b> in the header.</div>
+      </div>
+    `;
+    return;
+  }
+  const subTabs = [
+    { key: 'cost',         label: '💵 Cost' },
+    { key: 'comparison',   label: '⚖ Comparison' },
+    { key: 'sensitivity',  label: '📈 Sensitivity' },
+    { key: 'map',          label: '🗺 Route Map' },
+    { key: 'feasibility',  label: '⏱ Feasibility' },
+  ];
+  el.innerHTML = `
+    <div style="display:flex;gap:0;border-bottom:1px solid var(--ies-gray-200);margin-bottom:18px;flex-wrap:wrap;">
+      ${subTabs.map(t => `
+        <button class="hub-btn" data-fm-runsub="${t.key}"
+                style="background:transparent;border:0;border-bottom:2px solid ${t.key === runSubTab ? 'var(--ies-blue)' : 'transparent'};border-radius:0;padding:10px 18px;font-size:13px;font-weight:${t.key === runSubTab ? '700' : '500'};color:${t.key === runSubTab ? 'var(--ies-blue)' : 'var(--ies-gray-600)'};cursor:pointer;">
+          ${t.label}
+        </button>
+      `).join('')}
+    </div>
+    <div id="fm-run-inner"></div>
+  `;
+  const inner = el.querySelector('#fm-run-inner');
+  if      (runSubTab === 'comparison')  renderComparisonSubTab(inner);
+  else if (runSubTab === 'sensitivity') renderSensitivitySubTab(inner);
+  else if (runSubTab === 'map')         renderMap(inner);
+  else if (runSubTab === 'feasibility') renderFeasibilitySubTab(inner);
+  else                                   renderCostSubTab(inner);
 }
 
 // ============================================================
@@ -460,7 +560,8 @@ function renderLanes(el) {
 // CONFIG TAB
 // ============================================================
 
-function renderConfig(el) {
+// 2026-04-27 EVE2 (FLE-SCOPE-2): Vehicles sub-tab — financing + vehicle specs.
+function renderVehiclesSubTab(el) {
   el.innerHTML = `
     <div style="max-width:900px;">
       <h3 class="text-section" style="margin-bottom:16px;">Financing Mode</h3>
@@ -483,7 +584,7 @@ function renderConfig(el) {
       </div>
 
       <h3 class="text-section" style="margin-bottom:16px;">Vehicle Specifications</h3>
-      <div class="hub-card" style="margin-bottom:20px;padding:16px;">
+      <div class="hub-card" style="padding:16px;">
         <table style="width:100%;border-collapse:collapse;font-size:13px;">
           <thead>
             <tr style="border-bottom:2px solid var(--ies-gray-200);">
@@ -511,114 +612,125 @@ function renderConfig(el) {
           </tbody>
         </table>
       </div>
-
-      <h3 class="text-section" style="margin-bottom:16px;">Cost Parameters</h3>
-      <div class="hub-card" style="padding:20px;">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-          ${cfgInput('Diesel Price', 'dieselPricePerGal', config.dieselPricePerGal, '$/gal')}
-          ${cfgInput('Driver Wage', 'driverCostPerHr', config.driverCostPerHr, '$/hr')}
-          ${cfgInput('Driver Benefits %', 'driverBenefitPct', config.driverBenefitPct ?? 35, '%')}
-          ${cfgInput('Admin Overhead %', 'adminCostPct', config.adminCostPct ?? 8, '%')}
-          ${cfgInput('Avg Speed', 'avgSpeedMph', config.avgSpeedMph, 'mph')}
-          ${cfgInput('Driving Hrs/Day', 'drivingHoursPerDay', config.drivingHoursPerDay, 'hrs')}
-          ${cfgInput('Operating Days/Wk', 'operatingDaysPerWeek', config.operatingDaysPerWeek, 'days')}
-          ${cfgInput('Utilization', 'utilizationPct', config.utilizationPct, '%')}
-          ${cfgInput('Maintenance', 'maintenanceCostPerMi', config.maintenanceCostPerMi, '$/mi')}
-          ${cfgInput('Tires', 'tiresCostPerMi', config.tiresCostPerMi ?? 0.04, '$/mi')}
-          ${cfgInput('Tolls', 'tollsCostPerMi', config.tollsCostPerMi ?? 0.025, '$/mi')}
-          ${cfgInput('Permits', 'permitsPerYear', config.permitsPerYear ?? 850, '$/yr')}
-          ${cfgInput('Insurance Base', 'insuranceBasePerYear', config.insuranceBasePerYear, '$/yr')}
-          ${cfgInput('Depreciation', 'depreciationYears', config.depreciationYears, 'yrs')}
-          ${cfgInput('Deadhead %', 'deadheadPct', config.deadheadPct ?? 15, '%')}
-          ${cfgInput('Detention Hrs/Trip', 'detentionHoursPerTrip', config.detentionHoursPerTrip ?? 2, 'hrs')}
-          ${cfgInput('GXO Margin', 'gxoMarginPct', config.gxoMarginPct, '%')}
-          ${cfgInput('Carrier Premium', 'carrierPremiumPct', config.carrierPremiumPct, '%')}
-        </div>
-        <div style="margin-top:16px;display:flex;gap:20px;flex-wrap:wrap;">
-          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
-            <input type="checkbox" id="fm-team" ${config.teamDriving ? 'checked' : ''}>
-            <span style="font-weight:600;">Team Driving (doubles daily hours, 2 drivers/vehicle)</span>
-          </label>
-          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
-            <select id="fm-driver-model" style="padding:4px 6px;border:1px solid var(--ies-gray-300);border-radius:4px;font-size:12px;">
-              <option value="hourly" ${(config.driverPayModel ?? 'hourly') === 'hourly' ? 'selected' : ''}>Hourly Pay Model</option>
-              <option value="perMile" ${(config.driverPayModel ?? 'hourly') === 'perMile' ? 'selected' : ''}>Per-Mile Pay Model</option>
-              <option value="percentage" ${(config.driverPayModel ?? 'hourly') === 'percentage' ? 'selected' : ''}>% of Revenue</option>
-              <option value="hybrid" ${(config.driverPayModel ?? 'hourly') === 'hybrid' ? 'selected' : ''}>Hybrid Pay Model</option>
-            </select>
-          </label>
-        </div>
-      </div>
-
-      <div style="padding:14px;background:var(--ies-gray-50);border-radius:6px;font-size:12px;color:var(--ies-gray-600);margin-top:24px;">
-        <strong>Carrier Rate Deck</strong> moved to its own tab. Open <em>Rate Deck</em> above to edit base rate, fuel surcharge, min charge, and notes per vehicle class.
-      </div>
     </div>
   `;
-
-  // Vehicle toggles
   el.querySelectorAll('[data-veh-toggle]').forEach(cb => {
     cb.addEventListener('change', () => {
       const idx = parseInt(/** @type {HTMLElement} */ (cb).dataset.vehToggle);
       vehicles[idx].enabled = /** @type {HTMLInputElement} */ (cb).checked;
-      updateRunButtonState();  // 2026-04-21 audit — flip Run button to dirty
-      renderConfig(el);
+      updateRunButtonState();
+      renderVehiclesSubTab(el);
     });
   });
-
-  // Carrier rate-deck inline edits — save on blur, also update the in-memory deck
-  el.querySelectorAll('[data-rate-id][data-rate-field]').forEach(input => {
-    input.addEventListener('change', async (e) => {
-      const target = /** @type {HTMLInputElement} */ (e.target);
-      const id = parseInt(target.dataset.rateId);
-      const field = target.dataset.rateField;
-      const val = parseFloat(target.value);
-      if (!Number.isFinite(val)) return;
-      // Update local deck immediately so re-renders show the new effective rate
-      const row = carrierRateDeck.find(r => r.id === id);
-      if (row) row[field] = val;
-      renderConfig(el);
-      // Persist if id is a real Supabase row (negative ids are local fallback defaults)
-      if (id > 0) {
-        try {
-          await api.updateCarrierRate(id, { [field]: val });
-          showToast(`Updated ${row?.display_name || 'rate'}`, 'success');
-        } catch (err) {
-          showToast(`Save failed: ${err.message || 'unknown'}`, 'error');
-        }
-      }
-    });
-  });
-
-  // Financing mode
   el.querySelectorAll('input[name="fm-financing"]').forEach(radio => {
     radio.addEventListener('change', (e) => {
       config.leaseMode = /** @type {HTMLInputElement} */ (e.target).value === 'lease';
       updateRunButtonState();
-      renderConfig(el);
+      renderVehiclesSubTab(el);
     });
   });
+}
 
-  // Config inputs
+// 2026-04-27 EVE2 (FLE-SCOPE-2/6/7/9): Operating Costs sub-tab. Cost
+// parameters sub-grouped into Driver / Fuel & Power / Vehicle / Overhead
+// sections. Driver Pay Model gets its own labeled row. GXO Margin +
+// Carrier Premium lifted into a separate Comparison block (they drive the
+// 3-way verdict, not vehicle cost).
+function renderOperatingSubTab(el) {
+  el.innerHTML = `
+    <div style="max-width:900px;">
+      <h3 class="text-section" style="margin-bottom:12px;">Driver</h3>
+      <div class="hub-card" style="padding:16px;margin-bottom:18px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px;">
+          ${cfgInput('Driver Wage', 'driverCostPerHr', config.driverCostPerHr, '$/hr')}
+          ${cfgInput('Driver Benefits %', 'driverBenefitPct', config.driverBenefitPct ?? 35, '%')}
+          ${cfgInput('Detention Hrs/Trip', 'detentionHoursPerTrip', config.detentionHoursPerTrip ?? 2, 'hrs')}
+          ${cfgInput('Driving Hrs/Day', 'drivingHoursPerDay', config.drivingHoursPerDay, 'hrs')}
+          ${cfgInput('Operating Days/Wk', 'operatingDaysPerWeek', config.operatingDaysPerWeek, 'days')}
+          ${cfgInput('Avg Speed', 'avgSpeedMph', config.avgSpeedMph, 'mph')}
+        </div>
+        <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--ies-gray-200);display:flex;gap:18px;flex-wrap:wrap;">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;font-weight:600;">
+            <input type="checkbox" id="fm-team" ${config.teamDriving ? 'checked' : ''}>
+            Team Driving (doubles daily hours, 2 drivers/vehicle)
+          </label>
+        </div>
+        <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--ies-gray-200);display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <label style="font-size:13px;font-weight:600;">Driver Pay Model:</label>
+          <select id="fm-driver-model" style="padding:6px 8px;border:1px solid var(--ies-gray-300);border-radius:6px;font-size:13px;font-weight:600;">
+            <option value="hourly" ${(config.driverPayModel ?? 'hourly') === 'hourly' ? 'selected' : ''}>Hourly</option>
+            <option value="perMile" ${(config.driverPayModel ?? 'hourly') === 'perMile' ? 'selected' : ''}>Per-Mile</option>
+            <option value="percentage" ${(config.driverPayModel ?? 'hourly') === 'percentage' ? 'selected' : ''}>% of Revenue</option>
+            <option value="hybrid" ${(config.driverPayModel ?? 'hourly') === 'hybrid' ? 'selected' : ''}>Hybrid</option>
+          </select>
+          <span style="font-size:11px;color:var(--ies-gray-500);">Drives how driver-cost rolls up against trips, miles, or revenue.</span>
+        </div>
+      </div>
+
+      <h3 class="text-section" style="margin-bottom:12px;">Fuel &amp; Power</h3>
+      <div class="hub-card" style="padding:16px;margin-bottom:18px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px;">
+          ${cfgInput('Diesel Price', 'dieselPricePerGal', config.dieselPricePerGal, '$/gal')}
+          ${cfgInput('Tolls', 'tollsCostPerMi', config.tollsCostPerMi ?? 0.025, '$/mi')}
+          ${cfgInput('Deadhead %', 'deadheadPct', config.deadheadPct ?? 15, '%')}
+          ${cfgInput('Utilization', 'utilizationPct', config.utilizationPct, '%')}
+        </div>
+      </div>
+
+      <h3 class="text-section" style="margin-bottom:12px;">Vehicle</h3>
+      <div class="hub-card" style="padding:16px;margin-bottom:18px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px;">
+          ${cfgInput('Maintenance', 'maintenanceCostPerMi', config.maintenanceCostPerMi, '$/mi')}
+          ${cfgInput('Tires', 'tiresCostPerMi', config.tiresCostPerMi ?? 0.04, '$/mi')}
+          ${cfgInput('Depreciation', 'depreciationYears', config.depreciationYears, 'yrs')}
+          ${cfgInput('Insurance Base', 'insuranceBasePerYear', config.insuranceBasePerYear, '$/yr')}
+        </div>
+      </div>
+
+      <h3 class="text-section" style="margin-bottom:12px;">Overhead</h3>
+      <div class="hub-card" style="padding:16px;margin-bottom:18px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px;">
+          ${cfgInput('Admin Overhead %', 'adminCostPct', config.adminCostPct ?? 8, '%')}
+          ${cfgInput('Permits', 'permitsPerYear', config.permitsPerYear ?? 850, '$/yr')}
+        </div>
+      </div>
+
+      <h3 class="text-section" style="margin-bottom:12px;">Comparison Knobs</h3>
+      <div class="hub-card" style="padding:16px;border-left:3px solid var(--ies-blue);margin-bottom:18px;">
+        <div style="font-size:11px;color:var(--ies-gray-500);margin-bottom:10px;line-height:1.5;">
+          Tune the numbers used by the <b>3-way comparison</b> on the Run phase. These don't change vehicle costs — they re-weight the dedicated and common-carrier columns.
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px;">
+          ${cfgInput('GXO Margin', 'gxoMarginPct', config.gxoMarginPct, '%')}
+          ${cfgInput('Carrier Premium', 'carrierPremiumPct', config.carrierPremiumPct, '%')}
+        </div>
+      </div>
+
+      <div style="padding:14px;background:var(--ies-gray-50);border-radius:6px;font-size:12px;color:var(--ies-gray-600);">
+        <strong>Carrier Rate Deck</strong> lives in its own sub-tab — switch to the <em>Rate Deck</em> tab above to edit base rate, fuel surcharge, min charge, and notes per vehicle class.
+      </div>
+    </div>
+  `;
   el.querySelectorAll('input[data-cfg]').forEach(input => {
     input.addEventListener('change', (e) => {
       const key = /** @type {HTMLInputElement} */ (e.target).dataset.cfg;
       config[key] = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
-      updateRunButtonState();  // 2026-04-21 audit — config edits now flip Run button.
+      updateRunButtonState();
     });
   });
-
-  // Team driving
   el.querySelector('#fm-team')?.addEventListener('change', (e) => {
     config.teamDriving = /** @type {HTMLInputElement} */ (e.target).checked;
     updateRunButtonState();
   });
-
-  // Driver pay model
   el.querySelector('#fm-driver-model')?.addEventListener('change', (e) => {
     config.driverPayModel = /** @type {HTMLSelectElement} */ (e.target).value;
     updateRunButtonState();
   });
+}
+
+function renderConfig(el) {
+  // Compat shim for any legacy callers — routes to Operating sub-tab.
+  renderOperatingSubTab(el);
 }
 
 function cfgInput(label, key, value, unit) {
@@ -719,6 +831,81 @@ function renderRateDeck(el) {
 // RESULTS TAB
 // ============================================================
 
+// 2026-04-27 EVE2 (FLE-SCOPE-5): Run-phase sub-tab renderers. Each calls
+// renderResults(el) (which emits the full results page) then hides the
+// blocks not relevant to that sub-tab via data-fm-section attrs sprinkled
+// onto the result cards.
+function renderCostSubTab(el) {
+  renderResults(el);
+  el.querySelectorAll('[data-fm-section]').forEach(node => {
+    const section = node.getAttribute('data-fm-section');
+    if (section && section !== 'cost') node.style.display = 'none';
+  });
+}
+
+function renderComparisonSubTab(el) {
+  renderResults(el);
+  el.querySelectorAll('[data-fm-section]').forEach(node => {
+    const section = node.getAttribute('data-fm-section');
+    if (section && section !== 'comparison') node.style.display = 'none';
+  });
+  // FLE-SCOPE-10: Push to NetOpt button on the Comparison sub-tab.
+  if (!el.querySelector('#fm-push-netopt')) {
+    const headerRail = el.querySelector('[data-fm-section="comparison"] [style*="font-size:14px"]');
+    const card = el.querySelector('[data-fm-section="comparison"]');
+    if (card) {
+      const btn = document.createElement('button');
+      btn.id = 'fm-push-netopt';
+      btn.className = 'hub-btn hub-btn-sm hub-btn-secondary';
+      btn.style.cssText = 'margin:0 0 12px 0;font-size:11px;padding:5px 10px;';
+      btn.title = 'Send the lane → annual-miles seed to Network Optimizer for downstream network design.';
+      btn.textContent = '→ Send to NetOpt';
+      btn.addEventListener('click', () => {
+        try {
+          const seed = lanes.map(l => ({
+            name: `${l.origin || 'O'} → ${l.destination || 'D'}`,
+            origin: l.origin,
+            destination: l.destination,
+            weeklyShipments: l.weeklyShipments,
+            avgWeightLbs: l.avgWeightLbs,
+            distanceMiles: l.distanceMiles,
+          }));
+          bus.emit('fleet:push-to-netopt', { source: 'fleet-modeler', lanes: seed, totalAnnualMiles: result?.totalAnnualMiles });
+          showToast(`Sent ${seed.length} lanes to Network Optimizer`, 'success');
+        } catch (err) {
+          showToast(`Push failed: ${err.message || 'unknown'}`, 'error');
+        }
+      });
+      card.insertBefore(btn, card.firstChild);
+    }
+  }
+}
+
+function renderSensitivitySubTab(el) {
+  renderResults(el);
+  el.querySelectorAll('[data-fm-section]').forEach(node => {
+    const section = node.getAttribute('data-fm-section');
+    if (section && section !== 'sensitivity') node.style.display = 'none';
+  });
+}
+
+function renderFeasibilitySubTab(el) {
+  renderResults(el);
+  el.querySelectorAll('[data-fm-section]').forEach(node => {
+    const section = node.getAttribute('data-fm-section');
+    if (section && section !== 'feasibility') node.style.display = 'none';
+  });
+  // If no HOS issues, surface a friendly all-clear card.
+  if (!el.querySelector('[data-fm-section="feasibility"]')) {
+    const inner = el;
+    const card = document.createElement('div');
+    card.className = 'hub-card';
+    card.style.cssText = 'padding:16px;background:#f0fdf4;border-left:4px solid #22c55e;margin-top:8px;';
+    card.innerHTML = '<div style="font-size:13px;font-weight:700;color:#15803d;">✓ HOS Feasibility — all lanes within driving budget</div>';
+    inner.appendChild(card);
+  }
+}
+
 function renderResults(el) {
   if (!result) {
     el.innerHTML = '<div class="hub-card"><p class="text-body text-muted">Click "Calculate Fleet" to see results.</p></div>';
@@ -749,7 +936,7 @@ function renderResults(el) {
       </div>
 
       <!-- Fleet Composition -->
-      <div class="hub-card" style="padding:16px;margin-bottom:20px;">
+      <div class="hub-card" data-fm-section="cost" style="padding:16px;margin-bottom:20px;">
         <div style="font-size:14px;font-weight:700;margin-bottom:12px;">Fleet Composition</div>
         <table style="width:100%;border-collapse:collapse;font-size:13px;">
           <thead>
@@ -788,13 +975,13 @@ function renderResults(el) {
       </div>
 
       <!-- Cost Waterfall (fixed → variable → total) -->
-      <div class="hub-card" style="padding:20px;margin-bottom:20px;">
+      <div class="hub-card" data-fm-section="cost" style="padding:20px;margin-bottom:20px;">
         <div style="font-size:14px;font-weight:700;margin-bottom:16px;">Annual Cost Waterfall</div>
         ${renderCostWaterfall(r.fleetComposition)}
       </div>
 
       <!-- 3-Way Comparison Cards -->
-      <div class="hub-card" style="padding:20px;margin-bottom:20px;">
+      <div class="hub-card" data-fm-section="comparison" style="padding:20px;margin-bottom:20px;">
         <div style="font-size:14px;font-weight:700;margin-bottom:16px;">3-Way Cost Comparison</div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;">
           ${renderComparisonCard('Private Fleet', r.comparison.private, r.comparison, 'var(--ies-blue)')}
@@ -807,7 +994,7 @@ function renderResults(el) {
       ${renderCostBuildupCard(r)}
 
       <!-- ATRI Benchmark Table -->
-      <div class="hub-card" style="padding:20px;margin-bottom:20px;">
+      <div class="hub-card" data-fm-section="comparison" style="padding:20px;margin-bottom:20px;">
         <div style="font-size:14px;font-weight:700;margin-bottom:16px;">ATRI 2024 Benchmark Comparison</div>
         <div style="overflow-x:auto;">
           <table style="width:100%;border-collapse:collapse;font-size:12px;">
@@ -845,7 +1032,7 @@ function renderResults(el) {
       ${renderVolumeSensitivityCard()}
 
       <!-- Lane Assignments -->
-      <div class="hub-card" style="padding:16px;margin-bottom:20px;">
+      <div class="hub-card" data-fm-section="cost" style="padding:16px;margin-bottom:20px;">
         <div style="font-size:14px;font-weight:700;margin-bottom:12px;">Lane Assignments</div>
         <div style="max-height:300px;overflow-y:auto;">
           <table style="width:100%;border-collapse:collapse;font-size:13px;">
@@ -1011,7 +1198,7 @@ function renderCostBuildupCard(r) {
     </tr>`;
 
   return `
-    <div class="hub-card" style="padding:20px;margin-bottom:20px;">
+    <div class="hub-card" data-fm-section="cost" style="padding:20px;margin-bottom:20px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
         <div style="font-size:14px;font-weight:700;">Annual Cost Build-Up — All Three Models</div>
         <div style="font-size:11px;color:var(--ies-gray-500);">Side-by-side. — = not applicable for that model.</div>
@@ -1107,7 +1294,7 @@ function renderSensitivityMatrixCard() {
 
     const rngInput = (key, val, step, min, max) => `<input type="number" data-sens-range="${key}" value="${val}" step="${step}" min="${min}" max="${max}" style="width:60px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:11px;text-align:right;">`;
     let tableHtml = `
-      <div class="hub-card" style="padding:20px;margin-bottom:20px;">
+      <div class="hub-card" data-fm-section="sensitivity" style="padding:20px;margin-bottom:20px;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
           <div style="font-size:14px;font-weight:700;">Sensitivity Analysis: Driver Rate × Diesel Price</div>
           <div style="display:flex;gap:14px;font-size:11px;color:var(--ies-gray-600);align-items:center;flex-wrap:wrap;">
@@ -1162,7 +1349,7 @@ function renderVolumeSensitivityCard() {
   try {
     const scenarios = calc.calcVolumeSensitivity(lanes, vehicles, config);
     return `
-      <div class="hub-card" style="padding:20px;margin-bottom:20px;">
+      <div class="hub-card" data-fm-section="sensitivity" style="padding:20px;margin-bottom:20px;">
         <div style="font-size:14px;font-weight:700;margin-bottom:16px;">Volume Sensitivity Analysis</div>
         <table style="width:100%;border-collapse:collapse;font-size:12px;">
           <thead>
@@ -1200,7 +1387,7 @@ function renderHosWarnings(r) {
   const v = (r && r.hosViolations) || [];
   if (v.length === 0) return '';
   return `
-    <div class="hub-card" style="padding:14px;margin-bottom:20px;border-left:4px solid #ef4444;background:#fef2f2;">
+    <div class="hub-card" data-fm-section="feasibility" style="padding:14px;margin-bottom:20px;border-left:4px solid #ef4444;background:#fef2f2;">
       <div style="font-size:13px;font-weight:700;color:#991b1b;margin-bottom:8px;">⚠ HOS Feasibility Warnings (${v.length})</div>
       <ul style="margin:0;padding-left:18px;font-size:12px;color:#7f1d1d;">
         ${v.map(x => {
@@ -1238,7 +1425,7 @@ function renderBreakEvenCard(r) {
   const carrY = yToPx(be.carrierCpm);
   const curX = xToPx(be.currentMiles);
   return `
-    <div class="hub-card" style="padding:20px;margin-bottom:20px;">
+    <div class="hub-card" data-fm-section="comparison" style="padding:20px;margin-bottom:20px;">
       <div style="font-size:14px;font-weight:700;margin-bottom:8px;">Break-Even Miles — Private vs Dedicated vs Carrier</div>
       <div style="font-size:12px;color:var(--ies-gray-500);margin-bottom:12px;">Below break-even, Private's fixed costs dominate. Above break-even, Private wins on $/mi.</div>
       <svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="xMidYMid meet" style="background:var(--ies-gray-50);border-radius:6px;">
