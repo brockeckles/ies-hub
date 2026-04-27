@@ -6,8 +6,8 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sP';
-import * as calc from './calc.js?v=20260423-z3';
-import * as api from './api.js?v=20260423-z5';
+import * as calc from './calc.js?v=20260427-A3';
+import * as api from './api.js?v=20260427-A3';
 import { showToast } from '../../shared/toast.js?v=20260418-sK';
 import { getEnv, getEnvLabel, getProjectRef } from '../../shared/supabase.js?v=20260424-A1';
 import { getBuildInfo, getBuildInfoSync } from '../../shared/build-info.js?v=20260424-A2';
@@ -278,7 +278,7 @@ async function loadActivityData(forceRefresh = false) {
   _activityLoading = true;
   try {
     const inputs = await api.loadUserActivityInputs({ days: _activityWindowDays });
-    _activityRows = calc.summarizeUserActivity(inputs.profiles, inputs.events);
+    _activityRows = calc.summarizeUserActivity(inputs.profiles, inputs.events, { authLogins: inputs.authLogins });
     _activityKpis = calc.activityKpis(_activityRows);
     _activityLoaded = true;
     _activityLastLoad = Date.now();

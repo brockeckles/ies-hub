@@ -522,6 +522,20 @@ export function summarizeUserActivity(profiles, events, opts = {}) {
   const now = opts.now || Date.now();
   const onlineWithinMs = opts.onlineWithinMs || 15 * 60 * 1000; // 15 min
 
+  // 2026-04-27: authLogins is the authoritative last-sign-in map keyed on
+  // user_id. Comes from public.admin_list_user_logins() which exposes
+  // auth.users.last_sign_in_at to admins. We overlay it onto each row's
+  // lastLogin so the column shows real auth state instead of telemetry-
+  // derived guesses (which were always null because session_start fires
+  // before auth bootstraps).
+  const authLogins = opts.authLogins || [];
+  const authLoginById = new Map();
+  for (const r of authLogins) {
+    const id = r?.user_id || r?.id;
+    const ts = r?.last_sign_in_at;
+    if (id && ts) authLoginById.set(id, ts);
+  }
+
   // Bucket events by user_id (string, or '__anon__' for nulls).
   const byUser = new Map();
   for (const ev of events || []) {
@@ -536,7 +550,7 @@ export function summarizeUserActivity(profiles, events, opts = {}) {
   // any existing fixtures / callers that pass a different shape still work.
   const rows = (profiles || []).map((p) => {
     const evs = byUser.get(p.id) || [];
-    return rollup({
+    const r = rollup({
       userId: p.id,
       email: p.email || '',
       displayName: p.full_name || p.display_name || p.email || '(no name)',
@@ -545,6 +559,12 @@ export function summarizeUserActivity(profiles, events, opts = {}) {
       events: evs,
       now, onlineWithinMs,
     });
+    // Prefer auth.users.last_sign_in_at — it's the only source that
+    // captures sign-ins independent of telemetry firing. Falls back to
+    // event-derived lastLogin (still useful when auth fetch fails).
+    const authTs = authLoginById.get(p.id);
+    if (authTs) r.lastLogin = authTs;
+    return r;
   });
 
   // Append the Anonymous bucket only if we actually have un-attributed

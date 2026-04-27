@@ -274,7 +274,7 @@ export async function loadUserActivityInputs(opts = {}) {
   const days = Number.isFinite(opts.days) ? opts.days : 7;
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
-  const [profilesRes, eventsRes] = await Promise.all([
+  const [profilesRes, eventsRes, loginsRes] = await Promise.all([
     // NOTE: the column is `full_name` in public.profiles (not display_name)
     db.from('profiles').select('id, email, full_name, role, team_id, created_at'),
     // Cap at a large-but-bounded number so we never accidentally pull the
@@ -285,6 +285,11 @@ export async function loadUserActivityInputs(opts = {}) {
       .gte('created_at', since)
       .order('created_at', { ascending: false })
       .limit(50000),
+    // 2026-04-27: pull authoritative last-sign-in timestamps from auth.users
+    // via admin-gated SECURITY DEFINER RPC. Telemetry-derived lastLogin from
+    // session_start events was always null because session_start fires before
+    // auth bootstraps, so user_id stamping is racy/empty.
+    db.rpc('admin_list_user_logins'),
   ]);
 
   if (profilesRes.error) {
@@ -293,10 +298,14 @@ export async function loadUserActivityInputs(opts = {}) {
   if (eventsRes.error) {
     console.warn('[admin] loadUserActivityInputs events failed:', eventsRes.error);
   }
+  if (loginsRes.error) {
+    console.warn('[admin] loadUserActivityInputs logins failed:', loginsRes.error);
+  }
 
   return {
     profiles: profilesRes.data || [],
     events: eventsRes.data || [],
+    authLogins: loginsRes.data || [],
   };
 }
 
