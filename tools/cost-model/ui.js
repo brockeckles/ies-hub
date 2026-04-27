@@ -11705,7 +11705,8 @@ ${(() => {
           <div class="cm-subtle" style="font-size:12px;">Direct labor cost during each ramp month — multiplies steady-state monthly direct labor (${calc.formatCurrency(steadyMonthlyCost)}) by the headcount ramp %. Steady-state baseline: <strong>${totalFtes.toFixed(1)} FTE</strong> · <strong>${calc.formatCurrency(steadyDirectCost)}</strong>/yr.</div>
         </div>
       </div>
-      <table class="cm-table" style="width:100%;">
+      <div class="cm-table-scroll">
+      <table class="cm-table" style="width:100%;min-width:680px;">
         <thead>
           <tr>
             <th>Month After Go-Live</th>
@@ -11796,7 +11797,7 @@ function renderImplRampPanel(arrayKey, values, label, color) {
       <div class="cm-impl-ramp__chart" style="position:relative;height:140px;display:flex;align-items:flex-end;gap:6px;padding:18px 0 0;border-bottom:1px solid var(--ies-gray-200);">
         <!-- 100% reference -->
         <div title="Steady-state reference (100%)" style="position:absolute;left:0;right:0;top:calc(18px + ${ssYPct.toFixed(1)}% * (140 - 18) / 140);border-top:1px dashed ${color};opacity:0.55;pointer-events:none;">
-          <span style="position:absolute;right:0;top:-9px;font-size:10px;font-weight:600;color:${color};background:#fff;padding:0 4px;">100% steady-state</span>
+          <span style="position:absolute;left:0;top:-9px;font-size:10px;font-weight:600;color:${color};background:#fff;padding:0 4px;">100% steady-state</span>
         </div>
         ${values.map((v, i) => {
           const pct = Number(v) || 0;
