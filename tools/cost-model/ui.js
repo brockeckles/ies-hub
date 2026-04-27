@@ -638,6 +638,72 @@ export async function mount(el) {
     console.warn('[CM] Failed to consume NetOpt push handoff:', e);
   }
 
+  // 2026-04-27 — Deal Management → CM handoff. When the user clicks an
+  // "Open <scenario> →" button on a real deal, we stash the model id in
+  // sessionStorage and navigate here. Open it directly into the editor so
+  // the user doesn't have to click again on the landing.
+  try {
+    const pendingOpen = sessionStorage.getItem('cm_pending_open');
+    if (pendingOpen) {
+      const payload = JSON.parse(pendingOpen);
+      if (payload && payload.at && (Date.now() - payload.at) < 60000 && payload.id) {
+        sessionStorage.removeItem('cm_pending_open');
+        const full = await api.getModel(Number(payload.id));
+        if (full) {
+          if (full.project_data) {
+            model = { ...createEmptyModel(), ...full.project_data, id: full.id };
+          } else {
+            // Legacy fallback — minimal hydrate so editor has something to render.
+            model = createEmptyModel();
+            model.id = full.id;
+            model.projectDetails = model.projectDetails || {};
+            if (full.name) model.projectDetails.name = full.name;
+            if (full.client_name) model.projectDetails.clientName = full.client_name;
+            if (full.market_id) model.projectDetails.market = full.market_id;
+            if (full.deal_deals_id) model.projectDetails.dealId = full.deal_deals_id;
+          }
+          lastSavedAt = full.updated_at || full.created_at || null;
+          lastSavedBy = null;
+          isDirty = false;
+          userHasInteracted = false;
+          viewMode = 'editor';
+          activeSection = 'projectDetails';
+        }
+      } else {
+        sessionStorage.removeItem('cm_pending_open');
+      }
+    }
+  } catch (e) {
+    console.warn('[CM] Failed to consume Deal-Management open handoff:', e);
+  }
+
+  // 2026-04-27 — Deal Management → CM "create new for deal" handoff.
+  // Pre-stamps the new (empty) model with the deal id so saving links it.
+  try {
+    const pendingNew = sessionStorage.getItem('cm_pending_new_for_deal');
+    if (pendingNew) {
+      const payload = JSON.parse(pendingNew);
+      if (payload && payload.at && (Date.now() - payload.at) < 60000 && payload.dealId) {
+        sessionStorage.removeItem('cm_pending_new_for_deal');
+        if (viewMode !== 'editor') {
+          model = createEmptyModel();
+          isDirty = false;
+          userHasInteracted = false;
+          viewMode = 'editor';
+          activeSection = 'projectDetails';
+        }
+        if (model && model.projectDetails) {
+          model.projectDetails.dealId = payload.dealId;
+          isDirty = true;
+        }
+      } else {
+        sessionStorage.removeItem('cm_pending_new_for_deal');
+      }
+    }
+  } catch (e) {
+    console.warn('[CM] Failed to consume Deal-Management create handoff:', e);
+  }
+
   renderCurrentView();
 
   bus.emit('cm:mounted');
@@ -11054,6 +11120,19 @@ function renderLanding() {
           const updatedStr = updated ? updated.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
           const market = m.market_id ? (marketById[m.market_id] || m.market_id) : null;
           const safeName = (m.name || 'Untitled Model').replace(/"/g, '&quot;');
+          // 2026-04-27: surface scenario_label + sqft + margin so cards differentiate
+          // when one deal has multiple scenarios (e.g., baseline / pessimistic / optimistic).
+          const rawLabel = (m.scenario_label || '').toString().trim();
+          const labelDisp = rawLabel ? rawLabel : 'Baseline';
+          const isBaseline = !rawLabel || /^baseline$/i.test(rawLabel);
+          const labelBg = isBaseline ? 'var(--ies-gray-100)' : 'rgba(0,71,171,0.10)';
+          const labelFg = isBaseline ? 'var(--ies-gray-600)' : 'var(--ies-blue)';
+          const sqftRaw = Number(m.facility_sqft);
+          const sqftDisp = Number.isFinite(sqftRaw) && sqftRaw > 0
+            ? (sqftRaw >= 1000 ? `${(sqftRaw/1000).toLocaleString(undefined,{maximumFractionDigits:0})}K` : sqftRaw.toLocaleString())
+            : null;
+          const marginRaw = Number(m.target_margin_pct);
+          const marginDisp = Number.isFinite(marginRaw) && marginRaw > 0 ? `${marginRaw.toFixed(1)}%` : null;
           return `
             <div class="hub-card cm-landing-card" data-cm-card="${m.id}" data-cm-name="${safeName}" draggable="true" style="padding:16px;cursor:pointer;transition:all 0.15s;border:1px solid var(--ies-gray-200);position:relative;">
               <button class="cm-landing-duplicate" data-cm-duplicate="${m.id}" data-cm-name="${safeName}" draggable="false"
@@ -11067,10 +11146,17 @@ function renderLanding() {
                 ✕
               </button>
               <div style="font-size:14px;font-weight:700;margin-bottom:4px;color:var(--ies-navy);padding-right:24px;">${m.name || 'Untitled Model'}</div>
-              <div style="font-size:12px;color:var(--ies-gray-500);margin-bottom:12px;">${m.client_name || '<span style=\"color:var(--ies-gray-300);\">No client</span>'}</div>
+              <div style="font-size:12px;color:var(--ies-gray-500);margin-bottom:10px;">${m.client_name || '<span style=\"color:var(--ies-gray-300);\">No client</span>'}</div>
               <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+                <span title="Scenario" style="font-size:10px;padding:2px 8px;border-radius:12px;background:${labelBg};color:${labelFg};font-weight:700;letter-spacing:0.02em;">${labelDisp}</span>
                 ${market ? `<span style="font-size:10px;padding:2px 8px;border-radius:12px;background:var(--ies-gray-100);color:var(--ies-gray-600);">${market}</span>` : ''}
               </div>
+              ${(sqftDisp || marginDisp) ? `
+                <div style="display:flex;gap:14px;margin-bottom:10px;font-size:11px;color:var(--ies-gray-500);">
+                  ${sqftDisp ? `<div><span style=\"color:var(--ies-gray-400);\">Facility</span> <strong style=\"color:var(--ies-navy);\">${sqftDisp} SF</strong></div>` : ''}
+                  ${marginDisp ? `<div><span style=\"color:var(--ies-gray-400);\">Margin</span> <strong style=\"color:var(--ies-navy);\">${marginDisp}</strong></div>` : ''}
+                </div>
+              ` : ''}
               <div style="font-size:11px;color:var(--ies-gray-400);">Updated ${updatedStr}</div>
             </div>
           `;

@@ -71,4 +71,90 @@ export async function fetchActivityTemplates() {
   }
 }
 
-export default { fetchStages, fetchActivityTemplates };
+/**
+ * Fetch live deals from `deal_deals` joined with the count + summary of attached
+ * cost models (`cost_model_projects.deal_deals_id`). Result is consumed by the
+ * Deal Management hub view to surface real deals alongside the demo set.
+ *
+ * Returned rows are shaped to be compatible with the hub view's deal renderer
+ * (`{id, name, client, stage, sites, revenue, margin, owner, ...}`) so the
+ * pipeline / list / detail screens can render them with no further transform.
+ *
+ * @returns {Promise<Array<object>>}
+ */
+export async function listRealDeals() {
+  try {
+    const [deals, models] = await Promise.all([
+      db.fetchAll('deal_deals', 'id, deal_name, client_name, deal_owner, status, current_stage_id, created_at, updated_at'),
+      db.fetchAll('cost_model_projects', 'id, name, scenario_label, client_name, market_id, facility_sqft, target_margin_pct, total_annual_cost, deal_deals_id, updated_at'),
+    ]);
+    const byDeal = new Map();
+    for (const m of models || []) {
+      const k = m.deal_deals_id;
+      if (!k) continue;
+      if (!byDeal.has(k)) byDeal.set(k, []);
+      byDeal.get(k).push(m);
+    }
+    return (deals || []).map(d => {
+      const attached = byDeal.get(d.id) || [];
+      // Roll a single per-site representative from each unique market_id (if set)
+      // so the Sites tab has something to show. When models share a market_id /
+      // name (4 scenarios for 1 site = the Wayfair Memphis FC case), they collapse
+      // into a single site row.
+      const sitesMap = new Map();
+      for (const m of attached) {
+        const k = `${m.market_id || ''}|${m.name || ''}`;
+        if (!sitesMap.has(k)) {
+          sitesMap.set(k, {
+            name: m.name || 'Unnamed Site',
+            market: m.market_id || '',
+            sqft: Number(m.facility_sqft) || 0,
+            type: '—',
+            modelCount: 0,
+          });
+        }
+        sitesMap.get(k).modelCount += 1;
+      }
+      const sites = [...sitesMap.values()];
+      // Best-effort revenue/margin: average across attached models.
+      const margins = attached.map(m => Number(m.target_margin_pct)).filter(n => Number.isFinite(n) && n > 0);
+      const margin = margins.length ? margins.reduce((a, b) => a + b, 0) / margins.length : 0;
+      const totals = attached.map(m => Number(m.total_annual_cost)).filter(n => Number.isFinite(n) && n > 0);
+      const revenue = totals.length ? totals.reduce((a, b) => a + b, 0) / (1 - (margin / 100 || 0.1)) : 0;
+      // Stage: deal_deals.current_stage_id is a bigint FK to stages.id; not the
+      // 1..6 stage_number used by the hub. Default to 1 when unset; when set,
+      // we'd need stages lookup — defer to a follow-up.
+      const stage = 1;
+      return {
+        id: d.id, // uuid — distinguishes real from demo (which use 'd1' etc.)
+        name: d.deal_name || 'Untitled Deal',
+        client: d.client_name || '—',
+        stage,
+        sites,
+        revenue,
+        margin,
+        owner: d.deal_owner || '—',
+        daysInStage: 0,
+        score: '—',
+        startDate: d.created_at ? d.created_at.slice(0, 10) : null,
+        targetClose: null,
+        isReal: true,
+        models: attached.map(m => ({
+          id: m.id,
+          name: m.name,
+          scenario_label: m.scenario_label,
+          client_name: m.client_name,
+          market_id: m.market_id,
+          facility_sqft: m.facility_sqft,
+          target_margin_pct: m.target_margin_pct,
+          updated_at: m.updated_at,
+        })),
+      };
+    });
+  } catch (err) {
+    console.warn('[deal-mgmt] listRealDeals failed', err);
+    return [];
+  }
+}
+
+export default { fetchStages, fetchActivityTemplates, listRealDeals };

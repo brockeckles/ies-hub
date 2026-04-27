@@ -19,7 +19,9 @@ import { recordAudit } from '../../shared/audit.js?v=20260423-y7';
  */
 export async function listModels() {
   // CM-LND-1 (2026-04-25): include deal_deals_id so the landing can group by deal.
-  return db.fetchAll('cost_model_projects', 'id, name, client_name, market_id, deal_deals_id, created_at, updated_at');
+  // 2026-04-27: also pull scenario_label, facility_sqft, target_margin_pct so cards can
+  // visually fan out by scenario when a deal has multiple models attached.
+  return db.fetchAll('cost_model_projects', 'id, name, client_name, market_id, deal_deals_id, scenario_label, facility_sqft, target_margin_pct, created_at, updated_at');
 }
 
 /**

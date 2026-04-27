@@ -7,7 +7,7 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import * as api from './api.js?v=20260418-sK';
+import * as api from './api.js?v=20260427-s1';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -144,6 +144,41 @@ export function mount(el) {
   // Pull live activity templates from stage_element_templates. Falls back to
   // the hardcoded DOS_TEMPLATES if the fetch fails (e.g., offline).
   loadLiveTemplates();
+
+  // 2026-04-27: load real deals from deal_deals + cost_model_projects join.
+  // Real deals get merged ahead of the hardcoded DEALS demo set so the user
+  // sees their live work first. Deal detail (artifacts / financials / open-cm
+  // routing) branches on `selectedDeal.isReal`.
+  loadRealDealsAndMerge();
+}
+
+const _realDealIds = new Set();
+async function loadRealDealsAndMerge() {
+  try {
+    const live = await api.listRealDeals();
+    if (!Array.isArray(live) || live.length === 0) return;
+    // Idempotent: drop any previously merged real deals before merging again
+    if (_realDealIds.size > 0) {
+      for (let i = DEALS.length - 1; i >= 0; i--) {
+        if (_realDealIds.has(DEALS[i].id)) DEALS.splice(i, 1);
+      }
+      _realDealIds.clear();
+    }
+    // Splice real deals at the top
+    DEALS.unshift(...live);
+    for (const d of live) _realDealIds.add(d.id);
+    bus.emit('deal-management:real-deals-loaded', { count: live.length });
+    // Re-render if visible
+    if (viewMode === 'detail' && selectedDeal) {
+      const refreshed = DEALS.find(x => x.id === selectedDeal.id);
+      if (refreshed) selectedDeal = refreshed;
+      renderDetailContent();
+    } else {
+      render();
+    }
+  } catch (err) {
+    console.warn('[deal-mgmt] loadRealDealsAndMerge failed', err);
+  }
 }
 
 async function loadLiveTemplates() {
@@ -350,6 +385,26 @@ function bindDelegatedEvents() {
     // Open in design tool
     if (target.closest('[data-action="open-cost-model"]')) { window.location.hash = 'designtools/cost-model'; return; }
     if (target.closest('[data-action="open-multi-site"]')) { window.location.hash = 'designtools/deal-manager'; return; }
+
+    // Smart cost-model actions (real deals only — wired by renderCostModelButton/renderCostBreakdownCard)
+    const openCmId = target.closest('[data-action="open-cost-model-id"]');
+    if (openCmId) {
+      const mid = /** @type {HTMLElement} */ (openCmId).dataset.modelId;
+      if (mid) openCostModelById(mid);
+      return;
+    }
+    const chooseCm = target.closest('[data-action="choose-cost-model"]');
+    if (chooseCm) {
+      const did = /** @type {HTMLElement} */ (chooseCm).dataset.dealId;
+      if (did) openCostModelChooser(did);
+      return;
+    }
+    const createCm = target.closest('[data-action="create-cost-model"]');
+    if (createCm) {
+      const did = /** @type {HTMLElement} */ (createCm).dataset.dealId;
+      if (did) createCostModelForDeal(did);
+      return;
+    }
 
     // Deck generation buttons
     const deckBtn = target.closest('[data-deck]');
@@ -935,12 +990,201 @@ const _artifactsByDeal = new Map();
 
 function getArtifacts(dealId) {
   if (_artifactsByDeal.has(dealId)) return _artifactsByDeal.get(dealId);
-  const seeded = [
-    { id: 'a1', kind: 'cost_model',       name: 'Wayfair Midwest base case',  ref: 'cm:7',   updated: '2026-04-12' },
-    { id: 'a2', kind: 'warehouse_sizing', name: 'Chicago DC sizing v2',       ref: 'wsc:11', updated: '2026-04-15' },
-  ];
+  // 2026-04-27: real deals (uuid id, isReal:true on the DEAL object) get
+  // their cost models surfaced as Linked Artifacts directly. Demo deals
+  // keep the original seeded list so the demo flow still works.
+  const dealObj = DEALS.find(x => x.id === dealId);
+  let seeded;
+  if (dealObj?.isReal && Array.isArray(dealObj.models) && dealObj.models.length) {
+    seeded = dealObj.models.map(m => ({
+      id: 'cm-' + m.id,
+      kind: 'cost_model',
+      name: `${m.name || 'Untitled'}${m.scenario_label ? ' — ' + m.scenario_label : ''}`,
+      ref: 'cm:' + m.id,
+      updated: m.updated_at ? String(m.updated_at).slice(0, 10) : '—',
+      modelId: m.id,
+    }));
+  } else {
+    seeded = [
+      { id: 'a1', kind: 'cost_model',       name: 'Wayfair Midwest base case',  ref: 'cm:7',   updated: '2026-04-12' },
+      { id: 'a2', kind: 'warehouse_sizing', name: 'Chicago DC sizing v2',       ref: 'wsc:11', updated: '2026-04-15' },
+    ];
+  }
   _artifactsByDeal.set(dealId, seeded);
   return seeded;
+}
+
+// =============================================================
+// 2026-04-27 — Smart cost-model routing: 0/1/N
+// =============================================================
+
+/**
+ * Render the Quick Actions "Open Cost Model Builder" button. For real deals
+ * with attached cost models, switches the affordance based on count:
+ *   0 → "Create cost model" (linked to this deal)
+ *   1 → "Open <scenario_label>" (jumps straight into that model)
+ *   N → "Compare N scenarios" (opens an in-page chooser modal)
+ *
+ * Demo deals keep the legacy "Open Cost Model Builder →" behavior so existing
+ * demo flows aren't disrupted.
+ */
+function renderCostModelButton(d) {
+  if (!d?.isReal || !Array.isArray(d.models) || d.models.length === 0) {
+    if (d?.isReal) {
+      return `<button class="hub-btn hub-btn-sm hub-btn-primary" data-action="create-cost-model" data-deal-id="${escapeAttr(d.id)}" style="text-align:left;">+ Create cost model for this deal</button>`;
+    }
+    return `<button class="hub-btn hub-btn-sm" data-action="open-cost-model" style="text-align:left;">Open Cost Model Builder →</button>`;
+  }
+  if (d.models.length === 1) {
+    const m = d.models[0];
+    const lbl = m.scenario_label ? `${m.name || 'Cost model'} — ${m.scenario_label}` : (m.name || 'Cost model');
+    return `<button class="hub-btn hub-btn-sm hub-btn-primary" data-action="open-cost-model-id" data-model-id="${m.id}" style="text-align:left;">Open ${escapeAttr(lbl)} →</button>`;
+  }
+  return `<button class="hub-btn hub-btn-sm hub-btn-primary" data-action="choose-cost-model" data-deal-id="${escapeAttr(d.id)}" style="text-align:left;">Choose from ${d.models.length} cost-model scenarios →</button>`;
+}
+
+/**
+ * Replacement for the legacy "Cost Breakdown (Placeholder)" card. For real
+ * deals, surfaces a small summary of attached models + a smart-routed button
+ * (same logic as the Quick Actions button). For demo deals, keeps the legacy
+ * placeholder + Open Cost Model Builder behavior so there's no regression.
+ */
+function renderCostBreakdownCard(d) {
+  if (!d?.isReal) {
+    return `
+      <div class="hub-card" style="padding:16px;">
+        <div style="font-size:13px;font-weight:700;margin-bottom:12px;">Cost Breakdown (Placeholder)</div>
+        <div style="text-align:center;padding:20px;color:var(--ies-gray-400);">
+          <div style="font-size:12px;margin-bottom:8px;">Build a cost model to see detailed cost breakdown.</div>
+          <button class="hub-btn hub-btn-sm" data-action="open-cost-model">Open Cost Model Builder</button>
+        </div>
+      </div>
+    `;
+  }
+  const ms = d.models || [];
+  const total = ms.length;
+  const headerLabel = total === 0 ? 'Cost Models' : `Cost Models · ${total}`;
+  if (total === 0) {
+    return `
+      <div class="hub-card" style="padding:16px;">
+        <div style="font-size:13px;font-weight:700;margin-bottom:12px;">${headerLabel}</div>
+        <div style="text-align:center;padding:20px;color:var(--ies-gray-400);">
+          <div style="font-size:12px;margin-bottom:8px;">No cost models linked to this deal yet.</div>
+          <button class="hub-btn hub-btn-sm hub-btn-primary" data-action="create-cost-model" data-deal-id="${escapeAttr(d.id)}">+ Create cost model</button>
+        </div>
+      </div>
+    `;
+  }
+  const rows = ms.map(m => {
+    const sqftN = Number(m.facility_sqft);
+    const sqft = Number.isFinite(sqftN) && sqftN > 0
+      ? (sqftN >= 1000 ? `${(sqftN/1000).toLocaleString(undefined,{maximumFractionDigits:0})}K SF` : sqftN.toLocaleString() + ' SF')
+      : '—';
+    const marginN = Number(m.target_margin_pct);
+    const margin = Number.isFinite(marginN) && marginN > 0 ? `${marginN.toFixed(1)}%` : '—';
+    const lbl = m.scenario_label || 'Baseline';
+    return `
+      <tr style="border-bottom:1px solid var(--ies-gray-100);">
+        <td style="padding:8px 6px;font-weight:600;">${escapeAttr(lbl)}</td>
+        <td style="padding:8px 6px;color:var(--ies-gray-500);">${sqft}</td>
+        <td style="padding:8px 6px;color:var(--ies-gray-500);">${margin}</td>
+        <td style="padding:8px 6px;text-align:right;">
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="open-cost-model-id" data-model-id="${m.id}" style="font-size:11px;">Open →</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+  return `
+    <div class="hub-card" style="padding:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div style="font-size:13px;font-weight:700;">${headerLabel}</div>
+        ${total > 1 ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="choose-cost-model" data-deal-id="${escapeAttr(d.id)}" style="font-size:11px;">Compare ${total} scenarios →</button>` : ''}
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead><tr style="background:var(--ies-gray-50);color:var(--ies-gray-400);font-size:10px;font-weight:700;">
+          <th style="text-align:left;padding:6px;">Scenario</th>
+          <th style="text-align:left;padding:6px;">Facility</th>
+          <th style="text-align:left;padding:6px;">Target Margin</th>
+          <th></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+/**
+ * Open a specific cost model by id. Uses sessionStorage handoff so the CM
+ * mount() can pick it up and skip the landing page.
+ */
+function openCostModelById(modelId) {
+  try {
+    sessionStorage.setItem('cm_pending_open', JSON.stringify({ id: Number(modelId), at: Date.now() }));
+  } catch {}
+  window.location.hash = 'designtools/cost-model';
+}
+
+/**
+ * Pop a chooser modal listing all attached scenarios so the user picks one.
+ */
+function openCostModelChooser(dealId) {
+  if (!rootEl) return;
+  const d = DEALS.find(x => x.id === dealId);
+  if (!d || !Array.isArray(d.models) || d.models.length === 0) return;
+  rootEl.querySelector('#dm-cm-chooser')?.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'dm-cm-chooser';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:1000;';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:8px;padding:20px;width:560px;max-width:92vw;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+      <div style="font-size:16px;font-weight:700;margin-bottom:4px;">Pick a cost-model scenario</div>
+      <div style="font-size:12px;color:var(--ies-gray-400);margin-bottom:14px;">${escapeAttr(d.name)} · ${d.models.length} scenarios linked.</div>
+      <div style="display:flex;flex-direction:column;gap:8px;max-height:60vh;overflow:auto;">
+        ${d.models.map(m => {
+          const sqftN = Number(m.facility_sqft);
+          const sqft = Number.isFinite(sqftN) && sqftN > 0
+            ? (sqftN >= 1000 ? `${(sqftN/1000).toLocaleString(undefined,{maximumFractionDigits:0})}K SF` : sqftN.toLocaleString() + ' SF')
+            : '—';
+          const marginN = Number(m.target_margin_pct);
+          const margin = Number.isFinite(marginN) && marginN > 0 ? `${marginN.toFixed(1)}%` : '—';
+          const lbl = m.scenario_label || 'Baseline';
+          return `
+            <button data-pick-model-id="${m.id}" style="text-align:left;padding:12px 14px;border:1px solid var(--ies-gray-200);border-radius:6px;background:#fff;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;">
+              <div>
+                <div style="font-weight:700;color:var(--ies-navy);">${escapeAttr(lbl)}</div>
+                <div style="font-size:11px;color:var(--ies-gray-500);margin-top:2px;">${escapeAttr(m.name || '')}</div>
+              </div>
+              <div style="font-size:11px;color:var(--ies-gray-500);text-align:right;">
+                <div>${sqft}</div>
+                <div>Margin ${margin}</div>
+              </div>
+            </button>
+          `;
+        }).join('')}
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-cm-chooser-cancel>Cancel</button>
+      </div>
+    </div>
+  `;
+  rootEl.appendChild(overlay);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+    const t = e.target.closest?.('[data-pick-model-id]');
+    if (t) { const id = t.getAttribute('data-pick-model-id'); overlay.remove(); openCostModelById(id); return; }
+    if (e.target.closest?.('[data-cm-chooser-cancel]')) overlay.remove();
+  });
+}
+
+/**
+ * Create a new cost model linked to the given deal. Pre-stash the deal id
+ * via sessionStorage so the new model picks it up on save.
+ */
+function createCostModelForDeal(dealId) {
+  try {
+    sessionStorage.setItem('cm_pending_new_for_deal', JSON.stringify({ dealId, at: Date.now() }));
+  } catch {}
+  window.location.hash = 'designtools/cost-model';
 }
 
 const ARTIFACT_KINDS = {
@@ -983,7 +1227,11 @@ function renderDealArtifacts() {
                 <td style="padding:10px 12px;color:var(--ies-gray-500);font-family:monospace;font-size:11px;">${escapeAttr(a.ref)}</td>
                 <td style="padding:10px 12px;color:var(--ies-gray-500);">${escapeAttr(a.updated)}</td>
                 <td style="padding:10px 16px;text-align:right;">
-                  <button class="hub-btn hub-btn-sm hub-btn-secondary" data-artifact-open="${escapeAttr(kind.route)}" style="font-size:11px;">Open →</button>
+                  ${a.kind === 'cost_model' && a.modelId
+                    ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="open-cost-model-id" data-model-id="${a.modelId}" style="font-size:11px;">Open →</button>`
+                    : (a.kind === 'cost_model'
+                        ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-artifact-open="${escapeAttr(kind.route)}" style="font-size:11px;" title="Demo artifact — opens Cost Model landing">Open →</button>`
+                        : `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-artifact-open="${escapeAttr(kind.route)}" style="font-size:11px;">Open →</button>`)}
                   <button class="hub-btn hub-btn-sm hub-btn-secondary" data-artifact-unlink="${a.id}" style="font-size:11px;color:#dc2626;">Unlink</button>
                 </td>
               </tr>
@@ -1021,7 +1269,7 @@ function renderDealOverview() {
       <div class="hub-card" style="padding:16px;">
         <div style="font-size:13px;font-weight:700;margin-bottom:12px;">Quick Actions</div>
         <div style="display:flex;flex-direction:column;gap:8px;">
-          <button class="hub-btn hub-btn-sm" data-action="open-cost-model" style="text-align:left;">Open Cost Model Builder →</button>
+          ${renderCostModelButton(d)}
           <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="open-multi-site" style="text-align:left;">Open Multi-Site Analyzer →</button>
         </div>
       </div>
@@ -1224,13 +1472,7 @@ function renderDealFinancials() {
         </div>
       </div>
 
-      <div class="hub-card" style="padding:16px;">
-        <div style="font-size:13px;font-weight:700;margin-bottom:12px;">Cost Breakdown (Placeholder)</div>
-        <div style="text-align:center;padding:20px;color:var(--ies-gray-400);">
-          <div style="font-size:12px;margin-bottom:8px;">Build a cost model to see detailed cost breakdown.</div>
-          <button class="hub-btn hub-btn-sm" data-action="open-cost-model">Open Cost Model Builder</button>
-        </div>
-      </div>
+      ${renderCostBreakdownCard(d)}
     </div>
   `;
 }
