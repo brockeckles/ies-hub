@@ -1142,64 +1142,86 @@ export function multiDCComparison(facilities, demands, modeMix, rateCard = DEFAU
  * @param {import('./types.js?v=20260418-sM').ScenarioResult[]} comparisonResults
  * @returns {{recommendedIdx: number, recommendation: string, savings: number, savingsPct: number}}
  */
-export function recommendOptimalDCs(comparisonResults) {
+export function recommendOptimalDCs(comparisonResults, serviceConfig) {
   if (!comparisonResults || comparisonResults.length === 0) {
-    return { recommendedIdx: 0, recommendation: 'No scenarios available.', savings: 0, savingsPct: 0 };
+    return { recommendedIdx: 0, recommendation: 'No scenarios available.', savings: 0, savingsPct: 0, slaConstrained: false };
   }
   if (comparisonResults.length === 1) {
-    return { recommendedIdx: 0, recommendation: 'Only one scenario evaluated — add more facility candidates to compare k-DC alternatives.', savings: 0, savingsPct: 0 };
+    return { recommendedIdx: 0, recommendation: 'Only one scenario evaluated — add more facility candidates to compare k-DC alternatives.', savings: 0, savingsPct: 0, slaConstrained: false };
   }
 
-  const MIN_KNEE_GAP = 0.05;
-  const ys = comparisonResults.map(r => r.totalCost);
+  // 2026-04-27 — SLA-aware recommendation. Without this, the recommender
+  // happily recommended 1 DC even when its service level was below target,
+  // because adding DCs typically adds fixed cost faster than transport
+  // savings reduce, so the cost-only optimum is k=1. The user expects
+  // "optimal" = the cheapest network that ALSO meets the SLA target.
+  const targetSLA = Number(serviceConfig?.targetServicePct);
+  const haveTarget = Number.isFinite(targetSLA) && targetSLA > 0;
+  const meetsSLA = (r) => !haveTarget || (Number(r.serviceLevel) >= targetSLA - 1e-6);
+
+  // Filter to scenarios that meet the SLA target; if none qualify, fall back
+  // to the full set with a warning narrative so the user sees a recommendation
+  // either way (best-effort) rather than a dead-end empty card.
+  const qualified = comparisonResults.filter(meetsSLA);
+  const allFailSLA = haveTarget && qualified.length === 0;
+  const candidates = allFailSLA ? comparisonResults : qualified;
+
+  // Within the candidate set, pick the kneedle inflection if real; otherwise
+  // pick the cheapest. Map back to comparisonResults indices.
+  const ys = candidates.map(r => r.totalCost);
+  const N = ys.length;
   const yMin = Math.min(...ys);
   const yMax = Math.max(...ys);
   const yRange = (yMax - yMin) || 1;
-  const N = ys.length;
-  // Normalize x to [0,1] across the indices, y to [0,1] across cost range.
-  const xn = ys.map((_, i) => i / (N - 1));
-  const yn = ys.map(y => (y - yMin) / yRange);
-  const yStart = yn[0];
-  const yEnd = yn[N - 1];
 
-  let bestIdx = 0;
-  let bestDist = -Infinity;
-  for (let i = 0; i < N; i++) {
-    // Chord from (0, yStart) to (1, yEnd); below-chord distance at i:
-    const chordY = yStart + xn[i] * (yEnd - yStart);
-    const dist = chordY - yn[i];
-    if (dist > bestDist) {
-      bestDist = dist;
-      bestIdx = i;
+  let bestIdxInCandidates = 0;
+  let usedKneedle = false;
+  if (N >= 2) {
+    const MIN_KNEE_GAP = 0.05;
+    const yn = ys.map(y => (y - yMin) / yRange);
+    const yStart = yn[0];
+    const yEnd = yn[N - 1];
+    let bestDist = -Infinity, bestIdx = 0;
+    for (let i = 0; i < N; i++) {
+      const xn = i / (N - 1);
+      const chordY = yStart + xn * (yEnd - yStart);
+      const dist = chordY - yn[i];
+      if (dist > bestDist) { bestDist = dist; bestIdx = i; }
+    }
+    if (bestDist > MIN_KNEE_GAP && bestIdx > 0 && bestIdx < N - 1) {
+      bestIdxInCandidates = bestIdx;
+      usedKneedle = true;
+    } else {
+      bestIdxInCandidates = ys.indexOf(yMin);
     }
   }
-
-  // Choose recommendation: kneedle if it's a real inflection AND not at an
-  // endpoint; otherwise pick the cheapest k.
-  let recommendedIdx;
-  let usedKneedle;
-  if (bestDist > MIN_KNEE_GAP && bestIdx > 0 && bestIdx < N - 1) {
-    recommendedIdx = bestIdx;
-    usedKneedle = true;
-  } else {
-    recommendedIdx = ys.indexOf(yMin);
-    usedKneedle = false;
-  }
+  const recScenario = candidates[bestIdxInCandidates];
+  const recommendedIdx = comparisonResults.indexOf(recScenario);
 
   const baselineCost = comparisonResults[0].totalCost;
-  const rec = comparisonResults[recommendedIdx];
-  const savings = baselineCost - rec.totalCost;
+  const savings = baselineCost - recScenario.totalCost;
   const savingsPct = baselineCost > 0 ? (savings / baselineCost) * 100 : 0;
 
   let narrative;
-  if (recommendedIdx === 0) {
-    narrative = 'Single DC is the lowest-cost scenario evaluated; adding facilities only adds net cost in this comparison.';
-  } else if (recommendedIdx === N - 1 && !usedKneedle) {
-    narrative = `${recommendedIdx + 1} DCs is the cheapest evaluated, but the curve is still trending down — extend "Max DCs to test" to confirm the true minimum.`;
+  const dcCount = recommendedIdx + 1;
+  const lvl = (Number(recScenario.serviceLevel) || 0).toFixed(1);
+  if (allFailSLA) {
+    narrative = `No network in this comparison meets the ${targetSLA}% service-level target. Showing the best-effort option (${dcCount} DC${dcCount === 1 ? '' : 's'}, ${lvl}% service). Add more candidate facilities, raise capacity, or relax max transit days.`;
+  } else if (haveTarget && qualified.length < comparisonResults.length) {
+    const skippedCount = comparisonResults.length - qualified.length;
+    if (usedKneedle) {
+      narrative = `${dcCount} DC${dcCount === 1 ? '' : 's'} is the inflection point among networks meeting the ${targetSLA}% SLA target — the best balance of transport savings against added facility cost. (${skippedCount} smaller network${skippedCount === 1 ? '' : 's'} skipped because they fall short of the SLA.)`;
+    } else {
+      narrative = `${dcCount} DC${dcCount === 1 ? '' : 's'} is the cheapest network that meets the ${targetSLA}% SLA target. (${skippedCount} smaller network${skippedCount === 1 ? '' : 's'} skipped because they fall short of the SLA.)`;
+    }
+  } else if (recommendedIdx === 0) {
+    narrative = 'Single DC is the lowest-cost scenario evaluated and meets the SLA target; adding facilities only adds net cost in this comparison.';
+  } else if (recommendedIdx === comparisonResults.length - 1 && !usedKneedle) {
+    narrative = `${dcCount} DCs is the cheapest evaluated, but the curve is still trending down — extend "Max DCs to test" to confirm the true minimum.`;
   } else if (usedKneedle) {
-    narrative = `${recommendedIdx + 1} DCs is the inflection point on the cost-vs-DC-count curve — the best balance of transport savings against added facility cost.`;
+    narrative = `${dcCount} DCs is the inflection point on the cost-vs-DC-count curve — the best balance of transport savings against added facility cost.`;
   } else {
-    narrative = `${recommendedIdx + 1} DCs is the lowest-cost scenario evaluated; the curve is near-linear so the elbow isn't sharp.`;
+    narrative = `${dcCount} DCs is the lowest-cost scenario evaluated; the curve is near-linear so the elbow isn't sharp.`;
   }
 
   return {
@@ -1207,6 +1229,11 @@ export function recommendOptimalDCs(comparisonResults) {
     recommendation: narrative,
     savings,
     savingsPct,
+    slaConstrained: haveTarget,
+    slaTarget: haveTarget ? targetSLA : null,
+    slaMet: meetsSLA(recScenario),
+    slaSkipped: haveTarget ? (comparisonResults.length - qualified.length) : 0,
+    allFailSLA,
   };
 }
 

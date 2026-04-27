@@ -15,7 +15,7 @@ import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadXLSX } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260418-sM';
-import * as calc from './calc.js?v=20260427-s14';
+import * as calc from './calc.js?v=20260427-s15';
 import * as api from './api.js?v=20260426-s13';
 import { createChart } from '../../shared/cdn-wrappers/chart-wrapper.js?v=20260418-sK';
 
@@ -1046,7 +1046,7 @@ function optimizeNetwork(opts = {}) {
     _runHeuristicOptimize(n, totalCombos, kCap, candidates, exhaustiveOK ? 'forced' : 'too_large');
   }
 
-  const rec = calc.recommendOptimalDCs(comparisonResults);
+  const rec = calc.recommendOptimalDCs(comparisonResults, serviceConfig);
   recommendedDCCount = rec.recommendedIdx;
   activeView = 'comparison';
   rootEl?.querySelectorAll('#no-view-tabs button').forEach(b => {
@@ -2611,7 +2611,7 @@ function renderOptimizationChip(meta) {
   return `<span title="${title}" style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;background:${bg};color:${fg};">${label}</span>`;
 }
 function renderMultiDCComparison(el) {
-  const rec = calc.recommendOptimalDCs(comparisonResults);
+  const rec = calc.recommendOptimalDCs(comparisonResults, serviceConfig);
 
   el.innerHTML = `
     <div style="max-width:1200px;">
@@ -2656,26 +2656,42 @@ function renderMultiDCComparison(el) {
             </tr>
           </thead>
           <tbody>
-            ${comparisonResults.map((s, i) => {
-              const baseline = comparisonResults[0].totalCost;
-              const savings = baseline - s.totalCost;
-              const savingsPct = baseline > 0 ? (savings / baseline) * 100 : 0;
-              const isRecommended = i === rec.recommendedIdx;
-
-              return `
-                <tr style="border-bottom:1px solid var(--ies-gray-200);background:${isRecommended ? '#f0fdf4' : 'transparent'};">
+            ${(() => {
+              // Pull SLA target from serviceConfig once so we can flag rows
+              // that fall short. Falls back to the historical 95/90/below
+              // gradient when no target is set.
+              const slaTarget = Number(serviceConfig?.targetServicePct);
+              const haveTarget = Number.isFinite(slaTarget) && slaTarget > 0;
+              return comparisonResults.map((s, i) => {
+                const baseline = comparisonResults[0].totalCost;
+                const savings = baseline - s.totalCost;
+                const isRecommended = i === rec.recommendedIdx;
+                const failsSLA = haveTarget && Number(s.serviceLevel) < slaTarget - 1e-6;
+                const rowBg = isRecommended ? '#f0fdf4' : (failsSLA ? '#fef9f9' : 'transparent');
+                const rowOpacity = failsSLA && !isRecommended ? '0.65' : '1';
+                const slLevel = Number(s.serviceLevel) || 0;
+                const slColor = haveTarget
+                  ? (slLevel >= slaTarget ? '#22c55e' : slLevel >= slaTarget - 5 ? '#f59e0b' : '#ef4444')
+                  : (slLevel >= 95 ? '#22c55e' : slLevel >= 90 ? '#f59e0b' : '#ef4444');
+                let statusBadge = '';
+                if (isRecommended) {
+                  statusBadge = `<span style="display:inline-block;padding:4px 12px;background:#22c55e;color:#fff;border-radius:12px;font-size:11px;font-weight:700;">RECOMMENDED</span>`;
+                } else if (failsSLA) {
+                  statusBadge = `<span title="Service level ${slLevel.toFixed(1)}% is below the ${slaTarget}% target — this network would not meet the SLA constraint and is excluded from the recommendation." style="display:inline-block;padding:4px 10px;background:#fee2e2;color:#991b1b;border-radius:12px;font-size:11px;font-weight:700;">✗ Below SLA</span>`;
+                }
+                return `
+                <tr style="border-bottom:1px solid var(--ies-gray-200);background:${rowBg};opacity:${rowOpacity};">
                   <td style="padding:10px 8px;font-weight:700;color:var(--ies-navy);">${i + 1}</td>
                   <td style="padding:10px 8px;text-align:right;">${calc.formatMiles(s.avgDistance)}</td>
                   <td style="padding:10px 8px;text-align:right;">${calc.formatCurrency(s.costBreakdown.transport, { compact: true })}</td>
                   <td style="padding:10px 8px;text-align:right;">${s.assignments.length > 0 ? (s.assignments.reduce((sum, a) => sum + a.transitDays, 0) / s.assignments.length).toFixed(1) : '—'} days</td>
-                  <td style="padding:10px 8px;text-align:right;font-weight:600;color:${s.serviceLevel >= 95 ? '#22c55e' : s.serviceLevel >= 90 ? '#f59e0b' : '#ef4444'};">${calc.formatPct(s.serviceLevel)}</td>
+                  <td style="padding:10px 8px;text-align:right;font-weight:600;color:${slColor};">${calc.formatPct(s.serviceLevel)}</td>
                   <td style="padding:10px 8px;text-align:right;font-weight:700;${savings < 0 ? 'color:#ef4444;' : 'color:#22c55e;'}">${savings >= 0 ? '+' : ''}${calc.formatCurrency(savings, { compact: true })}</td>
-                  <td style="padding:10px 8px;text-align:center;">
-                    ${isRecommended ? '<span style="display:inline-block;padding:4px 12px;background:#22c55e;color:#fff;border-radius:12px;font-size:11px;font-weight:700;">RECOMMENDED</span>' : ''}
-                  </td>
+                  <td style="padding:10px 8px;text-align:center;">${statusBadge}</td>
                 </tr>
               `;
-            }).join('')}
+              }).join('');
+            })()}
           </tbody>
         </table>
       </div>
