@@ -11497,9 +11497,11 @@ function renderImplementation() {
     s + calc.directLineAnnualSimple(l, lc), 0);
   const steadyMonthlyCost = steadyDirectCost / 12;
 
-  // Total implementation spend = sum of startupLines (one-time setup outlay)
+  // Total implementation spend = sum of startupLines (one-time setup outlay).
+  // Field is `one_time_cost` (verified live 2026-04-27 — earlier `cost`/`annual_cost`
+  // fallback chain returned 0 since neither field exists on startup line records).
   const totalImplSpend = (model.startupLines || []).reduce((s, l) =>
-    s + (Number(l.cost) || Number(l.annual_cost) || 0), 0);
+    s + (Number(l.one_time_cost) || Number(l.cost) || Number(l.annual_cost) || 0), 0);
 
   // Build week-bar Gantt — week ticks every 4 weeks for readability
   const tickInterval = totalWeeks <= 16 ? 2 : 4;
@@ -11537,6 +11539,35 @@ function renderImplementation() {
       </div>
     </div>
 
+    <!-- 2026-04-27 — Settings moved to TOP per Brock's feedback. These two
+         scalars (Go-Live Week + Ramp Period) drive the totalWeeks math
+         and the ramp array shapes, so they belong before the things they
+         drive, not buried at the bottom. -->
+    <div class="cm-card" style="margin-bottom:16px;">
+      <div class="cm-section-header__intro" style="margin-bottom:8px;">
+        <div>
+          <h3 style="margin:0;font-size:14px;font-weight:700;color:var(--ies-navy);">Timeline Settings</h3>
+          <div class="cm-subtle" style="font-size:12px;">Go-Live + Ramp Period drive the Gantt scale and the ramp tables below.</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:14px;">
+        <div class="hub-field">
+          <label class="hub-field__label">Go-Live Week (W#)</label>
+          <input class="hub-input hub-num" type="number" min="0" step="1" value="${goLiveWeek}" data-field-direct="implementationTimeline.goLiveWeek" data-type="number" />
+          <div class="hub-field__hint">Week of contract start when operations begin.</div>
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label">Ramp Period (months)</label>
+          <input class="hub-input hub-num" type="number" min="1" max="24" step="1" value="${rampMonths}" data-field-direct="implementationTimeline.rampMonths" data-type="number" />
+          <div class="hub-field__hint">Months from go-live to steady-state. Click <strong>Resize Ramps</strong> if you change this.</div>
+        </div>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px;">
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="impl-resize-ramps" title="Re-shape volume + headcount ramp arrays to match the Ramp Period above">Resize Ramp Curves</button>
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="impl-reset-defaults" title="Reset all phases + ramp curves to defaults">Reset to Defaults</button>
+      </div>
+    </div>
+
     <!-- Phase Gantt -->
     <div class="cm-card" style="margin-bottom:16px;">
       <div class="cm-section-header__intro" style="margin-bottom:12px;">
@@ -11544,13 +11575,13 @@ function renderImplementation() {
           <h3 style="margin:0;font-size:14px;font-weight:700;color:var(--ies-navy);">Phase Plan</h3>
           <div class="cm-subtle" style="font-size:12px;">Drag start week / duration in the table below to reshape. Bars below visualize the schedule.</div>
         </div>
-        <div class="cm-section-header__actions">
-          <button class="hub-btn hub-btn-sm" data-action="impl-add-phase" title="Add a new phase to the plan">+ Add Phase</button>
-        </div>
+
       </div>
 
-      <!-- Gantt visualization -->
-      <div class="cm-impl-gantt" style="margin:8px 0 16px;">
+      <!-- Gantt visualization. padding-right of 24px reserves a gutter for
+           the rightmost ruler label (e.g. W40) which previously clipped
+           when totalWeeks landed on a tick boundary. -->
+      <div class="cm-impl-gantt" style="margin:8px 0 16px;padding-right:24px;">
         <div class="cm-impl-gantt__ruler">
           <div class="cm-impl-gantt__ruler-label">&nbsp;</div>
           <div class="cm-impl-gantt__ruler-track" style="position:relative;height:18px;border-bottom:1px solid var(--ies-gray-200);">
@@ -11580,17 +11611,25 @@ function renderImplementation() {
         }).join('')}
       </div>
 
-      <!-- Editable phase table -->
+      <!-- Editable phase table. 2026-04-27 — Add Phase button moved
+           to a strip directly above the table (was in the card-header
+           actions slot, which sat above the GANTT, not the table — Brock
+           feedback that adds-go-here-not-up-there). Phase column widened
+           from 32 to 40 percent so longer phase names do not truncate. -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin:8px 0 6px;">
+        <div style="font-size:12px;color:var(--ies-gray-500);">${phases.length} phase${phases.length === 1 ? '' : 's'}</div>
+        <button class="hub-btn hub-btn-sm" data-action="impl-add-phase" title="Add a new phase to the plan">+ Add Phase</button>
+      </div>
       <table class="cm-table" style="width:100%;">
         <thead>
           <tr>
-            <th style="width:32%;">Phase</th>
-            <th style="width:13%;">Owner</th>
-            <th style="width:13%;text-align:right;">Start Week</th>
-            <th style="width:13%;text-align:right;">Duration (wk)</th>
-            <th style="width:13%;text-align:right;">End Week</th>
-            <th style="width:10%;">Color</th>
-            <th style="width:6%;"></th>
+            <th style="width:40%;">Phase</th>
+            <th style="width:14%;">Owner</th>
+            <th style="width:11%;text-align:right;">Start Week</th>
+            <th style="width:12%;text-align:right;">Duration (wk)</th>
+            <th style="width:11%;text-align:right;">End Week</th>
+            <th style="width:8%;">Color</th>
+            <th style="width:4%;"></th>
           </tr>
         </thead>
         <tbody>
@@ -11614,10 +11653,16 @@ function renderImplementation() {
       </table>
     </div>
 
-    <!-- Ramp curves: 2-col grid -->
+    <!-- Ramp curves — full-width side-by-side cards. 2026-04-27 redesign:
+         tall bar chart on top (~140px) with the % value rendered on each
+         bar + a 100% reference line, then editable inputs aligned 1:1
+         BELOW each bar. Old design used a one-row table of narrow inputs
+         (~56px each) with a 60px sparkline below — Brock feedback that
+         the graphs were "basically useless" and the inputs weren't
+         wide enough to read or edit comfortably. New layout reads as a
+         single unified curve-editor: see the shape AND tune the values
+         without losing your place. -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
-
-      <!-- Volume Ramp -->
       <div class="cm-card">
         <div class="cm-section-header__intro" style="margin-bottom:8px;">
           <div>
@@ -11625,11 +11670,8 @@ function renderImplementation() {
             <div class="cm-subtle" style="font-size:12px;">% of steady-state volume by month after go-live</div>
           </div>
         </div>
-        ${renderImplRampTable('volumeRamp', volumeRamp, 'Volume')}
-        ${renderImplRampSparkline(volumeRamp, '#0047AB')}
+        ${renderImplRampPanel('volumeRamp', volumeRamp, 'Volume', '#0047AB')}
       </div>
-
-      <!-- Headcount Ramp -->
       <div class="cm-card">
         <div class="cm-section-header__intro" style="margin-bottom:8px;">
           <div>
@@ -11637,8 +11679,7 @@ function renderImplementation() {
             <div class="cm-subtle" style="font-size:12px;">% of steady-state direct FTE by month after go-live</div>
           </div>
         </div>
-        ${renderImplRampTable('headcountRamp', headcountRamp, 'FTE')}
-        ${renderImplRampSparkline(headcountRamp, '#d97706')}
+        ${renderImplRampPanel('headcountRamp', headcountRamp, 'FTE', '#d97706')}
       </div>
     </div>
 
@@ -11692,30 +11733,6 @@ function renderImplementation() {
       </table>
     </div>
 
-    <!-- Settings strip -->
-    <div class="cm-card" style="margin-top:16px;">
-      <div class="cm-section-header__intro" style="margin-bottom:8px;">
-        <div>
-          <h3 style="margin:0;font-size:14px;font-weight:700;color:var(--ies-navy);">Settings</h3>
-        </div>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:14px;">
-        <div class="hub-field">
-          <label class="hub-field__label">Go-Live Week (W#)</label>
-          <input class="hub-input hub-num" type="number" min="0" step="1" value="${goLiveWeek}" data-field-direct="implementationTimeline.goLiveWeek" data-type="number" />
-          <div class="hub-field__hint">Week of contract start when operations begin.</div>
-        </div>
-        <div class="hub-field">
-          <label class="hub-field__label">Ramp Period (months)</label>
-          <input class="hub-input hub-num" type="number" min="1" max="24" step="1" value="${rampMonths}" data-field-direct="implementationTimeline.rampMonths" data-type="number" />
-          <div class="hub-field__hint">Months from go-live to steady-state. Click <strong>Resize Ramps</strong> below if you change this.</div>
-        </div>
-      </div>
-      <div style="margin-top:12px;display:flex;gap:8px;">
-        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="impl-resize-ramps" title="Re-shape volume + headcount ramp arrays to match the Ramp Period above">Resize Ramp Curves</button>
-        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="impl-reset-defaults" title="Reset all phases + ramp curves to defaults">Reset to Defaults</button>
-      </div>
-    </div>
   `;
 }
 
@@ -11723,58 +11740,63 @@ function renderImplementation() {
  * Helper: render a one-row editable table for a ramp curve array.
  * Uses the _direct scalar-array pattern in the data-array handler.
  */
-function renderImplRampTable(arrayKey, values, label) {
-  return `
-    <table class="cm-table" style="width:100%;">
-      <thead>
-        <tr>
-          <th>${escapeHtml(label)} %</th>
-          ${values.map((_, i) => `<th style="text-align:center;">M${i + 1}</th>`).join('')}
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td><strong>%</strong></td>
-          ${values.map((v, i) => `
-            <td style="text-align:center;">
-              <input class="hub-input hub-num" type="number" min="0" max="200" step="5" value="${Number(v) || 0}"
-                data-array="implementationTimeline.${arrayKey}" data-idx="${i}" data-field="_direct" data-type="number"
-                style="width:56px;text-align:center;" />
-            </td>
-          `).join('')}
-        </tr>
-      </tbody>
-    </table>
-  `;
-}
-
 /**
- * Helper: render an inline SVG sparkline for a ramp curve. No
- * external chart library — this is a small visualization.
+ * 2026-04-27 — Unified ramp panel (replaces renderImplRampTable +
+ * renderImplRampSparkline pair). Tall vertical-bar chart on top with
+ * the % rendered on/above each bar, a dashed 100% reference line, and
+ * a row of full-width editable inputs aligned 1:1 below each bar.
+ *
+ * Why bars not a polyline: a polyline reads as "trend" but you can't
+ * see WHICH month has WHICH value without hover. Vertical bars give
+ * you the Y-axis read-out for free, and they line up cleanly with the
+ * input row below. Also matches the dominant pattern in CM tools that
+ * deal with month-indexed series (Seasonality grid, MLV).
+ *
+ * @param {string} arrayKey   — "volumeRamp" | "headcountRamp"
+ * @param {Array<number>} values
+ * @param {string} label      — short axis label (e.g. "Volume", "FTE")
+ * @param {string} color      — bar fill (and the 100% reference dashed line color)
  */
-function renderImplRampSparkline(values, color) {
-  if (!values || values.length === 0) return '';
-  const w = 240, h = 60, pad = 6;
+function renderImplRampPanel(arrayKey, values, label, color) {
+  if (!values || values.length === 0) {
+    return `<div class="cm-empty-state" style="padding:16px;text-align:center;color:var(--ies-gray-400);">No ramp data — adjust Ramp Period above and click <strong>Resize Ramp Curves</strong>.</div>`;
+  }
+  const n = values.length;
+  // Cap the y-axis at the larger of 100 or actual max — lets users overshoot
+  // 100% during early ramp without clipping (rare but possible for volume).
   const maxVal = Math.max(100, ...values.map(v => Number(v) || 0));
-  const stepX = (w - 2 * pad) / Math.max(1, values.length - 1);
-  const points = values.map((v, i) => {
-    const x = pad + i * stepX;
-    const y = h - pad - ((Number(v) || 0) / maxVal) * (h - 2 * pad);
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(' ');
-  // Steady-state reference line at 100%
-  const ssY = h - pad - (100 / maxVal) * (h - 2 * pad);
+  // Reference line at 100% (steady-state). Y-percentage from chart top.
+  const ssYPct = (1 - 100 / maxVal) * 100;
   return `
-    <div style="margin-top:8px;text-align:center;">
-      <svg viewBox="0 0 ${w} ${h}" style="width:100%;max-width:${w}px;height:${h}px;" aria-hidden="true">
-        <line x1="${pad}" y1="${ssY}" x2="${w - pad}" y2="${ssY}" stroke="var(--ies-gray-300)" stroke-dasharray="3,3" stroke-width="1" />
-        <polyline points="${points}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" />
+    <div class="cm-impl-ramp" style="margin-top:8px;">
+      <!-- chart -->
+      <div class="cm-impl-ramp__chart" style="position:relative;height:140px;display:flex;align-items:flex-end;gap:6px;padding:8px 0 0;border-bottom:1px solid var(--ies-gray-200);">
+        <!-- 100% reference -->
+        <div title="Steady-state reference (100%)" style="position:absolute;left:0;right:0;top:${ssYPct.toFixed(1)}%;border-top:1px dashed ${color};opacity:0.55;pointer-events:none;">
+          <span style="position:absolute;right:0;top:-9px;font-size:10px;font-weight:600;color:${color};background:#fff;padding:0 4px;">100% steady-state</span>
+        </div>
         ${values.map((v, i) => {
-          const x = pad + i * stepX;
-          const y = h - pad - ((Number(v) || 0) / maxVal) * (h - 2 * pad);
-          return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="${color}" />`;
+          const pct = Number(v) || 0;
+          const hPct = (pct / maxVal) * 100;
+          return `
+            <div class="cm-impl-ramp__col" style="flex:1 1 0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;" title="Month ${i + 1}: ${pct}% of ${label === 'Volume' ? 'volume' : 'FTE'} steady-state">
+              <div class="cm-impl-ramp__bar-value" style="font-size:11px;font-weight:700;color:${color};margin-bottom:3px;">${pct}%</div>
+              <div class="cm-impl-ramp__bar" style="width:100%;max-width:48px;height:${hPct.toFixed(1)}%;background:${color};border-radius:4px 4px 0 0;min-height:2px;transition:height 0.18s ease;"></div>
+            </div>
+          `;
         }).join('')}
-      </svg>
+      </div>
+      <!-- month labels + editable inputs aligned 1:1 with bars -->
+      <div class="cm-impl-ramp__inputs" style="display:flex;align-items:flex-start;gap:6px;margin-top:8px;">
+        ${values.map((v, i) => `
+          <div style="flex:1 1 0;display:flex;flex-direction:column;align-items:center;gap:4px;">
+            <span style="font-size:10px;color:var(--ies-gray-500);font-weight:600;letter-spacing:0.4px;">M${i + 1}</span>
+            <input class="hub-input hub-num" type="number" min="0" max="200" step="5" value="${Number(v) || 0}"
+              data-array="implementationTimeline.${arrayKey}" data-idx="${i}" data-field="_direct" data-type="number"
+              style="width:100%;max-width:60px;text-align:center;font-weight:600;padding:6px 4px;" />
+          </div>
+        `).join('')}
+      </div>
     </div>
   `;
 }
