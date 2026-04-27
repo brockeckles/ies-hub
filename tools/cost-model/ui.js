@@ -1739,14 +1739,43 @@ function refreshHeaderKpis(opts) {
     host.classList.remove('is-ready');
     return;
   }
+  // 2026-04-27 — Lift the section page-name + description INTO the navy
+  // bar so it reads as a unified "tab identity" header. Source of truth is
+  // the .cm-section-header that each renderer still emits — we read its
+  // title + desc text here, then hide the original via CSS so the title
+  // appears exactly once. Sections may render their .cm-section-header
+  // immediately above other content (Equipment, Volumes, etc.) — picking
+  // the FIRST one in #cm-section-content gives the page header reliably.
+  let pageTitle = '';
+  let pageDesc = '';
+  try {
+    const sec = rootEl?.querySelector('#cm-section-content .cm-section-header');
+    if (sec) {
+      const t = sec.querySelector('.cm-section-title');
+      const d = sec.querySelector('.cm-section-desc');
+      if (t) pageTitle = t.innerHTML; // innerHTML preserves the contract-type chip etc.
+      if (d) pageDesc = d.innerHTML;
+    }
+  } catch (_) { /* defensive — never block KPI render on header lookup */ }
+
+  const titleBlock = pageTitle
+    ? `<div class="hub-kpi-bar__id">
+         <div class="hub-kpi-bar__title">${pageTitle}</div>
+         ${pageDesc ? `<div class="hub-kpi-bar__desc">${pageDesc}</div>` : ''}
+       </div>`
+    : '';
+
   host.innerHTML = `
     <div class="hub-kpi-bar">
-      ${kpis.items.map(it => `
-        <div class="hub-kpi-item" ${it.hint ? `title="${escapeAttr(it.hint)}"` : ''}>
-          <span class="hub-kpi-label">${escapeHtml(it.label)}</span>
-          <span class="hub-kpi-value">${escapeHtml(it.value)}</span>
-        </div>
-      `).join('')}
+      ${titleBlock}
+      <div class="hub-kpi-bar__metrics">
+        ${kpis.items.map(it => `
+          <div class="hub-kpi-item" ${it.hint ? `title="${escapeAttr(it.hint)}"` : ''}>
+            <span class="hub-kpi-label">${escapeHtml(it.label)}</span>
+            <span class="hub-kpi-value">${escapeHtml(it.value)}</span>
+          </div>
+        `).join('')}
+      </div>
     </div>`;
   host.classList.toggle('is-ready', !!kpis.ready);
 }

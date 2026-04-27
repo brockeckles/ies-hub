@@ -3500,14 +3500,23 @@ textarea.hub-input {
 
 .cm-header-kpis {
   position: sticky;
-  top: 0;
+  /* `top: -24px` (negative offset = sticks ABOVE the content edge, into
+     `.hub-builder-content`'s padding-top zone) so the white backdrop
+     fully covers content scrolling under it. Without the negative top,
+     the wrapper sticks at the content edge and there's a 24px padding
+     band ABOVE the wrapper through which content visibly bleeds —
+     which is exactly the symptom Brock reported 2026-04-27 morning
+     ("text going behind and above the blue KPI tile when scrolling").
+     The 48px padding-top + the wrapper margin pulls the navy bar BACK
+     to the same visual position as before so the design doesn't shift. */
+  top: calc(var(--sp-6) * -1);
   z-index: 5;
   /* Backdrop spans the full .hub-builder-content (clawing back its
      var(--sp-6) padding on top + sides) so the white surface covers
      scrolled content above + at the edges. The navy bar inside is
      re-inset via padding so it lines up with section content below. */
   margin: calc(var(--sp-6) * -1) calc(var(--sp-6) * -1) var(--sp-6);
-  padding: var(--sp-6) var(--sp-6) 0;
+  padding: calc(var(--sp-6) * 2) var(--sp-6) 0;
   background: #fff;
 }
 .cm-header-kpis:empty {
@@ -3562,6 +3571,80 @@ textarea.hub-input {
    after the first successful compute. */
 .cm-header-kpis:not(.is-ready) .hub-kpi-bar {
   opacity: 0.85;
+}
+
+/* ---- 2026-04-27 — page-name + description LIVE INSIDE the navy bar ----
+   Lifted out of the orphaned `.cm-section-header` so each section reads
+   as a unified "tab identity" header. Title + description sit in a
+   top row, with the 5 KPI items in a bottom row, separated by a hairline
+   white-on-navy rule. Source titles still live in each section's
+   render fn — `refreshHeaderKpis()` reads them out and reflects them
+   here, then `.cm-section-header` is hidden via CSS below to avoid
+   duplication. Fallback: if read fails, the bar renders without the
+   title block (KPIs only) — same as the pre-2026-04-27 layout. */
+.cm-header-kpis .hub-kpi-bar {
+  /* The bar is now a vertical stack: title block on top, KPIs below.
+     `flex-direction: column` overrides the default row layout from
+     `.hub-kpi-bar` itself. */
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding: 14px var(--sp-4);
+}
+.cm-header-kpis .hub-kpi-bar__id {
+  padding: 0 4px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+  margin-bottom: 12px;
+}
+.cm-header-kpis .hub-kpi-bar__title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.1px;
+  line-height: 1.2;
+}
+/* Inline chips inside the title (e.g. Pricing Schedule contract-type chip)
+   inherit the navy background so they read on the dark bar — the public
+   `.cm-contract-type-chip` styles assume a light surface. */
+.cm-header-kpis .hub-kpi-bar__title .cm-contract-type-chip {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+}
+.cm-header-kpis .hub-kpi-bar__desc {
+  font-size: 12px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.72);
+  margin-top: 4px;
+  line-height: 1.4;
+  /* Wrap gracefully on narrower viewports — descriptions can be long
+     (Labor Factors, Pricing Buckets, Financial Assumptions). */
+  white-space: normal;
+}
+.cm-header-kpis .hub-kpi-bar__desc strong,
+.cm-header-kpis .hub-kpi-bar__desc code {
+  color: #fff;
+  font-weight: 600;
+}
+.cm-header-kpis .hub-kpi-bar__metrics {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+}
+/* The hub-kpi-item is already styled — just ensure it grows evenly across
+   the metrics row now that it's inside an inner flex container. */
+.cm-header-kpis .hub-kpi-bar__metrics .hub-kpi-item {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* The original `.cm-section-header` (page name + description text inside
+   the form) is the SOURCE OF TRUTH for the title/desc text — `refreshHeaderKpis`
+   reads it and re-renders it inside the navy bar. Hide the original so it
+   doesn't appear twice. Pricing Schedule + Cashflow & P&L use h2 inside
+   the .cm-section-header — those collapse the same way. */
+#cm-section-content .cm-section-header {
+  display: none;
 }
 
 /* ---- Tri-state save chip dot — matches text color of state ---- */
