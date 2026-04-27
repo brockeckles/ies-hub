@@ -8,7 +8,7 @@
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sL';
 import { state } from '../../shared/state.js?v=20260418-sL';
-import { renderToolHeader } from '../../shared/tool-frame.js?v=20260419-uE';
+import { renderToolHeader } from '../../shared/tool-frame.js?v=20260427-pm3-s1';
 import * as calc from './calc.js?v=20260426-s3';
 import * as api from './api.js?v=20260426-s3';
 import * as cmApi from '../cost-model/api.js?v=20260423-xQ';
@@ -220,6 +220,29 @@ function renderShell() {
     chips.push(dealChip);
   }
 
+  // Per-tab navy banner descriptions (CM page-name lift pattern, 2026-04-27).
+  // Landing mode shows a portfolio overview message; detail mode rotates per tab.
+  const TAB_DESC = {
+    list:        'Browse all multi-site deals — search by client, owner, or status. Click a row to drill into per-site financials, pipeline, and tasks.',
+    kanban:      'Pipeline view — drag deals between draft / proposal / verbal / won / lost columns to update status. Card chips reflect site count + sqft + revenue.',
+    summary:     'Deal-level rollup — total revenue, cost, gross margin, NPV, payback, and DOS stage progress across every linked site.',
+    sites:       'Site list — link existing Cost Model projects or add empty site shells. Each site contributes its annual revenue / cost / sqft / volume to the portfolio rollup.',
+    financials:  'Per-site financial breakdown — revenue, cost, margin, capex, and contract-term metrics. Configure EBITDA overhead and discount rate at the deal level.',
+    sensitivity: 'What-if sensitivity table — flex revenue, cost, and ramp assumptions to see margin/NPV impact across the portfolio.',
+    compare:     'Side-by-side scenario compare — pit two deal versions or two site configurations against each other for executive review.',
+    pipeline:    'DOS stage tracker — visual progress bar across the 6 GXO solution-design stages. Mark elements complete as they close out.',
+    hours:       'Time tracking — log hours by team member + workstream against this deal. Used for cost-of-pursuit and capacity planning.',
+    tasks:       'Task list — open and closed action items, owner, due date. Drives the deal-progress chip on the Summary tab.',
+    updates:     'Activity feed — chronological log of comments, status flips, and milestone notes. Use to brief teammates returning to the deal.',
+  };
+  const TAB_LABEL = {
+    list: 'All Deals', kanban: 'Pipeline', summary: 'Summary', sites: 'Sites', financials: 'Financials',
+    sensitivity: 'Sensitivity', compare: 'Compare', pipeline: 'DOS Pipeline', hours: 'Hours', tasks: 'Tasks', updates: 'Updates',
+  };
+  const bannerTab = landing ? (landingViewMode === 'kanban' ? 'kanban' : 'list') : activeTab;
+  const bannerDesc = landing
+    ? TAB_DESC[bannerTab]
+    : (activeDeal ? `<strong>${activeDeal.dealName}</strong> · ${activeDeal.clientName || 'Unassigned client'}. ${TAB_DESC[bannerTab] || ''}` : TAB_DESC[bannerTab]);
   return `
     <div class="hub-content-inner" style="padding:0;display:flex;flex-direction:column;height:100%;">
       ${renderToolHeader({
@@ -231,6 +254,8 @@ function renderShell() {
         activeTab: landing ? '' : activeTab,
         tabsId: 'dm-tabs',
         statusChips: chips,
+        description: bannerDesc,
+        subtitle: TAB_LABEL[bannerTab] || '',
       })}
       <!-- Landing-mode action rail (hidden in detail mode) -->
       <div id="dm-action-rail" class="hub-action-rail" style="padding:6px 24px 0 24px;margin-left:0;flex-shrink:0;justify-content:flex-start;display:${landing ? 'flex' : 'none'};">

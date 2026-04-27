@@ -73,6 +73,15 @@
  * @property {ActionBtn} [primaryAction]   "Run / Calculate / Optimize"
  * @property {ActionBtn[]} [secondaryActions]
  * @property {string} [shortcutLabel]      default "⌘↵"
+ * @property {string} [description]        Page description rendered inside a
+ *   navy banner above the header strip. When provided, hides the original
+ *   in-strip `.hub-tool-title` so the title only reads once. Echoes the CM
+ *   "page-name lifted into navy bar" pattern (commits 384b2a7 + 57aae71).
+ * @property {string} [subtitle]           Optional pill rendered next to the
+ *   title in the navy banner — typically the active tab/view name. Skipped
+ *   if `description` isn't also provided (banner only renders if either is).
+ * @property {boolean} [showInlineTitle]   Force-render the in-strip title
+ *   even when a banner is shown. Default false (banner replaces strip title).
  */
 
 /**
@@ -93,7 +102,28 @@ export function renderToolHeader(opts) {
     primaryAction = null,
     secondaryActions = [],
     shortcutLabel = '⌘↵',
+    description = '',
+    subtitle = '',
+    showInlineTitle = false,
   } = opts || {};
+
+  // Navy page banner — when description (or subtitle) provided, lift the
+  // page name out of the inline header strip into a navy gradient bar.
+  // Mirrors the CM page-name pattern shipped 2026-04-27 (AM2/AM3/AM6).
+  const hasBanner = Boolean(description || subtitle);
+  const bannerHtml = !hasBanner ? '' : `
+    <div class="hub-page-banner" ${toolKey ? `data-tool="${toolKey}"` : ''}>
+      <div class="hub-page-banner__title">
+        <span class="hub-page-banner__name">${escapeHtml(toolName)}</span>
+        ${subtitle ? `<span class="hub-page-banner__pill">${escapeHtml(subtitle)}</span>` : ''}
+      </div>
+      ${description ? `<p class="hub-page-banner__desc">${description}</p>` : ''}
+    </div>`;
+  // Hide the in-strip title when banner is shown (unless override) — avoids
+  // reading "MOST Labor Standards" twice.
+  const inlineTitleHtml = (hasBanner && !showInlineTitle)
+    ? ''
+    : `<h2 class="hub-tool-title">${escapeHtml(toolName)}</h2>`;
 
   const tabsHtml = tabs.length === 0 ? '' : `
     <div class="hub-tab-strip" id="${tabsId}">
@@ -150,10 +180,11 @@ export function renderToolHeader(opts) {
   const toolDataAttr = toolKey ? `data-tool="${toolKey}"` : '';
 
   return `
+    ${bannerHtml}
     <div class="hub-tool-header" ${toolDataAttr}>
       <button type="button" class="hub-btn hub-btn-sm hub-btn-secondary hub-tool-back"
               data-action="${backAction}" title="Back to saved scenarios">${escapeHtml(backLabel)}</button>
-      <h2 class="hub-tool-title">${escapeHtml(toolName)}</h2>
+      ${inlineTitleHtml}
       ${chipsHtml}
       ${tabsHtml}
       <div class="hub-action-rail">

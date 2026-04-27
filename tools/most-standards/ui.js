@@ -8,7 +8,7 @@
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sM';
 import { state } from '../../shared/state.js?v=20260418-sM';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260419-uE';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260427-pm3-s1';
 // Note: MOST intentionally opts out of run-state tracking. Its Quick Analysis
 // and Workflow tabs recompute inline on every render — the primary "Run"
 // button is a convenience trigger rather than a discrete compute step, so a
@@ -308,6 +308,15 @@ function renderShell() {
   // before picking a template. Hide it there.
   const showRunBtn = activeTab === 'analysis' || activeTab === 'workflow';
   const primaryActionLabel = activeTab === 'workflow' ? 'Run Workflow' : 'Run Analysis';
+  // Per-tab page descriptions for the navy banner. Mirrors the CM
+  // page-name + description lift pattern (2026-04-27 morning rollout).
+  const TAB_DESC = {
+    library:  'Browse the BY-WMS-tuned activity library — filter by process area or labor category, click any card to see element-by-element TMU breakdown.',
+    editor:   'Author or edit a template. Add elements with TMU values, set base UPH, and save to the shared library so the rest of the team can use it.',
+    analysis: 'Build a labor analysis: pick templates, enter daily volumes, set PF&D + shift hours, and we compute FTEs, headcount, hours, and annual cost.',
+    workflow: 'Compose multiple templates into a flow with handoffs and bottleneck chart. Use to model end-to-end pick → pack → ship throughput. <strong>Preview</strong>.',
+  };
+  const TAB_LABEL = { library: 'Template Library', editor: 'Template Editor', analysis: 'Quick Analysis', workflow: 'Workflow Composer' };
   return `
     <div class="hub-content-inner" style="padding:0;display:flex;flex-direction:column;height: calc(100vh - 48px);">
       ${renderToolHeader({
@@ -319,6 +328,8 @@ function renderShell() {
         activeTab,
         tabsId: 'most-tabs',
         statusChips: chips,
+        description: TAB_DESC[activeTab] || TAB_DESC.library,
+        subtitle: TAB_LABEL[activeTab] || '',
         primaryAction: showRunBtn
           ? { label: primaryActionLabel, action: 'most-run', icon: '▶', title: 'Compute labor standards (Cmd/Ctrl+Enter)' }
           : null,

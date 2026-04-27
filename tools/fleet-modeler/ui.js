@@ -10,7 +10,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sM';
 import { state } from '../../shared/state.js?v=20260418-sM';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sM';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260419-uE';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260427-pm3-s1';
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import * as calc from './calc.js?v=20260426-s2';
 import * as api from './api.js?v=20260418-sM';
@@ -238,6 +238,15 @@ function renderShell() {
       : { label: 'Stand-alone', kind: 'standalone', title: 'This fleet is not yet attached to a Cost Model' },
   ];
 
+  // Per-tab navy banner descriptions (CM page-name lift pattern, 2026-04-27).
+  const TAB_DESC = {
+    lanes:    'Define your lane mix — origin/destination, miles, weekly trips, weight, and equipment type. The lane list drives every downstream calc.',
+    config:   'Set the financing model (own/lease/rent), driver economics (single vs team, hourly rate, benefits), fuel + maintenance + ATRI overlay assumptions.',
+    ratedeck: 'Compute the cost-per-mile rate deck — base + variable cost, allocation to deadhead, and quoted vs incurred margin per lane.',
+    results:  'Per-vehicle and fleet-wide results — operating cost, profitability, utilization, and a 6×6 sensitivity matrix flexing fuel × wage assumptions.',
+    map:      'Geographic route map — colored polylines per lane sized by trip volume; toggle ATRI lane benchmarks to compare vs national averages.',
+  };
+  const TAB_LABEL = { lanes: 'Lanes', config: 'Configuration', ratedeck: 'Rate Deck', results: 'Results', map: 'Route Map' };
   return `
     <div class="hub-content-inner" style="padding:0;display:flex;flex-direction:column;height:100%;">
       ${renderToolHeader({
@@ -248,6 +257,8 @@ function renderShell() {
         activeTab,
         tabsId: 'fm-tabs',
         statusChips: chips,
+        description: TAB_DESC[activeTab] || TAB_DESC.lanes,
+        subtitle: TAB_LABEL[activeTab] || '',
         primaryAction: {
           label: 'Calculate Fleet',
           action: 'fleet-run',

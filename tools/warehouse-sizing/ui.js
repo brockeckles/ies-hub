@@ -10,7 +10,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sL';
 import { state } from '../../shared/state.js?v=20260418-sL';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sL';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260419-uE';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260427-pm3-s1';
 import * as calc from './calc.js?v=20260425-s11';
 import * as api from './api.js?v=20260418-sL';
 
@@ -183,6 +183,14 @@ function renderShell() {
       ? { label: `Linked to CM`, kind: 'linked', title: `Linked to Cost Model #${facility.parent_cost_model_id}` }
       : { label: 'Stand-alone', kind: 'standalone', title: 'Not yet pushed into a Cost Model' },
   ];
+  // Per-view banner descriptions (navy-bar lift pattern, 2026-04-27).
+  const VIEW_DESC = {
+    dashboard: 'Capacity dashboard — total SF, dock doors, rack positions, and utilization KPIs derived from peak pallets, SKU count, turn rate, and clearance height.',
+    plan:      'Top-down floor plan — dock doors, storage zones, picking aisles, and inbound/outbound flows. Click zones for SF + utilization detail.',
+    elevation: 'Cross-section view — rack tier counts, clearance heights, and aisle layout. Verifies cube utilization against pallet height profile.',
+    '3d':      'Interactive 3D walkthrough — orbit, pan, and inspect rack systems and dock face. Useful for client presentations and spatial sanity checks.',
+  };
+  const VIEW_LABEL = { dashboard: 'Dashboard', plan: '2D Plan', elevation: '2D Elevation', '3d': '3D View' };
   return `
     <div class="hub-content-inner" style="padding:0;display:flex;flex-direction:column;height: calc(100vh - 48px);">
       ${renderToolHeader({
@@ -193,6 +201,8 @@ function renderShell() {
         activeTab: activeView,
         tabsId: 'wsc-tabs',
         statusChips: chips,
+        description: VIEW_DESC[activeView] || VIEW_DESC.dashboard,
+        subtitle: VIEW_LABEL[activeView] || '',
         primaryAction: { label: 'Use in Cost Model →', action: 'push-to-cm', icon: '⇨', title: 'Push this design into a Cost Model (Cmd/Ctrl+Enter)' },
       })}
 
