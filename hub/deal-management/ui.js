@@ -7,7 +7,7 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import * as api from './api.js?v=20260427-s1';
+import * as api from './api.js?v=20260427-s2';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -84,53 +84,12 @@ const DOS_TEMPLATES = {
   ],
 };
 
-/** Demo deals — enriched with site data and DOS elements */
-const DEALS = [
-  { id: 'd1', name: 'Wayfair Midwest Expansion', client: 'Wayfair', stage: 4, sites: [
-      { name: 'Chicago DC', market: 'Chicago, IL', sqft: 450000, type: 'E-Commerce Fulfillment' },
-      { name: 'Indianapolis FC', market: 'Indianapolis, IN', sqft: 380000, type: 'Returns Processing' },
-      { name: 'Columbus Hub', market: 'Columbus, OH', sqft: 250000, type: 'Cross-Dock' },
-    ], revenue: 18500000, margin: 11.2, owner: 'Brock Eckles', daysInStage: 8, score: 'A', startDate: '2026-02-15', targetClose: '2026-06-30' },
-  { id: 'd2', name: 'Amazon Last Mile Southeast', client: 'Amazon', stage: 3, sites: [
-      { name: 'Atlanta Sort', market: 'Atlanta, GA', sqft: 600000, type: 'Sortation Center' },
-      { name: 'Savannah FC', market: 'Savannah, GA', sqft: 500000, type: 'Fulfillment Center' },
-      { name: 'Charlotte Last Mile', market: 'Charlotte, NC', sqft: 200000, type: 'Last Mile Hub' },
-      { name: 'Nashville Sort', market: 'Nashville, TN', sqft: 350000, type: 'Sortation Center' },
-      { name: 'Memphis FC', market: 'Memphis, TN', sqft: 450000, type: 'Fulfillment Center' },
-    ], revenue: 42000000, margin: 9.8, owner: 'Design Engineer 1', daysInStage: 14, score: 'B+', startDate: '2026-01-20', targetClose: '2026-08-15' },
-  { id: 'd3', name: 'Target Returns Processing', client: 'Target', stage: 2, sites: [
-      { name: 'Dallas Returns', market: 'Dallas-Fort Worth, TX', sqft: 280000, type: 'Returns Processing' },
-      { name: 'Phoenix Returns', market: 'Phoenix, AZ', sqft: 220000, type: 'Returns Processing' },
-    ], revenue: 8200000, margin: 13.5, owner: 'Design Engineer 2', daysInStage: 5, score: 'A-', startDate: '2026-03-10', targetClose: '2026-07-15' },
-  { id: 'd4', name: 'Home Depot Regional DC', client: 'Home Depot', stage: 5, sites: [
-      { name: 'Houston DC', market: 'Houston, TX', sqft: 550000, type: 'Regional Distribution' },
-    ], revenue: 12000000, margin: 10.1, owner: 'Brock Eckles', daysInStage: 21, score: 'B', startDate: '2026-01-05', targetClose: '2026-05-30' },
-  { id: 'd5', name: 'Costco Cold Chain West', client: 'Costco', stage: 1, sites: [
-      { name: 'LA Cold Storage', market: 'Los Angeles, CA', sqft: 300000, type: 'Cold Chain' },
-      { name: 'Reno DC', market: 'Reno, NV', sqft: 400000, type: 'Distribution Center' },
-    ], revenue: 15000000, margin: 0, owner: 'Design Engineer 1', daysInStage: 3, score: '—', startDate: '2026-04-10', targetClose: '2026-10-30' },
-  { id: 'd6', name: 'Nike DTC Fulfillment', client: 'Nike', stage: 3, sites: [
-      { name: 'Memphis FC', market: 'Memphis, TN', sqft: 500000, type: 'DTC Fulfillment' },
-      { name: 'Lehigh Valley FC', market: 'Lehigh Valley, PA', sqft: 400000, type: 'DTC Fulfillment' },
-      { name: 'Dallas FC', market: 'Dallas-Fort Worth, TX', sqft: 350000, type: 'DTC Fulfillment' },
-      { name: 'Seattle FC', market: 'Seattle-Tacoma, WA', sqft: 280000, type: 'DTC Fulfillment' },
-    ], revenue: 28000000, margin: 10.5, owner: 'Brock Eckles', daysInStage: 10, score: 'A-', startDate: '2026-02-01', targetClose: '2026-07-31' },
-  { id: 'd7', name: 'Kroger Fresh Network', client: 'Kroger', stage: 6, sites: [
-      { name: 'Cincinnati Fresh', market: 'Cincinnati, OH', sqft: 200000, type: 'Fresh Distribution' },
-      { name: 'Indianapolis Fresh', market: 'Indianapolis, IN', sqft: 180000, type: 'Fresh Distribution' },
-      { name: 'Louisville Fresh', market: 'Louisville, KY', sqft: 160000, type: 'Fresh Distribution' },
-    ], revenue: 22000000, margin: 12.0, owner: 'Design Engineer 2', daysInStage: 30, score: 'A', startDate: '2025-11-15', targetClose: '2026-05-15' },
-  { id: 'd8', name: 'PepsiCo Secondary Dist', client: 'PepsiCo', stage: 2, sites: [
-      { name: 'Kansas City DC', market: 'Kansas City, MO', sqft: 350000, type: 'Secondary Distribution' },
-    ], revenue: 6500000, margin: 0, owner: 'Design Engineer 1', daysInStage: 7, score: '—', startDate: '2026-04-01', targetClose: '2026-09-30' },
-  { id: 'd9', name: 'Walmart E-Commerce Hub', client: 'Walmart', stage: 4, sites: [
-      { name: 'Inland Empire EC', market: 'Riverside / Inland Empire, CA', sqft: 700000, type: 'E-Commerce Hub' },
-      { name: 'NJ Metro EC', market: 'Northern NJ / NYC Metro', sqft: 500000, type: 'E-Commerce Hub' },
-    ], revenue: 31000000, margin: 9.2, owner: 'Brock Eckles', daysInStage: 12, score: 'B+', startDate: '2026-02-20', targetClose: '2026-07-15' },
-  { id: 'd10', name: 'IKEA Assembly & Delivery', client: 'IKEA', stage: 1, sites: [
-      { name: 'Chicago A&D', market: 'Chicago, IL', sqft: 150000, type: 'Assembly & Delivery' },
-    ], revenue: 9000000, margin: 0, owner: 'Design Engineer 2', daysInStage: 1, score: '—', startDate: '2026-04-15', targetClose: '2026-11-30' },
-];
+/**
+ * Live deals from deal_deals (real DB rows) get spliced into this list at
+ * mount via loadRealDealsAndMerge(). Hardcoded demo deals retired 2026-04-27
+ * — `+ New Opportunity` now persists to deal_deals via api.createDeal().
+ */
+const DEALS = [];
 
 export function mount(el) {
   rootEl = el;
@@ -164,6 +123,9 @@ async function loadRealDealsAndMerge() {
       }
       _realDealIds.clear();
     }
+    // 2026-04-27: invalidate per-deal artifacts cache so the freshly loaded
+    // models (could be different than last render) get picked up on next read.
+    _artifactsByDeal.clear();
     // Splice real deals at the top
     DEALS.unshift(...live);
     for (const d of live) _realDealIds.add(d.id);
@@ -273,36 +235,35 @@ function openNewOppModal() {
   const close = () => modal.remove();
   modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
   modal.querySelector('#opp-cancel')?.addEventListener('click', close);
-  modal.querySelector('#opp-create')?.addEventListener('click', () => {
+  modal.querySelector('#opp-create')?.addEventListener('click', async () => {
     const name   = /** @type {HTMLInputElement} */ (modal.querySelector('#opp-name')).value.trim();
     const client = /** @type {HTMLInputElement} */ (modal.querySelector('#opp-client')).value.trim();
     if (!name || !client) {
       alert('Deal name and client are required.');
       return;
     }
-    const stage   = parseInt(/** @type {HTMLSelectElement} */ (modal.querySelector('#opp-stage')).value, 10) || 1;
-    const owner   = /** @type {HTMLInputElement} */ (modal.querySelector('#opp-owner')).value.trim() || 'Unassigned';
-    const revenue = parseFloat(/** @type {HTMLInputElement} */ (modal.querySelector('#opp-revenue')).value) || 0;
-    const margin  = parseFloat(/** @type {HTMLInputElement} */ (modal.querySelector('#opp-margin')).value) || 0;
-
-    const newDeal = {
-      id: 'd' + (DEALS.length + 1) + '-' + Date.now().toString(36),
-      name,
-      client,
-      stage,
-      sites: [],
-      revenue: Math.round(revenue * 1e6),
-      margin,
-      owner,
-      daysInStage: 0,
-      score: '—',
-      startDate: new Date().toISOString().slice(0, 10),
-      targetClose: null,
-    };
-    DEALS.push(newDeal);
-    close();
-    render(); // re-render pipeline with new deal
-    bus.emit('deal-management:deal-created', { id: newDeal.id });
+    const owner = /** @type {HTMLInputElement} */ (modal.querySelector('#opp-owner')).value.trim() || null;
+    const createBtn = /** @type {HTMLButtonElement} */ (modal.querySelector('#opp-create'));
+    if (createBtn) { createBtn.disabled = true; createBtn.textContent = 'Creating...'; }
+    try {
+      const inserted = await api.createDeal({ deal_name: name, client_name: client, deal_owner: owner });
+      close();
+      // Refresh real deals so the new row appears + select it for the user.
+      await loadRealDealsAndMerge();
+      const created = DEALS.find(x => x.id === inserted?.id);
+      if (created) {
+        selectedDeal = created;
+        viewMode = 'detail';
+        detailTab = 'overview';
+        render();
+      } else {
+        render();
+      }
+      bus.emit('deal-management:deal-created', { id: inserted?.id });
+    } catch (err) {
+      if (createBtn) { createBtn.disabled = false; createBtn.textContent = 'Create Deal'; }
+      alert('Failed to create deal: ' + (err?.message || err));
+    }
   });
 
   // Focus first field
@@ -546,7 +507,8 @@ function render() {
   if (viewMode === 'detail' && selectedDeal) { renderDetail(); return; }
 
   const totalRevenue = DEALS.reduce((s, d) => s + d.revenue, 0);
-  const avgMargin = DEALS.filter(d => d.margin > 0).reduce((s, d) => s + d.margin, 0) / DEALS.filter(d => d.margin > 0).length;
+  const marginRows = DEALS.filter(d => d.margin > 0);
+  const avgMargin = marginRows.length ? (marginRows.reduce((s, d) => s + d.margin, 0) / marginRows.length) : 0;
   const totalSites = DEALS.reduce((s, d) => s + (Array.isArray(d.sites) ? d.sites.length : d.sites), 0);
 
   // Distinct customers for the filter dropdown.

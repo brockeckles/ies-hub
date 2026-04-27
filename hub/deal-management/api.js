@@ -157,4 +157,44 @@ export async function listRealDeals() {
   }
 }
 
-export default { fetchStages, fetchActivityTemplates, listRealDeals };
+/**
+ * Insert a new deal into deal_deals. Returns the inserted row.
+ *
+ * @param {{ deal_name:string, client_name:string, deal_owner?:string, status?:string }} payload
+ * @returns {Promise<object|null>}
+ */
+export async function createDeal(payload) {
+  try {
+    const row = {
+      deal_name: payload.deal_name || 'Untitled Deal',
+      client_name: payload.client_name || '',
+      deal_owner: payload.deal_owner || null,
+      status: payload.status || 'Draft',
+    };
+    return await db.insert('deal_deals', row);
+  } catch (err) {
+    console.error('[deal-mgmt] createDeal failed', err);
+    throw err;
+  }
+}
+
+/**
+ * Delete a deal by id. Cost models linked via deal_deals_id are NOT deleted —
+ * they get unlinked (deal_deals_id set to null) by a downstream cleanup or
+ * stay attached as orphaned references depending on FK behavior. Caller
+ * should warn the user before invoking.
+ *
+ * @param {string} id  deal_deals.id (uuid)
+ */
+export async function deleteDeal(id) {
+  try {
+    const { error } = await db.from('deal_deals').delete().eq('id', id);
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    console.error('[deal-mgmt] deleteDeal failed', err);
+    throw err;
+  }
+}
+
+export default { fetchStages, fetchActivityTemplates, listRealDeals, createDeal, deleteDeal };
