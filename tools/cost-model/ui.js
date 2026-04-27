@@ -1740,22 +1740,77 @@ function refreshHeaderKpis(opts) {
     return;
   }
   // 2026-04-27 — Lift the section page-name + description INTO the navy
-  // bar so it reads as a unified "tab identity" header. Source of truth is
-  // the .cm-section-header that each renderer still emits — we read its
-  // title + desc text here, then hide the original via CSS so the title
-  // appears exactly once. Sections may render their .cm-section-header
-  // immediately above other content (Equipment, Volumes, etc.) — picking
-  // the FIRST one in #cm-section-content gives the page header reliably.
+  // bar so it reads as a unified "tab identity" header. Each renderer is
+  // the source of truth for the title + desc text; we read it out here
+  // and hide the original via CSS so the title appears exactly once.
+  //
+  // Pattern variation across the 21 sections is a tax we pay for letting
+  // each renderer evolve independently — Implementation/Scenarios/Assumptions/
+  // What-If Studio use `<h2>` inside `.cm-section-header`, Cashflow & P&L
+  // (timeline) uses `<h2>` inside `.cm-timeline-meta`, Shift Planning lives
+  // in an external module with its own `.sp-header__title h2 + p`, and
+  // Setup/Equipment/Labor/etc. use the canonical `.cm-section-title +
+  // .cm-section-desc` pair. We try each pattern in priority order, and
+  // fall back to a static title map keyed off `activeSection` so the bar
+  // never lands titleless.
+  const SECTION_TITLE_FALLBACK = {
+    setup: 'Project Setup',
+    volumes: 'Volumes & Profile',
+    facility: 'Facility',
+    shifts: 'Labor Factors',
+    shiftPlanning: 'Shift Planning',
+    pricingBuckets: 'Pricing Buckets',
+    labor: 'Labor',
+    equipment: 'Equipment',
+    overhead: 'Overhead',
+    vas: 'Value-Added Services',
+    financial: 'Financial Assumptions',
+    startup: 'Start-Up / Capital',
+    implementation: 'Implementation',
+    pricing: 'Pricing Schedule',
+    summary: 'Summary Dashboard',
+    timeline: 'Cashflow & P&L',
+    assumptions: 'Assumptions',
+    scenarios: 'Scenarios',
+    whatif: 'What-If Studio',
+    linked: 'Linked Designs',
+  };
+  const TITLE_SELECTORS = [
+    '.cm-section-header .cm-section-title',
+    '.cm-section-header__intro h2',
+    '.cm-section-header h2',
+    '.cm-section-header h1',
+    '.cm-section-header h3',
+    '.cm-section .cm-section-title',
+    '.cm-section > h2',
+    '.cm-timeline-meta__title',
+    '.sp-header__title h2',
+    '.cm-wide-layout > .cm-section-header h2',
+  ];
+  const DESC_SELECTORS = [
+    '.cm-section-header .cm-section-desc',
+    '.cm-section-header__intro .cm-section-desc',
+    '.cm-section-header__intro .cm-subtle',
+    '.cm-section-header__intro p',
+    '.cm-section-header .cm-subtle',
+    '.cm-section-header p',
+    '.sp-header__title p',
+  ];
   let pageTitle = '';
   let pageDesc = '';
   try {
-    const sec = rootEl?.querySelector('#cm-section-content .cm-section-header');
-    if (sec) {
-      const t = sec.querySelector('.cm-section-title');
-      const d = sec.querySelector('.cm-section-desc');
-      if (t) pageTitle = t.innerHTML; // innerHTML preserves the contract-type chip etc.
-      if (d) pageDesc = d.innerHTML;
+    const root = rootEl?.querySelector('#cm-section-content');
+    if (root) {
+      for (const sel of TITLE_SELECTORS) {
+        const el = root.querySelector(sel);
+        if (el && (el.innerHTML || '').trim()) { pageTitle = el.innerHTML; break; }
+      }
+      for (const sel of DESC_SELECTORS) {
+        const el = root.querySelector(sel);
+        if (el && (el.innerHTML || '').trim()) { pageDesc = el.innerHTML; break; }
+      }
     }
+    if (!pageTitle) pageTitle = SECTION_TITLE_FALLBACK[activeSection] || '';
   } catch (_) { /* defensive — never block KPI render on header lookup */ }
 
   const titleBlock = pageTitle

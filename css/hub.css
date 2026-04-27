@@ -3641,9 +3641,12 @@ textarea.hub-input {
 /* The original `.cm-section-header` (page name + description text inside
    the form) is the SOURCE OF TRUTH for the title/desc text — `refreshHeaderKpis`
    reads it and re-renders it inside the navy bar. Hide the original so it
-   doesn't appear twice. Pricing Schedule + Cashflow & P&L use h2 inside
-   the .cm-section-header — those collapse the same way. */
-#cm-section-content .cm-section-header {
+   doesn't appear twice. Cashflow & P&L renders its h2 inside `.cm-timeline-meta`
+   (with a useful months-count hint sibling — only the title hides), and
+   Shift Planning lives in an external module with its own `.sp-header` card. */
+#cm-section-content .cm-section-header,
+#cm-section-content .cm-timeline-meta__title,
+#cm-section-content .sp-header {
   display: none;
 }
 
