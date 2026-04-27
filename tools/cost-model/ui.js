@@ -2710,7 +2710,7 @@ function renderSetup() {
     <!-- CM-SET-2 — Reference Data Status (HIDDEN 2026-04-26 EVE7 — admin/devops surface,
          not a user-oriented feature. Targets are partly aspirational and Labor/Equipment/MOST
          counts don't reconcile against the seeder. Re-enable + revise targets in CM-REF-1 if
-         we ever want this back. To restore: change `false &&` to `true &&` in the wrapper. -->
+         we ever want this back. To restore: flip the false-gated wrapper around this card from false to true. -->
     ${false ? `
     <div class="hub-card" style="margin-top:24px;padding:16px;border-left:3px solid var(--ies-blue);">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
