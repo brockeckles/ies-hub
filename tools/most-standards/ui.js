@@ -233,13 +233,17 @@ export async function mount(el) {
     onPhase: (phase) => {
       if (!phase || phase === activeTab) return;
       activeTab = /** @type {any} */ (phase);
-      el.innerHTML = renderShell();
-      // Re-bind chrome events on the fresh shell. bindToolChromeEvents is
-      // idempotent (rootEl.__tcBound flag), so reset it before re-binding.
-      el.__tcBound = false;
-      bindToolChromeEvents(el, _buildMostChromeHandlers());
+      // Surgical refresh — primitive replaces just the phase tab row +
+      // section pills + save chip + sidebar body. Listener stays bound;
+      // no re-render of the whole shell, no listener accumulation.
+      refreshToolChrome(el, _buildMostChromeOpts());
       renderContent();
       _refreshMostKpis();
+      // Conditional actions per phase (e.g., Run Analysis only on
+      // analysis/workflow). refreshToolChrome doesn't rebuild the
+      // actions rail by default — call refreshToolChromeActions for
+      // that.
+      refreshToolChromeActions(el, _buildMostChromeOpts());
     },
     onSection: () => {}, // MOST has no sub-sections
     onBack: () => { window.location.hash = 'designtools'; },
@@ -288,16 +292,19 @@ export function unmount() {
 
 /** Re-buildable handler set for MOST chrome events. */
 function _buildMostChromeHandlers() {
+  // Kept for legacy callers but no longer used to re-bind — the mount-time
+  // bindToolChromeEvents handlers stay live across phase changes (we
+  // refresh the chrome surgically instead of rebinding). The handlers
+  // here mirror the inline ones in mount so direct calls still work.
   return {
     onPhase: (phase) => {
       if (!phase || phase === activeTab) return;
       activeTab = /** @type {any} */ (phase);
       if (rootEl) {
-        rootEl.innerHTML = renderShell();
-        rootEl.__tcBound = false;
-        bindToolChromeEvents(rootEl, _buildMostChromeHandlers());
+        refreshToolChrome(rootEl, _buildMostChromeOpts());
         renderContent();
         _refreshMostKpis();
+        refreshToolChromeActions(rootEl, _buildMostChromeOpts());
       }
     },
     onSection: () => {},
