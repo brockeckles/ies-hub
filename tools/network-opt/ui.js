@@ -11,7 +11,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sM';
 import { state } from '../../shared/state.js?v=20260418-sM';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sM';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton, renderPhaseStepper, bindPhaseStepper, renderSubTabStrip as sharedRenderSubTabStrip } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
+import { bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260428-chrome-no1';
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadXLSX } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260418-sM';
@@ -31,6 +31,28 @@ let activeView = 'setup';
 
 /** @type {'facilities' | 'demand' | 'modemix' | 'service'} */
 let activeSection = 'facilities';
+
+// ============================================================
+// CHROME v3 — top-ribbon phase + section structure (2026-04-28 EVE)
+// ============================================================
+const NO_GROUPS = [
+  { key: 'inputs',     label: 'Inputs',     description: 'Demand & facilities' },
+  { key: 'parameters', label: 'Parameters', description: 'Modes, rates, service' },
+  { key: 'run',        label: 'Run',        description: 'Numbers & map' },
+  { key: 'compare',    label: 'Compare',    description: 'k-sweep & sensitivity' },
+];
+const NO_SECTIONS = [
+  { key: 'demand',     label: '\u{1F4CD} Demand',       group: 'inputs' },
+  { key: 'facilities', label: '\u{1F3ED} Facilities',   group: 'inputs' },
+  { key: 'modemix',    label: '\u{1F69B} Mode Mix',     group: 'parameters' },
+  { key: 'rates',      label: '\u{1F4B2} Rate Card',    group: 'parameters' },
+  { key: 'service',    label: '⏱ Service',         group: 'parameters' },
+  { key: 'results',    label: '\u{1F4C8} Numbers',      group: 'run', viewKey: 'results' },
+  { key: 'map',        label: '\u{1F5FA} Map',          group: 'run', viewKey: 'map' },
+];
+let _noSidebarOpen = false;
+let _noKpiRefreshTimer = null;
+
 
 /** @type {import('./types.js?v=20260418-sM').Facility[]} */
 let facilities = [];
@@ -281,13 +303,8 @@ function openEditor(savedRow) {
   rootEl.innerHTML = renderShell();
   bindShellEvents();
   renderContentView();
-
-  // Wire the "← Scenarios" back button.
-  rootEl.querySelector('[data-action="netopt-back"]')?.addEventListener('click', async () => {
-    if (isDirty && !confirm('You have unsaved changes. Leave anyway?')) return;
-    guardMarkClean('netopt');
-    await renderLanding();
-  });
+  refreshNoHeaderKpis();
+  // Back-button binding lives in bindShellEvents() now (CM Chrome v3 ripple).
 }
 
 // I-05 — dirty tracking + Save handler
@@ -301,24 +318,9 @@ function markDirty() {
   updateHeaderSaveState();
 }
 function updateHeaderSaveState() {
-  if (!rootEl) return;
-  const btn = rootEl.querySelector('[data-action="netopt-save"]');
-  if (!btn) return;
-  btn.removeAttribute('disabled');
-  btn.textContent = isDirty ? (activeConfigId ? '💾 Save' : '💾 Save Scenario') : (activeConfigId ? '✓ Saved' : '💾 Save Scenario');
-  btn.classList.toggle('hub-btn-primary', isDirty);
-  btn.classList.toggle('hub-btn-secondary', !isDirty);
-  // P2-2 — chip is tri-state, keep all 3 classes consistent with current state.
-  const stateChip = rootEl.querySelector('.hub-status-chip.draft, .hub-status-chip.saved, .hub-status-chip.modified');
-  if (stateChip) {
-    const draft = !activeConfigId;
-    const modified = !!activeConfigId && isDirty;
-    const saved = !!activeConfigId && !isDirty;
-    stateChip.classList.toggle('draft', draft);
-    stateChip.classList.toggle('saved', saved);
-    stateChip.classList.toggle('modified', modified);
-    stateChip.textContent = draft ? 'Draft' : (modified ? 'Modified' : 'Saved');
-  }
+  refreshNoSaveStateChip();
+  _refreshTopChrome();
+  refreshNoHeaderKpis({ debounce: true });
 }
 async function handleSaveNetopt() {
   try {
@@ -420,66 +422,365 @@ function setPhase(phase) {
 }
 
 function renderShell() {
-  const chips = [
-    // P2-2 tri-state: Draft (no DB row) / Modified (DB row but dirty) / Saved (DB row, clean).
-    {
-      label: !activeConfigId ? 'Draft' : (isDirty ? 'Modified' : 'Saved'),
-      kind:  !activeConfigId ? 'draft' : (isDirty ? 'modified' : 'saved'),
-      dot: true,
-    },
-    activeParentCmId
-      ? { label: 'Linked to CM', kind: 'linked', title: `Linked to Cost Model #${activeParentCmId}` }
-      : { label: scenarios.length ? `${scenarios.length} scenarios run` : 'Stand-alone', kind: scenarios.length ? 'linked' : 'standalone' },
-  ];
-  return `
-    <div class="hub-content-inner" style="padding:0;display:flex;flex-direction:column;height:100%;">
-      ${renderToolHeader({
-        toolName: 'Network Optimizer',
-        toolKey: 'netopt',
-        backAction: 'netopt-back',
-        // 2026-04-27 EVE: top tab strip removed — the phase stepper below is
-        // now the SINGLE primary nav. Tabs (setup/map/results/comparison)
-        // were redundant with stepper phases (inputs/parameters/run/compare).
-        statusChips: chips,
-        // I-05 — Save button always visible so work persists across tab closes.
-        // 2026-04-27 EVE — Export and Clear lifted from sidebar utilities.
-        secondaryActions: [
-          { label: '📥 Export', action: 'export-csv', title: 'Export scenarios to XLSX' },
-          // NO-SCOPE-7 — Clear All is destructive (wipes all run scenarios) and
-          // only meaningful in the Compare phase where scenarios live.
-          ...(currentPhase() === 'compare' ? [{ label: '🗑 Clear', action: 'clear-scenarios', title: 'Clear all run scenarios' }] : []),
-          { label: isDirty ? (activeConfigId ? '💾 Save' : '💾 Save Scenario') : (activeConfigId ? '✓ Saved' : '💾 Save Scenario'),
-            action: 'netopt-save',
-            primary: isDirty,
-            title: activeConfigId ? 'Update this scenario' : 'Save this scenario so you can reopen it later' },
-        ],
-        primaryAction: {
-          // XT-SCOPE-1 (2026-04-27 EVE2) — all 3 design tools now use "Run"
-          // as the primary verb, with the descriptor in the title attr.
-          label: 'Run',
-          action: 'netopt-run',
-          icon: '▶',
-          title: 'Run network optimizer (Cmd/Ctrl+Enter)',
-          state: runState.state(runStateInputs()),
-          cleanLabel: '✓ Results current',
-          cleanTitle: 'Inputs unchanged since the last run — optimizer results match the current setup. Click to force a re-run.',
-        },
-      })}
+  // CM Chrome v3 ripple — top ribbon (Row 1 phase tabs + actions; Row 2
+  // section pills + slim KPI strip) + collapsible sidebar drawer + left-
+  // aligned full-width content. Replaces the legacy renderToolHeader +
+  // process-flow-chip pattern. See project_chrome_ripple_plan_2026-04-29.md.
+  const sectionsByGroup = _noSectionsByGroup();
+  const activePhase = currentPhase();
+  const sidebarOpen = _noSidebarOpen ? 'true' : 'false';
 
-      <!-- 2026-04-27 EVE: phase stepper is the SINGLE primary nav surface.
-           Renders into #no-process-flow (kept for compat with existing
-           renderProcessFlow); now styled bigger / bolder per Option B. -->
-      <div id="no-process-flow"></div>
+  const phaseTabsHtml = NO_GROUPS.map(g => {
+    const items = sectionsByGroup.get(g.key) || [];
+    const completes = items.filter(s => _noSectionCompleteness(s.key) === 'complete').length;
+    const partials  = items.filter(s => _noSectionCompleteness(s.key) === 'partial').length;
+    const total = items.length;
+    const groupState = total === 0
+      ? (activePhase === g.key ? 'partial' : 'empty')
+      : (completes === total ? 'complete' : (completes + partials > 0 ? 'partial' : 'empty'));
+    const isActive = g.key === activePhase;
+    const countLabel = total === 0 ? '·' : (completes + '/' + total);
+    return '<button class="no-phase-tab ' + (isActive ? 'no-phase-tab--active' : '') + '" data-no-phase="' + g.key + '" title="' + _attr(g.description || '') + '">' +
+           '<span class="no-phase-tab__label">' + _html(g.label) + '</span>' +
+           '<span class="no-phase-tab__count no-phase-tab__count--' + groupState + '">' + countLabel + '</span>' +
+           '</button>';
+  }).join('');
 
-      <!-- Main area: full-bleed content (sidebar removed). -->
-      <div style="display:flex;flex:1;overflow:hidden;">
-        <div id="no-content" style="flex:1;overflow-y:auto;padding:0;">
-        </div>
-      </div>
-      <input type="file" id="netopt-csv-upload" accept=".csv,text/csv" style="display:none;"/>
-    </div>
-  `;
+  const activeSectionsList = sectionsByGroup.get(activePhase) || [];
+  const activeSectionKey = _activeNoSectionKey();
+  const sectionPillsHtml = activeSectionsList.length === 0
+    ? '<span style="font-size:11px;color:rgba(255,255,255,0.55);font-style:italic;">k-sweep + sensitivity in this phase — no sub-sections</span>'
+    : activeSectionsList.map(sec => {
+        const c = _noSectionCompleteness(sec.key);
+        const isActive = sec.key === activeSectionKey;
+        return '<button class="no-section-pill ' + (isActive ? 'no-section-pill--active' : '') + '" data-no-section="' + sec.key + '">' +
+               '<span class="no-section-pill__dot no-section-pill__dot--' + c + '"></span>' +
+               '<span class="no-section-pill__label">' + _html(sec.label) + '</span>' +
+               '</button>';
+      }).join('');
+
+  const draft = !activeConfigId;
+  const modified = !!activeConfigId && isDirty;
+  const stateClass = draft ? 'draft' : (modified ? 'modified' : 'saved');
+  const stateLabel = draft ? 'Draft' : (modified ? 'Modified' : 'Saved');
+
+  const runStateClass = runState.state(runStateInputs());
+  const isRunClean = runStateClass === 'clean';
+  const runLabel = isRunClean ? '✓ Results current' : 'Run';
+  const runIcon = isRunClean ? '' : '<span class="hub-run-icon">▶</span>';
+  const runTitle = isRunClean
+    ? 'Inputs unchanged since the last run — click to force a re-run.'
+    : 'Run network optimizer (Cmd/Ctrl+Enter)';
+
+  const showClear = activePhase === 'compare';
+
+  return '\n' +
+    '    <div class="hub-builder no-shell-v3" style="height: calc(100vh - 48px); display: flex; flex-direction: column;">\n' +
+    '      <header class="no-top-chrome">\n' +
+    '        <div class="no-top-chrome__row1">\n' +
+    '          <button class="no-top-chrome__back hub-btn hub-btn-sm hub-btn-secondary" data-action="netopt-back" title="Back to scenarios">←</button>\n' +
+    '          <nav class="no-phase-tabs">' + phaseTabsHtml + '</nav>\n' +
+    '          <div class="no-top-chrome__row1-spacer"></div>\n' +
+    '          <div class="no-top-chrome__actions">\n' +
+    '            <span class="hub-status-chip dot ' + stateClass + '" id="no-save-state-chip" data-no-state="' + stateClass + '" title="' + _attr(formatNoSavedWhen() || 'Save state') + '">' + _html(stateLabel) + '</span>\n' +
+    '            <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="export-csv" title="Export scenarios to XLSX">\u{1F4E5} Export</button>\n' +
+    (showClear ? '            <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="clear-scenarios" title="Clear all run scenarios">\u{1F5D1} Clear</button>\n' : '') +
+    '            <button class="hub-btn hub-btn-' + (modified ? 'primary' : 'secondary') + ' hub-btn-sm" data-action="netopt-save" title="' + (activeConfigId ? 'Update this scenario' : 'Save this scenario so you can reopen it later') + '">' + (activeConfigId ? '\u{1F4BE} Save' : '\u{1F4BE} Save Scenario') + '</button>\n' +
+    '            <button class="hub-btn hub-run-btn ' + (isRunClean ? 'is-clean' : '') + '" data-action="netopt-run" data-primary-action="netopt-run" data-run-state="' + runStateClass + '" title="' + _attr(runTitle) + '">' + runIcon + '<span>' + _html(runLabel) + '</span><span class="hub-run-shortcut">⌘↵</span></button>\n' +
+    '            <button class="no-top-chrome__toggle" id="no-sidebar-toggle" title="Show full section list">☰</button>\n' +
+    '          </div>\n' +
+    '        </div>\n' +
+    '        <div class="no-top-chrome__row2">\n' +
+    '          <nav class="no-section-pills">' + sectionPillsHtml + '</nav>\n' +
+    '          <div class="no-top-chrome__kpis" id="no-header-kpis"></div>\n' +
+    '        </div>\n' +
+    '      </header>\n' +
+    '\n' +
+    '      <div class="no-shell-body" data-sidebar-open="' + sidebarOpen + '">\n' +
+    '        <aside id="no-sidebar" class="no-sidebar-drawer">\n' +
+    '          <div class="no-sidebar-drawer__header">\n' +
+    '            <span class="text-subtitle">All Sections</span>\n' +
+    '            <button class="no-sidebar-drawer__close" id="no-sidebar-close" title="Hide">✕</button>\n' +
+    '          </div>\n' +
+    '          <nav style="padding: 8px 0;">' + renderNoGroupedNav() + '</nav>\n' +
+    (activeParentCmId ? '          <div style="padding:10px 16px;border-top:1px solid var(--ies-gray-200);font-size:11px;color:var(--ies-gray-600);">Linked to Cost Model #' + activeParentCmId + '</div>\n' : '') +
+    '        </aside>\n' +
+    '        <div class="hub-builder-content" id="no-content-wrap">\n' +
+    '          <div class="hub-builder-form" id="no-content"></div>\n' +
+    '        </div>\n' +
+    '      </div>\n' +
+    '      <input type="file" id="netopt-csv-upload" accept=".csv,text/csv" style="display:none;"/>\n' +
+    '    </div>\n' +
+    '\n' +
+    '    <style>\n' +
+    '      .no-top-chrome { background: var(--ies-navy, #001f3f); color: #fff; flex: 0 0 auto; border-bottom: 1px solid rgba(255,255,255,0.08); }\n' +
+    '      .no-top-chrome__row1 { display: flex; align-items: center; gap: 12px; padding: 8px 16px; min-height: 44px; }\n' +
+    '      .no-top-chrome__back { flex: 0 0 auto; }\n' +
+    '      .no-phase-tabs { display: flex; gap: 2px; flex: 0 0 auto; }\n' +
+    '      .no-phase-tab { background: transparent; border: none; cursor: pointer; color: rgba(255,255,255,0.7); padding: 7px 14px; border-radius: 4px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; transition: background 0.12s, color 0.12s; }\n' +
+    '      .no-phase-tab:hover { color: #fff; background: rgba(255,255,255,0.06); }\n' +
+    '      .no-phase-tab--active { color: #fff; background: rgba(255,255,255,0.14); }\n' +
+    '      .no-phase-tab__count { font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 8px; background: rgba(255,255,255,0.16); color: rgba(255,255,255,0.85); }\n' +
+    '      .no-phase-tab__count--complete { background: var(--ies-green, #16a34a); color: #fff; }\n' +
+    '      .no-phase-tab__count--partial  { background: #f59e0b; color: #fff; }\n' +
+    '      .no-phase-tab__count--empty    { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.6); }\n' +
+    '      .no-top-chrome__row1-spacer { flex: 1 1 auto; min-width: 8px; }\n' +
+    '      .no-top-chrome__kpis { flex: 0 1 auto; display: flex; align-items: center; gap: 18px; color: rgba(255,255,255,0.85); }\n' +
+    '      .no-top-chrome__actions { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; }\n' +
+    '      .no-top-chrome__toggle { background: transparent; border: 1px solid rgba(255,255,255,0.2); cursor: pointer; color: #fff; width: 30px; height: 28px; border-radius: 4px; font-size: 16px; line-height: 1; margin-left: 4px; }\n' +
+    '      .no-top-chrome__toggle:hover { background: rgba(255,255,255,0.08); }\n' +
+    '      .no-top-chrome__row2 { background: rgba(0,0,0,0.16); padding: 6px 16px; min-height: 38px; display: flex; align-items: center; gap: 16px; }\n' +
+    '      .no-section-pills { flex: 1 1 auto; min-width: 0; display: flex; gap: 4px; flex-wrap: wrap; }\n' +
+    '      .no-section-pill { background: transparent; border: 1px solid transparent; cursor: pointer; color: rgba(255,255,255,0.7); padding: 5px 12px; border-radius: 16px; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; transition: background 0.12s, color 0.12s, border-color 0.12s; }\n' +
+    '      .no-section-pill:hover { color: #fff; background: rgba(255,255,255,0.08); }\n' +
+    '      .no-section-pill--active { color: var(--ies-navy, #001f3f); background: #fff; border-color: #fff; }\n' +
+    '      .no-section-pill__dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }\n' +
+    '      .no-section-pill__dot--complete { background: var(--ies-green, #16a34a); }\n' +
+    '      .no-section-pill__dot--partial  { background: #f59e0b; }\n' +
+    '      .no-section-pill__dot--empty    { background: rgba(255,255,255,0.25); }\n' +
+    '      .no-section-pill--active .no-section-pill__dot--empty { background: rgba(0,0,0,0.18); }\n' +
+    '      .no-kpi-chip { display: inline-flex; flex-direction: column; align-items: flex-start; line-height: 1.1; white-space: nowrap; }\n' +
+    '      .no-kpi-chip__label { font-size: 9px; font-weight: 600; color: rgba(255,255,255,0.55); text-transform: uppercase; letter-spacing: 0.04em; }\n' +
+    '      .no-kpi-chip__value { font-size: 13px; font-weight: 700; color: #fff; margin-top: 1px; }\n' +
+    '      .no-shell-body { flex: 1 1 auto; display: flex; min-height: 0; position: relative; }\n' +
+    '      .no-sidebar-drawer { flex: 0 0 240px; width: 240px; background: #fff; border-right: 1px solid var(--ies-gray-200); overflow-y: auto; transition: width 0.18s ease, flex-basis 0.18s ease; }\n' +
+    '      .no-shell-body[data-sidebar-open="false"] .no-sidebar-drawer { flex: 0 0 0; width: 0; overflow: hidden; border-right: 0; }\n' +
+    '      .no-sidebar-drawer__header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--ies-gray-200); }\n' +
+    '      .no-sidebar-drawer__close { background: transparent; border: none; cursor: pointer; color: var(--ies-gray-500); font-size: 14px; line-height: 1; padding: 2px 6px; }\n' +
+    '      .no-sidebar-drawer__close:hover { color: var(--ies-navy); }\n' +
+    '      .no-nav-item { display: flex; align-items: center; gap: 8px; padding: 8px 16px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ies-gray-600); transition: all 0.15s ease; border-left: 3px solid transparent; }\n' +
+    '      .no-nav-item:hover { background: var(--ies-gray-50); color: var(--ies-navy); }\n' +
+    '      .no-nav-item.active { background: rgba(0,71,171,0.06); color: var(--ies-blue); border-left-color: var(--ies-blue); }\n' +
+    '      .no-nav-group-label { padding: 12px 16px 4px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px; color: var(--ies-gray-500); text-transform: uppercase; }\n' +
+    '      .no-nav-check { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--ies-gray-300); flex-shrink: 0; }\n' +
+    '      .no-nav-check.complete { background: var(--ies-green, #16a34a); border-color: var(--ies-green, #16a34a); }\n' +
+    '      .hub-builder-content { flex: 1 1 auto; overflow-y: auto; background: var(--ies-gray-50, #f8fafc); }\n' +
+    '      #no-content { padding: 20px 24px; }\n' +
+    '    </style>\n' +
+    '  ';
 }
+
+// ============================================================
+// CHROME v3 helpers (2026-04-28 EVE)
+// ============================================================
+function _html(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function _attr(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function _noSectionsByGroup() {
+  const m = new Map();
+  for (const g of NO_GROUPS) m.set(g.key, []);
+  for (const s of NO_SECTIONS) {
+    const arr = m.get(s.group);
+    if (arr) arr.push(s);
+  }
+  return m;
+}
+
+function _activeNoSectionKey() {
+  const phase = currentPhase();
+  if (phase === 'run') return activeView === 'map' ? 'map' : 'results';
+  if (phase === 'inputs') return (activeSection === 'facilities') ? 'facilities' : 'demand';
+  if (phase === 'parameters') {
+    if (activeSection === 'rates' || activeSection === 'service') return activeSection;
+    return 'modemix';
+  }
+  return null;
+}
+
+function _noSectionCompleteness(key) {
+  switch (key) {
+    case 'demand':     return demands.length === 0 ? 'empty' : 'complete';
+    case 'facilities': {
+      if (facilities.length === 0) return 'empty';
+      return facilities.some(f => f.isOpen) ? 'complete' : 'partial';
+    }
+    case 'modemix': {
+      const sum = (modeMix && modeMix.tlPct || 0) + (modeMix && modeMix.ltlPct || 0) + (modeMix && modeMix.parcelPct || 0);
+      return Math.abs(sum - 100) < 0.5 ? 'complete' : 'partial';
+    }
+    case 'rates':   return (rateCard && rateCard.tlPerMile) ? 'complete' : 'empty';
+    case 'service': return (serviceConfig && serviceConfig.globalMaxDays) ? 'complete' : 'empty';
+    case 'results': return activeScenario ? 'complete' : 'empty';
+    case 'map':     return activeScenario ? 'complete' : 'empty';
+    default: return 'empty';
+  }
+}
+
+function renderNoGroupedNav() {
+  const sectionsByGroup = _noSectionsByGroup();
+  const activeKey = _activeNoSectionKey();
+  return NO_GROUPS.map(g => {
+    const items = sectionsByGroup.get(g.key) || [];
+    const itemsHtml = items.length === 0
+      ? '<div class="no-nav-item" data-no-section="__phase__:' + g.key + '"><span style="opacity:0.6;font-style:italic;">Open ' + _html(g.label) + '</span></div>'
+      : items.map(s => '<div class="no-nav-item ' + (activeKey === s.key ? 'active' : '') + '" data-no-section="' + s.key + '"><span class="no-nav-check ' + (_noSectionCompleteness(s.key) === 'complete' ? 'complete' : '') + '"></span><span>' + _html(s.label) + '</span></div>').join('');
+    return '<div class="no-nav-group"><div class="no-nav-group-label">' + _html(g.label) + '</div>' + itemsHtml + '</div>';
+  }).join('');
+}
+
+function navigateNoSection(key) {
+  if (!key) return;
+  if (key.startsWith('__phase__:')) {
+    const phase = key.slice('__phase__:'.length);
+    setPhase(/** @type {any} */ (phase));
+    renderContentView();
+    _refreshTopChrome();
+    refreshNoHeaderKpis();
+    return;
+  }
+  const sec = NO_SECTIONS.find(s => s.key === key);
+  if (!sec) return;
+  if (sec.group === 'run') {
+    activeView = sec.viewKey || 'results';
+  } else if (sec.group === 'inputs') {
+    activeView = 'setup';
+    activeSection = key;
+  } else if (sec.group === 'parameters') {
+    activeView = 'setup';
+    activeSection = key;
+  } else if (sec.group === 'compare') {
+    activeView = 'comparison';
+  }
+  renderContentView();
+  _refreshTopChrome();
+  refreshNoHeaderKpis();
+}
+
+function _refreshTopChrome() {
+  if (!rootEl) return;
+  const sectionsByGroup = _noSectionsByGroup();
+  const activePhase = currentPhase();
+  const activeKey = _activeNoSectionKey();
+
+  const tabsEl = rootEl.querySelector('.no-phase-tabs');
+  if (tabsEl) {
+    tabsEl.innerHTML = NO_GROUPS.map(g => {
+      const items = sectionsByGroup.get(g.key) || [];
+      const completes = items.filter(s => _noSectionCompleteness(s.key) === 'complete').length;
+      const partials  = items.filter(s => _noSectionCompleteness(s.key) === 'partial').length;
+      const total = items.length;
+      const groupState = total === 0
+        ? (activePhase === g.key ? 'partial' : 'empty')
+        : (completes === total ? 'complete' : (completes + partials > 0 ? 'partial' : 'empty'));
+      const isActive = g.key === activePhase;
+      const countLabel = total === 0 ? '·' : (completes + '/' + total);
+      return '<button class="no-phase-tab ' + (isActive ? 'no-phase-tab--active' : '') + '" data-no-phase="' + g.key + '" title="' + _attr(g.description || '') + '">' +
+             '<span class="no-phase-tab__label">' + _html(g.label) + '</span>' +
+             '<span class="no-phase-tab__count no-phase-tab__count--' + groupState + '">' + countLabel + '</span>' +
+             '</button>';
+    }).join('');
+    tabsEl.querySelectorAll('[data-no-phase]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const target = btn.dataset.noPhase;
+        if (!target || target === currentPhase()) return;
+        setPhase(/** @type {any} */ (target));
+        renderContentView();
+        _refreshTopChrome();
+        refreshNoHeaderKpis();
+      });
+    });
+  }
+
+  const pillsEl = rootEl.querySelector('.no-section-pills');
+  if (pillsEl) {
+    const items = sectionsByGroup.get(activePhase) || [];
+    pillsEl.innerHTML = items.length === 0
+      ? '<span style="font-size:11px;color:rgba(255,255,255,0.55);font-style:italic;">k-sweep + sensitivity in this phase — no sub-sections</span>'
+      : items.map(sec => {
+          const c = _noSectionCompleteness(sec.key);
+          const isActive = sec.key === activeKey;
+          return '<button class="no-section-pill ' + (isActive ? 'no-section-pill--active' : '') + '" data-no-section="' + sec.key + '">' +
+                 '<span class="no-section-pill__dot no-section-pill__dot--' + c + '"></span>' +
+                 '<span class="no-section-pill__label">' + _html(sec.label) + '</span>' +
+                 '</button>';
+        }).join('');
+    pillsEl.querySelectorAll('[data-no-section]').forEach(btn => {
+      btn.addEventListener('click', () => navigateNoSection(btn.dataset.noSection));
+    });
+  }
+
+  const drawerNav = rootEl.querySelector('#no-sidebar nav');
+  if (drawerNav) {
+    drawerNav.innerHTML = renderNoGroupedNav();
+    drawerNav.querySelectorAll('[data-no-section]').forEach(btn => {
+      btn.addEventListener('click', () => navigateNoSection(btn.dataset.noSection));
+    });
+  }
+
+  refreshNoSaveStateChip();
+  updateRunButtonState();
+}
+
+function refreshNoSaveStateChip() {
+  const chip = rootEl && rootEl.querySelector('#no-save-state-chip');
+  if (!chip) return;
+  const draft = !activeConfigId;
+  const modified = !!activeConfigId && isDirty;
+  chip.classList.remove('draft', 'modified', 'saved');
+  if (draft)         { chip.classList.add('draft');    chip.textContent = 'Draft'; }
+  else if (modified) { chip.classList.add('modified'); chip.textContent = 'Modified'; }
+  else               { chip.classList.add('saved');    chip.textContent = 'Saved'; }
+  chip.dataset.noState = draft ? 'draft' : (modified ? 'modified' : 'saved');
+  chip.title = formatNoSavedWhen() || (draft ? 'Brand-new scenario — Save to capture an audit timestamp' : 'Save to capture the latest changes');
+  const saveBtn = rootEl && rootEl.querySelector('[data-action="netopt-save"]');
+  if (saveBtn) {
+    saveBtn.textContent = activeConfigId ? '\u{1F4BE} Save' : '\u{1F4BE} Save Scenario';
+    saveBtn.classList.toggle('hub-btn-primary', modified);
+    saveBtn.classList.toggle('hub-btn-secondary', !modified);
+  }
+}
+
+function formatNoSavedWhen() { return ''; }
+
+function refreshNoHeaderKpis(opts) {
+  if (opts && opts.debounce) {
+    if (_noKpiRefreshTimer) clearTimeout(_noKpiRefreshTimer);
+    _noKpiRefreshTimer = setTimeout(() => { _noKpiRefreshTimer = null; refreshNoHeaderKpis(); }, 200);
+    return;
+  }
+  const host = rootEl && rootEl.querySelector('#no-header-kpis');
+  if (!host) return;
+  const kpis = computeNoHeaderKpis();
+  if (!kpis.items.length) { host.innerHTML = ''; return; }
+  host.innerHTML = kpis.items.map(it => '<span class="no-kpi-chip"' + (it.hint ? ' title="' + _attr(it.hint) + '"' : '') + '><span class="no-kpi-chip__label">' + _html(it.label) + '</span><span class="no-kpi-chip__value">' + _html(it.value) + '</span></span>').join('');
+}
+
+function computeNoHeaderKpis() {
+  const s = activeScenario;
+  let optimalK = '—';
+  let optimalKHint = 'Run a k-sweep on the Compare phase to find the cost-optimal facility count.';
+  if (recommendedDCCount) {
+    optimalK = String(recommendedDCCount);
+    optimalKHint = 'Recommended DC count from the most recent k-sweep (kneedle-elbow).';
+  } else if (s && Array.isArray(facilities)) {
+    optimalK = String(facilities.filter(f => f.isOpen).length);
+    optimalKHint = 'Open facilities count. Run k-sweep for a cost-optimal recommendation.';
+  }
+
+  if (!s) {
+    return { items: [
+      { label: 'Total Cost', value: '—', hint: 'Run a scenario to populate KPIs.' },
+      { label: 'Lanes',      value: '—' },
+      { label: 'Service %',  value: '—' },
+      { label: 'Optimal K',  value: optimalK, hint: optimalKHint },
+    ] };
+  }
+  let costLabel = '—';
+  try { costLabel = calc.formatCurrency(s.totalCost, { compact: true }); } catch (_) {}
+  const laneCount = Array.isArray(s.assignments) ? s.assignments.length : 0;
+  const svcPct = (typeof s.serviceLevel === 'number') ? (s.serviceLevel.toFixed(1) + '%') : '—';
+  return { items: [
+    { label: 'Total Cost', value: costLabel, hint: 'Active scenario total cost (transport + facility) per year.' },
+    { label: 'Lanes',      value: laneCount.toLocaleString(), hint: 'Demand-to-facility lanes evaluated in the active scenario.' },
+    { label: 'Service %',  value: svcPct, hint: 'Lanes meeting their SLA window (≤ maxDays) as % of total.' },
+    { label: 'Optimal K',  value: optimalK, hint: optimalKHint },
+  ] };
+}
+
 
 function viewLabel(v) {
   const labels = { setup: 'Setup', map: 'Network Map', results: 'Results', comparison: 'Compare' };
@@ -489,10 +790,34 @@ function viewLabel(v) {
 function bindShellEvents() {
   if (!rootEl) return;
 
-  // 2026-04-27 EVE: top tab strip removed (Option B redesign) — phase
-  // stepper below is the single primary nav. View-tabs handler obsolete.
+  rootEl.querySelectorAll('[data-no-phase]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.noPhase;
+      if (!target || target === currentPhase()) return;
+      setPhase(/** @type {any} */ (target));
+      renderContentView();
+      _refreshTopChrome();
+      refreshNoHeaderKpis();
+    });
+  });
+  rootEl.querySelectorAll('[data-no-section]').forEach(btn => {
+    btn.addEventListener('click', () => navigateNoSection(btn.dataset.noSection));
+  });
+  rootEl.querySelector('#no-sidebar-toggle')?.addEventListener('click', () => {
+    _noSidebarOpen = !_noSidebarOpen;
+    rootEl.innerHTML = renderShell();
+    bindShellEvents();
+    renderContentView();
+    refreshNoHeaderKpis();
+  });
+  rootEl.querySelector('#no-sidebar-close')?.addEventListener('click', () => {
+    _noSidebarOpen = false;
+    rootEl.innerHTML = renderShell();
+    bindShellEvents();
+    renderContentView();
+    refreshNoHeaderKpis();
+  });
 
-  // Header primary action — direct call (no sidebar Run button to proxy through).
   const headerRun = rootEl.querySelector('[data-primary-action="netopt-run"]');
   headerRun?.addEventListener('click', () => {
     runScenario();
@@ -501,27 +826,21 @@ function bindShellEvents() {
   });
   bindPrimaryActionShortcut(rootEl, 'netopt-run');
 
-  // I-05 — Save button (in the header secondaryActions rail).
   rootEl.querySelector('[data-action="netopt-save"]')?.addEventListener('click', handleSaveNetopt);
-
-  // Header secondaryActions: Export + Clear (lifted from sidebar utilities).
   rootEl.querySelector('[data-action="export-csv"]')?.addEventListener('click', exportToCSV);
   rootEl.querySelector('[data-action="clear-scenarios"]')?.addEventListener('click', () => {
     scenarios = []; activeScenario = null; comparisonResults = null;
     markDirty(); renderContentView();
+    _refreshTopChrome();
+    refreshNoHeaderKpis();
+  });
+  rootEl.querySelector('[data-action="netopt-back"]')?.addEventListener('click', async () => {
+    if (isDirty && !confirm('You have unsaved changes. Leave anyway?')) return;
+    guardMarkClean('netopt');
+    await renderLanding();
   });
 
-  // CSV rate card upload (the file input lives at shell level so it survives phase re-renders).
   rootEl.querySelector('#netopt-csv-upload')?.addEventListener('change', handleCsvUpload);
-
-  // Phase stepper — single primary nav. Wired via the shared
-  // bindPhaseStepper helper (XT-SCOPE-3). The callback maps the clicked
-  // phase to (view, section) via setPhase + jumpToPhase, then re-renders
-  // the content view.
-  bindPhaseStepper(rootEl.querySelector('#no-process-flow'), (phase) => {
-    jumpToPhase(/** @type {any} */ (phase));
-    renderContentView();
-  });
 }
 
 // ============================================================
@@ -552,29 +871,9 @@ function phaseStatus() {
 }
 
 function renderProcessFlow() {
-  // 2026-04-27 EVE2 (XT-SCOPE-3): now delegates to the shared
-  // renderPhaseStepper in shared/tool-frame.js so CoG + Fleet can re-use
-  // the same chrome. Tool-specific knowledge stays here: phase definitions,
-  // status mapping, and the click → setPhase + renderContentView wiring.
-  const el = rootEl?.querySelector('#no-process-flow');
-  if (!el) return;
-  const s = phaseStatus();
-  const active = currentPhase();
-  const phases = [
-    { key: 'inputs',     num: 1, label: 'Inputs',     sub: 'Demand & facilities',          statusKey: 'setup'    },
-    { key: 'parameters', num: 2, label: 'Parameters', sub: 'Modes, rates, service',         statusKey: 'optimize' },
-    { key: 'run',        num: 3, label: 'Run',        sub: 'Map, KPIs, results',            statusKey: 'run'      },
-    { key: 'compare',    num: 4, label: 'Compare',    sub: 'k-sweep & sensitivity',         statusKey: 'compare'  },
-  ];
-  const styleFor = (phaseKey, status) => {
-    if (phaseKey === active) return { circleBg: 'var(--ies-blue)', circleFg: '#fff', label: 'var(--ies-blue)', icon: null, ring: true };
-    if (status === 'complete') return { circleBg: 'var(--ies-green, #047857)', circleFg: '#fff', label: 'var(--ies-green, #047857)', icon: '✓', ring: false };
-    return { circleBg: 'var(--ies-gray-200)', circleFg: 'var(--ies-gray-600)', label: 'var(--ies-gray-600)', icon: null, ring: false };
-  };
-  el.innerHTML = renderPhaseStepper({
-    phases: phases.map(p => ({ key: p.key, num: p.num, label: p.label, sub: p.sub, status: s[p.statusKey] })),
-    activePhase: active,
-  });
+  // 2026-04-28 EVE — in-canvas process-flow chip strip dropped (Brock
+  // 2026-04-29 decision). Top-ribbon Row 1 phase tabs convey phase context.
+  return;
 }
 
 /** @param {'inputs'|'parameters'|'run'|'compare'} phase */
@@ -1020,14 +1319,19 @@ function renderContentView() {
     case 'compare':    renderComparePhase(el);    break;
   }
   renderProcessFlow();
+  // Top chrome rows (phase counts, section pill dots) reflect content state —
+  // refresh after every content render so dots/counts stay in lockstep.
+  _refreshTopChrome();
+  refreshNoHeaderKpis();
 }
 
 // ============================================================
 // SUB-TAB / TOOLS HELPERS (2026-04-27 EVE — stepper redesign)
 // ============================================================
-// 2026-04-27 EVE2 follow-up: renderSubTabStrip lifted to shared/tool-frame.js.
-// Local shim retained so the ~6 internal call sites keep working unchanged.
-const renderSubTabStrip = sharedRenderSubTabStrip;
+// 2026-04-28 EVE — sub-tab strips removed from phase content. The new
+// top-ribbon chrome's Row 2 section pills are now the SINGLE source of
+// section nav across the tool. Sub-tab callsites below were inlined empty.
+const renderSubTabStrip = () => '';
 
 /** Quick-seed archetype bar shown above the Inputs phase content. */
 function renderArchetypeSeedBar() {
@@ -1056,73 +1360,39 @@ function renderArchetypeSeedBar() {
 // PHASE RENDERERS (2026-04-27 EVE)
 // ============================================================
 function renderInputsPhase(el) {
-  // Default to demand if section isn't an Inputs section.
   if (activeSection !== 'demand' && activeSection !== 'facilities') activeSection = 'demand';
-  const subTabs = renderSubTabStrip([
-    { key: 'demand',     label: '📍 Demand Points', count: demands.length },
-    { key: 'facilities', label: '🏭 Facilities',   count: `${facilities.filter(f => f.isOpen).length}/${facilities.length}` },
-  ], activeSection, 'section');
-  el.innerHTML = `
-    <div style="padding:18px 24px 24px;">
-      ${subTabs}
-      ${activeSection === 'demand' ? renderArchetypeSeedBar() : ''}
-      <div id="np-phase-inner" style="margin-top:18px;"></div>
-    </div>`;
+  el.innerHTML = '<div>' +
+    (activeSection === 'demand' ? renderArchetypeSeedBar() : '') +
+    '<div id="np-phase-inner" style="margin-top:6px;"></div></div>';
   const inner = el.querySelector('#np-phase-inner');
   if (activeSection === 'facilities') renderFacilities(inner);
   else                                renderDemand(inner);
-  bindPhaseSubTabClicks(el);
   bindArchetypeButtons(el);
 }
 
 function renderParametersPhase(el) {
-  // 2026-04-27 EVE2 (NO-SCOPE-6 + NO-SCOPE-8): three sub-tabs replace
-  // the prior 2-tab + right-column-tools-panel layout. Mode Mix is now a
-  // pure mode-allocation surface; Rate Card lives in its own sub-tab.
   if (!['modemix', 'rates', 'service'].includes(activeSection)) activeSection = 'modemix';
-  const subTabs = renderSubTabStrip([
-    { key: 'modemix', label: '🚛 Mode Mix' },
-    { key: 'rates',   label: '💲 Rate Card' },
-    { key: 'service', label: '⏱ Service Config' },
-  ], activeSection, 'section');
-  el.innerHTML = `
-    <div style="padding:18px 24px 24px;">
-      ${subTabs}
-      <div id="np-phase-inner" style="margin-top:18px;"></div>
-    </div>`;
+  el.innerHTML = '<div><div id="np-phase-inner" style="margin-top:6px;"></div></div>';
   const inner = el.querySelector('#np-phase-inner');
   if      (activeSection === 'service') renderServiceConfig(inner);
   else if (activeSection === 'rates')   renderRateCardPhase(inner);
   else                                  renderModeMix(inner);
-  bindPhaseSubTabClicks(el);
 }
 
 function renderRunPhase(el) {
-  // Sub-tabs: Map | Numbers (results table). activeView holds the sub-view.
   if (activeView !== 'map' && activeView !== 'results') activeView = 'results';
-  const subView = activeView === 'map' ? 'map' : 'results';
-  // 2026-04-27 EVE2-fu2: Numbers is the default landing — list it first.
-  const subTabs = renderSubTabStrip([
-    { key: 'results', label: '📈 Numbers' },
-    { key: 'map',     label: '🗺 Map' },
-  ], subView, 'runsub');
-  el.innerHTML = `
-    <div style="padding:18px 24px 24px;display:flex;flex-direction:column;height:100%;">
-      ${subTabs}
-      <div id="np-phase-inner" style="flex:1;margin-top:16px;min-height:0;"></div>
-    </div>`;
+  el.innerHTML = '<div style="display:flex;flex-direction:column;height:100%;"><div id="np-phase-inner" style="flex:1;min-height:0;"></div></div>';
   const inner = el.querySelector('#np-phase-inner');
-  if (subView === 'map') renderMap(inner);
-  else                    renderResults(inner);
-  bindRunPhaseSubTabs(el);
+  if (activeView === 'map') renderMap(inner);
+  else                       renderResults(inner);
 }
 
 function renderComparePhase(el) {
   // 2026-04-27 EVE2 (NO-SCOPE-2 + NO-SCOPE-3): Optimize Network k-sweep is the
-  // primary action of the Compare phase — it produces the data this phase
-  // exists to display. Max DCs travels with it.
+  // primary action of the Compare phase. 2026-04-28: outer padding dropped —
+  // #no-content provides 20×24 form padding.
   el.innerHTML = `
-    <div style="padding:18px 24px 24px;">
+    <div>
       <div class="hub-card" style="padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
         <div style="flex:1;min-width:280px;">
           <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;color:var(--ies-gray-500);text-transform:uppercase;">Run k-sweep</div>
