@@ -62,7 +62,7 @@ function render() {
       .cc-alert-banner { transition: filter .12s ease; }
       .cc-alert-banner:hover { filter: brightness(0.97); cursor: pointer; }
     </style>
-    <div class="hub-content-inner" style="padding:24px;max-width:1280px;">
+    <div class="hub-content-inner" style="padding:24px;max-width:var(--content-max-width, 1400px);">
 
       <!-- Header -->
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">

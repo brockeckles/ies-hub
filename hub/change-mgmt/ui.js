@@ -274,7 +274,7 @@ function renderAdkar(el) {
   };
 
   el.innerHTML = `
-    <div style="max-width:1200px;">
+    <div>
       <div style="margin-bottom:24px;">
         <h3 class="text-section" style="margin:0 0 8px 0;">ADKAR Change Management Framework</h3>
         <p style="font-size:13px;color:var(--ies-gray-400);margin:0;">The ADKAR model (Awareness, Desire, Knowledge, Ability, Reinforcement) provides a structured approach to organizational change.</p>
