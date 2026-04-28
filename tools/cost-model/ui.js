@@ -12696,11 +12696,14 @@ function _renderOfpPathConnectors(container) {
     const laneRightX = laneRect.right - svgRect.left;
     const cards = Array.from(laneEl.querySelectorAll('.ofp-node'));
     for (const card of cards) {
-      const idx = Number(card.dataset.ofpIdx);
-      const kind = card.dataset.ofpKind;
-      const arr = kind === 'direct' ? (model.laborLines || []) : (model.indirectLaborLines || []);
-      const line = arr[idx];
-      const tag = (line?.path_tag || '').trim();
+      // v0.3a.4 hotfix — read path_tag from the rendered pill in the DOM
+      // rather than indirecting through model. This matches the user's
+      // visible state exactly and avoids any module-state-vs-DOM drift
+      // (initial implementation had drift the connector never recovered
+      // from). Path pills are rendered by _renderOfpNode unconditionally
+      // when the line has a path_tag, so DOM is an authoritative source.
+      const pillEl = card.querySelector('.ofp-node__path-pill');
+      const tag = (pillEl?.textContent || '').trim();
       if (!tag) continue;
       const cardRect = card.getBoundingClientRect();
       const cy = cardRect.top + cardRect.height / 2 - svgRect.top;
