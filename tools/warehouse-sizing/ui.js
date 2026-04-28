@@ -10,7 +10,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sL';
 import { state } from '../../shared/state.js?v=20260418-sL';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sL';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260429-tc2-wsc';
+import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260429-tc2-wsc2';
 import * as calc from './calc.js?v=20260425-s11';
 import * as api from './api.js?v=20260418-sL';
 
@@ -54,6 +54,7 @@ let isDirty = false;
 let scene3d = null;
 
 /** 2D-plan edit mode: when true, user can drag Office / Ship Staging / Forward Pick. */
+let _wscDrawerOpen = true;
 let _planEditMode = false;
 /** Rect registry populated each drawPlan() — keyed by zoneId → {x,y,w,h} in canvas px. */
 let _planZoneRects = {};
@@ -231,30 +232,56 @@ function _buildWscChromeOpts() {
     sectionCompleteness: () => 'complete',
     saveState: { state: stateName, title: stateTitle },
     actions,
-    showSidebar: false,
-    sidebarHeader: 'Warehouse Design',
-    sidebarBody: '',
+    showSidebar: _wscDrawerOpen,
+    sidebarHeader: 'Configure',
+    sidebarBody: '<div id="wsc-config">' + _renderWscConfigHtml() + '</div>',
     sidebarFooter,
-    bodyHtml: `<div style="display:grid;grid-template-columns:300px 1fr;height:100%;width:100%;">
-      <div id="wsc-config" style="overflow-y:auto;border-right:1px solid var(--ies-gray-200);"></div>
-      <div id="wsc-content" style="overflow-y:auto;padding:24px;"></div>
-    </div>`,
+    bodyHtml: '<div id="wsc-content" style="overflow-y:auto;padding:24px;height:100%;"></div>',
     backTitle: 'Back to scenarios',
   };
 }
 
-/** Compute KPI strip values for the WSC chrome. */
+/** Compute KPI strip values for the WSC chrome.
+ *  Real-time math from calc.computeStorage(facility, zones) — not stored
+ *  on facility.* (an early version of this function tried that and got
+ *  empty values because storage size is computed, not configured). */
 function _computeWscKpis() {
   const items = [];
-  const sf = facility?.totalSqft;
-  items.push({ label: 'Total SF', value: (sf && sf > 0) ? (sf / 1000).toFixed(0) + 'K' : '—' });
-  const inb = facility?.dockConfig?.inboundDoors || 0;
-  const out = facility?.dockConfig?.outboundDoors || 0;
-  items.push({ label: 'Dock Doors', value: (inb + out) > 0 ? String(inb + out) : '—' });
-  const rp = facility?.totalRackPositions;
-  items.push({ label: 'Rack Positions', value: (rp && rp > 0) ? (rp / 1000).toFixed(1) + 'K' : '—' });
-  const u = facility?.utilizationPct;
-  items.push({ label: 'Utilization', value: (typeof u === 'number') ? u.toFixed(1) + '%' : '—' });
+  // Total SF — width × depth when both are set, otherwise facility.totalSqft.
+  const w = +facility?.buildingWidth || 0;
+  const d = +facility?.buildingDepth || 0;
+  const totalSf = (w > 0 && d > 0) ? (w * d) : (facility?.totalSqft || 0);
+  items.push({
+    label: 'Total SF',
+    value: totalSf > 0 ? (totalSf / 1000).toFixed(0) + 'K' : '—',
+    hint: 'Building footprint (width × depth, or totalSqft if dims not set).',
+  });
+  // Dock Doors — zones.dockConfig (NOT facility.*).
+  const inb = zones?.dockConfig?.inboundDoors || 0;
+  const out = zones?.dockConfig?.outboundDoors || 0;
+  items.push({
+    label: 'Dock Doors',
+    value: (inb + out) > 0 ? String(inb + out) : '—',
+    hint: `${inb} inbound + ${out} outbound`,
+  });
+  // Rack Positions — derived from computeStorage().
+  let rackPos = 0;
+  let utilFrac = null;
+  try {
+    const storage = calc.computeStorage(facility, zones);
+    rackPos = storage.totalPalletPositions || 0;
+    utilFrac = storage.storageUtilization;
+  } catch (_) {}
+  items.push({
+    label: 'Rack Positions',
+    value: rackPos > 0 ? (rackPos >= 1000 ? (rackPos / 1000).toFixed(1) + 'K' : String(rackPos)) : '—',
+    hint: 'aisleCount × 2 sides × bays × levels (from computeStorage).',
+  });
+  items.push({
+    label: 'Utilization',
+    value: (typeof utilFrac === 'number' && utilFrac > 0) ? (utilFrac * 100).toFixed(1) + '%' : '—',
+    hint: 'Storage SF / total facility footprint.',
+  });
   return items;
 }
 
@@ -305,8 +332,14 @@ function bindShellEvents() {
       renderContentView();
       _refreshWscKpis();
     },
-    onSidebar: () => {
-      // WSC's drawer is unused; toggle is a no-op.
+    onSidebar: (kind) => {
+      _wscDrawerOpen = (kind === 'toggle') ? !_wscDrawerOpen : false;
+      // Just flip the data-sidebar-open attribute — primitive's CSS handles
+      // the width transition. Avoid calling refreshToolChrome here because
+      // that re-renders sidebarBody, which would nuke any in-progress
+      // text-input state inside the config panel.
+      const body = rootEl?.querySelector('.tc-body');
+      if (body) body.dataset.sidebarOpen = _wscDrawerOpen ? 'true' : 'false';
     },
     onBack: async () => {
       if (isDirty && !confirm('Unsaved changes. Leave for the scenarios list?')) return;
@@ -502,24 +535,20 @@ async function handleSaveWsc() {
 }
 
 function renderConfigPanel() {
+  // CM Chrome v3 ripple — the WSC config panel now lives inside the chrome's
+  // collapsible left drawer. _renderWscConfigHtml() returns the HTML; this
+  // function targets whichever element holds it (id=wsc-config wrapper inside
+  // the chrome's .tc-sidebar__body).
   const panel = rootEl?.querySelector('#wsc-config');
   if (!panel) return;
+  panel.innerHTML = _renderWscConfigHtml();
+  bindConfigEvents(panel);
+}
 
-  panel.innerHTML = `
-    <!-- Toolbar -->
-    <div style="padding:12px 16px; border-bottom:1px solid var(--ies-gray-200);">
-      <div class="text-subtitle" style="margin-bottom:8px;">Warehouse Sizing</div>
-      <div class="flex gap-2" style="flex-wrap:wrap;">
-        <!-- 2026-04-27 EVE: removed redundant ← Scenarios button — tool-frame.js
-             already renders one in the top header strip. The local one in this
-             toolbar created two stacked buttons (top one was unwired, since
-             the click handler was scoped to #wsc-config). -->
-        <button class="hub-btn hub-btn-primary hub-btn-sm" data-action="wsc-save">Save</button>
-        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="wsc-new">New</button>
-        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="wsc-copy-summary" title="Copy summary to clipboard">Copy</button>
-      </div>
-    </div>
-
+/** Build the WSC config-panel HTML. The Save/New/Copy toolbar that used to
+ *  sit at the top is now redundant with the chrome's actions rail — dropped. */
+function _renderWscConfigHtml() {
+  return `
     <!-- 2026-04-21 audit: Quick-Start Verticals. Handler already existed at
          line ~978 ([data-preset]) — this block connects the applyVerticalPreset
          function to a UI the user can actually click. -->
@@ -794,8 +823,6 @@ function renderConfigPanel() {
       <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="wsc-add-custom-zone" style="width:100%;">+ Add Custom Zone</button>
     </div>
   `;
-
-  bindConfigEvents(panel);
 }
 
 function bindConfigEvents(panel) {
