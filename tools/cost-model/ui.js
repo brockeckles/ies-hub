@@ -6563,7 +6563,7 @@ function renderSummary() {
       const y1Orders  = p1.orders    || orders || 0;
       const y1CostPerOrder = y1Orders > 0 ? y1Cost / y1Orders : 0;
       return `
-    <div class="hub-kpi-strip mb-4" style="grid-template-columns: repeat(5, minmax(0, 1fr));">
+    <div class="hub-kpi-strip mb-4" style="grid-template-columns: repeat(6, minmax(0, 1fr));">
       <div class="hub-kpi-tile" data-cm-disclose="summary-y1-cost" title="Hover for breakdown · Year 1 total cost">
         <div class="hub-kpi-tile__label">Y1 Total Cost</div>
         <div class="hub-kpi-tile__value">${calc.formatCurrency(y1Cost, {compact: true})}</div>
@@ -6571,6 +6571,10 @@ function renderSummary() {
       <div class="hub-kpi-tile" data-cm-disclose="summary-y1-revenue" title="Hover for breakdown · Year 1 revenue at target margin">
         <div class="hub-kpi-tile__label">Y1 Revenue</div>
         <div class="hub-kpi-tile__value hub-kpi-tile__value--brand">${calc.formatCurrency(y1Revenue, {compact: true})}</div>
+      </div>
+      <div class="hub-kpi-tile" title="Year-1 Gross Profit ÷ Year-1 Revenue · ties to the GP row in the P&L below">
+        <div class="hub-kpi-tile__label">Y1 GP Margin</div>
+        <div class="hub-kpi-tile__value" style="color:${y1Revenue > 0 && (((p1.grossProfit||0) / y1Revenue) >= ((thresholds.grossMargin||10)/100)) ? 'var(--ies-green)' : 'var(--ies-gray-700)'};">${y1Revenue > 0 ? calc.formatPct((p1.grossProfit||0) / y1Revenue) : '—'}</div>
       </div>
       <div class="hub-kpi-tile" data-cm-disclose="summary-y1-cost-per-order" title="Hover for breakdown · Year 1 cost ÷ Year 1 ${outboundUomLabel.toLowerCase()}s">
         <div class="hub-kpi-tile__label">Cost / ${outboundUomLabel} (Y1)</div>
@@ -6601,12 +6605,16 @@ function renderSummary() {
       </div>
     </div>
 
-    <!-- Cost Breakdown — stacked bar + legend (primitives-style).
+    <!-- Cost Breakdown + Financial Metrics — paired side-by-side after the
+         CM Chrome v3 ripple reclaimed horizontal space. Stacks back to
+         single-column at <1100px viewport. -->
+    <div class="cm-summary-row mb-4">
+      <!-- Cost Breakdown — stacked bar + legend (primitives-style).
          2026-04-21 audit: swapped the ad-hoc teal/amber/gray/red palette for
          a brand-aligned ramp anchored by ies-blue (Labor — biggest slice) and
          ies-orange (Start-Up — smallest, accent). Middle slices step down in
          blue/slate shades to stay on-brand at a glance. -->
-    <div class="hub-card mb-4">
+    <div class="hub-card">
       <h3 class="hub-section-heading">Cost Breakdown</h3>
       <div class="cm-stacked-bar">
         <div style="width:${pcts.labor}%; background: var(--ies-blue, #0047AB);" title="Labor ${pcts.labor}%"></div>
@@ -6649,7 +6657,7 @@ function renderSummary() {
     <!-- Financial Metrics — primitives kpi-tile grid. Each tile carries an
          audit-trail tooltip so finance / pricing reviewers can see exactly
          how the number was derived without reading the code. -->
-    <div class="hub-card mb-4">
+    <div class="hub-card">
       <h3 class="hub-section-heading">Financial Metrics</h3>
       <div class="cm-metrics-grid">
         ${(() => {
@@ -6681,6 +6689,7 @@ function renderSummary() {
         ${renderMetricCard('Total Investment', calc.formatCurrency(metrics.totalInvestment, {compact: true}), null, `Startup capital $${(summary.startupCapital/1000).toFixed(0)}K + Equipment capital $${(summary.equipmentCapital/1000).toFixed(0)}K. EXCLUDES TI Upfront (rolled into facility rent via amortization). The Y0 outflow used as the anchor for MIRR/NPV/Payback.`)}
         ${(summary.tiUpfront || 0) > 0 ? renderMetricCard('TI Upfront', calc.formatCurrency(summary.tiUpfront, {compact: true}), null, `Tenant Improvement outlay at Y0 (dock levelers, office build-out, CCTV, access control, etc.) — per Asset Defaults Guidance, TI does NOT hit Total Investment or D&A. Instead it amortizes over the ${(model.projectDetails?.contractTerm || 5)}-year contract at $${(((summary.tiAmortAnnual)||0)/1000).toFixed(0)}K/yr and shows as a line in Facility Cost.`) : ''}
       </div>
+    </div>
     </div>
 
     <!-- Multi-Year P&L — standard accounting stack post-2026-04-20 audit:

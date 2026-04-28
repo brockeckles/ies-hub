@@ -2669,6 +2669,21 @@ textarea.hub-input {
   -webkit-overflow-scrolling: touch;
 }
 
+/* ---- CM Summary 2-column row (CM layout pass 2026-04-29) ---- */
+/* Pairs Cost Breakdown + Financial Metrics side-by-side now that the new
+   chrome reclaimed horizontal space. Cost Breakdown takes ~38% (its content
+   is denser per inch); Financial Metrics takes ~62% (cm-metrics-grid has
+   4 columns internally and benefits from the wider half). */
+.cm-summary-row {
+  display: grid;
+  grid-template-columns: minmax(0, 38fr) minmax(0, 62fr);
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .cm-summary-row { grid-template-columns: 1fr; gap: 12px; }
+}
+
 /* ---- Financial Metrics 4-col grid (Summary) ---- */
 .cm-metrics-grid {
   display: grid;
