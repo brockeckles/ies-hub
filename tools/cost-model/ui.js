@@ -12087,6 +12087,36 @@ function _pathColor(tag) {
 
 
 
+
+// v0.3a.9 — Canonical MHE / IT option lists. Mirrors the inline option
+// blocks rendered by the Labor page (renderLaborV1 around line 3925)
+// so the OFP detail drawer's dropdowns produce values that round-trip
+// cleanly with Labor (same value strings, same labels).
+const _OFP_MHE_OPTIONS = [
+  ['',                     'None'],
+  ['reach_truck',          'Reach Truck'],
+  ['sit_down_forklift',    'Sit-Down FL'],
+  ['stand_up_forklift',    'Stand-Up FL'],
+  ['order_picker',         'Order Picker'],
+  ['walkie_rider',         'Walkie Rider'],
+  ['pallet_jack',          'Pallet Jack'],
+  ['electric_pallet_jack', 'Electric Pallet Jack'],
+  ['turret_truck',         'Turret Truck'],
+  ['amr',                  'AMR / Robot'],
+  ['conveyor',             'Conveyor'],
+  ['manual',               'Manual / Walk'],
+];
+const _OFP_IT_OPTIONS = [
+  ['',                'None'],
+  ['rf_scanner',      'RF Scanner'],
+  ['voice_pick',      'Voice Pick'],
+  ['wearable',        'Wearable'],
+  ['tablet',          'Tablet'],
+  ['vision_system',   'Vision System'],
+  ['pick_to_light',   'Pick-to-Light'],
+  ['pick_to_display', 'Pick-to-Display'],
+];
+
 // ============================================================
 // v0.3a.7 — MHE / IT icon catalog for OFP node badges
 // ============================================================
@@ -12938,8 +12968,22 @@ function _openOfpDetail(container, line, kind, idx) {
       </div>
       <div class="ofp-detail-panel__field">
         <label class="ofp-detail-panel__field-label">Position / Role</label>
-        <input class="hub-input ofp-edit-input" type="text" value="${escapeAttr(line.position || line.role || '')}"
-          data-array="${arrayPath}" data-idx="${idx}" data-field="position" />
+        ${(() => {
+          // Pull positions catalog from the same source the Labor page
+          // uses (model.shifts.positions). Filter by direct vs indirect.
+          const positions = (model.shifts && model.shifts.positions) || [];
+          const wantIndirect = kind !== 'direct';
+          const eligible = positions.filter(pp => wantIndirect ? pp.category === 'indirect' : pp.category !== 'indirect');
+          const currentId = line.position_id || '';
+          return `
+            <select class="hub-input ofp-edit-input" data-array="${arrayPath}" data-idx="${idx}" data-field="position_id">
+              <option value="" ${!currentId ? 'selected' : ''}>— Manual —</option>
+              ${eligible.map(pp => `
+                <option value="${escapeAttr(pp.id)}" ${currentId === pp.id ? 'selected' : ''}>${escapeHtml(pp.name)}${pp.employment_type === 'temp_agency' ? ' · Temp' : ''} · $${(pp.hourly_wage || 0).toFixed(2)}</option>
+              `).join('')}
+            </select>
+          `;
+        })()}
       </div>
       <div class="ofp-detail-panel__field">
         <label class="ofp-detail-panel__field-label">Lane Override</label>
@@ -12971,13 +13015,15 @@ function _openOfpDetail(container, line, kind, idx) {
       </div>
       <div class="ofp-detail-panel__field">
         <label class="ofp-detail-panel__field-label">MHE</label>
-        <input class="hub-input ofp-edit-input" type="text" value="${escapeAttr(line.mhe_type && line.mhe_type !== 'none' ? line.mhe_type : '')}"
-          data-array="${arrayPath}" data-idx="${idx}" data-field="mhe_type" placeholder="e.g. reach truck" />
+        <select class="hub-input ofp-edit-input" data-array="${arrayPath}" data-idx="${idx}" data-field="mhe_type">
+          ${_OFP_MHE_OPTIONS.map(([v, l]) => `<option value="${v}" ${(line.mhe_type || '') === v ? 'selected' : ''}>${escapeHtml(l)}</option>`).join('')}
+        </select>
       </div>
       <div class="ofp-detail-panel__field">
         <label class="ofp-detail-panel__field-label">IT / Device</label>
-        <input class="hub-input ofp-edit-input" type="text" value="${escapeAttr(line.it_device && line.it_device !== 'none' ? line.it_device : '')}"
-          data-array="${arrayPath}" data-idx="${idx}" data-field="it_device" placeholder="e.g. RF, voice" />
+        <select class="hub-input ofp-edit-input" data-array="${arrayPath}" data-idx="${idx}" data-field="it_device">
+          ${_OFP_IT_OPTIONS.map(([v, l]) => `<option value="${v}" ${(line.it_device || '') === v ? 'selected' : ''}>${escapeHtml(l)}</option>`).join('')}
+        </select>
       </div>
       <div class="ofp-detail-panel__field">
         <label class="ofp-detail-panel__field-label">Volume (annual)</label>
@@ -13071,6 +13117,37 @@ function _bindOfpPanelInputs(panel, container) {
       // page does on those fields).
       if ((field === 'volume' || field === 'base_uph') && typeof recomputeLineHours === 'function') {
         try { recomputeLineHours(arr[idx]); } catch (_) {}
+      }
+      // v0.3a.9 — Position picker side effects. When the user selects a
+      // position from the catalog, sync the same line attrs the Labor
+      // page sync's (hourly_rate, employment_type, markup, burden, etc.)
+      // so the cost calc downstream stays defensible. Mirrors the
+      // [data-whatif-position] change handler at line ~7234.
+      if (field === 'position_id') {
+        const posId = arr[idx].position_id;
+        const positions = (model.shifts && model.shifts.positions) || [];
+        if (posId) {
+          const pos = positions.find(pp => pp.id === posId);
+          if (pos) {
+            if (pos.is_salaried) {
+              arr[idx].hourly_rate = 0;
+              arr[idx].annual_salary = Number(pos.annual_salary) || 0;
+              arr[idx].pay_type = 'salary';
+            } else {
+              arr[idx].hourly_rate = Number(pos.hourly_wage) || 0;
+              arr[idx].pay_type = 'hourly';
+            }
+            arr[idx].employment_type = pos.employment_type || 'permanent';
+            if (pos.employment_type === 'temp_agency') {
+              arr[idx].temp_agency_markup_pct = Number(pos.temp_markup_pct) || 0;
+            }
+            arr[idx].burden_pct = (pos.benefit_load_pct != null && pos.benefit_load_pct !== '')
+              ? Number(pos.benefit_load_pct) || 0
+              : null;
+            // Hint activity_name from the position when blank
+            if (!arr[idx].activity_name) arr[idx].activity_name = pos.name;
+          }
+        }
       }
       isDirty = true;
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
