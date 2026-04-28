@@ -6991,6 +6991,16 @@ function bindSectionEvents(section, container) {
   // OFP v0.1 (2026-04-28) — click a node card → open detail panel.
   if (section === 'flow') {
     _bindOperationalFlowEvents(container);
+    // v0.3a.4 — draw dotted same-path connectors after the layout settles.
+    // requestAnimationFrame ensures lanes have laid out and getBoundingClientRect
+    // returns final positions. Resize listener re-runs the draw on viewport
+    // changes; bind once per render and clean up the previous one.
+    const drawConnectors = () => _renderOfpPathConnectors(container);
+    requestAnimationFrame(drawConnectors);
+    if (container._ofpResizeDetach) try { container._ofpResizeDetach(); } catch (_) {}
+    const onResize = () => requestAnimationFrame(drawConnectors);
+    window.addEventListener('resize', onResize);
+    container._ofpResizeDetach = () => window.removeEventListener('resize', onResize);
   }
 
   if (section === 'shiftPlanning') {
@@ -12188,8 +12198,12 @@ function renderOperationalFlow() {
 
     <!-- v0.2.2 — Canvas reverts to full-width. Detail panel is now a
          modal overlay (see #ofp-detail-modal below), so the lanes no
-         longer have to share horizontal space with a side rail. -->
-    <div class="cm-card" style="padding:18px 18px 22px;">
+         longer have to share horizontal space with a side rail.
+         v0.3a.4 — position:relative + the absolute-positioned SVG
+         overlay below host the dotted same-path connectors that get
+         drawn after each render by _renderOfpPathConnectors(). -->
+    <div class="cm-card ofp-canvas-card" style="padding:18px 18px 22px;position:relative;">
+      <svg class="ofp-flow-overlay" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"></svg>
       <div class="ofp-row ofp-row--main">
         ${_renderOfpLane('inbound', lanes.inbound, opHrs, lc)}
         ${arrowSvg(lanes.inbound, 'Inbound', 'Storage')}
@@ -12646,6 +12660,83 @@ function _ofpSlugifyForPath(name) {
 }
 
 /**
+ * v0.3a.4 — Draw dotted bezier connectors between same-path cards
+ * across adjacent main-row lanes (Inbound → Storage → Outbound).
+ * Wide lanes (Returns/VAS, Support, Unclassified) are skipped — they
+ * don't fit the left-to-right flow concept.
+ *
+ * Algorithm:
+ *   1. Walk every card in the three main lanes; bucket by (path_tag, lane).
+ *   2. For each path, for each adjacent populated lane pair, draw one
+ *      bezier from (source-lane right edge, mean Y of that path's cards)
+ *      to (target-lane left edge, mean Y of that path's cards).
+ *   3. Stroke = path color; dasharray for dotted; low opacity so cards
+ *      stay visually dominant.
+ *
+ * If a path has cards only in one main lane (or none), nothing draws.
+ * If a path skips a lane (e.g., crossdock: Inbound + Outbound, no Storage),
+ * the connector hops directly across the gap — populated-lane order, not
+ * raw lane order.
+ */
+function _renderOfpPathConnectors(container) {
+  const svg = container.querySelector('.ofp-flow-overlay');
+  if (!svg) return;
+  const svgRect = svg.getBoundingClientRect();
+  if (!svgRect.width) return; // not laid out yet
+
+  const mainLanes = ['inbound', 'storage', 'outbound'];
+  // Map<pathTag, Map<laneKey, { ys: number[], leftX, rightX }>>
+  const byPath = new Map();
+
+  for (const laneKey of mainLanes) {
+    const laneEl = container.querySelector(`.ofp-lane[data-ofp-lane="${laneKey}"]`);
+    if (!laneEl) continue;
+    const laneRect = laneEl.getBoundingClientRect();
+    const laneLeftX = laneRect.left - svgRect.left;
+    const laneRightX = laneRect.right - svgRect.left;
+    const cards = Array.from(laneEl.querySelectorAll('.ofp-node'));
+    for (const card of cards) {
+      const idx = Number(card.dataset.ofpIdx);
+      const kind = card.dataset.ofpKind;
+      const arr = kind === 'direct' ? (model.laborLines || []) : (model.indirectLaborLines || []);
+      const line = arr[idx];
+      const tag = (line?.path_tag || '').trim();
+      if (!tag) continue;
+      const cardRect = card.getBoundingClientRect();
+      const cy = cardRect.top + cardRect.height / 2 - svgRect.top;
+      if (!byPath.has(tag)) byPath.set(tag, new Map());
+      const laneMap = byPath.get(tag);
+      if (!laneMap.has(laneKey)) {
+        laneMap.set(laneKey, { ys: [], leftX: laneLeftX, rightX: laneRightX });
+      }
+      laneMap.get(laneKey).ys.push(cy);
+    }
+  }
+
+  const pathStrs = [];
+  for (const [tag, laneMap] of byPath) {
+    const populated = mainLanes.filter(k => laneMap.has(k));
+    if (populated.length < 2) continue;
+    const color = _pathColor(tag);
+    for (let i = 0; i < populated.length - 1; i++) {
+      const from = laneMap.get(populated[i]);
+      const to = laneMap.get(populated[i + 1]);
+      const fromY = from.ys.reduce((a, b) => a + b, 0) / from.ys.length;
+      const toY = to.ys.reduce((a, b) => a + b, 0) / to.ys.length;
+      const x1 = from.rightX;
+      const x2 = to.leftX;
+      const dx = Math.max(20, (x2 - x1) * 0.45);
+      const d = `M ${x1.toFixed(1)} ${fromY.toFixed(1)} C ${(x1 + dx).toFixed(1)} ${fromY.toFixed(1)}, ${(x2 - dx).toFixed(1)} ${toY.toFixed(1)}, ${x2.toFixed(1)} ${toY.toFixed(1)}`;
+      pathStrs.push(`<path d="${d}" stroke="${color}" stroke-width="2" stroke-dasharray="5 4" stroke-linecap="round" fill="none" opacity="0.75" />`);
+    }
+  }
+  // Set viewBox/size to match canvas so coords are pixels
+  svg.setAttribute('width', String(Math.round(svgRect.width)));
+  svg.setAttribute('height', String(Math.round(svgRect.height)));
+  svg.innerHTML = pathStrs.join('');
+}
+
+/**
  * Defaults for "+ Add" on each lane. Activity name + role + a sane MHE
  * are seeded so the new card reads as a real placeholder rather than
  * an empty row, and so the keyword classifier puts it back in the same
@@ -13049,6 +13140,21 @@ function _ofpStyles() {
         background: #F59E0B; color: #fff;
         font-size: 11px; font-weight: 700; cursor: help;
       }
+
+      /* v0.3a.4 — Dotted same-path connectors overlay. Sits behind
+         cards in the stacking order so the lines read as connections
+         between them, not as decorations on top. pointer-events:none
+         so clicks/drags pass through to lanes + cards beneath. */
+      .ofp-flow-overlay {
+        position: absolute;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        pointer-events: none;
+        z-index: 1;
+        overflow: visible;
+      }
+      .ofp-canvas-card .ofp-row { position: relative; z-index: 2; }
+      .ofp-canvas-card .ofp-lane { position: relative; z-index: 2; }
 
       /* v0.3a — path divider rows inside vertical lanes */
       .ofp-path-divider {
