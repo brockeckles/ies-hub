@@ -2492,8 +2492,6 @@ function renderShell() {
       }
       .hub-builder-form {
         padding: 20px 24px;
-        max-width: var(--content-max-width, 1280px);
-        margin: 0 auto;
       }
 
       /* Existing nav-item / form styles preserved for sidebar drawer body */
