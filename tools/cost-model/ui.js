@@ -12042,6 +12042,50 @@ function _ofpLaneMeta(key) {
   return _OFP_LANES.find(l => l.key === key) || { key, label: key, color: '#64748B' };
 }
 
+// v0.3a — Path color palette. Path tags are freeform strings (e.g.
+// "full-pallet", "loose-case", "vas-kitting") that group labor lines
+// flowing through the same operational journey across lanes. Color is
+// derived deterministically from the tag string so the same tag gets
+// the same color every render. Untagged lines fall back to a neutral
+// gray. The palette intentionally avoids the lane colors (sky / purple /
+// green / amber / slate / red) so paths are visually distinct from
+// lanes — both axes can be read at a glance.
+const _OFP_PATH_PALETTE = [
+  '#2563EB', // blue
+  '#DB2777', // pink
+  '#059669', // emerald
+  '#CA8A04', // yellow
+  '#0891B2', // cyan
+  '#BE185D', // rose
+  '#6366F1', // indigo
+  '#EA580C', // orange
+];
+function _pathColor(tag) {
+  if (!tag || !tag.trim()) return '#9CA3AF'; // neutral gray for untagged
+  let hash = 0;
+  for (let i = 0; i < tag.length; i++) {
+    hash = ((hash * 31) + tag.charCodeAt(i)) >>> 0;
+  }
+  return _OFP_PATH_PALETTE[hash % _OFP_PATH_PALETTE.length];
+}
+
+// v0.3a — Canonical UoM set. Other surfaces in the model use line.uom
+// as a free-text field; OFP standardizes around this list for the
+// detail panel dropdowns. 'other' is the escape hatch for the rare
+// case (parcel, fluid, bulk) without forcing every dropdown to enumerate.
+const _OFP_UOMS = ['pallet', 'case', 'each', 'layer', 'other'];
+
+/**
+ * Read a labor line's input UoM, with backward-compat fallback to the
+ * existing line.uom field when uom_in is unset on legacy models.
+ */
+function _ofpUomIn(line) {
+  return (line?.uom_in || line?.uom || '').toLowerCase();
+}
+function _ofpUomOut(line) {
+  return (line?.uom_out || line?.uom_in || line?.uom || '').toLowerCase();
+}
+
 function renderOperationalFlow() {
   const directLines = model.laborLines || [];
   const indirectLines = model.indirectLaborLines || [];
@@ -12200,9 +12244,44 @@ function _renderOfpLane(laneKey, entries, opHrs, lc, opts = {}) {
   const widthClass = wide ? 'ofp-lane--wide' : '';
   const warnClass = warn ? 'ofp-lane--warn' : '';
 
-  const nodes = entries.length > 0
-    ? entries.map(e => _renderOfpNode(e, laneKey, opHrs, lc)).join('')
-    : `<div class="ofp-lane__empty">No activities</div>`;
+  // v0.3a — Vertical (main) lanes group entries by path_tag so parallel
+  // paths through the system are visible. Wide lanes (Returns/VAS,
+  // Support, Unclassified) keep the flat row layout — they're typically
+  // smaller and path-grouping a row layout looks chaotic.
+  let nodesHtml;
+  if (entries.length === 0) {
+    nodesHtml = `<div class="ofp-lane__empty">No activities</div>`;
+  } else if (wide) {
+    nodesHtml = entries.map(e => _renderOfpNode(e, laneKey, opHrs, lc)).join('');
+  } else {
+    // Group by path_tag. Untagged lines collected last under "(untagged)".
+    const groups = new Map();
+    for (const e of entries) {
+      const tag = (e.line.path_tag || '').trim();
+      const key = tag || '__untagged__';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(e);
+    }
+    // If there's only one group AND it's untagged, skip dividers entirely
+    // (no point showing a single "(untagged)" header on a single-path lane).
+    const skipDividers = groups.size === 1 && groups.has('__untagged__');
+    const parts = [];
+    for (const [key, group] of groups) {
+      const isUntagged = key === '__untagged__';
+      const tag = isUntagged ? '' : key;
+      if (!skipDividers) {
+        parts.push(`
+          <div class="ofp-path-divider">
+            <span class="ofp-path-divider__stripe" style="background:${_pathColor(tag)};"></span>
+            <span class="ofp-path-divider__label">${escapeHtml(isUntagged ? '(untagged)' : tag)}</span>
+            <span class="ofp-path-divider__count">${group.length}</span>
+          </div>
+        `);
+      }
+      parts.push(group.map(e => _renderOfpNode(e, laneKey, opHrs, lc)).join(''));
+    }
+    nodesHtml = parts.join('');
+  }
 
   // Unclassified lane doesn't get an "+ Add" button — adding into it would
   // be a no-op for a user (no canonical default activity name to seed with).
@@ -12221,7 +12300,7 @@ function _renderOfpLane(laneKey, entries, opHrs, lc, opts = {}) {
         <div class="ofp-lane__fte">${totalFte.toFixed(1)} FTE</div>
       </div>
       <div class="ofp-lane__nodes ${wide ? 'ofp-lane__nodes--row' : ''}">
-        ${nodes}
+        ${nodesHtml}
       </div>
     </div>
   `;
@@ -12266,6 +12345,20 @@ function _renderOfpNode(entry, laneKey, opHrs, lc) {
     ? `<span class="ofp-node__chip" draggable="false" title="${escapeAttr(issues.join(' • '))}">!</span>`
     : '';
 
+  // v0.3a — UoM badge ("pallet" or "case → pallet" if transforming) and
+  // path tag pill (if set). Both render in the metrics row to keep the
+  // card compact.
+  const uomIn = _ofpUomIn(l);
+  const uomOut = _ofpUomOut(l);
+  const isTransform = uomIn && uomOut && uomIn !== uomOut;
+  const uomBadge = uomIn
+    ? `<span class="ofp-node__uom ${isTransform ? 'ofp-node__uom--transform' : ''}" title="${isTransform ? `Transformation: ${uomIn} → ${uomOut}` : `UoM: ${uomIn}`}">${escapeHtml(isTransform ? `${uomIn} → ${uomOut}` : uomIn)}</span>`
+    : '';
+  const pathTag = (l.path_tag || '').trim();
+  const pathPill = pathTag
+    ? `<span class="ofp-node__path-pill" style="background:${_pathColor(pathTag)};" title="Path: ${escapeAttr(pathTag)}">${escapeHtml(pathTag)}</span>`
+    : '';
+
   return `
     <div class="ofp-node ${entry.isDirect ? 'ofp-node--direct' : 'ofp-node--indirect'}" data-ofp-line="${arrayKind}:${entry.idx}" data-ofp-kind="${arrayKind}" data-ofp-idx="${entry.idx}" draggable="true" style="border-left:3px solid ${meta.color};" title="${escapeAttr(name)} — ${fte.toFixed(1)} FTE · ${calc.formatCurrency(cost, { compact: true })}/yr">
       <div class="ofp-node__top">
@@ -12281,6 +12374,7 @@ function _renderOfpNode(entry, laneKey, opHrs, lc) {
         <span class="ofp-node__fte">${fte.toFixed(1)} FTE</span>
         ${volume > 0 ? `<span class="ofp-node__vol">${volume.toLocaleString()}${uph > 0 ? `/${uph} UPH` : ''}</span>` : ''}
       </div>
+      ${(uomBadge || pathPill) ? `<div class="ofp-node__pills">${pathPill}${uomBadge}</div>` : ''}
       ${mhe || itDevice ? `<div class="ofp-node__tags">${mhe ? `<span class="ofp-tag">${escapeHtml(mhe)}</span>` : ''}${itDevice ? `<span class="ofp-tag">${escapeHtml(itDevice)}</span>` : ''}</div>` : ''}
     </div>
   `;
@@ -12427,6 +12521,26 @@ function _bindOperationalFlowEvents(container) {
   container._ofpEscDetach = () => document.removeEventListener('keydown', onEsc);
 }
 
+
+
+/**
+ * Collect distinct path_tag values across direct + indirect labor lines
+ * for autocomplete in the detail panel. Returns a sorted array; empty
+ * tags are dropped.
+ */
+function _ofpAllPathTags() {
+  const set = new Set();
+  for (const l of (model.laborLines || [])) {
+    const t = (l?.path_tag || '').trim();
+    if (t) set.add(t);
+  }
+  for (const l of (model.indirectLaborLines || [])) {
+    const t = (l?.path_tag || '').trim();
+    if (t) set.add(t);
+  }
+  return Array.from(set).sort();
+}
+
 /**
  * Defaults for "+ Add" on each lane. Activity name + role + a sane MHE
  * are seeded so the new card reads as a real placeholder rather than
@@ -12434,11 +12548,11 @@ function _bindOperationalFlowEvents(container) {
  * lane on next render even before the user fills in details.
  */
 const _OFP_LANE_DEFAULTS = {
-  inbound:    { activity_name: 'Receiving',   position: 'Receiver',     mhe_type: 'sit-down forklift', it_device: 'RF' },
-  storage:    { activity_name: 'Putaway',     position: 'Putaway Driver', mhe_type: 'reach truck',     it_device: 'RF' },
-  outbound:   { activity_name: 'Picking',     position: 'Picker',       mhe_type: 'EPJ',               it_device: 'RF' },
-  returnsVas: { activity_name: 'Returns Processing', position: 'Returns Clerk', mhe_type: '',           it_device: 'RF' },
-  support:    { activity_name: 'Lead',        position: 'Operations Lead', mhe_type: '',                it_device: '' },
+  inbound:    { activity_name: 'Receiving',          position: 'Receiver',         mhe_type: 'sit-down forklift', it_device: 'RF', uom_in: 'pallet', uom_out: 'pallet' },
+  storage:    { activity_name: 'Putaway',            position: 'Putaway Driver',   mhe_type: 'reach truck',       it_device: 'RF', uom_in: 'pallet', uom_out: 'pallet' },
+  outbound:   { activity_name: 'Picking',            position: 'Picker',           mhe_type: 'EPJ',               it_device: 'RF', uom_in: 'each',   uom_out: 'each' },
+  returnsVas: { activity_name: 'Returns Processing', position: 'Returns Clerk',    mhe_type: '',                  it_device: 'RF', uom_in: 'each',   uom_out: 'each' },
+  support:    { activity_name: 'Lead',               position: 'Operations Lead',  mhe_type: '',                  it_device: '' },
 };
 
 function _ofpAddLineToLane(laneKey) {
@@ -12537,6 +12651,28 @@ function _openOfpDetail(container, line, kind, idx) {
         <label class="ofp-detail-panel__field-label">Lane Override</label>
         <select class="hub-input ofp-edit-input" data-array="${arrayPath}" data-idx="${idx}" data-field="flowLane">
           ${laneSelectHtml}
+        </select>
+      </div>
+      <div class="ofp-detail-panel__field">
+        <label class="ofp-detail-panel__field-label">Flow Path</label>
+        <input class="hub-input ofp-edit-input" type="text" list="ofp-path-tags-${idx}" value="${escapeAttr(line.path_tag || '')}"
+          data-array="${arrayPath}" data-idx="${idx}" data-field="path_tag" placeholder="e.g. full-pallet, loose-case" />
+        <datalist id="ofp-path-tags-${idx}">
+          ${_ofpAllPathTags().map(t => `<option value="${escapeAttr(t)}"></option>`).join('')}
+        </datalist>
+      </div>
+      <div class="ofp-detail-panel__field">
+        <label class="ofp-detail-panel__field-label">UoM In</label>
+        <select class="hub-input ofp-edit-input" data-array="${arrayPath}" data-idx="${idx}" data-field="uom_in">
+          <option value="" ${!line.uom_in ? 'selected' : ''}>—</option>
+          ${_OFP_UOMS.map(u => `<option value="${u}" ${(line.uom_in || '').toLowerCase() === u ? 'selected' : ''}>${u}</option>`).join('')}
+        </select>
+      </div>
+      <div class="ofp-detail-panel__field">
+        <label class="ofp-detail-panel__field-label">UoM Out</label>
+        <select class="hub-input ofp-edit-input" data-array="${arrayPath}" data-idx="${idx}" data-field="uom_out">
+          <option value="" ${!line.uom_out ? 'selected' : ''}>—</option>
+          ${_OFP_UOMS.map(u => `<option value="${u}" ${(line.uom_out || '').toLowerCase() === u ? 'selected' : ''}>${u}</option>`).join('')}
         </select>
       </div>
       <div class="ofp-detail-panel__field">
@@ -12795,6 +12931,40 @@ function _ofpStyles() {
         width: 16px; height: 16px; border-radius: 50%;
         background: #F59E0B; color: #fff;
         font-size: 11px; font-weight: 700; cursor: help;
+      }
+
+      /* v0.3a — path divider rows inside vertical lanes */
+      .ofp-path-divider {
+        display: flex; align-items: center; gap: 6px;
+        font-size: 9px; font-weight: 700;
+        color: var(--ies-gray-500);
+        text-transform: uppercase; letter-spacing: 0.05em;
+        padding: 6px 4px 3px;
+        border-top: 1px solid var(--ies-gray-100);
+        margin-top: 4px;
+      }
+      .ofp-path-divider:first-child { border-top: 0; margin-top: 0; padding-top: 2px; }
+      .ofp-path-divider__stripe { width: 14px; height: 3px; border-radius: 2px; flex: 0 0 auto; }
+      .ofp-path-divider__label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .ofp-path-divider__count { color: var(--ies-gray-400); font-weight: 600; }
+
+      /* v0.3a — UoM badge + path-tag pill on the node card */
+      .ofp-node__pills { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; align-items: center; }
+      .ofp-node__path-pill {
+        font-size: 9px; font-weight: 700; color: #fff;
+        padding: 1px 6px; border-radius: 8px;
+        text-transform: uppercase; letter-spacing: 0.04em;
+        max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      .ofp-node__uom {
+        font-size: 9px; font-weight: 700;
+        color: var(--ies-gray-700); background: var(--ies-gray-100);
+        padding: 1px 5px; border-radius: 3px;
+        text-transform: uppercase; letter-spacing: 0.04em;
+      }
+      .ofp-node__uom--transform {
+        color: #fff; background: #7C3AED;
+        text-transform: none; letter-spacing: 0;
       }
 
       /* v0.2 — drag-and-drop visual states */
