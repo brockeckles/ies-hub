@@ -12702,32 +12702,38 @@ function _ofpStyles() {
       .ofp-node__tags { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 3px; }
       .ofp-tag { font-size: 9px; font-weight: 600; color: var(--ies-gray-600); background: var(--ies-gray-100); border-radius: 3px; padding: 1px 5px; text-transform: uppercase; letter-spacing: 0.02em; }
 
-      /* v0.2.2 — Modal overlay. Backdrop is semi-transparent (the
-         canvas stays visible behind) so the user keeps spatial context
-         on which node they clicked. Dialog is centered and fixed-width. */
+      /* v0.2.3 — Right-side drawer. Slides in from the right edge,
+         full viewport height. Backdrop is semi-transparent so the
+         canvas + the clicked node remain visible to the left. */
       .ofp-detail-modal {
         position: fixed; inset: 0;
-        background: rgba(15, 23, 42, 0.45);
-        display: flex; align-items: center; justify-content: center;
+        background: rgba(15, 23, 42, 0.32);
+        display: flex; align-items: stretch; justify-content: flex-end;
         z-index: 1000;
-        padding: 24px;
         animation: ofpFadeIn 0.12s ease-out;
       }
       @keyframes ofpFadeIn { from { opacity: 0; } to { opacity: 1; } }
       .ofp-detail-modal__dialog {
         background: #fff;
-        border-radius: 8px;
-        box-shadow: 0 16px 48px rgba(0,0,0,0.30);
-        width: min(640px, 100%);
-        max-height: calc(100vh - 48px);
+        border-left: 1px solid var(--ies-gray-200);
+        box-shadow: -8px 0 32px rgba(0,0,0,0.20);
+        width: min(480px, 100%);
+        height: 100vh;
+        max-height: 100vh;
         overflow-y: auto;
-        animation: ofpDialogIn 0.16s ease-out;
+        animation: ofpDrawerIn 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
       }
-      @keyframes ofpDialogIn {
-        from { opacity: 0; transform: translateY(8px) scale(0.98); }
-        to   { opacity: 1; transform: translateY(0) scale(1); }
+      @keyframes ofpDrawerIn {
+        from { transform: translateX(100%); }
+        to   { transform: translateX(0); }
       }
-      /* Canvas spans full content width again (no rail). */
+      /* In the drawer the field grid drops to 2 columns so labels +
+         values stay readable at 480px width. */
+      .ofp-detail-modal .ofp-detail-panel__grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px 16px;
+        padding: 16px;
+      }
       .ofp-detail-panel { display: block; }
       .ofp-detail-panel__header {
         display: flex; justify-content: space-between; align-items: center;
