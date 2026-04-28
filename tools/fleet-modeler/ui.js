@@ -10,7 +10,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sM';
 import { state } from '../../shared/state.js?v=20260418-sM';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sM';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260429-tc1-fleet';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton, renderPhaseStepper, bindPhaseStepper, renderSubTabStrip } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import * as calc from './calc.js?v=20260426-s2';
 import * as api from './api.js?v=20260418-sM';
@@ -49,97 +49,6 @@ let mapInstance = null;
  * @type {Array<import('./api.js?v=20260418-sM').CarrierRate>}
  */
 let carrierRateDeck = [];
-
-// ============================================================
-// CHROME v3 — top-ribbon phase + section structure (2026-04-29)
-// ============================================================
-const FLEET_GROUPS = [
-  { key: 'inputs',     label: 'Inputs',     description: 'Lane mix' },
-  { key: 'parameters', label: 'Parameters', description: 'Vehicles, costs, rates' },
-  { key: 'run',        label: 'Run',        description: 'Results & analysis' },
-];
-const FLEET_SECTIONS = [
-  { key: 'lanes',      label: '🚚 Lanes',          group: 'inputs' },
-  { key: 'vehicles',   label: '🚛 Vehicles',       group: 'parameters' },
-  { key: 'operating',  label: '💰 Operating Costs', group: 'parameters' },
-  { key: 'ratedeck',   label: '📋 Rate Deck',      group: 'parameters' },
-  { key: 'cost',       label: '💵 Cost',           group: 'run' },
-  { key: 'comparison', label: '⚖ Comparison',     group: 'run' },
-  { key: 'sensitivity', label: '📈 Sensitivity',   group: 'run' },
-  { key: 'map',        label: '🗺 Route Map',      group: 'run' },
-  { key: 'feasibility', label: '⏱ Feasibility',   group: 'run' },
-];
-let _fleetSidebarOpen = false;
-
-function _computeFleetKpis() {
-  if (!result) {
-    return { vehicles: '—', drivers: '—', totalCost: '—', utilization: '—' };
-  }
-  const optimalFleet = result.optimalFleet || {};
-  const totalVehicles = Object.values(optimalFleet).reduce((s, v) => s + (v || 0), 0);
-  const drivingDays = Number(config.operatingDaysPerWeek ?? 5);
-  const hoursPerDay = Number(config.drivingHoursPerDay ?? 11);
-  const drivesPerLane = Math.ceil(totalVehicles / Math.max(1, Math.floor((hoursPerDay * drivingDays) / 10)));
-  const totalDrivers = totalVehicles + Math.max(0, drivesPerLane - totalVehicles);
-  const annualCost = (result.totalAnnualCost ?? 0);
-  const avgUtil = (result.avgUtilization ?? 0) * 100;
-  return {
-    vehicles: String(Math.round(totalVehicles)),
-    drivers: String(Math.round(totalDrivers)),
-    totalCost: '$ ' + (annualCost > 0 ? (annualCost / 1e6).toFixed(1) + 'M' : '—'),
-    utilization: avgUtil > 0 ? (avgUtil.toFixed(1) + '%') : '—',
-  };
-}
-
-function _activeFleetSectionKey() {
-  switch (activePhase) {
-    case 'inputs': return 'lanes';
-    case 'parameters': {
-      if (paramsSubTab === 'operating') return 'operating';
-      if (paramsSubTab === 'ratedeck') return 'ratedeck';
-      return 'vehicles';
-    }
-    case 'run': {
-      if (runSubTab === 'comparison') return 'comparison';
-      if (runSubTab === 'sensitivity') return 'sensitivity';
-      if (runSubTab === 'map') return 'map';
-      if (runSubTab === 'feasibility') return 'feasibility';
-      return 'cost';
-    }
-    default: return 'lanes';
-  }
-}
-
-function _fleetSectionCompleteness(key) {
-  switch (key) {
-    case 'lanes': return lanes.length > 0 ? 'complete' : 'empty';
-    case 'vehicles': return vehicles.length > 0 ? 'complete' : 'empty';
-    case 'operating': return config && config.fuelCostPerGallon ? 'complete' : 'empty';
-    case 'ratedeck': return carrierRateDeck.length > 0 ? 'complete' : 'empty';
-    case 'cost': case 'comparison': case 'sensitivity': case 'map': case 'feasibility':
-      return result ? 'complete' : 'empty';
-    default: return 'empty';
-  }
-}
-
-function renderFleetSidebarNav() {
-  const sectionsByGroup = new Map();
-  for (const g of FLEET_GROUPS) sectionsByGroup.set(g.key, []);
-  for (const s of FLEET_SECTIONS) {
-    const arr = sectionsByGroup.get(s.group);
-    if (arr) arr.push(s);
-  }
-  const activeKey = _activeFleetSectionKey();
-  return FLEET_GROUPS.map(g => {
-    const items = sectionsByGroup.get(g.key) || [];
-    const itemsHtml = items.length === 0
-      ? '<div class="tc-nav-item"><span style="opacity:0.6;font-style:italic;">Open ' + (g.label) + '</span></div>'
-      : items.map(s => '<div class="tc-nav-item ' + (activeKey === s.key ? 'active' : '') + '" data-tc-section="' + s.key + '"><span class="tc-nav-check ' + (_fleetSectionCompleteness(s.key) === 'complete' ? 'complete' : '') + '"></span><span>' + (s.label) + '</span></div>').join('');
-    return '<div class="tc-nav-group"><div class="tc-nav-group-label">' + (g.label) + '</div>' + itemsHtml + '</div>';
-  }).join('');
-}
-
-
 
 // FLE-F1 — sensitivity matrix range controls. Persisted on `config`-adjacent
 // state so re-renders preserve user-tuned bounds.
@@ -318,60 +227,37 @@ export function unmount() {
 // ============================================================
 
 function renderShell() {
-  const draft = !activeScenarioId;
-  const modified = !!activeScenarioId && isDirty;
-  const saveStateName = draft ? 'draft' : (modified ? 'modified' : 'saved');
-  const saveStateTitle = draft
-    ? 'Brand-new scenario — Save to capture an audit timestamp'
-    : (modified ? 'Save to capture the latest changes' : 'Saved');
-  
-  const runStateClass = runState.state(runStateInputs());
-  const kpis = _computeFleetKpis();
-
-  const actions = [
-    { id: 'fleet-save',
-      label: activeScenarioId ? '💾 Save' : '💾 Save Scenario',
-      title: activeScenarioId ? 'Update this scenario' : 'Save this scenario so you can reopen it later',
-      primary: modified },
-    { id: 'fleet-run',
-      label: 'Run',
-      icon: '▶',
-      title: 'Run fleet analyzer (Cmd/Ctrl+Enter)',
-      kind: 'primary',
-      runState: runStateClass,
-      cleanLabel: '✓ Results current',
-      cleanTitle: 'Inputs unchanged since the last run — click to force a re-run.' },
+  // 2026-04-27 EVE2 (FLE-SCOPE-1): tabs replaced with phase stepper.
+  const chips = [
+    { label: activeScenarioId ? 'Saved' : 'Draft', kind: activeScenarioId ? 'saved' : 'draft', dot: true },
+    activeParentCmId
+      ? { label: 'Linked to CM', kind: 'linked', title: `Linked to Cost Model #${activeParentCmId}` }
+      : { label: 'Stand-alone', kind: 'standalone', title: 'This fleet is not yet attached to a Cost Model' },
   ];
 
-  const sidebarFooter = activeParentCmId
-    ? 'Linked to Cost Model #' + activeParentCmId
-    : '';
-
-  return renderToolChrome({
-    toolKey: 'fleet',
-    groups: FLEET_GROUPS,
-    sections: FLEET_SECTIONS,
-    activePhase: activePhase,
-    activeSection: _activeFleetSectionKey(),
-    sectionCompleteness: _fleetSectionCompleteness,
-    saveState: { state: saveStateName, title: saveStateTitle },
-    actions,
-    showSidebar: _fleetSidebarOpen,
-    sidebarHeader: 'All Sections',
-    sidebarBody: renderFleetSidebarNav(),
-    sidebarFooter,
-    kpiStrip: [
-      { label: 'Vehicles', value: kpis.vehicles },
-      { label: 'Drivers', value: kpis.drivers },
-      { label: 'Total Cost', value: kpis.totalCost },
-      { label: 'Utilization', value: kpis.utilization },
-    ],
-    bodyHtml: '<div id="fm-content" style="flex:1;overflow-y:auto;padding:24px;"></div>',
-    backTitle: 'Back to scenarios',
-    emptyPhaseHint: 'No sub-sections in this phase',
-  });
+  return `
+    <div class="hub-content-inner" style="padding:0;display:flex;flex-direction:column;height:100%;">
+      ${renderToolHeader({
+        toolName: 'Fleet Modeler',
+        toolKey: 'fleet',
+        backAction: 'fleet-back',
+        statusChips: chips,
+        primaryAction: {
+          // XT-SCOPE-1 — standardized "Run" verb.
+          label: 'Run',
+          action: 'fleet-run',
+          icon: '▶',
+          title: 'Run fleet analyzer (Cmd/Ctrl+Enter)',
+          state: runState.state(runStateInputs()),
+          cleanLabel: '✓ Results current',
+          cleanTitle: 'Inputs unchanged since the last run — fleet results match the current lanes + config. Click to force a re-run.',
+        },
+      })}
+      <div id="fm-process-flow"></div>
+      <div id="fm-content" style="flex:1;overflow-y:auto;padding:24px;"></div>
+    </div>
+  `;
 }
-
 
 // 2026-04-27 EVE2 (FLE-SCOPE-1): stepper status driven by current state.
 function fleetPhaseStatus() {
@@ -385,10 +271,17 @@ function fleetPhaseStatus() {
 }
 
 function renderFleetStepper() {
-  // CM Chrome v3 ripple, step 3 — in-canvas phase stepper dropped. Chrome's
-  // Row 1 phase tabs convey phase context. Kept as a no-op so existing call
-  // sites don't crash.
-  return;
+  const el = rootEl?.querySelector('#fm-process-flow');
+  if (!el) return;
+  const s = fleetPhaseStatus();
+  el.innerHTML = renderPhaseStepper({
+    phases: [
+      { key: 'inputs',     num: 1, label: 'Inputs',     sub: 'Lane mix',                       status: s.inputs },
+      { key: 'parameters', num: 2, label: 'Parameters', sub: 'Vehicles, costs, rate deck',     status: s.parameters },
+      { key: 'run',        num: 3, label: 'Run',        sub: 'Cost, compare, sensitivity, map', status: s.run },
+    ],
+    activePhase: activePhase,
+  });
 }
 
 // 2026-04-27 EVE2 (FLE-SCOPE-8): HOS feasibility check that runs upstream
@@ -424,6 +317,10 @@ function renderHosFeasibilityChip() {
 function bindShellEvents() {
   if (!rootEl) return;
 
+  bindPhaseStepper(rootEl.querySelector('#fm-process-flow'), (phase) => {
+    activePhase = /** @type {any} */ (phase);
+    renderContent();
+  });
 
   rootEl.addEventListener('click', (e) => {
     const psub = /** @type {HTMLElement} */ (e.target).closest('[data-fm-paramssub]');
@@ -440,7 +337,19 @@ function bindShellEvents() {
     }
   });
 
+  const runBtn = rootEl.querySelector('[data-primary-action="fleet-run"]');
+  runBtn?.addEventListener('click', () => {
+    const deckMap = carrierRateDeck.length ? calc.indexCarrierDeck(carrierRateDeck) : undefined;
+    result = calc.analyzeFleet(lanes, vehicles, config, deckMap);
+    activePhase = 'run';
+    runSubTab = 'cost';
+    runState.markClean(runStateInputs());
+    renderContent();
+    updateRunButtonState();
+    flashRunButton(runBtn);
+  });
 
+  bindPrimaryActionShortcut(rootEl, 'fleet-run');
 }
 
 function renderContent() {
@@ -459,7 +368,16 @@ function renderContent() {
 }
 
 function renderParametersPhase(el) {
-  el.innerHTML = `<div id="fm-params-inner"></div>`;
+  const subTabs = [
+    { key: 'vehicles',  label: '🚛 Vehicles' },
+    { key: 'operating', label: '💰 Operating Costs' },
+    { key: 'ratedeck',  label: '📋 Rate Deck' },
+  ];
+  el.innerHTML = `
+    ${renderSubTabStrip(subTabs, paramsSubTab, 'fm-paramssub')}
+    <div style="margin-bottom:18px;"></div>
+    <div id="fm-params-inner"></div>
+  `;
   const inner = el.querySelector('#fm-params-inner');
   if      (paramsSubTab === 'operating') renderOperatingSubTab(inner);
   else if (paramsSubTab === 'ratedeck')  renderRateDeck(inner);
@@ -475,7 +393,18 @@ function renderRunPhase(el) {
     `;
     return;
   }
-  el.innerHTML = `<div id="fm-run-inner"></div>`;
+  const subTabs = [
+    { key: 'cost',         label: '💵 Cost' },
+    { key: 'comparison',   label: '⚖ Comparison' },
+    { key: 'sensitivity',  label: '📈 Sensitivity' },
+    { key: 'map',          label: '🗺 Route Map' },
+    { key: 'feasibility',  label: '⏱ Feasibility' },
+  ];
+  el.innerHTML = `
+    ${renderSubTabStrip(subTabs, runSubTab, 'fm-runsub')}
+    <div style="margin-bottom:18px;"></div>
+    <div id="fm-run-inner"></div>
+  `;
   const inner = el.querySelector('#fm-run-inner');
   if      (runSubTab === 'comparison')  renderComparisonSubTab(inner);
   else if (runSubTab === 'sensitivity') renderSensitivitySubTab(inner);
