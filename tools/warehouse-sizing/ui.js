@@ -10,9 +10,23 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sL';
 import { state } from '../../shared/state.js?v=20260418-sL';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sL';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton, renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
+import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260429-tc2-wsc';
 import * as calc from './calc.js?v=20260425-s11';
 import * as api from './api.js?v=20260418-sL';
+
+// ============================================================
+// CHROME v3 — phase + section structure (CM Chrome v3 ripple, step 3 redo)
+// ============================================================
+const WSC_GROUPS = [
+  { key: 'design', label: 'Design', description: '4-view warehouse sizing canvas' },
+];
+const WSC_SECTIONS = [
+  { key: 'dashboard', label: 'Dashboard',      group: 'design' },
+  { key: 'plan',      label: '2D — Plan',      group: 'design' },
+  { key: 'elevation', label: '2D — Elevation', group: 'design' },
+  { key: '3d',        label: '3D View',        group: 'design' },
+];
+
 
 // ============================================================
 // STATE
@@ -153,6 +167,7 @@ function openEditor(savedRow) {
   bindShellEvents();
   renderConfigPanel();
   renderContentView();
+  _refreshWscKpis();
 }
 
 /**
@@ -171,177 +186,148 @@ export function unmount() {
 // ============================================================
 
 function renderWscPhaseStepper() {
-  const el = rootEl?.querySelector('#wsc-process-flow');
-  if (!el) return;
-  el.innerHTML = renderPhaseStepper({
-    phases: [
-      { key: 'dashboard', num: 1, label: 'Dashboard', sub: 'Capacity KPIs',          status: activeView === 'dashboard' ? 'active' : 'pending' },
-      { key: 'plan',      num: 2, label: '2D Plan',   sub: 'Top-down floorplan',     status: activeView === 'plan'      ? 'active' : 'pending' },
-      { key: 'elevation', num: 3, label: '2D Elev',   sub: 'Cross-section + clearance', status: activeView === 'elevation' ? 'active' : 'pending' },
-      { key: '3d',        num: 4, label: '3D View',   sub: 'Interactive walkthrough', status: activeView === '3d'        ? 'active' : 'pending' },
-    ],
-    activePhase: activeView,
-  });
+  // CM Chrome v3 ripple — in-canvas phase stepper dropped. Top-ribbon Row 1
+  // section pills convey view context. Stub kept so existing call sites
+  // don't crash.
+  return;
 }
 
 function renderShell() {
-  const tabs = [
-    { key: 'dashboard', label: 'Dashboard', title: 'Capacity dashboard with utilization metrics' },
-    { key: 'plan', label: '2D — Plan', title: 'Top-down floorplan showing dock doors, storage, zones' },
-    { key: 'elevation', label: '2D — Elevation', title: 'Cross-section showing rack levels and clearances' },
-    { key: '3d', label: '3D View', title: 'Interactive 3D model of the facility layout' },
+  // CM Chrome v3 ripple — chrome HTML+CSS lives in shared/tool-chrome.js.
+  return renderToolChrome(_buildWscChromeOpts()) + _wscExtraStyles();
+}
+
+/** Build chrome opts from current WSC state. */
+function _buildWscChromeOpts() {
+  const draft = !facility.id;
+  const modified = !!facility.id && isDirty;
+  const stateName = draft ? 'draft' : (modified ? 'modified' : 'saved');
+  const stateTitle = draft
+    ? 'Brand-new design — Save to capture an audit timestamp'
+    : (modified ? 'Save to capture the latest changes' : 'Saved');
+
+  const actions = [
+    { id: 'wsc-save',
+      label: facility.id ? 'Save' : 'Save Design',
+      title: facility.id ? 'Update this design' : 'Save this design so you can reopen it later',
+      primary: modified },
+    { id: 'push-to-cm',
+      label: 'Use in Cost Model →',
+      kind: 'primary',
+      icon: '⇨',
+      title: 'Push this design into a Cost Model (Cmd/Ctrl+Enter)' },
   ];
-  const chips = [
-    { label: facility.id ? 'Saved' : 'Draft', kind: facility.id ? 'saved' : 'draft', dot: true },
-    facility.parent_cost_model_id
-      ? { label: `Linked to CM`, kind: 'linked', title: `Linked to Cost Model #${facility.parent_cost_model_id}` }
-      : { label: 'Stand-alone', kind: 'standalone', title: 'Not yet pushed into a Cost Model' },
-  ];
-  // Per-view banner descriptions (navy-bar lift pattern, 2026-04-27).
-  const VIEW_DESC = {
-    dashboard: 'Capacity dashboard — total SF, dock doors, rack positions, and utilization KPIs derived from peak pallets, SKU count, turn rate, and clearance height.',
-    plan:      'Top-down floor plan — dock doors, storage zones, picking aisles, and inbound/outbound flows. Click zones for SF + utilization detail.',
-    elevation: 'Cross-section view — rack tier counts, clearance heights, and aisle layout. Verifies cube utilization against pallet height profile.',
-    '3d':      'Interactive 3D walkthrough — orbit, pan, and inspect rack systems and dock face. Useful for client presentations and spatial sanity checks.',
+
+  const sidebarFooter = facility.parent_cost_model_id
+    ? 'Linked to Cost Model #' + facility.parent_cost_model_id
+    : '';
+
+  return {
+    toolKey: 'wsc',
+    groups: WSC_GROUPS,
+    sections: WSC_SECTIONS,
+    activePhase: 'design',
+    activeSection: activeView,
+    sectionCompleteness: () => 'complete',
+    saveState: { state: stateName, title: stateTitle },
+    actions,
+    showSidebar: false,
+    sidebarHeader: 'Warehouse Design',
+    sidebarBody: '',
+    sidebarFooter,
+    bodyHtml: `<div style="display:grid;grid-template-columns:300px 1fr;height:100%;width:100%;">
+      <div id="wsc-config" style="overflow-y:auto;border-right:1px solid var(--ies-gray-200);"></div>
+      <div id="wsc-content" style="overflow-y:auto;padding:24px;"></div>
+    </div>`,
+    backTitle: 'Back to scenarios',
   };
-  const VIEW_LABEL = { dashboard: 'Dashboard', plan: '2D Plan', elevation: '2D Elevation', '3d': '3D View' };
+}
+
+/** Compute KPI strip values for the WSC chrome. */
+function _computeWscKpis() {
+  const items = [];
+  const sf = facility?.totalSqft;
+  items.push({ label: 'Total SF', value: (sf && sf > 0) ? (sf / 1000).toFixed(0) + 'K' : '—' });
+  const inb = facility?.dockConfig?.inboundDoors || 0;
+  const out = facility?.dockConfig?.outboundDoors || 0;
+  items.push({ label: 'Dock Doors', value: (inb + out) > 0 ? String(inb + out) : '—' });
+  const rp = facility?.totalRackPositions;
+  items.push({ label: 'Rack Positions', value: (rp && rp > 0) ? (rp / 1000).toFixed(1) + 'K' : '—' });
+  const u = facility?.utilizationPct;
+  items.push({ label: 'Utilization', value: (typeof u === 'number') ? u.toFixed(1) + '%' : '—' });
+  return items;
+}
+
+/** Refresh KPI strip from current WSC state. Cheap to call. */
+function _refreshWscKpis() {
+  if (!rootEl) return;
+  refreshKpiStrip(rootEl, _computeWscKpis());
+}
+
+/** WSC-specific styles (the chrome primitive doesn't cover these). */
+function _wscExtraStyles() {
   return `
-    <div class="hub-content-inner" style="padding:0;display:flex;flex-direction:column;height: calc(100vh - 48px);">
-      ${renderToolHeader({
-        toolName: 'Warehouse Sizing',
-        toolKey: 'wsc',
-        backAction: 'wsc-back',
-        statusChips: chips,
-        description: VIEW_DESC[activeView] || VIEW_DESC.dashboard,
-        subtitle: VIEW_LABEL[activeView] || '',
-        primaryAction: { label: 'Use in Cost Model →', action: 'push-to-cm', icon: '⇨', title: 'Push this design into a Cost Model (Cmd/Ctrl+Enter)' },
-      })}
-      <!-- 2026-04-28 — phase-stepper port. The 4 views (Dashboard / 2D Plan /
-           2D Elev / 3D) are nav-as-stepper: they are not strictly sequential
-           phases (live-recalc means all four are always available), but the
-           shared stepper chrome unifies WSC visually with CoG / Fleet / NetOpt.
-           Status logic: current view = active, others = pending. -->
-      <div id="wsc-process-flow"></div>
-
-      <div class="hub-builder" style="flex:1;min-height:0;display:grid;grid-template-columns:300px 1fr;">
-        <!-- Config Sidebar -->
-        <div class="hub-builder-sidebar" id="wsc-config" style="overflow-y:auto;border-right:1px solid var(--ies-gray-200);">
-          <!-- Config content renders here -->
-        </div>
-
-        <!-- Content Area -->
-        <div class="hub-builder-content" style="display:flex; flex-direction:column;min-height:0;">
-          <!-- View Content -->
-          <div id="wsc-content" style="flex:1; overflow-y:auto; padding:24px;">
-            <!-- View content renders here -->
-          </div>
-        </div>
-      </div>
-    </div>
-
     <style>
-      .wsc-view-btn {
-        padding: 6px 14px;
-        border: 1px solid var(--ies-gray-200);
-        border-radius: 6px;
-        background: #fff;
-        font-family: Montserrat, sans-serif;
-        font-size: 13px;
-        font-weight: 600;
-        color: var(--ies-gray-500);
-        cursor: pointer;
-        transition: all 0.15s;
-      }
-      .wsc-view-btn:hover { border-color: var(--ies-blue); color: var(--ies-blue); }
-      .wsc-view-btn.active { background: var(--ies-blue); color: #fff; border-color: var(--ies-blue); }
-
       .wsc-config-section {
         padding: 16px;
         border-bottom: 1px solid var(--ies-gray-100);
       }
-      .wsc-config-title {
+      .wsc-config-section:last-child { border-bottom: 0; }
+      .wsc-config-section h4 {
+        margin: 0 0 8px 0;
         font-size: 11px;
         font-weight: 700;
+        color: var(--ies-gray-500);
         text-transform: uppercase;
         letter-spacing: 0.5px;
-        color: var(--ies-gray-500);
-        margin-bottom: 12px;
-      }
-      .wsc-config-row {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
-        margin-bottom: 8px;
-      }
-      .wsc-config-field label {
-        display: block;
-        font-size: 11px;
-        font-weight: 600;
-        color: var(--ies-gray-500);
-        margin-bottom: 3px;
-      }
-      .wsc-config-field input, .wsc-config-field select {
-        width: 100%;
-        padding: 6px 8px;
-        border: 1px solid var(--ies-gray-200);
-        border-radius: 4px;
-        font-family: Montserrat, sans-serif;
-        font-size: 13px;
-        font-weight: 600;
-      }
-      /* Checkboxes should not stretch — they inherit the wsc-config-field rule otherwise */
-      .wsc-config-field input[type="checkbox"] {
-        width: auto;
-        padding: 0;
-        border: none;
-        margin: 0;
-        flex-shrink: 0;
-      }
-      /* Single-field rows within optional zones render as a 1-col grid, not 2-col */
-      .wsc-config-section .wsc-config-row.single-col {
-        grid-template-columns: 1fr;
-      }
-      .wsc-config-field input:focus, .wsc-config-field select:focus {
-        outline: none;
-        border-color: var(--ies-blue);
-        box-shadow: 0 0 0 2px rgba(0,71,171,0.1);
-      }
-
-      .wsc-util-bar {
-        height: 8px;
-        border-radius: 4px;
-        background: var(--ies-gray-100);
-        overflow: hidden;
-        margin: 4px 0;
-      }
-      .wsc-util-fill {
-        height: 100%;
-        border-radius: 4px;
-        transition: width 0.3s;
       }
     </style>
   `;
 }
 
 function bindShellEvents() {
-  // 2026-04-28 — phase-stepper port replaces the old #wsc-tabs click handler.
-  bindPhaseStepper(rootEl?.querySelector('#wsc-process-flow'), (phase) => {
-    activeView = /** @type {any} */ (phase);
-    // Re-render the shell to refresh navy-banner description + stepper status.
-    if (rootEl) {
+  if (!rootEl) return;
+  rootEl.__tcBound = false;
+
+  bindToolChromeEvents(rootEl, {
+    onPhase: () => {
+      // WSC is single-phase; phase tab clicks no-op.
+    },
+    onSection: (key) => {
+      if (!key || !WSC_SECTIONS.find(s => s.key === key)) return;
+      activeView = /** @type {any} */ (key);
+      // Re-render the shell to refresh chrome + content for the new view.
+      // (renderShell + renderConfigPanel + renderContentView is the legacy
+      // pattern; preserve it here.)
       rootEl.innerHTML = renderShell();
       bindShellEvents();
       renderConfigPanel();
-      bindConfigEvents(rootEl.querySelector('#wsc-config'));
-      renderWscPhaseStepper();
       renderContentView();
-    }
+      _refreshWscKpis();
+    },
+    onSidebar: () => {
+      // WSC's drawer is unused; toggle is a no-op.
+    },
+    onBack: async () => {
+      if (isDirty && !confirm('Unsaved changes. Leave for the scenarios list?')) return;
+      isDirty = false;
+      viewMode = 'landing';
+      await renderLanding();
+    },
+    onAction: (id) => {
+      if (id === 'push-to-cm') {
+        const btn = rootEl.querySelector('[data-tc-primary]');
+        pushToCm();
+        flashPrimaryAction(rootEl);
+        return;
+      }
+      if (id === 'wsc-save') return handleSaveWsc();
+    },
+    onPrimaryShortcut: () => {
+      pushToCm();
+      flashPrimaryAction(rootEl);
+    },
   });
-
-  // Push to CM — primary action
-  const headerRun = rootEl?.querySelector('[data-primary-action="push-to-cm"]');
-  headerRun?.addEventListener('click', () => { pushToCm(); flashRunButton(headerRun); });
-  bindPrimaryActionShortcut(rootEl, 'push-to-cm');
 
   // Root-level delegation for data-wsc-action (toggle-edit-layout, reset-layout).
   // Using delegation per the event-delegation-pattern memory — renderPlan's
@@ -459,6 +445,7 @@ function bindShellEvents() {
   rootEl?.addEventListener('pointerup', finishDrag);
   rootEl?.addEventListener('pointercancel', finishDrag);
   rootEl?.addEventListener('pointerleave', finishDrag);
+
 }
 
 /**
@@ -495,6 +482,23 @@ function debounceRender(fn, ms = 100) {
       timeoutId = null;
     }, ms);
   };
+}
+
+
+/** Save the current design — extracted so the chrome's onAction handler can dispatch. */
+async function handleSaveWsc() {
+  try {
+    const saved = await api.saveConfig({ ...facility, zones, volumes });
+    facility.id = saved.id || saved[0]?.id || facility.id;
+    isDirty = false;
+    bus.emit('wsc:saved', { id: facility.id });
+    showToast(`Saved "${facility.name || 'Untitled'}"`, 'success');
+    refreshToolChrome(rootEl, _buildWscChromeOpts());
+    _refreshWscKpis();
+  } catch (err) {
+    console.error('[WSC] Save failed:', err);
+    showToast('Save failed: ' + (err.message || err), 'error');
+  }
 }
 
 function renderConfigPanel() {
