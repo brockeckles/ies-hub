@@ -116,6 +116,7 @@ let _cmSavedUnsub = null;
 export async function mount(el) {
   rootEl = el;
   activeTab = 'list';
+  landingViewMode = 'table';
   activeDeal = null;
   sites = [];
   financials = null;
@@ -265,7 +266,10 @@ function _buildDmChromeOpts() {
   const landing = isLandingView();
 
   if (landing) {
-    const activeSection = (landingViewMode === 'kanban') ? 'kanban' : 'list';
+    // Section pill follows activeTab (source of truth for what content
+    // renders) — landingViewMode lags it. mount() sets activeTab='list',
+    // so the pill correctly reads as List on first load.
+    const activeSection = (activeTab === 'kanban') ? 'kanban' : 'list';
     const actions = [
       { id: 'dm-toggle-view',
         label: landingViewMode === 'kanban' ? '\u{1F4CB} List View' : '\u{1F5C2} Kanban View',
@@ -338,10 +342,10 @@ function bindShellEvents() {
     },
     onSection: (key) => {
       if (isLandingView()) {
-        // Landing mode — toggle list / kanban.
+        // Landing mode — switch list / kanban view.
         if (key === 'kanban' || key === 'list') {
-          landingViewMode = (key === 'kanban') ? 'kanban' : 'table';
           activeTab = /** @type {any} */ (key);
+          landingViewMode = (key === 'kanban') ? 'kanban' : 'table';
           rerenderShell();
         }
         return;
