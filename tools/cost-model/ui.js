@@ -2569,13 +2569,86 @@ function navigateSection(key) {
   activeSection = key;
   state.set('costModel.activeSection', key);
 
-  // Update nav highlighting
+  // Update legacy sidebar-drawer highlighting (when sidebar is open)
   rootEl?.querySelectorAll('.cm-nav-item').forEach(item => {
     item.classList.toggle('active', item.dataset.section === key);
   });
 
+  // v0.3-chrome — Refresh the top-ribbon: phase tabs (so completion
+  // counts roll up correctly + the active phase highlights) and the
+  // section pills row (changes whenever the active phase changes, plus
+  // active-pill highlight always). innerHTML replacement requires
+  // rebinding the click handlers on the new buttons.
+  _refreshTopChrome();
+
   renderSection();
   bus.emit('cm:section-changed', { section: key });
+}
+
+/**
+ * v0.3-chrome — Surgically refresh the top ribbon's phase-tab row and
+ * section-pill row to match the current activeSection. Used by
+ * navigateSection() so clicks on tabs/pills produce immediate visual
+ * feedback (active highlight + pills row swap) without re-rendering
+ * the whole shell. Re-binds click handlers on the freshly-rendered
+ * nav buttons.
+ */
+function _refreshTopChrome() {
+  if (!rootEl) return;
+  const groups = SECTION_GROUPS;
+  const sectionsByGroup = _sectionsByGroup();
+  const activeSec = SECTIONS.find(s => s.key === activeSection) || SECTIONS[0];
+  const activeGroupKey = activeSec.group;
+
+  const tabsEl = rootEl.querySelector('.cm-phase-tabs');
+  if (tabsEl) {
+    tabsEl.innerHTML = groups.map(g => {
+      const items = sectionsByGroup.get(g.key) || [];
+      const completes = items.filter(s => _sectionCompleteness(s.key) === 'complete').length;
+      const partials  = items.filter(s => _sectionCompleteness(s.key) === 'partial').length;
+      const total = items.length;
+      const groupState = completes === total ? 'complete' : (completes + partials > 0 ? 'partial' : 'empty');
+      const isActive = g.key === activeGroupKey;
+      return `
+        <button class="cm-phase-tab ${isActive ? 'cm-phase-tab--active' : ''}" data-cm-phase="${g.key}" title="${escapeAttr(g.description || '')}">
+          <span class="cm-phase-tab__label">${escapeHtml(g.label)}</span>
+          <span class="cm-phase-tab__count cm-phase-tab__count--${groupState}">${completes}/${total}</span>
+        </button>
+      `;
+    }).join('');
+    // Re-bind the freshly-built tabs
+    tabsEl.querySelectorAll('[data-cm-phase]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const targetPhase = btn.dataset.cmPhase;
+        const cur = SECTIONS.find(s => s.key === activeSection);
+        if (!targetPhase || (cur && cur.group === targetPhase)) return;
+        const sectionsInPhase = SECTIONS.filter(s => s.group === targetPhase);
+        const first = sectionsInPhase[0];
+        if (first) navigateSection(first.key);
+      });
+    });
+  }
+
+  const pillsEl = rootEl.querySelector('.cm-section-pills');
+  if (pillsEl) {
+    pillsEl.innerHTML = (sectionsByGroup.get(activeGroupKey) || []).map(sec => {
+      const c = _sectionCompleteness(sec.key);
+      const isActive = sec.key === activeSection;
+      return `
+        <button class="cm-section-pill ${isActive ? 'cm-section-pill--active' : ''}" data-cm-section="${sec.key}">
+          <span class="cm-section-pill__dot cm-section-pill__dot--${c}"></span>
+          <span class="cm-section-pill__label">${escapeHtml(sec.label)}</span>
+        </button>
+      `;
+    }).join('');
+    // Re-bind
+    pillsEl.querySelectorAll('[data-cm-section]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const k = btn.dataset.cmSection;
+        if (k) navigateSection(k);
+      });
+    });
+  }
 }
 
 // ============================================================
