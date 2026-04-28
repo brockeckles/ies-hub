@@ -12142,42 +12142,42 @@ function renderOperationalFlow() {
       </div>
     </div>
 
-    <!-- v0.2.1 — Canvas + detail rail laid out side-by-side. The rail
-         sticks at top:16px when scrolling so it stays visible alongside
-         the lanes. When no node is selected, the rail is display:none and
-         the canvas takes the full width. -->
-    <div class="ofp-layout">
-      <div class="ofp-canvas cm-card" style="padding:18px 18px 22px;">
-        <div class="ofp-row ofp-row--main">
-          ${_renderOfpLane('inbound', lanes.inbound, opHrs, lc)}
-          ${arrowSvg(lanes.inbound, 'Inbound', 'Storage')}
-          ${_renderOfpLane('storage', lanes.storage, opHrs, lc)}
-          ${arrowSvg(lanes.storage, 'Storage', 'Outbound')}
-          ${_renderOfpLane('outbound', lanes.outbound, opHrs, lc)}
-        </div>
-
-        ${lanes.returnsVas.length > 0 ? `
-          <div class="ofp-row ofp-row--secondary" style="margin-top:18px;">
-            ${_renderOfpLane('returnsVas', lanes.returnsVas, opHrs, lc, { wide: true })}
-          </div>
-        ` : ''}
-
-        ${lanes.support.length > 0 ? `
-          <div class="ofp-row ofp-row--secondary" style="margin-top:14px;">
-            ${_renderOfpLane('support', lanes.support, opHrs, lc, { wide: true })}
-          </div>
-        ` : ''}
-
-        ${lanes.unclassified.length > 0 ? `
-          <div class="ofp-row ofp-row--secondary" style="margin-top:14px;">
-            ${_renderOfpLane('unclassified', lanes.unclassified, opHrs, lc, { wide: true, warn: true })}
-          </div>
-        ` : ''}
+    <!-- v0.2.2 — Canvas reverts to full-width. Detail panel is now a
+         modal overlay (see #ofp-detail-modal below), so the lanes no
+         longer have to share horizontal space with a side rail. -->
+    <div class="cm-card" style="padding:18px 18px 22px;">
+      <div class="ofp-row ofp-row--main">
+        ${_renderOfpLane('inbound', lanes.inbound, opHrs, lc)}
+        ${arrowSvg(lanes.inbound, 'Inbound', 'Storage')}
+        ${_renderOfpLane('storage', lanes.storage, opHrs, lc)}
+        ${arrowSvg(lanes.storage, 'Storage', 'Outbound')}
+        ${_renderOfpLane('outbound', lanes.outbound, opHrs, lc)}
       </div>
 
-      <!-- Detail panel — populated on node click. Lives in the rail
-           column; sticks while scrolling so it stays visible. -->
-      <aside id="ofp-detail-panel" class="ofp-detail-panel" style="display:none;"></aside>
+      ${lanes.returnsVas.length > 0 ? `
+        <div class="ofp-row ofp-row--secondary" style="margin-top:18px;">
+          ${_renderOfpLane('returnsVas', lanes.returnsVas, opHrs, lc, { wide: true })}
+        </div>
+      ` : ''}
+
+      ${lanes.support.length > 0 ? `
+        <div class="ofp-row ofp-row--secondary" style="margin-top:14px;">
+          ${_renderOfpLane('support', lanes.support, opHrs, lc, { wide: true })}
+        </div>
+      ` : ''}
+
+      ${lanes.unclassified.length > 0 ? `
+        <div class="ofp-row ofp-row--secondary" style="margin-top:14px;">
+          ${_renderOfpLane('unclassified', lanes.unclassified, opHrs, lc, { wide: true, warn: true })}
+        </div>
+      ` : ''}
+    </div>
+
+    <!-- Modal overlay — populated on node click. Backdrop is semi-
+         transparent so the canvas stays visible behind. ESC + click
+         outside the dialog close. -->
+    <div id="ofp-detail-modal" class="ofp-detail-modal" style="display:none;">
+      <div class="ofp-detail-modal__dialog" id="ofp-detail-panel"></div>
     </div>
 
     ${_ofpStyles()}
@@ -12386,19 +12386,45 @@ function _bindOperationalFlowEvents(container) {
     });
   });
 
-  // Detail panel close + edit-jump
+  // v0.2.2 — Modal close paths: × button, Esc key, click on backdrop.
+  const modal = container.querySelector('#ofp-detail-modal');
   const panel = container.querySelector('#ofp-detail-panel');
+  const closeModal = () => {
+    if (modal) modal.style.display = 'none';
+    if (panel) panel.style.display = 'none'; // fallback inline display
+    document.body.style.overflow = '';
+    container.querySelectorAll('.ofp-node--selected').forEach(n => n.classList.remove('ofp-node--selected'));
+  };
+  // Click on backdrop (modal root, not the dialog) closes.
+  if (modal) {
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeModal();
+    });
+  }
+  // × button + edit-on-labor inside the dialog.
   if (panel) {
     panel.addEventListener('click', (e) => {
       const action = e.target?.dataset?.ofpAction;
       if (action === 'close') {
-        panel.style.display = 'none';
-        container.querySelectorAll('.ofp-node--selected').forEach(n => n.classList.remove('ofp-node--selected'));
+        closeModal();
       } else if (action === 'edit-on-labor') {
+        closeModal();
         navigateSection('labor');
       }
     });
   }
+  // Esc to close. Bind once per renderSection — store on container so
+  // we can detach if container is wiped (renderSection re-builds the
+  // child tree but reuses #cm-section-content; the listener follows).
+  const onEsc = (e) => {
+    if (e.key !== 'Escape') return;
+    if (modal && modal.style.display !== 'none') closeModal();
+  };
+  document.addEventListener('keydown', onEsc);
+  // Attach a cleanup hook on the container so a future bindSectionEvents
+  // call can detach the previous listener (re-renders rewire everything).
+  if (container._ofpEscDetach) try { container._ofpEscDetach(); } catch (_) {}
+  container._ofpEscDetach = () => document.removeEventListener('keydown', onEsc);
 }
 
 /**
@@ -12552,12 +12578,19 @@ function _openOfpDetail(container, line, kind, idx) {
       <button class="hub-btn hub-btn-sm" data-ofp-action="edit-on-labor">Open in Labor page →</button>
     </div>
   `;
-  panel.style.display = 'block';
-
-  // v0.2.1 — scroll the panel into the viewport so the user can see the
-  // edits land. Behavior 'smooth' + block 'nearest' keeps the page from
-  // jumping if the panel is already visible.
-  try { panel.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' }); } catch (_) {}
+  // v0.2.2 — show the modal overlay (parent of #ofp-detail-panel).
+  const modal = container.querySelector('#ofp-detail-modal');
+  if (modal) {
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden'; // prevent background scroll while modal open
+    // Focus the first editable input so keyboard users land in the form.
+    const firstInput = panel.querySelector('.ofp-edit-input');
+    if (firstInput) try { firstInput.focus(); firstInput.select?.(); } catch (_) {}
+  } else {
+    // Fallback if the modal scaffold is missing for any reason — show
+    // the panel inline (degenerate to v0.2 behavior).
+    panel.style.display = 'block';
+  }
 
   // Wire the editable inputs. Use commit-on-change semantics for text /
   // number / select so a full re-render doesn't steal focus on the first
@@ -12669,29 +12702,33 @@ function _ofpStyles() {
       .ofp-node__tags { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 3px; }
       .ofp-tag { font-size: 9px; font-weight: 600; color: var(--ies-gray-600); background: var(--ies-gray-100); border-radius: 3px; padding: 1px 5px; text-transform: uppercase; letter-spacing: 0.02em; }
 
-      /* v0.2.1 — Layout: canvas + sticky right rail. */
-      .ofp-layout { display: flex; gap: 16px; align-items: flex-start; }
-      .ofp-canvas { flex: 1 1 auto; min-width: 0; }
-      .ofp-detail-panel {
-        flex: 0 0 360px;
-        position: sticky;
-        top: 16px;
-        max-height: calc(100vh - 100px);
-        overflow-y: auto;
+      /* v0.2.2 — Modal overlay. Backdrop is semi-transparent (the
+         canvas stays visible behind) so the user keeps spatial context
+         on which node they clicked. Dialog is centered and fixed-width. */
+      .ofp-detail-modal {
+        position: fixed; inset: 0;
+        background: rgba(15, 23, 42, 0.45);
+        display: flex; align-items: center; justify-content: center;
+        z-index: 1000;
+        padding: 24px;
+        animation: ofpFadeIn 0.12s ease-out;
+      }
+      @keyframes ofpFadeIn { from { opacity: 0; } to { opacity: 1; } }
+      .ofp-detail-modal__dialog {
         background: #fff;
-        border: 1px solid var(--ies-gray-200);
-        border-radius: 6px;
-        box-shadow: 0 4px 16px rgba(0,0,0,0.10);
-        align-self: flex-start;
+        border-radius: 8px;
+        box-shadow: 0 16px 48px rgba(0,0,0,0.30);
+        width: min(640px, 100%);
+        max-height: calc(100vh - 48px);
+        overflow-y: auto;
+        animation: ofpDialogIn 0.16s ease-out;
       }
-      /* On narrower viewports drop the rail below the canvas so the
-         lanes stay readable. 1100px is the existing CM section width. */
-      @media (max-width: 1100px) {
-        .ofp-layout { flex-direction: column; }
-        .ofp-detail-panel { flex: 1 1 auto; position: relative; top: auto; max-height: none; width: 100%; }
+      @keyframes ofpDialogIn {
+        from { opacity: 0; transform: translateY(8px) scale(0.98); }
+        to   { opacity: 1; transform: translateY(0) scale(1); }
       }
-      /* Detail panel grid drops to 2 columns when in the narrow rail. */
-      .ofp-detail-panel .ofp-detail-panel__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; padding: 14px; }
+      /* Canvas spans full content width again (no rail). */
+      .ofp-detail-panel { display: block; }
       .ofp-detail-panel__header {
         display: flex; justify-content: space-between; align-items: center;
         padding: 12px 16px; border-bottom: 1px solid var(--ies-gray-200);
