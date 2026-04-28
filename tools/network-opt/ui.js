@@ -1101,9 +1101,10 @@ function renderRunPhase(el) {
   // Sub-tabs: Map | Numbers (results table). activeView holds the sub-view.
   if (activeView !== 'map' && activeView !== 'results') activeView = 'results';
   const subView = activeView === 'map' ? 'map' : 'results';
+  // 2026-04-27 EVE2-fu2: Numbers is the default landing — list it first.
   const subTabs = renderSubTabStrip([
-    { key: 'map',     label: '🗺 Map' },
     { key: 'results', label: '📈 Numbers' },
+    { key: 'map',     label: '🗺 Map' },
   ], subView, 'runsub');
   el.innerHTML = `
     <div style="padding:18px 24px 24px;display:flex;flex-direction:column;height:100%;">
