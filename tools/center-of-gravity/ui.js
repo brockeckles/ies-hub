@@ -620,7 +620,7 @@ function renderInputsPhase(el) {
   // (Apply Archetype + Load Demo + Add Point) sit in one Seeders card so
   // the user reads the full menu at a glance.
   el.innerHTML = `
-    <div style="max-width:920px;">
+    <div>
       <!-- Seeders card -->
       <div class="hub-card" style="margin-bottom:16px;padding:14px 16px;border-left:3px solid #20c997;">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);margin-bottom:10px;">Seed demand points</div>
@@ -817,7 +817,7 @@ function renderParametersPhase(el) {
   // Nodes / Facilities" renamed to "Centers (k)".
   const wmeta = calc.getWeightUnitMeta(config.weightUnit || 'lb');
   el.innerHTML = `
-    <div style="max-width:900px;">
+    <div>
       <!-- Analysis Configuration (COG-SCOPE-2 lift) -->
       <div class="hub-card" style="margin-bottom:20px;padding:16px;border-left:3px solid var(--ies-blue);">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-400);margin-bottom:10px;">Analysis Configuration</div>
@@ -991,7 +991,7 @@ function renderRunPhase(el) {
   }
 
   el.innerHTML = `
-    <div style="max-width:1100px;">
+    <div>
       <!-- Sub-tabs moved to chrome Row 2 (CM Chrome v3 ripple) -->
 
       ${cogResult && recK != null ? `
@@ -1049,7 +1049,7 @@ function renderAnalysis(el) {
   const costEst = calc.estimateTransportCost(cogResult, points, config.transportCostPerMile, config.unitsPerTruck || 25000);
 
   el.innerHTML = `
-    <div style="max-width:900px;">
+    <div>
       <!-- Action Bar -->
       <div style="display:flex;gap:12px;margin-bottom:16px;align-items:center;">
         <h3 class="text-section" style="margin:0;flex:1;">Analysis Results</h3>
@@ -1393,7 +1393,7 @@ function renderSensitivity(el) {
   const savingsPct = baseline.estimatedCost > 0 ? (savings / baseline.estimatedCost * 100).toFixed(1) : 0;
 
   el.innerHTML = `
-    <div style="max-width:900px;">
+    <div>
       <h3 class="text-section" style="margin-bottom:16px;">Sensitivity: Number of Centers vs. Cost</h3>
 
       <!-- Network Summary -->

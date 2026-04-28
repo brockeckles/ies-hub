@@ -541,7 +541,7 @@ function renderRunPhase(el) {
 
 function renderLanes(el) {
   el.innerHTML = `
-    <div style="max-width:1000px;">
+    <div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
         <h3 class="text-section" style="margin:0;">Transportation Lanes</h3>
         <div style="display:flex;gap:8px;">
@@ -673,7 +673,7 @@ function renderLanes(el) {
 // 2026-04-27 EVE2 (FLE-SCOPE-2): Vehicles sub-tab — financing + vehicle specs.
 function renderVehiclesSubTab(el) {
   el.innerHTML = `
-    <div style="max-width:900px;">
+    <div>
       <h3 class="text-section" style="margin-bottom:16px;">Financing Mode</h3>
       <div class="hub-card" style="margin-bottom:20px;padding:16px;">
         <div style="display:flex;gap:24px;margin-bottom:16px;">
@@ -748,7 +748,7 @@ function renderVehiclesSubTab(el) {
 // 3-way verdict, not vehicle cost).
 function renderOperatingSubTab(el) {
   el.innerHTML = `
-    <div style="max-width:900px;">
+    <div>
       <h3 class="text-section" style="margin-bottom:12px;">Driver</h3>
       <div class="hub-card" style="padding:16px;margin-bottom:18px;">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px;">
@@ -860,7 +860,7 @@ function cfgInput(label, key, value, unit) {
 
 function renderRateDeck(el) {
   el.innerHTML = `
-    <div style="max-width:1100px;">
+    <div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
         <div>
           <h3 class="text-section" style="margin:0 0 4px 0;">Common-Carrier Rate Deck</h3>
@@ -1026,7 +1026,7 @@ function renderResults(el) {
   const atriColor = { 'BELOW': '#22c55e', 'AT': '#f59e0b', 'ABOVE': '#ef4444' }[r.atriBenchmark.verdict];
 
   el.innerHTML = `
-    <div style="max-width:1200px;">
+    <div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
         <h3 class="text-section" style="margin:0;">Results</h3>
         <div style="display:flex;gap:8px;">

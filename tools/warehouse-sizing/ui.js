@@ -637,18 +637,6 @@ function renderConfigPanel() {
  *  sit at the top is now redundant with the chrome's actions rail — dropped. */
 function _renderWscConfigHtml() {
   return `
-    <!-- 2026-04-21 audit: Quick-Start Verticals. Handler already existed at
-         line ~978 ([data-preset]) — this block connects the applyVerticalPreset
-         function to a UI the user can actually click. -->
-    <div style="padding:10px 16px;background:var(--ies-gray-50);border-bottom:1px solid var(--ies-gray-200);">
-      <div style="font-size:11px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;margin-bottom:6px;">Quick-Start Vertical</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        ${['Retail','F&B','Pharma','Apparel','Auto','Ecomm'].map(p =>
-          `<button class="hub-btn hub-btn-secondary" style="font-size:11px;padding:4px 10px;" data-preset="${p}" title="Seed SF + clear height + dock doors + storage mix from a ${p} reference build">${p}</button>`
-        ).join('')}
-      </div>
-    </div>
-
     <!-- Building -->
     <!-- Brock 2026-04-20: Total SF is the tool's OUTPUT, not an input.
          The sizing engine computes it from peak units, storage type,
@@ -1169,14 +1157,6 @@ function bindConfigEvents(panel) {
     copySummaryToClipboard();
   });
 
-  // Quick-start presets
-  panel.querySelectorAll('[data-preset]').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      const preset = /** @type {HTMLElement} */ (e.currentTarget).dataset.preset;
-      applyVerticalPreset(preset);
-    });
-  });
-
   panel.querySelector('[data-action="wsc-save"]')?.addEventListener('click', async (e) => {
     const btn = /** @type {HTMLButtonElement} */ (e.currentTarget);
     const orig = btn.textContent;
@@ -1220,96 +1200,6 @@ function hasMeaningfulVolumes(v) {
  * still tune any field after applying.
  * @param {string} preset
  */
-function applyVerticalPreset(preset) {
-  // WSC-E1 (2026-04-25): presets used to drive ~5 fields (totalSqft, clearHeight,
-  // doors x2, peakUnits, avgUnits). Now drives 18 fields covering the geometry
-  // (width/depth), dock throughput (palletsPerHour/operatingHours/sided), inventory
-  // (outboundUnits, operatingDays), storage type (storeType, aisleWidth), product
-  // dims (unitsPerPallet/cartonsPerPallet etc.), and storage allocation. Tuned per
-  // vertical from typical 3PL profiles. Users still override after apply.
-  const presets = {
-    'Retail': {
-      totalSqft: 350000, clearHeight: 36, buildingWidth: 700, buildingDepth: 500,
-      inboundDoors: 19, outboundDoors: 19, palletsPerDockHour: 12, dockOperatingHours: 10, sided: 'two',
-      storeType: 'selective', aisleWidth: 11,
-      storageAlloc: { fullPallet: 55, cartonOnPallet: 30, cartonOnShelving: 15 },
-      productDims: { unitsPerPallet: 56, unitsPerCartonPallet: 8, cartonsPerPallet: 14, unitsPerCartonShelving: 8, cartonsPerLocation: 4 },
-      peakUnitsPerDay: 350000, avgUnitsPerDay: 220000, outboundUnitsPerDay: 200000, operatingDaysPerYear: 312,
-    },
-    'F&B': {
-      totalSqft: 250000, clearHeight: 32, buildingWidth: 600, buildingDepth: 420,
-      inboundDoors: 16, outboundDoors: 16, palletsPerDockHour: 14, dockOperatingHours: 12, sided: 'two',
-      storeType: 'selective', aisleWidth: 12,
-      storageAlloc: { fullPallet: 75, cartonOnPallet: 20, cartonOnShelving: 5 },
-      productDims: { unitsPerPallet: 80, unitsPerCartonPallet: 12, cartonsPerPallet: 18, unitsPerCartonShelving: 8, cartonsPerLocation: 4 },
-      peakUnitsPerDay: 220000, avgUnitsPerDay: 160000, outboundUnitsPerDay: 150000, operatingDaysPerYear: 350,
-    },
-    'Pharma': {
-      totalSqft: 180000, clearHeight: 36, buildingWidth: 500, buildingDepth: 360,
-      inboundDoors: 9, outboundDoors: 9, palletsPerDockHour: 10, dockOperatingHours: 10, sided: 'single',
-      storeType: 'vna', aisleWidth: 6,
-      storageAlloc: { fullPallet: 30, cartonOnPallet: 30, cartonOnShelving: 40 },
-      productDims: { unitsPerPallet: 40, unitsPerCartonPallet: 4, cartonsPerPallet: 16, unitsPerCartonShelving: 4, cartonsPerLocation: 6 },
-      peakUnitsPerDay: 180000, avgUnitsPerDay: 130000, outboundUnitsPerDay: 110000, operatingDaysPerYear: 260,
-    },
-    'Apparel': {
-      totalSqft: 280000, clearHeight: 36, buildingWidth: 600, buildingDepth: 467,
-      inboundDoors: 12, outboundDoors: 12, palletsPerDockHour: 12, dockOperatingHours: 10, sided: 'single',
-      storeType: 'selective', aisleWidth: 10,
-      storageAlloc: { fullPallet: 25, cartonOnPallet: 35, cartonOnShelving: 40 },
-      productDims: { unitsPerPallet: 240, unitsPerCartonPallet: 24, cartonsPerPallet: 20, unitsPerCartonShelving: 24, cartonsPerLocation: 6 },
-      peakUnitsPerDay: 280000, avgUnitsPerDay: 180000, outboundUnitsPerDay: 160000, operatingDaysPerYear: 312,
-    },
-    'Auto': {
-      totalSqft: 320000, clearHeight: 32, buildingWidth: 660, buildingDepth: 485,
-      inboundDoors: 15, outboundDoors: 15, palletsPerDockHour: 11, dockOperatingHours: 10, sided: 'two',
-      storeType: 'selective', aisleWidth: 11,
-      storageAlloc: { fullPallet: 60, cartonOnPallet: 30, cartonOnShelving: 10 },
-      productDims: { unitsPerPallet: 48, unitsPerCartonPallet: 6, cartonsPerPallet: 16, unitsPerCartonShelving: 6, cartonsPerLocation: 4 },
-      peakUnitsPerDay: 200000, avgUnitsPerDay: 150000, outboundUnitsPerDay: 130000, operatingDaysPerYear: 312,
-    },
-    'Ecomm': {
-      totalSqft: 600000, clearHeight: 40, buildingWidth: 900, buildingDepth: 667,
-      inboundDoors: 25, outboundDoors: 25, palletsPerDockHour: 12, dockOperatingHours: 12, sided: 'two',
-      storeType: 'selective', aisleWidth: 11,
-      storageAlloc: { fullPallet: 30, cartonOnPallet: 40, cartonOnShelving: 30 },
-      productDims: { unitsPerPallet: 96, unitsPerCartonPallet: 12, cartonsPerPallet: 20, unitsPerCartonShelving: 12, cartonsPerLocation: 5 },
-      peakUnitsPerDay: 800000, avgUnitsPerDay: 500000, outboundUnitsPerDay: 450000, operatingDaysPerYear: 350,
-    },
-  };
-  const p = presets[preset];
-  if (!p) return;
-  // Facility scale + geometry
-  facility.totalSqft = p.totalSqft;
-  facility.clearHeight = p.clearHeight;
-  facility.buildingWidth = p.buildingWidth;
-  facility.buildingDepth = p.buildingDepth;
-  // Storage type + aisle
-  facility.storageType = p.storeType;
-  facility.aisleWidth = p.aisleWidth;
-  // Dock — preserve existing dockConfig keys, override the preset-driven ones
-  zones.dockConfig = {
-    ...zones.dockConfig,
-    inboundDoors: p.inboundDoors,
-    outboundDoors: p.outboundDoors,
-    palletsPerDockHour: p.palletsPerDockHour,
-    dockOperatingHours: p.dockOperatingHours,
-    sided: p.sided,
-  };
-  // Storage allocation + product dimensions
-  zones.storageAllocation = { ...zones.storageAllocation, ...p.storageAlloc };
-  zones.productDimensions = { ...zones.productDimensions, ...p.productDims };
-  // Inventory
-  zones.peakUnitsPerDay = p.peakUnitsPerDay;
-  zones.avgUnitsPerDay = p.avgUnitsPerDay;
-  zones.outboundUnitsPerDay = p.outboundUnitsPerDay;
-  zones.operatingDaysPerYear = p.operatingDaysPerYear;
-  isDirty = true;
-  renderConfigPanel();
-  renderContentView();
-  showWscToast(`Applied ${preset} preset (18 fields)`, 'success');
-}
-
 /** Copy an English summary of the current config to the clipboard. */
 function copySummaryToClipboard() {
   const dock = zones.dockConfig || { inboundDoors: 10, outboundDoors: 12 };
