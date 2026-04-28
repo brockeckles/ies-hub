@@ -128,6 +128,7 @@ export function renderToolChrome(opts) {
   const sidebarOpen = showSidebar ? 'true' : 'false';
   const bodyAttr = bodyId ? ' id="' + _a(bodyId) + '"' : '';
 
+  const row2PrefixHtml = opts.row2Prefix || '';
   return (
     '<div class="hub-builder tool-chrome-shell" data-tool="' + _a(toolKey) + '" style="height: calc(100vh - 48px); display: flex; flex-direction: column;">' +
       '<header class="tc-top">' +
@@ -142,6 +143,7 @@ export function renderToolChrome(opts) {
           '</div>' +
         '</div>' +
         '<div class="tc-top__row2">' +
+          row2PrefixHtml +
           '<nav class="tc-section-pills">' + sectionPills + '</nav>' +
           '<div class="tc-top__kpis" data-tc-kpis></div>' +
         '</div>' +
@@ -179,6 +181,24 @@ export function refreshToolChrome(rootEl, opts) {
 
   const pillsEl = rootEl.querySelector('.tc-section-pills');
   if (pillsEl) pillsEl.innerHTML = _sectionPillsHtml(opts);
+
+  // row2Prefix updates (e.g., WSC's Configure toggle pill state).
+  if (opts.row2Prefix !== undefined) {
+    const row2 = rootEl.querySelector('.tc-top__row2');
+    if (row2) {
+      // Replace any existing prefix node (the first child before .tc-section-pills).
+      const pillsNav = row2.querySelector('.tc-section-pills');
+      if (pillsNav) {
+        // Remove any sibling nodes BEFORE the pills nav.
+        while (pillsNav.previousSibling) row2.removeChild(pillsNav.previousSibling);
+        if (opts.row2Prefix) {
+          const tmp = document.createElement('div');
+          tmp.innerHTML = opts.row2Prefix;
+          while (tmp.firstChild) row2.insertBefore(tmp.firstChild, pillsNav);
+        }
+      }
+    }
+  }
 
   if (opts.saveState) {
     const chip = rootEl.querySelector('[data-tc-save-chip]');
@@ -366,6 +386,32 @@ function _stylesheet() {
         min-height: 38px;
         display: flex; align-items: center; gap: 16px;
       }
+      .tool-chrome-shell .tc-row2-toggle {
+        flex: 0 0 auto;
+        background: rgba(255,255,255,0.06);
+        border: 1px solid rgba(255,255,255,0.18);
+        cursor: pointer;
+        color: #fff;
+        padding: 5px 12px;
+        border-radius: 16px;
+        font-size: 11px; font-weight: 700;
+        display: inline-flex; align-items: center; gap: 6px;
+        margin-right: 12px;
+        transition: background 0.12s, border-color 0.12s;
+        white-space: nowrap;
+      }
+      .tool-chrome-shell .tc-row2-toggle:hover { background: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.32); }
+      .tool-chrome-shell .tc-row2-toggle--active {
+        background: #fff; color: var(--ies-navy, #001f3f); border-color: #fff;
+      }
+      .tool-chrome-shell .tc-row2-toggle__icon { font-size: 12px; line-height: 1; }
+      .tool-chrome-shell .tc-row2-divider {
+        width: 1px; height: 18px;
+        background: rgba(255,255,255,0.16);
+        margin: 0 8px 0 0;
+        flex: 0 0 auto;
+      }
+
       .tool-chrome-shell .tc-section-pills {
         flex: 1 1 auto; min-width: 0;
         display: flex; gap: 4px; flex-wrap: wrap;

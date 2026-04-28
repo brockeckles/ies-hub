@@ -10,7 +10,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sL';
 import { state } from '../../shared/state.js?v=20260418-sL';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sL';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260429-tc2-wsc2';
+import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260429-tc2-wsc3';
 import * as calc from './calc.js?v=20260425-s11';
 import * as api from './api.js?v=20260418-sL';
 
@@ -236,6 +236,17 @@ function _buildWscChromeOpts() {
     sidebarHeader: 'Configure',
     sidebarBody: '<div id="wsc-config">' + _renderWscConfigHtml() + '</div>',
     sidebarFooter,
+    // Drawer-toggle pill — labeled, sits at the start of Row 2 so it's
+    // discoverable next to the section pills (instead of relying on the
+    // generic ☰ icon way over in Row 1).
+    row2Prefix: (
+      '<button class="tc-row2-toggle' + (_wscDrawerOpen ? ' tc-row2-toggle--active' : '') + '" data-tc-sidebar="toggle" title="' +
+      (_wscDrawerOpen ? 'Hide configure panel' : 'Show configure panel') + '">' +
+      '<span class="tc-row2-toggle__icon">⚙</span>' +
+      '<span>' + (_wscDrawerOpen ? 'Hide Configure' : 'Configure') + '</span>' +
+      '</button>' +
+      '<div class="tc-row2-divider"></div>'
+    ),
     bodyHtml: '<div id="wsc-content" style="overflow-y:auto;padding:24px;height:100%;"></div>',
     backTitle: 'Back to scenarios',
   };
@@ -334,12 +345,18 @@ function bindShellEvents() {
     },
     onSidebar: (kind) => {
       _wscDrawerOpen = (kind === 'toggle') ? !_wscDrawerOpen : false;
-      // Just flip the data-sidebar-open attribute — primitive's CSS handles
-      // the width transition. Avoid calling refreshToolChrome here because
-      // that re-renders sidebarBody, which would nuke any in-progress
-      // text-input state inside the config panel.
+      // Flip the data-sidebar-open attribute (CSS handles the width
+      // transition) and refresh ONLY row2Prefix + the chrome's mode flag —
+      // sidebarBody is intentionally OMITTED so in-progress text input
+      // inside the panel is preserved.
       const body = rootEl?.querySelector('.tc-body');
       if (body) body.dataset.sidebarOpen = _wscDrawerOpen ? 'true' : 'false';
+      // Re-render the Configure pill so its label/active class reflect
+      // the new state. We pass an opts subset that includes row2Prefix
+      // (refreshed) but omits sidebarBody.
+      const opts = _buildWscChromeOpts();
+      delete opts.sidebarBody;
+      refreshToolChrome(rootEl, opts);
     },
     onBack: async () => {
       if (isDirty && !confirm('Unsaved changes. Leave for the scenarios list?')) return;
