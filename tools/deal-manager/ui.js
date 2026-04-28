@@ -971,7 +971,11 @@ async function openDeal(id) {
   tasks = await api.fetchTasks(activeDeal.id);
   updates = await api.fetchUpdates(activeDeal.id);
 
-  activeTab = 'summary';
+  // 2026-04-29 (Brock): land on Sites for empty deals so the natural next
+  // step (linking cost models / adding sites) is right there. For already-
+  // populated deals, land on Summary so the rollup is the first thing users
+  // see.
+  activeTab = (sites && sites.length > 0) ? 'summary' : 'sites';
   // Switching from landing to detail — re-render shell so header swaps to detail mode
   rerenderShell();
 }
@@ -984,8 +988,9 @@ function renderSummary(el) {
   if (!activeDeal || !financials) return;
 
   // 2026-04-21 audit: Summary showed $0/zero KPIs on empty deals with no
-  // guidance. Render an empty-state card directing the user to Sites tab
-  // before rendering the full dashboard (which is meaningless with 0 sites).
+  // guidance. Render an empty-state card directing the user to the Sites
+  // section under the Composition phase before rendering the full dashboard
+  // (which is meaningless with 0 sites).
   if (!sites || sites.length === 0) {
     const badge = calc.statusBadge(activeDeal.status);
     el.innerHTML = `
@@ -1000,17 +1005,20 @@ function renderSummary(el) {
         <div class="hub-card" style="padding:32px;text-align:center;background:var(--ies-gray-50);border:1px dashed var(--ies-gray-300);">
           <div style="font-size:18px;font-weight:700;color:var(--ies-navy);margin-bottom:8px;">No sites linked yet</div>
           <div style="font-size:13px;color:var(--ies-gray-500);line-height:1.6;max-width:500px;margin:0 auto 16px auto;">
-            Multi-site financials roll up from the cost models attached to each site. Head to the
-            <b>Sites</b> tab to link existing Cost Model projects (e.g., Memphis FC, Atlanta DC) or
-            add an empty site shell.
+            Multi-site financials roll up from the cost models attached to each site. Use
+            <b>Composition → Sites</b> to link existing Cost Model projects (e.g., Memphis FC,
+            Atlanta DC) or add an empty site shell.
           </div>
-          <button class="hub-btn hub-btn-primary hub-btn-sm" data-action="dm-jump-to-sites">Go to Sites Tab →</button>
+          <button class="hub-btn hub-btn-primary hub-btn-sm" data-action="dm-jump-to-sites">Add Sites →</button>
         </div>
       </div>
     `;
     el.querySelector('[data-action="dm-jump-to-sites"]')?.addEventListener('click', () => {
       activeTab = /** @type {any} */ ('sites');
       renderContent();
+      // Sites lives under Composition phase (different from current Overview);
+      // refresh chrome so phase tabs + section pills follow.
+      refreshToolChrome(rootEl, _buildDmChromeOpts());
     });
     return;
   }
@@ -1221,7 +1229,7 @@ function renderSites(el) {
 /**
  * Open the Link-CM modal. Loads unlinked CM projects and lets the user
  * select one to attach to the current deal as a new site.
- * @param {Element} parentEl  The Sites tab element, re-rendered on link success.
+ * @param {Element} parentEl  The Sites section element, re-rendered on link success.
  */
 async function openLinkCmModal(parentEl) {
   // Remove any existing modal
