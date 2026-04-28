@@ -12438,7 +12438,7 @@ function _bindOperationalFlowEvents(container) {
       const idx = Number(node.dataset.ofpIdx);
       dragInfo = { kind, idx };
       node.classList.add('ofp-node--dragging');
-      try { e.dataTransfer.effectAllowed = 'move'; } catch (_) {}
+      try { e.dataTransfer.effectAllowed = 'all'; } catch (_) {}
     });
     node.addEventListener('dragend', () => {
       node.classList.remove('ofp-node--dragging');
