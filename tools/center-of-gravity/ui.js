@@ -10,7 +10,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sP';
 import { state } from '../../shared/state.js?v=20260418-sP';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sP';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton, renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton, renderPhaseStepper, bindPhaseStepper, renderSubTabStrip } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sP';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260418-sP';
@@ -478,13 +478,7 @@ function bindShellEvents() {
       updateRunButtonState();
       rootEl.innerHTML = renderShell();
       renderCogStepper();
-      bindPhaseStepper(rootEl.querySelector('#cog-process-flow'), (phase) => {
-        activePhase = phase;
-        rootEl.innerHTML = renderShell();
-        renderCogStepper();
-        bindPhaseStepper(rootEl.querySelector('#cog-process-flow'), arguments.callee);
-        renderContent();
-      });
+      bindCogStepper();
       renderContent();
       flashRunButton(rootEl.querySelector('[data-primary-action="cog-run"]'));
       return;
@@ -933,15 +927,9 @@ function renderRunPhase(el) {
 
   el.innerHTML = `
     <div style="max-width:1100px;">
-      <!-- Sub-tab strip -->
-      <div style="display:flex;gap:0;border-bottom:1px solid var(--ies-gray-200);margin-bottom:18px;">
-        ${subTabs.map(t => `
-          <button class="hub-btn" data-cog-runsub="${t.key}"
-                  style="background:transparent;border:0;border-bottom:2px solid ${t.key === runSubTab ? 'var(--ies-blue)' : 'transparent'};border-radius:0;padding:10px 18px;font-size:13px;font-weight:${t.key === runSubTab ? '700' : '500'};color:${t.key === runSubTab ? 'var(--ies-blue)' : 'var(--ies-gray-600)'};cursor:pointer;">
-            ${t.label}
-          </button>
-        `).join('')}
-      </div>
+      <!-- Sub-tab strip (shared helper, 2026-04-27 EVE2-fu) -->
+      ${renderSubTabStrip(subTabs, runSubTab, 'cog-runsub')}
+      <div style="margin-bottom:18px;"></div>
 
       ${cogResult && recK != null ? `
         <div class="hub-card" style="background:linear-gradient(135deg,#f0fdf4,#f0f9ff);border:1px solid #22c55e;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">

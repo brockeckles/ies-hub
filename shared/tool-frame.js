@@ -359,4 +359,31 @@ export function bindPhaseStepper(container, onJump) {
   container._phaseHandler = handler;
 }
 
-export default { renderToolHeader, renderInputGroup, renderResultsShelf, bindPrimaryActionShortcut, flashRunButton, renderPhaseStepper, bindPhaseStepper };
+
+/**
+ * Render an inline sub-tab strip (used inside Run / Parameters phases).
+ * Caller wires the click handler — typically delegated on the parent.
+ *
+ * Lifted out of tools/network-opt/ui.js on 2026-04-27 EVE2 follow-up so
+ * CoG + Fleet stop inlining the same markup three different ways.
+ *
+ * @param {Array<{key:string, label:string, count?:string|number, title?:string}>} items
+ * @param {string} activeKey
+ * @param {string} [dataAttr]   data-* attribute name (default "section")
+ * @returns {string}
+ */
+export function renderSubTabStrip(items, activeKey, dataAttr = 'section') {
+  if (!Array.isArray(items) || items.length === 0) return '';
+  return `
+    <div class="hub-sub-tab-strip" style="display:flex;gap:0;border-bottom:1px solid var(--ies-gray-200);margin-bottom:0;flex-wrap:wrap;">
+      ${items.map(it => `
+        <button class="hub-btn" data-${escapeAttr(dataAttr)}="${escapeAttr(it.key)}"
+                ${it.title ? `title="${escapeAttr(it.title)}"` : ''}
+                style="background:transparent;border:0;border-bottom:2px solid ${it.key === activeKey ? 'var(--ies-blue)' : 'transparent'};border-radius:0;padding:10px 18px;font-size:13px;font-weight:${it.key === activeKey ? '700' : '500'};color:${it.key === activeKey ? 'var(--ies-blue)' : 'var(--ies-gray-600)'};cursor:pointer;">
+          ${escapeHtml(it.label)}${it.count != null ? ` <span style="opacity:0.65;font-weight:600;">${escapeHtml(String(it.count))}</span>` : ''}
+        </button>
+      `).join('')}
+    </div>`;
+}
+
+export default { renderToolHeader, renderInputGroup, renderResultsShelf, bindPrimaryActionShortcut, flashRunButton, renderPhaseStepper, bindPhaseStepper, renderSubTabStrip };

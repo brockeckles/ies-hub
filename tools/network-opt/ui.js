@@ -11,7 +11,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sM';
 import { state } from '../../shared/state.js?v=20260418-sM';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sM';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton, renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton, renderPhaseStepper, bindPhaseStepper, renderSubTabStrip as sharedRenderSubTabStrip } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadXLSX } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260418-sM';
@@ -206,7 +206,6 @@ function applyCogHandoff(payload) {
   // If the editor shell is rendered, re-render its facility list
   if (rootEl?.querySelector('#no-facilities-panel')) {
     renderFacilities(rootEl);
-    renderSidebar();
   }
   console.log(`[NetOpt] Received ${candidates.length} facility candidates from COG`);
 }
@@ -281,7 +280,6 @@ function openEditor(savedRow) {
 
   rootEl.innerHTML = renderShell();
   bindShellEvents();
-  renderSidebar();
   renderContentView();
 
   // Wire the "← Scenarios" back button.
@@ -347,7 +345,6 @@ async function handleSaveNetopt() {
     guardMarkClean('netopt');
     rootEl.innerHTML = renderShell();
     bindShellEvents();
-    renderSidebar();
     renderContentView();
     showToast(`Saved "${_configName}".`, 'ok');
   } catch (err) {
@@ -595,7 +592,6 @@ function jumpToPhase(phase) {
   rootEl?.querySelectorAll('#no-view-tabs button').forEach(b => {
     b.classList.toggle('active', b.getAttribute('data-tab') === activeView);
   });
-  renderSidebar();
   renderContentView();
 }
 
@@ -717,7 +713,6 @@ function applyArchetype(key) {
     demands = demands.map(d => ({ ...d, maxDays: arch.maxDays }));
     showNoToast(`Applied ${arch.name} — mode mix ${arch.modeMix.tlPct}/${arch.modeMix.ltlPct}/${arch.modeMix.parcelPct} + max ${arch.maxDays}-day service`, 'success');
   }
-  renderSidebar();
   // Re-render whichever view is active so visible state updates (Facilities
   // counts, Demand table, Service banner).
   renderContentView();
@@ -763,7 +758,6 @@ function findOptimalLocations() {
     });
   }
   activeSection = 'facilities';
-  renderSidebar();
   renderContentView();
   showNoToast(`Recommended ${recs.length} DC location${recs.length > 1 ? 's' : ''} based on demand clusters — activate the ones to evaluate, then hit Run Scenario`, 'success');
 }
@@ -1031,18 +1025,9 @@ function renderContentView() {
 // ============================================================
 // SUB-TAB / TOOLS HELPERS (2026-04-27 EVE — stepper redesign)
 // ============================================================
-/** Inline sub-tab strip used inside Inputs / Parameters / Run phases. */
-function renderSubTabStrip(items, activeKey, dataAttr = 'section') {
-  return `
-    <div style="display:flex;gap:0;border-bottom:1px solid var(--ies-gray-200);margin-bottom:0;">
-      ${items.map(it => `
-        <button class="hub-btn" data-${dataAttr}="${it.key}"
-                style="background:transparent;border:0;border-bottom:2px solid ${it.key === activeKey ? 'var(--ies-blue)' : 'transparent'};border-radius:0;padding:10px 18px;font-size:13px;font-weight:${it.key === activeKey ? '700' : '500'};color:${it.key === activeKey ? 'var(--ies-blue)' : 'var(--ies-gray-600)'};cursor:pointer;">
-          ${it.label}${it.count != null ? ` <span style="opacity:0.65;font-weight:600;">${it.count}</span>` : ''}
-        </button>
-      `).join('')}
-    </div>`;
-}
+// 2026-04-27 EVE2 follow-up: renderSubTabStrip lifted to shared/tool-frame.js.
+// Local shim retained so the ~6 internal call sites keep working unchanged.
+const renderSubTabStrip = sharedRenderSubTabStrip;
 
 /** Quick-seed archetype bar shown above the Inputs phase content. */
 function renderArchetypeSeedBar() {
@@ -1216,7 +1201,9 @@ function renderFacilities(el) {
         <h3 class="text-section" style="margin:0;">Facility Network</h3>
         <div style="display:flex;gap:8px;">
           ${facilities.length === 0 && demands.length === 0 ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" id="no-load-sample" title="Seed 5 candidate DCs + 10 demand points so you can explore the optimizer without entering data.">Load Sample Network</button>` : ''}
-          ${demands.length > 0 ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" id="no-find-optimal-header" title="Weighted k-means on your demand → recommended DC metros. Adds candidate facilities to the list without opening them.">🎯 Find Optimal Locations</button>` : ''}
+          ${demands.length > 0
+            ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" id="no-find-optimal-header" title="Weighted k-means on your demand → recommended DC metros. Adds candidate facilities to the list without opening them.">🎯 Find Optimal Locations</button>`
+            : `<button class="hub-btn hub-btn-sm hub-btn-secondary" disabled title="Add demand points first — k-means needs demand to cluster against." style="opacity:0.55;cursor:not-allowed;">🎯 Find Optimal Locations</button>`}
           <button class="hub-btn hub-btn-sm hub-btn-secondary" id="no-add-facility">+ Add Facility</button>
         </div>
       </div>
@@ -1310,7 +1297,6 @@ function renderFacilities(el) {
       facilities[idx].isOpen = /** @type {HTMLInputElement} */ (cb).checked;
       markDirty();  // audit: missing — open/closed toggle didn't invalidate Run.
       renderFacilities(el);
-      renderSidebar();
     });
   });
 
@@ -1333,7 +1319,6 @@ function renderFacilities(el) {
       }
       markDirty();  // audit: missing — lock-state change didn't invalidate Run.
       renderFacilities(el);
-      renderSidebar();
     });
   });
 
@@ -1344,7 +1329,6 @@ function renderFacilities(el) {
       facilities.splice(idx, 1);
       markDirty();
       renderFacilities(el);
-      renderSidebar();
     });
   });
 
@@ -1354,7 +1338,6 @@ function renderFacilities(el) {
     facilities.push({ id, name: 'New DC', city: '', state: '', lat: 39.8283, lng: -98.5795, capacity: 200000, fixedCost: 1000000, variableCost: 3.00, isOpen: true });
     markDirty();
     renderFacilities(el);
-    renderSidebar();
   }
   el.querySelector('#no-add-facility')?.addEventListener('click', _addBlankFacility);
   el.querySelector('#no-find-optimal-header')?.addEventListener('click', () => {
@@ -1375,7 +1358,6 @@ function renderFacilities(el) {
     demands   = DEMO_DEMANDS.map(x => ({ ...x }));
     markDirty();
     renderFacilities(el);
-    renderSidebar();
     if (typeof window !== 'undefined' && window.__iesToast) {
       window.__iesToast(`Loaded sample network — ${facilities.length} DCs + ${demands.length} demand points`, 'success');
     }
@@ -1474,7 +1456,6 @@ function renderDemand(el) {
       demands.splice(parseInt(/** @type {HTMLElement} */ (btn).dataset.demDelete), 1);
       markDirty();
       renderDemand(el);
-      renderSidebar();
     });
   });
 
@@ -1523,7 +1504,6 @@ function renderDemand(el) {
     demands.push({ id: 'd' + Date.now(), zip3: '', lat: 39.83, lng: -98.58, annualDemand: 10000, maxDays: 3, avgWeight: 25, nmfcClass: 100, hazmat: false, seasonality: 'uniform', frequency: 'weekly' });
     markDirty();
     renderDemand(el);
-    renderSidebar();
   });
 }
 
@@ -2358,7 +2338,6 @@ function renderResults(el) {
         rootEl?.querySelectorAll('#no-view-tabs button').forEach(b => {
           b.classList.toggle('active', b.dataset.tab === activeView);
         });
-        renderSidebar();
         renderContentView();
       });
       return;
@@ -2385,7 +2364,6 @@ function renderResults(el) {
         rootEl?.querySelectorAll('#no-view-tabs button').forEach(b => {
           b.classList.toggle('active', b.dataset.tab === activeView);
         });
-        renderSidebar();
         renderContentView();
       });
       return;
@@ -2410,12 +2388,12 @@ function renderResults(el) {
       el.querySelector('#no-results-go-fix-fac')?.addEventListener('click', () => {
         activeSection = 'facilities'; activeView = 'setup';
         rootEl?.querySelectorAll('#no-view-tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === activeView));
-        renderSidebar(); renderContentView();
+        renderContentView();
       });
       el.querySelector('#no-results-go-fix-dem')?.addEventListener('click', () => {
         activeSection = 'demand'; activeView = 'setup';
         rootEl?.querySelectorAll('#no-view-tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === activeView));
-        renderSidebar(); renderContentView();
+        renderContentView();
       });
       return;
     }
@@ -2664,7 +2642,7 @@ function renderComparison(el) {
   } else if (scenarios.length === 0) {
     el.innerHTML = `
       <div class="hub-card">
-        <p class="text-body text-muted">No optimization run yet. Set <b>Max DCs</b> above and click <b>🎯 Optimize Network</b> to evaluate the best subset of candidates for each network size 1..N. The tool auto-picks brute-force enumeration when the search space is small (provably optimal) and a multi-start heuristic otherwise.</p>
+        <p class="text-body text-muted">Set <b>Max DCs</b> above and run the k-sweep to populate this comparison. The optimizer auto-picks brute-force enumeration when the search space is small (provably optimal) and a multi-start heuristic otherwise.</p>
       </div>
     `;
     return;

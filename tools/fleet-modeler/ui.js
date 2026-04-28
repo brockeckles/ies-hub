@@ -10,7 +10,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sM';
 import { state } from '../../shared/state.js?v=20260418-sM';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sM';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton, renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton, renderPhaseStepper, bindPhaseStepper, renderSubTabStrip } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import * as calc from './calc.js?v=20260426-s2';
 import * as api from './api.js?v=20260418-sM';
@@ -374,14 +374,8 @@ function renderParametersPhase(el) {
     { key: 'ratedeck',  label: '📋 Rate Deck' },
   ];
   el.innerHTML = `
-    <div style="display:flex;gap:0;border-bottom:1px solid var(--ies-gray-200);margin-bottom:18px;">
-      ${subTabs.map(t => `
-        <button class="hub-btn" data-fm-paramssub="${t.key}"
-                style="background:transparent;border:0;border-bottom:2px solid ${t.key === paramsSubTab ? 'var(--ies-blue)' : 'transparent'};border-radius:0;padding:10px 18px;font-size:13px;font-weight:${t.key === paramsSubTab ? '700' : '500'};color:${t.key === paramsSubTab ? 'var(--ies-blue)' : 'var(--ies-gray-600)'};cursor:pointer;">
-          ${t.label}
-        </button>
-      `).join('')}
-    </div>
+    ${renderSubTabStrip(subTabs, paramsSubTab, 'fm-paramssub')}
+    <div style="margin-bottom:18px;"></div>
     <div id="fm-params-inner"></div>
   `;
   const inner = el.querySelector('#fm-params-inner');
@@ -407,14 +401,8 @@ function renderRunPhase(el) {
     { key: 'feasibility',  label: '⏱ Feasibility' },
   ];
   el.innerHTML = `
-    <div style="display:flex;gap:0;border-bottom:1px solid var(--ies-gray-200);margin-bottom:18px;flex-wrap:wrap;">
-      ${subTabs.map(t => `
-        <button class="hub-btn" data-fm-runsub="${t.key}"
-                style="background:transparent;border:0;border-bottom:2px solid ${t.key === runSubTab ? 'var(--ies-blue)' : 'transparent'};border-radius:0;padding:10px 18px;font-size:13px;font-weight:${t.key === runSubTab ? '700' : '500'};color:${t.key === runSubTab ? 'var(--ies-blue)' : 'var(--ies-gray-600)'};cursor:pointer;">
-          ${t.label}
-        </button>
-      `).join('')}
-    </div>
+    ${renderSubTabStrip(subTabs, runSubTab, 'fm-runsub')}
+    <div style="margin-bottom:18px;"></div>
     <div id="fm-run-inner"></div>
   `;
   const inner = el.querySelector('#fm-run-inner');
