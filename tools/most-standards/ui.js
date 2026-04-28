@@ -8,7 +8,7 @@
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sM';
 import { state } from '../../shared/state.js?v=20260418-sM';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260427-pm3-s1';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton, renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
 // Note: MOST intentionally opts out of run-state tracking. Its Quick Analysis
 // and Workflow tabs recompute inline on every render — the primary "Run"
 // button is a convenience trigger rather than a discrete compute step, so a
@@ -221,13 +221,16 @@ export async function mount(el) {
     const target = /** @type {HTMLElement} */ (e.target);
     if (!target) return;
 
-    // Tab switching — re-render the full shell so the primary-action button
-    // appears only on tabs where it does real work.
-    const tabBtn = target.closest('#most-tabs [data-tab]');
-    if (tabBtn) {
-      activeTab = /** @type {any} */ (tabBtn.dataset.tab);
-      el.innerHTML = renderShell();
-      renderContent();
+    // 2026-04-28 — phase stepper replaces the #most-tabs flat-tab strip. The
+    // shared helper uses data-phase chips, so we listen for those clicks here.
+    const phaseBtn = target.closest('[data-phase]');
+    if (phaseBtn && el.contains(phaseBtn) && phaseBtn.closest('#most-process-flow')) {
+      const next = phaseBtn.getAttribute('data-phase');
+      if (next && next !== activeTab) {
+        activeTab = /** @type {any} */ (next);
+        el.innerHTML = renderShell();
+        renderContent();
+      }
       return;
     }
 
@@ -289,6 +292,20 @@ export function unmount() {
 // SHELL
 // ============================================================
 
+function renderMostPhaseStepper() {
+  const el = rootEl?.querySelector('#most-process-flow');
+  if (!el) return;
+  el.innerHTML = renderPhaseStepper({
+    phases: [
+      { key: 'library',  num: 1, label: 'Template Library',  sub: 'Browse activity catalog',                  status: activeTab === 'library'  ? 'active' : 'pending' },
+      { key: 'editor',   num: 2, label: 'Template Editor',   sub: 'Author or edit templates',                 status: activeTab === 'editor'   ? 'active' : 'pending' },
+      { key: 'analysis', num: 3, label: 'Quick Analysis',    sub: 'Pick templates · set volumes · compute',   status: activeTab === 'analysis' ? 'active' : 'pending' },
+      { key: 'workflow', num: 4, label: 'Workflow Composer', sub: 'Compose templates into a flow · preview',  status: activeTab === 'workflow' ? 'active' : 'pending' },
+    ],
+    activePhase: activeTab,
+  });
+}
+
 function renderShell() {
   const tabs = [
     { key: 'library', label: 'Template Library' },
@@ -324,9 +341,6 @@ function renderShell() {
         toolKey: 'most',
         backAction: 'most-back',
         backLabel: '← Design Tools',
-        tabs,
-        activeTab,
-        tabsId: 'most-tabs',
         statusChips: chips,
         description: TAB_DESC[activeTab] || TAB_DESC.library,
         subtitle: TAB_LABEL[activeTab] || '',
@@ -334,6 +348,13 @@ function renderShell() {
           ? { label: primaryActionLabel, action: 'most-run', icon: '▶', title: 'Compute labor standards (Cmd/Ctrl+Enter)' }
           : null,
       })}
+      <!-- 2026-04-28 — phase-stepper port. Replaces flat tab strip. The 4 modes
+           (Library, Editor, Analysis, Workflow) are not strictly sequential — 
+           Library + Editor manage reference data; Analysis + Workflow are
+           solvers — but the shared stepper visually unifies MOST with the
+           rest of the design-tools suite. Status: current = active, others
+           = pending (no 'complete' state for nav-as-stepper). -->
+      <div id="most-process-flow"></div>
       <!-- Content -->
       <div class="hub-analyzer-content" id="most-content" style="flex:1;padding: 24px; overflow-y: auto;">
         <!-- Tab content renders here -->
@@ -613,6 +634,8 @@ function renderShell() {
 function renderContent() {
   const container = rootEl?.querySelector('#most-content');
   if (!container) return;
+  // 2026-04-28 — keep phase stepper status in sync with activeTab after re-renders.
+  renderMostPhaseStepper();
 
   const renderers = { library: renderLibrary, editor: renderEditor, analysis: renderAnalysis, workflow: renderWorkflowComposer };
   const render = renderers[activeTab];
