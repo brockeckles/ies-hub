@@ -10,10 +10,32 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sM';
 import { state } from '../../shared/state.js?v=20260418-sM';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sM';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton, renderPhaseStepper, bindPhaseStepper, renderSubTabStrip } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
+import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260429-tc2-fleet';
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import * as calc from './calc.js?v=20260426-s2';
 import * as api from './api.js?v=20260418-sM';
+
+// ============================================================
+// CHROME v3 — phase + section structure (CM Chrome v3 ripple, step 3 redo)
+// ============================================================
+const FLEET_GROUPS = [
+  { key: 'inputs',     label: 'Inputs',     description: 'Lane mix' },
+  { key: 'parameters', label: 'Parameters', description: 'Vehicles, operating costs, rate deck' },
+  { key: 'run',        label: 'Run',        description: 'Cost, comparison, sensitivity, map, feasibility' },
+];
+const FLEET_SECTIONS = [
+  // parameters
+  { key: 'vehicles',    label: '\u{1F69B} Vehicles',          group: 'parameters' },
+  { key: 'operating',   label: '\u{1F4B0} Operating Costs',   group: 'parameters' },
+  { key: 'ratedeck',    label: '\u{1F4CB} Rate Deck',         group: 'parameters' },
+  // run
+  { key: 'cost',        label: '\u{1F4B5} Cost',              group: 'run' },
+  { key: 'comparison',  label: '⚖ Comparison',             group: 'run' },
+  { key: 'sensitivity', label: '\u{1F4C8} Sensitivity',       group: 'run' },
+  { key: 'map',         label: '\u{1F5FA} Route Map',         group: 'run' },
+  { key: 'feasibility', label: '⏱ Feasibility',            group: 'run' },
+];
+
 
 // ============================================================
 // STATE
@@ -189,6 +211,7 @@ function openEditor(savedRow) {
   rootEl.innerHTML = renderShell();
   bindShellEvents();
   renderContent();
+  _refreshFleetKpis();
 
   rootEl.querySelector('[data-action="fleet-back"]')?.addEventListener('click', async () => {
     // 2026-04-21 audit: NetOpt already guarded its back button; Fleet didn't.
@@ -227,36 +250,117 @@ export function unmount() {
 // ============================================================
 
 function renderShell() {
-  // 2026-04-27 EVE2 (FLE-SCOPE-1): tabs replaced with phase stepper.
-  const chips = [
-    { label: activeScenarioId ? 'Saved' : 'Draft', kind: activeScenarioId ? 'saved' : 'draft', dot: true },
-    activeParentCmId
-      ? { label: 'Linked to CM', kind: 'linked', title: `Linked to Cost Model #${activeParentCmId}` }
-      : { label: 'Stand-alone', kind: 'standalone', title: 'This fleet is not yet attached to a Cost Model' },
+  // CM Chrome v3 ripple — chrome HTML+CSS lives in shared/tool-chrome.js.
+  return renderToolChrome(_buildFleetChromeOpts());
+}
+
+/** Build chrome opts from current Fleet state. Fleet has no explicit
+ *  isDirty flag — runState tracks input divergence, so 'modified' = saved
+ *  scenario whose inputs have diverged since the last clean run. */
+function _buildFleetChromeOpts() {
+  const draft = !activeScenarioId;
+  const isModifiedFromRunState = runState.state(runStateInputs()) === 'dirty';
+  const modified = !!activeScenarioId && isModifiedFromRunState;
+  const stateName = draft ? 'draft' : (modified ? 'modified' : 'saved');
+  const stateTitle = draft
+    ? 'Brand-new scenario — Save to capture an audit timestamp'
+    : (modified ? 'Inputs have diverged since the last run — re-run + save to capture' : 'Saved');
+
+  const runStateClass = runState.state(runStateInputs());
+
+  const actions = [
+    { id: 'fleet-save',
+      label: activeScenarioId ? '\u{1F4BE} Save' : '\u{1F4BE} Save Scenario',
+      title: activeScenarioId ? 'Update this scenario' : 'Save this scenario to open it again later',
+      primary: modified },
+    { id: 'fleet-run',
+      label: 'Run',
+      icon: '▶',
+      title: 'Run fleet analyzer (Cmd/Ctrl+Enter)',
+      kind: 'primary',
+      runState: runStateClass,
+      cleanLabel: '✓ Results current',
+      cleanTitle: 'Inputs unchanged since the last run — fleet results match the current lanes + config. Click to force a re-run.' },
   ];
 
-  return `
-    <div class="hub-content-inner" style="padding:0;display:flex;flex-direction:column;height:100%;">
-      ${renderToolHeader({
-        toolName: 'Fleet Modeler',
-        toolKey: 'fleet',
-        backAction: 'fleet-back',
-        statusChips: chips,
-        primaryAction: {
-          // XT-SCOPE-1 — standardized "Run" verb.
-          label: 'Run',
-          action: 'fleet-run',
-          icon: '▶',
-          title: 'Run fleet analyzer (Cmd/Ctrl+Enter)',
-          state: runState.state(runStateInputs()),
-          cleanLabel: '✓ Results current',
-          cleanTitle: 'Inputs unchanged since the last run — fleet results match the current lanes + config. Click to force a re-run.',
-        },
-      })}
-      <div id="fm-process-flow"></div>
-      <div id="fm-content" style="flex:1;overflow-y:auto;padding:24px;"></div>
-    </div>
-  `;
+  const sidebarFooter = activeParentCmId
+    ? 'Linked to Cost Model #' + activeParentCmId
+    : '';
+
+  const activeSection = _activeFleetSectionKey();
+
+  return {
+    toolKey: 'fleet',
+    groups: FLEET_GROUPS,
+    sections: FLEET_SECTIONS,
+    activePhase,
+    activeSection,
+    sectionCompleteness: _fleetSectionCompleteness,
+    saveState: { state: stateName, title: stateTitle },
+    actions,
+    showSidebar: false,
+    showSidebarToggle: false,
+    sidebarHeader: 'All Sections',
+    sidebarBody: '',
+    sidebarFooter,
+    bodyHtml: '<div id="fm-content" style="overflow-y:auto;padding:24px;height:100%;"></div>',
+    backTitle: 'Back to scenarios',
+    emptyPhaseHint: activePhase === 'inputs' ? 'Single-canvas phase — switch to Parameters or Run for sub-views' : '',
+  };
+}
+
+/** Map current phase + sub-tab state to the active section pill. */
+function _activeFleetSectionKey() {
+  if (activePhase === 'parameters') return paramsSubTab || 'vehicles';
+  if (activePhase === 'run') return runSubTab || 'cost';
+  return null; // inputs phase has no sub-sections
+}
+
+function _fleetSectionCompleteness(key) {
+  // Parameters sub-sections always 'complete' (configured by default).
+  if (key === 'vehicles' || key === 'operating' || key === 'ratedeck') return 'complete';
+  // Run sub-sections require a result.
+  if (['cost', 'comparison', 'sensitivity', 'map', 'feasibility'].includes(key)) {
+    return result ? 'complete' : 'empty';
+  }
+  return 'empty';
+}
+
+/** Compute KPI strip values for Fleet's chrome. */
+function _computeFleetKpis() {
+  const items = [];
+  let veh = '—', drv = '—', cost = '—', util = '—';
+  if (result) {
+    if (typeof result.totalVehicles === 'number') veh = String(result.totalVehicles);
+    else if (Array.isArray(result.fleet)) veh = String(result.fleet.reduce((s, f) => s + (f.count || 0), 0));
+    if (typeof result.totalDrivers === 'number') drv = String(result.totalDrivers);
+    if (typeof result.totalAnnualCost === 'number') {
+      const tc = result.totalAnnualCost;
+      cost = tc >= 1e6 ? '$' + (tc / 1e6).toFixed(2) + 'M' :
+             tc >= 1e3 ? '$' + (tc / 1e3).toFixed(0) + 'K' :
+             '$' + tc.toFixed(0);
+    } else if (typeof result.totalCost === 'number') {
+      const tc = result.totalCost;
+      cost = tc >= 1e6 ? '$' + (tc / 1e6).toFixed(2) + 'M' :
+             tc >= 1e3 ? '$' + (tc / 1e3).toFixed(0) + 'K' :
+             '$' + tc.toFixed(0);
+    }
+    if (typeof result.utilization === 'number') {
+      util = (result.utilization * (result.utilization > 1 ? 1 : 100)).toFixed(0) + '%';
+    } else if (typeof result.avgUtilizationPct === 'number') {
+      util = result.avgUtilizationPct.toFixed(0) + '%';
+    }
+  }
+  items.push({ label: 'Vehicles', value: veh, hint: 'Total fleet vehicle count from the most recent run.' });
+  items.push({ label: 'Drivers', value: drv, hint: 'Required drivers (accounting for team-driving mode).' });
+  items.push({ label: 'Total Cost', value: cost, hint: 'Annual fleet cost (vehicles + drivers + ops).' });
+  items.push({ label: 'Utilization', value: util, hint: 'Average fleet utilization across the run.' });
+  return items;
+}
+
+function _refreshFleetKpis() {
+  if (!rootEl) return;
+  refreshKpiStrip(rootEl, _computeFleetKpis());
 }
 
 // 2026-04-27 EVE2 (FLE-SCOPE-1): stepper status driven by current state.
@@ -271,17 +375,9 @@ function fleetPhaseStatus() {
 }
 
 function renderFleetStepper() {
-  const el = rootEl?.querySelector('#fm-process-flow');
-  if (!el) return;
-  const s = fleetPhaseStatus();
-  el.innerHTML = renderPhaseStepper({
-    phases: [
-      { key: 'inputs',     num: 1, label: 'Inputs',     sub: 'Lane mix',                       status: s.inputs },
-      { key: 'parameters', num: 2, label: 'Parameters', sub: 'Vehicles, costs, rate deck',     status: s.parameters },
-      { key: 'run',        num: 3, label: 'Run',        sub: 'Cost, compare, sensitivity, map', status: s.run },
-    ],
-    activePhase: activePhase,
-  });
+  // CM Chrome v3 ripple — in-canvas phase stepper dropped. Stub kept so
+  // existing call sites don't crash.
+  return;
 }
 
 // 2026-04-27 EVE2 (FLE-SCOPE-8): HOS feasibility check that runs upstream
@@ -316,40 +412,86 @@ function renderHosFeasibilityChip() {
 
 function bindShellEvents() {
   if (!rootEl) return;
+  rootEl.__tcBound = false;
 
-  bindPhaseStepper(rootEl.querySelector('#fm-process-flow'), (phase) => {
-    activePhase = /** @type {any} */ (phase);
-    renderContent();
-  });
-
-  rootEl.addEventListener('click', (e) => {
-    const psub = /** @type {HTMLElement} */ (e.target).closest('[data-fm-paramssub]');
-    if (psub) {
-      paramsSubTab = /** @type {any} */ (psub.getAttribute('data-fm-paramssub'));
+  bindToolChromeEvents(rootEl, {
+    onPhase: (phase) => {
+      if (!phase || phase === activePhase) return;
+      activePhase = /** @type {any} */ (phase);
+      // Default sub-tab when entering each phase.
+      if (activePhase === 'parameters' && !paramsSubTab) paramsSubTab = 'vehicles';
+      if (activePhase === 'run' && !runSubTab) runSubTab = 'cost';
+      rootEl.innerHTML = renderShell();
+      bindShellEvents();
       renderContent();
-      return;
-    }
-    const rsub = /** @type {HTMLElement} */ (e.target).closest('[data-fm-runsub]');
-    if (rsub) {
-      runSubTab = /** @type {any} */ (rsub.getAttribute('data-fm-runsub'));
+      _refreshFleetKpis();
+    },
+    onSection: (key) => {
+      if (!key) return;
+      const sec = FLEET_SECTIONS.find(s => s.key === key);
+      if (!sec) return;
+      if (sec.group === 'parameters') {
+        activePhase = 'parameters';
+        paramsSubTab = /** @type {any} */ (key);
+      } else if (sec.group === 'run') {
+        activePhase = 'run';
+        runSubTab = /** @type {any} */ (key);
+      }
+      rootEl.innerHTML = renderShell();
+      bindShellEvents();
       renderContent();
-      return;
-    }
+      _refreshFleetKpis();
+    },
+    onBack: async () => {
+      const state = runState.state(runStateInputs());
+      if (state === 'dirty' && result && !confirm('You have unsaved changes since the last calculate. Leave anyway?')) return;
+      await renderLanding();
+    },
+    onAction: (id) => {
+      if (id === 'fleet-save') return handleSaveFleet();
+      if (id === 'fleet-run') {
+        runFleetAnalysis();
+        return;
+      }
+    },
+    onPrimaryShortcut: () => {
+      runFleetAnalysis();
+    },
   });
+}
 
-  const runBtn = rootEl.querySelector('[data-primary-action="fleet-run"]');
-  runBtn?.addEventListener('click', () => {
+/** Run the fleet analyzer + refresh chrome/KPIs/content after the new result. */
+function runFleetAnalysis() {
+  try {
     const deckMap = carrierRateDeck.length ? calc.indexCarrierDeck(carrierRateDeck) : undefined;
     result = calc.analyzeFleet(lanes, vehicles, config, deckMap);
     activePhase = 'run';
-    runSubTab = 'cost';
+    if (!runSubTab) runSubTab = 'cost';
     runState.markClean(runStateInputs());
-    renderContent();
     updateRunButtonState();
-    flashRunButton(runBtn);
-  });
+    rootEl.innerHTML = renderShell();
+    bindShellEvents();
+    renderContent();
+    _refreshFleetKpis();
+    flashPrimaryAction(rootEl);
+  } catch (err) {
+    console.error('[Fleet] Run failed:', err);
+    if (typeof showToast === 'function') showToast('Run failed: ' + (err.message || err), 'error');
+  }
+}
 
-  bindPrimaryActionShortcut(rootEl, 'fleet-run');
+/** Save scenario via the chrome's onAction handler. */
+async function handleSaveFleet() {
+  try {
+    const payload = { id: activeScenarioId || undefined, lanes, vehicles, config, result };
+    const saved = await api.saveScenario(payload);
+    activeScenarioId = saved?.id || activeScenarioId;
+    if (typeof showToast === 'function') showToast('Saved.', 'success');
+    refreshToolChrome(rootEl, _buildFleetChromeOpts());
+  } catch (err) {
+    console.error('[Fleet] Save failed:', err);
+    if (typeof showToast === 'function') showToast('Save failed: ' + (err.message || err), 'error');
+  }
 }
 
 function renderContent() {
@@ -368,16 +510,7 @@ function renderContent() {
 }
 
 function renderParametersPhase(el) {
-  const subTabs = [
-    { key: 'vehicles',  label: '🚛 Vehicles' },
-    { key: 'operating', label: '💰 Operating Costs' },
-    { key: 'ratedeck',  label: '📋 Rate Deck' },
-  ];
-  el.innerHTML = `
-    ${renderSubTabStrip(subTabs, paramsSubTab, 'fm-paramssub')}
-    <div style="margin-bottom:18px;"></div>
-    <div id="fm-params-inner"></div>
-  `;
+  el.innerHTML = '<div id="fm-params-inner"></div>';
   const inner = el.querySelector('#fm-params-inner');
   if      (paramsSubTab === 'operating') renderOperatingSubTab(inner);
   else if (paramsSubTab === 'ratedeck')  renderRateDeck(inner);
@@ -393,18 +526,7 @@ function renderRunPhase(el) {
     `;
     return;
   }
-  const subTabs = [
-    { key: 'cost',         label: '💵 Cost' },
-    { key: 'comparison',   label: '⚖ Comparison' },
-    { key: 'sensitivity',  label: '📈 Sensitivity' },
-    { key: 'map',          label: '🗺 Route Map' },
-    { key: 'feasibility',  label: '⏱ Feasibility' },
-  ];
-  el.innerHTML = `
-    ${renderSubTabStrip(subTabs, runSubTab, 'fm-runsub')}
-    <div style="margin-bottom:18px;"></div>
-    <div id="fm-run-inner"></div>
-  `;
+    el.innerHTML = '<div id="fm-run-inner"></div>';
   const inner = el.querySelector('#fm-run-inner');
   if      (runSubTab === 'comparison')  renderComparisonSubTab(inner);
   else if (runSubTab === 'sensitivity') renderSensitivitySubTab(inner);
