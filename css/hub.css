@@ -3050,13 +3050,18 @@ textarea.hub-input {
   min-width: 200px;
 }
 
-/* ---- Narrow-form primitives (Setup / Facility / Shifts / Financial / Startup / OrderProfile) ---- */
+/* ---- Narrow-form primitives (Setup / Facility / Shifts / Financial / Startup / OrderProfile)
+   ---- 2026-04-29 layout pass: was capped at max-width 720px (legacy chrome
+   constraint). New chrome reclaimed ~12% horizontal — switching to
+   auto-fit so columns flow with viewport: 4-col on wide screens, 3-col
+   on standard laptops, 2-col on small windows, 1-col on phones. ---- */
 .cm-narrow-form {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 14px 18px;
-  max-width: 720px;
 }
+/* Tools that pass an explicit grid-template-columns inline (e.g. repeat(3, ..)
+   or repeat(4, ..)) override the auto-fit default — kept working unchanged. */
 @media (max-width: 640px) {
   .cm-narrow-form { grid-template-columns: 1fr; }
 }
@@ -3067,11 +3072,11 @@ textarea.hub-input {
   box-sizing: border-box;
 }
 
-/* ---- Financial Assumptions sub-cards (CM-ASM-1, 2026-04-26) ---- */
+/* ---- Financial Assumptions sub-cards (CM-ASM-1, 2026-04-26)
+   2026-04-29 layout pass: dropped max-width 1040px cap. ---- */
 .cm-fin-grid {
   display: grid;
   gap: 18px;
-  max-width: 1040px;
 }
 .cm-fin-section {
   background: #fff;
