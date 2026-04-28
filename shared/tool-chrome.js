@@ -57,7 +57,8 @@ function _sectionPillsHtml(opts) {
   const sectionsByGroup = _sectionsByGroup(groups, sections);
   const items = sectionsByGroup.get(activePhase) || [];
   if (items.length === 0) {
-    return '<span class="tc-section-pills__empty">' + _h(emptyPhaseHint || 'No sub-sections in this phase') + '</span>';
+    const hint = (typeof emptyPhaseHint === 'string') ? emptyPhaseHint : 'No sub-sections in this phase';
+    return hint ? '<span class="tc-section-pills__empty">' + _h(hint) + '</span>' : '';
   }
   return items.map(sec => {
     const c = sectionCompleteness(sec.key);

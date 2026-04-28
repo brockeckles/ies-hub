@@ -8,7 +8,7 @@
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sM';
 import { state } from '../../shared/state.js?v=20260418-sM';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton, renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
+import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260429-tc2-most';
 // Note: MOST intentionally opts out of run-state tracking. Its Quick Analysis
 // and Workflow tabs recompute inline on every render — the primary "Run"
 // button is a convenience trigger rather than a discrete compute step, so a
@@ -16,6 +16,18 @@ import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton, renderPhas
 // heavier recompute path (MOST B4 productivity factor, maybe).
 import * as calc from './calc.js?v=20260426-s2';
 import * as api from './api.js?v=20260426-s2';
+
+// ============================================================
+// CHROME v3 — phase + section structure (CM Chrome v3 ripple, step 3 redo)
+// ============================================================
+const MOST_GROUPS = [
+  { key: 'library',  label: 'Template Library',  description: 'Browse activity catalog' },
+  { key: 'editor',   label: 'Template Editor',   description: 'Author or edit templates' },
+  { key: 'analysis', label: 'Quick Analysis',    description: 'Pick templates · set volumes · compute' },
+  { key: 'workflow', label: 'Workflow Composer', description: 'Compose templates into a flow · preview' },
+];
+const MOST_SECTIONS = [];  // No sub-sections — Row 2 shows only the KPI strip.
+
 import { getMostTplName, getMostTplBaseUph, getMostTplTmuTotal, getMostElName, getMostElSequence, getMostElTmu } from './types.js?v=20260418-sM';
 
 // ============================================================
@@ -214,57 +226,38 @@ export async function mount(el) {
 
   el.innerHTML = renderShell();
 
-  // Root-level event delegation survives shell re-renders (needed so
-  // MOST-2's conditional Run button can toggle on tab change). Per the
-  // event-delegation memo.
+  // CM Chrome v3 ripple — chrome events route through bindToolChromeEvents.
+  // Content-internal click delegation (template tile cards) survives shell
+  // re-renders by binding at the el (rootEl) level.
+  bindToolChromeEvents(el, {
+    onPhase: (phase) => {
+      if (!phase || phase === activeTab) return;
+      activeTab = /** @type {any} */ (phase);
+      el.innerHTML = renderShell();
+      // Re-bind chrome events on the fresh shell. bindToolChromeEvents is
+      // idempotent (rootEl.__tcBound flag), so reset it before re-binding.
+      el.__tcBound = false;
+      bindToolChromeEvents(el, _buildMostChromeHandlers());
+      renderContent();
+      _refreshMostKpis();
+    },
+    onSection: () => {}, // MOST has no sub-sections
+    onBack: () => { window.location.hash = 'designtools'; },
+    onAction: (id) => _handleMostAction(id),
+    onPrimaryShortcut: (id) => _handleMostAction(id),
+  });
+
+  // Content-internal: click on a template tile to open it in the editor.
   el.addEventListener('click', (e) => {
     const target = /** @type {HTMLElement} */ (e.target);
     if (!target) return;
-
-    // 2026-04-28 — phase stepper replaces the #most-tabs flat-tab strip. The
-    // shared helper uses data-phase chips, so we listen for those clicks here.
-    const phaseBtn = target.closest('[data-phase]');
-    if (phaseBtn && el.contains(phaseBtn) && phaseBtn.closest('#most-process-flow')) {
-      const next = phaseBtn.getAttribute('data-phase');
-      if (next && next !== activeTab) {
-        activeTab = /** @type {any} */ (next);
-        el.innerHTML = renderShell();
-        renderContent();
-      }
-      return;
-    }
-
-    // Back to Design Tools
-    if (target.closest('[data-action="most-back"]')) {
-      window.location.hash = 'designtools';
-      return;
-    }
-
-    // Primary action — routes to whichever tab's "run" makes sense
-    const runBtn = target.closest('[data-primary-action="most-run"]');
-    if (runBtn) {
-      if (activeTab === 'analysis') {
-        const calcBtn = el.querySelector('#most-analysis-calc, [data-action="most-analyze"]');
-        if (calcBtn) /** @type {HTMLButtonElement} */ (calcBtn).click();
-      } else if (activeTab === 'workflow') {
-        const calcBtn = el.querySelector('[data-action="most-workflow-calc"]');
-        if (calcBtn) /** @type {HTMLButtonElement} */ (calcBtn).click();
-      }
-      flashRunButton(runBtn);
-      return;
-    }
-
-    // MOST-1 — Template tile clicks (root-level delegation so innerHTML
-    // swaps don't orphan per-element listeners). Also catches clicks on
-    // inner spans/divs inside the card.
     const tileCard = target.closest('.most-tpl-card[data-action="select-template"]');
     if (tileCard) {
       const id = tileCard.getAttribute('data-id');
       openTemplateInEditor(id);
-      return;
     }
   });
-  bindPrimaryActionShortcut(el, 'most-run');
+
 
   // Load ref data
   try {
@@ -292,339 +285,170 @@ export function unmount() {
 // SHELL
 // ============================================================
 
+
+/** Re-buildable handler set for MOST chrome events. */
+function _buildMostChromeHandlers() {
+  return {
+    onPhase: (phase) => {
+      if (!phase || phase === activeTab) return;
+      activeTab = /** @type {any} */ (phase);
+      if (rootEl) {
+        rootEl.innerHTML = renderShell();
+        rootEl.__tcBound = false;
+        bindToolChromeEvents(rootEl, _buildMostChromeHandlers());
+        renderContent();
+        _refreshMostKpis();
+      }
+    },
+    onSection: () => {},
+    onBack: () => { window.location.hash = 'designtools'; },
+    onAction: (id) => _handleMostAction(id),
+    onPrimaryShortcut: (id) => _handleMostAction(id),
+  };
+}
+
+/** Route a chrome action click to MOST's existing handlers. */
+function _handleMostAction(actionId) {
+  if (!rootEl) return;
+  if (actionId === 'most-save-template') {
+    const btn = rootEl.querySelector('[data-action="most-save-template"], #most-save-template');
+    if (btn) /** @type {HTMLButtonElement} */ (btn).click();
+    return;
+  }
+  if (actionId === 'most-save-scenario') {
+    const btn = rootEl.querySelector('[data-action="most-save-scenario"], #most-save-scenario');
+    if (btn) /** @type {HTMLButtonElement} */ (btn).click();
+    return;
+  }
+  if (actionId === 'most-run-analysis') {
+    const btn = rootEl.querySelector('#most-analysis-calc, [data-action="most-analyze"]');
+    if (btn) /** @type {HTMLButtonElement} */ (btn).click();
+    flashPrimaryAction(rootEl);
+    return;
+  }
+  if (actionId === 'most-run-workflow') {
+    const btn = rootEl.querySelector('[data-action="most-workflow-calc"]');
+    if (btn) /** @type {HTMLButtonElement} */ (btn).click();
+    flashPrimaryAction(rootEl);
+    return;
+  }
+}
+
 function renderMostPhaseStepper() {
-  const el = rootEl?.querySelector('#most-process-flow');
-  if (!el) return;
-  el.innerHTML = renderPhaseStepper({
-    phases: [
-      { key: 'library',  num: 1, label: 'Template Library',  sub: 'Browse activity catalog',                  status: activeTab === 'library'  ? 'active' : 'pending' },
-      { key: 'editor',   num: 2, label: 'Template Editor',   sub: 'Author or edit templates',                 status: activeTab === 'editor'   ? 'active' : 'pending' },
-      { key: 'analysis', num: 3, label: 'Quick Analysis',    sub: 'Pick templates · set volumes · compute',   status: activeTab === 'analysis' ? 'active' : 'pending' },
-      { key: 'workflow', num: 4, label: 'Workflow Composer', sub: 'Compose templates into a flow · preview',  status: activeTab === 'workflow' ? 'active' : 'pending' },
-    ],
-    activePhase: activeTab,
-  });
+  // CM Chrome v3 ripple — in-canvas phase stepper dropped. Stub kept so
+  // existing call sites don't crash.
+  return;
 }
 
 function renderShell() {
-  const tabs = [
-    { key: 'library', label: 'Template Library' },
-    { key: 'editor', label: 'Template Editor' },
-    { key: 'analysis', label: 'Quick Analysis' },
-    { key: 'workflow', label: 'Workflow Composer · Preview', title: 'Preview — composes templates into a workflow; volume rebalancing + bottleneck chart still in development' },
-  ];
-  const chips = [
-    { label: `${refData.templates.length} templates`, kind: 'default' },
-    savedScenarios.length
-      ? { label: `${savedScenarios.length} saved analyses`, kind: 'linked' }
-      : null,
-  ].filter(Boolean);
-  // MOST-2 — Run Analysis is only meaningful on Quick Analysis + Workflow
-  // tabs (where the calc fires). On Library + Editor it just jumps to
-  // Analysis, which confuses users into thinking they have to click it
-  // before picking a template. Hide it there.
-  const showRunBtn = activeTab === 'analysis' || activeTab === 'workflow';
-  const primaryActionLabel = activeTab === 'workflow' ? 'Run Workflow' : 'Run Analysis';
-  // Per-tab page descriptions for the navy banner. Mirrors the CM
-  // page-name + description lift pattern (2026-04-27 morning rollout).
-  const TAB_DESC = {
-    library:  'Browse the BY-WMS-tuned activity library — filter by process area or labor category, click any card to see element-by-element TMU breakdown.',
-    editor:   'Author or edit a template. Add elements with TMU values, set base UPH, and save to the shared library so the rest of the team can use it.',
-    analysis: 'Build a labor analysis: pick templates, enter daily volumes, set PF&D + shift hours, and we compute FTEs, headcount, hours, and annual cost.',
-    workflow: 'Compose multiple templates into a flow with handoffs and bottleneck chart. Use to model end-to-end pick → pack → ship throughput. <strong>Preview</strong>.',
+  // CM Chrome v3 ripple — chrome HTML+CSS lives in shared/tool-chrome.js.
+  return renderToolChrome(_buildMostChromeOpts());
+}
+
+/** Build chrome opts from current MOST state. activeTab IS the phase. */
+function _buildMostChromeOpts() {
+  // Conditional actions per phase. analysis + workflow get Run buttons.
+  const actions = [];
+  if (activeTab === 'editor' && editorTemplate) {
+    actions.push({
+      id: 'most-save-template',
+      label: '\u{1F4BE} Save Template',
+      title: 'Save this template back to the library',
+      primary: true,
+    });
+  }
+  if (activeTab === 'analysis') {
+    actions.push({
+      id: 'most-save-scenario',
+      label: '\u{1F4BE} Save',
+      title: 'Save this analysis scenario',
+    });
+    actions.push({
+      id: 'most-run-analysis',
+      label: 'Run Analysis',
+      icon: '▶',
+      title: 'Compute labor standards (Cmd/Ctrl+Enter)',
+      kind: 'primary',
+    });
+  }
+  if (activeTab === 'workflow') {
+    actions.push({
+      id: 'most-save-scenario',
+      label: '\u{1F4BE} Save',
+      title: 'Save this workflow scenario',
+    });
+    actions.push({
+      id: 'most-run-workflow',
+      label: 'Run Workflow',
+      icon: '▶',
+      title: 'Compute workflow (Cmd/Ctrl+Enter)',
+      kind: 'primary',
+    });
+  }
+
+  return {
+    toolKey: 'most',
+    groups: MOST_GROUPS,
+    sections: MOST_SECTIONS,
+    activePhase: activeTab,
+    activeSection: null,
+    sectionCompleteness: () => 'empty',
+    saveState: null, // MOST doesn't track tri-state; saves are explicit per-action.
+    actions,
+    showSidebar: false,
+    showSidebarToggle: false,
+    sidebarHeader: 'All Sections',
+    sidebarBody: '',
+    bodyHtml: '<div id="most-content" style="overflow-y:auto;padding:24px;height:100%;"></div>',
+    backTitle: 'Back to Design Tools',
+    emptyPhaseHint: '', // Render nothing in Row 2 left — KPI strip stands on its own.
   };
-  const TAB_LABEL = { library: 'Template Library', editor: 'Template Editor', analysis: 'Quick Analysis', workflow: 'Workflow Composer' };
-  return `
-    <div class="hub-content-inner" style="padding:0;display:flex;flex-direction:column;height: calc(100vh - 48px);">
-      ${renderToolHeader({
-        toolName: 'MOST Labor Standards',
-        toolKey: 'most',
-        backAction: 'most-back',
-        backLabel: '← Design Tools',
-        statusChips: chips,
-        description: TAB_DESC[activeTab] || TAB_DESC.library,
-        subtitle: TAB_LABEL[activeTab] || '',
-        primaryAction: showRunBtn
-          ? { label: primaryActionLabel, action: 'most-run', icon: '▶', title: 'Compute labor standards (Cmd/Ctrl+Enter)' }
-          : null,
-      })}
-      <!-- 2026-04-28 — phase-stepper port. Replaces flat tab strip. The 4 modes
-           (Library, Editor, Analysis, Workflow) are not strictly sequential — 
-           Library + Editor manage reference data; Analysis + Workflow are
-           solvers — but the shared stepper visually unifies MOST with the
-           rest of the design-tools suite. Status: current = active, others
-           = pending (no 'complete' state for nav-as-stepper). -->
-      <div id="most-process-flow"></div>
-      <!-- Content -->
-      <div class="hub-analyzer-content" id="most-content" style="flex:1;padding: 24px; overflow-y: auto;">
-        <!-- Tab content renders here -->
-      </div>
-    </div>
+}
 
-    <style>
-      .most-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
-      .most-tpl-card {
-        border: 1px solid var(--ies-gray-200);
-        border-radius: 8px;
-        padding: 16px;
-        cursor: pointer;
-        transition: all 0.15s ease;
-        background: #fff;
-      }
-      .most-tpl-card:hover { border-color: var(--ies-blue); box-shadow: 0 2px 8px rgba(0,71,171,0.1); }
-      .most-tpl-card.selected { border-color: var(--ies-blue); background: rgba(0,71,171,0.03); }
-      .most-tpl-name { font-size: 14px; font-weight: 700; color: var(--ies-navy); margin-bottom: 4px; }
-      .most-tpl-meta { font-size: 12px; color: var(--ies-gray-500); display: flex; gap: 12px; margin-bottom: 8px; }
-      .most-tpl-stats { display: flex; gap: 16px; font-size: 13px; }
-      .most-tpl-stat { font-weight: 700; }
-      .most-tpl-stat span { font-weight: 400; color: var(--ies-gray-500); font-size: 11px; display: block; }
+/** Compute KPI strip values for MOST. */
+function _computeMostKpis() {
+  const items = [];
+  if (activeTab === 'library') {
+    items.push({
+      label: 'Templates',
+      value: refData.templates ? String(refData.templates.length) : '—',
+      hint: 'Total templates in the library',
+    });
+    items.push({
+      label: 'Saved Analyses',
+      value: savedScenarios ? String(savedScenarios.length) : '—',
+      hint: 'Saved Quick Analysis scenarios',
+    });
+  } else if (activeTab === 'editor') {
+    if (editorTemplate) {
+      items.push({
+        label: 'Elements',
+        value: editorElements ? String(editorElements.length) : '—',
+        hint: 'Elements in the open template',
+      });
+      items.push({
+        label: 'Process Area',
+        value: editorTemplate.process_area || '—',
+        hint: 'Process-area tag for filtering',
+      });
+    } else {
+      items.push({ label: 'Editing', value: '—', hint: 'Open a template from the Library to edit' });
+    }
+  } else if (activeTab === 'analysis' || activeTab === 'workflow') {
+    const lines = (analysis && Array.isArray(analysis.lines)) ? analysis.lines : [];
+    const totalActs = lines.length;
+    const totalTmu = lines.reduce((sum, l) => sum + (l.estTmu || 0), 0);
+    const totalFte = (analysis && typeof analysis.totalFte === 'number') ? analysis.totalFte : 0;
+    items.push({ label: 'Activities', value: String(totalActs), hint: 'Lines in the analysis' });
+    items.push({ label: 'TMU Total', value: totalTmu > 0 ? totalTmu.toFixed(0) : '—', hint: 'Total time-measurement-units' });
+    items.push({ label: 'Std Hours', value: totalFte > 0 ? (totalFte * 8).toFixed(1) : '—', hint: 'Computed standard hours per day (FTE × 8)' });
+  }
+  return items;
+}
 
-      .most-cat-badge {
-        display: inline-block;
-        padding: 2px 8px;
-        border-radius: 10px;
-        font-size: 11px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.3px;
-      }
-      .most-cat-manual { background: rgba(0,71,171,0.1); color: var(--ies-blue); }
-      .most-cat-mhe { background: rgba(32,201,151,0.1); color: #0d9668; }
-      .most-cat-hybrid { background: rgba(255,149,0,0.1); color: #cc7700; }
-
-      /* Q3: visual cue when an analysis line is variable — thin
-         orange leader on the left + subtle wash so the row draws the
-         eye without overwhelming the otherwise-dense table. */
-      .most-row-variable td {
-        background: rgba(255, 149, 0, 0.04);
-      }
-      .most-row-variable td:first-child {
-        box-shadow: inset 3px 0 0 var(--ies-orange, #d97706);
-      }
-
-      .most-detail-panel {
-        border: 1px solid var(--ies-gray-200);
-        border-radius: 8px;
-        padding: 20px;
-        background: #fff;
-        margin-top: 16px;
-      }
-
-      .most-filter-bar {
-        display: flex;
-        gap: 12px;
-        align-items: center;
-        margin-bottom: 20px;
-        flex-wrap: wrap;
-      }
-      .most-filter-bar input, .most-filter-bar select {
-        padding: 8px 12px;
-        border: 1px solid var(--ies-gray-200);
-        border-radius: 10px;
-        font-family: Montserrat, sans-serif;
-        font-size: 13px;
-        font-weight: 600;
-      }
-      .most-filter-bar input:focus, .most-filter-bar select:focus {
-        outline: none;
-        border-color: var(--ies-blue);
-        box-shadow: 0 0 0 2px rgba(0,71,171,0.1);
-      }
-
-      .most-workflow-step {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 12px 16px;
-        border: 1px solid var(--ies-gray-200);
-        border-radius: 8px;
-        background: #fff;
-        margin-bottom: 8px;
-      }
-      .most-workflow-step.bottleneck { border-color: var(--ies-red); background: rgba(220,53,69,0.03); }
-      .most-workflow-arrow {
-        text-align: center;
-        color: var(--ies-gray-300);
-        font-size: 18px;
-        margin-bottom: 8px;
-      }
-
-      /* .most-push-btn removed 2026-04-18 (X2) — buttons now use shared .hub-btn + .hub-btn-primary */
-
-      /* =========================================================
-         MOST-3 — Template Editor refresh (2026-04-19)
-         Replaces dated cm-edit-btn / cm-delete-btn with a clean
-         icon+label action pattern. Tokens all reference the design
-         system standards memo.
-         ========================================================= */
-
-      .most-editor-toolbar {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        gap: 24px;
-        margin-bottom: 24px;
-        padding-bottom: 20px;
-        border-bottom: 1px solid var(--ies-gray-200);
-      }
-      .most-editor-toolbar-actions {
-        display: flex;
-        gap: 8px;
-        align-items: center;
-        flex-shrink: 0;
-      }
-      .most-editor-title {
-        font-size: 20px;
-        font-weight: 800;
-        color: var(--ies-navy);
-        margin: 0;
-        letter-spacing: -0.2px;
-      }
-      .most-editor-subtitle {
-        font-size: 13px;
-        color: var(--ies-gray-500);
-        margin: 4px 0 0 0;
-        font-weight: 500;
-      }
-      .most-editor-breadcrumb {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 12px;
-        color: var(--ies-gray-500);
-        margin-bottom: 6px;
-        font-weight: 600;
-      }
-      .most-breadcrumb-link {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        background: none;
-        border: none;
-        padding: 2px 6px;
-        margin-left: -6px;
-        color: var(--ies-gray-500);
-        font-size: 12px;
-        font-weight: 600;
-        font-family: Montserrat, sans-serif;
-        cursor: pointer;
-        border-radius: 4px;
-        transition: all 0.15s ease;
-      }
-      .most-breadcrumb-link:hover {
-        background: var(--ies-gray-100);
-        color: var(--ies-blue);
-      }
-
-      .most-table-card {
-        background: #fff;
-        border: 1px solid var(--ies-gray-200);
-        border-radius: 10px;
-        overflow: hidden;
-        box-shadow: var(--shadow-sm, 0 1px 2px rgba(0,0,0,0.05));
-      }
-      .most-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 13px;
-      }
-      .most-table thead th {
-        background: var(--ies-gray-50);
-        color: var(--ies-gray-500);
-        font-size: 11px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        padding: 12px 16px;
-        text-align: left;
-        border-bottom: 1px solid var(--ies-gray-200);
-      }
-      .most-table tbody td {
-        padding: 12px 16px;
-        border-bottom: 1px solid var(--ies-gray-100);
-        color: var(--ies-gray-600);
-        font-weight: 500;
-      }
-      .most-table tbody tr:last-child td { border-bottom: none; }
-      .most-row-hover:hover { background: #f8fafc; }
-      .most-table td.cm-num { text-align: right; font-variant-numeric: tabular-nums; }
-
-      /* Row actions — icon buttons with hover tint */
-      .most-row-actions {
-        display: inline-flex;
-        gap: 4px;
-        align-items: center;
-      }
-      .most-icon-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 5px;
-        padding: 5px 10px;
-        background: transparent;
-        border: 1px solid transparent;
-        border-radius: 10px;
-        color: var(--ies-gray-500);
-        font-family: Montserrat, sans-serif;
-        font-size: 11px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.12s ease;
-        white-space: nowrap;
-      }
-      .most-icon-btn:hover {
-        background: rgba(0, 71, 171, 0.08);
-        border-color: rgba(0, 71, 171, 0.15);
-        color: var(--ies-blue);
-      }
-      .most-icon-btn:active { transform: translateY(0.5px); }
-      .most-icon-btn svg { display: block; opacity: 0.85; }
-      .most-icon-btn-danger:hover {
-        background: rgba(220, 53, 69, 0.08);
-        border-color: rgba(220, 53, 69, 0.18);
-        color: var(--ies-red);
-      }
-
-      /* MOS-F2: Drag-reorder visuals for editor element rows */
-      .most-elem-row[draggable="true"] { transition: background 0.12s ease, opacity 0.12s ease; }
-      .most-elem-row--dragging { opacity: 0.45; background: var(--ies-gray-50); }
-      .most-elem-row--drop-target { box-shadow: inset 0 -3px 0 0 var(--ies-blue, #0047ab); }
-      .most-elem-row--variable { background: rgba(249, 115, 22, 0.04); }
-
-            /* Empty state for the editor list */
-      .most-empty-state {
-        text-align: center;
-        padding: 60px 20px;
-        background: var(--ies-gray-50);
-        border: 1px dashed var(--ies-gray-200);
-        border-radius: 10px;
-      }
-      .most-empty-icon {
-        color: var(--ies-gray-300);
-        margin: 0 auto 16px;
-        display: inline-block;
-      }
-      .most-empty-title {
-        font-size: 14px;
-        font-weight: 700;
-        color: var(--ies-navy);
-        margin-bottom: 4px;
-      }
-      .most-empty-body {
-        font-size: 13px;
-        color: var(--ies-gray-500);
-      }
-
-      /* Sticky footer action bar for the edit form */
-      .most-editor-footer {
-        display: flex;
-        gap: 8px;
-        justify-content: flex-end;
-        margin-top: 24px;
-        padding-top: 20px;
-        border-top: 1px solid var(--ies-gray-200);
-      }
-    </style>
-  `;
+function _refreshMostKpis() {
+  if (!rootEl) return;
+  refreshKpiStrip(rootEl, _computeMostKpis());
 }
 
 // ============================================================
@@ -643,6 +467,7 @@ function renderContent() {
     container.innerHTML = render();
     bindContentEvents(container);
   }
+  _refreshMostKpis();
 }
 
 /**
