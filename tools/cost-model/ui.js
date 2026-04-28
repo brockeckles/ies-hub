@@ -17,7 +17,7 @@ import * as scenarios from './calc.scenarios.js?v=20260421-wA';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
 import * as shiftPlannerCalc from './shift-planner.js?v=20260427-pm3-s2';
-import * as shiftPlannerUi from './shift-planner-ui.js?v=20260427-pm3-s2';
+import * as shiftPlannerUi from './shift-planner-ui.js?v=20260428-walkthru1';
 // 2026-04-28 — internal phase stepper for Implementation Timeline section.
 import { renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
@@ -11883,9 +11883,9 @@ function renderImplPhaseStepperContent() {
                              : (activeImplPhase === 'forecast' ? 'active' : 'pending');
   return renderPhaseStepper({
     phases: [
-      { key: 'plan',     num: 1, label: 'Plan',     sub: 'Timeline + phase Gantt',           status: planStatus },
-      { key: 'ramp',     num: 2, label: 'Ramp',     sub: 'Volume + headcount curves',        status: rampStatus },
-      { key: 'forecast', num: 3, label: 'Forecast', sub: 'Ramp burn estimate (read-only)',   status: fcStatus },
+      { key: 'plan',     num: 1, label: 'Plan',     sub: 'Phases & Gantt',  status: planStatus },
+      { key: 'ramp',     num: 2, label: 'Ramp',     sub: 'Ramp curves',     status: rampStatus },
+      { key: 'forecast', num: 3, label: 'Forecast', sub: 'Burn estimate',   status: fcStatus },
     ],
     activePhase: activeImplPhase,
   });

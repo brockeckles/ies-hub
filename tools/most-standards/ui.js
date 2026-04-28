@@ -1159,7 +1159,7 @@ function renderAnalysis() {
       <div class="hub-card" style="padding:24px;text-align:center;background:var(--ies-gray-50);border:1px dashed var(--ies-gray-300);margin-bottom:20px;">
         <div style="font-size:14px;font-weight:700;color:var(--ies-navy);margin-bottom:8px;">No activities in this analysis yet</div>
         <div style="font-size:12px;color:var(--ies-gray-500);line-height:1.5;max-width:520px;margin:0 auto;">
-          Pick a template from the library, or add a manual line below. For each activity set the daily volume — the analyzer derives FTEs needed, labor cost, and per-unit rate using PFD + Productivity from the panel above.
+          Pick a template from the library, or add a manual line below. For each activity set the daily volume — the analyzer derives FTEs needed, labor cost, and per-unit rate using PFD + Productivity from the panel below.
         </div>
       </div>
     ` : ''}

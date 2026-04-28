@@ -668,6 +668,14 @@ function renderDowPatternsCard(alloc, shiftsCfg, dowVolumeMultipliers, dowPremiu
       </div>
 
       <div class="sp-dow-card__sub">Labor Premium % by DOW <span style="text-transform:none;font-weight:400;color:var(--ies-gray-400);">(SP-3 — typical Sat 50% + Sun 100% for weekend OT)</span></div>
+      <!-- 2026-04-28 — disambiguate from 2nd/3rd shift differentials. The DOW grid
+           is for weekend OT (Sat/Sun); shift-of-day differentials live one section
+           over on Labor Factors → Wage Factors. The walkthrough surfaced this gap
+           ("how do we enter the shift premium" → users assumed Shift Planner). -->
+      <div class="sp-dow-help" style="margin:-2px 0 8px;color:var(--ies-gray-600);">
+        <strong>Note:</strong> this is a <em>day-of-week</em> premium (weekend OT). For <strong>2nd/3rd shift differentials</strong>, edit on Labor Factors → Wage Factors.
+        <button type="button" class="hub-btn hub-btn-secondary" style="font-size:11px;padding:3px 9px;margin-left:6px;" data-action="goto-section" data-section="shifts" title="Jump to Labor Factors → Wage Factors to set 2nd / 3rd shift premium %">Edit in Labor Factors →</button>
+      </div>
       <div class="sp-dow-grid">${premCells}</div>
       <div class="sp-dow-actions">
         <button type="button" data-action="sp-reset-dow-premium" title="Zero out all DOW premiums">Reset to 0</button>
