@@ -3889,27 +3889,13 @@ textarea.hub-input {
 .hub-nav-group__badge--complete { background: var(--ies-green, #047857); }
 .hub-nav-group__badge--partial  { background: var(--ies-blue); }
 .hub-nav-group__badge--empty    { background: var(--ies-gray-300); }
-.hub-nav-group__title {
-  display: flex;
-  flex-direction: column;
+.hub-nav-group__label {
   flex: 1;
   min-width: 0;
-  line-height: 1.2;
-}
-.hub-nav-group__label {
   font-size: 13px;
   font-weight: 700;
   color: var(--ies-gray-700);
   letter-spacing: 0.1px;
-}
-.hub-nav-group__desc {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--ies-gray-500);
-  margin-top: 1px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .hub-nav-group__count {
   font-size: 10px;
@@ -3934,6 +3920,5 @@ textarea.hub-input {
   padding: 2px 0 4px 12px;
 }
 /* Collapse the description on narrow / collapsed sidebars. */
-.hub-sidebar.collapsed .hub-nav-group__desc,
 .hub-sidebar.collapsed .hub-nav-group__count { display: none; }
 
