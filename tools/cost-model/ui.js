@@ -12480,6 +12480,72 @@ function _bindOperationalFlowEvents(container) {
     });
   });
 
+  // v0.3a.1 — Drop a card onto another card to connect them on the same
+  // path (sets path_tag on both). Distinct from drop-on-lane-background
+  // (which reassigns lane). Card handlers stopPropagation so the lane
+  // drop doesn't also fire when the user drops on a card inside a lane.
+  container.querySelectorAll('.ofp-node').forEach(node => {
+    node.addEventListener('dragover', (e) => {
+      if (!dragInfo) return;
+      const myKind = node.dataset.ofpKind;
+      const myIdx = Number(node.dataset.ofpIdx);
+      // Don't highlight the dragging card as a target for itself.
+      if (dragInfo.kind === myKind && dragInfo.idx === myIdx) return;
+      e.preventDefault();
+      e.stopPropagation();
+      try { e.dataTransfer.dropEffect = 'link'; } catch (_) {}
+      node.classList.add('ofp-node--droptarget');
+    });
+    node.addEventListener('dragleave', (e) => {
+      if (e.target === node || e.target.closest('.ofp-node') === node) {
+        node.classList.remove('ofp-node--droptarget');
+      }
+    });
+    node.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      node.classList.remove('ofp-node--droptarget');
+      if (!dragInfo) return;
+      const targetKind = node.dataset.ofpKind;
+      const targetIdx = Number(node.dataset.ofpIdx);
+      // No-op for self-drop
+      if (dragInfo.kind === targetKind && dragInfo.idx === targetIdx) {
+        dragInfo = null;
+        return;
+      }
+      const sourceArr = dragInfo.kind === 'direct' ? (model.laborLines || []) : (model.indirectLaborLines || []);
+      const targetArr = targetKind === 'direct' ? (model.laborLines || []) : (model.indirectLaborLines || []);
+      const sourceLine = sourceArr[dragInfo.idx];
+      const targetLine = targetArr[targetIdx];
+      dragInfo = null;
+      if (!sourceLine || !targetLine) return;
+      // Resolve the path tag to apply to both lines:
+      //   target has tag         → both adopt target's tag (target wins,
+      //                            mirrors how 'drop into folder X'
+      //                            inherits X's properties)
+      //   only source has tag    → target adopts source's tag
+      //   both untagged          → prompt for a new path name
+      const targetTag = (targetLine.path_tag || '').trim();
+      const sourceTag = (sourceLine.path_tag || '').trim();
+      let resolvedTag;
+      if (targetTag) {
+        resolvedTag = targetTag;
+      } else if (sourceTag) {
+        resolvedTag = sourceTag;
+      } else {
+        const newTag = prompt('Name the path these activities share (e.g. full-pallet, loose-case):', '');
+        if (!newTag || !newTag.trim()) return;
+        resolvedTag = newTag.trim();
+      }
+      sourceLine.path_tag = resolvedTag;
+      targetLine.path_tag = resolvedTag;
+      isDirty = true;
+      if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+      renderSection();
+      try { showToast(`Connected on path "${resolvedTag}".`, 'success'); } catch (_) {}
+    });
+  });
+
   // v0.2.2 — Modal close paths: × button, Esc key, click on backdrop.
   const modal = container.querySelector('#ofp-detail-modal');
   const panel = container.querySelector('#ofp-detail-panel');
@@ -12655,11 +12721,11 @@ function _openOfpDetail(container, line, kind, idx) {
       </div>
       <div class="ofp-detail-panel__field">
         <label class="ofp-detail-panel__field-label">Flow Path</label>
-        <input class="hub-input ofp-edit-input" type="text" list="ofp-path-tags-${idx}" value="${escapeAttr(line.path_tag || '')}"
-          data-array="${arrayPath}" data-idx="${idx}" data-field="path_tag" placeholder="e.g. full-pallet, loose-case" />
-        <datalist id="ofp-path-tags-${idx}">
-          ${_ofpAllPathTags().map(t => `<option value="${escapeAttr(t)}"></option>`).join('')}
-        </datalist>
+        <select class="hub-input ofp-edit-input" data-array="${arrayPath}" data-idx="${idx}" data-field="path_tag">
+          <option value="" ${!line.path_tag ? 'selected' : ''}>(none)</option>
+          ${_ofpAllPathTags().map(t => `<option value="${escapeAttr(t)}" ${line.path_tag === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
+          <option value="__OFP_NEW_PATH__">+ New path…</option>
+        </select>
       </div>
       <div class="ofp-detail-panel__field">
         <label class="ofp-detail-panel__field-label">UoM In</label>
@@ -12754,6 +12820,19 @@ function _bindOfpPanelInputs(panel, container) {
       if (field === 'flowLane' && val === '') val = undefined;
       // Empty string for mhe_type / it_device = clear (treat 'none').
       if ((field === 'mhe_type' || field === 'it_device') && val === '') val = undefined;
+      // v0.3a.1 — Flow Path "+ New path…" sentinel triggers a prompt for
+      // the new tag name. If user cancels or types blank, restore the
+      // previous selection without persisting the change.
+      if (field === 'path_tag' && val === '__OFP_NEW_PATH__') {
+        const newTag = prompt('Name this path (e.g. full-pallet, loose-case):', '');
+        if (!newTag || !newTag.trim()) {
+          input.value = arr[idx].path_tag || '';
+          return;
+        }
+        val = newTag.trim();
+      }
+      // Empty path_tag = clear (so the line drops back to "(untagged)").
+      if (field === 'path_tag' && val === '') val = undefined;
       if (val === undefined) {
         delete arr[idx][field];
       } else {
@@ -12971,6 +13050,24 @@ function _ofpStyles() {
       .ofp-node[draggable="true"] { cursor: grab; }
       .ofp-node[draggable="true"]:active { cursor: grabbing; }
       .ofp-node--dragging { opacity: 0.35; transform: scale(0.96); box-shadow: 0 4px 12px rgba(0,71,171,0.25); }
+      /* v0.3a.1 — drop a card onto another card → connect both on same path */
+      .ofp-node--droptarget {
+        outline: 2px dashed var(--ies-blue);
+        outline-offset: 2px;
+        background: rgba(0, 71, 171, 0.06);
+        z-index: 5;
+      }
+      .ofp-node--droptarget::after {
+        content: 'Same path';
+        position: absolute;
+        top: -10px; right: 6px;
+        background: var(--ies-blue); color: #fff;
+        font-size: 9px; font-weight: 700;
+        padding: 2px 6px; border-radius: 3px;
+        text-transform: uppercase; letter-spacing: 0.04em;
+        pointer-events: none;
+        box-shadow: 0 2px 6px rgba(0,71,171,0.4);
+      }
       .ofp-lane--dragover {
         outline: 3px dashed var(--ies-blue);
         outline-offset: -3px;
