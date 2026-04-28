@@ -11683,7 +11683,7 @@ function renderImplementation() {
       <div class="cm-section-header__intro" style="margin-bottom:12px;">
         <div>
           <h3 style="margin:0;font-size:14px;font-weight:700;color:var(--ies-navy);">Phase Plan</h3>
-          <div class="cm-subtle" style="font-size:12px;">Drag start week / duration in the table below to reshape. Bars below visualize the schedule.</div>
+          <div class="cm-subtle" style="font-size:12px;">Edit Start Week / Duration in the table below to reshape. Bars above visualize the schedule.</div>
         </div>
 
       </div>
