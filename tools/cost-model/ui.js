@@ -2291,7 +2291,7 @@ function renderShell() {
         <div class="cm-top-chrome__row1">
           <button class="cm-top-chrome__back hub-btn hub-btn-sm hub-btn-secondary" id="cm-back-btn" title="Back to all models">←</button>
           <nav class="cm-phase-tabs">${phaseTabsHtml}</nav>
-          <div class="cm-top-chrome__kpis" id="cm-header-kpis"></div>
+          <div class="cm-top-chrome__row1-spacer"></div>
           <div class="cm-top-chrome__actions">
             <span class="hub-status-chip dot draft" id="cm-save-state-chip" data-cm-state="draft" title="Save state">Draft</span>
             <span id="cm-save-state-when" style="font-size:10px;color:var(--ies-gray-500);"></span>
@@ -2304,6 +2304,7 @@ function renderShell() {
         </div>
         <div class="cm-top-chrome__row2">
           <nav class="cm-section-pills">${sectionPillsHtml}</nav>
+          <div class="cm-top-chrome__kpis" id="cm-header-kpis"></div>
         </div>
       </header>
 
@@ -2374,13 +2375,12 @@ function renderShell() {
       .cm-phase-tab__count--partial  { background: #f59e0b; color: #fff; }
       .cm-phase-tab__count--empty    { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.6); }
 
+      .cm-top-chrome__row1-spacer { flex: 1 1 auto; min-width: 8px; }
       .cm-top-chrome__kpis {
-        flex: 1 1 auto; min-width: 0;
-        display: flex; align-items: center; justify-content: flex-end;
-        gap: 16px;
-        font-size: 11px;
+        flex: 0 1 auto;
+        display: flex; align-items: center;
+        gap: 18px;
         color: rgba(255,255,255,0.85);
-        overflow: hidden;
       }
       .cm-top-chrome__actions {
         flex: 0 0 auto;
@@ -2400,8 +2400,9 @@ function renderShell() {
         background: rgba(0,0,0,0.16);
         padding: 6px 16px;
         min-height: 38px;
-        display: flex; align-items: center;
+        display: flex; align-items: center; gap: 16px;
       }
+      .cm-section-pills { flex: 1 1 auto; min-width: 0; }
       .cm-section-pills {
         display: flex; gap: 4px; flex-wrap: wrap;
       }
@@ -2429,19 +2430,24 @@ function renderShell() {
       .cm-section-pill__dot--empty    { background: rgba(255,255,255,0.25); }
       .cm-section-pill--active .cm-section-pill__dot--empty { background: rgba(0,0,0,0.18); }
 
-      /* Slim KPI chip strip — populated by refreshHeaderKpis() */
+      /* Slim KPI chip strip — populated by refreshHeaderKpis().
+         v3.2 — chip is a vertical stack (label above value) so the
+         strip packs tightly into the row 2 right side without crowding
+         the section pills. */
       .cm-kpi-chip {
-        display: inline-flex; align-items: baseline; gap: 4px;
+        display: inline-flex; flex-direction: column; align-items: flex-start;
+        line-height: 1.1;
         white-space: nowrap;
       }
       .cm-kpi-chip__label {
-        font-size: 10px; font-weight: 600;
+        font-size: 9px; font-weight: 600;
         color: rgba(255,255,255,0.55);
         text-transform: uppercase; letter-spacing: 0.04em;
       }
       .cm-kpi-chip__value {
         font-size: 13px; font-weight: 700;
         color: #fff;
+        margin-top: 1px;
       }
 
       /* Body — sidebar drawer + main content */
