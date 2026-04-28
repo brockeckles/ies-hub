@@ -2460,10 +2460,18 @@ function renderShell() {
         background: #fff;
         border-right: 1px solid var(--ies-gray-200);
         overflow-y: auto;
-        transition: margin-left 0.18s ease;
+        transition: width 0.18s ease, flex-basis 0.18s ease;
       }
+      /* v3.3 — collapse to 0 width + clip overflow when closed. The
+         previous margin-left:-240px approach pushed the sidebar off-
+         screen but its overflow-y scrollbar still rendered at x=0
+         (right edge of the off-screen element = left edge of viewport),
+         producing a phantom scrollbar at the screen's left edge. */
       .cm-shell-body[data-sidebar-open="false"] .cm-sidebar-drawer {
-        margin-left: -240px;
+        flex: 0 0 0;
+        width: 0;
+        overflow: hidden;
+        border-right: 0;
       }
       .cm-sidebar-drawer__header {
         display: flex; justify-content: space-between; align-items: center;
