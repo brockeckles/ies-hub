@@ -12142,37 +12142,43 @@ function renderOperationalFlow() {
       </div>
     </div>
 
-    <!-- Top row: Inbound → Storage → Outbound -->
-    <div class="cm-card" style="padding:18px 18px 22px;">
-      <div class="ofp-row ofp-row--main">
-        ${_renderOfpLane('inbound', lanes.inbound, opHrs, lc)}
-        ${arrowSvg(lanes.inbound, 'Inbound', 'Storage')}
-        ${_renderOfpLane('storage', lanes.storage, opHrs, lc)}
-        ${arrowSvg(lanes.storage, 'Storage', 'Outbound')}
-        ${_renderOfpLane('outbound', lanes.outbound, opHrs, lc)}
+    <!-- v0.2.1 — Canvas + detail rail laid out side-by-side. The rail
+         sticks at top:16px when scrolling so it stays visible alongside
+         the lanes. When no node is selected, the rail is display:none and
+         the canvas takes the full width. -->
+    <div class="ofp-layout">
+      <div class="ofp-canvas cm-card" style="padding:18px 18px 22px;">
+        <div class="ofp-row ofp-row--main">
+          ${_renderOfpLane('inbound', lanes.inbound, opHrs, lc)}
+          ${arrowSvg(lanes.inbound, 'Inbound', 'Storage')}
+          ${_renderOfpLane('storage', lanes.storage, opHrs, lc)}
+          ${arrowSvg(lanes.storage, 'Storage', 'Outbound')}
+          ${_renderOfpLane('outbound', lanes.outbound, opHrs, lc)}
+        </div>
+
+        ${lanes.returnsVas.length > 0 ? `
+          <div class="ofp-row ofp-row--secondary" style="margin-top:18px;">
+            ${_renderOfpLane('returnsVas', lanes.returnsVas, opHrs, lc, { wide: true })}
+          </div>
+        ` : ''}
+
+        ${lanes.support.length > 0 ? `
+          <div class="ofp-row ofp-row--secondary" style="margin-top:14px;">
+            ${_renderOfpLane('support', lanes.support, opHrs, lc, { wide: true })}
+          </div>
+        ` : ''}
+
+        ${lanes.unclassified.length > 0 ? `
+          <div class="ofp-row ofp-row--secondary" style="margin-top:14px;">
+            ${_renderOfpLane('unclassified', lanes.unclassified, opHrs, lc, { wide: true, warn: true })}
+          </div>
+        ` : ''}
       </div>
 
-      ${lanes.returnsVas.length > 0 ? `
-        <div class="ofp-row ofp-row--secondary" style="margin-top:18px;">
-          ${_renderOfpLane('returnsVas', lanes.returnsVas, opHrs, lc, { wide: true })}
-        </div>
-      ` : ''}
-
-      ${lanes.support.length > 0 ? `
-        <div class="ofp-row ofp-row--secondary" style="margin-top:14px;">
-          ${_renderOfpLane('support', lanes.support, opHrs, lc, { wide: true })}
-        </div>
-      ` : ''}
-
-      ${lanes.unclassified.length > 0 ? `
-        <div class="ofp-row ofp-row--secondary" style="margin-top:14px;">
-          ${_renderOfpLane('unclassified', lanes.unclassified, opHrs, lc, { wide: true, warn: true })}
-        </div>
-      ` : ''}
+      <!-- Detail panel — populated on node click. Lives in the rail
+           column; sticks while scrolling so it stays visible. -->
+      <aside id="ofp-detail-panel" class="ofp-detail-panel" style="display:none;"></aside>
     </div>
-
-    <!-- Detail panel — populated on node click -->
-    <div id="ofp-detail-panel" class="ofp-detail-panel" style="display:none;"></div>
 
     ${_ofpStyles()}
   `;
@@ -12257,16 +12263,17 @@ function _renderOfpNode(entry, laneKey, opHrs, lc) {
     }
   }
   const issueChip = issues.length > 0
-    ? `<span class="ofp-node__chip" title="${escapeAttr(issues.join(' • '))}">!</span>`
+    ? `<span class="ofp-node__chip" draggable="false" title="${escapeAttr(issues.join(' • '))}">!</span>`
     : '';
 
   return `
     <div class="ofp-node ${entry.isDirect ? 'ofp-node--direct' : 'ofp-node--indirect'}" data-ofp-line="${arrayKind}:${entry.idx}" data-ofp-kind="${arrayKind}" data-ofp-idx="${entry.idx}" draggable="true" style="border-left:3px solid ${meta.color};" title="${escapeAttr(name)} — ${fte.toFixed(1)} FTE · ${calc.formatCurrency(cost, { compact: true })}/yr">
       <div class="ofp-node__top">
+        <span class="ofp-node__grip" title="Drag to a different lane to reassign">⋮⋮</span>
         <div class="ofp-node__name">${escapeHtml(name)}</div>
         <div class="ofp-node__top-actions">
           ${issueChip}
-          <button class="ofp-node__del" data-ofp-del-kind="${arrayKind}" data-ofp-del-idx="${entry.idx}" data-ofp-del-name="${escapeAttr(name)}" title="Delete this activity">×</button>
+          <button class="ofp-node__del" draggable="false" data-ofp-del-kind="${arrayKind}" data-ofp-del-idx="${entry.idx}" data-ofp-del-name="${escapeAttr(name)}" title="Delete this activity">×</button>
         </div>
       </div>
       <div class="ofp-node__role">${escapeHtml(role || '—')}</div>
@@ -12547,6 +12554,11 @@ function _openOfpDetail(container, line, kind, idx) {
   `;
   panel.style.display = 'block';
 
+  // v0.2.1 — scroll the panel into the viewport so the user can see the
+  // edits land. Behavior 'smooth' + block 'nearest' keeps the page from
+  // jumping if the panel is already visible.
+  try { panel.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' }); } catch (_) {}
+
   // Wire the editable inputs. Use commit-on-change semantics for text /
   // number / select so a full re-render doesn't steal focus on the first
   // keystroke (same issue Brock hit with Shift Structure 2026-04-22).
@@ -12657,13 +12669,29 @@ function _ofpStyles() {
       .ofp-node__tags { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 3px; }
       .ofp-tag { font-size: 9px; font-weight: 600; color: var(--ies-gray-600); background: var(--ies-gray-100); border-radius: 3px; padding: 1px 5px; text-transform: uppercase; letter-spacing: 0.02em; }
 
+      /* v0.2.1 — Layout: canvas + sticky right rail. */
+      .ofp-layout { display: flex; gap: 16px; align-items: flex-start; }
+      .ofp-canvas { flex: 1 1 auto; min-width: 0; }
       .ofp-detail-panel {
-        margin-top: 16px;
+        flex: 0 0 360px;
+        position: sticky;
+        top: 16px;
+        max-height: calc(100vh - 100px);
+        overflow-y: auto;
         background: #fff;
         border: 1px solid var(--ies-gray-200);
         border-radius: 6px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        box-shadow: 0 4px 16px rgba(0,0,0,0.10);
+        align-self: flex-start;
       }
+      /* On narrower viewports drop the rail below the canvas so the
+         lanes stay readable. 1100px is the existing CM section width. */
+      @media (max-width: 1100px) {
+        .ofp-layout { flex-direction: column; }
+        .ofp-detail-panel { flex: 1 1 auto; position: relative; top: auto; max-height: none; width: 100%; }
+      }
+      /* Detail panel grid drops to 2 columns when in the narrow rail. */
+      .ofp-detail-panel .ofp-detail-panel__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; padding: 14px; }
       .ofp-detail-panel__header {
         display: flex; justify-content: space-between; align-items: center;
         padding: 12px 16px; border-bottom: 1px solid var(--ies-gray-200);
@@ -12702,6 +12730,16 @@ function _ofpStyles() {
       .ofp-node__top { display: flex; justify-content: space-between; align-items: flex-start; gap: 6px; }
       .ofp-node__top .ofp-node__name { flex: 1 1 auto; min-width: 0; }
       .ofp-node__top-actions { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+      .ofp-node__grip {
+        flex: 0 0 auto;
+        font-size: 11px; line-height: 1; color: var(--ies-gray-300);
+        cursor: grab; user-select: none;
+        padding: 1px 2px; margin-right: 2px;
+        letter-spacing: -1px;
+        transition: color 0.12s;
+      }
+      .ofp-node:hover .ofp-node__grip { color: var(--ies-gray-500); }
+      .ofp-node--dragging .ofp-node__grip { color: var(--ies-blue); }
       .ofp-node__del {
         background: transparent; border: none; color: var(--ies-gray-400);
         cursor: pointer; font-size: 14px; line-height: 1; padding: 0 2px;
@@ -12719,11 +12757,23 @@ function _ofpStyles() {
       /* v0.2 — drag-and-drop visual states */
       .ofp-node[draggable="true"] { cursor: grab; }
       .ofp-node[draggable="true"]:active { cursor: grabbing; }
-      .ofp-node--dragging { opacity: 0.45; transform: scale(0.98); }
+      .ofp-node--dragging { opacity: 0.35; transform: scale(0.96); box-shadow: 0 4px 12px rgba(0,71,171,0.25); }
       .ofp-lane--dragover {
-        outline: 2px dashed var(--ies-blue);
-        outline-offset: -2px;
-        background: rgba(0, 71, 171, 0.06);
+        outline: 3px dashed var(--ies-blue);
+        outline-offset: -3px;
+        background: rgba(0, 71, 171, 0.12);
+        position: relative;
+      }
+      .ofp-lane--dragover::after {
+        content: 'Drop to reassign';
+        position: absolute;
+        top: 6px; right: 8px;
+        background: var(--ies-blue); color: #fff;
+        font-size: 10px; font-weight: 700;
+        padding: 3px 8px; border-radius: 3px;
+        text-transform: uppercase; letter-spacing: 0.04em;
+        pointer-events: none;
+        box-shadow: 0 2px 6px rgba(0,71,171,0.4);
       }
 
       /* v0.2 — editable detail panel inputs */
