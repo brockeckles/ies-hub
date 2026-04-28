@@ -395,6 +395,7 @@ const SECTIONS = [
   { key: 'financial',      label: 'Financial',          icon: 'trending-up',   group: 'structure' },
   // Cost — the build itself
   { key: 'labor',          label: 'Labor',              icon: 'users',         group: 'cost' },
+  { key: 'flow',           label: 'Operational Flow',   icon: 'git-merge',     group: 'cost' },
   { key: 'shiftPlanning',  label: 'Shift Planning',     icon: 'grid',          group: 'cost' },
   { key: 'equipment',      label: 'Equipment',          icon: 'truck',         group: 'cost' },
   { key: 'overhead',       label: 'Overhead',           icon: 'layers',        group: 'cost' },
@@ -2527,6 +2528,7 @@ function renderSection() {
     shiftPlanning: renderShiftPlanning,
     pricingBuckets: renderPricingBuckets,
     labor: renderLabor,
+    flow: renderOperationalFlow,
     equipment: renderEquipment,
     overhead: renderOverhead,
     vas: renderVas,
@@ -2635,6 +2637,9 @@ function _sectionCompleteness(sectionKey) {
       return 'complete';
     }
     case 'labor':
+      return (m.laborLines && m.laborLines.length > 0) ? 'complete' : 'empty';
+    case 'flow':
+      // OFP is auto-derived from labor lines — completeness mirrors labor.
       return (m.laborLines && m.laborLines.length > 0) ? 'complete' : 'empty';
     case 'equipment':
       return (m.equipmentLines && m.equipmentLines.length > 0) ? 'complete' : 'empty';
@@ -6981,6 +6986,11 @@ function bindSectionEvents(section, container) {
       activeImplPhase = phase;
       renderSection();
     });
+  }
+
+  // OFP v0.1 (2026-04-28) — click a node card → open detail panel.
+  if (section === 'flow') {
+    _bindOperationalFlowEvents(container);
   }
 
   if (section === 'shiftPlanning') {
@@ -11961,6 +11971,453 @@ function renderImplRampPanel(arrayKey, values, label, color) {
         `).join('')}
       </div>
     </div>
+  `;
+}
+
+
+// ============================================================
+// OPERATIONAL FLOW PAGE (OFP) — v0.1, 2026-04-28
+// ============================================================
+//
+// Visual end-to-end view of the labor activities in this cost model:
+// Inbound → Storage → Outbound, with Returns/VAS and Support overlays.
+//
+// v0.1 is READ-ONLY and AUTO-DERIVED from existing laborLines +
+// indirectLaborLines. Each row binds into one of six lanes by activity-
+// keyword classification (`_classifyLaneFromLine`). Click any node card
+// to open a side detail panel mirroring the Labor row's read-only
+// values + an "Edit on Labor page" jump.
+//
+// v0.2 (planned) adds: editable flow-primary canvas, drag/drop palette,
+// validation lints (volume conservation, missing MHE, etc.), shared-MHE
+// pools, archetype templates. Until v0.2, edits still happen on Labor;
+// OFP is a complementary visualization.
+
+// Lane keyword catalog. Order matters — more specific keywords (e.g.
+// "replenishment") should match before more generic ones (e.g. "ship").
+// The classifier lowercases activity_name + position role and tests each
+// lane's keywords in the order the lanes are declared here.
+const _OFP_LANES = [
+  { key: 'inbound',     label: 'Inbound',          color: '#0EA5E9', keywords: ['receiv', 'unload', 'dock', 'inbound', ' rx', 'gatehouse', 'putaway-prep', 'check-in', 'pallet build'] },
+  { key: 'storage',     label: 'Storage',          color: '#8B5CF6', keywords: ['putaway', 'put away', 'replen', 'replenish', 'storage', 'let-down', 'letdown', 'slot', 'cycle count', 'inventory move'] },
+  { key: 'outbound',    label: 'Outbound',         color: '#16A34A', keywords: ['pick', 'pack', 'stage', 'ship', 'load', 'dispatch', 'outbound', 'wave', 'consolidat', 'sort', 'manifest', 'palletiz'] },
+  { key: 'returnsVas',  label: 'Returns / VAS',    color: '#F59E0B', keywords: ['return', 'rtv', 'rework', 'kit', 'kitting', 'label', 'vas', 'value-add', 'value add', 'special', 'compliance', 'ticket', 'price'] },
+  { key: 'support',     label: 'Support / Indirect', color: '#64748B', keywords: ['clean', 'janitor', 'supervisor', 'lead ', 'manager', 'admin', 'audit', 'cycle', 'inventory control', 'trainer', 'safety', 'qa', 'quality', 'security', ' im '] },
+];
+
+/**
+ * Bin a labor line into one of the six OFP lanes by keyword match on
+ * activity_name + role. Indirect labor is forced to 'support' by the
+ * caller; this function classifies direct labor only.
+ *
+ * Returns one of: 'inbound' | 'storage' | 'outbound' | 'returnsVas' |
+ *                 'support' | 'unclassified'
+ */
+function _classifyLaneFromLine(line) {
+  if (!line) return 'unclassified';
+  const haystack = `${line.activity_name || ''} ${line.position || ''} ${line.role || ''} ${line.most_template || ''}`.toLowerCase();
+  for (const lane of _OFP_LANES) {
+    for (const kw of lane.keywords) {
+      if (haystack.includes(kw)) return lane.key;
+    }
+  }
+  return 'unclassified';
+}
+
+/**
+ * Lane → meta lookup (color, label). Includes a synthetic 'unclassified'
+ * entry that doesn't appear in _OFP_LANES (we keep that array as the
+ * keyword catalog for direct labor only).
+ */
+function _ofpLaneMeta(key) {
+  if (key === 'unclassified') return { key, label: 'Unclassified', color: '#DC2626' };
+  return _OFP_LANES.find(l => l.key === key) || { key, label: key, color: '#64748B' };
+}
+
+function renderOperationalFlow() {
+  const directLines = model.laborLines || [];
+  const indirectLines = model.indirectLaborLines || [];
+
+  // Empty state — no labor lines at all
+  if (directLines.length === 0 && indirectLines.length === 0) {
+    return `
+      <div class="cm-section-header">
+        <div>
+          <h2>Operational Flow <span class="hub-status-chip cm-chip-info cm-chip-xs">v0.1 · auto-derived</span></h2>
+          <div class="cm-section-desc">End-to-end view of the labor activities — Inbound through Outbound, with Returns/VAS and Support overlays. Auto-arranged from the Labor page.</div>
+        </div>
+      </div>
+      <div class="cm-card" style="text-align:center;padding:48px 24px;">
+        <div style="font-size:48px;line-height:1;margin-bottom:12px;opacity:0.4;">⇄</div>
+        <div style="font-size:14px;font-weight:600;color:var(--ies-navy);margin-bottom:6px;">No labor lines yet</div>
+        <div style="font-size:12px;color:var(--ies-gray-500);margin-bottom:16px;">Build labor lines on the Labor page and they'll auto-arrange into a process flow here.</div>
+        <button class="hub-btn hub-btn-sm" data-action="ofp-go-to-labor">Go to Labor →</button>
+      </div>
+      ${_ofpStyles()}
+    `;
+  }
+
+  // Bin lines into lanes
+  const lanes = { inbound: [], storage: [], outbound: [], returnsVas: [], support: [], unclassified: [] };
+  directLines.forEach((l, idx) => {
+    const lane = _classifyLaneFromLine(l);
+    lanes[lane].push({ line: l, idx, isDirect: true });
+  });
+  indirectLines.forEach((l, idx) => {
+    // Indirect labor always lands in Support
+    lanes.support.push({ line: l, idx, isDirect: false });
+  });
+
+  // KPIs
+  const opHrs = calc.operatingHours(model.shifts || {});
+  const lc = model.laborCosting || {};
+  const totalDirectFte = directLines.reduce((s, l) => s + calc.fte(l, opHrs), 0);
+  const totalIndirectFte = indirectLines.reduce((s, l) => s + calc.fte(l, opHrs), 0);
+  const totalFte = totalDirectFte + totalIndirectFte;
+  const totalCost = directLines.reduce((s, l) => s + calc.directLineAnnualSimple(l, lc), 0)
+                  + indirectLines.reduce((s, l) => s + calc.indirectLineAnnualSimple(l, opHrs, lc), 0);
+  const totalLanesPossible = lanes.unclassified.length > 0 ? 6 : 5;
+  const populatedLanes = Object.values(lanes).filter(arr => arr.length > 0).length;
+  const unclassifiedCount = lanes.unclassified.length;
+
+  // Build SVG connector arrows between top-row lanes (Inbound → Storage → Outbound)
+  const arrowSvg = (volumeLabel) => `
+    <div class="ofp-connector" title="${escapeAttr(volumeLabel || '')}">
+      <svg viewBox="0 0 60 24" width="60" height="24" preserveAspectRatio="none" aria-hidden="true">
+        <defs>
+          <marker id="ofp-arrowhead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--ies-gray-400)"></path>
+          </marker>
+        </defs>
+        <line x1="0" y1="12" x2="56" y2="12" stroke="var(--ies-gray-400)" stroke-width="2" marker-end="url(#ofp-arrowhead)"></line>
+      </svg>
+    </div>
+  `;
+
+  return `
+    <div class="cm-section-header">
+      <div>
+        <h2>Operational Flow <span class="hub-status-chip cm-chip-info cm-chip-xs">v0.1 · auto-derived</span></h2>
+        <div class="cm-section-desc">End-to-end view of the labor activities. Auto-arranged from the Labor page by activity-keyword. Click any node to inspect; "Edit on Labor page" round-trips the change.</div>
+      </div>
+    </div>
+
+    <!-- KPI strip -->
+    <div class="hub-kpi-strip" style="margin-bottom:16px;">
+      <div class="hub-kpi-tile" title="Total FTE across direct + indirect labor">
+        <div class="hub-kpi-tile__label">Total FTE</div>
+        <div class="hub-kpi-tile__value hub-kpi-tile__value--brand">${totalFte.toFixed(1)}</div>
+      </div>
+      <div class="hub-kpi-tile" title="Annual loaded labor cost (direct + indirect)">
+        <div class="hub-kpi-tile__label">Annual Labor Cost</div>
+        <div class="hub-kpi-tile__value">${calc.formatCurrency(totalCost, { compact: true })}</div>
+      </div>
+      <div class="hub-kpi-tile" title="Lanes that have at least one activity binned into them">
+        <div class="hub-kpi-tile__label">Lanes Populated</div>
+        <div class="hub-kpi-tile__value">${populatedLanes} of ${totalLanesPossible}</div>
+      </div>
+      <div class="hub-kpi-tile" title="${unclassifiedCount > 0 ? 'Activities that did not match any lane keyword. Rename the activity on Labor or extend the OFP keyword catalog.' : 'All activities mapped into a lane'}" ${unclassifiedCount > 0 ? 'style="border-left:3px solid #DC2626;"' : ''}>
+        <div class="hub-kpi-tile__label">Unclassified</div>
+        <div class="hub-kpi-tile__value" style="${unclassifiedCount > 0 ? 'color:#DC2626;' : ''}">${unclassifiedCount}</div>
+      </div>
+    </div>
+
+    <!-- Top row: Inbound → Storage → Outbound -->
+    <div class="cm-card" style="padding:18px 18px 22px;">
+      <div class="ofp-row ofp-row--main">
+        ${_renderOfpLane('inbound', lanes.inbound, opHrs, lc)}
+        ${arrowSvg('')}
+        ${_renderOfpLane('storage', lanes.storage, opHrs, lc)}
+        ${arrowSvg('')}
+        ${_renderOfpLane('outbound', lanes.outbound, opHrs, lc)}
+      </div>
+
+      ${lanes.returnsVas.length > 0 ? `
+        <div class="ofp-row ofp-row--secondary" style="margin-top:18px;">
+          ${_renderOfpLane('returnsVas', lanes.returnsVas, opHrs, lc, { wide: true })}
+        </div>
+      ` : ''}
+
+      ${lanes.support.length > 0 ? `
+        <div class="ofp-row ofp-row--secondary" style="margin-top:14px;">
+          ${_renderOfpLane('support', lanes.support, opHrs, lc, { wide: true })}
+        </div>
+      ` : ''}
+
+      ${lanes.unclassified.length > 0 ? `
+        <div class="ofp-row ofp-row--secondary" style="margin-top:14px;">
+          ${_renderOfpLane('unclassified', lanes.unclassified, opHrs, lc, { wide: true, warn: true })}
+        </div>
+      ` : ''}
+    </div>
+
+    <!-- Detail panel — populated on node click -->
+    <div id="ofp-detail-panel" class="ofp-detail-panel" style="display:none;"></div>
+
+    ${_ofpStyles()}
+  `;
+}
+
+/**
+ * Render a single OFP lane (header + stack of node cards).
+ * @param {string} laneKey
+ * @param {Array<{line, idx, isDirect}>} entries
+ * @param {number} opHrs
+ * @param {object} lc
+ * @param {{wide?: boolean, warn?: boolean}} [opts]
+ */
+function _renderOfpLane(laneKey, entries, opHrs, lc, opts = {}) {
+  const meta = _ofpLaneMeta(laneKey);
+  const wide = !!opts.wide;
+  const warn = !!opts.warn;
+  const totalFte = entries.reduce((s, e) => s + calc.fte(e.line, opHrs), 0);
+  const widthClass = wide ? 'ofp-lane--wide' : '';
+  const warnClass = warn ? 'ofp-lane--warn' : '';
+
+  const nodes = entries.length > 0
+    ? entries.map(e => _renderOfpNode(e, laneKey, opHrs, lc)).join('')
+    : `<div class="ofp-lane__empty">No activities</div>`;
+
+  return `
+    <div class="ofp-lane ${widthClass} ${warnClass}" data-ofp-lane="${laneKey}">
+      <div class="ofp-lane__header" style="border-top:3px solid ${meta.color};">
+        <div class="ofp-lane__header-row">
+          <div class="ofp-lane__title">${escapeHtml(meta.label)}</div>
+          <div class="ofp-lane__count">${entries.length}</div>
+        </div>
+        <div class="ofp-lane__fte">${totalFte.toFixed(1)} FTE</div>
+      </div>
+      <div class="ofp-lane__nodes ${wide ? 'ofp-lane__nodes--row' : ''}">
+        ${nodes}
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Render a single node card. Card click → fires detail-panel open.
+ * data-ofp-line="direct:5" or "indirect:2" tells the click handler which
+ * array + index to look up.
+ */
+function _renderOfpNode(entry, laneKey, opHrs, lc) {
+  const l = entry.line;
+  const arrayKind = entry.isDirect ? 'direct' : 'indirect';
+  const fte = calc.fte(l, opHrs);
+  const meta = _ofpLaneMeta(laneKey);
+  const cost = entry.isDirect
+    ? calc.directLineAnnualSimple(l, lc)
+    : calc.indirectLineAnnualSimple(l, opHrs, lc);
+  const name = l.activity_name || l.position || '(unnamed)';
+  const role = l.position || l.role || (entry.isDirect ? '' : 'Indirect');
+  const volume = Number(l.volume) || 0;
+  const uph = Number(l.base_uph) || 0;
+  const mhe = l.mhe_type && l.mhe_type !== 'none' ? l.mhe_type : '';
+  const itDevice = l.it_device && l.it_device !== 'none' ? l.it_device : '';
+
+  return `
+    <button class="ofp-node" data-ofp-line="${arrayKind}:${entry.idx}" style="border-left:3px solid ${meta.color};" title="${escapeAttr(name)} — ${fte.toFixed(1)} FTE · ${calc.formatCurrency(cost, { compact: true })}/yr">
+      <div class="ofp-node__name">${escapeHtml(name)}</div>
+      <div class="ofp-node__role">${escapeHtml(role || '—')}</div>
+      <div class="ofp-node__metrics">
+        <span class="ofp-node__fte">${fte.toFixed(1)} FTE</span>
+        ${volume > 0 ? `<span class="ofp-node__vol">${volume.toLocaleString()}${uph > 0 ? `/${uph} UPH` : ''}</span>` : ''}
+      </div>
+      ${mhe || itDevice ? `<div class="ofp-node__tags">${mhe ? `<span class="ofp-tag">${escapeHtml(mhe)}</span>` : ''}${itDevice ? `<span class="ofp-tag">${escapeHtml(itDevice)}</span>` : ''}</div>` : ''}
+    </button>
+  `;
+}
+
+/**
+ * Bind OFP click handlers — node cards open the detail panel; empty-state
+ * "Go to Labor" button switches sections.
+ */
+function _bindOperationalFlowEvents(container) {
+  // Empty state CTA
+  container.querySelectorAll('[data-action="ofp-go-to-labor"]').forEach(btn => {
+    btn.addEventListener('click', () => navigateSection('labor'));
+  });
+
+  // Node click → detail panel
+  container.querySelectorAll('.ofp-node').forEach(node => {
+    node.addEventListener('click', () => {
+      const ref = node.dataset.ofpLine;  // "direct:5" or "indirect:2"
+      if (!ref) return;
+      const [kind, idxStr] = ref.split(':');
+      const idx = Number(idxStr);
+      const arr = kind === 'direct' ? (model.laborLines || []) : (model.indirectLaborLines || []);
+      const line = arr[idx];
+      if (!line) return;
+      _openOfpDetail(container, line, kind, idx);
+
+      // Visual selected state
+      container.querySelectorAll('.ofp-node--selected').forEach(n => n.classList.remove('ofp-node--selected'));
+      node.classList.add('ofp-node--selected');
+    });
+  });
+
+  // Close-button + edit-jump on the detail panel use a delegated handler
+  // so re-renders of the panel content don't drop bindings.
+  const panel = container.querySelector('#ofp-detail-panel');
+  if (panel) {
+    panel.addEventListener('click', (e) => {
+      const action = e.target?.dataset?.ofpAction;
+      if (action === 'close') {
+        panel.style.display = 'none';
+        container.querySelectorAll('.ofp-node--selected').forEach(n => n.classList.remove('ofp-node--selected'));
+      } else if (action === 'edit-on-labor') {
+        navigateSection('labor');
+      }
+    });
+  }
+}
+
+function _openOfpDetail(container, line, kind, idx) {
+  const panel = container.querySelector('#ofp-detail-panel');
+  if (!panel) return;
+  const opHrs = calc.operatingHours(model.shifts || {});
+  const lc = model.laborCosting || {};
+  const fte = calc.fte(line, opHrs);
+  const cost = kind === 'direct'
+    ? calc.directLineAnnualSimple(line, lc)
+    : calc.indirectLineAnnualSimple(line, opHrs, lc);
+  const lane = kind === 'direct' ? _classifyLaneFromLine(line) : 'support';
+  const meta = _ofpLaneMeta(lane);
+  const name = line.activity_name || line.position || '(unnamed)';
+
+  const fields = [
+    ['Activity', line.activity_name || '—'],
+    ['Position / Role', line.position || line.role || '—'],
+    ['Lane', meta.label],
+    ['MHE', (line.mhe_type && line.mhe_type !== 'none') ? line.mhe_type : '—'],
+    ['IT / Device', (line.it_device && line.it_device !== 'none') ? line.it_device : '—'],
+    ['Volume', Number(line.volume) > 0 ? Number(line.volume).toLocaleString() : '—'],
+    ['UPH', Number(line.base_uph) > 0 ? Number(line.base_uph).toString() : '—'],
+    ['FTE', fte.toFixed(2)],
+    ['Hourly Rate', Number(line.hourly_rate) > 0 ? `$${Number(line.hourly_rate).toFixed(2)}` : '—'],
+    ['Employment', line.employment_type || '—'],
+    ['Annual Cost', calc.formatCurrency(cost, { compact: false })],
+  ];
+
+  panel.innerHTML = `
+    <div class="ofp-detail-panel__header" style="border-top:4px solid ${meta.color};">
+      <div>
+        <div class="ofp-detail-panel__lane">${escapeHtml(meta.label)}${kind === 'indirect' ? ' · indirect' : ''}</div>
+        <div class="ofp-detail-panel__name">${escapeHtml(name)}</div>
+      </div>
+      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-ofp-action="close" title="Close panel">✕</button>
+    </div>
+    <div class="ofp-detail-panel__grid">
+      ${fields.map(([k, v]) => `
+        <div class="ofp-detail-panel__field">
+          <div class="ofp-detail-panel__field-label">${escapeHtml(k)}</div>
+          <div class="ofp-detail-panel__field-value">${escapeHtml(String(v))}</div>
+        </div>
+      `).join('')}
+    </div>
+    <div class="ofp-detail-panel__footer">
+      <span class="cm-subtle" style="font-size:11px;">v0.1 read-only — edits round-trip through the Labor page.</span>
+      <button class="hub-btn hub-btn-sm" data-ofp-action="edit-on-labor">Edit on Labor page →</button>
+    </div>
+  `;
+  panel.style.display = 'block';
+}
+
+/** Inline OFP styles. Scoped via .ofp- prefix so they don't bleed. */
+function _ofpStyles() {
+  return `
+    <style>
+      .ofp-row { display: flex; align-items: stretch; gap: 0; }
+      .ofp-row--main > .ofp-lane { flex: 1 1 0; min-width: 0; }
+      .ofp-row--secondary > .ofp-lane { flex: 1 1 100%; }
+      .ofp-connector { display: flex; align-items: flex-start; padding-top: 56px; flex: 0 0 auto; width: 60px; }
+
+      .ofp-lane {
+        display: flex; flex-direction: column;
+        background: var(--ies-gray-50);
+        border: 1px solid var(--ies-gray-200);
+        border-radius: 6px;
+        overflow: hidden;
+      }
+      .ofp-lane--wide { width: 100%; }
+      .ofp-lane--warn { border-color: #DC2626; background: rgba(220, 38, 38, 0.04); }
+
+      .ofp-lane__header {
+        padding: 8px 10px 10px;
+        background: #fff;
+        border-bottom: 1px solid var(--ies-gray-200);
+      }
+      .ofp-lane__header-row {
+        display: flex; justify-content: space-between; align-items: baseline;
+      }
+      .ofp-lane__title {
+        font-size: 12px; font-weight: 700; color: var(--ies-navy);
+        text-transform: uppercase; letter-spacing: 0.04em;
+      }
+      .ofp-lane__count {
+        font-size: 11px; color: var(--ies-gray-500); font-weight: 600;
+        background: var(--ies-gray-100); border-radius: 10px; padding: 1px 8px;
+      }
+      .ofp-lane__fte {
+        font-size: 11px; color: var(--ies-gray-500); margin-top: 3px;
+      }
+      .ofp-lane__nodes {
+        display: flex; flex-direction: column; gap: 6px;
+        padding: 10px;
+      }
+      .ofp-lane__nodes--row {
+        flex-direction: row; flex-wrap: wrap;
+      }
+      .ofp-lane__nodes--row > .ofp-node { flex: 0 0 calc((100% - 18px) / 4); }
+      .ofp-lane__empty {
+        padding: 18px 8px; text-align: center; font-size: 11px; color: var(--ies-gray-400); font-style: italic;
+      }
+
+      .ofp-node {
+        display: block; width: 100%; text-align: left;
+        background: #fff; border: 1px solid var(--ies-gray-200); border-left-width: 3px;
+        border-radius: 4px; padding: 8px 10px; cursor: pointer;
+        transition: all 0.12s; font-family: inherit;
+      }
+      .ofp-node:hover { border-color: var(--ies-blue); box-shadow: 0 1px 4px rgba(0,71,171,0.10); transform: translateY(-1px); }
+      .ofp-node--selected { border-color: var(--ies-blue); background: rgba(0,71,171,0.04); box-shadow: 0 0 0 2px rgba(0,71,171,0.15); }
+      .ofp-node__name { font-size: 12px; font-weight: 700; color: var(--ies-navy); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .ofp-node__role { font-size: 11px; color: var(--ies-gray-500); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .ofp-node__metrics { display: flex; gap: 8px; margin-top: 4px; align-items: baseline; }
+      .ofp-node__fte { font-size: 12px; font-weight: 700; color: var(--ies-blue); }
+      .ofp-node__vol { font-size: 10px; color: var(--ies-gray-500); }
+      .ofp-node__tags { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 3px; }
+      .ofp-tag { font-size: 9px; font-weight: 600; color: var(--ies-gray-600); background: var(--ies-gray-100); border-radius: 3px; padding: 1px 5px; text-transform: uppercase; letter-spacing: 0.02em; }
+
+      .ofp-detail-panel {
+        margin-top: 16px;
+        background: #fff;
+        border: 1px solid var(--ies-gray-200);
+        border-radius: 6px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+      }
+      .ofp-detail-panel__header {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 12px 16px; border-bottom: 1px solid var(--ies-gray-200);
+      }
+      .ofp-detail-panel__lane {
+        font-size: 10px; font-weight: 700; color: var(--ies-gray-500);
+        text-transform: uppercase; letter-spacing: 0.06em;
+      }
+      .ofp-detail-panel__name {
+        font-size: 16px; font-weight: 700; color: var(--ies-navy); margin-top: 2px;
+      }
+      .ofp-detail-panel__grid {
+        display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px 24px; padding: 16px;
+      }
+      .ofp-detail-panel__field-label { font-size: 10px; color: var(--ies-gray-500); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+      .ofp-detail-panel__field-value { font-size: 13px; color: var(--ies-navy); font-weight: 600; margin-top: 2px; }
+      .ofp-detail-panel__footer {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 10px 16px; border-top: 1px solid var(--ies-gray-200);
+        background: var(--ies-gray-50);
+      }
+    </style>
   `;
 }
 
