@@ -12669,7 +12669,11 @@ function _bindOperationalFlowEvents(container) {
   const panel = container.querySelector('#ofp-detail-panel');
   const closeModal = () => {
     if (modal) modal.style.display = 'none';
-    if (panel) panel.style.display = 'none'; // fallback inline display
+    // v0.3a.8 — don't touch panel.style.display here. Setting it to
+    // 'none' on close left a stale inline style that the next
+    // _openOfpDetail() (which only resets modal.style.display) never
+    // cleared, so subsequent opens showed an empty drawer. Modal
+    // visibility is controlled by the OUTER overlay's display.
     document.body.style.overflow = '';
     container.querySelectorAll('.ofp-node--selected').forEach(n => n.classList.remove('ofp-node--selected'));
   };
@@ -13008,6 +13012,7 @@ function _openOfpDetail(container, line, kind, idx) {
   const modal = container.querySelector('#ofp-detail-modal');
   if (modal) {
     modal.style.display = 'flex';
+    panel.style.display = ''; // v0.3a.8 — clear any stale inline 'none' from older close handlers
     document.body.style.overflow = 'hidden'; // prevent background scroll while modal open
     // Focus the first editable input so keyboard users land in the form.
     const firstInput = panel.querySelector('.ofp-edit-input');
