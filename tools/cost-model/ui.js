@@ -12085,6 +12085,92 @@ function _pathColor(tag) {
   return _OFP_PATH_PALETTE[hash % _OFP_PATH_PALETTE.length];
 }
 
+
+
+// ============================================================
+// v0.3a.7 — MHE / IT icon catalog for OFP node badges
+// ============================================================
+//
+// Small inline-SVG icons (16x16 viewBox, render at 14px) replace the
+// previous text chips for MHE_TYPE and IT_DEVICE on cards. Each entry
+// is the path content only (the wrapping <svg> is added in the
+// renderer). Fuzzy match on lowercase, _-and-space-normalized strings
+// so REACH_TRUCK / reach-truck / "Reach Truck" all map the same.
+
+const _OFP_MHE_ICONS = {
+  // Sit-down counterbalance forklift — chunky body, mast on the right
+  forklift: '<rect x="2" y="9" width="6" height="3" rx="0.4" /><rect x="8" y="3" width="1.5" height="9" /><rect x="9.5" y="11" width="4.2" height="0.8" /><circle cx="3" cy="13.2" r="1.1" /><circle cx="6.2" cy="13.2" r="1.1" />',
+  // Reach truck — narrower body, extended mast (taller, slimmer)
+  reach_truck: '<rect x="2" y="9" width="5" height="3" rx="0.4" /><rect x="7" y="1.5" width="1.2" height="10.5" /><rect x="8.2" y="11" width="5" height="0.7" /><circle cx="3" cy="13.2" r="1" /><circle cx="6" cy="13.2" r="1" />',
+  // Electric pallet jack (EPJ) — low-profile flat
+  epj: '<rect x="3" y="11" width="10" height="2" rx="0.3" /><rect x="2" y="8" width="2.2" height="3.5" rx="0.3" /><circle cx="4.5" cy="13.5" r="0.8" /><circle cx="11.5" cy="13.5" r="0.8" />',
+  // Order picker — vertical lift with operator platform
+  order_picker: '<rect x="3.5" y="2" width="1.5" height="10" /><rect x="5" y="3" width="4" height="2.5" rx="0.3" /><rect x="2" y="11" width="6.5" height="2" rx="0.3" /><circle cx="3" cy="13.4" r="0.7" /><circle cx="7" cy="13.4" r="0.7" />',
+  // Walkie / walking pallet truck — operator handle angled out
+  walkie: '<rect x="2" y="11" width="9" height="2" rx="0.3" /><path d="M11 11 L13.5 5" stroke-width="1.2" stroke="currentColor" fill="none" stroke-linecap="round" /><circle cx="13.6" cy="4.6" r="0.9" />',
+  // Turret / very narrow aisle — like a thin reach truck
+  turret: '<rect x="6" y="2" width="1" height="10" /><rect x="4" y="9" width="5" height="3" rx="0.3" /><circle cx="5" cy="13.2" r="0.9" /><circle cx="8" cy="13.2" r="0.9" />',
+};
+
+const _OFP_IT_ICONS = {
+  rf_scanner: '<path d="M2 5 h9 v3 h-2.5 v3 h-2 v-3 H2 z" /><path d="M11 5 L13.5 3.5" stroke-width="1.1" stroke="currentColor" fill="none" stroke-linecap="round" />',
+  voice: '<path d="M3 9 v-2 a5 5 0 0 1 10 0 v2" fill="none" stroke="currentColor" stroke-width="1.4" /><rect x="2" y="8.5" width="2.5" height="4.5" rx="0.5" /><rect x="11.5" y="8.5" width="2.5" height="4.5" rx="0.5" />',
+  vision: '<ellipse cx="8" cy="8" rx="6" ry="3.5" fill="none" stroke="currentColor" stroke-width="1.3" /><circle cx="8" cy="8" r="1.6" />',
+  tablet: '<rect x="3.5" y="2" width="9" height="12" rx="1" fill="none" stroke="currentColor" stroke-width="1.3" /><circle cx="8" cy="12.2" r="0.5" />',
+  manual: '<path d="M5.5 13 v-3.5 a1 1 0 0 1 1 -1 h0.7 v-4 a1 1 0 0 1 2 0 v4 h1.5 v-2.2 a1 1 0 0 1 2 0 v5.7 h-2.7" fill="none" stroke="currentColor" stroke-width="1.2" />',
+};
+
+/**
+ * Map an MHE type string (any casing/punctuation) to an icon key.
+ * Returns null when nothing matches; the renderer falls back to a
+ * 2-letter monogram chip in that case.
+ */
+function _ofpMheIconKey(t) {
+  if (!t) return null;
+  const k = String(t).toLowerCase().replace(/[-\s]+/g, '_');
+  if (k === 'none') return null;
+  if (k.includes('reach')) return 'reach_truck';
+  if (k.includes('order') && k.includes('pick')) return 'order_picker';
+  if (k.includes('order_picker')) return 'order_picker';
+  if (k.includes('turret') || k.includes('vna') || k.includes('narrow')) return 'turret';
+  if (k.includes('walkie') || k === 'wpt' || k.includes('walking')) return 'walkie';
+  if (k.includes('epj') || (k.includes('electric') && k.includes('jack')) || k.includes('pallet_jack')) return 'epj';
+  if (k.includes('forklift') || k.includes('sit_down') || k.includes('sitdown') || k.includes('counterbalance')) return 'forklift';
+  return null;
+}
+
+function _ofpItIconKey(t) {
+  if (!t) return null;
+  const k = String(t).toLowerCase().replace(/[-\s]+/g, '_');
+  if (k === 'none' || k === '') return null;
+  if (k.includes('voice')) return 'voice';
+  if (k.includes('vision') || k.includes('camera')) return 'vision';
+  if (k.includes('tablet') || k.includes('rdt')) return 'tablet';
+  if (k.includes('manual') || k.includes('paper')) return 'manual';
+  if (k.includes('rf') || k.includes('scan')) return 'rf_scanner';
+  return null;
+}
+
+/**
+ * Build a badge HTML chunk: small SVG icon + tooltip with full type
+ * name. If the type doesn't map to an icon, fall back to a 2-letter
+ * monogram chip (e.g. "RP" for "Robotic Picker") so the user still
+ * sees SOMETHING and can hover for the full string.
+ */
+function _ofpEquipBadge(type, kind /* 'mhe' | 'it' */) {
+  if (!type || String(type).toLowerCase() === 'none') return '';
+  const iconKey = kind === 'mhe' ? _ofpMheIconKey(type) : _ofpItIconKey(type);
+  const palette = kind === 'mhe' ? _OFP_MHE_ICONS : _OFP_IT_ICONS;
+  const className = kind === 'mhe' ? 'ofp-badge ofp-badge--mhe' : 'ofp-badge ofp-badge--it';
+  const tip = `${kind === 'mhe' ? 'MHE' : 'IT'}: ${type}`;
+  if (iconKey && palette[iconKey]) {
+    return `<span class="${className}" title="${escapeAttr(tip)}"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true">${palette[iconKey]}</svg></span>`;
+  }
+  // Fallback monogram — first letters of the first two words, max 2 chars.
+  const mono = String(type).split(/[_\s-]+/).filter(Boolean).map(w => w[0]).join('').toUpperCase().substring(0, 2) || '?';
+  return `<span class="${className} ofp-badge--mono" title="${escapeAttr(tip)}">${escapeHtml(mono)}</span>`;
+}
+
 // v0.3a — Canonical UoM set. Other surfaces in the model use line.uom
 // as a free-text field; OFP standardizes around this list for the
 // detail panel dropdowns. 'other' is the escape hatch for the rare
@@ -12395,7 +12481,7 @@ function _renderOfpNode(entry, laneKey, opHrs, lc) {
         ${volume > 0 ? `<span class="ofp-node__vol">${volume.toLocaleString()}${uph > 0 ? `/${uph} UPH` : ''}</span>` : ''}
       </div>
       ${(uomBadge || pathPill) ? `<div class="ofp-node__pills">${pathPill}${uomBadge}</div>` : ''}
-      ${mhe || itDevice ? `<div class="ofp-node__tags">${mhe ? `<span class="ofp-tag">${escapeHtml(mhe)}</span>` : ''}${itDevice ? `<span class="ofp-tag">${escapeHtml(itDevice)}</span>` : ''}</div>` : ''}
+      ${mhe || itDevice ? `<div class="ofp-node__badges">${_ofpEquipBadge(mhe, 'mhe')}${_ofpEquipBadge(itDevice, 'it')}</div>` : ''}
     </div>
   `;
 }
@@ -13054,6 +13140,23 @@ function _ofpStyles() {
       .ofp-node__vol { font-size: 10px; color: var(--ies-gray-500); }
       .ofp-node__tags { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 3px; }
       .ofp-tag { font-size: 9px; font-weight: 600; color: var(--ies-gray-600); background: var(--ies-gray-100); border-radius: 3px; padding: 1px 5px; text-transform: uppercase; letter-spacing: 0.02em; }
+
+      /* v0.3a.7 — MHE / IT icon badges on node cards */
+      .ofp-node__badges { margin-top: 5px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+      .ofp-badge {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 22px; height: 22px;
+        border-radius: 4px;
+        cursor: help;
+        transition: transform 0.1s, background 0.12s;
+      }
+      .ofp-badge:hover { transform: scale(1.08); }
+      .ofp-badge svg { display: block; }
+      .ofp-badge--mhe { background: rgba(100, 116, 139, 0.14); color: var(--ies-gray-700, #334155); }
+      .ofp-badge--mhe:hover { background: rgba(100, 116, 139, 0.22); }
+      .ofp-badge--it { background: rgba(13, 148, 136, 0.14); color: #0d9488; }
+      .ofp-badge--it:hover { background: rgba(13, 148, 136, 0.22); }
+      .ofp-badge--mono { font-size: 9px; font-weight: 700; letter-spacing: 0.02em; }
 
       /* v0.2.3 — Right-side drawer. Slides in from the right edge,
          full viewport height. Backdrop is semi-transparent so the
