@@ -423,7 +423,7 @@ const SECTIONS = [
 const SECTION_GROUPS = [
   { key: 'scope',      label: 'Scope',       description: 'Who, what, where' },
   { key: 'structure',  label: 'Structure',   description: 'Framework: facility, shifts, pricing buckets, financial' },
-  { key: 'cost',       label: 'Cost',        description: 'The build: labor, equipment, overhead, VAS, startup' },
+  { key: 'cost',       label: 'Solution',    description: 'The build: labor, equipment, overhead, VAS, startup' },
   { key: 'output',     label: 'Output',      description: 'Summary, pricing rates, cashflow & P&L, scenarios' },
   { key: 'analysis',   label: 'Analysis',    description: 'What-If, assumptions, links' },
 ];
@@ -6720,11 +6720,11 @@ function renderSummary() {
 
             <tr><td style="padding-left:16px; color:var(--ies-gray-600);">Overhead (SG&A)</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);" data-cm-cell="sga" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.sga ?? p.overhead, {compact: true})}</td>`).join('')}</tr>
             <tr style="border-top: 1px dashed var(--ies-gray-200);"><td style="font-weight:700;">EBITDA</td>${projections.map(p => `<td class="hub-num" style="font-weight:700;" data-cm-cell="ebitda" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.ebitda, {compact: true})}</td>`).join('')}</tr>
-            <tr><td style="padding-left:16px; color:var(--ies-gray-500); font-size:12px; font-style:italic;">EBITDA Margin %</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-500); font-size:12px;" title="EBITDA / Revenue">${p.revenue > 0 ? calc.formatPct(p.ebitda / p.revenue) : '—'}</td>`).join('')}</tr>
+            <tr><td style="padding-left:16px; color:var(--ies-gray-500); font-size:12px; font-style:italic;">EBITDA Margin %</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-500); font-size:12px;" title="EBITDA / Revenue">${p.revenue > 0 ? calc.formatPct((p.ebitda / p.revenue) * 100) : '—'}</td>`).join('')}</tr>
 
             <tr><td style="padding-left:16px; color:var(--ies-gray-600);">Depreciation &amp; Amort.</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);" data-cm-cell="depreciation" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.depreciation ?? p.startup, {compact: true})}</td>`).join('')}</tr>
             <tr style="border-top: 1px dashed var(--ies-gray-200);"><td style="font-weight:700;">EBIT</td>${projections.map(p => `<td class="hub-num" style="font-weight:700;" data-cm-cell="ebit" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.ebit, {compact: true})}</td>`).join('')}</tr>
-            <tr><td style="padding-left:16px; color:var(--ies-gray-500); font-size:12px; font-style:italic;">EBIT Margin %</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-500); font-size:12px;" title="EBIT / Revenue">${p.revenue > 0 ? calc.formatPct(p.ebit / p.revenue) : '—'}</td>`).join('')}</tr>
+            <tr><td style="padding-left:16px; color:var(--ies-gray-500); font-size:12px; font-style:italic;">EBIT Margin %</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-500); font-size:12px;" title="EBIT / Revenue">${p.revenue > 0 ? calc.formatPct((p.ebit / p.revenue) * 100) : '—'}</td>`).join('')}</tr>
 
             <tr><td style="padding-left:16px; color:var(--ies-gray-600);">Taxes</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);" data-cm-cell="taxes" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.taxes || 0, {compact: true})}</td>`).join('')}</tr>
             <tr style="border-top: 1px dashed var(--ies-gray-200);"><td style="font-weight:700;">Net Income</td>${projections.map(p => `<td class="hub-num" style="font-weight:700; color:${p.netIncome >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};" data-cm-cell="netIncome" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.netIncome, {compact: true})}</td>`).join('')}</tr>
