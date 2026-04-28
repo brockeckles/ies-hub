@@ -6991,14 +6991,20 @@ function bindSectionEvents(section, container) {
   // OFP v0.1 (2026-04-28) — click a node card → open detail panel.
   if (section === 'flow') {
     _bindOperationalFlowEvents(container);
-    // v0.3a.4 — draw dotted same-path connectors after the layout settles.
-    // requestAnimationFrame ensures lanes have laid out and getBoundingClientRect
-    // returns final positions. Resize listener re-runs the draw on viewport
-    // changes; bind once per render and clean up the previous one.
-    const drawConnectors = () => _renderOfpPathConnectors(container);
-    requestAnimationFrame(drawConnectors);
+    // v0.3a.6 — draw dotted same-path connectors. Try synchronously first
+    // (DOM is in place after the innerHTML set above), then schedule a
+    // setTimeout(0) AND a setTimeout(120) retry to cover the case where
+    // initial getBoundingClientRect returns 0-width before layout settles.
+    // (Earlier rAF-only scheduling was unreliable in this codebase —
+    // some downstream code wraps rAF and the chain wasn't always firing.)
+    const drawConnectors = () => {
+      try { _renderOfpPathConnectors(container); } catch (e) {}
+    };
+    drawConnectors();
+    setTimeout(drawConnectors, 0);
+    setTimeout(drawConnectors, 120);
     if (container._ofpResizeDetach) try { container._ofpResizeDetach(); } catch (_) {}
-    const onResize = () => requestAnimationFrame(drawConnectors);
+    const onResize = () => setTimeout(drawConnectors, 0);
     window.addEventListener('resize', onResize);
     container._ofpResizeDetach = () => window.removeEventListener('resize', onResize);
   }
