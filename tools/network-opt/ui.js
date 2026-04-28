@@ -11,7 +11,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sM';
 import { state } from '../../shared/state.js?v=20260418-sM';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sM';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import { bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260428-chrome-no1';
+import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260429-tc1';
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadXLSX } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260418-sM';
@@ -154,7 +154,7 @@ function runStateInputs() {
  */
 function updateRunButtonState() {
   if (!rootEl) return;
-  const btn = rootEl.querySelector('[data-primary-action="netopt-run"]');
+  const btn = rootEl.querySelector('[data-tc-primary][data-tc-action="netopt-run"]');
   if (!btn) return;
   const state = runState.state(runStateInputs());
   const isClean = state === 'clean';
@@ -422,142 +422,69 @@ function setPhase(phase) {
 }
 
 function renderShell() {
-  // CM Chrome v3 ripple — top ribbon (Row 1 phase tabs + actions; Row 2
-  // section pills + slim KPI strip) + collapsible sidebar drawer + left-
-  // aligned full-width content. Replaces the legacy renderToolHeader +
-  // process-flow-chip pattern. See project_chrome_ripple_plan_2026-04-29.md.
-  const sectionsByGroup = _noSectionsByGroup();
+  // CM Chrome v3 ripple, step 2 — chrome HTML+CSS lives in
+  // shared/tool-chrome.js. NetOpt now passes opts in and consumes the
+  // returned shell HTML.
+  return renderToolChrome(_buildChromeOpts());
+}
+
+/**
+ * Build the opts object the shared primitive needs from current
+ * NetOpt state. Centralised so renderShell, refreshToolChrome calls,
+ * and refreshToolChromeActions all stay consistent.
+ */
+function _buildChromeOpts() {
   const activePhase = currentPhase();
-  const sidebarOpen = _noSidebarOpen ? 'true' : 'false';
-
-  const phaseTabsHtml = NO_GROUPS.map(g => {
-    const items = sectionsByGroup.get(g.key) || [];
-    const completes = items.filter(s => _noSectionCompleteness(s.key) === 'complete').length;
-    const partials  = items.filter(s => _noSectionCompleteness(s.key) === 'partial').length;
-    const total = items.length;
-    const groupState = total === 0
-      ? (activePhase === g.key ? 'partial' : 'empty')
-      : (completes === total ? 'complete' : (completes + partials > 0 ? 'partial' : 'empty'));
-    const isActive = g.key === activePhase;
-    const countLabel = total === 0 ? '·' : (completes + '/' + total);
-    return '<button class="no-phase-tab ' + (isActive ? 'no-phase-tab--active' : '') + '" data-no-phase="' + g.key + '" title="' + _attr(g.description || '') + '">' +
-           '<span class="no-phase-tab__label">' + _html(g.label) + '</span>' +
-           '<span class="no-phase-tab__count no-phase-tab__count--' + groupState + '">' + countLabel + '</span>' +
-           '</button>';
-  }).join('');
-
-  const activeSectionsList = sectionsByGroup.get(activePhase) || [];
-  const activeSectionKey = _activeNoSectionKey();
-  const sectionPillsHtml = activeSectionsList.length === 0
-    ? '<span style="font-size:11px;color:rgba(255,255,255,0.55);font-style:italic;">k-sweep + sensitivity in this phase — no sub-sections</span>'
-    : activeSectionsList.map(sec => {
-        const c = _noSectionCompleteness(sec.key);
-        const isActive = sec.key === activeSectionKey;
-        return '<button class="no-section-pill ' + (isActive ? 'no-section-pill--active' : '') + '" data-no-section="' + sec.key + '">' +
-               '<span class="no-section-pill__dot no-section-pill__dot--' + c + '"></span>' +
-               '<span class="no-section-pill__label">' + _html(sec.label) + '</span>' +
-               '</button>';
-      }).join('');
-
+  const activeKey = _activeNoSectionKey();
   const draft = !activeConfigId;
   const modified = !!activeConfigId && isDirty;
-  const stateClass = draft ? 'draft' : (modified ? 'modified' : 'saved');
-  const stateLabel = draft ? 'Draft' : (modified ? 'Modified' : 'Saved');
+  const saveStateName = draft ? 'draft' : (modified ? 'modified' : 'saved');
+  const saveStateTitle = draft
+    ? 'Brand-new scenario — Save to capture an audit timestamp'
+    : (modified ? 'Save to capture the latest changes' : 'Saved');
 
   const runStateClass = runState.state(runStateInputs());
-  const isRunClean = runStateClass === 'clean';
-  const runLabel = isRunClean ? '✓ Results current' : 'Run';
-  const runIcon = isRunClean ? '' : '<span class="hub-run-icon">▶</span>';
-  const runTitle = isRunClean
-    ? 'Inputs unchanged since the last run — click to force a re-run.'
-    : 'Run network optimizer (Cmd/Ctrl+Enter)';
+  const isCompare = activePhase === 'compare';
 
-  const showClear = activePhase === 'compare';
+  const actions = [
+    { id: 'export-csv', label: '\u{1F4E5} Export', title: 'Export scenarios to XLSX' },
+    isCompare ? { id: 'clear-scenarios', label: '\u{1F5D1} Clear', title: 'Clear all run scenarios' } : null,
+    { id: 'netopt-save',
+      label: activeConfigId ? '\u{1F4BE} Save' : '\u{1F4BE} Save Scenario',
+      title: activeConfigId ? 'Update this scenario' : 'Save this scenario so you can reopen it later',
+      primary: modified },
+    { id: 'netopt-run',
+      label: 'Run',
+      icon: '▶',
+      title: 'Run network optimizer (Cmd/Ctrl+Enter)',
+      kind: 'primary',
+      runState: runStateClass,
+      cleanLabel: '✓ Results current',
+      cleanTitle: 'Inputs unchanged since the last run — click to force a re-run.' },
+  ].filter(Boolean);
 
-  return '\n' +
-    '    <div class="hub-builder no-shell-v3" style="height: calc(100vh - 48px); display: flex; flex-direction: column;">\n' +
-    '      <header class="no-top-chrome">\n' +
-    '        <div class="no-top-chrome__row1">\n' +
-    '          <button class="no-top-chrome__back hub-btn hub-btn-sm hub-btn-secondary" data-action="netopt-back" title="Back to scenarios">←</button>\n' +
-    '          <nav class="no-phase-tabs">' + phaseTabsHtml + '</nav>\n' +
-    '          <div class="no-top-chrome__row1-spacer"></div>\n' +
-    '          <div class="no-top-chrome__actions">\n' +
-    '            <span class="hub-status-chip dot ' + stateClass + '" id="no-save-state-chip" data-no-state="' + stateClass + '" title="' + _attr(formatNoSavedWhen() || 'Save state') + '">' + _html(stateLabel) + '</span>\n' +
-    '            <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="export-csv" title="Export scenarios to XLSX">\u{1F4E5} Export</button>\n' +
-    (showClear ? '            <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="clear-scenarios" title="Clear all run scenarios">\u{1F5D1} Clear</button>\n' : '') +
-    '            <button class="hub-btn hub-btn-' + (modified ? 'primary' : 'secondary') + ' hub-btn-sm" data-action="netopt-save" title="' + (activeConfigId ? 'Update this scenario' : 'Save this scenario so you can reopen it later') + '">' + (activeConfigId ? '\u{1F4BE} Save' : '\u{1F4BE} Save Scenario') + '</button>\n' +
-    '            <button class="hub-btn hub-run-btn ' + (isRunClean ? 'is-clean' : '') + '" data-action="netopt-run" data-primary-action="netopt-run" data-run-state="' + runStateClass + '" title="' + _attr(runTitle) + '">' + runIcon + '<span>' + _html(runLabel) + '</span><span class="hub-run-shortcut">⌘↵</span></button>\n' +
-    '            <button class="no-top-chrome__toggle" id="no-sidebar-toggle" title="Show full section list">☰</button>\n' +
-    '          </div>\n' +
-    '        </div>\n' +
-    '        <div class="no-top-chrome__row2">\n' +
-    '          <nav class="no-section-pills">' + sectionPillsHtml + '</nav>\n' +
-    '          <div class="no-top-chrome__kpis" id="no-header-kpis"></div>\n' +
-    '        </div>\n' +
-    '      </header>\n' +
-    '\n' +
-    '      <div class="no-shell-body" data-sidebar-open="' + sidebarOpen + '">\n' +
-    '        <aside id="no-sidebar" class="no-sidebar-drawer">\n' +
-    '          <div class="no-sidebar-drawer__header">\n' +
-    '            <span class="text-subtitle">All Sections</span>\n' +
-    '            <button class="no-sidebar-drawer__close" id="no-sidebar-close" title="Hide">✕</button>\n' +
-    '          </div>\n' +
-    '          <nav style="padding: 8px 0;">' + renderNoGroupedNav() + '</nav>\n' +
-    (activeParentCmId ? '          <div style="padding:10px 16px;border-top:1px solid var(--ies-gray-200);font-size:11px;color:var(--ies-gray-600);">Linked to Cost Model #' + activeParentCmId + '</div>\n' : '') +
-    '        </aside>\n' +
-    '        <div class="hub-builder-content" id="no-content-wrap">\n' +
-    '          <div class="hub-builder-form" id="no-content"></div>\n' +
-    '        </div>\n' +
-    '      </div>\n' +
-    '      <input type="file" id="netopt-csv-upload" accept=".csv,text/csv" style="display:none;"/>\n' +
-    '    </div>\n' +
-    '\n' +
-    '    <style>\n' +
-    '      .no-top-chrome { background: var(--ies-navy, #001f3f); color: #fff; flex: 0 0 auto; border-bottom: 1px solid rgba(255,255,255,0.08); }\n' +
-    '      .no-top-chrome__row1 { display: flex; align-items: center; gap: 12px; padding: 8px 16px; min-height: 44px; }\n' +
-    '      .no-top-chrome__back { flex: 0 0 auto; }\n' +
-    '      .no-phase-tabs { display: flex; gap: 2px; flex: 0 0 auto; }\n' +
-    '      .no-phase-tab { background: transparent; border: none; cursor: pointer; color: rgba(255,255,255,0.7); padding: 7px 14px; border-radius: 4px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; transition: background 0.12s, color 0.12s; }\n' +
-    '      .no-phase-tab:hover { color: #fff; background: rgba(255,255,255,0.06); }\n' +
-    '      .no-phase-tab--active { color: #fff; background: rgba(255,255,255,0.14); }\n' +
-    '      .no-phase-tab__count { font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 8px; background: rgba(255,255,255,0.16); color: rgba(255,255,255,0.85); }\n' +
-    '      .no-phase-tab__count--complete { background: var(--ies-green, #16a34a); color: #fff; }\n' +
-    '      .no-phase-tab__count--partial  { background: #f59e0b; color: #fff; }\n' +
-    '      .no-phase-tab__count--empty    { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.6); }\n' +
-    '      .no-top-chrome__row1-spacer { flex: 1 1 auto; min-width: 8px; }\n' +
-    '      .no-top-chrome__kpis { flex: 0 1 auto; display: flex; align-items: center; gap: 18px; color: rgba(255,255,255,0.85); }\n' +
-    '      .no-top-chrome__actions { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; }\n' +
-    '      .no-top-chrome__toggle { background: transparent; border: 1px solid rgba(255,255,255,0.2); cursor: pointer; color: #fff; width: 30px; height: 28px; border-radius: 4px; font-size: 16px; line-height: 1; margin-left: 4px; }\n' +
-    '      .no-top-chrome__toggle:hover { background: rgba(255,255,255,0.08); }\n' +
-    '      .no-top-chrome__row2 { background: rgba(0,0,0,0.16); padding: 6px 16px; min-height: 38px; display: flex; align-items: center; gap: 16px; }\n' +
-    '      .no-section-pills { flex: 1 1 auto; min-width: 0; display: flex; gap: 4px; flex-wrap: wrap; }\n' +
-    '      .no-section-pill { background: transparent; border: 1px solid transparent; cursor: pointer; color: rgba(255,255,255,0.7); padding: 5px 12px; border-radius: 16px; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; transition: background 0.12s, color 0.12s, border-color 0.12s; }\n' +
-    '      .no-section-pill:hover { color: #fff; background: rgba(255,255,255,0.08); }\n' +
-    '      .no-section-pill--active { color: var(--ies-navy, #001f3f); background: #fff; border-color: #fff; }\n' +
-    '      .no-section-pill__dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }\n' +
-    '      .no-section-pill__dot--complete { background: var(--ies-green, #16a34a); }\n' +
-    '      .no-section-pill__dot--partial  { background: #f59e0b; }\n' +
-    '      .no-section-pill__dot--empty    { background: rgba(255,255,255,0.25); }\n' +
-    '      .no-section-pill--active .no-section-pill__dot--empty { background: rgba(0,0,0,0.18); }\n' +
-    '      .no-kpi-chip { display: inline-flex; flex-direction: column; align-items: flex-start; line-height: 1.1; white-space: nowrap; }\n' +
-    '      .no-kpi-chip__label { font-size: 9px; font-weight: 600; color: rgba(255,255,255,0.55); text-transform: uppercase; letter-spacing: 0.04em; }\n' +
-    '      .no-kpi-chip__value { font-size: 13px; font-weight: 700; color: #fff; margin-top: 1px; }\n' +
-    '      .no-shell-body { flex: 1 1 auto; display: flex; min-height: 0; position: relative; }\n' +
-    '      .no-sidebar-drawer { flex: 0 0 240px; width: 240px; background: #fff; border-right: 1px solid var(--ies-gray-200); overflow-y: auto; transition: width 0.18s ease, flex-basis 0.18s ease; }\n' +
-    '      .no-shell-body[data-sidebar-open="false"] .no-sidebar-drawer { flex: 0 0 0; width: 0; overflow: hidden; border-right: 0; }\n' +
-    '      .no-sidebar-drawer__header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--ies-gray-200); }\n' +
-    '      .no-sidebar-drawer__close { background: transparent; border: none; cursor: pointer; color: var(--ies-gray-500); font-size: 14px; line-height: 1; padding: 2px 6px; }\n' +
-    '      .no-sidebar-drawer__close:hover { color: var(--ies-navy); }\n' +
-    '      .no-nav-item { display: flex; align-items: center; gap: 8px; padding: 8px 16px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ies-gray-600); transition: all 0.15s ease; border-left: 3px solid transparent; }\n' +
-    '      .no-nav-item:hover { background: var(--ies-gray-50); color: var(--ies-navy); }\n' +
-    '      .no-nav-item.active { background: rgba(0,71,171,0.06); color: var(--ies-blue); border-left-color: var(--ies-blue); }\n' +
-    '      .no-nav-group-label { padding: 12px 16px 4px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px; color: var(--ies-gray-500); text-transform: uppercase; }\n' +
-    '      .no-nav-check { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--ies-gray-300); flex-shrink: 0; }\n' +
-    '      .no-nav-check.complete { background: var(--ies-green, #16a34a); border-color: var(--ies-green, #16a34a); }\n' +
-    '      .hub-builder-content { flex: 1 1 auto; overflow-y: auto; background: var(--ies-gray-50, #f8fafc); }\n' +
-    '      #no-content { padding: 20px 24px; }\n' +
-    '    </style>\n' +
-    '  ';
+  const sidebarFooter = activeParentCmId
+    ? 'Linked to Cost Model #' + activeParentCmId
+    : '';
+
+  return {
+    toolKey: 'netopt',
+    groups: NO_GROUPS,
+    sections: NO_SECTIONS,
+    activePhase,
+    activeSection: activeKey,
+    sectionCompleteness: _noSectionCompleteness,
+    saveState: { state: saveStateName, title: saveStateTitle },
+    actions,
+    showSidebar: _noSidebarOpen,
+    sidebarHeader: 'All Sections',
+    sidebarBody: renderNoGroupedNav(),
+    sidebarFooter,
+    bodyHtml: '<div class="hub-builder-form" id="no-content"></div>',
+    backTitle: 'Back to scenarios',
+    emptyPhaseHint: 'k-sweep + sensitivity in this phase — no sub-sections',
+    fileInputs: '<input type="file" id="netopt-csv-upload" accept=".csv,text/csv" style="display:none;"/>',
+  };
 }
 
 // ============================================================
@@ -616,9 +543,9 @@ function renderNoGroupedNav() {
   return NO_GROUPS.map(g => {
     const items = sectionsByGroup.get(g.key) || [];
     const itemsHtml = items.length === 0
-      ? '<div class="no-nav-item" data-no-section="__phase__:' + g.key + '"><span style="opacity:0.6;font-style:italic;">Open ' + _html(g.label) + '</span></div>'
-      : items.map(s => '<div class="no-nav-item ' + (activeKey === s.key ? 'active' : '') + '" data-no-section="' + s.key + '"><span class="no-nav-check ' + (_noSectionCompleteness(s.key) === 'complete' ? 'complete' : '') + '"></span><span>' + _html(s.label) + '</span></div>').join('');
-    return '<div class="no-nav-group"><div class="no-nav-group-label">' + _html(g.label) + '</div>' + itemsHtml + '</div>';
+      ? '<div class="tc-nav-item" data-tc-section="__phase__:' + g.key + '"><span style="opacity:0.6;font-style:italic;">Open ' + _html(g.label) + '</span></div>'
+      : items.map(s => '<div class="tc-nav-item ' + (activeKey === s.key ? 'active' : '') + '" data-tc-section="' + s.key + '"><span class="tc-nav-check ' + (_noSectionCompleteness(s.key) === 'complete' ? 'complete' : '') + '"></span><span>' + _html(s.label) + '</span></div>').join('');
+    return '<div class="tc-nav-group"><div class="tc-nav-group-label">' + _html(g.label) + '</div>' + itemsHtml + '</div>';
   }).join('');
 }
 
@@ -652,86 +579,15 @@ function navigateNoSection(key) {
 
 function _refreshTopChrome() {
   if (!rootEl) return;
-  const sectionsByGroup = _noSectionsByGroup();
-  const activePhase = currentPhase();
-  const activeKey = _activeNoSectionKey();
-
-  const tabsEl = rootEl.querySelector('.no-phase-tabs');
-  if (tabsEl) {
-    tabsEl.innerHTML = NO_GROUPS.map(g => {
-      const items = sectionsByGroup.get(g.key) || [];
-      const completes = items.filter(s => _noSectionCompleteness(s.key) === 'complete').length;
-      const partials  = items.filter(s => _noSectionCompleteness(s.key) === 'partial').length;
-      const total = items.length;
-      const groupState = total === 0
-        ? (activePhase === g.key ? 'partial' : 'empty')
-        : (completes === total ? 'complete' : (completes + partials > 0 ? 'partial' : 'empty'));
-      const isActive = g.key === activePhase;
-      const countLabel = total === 0 ? '·' : (completes + '/' + total);
-      return '<button class="no-phase-tab ' + (isActive ? 'no-phase-tab--active' : '') + '" data-no-phase="' + g.key + '" title="' + _attr(g.description || '') + '">' +
-             '<span class="no-phase-tab__label">' + _html(g.label) + '</span>' +
-             '<span class="no-phase-tab__count no-phase-tab__count--' + groupState + '">' + countLabel + '</span>' +
-             '</button>';
-    }).join('');
-    tabsEl.querySelectorAll('[data-no-phase]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const target = btn.dataset.noPhase;
-        if (!target || target === currentPhase()) return;
-        setPhase(/** @type {any} */ (target));
-        renderContentView();
-        _refreshTopChrome();
-        refreshNoHeaderKpis();
-      });
-    });
-  }
-
-  const pillsEl = rootEl.querySelector('.no-section-pills');
-  if (pillsEl) {
-    const items = sectionsByGroup.get(activePhase) || [];
-    pillsEl.innerHTML = items.length === 0
-      ? '<span style="font-size:11px;color:rgba(255,255,255,0.55);font-style:italic;">k-sweep + sensitivity in this phase — no sub-sections</span>'
-      : items.map(sec => {
-          const c = _noSectionCompleteness(sec.key);
-          const isActive = sec.key === activeKey;
-          return '<button class="no-section-pill ' + (isActive ? 'no-section-pill--active' : '') + '" data-no-section="' + sec.key + '">' +
-                 '<span class="no-section-pill__dot no-section-pill__dot--' + c + '"></span>' +
-                 '<span class="no-section-pill__label">' + _html(sec.label) + '</span>' +
-                 '</button>';
-        }).join('');
-    pillsEl.querySelectorAll('[data-no-section]').forEach(btn => {
-      btn.addEventListener('click', () => navigateNoSection(btn.dataset.noSection));
-    });
-  }
-
-  const drawerNav = rootEl.querySelector('#no-sidebar nav');
-  if (drawerNav) {
-    drawerNav.innerHTML = renderNoGroupedNav();
-    drawerNav.querySelectorAll('[data-no-section]').forEach(btn => {
-      btn.addEventListener('click', () => navigateNoSection(btn.dataset.noSection));
-    });
-  }
-
-  refreshNoSaveStateChip();
+  refreshToolChrome(rootEl, _buildChromeOpts());
+  // Run-button class still lives on a tc-primary button — refresh its
+  // class/state without rebuilding the entire actions rail.
   updateRunButtonState();
 }
 
 function refreshNoSaveStateChip() {
-  const chip = rootEl && rootEl.querySelector('#no-save-state-chip');
-  if (!chip) return;
-  const draft = !activeConfigId;
-  const modified = !!activeConfigId && isDirty;
-  chip.classList.remove('draft', 'modified', 'saved');
-  if (draft)         { chip.classList.add('draft');    chip.textContent = 'Draft'; }
-  else if (modified) { chip.classList.add('modified'); chip.textContent = 'Modified'; }
-  else               { chip.classList.add('saved');    chip.textContent = 'Saved'; }
-  chip.dataset.noState = draft ? 'draft' : (modified ? 'modified' : 'saved');
-  chip.title = formatNoSavedWhen() || (draft ? 'Brand-new scenario — Save to capture an audit timestamp' : 'Save to capture the latest changes');
-  const saveBtn = rootEl && rootEl.querySelector('[data-action="netopt-save"]');
-  if (saveBtn) {
-    saveBtn.textContent = activeConfigId ? '\u{1F4BE} Save' : '\u{1F4BE} Save Scenario';
-    saveBtn.classList.toggle('hub-btn-primary', modified);
-    saveBtn.classList.toggle('hub-btn-secondary', !modified);
-  }
+  if (!rootEl) return;
+  refreshToolChrome(rootEl, _buildChromeOpts());
 }
 
 function formatNoSavedWhen() { return ''; }
@@ -742,11 +598,9 @@ function refreshNoHeaderKpis(opts) {
     _noKpiRefreshTimer = setTimeout(() => { _noKpiRefreshTimer = null; refreshNoHeaderKpis(); }, 200);
     return;
   }
-  const host = rootEl && rootEl.querySelector('#no-header-kpis');
-  if (!host) return;
+  if (!rootEl) return;
   const kpis = computeNoHeaderKpis();
-  if (!kpis.items.length) { host.innerHTML = ''; return; }
-  host.innerHTML = kpis.items.map(it => '<span class="no-kpi-chip"' + (it.hint ? ' title="' + _attr(it.hint) + '"' : '') + '><span class="no-kpi-chip__label">' + _html(it.label) + '</span><span class="no-kpi-chip__value">' + _html(it.value) + '</span></span>').join('');
+  refreshKpiStrip(rootEl, kpis.items);
 }
 
 function computeNoHeaderKpis() {
@@ -789,57 +643,55 @@ function viewLabel(v) {
 
 function bindShellEvents() {
   if (!rootEl) return;
+  // Reset bound-flag so re-renders (e.g. after sidebar toggle does a
+  // full innerHTML replace) get re-bound. The primitive's idempotency
+  // tag is per-rootEl; rootEl reference doesn't change but innerHTML
+  // does, so we flip the flag here ourselves.
+  rootEl.__tcBound = false;
 
-  rootEl.querySelectorAll('[data-no-phase]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const target = btn.dataset.noPhase;
+  bindToolChromeEvents(rootEl, {
+    onPhase: (target) => {
       if (!target || target === currentPhase()) return;
       setPhase(/** @type {any} */ (target));
       renderContentView();
       _refreshTopChrome();
       refreshNoHeaderKpis();
-    });
-  });
-  rootEl.querySelectorAll('[data-no-section]').forEach(btn => {
-    btn.addEventListener('click', () => navigateNoSection(btn.dataset.noSection));
-  });
-  rootEl.querySelector('#no-sidebar-toggle')?.addEventListener('click', () => {
-    _noSidebarOpen = !_noSidebarOpen;
-    rootEl.innerHTML = renderShell();
-    bindShellEvents();
-    renderContentView();
-    refreshNoHeaderKpis();
-  });
-  rootEl.querySelector('#no-sidebar-close')?.addEventListener('click', () => {
-    _noSidebarOpen = false;
-    rootEl.innerHTML = renderShell();
-    bindShellEvents();
-    renderContentView();
-    refreshNoHeaderKpis();
-  });
-
-  const headerRun = rootEl.querySelector('[data-primary-action="netopt-run"]');
-  headerRun?.addEventListener('click', () => {
-    runScenario();
-    markDirty();
-    flashRunButton(headerRun);
-  });
-  bindPrimaryActionShortcut(rootEl, 'netopt-run');
-
-  rootEl.querySelector('[data-action="netopt-save"]')?.addEventListener('click', handleSaveNetopt);
-  rootEl.querySelector('[data-action="export-csv"]')?.addEventListener('click', exportToCSV);
-  rootEl.querySelector('[data-action="clear-scenarios"]')?.addEventListener('click', () => {
-    scenarios = []; activeScenario = null; comparisonResults = null;
-    markDirty(); renderContentView();
-    _refreshTopChrome();
-    refreshNoHeaderKpis();
-  });
-  rootEl.querySelector('[data-action="netopt-back"]')?.addEventListener('click', async () => {
-    if (isDirty && !confirm('You have unsaved changes. Leave anyway?')) return;
-    guardMarkClean('netopt');
-    await renderLanding();
+    },
+    onSection: (key) => navigateNoSection(key),
+    onSidebar: (kind) => {
+      _noSidebarOpen = (kind === 'toggle') ? !_noSidebarOpen : false;
+      // Surgical update of body data-attr — primitive owns the CSS.
+      refreshToolChrome(rootEl, _buildChromeOpts());
+    },
+    onBack: async () => {
+      if (isDirty && !confirm('You have unsaved changes. Leave anyway?')) return;
+      guardMarkClean('netopt');
+      await renderLanding();
+    },
+    onAction: (id) => {
+      if (id === 'netopt-run') {
+        runScenario();
+        markDirty();
+        flashPrimaryAction(rootEl);
+        return;
+      }
+      if (id === 'netopt-save') return handleSaveNetopt();
+      if (id === 'export-csv') return exportToCSV();
+      if (id === 'clear-scenarios') {
+        scenarios = []; activeScenario = null; comparisonResults = null;
+        markDirty(); renderContentView();
+        _refreshTopChrome();
+        refreshNoHeaderKpis();
+      }
+    },
+    onPrimaryShortcut: () => {
+      runScenario();
+      markDirty();
+      flashPrimaryAction(rootEl);
+    },
   });
 
+  // CSV file input lives at shell scope; re-bind after every renderShell.
   rootEl.querySelector('#netopt-csv-upload')?.addEventListener('change', handleCsvUpload);
 }
 

@@ -20,6 +20,7 @@ import * as shiftPlannerCalc from './shift-planner.js?v=20260427-pm3-s2';
 import * as shiftPlannerUi from './shift-planner-ui.js?v=20260428-walkthru1';
 // 2026-04-28 — internal phase stepper for Implementation Timeline section.
 import { renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
+import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260429-tc1';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
 // disk but no longer imported; can be deleted in a future cleanup.
@@ -1053,49 +1054,43 @@ function showCmToast(message, level) {
 
 function wireEditorEvents() {
   if (!rootEl) return;
-  // v0.3-chrome — Phase tabs at top: clicking a different phase navigates
-  // to the first section of that phase. Clicking the current phase is a
-  // no-op (avoids the surprise of jumping to a different section when you
-  // wanted to stay where you were).
-  rootEl.querySelectorAll('[data-cm-phase]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const targetPhase = btn.dataset.cmPhase;
+  // Reset bound-flag so re-renders (renderShell on sidebar toggle, save, load,
+  // group-toggle) get re-bound. The primitive's idempotency tag is per-rootEl.
+  rootEl.__tcBound = false;
+
+  bindToolChromeEvents(rootEl, {
+    onPhase: (targetPhase) => {
       const activeSec = SECTIONS.find(s => s.key === activeSection);
       if (!targetPhase || (activeSec && activeSec.group === targetPhase)) return;
       const sectionsInPhase = SECTIONS.filter(s => s.group === targetPhase);
       const first = sectionsInPhase[0];
       if (first) navigateSection(first.key);
-    });
-  });
-  // v0.3-chrome — Section pills (top ribbon row 2): same behavior as
-  // legacy sidebar nav — pick a section, navigate to it.
-  rootEl.querySelectorAll('[data-cm-section]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const key = btn.dataset.cmSection;
+    },
+    onSection: (key) => {
+      // Sidebar drawer items (renderGroupedNav) AND Row 2 section pills both
+      // emit data-tc-section, so they share this handler.
       if (key) navigateSection(key);
-    });
+    },
+    onSidebar: (kind) => {
+      _cmSidebarOpen = (kind === 'toggle') ? !_cmSidebarOpen : false;
+      renderCurrentView();
+    },
+    onBack: async () => {
+      // Refresh saved-models list when returning to landing.
+      try { savedModels = await api.listModels(); } catch (_) {}
+      viewMode = 'landing';
+      renderCurrentView();
+    },
+    onAction: (id) => {
+      if (id === 'cm-new')    return handleNew();
+      if (id === 'cm-save')   return handleSave();
+      if (id === 'cm-load')   return handleLoad();
+      if (id === 'cm-export') return handleExportExcel();
+    },
   });
-  // v0.3-chrome — Sidebar drawer toggle (the ☰ button) + close (✕ inside
-  // the drawer header). Toggling re-renders the shell so the data-
-  // sidebar-open attribute updates.
-  rootEl.querySelector('#cm-sidebar-toggle')?.addEventListener('click', () => {
-    _cmSidebarOpen = !_cmSidebarOpen;
-    renderCurrentView();
-  });
-  rootEl.querySelector('#cm-sidebar-close')?.addEventListener('click', () => {
-    _cmSidebarOpen = false;
-    renderCurrentView();
-  });
-  // Sidebar nav (legacy class .cm-nav-item — used by the in-drawer
-  // grouped nav rendered by renderGroupedNav)
-  rootEl.querySelectorAll('.cm-nav-item').forEach(item => {
-    item.addEventListener('click', () => {
-      const key = item.dataset.section;
-      if (key) navigateSection(key);
-    });
-  });
-  // v2 — group headers toggle their children (full editor re-render
-  // keeps handler wiring simple; groups collapse/expand at local speed)
+
+  // Group toggles (collapsible nav groups in sidebar drawer) — CM-specific,
+  // not in primitive's delegation surface.
   rootEl.querySelectorAll('[data-nav-group-toggle]').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1105,23 +1100,10 @@ function wireEditorEvents() {
       renderCurrentView();
     });
   });
-  // Toolbar
-  rootEl.querySelector('#cm-back-btn')?.addEventListener('click', async () => {
-    // Refresh saved-models list when returning to landing
-    try { savedModels = await api.listModels(); } catch {}
-    viewMode = 'landing';
-    renderCurrentView();
-  });
-  rootEl.querySelector('#cm-new-btn')?.addEventListener('click', handleNew);
-  rootEl.querySelector('#cm-save-btn')?.addEventListener('click', handleSave);
-  rootEl.querySelector('#cm-load-btn')?.addEventListener('click', handleLoad);
-  rootEl.querySelector('#cm-export-btn')?.addEventListener('click', handleExportExcel);
 
   // CM-PROV-1 — root-level click delegation for the P&L cell inspector.
   // Per feedback_event_delegation_pattern.md: bind at the stable root so
   // the listener survives every renderShell()/renderCurrentView() pass.
-  // (The previous container-scoped binding was wiped any time renderShell
-  // re-rendered the editor — e.g. nav-group toggle or async profile load.)
   rootEl.addEventListener('click', (e) => {
     if (activeSection !== 'summary') return;
     const cell = e.target.closest('[data-cm-cell]');
@@ -1662,24 +1644,8 @@ function formatSavedWhen() {
  * Safe to call when the chip isn't mounted (no-op).
  */
 function refreshSaveStateChip() {
-  const chip = rootEl?.querySelector('#cm-save-state-chip');
-  const whenEl = rootEl?.querySelector('#cm-save-state-when');
-  if (!chip) return;
-  const hasId = !!model?.id;
-  const draft = !hasId;
-  const modified = hasId && !!isDirty;
-  const saved = hasId && !isDirty;
-  // Reset → reapply state class (preserve `.dot` from base markup so the
-  // current-color dot stays in sync with the new state's text color).
-  chip.classList.remove('draft', 'modified', 'saved');
-  if (draft)   { chip.classList.add('draft');    chip.textContent = 'Draft'; }
-  else if (modified) { chip.classList.add('modified'); chip.textContent = 'Modified'; }
-  else /* saved */   { chip.classList.add('saved');    chip.textContent = 'Saved'; }
-  chip.dataset.cmState = draft ? 'draft' : (modified ? 'modified' : 'saved');
-  chip.title = lastSavedAt
-    ? `Last saved ${new Date(lastSavedAt).toLocaleString()}`
-    : (draft ? 'Brand-new model — Save to capture an audit timestamp' : 'Save to capture the latest changes');
-  if (whenEl) whenEl.textContent = formatSavedWhen();
+  if (!rootEl) return;
+  refreshToolChrome(rootEl, _buildCmChromeOpts());
   // EVE8 — Save/Load/New flows toggle this; KPI strip should follow so it
   // re-renders on the new model's data the moment a load completes.
   refreshHeaderKpis();
@@ -1840,27 +1806,9 @@ function refreshHeaderKpis(opts) {
     _kpiRefreshTimer = setTimeout(() => { _kpiRefreshTimer = null; refreshHeaderKpis(); }, 200);
     return;
   }
-  const host = rootEl?.querySelector('#cm-header-kpis');
-  if (!host) return;
+  if (!rootEl) return;
   const kpis = computeHeaderKpis();
-  if (!kpis.items.length) {
-    host.innerHTML = '';
-    host.classList.remove('is-ready');
-    return;
-  }
-  // v0.3-chrome — slim chip strip rendering. The full title + KPI tile
-  // navy bar collapsed into a thin in-header chip strip; the section
-  // identity now lives in the section pill (cm-section-pill--active)
-  // above. We render JUST the KPI chips here.
-  host.innerHTML = kpis.items.map(it => `
-    <span class="cm-kpi-chip" ${it.hint ? `title="${escapeAttr(it.hint)}"` : ''}>
-      <span class="cm-kpi-chip__label">${escapeHtml(it.label)}</span>
-      <span class="cm-kpi-chip__value">${escapeHtml(it.value)}</span>
-    </span>
-  `).join('');
-  host.classList.toggle('is-ready', !!kpis.ready);
-  return;
-
+  refreshKpiStrip(rootEl, kpis.items || []);
 }
 
 // ============================================================
@@ -2249,260 +2197,85 @@ function refreshProvenancePanel() {
 }
 
 function renderShell() {
-  // v0.3-chrome — Top-ribbon shell. Two-tier nav (phase tabs + section
-  // pills) replaces the legacy 220px left sidebar. Slim KPI chip strip
-  // replaces the navy KPI bar. Sidebar still available as an opt-in
-  // drawer via the ≡ toggle. See feedback_chrome_redesign_2026-04-28.md.
+  // CM Chrome v3 ripple, step 2 — chrome HTML+CSS lives in
+  // shared/tool-chrome.js. CM passes opts in and consumes the
+  // returned shell HTML, then appends its own provenance panel +
+  // section-content-specific CSS.
+  return renderToolChrome(_buildCmChromeOpts()) + _cmExtraStyles();
+}
+
+/** Build the opts object the shared primitive needs from CM state. */
+function _buildCmChromeOpts() {
   const groups = SECTION_GROUPS;
-  const sectionsByGroup = _sectionsByGroup();
   const activeSec = SECTIONS.find(s => s.key === activeSection) || SECTIONS[0];
   const activeGroupKey = activeSec.group;
-  const sidebarOpen = _cmSidebarOpen ? 'true' : 'false';
 
-  const phaseTabsHtml = groups.map(g => {
-    const items = sectionsByGroup.get(g.key) || [];
-    const completes = items.filter(s => _sectionCompleteness(s.key) === 'complete').length;
-    const partials  = items.filter(s => _sectionCompleteness(s.key) === 'partial').length;
-    const total = items.length;
-    const groupState = completes === total ? 'complete' : (completes + partials > 0 ? 'partial' : 'empty');
-    const isActive = g.key === activeGroupKey;
-    return `
-      <button class="cm-phase-tab ${isActive ? 'cm-phase-tab--active' : ''}" data-cm-phase="${g.key}" title="${escapeAttr(g.description || '')}">
-        <span class="cm-phase-tab__label">${escapeHtml(g.label)}</span>
-        <span class="cm-phase-tab__count cm-phase-tab__count--${groupState}">${completes}/${total}</span>
-      </button>
-    `;
-  }).join('');
+  const hasId = !!model?.id;
+  const draft = !hasId;
+  const modified = hasId && !!isDirty;
+  const stateName = draft ? 'draft' : (modified ? 'modified' : 'saved');
+  const stateTitle = lastSavedAt
+    ? `Last saved ${new Date(lastSavedAt).toLocaleString()}`
+    : (draft ? 'Brand-new model — Save to capture an audit timestamp' : 'Save to capture the latest changes');
 
-  const sectionPillsHtml = (sectionsByGroup.get(activeGroupKey) || []).map(sec => {
-    const c = _sectionCompleteness(sec.key);
-    const isActive = sec.key === activeSection;
-    return `
-      <button class="cm-section-pill ${isActive ? 'cm-section-pill--active' : ''}" data-cm-section="${sec.key}">
-        <span class="cm-section-pill__dot cm-section-pill__dot--${c}"></span>
-        <span class="cm-section-pill__label">${escapeHtml(sec.label)}</span>
-      </button>
-    `;
-  }).join('');
+  const actions = [
+    { id: 'cm-new',    label: 'New',    title: 'New model' },
+    { id: 'cm-save',   label: 'Save',   title: 'Save', primary: true },
+    { id: 'cm-load',   label: 'Load',   title: 'Load' },
+    { id: 'cm-export', label: 'Export', title: 'Export to .xlsx' },
+  ];
 
+  return {
+    toolKey: 'cm',
+    groups,
+    sections: SECTIONS,
+    activePhase: activeGroupKey,
+    activeSection,
+    sectionCompleteness: _sectionCompleteness,
+    saveState: { state: stateName, title: stateTitle, when: formatSavedWhen() },
+    actions,
+    showSidebar: _cmSidebarOpen,
+    sidebarHeader: 'All Sections',
+    sidebarBody: renderGroupedNav() + '<div id="cm-validation" style="padding: 8px 16px; border-top: 1px solid var(--ies-gray-200); font-size: 11px;"></div>',
+    bodyHtml: '<div class="hub-builder-form" id="cm-section-content"></div>',
+    backTitle: 'Back to all models',
+    fileInputs: '',
+  };
+}
+
+/** CM-specific styles that the shared primitive doesn't cover —
+ *  section-content header + provenance-cell hover + form rows. Also
+ *  appends the provenance panel (fixed position, slides in from right). */
+function _cmExtraStyles() {
   return `
-    <div class="hub-builder cm-shell-v3" style="height: calc(100vh - 48px); display: flex; flex-direction: column;">
-      <header class="cm-top-chrome">
-        <div class="cm-top-chrome__row1">
-          <button class="cm-top-chrome__back hub-btn hub-btn-sm hub-btn-secondary" id="cm-back-btn" title="Back to all models">←</button>
-          <nav class="cm-phase-tabs">${phaseTabsHtml}</nav>
-          <div class="cm-top-chrome__row1-spacer"></div>
-          <div class="cm-top-chrome__actions">
-            <span class="hub-status-chip dot draft" id="cm-save-state-chip" data-cm-state="draft" title="Save state">Draft</span>
-            <span id="cm-save-state-when" style="font-size:10px;color:var(--ies-gray-500);"></span>
-            <button class="hub-btn hub-btn-secondary hub-btn-sm" id="cm-new-btn" title="New model">New</button>
-            <button class="hub-btn hub-btn-primary hub-btn-sm" id="cm-save-btn" title="Save">Save</button>
-            <button class="hub-btn hub-btn-secondary hub-btn-sm" id="cm-load-btn" title="Load">Load</button>
-            <button class="hub-btn hub-btn-secondary hub-btn-sm" id="cm-export-btn" title="Export to .xlsx">Export</button>
-            <button class="cm-top-chrome__toggle" id="cm-sidebar-toggle" title="Show full section list">☰</button>
-          </div>
-        </div>
-        <div class="cm-top-chrome__row2">
-          <nav class="cm-section-pills">${sectionPillsHtml}</nav>
-          <div class="cm-top-chrome__kpis" id="cm-header-kpis"></div>
-        </div>
-      </header>
-
-      <div class="cm-shell-body" data-sidebar-open="${sidebarOpen}">
-        <aside id="cm-sidebar" class="cm-sidebar-drawer">
-          <div class="cm-sidebar-drawer__header">
-            <span class="text-subtitle">All Sections</span>
-            <button class="cm-sidebar-drawer__close" id="cm-sidebar-close" title="Hide">✕</button>
-          </div>
-          <nav style="padding: 8px 0;">${renderGroupedNav()}</nav>
-          <div id="cm-validation" style="padding: 8px 16px; border-top: 1px solid var(--ies-gray-200); font-size: 11px;"></div>
-        </aside>
-        <div class="hub-builder-content" id="cm-content">
-          <div class="hub-builder-form" id="cm-section-content"></div>
-        </div>
-      </div>
-
-      <!-- CM-PROV-1 — Cell-level formula inspector side panel -->
-      <aside id="cm-provenance-panel"
-             data-cm-open="false"
-             style="position:fixed; top:48px; right:0; width:380px; max-width:92vw; height:calc(100vh - 48px);
-                    background:#fff; border-left:1px solid var(--ies-gray-200,#e5e7eb);
-                    box-shadow:-6px 0 16px rgba(15,27,46,0.08);
-                    transform:translateX(110%); transition:transform 220ms ease;
-                    z-index:1100; overflow-y:auto;">
-        <div id="cm-provenance-panel-inner"></div>
-      </aside>
-    </div>
-
+    <aside id="cm-provenance-panel"
+           data-cm-open="false"
+           style="position:fixed; top:48px; right:0; width:380px; max-width:92vw; height:calc(100vh - 48px);
+                  background:#fff; border-left:1px solid var(--ies-gray-200,#e5e7eb);
+                  box-shadow:-6px 0 16px rgba(15,27,46,0.08);
+                  transform:translateX(110%); transition:transform 220ms ease;
+                  z-index:1100; overflow-y:auto;">
+      <div id="cm-provenance-panel-inner"></div>
+    </aside>
     <style>
-      /* v0.3-chrome — Top ribbon styles */
-      .cm-top-chrome {
-        background: var(--ies-navy, #001f3f);
-        color: #fff;
-        flex: 0 0 auto;
-        border-bottom: 1px solid rgba(255,255,255,0.08);
-      }
-      .cm-top-chrome__row1 {
-        display: flex; align-items: center; gap: 12px;
-        padding: 8px 16px;
-        min-height: 44px;
-      }
-      .cm-top-chrome__back {
-        flex: 0 0 auto;
-      }
-      .cm-phase-tabs {
-        display: flex; gap: 2px;
-        flex: 0 0 auto;
-      }
-      .cm-phase-tab {
-        background: transparent; border: none; cursor: pointer;
-        color: rgba(255,255,255,0.7);
-        padding: 7px 14px;
-        border-radius: 4px;
-        font-size: 12px; font-weight: 600;
-        display: inline-flex; align-items: center; gap: 8px;
-        transition: background 0.12s, color 0.12s;
-      }
-      .cm-phase-tab:hover { color: #fff; background: rgba(255,255,255,0.06); }
-      .cm-phase-tab--active { color: #fff; background: rgba(255,255,255,0.14); }
-      .cm-phase-tab__count {
-        font-size: 9px; font-weight: 700;
-        padding: 1px 6px; border-radius: 8px;
-        background: rgba(255,255,255,0.16);
-        color: rgba(255,255,255,0.85);
-      }
-      .cm-phase-tab__count--complete { background: var(--ies-green, #16a34a); color: #fff; }
-      .cm-phase-tab__count--partial  { background: #f59e0b; color: #fff; }
-      .cm-phase-tab__count--empty    { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.6); }
+      .cm-section-header { padding: 0 0 12px; border-bottom: 1px solid var(--ies-gray-200); margin-bottom: 16px; }
+      .cm-section-header h2,
+      .cm-section-header .cm-section-title { font-size: 18px; font-weight: 700; color: var(--ies-navy); margin: 0; }
+      .cm-section-header .cm-section-desc,
+      .cm-section-header__intro .cm-section-desc { font-size: 12px; color: var(--ies-gray-600); margin-top: 2px; }
 
-      .cm-top-chrome__row1-spacer { flex: 1 1 auto; min-width: 8px; }
-      .cm-top-chrome__kpis {
-        flex: 0 1 auto;
-        display: flex; align-items: center;
-        gap: 18px;
-        color: rgba(255,255,255,0.85);
-      }
-      .cm-top-chrome__actions {
-        flex: 0 0 auto;
-        display: flex; align-items: center; gap: 6px;
-      }
-      .cm-top-chrome__toggle {
-        background: transparent; border: 1px solid rgba(255,255,255,0.2); cursor: pointer;
-        color: #fff;
-        width: 30px; height: 28px;
-        border-radius: 4px;
-        font-size: 16px; line-height: 1;
-        margin-left: 4px;
-      }
-      .cm-top-chrome__toggle:hover { background: rgba(255,255,255,0.08); }
+      [data-cm-cell] { cursor: pointer; transition: background-color 0.12s ease, outline 0.12s ease; }
+      [data-cm-cell]:hover { background-color: rgba(0,71,171,0.06); }
+      [data-cm-cell].is-active { outline: 2px solid var(--ies-blue,#0047AB); outline-offset: -2px; background-color: rgba(0,71,171,0.08); }
 
-      .cm-top-chrome__row2 {
-        background: rgba(0,0,0,0.16);
-        padding: 6px 16px;
-        min-height: 38px;
-        display: flex; align-items: center; gap: 16px;
-      }
-      .cm-section-pills { flex: 1 1 auto; min-width: 0; }
-      .cm-section-pills {
-        display: flex; gap: 4px; flex-wrap: wrap;
-      }
-      .cm-section-pill {
-        background: transparent; border: 1px solid transparent; cursor: pointer;
-        color: rgba(255,255,255,0.7);
-        padding: 5px 12px;
-        border-radius: 16px;
-        font-size: 11px; font-weight: 600;
-        display: inline-flex; align-items: center; gap: 6px;
-        transition: background 0.12s, color 0.12s, border-color 0.12s;
-      }
-      .cm-section-pill:hover { color: #fff; background: rgba(255,255,255,0.08); }
-      .cm-section-pill--active {
-        color: var(--ies-navy, #001f3f);
-        background: #fff;
-        border-color: #fff;
-      }
-      .cm-section-pill__dot {
-        width: 7px; height: 7px; border-radius: 50%;
-        flex-shrink: 0;
-      }
-      .cm-section-pill__dot--complete { background: var(--ies-green, #16a34a); }
-      .cm-section-pill__dot--partial  { background: #f59e0b; }
-      .cm-section-pill__dot--empty    { background: rgba(255,255,255,0.25); }
-      .cm-section-pill--active .cm-section-pill__dot--empty { background: rgba(0,0,0,0.18); }
-
-      /* Slim KPI chip strip — populated by refreshHeaderKpis().
-         v3.2 — chip is a vertical stack (label above value) so the
-         strip packs tightly into the row 2 right side without crowding
-         the section pills. */
-      .cm-kpi-chip {
-        display: inline-flex; flex-direction: column; align-items: flex-start;
-        line-height: 1.1;
-        white-space: nowrap;
-      }
-      .cm-kpi-chip__label {
-        font-size: 9px; font-weight: 600;
-        color: rgba(255,255,255,0.55);
-        text-transform: uppercase; letter-spacing: 0.04em;
-      }
-      .cm-kpi-chip__value {
-        font-size: 13px; font-weight: 700;
-        color: #fff;
-        margin-top: 1px;
-      }
-
-      /* Body — sidebar drawer + main content */
-      .cm-shell-body {
-        flex: 1 1 auto; display: flex; min-height: 0;
-        position: relative;
-      }
-      .cm-sidebar-drawer {
-        flex: 0 0 240px; width: 240px;
-        background: #fff;
-        border-right: 1px solid var(--ies-gray-200);
-        overflow-y: auto;
-        transition: width 0.18s ease, flex-basis 0.18s ease;
-      }
-      /* v3.3 — collapse to 0 width + clip overflow when closed. The
-         previous margin-left:-240px approach pushed the sidebar off-
-         screen but its overflow-y scrollbar still rendered at x=0
-         (right edge of the off-screen element = left edge of viewport),
-         producing a phantom scrollbar at the screen's left edge. */
-      .cm-shell-body[data-sidebar-open="false"] .cm-sidebar-drawer {
-        flex: 0 0 0;
-        width: 0;
-        overflow: hidden;
-        border-right: 0;
-      }
-      .cm-sidebar-drawer__header {
-        display: flex; justify-content: space-between; align-items: center;
-        padding: 12px 16px;
-        border-bottom: 1px solid var(--ies-gray-200);
-      }
-      .cm-sidebar-drawer__close {
-        background: transparent; border: none; cursor: pointer;
-        color: var(--ies-gray-500);
-        font-size: 14px; line-height: 1; padding: 2px 6px;
-      }
-      .cm-sidebar-drawer__close:hover { color: var(--ies-navy); }
-
-      .hub-builder-content {
-        flex: 1 1 auto;
-        overflow-y: auto;
-        background: var(--ies-gray-50, #f8fafc);
-      }
-      .hub-builder-form {
-        padding: 20px 24px;
-      }
-
-      /* Existing nav-item / form styles preserved for sidebar drawer body */
+      /* CM-specific sidebar nav-item styling — matches primitive's
+         tc-nav-item but kept under cm-nav-item for backwards compat
+         with renderGroupedNav's HTML output. */
       .cm-nav-item {
-        display: flex;
-        align-items: center;
-        gap: 8px;
+        display: flex; align-items: center; gap: 8px;
         padding: 8px 16px;
         cursor: pointer;
-        font-size: 13px;
-        font-weight: 600;
+        font-size: 13px; font-weight: 600;
         color: var(--ies-gray-600);
         transition: all 0.15s ease;
         border-left: 3px solid transparent;
@@ -2510,8 +2283,7 @@ function renderShell() {
       .cm-nav-item:hover { background: var(--ies-gray-50); color: var(--ies-navy); }
       .cm-nav-item.active { background: rgba(0,71,171,0.06); color: var(--ies-blue); border-left-color: var(--ies-blue); }
       .cm-nav-check {
-        width: 16px;
-        height: 16px;
+        width: 16px; height: 16px;
         border-radius: 50%;
         border: 2px solid var(--ies-gray-300);
         flex-shrink: 0;
@@ -2524,30 +2296,12 @@ function renderShell() {
       .cm-nav-check.complete::after {
         content: '';
         position: absolute;
-        left: 4px;
-        top: 1px;
-        width: 4px;
-        height: 8px;
+        left: 4px; top: 1px;
+        width: 4px; height: 8px;
         border: solid #fff;
         border-width: 0 2px 2px 0;
         transform: rotate(45deg);
       }
-
-      /* Hide the per-section title/desc rendered by section renderers
-         since the section pill in the top chrome already conveys that
-         identity. Each renderer still produces .cm-section-header for
-         backwards compat with the legacy KPI-bar title-extraction
-         (kept as fallback). The section header is now compact. */
-      .cm-section-header { padding: 0 0 12px; border-bottom: 1px solid var(--ies-gray-200); margin-bottom: 16px; }
-      .cm-section-header h2,
-      .cm-section-header .cm-section-title { font-size: 18px; font-weight: 700; color: var(--ies-navy); margin: 0; }
-      .cm-section-header .cm-section-desc,
-      .cm-section-header__intro .cm-section-desc { font-size: 12px; color: var(--ies-gray-600); margin-top: 2px; }
-
-      /* CM-PROV-1 — clickable P&L cells + side-panel polish */
-      [data-cm-cell] { cursor: pointer; transition: background-color 0.12s ease, outline 0.12s ease; }
-      [data-cm-cell]:hover { background-color: rgba(0,71,171,0.06); }
-      [data-cm-cell].is-active { outline: 2px solid var(--ies-blue,#0047AB); outline-offset: -2px; background-color: rgba(0,71,171,0.08); }
 
       .cm-form-group { margin-bottom: 20px; }
       .cm-form-label {
@@ -2607,60 +2361,7 @@ function navigateSection(key) {
  */
 function _refreshTopChrome() {
   if (!rootEl) return;
-  const groups = SECTION_GROUPS;
-  const sectionsByGroup = _sectionsByGroup();
-  const activeSec = SECTIONS.find(s => s.key === activeSection) || SECTIONS[0];
-  const activeGroupKey = activeSec.group;
-
-  const tabsEl = rootEl.querySelector('.cm-phase-tabs');
-  if (tabsEl) {
-    tabsEl.innerHTML = groups.map(g => {
-      const items = sectionsByGroup.get(g.key) || [];
-      const completes = items.filter(s => _sectionCompleteness(s.key) === 'complete').length;
-      const partials  = items.filter(s => _sectionCompleteness(s.key) === 'partial').length;
-      const total = items.length;
-      const groupState = completes === total ? 'complete' : (completes + partials > 0 ? 'partial' : 'empty');
-      const isActive = g.key === activeGroupKey;
-      return `
-        <button class="cm-phase-tab ${isActive ? 'cm-phase-tab--active' : ''}" data-cm-phase="${g.key}" title="${escapeAttr(g.description || '')}">
-          <span class="cm-phase-tab__label">${escapeHtml(g.label)}</span>
-          <span class="cm-phase-tab__count cm-phase-tab__count--${groupState}">${completes}/${total}</span>
-        </button>
-      `;
-    }).join('');
-    // Re-bind the freshly-built tabs
-    tabsEl.querySelectorAll('[data-cm-phase]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const targetPhase = btn.dataset.cmPhase;
-        const cur = SECTIONS.find(s => s.key === activeSection);
-        if (!targetPhase || (cur && cur.group === targetPhase)) return;
-        const sectionsInPhase = SECTIONS.filter(s => s.group === targetPhase);
-        const first = sectionsInPhase[0];
-        if (first) navigateSection(first.key);
-      });
-    });
-  }
-
-  const pillsEl = rootEl.querySelector('.cm-section-pills');
-  if (pillsEl) {
-    pillsEl.innerHTML = (sectionsByGroup.get(activeGroupKey) || []).map(sec => {
-      const c = _sectionCompleteness(sec.key);
-      const isActive = sec.key === activeSection;
-      return `
-        <button class="cm-section-pill ${isActive ? 'cm-section-pill--active' : ''}" data-cm-section="${sec.key}">
-          <span class="cm-section-pill__dot cm-section-pill__dot--${c}"></span>
-          <span class="cm-section-pill__label">${escapeHtml(sec.label)}</span>
-        </button>
-      `;
-    }).join('');
-    // Re-bind
-    pillsEl.querySelectorAll('[data-cm-section]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const k = btn.dataset.cmSection;
-        if (k) navigateSection(k);
-      });
-    });
-  }
+  refreshToolChrome(rootEl, _buildCmChromeOpts());
 }
 
 // ============================================================
@@ -2922,7 +2623,7 @@ function renderGroupedNav() {
             // 'na' renders as complete (green dot) — these are derived views
             const renderAsComplete = done === 'complete' || done === 'na';
             return `
-              <div class="cm-nav-item${s.key === activeSection ? ' active' : ''}" data-section="${s.key}">
+              <div class="cm-nav-item${s.key === activeSection ? ' active' : ''}" data-tc-section="${s.key}">
                 <span class="cm-nav-check${renderAsComplete ? ' complete' : ''}" id="cm-check-${s.key}"></span>
                 <span class="cm-nav-label">${s.label}</span>
               </div>`;
