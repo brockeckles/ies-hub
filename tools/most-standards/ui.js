@@ -342,10 +342,279 @@ function renderMostPhaseStepper() {
 
 function renderShell() {
   // CM Chrome v3 ripple — chrome HTML+CSS lives in shared/tool-chrome.js.
-  return renderToolChrome(_buildMostChromeOpts());
+  return renderToolChrome(_buildMostChromeOpts()) + _mostExtraStyles();
 }
 
 /** Build chrome opts from current MOST state. activeTab IS the phase. */
+
+/** Restore MOST's original CSS that lived inside renderShell's old
+ *  <style> block (got dropped when chrome was extracted). */
+function _mostExtraStyles() {
+  return `    <style>
+      .most-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+      .most-tpl-card {
+        border: 1px solid var(--ies-gray-200);
+        border-radius: 8px;
+        padding: 16px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        background: #fff;
+      }
+      .most-tpl-card:hover { border-color: var(--ies-blue); box-shadow: 0 2px 8px rgba(0,71,171,0.1); }
+      .most-tpl-card.selected { border-color: var(--ies-blue); background: rgba(0,71,171,0.03); }
+      .most-tpl-name { font-size: 14px; font-weight: 700; color: var(--ies-navy); margin-bottom: 4px; }
+      .most-tpl-meta { font-size: 12px; color: var(--ies-gray-500); display: flex; gap: 12px; margin-bottom: 8px; }
+      .most-tpl-stats { display: flex; gap: 16px; font-size: 13px; }
+      .most-tpl-stat { font-weight: 700; }
+      .most-tpl-stat span { font-weight: 400; color: var(--ies-gray-500); font-size: 11px; display: block; }
+
+      .most-cat-badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 10px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+      }
+      .most-cat-manual { background: rgba(0,71,171,0.1); color: var(--ies-blue); }
+      .most-cat-mhe { background: rgba(32,201,151,0.1); color: #0d9668; }
+      .most-cat-hybrid { background: rgba(255,149,0,0.1); color: #cc7700; }
+
+      /* Q3: visual cue when an analysis line is variable — thin
+         orange leader on the left + subtle wash so the row draws the
+         eye without overwhelming the otherwise-dense table. */
+      .most-row-variable td {
+        background: rgba(255, 149, 0, 0.04);
+      }
+      .most-row-variable td:first-child {
+        box-shadow: inset 3px 0 0 var(--ies-orange, #d97706);
+      }
+
+      .most-detail-panel {
+        border: 1px solid var(--ies-gray-200);
+        border-radius: 8px;
+        padding: 20px;
+        background: #fff;
+        margin-top: 16px;
+      }
+
+      .most-filter-bar {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+      }
+      .most-filter-bar input, .most-filter-bar select {
+        padding: 8px 12px;
+        border: 1px solid var(--ies-gray-200);
+        border-radius: 10px;
+        font-family: Montserrat, sans-serif;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .most-filter-bar input:focus, .most-filter-bar select:focus {
+        outline: none;
+        border-color: var(--ies-blue);
+        box-shadow: 0 0 0 2px rgba(0,71,171,0.1);
+      }
+
+      .most-workflow-step {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 16px;
+        border: 1px solid var(--ies-gray-200);
+        border-radius: 8px;
+        background: #fff;
+        margin-bottom: 8px;
+      }
+      .most-workflow-step.bottleneck { border-color: var(--ies-red); background: rgba(220,53,69,0.03); }
+      .most-workflow-arrow {
+        text-align: center;
+        color: var(--ies-gray-300);
+        font-size: 18px;
+        margin-bottom: 8px;
+      }
+
+      /* .most-push-btn removed 2026-04-18 (X2) — buttons now use shared .hub-btn + .hub-btn-primary */
+
+      /* =========================================================
+         MOST-3 — Template Editor refresh (2026-04-19)
+         Replaces dated cm-edit-btn / cm-delete-btn with a clean
+         icon+label action pattern. Tokens all reference the design
+         system standards memo.
+         ========================================================= */
+
+      .most-editor-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 24px;
+        margin-bottom: 24px;
+        padding-bottom: 20px;
+        border-bottom: 1px solid var(--ies-gray-200);
+      }
+      .most-editor-toolbar-actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-shrink: 0;
+      }
+      .most-editor-title {
+        font-size: 20px;
+        font-weight: 800;
+        color: var(--ies-navy);
+        margin: 0;
+        letter-spacing: -0.2px;
+      }
+      .most-editor-subtitle {
+        font-size: 13px;
+        color: var(--ies-gray-500);
+        margin: 4px 0 0 0;
+        font-weight: 500;
+      }
+      .most-editor-breadcrumb {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--ies-gray-500);
+        margin-bottom: 6px;
+        font-weight: 600;
+      }
+      .most-breadcrumb-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        background: none;
+        border: none;
+        padding: 2px 6px;
+        margin-left: -6px;
+        color: var(--ies-gray-500);
+        font-size: 12px;
+        font-weight: 600;
+        font-family: Montserrat, sans-serif;
+        cursor: pointer;
+        border-radius: 4px;
+        transition: all 0.15s ease;
+      }
+      .most-breadcrumb-link:hover {
+        background: var(--ies-gray-100);
+        color: var(--ies-blue);
+      }
+
+      .most-table-card {
+        background: #fff;
+        border: 1px solid var(--ies-gray-200);
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: var(--shadow-sm, 0 1px 2px rgba(0,0,0,0.05));
+      }
+      .most-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      .most-table thead th {
+        background: var(--ies-gray-50);
+        color: var(--ies-gray-500);
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 12px 16px;
+        text-align: left;
+        border-bottom: 1px solid var(--ies-gray-200);
+      }
+      .most-table tbody td {
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--ies-gray-100);
+        color: var(--ies-gray-600);
+        font-weight: 500;
+      }
+      .most-table tbody tr:last-child td { border-bottom: none; }
+      .most-row-hover:hover { background: #f8fafc; }
+      .most-table td.cm-num { text-align: right; font-variant-numeric: tabular-nums; }
+
+      /* Row actions — icon buttons with hover tint */
+      .most-row-actions {
+        display: inline-flex;
+        gap: 4px;
+        align-items: center;
+      }
+      .most-icon-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 5px 10px;
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 10px;
+        color: var(--ies-gray-500);
+        font-family: Montserrat, sans-serif;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.12s ease;
+        white-space: nowrap;
+      }
+      .most-icon-btn:hover {
+        background: rgba(0, 71, 171, 0.08);
+        border-color: rgba(0, 71, 171, 0.15);
+        color: var(--ies-blue);
+      }
+      .most-icon-btn:active { transform: translateY(0.5px); }
+      .most-icon-btn svg { display: block; opacity: 0.85; }
+      .most-icon-btn-danger:hover {
+        background: rgba(220, 53, 69, 0.08);
+        border-color: rgba(220, 53, 69, 0.18);
+        color: var(--ies-red);
+      }
+
+      /* MOS-F2: Drag-reorder visuals for editor element rows */
+      .most-elem-row[draggable="true"] { transition: background 0.12s ease, opacity 0.12s ease; }
+      .most-elem-row--dragging { opacity: 0.45; background: var(--ies-gray-50); }
+      .most-elem-row--drop-target { box-shadow: inset 0 -3px 0 0 var(--ies-blue, #0047ab); }
+      .most-elem-row--variable { background: rgba(249, 115, 22, 0.04); }
+
+            /* Empty state for the editor list */
+      .most-empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        background: var(--ies-gray-50);
+        border: 1px dashed var(--ies-gray-200);
+        border-radius: 10px;
+      }
+      .most-empty-icon {
+        color: var(--ies-gray-300);
+        margin: 0 auto 16px;
+        display: inline-block;
+      }
+      .most-empty-title {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--ies-navy);
+        margin-bottom: 4px;
+      }
+      .most-empty-body {
+        font-size: 13px;
+        color: var(--ies-gray-500);
+      }
+
+      /* Sticky footer action bar for the edit form */
+      .most-editor-footer {
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+        margin-top: 24px;
+        padding-top: 20px;
+        border-top: 1px solid var(--ies-gray-200);
+      }
+    </style>`;
+}
+
 function _buildMostChromeOpts() {
   // Conditional actions per phase. analysis + workflow get Run buttons.
   const actions = [];
