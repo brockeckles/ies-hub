@@ -12015,6 +12015,14 @@ const _OFP_LANES = [
  */
 function _classifyLaneFromLine(line) {
   if (!line) return 'unclassified';
+  // v0.2 — explicit flowLane override wins over keyword classification.
+  // Set when the user drags a card to a different lane or picks the lane
+  // override dropdown in the detail panel. Persists on the model so the
+  // override survives saves + reloads.
+  if (line.flowLane) {
+    const valid = new Set(['inbound', 'storage', 'outbound', 'returnsVas', 'support', 'unclassified']);
+    if (valid.has(line.flowLane)) return line.flowLane;
+  }
   const haystack = `${line.activity_name || ''} ${line.position || ''} ${line.role || ''} ${line.most_template || ''}`.toLowerCase();
   for (const lane of _OFP_LANES) {
     for (const kw of lane.keywords) {
@@ -12080,19 +12088,31 @@ function renderOperationalFlow() {
   const populatedLanes = Object.values(lanes).filter(arr => arr.length > 0).length;
   const unclassifiedCount = lanes.unclassified.length;
 
-  // Build SVG connector arrows between top-row lanes (Inbound → Storage → Outbound)
-  const arrowSvg = (volumeLabel) => `
-    <div class="ofp-connector" title="${escapeAttr(volumeLabel || '')}">
-      <svg viewBox="0 0 60 24" width="60" height="24" preserveAspectRatio="none" aria-hidden="true">
-        <defs>
-          <marker id="ofp-arrowhead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
-            <path d="M0,0 L10,5 L0,10 z" fill="var(--ies-gray-400)"></path>
-          </marker>
-        </defs>
-        <line x1="0" y1="12" x2="56" y2="12" stroke="var(--ies-gray-400)" stroke-width="2" marker-end="url(#ofp-arrowhead)"></line>
-      </svg>
-    </div>
-  `;
+  // Inter-lane connector with FTE-throughput proxy. Use the MAX FTE in
+  // the upstream lane as a defensible proxy for "what flows through this
+  // boundary" — within a lane multiple roles double-handle the same units,
+  // so SUM would overstate, whereas MAX = the most-staffed role roughly =
+  // the bottleneck-shaped throughput.
+  const maxFteInLane = (entries) => entries.reduce((mx, e) => Math.max(mx, calc.fte(e.line, opHrs)), 0);
+  const arrowSvg = (upstreamEntries, upstreamLabel, downstreamLabel) => {
+    const fteThrough = maxFteInLane(upstreamEntries);
+    const tip = upstreamEntries.length === 0
+      ? `${upstreamLabel} → ${downstreamLabel} (no upstream activities)`
+      : `${upstreamLabel} → ${downstreamLabel} · proxy throughput = max-FTE in ${upstreamLabel} (${fteThrough.toFixed(1)} FTE on the most-staffed role).`;
+    return `
+      <div class="ofp-connector" title="${escapeAttr(tip)}">
+        <svg viewBox="0 0 60 32" width="60" height="32" preserveAspectRatio="none" aria-hidden="true">
+          <defs>
+            <marker id="ofp-arrowhead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+              <path d="M0,0 L10,5 L0,10 z" fill="var(--ies-gray-400)"></path>
+            </marker>
+          </defs>
+          <line x1="0" y1="20" x2="56" y2="20" stroke="var(--ies-gray-400)" stroke-width="2" marker-end="url(#ofp-arrowhead)"></line>
+        </svg>
+        ${fteThrough > 0 ? `<div class="ofp-connector__label">${fteThrough.toFixed(1)} FTE</div>` : ''}
+      </div>
+    `;
+  };
 
   return `
     <div class="cm-section-header">
@@ -12126,9 +12146,9 @@ function renderOperationalFlow() {
     <div class="cm-card" style="padding:18px 18px 22px;">
       <div class="ofp-row ofp-row--main">
         ${_renderOfpLane('inbound', lanes.inbound, opHrs, lc)}
-        ${arrowSvg('')}
+        ${arrowSvg(lanes.inbound, 'Inbound', 'Storage')}
         ${_renderOfpLane('storage', lanes.storage, opHrs, lc)}
-        ${arrowSvg('')}
+        ${arrowSvg(lanes.storage, 'Storage', 'Outbound')}
         ${_renderOfpLane('outbound', lanes.outbound, opHrs, lc)}
       </div>
 
@@ -12178,12 +12198,19 @@ function _renderOfpLane(laneKey, entries, opHrs, lc, opts = {}) {
     ? entries.map(e => _renderOfpNode(e, laneKey, opHrs, lc)).join('')
     : `<div class="ofp-lane__empty">No activities</div>`;
 
+  // Unclassified lane doesn't get an "+ Add" button — adding into it would
+  // be a no-op for a user (no canonical default activity name to seed with).
+  const showAdd = laneKey !== 'unclassified';
+
   return `
     <div class="ofp-lane ${widthClass} ${warnClass}" data-ofp-lane="${laneKey}">
       <div class="ofp-lane__header" style="border-top:3px solid ${meta.color};">
         <div class="ofp-lane__header-row">
           <div class="ofp-lane__title">${escapeHtml(meta.label)}</div>
-          <div class="ofp-lane__count">${entries.length}</div>
+          <div class="ofp-lane__header-actions">
+            <span class="ofp-lane__count">${entries.length}</span>
+            ${showAdd ? `<button class="ofp-add-btn" data-ofp-add-lane="${laneKey}" title="Add a new ${escapeAttr(meta.label)} activity">+</button>` : ''}
+          </div>
         </div>
         <div class="ofp-lane__fte">${totalFte.toFixed(1)} FTE</div>
       </div>
@@ -12214,16 +12241,41 @@ function _renderOfpNode(entry, laneKey, opHrs, lc) {
   const mhe = l.mhe_type && l.mhe_type !== 'none' ? l.mhe_type : '';
   const itDevice = l.it_device && l.it_device !== 'none' ? l.it_device : '';
 
+  // v0.2 — cheap validation lints. Indirect labor exempt from the
+  // "no volume / no UPH" lints (indirect roles are headcount-driven).
+  const issues = [];
+  if (!l.activity_name || !l.activity_name.trim()) issues.push('Activity name is empty');
+  if (!Number(l.hourly_rate) || Number(l.hourly_rate) <= 0) issues.push('Hourly rate is $0');
+  if (entry.isDirect) {
+    if (volume <= 0) issues.push('Volume is 0 (FTE math will collapse to 0)');
+    if (uph <= 0) issues.push('UPH is 0 (no productivity defined)');
+    if ((laneKey === 'outbound' || laneKey === 'storage') && !mhe) {
+      const lower = (l.activity_name || '').toLowerCase();
+      if (/pick|put|load|stage|pack|replen|let-?down/.test(lower)) {
+        issues.push('Movement activity has no MHE assigned');
+      }
+    }
+  }
+  const issueChip = issues.length > 0
+    ? `<span class="ofp-node__chip" title="${escapeAttr(issues.join(' • '))}">!</span>`
+    : '';
+
   return `
-    <button class="ofp-node" data-ofp-line="${arrayKind}:${entry.idx}" style="border-left:3px solid ${meta.color};" title="${escapeAttr(name)} — ${fte.toFixed(1)} FTE · ${calc.formatCurrency(cost, { compact: true })}/yr">
-      <div class="ofp-node__name">${escapeHtml(name)}</div>
+    <div class="ofp-node ${entry.isDirect ? 'ofp-node--direct' : 'ofp-node--indirect'}" data-ofp-line="${arrayKind}:${entry.idx}" data-ofp-kind="${arrayKind}" data-ofp-idx="${entry.idx}" draggable="true" style="border-left:3px solid ${meta.color};" title="${escapeAttr(name)} — ${fte.toFixed(1)} FTE · ${calc.formatCurrency(cost, { compact: true })}/yr">
+      <div class="ofp-node__top">
+        <div class="ofp-node__name">${escapeHtml(name)}</div>
+        <div class="ofp-node__top-actions">
+          ${issueChip}
+          <button class="ofp-node__del" data-ofp-del-kind="${arrayKind}" data-ofp-del-idx="${entry.idx}" data-ofp-del-name="${escapeAttr(name)}" title="Delete this activity">×</button>
+        </div>
+      </div>
       <div class="ofp-node__role">${escapeHtml(role || '—')}</div>
       <div class="ofp-node__metrics">
         <span class="ofp-node__fte">${fte.toFixed(1)} FTE</span>
         ${volume > 0 ? `<span class="ofp-node__vol">${volume.toLocaleString()}${uph > 0 ? `/${uph} UPH` : ''}</span>` : ''}
       </div>
       ${mhe || itDevice ? `<div class="ofp-node__tags">${mhe ? `<span class="ofp-tag">${escapeHtml(mhe)}</span>` : ''}${itDevice ? `<span class="ofp-tag">${escapeHtml(itDevice)}</span>` : ''}</div>` : ''}
-    </button>
+    </div>
   `;
 }
 
@@ -12237,10 +12289,12 @@ function _bindOperationalFlowEvents(container) {
     btn.addEventListener('click', () => navigateSection('labor'));
   });
 
-  // Node click → detail panel
+  // Node click → detail panel. Don't open if the click landed on the
+  // delete button or the issues chip (those have their own handlers).
   container.querySelectorAll('.ofp-node').forEach(node => {
-    node.addEventListener('click', () => {
-      const ref = node.dataset.ofpLine;  // "direct:5" or "indirect:2"
+    node.addEventListener('click', (e) => {
+      if (e.target.closest('.ofp-node__del') || e.target.closest('.ofp-node__chip')) return;
+      const ref = node.dataset.ofpLine;
       if (!ref) return;
       const [kind, idxStr] = ref.split(':');
       const idx = Number(idxStr);
@@ -12248,15 +12302,84 @@ function _bindOperationalFlowEvents(container) {
       const line = arr[idx];
       if (!line) return;
       _openOfpDetail(container, line, kind, idx);
-
-      // Visual selected state
       container.querySelectorAll('.ofp-node--selected').forEach(n => n.classList.remove('ofp-node--selected'));
       node.classList.add('ofp-node--selected');
     });
   });
 
-  // Close-button + edit-jump on the detail panel use a delegated handler
-  // so re-renders of the panel content don't drop bindings.
+  // v0.2 — Add button on each lane header
+  container.querySelectorAll('.ofp-add-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const lane = btn.dataset.ofpAddLane;
+      if (!lane) return;
+      _ofpAddLineToLane(lane);
+    });
+  });
+
+  // v0.2 — Delete button on each node card
+  container.querySelectorAll('.ofp-node__del').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const kind = btn.dataset.ofpDelKind;
+      const idx = Number(btn.dataset.ofpDelIdx);
+      const name = btn.dataset.ofpDelName || 'this activity';
+      if (!confirm(`Delete "${name}"? This removes the underlying labor line.`)) return;
+      _ofpDeleteLine(kind, idx);
+    });
+  });
+
+  // v0.2 — Drag-and-drop reassign between lanes. Persists as line.flowLane.
+  let dragInfo = null;
+  container.querySelectorAll('.ofp-node').forEach(node => {
+    node.addEventListener('dragstart', (e) => {
+      const kind = node.dataset.ofpKind;
+      const idx = Number(node.dataset.ofpIdx);
+      dragInfo = { kind, idx };
+      node.classList.add('ofp-node--dragging');
+      try { e.dataTransfer.effectAllowed = 'move'; } catch (_) {}
+    });
+    node.addEventListener('dragend', () => {
+      node.classList.remove('ofp-node--dragging');
+      dragInfo = null;
+      container.querySelectorAll('.ofp-lane--dragover').forEach(el => el.classList.remove('ofp-lane--dragover'));
+    });
+  });
+  container.querySelectorAll('.ofp-lane[data-ofp-lane]').forEach(lane => {
+    const targetLane = lane.dataset.ofpLane;
+    lane.addEventListener('dragover', (e) => {
+      if (!dragInfo) return;
+      e.preventDefault();
+      try { e.dataTransfer.dropEffect = 'move'; } catch (_) {}
+      lane.classList.add('ofp-lane--dragover');
+    });
+    lane.addEventListener('dragleave', (e) => {
+      // Only drop the highlight when leaving the lane itself, not a child.
+      if (e.target === lane) lane.classList.remove('ofp-lane--dragover');
+    });
+    lane.addEventListener('drop', (e) => {
+      e.preventDefault();
+      lane.classList.remove('ofp-lane--dragover');
+      if (!dragInfo) return;
+      const { kind, idx } = dragInfo;
+      const arr = kind === 'direct' ? (model.laborLines || []) : (model.indirectLaborLines || []);
+      const line = arr[idx];
+      dragInfo = null;
+      if (!line) return;
+      // No-op if dropping into the lane the line is already in.
+      const currentLane = kind === 'direct' ? _classifyLaneFromLine(line) : 'support';
+      if (currentLane === targetLane) return;
+      // Indirect labor lives in 'support' by convention. Allow override
+      // anyway — the user knows what they want.
+      line.flowLane = targetLane;
+      isDirty = true;
+      if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+      renderSection();
+      try { showToast(`Reassigned to ${targetLane === 'returnsVas' ? 'Returns/VAS' : (targetLane.charAt(0).toUpperCase() + targetLane.slice(1))}.`, 'success'); } catch (_) {}
+    });
+  });
+
+  // Detail panel close + edit-jump
   const panel = container.querySelector('#ofp-detail-panel');
   if (panel) {
     panel.addEventListener('click', (e) => {
@@ -12271,6 +12394,65 @@ function _bindOperationalFlowEvents(container) {
   }
 }
 
+/**
+ * Defaults for "+ Add" on each lane. Activity name + role + a sane MHE
+ * are seeded so the new card reads as a real placeholder rather than
+ * an empty row, and so the keyword classifier puts it back in the same
+ * lane on next render even before the user fills in details.
+ */
+const _OFP_LANE_DEFAULTS = {
+  inbound:    { activity_name: 'Receiving',   position: 'Receiver',     mhe_type: 'sit-down forklift', it_device: 'RF' },
+  storage:    { activity_name: 'Putaway',     position: 'Putaway Driver', mhe_type: 'reach truck',     it_device: 'RF' },
+  outbound:   { activity_name: 'Picking',     position: 'Picker',       mhe_type: 'EPJ',               it_device: 'RF' },
+  returnsVas: { activity_name: 'Returns Processing', position: 'Returns Clerk', mhe_type: '',           it_device: 'RF' },
+  support:    { activity_name: 'Lead',        position: 'Operations Lead', mhe_type: '',                it_device: '' },
+};
+
+function _ofpAddLineToLane(laneKey) {
+  const def = _OFP_LANE_DEFAULTS[laneKey];
+  if (!def) return;
+  // Support lane → indirect labor; everything else → direct labor.
+  if (laneKey === 'support') {
+    if (!Array.isArray(model.indirectLaborLines)) model.indirectLaborLines = [];
+    model.indirectLaborLines.push({
+      ...def,
+      annual_hours: 2080,
+      hourly_rate: 0,
+      burden_pct: 30,
+      employment_type: 'permanent',
+      flowLane: 'support',
+      pricing_bucket: defaultBucketFor('labor'),
+    });
+  } else {
+    if (!Array.isArray(model.laborLines)) model.laborLines = [];
+    model.laborLines.push({
+      ...def,
+      volume: 0,
+      base_uph: 0,
+      annual_hours: 0,
+      hourly_rate: 0,
+      burden_pct: 30,
+      employment_type: 'permanent',
+      temp_agency_markup_pct: 0,
+      performance_variance_pct: 0,
+      flowLane: laneKey,
+      pricing_bucket: defaultBucketFor('labor'),
+    });
+  }
+  isDirty = true;
+  if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+  renderSection();
+}
+
+function _ofpDeleteLine(kind, idx) {
+  const arr = kind === 'direct' ? (model.laborLines || []) : (model.indirectLaborLines || []);
+  if (!arr[idx]) return;
+  arr.splice(idx, 1);
+  isDirty = true;
+  if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+  renderSection();
+}
+
 function _openOfpDetail(container, line, kind, idx) {
   const panel = container.querySelector('#ofp-detail-panel');
   if (!panel) return;
@@ -12283,20 +12465,21 @@ function _openOfpDetail(container, line, kind, idx) {
   const lane = kind === 'direct' ? _classifyLaneFromLine(line) : 'support';
   const meta = _ofpLaneMeta(lane);
   const name = line.activity_name || line.position || '(unnamed)';
+  const arrayPath = kind === 'direct' ? 'laborLines' : 'indirectLaborLines';
 
-  const fields = [
-    ['Activity', line.activity_name || '—'],
-    ['Position / Role', line.position || line.role || '—'],
-    ['Lane', meta.label],
-    ['MHE', (line.mhe_type && line.mhe_type !== 'none') ? line.mhe_type : '—'],
-    ['IT / Device', (line.it_device && line.it_device !== 'none') ? line.it_device : '—'],
-    ['Volume', Number(line.volume) > 0 ? Number(line.volume).toLocaleString() : '—'],
-    ['UPH', Number(line.base_uph) > 0 ? Number(line.base_uph).toString() : '—'],
-    ['FTE', fte.toFixed(2)],
-    ['Hourly Rate', Number(line.hourly_rate) > 0 ? `$${Number(line.hourly_rate).toFixed(2)}` : '—'],
-    ['Employment', line.employment_type || '—'],
-    ['Annual Cost', calc.formatCurrency(cost, { compact: false })],
+  // Build the lane override <select> options. "auto" means flowLane is
+  // unset → fall through to keyword classification.
+  const laneOpts = [
+    { val: '',            label: 'Auto (keyword match)' },
+    { val: 'inbound',     label: 'Inbound' },
+    { val: 'storage',     label: 'Storage' },
+    { val: 'outbound',    label: 'Outbound' },
+    { val: 'returnsVas',  label: 'Returns / VAS' },
+    { val: 'support',     label: 'Support / Indirect' },
   ];
+  const laneSelectHtml = laneOpts.map(o =>
+    `<option value="${o.val}" ${(line.flowLane || '') === o.val ? 'selected' : ''}>${escapeHtml(o.label)}</option>`
+  ).join('');
 
   panel.innerHTML = `
     <div class="ofp-detail-panel__header" style="border-top:4px solid ${meta.color};">
@@ -12307,19 +12490,104 @@ function _openOfpDetail(container, line, kind, idx) {
       <button class="hub-btn hub-btn-secondary hub-btn-sm" data-ofp-action="close" title="Close panel">✕</button>
     </div>
     <div class="ofp-detail-panel__grid">
-      ${fields.map(([k, v]) => `
-        <div class="ofp-detail-panel__field">
-          <div class="ofp-detail-panel__field-label">${escapeHtml(k)}</div>
-          <div class="ofp-detail-panel__field-value">${escapeHtml(String(v))}</div>
-        </div>
-      `).join('')}
+      <div class="ofp-detail-panel__field">
+        <label class="ofp-detail-panel__field-label">Activity</label>
+        <input class="hub-input ofp-edit-input" type="text" value="${escapeAttr(line.activity_name || '')}"
+          data-array="${arrayPath}" data-idx="${idx}" data-field="activity_name" />
+      </div>
+      <div class="ofp-detail-panel__field">
+        <label class="ofp-detail-panel__field-label">Position / Role</label>
+        <input class="hub-input ofp-edit-input" type="text" value="${escapeAttr(line.position || line.role || '')}"
+          data-array="${arrayPath}" data-idx="${idx}" data-field="position" />
+      </div>
+      <div class="ofp-detail-panel__field">
+        <label class="ofp-detail-panel__field-label">Lane Override</label>
+        <select class="hub-input ofp-edit-input" data-array="${arrayPath}" data-idx="${idx}" data-field="flowLane">
+          ${laneSelectHtml}
+        </select>
+      </div>
+      <div class="ofp-detail-panel__field">
+        <label class="ofp-detail-panel__field-label">MHE</label>
+        <input class="hub-input ofp-edit-input" type="text" value="${escapeAttr(line.mhe_type && line.mhe_type !== 'none' ? line.mhe_type : '')}"
+          data-array="${arrayPath}" data-idx="${idx}" data-field="mhe_type" placeholder="e.g. reach truck" />
+      </div>
+      <div class="ofp-detail-panel__field">
+        <label class="ofp-detail-panel__field-label">IT / Device</label>
+        <input class="hub-input ofp-edit-input" type="text" value="${escapeAttr(line.it_device && line.it_device !== 'none' ? line.it_device : '')}"
+          data-array="${arrayPath}" data-idx="${idx}" data-field="it_device" placeholder="e.g. RF, voice" />
+      </div>
+      <div class="ofp-detail-panel__field">
+        <label class="ofp-detail-panel__field-label">Volume (annual)</label>
+        <input class="hub-input ofp-edit-input" type="number" min="0" step="1" value="${Number(line.volume) || 0}"
+          data-array="${arrayPath}" data-idx="${idx}" data-field="volume" data-type="number" />
+      </div>
+      <div class="ofp-detail-panel__field">
+        <label class="ofp-detail-panel__field-label">UPH</label>
+        <input class="hub-input ofp-edit-input" type="number" min="0" step="1" value="${Number(line.base_uph) || 0}"
+          data-array="${arrayPath}" data-idx="${idx}" data-field="base_uph" data-type="number" />
+      </div>
+      <div class="ofp-detail-panel__field">
+        <label class="ofp-detail-panel__field-label">Hourly Rate ($)</label>
+        <input class="hub-input ofp-edit-input" type="number" min="0" step="0.5" value="${Number(line.hourly_rate) || 0}"
+          data-array="${arrayPath}" data-idx="${idx}" data-field="hourly_rate" data-type="number" />
+      </div>
+      <div class="ofp-detail-panel__field">
+        <label class="ofp-detail-panel__field-label">FTE (computed)</label>
+        <div class="ofp-detail-panel__field-value">${fte.toFixed(2)}</div>
+      </div>
+      <div class="ofp-detail-panel__field">
+        <label class="ofp-detail-panel__field-label">Annual Cost (computed)</label>
+        <div class="ofp-detail-panel__field-value">${calc.formatCurrency(cost, { compact: false })}</div>
+      </div>
     </div>
     <div class="ofp-detail-panel__footer">
-      <span class="cm-subtle" style="font-size:11px;">v0.1 read-only — edits round-trip through the Labor page.</span>
-      <button class="hub-btn hub-btn-sm" data-ofp-action="edit-on-labor">Edit on Labor page →</button>
+      <span class="cm-subtle" style="font-size:11px;">v0.2 — edits write through to the Labor page model. FTE + Cost recompute on commit.</span>
+      <button class="hub-btn hub-btn-sm" data-ofp-action="edit-on-labor">Open in Labor page →</button>
     </div>
   `;
   panel.style.display = 'block';
+
+  // Wire the editable inputs. Use commit-on-change semantics for text /
+  // number / select so a full re-render doesn't steal focus on the first
+  // keystroke (same issue Brock hit with Shift Structure 2026-04-22).
+  _bindOfpPanelInputs(panel, container);
+}
+
+/**
+ * Bind editable inputs inside the OFP detail panel. Mirrors the central
+ * data-array binder but commits on 'change' (not 'input') so a typed
+ * value isn't truncated by an interim re-render.
+ */
+function _bindOfpPanelInputs(panel, container) {
+  panel.querySelectorAll('.ofp-edit-input[data-array]').forEach(input => {
+    const arrayPath = input.dataset.array;
+    const idx = Number(input.dataset.idx);
+    const field = input.dataset.field;
+    const isNum = input.dataset.type === 'number';
+    const arr = arrayPath === 'laborLines' ? (model.laborLines || []) : (model.indirectLaborLines || []);
+    if (!arr[idx]) return;
+    input.addEventListener('change', () => {
+      let val = input.value;
+      if (isNum) val = val === '' ? 0 : Number(val);
+      // Empty string for flowLane = clear override (back to keyword auto).
+      if (field === 'flowLane' && val === '') val = undefined;
+      // Empty string for mhe_type / it_device = clear (treat 'none').
+      if ((field === 'mhe_type' || field === 'it_device') && val === '') val = undefined;
+      if (val === undefined) {
+        delete arr[idx][field];
+      } else {
+        arr[idx][field] = val;
+      }
+      // Recompute hours if volume or UPH changed (mirrors what the Labor
+      // page does on those fields).
+      if ((field === 'volume' || field === 'base_uph') && typeof recomputeLineHours === 'function') {
+        try { recomputeLineHours(arr[idx]); } catch (_) {}
+      }
+      isDirty = true;
+      if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+      renderSection();
+    });
+  });
 }
 
 /** Inline OFP styles. Scoped via .ofp- prefix so they don't bleed. */
@@ -12329,7 +12597,8 @@ function _ofpStyles() {
       .ofp-row { display: flex; align-items: stretch; gap: 0; }
       .ofp-row--main > .ofp-lane { flex: 1 1 0; min-width: 0; }
       .ofp-row--secondary > .ofp-lane { flex: 1 1 100%; }
-      .ofp-connector { display: flex; align-items: flex-start; padding-top: 56px; flex: 0 0 auto; width: 60px; }
+      .ofp-connector { display: flex; flex-direction: column; align-items: center; padding-top: 56px; flex: 0 0 auto; width: 60px; }
+      .ofp-connector__label { font-size: 9px; color: var(--ies-gray-500); font-weight: 600; margin-top: -2px; white-space: nowrap; }
 
       .ofp-lane {
         display: flex; flex-direction: column;
@@ -12417,6 +12686,53 @@ function _ofpStyles() {
         padding: 10px 16px; border-top: 1px solid var(--ies-gray-200);
         background: var(--ies-gray-50);
       }
+
+      /* v0.2 — lane header actions row (count + add button) */
+      .ofp-lane__header-actions { display: flex; align-items: center; gap: 6px; }
+      .ofp-add-btn {
+        background: var(--ies-blue); color: #fff; border: none; border-radius: 4px;
+        width: 22px; height: 22px; line-height: 1; font-size: 16px; font-weight: 700;
+        cursor: pointer; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+        transition: background 0.12s;
+      }
+      .ofp-add-btn:hover { background: var(--ies-navy, #001f3f); }
+
+      /* v0.2 — node card top row (name + del/chip), delete button, validation chip */
+      .ofp-node { position: relative; }
+      .ofp-node__top { display: flex; justify-content: space-between; align-items: flex-start; gap: 6px; }
+      .ofp-node__top .ofp-node__name { flex: 1 1 auto; min-width: 0; }
+      .ofp-node__top-actions { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+      .ofp-node__del {
+        background: transparent; border: none; color: var(--ies-gray-400);
+        cursor: pointer; font-size: 14px; line-height: 1; padding: 0 2px;
+        opacity: 0; transition: opacity 0.12s, color 0.12s;
+      }
+      .ofp-node:hover .ofp-node__del { opacity: 1; }
+      .ofp-node__del:hover { color: #DC2626; }
+      .ofp-node__chip {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 16px; height: 16px; border-radius: 50%;
+        background: #F59E0B; color: #fff;
+        font-size: 11px; font-weight: 700; cursor: help;
+      }
+
+      /* v0.2 — drag-and-drop visual states */
+      .ofp-node[draggable="true"] { cursor: grab; }
+      .ofp-node[draggable="true"]:active { cursor: grabbing; }
+      .ofp-node--dragging { opacity: 0.45; transform: scale(0.98); }
+      .ofp-lane--dragover {
+        outline: 2px dashed var(--ies-blue);
+        outline-offset: -2px;
+        background: rgba(0, 71, 171, 0.06);
+      }
+
+      /* v0.2 — editable detail panel inputs */
+      .ofp-detail-panel__field { display: flex; flex-direction: column; gap: 4px; }
+      .ofp-edit-input {
+        font-size: 12px; padding: 5px 8px; border: 1px solid var(--ies-gray-200);
+        border-radius: 4px; width: 100%;
+      }
+      .ofp-edit-input:focus { outline: none; border-color: var(--ies-blue); box-shadow: 0 0 0 2px rgba(0,71,171,0.15); }
     </style>
   `;
 }
