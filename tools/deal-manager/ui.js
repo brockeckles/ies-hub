@@ -8,7 +8,7 @@
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sL';
 import { state } from '../../shared/state.js?v=20260418-sL';
-import { renderToolHeader } from '../../shared/tool-frame.js?v=20260427-pm3-s1';
+import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260429-tc2-dm';
 import * as calc from './calc.js?v=20260426-s3';
 import * as api from './api.js?v=20260427-pm3-s2';
 import * as cmApi from '../cost-model/api.js?v=20260423-xQ';
@@ -205,6 +205,40 @@ async function handleCmSaved(payload) {
 // ============================================================
 
 // Detail-mode tab definitions (used by header)
+
+// ============================================================
+// CHROME v3 — phase + section structure (CM Chrome v3 ripple, step 3 redo)
+// ============================================================
+// Multi-Site has two distinct shapes:
+//   - Landing: portfolio view — list / kanban toggle, no active deal.
+//   - Detail: deal-level view — 9 sub-tabs grouped into 4 phases.
+// _buildDmChromeOpts() branches on isLandingView() to produce the
+// correct chrome opts for each.
+const DM_DETAIL_GROUPS = [
+  { key: 'overview',    label: 'Overview',    description: 'Deal-level rollup' },
+  { key: 'composition', label: 'Composition', description: 'Sites & financials' },
+  { key: 'analysis',    label: 'Analysis',    description: 'Sensitivity & compare' },
+  { key: 'workflow',    label: 'Workflow',    description: 'DOS pipeline, hours, tasks, updates' },
+];
+const DM_DETAIL_SECTIONS = [
+  { key: 'summary',     label: 'Summary',     group: 'overview' },
+  { key: 'sites',       label: 'Sites',       group: 'composition' },
+  { key: 'financials',  label: 'Financials',  group: 'composition' },
+  { key: 'sensitivity', label: 'Sensitivity', group: 'analysis' },
+  { key: 'compare',     label: 'Compare',     group: 'analysis' },
+  { key: 'pipeline',    label: 'Pipeline',    group: 'workflow' },
+  { key: 'hours',       label: 'Hours',       group: 'workflow' },
+  { key: 'tasks',       label: 'Tasks',       group: 'workflow' },
+  { key: 'updates',     label: 'Updates',     group: 'workflow' },
+];
+const DM_LANDING_GROUPS = [
+  { key: 'portfolio', label: 'Portfolio', description: 'Multi-deal portfolio view' },
+];
+const DM_LANDING_SECTIONS = [
+  { key: 'list',   label: '\u{1F4CB} List',   group: 'portfolio' },
+  { key: 'kanban', label: '\u{1F5C2} Kanban', group: 'portfolio' },
+];
+
 const DETAIL_TABS = [
   { key: 'summary', label: 'Summary' },
   { key: 'sites', label: 'Sites' },
@@ -222,140 +256,142 @@ function isLandingView() {
 }
 
 function renderShell() {
+  // CM Chrome v3 ripple — chrome HTML+CSS lives in shared/tool-chrome.js.
+  return renderToolChrome(_buildDmChromeOpts());
+}
+
+/** Build chrome opts from current Multi-Site state. */
+function _buildDmChromeOpts() {
   const landing = isLandingView();
-  const backAction = landing ? 'dm-tool-back' : 'dm-back';
-  const backLabel = landing ? '← Design Tools' : '← All Deals';
-  const headerTabs = landing ? [] : DETAIL_TABS;
-  // Status chips: portfolio always; deal-status pill only in detail
-  const chips = [{ label: 'Multi-deal portfolio', kind: /** @type {const} */ ('default') }];
-  if (!landing && activeDeal) {
-    const badge = calc.statusBadge(activeDeal.status);
-    /** @type {{label:string,kind:'linked'|'standalone'|'saved'|'draft'|'default',dot?:boolean,title?:string}} */
-    const dealChip = {
-      label: badge.label,
-      kind: activeDeal.status === 'won' ? 'saved' : activeDeal.status === 'draft' ? 'draft' : 'default',
-      dot: true,
+
+  if (landing) {
+    const activeSection = (landingViewMode === 'kanban') ? 'kanban' : 'list';
+    const actions = [
+      { id: 'dm-toggle-view',
+        label: landingViewMode === 'kanban' ? '\u{1F4CB} List View' : '\u{1F5C2} Kanban View',
+        title: 'Toggle landing view' },
+      { id: 'dm-load-sample',
+        label: 'Load Sample Deal',
+        title: 'Seed a sample multi-site deal so you can see what a populated analysis looks like',
+        hidden: allDeals.length > 0 },
+      { id: 'dm-new-deal',
+        label: '+ New Deal',
+        title: 'Start a new multi-site deal',
+        primary: true },
+    ];
+    return {
+      toolKey: 'dm',
+      groups: DM_LANDING_GROUPS,
+      sections: DM_LANDING_SECTIONS,
+      activePhase: 'portfolio',
+      activeSection,
+      sectionCompleteness: () => 'complete',
+      saveState: null,
+      actions,
+      showSidebar: false,
+      showSidebarToggle: false,
+      sidebarHeader: 'All Sections',
+      sidebarBody: '',
+      bodyHtml: '<div id="dm-content" style="overflow-y:auto;padding:24px;height:100%;"></div>',
+      backTitle: 'Back to Design Tools',
+      emptyPhaseHint: '',
     };
-    chips.push(dealChip);
   }
 
-  // Per-tab navy banner descriptions (CM page-name lift pattern, 2026-04-27).
-  // Landing mode shows a portfolio overview message; detail mode rotates per tab.
-  const TAB_DESC = {
-    list:        'Browse all multi-site deals — search by client, owner, or status. Click a row to drill into per-site financials, pipeline, and tasks.',
-    kanban:      'Pipeline view — drag deals between draft / proposal / verbal / won / lost columns to update status. Card chips reflect site count + sqft + revenue.',
-    summary:     'Deal-level rollup — total revenue, cost, gross margin, NPV, payback, and DOS stage progress across every linked site.',
-    sites:       'Site list — link existing Cost Model projects or add empty site shells. Each site contributes its annual revenue / cost / sqft / volume to the portfolio rollup.',
-    financials:  'Per-site financial breakdown — revenue, cost, margin, capex, and contract-term metrics. Configure EBITDA overhead and discount rate at the deal level.',
-    sensitivity: 'What-if sensitivity table — flex revenue, cost, and ramp assumptions to see margin/NPV impact across the portfolio.',
-    compare:     'Side-by-side scenario compare — pit two deal versions or two site configurations against each other for executive review.',
-    pipeline:    'DOS stage tracker — visual progress bar across the 6 GXO solution-design stages. Mark elements complete as they close out.',
-    hours:       'Time tracking — log hours by team member + workstream against this deal. Used for cost-of-pursuit and capacity planning.',
-    tasks:       'Task list — open and closed action items, owner, due date. Drives the deal-progress chip on the Summary tab.',
-    updates:     'Activity feed — chronological log of comments, status flips, and milestone notes. Use to brief teammates returning to the deal.',
+  // Detail mode.
+  const sec = DM_DETAIL_SECTIONS.find(s => s.key === activeTab) || DM_DETAIL_SECTIONS[0];
+  const activePhase = sec.group;
+  return {
+    toolKey: 'dm',
+    groups: DM_DETAIL_GROUPS,
+    sections: DM_DETAIL_SECTIONS,
+    activePhase,
+    activeSection: activeTab,
+    sectionCompleteness: () => 'complete',
+    saveState: null,
+    actions: [],
+    showSidebar: false,
+    showSidebarToggle: false,
+    sidebarHeader: 'All Sections',
+    sidebarBody: '',
+    bodyHtml: '<div id="dm-content" style="overflow-y:auto;padding:24px;height:100%;"></div>',
+    backTitle: activeDeal ? ('Back to All Deals · ' + (activeDeal.dealName || 'Untitled')) : 'Back to All Deals',
+    emptyPhaseHint: '',
   };
-  const TAB_LABEL = {
-    list: 'All Deals', kanban: 'Pipeline', summary: 'Summary', sites: 'Sites', financials: 'Financials',
-    sensitivity: 'Sensitivity', compare: 'Compare', pipeline: 'DOS Pipeline', hours: 'Hours', tasks: 'Tasks', updates: 'Updates',
-  };
-  const bannerTab = landing ? (landingViewMode === 'kanban' ? 'kanban' : 'list') : activeTab;
-  const bannerDesc = landing
-    ? TAB_DESC[bannerTab]
-    : (activeDeal ? `<strong>${activeDeal.dealName}</strong> · ${activeDeal.clientName || 'Unassigned client'}. ${TAB_DESC[bannerTab] || ''}` : TAB_DESC[bannerTab]);
-  return `
-    <div class="hub-content-inner" style="padding:0;display:flex;flex-direction:column;height:100%;">
-      ${renderToolHeader({
-        toolName: 'Multi-Site Analyzer',
-        toolKey: 'dm',
-        backAction,
-        backLabel,
-        tabs: headerTabs,
-        activeTab: landing ? '' : activeTab,
-        tabsId: 'dm-tabs',
-        statusChips: chips,
-        description: bannerDesc,
-        subtitle: TAB_LABEL[bannerTab] || '',
-      })}
-      <!-- Landing-mode action rail (hidden in detail mode) -->
-      <div id="dm-action-rail" class="hub-action-rail" style="padding:6px 24px 0 24px;margin-left:0;flex-shrink:0;justify-content:flex-start;display:${landing ? 'flex' : 'none'};">
-        ${landing ? `
-          <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="dm-toggle-view">📋 ${landingViewMode === 'kanban' ? 'List View' : 'Kanban View'}</button>
-          ${allDeals.length === 0 ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="dm-load-sample" title="Seed a sample multi-site deal so you can see what a populated analysis looks like">Load Sample Deal</button>` : ''}
-          <button class="hub-btn hub-btn-sm hub-btn-primary" data-action="dm-new-deal">+ New Deal</button>
-        ` : ''}
-      </div>
-      <div id="dm-content" style="flex:1;overflow-y:auto;padding:24px;"></div>
-    </div>
-  `;
 }
 
 function bindShellEvents() {
   if (!rootEl) return;
+  rootEl.__tcBound = false;
 
-  // Delegated header tab clicks (works for re-renders too)
-  rootEl.addEventListener('click', shellClickHandler);
+  bindToolChromeEvents(rootEl, {
+    onPhase: (phaseKey) => {
+      // Detail-mode only: jump to the first section of the new phase.
+      if (isLandingView()) return;
+      const sectionsInPhase = DM_DETAIL_SECTIONS.filter(s => s.group === phaseKey);
+      const first = sectionsInPhase[0];
+      if (first && first.key !== activeTab) {
+        activeTab = /** @type {any} */ (first.key);
+        renderContent();
+        refreshToolChrome(rootEl, _buildDmChromeOpts());
+      }
+    },
+    onSection: (key) => {
+      if (isLandingView()) {
+        // Landing mode — toggle list / kanban.
+        if (key === 'kanban' || key === 'list') {
+          landingViewMode = (key === 'kanban') ? 'kanban' : 'table';
+          activeTab = /** @type {any} */ (key);
+          rerenderShell();
+        }
+        return;
+      }
+      if (key !== activeTab) {
+        activeTab = /** @type {any} */ (key);
+        renderContent();
+        refreshToolChrome(rootEl, _buildDmChromeOpts());
+      }
+    },
+    onBack: () => {
+      if (isLandingView()) {
+        // Landing-mode back — return to Design Tools hub.
+        window.location.hash = 'designtools';
+      } else {
+        // Detail-mode back — return to deal list.
+        activeTab = (landingViewMode === 'kanban' ? 'kanban' : 'list');
+        activeDeal = null;
+        rerenderShell();
+      }
+    },
+    onAction: (id) => {
+      if (id === 'dm-toggle-view') {
+        landingViewMode = (landingViewMode === 'kanban') ? 'table' : 'kanban';
+        activeTab = /** @type {any} */ (landingViewMode === 'kanban' ? 'kanban' : 'list');
+        rerenderShell();
+        return;
+      }
+      if (id === 'dm-new-deal') return createNewDeal();
+      if (id === 'dm-load-sample') {
+        allDeals = [{ ...calc.DEMO_DEAL, id: 'demo-deal-1' }];
+        rerenderShell();
+        bus.emit('deal:sample-loaded');
+        return;
+      }
+    },
+  });
+
+  // Content-area click delegation — for in-content interactions (delete
+  // weekly update, edit task) that the chrome doesn't know about.
+  rootEl.addEventListener('click', _dmContentClickHandler);
 }
 
 /** @param {Event} e */
-function shellClickHandler(e) {
+function _dmContentClickHandler(e) {
   if (!rootEl) return;
   const target = /** @type {HTMLElement} */ (e.target);
   if (!target || !target.closest) return;
 
-  // Tab strip
-  const tabBtn = target.closest('#dm-tabs [data-tab]');
-  if (tabBtn) {
-    const key = /** @type {HTMLElement} */ (tabBtn).dataset.tab;
-    if (key && key !== activeTab) {
-      activeTab = /** @type {any} */ (key);
-      // Update active class on tabs without full re-render
-      rootEl.querySelectorAll('#dm-tabs [data-tab]').forEach(b => {
-        b.classList.toggle('active', /** @type {HTMLElement} */ (b).dataset.tab === activeTab);
-      });
-      renderContent();
-    }
-    return;
-  }
-
-  // Back to Design Tools (landing-mode back button)
-  if (target.closest('[data-action="dm-tool-back"]')) {
-    window.location.hash = 'designtools';
-    return;
-  }
-
-  // Back to deal list (detail-mode back button)
-  if (target.closest('[data-action="dm-back"]')) {
-    activeTab = landingViewMode === 'kanban' ? 'kanban' : 'list';
-    activeDeal = null;
-    rerenderShell();
-    return;
-  }
-
-  // Landing toggle view
-  if (target.closest('[data-action="dm-toggle-view"]')) {
-    landingViewMode = landingViewMode === 'kanban' ? 'table' : 'kanban';
-    activeTab = /** @type {any} */ (landingViewMode === 'kanban' ? 'kanban' : 'list');
-    rerenderShell();
-    return;
-  }
-
-  // Landing new deal
-  if (target.closest('[data-action="dm-new-deal"]')) {
-    createNewDeal();
-    return;
-  }
-
-  // Load sample deal — seeds the demo deal so users can see a populated
-  // multi-site analysis. Button only renders when allDeals is empty.
-  if (target.closest('[data-action="dm-load-sample"]')) {
-    allDeals = [{ ...calc.DEMO_DEAL, id: 'demo-deal-1' }];
-    rerenderShell();
-    bus.emit('deal:sample-loaded');
-    return;
-  }
-
-  // Delete weekly update — closes the audit finding "pmDeleteUpdate called
-  // but undefined". Uses confirm dialog + api.deleteUpdate then re-renders.
+  // Delete weekly update.
   const delUpdateBtn = /** @type {HTMLElement|null} */ (target.closest('[data-action="dm-delete-update"]'));
   if (delUpdateBtn) {
     const updateId = delUpdateBtn.dataset.updateId;
@@ -375,8 +411,7 @@ function shellClickHandler(e) {
     return;
   }
 
-  // Edit task — replaces the former `alert('Edit task')` stub with an inline
-  // edit modal allowing status / priority / title update via api.updateTask.
+  // Edit task (opens inline modal).
   const editTaskBtn = /** @type {HTMLElement|null} */ (target.closest('[data-action="dm-edit-task"]'));
   if (editTaskBtn) {
     const taskId = editTaskBtn.dataset.taskId;
@@ -385,6 +420,8 @@ function shellClickHandler(e) {
     return;
   }
 }
+
+
 
 /**
  * Simple edit modal for an existing task. Closes a P0 stub (button was wired
@@ -482,8 +519,8 @@ function showEditTaskModal(task) {
 /** Full shell re-render (used when changing landing↔detail context). */
 function rerenderShell() {
   if (!rootEl) return;
-  // Drop the previous delegated handler before swapping innerHTML to avoid duplicates
-  rootEl.removeEventListener('click', shellClickHandler);
+  // Drop previous content-area delegation before swapping innerHTML.
+  rootEl.removeEventListener('click', _dmContentClickHandler);
   rootEl.innerHTML = renderShell();
   bindShellEvents();
   renderContent();
