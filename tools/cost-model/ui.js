@@ -427,6 +427,9 @@ const SECTION_GROUPS = [
   { key: 'analysis',   label: 'Analysis',    description: 'What-If, assumptions, links' },
 ];
 
+// v0.3-chrome — sidebar drawer toggle (default closed)
+let _cmSidebarOpen = false;
+
 // Phase 3 module-local state
 let heuristicsCatalog = [];
 let heuristicOverrides = {};
@@ -1050,7 +1053,41 @@ function showCmToast(message, level) {
 
 function wireEditorEvents() {
   if (!rootEl) return;
-  // Sidebar nav
+  // v0.3-chrome — Phase tabs at top: clicking a different phase navigates
+  // to the first section of that phase. Clicking the current phase is a
+  // no-op (avoids the surprise of jumping to a different section when you
+  // wanted to stay where you were).
+  rootEl.querySelectorAll('[data-cm-phase]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const targetPhase = btn.dataset.cmPhase;
+      const activeSec = SECTIONS.find(s => s.key === activeSection);
+      if (!targetPhase || (activeSec && activeSec.group === targetPhase)) return;
+      const sectionsInPhase = SECTIONS.filter(s => s.group === targetPhase);
+      const first = sectionsInPhase[0];
+      if (first) navigateSection(first.key);
+    });
+  });
+  // v0.3-chrome — Section pills (top ribbon row 2): same behavior as
+  // legacy sidebar nav — pick a section, navigate to it.
+  rootEl.querySelectorAll('[data-cm-section]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.cmSection;
+      if (key) navigateSection(key);
+    });
+  });
+  // v0.3-chrome — Sidebar drawer toggle (the ☰ button) + close (✕ inside
+  // the drawer header). Toggling re-renders the shell so the data-
+  // sidebar-open attribute updates.
+  rootEl.querySelector('#cm-sidebar-toggle')?.addEventListener('click', () => {
+    _cmSidebarOpen = !_cmSidebarOpen;
+    renderCurrentView();
+  });
+  rootEl.querySelector('#cm-sidebar-close')?.addEventListener('click', () => {
+    _cmSidebarOpen = false;
+    renderCurrentView();
+  });
+  // Sidebar nav (legacy class .cm-nav-item — used by the in-drawer
+  // grouped nav rendered by renderGroupedNav)
   rootEl.querySelectorAll('.cm-nav-item').forEach(item => {
     item.addEventListener('click', () => {
       const key = item.dataset.section;
@@ -1811,100 +1848,19 @@ function refreshHeaderKpis(opts) {
     host.classList.remove('is-ready');
     return;
   }
-  // 2026-04-27 — Lift the section page-name + description INTO the navy
-  // bar so it reads as a unified "tab identity" header. Each renderer is
-  // the source of truth for the title + desc text; we read it out here
-  // and hide the original via CSS so the title appears exactly once.
-  //
-  // Pattern variation across the 21 sections is a tax we pay for letting
-  // each renderer evolve independently — Implementation/Scenarios/Assumptions/
-  // What-If Studio use `<h2>` inside `.cm-section-header`, Cashflow & P&L
-  // (timeline) uses `<h2>` inside `.cm-timeline-meta`, Shift Planning lives
-  // in an external module with its own `.sp-header__title h2 + p`, and
-  // Setup/Equipment/Labor/etc. use the canonical `.cm-section-title +
-  // .cm-section-desc` pair. We try each pattern in priority order, and
-  // fall back to a static title map keyed off `activeSection` so the bar
-  // never lands titleless.
-  const SECTION_TITLE_FALLBACK = {
-    setup: 'Project Setup',
-    volumes: 'Volumes & Profile',
-    facility: 'Facility',
-    shifts: 'Labor Factors',
-    shiftPlanning: 'Shift Planning',
-    pricingBuckets: 'Pricing Buckets',
-    labor: 'Labor',
-    equipment: 'Equipment',
-    overhead: 'Overhead',
-    vas: 'Value-Added Services',
-    financial: 'Financial Assumptions',
-    startup: 'Start-Up / Capital',
-    implementation: 'Implementation',
-    pricing: 'Pricing Schedule',
-    summary: 'Summary Dashboard',
-    timeline: 'Cashflow & P&L',
-    assumptions: 'Assumptions',
-    scenarios: 'Scenarios',
-    whatif: 'What-If Studio',
-    linked: 'Linked Designs',
-  };
-  const TITLE_SELECTORS = [
-    '.cm-section-header .cm-section-title',
-    '.cm-section-header__intro h2',
-    '.cm-section-header h2',
-    '.cm-section-header h1',
-    '.cm-section-header h3',
-    '.cm-section .cm-section-title',
-    '.cm-section > h2',
-    '.cm-timeline-meta__title',
-    '.sp-header__title h2',
-    '.cm-wide-layout > .cm-section-header h2',
-  ];
-  const DESC_SELECTORS = [
-    '.cm-section-header .cm-section-desc',
-    '.cm-section-header__intro .cm-section-desc',
-    '.cm-section-header__intro .cm-subtle',
-    '.cm-section-header__intro p',
-    '.cm-section-header .cm-subtle',
-    '.cm-section-header p',
-    '.sp-header__title p',
-  ];
-  let pageTitle = '';
-  let pageDesc = '';
-  try {
-    const root = rootEl?.querySelector('#cm-section-content');
-    if (root) {
-      for (const sel of TITLE_SELECTORS) {
-        const el = root.querySelector(sel);
-        if (el && (el.innerHTML || '').trim()) { pageTitle = el.innerHTML; break; }
-      }
-      for (const sel of DESC_SELECTORS) {
-        const el = root.querySelector(sel);
-        if (el && (el.innerHTML || '').trim()) { pageDesc = el.innerHTML; break; }
-      }
-    }
-    if (!pageTitle) pageTitle = SECTION_TITLE_FALLBACK[activeSection] || '';
-  } catch (_) { /* defensive — never block KPI render on header lookup */ }
-
-  const titleBlock = pageTitle
-    ? `<div class="hub-kpi-bar__id">
-         <div class="hub-kpi-bar__title">${pageTitle}</div>
-         ${pageDesc ? `<div class="hub-kpi-bar__desc">${pageDesc}</div>` : ''}
-       </div>`
-    : '';
-
-  host.innerHTML = `
-    <div class="hub-kpi-bar">
-      ${titleBlock}
-      <div class="hub-kpi-bar__metrics">
-        ${kpis.items.map(it => `
-          <div class="hub-kpi-item" ${it.hint ? `title="${escapeAttr(it.hint)}"` : ''}>
-            <span class="hub-kpi-label">${escapeHtml(it.label)}</span>
-            <span class="hub-kpi-value">${escapeHtml(it.value)}</span>
-          </div>
-        `).join('')}
-      </div>
-    </div>`;
+  // v0.3-chrome — slim chip strip rendering. The full title + KPI tile
+  // navy bar collapsed into a thin in-header chip strip; the section
+  // identity now lives in the section pill (cm-section-pill--active)
+  // above. We render JUST the KPI chips here.
+  host.innerHTML = kpis.items.map(it => `
+    <span class="cm-kpi-chip" ${it.hint ? `title="${escapeAttr(it.hint)}"` : ''}>
+      <span class="cm-kpi-chip__label">${escapeHtml(it.label)}</span>
+      <span class="cm-kpi-chip__value">${escapeHtml(it.value)}</span>
+    </span>
+  `).join('');
   host.classList.toggle('is-ready', !!kpis.ready);
+  return;
+
 }
 
 // ============================================================
@@ -2293,46 +2249,75 @@ function refreshProvenancePanel() {
 }
 
 function renderShell() {
+  // v0.3-chrome — Top-ribbon shell. Two-tier nav (phase tabs + section
+  // pills) replaces the legacy 220px left sidebar. Slim KPI chip strip
+  // replaces the navy KPI bar. Sidebar still available as an opt-in
+  // drawer via the ≡ toggle. See feedback_chrome_redesign_2026-04-28.md.
+  const groups = SECTION_GROUPS;
+  const sectionsByGroup = _sectionsByGroup();
+  const activeSec = SECTIONS.find(s => s.key === activeSection) || SECTIONS[0];
+  const activeGroupKey = activeSec.group;
+  const sidebarOpen = _cmSidebarOpen ? 'true' : 'false';
+
+  const phaseTabsHtml = groups.map(g => {
+    const items = sectionsByGroup.get(g.key) || [];
+    const completes = items.filter(s => _sectionCompleteness(s.key) === 'complete').length;
+    const partials  = items.filter(s => _sectionCompleteness(s.key) === 'partial').length;
+    const total = items.length;
+    const groupState = completes === total ? 'complete' : (completes + partials > 0 ? 'partial' : 'empty');
+    const isActive = g.key === activeGroupKey;
+    return `
+      <button class="cm-phase-tab ${isActive ? 'cm-phase-tab--active' : ''}" data-cm-phase="${g.key}" title="${escapeAttr(g.description || '')}">
+        <span class="cm-phase-tab__label">${escapeHtml(g.label)}</span>
+        <span class="cm-phase-tab__count cm-phase-tab__count--${groupState}">${completes}/${total}</span>
+      </button>
+    `;
+  }).join('');
+
+  const sectionPillsHtml = (sectionsByGroup.get(activeGroupKey) || []).map(sec => {
+    const c = _sectionCompleteness(sec.key);
+    const isActive = sec.key === activeSection;
+    return `
+      <button class="cm-section-pill ${isActive ? 'cm-section-pill--active' : ''}" data-cm-section="${sec.key}">
+        <span class="cm-section-pill__dot cm-section-pill__dot--${c}"></span>
+        <span class="cm-section-pill__label">${escapeHtml(sec.label)}</span>
+      </button>
+    `;
+  }).join('');
+
   return `
-    <div class="hub-builder" style="height: calc(100vh - 48px);">
-      <!-- Builder Sidebar (220px) -->
-      <div class="hub-builder-sidebar">
-        <!-- Toolbar -->
-        <div style="padding: 12px 16px; border-bottom: 1px solid var(--ies-gray-200);">
-          <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cm-back-btn" style="margin-bottom:8px;font-size:11px;">← All Models</button>
-          <div class="text-subtitle" style="margin-bottom: 8px;">Cost Model Builder</div>
-          <div class="flex gap-2" style="flex-wrap: wrap;">
-            <button class="hub-btn hub-btn-primary hub-btn-sm" id="cm-new-btn">New</button>
-            <button class="hub-btn hub-btn-secondary hub-btn-sm" id="cm-save-btn">Save</button>
-            <button class="hub-btn hub-btn-secondary hub-btn-sm" id="cm-load-btn">Load</button>
-            <button class="hub-btn hub-btn-secondary hub-btn-sm" id="cm-export-btn" title="Download as multi-sheet .xlsx">Export</button>
-          </div>
-          <!-- CM-SAVE-1 + EVE8 tri-state pill — Draft / Modified / Saved -->
-          <div class="cm-save-state-row" style="margin-top:8px;display:flex;flex-direction:column;gap:4px;">
-            <span class="hub-status-chip dot draft" id="cm-save-state-chip"
-                  data-cm-state="draft" title="Save the model to record an audit timestamp">Draft</span>
-            <span id="cm-save-state-when" style="font-size:10px;color:var(--ies-gray-500);line-height:1.2;"></span>
+    <div class="hub-builder cm-shell-v3" style="height: calc(100vh - 48px); display: flex; flex-direction: column;">
+      <header class="cm-top-chrome">
+        <div class="cm-top-chrome__row1">
+          <button class="cm-top-chrome__back hub-btn hub-btn-sm hub-btn-secondary" id="cm-back-btn" title="Back to all models">←</button>
+          <nav class="cm-phase-tabs">${phaseTabsHtml}</nav>
+          <div class="cm-top-chrome__kpis" id="cm-header-kpis"></div>
+          <div class="cm-top-chrome__actions">
+            <span class="hub-status-chip dot draft" id="cm-save-state-chip" data-cm-state="draft" title="Save state">Draft</span>
+            <span id="cm-save-state-when" style="font-size:10px;color:var(--ies-gray-500);"></span>
+            <button class="hub-btn hub-btn-secondary hub-btn-sm" id="cm-new-btn" title="New model">New</button>
+            <button class="hub-btn hub-btn-primary hub-btn-sm" id="cm-save-btn" title="Save">Save</button>
+            <button class="hub-btn hub-btn-secondary hub-btn-sm" id="cm-load-btn" title="Load">Load</button>
+            <button class="hub-btn hub-btn-secondary hub-btn-sm" id="cm-export-btn" title="Export to .xlsx">Export</button>
+            <button class="cm-top-chrome__toggle" id="cm-sidebar-toggle" title="Show full section list">☰</button>
           </div>
         </div>
-        <!-- Section Nav -->
-        <nav style="padding: 8px 0;">
-          ${isCmV2UiOn() ? renderGroupedNav() : SECTIONS.map(s => `
-            <div class="cm-nav-item${s.key === activeSection ? ' active' : ''}" data-section="${s.key}">
-              <span class="cm-nav-check" id="cm-check-${s.key}"></span>
-              <span class="cm-nav-label">${s.label}</span>
-            </div>
-          `).join('')}
-        </nav>
-        <!-- Validation -->
-        <div id="cm-validation" style="padding: 8px 16px; border-top: 1px solid var(--ies-gray-200); font-size: 11px;"></div>
-      </div>
+        <div class="cm-top-chrome__row2">
+          <nav class="cm-section-pills">${sectionPillsHtml}</nav>
+        </div>
+      </header>
 
-      <!-- Content Area -->
-      <div class="hub-builder-content" id="cm-content">
-        <!-- EVE8 — Sticky KPI strip (always-visible 5-metric header) -->
-        <div class="cm-header-kpis" id="cm-header-kpis"></div>
-        <div class="hub-builder-form" id="cm-section-content">
-          <!-- Section content renders here -->
+      <div class="cm-shell-body" data-sidebar-open="${sidebarOpen}">
+        <aside id="cm-sidebar" class="cm-sidebar-drawer">
+          <div class="cm-sidebar-drawer__header">
+            <span class="text-subtitle">All Sections</span>
+            <button class="cm-sidebar-drawer__close" id="cm-sidebar-close" title="Hide">✕</button>
+          </div>
+          <nav style="padding: 8px 0;">${renderGroupedNav()}</nav>
+          <div id="cm-validation" style="padding: 8px 16px; border-top: 1px solid var(--ies-gray-200); font-size: 11px;"></div>
+        </aside>
+        <div class="hub-builder-content" id="cm-content">
+          <div class="hub-builder-form" id="cm-section-content"></div>
         </div>
       </div>
 
@@ -2349,6 +2334,155 @@ function renderShell() {
     </div>
 
     <style>
+      /* v0.3-chrome — Top ribbon styles */
+      .cm-top-chrome {
+        background: var(--ies-navy, #001f3f);
+        color: #fff;
+        flex: 0 0 auto;
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+      }
+      .cm-top-chrome__row1 {
+        display: flex; align-items: center; gap: 12px;
+        padding: 8px 16px;
+        min-height: 44px;
+      }
+      .cm-top-chrome__back {
+        flex: 0 0 auto;
+      }
+      .cm-phase-tabs {
+        display: flex; gap: 2px;
+        flex: 0 0 auto;
+      }
+      .cm-phase-tab {
+        background: transparent; border: none; cursor: pointer;
+        color: rgba(255,255,255,0.7);
+        padding: 7px 14px;
+        border-radius: 4px;
+        font-size: 12px; font-weight: 600;
+        display: inline-flex; align-items: center; gap: 8px;
+        transition: background 0.12s, color 0.12s;
+      }
+      .cm-phase-tab:hover { color: #fff; background: rgba(255,255,255,0.06); }
+      .cm-phase-tab--active { color: #fff; background: rgba(255,255,255,0.14); }
+      .cm-phase-tab__count {
+        font-size: 9px; font-weight: 700;
+        padding: 1px 6px; border-radius: 8px;
+        background: rgba(255,255,255,0.16);
+        color: rgba(255,255,255,0.85);
+      }
+      .cm-phase-tab__count--complete { background: var(--ies-green, #16a34a); color: #fff; }
+      .cm-phase-tab__count--partial  { background: #f59e0b; color: #fff; }
+      .cm-phase-tab__count--empty    { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.6); }
+
+      .cm-top-chrome__kpis {
+        flex: 1 1 auto; min-width: 0;
+        display: flex; align-items: center; justify-content: flex-end;
+        gap: 16px;
+        font-size: 11px;
+        color: rgba(255,255,255,0.85);
+        overflow: hidden;
+      }
+      .cm-top-chrome__actions {
+        flex: 0 0 auto;
+        display: flex; align-items: center; gap: 6px;
+      }
+      .cm-top-chrome__toggle {
+        background: transparent; border: 1px solid rgba(255,255,255,0.2); cursor: pointer;
+        color: #fff;
+        width: 30px; height: 28px;
+        border-radius: 4px;
+        font-size: 16px; line-height: 1;
+        margin-left: 4px;
+      }
+      .cm-top-chrome__toggle:hover { background: rgba(255,255,255,0.08); }
+
+      .cm-top-chrome__row2 {
+        background: rgba(0,0,0,0.16);
+        padding: 6px 16px;
+        min-height: 38px;
+        display: flex; align-items: center;
+      }
+      .cm-section-pills {
+        display: flex; gap: 4px; flex-wrap: wrap;
+      }
+      .cm-section-pill {
+        background: transparent; border: 1px solid transparent; cursor: pointer;
+        color: rgba(255,255,255,0.7);
+        padding: 5px 12px;
+        border-radius: 16px;
+        font-size: 11px; font-weight: 600;
+        display: inline-flex; align-items: center; gap: 6px;
+        transition: background 0.12s, color 0.12s, border-color 0.12s;
+      }
+      .cm-section-pill:hover { color: #fff; background: rgba(255,255,255,0.08); }
+      .cm-section-pill--active {
+        color: var(--ies-navy, #001f3f);
+        background: #fff;
+        border-color: #fff;
+      }
+      .cm-section-pill__dot {
+        width: 7px; height: 7px; border-radius: 50%;
+        flex-shrink: 0;
+      }
+      .cm-section-pill__dot--complete { background: var(--ies-green, #16a34a); }
+      .cm-section-pill__dot--partial  { background: #f59e0b; }
+      .cm-section-pill__dot--empty    { background: rgba(255,255,255,0.25); }
+      .cm-section-pill--active .cm-section-pill__dot--empty { background: rgba(0,0,0,0.18); }
+
+      /* Slim KPI chip strip — populated by refreshHeaderKpis() */
+      .cm-kpi-chip {
+        display: inline-flex; align-items: baseline; gap: 4px;
+        white-space: nowrap;
+      }
+      .cm-kpi-chip__label {
+        font-size: 10px; font-weight: 600;
+        color: rgba(255,255,255,0.55);
+        text-transform: uppercase; letter-spacing: 0.04em;
+      }
+      .cm-kpi-chip__value {
+        font-size: 13px; font-weight: 700;
+        color: #fff;
+      }
+
+      /* Body — sidebar drawer + main content */
+      .cm-shell-body {
+        flex: 1 1 auto; display: flex; min-height: 0;
+        position: relative;
+      }
+      .cm-sidebar-drawer {
+        flex: 0 0 240px; width: 240px;
+        background: #fff;
+        border-right: 1px solid var(--ies-gray-200);
+        overflow-y: auto;
+        transition: margin-left 0.18s ease;
+      }
+      .cm-shell-body[data-sidebar-open="false"] .cm-sidebar-drawer {
+        margin-left: -240px;
+      }
+      .cm-sidebar-drawer__header {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--ies-gray-200);
+      }
+      .cm-sidebar-drawer__close {
+        background: transparent; border: none; cursor: pointer;
+        color: var(--ies-gray-500);
+        font-size: 14px; line-height: 1; padding: 2px 6px;
+      }
+      .cm-sidebar-drawer__close:hover { color: var(--ies-navy); }
+
+      .hub-builder-content {
+        flex: 1 1 auto;
+        overflow-y: auto;
+        background: var(--ies-gray-50, #f8fafc);
+      }
+      .hub-builder-form {
+        padding: 20px 24px;
+        max-width: var(--content-max-width, 1280px);
+        margin: 0 auto;
+      }
+
+      /* Existing nav-item / form styles preserved for sidebar drawer body */
       .cm-nav-item {
         display: flex;
         align-items: center;
@@ -2387,6 +2521,17 @@ function renderShell() {
         transform: rotate(45deg);
       }
 
+      /* Hide the per-section title/desc rendered by section renderers
+         since the section pill in the top chrome already conveys that
+         identity. Each renderer still produces .cm-section-header for
+         backwards compat with the legacy KPI-bar title-extraction
+         (kept as fallback). The section header is now compact. */
+      .cm-section-header { padding: 0 0 12px; border-bottom: 1px solid var(--ies-gray-200); margin-bottom: 16px; }
+      .cm-section-header h2,
+      .cm-section-header .cm-section-title { font-size: 18px; font-weight: 700; color: var(--ies-navy); margin: 0; }
+      .cm-section-header .cm-section-desc,
+      .cm-section-header__intro .cm-section-desc { font-size: 12px; color: var(--ies-gray-600); margin-top: 2px; }
+
       /* CM-PROV-1 — clickable P&L cells + side-panel polish */
       [data-cm-cell] { cursor: pointer; transition: background-color 0.12s ease, outline 0.12s ease; }
       [data-cm-cell]:hover { background-color: rgba(0,71,171,0.06); }
@@ -2412,84 +2557,6 @@ function renderShell() {
         grid-template-columns: 1fr 1fr 1fr;
         gap: 16px;
       }
-
-      .cm-section-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 20px;
-        padding-bottom: 12px;
-        border-bottom: 2px solid var(--ies-gray-200);
-      }
-      .cm-section-title { font-size: 16px; font-weight: 700; color: var(--ies-navy); }
-      .cm-section-desc { font-size: 13px; color: var(--ies-gray-500); margin-top: 4px; }
-
-      .cm-grid-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 13px;
-      }
-      .cm-grid-table th {
-        font-size: 11px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        color: var(--ies-gray-500);
-        text-align: left;
-        padding: 8px 10px;
-        border-bottom: 2px solid var(--ies-gray-200);
-        white-space: nowrap;
-      }
-      .cm-grid-table td {
-        padding: 6px 10px;
-        border-bottom: 1px solid var(--ies-gray-100);
-        vertical-align: middle;
-      }
-      .cm-grid-table input, .cm-grid-table select {
-        padding: 6px 8px;
-        border: 1px solid var(--ies-gray-200);
-        border-radius: 4px;
-        font-family: Montserrat, sans-serif;
-        font-size: 13px;
-        font-weight: 600;
-      }
-      .cm-grid-table input:focus, .cm-grid-table select:focus {
-        outline: none;
-        border-color: var(--ies-blue);
-        box-shadow: 0 0 0 2px rgba(0,71,171,0.1);
-      }
-      .cm-num { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
-      .cm-total-row td { font-weight: 700; border-top: 2px solid var(--ies-gray-300); background: var(--ies-gray-50); }
-
-      .cm-add-row-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        margin-top: 8px;
-        padding: 6px 12px;
-        background: none;
-        border: 1px dashed var(--ies-gray-300);
-        border-radius: 6px;
-        color: var(--ies-blue);
-        font-size: 13px;
-        font-weight: 600;
-        cursor: pointer;
-        font-family: Montserrat, sans-serif;
-      }
-      .cm-add-row-btn:hover { border-color: var(--ies-blue); background: rgba(0,71,171,0.04); }
-
-      .cm-delete-btn {
-        background: none;
-        border: none;
-        color: var(--ies-red);
-        cursor: pointer;
-        font-size: 11px;
-        font-weight: 600;
-        padding: 4px 8px;
-        border-radius: 4px;
-        font-family: Montserrat, sans-serif;
-      }
-      .cm-delete-btn:hover { background: rgba(220,53,69,0.08); }
     </style>
   `;
 }
