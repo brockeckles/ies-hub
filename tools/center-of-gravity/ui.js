@@ -10,12 +10,27 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sP';
 import { state } from '../../shared/state.js?v=20260418-sP';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sP';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton, renderPhaseStepper, bindPhaseStepper, renderSubTabStrip } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
+import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260429-tc2-cog';
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sP';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260418-sP';
 import * as calc from './calc.js?v=20260426-s9';
 import * as api from './api.js?v=20260418-sP';
+
+// ============================================================
+// CHROME v3 — phase + section structure (CM Chrome v3 ripple, step 3 redo)
+// ============================================================
+const COG_GROUPS = [
+  { key: 'inputs',     label: 'Inputs',     description: 'Demand points + seeds' },
+  { key: 'parameters', label: 'Parameters', description: 'k, $/mi, capacity, candidates' },
+  { key: 'run',        label: 'Run',        description: 'Numbers, map, sensitivity' },
+];
+const COG_SECTIONS = [
+  { key: 'numbers',     label: '\u{1F4CA} Numbers',     group: 'run' },
+  { key: 'map',         label: '\u{1F5FA} Map',         group: 'run' },
+  { key: 'sensitivity', label: '\u{1F4C8} Sensitivity', group: 'run' },
+];
+
 
 // ============================================================
 // STATE
@@ -374,45 +389,119 @@ function _pointsForSolve() {
 }
 
 function renderShell() {
-  // 2026-04-27 EVE2 (COG-SCOPE-1): tabs replaced with horizontal phase
-  // stepper (Inputs → Parameters → Run). Run sub-tabs (Numbers / Map /
-  // Sensitivity) live inside the Run phase canvas.
-  const chips = [
-    { label: activeScenarioId ? 'Saved' : 'Draft', kind: activeScenarioId ? 'saved' : 'draft', dot: true },
-    activeParentCmId
-      ? { label: 'Linked to CM', kind: 'linked', title: `Linked to Cost Model #${activeParentCmId}` }
-      : { label: 'Stand-alone', kind: 'standalone', title: 'Not linked to a Cost Model' },
+  // CM Chrome v3 ripple — chrome HTML+CSS lives in shared/tool-chrome.js.
+  return renderToolChrome(_buildCogChromeOpts());
+}
+
+/** Build chrome opts from current CoG state. */
+function _buildCogChromeOpts() {
+  const draft = !activeScenarioId;
+  const modified = !!activeScenarioId && isDirty;
+  const stateName = draft ? 'draft' : (modified ? 'modified' : 'saved');
+  const stateTitle = draft
+    ? 'Brand-new scenario — Save to capture an audit timestamp'
+    : (modified ? 'Save to capture the latest changes' : 'Saved');
+
+  const runStateClass = runState.state(runStateInputs());
+
+  const actions = [
+    { id: 'cog-save',
+      label: activeScenarioId ? '\u{1F4BE} Save' : '\u{1F4BE} Save Scenario',
+      title: activeScenarioId ? 'Update this scenario' : 'Save this scenario to open it again later',
+      primary: modified },
+    { id: 'cog-run',
+      label: 'Run',
+      icon: '▶',
+      title: 'Run k-means center-of-gravity (Cmd/Ctrl+Enter)',
+      kind: 'primary',
+      runState: runStateClass,
+      cleanLabel: '✓ Results current',
+      cleanTitle: 'Inputs unchanged since the last solve — click to force a re-run.' },
   ];
 
-  return `
-    <div class="hub-content-inner" style="padding:0;display:flex;flex-direction:column;height:100%;">
-      ${renderToolHeader({
-        toolName: 'Center of Gravity',
-        toolKey: 'cog',
-        backAction: 'cog-back',
-        statusChips: chips,
-        // I-05 — Save button is always visible so work isn't lost on tab close.
-        secondaryActions: [
-          { label: isDirty ? (activeScenarioId ? '💾 Save' : '💾 Save Scenario') : (activeScenarioId ? '✓ Saved' : '💾 Save Scenario'),
-            action: 'cog-save',
-            primary: isDirty,
-            title: activeScenarioId ? 'Update this scenario' : 'Save this scenario to open it again later' },
-        ],
-        primaryAction: {
-          // XT-SCOPE-1 — standardized "Run" verb.
-          label: 'Run',
-          action: 'cog-run',
-          icon: '▶',
-          title: 'Run k-means center-of-gravity (Cmd/Ctrl+Enter)',
-          state: runState.state(runStateInputs()),
-          cleanLabel: '✓ Results current',
-          cleanTitle: 'Inputs unchanged since the last solve — k-means centers match the current points + config. Click to force a re-run.',
-        },
-      })}
-      <div id="cog-process-flow"></div>
-      <div id="cog-content" style="flex:1;overflow-y:auto;padding:24px;"></div>
-    </div>
-  `;
+  const sidebarFooter = activeParentCmId
+    ? 'Linked to Cost Model #' + activeParentCmId
+    : '';
+
+  // Active section: only meaningful in run phase (mirrors runSubTab).
+  const activeSection = activePhase === 'run' ? runSubTab : null;
+
+  return {
+    toolKey: 'cog',
+    groups: COG_GROUPS,
+    sections: COG_SECTIONS,
+    activePhase,
+    activeSection,
+    sectionCompleteness: _cogSectionCompleteness,
+    saveState: { state: stateName, title: stateTitle },
+    actions,
+    showSidebar: false,
+    showSidebarToggle: false,
+    sidebarHeader: 'All Sections',
+    sidebarBody: '',
+    sidebarFooter,
+    bodyHtml: '<div id="cog-content" style="overflow-y:auto;padding:24px;height:100%;"></div>',
+    backTitle: 'Back to scenarios',
+    emptyPhaseHint: activePhase === 'run' ? '' : 'Single-canvas phase — switch to Run for sub-views',
+  };
+}
+
+function _cogSectionCompleteness(key) {
+  if (key === 'numbers' || key === 'map' || key === 'sensitivity') {
+    return cogResult ? 'complete' : 'empty';
+  }
+  return 'empty';
+}
+
+/** Compute KPI strip values for the CoG chrome. */
+function _computeCogKpis() {
+  const items = [];
+  // Centers (k from current config; "result" k after a run)
+  const k = (cogResult && cogResult.centers ? cogResult.centers.length : (config?.numCenters || 0));
+  items.push({
+    label: 'Centers',
+    value: k > 0 ? String(k) : '—',
+    hint: cogResult ? 'Optimal centers from the most recent solve.' : 'Configured k — run to compute optimal centers.',
+  });
+  items.push({
+    label: 'Demand Pts',
+    value: points.length > 0 ? String(points.length) : '—',
+    hint: 'Demand points in the input set.',
+  });
+  // Total weighted cost — from cogResult if available.
+  let totalCostStr = '—';
+  if (cogResult && typeof cogResult.totalCost === 'number') {
+    const tc = cogResult.totalCost;
+    if (tc >= 1e6) totalCostStr = '$' + (tc / 1e6).toFixed(2) + 'M';
+    else if (tc >= 1e3) totalCostStr = '$' + (tc / 1e3).toFixed(0) + 'K';
+    else totalCostStr = '$' + tc.toFixed(0);
+  }
+  items.push({
+    label: 'Weighted Cost',
+    value: totalCostStr,
+    hint: 'Sum of weighted distances × $/mi from the most recent solve.',
+  });
+  // Recommended k from sensitivity.
+  let recK = '—';
+  if (Array.isArray(sensitivityData) && sensitivityData.length > 0) {
+    const flagged = sensitivityData.find(d => d.isRecommended) || sensitivityData.find(d => d.recommended);
+    if (flagged) recK = String(flagged.k);
+    else {
+      const min = sensitivityData.reduce((m, d) => (m == null || (d.totalCost != null && d.totalCost < m.totalCost)) ? d : m, null);
+      if (min) recK = String(min.k);
+    }
+  }
+  items.push({
+    label: 'Recommended k',
+    value: recK,
+    hint: 'k value with the lowest weighted-cost from the sensitivity sweep.',
+  });
+  return items;
+}
+
+function _refreshCogKpis() {
+  if (!rootEl) return;
+  refreshKpiStrip(rootEl, _computeCogKpis());
 }
 
 // 2026-04-27 EVE2 (COG-SCOPE-1): phase status driven by current state.
@@ -427,96 +516,77 @@ function cogPhaseStatus() {
 }
 
 function renderCogStepper() {
-  const el = rootEl?.querySelector('#cog-process-flow');
-  if (!el) return;
-  const s = cogPhaseStatus();
-  el.innerHTML = renderPhaseStepper({
-    phases: [
-      { key: 'inputs',     num: 1, label: 'Inputs',     sub: 'Demand points + seeds',         status: s.inputs },
-      { key: 'parameters', num: 2, label: 'Parameters', sub: 'k, $/mi, capacity, candidates',  status: s.parameters },
-      { key: 'run',        num: 3, label: 'Run',        sub: 'Numbers, map, sensitivity',      status: s.run },
-    ],
-    activePhase: activePhase,
-  });
+  // CM Chrome v3 ripple — in-canvas phase stepper dropped. Stub kept so
+  // existing call sites don't crash.
+  return;
 }
 
 function bindShellEvents() {
   if (!rootEl) return;
+  rootEl.__tcBound = false;
 
-  // Root-level delegation so shell-scoped clicks survive any re-renders of
-  // the tool header (per feedback_event_delegation_pattern).
-  rootEl.addEventListener('click', async (e) => {
-    const target = /** @type {HTMLElement} */ (e.target);
-    if (!target) return;
-
-    // Back-to-scenarios button (top-left of tool header).
-    const backBtn = target.closest('[data-action="cog-back"]');
-    if (backBtn) {
-      e.preventDefault();
+  bindToolChromeEvents(rootEl, {
+    onPhase: (phase) => {
+      if (!phase || phase === activePhase) return;
+      activePhase = /** @type {any} */ (phase);
+      // Default sub-tab on phase change to run → numbers.
+      if (activePhase === 'run' && !runSubTab) runSubTab = 'numbers';
+      rootEl.innerHTML = renderShell();
+      bindShellEvents();
+      renderContent();
+      _refreshCogKpis();
+    },
+    onSection: (key) => {
+      if (!key) return;
+      // CoG sections only exist in the run phase (numbers/map/sensitivity).
+      const sec = COG_SECTIONS.find(s => s.key === key);
+      if (!sec) return;
+      activePhase = sec.group;
+      runSubTab = key;
+      rootEl.innerHTML = renderShell();
+      bindShellEvents();
+      renderContent();
+      _refreshCogKpis();
+    },
+    onBack: async () => {
       if (isDirty && !confirm('You have unsaved changes. Leave anyway?')) return;
       guardMarkClean('cog');
       await renderLanding();
-      return;
-    }
-
-    // Primary action: Find Optimal Location / Run k-means.
-    const runBtn = target.closest('[data-primary-action="cog-run"]');
-    if (runBtn) {
-      e.preventDefault();
-      const _solvePts = _pointsForSolve();
-      cogResult = calc.kMeansCog(_solvePts, config.numCenters, config.maxIterations);
-      if (config.snapToCandidates && (config.candidateFacilities || []).length > 0) {
-        cogResult = calc.snapCentersToCandidates(cogResult, _solvePts, config.candidateFacilities);
+    },
+    onAction: (id) => {
+      if (id === 'cog-save') return handleSave();
+      if (id === 'cog-run') {
+        const _solvePts = _pointsForSolve();
+        cogResult = calc.kMeansCog(_solvePts, config.numCenters, config.maxIterations);
+        if (config.snapToCandidates && (config.candidateFacilities || []).length > 0) {
+          cogResult = calc.snapCentersToCandidates(cogResult, _solvePts, config.candidateFacilities);
+        }
+        sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0);
+        activePhase = 'run';
+        runSubTab = 'numbers';
+        runState.markClean(runStateInputs());
+        markDirty();
+        updateRunButtonState();
+        rootEl.innerHTML = renderShell();
+        bindShellEvents();
+        renderContent();
+        _refreshCogKpis();
+        flashPrimaryAction(rootEl);
+        return;
       }
-      sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0);
-      // 2026-04-27 EVE2 (COG-SCOPE-3): after a run, jump to Run phase /
-      // Numbers sub-tab so the user immediately sees the centers.
-      activePhase = 'run';
-      runSubTab = 'numbers';
-      runState.markClean(runStateInputs());
-      markDirty(); // I-05 — running produces a new result that deserves saving
-      updateRunButtonState();
-      rootEl.innerHTML = renderShell();
-      renderCogStepper();
-      bindCogStepper();
-      renderContent();
-      flashRunButton(rootEl.querySelector('[data-primary-action="cog-run"]'));
-      return;
-    }
-
-    // I-05 — Save scenario.
-    const saveBtn = target.closest('[data-action="cog-save"]');
-    if (saveBtn) {
-      e.preventDefault();
-      await handleSave();
-      return;
-    }
-
-    // Run-phase sub-tab clicks (Numbers | Map | Sensitivity).
-    const subTab = target.closest('[data-cog-runsub]');
-    if (subTab) {
-      runSubTab = /** @type {any} */ (subTab.getAttribute('data-cog-runsub'));
-      renderContent();
-      return;
-    }
+    },
+    onPrimaryShortcut: () => {
+      // Re-use onAction's cog-run path to avoid duplicating run logic.
+      const handlers = { onAction: (id) => {} };
+      // Direct dispatch.
+      const fakeEvent = new Event('click');
+      const btn = rootEl?.querySelector('[data-tc-action="cog-run"]');
+      if (btn) btn.dispatchEvent(fakeEvent);
+    },
   });
 
-  // Phase stepper — wired via the shared helper (COG-SCOPE-1 + XT-SCOPE-3).
-  bindPhaseStepper(rootEl.querySelector('#cog-process-flow'), (phase) => {
-    activePhase = /** @type {any} */ (phase);
-    rootEl.innerHTML = renderShell();
-    renderCogStepper();
-    // Re-bind on each shell re-render — the prior container is gone.
-    bindPhaseStepper(rootEl.querySelector('#cog-process-flow'), (next) => {
-      activePhase = /** @type {any} */ (next);
-      rootEl.innerHTML = renderShell();
-      renderCogStepper();
-      renderContent();
-    });
-    renderContent();
-  });
-
-  bindPrimaryActionShortcut(rootEl, 'cog-run');
+  // Note: run-phase sub-tabs (Numbers/Map/Sensitivity) now live in chrome
+  // Row 2 as section pills — onSection handler above routes those clicks.
 }
 
 function renderContent() {
@@ -907,11 +977,6 @@ function renderRunPhase(el) {
   // 2026-04-27 EVE2 (COG-SCOPE-3/4): one phase, three views over a single
   // solve. Header KPI strip surfaces Recommended k (from sensitivityData)
   // alongside the existing centers/cost summary.
-  const subTabs = [
-    { key: 'numbers',     label: '📊 Numbers' },
-    { key: 'map',         label: '🗺 Map' },
-    { key: 'sensitivity', label: '📈 Sensitivity' },
-  ];
   // COG-SCOPE-4: Recommended k tile when sensitivity has a recommendation.
   let recK = null;
   if (Array.isArray(sensitivityData) && sensitivityData.length > 0) {
@@ -927,9 +992,7 @@ function renderRunPhase(el) {
 
   el.innerHTML = `
     <div style="max-width:1100px;">
-      <!-- Sub-tab strip (shared helper, 2026-04-27 EVE2-fu) -->
-      ${renderSubTabStrip(subTabs, runSubTab, 'cog-runsub')}
-      <div style="margin-bottom:18px;"></div>
+      <!-- Sub-tabs moved to chrome Row 2 (CM Chrome v3 ripple) -->
 
       ${cogResult && recK != null ? `
         <div class="hub-card" style="background:linear-gradient(135deg,#f0fdf4,#f0f9ff);border:1px solid #22c55e;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
