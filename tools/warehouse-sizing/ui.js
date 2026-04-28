@@ -10,12 +10,46 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sL';
 import { state } from '../../shared/state.js?v=20260418-sL';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sL';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton, renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
+import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260429-tc1-wsc';
 import * as calc from './calc.js?v=20260425-s11';
 import * as api from './api.js?v=20260418-sL';
 
 // ============================================================
+// CHROME v3 DEFINITIONS
+// ============================================================
+
+// ============================================================
+// ============================================================
+// CHROME v3 DEFINITIONS
+// ============================================================
+
+const WSC_GROUPS = [
+  { key: 'design', label: 'Design', description: '4-view warehouse sizing canvas' },
+];
+
+const WSC_SECTIONS = [
+  { key: 'dashboard', label: 'Dashboard',     group: 'design' },
+  { key: 'plan',      label: '2D — Plan',     group: 'design' },
+  { key: 'elevation', label: '2D — Elevation', group: 'design' },
+  { key: '3d',        label: '3D View',       group: 'design' },
+];
+
 // STATE
+// ============================================================
+// CHROME v3 DEFINITIONS
+// ============================================================
+
+const WSC_GROUPS = [
+  { key: 'design', label: 'Design', description: '4-view warehouse sizing canvas' },
+];
+
+const WSC_SECTIONS = [
+  { key: 'dashboard', label: 'Dashboard',     group: 'design' },
+  { key: 'plan',      label: '2D — Plan',     group: 'design' },
+  { key: 'elevation', label: '2D — Elevation', group: 'design' },
+  { key: '3d',        label: '3D View',       group: 'design' },
+];
+
 // ============================================================
 
 /** @type {HTMLElement|null} */
@@ -166,186 +200,144 @@ export function unmount() {
   bus.emit('wsc:unmounted');
 }
 
+
 // ============================================================
 // SHELL
 // ============================================================
 
-function renderWscPhaseStepper() {
-  const el = rootEl?.querySelector('#wsc-process-flow');
-  if (!el) return;
-  el.innerHTML = renderPhaseStepper({
-    phases: [
-      { key: 'dashboard', num: 1, label: 'Dashboard', sub: 'Capacity KPIs',          status: activeView === 'dashboard' ? 'active' : 'pending' },
-      { key: 'plan',      num: 2, label: '2D Plan',   sub: 'Top-down floorplan',     status: activeView === 'plan'      ? 'active' : 'pending' },
-      { key: 'elevation', num: 3, label: '2D Elev',   sub: 'Cross-section + clearance', status: activeView === 'elevation' ? 'active' : 'pending' },
-      { key: '3d',        num: 4, label: '3D View',   sub: 'Interactive walkthrough', status: activeView === '3d'        ? 'active' : 'pending' },
-    ],
-    activePhase: activeView,
-  });
+function renderShell() {
+  return renderToolChrome(_buildWscChromeOpts());
 }
 
-function renderShell() {
-  const tabs = [
-    { key: 'dashboard', label: 'Dashboard', title: 'Capacity dashboard with utilization metrics' },
-    { key: 'plan', label: '2D — Plan', title: 'Top-down floorplan showing dock doors, storage, zones' },
-    { key: 'elevation', label: '2D — Elevation', title: 'Cross-section showing rack levels and clearances' },
-    { key: '3d', label: '3D View', title: 'Interactive 3D model of the facility layout' },
+/**
+ * Build chrome options from current WSC state.
+ */
+function _buildWscChromeOpts() {
+  const draft = !facility.id;
+  const modified = !!facility.id && isDirty;
+  const saveStateName = draft ? 'draft' : (modified ? 'modified' : 'saved');
+  const saveStateTitle = draft
+    ? 'Brand-new design — Save to capture an audit timestamp'
+    : (modified ? 'Save to capture the latest changes' : 'Saved');
+
+  const actions = [
+    { id: 'wsc-save',
+      label: !facility.id ? 'Save Design' : 'Save',
+      title: !facility.id ? 'Save this design so you can reopen it later' : 'Update this design',
+      primary: modified },
+    { id: 'push-to-cm',
+      label: 'Use in Cost Model →',
+      kind: 'primary',
+      icon: '⇨',
+      title: 'Push this design into a Cost Model (Cmd/Ctrl+Enter)' },
   ];
-  const chips = [
-    { label: facility.id ? 'Saved' : 'Draft', kind: facility.id ? 'saved' : 'draft', dot: true },
-    facility.parent_cost_model_id
-      ? { label: `Linked to CM`, kind: 'linked', title: `Linked to Cost Model #${facility.parent_cost_model_id}` }
-      : { label: 'Stand-alone', kind: 'standalone', title: 'Not yet pushed into a Cost Model' },
-  ];
-  // Per-view banner descriptions (navy-bar lift pattern, 2026-04-27).
-  const VIEW_DESC = {
-    dashboard: 'Capacity dashboard — total SF, dock doors, rack positions, and utilization KPIs derived from peak pallets, SKU count, turn rate, and clearance height.',
-    plan:      'Top-down floor plan — dock doors, storage zones, picking aisles, and inbound/outbound flows. Click zones for SF + utilization detail.',
-    elevation: 'Cross-section view — rack tier counts, clearance heights, and aisle layout. Verifies cube utilization against pallet height profile.',
-    '3d':      'Interactive 3D walkthrough — orbit, pan, and inspect rack systems and dock face. Useful for client presentations and spatial sanity checks.',
+
+  const sidebarFooter = facility.parent_cost_model_id
+    ? 'Linked to Cost Model #' + facility.parent_cost_model_id
+    : '';
+
+  const kpis = _computeWscKpis();
+
+  return {
+    toolKey: 'wsc',
+    groups: WSC_GROUPS,
+    sections: WSC_SECTIONS,
+    activePhase: 'design',
+    activeSection: activeView,
+    sectionCompleteness: () => 'complete',
+    saveState: { state: saveStateName, title: saveStateTitle },
+    actions,
+    showSidebar: false,
+    sidebarHeader: 'Warehouse Design',
+    sidebarBody: '',
+    sidebarFooter,
+    headerKpis: kpis.items,
+    bodyHtml: `<div style="display:grid;grid-template-columns:300px 1fr;height:100%;">
+      <div id="wsc-config" style="overflow-y:auto;border-right:1px solid var(--ies-gray-200);"></div>
+      <div id="wsc-content" style="display:flex;flex-direction:column;min-height:0;overflow-y:auto;padding:24px;"></div>
+    </div>`,
+    backTitle: 'Back to scenarios',
+    emptyPhaseHint: '',
   };
-  const VIEW_LABEL = { dashboard: 'Dashboard', plan: '2D Plan', elevation: '2D Elevation', '3d': '3D View' };
-  return `
-    <div class="hub-content-inner" style="padding:0;display:flex;flex-direction:column;height: calc(100vh - 48px);">
-      ${renderToolHeader({
-        toolName: 'Warehouse Sizing',
-        toolKey: 'wsc',
-        backAction: 'wsc-back',
-        statusChips: chips,
-        description: VIEW_DESC[activeView] || VIEW_DESC.dashboard,
-        subtitle: VIEW_LABEL[activeView] || '',
-        primaryAction: { label: 'Use in Cost Model →', action: 'push-to-cm', icon: '⇨', title: 'Push this design into a Cost Model (Cmd/Ctrl+Enter)' },
-      })}
-      <!-- 2026-04-28 — phase-stepper port. The 4 views (Dashboard / 2D Plan /
-           2D Elev / 3D) are nav-as-stepper: they are not strictly sequential
-           phases (live-recalc means all four are always available), but the
-           shared stepper chrome unifies WSC visually with CoG / Fleet / NetOpt.
-           Status logic: current view = active, others = pending. -->
-      <div id="wsc-process-flow"></div>
+}
 
-      <div class="hub-builder" style="flex:1;min-height:0;display:grid;grid-template-columns:300px 1fr;">
-        <!-- Config Sidebar -->
-        <div class="hub-builder-sidebar" id="wsc-config" style="overflow-y:auto;border-right:1px solid var(--ies-gray-200);">
-          <!-- Config content renders here -->
-        </div>
+/**
+ * Compute WSC KPI strip values.
+ */
+function _computeWscKpis() {
+  let totalSf = '—';
+  let dockDoors = '—';
+  let rackPositions = '—';
+  let util = '—';
 
-        <!-- Content Area -->
-        <div class="hub-builder-content" style="display:flex; flex-direction:column;min-height:0;">
-          <!-- View Content -->
-          <div id="wsc-content" style="flex:1; overflow-y:auto; padding:24px;">
-            <!-- View content renders here -->
-          </div>
-        </div>
-      </div>
-    </div>
+  if (facility && facility.totalSqft) {
+    totalSf = (facility.totalSqft / 1000).toFixed(0) + 'K';
+  }
+  if (facility && facility.dockConfig) {
+    const total = (facility.dockConfig.inboundDoors || 0) + (facility.dockConfig.outboundDoors || 0);
+    dockDoors = String(total);
+  }
+  if (facility && facility.totalRackPositions) {
+    rackPositions = (facility.totalRackPositions / 1000).toFixed(1) + 'K';
+  }
+  if (facility && typeof facility.utilizationPct === 'number') {
+    util = facility.utilizationPct.toFixed(1) + '%';
+  }
 
-    <style>
-      .wsc-view-btn {
-        padding: 6px 14px;
-        border: 1px solid var(--ies-gray-200);
-        border-radius: 6px;
-        background: #fff;
-        font-family: Montserrat, sans-serif;
-        font-size: 13px;
-        font-weight: 600;
-        color: var(--ies-gray-500);
-        cursor: pointer;
-        transition: all 0.15s;
-      }
-      .wsc-view-btn:hover { border-color: var(--ies-blue); color: var(--ies-blue); }
-      .wsc-view-btn.active { background: var(--ies-blue); color: #fff; border-color: var(--ies-blue); }
+  return {
+    items: [
+      { label: 'Total SF', value: totalSf },
+      { label: 'Dock Doors', value: dockDoors },
+      { label: 'Rack Positions', value: rackPositions },
+      { label: 'Utilization %', value: util },
+    ],
+  };
+}
 
-      .wsc-config-section {
-        padding: 16px;
-        border-bottom: 1px solid var(--ies-gray-100);
-      }
-      .wsc-config-title {
-        font-size: 11px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        color: var(--ies-gray-500);
-        margin-bottom: 12px;
-      }
-      .wsc-config-row {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
-        margin-bottom: 8px;
-      }
-      .wsc-config-field label {
-        display: block;
-        font-size: 11px;
-        font-weight: 600;
-        color: var(--ies-gray-500);
-        margin-bottom: 3px;
-      }
-      .wsc-config-field input, .wsc-config-field select {
-        width: 100%;
-        padding: 6px 8px;
-        border: 1px solid var(--ies-gray-200);
-        border-radius: 4px;
-        font-family: Montserrat, sans-serif;
-        font-size: 13px;
-        font-weight: 600;
-      }
-      /* Checkboxes should not stretch — they inherit the wsc-config-field rule otherwise */
-      .wsc-config-field input[type="checkbox"] {
-        width: auto;
-        padding: 0;
-        border: none;
-        margin: 0;
-        flex-shrink: 0;
-      }
-      /* Single-field rows within optional zones render as a 1-col grid, not 2-col */
-      .wsc-config-section .wsc-config-row.single-col {
-        grid-template-columns: 1fr;
-      }
-      .wsc-config-field input:focus, .wsc-config-field select:focus {
-        outline: none;
-        border-color: var(--ies-blue);
-        box-shadow: 0 0 0 2px rgba(0,71,171,0.1);
-      }
-
-      .wsc-util-bar {
-        height: 8px;
-        border-radius: 4px;
-        background: var(--ies-gray-100);
-        overflow: hidden;
-        margin: 4px 0;
-      }
-      .wsc-util-fill {
-        height: 100%;
-        border-radius: 4px;
-        transition: width 0.3s;
-      }
-    </style>
-  `;
+/**
+ * Refresh KPI strip (after config change).
+ */
+function _refreshWscKpis() {
+  if (!rootEl) return;
+  const kpis = _computeWscKpis();
+  refreshKpiStrip(rootEl, kpis.items);
 }
 
 function bindShellEvents() {
-  // 2026-04-28 — phase-stepper port replaces the old #wsc-tabs click handler.
-  bindPhaseStepper(rootEl?.querySelector('#wsc-process-flow'), (phase) => {
-    activeView = /** @type {any} */ (phase);
-    // Re-render the shell to refresh navy-banner description + stepper status.
-    if (rootEl) {
-      rootEl.innerHTML = renderShell();
-      bindShellEvents();
+  if (!rootEl) return;
+  rootEl.__tcBound = false;
+
+  bindToolChromeEvents(rootEl, {
+    onPhase: () => {
+      // WSC is single-phase; no-op
+    },
+    onSection: (key) => {
+      if (!key || !WSC_SECTIONS.find(s => s.key === key)) return;
+      activeView = /** @type {any} */ (key);
       renderConfigPanel();
       bindConfigEvents(rootEl.querySelector('#wsc-config'));
-      renderWscPhaseStepper();
       renderContentView();
-    }
+      _refreshWscKpis();
+    },
+    onSidebar: () => {
+      // WSC sidebar is persistent, not collapsible; no-op
+    },
+    onBack: async () => {
+      if (isDirty && !confirm('You have unsaved changes. Leave anyway?')) return;
+      isDirty = false;
+      await renderLanding();
+    },
+    onAction: (id) => {
+      if (id === 'push-to-cm') {
+        pushToCm();
+        flashPrimaryAction(rootEl);
+        return;
+      }
+      if (id === 'wsc-save') return handleSaveWsc();
+    },
   });
 
-  // Push to CM — primary action
-  const headerRun = rootEl?.querySelector('[data-primary-action="push-to-cm"]');
-  headerRun?.addEventListener('click', () => { pushToCm(); flashRunButton(headerRun); });
-  bindPrimaryActionShortcut(rootEl, 'push-to-cm');
-
   // Root-level delegation for data-wsc-action (toggle-edit-layout, reset-layout).
-  // Using delegation per the event-delegation-pattern memory — renderPlan's
-  // innerHTML rewrite would otherwise drop any per-element listener.
   rootEl?.addEventListener('click', (e) => {
     const btn = /** @type {HTMLElement} */ (e.target)?.closest('[data-wsc-action]');
     if (!btn) return;
@@ -360,8 +352,7 @@ function bindShellEvents() {
     }
   });
 
-  // Canvas pointer events for edit-mode dragging. Delegated on rootEl for the
-  // same reason — the canvas is recreated on every plan re-render.
+  // Canvas pointer events for edit-mode dragging.
   rootEl?.addEventListener('pointerdown', (e) => {
     if (!_planEditMode) return;
     const canvas = /** @type {HTMLCanvasElement} */ (e.target);
@@ -369,7 +360,6 @@ function bindShellEvents() {
     const { X0, Y0, pxPerFt } = _planMeta;
     const { offsetX, offsetY } = canvasMouseCoords(canvas, e);
     const order = ['office', 'forwardPick', 'shipStaging'];
-    // Resize-corner hit-test wins over body-move (handles take priority)
     let hit = null;
     let mode = 'move';
     let corner = null;
@@ -397,83 +387,10 @@ function bindShellEvents() {
     const curYFt = (curOverride.y !== undefined) ? curOverride.y : (r.y - Y0) / pxPerFt;
     const curWFt = (curOverride.w !== undefined) ? curOverride.w : r.w / pxPerFt;
     const curHFt = (curOverride.h !== undefined) ? curOverride.h : r.h / pxPerFt;
-    _planDrag = {
-      zoneId: hit,
-      mode,                  // 'move' | 'resize'
-      corner,                // 'tl' | 'tr' | 'bl' | 'br' | null
-      startMouseXPx: offsetX,
-      startMouseYPx: offsetY,
-      origXFt: curXFt,
-      origYFt: curYFt,
-      origWFt: curWFt,
-      origHFt: curHFt,
-      pxPerFt,
-    };
-    canvas.setPointerCapture(e.pointerId);
-    canvas.style.cursor = mode === 'resize' ? 'nwse-resize' : 'grabbing';
+    _planDrag = { zoneId: hit, mode, corner, startCanvasX: offsetX, startCanvasY: offsetY, origXFt: curXFt, origYFt: curYFt, origWFt: curWFt, origHFt: curHFt, pxPerFt, X0, Y0, Wpx: r.w, Hpx: r.h };
+    document.addEventListener('pointermove', onPlanPointerMove);
+    document.addEventListener('pointerup', onPlanPointerUp);
   });
-
-  rootEl?.addEventListener('pointermove', (e) => {
-    if (!_planDrag || !_planEditMode) return;
-    const canvas = /** @type {HTMLCanvasElement} */ (e.target);
-    if (!canvas || canvas.id !== 'wsc-plan-canvas') return;
-    const { offsetX, offsetY } = canvasMouseCoords(canvas, e);
-    const dxFt = (offsetX - _planDrag.startMouseXPx) / _planDrag.pxPerFt;
-    const dyFt = (offsetY - _planDrag.startMouseYPx) / _planDrag.pxPerFt;
-    const snap = 5;
-    if (!zones.layoutOverrides) zones.layoutOverrides = {};
-    const cur = zones.layoutOverrides[_planDrag.zoneId] || {};
-    if (_planDrag.mode === 'resize') {
-      // Translate corner-drag into x/y/w/h deltas
-      let newX = _planDrag.origXFt;
-      let newY = _planDrag.origYFt;
-      let newW = _planDrag.origWFt;
-      let newH = _planDrag.origHFt;
-      const c = _planDrag.corner;
-      if (c === 'br') { newW = _planDrag.origWFt + dxFt; newH = _planDrag.origHFt + dyFt; }
-      else if (c === 'tr') { newW = _planDrag.origWFt + dxFt; newY = _planDrag.origYFt + dyFt; newH = _planDrag.origHFt - dyFt; }
-      else if (c === 'bl') { newX = _planDrag.origXFt + dxFt; newW = _planDrag.origWFt - dxFt; newH = _planDrag.origHFt + dyFt; }
-      else if (c === 'tl') { newX = _planDrag.origXFt + dxFt; newW = _planDrag.origWFt - dxFt; newY = _planDrag.origYFt + dyFt; newH = _planDrag.origHFt - dyFt; }
-      // Snap and clamp to a reasonable minimum (10 ft per side)
-      newX = Math.round(newX / snap) * snap;
-      newY = Math.round(newY / snap) * snap;
-      newW = Math.max(10, Math.round(newW / snap) * snap);
-      newH = Math.max(10, Math.round(newH / snap) * snap);
-      zones.layoutOverrides[_planDrag.zoneId] = { ...cur, x: newX, y: newY, w: newW, h: newH };
-    } else {
-      // Move mode — only update x/y, preserve any existing w/h override
-      const newXFt = Math.round((_planDrag.origXFt + dxFt) / snap) * snap;
-      const newYFt = Math.round((_planDrag.origYFt + dyFt) / snap) * snap;
-      zones.layoutOverrides[_planDrag.zoneId] = { ...cur, x: newXFt, y: newYFt };
-    }
-    drawPlan();
-  });
-
-  const finishDrag = () => {
-    if (!_planDrag) return;
-    const canvas = rootEl?.querySelector('#wsc-plan-canvas');
-    if (canvas) canvas.style.cursor = 'grab';
-    _planDrag = null;
-    isDirty = true;
-  };
-  rootEl?.addEventListener('pointerup', finishDrag);
-  rootEl?.addEventListener('pointercancel', finishDrag);
-  rootEl?.addEventListener('pointerleave', finishDrag);
-}
-
-/**
- * Canvas mouse coord helper — converts a pointer event into canvas-space px
- * (accounting for CSS scaling between the canvas's intrinsic width=900 and
- * the rendered width).
- */
-function canvasMouseCoords(canvas, evt) {
-  const rect = canvas.getBoundingClientRect();
-  const scaleX = canvas.width / rect.width;
-  const scaleY = canvas.height / rect.height;
-  return {
-    offsetX: (evt.clientX - rect.left) * scaleX,
-    offsetY: (evt.clientY - rect.top)  * scaleY,
-  };
 }
 
 // ============================================================
@@ -792,6 +709,36 @@ function renderConfigPanel() {
   `;
 
   bindConfigEvents(panel);
+}
+
+/**
+ * Save the current design configuration.
+ */
+async function handleSaveWsc() {
+  const btn = rootEl?.querySelector('[data-tc-action="wsc-save"]');
+  if (!btn) {
+    showToast('Save button not found', 'error');
+    return;
+  }
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  try {
+    const saved = await api.saveConfig({ ...facility, zones, volumes });
+    facility.id = saved.id || saved[0]?.id || facility.id;
+    isDirty = false;
+    bus.emit('wsc:saved', { id: facility.id });
+    btn.textContent = '✓ Saved';
+    showToast(`Saved "${facility.name || 'Untitled'}"`, 'success');
+    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1800);
+    // Refresh chrome to show new save state
+    refreshToolChrome(rootEl, _buildWscChromeOpts());
+  } catch (err) {
+    console.error('[WSC] Save failed:', err);
+    btn.textContent = orig;
+    btn.disabled = false;
+    showToast('Save failed: ' + err.message, 'error');
+  }
 }
 
 function bindConfigEvents(panel) {
