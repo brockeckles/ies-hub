@@ -3072,6 +3072,30 @@ textarea.hub-input {
   box-sizing: border-box;
 }
 
+/* ---- Linked Designs grid (2026-04-29 layout pass)
+   4 design-tool cards stack vertically by default; on wider canvas they
+   pack tighter as 2x2 (or 4-col on very wide screens). ---- */
+.cm-linked-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+/* The .hub-card.mt-4 inline marg fights the grid-gap on the first card.
+   Inside cm-linked-grid we drop the margin-top — the grid handles spacing. */
+.cm-linked-grid > .hub-card { margin-top: 0; }
+
+/* ---- Assumptions categories grid (2026-04-29 layout pass)
+   Each category card hosts a small table (5 cols, ~5-15 rows). With the
+   wider canvas they fit 2-up or 3-up nicely instead of stacking. ---- */
+.cm-assumptions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(520px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.cm-assumptions-grid > .cm-card { margin-top: 0; }
+
 /* ---- Financial Assumptions sub-cards (CM-ASM-1, 2026-04-26)
    2026-04-29 layout pass: dropped max-width 1040px cap. ---- */
 .cm-fin-grid {

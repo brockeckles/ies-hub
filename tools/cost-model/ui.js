@@ -9174,11 +9174,11 @@ function renderLinkedDesigns() {
         No design scenarios linked to this Cost Model yet.<br>
         Open a design tool (WSC / COG / NetOpt / Fleet), save a scenario, and select this Cost Model as its parent.
       </div>
-    ` : groups.map(g => {
+    ` : `<div class="cm-linked-grid">` + groups.map(g => {
       const rows = linkedDesigns[g.key] || [];
       if (rows.length === 0) return '';
       return `
-        <div class="hub-card mt-4">
+        <div class="hub-card">
           <div class="text-subtitle mb-2">${g.icon} ${g.label} <span style="color:var(--ies-gray-400);font-weight:500;font-size:11px;">(${rows.length})</span></div>
           <table class="cm-grid-table" style="font-size:13px;">
             <thead>
@@ -9196,7 +9196,7 @@ function renderLinkedDesigns() {
           </table>
         </div>
       `;
-    }).filter(Boolean).join('')}
+    }).filter(Boolean).join('') + `</div>`}
   `;
 }
 
@@ -13615,6 +13615,7 @@ function renderAssumptions() {
       </div>
     </div>
 
+    <div class="cm-assumptions-grid">
     ${Array.from(grouped.entries()).map(([category, items]) => `
       <div class="cm-card">
         <h3>${HEURISTIC_CATEGORY_LABELS[category] || category}</h3>
@@ -13654,6 +13655,7 @@ function renderAssumptions() {
         </table>
       </div>
     `).join('')}
+    </div>
 
     ${renderPlanningRatios()}
   `;
