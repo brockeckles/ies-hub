@@ -1319,7 +1319,7 @@ function renderSetup(el) {
 
 function renderFacilities(el) {
   el.innerHTML = `
-    <div style="max-width:900px;">
+    <div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
         <h3 class="text-section" style="margin:0;">Facility Network</h3>
         <div style="display:flex;gap:8px;">
@@ -1491,7 +1491,7 @@ function renderDemand(el) {
   const totalDemand = demands.reduce((s, d) => s + d.annualDemand, 0);
 
   el.innerHTML = `
-    <div style="max-width:900px;">
+    <div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
         <h3 class="text-section" style="margin:0;">Demand Points</h3>
         <div style="display:flex;gap:8px;">
@@ -1936,7 +1936,7 @@ function renderRateCardEditor() {
 // actions; previously they lived in the right-rail Tools panel (deleted).
 function renderRateCardPhase(el) {
   el.innerHTML = `
-    <div style="max-width:1100px;">
+    <div>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap;">
         <div>
           <h3 class="text-section" style="margin:0;">Rate Card</h3>
@@ -2528,7 +2528,7 @@ function renderResults(el) {
   const slaColor = s.serviceLevel >= 95 ? '#22c55e' : s.serviceLevel >= 90 ? '#f59e0b' : '#ef4444';
 
   el.innerHTML = `
-    <div style="max-width:1000px;">
+    <div>
       <h3 class="text-section" style="margin-bottom:16px;">${s.name}</h3>
 
       <!-- KPI Bar -->
@@ -2797,7 +2797,7 @@ function renderMultiDCComparison(el) {
   const rec = calc.recommendOptimalDCs(comparisonResults, serviceConfig);
 
   el.innerHTML = `
-    <div style="max-width:1200px;">
+    <div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
         <h3 class="text-section" style="margin:0;">DC Network Comparison (1-${_optimizationMeta?.kCap || comparisonResults.length} facilities)</h3>
         <div style="display:flex;align-items:center;gap:8px;">

@@ -2827,9 +2827,9 @@ function renderVolumes() {
           <tr>
             <th style="width:30px;"></th>
             <th>Activity</th>
-            <th>Annual Volume</th>
-            <th>UOM</th>
-            <th style="width:60px;"></th>
+            <th style="width:220px;">Annual Volume</th>
+            <th style="width:160px;">UOM</th>
+            <th style="width:80px;"></th>
           </tr>
         </thead>
         <tbody id="cm-volume-rows">
@@ -2837,14 +2837,14 @@ function renderVolumes() {
             <tr>
               <td><button class="cm-star-btn${l.isOutboundPrimary ? ' active' : ''}" data-idx="${i}" title="Set as primary outbound">&#9733;</button></td>
               <td>
-                <div style="display:flex;align-items:center;gap:6px;">
-                  <input value="${l.name || ''}" style="width:180px;" data-array="volumeLines" data-idx="${i}" data-field="name" />
+                <div style="display:flex;align-items:center;gap:6px;width:100%;">
+                  <input value="${l.name || ''}" style="flex:1;min-width:0;" data-array="volumeLines" data-idx="${i}" data-field="name" />
                   ${l.source ? `<span class="cm-vol-src cm-vol-src--${l.source}" title="Volume source: ${l.source === 'wsc' ? 'pulled from Warehouse Sizing' : l.source === 'netopt' ? 'pulled from Network Optimizer' : 'manually entered'}">${l.source === 'wsc' ? 'WSC' : l.source === 'netopt' ? 'NETOPT' : 'MANUAL'}</span>` : ''}
                 </div>
               </td>
-              <td><input type="number" value="${l.volume || 0}" style="width:120px;" data-array="volumeLines" data-idx="${i}" data-field="volume" data-type="number" /></td>
+              <td><input type="number" value="${l.volume || 0}" style="width:100%;" data-array="volumeLines" data-idx="${i}" data-field="volume" data-type="number" /></td>
               <td>
-                <select style="width:90px;" data-array="volumeLines" data-idx="${i}" data-field="uom">
+                <select style="width:100%;" data-array="volumeLines" data-idx="${i}" data-field="uom">
                   ${['pallets', 'cases', 'eaches', 'orders', 'lines', 'units'].map(u =>
                     `<option value="${u}"${l.uom === u ? ' selected' : ''}>${u}</option>`
                   ).join('')}
