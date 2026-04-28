@@ -12533,9 +12533,21 @@ function _bindOperationalFlowEvents(container) {
       } else if (sourceTag) {
         resolvedTag = sourceTag;
       } else {
-        const newTag = prompt('Name the path these activities share (e.g. full-pallet, loose-case):', '');
-        if (!newTag || !newTag.trim()) return;
-        resolvedTag = newTag.trim();
+        // v0.3a.2 — both untagged. Auto-generate a path tag so the drop
+        // doesn't block on prompt() (interruptive during a drag gesture
+        // and prevented test automation from working). Strategy: slugify
+        // source's activity_name to first 2 keywords; fall back to
+        // 'flow-N' (next available integer) when name is empty/garbage.
+        // User can always rename via the detail drawer.
+        const slug = _ofpSlugifyForPath(sourceLine.activity_name);
+        if (slug) {
+          resolvedTag = slug;
+        } else {
+          const existing = new Set(_ofpAllPathTags());
+          let n = 1;
+          while (existing.has(`flow-${n}`)) n++;
+          resolvedTag = `flow-${n}`;
+        }
       }
       sourceLine.path_tag = resolvedTag;
       targetLine.path_tag = resolvedTag;
@@ -12605,6 +12617,32 @@ function _ofpAllPathTags() {
     if (t) set.add(t);
   }
   return Array.from(set).sort();
+}
+
+/**
+ * Slugify an activity name into a path-tag candidate. Lowercase, drop
+ * common stop-words + non-alphanum, take first 2 keywords, kebab-join,
+ * cap at 24 chars. Returns null if the result is too short (< 2 chars)
+ * so the caller can fall back to "flow-N".
+ *
+ *   "Receive & Unload pallets"  → "receive-unload"
+ *   "Each pick"                 → "each-pick"
+ *   "VAS — kitting"             → "vas-kitting"
+ *   ""                          → null
+ */
+function _ofpSlugifyForPath(name) {
+  if (!name || typeof name !== 'string') return null;
+  const STOP = new Set(['the','a','an','and','or','of','to','for','in','at','with','from','on','&']);
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(w => w.length > 1 && !STOP.has(w))
+    .slice(0, 2)
+    .join('-')
+    .substring(0, 24);
+  return slug.length >= 2 ? slug : null;
 }
 
 /**
