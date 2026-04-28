@@ -20,7 +20,7 @@ import * as cmApi from '../cost-model/api.js?v=20260423-xQ';
 /** @type {HTMLElement|null} */
 let rootEl = null;
 
-/** @type {'list' | 'kanban' | 'summary' | 'sites' | 'financials' | 'pipeline' | 'hours' | 'tasks' | 'updates'} */
+/** @type {'list' | 'summary' | 'sites' | 'financials' | 'sensitivity' | 'compare' | 'pipeline' | 'hours' | 'tasks' | 'updates'} */
 let activeTab = 'list';
 // MUL-D1/D3/D4 — deal-financial overrides (per-session, applied to the
 // active deal). UI exposes these in the Financials tab.
@@ -46,8 +46,7 @@ let sensCfg = {
 // MUL-G2 — selected deal IDs for side-by-side comparison
 let compareDealIds = [];
 
-/** @type {'kanban' | 'table'} */
-let landingViewMode = 'kanban';
+/** Removed 2026-04-29 — Kanban view dropped from Multi-Site. */
 
 /** @type {import('./types.js?v=20260418-sL').Deal|null} */
 let activeDeal = null;
@@ -116,7 +115,6 @@ let _cmSavedUnsub = null;
 export async function mount(el) {
   rootEl = el;
   activeTab = 'list';
-  landingViewMode = 'table';
   activeDeal = null;
   sites = [];
   financials = null;
@@ -235,10 +233,9 @@ const DM_DETAIL_SECTIONS = [
 const DM_LANDING_GROUPS = [
   { key: 'portfolio', label: 'Portfolio', description: 'Multi-deal portfolio view' },
 ];
-const DM_LANDING_SECTIONS = [
-  { key: 'list',   label: '\u{1F4CB} List',   group: 'portfolio' },
-  { key: 'kanban', label: '\u{1F5C2} Kanban', group: 'portfolio' },
-];
+// 2026-04-29 (Brock): Kanban view removed from Multi-Site — pipeline-stage
+// management belongs to hub/deal-management, not the analyzer.
+const DM_LANDING_SECTIONS = [];
 
 const DETAIL_TABS = [
   { key: 'summary', label: 'Summary' },
@@ -253,7 +250,7 @@ const DETAIL_TABS = [
 ];
 
 function isLandingView() {
-  return activeTab === 'list' || activeTab === 'kanban';
+  return activeTab === 'list';
 }
 
 function renderShell() {
@@ -266,14 +263,8 @@ function _buildDmChromeOpts() {
   const landing = isLandingView();
 
   if (landing) {
-    // Section pill follows activeTab (source of truth for what content
-    // renders) — landingViewMode lags it. mount() sets activeTab='list',
-    // so the pill correctly reads as List on first load.
-    const activeSection = (activeTab === 'kanban') ? 'kanban' : 'list';
+    const activeSection = null; // landing has no section pills now
     const actions = [
-      { id: 'dm-toggle-view',
-        label: landingViewMode === 'kanban' ? '\u{1F4CB} List View' : '\u{1F5C2} Kanban View',
-        title: 'Toggle landing view' },
       { id: 'dm-load-sample',
         label: 'Load Sample Deal',
         title: 'Seed a sample multi-site deal so you can see what a populated analysis looks like',
@@ -341,15 +332,7 @@ function bindShellEvents() {
       }
     },
     onSection: (key) => {
-      if (isLandingView()) {
-        // Landing mode — switch list / kanban view.
-        if (key === 'kanban' || key === 'list') {
-          activeTab = /** @type {any} */ (key);
-          landingViewMode = (key === 'kanban') ? 'kanban' : 'table';
-          rerenderShell();
-        }
-        return;
-      }
+      if (isLandingView()) return; // Landing has no sub-sections
       if (key !== activeTab) {
         activeTab = /** @type {any} */ (key);
         renderContent();
@@ -362,18 +345,12 @@ function bindShellEvents() {
         window.location.hash = 'designtools';
       } else {
         // Detail-mode back — return to deal list.
-        activeTab = (landingViewMode === 'kanban' ? 'kanban' : 'list');
+        activeTab = 'list';
         activeDeal = null;
         rerenderShell();
       }
     },
     onAction: (id) => {
-      if (id === 'dm-toggle-view') {
-        landingViewMode = (landingViewMode === 'kanban') ? 'table' : 'kanban';
-        activeTab = /** @type {any} */ (landingViewMode === 'kanban' ? 'kanban' : 'list');
-        rerenderShell();
-        return;
-      }
       if (id === 'dm-new-deal') return createNewDeal();
       if (id === 'dm-load-sample') {
         allDeals = [{ ...calc.DEMO_DEAL, id: 'demo-deal-1' }];
@@ -535,7 +512,7 @@ function renderContent() {
   if (!el) return;
 
   switch (activeTab) {
-    case 'kanban': renderKanban(el); break;
+    // 'kanban' case removed 2026-04-29 — Kanban view dropped from Multi-Site.
     case 'list': renderDealList(el); break;
     case 'summary': renderSummary(el); break;
     case 'sites': renderSites(el); break;
