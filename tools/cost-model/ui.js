@@ -18,6 +18,8 @@ import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
 import * as shiftPlannerCalc from './shift-planner.js?v=20260427-pm3-s2';
 import * as shiftPlannerUi from './shift-planner-ui.js?v=20260427-pm3-s2';
+// 2026-04-28 — internal phase stepper for Implementation Timeline section.
+import { renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
 // disk but no longer imported; can be deleted in a future cleanup.
@@ -134,6 +136,9 @@ let refData = {};
 
 /** @type {string} */
 let activeSection = 'setup';
+// 2026-04-28 — internal phase for renderImplementation. 'plan' | 'ramp' | 'forecast'.
+// Stays at module level so the choice persists across renderSection() re-renders.
+let activeImplPhase = 'plan';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -6970,6 +6975,14 @@ function bindSectionEvents(section, container) {
   // Section-specific event delegation — wired BEFORE the generic data-field
   // binder so delegated handlers can run without collision. Shift Planning
   // uses data-sp-cell / data-sp-action and does not use data-field.
+  // 2026-04-28 — internal phase stepper inside the Implementation section.
+  if (section === 'implementation') {
+    bindPhaseStepper(container.querySelector('#cm-impl-stepper'), (phase) => {
+      activeImplPhase = phase;
+      renderSection();
+    });
+  }
+
   if (section === 'shiftPlanning') {
     shiftPlannerUi.bindShiftPlanningEvents(container, {
       model,
@@ -11627,6 +11640,15 @@ function renderImplementation() {
       </div>
     </div>
 
+    <!-- 2026-04-28 — internal phase stepper. Plan / Ramp / Forecast.
+         Plan = Timeline Settings + Phase Plan (the WHAT/WHEN of phases).
+         Ramp = Volume + Headcount ramp curves (HOW intensity climbs).
+         Forecast = read-only Ramp Burn Estimate (what those choices imply).
+         Per EVE2 design-SME convo Item #2 — stepper INSIDE a CM section,
+         not over the whole workbook. -->
+    <div id="cm-impl-stepper" style="margin-bottom:16px;border-radius:8px;overflow:hidden;">${renderImplPhaseStepperContent()}</div>
+
+    ${activeImplPhase === 'plan' ? `
     <!-- 2026-04-27 — Settings moved to TOP per Brock's feedback. These two
          scalars (Go-Live Week + Ramp Period) drive the totalWeeks math
          and the ramp array shapes, so they belong before the things they
@@ -11753,6 +11775,9 @@ ${(() => {
       </table>
     </div>
 
+    ` : ''}
+
+    ${activeImplPhase === 'ramp' ? `
     <!-- Ramp curves — full-width side-by-side cards. 2026-04-27 redesign:
          tall bar chart on top (~140px) with the % value rendered on each
          bar + a 100% reference line, then editable inputs aligned 1:1
@@ -11783,6 +11808,9 @@ ${(() => {
       </div>
     </div>
 
+    ` : ''}
+
+    ${activeImplPhase === 'forecast' ? `
     <!-- Ramp Burn Estimate (read-only, derives from labor + ramp curves) -->
     <div class="cm-card">
       <div class="cm-section-header__intro" style="margin-bottom:8px;">
@@ -11834,8 +11862,33 @@ ${(() => {
       </table>
       </div>
     </div>
-
+    ` : ''}
   `;
+}
+
+// 2026-04-28 — Implementation Timeline phase stepper helper.
+// Status logic mirrors the design-tool steppers: 'complete' once a phase
+// has any user data, 'active' when it's the current view, 'pending' otherwise.
+function renderImplPhaseStepperContent() {
+  const it = model.implementationTimeline || {};
+  const hasPhases = Array.isArray(it.phases) && it.phases.length > 0;
+  const hasRamp = (Array.isArray(it.volumeRamp) && it.volumeRamp.some(v => Number(v) > 0))
+    || (Array.isArray(it.headcountRamp) && it.headcountRamp.some(v => Number(v) > 0));
+  // Forecast is derived/read-only — mark complete whenever ramp has values.
+  const planStatus = hasPhases ? (activeImplPhase === 'plan' ? 'active' : 'complete')
+                               : (activeImplPhase === 'plan' ? 'active' : 'pending');
+  const rampStatus = hasRamp ? (activeImplPhase === 'ramp' ? 'active' : 'complete')
+                             : (activeImplPhase === 'ramp' ? 'active' : 'pending');
+  const fcStatus   = hasRamp ? (activeImplPhase === 'forecast' ? 'active' : 'complete')
+                             : (activeImplPhase === 'forecast' ? 'active' : 'pending');
+  return renderPhaseStepper({
+    phases: [
+      { key: 'plan',     num: 1, label: 'Plan',     sub: 'Timeline + phase Gantt',           status: planStatus },
+      { key: 'ramp',     num: 2, label: 'Ramp',     sub: 'Volume + headcount curves',        status: rampStatus },
+      { key: 'forecast', num: 3, label: 'Forecast', sub: 'Ramp burn estimate (read-only)',   status: fcStatus },
+    ],
+    activePhase: activeImplPhase,
+  });
 }
 
 /**
