@@ -2749,10 +2749,13 @@ function renderGroupedNav() {
     return `
       <div class="hub-nav-group${collapsed ? ' is-collapsed' : ''}" data-nav-group="${g.key}">
         <button type="button" class="hub-nav-group__header" data-nav-group-toggle="${g.key}" title="${g.description}">
-          <span class="hub-nav-group__caret">▾</span>
-          <span>${g.label}</span>
-          <span class="hub-completion-dot hub-completion-dot--${groupDot}"></span>
+          <span class="hub-nav-group__badge hub-nav-group__badge--${groupDot}">${SECTION_GROUPS.findIndex(x => x.key === g.key) + 1}</span>
+          <span class="hub-nav-group__title">
+            <span class="hub-nav-group__label">${g.label}</span>
+            <span class="hub-nav-group__desc">${g.description}</span>
+          </span>
           ${countLabel ? `<span class="hub-nav-group__count">${countLabel}</span>` : ''}
+          <span class="hub-nav-group__caret">▾</span>
         </button>
         <div class="hub-nav-group__items">
           ${sections.map(s => {

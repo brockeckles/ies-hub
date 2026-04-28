@@ -3840,17 +3840,100 @@ textarea.hub-input {
    Setup / Inputs / Operations / Financials / Output groupings read
    as a clear vertical hierarchy (NetOpt's tab-strip uses a bottom
    divider; sidebar gets the same treatment between groups). */
+/* 2026-04-28 EVE3 — CM sidebar groupings styled to echo the stepper motif
+ * (numbered phase badge + label + description sub-text). Replaces the
+ * earlier 10px gray-400 quiet header. The group itself is still flat —
+ * users still click directly to any section — but it now reads as
+ * confidently grouped at a glance. */
 .hub-nav-group + .hub-nav-group {
-  margin-top: 4px;
-  padding-top: 4px;
-  border-top: 1px solid var(--ies-gray-100);
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--ies-gray-200);
 }
 .hub-nav-group__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px 8px 12px;
+  font-size: 13px;
   font-weight: 700;
-  letter-spacing: 0.4px;
-  color: var(--ies-gray-600);
-  text-transform: uppercase;
-  font-size: 10px;
-  padding: 8px 16px 4px;
+  color: var(--ies-gray-700);
+  text-transform: none;
+  letter-spacing: normal;
+  cursor: pointer;
+  user-select: none;
+  border: 0;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  border-radius: 6px;
+  transition: background var(--ease-default);
 }
+.hub-nav-group__header:hover {
+  background: var(--ies-gray-50);
+  color: var(--ies-gray-700);
+}
+.hub-nav-group__badge {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--ies-gray-300);
+}
+.hub-nav-group__badge--complete { background: var(--ies-green, #047857); }
+.hub-nav-group__badge--partial  { background: var(--ies-blue); }
+.hub-nav-group__badge--empty    { background: var(--ies-gray-300); }
+.hub-nav-group__title {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  line-height: 1.2;
+}
+.hub-nav-group__label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ies-gray-700);
+  letter-spacing: 0.1px;
+}
+.hub-nav-group__desc {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ies-gray-500);
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hub-nav-group__count {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ies-gray-500);
+  margin-left: auto;
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+.hub-nav-group__caret {
+  font-size: 9px;
+  color: var(--ies-gray-400);
+  transition: transform var(--ease-default);
+  flex-shrink: 0;
+}
+.hub-nav-group.is-collapsed .hub-nav-group__items { display: none; }
+.hub-nav-group.is-collapsed .hub-nav-group__caret { transform: rotate(-90deg); }
+.hub-nav-group__items {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 2px 0 4px 12px;
+}
+/* Collapse the description on narrow / collapsed sidebars. */
+.hub-sidebar.collapsed .hub-nav-group__desc,
+.hub-sidebar.collapsed .hub-nav-group__count { display: none; }
 
