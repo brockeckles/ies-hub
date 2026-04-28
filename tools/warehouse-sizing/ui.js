@@ -302,22 +302,93 @@ function _refreshWscKpis() {
   refreshKpiStrip(rootEl, _computeWscKpis());
 }
 
-/** WSC-specific styles (the chrome primitive doesn't cover these). */
+/** WSC-specific styles — the Configure-panel inputs were rendering with
+ *  browser-default <input>/<select> styling (heavy black borders) which
+ *  clashed with the hub's lighter aesthetic. This stylesheet makes them
+ *  match hub-input + cm-form-label patterns. */
 function _wscExtraStyles() {
   return `
     <style>
+      /* Section grouping inside the Configure drawer. */
       .wsc-config-section {
         padding: 16px;
         border-bottom: 1px solid var(--ies-gray-100);
       }
       .wsc-config-section:last-child { border-bottom: 0; }
-      .wsc-config-section h4 {
-        margin: 0 0 8px 0;
+      .wsc-config-section h4,
+      .wsc-config-title {
+        margin: 0 0 12px 0;
         font-size: 11px;
         font-weight: 700;
         color: var(--ies-gray-500);
         text-transform: uppercase;
         letter-spacing: 0.5px;
+      }
+
+      /* Two-column row of fields. */
+      .wsc-config-row {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        margin-bottom: 8px;
+      }
+      .wsc-config-row:last-child { margin-bottom: 0; }
+
+      /* Single field — label + input stacked. */
+      .wsc-config-field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 0;
+      }
+      .wsc-config-field > label {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--ies-gray-500);
+        line-height: 1.3;
+        cursor: default;
+      }
+
+      /* Inputs + selects — match the hub-input aesthetic without forcing
+         the wsc-config-field markup to add the .hub-input class to every
+         element. (240+ inputs in renderConfigPanel — class-by-class
+         migration would be a massive diff.) */
+      .wsc-config-field > input,
+      .wsc-config-field > select {
+        font-family: 'Montserrat', sans-serif;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--ies-navy);
+        background: #fff;
+        border: 1px solid var(--ies-gray-200);
+        border-radius: 6px;
+        padding: 7px 10px;
+        height: 34px;
+        width: 100%;
+        box-sizing: border-box;
+        transition: border-color 0.12s ease, box-shadow 0.12s ease;
+      }
+      .wsc-config-field > input:focus,
+      .wsc-config-field > select:focus {
+        outline: none;
+        border-color: var(--ies-blue);
+        box-shadow: 0 0 0 3px rgba(0, 71, 171, 0.10);
+      }
+      .wsc-config-field > input::placeholder {
+        color: var(--ies-gray-400);
+        font-weight: 500;
+      }
+      /* Number inputs — tabular numerals for clean alignment. */
+      .wsc-config-field > input[type="number"] {
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+      }
+      /* Range inputs (storage allocation sliders). */
+      .wsc-config-field > input[type="range"] {
+        height: auto;
+        padding: 0;
+        border: none;
+        background: transparent;
       }
     </style>
   `;
