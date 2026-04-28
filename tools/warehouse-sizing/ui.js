@@ -10,7 +10,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sL';
 import { state } from '../../shared/state.js?v=20260418-sL';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sL';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton } from '../../shared/tool-frame.js?v=20260427-pm3-s1';
+import { renderToolHeader, bindPrimaryActionShortcut, flashRunButton, renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
 import * as calc from './calc.js?v=20260425-s11';
 import * as api from './api.js?v=20260418-sL';
 
@@ -170,6 +170,20 @@ export function unmount() {
 // SHELL
 // ============================================================
 
+function renderWscPhaseStepper() {
+  const el = rootEl?.querySelector('#wsc-process-flow');
+  if (!el) return;
+  el.innerHTML = renderPhaseStepper({
+    phases: [
+      { key: 'dashboard', num: 1, label: 'Dashboard', sub: 'Capacity KPIs',          status: activeView === 'dashboard' ? 'active' : 'pending' },
+      { key: 'plan',      num: 2, label: '2D Plan',   sub: 'Top-down floorplan',     status: activeView === 'plan'      ? 'active' : 'pending' },
+      { key: 'elevation', num: 3, label: '2D Elev',   sub: 'Cross-section + clearance', status: activeView === 'elevation' ? 'active' : 'pending' },
+      { key: '3d',        num: 4, label: '3D View',   sub: 'Interactive walkthrough', status: activeView === '3d'        ? 'active' : 'pending' },
+    ],
+    activePhase: activeView,
+  });
+}
+
 function renderShell() {
   const tabs = [
     { key: 'dashboard', label: 'Dashboard', title: 'Capacity dashboard with utilization metrics' },
@@ -197,14 +211,17 @@ function renderShell() {
         toolName: 'Warehouse Sizing',
         toolKey: 'wsc',
         backAction: 'wsc-back',
-        tabs,
-        activeTab: activeView,
-        tabsId: 'wsc-tabs',
         statusChips: chips,
         description: VIEW_DESC[activeView] || VIEW_DESC.dashboard,
         subtitle: VIEW_LABEL[activeView] || '',
         primaryAction: { label: 'Use in Cost Model →', action: 'push-to-cm', icon: '⇨', title: 'Push this design into a Cost Model (Cmd/Ctrl+Enter)' },
       })}
+      <!-- 2026-04-28 — phase-stepper port. The 4 views (Dashboard / 2D Plan /
+           2D Elev / 3D) are nav-as-stepper: they are not strictly sequential
+           phases (live-recalc means all four are always available), but the
+           shared stepper chrome unifies WSC visually with CoG / Fleet / NetOpt.
+           Status logic: current view = active, others = pending. -->
+      <div id="wsc-process-flow"></div>
 
       <div class="hub-builder" style="flex:1;min-height:0;display:grid;grid-template-columns:300px 1fr;">
         <!-- Config Sidebar -->
@@ -307,15 +324,18 @@ function renderShell() {
 }
 
 function bindShellEvents() {
-  // View toggle (now uses [data-tab] from shared tool-frame)
-  rootEl?.querySelector('#wsc-tabs')?.addEventListener('click', (e) => {
-    const btn = /** @type {HTMLElement} */ (e.target).closest('[data-tab]');
-    if (!btn) return;
-    activeView = /** @type {any} */ (btn.dataset.tab);
-    rootEl?.querySelectorAll('#wsc-tabs button').forEach(b => {
-      b.classList.toggle('active', b.dataset.tab === activeView);
-    });
-    renderContentView();
+  // 2026-04-28 — phase-stepper port replaces the old #wsc-tabs click handler.
+  bindPhaseStepper(rootEl?.querySelector('#wsc-process-flow'), (phase) => {
+    activeView = /** @type {any} */ (phase);
+    // Re-render the shell to refresh navy-banner description + stepper status.
+    if (rootEl) {
+      rootEl.innerHTML = renderShell();
+      bindShellEvents();
+      renderConfigPanel();
+      bindConfigEvents(rootEl.querySelector('#wsc-config'));
+      renderWscPhaseStepper();
+      renderContentView();
+    }
   });
 
   // Push to CM — primary action
@@ -1214,6 +1234,8 @@ function showWscToast(message, level) {
 function renderContentView() {
   const container = rootEl?.querySelector('#wsc-content');
   if (!container) return;
+  // 2026-04-28 — keep phase stepper status in sync with activeView.
+  renderWscPhaseStepper();
 
   // Clean up 3D scene if switching away
   if (activeView !== '3d' && scene3d) {
