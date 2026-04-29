@@ -264,7 +264,7 @@ const STANDARD_POSITIONS = [
   { name: 'Retail Compliance Specialist',        category: 'indirect', is_salaried: true,  annual_salary: 62000, notes: '1 : 8-10 retail customers — routing guide + dock compliance' },
   { name: 'Wave Tasker',                         category: 'indirect', is_salaried: true,  annual_salary: 52000, notes: '1 per 2-shift 8K-order/day op' },
   { name: 'WMS/LMS Field Support',               category: 'indirect', is_salaried: true,  annual_salary: 70000, notes: '1 per 150 operators' },
-  { name: 'Transportation Routing',              category: 'indirect', is_salaried: true,  annual_salary: 58000, notes: '≥100 distinct carrier lanes triggers' },
+  { name: 'Transportation Routing',              category: 'indirect', is_salaried: true,  annual_salary: 58000, notes: '≥100 distinct carrier areas triggers' },
 ];
 
 /** Bumps when STANDARD_POSITIONS changes enough to warrant re-seeding every
@@ -6893,7 +6893,7 @@ function bindSectionEvents(section, container) {
     // (Earlier rAF-only scheduling was unreliable in this codebase —
     // some downstream code wraps rAF and the chain wasn't always firing.)
     const drawConnectors = () => {
-      try { _renderOfpPathConnectors(container); } catch (e) {}
+      try { _renderOfpFlowConnectors(container); } catch (e) {}
     };
     drawConnectors();
     setTimeout(drawConnectors, 0);
@@ -12166,15 +12166,18 @@ function renderImplRampPanel(arrayKey, values, label, color) {
 
 
 // ============================================================
-// OPERATIONAL FLOW PAGE (OFP) — v0.1, 2026-04-28
+// OPERATIONAL FLOW PAGE (OFP) — v0.4 (Functional Areas + Flows), 2026-04-29
+// Rename ripple from v0.3a.9: "lanes" → "Functional Areas", "paths" → "Flows".
+// Persistence keys (line.flowLane, line.path_tag) intentionally retained for
+// backward compatibility with saved scenarios.
 // ============================================================
 //
 // Visual end-to-end view of the labor activities in this cost model:
 // Inbound → Storage → Outbound, with Returns/VAS and Support overlays.
 //
 // v0.1 is READ-ONLY and AUTO-DERIVED from existing laborLines +
-// indirectLaborLines. Each row binds into one of six lanes by activity-
-// keyword classification (`_classifyLaneFromLine`). Click any node card
+// indirectLaborLines. Each row binds into one of six areas by activity-
+// keyword classification (`_classifyAreaFromLine`). Click any node card
 // to open a side detail panel mirroring the Labor row's read-only
 // values + an "Edit on Labor page" jump.
 //
@@ -12183,11 +12186,11 @@ function renderImplRampPanel(arrayKey, values, label, color) {
 // pools, archetype templates. Until v0.2, edits still happen on Labor;
 // OFP is a complementary visualization.
 
-// Lane keyword catalog. Order matters — more specific keywords (e.g.
+// Functional Area keyword catalog. Order matters — more specific keywords (e.g.
 // "replenishment") should match before more generic ones (e.g. "ship").
 // The classifier lowercases activity_name + position role and tests each
-// lane's keywords in the order the lanes are declared here.
-const _OFP_LANES = [
+// area's keywords in the order the areas are declared here.
+const _OFP_DEFAULT_AREAS = [
   { key: 'inbound',     label: 'Inbound',          color: '#0EA5E9', keywords: ['receiv', 'unload', 'dock', 'inbound', ' rx', 'gatehouse', 'putaway-prep', 'check-in', 'pallet build'] },
   { key: 'storage',     label: 'Storage',          color: '#8B5CF6', keywords: ['putaway', 'put away', 'replen', 'replenish', 'storage', 'let-down', 'letdown', 'slot', 'cycle count', 'inventory move'] },
   { key: 'outbound',    label: 'Outbound',         color: '#16A34A', keywords: ['pick', 'pack', 'stage', 'ship', 'load', 'dispatch', 'outbound', 'wave', 'consolidat', 'sort', 'manifest', 'palletiz'] },
@@ -12196,17 +12199,17 @@ const _OFP_LANES = [
 ];
 
 /**
- * Bin a labor line into one of the six OFP lanes by keyword match on
+ * Bin a labor line into one of the six OFP areas by keyword match on
  * activity_name + role. Indirect labor is forced to 'support' by the
  * caller; this function classifies direct labor only.
  *
  * Returns one of: 'inbound' | 'storage' | 'outbound' | 'returnsVas' |
  *                 'support' | 'unclassified'
  */
-function _classifyLaneFromLine(line) {
+function _classifyAreaFromLine(line) {
   if (!line) return 'unclassified';
   // v0.2 — explicit flowLane override wins over keyword classification.
-  // Set when the user drags a card to a different lane or picks the lane
+  // Set when the user drags a card to a different area or picks the area
   // override dropdown in the detail panel. Persists on the model so the
   // override survives saves + reloads.
   if (line.flowLane) {
@@ -12214,33 +12217,33 @@ function _classifyLaneFromLine(line) {
     if (valid.has(line.flowLane)) return line.flowLane;
   }
   const haystack = `${line.activity_name || ''} ${line.position || ''} ${line.role || ''} ${line.most_template || ''}`.toLowerCase();
-  for (const lane of _OFP_LANES) {
-    for (const kw of lane.keywords) {
-      if (haystack.includes(kw)) return lane.key;
+  for (const area of _OFP_DEFAULT_AREAS) {
+    for (const kw of area.keywords) {
+      if (haystack.includes(kw)) return area.key;
     }
   }
   return 'unclassified';
 }
 
 /**
- * Lane → meta lookup (color, label). Includes a synthetic 'unclassified'
- * entry that doesn't appear in _OFP_LANES (we keep that array as the
+ * Area → meta lookup (color, label). Includes a synthetic 'unclassified'
+ * entry that doesn't appear in _OFP_DEFAULT_AREAS (we keep that array as the
  * keyword catalog for direct labor only).
  */
-function _ofpLaneMeta(key) {
+function _ofpAreaMeta(key) {
   if (key === 'unclassified') return { key, label: 'Unclassified', color: '#DC2626' };
-  return _OFP_LANES.find(l => l.key === key) || { key, label: key, color: '#64748B' };
+  return _OFP_DEFAULT_AREAS.find(l => l.key === key) || { key, label: key, color: '#64748B' };
 }
 
-// v0.3a — Path color palette. Path tags are freeform strings (e.g.
+// v0.3a — Path color palette. Flow tags are freeform strings (e.g.
 // "full-pallet", "loose-case", "vas-kitting") that group labor lines
-// flowing through the same operational journey across lanes. Color is
+// flowing through the same operational journey across areas. Color is
 // derived deterministically from the tag string so the same tag gets
 // the same color every render. Untagged lines fall back to a neutral
-// gray. The palette intentionally avoids the lane colors (sky / purple /
-// green / amber / slate / red) so paths are visually distinct from
-// lanes — both axes can be read at a glance.
-const _OFP_PATH_PALETTE = [
+// gray. The palette intentionally avoids the area colors (sky / purple /
+// green / amber / slate / red) so flows are visually distinct from
+// areas — both axes can be read at a glance.
+const _OFP_FLOW_PALETTE = [
   '#2563EB', // blue
   '#DB2777', // pink
   '#059669', // emerald
@@ -12250,13 +12253,13 @@ const _OFP_PATH_PALETTE = [
   '#6366F1', // indigo
   '#EA580C', // orange
 ];
-function _pathColor(tag) {
+function _flowColor(tag) {
   if (!tag || !tag.trim()) return '#9CA3AF'; // neutral gray for untagged
   let hash = 0;
   for (let i = 0; i < tag.length; i++) {
     hash = ((hash * 31) + tag.charCodeAt(i)) >>> 0;
   }
-  return _OFP_PATH_PALETTE[hash % _OFP_PATH_PALETTE.length];
+  return _OFP_FLOW_PALETTE[hash % _OFP_FLOW_PALETTE.length];
 }
 
 
@@ -12401,7 +12404,7 @@ function renderOperationalFlow() {
     return `
       <div class="cm-section-header">
         <div>
-          <h2>Operational Flow <span class="hub-status-chip cm-chip-info cm-chip-xs">v0.1 · auto-derived</span></h2>
+          <h2>Operational Flow <span class="hub-status-chip cm-chip-info cm-chip-xs">v0.4 · editable</span></h2>
           <div class="cm-section-desc">End-to-end view of the labor activities — Inbound through Outbound, with Returns/VAS and Support overlays. Auto-arranged from the Labor page.</div>
         </div>
       </div>
@@ -12415,15 +12418,15 @@ function renderOperationalFlow() {
     `;
   }
 
-  // Bin lines into lanes
-  const lanes = { inbound: [], storage: [], outbound: [], returnsVas: [], support: [], unclassified: [] };
+  // Bin lines into areas
+  const areas = { inbound: [], storage: [], outbound: [], returnsVas: [], support: [], unclassified: [] };
   directLines.forEach((l, idx) => {
-    const lane = _classifyLaneFromLine(l);
-    lanes[lane].push({ line: l, idx, isDirect: true });
+    const area = _classifyAreaFromLine(l);
+    areas[area].push({ line: l, idx, isDirect: true });
   });
   indirectLines.forEach((l, idx) => {
     // Indirect labor always lands in Support
-    lanes.support.push({ line: l, idx, isDirect: false });
+    areas.support.push({ line: l, idx, isDirect: false });
   });
 
   // KPIs
@@ -12434,13 +12437,13 @@ function renderOperationalFlow() {
   const totalFte = totalDirectFte + totalIndirectFte;
   const totalCost = directLines.reduce((s, l) => s + calc.directLineAnnualSimple(l, lc), 0)
                   + indirectLines.reduce((s, l) => s + calc.indirectLineAnnualSimple(l, opHrs, lc), 0);
-  const totalLanesPossible = lanes.unclassified.length > 0 ? 6 : 5;
-  const populatedLanes = Object.values(lanes).filter(arr => arr.length > 0).length;
-  const unclassifiedCount = lanes.unclassified.length;
+  const totalLanesPossible = areas.unclassified.length > 0 ? 6 : 5;
+  const populatedLanes = Object.values(areas).filter(arr => arr.length > 0).length;
+  const unclassifiedCount = areas.unclassified.length;
 
-  // Inter-lane connector with FTE-throughput proxy. Use the MAX FTE in
-  // the upstream lane as a defensible proxy for "what flows through this
-  // boundary" — within a lane multiple roles double-handle the same units,
+  // Inter-area connector with FTE-throughput proxy. Use the MAX FTE in
+  // the upstream area as a defensible proxy for "what flows through this
+  // boundary" — within an area multiple roles double-handle the same units,
   // so SUM would overstate, whereas MAX = the most-staffed role roughly =
   // the bottleneck-shaped throughput.
   const maxFteInLane = (entries) => entries.reduce((mx, e) => Math.max(mx, calc.fte(e.line, opHrs)), 0);
@@ -12467,7 +12470,7 @@ function renderOperationalFlow() {
   return `
     <div class="cm-section-header">
       <div>
-        <h2>Operational Flow <span class="hub-status-chip cm-chip-info cm-chip-xs">v0.1 · auto-derived</span></h2>
+        <h2>Operational Flow <span class="hub-status-chip cm-chip-info cm-chip-xs">v0.4 · editable</span></h2>
         <div class="cm-section-desc">End-to-end view of the labor activities. Auto-arranged from the Labor page by activity-keyword. Click any node to inspect; "Edit on Labor page" round-trips the change.</div>
       </div>
     </div>
@@ -12482,47 +12485,47 @@ function renderOperationalFlow() {
         <div class="hub-kpi-tile__label">Annual Labor Cost</div>
         <div class="hub-kpi-tile__value">${calc.formatCurrency(totalCost, { compact: true })}</div>
       </div>
-      <div class="hub-kpi-tile" title="Lanes that have at least one activity binned into them">
-        <div class="hub-kpi-tile__label">Lanes Populated</div>
+      <div class="hub-kpi-tile" title="Functional Areas that have at least one activity binned into them">
+        <div class="hub-kpi-tile__label">Areas Populated</div>
         <div class="hub-kpi-tile__value">${populatedLanes} of ${totalLanesPossible}</div>
       </div>
-      <div class="hub-kpi-tile" title="${unclassifiedCount > 0 ? 'Activities that did not match any lane keyword. Rename the activity on Labor or extend the OFP keyword catalog.' : 'All activities mapped into a lane'}" ${unclassifiedCount > 0 ? 'style="border-left:3px solid #DC2626;"' : ''}>
+      <div class="hub-kpi-tile" title="${unclassifiedCount > 0 ? 'Activities that did not match any area keyword. Rename the activity on Labor or extend the OFP keyword catalog.' : 'All activities mapped into an area'}" ${unclassifiedCount > 0 ? 'style="border-left:3px solid #DC2626;"' : ''}>
         <div class="hub-kpi-tile__label">Unclassified</div>
         <div class="hub-kpi-tile__value" style="${unclassifiedCount > 0 ? 'color:#DC2626;' : ''}">${unclassifiedCount}</div>
       </div>
     </div>
 
     <!-- v0.2.2 — Canvas reverts to full-width. Detail panel is now a
-         modal overlay (see #ofp-detail-modal below), so the lanes no
+         modal overlay (see #ofp-detail-modal below), so the areas no
          longer have to share horizontal space with a side rail.
          v0.3a.4 — position:relative + the absolute-positioned SVG
-         overlay below host the dotted same-path connectors that get
-         drawn after each render by _renderOfpPathConnectors(). -->
+         overlay below host the dotted same-flow connectors that get
+         drawn after each render by _renderOfpFlowConnectors(). -->
     <div class="cm-card ofp-canvas-card" style="padding:18px 18px 22px;position:relative;">
       <svg class="ofp-flow-overlay" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"></svg>
       <div class="ofp-row ofp-row--main">
-        ${_renderOfpLane('inbound', lanes.inbound, opHrs, lc)}
-        ${arrowSvg(lanes.inbound, 'Inbound', 'Storage')}
-        ${_renderOfpLane('storage', lanes.storage, opHrs, lc)}
-        ${arrowSvg(lanes.storage, 'Storage', 'Outbound')}
-        ${_renderOfpLane('outbound', lanes.outbound, opHrs, lc)}
+        ${_renderOfpArea('inbound', areas.inbound, opHrs, lc)}
+        ${arrowSvg(areas.inbound, 'Inbound', 'Storage')}
+        ${_renderOfpArea('storage', areas.storage, opHrs, lc)}
+        ${arrowSvg(areas.storage, 'Storage', 'Outbound')}
+        ${_renderOfpArea('outbound', areas.outbound, opHrs, lc)}
       </div>
 
-      ${lanes.returnsVas.length > 0 ? `
+      ${areas.returnsVas.length > 0 ? `
         <div class="ofp-row ofp-row--secondary" style="margin-top:18px;">
-          ${_renderOfpLane('returnsVas', lanes.returnsVas, opHrs, lc, { wide: true })}
+          ${_renderOfpArea('returnsVas', areas.returnsVas, opHrs, lc, { wide: true })}
         </div>
       ` : ''}
 
-      ${lanes.support.length > 0 ? `
+      ${areas.support.length > 0 ? `
         <div class="ofp-row ofp-row--secondary" style="margin-top:14px;">
-          ${_renderOfpLane('support', lanes.support, opHrs, lc, { wide: true })}
+          ${_renderOfpArea('support', areas.support, opHrs, lc, { wide: true })}
         </div>
       ` : ''}
 
-      ${lanes.unclassified.length > 0 ? `
+      ${areas.unclassified.length > 0 ? `
         <div class="ofp-row ofp-row--secondary" style="margin-top:14px;">
-          ${_renderOfpLane('unclassified', lanes.unclassified, opHrs, lc, { wide: true, warn: true })}
+          ${_renderOfpArea('unclassified', areas.unclassified, opHrs, lc, { wide: true, warn: true })}
         </div>
       ` : ''}
     </div>
@@ -12539,30 +12542,30 @@ function renderOperationalFlow() {
 }
 
 /**
- * Render a single OFP lane (header + stack of node cards).
- * @param {string} laneKey
+ * Render a single OFP area (header + stack of node cards).
+ * @param {string} areaKey
  * @param {Array<{line, idx, isDirect}>} entries
  * @param {number} opHrs
  * @param {object} lc
  * @param {{wide?: boolean, warn?: boolean}} [opts]
  */
-function _renderOfpLane(laneKey, entries, opHrs, lc, opts = {}) {
-  const meta = _ofpLaneMeta(laneKey);
+function _renderOfpArea(areaKey, entries, opHrs, lc, opts = {}) {
+  const meta = _ofpAreaMeta(areaKey);
   const wide = !!opts.wide;
   const warn = !!opts.warn;
   const totalFte = entries.reduce((s, e) => s + calc.fte(e.line, opHrs), 0);
-  const widthClass = wide ? 'ofp-lane--wide' : '';
-  const warnClass = warn ? 'ofp-lane--warn' : '';
+  const widthClass = wide ? 'ofp-area--wide' : '';
+  const warnClass = warn ? 'ofp-area--warn' : '';
 
-  // v0.3a — Vertical (main) lanes group entries by path_tag so parallel
-  // paths through the system are visible. Wide lanes (Returns/VAS,
+  // v0.3a — Vertical (main) areas group entries by path_tag so parallel
+  // paths through the system are visible. Wide areas (Returns/VAS,
   // Support, Unclassified) keep the flat row layout — they're typically
-  // smaller and path-grouping a row layout looks chaotic.
+  // smaller and flow-grouping a row layout looks chaotic.
   let nodesHtml;
   if (entries.length === 0) {
-    nodesHtml = `<div class="ofp-lane__empty">No activities</div>`;
+    nodesHtml = `<div class="ofp-area__empty">No activities</div>`;
   } else if (wide) {
-    nodesHtml = entries.map(e => _renderOfpNode(e, laneKey, opHrs, lc)).join('');
+    nodesHtml = entries.map(e => _renderOfpNode(e, areaKey, opHrs, lc)).join('');
   } else {
     // Group by path_tag. Untagged lines collected last under "(untagged)".
     const groups = new Map();
@@ -12573,7 +12576,7 @@ function _renderOfpLane(laneKey, entries, opHrs, lc, opts = {}) {
       groups.get(key).push(e);
     }
     // If there's only one group AND it's untagged, skip dividers entirely
-    // (no point showing a single "(untagged)" header on a single-path lane).
+    // (no point showing a single "(untagged)" header on a single-flow area).
     const skipDividers = groups.size === 1 && groups.has('__untagged__');
     const parts = [];
     for (const [key, group] of groups) {
@@ -12581,35 +12584,35 @@ function _renderOfpLane(laneKey, entries, opHrs, lc, opts = {}) {
       const tag = isUntagged ? '' : key;
       if (!skipDividers) {
         parts.push(`
-          <div class="ofp-path-divider">
-            <span class="ofp-path-divider__stripe" style="background:${_pathColor(tag)};"></span>
-            <span class="ofp-path-divider__label">${escapeHtml(isUntagged ? '(untagged)' : tag)}</span>
-            <span class="ofp-path-divider__count">${group.length}</span>
+          <div class="ofp-flow-divider">
+            <span class="ofp-flow-divider__stripe" style="background:${_flowColor(tag)};"></span>
+            <span class="ofp-flow-divider__label">${escapeHtml(isUntagged ? '(untagged)' : tag)}</span>
+            <span class="ofp-flow-divider__count">${group.length}</span>
           </div>
         `);
       }
-      parts.push(group.map(e => _renderOfpNode(e, laneKey, opHrs, lc)).join(''));
+      parts.push(group.map(e => _renderOfpNode(e, areaKey, opHrs, lc)).join(''));
     }
     nodesHtml = parts.join('');
   }
 
-  // Unclassified lane doesn't get an "+ Add" button — adding into it would
+  // Unclassified area doesn't get an "+ Add" button — adding into it would
   // be a no-op for a user (no canonical default activity name to seed with).
-  const showAdd = laneKey !== 'unclassified';
+  const showAdd = areaKey !== 'unclassified';
 
   return `
-    <div class="ofp-lane ${widthClass} ${warnClass}" data-ofp-lane="${laneKey}">
-      <div class="ofp-lane__header" style="border-top:3px solid ${meta.color};">
-        <div class="ofp-lane__header-row">
-          <div class="ofp-lane__title">${escapeHtml(meta.label)}</div>
-          <div class="ofp-lane__header-actions">
-            <span class="ofp-lane__count">${entries.length}</span>
-            ${showAdd ? `<button class="ofp-add-btn" data-ofp-add-lane="${laneKey}" title="Add a new ${escapeAttr(meta.label)} activity">+</button>` : ''}
+    <div class="ofp-area ${widthClass} ${warnClass}" data-ofp-area="${areaKey}">
+      <div class="ofp-area__header" style="border-top:3px solid ${meta.color};">
+        <div class="ofp-area__header-row">
+          <div class="ofp-area__title">${escapeHtml(meta.label)}</div>
+          <div class="ofp-area__header-actions">
+            <span class="ofp-area__count">${entries.length}</span>
+            ${showAdd ? `<button class="ofp-add-btn" data-ofp-add-area="${areaKey}" title="Add a new ${escapeAttr(meta.label)} activity">+</button>` : ''}
           </div>
         </div>
-        <div class="ofp-lane__fte">${totalFte.toFixed(1)} FTE</div>
+        <div class="ofp-area__fte">${totalFte.toFixed(1)} FTE</div>
       </div>
-      <div class="ofp-lane__nodes ${wide ? 'ofp-lane__nodes--row' : ''}">
+      <div class="ofp-area__nodes ${wide ? 'ofp-area__nodes--row' : ''}">
         ${nodesHtml}
       </div>
     </div>
@@ -12621,11 +12624,11 @@ function _renderOfpLane(laneKey, entries, opHrs, lc, opts = {}) {
  * data-ofp-line="direct:5" or "indirect:2" tells the click handler which
  * array + index to look up.
  */
-function _renderOfpNode(entry, laneKey, opHrs, lc) {
+function _renderOfpNode(entry, areaKey, opHrs, lc) {
   const l = entry.line;
   const arrayKind = entry.isDirect ? 'direct' : 'indirect';
   const fte = calc.fte(l, opHrs);
-  const meta = _ofpLaneMeta(laneKey);
+  const meta = _ofpAreaMeta(areaKey);
   const cost = entry.isDirect
     ? calc.directLineAnnualSimple(l, lc)
     : calc.indirectLineAnnualSimple(l, opHrs, lc);
@@ -12644,7 +12647,7 @@ function _renderOfpNode(entry, laneKey, opHrs, lc) {
   if (entry.isDirect) {
     if (volume <= 0) issues.push('Volume is 0 (FTE math will collapse to 0)');
     if (uph <= 0) issues.push('UPH is 0 (no productivity defined)');
-    if ((laneKey === 'outbound' || laneKey === 'storage') && !mhe) {
+    if ((areaKey === 'outbound' || areaKey === 'storage') && !mhe) {
       const lower = (l.activity_name || '').toLowerCase();
       if (/pick|put|load|stage|pack|replen|let-?down/.test(lower)) {
         issues.push('Movement activity has no MHE assigned');
@@ -12656,7 +12659,7 @@ function _renderOfpNode(entry, laneKey, opHrs, lc) {
     : '';
 
   // v0.3a — UoM badge ("pallet" or "case → pallet" if transforming) and
-  // path tag pill (if set). Both render in the metrics row to keep the
+  // flow tag pill (if set). Both render in the metrics row to keep the
   // card compact.
   const uomIn = _ofpUomIn(l);
   const uomOut = _ofpUomOut(l);
@@ -12664,15 +12667,15 @@ function _renderOfpNode(entry, laneKey, opHrs, lc) {
   const uomBadge = uomIn
     ? `<span class="ofp-node__uom ${isTransform ? 'ofp-node__uom--transform' : ''}" title="${isTransform ? `Transformation: ${uomIn} → ${uomOut}` : `UoM: ${uomIn}`}">${escapeHtml(isTransform ? `${uomIn} → ${uomOut}` : uomIn)}</span>`
     : '';
-  const pathTag = (l.path_tag || '').trim();
-  const pathPill = pathTag
-    ? `<span class="ofp-node__path-pill" style="background:${_pathColor(pathTag)};" title="Path: ${escapeAttr(pathTag)}">${escapeHtml(pathTag)}</span>`
+  const flowTag = (l.path_tag || '').trim();
+  const flowPill = flowTag
+    ? `<span class="ofp-node__flow-pill" style="background:${_flowColor(flowTag)};" title="Flow: ${escapeAttr(flowTag)}">${escapeHtml(flowTag)}</span>`
     : '';
 
   return `
     <div class="ofp-node ${entry.isDirect ? 'ofp-node--direct' : 'ofp-node--indirect'}" data-ofp-line="${arrayKind}:${entry.idx}" data-ofp-kind="${arrayKind}" data-ofp-idx="${entry.idx}" draggable="true" style="border-left:3px solid ${meta.color};" title="${escapeAttr(name)} — ${fte.toFixed(1)} FTE · ${calc.formatCurrency(cost, { compact: true })}/yr">
       <div class="ofp-node__top">
-        <span class="ofp-node__grip" title="Drag to a different lane to reassign">⋮⋮</span>
+        <span class="ofp-node__grip" title="Drag to a different area to reassign">⋮⋮</span>
         <div class="ofp-node__name">${escapeHtml(name)}</div>
         <div class="ofp-node__top-actions">
           ${issueChip}
@@ -12684,7 +12687,7 @@ function _renderOfpNode(entry, laneKey, opHrs, lc) {
         <span class="ofp-node__fte">${fte.toFixed(1)} FTE</span>
         ${volume > 0 ? `<span class="ofp-node__vol">${volume.toLocaleString()}${uph > 0 ? `/${uph} UPH` : ''}</span>` : ''}
       </div>
-      ${(uomBadge || pathPill) ? `<div class="ofp-node__pills">${pathPill}${uomBadge}</div>` : ''}
+      ${(uomBadge || flowPill) ? `<div class="ofp-node__pills">${flowPill}${uomBadge}</div>` : ''}
       ${mhe || itDevice ? `<div class="ofp-node__badges">${_ofpEquipBadge(mhe, 'mhe')}${_ofpEquipBadge(itDevice, 'it')}</div>` : ''}
     </div>
   `;
@@ -12718,13 +12721,13 @@ function _bindOperationalFlowEvents(container) {
     });
   });
 
-  // v0.2 — Add button on each lane header
+  // v0.2 — Add button on each area header
   container.querySelectorAll('.ofp-add-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      const lane = btn.dataset.ofpAddLane;
-      if (!lane) return;
-      _ofpAddLineToLane(lane);
+      const area = btn.dataset.ofpAddArea;
+      if (!area) return;
+      _ofpAddLineToArea(area);
     });
   });
 
@@ -12740,7 +12743,7 @@ function _bindOperationalFlowEvents(container) {
     });
   });
 
-  // v0.2 — Drag-and-drop reassign between lanes. Persists as line.flowLane.
+  // v0.2 — Drag-and-drop reassign between areas. Persists as line.flowLane.
   let dragInfo = null;
   container.querySelectorAll('.ofp-node').forEach(node => {
     node.addEventListener('dragstart', (e) => {
@@ -12753,47 +12756,47 @@ function _bindOperationalFlowEvents(container) {
     node.addEventListener('dragend', () => {
       node.classList.remove('ofp-node--dragging');
       dragInfo = null;
-      container.querySelectorAll('.ofp-lane--dragover').forEach(el => el.classList.remove('ofp-lane--dragover'));
+      container.querySelectorAll('.ofp-area--dragover').forEach(el => el.classList.remove('ofp-area--dragover'));
     });
   });
-  container.querySelectorAll('.ofp-lane[data-ofp-lane]').forEach(lane => {
-    const targetLane = lane.dataset.ofpLane;
-    lane.addEventListener('dragover', (e) => {
+  container.querySelectorAll('.ofp-area[data-ofp-area]').forEach(area => {
+    const targetArea = area.dataset.ofpArea;
+    area.addEventListener('dragover', (e) => {
       if (!dragInfo) return;
       e.preventDefault();
       try { e.dataTransfer.dropEffect = 'move'; } catch (_) {}
-      lane.classList.add('ofp-lane--dragover');
+      area.classList.add('ofp-area--dragover');
     });
-    lane.addEventListener('dragleave', (e) => {
-      // Only drop the highlight when leaving the lane itself, not a child.
-      if (e.target === lane) lane.classList.remove('ofp-lane--dragover');
+    area.addEventListener('dragleave', (e) => {
+      // Only drop the highlight when leaving the area itself, not a child.
+      if (e.target === area) area.classList.remove('ofp-area--dragover');
     });
-    lane.addEventListener('drop', (e) => {
+    area.addEventListener('drop', (e) => {
       e.preventDefault();
-      lane.classList.remove('ofp-lane--dragover');
+      area.classList.remove('ofp-area--dragover');
       if (!dragInfo) return;
       const { kind, idx } = dragInfo;
       const arr = kind === 'direct' ? (model.laborLines || []) : (model.indirectLaborLines || []);
       const line = arr[idx];
       dragInfo = null;
       if (!line) return;
-      // No-op if dropping into the lane the line is already in.
-      const currentLane = kind === 'direct' ? _classifyLaneFromLine(line) : 'support';
-      if (currentLane === targetLane) return;
+      // No-op if dropping into the area the line is already in.
+      const currentArea = kind === 'direct' ? _classifyAreaFromLine(line) : 'support';
+      if (currentArea === targetArea) return;
       // Indirect labor lives in 'support' by convention. Allow override
       // anyway — the user knows what they want.
-      line.flowLane = targetLane;
+      line.flowLane = targetArea;
       isDirty = true;
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
-      try { showToast(`Reassigned to ${targetLane === 'returnsVas' ? 'Returns/VAS' : (targetLane.charAt(0).toUpperCase() + targetLane.slice(1))}.`, 'success'); } catch (_) {}
+      try { showToast(`Reassigned to ${targetArea === 'returnsVas' ? 'Returns/VAS' : (targetArea.charAt(0).toUpperCase() + targetArea.slice(1))}.`, 'success'); } catch (_) {}
     });
   });
 
   // v0.3a.1 — Drop a card onto another card to connect them on the same
-  // path (sets path_tag on both). Distinct from drop-on-lane-background
-  // (which reassigns lane). Card handlers stopPropagation so the lane
-  // drop doesn't also fire when the user drops on a card inside a lane.
+  // path (sets path_tag on both). Distinct from drop-on-area-background
+  // (which reassigns area). Card handlers stopPropagation so the area
+  // drop doesn't also fire when the user drops on a card inside an area.
   container.querySelectorAll('.ofp-node').forEach(node => {
     node.addEventListener('dragover', (e) => {
       if (!dragInfo) return;
@@ -12829,12 +12832,12 @@ function _bindOperationalFlowEvents(container) {
       const targetLine = targetArr[targetIdx];
       dragInfo = null;
       if (!sourceLine || !targetLine) return;
-      // Resolve the path tag to apply to both lines:
+      // Resolve the flow tag to apply to both lines:
       //   target has tag         → both adopt target's tag (target wins,
       //                            mirrors how 'drop into folder X'
       //                            inherits X's properties)
       //   only source has tag    → target adopts source's tag
-      //   both untagged          → prompt for a new path name
+      //   both untagged          → prompt for a new flow name
       const targetTag = (targetLine.path_tag || '').trim();
       const sourceTag = (sourceLine.path_tag || '').trim();
       let resolvedTag;
@@ -12843,17 +12846,17 @@ function _bindOperationalFlowEvents(container) {
       } else if (sourceTag) {
         resolvedTag = sourceTag;
       } else {
-        // v0.3a.2 — both untagged. Auto-generate a path tag so the drop
+        // v0.3a.2 — both untagged. Auto-generate a flow tag so the drop
         // doesn't block on prompt() (interruptive during a drag gesture
         // and prevented test automation from working). Strategy: slugify
         // source's activity_name to first 2 keywords; fall back to
         // 'flow-N' (next available integer) when name is empty/garbage.
         // User can always rename via the detail drawer.
-        const slug = _ofpSlugifyForPath(sourceLine.activity_name);
+        const slug = _ofpSlugifyForFlow(sourceLine.activity_name);
         if (slug) {
           resolvedTag = slug;
         } else {
-          const existing = new Set(_ofpAllPathTags());
+          const existing = new Set(_ofpAllFlowTags());
           let n = 1;
           while (existing.has(`flow-${n}`)) n++;
           resolvedTag = `flow-${n}`;
@@ -12864,7 +12867,7 @@ function _bindOperationalFlowEvents(container) {
       isDirty = true;
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
-      try { showToast(`Connected on path "${resolvedTag}".`, 'success'); } catch (_) {}
+      try { showToast(`Connected on flow "${resolvedTag}".`, 'success'); } catch (_) {}
     });
   });
 
@@ -12920,7 +12923,7 @@ function _bindOperationalFlowEvents(container) {
  * for autocomplete in the detail panel. Returns a sorted array; empty
  * tags are dropped.
  */
-function _ofpAllPathTags() {
+function _ofpAllFlowTags() {
   const set = new Set();
   for (const l of (model.laborLines || [])) {
     const t = (l?.path_tag || '').trim();
@@ -12944,7 +12947,7 @@ function _ofpAllPathTags() {
  *   "VAS — kitting"             → "vas-kitting"
  *   ""                          → null
  */
-function _ofpSlugifyForPath(name) {
+function _ofpSlugifyForFlow(name) {
   if (!name || typeof name !== 'string') return null;
   const STOP = new Set(['the','a','an','and','or','of','to','for','in','at','with','from','on','&']);
   const slug = name
@@ -12960,41 +12963,41 @@ function _ofpSlugifyForPath(name) {
 }
 
 /**
- * v0.3a.4 — Draw dotted bezier connectors between same-path cards
- * across adjacent main-row lanes (Inbound → Storage → Outbound).
- * Wide lanes (Returns/VAS, Support, Unclassified) are skipped — they
+ * v0.3a.4 — Draw dotted bezier connectors between same-flow cards
+ * across adjacent main-row areas (Inbound → Storage → Outbound).
+ * Wide areas (Returns/VAS, Support, Unclassified) are skipped — they
  * don't fit the left-to-right flow concept.
  *
  * Algorithm:
- *   1. Walk every card in the three main lanes; bucket by (path_tag, lane).
- *   2. For each path, for each adjacent populated lane pair, draw one
- *      bezier from (source-lane right edge, mean Y of that path's cards)
- *      to (target-lane left edge, mean Y of that path's cards).
- *   3. Stroke = path color; dasharray for dotted; low opacity so cards
+ *   1. Walk every card in the three main areas; bucket by (path_tag, area).
+ *   2. For each flow, for each adjacent populated area pair, draw one
+ *      bezier from (source-area right edge, mean Y of that flow's cards)
+ *      to (target-area left edge, mean Y of that flow's cards).
+ *   3. Stroke = flow color; dasharray for dotted; low opacity so cards
  *      stay visually dominant.
  *
- * If a path has cards only in one main lane (or none), nothing draws.
- * If a path skips a lane (e.g., crossdock: Inbound + Outbound, no Storage),
- * the connector hops directly across the gap — populated-lane order, not
- * raw lane order.
+ * If a flow has cards only in one main area (or none), nothing draws.
+ * If a flow skips an area (e.g., crossdock: Inbound + Outbound, no Storage),
+ * the connector hops directly across the gap — populated-area order, not
+ * raw area order.
  */
-function _renderOfpPathConnectors(container) {
+function _renderOfpFlowConnectors(container) {
   const svg = container.querySelector('.ofp-flow-overlay');
   if (!svg) return;
   const svgRect = svg.getBoundingClientRect();
   if (!svgRect.width) return; // not laid out yet
 
-  const mainLanes = ['inbound', 'storage', 'outbound'];
-  // Map<pathTag, Map<laneKey, { ys: number[], leftX, rightX }>>
-  const byPath = new Map();
+  const mainAreas = ['inbound', 'storage', 'outbound'];
+  // Map<flowTag, Map<areaKey, { ys: number[], leftX, rightX }>>
+  const byFlow = new Map();
 
-  for (const laneKey of mainLanes) {
-    const laneEl = container.querySelector(`.ofp-lane[data-ofp-lane="${laneKey}"]`);
-    if (!laneEl) continue;
-    const laneRect = laneEl.getBoundingClientRect();
-    const laneLeftX = laneRect.left - svgRect.left;
-    const laneRightX = laneRect.right - svgRect.left;
-    const cards = Array.from(laneEl.querySelectorAll('.ofp-node'));
+  for (const areaKey of mainAreas) {
+    const areaEl = container.querySelector(`.ofp-area[data-ofp-area="${areaKey}"]`);
+    if (!areaEl) continue;
+    const areaRect = areaEl.getBoundingClientRect();
+    const areaLeftX = areaRect.left - svgRect.left;
+    const areaRightX = areaRect.right - svgRect.left;
+    const cards = Array.from(areaEl.querySelectorAll('.ofp-node'));
     for (const card of cards) {
       // v0.3a.4 hotfix — read path_tag from the rendered pill in the DOM
       // rather than indirecting through model. This matches the user's
@@ -13002,50 +13005,50 @@ function _renderOfpPathConnectors(container) {
       // (initial implementation had drift the connector never recovered
       // from). Path pills are rendered by _renderOfpNode unconditionally
       // when the line has a path_tag, so DOM is an authoritative source.
-      const pillEl = card.querySelector('.ofp-node__path-pill');
+      const pillEl = card.querySelector('.ofp-node__flow-pill');
       const tag = (pillEl?.textContent || '').trim();
       if (!tag) continue;
       const cardRect = card.getBoundingClientRect();
       const cy = cardRect.top + cardRect.height / 2 - svgRect.top;
-      if (!byPath.has(tag)) byPath.set(tag, new Map());
-      const laneMap = byPath.get(tag);
-      if (!laneMap.has(laneKey)) {
-        laneMap.set(laneKey, { ys: [], leftX: laneLeftX, rightX: laneRightX });
+      if (!byFlow.has(tag)) byFlow.set(tag, new Map());
+      const areaMap = byFlow.get(tag);
+      if (!areaMap.has(areaKey)) {
+        areaMap.set(areaKey, { ys: [], leftX: areaLeftX, rightX: areaRightX });
       }
-      laneMap.get(laneKey).ys.push(cy);
+      areaMap.get(areaKey).ys.push(cy);
     }
   }
 
-  const pathStrs = [];
-  for (const [tag, laneMap] of byPath) {
-    const populated = mainLanes.filter(k => laneMap.has(k));
+  const flowStrs = [];
+  for (const [tag, areaMap] of byFlow) {
+    const populated = mainAreas.filter(k => areaMap.has(k));
     if (populated.length < 2) continue;
-    const color = _pathColor(tag);
+    const color = _flowColor(tag);
     for (let i = 0; i < populated.length - 1; i++) {
-      const from = laneMap.get(populated[i]);
-      const to = laneMap.get(populated[i + 1]);
+      const from = areaMap.get(populated[i]);
+      const to = areaMap.get(populated[i + 1]);
       const fromY = from.ys.reduce((a, b) => a + b, 0) / from.ys.length;
       const toY = to.ys.reduce((a, b) => a + b, 0) / to.ys.length;
       const x1 = from.rightX;
       const x2 = to.leftX;
       const dx = Math.max(20, (x2 - x1) * 0.45);
       const d = `M ${x1.toFixed(1)} ${fromY.toFixed(1)} C ${(x1 + dx).toFixed(1)} ${fromY.toFixed(1)}, ${(x2 - dx).toFixed(1)} ${toY.toFixed(1)}, ${x2.toFixed(1)} ${toY.toFixed(1)}`;
-      pathStrs.push(`<path d="${d}" stroke="${color}" stroke-width="2" stroke-dasharray="5 4" stroke-linecap="round" fill="none" opacity="0.75" />`);
+      flowStrs.push(`<path d="${d}" stroke="${color}" stroke-width="2" stroke-dasharray="5 4" stroke-linecap="round" fill="none" opacity="0.75" />`);
     }
   }
   // Set viewBox/size to match canvas so coords are pixels
   svg.setAttribute('width', String(Math.round(svgRect.width)));
   svg.setAttribute('height', String(Math.round(svgRect.height)));
-  svg.innerHTML = pathStrs.join('');
+  svg.innerHTML = flowStrs.join('');
 }
 
 /**
- * Defaults for "+ Add" on each lane. Activity name + role + a sane MHE
+ * Defaults for "+ Add" on each area. Activity name + role + a sane MHE
  * are seeded so the new card reads as a real placeholder rather than
  * an empty row, and so the keyword classifier puts it back in the same
- * lane on next render even before the user fills in details.
+ * area on next render even before the user fills in details.
  */
-const _OFP_LANE_DEFAULTS = {
+const _OFP_AREA_DEFAULTS = {
   inbound:    { activity_name: 'Receiving',          position: 'Receiver',         mhe_type: 'sit-down forklift', it_device: 'RF', uom_in: 'pallet', uom_out: 'pallet' },
   storage:    { activity_name: 'Putaway',            position: 'Putaway Driver',   mhe_type: 'reach truck',       it_device: 'RF', uom_in: 'pallet', uom_out: 'pallet' },
   outbound:   { activity_name: 'Picking',            position: 'Picker',           mhe_type: 'EPJ',               it_device: 'RF', uom_in: 'each',   uom_out: 'each' },
@@ -13053,11 +13056,11 @@ const _OFP_LANE_DEFAULTS = {
   support:    { activity_name: 'Lead',               position: 'Operations Lead',  mhe_type: '',                  it_device: '' },
 };
 
-function _ofpAddLineToLane(laneKey) {
-  const def = _OFP_LANE_DEFAULTS[laneKey];
+function _ofpAddLineToArea(areaKey) {
+  const def = _OFP_AREA_DEFAULTS[areaKey];
   if (!def) return;
-  // Support lane → indirect labor; everything else → direct labor.
-  if (laneKey === 'support') {
+  // Support area → indirect labor; everything else → direct labor.
+  if (areaKey === 'support') {
     if (!Array.isArray(model.indirectLaborLines)) model.indirectLaborLines = [];
     model.indirectLaborLines.push({
       ...def,
@@ -13080,7 +13083,7 @@ function _ofpAddLineToLane(laneKey) {
       employment_type: 'permanent',
       temp_agency_markup_pct: 0,
       performance_variance_pct: 0,
-      flowLane: laneKey,
+      flowLane: areaKey,
       pricing_bucket: defaultBucketFor('labor'),
     });
   }
@@ -13107,14 +13110,14 @@ function _openOfpDetail(container, line, kind, idx) {
   const cost = kind === 'direct'
     ? calc.directLineAnnualSimple(line, lc)
     : calc.indirectLineAnnualSimple(line, opHrs, lc);
-  const lane = kind === 'direct' ? _classifyLaneFromLine(line) : 'support';
-  const meta = _ofpLaneMeta(lane);
+  const area = kind === 'direct' ? _classifyAreaFromLine(line) : 'support';
+  const meta = _ofpAreaMeta(area);
   const name = line.activity_name || line.position || '(unnamed)';
   const arrayPath = kind === 'direct' ? 'laborLines' : 'indirectLaborLines';
 
-  // Build the lane override <select> options. "auto" means flowLane is
+  // Build the area override <select> options. "auto" means flowLane is
   // unset → fall through to keyword classification.
-  const laneOpts = [
+  const areaOpts = [
     { val: '',            label: 'Auto (keyword match)' },
     { val: 'inbound',     label: 'Inbound' },
     { val: 'storage',     label: 'Storage' },
@@ -13122,14 +13125,14 @@ function _openOfpDetail(container, line, kind, idx) {
     { val: 'returnsVas',  label: 'Returns / VAS' },
     { val: 'support',     label: 'Support / Indirect' },
   ];
-  const laneSelectHtml = laneOpts.map(o =>
+  const areaSelectHtml = areaOpts.map(o =>
     `<option value="${o.val}" ${(line.flowLane || '') === o.val ? 'selected' : ''}>${escapeHtml(o.label)}</option>`
   ).join('');
 
   panel.innerHTML = `
     <div class="ofp-detail-panel__header" style="border-top:4px solid ${meta.color};">
       <div>
-        <div class="ofp-detail-panel__lane">${escapeHtml(meta.label)}${kind === 'indirect' ? ' · indirect' : ''}</div>
+        <div class="ofp-detail-panel__area">${escapeHtml(meta.label)}${kind === 'indirect' ? ' · indirect' : ''}</div>
         <div class="ofp-detail-panel__name">${escapeHtml(name)}</div>
       </div>
       <button class="hub-btn hub-btn-secondary hub-btn-sm" data-ofp-action="close" title="Close panel">✕</button>
@@ -13160,17 +13163,17 @@ function _openOfpDetail(container, line, kind, idx) {
         })()}
       </div>
       <div class="ofp-detail-panel__field">
-        <label class="ofp-detail-panel__field-label">Lane Override</label>
+        <label class="ofp-detail-panel__field-label">Functional Area</label>
         <select class="hub-input ofp-edit-input" data-array="${arrayPath}" data-idx="${idx}" data-field="flowLane">
-          ${laneSelectHtml}
+          ${areaSelectHtml}
         </select>
       </div>
       <div class="ofp-detail-panel__field">
-        <label class="ofp-detail-panel__field-label">Flow Path</label>
+        <label class="ofp-detail-panel__field-label">Flow</label>
         <select class="hub-input ofp-edit-input" data-array="${arrayPath}" data-idx="${idx}" data-field="path_tag">
           <option value="" ${!line.path_tag ? 'selected' : ''}>(none)</option>
-          ${_ofpAllPathTags().map(t => `<option value="${escapeAttr(t)}" ${line.path_tag === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
-          <option value="__OFP_NEW_PATH__">+ New path…</option>
+          ${_ofpAllFlowTags().map(t => `<option value="${escapeAttr(t)}" ${line.path_tag === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
+          <option value="__OFP_NEW_FLOW__">+ New flow…</option>
         </select>
       </div>
       <div class="ofp-detail-panel__field">
@@ -13269,11 +13272,11 @@ function _bindOfpPanelInputs(panel, container) {
       if (field === 'flowLane' && val === '') val = undefined;
       // Empty string for mhe_type / it_device = clear (treat 'none').
       if ((field === 'mhe_type' || field === 'it_device') && val === '') val = undefined;
-      // v0.3a.1 — Flow Path "+ New path…" sentinel triggers a prompt for
+      // v0.3a.1 — Flow Path "+ New flow…" sentinel triggers a prompt for
       // the new tag name. If user cancels or types blank, restore the
       // previous selection without persisting the change.
-      if (field === 'path_tag' && val === '__OFP_NEW_PATH__') {
-        const newTag = prompt('Name this path (e.g. full-pallet, loose-case):', '');
+      if (field === 'path_tag' && val === '__OFP_NEW_FLOW__') {
+        const newTag = prompt('Name this flow (e.g. full-pallet, loose-case):', '');
         if (!newTag || !newTag.trim()) {
           input.value = arr[idx].path_tag || '';
           return;
@@ -13335,49 +13338,49 @@ function _ofpStyles() {
   return `
     <style>
       .ofp-row { display: flex; align-items: stretch; gap: 0; }
-      .ofp-row--main > .ofp-lane { flex: 1 1 0; min-width: 0; }
-      .ofp-row--secondary > .ofp-lane { flex: 1 1 100%; }
+      .ofp-row--main > .ofp-area { flex: 1 1 0; min-width: 0; }
+      .ofp-row--secondary > .ofp-area { flex: 1 1 100%; }
       .ofp-connector { display: flex; flex-direction: column; align-items: center; padding-top: 56px; flex: 0 0 auto; width: 60px; }
       .ofp-connector__label { font-size: 9px; color: var(--ies-gray-500); font-weight: 600; margin-top: -2px; white-space: nowrap; }
 
-      .ofp-lane {
+      .ofp-area {
         display: flex; flex-direction: column;
         background: var(--ies-gray-50);
         border: 1px solid var(--ies-gray-200);
         border-radius: 6px;
         overflow: hidden;
       }
-      .ofp-lane--wide { width: 100%; }
-      .ofp-lane--warn { border-color: #DC2626; background: rgba(220, 38, 38, 0.04); }
+      .ofp-area--wide { width: 100%; }
+      .ofp-area--warn { border-color: #DC2626; background: rgba(220, 38, 38, 0.04); }
 
-      .ofp-lane__header {
+      .ofp-area__header {
         padding: 8px 10px 10px;
         background: #fff;
         border-bottom: 1px solid var(--ies-gray-200);
       }
-      .ofp-lane__header-row {
+      .ofp-area__header-row {
         display: flex; justify-content: space-between; align-items: baseline;
       }
-      .ofp-lane__title {
+      .ofp-area__title {
         font-size: 12px; font-weight: 700; color: var(--ies-navy);
         text-transform: uppercase; letter-spacing: 0.04em;
       }
-      .ofp-lane__count {
+      .ofp-area__count {
         font-size: 11px; color: var(--ies-gray-500); font-weight: 600;
         background: var(--ies-gray-100); border-radius: 10px; padding: 1px 8px;
       }
-      .ofp-lane__fte {
+      .ofp-area__fte {
         font-size: 11px; color: var(--ies-gray-500); margin-top: 3px;
       }
-      .ofp-lane__nodes {
+      .ofp-area__nodes {
         display: flex; flex-direction: column; gap: 6px;
         padding: 10px;
       }
-      .ofp-lane__nodes--row {
+      .ofp-area__nodes--row {
         flex-direction: row; flex-wrap: wrap;
       }
-      .ofp-lane__nodes--row > .ofp-node { flex: 0 0 calc((100% - 18px) / 4); }
-      .ofp-lane__empty {
+      .ofp-area__nodes--row > .ofp-node { flex: 0 0 calc((100% - 18px) / 4); }
+      .ofp-area__empty {
         padding: 18px 8px; text-align: center; font-size: 11px; color: var(--ies-gray-400); font-style: italic;
       }
 
@@ -13451,7 +13454,7 @@ function _ofpStyles() {
         display: flex; justify-content: space-between; align-items: center;
         padding: 12px 16px; border-bottom: 1px solid var(--ies-gray-200);
       }
-      .ofp-detail-panel__lane {
+      .ofp-detail-panel__area {
         font-size: 10px; font-weight: 700; color: var(--ies-gray-500);
         text-transform: uppercase; letter-spacing: 0.06em;
       }
@@ -13470,8 +13473,8 @@ function _ofpStyles() {
         background: var(--ies-gray-50);
       }
 
-      /* v0.2 — lane header actions row (count + add button) */
-      .ofp-lane__header-actions { display: flex; align-items: center; gap: 6px; }
+      /* v0.2 — area header actions row (count + add button) */
+      .ofp-area__header-actions { display: flex; align-items: center; gap: 6px; }
       .ofp-add-btn {
         background: var(--ies-blue); color: #fff; border: none; border-radius: 4px;
         width: 22px; height: 22px; line-height: 1; font-size: 16px; font-weight: 700;
@@ -13512,7 +13515,7 @@ function _ofpStyles() {
       /* v0.3a.4 — Dotted same-path connectors overlay. Sits behind
          cards in the stacking order so the lines read as connections
          between them, not as decorations on top. pointer-events:none
-         so clicks/drags pass through to lanes + cards beneath. */
+         so clicks/drags pass through to areas + cards beneath. */
       .ofp-flow-overlay {
         position: absolute;
         top: 0; left: 0;
@@ -13522,10 +13525,10 @@ function _ofpStyles() {
         overflow: visible;
       }
       .ofp-canvas-card .ofp-row { position: relative; z-index: 2; }
-      .ofp-canvas-card .ofp-lane { position: relative; z-index: 2; }
+      .ofp-canvas-card .ofp-area { position: relative; z-index: 2; }
 
-      /* v0.3a — path divider rows inside vertical lanes */
-      .ofp-path-divider {
+      /* v0.3a — path divider rows inside vertical areas */
+      .ofp-flow-divider {
         display: flex; align-items: center; gap: 6px;
         font-size: 9px; font-weight: 700;
         color: var(--ies-gray-500);
@@ -13534,14 +13537,14 @@ function _ofpStyles() {
         border-top: 1px solid var(--ies-gray-100);
         margin-top: 4px;
       }
-      .ofp-path-divider:first-child { border-top: 0; margin-top: 0; padding-top: 2px; }
-      .ofp-path-divider__stripe { width: 14px; height: 3px; border-radius: 2px; flex: 0 0 auto; }
-      .ofp-path-divider__label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .ofp-path-divider__count { color: var(--ies-gray-400); font-weight: 600; }
+      .ofp-flow-divider:first-child { border-top: 0; margin-top: 0; padding-top: 2px; }
+      .ofp-flow-divider__stripe { width: 14px; height: 3px; border-radius: 2px; flex: 0 0 auto; }
+      .ofp-flow-divider__label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .ofp-flow-divider__count { color: var(--ies-gray-400); font-weight: 600; }
 
       /* v0.3a — UoM badge + path-tag pill on the node card */
       .ofp-node__pills { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; align-items: center; }
-      .ofp-node__path-pill {
+      .ofp-node__flow-pill {
         font-size: 9px; font-weight: 700; color: #fff;
         padding: 1px 6px; border-radius: 8px;
         text-transform: uppercase; letter-spacing: 0.04em;
@@ -13580,13 +13583,13 @@ function _ofpStyles() {
         pointer-events: none;
         box-shadow: 0 2px 6px rgba(0,71,171,0.4);
       }
-      .ofp-lane--dragover {
+      .ofp-area--dragover {
         outline: 3px dashed var(--ies-blue);
         outline-offset: -3px;
         background: rgba(0, 71, 171, 0.12);
         position: relative;
       }
-      .ofp-lane--dragover::after {
+      .ofp-area--dragover::after {
         content: 'Drop to reassign';
         position: absolute;
         top: 6px; right: 8px;
