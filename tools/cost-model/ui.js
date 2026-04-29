@@ -12672,6 +12672,17 @@ function renderOperationalFlow() {
   const totalFte = totalDirectFte + totalIndirectFte;
   const totalCost = directLines.reduce((s, l) => s + calc.directLineAnnualSimple(l, lc), 0)
                   + indirectLines.reduce((s, l) => s + calc.indirectLineAnnualSimple(l, opHrs, lc), 0);
+
+  // v0.9 — Zoom level (persistent per cost model). Snap to nearest
+  // discrete step so legacy odd values from manual edits normalize on
+  // next render.
+  const _OFP_ZOOM_STEPS = [0.75, 0.9, 1.0, 1.15, 1.3];
+  const _ofpSnapZoom = (z) => {
+    const n = Number(z);
+    if (!isFinite(n) || n <= 0) return 1.0;
+    return _OFP_ZOOM_STEPS.reduce((best, s) => Math.abs(s - n) < Math.abs(best - n) ? s : best, _OFP_ZOOM_STEPS[2]);
+  };
+  const zoomLevel = _ofpSnapZoom(model.ofpZoom);
   // Areas Populated denominator is the count of NON-unclassified areas
   // when unclassified itself is empty (the bucket is hidden in that
   // case so the headline ratio shouldn't include it).
@@ -12768,6 +12779,11 @@ function renderOperationalFlow() {
         <div class="cm-section-desc">End-to-end view of the labor activities. Auto-arranged from the Labor page by activity-keyword classification, then editable per cost model. Click any node to inspect; "Edit on Labor page" round-trips the change.</div>
       </div>
       <div class="ofp-section-actions">
+        <div class="ofp-zoom-controls" title="Zoom canvas">
+          <button class="ofp-zoom-btn" data-ofp-action="zoom-out" title="Zoom out (75% min)">−</button>
+          <button class="ofp-zoom-pct" data-ofp-action="zoom-reset" title="Click to reset to 100%">${Math.round(zoomLevel * 100)}%</button>
+          <button class="ofp-zoom-btn" data-ofp-action="zoom-in" title="Zoom in (130% max)">+</button>
+        </div>
         <button class="hub-btn hub-btn-secondary hub-btn-sm" data-ofp-action="manage-areas" title="Edit Functional Areas — rename, recolor, edit keywords, add custom areas">⚙ Manage Areas</button>
         <button class="hub-btn hub-btn-secondary hub-btn-sm" data-ofp-action="manage-flows" title="Edit Flows — rename, recolor, add new flows">⚙ Manage Flows</button>
       </div>
@@ -12775,25 +12791,16 @@ function renderOperationalFlow() {
 
     ${hiddenStripHtml}
 
-    <!-- KPI strip -->
-    <div class="hub-kpi-strip" style="margin-bottom:16px;">
-      <div class="hub-kpi-tile" title="Total FTE across direct + indirect labor">
-        <div class="hub-kpi-tile__label">Total FTE</div>
-        <div class="hub-kpi-tile__value hub-kpi-tile__value--brand">${totalFte.toFixed(1)}</div>
+    <!-- v0.9 — Replaced 4-tile KPI strip with a thin warning banner that
+         only renders when unclassifiedCount > 0. Total FTE / Cost / Areas
+         Populated were duplicating data from the CM top toolbar; killing
+         them reclaims ~80px of canvas real estate. -->
+    ${unclassifiedCount > 0 ? `
+      <div class="ofp-warn-banner" title="Activities did not match any area keyword. Rename the activity on Labor, or extend the keyword catalog in Manage Areas.">
+        <span class="ofp-warn-banner__icon">⚠</span>
+        <span class="ofp-warn-banner__msg"><strong>${unclassifiedCount}</strong> activit${unclassifiedCount === 1 ? 'y is' : 'ies are'} unclassified — open <button class="ofp-warn-banner__action" data-ofp-action="manage-areas">Manage Areas</button> to add classification keywords, or rename activities on the Labor page.</span>
       </div>
-      <div class="hub-kpi-tile" title="Annual loaded labor cost (direct + indirect)">
-        <div class="hub-kpi-tile__label">Annual Labor Cost</div>
-        <div class="hub-kpi-tile__value">${calc.formatCurrency(totalCost, { compact: true })}</div>
-      </div>
-      <div class="hub-kpi-tile" title="Functional Areas that have at least one activity binned into them">
-        <div class="hub-kpi-tile__label">Areas Populated</div>
-        <div class="hub-kpi-tile__value">${populatedAreas} of ${totalAreasPossible}</div>
-      </div>
-      <div class="hub-kpi-tile" title="${unclassifiedCount > 0 ? 'Activities that did not match any area keyword. Rename the activity on Labor or extend keyword catalogs in Manage Areas.' : 'All activities mapped into a Functional Area'}" ${unclassifiedCount > 0 ? 'style="border-left:3px solid #DC2626;"' : ''}>
-        <div class="hub-kpi-tile__label">Unclassified</div>
-        <div class="hub-kpi-tile__value" style="${unclassifiedCount > 0 ? 'color:#DC2626;' : ''}">${unclassifiedCount}</div>
-      </div>
-    </div>
+    ` : ''}
 
     <!-- v0.2.2 — Canvas reverts to full-width. Detail panel is now a
          modal overlay (see #ofp-detail-modal below), so the areas no
@@ -12803,7 +12810,7 @@ function renderOperationalFlow() {
          drawn after each render by _renderOfpFlowConnectors().
          v0.4 — main row + wide rows are now built dynamically from
          the per-cost-model area registry instead of hardcoded layout. -->
-    <div class="cm-card ofp-canvas-card" style="padding:18px 18px 22px;position:relative;">
+    <div class="cm-card ofp-canvas-card" style="padding:18px 18px 22px;position:relative;zoom:${zoomLevel};">
       <svg class="ofp-flow-overlay" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"></svg>
       <div class="ofp-row ofp-row--main">
         ${mainRowParts.join('')}
@@ -13060,6 +13067,59 @@ function _bindOperationalFlowEvents(container) {
       _ofpOpenManageFlowsModal(container, focusTag);
     });
   });
+
+  // v0.9 — Zoom controls. Update model.ofpZoom + apply directly to the
+  // canvas card style + update the percentage label, all without a full
+  // section re-render so the zoom feels snappy.
+  const _OFP_ZOOM_STEPS_BIND = [0.75, 0.9, 1.0, 1.15, 1.3];
+  const applyZoom = (z) => {
+    model.ofpZoom = z;
+    isDirty = true;
+    if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+    const card = container.querySelector('.ofp-canvas-card');
+    if (card) card.style.zoom = String(z);
+    const pct = container.querySelector('.ofp-zoom-pct');
+    if (pct) pct.textContent = `${Math.round(z * 100)}%`;
+    const minus = container.querySelector('[data-ofp-action="zoom-out"]');
+    const plus = container.querySelector('[data-ofp-action="zoom-in"]');
+    if (minus) minus.disabled = z <= _OFP_ZOOM_STEPS_BIND[0] + 1e-6;
+    if (plus) plus.disabled = z >= _OFP_ZOOM_STEPS_BIND[_OFP_ZOOM_STEPS_BIND.length - 1] - 1e-6;
+    // Re-draw same-flow connectors (they use getBoundingClientRect which
+    // reflects post-zoom coords, but timing matters — draw on next frame).
+    setTimeout(() => { try { _renderOfpFlowConnectors(container); } catch (_) {} }, 50);
+  };
+  container.querySelectorAll('[data-ofp-action="zoom-in"]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const cur = Number(model.ofpZoom) || 1.0;
+      const idx = _OFP_ZOOM_STEPS_BIND.findIndex(s => Math.abs(s - cur) < 1e-6);
+      const next = idx === -1 ? 1.0 : _OFP_ZOOM_STEPS_BIND[Math.min(idx + 1, _OFP_ZOOM_STEPS_BIND.length - 1)];
+      applyZoom(next);
+    });
+  });
+  container.querySelectorAll('[data-ofp-action="zoom-out"]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const cur = Number(model.ofpZoom) || 1.0;
+      const idx = _OFP_ZOOM_STEPS_BIND.findIndex(s => Math.abs(s - cur) < 1e-6);
+      const next = idx === -1 ? 1.0 : _OFP_ZOOM_STEPS_BIND[Math.max(idx - 1, 0)];
+      applyZoom(next);
+    });
+  });
+  container.querySelectorAll('[data-ofp-action="zoom-reset"]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      applyZoom(1.0);
+    });
+  });
+  // Apply initial disabled-state on render
+  {
+    const cur = Number(model.ofpZoom) || 1.0;
+    const minus = container.querySelector('[data-ofp-action="zoom-out"]');
+    const plus = container.querySelector('[data-ofp-action="zoom-in"]');
+    if (minus) minus.disabled = cur <= _OFP_ZOOM_STEPS_BIND[0] + 1e-6;
+    if (plus) plus.disabled = cur >= _OFP_ZOOM_STEPS_BIND[_OFP_ZOOM_STEPS_BIND.length - 1] - 1e-6;
+  }
 
   // ============================================================
   // v0.6 — Hidden-strip chip handlers + Show-all
@@ -15098,6 +15158,77 @@ function _ofpStyles() {
       }
       .ofp-mgr-row--drop-below td {
         box-shadow: inset 0 -2px 0 0 var(--ies-blue);
+      }
+
+      /* ========================================================
+         v0.9 — Warning banner (replaces KPI strip)
+         ======================================================== */
+      .ofp-warn-banner {
+        display: flex; align-items: center; gap: 8px;
+        padding: 8px 14px;
+        background: rgba(220, 38, 38, 0.06);
+        border: 1px solid rgba(220, 38, 38, 0.30);
+        border-radius: 6px;
+        margin-bottom: 12px;
+        font-size: 12px;
+        color: #991B1B;
+      }
+      .ofp-warn-banner__icon { font-size: 16px; line-height: 1; }
+      .ofp-warn-banner__msg { flex: 1 1 auto; }
+      .ofp-warn-banner__msg strong { color: #B91C1C; font-weight: 700; }
+      .ofp-warn-banner__action {
+        background: transparent;
+        border: 1px solid rgba(220, 38, 38, 0.40);
+        border-radius: 4px;
+        padding: 1px 8px;
+        font-size: 11px; font-weight: 600;
+        color: #B91C1C;
+        cursor: pointer;
+        margin: 0 2px;
+        transition: all 0.12s;
+      }
+      .ofp-warn-banner__action:hover {
+        background: rgba(220, 38, 38, 0.12);
+        border-color: #DC2626;
+      }
+
+      /* ========================================================
+         v0.9 — Zoom controls
+         ======================================================== */
+      .ofp-zoom-controls {
+        display: inline-flex; align-items: stretch;
+        border: 1px solid var(--ies-gray-200);
+        border-radius: 6px;
+        background: #fff;
+        overflow: hidden;
+        flex-shrink: 0;
+      }
+      .ofp-zoom-btn {
+        background: transparent; border: none;
+        padding: 0 10px; height: 28px;
+        font-size: 16px; font-weight: 700; line-height: 1;
+        color: var(--ies-gray-700);
+        cursor: pointer;
+        transition: background 0.12s, color 0.12s;
+      }
+      .ofp-zoom-btn:hover:not(:disabled) {
+        background: var(--ies-gray-100);
+        color: var(--ies-blue);
+      }
+      .ofp-zoom-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+      .ofp-zoom-pct {
+        background: transparent; border: none;
+        border-left: 1px solid var(--ies-gray-200);
+        border-right: 1px solid var(--ies-gray-200);
+        padding: 0 8px; min-width: 48px;
+        font-size: 11px; font-weight: 600;
+        color: var(--ies-gray-700);
+        cursor: pointer;
+        transition: background 0.12s, color 0.12s;
+      }
+      .ofp-zoom-pct:hover {
+        background: var(--ies-gray-100);
+        color: var(--ies-blue);
       }
 
       /* ========================================================
