@@ -59,6 +59,19 @@ function render() {
     <style>
       .cc-kpi-tile:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.08); border-color: var(--ies-gray-300); }
       .cc-kpi-tile:hover .cc-kpi-tooltip { opacity: 1; }
+      .cc-intel-tab {
+        font-size: 11px; font-weight: 700;
+        padding: 4px 10px; border-radius: 999px;
+        border: 1px solid var(--ies-gray-300);
+        background: #fff; color: var(--ies-gray-700);
+        cursor: pointer; text-transform: uppercase; letter-spacing: 0.04em;
+        white-space: nowrap;
+        transition: background 0.12s, border-color 0.12s, color 0.12s;
+      }
+      .cc-intel-tab:hover { border-color: var(--ies-navy); color: var(--ies-navy); }
+      .cc-intel-tab.active {
+        background: var(--ies-navy); color: #fff; border-color: var(--ies-navy);
+      }
       .cc-alert-banner { transition: filter .12s ease; }
       .cc-alert-banner:hover { filter: brightness(0.97); cursor: pointer; }
     </style>
@@ -67,11 +80,11 @@ function render() {
       <!-- Header -->
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
         <div>
-          <h1 class="text-page" style="margin:0 0 4px 0;">${greeting}</h1>
+          <h1 class="text-page" style="margin-bottom:4px;">${greeting}</h1>
           <p style="font-size:13px;color:var(--ies-gray-400);margin:0;">${dateStr} — IES Intelligence Hub v3.0</p>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
-          <span style="width:8px;height:8px;border-radius:50%;background:${d.supabaseConnected ? '#16a34a' : '#d97706'};"></span>
+          <span style="width:8px;height:8px;border-radius:50%;background:${d.supabaseConnected ? 'var(--ies-green)' : 'var(--ies-orange)'};"></span>
           <span style="font-size:11px;color:var(--ies-gray-400);">${d.supabaseConnected ? 'Live' : 'Demo'} Data</span>
           <span style="font-size:11px;color:var(--ies-gray-300);margin-left:4px;">Updated ${timeStr}</span>
           <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="refresh" style="margin-left:8px;padding:4px 10px;font-size:11px;">↻ Refresh</button>
@@ -108,8 +121,7 @@ function render() {
             </div>
             <div style="display:flex;gap:4px;overflow-x:auto;padding-bottom:10px;">
               ${['all','alerts','competitor','accounts','tariff','rfp'].map((k, i) => `
-                <button type="button" data-intel-tab="${k}" class="cc-intel-tab ${i === 0 ? 'active' : ''}"
-                  style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;border:1px solid ${i === 0 ? 'var(--ies-navy)' : 'var(--ies-gray-300)'};background:${i === 0 ? 'var(--ies-navy)' : '#fff'};color:${i === 0 ? '#fff' : 'var(--ies-gray-700)'};cursor:pointer;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;">${labelForIntelTab(k)} <span style="opacity:.7;">(${(d.intel?.[k === 'all' ? 'all' : k] || []).length})</span></button>
+                <button type="button" data-intel-tab="${k}" class="cc-intel-tab ${i === 0 ? 'active' : ''}">${labelForIntelTab(k)} <span style="opacity:.7;">(${(d.intel?.[k === 'all' ? 'all' : k] || []).length})</span></button>
               `).join('')}
             </div>
           </div>
@@ -149,11 +161,11 @@ function render() {
  */
 function vitalSignTile(label, value, unit, trend, color, change, sparkData, href, periodLabel) {
   const trendArrow = trend === 'up' ? '↑' : trend === 'down' ? '↓' : '→';
-  const trendColor = trend === 'up' ? '#dc2626' : trend === 'down' ? '#16a34a' : '#6b7280';
+  const trendColor = trend === 'up' ? 'var(--ies-red)' : trend === 'down' ? 'var(--ies-green)' : 'var(--ies-gray-500)';
   // For RFP Signals (and other "more is good") we don't want red on uptick.
   const isCountKpi = unit === 'active';
   const finalTrendColor = isCountKpi
-    ? (trend === 'up' ? '#16a34a' : trend === 'down' ? '#dc2626' : '#6b7280')
+    ? (trend === 'up' ? 'var(--ies-green)' : trend === 'down' ? 'var(--ies-red)' : 'var(--ies-gray-500)')
     : trendColor;
 
   // Tooltip content — min/max + period for this KPI's sparkline data.
@@ -172,7 +184,7 @@ function vitalSignTile(label, value, unit, trend, color, change, sparkData, href
     <a class="hub-card cc-kpi-tile" href="#${href || 'marketmap'}" data-kpi-tile="1" style="padding:12px 14px;display:flex;flex-direction:column;gap:6px;cursor:pointer;position:relative;text-decoration:none;color:inherit;transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease;">
       <div style="position:absolute;top:8px;right:10px;color:var(--ies-gray-300);font-size:10px;pointer-events:none;">↗</div>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;padding-right:14px;">
-        <span style="font-size:11px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:.04em;">${label}</span>
+        <span class="hub-kpi-tile__label" style="min-height:0;">${label}</span>
         <span style="font-size:11px;font-weight:800;color:${finalTrendColor};">${trendArrow}</span>
       </div>
       <div style="display:flex;align-items:baseline;gap:4px;">
@@ -181,7 +193,7 @@ function vitalSignTile(label, value, unit, trend, color, change, sparkData, href
       </div>
       ${renderSparkline(sparkData, color)}
       <div style="font-size:10px;color:var(--ies-gray-500);margin-top:2px;">${change}</div>
-      ${tipText ? `<div class="cc-kpi-tooltip" style="position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:#1a1f2e;color:#fff;padding:6px 10px;border-radius:6px;font-size:11px;font-weight:600;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,.25);opacity:0;pointer-events:none;transition:opacity .15s ease;z-index:10;">${tipText}</div>` : ''}
+      ${tipText ? `<div class="cc-kpi-tooltip" style="position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:var(--ies-navy);color:#fff;padding:6px 10px;border-radius:6px;font-size:11px;font-weight:600;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,.25);opacity:0;pointer-events:none;transition:opacity .15s ease;z-index:10;">${tipText}</div>` : ''}
     </a>
   `;
 }
@@ -223,18 +235,18 @@ function renderPipelineSnapshot(p) {
         <div style="font-size:13px;font-weight:700;">Pipeline Snapshot</div>
         <span style="font-size:11px;color:#2563eb;font-weight:700;">Open Deal Mgmt →</span>
       </div>
-      <div style="display:flex;gap:14px;align-items:baseline;">
-        <div>
-          <div style="font-size:24px;font-weight:800;color:var(--ies-navy);line-height:1;">${totalDeals}</div>
-          <div style="font-size:10px;color:var(--ies-gray-500);font-weight:600;text-transform:uppercase;letter-spacing:.04em;">Active deals</div>
+      <div style="display:flex;gap:18px;align-items:flex-start;">
+        <div style="display:flex;flex-direction:column;gap:2px;min-width:0;">
+          <span class="hub-kpi-tile__label" style="min-height:0;">Active deals</span>
+          <span class="hub-kpi-tile__value" style="font-size:24px;">${totalDeals}</span>
         </div>
-        <div>
-          <div style="font-size:20px;font-weight:800;color:#16a34a;line-height:1;">$${(p.totalRevenue / 1e6).toFixed(0)}M</div>
-          <div style="font-size:10px;color:var(--ies-gray-500);font-weight:600;text-transform:uppercase;letter-spacing:.04em;">Pipeline</div>
+        <div style="display:flex;flex-direction:column;gap:2px;min-width:0;">
+          <span class="hub-kpi-tile__label" style="min-height:0;">Pipeline</span>
+          <span class="hub-kpi-tile__value" style="font-size:20px;">$${(p.totalRevenue / 1e6).toFixed(0)}M</span>
         </div>
-        <div>
-          <div style="font-size:20px;font-weight:800;color:#7c3aed;line-height:1;">${(p.avgMargin || 0).toFixed(1)}%</div>
-          <div style="font-size:10px;color:var(--ies-gray-500);font-weight:600;text-transform:uppercase;letter-spacing:.04em;">Avg margin</div>
+        <div style="display:flex;flex-direction:column;gap:2px;min-width:0;">
+          <span class="hub-kpi-tile__label" style="min-height:0;">Avg margin</span>
+          <span class="hub-kpi-tile__value" style="font-size:20px;">${(p.avgMargin || 0).toFixed(1)}%</span>
         </div>
       </div>
       <div>
@@ -365,9 +377,8 @@ function switchIntelTab(key) {
   tabs.forEach(t => {
     const active = t.dataset.intelTab === key;
     t.classList.toggle('active', active);
-    t.style.background = active ? 'var(--ies-navy)' : '#fff';
-    t.style.color = active ? '#fff' : 'var(--ies-gray-700)';
-    t.style.borderColor = active ? 'var(--ies-navy)' : 'var(--ies-gray-300)';
+    // 2026-04-29 polish: visual state lives entirely on .cc-intel-tab.active CSS rule;
+    // strip the inline-style mutation that used to duplicate the rule values.
   });
   const body = rootEl.querySelector('#cc-intel-body');
   if (body && liveData.intel) {
