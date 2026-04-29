@@ -14,7 +14,10 @@ const marketSignalCache = new Map();
 let rootEl = null;
 let markets = [...calc.DEMO_MARKETS];
 let selectedMarket = null;
-let activeTab = 'overview';
+// colorMode drives both the map-pin coloring and the rail list's primary metric.
+// Replaces the old 5-tab top-level navigation. Values: 'all' / 'labor' /
+// 'realestate' / 'freight' / 'gxo'.
+let colorMode = 'all';
 let detailTabActive = 'overview';
 let filterRegion = 'all';
 let filterPresence = 'all';
@@ -30,7 +33,7 @@ export function mount(el) {
   rootEl = el;
   markets = [...calc.DEMO_MARKETS];
   selectedMarket = null;
-  activeTab = 'overview';
+  colorMode = 'all';
   detailTabActive = 'overview';
   filterRegion = 'all';
   filterPresence = 'all';
@@ -61,41 +64,41 @@ function bindDelegatedEvents() {
   rootEl.addEventListener('click', (e) => {
     const target = /** @type {HTMLElement} */ (e.target);
 
-    // Main tab clicks
-    const tab = target.closest('[data-tab]');
-    if (tab) {
-      activeTab = /** @type {HTMLElement} */ (tab).dataset.tab;
-      render();
+    // Color-mode chip clicks (replaces top-level tab nav)
+    const chip = target.closest('[data-color-mode]');
+    if (chip) {
+      colorMode = /** @type {HTMLElement} */ (chip).dataset.colorMode;
+      // Recolor pins + re-render rail list without full shell re-render so the
+      // map doesn't blink on every chip change.
+      _recolorPins();
+      _refreshRailList();
+      _refreshChipBar();
       return;
     }
 
-    // Detail tab clicks (5-tab panel)
+    // Detail tab clicks (5-tab panel inside the slide-in detail)
     const detailTab = target.closest('[data-detail-tab]');
     if (detailTab) {
       detailTabActive = /** @type {HTMLElement} */ (detailTab).dataset.detailTab;
       renderDetailContent();
-      // Lazy-load Intelligence tab signals the first time it's viewed per market
       if (detailTabActive === 'intelligence' && selectedMarket) {
         loadIntelligenceIfNeeded(selectedMarket);
       }
       return;
     }
 
-    // Market row clicks in data library
+    // Market row click in the right rail list — open detail panel slide-in
     const row = target.closest('[data-market-row]');
     if (row) {
       const id = /** @type {HTMLElement} */ (row).dataset.marketRow;
-      selectedMarket = markets.find(m => m.id === id) || null;
-      render();
-      highlightMarketOnMap(selectedMarket?.id);
+      const m = markets.find(x => x.id === id) || null;
+      if (m) _openDetail(m);
       return;
     }
 
-    // Close detail
+    // Close detail panel — slide back to rail list
     if (target.closest('[data-action="close-detail"]')) {
-      selectedMarket = null;
-      detailTabActive = 'overview';
-      render();
+      _closeDetail();
       return;
     }
   });
@@ -145,17 +148,58 @@ function render() {
   const regions = calc.uniqueRegions(markets);
 
   rootEl.innerHTML = `
+    <style>
+      .me-news-link { color: inherit; text-decoration: none; transition: color 0.12s; }
+      .me-news-link:hover { color: var(--ies-blue); }
+      .me-chip {
+        font-size: 11px; font-weight: 700;
+        padding: 5px 12px; border-radius: 999px;
+        border: 1px solid var(--ies-gray-300);
+        background: #fff; color: var(--ies-gray-700);
+        cursor: pointer; text-transform: uppercase; letter-spacing: 0.04em;
+        white-space: nowrap; transition: all 0.12s;
+      }
+      .me-chip:hover { border-color: var(--ies-navy); color: var(--ies-navy); }
+      .me-chip.active { background: var(--ies-navy); color: #fff; border-color: var(--ies-navy); }
+      .me-rail { position: relative; }
+      .me-rail-list, .me-detail-slide {
+        position: absolute; inset: 0;
+        overflow-y: auto;
+        background: #fff;
+        transition: transform 0.22s ease, opacity 0.18s ease;
+      }
+      .me-detail-slide {
+        transform: translateX(100%); opacity: 0; pointer-events: none;
+        border-left: 4px solid var(--ies-orange);
+      }
+      .me-rail.detail-open .me-rail-list { transform: translateX(-6%); opacity: 0.4; pointer-events: none; }
+      .me-rail.detail-open .me-detail-slide { transform: translateX(0); opacity: 1; pointer-events: auto; }
+      .me-row {
+        display: grid; grid-template-columns: 1fr auto;
+        gap: 4px 10px; padding: 10px 12px;
+        border-bottom: 1px solid var(--ies-gray-100);
+        cursor: pointer; transition: background 0.1s;
+      }
+      .me-row:hover { background: var(--ies-gray-50); }
+      .me-row.selected { background: rgba(255,58,0,0.06); border-left: 3px solid var(--ies-orange); padding-left: 9px; }
+      .me-row__name { font-size: 13px; font-weight: 700; color: var(--ies-navy); }
+      .me-row__region { font-size: 11px; color: var(--ies-gray-500); grid-column: 1; }
+      .me-row__metric { grid-column: 2; grid-row: 1 / span 2; align-self: center; text-align: right; }
+      .me-row__metric-label { font-size: 9px; color: var(--ies-gray-400); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700; }
+      .me-row__metric-value { font-size: 14px; font-weight: 800; color: var(--ies-navy); font-variant-numeric: tabular-nums; }
+      .me-pin-bullet { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+    </style>
     <div class="hub-content-inner">
-      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-5);">
-        <h1 class="text-page" style="margin: 0;">Market Explorer</h1>
-        <div style="display: flex; gap: var(--sp-3); align-items: center;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-4); gap: 12px; flex-wrap: wrap;">
+        <h1 class="text-page">Market Explorer</h1>
+        <div style="display: flex; gap: var(--sp-3); align-items: center; flex-wrap: wrap;">
           <input type="text" class="hub-input" placeholder="Search markets..." value="${searchQuery}"
-            data-action="search" style="width: 200px; height: 38px; font-size: 13px; padding: 6px 12px; line-height: 1.4;" />
-          <select class="hub-input" data-action="filter-region" style="height: 38px; font-size: 13px; padding: 6px 28px 6px 12px; line-height: 1.4;">
+            data-action="search" style="width: 220px; height: 36px; font-size: 13px;" />
+          <select class="hub-select" data-action="filter-region" style="width: auto; height: 36px; font-size: 13px;">
             <option value="all">All Regions</option>
             ${regions.map(r => `<option value="${r}" ${filterRegion === r ? 'selected' : ''}>${r}</option>`).join('')}
           </select>
-          <select class="hub-input" data-action="filter-presence" style="height: 38px; font-size: 13px; padding: 6px 28px 6px 12px; line-height: 1.4;">
+          <select class="hub-select" data-action="filter-presence" style="width: auto; height: 36px; font-size: 13px;">
             <option value="all">All Presence</option>
             <option value="active" ${filterPresence === 'active' ? 'selected' : ''}>GXO Active</option>
             <option value="target" ${filterPresence === 'target' ? 'selected' : ''}>Target Markets</option>
@@ -163,58 +207,221 @@ function render() {
         </div>
       </div>
 
-      <!-- KPI Row — slimmed inline header, with hover tooltips -->
-      <div class="hub-kpi-strip" style="margin-bottom: var(--sp-4);">
+      <!-- KPI strip -->
+      <div class="hub-kpi-strip" style="margin-bottom: var(--sp-3);">
         ${meKpi('Markets Tracked', String(stats.totalMarkets), 'Count of MSAs in the filter set (of ' + markets.length + ' total tracked).')}
-        ${meKpi('Avg Labor Score', calc.scoreBadge(stats.avgLaborScore), 'Composite labor-availability score (0-100) for filtered markets. Higher = more available workforce. Inputs: unemployment rate, participation, turnover, time-to-fill.')}
+        ${meKpi('Avg Labor Score', calc.scoreBadge(stats.avgLaborScore), 'Composite labor-availability score (0-100) for filtered markets. Higher = more available workforce.')}
         ${meKpi('Avg Warehouse Wage', calc.fmt$(stats.avgWage) + '/hr', 'Average hourly warehouse wage (filtered set). BLS OEWS data, seasonally adjusted.')}
         ${meKpi('Markets with Deals', String(stats.marketsWithDeals), 'Markets in the filtered set that have at least one active deal in the IES pipeline.')}
       </div>
 
-      <!-- Tab Bar -->
-      <div class="hub-tab-bar" style="margin-bottom: var(--sp-4);">
-        <button class="hub-tab ${activeTab === 'overview' ? 'active' : ''}" data-tab="overview">Map Overview</button>
-        <button class="hub-tab ${activeTab === 'labor' ? 'active' : ''}" data-tab="labor">Labor Watch</button>
-        <button class="hub-tab ${activeTab === 'realestate' ? 'active' : ''}" data-tab="realestate">Real Estate</button>
-        <button class="hub-tab ${activeTab === 'freight' ? 'active' : ''}" data-tab="freight">Freight Index</button>
-        <button class="hub-tab ${activeTab === 'data' ? 'active' : ''}" data-tab="data">Data Library</button>
+      <!-- Color-mode chips (replaces top-level tabs) -->
+      <div id="me-chip-bar" style="display: flex; gap: 6px; align-items: center; margin-bottom: var(--sp-3); flex-wrap: wrap;">
+        ${_renderChipBar()}
       </div>
 
-      <!-- Tab Content -->
-      <div id="me-tab-content"></div>
+      <!-- Two-pane main: persistent map (left, ~65%) + rail (right, ~35%) -->
+      <div style="display: grid; grid-template-columns: minmax(0, 1.85fr) minmax(280px, 1fr); gap: 16px; height: 620px;">
+        <!-- Map pane -->
+        <div class="hub-card" style="padding: var(--sp-3); display: flex; flex-direction: column; min-height: 0;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom: var(--sp-2);">
+            <h3 class="text-subtitle" style="margin: 0;">US Market Map</h3>
+            <span class="text-caption text-muted">${filtered.length} markets · click a pin for details</span>
+          </div>
+          <div id="market-map" style="background: var(--ies-gray-100); border-radius: var(--radius-md); flex: 1 1 auto; min-height: 0; position: relative; overflow: hidden;">
+            <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--ies-gray-500); font-size: 13px;">Loading map...</div>
+          </div>
+        </div>
 
-      <!-- Detail Panel -->
-      <div id="me-detail-panel"></div>
+        <!-- Right rail: ranked list + slide-in detail panel -->
+        <div class="hub-card me-rail" style="padding: 0; display: flex; flex-direction: column; min-height: 0;">
+          <div class="me-rail-list" id="me-rail-list">
+            ${_renderRailList(filtered)}
+          </div>
+          <div class="me-detail-slide" id="me-detail-slide">
+            ${selectedMarket ? renderDetailPanel(selectedMarket) : ''}
+          </div>
+        </div>
+      </div>
     </div>
   `;
 
-  renderContent();
+  // Sync the slide-open class if a market is preselected (e.g., across navigation).
+  const railEl = rootEl.querySelector('.me-rail');
+  if (railEl) {
+    railEl.classList.toggle('detail-open', !!selectedMarket);
+  }
+
+  // Always re-init the map (this fn is called on full shell re-renders only).
+  setTimeout(() => initializeMap(filtered), 60);
 }
 
+// renderContent retained for filter changes — re-renders the rail list +
+// recolors pins without nuking the map. Full shell render only happens on
+// mount or filter changes that drop the selected market.
 function renderContent() {
   if (!rootEl) return;
-  const filtered = getFiltered();
-  const topLabor = calc.topMarketsByLabor(filtered, 5);
-  const topRate = calc.topMarketsByRate(filtered, 5);
-
-  const tabEl = rootEl.querySelector('#me-tab-content');
-  if (tabEl) tabEl.innerHTML = renderTab(filtered, topLabor, topRate);
-
-  const detailEl = rootEl.querySelector('#me-detail-panel');
-  if (detailEl) detailEl.innerHTML = selectedMarket ? renderDetailPanel(selectedMarket) : '';
-
-  // Initialize map after overview tab is rendered
-  if (activeTab === 'overview' && !mapInstance) {
-    setTimeout(() => initializeMap(filtered), 100);
-  }
+  _refreshRailList();
+  _recolorPins();
+  // Detail panel state syncs from selectedMarket flag.
+  const railEl = rootEl.querySelector('.me-rail');
+  if (railEl) railEl.classList.toggle('detail-open', !!selectedMarket);
 }
 
 function renderDetailContent() {
   if (!rootEl) return;
-  const detailEl = rootEl.querySelector('#me-detail-panel');
-  if (detailEl && selectedMarket) {
-    detailEl.innerHTML = renderDetailPanel(selectedMarket);
+  const detailEl = rootEl.querySelector('#me-detail-slide');
+  if (detailEl) {
+    detailEl.innerHTML = selectedMarket ? renderDetailPanel(selectedMarket) : '';
   }
+}
+
+// ============================================================
+// DIRECTION A — color-mode chip + rail list helpers
+// ============================================================
+
+const _COLOR_MODES = [
+  { key: 'all',        label: 'All',         metric: 'gxo' },
+  { key: 'labor',      label: 'Labor',       metric: 'labor' },
+  { key: 'realestate', label: 'Real Estate', metric: 'rate' },
+  { key: 'freight',    label: 'Freight',     metric: 'freight' },
+  { key: 'gxo',        label: 'GXO Presence', metric: 'gxo' },
+];
+
+function _renderChipBar() {
+  return [
+    '<span style="font-size: 11px; font-weight: 700; color: var(--ies-gray-500); text-transform: uppercase; letter-spacing: 0.04em; margin-right: 4px;">Heat by:</span>',
+    ..._COLOR_MODES.map(m =>
+      `<button class="me-chip ${colorMode === m.key ? 'active' : ''}" data-color-mode="${m.key}">${m.label}</button>`
+    ),
+  ].join('');
+}
+
+function _refreshChipBar() {
+  if (!rootEl) return;
+  const bar = rootEl.querySelector('#me-chip-bar');
+  if (bar) bar.innerHTML = _renderChipBar();
+}
+
+// Pin color resolution. Continuous metrics (labor / rate / freight) use a
+// 3-tier ramp keyed off the FILTERED set\'s tertile so the highlight is
+// relative to what\'s on screen. GXO presence uses the original color rule.
+function _pinColorFor(market, metricKey, filteredSorted) {
+  const styles = getComputedStyle(document.documentElement);
+  const c = (name, fallback) => (styles.getPropertyValue(name) || fallback).trim() || fallback;
+  if (metricKey === 'gxo') {
+    if (market.gxoPresence === 'active') return c('--ies-green', '#16a34a');
+    if (market.gxoPresence === 'target') return c('--ies-blue', '#0047AB');
+    return c('--ies-gray-400', '#adb5bd');
+  }
+  // Continuous: lookup market\'s rank in sorted-by-metric array
+  const idx = filteredSorted.findIndex(m => m.id === market.id);
+  if (idx === -1) return c('--ies-gray-400', '#adb5bd');
+  const t = idx / Math.max(1, filteredSorted.length - 1);
+  // Lower idx = better (sorted ascending for cost metrics, descending for score)
+  if (t < 0.34) return c('--ies-green', '#16a34a');
+  if (t < 0.67) return c('--ies-orange', '#ff3a00');
+  return c('--ies-red', '#dc3545');
+}
+
+// Sort filtered markets by current colorMode\'s primary metric — best first.
+function _sortFilteredByMode(filtered) {
+  const arr = [...filtered];
+  switch (colorMode) {
+    case 'labor':      return arr.sort((a, b) => (b.laborScore || 0) - (a.laborScore || 0));      // higher = better
+    case 'realestate': return arr.sort((a, b) => (a.warehouseRate || 0) - (b.warehouseRate || 0)); // lower = better
+    case 'freight':    return arr.sort((a, b) => (a.freightIndex || 0) - (b.freightIndex || 0));   // lower = better
+    case 'gxo':        return arr.sort((a, b) => {
+      const score = (m) => m.gxoPresence === 'active' ? 0 : m.gxoPresence === 'target' ? 1 : 2;
+      return score(a) - score(b);
+    });
+    default: return arr.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  }
+}
+
+function _metricForRow(m) {
+  switch (colorMode) {
+    case 'labor':      return { label: 'Labor score', value: String(m.laborScore || '—') + '/100' };
+    case 'realestate': return { label: '$/sqft/yr',   value: calc.fmt$(m.warehouseRate || 0) };
+    case 'freight':    return { label: 'Freight idx', value: String(m.freightIndex || '—') };
+    case 'gxo':        return { label: 'GXO',         value: (m.gxoPresence || 'none').replace(/^./, c => c.toUpperCase()) };
+    default:           return { label: 'Wage / hr',   value: calc.fmt$(m.avgWage || 0) };
+  }
+}
+
+function _renderRailList(filtered) {
+  const sorted = _sortFilteredByMode(filtered);
+  const styles = (typeof window !== 'undefined' && document) ? getComputedStyle(document.documentElement) : null;
+  const cText = (n, f) => styles ? ((styles.getPropertyValue(n) || f).trim() || f) : f;
+  const rows = sorted.map(m => {
+    const metric = _metricForRow(m);
+    const pinColor = _pinColorFor(m, _COLOR_MODES.find(x => x.key === colorMode)?.metric || 'gxo', sorted);
+    const isSelected = selectedMarket && selectedMarket.id === m.id;
+    return `
+      <div class="me-row ${isSelected ? 'selected' : ''}" data-market-row="${m.id}">
+        <div class="me-row__name"><span class="me-pin-bullet" style="background:${pinColor};"></span>${m.name}</div>
+        <div class="me-row__region">${m.region}</div>
+        <div class="me-row__metric">
+          <div class="me-row__metric-label">${metric.label}</div>
+          <div class="me-row__metric-value">${metric.value}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+  return `
+    <div style="padding: 10px 12px 8px; border-bottom: 1px solid var(--ies-gray-200); display: flex; align-items: center; justify-content: space-between;">
+      <div style="font-size: 13px; font-weight: 700; color: var(--ies-navy);">Ranked by ${_COLOR_MODES.find(x => x.key === colorMode)?.label || ''}</div>
+      <span class="text-caption text-muted">${sorted.length} markets</span>
+    </div>
+    ${rows}
+  `;
+}
+
+function _refreshRailList() {
+  if (!rootEl) return;
+  const listEl = rootEl.querySelector('#me-rail-list');
+  if (listEl) {
+    const filtered = getFiltered();
+    listEl.innerHTML = _renderRailList(filtered);
+  }
+}
+
+function _recolorPins() {
+  if (!mapInstance) return;
+  const filtered = getFiltered();
+  const sorted = _sortFilteredByMode(filtered);
+  const metric = _COLOR_MODES.find(m => m.key === colorMode)?.metric || 'gxo';
+  for (const m of markets) {
+    if (!m._marker) continue;
+    const inFilter = filtered.some(f => f.id === m.id);
+    if (!inFilter) {
+      m._marker.setStyle({ fillOpacity: 0, opacity: 0 });
+      continue;
+    }
+    const color = _pinColorFor(m, metric, sorted);
+    m._marker.setStyle({ fillColor: color, color: '#fff', fillOpacity: 0.85, opacity: 1 });
+  }
+}
+
+function _openDetail(m) {
+  selectedMarket = m;
+  detailTabActive = 'overview';
+  if (!rootEl) return;
+  const slide = rootEl.querySelector('#me-detail-slide');
+  if (slide) slide.innerHTML = renderDetailPanel(m);
+  const railEl = rootEl.querySelector('.me-rail');
+  if (railEl) railEl.classList.add('detail-open');
+  highlightMarketOnMap(m.id);
+  _refreshRailList();
+}
+
+function _closeDetail() {
+  selectedMarket = null;
+  detailTabActive = 'overview';
+  if (!rootEl) return;
+  const railEl = rootEl.querySelector('.me-rail');
+  if (railEl) railEl.classList.remove('detail-open');
+  _refreshRailList();
 }
 
 function getFiltered() {
@@ -228,16 +435,11 @@ function getFiltered() {
 // TAB RENDERERS
 // ============================================================
 
-function renderTab(filtered, topLabor, topRate) {
-  switch (activeTab) {
-    case 'overview': return renderOverview(filtered);
-    case 'labor': return renderLaborWatch(filtered, topLabor);
-    case 'realestate': return renderRealEstate(filtered);
-    case 'freight': return renderFreight(filtered);
-    case 'data': return renderDataLibrary(filtered);
-    default: return '';
-  }
-}
+// renderTab dispatcher removed in 2026-04-29 redesign. Top-level tabs were
+// replaced by color-mode chips + a persistent map+rail layout. The previous
+// per-tab renderers (renderLaborWatch, renderRealEstate, renderFreight,
+// renderDataLibrary, renderOverview) are no longer called and can be deleted
+// in a follow-up cleanup commit.
 
 function renderOverview(filtered) {
   // Map full-width — the right-hand "Data Library" table was duplicative of
@@ -773,14 +975,13 @@ function initializeMap(filtered) {
       maxZoom: 19,
     }).addTo(mapInstance);
 
-    // Add market markers
+    // 2026-04-29 redesign: pin color comes from colorMode (Labor / Real Estate /
+    // Freight / GXO heat). Pin click opens the slide-in detail panel — no full
+    // re-render so the map state is preserved.
+    const sorted = _sortFilteredByMode(filtered);
+    const metric = _COLOR_MODES.find(x => x.key === colorMode)?.metric || 'gxo';
     filtered.forEach(m => {
-      // 2026-04-29: resolve from token rather than hardcoded hex so theme
-      // changes propagate. getComputedStyle reads the live computed value.
-      const _styles = getComputedStyle(document.documentElement);
-      const _activeColor = (_styles.getPropertyValue('--ies-green') || '#16a34a').trim();
-      const _defaultColor = (_styles.getPropertyValue('--ies-blue') || '#3b82f6').trim();
-      const color = m.gxoPresence === 'active' ? _activeColor : _defaultColor;
+      const color = _pinColorFor(m, metric, sorted);
       const radius = 6 + (m.laborScore / 20);
 
       const marker = window.L.circleMarker([m.lat, m.lng], {
@@ -793,21 +994,13 @@ function initializeMap(filtered) {
         className: 'market-map-pin',
       }).addTo(mapInstance);
 
-      // Tooltip on hover
-      marker.bindTooltip(`<strong>${m.name}</strong><br>Labor: ${m.laborScore}/100`, {
+      marker.bindTooltip(`<strong>${m.name}</strong><br>Labor: ${m.laborScore}/100 · Wage: ${calc.fmt$(m.avgWage || 0)}/hr`, {
         direction: 'top',
         offset: [0, -10],
         className: 'market-tooltip',
       });
 
-      // Click handler to select market
-      marker.on('click', () => {
-        selectedMarket = m;
-        detailTabActive = 'overview';
-        render();
-      });
-
-      // Store marker reference for later highlighting
+      marker.on('click', () => _openDetail(m));
       m._marker = marker;
     });
 
