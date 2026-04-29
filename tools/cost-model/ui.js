@@ -12,7 +12,7 @@ import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260424-hyg04';
 import * as calc from './calc.js?v=20260427-s2';
-import * as api from './api.js?v=20260429-fam1';
+import * as api from './api.js?v=20260429-fam2';
 import * as scenarios from './calc.scenarios.js?v=20260429-otfix1';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
@@ -11051,7 +11051,7 @@ function renderLanding() {
         // Compact chip used inside renderFamilyCard for each child scenario.
         const renderScenarioChip = (m) => {
           const safeName = (m.name || 'Untitled Model').replace(/"/g, '&quot;');
-          const sc = Array.isArray(m.cost_model_scenarios) ? m.cost_model_scenarios[0] : null;
+          const sc = (Array.isArray(m.cost_model_scenarios) ? m.cost_model_scenarios[0] : (m.cost_model_scenarios || null));
           const labelRaw = (sc?.scenario_label || m.scenario_label || '').toString().trim() || 'Scenario';
           const status = sc?.status || 'draft';
           const statusBg = status === 'approved' ? 'rgba(22,163,74,0.10)'
@@ -11211,13 +11211,13 @@ function renderLanding() {
                   // record (legacy duplicates) render as solo cards via the existing renderCard.
                   const scenById = new Map();
                   for (const m of items) {
-                    const sc = Array.isArray(m.cost_model_scenarios) ? m.cost_model_scenarios[0] : null;
+                    const sc = (Array.isArray(m.cost_model_scenarios) ? m.cost_model_scenarios[0] : (m.cost_model_scenarios || null));
                     if (sc) scenById.set(sc.id, { model: m, sc });
                   }
                   const families = new Map(); // key -> { baseline, children: [], rootSc }
                   const solo = [];
                   for (const m of items) {
-                    const sc = Array.isArray(m.cost_model_scenarios) ? m.cost_model_scenarios[0] : null;
+                    const sc = (Array.isArray(m.cost_model_scenarios) ? m.cost_model_scenarios[0] : (m.cost_model_scenarios || null));
                     if (!sc) { solo.push(m); continue; }
                     let rootSc = sc;
                     let guard = 0;
