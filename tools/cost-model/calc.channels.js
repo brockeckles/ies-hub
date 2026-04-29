@@ -355,6 +355,30 @@ export function getTotalReturns(model, toUom = 'units') {
 }
 
 /**
+ * Total inbound volume across non-reverse channels in a target UOM.
+ * Each channel's inbound = primary (units) x inboundOutboundRatio, then
+ * converted to the target UOM using that channel's conversion factors.
+ *
+ * Used by Phase 3 calc consumers that previously read pallet-UOM
+ * volumeLines directly (equipment auto-gen, racking startup capital,
+ * facility-size heuristic). The legacy "annualPalletsIn" was simply
+ * volumeLines.filter(v => v.uom === 'pallet').sum; the channel-aware
+ * equivalent honors each channel's inbound:outbound ratio + conversions.
+ *
+ * @param {Object} model
+ * @param {string} [toUom='units']
+ * @returns {number}
+ */
+export function getAggregateInbound(model, toUom = 'units') {
+  const channels = getOutboundChannels(model);
+  return channels.reduce((sum, c) => {
+    const derivedUnits = getChannelDerived(model, c, 'inbound').value;
+    if (toUom === 'units') return sum + derivedUnits;
+    return sum + convertUom(derivedUnits, 'units', toUom, c.conversions);
+  }, 0);
+}
+
+/**
  * Channel mix (% of total annual outbound volume per channel, in units).
  * Returns [{channelKey, name, pct, annualUnits}, ...]. Excludes reverse.
  *

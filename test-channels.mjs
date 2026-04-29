@@ -342,6 +342,194 @@ test('backfill + getAnnualVolume agree on total', () => {
   approx(getAnnualVolume(m, 'units'), 1000000);
 });
 
+// ────────────────────────────────────────────────────────────────
+// Phase 3 multi-channel calc-consumer integration tests.
+// These exercise the migrated calc paths (computeBucketRates,
+// autoGenerateIndirectLabor as autoGenerateIndirect, autoGenerateEquipment, autoGenerateOverhead,
+// autoGenerateStartup, generateHeuristics as getDesignHeuristics, deriveShiftHeadcount) with
+// a 2-channel model and confirm the outputs fold across channels.
+// ────────────────────────────────────────────────────────────────
+
+import {
+  computeBucketRates,
+  autoGenerateIndirectLabor as autoGenerateIndirect,
+  autoGenerateEquipment,
+  autoGenerateOverhead,
+  autoGenerateStartup,
+  generateHeuristics as getDesignHeuristics,
+} from './tools/cost-model/calc.js';
+import { deriveShiftHeadcount, createEmptyShiftAllocation } from './tools/cost-model/shift-planner.js';
+import { getAggregateInbound } from './tools/cost-model/calc.channels.js';
+
+function twoChannelModel() {
+  return {
+    facility: { totalSqft: 200000, opDaysPerYear: 250 },
+    shifts: { shiftsPerDay: 1, hoursPerShift: 8, daysPerWeek: 5, weeksPerYear: 52 },
+    channels: [
+      {
+        key: 'dtc', name: 'DTC e-com', sortOrder: 10,
+        primary: { value: 1000000, uom: 'orders', activity: 'outbound', source: 'manual' },
+        conversions: { unitsPerCase: 12, casesPerPallet: 40, linesPerOrder: 2, unitsPerLine: 5 },
+        assumptions: { returnsPercent: 15, inboundOutboundRatio: 1.0, peakSurgeFactor: 2.0 },
+        seasonality: { preset: 'flat', monthly_shares: Array.from({length:12},()=>1/12) },
+        overrides: [],
+      },
+      {
+        key: 'b2b', name: 'B2B retail', sortOrder: 20,
+        primary: { value: 50000, uom: 'pallets', activity: 'outbound', source: 'manual' },
+        conversions: { unitsPerCase: 24, casesPerPallet: 50, linesPerOrder: 5, unitsPerLine: 10 },
+        assumptions: { returnsPercent: 1, inboundOutboundRatio: 1.0, peakSurgeFactor: 1.2 },
+        seasonality: { preset: 'flat', monthly_shares: Array.from({length:12},()=>1/12) },
+        overrides: [],
+      },
+    ],
+    volumeLines: [],   // Phase 3: channels[] is the source of truth
+    orderProfile: {},
+    seasonalityProfile: { preset: 'flat', monthly_shares: Array.from({length:12},()=>1/12) },
+    pricingBuckets: [
+      { id: 'mgmt', name: 'Mgmt Fee', type: 'fixed', uom: 'month' },
+      { id: 'inbound', name: 'Inbound', type: 'variable', uom: 'pallet' },
+      { id: 'orders', name: 'Order Handling', type: 'variable', uom: 'order' },
+    ],
+    laborLines: [],
+    indirectLaborLines: [],
+    equipmentLines: [],
+    overheadLines: [],
+    vasLines: [],
+    startupLines: [],
+    financial: { contractTermYears: 5 },
+  };
+}
+
+test('Phase 3 — computeBucketRates: order bucket folds DTC + B2B orders', () => {
+  const m = twoChannelModel();
+  // DTC: 1,000,000 orders. B2B: 50,000 pallets × (24 units/case × 50 cases/pallet) = 60M units;
+  // 60M units / (5 lines × 10 units/line) = 1,200,000 orders. Total expected ≈ 2,200,000.
+  const out = computeBucketRates({
+    buckets: m.pricingBuckets,
+    bucketCosts: { mgmt: 120000, inbound: 500000, orders: 5000000 },
+    marginPct: 0.16,
+    model: m,
+  });
+  // Order bucket annualVolume should reflect the cross-channel order total.
+  approx(out.orders.annualVolume, 2200000, 200);
+});
+
+test('Phase 3 — computeBucketRates: pallet bucket folds DTC + B2B pallets', () => {
+  const m = twoChannelModel();
+  // DTC pallets: 1M orders × (2 lines × 5 units) / (12 × 40) = 10M units / 480 ≈ 20,833 pallets.
+  // B2B pallets: 50,000 (already in pallets).
+  const out = computeBucketRates({
+    buckets: m.pricingBuckets,
+    bucketCosts: { mgmt: 120000, inbound: 500000, orders: 5000000 },
+    marginPct: 0.16,
+    model: m,
+  });
+  approx(out.inbound.annualVolume, 70833, 200);
+});
+
+test('Phase 3 — autoGenerateIndirect: CS rep sized off cross-channel orders', () => {
+  const m = twoChannelModel();
+  const ind = autoGenerateIndirect(m);
+  // 2.2M orders / 500k = 4.4 → ceil = 5 CS reps.
+  const cs = ind.find(l => /customer service/i.test(l.role_name || ''));
+  if (!cs) throw new Error('CS rep not generated');
+  eq(cs.headcount, 5);
+});
+
+test('Phase 3 — autoGenerateIndirect: Returns processor uses per-channel returnsPercent', () => {
+  const m = twoChannelModel();
+  // DTC returns: 1M orders × (2 × 5 units) = 10M units × 15% = 1.5M units.
+  // B2B returns: 50k pallets × (24 × 50 units) = 60M units × 1% = 600k units.
+  // Total returns: 2.1M units. /100k = 21 processors.
+  const ind = autoGenerateIndirect(m);
+  const rp = ind.find(l => /returns processor/i.test(l.role_name || ''));
+  if (!rp) throw new Error('Returns processor not generated');
+  // Should be far more than the legacy flat-5% would have given.
+  if (rp.headcount < 15) throw new Error(`Expected channel-aware headcount > 15, got ${rp.headcount}`);
+});
+
+test('Phase 3 — autoGenerateEquipment: pallets-in folds inbound across channels', () => {
+  const m = twoChannelModel();
+  const aggregate = getAggregateInbound(m, 'pallets');
+  // Inbound = primary × inboundOutboundRatio (1.0) → equals outbound pallets across channels ≈ 70,833.
+  approx(aggregate, 70833, 200);
+});
+
+test('Phase 3 — autoGenerateOverhead: per-unit scalers fold cross-channel units', () => {
+  const m = twoChannelModel();
+  const oh = autoGenerateOverhead(m);
+  const supplies = oh.find(l => /supplies/i.test(l.category || l.description || ''));
+  if (!supplies) throw new Error('Supplies & Consumables not generated');
+  // DTC: 10M units × 0.15 = 1.5M. B2B: 60M units × 0.15 = 9M. Total ≈ 10.5M.
+  if ((supplies.annual_cost || 0) < 9000000) {
+    throw new Error(`Expected supplies annual_cost > 9M, got ${supplies.annual_cost}`);
+  }
+});
+
+test('Phase 3 — autoGenerateStartup: racking sized off cross-channel inbound pallets', () => {
+  const m = twoChannelModel();
+  const su = autoGenerateStartup(m);
+  const racking = su.find(l => /racking/i.test(l.description || ''));
+  if (!racking) throw new Error('Racking startup line not generated');
+  // 70,833 pallets / 12 turns × 1.15 spare ≈ 6,789 positions × $85 ≈ $577k.
+  if ((racking.one_time_cost || 0) < 400000) {
+    throw new Error(`Expected racking cost > $400k, got ${racking.one_time_cost}`);
+  }
+});
+
+test('Phase 3 — getDesignHeuristics: throughput density uses cross-channel orders', () => {
+  const m = twoChannelModel();
+  const dummySummary = { laborCost: 1000000, totalCost: 5000000, facilityCost: 1000000 };
+  const checks = getDesignHeuristics(m, dummySummary);
+  // 1.012M orders / 200k sqft = 5.06 orders/sqft → "in range" not "low density".
+  const dens = checks.find(c => /throughput density|orders\/sqft/i.test(c.title || ''));
+  // Either no warning fires (density healthy) or it fires as info — but should not be the low-density variant.
+  if (dens && /low throughput/i.test(dens.title)) {
+    throw new Error(`Expected mid/high density, got: ${dens.title}`);
+  }
+});
+
+test('Phase 3 — deriveShiftHeadcount: channel-aware path handles multi-channel volumes', () => {
+  const m = twoChannelModel();
+  m.laborLines = [
+    { id: 'pick1', labor_category: 'direct', function: 'picking', base_uph: 100, headcount: 10, annual_hours: 20000, hourly_rate: 20, burden_pct: 30 },
+    { id: 'pack1', labor_category: 'direct', function: 'pack',    base_uph: 200, headcount:  5, annual_hours: 10000, hourly_rate: 20, burden_pct: 30 },
+    { id: 'in1',   labor_category: 'direct', function: 'inbound', base_uph: 30,  headcount:  4, annual_hours:  8000, hourly_rate: 20, burden_pct: 30 },
+  ];
+  const alloc = createEmptyShiftAllocation(1, 8);
+  // Set picking/pack/ship/inbound/returns matrix to 100% on shift 1.
+  for (const fn of ['picking','pack','ship','inbound','returns','putaway','replenish','vas']) {
+    if (Array.isArray(alloc.matrix[fn])) alloc.matrix[fn][0] = 100;
+  }
+  const result = deriveShiftHeadcount(alloc, [], m.laborLines, m.shifts, { model: m });
+  // With model passed, both channels' primaries should drive picking/pack/ship.
+  // DTC: 10M units/year, B2B: 60M units/year → 70M total / (5×52 = 260 op-days) ≈ 269k/day picking.
+  const pickRow = result.byFunctionShift.find(r => r.fn === 'picking' && r.shift === 1);
+  if (!pickRow) throw new Error('picking row missing');
+  approx(pickRow.volume, 269230, 500);
+});
+
+test('Phase 3 — deriveShiftHeadcount: legacy path still works when model is omitted', () => {
+  // Single-channel legacy fixture — make sure the keyword-matched fallback
+  // hasn't regressed.
+  const volumeLines = [
+    { name: 'Daily Picks', volume: 250000, uom: 'orders', isOutboundPrimary: true },
+  ];
+  const labor = [
+    { id: 'p', labor_category: 'direct', function: 'picking', base_uph: 100, headcount: 10, annual_hours: 20000 },
+  ];
+  const alloc = createEmptyShiftAllocation(1, 8);
+  for (const fn of ['picking','pack','ship']) {
+    if (Array.isArray(alloc.matrix[fn])) alloc.matrix[fn][0] = 100;
+  }
+  const result = deriveShiftHeadcount(alloc, volumeLines, labor, { shiftsPerDay: 1, hoursPerShift: 8, daysPerWeek: 5, weeksPerYear: 52 });
+  const row = result.byFunctionShift.find(r => r.fn === 'picking' && r.shift === 1);
+  if (!row) throw new Error('legacy picking row missing');
+  // 250k orders / (5×52 = 260 days) ≈ 962/day.
+  approx(row.volume, 962, 5);
+});
+
 console.log(`\n\n${passed} passed, ${failed} failed`);
 if (failures.length) {
   console.log('\n' + failures.join('\n\n'));

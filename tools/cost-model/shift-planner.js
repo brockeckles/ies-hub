@@ -18,6 +18,13 @@
  * @module tools/cost-model/shift-planner
  */
 
+import {
+  getOutboundChannels as _getOutboundChannels,
+  getChannels as _getChannels,
+  getChannelPrimaryIn as _getChannelPrimaryIn,
+  getChannelDerived as _getChannelDerived,
+} from './calc.channels.js?v=20260429-vol8';
+
 // The canonical function vocabulary. Keep in sync with the CHECK in the
 // ref_shift_archetype_defaults matrix JSONB schema.
 export const FUNCTION_ORDER = [
@@ -353,6 +360,13 @@ export function normalizeShiftMatrix(allocation, nowIso) {
  * @param {number} [opts.absenceAllowancePct]
  * @param {Record<string,number>} [opts.shiftPremiumPct]  e.g. { '2': 5, '3': 10 }
  * @param {number} [opts.operatingDaysPerYear]
+ * @param {Object} [opts.model]   full cost-model state. When passed (Phase 3
+ *   of volumes-as-nucleus), daily volume by function is derived from
+ *   `model.channels[]` instead of the keyword-matched volumeLines. Each
+ *   non-reverse channel contributes its primary-units to picking/pack/ship,
+ *   its derived inbound to inbound, and its derived returns to returns; the
+ *   reverse channel (if present) adds to returns. Falls back to the legacy
+ *   keyword-matched volumeLines path when model is absent.
  * @param {number[]} [opts.dowVolumeMultipliers]   7-element Mon..Sun multiplier
  *   on daily volume. Default `[1,1,1,1,1,0,0]` (M-F uniform, weekend off).
  *   SP-2: lets users express weekend volume falloff (e.g., Sat at 0.5).
@@ -421,10 +435,14 @@ export function deriveShiftHeadcount(allocation, volumeLines, laborLines, shifts
   const absence = (Number(o.absenceAllowancePct) || 0) / 100;               // 0..1
   const productiveHoursPerShift = Math.max(1, hoursPerShift * (1 - absence));
 
-  // Daily volume per function. If a volumeLine matches a function keyword we
-  // use it; fall back to split the outbound-primary volume across picking/
-  // pack/ship when no explicit function matches (covers most projects today).
-  const dailyVolumeByFn = computeDailyVolumeByFunction(volumeLines, operatingDays);
+  // Daily volume per function. Phase 3 of volumes-as-nucleus: when the
+  // caller passes `opts.model`, daily volumes derive from channels[]
+  // (multi-channel-aware). Otherwise we fall through to the legacy keyword
+  // match against volumeLines (single-channel projects work either way
+  // since dual-write keeps volumeLines populated for channels[0]).
+  const dailyVolumeByFn = o.model
+    ? computeDailyVolumeByFunctionFromChannels(o.model, operatingDays)
+    : computeDailyVolumeByFunction(volumeLines, operatingDays);
 
   // Aggregate UPH per function from laborLines (weighted by line's uph × hc).
   // Lines without a matching function are ignored for the derivation (they
@@ -897,6 +915,68 @@ export function deriveFunctionForLine(line) {
     if (/ship|outbound|load/.test(proc)) return 'ship';
   }
   return null;
+}
+
+/**
+ * Channel-aware daily-volume-by-function derivation (Phase 3 of
+ * volumes-as-nucleus). Replaces the keyword-matched volumeLines path for
+ * multi-channel models — each (non-reverse) channel contributes its primary
+ * volume to picking/pack/ship, its derived inbound to inbound, and its
+ * derived returns to returns. The reverse channel (if any) feeds returns.
+ *
+ * Same downstream physical-logic inferences as the legacy path:
+ *   putaway   ← inbound
+ *   replenish ← picking x 0.4
+ *   vas       ← picking x 0.1
+ *
+ * @param {Object} model
+ * @param {number} operatingDays
+ * @returns {Record<string, number>}
+ */
+function computeDailyVolumeByFunctionFromChannels(model, operatingDays) {
+  const out = {};
+  for (const fn of FUNCTION_ORDER) out[fn] = 0;
+  const opDays = Math.max(1, operatingDays);
+
+  // Outbound channels — primary in units drives picking/pack/ship; derived
+  // inbound drives inbound; derived returns drives returns.
+  const outboundChannels = _getOutboundChannels(model);
+  let outboundUnits = 0;
+  let inboundUnits = 0;
+  let returnsUnits = 0;
+  for (const c of outboundChannels) {
+    outboundUnits += _getChannelPrimaryIn(c, 'units');
+    inboundUnits  += _getChannelDerived(model, c, 'inbound').value;
+    returnsUnits  += _getChannelDerived(model, c, 'returns').value;
+  }
+
+  // Reverse channel (if any) — its primary IS the returns flow. Add on top
+  // of the per-outbound-channel returnsPercent contributions; the reverse
+  // primary is itself auto-derived from outbound returns when no override is
+  // pinned, so this read won't double-count for typical models.
+  const reverseChannels = _getChannels(model).filter(c =>
+    !c.hidden && c.primary && c.primary.activity === 'returns'
+  );
+  let reverseUnits = 0;
+  for (const c of reverseChannels) {
+    reverseUnits += _getChannelPrimaryIn(c, 'units');
+  }
+  // Prefer the reverse channel's own primary when present (designer authority);
+  // otherwise use the per-outbound-channel returns aggregate.
+  const totalReturnsUnits = reverseUnits > 0 ? reverseUnits : returnsUnits;
+
+  out.picking = outboundUnits / opDays;
+  out.pack    = outboundUnits / opDays;
+  out.ship    = outboundUnits / opDays;
+  out.inbound = inboundUnits  / opDays;
+  out.returns = totalReturnsUnits / opDays;
+
+  // Same inferred borrows as the legacy path.
+  if (out.putaway === 0 && out.inbound > 0) out.putaway = out.inbound;
+  if (out.replenish === 0 && out.picking > 0) out.replenish = out.picking * 0.4;
+  if (out.vas === 0 && out.picking > 0) out.vas = out.picking * 0.1;
+
+  return out;
 }
 
 function computeDailyVolumeByFunction(volumeLines, operatingDays) {

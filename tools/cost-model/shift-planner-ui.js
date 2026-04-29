@@ -78,6 +78,7 @@ export function renderShiftPlanningSection(ctx) {
     shiftPremiumPct: premiumMap,
     dowVolumeMultipliers,
     dowPremiumPct,
+    model,
   });
   const indirectLines = Array.isArray(model.indirectLaborLines) ? model.indirectLaborLines : [];
   const indirectByShift = deriveIndirectByShift(indirectLines, derived.byShift || []);

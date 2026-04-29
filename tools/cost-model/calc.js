@@ -16,6 +16,12 @@
 
 import * as monthly from './calc.monthly.js?v=20260421-xE';
 import { deriveFunctionForLine as _deriveFunctionForLine } from './shift-planner.js?v=20260427-pm3-s2';
+import {
+  getAnnualVolume as _getAnnualVolume,
+  getAggregateDerived as _getAggregateDerived,
+  getAggregateInbound as _getAggregateInbound,
+  getOutboundChannels as _getOutboundChannels,
+} from './calc.channels.js?v=20260429-vol8';
 
 // ============================================================
 // MARGIN / GROSS-UP
@@ -2209,17 +2215,35 @@ export function computeBucketCosts(params) {
  * @param {Array} params.buckets — model.pricingBuckets
  * @param {Record<string, number>} params.bucketCosts — output of computeBucketCosts
  * @param {number} params.marginPct — target margin (0-based fraction, e.g. 0.16)
- * @param {Array} [params.volumeLines] — model.volumeLines (used when bucket.annualVolume is unset)
+ * @param {Object} [params.model] — full cost-model state; when present, volume-by-UOM
+ *   is computed channel-aware via getAnnualVolume(). Phase 3 of volumes-as-nucleus.
+ * @param {Array} [params.volumeLines] — legacy fallback when no model is passed
+ *   (used only by tests + any pre-Phase-3 caller still on the old shape).
  * @returns {Record<string, { rate: number, annualVolume: number, withMargin: number }>}
  */
 export function computeBucketRates(params) {
-  const { buckets = [], bucketCosts = {}, marginPct = 0, volumeLines = [] } = params;
+  const { buckets = [], bucketCosts = {}, marginPct = 0, volumeLines = [], model = null } = params;
 
-  // Volume-by-UOM lookup (matches Pricing UI logic)
+  // Volume-by-UOM lookup. Channel-aware path (Phase 3): when a model is
+  // provided, each bucket's UOM is resolved by summing every (non-reverse)
+  // channel's primary volume converted into that UOM. Multi-channel deals
+  // therefore fold DTC orders + B2B orders + EDI orders into the orders UOM
+  // total for the order-handling bucket. Legacy path kept for tests + any
+  // caller that still passes raw volumeLines.
   const volumeByUom = {};
-  for (const vl of volumeLines) {
-    const key = vl.uom || 'each';
-    volumeByUom[key] = (volumeByUom[key] || 0) + (Number(vl.volume) || 0);
+  if (model) {
+    const uomsNeeded = new Set();
+    for (const b of buckets) {
+      if (b && b.type !== 'fixed' && b.uom) uomsNeeded.add(String(b.uom));
+    }
+    for (const uom of uomsNeeded) {
+      volumeByUom[uom] = _getAnnualVolume(model, uom);
+    }
+  } else {
+    for (const vl of volumeLines) {
+      const key = vl.uom || 'each';
+      volumeByUom[key] = (volumeByUom[key] || 0) + (Number(vl.volume) || 0);
+    }
   }
 
   // Reference-aligned gross-up: Cost / (1 − margin). Guarded.
@@ -2582,6 +2606,7 @@ export function validateModel(model, opts = {}) {
         buckets, bucketCosts,
         marginPct: targetMarginPct / 100,
         volumeLines: model.volumeLines || [],
+        model,
       });
       const impact = computeOverrideImpact(enriched);
       const totalCost = Object.entries(bucketCosts).reduce(
@@ -2605,12 +2630,14 @@ export function validateModel(model, opts = {}) {
     }
   }
 
-  // Volumes
-  const orderVol = (model.volumeLines || []).find(v =>
-    v.name?.toLowerCase().includes('order') && v.isOutboundPrimary
-  );
-  if (!orderVol || (orderVol.volume || 0) <= 0) {
-    warnings.push({ level: 'warning', area: 'volumes', message: 'No primary outbound order volume defined — unit cost metrics will be inaccurate' });
+  // Volumes — channel-aware (Phase 3 of volumes-as-nucleus). Warn when no
+  // outbound channel carries any positive primary volume. This catches the
+  // single-channel "user forgot to enter volumes" case AND the multi-channel
+  // "all channels are zero" case in one check.
+  const outboundChannels = _getOutboundChannels(model);
+  const hasOutboundVolume = outboundChannels.some(c => (Number(c.primary?.value) || 0) > 0);
+  if (!hasOutboundVolume) {
+    warnings.push({ level: 'warning', area: 'volumes', message: 'No primary outbound volume defined — unit cost metrics will be inaccurate' });
   }
 
   return warnings;
@@ -2894,20 +2921,25 @@ export function autoGenerateIndirectLabor(state, opts = {}) {
   addRole('Receiving / Shipping Clerk', Math.max(1, shiftsPerDay), 18, 30,
     { code: 'indirect.recv_ship_clerk.per_shift', label: '1 clerk per shift', value: 1, source: 'legacy', legacy_value: 1 });
 
-  // 6. Customer Service: 1 per 500K orders/yr
-  const annualOrders = (state.volumeLines || [])
-    .filter(v => v.isOutboundPrimary)
-    .reduce((s, v) => s + (v.volume || 0), 0) || 0;
+  // 6. Customer Service: 1 per 500K orders/yr — channel-aware aggregate
+  // (Phase 3 of volumes-as-nucleus). Sums each non-reverse channel's derived
+  // orders, override-aware. Single-channel deals match the legacy filter on
+  // isOutboundPrimary; multi-channel deals now correctly fold DTC + B2B.
+  const annualOrders = _getAggregateDerived(state, 'orders');
   if (annualOrders >= 500000) {
     addRole('Customer Service Rep', Math.ceil(annualOrders / 500000), 18, 30,
       { code: 'indirect.customer_service.per_500k_orders', label: '1 CS rep per 500K orders/yr', value: 500000, source: 'legacy', legacy_value: 500000 });
   }
 
-  // 7. Returns Processor: 1 per 100K returns/yr (estimate as 5% of outbound orders)
-  const estimatedReturns = annualOrders * 0.05;
+  // 7. Returns Processor: 1 per 100K returns/yr — channel-aware (Phase 3).
+  // Each channel contributes its primary-units × that channel's own
+  // returnsPercent assumption. Replaces the flat 5%-of-orders heuristic so
+  // a deal mixing 15%-return DTC with 1%-return B2B sizes the role correctly
+  // instead of averaging into noise.
+  const estimatedReturns = _getAggregateDerived(state, 'returns');
   if (estimatedReturns >= 100000) {
     addRole('Returns Processor', Math.ceil(estimatedReturns / 100000), 17, 30,
-      { code: 'indirect.returns_processor.per_100k_returns', label: '1 processor per 100K returns/yr (5% of outbound)', value: 100000, source: 'legacy', legacy_value: 100000 });
+      { code: 'indirect.returns_processor.per_100k_returns', label: '1 processor per 100K returns/yr (per-channel returns%)', value: 100000, source: 'channels', legacy_value: 100000 });
   }
 
   // 8. IT Support: 0.5-2 based on FTE count
@@ -3107,12 +3139,14 @@ export function autoGenerateEquipment(state, opts = {}) {
   const securityTier    = Number(state.facility?.securityTier ?? state.facility?.security_tier ?? 3);
   const fencedLf        = Number(state.facility?.fencedPerimeterLf ?? state.facility?.fenced_perimeter_lf ?? 0);
 
-  const annualOrders = (state.volumeLines || [])
-    .filter(v => v.isOutboundPrimary)
-    .reduce((s, v) => s + (v.volume || 0), 0) || 0;
-  const annualPalletsIn = (state.volumeLines || [])
-    .filter(v => v.uom === 'pallet')
-    .reduce((s, v) => s + (v.volume || 0), 0) || 0;
+  // Equipment auto-gen volume reads — channel-aware (Phase 3 of
+  // volumes-as-nucleus). annualOrders sums each channel's derived orders;
+  // annualPalletsIn aggregates each channel's inbound (= primary-units ×
+  // inboundOutboundRatio) converted to pallets via that channel's own
+  // conversion factors. Multi-channel deals now correctly size MHE/dock
+  // doors against true cross-channel demand.
+  const annualOrders = _getAggregateDerived(state, 'orders');
+  const annualPalletsIn = _getAggregateInbound(state, 'pallets');
 
   // ────────────────────────────────────────────────────────────────
   // 1. MHE — forklifts (Leased per reference model; vendor-financed,
@@ -3437,13 +3471,13 @@ export function autoGenerateOverhead(state) {
     addOh('Uniforms & PPE', 'Safety vests, gloves, boots, hard hats, eye protection', (totalHC + annualHires) * 400);
   }
 
-  // PER-UNIT SCALERS
-  const annualOrders = (state.volumeLines || [])
-    .filter(v => v.isOutboundPrimary)
-    .reduce((s, v) => s + (v.volume || 0), 0) || 0;
-  const annualUnitsShipped = annualOrders + ((state.volumeLines || [])
-    .filter(v => v.uom === 'pallet')
-    .reduce((s, v) => s + (v.volume || 0), 0) || 0);
+  // PER-UNIT SCALERS — channel-aware (Phase 3 of volumes-as-nucleus).
+  // annualOrders sums each non-reverse channel's derived orders.
+  // annualUnitsShipped is now the sum of each channel's primary expressed
+  // in physical units (replaces the legacy "orders + pallet-uom volumes"
+  // heuristic, which conflated transactions and physical units).
+  const annualOrders = _getAggregateDerived(state, 'orders');
+  const annualUnitsShipped = _getAnnualVolume(state, 'units');
 
   if (annualUnitsShipped > 0) {
     addOh('Supplies & Consumables', 'Stretch wrap, labels, tape, dunnage, cleaning', annualUnitsShipped * 0.15);
@@ -3483,10 +3517,10 @@ export function autoGenerateStartup(state) {
     }
   };
 
-  // 1. Racking capital — $85/pallet position
-  const annualPalletsIn = (state.volumeLines || [])
-    .filter(v => v.uom === 'pallet')
-    .reduce((s, v) => s + (v.volume || 0), 0) || 0;
+  // 1. Racking capital — $85/pallet position. Channel-aware (Phase 3 of
+  // volumes-as-nucleus): aggregate inbound across channels honoring each
+  // channel's inboundOutboundRatio + pallet-conversion factors.
+  const annualPalletsIn = _getAggregateInbound(state, 'pallets');
   if (annualPalletsIn > 0) {
     const turnsPerYear = 12;
     const avgPalletsOnHand = Math.ceil(annualPalletsIn / turnsPerYear);
@@ -3582,9 +3616,8 @@ export function generateHeuristics(state, summary) {
   const totalIndirectHC = (state.indirectLaborLines || []).reduce((s, l) => s + (l.headcount || 0), 0);
   const totalHC = Math.ceil(totalDirectFtes) + totalIndirectHC;
   const sqft = state.facility?.totalSqft || 0;
-  const annualOrders = (state.volumeLines || [])
-    .filter(v => v.isOutboundPrimary)
-    .reduce((s, v) => s + (v.volume || 0), 0) || 0;
+  // Channel-aware orders aggregate (Phase 3 of volumes-as-nucleus).
+  const annualOrders = _getAggregateDerived(state, 'orders');
 
   const pct = (part, whole) => whole > 0 ? (part / whole * 100) : 0;
 
@@ -3720,9 +3753,11 @@ export function generateHeuristics(state, summary) {
   // thumb — pallet area / 0.55 adds aisle + cross-aisle + staging + dock.
   // Still rough; the message points users at WSC for a sized recommendation.
   if (annualOrders > 0 && sqft > 0) {
-    const palletsStored = ((state.volumeLines || [])
-      .filter(v => v.uom === 'pallet')
-      .reduce((s, v) => s + (v.volume || 0), 0) || 0) / 2 / 12;
+    // Channel-aware aggregate inbound in pallets (Phase 3 of
+    // volumes-as-nucleus). The /2/12 keeps the existing average-inventory
+    // heuristic; CM-HEUR-1 is parked for a separate fix to the heuristic
+    // itself.
+    const palletsStored = _getAggregateInbound(state, 'pallets') / 2 / 12;
     if (palletsStored > 0) {
       const estPalletArea = palletsStored * 40;
       // 55% net storage utilization → divide by 0.55, round to nearest 1K

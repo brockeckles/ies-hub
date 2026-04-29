@@ -12,10 +12,10 @@ import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260424-hyg04';
 import * as calc from './calc.js?v=20260427-s2';
-import * as api from './api.js?v=20260429-vol7';
+import * as api from './api.js?v=20260429-vol8';
 import * as scenarios from './calc.scenarios.js?v=20260429-otfix1';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
-import * as channelCalc from './calc.channels.js?v=20260429-vol1';
+import * as channelCalc from './calc.channels.js?v=20260429-vol8';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
 import * as shiftPlannerCalc from './shift-planner.js?v=20260427-pm3-s2';
 import * as shiftPlannerUi from './shift-planner-ui.js?v=20260428-walkthru1';
@@ -6096,7 +6096,7 @@ function renderPricing() {
   // Single source of truth — enriched buckets carry recommendedRate +
   // overrideRate + effective rate, matching what the monthly engine reads.
   const enriched = calc.enrichBucketsWithDerivedRates({
-    buckets, bucketCosts, marginPct, volumeLines: model.volumeLines || [],
+    buckets, bucketCosts, marginPct, volumeLines: model.volumeLines || [], model,
   });
   const impact = calc.computeOverrideImpact(enriched);
   // Snapshot for the override-audit listener — see bindSectionEvents. The
@@ -9030,6 +9030,7 @@ function computeWhatIfPreview(overlay) {
             bucketCosts,
             marginPct: whatIfMarginFrac || 0,
             volumeLines: model.volumeLines || [],
+            model,
           });
         })()
       : buildEnrichedPricingBuckets(summary, whatIfMarginFrac, opHrs, contractYears);
@@ -12231,6 +12232,7 @@ function computePricingSnapshot(summary, marginFrac, opHrs, contractYears) {
     bucketCosts,
     marginPct: marginFrac || 0,
     volumeLines: model.volumeLines || [],
+    model,
   });
 
   return {
