@@ -256,6 +256,7 @@ function openNewOppModal() {
         viewMode = 'detail';
         detailTab = 'overview';
         render();
+        _hydrateDealDetail(created.id);
       } else {
         render();
       }
@@ -308,7 +309,13 @@ function bindDelegatedEvents() {
     if (deal) {
       const id = /** @type {HTMLElement} */ (deal).dataset.deal;
       selectedDeal = DEALS.find(d => d.id === id) || null;
-      if (selectedDeal) { viewMode = 'detail'; detailTab = 'overview'; render(); }
+      if (selectedDeal) {
+        viewMode = 'detail';
+        detailTab = 'overview';
+        render();
+        // Async hydrate for real deals (strategy + artifacts + DOS status).
+        _hydrateDealDetail(selectedDeal.id);
+      }
       return;
     }
 
@@ -433,25 +440,35 @@ function bindDelegatedEvents() {
       const key = /** @type {HTMLElement} */ (addBtn).dataset.strategyAdd;
       if (selectedDeal) {
         const s = getStrategy(selectedDeal.id);
-        if (Array.isArray(s[key])) { s[key].push(''); renderDetailContent(); }
+        if (Array.isArray(s[key])) {
+          s[key].push('');
+          renderDetailContent();
+          _scheduleStrategySave(selectedDeal.id);
+        }
       }
       return;
     }
   });
 
-  // Strategy inputs — debounced via input event
+  // Strategy inputs — debounced upsert via _scheduleStrategySave
   rootEl.addEventListener('input', (e) => {
     const t = /** @type {HTMLElement} */ (e.target);
     if (!selectedDeal) return;
+    let edited = false;
     if (t.matches('[data-strategy-field]')) {
       const s = getStrategy(selectedDeal.id);
       s[t.dataset.strategyField] = /** @type {HTMLInputElement} */ (t).value;
+      edited = true;
     } else if (t.matches('[data-strategy-list]')) {
       const s = getStrategy(selectedDeal.id);
       const list = s[t.dataset.strategyList];
       const idx = parseInt(t.dataset.strategyIdx, 10);
-      if (Array.isArray(list) && !isNaN(idx)) list[idx] = /** @type {HTMLInputElement} */ (t).value;
+      if (Array.isArray(list) && !isNaN(idx)) {
+        list[idx] = /** @type {HTMLInputElement} */ (t).value;
+        edited = true;
+      }
     }
+    if (edited) _scheduleStrategySave(selectedDeal.id);
   });
 }
 
@@ -511,16 +528,34 @@ function openAddArtifactModal() {
 }
 
 function toggleDosElement(elemId) {
-  // Find and toggle the element in our template data
+  // Per-deal status overlay — does NOT mutate the global DOS_TEMPLATES catalog.
+  // Cycle: pending -> in-progress -> complete -> in-progress (matches old
+  // behavior where the catalog default was the seed).
+  if (!selectedDeal) return;
+  // Locate template by id to confirm it exists (defensive — stale clicks etc.)
+  let found = null;
   for (const stageTemplates of Object.values(DOS_TEMPLATES)) {
     const tpl = stageTemplates.find(t => t.id === elemId);
-    if (tpl) {
-      if (tpl.status === 'complete') tpl.status = 'in-progress';
-      else if (tpl.status === 'in-progress') tpl.status = 'complete';
-      else tpl.status = 'in-progress';
+    if (tpl) { found = tpl; break; }
+  }
+  if (!found) return;
+  const dealId = selectedDeal.id;
+  const overlay = _dosOverlay(dealId);
+  const current = overlay.has(elemId) ? overlay.get(elemId) : (found.status || 'pending');
+  let next;
+  if (current === 'complete')          next = 'in-progress';
+  else if (current === 'in-progress')  next = 'complete';
+  else                                 next = 'in-progress';
+  overlay.set(elemId, next);
+  renderDetailContent();
+  // Persist for real deals; demo deals stay in-memory.
+  if (_isRealDealId(dealId)) {
+    api.setDosElementStatus(dealId, elemId, next).catch(err => {
+      // Roll back overlay on persist failure to keep UI honest with DB.
+      overlay.set(elemId, current);
       renderDetailContent();
-      return;
-    }
+      bus.emit('toast:show', { message: 'DOS save failed: ' + (err.message || err), level: 'error' });
+    });
   }
 }
 
@@ -834,12 +869,13 @@ function renderDetail() {
   const siteCount = Array.isArray(d.sites) ? d.sites.length : d.sites;
   const totalSqft = Array.isArray(d.sites) ? d.sites.reduce((s, site) => s + (site.sqft || 0), 0) : 0;
 
-  // Calculate DOS completion
+  // Calculate DOS completion (applies per-deal overlay so real deals show
+  // their persisted progress, not the global catalog default).
   let totalElements = 0, completedElements = 0;
   for (let s = 1; s <= d.stage; s++) {
     const templates = DOS_TEMPLATES[s] || [];
     totalElements += templates.length;
-    completedElements += templates.filter(t => t.status === 'complete').length;
+    completedElements += templates.filter(t => _dosStatusFor(d.id, t) === 'complete').length;
   }
   const dosCompletion = totalElements > 0 ? Math.round((completedElements / totalElements) * 100) : 0;
 
@@ -1012,6 +1048,132 @@ function getArtifacts(dealId) {
   }
   _artifactsByDeal.set(dealId, seeded);
   return seeded;
+}
+
+// =============================================================
+// 2026-04-29 — DM persistence helpers (uuid check / hydrate / debounced save)
+// =============================================================
+// These functions were referenced by the DM persistence wiring but accidentally
+// omitted from commit 864411b. Adding them here closes the circuit:
+//   - _isRealDealId: real deals have uuid ids and get registered in
+//     `_realDealIds` whenever loadRealDealsAndMerge runs. Demo deals use
+//     short string ids ('d1', 'd2', ...) and are never registered.
+//   - _hydrateDealDetail: pulls strategy + artifacts + DOS status from
+//     Supabase on detail-view entry. Merges into the per-deal Maps so
+//     subsequent edits flow through the existing UI paths.
+//   - _scheduleStrategySave: debounced upsert (600ms) — the strategy
+//     textarea/input handlers fire every keystroke, so we coalesce.
+// DOS status overrides live in `_dosStatusByDeal` so we can render per-deal
+// progress without mutating the global DOS_TEMPLATES catalog.
+
+/** Map<dealId, Map<elementId, status>> — per-deal overrides on top of
+ *  DOS_TEMPLATES defaults. Persisted to deal_dos_status for real deals. */
+const _dosStatusByDeal = new Map();
+
+/** Set of dealIds that have already been hydrated, so we don't re-fetch
+ *  on every detail-tab switch. Keyed by deal_deals.id (uuid). */
+const _hydratedDeals = new Set();
+
+/** True when this deal_id has been merged from deal_deals (real DB row). */
+function _isRealDealId(dealId) {
+  return _realDealIds.has(dealId);
+}
+
+/** Get (creating if needed) the per-deal DOS status overlay map. */
+function _dosOverlay(dealId) {
+  let m = _dosStatusByDeal.get(dealId);
+  if (!m) { m = new Map(); _dosStatusByDeal.set(dealId, m); }
+  return m;
+}
+
+/** Read a DOS template's effective status for a deal, applying overlay. */
+function _dosStatusFor(dealId, tpl) {
+  const overlay = _dosStatusByDeal.get(dealId);
+  if (overlay && overlay.has(tpl.id)) return overlay.get(tpl.id);
+  return tpl.status || 'pending';
+}
+
+/** Async hydrate strategy + artifacts + DOS status for a real deal. Demo
+ *  deals are no-op (their state lives in the seeded Maps already). Idempotent
+ *  — second call for the same deal is a quick `_hydratedDeals` membership
+ *  check. */
+async function _hydrateDealDetail(dealId) {
+  if (!dealId) return;
+  if (!_isRealDealId(dealId)) return;
+  if (_hydratedDeals.has(dealId)) return;
+  _hydratedDeals.add(dealId);
+  try {
+    const [strategy, artifacts, dosStatus] = await Promise.all([
+      api.loadStrategy(dealId),
+      api.listArtifactsByDeal(dealId),
+      api.loadDosStatusByDeal(dealId),
+    ]);
+
+    // Strategy: merge over the seeded defaults so any null-valued columns
+    // fall back to the seed; non-null DB values win.
+    if (strategy) {
+      const seed = getStrategy(dealId); // creates seed if absent
+      if (typeof strategy.value_prop === 'string')        seed.valueProp = strategy.value_prop;
+      if (Array.isArray(strategy.risks))                   seed.risks = strategy.risks;
+      if (Array.isArray(strategy.asks))                    seed.asks = strategy.asks;
+      if (Array.isArray(strategy.differentiators))         seed.differentiators = strategy.differentiators;
+      if (typeof strategy.competitor_threats === 'string') seed.competitorThreats = strategy.competitor_threats;
+    }
+
+    // Artifacts: prefer DB rows when present. Otherwise leave the
+    // model-derived seed (real deals seed from cost-model rows in
+    // getArtifacts()) so the user still sees their attached scenarios.
+    if (Array.isArray(artifacts) && artifacts.length > 0) {
+      const list = artifacts.map(r => ({
+        id: r.id, kind: r.kind, name: r.name, ref: r.ref || '',
+        modelId: r.model_id ?? null,
+        updated: r.updated_at ? String(r.updated_at).slice(0, 10) : '—',
+      }));
+      _artifactsByDeal.set(dealId, list);
+    }
+
+    // DOS status: load overlay map.
+    const overlay = _dosOverlay(dealId);
+    overlay.clear();
+    for (const [elemId, status] of Object.entries(dosStatus || {})) {
+      overlay.set(elemId, status);
+    }
+
+    // Re-render currently visible detail content if we're still on this deal.
+    if (viewMode === 'detail' && selectedDeal && selectedDeal.id === dealId) {
+      renderDetailContent();
+    }
+  } catch (err) {
+    console.warn('[deal-mgmt] _hydrateDealDetail failed', err);
+    // Allow retry on next entry by clearing the membership
+    _hydratedDeals.delete(dealId);
+  }
+}
+
+/** Debounced strategy upsert — 600ms quiet window. One timer per deal so
+ *  switching between deals doesn't drop pending writes. */
+const _strategySaveTimers = new Map();
+function _scheduleStrategySave(dealId) {
+  if (!dealId || !_isRealDealId(dealId)) return;
+  const existing = _strategySaveTimers.get(dealId);
+  if (existing) clearTimeout(existing);
+  const t = setTimeout(async () => {
+    _strategySaveTimers.delete(dealId);
+    try {
+      const s = getStrategy(dealId);
+      await api.saveStrategy(dealId, {
+        valueProp:         s.valueProp,
+        risks:             s.risks,
+        asks:              s.asks,
+        differentiators:   s.differentiators,
+        competitorThreats: s.competitorThreats,
+      });
+    } catch (err) {
+      console.warn('[deal-mgmt] strategy save failed', err);
+      bus.emit('toast:show', { message: 'Strategy save failed: ' + (err.message || err), level: 'error' });
+    }
+  }, 600);
+  _strategySaveTimers.set(dealId, t);
 }
 
 // =============================================================
@@ -1385,7 +1547,7 @@ function renderDealDos() {
   // Compute stage-advance eligibility: current stage's REQUIRED templates must
   // all be complete and we must not be on the final stage.
   const currentTemplates = DOS_TEMPLATES[d.stage] || [];
-  const requiredOpen = currentTemplates.filter(t => t.required && t.status !== 'complete').length;
+  const requiredOpen = currentTemplates.filter(t => t.required && _dosStatusFor(d.id, t) !== 'complete').length;
   const canAdvance = d.stage < 6 && requiredOpen === 0;
   const advanceBanner = canAdvance ? `
     <div class="hub-card" style="padding:14px 16px;background:#f0fdf4;border:1px solid #86efac;display:flex;align-items:center;gap:12px;">
@@ -1405,7 +1567,7 @@ function renderDealDos() {
       ${advanceBanner}
       ${DOS_STAGES.filter(s => s.id <= d.stage).map(stage => {
         const templates = DOS_TEMPLATES[stage.id] || [];
-        const completed = templates.filter(t => t.status === 'complete').length;
+        const completed = templates.filter(t => _dosStatusFor(d.id, t) === 'complete').length;
         const pct = templates.length > 0 ? Math.round((completed / templates.length) * 100) : 0;
 
         return `
@@ -1418,14 +1580,15 @@ function renderDealDos() {
               <div style="width:${pct}%;height:100%;background:${stage.color};border-radius:2px;"></div>
             </div>
             ${templates.map(t => {
-              const statusIcon = t.status === 'complete' ? '✅' : t.status === 'in-progress' ? '🔄' : '⬜';
-              const statusColor = t.status === 'complete' ? '#16a34a' : t.status === 'in-progress' ? '#d97706' : 'var(--ies-gray-300)';
+              const status = _dosStatusFor(d.id, t);
+              const statusIcon = status === 'complete' ? '✅' : status === 'in-progress' ? '🔄' : '⬜';
+              const statusColor = status === 'complete' ? '#16a34a' : status === 'in-progress' ? '#d97706' : 'var(--ies-gray-300)';
               return `
                 <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--ies-gray-50);cursor:pointer;" data-dos-toggle="${t.id}">
                   <span style="font-size:14px;">${statusIcon}</span>
-                  <span style="font-size:13px;flex:1;${t.status === 'complete' ? 'text-decoration:line-through;color:var(--ies-gray-400);' : ''}">${t.name}</span>
+                  <span style="font-size:13px;flex:1;${status === 'complete' ? 'text-decoration:line-through;color:var(--ies-gray-400);' : ''}">${t.name}</span>
                   ${t.required ? '<span style="font-size:9px;font-weight:700;color:#dc2626;padding:1px 6px;border-radius:10px;border:1px solid #dc2626;">REQ</span>' : ''}
-                  <span style="font-size:11px;font-weight:600;color:${statusColor};">${t.status}</span>
+                  <span style="font-size:11px;font-weight:600;color:${statusColor};">${status}</span>
                 </div>
               `;
             }).join('')}
