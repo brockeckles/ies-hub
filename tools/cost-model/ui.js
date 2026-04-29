@@ -12,7 +12,7 @@ import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260424-hyg04';
 import * as calc from './calc.js?v=20260427-s2';
-import * as api from './api.js?v=20260429-vol3';
+import * as api from './api.js?v=20260429-vol4';
 import * as scenarios from './calc.scenarios.js?v=20260429-otfix1';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
 import * as channelCalc from './calc.channels.js?v=20260429-vol1';
@@ -132,6 +132,9 @@ const SEASONALITY_PRESET_LABELS = {
 };
 /** Debounce timer for the seasonality per-month input re-render. */
 let _seasonalityRerenderTimer = null;
+
+/** Phase 2.2: which derived-volume row is currently in override-edit mode. Null = none. */
+let _volEditingOverrideKey = null;
 
 /** @type {Object} */
 let refData = {};
@@ -2994,18 +2997,36 @@ function renderVolumes() {
           </tr>
         </thead>
         <tbody>
-          ${derivedRows.map(r => `
-            <tr${r.d.isOverride ? ' class="cm-vol-derived-row--override"' : ''}>
+          ${derivedRows.map(r => {
+            const isEditing = _volEditingOverrideKey === r.key;
+            const inputDefault = r.d.isOverride ? r.d.value : r.d.derivedValue;
+            return `
+            <tr${r.d.isOverride && !isEditing ? ' class="cm-vol-derived-row--override"' : ''}${isEditing ? ' class="cm-vol-derived-row--editing"' : ''}>
               <td>
-                <div>${r.label}${r.d.isOverride ? ` <span class="cm-vol-pill cm-vol-pill--warn" title="Pinned value vs derived">override ${r.d.variancePct >= 0 ? '+' : ''}${r.d.variancePct.toFixed(1)}%</span>` : ''}</div>
-                <div class="cm-vol-formula">${r.formula}${r.d.isOverride ? ` &middot; pinned ${fmtFull(r.d.value)}` : ''}</div>
+                <div>${r.label}${r.d.isOverride && !isEditing ? ` <span class="cm-vol-pill cm-vol-pill--warn" title="Pinned value vs derived">override ${r.d.variancePct >= 0 ? '+' : ''}${r.d.variancePct.toFixed(1)}%</span>` : ''}</div>
+                <div class="cm-vol-formula">${r.formula}${r.d.isOverride && !isEditing ? ` &middot; pinned ${fmtFull(r.d.value)}` : ''}</div>
               </td>
-              <td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:600;">${fmtFull(r.d.value)}</td>
+              <td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:600;">
+                ${isEditing
+                  ? `<input class="hub-input cm-vol-override-input" type="number" value="${Math.round(inputDefault)}" min="0" step="1" data-vol-override-key="${r.key}" autofocus title="Pin authoritative value (derived: ${fmtFull(r.d.derivedValue)})" style="width:130px;text-align:right;font-variant-numeric:tabular-nums;font-weight:600;" />`
+                  : fmtFull(r.d.value)
+                }
+              </td>
               <td style="text-align:right;">
-                <button class="hub-btn hub-btn-secondary hub-btn-sm" disabled title="Per-row override path lands in Phase 2.2">${r.d.isOverride ? 'edit' : '+ override'}</button>
+                ${isEditing ? `
+                  <div style="display:inline-flex;gap:4px;">
+                    <button class="hub-btn hub-btn-primary hub-btn-sm" data-action="vol-override-save" data-key="${r.key}" title="Pin this value">Save</button>
+                    <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="vol-override-cancel" data-key="${r.key}" title="Discard and revert to derived">Cancel</button>
+                  </div>` : r.d.isOverride ? `
+                  <div style="display:inline-flex;gap:4px;">
+                    <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="vol-override-start" data-key="${r.key}" title="Edit pinned value">Edit</button>
+                    <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="vol-override-remove" data-key="${r.key}" title="Remove override and revert to derived">×</button>
+                  </div>` : `
+                  <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="vol-override-start" data-key="${r.key}" title="Pin an authoritative value (e.g. when RFP figure differs from derived)">+ override</button>
+                `}
               </td>
-            </tr>
-          `).join('')}
+            </tr>`;
+          }).join('')}
         </tbody>
       </table>
     </div>
@@ -3033,6 +3054,8 @@ function renderVolumes() {
       .cm-vol-derived-table tbody td { padding: 10px 4px; border-bottom: 1px dashed var(--ies-gray-200); vertical-align: top; }
       .cm-vol-derived-table tbody tr:last-child td { border-bottom: none; }
       .cm-vol-derived-row--override { background: rgba(217,119,6,0.04); }
+      .cm-vol-derived-row--editing { background: rgba(0,71,171,0.04); }
+      .cm-vol-override-input { border-color: var(--ies-blue) !important; }
       .cm-vol-source-bar { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--ies-gray-50, #fafbfc); border: 1px solid var(--ies-gray-200); border-radius: 10px; font-size: 12px; }
 
       /* Stack to 1-up on narrow viewports */
@@ -7468,6 +7491,27 @@ function bindSectionEvents(section, container) {
     });
   });
 
+  // Phase 2.2 — keyboard shortcuts on the inline override input.
+  // Enter saves, Esc cancels. Wired here because the input renders inside
+  // the table and needs a per-render rebind.
+  container.querySelectorAll('input.cm-vol-override-input').forEach(input => {
+    input.addEventListener('keydown', (e) => {
+      const key = input.dataset.volOverrideKey;
+      if (!key) return;
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const saveBtn = input.closest('tr')?.querySelector('button[data-action="vol-override-save"]');
+        saveBtn?.click();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        _volEditingOverrideKey = null;
+        renderSection();
+      }
+    });
+    // Auto-focus + select for fast keyboard editing
+    setTimeout(() => { try { input.focus(); input.select(); } catch (_) {} }, 0);
+  });
+
   // Star buttons (volumes)
   container.querySelectorAll('.cm-star-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -9909,6 +9953,57 @@ function writeOverrideAuditEvent(ev) {
 
 function handleAction(action, idx, btn) {
   switch (action) {
+    case 'vol-override-start':
+      _volEditingOverrideKey = btn?.dataset?.key || null;
+      renderSection();
+      return;
+    case 'vol-override-cancel':
+      _volEditingOverrideKey = null;
+      renderSection();
+      return;
+    case 'vol-override-save': {
+      const key = btn?.dataset?.key;
+      if (!key) return;
+      const input = btn.closest('tr')?.querySelector('input.cm-vol-override-input');
+      if (!input) return;
+      const raw = parseFloat(input.value);
+      if (!Number.isFinite(raw) || raw < 0) {
+        showToast('Override must be a non-negative number', 'warning');
+        return;
+      }
+      if (!Array.isArray(model.channels) || !model.channels[0]) api.backfillChannelsFromLegacy(model);
+      const ch = model.channels[0];
+      if (!Array.isArray(ch.overrides)) ch.overrides = [];
+      const existing = ch.overrides.find(o => o && o.key === key);
+      const now = new Date().toISOString();
+      if (existing) {
+        existing.pinnedValue = raw;
+        existing.pinnedAt = now;
+      } else {
+        ch.overrides.push({ key, pinnedValue: raw, pinnedAt: now });
+      }
+      _volEditingOverrideKey = null;
+      isDirty = true;
+      // Override is channel-only state; legacy fields don't represent it.
+      // Phase 3 calc consumers will read overrides via accessors.
+      renderSection();
+      showToast(`Pinned ${key}: ${Math.round(raw).toLocaleString()}`, 'success');
+      return;
+    }
+    case 'vol-override-remove': {
+      const key = btn?.dataset?.key;
+      if (!key) return;
+      if (!Array.isArray(model.channels) || !model.channels[0]) return;
+      const ch = model.channels[0];
+      if (Array.isArray(ch.overrides)) {
+        ch.overrides = ch.overrides.filter(o => !o || o.key !== key);
+      }
+      _volEditingOverrideKey = null;
+      isDirty = true;
+      renderSection();
+      showToast(`Removed override for ${key}`, 'info');
+      return;
+    }
     case 'linked-refresh':
       // Force re-query of parent_cost_model_id across design-tool tables + scenario family.
       linkedDesigns = null;
