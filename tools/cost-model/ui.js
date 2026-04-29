@@ -21,7 +21,7 @@ import * as shiftPlannerCalc from './shift-planner.js?v=20260427-pm3-s2';
 import * as shiftPlannerUi from './shift-planner-ui.js?v=20260428-walkthru1';
 // 2026-04-28 — internal phase stepper for Implementation Timeline section.
 import { renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
-import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260429-tc1';
+import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260429-p52';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
 // disk but no longer imported; can be deleted in a future cleanup.
@@ -1098,17 +1098,24 @@ function wireEditorEvents() {
     });
   });
 
-  // CM-PROV-1 — root-level click delegation for the P&L cell inspector.
+  // CM-PROV-1 + Phase 5.2 — root-level click delegation for the cell
+  // inspector. P&L cells are gated to the Summary section since they only
+  // exist there; KPI tiles in the chrome strip are clickable from any
+  // section so the panel surface follows the user.
   // Per feedback_event_delegation_pattern.md: bind at the stable root so
   // the listener survives every renderShell()/renderCurrentView() pass.
   rootEl.addEventListener('click', (e) => {
-    if (activeSection !== 'summary') return;
     const cell = e.target.closest('[data-cm-cell]');
     if (!cell) return;
-    if (!cell.closest('#cm-section-content')) return;
     const rowKey = cell.dataset.cmCell;
     const year = parseInt(cell.dataset.cmYear, 10);
     if (!rowKey || !Number.isFinite(year)) return;
+    const isKpi = typeof rowKey === 'string' && rowKey.startsWith('kpi:');
+    if (!isKpi) {
+      // P&L cells must be inside the Summary section content.
+      if (activeSection !== 'summary') return;
+      if (!cell.closest('#cm-section-content')) return;
+    }
     if (_activeProvCell && _activeProvCell.rowKey === rowKey && _activeProvCell.year === year) {
       closeProvenancePanel();
     } else {
@@ -1754,10 +1761,59 @@ function computeHeaderKpis() {
     const totalFtes   = summary.totalFtes || 0;
     const npv         = (metrics && metrics.npv) || 0;
 
+    // Phase 5.2 — bundle the underlying numbers + lineage into a ctx the
+    // inspector panel can read when a KPI tile is clicked from any section.
+    // Mirrors _lastProvenanceContext but adds payback + costPerUnit so the
+    // KPI-specific row keys can render inputs even when the user has never
+    // navigated to Summary yet. Stashed onto _lastProvenanceContext so
+    // getCellProvenance has a single source of truth.
+    const kpiCtx = {
+      projections,
+      summary,
+      calcHeur: {
+        volGrowthPct: (fin.volGrowth || 0) * 1,
+        laborEscPct:  (fin.laborEsc  || 0) * 1,
+        costEscPct:   (fin.costEsc   || 0) * 1,
+        facilityEscPct:  fin.facilityEsc != null ? fin.facilityEsc : (fin.costEsc || 0),
+        equipmentEscPct: fin.equipmentEsc != null ? fin.equipmentEsc : (fin.costEsc || 0),
+        taxRatePct:   fin.taxRate != null ? fin.taxRate : 25,
+      },
+      marginFrac,
+      contractYears,
+      baseOrders: orders || 1,
+      computedAt: new Date().toISOString(),
+      channelLineage: channelCalc.buildChannelLineage(model),
+      // KPI-specific extras
+      kpi: {
+        costPerUnit,
+        y1Revenue,
+        y1Margin,
+        totalFtes,
+        npv,
+        payback: (metrics && metrics.payback) || null,
+        outboundUomLabel: outboundUomLabel || 'Unit',
+        discountRate: fin.discountRate || 10,
+      },
+    };
+
+    // If renderSummary hasn't run yet (user opened a non-Summary section
+    // first), seed _lastProvenanceContext so the inspector still works.
+    // renderSummary will overwrite with its richer ctx when the user
+    // navigates there. From-Summary loads always win because they pass
+    // through renderSummary AFTER refreshHeaderKpis.
+    if (!_lastProvenanceContext || _lastProvenanceContext._source !== 'summary') {
+      _lastProvenanceContext = { ...kpiCtx, _source: 'kpi' };
+    } else {
+      // Already on Summary — graft the kpi-specific extras onto it so
+      // KPI clicks read fresh costPerUnit/npv even mid-session.
+      _lastProvenanceContext.kpi = kpiCtx.kpi;
+    }
+
     return {
       ready: true,
       items: [
         {
+          key: 'kpi:costPerUnit',
           label: `Cost / ${outboundUomLabel || 'Unit'}`,
           value: costPerUnit > 0
             ? calc.formatCurrency(costPerUnit, { decimals: costPerUnit < 10 ? 2 : 0 })
@@ -1765,26 +1821,31 @@ function computeHeaderKpis() {
           hint: 'Total operating cost ÷ outbound primary volume. Drives the headline pricing rate.',
         },
         {
+          key: 'kpi:y1Revenue',
           label: 'Y1 Revenue',
           value: y1Revenue > 0 ? calc.formatCurrency(y1Revenue, { compact: true }) : '—',
           hint: 'Year-1 revenue from the multi-year P&L (ramped, escalation-aware).',
         },
         {
+          key: 'kpi:y1Margin',
           label: 'Margin (Y1)',
           value: y1Revenue > 0 ? calc.formatPct(y1Margin, 1) : '—',
           hint: 'Y1 gross profit ÷ revenue. Often lower than your target margin in early years until the ramp completes.',
         },
         {
+          key: 'kpi:totalFtes',
           label: 'Total FTEs',
           value: totalFtes > 0 ? totalFtes.toFixed(1) : '—',
           hint: 'Direct + indirect headcount at steady-state operating hours.',
         },
         {
+          key: 'kpi:npv',
           label: `NPV (${contractYears}yr)`,
           value: npv !== 0 ? calc.formatCurrency(npv, { compact: true }) : '—',
           hint: `Net present value over the ${contractYears}-year contract at ${fin.discountRate || 10}% discount rate.`,
         },
         {
+          key: 'kpi:contract',
           // 2026-04-29 (Brock): contract term as framing context for the other
           // chips. Sets the horizon for the multi-year P&L, NPV, and ramp.
           label: 'Contract',
@@ -1841,6 +1902,27 @@ function _fmtPct(v, digits = 1) {
 function _fmtNum(v) {
   if (v == null || !Number.isFinite(v)) return '—';
   return Math.round(v).toLocaleString();
+}
+
+/**
+ * Phase 5.2 — Format the headline value of a provenance record per its
+ * `valueFormat` hint. Defaults to currency for back-compat with the P&L
+ * cells that lack the field.
+ *
+ *   valueFormat: 'currency' | 'pct' | 'fte' | 'years' | 'rate' | 'unitCost'
+ */
+function _fmtProvValue(prov) {
+  if (!prov) return '—';
+  const v = prov.value;
+  switch (prov.valueFormat) {
+    case 'pct':       return _fmtPct(v, 2);
+    case 'fte':       return (v == null || !Number.isFinite(v)) ? '—' : v.toFixed(1) + ' FTE';
+    case 'years':     return (v == null || !Number.isFinite(v)) ? '—' : v.toFixed(0) + ' yr';
+    case 'unitCost':  return (v == null || !Number.isFinite(v)) ? '—'
+                              : (v < 10 ? '$' + v.toFixed(2) : '$' + Math.round(v).toLocaleString());
+    case 'currency':
+    default:          return _fmtMoney(v);
+  }
 }
 
 /**
@@ -1937,7 +2019,11 @@ function getCellProvenance(rowKey, year) {
   if (!ctx) return null;
   const idx = year - 1;
   const p = ctx.projections[idx];
-  if (!p) return null;
+  // Phase 5.2 — kpi:contract is the only row that doesn't need projections
+  // (it only renders contractYears). Other kpi:* rows + every P&L row
+  // require a populated projection; bail early on those if `p` is missing.
+  const isKpi = typeof rowKey === 'string' && rowKey.startsWith('kpi:');
+  if (!p && !(isKpi && rowKey === 'kpi:contract')) return null;
   const ch = ctx.calcHeur || {};
   const s = ctx.summary || {};
   const mFrac = ctx.marginFrac;
@@ -2226,6 +2312,138 @@ function getCellProvenance(rowKey, year) {
         ],
         notes: 'Crossover from negative to positive marks the Payback point used in the Summary KPIs.',
       };
+
+    // ────────────────────────────────────────────────────────────
+    // Phase 5.2 — KPI tile rows. Reached when a sticky-header KPI
+    // chip is clicked. These mirror the formulas inside computeHeaderKpis
+    // and read kpi extras stashed on _lastProvenanceContext by
+    // computeHeaderKpis (or the richer Summary ctx if the user is
+    // already on the Summary page).
+    // ────────────────────────────────────────────────────────────
+
+    case 'kpi:costPerUnit': {
+      const k = ctx.kpi || {};
+      const channelRows = _buildChannelBreakdownInputs(lineage, 'units');
+      const totalCost = (s.laborCost || 0) + (s.facilityCost || 0) + (s.equipmentCost || 0)
+                       + (s.overheadCost || 0) + (s.vasCost || 0) + (s.startupAmort || 0);
+      const annualVolume = ctx.baseOrders || 1;
+      return {
+        label: `Cost / ${k.outboundUomLabel || 'Unit'}`,
+        valueFormat: 'unitCost',
+        formula: `costPerUnit = totalAnnualCost ÷ annual${k.outboundUomLabel || 'Unit'} volume`,
+        value: k.costPerUnit || s.costPerOrder || 0,
+        inputs: [
+          { label: 'Total Annual Cost', value: _fmtMoney(totalCost), source: 'Σ Labor + Facility + Equipment + Overhead + VAS + Startup amort.' },
+          { label: 'Labor', value: _fmtMoney(s.laborCost || 0), source: 'Sum of laborLines + indirectLaborLines' },
+          { label: 'Facility', value: _fmtMoney(s.facilityCost || 0), source: 'Rent + utilities + TI amort + property tax' },
+          { label: 'Equipment', value: _fmtMoney(s.equipmentCost || 0), source: 'Sum of equipmentLines (own + rent + IT)' },
+          { label: 'Overhead', value: _fmtMoney(s.overheadCost || 0), source: 'Sum of overheadLines (annualized)' },
+          { label: 'VAS (pass-through)', value: _fmtMoney(s.vasCost || 0), source: 'Sum of vasLines' },
+          { label: 'Startup amort.', value: _fmtMoney(s.startupAmort || 0), source: 'Sum of startupLines ÷ contract term' },
+          { label: `Annual ${k.outboundUomLabel || 'Unit'} volume`, value: _fmtNum(annualVolume), source: 'Volumes & Profile → primary outbound' },
+          ...(channelRows.length ? [{ label: 'Volume drivers (units)', value: '', source: 'Per-channel contribution to the divisor' }] : []),
+          ...channelRows,
+        ],
+        notes: 'Single-number headline rate. Move any cost category or channel volume to see this figure shift.',
+      };
+    }
+
+    case 'kpi:y1Revenue': {
+      const k = ctx.kpi || {};
+      const channelRows = _buildChannelBreakdownInputs(lineage, 'orders');
+      return {
+        label: 'Y1 Revenue',
+        valueFormat: 'currency',
+        formula: 'y1Revenue = totalCost(Y1) ÷ (1 − targetMargin)',
+        value: k.y1Revenue || (p && p.revenue) || 0,
+        inputs: [
+          { label: 'Total Cost (Y1)', value: _fmtMoney(p ? p.totalCost : 0), source: 'Y1 P&L row' },
+          { label: 'Target Margin', value: _fmtPct(mFrac, 2), source: 'Financial → Target Margin %' },
+          { label: 'Implied Cost / Revenue', value: _fmtPct(p && p.revenue > 0 ? (p.totalCost / p.revenue) : 0), source: 'Y1 P&L' },
+          ...(channelRows.length ? [{ label: 'Volume mix driving rates × volume', value: '', source: 'Bucket rates × per-channel volume share' }] : []),
+          ...channelRows,
+        ],
+        notes: 'Reference cost-plus pricing. Y1 reflects ramp/learning-curve uplift on labor — later years are typically higher revenue at the same margin.',
+      };
+    }
+
+    case 'kpi:y1Margin': {
+      const k = ctx.kpi || {};
+      return {
+        label: 'Margin (Y1)',
+        valueFormat: 'pct',
+        formula: 'y1Margin = grossProfit(Y1) ÷ revenue(Y1)',
+        value: (k.y1Margin || 0) / 100,
+        inputs: [
+          { label: 'Y1 Revenue', value: _fmtMoney(p ? p.revenue : 0), source: 'Y1 P&L Revenue row' },
+          { label: 'Y1 Gross Profit', value: _fmtMoney(p ? p.grossProfit : 0), source: 'Y1 P&L GP row' },
+          { label: 'Y1 COGS', value: _fmtMoney(p ? (p.cogs ?? (p.labor + p.facility + p.equipment + p.vas)) : 0), source: 'Labor + Facility + Equipment + VAS' },
+          { label: 'Target Margin', value: _fmtPct(mFrac, 2), source: 'Financial → Target Margin %' },
+          { label: 'Implied vs. target', value: _fmtPct(((k.y1Margin || 0) / 100) - mFrac, 2), source: 'Y1 actual − target' },
+        ],
+        notes: 'Y1 margin is often lower than target because the learning-curve uplift on labor inflates Y1 cost. Y2+ usually compresses to within 0.5 pts of target.',
+      };
+    }
+
+    case 'kpi:totalFtes': {
+      const k = ctx.kpi || {};
+      const channelOrderRows = _buildChannelBreakdownInputs(lineage, 'orders');
+      const returnsAssumptionRows = _buildChannelAssumptionInputs(lineage, 'returnsPercent');
+      return {
+        label: 'Total FTEs',
+        valueFormat: 'fte',
+        formula: 'totalFtes = directFtes + indirectFtes',
+        value: k.totalFtes || s.totalFtes || 0,
+        inputs: [
+          { label: 'Direct FTEs', value: (s.directFtes || 0).toFixed(1), source: 'laborLines × headcount' },
+          { label: 'Indirect FTEs', value: (s.indirectFtes || 0).toFixed(1), source: 'indirectLaborLines (CS, Returns, Mgmt, Trainer, etc.)' },
+          { label: 'Operating hours', value: _fmtNum(calc.operatingHours(model.shifts || {})), source: 'Settings → Shifts (shifts × hours × days × weeks)' },
+          ...(channelOrderRows.length ? [{ label: 'Volume drivers (orders)', value: '', source: 'Indirect labor sized off cross-channel volumes (Phase 3)' }] : []),
+          ...channelOrderRows,
+          ...(returnsAssumptionRows.length ? [{ label: 'Returns Processor — sized off per-channel returns %', value: '', source: 'Volumes & Profile → Structural Assumptions' }] : []),
+          ...returnsAssumptionRows,
+        ],
+        notes: 'Steady-state operating headcount. Excludes the Y1 learning-curve productivity ramp (which inflates Y1 hours, not bodies).',
+      };
+    }
+
+    case 'kpi:npv': {
+      const k = ctx.kpi || {};
+      return {
+        label: `NPV (${ctx.contractYears}yr)`,
+        valueFormat: 'currency',
+        formula: `npv = Σ FCF(t) ÷ (1 + discountRate)^t  for t = 1..${ctx.contractYears}\nFCF = (NI + D&A − ΔWC) − CapEx`,
+        value: k.npv || 0,
+        inputs: [
+          { label: 'Discount Rate', value: ((k.discountRate || 10).toFixed(1) + '%'), source: 'Financial → Discount Rate' },
+          { label: 'Contract Term', value: ctx.contractYears + ' yr', source: 'Project Details → Contract Term' },
+          { label: 'Y1 Revenue', value: _fmtMoney(k.y1Revenue || (p ? p.revenue : 0)), source: 'Year 1 P&L' },
+          { label: 'Y1 Net Income', value: _fmtMoney(p ? p.netIncome : 0), source: 'Year 1 P&L' },
+          { label: 'Startup CapEx (Y1)', value: _fmtMoney(s.startupCapital || 0), source: 'Sum of startupLines marked is_capital' },
+          { label: 'Tax Rate', value: ((ch.taxRatePct || 25).toFixed(1) + '%'), source: 'Heuristics → Tax Rate' },
+          ...(k.payback != null ? [{ label: 'Payback', value: (k.payback < 0 ? 'never' : k.payback.toFixed(2) + ' yr'), source: 'cum-FCF crossover from negative to positive' }] : []),
+        ],
+        notes: 'Multi-year discounted cash flow. Click any P&L row in the Summary table for the year-by-year FCF buildup.',
+      };
+    }
+
+    case 'kpi:contract': {
+      const yrs = ctx.contractYears || 0;
+      return {
+        label: 'Contract Term',
+        valueFormat: 'years',
+        formula: 'contractTerm = Project Details → Contract Term',
+        value: yrs,
+        inputs: [
+          { label: 'Years', value: yrs.toFixed(0), source: 'Project Details → Contract Term' },
+          { label: 'Months', value: Math.round(yrs * 12).toLocaleString(), source: 'years × 12' },
+          { label: 'P&L horizon', value: yrs + ' years', source: 'Drives the multi-year escalation path' },
+          { label: 'NPV window', value: yrs + ' years', source: 'Sets the FCF discount horizon' },
+          { label: 'Startup amortization', value: yrs + ' years', source: 'Capital costs amortized over contract' },
+        ],
+        notes: 'Contract term sets the horizon for every multi-year calculation. Changing it mid-build re-amortizes startup capital and resets NPV.',
+      };
+    }
   }
   return null;
 }
@@ -2252,7 +2470,7 @@ function renderProvenancePanelInner() {
         <button id="cm-prov-close" class="hub-btn hub-btn-sm hub-btn-secondary" style="padding:2px 8px;font-size:11px;line-height:1.4;">Close ✕</button>
       </div>
       <div style="font-size:15px;font-weight:700;color:var(--ies-navy,#0F1B2E);margin-top:4px;">${prov.label}</div>
-      <div style="font-size:22px;font-weight:700;color:var(--ies-blue,#0047AB);margin-top:6px;">${_fmtMoney(prov.value)}</div>
+      <div style="font-size:22px;font-weight:700;color:var(--ies-blue,#0047AB);margin-top:6px;">${_fmtProvValue(prov)}</div>
     </div>
 
     <div style="padding:14px 16px;border-bottom:1px solid var(--ies-gray-200);background:var(--ies-gray-50,#f9fafb);">
@@ -2301,7 +2519,9 @@ function renderProvenancePanelInner() {
 
     <div style="padding:10px 16px;font-size:10.5px;color:var(--ies-gray-500);line-height:1.4;">
       Computed ${computedAtStr}<br>
-      Year ${_activeProvCell.year} of ${_lastProvenanceContext?.contractYears || '—'} · row key <code style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10.5px;background:var(--ies-gray-100);padding:1px 4px;border-radius:3px;">${_activeProvCell.rowKey}</code>
+      ${_activeProvCell.rowKey.startsWith('kpi:')
+        ? `KPI tile · row key <code style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10.5px;background:var(--ies-gray-100);padding:1px 4px;border-radius:3px;">${_activeProvCell.rowKey}</code>`
+        : `Year ${_activeProvCell.year} of ${_lastProvenanceContext?.contractYears || '—'} · row key <code style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10.5px;background:var(--ies-gray-100);padding:1px 4px;border-radius:3px;">${_activeProvCell.rowKey}</code>`}
     </div>
   `;
 }
@@ -6918,6 +7138,11 @@ function renderSummary() {
     // Phase 5.1 — per-channel lineage feeds the inspector's "By channel"
     // sub-rows for volume-driven cells (orders, revenue, labor, vas, ΔWC).
     channelLineage: channelCalc.buildChannelLineage(model),
+    // Phase 5.2 — kpi extras (costPerUnit, npv, payback, etc.) are
+    // refreshed by computeHeaderKpis on every strip render. _source tag
+    // marks this ctx as Summary-page-authoritative so refreshHeaderKpis
+    // does not overwrite it with the lighter KPI ctx.
+    _source: 'summary',
   };
   // Stash the monthly bundle for save-time persistence
   if (projResult && projResult.monthlyBundle) _lastMonthlyBundle = projResult.monthlyBundle;

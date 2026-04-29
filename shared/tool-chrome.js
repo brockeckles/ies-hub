@@ -245,17 +245,30 @@ export function refreshToolChromeActions(rootEl, opts) {
 }
 
 /**
- * Render the KPI strip into [data-tc-kpis]. Items: [{label, value, hint?}].
+ * Render the KPI strip into [data-tc-kpis]. Items: [{label, value, hint?, key?}].
+ *
+ * Phase 5.2 (2026-04-29) — when an item carries a `key`, the chip becomes
+ * a button with `data-cm-cell="<key>" data-cm-year="1"` so the consuming
+ * tool's existing P&L cell-click delegation picks it up. Tools that don't
+ * pass keys keep the legacy non-clickable span.
  */
 export function refreshKpiStrip(rootEl, items) {
   if (!rootEl) return;
   const host = rootEl.querySelector('[data-tc-kpis]');
   if (!host) return;
   if (!items || items.length === 0) { host.innerHTML = ''; return; }
-  host.innerHTML = items.map(it => '<span class="tc-kpi-chip"' + (it.hint ? ' title="' + _a(it.hint) + '"' : '') + '>' +
-    '<span class="tc-kpi-chip__label">' + _h(it.label) + '</span>' +
-    '<span class="tc-kpi-chip__value">' + _h(it.value) + '</span>' +
-    '</span>').join('');
+  host.innerHTML = items.map(it => {
+    const tag = it.key ? 'button' : 'span';
+    const clickable = it.key ? ' tc-kpi-chip--clickable' : '';
+    const dataAttrs = it.key
+      ? ` data-cm-cell="${_a(it.key)}" data-cm-year="1" type="button"`
+      : '';
+    return '<' + tag + ' class="tc-kpi-chip' + clickable + '"' + dataAttrs +
+      (it.hint ? ' title="' + _a(it.hint) + '"' : '') + '>' +
+      '<span class="tc-kpi-chip__label">' + _h(it.label) + '</span>' +
+      '<span class="tc-kpi-chip__value">' + _h(it.value) + '</span>' +
+      '</' + tag + '>';
+  }).join('');
 }
 
 /**
@@ -457,6 +470,24 @@ function _stylesheet() {
         font-size: 13px; font-weight: 700;
         color: #fff;
         margin-top: 1px;
+      }
+      /* Phase 5.2 — clickable KPI chip variant. Reset button defaults so
+         the click target is a button styled identically to the span. */
+      .tool-chrome-shell button.tc-kpi-chip {
+        background: transparent; border: 0; padding: 2px 6px; margin: 0;
+        cursor: pointer; font: inherit; color: inherit; text-align: left;
+        border-radius: 4px;
+        transition: background 0.12s ease;
+      }
+      .tool-chrome-shell button.tc-kpi-chip:hover {
+        background: rgba(255,255,255,0.08);
+      }
+      .tool-chrome-shell button.tc-kpi-chip:focus-visible {
+        outline: 2px solid rgba(255,255,255,0.6);
+        outline-offset: 2px;
+      }
+      .tool-chrome-shell button.tc-kpi-chip.is-active {
+        background: rgba(255,255,255,0.16);
       }
 
       .tool-chrome-shell .tc-body {
