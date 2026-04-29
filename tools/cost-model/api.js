@@ -317,6 +317,26 @@ export async function fetchMarkets() {
 }
 
 /**
+ * Fetch the master_channel_archetypes catalog (Phase 2.3 of volumes-as-nucleus).
+ * Active rows only, sorted. Used by the Add Channel picker modal.
+ *
+ * @returns {Promise<any[]>}
+ */
+export async function fetchChannelArchetypes() {
+  try {
+    const { data, error } = await db.from('master_channel_archetypes')
+      .select('id, archetype_key, name, description, default_conversions, default_assumptions, default_seasonality_preset, auto_derived_returns, icon, color, sort_order')
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true });
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.warn('[CM] fetchChannelArchetypes failed:', err);
+    return [];
+  }
+}
+
+/**
  * Fetch labor rates, optionally filtered by market.
  * @param {string} [marketId]
  * @returns {Promise<any[]>}

@@ -12,7 +12,7 @@ import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260424-hyg04';
 import * as calc from './calc.js?v=20260427-s2';
-import * as api from './api.js?v=20260429-vol4';
+import * as api from './api.js?v=20260429-vol5';
 import * as scenarios from './calc.scenarios.js?v=20260429-otfix1';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
 import * as channelCalc from './calc.channels.js?v=20260429-vol1';
@@ -135,6 +135,9 @@ let _seasonalityRerenderTimer = null;
 
 /** Phase 2.2: which derived-volume row is currently in override-edit mode. Null = none. */
 let _volEditingOverrideKey = null;
+
+/** Phase 2.3: which channel tab is currently active. Null until first render initializes from channels[0].key. */
+let _activeChannelKey = null;
 
 /** @type {Object} */
 let refData = {};
@@ -2813,16 +2816,24 @@ function renderSetup() {
 // Brock 2026-04-21 pm: Volumes + Order Profile combined into a single
 // "Volumes & Profile" page (both describe demand — how much + what shape).
 function renderVolumes() {
-  // ─── Phase 2.1 (volumes-as-nucleus, 2026-04-29) ───
-  // Single-channel target page: KPI strip + Primary Volume + UOM Conversions
-  // + Structural Assumptions + Seasonality + Derived Volumes table. Reads
-  // model.channels[0] via accessors; writes through dot-path data-field
-  // bindings, then syncLegacyFromChannel() mirrors back to legacy fields so
-  // unmigrated calc consumers keep working until Phase 3.
+  // ─── Phase 2.3 (volumes-as-nucleus, 2026-04-29) ───
+  // Multi-channel aware. Tab strip when channels.length > 1; nucleus cards
+  // edit the active channel. Aggregate KPI strip across all (non-reverse)
+  // outbound channels. Derived Volumes table is per-channel (matches the
+  // edited card stack). Override path lands per-channel.
   if (!Array.isArray(model.channels) || model.channels.length === 0) {
     api.backfillChannelsFromLegacy(model);
   }
-  const ch = model.channels[0];
+  const channels = model.channels;
+
+  // Resolve active channel — fallback to channels[0] if state stale
+  if (!_activeChannelKey || !channels.find(c => c.key === _activeChannelKey)) {
+    _activeChannelKey = channels[0].key;
+  }
+  const activeIdx = channels.findIndex(c => c.key === _activeChannelKey);
+  const ch = channels[activeIdx];
+  const isMultiChannel = channels.length > 1;
+
   const conv = ch.conversions || {};
   const ass = ch.assumptions || {};
   const primary = ch.primary || { value: 0, uom: 'units', activity: 'outbound', source: 'manual' };
@@ -2836,7 +2847,14 @@ function renderVolumes() {
   };
   const fmtFull = (n) => Math.round(Number(n) || 0).toLocaleString();
 
-  // Derived volumes via Phase 1 accessors
+  // KPI strip: aggregate across all outbound channels (excludes reverse)
+  const kpiUnits  = isMultiChannel ? channelCalc.getAnnualVolume(model, 'units')  : channelCalc.getChannelPrimaryIn(ch, 'units');
+  const kpiCases  = isMultiChannel ? channelCalc.getAnnualVolume(model, 'cases')  : channelCalc.getChannelDerived(model, ch, 'cases').value;
+  const kpiPallets = isMultiChannel ? channelCalc.getAnnualVolume(model, 'pallets') : channelCalc.getChannelDerived(model, ch, 'pallets').value;
+  const kpiOrders = isMultiChannel ? channelCalc.getAnnualVolume(model, 'orders') : channelCalc.getChannelDerived(model, ch, 'orders').value;
+  const kpiDaily  = (kpiUnits > 0 && opDays > 0) ? kpiUnits / opDays : 0;
+
+  // Derived volumes via Phase 1 accessors (active channel only)
   const dCases   = channelCalc.getChannelDerived(model, ch, 'cases');
   const dPallets = channelCalc.getChannelDerived(model, ch, 'pallets');
   const dOrders  = channelCalc.getChannelDerived(model, ch, 'orders');
@@ -2862,6 +2880,34 @@ function renderVolumes() {
                     : primary.source === 'netopt' ? 'NetOpt'
                     : 'Manual entry';
 
+  // Channel tab strip (multi-channel only) + mix bar
+  const channelMix = isMultiChannel ? channelCalc.getChannelMix(model) : null;
+  const tabStripHtml = !isMultiChannel ? '' : `
+    <div class="cm-vol-channels mb-3">
+      <div class="cm-vol-tabs">
+        ${channels.map(c => {
+          const isActive = c.key === _activeChannelKey;
+          const isReverse = (c.archetypeId === 'reverse') || (c.primary && c.primary.activity === 'returns');
+          const mix = channelMix.find(m => m.channelKey === c.key);
+          const pctLabel = mix ? `${Math.round(mix.pct)}%` : '';
+          return `
+            <button class="cm-vol-tab${isActive ? ' cm-vol-tab--active' : ''}${isReverse ? ' cm-vol-tab--reverse' : ''}"
+                    data-action="vol-channel-tab" data-key="${c.key}"
+                    title="${c.name}${c.archetypeId ? ` (${c.archetypeId})` : ''}">
+              ${c.color ? `<span class="cm-vol-tab__dot" style="background:${c.color};"></span>` : ''}
+              <span>${c.name || '(unnamed)'}</span>
+              ${pctLabel && !isReverse ? `<span class="cm-vol-tab__pct">${pctLabel}</span>` : ''}
+            </button>`;
+        }).join('')}
+        <button class="cm-vol-tab cm-vol-tab--add" data-action="vol-channel-add-open" title="Add a channel from the catalog">
+          + Add channel
+        </button>
+        <button class="cm-vol-tab cm-vol-tab--manage" data-action="vol-channel-manage-open" title="Rename, reorder, hide, or delete channels">
+          Manage
+        </button>
+      </div>
+    </div>`;
+
   return `
     <div class="cm-section-header">
       <div>
@@ -2870,35 +2916,37 @@ function renderVolumes() {
       </div>
     </div>
 
-    <!-- KPI strip — derived volumes at a glance -->
+    ${tabStripHtml}
+
+    <!-- KPI strip — aggregate when multi-channel, single-channel when not -->
     <div class="hub-kpi-bar mb-4">
-      <div class="hub-kpi-item" title="Annual primary outbound, expressed in units">
-        <div class="hub-kpi-label">Annual Units</div>
-        <div class="hub-kpi-value">${fmtN(annualUnits)}</div>
+      <div class="hub-kpi-item" title="${isMultiChannel ? 'Sum of primary volumes across outbound channels, in units' : 'Annual primary outbound, in units'}">
+        <div class="hub-kpi-label">${isMultiChannel ? 'Total Annual Units' : 'Annual Units'}</div>
+        <div class="hub-kpi-value">${fmtN(kpiUnits)}</div>
       </div>
-      <div class="hub-kpi-item" title="Derived from primary ÷ units-per-case">
-        <div class="hub-kpi-label">Annual Cases</div>
-        <div class="hub-kpi-value">${fmtN(dCases.value)}</div>
+      <div class="hub-kpi-item">
+        <div class="hub-kpi-label">${isMultiChannel ? 'Total Cases' : 'Annual Cases'}</div>
+        <div class="hub-kpi-value">${fmtN(kpiCases)}</div>
       </div>
-      <div class="hub-kpi-item" title="Derived from cases ÷ cases-per-pallet">
-        <div class="hub-kpi-label">Annual Pallets</div>
-        <div class="hub-kpi-value">${fmtN(dPallets.value)}</div>
+      <div class="hub-kpi-item">
+        <div class="hub-kpi-label">${isMultiChannel ? 'Total Pallets' : 'Annual Pallets'}</div>
+        <div class="hub-kpi-value">${fmtN(kpiPallets)}</div>
       </div>
-      <div class="hub-kpi-item" title="Derived from primary ÷ units-per-order">
-        <div class="hub-kpi-label">Annual Orders</div>
-        <div class="hub-kpi-value">${fmtN(dOrders.value)}</div>
+      <div class="hub-kpi-item">
+        <div class="hub-kpi-label">${isMultiChannel ? 'Total Orders' : 'Annual Orders'}</div>
+        <div class="hub-kpi-value">${fmtN(kpiOrders)}</div>
       </div>
-      <div class="hub-kpi-item" title="Annual units ÷ working days per year (${opDays})">
+      <div class="hub-kpi-item" title="Total annual units ÷ working days per year (${opDays})">
         <div class="hub-kpi-label">Daily Avg</div>
-        <div class="hub-kpi-value">${fmtN(dDaily.value)}</div>
+        <div class="hub-kpi-value">${fmtN(kpiDaily)}</div>
       </div>
     </div>
 
-    <!-- Primary Volume — the nucleus card -->
+    <!-- Primary Volume — the nucleus card (active channel) -->
     <div class="hub-card cm-vol-nucleus mb-4">
       <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;gap:12px;flex-wrap:wrap;">
         <div style="display:flex;align-items:center;gap:8px;">
-          <div class="text-subtitle" style="margin:0;">Primary Volume</div>
+          <div class="text-subtitle" style="margin:0;">Primary Volume${isMultiChannel ? ` — <span style="color:var(--ies-blue);">${ch.name}</span>` : ''}</div>
           <span class="cm-vol-pill cm-vol-pill--info">nucleus</span>
         </div>
         <span class="hub-field__hint" style="flex:1;min-width:240px;text-align:right;">All other UOMs derive from this value &times; the conversion factors below.</span>
@@ -2907,11 +2955,11 @@ function renderVolumes() {
         <div class="hub-field">
           <label class="hub-field__label">Annual volume</label>
           <input class="hub-input" type="number" value="${primary.value || 0}" min="0" step="1000"
-                 data-field="channels.0.primary.value" data-type="number" />
+                 data-field="channels.${activeIdx}.primary.value" data-type="number" />
         </div>
         <div class="hub-field">
           <label class="hub-field__label">UOM</label>
-          <select class="hub-input" data-field="channels.0.primary.uom">
+          <select class="hub-input" data-field="channels.${activeIdx}.primary.uom">
             ${['units', 'cases', 'pallets', 'orders', 'lines'].map(u =>
               `<option value="${u}"${primary.uom === u ? ' selected' : ''}>${u}</option>`
             ).join('')}
@@ -2919,7 +2967,7 @@ function renderVolumes() {
         </div>
         <div class="hub-field">
           <label class="hub-field__label">Activity</label>
-          <select class="hub-input" data-field="channels.0.primary.activity">
+          <select class="hub-input" data-field="channels.${activeIdx}.primary.activity">
             ${[['outbound', 'Outbound'], ['inbound', 'Inbound'], ['returns', 'Returns'], ['transfer', 'Transfer']].map(([v, l]) =>
               `<option value="${v}"${primary.activity === v ? ' selected' : ''}>${l}</option>`
             ).join('')}
@@ -2928,6 +2976,7 @@ function renderVolumes() {
       </div>
       <div style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;color:var(--ies-gray-600);">
         <span class="cm-vol-pill cm-vol-pill--mute">Source: ${sourceBadge}</span>
+        ${primary.autoDerived ? `<span class="cm-vol-pill cm-vol-pill--info">auto-derived from outbound × returns%</span>` : ''}
       </div>
     </div>
 
@@ -2937,20 +2986,20 @@ function renderVolumes() {
         <div class="text-subtitle" style="margin:0 0 12px;">UOM Conversion Factors</div>
         <div class="cm-vol-row"><span>Units per case</span>
           <input class="hub-input cm-vol-num" type="number" value="${conv.unitsPerCase || ''}" placeholder="12" step="0.1"
-                 data-field="channels.0.conversions.unitsPerCase" data-type="number" /></div>
+                 data-field="channels.${activeIdx}.conversions.unitsPerCase" data-type="number" /></div>
         <div class="cm-vol-row"><span>Cases per pallet</span>
           <input class="hub-input cm-vol-num" type="number" value="${conv.casesPerPallet || ''}" placeholder="40" step="0.1"
-                 data-field="channels.0.conversions.casesPerPallet" data-type="number" /></div>
+                 data-field="channels.${activeIdx}.conversions.casesPerPallet" data-type="number" /></div>
         <div class="cm-vol-row"><span>Lines per order</span>
           <input class="hub-input cm-vol-num" type="number" value="${conv.linesPerOrder || ''}" placeholder="2" step="0.1"
-                 data-field="channels.0.conversions.linesPerOrder" data-type="number" /></div>
+                 data-field="channels.${activeIdx}.conversions.linesPerOrder" data-type="number" /></div>
         <div class="cm-vol-row"><span>Units per line</span>
           <input class="hub-input cm-vol-num" type="number" value="${conv.unitsPerLine || ''}" placeholder="5" step="0.1"
-                 data-field="channels.0.conversions.unitsPerLine" data-type="number" /></div>
+                 data-field="channels.${activeIdx}.conversions.unitsPerLine" data-type="number" /></div>
         <div class="cm-vol-row" style="gap:6px;"><span>Weight per unit</span>
           <input class="hub-input cm-vol-num" type="number" value="${conv.weightPerUnit || ''}" placeholder="1.0" step="0.01"
-                 data-field="channels.0.conversions.weightPerUnit" data-type="number" style="max-width:90px;" />
-          <select class="hub-input" data-field="channels.0.conversions.weightUnit" style="max-width:80px;">
+                 data-field="channels.${activeIdx}.conversions.weightPerUnit" data-type="number" style="max-width:90px;" />
+          <select class="hub-input" data-field="channels.${activeIdx}.conversions.weightUnit" style="max-width:80px;">
             <option value="lbs"${conv.weightUnit === 'lbs' || !conv.weightUnit ? ' selected' : ''}>lbs</option>
             <option value="kg"${conv.weightUnit === 'kg' ? ' selected' : ''}>kg</option>
           </select>
@@ -2962,11 +3011,11 @@ function renderVolumes() {
         <div class="text-subtitle" style="margin:0 0 12px;">Structural Assumptions</div>
         <div class="cm-vol-row" style="gap:6px;"><span>Returns rate</span>
           <input class="hub-input cm-vol-num" type="number" value="${ass.returnsPercent || 0}" placeholder="5" step="0.1" min="0" max="100"
-                 data-field="channels.0.assumptions.returnsPercent" data-type="number" style="max-width:80px;" />
+                 data-field="channels.${activeIdx}.assumptions.returnsPercent" data-type="number" style="max-width:80px;" />
           <span class="cm-vol-row__suffix">%</span></div>
         <div class="cm-vol-row" style="gap:6px;"><span>Inbound : outbound ratio</span>
           <input class="hub-input cm-vol-num" type="number" value="${ass.inboundOutboundRatio || 1}" placeholder="1.0" step="0.01" min="0"
-                 data-field="channels.0.assumptions.inboundOutboundRatio" data-type="number" style="max-width:80px;" />
+                 data-field="channels.${activeIdx}.assumptions.inboundOutboundRatio" data-type="number" style="max-width:80px;" />
           <span class="cm-vol-row__suffix">&times;</span></div>
         <div class="cm-vol-row" style="gap:6px;"><span>Working days / year</span>
           <input class="hub-input cm-vol-num" type="number" value="${opDays}" placeholder="250" step="1" min="1" max="366"
@@ -2974,18 +3023,18 @@ function renderVolumes() {
           <span class="cm-vol-row__suffix">days</span></div>
         <div class="cm-vol-row" style="gap:6px;"><span>Peak surge factor</span>
           <input class="hub-input cm-vol-num" type="number" value="${ass.peakSurgeFactor || 1.5}" placeholder="1.5" step="0.1" min="1"
-                 data-field="channels.0.assumptions.peakSurgeFactor" data-type="number" style="max-width:80px;" />
+                 data-field="channels.${activeIdx}.assumptions.peakSurgeFactor" data-type="number" style="max-width:80px;" />
           <span class="cm-vol-row__suffix">&times; daily avg</span></div>
         <div class="cm-vol-formula">Returns volume = ${fmtFull(annualUnits)} &times; ${(ass.returnsPercent || 0)}% = ${fmtFull(dReturns.value)} units/yr</div>
       </div>
     </div>
 
-    ${renderSeasonalityProfileCard()}
+    ${renderSeasonalityProfileCard(activeIdx)}
 
     <!-- Derived Volumes table — read-only traceability surface -->
     <div class="hub-card mb-4">
       <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;gap:12px;flex-wrap:wrap;">
-        <div class="text-subtitle" style="margin:0;">Derived Volumes</div>
+        <div class="text-subtitle" style="margin:0;">Derived Volumes${isMultiChannel ? ` — <span style="color:var(--ies-blue);">${ch.name}</span>` : ''}</div>
         <span class="hub-field__hint">Read-only — every calc consumer reads from here. Override per-row when RFP figures don’t reconcile.</span>
       </div>
       <table class="cm-vol-derived-table">
@@ -2993,7 +3042,7 @@ function renderVolumes() {
           <tr>
             <th style="text-align:left;">Figure</th>
             <th style="text-align:right;width:140px;">Value</th>
-            <th style="width:120px;text-align:right;">Override</th>
+            <th style="width:160px;text-align:right;">Override</th>
           </tr>
         </thead>
         <tbody>
@@ -3058,6 +3107,19 @@ function renderVolumes() {
       .cm-vol-override-input { border-color: var(--ies-blue) !important; }
       .cm-vol-source-bar { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--ies-gray-50, #fafbfc); border: 1px solid var(--ies-gray-200); border-radius: 10px; font-size: 12px; }
 
+      /* Channel tab strip (Phase 2.3) */
+      .cm-vol-channels { border-bottom: 1px solid var(--ies-gray-200); padding-bottom: 0; }
+      .cm-vol-tabs { display: flex; gap: 4px; flex-wrap: wrap; align-items: stretch; }
+      .cm-vol-tab { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; font-size: 13px; font-weight: 500; color: var(--ies-gray-600); background: transparent; border: 1px solid transparent; border-bottom: none; border-radius: 6px 6px 0 0; cursor: pointer; margin-bottom: -1px; }
+      .cm-vol-tab:hover { color: var(--ies-navy); background: var(--ies-gray-50, #fafbfc); }
+      .cm-vol-tab--active { color: var(--ies-blue); background: white; border-color: var(--ies-gray-200); border-bottom-color: white; font-weight: 600; }
+      .cm-vol-tab--reverse { color: #a32d2d; }
+      .cm-vol-tab--reverse.cm-vol-tab--active { color: #a32d2d; }
+      .cm-vol-tab__dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+      .cm-vol-tab__pct { display: inline-block; padding: 1px 6px; border-radius: 999px; background: var(--ies-gray-100, #f1f3f5); color: var(--ies-gray-600); font-size: 10px; font-weight: 700; }
+      .cm-vol-tab--add { color: var(--ies-blue); border-style: dashed; border-color: rgba(0,71,171,0.30); }
+      .cm-vol-tab--manage { margin-left: auto; color: var(--ies-gray-500); border-style: dashed; border-color: var(--ies-gray-200); }
+
       /* Stack to 1-up on narrow viewports */
       @media (max-width: 900px) {
         .cm-vol-2up { grid-template-columns: 1fr !important; }
@@ -3076,11 +3138,11 @@ function renderVolumes() {
   `;
 }
 
-function renderSeasonalityProfileCard() {
-  // Phase 2.1 (volumes-as-nucleus): read from channels[0].seasonality.
+function renderSeasonalityProfileCard(activeIdx = 0) {
+  // Phase 2.3 (volumes-as-nucleus): read from channels[activeIdx].seasonality.
   // Falls back to legacy model.seasonalityProfile if channel state missing
   // (defensive — should not happen post-migration).
-  const ch = (Array.isArray(model.channels) && model.channels[0]) || null;
+  const ch = (Array.isArray(model.channels) && model.channels[activeIdx]) || null;
   const sp = (ch && ch.seasonality) || model.seasonalityProfile || {};
   const shares = Array.isArray(sp.monthly_shares) && sp.monthly_shares.length === 12
     ? sp.monthly_shares.slice()
@@ -3102,7 +3164,7 @@ function renderSeasonalityProfileCard() {
       <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;">
         <div class="hub-field" style="min-width:220px;">
           <label class="hub-field__label">Preset</label>
-          <select class="hub-input" data-field="channels.0.seasonality.preset" data-cm-action="seasonality-preset-change">
+          <select class="hub-input" data-field="channels.${activeIdx}.seasonality.preset" data-cm-action="seasonality-preset-change">
             <option value="flat"${presetName === 'flat' ? ' selected' : ''}>Flat (1/12 per month)</option>
             <option value="ecom_holiday_peak"${presetName === 'ecom_holiday_peak' ? ' selected' : ''}>E-com Holiday Peak (Q4 heavy)</option>
             <option value="cold_chain_food"${presetName === 'cold_chain_food' ? ' selected' : ''}>Cold Chain Food (Thanksgiving/Christmas)</option>
@@ -3118,7 +3180,7 @@ function renderSeasonalityProfileCard() {
             <label>${MONTH_ABBR[i]}</label>
             <input class="hub-input hub-num" type="number" min="0" max="100" step="0.1"
               value="${(Number(v) * 100).toFixed(1)}"
-              data-cm-action="seasonality-month" data-idx="${i}"
+              data-cm-action="seasonality-month" data-idx="${i}" data-channel-idx="${activeIdx}"
               title="${MONTH_FULL[i]} share of annual volume" />
           </div>
         `).join('')}
@@ -7214,9 +7276,10 @@ function bindSectionEvents(section, container) {
       } else {
         // Dot-path assignment
         setNestedValue(model, field, val);
-        // Phase 2.1: dual-write — mirror channel mutations back to legacy
-        // fields so unmigrated calc consumers stay correct until Phase 3.
-        if (field.startsWith('channels.')) {
+        // Phase 2.3: dual-write — only mirror channel-0 mutations back to
+        // legacy fields. channels[1+] are dormant for calc until Phase 3
+        // consumer migration; their data persists but doesn't hit legacy.
+        if (field.startsWith('channels.0.')) {
           syncLegacyFromChannel(model);
         }
         // M1 (2026-04-21): recompute derived targetMargin whenever a component
@@ -7538,10 +7601,11 @@ function bindSectionEvents(section, container) {
       const name = e.target.value;
       if (name === 'custom') return; // don't auto-apply anything when user picks custom
       const preset = SEASONALITY_PRESETS[name] || SEASONALITY_PRESETS.flat;
-      // Phase 2.1: write to channel[0].seasonality, sync to legacy.
-      if (!Array.isArray(model.channels) || !model.channels[0]) api.backfillChannelsFromLegacy(model);
-      model.channels[0].seasonality = { preset: name, monthly_shares: preset.slice() };
-      syncLegacyFromChannel(model);
+      // Phase 2.3: write to active channel (resolved from _activeChannelKey).
+      if (!Array.isArray(model.channels) || model.channels.length === 0) api.backfillChannelsFromLegacy(model);
+      const activeIdx = Math.max(0, model.channels.findIndex(c => c.key === _activeChannelKey));
+      model.channels[activeIdx].seasonality = { preset: name, monthly_shares: preset.slice() };
+      if (activeIdx === 0) syncLegacyFromChannel(model);
       isDirty = true;
       renderSection();
       showToast(`Applied "${SEASONALITY_PRESET_LABELS[name]}" profile`, 'success');
@@ -7551,9 +7615,11 @@ function bindSectionEvents(section, container) {
     inp.addEventListener('input', (e) => {
       const idx = parseInt(e.target.dataset.idx);
       if (!(idx >= 0 && idx < 12)) return;
-      // Phase 2.1: write to channel[0].seasonality, sync to legacy.
-      if (!Array.isArray(model.channels) || !model.channels[0]) api.backfillChannelsFromLegacy(model);
-      const chSeason = model.channels[0].seasonality || (model.channels[0].seasonality = { preset: 'flat', monthly_shares: new Array(12).fill(1/12) });
+      // Phase 2.3: read which channel this seasonality input belongs to.
+      const chIdx = parseInt(e.target.dataset.channelIdx) || 0;
+      if (!Array.isArray(model.channels) || !model.channels[chIdx]) api.backfillChannelsFromLegacy(model);
+      const targetCh = model.channels[chIdx] || model.channels[0];
+      const chSeason = targetCh.seasonality || (targetCh.seasonality = { preset: 'flat', monthly_shares: new Array(12).fill(1/12) });
       if (!Array.isArray(chSeason.monthly_shares) || chSeason.monthly_shares.length !== 12) {
         chSeason.monthly_shares = new Array(12).fill(1/12);
       }
@@ -7562,7 +7628,9 @@ function bindSectionEvents(section, container) {
       // Hand-edit flips preset to 'custom' so future preset changes don't
       // silently clobber the user's tweaks.
       chSeason.preset = 'custom';
-      syncLegacyFromChannel(model);
+      // Only sync to legacy when editing channel 0 (the canonical primary).
+      // Phase 3 will retire this branch when calc consumers read accessors.
+      if (chIdx === 0) syncLegacyFromChannel(model);
       isDirty = true;
       // Debounced re-render so sum/peak summary updates without losing focus
       clearTimeout(_seasonalityRerenderTimer);
@@ -9953,6 +10021,17 @@ function writeOverrideAuditEvent(ev) {
 
 function handleAction(action, idx, btn) {
   switch (action) {
+    case 'vol-channel-tab':
+      _activeChannelKey = btn?.dataset?.key || _activeChannelKey;
+      _volEditingOverrideKey = null;
+      renderSection();
+      return;
+    case 'vol-channel-add-open':
+      openChannelArchetypePicker();
+      return;
+    case 'vol-channel-manage-open':
+      openChannelManageModal();
+      return;
     case 'vol-override-start':
       _volEditingOverrideKey = btn?.dataset?.key || null;
       renderSection();
@@ -11987,6 +12066,232 @@ function setNestedValue(obj, path, value) {
     current = current[parts[i]];
   }
   current[parts[parts.length - 1]] = value;
+}
+
+// ============================================================
+// VOLUMES & PROFILE — channel modals (Phase 2.3)
+// ============================================================
+
+/**
+ * Picker modal for adding a new channel from the master_channel_archetypes
+ * catalog. Renders the 7 archetype cards + a "Custom channel" option.
+ * Selecting an archetype creates a new channel block on model.channels[],
+ * switches the active tab to it, and re-renders.
+ */
+async function openChannelArchetypePicker() {
+  const overlay = document.createElement('div');
+  overlay.className = 'hub-modal-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:9999;';
+  overlay.innerHTML = `
+    <div style="background:white;border-radius:10px;padding:24px;width:780px;max-width:95vw;max-height:92vh;overflow:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
+        <div>
+          <h3 style="margin:0;">Add channel</h3>
+          <p class="cm-subtle" style="margin-top:4px;font-size:13px;color:var(--ies-gray-600);">Pick an archetype to seed sensible defaults — you can edit any field afterward.</p>
+        </div>
+        <button class="hub-btn hub-btn-secondary" data-close>×</button>
+      </div>
+      <div id="cm-channel-picker-body" style="margin-top:16px;">
+        <div style="text-align:center;padding:32px;color:var(--ies-gray-500);">Loading archetypes…</div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => overlay.remove()));
+
+  const archetypes = await api.fetchChannelArchetypes();
+  const body = overlay.querySelector('#cm-channel-picker-body');
+  if (!body) return;
+  if (!archetypes.length) {
+    body.innerHTML = `<p style="color:var(--ies-gray-500);font-size:13px;">No archetypes available. Pick a Custom channel below.</p>`;
+  } else {
+    body.innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        ${archetypes.map(a => `
+          <button class="cm-arch-card" data-archetype-key="${a.archetype_key}" title="${a.description || ''}">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+              ${a.color ? `<span class="cm-arch-card__dot" style="background:${a.color};"></span>` : ''}
+              <span style="font-weight:600;font-size:13px;color:var(--ies-navy);">${a.name}</span>
+              ${a.auto_derived_returns ? '<span class="cm-vol-pill cm-vol-pill--info" style="margin-left:auto;">auto-derived</span>' : ''}
+            </div>
+            <div style="font-size:11px;color:var(--ies-gray-600);line-height:1.4;">${a.description || ''}</div>
+          </button>
+        `).join('')}
+        <button class="cm-arch-card cm-arch-card--custom" data-archetype-key="__custom__">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+            <span style="font-weight:600;font-size:13px;color:var(--ies-navy);">Custom channel</span>
+          </div>
+          <div style="font-size:11px;color:var(--ies-gray-600);line-height:1.4;">Empty channel with neutral defaults — use when none of the catalog archetypes fit.</div>
+        </button>
+      </div>
+      <style>
+        .cm-arch-card { background: white; border: 1px solid var(--ies-gray-200); border-radius: 10px; padding: 14px 16px; text-align: left; cursor: pointer; transition: border-color 120ms, transform 120ms; }
+        .cm-arch-card:hover { border-color: var(--ies-blue); transform: translateY(-1px); box-shadow: 0 2px 6px rgba(0,71,171,0.08); }
+        .cm-arch-card--custom { border-style: dashed; }
+        .cm-arch-card__dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+      </style>
+    `;
+
+    body.querySelectorAll('[data-archetype-key]').forEach(card => {
+      card.addEventListener('click', () => {
+        const key = card.dataset.archetypeKey;
+        const arch = key === '__custom__' ? null : archetypes.find(a => a.archetype_key === key);
+        const newCh = buildChannelFromArchetype(arch);
+        if (!Array.isArray(model.channels)) model.channels = [];
+        model.channels.push(newCh);
+        _activeChannelKey = newCh.key;
+        isDirty = true;
+        overlay.remove();
+        renderSection();
+        showToast(`Added channel: ${newCh.name}`, 'success');
+      });
+    });
+  }
+}
+
+/**
+ * Build a Channel block from a master_channel_archetypes row, or seed a
+ * Custom channel when arch is null.
+ */
+function buildChannelFromArchetype(arch) {
+  const existing = (model.channels || []).map(c => c.key);
+  const baseKey = arch ? arch.archetype_key : 'custom';
+  let key = baseKey;
+  let n = 2;
+  while (existing.includes(key)) { key = `${baseKey}-${n++}`; }
+
+  const seedConv = (arch && arch.default_conversions) || {
+    unitsPerCase: 12, casesPerPallet: 40, linesPerOrder: 2, unitsPerLine: 5, weightPerUnit: 1, weightUnit: 'lbs',
+  };
+  const seedAss = (arch && arch.default_assumptions) || {
+    returnsPercent: 5, inboundOutboundRatio: 1.0, peakSurgeFactor: 1.5,
+  };
+  const presetName = (arch && arch.default_seasonality_preset) || 'flat';
+  const presetShares = (SEASONALITY_PRESETS[presetName] || SEASONALITY_PRESETS.flat).slice();
+
+  const isReverse = !!(arch && arch.auto_derived_returns);
+  const sortOrders = (model.channels || []).map(c => c.sortOrder || 0);
+  const sortOrder = sortOrders.length ? Math.max(...sortOrders) + 10 : 10;
+
+  return {
+    key,
+    name: arch ? arch.name : 'Custom channel',
+    archetypeId: arch ? arch.archetype_key : null,
+    color: (arch && arch.color) || null,
+    sortOrder,
+    primary: {
+      value: 0,
+      uom: 'units',
+      activity: isReverse ? 'returns' : 'outbound',
+      source: 'manual',
+      autoDerived: isReverse,
+    },
+    conversions: { ...seedConv },
+    assumptions: { ...seedAss },
+    seasonality: { preset: presetName, monthly_shares: presetShares },
+    overrides: [],
+    archetypeSnapshot: arch ? {
+      archetype_key: arch.archetype_key,
+      name: arch.name,
+      default_conversions: arch.default_conversions,
+      default_assumptions: arch.default_assumptions,
+      default_seasonality_preset: arch.default_seasonality_preset,
+      auto_derived_returns: !!arch.auto_derived_returns,
+      capturedAt: new Date().toISOString(),
+    } : null,
+  };
+}
+
+/**
+ * Manage channels modal — rename, delete, reorder, hide.
+ */
+function openChannelManageModal() {
+  const overlay = document.createElement('div');
+  overlay.className = 'hub-modal-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:9999;';
+  const renderBody = () => {
+    const channels = (model.channels || []).slice().sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+    return channels.map((c, i) => `
+      <div class="cm-mgmt-row" data-channel-key="${c.key}">
+        <div class="cm-mgmt-row__handle">${c.color ? `<span class="cm-vol-tab__dot" style="background:${c.color};"></span>` : ''}</div>
+        <input class="hub-input cm-mgmt-row__name" value="${c.name || ''}" data-action="vol-channel-rename" data-key="${c.key}" placeholder="Channel name" />
+        <span class="cm-mgmt-row__type">${c.archetypeId || 'custom'}</span>
+        <div class="cm-mgmt-row__actions">
+          <button class="hub-btn hub-btn-secondary hub-btn-sm" ${i === 0 ? 'disabled' : ''} data-action="vol-channel-reorder-up" data-key="${c.key}" title="Move up">▲</button>
+          <button class="hub-btn hub-btn-secondary hub-btn-sm" ${i === channels.length - 1 ? 'disabled' : ''} data-action="vol-channel-reorder-down" data-key="${c.key}" title="Move down">▼</button>
+          <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="vol-channel-toggle-hidden" data-key="${c.key}" title="${c.hidden ? 'Show channel' : 'Hide channel from page'}">${c.hidden ? '👁‍🗨' : '👁'}</button>
+          <button class="hub-btn hub-btn-danger hub-btn-sm" ${channels.length <= 1 ? 'disabled' : ''} data-action="vol-channel-delete" data-key="${c.key}" title="Delete channel">×</button>
+        </div>
+      </div>
+    `).join('');
+  };
+  overlay.innerHTML = `
+    <div style="background:white;border-radius:10px;padding:24px;width:760px;max-width:95vw;max-height:92vh;overflow:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
+        <div>
+          <h3 style="margin:0;">Manage channels</h3>
+          <p class="cm-subtle" style="margin-top:4px;font-size:13px;color:var(--ies-gray-600);">Rename, reorder, hide, or delete channels. Deleting drops all channel data — there's no undo.</p>
+        </div>
+        <button class="hub-btn hub-btn-secondary" data-close>×</button>
+      </div>
+      <div id="cm-channel-mgmt-body" style="margin-top:16px;display:flex;flex-direction:column;gap:8px;">
+        ${renderBody()}
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:16px;">
+        <button class="hub-btn hub-btn-primary" data-close>Done</button>
+      </div>
+      <style>
+        .cm-mgmt-row { display: grid; grid-template-columns: 24px 1fr 100px auto; gap: 8px; align-items: center; padding: 8px 10px; border: 1px solid var(--ies-gray-200); border-radius: 8px; }
+        .cm-mgmt-row__handle { display: flex; align-items: center; justify-content: center; }
+        .cm-mgmt-row__type { font-size: 11px; color: var(--ies-gray-500); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700; }
+        .cm-mgmt-row__actions { display: inline-flex; gap: 4px; }
+      </style>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const wireBody = () => {
+    overlay.querySelectorAll('input[data-action="vol-channel-rename"]').forEach(inp => {
+      inp.addEventListener('change', (e) => {
+        const key = e.target.dataset.key;
+        const ch = model.channels.find(c => c.key === key);
+        if (!ch) return;
+        ch.name = e.target.value || ch.name;
+        isDirty = true;
+        renderSection();
+      });
+    });
+    overlay.querySelectorAll('button[data-action]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const action = btn.dataset.action;
+        const key = btn.dataset.key;
+        if (action === 'vol-channel-reorder-up' || action === 'vol-channel-reorder-down') {
+          const sorted = (model.channels || []).slice().sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+          const i = sorted.findIndex(c => c.key === key);
+          const j = action === 'vol-channel-reorder-up' ? i - 1 : i + 1;
+          if (j < 0 || j >= sorted.length) return;
+          const tmp = sorted[i].sortOrder;
+          sorted[i].sortOrder = sorted[j].sortOrder;
+          sorted[j].sortOrder = tmp;
+          isDirty = true;
+        } else if (action === 'vol-channel-toggle-hidden') {
+          const ch = model.channels.find(c => c.key === key);
+          if (ch) { ch.hidden = !ch.hidden; isDirty = true; }
+        } else if (action === 'vol-channel-delete') {
+          if (model.channels.length <= 1) return;
+          if (!confirm(`Delete channel? All channel data is dropped — there's no undo.`)) return;
+          model.channels = model.channels.filter(c => c.key !== key);
+          if (_activeChannelKey === key) _activeChannelKey = model.channels[0]?.key || null;
+          isDirty = true;
+        }
+        const body = overlay.querySelector('#cm-channel-mgmt-body');
+        if (body) { body.innerHTML = renderBody(); wireBody(); }
+        renderSection();
+      });
+    });
+  };
+  wireBody();
+  overlay.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => overlay.remove()));
 }
 
 // ============================================================
