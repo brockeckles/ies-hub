@@ -150,6 +150,105 @@ export function backfillEquipmentLineTypes(model) {
 }
 
 /**
+ * Phase 1 of volumes-as-nucleus redesign (2026-04-29). Idempotent migration
+ * that populates `model.channels[]` from legacy `volumeLines` + `orderProfile`
+ * + `seasonalityProfile` + scattered assumptions. See
+ * `project_volumes_nucleus_redesign.md` in auto-memory for architecture.
+ *
+ * Phase 1: Lossless and silent. Existing legacy fields are preserved on the
+ * model so unmigrated calc consumers keep reading them. Channel-aware calc
+ * accessors (tools/cost-model/calc.channels.js) read from channels[] only.
+ *
+ * Phase 3 will migrate every legacy-volumeLines consumer to call into the
+ * accessors, after which volumeLines/orderProfile/seasonalityProfile can
+ * be dropped from save.
+ *
+ * Single primary = the isOutboundPrimary row, falling back to the first row.
+ * Other volumeLines rows are not represented in channels[] but are kept on
+ * the model in case the designer wants to surface them for review.
+ *
+ * @param {Object} model — Cost Model project data (mutated in place)
+ * @returns {boolean} true if a channel was synthesized this call, false if already present
+ */
+export function backfillChannelsFromLegacy(model) {
+  if (!model) return false;
+  if (Array.isArray(model.channels) && model.channels.length > 0) return false;
+
+  const volumeLines = Array.isArray(model.volumeLines) ? model.volumeLines : [];
+  const orderProfile = model.orderProfile || {};
+  const seasonality = model.seasonalityProfile || null;
+
+  const primaryRow = volumeLines.find(v => v && v.isOutboundPrimary) || volumeLines[0] || null;
+
+  // UOM normalization mirrors calc.channels.js:normalizeUom — keep in sync.
+  const normalizeUom = (uom) => {
+    const u = String(uom || '').toLowerCase().trim();
+    if (!u || u === 'each' || u === 'eaches' || u === 'unit') return 'units';
+    if (u === 'case') return 'cases';
+    if (u === 'pallet') return 'pallets';
+    if (u === 'order') return 'orders';
+    if (u === 'line') return 'lines';
+    return u;
+  };
+
+  const primary = primaryRow
+    ? {
+        value: Number(primaryRow.volume) || 0,
+        uom: normalizeUom(primaryRow.uom),
+        activity: 'outbound',
+        source: 'manual',
+      }
+    : { value: 0, uom: 'units', activity: 'outbound', source: 'manual' };
+
+  // Conversions seeded from orderProfile where available, falling to neutral
+  // mid-range defaults otherwise. Designers will tune these on first
+  // walkthrough of the Phase 2 Volumes & Profile page.
+  const conversions = {
+    unitsPerCase: 12,
+    casesPerPallet: 40,
+    linesPerOrder: Number(orderProfile.linesPerOrder) || 2,
+    unitsPerLine:  Number(orderProfile.unitsPerLine)  || 5,
+    weightPerUnit: Number(orderProfile.avgOrderWeight) || 1,
+    weightUnit: orderProfile.weightUnit || 'lbs',
+  };
+
+  // Structural assumptions are net-new model state. None of these existed
+  // on legacy models, so seed neutral mid-range defaults that don't materially
+  // change downstream output. Designer tunes per-channel during Phase 2.
+  const assumptions = {
+    returnsPercent: 5,
+    inboundOutboundRatio: 1.0,
+    peakSurgeFactor: 1.5,
+  };
+
+  const channelSeasonality = {
+    preset: (seasonality && seasonality.preset) || 'flat',
+    monthly_shares: (seasonality && Array.isArray(seasonality.monthly_shares) && seasonality.monthly_shares.length === 12)
+      ? seasonality.monthly_shares.slice()
+      : Array.from({ length: 12 }, () => 100 / 12),
+  };
+
+  model.channels = [{
+    key: 'outbound',
+    name: 'Outbound',
+    archetypeId: null,
+    sortOrder: 10,
+    primary,
+    conversions,
+    assumptions,
+    seasonality: channelSeasonality,
+    overrides: [],
+  }];
+
+  // Mix state defaults to byVolume — single channel, mix is implicit 100%.
+  if (!model.channelMix) {
+    model.channelMix = { mode: 'byVolume' };
+  }
+
+  return true;
+}
+
+/**
  * List all deals (for the Link-to-Deal selector in Setup).
  * Returns a light projection — id, deal_name, client_name — sorted by most-recent.
  * @returns {Promise<Array<{id:string, deal_name:string, client_name:string|null}>>}

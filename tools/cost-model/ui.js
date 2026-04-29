@@ -12,7 +12,7 @@ import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260424-hyg04';
 import * as calc from './calc.js?v=20260427-s2';
-import * as api from './api.js?v=20260429-lnk2';
+import * as api from './api.js?v=20260429-vol1';
 import * as scenarios from './calc.scenarios.js?v=20260429-otfix1';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
@@ -793,6 +793,7 @@ async function loadModelByCmId(id) {
     });
     migrateLaborLinesToPositions(model);
     api.backfillEquipmentLineTypes(model);
+    api.backfillChannelsFromLegacy(model);
     isDirty = false;
     userHasInteracted = false;
     activeSection = 'setup';

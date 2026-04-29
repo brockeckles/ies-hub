@@ -17,9 +17,20 @@
  * @property {number} [contractTerm] — years
  */
 
-// ---- Volumes (Section 2) ----
+// ---- Volumes & Profile (Section 2) ----
+//
+// PHASE 1 (volumes-as-nucleus redesign, 2026-04-29): The Volumes & Profile
+// section is being restructured around a channel-segmented nucleus pattern.
+// See `project_volumes_nucleus_redesign.md` in auto-memory for the full
+// architecture. Phase 1 introduces `model.channels[]` as the canonical shape.
+// Legacy `volumeLines`, `orderProfile`, and `seasonalityProfile` stay in saved
+// jsonb for backward compat for one cycle while load-time migration converts
+// them into channels[]. After Phase 3 calc-layer migration, they go away.
 
 /**
+ * Legacy shape — DEPRECATED. Kept for load-time migration into channels[].
+ * Phase 3 migrates all calc consumers off this and Phase 4+ drops it from save.
+ *
  * @typedef {Object} VolumeLine
  * @property {string} name — activity name (e.g. 'Pallets Received', 'Orders Packed')
  * @property {number} volume — annual volume
@@ -27,14 +38,128 @@
  * @property {boolean} [isOutboundPrimary] — starred line for unit cost metrics
  */
 
-// ---- Order Profile (Section 3) ----
-
 /**
+ * Legacy shape — DEPRECATED. Folded into Channel.conversions in the
+ * volumes-as-nucleus redesign. Kept for load-time migration only.
+ *
  * @typedef {Object} OrderProfile
  * @property {number} [linesPerOrder]
  * @property {number} [unitsPerLine]
  * @property {number} [avgOrderWeight]
  * @property {string} [weightUnit] — 'lbs' | 'kg'
+ */
+
+/**
+ * UOM conversion factors that translate the channel's primary volume into
+ * every other UOM downstream calc may need. Edited by the designer; seeded
+ * from the channel archetype catalog when a channel is first added.
+ *
+ * @typedef {Object} UomConversionFactors
+ * @property {number} unitsPerCase
+ * @property {number} casesPerPallet
+ * @property {number} linesPerOrder
+ * @property {number} unitsPerLine
+ * @property {number} weightPerUnit
+ * @property {('lbs'|'kg')} weightUnit
+ */
+
+/**
+ * Structural assumptions that interpret the channel's primary volume into
+ * operating volumes (returns, inbound, peak day). Per-channel because these
+ * differ materially across DTC vs B2B vs reverse logistics.
+ *
+ * Note: workingDaysPerYear is NOT here — it lives on facility.opDaysPerYear
+ * because it's a building calendar property shared across channels.
+ *
+ * @typedef {Object} StructuralAssumptions
+ * @property {number} returnsPercent — % of channel outbound that returns (0–100)
+ * @property {number} inboundOutboundRatio — IB:OB unit ratio (e.g. 1.05 = 5% more inbound than outbound)
+ * @property {number} peakSurgeFactor — peak day vs daily-avg multiplier (e.g. 1.6, 2.0, 3.0)
+ */
+
+/**
+ * Per-channel monthly seasonality. Same shape as the legacy global
+ * `model.seasonalityProfile` — moved into the channel block so DTC and B2B
+ * can carry independent seasonal patterns.
+ *
+ * @typedef {Object} ChannelSeasonality
+ * @property {string} preset — 'flat' | 'ecom_holiday_peak' | 'cold_chain_food' | 'apparel_2_peak' | 'custom'
+ * @property {number[]} monthly_shares — 12 values (% per month, should sum to 100)
+ */
+
+/**
+ * The single canonical volume input for a channel. All other UOMs and all
+ * operating volumes derive from this × conversions × assumptions.
+ *
+ * @typedef {Object} PrimaryVolume
+ * @property {number} value — annual volume in the chosen UOM
+ * @property {('units'|'cases'|'pallets'|'orders'|'lines')} uom
+ * @property {('outbound'|'inbound'|'returns'|'transfer'|'custom')} activity
+ * @property {boolean} [autoDerived] — true when this primary is auto-computed (e.g. reverse-logistics from Σ outbound × returns%)
+ * @property {('manual'|'wsc'|'netopt'|'imported')} [source]
+ * @property {string} [sourceRef] — id/ref of source scenario when imported
+ */
+
+/**
+ * Designer-pinned authoritative figure overriding a derived volume. Lets a
+ * designer pin (e.g.) "Annual Pallets" to an RFP-stated figure that doesn't
+ * match `primary ÷ unitsPerCase ÷ casesPerPallet`. Variance vs derived is
+ * shown in UI as a badge on the row.
+ *
+ * @typedef {Object} DerivedVolumeOverride
+ * @property {('cases'|'pallets'|'orders'|'lines'|'dailyAvg'|'peakDay'|'returns'|'inbound')} key
+ * @property {number} pinnedValue
+ * @property {string} [note] — optional rationale
+ * @property {string} [pinnedAt] — ISO timestamp
+ */
+
+/**
+ * One operating profile that lives in the warehouse. Channels are the top
+ * dimension of the cost model: each channel carries its own primary volume,
+ * conversions, assumptions, and seasonality. A single-channel deal defaults
+ * to one channel; multi-channel deals (DTC + B2B + reverse) get a tab strip.
+ *
+ * @typedef {Object} Channel
+ * @property {string} key — stable identifier (e.g. 'dtc-ecom', 'b2b-retail', 'reverse')
+ * @property {string} name — display name (editable)
+ * @property {string} [archetypeId] — fk to master_channel_archetypes (null for fully-custom channels)
+ * @property {string} [color] — visual accent for tabs/badges
+ * @property {number} sortOrder
+ * @property {boolean} [hidden]
+ * @property {PrimaryVolume} primary
+ * @property {UomConversionFactors} conversions
+ * @property {StructuralAssumptions} assumptions
+ * @property {ChannelSeasonality} seasonality
+ * @property {DerivedVolumeOverride[]} [overrides]
+ * @property {Object} [archetypeSnapshot] — JSON snapshot of archetype seed at time of selection (so archetype edits don't silently mutate channels)
+ */
+
+/**
+ * Mix-entry mode. 'byVolume' (default) — channels independently entered, mix
+ * % is read-only computed. 'byMix' — total volume + mix bar drives per-channel
+ * primaries, which are derived. Toggling between modes never destroys data.
+ *
+ * @typedef {Object} ChannelMixState
+ * @property {('byVolume'|'byMix')} mode
+ * @property {number} [totalVolume] — only meaningful in byMix
+ * @property {('units'|'cases'|'pallets'|'orders'|'lines')} [totalUom] — only meaningful in byMix
+ * @property {Array<{channelKey: string, pct: number}>} [allocations] — only meaningful in byMix
+ */
+
+/**
+ * Master-data archetype seeding a channel block. Lives in master_channel_archetypes
+ * Supabase table. Hub admins manage; designers select when adding a channel.
+ *
+ * @typedef {Object} ChannelArchetype
+ * @property {string} id — uuid
+ * @property {string} name
+ * @property {string} description
+ * @property {UomConversionFactors} defaultConversions
+ * @property {StructuralAssumptions} defaultAssumptions
+ * @property {string} defaultSeasonalityPreset
+ * @property {boolean} [autoDerivedReturns] — true for reverse-logistics archetype: primary auto-computes from Σ outbound × returns%
+ * @property {number} sortOrder
+ * @property {boolean} isActive
  */
 
 // ---- Facility (Section 4) ----
@@ -44,6 +169,7 @@
  * @property {number} totalSqft
  * @property {number} [clearHeight] — feet
  * @property {number} [dockDoors]
+ * @property {number} [opDaysPerYear] — operating calendar; shared across channels
  * @property {Object} [rateOverrides] — per-key overrides for facility cost calc
  */
 
@@ -250,11 +376,21 @@
 
 /**
  * Full cost model project data structure.
+ *
+ * Volumes-as-nucleus redesign (Phase 1, 2026-04-29):
+ *   - `channels[]` is the canonical shape going forward.
+ *   - `volumeLines`, `orderProfile`, `seasonalityProfile` are DEPRECATED;
+ *     load-time migration converts them into channels[]. Saved on jsonb
+ *     for one cycle of backward compat; dropped after Phase 3.
+ *
  * @typedef {Object} CostModelData
  * @property {number} [id]
  * @property {ProjectDetails} projectDetails
- * @property {VolumeLine[]} volumeLines
- * @property {OrderProfile} orderProfile
+ * @property {Channel[]} [channels] — canonical Volumes & Profile state (Phase 1+)
+ * @property {ChannelMixState} [channelMix] — mix-mode state (Phase 1+)
+ * @property {VolumeLine[]} [volumeLines] — DEPRECATED, kept for migration
+ * @property {OrderProfile} [orderProfile] — DEPRECATED, kept for migration
+ * @property {ChannelSeasonality} [seasonalityProfile] — DEPRECATED, kept for migration
  * @property {FacilityConfig} facility
  * @property {ShiftConfig} shifts
  * @property {DirectLaborLine[]} laborLines
