@@ -7,7 +7,8 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import * as api from './api.js?v=20260427-eve1-s1';
+import * as api from './api.js?v=20260429-demo-s1';
+import { showToast } from '../../shared/toast.js?v=20260418-sK';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -239,7 +240,7 @@ function openNewOppModal() {
     const name   = /** @type {HTMLInputElement} */ (modal.querySelector('#opp-name')).value.trim();
     const client = /** @type {HTMLInputElement} */ (modal.querySelector('#opp-client')).value.trim();
     if (!name || !client) {
-      alert('Deal name and client are required.');
+      showToast('Deal name and client are required.', 'error');
       return;
     }
     const owner = /** @type {HTMLInputElement} */ (modal.querySelector('#opp-owner')).value.trim() || null;
@@ -262,8 +263,8 @@ function openNewOppModal() {
       }
       bus.emit('deal-management:deal-created', { id: inserted?.id });
     } catch (err) {
-      if (createBtn) { createBtn.disabled = false; createBtn.textContent = 'Create Deal'; }
-      alert('Failed to create deal: ' + (err?.message || err));
+      if (createBtn) { createBtn.disabled = false; createBtn.textContent = 'Create Opportunity'; }
+      showToast('Failed to create deal: ' + (err?.message || err), 'error');
     }
   });
 

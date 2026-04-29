@@ -7,6 +7,7 @@
  */
 
 import { db } from '../../shared/supabase.js?v=20260424-A1';
+import { auth } from '../../shared/auth.js?v=20260423-z2';
 
 /**
  * Fetch the 6 canonical DOS stages.
@@ -182,11 +183,20 @@ export async function listRealDeals() {
  */
 export async function createDeal(payload) {
   try {
+    // RLS: deal_deals INSERT policy is `WITH CHECK (owner_id = auth.uid())`,
+    // so we MUST stamp owner_id before insert. Without this, every save
+    // fails with 'new row violates row-level security policy'.
+    // Recurring bug class: same pattern as netopt_configs (2026-04-25).
+    const u = auth.getUser();
+    if (!u?.id) {
+      throw new Error('You are not signed in. Please sign in to create a deal.');
+    }
     const row = {
       deal_name: payload.deal_name || 'Untitled Deal',
       client_name: payload.client_name || '',
       deal_owner: payload.deal_owner || null,
       status: payload.status || 'Draft',
+      owner_id: u.id,
     };
     return await db.insert('deal_deals', row);
   } catch (err) {
