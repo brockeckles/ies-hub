@@ -9,7 +9,7 @@
   --ies-orange: #ff3a00;
   --ies-blue: #0047AB;
   --ies-navy: #1c1c1c;
-  --ies-sidebar-dark: #1a1f2e;
+  --ies-sidebar-dark: #1c1c1c;  /* 2026-04-29 (Brock): align with --ies-navy near-black; was navy #1a1f2e which clashed with GXO orange brand accent */
 
   /* Grays */
   --ies-gray-50: #f8f9fa;
