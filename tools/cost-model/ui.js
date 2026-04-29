@@ -12321,8 +12321,9 @@ const _OFP_FLOW_PALETTE = [
 function _ofpEnsureFlowRegistry() {
   if (!Array.isArray(model.ofpFlows)) model.ofpFlows = [];
   // Backfill missing fields on legacy entries.
-  model.ofpFlows.forEach(f => {
+  model.ofpFlows.forEach((f, i) => {
     if (typeof f.label !== 'string' || !f.label) f.label = f.tag;
+    if (typeof f.sortOrder !== 'number') f.sortOrder = i;
   });
   // Lazy-add registry entries for tags that exist on lines but not in
   // the registry. Preserves user edits — only adds new ones.
@@ -12337,13 +12338,104 @@ function _ofpEnsureFlowRegistry() {
     if (t) lineTags.add(t);
   }
   for (const t of lineTags) {
-    if (!known.has(t)) model.ofpFlows.push({ tag: t, label: t });
+    if (!known.has(t)) {
+      const next = (model.ofpFlows.reduce((mx, f) => Math.max(mx, f.sortOrder || 0), -1)) + 1;
+      model.ofpFlows.push({ tag: t, label: t, sortOrder: next });
+    }
   }
 }
 
 function _ofpFlowRegistry() {
   _ofpEnsureFlowRegistry();
-  return [...model.ofpFlows];
+  return [...model.ofpFlows].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+}
+
+// ============================================================
+// v0.5 — Reorder helpers (areas + flows)
+// ============================================================
+//
+// Both registries use sortOrder as the rank field. Public ops:
+//   _ofpReorderArea(srcKey, tgtKey, position) — drag/drop insertion
+//   _ofpMoveAreaUp(key) / _ofpMoveAreaDown(key) — modal up/down buttons
+//   plus _ofpReorderFlow / _ofpMoveFlowUp / _ofpMoveFlowDown
+//
+// All ops normalize sortOrder to dense 0..N-1 integers after each
+// change so future swaps stay deterministic. Mutate model.ofpAreas /
+// model.ofpFlows in place; caller is responsible for setting isDirty
+// and re-rendering.
+
+function _ofpNormalizeAreaSortOrder() {
+  _ofpEnsureAreaRegistry();
+  const list = [...model.ofpAreas].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+  list.forEach((a, i) => { a.sortOrder = i; });
+}
+
+function _ofpNormalizeFlowSortOrder() {
+  _ofpEnsureFlowRegistry();
+  const list = [...model.ofpFlows].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+  list.forEach((f, i) => { f.sortOrder = i; });
+}
+
+function _ofpReorderArea(srcKey, tgtKey, position /* 'before' | 'after' */) {
+  if (srcKey === tgtKey) return;
+  _ofpNormalizeAreaSortOrder();
+  const sorted = [...model.ofpAreas].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+  const srcIdx = sorted.findIndex(a => a.key === srcKey);
+  if (srcIdx === -1) return;
+  const [item] = sorted.splice(srcIdx, 1);
+  let tgtIdx = sorted.findIndex(a => a.key === tgtKey);
+  if (tgtIdx === -1) return;
+  if (position === 'after') tgtIdx++;
+  sorted.splice(tgtIdx, 0, item);
+  sorted.forEach((a, i) => { a.sortOrder = i; });
+}
+
+function _ofpReorderFlow(srcTag, tgtTag, position /* 'before' | 'after' */) {
+  if (srcTag === tgtTag) return;
+  _ofpNormalizeFlowSortOrder();
+  const sorted = [...model.ofpFlows].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+  const srcIdx = sorted.findIndex(f => f.tag === srcTag);
+  if (srcIdx === -1) return;
+  const [item] = sorted.splice(srcIdx, 1);
+  let tgtIdx = sorted.findIndex(f => f.tag === tgtTag);
+  if (tgtIdx === -1) return;
+  if (position === 'after') tgtIdx++;
+  sorted.splice(tgtIdx, 0, item);
+  sorted.forEach((f, i) => { f.sortOrder = i; });
+}
+
+function _ofpMoveAreaUp(key) {
+  _ofpNormalizeAreaSortOrder();
+  const a = model.ofpAreas.find(x => x.key === key);
+  if (!a || a.sortOrder === 0) return;
+  const above = model.ofpAreas.find(x => x.sortOrder === a.sortOrder - 1);
+  if (above) { const t = a.sortOrder; a.sortOrder = above.sortOrder; above.sortOrder = t; }
+}
+
+function _ofpMoveAreaDown(key) {
+  _ofpNormalizeAreaSortOrder();
+  const max = model.ofpAreas.length - 1;
+  const a = model.ofpAreas.find(x => x.key === key);
+  if (!a || a.sortOrder === max) return;
+  const below = model.ofpAreas.find(x => x.sortOrder === a.sortOrder + 1);
+  if (below) { const t = a.sortOrder; a.sortOrder = below.sortOrder; below.sortOrder = t; }
+}
+
+function _ofpMoveFlowUp(tag) {
+  _ofpNormalizeFlowSortOrder();
+  const f = model.ofpFlows.find(x => x.tag === tag);
+  if (!f || f.sortOrder === 0) return;
+  const above = model.ofpFlows.find(x => x.sortOrder === f.sortOrder - 1);
+  if (above) { const t = f.sortOrder; f.sortOrder = above.sortOrder; above.sortOrder = t; }
+}
+
+function _ofpMoveFlowDown(tag) {
+  _ofpNormalizeFlowSortOrder();
+  const max = model.ofpFlows.length - 1;
+  const f = model.ofpFlows.find(x => x.tag === tag);
+  if (!f || f.sortOrder === max) return;
+  const below = model.ofpFlows.find(x => x.sortOrder === f.sortOrder + 1);
+  if (below) { const t = f.sortOrder; f.sortOrder = below.sortOrder; below.sortOrder = t; }
 }
 
 /**
@@ -12737,19 +12829,38 @@ function _renderOfpArea(areaKey, entries, opHrs, lc, opts = {}) {
     // If there's only one group AND it's untagged, skip dividers entirely
     // (no point showing a single "(untagged)" header on a single-flow area).
     const skipDividers = groups.size === 1 && groups.has('__untagged__');
+
+    // v0.5 — Order groups by Flow registry sortOrder. Untagged group
+    // always renders LAST regardless of registry ordering. Tags not
+    // found in registry sort after registered ones (shouldn't happen
+    // since _ofpEnsureFlowRegistry seeds from line tags, but defensive).
+    const flowOrder = new Map(_ofpFlowRegistry().map((f, i) => [f.tag, i]));
+    const orderedKeys = [...groups.keys()].sort((a, b) => {
+      if (a === '__untagged__') return 1;
+      if (b === '__untagged__') return -1;
+      const ai = flowOrder.has(a) ? flowOrder.get(a) : 9999;
+      const bi = flowOrder.has(b) ? flowOrder.get(b) : 9999;
+      return ai - bi;
+    });
+
     const parts = [];
-    for (const [key, group] of groups) {
+    for (const key of orderedKeys) {
+      const group = groups.get(key);
       const isUntagged = key === '__untagged__';
       const tag = isUntagged ? '' : key;
       if (!skipDividers) {
         // v0.4 — show registry label (falls back to tag), with hover-
         // reveal pencil that opens Manage Flows scoped to this flow.
-        // No pencil on the (untagged) divider.
+        // v0.5 — drag-handle for canvas reorder (also hover-reveal).
+        // No pencil/handle on the (untagged) divider.
         const labelText = isUntagged ? '(untagged)' : _ofpFlowLabel(tag);
+        const handleHtml = isUntagged ? '' :
+          `<span class="ofp-flow-divider__grip" data-flow-tag="${escapeAttr(tag)}" draggable="true" title="Drag to reorder this flow">⋮⋮</span>`;
         const pencilHtml = isUntagged ? '' :
           `<button class="ofp-flow-divider__pencil" data-ofp-action="manage-flows" data-flow-tag="${escapeAttr(tag)}" title="Edit this Flow">✎</button>`;
         parts.push(`
-          <div class="ofp-flow-divider">
+          <div class="ofp-flow-divider"${isUntagged ? '' : ` data-flow-tag="${escapeAttr(tag)}"`}>
+            ${handleHtml}
             <span class="ofp-flow-divider__stripe" style="background:${_flowColor(tag)};"></span>
             <span class="ofp-flow-divider__label">${escapeHtml(labelText)}</span>
             ${pencilHtml}
@@ -12771,6 +12882,7 @@ function _renderOfpArea(areaKey, entries, opHrs, lc, opts = {}) {
       <div class="ofp-area__header" style="border-top:3px solid ${meta.color};">
         <div class="ofp-area__header-row">
           <div class="ofp-area__title-row">
+            <span class="ofp-area__grip" data-area-key="${escapeAttr(areaKey)}" draggable="true" title="Drag to reorder this Functional Area">⋮⋮</span>
             <div class="ofp-area__title">${escapeHtml(meta.label)}</div>
             <button class="ofp-area__title-pencil" data-ofp-action="manage-areas" data-area-key="${escapeAttr(areaKey)}" title="Edit this Functional Area">✎</button>
           </div>
@@ -12893,6 +13005,122 @@ function _bindOperationalFlowEvents(container) {
       e.stopPropagation();
       const focusTag = btn.dataset.flowTag || null;
       _ofpOpenManageFlowsModal(container, focusTag);
+    });
+  });
+
+  // ============================================================
+  // v0.5 — Canvas drag-to-reorder for Functional Areas + Flows
+  // ============================================================
+  //
+  // Independent from the existing card-drag (dragInfo). Uses separate
+  // closure vars so the existing card-area drop handler (which checks
+  // !dragInfo and bails out) doesn't fire when we're reordering.
+  // Drop targets are whole .ofp-area elements for area reorder, and
+  // .ofp-flow-divider elements for flow reorder.
+
+  let areaCanvasDragKey = null;
+  let flowCanvasDragTag = null;
+
+  // --- Area grip dragstart/dragend ---
+  container.querySelectorAll('.ofp-area__grip[data-area-key]').forEach(grip => {
+    grip.addEventListener('dragstart', (e) => {
+      e.stopPropagation();
+      areaCanvasDragKey = grip.dataset.areaKey;
+      try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', `area:${areaCanvasDragKey}`); } catch (_) {}
+      const areaEl = grip.closest('.ofp-area');
+      if (areaEl) areaEl.classList.add('ofp-area--reorder-dragging');
+    });
+    grip.addEventListener('dragend', () => {
+      areaCanvasDragKey = null;
+      container.querySelectorAll('.ofp-area--reorder-dragging').forEach(el => el.classList.remove('ofp-area--reorder-dragging'));
+      container.querySelectorAll('.ofp-area--reorder-target').forEach(el => el.classList.remove('ofp-area--reorder-target'));
+    });
+  });
+
+  // --- Area drop targets ---
+  container.querySelectorAll('.ofp-area[data-ofp-area]').forEach(areaEl => {
+    areaEl.addEventListener('dragover', (e) => {
+      if (!areaCanvasDragKey) return; // card-drag handles this case separately
+      const tgtKey = areaEl.dataset.ofpArea;
+      if (tgtKey === areaCanvasDragKey) return;
+      e.preventDefault();
+      e.stopPropagation();
+      try { e.dataTransfer.dropEffect = 'move'; } catch (_) {}
+      areaEl.classList.add('ofp-area--reorder-target');
+    });
+    areaEl.addEventListener('dragleave', (e) => {
+      if (!areaCanvasDragKey) return;
+      if (e.target === areaEl) areaEl.classList.remove('ofp-area--reorder-target');
+    });
+    areaEl.addEventListener('drop', (e) => {
+      if (!areaCanvasDragKey) return; // let the card-drop handler run if dragInfo set
+      e.preventDefault();
+      e.stopPropagation();
+      const tgtKey = areaEl.dataset.ofpArea;
+      areaEl.classList.remove('ofp-area--reorder-target');
+      if (areaCanvasDragKey === tgtKey) { areaCanvasDragKey = null; return; }
+      // For canvas reorder we use insert-after-target semantics by default
+      // (drop ON an area → place dragged area after target). Could use
+      // mid-rect threshold like the modal but visual cues on horizontal
+      // columns are hard, so simple swap-style insert after.
+      _ofpReorderArea(areaCanvasDragKey, tgtKey, 'after');
+      areaCanvasDragKey = null;
+      isDirty = true;
+      if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+      renderSection();
+    });
+  });
+
+  // --- Flow divider grip dragstart/dragend ---
+  container.querySelectorAll('.ofp-flow-divider__grip[data-flow-tag]').forEach(grip => {
+    grip.addEventListener('dragstart', (e) => {
+      e.stopPropagation();
+      flowCanvasDragTag = grip.dataset.flowTag;
+      try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', `flow:${flowCanvasDragTag}`); } catch (_) {}
+      const dividerEl = grip.closest('.ofp-flow-divider');
+      if (dividerEl) dividerEl.classList.add('ofp-flow-divider--reorder-dragging');
+    });
+    grip.addEventListener('dragend', () => {
+      flowCanvasDragTag = null;
+      container.querySelectorAll('.ofp-flow-divider--reorder-dragging').forEach(el => el.classList.remove('ofp-flow-divider--reorder-dragging'));
+      container.querySelectorAll('.ofp-flow-divider--reorder-above, .ofp-flow-divider--reorder-below').forEach(el =>
+        el.classList.remove('ofp-flow-divider--reorder-above', 'ofp-flow-divider--reorder-below'));
+    });
+  });
+
+  // --- Flow divider drop targets ---
+  container.querySelectorAll('.ofp-flow-divider[data-flow-tag]').forEach(dividerEl => {
+    dividerEl.addEventListener('dragover', (e) => {
+      if (!flowCanvasDragTag) return;
+      const tgtTag = dividerEl.dataset.flowTag;
+      if (tgtTag === flowCanvasDragTag) return;
+      e.preventDefault();
+      e.stopPropagation();
+      try { e.dataTransfer.dropEffect = 'move'; } catch (_) {}
+      const rect = dividerEl.getBoundingClientRect();
+      const above = e.clientY < rect.top + rect.height / 2;
+      dividerEl.classList.toggle('ofp-flow-divider--reorder-above', above);
+      dividerEl.classList.toggle('ofp-flow-divider--reorder-below', !above);
+    });
+    dividerEl.addEventListener('dragleave', (e) => {
+      if (!flowCanvasDragTag) return;
+      if (e.target === dividerEl) {
+        dividerEl.classList.remove('ofp-flow-divider--reorder-above', 'ofp-flow-divider--reorder-below');
+      }
+    });
+    dividerEl.addEventListener('drop', (e) => {
+      if (!flowCanvasDragTag) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const tgtTag = dividerEl.dataset.flowTag;
+      const above = dividerEl.classList.contains('ofp-flow-divider--reorder-above');
+      dividerEl.classList.remove('ofp-flow-divider--reorder-above', 'ofp-flow-divider--reorder-below');
+      if (flowCanvasDragTag === tgtTag) { flowCanvasDragTag = null; return; }
+      _ofpReorderFlow(flowCanvasDragTag, tgtTag, above ? 'before' : 'after');
+      flowCanvasDragTag = null;
+      isDirty = true;
+      if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+      renderSection();
     });
   });
 
@@ -13576,7 +13804,11 @@ function _ofpOpenManageAreasModal(container, focusKey) {
 }
 
 function _renderManageAreasModal() {
+  // Normalize sortOrder so the modal lists in dense 0..N-1 order — keeps
+  // up/down disabled-state math clean.
+  _ofpNormalizeAreaSortOrder();
   const registry = _ofpRegistry();
+  const lastIdx = registry.length - 1;
   // Count lines bound to each area for the line-count column + the
   // delete-confirm prompt (so the user knows how many activities will
   // be reassigned).
@@ -13613,8 +13845,13 @@ function _renderManageAreasModal() {
       ? `<button class="ofp-area-mgr__del" disabled title="Unclassified is protected — cannot delete">×</button>`
       : `<button class="ofp-area-mgr__del" data-area-key="${escapeAttr(a.key)}" data-area-count="${counts[a.key] || 0}" title="Delete this Functional Area">×</button>`;
 
+    const upDisabled = idx === 0 ? 'disabled' : '';
+    const downDisabled = idx === lastIdx ? 'disabled' : '';
     return `
-      <tr class="ofp-area-mgr__row" data-area-row-key="${escapeAttr(a.key)}" data-area-idx="${idx}">
+      <tr class="ofp-area-mgr__row ofp-mgr-row" data-area-row-key="${escapeAttr(a.key)}" data-area-idx="${idx}">
+        <td class="ofp-mgr-row__handle-cell">
+          <span class="ofp-mgr-row__grip" data-area-key="${escapeAttr(a.key)}" draggable="true" title="Drag to reorder">⋮⋮</span>
+        </td>
         <td class="ofp-area-mgr__color-cell">
           <input type="color" class="ofp-area-mgr__color-input" value="${a.color}" data-area-key="${escapeAttr(a.key)}" data-area-field="color" title="Header stripe color" />
         </td>
@@ -13630,6 +13867,10 @@ function _renderManageAreasModal() {
           </select>
         </td>
         <td class="ofp-area-mgr__count-cell">${counts[a.key] || 0}</td>
+        <td class="ofp-mgr-row__move-cell">
+          <button class="ofp-mgr-row__move" data-area-key="${escapeAttr(a.key)}" data-move="up" ${upDisabled} title="Move up">▲</button>
+          <button class="ofp-mgr-row__move" data-area-key="${escapeAttr(a.key)}" data-move="down" ${downDisabled} title="Move down">▼</button>
+        </td>
         <td class="ofp-area-mgr__actions-cell">${delBtn}</td>
       </tr>
     `;
@@ -13648,11 +13889,13 @@ function _renderManageAreasModal() {
         <table class="ofp-area-mgr__table">
           <thead>
             <tr>
+              <th style="width:32px;"></th>
               <th style="width:46px;">Color</th>
               <th style="width:200px;">Label</th>
               <th>Keywords (auto-classify activities by name match)</th>
               <th style="width:130px;">Display</th>
               <th style="width:64px;text-align:center;">Lines</th>
+              <th style="width:60px;text-align:center;">Order</th>
               <th style="width:48px;"></th>
             </tr>
           </thead>
@@ -13821,6 +14064,71 @@ function _bindManageAreasEvents(container) {
       _ofpOpenManageAreasModal(container, key);
     });
   }
+
+  // v0.5 — Up/Down buttons
+  panel.querySelectorAll('.ofp-mgr-row__move[data-area-key]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const key = btn.dataset.areaKey;
+      const dir = btn.dataset.move;
+      if (dir === 'up') _ofpMoveAreaUp(key);
+      else _ofpMoveAreaDown(key);
+      isDirty = true;
+      if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+      renderSection();
+      _ofpOpenManageAreasModal(container, key);
+    });
+  });
+
+  // v0.5 — Drag-handle drag/drop reorder. Closure-scoped sourceKey so
+  // it doesn't collide with anything else.
+  let areaRowDragKey = null;
+  panel.querySelectorAll('.ofp-mgr-row__grip[data-area-key]').forEach(grip => {
+    grip.addEventListener('dragstart', (e) => {
+      areaRowDragKey = grip.dataset.areaKey;
+      try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', areaRowDragKey); } catch (_) {}
+      const row = grip.closest('tr');
+      if (row) row.classList.add('ofp-mgr-row--dragging');
+    });
+    grip.addEventListener('dragend', () => {
+      areaRowDragKey = null;
+      panel.querySelectorAll('.ofp-mgr-row--dragging').forEach(r => r.classList.remove('ofp-mgr-row--dragging'));
+      panel.querySelectorAll('.ofp-mgr-row--drop-above, .ofp-mgr-row--drop-below').forEach(r =>
+        r.classList.remove('ofp-mgr-row--drop-above', 'ofp-mgr-row--drop-below'));
+    });
+  });
+  panel.querySelectorAll('tr.ofp-mgr-row[data-area-row-key]').forEach(row => {
+    row.addEventListener('dragover', (e) => {
+      if (!areaRowDragKey) return;
+      const tgtKey = row.dataset.areaRowKey;
+      if (tgtKey === areaRowDragKey) return;
+      e.preventDefault();
+      try { e.dataTransfer.dropEffect = 'move'; } catch (_) {}
+      const rect = row.getBoundingClientRect();
+      const above = e.clientY < rect.top + rect.height / 2;
+      row.classList.toggle('ofp-mgr-row--drop-above', above);
+      row.classList.toggle('ofp-mgr-row--drop-below', !above);
+    });
+    row.addEventListener('dragleave', (e) => {
+      if (e.target === row || row.contains(e.target) === false) {
+        row.classList.remove('ofp-mgr-row--drop-above', 'ofp-mgr-row--drop-below');
+      }
+    });
+    row.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const tgtKey = row.dataset.areaRowKey;
+      const above = row.classList.contains('ofp-mgr-row--drop-above');
+      row.classList.remove('ofp-mgr-row--drop-above', 'ofp-mgr-row--drop-below');
+      if (!areaRowDragKey || areaRowDragKey === tgtKey) return;
+      _ofpReorderArea(areaRowDragKey, tgtKey, above ? 'before' : 'after');
+      const moved = areaRowDragKey;
+      areaRowDragKey = null;
+      isDirty = true;
+      if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+      renderSection();
+      _ofpOpenManageAreasModal(container, moved);
+    });
+  });
 }
 
 // ============================================================
@@ -13868,19 +14176,22 @@ function _renderManageFlowsModal() {
     if (t) counts[t] = (counts[t] || 0) + 1;
   }
 
-  // Sort: flows with lines first (by count desc), then by label
-  const sorted = [...flows].sort((a, b) => {
-    const ca = counts[a.tag] || 0;
-    const cb = counts[b.tag] || 0;
-    if (cb !== ca) return cb - ca;
-    return a.label.localeCompare(b.label);
-  });
+  // v0.5 — Order by registry sortOrder (the user-controlled rank).
+  // Normalize first so the up/down enable-state math is clean.
+  _ofpNormalizeFlowSortOrder();
+  const sorted = [...flows].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+  const lastIdx = sorted.length - 1;
 
-  const rows = sorted.map(f => {
+  const rows = sorted.map((f, idx) => {
     const resolved = _flowColor(f.tag);
     const isAuto = !f.color;
+    const upDisabled = idx === 0 ? 'disabled' : '';
+    const downDisabled = idx === lastIdx ? 'disabled' : '';
     return `
-      <tr class="ofp-area-mgr__row" data-flow-row-tag="${escapeAttr(f.tag)}">
+      <tr class="ofp-area-mgr__row ofp-mgr-row" data-flow-row-tag="${escapeAttr(f.tag)}" data-flow-idx="${idx}">
+        <td class="ofp-mgr-row__handle-cell">
+          <span class="ofp-mgr-row__grip" data-flow-tag="${escapeAttr(f.tag)}" draggable="true" title="Drag to reorder">⋮⋮</span>
+        </td>
         <td class="ofp-area-mgr__color-cell">
           <input type="color" class="ofp-area-mgr__color-input" value="${resolved}" data-flow-tag="${escapeAttr(f.tag)}" data-flow-field="color" title="${isAuto ? 'Auto color (hash). Pick to override.' : 'Color override — picker resets via the ↻ button.'}" />
         </td>
@@ -13892,6 +14203,10 @@ function _renderManageFlowsModal() {
           ${isAuto ? '<span class="ofp-flow-mgr__auto-chip" title="Color is auto (deterministic hash from tag).">auto</span>' : `<button class="ofp-flow-mgr__reset-color" data-flow-tag="${escapeAttr(f.tag)}" title="Reset to auto color">↻</button>`}
         </td>
         <td class="ofp-area-mgr__count-cell">${counts[f.tag] || 0}</td>
+        <td class="ofp-mgr-row__move-cell">
+          <button class="ofp-mgr-row__move" data-flow-tag="${escapeAttr(f.tag)}" data-move="up" ${upDisabled} title="Move up">▲</button>
+          <button class="ofp-mgr-row__move" data-flow-tag="${escapeAttr(f.tag)}" data-move="down" ${downDisabled} title="Move down">▼</button>
+        </td>
         <td class="ofp-area-mgr__actions-cell">
           <button class="ofp-area-mgr__del" data-flow-tag="${escapeAttr(f.tag)}" data-flow-count="${counts[f.tag] || 0}" title="Delete this Flow">×</button>
         </td>
@@ -13900,7 +14215,7 @@ function _renderManageFlowsModal() {
   }).join('');
 
   const emptyRow = sorted.length === 0
-    ? `<tr><td colspan="5" style="text-align:center; padding:32px 12px; color:var(--ies-gray-400); font-style:italic; font-size:12px;">No flows yet — drag a card onto another to connect them on a flow, or click + Add Flow below.</td></tr>`
+    ? `<tr><td colspan="8" style="text-align:center; padding:32px 12px; color:var(--ies-gray-400); font-style:italic; font-size:12px;">No flows yet — drag a card onto another to connect them on a flow, or click + Add Flow below.</td></tr>`
     : '';
 
   return `
@@ -13916,10 +14231,12 @@ function _renderManageFlowsModal() {
         <table class="ofp-area-mgr__table">
           <thead>
             <tr>
+              <th style="width:32px;"></th>
               <th style="width:46px;">Color</th>
               <th style="width:240px;">Label</th>
               <th>Tag</th>
               <th style="width:64px;text-align:center;">Lines</th>
+              <th style="width:60px;text-align:center;">Order</th>
               <th style="width:48px;"></th>
             </tr>
           </thead>
@@ -14030,13 +14347,78 @@ function _bindManageFlowsEvents(container) {
       let tag = slug;
       let n = 2;
       while (existing.has(tag)) { tag = `${slug}-${n++}`; }
-      model.ofpFlows.push({ tag, label: labelTrim });
+      const next = (model.ofpFlows.reduce((mx, f) => Math.max(mx, f.sortOrder || 0), -1)) + 1;
+      model.ofpFlows.push({ tag, label: labelTrim, sortOrder: next });
       isDirty = true;
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
       _ofpOpenManageFlowsModal(container, tag);
     });
   }
+
+  // v0.5 — Up/Down buttons (flows)
+  panel.querySelectorAll('.ofp-mgr-row__move[data-flow-tag]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const tag = btn.dataset.flowTag;
+      const dir = btn.dataset.move;
+      if (dir === 'up') _ofpMoveFlowUp(tag);
+      else _ofpMoveFlowDown(tag);
+      isDirty = true;
+      if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+      renderSection();
+      _ofpOpenManageFlowsModal(container, tag);
+    });
+  });
+
+  // v0.5 — Drag-handle drag/drop reorder (flows)
+  let flowRowDragTag = null;
+  panel.querySelectorAll('.ofp-mgr-row__grip[data-flow-tag]').forEach(grip => {
+    grip.addEventListener('dragstart', (e) => {
+      flowRowDragTag = grip.dataset.flowTag;
+      try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', flowRowDragTag); } catch (_) {}
+      const row = grip.closest('tr');
+      if (row) row.classList.add('ofp-mgr-row--dragging');
+    });
+    grip.addEventListener('dragend', () => {
+      flowRowDragTag = null;
+      panel.querySelectorAll('.ofp-mgr-row--dragging').forEach(r => r.classList.remove('ofp-mgr-row--dragging'));
+      panel.querySelectorAll('.ofp-mgr-row--drop-above, .ofp-mgr-row--drop-below').forEach(r =>
+        r.classList.remove('ofp-mgr-row--drop-above', 'ofp-mgr-row--drop-below'));
+    });
+  });
+  panel.querySelectorAll('tr.ofp-mgr-row[data-flow-row-tag]').forEach(row => {
+    row.addEventListener('dragover', (e) => {
+      if (!flowRowDragTag) return;
+      const tgtTag = row.dataset.flowRowTag;
+      if (tgtTag === flowRowDragTag) return;
+      e.preventDefault();
+      try { e.dataTransfer.dropEffect = 'move'; } catch (_) {}
+      const rect = row.getBoundingClientRect();
+      const above = e.clientY < rect.top + rect.height / 2;
+      row.classList.toggle('ofp-mgr-row--drop-above', above);
+      row.classList.toggle('ofp-mgr-row--drop-below', !above);
+    });
+    row.addEventListener('dragleave', (e) => {
+      if (e.target === row || row.contains(e.target) === false) {
+        row.classList.remove('ofp-mgr-row--drop-above', 'ofp-mgr-row--drop-below');
+      }
+    });
+    row.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const tgtTag = row.dataset.flowRowTag;
+      const above = row.classList.contains('ofp-mgr-row--drop-above');
+      row.classList.remove('ofp-mgr-row--drop-above', 'ofp-mgr-row--drop-below');
+      if (!flowRowDragTag || flowRowDragTag === tgtTag) return;
+      _ofpReorderFlow(flowRowDragTag, tgtTag, above ? 'before' : 'after');
+      const moved = flowRowDragTag;
+      flowRowDragTag = null;
+      isDirty = true;
+      if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+      renderSection();
+      _ofpOpenManageFlowsModal(container, moved);
+    });
+  });
 }
 
 /** Inline OFP styles. Scoped via .ofp- prefix so they don't bleed. */
@@ -14479,6 +14861,88 @@ function _ofpStyles() {
         transition: all 0.12s;
       }
       .ofp-flow-mgr__reset-color:hover { color: var(--ies-blue); border-color: var(--ies-blue); }
+
+      /* ========================================================
+         v0.5 — Reorder handles + drop indicators
+         ======================================================== */
+
+      /* Canvas: area drag-handle (in title-row) — hover-reveal */
+      .ofp-area__grip {
+        flex: 0 0 auto;
+        font-size: 12px; line-height: 1; letter-spacing: -1px;
+        color: var(--ies-gray-300);
+        cursor: grab; user-select: none;
+        padding: 1px 2px;
+        opacity: 0; transition: opacity 0.12s, color 0.12s;
+      }
+      .ofp-area:hover .ofp-area__grip { opacity: 1; }
+      .ofp-area__grip:hover { color: var(--ies-blue); }
+      .ofp-area__grip:active { cursor: grabbing; }
+      .ofp-area--reorder-dragging { opacity: 0.45; }
+      .ofp-area--reorder-target {
+        outline: 2px dashed var(--ies-blue);
+        outline-offset: 4px;
+        background: rgba(0, 71, 171, 0.04);
+      }
+
+      /* Canvas: flow divider drag-handle */
+      .ofp-flow-divider__grip {
+        flex: 0 0 auto;
+        font-size: 11px; line-height: 1; letter-spacing: -1px;
+        color: var(--ies-gray-300);
+        cursor: grab; user-select: none;
+        padding: 1px 2px; margin-right: 2px;
+        opacity: 0; transition: opacity 0.12s, color 0.12s;
+      }
+      .ofp-flow-divider:hover .ofp-flow-divider__grip { opacity: 1; }
+      .ofp-flow-divider__grip:hover { color: var(--ies-blue); }
+      .ofp-flow-divider__grip:active { cursor: grabbing; }
+      .ofp-flow-divider--reorder-dragging { opacity: 0.45; }
+      .ofp-flow-divider--reorder-above {
+        box-shadow: inset 0 2px 0 0 var(--ies-blue);
+        background: rgba(0, 71, 171, 0.04);
+      }
+      .ofp-flow-divider--reorder-below {
+        box-shadow: inset 0 -2px 0 0 var(--ies-blue);
+        background: rgba(0, 71, 171, 0.04);
+      }
+
+      /* Modal: drag-handle column + grip + up/down buttons */
+      .ofp-mgr-row__handle-cell { width: 32px; padding-right: 4px !important; padding-left: 8px !important; }
+      .ofp-mgr-row__grip {
+        display: inline-block;
+        font-size: 13px; line-height: 1; letter-spacing: -1px;
+        color: var(--ies-gray-400);
+        cursor: grab; user-select: none;
+        padding: 4px 2px;
+      }
+      .ofp-mgr-row__grip:hover { color: var(--ies-blue); }
+      .ofp-mgr-row__grip:active { cursor: grabbing; }
+      .ofp-mgr-row__move-cell {
+        text-align: center; white-space: nowrap;
+      }
+      .ofp-mgr-row__move {
+        background: transparent; border: 1px solid var(--ies-gray-200);
+        border-radius: 3px; width: 22px; height: 22px; padding: 0;
+        cursor: pointer; font-size: 9px; line-height: 1;
+        color: var(--ies-gray-500);
+        display: inline-flex; align-items: center; justify-content: center;
+        margin: 0 1px;
+        transition: all 0.12s;
+      }
+      .ofp-mgr-row__move:hover:not(:disabled) {
+        color: var(--ies-blue); border-color: var(--ies-blue);
+      }
+      .ofp-mgr-row__move:disabled { opacity: 0.3; cursor: not-allowed; }
+
+      /* Modal: drop-target indicators on rows */
+      .ofp-mgr-row--dragging { opacity: 0.45; }
+      .ofp-mgr-row--drop-above td {
+        box-shadow: inset 0 2px 0 0 var(--ies-blue);
+      }
+      .ofp-mgr-row--drop-below td {
+        box-shadow: inset 0 -2px 0 0 var(--ies-blue);
+      }
     </style>
   `;
 }
