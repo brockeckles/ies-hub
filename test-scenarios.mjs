@@ -403,21 +403,22 @@ test('monthlyOvertimePct: profile wrong length is ignored, falls through', () =>
 });
 
 test('monthlyEffectiveHours: peak Aug w/ 15% OT and 12% absence', () => {
+  // 2026-04-29 OT-fix: formula is (1 + OT×0.5)(1 - abs) per tooltip 'OT costs 1.5×'
   // base monthly = 2400/12 = 200
-  // 200 × 1.15 × 0.88 = 202.4
+  // 200 × (1 + 0.15×0.5) × 0.88 = 200 × 1.075 × 0.88 = 189.20
   const aug = monthlyEffectiveHours(LINE_WITH_PROFILE, 7, FALLBACK_HEUR, MARKET_PROFILE);
-  close(aug, 202.4, 0.01);
+  close(aug, 189.20, 0.01);
 });
 test('monthlyEffectiveHours: profile-less line uses fallback', () => {
-  // 200 × 1.05 × 0.88 = 184.8
+  // 2026-04-29 OT-fix: 200 × (1 + 0.05×0.5) × 0.88 = 200 × 1.025 × 0.88 = 180.4
   const may = monthlyEffectiveHours(LINE_NO_PROFILE, 4, FALLBACK_HEUR, null);
-  close(may, 184.8, 0.01);
+  close(may, 180.4, 0.01);
 });
 
-test('annualEffectiveHoursFromMonthly: line with no profile + flat fallback ≈ annual_hours × (1 + OT) × (1 - absence)', () => {
-  // 2400 × 1.05 × 0.88 = 2217.6
+test('annualEffectiveHoursFromMonthly: line with no profile + flat fallback ≈ annual_hours × (1 + OT×0.5) × (1 - absence)', () => {
+  // 2026-04-29 OT-fix: 2400 × (1 + 0.05×0.5) × 0.88 = 2400 × 1.025 × 0.88 = 2164.8
   const sum = annualEffectiveHoursFromMonthly(LINE_NO_PROFILE, FALLBACK_HEUR, null);
-  close(sum, 2217.6, 0.01);
+  close(sum, 2164.8, 0.01);
 });
 test('annualEffectiveHoursFromMonthly: peak profile pulls more hours than flat 5%', () => {
   // The peak profile averages > 5% OT, so this MUST exceed flat

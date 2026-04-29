@@ -46,15 +46,17 @@ test('empty laborLines → 0', () => {
 });
 
 test('flat line, January: base × 26/hr × 1/12 of 2080 hrs', () => {
-  // monthlyEffectiveHours = 2080/12 × (1+0.05) × (1-0.12) = 173.33 × 1.05 × 0.88 ≈ 160.16
+  // 2026-04-29 OT-fix: OT formula now (1 + otPct/100 × 0.5) — 5% OT means
+  // 5% of hours at 1.5× = 2.5% premium share, not 5% extra hours.
+  // monthlyEffectiveHours = 2080/12 × (1 + 0.05 × 0.5) × (1 - 0.12)
+  //                       = 173.33 × 1.025 × 0.88 ≈ 156.39
   // loadedRate = 20 × 1.30 = 26
-  // seasonal mult = (1/12) × 12 = 1.0
-  // expected ≈ 160.16 × 26 = 4164
+  // expected ≈ 156.39 × 26 ≈ 4066
   const cost = computeMonthlyLaborFromLines([FLAT_LINE], {
     calcHeur: FALLBACK_HEUR, calendarMonth: 1, seasonalShare: 1/12,
     escLaborMult: 1, volMult: 1, rampLaborMult: 1,
   });
-  close(cost, 4164, 5);
+  close(cost, 4066, 5);
 });
 
 test('peak line in November (20% OT) costs MORE than January (5% OT)', () => {
@@ -62,9 +64,9 @@ test('peak line in November (20% OT) costs MORE than January (5% OT)', () => {
   const jan = computeMonthlyLaborFromLines([PEAK_LINE], { ...ctx, calendarMonth: 1 });
   const nov = computeMonthlyLaborFromLines([PEAK_LINE], { ...ctx, calendarMonth: 11 });
   assert(nov > jan, `Nov (${nov.toFixed(0)}) should exceed Jan (${jan.toFixed(0)})`);
-  // Nov should be ~14% higher than Jan (20% vs 5% OT, otherwise identical)
+  // 2026-04-29 OT-fix: ratio is now (1 + 0.20×0.5)/(1 + 0.05×0.5) = 1.10/1.025 ≈ 1.073
   const ratio = nov / jan;
-  close(ratio, 1.20 / 1.05, 0.02, 'Nov/Jan ratio ≈ 1.143');
+  close(ratio, (1 + 0.20*0.5) / (1 + 0.05*0.5), 0.02, 'Nov/Jan ratio ≈ 1.073');
 });
 
 test('temp_agency ratio to permanent (doc §3.3: no perm burden on temp)', () => {
@@ -147,7 +149,7 @@ test('per-line path: Nov labor > Jan labor when line has Q4 OT spike', () => {
   assert(byMonth[11] > byMonth[1], `Nov (${byMonth[11]?.toFixed(0)}) should exceed Jan (${byMonth[1]?.toFixed(0)})`);
 });
 
-test('flat-profile path reconciles: sum of monthly labor ≈ annual_hours × loadedRate × (1+OT)(1-abs)', () => {
+test('flat-profile path reconciles: sum of monthly labor ≈ annual_hours × loadedRate × (1+OT×0.5)(1-abs)', () => {
   const bundle = buildMonthlyProjections({
     project_id: 1,
     contract_term_years: 1,
@@ -168,8 +170,9 @@ test('flat-profile path reconciles: sum of monthly labor ≈ annual_hours × loa
   const totalLaborCost = bundle.expense
     .filter(r => r.expense_line_code === 'LABOR_HOURLY')
     .reduce((s, r) => s + r.amount, 0);
-  // expected: 2080 × 26 × 1.05 × 0.88 ≈ 49,969
-  const expected = 2080 * 26 * 1.05 * 0.88;
+  // 2026-04-29 OT-fix: OT factor is now (1 + 0.05×0.5) = 1.025, not 1.05
+  // expected: 2080 × 26 × 1.025 × 0.88 ≈ 48,779
+  const expected = 2080 * 26 * (1 + 0.05 * 0.5) * 0.88;
   close(totalLaborCost, expected, 50, `annual flat reconciliation ≈ ${expected.toFixed(0)}`);
 });
 
