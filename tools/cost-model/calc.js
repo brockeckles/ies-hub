@@ -3088,12 +3088,12 @@ export function autoGenerateEquipment(state, opts = {}) {
     if (cat === 'it')  return 'it_equipment';
     return 'owned_facility';
   };
-  const addEquip = (name, category, qty, monthlyCost = 0, acquisitionCost = 0, monthlyMaint = 0, drivenBy = '', financing = null, amortYears = 5) => {
+  const addEquip = (name, category, qty, monthlyCost = 0, acquisitionCost = 0, monthlyMaint = 0, drivenBy = '', financing = null, amortYears = 5, heuristic = null) => {
     if (qty > 0) {
       // Heuristic fallback: if no financing type supplied, infer from cost shape.
       // Acquisition cost present → capital; else → lease. Legacy call sites.
       const acq_type = financing || (acquisitionCost > 0 ? 'capital' : 'lease');
-      lines.push({
+      const line = {
         equipment_name: name,
         category: category || 'Other',
         line_type: categoryToLineType(category),
@@ -3104,18 +3104,28 @@ export function autoGenerateEquipment(state, opts = {}) {
         monthly_maintenance: monthlyMaint,
         amort_years: amortYears,
         driven_by: drivenBy,
-      });
+      };
+      // Phase 5.3b — auto-gen equipment now stamps `_heuristic` metadata
+      // onto each generated line so the Cell-Inspector panel can drill back
+      // from any line into its formula + driver inputs.
+      if (heuristic) line._heuristic = heuristic;
+      lines.push(line);
     }
   };
+  // Phase 5.3b — heuristic builder for equipment auto-gen lines.
+  const eqH = (code, label, value, formula, driver, source = 'legacy', legacyValue = null) => ({
+    code, label, value, formula, driver, source,
+    legacy_value: legacyValue != null ? legacyValue : value,
+  });
 
   // Phase 2d (2026-04-22): dedicated helper for rented_mhe sibling lines.
   // Always line_type='rented_mhe' with seasonal_months from the MLV delta.
   // monthlyCost is the rental rate (maintenance bundled); acquisition_cost
   // is always 0; peak_markup_pct stays 0 (whole line IS the peak).
-  const addRentedMhe = (name, qty, monthlyCost, seasonalMonths, drivenBy) => {
+  const addRentedMhe = (name, qty, monthlyCost, seasonalMonths, drivenBy, heuristic = null) => {
     if (qty <= 0) return;
     if (!Array.isArray(seasonalMonths) || seasonalMonths.length === 0) return;
-    lines.push({
+    const line = {
       equipment_name: name,
       category: 'MHE',
       line_type: 'rented_mhe',
@@ -3127,7 +3137,9 @@ export function autoGenerateEquipment(state, opts = {}) {
       amort_years: 5,
       seasonal_months: seasonalMonths.slice().sort((a, b) => a - b),
       driven_by: drivenBy,
-    });
+    };
+    if (heuristic) line._heuristic = heuristic;
+    lines.push(line);
   };
 
   // Facility-level policy inputs — defaults per Asset Defaults Guidance.
@@ -3239,7 +3251,10 @@ export function autoGenerateEquipment(state, opts = {}) {
         : ` ÷ ${shiftsPerDay} shifts`;
       const ownedDriver = `Steady ${sig.steady.toFixed(1)} FTE${shiftShareNote} × 1.05 spare (MLV${matrixSkew ? ' + matrix' : ''})`;
       addEquip(config.ownedName, 'MHE', steadyQty,
-        config.ownedMonthly, 0, config.ownedMaint, ownedDriver, 'lease');
+        config.ownedMonthly, 0, config.ownedMaint, ownedDriver, 'lease', 5,
+        eqH(`equipment.mhe.${config.mheType}.owned`, `${config.ownedName} — owned, sized to steady-state max-shift HC`,
+            steadyQty, `⌈steadyFte × ${matrixSkew ? `${(peakFrac * 100).toFixed(0)}% peak-shift share` : `1/${shiftsPerDay} shifts`} × 1.05 spare⌉`,
+            'MLV peak-month FTE per MHE type (channel-aware: per-channel volumes feed labor headcount)', 'channels'));
 
       if (rentalQty > 0 && sig.seasonalMonths.length > 0) {
         const monthLabels = sig.seasonalMonths.map(n => ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][n-1]);
@@ -3247,7 +3262,10 @@ export function autoGenerateEquipment(state, opts = {}) {
           ? ` × ${(peakFrac * 100).toFixed(0)}% peak-shift share`
           : ` ÷ ${shiftsPerDay}`;
         const rentalDriver = `Peak ${sig.peak.toFixed(1)} − steady ${sig.steady.toFixed(1)} = ${(sig.peak - sig.steady).toFixed(1)} FTE${rentalShiftNote} = ${rentalQty} rental unit${rentalQty === 1 ? '' : 's'} (${monthLabels.join(', ')} per MLV${matrixSkew ? ' + matrix' : ''})`;
-        addRentedMhe(config.rentalName, rentalQty, config.rentalMonthly, sig.seasonalMonths, rentalDriver);
+        addRentedMhe(config.rentalName, rentalQty, config.rentalMonthly, sig.seasonalMonths, rentalDriver,
+          eqH(`equipment.mhe.${config.mheType}.rental`, `${config.rentalName} — peak-only rental, ${monthLabels.join('/')} months`,
+              rentalQty, `⌈(peakFte − steadyFte) × ${matrixSkew ? `${(peakFrac * 100).toFixed(0)}% peak-shift share` : `1/${shiftsPerDay}`}⌉`,
+              `MLV seasonal delta on ${config.mheType} (months: ${monthLabels.join(', ')})`, 'channels'));
       }
     } else if (config.heuristic && config.heuristic.when()) {
       // Heuristic fallback — owned-only at legacy 1.15 spare. No rental line
@@ -3256,7 +3274,10 @@ export function autoGenerateEquipment(state, opts = {}) {
       const qty = Math.max(0, (totalDirectFtes / config.heuristic.divisor) * spareFactor);
       const driver = `${totalDirectFtes.toFixed(1)} direct FTE / ${config.heuristic.divisor} × 1.15 spare (heuristic)`;
       addEquip(config.ownedName, 'MHE', qty,
-        config.ownedMonthly, 0, config.ownedMaint, driver, 'lease');
+        config.ownedMonthly, 0, config.ownedMaint, driver, 'lease', 5,
+        eqH(`equipment.mhe.${config.mheType}.owned`, `${config.ownedName} — heuristic fallback (no MLV)`,
+            config.heuristic.divisor, `directFtes ÷ ${config.heuristic.divisor} × 1.15 spare`,
+            'Heuristic fallback when MLV is absent or labor lines lack mhe_type', 'legacy'));
     }
   };
 
@@ -3312,20 +3333,29 @@ export function autoGenerateEquipment(state, opts = {}) {
       Math.ceil(peakDirectFte * spareFactor * 0.3),
       0, 2850, 15,
       mlv ? `Peak ${peakDirectFte.toFixed(1)} FTE × 1.15 × 30% coverage (MLV)` : 'Direct labor × 30% coverage (heuristic)',
-      'capital', 3);
+      'capital', 3,
+      eqH('equipment.it.rf_handheld', 'RF / mobile computer per peak FTE', 0.3,
+          '⌈peakFte × 1.15 × 30%⌉ (1 device per ~3.3 peak FTE)',
+          mlv ? 'MLV peak HC' : 'totalDirectFtes (heuristic)', mlv ? 'channels' : 'legacy'));
   }
   addEquip('Label Printer (Thermal)', 'IT',
     Math.max(1, Math.ceil(totalHC / 50)),
-    0, 1500, 25, 'Pack stations + Receiving/Shipping', 'capital', 5);
+    0, 1500, 25, 'Pack stations + Receiving/Shipping', 'capital', 5,
+    eqH('equipment.it.label_printer', 'Thermal label printer per 50 HC', 50,
+        '⌈totalHC ÷ 50⌉ (min 1)', 'totalHC = direct + indirect headcount'));
   if (sqft > 0) {
     // WiFi AP: ~$540/unit. Flipped from $100/mo lease.
     addEquip('WiFi Access Point (warehouse)', 'IT',
       Math.max(2, Math.ceil(sqft / 10000)),
-      0, 540, 0, sqft.toLocaleString() + ' sqft @ 1 per 10K sqft', 'capital', 5);
+      0, 540, 0, sqft.toLocaleString() + ' sqft @ 1 per 10K sqft', 'capital', 5,
+      eqH('equipment.it.wifi_ap', 'WiFi AP per 10K sqft', 10000,
+          '⌈sqft ÷ 10,000⌉ (min 2)', 'totalSqft'));
     // Network backbone — one 24-port PoE switch per 50K sqft.
     addEquip('Switch (24-port PoE)', 'IT',
       Math.max(2, Math.ceil(sqft / 50000)),
-      0, 3024, 0, '1 per 50K sqft', 'capital', 7);
+      0, 3024, 0, '1 per 50K sqft', 'capital', 7,
+      eqH('equipment.it.network_switch', '24-port PoE switch per 50K sqft', 50000,
+          '⌈sqft ÷ 50,000⌉ (min 2)', 'totalSqft'));
   }
 
   // ────────────────────────────────────────────────────────────────
@@ -3338,7 +3368,10 @@ export function autoGenerateEquipment(state, opts = {}) {
     const rackPositions = Math.ceil(avgPalletsOnHand * 1.15);
     addEquip('Selective Pallet Rack', 'Racking', rackPositions,
       /*monthly*/ 1.00, /*acq*/ 0, /*maint*/ 0.15,
-      avgPalletsOnHand.toLocaleString() + ' avg pallets + 15% buffer', 'lease');
+      avgPalletsOnHand.toLocaleString() + ' avg pallets + 15% buffer', 'lease', 5,
+      eqH('equipment.racking.selective_pallet', 'Selective pallet rack positions', 1.15,
+          '⌈(annualPalletsIn ÷ 12 turns) × 1.15 buffer⌉',
+          'Cross-channel inbound pallets (Phase 3 — per-channel inboundOutboundRatio + UOM conv)', 'channels'));
   }
 
   // ────────────────────────────────────────────────────────────────
@@ -3359,7 +3392,9 @@ export function autoGenerateEquipment(state, opts = {}) {
   if (forkliftCount > 0) {
     addEquip('Battery Charging Station', 'Charging',
       Math.max(1, Math.ceil(forkliftCount / 6)),
-      0, 1200, 50, forkliftCount + ' electric MHE units', 'capital', 7);
+      0, 1200, 50, forkliftCount + ' electric MHE units', 'capital', 7,
+      eqH('equipment.charging.station', 'Battery charging station per ~6 MHE', 6,
+          '⌈forkliftCount ÷ 6⌉ (min 1)', 'count of MHE lines (truck/picker)'));
   }
 
   // ────────────────────────────────────────────────────────────────
@@ -3377,29 +3412,43 @@ export function autoGenerateEquipment(state, opts = {}) {
   if (securityTier >= 2 && sqft > 0) {
     // CCTV — TI (built into facility)
     addEquip('Security Camera System (head-end)', 'Security', 1,
-      0, 20000, 0, 'Security Tier ' + securityTier, 'ti');
+      0, 20000, 0, 'Security Tier ' + securityTier, 'ti', 5,
+      eqH('equipment.security.camera_headend', 'CCTV head-end (1 system)', 1,
+          'Tier ≥2 → 1 head-end', `Security Tier ${securityTier}`));
     const cameraCount = Math.max(4, Math.ceil(sqft / 30000));
     addEquip('Security Cameras', 'Security', cameraCount,
-      0, 1562, 0, cameraCount + ' cameras (sqft / 30K)', 'ti');
+      0, 1562, 0, cameraCount + ' cameras (sqft / 30K)', 'ti', 5,
+      eqH('equipment.security.cameras', 'CCTV cameras per 30K sqft', 30000,
+          '⌈sqft ÷ 30,000⌉ (min 4)', 'totalSqft + Security Tier ≥2'));
   }
   if (securityTier >= 3) {
     // Access control — TI (default tier)
     addEquip('Access Control System (head-end)', 'Security', 1,
-      0, 20000, 0, 'Security Tier ' + securityTier, 'ti');
+      0, 20000, 0, 'Security Tier ' + securityTier, 'ti', 5,
+      eqH('equipment.security.access_headend', 'Access control head-end', 1,
+          'Tier ≥3 → 1 head-end', `Security Tier ${securityTier}`));
     addEquip('Employee Entrance (turnstile)', 'Security', 1,
-      0, 2500, 0, 'Security Tier 3+', 'ti');
+      0, 2500, 0, 'Security Tier 3+', 'ti', 5,
+      eqH('equipment.security.turnstile', 'Employee entrance turnstile', 1,
+          'Tier ≥3 → 1 turnstile', `Security Tier ${securityTier}`));
   }
   if (securityTier >= 4) {
     // Guard shack + gate — Capital (physical)
     addEquip('External Guard Shack', 'Security', 1,
-      0, 43000, 0, 'Security Tier 4', 'capital', 15);
+      0, 43000, 0, 'Security Tier 4', 'capital', 15,
+      eqH('equipment.security.guard_shack', 'External guard shack', 1,
+          'Tier ≥4 → 1 shack', `Security Tier ${securityTier}`));
     addEquip('Gate Automation', 'Security', 1,
-      0, 25000, 0, 'Security Tier 4', 'capital', 10);
+      0, 25000, 0, 'Security Tier 4', 'capital', 10,
+      eqH('equipment.security.gate_automation', 'Gate automation', 1,
+          'Tier ≥4 → 1 system', `Security Tier ${securityTier}`));
   }
   if (fencedLf > 0) {
     // Physical perimeter — Capital
     addEquip('Perimeter Fencing', 'Security', fencedLf,
-      0, 52, 0, fencedLf + ' LF', 'capital', 15);
+      0, 52, 0, fencedLf + ' LF', 'capital', 15,
+      eqH('equipment.security.fencing', 'Perimeter fencing per linear foot', 52,
+          'fencedLf × $52/LF', 'facility.fencedPerimeterLf'));
   }
 
   // ────────────────────────────────────────────────────────────────
@@ -3414,7 +3463,10 @@ export function autoGenerateEquipment(state, opts = {}) {
     addEquip('Belt Conveyor (linear ft)', 'Conveyor', conveyorLF,
       /*monthly*/ 6, /*acq*/ 0, /*maint*/ 0,
       'automation=' + automationLevel + ', ' + annualOrders.toLocaleString() + ' orders/yr',
-      'lease');
+      'lease', 5,
+      eqH('equipment.conveyor.belt', `Belt conveyor (${automationLevel} automation)`,
+          conveyorLF, automationLevel === 'high' ? 'min(1500, max(300, ⌈orders ÷ 3000⌉))' : 'min(500, max(100, ⌈orders ÷ 5000⌉))',
+          `automation_level=${automationLevel} + cross-channel orders`, 'channels'));
   }
 
   return lines;

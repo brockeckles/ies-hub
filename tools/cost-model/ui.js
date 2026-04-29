@@ -11,7 +11,7 @@ import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260424-hyg04';
-import * as calc from './calc.js?v=20260429-vol15';
+import * as calc from './calc.js?v=20260429-vol16';
 import * as api from './api.js?v=20260429-vol12';
 import * as scenarios from './calc.scenarios.js?v=20260429-otfix1';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
@@ -2476,6 +2476,7 @@ function _getAutoGenProvenance(category, code, lineage, isMultiChannel) {
     'indirect-labor': model.indirectLaborLines || [],
     'overhead':       model.overheadLines       || [],
     'startup':        model.startupLines        || [],
+    'equipment':      model.equipmentLines      || [],
   };
   const arr = arrayMap[category];
   if (!arr) return null;
@@ -2578,6 +2579,50 @@ function _getAutoGenProvenance(category, code, lineage, isMultiChannel) {
       if (isMultiChannel && channelInbound.length) {
         inputs.push({ label: 'Inbound pallets by channel', value: '', source: 'Per-channel inbound, in pallets (Phase 3)' });
         inputs.push(...channelInbound);
+      }
+    }
+  } else if (category === 'equipment') {
+    // Phase 5.3b — Equipment auto-gen lineage. Lines split into MHE
+    // (owned + rental siblings, MLV peak/steady-driven), IT (peak HC),
+    // Racking (channel-aware inbound pallets), Charging (count of MHE
+    // lines), Security (driven by tier), Conveyor (automation gate +
+    // channel-aware orders).
+    headline = (line.quantity || 0);
+    valueFormat = 'currency'; // override below for qty-headline
+    label = `${line.equipment_name || code} — qty ${line.quantity || 0}`;
+    inputs.push({ label: 'Heuristic', value: h.label || code, source: 'calc.js → autoGenerateEquipment' });
+    if (h.formula) inputs.push({ label: 'Formula', value: h.formula, source: 'calc.js' });
+    if (h.driver)  inputs.push({ label: 'Driver', value: h.driver, source: 'What scales this line' });
+    inputs.push({ label: 'Quantity', value: String(line.quantity || 0), source: 'Computed at auto-gen time' });
+    inputs.push({ label: 'Acquisition type', value: line.acquisition_type || '—', source: 'lease / capital / ti — financing path' });
+    if (line.line_type) inputs.push({ label: 'Line type', value: line.line_type, source: 'Phase 2 peak-capacity classification' });
+    if (line.monthly_cost > 0) inputs.push({ label: 'Monthly cost', value: '$' + line.monthly_cost.toLocaleString(), source: 'Lease + maint per unit' });
+    if (line.acquisition_cost > 0) inputs.push({ label: 'Acquisition cost', value: '$' + line.acquisition_cost.toLocaleString(), source: 'Capital outlay per unit' });
+    if (Array.isArray(line.seasonal_months) && line.seasonal_months.length) {
+      const monthLabels = line.seasonal_months.map(n => ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][n-1]).join(', ');
+      inputs.push({ label: 'Seasonal months', value: monthLabels, source: 'MLV peak-vs-steady delta (Phase 2d)' });
+    }
+    // Channel-aware: MHE owned + rental, Racking, Conveyor — show channel
+    // volume drivers since their qty derives from cross-channel volumes
+    // (via labor headcount → MLV → MHE for MHE; via inbound pallets for
+    // Racking; via orders for Conveyor).
+    if (code.startsWith('equipment.mhe.') || code === 'equipment.racking.selective_pallet') {
+      const channelRows = _buildChannelBreakdownInputs(lineage, code === 'equipment.racking.selective_pallet' ? 'pallets' : 'orders');
+      if (isMultiChannel && channelRows.length) {
+        inputs.push({ label: code === 'equipment.racking.selective_pallet' ? 'Pallet drivers by channel' : 'Volume drivers (orders → labor → MHE)', value: '', source: code === 'equipment.racking.selective_pallet' ? 'Per-channel inbound (pallets)' : 'Per-channel orders feed labor headcount; labor drives MHE qty' });
+        inputs.push(...channelRows);
+      }
+    } else if (code === 'equipment.conveyor.belt') {
+      const channelRows = _buildChannelBreakdownInputs(lineage, 'orders');
+      if (isMultiChannel && channelRows.length) {
+        inputs.push({ label: 'Volume drivers (orders)', value: '', source: 'Conveyor LF derived from cross-channel orders' });
+        inputs.push(...channelRows);
+      }
+    } else if (code === 'equipment.it.rf_handheld') {
+      const channelRows = _buildChannelBreakdownInputs(lineage, 'orders');
+      if (isMultiChannel && channelRows.length) {
+        inputs.push({ label: 'Volume drivers (orders → labor → RF)', value: '', source: 'Per-channel orders feed peak labor → RF qty' });
+        inputs.push(...channelRows);
       }
     }
   }
@@ -5703,7 +5748,7 @@ Owned Facility — racking/dock/charging/office/security/conveyor">Line Type</th
               : 'No MLV match — set a peak markup to activate seasonal uplift when a matching MHE/IT line exists';
             return `
             <tr>
-              <td><input class="hub-input" value="${l.equipment_name || ''}" data-array="equipmentLines" data-idx="${i}" data-field="equipment_name" /></td>
+              <td><input class="hub-input" value="${l.equipment_name || ''}" data-array="equipmentLines" data-idx="${i}" data-field="equipment_name" />${renderHeuristicChip(l, { category: 'equipment' })}</td>
               <td>
                 <select class="hub-input" data-array="equipmentLines" data-idx="${i}" data-field="line_type" title="Peak-capacity classification. Drives financing UI (Phase 2b) and auto-gen split (Phase 2d).">
                   <option value="owned_mhe"${l.line_type === 'owned_mhe' ? ' selected' : ''}>Owned MHE</option>
