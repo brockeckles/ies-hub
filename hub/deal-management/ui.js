@@ -405,11 +405,23 @@ function bindDelegatedEvents() {
       const artId = /** @type {HTMLElement} */ (unlinkArt).dataset.artifactUnlink;
       if (selectedDeal) {
         const list = getArtifacts(selectedDeal.id);
-        const idx = list.findIndex(a => a.id === artId);
+        const idx = list.findIndex(a => String(a.id) === String(artId));
         if (idx >= 0) {
+          const removed = list[idx];
           list.splice(idx, 1);
           renderDetailContent();
-          bus.emit('toast:show', { message: 'Artifact unlinked', level: 'success' });
+          // Persist for real deals; local-only for demo. Restore on failure.
+          if (_isRealDealId(selectedDeal.id) && typeof removed.id === 'number') {
+            api.deleteArtifact(removed.id).then(() => {
+              bus.emit('toast:show', { message: 'Artifact unlinked', level: 'success' });
+            }).catch(err => {
+              list.splice(idx, 0, removed);
+              renderDetailContent();
+              bus.emit('toast:show', { message: 'Unlink failed: ' + (err.message || err), level: 'error' });
+            });
+          } else {
+            bus.emit('toast:show', { message: 'Artifact unlinked', level: 'success' });
+          }
         }
       }
       return;
@@ -469,13 +481,28 @@ function openAddArtifactModal() {
   const close = () => overlay.remove();
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
   overlay.querySelector('#art-cancel').addEventListener('click', close);
-  overlay.querySelector('#art-save').addEventListener('click', () => {
+  overlay.querySelector('#art-save').addEventListener('click', async () => {
     const kind = overlay.querySelector('#art-kind').value;
     const name = overlay.querySelector('#art-name').value.trim();
     const ref = overlay.querySelector('#art-ref').value.trim();
     if (!name) { bus.emit('toast:show', { message: 'Name is required', level: 'error' }); return; }
     const list = getArtifacts(selectedDeal.id);
-    list.push({ id: 'a' + Date.now().toString(36), kind, name, ref, updated: new Date().toISOString().slice(0, 10) });
+    if (_isRealDealId(selectedDeal.id)) {
+      // Real deal — persist to Supabase. Local cache updates on success.
+      try {
+        const row = await api.createArtifact(selectedDeal.id, { kind, name, ref, model_id: null });
+        list.push({
+          id: row.id, kind: row.kind, name: row.name, ref: row.ref || '',
+          updated: row.updated_at ? String(row.updated_at).slice(0, 10) : new Date().toISOString().slice(0, 10),
+        });
+      } catch (err) {
+        bus.emit('toast:show', { message: 'Save failed: ' + (err.message || err), level: 'error' });
+        return;
+      }
+    } else {
+      // Demo deal — local-only.
+      list.push({ id: 'a' + Date.now().toString(36), kind, name, ref, updated: new Date().toISOString().slice(0, 10) });
+    }
     close();
     renderDetailContent();
     bus.emit('toast:show', { message: `${ARTIFACT_KINDS[kind]?.label || kind} linked`, level: 'success' });

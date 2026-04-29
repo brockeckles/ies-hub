@@ -214,4 +214,154 @@ export async function deleteDeal(id) {
   }
 }
 
-export default { fetchStages, fetchActivityTemplates, listRealDeals, createDeal, deleteDeal };
+
+
+// ============================================================
+// 2026-04-29 — Deal-detail persistence
+// ============================================================
+// Three concerns moved out of in-memory Maps in ui.js:
+//   - Win Strategy (1:1 with deal)
+//   - Linked Artifacts (N per deal)
+//   - DOS element status (N per deal, per element)
+//
+// Schema lives in supabase/migrations/20260429120000_dm_persistence_*.sql.
+// All three tables RLS-gate through the parent deal\'s owner / team / vis.
+// ============================================================
+
+/**
+ * Fetch the strategy row for a deal. Returns null when no row exists yet —
+ * the UI seeds defaults locally and saves on first edit.
+ *
+ * @param {string} dealId  deal_deals.id (uuid)
+ */
+export async function loadStrategy(dealId) {
+  if (!dealId) return null;
+  try {
+    const { data, error } = await db.from('deal_strategy')
+      .select('value_prop, risks, asks, differentiators, competitor_threats, updated_at')
+      .eq('deal_id', dealId).maybeSingle();
+    if (error) { console.warn('[deal-mgmt] loadStrategy failed', error); return null; }
+    return data || null;
+  } catch (err) {
+    console.warn('[deal-mgmt] loadStrategy threw', err);
+    return null;
+  }
+}
+
+/**
+ * Upsert the strategy row for a deal. Pass camelCase from the UI; this maps
+ * to the snake_case DB columns.
+ *
+ * @param {string} dealId
+ * @param {{ valueProp?:string, risks?:string[], asks?:string[],
+ *           differentiators?:string[], competitorThreats?:string }} payload
+ */
+export async function saveStrategy(dealId, payload) {
+  if (!dealId) throw new Error('saveStrategy: dealId required');
+  const row = {
+    deal_id: dealId,
+    value_prop:         payload.valueProp ?? '',
+    risks:              Array.isArray(payload.risks) ? payload.risks : [],
+    asks:               Array.isArray(payload.asks) ? payload.asks : [],
+    differentiators:    Array.isArray(payload.differentiators) ? payload.differentiators : [],
+    competitor_threats: payload.competitorThreats ?? '',
+  };
+  // Upsert on the unique deal_id constraint.
+  const { data, error } = await db.from('deal_strategy')
+    .upsert(row, { onConflict: 'deal_id' }).select().single();
+  if (error) { console.warn('[deal-mgmt] saveStrategy failed', error); throw error; }
+  return data;
+}
+
+/**
+ * List artifact rows for a deal.
+ * @param {string} dealId
+ */
+export async function listArtifactsByDeal(dealId) {
+  if (!dealId) return [];
+  try {
+    const { data, error } = await db.from('deal_artifacts')
+      .select('id, kind, name, ref, model_id, created_at, updated_at')
+      .eq('deal_id', dealId).order('created_at', { ascending: false });
+    if (error) { console.warn('[deal-mgmt] listArtifactsByDeal failed', error); return []; }
+    return data || [];
+  } catch (err) {
+    console.warn('[deal-mgmt] listArtifactsByDeal threw', err);
+    return [];
+  }
+}
+
+/**
+ * Insert a new artifact row.
+ * @param {string} dealId
+ * @param {{ kind:string, name:string, ref?:string, model_id?:number|null }} payload
+ */
+export async function createArtifact(dealId, payload) {
+  if (!dealId) throw new Error('createArtifact: dealId required');
+  const row = {
+    deal_id:  dealId,
+    kind:     payload.kind || 'other',
+    name:     payload.name || 'Untitled artifact',
+    ref:      payload.ref || null,
+    model_id: payload.model_id ?? null,
+  };
+  const { data, error } = await db.from('deal_artifacts')
+    .insert(row).select().single();
+  if (error) { console.warn('[deal-mgmt] createArtifact failed', error); throw error; }
+  return data;
+}
+
+/**
+ * Delete an artifact by id (bigint).
+ * @param {number} id
+ */
+export async function deleteArtifact(id) {
+  if (!id) return false;
+  const { error } = await db.from('deal_artifacts').delete().eq('id', id);
+  if (error) { console.warn('[deal-mgmt] deleteArtifact failed', error); throw error; }
+  return true;
+}
+
+/**
+ * Load DOS status overrides for a deal. Returns an object map
+ * { element_id: status } so the UI can apply overrides on top of defaults.
+ *
+ * @param {string} dealId
+ */
+export async function loadDosStatusByDeal(dealId) {
+  if (!dealId) return {};
+  try {
+    const { data, error } = await db.from('deal_dos_status')
+      .select('element_id, status').eq('deal_id', dealId);
+    if (error) { console.warn('[deal-mgmt] loadDosStatusByDeal failed', error); return {}; }
+    const out = {};
+    for (const row of (data || [])) {
+      if (row.element_id) out[row.element_id] = row.status;
+    }
+    return out;
+  } catch (err) {
+    console.warn('[deal-mgmt] loadDosStatusByDeal threw', err);
+    return {};
+  }
+}
+
+/**
+ * Upsert a DOS element\'s status for a deal.
+ * @param {string} dealId
+ * @param {string} elementId
+ * @param {'not-started'|'in-progress'|'complete'} status
+ */
+export async function setDosElementStatus(dealId, elementId, status) {
+  if (!dealId || !elementId) throw new Error('setDosElementStatus: dealId + elementId required');
+  const row = { deal_id: dealId, element_id: elementId, status };
+  const { data, error } = await db.from('deal_dos_status')
+    .upsert(row, { onConflict: 'deal_id,element_id' }).select().single();
+  if (error) { console.warn('[deal-mgmt] setDosElementStatus failed', error); throw error; }
+  return data;
+}
+
+export default { fetchStages, fetchActivityTemplates, listRealDeals, createDeal, deleteDeal,
+  loadStrategy, saveStrategy,
+  listArtifactsByDeal, createArtifact, deleteArtifact,
+  loadDosStatusByDeal, setDosElementStatus,
+};
