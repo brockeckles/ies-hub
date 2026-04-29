@@ -12236,6 +12236,15 @@ function _ofpEnsureAreaRegistry() {
     if (typeof a.sortOrder !== 'number') a.sortOrder = i;
     if (!Array.isArray(a.keywords)) a.keywords = [];
     if (typeof a.hidden !== 'boolean') a.hidden = false;
+    // v0.10 — sub-areas (stackable functional sub-blocks within an area)
+    if (!Array.isArray(a.subAreas)) a.subAreas = [];
+    a.subAreas.forEach((sa, j) => {
+      if (typeof sa.label !== 'string' || !sa.label) sa.label = sa.key;
+      if (!Array.isArray(sa.keywords)) sa.keywords = [];
+      if (typeof sa.sortOrder !== 'number') sa.sortOrder = j;
+      if (typeof sa.hidden !== 'boolean') sa.hidden = false;
+      if (!sa.color) sa.color = '#94A3B8';
+    });
   });
   // Guarantee an unclassified entry exists — it's the classifier fallback.
   if (!model.ofpAreas.some(a => a.key === 'unclassified')) {
@@ -12276,6 +12285,34 @@ function _classifyAreaFromLine(line) {
     }
   }
   return 'unclassified';
+}
+
+/**
+ * v0.10 — Classify a labor line into a sub-area within its parent
+ * Functional Area. Returns the sub-area key, or null if:
+ *   - the line's parent area has no sub-areas defined
+ *   - no sub-area's keywords match the line
+ *
+ * Resolution order:
+ *   1. line.flowSubArea override wins IF it points to a registered sub-area
+ *      within the line's parent area
+ *   2. Keyword match across the parent's subAreas in sortOrder
+ *   3. null (line renders in an "(other)" pile within the parent area)
+ */
+function _classifySubAreaFromLine(line, areaKey) {
+  if (!line || !areaKey) return null;
+  const area = _ofpAreaMeta(areaKey);
+  if (!area || !Array.isArray(area.subAreas) || area.subAreas.length === 0) return null;
+  const subKeys = new Set(area.subAreas.map(sa => sa.key));
+  if (line.flowSubArea && subKeys.has(line.flowSubArea)) return line.flowSubArea;
+  const haystack = `${line.activity_name || ''} ${line.position || ''} ${line.role || ''} ${line.most_template || ''}`.toLowerCase();
+  const sorted = [...area.subAreas].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+  for (const sa of sorted) {
+    for (const kw of (sa.keywords || [])) {
+      if (kw && haystack.includes(kw)) return sa.key;
+    }
+  }
+  return null;
 }
 
 /**
@@ -12406,6 +12443,36 @@ function _ofpReorderFlow(srcTag, tgtTag, position /* 'before' | 'after' */) {
   if (position === 'after') tgtIdx++;
   sorted.splice(tgtIdx, 0, item);
   sorted.forEach((f, i) => { f.sortOrder = i; });
+}
+
+// v0.10 — Sub-area reorder helpers (within parent only)
+function _ofpNormalizeSubAreaSortOrder(areaKey) {
+  _ofpEnsureAreaRegistry();
+  const a = model.ofpAreas.find(x => x.key === areaKey);
+  if (!a || !Array.isArray(a.subAreas)) return;
+  const list = [...a.subAreas].sort((x, y) => (x.sortOrder || 0) - (y.sortOrder || 0));
+  list.forEach((sa, i) => { sa.sortOrder = i; });
+}
+
+function _ofpMoveSubAreaUp(areaKey, subKey) {
+  _ofpNormalizeSubAreaSortOrder(areaKey);
+  const a = model.ofpAreas.find(x => x.key === areaKey);
+  if (!a) return;
+  const sa = a.subAreas.find(x => x.key === subKey);
+  if (!sa || sa.sortOrder === 0) return;
+  const above = a.subAreas.find(x => x.sortOrder === sa.sortOrder - 1);
+  if (above) { const t = sa.sortOrder; sa.sortOrder = above.sortOrder; above.sortOrder = t; }
+}
+
+function _ofpMoveSubAreaDown(areaKey, subKey) {
+  _ofpNormalizeSubAreaSortOrder(areaKey);
+  const a = model.ofpAreas.find(x => x.key === areaKey);
+  if (!a) return;
+  const max = a.subAreas.length - 1;
+  const sa = a.subAreas.find(x => x.key === subKey);
+  if (!sa || sa.sortOrder === max) return;
+  const below = a.subAreas.find(x => x.sortOrder === sa.sortOrder + 1);
+  if (below) { const t = sa.sortOrder; sa.sortOrder = below.sortOrder; below.sortOrder = t; }
 }
 
 function _ofpMoveAreaUp(key) {
@@ -12840,6 +12907,92 @@ function renderOperationalFlow() {
  * @param {object} lc
  * @param {{wide?: boolean, warn?: boolean}} [opts]
  */
+// v0.10 — Helper extracted from _renderOfpArea so we can reuse it for
+// both top-level area bodies AND sub-area bodies (when an area has
+// stackable sub-areas like Storage → Bulk / Rack / Forward Pick).
+//
+// Renders a list of entries grouped by flow (path_tag), with flow
+// dividers between groups (skipped when only one untagged group exists).
+function _renderFlowGroupsForEntries(entries, areaKey, opHrs, lc) {
+  if (!entries || entries.length === 0) return '';
+  // Drop entries whose flow tag is hidden. Untagged entries are never hidden.
+  const hiddenFlowTags = new Set((model.ofpFlows || []).filter(f => f.hidden).map(f => f.tag));
+  const visibleEntries = entries.filter(e => {
+    const t = (e.line.path_tag || '').trim();
+    return !t || !hiddenFlowTags.has(t);
+  });
+  if (visibleEntries.length === 0) return '';
+  // Group by path_tag. Untagged collected under '__untagged__'.
+  const groups = new Map();
+  for (const e of visibleEntries) {
+    const tag = (e.line.path_tag || '').trim();
+    const key = tag || '__untagged__';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(e);
+  }
+  const skipDividers = groups.size === 1 && groups.has('__untagged__');
+  const flowOrder = new Map(_ofpFlowRegistry().map((f, i) => [f.tag, i]));
+  const orderedKeys = [...groups.keys()].sort((a, b) => {
+    if (a === '__untagged__') return 1;
+    if (b === '__untagged__') return -1;
+    const ai = flowOrder.has(a) ? flowOrder.get(a) : 9999;
+    const bi = flowOrder.has(b) ? flowOrder.get(b) : 9999;
+    return ai - bi;
+  });
+  const parts = [];
+  for (const key of orderedKeys) {
+    const group = groups.get(key);
+    const isUntagged = key === '__untagged__';
+    const tag = isUntagged ? '' : key;
+    if (!skipDividers) {
+      const labelText = isUntagged ? '(untagged)' : _ofpFlowLabel(tag);
+      const handleHtml = isUntagged ? '' :
+        `<span class="ofp-flow-divider__grip" aria-hidden="true">⋮⋮</span>`;
+      const pencilHtml = isUntagged ? '' :
+        `<button class="ofp-flow-divider__pencil" data-ofp-action="manage-flows" data-flow-tag="${escapeAttr(tag)}" title="Edit this Flow">✎</button>`;
+      parts.push(`
+        <div class="ofp-flow-divider"${isUntagged ? '' : ` data-flow-tag="${escapeAttr(tag)}" draggable="true" title="Drag to reorder this flow"`}>
+          ${handleHtml}
+          <span class="ofp-flow-divider__stripe" style="background:${_flowColor(tag)};"></span>
+          <span class="ofp-flow-divider__label">${escapeHtml(labelText)}</span>
+          ${pencilHtml}
+          <span class="ofp-flow-divider__count">${group.length}</span>
+        </div>
+      `);
+    }
+    parts.push(group.map(e => _renderOfpNode(e, areaKey, opHrs, lc)).join(''));
+  }
+  return parts.join('');
+}
+
+// v0.10 — Render a single sub-area block (mini-header + flow groups
+// for the entries that bin into it).
+function _renderOfpSubArea(areaKey, sa, entries, opHrs, lc) {
+  if (sa.hidden) return '';
+  const totalFte = entries.reduce((s, e) => s + calc.fte(e.line, opHrs), 0);
+  const bodyHtml = entries.length === 0
+    ? `<div class="ofp-subarea__empty">No activities</div>`
+    : _renderFlowGroupsForEntries(entries, areaKey, opHrs, lc);
+  return `
+    <div class="ofp-subarea" data-area-key="${escapeAttr(areaKey)}" data-subarea-key="${escapeAttr(sa.key)}">
+      <div class="ofp-subarea__header" style="border-left:3px solid ${sa.color};">
+        <div class="ofp-subarea__title-row">
+          <span class="ofp-subarea__title">${escapeHtml(sa.label)}</span>
+          <button class="ofp-subarea__pencil" data-ofp-action="manage-areas" data-area-key="${escapeAttr(areaKey)}" data-subarea-key="${escapeAttr(sa.key)}" title="Edit this sub-area">✎</button>
+        </div>
+        <div class="ofp-subarea__meta">
+          <span class="ofp-subarea__count">${entries.length}</span>
+          <span class="ofp-subarea__fte">${totalFte.toFixed(1)} FTE</span>
+          <button class="ofp-subarea__add" data-ofp-add-area="${escapeAttr(areaKey)}" data-ofp-add-subarea="${escapeAttr(sa.key)}" title="Add a new ${escapeAttr(sa.label)} activity">+</button>
+        </div>
+      </div>
+      <div class="ofp-subarea__nodes">
+        ${bodyHtml}
+      </div>
+    </div>
+  `;
+}
+
 function _renderOfpArea(areaKey, entries, opHrs, lc, opts = {}) {
   const meta = _ofpAreaMeta(areaKey);
   const wide = !!opts.wide;
@@ -12848,90 +13001,74 @@ function _renderOfpArea(areaKey, entries, opHrs, lc, opts = {}) {
   const widthClass = wide ? 'ofp-area--wide' : '';
   const warnClass = warn ? 'ofp-area--warn' : '';
 
-  // v0.3a — Vertical (main) areas group entries by path_tag so parallel
-  // paths through the system are visible. Wide areas (Returns/VAS,
-  // Support, Unclassified) keep the flat row layout — they're typically
-  // smaller and flow-grouping a row layout looks chaotic.
+  // v0.10 — Sub-areas: if the area has subAreas defined, bin entries
+  // into sub-area buckets (with an "(other)" pile for entries that
+  // don't classify into any sub-area). Wide areas DON'T support sub-
+  // areas in v1 — wide rows are typically Returns/VAS, Support,
+  // Unclassified, where horizontal stacking doesn't fit.
+  const visibleSubs = (Array.isArray(meta.subAreas) ? meta.subAreas : [])
+    .filter(sa => !sa.hidden)
+    .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+  const useSubAreas = !wide && visibleSubs.length > 0;
+
   let nodesHtml;
   if (entries.length === 0) {
     nodesHtml = `<div class="ofp-area__empty">No activities</div>`;
   } else if (wide) {
-    // v0.6 — Filter hidden-flow lines on wide rows too.
+    // Wide row — flat layout, no flow groupings or sub-areas.
     const hiddenFlowTags = new Set((model.ofpFlows || []).filter(f => f.hidden).map(f => f.tag));
     const visibleEntries = entries.filter(e => {
       const t = (e.line.path_tag || '').trim();
       return !t || !hiddenFlowTags.has(t);
     });
     nodesHtml = visibleEntries.map(e => _renderOfpNode(e, areaKey, opHrs, lc)).join('');
-  } else {
-    // v0.6 — Drop entries whose flow tag is hidden. Untagged entries
-    // are never hidden (no per-tag toggle for untagged — synthetic group).
-    const hiddenFlowTags = new Set((model.ofpFlows || []).filter(f => f.hidden).map(f => f.tag));
-    const visibleEntries = entries.filter(e => {
-      const t = (e.line.path_tag || '').trim();
-      return !t || !hiddenFlowTags.has(t);
-    });
-    // Group by path_tag. Untagged lines collected last under "(untagged)".
-    const groups = new Map();
-    for (const e of visibleEntries) {
-      const tag = (e.line.path_tag || '').trim();
-      const key = tag || '__untagged__';
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(e);
-    }
-    // If there's only one group AND it's untagged, skip dividers entirely
-    // (no point showing a single "(untagged)" header on a single-flow area).
-    const skipDividers = groups.size === 1 && groups.has('__untagged__');
-
-    // v0.5 — Order groups by Flow registry sortOrder. Untagged group
-    // always renders LAST regardless of registry ordering. Tags not
-    // found in registry sort after registered ones (shouldn't happen
-    // since _ofpEnsureFlowRegistry seeds from line tags, but defensive).
-    const flowOrder = new Map(_ofpFlowRegistry().map((f, i) => [f.tag, i]));
-    const orderedKeys = [...groups.keys()].sort((a, b) => {
-      if (a === '__untagged__') return 1;
-      if (b === '__untagged__') return -1;
-      const ai = flowOrder.has(a) ? flowOrder.get(a) : 9999;
-      const bi = flowOrder.has(b) ? flowOrder.get(b) : 9999;
-      return ai - bi;
-    });
-
-    const parts = [];
-    for (const key of orderedKeys) {
-      const group = groups.get(key);
-      const isUntagged = key === '__untagged__';
-      const tag = isUntagged ? '' : key;
-      if (!skipDividers) {
-        // v0.4 — show registry label (falls back to tag), with hover-
-        // reveal pencil that opens Manage Flows scoped to this flow.
-        // v0.5 — drag-handle for canvas reorder (also hover-reveal).
-        // No pencil/handle on the (untagged) divider.
-        const labelText = isUntagged ? '(untagged)' : _ofpFlowLabel(tag);
-        const handleHtml = isUntagged ? '' :
-          `<span class="ofp-flow-divider__grip" aria-hidden="true">⋮⋮</span>`;
-        const pencilHtml = isUntagged ? '' :
-          `<button class="ofp-flow-divider__pencil" data-ofp-action="manage-flows" data-flow-tag="${escapeAttr(tag)}" title="Edit this Flow">✎</button>`;
-        parts.push(`
-          <div class="ofp-flow-divider"${isUntagged ? '' : ` data-flow-tag="${escapeAttr(tag)}" draggable="true" title="Drag to reorder this flow"`}>
-            ${handleHtml}
-            <span class="ofp-flow-divider__stripe" style="background:${_flowColor(tag)};"></span>
-            <span class="ofp-flow-divider__label">${escapeHtml(labelText)}</span>
-            ${pencilHtml}
-            <span class="ofp-flow-divider__count">${group.length}</span>
-          </div>
-        `);
+  } else if (useSubAreas) {
+    // Bin entries into sub-area buckets.
+    const subBuckets = new Map();
+    for (const sa of visibleSubs) subBuckets.set(sa.key, []);
+    const otherBucket = [];
+    for (const e of entries) {
+      const subKey = _classifySubAreaFromLine(e.line, areaKey);
+      if (subKey && subBuckets.has(subKey)) {
+        subBuckets.get(subKey).push(e);
+      } else {
+        otherBucket.push(e);
       }
-      parts.push(group.map(e => _renderOfpNode(e, areaKey, opHrs, lc)).join(''));
     }
-    nodesHtml = parts.join('');
+    const blocks = [];
+    for (const sa of visibleSubs) {
+      blocks.push(_renderOfpSubArea(areaKey, sa, subBuckets.get(sa.key) || [], opHrs, lc));
+    }
+    if (otherBucket.length > 0) {
+      const otherFlowHtml = _renderFlowGroupsForEntries(otherBucket, areaKey, opHrs, lc);
+      blocks.push(`
+        <div class="ofp-subarea ofp-subarea--other">
+          <div class="ofp-subarea__header" style="border-left:3px dashed var(--ies-gray-300);">
+            <div class="ofp-subarea__title-row">
+              <span class="ofp-subarea__title ofp-subarea__title--other">(other)</span>
+            </div>
+            <div class="ofp-subarea__meta">
+              <span class="ofp-subarea__count">${otherBucket.length}</span>
+              <span class="ofp-subarea__fte">${otherBucket.reduce((s, e) => s + calc.fte(e.line, opHrs), 0).toFixed(1)} FTE</span>
+            </div>
+          </div>
+          <div class="ofp-subarea__nodes">${otherFlowHtml}</div>
+        </div>
+      `);
+    }
+    nodesHtml = blocks.join('');
+  } else {
+    // No sub-areas — render flow groups directly.
+    nodesHtml = _renderFlowGroupsForEntries(entries, areaKey, opHrs, lc);
+    if (!nodesHtml) nodesHtml = `<div class="ofp-area__empty">No activities</div>`;
   }
 
   // Unclassified area doesn't get an "+ Add" button — adding into it would
   // be a no-op for a user (no canonical default activity name to seed with).
-  const showAdd = areaKey !== 'unclassified';
+  const showAdd = areaKey !== 'unclassified' && !useSubAreas;
 
   return `
-    <div class="ofp-area ${widthClass} ${warnClass}" data-ofp-area="${areaKey}">
+    <div class="ofp-area ${widthClass} ${warnClass}${useSubAreas ? ' ofp-area--has-subs' : ''}" data-ofp-area="${areaKey}">
       <div class="ofp-area__header" style="border-top:3px solid ${meta.color};">
         <div class="ofp-area__header-row">
           <div class="ofp-area__title-row" data-area-key="${escapeAttr(areaKey)}" draggable="${areaKey === 'unclassified' ? 'false' : 'true'}" title="${areaKey === 'unclassified' ? '' : 'Drag to reorder this Functional Area'}">
@@ -12946,7 +13083,7 @@ function _renderOfpArea(areaKey, entries, opHrs, lc, opts = {}) {
         </div>
         <div class="ofp-area__fte">${totalFte.toFixed(1)} FTE</div>
       </div>
-      <div class="ofp-area__nodes ${wide ? 'ofp-area__nodes--row' : ''}">
+      <div class="ofp-area__nodes ${wide ? 'ofp-area__nodes--row' : ''}${useSubAreas ? ' ofp-area__nodes--subs' : ''}">
         ${nodesHtml}
       </div>
     </div>
@@ -13299,13 +13436,14 @@ function _bindOperationalFlowEvents(container) {
     });
   });
 
-  // v0.2 — Add button on each area header
-  container.querySelectorAll('.ofp-add-btn').forEach(btn => {
+  // v0.2 — Add button on each area header (and v0.10 sub-area headers)
+  container.querySelectorAll('.ofp-add-btn, .ofp-subarea__add').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const area = btn.dataset.ofpAddArea;
+      const subArea = btn.dataset.ofpAddSubarea || null;
       if (!area) return;
-      _ofpAddLineToArea(area);
+      _ofpAddLineToArea(area, subArea);
     });
   });
 
@@ -13631,37 +13769,54 @@ const _OFP_AREA_DEFAULTS = {
   support:    { activity_name: 'Lead',               position: 'Operations Lead',  mhe_type: '',                  it_device: '' },
 };
 
-function _ofpAddLineToArea(areaKey) {
+function _ofpAddLineToArea(areaKey, subAreaKey) {
   // For built-in areas use the curated default seed (with sensible
   // activity_name + role + MHE). For custom user-added areas fall back
   // to a generic placeholder labelled with the area's display name.
   const builtinDef = _OFP_AREA_DEFAULTS[areaKey];
   const meta = _ofpAreaMeta(areaKey);
-  const def = builtinDef || {
-    activity_name: meta.label || 'Activity',
-    position: '',
-    mhe_type: '',
-    it_device: '',
-    uom_in: 'pallet',
-    uom_out: 'pallet',
-  };
+  // v0.10 — When adding into a sub-area, seed activity_name from the
+  // sub-area label so the new line is recognizable without extra typing.
+  let seedDef;
+  if (subAreaKey) {
+    const sa = (meta.subAreas || []).find(s => s.key === subAreaKey);
+    seedDef = {
+      activity_name: sa ? sa.label : (meta.label || 'Activity'),
+      position: '',
+      mhe_type: '',
+      it_device: '',
+      uom_in: 'pallet',
+      uom_out: 'pallet',
+    };
+  } else {
+    seedDef = builtinDef || {
+      activity_name: meta.label || 'Activity',
+      position: '',
+      mhe_type: '',
+      it_device: '',
+      uom_in: 'pallet',
+      uom_out: 'pallet',
+    };
+  }
   if (areaKey === 'unclassified') return; // not allowed; UI also blocks
   // Support area → indirect labor; everything else → direct labor.
   if (areaKey === 'support') {
     if (!Array.isArray(model.indirectLaborLines)) model.indirectLaborLines = [];
-    model.indirectLaborLines.push({
-      ...def,
+    const line = {
+      ...seedDef,
       annual_hours: 2080,
       hourly_rate: 0,
       burden_pct: 30,
       employment_type: 'permanent',
       flowLane: 'support',
       pricing_bucket: defaultBucketFor('labor'),
-    });
+    };
+    if (subAreaKey) line.flowSubArea = subAreaKey;
+    model.indirectLaborLines.push(line);
   } else {
     if (!Array.isArray(model.laborLines)) model.laborLines = [];
-    model.laborLines.push({
-      ...def,
+    const line = {
+      ...seedDef,
       volume: 0,
       base_uph: 0,
       annual_hours: 0,
@@ -13672,7 +13827,9 @@ function _ofpAddLineToArea(areaKey) {
       performance_variance_pct: 0,
       flowLane: areaKey,
       pricing_bucket: defaultBucketFor('labor'),
-    });
+    };
+    if (subAreaKey) line.flowSubArea = subAreaKey;
+    model.laborLines.push(line);
   }
   isDirty = true;
   if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
@@ -13966,6 +14123,10 @@ function _renderManageAreasModal() {
   _ofpNormalizeAreaSortOrder();
   const registry = _ofpRegistry();
   const lastIdx = registry.length - 1;
+  // v0.10 — track which areas are expanded to show sub-areas. State
+  // persists across modal re-renders (closure on container).
+  const expanded = (typeof window !== 'undefined' && window.__ofpExpandedAreas) || new Set();
+  if (typeof window !== 'undefined') window.__ofpExpandedAreas = expanded;
   // Count lines bound to each area for the line-count column + the
   // delete-confirm prompt (so the user knows how many activities will
   // be reassigned).
@@ -13978,6 +14139,24 @@ function _renderManageAreasModal() {
   const indirectKey = registry.some(a => a.key === 'support') ? 'support' : 'unclassified';
   for (const _l of (model.indirectLaborLines || [])) {
     counts[indirectKey] = (counts[indirectKey] || 0) + 1;
+  }
+
+  // v0.10 — Pre-compute per-sub-area line counts.
+  const subCounts = {};
+  for (const a of registry) {
+    for (const sa of (a.subAreas || [])) {
+      subCounts[`${a.key}|${sa.key}`] = 0;
+    }
+  }
+  for (const l of (model.laborLines || [])) {
+    const k = _classifyAreaFromLine(l);
+    const sk = _classifySubAreaFromLine(l, k);
+    if (sk) subCounts[`${k}|${sk}`] = (subCounts[`${k}|${sk}`] || 0) + 1;
+  }
+  for (const l of (model.indirectLaborLines || [])) {
+    const supportKey = registry.some(a => a.key === 'support') ? 'support' : 'unclassified';
+    const sk = _classifySubAreaFromLine(l, supportKey);
+    if (sk) subCounts[`${supportKey}|${sk}`] = (subCounts[`${supportKey}|${sk}`] || 0) + 1;
   }
 
   const rows = registry.map((a, idx) => {
@@ -14004,10 +14183,15 @@ function _renderManageAreasModal() {
 
     const upDisabled = idx === 0 ? 'disabled' : '';
     const downDisabled = idx === lastIdx ? 'disabled' : '';
+    const isExpanded = expanded.has(a.key);
+    const subAreas = [...(a.subAreas || [])].sort((x, y) => (x.sortOrder || 0) - (y.sortOrder || 0));
+    const lastSubIdx = subAreas.length - 1;
+    const chevron = `<button class="ofp-area-mgr__chevron ${isExpanded ? 'ofp-area-mgr__chevron--open' : ''}" data-area-key="${escapeAttr(a.key)}" data-action="toggle-expand" title="${isExpanded ? 'Collapse sub-areas' : (subAreas.length > 0 ? 'Expand sub-areas' : 'Add sub-areas')}">▶</button>`;
     return `
-      <tr class="ofp-area-mgr__row ofp-mgr-row ${a.hidden ? 'ofp-mgr-row--hidden' : ''}" data-area-row-key="${escapeAttr(a.key)}" data-area-idx="${idx}">
+      <tr class="ofp-area-mgr__row ofp-mgr-row ${a.hidden ? 'ofp-mgr-row--hidden' : ''} ${isExpanded ? 'ofp-mgr-row--expanded' : ''}" data-area-row-key="${escapeAttr(a.key)}" data-area-idx="${idx}">
         <td class="ofp-mgr-row__handle-cell">
           <span class="ofp-mgr-row__grip" data-area-key="${escapeAttr(a.key)}" draggable="true" title="Drag to reorder">⋮⋮</span>
+          ${chevron}
         </td>
         <td class="ofp-area-mgr__color-cell">
           <input type="color" class="ofp-area-mgr__color-input" value="${a.color}" data-area-key="${escapeAttr(a.key)}" data-area-field="color" title="Header stripe color" />
@@ -14033,6 +14217,52 @@ function _renderManageAreasModal() {
         </td>
         <td class="ofp-area-mgr__actions-cell">${delBtn}</td>
       </tr>
+      ${isExpanded ? `
+        ${subAreas.map((sa, sidx) => {
+          const subUp = sidx === 0 ? 'disabled' : '';
+          const subDown = sidx === lastSubIdx ? 'disabled' : '';
+          const subKwChips = (sa.keywords || []).map(kw => `
+            <span class="ofp-area-mgr__chip">
+              ${escapeHtml(kw)}
+              <button class="ofp-area-mgr__chip-x" data-area-key="${escapeAttr(a.key)}" data-subarea-key="${escapeAttr(sa.key)}" data-keyword="${escapeAttr(kw)}" data-scope="sub" title="Remove keyword">×</button>
+            </span>
+          `).join('');
+          return `
+            <tr class="ofp-area-mgr__row ofp-subarea-mgr__row ${sa.hidden ? 'ofp-mgr-row--hidden' : ''}" data-area-row-key="${escapeAttr(a.key)}" data-subarea-row-key="${escapeAttr(sa.key)}">
+              <td class="ofp-mgr-row__handle-cell ofp-subarea-mgr__indent"></td>
+              <td class="ofp-area-mgr__color-cell">
+                <input type="color" class="ofp-area-mgr__color-input" value="${sa.color}" data-area-key="${escapeAttr(a.key)}" data-subarea-key="${escapeAttr(sa.key)}" data-subarea-field="color" title="Sub-area stripe color" />
+              </td>
+              <td class="ofp-area-mgr__label-cell">
+                <input type="text" class="hub-input ofp-area-mgr__input" value="${escapeAttr(sa.label)}" data-area-key="${escapeAttr(a.key)}" data-subarea-key="${escapeAttr(sa.key)}" data-subarea-field="label" maxlength="40" />
+              </td>
+              <td class="ofp-area-mgr__keywords-cell">
+                <div class="ofp-area-mgr__chips" data-area-key="${escapeAttr(a.key)}" data-subarea-key="${escapeAttr(sa.key)}" data-scope="sub">
+                  ${subKwChips}
+                  <input type="text" class="ofp-area-mgr__chip-input" placeholder="+ keyword" data-area-key="${escapeAttr(a.key)}" data-subarea-key="${escapeAttr(sa.key)}" data-scope="sub" />
+                </div>
+              </td>
+              <td class="ofp-area-mgr__display-cell"><span class="ofp-area-mgr__muted" title="Sub-areas always render stacked under their parent">— stacked under ${escapeHtml(a.label)} —</span></td>
+              <td class="ofp-mgr-row__visible-cell">
+                <button class="ofp-mgr-row__visible ${sa.hidden ? 'ofp-mgr-row__visible--off' : ''}" data-area-key="${escapeAttr(a.key)}" data-subarea-key="${escapeAttr(sa.key)}" data-toggle="sub-visible" title="${sa.hidden ? 'Hidden — click to show' : 'Visible — click to hide'}">${sa.hidden ? '🚫' : '👁'}</button>
+              </td>
+              <td class="ofp-area-mgr__count-cell">${subCounts[`${a.key}|${sa.key}`] || 0}</td>
+              <td class="ofp-mgr-row__move-cell">
+                <button class="ofp-mgr-row__move" data-area-key="${escapeAttr(a.key)}" data-subarea-key="${escapeAttr(sa.key)}" data-sub-move="up" ${subUp} title="Move up">▲</button>
+                <button class="ofp-mgr-row__move" data-area-key="${escapeAttr(a.key)}" data-subarea-key="${escapeAttr(sa.key)}" data-sub-move="down" ${subDown} title="Move down">▼</button>
+              </td>
+              <td class="ofp-area-mgr__actions-cell">
+                <button class="ofp-area-mgr__del" data-area-key="${escapeAttr(a.key)}" data-subarea-key="${escapeAttr(sa.key)}" data-sub-delete="1" title="Delete this sub-area">×</button>
+              </td>
+            </tr>
+          `;
+        }).join('')}
+        <tr class="ofp-subarea-mgr__add-row">
+          <td colspan="9">
+            <button class="ofp-subarea-mgr__add-btn" data-area-key="${escapeAttr(a.key)}" data-action="add-subarea">+ Add Sub-Area to ${escapeHtml(a.label)}</button>
+          </td>
+        </tr>
+      ` : ''}
     `;
   }).join('');
 
@@ -14303,6 +14533,181 @@ function _bindManageAreasEvents(container) {
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
       _ofpOpenManageAreasModal(container, moved);
+    });
+  });
+
+  // ============================================================
+  // v0.10 — Sub-area handlers: chevron toggle, edit, add, delete, etc.
+  // ============================================================
+
+  // Chevron — toggle expand/collapse for an area's sub-area rows
+  panel.querySelectorAll('[data-action="toggle-expand"]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const key = btn.dataset.areaKey;
+      const set = (typeof window !== 'undefined' && window.__ofpExpandedAreas) || new Set();
+      if (set.has(key)) set.delete(key); else set.add(key);
+      if (typeof window !== 'undefined') window.__ofpExpandedAreas = set;
+      _ofpOpenManageAreasModal(container, key);
+    });
+  });
+
+  // Add sub-area
+  panel.querySelectorAll('[data-action="add-subarea"]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const areaKey = btn.dataset.areaKey;
+      const a = model.ofpAreas.find(x => x.key === areaKey);
+      if (!a) return;
+      const label = prompt(`Name the new Sub-Area for "${a.label}" (e.g. Bulk, Rack, Forward Pick):`, 'New Sub-Area');
+      if (!label || !label.trim()) return;
+      const labelTrim = label.trim();
+      const slug = labelTrim.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').substring(0, 32) || 'sub';
+      if (!Array.isArray(a.subAreas)) a.subAreas = [];
+      const existing = new Set(a.subAreas.map(s => s.key));
+      let key = slug;
+      let n = 2;
+      while (existing.has(key)) { key = `${slug}-${n++}`; }
+      const palette = ['#0EA5E9', '#8B5CF6', '#16A34A', '#F59E0B', '#EC4899', '#06B6D4', '#84CC16', '#A855F7', '#F97316', '#14B8A6', '#94A3B8', '#7C3AED'];
+      const usedColors = new Set(a.subAreas.map(s => s.color));
+      const color = palette.find(c => !usedColors.has(c)) || palette[a.subAreas.length % palette.length];
+      const next = (a.subAreas.reduce((mx, s) => Math.max(mx, s.sortOrder || 0), -1)) + 1;
+      a.subAreas.push({ key, label: labelTrim, color, keywords: [], sortOrder: next, hidden: false });
+      // Auto-expand when adding the first sub-area
+      const set = (typeof window !== 'undefined' && window.__ofpExpandedAreas) || new Set();
+      set.add(areaKey);
+      if (typeof window !== 'undefined') window.__ofpExpandedAreas = set;
+      isDirty = true;
+      if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+      renderSection();
+      _ofpOpenManageAreasModal(container, areaKey);
+    });
+  });
+
+  // Sub-area field edits (color, label)
+  panel.querySelectorAll('[data-subarea-field]').forEach(input => {
+    input.addEventListener('change', () => {
+      const areaKey = input.dataset.areaKey;
+      const subKey = input.dataset.subareaKey;
+      const field = input.dataset.subareaField;
+      const a = model.ofpAreas.find(x => x.key === areaKey);
+      if (!a) return;
+      const sa = (a.subAreas || []).find(x => x.key === subKey);
+      if (!sa) return;
+      sa[field] = input.value;
+      isDirty = true;
+      if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+      renderSection();
+      _ofpOpenManageAreasModal(container, areaKey);
+    });
+  });
+
+  // Sub-area keyword chip removal
+  panel.querySelectorAll('.ofp-area-mgr__chip-x[data-scope="sub"]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const areaKey = btn.dataset.areaKey;
+      const subKey = btn.dataset.subareaKey;
+      const kw = btn.dataset.keyword;
+      const a = model.ofpAreas.find(x => x.key === areaKey);
+      if (!a) return;
+      const sa = (a.subAreas || []).find(x => x.key === subKey);
+      if (!sa) return;
+      sa.keywords = (sa.keywords || []).filter(k => k !== kw);
+      isDirty = true;
+      if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+      renderSection();
+      _ofpOpenManageAreasModal(container, areaKey);
+    });
+  });
+
+  // Sub-area keyword chip add (Enter or comma)
+  panel.querySelectorAll('.ofp-area-mgr__chip-input[data-scope="sub"]').forEach(input => {
+    const commit = () => {
+      const areaKey = input.dataset.areaKey;
+      const subKey = input.dataset.subareaKey;
+      const raw = (input.value || '').trim().toLowerCase();
+      if (!raw) return;
+      const a = model.ofpAreas.find(x => x.key === areaKey);
+      if (!a) return;
+      const sa = (a.subAreas || []).find(x => x.key === subKey);
+      if (!sa) return;
+      const parts = raw.split(',').map(s => s.trim()).filter(Boolean);
+      sa.keywords = Array.from(new Set([...(sa.keywords || []), ...parts]));
+      input.value = '';
+      isDirty = true;
+      if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+      renderSection();
+      _ofpOpenManageAreasModal(container, areaKey);
+    };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ',') {
+        e.preventDefault();
+        commit();
+      }
+    });
+    input.addEventListener('blur', commit);
+  });
+
+  // Sub-area visibility toggle
+  panel.querySelectorAll('[data-toggle="sub-visible"]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const areaKey = btn.dataset.areaKey;
+      const subKey = btn.dataset.subareaKey;
+      const a = model.ofpAreas.find(x => x.key === areaKey);
+      if (!a) return;
+      const sa = (a.subAreas || []).find(x => x.key === subKey);
+      if (!sa) return;
+      sa.hidden = !sa.hidden;
+      isDirty = true;
+      if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+      renderSection();
+      _ofpOpenManageAreasModal(container, areaKey);
+    });
+  });
+
+  // Sub-area up/down move
+  panel.querySelectorAll('[data-sub-move]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const areaKey = btn.dataset.areaKey;
+      const subKey = btn.dataset.subareaKey;
+      const dir = btn.dataset.subMove;
+      if (dir === 'up') _ofpMoveSubAreaUp(areaKey, subKey);
+      else _ofpMoveSubAreaDown(areaKey, subKey);
+      isDirty = true;
+      if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+      renderSection();
+      _ofpOpenManageAreasModal(container, areaKey);
+    });
+  });
+
+  // Sub-area delete
+  panel.querySelectorAll('[data-sub-delete]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const areaKey = btn.dataset.areaKey;
+      const subKey = btn.dataset.subareaKey;
+      const a = model.ofpAreas.find(x => x.key === areaKey);
+      if (!a) return;
+      const sa = (a.subAreas || []).find(x => x.key === subKey);
+      if (!sa) return;
+      const lineCount = (model.laborLines || []).filter(l => l.flowSubArea === subKey).length
+                      + (model.indirectLaborLines || []).filter(l => l.flowSubArea === subKey).length;
+      let msg = `Delete Sub-Area "${sa.label}" from "${a.label}"?`;
+      if (lineCount > 0) {
+        msg += `\n\n${lineCount} activit${lineCount === 1 ? 'y has' : 'ies have'} an explicit override pointing to this sub-area; the override will be cleared (lines fall back to keyword classification within "${a.label}").`;
+      }
+      if (!confirm(msg)) return;
+      // Clear flowSubArea on lines that explicitly point here
+      (model.laborLines || []).forEach(l => { if (l.flowSubArea === subKey) delete l.flowSubArea; });
+      (model.indirectLaborLines || []).forEach(l => { if (l.flowSubArea === subKey) delete l.flowSubArea; });
+      a.subAreas = a.subAreas.filter(x => x.key !== subKey);
+      isDirty = true;
+      if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+      renderSection();
+      _ofpOpenManageAreasModal(container, areaKey);
     });
   });
 }
@@ -15250,6 +15655,127 @@ function _ofpStyles() {
       }
       .ofp-mgr-row--hidden { opacity: 0.55; }
       .ofp-mgr-row--hidden:hover { opacity: 1; }
+
+      /* ========================================================
+         v0.10 — Sub-area styling (canvas + modal)
+         ======================================================== */
+
+      /* Canvas: sub-area mini-block within parent area */
+      .ofp-area--has-subs .ofp-area__nodes--subs {
+        padding: 8px 8px 10px;
+        gap: 8px;
+      }
+      .ofp-subarea {
+        background: #fff;
+        border: 1px solid var(--ies-gray-200);
+        border-radius: 4px;
+        margin-bottom: 6px;
+      }
+      .ofp-subarea:last-child { margin-bottom: 0; }
+      .ofp-subarea__header {
+        padding: 5px 7px 5px 9px;
+        background: var(--ies-gray-50);
+        border-bottom: 1px solid var(--ies-gray-100);
+      }
+      .ofp-subarea__title-row {
+        display: flex; align-items: center; gap: 4px;
+      }
+      .ofp-subarea__title {
+        font-size: 10px; font-weight: 700;
+        color: var(--ies-navy);
+        text-transform: uppercase; letter-spacing: 0.04em;
+        flex: 1 1 auto; min-width: 0;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      .ofp-subarea__title--other { color: var(--ies-gray-500); font-style: italic; text-transform: none; letter-spacing: 0; }
+      .ofp-subarea__pencil {
+        background: transparent; border: none; padding: 0 2px;
+        font-size: 10px; line-height: 1; cursor: pointer;
+        color: var(--ies-gray-300);
+        opacity: 0; transition: opacity 0.12s, color 0.12s;
+      }
+      .ofp-subarea:hover .ofp-subarea__pencil { opacity: 1; }
+      .ofp-subarea__pencil:hover { color: var(--ies-blue); }
+      .ofp-subarea__meta {
+        display: flex; align-items: center; gap: 6px;
+        font-size: 9px; color: var(--ies-gray-500);
+        margin-top: 2px;
+      }
+      .ofp-subarea__count {
+        font-weight: 700;
+        background: var(--ies-gray-100); border-radius: 8px;
+        padding: 0 5px;
+      }
+      .ofp-subarea__fte { font-weight: 600; }
+      .ofp-subarea__add {
+        background: var(--ies-blue); color: #fff;
+        border: none; border-radius: 3px;
+        width: 18px; height: 18px; padding: 0;
+        line-height: 1; font-size: 12px; font-weight: 700;
+        cursor: pointer;
+        margin-left: auto;
+        display: inline-flex; align-items: center; justify-content: center;
+        transition: background 0.12s;
+      }
+      .ofp-subarea__add:hover { background: var(--ies-navy, #001f3f); }
+      .ofp-subarea__nodes {
+        display: flex; flex-direction: column; gap: 6px;
+        padding: 8px;
+      }
+      .ofp-subarea__empty {
+        padding: 12px 6px; text-align: center;
+        font-size: 10px; color: var(--ies-gray-400); font-style: italic;
+      }
+      .ofp-subarea--other {
+        background: var(--ies-gray-50);
+      }
+
+      /* Manage Areas modal — chevron expand button */
+      .ofp-area-mgr__chevron {
+        background: transparent; border: none; padding: 0;
+        font-size: 10px; line-height: 1;
+        color: var(--ies-gray-400);
+        cursor: pointer;
+        transition: transform 0.18s, color 0.12s;
+        margin-left: 2px;
+      }
+      .ofp-area-mgr__chevron:hover { color: var(--ies-blue); }
+      .ofp-area-mgr__chevron--open { transform: rotate(90deg); color: var(--ies-blue); }
+
+      /* Manage Areas modal — sub-area row styling */
+      .ofp-subarea-mgr__row { background: rgba(0, 71, 171, 0.02); }
+      .ofp-subarea-mgr__row:hover { background: rgba(0, 71, 171, 0.05); }
+      .ofp-subarea-mgr__row td { padding: 6px 8px; font-size: 11px; }
+      .ofp-subarea-mgr__row .ofp-area-mgr__input {
+        font-size: 11px; padding: 4px 6px;
+      }
+      .ofp-subarea-mgr__indent { width: 40px; }
+      .ofp-subarea-mgr__indent::after {
+        content: '↳';
+        display: inline-block;
+        margin-left: 16px;
+        color: var(--ies-gray-300);
+        font-size: 12px;
+      }
+      .ofp-subarea-mgr__add-row td {
+        padding: 6px 8px 10px 50px !important;
+        background: rgba(0, 71, 171, 0.02);
+      }
+      .ofp-subarea-mgr__add-btn {
+        background: transparent;
+        border: 1px dashed var(--ies-gray-300);
+        border-radius: 4px;
+        padding: 4px 12px;
+        font-size: 11px; font-weight: 600;
+        color: var(--ies-gray-600);
+        cursor: pointer;
+        transition: all 0.12s;
+      }
+      .ofp-subarea-mgr__add-btn:hover {
+        border-color: var(--ies-blue);
+        color: var(--ies-blue);
+        background: rgba(0, 71, 171, 0.04);
+      }
 
       /* Hidden strip — sits between section header and KPI strip */
       .ofp-hidden-strip {
