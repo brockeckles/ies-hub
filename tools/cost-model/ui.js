@@ -22,6 +22,7 @@ import * as shiftPlannerUi from './shift-planner-ui.js?v=20260428-walkthru1';
 // 2026-04-28 — internal phase stepper for Implementation Timeline section.
 import { renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260429-p52';
+import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260429-p54';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
 // disk but no longer imported; can be deleted in a future cleanup.
@@ -825,6 +826,23 @@ async function loadModelByCmId(id) {
     _chromeScenarioRow = null;
     renderCurrentView();
     refreshSaveStateChip();
+
+    // Phase 5.4 — consume cross-tool drillback hint. When WSC/NetOpt/OFP
+    // dispatched the user here with a channelKey hint, activate that
+    // channel tab + jump to the Volumes & Profile section.
+    try {
+      const hint = consumeCmDrillbackHint();
+      if (hint && String(hint.cmId) === String(id) && hint.channelKey) {
+        const ch = (model.channels || []).find(c => c.key === hint.channelKey);
+        if (ch) {
+          _activeChannelKey = ch.key;
+          activeSection = 'volumes';
+          renderCurrentView();
+          showCmToast(`Drilled back to channel "${ch.name || ch.key}" from the linked tool.`, 'info');
+        }
+      }
+    } catch (err) { console.warn('[CM] drillback hint consume failed:', err); }
+
     // Eagerly fetch the scenario row so the chrome title shows the scenario
     // label (Baseline / Pessimistic / Optimistic) from the moment the model opens.
     api.getScenarioByProject(id).then(row => {
@@ -14639,6 +14657,29 @@ function _bindOperationalFlowEvents(container) {
     });
   });
 
+  // Phase 5.4 — OFP channel chip drillback. Click → activate the named
+  // channel in Volumes & Profile, then navigate the section there. Same-
+  // CM-model context so we route through `bus.emit('cm:goto-section')`.
+  container.querySelectorAll('[data-ofp-channel-drillback]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const channelKey = btn.dataset.ofpChannelDrillback;
+      if (!channelKey) return;
+      // Activate the channel before switching sections so the volumes
+      // page renders with that tab pre-selected.
+      if (model.channels && model.channels.find(c => c.key === channelKey)) {
+        _activeChannelKey = channelKey;
+      }
+      // Navigate to volumes section via the existing CM section router.
+      activeSection = 'volumes';
+      renderCurrentView();
+      try {
+        const volSection = rootEl?.querySelector('#cm-section-content');
+        if (volSection) volSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch {}
+    });
+  });
+
   // v0.9 — Zoom controls. Update model.ofpZoom + apply directly to the
   // canvas card style + update the percentage label, all without a full
   // section re-render so the zoom feels snappy.
@@ -16806,6 +16847,14 @@ function _ofpStyles() {
         max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       }
       /* Phase 4 — channel chip rendered alongside flow-pill when mapped */
+      .ofp-node__channel-chip--clickable {
+        background: transparent; border: 1px solid var(--ies-gray-300, #d1d5db);
+        padding: 1px 6px;
+      }
+      .ofp-node__channel-chip--clickable:hover {
+        background: var(--ies-gray-100, #f3f4f6);
+        border-color: var(--ies-blue, #0047AB);
+      }
       .ofp-node__channel-chip {
         font-size: 9px; font-weight: 600; color: var(--ies-gray-700);
         background: var(--ies-gray-50);

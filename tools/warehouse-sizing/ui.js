@@ -14,6 +14,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import * as calc from './calc.js?v=20260425-s11';
 import * as api from './api.js?v=20260418-sL';
 import * as cmApi from '../cost-model/api.js?v=20260429-vol12';
+import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260429-p54';
 
 // ============================================================
 // CHROME v3 — phase + section structure (CM Chrome v3 ripple, step 3 redo)
@@ -450,6 +451,8 @@ function bindShellEvents() {
       flashPrimaryAction(rootEl);
     },
   });
+  // Phase 5.4 — cross-tool CM drillback chip delegation.
+  bindCmDrillback(rootEl);
 
   // Root-level delegation for data-wsc-action (toggle-edit-layout, reset-layout).
   // Using delegation per the event-delegation-pattern memory — renderPlan's
@@ -2109,7 +2112,7 @@ function renderDashboard() {
             <tr><td colspan="2" style="padding-top:14px;font-weight:700;color:var(--ies-blue);font-size:11px;text-transform:uppercase;" title="Phase 4 Layer B (volumes-as-nucleus): positions sized per-channel using each channel's storageAllocation override (falls back to facility allocation when no override).">Inventory → Positions by Channel</td></tr>
             ${byChannel.map(c => `
               <tr>
-                <td style="padding-left:8px;">${escapeHtml(c.name)}</td>
+                <td style="padding-left:8px;">${escapeHtml(c.name)}${renderCmDrillbackChip({ cmId: facility.parent_cost_model_id, channelKey: c.channelKey, channelName: c.name })}</td>
                 <td class="cm-num">
                   <span title="Full pallet positions">${c.fullPalletPositions.toLocaleString()} fp</span>
                   <span style="color:var(--ies-gray-400);"> · </span>

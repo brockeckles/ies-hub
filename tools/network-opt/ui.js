@@ -12,6 +12,7 @@ import { state } from '../../shared/state.js?v=20260418-sM';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sM';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260429-tc1';
+import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260429-p54';
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadXLSX } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260418-sM';
@@ -722,6 +723,8 @@ function bindShellEvents() {
       flashPrimaryAction(rootEl);
     },
   });
+  // Phase 5.4 — cross-tool CM drillback chip delegation.
+  bindCmDrillback(rootEl);
 
   // CSV file input lives at shell scope; re-bind after every renderShell.
   rootEl.querySelector('#netopt-csv-upload')?.addEventListener('change', handleCsvUpload);
@@ -1781,7 +1784,7 @@ function renderModeMix(el) {
           return `
             <div class="hub-card" style="margin-top:12px;padding:14px 18px;">
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:10px;">
-                <div style="font-size:13px;font-weight:700;">Channel: ${escapeHtml(k)}</div>
+                <div style="font-size:13px;font-weight:700;display:inline-flex;align-items:center;">Channel: ${escapeHtml(k)}${renderCmDrillbackChip({ cmId: activeParentCmId, channelKey: k, channelName: k })}</div>
                 <button class="hub-btn hub-btn-sm hub-btn-secondary" data-cm-reset="${escapeAttr(k)}" title="Reset this channel's mix to the project default" style="font-size:11px;padding:4px 8px;">&#x21bb; Reset to project mix</button>
               </div>
               <div style="display:flex;flex-direction:column;gap:14px;">
