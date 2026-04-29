@@ -517,7 +517,7 @@ function render() {
   rootEl.innerHTML = `
     <div class="hub-content-inner" style="padding:24px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
-        <h2 class="text-page" style="margin:0;">Deal Management</h2>
+        <h2 class="text-page">Deal Management</h2>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button class="hub-btn hub-btn-sm ${viewMode === 'pipeline' ? '' : 'hub-btn-secondary'}" data-view="pipeline">Pipeline</button>
           <button class="hub-btn hub-btn-sm ${viewMode === 'list' ? '' : 'hub-btn-secondary'}" data-view="list">List</button>
@@ -531,25 +531,25 @@ function render() {
       ${(viewMode === 'pipeline' || viewMode === 'list') ? `
       <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">
         <div style="position:relative;flex:1;min-width:240px;max-width:380px;">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ies-gray-400)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input type="text" id="dm-search" placeholder="Search deals by name, customer, or owner…" value="${escapeAttr(dealSearch)}"
-            style="width:100%;padding:6px 10px 6px 32px;border:1px solid var(--ies-gray-300);border-radius:8px;font-size:13px;font-family:Montserrat,sans-serif;"/>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ies-gray-400)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);pointer-events:none;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input class="hub-input" type="text" id="dm-search" placeholder="Search deals by name, customer, or owner…" value="${escapeAttr(dealSearch)}"
+            style="padding-left:38px;"/>
         </div>
-        <select id="dm-customer-filter" style="padding:6px 10px;border:1px solid var(--ies-gray-300);border-radius:8px;font-size:13px;background:#fff;font-family:Montserrat,sans-serif;">
+        <select class="hub-select" id="dm-customer-filter" style="width:auto;min-width:180px;">
           <option value="">All Customers</option>
           ${customers.map(c => `<option value="${escapeAttr(c)}" ${c === customerFilter ? 'selected' : ''}>${escapeAttr(c)}</option>`).join('')}
         </select>
-        ${(dealSearch || customerFilter) ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="clear-filters" style="font-size:11px;">Clear filters</button>` : ''}
+        ${(dealSearch || customerFilter) ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="clear-filters">Clear filters</button>` : ''}
         <span style="font-size:11px;color:var(--ies-gray-500);margin-left:auto;">${filteredDeals().length} of ${DEALS.length} deals</span>
       </div>
       ` : ''}
 
       <!-- KPI Bar -->
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">
-        ${kpi('Active Deals', DEALS.length, '#2563eb')}
-        ${kpi('Total Pipeline', '$' + (totalRevenue / 1e6).toFixed(1) + 'M', '#16a34a')}
-        ${kpi('Avg Margin', avgMargin.toFixed(1) + '%', '#7c3aed')}
-        ${kpi('Total Sites', totalSites, '#d97706')}
+      <div class="hub-kpi-strip" style="margin-bottom:20px;">
+        ${kpi('Active Deals', DEALS.length)}
+        ${kpi('Total Pipeline', '$' + (totalRevenue / 1e6).toFixed(1) + 'M')}
+        ${kpi('Avg Margin', avgMargin.toFixed(1) + '%')}
+        ${kpi('Total Sites', totalSites)}
       </div>
 
       <div id="dm-content"></div>
@@ -836,13 +836,13 @@ function renderDetail() {
         ${d.score !== '—' ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;font-size:16px;font-weight:800;color:#fff;background:${d.score.startsWith('A') ? '#16a34a' : '#2563eb'};">${d.score}</span>` : ''}
       </div>
 
-      <!-- Quick Stats -->
-      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px;">
-        ${kpi('Revenue', '$' + (d.revenue / 1e6).toFixed(1) + 'M', '#16a34a')}
-        ${kpi('Margin', d.margin > 0 ? d.margin + '%' : 'TBD', d.margin >= 10 ? '#16a34a' : '#d97706')}
-        ${kpi('Total sqft', totalSqft > 0 ? (totalSqft / 1000).toFixed(0) + 'K' : '—', '#2563eb')}
-        ${kpi('Days in Stage', d.daysInStage, d.daysInStage > 14 ? '#dc2626' : '#16a34a')}
-        ${kpi('DOS Completion', dosCompletion + '%', dosCompletion >= 75 ? '#16a34a' : dosCompletion >= 50 ? '#d97706' : '#dc2626')}
+      <!-- Quick Stats — 5-tile strip overrides hub-kpi-strip\'s 4-column default -->
+      <div class="hub-kpi-strip" style="grid-template-columns:repeat(5,minmax(0,1fr));margin-bottom:20px;">
+        ${kpi('Revenue', '$' + (d.revenue / 1e6).toFixed(1) + 'M')}
+        ${kpi('Margin', d.margin > 0 ? d.margin + '%' : 'TBD', d.margin > 0 && d.margin < 10 ? 'var(--ies-orange)' : null)}
+        ${kpi('Total sqft', totalSqft > 0 ? (totalSqft / 1000).toFixed(0) + 'K' : '—')}
+        ${kpi('Days in Stage', d.daysInStage, d.daysInStage > 14 ? 'var(--ies-red)' : null)}
+        ${kpi('DOS Completion', dosCompletion + '%', dosCompletion < 50 ? 'var(--ies-red)' : dosCompletion < 75 ? 'var(--ies-orange)' : null)}
       </div>
 
       <!-- Detail Tabs -->
@@ -1480,10 +1480,15 @@ function renderDealDocuments() {
 // ============================================================
 
 function kpi(label, value, color) {
+  // 2026-04-29 polish — emit hub-kpi-tile so DM matches the design-tools
+  // visual language (label uppercase + accent value). The optional color
+  // argument is kept for threshold semantics (e.g. red when days-in-stage
+  // exceeds 14) — when omitted, value inherits --ies-navy from the primitive.
+  const valueStyle = color ? ` style="color:${color};"` : '';
   return `
-    <div class="hub-card" style="padding:12px;text-align:center;">
-      <div style="font-size:20px;font-weight:800;color:${color};">${value}</div>
-      <div style="font-size:11px;color:var(--ies-gray-400);font-weight:600;">${label}</div>
+    <div class="hub-kpi-tile">
+      <div class="hub-kpi-tile__label">${label}</div>
+      <div class="hub-kpi-tile__value"${valueStyle}>${value}</div>
     </div>
   `;
 }
