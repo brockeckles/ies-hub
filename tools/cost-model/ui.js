@@ -12906,11 +12906,11 @@ function _renderOfpArea(areaKey, entries, opHrs, lc, opts = {}) {
         // No pencil/handle on the (untagged) divider.
         const labelText = isUntagged ? '(untagged)' : _ofpFlowLabel(tag);
         const handleHtml = isUntagged ? '' :
-          `<span class="ofp-flow-divider__grip" data-flow-tag="${escapeAttr(tag)}" draggable="true" title="Drag to reorder this flow">⋮⋮</span>`;
+          `<span class="ofp-flow-divider__grip" aria-hidden="true">⋮⋮</span>`;
         const pencilHtml = isUntagged ? '' :
           `<button class="ofp-flow-divider__pencil" data-ofp-action="manage-flows" data-flow-tag="${escapeAttr(tag)}" title="Edit this Flow">✎</button>`;
         parts.push(`
-          <div class="ofp-flow-divider"${isUntagged ? '' : ` data-flow-tag="${escapeAttr(tag)}"`}>
+          <div class="ofp-flow-divider"${isUntagged ? '' : ` data-flow-tag="${escapeAttr(tag)}" draggable="true" title="Drag to reorder this flow"`}>
             ${handleHtml}
             <span class="ofp-flow-divider__stripe" style="background:${_flowColor(tag)};"></span>
             <span class="ofp-flow-divider__label">${escapeHtml(labelText)}</span>
@@ -12932,8 +12932,8 @@ function _renderOfpArea(areaKey, entries, opHrs, lc, opts = {}) {
     <div class="ofp-area ${widthClass} ${warnClass}" data-ofp-area="${areaKey}">
       <div class="ofp-area__header" style="border-top:3px solid ${meta.color};">
         <div class="ofp-area__header-row">
-          <div class="ofp-area__title-row">
-            <span class="ofp-area__grip" data-area-key="${escapeAttr(areaKey)}" draggable="true" title="Drag to reorder this Functional Area">⋮⋮</span>
+          <div class="ofp-area__title-row" data-area-key="${escapeAttr(areaKey)}" draggable="${areaKey === 'unclassified' ? 'false' : 'true'}" title="${areaKey === 'unclassified' ? '' : 'Drag to reorder this Functional Area'}">
+            <span class="ofp-area__grip" aria-hidden="true">⋮⋮</span>
             <div class="ofp-area__title">${escapeHtml(meta.label)}</div>
             <button class="ofp-area__title-pencil" data-ofp-action="manage-areas" data-area-key="${escapeAttr(areaKey)}" title="Edit this Functional Area">✎</button>
           </div>
@@ -13110,16 +13110,22 @@ function _bindOperationalFlowEvents(container) {
   let areaCanvasDragKey = null;
   let flowCanvasDragTag = null;
 
-  // --- Area grip dragstart/dragend ---
-  container.querySelectorAll('.ofp-area__grip[data-area-key]').forEach(grip => {
-    grip.addEventListener('dragstart', (e) => {
+  // --- Area dragstart/dragend (drag the whole title-row) ---
+  // Drag source is .ofp-area__title-row[data-area-key]; grip is just a
+  // visual cue. Title-row is naturally large and obvious to grab.
+  container.querySelectorAll('.ofp-area__title-row[data-area-key]').forEach(row => {
+    row.addEventListener('dragstart', (e) => {
+      // Don't fire for buttons inside the row (pencil ✎). HTML5 only
+      // dispatches dragstart from the closest draggable ancestor,
+      // which for buttons is still the row — but the user pressing on
+      // a button without dragging won't trigger this anyway.
       e.stopPropagation();
-      areaCanvasDragKey = grip.dataset.areaKey;
+      areaCanvasDragKey = row.dataset.areaKey;
       try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', `area:${areaCanvasDragKey}`); } catch (_) {}
-      const areaEl = grip.closest('.ofp-area');
+      const areaEl = row.closest('.ofp-area');
       if (areaEl) areaEl.classList.add('ofp-area--reorder-dragging');
     });
-    grip.addEventListener('dragend', () => {
+    row.addEventListener('dragend', () => {
       areaCanvasDragKey = null;
       container.querySelectorAll('.ofp-area--reorder-dragging').forEach(el => el.classList.remove('ofp-area--reorder-dragging'));
       container.querySelectorAll('.ofp-area--reorder-target').forEach(el => el.classList.remove('ofp-area--reorder-target'));
@@ -13160,16 +13166,17 @@ function _bindOperationalFlowEvents(container) {
     });
   });
 
-  // --- Flow divider grip dragstart/dragend ---
-  container.querySelectorAll('.ofp-flow-divider__grip[data-flow-tag]').forEach(grip => {
-    grip.addEventListener('dragstart', (e) => {
+  // --- Flow divider dragstart/dragend (drag the whole divider band) ---
+  container.querySelectorAll('.ofp-flow-divider[data-flow-tag]').forEach(dividerEl => {
+    dividerEl.addEventListener('dragstart', (e) => {
+      // Don't fire if the user is dragging from the pencil button.
+      if (e.target.closest('.ofp-flow-divider__pencil')) { e.preventDefault(); return; }
       e.stopPropagation();
-      flowCanvasDragTag = grip.dataset.flowTag;
+      flowCanvasDragTag = dividerEl.dataset.flowTag;
       try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', `flow:${flowCanvasDragTag}`); } catch (_) {}
-      const dividerEl = grip.closest('.ofp-flow-divider');
-      if (dividerEl) dividerEl.classList.add('ofp-flow-divider--reorder-dragging');
+      dividerEl.classList.add('ofp-flow-divider--reorder-dragging');
     });
-    grip.addEventListener('dragend', () => {
+    dividerEl.addEventListener('dragend', () => {
       flowCanvasDragTag = null;
       container.querySelectorAll('.ofp-flow-divider--reorder-dragging').forEach(el => el.classList.remove('ofp-flow-divider--reorder-dragging'));
       container.querySelectorAll('.ofp-flow-divider--reorder-above, .ofp-flow-divider--reorder-below').forEach(el =>
@@ -14993,18 +15000,26 @@ function _ofpStyles() {
          v0.5 — Reorder handles + drop indicators
          ======================================================== */
 
-      /* Canvas: area drag-handle (in title-row) — hover-reveal */
+      /* Canvas: area drag-handle. v0.7 — title-row IS the drag source;
+         grip is just a visible cue. Always visible (was hover-reveal)
+         and the whole title-row gets cursor:grab so the affordance is
+         obvious — drag the title 'Inbound' itself to reorder. */
+      .ofp-area__title-row {
+        cursor: grab; user-select: none;
+      }
+      .ofp-area__title-row[draggable="false"] {
+        cursor: default;
+      }
+      .ofp-area__title-row:active { cursor: grabbing; }
       .ofp-area__grip {
         flex: 0 0 auto;
-        font-size: 12px; line-height: 1; letter-spacing: -1px;
-        color: var(--ies-gray-300);
-        cursor: grab; user-select: none;
+        font-size: 13px; line-height: 1; letter-spacing: -1px;
+        color: var(--ies-gray-400);
+        user-select: none;
         padding: 1px 2px;
-        opacity: 0; transition: opacity 0.12s, color 0.12s;
+        opacity: 0.6; transition: opacity 0.12s, color 0.12s;
       }
-      .ofp-area:hover .ofp-area__grip { opacity: 1; }
-      .ofp-area__grip:hover { color: var(--ies-blue); }
-      .ofp-area__grip:active { cursor: grabbing; }
+      .ofp-area__title-row:hover .ofp-area__grip { opacity: 1; color: var(--ies-blue); }
       .ofp-area--reorder-dragging { opacity: 0.45; }
       .ofp-area--reorder-target {
         outline: 2px dashed var(--ies-blue);
@@ -15012,18 +15027,21 @@ function _ofpStyles() {
         background: rgba(0, 71, 171, 0.04);
       }
 
-      /* Canvas: flow divider drag-handle */
+      /* Canvas: flow divider drag. v0.7 — whole divider band is the
+         drag source; grip is a visible cue. */
+      .ofp-flow-divider[draggable="true"] {
+        cursor: grab; user-select: none;
+      }
+      .ofp-flow-divider[draggable="true"]:active { cursor: grabbing; }
       .ofp-flow-divider__grip {
         flex: 0 0 auto;
         font-size: 11px; line-height: 1; letter-spacing: -1px;
-        color: var(--ies-gray-300);
-        cursor: grab; user-select: none;
+        color: var(--ies-gray-400);
+        user-select: none;
         padding: 1px 2px; margin-right: 2px;
-        opacity: 0; transition: opacity 0.12s, color 0.12s;
+        opacity: 0.6; transition: opacity 0.12s, color 0.12s;
       }
-      .ofp-flow-divider:hover .ofp-flow-divider__grip { opacity: 1; }
-      .ofp-flow-divider__grip:hover { color: var(--ies-blue); }
-      .ofp-flow-divider__grip:active { cursor: grabbing; }
+      .ofp-flow-divider:hover .ofp-flow-divider__grip { opacity: 1; color: var(--ies-blue); }
       .ofp-flow-divider--reorder-dragging { opacity: 0.45; }
       .ofp-flow-divider--reorder-above {
         box-shadow: inset 0 2px 0 0 var(--ies-blue);
