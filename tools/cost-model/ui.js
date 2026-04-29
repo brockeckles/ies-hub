@@ -12690,19 +12690,13 @@ function renderOperationalFlow() {
   const totalAreasPossible = unclassifiedCount > 0 ? registry.length : registry.length - 1;
   const populatedAreas = Object.values(areasMap).filter(arr => arr.length > 0).length;
 
-  // Inter-area connector — show TOTAL upstream-area FTE so the number
-  // matches the area header (14.8 / 31.7 / etc). v0.5 used MAX-FTE as
-  // a "bottleneck-throughput proxy" but that doesn't match the area
-  // total users see in the header above, which made the arrows feel
-  // wrong. SUM is conventional for staffing-flow diagrams; if it
-  // overstates due to within-area double-handling, that's a per-line
-  // modeling concern, not an arrow-rendering concern.
-  const sumFteInArea = (entries) => entries.reduce((s, e) => s + calc.fte(e.line, opHrs), 0);
+  // Inter-area connector — direction only, no FTE label.
+  // v0.5/v0.8 tried MAX-FTE then SUM-FTE; both are mathematically
+  // ill-defined once areas are user-reorderable (same data renders
+  // different numbers when columns swap). Brock's call: just show
+  // direction. Each area's total FTE is already in its header above.
   const arrowSvg = (upstreamEntries, upstreamLabel, downstreamLabel) => {
-    const fteThrough = sumFteInArea(upstreamEntries);
-    const tip = upstreamEntries.length === 0
-      ? `${upstreamLabel} → ${downstreamLabel} (no upstream activities)`
-      : `${upstreamLabel} → ${downstreamLabel} · ${fteThrough.toFixed(1)} FTE total in ${upstreamLabel} (sum of all roles).`;
+    const tip = `${upstreamLabel} → ${downstreamLabel}`;
     return `
       <div class="ofp-connector" title="${escapeAttr(tip)}">
         <svg viewBox="0 0 60 32" width="60" height="32" preserveAspectRatio="none" aria-hidden="true">
@@ -12713,7 +12707,6 @@ function renderOperationalFlow() {
           </defs>
           <line x1="0" y1="20" x2="56" y2="20" stroke="var(--ies-gray-400)" stroke-width="2" marker-end="url(#ofp-arrowhead)"></line>
         </svg>
-        ${fteThrough > 0 ? `<div class="ofp-connector__label">${fteThrough.toFixed(1)} FTE</div>` : ''}
       </div>
     `;
   };
