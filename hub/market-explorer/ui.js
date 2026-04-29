@@ -164,7 +164,7 @@ function render() {
       </div>
 
       <!-- KPI Row — slimmed inline header, with hover tooltips -->
-      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-3); margin-bottom: var(--sp-4);">
+      <div class="hub-kpi-strip" style="margin-bottom: var(--sp-4);">
         ${meKpi('Markets Tracked', String(stats.totalMarkets), 'Count of MSAs in the filter set (of ' + markets.length + ' total tracked).')}
         ${meKpi('Avg Labor Score', calc.scoreBadge(stats.avgLaborScore), 'Composite labor-availability score (0-100) for filtered markets. Higher = more available workforce. Inputs: unemployment rate, participation, turnover, time-to-fill.')}
         ${meKpi('Avg Warehouse Wage', calc.fmt$(stats.avgWage) + '/hr', 'Average hourly warehouse wage (filtered set). BLS OEWS data, seasonally adjusted.')}
@@ -243,30 +243,36 @@ function renderOverview(filtered) {
   // Map full-width — the right-hand "Data Library" table was duplicative of
   // the Data Library tab below; removed per feedback 2026-04-17.
   return `
+    <style>
+      .me-news-link { color: inherit; text-decoration: none; transition: color 0.12s; }
+      .me-news-link:hover { color: var(--ies-blue); }
+    </style>
     <div class="hub-card" style="padding: var(--sp-4); position: relative;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom: var(--sp-3);">
         <h3 class="text-subtitle" style="margin: 0;">US Market Map</h3>
         <span class="text-caption text-muted">${filtered.length} markets shown — click a pin for details</span>
       </div>
-      <div id="market-map" style="background: #f0f4f8; border-radius: var(--radius-md); height: 520px; position: relative; overflow: hidden;">
+      <div id="market-map" style="background: var(--ies-gray-100); border-radius: var(--radius-md); height: 520px; position: relative; overflow: hidden;">
         <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--ies-gray-500); font-size: 13px;">Loading map...</div>
       </div>
     </div>
   `;
 }
 
-// Small helper — KPI tile with hover tooltip (mirrors CC pattern)
+// Small helper — KPI tile with hover tooltip. Uses hub-kpi-tile BEM so the
+// strip aligns with the rest of the hub; tooltip background tokenized to
+// var(--ies-navy) instead of raw #1e293b hex.
 function meKpi(label, value, tooltip) {
   return `
-    <div class="hub-card" style="text-align:center; padding: var(--sp-3); position:relative;">
-      <div style="display:flex;align-items:center;justify-content:center;gap:4px;margin-bottom:4px;">
-        <span class="text-caption text-muted">${label}</span>
+    <div class="hub-kpi-tile" style="position:relative;">
+      <div style="display:flex;align-items:center;gap:4px;">
+        <span class="hub-kpi-tile__label" style="min-height:0;">${label}</span>
         ${tooltip ? `<span class="cc-kpi-tip" style="position:relative;display:inline-flex;">
           <span style="width:14px;height:14px;border-radius:50%;background:var(--ies-gray-100);color:var(--ies-gray-400);font-size:9px;display:inline-flex;align-items:center;justify-content:center;cursor:help;font-weight:700;">?</span>
-          <span class="cc-kpi-tiptext" style="display:none;position:absolute;left:50%;transform:translateX(-50%);bottom:calc(100% + 6px);width:240px;padding:8px 10px;background:#1e293b;color:#f8fafc;font-size:11px;font-weight:400;line-height:1.4;border-radius:6px;z-index:100;pointer-events:none;text-align:left;box-shadow:0 4px 12px rgba(0,0,0,.25);">${tooltip}</span>
+          <span class="cc-kpi-tiptext" style="display:none;position:absolute;left:50%;transform:translateX(-50%);bottom:calc(100% + 6px);width:240px;padding:8px 10px;background:var(--ies-navy);color:#fff;font-size:11px;font-weight:400;line-height:1.4;border-radius:6px;z-index:100;pointer-events:none;text-align:left;box-shadow:0 4px 12px rgba(0,0,0,.25);">${tooltip}</span>
         </span>` : ''}
       </div>
-      <div class="text-page">${value}</div>
+      <div class="hub-kpi-tile__value">${value}</div>
     </div>
   `;
 }
@@ -664,7 +670,7 @@ function renderIntelligencePanel(m) {
           ${news.map(n => `
             <div style="padding:10px 12px;background:#fff;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:12px;">
               <div style="font-weight:600;color:var(--ies-gray-700);margin-bottom:3px;">
-                ${n.source_url ? `<a href="${n.source_url}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;" onmouseover="this.style.color='#2563eb'" onmouseout="this.style.color='inherit'">${n.headline} ↗</a>` : n.headline}
+                ${n.source_url ? `<a href="${n.source_url}" target="_blank" rel="noopener" class="me-news-link">${n.headline} ↗</a>` : n.headline}
               </div>
               ${n.summary ? `<div style="color:var(--ies-gray-500);line-height:1.4;">${n.summary}</div>` : ''}
               <div style="display:flex;gap:8px;margin-top:4px;font-size:10px;color:var(--ies-gray-400);">
@@ -769,7 +775,12 @@ function initializeMap(filtered) {
 
     // Add market markers
     filtered.forEach(m => {
-      const color = m.gxoPresence === 'active' ? '#16a34a' : '#3b82f6';
+      // 2026-04-29: resolve from token rather than hardcoded hex so theme
+      // changes propagate. getComputedStyle reads the live computed value.
+      const _styles = getComputedStyle(document.documentElement);
+      const _activeColor = (_styles.getPropertyValue('--ies-green') || '#16a34a').trim();
+      const _defaultColor = (_styles.getPropertyValue('--ies-blue') || '#3b82f6').trim();
+      const color = m.gxoPresence === 'active' ? _activeColor : _defaultColor;
       const radius = 6 + (m.laborScore / 20);
 
       const marker = window.L.circleMarker([m.lat, m.lng], {
@@ -806,7 +817,7 @@ function initializeMap(filtered) {
     }, 100);
   } catch (e) {
     console.error('Map initialization error:', e);
-    mapContainer.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#dc3545;">Map error: ${e.message}</div>`;
+    mapContainer.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--ies-red);">Map error: ${e.message}</div>`;
   }
 }
 
