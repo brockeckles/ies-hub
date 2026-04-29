@@ -448,6 +448,8 @@ function _recolorPins() {
   const filtered = getFiltered();
   const sorted = _sortFilteredByMode(filtered);
   const metric = _COLOR_MODES.find(m => m.key === colorMode)?.metric || 'gxo';
+  const styles = getComputedStyle(document.documentElement);
+  const orange = (styles.getPropertyValue('--ies-orange') || '#ff3a00').trim() || '#ff3a00';
   for (const m of markets) {
     if (!m._marker) continue;
     const inFilter = filtered.some(f => f.id === m.id);
@@ -456,7 +458,29 @@ function _recolorPins() {
       continue;
     }
     const color = _pinColorFor(m, metric, sorted);
-    m._marker.setStyle({ fillColor: color, color: '#fff', fillOpacity: 0.85, opacity: 1 });
+    const isSelected = !!(selectedMarket && m.id === selectedMarket.id);
+    const baseRadius = 6 + (m.laborScore / 20);
+    if (isSelected) {
+      // Selected: larger radius, orange stroke ring, full opacity, brought to front
+      m._marker.setStyle({
+        radius: baseRadius * 1.6,
+        fillColor: color,
+        color: orange,
+        weight: 4,
+        fillOpacity: 1,
+        opacity: 1,
+      });
+      try { m._marker.bringToFront(); } catch (_) {}
+    } else {
+      m._marker.setStyle({
+        radius: baseRadius,
+        fillColor: color,
+        color: '#fff',
+        weight: 2,
+        fillOpacity: 0.85,
+        opacity: 1,
+      });
+    }
   }
 }
 
@@ -469,6 +493,7 @@ function _openDetail(m) {
   const railEl = rootEl.querySelector('.me-rail');
   if (railEl) railEl.classList.add('detail-open');
   highlightMarketOnMap(m.id);
+  _recolorPins();        // upgrade the selected pin's visual
   _refreshRailList();
 }
 
@@ -478,6 +503,7 @@ function _closeDetail() {
   if (!rootEl) return;
   const railEl = rootEl.querySelector('.me-rail');
   if (railEl) railEl.classList.remove('detail-open');
+  _recolorPins();        // restore default pin styling
   _refreshRailList();
 }
 
@@ -1103,6 +1129,9 @@ function initializeMap(filtered) {
     // Force map to resize after container is visible
     setTimeout(() => {
       if (mapInstance) mapInstance.invalidateSize();
+      // 2026-04-29: pick up selected-pin highlight if a market is preselected
+      // (e.g., across navigation). _recolorPins applies the orange ring.
+      if (selectedMarket) _recolorPins();
     }, 100);
   } catch (e) {
     console.error('Map initialization error:', e);
