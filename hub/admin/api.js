@@ -62,6 +62,30 @@ export async function saveMasterRecord(tableName, id, payload) {
 }
 
 /**
+ * Count records across multiple master tables in parallel. Used by the Admin
+ * Master Data card grid so each card shows a live row count instead of a
+ * hardcoded value. Returns a map keyed by table name; missing/errored tables
+ * resolve to null.
+ *
+ * @param {string[]} tableNames
+ * @returns {Promise<Record<string, number|null>>}
+ */
+export async function countMasterRecords(tableNames) {
+  const out = {};
+  await Promise.all((tableNames || []).map(async (t) => {
+    if (!t) return;
+    try {
+      const { count, error } = await db.from(t).select('id', { count: 'exact', head: true });
+      out[t] = error ? null : (count ?? 0);
+    } catch (err) {
+      console.warn('[admin] countMasterRecords(' + t + ') failed', err);
+      out[t] = null;
+    }
+  }));
+  return out;
+}
+
+/**
  * Delete a master record.
  * @param {string} tableName
  * @param {string} id

@@ -150,7 +150,7 @@ function renderMasterData(el) {
           <div style="font-size:14px;font-weight:700;margin-bottom:4px;">${t.name}</div>
           <div style="font-size:12px;color:var(--ies-gray-400);margin-bottom:8px;">${t.description}</div>
           <div style="display:flex;gap:12px;font-size:11px;color:var(--ies-gray-400);margin-bottom:8px;">
-            <span>📊 ${t.rowCount} records</span>
+            <span data-count-for="${t.tableName}">📊 — records</span>
             <span>📋 ${t.columns.length} columns</span>
           </div>
           <button class="hub-btn hub-btn-sm hub-btn-secondary" style="width:100%;margin-top:8px;">View →</button>
@@ -164,6 +164,25 @@ function renderMasterData(el) {
       activeMasterTable = calc.MASTER_TABLES.find(t => t.id === /** @type {HTMLElement} */ (card).dataset.table);
       render();
     });
+  });
+
+  // 2026-04-29: fetch live row counts in parallel and patch each card in
+  // place so the static rowCount values from MASTER_TABLES never lie.
+  const tableNames = calc.MASTER_TABLES.map(t => t.tableName).filter(Boolean);
+  api.countMasterRecords(tableNames).then(counts => {
+    for (const [tableName, count] of Object.entries(counts)) {
+      const slot = el.querySelector(`[data-count-for="${tableName}"]`);
+      if (!slot) continue;
+      if (count == null) {
+        slot.textContent = '📊 — records';
+        slot.title = 'Count unavailable (table missing or RLS-blocked)';
+      } else {
+        slot.textContent = `📊 ${count.toLocaleString()} record${count === 1 ? '' : 's'}`;
+        slot.removeAttribute('title');
+      }
+    }
+  }).catch(err => {
+    console.warn('[admin] live counts failed', err);
   });
 }
 
