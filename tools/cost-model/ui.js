@@ -11820,6 +11820,8 @@ function renderImplementation() {
       </div>
     </div>
 
+    ${hiddenStripHtml}
+
     <!-- KPI strip -->
     <div class="hub-kpi-strip" style="margin-bottom:16px;">
       <div class="hub-kpi-tile" title="Calendar week of contract start when ops officially begin handling volume">
@@ -12233,6 +12235,7 @@ function _ofpEnsureAreaRegistry() {
     if (typeof a.isProtected !== 'boolean') a.isProtected = a.key === 'unclassified';
     if (typeof a.sortOrder !== 'number') a.sortOrder = i;
     if (!Array.isArray(a.keywords)) a.keywords = [];
+    if (typeof a.hidden !== 'boolean') a.hidden = false;
   });
   // Guarantee an unclassified entry exists — it's the classifier fallback.
   if (!model.ofpAreas.some(a => a.key === 'unclassified')) {
@@ -12324,6 +12327,7 @@ function _ofpEnsureFlowRegistry() {
   model.ofpFlows.forEach((f, i) => {
     if (typeof f.label !== 'string' || !f.label) f.label = f.tag;
     if (typeof f.sortOrder !== 'number') f.sortOrder = i;
+    if (typeof f.hidden !== 'boolean') f.hidden = false;
   });
   // Lazy-add registry entries for tags that exist on lines but not in
   // the registry. Preserves user edits — only adds new ones.
@@ -12701,11 +12705,17 @@ function renderOperationalFlow() {
     `;
   };
 
+  // v0.6 — Hidden filter. Visible areas + flows only render on the
+  // canvas. Hidden items show as restore-chips above the KPI strip.
+  const hiddenAreas = registry.filter(a => a.hidden);
+  const hiddenFlows = (model.ofpFlows || []).filter(f => f.hidden);
+  const hiddenAreaKeys = new Set(hiddenAreas.map(a => a.key));
+
   // Build the main row dynamically — interleave area cards with
   // arrow connectors. arrowSvg takes the upstream area's entries to
   // pick the throughput proxy, so we pass that explicitly.
-  const mainAreas = registry.filter(a => a.displayMode === 'main');
-  const wideAreas = registry.filter(a => a.displayMode !== 'main');
+  const mainAreas = registry.filter(a => a.displayMode === 'main' && !hiddenAreaKeys.has(a.key));
+  const wideAreas = registry.filter(a => a.displayMode !== 'main' && !hiddenAreaKeys.has(a.key));
   const mainRowParts = [];
   mainAreas.forEach((area, i) => {
     if (i > 0) {
@@ -12723,6 +12733,32 @@ function renderOperationalFlow() {
       </div>
     `).join('');
 
+  // Hidden strip — only renders when at least one item is hidden.
+  // Chips show area label / flow label; click restores. Plus a
+  // 'Show all' button to clear every hidden flag in one go.
+  const hiddenStripHtml = (hiddenAreas.length + hiddenFlows.length) === 0 ? '' : `
+    <div class="ofp-hidden-strip">
+      <span class="ofp-hidden-strip__label">Hidden:</span>
+      ${hiddenAreas.map(a => `
+        <button class="ofp-hidden-chip" data-restore-area="${escapeAttr(a.key)}" title="Show ${escapeAttr(a.label)} on canvas">
+          <span class="ofp-hidden-chip__dot" style="background:${a.color};"></span>
+          <span class="ofp-hidden-chip__name">${escapeHtml(a.label)}</span>
+          <span class="ofp-hidden-chip__type">area</span>
+          <span class="ofp-hidden-chip__icon">👁</span>
+        </button>
+      `).join('')}
+      ${hiddenFlows.map(f => `
+        <button class="ofp-hidden-chip ofp-hidden-chip--flow" data-restore-flow="${escapeAttr(f.tag)}" title="Show flow '${escapeAttr(f.label)}' on canvas">
+          <span class="ofp-hidden-chip__dot" style="background:${_flowColor(f.tag)};"></span>
+          <span class="ofp-hidden-chip__name">${escapeHtml(f.label)}</span>
+          <span class="ofp-hidden-chip__type">flow</span>
+          <span class="ofp-hidden-chip__icon">👁</span>
+        </button>
+      `).join('')}
+      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-ofp-action="show-all-hidden" style="margin-left:auto;" title="Restore all hidden areas and flows">Show all</button>
+    </div>
+  `;
+
   return `
     <div class="cm-section-header" style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px;">
       <div>
@@ -12734,6 +12770,8 @@ function renderOperationalFlow() {
         <button class="hub-btn hub-btn-secondary hub-btn-sm" data-ofp-action="manage-flows" title="Edit Flows — rename, recolor, add new flows">⚙ Manage Flows</button>
       </div>
     </div>
+
+    ${hiddenStripHtml}
 
     <!-- KPI strip -->
     <div class="hub-kpi-strip" style="margin-bottom:16px;">
@@ -12816,11 +12854,24 @@ function _renderOfpArea(areaKey, entries, opHrs, lc, opts = {}) {
   if (entries.length === 0) {
     nodesHtml = `<div class="ofp-area__empty">No activities</div>`;
   } else if (wide) {
-    nodesHtml = entries.map(e => _renderOfpNode(e, areaKey, opHrs, lc)).join('');
+    // v0.6 — Filter hidden-flow lines on wide rows too.
+    const hiddenFlowTags = new Set((model.ofpFlows || []).filter(f => f.hidden).map(f => f.tag));
+    const visibleEntries = entries.filter(e => {
+      const t = (e.line.path_tag || '').trim();
+      return !t || !hiddenFlowTags.has(t);
+    });
+    nodesHtml = visibleEntries.map(e => _renderOfpNode(e, areaKey, opHrs, lc)).join('');
   } else {
+    // v0.6 — Drop entries whose flow tag is hidden. Untagged entries
+    // are never hidden (no per-tag toggle for untagged — synthetic group).
+    const hiddenFlowTags = new Set((model.ofpFlows || []).filter(f => f.hidden).map(f => f.tag));
+    const visibleEntries = entries.filter(e => {
+      const t = (e.line.path_tag || '').trim();
+      return !t || !hiddenFlowTags.has(t);
+    });
     // Group by path_tag. Untagged lines collected last under "(untagged)".
     const groups = new Map();
-    for (const e of entries) {
+    for (const e of visibleEntries) {
       const tag = (e.line.path_tag || '').trim();
       const key = tag || '__untagged__';
       if (!groups.has(key)) groups.set(key, []);
@@ -13005,6 +13056,44 @@ function _bindOperationalFlowEvents(container) {
       e.stopPropagation();
       const focusTag = btn.dataset.flowTag || null;
       _ofpOpenManageFlowsModal(container, focusTag);
+    });
+  });
+
+  // ============================================================
+  // v0.6 — Hidden-strip chip handlers + Show-all
+  // ============================================================
+  container.querySelectorAll('.ofp-hidden-chip[data-restore-area]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const key = btn.dataset.restoreArea;
+      const a = (model.ofpAreas || []).find(x => x.key === key);
+      if (!a) return;
+      a.hidden = false;
+      isDirty = true;
+      if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+      renderSection();
+    });
+  });
+  container.querySelectorAll('.ofp-hidden-chip[data-restore-flow]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const tag = btn.dataset.restoreFlow;
+      const f = (model.ofpFlows || []).find(x => x.tag === tag);
+      if (!f) return;
+      f.hidden = false;
+      isDirty = true;
+      if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+      renderSection();
+    });
+  });
+  container.querySelectorAll('[data-ofp-action="show-all-hidden"]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      (model.ofpAreas || []).forEach(a => { if (a.hidden) a.hidden = false; });
+      (model.ofpFlows || []).forEach(f => { if (f.hidden) f.hidden = false; });
+      isDirty = true;
+      if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+      renderSection();
     });
   });
 
@@ -13848,7 +13937,7 @@ function _renderManageAreasModal() {
     const upDisabled = idx === 0 ? 'disabled' : '';
     const downDisabled = idx === lastIdx ? 'disabled' : '';
     return `
-      <tr class="ofp-area-mgr__row ofp-mgr-row" data-area-row-key="${escapeAttr(a.key)}" data-area-idx="${idx}">
+      <tr class="ofp-area-mgr__row ofp-mgr-row ${a.hidden ? 'ofp-mgr-row--hidden' : ''}" data-area-row-key="${escapeAttr(a.key)}" data-area-idx="${idx}">
         <td class="ofp-mgr-row__handle-cell">
           <span class="ofp-mgr-row__grip" data-area-key="${escapeAttr(a.key)}" draggable="true" title="Drag to reorder">⋮⋮</span>
         </td>
@@ -13865,6 +13954,9 @@ function _renderManageAreasModal() {
             <option value="main" ${a.displayMode === 'main' ? 'selected' : ''}>Main row</option>
             <option value="wide" ${a.displayMode !== 'main' ? 'selected' : ''}>Wide row</option>
           </select>
+        </td>
+        <td class="ofp-mgr-row__visible-cell">
+          <button class="ofp-mgr-row__visible ${a.hidden ? 'ofp-mgr-row__visible--off' : ''}" data-area-key="${escapeAttr(a.key)}" data-toggle="visible" title="${a.hidden ? 'Hidden on canvas — click to show' : 'Visible — click to hide on canvas'}">${a.hidden ? '🚫' : '👁'}</button>
         </td>
         <td class="ofp-area-mgr__count-cell">${counts[a.key] || 0}</td>
         <td class="ofp-mgr-row__move-cell">
@@ -13894,6 +13986,7 @@ function _renderManageAreasModal() {
               <th style="width:200px;">Label</th>
               <th>Keywords (auto-classify activities by name match)</th>
               <th style="width:130px;">Display</th>
+              <th style="width:48px;text-align:center;" title="Show or hide on canvas">Show</th>
               <th style="width:64px;text-align:center;">Lines</th>
               <th style="width:60px;text-align:center;">Order</th>
               <th style="width:48px;"></th>
@@ -14065,6 +14158,21 @@ function _bindManageAreasEvents(container) {
     });
   }
 
+  // v0.6 — Show/hide toggle (👁) on each row
+  panel.querySelectorAll('.ofp-mgr-row__visible[data-area-key]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const key = btn.dataset.areaKey;
+      const a = model.ofpAreas.find(x => x.key === key);
+      if (!a) return;
+      a.hidden = !a.hidden;
+      isDirty = true;
+      if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+      renderSection();
+      _ofpOpenManageAreasModal(container, key);
+    });
+  });
+
   // v0.5 — Up/Down buttons
   panel.querySelectorAll('.ofp-mgr-row__move[data-area-key]').forEach(btn => {
     btn.addEventListener('click', (e) => {
@@ -14188,7 +14296,7 @@ function _renderManageFlowsModal() {
     const upDisabled = idx === 0 ? 'disabled' : '';
     const downDisabled = idx === lastIdx ? 'disabled' : '';
     return `
-      <tr class="ofp-area-mgr__row ofp-mgr-row" data-flow-row-tag="${escapeAttr(f.tag)}" data-flow-idx="${idx}">
+      <tr class="ofp-area-mgr__row ofp-mgr-row ${f.hidden ? 'ofp-mgr-row--hidden' : ''}" data-flow-row-tag="${escapeAttr(f.tag)}" data-flow-idx="${idx}">
         <td class="ofp-mgr-row__handle-cell">
           <span class="ofp-mgr-row__grip" data-flow-tag="${escapeAttr(f.tag)}" draggable="true" title="Drag to reorder">⋮⋮</span>
         </td>
@@ -14201,6 +14309,9 @@ function _renderManageFlowsModal() {
         <td class="ofp-flow-mgr__tag-cell">
           <code class="ofp-flow-mgr__tag" title="Canonical tag (matches line.path_tag). Immutable.">${escapeHtml(f.tag)}</code>
           ${isAuto ? '<span class="ofp-flow-mgr__auto-chip" title="Color is auto (deterministic hash from tag).">auto</span>' : `<button class="ofp-flow-mgr__reset-color" data-flow-tag="${escapeAttr(f.tag)}" title="Reset to auto color">↻</button>`}
+        </td>
+        <td class="ofp-mgr-row__visible-cell">
+          <button class="ofp-mgr-row__visible ${f.hidden ? 'ofp-mgr-row__visible--off' : ''}" data-flow-tag="${escapeAttr(f.tag)}" data-toggle="visible" title="${f.hidden ? 'Hidden on canvas — click to show' : 'Visible — click to hide on canvas'}">${f.hidden ? '🚫' : '👁'}</button>
         </td>
         <td class="ofp-area-mgr__count-cell">${counts[f.tag] || 0}</td>
         <td class="ofp-mgr-row__move-cell">
@@ -14215,7 +14326,7 @@ function _renderManageFlowsModal() {
   }).join('');
 
   const emptyRow = sorted.length === 0
-    ? `<tr><td colspan="8" style="text-align:center; padding:32px 12px; color:var(--ies-gray-400); font-style:italic; font-size:12px;">No flows yet — drag a card onto another to connect them on a flow, or click + Add Flow below.</td></tr>`
+    ? `<tr><td colspan="9" style="text-align:center; padding:32px 12px; color:var(--ies-gray-400); font-style:italic; font-size:12px;">No flows yet — drag a card onto another to connect them on a flow, or click + Add Flow below.</td></tr>`
     : '';
 
   return `
@@ -14235,6 +14346,7 @@ function _renderManageFlowsModal() {
               <th style="width:46px;">Color</th>
               <th style="width:240px;">Label</th>
               <th>Tag</th>
+              <th style="width:48px;text-align:center;" title="Show or hide on canvas">Show</th>
               <th style="width:64px;text-align:center;">Lines</th>
               <th style="width:60px;text-align:center;">Order</th>
               <th style="width:48px;"></th>
@@ -14355,6 +14467,21 @@ function _bindManageFlowsEvents(container) {
       _ofpOpenManageFlowsModal(container, tag);
     });
   }
+
+  // v0.6 — Show/hide toggle (👁) on each row
+  panel.querySelectorAll('.ofp-mgr-row__visible[data-flow-tag]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const tag = btn.dataset.flowTag;
+      const f = model.ofpFlows.find(x => x.tag === tag);
+      if (!f) return;
+      f.hidden = !f.hidden;
+      isDirty = true;
+      if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+      renderSection();
+      _ofpOpenManageFlowsModal(container, tag);
+    });
+  });
 
   // v0.5 — Up/Down buttons (flows)
   panel.querySelectorAll('.ofp-mgr-row__move[data-flow-tag]').forEach(btn => {
@@ -14942,6 +15069,76 @@ function _ofpStyles() {
       }
       .ofp-mgr-row--drop-below td {
         box-shadow: inset 0 -2px 0 0 var(--ies-blue);
+      }
+
+      /* ========================================================
+         v0.6 — Show/hide toggle + Hidden chip strip
+         ======================================================== */
+
+      /* Modal: Visible toggle button */
+      .ofp-mgr-row__visible-cell { text-align: center; }
+      .ofp-mgr-row__visible {
+        background: transparent;
+        border: 1px solid var(--ies-gray-200);
+        border-radius: 4px;
+        width: 30px; height: 28px; padding: 0;
+        cursor: pointer;
+        font-size: 14px; line-height: 1;
+        color: var(--ies-gray-700);
+        transition: all 0.12s;
+      }
+      .ofp-mgr-row__visible:hover {
+        border-color: var(--ies-blue);
+        background: rgba(0, 71, 171, 0.05);
+      }
+      .ofp-mgr-row__visible--off {
+        background: rgba(220, 38, 38, 0.06);
+        border-color: rgba(220, 38, 38, 0.30);
+      }
+      .ofp-mgr-row--hidden { opacity: 0.55; }
+      .ofp-mgr-row--hidden:hover { opacity: 1; }
+
+      /* Hidden strip — sits between section header and KPI strip */
+      .ofp-hidden-strip {
+        display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+        padding: 8px 12px;
+        background: var(--ies-gray-50);
+        border: 1px solid var(--ies-gray-200);
+        border-radius: 6px;
+        margin-bottom: 12px;
+      }
+      .ofp-hidden-strip__label {
+        font-size: 10px; font-weight: 700;
+        color: var(--ies-gray-500);
+        text-transform: uppercase; letter-spacing: 0.04em;
+        margin-right: 4px;
+      }
+      .ofp-hidden-chip {
+        display: inline-flex; align-items: center; gap: 5px;
+        background: #fff;
+        border: 1px solid var(--ies-gray-200);
+        border-radius: 12px;
+        padding: 3px 9px 3px 7px;
+        cursor: pointer;
+        font-size: 11px; color: var(--ies-navy);
+        transition: all 0.12s;
+      }
+      .ofp-hidden-chip:hover {
+        border-color: var(--ies-blue);
+        background: rgba(0, 71, 171, 0.04);
+      }
+      .ofp-hidden-chip__dot {
+        width: 8px; height: 8px; border-radius: 50%;
+        flex-shrink: 0;
+      }
+      .ofp-hidden-chip__name { font-weight: 600; }
+      .ofp-hidden-chip__type {
+        font-size: 8px; font-weight: 700; letter-spacing: 0.04em;
+        color: var(--ies-gray-400); text-transform: uppercase;
+      }
+      .ofp-hidden-chip--flow .ofp-hidden-chip__type { color: var(--ies-gray-500); }
+      .ofp-hidden-chip__icon {
+        font-size: 10px; opacity: 0.7;
       }
     </style>
   `;
