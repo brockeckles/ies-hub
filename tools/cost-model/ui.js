@@ -12,7 +12,7 @@ import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260424-hyg04';
 import * as calc from './calc.js?v=20260427-s2';
-import * as api from './api.js?v=20260427-s9';
+import * as api from './api.js?v=20260429-fam1';
 import * as scenarios from './calc.scenarios.js?v=20260429-otfix1';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
@@ -11048,6 +11048,99 @@ function renderLanding() {
           const bn = (dealById[b]?.deal_name || b).toLowerCase();
           return an < bn ? -1 : an > bn ? 1 : 0;
         });
+        // Compact chip used inside renderFamilyCard for each child scenario.
+        const renderScenarioChip = (m) => {
+          const safeName = (m.name || 'Untitled Model').replace(/"/g, '&quot;');
+          const sc = Array.isArray(m.cost_model_scenarios) ? m.cost_model_scenarios[0] : null;
+          const labelRaw = (sc?.scenario_label || m.scenario_label || '').toString().trim() || 'Scenario';
+          const status = sc?.status || 'draft';
+          const statusBg = status === 'approved' ? 'rgba(22,163,74,0.10)'
+                          : status === 'rejected' ? 'rgba(220,38,38,0.10)'
+                          : 'var(--ies-gray-100)';
+          const statusFg = status === 'approved' ? '#16a34a'
+                          : status === 'rejected' ? '#dc2626'
+                          : 'var(--ies-gray-500)';
+          const marginRaw = Number(m.target_margin_pct);
+          const marginDisp = Number.isFinite(marginRaw) && marginRaw > 0 ? `${marginRaw.toFixed(1)}%` : '—';
+          const sqftRaw = Number(m.facility_sqft);
+          const sqftDisp = Number.isFinite(sqftRaw) && sqftRaw > 0
+            ? (sqftRaw >= 1000 ? `${(sqftRaw/1000).toLocaleString(undefined,{maximumFractionDigits:0})}K SF` : `${sqftRaw.toLocaleString()} SF`)
+            : null;
+          return `
+            <div class="cm-family-chip" data-cm-card="${m.id}" data-cm-name="${safeName}"
+                 title="Open ${labelRaw}"
+                 style="padding:8px 10px;border:1px solid var(--ies-gray-200);border-radius:8px;background:#fff;cursor:pointer;display:flex;flex-direction:column;gap:4px;transition:all 0.12s;">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span style="font-size:11px;font-weight:700;color:var(--ies-navy);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${labelRaw}</span>
+                <span style="font-size:9px;padding:1px 6px;border-radius:8px;background:${statusBg};color:${statusFg};font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">${status}</span>
+              </div>
+              <div style="display:flex;gap:10px;font-size:10px;color:var(--ies-gray-500);">
+                <span><span style="color:var(--ies-gray-400);">Margin</span> <strong style="color:var(--ies-navy);">${marginDisp}</strong></span>
+                ${sqftDisp ? `<span><span style=\"color:var(--ies-gray-400);\">${sqftDisp}</span></span>` : ''}
+              </div>
+            </div>
+          `;
+        };
+
+        // Family card: baseline header + child-scenario chip strip. Uses the same
+        // visual language as the solo renderCard but reserves a footer for chips.
+        const renderFamilyCard = (fam) => {
+          const m = fam.baseline;
+          const updated = m.updated_at ? new Date(m.updated_at) : null;
+          const updatedStr = updated ? updated.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+          const market = m.market_id ? (marketById[m.market_id] || m.market_id) : null;
+          const safeName = (m.name || 'Untitled Model').replace(/"/g, '&quot;');
+          const sqftRaw = Number(m.facility_sqft);
+          const sqftDisp = Number.isFinite(sqftRaw) && sqftRaw > 0
+            ? (sqftRaw >= 1000 ? `${(sqftRaw/1000).toLocaleString(undefined,{maximumFractionDigits:0})}K` : sqftRaw.toLocaleString())
+            : null;
+          const marginRaw = Number(m.target_margin_pct);
+          const marginDisp = Number.isFinite(marginRaw) && marginRaw > 0 ? `${marginRaw.toFixed(1)}%` : null;
+          const childCount = fam.children.length;
+          // Sort children by created_at ascending so the chip order is stable.
+          const sortedChildren = [...fam.children].sort((a, b) => {
+            const ad = a.created_at ? new Date(a.created_at).getTime() : 0;
+            const bd = b.created_at ? new Date(b.created_at).getTime() : 0;
+            return ad - bd;
+          });
+          return `
+            <div class="hub-card cm-landing-card cm-landing-family" data-cm-card="${m.id}" data-cm-name="${safeName}" draggable="true"
+                 style="padding:16px;cursor:pointer;transition:all 0.15s;border:1px solid var(--ies-blue);position:relative;display:flex;flex-direction:column;gap:12px;">
+              <!-- Family ribbon: distinguishes from solo cards -->
+              <div style="position:absolute;top:-1px;left:-1px;right:-1px;height:3px;background:var(--ies-blue);border-radius:8px 8px 0 0;"></div>
+              <button class="cm-landing-duplicate" data-cm-duplicate="${m.id}" data-cm-name="${safeName}" draggable="false"
+                      title="Duplicate the baseline model"
+                      style="position:absolute;top:8px;right:36px;width:24px;height:24px;padding:0;display:flex;align-items:center;justify-content:center;background:transparent;border:none;color:var(--ies-gray-300);cursor:pointer;border-radius:4px;font-size:13px;">⎘</button>
+              <button class="cm-landing-delete" data-cm-delete="${m.id}" data-cm-name="${safeName}" draggable="false"
+                      title="Delete the baseline model"
+                      style="position:absolute;top:8px;right:8px;width:24px;height:24px;padding:0;display:flex;align-items:center;justify-content:center;background:transparent;border:none;color:var(--ies-gray-300);cursor:pointer;border-radius:4px;font-size:14px;">✕</button>
+              <!-- Baseline header -->
+              <div>
+                <div style="font-size:14px;font-weight:700;margin-bottom:4px;color:var(--ies-navy);padding-right:24px;">${m.name || 'Untitled Model'}</div>
+                <div style="font-size:12px;color:var(--ies-gray-500);margin-bottom:10px;">${m.client_name || '<span style=\"color:var(--ies-gray-300);\">No client</span>'}</div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+                  <span title="Baseline scenario" style="font-size:10px;padding:2px 8px;border-radius:12px;background:rgba(0,71,171,0.12);color:var(--ies-blue);font-weight:700;letter-spacing:0.02em;">★ Baseline</span>
+                  ${market ? `<span style=\"font-size:10px;padding:2px 8px;border-radius:12px;background:var(--ies-gray-100);color:var(--ies-gray-600);\">${market}</span>` : ''}
+                </div>
+                ${(sqftDisp || marginDisp) ? `
+                  <div style=\"display:flex;gap:14px;margin-bottom:8px;font-size:11px;color:var(--ies-gray-500);\">
+                    ${sqftDisp ? `<div><span style=\"color:var(--ies-gray-400);\">Facility</span> <strong style=\"color:var(--ies-navy);\">${sqftDisp} SF</strong></div>` : ''}
+                    ${marginDisp ? `<div><span style=\"color:var(--ies-gray-400);\">Margin</span> <strong style=\"color:var(--ies-navy);\">${marginDisp}</strong></div>` : ''}
+                  </div>
+                ` : ''}
+                <div style="font-size:11px;color:var(--ies-gray-400);">Updated ${updatedStr}</div>
+              </div>
+              <!-- Scenario chip strip -->
+              <div style="border-top:1px dashed var(--ies-gray-200);padding-top:10px;">
+                <div style="font-size:11px;color:var(--ies-gray-500);margin-bottom:6px;font-weight:600;letter-spacing:0.02em;text-transform:uppercase;">${childCount} scenario${childCount === 1 ? '' : 's'}</div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:6px;">
+                  ${sortedChildren.map(renderScenarioChip).join('')}
+                </div>
+              </div>
+            </div>
+          `;
+        };
+
         const renderCard = (m) => {
           const updated = m.updated_at ? new Date(m.updated_at) : null;
           const updatedStr = updated ? updated.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
@@ -11111,8 +11204,45 @@ function renderLanding() {
                 </div>
                 <span style="font-size:11px;color:var(--ies-gray-500);background:var(--ies-gray-100);padding:2px 8px;border-radius:10px;">${items.length} model${items.length === 1 ? '' : 's'}</span>
               </summary>
-              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-top:14px;">
-                ${items.map(renderCard).join('')}
+              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;margin-top:14px;">
+                ${(() => {
+                  // Group models by scenario family. Family key = root baseline scenario id;
+                  // children resolve via parent_scenario_id chain. Models with no scenario
+                  // record (legacy duplicates) render as solo cards via the existing renderCard.
+                  const scenById = new Map();
+                  for (const m of items) {
+                    const sc = Array.isArray(m.cost_model_scenarios) ? m.cost_model_scenarios[0] : null;
+                    if (sc) scenById.set(sc.id, { model: m, sc });
+                  }
+                  const families = new Map(); // key -> { baseline, children: [], rootSc }
+                  const solo = [];
+                  for (const m of items) {
+                    const sc = Array.isArray(m.cost_model_scenarios) ? m.cost_model_scenarios[0] : null;
+                    if (!sc) { solo.push(m); continue; }
+                    let rootSc = sc;
+                    let guard = 0;
+                    while (rootSc.parent_scenario_id && scenById.has(rootSc.parent_scenario_id) && guard++ < 10) {
+                      rootSc = scenById.get(rootSc.parent_scenario_id).sc;
+                    }
+                    const key = rootSc.id;
+                    if (!families.has(key)) families.set(key, { baseline: null, children: [], rootSc });
+                    const fam = families.get(key);
+                    if (sc.id === rootSc.id) fam.baseline = m;
+                    else fam.children.push(m);
+                  }
+                  // Render. Family with baseline → renderFamilyCard. Family with only orphan
+                  // children (baseline filtered/deleted) → render each child as solo.
+                  const out = [];
+                  for (const fam of families.values()) {
+                    if (fam.baseline) {
+                      out.push(renderFamilyCard(fam));
+                    } else {
+                      for (const c of fam.children) out.push(renderCard(c));
+                    }
+                  }
+                  for (const m of solo) out.push(renderCard(m));
+                  return out.join('');
+                })()}
               </div>
             </details>
           `;
