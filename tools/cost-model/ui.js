@@ -13045,7 +13045,7 @@ function _renderOfpArea(areaKey, entries, opHrs, lc, opts = {}) {
         <div class="ofp-subarea ofp-subarea--other" data-area-key="${escapeAttr(areaKey)}" data-subarea-key="__other__">
           <div class="ofp-subarea__header" style="border-left:3px dashed var(--ies-gray-300);">
             <div class="ofp-subarea__title-row">
-              <span class="ofp-subarea__title ofp-subarea__title--other">(other)</span>
+              <span class="ofp-subarea__title ofp-subarea__title--other">(unassigned)</span>
             </div>
             <div class="ofp-subarea__meta">
               <span class="ofp-subarea__count">${otherBucket.length}</span>
