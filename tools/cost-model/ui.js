@@ -3531,30 +3531,39 @@ function renderVolumes() {
       </div>`;
   }
 
-  const tabStripHtml = !isMultiChannel ? '' : `
+  // Phase 5 close-out (2026-04-29): Add/Manage buttons must render even on
+  // single-channel models, otherwise users have no entry point to the
+  // multi-channel feature (chicken-and-egg — pre-fix, the Add button only
+  // appeared after a 2nd channel already existed). Tab pills still hide
+  // on single-channel to keep the page clean; just the action buttons
+  // surface as a small toolbar.
+  const channelTabsHtml = !isMultiChannel ? '' : channels.map(c => {
+    const isActive = c.key === _activeChannelKey;
+    const isReverse = (c.archetypeId === 'reverse') || (c.primary && c.primary.activity === 'returns');
+    const mix = channelMix.find(m => m.channelKey === c.key);
+    const pctLabel = mix ? `${Math.round(mix.pct)}%` : '';
+    return `
+      <button class="cm-vol-tab${isActive ? ' cm-vol-tab--active' : ''}${isReverse ? ' cm-vol-tab--reverse' : ''}"
+              data-action="vol-channel-tab" data-key="${c.key}"
+              title="${c.name}${c.archetypeId ? ` (${c.archetypeId})` : ''}">
+        ${c.color ? `<span class="cm-vol-tab__dot" style="background:${c.color};"></span>` : ''}
+        <span>${c.name || '(unnamed)'}</span>
+        ${pctLabel && !isReverse ? `<span class="cm-vol-tab__pct">${pctLabel}</span>` : ''}
+      </button>`;
+  }).join('');
+
+  const tabStripHtml = `
     <div class="cm-vol-channels mb-3">
       <div class="cm-vol-tabs">
-        ${channels.map(c => {
-          const isActive = c.key === _activeChannelKey;
-          const isReverse = (c.archetypeId === 'reverse') || (c.primary && c.primary.activity === 'returns');
-          const mix = channelMix.find(m => m.channelKey === c.key);
-          const pctLabel = mix ? `${Math.round(mix.pct)}%` : '';
-          return `
-            <button class="cm-vol-tab${isActive ? ' cm-vol-tab--active' : ''}${isReverse ? ' cm-vol-tab--reverse' : ''}"
-                    data-action="vol-channel-tab" data-key="${c.key}"
-                    title="${c.name}${c.archetypeId ? ` (${c.archetypeId})` : ''}">
-              ${c.color ? `<span class="cm-vol-tab__dot" style="background:${c.color};"></span>` : ''}
-              <span>${c.name || '(unnamed)'}</span>
-              ${pctLabel && !isReverse ? `<span class="cm-vol-tab__pct">${pctLabel}</span>` : ''}
-            </button>`;
-        }).join('')}
-        <button class="cm-vol-tab cm-vol-tab--add" data-action="vol-channel-add-open" title="Add a channel from the catalog">
+        ${channelTabsHtml}
+        <button class="cm-vol-tab cm-vol-tab--add" data-action="vol-channel-add-open" title="${isMultiChannel ? 'Add another channel from the catalog (DTC, B2B, EDI, Marketplace, Reverse, etc.)' : 'Add a second channel — turns this single-channel deal into a multi-channel deal with per-channel volumes, assumptions, and seasonality. Pick from DTC, B2B, EDI, Marketplace, Cold chain, Hazmat, or Reverse.'}">
           + Add channel
         </button>
         <button class="cm-vol-tab cm-vol-tab--manage" data-action="vol-channel-manage-open" title="Rename, reorder, hide, or delete channels">
           Manage
         </button>
       </div>
+      ${!isMultiChannel ? `<div style="font-size:11px;color:var(--ies-gray-500);margin-top:6px;line-height:1.4;">Single-channel deal — click <strong>+ Add channel</strong> to split into DTC + B2B + EDI + Reverse + ... and tune per-channel volumes, structural assumptions, and seasonality.</div>` : ''}
     </div>`;
 
   return `
