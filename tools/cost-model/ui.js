@@ -15,7 +15,7 @@ import * as calc from './calc.js?v=20260427-s2';
 import * as api from './api.js?v=20260429-vol12';
 import * as scenarios from './calc.scenarios.js?v=20260429-otfix1';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
-import * as channelCalc from './calc.channels.js?v=20260429-vol12';
+import * as channelCalc from './calc.channels.js?v=20260429-vol13';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
 import * as shiftPlannerCalc from './shift-planner.js?v=20260427-pm3-s2';
 import * as shiftPlannerUi from './shift-planner-ui.js?v=20260428-walkthru1';
@@ -173,6 +173,7 @@ let lastSavedBy = null;
  *   contractYears: number,
  *   baseOrders: number,
  *   computedAt: string,
+ *   channelLineage?: Array<Object>,
  * }}
  */
 let _lastProvenanceContext = null;
@@ -1843,6 +1844,85 @@ function _fmtNum(v) {
 }
 
 /**
+ * Phase 5.1 — Build the per-channel breakdown rows for a volume-driven cell.
+ *
+ * `mode` controls which figure goes in the per-channel row's value cell:
+ *   - 'orders'  → channel.primaryAsOrders
+ *   - 'units'   → channel.primaryAsUnits
+ *   - 'pallets' → channel.primaryAsPallets
+ *   - 'returns' → channel.derived.returns
+ *
+ * Returns a flat list of input rows in the same shape getCellProvenance
+ * already emits (label/value/source). Filters reverse + hidden out by
+ * default since they double-count or aren't real demand. Pass
+ * `{ includeReverse: true }` for cells that legitimately fold reverse in.
+ *
+ * Returns an empty array on single-channel models — the inspector falls
+ * through to the existing aggregate input row in that case to keep the
+ * panel uncluttered.
+ */
+function _buildChannelBreakdownInputs(lineage, mode = 'units', opts = {}) {
+  if (!Array.isArray(lineage) || lineage.length < 2) return [];
+  const includeReverse = !!opts.includeReverse;
+  const fmtV = (ch) => {
+    if (mode === 'orders')  return _fmtNum(ch.primaryAsOrders);
+    if (mode === 'pallets') return _fmtNum(ch.primaryAsPallets);
+    if (mode === 'returns') return _fmtNum(ch.derived?.returns || 0);
+    return _fmtNum(ch.primaryAsUnits);
+  };
+  const rows = lineage
+    .filter(ch => !ch.isHidden)
+    .filter(ch => includeReverse || !ch.isReverse)
+    .map(ch => {
+      const pct = ch.contributionPctOfOutboundUnits || 0;
+      const primaryStr = `${_fmtNum(ch.primary.value)} ${ch.primary.uom}`;
+      const sourceParts = [
+        `${primaryStr} primary`,
+        ch.isReverse ? 'reverse-logistics' : `${pct.toFixed(1)}% of outbound`,
+      ];
+      return {
+        label: `↳ ${ch.name || ch.key}`,
+        value: fmtV(ch),
+        source: sourceParts.join(' · '),
+        _channelKey: ch.key,
+      };
+    });
+  return rows;
+}
+
+/**
+ * Phase 5.1 — Channel-assumption rows for cells whose Phase 3 migration
+ * meant the calc consumer reads per-channel structural assumptions
+ * (returnsPercent, inboundOutboundRatio, peakSurgeFactor). Returns rows
+ * the inspector can append after the aggregate inputs so the designer
+ * sees "Returns Processor was sized off DTC=8% / B2B=2%" not just
+ * "Returns Processor".
+ */
+function _buildChannelAssumptionInputs(lineage, key) {
+  if (!Array.isArray(lineage) || lineage.length < 2) return [];
+  const labelMap = {
+    returnsPercent:        'Returns %',
+    inboundOutboundRatio:  'Inbound:Outbound',
+    peakSurgeFactor:       'Peak surge ×',
+  };
+  const fmtMap = {
+    returnsPercent:        v => `${(Number(v) || 0).toFixed(1)}%`,
+    inboundOutboundRatio:  v => `${(Number(v) || 1).toFixed(2)}×`,
+    peakSurgeFactor:       v => `${(Number(v) || 1).toFixed(2)}×`,
+  };
+  const label = labelMap[key] || key;
+  const fmt = fmtMap[key] || (v => String(v));
+  return lineage
+    .filter(ch => !ch.isHidden && !ch.isReverse)
+    .map(ch => ({
+      label: `↳ ${ch.name || ch.key} · ${label}`,
+      value: fmt(ch.assumptions?.[key]),
+      source: 'Volumes & Profile → Structural Assumptions',
+      _channelKey: ch.key,
+    }));
+}
+
+/**
  * Build the provenance record for a single P&L cell.
  *
  * @param {string} rowKey  — one of: orders, revenue, labor, facility, equipment, vas,
@@ -1861,6 +1941,10 @@ function getCellProvenance(rowKey, year) {
   const ch = ctx.calcHeur || {};
   const s = ctx.summary || {};
   const mFrac = ctx.marginFrac;
+  // Phase 5.1 — per-channel lineage. Empty/single-channel models get []
+  // and the per-cell breakdown rows below short-circuit to nothing.
+  const lineage = Array.isArray(ctx.channelLineage) ? ctx.channelLineage : [];
+  const isMultiChannel = lineage.filter(c => !c.isHidden && !c.isReverse).length > 1;
 
   // Cumulative escalation factor for human display ("compounded 9.3% by Y4")
   const compound = (rate, n) => Math.pow(1 + rate, n - 1) - 1;
@@ -1871,25 +1955,41 @@ function getCellProvenance(rowKey, year) {
   const costMult = Math.pow(1 + (ch.costEscPct || 0) / 100, year - 1);
 
   switch (rowKey) {
-    case 'orders':
+    case 'orders': {
+      const channelRows = _buildChannelBreakdownInputs(lineage, 'orders');
+      const baseLabel = isMultiChannel
+        ? 'Total Orders (Y1, all outbound channels)'
+        : 'Base Orders (Y1)';
+      const baseSource = isMultiChannel
+        ? 'Volumes & Profile → Σ channels[].primary expressed in orders'
+        : 'Volumes & Profile → starred outbound line';
       return {
         label: `Orders (Year ${year})`,
         formula: 'orders = baseOrders × (1 + volGrowth)^(year − 1)',
         value: p.orders,
         inputs: [
-          { label: 'Base Orders (Y1)', value: _fmtNum(ctx.baseOrders), source: 'Volumes & Profile → starred outbound line' },
+          { label: baseLabel, value: _fmtNum(ctx.baseOrders), source: baseSource },
+          ...channelRows,
           { label: 'Volume Growth', value: ((ch.volGrowthPct || 0).toFixed(1) + '%/yr'), source: 'Heuristics' },
           { label: 'Cumulative growth', value: _fmtPct(compound((ch.volGrowthPct || 0) / 100, year)), source: `Compounded over ${year - 1} year(s)` },
         ],
+        notes: isMultiChannel ? 'Orders aggregate across all non-reverse channels. Each channel\'s own primary volume converts into orders via its UOM conversions; per-channel rows above show those contributions.' : undefined,
       };
+    }
 
-    case 'labor':
+    case 'labor': {
+      const channelOrderRows = _buildChannelBreakdownInputs(lineage, 'orders');
+      const returnsAssumptionRows = _buildChannelAssumptionInputs(lineage, 'returnsPercent');
       return {
         label: `Labor Cost (Year ${year})`,
         formula: 'labor = baseLaborCost × (1 + laborEsc)^(yr−1) × (1 + volGrowth)^(yr−1)' + (year === 1 ? ' × (1 / yr1LearningFactor)' : ''),
         value: p.labor,
         inputs: [
           { label: 'Base Labor Cost', value: _fmtMoney(s.laborCost), source: 'Sum of laborLines + indirectLaborLines' },
+          ...(channelOrderRows.length ? [{ label: 'Volume drivers (auto-gen labor)', value: '', source: 'Indirect labor sized off cross-channel volumes (Phase 3)' }] : []),
+          ...channelOrderRows,
+          ...(returnsAssumptionRows.length ? [{ label: 'Returns Processor — sized off per-channel returns %', value: '', source: 'Volumes & Profile → Structural Assumptions (per channel)' }] : []),
+          ...returnsAssumptionRows,
           { label: 'Labor Escalation', value: ((ch.laborEscPct || 0).toFixed(1) + '%/yr'), source: 'Heuristics' },
           { label: 'Volume Growth', value: ((ch.volGrowthPct || 0).toFixed(1) + '%/yr'), source: 'Heuristics' },
           { label: 'Combined multiplier', value: (laborMult * volMult).toFixed(3) + '×', source: `Y${year} of ${ctx.contractYears}` },
@@ -1899,6 +1999,7 @@ function getCellProvenance(rowKey, year) {
           ? 'Year 1 includes a productivity ramp: new hires reach standard productivity over time. Higher complexity → bigger Y1 cost uplift.'
           : 'No learning-curve in Y2+: standard productivity is assumed.',
       };
+    }
 
     case 'facility':
       return {
@@ -1925,18 +2026,22 @@ function getCellProvenance(rowKey, year) {
         ],
       };
 
-    case 'vas':
+    case 'vas': {
+      const channelRows = _buildChannelBreakdownInputs(lineage, 'units');
       return {
         label: `VAS (Pass-through) — Year ${year}`,
         formula: 'vas = baseVasCost × (1 + volGrowth)^(yr − 1)',
         value: p.vas,
         inputs: [
           { label: 'Base VAS Cost', value: _fmtMoney(s.vasCost), source: 'Sum of vasLines' },
+          ...(channelRows.length ? [{ label: 'Volume drivers (units)', value: '', source: 'VAS scales with cross-channel physical units' }] : []),
+          ...channelRows,
           { label: 'Volume Growth', value: ((ch.volGrowthPct || 0).toFixed(1) + '%/yr'), source: 'Heuristics' },
           { label: 'Cumulative growth', value: _fmtPct(compound((ch.volGrowthPct || 0) / 100, year)), source: `Compounded over ${year - 1} year(s)` },
         ],
         notes: 'VAS scales with volume, not cost-of-living. No escalation rate applied.',
       };
+    }
 
     case 'overhead':
     case 'sga': {
@@ -1960,7 +2065,8 @@ function getCellProvenance(rowKey, year) {
       };
     }
 
-    case 'revenue':
+    case 'revenue': {
+      const channelRows = _buildChannelBreakdownInputs(lineage, 'orders');
       return {
         label: `Revenue (Year ${year})`,
         formula: 'revenue = totalCost ÷ (1 − targetMargin)\nbreakout: each category grossed up at the same margin',
@@ -1974,9 +2080,12 @@ function getCellProvenance(rowKey, year) {
           { label: 'Equipment revenue', value: _fmtMoney(p.equipmentRevenue), source: 'equipment ÷ (1 − margin)' },
           { label: 'Overhead revenue', value: _fmtMoney(p.overheadRevenue), source: 'overhead ÷ (1 − margin)' },
           { label: 'VAS revenue', value: _fmtMoney(p.vasRevenue), source: 'vas ÷ (1 − margin)' },
+          ...(channelRows.length ? [{ label: 'Volume mix driving rates × volume', value: '', source: 'Bucket rates × per-channel volume share' }] : []),
+          ...channelRows,
         ],
         notes: 'Reference cost-plus pricing per Part I §3.2. Each category grossed up at the same margin, then summed.',
       };
+    }
 
     case 'cogs':
       return {
@@ -2075,18 +2184,22 @@ function getCellProvenance(rowKey, year) {
         notes: year === 1 ? 'All startup capital hits Y0/Y1 cash flow.' : 'No replacement-CapEx modeled — assumes assets last the contract.',
       };
 
-    case 'workingCapitalChange':
+    case 'workingCapitalChange': {
+      const channelRows = _buildChannelBreakdownInputs(lineage, 'orders');
       return {
         label: `Δ Working Capital (Year ${year})`,
         formula: year === 1 ? 'ΔWC_Y1 = revenue × 8%' : 'ΔWC = revenue × volGrowth × 8%',
         value: p.workingCapitalChange,
         inputs: [
           { label: 'Revenue', value: _fmtMoney(p.revenue), source: 'Year ' + year + ' Revenue row' },
+          ...(channelRows.length ? [{ label: 'Revenue volume drivers (orders)', value: '', source: 'WC scales with revenue, which is volume-weighted across channels' }] : []),
+          ...channelRows,
           { label: 'Volume Growth', value: ((ch.volGrowthPct || 0).toFixed(1) + '%/yr'), source: 'Heuristics' },
           { label: 'WC Proxy', value: '8% of revenue', source: 'Legacy yearly engine constant' },
         ],
         notes: 'Yearly engine uses an 8% revenue proxy. The monthly engine (when enabled) uses a defensible DSO/DPO/labor-accrual model instead.',
       };
+    }
 
     case 'freeCashFlow':
       return {
@@ -2150,15 +2263,37 @@ function renderProvenancePanelInner() {
     <div style="padding:14px 16px;${prov.notes ? 'border-bottom:1px solid var(--ies-gray-200);' : ''}">
       <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);font-weight:700;margin-bottom:8px;">Inputs feeding this cell</div>
       <div style="display:flex;flex-direction:column;gap:8px;">
-        ${prov.inputs.map(inp => `
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;font-size:12.5px;line-height:1.4;">
-            <div style="flex:1;min-width:0;">
-              <div style="font-weight:600;color:var(--ies-gray-800,#1f2937);">${inp.label}</div>
-              ${inp.source ? `<div style="font-size:11px;color:var(--ies-gray-500);">${inp.source}</div>` : ''}
+        ${prov.inputs.map(inp => {
+          // Phase 5.1 — sub-rows whose label starts with "↳" render indented
+          // and muted, so per-channel breakdowns nest visually under their
+          // aggregate parent. Section-header rows (value === '') drop the
+          // value column entirely and render as a small caps lead-in.
+          const isSubRow      = typeof inp.label === 'string' && inp.label.trimStart().startsWith('↳');
+          const isSectionLead = (inp.value == null || inp.value === '') && !isSubRow;
+          if (isSectionLead) {
+            return `
+              <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);font-weight:700;margin-top:6px;border-top:1px dashed var(--ies-gray-200);padding-top:8px;">
+                ${inp.label}
+                ${inp.source ? `<div style="font-size:10.5px;text-transform:none;letter-spacing:0;color:var(--ies-gray-500);font-weight:500;margin-top:1px;">${inp.source}</div>` : ''}
+              </div>
+            `;
+          }
+          const labelStyle = isSubRow
+            ? 'font-weight:600;color:var(--ies-gray-700,#374151);padding-left:10px;'
+            : 'font-weight:600;color:var(--ies-gray-800,#1f2937);';
+          const valueStyle = isSubRow
+            ? 'font-weight:600;color:var(--ies-blue,#0047AB);font-variant-numeric:tabular-nums;white-space:nowrap;font-size:12px;'
+            : 'font-weight:700;color:var(--ies-navy,#0F1B2E);font-variant-numeric:tabular-nums;white-space:nowrap;';
+          return `
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;font-size:12.5px;line-height:1.4;">
+              <div style="flex:1;min-width:0;">
+                <div style="${labelStyle}">${inp.label}</div>
+                ${inp.source ? `<div style="font-size:11px;color:var(--ies-gray-500);${isSubRow ? 'padding-left:10px;' : ''}">${inp.source}</div>` : ''}
+              </div>
+              <div style="${valueStyle}">${inp.value}</div>
             </div>
-            <div style="font-weight:700;color:var(--ies-navy,#0F1B2E);font-variant-numeric:tabular-nums;white-space:nowrap;">${inp.value}</div>
-          </div>
-        `).join('')}
+          `;
+        }).join('')}
       </div>
     </div>
 
@@ -6780,6 +6915,9 @@ function renderSummary() {
     contractYears,
     baseOrders: orders || 1,
     computedAt: new Date().toISOString(),
+    // Phase 5.1 — per-channel lineage feeds the inspector's "By channel"
+    // sub-rows for volume-driven cells (orders, revenue, labor, vas, ΔWC).
+    channelLineage: channelCalc.buildChannelLineage(model),
   };
   // Stash the monthly bundle for save-time persistence
   if (projResult && projResult.monthlyBundle) _lastMonthlyBundle = projResult.monthlyBundle;

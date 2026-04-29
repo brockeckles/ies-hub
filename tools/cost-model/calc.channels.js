@@ -399,6 +399,76 @@ export function getChannelMix(model) {
   }));
 }
 
+/**
+ * Phase 5.1 — Channels-aware provenance lineage.
+ *
+ * Pure summary of every channel on the model in the shape the cell-level
+ * formula inspector consumes. One row per channel (including reverse +
+ * hidden) so the inspector can render per-channel breakdown rows alongside
+ * existing aggregate inputs. Single-channel models still get a 1-row
+ * lineage; the inspector decides whether to show it based on length.
+ *
+ * Each row is fully derived — no mutation of the model. Numbers are pulled
+ * via the existing per-channel accessors so override resolution is honored.
+ *
+ * @param {Object} model
+ * @returns {Array<{
+ *   key: string,
+ *   name: string,
+ *   archetypeId: string|null,
+ *   isReverse: boolean,
+ *   isHidden: boolean,
+ *   primary: { value: number, uom: string, activity: string },
+ *   primaryAsUnits: number,
+ *   primaryAsOrders: number,
+ *   primaryAsPallets: number,
+ *   contributionPctOfTotalUnits: number,
+ *   contributionPctOfOutboundUnits: number,
+ *   assumptions: Object,
+ *   derived: { returns: number, inbound: number, peakDay: number, dailyAvg: number },
+ * }>}
+ */
+export function buildChannelLineage(model) {
+  const channels = getChannels(model);
+  if (!channels.length) return [];
+
+  const totalUnits = getAnnualVolume(model, 'units');
+  const outboundUnits = getOutboundChannels(model)
+    .reduce((s, ch) => s + getChannelPrimaryIn(ch, 'units'), 0);
+
+  return channels.map(ch => {
+    const isReverse = ch.archetypeId === 'reverse'
+      || (ch.primary && ch.primary.activity === 'returns');
+    const primaryUnits = getChannelPrimaryIn(ch, 'units');
+    const assumptions = { ...DEFAULT_ASSUMPTIONS, ...(ch.assumptions || {}) };
+
+    return {
+      key: ch.key,
+      name: ch.name || ch.key,
+      archetypeId: ch.archetypeId || null,
+      isReverse,
+      isHidden: !!ch.hidden,
+      primary: {
+        value: Number(ch.primary?.value) || 0,
+        uom: ch.primary?.uom || 'units',
+        activity: ch.primary?.activity || 'outbound',
+      },
+      primaryAsUnits:   primaryUnits,
+      primaryAsOrders:  getChannelPrimaryIn(ch, 'orders'),
+      primaryAsPallets: getChannelPrimaryIn(ch, 'pallets'),
+      contributionPctOfTotalUnits:    totalUnits    > 0 ? (primaryUnits / totalUnits)    * 100 : 0,
+      contributionPctOfOutboundUnits: outboundUnits > 0 && !isReverse ? (primaryUnits / outboundUnits) * 100 : 0,
+      assumptions,
+      derived: {
+        returns:  getChannelDerived(model, ch, 'returns').value,
+        inbound:  getChannelDerived(model, ch, 'inbound').value,
+        peakDay:  getChannelDerived(model, ch, 'peakDay').value,
+        dailyAvg: getChannelDerived(model, ch, 'dailyAvg').value,
+      },
+    };
+  });
+}
+
 // ────────────────────────────────────────────────────────────────
 // Test hook — internals exposed for unit tests only.
 // ────────────────────────────────────────────────────────────────

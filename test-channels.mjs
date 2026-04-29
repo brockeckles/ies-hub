@@ -14,6 +14,7 @@ import {
   getAggregateDerived,
   getTotalReturns,
   getChannelMix,
+  buildChannelLineage,
   convertUom,
   _internals,
 } from './tools/cost-model/calc.channels.js';
@@ -580,6 +581,104 @@ test('Phase 4 — buildWscLaunchPayload: legacy single-channel model also works'
   approx(p.avgDailyOutbound, 83, 5);
   if (p.clearHeight !== 32) throw new Error('clearHeight not carried through');
   if (p.totalSqft !== 150000) throw new Error('totalSqft not carried through');
+});
+
+// ─────────────────────────────────────────────────────────────────
+// Phase 5.1 — buildChannelLineage (channels-aware P&L inspector)
+// ─────────────────────────────────────────────────────────────────
+
+test('Phase 5.1 — buildChannelLineage returns one row per channel including reverse', () => {
+  const m = twoChannelModel();
+  m.channels.push({
+    key: 'rev',
+    name: 'Reverse',
+    archetypeId: 'reverse',
+    primary: { value: 0, uom: 'units', activity: 'returns', autoDerived: true },
+    conversions: {},
+    assumptions: {},
+  });
+  const lineage = buildChannelLineage(m);
+  eq(lineage.length, 3, 'three rows');
+  eq(lineage[0].key, 'dtc');
+  eq(lineage[1].key, 'b2b');
+  eq(lineage[2].key, 'rev');
+  eq(lineage[2].isReverse, true, 'reverse flagged');
+  eq(lineage[0].isReverse, false);
+  eq(lineage[1].isReverse, false);
+});
+
+test('Phase 5.1 — buildChannelLineage contributionPct sums to ~100% across outbound (excludes reverse)', () => {
+  const m = twoChannelModel();
+  const lineage = buildChannelLineage(m);
+  const outboundPct = lineage
+    .filter(c => !c.isReverse)
+    .reduce((s, c) => s + c.contributionPctOfOutboundUnits, 0);
+  approx(outboundPct, 100, 0.5);
+  m.channels.push({
+    key: 'rev', name: 'Reverse', archetypeId: 'reverse',
+    primary: { value: 0, uom: 'units', activity: 'returns' }, conversions: {}, assumptions: {},
+  });
+  const withRev = buildChannelLineage(m);
+  const revRow = withRev.find(c => c.isReverse);
+  eq(revRow.contributionPctOfOutboundUnits, 0, 'reverse contributes 0% of outbound');
+});
+
+test('Phase 5.1 — buildChannelLineage exposes per-channel structural assumptions', () => {
+  const m = twoChannelModel();
+  const lineage = buildChannelLineage(m);
+  // Fixture: DTC returnsPercent=15, B2B=1
+  approx(lineage[0].assumptions.returnsPercent, 15, 0.01);
+  approx(lineage[1].assumptions.returnsPercent, 1, 0.01);
+});
+
+test('Phase 5.1 — buildChannelLineage primaryAsOrders normalizes mixed UOMs', () => {
+  const m = twoChannelModel();
+  const lineage = buildChannelLineage(m);
+  approx(lineage[0].primaryAsOrders, 1000000, 1);
+  // B2B fixture: 50,000 pallets × (24 unitsPerCase × 50 casesPerPallet)=1,200 units/pallet
+  // = 60,000,000 units; ÷ (10 unitsPerLine × 5 linesPerOrder)=50 units/order = 1,200,000 orders.
+  approx(lineage[1].primaryAsOrders, 1200000, 100);
+});
+
+test('Phase 5.1 — buildChannelLineage handles single-channel and legacy models', () => {
+  const single = {
+    channels: [{
+      key: 'main', name: 'Main',
+      primary: { value: 500000, uom: 'orders', activity: 'outbound' },
+      // Conversion table uses linesPerOrder × unitsPerLine for orders→units;
+      // override to make the math obvious in the assertion below.
+      conversions: { linesPerOrder: 2, unitsPerLine: 4 }, assumptions: {},
+    }],
+  };
+  const ls = buildChannelLineage(single);
+  eq(ls.length, 1);
+  approx(ls[0].contributionPctOfOutboundUnits, 100, 0.01);
+  // 500,000 orders × (2 × 4)=8 units/order = 4,000,000 units.
+  approx(ls[0].primaryAsUnits, 4000000, 0.1);
+
+  const legacy = {
+    volumeLines: [{ name: 'Outbound', volume: 100000, uom: 'orders', isOutboundPrimary: true }],
+    orderProfile: { linesPerOrder: 2, unitsPerLine: 5 },
+  };
+  const lLegacy = buildChannelLineage(legacy);
+  eq(lLegacy.length, 1, 'legacy synthesizes 1 channel');
+  if (lLegacy[0].primaryAsUnits <= 0) throw new Error('legacy primaryAsUnits should be > 0');
+
+  const empty = {};
+  const lEmpty = buildChannelLineage(empty);
+  if (!Array.isArray(lEmpty)) throw new Error('always returns an array');
+});
+
+test('Phase 5.1 — buildChannelLineage derived block carries returns/inbound/peak/dailyAvg', () => {
+  const m = twoChannelModel();
+  const lineage = buildChannelLineage(m);
+  const dtc = lineage[0];
+  // DTC: returnsPercent=15 × 10M units primary = 1.5M; inboundOutboundRatio=1.0 × 10M = 10M;
+  // 250 op-days → dailyAvg=40,000; peakSurgeFactor=2.0 → peakDay=80,000.
+  approx(dtc.derived.returns, 1500000, 1);
+  approx(dtc.derived.inbound, 10000000, 1);
+  approx(dtc.derived.peakDay, 80000, 1);
+  approx(dtc.derived.dailyAvg, 40000, 1);
 });
 
 console.log(`\n\n${passed} passed, ${failed} failed`);
