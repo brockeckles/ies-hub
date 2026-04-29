@@ -12,7 +12,7 @@ import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260424-hyg04';
 import * as calc from './calc.js?v=20260427-s2';
-import * as api from './api.js?v=20260429-vol6';
+import * as api from './api.js?v=20260429-vol7';
 import * as scenarios from './calc.scenarios.js?v=20260429-otfix1';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
 import * as channelCalc from './calc.channels.js?v=20260429-vol1';
@@ -2826,6 +2826,19 @@ function renderVolumes() {
   }
   const channels = model.channels;
 
+  // Phase 2.5 — Reverse-logistics auto-derive.
+  // Channels with primary.activity === 'returns' and autoDerived !== false
+  // recompute primary.value as Σ outbound × returns% on each render.
+  channels.forEach(rc => {
+    if (!rc || !rc.primary) return;
+    if (rc.primary.activity !== 'returns') return;
+    if (rc.primary.autoDerived === false) return;
+    rc.primary.autoDerived = true; // ensure flag is set when activity === 'returns'
+    const totalReturnsUnits = channelCalc.getTotalReturns(model, 'units');
+    const targetUom = rc.primary.uom || 'units';
+    rc.primary.value = Math.round(channelCalc.convertUom(totalReturnsUnits, 'units', targetUom, rc.conversions) || 0);
+  });
+
   // Resolve active channel — fallback to channels[0] if state stale
   if (!_activeChannelKey || !channels.find(c => c.key === _activeChannelKey)) {
     _activeChannelKey = channels[0].key;
@@ -3028,7 +3041,12 @@ function renderVolumes() {
           <label class="hub-field__label">Annual volume</label>
           <input class="hub-input" type="number" value="${primary.value || 0}" min="0" step="1000"
                  data-field="channels.${activeIdx}.primary.value" data-type="number"
-                 ${isByMix && primary.activity !== 'returns' ? 'readonly title="Auto-derived from Total volume × this channel\'s mix %. Switch to By volume mode above to edit directly."' : ''} />
+                 ${isByMix && primary.activity !== 'returns'
+                   ? 'readonly title="Auto-derived from Total volume × this channel\'s mix %. Switch to By volume mode above to edit directly."'
+                   : (primary.activity === 'returns' && primary.autoDerived !== false)
+                     ? 'readonly title="Auto-derived from Σ outbound channels × returns rate. Click Override below to pin an authoritative value."'
+                     : ''
+                 } />
         </div>
         <div class="hub-field">
           <label class="hub-field__label">UOM</label>
@@ -3047,9 +3065,17 @@ function renderVolumes() {
           </select>
         </div>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;color:var(--ies-gray-600);">
+      <div style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;color:var(--ies-gray-600);flex-wrap:wrap;">
         <span class="cm-vol-pill cm-vol-pill--mute">Source: ${sourceBadge}</span>
-        ${primary.autoDerived ? `<span class="cm-vol-pill cm-vol-pill--info">auto-derived from outbound × returns%</span>` : ''}
+        ${primary.activity === 'returns' && primary.autoDerived !== false
+          ? `<span class="cm-vol-pill cm-vol-pill--info">auto-derived from outbound × returns%</span>
+             <button class="hub-btn hub-btn-secondary hub-btn-sm" data-cm-action="vol-reverse-override" data-channel-key="${ch.key}"
+                     title="Pin an authoritative value, breaking the auto-derive link">Override →</button>`
+          : (primary.activity === 'returns' && primary.autoDerived === false)
+            ? `<span class="cm-vol-pill cm-vol-pill--warn" style="text-transform:none;">overridden — manual entry</span>
+               <button class="hub-btn hub-btn-secondary hub-btn-sm" data-cm-action="vol-reverse-reset" data-channel-key="${ch.key}"
+                       title="Resume auto-derive from Σ outbound × returns%">↺ Reset to auto-derived</button>`
+            : ''}
       </div>
     </div>
 
@@ -7751,6 +7777,31 @@ function bindSectionEvents(section, container) {
       _recomputeChannelPrimariesFromMix();
       isDirty = true;
       renderSection();
+    });
+  });
+
+  container.querySelectorAll('[data-cm-action="vol-reverse-override"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.channelKey;
+      const ch = (model.channels || []).find(c => c.key === key);
+      if (!ch || !ch.primary) return;
+      ch.primary.autoDerived = false;
+      isDirty = true;
+      renderSection();
+      showToast(`Reverse channel "${ch.name}" — manual entry mode`, 'info');
+    });
+  });
+
+  container.querySelectorAll('[data-cm-action="vol-reverse-reset"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.channelKey;
+      const ch = (model.channels || []).find(c => c.key === key);
+      if (!ch || !ch.primary) return;
+      ch.primary.autoDerived = true;
+      // Recomputation happens at next render
+      isDirty = true;
+      renderSection();
+      showToast(`Reverse channel "${ch.name}" — auto-derived from outbound × returns%`, 'success');
     });
   });
 
