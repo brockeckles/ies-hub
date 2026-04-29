@@ -12305,13 +12305,92 @@ const _OFP_FLOW_PALETTE = [
   '#6366F1', // indigo
   '#EA580C', // orange
 ];
+
+/**
+ * v0.4 — Per-cost-model Flow registry. Each flow has:
+ *   tag:   stable id (matches line.path_tag — the persistence key)
+ *   label: display name (defaults to tag; lets user rename without
+ *          rewriting line.path_tag values across the cost model)
+ *   color: optional hex override — when unset, falls back to deterministic
+ *          hash from _OFP_FLOW_PALETTE for backward compat
+ *
+ * Lazy-seeded from existing line.path_tag values on first OFP render —
+ * any tag that already appears on a line gets a registry entry so the
+ * Manage Flows modal shows the full set.
+ */
+function _ofpEnsureFlowRegistry() {
+  if (!Array.isArray(model.ofpFlows)) model.ofpFlows = [];
+  // Backfill missing fields on legacy entries.
+  model.ofpFlows.forEach(f => {
+    if (typeof f.label !== 'string' || !f.label) f.label = f.tag;
+  });
+  // Lazy-add registry entries for tags that exist on lines but not in
+  // the registry. Preserves user edits — only adds new ones.
+  const known = new Set(model.ofpFlows.map(f => f.tag));
+  const lineTags = new Set();
+  for (const l of (model.laborLines || [])) {
+    const t = (l?.path_tag || '').trim();
+    if (t) lineTags.add(t);
+  }
+  for (const l of (model.indirectLaborLines || [])) {
+    const t = (l?.path_tag || '').trim();
+    if (t) lineTags.add(t);
+  }
+  for (const t of lineTags) {
+    if (!known.has(t)) model.ofpFlows.push({ tag: t, label: t });
+  }
+}
+
+function _ofpFlowRegistry() {
+  _ofpEnsureFlowRegistry();
+  return [...model.ofpFlows];
+}
+
+/**
+ * Look up a flow by tag. Returns null if not registered.
+ */
+function _ofpFlowMeta(tag) {
+  if (!tag) return null;
+  _ofpEnsureFlowRegistry();
+  return model.ofpFlows.find(f => f.tag === tag) || null;
+}
+
+/**
+ * Display label for a flow tag — falls back to the tag itself when no
+ * label is set or the flow isn't registered.
+ */
+function _ofpFlowLabel(tag) {
+  const meta = _ofpFlowMeta(tag);
+  return (meta && meta.label) || tag || '';
+}
+
+/**
+ * Resolve the color for a flow tag. Registry override wins; otherwise
+ * deterministic hash into _OFP_FLOW_PALETTE so untagged or unregistered
+ * flows still render a stable color.
+ */
 function _flowColor(tag) {
   if (!tag || !tag.trim()) return '#9CA3AF'; // neutral gray for untagged
+  const meta = _ofpFlowMeta(tag);
+  if (meta && meta.color) return meta.color;
   let hash = 0;
   for (let i = 0; i < tag.length; i++) {
     hash = ((hash * 31) + tag.charCodeAt(i)) >>> 0;
   }
   return _OFP_FLOW_PALETTE[hash % _OFP_FLOW_PALETTE.length];
+}
+
+/**
+ * Register a new tag (idempotent). Used by drag-to-connect and the
+ * detail-panel "+ New flow..." sentinel so user-created tags get
+ * promoted to first-class registry entries automatically.
+ */
+function _ofpRegisterFlow(tag, label) {
+  if (!tag) return;
+  _ofpEnsureFlowRegistry();
+  if (!model.ofpFlows.some(f => f.tag === tag)) {
+    model.ofpFlows.push({ tag, label: label || tag });
+  }
 }
 
 
@@ -12560,6 +12639,7 @@ function renderOperationalFlow() {
       </div>
       <div class="ofp-section-actions">
         <button class="hub-btn hub-btn-secondary hub-btn-sm" data-ofp-action="manage-areas" title="Edit Functional Areas — rename, recolor, edit keywords, add custom areas">⚙ Manage Areas</button>
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-ofp-action="manage-flows" title="Edit Flows — rename, recolor, add new flows">⚙ Manage Flows</button>
       </div>
     </div>
 
@@ -12611,6 +12691,11 @@ function renderOperationalFlow() {
       <div class="ofp-areas-modal__dialog" id="ofp-areas-panel"></div>
     </div>
 
+    <!-- v0.4 — Manage Flows modal. Same UX pattern as Manage Areas. -->
+    <div id="ofp-flows-modal" class="ofp-detail-modal ofp-detail-modal--centered" style="display:none;">
+      <div class="ofp-areas-modal__dialog" id="ofp-flows-panel"></div>
+    </div>
+
     ${_ofpStyles()}
   `;
 }
@@ -12657,10 +12742,17 @@ function _renderOfpArea(areaKey, entries, opHrs, lc, opts = {}) {
       const isUntagged = key === '__untagged__';
       const tag = isUntagged ? '' : key;
       if (!skipDividers) {
+        // v0.4 — show registry label (falls back to tag), with hover-
+        // reveal pencil that opens Manage Flows scoped to this flow.
+        // No pencil on the (untagged) divider.
+        const labelText = isUntagged ? '(untagged)' : _ofpFlowLabel(tag);
+        const pencilHtml = isUntagged ? '' :
+          `<button class="ofp-flow-divider__pencil" data-ofp-action="manage-flows" data-flow-tag="${escapeAttr(tag)}" title="Edit this Flow">✎</button>`;
         parts.push(`
           <div class="ofp-flow-divider">
             <span class="ofp-flow-divider__stripe" style="background:${_flowColor(tag)};"></span>
-            <span class="ofp-flow-divider__label">${escapeHtml(isUntagged ? '(untagged)' : tag)}</span>
+            <span class="ofp-flow-divider__label">${escapeHtml(labelText)}</span>
+            ${pencilHtml}
             <span class="ofp-flow-divider__count">${group.length}</span>
           </div>
         `);
@@ -12745,8 +12837,9 @@ function _renderOfpNode(entry, areaKey, opHrs, lc) {
     ? `<span class="ofp-node__uom ${isTransform ? 'ofp-node__uom--transform' : ''}" title="${isTransform ? `Transformation: ${uomIn} → ${uomOut}` : `UoM: ${uomIn}`}">${escapeHtml(isTransform ? `${uomIn} → ${uomOut}` : uomIn)}</span>`
     : '';
   const flowTag = (l.path_tag || '').trim();
+  const flowLabel = flowTag ? _ofpFlowLabel(flowTag) : '';
   const flowPill = flowTag
-    ? `<span class="ofp-node__flow-pill" style="background:${_flowColor(flowTag)};" title="Flow: ${escapeAttr(flowTag)}">${escapeHtml(flowTag)}</span>`
+    ? `<span class="ofp-node__flow-pill" data-flow-tag="${escapeAttr(flowTag)}" style="background:${_flowColor(flowTag)};" title="Flow: ${escapeAttr(flowLabel)}${flowLabel !== flowTag ? ` (${flowTag})` : ''}">${escapeHtml(flowLabel)}</span>`
     : '';
 
   return `
@@ -12788,6 +12881,18 @@ function _bindOperationalFlowEvents(container) {
       e.stopPropagation();
       const focusKey = btn.dataset.areaKey || null;
       _ofpOpenManageAreasModal(container, focusKey);
+    });
+  });
+
+  // v0.4 — Manage Flows: top-right ⚙ button + per-flow inline pencil
+  // on flow dividers. Both use data-ofp-action="manage-flows". The
+  // pencil carries data-flow-tag so the modal can scroll/focus on
+  // that flow.
+  container.querySelectorAll('[data-ofp-action="manage-flows"]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const focusTag = btn.dataset.flowTag || null;
+      _ofpOpenManageFlowsModal(container, focusTag);
     });
   });
 
@@ -12952,10 +13057,14 @@ function _bindOperationalFlowEvents(container) {
       }
       sourceLine.path_tag = resolvedTag;
       targetLine.path_tag = resolvedTag;
+      // v0.4 — register the (possibly new) tag in the flow registry so
+      // it shows up in Manage Flows immediately, not only after a
+      // re-render side-effect.
+      _ofpRegisterFlow(resolvedTag);
       isDirty = true;
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
-      try { showToast(`Connected on flow "${resolvedTag}".`, 'success'); } catch (_) {}
+      try { showToast(`Connected on flow "${_ofpFlowLabel(resolvedTag)}".`, 'success'); } catch (_) {}
     });
   });
 
@@ -13012,16 +13121,9 @@ function _bindOperationalFlowEvents(container) {
  * tags are dropped.
  */
 function _ofpAllFlowTags() {
-  const set = new Set();
-  for (const l of (model.laborLines || [])) {
-    const t = (l?.path_tag || '').trim();
-    if (t) set.add(t);
-  }
-  for (const l of (model.indirectLaborLines || [])) {
-    const t = (l?.path_tag || '').trim();
-    if (t) set.add(t);
-  }
-  return Array.from(set).sort();
+  // Registry is the source of truth (lazy-seeded from line tags on
+  // every render). Returns sorted unique tags.
+  return Array.from(new Set(_ofpFlowRegistry().map(f => f.tag))).sort();
 }
 
 /**
@@ -13087,14 +13189,14 @@ function _renderOfpFlowConnectors(container) {
     const areaRightX = areaRect.right - svgRect.left;
     const cards = Array.from(areaEl.querySelectorAll('.ofp-node'));
     for (const card of cards) {
-      // v0.3a.4 hotfix — read path_tag from the rendered pill in the DOM
-      // rather than indirecting through model. This matches the user's
-      // visible state exactly and avoids any module-state-vs-DOM drift
-      // (initial implementation had drift the connector never recovered
-      // from). Path pills are rendered by _renderOfpNode unconditionally
-      // when the line has a path_tag, so DOM is an authoritative source.
+      // v0.3a.4 hotfix — read tag from the rendered pill's data
+      // attribute. Must be data-flow-tag, NOT pill.textContent: post-v0.4
+      // the pill displays the editable label (which can differ from the
+      // canonical tag the connector logic groups on). Pills are rendered
+      // by _renderOfpNode unconditionally when the line has a path_tag,
+      // so DOM remains an authoritative source.
       const pillEl = card.querySelector('.ofp-node__flow-pill');
-      const tag = (pillEl?.textContent || '').trim();
+      const tag = (pillEl?.dataset?.flowTag || '').trim();
       if (!tag) continue;
       const cardRect = card.getBoundingClientRect();
       const cy = cardRect.top + cardRect.height / 2 - svgRect.top;
@@ -13269,7 +13371,11 @@ function _openOfpDetail(container, line, kind, idx) {
         <label class="ofp-detail-panel__field-label">Flow</label>
         <select class="hub-input ofp-edit-input" data-array="${arrayPath}" data-idx="${idx}" data-field="path_tag">
           <option value="" ${!line.path_tag ? 'selected' : ''}>(none)</option>
-          ${_ofpAllFlowTags().map(t => `<option value="${escapeAttr(t)}" ${line.path_tag === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
+          ${_ofpAllFlowTags().map(t => {
+            const lbl = _ofpFlowLabel(t);
+            const display = lbl === t ? lbl : `${lbl} (${t})`;
+            return `<option value="${escapeAttr(t)}" ${line.path_tag === t ? 'selected' : ''}>${escapeHtml(display)}</option>`;
+          }).join('')}
           <option value="__OFP_NEW_FLOW__">+ New flow…</option>
         </select>
       </div>
@@ -13369,16 +13475,26 @@ function _bindOfpPanelInputs(panel, container) {
       if (field === 'flowLane' && val === '') val = undefined;
       // Empty string for mhe_type / it_device = clear (treat 'none').
       if ((field === 'mhe_type' || field === 'it_device') && val === '') val = undefined;
-      // v0.3a.1 — Flow Path "+ New flow…" sentinel triggers a prompt for
+      // v0.3a.1 — Flow "+ New flow…" sentinel triggers a prompt for
       // the new tag name. If user cancels or types blank, restore the
       // previous selection without persisting the change.
+      // v0.4 — slugify the input + register in the flow registry so it
+      // shows up everywhere (manager modal, autocomplete dropdown).
       if (field === 'path_tag' && val === '__OFP_NEW_FLOW__') {
-        const newTag = prompt('Name this flow (e.g. full-pallet, loose-case):', '');
-        if (!newTag || !newTag.trim()) {
+        const newLabel = prompt('Name this flow (e.g. Full Pallet, Loose Case):', '');
+        if (!newLabel || !newLabel.trim()) {
           input.value = arr[idx].path_tag || '';
           return;
         }
-        val = newTag.trim();
+        const labelTrim = newLabel.trim();
+        // Build a unique tag from the label (kebab-case, dedup).
+        const slug = labelTrim.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').substring(0, 32) || 'flow';
+        const existing = new Set((model.ofpFlows || []).map(f => f.tag));
+        let tag = slug;
+        let n = 2;
+        while (existing.has(tag)) { tag = `${slug}-${n++}`; }
+        _ofpRegisterFlow(tag, labelTrim);
+        val = tag;
       }
       // Empty path_tag = clear (so the line drops back to "(untagged)").
       if (field === 'path_tag' && val === '') val = undefined;
@@ -13703,6 +13819,222 @@ function _bindManageAreasEvents(container) {
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
       _ofpOpenManageAreasModal(container, key);
+    });
+  }
+}
+
+// ============================================================
+// v0.4 — Manage Flows modal
+// ============================================================
+//
+// Same UX pattern as Manage Areas: centered dialog, editable rows,
+// + Add / × Delete. Schema simpler — flow has tag (canonical id, also
+// stored on each line.path_tag), label (display name; can differ from
+// tag), and optional color override.
+//
+// Tag is immutable post-creation in v0.4 — renaming via the label is
+// the supported path. (Renaming tags would require rewriting every
+// line.path_tag reference; we may add a migration helper later.)
+
+function _ofpOpenManageFlowsModal(container, focusTag) {
+  const panel = container.querySelector('#ofp-flows-panel');
+  const modal = container.querySelector('#ofp-flows-modal');
+  if (!panel || !modal) return;
+  panel.innerHTML = _renderManageFlowsModal();
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  _bindManageFlowsEvents(container);
+  if (focusTag) {
+    const row = panel.querySelector(`[data-flow-row-tag="${focusTag}"]`);
+    if (row) {
+      row.scrollIntoView({ block: 'center' });
+      const lblInput = row.querySelector('input[data-flow-field="label"]');
+      if (lblInput) try { lblInput.focus(); lblInput.select?.(); } catch (_) {}
+    }
+  }
+}
+
+function _renderManageFlowsModal() {
+  const flows = _ofpFlowRegistry();
+  // Count lines per flow tag
+  const counts = {};
+  for (const f of flows) counts[f.tag] = 0;
+  for (const l of (model.laborLines || [])) {
+    const t = (l?.path_tag || '').trim();
+    if (t) counts[t] = (counts[t] || 0) + 1;
+  }
+  for (const l of (model.indirectLaborLines || [])) {
+    const t = (l?.path_tag || '').trim();
+    if (t) counts[t] = (counts[t] || 0) + 1;
+  }
+
+  // Sort: flows with lines first (by count desc), then by label
+  const sorted = [...flows].sort((a, b) => {
+    const ca = counts[a.tag] || 0;
+    const cb = counts[b.tag] || 0;
+    if (cb !== ca) return cb - ca;
+    return a.label.localeCompare(b.label);
+  });
+
+  const rows = sorted.map(f => {
+    const resolved = _flowColor(f.tag);
+    const isAuto = !f.color;
+    return `
+      <tr class="ofp-area-mgr__row" data-flow-row-tag="${escapeAttr(f.tag)}">
+        <td class="ofp-area-mgr__color-cell">
+          <input type="color" class="ofp-area-mgr__color-input" value="${resolved}" data-flow-tag="${escapeAttr(f.tag)}" data-flow-field="color" title="${isAuto ? 'Auto color (hash). Pick to override.' : 'Color override — picker resets via the ↻ button.'}" />
+        </td>
+        <td class="ofp-area-mgr__label-cell">
+          <input type="text" class="hub-input ofp-area-mgr__input" value="${escapeAttr(f.label)}" data-flow-tag="${escapeAttr(f.tag)}" data-flow-field="label" maxlength="40" />
+        </td>
+        <td class="ofp-flow-mgr__tag-cell">
+          <code class="ofp-flow-mgr__tag" title="Canonical tag (matches line.path_tag). Immutable.">${escapeHtml(f.tag)}</code>
+          ${isAuto ? '<span class="ofp-flow-mgr__auto-chip" title="Color is auto (deterministic hash from tag).">auto</span>' : `<button class="ofp-flow-mgr__reset-color" data-flow-tag="${escapeAttr(f.tag)}" title="Reset to auto color">↻</button>`}
+        </td>
+        <td class="ofp-area-mgr__count-cell">${counts[f.tag] || 0}</td>
+        <td class="ofp-area-mgr__actions-cell">
+          <button class="ofp-area-mgr__del" data-flow-tag="${escapeAttr(f.tag)}" data-flow-count="${counts[f.tag] || 0}" title="Delete this Flow">×</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  const emptyRow = sorted.length === 0
+    ? `<tr><td colspan="5" style="text-align:center; padding:32px 12px; color:var(--ies-gray-400); font-style:italic; font-size:12px;">No flows yet — drag a card onto another to connect them on a flow, or click + Add Flow below.</td></tr>`
+    : '';
+
+  return `
+    <div class="ofp-areas-mgr">
+      <div class="ofp-areas-mgr__header">
+        <div>
+          <div class="ofp-areas-mgr__title">Manage Flows</div>
+          <div class="ofp-areas-mgr__sub">Flows are parallel threads through Functional Areas — e.g. full-pallet, case-pick, kitting. Renaming the label leaves the underlying tag (line.path_tag) untouched, so saved scenarios keep their flow membership.</div>
+        </div>
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-ofp-action="close-flows-modal" title="Close">✕</button>
+      </div>
+      <div class="ofp-areas-mgr__table-wrap">
+        <table class="ofp-area-mgr__table">
+          <thead>
+            <tr>
+              <th style="width:46px;">Color</th>
+              <th style="width:240px;">Label</th>
+              <th>Tag</th>
+              <th style="width:64px;text-align:center;">Lines</th>
+              <th style="width:48px;"></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+            ${emptyRow}
+          </tbody>
+        </table>
+      </div>
+      <div class="ofp-areas-mgr__footer">
+        <button class="hub-btn hub-btn-sm" data-ofp-action="add-flow">+ Add Flow</button>
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-ofp-action="close-flows-modal">Done</button>
+      </div>
+    </div>
+  `;
+}
+
+function _bindManageFlowsEvents(container) {
+  const modal = container.querySelector('#ofp-flows-modal');
+  const panel = container.querySelector('#ofp-flows-panel');
+  if (!modal || !panel) return;
+
+  const closeModal = () => {
+    modal.style.display = 'none';
+    document.body.style.overflow = '';
+    if (container._ofpFlowsMgrEscDetach) try { container._ofpFlowsMgrEscDetach(); } catch (_) {}
+    container._ofpFlowsMgrEscDetach = null;
+  };
+
+  panel.querySelectorAll('[data-ofp-action="close-flows-modal"]').forEach(btn => {
+    btn.addEventListener('click', closeModal);
+  });
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeModal();
+  });
+
+  if (container._ofpFlowsMgrEscDetach) try { container._ofpFlowsMgrEscDetach(); } catch (_) {}
+  const onEsc = (e) => {
+    if (e.key === 'Escape' && modal.style.display !== 'none') closeModal();
+  };
+  document.addEventListener('keydown', onEsc);
+  container._ofpFlowsMgrEscDetach = () => document.removeEventListener('keydown', onEsc);
+
+  // Field edits — label, color
+  panel.querySelectorAll('[data-flow-field]').forEach(input => {
+    input.addEventListener('change', () => {
+      const tag = input.dataset.flowTag;
+      const field = input.dataset.flowField;
+      const f = model.ofpFlows.find(x => x.tag === tag);
+      if (!f) return;
+      f[field] = input.value;
+      isDirty = true;
+      if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+      renderSection();
+      _ofpOpenManageFlowsModal(container, tag);
+    });
+  });
+
+  // Reset color override (↻ button)
+  panel.querySelectorAll('.ofp-flow-mgr__reset-color').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const tag = btn.dataset.flowTag;
+      const f = model.ofpFlows.find(x => x.tag === tag);
+      if (!f) return;
+      delete f.color;
+      isDirty = true;
+      if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+      renderSection();
+      _ofpOpenManageFlowsModal(container, tag);
+    });
+  });
+
+  // Delete flow
+  panel.querySelectorAll('.ofp-area-mgr__del[data-flow-tag]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const tag = btn.dataset.flowTag;
+      const count = Number(btn.dataset.flowCount) || 0;
+      const f = model.ofpFlows.find(x => x.tag === tag);
+      if (!f) return;
+      let msg = `Delete Flow "${f.label}"?`;
+      if (count > 0) {
+        msg += `\n\n${count} activit${count === 1 ? 'y' : 'ies'} reference this flow. They will become untagged.`;
+      }
+      if (!confirm(msg)) return;
+      // Untag every line that points to this flow.
+      (model.laborLines || []).forEach(l => { if (l.path_tag === tag) delete l.path_tag; });
+      (model.indirectLaborLines || []).forEach(l => { if (l.path_tag === tag) delete l.path_tag; });
+      // Remove from registry.
+      model.ofpFlows = model.ofpFlows.filter(x => x.tag !== tag);
+      isDirty = true;
+      if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+      renderSection();
+      _ofpOpenManageFlowsModal(container);
+    });
+  });
+
+  // Add flow
+  const addBtn = panel.querySelector('[data-ofp-action="add-flow"]');
+  if (addBtn) {
+    addBtn.addEventListener('click', () => {
+      const label = prompt('Name the new Flow (e.g. Full Pallet, Case Pick, Kitting):', 'New Flow');
+      if (!label || !label.trim()) return;
+      const labelTrim = label.trim();
+      const slug = labelTrim.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').substring(0, 32) || 'flow';
+      const existing = new Set(model.ofpFlows.map(f => f.tag));
+      let tag = slug;
+      let n = 2;
+      while (existing.has(tag)) { tag = `${slug}-${n++}`; }
+      model.ofpFlows.push({ tag, label: labelTrim });
+      isDirty = true;
+      if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+      renderSection();
+      _ofpOpenManageFlowsModal(container, tag);
     });
   }
 }
@@ -14109,6 +14441,44 @@ function _ofpStyles() {
         flex-shrink: 0;
         background: var(--ies-gray-50);
       }
+
+      /* === v0.4 — Flow inline pencil (hover-reveal on flow dividers) === */
+      .ofp-flow-divider { position: relative; }
+      .ofp-flow-divider__pencil {
+        background: transparent; border: none; padding: 0 4px;
+        font-size: 10px; line-height: 1; cursor: pointer;
+        color: var(--ies-gray-300);
+        opacity: 0; transition: opacity 0.12s, color 0.12s;
+        flex: 0 0 auto;
+      }
+      .ofp-flow-divider:hover .ofp-flow-divider__pencil { opacity: 1; }
+      .ofp-flow-divider__pencil:hover { color: var(--ies-blue); }
+
+      /* === v0.4 — Manage Flows modal — tag cell + auto chip + reset btn === */
+      .ofp-flow-mgr__tag-cell {
+        display: flex; align-items: center; gap: 6px;
+      }
+      .ofp-flow-mgr__tag {
+        font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+        font-size: 11px;
+        background: var(--ies-gray-100); color: var(--ies-gray-700);
+        padding: 2px 6px; border-radius: 3px;
+        max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      .ofp-flow-mgr__auto-chip {
+        font-size: 9px; font-weight: 700; letter-spacing: 0.04em;
+        color: var(--ies-gray-500); background: var(--ies-gray-100);
+        padding: 1px 5px; border-radius: 2px;
+        text-transform: uppercase;
+      }
+      .ofp-flow-mgr__reset-color {
+        background: transparent; border: 1px solid var(--ies-gray-200);
+        border-radius: 3px; cursor: pointer;
+        font-size: 11px; line-height: 1; padding: 2px 6px;
+        color: var(--ies-gray-500);
+        transition: all 0.12s;
+      }
+      .ofp-flow-mgr__reset-color:hover { color: var(--ies-blue); border-color: var(--ies-blue); }
     </style>
   `;
 }
