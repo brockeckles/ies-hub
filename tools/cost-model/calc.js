@@ -3833,36 +3833,53 @@ export function generateHeuristics(state, summary) {
       detail: 'Within 10-18% industry standard.' });
   }
 
-  // 10. Facility suggestion (CM-HEUR-1 fix — Brock 2026-04-26)
+  // 10. Facility suggestion (CM-HEUR-1 — final 2026-04-29 pass)
   //
-  // Prior form had `suggestedSqft = round((palletArea + sqft*0.25)/1000)*1000`,
-  // where the `sqft*0.25` term was meant as an allowance for aisles/staging
-  // but accidentally referenced the CURRENT sqft (self-referential). When a
-  // model had no pallet-UOM volume, palletArea collapsed to 0 and the formula
-  // produced 0.25× current — every model flunked the 30% divergence gate and
-  // emitted a misleading "may be oversized" suggestion built on math noise.
+  // Three-strike history on this check:
+  //   (1) Original form had `(palletArea + sqft*0.25)/1000` — the sqft*0.25
+  //       term was meant as an aisle/staging allowance but accidentally
+  //       referenced CURRENT sqft (self-referential). With no pallet-UOM
+  //       volume, palletArea collapsed to 0 and the formula produced
+  //       0.25× current sqft, always tripping the 30% gate. Every model
+  //       got a tautological "may be oversized" warning.
+  //   (2) Earlier fix (2026-04-26) gated the check on palletsStored > 0
+  //       and replaced the self-referential term with /0.55 net storage
+  //       utilization. Defensible but used a hand-waved /2/12 factor for
+  //       avg-on-hand inventory (= 24 turns/yr, 15-day DOH) — too fast
+  //       for general 3PL operations.
+  //   (3) Final pass (this commit): honors model.facility.daysOnHand when
+  //       set; defaults to 30 days (12 turns/yr) which is closer to the
+  //       3PL median. Surfaces the DOH assumption in the message so the
+  //       designer knows where the suggestion came from and how to tune
+  //       it. Otherwise unchanged from (2).
   //
-  // Fix: (a) only fire when there's real pallet-UOM volume to anchor the
-  // estimate, and (b) use a defensible "55% net storage utilization" rule of
-  // thumb — pallet area / 0.55 adds aisle + cross-aisle + staging + dock.
-  // Still rough; the message points users at WSC for a sized recommendation.
+  // Math:
+  //   avgPalletsOnHand = annualInboundPallets × (DOH / 365)
+  //   palletArea       = avgPalletsOnHand × 40 sqft
+  //   suggestedSqft    = palletArea / 0.55  (55% net storage utilization)
+  //   round to nearest 1K, fire only when divergence > 30%.
   if (annualOrders > 0 && sqft > 0) {
-    // Channel-aware aggregate inbound in pallets (Phase 3 of
-    // volumes-as-nucleus). The /2/12 keeps the existing average-inventory
-    // heuristic; CM-HEUR-1 is parked for a separate fix to the heuristic
-    // itself.
-    const palletsStored = _getAggregateInbound(state, 'pallets') / 2 / 12;
-    if (palletsStored > 0) {
-      const estPalletArea = palletsStored * 40;
-      // 55% net storage utilization → divide by 0.55, round to nearest 1K
+    const annualPalletsIn = _getAggregateInbound(state, 'pallets');
+    if (annualPalletsIn > 0) {
+      // Designer override on facility, or 30-day default (12 turns/yr).
+      const dohRaw = Number(state.facility?.daysOnHand);
+      const doh = Number.isFinite(dohRaw) && dohRaw > 0 ? dohRaw : 30;
+      const avgPalletsOnHand = annualPalletsIn * (doh / 365);
+      const estPalletArea = avgPalletsOnHand * 40;
       const suggestedSqft = Math.round((estPalletArea / 0.55) / 1000) * 1000;
       if (suggestedSqft > 0 && Math.abs(suggestedSqft - sqft) / sqft > 0.30) {
+        const dohSource = Number.isFinite(dohRaw) && dohRaw > 0
+          ? `${doh}-day DOH (project setting)`
+          : `30-day DOH default — set facility.daysOnHand to override`;
+        const turnsLabel = (365 / doh).toFixed(1);
         checks.push({
           type: 'info',
           title: 'Suggested facility size: ~' + suggestedSqft.toLocaleString() + ' sqft',
           detail: 'Current: ' + sqft.toLocaleString() + ' sqft (' +
-            (sqft > suggestedSqft ? 'may be oversized' : 'may be undersized') +
-            '). Rough estimate from pallet inventory × aisle/staging allowance — run Warehouse Sizing for a fully-sized recommendation.',
+            (sqft > suggestedSqft ? 'may be oversized' : 'may be undersized') + '). ' +
+            'Rough estimate: ' + Math.round(avgPalletsOnHand).toLocaleString() + ' avg pallets on-hand × 40 sqft × 1.82 (55% net util). ' +
+            'Inventory turns: ' + turnsLabel + '/yr (' + dohSource + '). ' +
+            'Run Warehouse Sizing for a fully-sized recommendation.',
         });
       }
     }
