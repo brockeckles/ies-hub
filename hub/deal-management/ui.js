@@ -853,7 +853,6 @@ function renderDetail() {
         <button class="hub-tab ${detailTab === 'financials' ? 'active' : ''}" data-detail-tab="financials">Financials</button>
         <button class="hub-tab ${detailTab === 'strategy' ? 'active' : ''}" data-detail-tab="strategy">Win Strategy</button>
         <button class="hub-tab ${detailTab === 'artifacts' ? 'active' : ''}" data-detail-tab="artifacts">Artifacts</button>
-        <button class="hub-tab ${detailTab === 'documents' ? 'active' : ''}" data-detail-tab="documents">Documents</button>
       </div>
 
       <div id="deal-detail-content"></div>
@@ -874,7 +873,6 @@ function renderDetailContent() {
     case 'financials': el.innerHTML = renderDealFinancials(); break;
     case 'strategy': el.innerHTML = renderDealWinStrategy(); break;
     case 'artifacts': el.innerHTML = renderDealArtifacts(); break;
-    case 'documents': el.innerHTML = renderDealDocuments(); break;
   }
 }
 
@@ -1435,42 +1433,6 @@ function renderDealFinancials() {
       </div>
 
       ${renderCostBreakdownCard(d)}
-    </div>
-  `;
-}
-
-function renderDealDocuments() {
-  const docs = [
-    { name: 'NDA — ' + selectedDeal.client, type: 'Legal', date: '2026-02-10', status: 'Executed' },
-    { name: 'Credit Check Report', type: 'Finance', date: '2026-02-12', status: 'Complete' },
-    { name: 'SCAN Document', type: 'Qualification', date: '2026-02-15', status: 'Complete' },
-    { name: 'Data Request Package', type: 'Engineering', date: '2026-03-01', status: 'Sent' },
-    { name: 'Site Visit Photos', type: 'Engineering', date: '2026-03-15', status: 'Uploaded' },
-  ];
-
-  return `
-    <div class="hub-card" style="padding:16px;">
-      <div style="font-size:13px;font-weight:700;margin-bottom:12px;">Deal Documents</div>
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">
-        <thead>
-          <tr style="border-bottom:2px solid var(--ies-gray-200);">
-            <th style="text-align:left;padding:8px;">Document</th>
-            <th style="text-align:left;padding:8px;">Type</th>
-            <th style="text-align:left;padding:8px;">Date</th>
-            <th style="text-align:left;padding:8px;">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${docs.map(d => `
-            <tr style="border-bottom:1px solid var(--ies-gray-100);">
-              <td style="padding:8px;font-weight:600;">${d.name}</td>
-              <td style="padding:8px;"><span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;background:var(--ies-gray-100);color:var(--ies-gray-600);">${d.type}</span></td>
-              <td style="padding:8px;color:var(--ies-gray-400);">${formatDate(d.date)}</td>
-              <td style="padding:8px;font-weight:600;color:#16a34a;">${d.status}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
     </div>
   `;
 }
