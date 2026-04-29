@@ -12186,53 +12186,105 @@ function renderImplRampPanel(arrayKey, values, label, color) {
 // pools, archetype templates. Until v0.2, edits still happen on Labor;
 // OFP is a complementary visualization.
 
-// Functional Area keyword catalog. Order matters — more specific keywords (e.g.
-// "replenishment") should match before more generic ones (e.g. "ship").
-// The classifier lowercases activity_name + position role and tests each
-// area's keywords in the order the areas are declared here.
+// Default Functional Area catalog. This array is the SEED for new cost
+// models — the actual runtime registry lives at model.ofpAreas (per-cost-
+// model), which users can rename, recolor, edit keywords on, and add
+// custom areas to. See _ofpEnsureAreaRegistry() below for seeding logic.
+//
+// Each area has:
+//   key:         stable id (matches line.flowLane override values)
+//   label:       display name
+//   color:       header stripe color
+//   keywords:    activity_name keyword list for auto-classification
+//   displayMode: 'main' (vertical column in the flow row) or 'wide' (full-width row below)
+//   isProtected: if true, area cannot be deleted (unclassified is the
+//                fallback bucket and the classifier needs it to exist)
+//   sortOrder:   render order; main areas left-to-right, wide areas top-to-bottom
+//
+// Order in this seed matters — more specific keywords (e.g. "replenishment")
+// should match before more generic ones (e.g. "ship"). The classifier
+// lowercases activity_name + position role and tests each area's keywords
+// in the order returned by _ofpRegistry().
 const _OFP_DEFAULT_AREAS = [
-  { key: 'inbound',     label: 'Inbound',          color: '#0EA5E9', keywords: ['receiv', 'unload', 'dock', 'inbound', ' rx', 'gatehouse', 'putaway-prep', 'check-in', 'pallet build'] },
-  { key: 'storage',     label: 'Storage',          color: '#8B5CF6', keywords: ['putaway', 'put away', 'replen', 'replenish', 'storage', 'let-down', 'letdown', 'slot', 'cycle count', 'inventory move'] },
-  { key: 'outbound',    label: 'Outbound',         color: '#16A34A', keywords: ['pick', 'pack', 'stage', 'ship', 'load', 'dispatch', 'outbound', 'wave', 'consolidat', 'sort', 'manifest', 'palletiz'] },
-  { key: 'returnsVas',  label: 'Returns / VAS',    color: '#F59E0B', keywords: ['return', 'rtv', 'rework', 'kit', 'kitting', 'label', 'vas', 'value-add', 'value add', 'special', 'compliance', 'ticket', 'price'] },
-  { key: 'support',     label: 'Support / Indirect', color: '#64748B', keywords: ['clean', 'janitor', 'supervisor', 'lead ', 'manager', 'admin', 'audit', 'cycle', 'inventory control', 'trainer', 'safety', 'qa', 'quality', 'security', ' im '] },
+  { key: 'inbound',      label: 'Inbound',            color: '#0EA5E9', keywords: ['receiv', 'unload', 'dock', 'inbound', ' rx', 'gatehouse', 'putaway-prep', 'check-in', 'pallet build'], displayMode: 'main', isProtected: false, sortOrder: 0 },
+  { key: 'storage',      label: 'Storage',            color: '#8B5CF6', keywords: ['putaway', 'put away', 'replen', 'replenish', 'storage', 'let-down', 'letdown', 'slot', 'cycle count', 'inventory move'], displayMode: 'main', isProtected: false, sortOrder: 1 },
+  { key: 'outbound',     label: 'Outbound',           color: '#16A34A', keywords: ['pick', 'pack', 'stage', 'ship', 'load', 'dispatch', 'outbound', 'wave', 'consolidat', 'sort', 'manifest', 'palletiz'], displayMode: 'main', isProtected: false, sortOrder: 2 },
+  { key: 'returnsVas',   label: 'Returns / VAS',      color: '#F59E0B', keywords: ['return', 'rtv', 'rework', 'kit', 'kitting', 'label', 'vas', 'value-add', 'value add', 'special', 'compliance', 'ticket', 'price'], displayMode: 'wide', isProtected: false, sortOrder: 3 },
+  { key: 'support',      label: 'Support / Indirect', color: '#64748B', keywords: ['clean', 'janitor', 'supervisor', 'lead ', 'manager', 'admin', 'audit', 'cycle', 'inventory control', 'trainer', 'safety', 'qa', 'quality', 'security', ' im '], displayMode: 'wide', isProtected: false, sortOrder: 4 },
+  { key: 'unclassified', label: 'Unclassified',       color: '#DC2626', keywords: [], displayMode: 'wide', isProtected: true,  sortOrder: 5 },
 ];
 
 /**
- * Bin a labor line into one of the six OFP areas by keyword match on
- * activity_name + role. Indirect labor is forced to 'support' by the
- * caller; this function classifies direct labor only.
+ * Ensure model.ofpAreas exists. If absent or empty, deep-clone the
+ * defaults into it so the registry is editable per-cost-model without
+ * mutating the module-level seed.
  *
- * Returns one of: 'inbound' | 'storage' | 'outbound' | 'returnsVas' |
- *                 'support' | 'unclassified'
+ * Backfills missing fields on legacy entries (e.g. saved before
+ * displayMode was added). Always called at the top of OFP render
+ * paths; safe to call repeatedly.
+ */
+function _ofpEnsureAreaRegistry() {
+  if (!Array.isArray(model.ofpAreas) || model.ofpAreas.length === 0) {
+    model.ofpAreas = _OFP_DEFAULT_AREAS.map(a => ({ ...a, keywords: [...(a.keywords || [])] }));
+    return;
+  }
+  model.ofpAreas.forEach((a, i) => {
+    if (!a.displayMode) a.displayMode = 'main';
+    if (typeof a.isProtected !== 'boolean') a.isProtected = a.key === 'unclassified';
+    if (typeof a.sortOrder !== 'number') a.sortOrder = i;
+    if (!Array.isArray(a.keywords)) a.keywords = [];
+  });
+  // Guarantee an unclassified entry exists — it's the classifier fallback.
+  if (!model.ofpAreas.some(a => a.key === 'unclassified')) {
+    const next = (model.ofpAreas.reduce((mx, a) => Math.max(mx, a.sortOrder || 0), 0)) + 1;
+    model.ofpAreas.push({ key: 'unclassified', label: 'Unclassified', color: '#DC2626', keywords: [], displayMode: 'wide', isProtected: true, sortOrder: next });
+  }
+}
+
+/**
+ * Read the current Functional Area registry, sorted by sortOrder.
+ */
+function _ofpRegistry() {
+  _ofpEnsureAreaRegistry();
+  return [...model.ofpAreas].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+}
+
+/**
+ * Bin a labor line into one of the registered Functional Areas by
+ * keyword match on activity_name + role. Indirect labor is forced to
+ * 'support' (or 'unclassified' if support was deleted) by the caller;
+ * this function classifies direct labor only.
+ *
+ * Resolution order:
+ *   1. line.flowLane override wins IF it points to a registered area
+ *   2. keyword match across the registry in sortOrder
+ *   3. fallback to 'unclassified' (always present)
  */
 function _classifyAreaFromLine(line) {
   if (!line) return 'unclassified';
-  // v0.2 — explicit flowLane override wins over keyword classification.
-  // Set when the user drags a card to a different area or picks the area
-  // override dropdown in the detail panel. Persists on the model so the
-  // override survives saves + reloads.
-  if (line.flowLane) {
-    const valid = new Set(['inbound', 'storage', 'outbound', 'returnsVas', 'support', 'unclassified']);
-    if (valid.has(line.flowLane)) return line.flowLane;
-  }
+  const registry = _ofpRegistry();
+  const keys = new Set(registry.map(a => a.key));
+  if (line.flowLane && keys.has(line.flowLane)) return line.flowLane;
   const haystack = `${line.activity_name || ''} ${line.position || ''} ${line.role || ''} ${line.most_template || ''}`.toLowerCase();
-  for (const area of _OFP_DEFAULT_AREAS) {
-    for (const kw of area.keywords) {
-      if (haystack.includes(kw)) return area.key;
+  for (const area of registry) {
+    if (area.key === 'unclassified') continue;
+    for (const kw of (area.keywords || [])) {
+      if (kw && haystack.includes(kw)) return area.key;
     }
   }
   return 'unclassified';
 }
 
 /**
- * Area → meta lookup (color, label). Includes a synthetic 'unclassified'
- * entry that doesn't appear in _OFP_DEFAULT_AREAS (we keep that array as the
- * keyword catalog for direct labor only).
+ * Area key → meta lookup (color, label, displayMode, etc.) from the
+ * per-cost-model registry. Falls back to a synthetic gray entry for
+ * unknown keys (shouldn't happen post-classifier-rewrite).
  */
 function _ofpAreaMeta(key) {
-  if (key === 'unclassified') return { key, label: 'Unclassified', color: '#DC2626' };
-  return _OFP_DEFAULT_AREAS.find(l => l.key === key) || { key, label: key, color: '#64748B' };
+  _ofpEnsureAreaRegistry();
+  const found = model.ofpAreas.find(a => a.key === key);
+  if (found) return found;
+  return { key, label: key, color: '#64748B', keywords: [], displayMode: 'wide', isProtected: false, sortOrder: 999 };
 }
 
 // v0.3a — Path color palette. Flow tags are freeform strings (e.g.
@@ -12418,15 +12470,23 @@ function renderOperationalFlow() {
     `;
   }
 
-  // Bin lines into areas
-  const areas = { inbound: [], storage: [], outbound: [], returnsVas: [], support: [], unclassified: [] };
+  // Bin lines into areas using the per-cost-model registry. Areas
+  // map keyspace is dynamic — every registered area gets a bucket,
+  // even empty ones (so 'Areas Populated' KPI denominator is right).
+  const registry = _ofpRegistry();
+  const areasMap = {};
+  for (const area of registry) areasMap[area.key] = [];
   directLines.forEach((l, idx) => {
-    const area = _classifyAreaFromLine(l);
-    areas[area].push({ line: l, idx, isDirect: true });
+    const ak = _classifyAreaFromLine(l);
+    if (!areasMap[ak]) areasMap[ak] = [];
+    areasMap[ak].push({ line: l, idx, isDirect: true });
   });
+  // Indirect labor → 'support' if it exists, else 'unclassified'. The
+  // user can delete the support area, so we can't blindly assume it.
+  const indirectTargetKey = registry.some(a => a.key === 'support') ? 'support' : 'unclassified';
   indirectLines.forEach((l, idx) => {
-    // Indirect labor always lands in Support
-    areas.support.push({ line: l, idx, isDirect: false });
+    if (!areasMap[indirectTargetKey]) areasMap[indirectTargetKey] = [];
+    areasMap[indirectTargetKey].push({ line: l, idx, isDirect: false });
   });
 
   // KPIs
@@ -12437,18 +12497,21 @@ function renderOperationalFlow() {
   const totalFte = totalDirectFte + totalIndirectFte;
   const totalCost = directLines.reduce((s, l) => s + calc.directLineAnnualSimple(l, lc), 0)
                   + indirectLines.reduce((s, l) => s + calc.indirectLineAnnualSimple(l, opHrs, lc), 0);
-  const totalLanesPossible = areas.unclassified.length > 0 ? 6 : 5;
-  const populatedLanes = Object.values(areas).filter(arr => arr.length > 0).length;
-  const unclassifiedCount = areas.unclassified.length;
+  // Areas Populated denominator is the count of NON-unclassified areas
+  // when unclassified itself is empty (the bucket is hidden in that
+  // case so the headline ratio shouldn't include it).
+  const unclassifiedCount = (areasMap['unclassified'] || []).length;
+  const totalAreasPossible = unclassifiedCount > 0 ? registry.length : registry.length - 1;
+  const populatedAreas = Object.values(areasMap).filter(arr => arr.length > 0).length;
 
   // Inter-area connector with FTE-throughput proxy. Use the MAX FTE in
   // the upstream area as a defensible proxy for "what flows through this
   // boundary" — within an area multiple roles double-handle the same units,
   // so SUM would overstate, whereas MAX = the most-staffed role roughly =
   // the bottleneck-shaped throughput.
-  const maxFteInLane = (entries) => entries.reduce((mx, e) => Math.max(mx, calc.fte(e.line, opHrs)), 0);
+  const maxFteInArea = (entries) => entries.reduce((mx, e) => Math.max(mx, calc.fte(e.line, opHrs)), 0);
   const arrowSvg = (upstreamEntries, upstreamLabel, downstreamLabel) => {
-    const fteThrough = maxFteInLane(upstreamEntries);
+    const fteThrough = maxFteInArea(upstreamEntries);
     const tip = upstreamEntries.length === 0
       ? `${upstreamLabel} → ${downstreamLabel} (no upstream activities)`
       : `${upstreamLabel} → ${downstreamLabel} · proxy throughput = max-FTE in ${upstreamLabel} (${fteThrough.toFixed(1)} FTE on the most-staffed role).`;
@@ -12467,11 +12530,36 @@ function renderOperationalFlow() {
     `;
   };
 
+  // Build the main row dynamically — interleave area cards with
+  // arrow connectors. arrowSvg takes the upstream area's entries to
+  // pick the throughput proxy, so we pass that explicitly.
+  const mainAreas = registry.filter(a => a.displayMode === 'main');
+  const wideAreas = registry.filter(a => a.displayMode !== 'main');
+  const mainRowParts = [];
+  mainAreas.forEach((area, i) => {
+    if (i > 0) {
+      const prev = mainAreas[i - 1];
+      mainRowParts.push(arrowSvg(areasMap[prev.key] || [], prev.label, area.label));
+    }
+    mainRowParts.push(_renderOfpArea(area.key, areasMap[area.key] || [], opHrs, lc));
+  });
+  // Wide rows — only render if non-empty. Unclassified gets warn=true.
+  const wideRowsHtml = wideAreas
+    .filter(a => (areasMap[a.key] || []).length > 0)
+    .map(a => `
+      <div class="ofp-row ofp-row--secondary" style="margin-top:14px;">
+        ${_renderOfpArea(a.key, areasMap[a.key], opHrs, lc, { wide: true, warn: a.key === 'unclassified' })}
+      </div>
+    `).join('');
+
   return `
-    <div class="cm-section-header">
+    <div class="cm-section-header" style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px;">
       <div>
         <h2>Operational Flow <span class="hub-status-chip cm-chip-info cm-chip-xs">v0.4 · editable</span></h2>
-        <div class="cm-section-desc">End-to-end view of the labor activities. Auto-arranged from the Labor page by activity-keyword. Click any node to inspect; "Edit on Labor page" round-trips the change.</div>
+        <div class="cm-section-desc">End-to-end view of the labor activities. Auto-arranged from the Labor page by activity-keyword classification, then editable per cost model. Click any node to inspect; "Edit on Labor page" round-trips the change.</div>
+      </div>
+      <div class="ofp-section-actions">
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-ofp-action="manage-areas" title="Edit Functional Areas — rename, recolor, edit keywords, add custom areas">⚙ Manage Areas</button>
       </div>
     </div>
 
@@ -12487,9 +12575,9 @@ function renderOperationalFlow() {
       </div>
       <div class="hub-kpi-tile" title="Functional Areas that have at least one activity binned into them">
         <div class="hub-kpi-tile__label">Areas Populated</div>
-        <div class="hub-kpi-tile__value">${populatedLanes} of ${totalLanesPossible}</div>
+        <div class="hub-kpi-tile__value">${populatedAreas} of ${totalAreasPossible}</div>
       </div>
-      <div class="hub-kpi-tile" title="${unclassifiedCount > 0 ? 'Activities that did not match any area keyword. Rename the activity on Labor or extend the OFP keyword catalog.' : 'All activities mapped into an area'}" ${unclassifiedCount > 0 ? 'style="border-left:3px solid #DC2626;"' : ''}>
+      <div class="hub-kpi-tile" title="${unclassifiedCount > 0 ? 'Activities that did not match any area keyword. Rename the activity on Labor or extend keyword catalogs in Manage Areas.' : 'All activities mapped into a Functional Area'}" ${unclassifiedCount > 0 ? 'style="border-left:3px solid #DC2626;"' : ''}>
         <div class="hub-kpi-tile__label">Unclassified</div>
         <div class="hub-kpi-tile__value" style="${unclassifiedCount > 0 ? 'color:#DC2626;' : ''}">${unclassifiedCount}</div>
       </div>
@@ -12500,41 +12588,27 @@ function renderOperationalFlow() {
          longer have to share horizontal space with a side rail.
          v0.3a.4 — position:relative + the absolute-positioned SVG
          overlay below host the dotted same-flow connectors that get
-         drawn after each render by _renderOfpFlowConnectors(). -->
+         drawn after each render by _renderOfpFlowConnectors().
+         v0.4 — main row + wide rows are now built dynamically from
+         the per-cost-model area registry instead of hardcoded layout. -->
     <div class="cm-card ofp-canvas-card" style="padding:18px 18px 22px;position:relative;">
       <svg class="ofp-flow-overlay" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"></svg>
       <div class="ofp-row ofp-row--main">
-        ${_renderOfpArea('inbound', areas.inbound, opHrs, lc)}
-        ${arrowSvg(areas.inbound, 'Inbound', 'Storage')}
-        ${_renderOfpArea('storage', areas.storage, opHrs, lc)}
-        ${arrowSvg(areas.storage, 'Storage', 'Outbound')}
-        ${_renderOfpArea('outbound', areas.outbound, opHrs, lc)}
+        ${mainRowParts.join('')}
       </div>
-
-      ${areas.returnsVas.length > 0 ? `
-        <div class="ofp-row ofp-row--secondary" style="margin-top:18px;">
-          ${_renderOfpArea('returnsVas', areas.returnsVas, opHrs, lc, { wide: true })}
-        </div>
-      ` : ''}
-
-      ${areas.support.length > 0 ? `
-        <div class="ofp-row ofp-row--secondary" style="margin-top:14px;">
-          ${_renderOfpArea('support', areas.support, opHrs, lc, { wide: true })}
-        </div>
-      ` : ''}
-
-      ${areas.unclassified.length > 0 ? `
-        <div class="ofp-row ofp-row--secondary" style="margin-top:14px;">
-          ${_renderOfpArea('unclassified', areas.unclassified, opHrs, lc, { wide: true, warn: true })}
-        </div>
-      ` : ''}
+      ${wideRowsHtml}
     </div>
 
-    <!-- Modal overlay — populated on node click. Backdrop is semi-
-         transparent so the canvas stays visible behind. ESC + click
-         outside the dialog close. -->
+    <!-- Detail-panel modal (node click → editable drawer) -->
     <div id="ofp-detail-modal" class="ofp-detail-modal" style="display:none;">
       <div class="ofp-detail-modal__dialog" id="ofp-detail-panel"></div>
+    </div>
+
+    <!-- v0.4 — Manage Functional Areas modal. Populated on demand by
+         _ofpOpenManageAreasModal(). Centered dialog, click-outside +
+         Esc to close. -->
+    <div id="ofp-areas-modal" class="ofp-detail-modal ofp-detail-modal--centered" style="display:none;">
+      <div class="ofp-areas-modal__dialog" id="ofp-areas-panel"></div>
     </div>
 
     ${_ofpStyles()}
@@ -12604,7 +12678,10 @@ function _renderOfpArea(areaKey, entries, opHrs, lc, opts = {}) {
     <div class="ofp-area ${widthClass} ${warnClass}" data-ofp-area="${areaKey}">
       <div class="ofp-area__header" style="border-top:3px solid ${meta.color};">
         <div class="ofp-area__header-row">
-          <div class="ofp-area__title">${escapeHtml(meta.label)}</div>
+          <div class="ofp-area__title-row">
+            <div class="ofp-area__title">${escapeHtml(meta.label)}</div>
+            <button class="ofp-area__title-pencil" data-ofp-action="manage-areas" data-area-key="${escapeAttr(areaKey)}" title="Edit this Functional Area">✎</button>
+          </div>
           <div class="ofp-area__header-actions">
             <span class="ofp-area__count">${entries.length}</span>
             ${showAdd ? `<button class="ofp-add-btn" data-ofp-add-area="${areaKey}" title="Add a new ${escapeAttr(meta.label)} activity">+</button>` : ''}
@@ -12701,6 +12778,17 @@ function _bindOperationalFlowEvents(container) {
   // Empty state CTA
   container.querySelectorAll('[data-action="ofp-go-to-labor"]').forEach(btn => {
     btn.addEventListener('click', () => navigateSection('labor'));
+  });
+
+  // v0.4 — Manage Areas: top-right ⚙ button + per-area inline pencil.
+  // Both use data-ofp-action="manage-areas". The pencil also carries
+  // data-area-key so the modal can scroll/focus on that area.
+  container.querySelectorAll('[data-ofp-action="manage-areas"]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const focusKey = btn.dataset.areaKey || null;
+      _ofpOpenManageAreasModal(container, focusKey);
+    });
   });
 
   // Node click → detail panel. Don't open if the click landed on the
@@ -13057,8 +13145,20 @@ const _OFP_AREA_DEFAULTS = {
 };
 
 function _ofpAddLineToArea(areaKey) {
-  const def = _OFP_AREA_DEFAULTS[areaKey];
-  if (!def) return;
+  // For built-in areas use the curated default seed (with sensible
+  // activity_name + role + MHE). For custom user-added areas fall back
+  // to a generic placeholder labelled with the area's display name.
+  const builtinDef = _OFP_AREA_DEFAULTS[areaKey];
+  const meta = _ofpAreaMeta(areaKey);
+  const def = builtinDef || {
+    activity_name: meta.label || 'Activity',
+    position: '',
+    mhe_type: '',
+    it_device: '',
+    uom_in: 'pallet',
+    uom_out: 'pallet',
+  };
+  if (areaKey === 'unclassified') return; // not allowed; UI also blocks
   // Support area → indirect labor; everything else → direct labor.
   if (areaKey === 'support') {
     if (!Array.isArray(model.indirectLaborLines)) model.indirectLaborLines = [];
@@ -13115,15 +13215,12 @@ function _openOfpDetail(container, line, kind, idx) {
   const name = line.activity_name || line.position || '(unnamed)';
   const arrayPath = kind === 'direct' ? 'laborLines' : 'indirectLaborLines';
 
-  // Build the area override <select> options. "auto" means flowLane is
-  // unset → fall through to keyword classification.
+  // Build the area override <select> options from the per-cost-model
+  // registry. "" means flowLane is unset → fall through to keyword
+  // classification.
   const areaOpts = [
-    { val: '',            label: 'Auto (keyword match)' },
-    { val: 'inbound',     label: 'Inbound' },
-    { val: 'storage',     label: 'Storage' },
-    { val: 'outbound',    label: 'Outbound' },
-    { val: 'returnsVas',  label: 'Returns / VAS' },
-    { val: 'support',     label: 'Support / Indirect' },
+    { val: '', label: 'Auto (keyword match)' },
+    ..._ofpRegistry().map(a => ({ val: a.key, label: a.label })),
   ];
   const areaSelectHtml = areaOpts.map(o =>
     `<option value="${o.val}" ${(line.flowLane || '') === o.val ? 'selected' : ''}>${escapeHtml(o.label)}</option>`
@@ -13331,6 +13428,283 @@ function _bindOfpPanelInputs(panel, container) {
       renderSection();
     });
   });
+}
+
+// ============================================================
+// v0.4 — Manage Functional Areas modal
+// ============================================================
+//
+// Opens a centered dialog with a row-per-area editable table:
+//   color picker | label | keyword chips | display mode | line count | delete
+// Each edit mutates model.ofpAreas immediately and re-renders both the
+// canvas behind and the modal body (so the row-count column stays fresh).
+// `unclassified` is protected — the classifier requires it as a fallback
+// bucket; UI disables its delete button.
+
+function _ofpOpenManageAreasModal(container, focusKey) {
+  const panel = container.querySelector('#ofp-areas-panel');
+  const modal = container.querySelector('#ofp-areas-modal');
+  if (!panel || !modal) return;
+  panel.innerHTML = _renderManageAreasModal();
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  _bindManageAreasEvents(container);
+  if (focusKey) {
+    const row = panel.querySelector(`[data-area-row-key="${focusKey}"]`);
+    if (row) {
+      row.scrollIntoView({ block: 'center' });
+      const lblInput = row.querySelector('input[data-area-field="label"]');
+      if (lblInput) try { lblInput.focus(); lblInput.select?.(); } catch (_) {}
+    }
+  }
+}
+
+function _renderManageAreasModal() {
+  const registry = _ofpRegistry();
+  // Count lines bound to each area for the line-count column + the
+  // delete-confirm prompt (so the user knows how many activities will
+  // be reassigned).
+  const counts = {};
+  for (const a of registry) counts[a.key] = 0;
+  for (const l of (model.laborLines || [])) {
+    const k = _classifyAreaFromLine(l);
+    counts[k] = (counts[k] || 0) + 1;
+  }
+  const indirectKey = registry.some(a => a.key === 'support') ? 'support' : 'unclassified';
+  for (const _l of (model.indirectLaborLines || [])) {
+    counts[indirectKey] = (counts[indirectKey] || 0) + 1;
+  }
+
+  const rows = registry.map((a, idx) => {
+    const isProtected = !!a.isProtected;
+    const badge = isProtected
+      ? '<span class="ofp-area-mgr__badge ofp-area-mgr__badge--protected" title="Protected — cannot delete">PROTECTED</span>'
+      : '';
+    const keywordsCell = a.key === 'unclassified'
+      ? '<span class="ofp-area-mgr__muted">— catch-all (no keywords)</span>'
+      : `
+        <div class="ofp-area-mgr__chips" data-area-key="${escapeAttr(a.key)}">
+          ${(a.keywords || []).map(kw => `
+            <span class="ofp-area-mgr__chip">
+              ${escapeHtml(kw)}
+              <button class="ofp-area-mgr__chip-x" data-area-key="${escapeAttr(a.key)}" data-keyword="${escapeAttr(kw)}" title="Remove keyword">×</button>
+            </span>
+          `).join('')}
+          <input type="text" class="ofp-area-mgr__chip-input" placeholder="+ keyword" data-area-key="${escapeAttr(a.key)}" />
+        </div>
+      `;
+    const delBtn = isProtected
+      ? `<button class="ofp-area-mgr__del" disabled title="Unclassified is protected — cannot delete">×</button>`
+      : `<button class="ofp-area-mgr__del" data-area-key="${escapeAttr(a.key)}" data-area-count="${counts[a.key] || 0}" title="Delete this Functional Area">×</button>`;
+
+    return `
+      <tr class="ofp-area-mgr__row" data-area-row-key="${escapeAttr(a.key)}" data-area-idx="${idx}">
+        <td class="ofp-area-mgr__color-cell">
+          <input type="color" class="ofp-area-mgr__color-input" value="${a.color}" data-area-key="${escapeAttr(a.key)}" data-area-field="color" title="Header stripe color" />
+        </td>
+        <td class="ofp-area-mgr__label-cell">
+          <input type="text" class="hub-input ofp-area-mgr__input" value="${escapeAttr(a.label)}" data-area-key="${escapeAttr(a.key)}" data-area-field="label" maxlength="40" />
+          ${badge}
+        </td>
+        <td class="ofp-area-mgr__keywords-cell">${keywordsCell}</td>
+        <td class="ofp-area-mgr__display-cell">
+          <select class="hub-input ofp-area-mgr__input" data-area-key="${escapeAttr(a.key)}" data-area-field="displayMode">
+            <option value="main" ${a.displayMode === 'main' ? 'selected' : ''}>Main row</option>
+            <option value="wide" ${a.displayMode !== 'main' ? 'selected' : ''}>Wide row</option>
+          </select>
+        </td>
+        <td class="ofp-area-mgr__count-cell">${counts[a.key] || 0}</td>
+        <td class="ofp-area-mgr__actions-cell">${delBtn}</td>
+      </tr>
+    `;
+  }).join('');
+
+  return `
+    <div class="ofp-areas-mgr">
+      <div class="ofp-areas-mgr__header">
+        <div>
+          <div class="ofp-areas-mgr__title">Manage Functional Areas</div>
+          <div class="ofp-areas-mgr__sub">Edit names, colors, and auto-classification keywords for this cost model. Changes save with the model.</div>
+        </div>
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-ofp-action="close-areas-modal" title="Close">✕</button>
+      </div>
+      <div class="ofp-areas-mgr__table-wrap">
+        <table class="ofp-area-mgr__table">
+          <thead>
+            <tr>
+              <th style="width:46px;">Color</th>
+              <th style="width:200px;">Label</th>
+              <th>Keywords (auto-classify activities by name match)</th>
+              <th style="width:130px;">Display</th>
+              <th style="width:64px;text-align:center;">Lines</th>
+              <th style="width:48px;"></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+          </tbody>
+        </table>
+      </div>
+      <div class="ofp-areas-mgr__footer">
+        <button class="hub-btn hub-btn-sm" data-ofp-action="add-area">+ Add Functional Area</button>
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-ofp-action="close-areas-modal">Done</button>
+      </div>
+    </div>
+  `;
+}
+
+function _bindManageAreasEvents(container) {
+  const modal = container.querySelector('#ofp-areas-modal');
+  const panel = container.querySelector('#ofp-areas-panel');
+  if (!modal || !panel) return;
+
+  const closeModal = () => {
+    modal.style.display = 'none';
+    document.body.style.overflow = '';
+    if (container._ofpAreasMgrEscDetach) try { container._ofpAreasMgrEscDetach(); } catch (_) {}
+    container._ofpAreasMgrEscDetach = null;
+  };
+
+  // Close handlers — × button + Done button + click-on-backdrop
+  panel.querySelectorAll('[data-ofp-action="close-areas-modal"]').forEach(btn => {
+    btn.addEventListener('click', closeModal);
+  });
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeModal();
+  });
+
+  // Esc → close. Detach previous Esc listener first to avoid stacking.
+  if (container._ofpAreasMgrEscDetach) try { container._ofpAreasMgrEscDetach(); } catch (_) {}
+  const onEsc = (e) => {
+    if (e.key === 'Escape' && modal.style.display !== 'none') closeModal();
+  };
+  document.addEventListener('keydown', onEsc);
+  container._ofpAreasMgrEscDetach = () => document.removeEventListener('keydown', onEsc);
+
+  // Field edits — label, color, displayMode. Each edit mutates the
+  // registry, re-renders the section, then re-opens the modal so the
+  // user can keep editing.
+  panel.querySelectorAll('[data-area-field]').forEach(input => {
+    input.addEventListener('change', () => {
+      const key = input.dataset.areaKey;
+      const field = input.dataset.areaField;
+      const a = model.ofpAreas.find(x => x.key === key);
+      if (!a) return;
+      a[field] = input.value;
+      isDirty = true;
+      if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+      renderSection();
+      _ofpOpenManageAreasModal(container);
+    });
+  });
+
+  // Keyword chip removal
+  panel.querySelectorAll('.ofp-area-mgr__chip-x').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const key = btn.dataset.areaKey;
+      const kw = btn.dataset.keyword;
+      const a = model.ofpAreas.find(x => x.key === key);
+      if (!a) return;
+      a.keywords = (a.keywords || []).filter(k => k !== kw);
+      isDirty = true;
+      if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+      renderSection();
+      _ofpOpenManageAreasModal(container);
+    });
+  });
+
+  // Keyword chip add — Enter or comma in the chip-input commits.
+  panel.querySelectorAll('.ofp-area-mgr__chip-input').forEach(input => {
+    const commit = () => {
+      const key = input.dataset.areaKey;
+      const raw = (input.value || '').trim().toLowerCase();
+      if (!raw) return;
+      const a = model.ofpAreas.find(x => x.key === key);
+      if (!a) return;
+      const parts = raw.split(',').map(s => s.trim()).filter(Boolean);
+      a.keywords = Array.from(new Set([...(a.keywords || []), ...parts]));
+      input.value = '';
+      isDirty = true;
+      if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+      renderSection();
+      _ofpOpenManageAreasModal(container, key);
+    };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ',') {
+        e.preventDefault();
+        commit();
+      }
+    });
+    input.addEventListener('blur', commit);
+  });
+
+  // Delete area
+  panel.querySelectorAll('.ofp-area-mgr__del[data-area-key]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const key = btn.dataset.areaKey;
+      const count = Number(btn.dataset.areaCount) || 0;
+      const a = model.ofpAreas.find(x => x.key === key);
+      if (!a || a.isProtected) return;
+      let msg = `Delete Functional Area "${a.label}"?`;
+      if (count > 0) {
+        msg += `\n\n${count} activit${count === 1 ? 'y is' : 'ies are'} currently in this area. They will be reassigned to "Unclassified" (or re-classified by keyword match if their override is cleared).`;
+      }
+      if (!confirm(msg)) return;
+      // Clear flowLane on any line that explicitly points to this area.
+      // Cleared lines fall through to keyword classification on the next render.
+      (model.laborLines || []).forEach(l => {
+        if (l.flowLane === key) delete l.flowLane;
+      });
+      (model.indirectLaborLines || []).forEach(l => {
+        if (l.flowLane === key) delete l.flowLane;
+      });
+      // Remove from registry.
+      model.ofpAreas = model.ofpAreas.filter(x => x.key !== key);
+      isDirty = true;
+      if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+      renderSection();
+      _ofpOpenManageAreasModal(container);
+    });
+  });
+
+  // Add area
+  const addBtn = panel.querySelector('[data-ofp-action="add-area"]');
+  if (addBtn) {
+    addBtn.addEventListener('click', () => {
+      const label = prompt('Name the new Functional Area:', 'New Area');
+      if (!label || !label.trim()) return;
+      const slug = label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').substring(0, 40);
+      const existing = new Set(model.ofpAreas.map(a => a.key));
+      let key = slug || `area-${model.ofpAreas.length + 1}`;
+      let n = 2;
+      while (existing.has(key)) { key = `${slug || 'area'}-${n++}`; }
+      const palette = ['#0EA5E9', '#8B5CF6', '#16A34A', '#F59E0B', '#64748B', '#DC2626', '#EC4899', '#06B6D4', '#84CC16', '#A855F7', '#F97316', '#14B8A6'];
+      const usedColors = new Set(model.ofpAreas.map(a => a.color));
+      const color = palette.find(c => !usedColors.has(c)) || palette[model.ofpAreas.length % palette.length];
+      // Insert with sortOrder just before the unclassified bucket so
+      // the new area appears in the main flow rather than after the
+      // catch-all (Unclassified should always be last).
+      const unclassified = model.ofpAreas.find(a => a.key === 'unclassified');
+      const beforeUnc = unclassified ? unclassified.sortOrder : model.ofpAreas.length;
+      const newArea = {
+        key,
+        label: label.trim(),
+        color,
+        keywords: [],
+        displayMode: 'main',
+        isProtected: false,
+        sortOrder: beforeUnc,
+      };
+      if (unclassified) unclassified.sortOrder = beforeUnc + 1;
+      model.ofpAreas.push(newArea);
+      isDirty = true;
+      if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+      renderSection();
+      _ofpOpenManageAreasModal(container, key);
+    });
+  }
 }
 
 /** Inline OFP styles. Scoped via .ofp- prefix so they don't bleed. */
@@ -13608,6 +13982,133 @@ function _ofpStyles() {
         border-radius: 4px; width: 100%;
       }
       .ofp-edit-input:focus { outline: none; border-color: var(--ies-blue); box-shadow: 0 0 0 2px rgba(0,71,171,0.15); }
+
+      /* ========================================================
+         v0.4 — Functional Area editing
+         ======================================================== */
+
+      /* Section actions row (top-right of OFP canvas) */
+      .ofp-section-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+      /* Inline pencil on each area title — hover-reveal */
+      .ofp-area__title-row {
+        display: inline-flex; align-items: center; gap: 4px;
+        flex: 1 1 auto; min-width: 0;
+      }
+      .ofp-area__title-pencil {
+        background: transparent; border: none; padding: 0;
+        font-size: 11px; line-height: 1; cursor: pointer;
+        color: var(--ies-gray-300);
+        opacity: 0; transition: opacity 0.12s, color 0.12s;
+      }
+      .ofp-area:hover .ofp-area__title-pencil { opacity: 1; }
+      .ofp-area__title-pencil:hover { color: var(--ies-blue); }
+
+      /* Manage Areas centered modal — reuses .ofp-detail-modal backdrop
+         but the dialog is centered (not slide-from-right like the detail
+         drawer). The .ofp-detail-modal--centered modifier overrides
+         alignment. */
+      .ofp-detail-modal--centered { align-items: center; justify-content: center; }
+      .ofp-areas-modal__dialog {
+        background: #fff; border-radius: 8px;
+        width: min(960px, 96vw); max-height: 86vh;
+        display: flex; flex-direction: column;
+        box-shadow: 0 24px 64px rgba(0,0,0,0.30);
+        animation: ofpAreasModalIn 0.18s cubic-bezier(0.2,0.8,0.2,1);
+      }
+      @keyframes ofpAreasModalIn {
+        from { transform: translateY(20px) scale(0.97); opacity: 0; }
+        to   { transform: none; opacity: 1; }
+      }
+      .ofp-areas-mgr { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+      .ofp-areas-mgr__header {
+        display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;
+        padding: 14px 18px;
+        border-bottom: 1px solid var(--ies-gray-200);
+        flex-shrink: 0;
+      }
+      .ofp-areas-mgr__title { font-size: 15px; font-weight: 700; color: var(--ies-navy); }
+      .ofp-areas-mgr__sub {
+        font-size: 11px; color: var(--ies-gray-500); margin-top: 2px;
+        max-width: 640px; line-height: 1.45;
+      }
+      .ofp-areas-mgr__table-wrap {
+        padding: 10px 18px; overflow-y: auto; flex: 1 1 auto; min-height: 0;
+      }
+      .ofp-area-mgr__table { width: 100%; border-collapse: collapse; }
+      .ofp-area-mgr__table th {
+        text-align: left; font-size: 9px; font-weight: 700; color: var(--ies-gray-500);
+        text-transform: uppercase; letter-spacing: 0.04em;
+        padding: 6px 8px; border-bottom: 1px solid var(--ies-gray-200);
+        background: #fff; position: sticky; top: 0; z-index: 1;
+      }
+      .ofp-area-mgr__table td {
+        padding: 8px; border-bottom: 1px solid var(--ies-gray-100);
+        vertical-align: middle;
+      }
+      .ofp-area-mgr__row:hover { background: var(--ies-gray-50); }
+      .ofp-area-mgr__color-input {
+        width: 30px; height: 30px; padding: 0;
+        border: 1px solid var(--ies-gray-200); border-radius: 4px;
+        cursor: pointer; background: transparent;
+      }
+      .ofp-area-mgr__input {
+        font-size: 12px; padding: 5px 8px;
+        border: 1px solid var(--ies-gray-200); border-radius: 4px;
+        width: 100%;
+      }
+      .ofp-area-mgr__chips {
+        display: flex; flex-wrap: wrap; gap: 4px; align-items: center;
+        border: 1px solid var(--ies-gray-200); border-radius: 4px;
+        padding: 4px 6px; background: #fff; min-height: 32px;
+      }
+      .ofp-area-mgr__chip {
+        display: inline-flex; align-items: center; gap: 2px;
+        font-size: 10px; font-weight: 600; color: var(--ies-navy);
+        background: var(--ies-gray-100); border-radius: 3px;
+        padding: 2px 4px 2px 7px;
+        line-height: 1.4;
+      }
+      .ofp-area-mgr__chip-x {
+        background: transparent; border: none; padding: 0 3px;
+        font-size: 12px; line-height: 1; cursor: pointer;
+        color: var(--ies-gray-500);
+      }
+      .ofp-area-mgr__chip-x:hover { color: #DC2626; }
+      .ofp-area-mgr__chip-input {
+        flex: 1 1 80px; min-width: 80px;
+        border: none; outline: none; background: transparent;
+        font-size: 11px; padding: 2px 4px;
+      }
+      .ofp-area-mgr__count-cell { text-align: center; font-weight: 700; color: var(--ies-gray-700); font-size: 13px; }
+      .ofp-area-mgr__del {
+        background: transparent; border: 1px solid var(--ies-gray-200);
+        border-radius: 4px; width: 28px; height: 28px; padding: 0;
+        cursor: pointer; font-size: 14px; color: var(--ies-gray-500); line-height: 1;
+        transition: all 0.12s;
+      }
+      .ofp-area-mgr__del:hover:not(:disabled) {
+        color: #DC2626; border-color: #DC2626; background: rgba(220,38,38,0.05);
+      }
+      .ofp-area-mgr__del:disabled { cursor: not-allowed; opacity: 0.4; }
+      .ofp-area-mgr__badge {
+        display: inline-block;
+        font-size: 8px; font-weight: 700; letter-spacing: 0.05em;
+        padding: 1px 5px; border-radius: 2px;
+        margin-left: 6px; vertical-align: middle;
+      }
+      .ofp-area-mgr__badge--protected {
+        background: rgba(220,38,38,0.10); color: #B91C1C;
+      }
+      .ofp-area-mgr__muted {
+        font-size: 11px; color: var(--ies-gray-400); font-style: italic;
+      }
+      .ofp-areas-mgr__footer {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 10px 18px; border-top: 1px solid var(--ies-gray-200);
+        flex-shrink: 0;
+        background: var(--ies-gray-50);
+      }
     </style>
   `;
 }
