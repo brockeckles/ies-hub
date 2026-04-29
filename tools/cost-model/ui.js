@@ -12679,17 +12679,19 @@ function renderOperationalFlow() {
   const totalAreasPossible = unclassifiedCount > 0 ? registry.length : registry.length - 1;
   const populatedAreas = Object.values(areasMap).filter(arr => arr.length > 0).length;
 
-  // Inter-area connector with FTE-throughput proxy. Use the MAX FTE in
-  // the upstream area as a defensible proxy for "what flows through this
-  // boundary" — within an area multiple roles double-handle the same units,
-  // so SUM would overstate, whereas MAX = the most-staffed role roughly =
-  // the bottleneck-shaped throughput.
-  const maxFteInArea = (entries) => entries.reduce((mx, e) => Math.max(mx, calc.fte(e.line, opHrs)), 0);
+  // Inter-area connector — show TOTAL upstream-area FTE so the number
+  // matches the area header (14.8 / 31.7 / etc). v0.5 used MAX-FTE as
+  // a "bottleneck-throughput proxy" but that doesn't match the area
+  // total users see in the header above, which made the arrows feel
+  // wrong. SUM is conventional for staffing-flow diagrams; if it
+  // overstates due to within-area double-handling, that's a per-line
+  // modeling concern, not an arrow-rendering concern.
+  const sumFteInArea = (entries) => entries.reduce((s, e) => s + calc.fte(e.line, opHrs), 0);
   const arrowSvg = (upstreamEntries, upstreamLabel, downstreamLabel) => {
-    const fteThrough = maxFteInArea(upstreamEntries);
+    const fteThrough = sumFteInArea(upstreamEntries);
     const tip = upstreamEntries.length === 0
       ? `${upstreamLabel} → ${downstreamLabel} (no upstream activities)`
-      : `${upstreamLabel} → ${downstreamLabel} · proxy throughput = max-FTE in ${upstreamLabel} (${fteThrough.toFixed(1)} FTE on the most-staffed role).`;
+      : `${upstreamLabel} → ${downstreamLabel} · ${fteThrough.toFixed(1)} FTE total in ${upstreamLabel} (sum of all roles).`;
     return `
       <div class="ofp-connector" title="${escapeAttr(tip)}">
         <svg viewBox="0 0 60 32" width="60" height="32" preserveAspectRatio="none" aria-hidden="true">
@@ -13128,11 +13130,15 @@ function _bindOperationalFlowEvents(container) {
     row.addEventListener('dragend', () => {
       areaCanvasDragKey = null;
       container.querySelectorAll('.ofp-area--reorder-dragging').forEach(el => el.classList.remove('ofp-area--reorder-dragging'));
-      container.querySelectorAll('.ofp-area--reorder-target').forEach(el => el.classList.remove('ofp-area--reorder-target'));
+      container.querySelectorAll('.ofp-area--reorder-target-before, .ofp-area--reorder-target-after').forEach(el =>
+        el.classList.remove('ofp-area--reorder-target-before', 'ofp-area--reorder-target-after'));
     });
   });
 
   // --- Area drop targets ---
+  // v0.8 — use X-midpoint threshold for direction (left half of target
+  // = insert before, right half = insert after). Visual indicator is
+  // an inset blue line on the appropriate side of the target.
   container.querySelectorAll('.ofp-area[data-ofp-area]').forEach(areaEl => {
     areaEl.addEventListener('dragover', (e) => {
       if (!areaCanvasDragKey) return; // card-drag handles this case separately
@@ -13141,24 +13147,26 @@ function _bindOperationalFlowEvents(container) {
       e.preventDefault();
       e.stopPropagation();
       try { e.dataTransfer.dropEffect = 'move'; } catch (_) {}
-      areaEl.classList.add('ofp-area--reorder-target');
+      const rect = areaEl.getBoundingClientRect();
+      const before = e.clientX < rect.left + rect.width / 2;
+      areaEl.classList.toggle('ofp-area--reorder-target-before', before);
+      areaEl.classList.toggle('ofp-area--reorder-target-after', !before);
     });
     areaEl.addEventListener('dragleave', (e) => {
       if (!areaCanvasDragKey) return;
-      if (e.target === areaEl) areaEl.classList.remove('ofp-area--reorder-target');
+      if (e.target === areaEl) {
+        areaEl.classList.remove('ofp-area--reorder-target-before', 'ofp-area--reorder-target-after');
+      }
     });
     areaEl.addEventListener('drop', (e) => {
       if (!areaCanvasDragKey) return; // let the card-drop handler run if dragInfo set
       e.preventDefault();
       e.stopPropagation();
       const tgtKey = areaEl.dataset.ofpArea;
-      areaEl.classList.remove('ofp-area--reorder-target');
+      const before = areaEl.classList.contains('ofp-area--reorder-target-before');
+      areaEl.classList.remove('ofp-area--reorder-target-before', 'ofp-area--reorder-target-after');
       if (areaCanvasDragKey === tgtKey) { areaCanvasDragKey = null; return; }
-      // For canvas reorder we use insert-after-target semantics by default
-      // (drop ON an area → place dragged area after target). Could use
-      // mid-rect threshold like the modal but visual cues on horizontal
-      // columns are hard, so simple swap-style insert after.
-      _ofpReorderArea(areaCanvasDragKey, tgtKey, 'after');
+      _ofpReorderArea(areaCanvasDragKey, tgtKey, before ? 'before' : 'after');
       areaCanvasDragKey = null;
       isDirty = true;
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
@@ -15021,9 +15029,12 @@ function _ofpStyles() {
       }
       .ofp-area__title-row:hover .ofp-area__grip { opacity: 1; color: var(--ies-blue); }
       .ofp-area--reorder-dragging { opacity: 0.45; }
-      .ofp-area--reorder-target {
-        outline: 2px dashed var(--ies-blue);
-        outline-offset: 4px;
+      .ofp-area--reorder-target-before {
+        box-shadow: inset 4px 0 0 0 var(--ies-blue);
+        background: rgba(0, 71, 171, 0.04);
+      }
+      .ofp-area--reorder-target-after {
+        box-shadow: inset -4px 0 0 0 var(--ies-blue);
         background: rgba(0, 71, 171, 0.04);
       }
 
