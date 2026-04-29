@@ -12,7 +12,7 @@ import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260424-hyg04';
 import * as calc from './calc.js?v=20260427-s2';
-import * as api from './api.js?v=20260429-vol2';
+import * as api from './api.js?v=20260429-vol3';
 import * as scenarios from './calc.scenarios.js?v=20260429-otfix1';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
 import * as channelCalc from './calc.channels.js?v=20260429-vol1';
@@ -11840,6 +11840,46 @@ function computePricingSnapshot(summary, marginFrac, opHrs, contractYears) {
     unassignedCount: unassignedLines.length,
     unassignedLines,
   };
+}
+
+/**
+ * Phase 2.1 dual-write — mirror channels[0] back to legacy fields so unmigrated
+ * calc consumers (volumeLines, orderProfile, seasonalityProfile) keep producing
+ * correct output until Phase 3 migrates them to read from accessors.
+ *
+ * Only runs when channels[] is populated; otherwise no-op. Idempotent.
+ *
+ * @param {Object} model
+ */
+function syncLegacyFromChannel(model) {
+  if (!model || !Array.isArray(model.channels) || !model.channels[0]) return;
+  const ch = model.channels[0];
+  const conv = ch.conversions || {};
+  const primary = ch.primary || {};
+
+  if (!Array.isArray(model.volumeLines)) model.volumeLines = [];
+  let starred = model.volumeLines.find(v => v && v.isOutboundPrimary);
+  if (!starred) {
+    starred = { name: 'Outbound', volume: 0, uom: 'units', isOutboundPrimary: true };
+    model.volumeLines.push(starred);
+  }
+  starred.volume = Number(primary.value) || 0;
+  starred.uom = primary.uom || 'units';
+
+  if (!model.orderProfile) model.orderProfile = {};
+  if (Number.isFinite(Number(conv.linesPerOrder))) model.orderProfile.linesPerOrder = Number(conv.linesPerOrder);
+  if (Number.isFinite(Number(conv.unitsPerLine)))  model.orderProfile.unitsPerLine  = Number(conv.unitsPerLine);
+  if (Number.isFinite(Number(conv.weightPerUnit))) model.orderProfile.avgOrderWeight = Number(conv.weightPerUnit);
+  if (conv.weightUnit) model.orderProfile.weightUnit = conv.weightUnit;
+
+  if (ch.seasonality) {
+    model.seasonalityProfile = {
+      preset: ch.seasonality.preset || 'flat',
+      monthly_shares: Array.isArray(ch.seasonality.monthly_shares) && ch.seasonality.monthly_shares.length === 12
+        ? ch.seasonality.monthly_shares.slice()
+        : new Array(12).fill(1/12),
+    };
+  }
 }
 
 function setNestedValue(obj, path, value) {
