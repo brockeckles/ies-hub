@@ -11,7 +11,7 @@ import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260424-hyg04';
-import * as calc from './calc.js?v=20260427-s2';
+import * as calc from './calc.js?v=20260429-vol15';
 import * as api from './api.js?v=20260429-vol12';
 import * as scenarios from './calc.scenarios.js?v=20260429-otfix1';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
@@ -1111,7 +1111,8 @@ function wireEditorEvents() {
     const year = parseInt(cell.dataset.cmYear, 10);
     if (!rowKey || !Number.isFinite(year)) return;
     const isKpi = typeof rowKey === 'string' && rowKey.startsWith('kpi:');
-    if (!isKpi) {
+    const isGen = typeof rowKey === 'string' && rowKey.startsWith('gen:');
+    if (!isKpi && !isGen) {
       // P&L cells must be inside the Summary section content.
       if (activeSection !== 'summary') return;
       if (!cell.closest('#cm-section-content')) return;
@@ -2022,8 +2023,11 @@ function getCellProvenance(rowKey, year) {
   // Phase 5.2 — kpi:contract is the only row that doesn't need projections
   // (it only renders contractYears). Other kpi:* rows + every P&L row
   // require a populated projection; bail early on those if `p` is missing.
-  const isKpi = typeof rowKey === 'string' && rowKey.startsWith('kpi:');
-  if (!p && !(isKpi && rowKey === 'kpi:contract')) return null;
+  // Phase 5.3 — gen:* (auto-gen line lineage) read model-state directly,
+  // not projections, so they bypass the guard.
+  const isKpiKey = typeof rowKey === 'string' && rowKey.startsWith('kpi:');
+  const isGenKey = typeof rowKey === 'string' && rowKey.startsWith('gen:');
+  if (!p && !(isKpiKey && rowKey === 'kpi:contract') && !isGenKey) return null;
   const ch = ctx.calcHeur || {};
   const s = ctx.summary || {};
   const mFrac = ctx.marginFrac;
@@ -2445,7 +2449,149 @@ function getCellProvenance(rowKey, year) {
       };
     }
   }
+
+  // ────────────────────────────────────────────────────────────
+  // Phase 5.3 — gen:<category>:<code> auto-gen line lineage
+  // ────────────────────────────────────────────────────────────
+  if (rowKey && rowKey.startsWith('gen:')) {
+    const parts = rowKey.split(':');
+    const category = parts[1] || '';
+    const code = parts.slice(2).join(':');
+    return _getAutoGenProvenance(category, code, lineage, isMultiChannel);
+  }
+
   return null;
+}
+
+/**
+ * Phase 5.3 — Build a provenance record for an auto-generated line
+ * (Indirect Labor / Overhead / Startup). Looks up the line on the model
+ * by `_heuristic.code` matching the code argument; surfaces formula,
+ * driver, computed value, and per-channel breakdown for the channel-aware
+ * heuristics (Returns Processor, Supplies & Consumables, Quality &
+ * Inspection, Selective Pallet Racking).
+ */
+function _getAutoGenProvenance(category, code, lineage, isMultiChannel) {
+  const arrayMap = {
+    'indirect-labor': model.indirectLaborLines || [],
+    'overhead':       model.overheadLines       || [],
+    'startup':        model.startupLines        || [],
+  };
+  const arr = arrayMap[category];
+  if (!arr) return null;
+  const line = arr.find(l => l && l._heuristic && l._heuristic.code === code);
+  if (!line) {
+    return {
+      label: `Auto-generated line: ${code}`,
+      formula: '(line not found on the current model — may have been edited or deleted)',
+      value: 0,
+      inputs: [],
+      notes: 'The generator stamped this code but the row is no longer present. Re-run Auto-Generate to restore it.',
+    };
+  }
+  const h = line._heuristic;
+  const isChannelAware = h.source === 'channels';
+
+  // Compute the headline value the inspector should display
+  let headline = 0;
+  let valueFormat = 'currency';
+  let label = '';
+  let formula = h.formula || '';
+  let inputs = [];
+
+  if (category === 'indirect-labor') {
+    headline = (line.headcount || 0);
+    valueFormat = 'fte';
+    label = `${line.role_name || code} — ${line.headcount} FTE`;
+    inputs.push({ label: 'Heuristic', value: h.label || code, source: 'calc.js → autoGenerateIndirectLabor' });
+    if (h.value != null) inputs.push({ label: 'Value used', value: String(h.value), source: h.source });
+    if (h.legacy_value != null && String(h.legacy_value) !== String(h.value)) {
+      inputs.push({ label: 'Legacy default', value: String(h.legacy_value), source: 'pre-Phase-3 / pre-catalog' });
+    }
+    if (h.source_citation) {
+      inputs.push({ label: 'Catalog citation', value: h.source_citation, source: h.source_date || '' });
+    }
+    inputs.push({ label: 'Headcount', value: line.headcount + ' FTE', source: 'Generated' });
+    inputs.push({ label: 'Hourly rate', value: '$' + (line.hourly_rate || 0).toFixed(2), source: 'Generator default rate' });
+    inputs.push({ label: 'Burden %', value: (line.burden_pct || 30) + '%', source: 'Generator default' });
+
+    // Channel-aware roles get per-channel breakdown
+    if (code === 'indirect.customer_service.per_500k_orders') {
+      const channelRows = _buildChannelBreakdownInputs(lineage, 'orders');
+      if (channelRows.length) {
+        inputs.push({ label: 'Volume drivers (orders)', value: '', source: 'CS Reps sized off cross-channel orders (Phase 3)' });
+        inputs.push(...channelRows);
+      }
+      formula = formula || 'CS Reps = ⌈totalAnnualOrders ÷ 500,000⌉';
+    } else if (code === 'indirect.returns_processor.per_100k_returns') {
+      const returnsRows = _buildChannelBreakdownInputs(lineage, 'returns');
+      const assumptionRows = _buildChannelAssumptionInputs(lineage, 'returnsPercent');
+      if (returnsRows.length) {
+        inputs.push({ label: 'Returns volume by channel', value: '', source: 'Per-channel primary × returns% (Phase 3)' });
+        inputs.push(...returnsRows);
+      }
+      if (assumptionRows.length) {
+        inputs.push({ label: 'Returns % per channel', value: '', source: 'Volumes & Profile → Structural Assumptions' });
+        inputs.push(...assumptionRows);
+      }
+      formula = formula || 'Returns Processors = ⌈totalReturns ÷ 100,000⌉ where totalReturns = Σ channel.primaryUnits × channel.returnsPercent';
+    }
+  } else if (category === 'overhead') {
+    headline = (line.cost_type === 'monthly' ? (line.monthly_cost || 0) * 12 : (line.annual_cost || 0));
+    valueFormat = 'currency';
+    label = `${line.category || code} — ${line.description || ''}`;
+    inputs.push({ label: 'Heuristic', value: h.label || code, source: 'calc.js → autoGenerateOverhead' });
+    if (h.value != null) inputs.push({ label: 'Rate', value: String(h.value), source: 'Generator default' });
+    if (h.driver) inputs.push({ label: 'Driver', value: h.driver, source: 'What scales this line' });
+    inputs.push({ label: 'Annual cost', value: '$' + headline.toLocaleString(), source: 'Computed at auto-gen time' });
+
+    // Channel-aware overhead — Supplies & Consumables, Quality & Inspection
+    if (code === 'overhead.per_units_shipped.supplies') {
+      const channelRows = _buildChannelBreakdownInputs(lineage, 'units');
+      if (channelRows.length) {
+        inputs.push({ label: 'Volume drivers (units)', value: '', source: 'Cross-channel physical units (Phase 3)' });
+        inputs.push(...channelRows);
+      }
+    } else if (code === 'overhead.per_orders.quality') {
+      const channelRows = _buildChannelBreakdownInputs(lineage, 'orders');
+      if (channelRows.length) {
+        inputs.push({ label: 'Volume drivers (orders)', value: '', source: 'Cross-channel orders (Phase 3)' });
+        inputs.push(...channelRows);
+      }
+    }
+  } else if (category === 'startup') {
+    headline = (line.one_time_cost || 0);
+    valueFormat = 'currency';
+    label = `${line.description || code} — one-time`;
+    inputs.push({ label: 'Heuristic', value: h.label || code, source: 'calc.js → autoGenerateStartup' });
+    if (h.value != null) inputs.push({ label: 'Rate / unit', value: String(h.value), source: 'Generator default' });
+    if (h.driver) inputs.push({ label: 'Driver', value: h.driver, source: 'What scales this line' });
+    inputs.push({ label: 'One-time cost', value: '$' + headline.toLocaleString(), source: 'Computed at auto-gen time' });
+
+    // Channel-aware startup — Selective Pallet Racking sized off inbound pallets
+    if (code === 'startup.racking.per_position') {
+      const channelInbound = (lineage || []).filter(c => !c.isHidden && !c.isReverse).map(ch => ({
+        label: `↳ ${ch.name || ch.key}`,
+        value: _fmtNum((ch.derived?.inbound || 0) / Math.max(1, (ch.primary?.uom === 'pallets' ? 1 : (ch.primaryAsPallets > 0 ? (ch.primaryAsUnits / ch.primaryAsPallets) : 1)))),
+        source: `${_fmtNum(ch.primary?.value || 0)} ${ch.primary?.uom || 'units'} primary · ${(ch.contributionPctOfOutboundUnits || 0).toFixed(1)}% of outbound`,
+      }));
+      if (isMultiChannel && channelInbound.length) {
+        inputs.push({ label: 'Inbound pallets by channel', value: '', source: 'Per-channel inbound, in pallets (Phase 3)' });
+        inputs.push(...channelInbound);
+      }
+    }
+  }
+
+  return {
+    label,
+    valueFormat,
+    formula,
+    value: headline,
+    inputs,
+    notes: isChannelAware
+      ? 'This auto-gen heuristic is channel-aware (Phase 3 of volumes-as-nucleus): the driver figure is summed across non-reverse channels, honoring per-channel UOM conversions and structural assumptions.'
+      : 'Static heuristic — driven by a single facility/headcount input. Re-run Auto-Generate after any input change.',
+  };
 }
 
 /** Render the panel HTML. Returns the inner content (panel container is in renderShell). */
@@ -2521,7 +2667,9 @@ function renderProvenancePanelInner() {
       Computed ${computedAtStr}<br>
       ${_activeProvCell.rowKey.startsWith('kpi:')
         ? `KPI tile · row key <code style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10.5px;background:var(--ies-gray-100);padding:1px 4px;border-radius:3px;">${_activeProvCell.rowKey}</code>`
-        : `Year ${_activeProvCell.year} of ${_lastProvenanceContext?.contractYears || '—'} · row key <code style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10.5px;background:var(--ies-gray-100);padding:1px 4px;border-radius:3px;">${_activeProvCell.rowKey}</code>`}
+        : (_activeProvCell.rowKey.startsWith('gen:')
+            ? `Auto-gen line · row key <code style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10.5px;background:var(--ies-gray-100);padding:1px 4px;border-radius:3px;">${_activeProvCell.rowKey}</code>`
+            : `Year ${_activeProvCell.year} of ${_lastProvenanceContext?.contractYears || '—'} · row key <code style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10.5px;background:var(--ies-gray-100);padding:1px 4px;border-radius:3px;">${_activeProvCell.rowKey}</code>`)}
     </div>
   `;
 }
@@ -4325,15 +4473,17 @@ function renderLaborVolumeCell(line, idx) {
  * @param {any} line — labor line (direct or indirect) with optional `_heuristic`
  * @returns {string} HTML
  */
-function renderHeuristicChip(line) {
+function renderHeuristicChip(line, opts = {}) {
   const h = line?._heuristic;
   if (!h) return '';
   const source = h.source || 'legacy';
   const sourceLabel = source === 'catalog'  ? 'catalog'
                     : source === 'override' ? 'override'
+                    : source === 'channels' ? 'channels'
                     : 'legacy';
   const sourceColor = source === 'catalog'  ? { bg: '#dbeafe', fg: '#1e40af', border: '#93c5fd' }
                     : source === 'override' ? { bg: '#fef3c7', fg: '#b45309', border: '#fcd34d' }
+                    : source === 'channels' ? { bg: '#dcfce7', fg: '#166534', border: '#86efac' }
                     :                          { bg: '#f3f4f6', fg: '#6b7280', border: '#d1d5db' };
   // Build an informative tooltip. Newlines render as line breaks in
   // native `title` on most browsers — good enough for an inline chip.
@@ -4343,10 +4493,19 @@ function renderHeuristicChip(line) {
   if (h.legacy_value != null && String(h.legacy_value) !== String(h.value)) {
     lines.push(`Legacy default: ${h.legacy_value}`);
   }
+  if (h.formula) lines.push(`Formula: ${h.formula}`);
+  if (h.driver)  lines.push(`Driver: ${h.driver}`);
   if (h.source_citation) lines.push(`Source: ${h.source_citation}`);
   if (h.source_date) lines.push(`Dated: ${h.source_date}`);
+  lines.push('Click for full formula inspector →');
   const tipText = lines.join(' · ');
-  return `<span class="cm-heuristic-chip" style="display:inline-flex;align-items:center;gap:2px;background:${sourceColor.bg};color:${sourceColor.fg};border:1px solid ${sourceColor.border};border-radius:10px;padding:1px 6px;font-size:10px;font-weight:600;line-height:1.3;margin-left:6px;cursor:help;white-space:nowrap;" title="${escapeAttr(tipText)}" aria-label="${escapeAttr(tipText)}">ℹ ${sourceLabel}</span>`;
+  // Phase 5.3 — chip is now a button with data-cm-cell="gen:<category>:<code>"
+  // so clicks open the existing side-panel inspector. Hover tooltip stays
+  // as fallback for users who want the quick read without opening the panel.
+  const category = opts.category || 'auto';
+  const cellKey = `gen:${category}:${h.code}`;
+  const styleBase = `display:inline-flex;align-items:center;gap:2px;background:${sourceColor.bg};color:${sourceColor.fg};border:1px solid ${sourceColor.border};border-radius:10px;padding:1px 6px;font-size:10px;font-weight:600;line-height:1.3;margin-left:6px;white-space:nowrap;cursor:pointer;font-family:inherit;`;
+  return `<button type="button" class="cm-heuristic-chip cm-heuristic-chip--clickable" data-cm-cell="${escapeAttr(cellKey)}" data-cm-year="1" style="${styleBase}" title="${escapeAttr(tipText)}" aria-label="${escapeAttr(tipText)}">ℹ ${sourceLabel}</button>`;
 }
 
 function renderMostCell(line, idx) {
@@ -4547,7 +4706,7 @@ function renderLaborV1() {
           <tr>
             <td style="white-space:nowrap;">
               <input value="${l.role_name || ''}" style="width:140px;" data-array="indirectLaborLines" data-idx="${i}" data-field="role_name" />
-              ${renderHeuristicChip(l)}
+              ${renderHeuristicChip(l, { category: 'indirect-labor' })}
             </td>
             <td><input type="number" value="${l.headcount || 0}" style="width:50px;" data-array="indirectLaborLines" data-idx="${i}" data-field="headcount" data-type="number" /></td>
             <td><input type="number" value="${l.hourly_rate || 0}" style="width:60px;" step="0.5" data-array="indirectLaborLines" data-idx="${i}" data-field="hourly_rate" data-type="number" /></td>
@@ -4660,7 +4819,7 @@ function renderLaborV2() {
               <tr>
                 <td style="white-space:nowrap;">
                   <input class="hub-input" style="width:calc(100% - 90px);display:inline-block;" value="${escapeAttr(l.role_name || '')}" data-array="indirectLaborLines" data-idx="${i}" data-field="role_name" />
-                  ${renderHeuristicChip(l)}
+                  ${renderHeuristicChip(l, { category: 'indirect-labor' })}
                 </td>
                 <td>${renderPositionCell(l, i, 'indirect')}</td>
                 <td><input class="hub-input hub-num" type="number" value="${l.headcount || 0}" data-array="indirectLaborLines" data-idx="${i}" data-field="headcount" data-type="number" /></td>
@@ -5949,7 +6108,7 @@ function renderOverhead() {
         <tbody>
           ${lines.map((l, i) => `
             <tr>
-              <td><input class="hub-input" value="${l.category || ''}" data-array="overheadLines" data-idx="${i}" data-field="category" /></td>
+              <td><input class="hub-input" value="${l.category || ''}" data-array="overheadLines" data-idx="${i}" data-field="category" />${renderHeuristicChip(l, { category: 'overhead' })}</td>
               <td><input class="hub-input" value="${l.description || ''}" data-array="overheadLines" data-idx="${i}" data-field="description" /></td>
               <td>
                 <select class="hub-input" data-array="overheadLines" data-idx="${i}" data-field="cost_type">
@@ -6239,7 +6398,7 @@ function renderStartup() {
             const amort = isAsIncurred ? 0 : (l.one_time_cost || 0) / Math.max(1, contractYears);
             return `
               <tr${isAsIncurred ? ' class="cm-startup-as-incurred"' : ''}>
-                <td><input class="hub-input" value="${l.description || ''}" data-array="startupLines" data-idx="${i}" data-field="description" /></td>
+                <td><input class="hub-input" value="${l.description || ''}" data-array="startupLines" data-idx="${i}" data-field="description" />${renderHeuristicChip(l, { category: 'startup' })}</td>
                 <td><input class="hub-input hub-num" type="number" value="${l.one_time_cost || 0}" data-array="startupLines" data-idx="${i}" data-field="one_time_cost" data-type="number" /></td>
                 <td>
                   <select class="hub-input" data-array="startupLines" data-idx="${i}" data-field="billing_type" title="Capitalized = amortized + grossed up. As-Incurred = zero-margin pass-through (customer pays at cost).">

@@ -3442,33 +3442,53 @@ export function autoGenerateOverhead(state) {
   const turnoverPct = 0.43;
   const annualHires = Math.ceil(totalHC * turnoverPct);
 
-  // Helper
-  const addOh = (category, description, annualCost, costType = 'annual', pricingBucket = '') => {
-    lines.push({
+  // Phase 5.3 — auto-gen overhead now stamps `_heuristic` metadata onto
+  // each generated line so the Cell-Inspector panel can drill back from
+  // any line into its formula + driver inputs.
+  //
+  // heuristic shape: { code, label, value, source, legacy_value, formula?, driver? }
+  const addOh = (category, description, annualCost, costType = 'annual', pricingBucket = '', heuristic = null) => {
+    const line = {
       category,
       description,
       cost_type: costType,
       annual_cost: costType === 'annual' ? annualCost : 0,
       monthly_cost: costType === 'monthly' ? annualCost : 0,
       pricing_bucket: pricingBucket,
-    });
+    };
+    if (heuristic) line._heuristic = heuristic;
+    lines.push(line);
   };
+  const ohH = (code, label, value, formula, driver, legacyValue = null) => ({
+    code, label, value, formula, driver,
+    source: code.startsWith('overhead.per_units') || code.startsWith('overhead.per_orders') ? 'channels' : 'legacy',
+    legacy_value: legacyValue != null ? legacyValue : value,
+  });
 
   // PER-SQFT SCALERS
   if (sqft > 0) {
-    addOh('Facility Maintenance', 'Janitorial, HVAC maint, pest control, repairs (IFMA benchmark)', sqft * 1.00);
-    addOh('Security', 'Monitoring, camera systems, access control', sqft * 0.12);
-    addOh('Property & Liability Insurance', 'Property, GL, umbrella coverage', sqft * 0.35);
-    addOh('Fire & Life Safety', 'Sprinkler inspection, suppression, extinguishers', sqft * 0.04);
+    addOh('Facility Maintenance', 'Janitorial, HVAC maint, pest control, repairs (IFMA benchmark)', sqft * 1.00, 'annual', '',
+      ohH('overhead.facility_maint.per_sqft', 'IFMA facility maintenance benchmark', 1.00, 'sqft × $1.00/yr', 'sqft'));
+    addOh('Security', 'Monitoring, camera systems, access control', sqft * 0.12, 'annual', '',
+      ohH('overhead.security.per_sqft', 'Security & monitoring benchmark', 0.12, 'sqft × $0.12/yr', 'sqft'));
+    addOh('Property & Liability Insurance', 'Property, GL, umbrella coverage', sqft * 0.35, 'annual', '',
+      ohH('overhead.insurance.per_sqft', 'Property + GL insurance benchmark', 0.35, 'sqft × $0.35/yr', 'sqft'));
+    addOh('Fire & Life Safety', 'Sprinkler inspection, suppression, extinguishers', sqft * 0.04, 'annual', '',
+      ohH('overhead.fire_safety.per_sqft', 'Sprinkler / fire-safety upkeep', 0.04, 'sqft × $0.04/yr', 'sqft'));
   }
 
   // PER-HEADCOUNT SCALERS
   if (totalHC > 0) {
-    addOh('IT / WMS Licensing', 'BY WMS, RF mgmt, networking, printers, telecom', totalHC * 2500);
-    addOh('HR & Recruiting', 'Payroll, benefits, onboarding + replacement hires', (totalHC * 2500) + (annualHires * 4700));
-    addOh('Workers Comp Insurance', 'Workers comp premiums, warehouse risk class', totalHC * 1250);
-    addOh('Safety & Compliance', 'OSHA compliance, training, safety supplies', totalHC * 800);
-    addOh('Uniforms & PPE', 'Safety vests, gloves, boots, hard hats, eye protection', (totalHC + annualHires) * 400);
+    addOh('IT / WMS Licensing', 'BY WMS, RF mgmt, networking, printers, telecom', totalHC * 2500, 'annual', '',
+      ohH('overhead.it_licensing.per_hc', 'IT / WMS licensing per headcount', 2500, 'totalHC × $2,500/yr', 'totalHC'));
+    addOh('HR & Recruiting', 'Payroll, benefits, onboarding + replacement hires', (totalHC * 2500) + (annualHires * 4700), 'annual', '',
+      ohH('overhead.hr_recruiting.per_hc', 'HR / recruiting per HC + replacement hires', 2500, '(totalHC × $2,500) + (annualHires × $4,700)', 'totalHC + 43% turnover'));
+    addOh('Workers Comp Insurance', 'Workers comp premiums, warehouse risk class', totalHC * 1250, 'annual', '',
+      ohH('overhead.wc_insurance.per_hc', 'Workers comp premium per HC', 1250, 'totalHC × $1,250/yr', 'totalHC'));
+    addOh('Safety & Compliance', 'OSHA compliance, training, safety supplies', totalHC * 800, 'annual', '',
+      ohH('overhead.safety_compliance.per_hc', 'OSHA / safety compliance per HC', 800, 'totalHC × $800/yr', 'totalHC'));
+    addOh('Uniforms & PPE', 'Safety vests, gloves, boots, hard hats, eye protection', (totalHC + annualHires) * 400, 'annual', '',
+      ohH('overhead.ppe.per_hc', 'Uniforms / PPE per HC + replacement hires', 400, '(totalHC + annualHires) × $400/yr', 'totalHC + 43% turnover'));
   }
 
   // PER-UNIT SCALERS — channel-aware (Phase 3 of volumes-as-nucleus).
@@ -3480,10 +3500,12 @@ export function autoGenerateOverhead(state) {
   const annualUnitsShipped = _getAnnualVolume(state, 'units');
 
   if (annualUnitsShipped > 0) {
-    addOh('Supplies & Consumables', 'Stretch wrap, labels, tape, dunnage, cleaning', annualUnitsShipped * 0.15);
+    addOh('Supplies & Consumables', 'Stretch wrap, labels, tape, dunnage, cleaning', annualUnitsShipped * 0.15, 'annual', '',
+      ohH('overhead.per_units_shipped.supplies', 'Supplies & consumables per unit shipped', 0.15, 'annualUnits × $0.15', 'cross-channel physical units (Phase 3)'));
   }
   if (annualOrders > 0) {
-    addOh('Quality & Inspection', 'QC labor overhead, quality systems, audits', annualOrders * 0.25);
+    addOh('Quality & Inspection', 'QC labor overhead, quality systems, audits', annualOrders * 0.25, 'annual', '',
+      ohH('overhead.per_orders.quality', 'Quality & inspection per order', 0.25, 'annualOrders × $0.25', 'cross-channel orders'));
   }
 
   return lines;
@@ -3508,14 +3530,21 @@ export function autoGenerateStartup(state) {
   const sqft = state.facility?.totalSqft || 0;
   const contractYears = state.financial?.contractTermYears || state.projectDetails?.contractTerm || 5;
 
-  const addStartup = (description, cost) => {
+  // Phase 5.3 — auto-gen startup now stamps `_heuristic` metadata onto
+  // each generated line so the Cell-Inspector panel can drill back from
+  // any line into its formula + driver inputs.
+  const addStartup = (description, cost, heuristic = null) => {
     if (cost > 0) {
-      lines.push({
-        description,
-        one_time_cost: Math.ceil(cost),
-      });
+      const line = { description, one_time_cost: Math.ceil(cost) };
+      if (heuristic) line._heuristic = heuristic;
+      lines.push(line);
     }
   };
+  const suH = (code, label, value, formula, driver, legacyValue = null) => ({
+    code, label, value, formula, driver,
+    source: code.startsWith('startup.racking') ? 'channels' : 'legacy',
+    legacy_value: legacyValue != null ? legacyValue : value,
+  });
 
   // 1. Racking capital — $85/pallet position. Channel-aware (Phase 3 of
   // volumes-as-nucleus): aggregate inbound across channels honoring each
@@ -3525,36 +3554,43 @@ export function autoGenerateStartup(state) {
     const turnsPerYear = 12;
     const avgPalletsOnHand = Math.ceil(annualPalletsIn / turnsPerYear);
     const rackPositions = Math.ceil(avgPalletsOnHand * 1.15);
-    addStartup('Selective Pallet Racking Installation', rackPositions * 85);
+    addStartup('Selective Pallet Racking Installation', rackPositions * 85,
+      suH('startup.racking.per_position', 'Racking installation per pallet position', 85, 'rackPositions × $85', 'cross-channel inbound pallets ÷ turns × 1.15 spare'));
   }
 
   // 2. Build-out — $45/sqft office, $30/sqft break room
   const totalIndirectHC = (state.indirectLaborLines || []).reduce((s, l) => s + (l.headcount || 0), 0);
   if (totalIndirectHC > 0) {
     const officeSqft = Math.ceil(totalIndirectHC * 120);
-    addStartup('Office Build-Out', officeSqft * 45);
+    addStartup('Office Build-Out', officeSqft * 45,
+      suH('startup.office.per_sqft', 'Office build-out per office sqft', 45, 'officeSqft × $45', 'indirectHC × 120 sqft/person'));
     const totalHC = Math.ceil(totalDirectFtes) + totalIndirectHC;
     const breakSqft = Math.max(200, Math.ceil(totalHC * 15));
-    addStartup('Break Room Build-Out', breakSqft * 30);
+    addStartup('Break Room Build-Out', breakSqft * 30,
+      suH('startup.breakroom.per_sqft', 'Break room build-out per sqft', 30, 'breakSqft × $30', 'max(200, totalHC × 15 sqft)'));
   }
 
   // 3. IT infrastructure — $0.50/sqft + WMS $50K + $2K/user
   if (sqft > 0) {
-    addStartup('Network Cabling & Infrastructure', sqft * 0.50);
+    addStartup('Network Cabling & Infrastructure', sqft * 0.50,
+      suH('startup.network.per_sqft', 'Network cabling per sqft', 0.50, 'sqft × $0.50', 'totalSqft'));
   }
   if (totalDirectFtes > 0) {
-    addStartup('WMS Implementation & Configuration', 50000 + (Math.ceil(totalDirectFtes) * 2000));
+    addStartup('WMS Implementation & Configuration', 50000 + (Math.ceil(totalDirectFtes) * 2000),
+      suH('startup.wms.fixed_plus_user', 'WMS impl base + per-user', 50000, '$50,000 + (directFtes × $2,000)', 'directFtes'));
   }
 
   // 4. EDI setup
-  addStartup('EDI Setup & Customer Integration', 15000);
+  addStartup('EDI Setup & Customer Integration', 15000,
+      suH('startup.edi.fixed', 'EDI setup (fixed)', 15000, '$15,000 flat', 'one-time'));
 
   // 5. Dock installation — $4,500 per door
   const daysPerYear = (state.shifts?.daysPerWeek || 5) * (state.shifts?.weeksPerYear ?? 52);
   const dailyPalletsTotal = (annualPalletsIn || 0) / Math.max(1, daysPerYear);
   if (dailyPalletsTotal > 0) {
     const dockDoors = Math.max(2, Math.ceil(dailyPalletsTotal / 90));
-    addStartup('Dock Leveler Installation', dockDoors * 4500);
+    addStartup('Dock Leveler Installation', dockDoors * 4500,
+      suH('startup.dock.per_door', 'Dock leveler per door', 4500, 'dockDoors × $4,500', 'dailyPallets ÷ 90, min 2 doors'));
   }
 
   // 6. MHE charging power drops — $3,500 per station
@@ -3562,17 +3598,20 @@ export function autoGenerateStartup(state) {
     .filter(l => l.equipment_name?.toLowerCase().includes('charging'))
     .reduce((s, l) => s + l.quantity, 0)));
   if (chargingStations > 0) {
-    addStartup('Power Drops for MHE Charging', chargingStations * 3500);
+    addStartup('Power Drops for MHE Charging', chargingStations * 3500,
+      suH('startup.power_drops.per_station', 'Power drops per charging station', 3500, 'chargingStations × $3,500', 'count of charging-equipment lines'));
   }
 
   // 7. Lighting — $1.25/sqft
   if (sqft >= 50000) {
-    addStartup('High-Bay LED Lighting Upgrade', sqft * 1.25);
+    addStartup('High-Bay LED Lighting Upgrade', sqft * 1.25,
+      suH('startup.lighting.per_sqft', 'High-bay LED upgrade per sqft', 1.25, 'sqft × $1.25', 'totalSqft (≥50K threshold)'));
   }
 
   // 8. Safety barriers — $0.15/sqft
   if (sqft >= 50000) {
-    addStartup('Guard Rails & Safety Barriers', sqft * 0.15);
+    addStartup('Guard Rails & Safety Barriers', sqft * 0.15,
+      suH('startup.safety.per_sqft', 'Guard rails / safety barriers', 0.15, 'sqft × $0.15', 'totalSqft (≥50K threshold)'));
   }
 
   // 9. Training / ramp-up — 30% labor inefficiency × ramp weeks
@@ -3582,13 +3621,16 @@ export function autoGenerateStartup(state) {
     const daysPerWeek = state.shifts?.daysPerWeek || 5;
     const rampHours = rampWeeks * daysPerWeek * hoursPerShift;
     const avgRate = 20;
-    addStartup('Training & Ramp-Up Premium', totalDirectFtes * rampHours * avgRate * 0.30);
-    addStartup('Go-Live Support Team (4 weeks)', 4 * 40 * 180); // PM + IT + Trainer
+    addStartup('Training & Ramp-Up Premium', totalDirectFtes * rampHours * avgRate * 0.30,
+      suH('startup.training.ramp_premium', 'Training ramp inefficiency premium', 0.30, 'directFtes × rampHrs × $20 × 30%', '8-week ramp at 30% inefficiency'));
+    addStartup('Go-Live Support Team (4 weeks)', 4 * 40 * 180,
+      suH('startup.golive.fixed', '4-week go-live support team', 28800, '4 wks × 40 hrs × $180/hr (PM + IT + Trainer blend)', 'one-time')); // PM + IT + Trainer
   }
 
   // 10. Contingency — 5% of subtotal
   const subtotal = lines.reduce((s, l) => s + (l.one_time_cost || 0), 0);
-  addStartup('Contingency (5%)', subtotal * 0.05);
+  addStartup('Contingency (5%)', subtotal * 0.05,
+      suH('startup.contingency.pct', 'Contingency on startup subtotal', 0.05, 'subtotal × 5%', 'sum of prior startup lines'));
 
   return lines;
 }
