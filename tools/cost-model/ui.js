@@ -13042,7 +13042,7 @@ function _renderOfpArea(areaKey, entries, opHrs, lc, opts = {}) {
     if (otherBucket.length > 0) {
       const otherFlowHtml = _renderFlowGroupsForEntries(otherBucket, areaKey, opHrs, lc);
       blocks.push(`
-        <div class="ofp-subarea ofp-subarea--other">
+        <div class="ofp-subarea ofp-subarea--other" data-area-key="${escapeAttr(areaKey)}" data-subarea-key="__other__">
           <div class="ofp-subarea__header" style="border-left:3px dashed var(--ies-gray-300);">
             <div class="ofp-subarea__title-row">
               <span class="ofp-subarea__title ofp-subarea__title--other">(other)</span>
@@ -13506,6 +13506,57 @@ function _bindOperationalFlowEvents(container) {
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
       try { showToast(`Reassigned to ${targetArea === 'returnsVas' ? 'Returns/VAS' : (targetArea.charAt(0).toUpperCase() + targetArea.slice(1))}.`, 'success'); } catch (_) {}
+    });
+  });
+
+  // v0.10 — Sub-area drop targets. Card-drag with dragInfo set drops on
+  // a sub-area → line.flowSubArea = subKey AND line.flowLane = areaKey.
+  // Drop on the (other) bucket clears flowSubArea (line falls back to
+  // keyword classification within parent). stopPropagation prevents the
+  // outer .ofp-area drop from also firing.
+  container.querySelectorAll('.ofp-subarea[data-subarea-key]').forEach(subEl => {
+    const targetArea = subEl.dataset.areaKey;
+    const targetSub = subEl.dataset.subareaKey;
+    subEl.addEventListener('dragover', (e) => {
+      if (!dragInfo) return;
+      e.preventDefault();
+      e.stopPropagation();
+      try { e.dataTransfer.dropEffect = 'move'; } catch (_) {}
+      subEl.classList.add('ofp-subarea--dragover');
+    });
+    subEl.addEventListener('dragleave', (e) => {
+      if (e.target === subEl) subEl.classList.remove('ofp-subarea--dragover');
+    });
+    subEl.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      subEl.classList.remove('ofp-subarea--dragover');
+      if (!dragInfo) return;
+      const { kind, idx } = dragInfo;
+      const arr = kind === 'direct' ? (model.laborLines || []) : (model.indirectLaborLines || []);
+      const line = arr[idx];
+      dragInfo = null;
+      if (!line) return;
+      // Always set parent flowLane to the area we dropped into.
+      line.flowLane = targetArea;
+      if (targetSub === '__other__') {
+        // Drop on (other) → clear sub-area override; line falls back
+        // to keyword classification within parent.
+        delete line.flowSubArea;
+        isDirty = true;
+        if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+        renderSection();
+        try { showToast('Cleared sub-area assignment.', 'success'); } catch (_) {}
+      } else {
+        line.flowSubArea = targetSub;
+        const a = (model.ofpAreas || []).find(x => x.key === targetArea);
+        const sa = a ? (a.subAreas || []).find(x => x.key === targetSub) : null;
+        const lbl = sa ? `${a.label} → ${sa.label}` : targetSub;
+        isDirty = true;
+        if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+        renderSection();
+        try { showToast(`Moved to ${lbl}`, 'success'); } catch (_) {}
+      }
     });
   });
 
@@ -15728,6 +15779,29 @@ function _ofpStyles() {
       }
       .ofp-subarea--other {
         background: var(--ies-gray-50);
+      }
+      .ofp-subarea--dragover {
+        outline: 2px dashed var(--ies-blue);
+        outline-offset: -2px;
+        background: rgba(0, 71, 171, 0.08);
+        position: relative;
+      }
+      .ofp-subarea--dragover::after {
+        content: 'Drop to assign';
+        position: absolute;
+        top: 4px; right: 6px;
+        background: var(--ies-blue); color: #fff;
+        font-size: 9px; font-weight: 700;
+        padding: 2px 6px; border-radius: 3px;
+        text-transform: uppercase; letter-spacing: 0.04em;
+        pointer-events: none;
+        box-shadow: 0 2px 6px rgba(0,71,171,0.4);
+        z-index: 10;
+      }
+      .ofp-subarea--other.ofp-subarea--dragover::after {
+        content: 'Drop to clear';
+        background: var(--ies-gray-500);
+        box-shadow: 0 2px 6px rgba(0,0,0,0.2);
       }
 
       /* Manage Areas modal — chevron expand button */
