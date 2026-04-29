@@ -13,6 +13,7 @@ import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260429-wsc-aesthetic';
 import * as calc from './calc.js?v=20260425-s11';
 import * as api from './api.js?v=20260418-sL';
+import * as cmApi from '../cost-model/api.js?v=20260429-vol9';
 
 // ============================================================
 // CHROME v3 — phase + section structure (CM Chrome v3 ripple, step 3 redo)
@@ -722,7 +723,10 @@ function _renderWscConfigHtml() {
 
     <!-- Volumes -->
     <div class="wsc-config-section">
-      <div class="wsc-config-title">Volume Requirements</div>
+      <div class="wsc-config-title" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>Volume Requirements</span>
+        ${facility.parent_cost_model_id ? `<button class="hub-btn hub-btn-ghost hub-btn-sm" data-action="wsc-pull-from-cm" title="Re-pull volume defaults from the linked Cost Model. Aggregates across all channels in the cost model's Volumes &amp; Profile page." style="font-weight:500;">↻ Pull from CM</button>` : ''}
+      </div>
       <div class="wsc-config-row">
         <div class="wsc-config-field"><label title="On-hand pallet positions at peak inventory. If > 0, overrides the units×mix derivation — use this when you have an engineered pallet count from a slotting study or an inventory snapshot.">Pallet Positions <span style="color:var(--ies-gray-500);font-weight:400;">(on-hand)</span></label><input type="number" value="${volumes.totalPallets}" data-vol="totalPallets" /></div>
         <div class="wsc-config-field"><label>Total SKUs</label><input type="number" value="${volumes.totalSKUs}" data-vol="totalSKUs" /></div>
@@ -1127,6 +1131,35 @@ function bindConfigEvents(panel) {
     isDirty = true;
     renderConfigPanel();
     renderContentView();
+  });
+
+  // Phase 4 of volumes-as-nucleus (Layer A, 2026-04-29): Pull-from-CM button.
+  // Re-fetches the linked cost model and re-runs the channel-aware payload
+  // builder, then applies it through handleCmPush so volumes (and zones'
+  // peakUnitsPerDay) refresh in place.
+  panel.querySelector('[data-action="wsc-pull-from-cm"]')?.addEventListener('click', async () => {
+    const cmId = facility.parent_cost_model_id;
+    if (!cmId) {
+      showToast('No linked Cost Model on this scenario.', 'error');
+      return;
+    }
+    try {
+      const row = await cmApi.getModel(cmId);
+      const cmModel = (row && row.model_data) ? row.model_data : row;
+      if (!cmModel) {
+        showToast('Could not load linked Cost Model.', 'error');
+        return;
+      }
+      // backfillChannelsFromLegacy ensures synthetic channels exist on legacy models.
+      try { cmApi.backfillChannelsFromLegacy(cmModel); } catch {}
+      const payload = cmApi.buildWscLaunchPayload(cmModel);
+      handleCmPush(payload);
+      isDirty = true;
+      showToast('Pulled volume defaults from Cost Model.', 'success');
+    } catch (e) {
+      console.warn('[WSC] Pull from CM failed:', e);
+      showToast('Pull from CM failed - see console.', 'error');
+    }
   });
 
   // Toolbar
@@ -2739,8 +2772,22 @@ function handleCmPush(payload) {
   // elevation view, so keep that.
   if (payload.clearHeight) facility.clearHeight = payload.clearHeight;
   if (payload.totalSqft) facility.totalSqft = payload.totalSqft;
+  // Phase 4 of volumes-as-nucleus (Layer A, 2026-04-29): payload now
+  // optionally carries channel-derived volume fields. Each is additive —
+  // we only overwrite the local volumes when the payload value is positive,
+  // so launching from CM with partial data never wipes WSC's defaults.
+  if (Number(payload.totalPallets)     > 0) volumes.totalPallets     = Number(payload.totalPallets);
+  if (Number(payload.avgDailyInbound)  > 0) volumes.avgDailyInbound  = Number(payload.avgDailyInbound);
+  if (Number(payload.avgDailyOutbound) > 0) volumes.avgDailyOutbound = Number(payload.avgDailyOutbound);
+  if (Number(payload.peakMultiplier)   > 0) volumes.peakMultiplier   = Number(payload.peakMultiplier);
+  if (Number(payload.inventoryTurns)   > 0) volumes.inventoryTurns   = Number(payload.inventoryTurns);
+  if (Number(payload.totalSKUs)        > 0) volumes.totalSKUs        = Number(payload.totalSKUs);
+  // peakUnitsPerDay lives on `zones`, not `volumes` — it drives the storage
+  // on-hand inventory sizing which is in the zones state object.
+  if (Number(payload.peakUnitsPerDay)  > 0) zones.peakUnitsPerDay    = Number(payload.peakUnitsPerDay);
   renderConfigPanel();
   renderContentView();
+  _refreshWscKpis();
   console.log('[WSC] Received facility data from Cost Model:', payload);
 }
 

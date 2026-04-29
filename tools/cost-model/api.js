@@ -8,6 +8,12 @@
 
 import { db } from '../../shared/supabase.js?v=20260424-A1';
 import { recordAudit } from '../../shared/audit.js?v=20260423-y7';
+import {
+  getOutboundChannels,
+  getAggregateDerived,
+  getAggregateInbound,
+  getChannelDerived,
+} from './calc.channels.js?v=20260429-vol9';
 
 // ============================================================
 // COST MODEL PROJECTS (CRUD)
@@ -1203,3 +1209,52 @@ export async function seedDefaultRefData() {
 
   return stats;
 }
+
+// ============================================================
+// CM <-> WSC INTEGRATION HELPERS
+// ============================================================
+
+/**
+ * Build the CM->WSC launch payload from a cost-model state. Phase 4 Layer A
+ * of volumes-as-nucleus (2026-04-29). Aggregates across non-reverse channels
+ * via the Phase-1 channel accessors so WSC's volumes panel pre-fills with
+ * cost-model-derived numbers instead of generic defaults.
+ *
+ * Used by:
+ *   - tools/cost-model/ui.js  : 'launch-wsc' button handler, on click.
+ *   - tools/warehouse-sizing/ui.js : 'Pull from CM' button on the Volumes panel.
+ *
+ * Every field is optional + additive on the WSC consumer side - WSC overwrites
+ * its local volumes only when the corresponding payload value is positive.
+ *
+ * @param {Object} model - cost-model state (model.channels[] preferred; legacy volumeLines also supported via the channel accessors' synthesis).
+ * @returns {Object} CmToWscPayload + at timestamp.
+ */
+export function buildWscLaunchPayload(model) {
+  const facility = model?.facility || {};
+  const opDays = Number(facility.opDaysPerYear) || 250;
+  const annualPalletsInbound  = getAggregateInbound(model, 'pallets');
+  const annualPalletsOutbound = getAggregateDerived(model, 'pallets');
+  const avgDailyInbound  = annualPalletsInbound  / Math.max(1, opDays);
+  const avgDailyOutbound = annualPalletsOutbound / Math.max(1, opDays);
+  // A facility is sized to the busiest channel's peak day, not an average.
+  const channels = getOutboundChannels(model);
+  const peakMultiplier = channels.reduce((mx, c) =>
+    Math.max(mx, Number(c.assumptions?.peakSurgeFactor) || 1.5), 1.5);
+  // Sum each channel's peakDay-units (drives storage on-hand sizing in WSC).
+  const peakUnitsPerDay = channels.reduce((sum, c) =>
+    sum + (getChannelDerived(model, c, 'peakDay').value || 0), 0);
+  return {
+    clearHeight: facility.clearHeight || 0,
+    totalSqft:   facility.totalSqft   || 0,
+    totalPallets:    Math.round(annualPalletsInbound),
+    avgDailyInbound: Math.round(avgDailyInbound),
+    avgDailyOutbound: Math.round(avgDailyOutbound),
+    peakMultiplier:  Number(peakMultiplier.toFixed(2)),
+    peakUnitsPerDay: Math.round(peakUnitsPerDay),
+    inventoryTurns:  Number(facility.inventoryTurns) || 12,
+    totalSKUs:       Number(facility.totalSKUs) || 0,
+    at: Date.now(),
+  };
+}
+

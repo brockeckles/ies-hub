@@ -530,6 +530,58 @@ test('Phase 3 — deriveShiftHeadcount: legacy path still works when model is om
   approx(row.volume, 962, 5);
 });
 
+// ────────────────────────────────────────────────────────────────
+// Phase 4 Layer A — buildWscLaunchPayload aggregates across channels.
+// ────────────────────────────────────────────────────────────────
+
+import { buildWscLaunchPayload } from './tools/cost-model/api.js';
+
+test('Phase 4 — buildWscLaunchPayload: aggregates pallets across channels', () => {
+  const m = twoChannelModel();
+  const p = buildWscLaunchPayload(m);
+  // DTC outbound: 1M orders × 10 units/order = 10M units / 480 units/pallet ≈ 20,833.
+  // B2B outbound: 50,000 pallets directly.
+  // inboundOutboundRatio = 1.0 on both channels, so inbound pallets ≈ same as outbound (~70,833).
+  approx(p.totalPallets, 70833, 200);
+  // 250 op days from facility.opDaysPerYear; both inbound/outbound ≈ 70,833 / 250 ≈ 283.
+  approx(p.avgDailyInbound,  283, 5);
+  approx(p.avgDailyOutbound, 283, 5);
+});
+
+test('Phase 4 — buildWscLaunchPayload: peakMultiplier picks max across channels', () => {
+  const m = twoChannelModel();
+  // DTC peakSurgeFactor=2.0; B2B=1.2. Should pick 2.0.
+  const p = buildWscLaunchPayload(m);
+  approx(p.peakMultiplier, 2.0, 0.01);
+});
+
+test('Phase 4 — buildWscLaunchPayload: peakUnitsPerDay sums per-channel peakDay', () => {
+  const m = twoChannelModel();
+  // DTC: 10M units / 250 = 40,000 daily × 2.0 = 80,000.
+  // B2B: 60M units / 250 = 240,000 daily × 1.2 = 288,000.
+  // Total: 368,000.
+  const p = buildWscLaunchPayload(m);
+  approx(p.peakUnitsPerDay, 368000, 1000);
+});
+
+test('Phase 4 — buildWscLaunchPayload: legacy single-channel model also works', () => {
+  // Uses the synthesizeChannelFromLegacy fallback in the channel accessors.
+  const m = {
+    facility: { totalSqft: 150000, clearHeight: 32, opDaysPerYear: 250 },
+    volumeLines: [{ name: 'Outbound Orders', volume: 1000000, uom: 'orders', isOutboundPrimary: true }],
+    orderProfile: { linesPerOrder: 2, unitsPerLine: 5 },
+    seasonalityProfile: { preset: 'flat', monthly_shares: Array.from({length:12},()=>1/12) },
+  };
+  const p = buildWscLaunchPayload(m);
+  // 1M orders × (2×5)=10M units / 480 units/pallet ≈ 20,833 pallets
+  approx(p.totalPallets, 20833, 50);
+  // op-days fallback to facility default of 250 → ~83/day inbound/outbound.
+  approx(p.avgDailyInbound,  83, 5);
+  approx(p.avgDailyOutbound, 83, 5);
+  if (p.clearHeight !== 32) throw new Error('clearHeight not carried through');
+  if (p.totalSqft !== 150000) throw new Error('totalSqft not carried through');
+});
+
 console.log(`\n\n${passed} passed, ${failed} failed`);
 if (failures.length) {
   console.log('\n' + failures.join('\n\n'));

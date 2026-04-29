@@ -12,10 +12,10 @@ import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260424-hyg04';
 import * as calc from './calc.js?v=20260427-s2';
-import * as api from './api.js?v=20260429-vol8';
+import * as api from './api.js?v=20260429-vol9';
 import * as scenarios from './calc.scenarios.js?v=20260429-otfix1';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
-import * as channelCalc from './calc.channels.js?v=20260429-vol8';
+import * as channelCalc from './calc.channels.js?v=20260429-vol9';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
 import * as shiftPlannerCalc from './shift-planner.js?v=20260427-pm3-s2';
 import * as shiftPlannerUi from './shift-planner-ui.js?v=20260428-walkthru1';
@@ -10736,11 +10736,15 @@ function handleAction(action, idx, btn) {
       // before anyone was listening and was dropped. WSC→CM already uses a
       // sessionStorage handoff to survive the mount gap; mirror that here
       // so CM→WSC lands reliably.
-      const payload = {
-        clearHeight: model.facility?.clearHeight || 0,
-        totalSqft:   model.facility?.totalSqft   || 0,
-        at: Date.now(),
-      };
+      //
+      // Phase 4 of volumes-as-nucleus (Layer A, 2026-04-29): payload now
+      // carries channel-derived volume fields so WSC can pre-fill its
+      // volumes panel instead of forcing the user to re-key every number.
+      // Each field aggregates across non-reverse channels using the channel
+      // accessors (Phase 1 + 3 work). All fields fall through to 0 when
+      // the model has no channels — additive on the WSC side, so 0s are
+      // ignored and WSC's defaults stand.
+      const payload = api.buildWscLaunchPayload(model);
       try { sessionStorage.setItem('cm_pending_push', JSON.stringify(payload)); } catch {}
       bus.emit('cm:push-to-wsc', payload); // still fire — WSC may already be mounted
       state.set('nav.tool', 'warehouse-sizing');

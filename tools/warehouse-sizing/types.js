@@ -183,9 +183,23 @@
 
 /**
  * Payload received on bus 'cm:push-to-wsc' event.
+ *
+ * Phase 4 of volumes-as-nucleus (Layer A, 2026-04-29): expanded from 2
+ * fields to 9. CM now seeds WSC's volume inputs from cost-model channels[]
+ * so WSC users don't have to re-key pallets/daily-throughput/peak when
+ * launching from a linked cost model. Every field is optional + additive —
+ * WSC overwrites local volumes only when the payload value is positive.
+ *
  * @typedef {Object} CmToWscPayload
  * @property {number} [clearHeight]
  * @property {number} [totalSqft]
+ * @property {number} [totalPallets]      — annual aggregate inbound pallets across channels
+ * @property {number} [avgDailyInbound]   — inbound pallets per operating day
+ * @property {number} [avgDailyOutbound]  — outbound pallets per operating day
+ * @property {number} [peakMultiplier]    — max peakSurgeFactor across channels (e.g. 1.5×)
+ * @property {number} [peakUnitsPerDay]   — physical units on peak day across channels
+ * @property {number} [inventoryTurns]    — turns/yr (defaults 12 when unset; no channel field for this yet)
+ * @property {number} [totalSKUs]         — best-effort SKU count (carries through if CM had it)
  */
 
 export {};
