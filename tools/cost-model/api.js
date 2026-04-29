@@ -225,7 +225,7 @@ export function backfillChannelsFromLegacy(model) {
     preset: (seasonality && seasonality.preset) || 'flat',
     monthly_shares: (seasonality && Array.isArray(seasonality.monthly_shares) && seasonality.monthly_shares.length === 12)
       ? seasonality.monthly_shares.slice()
-      : Array.from({ length: 12 }, () => 100 / 12),
+      : Array.from({ length: 12 }, () => 1 / 12),
   };
 
   model.channels = [{

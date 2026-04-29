@@ -39,7 +39,7 @@ const DEFAULT_ASSUMPTIONS = {
 
 const DEFAULT_FLAT_SEASONALITY = {
   preset: 'flat',
-  monthly_shares: Array.from({ length: 12 }, () => 100 / 12),
+  monthly_shares: Array.from({ length: 12 }, () => 1 / 12),
 };
 
 // Conversion factors between UOMs, derived from the conversion table.

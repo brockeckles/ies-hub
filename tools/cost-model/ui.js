@@ -12,9 +12,10 @@ import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260424-hyg04';
 import * as calc from './calc.js?v=20260427-s2';
-import * as api from './api.js?v=20260429-vol1';
+import * as api from './api.js?v=20260429-vol2';
 import * as scenarios from './calc.scenarios.js?v=20260429-otfix1';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
+import * as channelCalc from './calc.channels.js?v=20260429-vol1';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
 import * as shiftPlannerCalc from './shift-planner.js?v=20260427-pm3-s2';
 import * as shiftPlannerUi from './shift-planner-ui.js?v=20260428-walkthru1';
@@ -2809,128 +2810,237 @@ function renderSetup() {
 // Brock 2026-04-21 pm: Volumes + Order Profile combined into a single
 // "Volumes & Profile" page (both describe demand — how much + what shape).
 function renderVolumes() {
-  const lines = model.volumeLines || [];
-  const op = model.orderProfile || {};
-  // CM-VOL-1: derive daily-avg + peak-month tiles from primary outbound +
-  // seasonality. Falls back gracefully when no primary set / no seasonality.
-  const primaryLine = lines.find(l => l.isOutboundPrimary) || lines[0] || null;
-  const annualVolume = primaryLine ? Number(primaryLine.volume) || 0 : 0;
-  const opDaysPerYr = (model.facility && Number(model.facility.opDaysPerYear)) || 250;
-  const dailyAvg = annualVolume > 0 && opDaysPerYr > 0 ? annualVolume / opDaysPerYr : 0;
-  const sp = model.seasonalityProfile || {};
-  const monthlyShares = Array.isArray(sp.monthly_shares) && sp.monthly_shares.length === 12
-    ? sp.monthly_shares
-    : SEASONALITY_PRESETS.flat;
-  const peakIdx = monthlyShares.reduce((iMax, v, i, a) => v > a[iMax] ? i : iMax, 0);
-  const peakShare = monthlyShares[peakIdx] || 0;
-  const peakMonthVol = annualVolume * peakShare;
-  const peakMonthLbl = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][peakIdx];
-  const fmtN = (n) => n >= 1e6 ? (n/1e6).toFixed(1) + 'M' : n >= 1e3 ? (n/1e3).toFixed(1) + 'K' : Math.round(n).toLocaleString();
-  const primaryUom = primaryLine?.uom || 'units';
+  // ─── Phase 2.1 (volumes-as-nucleus, 2026-04-29) ───
+  // Single-channel target page: KPI strip + Primary Volume + UOM Conversions
+  // + Structural Assumptions + Seasonality + Derived Volumes table. Reads
+  // model.channels[0] via accessors; writes through dot-path data-field
+  // bindings, then syncLegacyFromChannel() mirrors back to legacy fields so
+  // unmigrated calc consumers keep working until Phase 3.
+  if (!Array.isArray(model.channels) || model.channels.length === 0) {
+    api.backfillChannelsFromLegacy(model);
+  }
+  const ch = model.channels[0];
+  const conv = ch.conversions || {};
+  const ass = ch.assumptions || {};
+  const primary = ch.primary || { value: 0, uom: 'units', activity: 'outbound', source: 'manual' };
+  const opDays = (model.facility && Number(model.facility.opDaysPerYear)) || 250;
+
+  const fmtN = (n) => {
+    n = Number(n) || 0;
+    if (n >= 1e6) return (n / 1e6).toFixed(2).replace(/\.?0+$/, '') + 'M';
+    if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'K';
+    return Math.round(n).toLocaleString();
+  };
+  const fmtFull = (n) => Math.round(Number(n) || 0).toLocaleString();
+
+  // Derived volumes via Phase 1 accessors
+  const dCases   = channelCalc.getChannelDerived(model, ch, 'cases');
+  const dPallets = channelCalc.getChannelDerived(model, ch, 'pallets');
+  const dOrders  = channelCalc.getChannelDerived(model, ch, 'orders');
+  const dLines   = channelCalc.getChannelDerived(model, ch, 'lines');
+  const dDaily   = channelCalc.getChannelDerived(model, ch, 'dailyAvg');
+  const dPeak    = channelCalc.getChannelDerived(model, ch, 'peakDay');
+  const dReturns = channelCalc.getChannelDerived(model, ch, 'returns');
+  const dInbound = channelCalc.getChannelDerived(model, ch, 'inbound');
+  const annualUnits = channelCalc.getChannelPrimaryIn(ch, 'units');
+
+  const derivedRows = [
+    { key: 'cases',    label: 'Annual cases',    formula: `${fmtFull(annualUnits)} ÷ ${conv.unitsPerCase || 12} units/case`, d: dCases },
+    { key: 'pallets',  label: 'Annual pallets',  formula: `${fmtFull(channelCalc.getChannelPrimaryIn(ch, 'cases'))} ÷ ${conv.casesPerPallet || 40} cases/pallet`, d: dPallets },
+    { key: 'orders',   label: 'Annual orders',   formula: `${fmtFull(annualUnits)} ÷ (${conv.linesPerOrder || 2} × ${conv.unitsPerLine || 5}) units/order`, d: dOrders },
+    { key: 'lines',    label: 'Annual lines',    formula: `${fmtFull(channelCalc.getChannelPrimaryIn(ch, 'orders'))} × ${conv.linesPerOrder || 2} lines/order`, d: dLines },
+    { key: 'dailyAvg', label: 'Daily average (units)', formula: `${fmtFull(annualUnits)} ÷ ${opDays} working days`, d: dDaily },
+    { key: 'peakDay',  label: 'Peak day (units)',      formula: `${fmtFull(dDaily.value)} × ${(ass.peakSurgeFactor || 1.5)}× surge`, d: dPeak },
+    { key: 'returns',  label: 'Annual returns (units)', formula: `${fmtFull(annualUnits)} × ${(ass.returnsPercent || 0)}% returns rate`, d: dReturns },
+    { key: 'inbound',  label: 'Annual inbound (units)', formula: `${fmtFull(annualUnits)} × ${(ass.inboundOutboundRatio || 1)} IB:OB ratio`, d: dInbound },
+  ];
+
+  const sourceBadge = primary.source === 'wsc'    ? 'WSC'
+                    : primary.source === 'netopt' ? 'NetOpt'
+                    : 'Manual entry';
+
   return `
     <div class="cm-section-header">
       <div>
         <div class="cm-section-title">Volumes &amp; Profile</div>
-        <div class="cm-section-desc">Annual throughput (how much) and order shape (how it arrives). Both describe demand; together they drive labor hours, storage, and unit-cost metrics.</div>
+        <div class="cm-section-desc">The nucleus of the model. Every downstream cost ties back to the primary volume below × conversion factors × structural assumptions.</div>
       </div>
     </div>
-    ${annualVolume > 0 ? `
+
+    <!-- KPI strip — derived volumes at a glance -->
     <div class="hub-kpi-bar mb-4">
-      <div class="hub-kpi-item" title="Annual primary outbound volume / Operating days per year (${opDaysPerYr})">
+      <div class="hub-kpi-item" title="Annual primary outbound, expressed in units">
+        <div class="hub-kpi-label">Annual Units</div>
+        <div class="hub-kpi-value">${fmtN(annualUnits)}</div>
+      </div>
+      <div class="hub-kpi-item" title="Derived from primary ÷ units-per-case">
+        <div class="hub-kpi-label">Annual Cases</div>
+        <div class="hub-kpi-value">${fmtN(dCases.value)}</div>
+      </div>
+      <div class="hub-kpi-item" title="Derived from cases ÷ cases-per-pallet">
+        <div class="hub-kpi-label">Annual Pallets</div>
+        <div class="hub-kpi-value">${fmtN(dPallets.value)}</div>
+      </div>
+      <div class="hub-kpi-item" title="Derived from primary ÷ units-per-order">
+        <div class="hub-kpi-label">Annual Orders</div>
+        <div class="hub-kpi-value">${fmtN(dOrders.value)}</div>
+      </div>
+      <div class="hub-kpi-item" title="Annual units ÷ working days per year (${opDays})">
         <div class="hub-kpi-label">Daily Avg</div>
-        <div class="hub-kpi-value">${fmtN(dailyAvg)} <span style="font-size:11px;color:var(--ies-gray-500);font-weight:400;">${primaryUom}/day</span></div>
-      </div>
-      <div class="hub-kpi-item" title="Peak month volume — annual volume × the largest monthly share from the Seasonality Profile (${(peakShare*100).toFixed(1)}% in ${peakMonthLbl})">
-        <div class="hub-kpi-label">Peak Month</div>
-        <div class="hub-kpi-value">${fmtN(peakMonthVol)} <span style="font-size:11px;color:var(--ies-gray-500);font-weight:400;">${primaryUom} (${peakMonthLbl})</span></div>
-      </div>
-      <div class="hub-kpi-item" title="Peak / Daily-Avg ratio — uplift used by labor + dock + storage planning">
-        <div class="hub-kpi-label">Peak Ratio</div>
-        <div class="hub-kpi-value">${dailyAvg > 0 ? ((peakMonthVol / 21) / dailyAvg).toFixed(2) + 'x' : '—'}</div>
+        <div class="hub-kpi-value">${fmtN(dDaily.value)}</div>
       </div>
     </div>
-    ` : ''}
 
-    <div class="hub-card mb-4">
-      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;">
-        <div class="text-subtitle" style="margin:0;">Annual Volumes</div>
-        <span class="hub-field__hint">Star the primary outbound line for unit-cost metrics.</span>
+    <!-- Primary Volume — the nucleus card -->
+    <div class="hub-card cm-vol-nucleus mb-4">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;gap:12px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div class="text-subtitle" style="margin:0;">Primary Volume</div>
+          <span class="cm-vol-pill cm-vol-pill--info">nucleus</span>
+        </div>
+        <span class="hub-field__hint" style="flex:1;min-width:240px;text-align:right;">All other UOMs derive from this value &times; the conversion factors below.</span>
       </div>
-      <table class="cm-grid-table">
-        <thead>
-          <tr>
-            <th style="width:30px;"></th>
-            <th>Activity</th>
-            <th style="width:220px;">Annual Volume</th>
-            <th style="width:160px;">UOM</th>
-            <th style="width:80px;"></th>
-          </tr>
-        </thead>
-        <tbody id="cm-volume-rows">
-          ${lines.map((l, i) => `
-            <tr>
-              <td><button class="cm-star-btn${l.isOutboundPrimary ? ' active' : ''}" data-idx="${i}" title="Set as primary outbound">&#9733;</button></td>
-              <td>
-                <div style="display:flex;align-items:center;gap:6px;width:100%;">
-                  <input value="${l.name || ''}" style="flex:1;min-width:0;" data-array="volumeLines" data-idx="${i}" data-field="name" />
-                  ${l.source ? `<span class="cm-vol-src cm-vol-src--${l.source}" title="Volume source: ${l.source === 'wsc' ? 'pulled from Warehouse Sizing' : l.source === 'netopt' ? 'pulled from Network Optimizer' : 'manually entered'}">${l.source === 'wsc' ? 'WSC' : l.source === 'netopt' ? 'NETOPT' : 'MANUAL'}</span>` : ''}
-                </div>
-              </td>
-              <td><input type="number" value="${l.volume || 0}" style="width:100%;" data-array="volumeLines" data-idx="${i}" data-field="volume" data-type="number" /></td>
-              <td>
-                <select style="width:100%;" data-array="volumeLines" data-idx="${i}" data-field="uom">
-                  ${['pallets', 'cases', 'eaches', 'orders', 'lines', 'units'].map(u =>
-                    `<option value="${u}"${l.uom === u ? ' selected' : ''}>${u}</option>`
-                  ).join('')}
-                </select>
-              </td>
-              <td><button class="cm-delete-btn" data-action="delete-volume" data-idx="${i}">Delete</button></td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-      <button class="cm-add-row-btn" data-action="add-volume">+ Add Volume Line</button>
-    </div>
-
-    <div class="hub-card mb-4">
-      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;">
-        <div class="text-subtitle" style="margin:0;">Order Profile</div>
-        <span class="hub-field__hint">Average order characteristics — drives UOM selection on pricing buckets and cost-per-unit math.</span>
-      </div>
-      <div class="cm-narrow-form" style="grid-template-columns:repeat(4, minmax(0, 1fr));">
+      <div class="cm-narrow-form" style="grid-template-columns: 2fr 1fr 1fr;">
         <div class="hub-field">
-          <label class="hub-field__label">Lines Per Order</label>
-          <input class="hub-input" type="number" value="${op.linesPerOrder || ''}" placeholder="e.g., 3.5" step="0.1" data-field="orderProfile.linesPerOrder" data-type="number" />
+          <label class="hub-field__label">Annual volume</label>
+          <input class="hub-input" type="number" value="${primary.value || 0}" min="0" step="1000"
+                 data-field="channels.0.primary.value" data-type="number" />
         </div>
         <div class="hub-field">
-          <label class="hub-field__label">Units Per Line</label>
-          <input class="hub-input" type="number" value="${op.unitsPerLine || ''}" placeholder="e.g., 1.8" step="0.1" data-field="orderProfile.unitsPerLine" data-type="number" />
-        </div>
-        <div class="hub-field">
-          <label class="hub-field__label">Average Order Weight</label>
-          <input class="hub-input" type="number" value="${op.avgOrderWeight || ''}" placeholder="e.g., 12.5" step="0.1" data-field="orderProfile.avgOrderWeight" data-type="number" />
-        </div>
-        <div class="hub-field">
-          <label class="hub-field__label">Weight Unit</label>
-          <select class="hub-input" data-field="orderProfile.weightUnit">
-            <option value="lbs"${op.weightUnit === 'lbs' || !op.weightUnit ? ' selected' : ''}>Pounds (lbs)</option>
-            <option value="kg"${op.weightUnit === 'kg' ? ' selected' : ''}>Kilograms (kg)</option>
+          <label class="hub-field__label">UOM</label>
+          <select class="hub-input" data-field="channels.0.primary.uom">
+            ${['units', 'cases', 'pallets', 'orders', 'lines'].map(u =>
+              `<option value="${u}"${primary.uom === u ? ' selected' : ''}>${u}</option>`
+            ).join('')}
           </select>
         </div>
+        <div class="hub-field">
+          <label class="hub-field__label">Activity</label>
+          <select class="hub-input" data-field="channels.0.primary.activity">
+            ${[['outbound', 'Outbound'], ['inbound', 'Inbound'], ['returns', 'Returns'], ['transfer', 'Transfer']].map(([v, l]) =>
+              `<option value="${v}"${primary.activity === v ? ' selected' : ''}>${l}</option>`
+            ).join('')}
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;color:var(--ies-gray-600);">
+        <span class="cm-vol-pill cm-vol-pill--mute">Source: ${sourceBadge}</span>
+      </div>
+    </div>
+
+    <!-- 2-up: Conversion Factors | Structural Assumptions -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;" class="mb-4 cm-vol-2up">
+      <div class="hub-card">
+        <div class="text-subtitle" style="margin:0 0 12px;">UOM Conversion Factors</div>
+        <div class="cm-vol-row"><span>Units per case</span>
+          <input class="hub-input cm-vol-num" type="number" value="${conv.unitsPerCase || ''}" placeholder="12" step="0.1"
+                 data-field="channels.0.conversions.unitsPerCase" data-type="number" /></div>
+        <div class="cm-vol-row"><span>Cases per pallet</span>
+          <input class="hub-input cm-vol-num" type="number" value="${conv.casesPerPallet || ''}" placeholder="40" step="0.1"
+                 data-field="channels.0.conversions.casesPerPallet" data-type="number" /></div>
+        <div class="cm-vol-row"><span>Lines per order</span>
+          <input class="hub-input cm-vol-num" type="number" value="${conv.linesPerOrder || ''}" placeholder="2" step="0.1"
+                 data-field="channels.0.conversions.linesPerOrder" data-type="number" /></div>
+        <div class="cm-vol-row"><span>Units per line</span>
+          <input class="hub-input cm-vol-num" type="number" value="${conv.unitsPerLine || ''}" placeholder="5" step="0.1"
+                 data-field="channels.0.conversions.unitsPerLine" data-type="number" /></div>
+        <div class="cm-vol-row" style="gap:6px;"><span>Weight per unit</span>
+          <input class="hub-input cm-vol-num" type="number" value="${conv.weightPerUnit || ''}" placeholder="1.0" step="0.01"
+                 data-field="channels.0.conversions.weightPerUnit" data-type="number" style="max-width:90px;" />
+          <select class="hub-input" data-field="channels.0.conversions.weightUnit" style="max-width:80px;">
+            <option value="lbs"${conv.weightUnit === 'lbs' || !conv.weightUnit ? ' selected' : ''}>lbs</option>
+            <option value="kg"${conv.weightUnit === 'kg' ? ' selected' : ''}>kg</option>
+          </select>
+        </div>
+        <div class="cm-vol-formula">1 pallet = ${conv.casesPerPallet || 40} cases &times; ${conv.unitsPerCase || 12} units = ${fmtFull((conv.casesPerPallet || 40) * (conv.unitsPerCase || 12))} units</div>
+      </div>
+
+      <div class="hub-card">
+        <div class="text-subtitle" style="margin:0 0 12px;">Structural Assumptions</div>
+        <div class="cm-vol-row" style="gap:6px;"><span>Returns rate</span>
+          <input class="hub-input cm-vol-num" type="number" value="${ass.returnsPercent || 0}" placeholder="5" step="0.1" min="0" max="100"
+                 data-field="channels.0.assumptions.returnsPercent" data-type="number" style="max-width:80px;" />
+          <span class="cm-vol-row__suffix">%</span></div>
+        <div class="cm-vol-row" style="gap:6px;"><span>Inbound : outbound ratio</span>
+          <input class="hub-input cm-vol-num" type="number" value="${ass.inboundOutboundRatio || 1}" placeholder="1.0" step="0.01" min="0"
+                 data-field="channels.0.assumptions.inboundOutboundRatio" data-type="number" style="max-width:80px;" />
+          <span class="cm-vol-row__suffix">&times;</span></div>
+        <div class="cm-vol-row" style="gap:6px;"><span>Working days / year</span>
+          <input class="hub-input cm-vol-num" type="number" value="${opDays}" placeholder="250" step="1" min="1" max="366"
+                 data-field="facility.opDaysPerYear" data-type="number" style="max-width:80px;" />
+          <span class="cm-vol-row__suffix">days</span></div>
+        <div class="cm-vol-row" style="gap:6px;"><span>Peak surge factor</span>
+          <input class="hub-input cm-vol-num" type="number" value="${ass.peakSurgeFactor || 1.5}" placeholder="1.5" step="0.1" min="1"
+                 data-field="channels.0.assumptions.peakSurgeFactor" data-type="number" style="max-width:80px;" />
+          <span class="cm-vol-row__suffix">&times; daily avg</span></div>
+        <div class="cm-vol-formula">Returns volume = ${fmtFull(annualUnits)} &times; ${(ass.returnsPercent || 0)}% = ${fmtFull(dReturns.value)} units/yr</div>
       </div>
     </div>
 
     ${renderSeasonalityProfileCard()}
 
+    <!-- Derived Volumes table — read-only traceability surface -->
+    <div class="hub-card mb-4">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;gap:12px;flex-wrap:wrap;">
+        <div class="text-subtitle" style="margin:0;">Derived Volumes</div>
+        <span class="hub-field__hint">Read-only — every calc consumer reads from here. Override per-row when RFP figures don’t reconcile.</span>
+      </div>
+      <table class="cm-vol-derived-table">
+        <thead>
+          <tr>
+            <th style="text-align:left;">Figure</th>
+            <th style="text-align:right;width:140px;">Value</th>
+            <th style="width:120px;text-align:right;">Override</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${derivedRows.map(r => `
+            <tr${r.d.isOverride ? ' class="cm-vol-derived-row--override"' : ''}>
+              <td>
+                <div>${r.label}${r.d.isOverride ? ` <span class="cm-vol-pill cm-vol-pill--warn" title="Pinned value vs derived">override ${r.d.variancePct >= 0 ? '+' : ''}${r.d.variancePct.toFixed(1)}%</span>` : ''}</div>
+                <div class="cm-vol-formula">${r.formula}${r.d.isOverride ? ` &middot; pinned ${fmtFull(r.d.value)}` : ''}</div>
+              </td>
+              <td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:600;">${fmtFull(r.d.value)}</td>
+              <td style="text-align:right;">
+                <button class="hub-btn hub-btn-secondary hub-btn-sm" disabled title="Per-row override path lands in Phase 2.2">${r.d.isOverride ? 'edit' : '+ override'}</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Source / integration footer -->
+    <div class="cm-vol-source-bar">
+      <span><span class="cm-vol-pill cm-vol-pill--mute">Source</span> ${sourceBadge}</span>
+      <span style="color:var(--ies-gray-500);">Pull from <a href="#" data-action="cm-launch-wsc" style="color:var(--ies-blue);text-decoration:none;">WSC →</a> or <a href="#" data-action="cm-launch-netopt" style="color:var(--ies-blue);text-decoration:none;">NetOpt →</a></span>
+    </div>
+
     <style>
-      .cm-star-btn { background: none; border: none; cursor: pointer; font-size: 18px; color: var(--ies-gray-300); }
-      .cm-star-btn.active { color: var(--ies-orange); }
-      .cm-star-btn:hover { color: var(--ies-orange); }
-      /* CM-VOL-3 — volume-source chip */
-      .cm-vol-src { display: inline-block; padding: 1px 6px; border-radius: 8px; font-size: 9px; font-weight: 700; letter-spacing: 0.04em; }
-      .cm-vol-src--wsc { background: rgba(32, 201, 151, 0.15); color: #117a55; border: 1px solid rgba(32,201,151,0.3); }
-      .cm-vol-src--netopt { background: rgba(13, 110, 253, 0.12); color: #0c4ea2; border: 1px solid rgba(13,110,253,0.3); }
-      .cm-vol-src--manual { background: rgba(108, 117, 125, 0.12); color: #495057; border: 1px solid rgba(108,117,125,0.3); }
+      .cm-vol-nucleus { border: 1.5px solid var(--ies-blue); }
+      .cm-vol-pill { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+      .cm-vol-pill--info { background: rgba(0,71,171,0.10); color: var(--ies-blue); border: 1px solid rgba(0,71,171,0.25); }
+      .cm-vol-pill--mute { background: var(--ies-gray-100, #f1f3f5); color: var(--ies-gray-600); border: 1px solid var(--ies-gray-200); }
+      .cm-vol-pill--warn { background: rgba(217,119,6,0.10); color: #b25e07; border: 1px solid rgba(217,119,6,0.30); text-transform: none; }
+      .cm-vol-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px dashed var(--ies-gray-200); font-size: 13px; }
+      .cm-vol-row:last-of-type { border-bottom: none; }
+      .cm-vol-row > span:first-child { flex: 1; color: var(--ies-navy); }
+      .cm-vol-row__suffix { color: var(--ies-gray-500); font-size: 12px; }
+      .cm-vol-num { max-width: 100px; text-align: right; font-variant-numeric: tabular-nums; }
+      .cm-vol-formula { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: var(--ies-gray-500); margin-top: 8px; }
+      .cm-vol-derived-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      .cm-vol-derived-table thead th { padding: 8px 0; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--ies-gray-500); border-bottom: 1px solid var(--ies-gray-200); }
+      .cm-vol-derived-table tbody td { padding: 10px 4px; border-bottom: 1px dashed var(--ies-gray-200); vertical-align: top; }
+      .cm-vol-derived-table tbody tr:last-child td { border-bottom: none; }
+      .cm-vol-derived-row--override { background: rgba(217,119,6,0.04); }
+      .cm-vol-source-bar { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--ies-gray-50, #fafbfc); border: 1px solid var(--ies-gray-200); border-radius: 10px; font-size: 12px; }
+
+      /* Stack to 1-up on narrow viewports */
+      @media (max-width: 900px) {
+        .cm-vol-2up { grid-template-columns: 1fr !important; }
+      }
+
+      /* Seasonality card styling reused from prior renderVolumes impl */
       .cm-season-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 4px; margin-top: 12px; }
       .cm-season-cell { display: flex; flex-direction: column; align-items: stretch; gap: 2px; }
       .cm-season-cell label { font-size: 10px; font-weight: 700; color: var(--ies-gray-500); text-align: center; text-transform: uppercase; }
@@ -2943,24 +3053,12 @@ function renderVolumes() {
   `;
 }
 
-/**
- * Seasonality Profile editor card (2026-04-22 PM, Brock).
- *
- * Closes the gap identified during the Phase 2d live demo: the project-level
- * `model.seasonalityProfile` field was read in 5 places but never written by
- * the UI, forcing users into SQL to enable seasonality. This card exposes:
- *   - Preset dropdown (Flat / E-com Holiday / Cold Chain / Apparel 2-Peak)
- *   - 12 per-month % inputs with tabular-nums alignment
- *   - Σ summary + peak/avg ratio + validity badge
- *   - Apply-preset + Reset buttons
- *
- * Data flow: writes to model.seasonalityProfile.monthly_shares[]. That bubbles
- * downstream into MLV (non-flat FTE distribution) → syncSeasonalFlex CTA →
- * Phase 2d auto-gen rental siblings → monthly engine series → Summary Peak
- * Rentals annotation.
- */
 function renderSeasonalityProfileCard() {
-  const sp = model.seasonalityProfile || {};
+  // Phase 2.1 (volumes-as-nucleus): read from channels[0].seasonality.
+  // Falls back to legacy model.seasonalityProfile if channel state missing
+  // (defensive — should not happen post-migration).
+  const ch = (Array.isArray(model.channels) && model.channels[0]) || null;
+  const sp = (ch && ch.seasonality) || model.seasonalityProfile || {};
   const shares = Array.isArray(sp.monthly_shares) && sp.monthly_shares.length === 12
     ? sp.monthly_shares.slice()
     : new Array(12).fill(1 / 12);
@@ -2981,7 +3079,7 @@ function renderSeasonalityProfileCard() {
       <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;">
         <div class="hub-field" style="min-width:220px;">
           <label class="hub-field__label">Preset</label>
-          <select class="hub-input" data-field="seasonalityProfile.preset" data-cm-action="seasonality-preset-change">
+          <select class="hub-input" data-field="channels.0.seasonality.preset" data-cm-action="seasonality-preset-change">
             <option value="flat"${presetName === 'flat' ? ' selected' : ''}>Flat (1/12 per month)</option>
             <option value="ecom_holiday_peak"${presetName === 'ecom_holiday_peak' ? ' selected' : ''}>E-com Holiday Peak (Q4 heavy)</option>
             <option value="cold_chain_food"${presetName === 'cold_chain_food' ? ' selected' : ''}>Cold Chain Food (Thanksgiving/Christmas)</option>
@@ -7093,6 +7191,11 @@ function bindSectionEvents(section, container) {
       } else {
         // Dot-path assignment
         setNestedValue(model, field, val);
+        // Phase 2.1: dual-write — mirror channel mutations back to legacy
+        // fields so unmigrated calc consumers stay correct until Phase 3.
+        if (field.startsWith('channels.')) {
+          syncLegacyFromChannel(model);
+        }
         // M1 (2026-04-21): recompute derived targetMargin whenever a component
         // margin field changes, so every downstream consumer (calc engine,
         // Pricing Schedule, validateModel, What-If) sees the updated total.
@@ -7391,7 +7494,10 @@ function bindSectionEvents(section, container) {
       const name = e.target.value;
       if (name === 'custom') return; // don't auto-apply anything when user picks custom
       const preset = SEASONALITY_PRESETS[name] || SEASONALITY_PRESETS.flat;
-      model.seasonalityProfile = { preset: name, monthly_shares: preset.slice() };
+      // Phase 2.1: write to channel[0].seasonality, sync to legacy.
+      if (!Array.isArray(model.channels) || !model.channels[0]) api.backfillChannelsFromLegacy(model);
+      model.channels[0].seasonality = { preset: name, monthly_shares: preset.slice() };
+      syncLegacyFromChannel(model);
       isDirty = true;
       renderSection();
       showToast(`Applied "${SEASONALITY_PRESET_LABELS[name]}" profile`, 'success');
@@ -7401,14 +7507,18 @@ function bindSectionEvents(section, container) {
     inp.addEventListener('input', (e) => {
       const idx = parseInt(e.target.dataset.idx);
       if (!(idx >= 0 && idx < 12)) return;
-      if (!model.seasonalityProfile || !Array.isArray(model.seasonalityProfile.monthly_shares)) {
-        model.seasonalityProfile = { preset: 'flat', monthly_shares: new Array(12).fill(1/12) };
+      // Phase 2.1: write to channel[0].seasonality, sync to legacy.
+      if (!Array.isArray(model.channels) || !model.channels[0]) api.backfillChannelsFromLegacy(model);
+      const chSeason = model.channels[0].seasonality || (model.channels[0].seasonality = { preset: 'flat', monthly_shares: new Array(12).fill(1/12) });
+      if (!Array.isArray(chSeason.monthly_shares) || chSeason.monthly_shares.length !== 12) {
+        chSeason.monthly_shares = new Array(12).fill(1/12);
       }
       const pct = Math.max(0, Math.min(100, parseFloat(e.target.value) || 0));
-      model.seasonalityProfile.monthly_shares[idx] = pct / 100;
+      chSeason.monthly_shares[idx] = pct / 100;
       // Hand-edit flips preset to 'custom' so future preset changes don't
       // silently clobber the user's tweaks.
-      model.seasonalityProfile.preset = 'custom';
+      chSeason.preset = 'custom';
+      syncLegacyFromChannel(model);
       isDirty = true;
       // Debounced re-render so sum/peak summary updates without losing focus
       clearTimeout(_seasonalityRerenderTimer);
@@ -9639,7 +9749,8 @@ async function exportScenarioToXlsx() {
 }
 
 function shouldRerender(field) {
-  return field.includes('shifts.') || field.includes('facility.') ||
+  return field.startsWith('channels.') || field.startsWith('channelMix.') ||
+         field.includes('shifts.') || field.includes('facility.') ||
          field === 'projectDetails.market' || field === 'projectDetails.contractTerm' ||
          field === 'financial.targetMargin' ||
          // M1 (2026-04-21): G&A / Mgmt Fee edits drive the derived total and
