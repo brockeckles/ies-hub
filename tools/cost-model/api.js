@@ -461,6 +461,69 @@ export async function listScenarios(dealId) {
 }
 
 /**
+ * Fetch all scenarios in the same family as the given project. The "family"
+ * is defined by climbing the parent_scenario_id chain to a root, then
+ * collecting that root + every descendant. All scenarios in a family typically
+ * share the same deal_id (cloneScenario copies it), so we fetch the deal's
+ * scenarios in one round-trip and walk the chain client-side.
+ *
+ * Each row carries the embedded project (id, name, scenario_label, sqft,
+ * margin, updated_at) so the renderer doesn't need a second query.
+ *
+ * @param {number} projectId
+ * @returns {Promise<any[]>}  scenarios in family, ordered baseline-first
+ */
+export async function listScenarioFamilyForProject(projectId) {
+  if (!projectId) return [];
+  // Step 1 — get the current scenario row to learn the deal_id + chain entry point
+  const { data: cur, error: e1 } = await db.from('cost_model_scenarios')
+    .select('id, parent_scenario_id, deal_id')
+    .eq('project_id', projectId).maybeSingle();
+  if (e1 || !cur) return [];
+  // Step 2 — fetch all scenarios for that deal with embedded project info.
+  // Explicit FK hint on cost_model_projects since cost_model_scenarios has 3 FKs.
+  let q;
+  if (cur.deal_id) {
+    q = db.from('cost_model_scenarios')
+      .select('id, parent_scenario_id, is_baseline, scenario_label, status, project_id, cost_model_projects!cost_model_scenarios_project_id_fkey(id, name, scenario_label, facility_sqft, target_margin_pct, updated_at)')
+      .eq('deal_id', cur.deal_id);
+  } else {
+    // Deal-less scenario — fall back to walking by id
+    q = db.from('cost_model_scenarios')
+      .select('id, parent_scenario_id, is_baseline, scenario_label, status, project_id, cost_model_projects!cost_model_scenarios_project_id_fkey(id, name, scenario_label, facility_sqft, target_margin_pct, updated_at)')
+      .or(`id.eq.${cur.id},parent_scenario_id.eq.${cur.id}`);
+  }
+  const { data: all, error: e2 } = await q;
+  if (e2 || !Array.isArray(all)) { console.warn('[CM] listScenarioFamilyForProject failed:', e2); return []; }
+  const byId = new Map(all.map(s => [s.id, s]));
+  // Step 3 — climb parent chain from current to root
+  let root = byId.get(cur.id);
+  let guard = 0;
+  while (root && root.parent_scenario_id && byId.has(root.parent_scenario_id) && guard++ < 10) {
+    root = byId.get(root.parent_scenario_id);
+  }
+  if (!root) return [];
+  // Step 4 — filter to family (scenario whose ancestor chain ends at root)
+  const inFamily = (s) => {
+    let n = s, g = 0;
+    while (n && g++ < 10) {
+      if (n.id === root.id) return true;
+      if (!n.parent_scenario_id) return false;
+      n = byId.get(n.parent_scenario_id);
+    }
+    return false;
+  };
+  const fam = all.filter(inFamily);
+  // Sort: baseline first, then children oldest-first by id
+  fam.sort((a, b) => {
+    if (a.id === root.id) return -1;
+    if (b.id === root.id) return 1;
+    return a.id - b.id;
+  });
+  return fam;
+}
+
+/**
  * Fetch the scenario row for a specific project_id (1:1). Used to show
  * status chip on the tool header.
  * @param {number} projectId

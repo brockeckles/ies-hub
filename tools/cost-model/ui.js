@@ -12,7 +12,7 @@ import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260424-hyg04';
 import * as calc from './calc.js?v=20260427-s2';
-import * as api from './api.js?v=20260429-fam2';
+import * as api from './api.js?v=20260429-lnk1';
 import * as scenarios from './calc.scenarios.js?v=20260429-otfix1';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
@@ -731,6 +731,92 @@ function renderCurrentView() {
   }
 }
 
+/**
+ * Load a saved cost-model project by id, hydrate state, and switch to the
+ * editor view. Extracted from the landing-card click handler so the same
+ * load path can be reused (e.g. "switch scenario" from Linked Designs).
+ *
+ * @param {number} id  cost_model_projects.id
+ */
+async function loadModelByCmId(id) {
+  if (!id) return;
+  try {
+    const full = await api.getModel(id);
+    if (!full) { showCmToast('Model not found — it may have been deleted.', 'error'); return; }
+    if (full.project_data) {
+      model = { ...createEmptyModel(), ...full.project_data, id: full.id };
+      lastSavedAt = full.updated_at || full.created_at || null;
+      lastSavedBy = null;
+      if (!model.projectDetails) model.projectDetails = createEmptyModel().projectDetails;
+      const pdHydrate = model.projectDetails;
+      if (!pdHydrate.environment && full.environment_type) pdHydrate.environment = String(full.environment_type).toLowerCase();
+      if (!pdHydrate.market && full.market_id) pdHydrate.market = full.market_id;
+      if (!pdHydrate.clientName && full.client_name) pdHydrate.clientName = full.client_name;
+      if (!pdHydrate.contractTerm && full.contract_term_years) pdHydrate.contractTerm = full.contract_term_years;
+      if (!pdHydrate.dealId && full.deal_deals_id) pdHydrate.dealId = full.deal_deals_id;
+      if (!pdHydrate.name && full.name) pdHydrate.name = full.name;
+      if (!model.financial) model.financial = createEmptyModel().financial;
+      const fin = model.financial;
+      const gaMissing  = fin.gaMargin == null || Number(fin.gaMargin) === 0;
+      const mgmtMissing = fin.mgmtFeeMargin == null || Number(fin.mgmtFeeMargin) === 0;
+      if (gaMissing) {
+        fin.gaMargin = full.ga_margin_pct != null
+          ? Number(full.ga_margin_pct)
+          : Number((Number(fin.targetMargin || 16) * 0.375).toFixed(2));
+      }
+      if (mgmtMissing) {
+        fin.mgmtFeeMargin = full.mgmt_fee_margin_pct != null
+          ? Number(full.mgmt_fee_margin_pct)
+          : Number((Number(fin.targetMargin || 16) * 0.625).toFixed(2));
+      }
+      fin.targetMargin = Number((Number(fin.gaMargin || 0) + Number(fin.mgmtFeeMargin || 0)).toFixed(2));
+      if (fin.sgaOverlayPct == null && full.sga_overlay_pct != null) fin.sgaOverlayPct = Number(full.sga_overlay_pct);
+      if (fin.sgaAppliesTo == null && full.sga_applies_to != null) fin.sgaAppliesTo = full.sga_applies_to;
+      if (!model.projectDetails.contractType && full.contract_type) model.projectDetails.contractType = full.contract_type;
+      if (model.projectDetails.taxRate == null && full.tax_rate_pct != null) model.projectDetails.taxRate = Number(full.tax_rate_pct);
+      try { window.__cmLoadedModel = model; } catch (_) {}
+    } else {
+      model = reconstructModelFromFlatRow(full);
+      lastSavedAt = full.updated_at || full.created_at || null;
+      lastSavedBy = null;
+      showCmToast('Legacy model loaded from summary fields. Save to upgrade to the new format.', 'info');
+    }
+    (model.laborLines || []).forEach(l => {
+      if ((l.annual_hours || 0) === 0 && (l.volume || 0) > 0 && (l.base_uph || 0) > 0) {
+        recomputeLineHours(l);
+      }
+    });
+    migrateLaborLinesToPositions(model);
+    api.backfillEquipmentLineTypes(model);
+    isDirty = false;
+    userHasInteracted = false;
+    activeSection = 'setup';
+    viewMode = 'editor';
+    currentScenario = null;
+    currentScenarioSnapshots = null;
+    currentRevisions = [];
+    dealScenarios = [];
+    _scenariosLoadedOnce = false;
+    _scenariosLoadInFlight = false;
+    heuristicOverrides = {};
+    currentMarketLaborProfile = null;
+    planningRatioOverrides = {};
+    _planningRatioOpenCategory = null;
+    _selectedLaborIdx = 0;
+    linkedDesigns = null;
+    _linkedDesignsLoadInFlight = false;
+    // Reset scenario family cache so the new project's family loads
+    scenarioFamily = null;
+    _scenarioFamilyLoadInFlight = false;
+    renderCurrentView();
+    refreshSaveStateChip();
+  } catch (err) {
+    console.error('[CM] Load failed:', err);
+    showCmToast('Load failed: ' + err.message, 'error');
+  }
+}
+
+
 function wireLandingEvents() {
   if (!rootEl) return;
   rootEl.querySelector('#cm-create-new')?.addEventListener('click', () => {
@@ -783,119 +869,7 @@ function wireLandingEvents() {
   rootEl.querySelectorAll('[data-cm-card]').forEach(card => {
     card.addEventListener('click', async () => {
       const id = Number(card.getAttribute('data-cm-card'));
-      if (!id) return;
-      try {
-        const full = await api.getModel(id);
-        if (!full) { showCmToast('Model not found — it may have been deleted.', 'error'); return; }
-        // Load logic:
-        //   (a) Modern rows: use project_data jsonb blob directly.
-        //   (b) Legacy rows (no project_data): reconstruct a minimal model from flat columns
-        //       so the user can still open / edit / re-save them. The next save populates
-        //       project_data, upgrading the row in place.
-        if (full.project_data) {
-          model = { ...createEmptyModel(), ...full.project_data, id: full.id };
-          // CM-SAVE-1 — Hydrate save-state from the loaded row's updated_at; clear by-user (set on next save).
-          lastSavedAt = full.updated_at || full.created_at || null;
-          lastSavedBy = null;
-          // Belt-and-braces: hydrate any project_data fields that are missing or
-          // empty from the row's flat columns. This covers rows where project_data
-          // was seeded by a SQL UPDATE that didn't include every field, or where
-          // project_data and the flat columns drifted out of sync. (I-03)
-          if (!model.projectDetails) model.projectDetails = createEmptyModel().projectDetails;
-          const pdHydrate = model.projectDetails;
-          if (!pdHydrate.environment && full.environment_type) {
-            pdHydrate.environment = String(full.environment_type).toLowerCase();
-          }
-          if (!pdHydrate.market && full.market_id) pdHydrate.market = full.market_id;
-          if (!pdHydrate.clientName && full.client_name) pdHydrate.clientName = full.client_name;
-          if (!pdHydrate.contractTerm && full.contract_term_years) pdHydrate.contractTerm = full.contract_term_years;
-          if (!pdHydrate.dealId && full.deal_deals_id) pdHydrate.dealId = full.deal_deals_id;
-          if (!pdHydrate.name && full.name) pdHydrate.name = full.name;
-          // M1 (2026-04-21): project_data saved before the G&A/Mgmt split
-          // wipes gaMargin + mgmtFeeMargin from the empty-model defaults via
-          // shallow spread. Backfill from flat columns (preferred) or by
-          // splitting the existing targetMargin 37.5/62.5.
-          if (!model.financial) model.financial = createEmptyModel().financial;
-          const fin = model.financial;
-          const gaMissing  = fin.gaMargin == null || Number(fin.gaMargin) === 0;
-          const mgmtMissing = fin.mgmtFeeMargin == null || Number(fin.mgmtFeeMargin) === 0;
-          if (gaMissing) {
-            fin.gaMargin = full.ga_margin_pct != null
-              ? Number(full.ga_margin_pct)
-              : Number((Number(fin.targetMargin || 16) * 0.375).toFixed(2));
-          }
-          if (mgmtMissing) {
-            fin.mgmtFeeMargin = full.mgmt_fee_margin_pct != null
-              ? Number(full.mgmt_fee_margin_pct)
-              : Number((Number(fin.targetMargin || 16) * 0.625).toFixed(2));
-          }
-          // Keep targetMargin as the derived sum (authoritative downstream reader).
-          fin.targetMargin = Number((Number(fin.gaMargin || 0) + Number(fin.mgmtFeeMargin || 0)).toFixed(2));
-          // M2 (2026-04-21): pull SG&A overlay + contract type from flat columns
-          if (fin.sgaOverlayPct == null && full.sga_overlay_pct != null) {
-            fin.sgaOverlayPct = Number(full.sga_overlay_pct);
-          }
-          if (fin.sgaAppliesTo == null && full.sga_applies_to != null) {
-            fin.sgaAppliesTo = full.sga_applies_to;
-          }
-          if (!model.projectDetails.contractType && full.contract_type) {
-            model.projectDetails.contractType = full.contract_type;
-          }
-          // M5 (2026-04-21): tax rate from flat column if project_data doesn't carry it
-          if (model.projectDetails.taxRate == null && full.tax_rate_pct != null) {
-            model.projectDetails.taxRate = Number(full.tax_rate_pct);
-          }
-          // Expose loaded model for quick live-debug (read-only, side-effect free)
-          try { window.__cmLoadedModel = model; } catch (_) {}
-        } else {
-          model = reconstructModelFromFlatRow(full);
-          // CM-SAVE-1 — Hydrate save-state from the legacy row.
-          lastSavedAt = full.updated_at || full.created_at || null;
-          lastSavedBy = null;
-          showCmToast('Legacy model loaded from summary fields. Save to upgrade to the new format.', 'info');
-        }
-        // Legacy models may have annual_hours=0 on lines with valid volume+uph; repair them.
-        (model.laborLines || []).forEach(l => {
-          if ((l.annual_hours || 0) === 0 && (l.volume || 0) > 0 && (l.base_uph || 0) > 0) {
-            recomputeLineHours(l);
-          }
-        });
-        // Brock 2026-04-20 — auto-migrate to position catalog. Clusters
-        // existing labor lines by (activity, rate, employment_type) into
-        // distinct positions and stamps position_id on each line.
-        migrateLaborLinesToPositions(model);
-        // Brock 2026-04-22 — Phase 2a: back-fill EquipmentLine.line_type from
-        // legacy `category` field for projects saved before the peak-capacity
-        // rewrite. Idempotent — only touches lines missing the new field.
-        api.backfillEquipmentLineTypes(model);
-        isDirty = false;
-        userHasInteracted = false;
-        activeSection = 'setup';
-        viewMode = 'editor';
-        // Reset Phase 3/4 module state for the newly loaded project
-        currentScenario = null;
-        currentScenarioSnapshots = null;
-        currentRevisions = [];
-        dealScenarios = [];
-        _scenariosLoadedOnce = false;
-        _scenariosLoadInFlight = false;
-        heuristicOverrides = {};
-        currentMarketLaborProfile = null;
-        // Phase 6 — planning ratio overrides are per-project
-        planningRatioOverrides = {};
-        _planningRatioOpenCategory = null;
-        // v2 UI — reset selection on load
-        _selectedLaborIdx = 0;
-        // Reset Linked Designs cache so the next view fetches fresh for the new model
-        linkedDesigns = null;
-        _linkedDesignsLoadInFlight = false;
-        renderCurrentView();
-        // CM-SAVE-1 — Chip is rendered by renderCurrentView; refresh to push the loaded timestamp.
-        refreshSaveStateChip();
-      } catch (err) {
-        console.error('[CM] Load failed:', err);
-        showCmToast('Load failed: ' + err.message, 'error');
-      }
+      await loadModelByCmId(id);
     });
   });
 
@@ -9085,6 +9059,25 @@ function renderWhatIfStudio() {
 // Module-local cache for this render; async load kicks off on section enter.
 let linkedDesigns = null; // { wsc:[], cog:[], netopt:[], fleet:[] }
 let _linkedDesignsLoadInFlight = false;
+// Scenario family for the currently-loaded project — list of cost_model_scenarios
+// rows in the same parent chain (root + descendants) with embedded project info.
+// Loaded lazily by renderLinkedDesigns; reset by loadModelByCmId on project switch.
+let scenarioFamily = null;
+let _scenarioFamilyLoadInFlight = false;
+async function ensureScenarioFamilyLoaded() {
+  if (!model?.id) { scenarioFamily = []; return; }
+  if (scenarioFamily !== null) return;
+  if (_scenarioFamilyLoadInFlight) return;
+  _scenarioFamilyLoadInFlight = true;
+  try {
+    scenarioFamily = await api.listScenarioFamilyForProject(model.id);
+  } catch (err) {
+    console.warn('[CM] scenario-family load failed:', err);
+    scenarioFamily = [];
+  } finally {
+    _scenarioFamilyLoadInFlight = false;
+  }
+}
 
 // Local escape helper (CM ui.js has no shared escapeHtml import)
 function _esc(s) {
@@ -9158,6 +9151,11 @@ function renderLinkedDesigns() {
         </div>
       </div>`;
   }
+  // Trigger family load once linkedDesigns is ready — separate lazy load so
+  // a slow scenarios query doesn't block the main panel.
+  if (scenarioFamily === null) {
+    ensureScenarioFamilyLoaded().then(() => renderSection());
+  }
   const groups = [
     { key: 'wsc',    label: 'Warehouse Sizing',   icon: '🏭', route: 'designtools/warehouse-sizing' },
     { key: 'cog',    label: 'Center of Gravity',  icon: '📍', route: 'designtools/center-of-gravity' },
@@ -9166,17 +9164,96 @@ function renderLinkedDesigns() {
   ];
   const totalLinked = groups.reduce((s, g) => s + (linkedDesigns[g.key] || []).length, 0);
 
+  // Scenario family rollup: baseline + sibling scenarios from cost_model_scenarios.
+  // Empty when the project has no scenario record (legacy duplicate) or when only
+  // one scenario exists in the family (no siblings to switch to).
+  const fam = Array.isArray(scenarioFamily) ? scenarioFamily : [];
+  const familyHtml = (fam.length >= 2) ? (() => {
+    const formatSqft = (n) => {
+      const v = Number(n);
+      if (!Number.isFinite(v) || v <= 0) return null;
+      return v >= 1000 ? `${(v/1000).toLocaleString(undefined,{maximumFractionDigits:0})}K SF` : `${v.toLocaleString()} SF`;
+    };
+    const rows = fam.map(s => {
+      const proj = s.cost_model_projects || {};
+      const isCurrent = proj.id === model.id;
+      const isBaseline = !!s.is_baseline;
+      const label = (s.scenario_label || proj.scenario_label || (isBaseline ? 'Baseline' : 'Scenario')).toString();
+      const status = s.status || 'draft';
+      const statusBg = status === 'approved' ? 'rgba(22,163,74,0.10)'
+                      : status === 'rejected' ? 'rgba(220,38,38,0.10)'
+                      : 'var(--ies-gray-100)';
+      const statusFg = status === 'approved' ? '#16a34a'
+                      : status === 'rejected' ? '#dc2626'
+                      : 'var(--ies-gray-500)';
+      const marginRaw = Number(proj.target_margin_pct);
+      const marginDisp = Number.isFinite(marginRaw) && marginRaw > 0 ? `${marginRaw.toFixed(1)}%` : '—';
+      const sqftDisp = formatSqft(proj.facility_sqft);
+      const updated = proj.updated_at ? new Date(proj.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
+      const ribbon = isBaseline
+        ? '<span style="font-size:10px;font-weight:700;color:var(--ies-blue);padding:2px 6px;border-radius:8px;background:rgba(0,71,171,0.12);letter-spacing:0.02em;">★ BASELINE</span>'
+        : '<span style="font-size:10px;font-weight:700;color:var(--ies-gray-500);padding:2px 6px;border-radius:8px;background:var(--ies-gray-100);letter-spacing:0.02em;">CHILD</span>';
+      const youBadge = isCurrent
+        ? '<span style="font-size:10px;font-weight:700;color:#ea580c;padding:2px 6px;border-radius:8px;background:rgba(234,88,12,0.10);letter-spacing:0.02em;margin-left:6px;">YOU&apos;RE HERE</span>'
+        : '';
+      const action = isCurrent
+        ? '<span style="font-size:11px;color:var(--ies-gray-400);">— current —</span>'
+        : `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="switch-scenario" data-target-id="${proj.id}" title="Open this scenario" style="font-size:11px;padding:3px 10px;">Open →</button>`;
+      const rowStyle = isCurrent
+        ? 'background:rgba(234,88,12,0.04);'
+        : '';
+      return `
+        <tr style="${rowStyle}">
+          <td>${ribbon}${youBadge}</td>
+          <td style="font-weight:600;">${_esc(label)}</td>
+          <td><span style="font-size:10px;padding:2px 8px;border-radius:8px;background:${statusBg};color:${statusFg};font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">${status}</span></td>
+          <td class="cm-num">${marginDisp}</td>
+          <td class="cm-num">${sqftDisp || '—'}</td>
+          <td style="color:var(--ies-gray-500);font-size:11px;">${updated}</td>
+          <td style="text-align:right;">${action}</td>
+        </tr>
+      `;
+    }).join('');
+    return `
+      <div class="hub-card mb-4" style="border-left:3px solid var(--ies-blue);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <div>
+            <div class="text-subtitle" style="margin:0;">Scenarios in this Family</div>
+            <div style="font-size:11px;color:var(--ies-gray-500);">Baseline + child scenarios on the same deal. Switch between them to compare assumptions side-by-side.</div>
+          </div>
+          <span class="hub-badge hub-badge-info">${fam.length} scenarios</span>
+        </div>
+        <table class="cm-grid-table" style="font-size:13px;">
+          <thead>
+            <tr>
+              <th style="width:130px;">Type</th>
+              <th>Scenario</th>
+              <th style="width:90px;">Status</th>
+              <th class="cm-num" style="width:80px;">Margin</th>
+              <th class="cm-num" style="width:80px;">Facility</th>
+              <th style="width:90px;">Updated</th>
+              <th style="width:100px;text-align:right;">Action</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
+  })() : '';
+
   return `
     <div class="cm-section-header">
       <div>
         <div class="cm-section-title">Linked Designs</div>
-        <div class="cm-section-desc">Design scenarios pointing back at this Cost Model via <code>parent_cost_model_id</code>. Click a row to open the scenario in its tool.</div>
+        <div class="cm-section-desc">Sister scenarios on this deal (above) and design-tool scenarios pointing back at this Cost Model (below). Click any row to switch context.</div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;">
         <span class="hub-badge hub-badge-info">${totalLinked} linked</span>
         <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="linked-refresh" title="Re-query linked scenarios">Refresh</button>
       </div>
     </div>
+
+    ${familyHtml}
 
     ${totalLinked === 0 ? `
       <div class="hub-card" style="padding:24px;text-align:center;color:var(--ies-gray-500);font-size:13px;">
@@ -9670,10 +9747,23 @@ function writeOverrideAuditEvent(ev) {
 function handleAction(action, idx, btn) {
   switch (action) {
     case 'linked-refresh':
-      // Force re-query of parent_cost_model_id across design-tool tables.
+      // Force re-query of parent_cost_model_id across design-tool tables + scenario family.
       linkedDesigns = null;
+      scenarioFamily = null;
       ensureLinkedDesignsLoaded().then(() => renderSection());
       return;
+    case 'switch-scenario': {
+      // Open the targeted sister scenario via the same load path the landing uses.
+      const targetId = Number(btn?.dataset?.targetId);
+      if (!targetId || targetId === model.id) return;
+      // Warn if there are unsaved changes — they\'ll be discarded by the load.
+      if (isDirty) {
+        const ok = window.confirm('You have unsaved changes. Switch scenarios anyway? Unsaved edits will be lost.');
+        if (!ok) return;
+      }
+      loadModelByCmId(targetId);
+      return;
+    }
     case 'add-volume':
       model.volumeLines.push({ name: '', volume: 0, uom: 'each', isOutboundPrimary: false });
       break;
