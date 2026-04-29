@@ -151,6 +151,40 @@ function render() {
     <style>
       .me-news-link { color: inherit; text-decoration: none; transition: color 0.12s; }
       .me-news-link:hover { color: var(--ies-blue); }
+      /* KPI ?-icon tooltips — restore hover behavior (lost in 2026-04-29 redesign) */
+      .cc-kpi-tip:hover .cc-kpi-tiptext { display: block !important; }
+      /* Detail panel tiles — fit one row in the narrow rail */
+      .me-detail-slide .hub-kpi-tile__value { font-size: 16px; }
+      .me-detail-slide .hub-kpi-tile { padding: 8px 10px; }
+      /* Override 2-col/3-col tile grids in the detail panel: keep 2-col but tighter */
+      .me-detail-slide [style*="grid-template-columns"] { gap: 8px !important; }
+      /* Detail panel tab bar — single row, tighter padding so all 5 fit */
+      .me-detail-slide .hub-tab-bar {
+        margin-bottom: 16px !important;
+        gap: 0 !important;
+        flex-wrap: nowrap !important;
+        overflow-x: auto;
+      }
+      .me-detail-slide .hub-tab {
+        padding: 6px 10px !important;
+        font-size: 11px !important;
+        flex: 0 0 auto;
+      }
+      .me-detail-slide #market-detail-tabs { padding-top: 4px; }
+      .me-detail-slide #market-detail-tabs > div { margin-top: 6px; }
+      /* Force 3-column tile grids inside the panel down to 2 cols (rail is narrow) */
+      .me-detail-slide [style*="grid-template-columns: repeat(3"] {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+      }
+      /* Click affordance on rail rows: chevron + stronger hover */
+      .me-row { position: relative; }
+      .me-row::after {
+        content: '\\203A'; position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+        font-size: 18px; color: var(--ies-gray-300); font-weight: 400;
+        transition: transform 0.12s, color 0.12s;
+      }
+      .me-row:hover::after { color: var(--ies-orange); transform: translateY(-50%) translateX(2px); }
+      .me-row__metric { padding-right: 16px; }
       .me-chip {
         font-size: 11px; font-weight: 700;
         padding: 5px 12px; border-radius: 999px;
@@ -220,8 +254,8 @@ function render() {
         ${_renderChipBar()}
       </div>
 
-      <!-- Two-pane main: persistent map (left, ~65%) + rail (right, ~35%) -->
-      <div style="display: grid; grid-template-columns: minmax(0, 1.85fr) minmax(280px, 1fr); gap: 16px; height: 620px;">
+      <!-- Two-pane main: persistent map (left, ~62%) + rail (right, ~38%) -->
+      <div style="display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(360px, 1fr); gap: 16px; height: 580px;">
         <!-- Map pane -->
         <div class="hub-card" style="padding: var(--sp-3); display: flex; flex-direction: column; min-height: 0;">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom: var(--sp-2);">
@@ -349,6 +383,16 @@ function _metricForRow(m) {
   }
 }
 
+function _sortHeading() {
+  switch (colorMode) {
+    case 'labor':      return 'Top markets by labor score';
+    case 'realestate': return 'Lowest warehouse rent';
+    case 'freight':    return 'Lowest freight cost';
+    case 'gxo':        return 'GXO presence — active first';
+    default:           return 'All markets — alphabetical';
+  }
+}
+
 function _renderRailList(filtered) {
   const sorted = _sortFilteredByMode(filtered);
   const styles = (typeof window !== 'undefined' && document) ? getComputedStyle(document.documentElement) : null;
@@ -370,7 +414,7 @@ function _renderRailList(filtered) {
   }).join('');
   return `
     <div style="padding: 10px 12px 8px; border-bottom: 1px solid var(--ies-gray-200); display: flex; align-items: center; justify-content: space-between;">
-      <div style="font-size: 13px; font-weight: 700; color: var(--ies-navy);">Ranked by ${_COLOR_MODES.find(x => x.key === colorMode)?.label || ''}</div>
+      <div style="font-size: 13px; font-weight: 700; color: var(--ies-navy);">${_sortHeading()}</div>
       <span class="text-caption text-muted">${sorted.length} markets</span>
     </div>
     ${rows}
@@ -448,6 +492,40 @@ function renderOverview(filtered) {
     <style>
       .me-news-link { color: inherit; text-decoration: none; transition: color 0.12s; }
       .me-news-link:hover { color: var(--ies-blue); }
+      /* KPI ?-icon tooltips — restore hover behavior (lost in 2026-04-29 redesign) */
+      .cc-kpi-tip:hover .cc-kpi-tiptext { display: block !important; }
+      /* Detail panel tiles — fit one row in the narrow rail */
+      .me-detail-slide .hub-kpi-tile__value { font-size: 16px; }
+      .me-detail-slide .hub-kpi-tile { padding: 8px 10px; }
+      /* Override 2-col/3-col tile grids in the detail panel: keep 2-col but tighter */
+      .me-detail-slide [style*="grid-template-columns"] { gap: 8px !important; }
+      /* Detail panel tab bar — single row, tighter padding so all 5 fit */
+      .me-detail-slide .hub-tab-bar {
+        margin-bottom: 16px !important;
+        gap: 0 !important;
+        flex-wrap: nowrap !important;
+        overflow-x: auto;
+      }
+      .me-detail-slide .hub-tab {
+        padding: 6px 10px !important;
+        font-size: 11px !important;
+        flex: 0 0 auto;
+      }
+      .me-detail-slide #market-detail-tabs { padding-top: 4px; }
+      .me-detail-slide #market-detail-tabs > div { margin-top: 6px; }
+      /* Force 3-column tile grids inside the panel down to 2 cols (rail is narrow) */
+      .me-detail-slide [style*="grid-template-columns: repeat(3"] {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+      }
+      /* Click affordance on rail rows: chevron + stronger hover */
+      .me-row { position: relative; }
+      .me-row::after {
+        content: '\\203A'; position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+        font-size: 18px; color: var(--ies-gray-300); font-weight: 400;
+        transition: transform 0.12s, color 0.12s;
+      }
+      .me-row:hover::after { color: var(--ies-orange); transform: translateY(-50%) translateX(2px); }
+      .me-row__metric { padding-right: 16px; }
     </style>
     <div class="hub-card" style="padding: var(--sp-4); position: relative;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom: var(--sp-3);">
@@ -640,7 +718,7 @@ function renderDataLibrary(filtered) {
 
 function renderDetailPanel(m) {
   return `
-    <div class="hub-card" style="margin-top: var(--sp-4); padding: var(--sp-5); border-left: 4px solid var(--ies-orange);">
+    <div class="hub-card" style="padding: var(--sp-4); border: none; box-shadow: none; border-radius: 0;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--sp-4);">
         <div>
           <h2 class="text-subtitle" style="margin: 0;">${m.name}</h2>
