@@ -101,10 +101,10 @@ function render() {
           `).join('')}
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;">
-        ${kpi('Tables', stats.totalTables, '#7c3aed')}
-        ${kpi('Records', stats.totalRecords, '#16a34a')}
-        ${kpi('Active Rules', stats.activeEscalations, '#d97706')}
+      <div class="hub-kpi-strip" style="grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:20px;">
+        ${kpi('Tables', stats.totalTables)}
+        ${kpi('Records', stats.totalRecords)}
+        ${kpi('Active Rules', stats.activeEscalations, stats.activeEscalations > 0 ? 'var(--ies-orange)' : null)}
       </div>
       <div id="admin-content"></div>
     </div>
@@ -316,11 +316,12 @@ function renderActivity(el) {
     ? '<div class="hub-card" style="padding:12px;background:#fef3c7;color:#92400e;margin-bottom:12px;">Loading activity…</div>'
     : '';
 
+  // Activity-tab tile reuses hub-kpi-tile + hub-kpi-tile__hint for the sub-line.
   const kpi = (label, value, sub, color) => `
-    <div class="hub-card" style="padding:12px 16px;">
-      <div style="font-size:11px;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:0.04em;font-weight:700;">${label}</div>
-      <div style="font-size:22px;font-weight:800;color:${color || '#111827'};margin-top:2px;">${value}</div>
-      ${sub ? `<div style="font-size:11px;color:var(--ies-gray-400);margin-top:2px;">${sub}</div>` : ''}
+    <div class="hub-kpi-tile">
+      <div class="hub-kpi-tile__label">${label}</div>
+      <div class="hub-kpi-tile__value"${color ? ` style="color:${color};"` : ''}>${value}</div>
+      ${sub ? `<div class="hub-kpi-tile__hint">${sub}</div>` : ''}
     </div>
   `;
 
@@ -335,7 +336,7 @@ function renderActivity(el) {
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
       <span style="font-size:13px;color:var(--ies-gray-400);">
         Window:
-        <select data-activity-window style="font-size:12px;margin-left:6px;">
+        <select data-activity-window class="hub-select" style="width:auto;height:auto;font-size:12px;padding:4px 26px 4px 10px;margin-left:6px;">
           ${[1, 7, 14, 30].map(d => `<option value="${d}" ${_activityWindowDays === d ? 'selected' : ''}>Last ${d}d</option>`).join('')}
         </select>
       </span>
@@ -347,11 +348,11 @@ function renderActivity(el) {
       <button class="hub-btn hub-btn-sm hub-btn-secondary" data-activity-refresh title="Re-fetch events from Supabase">🔄 Refresh</button>
     </div>
 
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;">
-      ${kpi('Active pilots', activeTotal, `in last ${_activityWindowDays}d`, '#2563eb')}
-      ${kpi('Online now', onlineNow, 'seen in last 15 min', onlineNow ? '#16a34a' : '#6b7280')}
-      ${kpi('Page views', totalPV, `across pilots, ${_activityWindowDays}d`, '#7c3aed')}
-      ${kpi('Median session', medSession, 'duration across pilots', '#d97706')}
+    <div class="hub-kpi-strip" style="margin-bottom:16px;">
+      ${kpi('Active pilots', activeTotal, `in last ${_activityWindowDays}d`)}
+      ${kpi('Online now', onlineNow, 'seen in last 15 min', onlineNow ? 'var(--ies-green)' : null)}
+      ${kpi('Page views', totalPV, `across pilots, ${_activityWindowDays}d`)}
+      ${kpi('Median session', medSession, 'duration across pilots')}
     </div>
 
     <div class="hub-card" style="padding:16px;overflow-x:auto;">
@@ -385,7 +386,7 @@ function renderActivity(el) {
               <td style="padding:8px;">
                 ${r.role && r.role !== '—' ? `<span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;color:#fff;background:${roleColor};">${escapeHtml(r.role)}</span>` : '<span style="color:var(--ies-gray-400);font-size:12px;">—</span>'}
               </td>
-              <td style="padding:8px;font-size:12px;${noActivity ? 'color:#dc2626;' : 'color:var(--ies-gray-400);'}">
+              <td style="padding:8px;font-size:12px;${noActivity ? 'color:var(--ies-red);' : 'color:var(--ies-gray-400);'}">
                 ${noActivity ? 'never' : calc.relativeAgo(r.lastLogin, nowMs)}
               </td>
               <td style="padding:8px;text-align:right;font-variant-numeric:tabular-nums;">${r.sessionsInWindow || 0}</td>
@@ -701,21 +702,21 @@ function renderAudit(el) {
     <div class="hub-card" style="padding:12px;margin-bottom:12px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;">
         Entity:
-        <select data-audit-filter="entityTable" style="font-size:12px;">
+        <select data-audit-filter="entityTable" class="hub-select" style="width:auto;height:auto;font-size:12px;padding:4px 26px 4px 10px;">
           <option value="">All</option>
           ${_auditFacets.tables.map(t => `<option value="${t}" ${_auditFilter.entityTable === t ? 'selected' : ''}>${t}</option>`).join('')}
         </select>
       </label>
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;">
         Action:
-        <select data-audit-filter="action" style="font-size:12px;">
+        <select data-audit-filter="action" class="hub-select" style="width:auto;height:auto;font-size:12px;padding:4px 26px 4px 10px;">
           <option value="">All</option>
           ${_auditFacets.actions.map(a => `<option value="${a}" ${_auditFilter.action === a ? 'selected' : ''}>${a}</option>`).join('')}
         </select>
       </label>
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;">
         Limit:
-        <select data-audit-filter="limit" style="font-size:12px;">
+        <select data-audit-filter="limit" class="hub-select" style="width:auto;height:auto;font-size:12px;padding:4px 26px 4px 10px;">
           <option value="100" ${_auditFilter.limit === 100 ? 'selected' : ''}>100</option>
           <option value="200" ${_auditFilter.limit === 200 ? 'selected' : ''}>200</option>
           <option value="500" ${_auditFilter.limit === 500 ? 'selected' : ''}>500</option>
@@ -786,10 +787,13 @@ function renderAudit(el) {
 
 // ===== HELPERS =====
 function kpi(label, value, color) {
+  // 2026-04-29 polish — emit hub-kpi-tile so the strip aligns with the rest
+  // of the hub. Optional color preserved for threshold semantics.
+  const valueStyle = color ? ` style="color:${color};"` : '';
   return `
-    <div class="hub-card" style="padding:12px;text-align:center;">
-      <div style="font-size:20px;font-weight:800;color:${color};">${value}</div>
-      <div style="font-size:11px;color:var(--ies-gray-400);font-weight:600;">${label}</div>
+    <div class="hub-kpi-tile">
+      <div class="hub-kpi-tile__label">${label}</div>
+      <div class="hub-kpi-tile__value"${valueStyle}>${value}</div>
     </div>
   `;
 }
