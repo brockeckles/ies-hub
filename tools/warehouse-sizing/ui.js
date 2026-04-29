@@ -13,7 +13,7 @@ import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260429-wsc-aesthetic';
 import * as calc from './calc.js?v=20260425-s11';
 import * as api from './api.js?v=20260418-sL';
-import * as cmApi from '../cost-model/api.js?v=20260429-vol10';
+import * as cmApi from '../cost-model/api.js?v=20260429-vol11';
 
 // ============================================================
 // CHROME v3 — phase + section structure (CM Chrome v3 ripple, step 3 redo)
@@ -756,6 +756,49 @@ function _renderWscConfigHtml() {
         <label>Carton on Shelving: <span id="wsc-alloc-cs" style="font-weight:700;">${(zones.storageAllocation?.cartonOnShelving || 10)}%</span></label>
         <input type="range" min="0" max="100" value="${zones.storageAllocation?.cartonOnShelving || 10}" data-alloc="cartonOnShelving" style="width:100%;" />
       </div>
+      ${(() => {
+        // Phase 4 Layer B (volumes-as-nucleus, 2026-04-29): per-channel
+        // storageAllocation overrides. Each channel inherits the facility-
+        // level allocation above unless explicitly overridden. Inputs
+        // accept whole-number percentages; render only when channelMixes
+        // is populated (i.e. WSC was launched / pulled from a CM with
+        // channels).
+        const chans = Array.isArray(zones.channelMixes) ? zones.channelMixes : [];
+        if (chans.length === 0) return '';
+        const facAlloc = zones.storageAllocation || { fullPallet: 60, cartonOnPallet: 30, cartonOnShelving: 10 };
+        const rows = chans.map(c => {
+          const a = (c.storageAllocation && typeof c.storageAllocation === 'object')
+            ? c.storageAllocation
+            : null;
+          const fp = a ? a.fullPallet : facAlloc.fullPallet;
+          const cp = a ? a.cartonOnPallet : facAlloc.cartonOnPallet;
+          const cs = a ? a.cartonOnShelving : facAlloc.cartonOnShelving;
+          const total = (Number(fp) || 0) + (Number(cp) || 0) + (Number(cs) || 0);
+          const totalOk = total === 100;
+          const isOverridden = !!a;
+          return `
+            <div class="wsc-channel-alloc-row" data-channel-key="${escapeAttr(c.channelKey)}" style="display:flex;flex-direction:column;gap:4px;padding:8px 0;border-top:1px solid var(--ies-gray-100);">
+              <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:600;">
+                <span>${escapeHtml(c.name || c.channelKey)} ${isOverridden ? '<span style="color:var(--ies-blue);font-weight:700;" title="Channel override active">●</span>' : '<span style="color:var(--ies-gray-400);" title="Inheriting facility allocation">○</span>'}</span>
+                <span style="color:${totalOk ? 'var(--ies-gray-500)' : 'var(--ies-orange)'};">${total}%${totalOk ? '' : ' ⚠'}</span>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr) auto;gap:4px;">
+                <input type="number" min="0" max="100" value="${fp}" data-channel-alloc="fullPallet" data-channel-key="${escapeAttr(c.channelKey)}" title="Full Pallet %" style="font-size:11px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;" />
+                <input type="number" min="0" max="100" value="${cp}" data-channel-alloc="cartonOnPallet" data-channel-key="${escapeAttr(c.channelKey)}" title="Carton on Pallet %" style="font-size:11px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;" />
+                <input type="number" min="0" max="100" value="${cs}" data-channel-alloc="cartonOnShelving" data-channel-key="${escapeAttr(c.channelKey)}" title="Carton Shelving %" style="font-size:11px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;" />
+                ${isOverridden ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-channel-alloc-reset="${escapeAttr(c.channelKey)}" title="Reset this channel to inherit the facility-level allocation" style="font-size:10px;padding:2px 6px;">↻</button>` : '<span></span>'}
+              </div>
+            </div>`;
+        }).join('');
+        return `
+          <details class="wsc-channel-allocs" style="margin-top:14px;border-top:1px solid var(--ies-gray-200);padding-top:8px;" open>
+            <summary style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);cursor:pointer;">Per-channel allocation overrides</summary>
+            <div style="display:flex;flex-direction:column;gap:0;margin-top:6px;font-size:11px;color:var(--ies-gray-600);">
+              <div style="font-size:10px;color:var(--ies-gray-400);font-weight:500;text-transform:none;letter-spacing:0;line-height:1.4;padding-bottom:4px;">FP / CP / CS — must sum to 100. ● = overridden, ○ = inheriting facility allocation.</div>
+              ${rows}
+            </div>
+          </details>`;
+      })()}
     </div>
 
     <!-- Product Dimensions -->
@@ -960,8 +1003,11 @@ function bindConfigEvents(panel) {
     });
   });
 
-  // Storage allocation sliders
-  panel.querySelectorAll('[data-alloc]').forEach(input => {
+  // Storage allocation sliders — facility-level (legacy single mix).
+  // Use a strict CSS selector to avoid accidentally matching the per-channel
+  // [data-channel-alloc] inputs added in Phase 4 Layer B (those have a
+  // different attribute name).
+  panel.querySelectorAll('input[data-alloc]').forEach(input => {
     input.addEventListener('change', e => {
       const field = /** @type {HTMLInputElement} */ (e.target).dataset.alloc;
       const val = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
@@ -978,6 +1024,47 @@ function bindConfigEvents(panel) {
       const val = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
       const label = panel.querySelector(`#wsc-alloc-${field.slice(0, 2)}`);
       if (label) label.textContent = val + '%';
+    });
+  });
+
+  // Phase 4 Layer B (volumes-as-nucleus, 2026-04-29) — per-channel
+  // storageAllocation override inputs. First write to a channel auto-promotes
+  // it from "inheriting facility" to "explicit override" (storageAllocation
+  // populated on the channel mix). Reset (↻) wipes the override.
+  panel.querySelectorAll('input[data-channel-alloc]').forEach(input => {
+    input.addEventListener('change', e => {
+      const tgt = /** @type {HTMLInputElement} */ (e.target);
+      const field = tgt.dataset.channelAlloc;
+      const k = tgt.dataset.channelKey;
+      const val = parseFloat(tgt.value) || 0;
+      const facAlloc = zones.storageAllocation || { fullPallet: 60, cartonOnPallet: 30, cartonOnShelving: 10 };
+      if (!Array.isArray(zones.channelMixes)) return;
+      const mix = zones.channelMixes.find(m => m.channelKey === k);
+      if (!mix) return;
+      if (!mix.storageAllocation) {
+        // Promote to override — seed from facility default.
+        mix.storageAllocation = {
+          fullPallet: facAlloc.fullPallet || 0,
+          cartonOnPallet: facAlloc.cartonOnPallet || 0,
+          cartonOnShelving: facAlloc.cartonOnShelving || 0,
+        };
+      }
+      mix.storageAllocation[field] = val;
+      isDirty = true;
+      renderConfigPanel();
+      renderContentView();
+    });
+  });
+  panel.querySelectorAll('[data-channel-alloc-reset]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      const k = /** @type {HTMLElement} */ (e.currentTarget).dataset.channelAllocReset;
+      if (!Array.isArray(zones.channelMixes)) return;
+      const mix = zones.channelMixes.find(m => m.channelKey === k);
+      if (!mix) return;
+      delete mix.storageAllocation;
+      isDirty = true;
+      renderConfigPanel();
+      renderContentView();
     });
   });
 
@@ -1973,6 +2060,17 @@ function renderDashboard() {
   // v2-equivalent volume-first sizing (the engine we actually trust).
   const sized = calc.sizeFacility(toSizingInputs());
 
+  // Phase 4 Layer B (volumes-as-nucleus, 2026-04-29): per-channel positions
+  // breakdown for display. Same pallet-vs-carton math as sizeFacility but
+  // split per-channel using each channel's storageAllocation override (or
+  // the facility-level allocation as fallback). Empty when zones.channelMixes
+  // is unset — falls back to the legacy single-row display.
+  let byChannel = [];
+  try {
+    const cbt = calc.calcStorageByType(facility, zones);
+    if (Array.isArray(cbt.byChannel)) byChannel = cbt.byChannel;
+  } catch (_) {}
+
   return `
     <!-- KPI Bar — Sized Facility (v2-equivalent volume-first engine) -->
     <div class="hub-kpi-bar mb-6">
@@ -2006,6 +2104,22 @@ function renderDashboard() {
           <tr><td><strong>Designed (post-honeycomb)</strong></td><td class="cm-num"><strong>${sized.utilization.designed.toLocaleString()} pos</strong></td></tr>
           <tr><td>+ Surge buffer</td><td class="cm-num">${sized.positions.surgePositions.toLocaleString()} pos</td></tr>
           <tr style="border-top:2px solid var(--ies-blue);"><td><strong>Gross Positions</strong></td><td class="cm-num"><strong>${sized.positions.grossPositions.toLocaleString()}</strong></td></tr>
+
+          ${byChannel.length > 0 ? `
+            <tr><td colspan="2" style="padding-top:14px;font-weight:700;color:var(--ies-blue);font-size:11px;text-transform:uppercase;" title="Phase 4 Layer B (volumes-as-nucleus): positions sized per-channel using each channel's storageAllocation override (falls back to facility allocation when no override).">Inventory → Positions by Channel</td></tr>
+            ${byChannel.map(c => `
+              <tr>
+                <td style="padding-left:8px;">${escapeHtml(c.name)}</td>
+                <td class="cm-num">
+                  <span title="Full pallet positions">${c.fullPalletPositions.toLocaleString()} fp</span>
+                  <span style="color:var(--ies-gray-400);"> · </span>
+                  <span title="Carton-on-pallet positions">${c.cartonOnPalletPositions.toLocaleString()} cp</span>
+                  <span style="color:var(--ies-gray-400);"> · </span>
+                  <span title="Carton-on-shelving locations">${c.cartonOnShelvingLocations.toLocaleString()} cs</span>
+                </td>
+              </tr>
+            `).join('')}
+          ` : ''}
 
           <tr><td colspan="2" style="padding-top:14px;font-weight:700;color:var(--ies-blue);font-size:11px;text-transform:uppercase;">Zone Breakdown</td></tr>
           ${sized.zoneBreakdown.map(z => `
@@ -2785,6 +2899,17 @@ function handleCmPush(payload) {
   // peakUnitsPerDay lives on `zones`, not `volumes` — it drives the storage
   // on-hand inventory sizing which is in the zones state object.
   if (Number(payload.peakUnitsPerDay)  > 0) zones.peakUnitsPerDay    = Number(payload.peakUnitsPerDay);
+  // Phase 4 Layer B (volumes-as-nucleus, 2026-04-29): per-channel mix for
+  // storage-media split. Replace wholesale rather than merge — channels are
+  // the source of truth from CM at the moment of push.
+  if (Array.isArray(payload.channelMixes) && payload.channelMixes.length > 0) {
+    zones.channelMixes = payload.channelMixes.map(m => ({
+      channelKey: m.channelKey,
+      name: m.name || m.channelKey,
+      peakUnitsPerDay: Number(m.peakUnitsPerDay) || 0,
+      ...(m.storageAllocation ? { storageAllocation: { ...m.storageAllocation } } : {}),
+    }));
+  }
   renderConfigPanel();
   renderContentView();
   _refreshWscKpis();

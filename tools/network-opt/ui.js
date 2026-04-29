@@ -82,6 +82,19 @@ let demands = [];
 /** @type {import('./types.js?v=20260418-sM').ModeMix} */
 let modeMix = { tlPct: 30, ltlPct: 40, parcelPct: 30 };
 
+/**
+ * Phase 4 of volumes-as-nucleus (2026-04-29) — per-channel modeMix overrides.
+ * Map from channelKey -> ModeMix. When a demand point's channelKey matches a
+ * key in this map, the engine uses that channel's modeMix instead of the
+ * project-level `modeMix`. Empty map = single-mode-mix legacy behavior.
+ *
+ * Built from a small editor on the Parameters page; rebuilt automatically
+ * when channels appear / disappear from demand points.
+ *
+ * @type {Object<string, import('./types.js?v=20260418-sM').ModeMix>}
+ */
+let channelModes = {};
+
 /** @type {import('./types.js?v=20260418-sM').RateCard} */
 let rateCard = { ...calc.DEFAULT_RATES };
 
@@ -980,7 +993,7 @@ function runScenario() {
   runBlockReason = null;
   runBlockDetail = null;
   const name = `Scenario ${scenarios.length + 1} — ${facilities.filter(f => f.isOpen).length} DCs`;
-  const result = calc.evaluateScenario(name, facilities, demands, modeMix, rateCard, serviceConfig);
+  const result = calc.evaluateScenario(name, facilities, demands, modeMix, rateCard, serviceConfig, { channelMixMap: channelModes });
   activeScenario = result;
   activeView = 'results';
   // Run succeeded — stash the inputs so the header Run button flips to the
@@ -996,7 +1009,7 @@ function runScenario() {
 
 function addToComparison() {
   const name = `Scenario ${scenarios.length + 1} — ${facilities.filter(f => f.isOpen).length} DCs`;
-  const result = calc.evaluateScenario(name, facilities, demands, modeMix, rateCard, serviceConfig);
+  const result = calc.evaluateScenario(name, facilities, demands, modeMix, rateCard, serviceConfig, { channelMixMap: channelModes });
   scenarios.push(result);
   activeView = 'comparison';
   rootEl?.querySelectorAll('#no-view-tabs button').forEach(b => {
@@ -1036,7 +1049,7 @@ function optimizeNetwork(opts = {}) {
              : (exhaustiveOK ? 'exhaustive' : 'heuristic');
 
   if (algo === 'exhaustive') {
-    const result = calc.exactSolver(facilities, demands, maxDCsToTest, modeMix, rateCard, serviceConfig);
+    const result = calc.exactSolver(facilities, demands, maxDCsToTest, modeMix, rateCard, serviceConfig, { channelMixMap: channelModes });
     if (!result) {
       // Forced exhaustive but search space too large (>10,000 cap inside calc) —
       // transparently fall back to heuristic instead of erroring on the user.
@@ -1739,6 +1752,67 @@ function renderModeMix(el) {
       <div style="font-size:12px;color:var(--ies-gray-500);line-height:1.5;">
         Per-lane TL / LTL / Parcel allocation. Rates that drive these costs live in the <b>Rate Card</b> sub-tab.
       </div>
+
+      ${(() => {
+        // Phase 4 of volumes-as-nucleus (2026-04-29) — Channel Modes editor.
+        // Renders one sub-card per distinct channelKey found on demand points.
+        // Sliders edit channelModes[k] which assignDemand reads at run time.
+        const distinctChannels = Array.from(new Set(
+          demands.map(d => (d.channelKey || '').trim()).filter(Boolean)
+        )).sort();
+        if (distinctChannels.length === 0) {
+          return `
+            <div class="hub-card" style="margin-top:20px;padding:14px 18px;background:var(--ies-gray-50);">
+              <div style="font-size:13px;font-weight:700;margin-bottom:4px;">Channel-specific modes</div>
+              <div style="font-size:12px;color:var(--ies-gray-500);line-height:1.5;">
+                Tag demand points with a channel (Inputs &rarr; Demand Points &rarr; Channel column) to edit per-channel mode mixes here. DTC channels typically lean Parcel; B2B retail leans TL/LTL.
+              </div>
+            </div>`;
+        }
+        // Lazy-init: missing channel entries inherit the project modeMix.
+        for (const k of distinctChannels) {
+          if (!channelModes[k]) {
+            channelModes[k] = { tlPct: modeMix.tlPct, ltlPct: modeMix.ltlPct, parcelPct: modeMix.parcelPct };
+          }
+        }
+        const cards = distinctChannels.map(k => {
+          const cm = channelModes[k];
+          const total = (cm.tlPct || 0) + (cm.ltlPct || 0) + (cm.parcelPct || 0);
+          return `
+            <div class="hub-card" style="margin-top:12px;padding:14px 18px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:10px;">
+                <div style="font-size:13px;font-weight:700;">Channel: ${escapeHtml(k)}</div>
+                <button class="hub-btn hub-btn-sm hub-btn-secondary" data-cm-reset="${escapeAttr(k)}" title="Reset this channel's mix to the project default" style="font-size:11px;padding:4px 8px;">&#x21bb; Reset to project mix</button>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:14px;">
+                <div>
+                  <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="font-size:13px;font-weight:600;">Truckload (TL)</span><span style="font-size:13px;font-weight:700;">${cm.tlPct}%</span></div>
+                  <input type="range" min="0" max="100" value="${cm.tlPct}" data-cm-key="${escapeAttr(k)}" data-cm-mode="tlPct" style="width:100%;accent-color:var(--ies-blue);">
+                </div>
+                <div>
+                  <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="font-size:13px;font-weight:600;">Less-Than-Truckload (LTL)</span><span style="font-size:13px;font-weight:700;">${cm.ltlPct}%</span></div>
+                  <input type="range" min="0" max="100" value="${cm.ltlPct}" data-cm-key="${escapeAttr(k)}" data-cm-mode="ltlPct" style="width:100%;accent-color:var(--ies-blue);">
+                </div>
+                <div>
+                  <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="font-size:13px;font-weight:600;">Parcel</span><span style="font-size:13px;font-weight:700;">${cm.parcelPct}%</span></div>
+                  <input type="range" min="0" max="100" value="${cm.parcelPct}" data-cm-key="${escapeAttr(k)}" data-cm-mode="parcelPct" style="width:100%;accent-color:var(--ies-blue);">
+                </div>
+              </div>
+              <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--ies-gray-200);font-size:12px;font-weight:600;text-align:right;">
+                Total: ${total}%
+                ${total !== 100 ? '<span style="color:var(--ies-orange);margin-left:8px;">Must equal 100%</span>' : '<span style="color:#22c55e;margin-left:8px;">&#x2713;</span>'}
+              </div>
+            </div>`;
+        }).join('');
+        return `
+          <div style="margin-top:24px;">
+            <h3 class="text-section" style="margin:0 0 8px;">Channel-specific modes</h3>
+            <div style="font-size:12px;color:var(--ies-gray-500);line-height:1.5;margin-bottom:8px;">
+              Phase 4 of volumes-as-nucleus &mdash; per-channel modeMix overrides. assignDemand looks up each demand's channelKey and uses that channel's mix; demands without a channelKey fall back to the project mix above.
+            </div>
+            ${cards}
+          </div>`;
+      })()}
     </div>
   `;
 
@@ -1748,14 +1822,37 @@ function renderModeMix(el) {
     markDirty();
   });
 
-  // Bind sliders
-  el.querySelectorAll('input[type="range"]').forEach(input => {
+  // Bind project-level sliders (data-key on input, but skip the per-channel ones).
+  el.querySelectorAll('input[type="range"][data-key]').forEach(input => {
     input.addEventListener('input', (e) => {
       const key = /** @type {HTMLInputElement} */ (e.target).dataset.key;
       const val = parseInt(/** @type {HTMLInputElement} */ (e.target).value);
       modeMix[key] = val;
       markDirty();  // 2026-04-21 audit: was missing — Run button stayed
                     // "✓ Results current" after mix slider moved.
+      renderModeMix(el);
+    });
+  });
+
+  // Phase 4 — bind per-channel mode sliders.
+  el.querySelectorAll('input[type="range"][data-cm-key]').forEach(input => {
+    input.addEventListener('input', (e) => {
+      const k = /** @type {HTMLInputElement} */ (e.target).dataset.cmKey;
+      const mode = /** @type {HTMLInputElement} */ (e.target).dataset.cmMode;
+      const val = parseInt(/** @type {HTMLInputElement} */ (e.target).value);
+      if (!channelModes[k]) channelModes[k] = { tlPct: 0, ltlPct: 0, parcelPct: 0 };
+      channelModes[k][mode] = val;
+      markDirty();
+      renderModeMix(el);
+    });
+  });
+
+  // Phase 4 — Reset-to-project-mix per channel.
+  el.querySelectorAll('[data-cm-reset]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const k = /** @type {HTMLElement} */ (e.currentTarget).dataset.cmReset;
+      channelModes[k] = { tlPct: modeMix.tlPct, ltlPct: modeMix.ltlPct, parcelPct: modeMix.parcelPct };
+      markDirty();
       renderModeMix(el);
     });
   });
@@ -2344,7 +2441,7 @@ function renderServiceConfig(el) {
 function renderMap(el) {
   // Run scenario first to get assignments for flow lines
   if (!activeScenario) {
-    const result = calc.evaluateScenario('Preview', facilities, demands, modeMix, rateCard, serviceConfig);
+    const result = calc.evaluateScenario('Preview', facilities, demands, modeMix, rateCard, serviceConfig, { channelMixMap: channelModes });
     activeScenario = result;
   }
 

@@ -200,6 +200,23 @@
  * @property {number} [peakUnitsPerDay]   — physical units on peak day across channels
  * @property {number} [inventoryTurns]    — turns/yr (defaults 12 when unset; no channel field for this yet)
  * @property {number} [totalSKUs]         — best-effort SKU count (carries through if CM had it)
+ * @property {ChannelMix[]} [channelMixes] — Phase 4 Layer B (volumes-as-nucleus, 2026-04-29):
+ *   per-channel breakdown of peakUnitsPerDay so WSC can size storage zones
+ *   per-channel. When present, calcStorageByType sums per-channel positions
+ *   using each channel's storageAllocation override (or the facility-level
+ *   allocation as fallback). Empty/absent = single-mix legacy behavior.
+ */
+
+/**
+ * Phase 4 Layer B (2026-04-29): per-channel snapshot for storage sizing.
+ *
+ * @typedef {Object} ChannelMix
+ * @property {string} channelKey
+ * @property {string} name
+ * @property {number} peakUnitsPerDay — channel's peak-day units (drives sizing)
+ * @property {StorageAllocation} [storageAllocation] — optional per-channel
+ *   override of the facility-level storage mix. When absent, the channel
+ *   inherits zones.storageAllocation.
  */
 
 export {};

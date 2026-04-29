@@ -225,5 +225,140 @@ import { computeStorage } from './tools/warehouse-sizing/calc.js';
     `got ${low.rackLevels}`);
 }
 
-console.log(`\n\n${pass}/${pass + fail} passed`);
+
+
+// ── Phase 4 Layer B (volumes-as-nucleus, 2026-04-29) — calcStorageByType
+//    aggregates per-channel positions when channelMixes present ──
+import { calcStorageByType } from './tools/warehouse-sizing/calc.js';
+
+{
+  // Single-mix legacy path (no channelMixes) preserves backwards-compat shape.
+  const r = calcStorageByType(
+    { clearHeight: 32 },
+    {
+      peakUnitsPerDay: 100000,
+      storageAllocation: { fullPallet: 60, cartonOnPallet: 30, cartonOnShelving: 10 },
+      productDimensions: { unitsPerPallet: 48, unitsPerCartonPallet: 6, cartonsPerPallet: 12, unitsPerCartonShelving: 6, cartonsPerLocation: 4 },
+    }
+  );
+  t('Phase 4B legacy path returns positions', r.totalPositions > 0);
+  t('Phase 4B legacy path has no byChannel field', r.byChannel === undefined);
+}
+
+{
+  // Per-channel path: 2 channels with different storageAllocations.
+  const r = calcStorageByType(
+    { clearHeight: 32 },
+    {
+      peakUnitsPerDay: 100000,
+      storageAllocation: { fullPallet: 60, cartonOnPallet: 30, cartonOnShelving: 10 },
+      productDimensions: { unitsPerPallet: 48, unitsPerCartonPallet: 6, cartonsPerPallet: 12, unitsPerCartonShelving: 6, cartonsPerLocation: 4 },
+      channelMixes: [
+        { channelKey: 'dtc',  name: 'DTC',  peakUnitsPerDay: 30000, storageAllocation: { fullPallet: 10, cartonOnPallet: 30, cartonOnShelving: 60 } },
+        { channelKey: 'b2b',  name: 'B2B',  peakUnitsPerDay: 70000, storageAllocation: { fullPallet: 90, cartonOnPallet:  8, cartonOnShelving:  2 } },
+      ],
+    }
+  );
+  t('Phase 4B per-channel returns byChannel array', Array.isArray(r.byChannel) && r.byChannel.length === 2);
+  t('Phase 4B per-channel preserves channelKey ordering',
+    r.byChannel[0].channelKey === 'dtc' && r.byChannel[1].channelKey === 'b2b');
+  // DTC: 30k * 60% / (6 * 4) shelving locations = 750. B2B: 70k * 2% / (6 * 4) = 59 → ceil = 59.
+  t('Phase 4B DTC channel uses 60% shelving (high carton-shelving)', r.byChannel[0].cartonOnShelvingLocations >= r.byChannel[1].cartonOnShelvingLocations * 5,
+    `DTC=${r.byChannel[0].cartonOnShelvingLocations} B2B=${r.byChannel[1].cartonOnShelvingLocations}`);
+  // B2B: 70k * 90% / 48 = 1313 full pallet. DTC: 30k * 10% / 48 = 63.
+  t('Phase 4B B2B channel uses 90% full-pallet (high pallet count)', r.byChannel[1].fullPalletPositions > r.byChannel[0].fullPalletPositions * 5,
+    `DTC=${r.byChannel[0].fullPalletPositions} B2B=${r.byChannel[1].fullPalletPositions}`);
+  // Total positions sums per-channel.
+  const sum = r.byChannel.reduce((s,c)=>s + c.fullPalletPositions + c.cartonOnPalletPositions + c.cartonOnShelvingLocations, 0);
+  t('Phase 4B totalPositions equals byChannel sum', r.totalPositions === sum, `total=${r.totalPositions} sum=${sum}`);
+}
+
+{
+  // Channel without storageAllocation override inherits the facility-level mix.
+  const r = calcStorageByType(
+    { clearHeight: 32 },
+    {
+      peakUnitsPerDay: 60000,
+      storageAllocation: { fullPallet: 60, cartonOnPallet: 30, cartonOnShelving: 10 },
+      productDimensions: { unitsPerPallet: 48, unitsPerCartonPallet: 6, cartonsPerPallet: 12, unitsPerCartonShelving: 6, cartonsPerLocation: 4 },
+      channelMixes: [
+        { channelKey: 'inherit',  name: 'Inheriting',  peakUnitsPerDay: 60000 },  // no storageAllocation
+      ],
+    }
+  );
+  // Inheriting path = same as facility mix = 60/30/10.
+  // 60k × 60% = 36000 / 48 = 750 full pallet.
+  t('Phase 4B channel without override matches facility-allocated full-pallet', r.byChannel[0].fullPalletPositions === 750,
+    `got ${r.byChannel[0].fullPalletPositions}`);
+}
+
+// ── Phase 4 — buildWscLaunchPayload emits channelMixes ──
+import { buildWscLaunchPayload } from './tools/cost-model/api.js';
+
+{
+  const m = {
+    facility: { totalSqft: 200000, opDaysPerYear: 250, clearHeight: 32 },
+    channels: [
+      { key: 'dtc', name: 'DTC',
+        primary: { value: 1000000, uom: 'orders', activity: 'outbound' },
+        conversions: { unitsPerCase: 12, casesPerPallet: 40, linesPerOrder: 2, unitsPerLine: 5 },
+        assumptions: { returnsPercent: 15, inboundOutboundRatio: 1.0, peakSurgeFactor: 2.0 },
+        seasonality: { preset: 'flat', monthly_shares: Array.from({length:12},()=>1/12) },
+      },
+      { key: 'b2b', name: 'B2B',
+        primary: { value: 50000, uom: 'pallets', activity: 'outbound' },
+        conversions: { unitsPerCase: 24, casesPerPallet: 50, linesPerOrder: 5, unitsPerLine: 10 },
+        assumptions: { returnsPercent: 1, inboundOutboundRatio: 1.0, peakSurgeFactor: 1.2 },
+        seasonality: { preset: 'flat', monthly_shares: Array.from({length:12},()=>1/12) },
+        storageAllocation: { fullPallet: 90, cartonOnPallet: 8, cartonOnShelving: 2 },
+      },
+    ],
+  };
+  const p = buildWscLaunchPayload(m);
+  t('Phase 4B payload carries channelMixes', Array.isArray(p.channelMixes) && p.channelMixes.length === 2,
+    `len=${(p.channelMixes||[]).length}`);
+  t('Phase 4B B2B mix keeps storageAllocation override', !!p.channelMixes[1].storageAllocation && p.channelMixes[1].storageAllocation.fullPallet === 90);
+  t('Phase 4B DTC mix has no storageAllocation override', !p.channelMixes[0].storageAllocation);
+}
+
+// ── Phase 4 — assignDemand resolves per-demand modeMix from channelMixMap ──
+import { assignDemand } from './tools/network-opt/calc.js';
+
+{
+  const facilities = [{ id: 'F1', lat: 40, lng: -75, isOpen: true, capacity: 0 }];
+  const demands = [
+    { id: 'D1', lat: 40.5, lng: -75.5, annualDemand: 10000, channelKey: 'dtc' },
+    { id: 'D2', lat: 41.0, lng: -76.0, annualDemand: 20000, channelKey: 'b2b' },
+    { id: 'D3', lat: 39.5, lng: -75.0, annualDemand: 5000 },  // no channelKey
+  ];
+  const projectMix = { tlPct: 30, ltlPct: 40, parcelPct: 30 };
+  const channelMixMap = {
+    dtc: { tlPct: 0,   ltlPct: 0,   parcelPct: 100 },
+    b2b: { tlPct: 70,  ltlPct: 30,  parcelPct: 0 },
+  };
+  const baselineLanes = assignDemand(facilities, demands, projectMix);
+  const channelLanes = assignDemand(facilities, demands, projectMix, undefined, undefined, { channelMixMap });
+  // Both should produce 3 lanes.
+  t('Phase 4 assignDemand legacy path returns 3 lanes', baselineLanes.length === 3);
+  t('Phase 4 assignDemand channel-aware path returns 3 lanes', channelLanes.length === 3);
+  // Same demand set + facility — lane structure shouldn't change. Per-lane costs SHOULD change since the mix shifts.
+  // Easiest invariant: total transport cost typically differs across the two paths because each demand uses a different mix.
+  const baselineTotal = baselineLanes.reduce((s, l) => s + (l.blendedCost || 0), 0);
+  const channelTotal  = channelLanes.reduce((s, l) => s + (l.blendedCost || 0), 0);
+  t('Phase 4 channel-aware total cost diverges from baseline (mix override applied)',
+    Math.abs(baselineTotal - channelTotal) > 1,
+    `baseline=$${baselineTotal.toFixed(0)} channel=$${channelTotal.toFixed(0)}`);
+  // Demand without channelKey falls back to project mix in both paths — the
+  // per-lane transport cost on D3 should match between baseline and channel.
+  const baselineD3 = baselineLanes.find(l => l.demandId === 'D3');
+  const channelD3  = channelLanes.find(l => l.demandId === 'D3');
+  if (baselineD3 && channelD3) {
+    t('Phase 4 unmapped demand falls back to project mix',
+      Math.abs((baselineD3.blendedCost || 0) - (channelD3.blendedCost || 0)) < 0.01);
+  }
+}
+
+console.log(`
+
+${pass}/${pass + fail} passed`);
 if (fail > 0) process.exit(1);

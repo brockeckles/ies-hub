@@ -439,13 +439,20 @@ export function elevationParams(facility, zones) {
  * @returns {{ fullPalletPositions: number, cartonOnPalletPositions: number, cartonOnShelvingLocations: number, totalPositions: number }}
  */
 export function calcStorageByType(facility, zones) {
-  const alloc = zones.storageAllocation || { fullPallet: 60, cartonOnPallet: 30, cartonOnShelving: 10 };
+  const facAlloc = zones.storageAllocation || { fullPallet: 60, cartonOnPallet: 30, cartonOnShelving: 10 };
   const prod = zones.productDimensions || {};
   const peakUnits = zones.peakUnitsPerDay || 0;
 
-  const fpUnits = Math.round(peakUnits * (alloc.fullPallet || 0) / 100);
-  const cpUnits = Math.round(peakUnits * (alloc.cartonOnPallet || 0) / 100);
-  const csUnits = Math.round(peakUnits * (alloc.cartonOnShelving || 0) / 100);
+  // Phase 4 Layer B (volumes-as-nucleus, 2026-04-29): when channelMixes are
+  // present, run the sizing math per-channel using each channel's
+  // storageAllocation override (or the facility-level alloc as fallback) and
+  // sum the positions. The channel total may not exactly equal `peakUnits`
+  // (rounding + the channels list omits zero-peak channels) so we use the
+  // sum of channel peakUnitsPerDay as the basis. Falls through to legacy
+  // single-mix path when channelMixes is absent or empty.
+  const channelMixes = Array.isArray(zones.channelMixes) ? zones.channelMixes : [];
+  const useChannels = channelMixes.length > 0
+    && channelMixes.some(m => Number(m?.peakUnitsPerDay) > 0);
 
   const upp = prod.unitsPerPallet || 48;
   const ucp = prod.unitsPerCartonPallet || 6;
@@ -453,21 +460,60 @@ export function calcStorageByType(facility, zones) {
   const ucs = prod.unitsPerCartonShelving || 6;
   const cpl = prod.cartonsPerLocation || 4;
 
-  const fullPalletPositions = upp > 0 ? Math.ceil(fpUnits / upp) : 0;
-  const cartonOnPalletPositions = (ucp > 0 && cpp > 0)
-    ? Math.ceil(cpUnits / ucp / cpp)
-    : 0;
-  const cartonOnShelvingLocations = (ucs > 0 && cpl > 0)
-    ? Math.ceil(csUnits / ucs / cpl)
-    : 0;
+  /**
+   * Compute positions for one allocation × peak-units bucket.
+   * @returns {{fullPalletPositions:number, cartonOnPalletPositions:number, cartonOnShelvingLocations:number}}
+   */
+  const positionsFor = (alloc, peak) => {
+    const fpUnits = Math.round(peak * (alloc.fullPallet || 0) / 100);
+    const cpUnits = Math.round(peak * (alloc.cartonOnPallet || 0) / 100);
+    const csUnits = Math.round(peak * (alloc.cartonOnShelving || 0) / 100);
+    return {
+      fullPalletPositions: upp > 0 ? Math.ceil(fpUnits / upp) : 0,
+      cartonOnPalletPositions: (ucp > 0 && cpp > 0) ? Math.ceil(cpUnits / ucp / cpp) : 0,
+      cartonOnShelvingLocations: (ucs > 0 && cpl > 0) ? Math.ceil(csUnits / ucs / cpl) : 0,
+    };
+  };
 
+  if (useChannels) {
+    let fpPos = 0, cpPos = 0, csPos = 0;
+    /** @type {Array<{channelKey:string, name:string, peakUnitsPerDay:number, fullPalletPositions:number, cartonOnPalletPositions:number, cartonOnShelvingLocations:number}>} */
+    const byChannel = [];
+    for (const m of channelMixes) {
+      const peak = Number(m.peakUnitsPerDay) || 0;
+      if (peak <= 0) continue;
+      const alloc = (m.storageAllocation && typeof m.storageAllocation === 'object')
+        ? m.storageAllocation
+        : facAlloc;
+      const pos = positionsFor(alloc, peak);
+      fpPos += pos.fullPalletPositions;
+      cpPos += pos.cartonOnPalletPositions;
+      csPos += pos.cartonOnShelvingLocations;
+      byChannel.push({
+        channelKey: m.channelKey,
+        name: m.name || m.channelKey,
+        peakUnitsPerDay: peak,
+        ...pos,
+      });
+    }
+    return {
+      fullPalletPositions: fpPos,
+      cartonOnPalletPositions: cpPos,
+      cartonOnShelvingLocations: csPos,
+      totalPositions: fpPos + cpPos + csPos,
+      byChannel,
+    };
+  }
+
+  // Legacy single-mix path.
+  const pos = positionsFor(facAlloc, peakUnits);
   return {
-    fullPalletPositions,
-    cartonOnPalletPositions,
-    cartonOnShelvingLocations,
+    fullPalletPositions: pos.fullPalletPositions,
+    cartonOnPalletPositions: pos.cartonOnPalletPositions,
+    cartonOnShelvingLocations: pos.cartonOnShelvingLocations,
     // Note: total mixes pallet positions + shelf locations. They are
     // different units of capacity — present them separately when displaying.
-    totalPositions: fullPalletPositions + cartonOnPalletPositions + cartonOnShelvingLocations,
+    totalPositions: pos.fullPalletPositions + pos.cartonOnPalletPositions + pos.cartonOnShelvingLocations,
   };
 }
 

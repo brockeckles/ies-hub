@@ -609,14 +609,26 @@ export function blendedLaneCost(miles, avgWeight, modeMix, rateCard = DEFAULT_RA
 
 /**
  * Assign each demand point to nearest open facility.
+ *
+ * Phase 4 of volumes-as-nucleus (2026-04-29): when `opts.channelMixMap` is
+ * provided, per-demand mode resolution looks up the demand's channelKey in
+ * the map and uses that channel's modeMix. Falls back to the project-level
+ * `modeMix` argument when the channel isn't mapped or the demand has no
+ * channelKey. Backwards-compat: callers that don't pass opts behave exactly
+ * as before.
+ *
  * @param {import('./types.js?v=20260418-sM').Facility[]} facilities
  * @param {import('./types.js?v=20260418-sM').DemandPoint[]} demands
  * @param {import('./types.js?v=20260418-sM').ModeMix} modeMix
  * @param {import('./types.js?v=20260418-sM').RateCard} [rateCard]
  * @param {import('./types.js?v=20260418-sM').ServiceConfig} [serviceConfig]
+ * @param {Object} [opts]
+ * @param {Object<string, import('./types.js?v=20260418-sM').ModeMix>} [opts.channelMixMap]
+ *   Map from demand.channelKey -> modeMix override. Demands without a matching
+ *   key fall back to the project modeMix.
  * @returns {import('./types.js?v=20260418-sM').LaneCost[]}
  */
-export function assignDemand(facilities, demands, modeMix, rateCard = DEFAULT_RATES, serviceConfig = DEFAULT_SERVICE) {
+export function assignDemand(facilities, demands, modeMix, rateCard = DEFAULT_RATES, serviceConfig = DEFAULT_SERVICE, opts = {}) {
   // Hard-constraint enforcement: lockedClosed wins over isOpen + lockedOpen.
   const lockedClosed = new Set(serviceConfig.lockedClosedIds || []);
   const lockedOpen = new Set(serviceConfig.lockedOpenIds || []);
@@ -679,10 +691,15 @@ export function assignDemand(facilities, demands, modeMix, rateCard = DEFAULT_RA
       originRegion: regionForCoord(fLatN, fLngN),
       destRegion:   regionForCoord(dLat, dLng),
     };
+    // Phase 4 — resolve effective modeMix from channel override map when present.
+    const channelMixMap = opts.channelMixMap || null;
+    const effectiveMix = (channelMixMap && d.channelKey && channelMixMap[d.channelKey])
+      ? channelMixMap[d.channelKey]
+      : modeMix;
     const costs = blendedLaneCost(
       best.dist,
       d.avgWeight || 25,
-      modeMix,
+      effectiveMix,
       rateCard,
       fLngN,
       dLng,
@@ -722,8 +739,9 @@ export function assignDemand(facilities, demands, modeMix, rateCard = DEFAULT_RA
  * @param {import('./types.js?v=20260418-sM').ServiceConfig} [serviceConfig]
  * @returns {import('./types.js?v=20260418-sM').ScenarioResult}
  */
-export function evaluateScenario(name, facilities, demands, modeMix, rateCard, serviceConfig) {
-  const assignments = assignDemand(facilities, demands, modeMix, rateCard, serviceConfig);
+export function evaluateScenario(name, facilities, demands, modeMix, rateCard, serviceConfig, opts = {}) {
+  // Phase 4 — pass channelMixMap (if any) through to assignDemand.
+  const assignments = assignDemand(facilities, demands, modeMix, rateCard, serviceConfig, opts);
 
   // 2026-04-25 hardening: coerce every numeric field to Number to handle
   // form-input strings ("85000") + saved-config edge cases. The prior
@@ -863,7 +881,7 @@ function getCombinations(arr, k) {
  * @param {import('./types.js?v=20260418-sM').ServiceConfig} [serviceConfig]
  * @returns {{scenarios: import('./types.js?v=20260418-sM').ScenarioResult[], optimal: import('./types.js?v=20260418-sM').ScenarioResult|null} | null}
  */
-export function exactSolver(facilities, demands, maxFacilities, modeMix, rateCard = DEFAULT_RATES, serviceConfig = DEFAULT_SERVICE) {
+export function exactSolver(facilities, demands, maxFacilities, modeMix, rateCard = DEFAULT_RATES, serviceConfig = DEFAULT_SERVICE, opts = {}) {
   const openCandidates = facilities.filter(f => f.isOpen !== false);
   if (openCandidates.length === 0) return null;
 
@@ -887,7 +905,7 @@ export function exactSolver(facilities, demands, maxFacilities, modeMix, rateCar
       const facConfig = facilities.map(f =>
         combo.find(c => c.id === f.id) ? { ...f, isOpen: true } : { ...f, isOpen: false }
       );
-      const result = evaluateScenario(`${numFacs} DC`, facConfig, demands, modeMix, rateCard, serviceConfig);
+      const result = evaluateScenario(`${numFacs} DC`, facConfig, demands, modeMix, rateCard, serviceConfig, opts);
       scenarios.push(result);
 
       if (!optimal || result.totalCost < optimal.totalCost) {

@@ -13,7 +13,7 @@ import {
   getAggregateDerived,
   getAggregateInbound,
   getChannelDerived,
-} from './calc.channels.js?v=20260429-vol10';
+} from './calc.channels.js?v=20260429-vol11';
 
 // ============================================================
 // COST MODEL PROJECTS (CRUD)
@@ -1244,6 +1244,23 @@ export function buildWscLaunchPayload(model) {
   // Sum each channel's peakDay-units (drives storage on-hand sizing in WSC).
   const peakUnitsPerDay = channels.reduce((sum, c) =>
     sum + (getChannelDerived(model, c, 'peakDay').value || 0), 0);
+  // Phase 4 Layer B (volumes-as-nucleus, 2026-04-29): emit a per-channel
+  // breakdown so WSC can size storage media per-channel. Each entry carries
+  // the channel's peakDay units in physical units + an optional storageAllocation
+  // override sourced from channel data. When the channel doesn't override,
+  // WSC's calcStorageByType applies the facility-level zones.storageAllocation.
+  const channelMixes = channels.map(c => {
+    const peak = getChannelDerived(model, c, 'peakDay').value || 0;
+    const out = {
+      channelKey: c.key,
+      name: c.name || c.key,
+      peakUnitsPerDay: Math.round(peak),
+    };
+    if (c.storageAllocation && typeof c.storageAllocation === 'object') {
+      out.storageAllocation = { ...c.storageAllocation };
+    }
+    return out;
+  }).filter(m => m.peakUnitsPerDay > 0);
   return {
     clearHeight: facility.clearHeight || 0,
     totalSqft:   facility.totalSqft   || 0,
@@ -1254,6 +1271,7 @@ export function buildWscLaunchPayload(model) {
     peakUnitsPerDay: Math.round(peakUnitsPerDay),
     inventoryTurns:  Number(facility.inventoryTurns) || 12,
     totalSKUs:       Number(facility.totalSKUs) || 0,
+    channelMixes,
     at: Date.now(),
   };
 }
