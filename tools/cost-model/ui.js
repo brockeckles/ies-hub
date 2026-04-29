@@ -12,7 +12,7 @@ import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260424-hyg04';
 import * as calc from './calc.js?v=20260427-s2';
-import * as api from './api.js?v=20260429-vol5';
+import * as api from './api.js?v=20260429-vol6';
 import * as scenarios from './calc.scenarios.js?v=20260429-otfix1';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
 import * as channelCalc from './calc.channels.js?v=20260429-vol1';
@@ -2882,6 +2882,76 @@ function renderVolumes() {
 
   // Channel tab strip (multi-channel only) + mix bar
   const channelMix = isMultiChannel ? channelCalc.getChannelMix(model) : null;
+
+  // Phase 2.4 — Mix mode + visual mix bar
+  const mix = model.channelMix || (model.channelMix = { mode: 'byVolume' });
+  const isByMix = isMultiChannel && mix.mode === 'byMix';
+  let mixBarHtml = '';
+  if (isMultiChannel) {
+    const segs = (channelMix || []).filter(m => m.pct > 0);
+    const grandUnits = segs.reduce((s, m) => s + (m.annualUnits || 0), 0);
+    mixBarHtml = `
+      <div class="cm-vol-mix-card mb-3">
+        <div class="cm-vol-mix-card__head">
+          <div class="cm-vol-mix-card__total">
+            <span class="hub-field__label" style="margin:0;">Total annual volume</span>
+            <span class="cm-vol-mix-card__total-val">${fmtN(grandUnits)} units</span>
+          </div>
+          <div class="cm-vol-mix-card__modes" role="tablist" aria-label="Mix mode">
+            <button class="cm-vol-mix-card__mode${!isByMix ? ' cm-vol-mix-card__mode--active' : ''}"
+                    data-cm-action="vol-mix-mode" data-mode="byVolume"
+                    title="Per-channel primaries are inputs; mix % is computed">By volume</button>
+            <button class="cm-vol-mix-card__mode${isByMix ? ' cm-vol-mix-card__mode--active' : ''}"
+                    data-cm-action="vol-mix-mode" data-mode="byMix"
+                    title="Total + per-channel mix % are inputs; primaries auto-derive">By mix</button>
+          </div>
+        </div>
+        <div class="cm-vol-mix-bar">
+          ${(channelMix || []).filter(m => {
+            const c2 = channels.find(c => c.key === m.channelKey);
+            return !c2 || c2.archetypeId !== 'reverse';
+          }).map(m => {
+            const ch2 = channels.find(c => c.key === m.channelKey);
+            const isActive = m.channelKey === _activeChannelKey;
+            const color = (ch2 && ch2.color) || '#888';
+            return `<div class="cm-vol-mix-bar__seg${isActive ? ' cm-vol-mix-bar__seg--active' : ''}" style="background:${color};width:${m.pct}%;" title="${ch2?.name || m.channelKey}: ${m.pct.toFixed(1)}%"></div>`;
+          }).join('')}
+        </div>
+        ${isByMix ? `
+          <div class="cm-vol-mix-allocs">
+            <div class="cm-vol-mix-allocs__total">
+              <label class="hub-field__label" style="margin:0;">Total volume</label>
+              <input class="hub-input" type="number" value="${Number(mix.totalVolume) || grandUnits}" min="0" step="1000"
+                     data-cm-action="vol-mix-total-edit" style="max-width:160px;text-align:right;font-variant-numeric:tabular-nums;font-weight:600;" />
+              <select class="hub-input" data-cm-action="vol-mix-uom-edit" style="max-width:90px;">
+                ${['units', 'cases', 'pallets', 'orders', 'lines'].map(u =>
+                  `<option value="${u}"${(mix.totalUom || 'units') === u ? ' selected' : ''}>${u}</option>`
+                ).join('')}
+              </select>
+            </div>
+            <div class="cm-vol-mix-allocs__rows">
+              ${channels.filter(c => c.primary?.activity !== 'returns').map(c2 => {
+                const allocs = Array.isArray(mix.allocations) ? mix.allocations : [];
+                const allocPct = (allocs.find(a => a.channelKey === c2.key) || {}).pct;
+                const fallbackPct = (channelMix || []).find(m => m.channelKey === c2.key)?.pct || 0;
+                return `
+                  <div class="cm-vol-mix-allocs__row">
+                    ${c2.color ? `<span class="cm-vol-tab__dot" style="background:${c2.color};"></span>` : '<span style="width:8px;"></span>'}
+                    <span class="cm-vol-mix-allocs__name">${c2.name}</span>
+                    <input class="hub-input cm-vol-num" type="number"
+                           value="${Number.isFinite(allocPct) ? allocPct : fallbackPct.toFixed(1)}"
+                           min="0" max="100" step="0.1"
+                           data-cm-action="vol-mix-pct-edit" data-key="${c2.key}"
+                           style="max-width:80px;" />
+                    <span class="cm-vol-row__suffix">%</span>
+                  </div>`;
+              }).join('')}
+            </div>
+          </div>` : ''
+        }
+      </div>`;
+  }
+
   const tabStripHtml = !isMultiChannel ? '' : `
     <div class="cm-vol-channels mb-3">
       <div class="cm-vol-tabs">
@@ -2915,6 +2985,8 @@ function renderVolumes() {
         <div class="cm-section-desc">The nucleus of the model. Every downstream cost ties back to the primary volume below × conversion factors × structural assumptions.</div>
       </div>
     </div>
+
+    ${mixBarHtml}
 
     ${tabStripHtml}
 
@@ -2955,7 +3027,8 @@ function renderVolumes() {
         <div class="hub-field">
           <label class="hub-field__label">Annual volume</label>
           <input class="hub-input" type="number" value="${primary.value || 0}" min="0" step="1000"
-                 data-field="channels.${activeIdx}.primary.value" data-type="number" />
+                 data-field="channels.${activeIdx}.primary.value" data-type="number"
+                 ${isByMix && primary.activity !== 'returns' ? 'readonly title="Auto-derived from Total volume × this channel\'s mix %. Switch to By volume mode above to edit directly."' : ''} />
         </div>
         <div class="hub-field">
           <label class="hub-field__label">UOM</label>
@@ -3106,6 +3179,27 @@ function renderVolumes() {
       .cm-vol-derived-row--editing { background: rgba(0,71,171,0.04); }
       .cm-vol-override-input { border-color: var(--ies-blue) !important; }
       .cm-vol-source-bar { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--ies-gray-50, #fafbfc); border: 1px solid var(--ies-gray-200); border-radius: 10px; font-size: 12px; }
+
+      /* Mix bar + mode toggle (Phase 2.4) */
+      .cm-vol-mix-card { background: white; border: 1px solid var(--ies-gray-200); border-radius: 10px; padding: 12px 14px; }
+      .cm-vol-mix-card__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
+      .cm-vol-mix-card__total { display: inline-flex; align-items: baseline; gap: 8px; }
+      .cm-vol-mix-card__total-val { font-size: 14px; font-weight: 600; color: var(--ies-navy); font-variant-numeric: tabular-nums; }
+      .cm-vol-mix-card__modes { display: inline-flex; border: 1px solid var(--ies-gray-200); border-radius: 6px; overflow: hidden; }
+      .cm-vol-mix-card__mode { padding: 6px 12px; font-size: 12px; font-weight: 600; color: var(--ies-gray-600); background: white; border: none; cursor: pointer; }
+      .cm-vol-mix-card__mode + .cm-vol-mix-card__mode { border-left: 1px solid var(--ies-gray-200); }
+      .cm-vol-mix-card__mode:hover { background: var(--ies-gray-50, #fafbfc); }
+      .cm-vol-mix-card__mode--active { background: var(--ies-blue); color: white; }
+      .cm-vol-mix-card__mode--active:hover { background: var(--ies-blue); }
+      .cm-vol-mix-bar { display: flex; height: 14px; border-radius: 4px; overflow: hidden; border: 1px solid var(--ies-gray-200); background: var(--ies-gray-50, #fafbfc); }
+      .cm-vol-mix-bar__seg { transition: width 200ms; }
+      .cm-vol-mix-bar__seg--active { box-shadow: inset 0 0 0 2px rgba(0,0,0,0.20); }
+      .cm-vol-mix-allocs { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--ies-gray-200); }
+      .cm-vol-mix-allocs__total { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+      .cm-vol-mix-allocs__rows { display: grid; gap: 6px; }
+      .cm-vol-mix-allocs__row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+      .cm-vol-mix-allocs__name { flex: 1; font-size: 13px; color: var(--ies-navy); }
+      .cm-vol-mix-allocs__sum { margin-top: 8px; font-size: 12px; color: var(--ies-gray-500); }
 
       /* Channel tab strip (Phase 2.3) */
       .cm-vol-channels { border-bottom: 1px solid var(--ies-gray-200); padding-bottom: 0; }
@@ -7596,6 +7690,86 @@ function bindSectionEvents(section, container) {
   // (new card in Volumes & Profile). Preset dropdown applies a canned
   // monthly_shares pattern; per-month inputs mutate the array and flip
   // preset to 'custom' so the user sees their hand-edits aren't reverted.
+  // Phase 2.4 — channel mix mode + allocations
+  function _recomputeChannelPrimariesFromMix() {
+    const mix = model.channelMix;
+    if (!mix || mix.mode !== 'byMix' || !Number.isFinite(Number(mix.totalVolume))) return;
+    const totalUom = mix.totalUom || 'units';
+    const allocs = Array.isArray(mix.allocations) ? mix.allocations : [];
+    (model.channels || []).forEach(c => {
+      if (!c || !c.primary) return;
+      if (c.primary.activity === 'returns') return; // reverse channels auto-derive separately (Phase 2.5)
+      const allocPct = (allocs.find(a => a.channelKey === c.key) || {}).pct;
+      if (!Number.isFinite(Number(allocPct))) return;
+      const allocFraction = Number(allocPct) / 100;
+      const tgtUomCount = Number(mix.totalVolume) * allocFraction;
+      // Convert from totalUom into the channel's primary UOM via channelCalc.convertUom
+      const channelUom = c.primary.uom || 'units';
+      c.primary.value = Math.round(channelCalc.convertUom(tgtUomCount, totalUom, channelUom, c.conversions) || 0);
+    });
+    // Mirror primary channel back to legacy fields per dual-write contract.
+    syncLegacyFromChannel(model);
+  }
+
+  container.querySelectorAll('[data-cm-action="vol-mix-mode"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mode = btn.dataset.mode;
+      if (!mode || mode === (model.channelMix?.mode || 'byVolume')) return;
+      if (!model.channelMix) model.channelMix = { mode: 'byVolume' };
+      // Switching to byMix: snapshot the current state into channelMix.
+      if (mode === 'byMix') {
+        const mixSnap = channelCalc.getChannelMix(model);
+        const grandUnits = mixSnap.reduce((s, m) => s + (m.annualUnits || 0), 0);
+        model.channelMix.mode = 'byMix';
+        model.channelMix.totalVolume = Math.round(grandUnits);
+        model.channelMix.totalUom = 'units';
+        model.channelMix.allocations = mixSnap.map(m => ({ channelKey: m.channelKey, pct: Number(m.pct.toFixed(2)) }));
+      } else {
+        model.channelMix.mode = 'byVolume';
+      }
+      isDirty = true;
+      renderSection();
+    });
+  });
+
+  container.querySelectorAll('[data-cm-action="vol-mix-total-edit"]').forEach(inp => {
+    inp.addEventListener('change', (e) => {
+      const v = parseFloat(e.target.value);
+      if (!Number.isFinite(v) || v < 0) return;
+      if (!model.channelMix) model.channelMix = { mode: 'byMix' };
+      model.channelMix.totalVolume = v;
+      _recomputeChannelPrimariesFromMix();
+      isDirty = true;
+      renderSection();
+    });
+  });
+
+  container.querySelectorAll('[data-cm-action="vol-mix-uom-edit"]').forEach(sel => {
+    sel.addEventListener('change', (e) => {
+      if (!model.channelMix) model.channelMix = { mode: 'byMix' };
+      model.channelMix.totalUom = e.target.value;
+      _recomputeChannelPrimariesFromMix();
+      isDirty = true;
+      renderSection();
+    });
+  });
+
+  container.querySelectorAll('[data-cm-action="vol-mix-pct-edit"]').forEach(inp => {
+    inp.addEventListener('change', (e) => {
+      const key = e.target.dataset.key;
+      const pct = parseFloat(e.target.value);
+      if (!key || !Number.isFinite(pct) || pct < 0 || pct > 100) return;
+      if (!model.channelMix) model.channelMix = { mode: 'byMix', totalVolume: 0, totalUom: 'units', allocations: [] };
+      if (!Array.isArray(model.channelMix.allocations)) model.channelMix.allocations = [];
+      const existing = model.channelMix.allocations.find(a => a.channelKey === key);
+      if (existing) existing.pct = pct;
+      else model.channelMix.allocations.push({ channelKey: key, pct });
+      _recomputeChannelPrimariesFromMix();
+      isDirty = true;
+      renderSection();
+    });
+  });
+
   container.querySelectorAll('[data-cm-action="seasonality-preset-change"]').forEach(sel => {
     sel.addEventListener('change', (e) => {
       const name = e.target.value;
