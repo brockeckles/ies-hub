@@ -836,6 +836,19 @@ function renderDetail() {
         ${d.score !== '—' ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;font-size:16px;font-weight:800;color:#fff;background:${d.score.startsWith('A') ? '#16a34a' : '#2563eb'};">${d.score}</span>` : ''}
       </div>
 
+      <!-- Quick Action chip group — surfaces most-used workflow actions without
+           burying them in tabs. All chips reuse existing handlers (advance-stage,
+           add-artifact, open-cost-model, open-multi-site). -->
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px;padding:10px 14px;background:var(--ies-gray-50);border:1px solid var(--ies-gray-200);border-radius:10px;">
+        <span style="font-size:11px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:0.04em;margin-right:4px;">Quick actions</span>
+        ${d.stage < 6
+          ? `<button class="hub-btn hub-btn-sm hub-btn-primary" data-action="advance-stage" title="Move this deal to Stage ${d.stage + 1}">Advance to Stage ${d.stage + 1} →</button>`
+          : `<span class="hub-chip" style="font-size:11px;color:var(--ies-gray-500);background:var(--ies-gray-100);padding:4px 10px;border-radius:16px;">Final stage reached</span>`}
+        ${renderCostModelButton(d)}
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="add-artifact" title="Link a cost model, design scenario, deck, or external file">+ Link Artifact</button>
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="open-multi-site" title="Open the Multi-Site Analyzer with this deal">Multi-Site →</button>
+      </div>
+
       <!-- Quick Stats — 5-tile strip overrides hub-kpi-strip\'s 4-column default -->
       <div class="hub-kpi-strip" style="grid-template-columns:repeat(5,minmax(0,1fr));margin-bottom:20px;">
         ${kpi('Revenue', '$' + (d.revenue / 1e6).toFixed(1) + 'M')}
