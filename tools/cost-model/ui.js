@@ -13,7 +13,7 @@ import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260424-hyg04';
 import * as calc from './calc.js?v=20260427-s2';
 import * as api from './api.js?v=20260427-s9';
-import * as scenarios from './calc.scenarios.js?v=20260421-wA';
+import * as scenarios from './calc.scenarios.js?v=20260429-otfix1';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
 import * as shiftPlannerCalc from './shift-planner.js?v=20260427-pm3-s2';
@@ -4062,7 +4062,7 @@ function renderMonthlyLaborViewCard() {
   })();
 
   const calcHeur = applySplitMonthBilling(scenarios.resolveCalcHeuristics(
-    currentScenario, currentScenarioSnapshots, heuristicOverrides, fin, whatIfTransient,
+    currentScenario, currentScenarioSnapshots, heuristicOverrides, _heurProjectFallbacks(model), whatIfTransient,
   ), model);
   const view = monthlyCalc.computeMonthlyLaborView({
     laborLines: lines,
@@ -5209,7 +5209,7 @@ function _tryComputeMlvForEquipment() {
       }
     }
     const calcHeur = applySplitMonthBilling(scenarios.resolveCalcHeuristics(
-      currentScenario, currentScenarioSnapshots, heuristicOverrides, fin, whatIfTransient,
+      currentScenario, currentScenarioSnapshots, heuristicOverrides, _heurProjectFallbacks(model), whatIfTransient,
     ), model);
     return monthlyCalc.computeMonthlyLaborView({
       laborLines: lines,
@@ -6373,7 +6373,7 @@ function renderSummary() {
     currentScenario,
     currentScenarioSnapshots,
     heuristicOverrides,
-    fin,
+    _heurProjectFallbacks(model),
     whatIfTransient,
   ), model);
 
@@ -8468,7 +8468,7 @@ function computeWhatIfPreview(overlay) {
       annualOrders: orders || 1,
     });
     const calcHeur = applySplitMonthBilling(scenarios.resolveCalcHeuristics(
-      currentScenario, currentScenarioSnapshots, heuristicOverrides, fin, ov,
+      currentScenario, currentScenarioSnapshots, heuristicOverrides, _heurProjectFallbacks(model), ov,
     ), model);
     const whatIfMarginFrac = (calcHeur.targetMarginPct || 0) / 100;
 
@@ -9538,6 +9538,38 @@ function syncDerivedTargetMargin() {
 }
 
 // ============================================================
+// HEURISTICS PROJECT-COL FALLBACK BAG (2026-04-29 OT-fix)
+// ============================================================
+/**
+ * `scenarios.resolveCalcHeuristics(scenario, snaps, overrides, projectCols, transient)`
+ * reads project-level fallbacks from the `projectCols` bag (e.g. `p.overtime`
+ * for OT%, `p.targetMargin` for margin). Historically callers passed
+ * `model.financial` directly, which works for fields that live there.
+ *
+ * The Settings → Labor Factors → "Overtime %" input writes to
+ * `model.laborCosting.overtimePct`, not `model.financial.overtime`. Without
+ * this bridge, the field is dead-wired: edits saved to the DB but every calc
+ * silently ignores them and falls back to the catalog default (5%).
+ *
+ * This helper builds the fallback bag by starting from `model.financial` and
+ * spreading in the laborCosting fields that the heuristics chain expects to
+ * see at the `p.*` keys. Add a new line here whenever a `laborCosting.*`
+ * Settings field needs to feed `calcHeur.*`.
+ *
+ * @param {Object} cmModel — the current cost model
+ * @returns {Object} fallback bag for resolveCalcHeuristics
+ */
+function _heurProjectFallbacks(cmModel) {
+  const fin = cmModel?.financial    || {};
+  const lc  = cmModel?.laborCosting || {};
+  return {
+    ...fin,
+    // Settings → Labor Factors → Overtime % (Bug A fix)
+    overtime: lc.overtimePct ?? fin.overtime,
+  };
+}
+
+// ============================================================
 // SPLIT-MONTH BILLING (2026-04-21)
 // ============================================================
 /**
@@ -10565,7 +10597,7 @@ function ensureMonthlyBundle() {
       currentScenario,
       currentScenarioSnapshots,
       heuristicOverrides,
-      fin,
+      _heurProjectFallbacks(model),
       whatIfTransient,
     ), model);
     const emBMarginFrac = (calcHeur.targetMarginPct || 0) / 100;

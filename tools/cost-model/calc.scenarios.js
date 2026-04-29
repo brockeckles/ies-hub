@@ -741,7 +741,12 @@ export function monthlyEffectiveHours(line, monthIndex, calcHeur, marketProfile)
   const otPct = monthlyOvertimePct(line, monthIndex, marketProfile, calcHeur?.overtimePct ?? 0);
   const absPct = monthlyAbsencePct(line, monthIndex, marketProfile, calcHeur?.absenceAllowancePct ?? 0);
   const baseMonthly = baseAnnual / 12;
-  return baseMonthly * (1 + otPct / 100) * (1 - absPct / 100);
+  // 2026-04-29 OT-fix: tooltip says "Each OT hour costs 1.5×" — that means
+  // OT hours add a 0.5× PREMIUM, not a full 1.0× extra. Old formula treated
+  // 5% OT as 5% extra hours at base rate (5% labor bump). Correct math:
+  // 5% of hours at 1.5× = 5% × 0.5 premium = 2.5% labor bump. Matches the
+  // annual-path semantics in calc.js `directLineAnnual` (otMult = 1 + ot * 0.5).
+  return baseMonthly * (1 + (otPct / 100) * 0.5) * (1 - absPct / 100);
 }
 
 /**
