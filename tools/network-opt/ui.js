@@ -57,6 +57,25 @@ let _noKpiRefreshTimer = null;
 /** @type {import('./types.js?v=20260418-sM').Facility[]} */
 let facilities = [];
 
+/**
+ * Phase 4 (volumes-as-nucleus, 2026-04-29) — currently active channel filter
+ * for the Demand Points table. null = show all. Set via the chip strip above
+ * the table.
+ * @type {string|null}
+ */
+let _demandChannelFilter = null;
+
+/** Minimal HTML-escape for user-supplied strings. */
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[c]);
+}
+/** Escape for HTML attribute values (covers double-quote contexts). */
+function escapeAttr(s) {
+  if (s == null) return '';
+  return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[c]);
+}
+
 /** @type {import('./types.js?v=20260418-sM').DemandPoint[]} */
 let demands = [];
 
@@ -1488,7 +1507,27 @@ function renderFacilities(el) {
 }
 
 function renderDemand(el) {
-  const totalDemand = demands.reduce((s, d) => s + d.annualDemand, 0);
+  // Phase 4 — derive distinct channels currently on demand points + render
+  // a filter chip strip. null filter = show everything. Empty-string channel
+  // values are bucketed under "(unmapped)".
+  const channelTotals = new Map(); // channelKey -> { units, points }
+  for (const d of demands) {
+    const k = (d.channelKey || '').trim();
+    const cur = channelTotals.get(k) || { units: 0, points: 0 };
+    cur.units += Number(d.annualDemand) || 0;
+    cur.points += 1;
+    channelTotals.set(k, cur);
+  }
+  const filteredDemands = _demandChannelFilter == null
+    ? demands
+    : demands.filter(d => (d.channelKey || '') === _demandChannelFilter);
+  const totalDemand = filteredDemands.reduce((s, d) => s + (Number(d.annualDemand) || 0), 0);
+  const channelChips = Array.from(channelTotals.entries()).map(([k, v]) => {
+    const isActive = _demandChannelFilter === k;
+    const label = k || '(unmapped)';
+    const pct = demands.length > 0 ? Math.round(100 * v.points / demands.length) : 0;
+    return `<button class="hub-btn hub-btn-sm ${isActive ? 'hub-btn-primary' : 'hub-btn-secondary'}" data-dem-chan-filter="${escapeAttr(k)}" title="${escapeAttr(label)} — ${v.points} points · ${v.units.toLocaleString()} units (${pct}%)">${escapeHtml(label)} <span style="opacity:.7;">${v.points}</span></button>`;
+  }).join('');
 
   el.innerHTML = `
     <div>
@@ -1498,12 +1537,20 @@ function renderDemand(el) {
           <button class="hub-btn hub-btn-sm hub-btn-secondary" id="no-add-demand">+ Add Point</button>
         </div>
       </div>
+      ${channelTotals.size > 0 ? `
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0 0 12px;font-size:12px;">
+          <span style="color:var(--ies-gray-500);font-weight:600;text-transform:uppercase;letter-spacing:.04em;font-size:11px;">Channel filter</span>
+          <button class="hub-btn hub-btn-sm ${_demandChannelFilter == null ? 'hub-btn-primary' : 'hub-btn-secondary'}" data-dem-chan-filter-all="1" title="Show all channels">All <span style="opacity:.7;">${demands.length}</span></button>
+          ${channelChips}
+        </div>
+      ` : ''}
 
       <div style="max-height:400px;overflow-y:auto;">
         <table style="width:100%;border-collapse:collapse;font-size:13px;">
           <thead style="position:sticky;top:0;background:#fff;z-index:1;">
             <tr style="border-bottom:2px solid var(--ies-gray-200);">
               <th style="text-align:left;padding:8px 6px;font-weight:700;">ZIP3</th>
+              <th style="text-align:left;padding:8px 6px;font-weight:700;" title="Channel binding (Phase 4 of volumes-as-nucleus). Free text — filter chips above auto-derive from distinct values. Match the Cost Model channel.key for downstream mode-mix routing.">Channel</th>
               <th style="text-align:right;padding:8px 6px;font-weight:700;">Lat</th>
               <th style="text-align:right;padding:8px 6px;font-weight:700;">Lng</th>
               <th style="text-align:right;padding:8px 6px;font-weight:700;">Annual Demand</th>
@@ -1517,9 +1564,14 @@ function renderDemand(el) {
             </tr>
           </thead>
           <tbody>
-            ${demands.map((d, i) => `
+            ${filteredDemands.map((d) => {
+              const i = demands.indexOf(d);  // stable original index for data-* handlers
+              return `
               <tr style="border-bottom:1px solid var(--ies-gray-200);">
                 <td style="padding:6px;font-weight:600;">${d.zip3 || '—'}</td>
+                <td style="padding:6px;">
+                  <input type="text" data-dem-channel="${i}" value="${escapeAttr(d.channelKey || '')}" placeholder="(unmapped)" maxlength="32" style="font-size:11px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;background:#fff;width:90px;" title="Free-text channel binding — match a Cost Model channel.key (e.g. dtc, b2b) when present." />
+                </td>
                 <td style="padding:6px;text-align:right;">${Number.isFinite(Number(d.lat)) ? Number(d.lat).toFixed(2) : '<span style="color:#dc2626;" title="Missing — re-add this row or set the city to auto-resolve">—</span>'}</td>
                 <td style="padding:6px;text-align:right;">${Number.isFinite(Number(d.lng)) ? Number(d.lng).toFixed(2) : '<span style="color:#dc2626;" title="Missing — re-add this row or set the city to auto-resolve">—</span>'}</td>
                 <td style="padding:6px;text-align:right;">${Number.isFinite(Number(d.annualDemand)) ? Number(d.annualDemand).toLocaleString() : '0'}</td>
@@ -1550,7 +1602,8 @@ function renderDemand(el) {
                   <button class="hub-btn hub-btn-sm hub-btn-secondary" data-dem-delete="${i}" style="padding:4px 8px;">✕</button>
                 </td>
               </tr>
-            `).join('')}
+            `;
+            }).join('')}
           </tbody>
         </table>
       </div>
@@ -1578,6 +1631,37 @@ function renderDemand(el) {
     btn.addEventListener('click', () => {
       demands.splice(parseInt(/** @type {HTMLElement} */ (btn).dataset.demDelete), 1);
       markDirty();
+      renderDemand(el);
+    });
+  });
+
+  // Phase 4 (volumes-as-nucleus, 2026-04-29): per-demand channel binding.
+  // Free-text input — match a Cost Model channel.key when downstream routing
+  // matters; otherwise leave blank for "(unmapped)" bucket.
+  el.querySelectorAll('[data-dem-channel]').forEach(input => {
+    input.addEventListener('change', () => {
+      const idx = parseInt(/** @type {HTMLElement} */ (input).dataset.demChannel);
+      const v = String(/** @type {HTMLInputElement} */ (input).value || '').trim();
+      if (demands[idx]) {
+        demands[idx].channelKey = v;
+        markDirty();
+        renderDemand(el); // re-render so the chip strip totals refresh
+      }
+    });
+  });
+
+  // Phase 4 — channel filter chip strip handlers.
+  el.querySelectorAll('[data-dem-chan-filter]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const k = /** @type {HTMLElement} */ (btn).dataset.demChanFilter;
+      // Toggle: clicking the active filter clears it.
+      _demandChannelFilter = (_demandChannelFilter === k) ? null : (k || '');
+      renderDemand(el);
+    });
+  });
+  el.querySelectorAll('[data-dem-chan-filter-all]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _demandChannelFilter = null;
       renderDemand(el);
     });
   });

@@ -12,10 +12,10 @@ import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260424-hyg04';
 import * as calc from './calc.js?v=20260427-s2';
-import * as api from './api.js?v=20260429-vol9';
+import * as api from './api.js?v=20260429-vol10';
 import * as scenarios from './calc.scenarios.js?v=20260429-otfix1';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
-import * as channelCalc from './calc.channels.js?v=20260429-vol9';
+import * as channelCalc from './calc.channels.js?v=20260429-vol10';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
 import * as shiftPlannerCalc from './shift-planner.js?v=20260427-pm3-s2';
 import * as shiftPlannerUi from './shift-planner-ui.js?v=20260428-walkthru1';
@@ -13143,11 +13143,34 @@ const _OFP_FLOW_PALETTE = [
  */
 function _ofpEnsureFlowRegistry() {
   if (!Array.isArray(model.ofpFlows)) model.ofpFlows = [];
+  // Phase 4 (volumes-as-nucleus, 2026-04-29): each ofpFlow carries an
+  // optional channelKey tying it to one of model.channels[]. Backfill auto-
+  // matches existing flow tags to channel keys/names by case-insensitive
+  // string contains so projects with conventionally-named flows ("DTC eCom",
+  // "B2B Wholesale") get pre-tagged for free.
+  const channels = Array.isArray(model.channels) ? model.channels : [];
+  const matchChannel = (tagOrLabel) => {
+    if (!tagOrLabel) return null;
+    const haystack = String(tagOrLabel).toLowerCase();
+    for (const c of channels) {
+      if (!c || !c.key) continue;
+      const k = String(c.key).toLowerCase();
+      const n = String(c.name || '').toLowerCase();
+      if (k && (haystack.includes(k) || k.includes(haystack))) return c.key;
+      if (n && (haystack.includes(n) || n.includes(haystack))) return c.key;
+    }
+    return null;
+  };
   // Backfill missing fields on legacy entries.
   model.ofpFlows.forEach((f, i) => {
     if (typeof f.label !== 'string' || !f.label) f.label = f.tag;
     if (typeof f.sortOrder !== 'number') f.sortOrder = i;
     if (typeof f.hidden !== 'boolean') f.hidden = false;
+    // Only backfill channelKey when the flow doesn't already have one.
+    // null is a valid "no channel" answer (designer chose unmapped).
+    if (f.channelKey === undefined) {
+      f.channelKey = matchChannel(f.tag) || matchChannel(f.label);
+    }
   });
   // Lazy-add registry entries for tags that exist on lines but not in
   // the registry. Preserves user edits — only adds new ones.
@@ -13164,7 +13187,7 @@ function _ofpEnsureFlowRegistry() {
   for (const t of lineTags) {
     if (!known.has(t)) {
       const next = (model.ofpFlows.reduce((mx, f) => Math.max(mx, f.sortOrder || 0), -1)) + 1;
-      model.ofpFlows.push({ tag: t, label: t, sortOrder: next });
+      model.ofpFlows.push({ tag: t, label: t, sortOrder: next, channelKey: matchChannel(t) });
     }
   }
 }
@@ -13976,8 +13999,23 @@ function _renderOfpNode(entry, areaKey, opHrs, lc) {
     : '';
   const flowTag = (l.path_tag || '').trim();
   const flowLabel = flowTag ? _ofpFlowLabel(flowTag) : '';
+  // Phase 4 (volumes-as-nucleus, 2026-04-29): each flow may be tied to a
+  // model.channels[] entry. When mapped, render a thin channel chip after
+  // the flow pill so designers can see the OFP <-> Volumes & Profile link
+  // at a glance. Tooltip extended with the channel binding for context.
+  const flowEntry = flowTag ? (model.ofpFlows || []).find(f => f.tag === flowTag) : null;
+  const flowChannelKey = flowEntry?.channelKey || '';
+  const flowChannel = flowChannelKey
+    ? (model.channels || []).find(c => c.key === flowChannelKey)
+    : null;
+  const channelChip = flowChannel
+    ? `<span class="ofp-node__channel-chip" data-channel-key="${escapeAttr(flowChannel.key)}" title="Channel: ${escapeAttr(flowChannel.name || flowChannel.key)} (Phase 4: OFP flow tied to model.channels[]).">${escapeHtml(flowChannel.name || flowChannel.key)}</span>`
+    : '';
+  const flowTitle = flowTag
+    ? `Flow: ${flowLabel}${flowLabel !== flowTag ? ` (${flowTag})` : ''}${flowChannel ? ` · Channel: ${flowChannel.name || flowChannel.key}` : ''}`
+    : '';
   const flowPill = flowTag
-    ? `<span class="ofp-node__flow-pill" data-flow-tag="${escapeAttr(flowTag)}" style="background:${_flowColor(flowTag)};" title="Flow: ${escapeAttr(flowLabel)}${flowLabel !== flowTag ? ` (${flowTag})` : ''}">${escapeHtml(flowLabel)}</span>`
+    ? `<span class="ofp-node__flow-pill" data-flow-tag="${escapeAttr(flowTag)}" style="background:${_flowColor(flowTag)};" title="${escapeAttr(flowTitle)}">${escapeHtml(flowLabel)}</span>${channelChip}`
     : '';
 
   return `
@@ -15670,6 +15708,12 @@ function _renderManageFlowsModal() {
           <code class="ofp-flow-mgr__tag" title="Canonical tag (matches line.path_tag). Immutable.">${escapeHtml(f.tag)}</code>
           ${isAuto ? '<span class="ofp-flow-mgr__auto-chip" title="Color is auto (deterministic hash from tag).">auto</span>' : `<button class="ofp-flow-mgr__reset-color" data-flow-tag="${escapeAttr(f.tag)}" title="Reset to auto color">↻</button>`}
         </td>
+        <td class="ofp-flow-mgr__channel-cell">
+          <select class="hub-select hub-select-sm" data-flow-tag="${escapeAttr(f.tag)}" data-flow-field="channelKey" title="Channel this flow serves. Phase 4 (volumes-as-nucleus, 2026-04-29) ties OFP flows to model.channels[] so the OFP and Volumes & Profile share the same channel vocabulary.">
+            <option value="" ${!f.channelKey ? 'selected' : ''}>(unmapped)</option>
+            ${(model.channels || []).map(c => `<option value="${escapeAttr(c.key)}" ${f.channelKey === c.key ? 'selected' : ''}>${escapeHtml(c.name || c.key)}</option>`).join('')}
+          </select>
+        </td>
         <td class="ofp-mgr-row__visible-cell">
           <button class="ofp-mgr-row__visible ${f.hidden ? 'ofp-mgr-row__visible--off' : ''}" data-flow-tag="${escapeAttr(f.tag)}" data-toggle="visible" title="${f.hidden ? 'Hidden on canvas — click to show' : 'Visible — click to hide on canvas'}">${f.hidden ? '🚫' : '👁'}</button>
         </td>
@@ -15686,7 +15730,7 @@ function _renderManageFlowsModal() {
   }).join('');
 
   const emptyRow = sorted.length === 0
-    ? `<tr><td colspan="9" style="text-align:center; padding:32px 12px; color:var(--ies-gray-400); font-style:italic; font-size:12px;">No flows yet — drag a card onto another to connect them on a flow, or click + Add Flow below.</td></tr>`
+    ? `<tr><td colspan="10" style="text-align:center; padding:32px 12px; color:var(--ies-gray-400); font-style:italic; font-size:12px;">No flows yet — drag a card onto another to connect them on a flow, or click + Add Flow below.</td></tr>`
     : '';
 
   return `
@@ -15706,6 +15750,7 @@ function _renderManageFlowsModal() {
               <th style="width:46px;">Color</th>
               <th style="width:240px;">Label</th>
               <th>Tag</th>
+              <th style="width:140px;" title="Channel this flow belongs to. Backfilled from flow tag/label match against model.channels[].">Channel</th>
               <th style="width:48px;text-align:center;" title="Show or hide on canvas">Show</th>
               <th style="width:64px;text-align:center;">Lines</th>
               <th style="width:60px;text-align:center;">Order</th>
@@ -16191,6 +16236,15 @@ function _ofpStyles() {
         font-size: 9px; font-weight: 700; color: #fff;
         padding: 1px 6px; border-radius: 8px;
         text-transform: uppercase; letter-spacing: 0.04em;
+        max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      /* Phase 4 — channel chip rendered alongside flow-pill when mapped */
+      .ofp-node__channel-chip {
+        font-size: 9px; font-weight: 600; color: var(--ies-gray-700);
+        background: var(--ies-gray-50);
+        border: 1px solid var(--ies-gray-200);
+        padding: 1px 6px; border-radius: 8px;
+        text-transform: none; letter-spacing: 0;
         max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       }
       .ofp-node__uom {

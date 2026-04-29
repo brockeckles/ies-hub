@@ -38,6 +38,12 @@
  * @property {number[]} [monthlyShare] — 12-element % distribution (sums to 100); used when seasonality='custom'
  * @property {('daily'|'weekly'|'biweekly'|'monthly'|'irregular')} [frequency] — order cadence; drives LTL vs TL break-even
  * @property {number} [freqPerWeek] — explicit weekly shipment count (overrides frequency bucket if set)
+ *
+ * Phase 4 of volumes-as-nucleus (2026-04-29):
+ * @property {string} [channelKey] — channel binding (typically DTC / B2B / Marketplace / EDI). Free-text;
+ *   filter chips on the Demand canvas auto-derive from distinct values.
+ *   When matched against a CM channel.key, future engine work can apply
+ *   per-channel mode preferences (DTC→Parcel, B2B→TL/LTL).
  */
 
 /**
