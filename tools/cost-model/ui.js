@@ -1787,6 +1787,15 @@ function computeHeaderKpis() {
           value: npv !== 0 ? calc.formatCurrency(npv, { compact: true }) : '—',
           hint: `Net present value over the ${contractYears}-year contract at ${fin.discountRate || 10}% discount rate.`,
         },
+        {
+          // 2026-04-29 (Brock): contract term as framing context for the other
+          // chips. Sets the horizon for the multi-year P&L, NPV, and ramp.
+          label: 'Contract',
+          value: contractYears > 0
+            ? `${contractYears} yr${(contractYears * 12) % 12 === 0 ? '' : ` (${Math.round(contractYears * 12)} mo)`}`
+            : '—',
+          hint: `${Math.round(contractYears * 12)}-month contract term — sets the multi-year P&L horizon, NPV window, and ramp tail.`,
+        },
       ],
     };
   } catch (err) {
