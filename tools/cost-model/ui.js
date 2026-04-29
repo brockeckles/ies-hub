@@ -12647,11 +12647,14 @@ function createEmptyModel() {
     indirectLaborLines: [],
     equipmentLines: [
       // Field names match renderEquipment DOM (monthly_cost / monthly_maintenance / amort_years).
-      { equipment_name: 'Reach Truck',              category: 'MHE',     quantity: 4,    acquisition_type: 'lease',    monthly_cost: 850,  acquisition_cost: 0,     monthly_maintenance: 100, amort_years: 7,  notes: '' },
-      { equipment_name: 'RF Scanners',              category: 'IT',      quantity: 15,   acquisition_type: 'lease',    monthly_cost: 45,   acquisition_cost: 0,     monthly_maintenance: 12,  amort_years: 5,  notes: '' },
-      { equipment_name: 'Selective Pallet Racking', category: 'Racking', quantity: 3000, acquisition_type: 'purchase', monthly_cost: 0,    acquisition_cost: 95,    monthly_maintenance: 0,   amort_years: 15, notes: 'Position count' },
-      { equipment_name: 'Dock Levelers',            category: 'Dock',    quantity: 20,   acquisition_type: 'purchase', monthly_cost: 0,    acquisition_cost: 4500,  monthly_maintenance: 21,  amort_years: 10, notes: '' },
-      { equipment_name: 'WMS License',              category: 'IT',      quantity: 1,    acquisition_type: 'service',  monthly_cost: 8500, acquisition_cost: 0,     monthly_maintenance: 0,   amort_years: 5,  notes: 'Annual SaaS license' },
+      // 2026-04-29 (demo audit): added line_type per row so the dropdown
+      // doesn't default-render every row as "Owned MHE". categoryToLineType:
+      //   MHE -> owned_mhe, IT -> it_equipment, Racking/Dock/etc -> owned_facility.
+      { equipment_name: 'Reach Truck',              category: 'MHE',     line_type: 'owned_mhe',       quantity: 4,    acquisition_type: 'lease',    monthly_cost: 850,  acquisition_cost: 0,     monthly_maintenance: 100, amort_years: 7,  notes: '' },
+      { equipment_name: 'RF Scanners',              category: 'IT',      line_type: 'it_equipment',    quantity: 15,   acquisition_type: 'lease',    monthly_cost: 45,   acquisition_cost: 0,     monthly_maintenance: 12,  amort_years: 5,  notes: '' },
+      { equipment_name: 'Selective Pallet Racking', category: 'Racking', line_type: 'owned_facility',  quantity: 3000, acquisition_type: 'purchase', monthly_cost: 0,    acquisition_cost: 95,    monthly_maintenance: 0,   amort_years: 15, notes: 'Position count' },
+      { equipment_name: 'Dock Levelers',            category: 'Dock',    line_type: 'owned_facility',  quantity: 20,   acquisition_type: 'purchase', monthly_cost: 0,    acquisition_cost: 4500,  monthly_maintenance: 21,  amort_years: 10, notes: '' },
+      { equipment_name: 'WMS License',              category: 'IT',      line_type: 'it_equipment',    quantity: 1,    acquisition_type: 'service',  monthly_cost: 8500, acquisition_cost: 0,     monthly_maintenance: 0,   amort_years: 5,  notes: 'Annual SaaS license' },
     ],
     overheadLines: [
       { category: 'Utilities',    annual_cost: 180000, driver: 'sqft',             notes: 'Electric + gas ($1.20/sqft)' },
@@ -18130,8 +18133,8 @@ function renderScenarios() {
       <div class="cm-card" style="margin-top:12px;background:#fef3c7;">
         <div style="display:flex;justify-content:space-between;align-items:center;">
           <div>
-            <strong>No scenario record yet.</strong> This project was created before the Phase 3 migration.
-            Click "Initialize scenario" to retroactively add a baseline scenario.
+            <strong>No scenarios yet.</strong> Save the cost model first, then click
+            <em>Initialize scenario</em> to create a baseline scenario you can branch from.
           </div>
           <button class="hub-btn-primary" data-cm-action="scenario-init">Initialize scenario</button>
         </div>
