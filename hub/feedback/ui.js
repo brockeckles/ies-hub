@@ -60,7 +60,7 @@ function render() {
   rootEl.innerHTML = `
     <div class="hub-content-inner" style="padding:24px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
-        <h2 class="text-page" style="margin:0;">Feedback Board</h2>
+        <h2 class="text-page">Feedback Board</h2>
       </div>
       <div id="fb-content"></div>
     </div>
@@ -79,11 +79,11 @@ function renderBoard(el) {
   const sorted = calc.sortFeedback(filtered, sortBy, 'desc');
 
   el.innerHTML = `
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">
-      ${kpi('Total', stats.totalItems, '#2563eb')}
-      ${kpi('Open', stats.openItems, '#d97706')}
-      ${kpi('Completed', stats.completedItems, '#16a34a')}
-      ${kpi('Resolution Rate', rate + '%', rate >= 50 ? '#16a34a' : '#d97706')}
+    <div class="hub-kpi-strip" style="margin-bottom:20px;">
+      ${kpi('Total', stats.totalItems)}
+      ${kpi('Open', stats.openItems, stats.openItems > 0 ? 'var(--ies-orange)' : null)}
+      ${kpi('Completed', stats.completedItems, 'var(--ies-green)')}
+      ${kpi('Resolution Rate', rate + '%', rate < 50 ? 'var(--ies-orange)' : 'var(--ies-green)')}
     </div>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">
       <span style="font-size:11px;font-weight:700;color:var(--ies-gray-400);">Type:</span>
@@ -95,7 +95,7 @@ function renderBoard(el) {
         <button class="hub-btn hub-btn-sm ${s === statusFilter ? '' : 'hub-btn-secondary'}" data-status-filter="${s}">${s === 'all' ? 'All' : s}</button>
       `).join('')}
       <span style="margin-left:auto;font-size:11px;color:var(--ies-gray-400);">Sort by:</span>
-      <select id="fb-sort" style="font-size:12px;padding:4px 8px;border:1px solid var(--ies-gray-200);border-radius:4px;">
+      <select id="fb-sort" class="hub-select" style="width:auto;height:auto;padding:4px 26px 4px 10px;font-size:12px;">
         <option value="upvotes" ${sortBy === 'upvotes' ? 'selected' : ''}>Most Voted</option>
         <option value="date" ${sortBy === 'date' ? 'selected' : ''}>Newest</option>
         <option value="priority" ${sortBy === 'priority' ? 'selected' : ''}>Priority</option>
@@ -172,10 +172,13 @@ function renderDetail(el) {
 }
 
 function kpi(label, value, color) {
+  // 2026-04-29 polish — emit hub-kpi-tile so the strip aligns with the rest
+  // of the hub. Optional color is preserved for threshold semantics.
+  const valueStyle = color ? ` style="color:${color};"` : '';
   return `
-    <div class="hub-card" style="padding:12px;text-align:center;">
-      <div style="font-size:20px;font-weight:800;color:${color};">${value}</div>
-      <div style="font-size:11px;color:var(--ies-gray-400);font-weight:600;">${label}</div>
+    <div class="hub-kpi-tile">
+      <div class="hub-kpi-tile__label">${label}</div>
+      <div class="hub-kpi-tile__value"${valueStyle}>${value}</div>
     </div>
   `;
 }

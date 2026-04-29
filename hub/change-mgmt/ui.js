@@ -153,11 +153,11 @@ function renderList(el) {
   const sorted = calc.sortInitiatives(filtered, 'priority', 'desc');
 
   el.innerHTML = `
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">
-      ${kpiCard('Total', stats.totalInitiatives, '#2563eb')}
-      ${kpiCard('Active', stats.activeInitiatives, '#16a34a')}
-      ${kpiCard('Milestones Done', `${stats.completedMilestones}/${stats.totalMilestones}`, '#7c3aed')}
-      ${kpiCard('At Risk', stats.overdueMilestones + stats.resistantCount, '#dc2626')}
+    <div class="hub-kpi-strip" style="margin-bottom:20px;">
+      ${kpiCard('Total', stats.totalInitiatives)}
+      ${kpiCard('Active', stats.activeInitiatives, 'var(--ies-green)')}
+      ${kpiCard('Milestones Done', `${stats.completedMilestones}/${stats.totalMilestones}`)}
+      ${kpiCard('At Risk', stats.overdueMilestones + stats.resistantCount, (stats.overdueMilestones + stats.resistantCount) > 0 ? 'var(--ies-red)' : null)}
     </div>
     <div style="display:flex;gap:8px;margin-bottom:16px;">
       ${['all', 'planning', 'in-progress', 'completed', 'on-hold'].map(s => `
@@ -347,10 +347,13 @@ function renderTimeline(el) {
 
 // ===== HELPERS =====
 function kpiCard(label, value, color) {
+  // 2026-04-29 polish — emit hub-kpi-tile so the strip aligns with the rest
+  // of the hub. Optional color is preserved for threshold semantics.
+  const valueStyle = color ? ` style="color:${color};"` : '';
   return `
-    <div class="hub-card" style="padding:12px;text-align:center;">
-      <div style="font-size:20px;font-weight:800;color:${color};">${value}</div>
-      <div style="font-size:11px;color:var(--ies-gray-400);font-weight:600;">${label}</div>
+    <div class="hub-kpi-tile">
+      <div class="hub-kpi-tile__label">${label}</div>
+      <div class="hub-kpi-tile__value"${valueStyle}>${value}</div>
     </div>
   `;
 }
