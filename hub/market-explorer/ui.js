@@ -158,8 +158,12 @@ function render() {
       .me-detail-slide .hub-kpi-tile { padding: 8px 10px; }
       /* Override 2-col/3-col tile grids in the detail panel: keep 2-col but tighter */
       .me-detail-slide [style*="grid-template-columns"] { gap: 8px !important; }
-      /* Detail panel tab bar — single row, tighter padding so all 5 fit */
+      /* Detail panel tab bar — single row, tighter padding so all 5 fit.
+         padding-bottom puts air between the tab buttons and the separator
+         line under them; margin-bottom puts air between the separator and
+         the tile content below. */
       .me-detail-slide .hub-tab-bar {
+        padding-bottom: 8px !important;
         margin-bottom: 16px !important;
         gap: 0 !important;
         flex-wrap: nowrap !important;
@@ -167,6 +171,7 @@ function render() {
       }
       .me-detail-slide .hub-tab {
         padding: 6px 10px !important;
+        margin-bottom: 0 !important;
         font-size: 11px !important;
         flex: 0 0 auto;
       }
@@ -195,18 +200,26 @@ function render() {
       }
       .me-chip:hover { border-color: var(--ies-navy); color: var(--ies-navy); }
       .me-chip.active { background: var(--ies-navy); color: #fff; border-color: var(--ies-navy); }
-      .me-rail { position: relative; }
+      .me-rail {
+        position: relative;
+        overflow: hidden;     /* clip the slide-in motion so list rows don't bleed out the edges */
+      }
       .me-rail-list, .me-detail-slide {
         position: absolute; inset: 0;
         overflow-y: auto;
-        background: #fff;
-        transition: transform 0.22s ease, opacity 0.18s ease;
+        background: var(--ies-gray-50, #f8f9fa);
+        transition: opacity 0.18s ease, transform 0.22s ease;
       }
+      .me-rail-list { background: #fff; z-index: 1; }
       .me-detail-slide {
         transform: translateX(100%); opacity: 0; pointer-events: none;
+        background: #fff;
         border-left: 4px solid var(--ies-orange);
+        z-index: 2;          /* sit above the list so its solid bg fully covers */
       }
-      .me-rail.detail-open .me-rail-list { transform: translateX(-6%); opacity: 0.4; pointer-events: none; }
+      /* On open: list fades out (no horizontal shift — that was bleeding past
+         the rail edges); detail slides in from right and sits on top. */
+      .me-rail.detail-open .me-rail-list { opacity: 0; pointer-events: none; }
       .me-rail.detail-open .me-detail-slide { transform: translateX(0); opacity: 1; pointer-events: auto; }
       .me-row {
         display: grid; grid-template-columns: 1fr auto;
@@ -499,8 +512,12 @@ function renderOverview(filtered) {
       .me-detail-slide .hub-kpi-tile { padding: 8px 10px; }
       /* Override 2-col/3-col tile grids in the detail panel: keep 2-col but tighter */
       .me-detail-slide [style*="grid-template-columns"] { gap: 8px !important; }
-      /* Detail panel tab bar — single row, tighter padding so all 5 fit */
+      /* Detail panel tab bar — single row, tighter padding so all 5 fit.
+         padding-bottom puts air between the tab buttons and the separator
+         line under them; margin-bottom puts air between the separator and
+         the tile content below. */
       .me-detail-slide .hub-tab-bar {
+        padding-bottom: 8px !important;
         margin-bottom: 16px !important;
         gap: 0 !important;
         flex-wrap: nowrap !important;
@@ -508,6 +525,7 @@ function renderOverview(filtered) {
       }
       .me-detail-slide .hub-tab {
         padding: 6px 10px !important;
+        margin-bottom: 0 !important;
         font-size: 11px !important;
         flex: 0 0 auto;
       }
