@@ -13,7 +13,7 @@ import {
   getAggregateDerived,
   getAggregateInbound,
   getChannelDerived,
-} from './calc.channels.js?v=20260429-vol11';
+} from './calc.channels.js?v=20260429-vol12';
 
 // ============================================================
 // COST MODEL PROJECTS (CRUD)

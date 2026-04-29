@@ -13,7 +13,7 @@ import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260429-wsc-aesthetic';
 import * as calc from './calc.js?v=20260425-s11';
 import * as api from './api.js?v=20260418-sL';
-import * as cmApi from '../cost-model/api.js?v=20260429-vol11';
+import * as cmApi from '../cost-model/api.js?v=20260429-vol12';
 
 // ============================================================
 // CHROME v3 — phase + section structure (CM Chrome v3 ripple, step 3 redo)
@@ -2989,6 +2989,22 @@ function createDefaultVolumes() {
 
 /** Minimal HTML-escape for user-supplied strings in the dashboard. */
 function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+/**
+ * Escape for HTML attribute values (covers double-quote contexts).
+ * Phase 4 Layer B (volumes-as-nucleus, 2026-04-29) — added because the new
+ * per-channel allocation editor and dashboard byChannel rows write
+ * channelKey into data-* attribute values.
+ */
+function escapeAttr(s) {
   if (s == null) return '';
   return String(s)
     .replaceAll('&', '&amp;')
