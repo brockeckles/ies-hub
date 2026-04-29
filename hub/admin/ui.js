@@ -167,101 +167,189 @@ function renderMasterData(el) {
   });
 }
 
-function renderTableDetail(el) {
+// 2026-04-29: Master table detail is fully DB-backed via api.listMasterRecords.
+// Add / Edit / Delete buttons wire through api.saveMasterRecord and
+// api.deleteMasterRecord. Only admins can write (RLS enforced server-side;
+// the buttons render for anyone but the save call will reject for non-admins).
+
+const _masterDataCache = new Map();   // tableName -> rows[]
+let _masterEditModal = null;
+
+async function renderTableDetail(el) {
   const table = activeMasterTable;
   if (!table) return;
 
-  // Sample data for each table
-  const sampleData = {
-    cost_buckets: [
-      { name: 'Management', code: 'MGMT', sort_order: 1, active: true },
-      { name: 'Labor', code: 'LABOR', sort_order: 2, active: true },
-      { name: 'Facility', code: 'FAC', sort_order: 3, active: true },
-      { name: 'Equipment', code: 'EQUIP', sort_order: 4, active: true },
-      { name: 'Overhead', code: 'OH', sort_order: 5, active: true },
-    ],
-    vehicle_types: [
-      { name: 'Sprinter Van', payload_lbs: 3000, cube_ft3: 380, cpm: 2.15, active: true },
-      { name: 'Box Truck (26ft)', payload_lbs: 12000, cube_ft3: 1600, cpm: 3.25, active: true },
-      { name: 'Semi (53ft)', payload_lbs: 43000, cube_ft3: 3400, cpm: 1.85, active: true },
-      { name: 'Straight (28ft)', payload_lbs: 25000, cube_ft3: 2000, cpm: 2.45, active: true },
-      { name: 'Pup Trailer', payload_lbs: 18000, cube_ft3: 1700, cpm: 1.95, active: true },
-    ],
-    dos_templates: [
-      { name: 'Credit Check', stage: 'Stage 1', required: true, sort_order: 1 },
-      { name: 'Cost Model', stage: 'Stage 3', required: true, sort_order: 2 },
-      { name: 'Facility Plan', stage: 'Stage 3', required: true, sort_order: 3 },
-      { name: 'P&L Projection', stage: 'Stage 3', required: false, sort_order: 4 },
-      { name: 'ELT Approval', stage: 'Stage 5', required: true, sort_order: 5 },
-    ],
-    escalation_rates: [
-      { category: 'Labor', rate_pct: 3.5, year: 2026, source: 'BLS' },
-      { category: 'Facility', rate_pct: 2.8, year: 2026, source: 'CRE Data' },
-      { category: 'Equipment', rate_pct: 2.2, year: 2026, source: 'Industrial' },
-      { category: 'Utilities', rate_pct: 4.1, year: 2026, source: 'DOE' },
-    ],
-    sccs: [
-      { name: 'Inbound Logistics', category: 'Operational', sort_order: 1 },
-      { name: 'Warehouse Operations', category: 'Operational', sort_order: 2 },
-      { name: 'Network Design', category: 'Strategic', sort_order: 3 },
-      { name: 'Automation Technology', category: 'Technology', sort_order: 4 },
-      { name: 'Labor Solutions', category: 'Operational', sort_order: 5 },
-    ],
-  };
-
-  const rows = sampleData[table.id] || [];
-
+  // Render frame immediately with a loading state, then async-fetch + repaint.
   el.innerHTML = `
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
       <button class="hub-btn hub-btn-sm hub-btn-secondary" id="admin-back">← Back to Tables</button>
       <h3 style="font-size:16px;font-weight:700;margin:0;flex:1;">${table.name}</h3>
-      <button class="hub-btn hub-btn-sm hub-btn-secondary" id="admin-refresh" title="Refresh data from Supabase">🔄 Refresh</button>
+      <button class="hub-btn hub-btn-sm" id="admin-add">+ Add</button>
+      <button class="hub-btn hub-btn-sm hub-btn-secondary" id="admin-refresh" title="Refresh from Supabase">↻ Refresh</button>
     </div>
-    <div style="margin-bottom:12px;padding:12px;background:#f0fdf4;border-left:3px solid #22c55e;border-radius:6px;">
-      <div style="font-size:11px;font-weight:700;color:#15803d;text-transform:uppercase;">Sample Data</div>
-      <div style="font-size:12px;color:#166534;">Showing ${rows.length} of ${table.rowCount} configured records. Connect to Supabase to load live data.</div>
+    <div id="admin-table-body">
+      <div style="padding: 32px; text-align: center; color: var(--ies-gray-400); font-size: 13px;">Loading…</div>
     </div>
-    <div class="hub-card" style="padding:16px;overflow-x:auto;">
+    <div id="admin-modal-host"></div>
+  `;
+  el.querySelector('#admin-back').addEventListener('click', () => { activeMasterTable = null; render(); });
+  el.querySelector('#admin-add').addEventListener('click', () => _openMasterEditModal(table, null));
+  el.querySelector('#admin-refresh').addEventListener('click', () => {
+    _masterDataCache.delete(table.tableName);
+    renderTableDetail(el);
+  });
+
+  let rows = _masterDataCache.get(table.tableName);
+  if (!rows) {
+    try {
+      rows = await api.listMasterRecords(table.tableName);
+      _masterDataCache.set(table.tableName, rows);
+    } catch (err) {
+      console.warn('[admin] listMasterRecords failed', err);
+      rows = [];
+    }
+  }
+  _renderMasterTableBody(el, table, rows);
+}
+
+function _renderMasterTableBody(el, table, rows) {
+  const body = el.querySelector('#admin-table-body');
+  if (!body) return;
+  body.innerHTML = `
+    <div class="hub-card" style="padding:0;overflow-x:auto;">
       <table style="width:100%;border-collapse:collapse;font-size:13px;">
         <thead>
           <tr style="background:var(--ies-gray-50);">
             ${table.columns.map(c => `<th style="text-align:left;padding:10px 12px;border-bottom:2px solid var(--ies-gray-200);font-weight:700;font-size:11px;text-transform:uppercase;color:var(--ies-gray-600);">${c.label}</th>`).join('')}
+            <th style="text-align:right;padding:10px 12px;border-bottom:2px solid var(--ies-gray-200);font-weight:700;font-size:11px;text-transform:uppercase;color:var(--ies-gray-600);width:160px;">Actions</th>
           </tr>
         </thead>
         <tbody>
-          ${rows.map((row, idx) => `
+          ${(rows || []).map((row, idx) => `
             <tr style="border-bottom:1px solid var(--ies-gray-100);${idx % 2 === 0 ? 'background:#fafafa;' : ''}">
               ${table.columns.map(c => {
                 const val = row[c.key];
                 let display = val;
                 if (c.type === 'boolean') display = val ? '✓' : '✕';
-                if (c.type === 'number') display = typeof val === 'number' ? val.toLocaleString() : val;
-                return `<td style="padding:10px 12px;color:var(--ies-gray-700);">${display || '—'}</td>`;
+                else if (c.type === 'number') display = (typeof val === 'number') ? val.toLocaleString() : (val ?? '—');
+                else display = (val == null || val === '') ? '—' : String(val);
+                return `<td style="padding:10px 12px;color:var(--ies-gray-700);">${display}</td>`;
               }).join('')}
+              <td style="padding:8px 12px;text-align:right;white-space:nowrap;">
+                <button class="hub-btn hub-btn-sm hub-btn-secondary" data-edit-id="${row.id || ''}" style="font-size:11px;margin-right:6px;">Edit</button>
+                <button class="hub-btn hub-btn-sm hub-btn-secondary" data-delete-id="${row.id || ''}" style="font-size:11px;color:var(--ies-red);">Delete</button>
+              </td>
             </tr>
           `).join('')}
-          ${rows.length === 0 ? `<tr><td colspan="${table.columns.length}" style="padding:16px;text-align:center;color:var(--ies-gray-400);font-size:12px;">No sample data available</td></tr>` : ''}
+          ${(!rows || rows.length === 0) ? `<tr><td colspan="${table.columns.length + 1}" style="padding:24px;text-align:center;color:var(--ies-gray-400);font-size:12px;">No records yet — click <strong>+ Add</strong> to create the first.</td></tr>` : ''}
         </tbody>
       </table>
+      <div style="padding: 8px 12px; font-size: 11px; color: var(--ies-gray-500); border-top: 1px solid var(--ies-gray-100); background: var(--ies-gray-50);">
+        ${(rows || []).length} record${(rows || []).length === 1 ? '' : 's'} · table: <code>${table.tableName}</code>
+      </div>
     </div>
   `;
-
-  el.querySelector('#admin-back')?.addEventListener('click', () => { activeMasterTable = null; render(); });
-  el.querySelector('#admin-refresh')?.addEventListener('click', (e) => {
-    const btn = /** @type {HTMLButtonElement} */ (e.currentTarget);
-    btn.disabled = true;
-    const prior = btn.innerHTML;
-    btn.innerHTML = '↻ Refreshing…';
-    // Master tables currently render from the hardcoded sampleData map above.
-    // When Supabase wiring lands, replace this with an api.listMasterTable()
-    // call + re-render. For now we surface a toast instead of the old
-    // `alert('Refreshing... (simulated)')` placeholder so the UX is clean.
-    setTimeout(() => {
-      btn.disabled = false;
-      btn.innerHTML = prior;
-      showToast('Sample data refreshed (live Supabase pull lands with master-table API)', 'info', { duration: 3500 });
-    }, 450);
+  // Wire row-level actions
+  body.querySelectorAll('[data-edit-id]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.editId;
+      const row = (rows || []).find(r => String(r.id) === String(id));
+      if (row) _openMasterEditModal(table, row);
+    });
   });
+  body.querySelectorAll('[data-delete-id]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.deleteId;
+      if (!id) return;
+      if (!window.confirm(`Delete this ${table.name.toLowerCase()} record? This cannot be undone.`)) return;
+      try {
+        await api.deleteMasterRecord(table.tableName, id);
+        _masterDataCache.delete(table.tableName);
+        renderTableDetail(rootEl.querySelector('#admin-content') || rootEl);
+        showToast('Deleted', 'success', { duration: 2000 });
+      } catch (err) {
+        console.warn('[admin] delete failed', err);
+        showToast('Delete failed: ' + (err.message || err), 'error');
+      }
+    });
+  });
+}
+
+function _openMasterEditModal(table, row) {
+  const isEdit = !!row;
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9990;display:flex;align-items:center;justify-content:center;';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:12px;padding:20px;width:480px;max-width:92vw;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+      <div style="font-size:15px;font-weight:800;margin-bottom:14px;">${isEdit ? 'Edit' : 'Add'} ${table.name.replace(/s$/, '')}</div>
+      <form id="master-form" style="display:flex;flex-direction:column;gap:10px;">
+        ${table.columns.map(c => _masterFormField(c, row)).join('')}
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;">
+          <button type="button" class="hub-btn hub-btn-sm hub-btn-secondary" id="master-cancel">Cancel</button>
+          <button type="submit" class="hub-btn hub-btn-sm">${isEdit ? 'Save changes' : 'Create'}</button>
+        </div>
+      </form>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  _masterEditModal = overlay;
+
+  const close = () => { overlay.remove(); _masterEditModal = null; };
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  overlay.querySelector('#master-cancel').addEventListener('click', close);
+
+  const form = overlay.querySelector('#master-form');
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const payload = {};
+    for (const c of table.columns) {
+      const input = form.querySelector(`[name="${c.key}"]`);
+      if (!input) continue;
+      let v;
+      if (c.type === 'boolean')      v = input.checked;
+      else if (c.type === 'number')  v = input.value === '' ? null : Number(input.value);
+      else                            v = input.value === '' ? null : input.value;
+      payload[c.key] = v;
+    }
+    try {
+      await api.saveMasterRecord(table.tableName, isEdit ? row.id : null, payload);
+      _masterDataCache.delete(table.tableName);
+      close();
+      renderTableDetail(rootEl.querySelector('#admin-content') || rootEl);
+      showToast(isEdit ? 'Saved' : 'Created', 'success', { duration: 2000 });
+    } catch (err) {
+      console.warn('[admin] save failed', err);
+      showToast('Save failed: ' + (err.message || err), 'error');
+    }
+  });
+
+  // Focus first input
+  const first = overlay.querySelector('input, select, textarea');
+  if (first) first.focus();
+}
+
+function _masterFormField(c, row) {
+  const v = row ? row[c.key] : '';
+  const safe = (s) => String(s ?? '').replace(/"/g, '&quot;');
+  const label = `<label style="display:flex;flex-direction:column;gap:4px;font-size:11px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:0.04em;">${c.label}${c.required ? ' *' : ''}`;
+  const closeLabel = '</label>';
+  if (c.type === 'boolean') {
+    const checked = v ? 'checked' : '';
+    return `<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ies-gray-700);font-weight:600;">
+      <input type="checkbox" name="${c.key}" ${checked} />
+      ${c.label}
+    </label>`;
+  }
+  if (c.type === 'select' && Array.isArray(c.options)) {
+    return `${label}<select class="hub-select" name="${c.key}" ${c.required ? 'required' : ''}>
+      <option value="">—</option>
+      ${c.options.map(opt => `<option value="${safe(opt)}" ${String(v) === String(opt) ? 'selected' : ''}>${safe(opt)}</option>`).join('')}
+    </select>${closeLabel}`;
+  }
+  if (c.type === 'number') {
+    return `${label}<input class="hub-input" type="number" step="any" name="${c.key}" value="${safe(v)}" ${c.required ? 'required' : ''} />${closeLabel}`;
+  }
+  return `${label}<input class="hub-input" type="text" name="${c.key}" value="${safe(v)}" ${c.required ? 'required' : ''} />${closeLabel}`;
 }
 
 // ===== USERS =====
