@@ -436,6 +436,10 @@ let heuristicsCatalog = [];
 let heuristicOverrides = {};
 let dealScenarios = [];
 let currentScenario = null;
+// _chromeScenarioRow — purely for the top-bar title (model name + scenario label).
+// Kept separate from currentScenario so eager loading does not trigger snapshot
+// mode in resolveCalcHeuristics for approved scenarios.
+let _chromeScenarioRow = null;
 let currentScenarioSnapshots = null;   // grouped { labor:[], facility:[], ..., heuristics:[] }
 let currentRevisions = [];
 let _lastCalcHeuristics = null;        // set by Summary calc; read by Timeline/Summary banners
@@ -520,6 +524,7 @@ export async function mount(el) {
   viewMode = 'landing';
   // Reset Phase 3/4 module state so a prior session's cache doesn't bleed in
   currentScenario = null;
+  _chromeScenarioRow = null;
   currentScenarioSnapshots = null;
   currentRevisions = [];
   dealScenarios = [];
@@ -808,8 +813,17 @@ async function loadModelByCmId(id) {
     // Reset scenario family cache so the new project's family loads
     scenarioFamily = null;
     _scenarioFamilyLoadInFlight = false;
+    _chromeScenarioRow = null;
     renderCurrentView();
     refreshSaveStateChip();
+    // Eagerly fetch the scenario row so the chrome title shows the scenario
+    // label (Baseline / Pessimistic / Optimistic) from the moment the model opens.
+    api.getScenarioByProject(id).then(row => {
+      _chromeScenarioRow = row || null;
+      if (rootEl && viewMode === 'editor') {
+        try { refreshToolChrome(rootEl, _buildCmChromeOpts()); } catch (_) {}
+      }
+    }).catch(() => {});
   } catch (err) {
     console.error('[CM] Load failed:', err);
     showCmToast('Load failed: ' + err.message, 'error');
@@ -2208,6 +2222,36 @@ function _buildCmChromeOpts() {
     { id: 'cm-export', label: 'Export', title: 'Export to .xlsx' },
   ];
 
+  // Top-bar model identity: name + scenario label, rendered as row2Prefix
+  // so the user always knows which model + scenario they\'re viewing.
+  const _modelName = (model?.projectDetails?.name || model?.name || '').trim();
+  const _scenarioLabel = (_chromeScenarioRow?.scenario_label
+    || model?.scenario_label
+    || (_chromeScenarioRow?.is_baseline ? 'Baseline' : '')).toString().trim();
+  const _isBaseline = !!(_chromeScenarioRow?.is_baseline)
+    || /^baseline$/i.test(_scenarioLabel);
+  const _scStatus = _chromeScenarioRow?.status || null;
+  const _statusBg = _scStatus === 'approved' ? 'rgba(22,163,74,0.10)'
+                  : _scStatus === 'rejected' ? 'rgba(220,38,38,0.10)' : null;
+  const _statusFg = _scStatus === 'approved' ? '#16a34a'
+                  : _scStatus === 'rejected' ? '#dc2626' : null;
+  const _pillCss = _isBaseline
+    ? 'color:var(--ies-blue);background:rgba(0,71,171,0.10);'
+    : 'color:var(--ies-gray-600);background:var(--ies-gray-100);';
+  const _pillLabel = _isBaseline ? '\u2605 Baseline' : (_scenarioLabel || 'Scenario');
+  const _safeName = _modelName.replace(/"/g, '&quot;');
+  const _modelTitleHtml = (_modelName || _scenarioLabel) ? (
+    '<div class="cm-model-title" style="display:flex;align-items:center;gap:8px;padding:0 12px 0 0;border-right:1px solid var(--ies-gray-200);margin-right:10px;flex-shrink:0;min-width:0;">' +
+      (_modelName
+        ? '<span style="font-size:12px;font-weight:700;color:var(--ies-navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px;" title="' + _safeName + '">' + _modelName + '</span>'
+        : '') +
+      (_scenarioLabel || _isBaseline
+        ? '<span style="display:inline-block;font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;letter-spacing:0.04em;text-transform:uppercase;white-space:nowrap;' + _pillCss + '" title="Scenario">' + _pillLabel + '</span>'
+        : '') +
+      (_statusBg ? '<span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:6px;letter-spacing:0.04em;text-transform:uppercase;background:' + _statusBg + ';color:' + _statusFg + ';">' + _scStatus + '</span>' : '') +
+    '</div>'
+  ) : '';
+
   return {
     toolKey: 'cm',
     groups,
@@ -2217,6 +2261,7 @@ function _buildCmChromeOpts() {
     sectionCompleteness: _sectionCompleteness,
     saveState: { state: stateName, title: stateTitle, when: formatSavedWhen() },
     actions,
+    row2Prefix: _modelTitleHtml,
     showSidebar: _cmSidebarOpen,
     sidebarHeader: 'All Sections',
     sidebarBody: renderGroupedNav() + '<div id="cm-validation" style="padding: 8px 16px; border-top: 1px solid var(--ies-gray-200); font-size: 11px;"></div>',
