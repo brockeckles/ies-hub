@@ -4860,7 +4860,7 @@ IT Equipment — RF/printers/AP, always owned, sized to peak HC
 Owned Facility — racking/dock/charging/office/security/conveyor">Line Type</th>
             <th style="width:100px;">Category</th>
             <th class="hub-num" style="width:54px;">Qty</th>
-            <th style="width:100px;">Type</th>
+            <th style="width:120px;">Type</th>
             <th class="hub-num" style="width:80px;">$ / Mo</th>
             <th class="hub-num" style="width:88px;">Acq Cost</th>
             <th class="hub-num" style="width:82px;">Maint / Mo</th>
@@ -9241,7 +9241,7 @@ function renderLinkedDesigns() {
         ? 'color:var(--ies-blue);background:rgba(0,71,171,0.10);'
         : 'color:var(--ies-gray-600);background:var(--ies-gray-100);';
       const pillLabel = isBaseline ? '★ Baseline' : 'Scenario';
-      const ribbon = `<span style="display:inline-block;font-size:10px;font-weight:700;padding:3px 9px;border-radius:10px;letter-spacing:0.04em;text-transform:uppercase;${pillCss}">${pillLabel}</span>`;
+      const ribbon = `<span style="display:inline-block;white-space:nowrap;font-size:10px;font-weight:700;padding:3px 9px;border-radius:10px;letter-spacing:0.04em;text-transform:uppercase;${pillCss}">${pillLabel}</span>`;
       const action = isCurrent
         ? '<span style="font-size:11px;color:var(--ies-gray-400);font-style:italic;">current</span>'
         : `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="switch-scenario" data-target-id="${proj.id}" title="Open this scenario" style="font-size:11px;padding:3px 10px;">Open →</button>`;
@@ -9272,7 +9272,7 @@ function renderLinkedDesigns() {
         <table class="cm-grid-table" style="font-size:13px;">
           <thead>
             <tr>
-              <th style="width:100px;">Type</th>
+              <th style="width:120px;">Type</th>
               <th>Scenario</th>
               <th style="width:90px;">Status</th>
               <th class="cm-num" style="width:80px;">Margin</th>
