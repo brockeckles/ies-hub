@@ -475,52 +475,41 @@ export async function listScenarios(dealId) {
  */
 export async function listScenarioFamilyForProject(projectId) {
   if (!projectId) return [];
-  // Step 1 — get the current scenario row to learn the deal_id + chain entry point
+  const SELECT = 'id, parent_scenario_id, is_baseline, scenario_label, status, project_id, cost_model_projects!cost_model_scenarios_project_id_fkey(id, name, scenario_label, facility_sqft, target_margin_pct, updated_at)';
+  // Step 1 — fetch the current scenario row by project_id
   const { data: cur, error: e1 } = await db.from('cost_model_scenarios')
-    .select('id, parent_scenario_id, deal_id')
+    .select('id, parent_scenario_id')
     .eq('project_id', projectId).maybeSingle();
   if (e1 || !cur) return [];
-  // Step 2 — fetch all scenarios for that deal with embedded project info.
-  // Explicit FK hint on cost_model_projects since cost_model_scenarios has 3 FKs.
-  let q;
-  if (cur.deal_id) {
-    q = db.from('cost_model_scenarios')
-      .select('id, parent_scenario_id, is_baseline, scenario_label, status, project_id, cost_model_projects!cost_model_scenarios_project_id_fkey(id, name, scenario_label, facility_sqft, target_margin_pct, updated_at)')
-      .eq('deal_id', cur.deal_id);
-  } else {
-    // Deal-less scenario — fall back to walking by id
-    q = db.from('cost_model_scenarios')
-      .select('id, parent_scenario_id, is_baseline, scenario_label, status, project_id, cost_model_projects!cost_model_scenarios_project_id_fkey(id, name, scenario_label, facility_sqft, target_margin_pct, updated_at)')
-      .or(`id.eq.${cur.id},parent_scenario_id.eq.${cur.id}`);
-  }
-  const { data: all, error: e2 } = await q;
-  if (e2 || !Array.isArray(all)) { console.warn('[CM] listScenarioFamilyForProject failed:', e2); return []; }
-  const byId = new Map(all.map(s => [s.id, s]));
-  // Step 3 — climb parent chain from current to root
-  let root = byId.get(cur.id);
+  // Step 2 — climb parent_scenario_id to find the family root. We deliberately
+  // do NOT filter by deal_id — historically some scenario rows had NULL deal_id
+  // even though their project had deal_deals_id set, which silently dropped them
+  // from the family. The parent-chain walk works regardless of deal_id state.
+  let rootId = cur.id;
+  let parentId = cur.parent_scenario_id;
   let guard = 0;
-  while (root && root.parent_scenario_id && byId.has(root.parent_scenario_id) && guard++ < 10) {
-    root = byId.get(root.parent_scenario_id);
+  while (parentId && guard++ < 10) {
+    const { data: parent } = await db.from('cost_model_scenarios')
+      .select('id, parent_scenario_id')
+      .eq('id', parentId).maybeSingle();
+    if (!parent) break;
+    rootId = parent.id;
+    parentId = parent.parent_scenario_id;
   }
-  if (!root) return [];
-  // Step 4 — filter to family (scenario whose ancestor chain ends at root)
-  const inFamily = (s) => {
-    let n = s, g = 0;
-    while (n && g++ < 10) {
-      if (n.id === root.id) return true;
-      if (!n.parent_scenario_id) return false;
-      n = byId.get(n.parent_scenario_id);
-    }
-    return false;
-  };
-  const fam = all.filter(inFamily);
-  // Sort: baseline first, then children oldest-first by id
-  fam.sort((a, b) => {
-    if (a.id === root.id) return -1;
-    if (b.id === root.id) return 1;
+  // Step 3 — collect root + direct children. Depth-1 covers the current data
+  // shape (baseline + sibling scenarios). For deeper trees, future work can add
+  // an RPC with a recursive CTE; that is not needed today.
+  const { data, error: e2 } = await db.from('cost_model_scenarios')
+    .select(SELECT)
+    .or(`id.eq.${rootId},parent_scenario_id.eq.${rootId}`);
+  if (e2 || !Array.isArray(data)) { console.warn('[CM] listScenarioFamilyForProject failed:', e2); return []; }
+  // Sort: baseline first (by root id), then children oldest-first by id
+  data.sort((a, b) => {
+    if (a.id === rootId) return -1;
+    if (b.id === rootId) return 1;
     return a.id - b.id;
   });
-  return fam;
+  return data;
 }
 
 /**

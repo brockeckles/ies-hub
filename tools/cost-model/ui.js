@@ -12,7 +12,7 @@ import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260424-hyg04';
 import * as calc from './calc.js?v=20260427-s2';
-import * as api from './api.js?v=20260429-lnk1';
+import * as api from './api.js?v=20260429-lnk2';
 import * as scenarios from './calc.scenarios.js?v=20260429-otfix1';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
@@ -9190,21 +9190,22 @@ function renderLinkedDesigns() {
       const marginDisp = Number.isFinite(marginRaw) && marginRaw > 0 ? `${marginRaw.toFixed(1)}%` : '—';
       const sqftDisp = formatSqft(proj.facility_sqft);
       const updated = proj.updated_at ? new Date(proj.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
-      const ribbon = isBaseline
-        ? '<span style="font-size:10px;font-weight:700;color:var(--ies-blue);padding:2px 6px;border-radius:8px;background:rgba(0,71,171,0.12);letter-spacing:0.02em;">★ BASELINE</span>'
-        : '<span style="font-size:10px;font-weight:700;color:var(--ies-gray-500);padding:2px 6px;border-radius:8px;background:var(--ies-gray-100);letter-spacing:0.02em;">CHILD</span>';
-      const youBadge = isCurrent
-        ? '<span style="font-size:10px;font-weight:700;color:#ea580c;padding:2px 6px;border-radius:8px;background:rgba(234,88,12,0.10);letter-spacing:0.02em;margin-left:6px;">YOU&apos;RE HERE</span>'
-        : '';
+      // Single clean pill in the Type column. Current row gets a left-bar
+      // accent + a tint to convey 'this is where you are' without an extra chip.
+      const pillCss = isBaseline
+        ? 'color:var(--ies-blue);background:rgba(0,71,171,0.10);'
+        : 'color:var(--ies-gray-600);background:var(--ies-gray-100);';
+      const pillLabel = isBaseline ? '★ Baseline' : 'Scenario';
+      const ribbon = `<span style="display:inline-block;font-size:10px;font-weight:700;padding:3px 9px;border-radius:10px;letter-spacing:0.04em;text-transform:uppercase;${pillCss}">${pillLabel}</span>`;
       const action = isCurrent
-        ? '<span style="font-size:11px;color:var(--ies-gray-400);">— current —</span>'
+        ? '<span style="font-size:11px;color:var(--ies-gray-400);font-style:italic;">current</span>'
         : `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="switch-scenario" data-target-id="${proj.id}" title="Open this scenario" style="font-size:11px;padding:3px 10px;">Open →</button>`;
       const rowStyle = isCurrent
-        ? 'background:rgba(234,88,12,0.04);'
+        ? 'background:rgba(0,71,171,0.05);box-shadow:inset 3px 0 0 var(--ies-blue);'
         : '';
       return `
         <tr style="${rowStyle}">
-          <td>${ribbon}${youBadge}</td>
+          <td>${ribbon}</td>
           <td style="font-weight:600;">${_esc(label)}</td>
           <td><span style="font-size:10px;padding:2px 8px;border-radius:8px;background:${statusBg};color:${statusFg};font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">${status}</span></td>
           <td class="cm-num">${marginDisp}</td>
@@ -9226,7 +9227,7 @@ function renderLinkedDesigns() {
         <table class="cm-grid-table" style="font-size:13px;">
           <thead>
             <tr>
-              <th style="width:130px;">Type</th>
+              <th style="width:100px;">Type</th>
               <th>Scenario</th>
               <th style="width:90px;">Status</th>
               <th class="cm-num" style="width:80px;">Margin</th>
