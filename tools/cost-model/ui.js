@@ -15306,38 +15306,40 @@ function _ofpStyles() {
       .ofp-node--dragging { opacity: 0.35; transform: scale(0.96); box-shadow: 0 4px 12px rgba(0,71,171,0.25); }
       /* v0.3a.1 — drop a card onto another card → connect both on same path */
       .ofp-node--droptarget {
-        outline: 2px dashed var(--ies-blue);
+        outline: 3px dashed var(--ies-blue);
         outline-offset: 2px;
-        background: rgba(0, 71, 171, 0.06);
+        background: rgba(0, 71, 171, 0.22);
+        box-shadow: 0 0 0 3px rgba(0, 71, 171, 0.15);
         z-index: 5;
       }
       .ofp-node--droptarget::after {
-        content: 'Same path';
+        content: 'Same flow';
         position: absolute;
-        top: -10px; right: 6px;
+        top: -12px; right: 6px;
         background: var(--ies-blue); color: #fff;
-        font-size: 9px; font-weight: 700;
-        padding: 2px 6px; border-radius: 3px;
-        text-transform: uppercase; letter-spacing: 0.04em;
+        font-size: 10px; font-weight: 700;
+        padding: 3px 8px; border-radius: 3px;
+        text-transform: uppercase; letter-spacing: 0.05em;
         pointer-events: none;
-        box-shadow: 0 2px 6px rgba(0,71,171,0.4);
+        box-shadow: 0 4px 10px rgba(0,71,171,0.55);
       }
       .ofp-area--dragover {
-        outline: 3px dashed var(--ies-blue);
-        outline-offset: -3px;
-        background: rgba(0, 71, 171, 0.12);
+        outline: 4px dashed var(--ies-blue);
+        outline-offset: -4px;
+        background: rgba(0, 71, 171, 0.22);
+        box-shadow: 0 0 0 4px rgba(0, 71, 171, 0.15) inset;
         position: relative;
       }
       .ofp-area--dragover::after {
         content: 'Drop to reassign';
         position: absolute;
-        top: 6px; right: 8px;
+        top: 8px; right: 10px;
         background: var(--ies-blue); color: #fff;
-        font-size: 10px; font-weight: 700;
-        padding: 3px 8px; border-radius: 3px;
-        text-transform: uppercase; letter-spacing: 0.04em;
+        font-size: 11px; font-weight: 700;
+        padding: 4px 10px; border-radius: 4px;
+        text-transform: uppercase; letter-spacing: 0.05em;
         pointer-events: none;
-        box-shadow: 0 2px 6px rgba(0,71,171,0.4);
+        box-shadow: 0 4px 12px rgba(0,71,171,0.55);
       }
 
       /* v0.2 — editable detail panel inputs */
@@ -15537,14 +15539,14 @@ function _ofpStyles() {
         opacity: 0.6; transition: opacity 0.12s, color 0.12s;
       }
       .ofp-area__title-row:hover .ofp-area__grip { opacity: 1; color: var(--ies-blue); }
-      .ofp-area--reorder-dragging { opacity: 0.45; }
+      .ofp-area--reorder-dragging { opacity: 0.40; }
       .ofp-area--reorder-target-before {
-        box-shadow: inset 4px 0 0 0 var(--ies-blue);
-        background: rgba(0, 71, 171, 0.04);
+        box-shadow: inset 7px 0 0 0 var(--ies-blue), 0 0 0 2px rgba(0, 71, 171, 0.30);
+        background: rgba(0, 71, 171, 0.18);
       }
       .ofp-area--reorder-target-after {
-        box-shadow: inset -4px 0 0 0 var(--ies-blue);
-        background: rgba(0, 71, 171, 0.04);
+        box-shadow: inset -7px 0 0 0 var(--ies-blue), 0 0 0 2px rgba(0, 71, 171, 0.30);
+        background: rgba(0, 71, 171, 0.18);
       }
 
       /* Canvas: flow divider drag. v0.7 — whole divider band is the
@@ -15562,14 +15564,14 @@ function _ofpStyles() {
         opacity: 0.6; transition: opacity 0.12s, color 0.12s;
       }
       .ofp-flow-divider:hover .ofp-flow-divider__grip { opacity: 1; color: var(--ies-blue); }
-      .ofp-flow-divider--reorder-dragging { opacity: 0.45; }
+      .ofp-flow-divider--reorder-dragging { opacity: 0.40; }
       .ofp-flow-divider--reorder-above {
-        box-shadow: inset 0 2px 0 0 var(--ies-blue);
-        background: rgba(0, 71, 171, 0.04);
+        box-shadow: inset 0 4px 0 0 var(--ies-blue), 0 -1px 0 1px rgba(0, 71, 171, 0.20);
+        background: rgba(0, 71, 171, 0.18);
       }
       .ofp-flow-divider--reorder-below {
-        box-shadow: inset 0 -2px 0 0 var(--ies-blue);
-        background: rgba(0, 71, 171, 0.04);
+        box-shadow: inset 0 -4px 0 0 var(--ies-blue), 0 1px 0 1px rgba(0, 71, 171, 0.20);
+        background: rgba(0, 71, 171, 0.18);
       }
 
       /* Modal: drag-handle column + grip + up/down buttons */
@@ -15601,12 +15603,14 @@ function _ofpStyles() {
       .ofp-mgr-row__move:disabled { opacity: 0.3; cursor: not-allowed; }
 
       /* Modal: drop-target indicators on rows */
-      .ofp-mgr-row--dragging { opacity: 0.45; }
+      .ofp-mgr-row--dragging { opacity: 0.40; }
       .ofp-mgr-row--drop-above td {
-        box-shadow: inset 0 2px 0 0 var(--ies-blue);
+        box-shadow: inset 0 4px 0 0 var(--ies-blue);
+        background: rgba(0, 71, 171, 0.10);
       }
       .ofp-mgr-row--drop-below td {
-        box-shadow: inset 0 -2px 0 0 var(--ies-blue);
+        box-shadow: inset 0 -4px 0 0 var(--ies-blue);
+        background: rgba(0, 71, 171, 0.10);
       }
 
       /* ========================================================
@@ -15781,27 +15785,28 @@ function _ofpStyles() {
         background: var(--ies-gray-50);
       }
       .ofp-subarea--dragover {
-        outline: 2px dashed var(--ies-blue);
-        outline-offset: -2px;
-        background: rgba(0, 71, 171, 0.08);
+        outline: 4px dashed var(--ies-blue);
+        outline-offset: -4px;
+        background: rgba(0, 71, 171, 0.22);
+        box-shadow: 0 0 0 4px rgba(0, 71, 171, 0.15) inset;
         position: relative;
       }
       .ofp-subarea--dragover::after {
         content: 'Drop to assign';
         position: absolute;
-        top: 4px; right: 6px;
+        top: 6px; right: 8px;
         background: var(--ies-blue); color: #fff;
-        font-size: 9px; font-weight: 700;
-        padding: 2px 6px; border-radius: 3px;
-        text-transform: uppercase; letter-spacing: 0.04em;
+        font-size: 10px; font-weight: 700;
+        padding: 3px 8px; border-radius: 4px;
+        text-transform: uppercase; letter-spacing: 0.05em;
         pointer-events: none;
-        box-shadow: 0 2px 6px rgba(0,71,171,0.4);
+        box-shadow: 0 4px 12px rgba(0,71,171,0.55);
         z-index: 10;
       }
       .ofp-subarea--other.ofp-subarea--dragover::after {
         content: 'Drop to clear';
-        background: var(--ies-gray-500);
-        box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        background: var(--ies-gray-700, #334155);
+        box-shadow: 0 4px 10px rgba(0,0,0,0.30);
       }
 
       /* Manage Areas modal — chevron expand button */
