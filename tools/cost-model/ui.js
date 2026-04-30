@@ -8978,6 +8978,15 @@ function bindSectionEvents(section, container) {
         { okLabel: 'Approve + Freeze', danger: false }
       );
       if (!ok) return;
+      // 2026-04-30 PM (PL1): flush in-memory model edits to DB BEFORE
+      // freezing the snapshot. Without this, unsaved edits stay in memory
+      // and a post-Approve reload silently loses them. The approval row
+      // itself goes to cost_model_scenarios via the RPC; project_data
+      // only persists via handleSave().
+      if (!(await handleSave())) {
+        showToast('Approve cancelled — save failed. Fix the error and retry.', 'warning');
+        return;
+      }
       try {
         const email = (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('ies_user_email') : null);
         const result = await api.approveScenarioRpc(currentScenario.id, email);
@@ -9115,7 +9124,7 @@ async function openCompareModal(opts = {}) {
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
         <div>
           <h3 style="margin:0;">Compare Scenarios</h3>
-          <p class="cm-subtle" style="margin-top:4px;">Select 2–4 scenarios. First picked is the baseline; other columns show Δ% vs. baseline.</p>
+          <p class="cm-subtle" style="margin-top:4px;">Select 2–4 scenarios. The deal’s baseline anchors the comparison; other columns show Δ% vs. baseline.</p>
         </div>
         <button class="hub-btn" data-close>×</button>
       </div>
@@ -9167,6 +9176,16 @@ async function openCompareModal(opts = {}) {
       showToast('Pick 2–4 scenarios to compare.', 'warning');
       return;
     }
+    // 2026-04-30 PM (PL3): always anchor the comparison on the deal's
+    // baseline scenario regardless of click order. Pre-PL3, "first picked"
+    // depended on DOM order which made siblings appear to be the baseline
+    // when the user unchecked + reordered. Stable sort preserves user's
+    // ordering for the non-baseline columns.
+    picked.sort((a, b) => {
+      const aBase = dealScenarios.find(s => s.id === a.scenarioId)?.is_baseline ? 1 : 0;
+      const bBase = dealScenarios.find(s => s.id === b.scenarioId)?.is_baseline ? 1 : 0;
+      return bBase - aBase;
+    });
     const resultEl = overlay.querySelector('#cm-compare-result');
     resultEl.innerHTML = '<em>Loading scenarios…</em>';
 
@@ -12019,9 +12038,13 @@ async function handleSave() {
           .catch(err => { console.warn('[CM] persistMonthlyFacts failed:', err); bus.emit('cm:pnl-refresh-failed', { project_id: model.id, error: err }); });
       }
     }
+    // 2026-04-30 PM (PL1): return success so callers (notably the Approve
+    // handler) can gate follow-up work on whether the save actually landed.
+    return true;
   } catch (err) {
     console.error('[CM] Save failed:', err);
-    alert('Save failed: ' + err.message);
+    showToast('Save failed: ' + (err?.message || err), 'error');
+    return false;
   }
 }
 
