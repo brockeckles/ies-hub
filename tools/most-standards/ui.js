@@ -9,7 +9,7 @@
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { state } from '../../shared/state.js?v=20260418-sM';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260429-tc2-most';
-import { showConfirm } from '../../shared/confirm-modal.js';
+import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
 // Note: MOST intentionally opts out of run-state tracking. Its Quick Analysis
 // and Workflow tabs recompute inline on every render — the primary "Run"
 // button is a convenience trigger rather than a discrete compute step, so a
@@ -2470,7 +2470,7 @@ async function saveCurrentScenario() {
     return;
   }
 
-  const name = prompt('Scenario name:', `Scenario ${savedScenarios.length + 1}`);
+  const name = await showPrompt('Scenario name:', `Scenario ${savedScenarios.length + 1}`);
   if (!name) return;
 
   try {
@@ -2560,7 +2560,7 @@ async function copyScenario(idx) {
   const sc = savedScenarios[idx];
   if (!sc) return;
   const proposed = `${sc.name} (Copy)`;
-  const newName = prompt('Name for the duplicate scenario:', proposed);
+  const newName = await showPrompt('Name for the duplicate scenario:', proposed);
   if (!newName) return;
   try {
     await api.saveAnalysis({

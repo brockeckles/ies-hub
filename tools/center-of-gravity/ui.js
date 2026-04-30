@@ -16,7 +16,7 @@ import { downloadCSV } from '../../shared/export.js?v=20260418-sP';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260418-sP';
 import * as calc from './calc.js?v=20260426-s9';
 import * as api from './api.js?v=20260418-sP';
-import { showConfirm } from '../../shared/confirm-modal.js';
+import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
 
 // ============================================================
 // CHROME v3 — phase + section structure (CM Chrome v3 ripple, step 3 redo)
@@ -273,7 +273,7 @@ function scheduleAutoRun() {
 /**
  * COG-F2 — debounced autosave. Fires only when activeScenarioId is set
  * (i.e., the scenario already has a name + DB row). Brand-new scenarios
- * still go through the manual prompt() flow on the first save.
+ * still go through the showPrompt() flow on the first save.
  */
 function scheduleAutoSave() {
   if (!activeScenarioId) return;
@@ -335,11 +335,10 @@ async function handleSave() {
   try {
     let name = _scenarioName;
     if (!activeScenarioId) {
-      // Prompt for a name. Native prompt() is blocked by the Claude-in-Chrome
-      // sandbox per past sessions — use window.prompt inline, which the desktop
-      // app handles fine. If it returns null, user cancelled.
+      // 2026-04-30 NIGHT: window.prompt suspends the renderer (same class as
+      // native confirm) — use the async showPrompt modal instead.
       const defaultName = name || `COG ${new Date().toLocaleDateString()}`;
-      const entered = window.prompt('Name this scenario:', defaultName);
+      const entered = await showPrompt('Name this scenario:', defaultName);
       if (entered === null) return;                          // user cancelled
       name = (entered || '').trim() || defaultName;
     }

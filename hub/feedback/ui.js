@@ -7,6 +7,8 @@
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import * as calc from './calc.js?v=20260418-sK';
+import * as api from './api.js?v=20260430-fb1';
+import { showToast } from '../../shared/toast.js?v=20260419-uC';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -15,7 +17,7 @@ let activeItem = null;
 let typeFilter = 'all';
 let statusFilter = 'all';
 let sortBy = 'upvotes';
-let items = calc.DEMO_FEEDBACK.map(i => ({ ...i }));
+let items = [];
 
 export async function mount(el) {
   rootEl = el;
@@ -24,9 +26,19 @@ export async function mount(el) {
   typeFilter = 'all';
   statusFilter = 'all';
   sortBy = 'upvotes';
+  // Render shell first (with a loading state) so the user sees something.
   render();
   bindDelegatedEvents();
   bus.emit('feedback:mounted');
+  // Load live rows from hub_feedback (RLS: authenticated SELECT).
+  try {
+    items = await api.listFeedback();
+  } catch (err) {
+    console.error('[feedback] listFeedback failed:', err);
+    showToast('Could not load feedback list. Showing empty board.', 'warning');
+    items = [];
+  }
+  render();
 }
 
 function bindDelegatedEvents() {

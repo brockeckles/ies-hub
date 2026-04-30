@@ -4114,3 +4114,133 @@ textarea.hub-input {
 }
 .cm-card-stack--tight { gap: var(--sp-4); }   /* 16px — "tight" tier */
 .cm-card-stack--loose { gap: var(--sp-7); }   /* 32px — "loose" tier */
+
+/* ============================================================
+   Feedback FAB (2026-04-30 NIGHT — re-added on all pages)
+   Floating action button bottom-right + modal form. Submits
+   to hub_feedback Supabase table; auto-captures #route as section.
+   ============================================================ */
+.hub-feedback-fab {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 9000;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px 10px 12px;
+  border: none;
+  border-radius: 999px;
+  background: var(--ies-blue, #0047AB);
+  color: #fff;
+  font: 600 13px/1 var(--ies-font, 'Inter', system-ui, sans-serif);
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(0, 71, 171, 0.28), 0 2px 4px rgba(0, 0, 0, 0.08);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+.hub-feedback-fab:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 22px rgba(0, 71, 171, 0.34), 0 3px 6px rgba(0, 0, 0, 0.12);
+  background: #0a52b8;
+}
+.hub-feedback-fab:active { transform: translateY(0); }
+.hub-feedback-fab svg { display: block; }
+.hub-feedback-fab__label { white-space: nowrap; }
+
+/* Modal */
+.hub-feedback-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9100;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: hubFeedbackFade 0.12s ease;
+}
+@keyframes hubFeedbackFade { from { opacity: 0; } to { opacity: 1; } }
+.hub-feedback-modal {
+  background: #fff;
+  border-radius: 12px;
+  width: min(540px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+  display: flex;
+  flex-direction: column;
+}
+.hub-feedback-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--ies-gray-200, #e5e7eb);
+}
+.hub-feedback-modal__header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ies-gray-900, #0f172a);
+}
+.hub-feedback-modal__close {
+  background: none;
+  border: none;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--ies-gray-500, #6b7280);
+  padding: 0 4px;
+}
+.hub-feedback-modal__close:hover { color: var(--ies-gray-900, #0f172a); }
+.hub-feedback-modal__body { padding: 16px 20px; }
+.hub-feedback-modal__row { margin-bottom: 14px; }
+.hub-feedback-modal__row--inline { display: flex; gap: 12px; align-items: flex-end; }
+.hub-feedback-modal__row > label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ies-gray-700, #374151);
+  margin-bottom: 4px;
+}
+.hub-feedback-modal__hint {
+  font-size: 11px;
+  color: var(--ies-gray-500, #6b7280);
+  font-weight: 400;
+}
+.hub-feedback-modal__hint code {
+  background: var(--ies-gray-100, #f3f4f6);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+.hub-feedback-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.hub-feedback-pill {
+  padding: 6px 12px;
+  border: 1px solid var(--ies-gray-300, #d1d5db);
+  background: #fff;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ies-gray-700, #374151);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+.hub-feedback-pill:hover { border-color: var(--ies-blue, #0047AB); color: var(--ies-blue, #0047AB); }
+.hub-feedback-pill.is-active {
+  background: var(--ies-blue, #0047AB);
+  border-color: var(--ies-blue, #0047AB);
+  color: #fff;
+}
+.hub-feedback-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--ies-gray-200, #e5e7eb);
+}
+@media (max-width: 480px) {
+  .hub-feedback-fab__label { display: none; }
+  .hub-feedback-fab { padding: 12px; border-radius: 50%; }
+  .hub-feedback-modal__row--inline { flex-direction: column; align-items: stretch; gap: 14px; }
+}

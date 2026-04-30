@@ -16225,7 +16225,7 @@ function _bindOfpPanelInputs(panel, container) {
     const isNum = input.dataset.type === 'number';
     const arr = arrayPath === 'laborLines' ? (model.laborLines || []) : (model.indirectLaborLines || []);
     if (!arr[idx]) return;
-    input.addEventListener('change', () => {
+    input.addEventListener('change', async () => {
       let val = input.value;
       if (isNum) val = val === '' ? 0 : Number(val);
       // Empty string for flowLane = clear override (back to keyword auto).
@@ -16238,7 +16238,7 @@ function _bindOfpPanelInputs(panel, container) {
       // v0.4 — slugify the input + register in the flow registry so it
       // shows up everywhere (manager modal, autocomplete dropdown).
       if (field === 'path_tag' && val === '__OFP_NEW_FLOW__') {
-        const newLabel = prompt('Name this flow (e.g. Full Pallet, Loose Case):', '');
+        const newLabel = await showPrompt('Name this flow (e.g. Full Pallet, Loose Case):', '');
         if (!newLabel || !newLabel.trim()) {
           input.value = arr[idx].path_tag || '';
           return;
@@ -16637,8 +16637,8 @@ function _bindManageAreasEvents(container) {
   // Add area
   const addBtn = panel.querySelector('[data-ofp-action="add-area"]');
   if (addBtn) {
-    addBtn.addEventListener('click', () => {
-      const label = prompt('Name the new Functional Area:', 'New Area');
+    addBtn.addEventListener('click', async () => {
+      const label = await showPrompt('Name the new Functional Area:', 'New Area');
       if (!label || !label.trim()) return;
       const slug = label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').substring(0, 40);
       const existing = new Set(model.ofpAreas.map(a => a.key));
@@ -16769,12 +16769,12 @@ function _bindManageAreasEvents(container) {
 
   // Add sub-area
   panel.querySelectorAll('[data-action="add-subarea"]').forEach(btn => {
-    btn.addEventListener('click', (e) => {
+    btn.addEventListener('click', async (e) => {
       e.stopPropagation();
       const areaKey = btn.dataset.areaKey;
       const a = model.ofpAreas.find(x => x.key === areaKey);
       if (!a) return;
-      const label = prompt(`Name the new Sub-Area for "${a.label}" (e.g. Bulk, Rack, Forward Pick):`, 'New Sub-Area');
+      const label = await showPrompt(`Name the new Sub-Area for "${a.label}" (e.g. Bulk, Rack, Forward Pick):`, 'New Sub-Area');
       if (!label || !label.trim()) return;
       const labelTrim = label.trim();
       const slug = labelTrim.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').substring(0, 32) || 'sub';
@@ -17145,8 +17145,8 @@ function _bindManageFlowsEvents(container) {
   // Add flow
   const addBtn = panel.querySelector('[data-ofp-action="add-flow"]');
   if (addBtn) {
-    addBtn.addEventListener('click', () => {
-      const label = prompt('Name the new Flow (e.g. Full Pallet, Case Pick, Kitting):', 'New Flow');
+    addBtn.addEventListener('click', async () => {
+      const label = await showPrompt('Name the new Flow (e.g. Full Pallet, Case Pick, Kitting):', 'New Flow');
       if (!label || !label.trim()) return;
       const labelTrim = label.trim();
       const slug = labelTrim.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').substring(0, 32) || 'flow';
