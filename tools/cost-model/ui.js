@@ -9189,6 +9189,37 @@ async function openCompareModal(opts = {}) {
     const resultEl = overlay.querySelector('#cm-compare-result');
     resultEl.innerHTML = '<em>Loading scenarios…</em>';
 
+    // 2026-04-30 PM (PL4): probe each picked scenario for empty
+    // monthly_projections. Siblings spawned via cloneScenario have no
+    // monthly facts until the user opens + saves them — which makes
+    // Compare render $0 across non-baseline columns. Auto-regen any
+    // missing siblings using the model-swap helper before fetching the
+    // bundles. Sequential to avoid hammering the writer with parallel
+    // RPC writes.
+    try {
+      const probes = await Promise.all(picked.map(async (p) => {
+        const monthly = await api.fetchMonthlyProjections(p.projectId).catch(() => []);
+        return { p, hasData: Array.isArray(monthly) && monthly.length > 0 };
+      }));
+      const needsRegen = probes.filter(x => !x.hasData).map(x => x.p);
+      if (needsRegen.length > 0) {
+        resultEl.innerHTML = `<em>Generating projections for ${needsRegen.length} scenario${needsRegen.length === 1 ? '' : 's'}…</em>`;
+        showToast(`Generating projections for ${needsRegen.length} sibling${needsRegen.length === 1 ? '' : 's'}…`, 'info');
+        for (const p of needsRegen) {
+          try {
+            const result = await regenSiblingProjections(p.projectId);
+            console.log('[CM] regen ok for project', p.projectId, result?.wrote);
+          } catch (regenErr) {
+            console.error('[CM] regen failed for project', p.projectId, regenErr);
+            showToast(`Could not regen scenario ${p.scenarioId}: ${regenErr?.message || regenErr}`, 'warning');
+          }
+        }
+        resultEl.innerHTML = '<em>Loading scenarios…</em>';
+      }
+    } catch (probeErr) {
+      console.warn('[CM] PL4 probe/regen pass failed (continuing):', probeErr);
+    }
+
     const bundles = await Promise.all(picked.map(async (p) => {
       const [monthly, proj] = await Promise.all([
         api.fetchMonthlyProjections(p.projectId).catch(() => []),
@@ -12133,6 +12164,78 @@ function ensureMonthlyBundle() {
   } catch (err) {
     console.warn('[CM] ensureMonthlyBundle failed:', err);
     return null;
+  }
+}
+
+/**
+ * 2026-04-30 PM (PL4) — Regenerate monthly_projections for a sibling scenario
+ * without forcing the user to navigate into it.
+ *
+ * Demo problem: Compare Scenarios reads `cost_model_*_monthly` rows that only
+ * get persisted when handleSave runs against a loaded model. Siblings spawned
+ * via cloneScenario inherit project_data but get NO monthly facts — so they
+ * show $0 across the Compare grid.
+ *
+ * Approach: model-swap pattern. Stash the module-scope state, swap in the
+ * sibling's persisted state, run ensureMonthlyBundle (which reads from those
+ * module variables), persist via api.persistMonthlyFacts, then restore the
+ * stashed state inside try/finally. Assumes the sibling is on the same deal
+ * and market as the currently-loaded view (refData + currentMarketLaborProfile
+ * are session-cached for that market). For different-market siblings the
+ * labor profile would be wrong but the demo set is always same-market.
+ *
+ * @param {number} projectId — the sibling project_id (same deal as current view)
+ * @returns {Promise<{ wrote: { revenue: number, expense: number, cashflow: number } }>}
+ */
+async function regenSiblingProjections(projectId) {
+  if (!projectId) throw new Error('regenSiblingProjections: projectId required');
+
+  // Fetch the sibling's persisted project row + scenario row.
+  const fullProj = await api.getModel(projectId);
+  if (!fullProj) throw new Error('Sibling project not found in DB');
+  const siblingPd = fullProj.project_data;
+  if (!siblingPd) {
+    throw new Error('Sibling has legacy schema — open + save it once via the UI first');
+  }
+  const siblingModel = JSON.parse(JSON.stringify(siblingPd));
+  siblingModel.id = projectId;
+
+  const siblingScen = (dealScenarios || []).find(sc => sc.project_id === projectId) || null;
+
+  // Stash + swap module-scope state. ensureMonthlyBundle reads from these.
+  const savedModel = model;
+  const savedScenario = currentScenario;
+  const savedSnapshots = currentScenarioSnapshots;
+  const savedHOver = heuristicOverrides;
+  const savedTransient = whatIfTransient;
+  const savedBundle = _lastMonthlyBundle;
+  const savedProjections = _lastProjections;
+  const savedCalcHeur = _lastCalcHeuristics;
+
+  try {
+    model = siblingModel;
+    currentScenario = siblingScen;
+    currentScenarioSnapshots = null; // siblings are typically draft; no frozen snapshots
+    heuristicOverrides = fullProj.heuristic_overrides || {};
+    whatIfTransient = {};
+    _lastMonthlyBundle = null; // force ensureMonthlyBundle to rebuild
+    _lastProjections = null;
+    _lastCalcHeuristics = null;
+
+    const bundle = ensureMonthlyBundle();
+    if (!bundle) throw new Error('ensureMonthlyBundle returned null for sibling');
+
+    return await api.persistMonthlyFacts(projectId, bundle);
+  } finally {
+    // Restore module-scope state regardless of success/failure.
+    model = savedModel;
+    currentScenario = savedScenario;
+    currentScenarioSnapshots = savedSnapshots;
+    heuristicOverrides = savedHOver;
+    whatIfTransient = savedTransient;
+    _lastMonthlyBundle = savedBundle;
+    _lastProjections = savedProjections;
+    _lastCalcHeuristics = savedCalcHeur;
   }
 }
 
