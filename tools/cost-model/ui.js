@@ -11,7 +11,7 @@ import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260424-hyg04';
-import * as calc from './calc.js?v=20260430-am-p5fix2';
+import * as calc from './calc.js?v=20260430-am-p5fix3';
 import * as api from './api.js?v=20260429-vol12';
 import * as scenarios from './calc.scenarios.js?v=20260429-otfix1';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
@@ -22,7 +22,7 @@ import * as shiftPlannerUi from './shift-planner-ui.js?v=20260428-walkthru1';
 // 2026-04-28 — internal phase stepper for Implementation Timeline section.
 import { renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260429-p52';
-import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260430-am-p5fix2';
+import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260430-am-p5fix3';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
 // disk but no longer imported; can be deleted in a future cleanup.
@@ -7581,7 +7581,7 @@ function renderSummary() {
       </div>
       <div class="hub-kpi-tile" title="Year-1 Gross Profit ÷ Year-1 Revenue · ties to the GP row in the P&L below">
         <div class="hub-kpi-tile__label">Y1 GP Margin</div>
-        <div class="hub-kpi-tile__value" style="color:${y1Revenue > 0 && (((p1.grossProfit||0) / y1Revenue) >= ((thresholds.grossMargin||10)/100)) ? 'var(--ies-green)' : 'var(--ies-gray-700)'};">${y1Revenue > 0 ? calc.formatPct((p1.grossProfit||0) / y1Revenue) : '—'}</div>
+        <div class="hub-kpi-tile__value" style="color:${y1Revenue > 0 && (((p1.grossProfit||0) / y1Revenue) >= ((thresholds.grossMargin||10)/100)) ? 'var(--ies-green)' : 'var(--ies-gray-700)'};">${y1Revenue > 0 ? calc.formatPct(((p1.grossProfit||0) / y1Revenue) * 100) : '—'}</div>
       </div>
       <div class="hub-kpi-tile" data-cm-disclose="summary-y1-cost-per-order" title="Hover for breakdown · Year 1 cost ÷ Year 1 ${outboundUomLabel.toLowerCase()}s">
         <div class="hub-kpi-tile__label">Cost / ${outboundUomLabel} (Y1)</div>
