@@ -17,6 +17,8 @@ import {
   computeFinancialMetrics,
   computeSummary,
   directLineAnnual,
+  totalFacilityCost,
+  facilityCostBreakdown,
 } from './tools/cost-model/calc.js';
 import {
   buildChannelLineage,
@@ -294,6 +296,190 @@ test('Total returns: each channel primary × returnsPercent sums to aggregate', 
     actual += getChannelDerived(model, ch, 'returns').value;
   }
   near(actual, expected, 0.01, 'sum of per-channel returns must match expected');
+});
+
+// ============================================================
+// 7. totalFacilityCost FIELD-NAME LOCK — canonical schema vs calc
+// ============================================================
+test('totalFacilityCost: canonical field names produce expected total', () => {
+  // FIELD-NAME lock: ref_facility_rates schema (and types.js FacilityRate
+  // typedef) uses _yr suffixes. Wrong field names silently zero out the
+  // facility cost (which is what bit me writing the headline-reconciliation
+  // fixture). Lock the canonical names here so a future refactor that
+  // 'simplifies' to lease_rate_psf without _yr will be caught.
+  const facility = { totalSqft: 100_000 };
+  const facilityRate = {
+    lease_rate_psf_yr: 8.0,
+    cam_rate_psf_yr: 2.0,
+    tax_rate_psf_yr: 1.5,
+    insurance_rate_psf_yr: 0.5,
+  };
+  const utilityRate = { avg_monthly_per_sqft: 0.10 };
+  const cost = totalFacilityCost(facility, facilityRate, utilityRate);
+  // 100K × (8 + 2 + 1.5 + 0.5) + 100K × 12 × 0.10 = 1,200,000 + 120,000 = 1,320,000
+  near(cost, 1_320_000, 0.01, 'totalFacilityCost canonical names');
+});
+
+test('totalFacilityCost: WRONG field names silently return 0 (anti-test)', () => {
+  // Anti-test documenting the units pitfall I hit. If a caller uses
+  // lease_rate_psf instead of lease_rate_psf_yr, the cost is silently 0
+  // because || 0 fallback. This anti-test catches future refactors that
+  // try to support both field-name conventions.
+  const facility = { totalSqft: 100_000 };
+  const facilityRate = {
+    lease_rate_psf: 8.0,    // WRONG — missing _yr
+    cam_psf: 2.0,
+    prop_tax_psf: 1.5,
+    insurance_psf: 0.5,
+  };
+  const utilityRate = { utility_psf: 0.10 };  // WRONG — should be avg_monthly_per_sqft
+  const cost = totalFacilityCost(facility, facilityRate, utilityRate);
+  near(cost, 0, 0.01, 'wrong field names yield 0 (proves the schema lock)');
+});
+
+test('facilityCostBreakdown: returns all components + total', () => {
+  const facility = { totalSqft: 100_000 };
+  const facilityRate = {
+    lease_rate_psf_yr: 8.0,
+    cam_rate_psf_yr: 2.0,
+    tax_rate_psf_yr: 1.5,
+    insurance_rate_psf_yr: 0.5,
+  };
+  const utilityRate = { avg_monthly_per_sqft: 0.10 };
+  const bd = facilityCostBreakdown(facility, facilityRate, utilityRate);
+  near(bd.lease, 800_000, 0.01, 'lease');
+  near(bd.cam, 200_000, 0.01, 'cam');
+  near(bd.tax, 150_000, 0.01, 'tax');
+  near(bd.insurance, 50_000, 0.01, 'insurance');
+  near(bd.utility, 120_000, 0.01, 'utility (12 × 100K × 0.10)');
+});
+
+// ============================================================
+// 8. Y1 LEARNING CURVE — engine-path divergence lock
+// ============================================================
+//
+// CONCERN B FINDING (2026-04-30 PM): the annual path applies a Y1
+// learning-curve uplift to labor cost (learningMult = 1/yr1LearningFactor;
+// 1.176x for medium-complexity default) while the monthly path applies
+// no such uplift. Same fixture, ~21% divergence in Y1 labor cost depending
+// on which engine is active. Production always runs the monthly engine
+// (window.COST_MODEL_MONTHLY_ENGINE defaults true), so the learning curve
+// never fires in the actual UI — making it a 'ghost feature' and a
+// flag-flip footgun. The strategic resolution is parked for Brock:
+// either (a) remove learning curve from the annual path, or (b) add it
+// to the monthly path. Until then, lock both behaviors so neither can
+// silently drift further.
+
+function _learningTinyParams(extra = {}) {
+  const summary = computeSummary({
+    laborLines: [{ position: 'X', fte: 30, annual_hours: 60_000, hourly_rate: 22, complexity_tier: 'medium' }],
+    indirectLaborLines: [], equipmentLines: [], overheadLines: [], vasLines: [], startupLines: [],
+    facility: {}, shifts: { shiftsPerDay: 1, hoursPerShift: 8, daysPerWeek: 5 },
+    facilityRate: {}, utilityRate: {},
+    contractYears: 5, targetMarginPct: 16, annualOrders: 1_000_000,
+  });
+  return {
+    summary,
+    params: {
+      years: 5, baseLaborCost: summary.laborCost, baseFacilityCost: 0,
+      baseEquipmentCost: 0, baseOverheadCost: 0, baseVasCost: 0,
+      startupAmort: 0, startupCapital: 0, baseOrders: 1_000_000, marginPct: 0.16,
+      volGrowthPct: 0, laborEscPct: 0, costEscPct: 0,
+      facilityEscPct: 0, equipmentEscPct: 0, taxRatePct: 25,
+      pricingBuckets: [], project_id: 1,
+      laborLines: [{ position: 'X', fte: 30, annual_hours: 60_000, hourly_rate: 22, complexity_tier: 'medium' }],
+      ...extra,
+    },
+  };
+}
+
+test('Annual path: Y1 labor includes learning-curve uplift (1.176x for medium tier)', () => {
+  const { summary, params } = _learningTinyParams({ useMonthlyEngine: false });
+  const proj = buildYearlyProjections(params).projections;
+  // Y1 labor = baseLabor × (1/0.85) ≈ baseLabor × 1.1765
+  const expectedY1 = summary.laborCost * (1 / 0.85);
+  near(proj[0].labor, expectedY1, 1, `annual Y1 labor must apply learningMult=1.176`);
+  // learningMult is exposed on the projection row for the inspector.
+  near(proj[0].learningMult, 1.1765, 0.001, 'learningMult exposed for UI');
+  // Y2+ has no learning multiplier.
+  near(proj[1].learningMult, 1.0, 0.001, 'Y2 learningMult = 1.0');
+});
+
+test('Annual path: Y1 learning curve scales by complexity_tier (low/medium/high)', () => {
+  // low complexity (0.95) -> 1.053x; high (0.75) -> 1.333x; medium (0.85) -> 1.176x.
+  // Caller can mix tiers; weighting is by hours.
+  for (const [tier, factor] of [['low', 0.95], ['medium', 0.85], ['high', 0.75]]) {
+    const { params } = _learningTinyParams({
+      useMonthlyEngine: false,
+      laborLines: [{ position: 'X', annual_hours: 60_000, hourly_rate: 22, complexity_tier: tier }],
+    });
+    const proj = buildYearlyProjections(params).projections;
+    near(proj[0].learningMult, 1 / factor, 0.001, `${tier} complexity learningMult = 1/${factor}`);
+  }
+});
+
+test('Monthly path: Y1 labor does NOT include learning-curve uplift (ghost feature)', () => {
+  // CONCERN B regression lock. If a future refactor makes the monthly engine
+  // apply the learning-curve uplift, this test should be UPDATED to match
+  // (the divergence is intentional gap pending strategic decision; the test
+  // documents which engine is currently authoritative).
+  function periods() {
+    const ps = [];
+    for (let i = -3; i < 120; i++) {
+      ps.push({ id: 1000+i, period_type: 'month', period_index: i,
+        calendar_year: 2026, calendar_month: 1,
+        customer_fy_index: 1, customer_fm_index: 1,
+        label: 'M' + i, is_pre_go_live: i < 0 });
+    }
+    return ps;
+  }
+  const FLAT = { monthly_shares: Array(12).fill(1/12) };
+  const RAMP = { type: 'medium', wk1_factor: 0.48, wk2_factor: 0.64, wk4_factor: 0.80, wk8_factor: 0.92, wk12_factor: 1.0 };
+  const { summary, params } = _learningTinyParams({
+    useMonthlyEngine: true, periods: periods(), ramp: RAMP, seasonality: FLAT,
+  });
+  const proj = buildYearlyProjections(params).projections;
+  // Monthly engine: Y1 labor < steady-state because of pre-go-live months,
+  // BUT no learning-curve uplift. Steady-state Y2 labor = baseLabor exactly.
+  near(proj[1].labor, summary.laborCost, 1, 'Y2 monthly = steady-state base');
+  // Y1 < steady-state. Annual would have been 1.176×; monthly is some
+  // fraction depending on ramp shape.
+  assert(proj[0].labor < summary.laborCost,
+    `monthly Y1 must be LESS than steady-state — got ${proj[0].labor.toFixed(0)} vs ${summary.laborCost.toFixed(0)}`);
+  // Annual path would produce 1.176x; assert monthly is well below that.
+  const annualY1 = summary.laborCost * (1 / 0.85);
+  assert(proj[0].labor < annualY1 * 0.95,
+    `monthly Y1 must diverge from annual Y1 by >5% (engine-path inconsistency)`);
+});
+
+test('CONCERN B documented: annual vs monthly Y1 labor divergence', () => {
+  // Same fixture, both engine paths — explicitly compute the divergence
+  // so it appears in test output. Future me should see this number and
+  // remember why both engines exist + the strategic decision pending.
+  function periods() {
+    const ps = [];
+    for (let i = -3; i < 120; i++) {
+      ps.push({ id: 1000+i, period_type: 'month', period_index: i,
+        calendar_year: 2026, calendar_month: 1,
+        customer_fy_index: 1, customer_fm_index: 1,
+        label: 'M' + i, is_pre_go_live: i < 0 });
+    }
+    return ps;
+  }
+  const FLAT = { monthly_shares: Array(12).fill(1/12) };
+  const RAMP = { type: 'medium', wk1_factor: 0.48, wk2_factor: 0.64, wk4_factor: 0.80, wk8_factor: 0.92, wk12_factor: 1.0 };
+  const { params: aP } = _learningTinyParams({ useMonthlyEngine: false });
+  const { params: mP } = _learningTinyParams({
+    useMonthlyEngine: true, periods: periods(), ramp: RAMP, seasonality: FLAT,
+  });
+  const annual = buildYearlyProjections(aP).projections;
+  const monthly = buildYearlyProjections(mP).projections;
+  const divergencePct = ((annual[0].labor - monthly[0].labor) / monthly[0].labor) * 100;
+  // Lock current observed divergence ~21.5%. If this drifts substantially,
+  // someone changed one of the engines; check whether the gap closed
+  // intentionally (good) or introduced a different bug.
+  assert(divergencePct > 15 && divergencePct < 30,
+    `Y1 engine divergence drift: ${divergencePct.toFixed(1)}% (was ~21% on 2026-04-30)`);
 });
 
 // ============================================================

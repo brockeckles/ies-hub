@@ -74,8 +74,15 @@ function fixture() {
     { description: 'IT Integration', one_time_cost: 200_000 },
   ];
   const facility = { totalSqft: 750_000, clearHeight: 32, dockDoors: 60 };
-  const facilityRate = { lease_rate_psf: 8.5, cam_psf: 2.1, prop_tax_psf: 1.4, insurance_psf: 0.4 };
-  const utilityRate = { utility_psf: 1.2 };
+  // Canonical field names per calc.js totalFacilityCost — _yr suffix on rates,
+  // avg_monthly_per_sqft on utility. Matches ref_facility_rates schema.
+  const facilityRate = {
+    lease_rate_psf_yr: 8.5,
+    cam_rate_psf_yr: 2.1,
+    tax_rate_psf_yr: 1.4,
+    insurance_rate_psf_yr: 0.4,
+  };
+  const utilityRate = { avg_monthly_per_sqft: 1.2 / 12 };
 
   return { shifts, opHrs, laborLines, indirectLaborLines, equipmentLines,
            overheadLines, vasLines, startupLines, facility, facilityRate, utilityRate };
