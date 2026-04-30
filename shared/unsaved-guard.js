@@ -22,6 +22,7 @@
  */
 
 import { bus } from './event-bus.js?v=20260418-sK';
+import { showConfirm } from './confirm-modal.js';
 
 /** @type {Set<string>} */
 const dirty = new Set();
@@ -76,7 +77,7 @@ function wire() {
   });
 
   // Internal hash-change navigation — intercept and confirm.
-  window.addEventListener('hashchange', (e) => {
+  window.addEventListener('hashchange', async (e) => {
     if (!dirty.size) return;
     // Avoid reentry: if we're in the middle of reverting, bail.
     if (window.__hubGuardReverting) {
@@ -84,9 +85,9 @@ function wire() {
       return;
     }
     // eslint-disable-next-line no-alert
-    const ok = window.confirm(
+    const ok = (await showConfirm(
       `You have unsaved changes in ${describeDirty()}. Leave anyway?`
-    );
+    ));
     if (!ok) {
       // Revert the hash silently.
       window.__hubGuardReverting = true;

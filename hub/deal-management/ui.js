@@ -421,6 +421,13 @@ function bindDelegatedEvents() {
       if (did) createCostModelForDeal(did);
       return;
     }
+    // R10 (2026-04-29) — Site Details + Add Site
+    const addSite = target.closest('[data-action="add-site-to-deal"]');
+    if (addSite) {
+      const did = /** @type {HTMLElement} */ (addSite).dataset.dealId;
+      if (did) createCostModelForDeal(did);
+      return;
+    }
 
     // Deck generation buttons
     const deckBtn = target.closest('[data-deck]');
@@ -966,7 +973,7 @@ function renderDetail() {
         ${kpi('Margin', d.margin > 0 ? d.margin + '%' : 'TBD', d.margin > 0 && d.margin < 10 ? 'var(--ies-orange)' : null)}
         ${kpi('Total sqft', totalSqft > 0 ? (totalSqft / 1000).toFixed(0) + 'K' : '—')}
         ${kpi('Days in Stage', d.daysInStage, d.daysInStage > 14 ? 'var(--ies-red)' : null)}
-        ${kpi('DOS Completion', dosCompletion + '%', totalElements === 0 ? 'var(--ies-gray-300)' : dosCompletion < 50 ? 'var(--ies-red)' : dosCompletion < 75 ? 'var(--ies-orange)' : null)}
+        ${kpi('DOS Completion', dosCompletion + '%', (totalElements === 0 || completedElements === 0) ? 'var(--ies-gray-300)' : dosCompletion < 50 ? 'var(--ies-red)' : dosCompletion < 75 ? 'var(--ies-orange)' : null)}
       </div>
 
       <!-- Detail Tabs -->
@@ -1558,10 +1565,30 @@ async function handleDeckGenClick(deckType) {
 function renderDealSites() {
   const d = selectedDeal;
   const sites = Array.isArray(d.sites) ? d.sites : [];
+  const isReal = !!d.isReal;
+
+  // R10 (2026-04-29): tab is no longer read-only. Real deals can add a site,
+  // which routes through createCostModelForDeal so the new site lands as a
+  // cost_model_projects row attached to this deal (existing data model).
+  // Demo deals (isReal=false) keep the read-only behavior since they have
+  // no FK row to attach to.
+  const addBtn = isReal
+    ? `<button class="hub-btn hub-btn-sm hub-btn-primary" data-action="add-site-to-deal" data-deal-id="${escapeAttr(d.id)}">+ Add Site</button>`
+    : '';
+
+  const emptyState = sites.length === 0 ? `
+        <tr><td colspan="4" style="padding:24px;text-align:center;color:var(--ies-gray-500);font-size:13px;">
+          ${isReal
+            ? 'No sites linked yet. Click <b>+ Add Site</b> to create the first cost-model scenario for this deal.'
+            : 'No sites linked.'}
+        </td></tr>` : '';
 
   return `
     <div class="hub-card" style="padding:16px;">
-      <div style="font-size:13px;font-weight:700;margin-bottom:12px;">Site Details (${sites.length})</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div style="font-size:13px;font-weight:700;">Site Details (${sites.length})</div>
+        ${addBtn}
+      </div>
       <table style="width:100%;border-collapse:collapse;font-size:13px;">
         <thead>
           <tr style="border-bottom:2px solid var(--ies-gray-200);">
@@ -1572,6 +1599,7 @@ function renderDealSites() {
           </tr>
         </thead>
         <tbody>
+          ${emptyState}
           ${sites.map(s => `
             <tr style="border-bottom:1px solid var(--ies-gray-100);">
               <td style="padding:8px;font-weight:600;">${s.name}</td>

@@ -33,6 +33,7 @@
 
 import { db } from './supabase.js?v=20260429-demo-s3';
 import { showToast } from './toast.js?v=20260419-uC';
+import { showConfirm } from './confirm-modal.js';
 
 /**
  * @param {HTMLElement} rootEl
@@ -137,7 +138,7 @@ export async function renderScenarioLanding(rootEl, opts) {
       try {
         if (parent.cmId) {
           // Already linked → offer to unlink
-          if (!window.confirm(`Unlink "${getName(scenario)}" from its Cost Model?`)) return;
+          if (!(await showConfirm(`Unlink "${getName(scenario)}" from its Cost Model?`))) return;
           if (typeof onUnlink === 'function') await onUnlink(scenario);
           showToast(`Unlinked "${getName(scenario)}"`, 'success');
         } else {
@@ -161,7 +162,7 @@ export async function renderScenarioLanding(rootEl, opts) {
       const scenario = scenarios.find(s => String(getId(s)) === String(id));
       if (!scenario || !onDelete) return;
       const name = getName(scenario);
-      if (!window.confirm(`Delete "${name}"? This cannot be undone.`)) return;
+      if (!(await showConfirm(`Delete "${name}"? This cannot be undone.`))) return;
       try {
         await onDelete(scenario);
         showToast(`Deleted "${name}"`, 'success');

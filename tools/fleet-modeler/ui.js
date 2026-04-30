@@ -14,6 +14,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import * as calc from './calc.js?v=20260426-s2';
 import * as api from './api.js?v=20260418-sM';
+import { showConfirm } from '../../shared/confirm-modal.js';
 
 // ============================================================
 // CHROME v3 — phase + section structure (CM Chrome v3 ripple, step 3 redo)
@@ -218,7 +219,7 @@ function openEditor(savedRow) {
     // If inputs have diverged from the last successful Calculate, warn before
     // jumping to scenarios (user may have unsaved edits).
     const state = runState.state(runStateInputs());
-    if (state === 'dirty' && result && !confirm('You have unsaved changes since the last calculate. Leave anyway?')) return;
+    if (state === 'dirty' && result && !(await showConfirm('You have unsaved changes since the last calculate. Leave anyway?'))) return;
     await renderLanding();
   });
 
@@ -410,7 +411,7 @@ function renderHosFeasibilityChip() {
   stepperEl.parentNode.insertBefore(chip, stepperEl.nextSibling);
 }
 
-function bindShellEvents() {
+async function bindShellEvents() {
   if (!rootEl) return;
   rootEl.__tcBound = false;
 
@@ -430,7 +431,7 @@ function bindShellEvents() {
       if (!key) return;
       const sec = FLEET_SECTIONS.find(s => s.key === key);
       if (!sec) return;
-      if (sec.group === 'parameters') {
+      async if(sec.group === 'parameters') {
         activePhase = 'parameters';
         paramsSubTab = /** @type {any} */ (key);
       } else if (sec.group === 'run') {
@@ -444,7 +445,7 @@ function bindShellEvents() {
     },
     onBack: async () => {
       const state = runState.state(runStateInputs());
-      if (state === 'dirty' && result && !confirm('You have unsaved changes since the last calculate. Leave anyway?')) return;
+      if (state === 'dirty' && result && !(await showConfirm('You have unsaved changes since the last calculate. Leave anyway?'))) return;
       await renderLanding();
     },
     onAction: (id) => {

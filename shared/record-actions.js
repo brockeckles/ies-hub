@@ -26,6 +26,7 @@
  */
 
 import { showToast } from './toast.js?v=20260419-uC';
+import { showConfirm } from './confirm-modal.js';
 
 /**
  * Shallow-clones the given record, strips id/timestamps, appends " (Copy)" to
@@ -85,7 +86,7 @@ export async function deleteRecord(opts) {
   }
   if (!skipConfirm) {
     // eslint-disable-next-line no-alert
-    const ok = window.confirm(`Delete "${label}"? This cannot be undone.`);
+    const ok = (await showConfirm(`Delete "${label}"? This cannot be undone.`));
     if (!ok) return false;
   }
   try {

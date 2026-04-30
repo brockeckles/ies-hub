@@ -9,6 +9,7 @@
 import { bus } from '../../shared/event-bus.js?v=20260418-sM';
 import { state } from '../../shared/state.js?v=20260418-sM';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260429-tc2-most';
+import { showConfirm } from '../../shared/confirm-modal.js';
 // Note: MOST intentionally opts out of run-state tracking. Its Quick Analysis
 // and Workflow tabs recompute inline on every render — the primary "Run"
 // button is a convenience trigger rather than a discrete compute step, so a
@@ -1757,7 +1758,7 @@ function bindContentEvents(container) {
   container.querySelectorAll('[data-action="delete-template"]').forEach(btn => {
     btn.addEventListener('click', async () => {
       const id = btn.dataset.id;
-      if (!confirm('Delete this template? This cannot be undone.')) return;
+      if (!(await showConfirm('Delete this template? This cannot be undone.'))) return;
       try {
         await api.deleteTemplate(id);
         refData.templates = await api.listTemplates();
@@ -2068,7 +2069,7 @@ function showAllowanceProfileModal() {
       btn.closest('tr')?.remove();
       return;
     }
-    if (!confirm('Delete this allowance profile? Analyses currently using it will fall back to Custom PFD.')) return;
+    if (!(await showConfirm('Delete this allowance profile? Analyses currently using it will fall back to Custom PFD.'))) return;
     btn.disabled = true;
     try {
       await api.deleteAllowanceProfile(id);
@@ -2526,7 +2527,7 @@ async function saveCurrentScenario() {
   }
 }
 
-function loadScenario(idx) {
+async function loadScenario(idx) {
   if (!savedScenarios[idx]) return;
   const scenario = savedScenarios[idx];
   analysis = JSON.parse(JSON.stringify(scenario.data));
@@ -2534,7 +2535,7 @@ function loadScenario(idx) {
 }
 
 async function deleteScenario(idx) {
-  if (!confirm('Delete this scenario?')) return;
+  if (!(await showConfirm('Delete this scenario?'))) return;
   const sc = savedScenarios[idx];
   if (!sc) return;
 

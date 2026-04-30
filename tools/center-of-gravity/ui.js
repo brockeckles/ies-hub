@@ -16,6 +16,7 @@ import { downloadCSV } from '../../shared/export.js?v=20260418-sP';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260418-sP';
 import * as calc from './calc.js?v=20260426-s9';
 import * as api from './api.js?v=20260418-sP';
+import { showConfirm } from '../../shared/confirm-modal.js';
 
 // ============================================================
 // CHROME v3 — phase + section structure (CM Chrome v3 ripple, step 3 redo)
@@ -521,7 +522,7 @@ function renderCogStepper() {
   return;
 }
 
-function bindShellEvents() {
+async function bindShellEvents() {
   if (!rootEl) return;
   rootEl.__tcBound = false;
 
@@ -549,7 +550,7 @@ function bindShellEvents() {
       _refreshCogKpis();
     },
     onBack: async () => {
-      if (isDirty && !confirm('You have unsaved changes. Leave anyway?')) return;
+      if (isDirty && !(await showConfirm('You have unsaved changes. Leave anyway?'))) return;
       guardMarkClean('cog');
       await renderLanding();
     },
@@ -792,18 +793,18 @@ function renderInputsPhase(el) {
     }
   });
 
-  el.querySelector('#cog-load-archetype')?.addEventListener('click', () => {
+  el.querySelector('#cog-load-archetype')?.addEventListener('click', async () => {
     if (!archSelect?.value) {
       showToast('Pick an archetype from the dropdown first.', 'warn');
       return;
     }
     const totalUnits = archVolInput?.value ? parseInt(archVolInput.value, 10) : 0;
     const generated = calc.generateArchetypePoints(archSelect.value, totalUnits || undefined);
-    if (!generated.length) {
+    async if(!generated.length) {
       showToast('Archetype generated 0 points — check the selection.', 'warn');
       return;
     }
-    if (points.length > 0 && !confirm(`Replace ${points.length} existing point${points.length === 1 ? '' : 's'} with ${generated.length} archetype-generated points?`)) return;
+    if (points.length > 0 && !(await showConfirm(`Replace ${points.length} existing point${points.length === 1 ? '' : 's'} with ${generated.length} archetype-generated points?`))) return;
     points = generated;
     markDirty();
     renderInputsPhase(el);

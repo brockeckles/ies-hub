@@ -12,6 +12,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import * as calc from './calc.js?v=20260426-s3';
 import * as api from './api.js?v=20260427-pm3-s2';
 import * as cmApi from '../cost-model/api.js?v=20260429-vol12';
+import { showConfirm } from '../../shared/confirm-modal.js';
 
 // ============================================================
 // STATE
@@ -367,16 +368,16 @@ function bindShellEvents() {
 }
 
 /** @param {Event} e */
-function _dmContentClickHandler(e) {
+async function _dmContentClickHandler(e) {
   if (!rootEl) return;
   const target = /** @type {HTMLElement} */ (e.target);
   if (!target || !target.closest) return;
 
   // Delete weekly update.
   const delUpdateBtn = /** @type {HTMLElement|null} */ (target.closest('[data-action="dm-delete-update"]'));
-  if (delUpdateBtn) {
+  async if(delUpdateBtn) {
     const updateId = delUpdateBtn.dataset.updateId;
-    if (updateId && activeDeal && window.confirm('Delete this weekly update? This cannot be undone.')) {
+    if (updateId && activeDeal && (await showConfirm('Delete this weekly update? This cannot be undone.'))) {
       (async () => {
         try {
           await api.deleteUpdate(updateId);
@@ -482,7 +483,7 @@ function showEditTaskModal(task) {
       }
     }
     if (t.closest('[data-action="dm-task-delete"]')) {
-      if (!window.confirm('Delete this task? This cannot be undone.')) return;
+      if (!(await showConfirm('Delete this task? This cannot be undone.'))) return;
       try {
         await api.deleteTask(task.id);
         tasks = await api.fetchTasks(activeDeal.id);
@@ -738,7 +739,7 @@ async function openCombinePreview(srcId, tgtId) {
   overlay.querySelector('[data-action="dm-cmb-cancel"]')?.addEventListener('click', () => overlay.remove());
 
   overlay.querySelector('[data-action="dm-cmb-move"]')?.addEventListener('click', async () => {
-    if (!confirm(`Move all ${sitesA.length} sites from "${dealA.dealName}" to "${dealB.dealName}"? Source deal will keep its metadata but become site-less.`)) return;
+    if (!(await showConfirm(`Move all ${sitesA.length} sites from "${dealA.dealName}" to "${dealB.dealName}"? Source deal will keep its metadata but become site-less.`))) return;
     try {
       for (const s of sitesA) {
         await api.linkSite(s.id, dealB.id);
@@ -841,7 +842,7 @@ function renderDealList(el) {
       const id = /** @type {HTMLElement} */ (btn).getAttribute('data-deal-delete');
       const name = /** @type {HTMLElement} */ (btn).getAttribute('data-deal-name') || 'this deal';
       if (!id) return;
-      if (!confirm(`Delete "${name}"? Linked sites/CMs are NOT deleted, only the deal record. This cannot be undone.`)) return;
+      if (!(await showConfirm(`Delete "${name}"? Linked sites/CMs are NOT deleted, only the deal record. This cannot be undone.`))) return;
       try {
         await api.deleteDeal(id);
         allDeals = allDeals.filter(x => x.id !== id);

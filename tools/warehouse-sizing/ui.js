@@ -15,6 +15,7 @@ import * as calc from './calc.js?v=20260425-s11';
 import * as api from './api.js?v=20260418-sL';
 import * as cmApi from '../cost-model/api.js?v=20260429-vol12';
 import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260429-p54';
+import { showConfirm } from '../../shared/confirm-modal.js';
 
 // ============================================================
 // CHROME v3 — phase + section structure (CM Chrome v3 ripple, step 3 redo)
@@ -396,7 +397,7 @@ function _wscExtraStyles() {
   `;
 }
 
-function bindShellEvents() {
+async function bindShellEvents() {
   if (!rootEl) return;
   rootEl.__tcBound = false;
 
@@ -432,7 +433,7 @@ function bindShellEvents() {
       refreshToolChrome(rootEl, opts);
     },
     onBack: async () => {
-      if (isDirty && !confirm('Unsaved changes. Leave for the scenarios list?')) return;
+      if (isDirty && !(await showConfirm('Unsaved changes. Leave for the scenarios list?'))) return;
       isDirty = false;
       viewMode = 'landing';
       await renderLanding();
@@ -1253,8 +1254,8 @@ function bindConfigEvents(panel) {
   });
 
   // Toolbar
-  panel.querySelector('[data-action="wsc-new"]')?.addEventListener('click', () => {
-    if (isDirty && !confirm('Unsaved changes. Start new?')) return;
+  panel.querySelector('[data-action="wsc-new"]')?.addEventListener('click', async () => {
+    if (isDirty && !(await showConfirm('Unsaved changes. Start new?'))) return;
     facility = createDefaultFacility();
     zones = createDefaultZones();
     volumes = createDefaultVolumes();
@@ -1269,7 +1270,7 @@ function bindConfigEvents(panel) {
   // click — wherever it lives in the tool DOM — routes here.
   rootEl?.addEventListener('click', async (e) => {
     if (!(/** @type {HTMLElement} */ (e.target))?.closest?.('[data-action="wsc-back"]')) return;
-    if (isDirty && !confirm('Unsaved changes. Leave for the scenarios list?')) return;
+    if (isDirty && !(await showConfirm('Unsaved changes. Leave for the scenarios list?'))) return;
     isDirty = false;
     viewMode = 'landing';
     await renderLanding();

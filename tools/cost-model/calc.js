@@ -1795,8 +1795,8 @@ export function computeFinancialMetrics(projections, opts) {
   const years = projections.length;
   if (years === 0) return emptyMetrics();
 
-  const discountRate = (opts.discountRatePct || 10) / 100;
-  const reinvestRate = (opts.reinvestRatePct || 8) / 100;
+  const discountRate = (opts.discountRatePct ?? 10) / 100;
+  const reinvestRate = (opts.reinvestRatePct ?? 8) / 100;
   const startupCapital   = Number(opts.startupCapital)   || 0;
   const equipmentCapital = Number(opts.equipmentCapital) || 0;
   // Tax rate — needed to compute NOPAT for ROIC. Caller passes the same
@@ -1813,10 +1813,22 @@ export function computeFinancialMetrics(projections, opts) {
   const avgWorkingCapitalOpt = Number(opts.avgWorkingCapital) || null;
 
   // totalInvestment — the one-time capital outlay at t=0. Used as the anchor
-  // for MIRR, NPV, and Payback cashflows. Previously summed projections[].capex;
-  // that read $0 on the monthly engine path so the Summary collapsed to
-  // MIRR=0 / Payback=1mo. Now explicit as startup + equipment.
-  const totalInvestment = startupCapital + equipmentCapital;
+  // for MIRR, NPV, and Payback cashflows.
+  //
+  // R5 fix (2026-04-29 EVE): previously summed startupCapital + equipmentCapital.
+  // That double-counted equipment because equipment cost is ALSO amortized into
+  // opex over the contract term in buildYearlyProjections (`baseEquipmentCost
+  // = totalEquipmentAmort(...)`) and in calc.monthly.js (LEASED_EQUIP COGS).
+  // Including the full equipment purchase at t=0 AND amortizing it through
+  // opex meant NPV(5YR) ≈ cumFcf(Y5) − equipmentCapital — explained the
+  // -$8.1M-NPV-vs-+$1.05M-cumFcf contradiction observed in the demo audit.
+  //
+  // Correct treatment for the opex-amortization accounting the rest of the
+  // engine uses: only startupCapital is a Y0 outflow. Equipment shows up
+  // through its yearly amortization in totalCost / freeCashFlow already.
+  // Now NPV @ r=0 ties exactly to cumFcf(Y5), as the inline doc on the
+  // cumFcf row promises.
+  const totalInvestment = startupCapital;
 
   const totalRevenue = projections.reduce((s, p) => s + p.revenue, 0);
   const _totalCost = projections.reduce((s, p) => s + p.totalCost, 0);
@@ -3697,6 +3709,28 @@ export function autoGenerateStartup(state) {
  * @param {import('./types.js?v=20260418-sK').CostSummary} summary
  * @returns {Array<{ type: 'ok'|'warn'|'info', title: string, detail: string }>}
  */
+/**
+ * R14 (2026-04-29) — pure helper: suggested facility sqft from volume.
+ * Same DOH-aware math as the heuristic warning in generateHeuristics, factored
+ * out so the Setup tab can show a "(suggested: NNNK)" hint before any warning
+ * fires.
+ *
+ * Returns 0 when annualPalletsIn is 0 (no inbound volume yet).
+ *
+ * @param {object} state — same model shape generateHeuristics consumes
+ * @returns {number} suggested sqft (rounded to nearest 1K), or 0
+ */
+export function suggestFacilitySqft(state) {
+  if (!state) return 0;
+  const annualPalletsIn = _getAggregateInbound(state, 'pallets');
+  if (!(annualPalletsIn > 0)) return 0;
+  const dohRaw = Number(state.facility?.daysOnHand);
+  const doh = Number.isFinite(dohRaw) && dohRaw > 0 ? dohRaw : 30;
+  const avgPalletsOnHand = annualPalletsIn * (doh / 365);
+  const estPalletArea = avgPalletsOnHand * 40;
+  return Math.round((estPalletArea / 0.55) / 1000) * 1000;
+}
+
 export function generateHeuristics(state, summary) {
   const checks = [];
 

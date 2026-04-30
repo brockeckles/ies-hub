@@ -196,9 +196,12 @@ test('computeFinancialMetrics: NPV uses FCF, not grossProfit', () => {
   });
   // NPV should reflect Y1 FCF (-25K, offset by Y1 capex of 0 here so Y1 operating = -25K)
   // and Y2 FCF (960K). Not grossProfit (3M / 3.4M) which would inflate NPV dramatically.
-  // With totalInvestment 600K + FCF series [-25K, 960K] at 10% discount:
-  // NPV = -600K + (-25K)/1.1 + 960K/1.21 = -600K - 22.7K + 793.4K = 170.7K
-  near(metrics.npv, 170_636, 100, `npv=${metrics.npv} should be ~170K, not huge (would be if using grossProfit)`);
+  // R5 fix (2026-04-29): equipmentCapital is no longer added to totalInvestment
+  // (equipment is amortized into opex; double-counting was inflating |NPV| by
+  // equipmentCapital). totalInvestment = startupCapital only = 500K.
+  // FCF series [-25K, 960K] at 10% discount:
+  //   NPV = -500K + (-25K)/1.1 + 960K/1.21 = -500K - 22.7K + 793.4K = 270.7K
+  near(metrics.npv, 270_661, 100, `npv=${metrics.npv} should be ~270K, not huge (would be if using grossProfit)`);
 });
 
 test('computeFinancialMetrics: ROIC uses NOPAT + WC-inflated IC', () => {
@@ -247,6 +250,41 @@ test('computeFinancialMetrics: empty projections returns empty metrics', () => {
   assert(metrics.npv === 0, 'empty npv');
   assert(metrics.mirrPct === 0, 'empty mirr');
 });
+
+// R5 (2026-04-29): NPV at r=0% must equal cumFcf(YN) — the inline doc on the
+// cumFcf P&L row promises this tie. Pre-fix, NPV was lower than cumFcf by
+// the full equipmentCapital, breaking the relationship at every discount
+// rate. After the fix, equipmentCapital is no longer subtracted at Y0 (it's
+// expensed via opex amortization in projections), so the identity holds.
+test('R5: NPV @ r=0 ties to cumFcf(YN) — equipment not double-counted', () => {
+  const projections = [
+    { year: 1, revenue: 10_000_000, totalCost: 9_000_000, cogs: 7_000_000, sga: 2_000_000,
+      grossProfit: 3_000_000, ebitda: 1_000_000, ebit: 900_000, depreciation: 100_000,
+      taxes: 225_000, netIncome: 675_000, capex: 500_000, workingCapitalChange: 800_000,
+      operatingCashFlow:  475_000, freeCashFlow: -25_000, orders: 1_000_000,
+      cumFcf: -25_000 },
+    { year: 2, revenue: 10_500_000, totalCost: 9_200_000, cogs: 7_100_000, sga: 2_100_000,
+      grossProfit: 3_400_000, ebitda: 1_300_000, ebit: 1_200_000, depreciation: 100_000,
+      taxes: 300_000, netIncome: 900_000, capex: 0, workingCapitalChange: 40_000,
+      operatingCashFlow: 960_000, freeCashFlow: 960_000, orders: 1_050_000,
+      cumFcf: 935_000 },
+  ];
+  const metrics = computeFinancialMetrics(projections, {
+    // 1.5M equipment that's already amortized into opex via projections.
+    // Pre-fix: NPV would be ~-590K (= 935K cumFcf − 1.5M equipment double-count).
+    // Post-fix: NPV @ r=0 = cumFcf(Y2) = 935K.
+    startupCapital: 500_000, equipmentCapital: 1_500_000,
+    annualDepreciation: 100_000, discountRatePct: 0, reinvestRatePct: 0,
+    taxRatePct: 25, totalFtes: 100,
+  });
+  // At discount=0, NPV should equal cumFcf(YN) exactly. Tiny tolerance for
+  // floating-point.
+  near(metrics.npv, 935_000, 0.01,
+    `npv@r=0 should equal cumFcf(Y2)=935K. Got ${metrics.npv}. Pre-fix this was -590K.`);
+  near(metrics.totalInvestment, 500_000, 0.01,
+    `totalInvestment must be startupCapital only (500K), not 500K+1.5M=2M`);
+});
+
 
 // ============================================================
 // 4. SENSITIVITY — accepts baseRevenue override

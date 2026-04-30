@@ -11,6 +11,7 @@ import * as api from './api.js?v=20260427-A4';
 import { showToast } from '../../shared/toast.js?v=20260418-sK';
 import { getEnv, getEnvLabel, getProjectRef } from '../../shared/supabase.js?v=20260429-demo-s3';
 import { getBuildInfo, getBuildInfoSync } from '../../shared/build-info.js?v=20260424-A2';
+import { showConfirm } from '../../shared/confirm-modal.js';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -280,7 +281,7 @@ function _renderMasterTableBody(el, table, rows) {
     btn.addEventListener('click', async () => {
       const id = btn.dataset.deleteId;
       if (!id) return;
-      if (!window.confirm(`Delete this ${table.name.toLowerCase()} record? This cannot be undone.`)) return;
+      if (!(await showConfirm(`Delete this ${table.name.toLowerCase()} record? This cannot be undone.`))) return;
       try {
         await api.deleteMasterRecord(table.tableName, id);
         _masterDataCache.delete(table.tableName);

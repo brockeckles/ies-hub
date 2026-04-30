@@ -19,6 +19,7 @@ import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../
 import * as calc from './calc.js?v=20260427-s15';
 import * as api from './api.js?v=20260426-s13';
 import { createChart } from '../../shared/cdn-wrappers/chart-wrapper.js?v=20260418-sK';
+import { showConfirm } from '../../shared/confirm-modal.js';
 
 // ============================================================
 // STATE
@@ -674,7 +675,7 @@ function viewLabel(v) {
   return labels[v] || v;
 }
 
-function bindShellEvents() {
+async function bindShellEvents() {
   if (!rootEl) return;
   // Reset bound-flag so re-renders (e.g. after sidebar toggle does a
   // full innerHTML replace) get re-bound. The primitive's idempotency
@@ -697,7 +698,7 @@ function bindShellEvents() {
       refreshToolChrome(rootEl, _buildChromeOpts());
     },
     onBack: async () => {
-      if (isDirty && !confirm('You have unsaved changes. Leave anyway?')) return;
+      if (isDirty && !(await showConfirm('You have unsaved changes. Leave anyway?'))) return;
       guardMarkClean('netopt');
       await renderLanding();
     },
@@ -2241,8 +2242,8 @@ function renderRateCardPhase(el) {
   });
 
   // Reset rate card to synthetic-tariff defaults
-  el.querySelector('[data-action="reset-rate-card"]')?.addEventListener('click', () => {
-    if (!confirm('Reset all rate-card values to the synthetic-tariff defaults? This will overwrite TL/LTL/FSC/discount/min charge, the class-100 weight-break row, and the region matrix.')) return;
+  el.querySelector('[data-action="reset-rate-card"]')?.addEventListener('click', async () => {
+    if (!(await showConfirm('Reset all rate-card values to the synthetic-tariff defaults? This will overwrite TL/LTL/FSC/discount/min charge, the class-100 weight-break row, and the region matrix.'))) return;
     rateCard = { ...calc.DEFAULT_RATES, ltlRegionMatrix: JSON.parse(JSON.stringify(calc.DEFAULT_LTL_REGION_MATRIX)) };
     markDirty();
     renderRateCardPhase(el);

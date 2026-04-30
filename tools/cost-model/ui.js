@@ -11,7 +11,7 @@ import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260424-hyg04';
-import * as calc from './calc.js?v=20260429-vol18';
+import * as calc from './calc.js?v=20260429-eve-r5fix';
 import * as api from './api.js?v=20260429-vol12';
 import * as scenarios from './calc.scenarios.js?v=20260429-otfix1';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
@@ -876,7 +876,7 @@ function wireLandingEvents() {
       const id = Number(btn.getAttribute('data-cm-delete'));
       const name = btn.getAttribute('data-cm-name') || `Model #${id}`;
       if (!id) return;
-      if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+      if (!(await showConfirm(`Delete "${name}"? This cannot be undone.`, { okLabel: 'Delete', danger: true }))) return;
       try {
         await api.deleteModel(id);
         savedModels = savedModels.filter(m => m.id !== id);
@@ -3601,7 +3601,7 @@ function renderVolumes() {
         <div class="hub-kpi-value">${fmtN(kpiOrders)}</div>
       </div>
       <div class="hub-kpi-item" title="Total annual units ÷ working days per year (${opDays})">
-        <div class="hub-kpi-label">Daily Avg</div>
+        <div class="hub-kpi-label">Daily Avg <span style="color:var(--ies-gray-400);font-weight:500;">(units/day)</span></div>
         <div class="hub-kpi-value">${fmtN(kpiDaily)}</div>
       </div>
     </div>
@@ -3922,6 +3922,23 @@ function renderFacility() {
       <div class="hub-field">
         <label class="hub-field__label">Total Square Footage</label>
         <input class="hub-input" type="number" value="${f.totalSqft || ''}" placeholder="e.g., 150000" step="1000" data-field="facility.totalSqft" data-type="number" />
+        ${(() => {
+          // R14 (2026-04-29) — surface a volume-driven suggestion any time
+          // current sqft diverges >5% from the heuristic. Click-to-apply
+          // button writes back through the standard data-field path.
+          const sug = calc.suggestFacilitySqft(model);
+          if (!(sug > 0)) return '';
+          const cur = Number(f.totalSqft) || 0;
+          const dev = cur > 0 ? Math.abs(sug - cur) / cur : Infinity;
+          if (cur > 0 && dev <= 0.05) {
+            return `<div class="hub-field__hint" style="font-size:11px;color:var(--ies-gray-500);margin-top:4px;">✓ Within 5% of suggested ${sug.toLocaleString()} sqft (${(model.facility?.daysOnHand || 30)}-day DOH)</div>`;
+          }
+          const verb = cur === 0 ? 'Use' : 'Replace with';
+          return `<div class="hub-field__hint" style="font-size:11px;color:var(--ies-gray-500);margin-top:4px;display:flex;align-items:center;gap:8px;">
+            <span><i style="color:var(--ies-blue);">Suggested:</i> ${sug.toLocaleString()} sqft (${(model.facility?.daysOnHand || 30)}-day DOH)</span>
+            <button type="button" class="hub-btn hub-btn-secondary hub-btn-sm" data-action="apply-suggested-sqft" data-value="${sug}" title="Set Total Sqft to the suggestion">${verb} ${(sug / 1000).toFixed(0)}K</button>
+          </div>`;
+        })()}
       </div>
       <div class="hub-field">
         <label class="hub-field__label">Clear Height (ft)</label>
@@ -7621,7 +7638,7 @@ function renderSummary() {
         ${renderMetricCard('GP / Order', calc.formatCurrency(metrics.contribPerOrder, {decimals: 2}), metrics.contribPerOrder > 0, `Y1 Gross Profit $${((p1.grossProfit||0)/1000).toFixed(0)}K ÷ Y1 Orders ${((p1.orders||orders||0)/1000).toFixed(0)}K. GP = Revenue − COGS (site-level direct costs only). Useful for unit-economics benchmarking across deals.`)}
         ${renderMetricCard('Op Leverage', calc.formatPct(metrics.opLeveragePct), null, `(Facility + Overhead + Start-Up Amort) ÷ Y1 Total Cost. Y1 fixed-ish costs: Facility $${((p1.facility||0)/1000).toFixed(0)}K + Overhead $${((p1.overhead||0)/1000).toFixed(0)}K + Startup Amort $${((p1.startup||0)/1000).toFixed(0)}K. Y1 Total Cost $${((p1.totalCost||0)/1000).toFixed(0)}K. Higher = more sensitive to volume swings (less ability to flex).`)}
         ${renderMetricCard('Contract Value', calc.formatCurrency(metrics.contractValue, {compact: true}), null, `Sum of Revenue across the ${contractYears}-year horizon = Total Contract Value (TCV). Horizon horizon average = $${((metrics.contractValue / Math.max(1, contractYears))/1000).toFixed(0)}K/yr.`)}
-        ${renderMetricCard('Total Investment', calc.formatCurrency(metrics.totalInvestment, {compact: true}), null, `Startup capital $${(summary.startupCapital/1000).toFixed(0)}K + Equipment capital $${(summary.equipmentCapital/1000).toFixed(0)}K. EXCLUDES TI Upfront (rolled into facility rent via amortization). The Y0 outflow used as the anchor for MIRR/NPV/Payback.`)}
+        ${renderMetricCard('Total Investment', calc.formatCurrency(metrics.totalInvestment, {compact: true}), null, `Startup capital $${(summary.startupCapital/1000).toFixed(0)}K — equipment ($${(summary.equipmentCapital/1000).toFixed(0)}K) is amortized into opex over the contract term, not booked at Y0. EXCLUDES TI Upfront (rolled into facility rent via amortization). The Y0 outflow used as the anchor for MIRR/NPV/Payback.`)}
         ${(summary.tiUpfront || 0) > 0 ? renderMetricCard('TI Upfront', calc.formatCurrency(summary.tiUpfront, {compact: true}), null, `Tenant Improvement outlay at Y0 (dock levelers, office build-out, CCTV, access control, etc.) — per Asset Defaults Guidance, TI does NOT hit Total Investment or D&A. Instead it amortizes over the ${(model.projectDetails?.contractTerm || 5)}-year contract at $${(((summary.tiAmortAnnual)||0)/1000).toFixed(0)}K/yr and shows as a line in Facility Cost.`) : ''}
       </div>
     </div>
@@ -8476,7 +8493,7 @@ function bindSectionEvents(section, container) {
   // CM-SET-2 — Seed default reference data into Supabase. Idempotent upsert
   // path: the api layer skips rows that already exist (matched by natural keys).
   container.querySelector('[data-cm-action="seed-default-refdata"]')?.addEventListener('click', async () => {
-    if (!confirm('Seed default reference data into Supabase? Existing rows are kept; only missing rows are inserted.')) return;
+    if (!(await showConfirm('Seed default reference data into Supabase? Existing rows are kept; only missing rows are inserted.', { okLabel: 'Seed' }))) return;
     showToast('Seeding reference data — this may take a few seconds…', 'info');
     try {
       const result = await api.seedDefaultRefData();
@@ -10843,7 +10860,7 @@ function writeOverrideAuditEvent(ev) {
 // ACTIONS (add/delete rows)
 // ============================================================
 
-function handleAction(action, idx, btn) {
+async function handleAction(action, idx, btn) {
   switch (action) {
     case 'vol-channel-tab':
       _activeChannelKey = btn?.dataset?.key || _activeChannelKey;
@@ -10919,7 +10936,7 @@ function handleAction(action, idx, btn) {
       if (!targetId || targetId === model.id) return;
       // Warn if there are unsaved changes — they\'ll be discarded by the load.
       if (isDirty) {
-        const ok = window.confirm('You have unsaved changes. Switch scenarios anyway? Unsaved edits will be lost.');
+        const ok = await showConfirm('You have unsaved changes. Switch scenarios anyway? Unsaved edits will be lost.', { okLabel: 'Switch' });
         if (!ok) return;
       }
       loadModelByCmId(targetId);
@@ -11352,6 +11369,17 @@ function handleAction(action, idx, btn) {
     case 'reset-most-uph':
       resetMostUph(idx);
       return; // resetMostUph already re-renders
+    case 'apply-suggested-sqft': {
+      // R14 (2026-04-29) — one-click apply the volume-driven sqft suggestion.
+      const v = Number(btn?.dataset?.value);
+      if (Number.isFinite(v) && v > 0) {
+        model.facility = model.facility || {};
+        model.facility.totalSqft = v;
+        markDirty();
+        showToast(`Total Sqft set to ${v.toLocaleString()} sqft (suggested)`, 'success');
+      }
+      break;
+    }
   }
   isDirty = true;
   renderSection();
@@ -11778,7 +11806,7 @@ async function openEquipmentCatalog() {
 // ============================================================
 
 async function handleNew() {
-  if (isDirty && !confirm('You have unsaved changes. Start a new model?')) return;
+  if (isDirty && !(await showConfirm('You have unsaved changes. Start a new model?', { okLabel: 'Start new' }))) return;
   model = createEmptyModel();
   isDirty = false;
   // CM-SAVE-1 — Reset save-state on a brand-new model.
@@ -11913,7 +11941,7 @@ async function handleLoad() {
   // The Load button now returns to the landing page where models are shown as cards.
   // Refreshes the list so any newly-saved model appears.
   try { savedModels = await api.listModels(); } catch {}
-  if (isDirty && !confirm('You have unsaved changes. Leave this model?')) return;
+  if (isDirty && !(await showConfirm('You have unsaved changes. Leave this model?', { okLabel: 'Leave' }))) return;
   viewMode = 'landing';
   renderCurrentView();
 }
@@ -12914,7 +12942,22 @@ function setNestedValue(obj, path, value) {
  * Selecting an archetype creates a new channel block on model.channels[],
  * switches the active tab to it, and re-renders.
  */
-async function openChannelArchetypePicker() {
+async function openChannelArchetypePicker(targetChannelKey = null) {
+  // R13 (2026-04-29): when targetChannelKey is set, the picker re-archetypes
+  // that channel rather than adding a new one. Volume + overrides are
+  // preserved; conversions / assumptions / seasonality / color / name
+  // are replaced from the chosen archetype.
+  const isRearchetype = !!targetChannelKey;
+  const targetCh = isRearchetype
+    ? (model.channels || []).find(c => c.key === targetChannelKey)
+    : null;
+  const headerTitle = isRearchetype
+    ? `Change archetype${targetCh ? ` — ${targetCh.name || ''}` : ''}`
+    : 'Add channel';
+  const headerSub = isRearchetype
+    ? "Pick a new archetype to overwrite this channel's UOM, structural assumptions, seasonality, and color. Volume + your custom row overrides stay intact."
+    : 'Pick an archetype to seed sensible defaults — you can edit any field afterward.';
+
   const overlay = document.createElement('div');
   overlay.className = 'hub-modal-overlay';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:9999;';
@@ -12922,8 +12965,8 @@ async function openChannelArchetypePicker() {
     <div style="background:white;border-radius:10px;padding:24px;width:780px;max-width:95vw;max-height:92vh;overflow:auto;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
         <div>
-          <h3 style="margin:0;">Add channel</h3>
-          <p class="cm-subtle" style="margin-top:4px;font-size:13px;color:var(--ies-gray-600);">Pick an archetype to seed sensible defaults — you can edit any field afterward.</p>
+          <h3 style="margin:0;">${headerTitle}</h3>
+          <p class="cm-subtle" style="margin-top:4px;font-size:13px;color:var(--ies-gray-600);">${headerSub}</p>
         </div>
         <button class="hub-btn hub-btn-secondary" data-close>×</button>
       </div>
@@ -12969,10 +13012,85 @@ async function openChannelArchetypePicker() {
     `;
 
     body.querySelectorAll('[data-archetype-key]').forEach(card => {
-      card.addEventListener('click', () => {
+      card.addEventListener('click', async () => {
         const key = card.dataset.archetypeKey;
         const arch = key === '__custom__' ? null : archetypes.find(a => a.archetype_key === key);
+        if (isRearchetype && targetCh) {
+          // R13 — re-archetype existing channel. Confirm before clobbering.
+          const archName = arch ? arch.name : 'Custom';
+          const ok = await showConfirm(
+            `Change "${targetCh.name || 'this channel'}" to "${archName}"?\n\n` +
+            `Replaced: UOM conversions · structural assumptions · seasonality · color.\n` +
+            `Preserved: annual volume · UOM · activity · row overrides.`,
+            { okLabel: 'Replace archetype' }
+          );
+          if (!ok) return;
+          // Build a fresh archetype shell, then merge its archetype-driven
+          // fields onto the existing channel (preserve volume + overrides).
+          const fresh = buildChannelFromArchetype(arch);
+          targetCh.archetypeId = fresh.archetypeId;
+          targetCh.color = fresh.color;
+          // Only rename if the user hasn't customized away from the prior
+          // archetype's name — i.e. current name still equals the archetype
+          // they had (or is the generic "Custom channel"). Otherwise keep.
+          const prevArchName = targetCh.archetypeSnapshot?.name || 'Custom channel';
+          if (!targetCh.name || targetCh.name === prevArchName || targetCh.name === 'Custom channel') {
+            targetCh.name = fresh.name;
+          }
+          targetCh.conversions = fresh.conversions;
+          targetCh.assumptions = fresh.assumptions;
+          targetCh.seasonality = fresh.seasonality;
+          targetCh.archetypeSnapshot = fresh.archetypeSnapshot;
+          // Mark reverse if newly so. Don't clobber existing primary.value.
+          const wasReverse = !!targetCh.primary?.autoDerived;
+          const isNowReverse = !!fresh.primary?.autoDerived;
+          if (!wasReverse && isNowReverse) {
+            targetCh.primary = { ...targetCh.primary, activity: 'returns', autoDerived: true };
+          } else if (wasReverse && !isNowReverse) {
+            targetCh.primary = { ...targetCh.primary, activity: 'outbound', autoDerived: false };
+          }
+          isDirty = true;
+          overlay.remove();
+          renderSection();
+          showToast(`Re-archetyped: ${targetCh.name}`, 'success');
+          return;
+        }
+        // Add-new path (default).
         const newCh = buildChannelFromArchetype(arch);
+        const isReverseNew = !!newCh.primary?.autoDerived;
+
+        // R8 (2026-04-29) — channel-add volume partition prompt. When the
+        // user is adding their FIRST extra non-reverse channel onto a
+        // single-channel deal that already has volume, default behavior is
+        // to leave the legacy channel at 100% and create the new one at 0
+        // — confusing because the user picked an archetype they expected to
+        // share the existing volume. Ask the user to allocate.
+        const legacyCandidates = (model.channels || []).filter(c =>
+          !c.hidden && !c.primary?.autoDerived && (Number(c.primary?.value) || 0) > 0
+        );
+        if (!isReverseNew && legacyCandidates.length === 1) {
+          const legacy = legacyCandidates[0];
+          const legacyVol = Number(legacy.primary?.value) || 0;
+          const half = Math.round(legacyVol / 2);
+          const ok = await showConfirm(
+            `Allocate volume from "${legacy.name}" (${legacyVol.toLocaleString()} ${legacy.primary?.uom || 'units'}) to "${newCh.name}"?\n\n` +
+            `OK → split 50 / 50: ${half.toLocaleString()} stays in "${legacy.name}", ${(legacyVol - half).toLocaleString()} moves to "${newCh.name}".\n\n` +
+            `Cancel → "${newCh.name}" starts at 0 and total volume is unchanged. (You can edit either channel afterward.)`,
+            { okLabel: 'Split 50/50' }
+          );
+          if (ok) {
+            // Shift half of legacy volume into the new channel. Match UOM
+            // so downstream calc consumers don't have to reconvert.
+            legacy.primary = { ...(legacy.primary || {}), value: half };
+            newCh.primary = {
+              ...(newCh.primary || {}),
+              value: legacyVol - half,
+              uom: legacy.primary?.uom || newCh.primary?.uom || 'units',
+              source: 'manual',
+            };
+          }
+        }
+
         if (!Array.isArray(model.channels)) model.channels = [];
         model.channels.push(newCh);
         _activeChannelKey = newCh.key;
@@ -13055,6 +13173,7 @@ function openChannelManageModal() {
         <div class="cm-mgmt-row__actions">
           <button class="hub-btn hub-btn-secondary hub-btn-sm" ${i === 0 ? 'disabled' : ''} data-action="vol-channel-reorder-up" data-key="${c.key}" title="Move up">▲</button>
           <button class="hub-btn hub-btn-secondary hub-btn-sm" ${i === channels.length - 1 ? 'disabled' : ''} data-action="vol-channel-reorder-down" data-key="${c.key}" title="Move down">▼</button>
+          <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="vol-channel-rearchetype" data-key="${c.key}" title="Change archetype — replaces UOM / structural / seasonality / color; volume preserved">↻ Archetype</button>
           <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="vol-channel-toggle-hidden" data-key="${c.key}" title="${c.hidden ? 'Show channel' : 'Hide channel from page'}">${c.hidden ? '👁‍🗨' : '👁'}</button>
           <button class="hub-btn hub-btn-danger hub-btn-sm" ${channels.length <= 1 ? 'disabled' : ''} data-action="vol-channel-delete" data-key="${c.key}" title="Delete channel">×</button>
         </div>
@@ -13078,6 +13197,7 @@ function openChannelManageModal() {
       </div>
       <style>
         .cm-mgmt-row { display: grid; grid-template-columns: 24px 1fr 100px auto; gap: 8px; align-items: center; padding: 8px 10px; border: 1px solid var(--ies-gray-200); border-radius: 8px; }
+        .cm-mgmt-row__actions .hub-btn-sm { white-space: nowrap; }
         .cm-mgmt-row__handle { display: flex; align-items: center; justify-content: center; }
         .cm-mgmt-row__type { font-size: 11px; color: var(--ies-gray-500); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700; }
         .cm-mgmt-row__actions { display: inline-flex; gap: 4px; }
@@ -13098,7 +13218,7 @@ function openChannelManageModal() {
       });
     });
     overlay.querySelectorAll('button[data-action]').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         const action = btn.dataset.action;
         const key = btn.dataset.key;
         if (action === 'vol-channel-reorder-up' || action === 'vol-channel-reorder-down') {
@@ -13113,9 +13233,16 @@ function openChannelManageModal() {
         } else if (action === 'vol-channel-toggle-hidden') {
           const ch = model.channels.find(c => c.key === key);
           if (ch) { ch.hidden = !ch.hidden; isDirty = true; }
+        } else if (action === 'vol-channel-rearchetype') {
+          // R13 (2026-04-29): close the manage modal first so the picker
+          // overlay doesn't stack on top of it; openChannelArchetypePicker
+          // will reopen on its own.
+          overlay.remove();
+          openChannelArchetypePicker(key);
+          return;
         } else if (action === 'vol-channel-delete') {
           if (model.channels.length <= 1) return;
-          if (!confirm(`Delete channel? All channel data is dropped — there's no undo.`)) return;
+          if (!(await showConfirm(`Delete channel? All channel data is dropped — there's no undo.`, { okLabel: 'Delete', danger: true }))) return;
           model.channels = model.channels.filter(c => c.key !== key);
           if (_activeChannelKey === key) _activeChannelKey = model.channels[0]?.key || null;
           isDirty = true;
@@ -14951,12 +15078,12 @@ function _bindOperationalFlowEvents(container) {
 
   // v0.2 — Delete button on each node card
   container.querySelectorAll('.ofp-node__del').forEach(btn => {
-    btn.addEventListener('click', (e) => {
+    btn.addEventListener('click', async (e) => {
       e.stopPropagation();
       const kind = btn.dataset.ofpDelKind;
       const idx = Number(btn.dataset.ofpDelIdx);
       const name = btn.dataset.ofpDelName || 'this activity';
-      if (!confirm(`Delete "${name}"? This removes the underlying labor line.`)) return;
+      if (!(await showConfirm(`Delete "${name}"? This removes the underlying labor line.`, { okLabel: 'Delete', danger: true }))) return;
       _ofpDeleteLine(kind, idx);
     });
   });
@@ -15944,7 +16071,7 @@ function _bindManageAreasEvents(container) {
 
   // Delete area
   panel.querySelectorAll('.ofp-area-mgr__del[data-area-key]').forEach(btn => {
-    btn.addEventListener('click', (e) => {
+    btn.addEventListener('click', async (e) => {
       e.stopPropagation();
       const key = btn.dataset.areaKey;
       const count = Number(btn.dataset.areaCount) || 0;
@@ -15954,7 +16081,7 @@ function _bindManageAreasEvents(container) {
       if (count > 0) {
         msg += `\n\n${count} activit${count === 1 ? 'y is' : 'ies are'} currently in this area. They will be reassigned to "Unclassified" (or re-classified by keyword match if their override is cleared).`;
       }
-      if (!confirm(msg)) return;
+      if (!(await showConfirm(msg, { okLabel: 'Delete', danger: true }))) return;
       // Clear flowLane on any line that explicitly points to this area.
       // Cleared lines fall through to keyword classification on the next render.
       (model.laborLines || []).forEach(l => {
@@ -16238,7 +16365,7 @@ function _bindManageAreasEvents(container) {
 
   // Sub-area delete
   panel.querySelectorAll('[data-sub-delete]').forEach(btn => {
-    btn.addEventListener('click', (e) => {
+    btn.addEventListener('click', async (e) => {
       e.stopPropagation();
       const areaKey = btn.dataset.areaKey;
       const subKey = btn.dataset.subareaKey;
@@ -16252,7 +16379,7 @@ function _bindManageAreasEvents(container) {
       if (lineCount > 0) {
         msg += `\n\n${lineCount} activit${lineCount === 1 ? 'y has' : 'ies have'} an explicit override pointing to this sub-area; the override will be cleared (lines fall back to keyword classification within "${a.label}").`;
       }
-      if (!confirm(msg)) return;
+      if (!(await showConfirm(msg, { okLabel: 'Delete', danger: true }))) return;
       // Clear flowSubArea on lines that explicitly point here
       (model.laborLines || []).forEach(l => { if (l.flowSubArea === subKey) delete l.flowSubArea; });
       (model.indirectLaborLines || []).forEach(l => { if (l.flowSubArea === subKey) delete l.flowSubArea; });
@@ -16457,7 +16584,7 @@ function _bindManageFlowsEvents(container) {
 
   // Delete flow
   panel.querySelectorAll('.ofp-area-mgr__del[data-flow-tag]').forEach(btn => {
-    btn.addEventListener('click', (e) => {
+    btn.addEventListener('click', async (e) => {
       e.stopPropagation();
       const tag = btn.dataset.flowTag;
       const count = Number(btn.dataset.flowCount) || 0;
@@ -16467,7 +16594,7 @@ function _bindManageFlowsEvents(container) {
       if (count > 0) {
         msg += `\n\n${count} activit${count === 1 ? 'y' : 'ies'} reference this flow. They will become untagged.`;
       }
-      if (!confirm(msg)) return;
+      if (!(await showConfirm(msg, { okLabel: 'Delete', danger: true }))) return;
       // Untag every line that points to this flow.
       (model.laborLines || []).forEach(l => { if (l.path_tag === tag) delete l.path_tag; });
       (model.indirectLaborLines || []).forEach(l => { if (l.path_tag === tag) delete l.path_tag; });
