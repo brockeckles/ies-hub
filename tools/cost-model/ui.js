@@ -3950,7 +3950,7 @@ function renderVolumes() {
     <!-- Source / integration footer -->
     <div class="cm-vol-source-bar">
       <span><span class="cm-vol-pill cm-vol-pill--mute">Source</span> ${sourceBadge}</span>
-      <span style="color:var(--ies-gray-500);">Pull from <button type="button" data-action="cm-launch-wsc" class="cm-vol-launch-link" style="background:none;border:none;padding:0;color:var(--ies-blue);text-decoration:none;cursor:pointer;font:inherit;">WSC →</button> or <button type="button" data-action="cm-launch-netopt" class="cm-vol-launch-link" style="background:none;border:none;padding:0;color:var(--ies-blue);text-decoration:none;cursor:pointer;font:inherit;">NetOpt →</button></span>
+      <span style="color:var(--ies-gray-500);">Pull from <button type="button" data-action="cm-launch-wsc" class="cm-link-arrow">WSC →</button> or <button type="button" data-action="cm-launch-netopt" class="cm-link-arrow">NetOpt →</button></span>
     </div>
 
     <style>

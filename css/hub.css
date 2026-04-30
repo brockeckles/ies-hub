@@ -3969,3 +3969,148 @@ textarea.hub-input {
 /* Collapse the description on narrow / collapsed sidebars. */
 .hub-sidebar.collapsed .hub-nav-group__count { display: none; }
 
+
+/* ============================================================
+   2026-04-30 R12-followup — CM Aesthetic Audit Sweep
+   ----------------------------------------------------------
+   Source: IT_Pitch/CM_Aesthetic_Inconsistencies_Audit_2026-04-26.md
+   17 findings of typography / button / input / card / chip drift
+   that read as polish noise during demos. The hub.css design
+   tokens above already cover most of the targets; this sweep adds
+   the explicit rules that lock down the remaining inconsistencies
+   without touching 50+ render templates.
+
+   Findings closed:
+     F1 Section title weight       → .cm-section-title locked to fw-bold/20px
+     F2 Subtitle size drift        → .cm-section-desc locked to 13px / gray-500
+     F3 Table header case          → .cm-table thead th already uppercase;
+                                     .hub-datatable thead th gets parity rule
+     F4 Field label case           → .hub-field__label already uppercase;
+                                     .cm-field-label legacy alias added
+     F5 Primary button drift       → +Add Volume Line / +Add Overhead Line
+                                     unified on .cm-add-row-btn (already shared)
+     F6 Secondary action style     → .cm-link-arrow added for inline → links
+     F7 Danger button color        → .cm-delete-btn already uses ies-red;
+                                     'Reset' text-only links get .cm-link-reset
+     F8 Input width                → .hub-input width:100% already; field
+                                     widths controlled by .hub-field grid
+     F9 Input padding              → .hub-input 10px/12px already fixed
+     F10 Placeholder opacity       → .hub-input::placeholder already standardized
+     F11 Card padding              → .hub-card already var(--sp-5)=20px;
+                                     verified consistent (audit recommendation
+                                     of 24px not adopted — 20px reads cleaner
+                                     in dense CM forms based on live walk)
+     F12 Border radius drift       → tokens enforced; status chips rule added
+     F13 Divider rule              → .cm-section-divider exists; explicit
+                                     1px / gray-100 / 28px-20px margin
+     F14 Status chip sizing        → .hub-status-chip family unified
+     F15 Color palette docs        → comment block above codifies semantic use
+     F16 Label-input gap           → .hub-field gap:4px standardized
+     F17 Card-section spacing      → .cm-card-stack utility for 24px gap groups
+
+   Color palette (semantic):
+     ies-blue   → primary actions, links, info accents
+     ies-green  → success, positive deltas, "approved"
+     ies-red    → destructive actions, alerts, negative deltas
+     ies-yellow → warnings, "draft", "pending review"
+     ies-gray-* → neutral surfaces, secondary text, inactive state
+   ============================================================ */
+
+/* F1+F2 — Section title + subtitle locks. Templates render
+   .cm-section-title (h-equivalent) and .cm-section-desc inside
+   .cm-section-header, but no explicit class rule existed; weight
+   and size cascaded inconsistently across 12 sections. */
+.cm-section-title {
+  font-size: var(--fs-page);          /* 20px */
+  font-weight: var(--fw-bold);        /* 700 */
+  color: var(--ies-navy);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+.cm-section-desc {
+  font-size: var(--fs-body);          /* 13px */
+  font-weight: var(--fw-medium);      /* 500 */
+  color: var(--ies-gray-500);
+  line-height: 1.4;
+  margin: 0;
+}
+
+/* F3 — hub-datatable thead parity with cm-table (some CM tables use
+   the shared hub-datatable wrapper instead of cm-table). Lock the
+   uppercase-caps treatment so all headers read identically. */
+.hub-datatable thead th {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 10px;
+  font-weight: var(--fw-bold);
+  color: var(--ies-gray-500);
+}
+
+/* F4 — Legacy alias for templates that emit .cm-field-label instead of
+   .hub-field__label. Mirrors the canonical rule so old + new render
+   identically; gradual migration to .hub-field__label preferred. */
+.cm-field-label {
+  font-size: var(--fs-caption);       /* 11px */
+  font-weight: var(--fw-semibold);    /* 600 */
+  color: var(--ies-gray-500);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  line-height: 1.25;
+}
+
+/* F6 — Inline arrow link (e.g. "Size with Calculator →", "Edit in
+   Labor Factors →", "Compare scenarios →"). Today some are .hub-btn
+   buttons and some are bare <a>; unify on a single text-link affordance
+   that reads as a navigation cue, not a primary action. */
+.cm-link-arrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--ies-blue);
+  font-family: inherit;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  text-decoration: none;
+}
+.cm-link-arrow:hover { text-decoration: underline; }
+.cm-link-arrow:focus-visible {
+  outline: 2px solid var(--ies-blue);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* F7 — Reset / undo text link (Pricing tab "Reset" was un-styled).
+   Subtle gray text link that becomes red on hover to signal the
+   destructive intent without screaming on every render. */
+.cm-link-reset {
+  background: none;
+  border: 0;
+  padding: 2px 0;
+  color: var(--ies-gray-500);
+  font-family: inherit;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+}
+.cm-link-reset:hover { color: var(--ies-red); text-decoration: underline; }
+
+/* F12 + F14 — Status chip border-radius standardization. tokens have
+   --radius-pill (20px); make sure all .hub-status-chip variants resolve
+   to it instead of inline 12px / 16px overrides that drift. */
+.hub-status-chip { border-radius: var(--radius-pill); }
+
+/* F17 — Stack utility for grouped CM cards. Use on a wrapper around
+   sibling .hub-card elements to guarantee the same vertical rhythm
+   (24px) that the audit recommends as the "normal" spacing tier. */
+.cm-card-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);                   /* 24px — "normal" tier */
+}
+.cm-card-stack--tight { gap: var(--sp-4); }   /* 16px — "tight" tier */
+.cm-card-stack--loose { gap: var(--sp-7); }   /* 32px — "loose" tier */
