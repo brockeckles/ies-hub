@@ -455,7 +455,14 @@ function _stylesheet() {
       .tool-chrome-shell .tc-section-pill__dot--complete { background: var(--ies-green, #16a34a); }
       .tool-chrome-shell .tc-section-pill__dot--partial  { background: #f59e0b; }
       .tool-chrome-shell .tc-section-pill__dot--empty    { background: rgba(255,255,255,0.25); }
+      /* Brock 2026-04-30 NIGHT — 'na' = derived view (Summary, Cashflow & P&L,
+         Scenarios, What-If, Assumptions, Linked Designs). Sidebar treats these
+         as complete; mirror the visual here so the dot is visible at all,
+         but use a softer blue-grey to signal "viewable / informational"
+         rather than the user-input-driven green. */
+      .tool-chrome-shell .tc-section-pill__dot--na      { background: rgba(255,255,255,0.55); }
       .tool-chrome-shell .tc-section-pill--active .tc-section-pill__dot--empty { background: rgba(0,0,0,0.18); }
+      .tool-chrome-shell .tc-section-pill--active .tc-section-pill__dot--na    { background: rgba(0,0,0,0.35); }
 
       .tool-chrome-shell .tc-kpi-chip {
         display: inline-flex; flex-direction: column; align-items: flex-start;
