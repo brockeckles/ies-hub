@@ -12,7 +12,7 @@ import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260424-hyg04';
 import * as calc from './calc.js?v=20260430-am-p5fix12';
-import * as api from './api.js?v=20260430-pm-g12';
+import * as api from './api.js?v=20260430-r12';
 import * as scenarios from './calc.scenarios.js?v=20260430-pm-otfix2';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
 import * as channelCalc from './calc.channels.js?v=20260429-vol13';
@@ -779,6 +779,24 @@ async function loadModelByCmId(id) {
       if (!model.projectDetails) model.projectDetails = createEmptyModel().projectDetails;
       const pdHydrate = model.projectDetails;
       if (!pdHydrate.environment && full.environment_type) pdHydrate.environment = String(full.environment_type).toLowerCase();
+      // R12: split-environment hydration. Prefer new flat columns; fall back
+      // to inferring from legacy environment_type when the project predates
+      // the split (created before 2026-04-30 migration).
+      if (!pdHydrate.storageEnvironment && full.storage_environment) {
+        pdHydrate.storageEnvironment = String(full.storage_environment).toLowerCase();
+      }
+      if (!pdHydrate.vertical && full.industry_vertical) {
+        pdHydrate.vertical = String(full.industry_vertical).toLowerCase();
+      }
+      if (!pdHydrate.storageEnvironment || !pdHydrate.vertical) {
+        const legacy = String(full.environment_type || pdHydrate.environment || '').toLowerCase().trim();
+        const STORAGE_SET = new Set(['ambient','refrigerated','freezer','temperature_controlled','cold','chilled','frozen','temp controlled','temp_controlled','temperature controlled']);
+        const VERTICAL_SET = new Set(['ecommerce','e-commerce','retail','food & beverage','food and beverage','food_beverage','industrial','pharmaceutical','pharma','automotive','consumer goods','consumer_goods','other']);
+        const STORAGE_NORM = {'cold':'refrigerated','chilled':'refrigerated','frozen':'freezer','temp controlled':'temperature_controlled','temp_controlled':'temperature_controlled','temperature controlled':'temperature_controlled'};
+        const VERTICAL_NORM = {'e-commerce':'ecommerce','food & beverage':'food_beverage','food and beverage':'food_beverage','pharma':'pharmaceutical','consumer goods':'consumer_goods'};
+        if (!pdHydrate.storageEnvironment && legacy && STORAGE_SET.has(legacy)) pdHydrate.storageEnvironment = STORAGE_NORM[legacy] || legacy;
+        if (!pdHydrate.vertical && legacy && VERTICAL_SET.has(legacy)) pdHydrate.vertical = VERTICAL_NORM[legacy] || legacy;
+      }
       if (!pdHydrate.market && full.market_id) pdHydrate.market = full.market_id;
       if (!pdHydrate.clientName && full.client_name) pdHydrate.clientName = full.client_name;
       if (!pdHydrate.contractTerm && full.contract_term_years) pdHydrate.contractTerm = full.contract_term_years;
@@ -1035,6 +1053,9 @@ function reconstructModelFromFlatRow(row) {
       name: row.name || '',
       clientName: row.client_name || '',
       market: row.market_id || '',
+      // R12 — split environment
+      storageEnvironment: row.storage_environment || _legacyEnvToStorage(row.environment_type) || '',
+      vertical: row.industry_vertical || _legacyEnvToVertical(row.environment_type) || '',
       environment: row.environment_type || '',
       facilityLocation: '',
       contractTerm: row.contract_term_years || 5,
@@ -3178,10 +3199,18 @@ function _sectionCompleteness(sectionKey) {
   switch (sectionKey) {
     case 'setup': {
       const pd = m.projectDetails || {};
-      const filled = ['name', 'clientName', 'market', 'environment', 'contractTerm']
-        .filter(k => pd[k] !== null && pd[k] !== undefined && pd[k] !== '').length;
-      if (filled === 5) return 'complete';
-      if (filled === 0) return 'empty';
+      // R12 — Setup is complete when name + clientName + market + contractTerm
+      // are filled AND both axes of the split environment are picked
+      // (storageEnvironment + vertical). Legacy `environment` field still
+      // counts as a fallback when neither new field is populated, so models
+      // saved before the 2026-04-30 split don't suddenly read as 'partial'.
+      const baseFields = ['name', 'clientName', 'market', 'contractTerm'];
+      const baseFilled = baseFields.filter(k => pd[k] !== null && pd[k] !== undefined && pd[k] !== '').length;
+      const hasStorage = !!(pd.storageEnvironment || (pd.environment && ['ambient','refrigerated','freezer','temperature_controlled','cold','chilled','frozen'].includes(String(pd.environment).toLowerCase().trim())));
+      const hasVertical = !!(pd.vertical || (pd.environment && ['ecommerce','e-commerce','retail','food & beverage','food_beverage','industrial','pharmaceutical','pharma','automotive','consumer goods','consumer_goods','other'].includes(String(pd.environment).toLowerCase().trim())));
+      const envFilled = (hasStorage ? 1 : 0) + (hasVertical ? 1 : 0);
+      if (baseFilled === 4 && envFilled === 2) return 'complete';
+      if (baseFilled === 0 && envFilled === 0) return 'empty';
       return 'partial';
     }
     case 'volumes': {
@@ -3362,7 +3391,7 @@ function renderSetup() {
     <div class="cm-section-header">
       <div>
         <div class="cm-section-title">Project Setup</div>
-        <div class="cm-section-desc">Define the project basics — client, market, environment, and contract term.</div>
+        <div class="cm-section-desc">Define the project basics — client, market, storage environment, industry vertical, and contract term.</div>
       </div>
     </div>
 
@@ -3391,32 +3420,51 @@ function renderSetup() {
       </div>
 
       <div class="hub-field">
-        <label class="hub-field__label">Environment</label>
-        <select class="hub-input" id="cm-env" data-field="projectDetails.environment">
-          <option value="">Select environment...</option>
+        <label class="hub-field__label">Storage Environment</label>
+        <select class="hub-input" id="cm-env-storage" data-field="projectDetails.storageEnvironment">
+          <option value="">Select storage...</option>
           ${(() => {
             const options = [
-              // Climate / facility classification
               { label: 'Ambient', value: 'ambient' },
               { label: 'Refrigerated', value: 'refrigerated' },
               { label: 'Freezer', value: 'freezer' },
               { label: 'Temperature Controlled', value: 'temperature_controlled' },
-              // Vertical / customer type
-              { label: 'Ecommerce', value: 'ecommerce' },
-              { label: 'Retail', value: 'retail' },
-              { label: 'Food & Beverage', value: 'food & beverage' },
-              { label: 'Industrial', value: 'industrial' },
-              { label: 'Pharmaceutical', value: 'pharmaceutical' },
-              { label: 'Automotive', value: 'automotive' },
-              { label: 'Consumer Goods', value: 'consumer goods' },
             ];
-            const curLower = String(pd.environment || '').toLowerCase().trim();
-            // Case-insensitive match so "Ambient" or "AMBIENT" from DB still selects
+            // R12 — fall back to legacy `environment` field if it happens to
+            // hold a storage value (e.g. saved as 'ambient' before the split).
+            const cur = String(pd.storageEnvironment || _legacyEnvToStorage(pd.environment) || '').toLowerCase().trim();
             return options.map(o =>
-              `<option value="${o.value}"${curLower === o.value.toLowerCase() ? ' selected' : ''}>${o.label}</option>`
+              `<option value="${o.value}"${cur === o.value.toLowerCase() ? ' selected' : ''}>${o.label}</option>`
             ).join('');
           })()}
         </select>
+        <div class="hub-field__hint">Climate / facility classification.</div>
+      </div>
+
+      <div class="hub-field">
+        <label class="hub-field__label">Industry Vertical</label>
+        <select class="hub-input" id="cm-env-vertical" data-field="projectDetails.vertical">
+          <option value="">Select vertical...</option>
+          ${(() => {
+            const options = [
+              { label: 'Ecommerce', value: 'ecommerce' },
+              { label: 'Retail', value: 'retail' },
+              { label: 'Food & Beverage', value: 'food_beverage' },
+              { label: 'Industrial', value: 'industrial' },
+              { label: 'Pharmaceutical', value: 'pharmaceutical' },
+              { label: 'Automotive', value: 'automotive' },
+              { label: 'Consumer Goods', value: 'consumer_goods' },
+              { label: 'Other', value: 'other' },
+            ];
+            // R12 — fall back to legacy `environment` field if it holds a
+            // vertical value (e.g. saved as 'retail' before the split).
+            const cur = String(pd.vertical || _legacyEnvToVertical(pd.environment) || '').toLowerCase().trim();
+            return options.map(o =>
+              `<option value="${o.value}"${cur === o.value.toLowerCase() ? ' selected' : ''}>${o.label}</option>`
+            ).join('');
+          })()}
+        </select>
+        <div class="hub-field__hint">Customer-side industry — drives planning-ratios.</div>
       </div>
       <div class="hub-field">
         <label class="hub-field__label">City, State</label>
@@ -10785,7 +10833,8 @@ function buildScenarioExportPayload() {
     { Field: 'Project Name',        Value: proj.name || '' },
     { Field: 'Client',              Value: proj.clientName || '' },
     { Field: 'Market',              Value: (refData.markets || []).find(m => m.id === proj.market)?.name || proj.market || '' },
-    { Field: 'Environment',         Value: proj.environment || '' },
+    { Field: 'Storage Environment', Value: proj.storageEnvironment || _legacyEnvToStorage(proj.environment) || '' },
+    { Field: 'Industry Vertical',   Value: proj.vertical           || _legacyEnvToVertical(proj.environment) || '' },
     { Field: 'Contract Term (yrs)', Value: proj.contractTerm || 5 },
     { Field: '',                    Value: '' },
     { Field: 'Scenario ID',         Value: scen?.id ?? '' },
@@ -11340,8 +11389,10 @@ async function handleAction(action, idx, btn) {
       // falls back to its legacy hardcoded divisors.
       const prMap = (isPlanningRatiosFlagOn() && planningRatiosCatalog.length)
         ? planningRatios.resolvePlanningRatios(planningRatiosCatalog, planningRatioOverrides, {
-            vertical: (model.projectDetails && model.projectDetails.vertical) || null,
-            environment_type: (model.projectDetails && model.projectDetails.environment) || null,
+            // R12 — vertical now sourced from new dedicated field
+            vertical:         (model.projectDetails && (model.projectDetails.vertical || _legacyEnvToVertical(model.projectDetails.environment))) || null,
+            // R12 — environment_type passes the storage axis (climate) to planning-ratios
+            environment_type: (model.projectDetails && (model.projectDetails.storageEnvironment || _legacyEnvToStorage(model.projectDetails.environment))) || null,
           })
         : null;
       const _priorIndirectCount = (model.indirectLaborLines || []).length;
@@ -12426,7 +12477,8 @@ function handleExportExcel() {
       ['Client',           pd.clientName || '—'],
       ['Facility Location',pd.facilityLocation || '—'],
       ['Market',           pd.market || '—'],
-      ['Environment',      pd.environment || '—'],
+      ['Storage Environment', pd.storageEnvironment || _legacyEnvToStorage(pd.environment) || '—'],
+      ['Industry Vertical',   pd.vertical           || _legacyEnvToVertical(pd.environment) || '—'],
       ['Contract Term (yrs)', pd.contractTerm || 5],
     ];
     if (summary) {
@@ -13076,11 +13128,46 @@ function migrateLaborLinesToPositions(m) {
   // positions silently would re-introduce the mess we just cleaned up.
 }
 
+/**
+ * R12 (2026-04-30) — Legacy environment-field split helpers.
+ *
+ * The pre-R12 `environment_type` column conflated storage climate
+ * (Ambient/Refrigerated/Freezer/Temp Controlled) with industry vertical
+ * (Ecommerce/Retail/Food&Bev/Industrial/Pharma/Auto/Consumer Goods).
+ * Models saved before the split need their old single value mapped onto
+ * one or the other axis at hydration time. These helpers do the mapping
+ * deterministically so the UI can render even when only the legacy
+ * `projectDetails.environment` field is populated.
+ */
+function _legacyEnvToStorage(legacy) {
+  if (!legacy) return '';
+  const s = String(legacy).toLowerCase().trim();
+  if (s === 'ambient') return 'ambient';
+  if (s === 'refrigerated' || s === 'cold' || s === 'chilled') return 'refrigerated';
+  if (s === 'freezer' || s === 'frozen') return 'freezer';
+  if (s === 'temperature_controlled' || s === 'temperature controlled' ||
+      s === 'temp controlled' || s === 'temp_controlled') return 'temperature_controlled';
+  return '';
+}
+function _legacyEnvToVertical(legacy) {
+  if (!legacy) return '';
+  const s = String(legacy).toLowerCase().trim();
+  if (s === 'ecommerce' || s === 'e-commerce') return 'ecommerce';
+  if (s === 'retail') return 'retail';
+  if (s === 'food & beverage' || s === 'food and beverage' || s === 'food_beverage') return 'food_beverage';
+  if (s === 'industrial') return 'industrial';
+  if (s === 'pharmaceutical' || s === 'pharma') return 'pharmaceutical';
+  if (s === 'automotive') return 'automotive';
+  if (s === 'consumer goods' || s === 'consumer_goods') return 'consumer_goods';
+  if (s === 'other') return 'other';
+  return '';
+}
+
 function createEmptyModel() {
   // Starter profile: representative mid-size 150k-sqft eComm DC. Replace values as you go.
   return {
     id: null,
-    projectDetails: { name: '', clientName: '', market: '', environment: '', facilityLocation: '', contractTerm: 5, dealId: null },
+    projectDetails: { name: '', clientName: '', market: '', storageEnvironment: '', vertical: '', environment: '', facilityLocation: '', contractTerm: 5, dealId: null },
     volumeLines: [
       { name: 'Receiving (Pallets)', volume: 15000, uom: 'pallets', isOutboundPrimary: false },
       { name: 'Put-Away',            volume: 15000, uom: 'pallets', isOutboundPrimary: false },
@@ -18453,8 +18540,10 @@ function renderPlanningRatios() {
   }
 
   const ctx = {
-    vertical: (model && model.projectDetails && model.projectDetails.vertical) || null,
-    environment_type: (model && model.projectDetails && model.projectDetails.environment) || null,
+    // R12 — vertical from new dedicated field with legacy fallback
+    vertical: (model && model.projectDetails && (model.projectDetails.vertical || _legacyEnvToVertical(model.projectDetails.environment))) || null,
+    // R12 — environment_type now means storage climate (was conflated)
+    environment_type: (model && model.projectDetails && (model.projectDetails.storageEnvironment || _legacyEnvToStorage(model.projectDetails.environment))) || null,
     automation_level: null,
     market_tier: null,
   };

@@ -12,7 +12,9 @@
  * @property {string} [name]
  * @property {string} [clientName]
  * @property {string} [market] — market_id (UUID)
- * @property {string} [environment] — e.g. 'ecommerce', 'retail', 'food', 'industrial'
+ * @property {string} [environment] — DEPRECATED conflated field; new code should use storageEnvironment + vertical (R12, 2026-04-30)
+ * @property {string} [storageEnvironment] — climate: 'ambient' | 'refrigerated' | 'freezer' | 'temperature_controlled'
+ * @property {string} [vertical] — industry: 'ecommerce' | 'retail' | 'food_beverage' | 'industrial' | 'pharmaceutical' | 'automotive' | 'consumer_goods' | 'other'
  * @property {string} [facilityLocation]
  * @property {number} [contractTerm] — years
  */

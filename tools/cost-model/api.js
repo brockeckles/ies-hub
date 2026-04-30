@@ -43,19 +43,93 @@ export async function getModel(id) {
 }
 
 /**
+ * R12 — split-environment helper.
+ *
+ * Cost-model project_details has been split into two orthogonal axes:
+ *   - storageEnvironment  (climate: ambient/refrigerated/freezer/temperature_controlled)
+ *   - vertical            (industry: ecommerce/retail/food_beverage/industrial/
+ *                          pharmaceutical/automotive/consumer_goods/other)
+ *
+ * Returns { storage, vertical, legacy } columns ready for cost_model_projects:
+ *   - prefers explicit pd.storageEnvironment / pd.vertical
+ *   - falls back to inferring from legacy pd.environment when only that exists
+ *   - legacy column is the single environment_type kept for back-compat;
+ *     populated as a hint for code that still reads the old name.
+ *
+ * @param {Object} pd — projectDetails block
+ * @param {Object} data — top-level model object (siblings on data.environment)
+ * @returns {{storage: string|null, vertical: string|null, legacy: string|null}}
+ */
+export function _splitEnvironment(pd, data) {
+  const STORAGE_VALUES = new Set([
+    'ambient','refrigerated','freezer','temperature_controlled',
+  ]);
+  const VERTICAL_VALUES = new Set([
+    'ecommerce','retail','food_beverage','industrial','pharmaceutical',
+    'automotive','consumer_goods','other',
+  ]);
+
+  // Normalize: lowercase, trim, replace spaces / ampersands with underscores
+  const norm = (v) => {
+    if (v == null) return null;
+    const s = String(v).toLowerCase().trim()
+      .replace(/&/g, ' and ')
+      .replace(/\s+/g, '_')
+      .replace(/-/g, '_');
+    // Common aliases
+    if (s === 'cold' || s === 'chilled')                              return 'refrigerated';
+    if (s === 'frozen')                                               return 'freezer';
+    if (s === 'temp_controlled' || s === 'temperature_controlled')    return 'temperature_controlled';
+    if (s === 'e_commerce')                                           return 'ecommerce';
+    if (s === 'food_and_beverage' || s === 'food_beverage')           return 'food_beverage';
+    if (s === 'pharma')                                               return 'pharmaceutical';
+    if (s === 'consumer_goods')                                       return 'consumer_goods';
+    return s;
+  };
+
+  // Try explicit new fields first
+  let storage = norm(pd.storageEnvironment || data.storageEnvironment);
+  let vertical = norm(pd.vertical || data.vertical);
+
+  // Fall back to legacy `environment` for either axis if we don't have it yet
+  const legacyNorm = norm(pd.environment || data.environment);
+  if (!storage && legacyNorm && STORAGE_VALUES.has(legacyNorm))   storage = legacyNorm;
+  if (!vertical && legacyNorm && VERTICAL_VALUES.has(legacyNorm)) vertical = legacyNorm;
+
+  // Normalize that the values actually fall in the allowed sets after inference;
+  // anything else gets dropped (NULL) so the CHECK constraint never errors.
+  if (storage && !STORAGE_VALUES.has(storage))   storage = null;
+  if (vertical && !VERTICAL_VALUES.has(vertical)) vertical = null;
+
+  // Legacy column: prefer storage if present (existing data tended to be that
+  // for non-vertical rows), else vertical, else the unmodified legacy value.
+  const legacy = storage || vertical || legacyNorm || null;
+
+  return { storage, vertical, legacy };
+}
+
+/**
  * Create a new cost model project.
  * @param {Object} data — project data to persist
  * @returns {Promise<any>}
  */
 export async function createModel(data) {
   // Store flat fields that match the real cost_model_projects schema (market_id,
-  // environment_type, contract_term_years). Everything else rides in project_data jsonb.
+  // storage_environment, industry_vertical, contract_term_years). Everything
+  // else rides in project_data jsonb.
+  // R12 (2026-04-30): replaced single environment_type column with split
+  // storage_environment + industry_vertical. environment_type is preserved
+  // for back-compat — callers writing only the legacy `environment` field
+  // get a best-guess split via _splitEnvironment().
   const pd = data.projectDetails || {};
+  const split = _splitEnvironment(pd, data);
   const payload = {
     name: data.name || pd.name || 'Untitled Model',
     client_name: data.clientName || pd.clientName || '',
     market_id: data.market || pd.market || null,
-    environment_type: data.environment || pd.environment || null,
+    storage_environment: split.storage,
+    industry_vertical: split.vertical,
+    environment_type: split.legacy,
     contract_term_years: Number(data.contractTerm || pd.contractTerm || 5),
     project_data: data, // Full JSON blob
   };
@@ -71,12 +145,16 @@ export async function createModel(data) {
  * @returns {Promise<any>}
  */
 export async function updateModel(id, data) {
+  // R12 (2026-04-30): writes storage_environment + industry_vertical split.
   const pd = data.projectDetails || {};
+  const split = _splitEnvironment(pd, data);
   const payload = {
     name: data.name || pd.name || 'Untitled Model',
     client_name: data.clientName || pd.clientName || '',
     market_id: data.market || pd.market || null,
-    environment_type: data.environment || pd.environment || null,
+    storage_environment: split.storage,
+    industry_vertical: split.vertical,
+    environment_type: split.legacy,
     contract_term_years: Number(data.contractTerm || pd.contractTerm || 5),
     project_data: data,
     updated_at: new Date().toISOString(),
