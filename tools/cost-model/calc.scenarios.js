@@ -683,14 +683,22 @@ export function resolveCalcHeuristics(scenario, snapshots, overrides, projectCol
  * @param {number} fallbackPct                  project flat (e.g. 5 for 5%)
  * @returns {number}                             percent (e.g. 12 for 12%)
  */
-export function monthlyOvertimePct(line, monthIndex, marketProfile, fallbackPct) {
+export function monthlyOvertimePct(line, monthIndex, marketProfile, fallbackPct, forceProjectFlat) {
   const m = ((Number(monthIndex) % 12) + 12) % 12;
   const fromLine = Array.isArray(line?.monthly_overtime_profile) && line.monthly_overtime_profile.length === 12
     ? line.monthly_overtime_profile[m]
     : null;
   if (fromLine !== null && fromLine !== undefined) {
-    // Stored as fractions in the catalog convention (0-1) → return as percent for math layer
+    // Per-line monthly profile always wins — that's an explicit per-line authoring decision.
     return Number(fromLine) * 100;
+  }
+  // 2026-04-30 PM (item 5 fix): when forceProjectFlat=true, the project-flat
+  // fallbackPct came from a What-If transient or a heuristic_overrides entry —
+  // both are explicit user choices. Skip the market profile so the slider /
+  // override actually moves the labor cost. Without this branch the market's
+  // peak_month_overtime_pct array always wins and the What-If OT slider is dead.
+  if (forceProjectFlat) {
+    return Number(fallbackPct) || 0;
   }
   const fromMarket = marketProfile && Array.isArray(marketProfile.peak_month_overtime_pct) && marketProfile.peak_month_overtime_pct.length === 12
     ? marketProfile.peak_month_overtime_pct[m]
@@ -711,12 +719,16 @@ export function monthlyOvertimePct(line, monthIndex, marketProfile, fallbackPct)
  * @param {number} fallbackPct
  * @returns {number}
  */
-export function monthlyAbsencePct(line, monthIndex, marketProfile, fallbackPct) {
+export function monthlyAbsencePct(line, monthIndex, marketProfile, fallbackPct, forceProjectFlat) {
   const m = ((Number(monthIndex) % 12) + 12) % 12;
   const fromLine = Array.isArray(line?.monthly_absence_profile) && line.monthly_absence_profile.length === 12
     ? line.monthly_absence_profile[m]
     : null;
   if (fromLine !== null && fromLine !== undefined) return Number(fromLine) * 100;
+  // Same explicit-override semantics as monthlyOvertimePct (item 5 sister fix).
+  if (forceProjectFlat) {
+    return Number(fallbackPct) || 0;
+  }
   const fromMarket = marketProfile && Array.isArray(marketProfile.peak_month_absence_pct) && marketProfile.peak_month_absence_pct.length === 12
     ? marketProfile.peak_month_absence_pct[m]
     : null;
@@ -738,8 +750,17 @@ export function monthlyAbsencePct(line, monthIndex, marketProfile, fallbackPct) 
 export function monthlyEffectiveHours(line, monthIndex, calcHeur, marketProfile) {
   const baseAnnual = Number(line?.annual_hours) || 0;
   if (baseAnnual === 0) return 0;
-  const otPct = monthlyOvertimePct(line, monthIndex, marketProfile, calcHeur?.overtimePct ?? 0);
-  const absPct = monthlyAbsencePct(line, monthIndex, marketProfile, calcHeur?.absenceAllowancePct ?? 0);
+  // 2026-04-30 PM (item 5): when calcHeur.overtimePct came from a What-If
+  // transient or an explicit heuristic_overrides entry, force the project-flat
+  // value to win over the market profile. resolveCalcHeuristics records the
+  // source in calcHeur.used.<key>; values 'transient' / 'override' / 'snapshot'
+  // are all deliberate overrides, 'default' is not.
+  const otSrc = calcHeur?.used?.overtime_pct;
+  const absSrc = calcHeur?.used?.absence_allowance_pct;
+  const otForce  = otSrc  === 'transient' || otSrc  === 'override' || otSrc  === 'snapshot';
+  const absForce = absSrc === 'transient' || absSrc === 'override' || absSrc === 'snapshot';
+  const otPct = monthlyOvertimePct(line, monthIndex, marketProfile, calcHeur?.overtimePct ?? 0, otForce);
+  const absPct = monthlyAbsencePct(line, monthIndex, marketProfile, calcHeur?.absenceAllowancePct ?? 0, absForce);
   const baseMonthly = baseAnnual / 12;
   // 2026-04-29 OT-fix: tooltip says "Each OT hour costs 1.5×" — that means
   // OT hours add a 0.5× PREMIUM, not a full 1.0× extra. Old formula treated

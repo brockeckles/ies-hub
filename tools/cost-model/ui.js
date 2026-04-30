@@ -13,7 +13,7 @@ import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260424-hyg04';
 import * as calc from './calc.js?v=20260430-am-p5fix12';
 import * as api from './api.js?v=20260430-pm-g12';
-import * as scenarios from './calc.scenarios.js?v=20260429-otfix1';
+import * as scenarios from './calc.scenarios.js?v=20260430-pm-otfix2';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
 import * as channelCalc from './calc.channels.js?v=20260429-vol13';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
@@ -2103,7 +2103,7 @@ function getCellProvenance(rowKey, year) {
   // not projections, so they bypass the guard.
   const isKpiKey = typeof rowKey === 'string' && rowKey.startsWith('kpi:');
   const isGenKey = typeof rowKey === 'string' && rowKey.startsWith('gen:');
-  if (!p && !(isKpiKey && rowKey === 'kpi:contract') && !isGenKey) return null;
+  if (!p && !(isKpiKey && (rowKey === 'kpi:contract' || rowKey === 'kpi:ebitdaMargin' || rowKey === 'kpi:ebitMargin')) && !isGenKey) return null;
   const ch = ctx.calcHeur || {};
   const s = ctx.summary || {};
   const mFrac = ctx.marginFrac;
@@ -2522,6 +2522,55 @@ function getCellProvenance(rowKey, year) {
           { label: 'Startup amortization', value: yrs + ' years', source: 'Capital costs amortized over contract' },
         ],
         notes: 'Contract term sets the horizon for every multi-year calculation. Changing it mid-build re-amortizes startup capital and resets NPV.',
+      };
+    }
+
+    case 'kpi:ebitdaMargin': {
+      const k = ctx.kpi || {};
+      // Aggregate EBITDA across the contract horizon for the headline.
+      const projs = ctx.projections || [];
+      const totalRev = projs.reduce((acc, pp) => acc + (pp.revenue || 0), 0);
+      const totalEbitda = projs.reduce((acc, pp) => acc + (pp.ebitda || 0), 0);
+      const aggPct = totalRev > 0 ? (totalEbitda / totalRev) * 100 : 0;
+      const y1Pct = (p && p.revenue > 0) ? ((p.ebitda || 0) / p.revenue) * 100 : 0;
+      return {
+        label: 'EBITDA Margin (contract)',
+        valueFormat: 'pct',
+        formula: 'ebitdaMargin = Σ EBITDA(t) ÷ Σ Revenue(t)\nEBITDA = Gross Profit − SG&A',
+        value: aggPct / 100,
+        inputs: [
+          { label: 'Y1 Revenue', value: _fmtMoney(p ? p.revenue : 0), source: 'Year 1 P&L' },
+          { label: 'Y1 EBITDA', value: _fmtMoney(p ? p.ebitda : 0), source: 'Year 1 P&L' },
+          { label: 'Y1 EBITDA Margin', value: _fmtPct(y1Pct / 100, 2), source: 'Y1 EBITDA ÷ Y1 Revenue' },
+          { label: 'Σ Revenue (contract)', value: _fmtMoney(totalRev), source: ctx.contractYears + '-yr aggregate' },
+          { label: 'Σ EBITDA (contract)', value: _fmtMoney(totalEbitda), source: ctx.contractYears + '-yr aggregate' },
+          { label: 'Aggregate EBITDA Margin', value: _fmtPct(aggPct / 100, 2), source: 'Σ EBITDA ÷ Σ Revenue (contract horizon)' },
+        ],
+        notes: 'Contract-life aggregate. Y1 reads higher in ramping deals because escalation has not yet pushed cost up; later years pull the aggregate down. Click the EBITDA cell on any year for the per-year breakdown.',
+      };
+    }
+
+    case 'kpi:ebitMargin': {
+      const k = ctx.kpi || {};
+      const projs = ctx.projections || [];
+      const totalRev = projs.reduce((acc, pp) => acc + (pp.revenue || 0), 0);
+      const totalEbit = projs.reduce((acc, pp) => acc + (pp.ebit || 0), 0);
+      const aggPct = totalRev > 0 ? (totalEbit / totalRev) * 100 : 0;
+      const y1Pct = (p && p.revenue > 0) ? ((p.ebit || 0) / p.revenue) * 100 : 0;
+      return {
+        label: 'EBIT Margin (contract)',
+        valueFormat: 'pct',
+        formula: 'ebitMargin = Σ EBIT(t) ÷ Σ Revenue(t)\nEBIT = EBITDA − D&A',
+        value: aggPct / 100,
+        inputs: [
+          { label: 'Y1 Revenue', value: _fmtMoney(p ? p.revenue : 0), source: 'Year 1 P&L' },
+          { label: 'Y1 EBIT', value: _fmtMoney(p ? p.ebit : 0), source: 'Year 1 P&L' },
+          { label: 'Y1 EBIT Margin', value: _fmtPct(y1Pct / 100, 2), source: 'Y1 EBIT ÷ Y1 Revenue' },
+          { label: 'Σ Revenue (contract)', value: _fmtMoney(totalRev), source: ctx.contractYears + '-yr aggregate' },
+          { label: 'Σ EBIT (contract)', value: _fmtMoney(totalEbit), source: ctx.contractYears + '-yr aggregate' },
+          { label: 'Aggregate EBIT Margin', value: _fmtPct(aggPct / 100, 2), source: 'Σ EBIT ÷ Σ Revenue (contract horizon)' },
+        ],
+        notes: 'Contract-life aggregate. EBIT differs from EBITDA only by D&A (startup amortization). Click the EBIT cell on any year for the per-year breakdown.',
       };
     }
   }
@@ -3303,11 +3352,39 @@ function renderSetup() {
   const pd = model.projectDetails;
   const markets = (refData.markets && refData.markets.length > 0) ? refData.markets : DEMO_MARKETS_FALLBACK;
 
+  // 2026-04-30 PM (item 7): top-of-page tile strip for design-system parity
+  // with Volumes / Equipment / Summary. Derived metrics — read-only context
+  // for the inputs below.
+  const _setupOpHrs = calc.operatingHours(model.shifts || {});
+  const _setupTotalFtes = calc.totalFtes(model.laborLines || [], model.indirectLaborLines || [], _setupOpHrs);
+  const _setupChannelCount = (model.channels || []).filter(c => c && !c.hidden).length;
+  const _setupContractYrs = pd?.contractTerm || 0;
+  const _setupOutboundOrders = (model.volumeLines || []).find(v => v.isOutboundPrimary)?.volume || 0;
+
   return `
     <div class="cm-section-header">
       <div>
         <div class="cm-section-title">Project Setup</div>
         <div class="cm-section-desc">Define the project basics — client, market, environment, and contract term.</div>
+      </div>
+    </div>
+
+    <div class="hub-kpi-strip mb-4">
+      <div class="hub-kpi-tile">
+        <div class="hub-kpi-tile__label">Contract Term</div>
+        <div class="hub-kpi-tile__value">${_setupContractYrs ? _setupContractYrs + ' yr' : '—'}</div>
+      </div>
+      <div class="hub-kpi-tile">
+        <div class="hub-kpi-tile__label">Channels</div>
+        <div class="hub-kpi-tile__value">${_setupChannelCount || '—'}</div>
+      </div>
+      <div class="hub-kpi-tile">
+        <div class="hub-kpi-tile__label">Total FTE</div>
+        <div class="hub-kpi-tile__value">${_setupTotalFtes > 0 ? _setupTotalFtes.toFixed(1) : '—'}</div>
+      </div>
+      <div class="hub-kpi-tile">
+        <div class="hub-kpi-tile__label">Primary Outbound Volume</div>
+        <div class="hub-kpi-tile__value">${_setupOutboundOrders > 0 ? (_setupOutboundOrders >= 1e6 ? (_setupOutboundOrders/1e6).toFixed(1)+'M' : (_setupOutboundOrders/1e3).toFixed(0)+'K') : '—'}</div>
       </div>
     </div>
 
@@ -4007,6 +4084,20 @@ function renderOrderProfile() {
 
 function renderFacility() {
   const f = model.facility || {};
+  // 2026-04-30 PM (item 8): top-of-page tile strip for design-system parity.
+  // Derived metrics — sqft suggestion + occupancy + facility cost.
+  const _facDetail = calc.suggestFacilitySqftDetail
+    ? calc.suggestFacilitySqftDetail(model)
+    : { sqft: 0, raw: 0, capped: false, sane: true };
+  const _facCurrent = Number(f.totalSqft) || 0;
+  const _facSuggested = _facDetail.sqft || 0;
+  const _facMarket = (refData.markets || []).find(m => (m.market_id || m.id) === model.projectDetails?.market);
+  const _facRate = (refData.facilityRates || []).find(r => r.market_id === model.projectDetails?.market);
+  const _facPsf = _facRate
+    ? (Number(_facRate.lease_rate_psf_yr) || 0) + (Number(_facRate.cam_rate_psf_yr) || 0) + (Number(_facRate.tax_rate_psf_yr) || 0) + (Number(_facRate.insurance_rate_psf_yr) || 0)
+    : 0;
+  const _facAnnualCost = _facCurrent * _facPsf;
+
   return `
     <div class="cm-section-header">
       <div>
@@ -4014,6 +4105,25 @@ function renderFacility() {
         <div class="cm-section-desc">Warehouse dimensions and infrastructure. Facility cost is calculated from market rates.</div>
       </div>
       <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="launch-wsc">Size with Calculator →</button>
+    </div>
+
+    <div class="hub-kpi-strip mb-4">
+      <div class="hub-kpi-tile">
+        <div class="hub-kpi-tile__label">Total Sqft</div>
+        <div class="hub-kpi-tile__value">${_facCurrent > 0 ? (_facCurrent >= 1e6 ? (_facCurrent/1e6).toFixed(2)+'M' : (_facCurrent/1e3).toFixed(0)+'K') + ' sqft' : '—'}</div>
+      </div>
+      <div class="hub-kpi-tile">
+        <div class="hub-kpi-tile__label">Suggested (DOH)</div>
+        <div class="hub-kpi-tile__value">${_facSuggested > 0 ? (_facSuggested >= 1e6 ? (_facSuggested/1e6).toFixed(2)+'M' : (_facSuggested/1e3).toFixed(0)+'K') + ' sqft' : '—'}</div>
+      </div>
+      <div class="hub-kpi-tile">
+        <div class="hub-kpi-tile__label">Market $ / sqft / yr</div>
+        <div class="hub-kpi-tile__value">${_facPsf > 0 ? '$' + _facPsf.toFixed(2) : '—'}</div>
+      </div>
+      <div class="hub-kpi-tile">
+        <div class="hub-kpi-tile__label">Annual Facility Cost</div>
+        <div class="hub-kpi-tile__value">${_facAnnualCost > 0 ? calc.formatCurrency(_facAnnualCost, {compact: true}) : '—'}</div>
+      </div>
     </div>
 
     <div class="cm-narrow-form" style="grid-template-columns: repeat(3, minmax(0, 1fr));">
@@ -5971,6 +6081,12 @@ Owned Facility — racking/dock/charging/office/security/conveyor">Line Type</th
                         if ((norm === 'capital' || norm === 'ti') && (Number(l.acquisition_cost) || 0) <= 0) {
                           return `style="border-color: var(--ies-orange, #d97706); background: rgba(255,193,7,0.08);" title="$0 acquisition cost on a ${norm === 'capital' ? 'Capital' : 'TI'} line — set a unit cost or pull from the Equipment Catalog"`;
                         }
+                        // 2026-04-30 PM (item 3a): leased lines correctly read $0 acquisition
+                        // (the $/mo column is the cost). Mute the field + add a tooltip so the
+                        // $0 doesn't read as missing data.
+                        if (norm === 'lease' && (Number(l.acquisition_cost) || 0) <= 0) {
+                          return `style="background: var(--ies-gray-50, #f9fafb); color: var(--ies-gray-500);" title="Leased — see $/mo column for cost. $0 acquisition is intentional for leases."`;
+                        }
                         return '';
                       })()} />
                     `}
@@ -7730,8 +7846,8 @@ function renderSummary() {
           const y1EbitPct  = y1Rev > 0 ? (y1Ebit   / y1Rev) * 100 : 0;
           return `
         ${renderMetricCard('Gross Margin (contract)', calc.formatPct(metrics.grossMarginPct), metrics.grossMarginPct >= (thresholds.grossMargin || 10), `Contract-life (${contractYears}-yr) aggregate Gross Margin. Formula: Σ Revenue − Σ COGS, divided by Σ Revenue. COGS = Labor + Facility + Equipment + VAS pass-through. Y1 Gross Margin: ${y1GpPct.toFixed(1)}% — reconciles with the Pricing Schedule M3 banner's "Y1 Actual (ramped)" tile. Contract margin trends lower than Y1 when labor/facility escalation outpace volume growth.`)}
-        ${renderMetricCard('EBITDA Margin (contract)', calc.formatPct(metrics.ebitdaMarginPct), metrics.ebitdaMarginPct >= (thresholds.ebitda || 8), `Contract-life (${contractYears}-yr) aggregate EBITDA Margin. EBITDA = GP − SG&A (Overhead + pre-live one-times). Y1 EBITDA Margin: ${y1EbitdaPct.toFixed(1)}%. Ties exactly to the EBITDA row in the P&L below. Pricing Schedule banner shows the reference-basis (steady-state) achieved margin, which reads higher until the site hits steady state.`)}
-        ${renderMetricCard('EBIT Margin (contract)', calc.formatPct(metrics.ebitMarginPct), metrics.ebitMarginPct >= (thresholds.ebit || 5), `Contract-life (${contractYears}-yr) aggregate EBIT Margin. EBIT = EBITDA − D&A. Y1 EBIT Margin: ${y1EbitPct.toFixed(1)}% — this is the figure the Pricing M3 banner "Y1 Actual (ramped)" tile displays. Ties exactly to the EBIT row in the P&L below.`)}
+        ${renderMetricCard('EBITDA Margin (contract)', calc.formatPct(metrics.ebitdaMarginPct), metrics.ebitdaMarginPct >= (thresholds.ebitda || 8), `Contract-life (${contractYears}-yr) aggregate EBITDA Margin. EBITDA = GP − SG&A (Overhead + pre-live one-times). Y1 EBITDA Margin: ${y1EbitdaPct.toFixed(1)}%. Ties exactly to the EBITDA row in the P&L below. Pricing Schedule banner shows the reference-basis (steady-state) achieved margin, which reads higher until the site hits steady state.`, 'kpi:ebitdaMargin')}
+        ${renderMetricCard('EBIT Margin (contract)', calc.formatPct(metrics.ebitMarginPct), metrics.ebitMarginPct >= (thresholds.ebit || 5), `Contract-life (${contractYears}-yr) aggregate EBIT Margin. EBIT = EBITDA − D&A. Y1 EBIT Margin: ${y1EbitPct.toFixed(1)}% — this is the figure the Pricing M3 banner "Y1 Actual (ramped)" tile displays. Ties exactly to the EBIT row in the P&L below.`, 'kpi:ebitMargin')}
           `;
         })()}
         ${renderMetricCard('ROIC', calc.formatPct(metrics.roicPct), metrics.roicPct >= (thresholds.roic || 15), `NOPAT / Invested Capital. NOPAT = avg annual EBIT × (1 − ${calcHeur.taxRatePct || 25}% tax) = $${((metrics.nopat||0)/1000).toFixed(0)}K. Invested Capital = $${(metrics.investedCapital/1000).toFixed(0)}K = Startup $${(summary.startupCapital/1000).toFixed(0)}K + Equipment $${(summary.equipmentCapital/1000).toFixed(0)}K + avg NWC $${((metrics.estimatedNwc||0)/1000).toFixed(0)}K (horizon-avg Revenue × DSO/365 − horizon-avg COGS × DPO/365).`)}
@@ -7854,9 +7970,21 @@ function renderSummary() {
  * the page.
  * Migrated to primitives kit (hub-kpi-tile base + .cm-metric-card mod).
  */
-function renderMetricCard(label, value, passes, tooltip) {
+function renderMetricCard(label, value, passes, tooltip, cellKey) {
   const stateClass = passes === null ? 'is-neutral' : (passes ? 'is-pass' : 'is-fail');
   const titleAttr = tooltip ? ` title="${String(tooltip).replace(/"/g, '&quot;')}"` : '';
+  // 2026-04-30 PM (item 4): clickable variant when caller passes cellKey.
+  // Mirrors Phase 5.2 chrome-strip pattern; click delegation is global on
+  // [data-cm-cell] in bindSectionEvents.
+  if (cellKey) {
+    const safeKey = String(cellKey).replace(/"/g, '&quot;');
+    return `
+      <button type="button" class="hub-kpi-tile cm-metric-card ${stateClass}" data-cm-cell="${safeKey}" data-cm-year="1" style="text-align:left;cursor:pointer;border:none;font:inherit;width:100%;"${titleAttr}>
+        <div class="hub-kpi-tile__label">${label}</div>
+        <div class="hub-kpi-tile__value">${value}</div>
+      </button>
+    `;
+  }
   return `
     <div class="hub-kpi-tile cm-metric-card ${stateClass}"${titleAttr}>
       <div class="hub-kpi-tile__label">${label}</div>
