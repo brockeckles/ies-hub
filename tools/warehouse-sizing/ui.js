@@ -14,7 +14,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import * as calc from './calc.js?v=20260425-s11';
 import * as api from './api.js?v=20260418-sL';
 import * as cmApi from '../cost-model/api.js?v=20260429-vol12';
-import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260429-p54';
+import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix1';
 import { showConfirm } from '../../shared/confirm-modal.js';
 
 // ============================================================

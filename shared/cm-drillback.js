@@ -59,9 +59,19 @@ export function bindCmDrillback(rootEl) {
     const cmId = btn.dataset.cmDrillback;
     const channelKey = btn.dataset.cmDrillbackChannel || '';
     if (!cmId) return;
+    // Stash both hand-offs: cm_pending_open is the established CM-load
+    // signal (read by mount()), cmDrillbackFocus is the channel/section
+    // intent that mount() consumes immediately after the load completes.
     setFocusHint({ cmId, channelKey });
-    // Hash-router navigates the app; CM mount() consumes the focus hint.
-    window.location.hash = `designtools/cost-model/${cmId}`;
+    try {
+      sessionStorage.setItem('cm_pending_open', JSON.stringify({
+        id: Number(cmId), at: Date.now(),
+      }));
+    } catch { /* storage may be disabled */ }
+    // Router only registers `designtools/cost-model` (no /:id segment),
+    // so navigate without the id; CM mount picks the project up via the
+    // pending-open hand-off and then consumes the focus hint.
+    window.location.hash = 'designtools/cost-model';
   });
 }
 

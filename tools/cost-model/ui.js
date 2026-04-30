@@ -11,7 +11,7 @@ import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260424-hyg04';
-import * as calc from './calc.js?v=20260429-eve-r5fix2';
+import * as calc from './calc.js?v=20260430-am-p5fix1';
 import * as api from './api.js?v=20260429-vol12';
 import * as scenarios from './calc.scenarios.js?v=20260429-otfix1';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
@@ -22,7 +22,7 @@ import * as shiftPlannerUi from './shift-planner-ui.js?v=20260428-walkthru1';
 // 2026-04-28 — internal phase stepper for Implementation Timeline section.
 import { renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260429-p52';
-import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260429-p54';
+import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260430-am-p5fix1';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
 // disk but no longer imported; can be deleted in a future cleanup.
@@ -1700,7 +1700,15 @@ function computeHeaderKpis() {
     // so the seeded defaults (80K orders + sample equipment) don't surface
     // a misleading "Cost/Order $5.94" / "NPV -$2.2M" before the user has
     // entered a single value.
-    if (!orders || !userHasInteracted) {
+    // 2026-04-30 (F2): loaded-from-DB models DO have meaningful data even
+    // before the user types, so distinguish loaded-with-data from
+    // fresh-empty-seed. Mirrors the hasData check in updateValidation().
+    const hasLoadedData = !!(model && (
+      (model.projectDetails?.name) ||
+      (Array.isArray(model.laborLines) && model.laborLines.length) ||
+      (Array.isArray(model.pricingBuckets) && model.pricingBuckets.length)
+    ));
+    if (!orders || (!userHasInteracted && !hasLoadedData)) {
       return {
         ready: false,
         items: [
@@ -1709,6 +1717,11 @@ function computeHeaderKpis() {
           { label: 'Margin (Y1)',   value: '—' },
           { label: 'Total FTEs',    value: '—' },
           { label: `NPV (${contractYears}yr)`, value: '—' },
+          // 2026-04-30 (F4): 6th tile on bail-out so the strip is stable
+          // (prior version showed 5 chips on bail, 6 after first input).
+          { label: 'Contract',
+            value: contractYears > 0 ? `${contractYears} yr` : '—',
+            hint: 'Contract term — sets the multi-year P&L horizon, NPV window, and ramp tail.' },
         ],
       };
     }
@@ -1729,7 +1742,24 @@ function computeHeaderKpis() {
       annualOrders: orders,
     });
 
-    const marginFrac = (fin.targetMargin || 0) / 100;
+    // 2026-04-30 (F3) — align with renderSummary's projection inputs so the
+    // chrome KPI strip's NPV/Revenue tie to the Summary section's tiles.
+    // Prior version called buildYearlyProjections with raw model.financial
+    // and unenriched pricingBuckets; the I-02 fix that derives missing
+    // bucket rates from assigned costs only ran inside renderSummary, so
+    // chrome strip Y1 Revenue read $0 on every saved model.
+    const opHrs = calc.operatingHours(model.shifts || {});
+    const calcHeur = applySplitMonthBilling(scenarios.resolveCalcHeuristics(
+      currentScenario,
+      currentScenarioSnapshots,
+      heuristicOverrides,
+      _heurProjectFallbacks(model),
+      whatIfTransient,
+    ), model);
+    const marginFrac = (calcHeur.targetMarginPct || 0) / 100;
+    const pricingSnapshot = computePricingSnapshot(summary, marginFrac, opHrs, contractYears);
+    const enrichedPricingBuckets = pricingSnapshot.buckets;
+
     const projResult = calc.buildYearlyProjections({
       years: contractYears,
       baseLaborCost:     summary.laborCost,
@@ -1741,26 +1771,28 @@ function computeHeaderKpis() {
       startupCapital:    summary.startupCapital,
       baseOrders:        orders,
       marginPct:         marginFrac,
-      volGrowthPct:      (fin.volGrowth      || 0) / 100,
-      laborEscPct:       (fin.laborEsc       || 0) / 100,
-      costEscPct:        (fin.costEsc        || 0) / 100,
-      facilityEscPct:    (fin.facilityEsc != null ? fin.facilityEsc : (fin.costEsc || 0)) / 100,
-      equipmentEscPct:   (fin.equipmentEsc != null ? fin.equipmentEsc : (fin.costEsc || 0)) / 100,
+      volGrowthPct:      calcHeur.volGrowthPct      / 100,
+      laborEscPct:       calcHeur.laborEscPct       / 100,
+      costEscPct:        calcHeur.costEscPct        / 100,
+      facilityEscPct:    calcHeur.facilityEscPct    / 100,
+      equipmentEscPct:   calcHeur.equipmentEscPct   / 100,
       laborLines: model.laborLines || [],
-      taxRatePct: fin.taxRate != null ? fin.taxRate : 25,
+      taxRatePct: calcHeur.taxRatePct,
       useMonthlyEngine: typeof window !== 'undefined' && window.COST_MODEL_MONTHLY_ENGINE !== false,
       periods: (refData && refData.periods) || [],
       ramp: null,
       seasonality: model.seasonalityProfile || null,
-      preGoLiveMonths:   fin.preGoLiveMonths   || 0,
-      dsoDays:           fin.dsoDays           || 0,
-      dpoDays:           fin.dpoDays           || 0,
-      laborPayableDays:  fin.laborPayableDays  || 0,
+      preGoLiveMonths:  calcHeur.preGoLiveMonths,
+      dsoDays:          calcHeur.dsoDays,
+      dpoDays:          calcHeur.dpoDays,
+      laborPayableDays: calcHeur.laborPayableDays,
       startupLines: model.startupLines || [],
-      pricingBuckets: model.pricingBuckets || [],
+      pricingBuckets: enrichedPricingBuckets,
       project_id: model.id || 0,
-      sgaOverlayPct: Number(fin.sgaOverlayPct) || 0,
-      sgaAppliesTo:  fin.sgaAppliesTo || 'net_revenue',
+      sgaOverlayPct: Number(model.financial?.sgaOverlayPct) || 0,
+      sgaAppliesTo:  model.financial?.sgaAppliesTo || 'net_revenue',
+      _calcHeur: calcHeur,
+      marketLaborProfile: currentMarketLaborProfile,
       wageLoadByYear: null,
     });
     const projections = (projResult && projResult.projections) || [];
@@ -1769,18 +1801,22 @@ function computeHeaderKpis() {
       startupCapital:      summary.startupCapital,
       equipmentCapital:    summary.equipmentCapital,
       annualDepreciation:  (summary.equipmentAmort || 0) + (summary.startupAmort || 0),
-      discountRatePct:     fin.discountRate || 10,
-      reinvestRatePct:     fin.reinvestRate || 8,
-      taxRatePct:          fin.taxRate != null ? fin.taxRate : 25,
-      dsoDays:             fin.dsoDays || 0,
-      dpoDays:             fin.dpoDays || 0,
+      discountRatePct:     calcHeur.discountRate ?? (fin.discountRate ?? 10),
+      reinvestRatePct:     calcHeur.reinvestRate ?? (fin.reinvestRate ?? 8),
+      taxRatePct:          calcHeur.taxRatePct,
+      dsoDays:             calcHeur.dsoDays || 0,
+      dpoDays:             calcHeur.dpoDays || 0,
       totalFtes:           summary.totalFtes,
       fixedCost:           summary.facilityCost + summary.overheadCost + summary.startupAmort,
     });
 
     const costPerUnit = summary.costPerOrder || 0;
-    const y1Revenue   = y1?.revenue || 0;
-    const y1Margin    = (y1 && y1.revenue > 0) ? ((y1.grossProfit || 0) / y1.revenue) * 100 : 0;
+    // 2026-04-30 (F3) — fall back to summary.totalRevenue when the projection
+    // didn't emit a Y1 revenue (matches renderSummary's `?? summary.totalRevenue`).
+    const y1Revenue   = (y1 && y1.revenue) ? y1.revenue : (summary.totalRevenue || 0);
+    const y1Margin    = (y1Revenue > 0)
+      ? ((y1?.grossProfit || (y1Revenue - (y1?.totalCost || summary.totalCost || 0))) / y1Revenue) * 100
+      : 0;
     const totalFtes   = summary.totalFtes || 0;
     const npv         = (metrics && metrics.npv) || 0;
 
@@ -1943,6 +1979,9 @@ function _fmtProvValue(prov) {
     case 'years':     return (v == null || !Number.isFinite(v)) ? '—' : v.toFixed(0) + ' yr';
     case 'unitCost':  return (v == null || !Number.isFinite(v)) ? '—'
                               : (v < 10 ? '$' + v.toFixed(2) : '$' + Math.round(v).toLocaleString());
+    // 2026-04-30 (F5) — count is for unit-quantity headlines (orders, returns,
+    // pallets, cases, units). Renders as a localized integer with no $ prefix.
+    case 'count':     return (v == null || !Number.isFinite(v)) ? '—' : Math.round(v).toLocaleString();
     case 'currency':
     default:          return _fmtMoney(v);
   }
@@ -2079,6 +2118,7 @@ function getCellProvenance(rowKey, year) {
         label: `Orders (Year ${year})`,
         formula: 'orders = baseOrders × (1 + volGrowth)^(year − 1)',
         value: p.orders,
+        valueFormat: 'count',
         inputs: [
           { label: baseLabel, value: _fmtNum(ctx.baseOrders), source: baseSource },
           ...channelRows,
