@@ -14,7 +14,7 @@
  * @module tools/cost-model/calc
  */
 
-import * as monthly from './calc.monthly.js?v=20260421-xE';
+import * as monthly from './calc.monthly.js?v=20260430-gp-fix2';
 import { deriveFunctionForLine as _deriveFunctionForLine } from './shift-planner.js?v=20260430-hours-first';
 import {
   getAnnualVolume as _getAnnualVolume,
