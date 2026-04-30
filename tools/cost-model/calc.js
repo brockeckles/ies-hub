@@ -3609,21 +3609,17 @@ export function autoGenerateStartup(state) {
   };
   const suH = (code, label, value, formula, driver, legacyValue = null) => ({
     code, label, value, formula, driver,
-    source: code.startsWith('startup.racking') ? 'channels' : 'legacy',
+    source: 'legacy',
     legacy_value: legacyValue != null ? legacyValue : value,
   });
 
-  // 1. Racking capital — $85/pallet position. Channel-aware (Phase 3 of
-  // volumes-as-nucleus): aggregate inbound across channels honoring each
-  // channel's inboundOutboundRatio + pallet-conversion factors.
-  const annualPalletsIn = _getAggregateInbound(state, 'pallets');
-  if (annualPalletsIn > 0) {
-    const turnsPerYear = 12;
-    const avgPalletsOnHand = Math.ceil(annualPalletsIn / turnsPerYear);
-    const rackPositions = Math.ceil(avgPalletsOnHand * 1.15);
-    addStartup('Selective Pallet Racking Installation', rackPositions * 85,
-      suH('startup.racking.per_position', 'Racking installation per pallet position', 85, 'rackPositions × $85', 'cross-channel inbound pallets ÷ turns × 1.15 spare'));
-  }
+  // 1. Racking install REMOVED 2026-04-30 NIGHT (Brock).
+  // Equipment auto-gen models racking as a $1/pos/month LEASE
+  // (see equipment.racking.selective_pallet); per industry practice,
+  // the racking lease quote already bundles installation labor, so a
+  // separate $85/pos one-time install line was double-counting.
+  // The Equipment monthly lease is now the single source of truth for
+  // racking cost — both capital-equivalent and ongoing.
 
   // 2. Build-out — $45/sqft office, $30/sqft break room
   const totalIndirectHC = (state.indirectLaborLines || []).reduce((s, l) => s + (l.headcount || 0), 0);
