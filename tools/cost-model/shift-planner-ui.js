@@ -569,7 +569,7 @@ function renderDowPatternsCard(alloc, shiftsCfg, dowVolumeMultipliers, dowPremiu
   const dpwGlobal = Math.max(1, Math.min(7, Math.floor(Number(shiftsCfg?.daysPerWeek) || 5)));
   const dowSum = dowVolumeMultipliers.reduce((a, v) => a + (Number(v) || 0), 0);
   const dowAnyPremium = dowPremiumPct.some(v => Number(v) > 0);
-  const shortDow = ['M','T','W','T','F','S','S'];
+  const shortDow = ['Mo','Tu','We','Th','Fr','Sa','Su'];
 
   // Per-shift active-days pill rows
   const shiftRows = shifts.map(s => {

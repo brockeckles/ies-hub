@@ -212,8 +212,44 @@ async function fetchById(table, id, select = '*') {
  * @param {Object} record
  * @returns {Promise<any>}
  */
+// 2026-04-29 (demo audit R7): centralized owner_id stamping.
+// Tables here have an RLS INSERT policy `WITH CHECK (owner_id = auth.uid())`,
+// so any insert without owner_id is rejected by the database. Discovered via
+// pg_policy scan. Keep this list in sync — a CI check should catch drift.
+const TABLES_WITH_OWNER_ID = new Set([
+  'change_activities', 'change_flowcharts', 'change_initiatives',
+  'cog_scenarios',
+  'cost_model_cashflow_monthly', 'cost_model_equipment',
+  'cost_model_expense_monthly', 'cost_model_labor', 'cost_model_overhead',
+  'cost_model_projects', 'cost_model_rate_snapshots',
+  'cost_model_revenue_monthly', 'cost_model_revisions',
+  'cost_model_scenarios', 'cost_model_summary', 'cost_model_vas',
+  'cost_model_volumes',
+  'deal_artifacts', 'deal_deals', 'deal_dos_status', 'deal_strategy',
+  'fleet_lanes', 'fleet_scenarios',
+  'most_analyses',
+  'netopt_configs', 'netopt_scenario_results', 'netopt_scenarios',
+  'network_optimization_scenarios',
+  'opportunities', 'opportunity_tasks',
+  'project_hours', 'project_updates',
+  'warehouse_sizing_scenarios', 'wsc_facility_configs',
+]);
+
+async function _stampOwnerIdIfNeeded(table, record) {
+  if (!TABLES_WITH_OWNER_ID.has(table)) return record;
+  if (record && record.owner_id) return record;
+  // Lazy-load auth to avoid an import cycle.
+  const authMod = await import('./auth.js');
+  const u = await authMod.auth.ensureSession();
+  if (!u || !u.id) {
+    throw new Error(`Cannot insert into ${table}: not signed in. Please sign in and try again.`);
+  }
+  return { ...record, owner_id: u.id };
+}
+
 async function insert(table, record) {
-  const { data, error } = await from(table).insert(record).select().single();
+  const enriched = await _stampOwnerIdIfNeeded(table, record);
+  const { data, error } = await from(table).insert(enriched).select().single();
   if (error) {
     console.error(`[DB] insert "${table}" failed:`, error);
     throw error;
@@ -247,7 +283,9 @@ async function update(table, id, updates) {
  */
 async function upsert(table, records, opts = {}) {
   const arr = Array.isArray(records) ? records : [records];
-  const query = from(table).upsert(arr, { onConflict: opts.onConflict });
+  const enriched = [];
+  for (const r of arr) enriched.push(await _stampOwnerIdIfNeeded(table, r));
+  const query = from(table).upsert(enriched, { onConflict: opts.onConflict });
   const { data, error } = await query.select();
   if (error) {
     console.error(`[DB] upsert "${table}" failed:`, error);

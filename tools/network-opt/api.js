@@ -5,7 +5,7 @@
  * @module tools/network-opt/api
  */
 
-import { db } from '../../shared/supabase.js?v=20260424-A1';
+import { db } from '../../shared/supabase.js?v=20260429-demo-s3';
 import { auth } from '../../shared/auth.js?v=20260423-A1';
 
 // ============================================================

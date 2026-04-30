@@ -27,7 +27,7 @@
  * @module shared/audit
  */
 
-import { db } from './supabase.js?v=20260424-A1';
+import { db } from './supabase.js?v=20260429-demo-s3';
 import { auth } from './auth.js?v=20260423-z3';
 
 /**

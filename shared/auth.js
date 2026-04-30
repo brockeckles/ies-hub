@@ -29,7 +29,7 @@
  *   completePasswordRecovery → signed in.
  *
  * Usage:
- *   import { auth } from './auth.js?v=20260423-z2';
+ *   import { auth } from './auth.js?v=20260429-demo-s3';
  *
  *   await auth.bootstrapSession();            // call once before gate check
  *   if (!auth.isAuthenticated()) {
@@ -56,7 +56,7 @@
  * @module shared/auth
  */
 
-import { db } from './supabase.js?v=20260424-A1';
+import { db } from './supabase.js?v=20260429-demo-s3';
 import { state } from './state.js?v=20260418-sK';
 import { bus } from './event-bus.js?v=20260418-sK';
 
@@ -186,6 +186,24 @@ async function bootstrapSession() {
  */
 function isAuthenticated() {
   return !!_currentSession && !_recoveryMode;
+}
+
+/**
+ * Idempotent helper that guarantees the auth state is hydrated before the
+ * caller reads getUser() / getSession(). Use this from any insert/update
+ * path that needs to stamp owner_id; survives the supabase-js quirk where
+ * the first getSession() after page load returns null even with a valid
+ * refresh token in localStorage.
+ *
+ * Cheap when already bootstrapped (single in-memory check); awaits an
+ * actual bootstrapSession() call only when _currentUser is null.
+ *
+ * @returns {Promise<{id:string,email:string}|null>}
+ */
+async function ensureSession() {
+  if (_currentUser) return getUser();
+  await bootstrapSession();
+  return getUser();
 }
 
 /** @returns {boolean} True while a recovery session is active. */
@@ -1859,7 +1877,7 @@ export const auth = {
   isAuthenticated,
   isInRecovery,
   getSession,
-  getUser,
+  getUser, ensureSession,
   getMode,
 
   // Role (Slice 3.14)

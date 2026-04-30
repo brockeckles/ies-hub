@@ -1696,7 +1696,11 @@ function computeHeaderKpis() {
 
     // Bail out cheaply when there's effectively no model yet — keeps the
     // strip blank on empty Setup pages instead of flashing $0.
-    if (!orders) {
+    // 2026-04-29 (#14): also bail when the user hasn't touched anything yet
+    // so the seeded defaults (80K orders + sample equipment) don't surface
+    // a misleading "Cost/Order $5.94" / "NPV -$2.2M" before the user has
+    // entered a single value.
+    if (!orders || !userHasInteracted) {
       return {
         ready: false,
         items: [
@@ -12623,7 +12627,7 @@ function createEmptyModel() {
       { name: 'Case Picks',          volume: 200000, uom: 'cases',  isOutboundPrimary: false },
     ],
     orderProfile: {},
-    facility: { totalSqft: 150000 },
+    facility: { totalSqft: 150000, clearHeightFt: 32 },
     shifts: {
       shiftsPerDay: 1, hoursPerShift: 8, daysPerWeek: 5, weeksPerYear: 52,
       // Brock 2026-04-21 pm: PTO + Holiday are now hour-based (editable ints).
@@ -12657,8 +12661,12 @@ function createEmptyModel() {
       { equipment_name: 'WMS License',              category: 'IT',      line_type: 'it_equipment',    quantity: 1,    acquisition_type: 'service',  monthly_cost: 8500, acquisition_cost: 0,     monthly_maintenance: 0,   amort_years: 5,  notes: 'Annual SaaS license' },
     ],
     overheadLines: [
-      { category: 'Utilities',    annual_cost: 180000, driver: 'sqft',             notes: 'Electric + gas ($1.20/sqft)' },
-      { category: 'Insurance',    annual_cost: 24000,  driver: 'fixed',            notes: '' },
+      // 2026-04-29 (R4 demo audit): Utilities and Insurance were ALSO booked in
+      // the Facility Cost Breakdown (totalFacilityCost), so summing both
+      // overhead and facility double-counted ~$204K/yr. Removed from the
+      // overhead seed; the facility breakdown is the source of truth for
+      // those two cost categories. Maintenance and Supplies are not in the
+      // facility breakdown, so they stay here.
       { category: 'Maintenance',  annual_cost: 60000,  driver: 'equipment value',  notes: '' },
       { category: 'Supplies',     annual_cost: 48000,  driver: 'per unit shipped', notes: 'Labels, tape, stretch wrap' },
     ],
@@ -18133,10 +18141,9 @@ function renderScenarios() {
       <div class="cm-card" style="margin-top:12px;background:#fef3c7;">
         <div style="display:flex;justify-content:space-between;align-items:center;">
           <div>
-            <strong>No scenarios yet.</strong> Save the cost model first, then click
-            <em>Initialize scenario</em> to create a baseline scenario you can branch from.
+            <strong>No scenarios yet.</strong> ${model.id ? 'Click <em>Initialize scenario</em> to create a baseline scenario you can branch from.' : 'Save the cost model first — scenarios attach to a saved model.'}
           </div>
-          <button class="hub-btn-primary" data-cm-action="scenario-init">Initialize scenario</button>
+          <button class="hub-btn-primary" data-cm-action="scenario-init" ${!model.id ? 'disabled title="Save the cost model first to enable this"' : ''}>Initialize scenario</button>
         </div>
       </div>
     `}

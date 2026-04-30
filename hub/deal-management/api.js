@@ -6,8 +6,8 @@
  * @module hub/deal-management/api
  */
 
-import { db } from '../../shared/supabase.js?v=20260424-A1';
-import { auth } from '../../shared/auth.js?v=20260423-z2';
+import { db } from '../../shared/supabase.js?v=20260429-demo-s3';
+import { auth } from '../../shared/auth.js?v=20260429-demo-s3';
 
 /**
  * Fetch the 6 canonical DOS stages.
@@ -91,7 +91,7 @@ export async function listRealDeals() {
     // cheap. .catch fallback keeps deals listing functional even if ref_markets
     // is gated by RLS or unreachable — sites just fall back to "—".
     const [deals, models, marketRows] = await Promise.all([
-      db.fetchAll('deal_deals', 'id, deal_name, client_name, deal_owner, status, current_stage_id, created_at, updated_at'),
+      db.fetchAll('deal_deals', 'id, deal_name, client_name, deal_owner, status, current_stage_id, created_at, updated_at, est_annual_revenue, target_margin_pct, contract_term_years, target_go_live, industry_vertical, site_count'),
       db.fetchAll('cost_model_projects', 'id, name, scenario_label, client_name, market_id, facility_sqft, target_margin_pct, total_annual_cost, deal_deals_id, updated_at'),
       db.fetchAll('ref_markets', 'id, name').catch(() => []),
     ]);
@@ -134,15 +134,24 @@ export async function listRealDeals() {
         sitesMap.get(k).modelCount += 1;
       }
       const sites = [...sitesMap.values()];
-      // Best-effort revenue/margin: average across attached models.
+      // R6 (2026-04-29): prefer deal-level columns from the modal entry, fall
+      // back to attached-model averages so older deals without the columns
+      // still render meaningful values.
+      const dealMargin = Number(d.target_margin_pct);
       const margins = attached.map(m => Number(m.target_margin_pct)).filter(n => Number.isFinite(n) && n > 0);
-      const margin = margins.length ? margins.reduce((a, b) => a + b, 0) / margins.length : 0;
+      const margin = Number.isFinite(dealMargin) && dealMargin > 0
+        ? dealMargin
+        : (margins.length ? margins.reduce((a, b) => a + b, 0) / margins.length : 0);
+      // est_annual_revenue is stored in $M; convert to dollars for the rest of the UI.
+      const dealRevenue = Number(d.est_annual_revenue);
       const totals = attached.map(m => Number(m.total_annual_cost)).filter(n => Number.isFinite(n) && n > 0);
-      const revenue = totals.length ? totals.reduce((a, b) => a + b, 0) / (1 - (margin / 100 || 0.1)) : 0;
+      const revenue = Number.isFinite(dealRevenue) && dealRevenue > 0
+        ? dealRevenue * 1e6
+        : (totals.length ? totals.reduce((a, b) => a + b, 0) / (1 - (margin / 100 || 0.1)) : 0);
       // Stage: deal_deals.current_stage_id is a bigint FK to stages.id; not the
       // 1..6 stage_number used by the hub. Default to 1 when unset; when set,
       // we'd need stages lookup — defer to a follow-up.
-      const stage = 1;
+      const stage = Number(d.current_stage_id) || 1;
       return {
         id: d.id, // uuid — distinguishes real from demo (which use 'd1' etc.)
         name: d.deal_name || 'Untitled Deal',
@@ -155,7 +164,10 @@ export async function listRealDeals() {
         daysInStage: 0,
         score: '—',
         startDate: d.created_at ? d.created_at.slice(0, 10) : null,
-        targetClose: null,
+        targetClose: d.target_go_live || null,
+        contractTermYears: Number(d.contract_term_years) || 5,
+        industryVertical: d.industry_vertical || null,
+        siteCount: Number(d.site_count) || (sites.length || 0),
         isReal: true,
         models: attached.map(m => ({
           id: m.id,
@@ -183,21 +195,25 @@ export async function listRealDeals() {
  */
 export async function createDeal(payload) {
   try {
-    // RLS: deal_deals INSERT policy is `WITH CHECK (owner_id = auth.uid())`,
-    // so we MUST stamp owner_id before insert. Without this, every save
-    // fails with 'new row violates row-level security policy'.
-    // Recurring bug class: same pattern as netopt_configs (2026-04-25).
-    const u = auth.getUser();
-    if (!u?.id) {
-      throw new Error('You are not signed in. Please sign in to create a deal.');
-    }
+    // owner_id is now auto-stamped by db.insert (R7 — 2026-04-29 demo audit).
+    // We still support callers passing it explicitly; the wrapper is a no-op
+    // when owner_id is already on the record.
     const row = {
       deal_name: payload.deal_name || 'Untitled Deal',
       client_name: payload.client_name || '',
       deal_owner: payload.deal_owner || null,
       status: payload.status || 'Draft',
-      owner_id: u.id,
     };
+    // R6 — forward qualification fields when present. Schema columns added
+    // 2026-04-29: est_annual_revenue, target_margin_pct, contract_term_years,
+    // target_go_live, industry_vertical, site_count, current_stage_id.
+    if (payload.est_annual_revenue != null && payload.est_annual_revenue !== '') row.est_annual_revenue = Number(payload.est_annual_revenue);
+    if (payload.target_margin_pct != null && payload.target_margin_pct !== '')   row.target_margin_pct  = Number(payload.target_margin_pct);
+    if (payload.contract_term_years != null && payload.contract_term_years !== '') row.contract_term_years = Number(payload.contract_term_years);
+    if (payload.target_go_live)     row.target_go_live     = payload.target_go_live;
+    if (payload.industry_vertical)  row.industry_vertical  = payload.industry_vertical;
+    if (payload.site_count != null && payload.site_count !== '') row.site_count = Number(payload.site_count);
+    if (payload.current_stage_id != null && payload.current_stage_id !== '') row.current_stage_id = Number(payload.current_stage_id);
     return await db.insert('deal_deals', row);
   } catch (err) {
     console.error('[deal-mgmt] createDeal failed', err);

@@ -7,7 +7,7 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import * as api from './api.js?v=20260429-demo-s1';
+import * as api from './api.js?v=20260429-demo-s3';
 import { showToast } from '../../shared/toast.js?v=20260418-sK';
 
 /** @type {HTMLElement|null} */
@@ -223,11 +223,40 @@ function openNewOppModal() {
             <input id="opp-margin" class="hub-input" type="number" step="0.1" placeholder="e.g., 11" style="width:100%;">
           </div>
         </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+          <div>
+            <label style="display:block;font-size:11px;font-weight:700;color:var(--ies-gray-400);margin-bottom:4px;">Contract Term (yrs)</label>
+            <input id="opp-term" class="hub-input" type="number" step="1" placeholder="5" value="5" style="width:100%;">
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;font-weight:700;color:var(--ies-gray-400);margin-bottom:4px;">Site Count</label>
+            <input id="opp-sites" class="hub-input" type="number" step="1" placeholder="1" value="1" style="width:100%;">
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;font-weight:700;color:var(--ies-gray-400);margin-bottom:4px;">Target Go-Live</label>
+            <input id="opp-golive" class="hub-input" type="date" style="width:100%;">
+          </div>
+        </div>
+        <div>
+          <label style="display:block;font-size:11px;font-weight:700;color:var(--ies-gray-400);margin-bottom:4px;">Industry / Vertical</label>
+          <select id="opp-vertical" class="hub-select" style="width:100%;">
+            <option value="">— Select —</option>
+            <option value="Retail">Retail</option>
+            <option value="E-commerce">E-commerce</option>
+            <option value="Omnichannel Retail">Omnichannel Retail</option>
+            <option value="Food & Beverage">Food &amp; Beverage</option>
+            <option value="Industrial">Industrial</option>
+            <option value="Pharmaceutical">Pharmaceutical</option>
+            <option value="Automotive">Automotive</option>
+            <option value="Consumer Goods">Consumer Goods</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
       </div>
 
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px;">
         <button id="opp-cancel" class="hub-btn hub-btn-sm hub-btn-secondary">Cancel</button>
-        <button id="opp-create" class="hub-btn hub-btn-sm hub-btn-primary">Create Opportunity</button>
+        <button id="opp-create" class="hub-btn hub-btn-sm hub-btn-primary">Create Deal</button>
       </div>
     </div>
   `;
@@ -247,7 +276,25 @@ function openNewOppModal() {
     const createBtn = /** @type {HTMLButtonElement} */ (modal.querySelector('#opp-create'));
     if (createBtn) { createBtn.disabled = true; createBtn.textContent = 'Creating...'; }
     try {
-      const inserted = await api.createDeal({ deal_name: name, client_name: client, deal_owner: owner });
+      const stageVal     = /** @type {HTMLSelectElement} */ (modal.querySelector('#opp-stage')).value;
+      const revenueVal   = /** @type {HTMLInputElement} */ (modal.querySelector('#opp-revenue')).value;
+      const marginVal    = /** @type {HTMLInputElement} */ (modal.querySelector('#opp-margin')).value;
+      const termVal      = /** @type {HTMLInputElement} */ (modal.querySelector('#opp-term'))?.value;
+      const sitesVal     = /** @type {HTMLInputElement} */ (modal.querySelector('#opp-sites'))?.value;
+      const goliveVal    = /** @type {HTMLInputElement} */ (modal.querySelector('#opp-golive'))?.value;
+      const verticalVal  = /** @type {HTMLSelectElement} */ (modal.querySelector('#opp-vertical'))?.value;
+      const inserted = await api.createDeal({
+        deal_name: name,
+        client_name: client,
+        deal_owner: owner,
+        current_stage_id: stageVal ? Number(stageVal) : null,
+        est_annual_revenue: revenueVal,
+        target_margin_pct: marginVal,
+        contract_term_years: termVal,
+        site_count: sitesVal,
+        target_go_live: goliveVal || null,
+        industry_vertical: verticalVal || null,
+      });
       close();
       // Refresh real deals so the new row appears + select it for the user.
       await loadRealDealsAndMerge();
@@ -263,7 +310,7 @@ function openNewOppModal() {
       }
       bus.emit('deal-management:deal-created', { id: inserted?.id });
     } catch (err) {
-      if (createBtn) { createBtn.disabled = false; createBtn.textContent = 'Create Opportunity'; }
+      if (createBtn) { createBtn.disabled = false; createBtn.textContent = 'Create Deal'; }
       showToast('Failed to create deal: ' + (err?.message || err), 'error');
     }
   });
@@ -919,7 +966,7 @@ function renderDetail() {
         ${kpi('Margin', d.margin > 0 ? d.margin + '%' : 'TBD', d.margin > 0 && d.margin < 10 ? 'var(--ies-orange)' : null)}
         ${kpi('Total sqft', totalSqft > 0 ? (totalSqft / 1000).toFixed(0) + 'K' : '—')}
         ${kpi('Days in Stage', d.daysInStage, d.daysInStage > 14 ? 'var(--ies-red)' : null)}
-        ${kpi('DOS Completion', dosCompletion + '%', dosCompletion < 50 ? 'var(--ies-red)' : dosCompletion < 75 ? 'var(--ies-orange)' : null)}
+        ${kpi('DOS Completion', dosCompletion + '%', totalElements === 0 ? 'var(--ies-gray-300)' : dosCompletion < 50 ? 'var(--ies-red)' : dosCompletion < 75 ? 'var(--ies-orange)' : null)}
       </div>
 
       <!-- Detail Tabs -->
@@ -1662,6 +1709,15 @@ function kpi(label, value, color) {
 function formatDate(dateStr) {
   if (!dateStr) return '—';
   try {
-    return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    // 2026-04-29 (#11): a YYYY-MM-DD string parsed by `new Date()` is treated
+    // as UTC midnight, which renders one day earlier in any negative-offset
+    // local timezone (e.g., US Pacific). Detect bare date and parse as local.
+    const dateOnlyMatch = typeof dateStr === 'string' && /^\d{4}-\d{2}-\d{2}$/.exec(dateStr);
+    const d = dateOnlyMatch
+      ? new Date(Number(dateOnlyMatch.input.slice(0, 4)),
+                 Number(dateOnlyMatch.input.slice(5, 7)) - 1,
+                 Number(dateOnlyMatch.input.slice(8, 10)))
+      : new Date(dateStr);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   } catch { return dateStr; }
 }
