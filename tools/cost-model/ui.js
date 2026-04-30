@@ -12202,6 +12202,31 @@ async function regenSiblingProjections(projectId) {
 
   const siblingScen = (dealScenarios || []).find(sc => sc.project_id === projectId) || null;
 
+  // 2026-04-30 PM (Step 1A) — close the same-market caveat. If the sibling
+  // is on a different market_id than the parent view, fetch ITS labor
+  // profile so the calc engine applies the right per-market OT/absence
+  // defaults. Same goes for snapshots: if the sibling is approved, pull
+  // its frozen snapshots so the regen reflects the snapshot freeze, not
+  // live ref_* rates.
+  const siblingMarketId = siblingModel?.projectDetails?.market;
+  const currentMarketId = currentMarketLaborProfile?.market_id;
+  let siblingLaborProfile = currentMarketLaborProfile;
+  if (siblingMarketId && siblingMarketId !== currentMarketId) {
+    try {
+      siblingLaborProfile = await api.fetchLaborMarketProfile(siblingMarketId);
+    } catch (err) {
+      console.warn('[CM] PL4 fetchLaborMarketProfile failed for sibling, falling back to current:', err);
+    }
+  }
+  let siblingSnapshots = null;
+  if (siblingScen?.status === 'approved' && siblingScen.id) {
+    try {
+      siblingSnapshots = await api.fetchSnapshots(siblingScen.id) || null;
+    } catch (err) {
+      console.warn('[CM] PL4 fetchSnapshots failed for approved sibling:', err);
+    }
+  }
+
   // Stash + swap module-scope state. ensureMonthlyBundle reads from these.
   const savedModel = model;
   const savedScenario = currentScenario;
@@ -12211,16 +12236,18 @@ async function regenSiblingProjections(projectId) {
   const savedBundle = _lastMonthlyBundle;
   const savedProjections = _lastProjections;
   const savedCalcHeur = _lastCalcHeuristics;
+  const savedLaborProfile = currentMarketLaborProfile;
 
   try {
     model = siblingModel;
     currentScenario = siblingScen;
-    currentScenarioSnapshots = null; // siblings are typically draft; no frozen snapshots
+    currentScenarioSnapshots = siblingSnapshots;
     heuristicOverrides = fullProj.heuristic_overrides || {};
     whatIfTransient = {};
     _lastMonthlyBundle = null; // force ensureMonthlyBundle to rebuild
     _lastProjections = null;
     _lastCalcHeuristics = null;
+    currentMarketLaborProfile = siblingLaborProfile;
 
     const bundle = ensureMonthlyBundle();
     if (!bundle) throw new Error('ensureMonthlyBundle returned null for sibling');
@@ -12236,6 +12263,7 @@ async function regenSiblingProjections(projectId) {
     _lastMonthlyBundle = savedBundle;
     _lastProjections = savedProjections;
     _lastCalcHeuristics = savedCalcHeur;
+    currentMarketLaborProfile = savedLaborProfile;
   }
 }
 
