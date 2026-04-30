@@ -6,7 +6,7 @@
  * @module tools/fleet-modeler/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sM';
+import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { state } from '../../shared/state.js?v=20260418-sM';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sM';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
@@ -431,7 +431,7 @@ async function bindShellEvents() {
       if (!key) return;
       const sec = FLEET_SECTIONS.find(s => s.key === key);
       if (!sec) return;
-      async if(sec.group === 'parameters') {
+      if (sec.group === 'parameters') {
         activePhase = 'parameters';
         paramsSubTab = /** @type {any} */ (key);
       } else if (sec.group === 'run') {

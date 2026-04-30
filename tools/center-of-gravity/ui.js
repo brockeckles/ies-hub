@@ -6,7 +6,7 @@
  * @module tools/center-of-gravity/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sP';
+import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { state } from '../../shared/state.js?v=20260418-sP';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sP';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
@@ -800,7 +800,7 @@ function renderInputsPhase(el) {
     }
     const totalUnits = archVolInput?.value ? parseInt(archVolInput.value, 10) : 0;
     const generated = calc.generateArchetypePoints(archSelect.value, totalUnits || undefined);
-    async if(!generated.length) {
+    if (!generated.length) {
       showToast('Archetype generated 0 points — check the selection.', 'warn');
       return;
     }

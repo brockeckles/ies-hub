@@ -6,7 +6,7 @@
  * @module tools/deal-manager/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sL';
+import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { state } from '../../shared/state.js?v=20260418-sL';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260429-tc2-dm';
 import * as calc from './calc.js?v=20260426-s3';
@@ -375,7 +375,7 @@ async function _dmContentClickHandler(e) {
 
   // Delete weekly update.
   const delUpdateBtn = /** @type {HTMLElement|null} */ (target.closest('[data-action="dm-delete-update"]'));
-  async if(delUpdateBtn) {
+  if (delUpdateBtn) {
     const updateId = delUpdateBtn.dataset.updateId;
     if (updateId && activeDeal && (await showConfirm('Delete this weekly update? This cannot be undone.'))) {
       (async () => {

@@ -7,7 +7,7 @@
  * @module hub/command-center/ui
  */
 
-import { bus } from '../../shared/event-bus.js';
+import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import * as api from './api.js?v=20260419-uG';
 
 /** @type {HTMLElement|null} */
