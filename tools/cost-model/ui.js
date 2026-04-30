@@ -9065,8 +9065,17 @@ function bindSectionEvents(section, container) {
       btn.addEventListener('click', async () => {
         const projId = parseInt(btn.dataset.projectId);
         if (!projId) return;
-        // Hand off to the existing open-model flow
-        window.location.hash = `#/cost-model/${projId}`;
+        // 2026-04-30 (G13): the previous handoff used #/cost-model/${projId}
+        // which the hash router never registered (only 'designtools/cost-model'
+        // is registered, no /:id segment). Result: clicking a sibling-row
+        // Open button bounced the user to the Command Center landing.
+        // Mirror the F1 fix on shared/cm-drillback.js: stash the target id
+        // in sessionStorage 'cm_pending_open' (60s freshness) and route to
+        // the canonical CM hash. CM's mount() consumes this on load.
+        try {
+          sessionStorage.setItem('cm_pending_open', JSON.stringify({ id: projId, at: Date.now() }));
+        } catch {}
+        window.location.hash = '#designtools/cost-model';
       });
     });
   }
