@@ -891,12 +891,14 @@ export function groupMonthlyToYearly(bundle, contractTermYears, opts = {}) {
     const yrTotalCost = sum('opex');
     const yrDep       = sum('depreciation');
     // Prefer summed fields when present; re-derive from categories when the
-    // cashflow rows predate the cogs/sga split. This makes the P&L GP ≥
-    // EBITDA ≥ EBIT invariant hold regardless of input schema age.
+    // cashflow rows predate the cogs/sga split. The cost_model_cashflow_monthly
+    // table doesn't carry cogs/sga columns, so the fallback fires on every
+    // read of persisted data — keep this aligned with the fresh-compute scope
+    // (Brock 2026-04-30 NIGHT: overhead is in COGS per 3PL convention).
     const yrCogsRaw = sum('cogs');
     const yrSgaRaw  = sum('sga');
-    const yrCogs    = yrCogsRaw > 0 ? yrCogsRaw : (yrLabor + yrFacility + yrEquipment + yrVas);
-    const yrSga     = yrSgaRaw  > 0 ? yrSgaRaw  : yrOverhead;
+    const yrCogs    = yrCogsRaw > 0 ? yrCogsRaw : (yrLabor + yrFacility + yrEquipment + yrVas + yrOverhead);
+    const yrSga     = yrSgaRaw  > 0 ? yrSgaRaw  : 0;
     const yrGp      = yrRevenue - yrCogs;
     const yrEbitda  = yrGp - yrSga;
     const yrEbit    = yrEbitda - yrDep;
