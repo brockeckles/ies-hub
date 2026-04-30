@@ -1552,7 +1552,7 @@ function _buildDiscloseHTML(key) {
         _discloseRow('VAS', _fmt$(p1.vas)) +
         _discloseRow('Start-Up amort.', _fmt$(p1.startupAmort || s.startupAmort)) +
         `<div class="cm-disclose-total">${_discloseRow('Total', _fmt$(total))}</div>` +
-        _discloseFooter('Year-1 figure includes the learning-curve uplift on labor. Click any cost row in the P&L below for the full formula.');
+        _discloseFooter('Year-1 figure reflects the ramp curve from go-live. Click any cost row in the P&L below for the full formula.');
     }
     if (key === 'summary-y1-revenue') {
       const margin = ctx.marginFrac || 0;
@@ -2160,11 +2160,10 @@ function getCellProvenance(rowKey, year) {
           { label: 'Labor Escalation', value: ((ch.laborEscPct || 0).toFixed(1) + '%/yr'), source: 'Heuristics' },
           { label: 'Volume Growth', value: ((ch.volGrowthPct || 0).toFixed(1) + '%/yr'), source: 'Heuristics' },
           { label: 'Combined multiplier', value: (laborMult * volMult).toFixed(3) + '×', source: `Y${year} of ${ctx.contractYears}` },
-          ...(year === 1 ? [{ label: 'Y1 Learning Curve', value: ((p.learningMult || 1).toFixed(3) + '×'), source: 'Weighted complexity_tier across labor lines' }] : []),
         ],
         notes: year === 1
-          ? 'Year 1 includes a productivity ramp: new hires reach standard productivity over time. Higher complexity → bigger Y1 cost uplift.'
-          : 'No learning-curve in Y2+: standard productivity is assumed.',
+          ? 'Year 1 reflects the volume ramp (production builds from go-live to full operations). Steady-state cost shape from Y2 onward.'
+          : 'Steady-state labor cost: full productivity at ramped volume, then escalates by laborEsc + volGrowth.',
       };
     }
 
@@ -2444,7 +2443,7 @@ function getCellProvenance(rowKey, year) {
           ...(channelRows.length ? [{ label: 'Volume mix driving rates × volume', value: '', source: 'Bucket rates × per-channel volume share' }] : []),
           ...channelRows,
         ],
-        notes: 'Reference cost-plus pricing. Y1 reflects ramp/learning-curve uplift on labor — later years are typically higher revenue at the same margin.',
+        notes: 'Reference cost-plus pricing. Y1 reflects the ramp curve — later years are typically higher revenue at the same margin.',
       };
     }
 
@@ -2462,7 +2461,7 @@ function getCellProvenance(rowKey, year) {
           { label: 'Target Margin', value: _fmtPct(mFrac, 2), source: 'Financial → Target Margin %' },
           { label: 'Implied vs. target', value: _fmtPct(((k.y1Margin || 0) / 100) - mFrac, 2), source: 'Y1 actual − target' },
         ],
-        notes: 'Y1 margin is often lower than target because the learning-curve uplift on labor inflates Y1 cost. Y2+ usually compresses to within 0.5 pts of target.',
+        notes: 'Y1 margin can differ from target while the ramp builds. Y2+ usually compresses to within 0.5 pts of target.',
       };
     }
 
@@ -2484,7 +2483,7 @@ function getCellProvenance(rowKey, year) {
           ...(returnsAssumptionRows.length ? [{ label: 'Returns Processor — sized off per-channel returns %', value: '', source: 'Volumes & Profile → Structural Assumptions' }] : []),
           ...returnsAssumptionRows,
         ],
-        notes: 'Steady-state operating headcount. Excludes the Y1 learning-curve productivity ramp (which inflates Y1 hours, not bodies).',
+        notes: 'Steady-state operating headcount sized off direct + indirect labor lines.',
       };
     }
 
@@ -4822,7 +4821,7 @@ function renderLaborV1() {
     <div class="text-subtitle mb-2">Direct Labor <span style="font-size:11px;color:var(--ies-gray-400);font-weight:500;">— Pick a <strong>Position</strong> (rate / employment / markup pull from Labor Factors) · Volume from Volumes tab · MHE and IT/Device separate</span></div>
     <table class="cm-grid-table">
       <thead>
-        <tr><th style="min-width:180px;">MOST Template</th><th>Activity</th><th style="min-width:150px;" title="Pick a role from the Labor Factors catalog. Rate/employment/markup pull from the position — edit those centrally.">Position</th><th>MHE</th><th>IT / Device</th><th>Volume</th><th>UPH</th><th>Hrs/Yr</th><th>FTE</th><th>Rate</th><th>Employment</th><th>Markup %</th><th title="Productivity variance for Monte Carlo sensitivity">Var %</th><th title="Activity complexity tier - drives the Year-1 learning-curve haircut. low=0.95, medium=0.85 (default), high=0.75. Read by calc.js learning multiplier.">Complexity</th><th class="cm-num">Annual Cost</th><th title="Monthly OT/absence seasonality">Seasonality</th><th></th></tr>
+        <tr><th style="min-width:180px;">MOST Template</th><th>Activity</th><th style="min-width:150px;" title="Pick a role from the Labor Factors catalog. Rate/employment/markup pull from the position — edit those centrally.">Position</th><th>MHE</th><th>IT / Device</th><th>Volume</th><th>UPH</th><th>Hrs/Yr</th><th>FTE</th><th>Rate</th><th>Employment</th><th>Markup %</th><th title="Productivity variance for Monte Carlo sensitivity">Var %</th><th class="cm-num">Annual Cost</th><th title="Monthly OT/absence seasonality">Seasonality</th><th></th></tr>
       </thead>
       <tbody>
         ${lines.map((l, i) => `
@@ -4880,13 +4879,6 @@ function renderLaborV1() {
                 data-array="laborLines" data-idx="${i}" data-field="performance_variance_pct" data-type="number"
                 title="Productivity variance (% std dev) for the Monte Carlo sensitivity card" />
             </td>
-            <td>
-              <select style="width:95px;font-size:11px;" data-array="laborLines" data-idx="${i}" data-field="complexity_tier" title="Activity complexity tier - drives Year-1 learning-curve factor (low=0.95, medium=0.85, high=0.75)">
-                <option value="low"${l.complexity_tier === 'low' ? ' selected' : ''}>Low</option>
-                <option value="medium"${(l.complexity_tier || 'medium') === 'medium' ? ' selected' : ''}>Medium</option>
-                <option value="high"${l.complexity_tier === 'high' ? ' selected' : ''}>High</option>
-              </select>
-            </td>
             <td class="cm-num">${calc.formatCurrency(calc.directLineAnnualSimple(l, lc))}</td>
             <td>
               <button class="hub-btn" style="padding:2px 6px;font-size:11px;" data-cm-action="edit-labor-seasonality" data-idx="${i}" title="Edit monthly OT/absence seasonality">
@@ -4896,7 +4888,7 @@ function renderLaborV1() {
             <td><button class="cm-delete-btn" data-action="delete-labor" data-idx="${i}">Del</button></td>
           </tr>
         `).join('')}
-        <tr class="cm-total-row"><td colspan="13">Total Direct Labor</td><td class="cm-num">${calc.formatCurrency(totalDirect)}</td><td colspan="2"></td></tr>
+        <tr class="cm-total-row"><td colspan="12">Total Direct Labor</td><td class="cm-num">${calc.formatCurrency(totalDirect)}</td><td colspan="2"></td></tr>
       </tbody>
     </table>
     <button class="cm-add-row-btn" data-action="add-labor">+ Add Labor Line</button>
@@ -6835,7 +6827,7 @@ function renderPricing() {
   // When it hasn't, we fall back to "labeling-only" mode (see-Summary link).
   // This gives the banner BOTH bases when data is available: reference-basis
   // (steady-state, no ramp) from the Pricing Schedule rollup AND Y1-actual
-  // from the P&L engine (ramp + learning-curve haircut applied).
+  // from the P&L engine (ramp shape applied).
   const y1Proj = Array.isArray(_lastProjections) && _lastProjections.length ? _lastProjections[0] : null;
   const y1AchievedPct = y1Proj && y1Proj.revenue > 0
     ? ((y1Proj.ebit || (y1Proj.revenue - y1Proj.totalCost)) / y1Proj.revenue) * 100
@@ -6916,7 +6908,7 @@ function renderPricing() {
         <div class="cm-margin-banner-label">
           ${m3Copy}
           <div class="cm-margin-banner-basis">
-            <span class="cm-margin-basis-chip" title="Pricing margin uses steady-state (reference) volumes and cost — the basis you set prices against. Summary tiles use Y1 P&L values which include ramp + learning-curve haircuts; those will read lower and are expected to reconcile to this banner by Y2-Y3 once the site is at steady state.">
+            <span class="cm-margin-basis-chip" title="Pricing margin uses steady-state (reference) volumes and cost — the basis you set prices against. Summary tiles use Y1 P&L values which include the ramp curve; those will read lower and are expected to reconcile to this banner by Y2-Y3 once the site is at steady state.">
               @ reference volumes
             </span>
             <span class="cm-margin-basis-compare">
@@ -6930,12 +6922,12 @@ function renderPricing() {
             <span class="cm-margin-tile-label">Target</span>
             <span class="cm-margin-tile-value">${targetMarginPct.toFixed(1)}%</span>
           </span>
-          <span class="cm-margin-tile" title="Reference-basis: steady-state cost / volume × effective rates. Matches target by construction when no overrides; deviates by override variance otherwise. Pre-ramp, pre-learning-curve.">
+          <span class="cm-margin-tile" title="Reference-basis: steady-state cost / volume × effective rates. Matches target by construction when no overrides; deviates by override variance otherwise. Pre-ramp.">
             <span class="cm-margin-tile-label">Achieved (ref)</span>
             <span class="cm-margin-tile-value ${hasAnyOverride && marginDeltaPP < 0 ? 'cm-margin-value-down' : ''}">${achievedMarginPct.toFixed(1)}%</span>
           </span>
           ${y1AchievedPct != null ? `
-            <span class="cm-margin-tile" title="Y1-only EBIT / Y1 Revenue, from the monthly engine (ramp + learning-curve haircuts included). This reconciles with the Summary → Financial Metrics 'EBIT Margin (contract)' tile's tooltip, which surfaces the Y1 basis alongside the contract-life aggregate. Y1 margin often reads higher than the contract-life aggregate when labor/facility escalation outpace volume growth; they converge in lighter-escalation deals by Y2-Y3.">
+            <span class="cm-margin-tile" title="Y1-only EBIT / Y1 Revenue, from the monthly engine (ramp curve included). This reconciles with the Summary → Financial Metrics 'EBIT Margin (contract)' tile's tooltip, which surfaces the Y1 basis alongside the contract-life aggregate. Y1 margin often reads higher than the contract-life aggregate when labor/facility escalation outpace volume growth; they converge in lighter-escalation deals by Y2-Y3.">
               <span class="cm-margin-tile-label">Y1 Actual (ramped)</span>
               <span class="cm-margin-tile-value ${y1VsTargetPP < -2 ? 'cm-margin-value-down' : y1VsTargetPP > 2 ? 'cm-margin-value-up' : ''}">${y1AchievedPct.toFixed(1)}%</span>
             </span>
@@ -7618,7 +7610,7 @@ function renderSummary() {
     <!-- KPI Strip (primitives-kit, 5-tile override) — Year-1 figures so they
          tie out to the Multi-Year P&L's Y1 column immediately below. Prior
          version used steady-state summary.totalCost/totalRevenue which
-         drifted from Y1 by ~3% (learning curve + escalation averaging),
+         drifted from Y1 by ~3% (escalation averaging),
          reading as an inconsistency on the Summary page. -->
     ${(() => {
       const p1 = projections[0] || {};
