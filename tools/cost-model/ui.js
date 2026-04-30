@@ -9065,17 +9065,21 @@ function bindSectionEvents(section, container) {
       btn.addEventListener('click', async () => {
         const projId = parseInt(btn.dataset.projectId);
         if (!projId) return;
-        // 2026-04-30 (G13): the previous handoff used #/cost-model/${projId}
-        // which the hash router never registered (only 'designtools/cost-model'
-        // is registered, no /:id segment). Result: clicking a sibling-row
-        // Open button bounced the user to the Command Center landing.
-        // Mirror the F1 fix on shared/cm-drillback.js: stash the target id
-        // in sessionStorage 'cm_pending_open' (60s freshness) and route to
-        // the canonical CM hash. CM's mount() consumes this on load.
+        // 2026-04-30 (G13b): the previous broken handoff used
+        // #/cost-model/${projId} which the hash router never registered.
+        // First fix attempt (G13) used the sessionStorage 'cm_pending_open'
+        // hand-off + hash change, mirroring F1 on cm-drillback.js. That
+        // works only when the route changes; when the user is already
+        // ON 'designtools/cost-model' the hash-set is a no-op so mount()
+        // never re-fires and the payload is left unconsumed. Since we
+        // know we're inside CM here, just call loadModelByCmId(projId)
+        // directly — the same function the mount-time consumer uses.
         try {
-          sessionStorage.setItem('cm_pending_open', JSON.stringify({ id: projId, at: Date.now() }));
-        } catch {}
-        window.location.hash = '#designtools/cost-model';
+          await loadModelByCmId(projId);
+        } catch (err) {
+          console.error('[CM] sibling open failed:', err);
+          showToast('Could not open scenario #' + projId + ': ' + (err?.message || err), 'error');
+        }
       });
     });
   }
