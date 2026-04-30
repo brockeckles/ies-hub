@@ -1272,6 +1272,12 @@ export function buildWscLaunchPayload(model) {
     inventoryTurns:  Number(facility.inventoryTurns) || 12,
     totalSKUs:       Number(facility.totalSKUs) || 0,
     channelMixes,
+    // 2026-04-30 (G10): parent linkage so WSC's save persists the CM
+    // pointer that Phase 5.4 drillback chips read off facility row.
+    // Without this, WSC scenarios launched from CM stay un-linked and
+    // the "→ CM · channel" chips on byChannel rows never render.
+    parent_cost_model_id: model?.id || null,
+    parent_deal_id: model?.projectDetails?.dealId || model?.deal_deals_id || null,
     at: Date.now(),
   };
 }

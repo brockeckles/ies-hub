@@ -14,7 +14,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import * as calc from './calc.js?v=20260425-s11';
 import * as api from './api.js?v=20260418-sL';
 import * as cmApi from '../cost-model/api.js?v=20260429-vol12';
-import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix10';
+import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix11';
 import { showConfirm } from '../../shared/confirm-modal.js';
 
 // ============================================================
@@ -2890,6 +2890,15 @@ function handleCmPush(payload) {
   // elevation view, so keep that.
   if (payload.clearHeight) facility.clearHeight = payload.clearHeight;
   if (payload.totalSqft) facility.totalSqft = payload.totalSqft;
+  // 2026-04-30 (G10): persist parent linkage from CM. Without this, the
+  // "Linked to Cost Model #..." sidebar footer + Phase 5.4 drillback chips
+  // can't render because facility.parent_cost_model_id stays null.
+  if (payload.parent_cost_model_id != null) {
+    facility.parent_cost_model_id = payload.parent_cost_model_id;
+  }
+  if (payload.parent_deal_id != null) {
+    facility.parent_deal_id = payload.parent_deal_id;
+  }
   // Phase 4 of volumes-as-nucleus (Layer A, 2026-04-29): payload now
   // optionally carries channel-derived volume fields. Each is additive —
   // we only overwrite the local volumes when the payload value is positive,
