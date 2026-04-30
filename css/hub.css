@@ -157,6 +157,13 @@ a:hover { text-decoration: underline; }
   color: var(--ies-blue);
 }
 
+.hub-btn-success {
+  background: #059669;
+  color: #fff;
+  border-color: #059669;
+}
+.hub-btn-success:hover { background: #047857; border-color: #047857; }
+
 .hub-btn-danger {
   background: var(--ies-red);
   color: #fff;

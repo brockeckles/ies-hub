@@ -50,7 +50,7 @@ function showConfirm(message, opts = {}) {
         <div style="white-space:pre-line;font-size:14px;line-height:1.45;">${String(message).replace(/</g, '&lt;')}</div>
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
           <button class="hub-btn" data-ans="0">${opts.cancelLabel || 'Cancel'}</button>
-          <button class="hub-btn-primary" data-ans="1" style="${opts.danger ? `background:${okBg};` : ''}">${opts.okLabel || 'Confirm'}</button>
+          <button class="hub-btn hub-btn-primary" data-ans="1" style="${opts.danger ? `background:${okBg};` : ''}">${opts.okLabel || 'Confirm'}</button>
         </div>
       </div>
     `;
@@ -84,7 +84,7 @@ function showPrompt(message, defaultValue = '') {
         <input class="hub-input" data-prompt-input style="width:100%;font-size:14px;padding:6px 8px;" value="${String(defaultValue).replace(/"/g, '&quot;')}" />
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
           <button class="hub-btn" data-ans="cancel">Cancel</button>
-          <button class="hub-btn-primary" data-ans="ok">OK</button>
+          <button class="hub-btn hub-btn-primary" data-ans="ok">OK</button>
         </div>
       </div>
     `;
@@ -2833,23 +2833,23 @@ function renderProvenancePanelInner() {
               </div>
             `;
           }
-          // CM-PROV-OVERFLOW-FIX (2026-04-30 PM s7) — long auto-gen
+          // CM-PROV-OVERFLOW-FIX (2026-04-30 NIGHT) — long auto-gen
           // labels (e.g., "Reach Truck — owned, sized to steady-state
           // max-shift HC") were overlapping with the calc.js source
           // line below them on Equipment-branch inspector rows. Added
           // overflow-wrap:anywhere so unbreakable strings wrap inside
           // the flex column instead of bleeding into the value column.
           const labelStyle = isSubRow
-            ? 'font-weight:600;color:var(--ies-gray-700,#374151);padding-left:10px;overflow-wrap:anywhere;'
-            : 'font-weight:600;color:var(--ies-gray-800,#1f2937);overflow-wrap:anywhere;';
+            ? 'font-weight:600;color:var(--ies-gray-700,#374151);padding-left:10px;overflow-wrap:break-word;'
+            : 'font-weight:600;color:var(--ies-gray-800,#1f2937);overflow-wrap:break-word;';
           const valueStyle = isSubRow
-            ? 'font-weight:600;color:var(--ies-blue,#0047AB);font-variant-numeric:tabular-nums;white-space:nowrap;font-size:12px;flex-shrink:0;'
-            : 'font-weight:700;color:var(--ies-navy,#0F1B2E);font-variant-numeric:tabular-nums;white-space:nowrap;flex-shrink:0;';
+            ? 'font-weight:600;color:var(--ies-blue,#0047AB);font-variant-numeric:tabular-nums;font-size:12px;flex:0 1 auto;max-width:55%;text-align:right;overflow-wrap:break-word;'
+            : 'font-weight:700;color:var(--ies-navy,#0F1B2E);font-variant-numeric:tabular-nums;flex:0 1 auto;max-width:55%;text-align:right;overflow-wrap:break-word;';
           return `
             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;font-size:12.5px;line-height:1.4;">
               <div style="flex:1;min-width:0;">
                 <div style="${labelStyle}">${inp.label}</div>
-                ${inp.source ? `<div style="font-size:11px;color:var(--ies-gray-500);overflow-wrap:anywhere;${isSubRow ? 'padding-left:10px;' : ''}">${inp.source}</div>` : ''}
+                ${inp.source ? `<div style="font-size:11px;color:var(--ies-gray-500);overflow-wrap:break-word;${isSubRow ? 'padding-left:10px;' : ''}">${inp.source}</div>` : ''}
               </div>
               <div style="${valueStyle}">${inp.value}</div>
             </div>
@@ -7731,7 +7731,7 @@ function renderSummary() {
         <button class="hub-btn" data-cm-action="summary-compare-scenarios" title="Side-by-side compare 2–4 scenarios on this deal — KPIs, pricing buckets, inputs" ${dealScenarios.length < 2 ? 'disabled' : ''}>
           ⇄ Compare Scenarios
         </button>
-        <button class="hub-btn-primary" data-cm-action="export-scenario-xlsx" title="Export the active scenario as a 7-sheet Excel workbook">
+        <button class="hub-btn hub-btn-primary" data-cm-action="export-scenario-xlsx" title="Export the active scenario as a 7-sheet Excel workbook">
           ⬇ Export Scenario XLSX
         </button>
       </div>
@@ -9273,7 +9273,7 @@ async function openCompareModal(opts = {}) {
       </div>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
         <button class="hub-btn" data-close>Cancel</button>
-        <button class="hub-btn-primary" data-run-compare>Compare →</button>
+        <button class="hub-btn hub-btn-primary" data-run-compare>Compare →</button>
       </div>
       <div id="cm-compare-result" style="margin-top:16px;"></div>
     </div>
@@ -9675,7 +9675,7 @@ async function openLaborSeasonalityModal(idx) {
         <button class="hub-btn" data-use-market>Use Market Defaults</button>
         <div style="display:flex;gap:8px;">
           <button class="hub-btn" data-close>Cancel</button>
-          <button class="hub-btn-primary" data-save>Save Seasonality</button>
+          <button class="hub-btn hub-btn-primary" data-save>Save Seasonality</button>
         </div>
       </div>
       <div id="cm-seasonality-status" style="margin-top:8px;font-size:11px;color:#666;"></div>
@@ -18783,16 +18783,16 @@ function renderScenarios() {
           </div>
           <div style="display:flex;flex-direction:column;gap:6px;min-width:180px;">
             ${s.status === 'draft' ? `
-              <button class="hub-btn-primary" data-cm-action="scenario-save-header">Save</button>
+              <button class="hub-btn hub-btn-primary" data-cm-action="scenario-save-header">Save</button>
               <button class="hub-btn" data-cm-action="scenario-to-review">Move to Review</button>
-              <button class="hub-btn-primary" data-cm-action="scenario-approve" style="background:#059669;">Approve + Freeze Rates</button>
+              <button class="hub-btn hub-btn-success" data-cm-action="scenario-approve">Approve + Freeze Rates</button>
             ` : ''}
             ${s.status === 'review' ? `
-              <button class="hub-btn-primary" data-cm-action="scenario-approve" style="background:#059669;">Approve + Freeze Rates</button>
+              <button class="hub-btn hub-btn-success" data-cm-action="scenario-approve">Approve + Freeze Rates</button>
               <button class="hub-btn" data-cm-action="scenario-to-draft">Back to Draft</button>
             ` : ''}
             ${s.status === 'approved' ? `
-              <button class="hub-btn-primary" data-cm-action="scenario-clone">Edit → Spawn Child</button>
+              <button class="hub-btn hub-btn-primary" data-cm-action="scenario-clone">Edit → Spawn Child</button>
               <button class="hub-btn" data-cm-action="scenario-archive">Archive</button>
             ` : ''}
             ${s.status === 'archived' ? `
@@ -18807,7 +18807,7 @@ function renderScenarios() {
           <div>
             <strong>No scenarios yet.</strong> ${model.id ? 'Click <em>Initialize scenario</em> to create a baseline scenario you can branch from.' : 'Save the cost model first — scenarios attach to a saved model.'}
           </div>
-          <button class="hub-btn-primary" data-cm-action="scenario-init" ${!model.id ? 'disabled title="Save the cost model first to enable this"' : ''}>Initialize scenario</button>
+          <button class="hub-btn hub-btn-primary" data-cm-action="scenario-init" ${!model.id ? 'disabled title="Save the cost model first to enable this"' : ''}>Initialize scenario</button>
         </div>
       </div>
     `}
@@ -18818,7 +18818,7 @@ function renderScenarios() {
           <h3 style="margin:0;">Sibling scenarios on this deal (${dealScenarios.length})</h3>
           <div style="display:flex;gap:8px;align-items:center;">
             <button class="hub-btn" data-cm-action="scenario-add-sibling" title="Clone the current scenario as a new sibling — independent project + scenario you can edit (e.g., Peak-Volume, Automation-Heavy, Labor-Stress)">+ Add sibling</button>
-            <button class="hub-btn-primary" data-cm-action="scenarios-compare-picker" ${dealScenarios.length < 2 ? 'disabled title="Need at least 2 scenarios"' : ''} title="Side-by-side compare 2–4 scenarios — KPIs, pricing, inputs">⇄ Compare scenarios →</button>
+            <button class="hub-btn hub-btn-primary" data-cm-action="scenarios-compare-picker" ${dealScenarios.length < 2 ? 'disabled title="Need at least 2 scenarios"' : ''} title="Side-by-side compare 2–4 scenarios — KPIs, pricing, inputs">⇄ Compare scenarios →</button>
           </div>
         </div>
         <table class="cm-table" style="margin-top:12px;width:100%;">

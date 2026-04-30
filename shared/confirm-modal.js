@@ -19,7 +19,7 @@ export function showConfirm(message, opts = {}) {
         <div style="white-space:pre-line;font-size:14px;line-height:1.45;">${String(message).replace(/</g, '&lt;')}</div>
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
           <button class="hub-btn" data-ans="0">${opts.cancelLabel || 'Cancel'}</button>
-          <button class="hub-btn-primary" data-ans="1" style="${opts.danger ? `background:${okBg};` : ''}">${opts.okLabel || 'Confirm'}</button>
+          <button class="hub-btn hub-btn-primary" data-ans="1" style="${opts.danger ? `background:${okBg};` : ''}">${opts.okLabel || 'Confirm'}</button>
         </div>
       </div>
     `;
@@ -52,7 +52,7 @@ export function showPrompt(message, defaultValue = '') {
         <input type="text" class="hub-input" data-prompt-input style="width:100%;" />
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
           <button class="hub-btn" data-ans="cancel">Cancel</button>
-          <button class="hub-btn-primary" data-ans="ok">OK</button>
+          <button class="hub-btn hub-btn-primary" data-ans="ok">OK</button>
         </div>
       </div>
     `;

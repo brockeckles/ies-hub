@@ -115,7 +115,7 @@ function openModal() {
       </div>
       <div class="hub-feedback-modal__footer">
         <button type="button" class="hub-btn" data-fb-action="close">Cancel</button>
-        <button type="button" class="hub-btn-primary" data-fb-action="submit">Submit</button>
+        <button type="button" class="hub-btn hub-btn-primary" data-fb-action="submit">Submit</button>
       </div>
     </div>
   `;
