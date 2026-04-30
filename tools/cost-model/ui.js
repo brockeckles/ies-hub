@@ -11,7 +11,7 @@ import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260424-hyg04';
-import * as calc from './calc.js?v=20260430-am-p5fix3';
+import * as calc from './calc.js?v=20260430-am-p5fix4';
 import * as api from './api.js?v=20260429-vol12';
 import * as scenarios from './calc.scenarios.js?v=20260429-otfix1';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
@@ -22,7 +22,7 @@ import * as shiftPlannerUi from './shift-planner-ui.js?v=20260428-walkthru1';
 // 2026-04-28 — internal phase stepper for Implementation Timeline section.
 import { renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260429-p52';
-import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260430-am-p5fix3';
+import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260430-am-p5fix4';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
 // disk but no longer imported; can be deleted in a future cleanup.
@@ -3981,10 +3981,23 @@ function renderFacility() {
           // R14 (2026-04-29) — surface a volume-driven suggestion any time
           // current sqft diverges >5% from the heuristic. Click-to-apply
           // button writes back through the standard data-field path.
-          const sug = calc.suggestFacilitySqft(model);
+          // G3 (2026-04-30) — when the raw heuristic exceeds the sanity cap
+          // (5M sqft), show a warning chip alongside instead of a clean
+          // "Replace with NK" affordance — the volume profile is almost
+          // certainly misconfigured.
+          const detail = calc.suggestFacilitySqftDetail
+            ? calc.suggestFacilitySqftDetail(model)
+            : { sqft: calc.suggestFacilitySqft(model), capped: false, sane: true, raw: 0 };
+          const sug = detail.sqft;
           if (!(sug > 0)) return '';
           const cur = Number(f.totalSqft) || 0;
           const dev = cur > 0 ? Math.abs(sug - cur) / cur : Infinity;
+          if (!detail.sane) {
+            // Raw suggestion is absurd (>5M sqft). Volume drivers are wrong.
+            return `<div class="hub-field__hint" style="font-size:11px;color:var(--ies-red,#c0392b);margin-top:4px;display:flex;align-items:center;gap:8px;">
+              <span title="Raw heuristic = ${detail.raw.toLocaleString()} sqft, capped at ${sug.toLocaleString()}. Likely cause: a channel UOM (units/case, lines/order, units/line) is wildly inflated. Review Volumes & Profile per channel.">⚠ Volume profile produces an unrealistic facility size (raw heuristic ${(detail.raw/1_000_000).toFixed(1)}M sqft). Cap shown; check channel UOMs.</span>
+            </div>`;
+          }
           if (cur > 0 && dev <= 0.05) {
             return `<div class="hub-field__hint" style="font-size:11px;color:var(--ies-gray-500);margin-top:4px;">✓ Within 5% of suggested ${sug.toLocaleString()} sqft (${(model.facility?.daysOnHand || 30)}-day DOH)</div>`;
           }

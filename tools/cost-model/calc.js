@@ -3728,7 +3728,48 @@ export function suggestFacilitySqft(state) {
   const doh = Number.isFinite(dohRaw) && dohRaw > 0 ? dohRaw : 30;
   const avgPalletsOnHand = annualPalletsIn * (doh / 365);
   const estPalletArea = avgPalletsOnHand * 40;
+  // 2026-04-30 (G3) — sanity bound on the suggestion. The largest US
+  // warehouses are ~3-4M sqft (Walmart Lehigh Valley ~3.4M, Boeing Everett
+  // ~4.3M); a single-DC suggestion above 5M is almost always the symptom
+  // of misconfigured channel UOMs producing absurd derived volumes.
+  // Returning a capped value with a sentinel field lets the UI render the
+  // suggestion AND a warning chip ('volume-driver too high — check
+  // channel UOMs') instead of an obviously-broken 81M sqft number.
+  const SANITY_CAP_SQFT = 5_000_000;
+  const raw = estPalletArea / 0.55;
+  if (raw > SANITY_CAP_SQFT) {
+    // Stash the over-cap raw value on a side property the UI can read
+    // to render the warning. Returning the cap keeps the math stable
+    // while the user investigates.
+    const capped = SANITY_CAP_SQFT;
+    // Note: pure functions shouldn't mutate inputs, so we encode the
+    // overflow signal in the return type. Callers that only care about
+    // the number get the capped sqft. Callers that want the warning
+    // can call suggestFacilitySqftDetail(state) below.
+    return Math.round(capped / 1000) * 1000;
+  }
   return Math.round((estPalletArea / 0.55) / 1000) * 1000;
+}
+
+/**
+ * G3 (2026-04-30) — same heuristic but returns { sqft, raw, capped, sane }
+ * so the UI can surface a warning when the volume profile would produce
+ * a nonsense suggestion. `sane` is true when raw ≤ 5M sqft.
+ */
+export function suggestFacilitySqftDetail(state) {
+  if (!state) return { sqft: 0, raw: 0, capped: false, sane: true };
+  const annualPalletsIn = _getAggregateInbound(state, 'pallets');
+  if (!(annualPalletsIn > 0)) return { sqft: 0, raw: 0, capped: false, sane: true };
+  const dohRaw = Number(state.facility?.daysOnHand);
+  const doh = Number.isFinite(dohRaw) && dohRaw > 0 ? dohRaw : 30;
+  const avgPalletsOnHand = annualPalletsIn * (doh / 365);
+  const raw = (avgPalletsOnHand * 40) / 0.55;
+  const SANITY_CAP_SQFT = 5_000_000;
+  const capped = raw > SANITY_CAP_SQFT;
+  const sqft = capped
+    ? Math.round(SANITY_CAP_SQFT / 1000) * 1000
+    : Math.round(raw / 1000) * 1000;
+  return { sqft, raw: Math.round(raw), capped, sane: !capped };
 }
 
 export function generateHeuristics(state, summary) {
@@ -3900,21 +3941,35 @@ export function generateHeuristics(state, summary) {
       const doh = Number.isFinite(dohRaw) && dohRaw > 0 ? dohRaw : 30;
       const avgPalletsOnHand = annualPalletsIn * (doh / 365);
       const estPalletArea = avgPalletsOnHand * 40;
-      const suggestedSqft = Math.round((estPalletArea / 0.55) / 1000) * 1000;
-      if (suggestedSqft > 0 && Math.abs(suggestedSqft - sqft) / sqft > 0.30) {
-        const dohSource = Number.isFinite(dohRaw) && dohRaw > 0
-          ? `${doh}-day DOH (project setting)`
-          : `30-day DOH default — set facility.daysOnHand to override`;
-        const turnsLabel = (365 / doh).toFixed(1);
+      const rawSqft = estPalletArea / 0.55;
+      // 2026-04-30 (G3) — cap at 5M sqft. Above that, the volume profile
+      // is almost certainly broken (typically misconfigured channel UOMs).
+      // Surface a dedicated 'warn' check rather than the standard
+      // suggestion so reviewers immediately spot the problem.
+      const SANITY_CAP_SQFT = 5_000_000;
+      if (rawSqft > SANITY_CAP_SQFT) {
         checks.push({
-          type: 'info',
-          title: 'Suggested facility size: ~' + suggestedSqft.toLocaleString() + ' sqft',
-          detail: 'Current: ' + sqft.toLocaleString() + ' sqft (' +
-            (sqft > suggestedSqft ? 'may be oversized' : 'may be undersized') + '). ' +
-            'Rough estimate: ' + Math.round(avgPalletsOnHand).toLocaleString() + ' avg pallets on-hand × 40 sqft × 1.82 (55% net util). ' +
-            'Inventory turns: ' + turnsLabel + '/yr (' + dohSource + '). ' +
-            'Run Warehouse Sizing for a fully-sized recommendation.',
+          type: 'warn',
+          title: 'Volume profile produces unrealistic facility size (raw heuristic ' + (rawSqft / 1_000_000).toFixed(1) + 'M sqft)',
+          detail: 'A channel\'s UOM (units/case, lines/order, units/line) likely has an outlier value. Largest US warehouses are ~3-4M sqft; cap is 5M. Review Volumes & Profile per channel.',
         });
+      } else {
+        const suggestedSqft = Math.round(rawSqft / 1000) * 1000;
+        if (suggestedSqft > 0 && Math.abs(suggestedSqft - sqft) / sqft > 0.30) {
+          const dohSource = Number.isFinite(dohRaw) && dohRaw > 0
+            ? `${doh}-day DOH (project setting)`
+            : `30-day DOH default — set facility.daysOnHand to override`;
+          const turnsLabel = (365 / doh).toFixed(1);
+          checks.push({
+            type: 'info',
+            title: 'Suggested facility size: ~' + suggestedSqft.toLocaleString() + ' sqft',
+            detail: 'Current: ' + sqft.toLocaleString() + ' sqft (' +
+              (sqft > suggestedSqft ? 'may be oversized' : 'may be undersized') + '). ' +
+              'Rough estimate: ' + Math.round(avgPalletsOnHand).toLocaleString() + ' avg pallets on-hand × 40 sqft × 1.82 (55% net util). ' +
+              'Inventory turns: ' + turnsLabel + '/yr (' + dohSource + '). ' +
+              'Run Warehouse Sizing for a fully-sized recommendation.',
+          });
+        }
       }
     }
   }
