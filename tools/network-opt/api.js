@@ -49,6 +49,10 @@ export async function saveConfig(config) {
       rateCard: config.rateCard,
       serviceConfig: config.serviceConfig,
     },
+    // 2026-04-30 (G12): top-level columns so reload's
+    // savedRow.parent_cost_model_id picks up the linkage.
+    parent_cost_model_id: config.parent_cost_model_id ?? null,
+    parent_deal_id: config.parent_deal_id ?? null,
   };
 
   if (config.id) {

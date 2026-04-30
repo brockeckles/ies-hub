@@ -12,7 +12,7 @@ import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260424-hyg04';
 import * as calc from './calc.js?v=20260430-am-p5fix12';
-import * as api from './api.js?v=20260429-vol12';
+import * as api from './api.js?v=20260430-pm-g12';
 import * as scenarios from './calc.scenarios.js?v=20260429-otfix1';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
 import * as channelCalc from './calc.channels.js?v=20260429-vol13';
@@ -3846,7 +3846,7 @@ function renderVolumes() {
     <!-- Source / integration footer -->
     <div class="cm-vol-source-bar">
       <span><span class="cm-vol-pill cm-vol-pill--mute">Source</span> ${sourceBadge}</span>
-      <span style="color:var(--ies-gray-500);">Pull from <a href="#" data-action="cm-launch-wsc" style="color:var(--ies-blue);text-decoration:none;">WSC →</a> or <a href="#" data-action="cm-launch-netopt" style="color:var(--ies-blue);text-decoration:none;">NetOpt →</a></span>
+      <span style="color:var(--ies-gray-500);">Pull from <button type="button" data-action="cm-launch-wsc" class="cm-vol-launch-link" style="background:none;border:none;padding:0;color:var(--ies-blue);text-decoration:none;cursor:pointer;font:inherit;">WSC →</button> or <button type="button" data-action="cm-launch-netopt" class="cm-vol-launch-link" style="background:none;border:none;padding:0;color:var(--ies-blue);text-decoration:none;cursor:pointer;font:inherit;">NetOpt →</button></span>
     </div>
 
     <style>
@@ -11480,6 +11480,32 @@ async function handleAction(action, idx, btn) {
       }
       markDirty();
       break;
+    }
+    case 'cm-launch-wsc': {
+      // 2026-04-30 (G12): the inline 'WSC ->' link in the cm-vol-source-bar
+      // was a dead anchor (data-action with no handler). Wire it up to the
+      // same hand-off path as the dedicated 'launch-wsc' button: build the
+      // payload, stash to sessionStorage so the WSC mount can consume it,
+      // emit the bus event for in-session handoff, navigate.
+      const payload = api.buildWscLaunchPayload(model);
+      try { sessionStorage.setItem('cm_pending_push', JSON.stringify(payload)); } catch {}
+      bus.emit('cm:push-to-wsc', payload);
+      state.set('nav.tool', 'warehouse-sizing');
+      window.location.hash = '#designtools/warehouse-sizing';
+      return;
+    }
+    case 'cm-launch-netopt': {
+      // 2026-04-30 (G12): equivalent of the cm-launch-wsc patch above for
+      // NetOpt. Builds buildNetOptLaunchPayload (parent_cost_model_id +
+      // channel seed), stashes via sessionStorage 'cm_pending_netopt_push'
+      // (distinct key from WSC's 'cm_pending_push' to avoid cross-talk),
+      // emits cm:push-to-netopt for in-session handoff, navigates.
+      const payload = api.buildNetOptLaunchPayload(model);
+      try { sessionStorage.setItem('cm_pending_netopt_push', JSON.stringify(payload)); } catch {}
+      bus.emit('cm:push-to-netopt', payload);
+      state.set('nav.tool', 'network-opt');
+      window.location.hash = '#designtools/network-opt';
+      return;
     }
     case 'launch-wsc': {
       // Brock 2026-04-20: cross-tool linkage was broken in this direction.

@@ -17,7 +17,7 @@ import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadXLSX } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260418-sM';
 import * as calc from './calc.js?v=20260427-s15';
-import * as api from './api.js?v=20260426-s13';
+import * as api from './api.js?v=20260430-pm-g12';
 import { createChart } from '../../shared/cdn-wrappers/chart-wrapper.js?v=20260418-sK';
 import { showConfirm } from '../../shared/confirm-modal.js';
 
@@ -173,6 +173,7 @@ const DEMO_DEMANDS = [
  */
 let activeConfigId = null;
 let activeParentCmId = null;
+let activeParentDealId = null;
 let isDirty = false;          // I-05 — track unsaved changes
 
 // Run-state tracker: flips the header Run button between orange "dirty"
@@ -230,6 +231,29 @@ export async function mount(el) {
     }
   } catch (e) { console.warn('[NetOpt] Failed to consume COG handoff:', e); }
 
+  // 2026-04-30 (G12): CM -> NetOpt cross-tool handoff. Mirrors the COG
+  // pattern above and the WSC consumer in tools/warehouse-sizing/ui.js.
+  // Both paths set activeParentCmId so the drillback chips on byChannel
+  // rows can render and handleSaveNetopt persists the linkage.
+  bus.on('cm:push-to-netopt', (payload) => {
+    openEditor(null);
+    applyCmHandoff(payload);
+  });
+  try {
+    const pending = sessionStorage.getItem('cm_pending_netopt_push');
+    if (pending) {
+      const payload = JSON.parse(pending);
+      if (payload && payload.at && (Date.now() - payload.at) < 60000) {
+        sessionStorage.removeItem('cm_pending_netopt_push');
+        openEditor(null);
+        applyCmHandoff(payload);
+        bus.emit('netopt:mounted');
+        return;
+      }
+      sessionStorage.removeItem('cm_pending_netopt_push');
+    }
+  } catch (e) { console.warn('[NetOpt] Failed to consume CM handoff:', e); }
+
   await renderLanding();
   bus.emit('netopt:mounted');
 }
@@ -242,6 +266,44 @@ export async function mount(el) {
  * before running optimization.
  * @param {{ candidates?: Array<{ name:string, lat:number, lng:number, annualDemand?:number }> }} payload
  */
+/**
+ * Apply CM -> NetOpt handoff. Sets parent_cost_model_id / parent_deal_id
+ * trackers so handleSaveNetopt persists them on save and the drillback
+ * chips on byChannel rows render. Optionally seeds the per-channel modes
+ * editor with channel keys + names from CM's channels[].
+ * @param {{ parent_cost_model_id?: any, parent_deal_id?: any, channelSeed?: Array<{channelKey:string, name:string}> }} payload
+ */
+function applyCmHandoff(payload) {
+  if (!payload || typeof payload !== 'object') return;
+  if (payload.parent_cost_model_id != null) {
+    activeParentCmId = payload.parent_cost_model_id;
+  }
+  if (payload.parent_deal_id != null) {
+    activeParentDealId = payload.parent_deal_id;
+  }
+  // Seed the per-channel modes editor so each channel from CM appears as
+  // a row even before any demand point is tagged. Engine routing reads
+  // channelModes[k] in assignDemand/evaluateScenario.
+  if (Array.isArray(payload.channelSeed) && payload.channelSeed.length > 0) {
+    for (const c of payload.channelSeed) {
+      if (!c || !c.channelKey) continue;
+      if (!channelModes[c.channelKey]) {
+        channelModes[c.channelKey] = {
+          tlPct: modeMix.tlPct,
+          ltlPct: modeMix.ltlPct,
+          parcelPct: modeMix.parcelPct,
+        };
+      }
+    }
+  }
+  markDirty();
+  if (rootEl) {
+    _refreshTopChrome?.();
+    refreshNoHeaderKpis?.();
+  }
+  console.log('[NetOpt] Received CM handoff, parent_cm_id=' + activeParentCmId);
+}
+
 function applyCogHandoff(payload) {
   const candidates = Array.isArray(payload?.candidates) ? payload.candidates : [];
   if (candidates.length === 0) return;
@@ -324,6 +386,7 @@ function openEditor(savedRow) {
   maxDCsToTest = 5;
   activeConfigId = savedRow?.id || null;
   activeParentCmId = savedRow?.parent_cost_model_id || null;
+  activeParentDealId = savedRow?.parent_deal_id || null;
   isDirty = false;
   _configName = savedRow?.name || d.name || '';
   // New editor session — the prior scenario's run-state tracker is stale.
@@ -373,6 +436,11 @@ async function handleSaveNetopt() {
       modeMix,
       rateCard,
       serviceConfig,
+      // 2026-04-30 (G12): persist CM linkage. saveConfig on the api side
+      // promotes these to the top-level columns so reload picks them up
+      // via savedRow.parent_cost_model_id.
+      parent_cost_model_id: activeParentCmId,
+      parent_deal_id: activeParentDealId,
     };
     const saved = await api.saveConfig(payload);
     activeConfigId = saved?.id || activeConfigId;
@@ -398,6 +466,7 @@ export function unmount() {
     mapInstance = null;
   }
   bus.clear('cog:push-to-netopt'); // free the COG handoff listener
+  bus.clear('cm:push-to-netopt'); // G12: free the CM handoff listener
   runState.reset();
   rootEl = null;
   bus.emit('netopt:unmounted');

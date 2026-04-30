@@ -1282,3 +1282,40 @@ export function buildWscLaunchPayload(model) {
   };
 }
 
+/**
+ * Build a launch payload for the CM -> NetOpt 'Optimize Network' button.
+ *
+ * Mirrors buildWscLaunchPayload (G10) so that NetOpt scenarios launched
+ * from CM persist parent_cost_model_id / parent_deal_id and the Phase 5.4
+ * drillback chips (-> CM . channel) on NetOpt's channel-modes editor
+ * actually render. Without this payload, activeParentCmId stays null and
+ * the chip code at byChannel rows is dead.
+ *
+ * Channel data is included so NetOpt's per-channel mode editor can pre-seed
+ * channel keys + names; the engine routing already accepts a channelMixMap
+ * keyed by channelKey via assignDemand/evaluateScenario.
+ *
+ * @param {Object} model - cost-model state.
+ * @returns {Object} CmToNetOptPayload.
+ */
+export function buildNetOptLaunchPayload(model) {
+  // Pull non-reverse channels for the per-channel mode editor.
+  const channels = getOutboundChannels(model);
+  const channelSeed = channels.map(c => ({
+    channelKey: c.key,
+    name: c.name || c.key,
+    annualOrders: Math.round(getChannelDerived(model, c, 'orders').value || 0),
+  })).filter(c => c.annualOrders > 0);
+  const totalAnnualOrders = channelSeed.reduce((s, c) => s + c.annualOrders, 0);
+  return {
+    // 2026-04-30 (G12): parent linkage so NetOpt's save persists the CM
+    // pointer that Phase 5.4 drillback chips read off saved rows. Mirror
+    // of the G10 fix on the WSC side.
+    parent_cost_model_id: model?.id || null,
+    parent_deal_id: model?.projectDetails?.dealId || model?.deal_deals_id || null,
+    channelSeed,
+    totalAnnualOrders,
+    at: Date.now(),
+  };
+}
+
