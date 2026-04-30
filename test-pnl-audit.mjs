@@ -59,9 +59,11 @@ function baseParams(over = {}) {
 // ============================================================
 // 1. ACCOUNTING STACK INVARIANTS
 // ============================================================
-test('monthly cf: gross_profit !== ebitda when SG&A > 0', () => {
-  const bundle = buildMonthlyProjections(baseParams());
-  // Find a steady-state month
+test('monthly cf: gross_profit !== ebitda when SG&A > 0 (sgaOverlay)', () => {
+  // Brock 2026-04-30 NIGHT — OVERHEAD moved into COGS, so the only path that
+  // produces SG&A > 0 is the sga_overlay_pct corporate-allocation knob.
+  // Inject a 5% overlay so the GP/EBITDA divergence invariant has data.
+  const bundle = buildMonthlyProjections(baseParams({ sga_overlay_pct: 5 }));
   const cf = bundle.cashflow.find(c => {
     const p = bundle.periods.find(pp => pp.id === c.period_id);
     return p && p.period_index === 24 && c.revenue > 0 && c.sga > 0;
@@ -90,11 +92,13 @@ test('monthly cf: ebit === ebitda - depreciation', () => {
     `ebit=${cf.ebit} should equal ebitda-dep=${cf.ebitda - cf.depreciation}`);
 });
 
-test('yearly rollup: gp > ebitda > ebit (when SG&A and dep > 0)', () => {
+test('yearly rollup: gp >= ebitda > ebit (post-2026-04-30: gp == ebitda when sgaOverlay = 0)', () => {
   const bundle = buildMonthlyProjections(baseParams());
   const yearly = groupMonthlyToYearly(bundle, 5, { baseOrders: 2_000_000, volGrowthPct: 0.05 });
   const y1 = yearly[0];
-  assert(y1.grossProfit > y1.ebitda, `gp=${y1.grossProfit} should be > ebitda=${y1.ebitda}`);
+  // GP >= EBITDA now (was strictly >). Overhead moved into COGS, so SG&A is only the
+  // sgaOverlay term — equal to 0 when no overlay is configured (default).
+  assert(y1.grossProfit >= y1.ebitda, `gp=${y1.grossProfit} should be >= ebitda=${y1.ebitda}`);
   assert(y1.ebitda > y1.ebit, `ebitda=${y1.ebitda} should be > ebit=${y1.ebit}`);
 });
 
@@ -134,7 +138,7 @@ test('buildYearlyProjections: gp === revenue - cogs', () => {
   for (const y of result.projections) {
     near(y.grossProfit, y.revenue - y.cogs, 0.5,
       `y${y.year}: gp=${y.grossProfit}, rev-cogs=${y.revenue - y.cogs}`);
-    assert(y.grossProfit > y.ebitda, `y${y.year}: gp should be > ebitda`);
+    assert(y.grossProfit >= y.ebitda, `y${y.year}: gp should be >= ebitda (== when sgaOverlay=0)`);
     assert(y.ebitda > y.ebit, `y${y.year}: ebitda should be > ebit`);
   }
 });

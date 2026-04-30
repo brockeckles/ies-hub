@@ -642,8 +642,11 @@ export function buildMonthlyProjections(params) {
   //    ebit = ebitda − dep
   // holds across both pre-live and operational months. Steady-state
   // Summary/P&L is only period_index ≥ 0 so this doesn't touch Y1-Y5.
-  const COGS_CODES = new Set(['LABOR_HOURLY', 'LABOR_SALARY', 'FACILITY', 'LEASED_EQUIP', 'PASS_THROUGH_EXP']);
-  const SGA_CODES  = new Set(['OVERHEAD', 'IT_INTEG_EXP', 'PROF_SERV_EXP', 'ONBOARD_EXP']);
+  // Brock 2026-04-30 NIGHT — OVERHEAD moved to COGS_CODES per 3PL site-level
+  // convention (utilities/supplies/sanitation are direct cost of providing
+  // the warehousing service, not corporate SG&A). Mirrors the yearly engine.
+  const COGS_CODES = new Set(['LABOR_HOURLY', 'LABOR_SALARY', 'FACILITY', 'LEASED_EQUIP', 'PASS_THROUGH_EXP', 'OVERHEAD']);
+  const SGA_CODES  = new Set(['IT_INTEG_EXP', 'PROF_SERV_EXP', 'ONBOARD_EXP']);
   const DEP_CODES  = new Set(['DEPRECIATION']);
 
   const revByPeriod   = aggregateByPeriod(revenueRows, periods);

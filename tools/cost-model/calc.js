@@ -1719,15 +1719,18 @@ export function buildYearlyProjections(params) {
     const startupRevenue   = startup   / (1 - mFrac);
     const revenue = laborRevenue + facilityRevenue + equipmentRevenue
                   + overheadRevenue + vasRevenue + startupRevenue;
-    // Accounting stack (parity with monthly engine as of 2026-04-20 audit):
-    //   COGS = Labor + Facility + Equipment + VAS
-    //   SG&A = Overhead
+    // Accounting stack (Brock 2026-04-30 NIGHT — moved Overhead into COGS
+    // to match 3PL site-level cost convention; site utilities/supplies/
+    // sanitation/security are direct cost of providing the warehousing
+    // service, not corporate SG&A. Mgmt-fee overlay remains in SG&A).
+    //   COGS = Labor + Facility + Equipment + VAS + Overhead
+    //   SG&A = sgaOverlay (mgmt fee / corporate allocation only)
     //   D&A  = startup amortization
     //   GP   = Revenue − COGS
     //   EBITDA = GP − SG&A
     //   EBIT = EBITDA − D&A = Revenue − totalCost (unchanged)
-    const cogs         = labor + facility + equipment + vas;
-    const sgaCategory  = overhead;
+    const cogs         = labor + facility + equipment + vas + overhead;
+    const sgaCategory  = 0;
     // M2 (2026-04-21): SG&A overlay per reference Part I §5 — additive to
     // category-based SG&A. Default 0; non-zero when project opts into
     // reference-aligned pricing.

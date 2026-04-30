@@ -11,7 +11,7 @@ import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260424-hyg04';
-import * as calc from './calc.js?v=20260430-rack-fix';
+import * as calc from './calc.js?v=20260430-gp-fix';
 import * as api from './api.js?v=20260430-r12';
 import * as scenarios from './calc.scenarios.js?v=20260430-pm-otfix2';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
@@ -2277,8 +2277,8 @@ function getCellProvenance(rowKey, year) {
     case 'cogs':
       return {
         label: `COGS (Year ${year})`,
-        formula: 'cogs = labor + facility + equipment + vas',
-        value: p.cogs ?? (p.labor + p.facility + p.equipment + p.vas),
+        formula: 'cogs = labor + facility + equipment + vas + overhead',
+        value: p.cogs ?? (p.labor + p.facility + p.equipment + p.vas + (p.overhead || 0)),
         inputs: [
           { label: 'Labor', value: _fmtMoney(p.labor), source: 'Year ' + year + ' Labor row' },
           { label: 'Facility', value: _fmtMoney(p.facility), source: 'Year ' + year + ' Facility row' },
@@ -2295,7 +2295,7 @@ function getCellProvenance(rowKey, year) {
         value: p.grossProfit,
         inputs: [
           { label: 'Revenue', value: _fmtMoney(p.revenue), source: 'Year ' + year + ' Revenue row' },
-          { label: 'COGS', value: _fmtMoney(p.cogs ?? (p.labor + p.facility + p.equipment + p.vas)), source: 'Year ' + year + ' Total COGS row' },
+          { label: 'COGS', value: _fmtMoney(p.cogs ?? (p.labor + p.facility + p.equipment + p.vas + (p.overhead || 0))), source: 'Year ' + year + ' Total COGS row' },
           { label: 'GP %', value: _fmtPct(p.revenue > 0 ? p.grossProfit / p.revenue : 0), source: '' },
         ],
       };
@@ -2478,7 +2478,7 @@ function getCellProvenance(rowKey, year) {
         inputs: [
           { label: 'Y1 Revenue', value: _fmtMoney(p ? p.revenue : 0), source: 'Y1 P&L Revenue row' },
           { label: 'Y1 Gross Profit', value: _fmtMoney(p ? p.grossProfit : 0), source: 'Y1 P&L GP row' },
-          { label: 'Y1 COGS', value: _fmtMoney(p ? (p.cogs ?? (p.labor + p.facility + p.equipment + p.vas)) : 0), source: 'Labor + Facility + Equipment + VAS' },
+          { label: 'Y1 COGS', value: _fmtMoney(p ? (p.cogs ?? (p.labor + p.facility + p.equipment + p.vas + (p.overhead || 0))) : 0), source: 'Labor + Facility + Equipment + VAS + Overhead' },
           { label: 'Target Margin', value: _fmtPct(mFrac, 2), source: 'Financial → Target Margin %' },
           { label: 'Implied vs. target', value: _fmtPct(((k.y1Margin || 0) / 100) - mFrac, 2), source: 'Y1 actual − target' },
         ],
@@ -7859,7 +7859,7 @@ function renderSummary() {
           const y1EbitdaPct= y1Rev > 0 ? (y1Ebitda / y1Rev) * 100 : 0;
           const y1EbitPct  = y1Rev > 0 ? (y1Ebit   / y1Rev) * 100 : 0;
           return `
-        ${renderMetricCard('Gross Margin (contract)', calc.formatPct(metrics.grossMarginPct), metrics.grossMarginPct >= (thresholds.grossMargin || 10), `Contract-life (${contractYears}-yr) aggregate Gross Margin. Formula: Σ Revenue − Σ COGS, divided by Σ Revenue. COGS = Labor + Facility + Equipment + VAS pass-through. Y1 Gross Margin: ${y1GpPct.toFixed(1)}% — reconciles with the Pricing Schedule M3 banner's "Y1 Actual (ramped)" tile. Contract margin trends lower than Y1 when labor/facility escalation outpace volume growth.`)}
+        ${renderMetricCard('Gross Margin (contract)', calc.formatPct(metrics.grossMarginPct), metrics.grossMarginPct >= (thresholds.grossMargin || 10), `Contract-life (${contractYears}-yr) aggregate Gross Margin. Formula: Σ Revenue − Σ COGS, divided by Σ Revenue. COGS = Labor + Facility + Equipment + VAS pass-through + Overhead (utilities, supplies, sanitation, security — site-level direct cost per 3PL convention). Y1 Gross Margin: ${y1GpPct.toFixed(1)}% — reconciles with the Pricing Schedule M3 banner's "Y1 Actual (ramped)" tile. Contract margin trends lower than Y1 when labor/facility escalation outpace volume growth.`)}
         ${renderMetricCard('EBITDA Margin (contract)', calc.formatPct(metrics.ebitdaMarginPct), metrics.ebitdaMarginPct >= (thresholds.ebitda || 8), `Contract-life (${contractYears}-yr) aggregate EBITDA Margin. EBITDA = GP − SG&A (Overhead + pre-live one-times). Y1 EBITDA Margin: ${y1EbitdaPct.toFixed(1)}%. Ties exactly to the EBITDA row in the P&L below. Pricing Schedule banner shows the reference-basis (steady-state) achieved margin, which reads higher until the site hits steady state.`, 'kpi:ebitdaMargin')}
         ${renderMetricCard('EBIT Margin (contract)', calc.formatPct(metrics.ebitMarginPct), metrics.ebitMarginPct >= (thresholds.ebit || 5), `Contract-life (${contractYears}-yr) aggregate EBIT Margin. EBIT = EBITDA − D&A. Y1 EBIT Margin: ${y1EbitPct.toFixed(1)}% — this is the figure the Pricing M3 banner "Y1 Actual (ramped)" tile displays. Ties exactly to the EBIT row in the P&L below.`, 'kpi:ebitMargin')}
           `;
@@ -7901,7 +7901,7 @@ function renderSummary() {
             <tr><td style="padding-left:16px; color:var(--ies-gray-600);">Facility</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);" data-cm-cell="facility" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.facility, {compact: true})}</td>`).join('')}</tr>
             <tr><td style="padding-left:16px; color:var(--ies-gray-600);">Equipment</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);" data-cm-cell="equipment" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.equipment, {compact: true})}</td>`).join('')}</tr>
             <tr><td style="padding-left:16px; color:var(--ies-gray-600);">VAS (Pass-through)</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);" data-cm-cell="vas" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.vas, {compact: true})}</td>`).join('')}</tr>
-            <tr style="border-top: 1px dashed var(--ies-gray-200);"><td style="font-weight:600;">Total COGS</td>${projections.map(p => `<td class="hub-num" style="font-weight:600;" data-cm-cell="cogs" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.cogs ?? (p.labor + p.facility + p.equipment + p.vas), {compact: true})}</td>`).join('')}</tr>
+            <tr style="border-top: 1px dashed var(--ies-gray-200);"><td style="font-weight:600;">Total COGS</td>${projections.map(p => `<td class="hub-num" style="font-weight:600;" data-cm-cell="cogs" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.cogs ?? (p.labor + p.facility + p.equipment + p.vas + (p.overhead || 0)), {compact: true})}</td>`).join('')}</tr>
             <tr class="cm-pnl-row-total"><td style="font-weight:700;">Gross Profit</td>${projections.map(p => `<td class="hub-num" style="font-weight:700; color:${p.grossProfit >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};" data-cm-cell="grossProfit" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.grossProfit, {compact: true})}</td>`).join('')}</tr>
 
             <tr><td style="padding-left:16px; color:var(--ies-gray-600);">Overhead (SG&A)</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);" data-cm-cell="sga" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.sga ?? p.overhead, {compact: true})}</td>`).join('')}</tr>
