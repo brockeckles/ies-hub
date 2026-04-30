@@ -11,7 +11,7 @@ import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260424-hyg04';
-import * as calc from './calc.js?v=20260430-am-p5fix4';
+import * as calc from './calc.js?v=20260430-am-p5fix5';
 import * as api from './api.js?v=20260429-vol12';
 import * as scenarios from './calc.scenarios.js?v=20260429-otfix1';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
@@ -22,7 +22,7 @@ import * as shiftPlannerUi from './shift-planner-ui.js?v=20260428-walkthru1';
 // 2026-04-28 — internal phase stepper for Implementation Timeline section.
 import { renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260429-p52';
-import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260430-am-p5fix4';
+import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260430-am-p5fix5';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
 // disk but no longer imported; can be deleted in a future cleanup.
@@ -8988,6 +8988,31 @@ function bindSectionEvents(section, container) {
         showToast('Scenario initialized', 'success');
         renderSection();
       } catch (err) { showToast('Init failed: ' + (err?.message || err), 'error'); }
+    });
+    act('scenario-add-sibling')?.addEventListener('click', async () => {
+      if (!currentScenario) return;
+      // 2026-04-30 (G4): clone the current scenario into a sibling so demo
+      // prep / scenario family (Baseline / Peak-Volume / Automation-Heavy /
+      // Labor-Stress) is buildable from inside CM without round-tripping
+      // through Deal Mgmt. cloneScenario sets parent_scenario_id; the
+      // sibling is fully editable from the moment it lands.
+      const defaultLabel = (() => {
+        const used = new Set(dealScenarios.map(s => (s.scenario_label || '').toLowerCase()));
+        const candidates = ['Peak-Volume', 'Automation-Heavy', 'Labor-Stress', 'Pessimistic', 'Optimistic'];
+        for (const c of candidates) if (!used.has(c.toLowerCase())) return c;
+        return 'Scenario ' + (dealScenarios.length + 1);
+      })();
+      const label = await showPrompt('Label for the new sibling scenario?', defaultLabel);
+      if (label === null) return;
+      try {
+        const { scenario: newScen, projectId: newProjId } = await api.cloneScenario(currentScenario.id, label.trim() || null);
+        showToast('Sibling "' + (newScen.scenario_label || label) + '" created on project #' + newProjId + '. Open it from the list below to edit.', 'success');
+        await ensureScenariosLoaded();
+        renderSection();
+      } catch (err) {
+        console.error('[CM] add sibling failed:', err);
+        showToast('Add sibling failed: ' + (err?.message || err), 'error');
+      }
     });
     act('scenarios-compare-picker')?.addEventListener('click', () => {
       openCompareModal();
@@ -18347,7 +18372,10 @@ function renderScenarios() {
       <div class="cm-card" style="margin-top:16px;">
         <div style="display:flex;justify-content:space-between;align-items:center;">
           <h3 style="margin:0;">Sibling scenarios on this deal (${dealScenarios.length})</h3>
-          <button class="hub-btn-primary" data-cm-action="scenarios-compare-picker" ${dealScenarios.length < 2 ? 'disabled title="Need at least 2 scenarios"' : ''} title="Side-by-side compare 2–4 scenarios — KPIs, pricing, inputs">⇄ Compare scenarios →</button>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button class="hub-btn" data-cm-action="scenario-add-sibling" title="Clone the current scenario as a new sibling — independent project + scenario you can edit (e.g., Peak-Volume, Automation-Heavy, Labor-Stress)">+ Add sibling</button>
+            <button class="hub-btn-primary" data-cm-action="scenarios-compare-picker" ${dealScenarios.length < 2 ? 'disabled title="Need at least 2 scenarios"' : ''} title="Side-by-side compare 2–4 scenarios — KPIs, pricing, inputs">⇄ Compare scenarios →</button>
+          </div>
         </div>
         <table class="cm-table" style="margin-top:12px;width:100%;">
           <thead>
