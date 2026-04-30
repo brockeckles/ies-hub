@@ -90,11 +90,16 @@ export async function listRealDeals() {
     // last we checked) and read-only ref data, so the extra round-trip is
     // cheap. .catch fallback keeps deals listing functional even if ref_markets
     // is gated by RLS or unreachable — sites just fall back to "—".
-    const [deals, models, marketRows] = await Promise.all([
+    const [deals, models, marketRows, stagesRows] = await Promise.all([
       db.fetchAll('deal_deals', 'id, deal_name, client_name, deal_owner, status, current_stage_id, created_at, updated_at, est_annual_revenue, target_margin_pct, contract_term_years, target_go_live, industry_vertical, site_count'),
       db.fetchAll('cost_model_projects', 'id, name, scenario_label, client_name, market_id, facility_sqft, target_margin_pct, total_annual_cost, deal_deals_id, updated_at'),
       db.fetchAll('ref_markets', 'id, name').catch(() => []),
+      db.fetchAll('stages', 'id, stage_number').catch(() => []),
     ]);
+    const stagesByIdLocal = new Map();
+    for (const r of stagesRows || []) {
+      if (r && r.id != null) stagesByIdLocal.set(Number(r.id), Number(r.stage_number));
+    }
     const marketNameById = new Map();
     for (const m of marketRows || []) {
       if (m && m.id) marketNameById.set(m.id, m.name || '');
@@ -148,10 +153,14 @@ export async function listRealDeals() {
       const revenue = Number.isFinite(dealRevenue) && dealRevenue > 0
         ? dealRevenue * 1e6
         : (totals.length ? totals.reduce((a, b) => a + b, 0) / (1 - (margin / 100 || 0.1)) : 0);
-      // Stage: deal_deals.current_stage_id is a bigint FK to stages.id; not the
-      // 1..6 stage_number used by the hub. Default to 1 when unset; when set,
-      // we'd need stages lookup — defer to a follow-up.
-      const stage = Number(d.current_stage_id) || 1;
+      // 2026-04-29 (R6): deal_deals.current_stage_id is the stages.id (PK),
+      // but the UI groups deals by stage_number (1..6). Map via stagesById.
+      const stagesIdToNum = (typeof stagesByIdLocal === 'undefined') ? null : stagesByIdLocal;
+      let stage = 1;
+      if (d.current_stage_id != null && stagesIdToNum) {
+        const sn = stagesIdToNum.get(Number(d.current_stage_id));
+        if (sn) stage = sn;
+      }
       return {
         id: d.id, // uuid — distinguishes real from demo (which use 'd1' etc.)
         name: d.deal_name || 'Untitled Deal',
@@ -213,7 +222,16 @@ export async function createDeal(payload) {
     if (payload.target_go_live)     row.target_go_live     = payload.target_go_live;
     if (payload.industry_vertical)  row.industry_vertical  = payload.industry_vertical;
     if (payload.site_count != null && payload.site_count !== '') row.site_count = Number(payload.site_count);
-    if (payload.current_stage_id != null && payload.current_stage_id !== '') row.current_stage_id = Number(payload.current_stage_id);
+    if (payload.current_stage_id != null && payload.current_stage_id !== '') {
+      // 2026-04-29: deal_deals.current_stage_id is FK to stages.id (PK).
+      // The modal sends stage_number (1..6), so look up the matching id.
+      const stageNum = Number(payload.current_stage_id);
+      try {
+        const stages = await db.fetchAll('stages');
+        const match = (stages || []).find(s => Number(s.stage_number) === stageNum);
+        if (match) row.current_stage_id = match.id;
+      } catch { /* if stages fetch fails, just skip stage assignment */ }
+    }
     return await db.insert('deal_deals', row);
   } catch (err) {
     console.error('[deal-mgmt] createDeal failed', err);
