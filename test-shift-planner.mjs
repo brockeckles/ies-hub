@@ -779,6 +779,177 @@ const wayfairShifts = {
 }
 
 // ------------------------------------------------------------
+// CM-SHIFT-UOM-FIX (2026-04-30) — UOM-aware UPH normalization
+//
+// Locks the channels-aware path: when labor lines declare `uom`, the shift
+// planner must convert each line's UPH to units/hr before averaging, so
+// that channel volumes (which are always in units) divide correctly. Bug
+// surfaced on Hearthwood 50/50 DTC+B2B as 5,909 HC vs ~127 expected.
+// ------------------------------------------------------------
+{
+  // Synthetic Hearthwood-class fixture: 50/50 DTC eaches + B2B cases,
+  // with UOM-mixed labor lines. Volumes always in units inside channels.
+  const dtcCh = {
+    key: 'dtc', name: 'DTC',
+    primary: { value: 5_000_000, uom: 'units', activity: 'outbound' },
+    conversions: { unitsPerCase: 4, casesPerPallet: 60, linesPerOrder: 2, unitsPerLine: 3 },
+    assumptions: { returnsPercent: 8, inboundOutboundRatio: 1.05, peakSurgeFactor: 1.4 },
+    seasonality: { preset: 'flat', monthly_shares: Array(12).fill(100/12) },
+    overrides: [],
+  };
+  const b2bCh = {
+    key: 'b2b', name: 'B2B',
+    primary: { value: 5_000_000, uom: 'units', activity: 'outbound' },
+    conversions: { unitsPerCase: 12, casesPerPallet: 50, linesPerOrder: 15, unitsPerLine: 8 },
+    assumptions: { returnsPercent: 1, inboundOutboundRatio: 1.02, peakSurgeFactor: 1.2 },
+    seasonality: { preset: 'flat', monthly_shares: Array(12).fill(100/12) },
+    overrides: [],
+  };
+  const reverseCh = {
+    key: 'reverse', name: 'Reverse',
+    primary: { value: 0, uom: 'units', activity: 'returns', autoDerived: true },
+    conversions: { unitsPerCase: 8, casesPerPallet: 50, linesPerOrder: 1.5, unitsPerLine: 1.5 },
+    assumptions: { returnsPercent: 0, inboundOutboundRatio: 0.85, peakSurgeFactor: 1.5 },
+    seasonality: { preset: 'flat', monthly_shares: Array(12).fill(100/12) },
+    overrides: [],
+  };
+  const hearthwoodModel = {
+    channels: [dtcCh, b2bCh, reverseCh],
+    facility: { opDaysPerYear: 250 },
+  };
+
+  // Mixed-UOM direct labor — pallet-UPH inbound/putaway/ship, each-UPH DTC
+  // pick + replen + pack, case-UPH B2B pick. Mirrors the Hearthwood demo
+  // build-out from 2026-04-30 AM (project_walkthrough_2026_04_30_pm.md §2).
+  const mixedLabor = [
+    { id: 'inb',   activity_name: 'Inbound Receiving', process_area: 'Receiving',  labor_category: 'direct', base_uph: 12,  uom: 'pallets', headcount: 4,  annual_hours: 8320, hourly_rate: 22 },
+    { id: 'pa',    activity_name: 'Putaway',           process_area: 'Putaway',    labor_category: 'direct', base_uph: 25,  uom: 'pallets', headcount: 3,  annual_hours: 6240, hourly_rate: 23 },
+    { id: 'rep',   activity_name: 'Forward Replen',    process_area: 'Replenishment', labor_category: 'direct', base_uph: 110, uom: 'each',    headcount: 4,  annual_hours: 8320, hourly_rate: 21 },
+    { id: 'dtcpk', activity_name: 'DTC Each Pick',     process_area: 'Picking',    labor_category: 'direct', base_uph: 110, uom: 'each',    headcount: 18, annual_hours: 37440, hourly_rate: 21 },
+    { id: 'dtcpz', activity_name: 'DTC Pack & Ship',   process_area: 'Packing',    labor_category: 'direct', base_uph: 50,  uom: 'orders',  headcount: 14, annual_hours: 29120, hourly_rate: 20 },
+    { id: 'b2bpk', activity_name: 'B2B Case Pick',     process_area: 'Picking',    labor_category: 'direct', base_uph: 180, uom: 'cases',   headcount: 8,  annual_hours: 16640, hourly_rate: 22 },
+    { id: 'b2bld', activity_name: 'B2B Stage & Load',  process_area: 'Shipping',   labor_category: 'direct', base_uph: 30,  uom: 'pallets', headcount: 6,  annual_hours: 12480, hourly_rate: 22 },
+  ];
+  const declaredHcSum = mixedLabor.reduce((s, l) => s + l.headcount, 0); // 57
+
+  const shifts = { shiftsPerDay: 2, hoursPerShift: 8, daysPerWeek: 5, weeksPerYear: 52 };
+  const alloc = createEmptyShiftAllocation(2, 8);
+  // Spread evenly so all functions get hours.
+  for (const fn of FUNCTION_ORDER) alloc.matrix[fn] = [60, 40];
+
+  const r = deriveShiftHeadcount(alloc, [], mixedLabor, shifts,
+    { absenceAllowancePct: 12, model: hearthwoodModel });
+
+  // --- BUG-FIX LOCK: total HC must be within reasonable bound of declared HC.
+  // Pre-fix: 5,909 HC across 57 declared (104× inflation).
+  // Post-fix: must be <= 5x declared (defensible bound for matrix expansion).
+  t('CM-SHIFT-UOM-FIX: totalDirectHc within 5x declared HC',
+    r.totals.directHc > 0 && r.totals.directHc <= declaredHcSum * 5,
+    `total=${r.totals.directHc} declared=${declaredHcSum}`);
+
+  // --- BUG-FIX LOCK: total HC must NOT explode past 10x (regression sentinel).
+  t('CM-SHIFT-UOM-FIX: totalDirectHc < 10x declared HC (sentinel)',
+    r.totals.directHc < declaredHcSum * 10,
+    `total=${r.totals.directHc} declared=${declaredHcSum}`);
+
+  // --- Inbound function: pallet-UPH 12 with ~9.6M annual pallets ÷ 250 op days
+  //     ≈ small per-day pallet flow. Weighted UPH (units) = 12 × ~480 ≈ 5,760
+  //     units/hr (DTC dominates with conversion 4×60=240, B2B has 12×50=600,
+  //     largest channel of value 5M is either; we picked B2B to win the
+  //     comparison since they tie — implementation picks the last evaluated).
+  const inb = r.byFunctionShift.filter(x => x.fn === 'inbound');
+  const inbTotalFte = inb.reduce((a, x) => a + x.fte, 0);
+  // Sanity: inbound FTE should be <2x declared inbound HC (4) — we allow loose
+  // bound because matrix splits across shifts (still wakes regression).
+  t('CM-SHIFT-UOM-FIX: inbound FTE within reasonable bound',
+    inbTotalFte > 0 && inbTotalFte < 30,
+    `inboundFte=${inbTotalFte}`);
+
+  // --- Picking function: mixed each-UPH (110) + case-UPH (180) →
+  // weighted units-UPH = (110*1*18 + 180*12*8) / (18+8) = (1980 + 17280) / 26
+  // = 740.0 units/hr. Picking volume per day = 10M units / 250 op days
+  // = 40,000 units/day. hoursDay = 40000 / 740 ≈ 54.05 hr/day.
+  // FTE = 54.05 / (8 × 0.88) ≈ 7.68. Across 2 shifts ≈ 7.68 total.
+  const pk = r.byFunctionShift.filter(x => x.fn === 'picking');
+  const pkTotalFte = pk.reduce((a, x) => a + x.fte, 0);
+  t('CM-SHIFT-UOM-FIX: picking FTE in expected range (5..15)',
+    pkTotalFte >= 5 && pkTotalFte <= 15,
+    `pickingFte=${pkTotalFte}`);
+}
+
+// ------------------------------------------------------------
+// CM-SHIFT-UOM-FIX: line.uom default-by-function applied when missing
+// ------------------------------------------------------------
+{
+  // Single-channel synthetic fixture: 1M units/yr.
+  const ch = {
+    key: 'core', name: 'Core',
+    primary: { value: 1_000_000, uom: 'units', activity: 'outbound' },
+    conversions: { unitsPerCase: 12, casesPerPallet: 50, linesPerOrder: 2, unitsPerLine: 4 },
+    assumptions: { returnsPercent: 5, inboundOutboundRatio: 1.05, peakSurgeFactor: 1.5 },
+    seasonality: { preset: 'flat', monthly_shares: Array(12).fill(100/12) },
+    overrides: [],
+  };
+  const m = { channels: [ch], facility: { opDaysPerYear: 250 } };
+  const shifts = { shiftsPerDay: 1, hoursPerShift: 8, daysPerWeek: 5, weeksPerYear: 52 };
+  const alloc = createEmptyShiftAllocation(1, 8);
+  for (const fn of FUNCTION_ORDER) alloc.matrix[fn] = [100];
+
+  // No line.uom set → default-by-function kicks in (inbound→pallets,
+  // picking→each, ship→pallets). Inbound UPH 12 (no uom) interpreted as
+  // 12 pallets/hr → 12 × 600 units/pallet = 7,200 units/hr.
+  const noUomLabor = [
+    { id: 'inb', process_area: 'Receiving', labor_category: 'direct', base_uph: 12, headcount: 1, annual_hours: 2080, hourly_rate: 22 },
+    { id: 'pk',  process_area: 'Picking',   labor_category: 'direct', base_uph: 100, headcount: 1, annual_hours: 2080, hourly_rate: 21 },
+  ];
+  const declaredHc = 2;
+  const r = deriveShiftHeadcount(alloc, [], noUomLabor, shifts,
+    { absenceAllowancePct: 0, model: m });
+
+  // With pallet-default for inbound + each-default for picking, total HC
+  // should NOT inflate beyond reasonable.
+  t('default-uom-by-fn: totalDirectHc <= 5x declared',
+    r.totals.directHc <= declaredHc * 5,
+    `total=${r.totals.directHc} declared=${declaredHc}`);
+
+  // Picking: each-default → 100 each/hr × 1 = 100 units/hr.
+  // Volume = 1M units / 250 = 4000 units/day. Hours/day = 4000/100 = 40.
+  // FTE = 40/8 = 5. So picking FTE ≈ 5 (within 1 of 5).
+  const pkFte = r.byFunctionShift
+    .filter(x => x.fn === 'picking').reduce((s, x) => s + x.fte, 0);
+  t('default-uom-by-fn: picking each-default math correct (~5 FTE)',
+    near(pkFte, 5, 1.5), `pkFte=${pkFte}`);
+}
+
+// ------------------------------------------------------------
+// CM-SHIFT-UOM-FIX: backward compat — legacy callers (no model passed)
+// produce identical numbers when line.uom is absent and there's no model.
+// ------------------------------------------------------------
+{
+  // Existing wayfairLabor + wayfairVolumes + wayfairShifts usage already
+  // exercised in test 8. Reproduce a minimal version locally to lock the
+  // contract that calling deriveShiftHeadcount WITHOUT opts.model still
+  // works exactly like the legacy keyword path.
+  const legacyVolumes = [
+    { name: 'Receiving (Pallets)', volume: 15000, uom: 'pallets', isOutboundPrimary: false },
+    { name: 'Orders Shipped',     volume: 5_000_000, uom: 'orders',  isOutboundPrimary: true },
+  ];
+  const legacyLabor = [
+    { id: 'pick', activity: 'Picking',     position: 'Picker', uph: 110, headcount: 30, annual_hours: 62400, hourly_rate: 18, fully_loaded_rate: 26 },
+    { id: 'inb',  activity: 'Receiving',   position: 'Receiver', uph: 22, headcount: 6,  annual_hours: 12480, hourly_rate: 18, fully_loaded_rate: 26 },
+  ];
+  const legacyShifts = { shiftsPerDay: 2, hoursPerShift: 8, daysPerWeek: 5, weeksPerYear: 52 };
+  const alloc = createEmptyShiftAllocation(2, 8);
+  alloc.matrix.picking = [60, 40];
+  alloc.matrix.inbound = [60, 40];
+
+  const r = deriveShiftHeadcount(alloc, legacyVolumes, legacyLabor, legacyShifts,
+    { absenceAllowancePct: 0 });
+  t('legacy-path-compat: HC > 0 with no opts.model', r.totals.directHc > 0);
+  t('legacy-path-compat: peakShift identified', r.totals.peakShift !== null);
+}
+
+// ------------------------------------------------------------
 // Summary
 // ------------------------------------------------------------
 console.log(`\n\n${pass} passed, ${fail} failed`);

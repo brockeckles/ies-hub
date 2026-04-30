@@ -23,6 +23,7 @@ import {
   getChannels as _getChannels,
   getChannelPrimaryIn as _getChannelPrimaryIn,
   getChannelDerived as _getChannelDerived,
+  convertUom as _convertUom,
 } from './calc.channels.js?v=20260429-vol13';
 
 // The canonical function vocabulary. Keep in sync with the CHECK in the
@@ -49,6 +50,109 @@ export const FUNCTION_META = {
   returns:   { label: 'Returns',      tip: 'Reverse logistics processing (receive + disposition).' },
   vas:       { label: 'VAS',          tip: 'Value-added services (kitting, labeling, light assembly).' },
 };
+
+// ────────────────────────────────────────────────────────────────
+// CM-SHIFT-UOM-FIX (2026-04-30): UOM-aware UPH normalization.
+//
+// Bug: shift-planner volumes were aggregated as `units` (channels-aware path
+// always returns daily volume in units), but labor lines store UPH in mixed
+// UOMs (pallets/cases/eaches/orders/lines). Dividing units by pallet-UPH
+// inflated headcount by ~480× on Hearthwood-class deals (5,909 HC vs ~127
+// expected). Root cause: `computeUphByFunction` was UOM-blind.
+//
+// Fix: normalize every labor-line's UPH to `units/hr` using the line's
+// declared `uom` (or a per-function default when absent), then weighted-
+// average across direct labor lines per function. Volumes stay in units —
+// hours = units / (units/hr) is now dimensionally consistent.
+//
+// When the caller passes `model`, we use the largest non-reverse channel's
+// conversions as model-level. The remainder of the calc engine treats UPH
+// the same way it always has; only the units of the per-function aggregate
+// changed (from "labor-line's native UOM" to "units").
+// ────────────────────────────────────────────────────────────────
+
+// Default UOM by function — applied when a labor line's `line.uom` is
+// absent. Reflects typical 3PL labor measurement conventions (the same
+// UOMs MOST templates seed for these process_areas).
+const DEFAULT_UOM_BY_FN = {
+  inbound:   'pallets',  // pallet jack / reach truck workflows
+  putaway:   'pallets',  // reach truck workflows
+  picking:   'each',     // walkie / RF / voice-pick workflows
+  replenish: 'each',     // forward-pick replen
+  pack:      'each',     // pack stations bill in eaches/orders interchangeably
+  ship:      'pallets',  // dock-load
+  returns:   'each',     // disposition is unit-level
+  vas:       'each',     // kitting / labeling unit-level
+};
+
+// Resolve a model-level conversion table to use for UPH normalization.
+// Computes a VOLUME-WEIGHTED average across non-reverse channels — the
+// blended units/case, units/pallet, units/order, units/line that best
+// represents the model's physical mix. This is more accurate than picking
+// one arbitrary "winner" channel, especially in 50/50 mixes where channels
+// have very different conversions (e.g., DTC eaches/case=4 vs B2B eaches/
+// case=12). Conservative fallback: returns null when the model has no
+// channels (legacy callers without `o.model`); _convertUom then defaults
+// to internal DEFAULT_CONVERSIONS.
+//
+// Caveat: a single model-level conversion table is still imperfect for
+// labor lines that are physically tied to a specific channel (e.g., a
+// B2B Case Pick line should ideally use B2B's unitsPerCase, not the
+// blended one). True per-line accuracy requires `line.channel_key`
+// metadata which the current schema doesn't carry. The weighted-average
+// is the pragmatic 80% — it eliminates the 50–500x HC inflation bug class
+// while keeping the schema additive.
+function _modelConversions(model) {
+  if (!model) return null;
+  let chans;
+  try {
+    chans = _getChannels(model).filter(c =>
+      !c.hidden && c.primary && c.primary.activity !== 'returns'
+    );
+  } catch (_) {
+    return null;
+  }
+  if (!chans.length) return null;
+
+  let totalVol = 0;
+  const acc = { unitsPerCase: 0, casesPerPallet: 0, linesPerOrder: 0, unitsPerLine: 0 };
+  for (const c of chans) {
+    const v = Number(c.primary && c.primary.value) || 0;
+    if (v <= 0) continue;
+    totalVol += v;
+    const cv = c.conversions || {};
+    acc.unitsPerCase   += (Number(cv.unitsPerCase)   || 0) * v;
+    acc.casesPerPallet += (Number(cv.casesPerPallet) || 0) * v;
+    acc.linesPerOrder  += (Number(cv.linesPerOrder)  || 0) * v;
+    acc.unitsPerLine   += (Number(cv.unitsPerLine)   || 0) * v;
+  }
+  if (totalVol <= 0) {
+    // No channel has positive volume — fall back to first channel's conv.
+    return chans[0].conversions || null;
+  }
+  return {
+    unitsPerCase:   acc.unitsPerCase   / totalVol,
+    casesPerPallet: acc.casesPerPallet / totalVol,
+    linesPerOrder:  acc.linesPerOrder  / totalVol,
+    unitsPerLine:   acc.unitsPerLine   / totalVol,
+  };
+}
+
+// Convert a labor line's UPH to units/hr.
+//   line.uom   : 'pallets' | 'cases' | 'each' | 'orders' | 'lines' | (omitted)
+//   fnDefault  : per-function default UOM (DEFAULT_UOM_BY_FN[fn])
+//   conv       : model-level conversion table (or null for defaults)
+// Returns 0 when no UPH is set; otherwise UPH × (1 line.uom in units).
+function _uphInUnits(line, fnDefault, conv) {
+  const uph = Number(line.base_uph) || Number(line.uph) || Number(line.UPH) || 0;
+  if (uph <= 0) return 0;
+  const raw = String(line.uom || '').toLowerCase().trim();
+  const uom = raw || fnDefault || 'each';
+  // factor = how many units in 1 of `uom`
+  const factor = _convertUom(1, uom, 'units', conv);
+  if (!Number.isFinite(factor) || factor <= 0) return uph; // safe fallback
+  return uph * factor;
+}
 
 // Default shift time windows when we have to synthesize them (user has no
 // explicit startHour/endHour set on their shifts config).
@@ -447,7 +551,12 @@ export function deriveShiftHeadcount(allocation, volumeLines, laborLines, shifts
   // Aggregate UPH per function from laborLines (weighted by line's uph × hc).
   // Lines without a matching function are ignored for the derivation (they
   // still show up in the by-role breakdown via direct labor hours).
-  const uphByFn = computeUphByFunction(laborLines);
+  // CM-SHIFT-UOM-FIX (2026-04-30): pass model-level conversions so that
+  // pallet/case/order-UPHs are normalized to units/hr before averaging.
+  // Without conversions (no model passed), _uphInUnits falls back to
+  // DEFAULT_CONVERSIONS inside _convertUom — backward compatible.
+  const _shiftConversions = o.model ? _modelConversions(o.model) : null;
+  const uphByFn = computeUphByFunction(laborLines, _shiftConversions);
 
   // Weighted loaded hourly rate for the "implied labor $" preview tile.
   const loadedHourlyRate = computeWeightedLoadedRate(laborLines);
@@ -1037,7 +1146,12 @@ function computeDailyVolumeByFunction(volumeLines, operatingDays) {
   return out;
 }
 
-function computeUphByFunction(laborLines) {
+function computeUphByFunction(laborLines, conversions) {
+  // CM-SHIFT-UOM-FIX (2026-04-30): UPH is normalized to units/hr using each
+  // labor line's declared `line.uom`. When uom is absent we default per
+  // function (e.g., picking → each, inbound → pallets) — this matches typical
+  // MOST-template seeded values. Backward-compat: when called without
+  // `conversions`, falls back to DEFAULT_CONVERSIONS internally via _convertUom.
   const out = {};
   const weights = {};
   for (const fn of FUNCTION_ORDER) { out[fn] = 0; weights[fn] = 0; }
@@ -1047,12 +1161,11 @@ function computeUphByFunction(laborLines) {
     if (line.labor_category && line.labor_category !== 'direct') continue;
     const fn = deriveFunctionForLine(line);
     if (!fn) continue;
-    // CM schema uses base_uph (primary) + falls back to uph/UPH on older models
-    const uph = Number(line.base_uph) || Number(line.uph) || Number(line.UPH) || 0;
-    if (uph <= 0) continue;
-    // Weight by annual_hours (proxy for size) when no HC field present
+    const uphUnits = _uphInUnits(line, DEFAULT_UOM_BY_FN[fn] || 'each', conversions);
+    if (uphUnits <= 0) continue;
+    // Weight by HC (proxy for size) when present; fall back to annual_hours.
     const weight = (Number(line.headcount) || Number(line.hc) || Number(line.annual_hours) || 1);
-    out[fn] += uph * weight;
+    out[fn] += uphUnits * weight;
     weights[fn] += weight;
   }
   for (const fn of FUNCTION_ORDER) {

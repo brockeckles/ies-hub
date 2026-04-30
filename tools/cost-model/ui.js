@@ -17,7 +17,7 @@ import * as scenarios from './calc.scenarios.js?v=20260430-pm-otfix2';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
 import * as channelCalc from './calc.channels.js?v=20260429-vol13';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
-import * as shiftPlannerCalc from './shift-planner.js?v=20260427-pm3-s2';
+import * as shiftPlannerCalc from './shift-planner.js?v=20260430-pm-s7';
 import * as shiftPlannerUi from './shift-planner-ui.js?v=20260428-walkthru1';
 // 2026-04-28 — internal phase stepper for Implementation Timeline section.
 import { renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
@@ -2812,17 +2812,23 @@ function renderProvenancePanelInner() {
               </div>
             `;
           }
+          // CM-PROV-OVERFLOW-FIX (2026-04-30 PM s7) — long auto-gen
+          // labels (e.g., "Reach Truck — owned, sized to steady-state
+          // max-shift HC") were overlapping with the calc.js source
+          // line below them on Equipment-branch inspector rows. Added
+          // overflow-wrap:anywhere so unbreakable strings wrap inside
+          // the flex column instead of bleeding into the value column.
           const labelStyle = isSubRow
-            ? 'font-weight:600;color:var(--ies-gray-700,#374151);padding-left:10px;'
-            : 'font-weight:600;color:var(--ies-gray-800,#1f2937);';
+            ? 'font-weight:600;color:var(--ies-gray-700,#374151);padding-left:10px;overflow-wrap:anywhere;'
+            : 'font-weight:600;color:var(--ies-gray-800,#1f2937);overflow-wrap:anywhere;';
           const valueStyle = isSubRow
-            ? 'font-weight:600;color:var(--ies-blue,#0047AB);font-variant-numeric:tabular-nums;white-space:nowrap;font-size:12px;'
-            : 'font-weight:700;color:var(--ies-navy,#0F1B2E);font-variant-numeric:tabular-nums;white-space:nowrap;';
+            ? 'font-weight:600;color:var(--ies-blue,#0047AB);font-variant-numeric:tabular-nums;white-space:nowrap;font-size:12px;flex-shrink:0;'
+            : 'font-weight:700;color:var(--ies-navy,#0F1B2E);font-variant-numeric:tabular-nums;white-space:nowrap;flex-shrink:0;';
           return `
             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;font-size:12.5px;line-height:1.4;">
               <div style="flex:1;min-width:0;">
                 <div style="${labelStyle}">${inp.label}</div>
-                ${inp.source ? `<div style="font-size:11px;color:var(--ies-gray-500);${isSubRow ? 'padding-left:10px;' : ''}">${inp.source}</div>` : ''}
+                ${inp.source ? `<div style="font-size:11px;color:var(--ies-gray-500);overflow-wrap:anywhere;${isSubRow ? 'padding-left:10px;' : ''}">${inp.source}</div>` : ''}
               </div>
               <div style="${valueStyle}">${inp.value}</div>
             </div>
@@ -4097,7 +4103,23 @@ function renderFacility() {
           if (cur > 0 && dev <= 0.05) {
             return `<div class="hub-field__hint" style="font-size:11px;color:var(--ies-gray-500);margin-top:4px;">✓ Within 5% of suggested ${sug.toLocaleString()} sqft (${(model.facility?.daysOnHand || 30)}-day DOH)</div>`;
           }
+          // CM-FAC-DIVERGE-WARN (2026-04-30 PM s7) — surface an amber
+          // chip when suggested differs from current by >100% (i.e., 2x
+          // either direction). Demo-time signal: "your channel UOMs may
+          // be off, OR your facility plan diverges substantially from
+          // the volume-driven sizing — review before defending the deck."
           const verb = cur === 0 ? 'Use' : 'Replace with';
+          const heavyDiverge = cur > 0 && dev > 1.0; // >100% off in either direction
+          if (heavyDiverge) {
+            const ratio = (sug / cur);
+            const ratioStr = ratio > 1
+              ? `${ratio.toFixed(1)}x larger than current`
+              : `${(1 / ratio).toFixed(1)}x smaller than current`;
+            return `<div class="hub-field__hint" style="font-size:11px;color:var(--ies-orange,#b8860b);margin-top:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <span title="Volume-driven heuristic: 30-day DOH × pallets/yr × 40 sqft/pallet ÷ 0.55 utilization. Wide divergence usually means a channel UOM (units/case, lines/order, units/line) is off — check Volumes & Profile.">⚠ Suggested ${sug.toLocaleString()} sqft is ${ratioStr}. Review channel UOMs or confirm facility plan.</span>
+              <button type="button" class="hub-btn hub-btn-secondary hub-btn-sm" data-action="apply-suggested-sqft" data-value="${sug}" title="Set Total Sqft to the suggestion">${verb} ${(sug / 1000).toFixed(0)}K</button>
+            </div>`;
+          }
           return `<div class="hub-field__hint" style="font-size:11px;color:var(--ies-gray-500);margin-top:4px;display:flex;align-items:center;gap:8px;">
             <span><i style="color:var(--ies-blue);">Suggested:</i> ${sug.toLocaleString()} sqft (${(model.facility?.daysOnHand || 30)}-day DOH)</span>
             <button type="button" class="hub-btn hub-btn-secondary hub-btn-sm" data-action="apply-suggested-sqft" data-value="${sug}" title="Set Total Sqft to the suggestion">${verb} ${(sug / 1000).toFixed(0)}K</button>
@@ -11124,6 +11146,48 @@ function writeOverrideAuditEvent(ev) {
 // ACTIONS (add/delete rows)
 // ============================================================
 
+/**
+ * CM-LAUNCH-UNIFY (2026-04-30 PM s7) — single source of truth for the
+ * CM → WSC and CM → NetOpt launch handoff. Three legacy call sites
+ * (`launch-wsc` button on Facility, `cm-launch-wsc` link on Volumes,
+ * `cm-launch-netopt` link on Volumes) all funnel through here so their
+ * payload-build / sessionStorage-stash / bus-emit / hash-change sequence
+ * can't drift apart.
+ *
+ * Background:
+ *   - Brock 2026-04-20: cross-tool linkage was broken because bus.emit fired
+ *     before the WSC mount() registered its listener. Fix was sessionStorage
+ *     handoff that the receiving tool consumes on mount.
+ *   - Phase 4 Layer A (2026-04-29): payload extended with 9-field channel-
+ *     derived volumes so WSC pre-fills its panel.
+ *   - G10/G12 (2026-04-30 AM): inline `cm-launch-wsc` link and parent CM
+ *     linkage added to NetOpt.
+ *   - s7 (2026-04-30 PM): three call sites collapsed onto this helper.
+ *
+ * @param {'wsc'|'netopt'} target
+ */
+function _launchToTool(target) {
+  if (target === 'wsc') {
+    const payload = api.buildWscLaunchPayload(model);
+    try { sessionStorage.setItem('cm_pending_push', JSON.stringify(payload)); } catch {}
+    bus.emit('cm:push-to-wsc', payload); // fire even though listener may not be mounted yet — sessionStorage covers the gap
+    state.set('nav.tool', 'warehouse-sizing');
+    window.location.hash = '#designtools/warehouse-sizing';
+    return;
+  }
+  if (target === 'netopt') {
+    const payload = api.buildNetOptLaunchPayload(model);
+    try { sessionStorage.setItem('cm_pending_netopt_push', JSON.stringify(payload)); } catch {}
+    bus.emit('cm:push-to-netopt', payload);
+    state.set('nav.tool', 'network-opt');
+    window.location.hash = '#designtools/network-opt';
+    return;
+  }
+  // Unknown target — no-op rather than throw, to avoid breaking unrelated UI.
+  // eslint-disable-next-line no-console
+  console.warn('_launchToTool: unknown target', target);
+}
+
 async function handleAction(action, idx, btn) {
   switch (action) {
     case 'vol-channel-tab':
@@ -11609,52 +11673,28 @@ async function handleAction(action, idx, btn) {
       break;
     }
     case 'cm-launch-wsc': {
-      // 2026-04-30 (G12): the inline 'WSC ->' link in the cm-vol-source-bar
-      // was a dead anchor (data-action with no handler). Wire it up to the
-      // same hand-off path as the dedicated 'launch-wsc' button: build the
-      // payload, stash to sessionStorage so the WSC mount can consume it,
-      // emit the bus event for in-session handoff, navigate.
-      const payload = api.buildWscLaunchPayload(model);
-      try { sessionStorage.setItem('cm_pending_push', JSON.stringify(payload)); } catch {}
-      bus.emit('cm:push-to-wsc', payload);
-      state.set('nav.tool', 'warehouse-sizing');
-      window.location.hash = '#designtools/warehouse-sizing';
+      // CM-LAUNCH-UNIFY (2026-04-30 PM s7): the inline 'WSC ->' link and the
+      // Facility "Size with Calculator ->" button now both route through the
+      // shared `_launchToTool('wsc')` helper so they cannot drift in the
+      // future. See helper definition below for the canonical handoff path.
+      _launchToTool('wsc');
       return;
     }
     case 'cm-launch-netopt': {
-      // 2026-04-30 (G12): equivalent of the cm-launch-wsc patch above for
-      // NetOpt. Builds buildNetOptLaunchPayload (parent_cost_model_id +
-      // channel seed), stashes via sessionStorage 'cm_pending_netopt_push'
-      // (distinct key from WSC's 'cm_pending_push' to avoid cross-talk),
-      // emits cm:push-to-netopt for in-session handoff, navigates.
-      const payload = api.buildNetOptLaunchPayload(model);
-      try { sessionStorage.setItem('cm_pending_netopt_push', JSON.stringify(payload)); } catch {}
-      bus.emit('cm:push-to-netopt', payload);
-      state.set('nav.tool', 'network-opt');
-      window.location.hash = '#designtools/network-opt';
+      // CM-LAUNCH-UNIFY (2026-04-30 PM s7): unified through the same helper.
+      _launchToTool('netopt');
       return;
     }
     case 'launch-wsc': {
-      // Brock 2026-04-20: cross-tool linkage was broken in this direction.
-      // The bus.emit was happening BEFORE the hash change to WSC, and WSC's
-      // listener is registered inside its mount() — so the event arrived
-      // before anyone was listening and was dropped. WSC→CM already uses a
-      // sessionStorage handoff to survive the mount gap; mirror that here
-      // so CM→WSC lands reliably.
-      //
-      // Phase 4 of volumes-as-nucleus (Layer A, 2026-04-29): payload now
-      // carries channel-derived volume fields so WSC can pre-fill its
-      // volumes panel instead of forcing the user to re-key every number.
-      // Each field aggregates across non-reverse channels using the channel
-      // accessors (Phase 1 + 3 work). All fields fall through to 0 when
-      // the model has no channels — additive on the WSC side, so 0s are
-      // ignored and WSC's defaults stand.
-      const payload = api.buildWscLaunchPayload(model);
-      try { sessionStorage.setItem('cm_pending_push', JSON.stringify(payload)); } catch {}
-      bus.emit('cm:push-to-wsc', payload); // still fire — WSC may already be mounted
-      state.set('nav.tool', 'warehouse-sizing');
-      window.location.hash = '#designtools/warehouse-sizing';
-      return; // don't re-render
+      // CM-LAUNCH-UNIFY (2026-04-30 PM s7): collapsed into _launchToTool.
+      // History: Brock 2026-04-20 wired up sessionStorage handoff to survive
+      // the WSC mount gap (bus.emit fired before WSC listener was registered).
+      // Phase 4 (2026-04-29) extended payload with channel-derived volumes.
+      // G12 added the cm-launch-wsc inline link with identical behavior. This
+      // s7 cleanup unifies the three call sites onto one helper so future
+      // payload-shape or sequencing changes don't drift across them.
+      _launchToTool('wsc');
+      return;
     }
     case 'reset-most-uph':
       resetMostUph(idx);
