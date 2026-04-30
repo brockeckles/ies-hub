@@ -11,7 +11,7 @@ import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260424-hyg04';
-import * as calc from './calc.js?v=20260430-am-p5fix7';
+import * as calc from './calc.js?v=20260430-am-p5fix8';
 import * as api from './api.js?v=20260429-vol12';
 import * as scenarios from './calc.scenarios.js?v=20260429-otfix1';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
@@ -22,7 +22,7 @@ import * as shiftPlannerUi from './shift-planner-ui.js?v=20260428-walkthru1';
 // 2026-04-28 — internal phase stepper for Implementation Timeline section.
 import { renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260429-p52';
-import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260430-am-p5fix7';
+import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260430-am-p5fix8';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
 // disk but no longer imported; can be deleted in a future cleanup.
@@ -3564,7 +3564,9 @@ function renderVolumes() {
           // viewers expect a 3rd segment. This pill closes the gap.
           const rev = (channelMix || []).find(m => {
             const c2 = channels.find(c => c.key === m.channelKey);
-            return c2 && c2.archetypeId === 'reverse';
+            // Match the same isReverse logic the tab strip uses (line ~3601):
+            // archetypeId OR primary.activity === 'returns'.
+            return c2 && (c2.archetypeId === 'reverse' || (c2.primary && c2.primary.activity === 'returns'));
           });
           if (!rev) return '';
           const revCh = channels.find(c => c.key === rev.channelKey);
