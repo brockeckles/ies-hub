@@ -11,7 +11,7 @@ import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260424-hyg04';
-import * as calc from './calc.js?v=20260430-am-p5fix8';
+import * as calc from './calc.js?v=20260430-am-p5fix9';
 import * as api from './api.js?v=20260429-vol12';
 import * as scenarios from './calc.scenarios.js?v=20260429-otfix1';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
@@ -22,7 +22,7 @@ import * as shiftPlannerUi from './shift-planner-ui.js?v=20260428-walkthru1';
 // 2026-04-28 — internal phase stepper for Implementation Timeline section.
 import { renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260429-p52';
-import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260430-am-p5fix8';
+import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260430-am-p5fix9';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
 // disk but no longer imported; can be deleted in a future cleanup.
@@ -3562,19 +3562,25 @@ function renderVolumes() {
           // so including them would double-count). But the channel tab
           // strip below DOES show Reverse, creating a visual gap where
           // viewers expect a 3rd segment. This pill closes the gap.
-          const rev = (channelMix || []).find(m => {
-            const c2 = channels.find(c => c.key === m.channelKey);
-            // Match the same isReverse logic the tab strip uses (line ~3601):
-            // archetypeId OR primary.activity === 'returns'.
-            return c2 && (c2.archetypeId === 'reverse' || (c2.primary && c2.primary.activity === 'returns'));
-          });
-          if (!rev) return '';
-          const revCh = channels.find(c => c.key === rev.channelKey);
-          const color = (revCh && revCh.color) || '#dc2626';
+          // 2026-04-30 (G8c) — getChannelMix() returns OUTBOUND channels only
+          // (Reverse is filtered upstream by getOutboundChannels). Read the
+          // Reverse channel directly from the full channels[] list, then
+          // size its volume by hand from primary value × UOM conversion.
+          const revCh = (channels || []).find(c =>
+            !c.isHidden && (c.archetypeId === 'reverse' || (c.primary && c.primary.activity === 'returns')));
+          if (!revCh) return '';
+          // Pull units count for the pill via the same accessor lineage uses.
+          let revUnits = 0;
+          try {
+            revUnits = channelCalc.getChannelPrimaryIn(revCh, 'units') || 0;
+          } catch (_) {
+            revUnits = Number(revCh.primary?.value) || 0;
+          }
+          const color = revCh.color || '#dc2626';
           return `
             <div class="cm-vol-mix-card__reverse-pill" title="Reverse logistics auto-derives from outbound channels' returns. Not shown in the mix bar to avoid double-counting (these are the same units flowing back from outbound).">
               <span class="cm-vol-mix-card__reverse-dot" style="background:${color};"></span>
-              <span class="cm-vol-mix-card__reverse-label">Reverse: ${fmtN(rev.annualUnits || 0)} units</span>
+              <span class="cm-vol-mix-card__reverse-label">Reverse: ${fmtN(revUnits)} units</span>
               <span class="cm-vol-mix-card__reverse-meta">auto-derived from outbound × returns%</span>
             </div>
           `;
