@@ -478,6 +478,46 @@ export function normalizeShiftMatrix(allocation, nowIso) {
 }
 
 /**
+ * Sum each direct labor line's annual_hours, grouped by function.
+ *
+ * SP-HOURS-FIRST (2026-04-30): the canonical truth for "how many hours of
+ * picking work exist annually" is the sum of the picking labor lines'
+ * `annual_hours` field. This is what the Labor page renders to the user
+ * (each line's annual_hours = line.volume / line.base_uph). The shift
+ * planner used to re-derive this from channel volumes ÷ per-fn weighted
+ * UPH, which (a) introduced UOM-mismatch bugs (5,909-HC class) when labor
+ * lines and channel volumes used different units, and (b) silently
+ * disagreed with the Labor page when a function had multiple lines with
+ * different UPHs (weighted-average UPH ≠ sum of per-line hours).
+ *
+ * Reading directly from `line.annual_hours` retires both bug classes:
+ *   - No UOM math in the shift planner — labor page already did it
+ *   - Per-line UPH preserved (each line uses its own UPH against its own
+ *     volume); summing hours is the exact op the matrix needs
+ *
+ * Lines without a recognized function (via `deriveFunctionForLine`) are
+ * dropped from the function rollup but still surface in `byRole`. Lines
+ * with `annual_hours <= 0` are skipped (zero-effort lines do not contribute).
+ *
+ * @param {Array} laborLines — direct labor lines from the model
+ * @returns {Object<string, number>} hours by function (FUNCTION_ORDER keys)
+ */
+function _hoursByFunction(laborLines) {
+  const out = {};
+  for (const fn of FUNCTION_ORDER) out[fn] = 0;
+  if (!Array.isArray(laborLines)) return out;
+  for (const line of laborLines) {
+    if (line.labor_category && line.labor_category !== 'direct') continue;
+    const fn = deriveFunctionForLine(line);
+    if (!fn) continue;
+    const hours = Number(line.annual_hours) || 0;
+    if (hours <= 0) continue;
+    out[fn] += hours;
+  }
+  return out;
+}
+
+/**
  * Given volumes × shift allocation × labor lines → derived HC/hours by shift
  * and by function × shift. Output drives the preview panel + the Labor line
  * shift column.
@@ -565,22 +605,27 @@ export function deriveShiftHeadcount(allocation, volumeLines, laborLines, shifts
   const absence = (Number(o.absenceAllowancePct) || 0) / 100;               // 0..1
   const productiveHoursPerShift = Math.max(1, hoursPerShift * (1 - absence));
 
-  // Daily volume per function. Phase 3 of volumes-as-nucleus: when the
-  // caller passes `opts.model`, daily volumes derive from channels[]
-  // (multi-channel-aware). Otherwise we fall through to the legacy keyword
-  // match against volumeLines (single-channel projects work either way
-  // since dual-write keeps volumeLines populated for channels[0]).
+  // SP-HOURS-FIRST (2026-04-30): primary FTE derivation reads `annual_hours`
+  // from each direct labor line, grouped by function — the same value the
+  // Labor page renders. This makes the shift planner agree with the Labor
+  // page on basic FTE counts and retires the UOM-mismatch bug class entirely
+  // (no more dividing per-pallet UPH into unit-volumes).
+  //
+  // Daily volume per function (channels-aware) is still computed for the UI
+  // tooltip ("X% × daily volume / UPH") and for the legacy fallback path
+  // when laborLines doesn't supply annual_hours for a function.
   const dailyVolumeByFn = o.model
     ? computeDailyVolumeByFunctionFromChannels(o.model, operatingDays)
     : computeDailyVolumeByFunction(volumeLines, operatingDays);
 
-  // Aggregate UPH per function from laborLines (weighted by line's uph × hc).
-  // Lines without a matching function are ignored for the derivation (they
-  // still show up in the by-role breakdown via direct labor hours).
-  // CM-SHIFT-UOM-FIX (2026-04-30): pass model-level conversions so that
-  // pallet/case/order-UPHs are normalized to units/hr before averaging.
-  // Without conversions (no model passed), _uphInUnits falls back to
-  // DEFAULT_CONVERSIONS inside _convertUom — backward compatible.
+  // Hours-first: sum line.annual_hours per function. This is the canonical
+  // input — every direct labor line on the Labor page already has annual_hours
+  // = volume / base_uph baked in.
+  const annualHoursByFn = _hoursByFunction(laborLines);
+
+  // UPH-by-function kept for the legacy fallback (when a function has
+  // matrix allocation but zero labor lines) and for tooltips. UOM
+  // normalization (CM-SHIFT-UOM-FIX) only matters in the fallback path.
   const _shiftConversions = o.model ? _modelConversions(o.model) : null;
   const uphByFn = computeUphByFunction(laborLines, _shiftConversions);
 
@@ -594,21 +639,35 @@ export function deriveShiftHeadcount(allocation, volumeLines, laborLines, shifts
   for (const fn of FUNCTION_ORDER) {
     const row = allocation.matrix[fn];
     if (!Array.isArray(row)) continue;
-    const dailyVol = Number(dailyVolumeByFn[fn]) || 0;
+    const fnAnnualHours = Number(annualHoursByFn[fn]) || 0;
+    const fnDailyVol = Number(dailyVolumeByFn[fn]) || 0;
     const uph = Number(uphByFn[fn]) || 0;
+    // Pick path: if the function has direct labor with annual_hours > 0,
+    // use the hours-first path (canonical, agrees with Labor page).
+    // Otherwise fall back to volumes × UPH (preserves backward compat
+    // for fixtures or fresh models without per-line annual_hours).
+    const useHoursFirst = fnAnnualHours > 0;
     for (let s = 0; s < shiftCount; s++) {
       const pct = Number(row[s]) || 0;
-      const vol = dailyVol * (pct / 100);
-      // Daily hours needed for this shift+fn.
-      const hoursDay = uph > 0 ? vol / uph : 0;
-      // SP-2: each shift now has its own effective operating-days/yr based
-      // on per-shift activeDays + DOW volume multipliers. A shift that runs
-      // 7 days at 1.0× has 365 op-days; a shift that runs M-F + Sat at 0.5
-      // has 5.5 × 52 = 286 op-days.
+      const fraction = pct / 100;
       const opDaysShift = opDaysByShift[s] || operatingDays;
-      const hoursAnnual = hoursDay * opDaysShift;
-      const fte = hoursDay / productiveHoursPerShift;
-      byFunctionShift.push({ fn, shift: s + 1, volume: vol, hours: hoursAnnual, fte });
+      let hoursAnnual = 0;
+      let volDailyOnShift = fnDailyVol * fraction;  // daily, for tooltip
+      if (useHoursFirst) {
+        hoursAnnual = fnAnnualHours * fraction;
+      } else {
+        // Legacy fallback path. dailyVol × fraction / uph → hoursDay; × opDays → annual.
+        const hoursDay = uph > 0 ? volDailyOnShift / uph : 0;
+        hoursAnnual = hoursDay * opDaysShift;
+      }
+      // FTE = annual hours / (productive hours per shift × operating days).
+      // For useHoursFirst, this is exactly hoursDay/productive when matrix sums
+      // to 1.0 across shifts (because opDays cancels). For the fallback path,
+      // identity vs. the prior `hoursDay/productive` formulation also holds.
+      const fte = (productiveHoursPerShift > 0 && opDaysShift > 0)
+        ? hoursAnnual / (productiveHoursPerShift * opDaysShift)
+        : 0;
+      byFunctionShift.push({ fn, shift: s + 1, volume: volDailyOnShift, hours: hoursAnnual, fte });
       shiftHours[s] += hoursAnnual;
     }
   }
@@ -1029,8 +1088,14 @@ export function deriveFunctionForLine(line) {
     if (/put.?away/.test(specific)) return 'putaway';
     if (/replen/.test(specific)) return 'replenish';
     if (/pack/.test(specific)) return 'pack';
-    if (/picker|picking|pick\s/.test(specific)) return 'picking';
-    if (/loader|shipper|load\s?truck|dispatch/.test(specific)) return 'ship';
+    // SP-CLASSIFIER-FIX (2026-04-30): old regex /picker|picking|pick\s/ failed
+    // on "DTC Each Pick" / "B2B Case Pick" (no trailing whitespace). Broadened
+    // to /pick/ since /pack/ above already catches packing first (first-match-wins).
+    if (/pick/.test(specific)) return 'picking';
+    // Same fix for ship: /load|ship|dispatch/ catches "B2B Stage & Load",
+    // "Outbound Shipper", "Dispatch Coordinator". 'pack' above catches "Pack
+    // & Ship" first so packing isn't mis-classified.
+    if (/load|ship|dispatch/.test(specific)) return 'ship';
     if (/receiv|inbound/.test(specific)) return 'inbound';
     if (/return|rma|reverse/.test(specific)) return 'returns';
     if (/vas|kitter|kitting|label|assembly/.test(specific)) return 'vas';

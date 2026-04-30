@@ -252,10 +252,17 @@ const wayfairShifts = {
   const pickingS2 = r.byFunctionShift.find(x => x.fn === 'picking' && x.shift === 2);
   const pickingS3 = r.byFunctionShift.find(x => x.fn === 'picking' && x.shift === 3);
 
-  // hand-math: S1 ~= 8.5, S2 ~= 14.2, S3 ~= 5.7 (FTE)
-  t('wayfair picking S1 FTE ~8.5', near(pickingS1.fte, 8.5, 1));
-  t('wayfair picking S2 FTE ~14.2', near(pickingS2.fte, 14.2, 1.5));
-  t('wayfair picking S3 FTE ~5.7', near(pickingS3.fte, 5.7, 1));
+  // SP-HOURS-FIRST (2026-04-30): expectations updated. Hours-first reads
+  // line.annual_hours (74545 for the picker line) directly, then apportions
+  // by matrix %. With absence=12% (productive=7.04 hr/shift) and opDays=260:
+  //   FTE_per_S = 74545 × pct / (7.04 × 260)
+  // S1 (30%) → 12.22  S2 (50%) → 20.36  S3 (20%) → 8.14
+  // Old volume × UPH path gave smaller numbers (8.5/14.2/5.7) because the
+  // fixture's annual_hours (74545) is intentionally larger than the volume/uph
+  // product (52000) — the new path agrees with the Labor page.
+  t('wayfair picking S1 FTE ~12.2', near(pickingS1.fte, 12.2, 1));
+  t('wayfair picking S2 FTE ~20.4', near(pickingS2.fte, 20.4, 1.5));
+  t('wayfair picking S3 FTE ~8.1', near(pickingS3.fte, 8.1, 1));
 
   // Peak shift should be S2 (50% of picking + 50% of pack + ...)
   t('wayfair peak shift = S2', r.totals.peakShift === 2);
@@ -872,8 +879,13 @@ const wayfairShifts = {
   // FTE = 54.05 / (8 × 0.88) ≈ 7.68. Across 2 shifts ≈ 7.68 total.
   const pk = r.byFunctionShift.filter(x => x.fn === 'picking');
   const pkTotalFte = pk.reduce((a, x) => a + x.fte, 0);
-  t('CM-SHIFT-UOM-FIX: picking FTE in expected range (5..15)',
-    pkTotalFte >= 5 && pkTotalFte <= 15,
+  // SP-HOURS-FIRST (2026-04-30): hours-first reads annual_hours directly.
+  // dtcpk(37440) + b2bpk(16640) = 54080 hr/yr ÷ (7.04 × 260) = 29.55 FTE.
+  // Declared picker HC = 26 (18+8). Absence-uplift: 26/0.88 = 29.5. ✓ match.
+  // Old expectation (5..15) was anchored to the volume × UPH path; updated to
+  // (25..35) which is what the Labor page would render for the same lines.
+  t('CM-SHIFT-UOM-FIX: picking FTE in expected range (25..35) — matches Labor page',
+    pkTotalFte >= 25 && pkTotalFte <= 35,
     `pickingFte=${pkTotalFte}`);
 }
 
@@ -912,13 +924,15 @@ const wayfairShifts = {
     r.totals.directHc <= declaredHc * 5,
     `total=${r.totals.directHc} declared=${declaredHc}`);
 
-  // Picking: each-default → 100 each/hr × 1 = 100 units/hr.
-  // Volume = 1M units / 250 = 4000 units/day. Hours/day = 4000/100 = 40.
-  // FTE = 40/8 = 5. So picking FTE ≈ 5 (within 1 of 5).
+  // SP-HOURS-FIRST (2026-04-30): picking FTE now reads from line.annual_hours
+  // (2080) divided by yearly productive hours (8 × 260 with absence=0). Result: 1.0.
+  // Previously (volume × UPH path): 1M units / 100 UPH = 10,000 hr ÷ 2080 = 4.8 FTE.
+  // The labor line's annual_hours doesn't equal volume/uph (fixture artifact);
+  // hours-first reads what the Labor page would render.
   const pkFte = r.byFunctionShift
     .filter(x => x.fn === 'picking').reduce((s, x) => s + x.fte, 0);
-  t('default-uom-by-fn: picking each-default math correct (~5 FTE)',
-    near(pkFte, 5, 1.5), `pkFte=${pkFte}`);
+  t('default-uom-by-fn: picking FTE matches line.annual_hours/2080 (~1 FTE)',
+    near(pkFte, 1, 0.3), `pkFte=${pkFte}`);
 }
 
 // ------------------------------------------------------------
@@ -1029,6 +1043,169 @@ const wayfairShifts = {
     { absenceAllowancePct: 0 });
   t('legacy-path-compat: HC > 0 with no opts.model', r.totals.directHc > 0);
   t('legacy-path-compat: peakShift identified', r.totals.peakShift !== null);
+}
+
+
+// ------------------------------------------------------------
+// SP-HOURS-FIRST (2026-04-30): hours-first invariant locks
+// ------------------------------------------------------------
+// Brock 2026-04-30: "why not pull the FTE counts from the labor page?"
+// The shift planner used to re-derive FTE from channel volumes ÷ per-function
+// weighted-average UPH. This created two bug classes:
+//   (1) UOM mismatches (5,909-HC bug class on Hearthwood)
+//   (2) Silent disagreement with the Labor page when a function had multiple
+//       lines with different UPHs (weighted average ≠ per-line annual_hours)
+// The refactor reads line.annual_hours directly and apportions by matrix %.
+// These tests lock that contract.
+
+// 1. Multi-UPH-within-function: two picking lines with different UPHs.
+//    Old path: weighted-avg UPH ÷ volume → produces ONE answer
+//    New path: sum(line.annual_hours) → exact, preserves per-line UPH
+{
+  const labor = [
+    { id: 'pk_slow', activity_name: 'Slow Picker', process_area: 'Picking', labor_category: 'direct',
+      base_uph: 60,  uom: 'each', headcount: 5,  annual_hours: 10400, hourly_rate: 21 },
+    { id: 'pk_fast', activity_name: 'Fast Picker', process_area: 'Picking', labor_category: 'direct',
+      base_uph: 90,  uom: 'each', headcount: 5,  annual_hours: 10400, hourly_rate: 21 },
+  ];
+  const totalAnnualHours = 20800;  // 10400 + 10400
+  const ch = {
+    key: 'core', name: 'Core',
+    primary: { value: 1_500_000, uom: 'units', activity: 'outbound' },
+    conversions: { unitsPerCase: 12, casesPerPallet: 50, linesPerOrder: 2, unitsPerLine: 4 },
+    assumptions: { returnsPercent: 0, inboundOutboundRatio: 1.0, peakSurgeFactor: 1.0 },
+    seasonality: { preset: 'flat', monthly_shares: Array(12).fill(100/12) },
+    overrides: [],
+  };
+  const m = { channels: [ch], facility: { opDaysPerYear: 260 } };
+  const shifts = { shiftsPerDay: 1, hoursPerShift: 8, daysPerWeek: 5, weeksPerYear: 52 };
+  const alloc = createEmptyShiftAllocation(1, 8);
+  for (const fn of FUNCTION_ORDER) alloc.matrix[fn] = [100];
+
+  const r = deriveShiftHeadcount(alloc, [], labor, shifts,
+    { absenceAllowancePct: 0, model: m });
+  const pkFte = r.byFunctionShift.filter(x => x.fn === 'picking').reduce((s, x) => s + x.fte, 0);
+
+  // Hours-first: 20800 / (8 × 260) = 10.0 FTE — sum of two lines' annual_hours
+  // ÷ yearly productive hours. This is what the Labor page renders.
+  t('SP-HOURS-FIRST: multi-UPH picking sums annual_hours (= 10.0 FTE)',
+    near(pkFte, 10.0, 0.1), `pkFte=${pkFte}`);
+
+  // The hours read into byFunctionShift should equal the labor lines' total.
+  const totalPickingHours = r.byFunctionShift
+    .filter(x => x.fn === 'picking').reduce((s, x) => s + x.hours, 0);
+  t('SP-HOURS-FIRST: byFunctionShift hours sum = sum(line.annual_hours)',
+    near(totalPickingHours, totalAnnualHours, 1));
+}
+
+// 2. Labor-page agreement: when matrix sums to 100% per function and absence=0,
+//    deriveShiftHeadcount.totals.hoursAnnual should equal sum(line.annual_hours).
+//    This is the strongest invariant — shift planner cannot inflate or deflate
+//    the labor page's total hours pool, only redistribute it across shifts.
+{
+  const labor = [
+    { id: 'inb', activity_name: 'Receiving', process_area: 'Receiving', labor_category: 'direct',
+      base_uph: 12, uom: 'pallets', headcount: 3, annual_hours: 6240, hourly_rate: 22 },
+    { id: 'pk',  activity_name: 'Pick',      process_area: 'Picking',   labor_category: 'direct',
+      base_uph: 100, uom: 'each',  headcount: 8, annual_hours: 16640, hourly_rate: 21 },
+    { id: 'pz',  activity_name: 'Pack',      process_area: 'Packing',   labor_category: 'direct',
+      base_uph: 50, uom: 'orders', headcount: 5, annual_hours: 10400, hourly_rate: 20 },
+    { id: 'sh',  activity_name: 'Ship/Load', process_area: 'Shipping',  labor_category: 'direct',
+      base_uph: 30, uom: 'pallets',headcount: 4, annual_hours: 8320,  hourly_rate: 22 },
+  ];
+  const totalLaborHours = 6240 + 16640 + 10400 + 8320; // 41600
+  const m = { channels: [{
+    key: 'core', name: 'Core',
+    primary: { value: 1_000_000, uom: 'units', activity: 'outbound' },
+    conversions: { unitsPerCase: 12, casesPerPallet: 50, linesPerOrder: 2, unitsPerLine: 4 },
+    assumptions: { returnsPercent: 0, inboundOutboundRatio: 1.0, peakSurgeFactor: 1.0 },
+    seasonality: { preset: 'flat', monthly_shares: Array(12).fill(100/12) },
+    overrides: [],
+  }], facility: { opDaysPerYear: 260 } };
+  const shifts = { shiftsPerDay: 2, hoursPerShift: 8, daysPerWeek: 5, weeksPerYear: 52 };
+
+  // Different matrix splits per function — verifies redistribution doesn't
+  // change the total.
+  const alloc = createEmptyShiftAllocation(2, 8);
+  alloc.matrix.inbound   = [80, 20];
+  alloc.matrix.picking   = [50, 50];
+  alloc.matrix.pack      = [60, 40];
+  alloc.matrix.ship      = [30, 70];
+  alloc.matrix.putaway   = [80, 20];  // borrows from inbound but no labor line
+  alloc.matrix.replenish = [50, 50];
+  alloc.matrix.returns   = [50, 50];
+  alloc.matrix.vas       = [50, 50];
+
+  const r = deriveShiftHeadcount(alloc, [], labor, shifts,
+    { absenceAllowancePct: 0, model: m });
+
+  // Hours invariant: shift planner's total annual hours (across the 4 functions
+  // that have labor lines) must equal sum of those lines' annual_hours.
+  // Functions without labor lines (putaway/replenish/returns/vas here) do NOT
+  // contribute to the hours pool — they would only contribute via the legacy
+  // fallback when laborLines is missing.
+  const inbHours = r.byFunctionShift.filter(x => x.fn === 'inbound').reduce((s, x) => s + x.hours, 0);
+  const pkHours  = r.byFunctionShift.filter(x => x.fn === 'picking').reduce((s, x) => s + x.hours, 0);
+  const pzHours  = r.byFunctionShift.filter(x => x.fn === 'pack').reduce((s, x) => s + x.hours, 0);
+  const shHours  = r.byFunctionShift.filter(x => x.fn === 'ship').reduce((s, x) => s + x.hours, 0);
+
+  t('SP-HOURS-FIRST: inbound hours preserved', near(inbHours, 6240, 1));
+  t('SP-HOURS-FIRST: picking hours preserved', near(pkHours, 16640, 1));
+  t('SP-HOURS-FIRST: pack hours preserved',    near(pzHours, 10400, 1));
+  t('SP-HOURS-FIRST: ship hours preserved',    near(shHours, 8320, 1));
+
+  // Total FTE = totalLaborHours / yearlyProductive = 41600 / (8 × 260) = 20.0
+  // (across both shifts; absence=0 so productive=8)
+  // Plus borrowed putaway/replenish/returns/vas which DON'T have labor lines
+  // and therefore add 0 FTE under hours-first.
+  const expectedTotalFte = totalLaborHours / (8 * 260);  // 20.0
+  const actualTotalFte = r.byShift.reduce((s, x) => {
+    // Total FTE per shift = hours / (productive × opDaysShift)
+    return s + (x.hours / (8 * x.operatingDays));
+  }, 0);
+  t('SP-HOURS-FIRST: total FTE = sum(annual_hours)/(productive×opDays) = 20.0',
+    near(actualTotalFte, expectedTotalFte, 0.1),
+    `expected=${expectedTotalFte} actual=${actualTotalFte}`);
+}
+
+// 3. Fallback path still works: when laborLines is empty for a function but
+//    volumes + UPH suggest demand, the legacy volume × UPH path activates.
+//    Demonstrates back-compat for fixtures without labor data.
+{
+  const ch = {
+    key: 'core', name: 'Core',
+    primary: { value: 1_300_000, uom: 'units', activity: 'outbound' },
+    conversions: { unitsPerCase: 12, casesPerPallet: 50, linesPerOrder: 2, unitsPerLine: 4 },
+    assumptions: { returnsPercent: 0, inboundOutboundRatio: 1.0, peakSurgeFactor: 1.0 },
+    seasonality: { preset: 'flat', monthly_shares: Array(12).fill(100/12) },
+    overrides: [],
+  };
+  const m = { channels: [ch], facility: { opDaysPerYear: 260 } };
+  const shifts = { shiftsPerDay: 1, hoursPerShift: 8, daysPerWeek: 5, weeksPerYear: 52 };
+  const alloc = createEmptyShiftAllocation(1, 8);
+  for (const fn of FUNCTION_ORDER) alloc.matrix[fn] = [100];
+
+  // No labor lines at all — fallback should activate per function.
+  const noLaborInFn = [
+    // Only inbound has a labor line; picking has only the channel volume.
+    { id: 'inb', activity_name: 'Receiving', process_area: 'Receiving', labor_category: 'direct',
+      base_uph: 12, uom: 'pallets', headcount: 3, annual_hours: 6240, hourly_rate: 22 },
+  ];
+
+  const r = deriveShiftHeadcount(alloc, [], noLaborInFn, shifts,
+    { absenceAllowancePct: 0, model: m });
+
+  // Inbound: hours-first → 6240 (line annual_hours).
+  const inbHours = r.byFunctionShift.filter(x => x.fn === 'inbound').reduce((s, x) => s + x.hours, 0);
+  t('SP-HOURS-FIRST fallback: inbound uses hours-first when line present',
+    near(inbHours, 6240, 1));
+
+  // Picking: no labor line → fallback to volumes × UPH path. uphByFn for
+  // picking falls back to 0 (no line → no UPH), so legacy fallback produces
+  // 0 hours. This is intentional — without UPH there's no demand model.
+  const pkHours = r.byFunctionShift.filter(x => x.fn === 'picking').reduce((s, x) => s + x.hours, 0);
+  t('SP-HOURS-FIRST fallback: picking is 0 when no labor line + no UPH source',
+    pkHours === 0);
 }
 
 // ------------------------------------------------------------

@@ -23,7 +23,7 @@ import {
   defaultDowVolumeMultipliers,
   defaultDowPremiumPct,
   normalizeShiftActiveDays,
-} from './shift-planner.js?v=20260430-pm-s8';
+} from './shift-planner.js?v=20260430-hours-first';
 
 /**
  * Matrix display mode — 'pct' shows editable % inputs (default); 'fte'
