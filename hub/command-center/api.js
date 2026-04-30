@@ -9,6 +9,7 @@
  */
 
 import { db } from '../../shared/supabase.js?v=20260429-demo-s3';
+import { listRealDeals } from '../deal-management/api.js?v=20260430-demo-s3';
 
 /**
  * Fetch all dashboard data. Tries Supabase first, falls back to demo data.
@@ -166,6 +167,46 @@ export async function fetchDashboardData() {
     labor: laborRowsHoist, rfp: rfpRows, realEstate: realEstateRowsHoist,
   });
 
+  // 2026-04-30 PM (R3a): build the Pipeline Snapshot from listRealDeals so
+  // CC matches the Deal Management view. Pre-R3a CC used a hardcoded
+  // DEMO_PIPELINE that disagreed with Deal Mgmt's actual count + revenue.
+  // Failure modes (RLS, network, empty table) fall back to DEMO_PIPELINE
+  // so the demo never renders an empty card.
+  let pipeline = DEMO_PIPELINE;
+  try {
+    const realDeals = await listRealDeals();
+    if (Array.isArray(realDeals) && realDeals.length > 0) {
+      // Active = anything not closed/lost. listRealDeals shapes status onto
+      // deal_deals.status which uses 'open' / 'won' / 'lost' / 'closed'.
+      const activeStatusKey = (d) => String(d.status || 'open').toLowerCase();
+      const active = realDeals.filter(d => {
+        const st = activeStatusKey(d);
+        return st !== 'won' && st !== 'lost' && st !== 'closed';
+      });
+      const totalRevenue = active.reduce((s, d) => s + (Number(d.revenue) || 0), 0);
+      const totalSites = active.reduce((s, d) => s + (Number(d.siteCount) || 0), 0);
+      const marginRows = active.map(d => Number(d.margin)).filter(n => Number.isFinite(n) && n > 0);
+      const avgMargin = marginRows.length
+        ? marginRows.reduce((a, b) => a + b, 0) / marginRows.length
+        : 0;
+      // Stage counts indexed 0..5 = stages 1..6
+      const stageCounts = [0, 0, 0, 0, 0, 0];
+      for (const d of active) {
+        const idx = (Number(d.stage) || 1) - 1;
+        if (idx >= 0 && idx < 6) stageCounts[idx]++;
+      }
+      pipeline = {
+        activeDeals: active.length,
+        totalRevenue,
+        avgMargin,
+        totalSites,
+        stageCounts,
+      };
+    }
+  } catch (err) {
+    console.warn('[CC] listRealDeals for pipeline snapshot failed, using demo:', err);
+  }
+
   return {
     supabaseConnected,
     kpis,
@@ -174,7 +215,7 @@ export async function fetchDashboardData() {
     rfpSignals,
     intel,
     sparks,
-    pipeline: DEMO_PIPELINE,
+    pipeline,
     activity: DEMO_ACTIVITY,
   };
 }

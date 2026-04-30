@@ -745,7 +745,7 @@ function renderPipeline(el) {
                   ${deal.margin > 0 ? `<span style="font-weight:700;color:${deal.margin >= 10 ? '#16a34a' : '#d97706'};">${deal.margin}%</span>` : ''}
                   ${deal.score !== '—' ? `<span style="font-weight:800;color:${deal.score.startsWith('A') ? '#16a34a' : '#2563eb'};">${deal.score}</span>` : ''}
                 </div>
-                <div style="font-size:9px;color:var(--ies-gray-300);margin-top:4px;">${deal.daysInStage}d in stage — ${deal.owner.split(' ')[0]}</div>
+                <div style="font-size:9px;color:var(--ies-gray-300);margin-top:4px;">${deal.daysInStage}d in stage — ${formatOwnerShort(deal.owner)}</div>
               </div>
             `}).join('') || '<div style="font-size:11px;color:var(--ies-gray-300);padding:8px;">No deals</div>'}
           </div>
@@ -788,7 +788,7 @@ function renderList(el) {
                 <td style="padding:10px 12px;text-align:right;font-weight:600;">$${(d.revenue / 1e6).toFixed(1)}M</td>
                 <td style="padding:10px 12px;text-align:right;font-weight:700;color:${d.margin >= 10 ? '#16a34a' : d.margin > 0 ? '#d97706' : 'var(--ies-gray-300)'};">${d.margin > 0 ? d.margin + '%' : '—'}</td>
                 <td style="padding:10px 12px;text-align:center;font-weight:800;color:${d.score.startsWith('A') ? '#16a34a' : d.score !== '—' ? '#2563eb' : 'var(--ies-gray-300)'};">${d.score}</td>
-                <td style="padding:10px 12px;color:var(--ies-gray-500);">${d.owner}</td>
+                <td style="padding:10px 12px;color:var(--ies-gray-500);">${formatOwnerFull(d.owner)}</td>
               </tr>
             `;
           }).join('')}
@@ -947,7 +947,7 @@ function renderDetail() {
             <span>•</span>
             <span>${siteCount} site${siteCount > 1 ? 's' : ''}</span>
             <span>•</span>
-            <span>Owner: ${d.owner}</span>
+            <span>Owner: ${formatOwnerFull(d.owner)}</span>
           </div>
         </div>
         <span style="display:inline-block;padding:6px 16px;border-radius:20px;font-size:12px;font-weight:700;color:#fff;background:${stage.color};">Stage ${d.stage}: ${stage.name}</span>
@@ -1092,7 +1092,9 @@ function getArtifacts(dealId) {
       kind: 'cost_model',
       name: `${m.name || 'Untitled'}${m.scenario_label ? ' — ' + m.scenario_label : ''}`,
       ref: 'cm:' + m.id,
-      updated: m.updated_at ? String(m.updated_at).slice(0, 10) : '—',
+      // 2026-04-30 PM (R3d): keep the full timestamp so formatDate() can
+      // render the LOCAL date instead of a UTC-sliced one.
+      updated: m.updated_at || null,
       modelId: m.id,
     }));
   } else {
@@ -1182,7 +1184,8 @@ async function _hydrateDealDetail(dealId) {
       const list = artifacts.map(r => ({
         id: r.id, kind: r.kind, name: r.name, ref: r.ref || '',
         modelId: r.model_id ?? null,
-        updated: r.updated_at ? String(r.updated_at).slice(0, 10) : '—',
+        // 2026-04-30 PM (R3d): keep raw timestamp; formatDate handles tz.
+        updated: r.updated_at || null,
       }));
       _artifactsByDeal.set(dealId, list);
     }
@@ -1442,7 +1445,7 @@ function renderDealArtifacts() {
                 <td style="padding:10px 16px;"><span style="display:inline-block;padding:2px 10px;border-radius:20px;font-size:10px;font-weight:700;color:#fff;background:${kind.color};">${kind.label}</span></td>
                 <td style="padding:10px 12px;font-weight:600;">${escapeAttr(a.name)}</td>
                 <td style="padding:10px 12px;color:var(--ies-gray-500);font-family:monospace;font-size:11px;">${escapeAttr(a.ref)}</td>
-                <td style="padding:10px 12px;color:var(--ies-gray-500);">${escapeAttr(a.updated)}</td>
+                <td style="padding:10px 12px;color:var(--ies-gray-500);">${formatDate(a.updated)}</td>
                 <td style="padding:10px 16px;text-align:right;">
                   ${a.kind === 'cost_model' && a.modelId
                     ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="open-cost-model-id" data-model-id="${a.modelId}" style="font-size:11px;">Open →</button>`
@@ -1732,6 +1735,26 @@ function kpi(label, value, color) {
       <div class="hub-kpi-tile__value"${valueStyle}>${value}</div>
     </div>
   `;
+}
+
+// 2026-04-30 PM (R3c): safe owner display for cards/detail. Handles email
+// addresses (returns the local-part), '—' / empty / null (returns
+// 'Unassigned'), and full names (returns the first name token).
+function formatOwnerShort(owner) {
+  const raw = (owner == null ? '' : String(owner)).trim();
+  if (!raw || raw === '—') return 'Unassigned';
+  if (raw.includes('@')) {
+    const local = raw.split('@')[0];
+    // brock.eckles -> Brock
+    const first = local.split(/[._]/)[0] || local;
+    return first.charAt(0).toUpperCase() + first.slice(1);
+  }
+  return raw.split(/\s+/)[0];
+}
+function formatOwnerFull(owner) {
+  const raw = (owner == null ? '' : String(owner)).trim();
+  if (!raw || raw === '—') return 'Unassigned';
+  return raw;
 }
 
 function formatDate(dateStr) {
