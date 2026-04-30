@@ -77,13 +77,40 @@ export const FUNCTION_META = {
 const DEFAULT_UOM_BY_FN = {
   inbound:   'pallets',  // pallet jack / reach truck workflows
   putaway:   'pallets',  // reach truck workflows
-  picking:   'each',     // walkie / RF / voice-pick workflows
-  replenish: 'each',     // forward-pick replen
-  pack:      'each',     // pack stations bill in eaches/orders interchangeably
+  picking:   'each',     // walkie / RF / voice-pick workflows (B2B case-pick lines override via name keyword)
+  replenish: 'cases',    // forward-pick replen pulls cases (was 'each' — too granular)
+  pack:      'orders',   // pack stations bill orders/hr (was 'each' — would cause 50x inflation on order-rate UPHs)
   ship:      'pallets',  // dock-load
-  returns:   'each',     // disposition is unit-level
+  returns:   'orders',   // RMA processor rate (was 'each')
   vas:       'each',     // kitting / labeling unit-level
 };
+
+// CM-SHIFT-UOM-FIX (2026-04-30 PM s8): keyword-based UOM inference from
+// labor-line activity_name. When line.uom is missing, this is much more
+// accurate than the per-function default — e.g., "DTC Pack & Ship" UPH 50
+// is clearly orders/hr (per-fn default would be orders too, but "B2B Case
+// Pick" UPH 180 is cases/hr while the picking default is 'each').
+//
+// Order matters: more specific keywords first.
+function _inferLineUom(line, fnDefault) {
+  // Explicit declaration wins. Treat missing/blank/'?' as absent.
+  const declared = String(line.uom || '').toLowerCase().trim();
+  if (declared && declared !== '?' && declared !== 'unit') return declared;
+
+  // Keyword inference from the line's activity / role / position name.
+  const name = String(
+    line.activity_name || line.activity || line.position ||
+    line.role_name || line.name || ''
+  ).toLowerCase();
+  if (/\b(case|carton)/.test(name)) return 'cases';
+  if (/\b(pallet|load|stage|dock)/.test(name)) return 'pallets';
+  if (/\b(pack|order|rma)/.test(name))         return 'orders';
+  if (/\b(line)\b/.test(name))                 return 'lines';
+  if (/\b(each|unit|piece|sku)/.test(name))    return 'each';
+
+  // Last resort: per-function default.
+  return fnDefault || 'each';
+}
 
 // Resolve a model-level conversion table to use for UPH normalization.
 // Computes a VOLUME-WEIGHTED average across non-reverse channels — the
@@ -139,15 +166,14 @@ function _modelConversions(model) {
 }
 
 // Convert a labor line's UPH to units/hr.
-//   line.uom   : 'pallets' | 'cases' | 'each' | 'orders' | 'lines' | (omitted)
+//   line       : labor line; uom resolved via _inferLineUom (declared > keyword > fnDefault)
 //   fnDefault  : per-function default UOM (DEFAULT_UOM_BY_FN[fn])
 //   conv       : model-level conversion table (or null for defaults)
-// Returns 0 when no UPH is set; otherwise UPH × (1 line.uom in units).
+// Returns 0 when no UPH is set; otherwise UPH × (1 inferred-uom in units).
 function _uphInUnits(line, fnDefault, conv) {
   const uph = Number(line.base_uph) || Number(line.uph) || Number(line.UPH) || 0;
   if (uph <= 0) return 0;
-  const raw = String(line.uom || '').toLowerCase().trim();
-  const uom = raw || fnDefault || 'each';
+  const uom = _inferLineUom(line, fnDefault);
   // factor = how many units in 1 of `uom`
   const factor = _convertUom(1, uom, 'units', conv);
   if (!Number.isFinite(factor) || factor <= 0) return uph; // safe fallback

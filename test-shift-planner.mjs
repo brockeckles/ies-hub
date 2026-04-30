@@ -922,6 +922,88 @@ const wayfairShifts = {
 }
 
 // ------------------------------------------------------------
+// CM-SHIFT-UOM-FIX (s8): keyword-based UOM inference from activity_name
+// Locks the Hearthwood-class fixture where labor lines have NO line.uom,
+// only activity_name. The shift-planner must infer "Pack" → orders, "Case
+// Pick" → cases, "Stage & Load" → pallets, etc. — per-function default
+// alone undercounts pack and B2B case-pick UOMs by 10-50x.
+// ------------------------------------------------------------
+{
+  // Synthetic mirror of the actual Hearthwood Baseline fixture observed
+  // on prod 2026-04-30 PM. line.uom is absent on all 7 direct labor lines.
+  const dtcCh = {
+    key: 'outbound', name: 'DTC e-commerce',
+    primary: { value: 1_400_000, uom: 'orders', activity: 'outbound' },
+    conversions: { unitsPerCase: 12, casesPerPallet: 40, linesPerOrder: 2, unitsPerLine: 3 },
+    assumptions: { returnsPercent: 18, inboundOutboundRatio: 1.05, peakSurgeFactor: 2.5 },
+    seasonality: { preset: 'flat', monthly_shares: Array(12).fill(100/12) },
+    overrides: [],
+  };
+  const b2bCh = {
+    key: 'b2b-retail', name: 'B2B retail / wholesale',
+    primary: { value: 600_000, uom: 'orders', activity: 'outbound' },
+    conversions: { unitsPerCase: 24, casesPerPallet: 50, linesPerOrder: 15, unitsPerLine: 8 },
+    assumptions: { returnsPercent: 2, inboundOutboundRatio: 1.02, peakSurgeFactor: 1.4 },
+    seasonality: { preset: 'flat', monthly_shares: Array(12).fill(100/12) },
+    overrides: [],
+  };
+  const reverseCh = {
+    key: 'reverse', name: 'Reverse logistics',
+    primary: { value: 2_952_000, uom: 'units', activity: 'returns', autoDerived: true },
+    conversions: { unitsPerCase: 12, casesPerPallet: 40, linesPerOrder: 1.5, unitsPerLine: 1.5 },
+    assumptions: { returnsPercent: 0, inboundOutboundRatio: 0.85, peakSurgeFactor: 1.8 },
+    seasonality: { preset: 'flat', monthly_shares: Array(12).fill(100/12) },
+    overrides: [],
+  };
+  const hearthwoodModel = {
+    channels: [dtcCh, b2bCh, reverseCh],
+    facility: { opDaysPerYear: 250 },
+  };
+
+  // Real Hearthwood labor (UOM-less, real activity names).
+  const realLabor = [
+    { id: 'inb',   activity_name: 'Inbound Receiving',   process_area: 'Receiving',     labor_category: 'direct', base_uph: 12,  headcount: 4,  annual_hours: 8320,  hourly_rate: 22 },
+    { id: 'pa',    activity_name: 'Putaway to Reserve',  process_area: 'Putaway',       labor_category: 'direct', base_uph: 25,  headcount: 3,  annual_hours: 6240,  hourly_rate: 23 },
+    { id: 'rep',   activity_name: 'Forward Replen',      process_area: 'Replenishment', labor_category: 'direct', base_uph: 60,  headcount: 4,  annual_hours: 8320,  hourly_rate: 21 },
+    { id: 'dtcpk', activity_name: 'DTC Each Pick',       process_area: 'Picking',       labor_category: 'direct', base_uph: 110, headcount: 18, annual_hours: 37440, hourly_rate: 21 },
+    { id: 'dtcpz', activity_name: 'DTC Pack & Ship',     process_area: 'Packing',       labor_category: 'direct', base_uph: 50,  headcount: 14, annual_hours: 29120, hourly_rate: 20 },
+    { id: 'b2bpk', activity_name: 'B2B Case Pick',       process_area: 'Picking',       labor_category: 'direct', base_uph: 180, headcount: 8,  annual_hours: 16640, hourly_rate: 22 },
+    { id: 'b2bld', activity_name: 'B2B Stage & Load',    process_area: 'Shipping',      labor_category: 'direct', base_uph: 12,  headcount: 6,  annual_hours: 12480, hourly_rate: 22 },
+  ];
+  const declaredHc = realLabor.reduce((s, l) => s + l.headcount, 0); // 57
+
+  const shifts = { shiftsPerDay: 1, hoursPerShift: 8, daysPerWeek: 5, weeksPerYear: 52 };
+  const alloc = createEmptyShiftAllocation(1, 8);
+  for (const fn of FUNCTION_ORDER) alloc.matrix[fn] = [100];
+
+  const r = deriveShiftHeadcount(alloc, [], realLabor, shifts,
+    { absenceAllowancePct: 12, model: hearthwoodModel });
+
+  // BUG-FIX-LOCK (s8): keyword-inferred UOM keeps total HC within reasonable
+  // bound. Pre-s7: 5,909 HC. s7 (per-fn defaults only): ~1,039 HC (still 18x
+  // declared, mostly from pack-as-each + replen-as-each + case-pick-as-each).
+  // s8 (keyword + better defaults): expect ~150-300 HC range (3-6x declared
+  // matrix-distributed FTE — defensible for a 1-shift max-load matrix).
+  t('CM-SHIFT-UOM-FIX-s8: Hearthwood HC in defensible range (< 6x declared)',
+    r.totals.directHc < declaredHc * 6,
+    `total=${r.totals.directHc} declared=${declaredHc}`);
+  t('CM-SHIFT-UOM-FIX-s8: Hearthwood HC > 0 (no over-correction to zero)',
+    r.totals.directHc > 0, `total=${r.totals.directHc}`);
+
+  // Pack-specific lock: DTC Pack & Ship UPH 50 must be inferred as orders,
+  // not each. With each (the bug), pack FTE alone would be hundreds.
+  const pkFte = r.byFunctionShift.filter(x => x.fn === 'pack').reduce((s, x) => s + x.fte, 0);
+  t('CM-SHIFT-UOM-FIX-s8: pack FTE < 50 (orders-UOM inferred from name)',
+    pkFte < 50, `packFte=${pkFte}`);
+
+  // B2B case pick at 180 UPH must be inferred as cases, not each.
+  // With cases, picking total FTE should be < 100 (DTC + B2B combined).
+  const pickFte = r.byFunctionShift.filter(x => x.fn === 'picking').reduce((s, x) => s + x.fte, 0);
+  t('CM-SHIFT-UOM-FIX-s8: picking FTE < 100 (B2B case-UOM inferred)',
+    pickFte < 100, `pickingFte=${pickFte}`);
+}
+
+// ------------------------------------------------------------
 // CM-SHIFT-UOM-FIX: backward compat — legacy callers (no model passed)
 // produce identical numbers when line.uom is absent and there's no model.
 // ------------------------------------------------------------

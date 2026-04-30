@@ -15,7 +15,7 @@
  */
 
 import * as monthly from './calc.monthly.js?v=20260421-xE';
-import { deriveFunctionForLine as _deriveFunctionForLine } from './shift-planner.js?v=20260430-pm-s7';
+import { deriveFunctionForLine as _deriveFunctionForLine } from './shift-planner.js?v=20260430-pm-s8';
 import {
   getAnnualVolume as _getAnnualVolume,
   getAggregateDerived as _getAggregateDerived,

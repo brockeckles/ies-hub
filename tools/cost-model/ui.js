@@ -17,7 +17,7 @@ import * as scenarios from './calc.scenarios.js?v=20260430-pm-otfix2';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
 import * as channelCalc from './calc.channels.js?v=20260429-vol13';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
-import * as shiftPlannerCalc from './shift-planner.js?v=20260430-pm-s7';
+import * as shiftPlannerCalc from './shift-planner.js?v=20260430-pm-s8';
 import * as shiftPlannerUi from './shift-planner-ui.js?v=20260428-walkthru1';
 // 2026-04-28 — internal phase stepper for Implementation Timeline section.
 import { renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
