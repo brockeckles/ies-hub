@@ -3352,15 +3352,6 @@ function renderSetup() {
   const pd = model.projectDetails;
   const markets = (refData.markets && refData.markets.length > 0) ? refData.markets : DEMO_MARKETS_FALLBACK;
 
-  // 2026-04-30 PM (item 7): top-of-page tile strip for design-system parity
-  // with Volumes / Equipment / Summary. Derived metrics — read-only context
-  // for the inputs below.
-  const _setupOpHrs = calc.operatingHours(model.shifts || {});
-  const _setupTotalFtes = calc.totalFtes(model.laborLines || [], model.indirectLaborLines || [], _setupOpHrs);
-  const _setupChannelCount = (model.channels || []).filter(c => c && !c.hidden).length;
-  const _setupContractYrs = pd?.contractTerm || 0;
-  const _setupOutboundOrders = (model.volumeLines || []).find(v => v.isOutboundPrimary)?.volume || 0;
-
   return `
     <div class="cm-section-header">
       <div>
@@ -3369,26 +3360,8 @@ function renderSetup() {
       </div>
     </div>
 
-    <div class="hub-kpi-strip mb-4">
-      <div class="hub-kpi-tile">
-        <div class="hub-kpi-tile__label">Contract Term</div>
-        <div class="hub-kpi-tile__value">${_setupContractYrs ? _setupContractYrs + ' yr' : '—'}</div>
-      </div>
-      <div class="hub-kpi-tile">
-        <div class="hub-kpi-tile__label">Channels</div>
-        <div class="hub-kpi-tile__value">${_setupChannelCount || '—'}</div>
-      </div>
-      <div class="hub-kpi-tile">
-        <div class="hub-kpi-tile__label">Total FTE</div>
-        <div class="hub-kpi-tile__value">${_setupTotalFtes > 0 ? _setupTotalFtes.toFixed(1) : '—'}</div>
-      </div>
-      <div class="hub-kpi-tile">
-        <div class="hub-kpi-tile__label">Primary Outbound Volume</div>
-        <div class="hub-kpi-tile__value">${_setupOutboundOrders > 0 ? (_setupOutboundOrders >= 1e6 ? (_setupOutboundOrders/1e6).toFixed(1)+'M' : (_setupOutboundOrders/1e3).toFixed(0)+'K') : '—'}</div>
-      </div>
-    </div>
-
-    <div class="cm-narrow-form">
+    <div class="hub-card">
+    <div class="cm-narrow-form" style="margin:0;">
       <div class="hub-field hub-field--full">
         <label class="hub-field__label">Project Name</label>
         <input class="hub-input" id="cm-name" value="${pd.name || ''}" placeholder="e.g., Acme Ecommerce Fulfillment" data-field="projectDetails.name" />
@@ -3447,7 +3420,7 @@ function renderSetup() {
 
       <div class="hub-field">
         <label class="hub-field__label">Contract Term (Years)</label>
-        <input class="hub-input" type="number" id="cm-term" value="${pd.contractTerm || 5}" min="1" max="20" step="1" data-field="projectDetails.contractTerm" data-type="number" />
+        <input class="hub-input" type="number" id="cm-term" value="${pd.contractTerm || 5}" min="1" max="20" step="1" data-field="projectDetails.contractTerm" data-type="number" data-field-commit="change" />
       </div>
       <div class="hub-field">
         <label class="hub-field__label">Link to Deal</label>
@@ -3460,6 +3433,7 @@ function renderSetup() {
         </select>
         <div class="hub-field__hint">Optional. Links this cost model to a Deal Manager opportunity.</div>
       </div>
+    </div>
     </div>
 
     <!-- CM-SET-2 — Reference Data Status (HIDDEN 2026-04-26 EVE7 — admin/devops surface,
@@ -3780,7 +3754,7 @@ function renderVolumes() {
         <div class="hub-field">
           <label class="hub-field__label">Annual volume</label>
           <input class="hub-input" type="number" value="${primary.value || 0}" min="0" step="1000"
-                 data-field="channels.${activeIdx}.primary.value" data-type="number"
+                 data-field="channels.${activeIdx}.primary.value" data-type="number" data-field-commit="change"
                  ${isByMix && primary.activity !== 'returns'
                    ? 'readonly title="Auto-derived from Total volume × this channel\'s mix %. Switch to By volume mode above to edit directly."'
                    : (primary.activity === 'returns' && primary.autoDerived !== false)
@@ -3825,19 +3799,19 @@ function renderVolumes() {
         <div class="text-subtitle" style="margin:0 0 12px;">UOM Conversion Factors</div>
         <div class="cm-vol-row"><span>Units per case</span>
           <input class="hub-input cm-vol-num" type="number" value="${conv.unitsPerCase || ''}" placeholder="12" step="0.1"
-                 data-field="channels.${activeIdx}.conversions.unitsPerCase" data-type="number" /></div>
+                 data-field="channels.${activeIdx}.conversions.unitsPerCase" data-type="number" data-field-commit="change" /></div>
         <div class="cm-vol-row"><span>Cases per pallet</span>
           <input class="hub-input cm-vol-num" type="number" value="${conv.casesPerPallet || ''}" placeholder="40" step="0.1"
-                 data-field="channels.${activeIdx}.conversions.casesPerPallet" data-type="number" /></div>
+                 data-field="channels.${activeIdx}.conversions.casesPerPallet" data-type="number" data-field-commit="change" /></div>
         <div class="cm-vol-row"><span>Lines per order</span>
           <input class="hub-input cm-vol-num" type="number" value="${conv.linesPerOrder || ''}" placeholder="2" step="0.1"
-                 data-field="channels.${activeIdx}.conversions.linesPerOrder" data-type="number" /></div>
+                 data-field="channels.${activeIdx}.conversions.linesPerOrder" data-type="number" data-field-commit="change" /></div>
         <div class="cm-vol-row"><span>Units per line</span>
           <input class="hub-input cm-vol-num" type="number" value="${conv.unitsPerLine || ''}" placeholder="5" step="0.1"
-                 data-field="channels.${activeIdx}.conversions.unitsPerLine" data-type="number" /></div>
+                 data-field="channels.${activeIdx}.conversions.unitsPerLine" data-type="number" data-field-commit="change" /></div>
         <div class="cm-vol-row" style="gap:6px;"><span>Weight per unit</span>
           <input class="hub-input cm-vol-num" type="number" value="${conv.weightPerUnit || ''}" placeholder="1.0" step="0.01"
-                 data-field="channels.${activeIdx}.conversions.weightPerUnit" data-type="number" style="max-width:90px;" />
+                 data-field="channels.${activeIdx}.conversions.weightPerUnit" data-type="number" data-field-commit="change" style="max-width:90px;" />
           <select class="hub-input" data-field="channels.${activeIdx}.conversions.weightUnit" style="max-width:80px;">
             <option value="lbs"${conv.weightUnit === 'lbs' || !conv.weightUnit ? ' selected' : ''}>lbs</option>
             <option value="kg"${conv.weightUnit === 'kg' ? ' selected' : ''}>kg</option>
@@ -3850,19 +3824,19 @@ function renderVolumes() {
         <div class="text-subtitle" style="margin:0 0 12px;">Structural Assumptions</div>
         <div class="cm-vol-row" style="gap:6px;"><span>Returns rate</span>
           <input class="hub-input cm-vol-num" type="number" value="${ass.returnsPercent || 0}" placeholder="5" step="0.1" min="0" max="100"
-                 data-field="channels.${activeIdx}.assumptions.returnsPercent" data-type="number" style="max-width:80px;" />
+                 data-field="channels.${activeIdx}.assumptions.returnsPercent" data-type="number" data-field-commit="change" style="max-width:80px;" />
           <span class="cm-vol-row__suffix">%</span></div>
         <div class="cm-vol-row" style="gap:6px;"><span>Inbound : outbound ratio</span>
           <input class="hub-input cm-vol-num" type="number" value="${ass.inboundOutboundRatio || 1}" placeholder="1.0" step="0.01" min="0"
-                 data-field="channels.${activeIdx}.assumptions.inboundOutboundRatio" data-type="number" style="max-width:80px;" />
+                 data-field="channels.${activeIdx}.assumptions.inboundOutboundRatio" data-type="number" data-field-commit="change" style="max-width:80px;" />
           <span class="cm-vol-row__suffix">&times;</span></div>
         <div class="cm-vol-row" style="gap:6px;"><span>Working days / year</span>
           <input class="hub-input cm-vol-num" type="number" value="${opDays}" placeholder="250" step="1" min="1" max="366"
-                 data-field="facility.opDaysPerYear" data-type="number" style="max-width:80px;" />
+                 data-field="facility.opDaysPerYear" data-type="number" data-field-commit="change" style="max-width:80px;" />
           <span class="cm-vol-row__suffix">days</span></div>
         <div class="cm-vol-row" style="gap:6px;"><span>Peak surge factor</span>
           <input class="hub-input cm-vol-num" type="number" value="${ass.peakSurgeFactor || 1.5}" placeholder="1.5" step="0.1" min="1"
-                 data-field="channels.${activeIdx}.assumptions.peakSurgeFactor" data-type="number" style="max-width:80px;" />
+                 data-field="channels.${activeIdx}.assumptions.peakSurgeFactor" data-type="number" data-field-commit="change" style="max-width:80px;" />
           <span class="cm-vol-row__suffix">&times; daily avg</span></div>
         <div class="cm-vol-formula">Returns volume = ${fmtFull(annualUnits)} &times; ${(ass.returnsPercent || 0)}% = ${fmtFull(dReturns.value)} units/yr</div>
       </div>
@@ -4084,19 +4058,6 @@ function renderOrderProfile() {
 
 function renderFacility() {
   const f = model.facility || {};
-  // 2026-04-30 PM (item 8): top-of-page tile strip for design-system parity.
-  // Derived metrics — sqft suggestion + occupancy + facility cost.
-  const _facDetail = calc.suggestFacilitySqftDetail
-    ? calc.suggestFacilitySqftDetail(model)
-    : { sqft: 0, raw: 0, capped: false, sane: true };
-  const _facCurrent = Number(f.totalSqft) || 0;
-  const _facSuggested = _facDetail.sqft || 0;
-  const _facMarket = (refData.markets || []).find(m => (m.market_id || m.id) === model.projectDetails?.market);
-  const _facRate = (refData.facilityRates || []).find(r => r.market_id === model.projectDetails?.market);
-  const _facPsf = _facRate
-    ? (Number(_facRate.lease_rate_psf_yr) || 0) + (Number(_facRate.cam_rate_psf_yr) || 0) + (Number(_facRate.tax_rate_psf_yr) || 0) + (Number(_facRate.insurance_rate_psf_yr) || 0)
-    : 0;
-  const _facAnnualCost = _facCurrent * _facPsf;
 
   return `
     <div class="cm-section-header">
@@ -4107,29 +4068,11 @@ function renderFacility() {
       <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="launch-wsc">Size with Calculator →</button>
     </div>
 
-    <div class="hub-kpi-strip mb-4">
-      <div class="hub-kpi-tile">
-        <div class="hub-kpi-tile__label">Total Sqft</div>
-        <div class="hub-kpi-tile__value">${_facCurrent > 0 ? (_facCurrent >= 1e6 ? (_facCurrent/1e6).toFixed(2)+'M' : (_facCurrent/1e3).toFixed(0)+'K') + ' sqft' : '—'}</div>
-      </div>
-      <div class="hub-kpi-tile">
-        <div class="hub-kpi-tile__label">Suggested (DOH)</div>
-        <div class="hub-kpi-tile__value">${_facSuggested > 0 ? (_facSuggested >= 1e6 ? (_facSuggested/1e6).toFixed(2)+'M' : (_facSuggested/1e3).toFixed(0)+'K') + ' sqft' : '—'}</div>
-      </div>
-      <div class="hub-kpi-tile">
-        <div class="hub-kpi-tile__label">Market $ / sqft / yr</div>
-        <div class="hub-kpi-tile__value">${_facPsf > 0 ? '$' + _facPsf.toFixed(2) : '—'}</div>
-      </div>
-      <div class="hub-kpi-tile">
-        <div class="hub-kpi-tile__label">Annual Facility Cost</div>
-        <div class="hub-kpi-tile__value">${_facAnnualCost > 0 ? calc.formatCurrency(_facAnnualCost, {compact: true}) : '—'}</div>
-      </div>
-    </div>
-
-    <div class="cm-narrow-form" style="grid-template-columns: repeat(3, minmax(0, 1fr));">
+    <div class="hub-card">
+    <div class="cm-narrow-form" style="grid-template-columns: repeat(3, minmax(0, 1fr));margin:0;">
       <div class="hub-field">
         <label class="hub-field__label">Total Square Footage</label>
-        <input class="hub-input" type="number" value="${f.totalSqft || ''}" placeholder="e.g., 150000" step="1000" data-field="facility.totalSqft" data-type="number" />
+        <input class="hub-input" type="number" value="${f.totalSqft || ''}" placeholder="e.g., 150000" step="1000" data-field="facility.totalSqft" data-type="number" data-field-commit="change" />
         ${(() => {
           // R14 (2026-04-29) — surface a volume-driven suggestion any time
           // current sqft diverges >5% from the heuristic. Click-to-apply
@@ -4163,12 +4106,13 @@ function renderFacility() {
       </div>
       <div class="hub-field">
         <label class="hub-field__label">Clear Height (ft)</label>
-        <input class="hub-input" type="number" value="${f.clearHeight || ''}" placeholder="e.g., 32" step="1" data-field="facility.clearHeight" data-type="number" />
+        <input class="hub-input" type="number" value="${f.clearHeight || ''}" placeholder="e.g., 32" step="1" data-field="facility.clearHeight" data-type="number" data-field-commit="change" />
       </div>
       <div class="hub-field">
         <label class="hub-field__label">Dock Doors</label>
-        <input class="hub-input" type="number" value="${f.dockDoors || ''}" placeholder="e.g., 24" step="1" data-field="facility.dockDoors" data-type="number" />
+        <input class="hub-input" type="number" value="${f.dockDoors || ''}" placeholder="e.g., 24" step="1" data-field="facility.dockDoors" data-type="number" data-field-commit="change" />
       </div>
+    </div>
     </div>
 
     <!-- Design policy inputs — drive the Equipment auto-generator per
@@ -4194,7 +4138,7 @@ function renderFacility() {
         </div>
         <div class="hub-field">
           <label class="hub-field__label" title="Linear feet of perimeter fencing. If > 0, auto-adds Capital fencing at ~$52/LF.">Fenced Perimeter (LF)</label>
-          <input class="hub-input" type="number" value="${f.fencedPerimeterLf || 0}" placeholder="0" step="100" data-field="facility.fencedPerimeterLf" data-type="number" />
+          <input class="hub-input" type="number" value="${f.fencedPerimeterLf || 0}" placeholder="0" step="100" data-field="facility.fencedPerimeterLf" data-type="number" data-field-commit="change" />
           <div class="hub-field__hint">0 = no fencing.</div>
         </div>
       </div>
@@ -4258,17 +4202,17 @@ function renderFacilityOverridePanel() {
         <div class="cm-narrow-form" style="grid-template-columns: repeat(3, minmax(0, 1fr));">
           <div class="hub-field">
             <label class="hub-field__label" title="Replaces lease + CAM + tax + insurance combined ($/SF/Yr). Useful when you have a known all-in rent number.">Rent ($/SF/Yr)</label>
-            <input class="hub-input" type="number" step="0.10" min="0" value="${_hasOv('ratePerSfYr') ? ov.ratePerSfYr : ''}" placeholder="market" data-field="facility.overrides.ratePerSfYr" data-type="number" />
+            <input class="hub-input" type="number" step="0.10" min="0" value="${_hasOv('ratePerSfYr') ? ov.ratePerSfYr : ''}" placeholder="market" data-field="facility.overrides.ratePerSfYr" data-type="number" data-field-commit="change" />
             <div class="hub-field__hint">Blank = use market</div>
           </div>
           <div class="hub-field">
             <label class="hub-field__label" title="Replaces market utility rate ($/SF/Mo).">Utilities ($/SF/Mo)</label>
-            <input class="hub-input" type="number" step="0.01" min="0" value="${_hasOv('utilPerSfMo') ? ov.utilPerSfMo : ''}" placeholder="market" data-field="facility.overrides.utilPerSfMo" data-type="number" />
+            <input class="hub-input" type="number" step="0.01" min="0" value="${_hasOv('utilPerSfMo') ? ov.utilPerSfMo : ''}" placeholder="market" data-field="facility.overrides.utilPerSfMo" data-type="number" data-field-commit="change" />
             <div class="hub-field__hint">Blank = use market</div>
           </div>
           <div class="hub-field">
             <label class="hub-field__label" title="Maintenance/repair as % of base rent (industry typical 0.5–2%). Adds on top of base rent.">Maintenance %</label>
-            <input class="hub-input" type="number" step="0.1" min="0" value="${_hasOv('maintPct') ? ov.maintPct : ''}" placeholder="0" data-field="facility.overrides.maintPct" data-type="number" />
+            <input class="hub-input" type="number" step="0.1" min="0" value="${_hasOv('maintPct') ? ov.maintPct : ''}" placeholder="0" data-field="facility.overrides.maintPct" data-type="number" data-field-commit="change" />
             <div class="hub-field__hint">% of base rent</div>
           </div>
         </div>
@@ -4505,11 +4449,11 @@ function renderShifts() {
       <div style="display:grid;grid-template-columns:repeat(4, minmax(0, 1fr));gap:12px;margin-bottom:12px;">
         <div class="hub-field">
           <label class="hub-field__label" title="Pay premium applied to 2nd-shift hours. Shift structure (shifts/day, workweek pattern) lives on Shift Planner.">2nd Shift Premium %</label>
-          <input class="hub-input" type="number" value="${s.shift2Premium || 0}" min="0" max="50" step="0.5" data-field="shifts.shift2Premium" data-type="number" />
+          <input class="hub-input" type="number" value="${s.shift2Premium || 0}" min="0" max="50" step="0.5" data-field="shifts.shift2Premium" data-type="number" data-field-commit="change" />
         </div>
         <div class="hub-field">
           <label class="hub-field__label" title="Pay premium applied to 3rd-shift hours. Shift structure (shifts/day, workweek pattern) lives on Shift Planner.">3rd Shift Premium %</label>
-          <input class="hub-input" type="number" value="${s.shift3Premium || 0}" min="0" max="50" step="0.5" data-field="shifts.shift3Premium" data-type="number" />
+          <input class="hub-input" type="number" value="${s.shift3Premium || 0}" min="0" max="50" step="0.5" data-field="shifts.shift3Premium" data-type="number" data-field-commit="change" />
         </div>
         <div></div>
         <div></div>
@@ -4518,11 +4462,11 @@ function renderShifts() {
       <div style="display:grid;grid-template-columns:repeat(4, minmax(0, 1fr));gap:12px;margin-bottom:12px;">
         <div class="hub-field">
           <label class="hub-field__label" title="Paid Time Off (vacation + personal days) — hours per FTE per year. Default 80 = 10 days × 8 hrs. Typical 80-120. Editable per region/role. Subtracts from 2,080 paid hours → Productive.">PTO Hours / Year</label>
-          <input class="hub-input" type="number" min="0" max="400" step="8" value="${ptoHrs}" data-field="shifts.ptoHoursPerYear" data-type="number" />
+          <input class="hub-input" type="number" min="0" max="400" step="8" value="${ptoHrs}" data-field="shifts.ptoHoursPerYear" data-type="number" data-field-commit="change" />
         </div>
         <div class="hub-field">
           <label class="hub-field__label" title="Paid holidays — hours per FTE per year. Default 64 = 8 holidays × 8 hrs. Some regions observe more/fewer. Subtracts from 2,080 paid hours → Productive.">Holiday Hours / Year</label>
-          <input class="hub-input" type="number" min="0" max="200" step="8" value="${holidayHrs}" data-field="shifts.holidayHoursPerYear" data-type="number" />
+          <input class="hub-input" type="number" min="0" max="200" step="8" value="${holidayHrs}" data-field="shifts.holidayHoursPerYear" data-type="number" data-field-commit="change" />
         </div>
         <div></div>
         <div></div>
@@ -4598,7 +4542,7 @@ function renderShifts() {
       <div style="display:grid;grid-template-columns:repeat(4, minmax(0, 1fr));gap:12px;">
         <div class="hub-field">
           <label class="hub-field__label" title="Planned bonus pay as % of base wage. Blend across all roles.">Bonus %</label>
-          <input class="hub-input" type="number" min="0" max="50" step="0.25" value="${s.bonusPct ?? 5}" data-field="shifts.bonusPct" data-type="number" />
+          <input class="hub-input" type="number" min="0" max="50" step="0.25" value="${s.bonusPct ?? 5}" data-field="shifts.bonusPct" data-type="number" data-field-commit="change" />
         </div>
         <div class="hub-field">
           <label class="hub-field__label" title="Planned overtime hours as % of regular. Each OT hour costs 1.5×. Typical 3-8%. Hourly-nonexempt only — salary roles are exempt (doc §3.4).">Overtime %</label>
@@ -4610,7 +4554,7 @@ function renderShifts() {
         </div>
         <div class="hub-field">
           <label class="hub-field__label" title="PF&amp;D haircut applied to UPH (not hours) per doc §2.1. Captures personal allowance, fatigue, delay, paid breaks, activity-switching. Reference 85%. Range 75-90%.">Direct Utilization %</label>
-          <input class="hub-input" type="number" min="50" max="100" step="0.5" value="${s.directUtilization ?? 85}" data-field="shifts.directUtilization" data-type="number" />
+          <input class="hub-input" type="number" min="50" max="100" step="0.5" value="${s.directUtilization ?? 85}" data-field="shifts.directUtilization" data-type="number" data-field-commit="change" />
         </div>
       </div>
     </div>
@@ -6527,12 +6471,12 @@ function renderFinancial() {
           <div class="cm-margin-split">
             <div class="cm-margin-split-field">
               <div class="cm-margin-split-sublabel" title="Corporate overhead layer that scales with the deal. Typical default 6%.">G&amp;A Margin (%)</div>
-              <input class="hub-input" type="number" step="0.25" min="0" max="30" value="${ga}" data-field="financial.gaMargin" data-type="number" />
+              <input class="hub-input" type="number" step="0.25" min="0" max="30" value="${ga}" data-field="financial.gaMargin" data-type="number" data-field-commit="change" />
             </div>
             <div class="cm-margin-split-op">+</div>
             <div class="cm-margin-split-field">
               <div class="cm-margin-split-sublabel" title="Management fee margin layered on top of cost + G&A. Typical default 10%.">Mgmt Fee Margin (%)</div>
-              <input class="hub-input" type="number" step="0.25" min="0" max="30" value="${mgmt}" data-field="financial.mgmtFeeMargin" data-type="number" />
+              <input class="hub-input" type="number" step="0.25" min="0" max="30" value="${mgmt}" data-field="financial.mgmtFeeMargin" data-type="number" data-field-commit="change" />
             </div>
             <div class="cm-margin-split-op">=</div>
             <div class="cm-margin-split-total">
@@ -6563,17 +6507,17 @@ function renderFinancial() {
             <div class="cm-split-month-grid">
               <div class="hub-field">
                 <label class="hub-field__label" title="Share of total revenue billed as a fixed monthly management fee at start-of-month. Covers overhead, management, facility. The remainder is billed as a variable transaction fee at month-end.">Fixed Fee (% of total revenue)</label>
-                <input class="hub-input" type="number" step="5" min="0" max="100" value="${model.projectDetails?.splitBillingFixedPct != null ? model.projectDetails.splitBillingFixedPct : 40}" data-field="projectDetails.splitBillingFixedPct" data-type="number" />
+                <input class="hub-input" type="number" step="5" min="0" max="100" value="${model.projectDetails?.splitBillingFixedPct != null ? model.projectDetails.splitBillingFixedPct : 40}" data-field="projectDetails.splitBillingFixedPct" data-type="number" data-field-commit="change" />
                 <div class="hub-field__hint">30–50% typical. Default 40%.</div>
               </div>
               <div class="hub-field">
                 <label class="hub-field__label" title="Days Sales Outstanding for the fixed-fee stream. Short — billed day 1, collected net-15.">Fixed-Fee DSO (days)</label>
-                <input class="hub-input" type="number" step="1" min="0" max="90" value="${model.projectDetails?.splitBillingFixedDsoDays != null ? model.projectDetails.splitBillingFixedDsoDays : 15}" data-field="projectDetails.splitBillingFixedDsoDays" data-type="number" />
+                <input class="hub-input" type="number" step="1" min="0" max="90" value="${model.projectDetails?.splitBillingFixedDsoDays != null ? model.projectDetails.splitBillingFixedDsoDays : 15}" data-field="projectDetails.splitBillingFixedDsoDays" data-type="number" data-field-commit="change" />
                 <div class="hub-field__hint">Default 15 days.</div>
               </div>
               <div class="hub-field">
                 <label class="hub-field__label" title="DSO for the variable transaction-fee stream. Longer — billed day 30 (month-end), collected net-30 → ~60 days after service delivery.">Variable-Fee DSO (days)</label>
-                <input class="hub-input" type="number" step="1" min="0" max="120" value="${model.projectDetails?.splitBillingVariableDsoDays != null ? model.projectDetails.splitBillingVariableDsoDays : 45}" data-field="projectDetails.splitBillingVariableDsoDays" data-type="number" />
+                <input class="hub-input" type="number" step="1" min="0" max="120" value="${model.projectDetails?.splitBillingVariableDsoDays != null ? model.projectDetails.splitBillingVariableDsoDays : 45}" data-field="projectDetails.splitBillingVariableDsoDays" data-type="number" data-field-commit="change" />
                 <div class="hub-field__hint">Default 45 days.</div>
               </div>
             </div>
@@ -6632,7 +6576,7 @@ function renderFinancial() {
           </div>
           <div class="hub-field">
             <label class="hub-field__label">Tax Rate (%)</label>
-            <input class="hub-input" type="number" value="${model.projectDetails?.taxRate || 25}" step="0.5" min="0" max="50" data-field="projectDetails.taxRate" data-type="number" />
+            <input class="hub-input" type="number" value="${model.projectDetails?.taxRate || 25}" step="0.5" min="0" max="50" data-field="projectDetails.taxRate" data-type="number" data-field-commit="change" />
             <div class="hub-field__hint">Federal + state blend. Default 25%. Operating losses don\'t generate refunds.</div>
           </div>
           <div class="hub-field">
@@ -6652,7 +6596,7 @@ function renderFinancial() {
         <div class="cm-fin-row cm-fin-row--2">
           <div class="hub-field">
             <label class="hub-field__label">SG&amp;A Overlay (% of net revenue)</label>
-            <input class="hub-input" type="number" step="0.25" min="0" max="30" value="${f.sgaOverlayPct != null ? f.sgaOverlayPct : 0}" data-field="financial.sgaOverlayPct" data-type="number" />
+            <input class="hub-input" type="number" step="0.25" min="0" max="30" value="${f.sgaOverlayPct != null ? f.sgaOverlayPct : 0}" data-field="financial.sgaOverlayPct" data-type="number" data-field-commit="change" />
             <div class="hub-field__hint">Optional flat overlay on net revenue, on top of any Overhead and start-up amortization rows. Leave at 0 unless your reference model requires it (4.5% is the typical reference value).</div>
           </div>
           <div class="hub-field">
