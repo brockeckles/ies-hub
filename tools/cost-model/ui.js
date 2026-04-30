@@ -11,7 +11,7 @@ import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260424-hyg04';
-import * as calc from './calc.js?v=20260430-am-p5fix5';
+import * as calc from './calc.js?v=20260430-am-p5fix6';
 import * as api from './api.js?v=20260429-vol12';
 import * as scenarios from './calc.scenarios.js?v=20260429-otfix1';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
@@ -22,7 +22,7 @@ import * as shiftPlannerUi from './shift-planner-ui.js?v=20260428-walkthru1';
 // 2026-04-28 — internal phase stepper for Implementation Timeline section.
 import { renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260429-p52';
-import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260430-am-p5fix5';
+import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260430-am-p5fix6';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
 // disk but no longer imported; can be deleted in a future cleanup.
@@ -13428,7 +13428,12 @@ function renderImplementation() {
       </div>
     </div>
 
-    ${hiddenStripHtml}
+    <!-- 2026-04-30 (G7): removed orphan \${hiddenStripHtml} reference —
+         that variable is only declared inside renderOperationalFlow.
+         The stale copy-paste threw ReferenceError on every Implementation
+         render; the exception aborted container.innerHTML = render(), so
+         the prior section's HTML stayed visible (which is why R2 was
+         mis-diagnosed as a "false alarm" in the 2026-04-29 audit). -->
 
     <!-- KPI strip -->
     <div class="hub-kpi-strip" style="margin-bottom:16px;">
@@ -14787,7 +14792,10 @@ function _renderOfpNode(entry, areaKey, opHrs, lc) {
   const cost = entry.isDirect
     ? calc.directLineAnnualSimple(l, lc)
     : calc.indirectLineAnnualSimple(l, opHrs, lc);
-  const name = l.activity_name || l.position || '(unnamed)';
+  // 2026-04-30 (G6): indirect labor stores its name in role_name; direct
+  // labor uses activity_name. Fall back through both so OFP cards don't
+  // render as "(unnamed)" for auto-gen indirect roles.
+  const name = l.activity_name || l.role_name || l.position || l.role || '(unnamed)';
   const role = l.position || l.role || (entry.isDirect ? '' : 'Indirect');
   const volume = Number(l.volume) || 0;
   const uph = Number(l.base_uph) || 0;
@@ -14796,8 +14804,13 @@ function _renderOfpNode(entry, areaKey, opHrs, lc) {
 
   // v0.2 — cheap validation lints. Indirect labor exempt from the
   // "no volume / no UPH" lints (indirect roles are headcount-driven).
+  // 2026-04-30 (G6): activity_name is a direct-labor field; for indirect
+  // labor, the name lives in role_name. Lint each per its own field.
   const issues = [];
-  if (!l.activity_name || !l.activity_name.trim()) issues.push('Activity name is empty');
+  const hasName = entry.isDirect
+    ? (l.activity_name && l.activity_name.trim())
+    : ((l.role_name && l.role_name.trim()) || (l.position && l.position.trim()));
+  if (!hasName) issues.push(entry.isDirect ? 'Activity name is empty' : 'Role name is empty');
   if (!Number(l.hourly_rate) || Number(l.hourly_rate) <= 0) issues.push('Hourly rate is $0');
   if (entry.isDirect) {
     if (volume <= 0) issues.push('Volume is 0 (FTE math will collapse to 0)');
@@ -15629,7 +15642,8 @@ function _openOfpDetail(container, line, kind, idx) {
     : calc.indirectLineAnnualSimple(line, opHrs, lc);
   const area = kind === 'direct' ? _classifyAreaFromLine(line) : 'support';
   const meta = _ofpAreaMeta(area);
-  const name = line.activity_name || line.position || '(unnamed)';
+  // 2026-04-30 (G6): indirect labor uses role_name, not activity_name.
+  const name = line.activity_name || line.role_name || line.position || line.role || '(unnamed)';
   const arrayPath = kind === 'direct' ? 'laborLines' : 'indirectLaborLines';
 
   // Build the area override <select> options from the per-cost-model
