@@ -11,7 +11,7 @@ import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260424-hyg04';
-import * as calc from './calc.js?v=20260430-am-p5fix11';
+import * as calc from './calc.js?v=20260430-am-p5fix12';
 import * as api from './api.js?v=20260429-vol12';
 import * as scenarios from './calc.scenarios.js?v=20260429-otfix1';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
@@ -22,7 +22,7 @@ import * as shiftPlannerUi from './shift-planner-ui.js?v=20260428-walkthru1';
 // 2026-04-28 — internal phase stepper for Implementation Timeline section.
 import { renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260429-p52';
-import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260430-am-p5fix11';
+import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
 // disk but no longer imported; can be deleted in a future cleanup.
@@ -1729,7 +1729,7 @@ function computeHeaderKpis() {
         items: [
           { label: `Cost / Unit`,   value: '—', hint: 'Set outbound volume on the Volumes section to populate.' },
           { label: 'Y1 Revenue',    value: '—' },
-          { label: 'Margin (Y1)',   value: '—' },
+          { label: 'GP Margin (Y1)', value: '—' },
           { label: 'Total FTEs',    value: '—' },
           { label: `NPV (${contractYears}yr)`, value: '—' },
           // 2026-04-30 (F4): 6th tile on bail-out so the strip is stable
@@ -1902,7 +1902,7 @@ function computeHeaderKpis() {
         },
         {
           key: 'kpi:y1Margin',
-          label: 'Margin (Y1)',
+          label: 'GP Margin (Y1)',
           value: y1Revenue > 0 ? calc.formatPct(y1Margin, 1) : '—',
           hint: 'Y1 gross profit ÷ revenue. Often lower than your target margin in early years until the ramp completes.',
         },
@@ -2451,7 +2451,7 @@ function getCellProvenance(rowKey, year) {
     case 'kpi:y1Margin': {
       const k = ctx.kpi || {};
       return {
-        label: 'Margin (Y1)',
+        label: 'GP Margin (Y1)',
         valueFormat: 'pct',
         formula: 'y1Margin = grossProfit(Y1) ÷ revenue(Y1)',
         value: (k.y1Margin || 0) / 100,
