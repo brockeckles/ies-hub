@@ -11,7 +11,7 @@ import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260424-hyg04';
-import * as calc from './calc.js?v=20260430-am-p5fix6';
+import * as calc from './calc.js?v=20260430-am-p5fix7';
 import * as api from './api.js?v=20260429-vol12';
 import * as scenarios from './calc.scenarios.js?v=20260429-otfix1';
 import * as monthlyCalc from './calc.monthly.js?v=20260422-xU';
@@ -22,7 +22,7 @@ import * as shiftPlannerUi from './shift-planner-ui.js?v=20260428-walkthru1';
 // 2026-04-28 — internal phase stepper for Implementation Timeline section.
 import { renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260429-p52';
-import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260430-am-p5fix6';
+import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260430-am-p5fix7';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
 // disk but no longer imported; can be deleted in a future cleanup.
@@ -3555,6 +3555,28 @@ function renderVolumes() {
             return `<div class="cm-vol-mix-bar__seg${isActive ? ' cm-vol-mix-bar__seg--active' : ''}" style="background:${color};width:${m.pct}%;" title="${ch2?.name || m.channelKey}: ${m.pct.toFixed(1)}%"></div>`;
           }).join('')}
         </div>
+        ${(() => {
+          // 2026-04-30 — surface reverse-channel volume as a separate
+          // indicator below the mix bar. Reverse is intentionally excluded
+          // from the mix bar (its units are returns from outbound channels,
+          // so including them would double-count). But the channel tab
+          // strip below DOES show Reverse, creating a visual gap where
+          // viewers expect a 3rd segment. This pill closes the gap.
+          const rev = (channelMix || []).find(m => {
+            const c2 = channels.find(c => c.key === m.channelKey);
+            return c2 && c2.archetypeId === 'reverse';
+          });
+          if (!rev) return '';
+          const revCh = channels.find(c => c.key === rev.channelKey);
+          const color = (revCh && revCh.color) || '#dc2626';
+          return `
+            <div class="cm-vol-mix-card__reverse-pill" title="Reverse logistics auto-derives from outbound channels' returns. Not shown in the mix bar to avoid double-counting (these are the same units flowing back from outbound).">
+              <span class="cm-vol-mix-card__reverse-dot" style="background:${color};"></span>
+              <span class="cm-vol-mix-card__reverse-label">Reverse: ${fmtN(rev.annualUnits || 0)} units</span>
+              <span class="cm-vol-mix-card__reverse-meta">auto-derived from outbound × returns%</span>
+            </div>
+          `;
+        })()}
         ${isByMix ? `
           <div class="cm-vol-mix-allocs">
             <div class="cm-vol-mix-allocs__total">
@@ -3854,6 +3876,20 @@ function renderVolumes() {
       .cm-vol-mix-bar { display: flex; height: 14px; border-radius: 4px; overflow: hidden; border: 1px solid var(--ies-gray-200); background: var(--ies-gray-50, #fafbfc); }
       .cm-vol-mix-bar__seg { transition: width 200ms; }
       .cm-vol-mix-bar__seg--active { box-shadow: inset 0 0 0 2px rgba(0,0,0,0.20); }
+      .cm-vol-mix-card__reverse-pill {
+        display: inline-flex; align-items: center; gap: 8px;
+        margin-top: 8px; padding: 4px 10px;
+        background: var(--ies-gray-50, #fafbfc);
+        border: 1px dashed var(--ies-gray-300, #d1d5db);
+        border-radius: 12px;
+        font-size: 11px; color: var(--ies-gray-600, #4b5563);
+        cursor: help;
+      }
+      .cm-vol-mix-card__reverse-dot {
+        width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+      }
+      .cm-vol-mix-card__reverse-label { font-weight: 600; color: var(--ies-gray-700, #374151); }
+      .cm-vol-mix-card__reverse-meta { font-style: italic; opacity: 0.85; }
       .cm-vol-mix-allocs { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--ies-gray-200); }
       .cm-vol-mix-allocs__total { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
       .cm-vol-mix-allocs__rows { display: grid; gap: 6px; }
