@@ -2943,15 +2943,18 @@ export function autoGenerateIndirectLabor(state, opts = {}) {
       { code: 'indirect.customer_service.per_500k_orders', label: '1 CS rep per 500K orders/yr', value: 500000, source: 'legacy', legacy_value: 500000 });
   }
 
-  // 7. Returns Processor: 1 per 100K returns/yr — channel-aware (Phase 3).
-  // Each channel contributes its primary-units × that channel's own
-  // returnsPercent assumption. Replaces the flat 5%-of-orders heuristic so
-  // a deal mixing 15%-return DTC with 1%-return B2B sizes the role correctly
-  // instead of averaging into noise.
-  const estimatedReturns = _getAggregateDerived(state, 'returns');
-  if (estimatedReturns >= 100000) {
-    addRole('Returns Processor', Math.ceil(estimatedReturns / 100000), 17, 30,
-      { code: 'indirect.returns_processor.per_100k_returns', label: '1 processor per 100K returns/yr (per-channel returns%)', value: 100000, source: 'channels', legacy_value: 100000 });
+  // 7. Returns Processor: 1 per 100K return ORDERS/yr — channel-aware (Phase 3).
+  // 2026-04-30 (G9): switched from return UNITS to return ORDERS. A
+  // returns processor handles return shipments (~30-50 return-orders/hr =
+  // ~100K return-orders/year), not individual items. Counting in units
+  // over-sized this role 5-15× on multi-channel deals where B2B's high
+  // units-per-order multiplied returns enormously (a 72M-unit B2B channel
+  // with 2% returns produced 1.44M return UNITS = 14 imaginary FTEs).
+  // Each channel contributes orders × that channel's own returnsPercent.
+  const estimatedReturnOrders = _getAggregateDerived(state, 'returnOrders');
+  if (estimatedReturnOrders >= 100000) {
+    addRole('Returns Processor', Math.ceil(estimatedReturnOrders / 100000), 17, 30,
+      { code: 'indirect.returns_processor.per_100k_return_orders', label: '1 processor per 100K return orders/yr (per-channel returns%)', value: 100000, source: 'channels', legacy_value: 100000 });
   }
 
   // 8. IT Support: 0.5-2 based on FTE count

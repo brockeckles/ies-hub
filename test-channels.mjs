@@ -438,16 +438,26 @@ test('Phase 3 — autoGenerateIndirect: CS rep sized off cross-channel orders', 
   eq(cs.headcount, 5);
 });
 
-test('Phase 3 — autoGenerateIndirect: Returns processor uses per-channel returnsPercent', () => {
+test('Phase 3 — autoGenerateIndirect: Returns processor uses per-channel returnsPercent (G9 — return ORDERS, not units)', () => {
   const m = twoChannelModel();
-  // DTC returns: 1M orders × (2 × 5 units) = 10M units × 15% = 1.5M units.
-  // B2B returns: 50k pallets × (24 × 50 units) = 60M units × 1% = 600k units.
-  // Total returns: 2.1M units. /100k = 21 processors.
+  // 2026-04-30 (G9): the heuristic was changed from return UNITS to
+  // return ORDERS because a Returns Processor handles return SHIPMENTS
+  // (not individual items). The previous test passed only because the
+  // unit-based formula massively over-sized this role on multi-channel
+  // deals (it expected 21 from B2B's high units/order).
+  //
+  // Now: DTC 1M orders × 15% = 150K return orders; B2B 0 orders × 1% = 0
+  // (B2B's primary is pallets in this fixture); total 150K. /100K = 2 reps.
+  // Note B2B's primary UOM in twoChannelModel is 'pallets' (not orders) so
+  // the orders-aware heuristic correctly picks up only DTC's order count.
   const ind = autoGenerateIndirect(m);
   const rp = ind.find(l => /returns processor/i.test(l.role_name || ''));
   if (!rp) throw new Error('Returns processor not generated');
-  // Should be far more than the legacy flat-5% would have given.
-  if (rp.headcount < 15) throw new Error(`Expected channel-aware headcount > 15, got ${rp.headcount}`);
+  // Realistic 3PL operations: 1 returns processor per ~100K return orders/yr.
+  // Channel-aware fixture should produce 2-3 (was 21 under units-based bug).
+  if (rp.headcount < 1 || rp.headcount > 5) {
+    throw new Error(`Expected order-aware headcount 1-5 (was 2 with G9 fix), got ${rp.headcount}`);
+  }
 });
 
 test('Phase 3 — autoGenerateEquipment: pallets-in folds inbound across channels', () => {

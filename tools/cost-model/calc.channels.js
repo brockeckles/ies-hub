@@ -286,6 +286,17 @@ export function getChannelDerived(model, channel, key) {
       derived = annualUnits * ((Number(assumptions.returnsPercent) || 0) / 100);
       break;
     }
+    case 'returnOrders': {
+      // 2026-04-30 (G9) — for labor-sizing heuristics (Returns Processor),
+      // returns measured in ORDERS is more accurate than in UNITS. A
+      // returns processor handles return shipments (typically 30-50/hr,
+      // ~100K/yr per FTE), not individual items. On a multi-channel deal
+      // mixing DTC (high units/order) and B2B (very high units/order),
+      // counting returns in units massively over-sizes the role.
+      const annualOrders = getChannelPrimaryIn(channel, 'orders');
+      derived = annualOrders * ((Number(assumptions.returnsPercent) || 0) / 100);
+      break;
+    }
     case 'inbound': {
       const annualUnits = getChannelPrimaryIn(channel, 'units');
       derived = annualUnits * (Number(assumptions.inboundOutboundRatio) || 1);
