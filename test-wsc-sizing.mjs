@@ -1,5 +1,5 @@
 // test-wsc-sizing.mjs — regression tests for I-06 (WSC honor explicit dock config + pallet override)
-import { sizeFacility, calcDIOH, orientFacility, elevationParams, crossAisleDefaults, crossAisleLayoutFt } from './tools/warehouse-sizing/calc.js';
+import { sizeFacility, calcDIOH, orientFacility, elevationParams, crossAisleDefaults, crossAisleLayoutFt, rackPairCapacity, rollupRenderedFacts, PALLET_BAY_WIDTH_FT, SHELVING_BAY_WIDTH_FT } from './tools/warehouse-sizing/calc.js';
 
 let pass = 0, fail = 0;
 const t = (name, cond, extra = '') => {
@@ -466,6 +466,174 @@ import { assignDemand } from './tools/network-opt/calc.js';
   t('X1 600 ft std+reach: 3 segments', std.segmentCount === 3);
   t('X1 600 ft std+reach: 10 ft clear', std.crossAisleClearFt === 10);
 }
+
+// ── P0-2: rackPairCapacity ──
+{
+  // Standard 200 ft segment, 5 levels, default 4.33 ft pallet bay.
+  // baysPerFace = floor(200/4.33) = 46; baysTotal = 92; positions = 92*5 = 460
+  const cap1 = rackPairCapacity({ segmentLenFt: 200, levels: 5 });
+  t('P0-2 200ft x 5lvl: 46 bays per face', cap1.baysPerFace === 46);
+  t('P0-2 200ft x 5lvl: 92 bays total (2 faces)', cap1.baysTotal === 92);
+  t('P0-2 200ft x 5lvl: 460 positions', cap1.positions === 460);
+
+  // Shelving — 200 ft segment, 5 levels, 3 ft bay
+  const capS = rackPairCapacity({ segmentLenFt: 200, levels: 5, bayWidthFt: 3 });
+  t('P0-2 200ft x 5lvl x 3ft bay: 66 bays per face', capS.baysPerFace === 66);
+  t('P0-2 200ft x 5lvl x 3ft bay: 660 locations', capS.positions === 660);
+
+  // Edge cases
+  const z1 = rackPairCapacity({ segmentLenFt: 0, levels: 5 });
+  t('P0-2 zero segment: 0 positions', z1.positions === 0 && z1.baysPerFace === 0);
+  const z2 = rackPairCapacity({ segmentLenFt: 200, levels: 0 });
+  t('P0-2 zero levels: 0 positions', z2.positions === 0);
+  const z3 = rackPairCapacity({ segmentLenFt: NaN, levels: 5 });
+  t('P0-2 NaN segment: 0 positions', z3.positions === 0);
+  const z4 = rackPairCapacity({ segmentLenFt: -50, levels: 5 });
+  t('P0-2 negative segment: 0 positions', z4.positions === 0);
+  const z5 = rackPairCapacity({ segmentLenFt: 200, levels: 5, bayWidthFt: 0 });
+  t('P0-2 zero bayWidth falls back to default', z5.baysPerFace === 46);
+
+  // Constants exposed for UI
+  t('P0-2 PALLET_BAY_WIDTH_FT = 4.33', PALLET_BAY_WIDTH_FT === 4.33);
+  t('P0-2 SHELVING_BAY_WIDTH_FT = 3', SHELVING_BAY_WIDTH_FT === 3);
+}
+
+// ── P0-2: rollupRenderedFacts — happy path ──
+{
+  // Simulate a 3D scene that placed:
+  //   2 fullPallet rack pairs, each broken into 2 segments of 200 ft, 5 levels
+  //   1 cartonPallet rack pair, 1 segment of 200 ft, 5 levels
+  //   1 shelving rack pair, 1 segment of 200 ft, 5 levels (3 ft bay)
+  const placed = [
+    { typeKey: 'fullPallet',   colKey: 0,  segmentLenFt: 200, levels: 5, bayWidthFt: 4.33 },
+    { typeKey: 'fullPallet',   colKey: 0,  segmentLenFt: 200, levels: 5, bayWidthFt: 4.33 },
+    { typeKey: 'fullPallet',   colKey: 1,  segmentLenFt: 200, levels: 5, bayWidthFt: 4.33 },
+    { typeKey: 'fullPallet',   colKey: 1,  segmentLenFt: 200, levels: 5, bayWidthFt: 4.33 },
+    { typeKey: 'cartonPallet', colKey: 2,  segmentLenFt: 200, levels: 5, bayWidthFt: 4.33 },
+    { typeKey: 'shelving',     colKey: 3,  segmentLenFt: 200, levels: 5, bayWidthFt: 3 },
+  ];
+  const sized = {
+    positions: {
+      fullPalletPositions: 1840,
+      cartonPalletPositions: 460,
+      shelvingPositions: 660,
+      grossPositions: 2960,
+    },
+  };
+  const facts = rollupRenderedFacts(placed, sized);
+
+  // 4 fullPallet segments of 460 each = 1840
+  t('P0-2 rollup fp segments = 4', facts.byType.fullPallet.segments === 4);
+  t('P0-2 rollup fp columns (unique colKeys) = 2', facts.byType.fullPallet.columns === 2);
+  t('P0-2 rollup fp positions = 1840', facts.byType.fullPallet.positions === 1840);
+
+  // 1 cartonPallet segment = 460
+  t('P0-2 rollup cp positions = 460', facts.byType.cartonPallet.positions === 460);
+  t('P0-2 rollup cp columns = 1', facts.byType.cartonPallet.columns === 1);
+
+  // 1 shelving segment of 660 each = 660
+  t('P0-2 rollup shelving positions = 660', facts.byType.shelving.positions === 660);
+
+  t('P0-2 rollup totalPositions = 2960', facts.totalPositions === 2960);
+  t('P0-2 rollup totalSegments = 6', facts.totalSegments === 6);
+  t('P0-2 rollup totalColumns = 4', facts.totalColumns === 4);
+  t('P0-2 rollup targets pulled from sized.positions', facts.targets.total === 2960 && facts.targets.fullPallet === 1840);
+  t('P0-2 rollup deltaPct = 0 when on target', facts.deltaPct === 0);
+  t('P0-2 rollup status = on_target', facts.status === 'on_target');
+}
+
+// ── P0-2: rollupRenderedFacts — under-built detection ──
+{
+  // Engine sized 5000 positions, scene only placed 1840.
+  const placed = [
+    { typeKey: 'fullPallet', colKey: 0, segmentLenFt: 200, levels: 5, bayWidthFt: 4.33 },
+    { typeKey: 'fullPallet', colKey: 0, segmentLenFt: 200, levels: 5, bayWidthFt: 4.33 },
+    { typeKey: 'fullPallet', colKey: 1, segmentLenFt: 200, levels: 5, bayWidthFt: 4.33 },
+    { typeKey: 'fullPallet', colKey: 1, segmentLenFt: 200, levels: 5, bayWidthFt: 4.33 },
+  ];
+  const sized = {
+    positions: { fullPalletPositions: 5000, cartonPalletPositions: 0, shelvingPositions: 0, grossPositions: 5000 },
+  };
+  const facts = rollupRenderedFacts(placed, sized);
+  t('P0-2 under-built: status=under_built', facts.status === 'under_built');
+  t('P0-2 under-built: deltaPct negative', facts.deltaPct < 0);
+  t('P0-2 under-built: deltaPct ~ -63.2%', Math.abs(facts.deltaPct - (-63.2)) < 0.5);
+}
+
+// ── P0-2: rollupRenderedFacts — over-built detection ──
+{
+  // Engine sized 100 positions, scene placed 920 — over-built.
+  const placed = [
+    { typeKey: 'fullPallet', colKey: 0, segmentLenFt: 200, levels: 5, bayWidthFt: 4.33 },
+    { typeKey: 'fullPallet', colKey: 1, segmentLenFt: 200, levels: 5, bayWidthFt: 4.33 },
+  ];
+  const sized = {
+    positions: { fullPalletPositions: 100, cartonPalletPositions: 0, shelvingPositions: 0, grossPositions: 100 },
+  };
+  const facts = rollupRenderedFacts(placed, sized);
+  t('P0-2 over-built: status=over_built', facts.status === 'over_built');
+  t('P0-2 over-built: deltaPct positive', facts.deltaPct > 0);
+}
+
+// ── P0-2: rollupRenderedFacts — empty inputs are safe ──
+{
+  const facts = rollupRenderedFacts([], {});
+  t('P0-2 empty: totalPositions = 0', facts.totalPositions === 0);
+  t('P0-2 empty: totalColumns = 0', facts.totalColumns === 0);
+  t('P0-2 empty: status=on_target (no target to compare)', facts.status === 'on_target');
+  t('P0-2 empty: deltaPct=0', facts.deltaPct === 0);
+
+  const factsNull = rollupRenderedFacts(null, null);
+  t('P0-2 null inputs: safe', factsNull.totalPositions === 0);
+
+  const factsUndef = rollupRenderedFacts(undefined);
+  t('P0-2 undefined inputs: safe', factsUndef.totalPositions === 0);
+}
+
+// ── P0-2: rollupRenderedFacts — unknown typeKey ignored ──
+{
+  const placed = [
+    { typeKey: 'fullPallet', colKey: 0, segmentLenFt: 200, levels: 5, bayWidthFt: 4.33 },
+    { typeKey: 'mystery',    colKey: 1, segmentLenFt: 200, levels: 5, bayWidthFt: 4.33 }, // unknown
+    { typeKey: undefined,    colKey: 2, segmentLenFt: 200, levels: 5, bayWidthFt: 4.33 },
+  ];
+  const facts = rollupRenderedFacts(placed, {});
+  t('P0-2 unknown typeKey ignored', facts.totalPositions === 460);
+  t('P0-2 unknown typeKey: only fullPallet counted', facts.byType.fullPallet.positions === 460);
+}
+
+// ── P0-2: rollupRenderedFacts — fallback target = sum-of-types when grossPositions=0 ──
+{
+  const placed = [
+    { typeKey: 'fullPallet', colKey: 0, segmentLenFt: 200, levels: 5, bayWidthFt: 4.33 },
+  ];
+  // Engine returned types but no grossPositions (corrupt sized object).
+  const sized = {
+    positions: { fullPalletPositions: 460, cartonPalletPositions: 0, shelvingPositions: 0, grossPositions: 0 },
+  };
+  const facts = rollupRenderedFacts(placed, sized);
+  t('P0-2 fallback: target falls back to sum of types', facts.targets.total === 460);
+  t('P0-2 fallback: status=on_target when achieved matches summed target', facts.status === 'on_target');
+}
+
+// ── P0-2: integration — sizeFacility output feeds rollupRenderedFacts cleanly ──
+{
+  // Run a real sizing scenario and confirm rollupRenderedFacts accepts the
+  // engine output directly without shape mismatch.
+  const sized = sizeFacility({
+    peakUnits: 500000,
+    fullPalletPct: 0.6,
+    cartonOnPalletPct: 0.3,
+    cartonOnShelvingPct: 0.1,
+    clearHeightFt: 36,
+  });
+  // Empty placedRacks → all zeros, but targets pulled from sized
+  const facts = rollupRenderedFacts([], sized);
+  t('P0-2 integration: targets.fullPallet matches sized', facts.targets.fullPallet === sized.positions.fullPalletPositions);
+  t('P0-2 integration: targets.total matches sized.grossPositions', facts.targets.total === sized.positions.grossPositions);
+  t('P0-2 integration: empty placement under-built', facts.status === 'under_built');
+}
+
 
 console.log(`
 

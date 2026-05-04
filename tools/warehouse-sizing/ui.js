@@ -11,7 +11,7 @@ import { state } from '../../shared/state.js?v=20260418-sL';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sL';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260430-na-dot';
-import * as calc from './calc.js?v=20260504-xa1';
+import * as calc from './calc.js?v=20260504-hud1';
 import * as api from './api.js?v=20260418-sL';
 import * as cmApi from '../cost-model/api.js?v=20260504-auth1';
 import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
@@ -392,6 +392,62 @@ function _wscExtraStyles() {
         padding: 0;
         border: none;
         background: transparent;
+      }
+
+      /* P0-2: 3D RenderedFacts HUD — fixed top-right overlay on the 3D canvas. */
+      .wsc-3d-hud {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        max-width: 280px;
+        padding: 12px 14px;
+        background: rgba(15, 23, 42, 0.86);
+        color: #f8fafc;
+        border-radius: 8px;
+        font-size: 12px;
+        line-height: 1.45;
+        font-variant-numeric: tabular-nums;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+        backdrop-filter: blur(4px);
+        pointer-events: none;
+        z-index: 10;
+      }
+      .wsc-3d-hud-title {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: #cbd5e1;
+        margin: 0 0 8px 0;
+      }
+      .wsc-3d-hud-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 2px 0;
+      }
+      .wsc-3d-hud-row strong {
+        font-weight: 700;
+      }
+      .wsc-3d-hud-divider {
+        border-top: 1px solid rgba(148, 163, 184, 0.35);
+        margin: 6px 0;
+      }
+      .wsc-3d-hud-status {
+        margin-top: 8px;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 600;
+        text-align: center;
+      }
+      .wsc-3d-hud-status--on    { background: rgba(34, 197, 94, 0.22);  color: #bbf7d0; }
+      .wsc-3d-hud-status--under { background: rgba(245, 158, 11, 0.25); color: #fde68a; }
+      .wsc-3d-hud-status--over  { background: rgba(59, 130, 246, 0.25); color: #bfdbfe; }
+      .wsc-3d-hud-meta {
+        font-size: 10px;
+        color: #94a3b8;
+        margin-top: 6px;
       }
     </style>
   `;
@@ -2523,6 +2579,14 @@ function drawDimH(ctx, x1, x2, y, label) {
 // ============================================================
 
 function render3DView(container) {
+  // Dispose prior scene before clobbering DOM, so re-renders triggered by
+  // data-field commits don't leak WebGL contexts or leave the old animate
+  // loop spinning against a detached canvas. (Was a latent leak; surfaced
+  // by the P0-2 HUD work because the HUD is recomputed on every rebuild.)
+  if (scene3d) {
+    try { scene3d.dispose(); } catch (_) {}
+    scene3d = null;
+  }
   const sized = calc.sizeFacility(toSizingInputs());
   container.innerHTML = `
     <div class="hub-card" style="padding:16px;">
@@ -2532,15 +2596,66 @@ function render3DView(container) {
           ${calc.formatSqft(sized.totalSqft)} sized  ·  ${facility.buildingWidth || '—'} × ${facility.buildingDepth || '—'} ft  ·  clear ht ${facility.clearHeight || 0} ft  ·  ${sized.dock.totalDoors} dock doors
         </span>
       </div>
-      <div id="wsc-3d-container" style="width:100%; height:520px; background:#e9eef5; border-radius:6px; overflow:hidden;"></div>
+      <div id="wsc-3d-container" style="position:relative; width:100%; height:520px; background:#e9eef5; border-radius:6px; overflow:hidden;">
+        <div id="wsc-3d-hud" class="wsc-3d-hud" aria-live="polite"></div>
+      </div>
       <div style="font-size:11px; color:var(--ies-gray-500); margin-top:8px;">
-        Drag to orbit  ·  Scroll to zoom  ·  Racks shown at 50% opacity for floor visibility
+        Drag to orbit  ·  Scroll to zoom  ·  Racks shown at 50% opacity for floor visibility  ·  HUD shows achieved vs sized target
       </div>
     </div>
   `;
 
   // Defer 3D scene build so the flex layout settles first.
   setTimeout(() => build3DScene(), 80);
+}
+
+/**
+ * Render the achieved-vs-target HUD overlay shown in the top-right corner of
+ * the 3D canvas. P0-2 from the 2026-05-04 WSC deep audit (Lens I — data
+ * fidelity). `facts` is the output of calc.rollupRenderedFacts(); the second
+ * arg is the per-type rack-level context so the HUD can show "5 lvls" etc.
+ */
+function renderRenderedFactsHud(facts, ctx = {}) {
+  if (!facts) return '';
+  const { byType = {}, totalPositions = 0, totalColumns = 0, totalSegments = 0, targets = {}, deltaPct = 0, status = 'on_target' } = facts;
+  const palletLv = +ctx.palletLevels || 0;
+  const shelvLv  = +ctx.shelvingLevels || 0;
+
+  const fmt = (n) => (Number(n) || 0).toLocaleString();
+  const fmtDelta = (d) => {
+    const sign = d > 0 ? '+' : '';
+    return `${sign}${d.toFixed(1)}%`;
+  };
+  const statusLabel = status === 'on_target' ? 'On target (within 5%)'
+    : status === 'under_built' ? 'Under-built — footprint too small'
+    : 'Over-built — building above sized need';
+  const statusClass = status === 'on_target' ? 'wsc-3d-hud-status--on'
+    : status === 'under_built' ? 'wsc-3d-hud-status--under'
+    : 'wsc-3d-hud-status--over';
+
+  const rowFor = (label, key, levelsLabel) => {
+    const b = byType[key] || { columns: 0, positions: 0 };
+    const tgt = targets[key] || 0;
+    const tgtTxt = tgt > 0 ? ` / ${fmt(tgt)}` : '';
+    return `
+      <div class="wsc-3d-hud-row">
+        <span>${label}${levelsLabel ? ` <span class="wsc-3d-hud-meta" style="display:inline">(${levelsLabel})</span>` : ''}</span>
+        <span>${fmt(b.positions)}${tgtTxt}</span>
+      </div>`;
+  };
+
+  return `
+    <div class="wsc-3d-hud-title">Achieved · live</div>
+    <div class="wsc-3d-hud-row"><span>Total positions</span><strong>${fmt(totalPositions)}${targets.total > 0 ? ` / ${fmt(targets.total)}` : ''}</strong></div>
+    ${targets.total > 0 ? `<div class="wsc-3d-hud-row"><span>Delta</span><strong>${fmtDelta(deltaPct)}</strong></div>` : ''}
+    <div class="wsc-3d-hud-divider"></div>
+    ${rowFor('Full pallet', 'fullPallet', palletLv ? `${palletLv} lvls` : '')}
+    ${rowFor('Carton on pallet', 'cartonPallet', palletLv ? `${palletLv} lvls` : '')}
+    ${rowFor('Shelving', 'shelving', shelvLv ? `${shelvLv} lvls` : '')}
+    <div class="wsc-3d-hud-divider"></div>
+    <div class="wsc-3d-hud-meta">${fmt(totalColumns)} rack pairs &middot; ${fmt(totalSegments)} segments</div>
+    ${targets.total > 0 ? `<div class="wsc-3d-hud-status ${statusClass}">${statusLabel}</div>` : ''}
+  `;
 }
 
 function build3DScene() {
@@ -2667,11 +2782,23 @@ function build3DScene() {
     const fullPalletCols   = Math.round(totalCols * mix.fullPalletPct);
     const cartonPalletCols = Math.round(totalCols * mix.cartonOnPalletPct);
     const shelvingCols     = Math.max(0, totalCols - fullPalletCols - cartonPalletCols);
+    // WSC-P0-2 (2026-05-04): each TYPES entry carries typeKey + levels +
+    // bayWidthFt so the placement loop below can record each rack-pair
+    // segment into placedRacks[] and rollupRenderedFacts() can attribute
+    // achieved counts back to the right bucket.
+    const palletLevels   = sized.rackLevels  || 5;
+    const shelvingLevels = sized.shelfLevels || 5;
     const TYPES = [
-      { count: fullPalletCols,   mat: matFullPallet,   wire: wirePallet,   heightU: rackHeightU,        kind: 'pallet' },
-      { count: cartonPalletCols, mat: matCartonPallet, wire: wirePallet,   heightU: rackHeightU * 0.85, kind: 'pallet' },
-      { count: shelvingCols,     mat: matShelving,     wire: wireShelving, heightU: 6.5 * scale,         kind: 'shelving' },
+      { typeKey: 'fullPallet',   count: fullPalletCols,   mat: matFullPallet,   wire: wirePallet,   heightU: rackHeightU,        kind: 'pallet',   levels: palletLevels,   bayWidthFt: calc.PALLET_BAY_WIDTH_FT },
+      { typeKey: 'cartonPallet', count: cartonPalletCols, mat: matCartonPallet, wire: wirePallet,   heightU: rackHeightU * 0.85, kind: 'pallet',   levels: palletLevels,   bayWidthFt: calc.PALLET_BAY_WIDTH_FT },
+      { typeKey: 'shelving',     count: shelvingCols,     mat: matShelving,     wire: wireShelving, heightU: 6.5 * scale,         kind: 'shelving', levels: shelvingLevels, bayWidthFt: calc.SHELVING_BAY_WIDTH_FT },
     ];
+
+    // Records what the placement loop actually paints — one entry per
+    // (rack pair, cross-aisle segment). Rolled up into a RenderedFacts HUD
+    // overlay below so achieved-vs-target is always visible on the canvas.
+    /** @type {Array<{typeKey:string,colKey:number,segmentLenFt:number,levels:number,bayWidthFt:number}>} */
+    const placedRacks = [];
 
     let mx = -W / 2 + 6 * scale;
     let typeIdx = 0;
@@ -2721,6 +2848,13 @@ function build3DScene() {
           const wf2 = new THREE.LineSegments(new THREE.EdgesGeometry(rackGeo), t.wire);
           wf2.position.copy(r2.position);
           scene.add(wf2);
+          placedRacks.push({
+            typeKey: t.typeKey,
+            colKey: mx,
+            segmentLenFt: xa.segmentLenFt,
+            levels: t.levels,
+            bayWidthFt: t.bayWidthFt,
+          });
           zCursor += segLenU + gapU;
         }
       }
@@ -2830,16 +2964,33 @@ function build3DScene() {
       e.preventDefault();
     }, { passive: false });
 
-    // Animate
+    // Animate. Capture a local "alive" flag so the loop stops as soon as
+    // dispose() is called (e.g. on re-render from a data-field commit).
+    let alive = true;
     function animate() {
-      if (!rootEl) return;
+      if (!rootEl || !alive) return;
       requestAnimationFrame(animate);
       renderer.render(scene, camera);
     }
     animate();
 
+    // ------------------------------------------------------------
+    // P0-2: RenderedFacts HUD — paint achieved vs sized counts in the
+    // top-right corner of the 3D canvas. Updates every time
+    // renderContentView() rebuilds the scene (which fires on any
+    // facility/zones/volumes mutation), so counts are always live.
+    // ------------------------------------------------------------
+    try {
+      const facts = calc.rollupRenderedFacts(placedRacks, sized);
+      const hud = el.querySelector('#wsc-3d-hud');
+      if (hud) hud.innerHTML = renderRenderedFactsHud(facts, { palletLevels, shelvingLevels });
+    } catch (hudErr) {
+      console.warn('[WSC] HUD render failed:', hudErr);
+    }
+
     scene3d = {
       dispose() {
+        alive = false;
         renderer.dispose();
         renderer.domElement.remove();
       },

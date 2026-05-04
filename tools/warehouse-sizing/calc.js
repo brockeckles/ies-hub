@@ -254,6 +254,141 @@ export function crossAisleLayoutFt(rackRunLenFt, opts = {}) {
 }
 
 // ============================================================
+// 3D RENDERED FACTS — achieved-vs-target accounting (P0-2)
+// ============================================================
+// Brock's complaint (audit doc Lens I): "we don't have a count of the
+// locations by storage type actually achieved in the rendering, these
+// counts should be dynamic to capture any tweaks the user makes."
+//
+// The 3D rack-placement loop knows exactly how many rack pairs and segments
+// it painted, but never reports back. Dashboard reads `sized.positions.*`
+// (engine-derived target) and the 3D scene quietly under-fills when the
+// footprint is too small — discrepancy invisible.
+//
+// `rackPairCapacity` converts one placed segment of one rack pair into
+// position count. `rollupRenderedFacts` aggregates an array of segment
+// records (one per Mesh placed in build3DScene) into a {byType, totals,
+// vs target} struct that can be painted as a HUD over the canvas.
+
+/** Standard pallet bay width in feet (52 inches incl. flue). */
+export const PALLET_BAY_WIDTH_FT = 4.33;
+/** Standard shelving bay width in feet (36 inches). */
+export const SHELVING_BAY_WIDTH_FT = 3;
+
+/**
+ * Capacity of a single placed rack pair (2 rack faces sharing one aisle)
+ * for one segment of length `segmentLenFt`. Each face holds bays packed
+ * along its length; each bay holds 1 selective pallet (or 1 shelf
+ * location for shelving) per level.
+ *
+ * @param {{ segmentLenFt:number, levels:number, bayWidthFt?:number }} opts
+ * @returns {{ baysPerFace:number, baysTotal:number, positions:number }}
+ */
+export function rackPairCapacity(opts = {}) {
+  const len = +opts.segmentLenFt;
+  const lv  = +opts.levels;
+  const bw  = +opts.bayWidthFt > 0 ? +opts.bayWidthFt : PALLET_BAY_WIDTH_FT;
+  if (!(len > 0) || !(lv > 0)) return { baysPerFace: 0, baysTotal: 0, positions: 0 };
+  const baysPerFace = Math.floor(len / bw);
+  const baysTotal = baysPerFace * 2;
+  return { baysPerFace, baysTotal, positions: baysTotal * lv };
+}
+
+/**
+ * Roll up the geometry actually placed by the 3D scene into achieved counts
+ * by storage type, with a delta vs the engine's sized target.
+ *
+ * Each entry in `placedRacks` represents ONE rack-pair x ONE cross-aisle
+ * segment that was painted as Mesh objects. Caller pushes one record per
+ * BoxGeometry pair drawn:
+ *   {
+ *     typeKey: 'fullPallet' | 'cartonPallet' | 'shelving',
+ *     colKey:  number,           // unique per rack-pair (mx index)
+ *     segmentLenFt: number,      // segment length post cross-aisle split
+ *     levels:  number,           // rack levels (or shelf levels) for this type
+ *     bayWidthFt?: number,       // optional override (4.33 pallet / 3 shelving)
+ *   }
+ *
+ * @param {Array} placedRacks
+ * @param {{ positions?: Object }} sized — output of sizeFacility (for targets)
+ * @returns {{
+ *   byType: Record<string,{columns:number,segments:number,bays:number,positions:number}>,
+ *   totalColumns:number,
+ *   totalSegments:number,
+ *   totalBays:number,
+ *   totalPositions:number,
+ *   targets: { fullPallet:number, cartonPallet:number, shelving:number, total:number },
+ *   deltaPct: number,
+ *   status: 'on_target' | 'under_built' | 'over_built'
+ * }}
+ */
+export function rollupRenderedFacts(placedRacks, sized = {}) {
+  /** @type {Record<string,{columns:number,segments:number,bays:number,positions:number}>} */
+  const byType = {
+    fullPallet:   { columns: 0, segments: 0, bays: 0, positions: 0 },
+    cartonPallet: { columns: 0, segments: 0, bays: 0, positions: 0 },
+    shelving:     { columns: 0, segments: 0, bays: 0, positions: 0 },
+  };
+  /** @type {Record<string,Set<number>>} */
+  const colSeen = { fullPallet: new Set(), cartonPallet: new Set(), shelving: new Set() };
+  for (const r of (placedRacks || [])) {
+    const bucket = byType[r?.typeKey];
+    if (!bucket) continue;
+    const cap = rackPairCapacity({
+      segmentLenFt: r.segmentLenFt,
+      levels: r.levels,
+      bayWidthFt: r.bayWidthFt,
+    });
+    bucket.segments += 1;
+    bucket.bays += cap.baysTotal;
+    bucket.positions += cap.positions;
+    if (r.colKey != null) colSeen[r.typeKey].add(r.colKey);
+  }
+  byType.fullPallet.columns   = colSeen.fullPallet.size;
+  byType.cartonPallet.columns = colSeen.cartonPallet.size;
+  byType.shelving.columns     = colSeen.shelving.size;
+
+  const totalPositions = byType.fullPallet.positions + byType.cartonPallet.positions + byType.shelving.positions;
+  const totalSegments  = byType.fullPallet.segments + byType.cartonPallet.segments + byType.shelving.segments;
+  const totalBays      = byType.fullPallet.bays + byType.cartonPallet.bays + byType.shelving.bays;
+  const totalColumns   = byType.fullPallet.columns + byType.cartonPallet.columns + byType.shelving.columns;
+
+  const positionsT = sized?.positions || {};
+  const targets = {
+    fullPallet:   +positionsT.fullPalletPositions   || 0,
+    cartonPallet: +positionsT.cartonPalletPositions || 0,
+    shelving:     +positionsT.shelvingPositions     || 0,
+    total:        +positionsT.grossPositions        || 0,
+  };
+  // If grossPositions is zero (engine had no input), fall back to summing
+  // designed type counts so the HUD still has a denominator.
+  if (targets.total === 0) {
+    targets.total = targets.fullPallet + targets.cartonPallet + targets.shelving;
+  }
+
+  const deltaPct = targets.total > 0
+    ? Math.round(((totalPositions - targets.total) / targets.total) * 1000) / 10
+    : 0;
+  /** @type {'on_target'|'under_built'|'over_built'} */
+  let status = 'on_target';
+  if (targets.total > 0) {
+    if (totalPositions < targets.total * 0.95) status = 'under_built';
+    else if (totalPositions > targets.total * 1.05) status = 'over_built';
+  }
+
+  return {
+    byType,
+    totalColumns,
+    totalSegments,
+    totalBays,
+    totalPositions,
+    targets,
+    deltaPct,
+    status,
+  };
+}
+
+// ============================================================
 // BAY & AISLE GEOMETRY
 // ============================================================
 
