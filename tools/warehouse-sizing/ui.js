@@ -2723,7 +2723,14 @@ function _wscGetFloorTexture(THREE) {
 // `scale` = world units per foot (matches build3DScene's 0.5).
 // ─────────────────────────────────────────────────────────────────────
 function _wscMakeForklift(THREE, scale) {
-  const s = scale;
+  // VIS_SCALE: oversize sprites 3x relative to real reach-truck so they
+  // read at typical demo building sizes (1000ft+). At realistic 1x scale,
+  // a forklift is ~3 pixels wide at the default camera distance for a
+  // 1000ft building — invisible. 3x makes the sprite ~10ft wide / ~21ft
+  // long which still fits comfortably in the 12ft aisles for visual
+  // purposes (sprites are non-collision; engine math unaffected).
+  const VIS_SCALE = 3;
+  const s = scale * VIS_SCALE;
   const group = new THREE.Group();
   // Body — orange industrial chassis
   const bodyMat = new THREE.MeshStandardMaterial({ color: 0xea580c, roughness: 0.55, metalness: 0.18 });
@@ -3405,33 +3412,6 @@ function build3DScene() {
     } catch (hudErr) {
       console.warn('[WSC] HUD render failed:', hudErr);
     }
-
-    // TEMP DEBUG: expose scene/forklifts to window for live verification.
-    // Remove once forklift visibility is confirmed.
-    window.__wscDebug = {
-      scene,
-      forklifts,
-      segmentMeta,
-      placedRacks,
-      camera,
-      W, D, H,
-      bwFt, bdFt,
-      forklift_count: forklifts.length,
-      segmentMeta_count: segmentMeta.length,
-    };
-    console.log('[WSC-DEBUG] scene built:', {
-      forklifts: forklifts.length,
-      segmentMeta: segmentMeta.length,
-      placedRacks: placedRacks.length,
-      W, D,
-      forklift_positions: forklifts.map(f => ({
-        x: f.group.position.x.toFixed(2),
-        y: f.group.position.y.toFixed(2),
-        z: f.group.position.z.toFixed(2),
-        from: [f.fromV.x.toFixed(2), f.fromV.y.toFixed(2), f.fromV.z.toFixed(2)],
-        to: [f.toV.x.toFixed(2), f.toV.y.toFixed(2), f.toV.z.toFixed(2)],
-      })),
-    });
 
     scene3d = {
       dispose() {
