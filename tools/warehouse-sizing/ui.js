@@ -327,7 +327,7 @@ function _wscExtraStyles() {
       /* WSC-scoped sidebar widen — Phase 4 cosmetic. The chrome's default
          240px sidebar was tight for some Configure inputs (5-digit Pallet
          Positions / Total SKUs, 3-decimal cartonsPerPalletOverride, etc.).
-         Bump to 300px while the WSC is mounted; reverts on unmount because
+         Bump to 350px while the WSC is mounted; reverts on unmount because
          the inline <style> tag goes with the WSC HTML. Tool-chrome.js'
          transition rule animates the change cleanly. */
       .tool-chrome-shell .tc-sidebar {
