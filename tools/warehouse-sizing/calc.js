@@ -523,7 +523,7 @@ export function calcStorageByType(facility, zones) {
 
 /**
  * Calculate dock door requirements and utilization.
- * Formula: (inbound + outbound) × 1.25 buffer × 700 SF/door × (1.15 if two-sided)
+ * Formula: (inbound + outbound) × 1.25 buffer × DOCK_SF_PER_DOOR × (1.15 if two-sided)
  * @param {import('./types.js?v=20260418-sL').FacilityConfig} facility
  * @param {import('./types.js?v=20260418-sL').ZoneConfig} zones
  * @param {import('./types.js?v=20260418-sL').VolumeInputs} volumes
@@ -545,7 +545,7 @@ export function calcDockAnalysis(facility, zones, volumes) {
   const inboundUtilization = capacity > 0 ? (peakInbound / capacity) * 100 : 0;
   const outboundUtilization = capacity > 0 ? (peakOutbound / capacity) * 100 : 0;
 
-  // Dock SF: (inbound + outbound) × 1.25 buffer × 700 SF/door × (1.15 if two-sided)
+  // Dock SF: (inbound + outbound) × 1.25 buffer × DOCK_SF_PER_DOOR (1500) × (1.15 if two-sided)
   const totalDoors = dock.inboundDoors + dock.outboundDoors;
   const bufferMultiplier = 1.25;
   const twoSidedMultiplier = dock.sided === 'two' ? 1.15 : 1.0;
@@ -1076,7 +1076,7 @@ export function sizeFacility(userInputs = {}) {
     ? (inboundDoors + outboundDoors)
     : Math.ceil((inboundDoors + outboundDoors) * 1.25);
 
-  let dockSqft = withSurgeBuffer * 700;
+  let dockSqft = withSurgeBuffer * DOCK_SF_PER_DOOR;
   if (i.dockConfig === 'two') dockSqft = Math.ceil(dockSqft * 1.15);
 
   const dockWallRequiredFt = withSurgeBuffer * 12;        // 12 ft on-center standard
