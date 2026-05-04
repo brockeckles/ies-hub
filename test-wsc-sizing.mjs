@@ -1,4 +1,6 @@
 // test-wsc-sizing.mjs — regression tests for I-06 (WSC honor explicit dock config + pallet override)
+// Plus Phase 1 redesign integration coverage (sized.unitLoad, .cartonProfile,
+// .locations, .rackingStructure, .dockRequirement, .requirementsDriven).
 import { sizeFacility, calcDIOH, orientFacility, elevationParams, crossAisleDefaults, crossAisleLayoutFt, rackPairCapacity, rollupRenderedFacts, allocateRackColsByTarget, suggestedBuildingDimensions, PALLET_BAY_WIDTH_FT, SHELVING_BAY_WIDTH_FT } from './tools/warehouse-sizing/calc.js';
 
 let pass = 0, fail = 0;
@@ -773,6 +775,199 @@ import { assignDemand } from './tools/network-opt/calc.js';
   // Bad inputs are safe.
   const r = suggestedBuildingDimensions({});
   t('suggest: empty inputs return not-recommended', r.recommended === false);
+}
+
+// ============================================================
+// Phase 1 redesign — sized model integration (additive fields)
+// ============================================================
+// Verify that sizeFacility() now returns the 6 new sized fields populated
+// from the new helpers, AND that all legacy fields still produce the same
+// values they did pre-Phase 1 (additive contract — nothing breaks).
+
+// ── Default invocation: all new fields present, all legacy fields untouched ──
+{
+  const r = sizeFacility({});
+  t('sized.unitLoad present', r.unitLoad != null && typeof r.unitLoad === 'object');
+  t('sized.cartonProfile present', r.cartonProfile != null);
+  t('sized.locations present', r.locations != null);
+  t('sized.rackingStructure present', r.rackingStructure != null);
+  t('sized.dockRequirement present', r.dockRequirement != null);
+  t('sized.requirementsDriven present', r.requirementsDriven != null);
+  // unitLoad defaults: GMA, 9.0 ft bay, 2 pallets per bay
+  t('default unitLoad palletType = GMA', r.unitLoad.palletType === 'GMA');
+  t('default unitLoad bayWidthFt = 9.0', Math.abs(r.unitLoad.bayWidthFt - 9.0) < 0.001);
+  t('default unitLoad palletsPerBay = 2', r.unitLoad.palletsPerBay === 2);
+  // cartonProfile defaults: 12×9×12 carton, ti×hi
+  t('default cartonProfile cartonLengthIn = 12', r.cartonProfile.cartonLengthIn === 12);
+  t('default cartonProfile cartonWidthIn = 9', r.cartonProfile.cartonWidthIn === 9);
+  t('default cartonProfile cartonHeightIn = 12', r.cartonProfile.cartonHeightIn === 12);
+  // sizeFacility wires SIZING_DEFAULTS.loadHeightIn = 48 → ti=16, hi=4, cpp=64
+  t('default cartonProfile cartonsPerPallet = 64 (loadHeight=48)', r.cartonProfile.cartonsPerPallet === 64);
+  // rackingStructure: bottomBeamFp default false, bottomBeamCp default true, no top beam
+  t('default rackingStructure.fullPallet bottomBeam false', r.rackingStructure.fullPallet.bottomBeam === false);
+  t('default rackingStructure.fullPallet topBeam false', r.rackingStructure.fullPallet.topBeam === false);
+  t('default rackingStructure.cartonOnPallet bottomBeam true', r.rackingStructure.cartonOnPallet.bottomBeam === true);
+  t('default rackingStructure.shelving bottomBeam false', r.rackingStructure.shelving.bottomBeam === false);
+  // Legacy fields untouched
+  t('legacy positions.grossPositions present', typeof r.positions.grossPositions === 'number');
+  t('legacy totalSqft present', typeof r.totalSqft === 'number');
+  t('legacy dock.totalDoors present', typeof r.dock.totalDoors === 'number');
+}
+
+// ── Wayfair Memphis FC profile: end-to-end with new fields ──
+{
+  const r = sizeFacility({
+    peakUnits: 3000000,
+    totalPalletsOverride: 65000,
+    fullPalletPct: 0.40,
+    cartonOnPalletPct: 0.45,
+    cartonOnShelvingPct: 0.15,
+    clearHeightFt: 36,
+    inPalletsDay: 2500,
+    outPalletsDay: 2500,
+    fullPalletSkus: 500,
+    cartonPalletSkus: 1500,
+    shelvingSkus: 5000,
+  });
+  // Locations: shelving demand-bound (5K pallets-equiv × 0.15 × 64 = 624K cartons / 6 per shelf = 104K)
+  t('wayfair shelving mode = demand-bound', r.locations.shelving.mode === 'demand-bound');
+  t('wayfair shelving demandLocations = 104,000', r.locations.shelving.demandLocations === 104000);
+  t('wayfair shelving skuMinLocations = 5,000', r.locations.shelving.skuMinLocations === 5000);
+  // 104000 × 1.10 × 1.20 = 137,280
+  t('wayfair shelving locationsRequired = 137,280', r.locations.shelving.locationsRequired === 137280);
+  // FP: 25,000 positions vs 500 SKUs → demand-bound
+  t('wayfair FP mode = demand-bound', r.locations.fullPallet.mode === 'demand-bound');
+  t('wayfair FP positions = 25,000', r.locations.fullPallet.positions === 25000);
+  t('wayfair FP skuMinLocations = 500', r.locations.fullPallet.skuMinLocations === 500);
+  // CP: 18,750 positions vs 1,500 SKUs → demand-bound
+  t('wayfair CP mode = demand-bound', r.locations.cartonOnPallet.mode === 'demand-bound');
+  t('wayfair CP positions = 18,750', r.locations.cartonOnPallet.positions === 18750);
+  // Dock: 5,000 pallets/day → 19 doors → 23 with surge
+  t('wayfair dockRequirement.doorsRequired = 19', r.dockRequirement.doorsRequired === 19);
+  t('wayfair dockRequirement.doorsBySurge = 23', r.dockRequirement.doorsBySurge === 23);
+  // requirementsDriven: total > 0
+  t('wayfair requirementsDriven.totalSfRequired > 0', r.requirementsDriven.totalSfRequired > 0);
+  t('wayfair requirementsDriven.suggestedLongFt > 0', r.requirementsDriven.suggestedLongFt > 0);
+  // Legacy still works (positions block intact under override)
+  t('wayfair legacy palletPositionsOverridden true', r.positions.palletPositionsOverridden === true);
+}
+
+// ── SKU floor activates sku-bound mode for slow-mover shelving ──
+{
+  const r = sizeFacility({
+    peakUnits: 100000,                 // small inventory
+    fullPalletPct: 0.50,
+    cartonOnPalletPct: 0.40,
+    cartonOnShelvingPct: 0.10,         // small shelving share
+    shelvingSkus: 10000,               // BUT lots of slow-mover SKUs
+    clearHeightFt: 36,
+  });
+  t('sku-bound mode trigger', r.locations.shelving.mode === 'sku-bound');
+  t('sku-bound floor enforced', r.locations.shelving.locationsRaw === 10000);
+}
+
+// ── Custom carton profile flows through to cartonsPerPallet ──
+{
+  const r = sizeFacility({
+    cartonLengthIn: 6, cartonWidthIn: 6, cartonHeightIn: 6,
+    loadHeightIn: 60,                  // override default 48
+  });
+  // ti = floor(48/6) × floor(40/6) = 8 × 6 = 48; hi = floor(60/6) = 10; cpp = 480
+  t('6³ carton ti = 48', r.cartonProfile.ti === 48);
+  t('6³ carton hi = 10', r.cartonProfile.hi === 10);
+  t('6³ cartonsPerPallet = 480', r.cartonProfile.cartonsPerPallet === 480);
+}
+
+// ── cartonsPerPalletOverride bypasses ti×hi ──
+{
+  const r = sizeFacility({
+    cartonsPerPalletOverride: 40,
+  });
+  t('cpp override active', r.cartonProfile.cartonsPerPalletOverride === true);
+  t('cpp override value applied', r.cartonProfile.cartonsPerPallet === 40);
+}
+
+// ── Per-zone bottom-beam toggles flow through to rackingStructure ──
+{
+  const r = sizeFacility({
+    bottomBeamFp: true,
+    bottomBeamCp: false,
+    bottomBeamShelving: true,
+  });
+  t('bottomBeamFp true', r.rackingStructure.fullPallet.bottomBeam === true);
+  t('bottomBeamCp false', r.rackingStructure.cartonOnPallet.bottomBeam === false);
+  t('bottomBeamShelving true', r.rackingStructure.shelving.bottomBeam === true);
+}
+
+// ── topBeam=true (legacy compat) adds the orphan beam everywhere ──
+{
+  const r = sizeFacility({ topBeam: true });
+  t('topBeam flows to FP', r.rackingStructure.fullPallet.topBeam === true);
+  t('topBeam flows to CP', r.rackingStructure.cartonOnPallet.topBeam === true);
+  t('topBeam flows to shelving', r.rackingStructure.shelving.topBeam === true);
+  // FP with no bottom + top: 7 levels means beams at L2..L7 + L7-top = 7 entries
+  // (levels comes from sizingRackLevels at default 36ft = 7)
+  const fp = r.rackingStructure.fullPallet;
+  t('FP with topBeam: top entry > previous', fp.beamRowHeightsFt[fp.beamCount - 1] > fp.beamRowHeightsFt[fp.beamCount - 2]);
+}
+
+// ── Custom truck class: VNA reduces palletsPerTruck not relevant; dwell change matters ──
+{
+  const r = sizeFacility({
+    inPalletsDay: 2000,
+    outPalletsDay: 2000,
+    palletsPerTruck: 30,                    // floor-loaded, no pallets
+    dwellHoursPerTruck: 1.0,                // faster turn
+    shiftHoursPerDay: 24,                   // round-clock
+  });
+  t('custom palletsPerTruck flows through', r.dockRequirement.palletsPerTruck === 30);
+  t('custom dwellHoursPerTruck flows through', r.dockRequirement.dwellHoursPerTruck === 1.0);
+  t('custom shiftHoursPerDay flows through', r.dockRequirement.shiftHoursPerDay === 24);
+  // 4000/30 = 133.3 trucks; × 1/24 = 5.56 → ceil 6 → 1.20× = ceil 7.2 → 8
+  t('custom dock doorsBySurge', r.dockRequirement.doorsBySurge === 8);
+}
+
+// ── requirementsDriven sums components ──
+{
+  const r = sizeFacility({
+    peakUnits: 1000000,
+    fullPalletPct: 0.5, cartonOnPalletPct: 0.4, cartonOnShelvingPct: 0.1,
+    clearHeightFt: 36,
+    inPalletsDay: 800,
+    outPalletsDay: 800,
+  });
+  // additive sum
+  const expectedSubtotal = r.requirementsDriven.storageSf + r.requirementsDriven.dockSf
+    + r.requirementsDriven.officeSf + r.requirementsDriven.stagingSf + r.requirementsDriven.additionalSf;
+  // total = subtotal + circulationSf
+  t('requirementsDriven total = subtotal + circulation',
+    r.requirementsDriven.totalSfRequired === expectedSubtotal + r.requirementsDriven.circulationSf);
+  // suggested dims at 10ft increments
+  t('requirementsDriven suggestedLong on 10ft', r.requirementsDriven.suggestedLongFt % 10 === 0);
+  t('requirementsDriven suggestedShort on 10ft', r.requirementsDriven.suggestedShortFt % 10 === 0);
+  // Long >= short (1.5:1 target)
+  t('suggested long >= short', r.requirementsDriven.suggestedLongFt >= r.requirementsDriven.suggestedShortFt);
+}
+
+// ── Phase 1 contract: legacy fields still match pre-Phase 1 behavior ──
+{
+  // Same inputs as a known pre-Phase 1 test (the I-06 pallet override case at top of file).
+  const r = sizeFacility({
+    peakUnits: 1000000,
+    fullPalletPct: 0.5,
+    cartonOnPalletPct: 0.5,
+    cartonOnShelvingPct: 0,
+    totalPalletsOverride: 12000,
+    inPalletsDay: 100,
+    outPalletsDay: 100,
+  });
+  // Legacy override path still works
+  t('back-compat: palletPositionsNeeded honors override', r.positions.palletPositionsNeeded === 12000);
+  t('back-compat: palletPositionsOverridden true', r.positions.palletPositionsOverridden === true);
+  // Legacy positions sum still consistent
+  t('back-compat: per-type gross sums to grossPositions',
+    r.positions.fullPalletGrossPositions + r.positions.cartonPalletGrossPositions + r.positions.shelvingGrossPositions
+    === r.positions.grossPositions);
 }
 
 console.log(`

@@ -562,6 +562,559 @@ export function suggestedBuildingDimensions(opts = {}) {
 }
 
 // ============================================================
+// IE-CORRECT UNIT LOAD + CARTON + SHELVING + RACKING + DOCK
+// ============================================================
+// Phase 1 of the WSC redesign (2026-05-04). Six pure helpers that
+// model warehouse sizing from a real industrial-engineering / AutoCAD
+// perspective:
+//
+//   1. computeUnitLoad         — pallet-driven bay width / rack depth / level pitch
+//   2. computeCartonProfile    — ti×hi cartons-per-pallet + cartons-per-shelf
+//   3. computeShelvingLocations — demand-bound vs sku-bound (max wins)
+//   4. computeRackingStructure — beam rows w/ no-top-beam + bottom-beam toggle
+//   5. computeDockRequirement  — door count from peak truck arrivals × dwell
+//   6. computeRequiredFacilitySF — full critical-path facility SF aggregation
+//
+// All ADDITIVE — no existing exports were modified. sizeFacility wires
+// the helpers in additively so sized.unitLoad, sized.cartonProfile,
+// sized.locations, sized.rackingStructure, sized.dockRequirement, and
+// sized.requirementsDriven appear on the result alongside the legacy
+// fields. UI / rendering are not touched in Phase 1.
+
+/**
+ * Standard pallet type catalog. Dimensions in inches.
+ *
+ * GMA (48×40)  — North American grocery / consumer goods standard. Most common.
+ * CHEP (48×40) — pooled rental, dimensionally identical to GMA, blue color.
+ * Euro (1200×800mm = ~47.2×31.5 in) — European standard.
+ * EuroHalf (800×600mm) — half-Euro pallet.
+ * Custom — user-supplied dimensions (palletL/palletW must be provided).
+ */
+export const PALLET_TYPES = {
+  GMA:      { palletLengthIn: 48,   palletWidthIn: 40 },
+  CHEP:     { palletLengthIn: 48,   palletWidthIn: 40 },
+  Euro:     { palletLengthIn: 47.2, palletWidthIn: 31.5 },
+  EuroHalf: { palletLengthIn: 31.5, palletWidthIn: 23.6 },
+};
+
+/**
+ * Per-pallet inter-pallet + outboard clearance budget for selective rack
+ * (in inches). Real selective rack: 4" outboard between upright and pallet
+ * on each side + 4" between adjacent pallets in the same bay = 12" total
+ * across a 2-pallet bay.
+ *
+ * Source: Steel King / Ridg-U-Rak / Mecalux selective-rack handbook
+ * conventions. Common production specs are 4", 6", and 8" depending on
+ * stock-keeping practices; 4" is tight but workable for tight-tolerance
+ * GMA pallets.
+ */
+export const PALLET_BAY_INTERIOR_CLEARANCE_IN = 12;
+
+/**
+ * Standard front overhang of a pallet beyond the upright face (inches).
+ * The pallet sits with its leading edge proud of the upright by 3" so
+ * forklift forks can engage cleanly without striking steel.
+ */
+export const PALLET_FRONT_OVERHANG_IN = 3;
+
+/**
+ * Standard flue space between back-to-back rack rows (inches). Required
+ * for sprinkler in-rack flow path on pallet rack > 25 ft tall.
+ */
+export const BACK_TO_BACK_FLUE_IN = 6;
+
+/**
+ * Beam-to-load vertical clearance (inches). The space between the top of
+ * a stored pallet load and the underside of the beam at the next level up.
+ * 6" is the IE convention for selective rack; tighter (3-4") is possible
+ * with disciplined operators but raises beam-strike risk.
+ */
+export const BEAM_TO_LOAD_CLEARANCE_IN = 6;
+
+/**
+ * Beam structural height (inches). Typical 4" or 5" step-beam. 5" is the
+ * IE conservative default for capacity-loaded rack.
+ */
+export const BEAM_HEIGHT_IN = 5;
+
+/**
+ * Compute unit-load (pallet) geometry from pallet dimensions and load
+ * profile. This is the IE-correct selective-rack bay sizing — bay width
+ * holds 2 pallets per crossbeam (real selective convention), not 1 per
+ * bay as the legacy `PALLET_BAY_WIDTH_FT = 4.33` constant implied (4.33 ft
+ * = single-pallet half-bay).
+ *
+ * **Bay width math.** 2 × pallet length (along beam) + interior clearance
+ * budget (4" outboard each side + 4" between pallets = 12" total).
+ *   GMA 48×40:  2 × 48 + 12 = 108 in = 9.00 ft
+ *   Euro 47.2×31.5: 2 × 47.2 + 12 = 106.4 in = 8.87 ft
+ *
+ * **Rack depth math.** Pallet width (perpendicular to beam) plus 6" flue
+ * (back-to-back sprinkler clearance) plus 3" front overhang each side.
+ *   Single-deep: pallet_width + 6" overhang (front + back face) — 40 + 6 = 46 in
+ *   Back-to-back pair: 2 × single-deep + flue = 2 × 46 + 6 = 98 in = 8.17 ft
+ *
+ * **Level pitch math.** Load height + pallet base + beam height + clearance.
+ *   GMA 60" load + 6" pallet + 5" beam + 6" clearance = 77 in = 6.42 ft per level.
+ *
+ * @param {{
+ *   palletType?: 'GMA'|'CHEP'|'Euro'|'EuroHalf'|'Custom',
+ *   palletLengthIn?: number,    // override; required when palletType='Custom'
+ *   palletWidthIn?: number,     // override; required when palletType='Custom'
+ *   loadHeightIn?: number,      // height of the load above the pallet base (default 60")
+ *   palletHeightIn?: number,    // pallet base thickness (default 6")
+ *   maxGrossWeightLb?: number,  // informational, drives MHE class downstream (default 2000)
+ *   beamHeightIn?: number,      // override structural beam height (default 5")
+ *   beamToLoadClearanceIn?: number, // override (default 6")
+ *   flueIn?: number,            // back-to-back flue (default 6")
+ *   bayClearanceIn?: number,    // override (default 12 = 4+4+4)
+ * }} [opts]
+ * @returns {{
+ *   palletType: string,
+ *   palletLengthIn: number,
+ *   palletWidthIn: number,
+ *   loadHeightIn: number,
+ *   palletHeightIn: number,
+ *   bayWidthFt: number,            // 2-pallet bay (real selective)
+ *   bayWidthIn: number,
+ *   palletsPerBay: 2,              // always 2 for selective; 1 for narrow / VNA single-pallet
+ *   rackDepthSingleFt: number,     // one-side rack row depth
+ *   rackDepthBackToBackFt: number, // both rows + flue
+ *   palletLevelHeightFt: number,   // vertical pitch per level
+ *   palletLevelsAt30FtClear: number, // floor-cap at 30' clear (typical Class III)
+ *   maxGrossWeightLb: number,
+ * }}
+ */
+export function computeUnitLoad(opts = {}) {
+  const palletType = opts.palletType || 'GMA';
+  let palletLengthIn = +opts.palletLengthIn || 0;
+  let palletWidthIn  = +opts.palletWidthIn  || 0;
+  if (palletLengthIn <= 0 || palletWidthIn <= 0) {
+    const preset = PALLET_TYPES[palletType];
+    if (preset) {
+      if (palletLengthIn <= 0) palletLengthIn = preset.palletLengthIn;
+      if (palletWidthIn  <= 0) palletWidthIn  = preset.palletWidthIn;
+    }
+  }
+  if (palletLengthIn <= 0) palletLengthIn = PALLET_TYPES.GMA.palletLengthIn;
+  if (palletWidthIn  <= 0) palletWidthIn  = PALLET_TYPES.GMA.palletWidthIn;
+
+  const loadHeightIn   = +opts.loadHeightIn   > 0 ? +opts.loadHeightIn   : 60;
+  const palletHeightIn = +opts.palletHeightIn > 0 ? +opts.palletHeightIn : 6;
+  const beamHeightIn   = +opts.beamHeightIn   > 0 ? +opts.beamHeightIn   : BEAM_HEIGHT_IN;
+  const beamClearIn    = +opts.beamToLoadClearanceIn > 0 ? +opts.beamToLoadClearanceIn : BEAM_TO_LOAD_CLEARANCE_IN;
+  const flueIn         = +opts.flueIn > 0 ? +opts.flueIn : BACK_TO_BACK_FLUE_IN;
+  const bayClearIn     = +opts.bayClearanceIn > 0 ? +opts.bayClearanceIn : PALLET_BAY_INTERIOR_CLEARANCE_IN;
+  const maxGrossWeightLb = +opts.maxGrossWeightLb > 0 ? +opts.maxGrossWeightLb : 2000;
+
+  const bayWidthIn = 2 * palletLengthIn + bayClearIn;
+  const bayWidthFt = bayWidthIn / 12;
+  const rackDepthSingleFt = (palletWidthIn + 2 * PALLET_FRONT_OVERHANG_IN) / 12;
+  const rackDepthBackToBackFt = 2 * rackDepthSingleFt + flueIn / 12;
+  const palletLevelHeightFt = (loadHeightIn + palletHeightIn + beamHeightIn + beamClearIn) / 12;
+  const palletLevelsAt30FtClear = palletLevelHeightFt > 0
+    ? Math.max(1, Math.floor(30 / palletLevelHeightFt))
+    : 0;
+
+  return {
+    palletType,
+    palletLengthIn,
+    palletWidthIn,
+    loadHeightIn,
+    palletHeightIn,
+    bayWidthFt,
+    bayWidthIn,
+    palletsPerBay: 2,
+    rackDepthSingleFt,
+    rackDepthBackToBackFt,
+    palletLevelHeightFt,
+    palletLevelsAt30FtClear,
+    maxGrossWeightLb,
+  };
+}
+
+/**
+ * Compute carton profile from carton dimensions and a unit-load reference.
+ * Returns ti×hi cartons-per-pallet and cartons-per-shelf at the chosen
+ * orientation.
+ *
+ * **ti×hi math.** ti = floor(palletL / cartonL) × floor(palletW / cartonW)
+ * (cartons that tile the pallet footprint in one layer); hi = floor(loadHeight
+ * / cartonH) (layers stacked to load height). cartons-per-pallet = ti × hi.
+ *
+ *   12×9×12 carton on GMA 48×40 with 60" load:
+ *     ti = floor(48/12) × floor(40/9) = 4 × 4 = 16
+ *     hi = floor(60/12) = 5
+ *     cartons-per-pallet = 80
+ *
+ * **Cartons-per-shelf.** Depends on shelving bay dimensions and orientation.
+ *   L-along-rack: floor(bay_width_in / carton_L) × floor(deck_depth_in / carton_W)
+ *   W-along-rack: floor(bay_width_in / carton_W) × floor(deck_depth_in / carton_L)
+ *
+ * **Shelf level pitch.** Carton height + 2" clearance.
+ *   12" carton → 14" pitch → 6 levels in 84" of usable shelf height.
+ *
+ * @param {{
+ *   cartonLengthIn?: number,        // default 12
+ *   cartonWidthIn?: number,         // default 9
+ *   cartonHeightIn?: number,        // default 12
+ *   palletLengthIn?: number,        // for ti — defaults from unitLoad.palletLengthIn or 48
+ *   palletWidthIn?: number,         // for ti — defaults from unitLoad.palletWidthIn or 40
+ *   loadHeightIn?: number,          // for hi — defaults from unitLoad.loadHeightIn or 60
+ *   shelfBayWidthFt?: number,       // default 3 (36 in)
+ *   shelfDeckDepthIn?: number,      // default 24 (industry standard for case-pick shelving)
+ *   orientation?: 'L-along-rack'|'W-along-rack',
+ *   shelfClearanceIn?: number,      // beam-to-carton vertical clearance (default 2)
+ *   cartonsPerPalletOverride?: number,  // user-engineered override (e.g., from slotting study)
+ * }} [opts]
+ * @returns {{
+ *   cartonLengthIn: number,
+ *   cartonWidthIn: number,
+ *   cartonHeightIn: number,
+ *   palletLengthIn: number,
+ *   palletWidthIn: number,
+ *   loadHeightIn: number,
+ *   ti: number,                 // cartons per pallet layer
+ *   hi: number,                 // pallet layers
+ *   cartonsPerPallet: number,
+ *   cartonsPerPalletOverride: boolean,
+ *   orientation: 'L-along-rack'|'W-along-rack',
+ *   shelfBayWidthFt: number,
+ *   shelfDeckDepthIn: number,
+ *   cartonsPerShelfAcross: number,  // along bay width
+ *   cartonsPerShelfDeep: number,    // along deck depth
+ *   cartonsPerShelf: number,
+ *   shelfLevelHeightFt: number,
+ *   shelfLevelsAt84In: number,      // levels that fit in 84" of usable shelf height
+ * }}
+ */
+export function computeCartonProfile(opts = {}) {
+  const cartonLengthIn = +opts.cartonLengthIn > 0 ? +opts.cartonLengthIn : 12;
+  const cartonWidthIn  = +opts.cartonWidthIn  > 0 ? +opts.cartonWidthIn  : 9;
+  const cartonHeightIn = +opts.cartonHeightIn > 0 ? +opts.cartonHeightIn : 12;
+  const palletLengthIn = +opts.palletLengthIn > 0 ? +opts.palletLengthIn : 48;
+  const palletWidthIn  = +opts.palletWidthIn  > 0 ? +opts.palletWidthIn  : 40;
+  const loadHeightIn   = +opts.loadHeightIn   > 0 ? +opts.loadHeightIn   : 60;
+  const shelfBayWidthFt = +opts.shelfBayWidthFt > 0 ? +opts.shelfBayWidthFt : 3;
+  const shelfDeckDepthIn = +opts.shelfDeckDepthIn > 0 ? +opts.shelfDeckDepthIn : 24;
+  const orientation = opts.orientation === 'W-along-rack' ? 'W-along-rack' : 'L-along-rack';
+  const shelfClearanceIn = +opts.shelfClearanceIn > 0 ? +opts.shelfClearanceIn : 2;
+  const overrideRaw = +opts.cartonsPerPalletOverride;
+  const useOverride = overrideRaw > 0;
+
+  // ti×hi
+  const ti = Math.max(0,
+    Math.floor(palletLengthIn / cartonLengthIn) *
+    Math.floor(palletWidthIn  / cartonWidthIn));
+  const hi = Math.max(0, Math.floor(loadHeightIn / cartonHeightIn));
+  const cartonsPerPalletDerived = ti * hi;
+  const cartonsPerPallet = useOverride ? Math.round(overrideRaw) : cartonsPerPalletDerived;
+
+  // Cartons-per-shelf (orientation-aware)
+  const bayWidthIn = shelfBayWidthFt * 12;
+  let acrossLenIn, deepLenIn;
+  if (orientation === 'L-along-rack') {
+    acrossLenIn = cartonLengthIn;
+    deepLenIn   = cartonWidthIn;
+  } else {
+    acrossLenIn = cartonWidthIn;
+    deepLenIn   = cartonLengthIn;
+  }
+  const cartonsPerShelfAcross = acrossLenIn > 0 ? Math.floor(bayWidthIn / acrossLenIn) : 0;
+  const cartonsPerShelfDeep   = deepLenIn   > 0 ? Math.floor(shelfDeckDepthIn / deepLenIn) : 0;
+  const cartonsPerShelf = cartonsPerShelfAcross * cartonsPerShelfDeep;
+
+  // Shelf level pitch
+  const shelfLevelHeightFt = (cartonHeightIn + shelfClearanceIn) / 12;
+  const shelfLevelsAt84In = shelfLevelHeightFt > 0
+    ? Math.max(1, Math.floor(84 / (shelfLevelHeightFt * 12)))
+    : 0;
+
+  return {
+    cartonLengthIn,
+    cartonWidthIn,
+    cartonHeightIn,
+    palletLengthIn,
+    palletWidthIn,
+    loadHeightIn,
+    ti,
+    hi,
+    cartonsPerPallet,
+    cartonsPerPalletOverride: useOverride,
+    orientation,
+    shelfBayWidthFt,
+    shelfDeckDepthIn,
+    cartonsPerShelfAcross,
+    cartonsPerShelfDeep,
+    cartonsPerShelf,
+    shelfLevelHeightFt,
+    shelfLevelsAt84In,
+  };
+}
+
+/**
+ * Compute required shelving locations as the maximum of demand-side
+ * (cartons / cartons-per-shelf) and SKU-side (one face per SKU).
+ *
+ * **Why two-sided.** Today's engine treats shelving capacity as a count
+ * of "positions" derived from total_pallets × shelving_mix%, which is
+ * dimensionally meaningless: a pallet ≠ a shelf location. Real shelving
+ * sizing accounts for BOTH:
+ *   - Cube demand: how many cartons does the inventory hold? Each shelf
+ *     location holds N cartons; required locations = cartons / N.
+ *   - SKU breadth: how many distinct SKUs need a forward-pick face?
+ *     Each SKU minimally needs 1 face (more if velocity/replenishment
+ *     warrant). Required locations >= SKU count.
+ * The binding constraint is whichever is larger.
+ *
+ * @param {{
+ *   totalPallets: number,           // gross pallet inventory (post override + buffers)
+ *   shelvingMixPct: number,         // 0-1 fraction of pallets diverted to shelving
+ *   cartonsPerPallet: number,       // from computeCartonProfile
+ *   cartonsPerShelf: number,        // from computeCartonProfile
+ *   shelvingSkus: number,           // SKU count assigned to shelving zone
+ *   shelfLevels?: number,           // for bays-required derivation (default 6)
+ *   honeycombPct?: number,          // 0-1 (default 0.10)
+ *   surgePct?: number,              // 0-1 (default 0.20)
+ * }} opts
+ * @returns {{
+ *   demandCartons: number,
+ *   demandLocations: number,
+ *   skuMinLocations: number,
+ *   locationsRaw: number,           // max(demand, sku) before buffers
+ *   locationsRequired: number,      // raw × (1 + honeycomb) × (1 + surge), rounded up
+ *   baysRequired: number,
+ *   shelfLevels: number,
+ *   mode: 'demand-bound'|'sku-bound'|'tie',
+ * }}
+ */
+export function computeShelvingLocations(opts = {}) {
+  const totalPallets    = Math.max(0, +opts.totalPallets    || 0);
+  const shelvingMixPct  = Math.max(0, +opts.shelvingMixPct  || 0);
+  const cartonsPerPallet = Math.max(0, +opts.cartonsPerPallet || 0);
+  const cartonsPerShelf  = Math.max(0, +opts.cartonsPerShelf  || 0);
+  const shelvingSkus    = Math.max(0, Math.round(+opts.shelvingSkus || 0));
+  const shelfLevels     = Math.max(1, Math.round(+opts.shelfLevels  || 6));
+  const honeycombPct    = opts.honeycombPct != null ? +opts.honeycombPct : 0.10;
+  const surgePct        = opts.surgePct     != null ? +opts.surgePct     : 0.20;
+
+  const demandCartons = totalPallets * shelvingMixPct * cartonsPerPallet;
+  const demandLocations = cartonsPerShelf > 0 ? demandCartons / cartonsPerShelf : 0;
+  const skuMinLocations = shelvingSkus;
+
+  /** @type {'demand-bound'|'sku-bound'|'tie'} */
+  let mode;
+  if (demandLocations > skuMinLocations) mode = 'demand-bound';
+  else if (skuMinLocations > demandLocations) mode = 'sku-bound';
+  else mode = 'tie';
+
+  const locationsRaw = Math.max(demandLocations, skuMinLocations);
+  const buffered = locationsRaw * (1 + honeycombPct) * (1 + surgePct);
+  const locationsRequired = Math.ceil(buffered);
+  const baysRequired = Math.ceil(locationsRequired / shelfLevels);
+
+  return {
+    demandCartons: Math.round(demandCartons),
+    demandLocations: Math.round(demandLocations),
+    skuMinLocations,
+    locationsRaw: Math.round(locationsRaw),
+    locationsRequired,
+    baysRequired,
+    shelfLevels,
+    mode,
+  };
+}
+
+/**
+ * Compute the row of beam heights (Y coordinates) at which crossbeams
+ * should be instanced for a rack of `levels` pallet positions.
+ *
+ * **Real selective-rack convention.**
+ *   - The beam at the BOTTOM of level k (k = 1..N) supports level k's pallet.
+ *   - The beam ABOVE the top level is structurally pointless — the top
+ *     pallet load has nothing above it. Today's engine instances N+1 beams
+ *     for N levels; this fix drops the orphan top beam.
+ *   - The bottom beam (at floor level) is OPTIONAL. Distribution default
+ *     is bottom pallet on slab (no beam, saves cost). Wire-decked rack for
+ *     case-pick or pick-modules where ergonomics raise the bottom level
+ *     do carry a bottom beam — toggle exposed here.
+ *
+ * Returns beam Y heights (feet, measured from floor) and a count.
+ *
+ * @param {{
+ *   levels: number,                 // number of pallet (or shelf) levels
+ *   levelHeightFt: number,          // vertical pitch per level
+ *   bottomBeam?: boolean,           // include floor beam (default false)
+ *   topBeam?: boolean,              // include orphan top beam (default false; set true only for legacy compat)
+ * }} opts
+ * @returns {{
+ *   beamRowHeightsFt: number[],     // sorted ascending; instance one beam pair per height
+ *   beamCount: number,
+ *   bottomBeam: boolean,
+ *   topBeam: boolean,
+ *   topOfSteelFt: number,           // top of highest stored load
+ * }}
+ */
+export function computeRackingStructure(opts = {}) {
+  const levels = Math.max(0, Math.round(+opts.levels || 0));
+  const levelHeightFt = Math.max(0, +opts.levelHeightFt || 0);
+  const bottomBeam = !!opts.bottomBeam;
+  const topBeam = !!opts.topBeam;
+
+  if (levels <= 0 || levelHeightFt <= 0) {
+    return {
+      beamRowHeightsFt: [],
+      beamCount: 0,
+      bottomBeam,
+      topBeam,
+      topOfSteelFt: 0,
+    };
+  }
+
+  /** @type {number[]} */
+  const heights = [];
+  // Floor beam (level 1's bottom) — optional.
+  if (bottomBeam) heights.push(0);
+  // Beams between levels: at the bottom of level k (k = 2..N), i.e. at
+  // height (k-1) * levelHeightFt. These support pallet k from below.
+  for (let k = 2; k <= levels; k++) {
+    heights.push((k - 1) * levelHeightFt);
+  }
+  // Orphan top beam — only if explicitly requested (legacy compat).
+  if (topBeam) heights.push(levels * levelHeightFt);
+
+  return {
+    beamRowHeightsFt: heights,
+    beamCount: heights.length,
+    bottomBeam,
+    topBeam,
+    topOfSteelFt: levels * levelHeightFt,
+  };
+}
+
+/**
+ * Compute dock door requirement from peak-day truck arrivals × dwell time.
+ *
+ * **Math.** Trucks per peak day = peak_throughput_pallets / pallets_per_truck.
+ * Each truck occupies one door for `dwellHoursPerTruck`. Door capacity per
+ * shift = `shiftHoursPerDay`. So doors required = trucks × dwell / shift.
+ * Surge buffer applies on top.
+ *
+ *   Example: 5,000 pallets/peak-day, 26 pallets/truck, 1.5h dwell, 16h shift, 20% surge:
+ *     trucks/peak = 5000 / 26 = 192.3
+ *     doorsRequired = 192.3 × 1.5 / 16 = 18.0
+ *     doorsBySurge = ceil(18.0 × 1.20) = 22
+ *
+ * @param {{
+ *   peakThroughputPalletsPerDay: number,  // (in + out) at peak
+ *   palletsPerTruck?: number,             // default 26 (TL with floor stack); 30 for pallet floor-load
+ *   dwellHoursPerTruck?: number,          // default 1.5 (live unload + stage)
+ *   shiftHoursPerDay?: number,            // default 16 (2 shifts)
+ *   surgePct?: number,                    // default 0.20
+ *   sfPerDoor?: number,                   // default DOCK_SF_PER_DOOR (1500)
+ * }} opts
+ * @returns {{
+ *   peakThroughputPalletsPerDay: number,
+ *   trucksPerPeakDay: number,
+ *   palletsPerTruck: number,
+ *   dwellHoursPerTruck: number,
+ *   shiftHoursPerDay: number,
+ *   doorsRequiredRaw: number,             // un-rounded
+ *   doorsRequired: number,                // ceil
+ *   doorsBySurge: number,                 // ceil with surge applied
+ *   dockSfRequired: number,
+ * }}
+ */
+export function computeDockRequirement(opts = {}) {
+  const peakThroughput = Math.max(0, +opts.peakThroughputPalletsPerDay || 0);
+  const palletsPerTruck = +opts.palletsPerTruck > 0 ? +opts.palletsPerTruck : 26;
+  const dwellHours = +opts.dwellHoursPerTruck > 0 ? +opts.dwellHoursPerTruck : 1.5;
+  const shiftHours = +opts.shiftHoursPerDay > 0 ? +opts.shiftHoursPerDay : 16;
+  const surgePct = opts.surgePct != null ? +opts.surgePct : 0.20;
+  const sfPerDoor = +opts.sfPerDoor > 0 ? +opts.sfPerDoor : DOCK_SF_PER_DOOR;
+
+  const trucksPerPeakDay = palletsPerTruck > 0 ? peakThroughput / palletsPerTruck : 0;
+  const doorsRequiredRaw = shiftHours > 0 ? trucksPerPeakDay * dwellHours / shiftHours : 0;
+  const doorsRequired = Math.ceil(doorsRequiredRaw);
+  const doorsBySurge = Math.ceil(doorsRequired * (1 + surgePct));
+  const dockSfRequired = doorsBySurge * sfPerDoor;
+
+  return {
+    peakThroughputPalletsPerDay: peakThroughput,
+    trucksPerPeakDay: Math.round(trucksPerPeakDay * 10) / 10,
+    palletsPerTruck,
+    dwellHoursPerTruck: dwellHours,
+    shiftHoursPerDay: shiftHours,
+    doorsRequiredRaw: Math.round(doorsRequiredRaw * 10) / 10,
+    doorsRequired,
+    doorsBySurge,
+    dockSfRequired,
+  };
+}
+
+/**
+ * Compute total required facility square footage from the requirements-side
+ * components: storage + dock + office + staging + circulation buffer.
+ * Returns a suggested 1.5:1 building footprint that holds the required SF.
+ *
+ * This is the requirements-driven footprint. Compare against an
+ * already-supplied building footprint to decide whether the building is
+ * over-built (suggest shrink) or under-built (suggest grow).
+ *
+ * @param {{
+ *   storageSf: number,
+ *   dockSf: number,
+ *   officeSf: number,
+ *   stagingSf: number,
+ *   additionalSf?: number,        // forward pick, VAS, returns, custom
+ *   circulationPct?: number,      // default 0.10 (10% buffer for column + main aisle + truck court)
+ *   targetRatio?: number,         // long:short — default 1.5
+ * }} opts
+ * @returns {{
+ *   storageSf: number,
+ *   dockSf: number,
+ *   officeSf: number,
+ *   stagingSf: number,
+ *   additionalSf: number,
+ *   circulationSf: number,
+ *   totalSfRequired: number,
+ *   suggestedLongFt: number,
+ *   suggestedShortFt: number,
+ *   targetRatio: number,
+ * }}
+ */
+export function computeRequiredFacilitySF(opts = {}) {
+  const storageSf    = Math.max(0, +opts.storageSf    || 0);
+  const dockSf       = Math.max(0, +opts.dockSf       || 0);
+  const officeSf     = Math.max(0, +opts.officeSf     || 0);
+  const stagingSf    = Math.max(0, +opts.stagingSf    || 0);
+  const additionalSf = Math.max(0, +opts.additionalSf || 0);
+  const circulationPct = opts.circulationPct != null ? +opts.circulationPct : 0.10;
+  const targetRatio    = +opts.targetRatio    > 0 ? +opts.targetRatio    : 1.5;
+
+  const subtotal = storageSf + dockSf + officeSf + stagingSf + additionalSf;
+  const circulationSf = Math.ceil(subtotal * circulationPct);
+  const totalSfRequired = subtotal + circulationSf;
+  const suggestedLongFt = totalSfRequired > 0 ? Math.ceil(Math.sqrt(totalSfRequired * targetRatio) / 10) * 10 : 0;
+  const suggestedShortFt = (suggestedLongFt > 0 && totalSfRequired > 0)
+    ? Math.ceil((totalSfRequired / suggestedLongFt) / 10) * 10
+    : 0;
+
+  return {
+    storageSf,
+    dockSf,
+    officeSf,
+    stagingSf,
+    additionalSf,
+    circulationSf,
+    totalSfRequired,
+    suggestedLongFt,
+    suggestedShortFt,
+    targetRatio,
+  };
+}
+
+// ============================================================
 // BAY & AISLE GEOMETRY
 // ============================================================
 
@@ -1269,6 +1822,37 @@ export const SIZING_DEFAULTS = {
   forwardPick: null,       // see ForwardPickInputs
   optionalZones: [],       // [{ label, sqft }]
   customZones: [],         // [{ label, sqft }]
+  // ── Phase 1 redesign (2026-05-04): IE-correct unit-load + carton + SKU + dock inputs ──
+  // All optional. When omitted, Phase 1 falls back to legacy behavior so
+  // existing tests + UI don't break. Phase 2 will surface these in the
+  // Configure side panel as the primary input flow.
+  palletType: 'GMA',           // 'GMA' | 'CHEP' | 'Euro' | 'EuroHalf' | 'Custom'
+  palletLengthIn: 0,           // override; required when palletType='Custom'
+  palletWidthIn: 0,            // override; required when palletType='Custom'
+  // Carton profile (single global carton; per-channel override deferred to Phase 5)
+  cartonLengthIn: 12,
+  cartonWidthIn: 9,
+  cartonHeightIn: 12,
+  cartonOrientation: 'L-along-rack',  // 'L-along-rack' | 'W-along-rack'
+  cartonsPerPalletOverride: 0,        // > 0 to bypass ti×hi derivation (e.g., from slotting study)
+  // SKU counts per zone — drive minimum-location math. Default 0 = derive
+  // from positions via heuristic (FP_SKUs = round(positions/10), etc.).
+  fullPalletSkus: 0,
+  cartonPalletSkus: 0,
+  shelvingSkus: 0,
+  // Bottom-beam toggles per zone. Distribution default for FP is no bottom
+  // beam (pallet on slab — saves cost); CP gets a bottom beam to support
+  // wire-decked case-pick or pick-module ergonomics; shelving has its own
+  // deck per level so the toggle is moot.
+  bottomBeamFp: false,
+  bottomBeamCp: true,
+  bottomBeamShelving: false,
+  topBeam: false,              // legacy compat — orphan beam above top level (real selective: never)
+  // Dock requirement inputs (peak throughput → door count)
+  palletsPerTruck: 26,         // TL pallet load — 30 floor-loaded, 26 with stack
+  dwellHoursPerTruck: 1.5,     // live unload + stage (door occupied time)
+  shiftHoursPerDay: 16,        // 2-shift default
+  surgePctDock: 0.20,          // dock-specific surge buffer (separate from inventory surge)
 };
 
 /**
@@ -1625,6 +2209,131 @@ export function sizeFacility(userInputs = {}) {
     pct: totalSqft > 0 ? Math.round((z.sqft / totalSqft) * 100) : 0,
   }));
 
+  // ============================================================
+  // Phase 1 redesign — IE-correct unit-load / carton / SKU / dock helpers
+  // ============================================================
+  // All ADDITIVE: existing fields above this block are unchanged.
+  // The new helpers + sized fields surface real selective-rack bay sizing
+  // (2 pallets per crossbeam), ti×hi cartons-per-pallet, two-sided shelving
+  // location math (demand-bound vs sku-bound), top-beam-off + bottom-beam
+  // toggle racking structure, peak-throughput-driven dock door count, and
+  // a requirements-driven facility footprint suggestion. Phase 2 will
+  // surface these in the UI; Phase 3 will use them in the 3D rendering.
+
+  const _unitLoad = computeUnitLoad({
+    palletType: i.palletType,
+    palletLengthIn: i.palletLengthIn,
+    palletWidthIn: i.palletWidthIn,
+    loadHeightIn: i.loadHeightIn,
+  });
+
+  const _cartonProfile = computeCartonProfile({
+    cartonLengthIn: i.cartonLengthIn,
+    cartonWidthIn: i.cartonWidthIn,
+    cartonHeightIn: i.cartonHeightIn,
+    palletLengthIn: _unitLoad.palletLengthIn,
+    palletWidthIn:  _unitLoad.palletWidthIn,
+    loadHeightIn:   _unitLoad.loadHeightIn,
+    shelfBayWidthFt: SHELVING_BAY_WIDTH_FT,
+    orientation: i.cartonOrientation,
+    cartonsPerPalletOverride: i.cartonsPerPalletOverride,
+  });
+
+  // Derive SKU heuristics when user hasn't supplied counts. These are
+  // back-of-envelope defaults used only as fallbacks; real sizing should
+  // collect SKU counts as primary inputs in Phase 2.
+  const _fpSkus  = +i.fullPalletSkus   > 0 ? Math.round(+i.fullPalletSkus)   : Math.max(0, Math.round(fullPalletPositions   / 10));
+  const _cpSkus  = +i.cartonPalletSkus > 0 ? Math.round(+i.cartonPalletSkus) : Math.max(0, Math.round(cartonPalletPositions /  5));
+  const _shSkus  = +i.shelvingSkus     > 0 ? Math.round(+i.shelvingSkus)     : Math.max(0, Math.round(shelvingPositions     *  4));
+
+  // Total palletized-equivalent inventory: when override engaged, that's
+  // the user's declared count; otherwise derive from peakUnits. Used as
+  // the basis for shelving demand-side carton math.
+  const _totalPalletsForShelving = palletPositionsExplicit
+    ? Math.round(i.totalPalletsOverride)
+    : Math.ceil((+i.peakUnits || 0) / Math.max(1, +i.unitsPerPallet || 1));
+
+  const _shelvingLocations = computeShelvingLocations({
+    totalPallets: _totalPalletsForShelving,
+    shelvingMixPct: mix.cartonOnShelvingPct,
+    cartonsPerPallet: _cartonProfile.cartonsPerPallet,
+    cartonsPerShelf:  _cartonProfile.cartonsPerShelf,
+    shelvingSkus: _shSkus,
+    shelfLevels,
+    honeycombPct: (i.honeycombPct || 0) / 100,
+    surgePct:     (i.surgePct || 0) / 100,
+  });
+
+  // Per-zone racking structure (beam row heights, no top beam, bottom beam
+  // toggleable per zone). Shelving uses the carton-profile shelf level
+  // height; pallet zones use the unit-load pallet level height.
+  const _rackingStructure = {
+    fullPallet: computeRackingStructure({
+      levels,
+      levelHeightFt: _unitLoad.palletLevelHeightFt,
+      bottomBeam: !!i.bottomBeamFp,
+      topBeam: !!i.topBeam,
+    }),
+    cartonOnPallet: computeRackingStructure({
+      levels,
+      levelHeightFt: _unitLoad.palletLevelHeightFt,
+      bottomBeam: !!i.bottomBeamCp,
+      topBeam: !!i.topBeam,
+    }),
+    shelving: computeRackingStructure({
+      levels: shelfLevels,
+      levelHeightFt: _cartonProfile.shelfLevelHeightFt,
+      bottomBeam: !!i.bottomBeamShelving,
+      topBeam: !!i.topBeam,
+    }),
+  };
+
+  // Dock requirement: peak day throughput in pallets = inbound + outbound
+  // (already represents peak — the legacy engine applies a 25% surge buffer
+  // on top of avg, so these are effectively peak-day numbers). New helper
+  // applies its own surgePctDock buffer.
+  const _dockRequirement = computeDockRequirement({
+    peakThroughputPalletsPerDay: (+i.inPalletsDay || 0) + (+i.outPalletsDay || 0),
+    palletsPerTruck:    i.palletsPerTruck,
+    dwellHoursPerTruck: i.dwellHoursPerTruck,
+    shiftHoursPerDay:   i.shiftHoursPerDay,
+    surgePct:           i.surgePctDock,
+    sfPerDoor:          DOCK_SF_PER_DOOR,
+  });
+
+  // Requirements-driven facility footprint: aggregate the components and
+  // suggest a 1.5:1 building. Compare against the user's facility dims to
+  // decide over-built vs under-built (Phase 2 banner will consume this).
+  const _requirementsDriven = computeRequiredFacilitySF({
+    storageSf:    storageSqft,
+    dockSf:       _dockRequirement.dockSfRequired,
+    officeSf:     officeSqft,
+    stagingSf:    recvStagingSqft + shipStagingSqft,
+    additionalSf: additionalSqft,
+    circulationPct: 0.10,
+    targetRatio: 1.5,
+  });
+
+  // Locations rollup: full pallet + carton-on-pallet + shelving with
+  // demand vs sku-bound mode tagging.
+  const _locations = {
+    fullPallet: {
+      positions: fullPalletPositions,
+      grossPositions: 0,                 // populated below from positions block
+      skuMinLocations: _fpSkus,
+      locationsRequired: Math.max(fullPalletPositions, _fpSkus),
+      mode: fullPalletPositions >= _fpSkus ? 'demand-bound' : 'sku-bound',
+    },
+    cartonOnPallet: {
+      positions: cartonPalletPositions,
+      grossPositions: 0,                 // populated below
+      skuMinLocations: _cpSkus,
+      locationsRequired: Math.max(cartonPalletPositions, _cpSkus),
+      mode: cartonPalletPositions >= _cpSkus ? 'demand-bound' : 'sku-bound',
+    },
+    shelving: _shelvingLocations,
+  };
+
   return {
     totalSqft,
     storageSqft,
@@ -1716,6 +2425,16 @@ export function sizeFacility(userInputs = {}) {
     },
     zoneBreakdown,
     storageDetail: { storeType: i.storeType, layoutDescription },
+    // ── Phase 1 redesign — additive sized fields ──
+    // All driven by the six new helpers (computeUnitLoad, computeCartonProfile,
+    // computeShelvingLocations, computeRackingStructure, computeDockRequirement,
+    // computeRequiredFacilitySF). Existing fields above are unchanged.
+    unitLoad: _unitLoad,
+    cartonProfile: _cartonProfile,
+    locations: _locations,
+    rackingStructure: _rackingStructure,
+    dockRequirement: _dockRequirement,
+    requirementsDriven: _requirementsDriven,
     meta: {
       inputs: i,
       normalisedMix: mix,
