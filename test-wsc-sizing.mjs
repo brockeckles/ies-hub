@@ -1,5 +1,5 @@
 // test-wsc-sizing.mjs — regression tests for I-06 (WSC honor explicit dock config + pallet override)
-import { sizeFacility, calcDIOH, orientFacility, elevationParams } from './tools/warehouse-sizing/calc.js';
+import { sizeFacility, calcDIOH, orientFacility, elevationParams, crossAisleDefaults, crossAisleLayoutFt } from './tools/warehouse-sizing/calc.js';
 
 let pass = 0, fail = 0;
 const t = (name, cond, extra = '') => {
@@ -401,6 +401,70 @@ import { assignDemand } from './tools/network-opt/calc.js';
   const ep2 = elevationParams({ buildingWidth: 1000, buildingDepth: 750, clearHeight: 36 });
   t('O1 elev landscape: buildingWidth = longFt = 1000', ep2.buildingWidth === 1000);
   t('O1 elev landscape: shortFt = 750', ep2.shortFt === 750);
+}
+
+// ──────────────────────────────────────────────────────────────────
+// WSC-X1 (2026-05-04) — cross-aisle layout (engine governs all surfaces)
+// ──────────────────────────────────────────────────────────────────
+{
+  // crossAisleDefaults — sprinkler-aware spacing
+  const dESFR = crossAisleDefaults({ sprinklerType: 'ESFR' });
+  t('X1 ESFR target spacing 250 ft', dESFR.targetSpacingFt === 250);
+  const dStd = crossAisleDefaults({ sprinklerType: 'standard' });
+  t('X1 standard sprinkler 200 ft', dStd.targetSpacingFt === 200);
+  const dNone = crossAisleDefaults({ sprinklerType: 'none' });
+  t('X1 unsprinklered 150 ft', dNone.targetSpacingFt === 150);
+
+  // crossAisleDefaults — truck-class-aware clear width
+  const tCB = crossAisleDefaults({ truckClass: 'counterbalance' });
+  t('X1 counterbalance 12 ft clear', tCB.clearFt === 12);
+  const tReach = crossAisleDefaults({ truckClass: 'reach' });
+  t('X1 reach truck 10 ft clear', tReach.clearFt === 10);
+  const tTurret = crossAisleDefaults({ truckClass: 'turret' });
+  t('X1 turret 8 ft clear', tTurret.clearFt === 8);
+
+  // Default (no opts) = ESFR + counterbalance
+  const dDef = crossAisleDefaults();
+  t('X1 defaults: ESFR 250 ft', dDef.targetSpacingFt === 250);
+  t('X1 defaults: counterbalance 12 ft', dDef.clearFt === 12);
+
+  // Short rack run — no cross-aisle needed
+  const short = crossAisleLayoutFt(150);
+  t('X1 short run: 1 segment', short.segmentCount === 1);
+  t('X1 short run: 0 cross-aisles', short.totalCrossAisleFt === 0);
+  t('X1 short run: full length preserved', short.segmentLenFt === 150);
+
+  // Long rack run — splits into segments
+  const long500 = crossAisleLayoutFt(500); // ESFR 250+12 → 1 split needed (262 < 500)
+  t('X1 500 ft run splits', long500.segmentCount >= 2);
+  // segments * segmentLen + (segments-1) * clearFt should equal input
+  const reconstructed = long500.segmentCount * long500.segmentLenFt + (long500.segmentCount - 1) * long500.crossAisleClearFt;
+  t('X1 segment math reconciles to input', Math.abs(reconstructed - 500) < 0.01);
+
+  // Specific case: 1000 ft long rack run on ESFR + counterbalance
+  // 250+12 = 262 fits ~3 times into 1000 → 4 segments with 3 cross-aisles
+  const long1000 = crossAisleLayoutFt(1000);
+  t('X1 1000 ft ESFR+cb: 4 segments', long1000.segmentCount === 4);
+  t('X1 1000 ft: 3 cross-aisles', long1000.segmentCount - 1 === 3);
+  t('X1 1000 ft: 36 ft total cross-aisle', long1000.totalCrossAisleFt === 36);
+
+  // Run = exactly target+clear → still 1 segment (boundary)
+  const boundary = crossAisleLayoutFt(262); // ESFR target 250 + 12 clear
+  t('X1 boundary 262 ft: 1 segment (no split needed)', boundary.segmentCount === 1);
+
+  // Negative / zero / NaN inputs return safe values
+  const zero = crossAisleLayoutFt(0);
+  t('X1 zero input: 1 segment, 0 length', zero.segmentCount === 1 && zero.segmentLenFt === 0);
+  const neg = crossAisleLayoutFt(-100);
+  t('X1 negative input clamped to 0', neg.segmentLenFt === 0);
+  const nanL = crossAisleLayoutFt(NaN);
+  t('X1 NaN input clamped to 0', nanL.segmentLenFt === 0);
+
+  // Mixed opts: standard sprinkler + reach truck
+  const std = crossAisleLayoutFt(600, { sprinklerType: 'standard', truckClass: 'reach' });
+  // 200+10=210 fits 2 times into 600 → 3 segments with 2 cross-aisles
+  t('X1 600 ft std+reach: 3 segments', std.segmentCount === 3);
+  t('X1 600 ft std+reach: 10 ft clear', std.crossAisleClearFt === 10);
 }
 
 console.log(`

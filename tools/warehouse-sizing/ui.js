@@ -11,7 +11,7 @@ import { state } from '../../shared/state.js?v=20260418-sL';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sL';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260430-na-dot';
-import * as calc from './calc.js?v=20260504-orient1';
+import * as calc from './calc.js?v=20260504-xa1';
 import * as api from './api.js?v=20260418-sL';
 import * as cmApi from '../cost-model/api.js?v=20260504-auth1';
 import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
@@ -1652,20 +1652,14 @@ function drawPlan() {
 
     const racksH = Math.max(0, racksBottom - racksTop);
     if (racksH > 0) {
-      // Cross-aisle insertion: split long racking runs with ~10 ft cross-aisles
-      // every ~200 ft so forklifts can navigate between rack rows. Mirrors
-      // real-world warehouse layout (OSHA/NFPA egress + turn-around practice).
-      const crossAisleFt = 10; // typical cross-aisle clear width
-      const segmentLenFt = 200; // typical spacing between cross-aisles
+      // WSC-X1 (2026-05-04): cross-aisle layout pulled from engine
+      // (calc.crossAisleLayoutFt). Plan / Elevation / 3D all consume the
+      // same helper so the three views agree on where cross-aisles sit.
       const rackRunLenFt = racksH / pxPerFt;
-      // Only split when the run is long enough for at least one cross-aisle.
-      const segmentCount = rackRunLenFt > segmentLenFt + crossAisleFt
-        ? Math.max(1, Math.ceil(rackRunLenFt / (segmentLenFt + crossAisleFt)))
-        : 1;
-      const crossAislePx = crossAisleFt * pxPerFt;
-      // Even segment heights so cross-aisles land at predictable positions.
-      const totalCrossAislePx = (segmentCount - 1) * crossAislePx;
-      const perSegmentPx = Math.max(8, (racksH - totalCrossAislePx) / segmentCount);
+      const xaLayout = calc.crossAisleLayoutFt(rackRunLenFt);
+      const segmentCount = xaLayout.segmentCount;
+      const crossAislePx = xaLayout.crossAisleClearFt * pxPerFt;
+      const perSegmentPx = Math.max(8, xaLayout.segmentLenFt * pxPerFt);
 
       const drawSegment = (yTop, segH) => {
         if (segH <= 0) return;
@@ -2703,20 +2697,32 @@ function build3DScene() {
       const thisLen = Math.max(0, thisZEnd - thisZStart);
 
       if (thisLen > 4) {
-        const zCenter = (thisZStart + thisZEnd) / 2;
-        const rackGeo = new THREE.BoxGeometry(rackDepthU, t.heightU, thisLen);
-        const r1 = new THREE.Mesh(rackGeo, t.mat);
-        r1.position.set(mx + rackDepthU / 2, t.heightU / 2, zCenter);
-        scene.add(r1);
-        const r2 = new THREE.Mesh(rackGeo, t.mat);
-        r2.position.set(mx + rackDepthU + 0.5 + rackDepthU / 2, t.heightU / 2, zCenter);
-        scene.add(r2);
-        const wf1 = new THREE.LineSegments(new THREE.EdgesGeometry(rackGeo), t.wire);
-        wf1.position.copy(r1.position);
-        scene.add(wf1);
-        const wf2 = new THREE.LineSegments(new THREE.EdgesGeometry(rackGeo), t.wire);
-        wf2.position.copy(r2.position);
-        scene.add(wf2);
+        // WSC-X1 (2026-05-04): break rack run into cross-aisle segments along Z
+        // matching what the plan view draws. Engine layout helper governs
+        // segment count and gap width — all three surfaces agree.
+        const thisLenFt = thisLen / scale;
+        const xa = calc.crossAisleLayoutFt(thisLenFt);
+        const segLenU = xa.segmentLenFt * scale;
+        const gapU    = xa.crossAisleClearFt * scale;
+        // Walk segments back-to-front along Z, placing one rack pair per segment.
+        let zCursor = thisZStart;
+        for (let s = 0; s < xa.segmentCount; s++) {
+          const segCenter = zCursor + segLenU / 2;
+          const rackGeo = new THREE.BoxGeometry(rackDepthU, t.heightU, segLenU);
+          const r1 = new THREE.Mesh(rackGeo, t.mat);
+          r1.position.set(mx + rackDepthU / 2, t.heightU / 2, segCenter);
+          scene.add(r1);
+          const r2 = new THREE.Mesh(rackGeo, t.mat);
+          r2.position.set(mx + rackDepthU + 0.5 + rackDepthU / 2, t.heightU / 2, segCenter);
+          scene.add(r2);
+          const wf1 = new THREE.LineSegments(new THREE.EdgesGeometry(rackGeo), t.wire);
+          wf1.position.copy(r1.position);
+          scene.add(wf1);
+          const wf2 = new THREE.LineSegments(new THREE.EdgesGeometry(rackGeo), t.wire);
+          wf2.position.copy(r2.position);
+          scene.add(wf2);
+          zCursor += segLenU + gapU;
+        }
       }
       typeUsed += 2;
       mx += moduleU;

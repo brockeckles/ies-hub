@@ -161,6 +161,99 @@ export function orientFacility(facility = {}) {
 }
 
 // ============================================================
+// CROSS-AISLE LAYOUT (canonical NFPA / IFC egress rule of thumb)
+// ============================================================
+
+/**
+ * Default cross-aisle spacing and clear-width by sprinkler / truck class.
+ *
+ * **Why this exists.** Pre-WSC-X1 (2026-05-04) cross-aisles were a 2D-only
+ * visual flourish: drawPlan hardcoded `crossAisleFt = 10, segmentLenFt = 200`
+ * locally; the 3D scene didn't render them at all (continuous racks from
+ * staging to staging — code-violating in any U.S. jurisdiction); the calc
+ * engine applied a flat `STORAGE_LOSS_FACTOR = 1.20` covering "cross-aisles,
+ * columns, fire lanes" with no spacing math. Three different mental models.
+ *
+ * **Convention pinned 2026-05-04 (WSC-X1).** Cross-aisles are transverse
+ * aisles that break rack runs into segments so forklifts can turn around
+ * and so egress travel distance stays under code. Default: 200 ft segment
+ * length (sprinklered, matching IFC Ch.10 max), 10 ft clear width
+ * (counterbalance and reach-truck friendly). Future-extensible by
+ * sprinkler type and truck class.
+ *
+ * Defaults (inputs all optional):
+ *   sprinklerType = 'ESFR' | 'standard' | 'none' (default 'ESFR')
+ *     - 'ESFR'     : 250 ft target between cross-aisles (extended-egress allowed)
+ *     - 'standard' : 200 ft (IFC Ch.10 sprinklered max)
+ *     - 'none'     : 150 ft (IFC Ch.10 unsprinklered max)
+ *   truckClass = 'counterbalance' | 'reach' | 'turret' | 'walkie' (default 'counterbalance')
+ *     - 'counterbalance' : 12 ft clear cross-aisle (90-deg turn with load)
+ *     - 'reach'          : 10 ft clear
+ *     - 'turret'         : 8 ft clear
+ *     - 'walkie'         : 8 ft clear
+ *
+ * @param {{ sprinklerType?: string, truckClass?: string }} [opts]
+ * @returns {{ targetSpacingFt: number, clearFt: number, sprinklerType: string, truckClass: string }}
+ */
+export function crossAisleDefaults(opts = {}) {
+  const sprinklerType = opts.sprinklerType || 'ESFR';
+  const truckClass = opts.truckClass || 'counterbalance';
+  const targetSpacingFt = sprinklerType === 'none' ? 150
+    : sprinklerType === 'standard' ? 200
+    : 250; // ESFR
+  const clearFt = truckClass === 'counterbalance' ? 12
+    : truckClass === 'reach' ? 10
+    : 8; // turret / walkie / unknown
+  return { targetSpacingFt, clearFt, sprinklerType, truckClass };
+}
+
+/**
+ * Compute a cross-aisle layout for a rack run of length `rackRunLenFt`.
+ * Returns segment count, length per segment, and total cross-aisle
+ * length consumed. When the run is too short to need a cross-aisle
+ * (≤ targetSpacing + clear), returns a single segment with no cross-aisles.
+ *
+ * Used by:
+ *   - drawPlan (ui.js) to render cross-aisle gaps in 2D rack rows
+ *   - build3DScene (ui.js) to break rack BoxGeometry into segments
+ *   - computeStorage (this file, future) to subtract cross-aisle SF from
+ *     achieved position count instead of relying on flat STORAGE_LOSS_FACTOR
+ *
+ * @param {number} rackRunLenFt — length of a continuous rack aisle in feet
+ * @param {{ sprinklerType?: string, truckClass?: string }} [opts]
+ * @returns {{
+ *   segmentCount: number,
+ *   segmentLenFt: number,
+ *   crossAisleClearFt: number,
+ *   totalCrossAisleFt: number,
+ *   targetSpacingFt: number
+ * }}
+ */
+export function crossAisleLayoutFt(rackRunLenFt, opts = {}) {
+  const len = Math.max(0, +rackRunLenFt || 0);
+  const { targetSpacingFt, clearFt } = crossAisleDefaults(opts);
+  if (len <= targetSpacingFt + clearFt) {
+    return {
+      segmentCount: 1,
+      segmentLenFt: len,
+      crossAisleClearFt: clearFt,
+      totalCrossAisleFt: 0,
+      targetSpacingFt,
+    };
+  }
+  const segmentCount = Math.max(1, Math.ceil(len / (targetSpacingFt + clearFt)));
+  const totalCrossAisleFt = (segmentCount - 1) * clearFt;
+  const segmentLenFt = (len - totalCrossAisleFt) / segmentCount;
+  return {
+    segmentCount,
+    segmentLenFt,
+    crossAisleClearFt: clearFt,
+    totalCrossAisleFt,
+    targetSpacingFt,
+  };
+}
+
+// ============================================================
 // BAY & AISLE GEOMETRY
 // ============================================================
 
