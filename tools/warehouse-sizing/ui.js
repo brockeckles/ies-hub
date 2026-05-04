@@ -11,7 +11,7 @@ import { state } from '../../shared/state.js?v=20260418-sL';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sL';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260430-na-dot';
-import * as calc from './calc.js?v=20260505-shelv3';
+import * as calc from './calc.js?v=20260505-shelv4';
 import * as api from './api.js?v=20260418-sL';
 import * as cmApi from '../cost-model/api.js?v=20260504-auth1';
 import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
@@ -1481,15 +1481,12 @@ function renderPlan() {
     const _sizedForCta = calc.sizeFacility(toSizingInputs());
     const _orientUser = calc.orientFacility(facility);
     const _userFits = (_orientUser.longFt * _orientUser.shortFt) >= _sizedForCta.totalSqft * 0.98 && !_orientUser.derived;
-    let _wFt, _dFt;
-    if (_userFits) {
-      _wFt = _orientUser.longFt;
-      _dFt = _orientUser.shortFt;
-    } else {
-      const _sizedOrient = calc.orientFacility({ totalSqft: _sizedForCta.totalSqft });
-      _wFt = _sizedOrient.longFt;
-      _dFt = _sizedOrient.shortFt;
-    }
+    // Only recommend a shrink when the user-entered dims actually fit the
+    // inventory. If the building is too small, the engine falls back to
+    // showing derived 1.5:1 dims on the canvas — recommending another
+    // shrink against those derived dims would be a feedback cycle.
+    const _wFt = _userFits ? _orientUser.longFt  : 0;
+    const _dFt = _userFits ? _orientUser.shortFt : 0;
     if (_wFt > 0 && _dFt > 0) {
       const _aisleFt     = facility.aisleWidth || calc.AISLE_WIDTHS[facility.storageType] || 12;
       const _rackDepthFt = calc.rackDepthFt(facility.storageType, facility);
