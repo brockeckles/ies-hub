@@ -164,6 +164,47 @@ export async function updateModel(id, data) {
 }
 
 /**
+ * Phase 4 of WSC redesign (2026-05-04) — write back the WSC sized output
+ * into a linked cost model's project_data so CM can surface "WSC says X"
+ * facts without re-running the WSC engine.
+ *
+ * Writeback shape (under `project_data.linkedWscFacts`):
+ *   {
+ *     scenarioId, scenarioName,
+ *     totalSf, requiredSf,                              // built vs required (Phase 1)
+ *     suggestedDims: { longFt, shortFt },               // 1.5:1 suggested footprint
+ *     dock: { totalDoors, inboundDoors, outboundDoors, sfRequired },
+ *     positions: { fullPallet, cartonOnPallet },        // raw pallet positions
+ *     shelving: { locationsRequired, mode, demandLocations, skuMinLocations },
+ *     unitLoad: { palletType, bayWidthFt, levelHeightFt },
+ *     cartonProfile: { cartonsPerPallet, cartonsPerShelf, orientation },
+ *     buildingDims: { width, depth, override },         // current vs suggested
+ *     updatedAt: ISO timestamp
+ *   }
+ *
+ * Additive write — fetch the parent CM's full payload, splice in the new
+ * linkedWscFacts key, push back via updateModel. Other fields untouched.
+ *
+ * @param {number|string} cmId
+ * @param {Object} wscFacts — see shape above
+ * @returns {Promise<void>}
+ */
+export async function applyWscWriteback(cmId, wscFacts) {
+  if (!cmId) throw new Error('applyWscWriteback: cmId required');
+  if (!wscFacts || typeof wscFacts !== 'object') throw new Error('applyWscWriteback: wscFacts required');
+  const row = await getModel(cmId);
+  if (!row) throw new Error(`applyWscWriteback: cost model ${cmId} not found`);
+  const data = (row.project_data && typeof row.project_data === 'object')
+    ? { ...row.project_data }
+    : {};
+  data.linkedWscFacts = {
+    ...wscFacts,
+    updatedAt: new Date().toISOString(),
+  };
+  return updateModel(cmId, data);
+}
+
+/**
  * Delete a cost model project.
  * @param {number} id
  * @returns {Promise<void>}

@@ -13,7 +13,7 @@ import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260430-na-dot';
 import * as calc from './calc.js?v=20260504-phase2';
 import * as api from './api.js?v=20260418-sL';
-import * as cmApi from '../cost-model/api.js?v=20260504-auth1';
+import * as cmApi from '../cost-model/api.js?v=20260504-phase4-cm';
 import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { showConfirm } from '../../shared/confirm-modal.js';
 
@@ -723,6 +723,66 @@ async function handleSaveWsc() {
     showToast(`Saved "${facility.name || 'Untitled'}"`, 'success');
     refreshToolChrome(rootEl, _buildWscChromeOpts());
     _refreshWscKpis();
+
+    // ── Phase 4 of WSC redesign (2026-05-04) — WSC → CM writeback ──
+    // When this scenario is linked to a parent cost model, push the sized
+    // output back into the CM's project_data under `linkedWscFacts` so the
+    // CM can surface "WSC says X SF / Y dock doors / Z shelving locations"
+    // without re-running the WSC engine. Best-effort: if the writeback
+    // fails (e.g., CM was deleted, RLS blocks), the WSC save still succeeded
+    // and we just toast a non-blocking warning.
+    if (facility.parent_cost_model_id) {
+      try {
+        const sized = calc.sizeFacility(toSizingInputs());
+        const wscFacts = {
+          scenarioId: facility.id,
+          scenarioName: facility.name || 'Untitled',
+          totalSf:    sized.totalSqft     || 0,
+          requiredSf: sized.requirementsDriven?.totalSfRequired || 0,
+          suggestedDims: {
+            longFt:  sized.requirementsDriven?.suggestedLongFt  || 0,
+            shortFt: sized.requirementsDriven?.suggestedShortFt || 0,
+          },
+          dock: {
+            totalDoors:    sized.dock?.totalDoors    || 0,
+            inboundDoors:  sized.dock?.inboundDoors  || 0,
+            outboundDoors: sized.dock?.outboundDoors || 0,
+            sfRequired:    sized.dockRequirement?.dockSfRequired || 0,
+          },
+          positions: {
+            fullPallet:     sized.positions?.fullPalletPositions   || 0,
+            cartonOnPallet: sized.positions?.cartonPalletPositions || 0,
+            grossPositions: sized.positions?.grossPositions        || 0,
+          },
+          shelving: {
+            locationsRequired: sized.locations?.shelving?.locationsRequired || 0,
+            mode:              sized.locations?.shelving?.mode              || 'tie',
+            demandLocations:   sized.locations?.shelving?.demandLocations   || 0,
+            skuMinLocations:   sized.locations?.shelving?.skuMinLocations   || 0,
+          },
+          unitLoad: sized.unitLoad ? {
+            palletType:        sized.unitLoad.palletType,
+            bayWidthFt:        sized.unitLoad.bayWidthFt,
+            palletLevelHeightFt: sized.unitLoad.palletLevelHeightFt,
+          } : null,
+          cartonProfile: sized.cartonProfile ? {
+            cartonsPerPallet: sized.cartonProfile.cartonsPerPallet,
+            cartonsPerShelf:  sized.cartonProfile.cartonsPerShelf,
+            orientation:      sized.cartonProfile.orientation,
+          } : null,
+          buildingDims: {
+            width:    facility.buildingWidth  || 0,
+            depth:    facility.buildingDepth  || 0,
+            override: !!facility.buildingDimsOverride,
+          },
+        };
+        await cmApi.applyWscWriteback(facility.parent_cost_model_id, wscFacts);
+        showToast(`WSC facts written to Cost Model #${facility.parent_cost_model_id}`, 'info');
+      } catch (writebackErr) {
+        console.warn('[WSC] CM writeback failed (non-blocking):', writebackErr);
+        showToast('WSC saved, but CM writeback failed — see console.', 'warning');
+      }
+    }
   } catch (err) {
     console.error('[WSC] Save failed:', err);
     showToast('Save failed: ' + (err.message || err), 'error');
@@ -1533,23 +1593,22 @@ function bindConfigEvents(panel) {
   });
 
   panel.querySelector('[data-action="wsc-save"]')?.addEventListener('click', async (e) => {
+    // Phase 4 (2026-05-04): delegate to handleSaveWsc so the WSC→CM writeback
+    // path runs from this button too. Pre-Phase-4 this had its own inline
+    // save that bypassed the writeback logic, so saves from the side-panel
+    // legacy save button silently skipped the CM update.
     const btn = /** @type {HTMLButtonElement} */ (e.currentTarget);
     const orig = btn.textContent;
     btn.disabled = true;
     btn.textContent = 'Saving…';
     try {
-      const saved = await api.saveConfig({ ...facility, zones, volumes });
-      facility.id = saved.id || saved[0]?.id || facility.id;
-      isDirty = false;
-      bus.emit('wsc:saved', { id: facility.id });
+      await handleSaveWsc();
       btn.textContent = '✓ Saved';
-      showWscToast(`Saved "${facility.name || 'Untitled'}"`, 'success');
       setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1800);
     } catch (err) {
       console.error('[WSC] Save failed:', err);
       btn.textContent = orig;
       btn.disabled = false;
-      showWscToast('Save failed: ' + err.message, 'error');
     }
   });
 
