@@ -2714,6 +2714,71 @@ function _wscGetFloorTexture(THREE) {
   return tex;
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// Forklift sprite (Q3 ratified 2026-05-04 PM, audit P2-14). Builds a
+// Group representing one industrial reach truck: body + cab + mast +
+// forks. Default orientation faces +Z so callers set group.rotation.y
+// from travel heading via Math.atan2(deltaX, deltaZ). All meshes carry
+// castShadow so the forklift drops a contact shadow on the concrete.
+// `scale` = world units per foot (matches build3DScene's 0.5).
+// ─────────────────────────────────────────────────────────────────────
+function _wscMakeForklift(THREE, scale) {
+  const s = scale;
+  const group = new THREE.Group();
+  // Body — orange industrial chassis
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0xea580c, roughness: 0.55, metalness: 0.18 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(4 * s, 3.5 * s, 7 * s), bodyMat);
+  body.position.set(0, 1.75 * s, -1 * s);
+  body.castShadow = true;
+  group.add(body);
+  // Cab — dark gray operator station, taller, sits on rear of body
+  const cabMat = new THREE.MeshStandardMaterial({ color: 0x374151, roughness: 0.75 });
+  const cab = new THREE.Mesh(new THREE.BoxGeometry(3.6 * s, 3 * s, 3.5 * s), cabMat);
+  cab.position.set(0, 5 * s, -2.5 * s);
+  cab.castShadow = true;
+  group.add(cab);
+  // Cab roof — thin dark panel
+  const roofMat = new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.8 });
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(3.8 * s, 0.3 * s, 3.7 * s), roofMat);
+  roof.position.set(0, 6.7 * s, -2.5 * s);
+  roof.castShadow = true;
+  group.add(roof);
+  // Mast — vertical steel column at front of body (forks extend in +Z)
+  const mastMat = new THREE.MeshStandardMaterial({ color: 0x4b5563, roughness: 0.6, metalness: 0.5 });
+  const mast = new THREE.Mesh(new THREE.BoxGeometry(3.4 * s, 13 * s, 0.4 * s), mastMat);
+  mast.position.set(0, 6.5 * s, 2.3 * s);
+  mast.castShadow = true;
+  group.add(mast);
+  // Two forks — yellow steel tines extending forward (+Z) at low height
+  const forkMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.55, metalness: 0.4 });
+  const forkGeo = new THREE.BoxGeometry(0.4 * s, 0.25 * s, 3.5 * s);
+  const fork1 = new THREE.Mesh(forkGeo, forkMat);
+  fork1.position.set(-1.0 * s, 0.4 * s, 4.0 * s);
+  fork1.castShadow = true;
+  group.add(fork1);
+  const fork2 = new THREE.Mesh(forkGeo, forkMat);
+  fork2.position.set(1.0 * s, 0.4 * s, 4.0 * s);
+  fork2.castShadow = true;
+  group.add(fork2);
+  // Wheels — 4 small dark cylinders at corners (purely visual; no physics)
+  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.85 });
+  const wheelGeo = new THREE.CylinderGeometry(0.7 * s, 0.7 * s, 0.6 * s, 16);
+  const wheelPositions = [
+    [ 1.8 * s, 0.7 * s,  1.5 * s],
+    [-1.8 * s, 0.7 * s,  1.5 * s],
+    [ 1.8 * s, 0.7 * s, -3.5 * s],
+    [-1.8 * s, 0.7 * s, -3.5 * s],
+  ];
+  for (const [x, y, z] of wheelPositions) {
+    const w = new THREE.Mesh(wheelGeo, wheelMat);
+    w.position.set(x, y, z);
+    w.rotation.z = Math.PI / 2; // wheel axles run along X
+    w.castShadow = true;
+    group.add(w);
+  }
+  return group;
+}
+
 function build3DScene() {
   const el = rootEl?.querySelector('#wsc-3d-container');
   if (!el) return;
@@ -3216,12 +3281,112 @@ function build3DScene() {
       }, { passive: false });
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // Q3 / P2-14: minimal forklift simulation. Three sprites move
+    // dock → random rack → dock on a loop. Demo polish — the "live
+    // model" feel for sales screenshots / videos. Engine math
+    // unchanged. Sprites are skipped if no rack pairs were placed
+    // (empty building) so they never wander an empty floor.
+    // ─────────────────────────────────────────────────────────────
+    /** @type {Array<{group:any, fromV:any, toV:any, t:number, speedUps:number, paused:number, returning:boolean}>} */
+    const forklifts = [];
+    if (segmentMeta.length > 0) {
+      const FORKLIFT_COUNT = 3;
+      const FORKLIFT_GROUND_Y = 0; // floor top is ~y=0; forklift body sits above by design
+      const FORKLIFT_SPEED_UPS = 6 * scale; // ~12 ft/s scaled to world units (scale=0.5)
+      const dockZ = -D / 2 + 4 * scale; // 4 ft inboard of dock face
+      function _wscPickRackTarget(THREE) {
+        const m = segmentMeta[Math.floor(Math.random() * segmentMeta.length)];
+        // Pull into the aisle next to the rack face so the forklift
+        // doesn't visually clip through the rack volume.
+        const aisleOffset = m.side === 'A' ? +1.0 * scale : -1.0 * scale;
+        return new THREE.Vector3(m.faceX + aisleOffset, FORKLIFT_GROUND_Y, m.segCenter);
+      }
+      for (let i = 0; i < FORKLIFT_COUNT; i++) {
+        const fk = _wscMakeForklift(THREE, scale);
+        // Stagger initial positions along the dock so the three
+        // forklifts spread out instead of stacking on each other.
+        const startX = ((i + 0.5) / FORKLIFT_COUNT - 0.5) * (W - 24 * scale);
+        const fromV = new THREE.Vector3(startX, FORKLIFT_GROUND_Y, dockZ);
+        const toV   = _wscPickRackTarget(THREE);
+        fk.position.copy(fromV);
+        // Heading toward target
+        const dx = toV.x - fromV.x, dz = toV.z - fromV.z;
+        fk.rotation.y = Math.atan2(dx, dz);
+        scene.add(fk);
+        forklifts.push({
+          group: fk,
+          fromV,
+          toV,
+          t: 0,
+          speedUps: FORKLIFT_SPEED_UPS,
+          paused: 0,
+          returning: false,
+        });
+      }
+    }
+
     // Animate. Capture a local "alive" flag so the loop stops as soon as
     // dispose() is called (e.g. on re-render from a data-field commit).
+    // Use a delta-time clock so forklift motion is frame-rate independent.
     let alive = true;
+    let lastTs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const _tmpV = new THREE.Vector3();
     function animate() {
       if (!rootEl || !alive) return;
       requestAnimationFrame(animate);
+      const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+      const dt = Math.min(0.1, (now - lastTs) / 1000); // clamp dt for tab-switch resumes
+      lastTs = now;
+
+      // Advance forklifts
+      for (const fk of forklifts) {
+        if (fk.paused > 0) {
+          fk.paused -= dt;
+          continue;
+        }
+        const segLen = fk.fromV.distanceTo(fk.toV);
+        if (segLen <= 0.01) {
+          // Pick a fresh leg if we somehow got a zero-length path
+          fk.fromV.copy(fk.toV);
+          fk.toV.copy(fk.returning ? new THREE.Vector3(fk.fromV.x, 0, dockZ) : segmentMeta.length > 0 ? (function () {
+            const m = segmentMeta[Math.floor(Math.random() * segmentMeta.length)];
+            const offset = m.side === 'A' ? +1.0 * scale : -1.0 * scale;
+            return new THREE.Vector3(m.faceX + offset, 0, m.segCenter);
+          })() : new THREE.Vector3(0, 0, 0));
+          fk.t = 0;
+          continue;
+        }
+        // Advance t in seconds-of-travel-along-path
+        fk.t += (fk.speedUps * dt) / segLen;
+        if (fk.t >= 1) {
+          // Arrived. Brief pause "loading/unloading" then turn around.
+          fk.group.position.copy(fk.toV);
+          fk.paused = 0.6 + Math.random() * 0.6; // 0.6 - 1.2 sec pause
+          if (!fk.returning) {
+            // Going dock → rack done. Set return leg to the dock.
+            fk.fromV.copy(fk.toV);
+            fk.toV.set(fk.toV.x, 0, dockZ);
+            fk.returning = true;
+          } else {
+            // Returned to dock. Pick a new rack target.
+            fk.fromV.copy(fk.toV);
+            const m = segmentMeta[Math.floor(Math.random() * segmentMeta.length)];
+            const offset = m.side === 'A' ? +1.0 * scale : -1.0 * scale;
+            fk.toV.set(m.faceX + offset, 0, m.segCenter);
+            fk.returning = false;
+          }
+          fk.t = 0;
+          // Update heading for the new leg
+          const dx2 = fk.toV.x - fk.fromV.x, dz2 = fk.toV.z - fk.fromV.z;
+          fk.group.rotation.y = Math.atan2(dx2, dz2);
+        } else {
+          // Lerp current position
+          _tmpV.copy(fk.fromV).lerp(fk.toV, fk.t);
+          fk.group.position.copy(_tmpV);
+        }
+      }
+
       if (controls) controls.update();
       renderer.render(scene, camera);
     }
