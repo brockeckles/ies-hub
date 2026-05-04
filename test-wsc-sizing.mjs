@@ -1,5 +1,5 @@
 // test-wsc-sizing.mjs — regression tests for I-06 (WSC honor explicit dock config + pallet override)
-import { sizeFacility, calcDIOH, orientFacility, elevationParams, crossAisleDefaults, crossAisleLayoutFt, rackPairCapacity, rollupRenderedFacts, allocateRackColsByTarget, PALLET_BAY_WIDTH_FT, SHELVING_BAY_WIDTH_FT } from './tools/warehouse-sizing/calc.js';
+import { sizeFacility, calcDIOH, orientFacility, elevationParams, crossAisleDefaults, crossAisleLayoutFt, rackPairCapacity, rollupRenderedFacts, allocateRackColsByTarget, suggestedBuildingDimensions, PALLET_BAY_WIDTH_FT, SHELVING_BAY_WIDTH_FT } from './tools/warehouse-sizing/calc.js';
 
 let pass = 0, fail = 0;
 const t = (name, cond, extra = '') => {
@@ -728,6 +728,51 @@ import { assignDemand } from './tools/network-opt/calc.js';
   const r = allocateRackColsByTarget({});
   t('allocate empty: returns zeros', r.fullPalletCols === 0 && r.cartonPalletCols === 0 && r.shelvingCols === 0);
   t('allocate empty: unusedCols = 0', r.unusedCols === 0);
+}
+
+// ── suggestedBuildingDimensions — over-built shrink CTA ──
+{
+  // Wayfair Memphis FC scenario: 1000ft wide, 116 cols available, only 90
+  // used (after target-driven allocation). 26 unused cols → suggest shrink.
+  const r = suggestedBuildingDimensions({
+    totalCols: 116,
+    usedCols: 90,         // 45 pairs used, 13 pairs unused
+    moduleFt: 18.5,       // 2*4.25 (back-to-back rack) + 10ft aisle
+    sideMarginFt: 6,
+    safetyPadFt: 6,
+    currentWidthFt: 1000,
+    currentDepthFt: 750,
+  });
+  t('suggest: recommended for 22%+ over-built', r.recommended === true);
+  t('suggest: depth unchanged', r.suggestedDepthFt === 750);
+  t('suggest: width is shrinkage of original', r.suggestedWidthFt < r.currentWidthFt);
+  // 45 pairs * 18.5 + 12 + 6 = 850.5 → round up to 860
+  t('suggest: width rounded to 10 ft', r.suggestedWidthFt % 10 === 0);
+  t('suggest: oversize % computed', r.oversizePct >= 10 && r.oversizePct <= 25);
+}
+{
+  // Building exactly fits → no recommendation.
+  const r = suggestedBuildingDimensions({
+    totalCols: 50, usedCols: 50,
+    moduleFt: 18.5, currentWidthFt: 1000, currentDepthFt: 750,
+  });
+  t('suggest: no rec when used == totalCols', r.recommended === false);
+}
+{
+  // Tiny shrink under threshold → no recommendation. usedCols=98 of 100
+  // (49 pairs) → 943 ft min → rounds to 950 ft → 5% shrink, BELOW the 10%
+  // custom threshold the caller passes here.
+  const r = suggestedBuildingDimensions({
+    totalCols: 100, usedCols: 98,
+    moduleFt: 18.5, currentWidthFt: 1000, currentDepthFt: 750,
+    minOversizePctToRecommend: 10,
+  });
+  t('suggest: no rec when shrink under custom threshold', r.recommended === false);
+}
+{
+  // Bad inputs are safe.
+  const r = suggestedBuildingDimensions({});
+  t('suggest: empty inputs return not-recommended', r.recommended === false);
 }
 
 console.log(`

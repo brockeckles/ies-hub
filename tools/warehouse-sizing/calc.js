@@ -497,6 +497,60 @@ export function allocateRackColsByTarget(opts = {}) {
   };
 }
 
+/**
+ * Suggest a smaller building footprint that just-fits the inventory when the
+ * current footprint is over-built. Used by the 2D plan over-built CTA banner.
+ *
+ * Holds depth fixed (master segment plan unchanged) and shrinks width to the
+ * minimum that holds `usedCols / 2` rack-pair modules + side margins + a
+ * small safety pad (so the allocator doesn't trim by 1 due to fence-post).
+ *
+ * @param {{
+ *   totalCols: number,         // current building's totalCols (face units)
+ *   usedCols: number,          // cols actually placed (sum of fp+cp+sh from allocateRackColsByTarget)
+ *   moduleFt: number,          // 2 * rackDepthFt + aisleFt
+ *   sideMarginFt?: number,     // 6 ft default
+ *   safetyPadFt?: number,      // 6 ft default
+ *   currentWidthFt: number,
+ *   currentDepthFt: number,
+ *   minOversizePctToRecommend?: number,  // suppress recommendation under this delta (default 5%)
+ * }} opts
+ * @returns {{
+ *   recommended: boolean,
+ *   currentWidthFt?: number, suggestedWidthFt?: number,
+ *   currentDepthFt?: number, suggestedDepthFt?: number,
+ *   oversizePct?: number,
+ * }}
+ */
+export function suggestedBuildingDimensions(opts = {}) {
+  const totalCols = +opts.totalCols || 0;
+  const usedCols  = +opts.usedCols  || 0;
+  const moduleFt  = +opts.moduleFt  || 0;
+  const sideMarginFt = opts.sideMarginFt != null ? +opts.sideMarginFt : 6;
+  const safetyPadFt  = opts.safetyPadFt  != null ? +opts.safetyPadFt  : 6;
+  const currentWidthFt = +opts.currentWidthFt || 0;
+  const currentDepthFt = +opts.currentDepthFt || 0;
+  const minPct = opts.minOversizePctToRecommend != null ? +opts.minOversizePctToRecommend : 5;
+
+  if (totalCols <= 0 || usedCols >= totalCols || moduleFt <= 0 || currentWidthFt <= 0) {
+    return { recommended: false };
+  }
+  const usedPairs = Math.ceil(usedCols / 2);
+  const minWidthFt = Math.max(0, usedPairs * moduleFt + 2 * sideMarginFt + safetyPadFt);
+  // Round up to a clean 10-ft increment.
+  const suggestedWidthFt = Math.ceil(minWidthFt / 10) * 10;
+  if (suggestedWidthFt >= currentWidthFt) return { recommended: false };
+  const oversizePct = Math.round(((currentWidthFt - suggestedWidthFt) / currentWidthFt) * 100);
+  return {
+    recommended: oversizePct >= minPct,
+    currentWidthFt,
+    suggestedWidthFt,
+    currentDepthFt,
+    suggestedDepthFt: currentDepthFt,
+    oversizePct,
+  };
+}
+
 // ============================================================
 // BAY & AISLE GEOMETRY
 // ============================================================

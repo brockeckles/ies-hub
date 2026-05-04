@@ -11,7 +11,7 @@ import { state } from '../../shared/state.js?v=20260418-sL';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sL';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260430-na-dot';
-import * as calc from './calc.js?v=20260505-shelv1';
+import * as calc from './calc.js?v=20260505-shelv2';
 import * as api from './api.js?v=20260418-sL';
 import * as cmApi from '../cost-model/api.js?v=20260504-auth1';
 import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
@@ -530,6 +530,16 @@ async function bindShellEvents() {
       renderContentView();
     } else if (action === 'reset-layout') {
       zones.layoutOverrides = {};
+      isDirty = true;
+      renderContentView();
+    } else if (action === 'apply-shrink-suggestion') {
+      // Resize the building to the suggested dims surfaced in the over-built
+      // banner. Width comes from the col-allocation math; depth is preserved
+      // (master segment plan unchanged).
+      const w = +btn.getAttribute('data-suggested-width') || 0;
+      const d = +btn.getAttribute('data-suggested-depth') || 0;
+      if (w > 0) facility.buildingWidth = w;
+      if (d > 0) facility.buildingDepth = d;
       isDirty = true;
       renderContentView();
     }
@@ -1461,8 +1471,70 @@ function renderPlan() {
   const storage = calc.computeStorage(facility, zones);
   const overrideKeys = Object.keys(zones.layoutOverrides || {});
   const editing = !!_planEditMode;
+
+  // Shrink-suggestion CTA — when the building is over-built (current dims
+  // hold significantly more rack capacity than the entered inventory needs),
+  // surface a one-click "right-size" banner above the canvas.
+  let shrinkSuggestion = { recommended: false };
+  try {
+    const _sizedForCta = calc.sizeFacility(toSizingInputs());
+    const _orient = calc.orientFacility({
+      longFt:   facility.buildingWidth,
+      shortFt:  facility.buildingDepth,
+      totalSqft: _sizedForCta.totalSqft,
+    });
+    const _wFt = _orient.longFt  || facility.buildingWidth || 0;
+    const _dFt = _orient.shortFt || facility.buildingDepth || 0;
+    if (_wFt > 0 && _dFt > 0) {
+      const _aisleFt     = facility.aisleWidth || calc.AISLE_WIDTHS[facility.storageType] || 12;
+      const _rackDepthFt = calc.rackDepthFt(facility.storageType, facility);
+      const _moduleFt    = 2 * _rackDepthFt + _aisleFt;
+      const _sideMargin  = 6;
+      const _modulesFit  = Math.floor((_wFt - 2 * _sideMargin) / _moduleFt);
+      const _totalCols   = Math.max(0, _modulesFit * 2);
+      // Master plan: same as the 2D plan rack-run (depth - 8ft top - 8ft bot margins).
+      const _runFt = Math.max(0, _dFt - 16);
+      const _xa    = calc.crossAisleLayoutFt(_runFt);
+      const _segs  = Array.from({ length: _xa.segmentCount }, () => _xa.segmentLenFt);
+      const _alloc = calc.allocateRackColsByTarget({
+        totalCols: _totalCols,
+        segmentLensFt: _segs,
+        palletLevels:   _sizedForCta.rackLevels  || 5,
+        shelvingLevels: _sizedForCta.shelfLevels || 5,
+        fullPalletTarget:   +_sizedForCta.positions?.fullPalletGrossPositions   || 0,
+        cartonPalletTarget: +_sizedForCta.positions?.cartonPalletGrossPositions || 0,
+        shelvingTarget:     +_sizedForCta.positions?.shelvingGrossPositions     || 0,
+      });
+      const _used = _alloc.fullPalletCols + _alloc.cartonPalletCols + _alloc.shelvingCols;
+      shrinkSuggestion = calc.suggestedBuildingDimensions({
+        totalCols: _totalCols, usedCols: _used,
+        moduleFt: _moduleFt, sideMarginFt: _sideMargin,
+        currentWidthFt: _wFt, currentDepthFt: _dFt,
+      });
+    }
+  } catch (e) {
+    console.warn('[WSC] shrink suggestion failed:', e);
+  }
+
   return `
     <div class="hub-card">
+      ${shrinkSuggestion.recommended ? `
+        <div style="margin-bottom:var(--sp-2); padding:10px 14px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:6px; font-size:12px; display:flex; align-items:center; gap:12px;">
+          <span style="font-size:16px;line-height:1;">📐</span>
+          <span style="flex:1;line-height:1.5;">
+            <strong style="color:#1e3a8a;">Building over-sized by ${shrinkSuggestion.oversizePct}%</strong>
+            for the entered inventory. Right-size to
+            <strong>${shrinkSuggestion.suggestedWidthFt.toLocaleString()} × ${shrinkSuggestion.suggestedDepthFt.toLocaleString()} ft</strong>
+            <span style="color:var(--ies-gray-500);">(currently ${shrinkSuggestion.currentWidthFt.toLocaleString()} × ${shrinkSuggestion.currentDepthFt.toLocaleString()} ft)</span>?
+          </span>
+          <button class="hub-btn-primary" data-wsc-action="apply-shrink-suggestion"
+                  data-suggested-width="${shrinkSuggestion.suggestedWidthFt}"
+                  data-suggested-depth="${shrinkSuggestion.suggestedDepthFt}"
+                  style="font-size:12px;padding:5px 14px;flex:none;">
+            Apply
+          </button>
+        </div>
+      ` : ''}
       <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom: var(--sp-2);gap:12px;flex-wrap:wrap;">
         <h3 class="text-subtitle" style="margin:0;">Floorplan (Top-Down)</h3>
         <div style="display:flex;align-items:center;gap:8px;">
@@ -2234,10 +2306,19 @@ function renderDashboard() {
       <table class="cm-grid-table" style="font-size:13px;width:100%;">
         <tbody>
           <tr><td colspan="2" style="padding-top:8px;font-weight:700;color:var(--ies-blue);font-size:11px;text-transform:uppercase;">Inventory → Positions</td></tr>
-          <tr><td>Full Pallet (${Math.round(sized.meta.normalisedMix.fullPalletPct * 100)}%)${sized.positions.palletPositionsOverridden ? ' <span style="color:var(--ies-gray-400);font-size:11px;">(peak-derived; override engaged)</span>' : ''}</td><td class="cm-num">${sized.positions.fullPalletPositions.toLocaleString()} pos</td></tr>
-          <tr><td>Carton on Pallet (${Math.round(sized.meta.normalisedMix.cartonOnPalletPct * 100)}%)${sized.positions.palletPositionsOverridden ? ' <span style="color:var(--ies-gray-400);font-size:11px;">(peak-derived; override engaged)</span>' : ''}</td><td class="cm-num">${sized.positions.cartonPalletPositions.toLocaleString()} pos</td></tr>
-          <tr><td>Carton Shelving (${Math.round(sized.meta.normalisedMix.cartonOnShelvingPct * 100)}%)</td><td class="cm-num">${sized.positions.shelvingPositions.toLocaleString()} loc</td></tr>
-          ${sized.positions.palletPositionsOverridden ? `<tr><td title="Total pallet positions you entered on Volume Requirements (overrides peakUnits × mix derivation)."><span style="color:var(--ies-gray-500);">↳ Total Pallets (entered)</span></td><td class="cm-num">${sized.positions.palletPositionsNeeded.toLocaleString()} pos</td></tr>` : ''}
+          ${sized.positions.palletPositionsOverridden ? `
+            <tr><td title="Total pallet positions you entered on Volume Requirements. Replaces the peakUnits × mix derivation (peak-derived FP + CP rows are not used downstream when an override is engaged).">
+              <strong>Total Pallets (entered)</strong>
+              <span style="color:var(--ies-gray-400);font-size:11px;display:block;line-height:1.5;">
+                Split by mix: Full Pallet ${Math.round((sized.meta.normalisedMix.fullPalletPct / Math.max(0.0001, sized.meta.normalisedMix.fullPalletPct + sized.meta.normalisedMix.cartonOnPalletPct)) * 100)}% / Carton on Pallet ${Math.round((sized.meta.normalisedMix.cartonOnPalletPct / Math.max(0.0001, sized.meta.normalisedMix.fullPalletPct + sized.meta.normalisedMix.cartonOnPalletPct)) * 100)}%
+              </span>
+            </td><td class="cm-num"><strong>${sized.positions.palletPositionsNeeded.toLocaleString()}</strong> pos</td></tr>
+            <tr><td>Carton Shelving (${Math.round(sized.meta.normalisedMix.cartonOnShelvingPct * 100)}%)</td><td class="cm-num">${sized.positions.shelvingPositions.toLocaleString()} loc</td></tr>
+          ` : `
+            <tr><td>Full Pallet (${Math.round(sized.meta.normalisedMix.fullPalletPct * 100)}%)</td><td class="cm-num">${sized.positions.fullPalletPositions.toLocaleString()} pos</td></tr>
+            <tr><td>Carton on Pallet (${Math.round(sized.meta.normalisedMix.cartonOnPalletPct * 100)}%)</td><td class="cm-num">${sized.positions.cartonPalletPositions.toLocaleString()} pos</td></tr>
+            <tr><td>Carton Shelving (${Math.round(sized.meta.normalisedMix.cartonOnShelvingPct * 100)}%)</td><td class="cm-num">${sized.positions.shelvingPositions.toLocaleString()} loc</td></tr>
+          `}
           <tr style="border-top:1px dashed var(--ies-gray-200);"><td title="Pallet inventory + shelving locations going into the engine before buffers."><strong>Subtotal: Inventory positions</strong></td><td class="cm-num"><strong>${(sized.positions.palletPositionsNeeded + sized.positions.shelvingPositions).toLocaleString()}</strong></td></tr>
           <tr><td title="Honeycomb buffer = empty positions reserved for inbound/outbound flux + slotting flexibility. Applied to pallet + shelving sides at the same rate.">+ Honeycomb buffer (${Math.round((sized.positions.honeycombFactor - 1) * 100)}%)</td><td class="cm-num">${(sized.positions.designedPositions - sized.positions.palletPositionsNeeded - sized.positions.shelvingPositions).toLocaleString()} pos</td></tr>
           <tr><td><strong>Designed positions</strong></td><td class="cm-num"><strong>${sized.positions.designedPositions.toLocaleString()} pos</strong></td></tr>
@@ -3294,11 +3375,13 @@ function build3DScene() {
       // One deck per level per face (faces share the deck thickness but
       // are visually distinct because uprights split them at the aisle).
       totalShDecks += m.levels;
-      // Cartons: bays * levels * fillPct. One carton per shelf position
-      // (each "position" in the engine = one shelf storage location, not
-      // one carton — but for visual storytelling one box per position
-      // reads as discrete inventory and matches the achieved-count HUD).
-      totalShCartons += Math.floor(baysPerFace * m.levels * m.fillPct);
+      // Cartons: bays * levels * fillPct * 4. Each engine "shelf location"
+      // renders as a 2×2 pack of cartons (2 along the rack run × 2 deep
+      // into the rack). Real shelving holds multiple SKUs per slot — one
+      // carton per location reads as sparsely populated (Brock 2026-05-05
+      // mid-day). HUD achieved-count semantics still match locations
+      // (placedRacks records are per-segment, not per-carton).
+      totalShCartons += Math.floor(baysPerFace * m.levels * m.fillPct) * 4;
     }
 
     if (totalShUprights > 0) {
@@ -3368,6 +3451,12 @@ function build3DScene() {
       const shCartonMesh = new THREE.InstancedMesh(cartonGeo, matCarton, totalShCartons);
       shCartonMesh.castShadow = true;
       const dummy = new THREE.Object3D();
+      // Two-deep into the rack along X (front carton near aisle, back
+      // carton deeper in) and two-wide along Z within each bay. Slight
+      // 1.1× cartonWidth spacing along Z leaves a hair of gap so adjacent
+      // cartons read as discrete (not merged into a stripe like pre-fix).
+      const _xOffsets = [0.5, 1.5];                 // multiples of cartonDepthU from frontFaceX
+      const _zOffsetsFrac = [-0.275, +0.275];       // fractions of bayU from bay center
       let ci = 0;
       for (const m of shelvingMeta) {
         const baysPerFace = Math.max(0, Math.floor((m.segLenU / scale) / m.bayWidthFt));
@@ -3375,11 +3464,7 @@ function build3DScene() {
         const bayU = m.bayWidthFt * scale;
         const segZ0 = m.segCenter - m.segLenU / 2;
         const fillBays = Math.floor(baysPerFace * m.fillPct);
-        // Carton center X: pushed toward the aisle face from the rack center.
-        // Front face + intoRackDir × half-carton-depth (so the aisle-facing
-        // edge of the carton sits at the rack face, like pallets).
-        const cartonCenterX = m.frontFaceX + m.intoRackDir * (cartonDepthU / 2);
-        const levelHeightU  = m.heightU / m.levels;
+        const levelHeightU = m.heightU / m.levels;
         for (let lv = 0; lv < m.levels; lv++) {
           // Carton sits on the deck (deck at top of level slot); offset
           // upward by half-carton so the bottom of the carton is just
@@ -3387,11 +3472,19 @@ function build3DScene() {
           const deckY = levelHeightU * lv;
           const yU = deckY + cartonHeightU / 2 + 0.04;
           for (let b = 0; b < fillBays; b++) {
-            const z = segZ0 + (b + 0.5) * bayU;
-            dummy.position.set(cartonCenterX, yU, z);
-            dummy.scale.set(1, 1, 1);
-            dummy.updateMatrix();
-            shCartonMesh.setMatrixAt(ci++, dummy.matrix);
+            const bayCenterZ = segZ0 + (b + 0.5) * bayU;
+            for (const xMul of _xOffsets) {
+              // X position: front face + intoRackDir × xMul × cartonDepthU
+              // → 0.5×depth = aisle-side carton; 1.5×depth = deeper carton.
+              const cartonCenterX = m.frontFaceX + m.intoRackDir * (cartonDepthU * xMul);
+              for (const zFrac of _zOffsetsFrac) {
+                const z = bayCenterZ + zFrac * bayU;
+                dummy.position.set(cartonCenterX, yU, z);
+                dummy.scale.set(1, 1, 1);
+                dummy.updateMatrix();
+                shCartonMesh.setMatrixAt(ci++, dummy.matrix);
+              }
+            }
           }
         }
       }
