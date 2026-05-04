@@ -3396,10 +3396,19 @@ function build3DScene() {
     const fullPalletCols   = _alloc3D.fullPalletCols;
     const cartonPalletCols = _alloc3D.cartonPalletCols;
     const shelvingCols     = _alloc3D.shelvingCols;
+    // Phase 3 redesign (2026-05-04): structuralBayWidthFt = upright-to-upright
+    // spacing (real selective rack: 9 ft for GMA, 2 pallets per crossbeam).
+    // bayWidthFt = position-width convention (4.33 ft = single pallet position),
+    // kept for placedRacks → rackPairCapacity → HUD math so HUD position counts
+    // stay consistent. The two values are semantically distinct: structuralBayWidthFt
+    // governs how often we instance uprights and how long each beam is; bayWidthFt
+    // governs how positions are counted. For shelving they're equal (3 ft).
+    const _structuralPalletBay = (sized?.unitLoad?.bayWidthFt) || (calc.PALLET_BAY_WIDTH_FT * 2);
+    const _structuralShelvingBay = (sized?.cartonProfile?.shelfBayWidthFt) || calc.SHELVING_BAY_WIDTH_FT;
     const TYPES = [
-      { typeKey: 'fullPallet',   count: fullPalletCols,   mat: matFullPallet,   heightU: rackHeightU,        kind: 'pallet',   levels: palletLevels,   bayWidthFt: calc.PALLET_BAY_WIDTH_FT },
-      { typeKey: 'cartonPallet', count: cartonPalletCols, mat: matCartonPallet, heightU: rackHeightU * 0.85, kind: 'pallet',   levels: palletLevels,   bayWidthFt: calc.PALLET_BAY_WIDTH_FT },
-      { typeKey: 'shelving',     count: shelvingCols,     mat: matShelving,     heightU: 6.5 * scale,         kind: 'shelving', levels: shelvingLevels, bayWidthFt: calc.SHELVING_BAY_WIDTH_FT },
+      { typeKey: 'fullPallet',   count: fullPalletCols,   mat: matFullPallet,   heightU: rackHeightU,        kind: 'pallet',   levels: palletLevels,   bayWidthFt: calc.PALLET_BAY_WIDTH_FT,   structuralBayWidthFt: _structuralPalletBay },
+      { typeKey: 'cartonPallet', count: cartonPalletCols, mat: matCartonPallet, heightU: rackHeightU * 0.85, kind: 'pallet',   levels: palletLevels,   bayWidthFt: calc.PALLET_BAY_WIDTH_FT,   structuralBayWidthFt: _structuralPalletBay },
+      { typeKey: 'shelving',     count: shelvingCols,     mat: matShelving,     heightU: 6.5 * scale,         kind: 'shelving', levels: shelvingLevels, bayWidthFt: calc.SHELVING_BAY_WIDTH_FT, structuralBayWidthFt: _structuralShelvingBay },
     ];
 
     /** @type {Array<{typeKey:string,colKey:number,segmentLenFt:number,levels:number,bayWidthFt:number}>} */
@@ -3499,6 +3508,7 @@ function build3DScene() {
             intoRackDir: +1,
             levels: t.levels,
             bayWidthFt: t.bayWidthFt,
+            structuralBayWidthFt: t.structuralBayWidthFt,
             rackDepthU: rackDepthU,
             heightU: t.heightU,
             fillPct: utilFrac,
@@ -3511,6 +3521,7 @@ function build3DScene() {
             intoRackDir: -1,
             levels: t.levels,
             bayWidthFt: t.bayWidthFt,
+            structuralBayWidthFt: t.structuralBayWidthFt,
             rackDepthU: rackDepthU,
             heightU: t.heightU,
             fillPct: utilFrac,
@@ -3550,16 +3561,36 @@ function build3DScene() {
     }
 
     // ── Pallet structural detail (uprights + beams + pallets) ──────────
+    // Phase 3 redesign (2026-05-04) — IE-correct selective rack:
+    //   • Uprights bracket PAIRS of pallets — instanced every structuralBayWidthFt
+    //     (9 ft for GMA), not every position-width (4.33 ft). Each upright frame
+    //     sits at the bay boundary; pallets sit between them at quarter-points.
+    //   • Beams come from sized.rackingStructure[zoneKey].beamRowHeightsFt which
+    //     drops the orphan top beam (real selective rack: top pallet load has
+    //     nothing above it; beam at level N is structurally pointless) and
+    //     respects per-zone bottom-beam toggle (FP off / CP on by default).
+    //   • Pallets render TWO per bay — side-by-side along the 9 ft beam at
+    //     quarter-points (so each pallet is at bayCenter ± 2.25 ft along Z).
+    //     Real selective rack: 2 × 48" pallet + 12" inter/outboard clearances
+    //     = 108" beam clear.
+    const _rackingStruct = sized?.rackingStructure || {};
     let totalUprights = 0, totalBeams = 0, totalPallets = 0;
     for (const m of palletMeta) {
-      const baysPerFace = Math.max(0, Math.floor((m.segLenU / scale) / m.bayWidthFt));
+      const sBay = m.structuralBayWidthFt || calc.PALLET_BAY_WIDTH_FT * 2;
+      const baysPerFace = Math.max(0, Math.floor((m.segLenU / scale) / sBay));
       // Uprights: bays + 1 vertical posts at each bay boundary, TWO per
       // boundary (front-of-aisle + back-of-rack).
       totalUprights += (baysPerFace + 1) * 2;
-      // Beams: one per level (spans full segment length at the aisle face).
-      totalBeams += m.levels;
-      // Pallets: bays * levels * fillPct
-      totalPallets += Math.floor(baysPerFace * m.levels * m.fillPct);
+      // Beams: one per level boundary that the engine says to instance.
+      // Default (no bottom beam, no top beam): N-1 beams for N levels.
+      // With bottom beam:                     N beams for N levels.
+      const rs = _rackingStruct[m.t.typeKey];
+      const beamsThisFace = rs
+        ? Math.max(0, m.levels - 1 + (rs.bottomBeam ? 1 : 0) + (rs.topBeam ? 1 : 0))
+        : Math.max(0, m.levels - 1);
+      totalBeams += beamsThisFace;
+      // Pallets: bays × 2 (per bay) × levels × fillPct
+      totalPallets += Math.floor(baysPerFace * 2 * m.levels * m.fillPct);
     }
 
     if (totalUprights > 0) {
@@ -3571,8 +3602,9 @@ function build3DScene() {
       const dummy = new THREE.Object3D();
       let ui = 0;
       for (const m of palletMeta) {
-        const baysPerFace = Math.max(0, Math.floor((m.segLenU / scale) / m.bayWidthFt));
-        const bayU = m.bayWidthFt * scale;
+        const sBay = m.structuralBayWidthFt || calc.PALLET_BAY_WIDTH_FT * 2;
+        const baysPerFace = Math.max(0, Math.floor((m.segLenU / scale) / sBay));
+        const bayU = sBay * scale;
         const segZ0 = m.segCenter - m.segLenU / 2;
         const frontX = m.frontFaceX;
         const backX  = m.frontFaceX + m.intoRackDir * m.rackDepthU;
@@ -3600,8 +3632,19 @@ function build3DScene() {
       let bi = 0;
       for (const m of palletMeta) {
         const beamX = m.frontFaceX + m.intoRackDir * 0.25;
-        for (let lv = 1; lv <= m.levels; lv++) {
-          const yU = (m.heightU / m.levels) * lv;
+        const levelHeightU = m.heightU / m.levels;
+        const rs = _rackingStruct[m.t.typeKey];
+        // Build the list of level-boundary indices to instance beams at:
+        //   Default (no bottom, no top): k = 1..N-1 (between each level pair)
+        //   Bottom beam on:              also include 0 (floor beam)
+        //   Top beam on:                 also include N (orphan above top — legacy compat only)
+        /** @type {number[]} */
+        const levelIndicesForBeams = [];
+        if (rs && rs.bottomBeam) levelIndicesForBeams.push(0);
+        for (let k = 1; k <= m.levels - 1; k++) levelIndicesForBeams.push(k);
+        if (rs && rs.topBeam) levelIndicesForBeams.push(m.levels);
+        for (const k of levelIndicesForBeams) {
+          const yU = levelHeightU * k;
           dummy.position.set(beamX, yU, m.segCenter);
           dummy.scale.set(1, 1, m.segLenU);
           dummy.updateMatrix();
@@ -3613,20 +3656,28 @@ function build3DScene() {
     }
 
     if (totalPallets > 0) {
-      // Pallet+load: 40" deep into rack × ~50" tall (load) × 48" wide along
-      // rack run. In feet: 3.33 X-depth × 4.0 Y-height × 4.0 Z-width.
+      // Pallet+load: real GMA dimensions. 40" deep into rack × 60" load
+      // height × 48" wide along rack run. In feet: 3.33 X-depth × 5.0 Y-height
+      // × 4.0 Z-width. (Phase 3 bumped Y from 4.0 → 5.0 to match real load
+      // height; the level pitch the rendering anchors at is heightU/N which
+      // accommodates 5 ft + clearance.)
       const palletDepthU = 3.33 * scale; // X — into rack
-      const palletLoadU  = 4.0  * scale; // Y — loaded pallet height
+      const palletLoadU  = 4.5  * scale; // Y — loaded pallet height (slightly under level pitch)
       const palletWidthU = 4.0  * scale; // Z — parallel to rack run
       const palletGeo = new THREE.BoxGeometry(palletDepthU, palletLoadU, palletWidthU);
       const palletMesh = new THREE.InstancedMesh(palletGeo, matPallet, totalPallets);
       palletMesh.castShadow = true;
       const dummy = new THREE.Object3D();
+      // 2 pallets per bay positioned at quarter-points along Z.
+      // For a 9 ft bay: pallet centers at bayCenter ± 2.25 ft (= 0.25 × bayU
+      // and 0.75 × bayU from segZ0 + b × bayU).
+      const _zFractionsInBay = [0.25, 0.75];
       let pi = 0;
       for (const m of palletMeta) {
-        const baysPerFace = Math.max(0, Math.floor((m.segLenU / scale) / m.bayWidthFt));
+        const sBay = m.structuralBayWidthFt || calc.PALLET_BAY_WIDTH_FT * 2;
+        const baysPerFace = Math.max(0, Math.floor((m.segLenU / scale) / sBay));
         if (baysPerFace === 0) continue;
-        const bayU = m.bayWidthFt * scale;
+        const bayU = sBay * scale;
         const segZ0 = m.segCenter - m.segLenU / 2;
         const fillBays = Math.floor(baysPerFace * m.fillPct);
         const palletCenterX = m.frontFaceX + m.intoRackDir * (palletDepthU / 2);
@@ -3635,11 +3686,14 @@ function build3DScene() {
           const beamY = levelHeightU * lv;
           const yU = beamY + palletLoadU / 2 + 0.05;
           for (let b = 0; b < fillBays; b++) {
-            const z = segZ0 + (b + 0.5) * bayU;
-            dummy.position.set(palletCenterX, yU, z);
-            dummy.scale.set(1, 1, 1);
-            dummy.updateMatrix();
-            palletMesh.setMatrixAt(pi++, dummy.matrix);
+            const bayBaseZ = segZ0 + b * bayU;
+            for (const zFrac of _zFractionsInBay) {
+              const z = bayBaseZ + zFrac * bayU;
+              dummy.position.set(palletCenterX, yU, z);
+              dummy.scale.set(1, 1, 1);
+              dummy.updateMatrix();
+              palletMesh.setMatrixAt(pi++, dummy.matrix);
+            }
           }
         }
       }
@@ -3654,6 +3708,16 @@ function build3DScene() {
     // not 48" pallets. Pre-fix shelving racks reused the pallet upright
     // logic but loaded with 4-ft pallet geometry that overlapped 4+
     // levels and merged into stripes.
+    // Phase 3 redesign (2026-05-04): carton geometry + grid count comes from
+    // sized.cartonProfile (real ti×hi math) rather than hardcoded 2×2.
+    // cartonsPerShelfAcross × cartonsPerShelfDeep are computed at the user's
+    // chosen orientation (L-along-rack vs W-along-rack) against shelf bay
+    // width × deck depth. Default 12×9×12 carton on 36" bay × 24" deep deck
+    // L-along-rack: 3 across × 2 deep = 6 cartons/shelf.
+    const _cartonProfile = sized?.cartonProfile || {};
+    const _cartonAcross = Math.max(1, +_cartonProfile.cartonsPerShelfAcross || 2);
+    const _cartonDeep   = Math.max(1, +_cartonProfile.cartonsPerShelfDeep   || 2);
+    const _cartonsPerShelfBay = _cartonAcross * _cartonDeep;
     let totalShUprights = 0, totalShDecks = 0, totalShCartons = 0;
     for (const m of shelvingMeta) {
       const baysPerFace = Math.max(0, Math.floor((m.segLenU / scale) / m.bayWidthFt));
@@ -3661,13 +3725,8 @@ function build3DScene() {
       // One deck per level per face (faces share the deck thickness but
       // are visually distinct because uprights split them at the aisle).
       totalShDecks += m.levels;
-      // Cartons: bays * levels * fillPct * 4. Each engine "shelf location"
-      // renders as a 2×2 pack of cartons (2 along the rack run × 2 deep
-      // into the rack). Real shelving holds multiple SKUs per slot — one
-      // carton per location reads as sparsely populated (Brock 2026-05-05
-      // mid-day). HUD achieved-count semantics still match locations
-      // (placedRacks records are per-segment, not per-carton).
-      totalShCartons += Math.floor(baysPerFace * m.levels * m.fillPct) * 4;
+      // Cartons: bays × levels × fillPct × cartonsPerShelfBay.
+      totalShCartons += Math.floor(baysPerFace * m.levels * m.fillPct) * _cartonsPerShelfBay;
     }
 
     if (totalShUprights > 0) {
@@ -3725,24 +3784,32 @@ function build3DScene() {
     }
 
     if (totalShCartons > 0) {
-      // Carton dim: 12" wide (Z, along rack run) × 18" deep (X, into rack)
-      // × 8" tall (Y). In feet: 1.0 X × 0.67 Y × 1.5 Z. Cartons sit on the
-      // shelf deck, centered in the bay along Z, pushed to the aisle face
-      // along X so they read against the open aisle (not buried in the
-      // back of the rack).
-      const cartonDepthU  = 1.5 * scale; // X — into rack
-      const cartonHeightU = 0.67 * scale; // Y
-      const cartonWidthU  = 1.0 * scale; // Z — along rack run
-      const cartonGeo = new THREE.BoxGeometry(cartonDepthU, cartonHeightU, cartonWidthU);
+      // Phase 3 redesign — carton geometry sized from cartonProfile dims
+      // and laid out on the shelf in cartonsPerShelfAcross × cartonsPerShelfDeep
+      // grid (depends on user's L/W-along-rack orientation choice).
+      // L-along-rack default: 3 across × 2 deep = 6 cartons/shelf for 12×9×12
+      // carton on 36"-bay × 24"-deck shelving.
+      const cartonLIn = +_cartonProfile.cartonLengthIn || 12;
+      const cartonWIn = +_cartonProfile.cartonWidthIn  || 9;
+      const cartonHIn = +_cartonProfile.cartonHeightIn || 12;
+      const orientation = _cartonProfile.orientation || 'L-along-rack';
+      // Map carton dims to (X = into rack, Y = up, Z = along rack run) per orientation.
+      // L-along-rack: long edge along rack run (Z), short edge into rack (X).
+      // W-along-rack: short edge along rack run (Z), long edge into rack (X).
+      const cartonZIn = orientation === 'L-along-rack' ? cartonLIn : cartonWIn;
+      const cartonXIn = orientation === 'L-along-rack' ? cartonWIn : cartonLIn;
+      const cartonZU = (cartonZIn / 12) * scale;
+      const cartonXU = (cartonXIn / 12) * scale;
+      const cartonYU = (cartonHIn / 12) * scale;
+      const cartonGeo = new THREE.BoxGeometry(cartonXU, cartonYU, cartonZU);
       const shCartonMesh = new THREE.InstancedMesh(cartonGeo, matCarton, totalShCartons);
       shCartonMesh.castShadow = true;
       const dummy = new THREE.Object3D();
-      // Two-deep into the rack along X (front carton near aisle, back
-      // carton deeper in) and two-wide along Z within each bay. Slight
-      // 1.1× cartonWidth spacing along Z leaves a hair of gap so adjacent
-      // cartons read as discrete (not merged into a stripe like pre-fix).
-      const _xOffsets = [0.5, 1.5];                 // multiples of cartonDepthU from frontFaceX
-      const _zOffsetsFrac = [-0.275, +0.275];       // fractions of bayU from bay center
+      // Grid layout within each shelf bay: cartonsPerShelfAcross along Z
+      // (rack run), cartonsPerShelfDeep along X (into rack). Cartons start
+      // from the aisle face and extend back into the rack at cartonXU spacing.
+      const acrossN = _cartonAcross;
+      const deepN   = _cartonDeep;
       let ci = 0;
       for (const m of shelvingMeta) {
         const baysPerFace = Math.max(0, Math.floor((m.segLenU / scale) / m.bayWidthFt));
@@ -3751,20 +3818,20 @@ function build3DScene() {
         const segZ0 = m.segCenter - m.segLenU / 2;
         const fillBays = Math.floor(baysPerFace * m.fillPct);
         const levelHeightU = m.heightU / m.levels;
+        // Center the across-grid in the bay; center deep-grid against the rack depth.
+        const acrossSpacing = bayU / acrossN;
+        const deepSpacing = m.rackDepthU / Math.max(1, deepN);
         for (let lv = 0; lv < m.levels; lv++) {
-          // Carton sits on the deck (deck at top of level slot); offset
-          // upward by half-carton so the bottom of the carton is just
-          // above the deck.
           const deckY = levelHeightU * lv;
-          const yU = deckY + cartonHeightU / 2 + 0.04;
+          const yU = deckY + cartonYU / 2 + 0.04;
           for (let b = 0; b < fillBays; b++) {
-            const bayCenterZ = segZ0 + (b + 0.5) * bayU;
-            for (const xMul of _xOffsets) {
-              // X position: front face + intoRackDir × xMul × cartonDepthU
-              // → 0.5×depth = aisle-side carton; 1.5×depth = deeper carton.
-              const cartonCenterX = m.frontFaceX + m.intoRackDir * (cartonDepthU * xMul);
-              for (const zFrac of _zOffsetsFrac) {
-                const z = bayCenterZ + zFrac * bayU;
+            const bayBaseZ = segZ0 + b * bayU;
+            for (let a = 0; a < acrossN; a++) {
+              const z = bayBaseZ + (a + 0.5) * acrossSpacing;
+              for (let d = 0; d < deepN; d++) {
+                // X position: from aisle face, step back by deepSpacing,
+                // centered within each step. d=0 → closest to aisle.
+                const cartonCenterX = m.frontFaceX + m.intoRackDir * ((d + 0.5) * deepSpacing);
                 dummy.position.set(cartonCenterX, yU, z);
                 dummy.scale.set(1, 1, 1);
                 dummy.updateMatrix();
