@@ -11,7 +11,7 @@ import { state } from '../../shared/state.js?v=20260418-sL';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sL';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260430-na-dot';
-import * as calc from './calc.js?v=20260505-shelv2';
+import * as calc from './calc.js?v=20260505-shelv3';
 import * as api from './api.js?v=20260418-sL';
 import * as cmApi from '../cost-model/api.js?v=20260504-auth1';
 import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
@@ -1474,17 +1474,22 @@ function renderPlan() {
 
   // Shrink-suggestion CTA — when the building is over-built (current dims
   // hold significantly more rack capacity than the entered inventory needs),
-  // surface a one-click "right-size" banner above the canvas.
+  // surface a one-click "right-size" banner above the canvas. Mirrors the
+  // canvas's widthFt/depthFt computation so banner/canvas always agree.
   let shrinkSuggestion = { recommended: false };
   try {
     const _sizedForCta = calc.sizeFacility(toSizingInputs());
-    const _orient = calc.orientFacility({
-      longFt:   facility.buildingWidth,
-      shortFt:  facility.buildingDepth,
-      totalSqft: _sizedForCta.totalSqft,
-    });
-    const _wFt = _orient.longFt  || facility.buildingWidth || 0;
-    const _dFt = _orient.shortFt || facility.buildingDepth || 0;
+    const _orientUser = calc.orientFacility(facility);
+    const _userFits = (_orientUser.longFt * _orientUser.shortFt) >= _sizedForCta.totalSqft * 0.98 && !_orientUser.derived;
+    let _wFt, _dFt;
+    if (_userFits) {
+      _wFt = _orientUser.longFt;
+      _dFt = _orientUser.shortFt;
+    } else {
+      const _sizedOrient = calc.orientFacility({ totalSqft: _sizedForCta.totalSqft });
+      _wFt = _sizedOrient.longFt;
+      _dFt = _sizedOrient.shortFt;
+    }
     if (_wFt > 0 && _dFt > 0) {
       const _aisleFt     = facility.aisleWidth || calc.AISLE_WIDTHS[facility.storageType] || 12;
       const _rackDepthFt = calc.rackDepthFt(facility.storageType, facility);
