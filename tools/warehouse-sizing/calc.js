@@ -536,7 +536,17 @@ export function suggestedBuildingDimensions(opts = {}) {
     return { recommended: false };
   }
   const usedPairs = Math.ceil(usedCols / 2);
-  const minWidthFt = Math.max(0, usedPairs * moduleFt + 2 * sideMarginFt + safetyPadFt);
+  const rackWidthFt = Math.max(0, usedPairs * moduleFt + 2 * sideMarginFt + safetyPadFt);
+  // Building must also hold the non-storage zones (dock, office, staging,
+  // forward-pick, etc.) — pre-fix the suggestion only counted rack-col
+  // width, leaving the building under-sized for total SF on dock-heavy
+  // demos. minTotalSqft caller passes sized.totalSqft so the suggestion
+  // honors the full facility footprint with depth held fixed.
+  const minTotalSqft = +opts.minTotalSqft || 0;
+  const totalSqftWidthFt = (minTotalSqft > 0 && opts.currentDepthFt > 0)
+    ? Math.ceil(minTotalSqft / +opts.currentDepthFt)
+    : 0;
+  const minWidthFt = Math.max(rackWidthFt, totalSqftWidthFt);
   // Round up to a clean 10-ft increment.
   const suggestedWidthFt = Math.ceil(minWidthFt / 10) * 10;
   if (suggestedWidthFt >= currentWidthFt) return { recommended: false };

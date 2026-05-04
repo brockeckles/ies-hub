@@ -11,7 +11,7 @@ import { state } from '../../shared/state.js?v=20260418-sL';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sL';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260430-na-dot';
-import * as calc from './calc.js?v=20260505-shelv4';
+import * as calc from './calc.js?v=20260505-shelv5';
 import * as api from './api.js?v=20260418-sL';
 import * as cmApi from '../cost-model/api.js?v=20260504-auth1';
 import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
@@ -535,12 +535,15 @@ async function bindShellEvents() {
     } else if (action === 'apply-shrink-suggestion') {
       // Resize the building to the suggested dims surfaced in the over-built
       // banner. Width comes from the col-allocation math; depth is preserved
-      // (master segment plan unchanged).
+      // (master segment plan unchanged). Refresh the Configure side panel
+      // too so its Width/Depth inputs reflect the applied dims (without it
+      // the inputs cache the original facility values).
       const w = +btn.getAttribute('data-suggested-width') || 0;
       const d = +btn.getAttribute('data-suggested-depth') || 0;
       if (w > 0) facility.buildingWidth = w;
       if (d > 0) facility.buildingDepth = d;
       isDirty = true;
+      renderConfigPanel();
       renderContentView();
     }
   });
@@ -1512,6 +1515,9 @@ function renderPlan() {
         totalCols: _totalCols, usedCols: _used,
         moduleFt: _moduleFt, sideMarginFt: _sideMargin,
         currentWidthFt: _wFt, currentDepthFt: _dFt,
+        // Honor total facility SF so suggested width holds dock + office +
+        // staging + forward-pick too, not just the rack columns.
+        minTotalSqft: _sizedForCta.totalSqft,
       });
     }
   } catch (e) {
