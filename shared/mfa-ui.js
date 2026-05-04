@@ -24,7 +24,7 @@
  * @module shared/mfa-ui
  */
 
-import { auth } from './auth.js?v=20260424-hyg04';
+import { auth } from './auth.js?v=20260504-auth1';
 
 // ─── Public entry point ──────────────────────────────────────────────────
 

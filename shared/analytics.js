@@ -22,11 +22,14 @@
  */
 
 import { db } from './supabase.js?v=20260429-demo-s3';
-// Slice 3.13 — attribute analytics events to the authenticated pilot so the
-// Admin → User Activity view can roll up per-user. Lazy-resolved at event
-// time (not import time) so a reload that fires page_view before the
-// session has bootstrapped still records whatever id is available.
-import { auth } from './auth.js?v=20260423-z3';
+// Identity is read from the sessionStorage mirror that auth.js maintains
+// (`ies_user_id` + `ies_user_email`). Reading from sessionStorage instead of
+// importing auth.js makes this module drift-immune to auth.js cache-bust
+// suffix mismatches — historically, multiple `auth.js?v=...` URLs created
+// multiple module singletons with separate `_currentUser` state, and this
+// module's stale instance never had its `_currentUser` populated → every
+// event after 2026-04-24 wrote `user_id = NULL`, breaking the User Activity
+// admin page. sessionStorage is a real singleton, so it can never drift.
 
 const SESSION_KEY = 'ies_hub_analytics_session';
 const SESSION_TTL_MS = 30 * 60 * 1000;
@@ -79,11 +82,11 @@ function touchSession() {
 function track(event, payload = {}) {
   if (!event) return Promise.resolve();
   touchSession();
-  // Slice 3.13 — resolve user_id at event time so a session_start fired
-  // before auth.bootstrap completes still gets stamped once login lands
-  // on any subsequent event. Pre-auth events (landing-page page_view, for
-  // example) just write NULL, which is expected and shown as "anon" in
-  // the admin view.
+  // Resolve user_id at event time via sessionStorage mirror so a
+  // session_start fired before auth bootstrap completes still gets stamped
+  // once login lands on any subsequent event. Pre-auth events (landing-page
+  // page_view, for example) just write NULL, which is expected and shown
+  // as "anon" in the admin view.
   const user = safeGetUser();
   const row = {
     event,
@@ -101,13 +104,19 @@ function track(event, payload = {}) {
 }
 
 /**
- * Read auth.getUser() without letting a throw from the auth module break
- * analytics. The auth module is generally synchronous, but we never want a
- * crash here to cascade into the tracked codepath.
+ * Read the current user identity from the sessionStorage mirror that auth.js
+ * writes via `mirrorIdentityToLegacy`. Returns `{id, email}` if signed in or
+ * `null` if pre-auth. Drift-immune: never imports auth.js, so a stale
+ * module-instance with empty `_currentUser` can't fool us.
  */
 function safeGetUser() {
-  try { return auth && typeof auth.getUser === 'function' ? auth.getUser() : null; }
-  catch { return null; }
+  try {
+    if (typeof sessionStorage === 'undefined') return null;
+    const id = sessionStorage.getItem('ies_user_id');
+    const email = sessionStorage.getItem('ies_user_email');
+    if (!id) return null;
+    return { id, email: email || '' };
+  } catch { return null; }
 }
 
 /** Fire a page_view event. */

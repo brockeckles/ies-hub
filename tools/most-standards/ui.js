@@ -16,7 +16,7 @@ import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
 // "clean/dirty" gate would be misleading here. Revisit if/when MOST gains a
 // heavier recompute path (MOST B4 productivity factor, maybe).
 import * as calc from './calc.js?v=20260426-s2';
-import * as api from './api.js?v=20260426-s2';
+import * as api from './api.js?v=20260504-auth1';
 
 // ============================================================
 // CHROME v3 — phase + section structure (CM Chrome v3 ripple, step 3 redo)

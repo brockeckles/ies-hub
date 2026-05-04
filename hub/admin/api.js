@@ -6,8 +6,8 @@
  */
 
 import { db } from '../../shared/supabase.js?v=20260429-demo-s3';
-import { recordAudit } from '../../shared/audit.js?v=20260423-y7';
-import { auth } from '../../shared/auth.js?v=20260423-z3';
+import { recordAudit } from '../../shared/audit.js?v=20260504-auth1';
+import { auth } from '../../shared/auth.js?v=20260504-auth1';
 
 // ============================================================
 // MASTER DATA

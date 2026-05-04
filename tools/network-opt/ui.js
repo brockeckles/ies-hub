@@ -17,7 +17,7 @@ import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadXLSX } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260418-sM';
 import * as calc from './calc.js?v=20260427-s15';
-import * as api from './api.js?v=20260430-pm-g12';
+import * as api from './api.js?v=20260504-auth1';
 import { createChart } from '../../shared/cdn-wrappers/chart-wrapper.js?v=20260418-sK';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
 

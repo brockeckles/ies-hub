@@ -21,14 +21,20 @@
  * NEVER block the actual user mutation — every saveX call wraps it
  * in fire-and-forget so a flaky network doesn't degrade the editor.
  *
- * Entra-swap seam: identity is read via auth.getUser().id which resolves
- * to auth.uid() — that claim survives the OIDC swap unchanged.
+ * Entra-swap seam: identity is read from the sessionStorage mirror that
+ * auth.js writes on sign-in. The auth.uid() claim that lands in DB rows
+ * survives the OIDC swap unchanged.
  *
  * @module shared/audit
  */
 
 import { db } from './supabase.js?v=20260429-demo-s3';
-import { auth } from './auth.js?v=20260423-z3';
+// Identity is read from the sessionStorage mirror that auth.js writes via
+// `mirrorIdentityToLegacy`. Reading sessionStorage (instead of importing
+// auth.js) makes this module drift-immune — multiple `auth.js?v=...` URLs
+// historically created separate module singletons with stale `_currentUser`,
+// causing audit_log rows to record `user_id = NULL`. sessionStorage is a
+// true singleton, so it can never drift.
 
 /**
  * Get-or-create the per-browser session identifier.
@@ -64,16 +70,14 @@ function mirroredEmail() {
 }
 
 /**
- * Read identity for the current audit row. Password-mode → {id, email};
- * code-mode (or signed out) → {id: null, email: null}. Never throws.
+ * Read identity for the current audit row from the sessionStorage mirror.
+ * Password-mode → {id, email}; signed out → {id: null, email: null}.
+ * Never throws.
  *
- * Callers can pass an explicit `override` (captured BEFORE an async
- * round-trip) to avoid a race where `auth._currentUser` is momentarily
- * null during a token refresh fired by an intervening network call.
- * This was the root cause of the Slice 3.16 invite audit regression:
- * recordAudit ran after the ~1–3s edge-fn await, and could read
- * _currentUser mid-refresh, producing user_id=null while the legacy
- * email mirror stayed populated.
+ * Callers can pass an explicit `override` (captured BEFORE an async round-
+ * trip) to lock attribution against a transient race where the mirror is
+ * cleared mid-flight (e.g. another tab signs out during the await). This
+ * was the root cause of the Slice 3.16 invite audit regression.
  *
  * @param {{id?:string|null, email?:string|null}} [override]
  * @returns {{ id: string|null, email: string|null }}
@@ -83,13 +87,13 @@ function currentIdentity(override) {
     return { id: override.id, email: override.email || mirroredEmail() || null };
   }
   try {
-    const u = auth?.getUser?.();
-    if (u && u.id) {
-      return { id: u.id, email: u.email || mirroredEmail() || null };
+    const id = (typeof sessionStorage !== 'undefined') ? sessionStorage.getItem('ies_user_id') : null;
+    if (id) {
+      return { id, email: mirroredEmail() || null };
     }
-  } catch { /* auth module not ready — fall through */ }
-  // Code-mode or pre-bootstrap: no UUID to attribute. Email stays null
-  // too; the legacy mirror is only populated by password sign-in now.
+  } catch { /* sessionStorage blocked — fall through */ }
+  // Code-mode or pre-bootstrap: no UUID to attribute. Email may still be
+  // populated by the email mirror written on sign-in.
   return { id: null, email: mirroredEmail() };
 }
 

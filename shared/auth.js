@@ -29,7 +29,7 @@
  *   completePasswordRecovery → signed in.
  *
  * Usage:
- *   import { auth } from './auth.js?v=20260429-demo-s3';
+ *   import { auth } from './auth.js?v=20260504-auth1';
  *
  *   await auth.bootstrapSession();            // call once before gate check
  *   if (!auth.isAuthenticated()) {
@@ -94,14 +94,29 @@ function shapeUser(u) {
 }
 
 /**
- * Mirror the signed-in user's email into the legacy sessionStorage slot so
- * older read-sites (audit writer, cost-model export headers) keep working
- * unchanged. Real identity everywhere is `auth.uid()`; this is display-only.
+ * Mirror the signed-in user's identity (email + uid) into legacy
+ * sessionStorage slots so identity-consuming modules (audit writer, analytics
+ * emitter, cost-model export headers) keep working without importing auth.js
+ * directly — which historically suffered cache-bust drift across module-
+ * instance boundaries (multiple `auth.js?v=...` URLs → multiple module
+ * singletons → stale `_currentUser` in modules that imported the wrong
+ * suffix; symptom was `analytics_events.user_id` always NULL after 2026-04-24,
+ * making the User Activity admin page render zero metrics). Reading the
+ * legacy mirror is drift-immune because sessionStorage is a true singleton.
+ *
+ * Real identity in DB-write paths is still `auth.uid()`; this mirror is for
+ * client-side attribution + display.
+ *
+ * @param {{id?: string, email?: string} | null | undefined} user
  */
-function mirrorEmailToLegacy(email) {
+function mirrorIdentityToLegacy(user) {
   try {
+    const email = user?.email || null;
+    const id = user?.id || null;
     if (email) sessionStorage.setItem('ies_user_email', email);
     else sessionStorage.removeItem('ies_user_email');
+    if (id) sessionStorage.setItem('ies_user_id', id);
+    else sessionStorage.removeItem('ies_user_id');
   } catch { /* sessionStorage can be blocked */ }
 }
 
@@ -120,7 +135,7 @@ async function bootstrapSession() {
 
     if (_currentSession && _currentUser) {
       state.set('user', shapeUser(_currentUser));
-      mirrorEmailToLegacy(_currentUser.email);
+      mirrorIdentityToLegacy(_currentUser);
     }
 
     // Subscribe once. If a second call lands (e.g. dev hot-reload) drop
@@ -140,7 +155,7 @@ async function bootstrapSession() {
         // listens for auth:recovery_started and pins the login overlay +
         // recovery modal on top.
         _recoveryMode = true;
-        if (session?.user) mirrorEmailToLegacy(session.user.email);
+        if (session?.user) mirrorIdentityToLegacy(session.user);
         bus.emit('auth:recovery_started', {
           email: session?.user?.email || null,
           id: session?.user?.id || null,
@@ -154,7 +169,7 @@ async function bootstrapSession() {
         // app can proceed to normal auth state.
         if (evt === 'USER_UPDATED' && _recoveryMode) _recoveryMode = false;
         state.set('user', shapeUser(session.user));
-        mirrorEmailToLegacy(session.user.email);
+        mirrorIdentityToLegacy(session.user);
         if (evt === 'SIGNED_IN') bus.emit('auth:login', { mode: 'password', email: session.user.email, id: session.user.id });
       } else if (evt === 'SIGNED_OUT') {
         _recoveryMode = false;
@@ -163,7 +178,7 @@ async function bootstrapSession() {
         _currentRole = null;
         _roleLoaded = false;
         state.set('user', null);
-        mirrorEmailToLegacy(null);
+        mirrorIdentityToLegacy(null);
         bus.emit('auth:logout');
       }
     });
@@ -748,7 +763,7 @@ async function logout() {
   // false until loadRole() finishes for the new session.
   _currentRole = null;
   _roleLoaded = false;
-  mirrorEmailToLegacy(null);
+  mirrorIdentityToLegacy(null);
   state.set('user', null);
   bus.emit('auth:logout');
 }

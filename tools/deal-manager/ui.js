@@ -10,8 +10,8 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { state } from '../../shared/state.js?v=20260418-sL';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260430-na-dot';
 import * as calc from './calc.js?v=20260426-s3';
-import * as api from './api.js?v=20260427-pm3-s2';
-import * as cmApi from '../cost-model/api.js?v=20260430-r12';
+import * as api from './api.js?v=20260504-auth1';
+import * as cmApi from '../cost-model/api.js?v=20260504-auth1';
 import { showConfirm } from '../../shared/confirm-modal.js';
 
 // ============================================================
