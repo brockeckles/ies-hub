@@ -2658,6 +2658,62 @@ function renderRenderedFactsHud(facts, ctx = {}) {
   `;
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// Procedural concrete-floor texture (P1-5 2026-05-04). Generated as a
+// CanvasTexture so we don't depend on external image assets. Warm gray
+// base + subtle noise + faint scratches reads as polished concrete.
+// ─────────────────────────────────────────────────────────────────────
+let _wsc3dFloorTexture = null;
+function _wscGetFloorTexture(THREE) {
+  if (_wsc3dFloorTexture) return _wsc3dFloorTexture;
+  const size = 512;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = size;
+  const ctx = cv.getContext('2d');
+  // Base — warm light gray concrete
+  const grad = ctx.createLinearGradient(0, 0, size, size);
+  grad.addColorStop(0, '#d6d3d1');
+  grad.addColorStop(0.5, '#c8c5c2');
+  grad.addColorStop(1, '#d2cfcc');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+  // Speckle noise — small dots at varying alpha
+  for (let i = 0; i < 1800; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const a = Math.random() * 0.18;
+    const shade = Math.random() < 0.5 ? '0,0,0' : '255,255,255';
+    ctx.fillStyle = `rgba(${shade},${a})`;
+    ctx.fillRect(x, y, 1.5, 1.5);
+  }
+  // Faint scratches — short diagonal lines
+  ctx.strokeStyle = 'rgba(0,0,0,0.06)';
+  ctx.lineWidth = 0.6;
+  for (let i = 0; i < 60; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const len = 6 + Math.random() * 18;
+    const ang = Math.random() * Math.PI;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.cos(ang) * len, y + Math.sin(ang) * len);
+    ctx.stroke();
+  }
+  // Joint lines at quarter marks (suggests slab pours)
+  ctx.strokeStyle = 'rgba(0,0,0,0.10)';
+  ctx.lineWidth = 1;
+  for (let q of [0.25, 0.5, 0.75]) {
+    ctx.beginPath();
+    ctx.moveTo(q * size, 0); ctx.lineTo(q * size, size); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, q * size); ctx.lineTo(size, q * size); ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  _wsc3dFloorTexture = tex;
+  return tex;
+}
+
 function build3DScene() {
   const el = rootEl?.querySelector('#wsc-3d-container');
   if (!el) return;
@@ -2673,21 +2729,47 @@ function build3DScene() {
     const height = el.clientHeight || 520;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color('#e9eef5');
+    // Subtle gradient sky-ish background (was flat #e9eef5).
+    scene.background = new THREE.Color('#dde4ee');
+    scene.fog = new THREE.Fog(0xdde4ee, 600, 2400);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // P1-5: enable soft shadow mapping. Without shadows the rectilinear
+    // rack masses had no visual depth — the "racks shown at 50% opacity"
+    // crutch was a workaround for that.
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputEncoding = THREE.sRGBEncoding;
     el.appendChild(renderer.domElement);
 
     // ---------- Lighting ----------
-    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
-    dirLight.position.set(120, 200, 120);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.85);
+    dirLight.position.set(180, 320, 200);
+    dirLight.castShadow = true;
+    // Configure shadow camera frustum to cover the building
+    const shadowSpan = 600;
+    dirLight.shadow.camera.left   = -shadowSpan;
+    dirLight.shadow.camera.right  =  shadowSpan;
+    dirLight.shadow.camera.top    =  shadowSpan;
+    dirLight.shadow.camera.bottom = -shadowSpan;
+    dirLight.shadow.camera.near = 1;
+    dirLight.shadow.camera.far  = 1500;
+    dirLight.shadow.mapSize.width  = 1024;
+    dirLight.shadow.mapSize.height = 1024;
+    dirLight.shadow.bias = -0.0005;
     scene.add(dirLight);
-    const fillLight = new THREE.DirectionalLight(0xb6c8e3, 0.25);
-    fillLight.position.set(-120, 80, -120);
+    scene.add(dirLight.target);
+
+    // Cool sky-fill (no shadow) to lift dark sides
+    const fillLight = new THREE.DirectionalLight(0xb6c8e3, 0.30);
+    fillLight.position.set(-160, 120, -180);
     scene.add(fillLight);
+
+    // Subtle hemisphere light for ambient color variation
+    scene.add(new THREE.HemisphereLight(0xe7eef7, 0.0, 0.25));
 
     // ---------- Geometry inputs ----------
     // WSC-O1 (2026-05-04): always map longFt -> world X axis (left-to-right
@@ -2707,25 +2789,71 @@ function build3DScene() {
     const D = bdFt * scale;
     const H = ch * scale;
 
-    // ---------- Floor with grid ----------
+    // ---------- Floor: textured concrete + safety stripes + aisle striping ----------
+    // P1-5: concrete floor with procedural texture. Receives shadows so the
+    // racks/pallets cast soft contact shadows that read as physical depth.
+    const floorTex = _wscGetFloorTexture(THREE);
+    floorTex.repeat.set(Math.max(2, bwFt / 60), Math.max(2, bdFt / 60));
     const floorGeo = new THREE.BoxGeometry(W, 0.4, D);
-    const floorMat = new THREE.MeshStandardMaterial({ color: 0xd6d3d1 });
+    const floorMat = new THREE.MeshStandardMaterial({
+      map: floorTex,
+      color: 0xe8e4df,
+      roughness: 0.92,
+      metalness: 0.0,
+    });
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.position.y = -0.2;
+    floor.receiveShadow = true;
     scene.add(floor);
 
-    const grid = new THREE.GridHelper(Math.max(W, D), 20, 0x9ca3af, 0xcbd5e1);
-    grid.position.y = 0.05;
-    scene.add(grid);
+    // Yellow safety stripe along the dock face (front, -Z edge).
+    // Width = dock-face-width minus safety setback; visual cue you'd see
+    // painted on the slab in a real DC.
+    const stripeWFt = 6;          // 6 ft wide painted strip
+    const stripeOffsetFt = 12;    // offset from front wall
+    const stripeGeo = new THREE.BoxGeometry(W * 0.96, 0.05, stripeWFt * scale);
+    const stripeMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.6 });
+    const stripe = new THREE.Mesh(stripeGeo, stripeMat);
+    stripe.position.set(0, 0.06, -D / 2 + (stripeOffsetFt + stripeWFt / 2) * scale);
+    stripe.receiveShadow = true;
+    scene.add(stripe);
 
-    // ---------- Wall frame (edges only — keep interior visible) ----------
-    const wallGeo = new THREE.BoxGeometry(W, H, D);
-    const edges = new THREE.EdgesGeometry(wallGeo);
-    const edgeLine = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x4b5563, linewidth: 2 }));
-    edgeLine.position.set(0, H / 2, 0);
-    scene.add(edgeLine);
+    // ---------- Building shell: tilt-up perimeter panels + truss roof line ----------
+    // P1-5: replace edges-only wireframe with light-gray flat panels around
+    // the perimeter (suggests precast tilt-up or insulated metal panel) and
+    // add a dark line at the roof apex to suggest exposed truss/joist.
+    const wallH = H;
+    const wallThk = 1.2;
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0xe5e7eb, roughness: 0.85, metalness: 0.0 });
+    // Long walls (run along X, +/-Z faces)
+    const longWallGeo = new THREE.BoxGeometry(W, wallH, wallThk);
+    const wN = new THREE.Mesh(longWallGeo, wallMat); wN.position.set(0, wallH / 2,  D / 2 - wallThk / 2); wN.receiveShadow = true; scene.add(wN);
+    const wS = new THREE.Mesh(longWallGeo, wallMat); wS.position.set(0, wallH / 2, -D / 2 + wallThk / 2); wS.receiveShadow = true; scene.add(wS);
+    // Short walls (run along Z, +/-X faces)
+    const shortWallGeo = new THREE.BoxGeometry(wallThk, wallH, D);
+    const wE = new THREE.Mesh(shortWallGeo, wallMat); wE.position.set( W / 2 - wallThk / 2, wallH / 2, 0); wE.receiveShadow = true; scene.add(wE);
+    const wW = new THREE.Mesh(shortWallGeo, wallMat); wW.position.set(-W / 2 + wallThk / 2, wallH / 2, 0); wW.receiveShadow = true; scene.add(wW);
+    // Reveal joint lines on the long walls every ~30 ft
+    const jointMat = new THREE.LineBasicMaterial({ color: 0xb1b6bd });
+    for (let panelX = -W / 2 + 30 * scale; panelX < W / 2 - 1; panelX += 30 * scale) {
+      const a1 = [ panelX, 0,  D / 2 - wallThk / 2 - 0.05];
+      const b1 = [ panelX, wallH,  D / 2 - wallThk / 2 - 0.05];
+      const g1 = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...a1), new THREE.Vector3(...b1)]);
+      scene.add(new THREE.Line(g1, jointMat));
+      const a2 = [ panelX, 0, -D / 2 + wallThk / 2 + 0.05];
+      const b2 = [ panelX, wallH, -D / 2 + wallThk / 2 + 0.05];
+      const g2 = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...a2), new THREE.Vector3(...b2)]);
+      scene.add(new THREE.Line(g2, jointMat));
+    }
+    // Roof apex line (suggests exposed truss/joist)
+    const roofLineMat = new THREE.LineBasicMaterial({ color: 0x6b7280 });
+    const roofPts = [
+      new THREE.Vector3(-W / 2, wallH + 0.05,  0),
+      new THREE.Vector3( W / 2, wallH + 0.05,  0),
+    ];
+    scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(roofPts), roofLineMat));
 
-    // ---------- Rack rows (orange, semi-transparent so we can see through) ----------
+    // ---------- Storage geometry inputs ----------
     const elev = calc.elevationParams(facility);
     const sized = calc.sizeFacility(toSizingInputs());
 
@@ -2739,34 +2867,38 @@ function build3DScene() {
     const rackHeightU = rackHeightFt * scale;
 
     // Reserve front (-Z, dock face) and back (+Z) margins for staging
-    const stagingFt = 30;            // 30 ft staging strip front + back
+    const stagingFt = 30;
     const stagingU  = stagingFt * scale;
     const rackZStart = -D / 2 + stagingU;
     const rackZEnd   =  D / 2 - stagingU;
-    const rackLengthU= Math.max(0, rackZEnd - rackZStart);
 
-    // Storage-type materials: pallet vs shelving render at different heights.
-    const matFullPallet   = new THREE.MeshStandardMaterial({ color: 0xea580c, transparent: true, opacity: 0.6 });
-    const matCartonPallet = new THREE.MeshStandardMaterial({ color: 0xf59e0b, transparent: true, opacity: 0.6 });
-    const matShelving     = new THREE.MeshStandardMaterial({ color: 0x0d9488, transparent: true, opacity: 0.65 });
-    const wirePallet      = new THREE.LineBasicMaterial({ color: 0x9a3412 });
-    const wireShelving    = new THREE.LineBasicMaterial({ color: 0x0f766e });
+    // Soft volume materials (lower opacity now that uprights/beams/pallets
+    // do the heavy visual lifting). The colored box hints "this zone is
+    // full-pallet vs carton-pallet vs shelving" — structure makes it read
+    // as a real rack.
+    const matFullPallet   = new THREE.MeshStandardMaterial({ color: 0xea580c, transparent: true, opacity: 0.28, roughness: 0.6 });
+    const matCartonPallet = new THREE.MeshStandardMaterial({ color: 0xf59e0b, transparent: true, opacity: 0.28, roughness: 0.6 });
+    const matShelving     = new THREE.MeshStandardMaterial({ color: 0x0d9488, transparent: true, opacity: 0.32, roughness: 0.6 });
+    // Steel structural color for uprights + beams (instanced).
+    const matSteel = new THREE.MeshStandardMaterial({ color: 0x4b5563, roughness: 0.55, metalness: 0.45 });
+    // Wood pallet color (instanced).
+    const matPallet = new THREE.MeshStandardMaterial({ color: 0x9a6b3f, roughness: 0.78, metalness: 0.0 });
 
-    // Office footprint — computed up-front so racks can avoid it.
+    // Office footprint
     const officeFt = Math.sqrt(Math.max(1, sized.officeSqft));
     const officeU  = officeFt * scale;
     const officeX0 = -W / 2 + 2;
     const officeX1 = officeX0 + officeU;
-    const officeZ0 = -D / 2 + stagingU;                        // front edge of storage zone
+    const officeZ0 = -D / 2 + stagingU;
     const officeZ1 = officeZ0 + officeU;
 
-    // Forward Pick footprint — strip across the front of storage (zStart..zStart+fpDepth)
+    // Forward Pick footprint
     const fpEnabled3D = !!zones.forwardPick?.enabled;
     const fpDepthFt   = fpEnabled3D ? Math.min(60, Math.max(20, (zones.forwardPick?.daysInventory || 3) * 8 + 16)) : 0;
     const fpDepthU    = fpDepthFt * scale;
-    const fpZ0        = rackZStart;                            // matches storage front
+    const fpZ0        = rackZStart;
     const fpZ1        = fpZ0 + fpDepthU;
-    const fpX0        = officeX1 + 2;                          // right of office
+    const fpX0        = officeX1 + 2;
     const fpX1        = W / 2 - 2;
 
     // Count columns to allocate by storage mix
@@ -2782,23 +2914,26 @@ function build3DScene() {
     const fullPalletCols   = Math.round(totalCols * mix.fullPalletPct);
     const cartonPalletCols = Math.round(totalCols * mix.cartonOnPalletPct);
     const shelvingCols     = Math.max(0, totalCols - fullPalletCols - cartonPalletCols);
-    // WSC-P0-2 (2026-05-04): each TYPES entry carries typeKey + levels +
-    // bayWidthFt so the placement loop below can record each rack-pair
-    // segment into placedRacks[] and rollupRenderedFacts() can attribute
-    // achieved counts back to the right bucket.
+
     const palletLevels   = sized.rackLevels  || 5;
     const shelvingLevels = sized.shelfLevels || 5;
     const TYPES = [
-      { typeKey: 'fullPallet',   count: fullPalletCols,   mat: matFullPallet,   wire: wirePallet,   heightU: rackHeightU,        kind: 'pallet',   levels: palletLevels,   bayWidthFt: calc.PALLET_BAY_WIDTH_FT },
-      { typeKey: 'cartonPallet', count: cartonPalletCols, mat: matCartonPallet, wire: wirePallet,   heightU: rackHeightU * 0.85, kind: 'pallet',   levels: palletLevels,   bayWidthFt: calc.PALLET_BAY_WIDTH_FT },
-      { typeKey: 'shelving',     count: shelvingCols,     mat: matShelving,     wire: wireShelving, heightU: 6.5 * scale,         kind: 'shelving', levels: shelvingLevels, bayWidthFt: calc.SHELVING_BAY_WIDTH_FT },
+      { typeKey: 'fullPallet',   count: fullPalletCols,   mat: matFullPallet,   heightU: rackHeightU,        kind: 'pallet',   levels: palletLevels,   bayWidthFt: calc.PALLET_BAY_WIDTH_FT },
+      { typeKey: 'cartonPallet', count: cartonPalletCols, mat: matCartonPallet, heightU: rackHeightU * 0.85, kind: 'pallet',   levels: palletLevels,   bayWidthFt: calc.PALLET_BAY_WIDTH_FT },
+      { typeKey: 'shelving',     count: shelvingCols,     mat: matShelving,     heightU: 6.5 * scale,         kind: 'shelving', levels: shelvingLevels, bayWidthFt: calc.SHELVING_BAY_WIDTH_FT },
     ];
 
-    // Records what the placement loop actually paints — one entry per
-    // (rack pair, cross-aisle segment). Rolled up into a RenderedFacts HUD
-    // overlay below so achieved-vs-target is always visible on the canvas.
     /** @type {Array<{typeKey:string,colKey:number,segmentLenFt:number,levels:number,bayWidthFt:number}>} */
     const placedRacks = [];
+
+    // ─────────────────────────────────────────────────────────────────
+    // Two-pass placement:
+    //  Pass 1: walk the building footprint, emit (colored volume per segment,
+    //          placedRacks record). Tracks segment metadata for instancing.
+    //  Pass 2: build InstancedMesh of uprights + beams + pallets in one go.
+    // ─────────────────────────────────────────────────────────────────
+    /** @type {Array<{t:any, mx:number, segCenter:number, segLenU:number, side:number, levels:number, bayWidthFt:number, fillPct:number}>} */
+    const segmentMeta = [];
 
     let mx = -W / 2 + 6 * scale;
     let typeIdx = 0;
@@ -2815,8 +2950,6 @@ function build3DScene() {
       const overlapsOfficeX = colRight > officeX0 && colLeft < officeX1;
       const overlapsFpX     = fpEnabled3D && colRight > fpX0 && colLeft < fpX1;
 
-      // Z-extent: shorten if column overlaps office (stops behind office)
-      // OR if it overlaps the forward-pick strip (stops behind FP).
       let thisZStart = rackZStart;
       const thisZEnd = rackZEnd;
       if (overlapsOfficeX) thisZStart = Math.max(thisZStart, officeZ1 + 2);
@@ -2824,30 +2957,48 @@ function build3DScene() {
       const thisLen = Math.max(0, thisZEnd - thisZStart);
 
       if (thisLen > 4) {
-        // WSC-X1 (2026-05-04): break rack run into cross-aisle segments along Z
-        // matching what the plan view draws. Engine layout helper governs
-        // segment count and gap width — all three surfaces agree.
         const thisLenFt = thisLen / scale;
         const xa = calc.crossAisleLayoutFt(thisLenFt);
         const segLenU = xa.segmentLenFt * scale;
         const gapU    = xa.crossAisleClearFt * scale;
-        // Walk segments back-to-front along Z, placing one rack pair per segment.
         let zCursor = thisZStart;
         for (let s = 0; s < xa.segmentCount; s++) {
           const segCenter = zCursor + segLenU / 2;
+
+          // Soft colored volume per rack pair
           const rackGeo = new THREE.BoxGeometry(rackDepthU, t.heightU, segLenU);
           const r1 = new THREE.Mesh(rackGeo, t.mat);
           r1.position.set(mx + rackDepthU / 2, t.heightU / 2, segCenter);
+          r1.castShadow = true;
           scene.add(r1);
           const r2 = new THREE.Mesh(rackGeo, t.mat);
           r2.position.set(mx + rackDepthU + 0.5 + rackDepthU / 2, t.heightU / 2, segCenter);
+          r2.castShadow = true;
           scene.add(r2);
-          const wf1 = new THREE.LineSegments(new THREE.EdgesGeometry(rackGeo), t.wire);
-          wf1.position.copy(r1.position);
-          scene.add(wf1);
-          const wf2 = new THREE.LineSegments(new THREE.EdgesGeometry(rackGeo), t.wire);
-          wf2.position.copy(r2.position);
-          scene.add(wf2);
+
+          // Record both faces for instanced uprights + beams + pallets.
+          // fillPct sets how many bays render a pallet (front-of-aisle
+          // shows occupancy without saturating the canvas).
+          const utilFrac = Math.max(0.30, Math.min(0.95, (sized.utilization?.utilizationPct || 75) / 100));
+          segmentMeta.push({
+            t, mx, segCenter, segLenU,
+            side: 'A', // X-near face
+            faceX: mx + rackDepthU / 2,
+            levels: t.levels,
+            bayWidthFt: t.bayWidthFt,
+            heightU: t.heightU,
+            fillPct: utilFrac,
+          });
+          segmentMeta.push({
+            t, mx, segCenter, segLenU,
+            side: 'B', // X-far face
+            faceX: mx + rackDepthU + 0.5 + rackDepthU / 2,
+            levels: t.levels,
+            bayWidthFt: t.bayWidthFt,
+            heightU: t.heightU,
+            fillPct: utilFrac,
+          });
+
           placedRacks.push({
             typeKey: t.typeKey,
             colKey: mx,
@@ -2862,31 +3013,119 @@ function build3DScene() {
       mx += moduleU;
     }
 
+    // ─────────────────────────────────────────────────────────────────
+    // Instanced uprights + horizontal beams + pallets.
+    // One InstancedMesh per kind for the entire building → at most 3
+    // draw calls regardless of facility size.
+    // ─────────────────────────────────────────────────────────────────
+    let totalUprights = 0, totalBeams = 0, totalPallets = 0;
+    for (const m of segmentMeta) {
+      const baysPerFace = Math.max(0, Math.floor((m.segLenU / scale) / m.bayWidthFt));
+      // Uprights: bays + 1 vertical posts at each bay boundary
+      totalUprights += (baysPerFace + 1);
+      // Beams: one per level (spans the full segment length)
+      totalBeams += m.levels;
+      // Pallets: bays * levels * fillPct
+      totalPallets += Math.floor(baysPerFace * m.levels * m.fillPct);
+    }
+
+    if (totalUprights > 0) {
+      const uprightW = 0.18, uprightDepthSlice = 0.18;
+      // Default upright is unit-tall; scaled per-instance to per-segment height.
+      const uprightGeo = new THREE.BoxGeometry(uprightW, 1, uprightDepthSlice);
+      const uprightMesh = new THREE.InstancedMesh(uprightGeo, matSteel, totalUprights);
+      uprightMesh.castShadow = true;
+      uprightMesh.receiveShadow = false;
+      const dummy = new THREE.Object3D();
+      let ui = 0;
+      for (const m of segmentMeta) {
+        const baysPerFace = Math.max(0, Math.floor((m.segLenU / scale) / m.bayWidthFt));
+        const bayU = m.bayWidthFt * scale;
+        const segZ0 = m.segCenter - m.segLenU / 2;
+        for (let b = 0; b <= baysPerFace; b++) {
+          const z = segZ0 + b * bayU;
+          dummy.position.set(m.faceX, m.heightU / 2, z);
+          dummy.scale.set(1, m.heightU, 1);
+          dummy.updateMatrix();
+          uprightMesh.setMatrixAt(ui++, dummy.matrix);
+        }
+      }
+      uprightMesh.instanceMatrix.needsUpdate = true;
+      scene.add(uprightMesh);
+    }
+
+    if (totalBeams > 0) {
+      // Default beam is unit-long along Z, thin in X & Y; scaled per instance.
+      const beamGeo = new THREE.BoxGeometry(0.45, 0.18, 1);
+      const beamMesh = new THREE.InstancedMesh(beamGeo, matSteel, totalBeams);
+      beamMesh.castShadow = true;
+      const dummy = new THREE.Object3D();
+      let bi = 0;
+      for (const m of segmentMeta) {
+        for (let lv = 1; lv <= m.levels; lv++) {
+          const yU = (m.heightU / m.levels) * lv;
+          dummy.position.set(m.faceX, yU, m.segCenter);
+          dummy.scale.set(1, 1, m.segLenU);
+          dummy.updateMatrix();
+          beamMesh.setMatrixAt(bi++, dummy.matrix);
+        }
+      }
+      beamMesh.instanceMatrix.needsUpdate = true;
+      scene.add(beamMesh);
+    }
+
+    if (totalPallets > 0) {
+      // Pallet box ~ 48"x6"x40" → in feet: 4 × 0.5 × 3.33; scale to world units.
+      const palletWU = 4 * scale, palletHU = 0.5 * scale, palletDU = 3.5 * scale;
+      const palletGeo = new THREE.BoxGeometry(palletWU, palletHU, palletDU);
+      const palletMesh = new THREE.InstancedMesh(palletGeo, matPallet, totalPallets);
+      palletMesh.castShadow = true;
+      const dummy = new THREE.Object3D();
+      let pi = 0;
+      for (const m of segmentMeta) {
+        const baysPerFace = Math.max(0, Math.floor((m.segLenU / scale) / m.bayWidthFt));
+        if (baysPerFace === 0) continue;
+        const bayU = m.bayWidthFt * scale;
+        const segZ0 = m.segCenter - m.segLenU / 2;
+        const fillBays = Math.floor(baysPerFace * m.fillPct);
+        for (let lv = 0; lv < m.levels; lv++) {
+          const yU = (m.heightU / m.levels) * lv + (m.heightU / m.levels) * 0.18;
+          for (let b = 0; b < fillBays; b++) {
+            const z = segZ0 + (b + 0.5) * bayU;
+            // Offset palette out from the upright face slightly so it doesn't z-fight.
+            const xOffset = (m.side === 'A' ? -1 : +1) * 0.01;
+            dummy.position.set(m.faceX + xOffset, yU + palletHU / 2, z);
+            dummy.scale.set(1, 1, 1);
+            dummy.updateMatrix();
+            palletMesh.setMatrixAt(pi++, dummy.matrix);
+          }
+        }
+      }
+      palletMesh.instanceMatrix.needsUpdate = true;
+      scene.add(palletMesh);
+    }
+
     // Forward Pick block: medium-height carton-flow strip across the front
     if (fpEnabled3D && fpX1 > fpX0 + 4 && fpDepthU > 4) {
       const fpW = fpX1 - fpX0;
-      const fpH = 10 * scale; // 10 ft pick-module height
+      const fpH = 10 * scale;
       const fpGeo = new THREE.BoxGeometry(fpW, fpH, fpDepthU);
-      const fpMat = new THREE.MeshStandardMaterial({ color: 0x7c3aed, transparent: true, opacity: 0.5 });
+      const fpMat = new THREE.MeshStandardMaterial({ color: 0x7c3aed, transparent: true, opacity: 0.5, roughness: 0.6 });
       const fpMesh = new THREE.Mesh(fpGeo, fpMat);
       fpMesh.position.set((fpX0 + fpX1) / 2, fpH / 2, (fpZ0 + fpZ1) / 2);
+      fpMesh.castShadow = true;
       scene.add(fpMesh);
-      const fpEdges = new THREE.LineSegments(new THREE.EdgesGeometry(fpGeo), new THREE.LineBasicMaterial({ color: 0x5b21b6 }));
-      fpEdges.position.copy(fpMesh.position);
-      scene.add(fpEdges);
     }
 
     // ---------- Dock doors ----------
-    // Single-sided: all doors on front (-Z) wall.
-    // Two-sided: outbound on front (-Z), inbound on back (+Z).
     const twoSided3D = (zones.dockConfig?.sided === 'two');
     const inDoors  = sized.dock.inboundDoors || 0;
     const outDoors = sized.dock.outboundDoors || 0;
     const totalDoors = sized.dock.totalDoors || 0;
     const doorWU = 8 * scale;
     const doorHU = 9 * scale;
-    const outboundMat = new THREE.MeshStandardMaterial({ color: 0x1f2937 });
-    const inboundMat  = new THREE.MeshStandardMaterial({ color: 0x1d4ed8 });
+    const outboundMat = new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.7 });
+    const inboundMat  = new THREE.MeshStandardMaterial({ color: 0x1d4ed8, roughness: 0.7 });
 
     function placeDoors(count, zEdge, mat) {
       if (count <= 0) return;
@@ -2899,6 +3138,7 @@ function build3DScene() {
           mat,
         );
         door.position.set(dx + doorWU / 2, doorHU / 2, zEdge);
+        door.castShadow = true;
         scene.add(door);
       }
     }
@@ -2907,62 +3147,74 @@ function build3DScene() {
       placeDoors(outDoors, -D / 2 + 0.1, outboundMat);
       placeDoors(inDoors,   D / 2 - 0.1, inboundMat);
     } else if (totalDoors > 0) {
-      // Combined I/O on the front wall
       placeDoors(totalDoors, -D / 2 + 0.1, outboundMat);
     }
 
-    // ---------- Office cube (front-left corner — already reserved by rack loop) ----------
+    // ---------- Office cube ----------
     if (sized.officeSqft > 0) {
-      const oW = officeU;             // computed above
-      const oD = officeU;
-      const oH = 12 * scale;          // 12 ft office ceiling
+      const oW = officeU, oD = officeU, oH = 12 * scale;
       const officeMesh = new THREE.Mesh(
         new THREE.BoxGeometry(oW, oH, oD),
-        new THREE.MeshStandardMaterial({ color: 0x8b5cf6, transparent: true, opacity: 0.55 }),
+        new THREE.MeshStandardMaterial({ color: 0x8b5cf6, transparent: true, opacity: 0.55, roughness: 0.6 }),
       );
       officeMesh.position.set(officeX0 + oW / 2, oH / 2, officeZ0 + oD / 2);
+      officeMesh.castShadow = true;
       scene.add(officeMesh);
-      const oEdges = new THREE.LineSegments(new THREE.EdgesGeometry(officeMesh.geometry), new THREE.LineBasicMaterial({ color: 0x5b21b6 }));
-      oEdges.position.copy(officeMesh.position);
-      scene.add(oEdges);
     }
 
-    // ---------- Camera ----------
-    // Iso-style 3/4 view from front-right-above, looking at the building center
+    // ---------- Camera + OrbitControls ----------
+    // Iso-style 3/4 view from front-right-above, looking at the building center.
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 5000);
     const dist0 = Math.max(W, D) * 1.4;
-    // Position camera so the dock face (-Z in our model) is toward the user.
-    // Iso-style 3/4 view from front-right-above looking back at the building.
-    let theta = (3 * Math.PI) / 4;   // 135° — puts camera at +X, -Z (front-right)
-    let phi   = Math.PI / 4;          // 45° elevation
-    let dist  = dist0;
-    function applyCamera() {
-      camera.position.set(
-        dist * Math.cos(phi) * Math.sin(theta),
-        dist * Math.sin(phi),
-        dist * Math.cos(phi) * Math.cos(theta),
-      );
-      camera.lookAt(0, H * 0.4, 0);
-    }
-    applyCamera();
+    const camTheta = (3 * Math.PI) / 4;
+    const camPhi   = Math.PI / 4;
+    camera.position.set(
+      dist0 * Math.cos(camPhi) * Math.sin(camTheta),
+      dist0 * Math.sin(camPhi),
+      dist0 * Math.cos(camPhi) * Math.cos(camTheta),
+    );
+    camera.lookAt(0, H * 0.4, 0);
 
-    // Orbit controls (manual)
-    let isDragging = false, lastX = 0, lastY = 0;
-    renderer.domElement.addEventListener('mousedown', e => { isDragging = true; lastX = e.clientX; lastY = e.clientY; });
-    window.addEventListener('mouseup',   () => { isDragging = false; });
-    renderer.domElement.addEventListener('mousemove', e => {
-      if (!isDragging) return;
-      theta -= (e.clientX - lastX) * 0.006;
-      phi    = Math.max(0.1, Math.min(Math.PI / 2 - 0.05, phi + (e.clientY - lastY) * 0.006));
-      lastX  = e.clientX;
-      lastY  = e.clientY;
-      applyCamera();
-    });
-    renderer.domElement.addEventListener('wheel', e => {
-      dist = Math.max(W * 0.5, Math.min(W * 5, dist + e.deltaY * 0.6));
-      applyCamera();
-      e.preventDefault();
-    }, { passive: false });
+    // P1-5: replace the previous custom orbit math with THREE.OrbitControls
+    // (loaded from jsdelivr in index.html). Adds smooth damping, pan with
+    // right-click, native zoom, sane azimuth bounds. Falls back to a tiny
+    // shim if OrbitControls failed to load (network blip).
+    let controls = null;
+    if (typeof THREE.OrbitControls === 'function') {
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.08;
+      controls.target.set(0, H * 0.4, 0);
+      controls.minDistance = Math.max(W, D) * 0.30;
+      controls.maxDistance = Math.max(W, D) * 4.0;
+      controls.maxPolarAngle = Math.PI / 2 - 0.05;
+      controls.update();
+    } else {
+      // Fallback to a minimal manual handler if OrbitControls didn't load.
+      let isDragging = false, lastX = 0, lastY = 0, theta = camTheta, phi = camPhi, dist = dist0;
+      function applyCamera() {
+        camera.position.set(
+          dist * Math.cos(phi) * Math.sin(theta),
+          dist * Math.sin(phi),
+          dist * Math.cos(phi) * Math.cos(theta),
+        );
+        camera.lookAt(0, H * 0.4, 0);
+      }
+      renderer.domElement.addEventListener('mousedown', e => { isDragging = true; lastX = e.clientX; lastY = e.clientY; });
+      window.addEventListener('mouseup',   () => { isDragging = false; });
+      renderer.domElement.addEventListener('mousemove', e => {
+        if (!isDragging) return;
+        theta -= (e.clientX - lastX) * 0.006;
+        phi    = Math.max(0.1, Math.min(Math.PI / 2 - 0.05, phi + (e.clientY - lastY) * 0.006));
+        lastX = e.clientX; lastY = e.clientY;
+        applyCamera();
+      });
+      renderer.domElement.addEventListener('wheel', e => {
+        dist = Math.max(W * 0.5, Math.min(W * 5, dist + e.deltaY * 0.6));
+        applyCamera();
+        e.preventDefault();
+      }, { passive: false });
+    }
 
     // Animate. Capture a local "alive" flag so the loop stops as soon as
     // dispose() is called (e.g. on re-render from a data-field commit).
@@ -2970,6 +3222,7 @@ function build3DScene() {
     function animate() {
       if (!rootEl || !alive) return;
       requestAnimationFrame(animate);
+      if (controls) controls.update();
       renderer.render(scene, camera);
     }
     animate();
@@ -2991,6 +3244,7 @@ function build3DScene() {
     scene3d = {
       dispose() {
         alive = false;
+        if (controls && typeof controls.dispose === 'function') controls.dispose();
         renderer.dispose();
         renderer.domElement.remove();
       },
@@ -3000,6 +3254,7 @@ function build3DScene() {
     el.innerHTML = '<div style="padding:40px; text-align:center; color:var(--ies-gray-400);">3D rendering failed. Check console.</div>';
   }
 }
+
 
 // ============================================================
 // WSC ↔ CM INTEGRATION
