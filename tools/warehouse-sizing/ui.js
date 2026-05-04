@@ -11,7 +11,7 @@ import { state } from '../../shared/state.js?v=20260418-sL';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sL';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260430-na-dot';
-import * as calc from './calc.js?v=20260505-shelv5';
+import * as calc from './calc.js?v=20260505-shelv6';
 import * as api from './api.js?v=20260418-sL';
 import * as cmApi from '../cost-model/api.js?v=20260504-auth1';
 import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
@@ -77,6 +77,11 @@ let viewMode = 'landing';
  */
 export async function mount(el) {
   rootEl = el;
+  // Reset the shell-bound flag + tool-chrome bound flag so subsequent
+  // mount() calls (e.g., user returns to WSC after visiting another tool)
+  // get a fresh set of listeners rather than reusing stale ones bound to
+  // the previous mount's closures.
+  if (el) { el.__wscShellBound = false; el.__tcBound = false; }
   activeView = 'dashboard';
   facility = createDefaultFacility();
   zones = createDefaultZones();
@@ -462,7 +467,14 @@ function _wscExtraStyles() {
 
 async function bindShellEvents() {
   if (!rootEl) return;
-  rootEl.__tcBound = false;
+  // Idempotent — pre-fix this rebinds chrome + 2 click + 4 pointer
+  // listeners on EVERY section navigation (each onSection rebuilds the
+  // shell HTML and recalls bindShellEvents). Stale listeners stack:
+  // after N navigations the back-arrow fired onBack N+1 times → N+1
+  // showConfirm modals. Cancel removed only the topmost. Now we bind
+  // once per mount; mount() resets the flag on re-entry.
+  if (rootEl.__wscShellBound) return;
+  rootEl.__wscShellBound = true;
 
   bindToolChromeEvents(rootEl, {
     onPhase: () => {
