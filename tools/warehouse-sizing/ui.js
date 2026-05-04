@@ -331,8 +331,8 @@ function _wscExtraStyles() {
          the inline <style> tag goes with the WSC HTML. Tool-chrome.js'
          transition rule animates the change cleanly. */
       .tool-chrome-shell .tc-sidebar {
-        flex: 0 0 300px !important;
-        width: 300px !important;
+        flex: 0 0 350px !important;
+        width: 350px !important;
       }
 
       /* Section grouping inside the Configure drawer. */
