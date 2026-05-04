@@ -96,6 +96,71 @@ export function topOfSteelFt(levels, dims = {}) {
 }
 
 // ============================================================
+// ORIENTATION (canonical dock-on-long-edge convention)
+// ============================================================
+
+/**
+ * Resolve a facility's two-axis footprint into a normalized
+ * `{ longFt, shortFt }` pair under the canonical dock-on-long-edge
+ * convention used throughout WSC.
+ *
+ * **Why this exists.** Before WSC-O1 (2026-05-04) the engine, the 2D
+ * plan canvas, the elevation canvas, and the 3D Three.js scene each
+ * had their own private convention for "which axis is the long one."
+ * The plan view force-swapped to landscape (ui.js:1484); the 3D scene
+ * mapped raw `buildingWidth -> X axis` with no swap; the elevation
+ * mapped raw `buildingWidth -> horizontal section axis`. With portrait
+ * inputs (W < D) the three views disagreed on building orientation,
+ * the same physical facility rendered 90 degrees rotated between Plan
+ * and 3D.
+ *
+ * **Convention pinned 2026-05-04 (WSC-O1).** Aisles run perpendicular
+ * to the dock face, dock sits on the long edge of the building. This
+ * matches standard 3PL practice: trucks pull up on the long wall,
+ * aisles extend back from the dock into the depth of the building.
+ * The calc engine already implemented this convention internally
+ * (computeStorage uses `Math.max(W, D)` as its `storageWidth`, the
+ * aisle-count axis). What was missing was a single source of truth
+ * the rendering surfaces could consume so they all draw the same
+ * orientation.
+ *
+ * **Outputs.** `longFt` is always >= `shortFt`. When the user has
+ * supplied only one of width/depth (or neither), this function
+ * derives a 1.5:1 landscape footprint from `facility.totalSqft`,
+ * matching drawPlan's heuristic at ui.js:1480. When neither dim
+ * nor totalSqft is set, both fields return 0.
+ *
+ * **Convention semantics for consumers:**
+ *   Plan view: render longFt horizontal, shortFt vertical, dock face on bottom edge.
+ *   Elevation: section cut runs along longFt (horizontal axis of the section drawing).
+ *   3D scene: longFt -> world X axis, shortFt -> world Z axis, default camera azimuth frames the long edge.
+ *
+ * @param {{ buildingWidth?: number, buildingDepth?: number, totalSqft?: number }} facility
+ * @returns {{ longFt: number, shortFt: number, derived: boolean }}
+ *   `derived` is true when the dimensions came from a totalSqft fallback,
+ *   false when the user supplied a real footprint.
+ */
+export function orientFacility(facility = {}) {
+  const wIn = +facility.buildingWidth || 0;
+  const dIn = +facility.buildingDepth || 0;
+  if (wIn > 0 && dIn > 0) {
+    return {
+      longFt: Math.max(wIn, dIn),
+      shortFt: Math.min(wIn, dIn),
+      derived: false,
+    };
+  }
+  // Single-dim or no-dim fallback: derive a 1.5:1 landscape from totalSqft.
+  const sqft = +facility.totalSqft || 0;
+  if (sqft <= 0) {
+    return { longFt: 0, shortFt: 0, derived: true };
+  }
+  const longFt = Math.round(Math.sqrt(sqft * 1.5));
+  const shortFt = longFt > 0 ? Math.round(sqft / longFt) : 0;
+  return { longFt, shortFt, derived: true };
+}
+
+// ============================================================
 // BAY & AISLE GEOMETRY
 // ============================================================
 
@@ -401,8 +466,16 @@ export function elevationParams(facility, zones) {
   const dock = zones?.dockConfig || { inboundDoors: 10, outboundDoors: 12 };
   const totalDoors = dock.inboundDoors + dock.outboundDoors;
 
+  // WSC-O1 (2026-05-04): elevation section runs along the LONG axis of the
+  // building (canonical dock-on-long-edge convention). Pre-O1 this consumed
+  // raw buildingWidth, which produced the wrong section dimension on portrait
+  // inputs (W < D). orientFacility() returns longFt regardless of which user
+  // input held the long value.
+  const orient = orientFacility(facility);
   return {
-    buildingWidth: facility.buildingWidth || Math.sqrt((facility.totalSqft || 0) * 1.5),
+    buildingWidth: orient.longFt,        // back-compat field name; semantically = section axis (long)
+    longFt: orient.longFt,
+    shortFt: orient.shortFt,
     clearHeight: facility.clearHeight || 0,
     rackLevels: levels,
     positionHeight: positionHeightFt(dims),

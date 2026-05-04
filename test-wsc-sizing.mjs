@@ -1,5 +1,5 @@
 // test-wsc-sizing.mjs — regression tests for I-06 (WSC honor explicit dock config + pallet override)
-import { sizeFacility, calcDIOH } from './tools/warehouse-sizing/calc.js';
+import { sizeFacility, calcDIOH, orientFacility, elevationParams } from './tools/warehouse-sizing/calc.js';
 
 let pass = 0, fail = 0;
 const t = (name, cond, extra = '') => {
@@ -356,6 +356,51 @@ import { assignDemand } from './tools/network-opt/calc.js';
     t('Phase 4 unmapped demand falls back to project mix',
       Math.abs((baselineD3.blendedCost || 0) - (channelD3.blendedCost || 0)) < 0.01);
   }
+}
+
+// ──────────────────────────────────────────────────────────────────
+// WSC-O1 (2026-05-04) — orientFacility() canonical dock-on-long-edge
+// ──────────────────────────────────────────────────────────────────
+{
+  // Landscape user input — long stays long, short stays short.
+  const a = orientFacility({ buildingWidth: 1000, buildingDepth: 750 });
+  t('O1 landscape: longFt = 1000', a.longFt === 1000);
+  t('O1 landscape: shortFt = 750', a.shortFt === 750);
+  t('O1 landscape: derived = false', a.derived === false);
+
+  // Portrait user input — engine swaps so longFt is always >= shortFt.
+  const b = orientFacility({ buildingWidth: 500, buildingDepth: 1000 });
+  t('O1 portrait: longFt = 1000 (swap)', b.longFt === 1000);
+  t('O1 portrait: shortFt = 500 (swap)', b.shortFt === 500);
+  t('O1 portrait: derived = false', b.derived === false);
+
+  // Single-dim or no-dim: derive 1.5:1 landscape from totalSqft.
+  const c = orientFacility({ totalSqft: 750000 });
+  t('O1 totalSqft fallback: long >= short', c.longFt >= c.shortFt);
+  t('O1 totalSqft fallback: derived = true', c.derived === true);
+  // 1.5:1 landscape: long ≈ sqrt(750000 * 1.5) ≈ 1061, short ≈ 750000/1061 ≈ 707
+  t('O1 totalSqft fallback: long ~ sqrt(SF * 1.5)', Math.abs(c.longFt - 1061) <= 1);
+
+  // Empty input: returns zeros.
+  const d = orientFacility({});
+  t('O1 empty input: longFt = 0', d.longFt === 0);
+  t('O1 empty input: shortFt = 0', d.shortFt === 0);
+
+  // Symmetry — should not depend on which axis the user labelled "width" vs "depth".
+  const e = orientFacility({ buildingWidth: 800, buildingDepth: 1200 });
+  const f = orientFacility({ buildingWidth: 1200, buildingDepth: 800 });
+  t('O1 swap symmetry: longFt matches', e.longFt === f.longFt && e.longFt === 1200);
+  t('O1 swap symmetry: shortFt matches', e.shortFt === f.shortFt && e.shortFt === 800);
+
+  // elevationParams now exposes longFt / shortFt and uses longFt as the section dim.
+  const ep1 = elevationParams({ buildingWidth: 500, buildingDepth: 1000, clearHeight: 36, palletHeight: 54, beamHeight: 5, flueSpace: 3, topClearance: 36 });
+  t('O1 elev portrait: buildingWidth = longFt = 1000', ep1.buildingWidth === 1000);
+  t('O1 elev portrait: longFt = 1000', ep1.longFt === 1000);
+  t('O1 elev portrait: shortFt = 500', ep1.shortFt === 500);
+
+  const ep2 = elevationParams({ buildingWidth: 1000, buildingDepth: 750, clearHeight: 36 });
+  t('O1 elev landscape: buildingWidth = longFt = 1000', ep2.buildingWidth === 1000);
+  t('O1 elev landscape: shortFt = 750', ep2.shortFt === 750);
 }
 
 console.log(`

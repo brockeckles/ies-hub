@@ -11,7 +11,7 @@ import { state } from '../../shared/state.js?v=20260418-sL';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sL';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260430-na-dot';
-import * as calc from './calc.js?v=20260504-dock';
+import * as calc from './calc.js?v=20260504-orient1';
 import * as api from './api.js?v=20260418-sL';
 import * as cmApi from '../cost-model/api.js?v=20260504-auth1';
 import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
@@ -1467,21 +1467,24 @@ function drawPlan() {
   // (prevents the "300×500 = 150K but sized = 578K" rendering where
   // storage blocks overflow the canvas).
   //
-  // Brock 2026-04-20: also ensure LANDSCAPE orientation — warehouses
-  // conventionally have the dock face on the long edge, so we always
-  // render widthFt (horizontal) >= depthFt (vertical). Stops the
-  // "weird portrait building" issue when the user's saved values
-  // have depth > width.
-  let widthFt  = Number(facility.buildingWidth)  || 0;
-  let depthFt  = Number(facility.buildingDepth)  || 0;
-  const footprintFits = widthFt > 0 && depthFt > 0 && (widthFt * depthFt) >= totalSqft * 0.98;
-  if (!footprintFits) {
-    // Derive 1.5:1 landscape footprint from sized SF.
-    widthFt  = Math.round(Math.sqrt(totalSqft * 1.5));
-    depthFt  = Math.round(totalSqft / Math.max(1, widthFt));
+  // WSC-O1 (2026-05-04): single source of truth for orientation lives in
+  // calc.orientFacility() — Plan / Elevation / 3D all consume it. Convention:
+  // dock-on-long-edge, longFt rendered horizontal, shortFt vertical. Pre-O1
+  // this block force-swapped to landscape locally; 3D had no swap; the two
+  // views drifted on portrait inputs.
+  const orientUser = calc.orientFacility(facility);
+  const userFits = (orientUser.longFt * orientUser.shortFt) >= totalSqft * 0.98 && !orientUser.derived;
+  let widthFt, depthFt;
+  if (userFits) {
+    widthFt = orientUser.longFt;
+    depthFt = orientUser.shortFt;
+  } else {
+    // Sized facility doesn't fit user-entered footprint — derive a 1.5:1
+    // landscape from sized SF (matches orientFacility's totalSqft fallback).
+    const sizedOrient = calc.orientFacility({ totalSqft });
+    widthFt = sizedOrient.longFt;
+    depthFt = sizedOrient.shortFt;
   }
-  // Enforce landscape: swap if user input was portrait.
-  if (widthFt < depthFt) [widthFt, depthFt] = [depthFt, widthFt];
 
   // Fit-to-canvas with padding for dimension labels
   const padX = 60, padY = 60;
@@ -2578,13 +2581,21 @@ function build3DScene() {
     scene.add(fillLight);
 
     // ---------- Geometry inputs ----------
-    const bw = facility.buildingWidth  || 300;  // X axis
-    const bd = facility.buildingDepth  || 500;  // Z axis (depth into screen)
-    const ch = facility.clearHeight    || 32;
+    // WSC-O1 (2026-05-04): always map longFt -> world X axis (left-to-right
+    // on screen, facing camera at default azimuth) and shortFt -> world Z
+    // axis (depth into screen). orientFacility() pins the dock-on-long-edge
+    // convention shared with the Plan view + Elevation. Pre-O1 the 3D scene
+    // mapped raw buildingWidth -> X with no swap, so portrait inputs (W<D)
+    // showed the long edge going INTO the screen while plan view showed it
+    // running across, producing a 90-degree disagreement between the two views.
+    const orient3d = calc.orientFacility(facility);
+    const bwFt = orient3d.longFt  || 500;       // long edge -> X axis
+    const bdFt = orient3d.shortFt || 300;       // short edge -> Z axis
+    const ch   = facility.clearHeight || 32;
     const scale = 0.5;                          // 1 ft = 0.5 units
 
-    const W = bw * scale;
-    const D = bd * scale;
+    const W = bwFt * scale;
+    const D = bdFt * scale;
     const H = ch * scale;
 
     // ---------- Floor with grid ----------
