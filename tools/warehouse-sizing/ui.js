@@ -13,7 +13,7 @@ import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260430-na-dot';
 import * as calc from './calc.js?v=20260504-phase2';
 import * as api from './api.js?v=20260418-sL';
-import * as cmApi from '../cost-model/api.js?v=20260504-phase4-cm';
+import * as cmApi from '../cost-model/api.js?v=20260504-auth1';
 import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { showConfirm } from '../../shared/confirm-modal.js';
 
@@ -324,6 +324,17 @@ function _refreshWscKpis() {
 function _wscExtraStyles() {
   return `
     <style>
+      /* WSC-scoped sidebar widen — Phase 4 cosmetic. The chrome's default
+         240px sidebar was tight for some Configure inputs (5-digit Pallet
+         Positions / Total SKUs, 3-decimal cartonsPerPalletOverride, etc.).
+         Bump to 300px while the WSC is mounted; reverts on unmount because
+         the inline <style> tag goes with the WSC HTML. Tool-chrome.js'
+         transition rule animates the change cleanly. */
+      .tool-chrome-shell .tc-sidebar {
+        flex: 0 0 300px !important;
+        width: 300px !important;
+      }
+
       /* Section grouping inside the Configure drawer. */
       .wsc-config-section {
         padding: 16px;
