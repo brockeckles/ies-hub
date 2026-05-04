@@ -3599,6 +3599,13 @@ export function autoGenerateStartup(state) {
   }, 0);
   const sqft = state.facility?.totalSqft || 0;
   const contractYears = state.financial?.contractTermYears || state.projectDetails?.contractTerm || 5;
+  // Cross-channel inbound pallets/year — used by the Dock Leveler line below
+  // (line 3655). Declared at the top of the function for clarity; matches the
+  // pattern used in autoGenerateOverhead (line ~3179) and the racking
+  // heuristic helper (~3727). Pre-fix: this was referenced at line 3655
+  // without being declared in scope, throwing "annualPalletsIn is not
+  // defined" on every call from autoGenerateStartup.
+  const annualPalletsIn = _getAggregateInbound(state, 'pallets');
 
   // Phase 5.3 — auto-gen startup now stamps `_heuristic` metadata onto
   // each generated line so the Cell-Inspector panel can drill back from

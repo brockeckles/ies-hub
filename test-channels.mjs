@@ -478,14 +478,28 @@ test('Phase 3 — autoGenerateOverhead: per-unit scalers fold cross-channel unit
   }
 });
 
-test('Phase 3 — autoGenerateStartup: racking sized off cross-channel inbound pallets', () => {
+test('Phase 3 — autoGenerateStartup: dock leveler sized off cross-channel inbound pallets', () => {
+  // Updated 2026-05-04: racking install was removed from autoGenerateStartup
+  // in commit e29df3d (2026-04-30 NIGHT racking-install-double-dip fix —
+  // racking now lives in autoGenerateEquipment as a $1/pos/month lease, no
+  // longer a one-time startup line). Re-targeted this test at the Dock
+  // Leveler line, which still consumes annualPalletsIn (line ~3655) and
+  // exercises the cross-channel inbound-pallets aggregation that the
+  // previous racking assertion was protecting.
   const m = twoChannelModel();
+  m.laborLines = [
+    { id: 'p', labor_category: 'direct', function: 'picking', annual_hours: 100, headcount: 1 },
+  ];
   const su = autoGenerateStartup(m);
-  const racking = su.find(l => /racking/i.test(l.description || ''));
-  if (!racking) throw new Error('Racking startup line not generated');
-  // 70,833 pallets / 12 turns × 1.15 spare ≈ 6,789 positions × $85 ≈ $577k.
-  if ((racking.one_time_cost || 0) < 400000) {
-    throw new Error(`Expected racking cost > $400k, got ${racking.one_time_cost}`);
+  const dock = su.find(l => /dock leveler/i.test(l.description || ''));
+  if (!dock) throw new Error('Dock leveler startup line not generated');
+  // Cross-channel inbound = 70,833 pallets/yr.
+  // Daily = 70,833 / 260 days ≈ 272 pallets/day.
+  // Doors = max(2, ceil(272 / 90)) = 4. Cost = 4 × $4,500 = $18,000.
+  // Anti-test: dailyPalletsTotal must be > 0, which only happens when
+  // annualPalletsIn is correctly aggregated across channels.
+  if ((dock.one_time_cost || 0) < 9000) {
+    throw new Error(`Expected dock leveler cost >= $9,000 (>= 2-door minimum), got ${dock.one_time_cost}`);
   }
 });
 
