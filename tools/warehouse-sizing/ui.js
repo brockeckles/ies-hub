@@ -11,7 +11,7 @@ import { state } from '../../shared/state.js?v=20260418-sL';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sL';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260430-na-dot';
-import * as calc from './calc.js?v=20260504-hud1';
+import * as calc from './calc.js?v=20260504-yank1';
 import * as api from './api.js?v=20260418-sL';
 import * as cmApi from '../cost-model/api.js?v=20260504-auth1';
 import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
@@ -278,23 +278,30 @@ function _computeWscKpis() {
     value: (inb + out) > 0 ? String(inb + out) : '—',
     hint: `${inb} inbound + ${out} outbound`,
   });
-  // Rack Positions — derived from computeStorage().
+  // Rack Positions — use sized engine (grossPositions = honeycomb + surge
+  // applied) so the chrome strip agrees with the Dashboard breakdown and
+  // the 3D HUD. Falls back to computeStorage geometric capacity only when
+  // the sizing engine has nothing to size against.
   let rackPos = 0;
-  let utilFrac = null;
+  let utilPct = null;
   try {
-    const storage = calc.computeStorage(facility, zones);
-    rackPos = storage.totalPalletPositions || 0;
-    utilFrac = storage.storageUtilization;
+    const sized = calc.sizeFacility(toSizingInputs());
+    rackPos = sized?.positions?.grossPositions || 0;
+    utilPct = sized?.utilization?.utilizationPct ?? null;
+    if (rackPos === 0) {
+      const storage = calc.computeStorage(facility, zones);
+      rackPos = storage.totalPalletPositions || 0;
+    }
   } catch (_) {}
   items.push({
     label: 'Rack Positions',
     value: rackPos > 0 ? (rackPos >= 1000 ? (rackPos / 1000).toFixed(1) + 'K' : String(rackPos)) : '—',
-    hint: 'aisleCount × 2 sides × bays × levels (from computeStorage).',
+    hint: 'Designed positions + honeycomb + surge buffer (from sizeFacility). Matches Dashboard Gross Positions.',
   });
   items.push({
     label: 'Utilization',
-    value: (typeof utilFrac === 'number' && utilFrac > 0) ? (utilFrac * 100).toFixed(1) + '%' : '—',
-    hint: 'Storage SF / total facility footprint.',
+    value: (typeof utilPct === 'number' && utilPct > 0) ? utilPct.toFixed(1) + '%' : '—',
+    hint: 'Average inventory positions / designed positions. Healthy band 70-90%.',
   });
   return items;
 }
@@ -1676,6 +1683,33 @@ function drawPlan() {
 
   // Rack loop — coloured by storage type, shortened around office and FP.
   ctx.lineWidth = 1;
+  // ─────────────────────────────────────────────────────────────────
+  // Master cross-aisle plan: compute ONCE for the full building rack run
+  // (uninterrupted by office / forward-pick), then every column intersects
+  // its own [racksTop, racksBottom] window with the same set of master
+  // segment Y-positions. This guarantees cross-aisles ALIGN across all
+  // storage zones — full-pallet, carton-on-pallet, and shelving columns
+  // share the same horizontal cross-aisle bands. (Pre-fix each column ran
+  // crossAisleLayoutFt independently against its own truncated length, so
+  // adjacent columns produced different segment counts and the cross-aisles
+  // jagged at zone boundaries.)
+  // ─────────────────────────────────────────────────────────────────
+  const _planRacksTopFull    = storageY + 8 * pxPerFt;
+  const _planRacksBottomFull = storageY + storageH - 8 * pxPerFt;
+  const _planFullRunFt       = (_planRacksBottomFull - _planRacksTopFull) / pxPerFt;
+  const _planXaMaster        = calc.crossAisleLayoutFt(_planFullRunFt);
+  const _planSegPx           = Math.max(8, _planXaMaster.segmentLenFt * pxPerFt);
+  const _planCrossPx         = _planXaMaster.crossAisleClearFt * pxPerFt;
+  /** Master segment Y-bands (each {yStart, yEnd} in canvas px). Shared by every column. */
+  const _planMasterSegments = [];
+  {
+    let cy = _planRacksTopFull;
+    for (let s = 0; s < _planXaMaster.segmentCount; s++) {
+      _planMasterSegments.push({ yStart: cy, yEnd: cy + _planSegPx });
+      cy += _planSegPx + _planCrossPx;
+    }
+  }
+
   let mx = X0 + sideMarginPx;
   let colIdx = 0;
   let typeIdx = 0;
@@ -1690,8 +1724,8 @@ function drawPlan() {
     ctx.fillStyle   = t.fill;
     ctx.strokeStyle = t.stroke;
 
-    const racksTop = storageY + 8 * pxPerFt;
-    let racksBottom = storageY + storageH - 8 * pxPerFt;
+    const racksTop = _planRacksTopFull;
+    let racksBottom = _planRacksBottomFull;
 
     // Shorten over office
     const colLeft  = mx;
@@ -1708,15 +1742,6 @@ function drawPlan() {
 
     const racksH = Math.max(0, racksBottom - racksTop);
     if (racksH > 0) {
-      // WSC-X1 (2026-05-04): cross-aisle layout pulled from engine
-      // (calc.crossAisleLayoutFt). Plan / Elevation / 3D all consume the
-      // same helper so the three views agree on where cross-aisles sit.
-      const rackRunLenFt = racksH / pxPerFt;
-      const xaLayout = calc.crossAisleLayoutFt(rackRunLenFt);
-      const segmentCount = xaLayout.segmentCount;
-      const crossAislePx = xaLayout.crossAisleClearFt * pxPerFt;
-      const perSegmentPx = Math.max(8, xaLayout.segmentLenFt * pxPerFt);
-
       const drawSegment = (yTop, segH) => {
         if (segH <= 0) return;
         if (t.label === 'Carton Shelving') {
@@ -1737,10 +1762,14 @@ function drawPlan() {
         }
       };
 
-      let segY = racksTop;
-      for (let s = 0; s < segmentCount; s++) {
-        drawSegment(segY, perSegmentPx);
-        segY += perSegmentPx + crossAislePx;
+      // Intersect each master segment with this column's [racksTop, racksBottom]
+      // window. Cross-aisles stay aligned across the whole building; columns
+      // truncated by office / forward-pick simply lose their tail segments.
+      for (const mseg of _planMasterSegments) {
+        const segTop    = Math.max(mseg.yStart, racksTop);
+        const segBottom = Math.min(mseg.yEnd,   racksBottom);
+        const segH      = segBottom - segTop;
+        if (segH > 0) drawSegment(segTop, segH);
       }
     }
     typeUsed += 2;
@@ -1855,33 +1884,53 @@ function drawPlan() {
     if (count <= 0) return;
     const doorWPx   = Math.max(6, 8 * pxPerFt);   // 8 ft door
     const minSpcPx  = Math.max(10, 12 * pxPerFt); // 12 ft on-center floor (real warehouse standard)
-    // Distribute doors evenly across the given span. Leave an edge margin
-    // equal to one door width so the first/last door isn't flush to the
-    // corner (building corner columns, sprinkler risers, etc.).
-    const edgeMargin = doorWPx * 1.5;
+    // Hard bounds: a door is drawn from cx - doorWPx/2 to cx + doorWPx/2, so
+    // the door center must stay inside [xStart + doorWPx/2, xEnd - doorWPx/2]
+    // to keep the geometry inside the building rectangle. (Pre-fix: a centering
+    // fallback could push doors past the wall when count × minSpc > span.)
+    const halfDoor = doorWPx / 2;
+    const edgeMargin = Math.max(halfDoor, doorWPx * 1.5);
     const spanStart = xStart + edgeMargin;
     const spanEnd   = xEnd   - edgeMargin;
     const span      = Math.max(0, spanEnd - spanStart);
-    // Spacing stretches to fill the span, but never drops below the 12-ft floor.
-    const rawSpc = count > 1 ? span / (count - 1) : 0;
-    const spc = Math.max(minSpcPx, rawSpc);
-    // If doors at minimum spacing exceed the span, fall back to centering.
-    const neededSpan = (count - 1) * spc;
-    const firstX = neededSpan > span
-      ? xStart + (xEnd - xStart - neededSpan) / 2
-      : spanStart;
+
+    // Max doors that physically fit at minimum 12 ft on-center. If the user
+    // entered more doors than the wall can hold, render the max that fits and
+    // emit a small "+N more" annotation rather than overflowing the wall.
+    const maxFit = span > 0
+      ? Math.max(1, Math.floor(span / minSpcPx) + 1)
+      : 1;
+    const drawCount = Math.min(count, maxFit);
+    const overflow  = Math.max(0, count - drawCount);
+
+    // Even distribution across the span (drawCount-1 gaps fill the span).
+    // Spacing never drops below the 12-ft floor and the distribution stays
+    // strictly within [spanStart, spanEnd].
+    const rawSpc = drawCount > 1 ? span / (drawCount - 1) : 0;
+    const spc = drawCount > 1 ? Math.max(minSpcPx, rawSpc) : 0;
+    const neededSpan = (drawCount - 1) * spc;
+    // Center the bank within the span when there's slack, but clamp so cx
+    // never crosses spanStart or spanEnd.
+    let firstX = drawCount === 1
+      ? (spanStart + spanEnd) / 2
+      : spanStart + Math.max(0, (span - neededSpan) / 2);
+    // Belt-and-braces clamp — first/last door fully inside the wall.
+    if (firstX < spanStart) firstX = spanStart;
+    if (firstX + neededSpan > spanEnd) firstX = spanEnd - neededSpan;
+
     ctx.fillStyle = color;
     ctx.strokeStyle = '#7f1d1d';
     ctx.lineWidth = 1;
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < drawCount; i++) {
       const cx = firstX + i * spc;
-      ctx.fillRect(cx - doorWPx / 2, yTop, doorWPx, 12);
-      ctx.strokeRect(cx - doorWPx / 2, yTop, doorWPx, 12);
+      ctx.fillRect(cx - halfDoor, yTop, doorWPx, 12);
+      ctx.strokeRect(cx - halfDoor, yTop, doorWPx, 12);
     }
     ctx.fillStyle = '#7f1d1d';
     ctx.font = 'bold 10px Montserrat, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(label, (xStart + xEnd) / 2, yTop + (labelAbove ? -6 : 28));
+    const labelTxt = overflow > 0 ? `${label} (+${overflow} won't fit)` : label;
+    ctx.fillText(labelTxt, (xStart + xEnd) / 2, yTop + (labelAbove ? -6 : 28));
   }
 
   if (twoSided) {
@@ -2155,11 +2204,14 @@ function renderDashboard() {
       <table class="cm-grid-table" style="font-size:13px;width:100%;">
         <tbody>
           <tr><td colspan="2" style="padding-top:8px;font-weight:700;color:var(--ies-blue);font-size:11px;text-transform:uppercase;">Inventory → Positions</td></tr>
-          <tr><td>Full Pallet (${Math.round(sized.meta.normalisedMix.fullPalletPct * 100)}%)</td><td class="cm-num">${sized.positions.fullPalletPositions.toLocaleString()} pos</td></tr>
-          <tr><td>Carton on Pallet (${Math.round(sized.meta.normalisedMix.cartonOnPalletPct * 100)}%)</td><td class="cm-num">${sized.positions.cartonPalletPositions.toLocaleString()} pos</td></tr>
+          <tr><td>Full Pallet (${Math.round(sized.meta.normalisedMix.fullPalletPct * 100)}%)${sized.positions.palletPositionsOverridden ? ' <span style="color:var(--ies-gray-400);font-size:11px;">(peak-derived; override engaged)</span>' : ''}</td><td class="cm-num">${sized.positions.fullPalletPositions.toLocaleString()} pos</td></tr>
+          <tr><td>Carton on Pallet (${Math.round(sized.meta.normalisedMix.cartonOnPalletPct * 100)}%)${sized.positions.palletPositionsOverridden ? ' <span style="color:var(--ies-gray-400);font-size:11px;">(peak-derived; override engaged)</span>' : ''}</td><td class="cm-num">${sized.positions.cartonPalletPositions.toLocaleString()} pos</td></tr>
           <tr><td>Carton Shelving (${Math.round(sized.meta.normalisedMix.cartonOnShelvingPct * 100)}%)</td><td class="cm-num">${sized.positions.shelvingPositions.toLocaleString()} loc</td></tr>
-          <tr><td><strong>Designed (post-honeycomb)</strong></td><td class="cm-num"><strong>${sized.utilization.designed.toLocaleString()} pos</strong></td></tr>
-          <tr><td>+ Surge buffer</td><td class="cm-num">${sized.positions.surgePositions.toLocaleString()} pos</td></tr>
+          ${sized.positions.palletPositionsOverridden ? `<tr><td title="Total pallet positions you entered on Volume Requirements (overrides peakUnits × mix derivation)."><span style="color:var(--ies-gray-500);">↳ Total Pallets (entered)</span></td><td class="cm-num">${sized.positions.palletPositionsNeeded.toLocaleString()} pos</td></tr>` : ''}
+          <tr style="border-top:1px dashed var(--ies-gray-200);"><td title="Pallet inventory + shelving locations going into the engine before buffers."><strong>Subtotal: Inventory positions</strong></td><td class="cm-num"><strong>${(sized.positions.palletPositionsNeeded + sized.positions.shelvingPositions).toLocaleString()}</strong></td></tr>
+          <tr><td title="Honeycomb buffer = empty positions reserved for inbound/outbound flux + slotting flexibility. Applied to pallet + shelving sides at the same rate.">+ Honeycomb buffer (${Math.round((sized.positions.honeycombFactor - 1) * 100)}%)</td><td class="cm-num">${(sized.positions.designedPositions - sized.positions.palletPositionsNeeded - sized.positions.shelvingPositions).toLocaleString()} pos</td></tr>
+          <tr><td><strong>Designed positions</strong></td><td class="cm-num"><strong>${sized.positions.designedPositions.toLocaleString()} pos</strong></td></tr>
+          <tr><td title="Surge buffer = additional positions for seasonal peaks above the engineered design.">+ Surge buffer (${Math.round((sized.positions.surgeFactor - 1) * 100)}%)</td><td class="cm-num">${sized.positions.surgePositions.toLocaleString()} pos</td></tr>
           <tr style="border-top:2px solid var(--ies-blue);"><td><strong>Gross Positions</strong></td><td class="cm-num"><strong>${sized.positions.grossPositions.toLocaleString()}</strong></td></tr>
 
           ${byChannel.length > 0 ? `
@@ -2714,78 +2766,6 @@ function _wscGetFloorTexture(THREE) {
   return tex;
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// Forklift sprite (Q3 ratified 2026-05-04 PM, audit P2-14). Builds a
-// Group representing one industrial reach truck: body + cab + mast +
-// forks. Default orientation faces +Z so callers set group.rotation.y
-// from travel heading via Math.atan2(deltaX, deltaZ). All meshes carry
-// castShadow so the forklift drops a contact shadow on the concrete.
-// `scale` = world units per foot (matches build3DScene's 0.5).
-// ─────────────────────────────────────────────────────────────────────
-function _wscMakeForklift(THREE, scale) {
-  // VIS_SCALE: oversize sprites 3x relative to real reach-truck so they
-  // read at typical demo building sizes (1000ft+). At realistic 1x scale,
-  // a forklift is ~3 pixels wide at the default camera distance for a
-  // 1000ft building — invisible. 3x makes the sprite ~10ft wide / ~21ft
-  // long which still fits comfortably in the 12ft aisles for visual
-  // purposes (sprites are non-collision; engine math unaffected).
-  const VIS_SCALE = 3;
-  const s = scale * VIS_SCALE;
-  const group = new THREE.Group();
-  // Body — orange industrial chassis
-  const bodyMat = new THREE.MeshStandardMaterial({ color: 0xea580c, roughness: 0.55, metalness: 0.18 });
-  const body = new THREE.Mesh(new THREE.BoxGeometry(4 * s, 3.5 * s, 7 * s), bodyMat);
-  body.position.set(0, 1.75 * s, -1 * s);
-  body.castShadow = true;
-  group.add(body);
-  // Cab — dark gray operator station, taller, sits on rear of body
-  const cabMat = new THREE.MeshStandardMaterial({ color: 0x374151, roughness: 0.75 });
-  const cab = new THREE.Mesh(new THREE.BoxGeometry(3.6 * s, 3 * s, 3.5 * s), cabMat);
-  cab.position.set(0, 5 * s, -2.5 * s);
-  cab.castShadow = true;
-  group.add(cab);
-  // Cab roof — thin dark panel
-  const roofMat = new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.8 });
-  const roof = new THREE.Mesh(new THREE.BoxGeometry(3.8 * s, 0.3 * s, 3.7 * s), roofMat);
-  roof.position.set(0, 6.7 * s, -2.5 * s);
-  roof.castShadow = true;
-  group.add(roof);
-  // Mast — vertical steel column at front of body (forks extend in +Z)
-  const mastMat = new THREE.MeshStandardMaterial({ color: 0x4b5563, roughness: 0.6, metalness: 0.5 });
-  const mast = new THREE.Mesh(new THREE.BoxGeometry(3.4 * s, 13 * s, 0.4 * s), mastMat);
-  mast.position.set(0, 6.5 * s, 2.3 * s);
-  mast.castShadow = true;
-  group.add(mast);
-  // Two forks — yellow steel tines extending forward (+Z) at low height
-  const forkMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.55, metalness: 0.4 });
-  const forkGeo = new THREE.BoxGeometry(0.4 * s, 0.25 * s, 3.5 * s);
-  const fork1 = new THREE.Mesh(forkGeo, forkMat);
-  fork1.position.set(-1.0 * s, 0.4 * s, 4.0 * s);
-  fork1.castShadow = true;
-  group.add(fork1);
-  const fork2 = new THREE.Mesh(forkGeo, forkMat);
-  fork2.position.set(1.0 * s, 0.4 * s, 4.0 * s);
-  fork2.castShadow = true;
-  group.add(fork2);
-  // Wheels — 4 small dark cylinders at corners (purely visual; no physics)
-  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.85 });
-  const wheelGeo = new THREE.CylinderGeometry(0.7 * s, 0.7 * s, 0.6 * s, 16);
-  const wheelPositions = [
-    [ 1.8 * s, 0.7 * s,  1.5 * s],
-    [-1.8 * s, 0.7 * s,  1.5 * s],
-    [ 1.8 * s, 0.7 * s, -3.5 * s],
-    [-1.8 * s, 0.7 * s, -3.5 * s],
-  ];
-  for (const [x, y, z] of wheelPositions) {
-    const w = new THREE.Mesh(wheelGeo, wheelMat);
-    w.position.set(x, y, z);
-    w.rotation.z = Math.PI / 2; // wheel axles run along X
-    w.castShadow = true;
-    group.add(w);
-  }
-  return group;
-}
-
 function build3DScene() {
   const el = rootEl?.querySelector('#wsc-3d-container');
   if (!el) return;
@@ -2948,9 +2928,13 @@ function build3DScene() {
     // do the heavy visual lifting). The colored box hints "this zone is
     // full-pallet vs carton-pallet vs shelving" — structure makes it read
     // as a real rack.
-    const matFullPallet   = new THREE.MeshStandardMaterial({ color: 0xea580c, transparent: true, opacity: 0.28, roughness: 0.6 });
-    const matCartonPallet = new THREE.MeshStandardMaterial({ color: 0xf59e0b, transparent: true, opacity: 0.28, roughness: 0.6 });
-    const matShelving     = new THREE.MeshStandardMaterial({ color: 0x0d9488, transparent: true, opacity: 0.32, roughness: 0.6 });
+    // Rack-type colored volumes: low opacity so the structural detail
+    // (uprights + beams + pallets at correct front-face positions) carries
+    // the visual reading. depthWrite:false prevents the colored volumes
+    // from masking the InstancedMesh structural elements behind them.
+    const matFullPallet   = new THREE.MeshStandardMaterial({ color: 0xea580c, transparent: true, opacity: 0.18, depthWrite: false, roughness: 0.7 });
+    const matCartonPallet = new THREE.MeshStandardMaterial({ color: 0xf59e0b, transparent: true, opacity: 0.18, depthWrite: false, roughness: 0.7 });
+    const matShelving     = new THREE.MeshStandardMaterial({ color: 0x0d9488, transparent: true, opacity: 0.22, depthWrite: false, roughness: 0.7 });
     // Steel structural color for uprights + beams (instanced).
     const matSteel = new THREE.MeshStandardMaterial({ color: 0x4b5563, roughness: 0.55, metalness: 0.45 });
     // Wood pallet color (instanced).
@@ -3007,6 +2991,26 @@ function build3DScene() {
     /** @type {Array<{t:any, mx:number, segCenter:number, segLenU:number, side:number, levels:number, bayWidthFt:number, fillPct:number}>} */
     const segmentMeta = [];
 
+    // ─────────────────────────────────────────────────────────────────
+    // Master cross-aisle plan (3D): same pattern as the 2D plan view —
+    // compute ONCE for the full rack run (rackZStart → rackZEnd) and
+    // share segment Z-bands across every column. Cross-aisles align
+    // through the entire building instead of jagging at zone boundaries.
+    // ─────────────────────────────────────────────────────────────────
+    const _3dFullRunFt    = (rackZEnd - rackZStart) / scale;
+    const _3dXaMaster     = calc.crossAisleLayoutFt(_3dFullRunFt);
+    const _3dSegLenU      = _3dXaMaster.segmentLenFt * scale;
+    const _3dGapU         = _3dXaMaster.crossAisleClearFt * scale;
+    /** Master segment Z-bands shared by every column (each {z0, z1} in world units). */
+    const _3dMasterSegments = [];
+    {
+      let cz = rackZStart;
+      for (let s = 0; s < _3dXaMaster.segmentCount; s++) {
+        _3dMasterSegments.push({ z0: cz, z1: cz + _3dSegLenU });
+        cz += _3dSegLenU + _3dGapU;
+      }
+    }
+
     let mx = -W / 2 + 6 * scale;
     let typeIdx = 0;
     let typeUsed = 0;
@@ -3029,13 +3033,14 @@ function build3DScene() {
       const thisLen = Math.max(0, thisZEnd - thisZStart);
 
       if (thisLen > 4) {
-        const thisLenFt = thisLen / scale;
-        const xa = calc.crossAisleLayoutFt(thisLenFt);
-        const segLenU = xa.segmentLenFt * scale;
-        const gapU    = xa.crossAisleClearFt * scale;
-        let zCursor = thisZStart;
-        for (let s = 0; s < xa.segmentCount; s++) {
-          const segCenter = zCursor + segLenU / 2;
+        // Intersect each master segment with this column's [thisZStart, thisZEnd]
+        // window. Truncated columns simply drop the master segments that don't fit.
+        for (const mseg of _3dMasterSegments) {
+          const segZ0Eff = Math.max(mseg.z0, thisZStart);
+          const segZ1Eff = Math.min(mseg.z1, thisZEnd);
+          const segLenU  = segZ1Eff - segZ0Eff;
+          if (segLenU <= 4) continue;
+          const segCenter = segZ0Eff + segLenU / 2;
 
           // Soft colored volume per rack pair
           const rackGeo = new THREE.BoxGeometry(rackDepthU, t.heightU, segLenU);
@@ -3052,21 +3057,33 @@ function build3DScene() {
           // fillPct sets how many bays render a pallet (front-of-aisle
           // shows occupancy without saturating the canvas).
           const utilFrac = Math.max(0.30, Math.min(0.95, (sized.utilization?.utilizationPct || 75) / 100));
+          // Side A's aisle-facing front sits at mx (left edge of the
+          // back-to-back pair). intoRackDir +1 → rack extends to +X.
+          // Side B's front sits at the right edge of the pair, extending
+          // back into -X. faceX retained as rack-volume center for the
+          // soft colored mesh; frontFaceX is the actual structural face
+          // where uprights, beams, and pallets attach.
           segmentMeta.push({
             t, mx, segCenter, segLenU,
-            side: 'A', // X-near face
+            side: 'A',
             faceX: mx + rackDepthU / 2,
+            frontFaceX: mx,
+            intoRackDir: +1,
             levels: t.levels,
             bayWidthFt: t.bayWidthFt,
+            rackDepthU: rackDepthU,
             heightU: t.heightU,
             fillPct: utilFrac,
           });
           segmentMeta.push({
             t, mx, segCenter, segLenU,
-            side: 'B', // X-far face
+            side: 'B',
             faceX: mx + rackDepthU + 0.5 + rackDepthU / 2,
+            frontFaceX: mx + 2 * rackDepthU + 0.5,
+            intoRackDir: -1,
             levels: t.levels,
             bayWidthFt: t.bayWidthFt,
+            rackDepthU: rackDepthU,
             heightU: t.heightU,
             fillPct: utilFrac,
           });
@@ -3074,11 +3091,10 @@ function build3DScene() {
           placedRacks.push({
             typeKey: t.typeKey,
             colKey: mx,
-            segmentLenFt: xa.segmentLenFt,
+            segmentLenFt: segLenU / scale,
             levels: t.levels,
             bayWidthFt: t.bayWidthFt,
           });
-          zCursor += segLenU + gapU;
         }
       }
       typeUsed += 2;
@@ -3093,9 +3109,13 @@ function build3DScene() {
     let totalUprights = 0, totalBeams = 0, totalPallets = 0;
     for (const m of segmentMeta) {
       const baysPerFace = Math.max(0, Math.floor((m.segLenU / scale) / m.bayWidthFt));
-      // Uprights: bays + 1 vertical posts at each bay boundary
-      totalUprights += (baysPerFace + 1);
-      // Beams: one per level (spans the full segment length)
+      // Uprights: bays + 1 vertical posts at each bay boundary, TWO per
+      // boundary (front-of-aisle + back-of-rack). 2× instance count vs
+      // the single-centerline placement that pre-fix made racks look like
+      // colored slabs without any structural detail.
+      totalUprights += (baysPerFace + 1) * 2;
+      // Beams: one per level (spans the full segment length, rendered at
+      // the rack's aisle-facing front).
       totalBeams += m.levels;
       // Pallets: bays * levels * fillPct
       totalPallets += Math.floor(baysPerFace * m.levels * m.fillPct);
@@ -3114,9 +3134,17 @@ function build3DScene() {
         const baysPerFace = Math.max(0, Math.floor((m.segLenU / scale) / m.bayWidthFt));
         const bayU = m.bayWidthFt * scale;
         const segZ0 = m.segCenter - m.segLenU / 2;
+        const frontX = m.frontFaceX;
+        const backX  = m.frontFaceX + m.intoRackDir * m.rackDepthU;
         for (let b = 0; b <= baysPerFace; b++) {
           const z = segZ0 + b * bayU;
-          dummy.position.set(m.faceX, m.heightU / 2, z);
+          // Front upright (aisle-side)
+          dummy.position.set(frontX, m.heightU / 2, z);
+          dummy.scale.set(1, m.heightU, 1);
+          dummy.updateMatrix();
+          uprightMesh.setMatrixAt(ui++, dummy.matrix);
+          // Back upright (back-to-back interior side)
+          dummy.position.set(backX, m.heightU / 2, z);
           dummy.scale.set(1, m.heightU, 1);
           dummy.updateMatrix();
           uprightMesh.setMatrixAt(ui++, dummy.matrix);
@@ -3134,9 +3162,13 @@ function build3DScene() {
       const dummy = new THREE.Object3D();
       let bi = 0;
       for (const m of segmentMeta) {
+        // Beam sits at the aisle-facing front of the rack, just inside
+        // the upright (not down the centerline like pre-fix), at every
+        // level boundary. Scaled along Z to span the full segment.
+        const beamX = m.frontFaceX + m.intoRackDir * 0.25;
         for (let lv = 1; lv <= m.levels; lv++) {
           const yU = (m.heightU / m.levels) * lv;
-          dummy.position.set(m.faceX, yU, m.segCenter);
+          dummy.position.set(beamX, yU, m.segCenter);
           dummy.scale.set(1, 1, m.segLenU);
           dummy.updateMatrix();
           beamMesh.setMatrixAt(bi++, dummy.matrix);
@@ -3147,9 +3179,15 @@ function build3DScene() {
     }
 
     if (totalPallets > 0) {
-      // Pallet box ~ 48"x6"x40" → in feet: 4 × 0.5 × 3.33; scale to world units.
-      const palletWU = 4 * scale, palletHU = 0.5 * scale, palletDU = 3.5 * scale;
-      const palletGeo = new THREE.BoxGeometry(palletWU, palletHU, palletDU);
+      // Pallet+load: 40" deep into rack × ~50" tall (load) × 48" wide along
+      // rack run. In feet: 3.33 X-depth × 4.0 Y-height × 4.0 Z-width.
+      // Pre-fix dimensions were swapped (4ft on X, 3.5ft on Z) so adjacent
+      // bays' pallets visually merged into stripes. Bumping Y from 0.5ft
+      // to 4ft turns thin wooden bases into proper loaded pallet boxes.
+      const palletDepthU = 3.33 * scale; // X — into rack
+      const palletLoadU  = 4.0  * scale; // Y — loaded pallet height
+      const palletWidthU = 4.0  * scale; // Z — parallel to rack run
+      const palletGeo = new THREE.BoxGeometry(palletDepthU, palletLoadU, palletWidthU);
       const palletMesh = new THREE.InstancedMesh(palletGeo, matPallet, totalPallets);
       palletMesh.castShadow = true;
       const dummy = new THREE.Object3D();
@@ -3160,13 +3198,21 @@ function build3DScene() {
         const bayU = m.bayWidthFt * scale;
         const segZ0 = m.segCenter - m.segLenU / 2;
         const fillBays = Math.floor(baysPerFace * m.fillPct);
+        // Pallet center X: front face + intoRackDir × half-pallet-depth.
+        // Pallet sits ON the rack with its aisle-facing edge at the rack face,
+        // extending into the rack interior.
+        const palletCenterX = m.frontFaceX + m.intoRackDir * (palletDepthU / 2);
+        const levelHeightU  = m.heightU / m.levels;
         for (let lv = 0; lv < m.levels; lv++) {
-          const yU = (m.heightU / m.levels) * lv + (m.heightU / m.levels) * 0.18;
+          // Pallet sits ON the level beam, centered vertically in the
+          // available height between this beam and the next.
+          const beamY = levelHeightU * lv;
+          const yU = beamY + palletLoadU / 2 + 0.05;
           for (let b = 0; b < fillBays; b++) {
+            // Center pallet inside its bay along Z (4ft pallet in 4.33ft bay
+            // leaves ~0.33ft gap → discrete pallet reads).
             const z = segZ0 + (b + 0.5) * bayU;
-            // Offset palette out from the upright face slightly so it doesn't z-fight.
-            const xOffset = (m.side === 'A' ? -1 : +1) * 0.01;
-            dummy.position.set(m.faceX + xOffset, yU + palletHU / 2, z);
+            dummy.position.set(palletCenterX, yU, z);
             dummy.scale.set(1, 1, 1);
             dummy.updateMatrix();
             palletMesh.setMatrixAt(pi++, dummy.matrix);
@@ -3288,112 +3334,12 @@ function build3DScene() {
       }, { passive: false });
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // Q3 / P2-14: minimal forklift simulation. Three sprites move
-    // dock → random rack → dock on a loop. Demo polish — the "live
-    // model" feel for sales screenshots / videos. Engine math
-    // unchanged. Sprites are skipped if no rack pairs were placed
-    // (empty building) so they never wander an empty floor.
-    // ─────────────────────────────────────────────────────────────
-    /** @type {Array<{group:any, fromV:any, toV:any, t:number, speedUps:number, paused:number, returning:boolean}>} */
-    const forklifts = [];
-    if (segmentMeta.length > 0) {
-      const FORKLIFT_COUNT = 3;
-      const FORKLIFT_GROUND_Y = 0; // floor top is ~y=0; forklift body sits above by design
-      const FORKLIFT_SPEED_UPS = 6 * scale; // ~12 ft/s scaled to world units (scale=0.5)
-      const dockZ = -D / 2 + 4 * scale; // 4 ft inboard of dock face
-      function _wscPickRackTarget(THREE) {
-        const m = segmentMeta[Math.floor(Math.random() * segmentMeta.length)];
-        // Pull into the aisle next to the rack face so the forklift
-        // doesn't visually clip through the rack volume.
-        const aisleOffset = m.side === 'A' ? +1.0 * scale : -1.0 * scale;
-        return new THREE.Vector3(m.faceX + aisleOffset, FORKLIFT_GROUND_Y, m.segCenter);
-      }
-      for (let i = 0; i < FORKLIFT_COUNT; i++) {
-        const fk = _wscMakeForklift(THREE, scale);
-        // Stagger initial positions along the dock so the three
-        // forklifts spread out instead of stacking on each other.
-        const startX = ((i + 0.5) / FORKLIFT_COUNT - 0.5) * (W - 24 * scale);
-        const fromV = new THREE.Vector3(startX, FORKLIFT_GROUND_Y, dockZ);
-        const toV   = _wscPickRackTarget(THREE);
-        fk.position.copy(fromV);
-        // Heading toward target
-        const dx = toV.x - fromV.x, dz = toV.z - fromV.z;
-        fk.rotation.y = Math.atan2(dx, dz);
-        scene.add(fk);
-        forklifts.push({
-          group: fk,
-          fromV,
-          toV,
-          t: 0,
-          speedUps: FORKLIFT_SPEED_UPS,
-          paused: 0,
-          returning: false,
-        });
-      }
-    }
-
     // Animate. Capture a local "alive" flag so the loop stops as soon as
     // dispose() is called (e.g. on re-render from a data-field commit).
-    // Use a delta-time clock so forklift motion is frame-rate independent.
     let alive = true;
-    let lastTs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-    const _tmpV = new THREE.Vector3();
     function animate() {
       if (!rootEl || !alive) return;
       requestAnimationFrame(animate);
-      const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-      const dt = Math.min(0.1, (now - lastTs) / 1000); // clamp dt for tab-switch resumes
-      lastTs = now;
-
-      // Advance forklifts
-      for (const fk of forklifts) {
-        if (fk.paused > 0) {
-          fk.paused -= dt;
-          continue;
-        }
-        const segLen = fk.fromV.distanceTo(fk.toV);
-        if (segLen <= 0.01) {
-          // Pick a fresh leg if we somehow got a zero-length path
-          fk.fromV.copy(fk.toV);
-          fk.toV.copy(fk.returning ? new THREE.Vector3(fk.fromV.x, 0, dockZ) : segmentMeta.length > 0 ? (function () {
-            const m = segmentMeta[Math.floor(Math.random() * segmentMeta.length)];
-            const offset = m.side === 'A' ? +1.0 * scale : -1.0 * scale;
-            return new THREE.Vector3(m.faceX + offset, 0, m.segCenter);
-          })() : new THREE.Vector3(0, 0, 0));
-          fk.t = 0;
-          continue;
-        }
-        // Advance t in seconds-of-travel-along-path
-        fk.t += (fk.speedUps * dt) / segLen;
-        if (fk.t >= 1) {
-          // Arrived. Brief pause "loading/unloading" then turn around.
-          fk.group.position.copy(fk.toV);
-          fk.paused = 0.6 + Math.random() * 0.6; // 0.6 - 1.2 sec pause
-          if (!fk.returning) {
-            // Going dock → rack done. Set return leg to the dock.
-            fk.fromV.copy(fk.toV);
-            fk.toV.set(fk.toV.x, 0, dockZ);
-            fk.returning = true;
-          } else {
-            // Returned to dock. Pick a new rack target.
-            fk.fromV.copy(fk.toV);
-            const m = segmentMeta[Math.floor(Math.random() * segmentMeta.length)];
-            const offset = m.side === 'A' ? +1.0 * scale : -1.0 * scale;
-            fk.toV.set(m.faceX + offset, 0, m.segCenter);
-            fk.returning = false;
-          }
-          fk.t = 0;
-          // Update heading for the new leg
-          const dx2 = fk.toV.x - fk.fromV.x, dz2 = fk.toV.z - fk.fromV.z;
-          fk.group.rotation.y = Math.atan2(dx2, dz2);
-        } else {
-          // Lerp current position
-          _tmpV.copy(fk.fromV).lerp(fk.toV, fk.t);
-          fk.group.position.copy(_tmpV);
-        }
-      }
-
       if (controls) controls.update();
       renderer.render(scene, camera);
     }

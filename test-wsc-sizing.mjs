@@ -629,8 +629,14 @@ import { assignDemand } from './tools/network-opt/calc.js';
   });
   // Empty placedRacks → all zeros, but targets pulled from sized
   const facts = rollupRenderedFacts([], sized);
-  t('P0-2 integration: targets.fullPallet matches sized', facts.targets.fullPallet === sized.positions.fullPalletPositions);
+  // Targets now use per-type GROSS positions (honeycomb + surge applied) so
+  // per-row HUD breakdowns sum to total. fullPalletGrossPositions is the
+  // canonical per-row target — see calc.js positions block (2026-05-04 PM s3).
+  t('P0-2 integration: targets.fullPallet matches sized gross', facts.targets.fullPallet === sized.positions.fullPalletGrossPositions);
   t('P0-2 integration: targets.total matches sized.grossPositions', facts.targets.total === sized.positions.grossPositions);
+  // Per-type gross targets sum to total (within ±1 for rounding).
+  const _sumPerType = facts.targets.fullPallet + facts.targets.cartonPallet + facts.targets.shelving;
+  t('P0-2 integration: per-type targets sum to total', Math.abs(_sumPerType - facts.targets.total) <= 1);
   t('P0-2 integration: empty placement under-built', facts.status === 'under_built');
 }
 

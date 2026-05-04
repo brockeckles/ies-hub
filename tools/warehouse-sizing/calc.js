@@ -353,8 +353,18 @@ export function rollupRenderedFacts(placedRacks, sized = {}) {
   const totalBays      = byType.fullPallet.bays + byType.cartonPallet.bays + byType.shelving.bays;
   const totalColumns   = byType.fullPallet.columns + byType.cartonPallet.columns + byType.shelving.columns;
 
+  // Targets: prefer per-type GROSS positions (honeycomb + surge applied,
+  // sums to grossPositions) so per-row achieved/target comparisons are
+  // dimensionally consistent with the total. Falls back to RAW per-type
+  // values for older sized payloads that don't carry the gross fields.
   const positionsT = sized?.positions || {};
-  const targets = {
+  const _hasGross = (positionsT.fullPalletGrossPositions != null);
+  const targets = _hasGross ? {
+    fullPallet:   +positionsT.fullPalletGrossPositions   || 0,
+    cartonPallet: +positionsT.cartonPalletGrossPositions || 0,
+    shelving:     +positionsT.shelvingGrossPositions     || 0,
+    total:        +positionsT.grossPositions             || 0,
+  } : {
     fullPallet:   +positionsT.fullPalletPositions   || 0,
     cartonPallet: +positionsT.cartonPalletPositions || 0,
     shelving:     +positionsT.shelvingPositions     || 0,
@@ -1463,15 +1473,59 @@ export function sizeFacility(userInputs = {}) {
     officeSqft,
     additionalSqft,
     additionalItems,
-    positions: {
-      fullPalletPositions,
-      cartonPalletPositions,
-      shelvingPositions,
-      designedPositions,
-      surgePositions,
-      grossPositions,
-      floorPositions,
-    },
+    positions: (() => {
+      // Per-type gross positions: distribute the post-honeycomb +
+      // post-surge total across the three storage types so per-row
+      // breakdowns in the HUD + Dashboard always sum to gross.
+      // Pallet side honors totalPalletsOverride (when engaged the
+      // override replaces fp+cp at the engine's pallet budget; mix
+      // between fp and cp follows the user's mix percentages).
+      const _buf = 1 + (i.honeycombPct || 0) / 100;
+      const _surgeF = 1 + (i.surgePct || 0) / 100;
+      // Distribute the canonical grossPositions across pallet vs shelving
+      // sides by their raw shares so fp + cp + shelving sums EXACTLY to
+      // grossPositions (no rounding drift).
+      const _denomAll = palletPositionsNeeded + shelvingPositions;
+      const _palletShare = _denomAll > 0 ? palletPositionsNeeded / _denomAll : 1;
+      const _palletGross = Math.round(grossPositions * _palletShare);
+      const _shelvingGross = grossPositions - _palletGross;
+      // Mix between fp and cp inside the pallet budget — follow user
+      // mix percentages when override engaged (otherwise raw fp+cp ratio).
+      let _fpShareOfPallet;
+      if (palletPositionsExplicit) {
+        const _denom = (mix.fullPalletPct || 0) + (mix.cartonOnPalletPct || 0);
+        _fpShareOfPallet = _denom > 0 ? (mix.fullPalletPct || 0) / _denom : 0.5;
+      } else {
+        const _fpcpRaw = fullPalletPositions + cartonPalletPositions;
+        _fpShareOfPallet = _fpcpRaw > 0 ? fullPalletPositions / _fpcpRaw : 0.5;
+      }
+      const fullPalletGrossPositions = Math.round(_palletGross * _fpShareOfPallet);
+      const cartonPalletGrossPositions = _palletGross - fullPalletGrossPositions;
+      const shelvingGrossPositions = _shelvingGross;
+      return {
+        fullPalletPositions,
+        cartonPalletPositions,
+        shelvingPositions,
+        // Per-type gross (honeycomb + surge applied) — sums to grossPositions.
+        // Used by the 3D RenderedFacts HUD + Dashboard breakdown so per-row
+        // numbers visibly add up to the total.
+        fullPalletGrossPositions,
+        cartonPalletGrossPositions,
+        shelvingGrossPositions,
+        // Subtotals used by the Dashboard breakdown to make math transparent.
+        palletPositionsNeeded,           // raw pallet inventory (fp+cp or override)
+        palletPositionsOverridden: palletPositionsExplicit,
+        grossPalletPositions,            // post-honeycomb (no surge)
+        grossShelvingPositions,          // post-honeycomb (no surge)
+        designedPositions,
+        surgePositions,
+        grossPositions,
+        floorPositions,
+        // Multipliers — surfaced so UI can show "× X% honeycomb" etc.
+        honeycombFactor: _buf,
+        surgeFactor: _surgeF,
+      };
+    })(),
     rackLevels: levels,
     shelfLevels,
     sfPerFloorPos,
