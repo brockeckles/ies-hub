@@ -398,6 +398,105 @@ export function rollupRenderedFacts(placedRacks, sized = {}) {
   };
 }
 
+/**
+ * Decide how many rack-pair "col faces" to allocate per storage type so the
+ * 3D scene's rendered position counts match the engine's per-type GROSS
+ * targets (instead of being driven by inventory-unit mix percentages, which
+ * massively over-fills shelving because shelving bays are 1.4× denser than
+ * pallet bays and shelving levels typically exceed pallet levels).
+ *
+ * Each module placed in the rack-placement loop adds ONE back-to-back rack
+ * pair = 2 col faces = 2 to `totalCols`. So col counts are always even and
+ * pair count = cols / 2.
+ *
+ * @param {{
+ *   totalCols: number,                  // available col faces (always even)
+ *   segmentLensFt: number[],            // master plan segment lengths (after cross-aisle splits)
+ *   palletLevels: number,
+ *   shelvingLevels: number,
+ *   fullPalletTarget: number,           // sized.positions.fullPalletGrossPositions
+ *   cartonPalletTarget: number,         // sized.positions.cartonPalletGrossPositions
+ *   shelvingTarget: number,             // sized.positions.shelvingGrossPositions
+ * }} opts
+ * @returns {{
+ *   fullPalletCols: number,             // even — share of totalCols routed to FP
+ *   cartonPalletCols: number,           // even
+ *   shelvingCols: number,               // even
+ *   unusedCols: number,                 // even — leftover (over-built building)
+ *   palletPosPerPair: number,           // diagnostic — positions a single FP/CP rack-pair holds across all master segments
+ *   shelvingPosPerPair: number,         // diagnostic
+ *   mode: 'over_built' | 'under_built' | 'exact_fit',
+ * }}
+ */
+export function allocateRackColsByTarget(opts = {}) {
+  const totalColFaces = Math.max(0, +opts.totalCols || 0);
+  const segs = Array.isArray(opts.segmentLensFt) ? opts.segmentLensFt : [];
+  const palletLevels   = Math.max(1, +opts.palletLevels   || 5);
+  const shelvingLevels = Math.max(1, +opts.shelvingLevels || 5);
+  const fpTarget = Math.max(0, +opts.fullPalletTarget   || 0);
+  const cpTarget = Math.max(0, +opts.cartonPalletTarget || 0);
+  const shTarget = Math.max(0, +opts.shelvingTarget     || 0);
+
+  // Positions a single back-to-back rack-pair holds across every master segment.
+  // (rackPairCapacity per segment, summed.)
+  let palletPosPerPair = 0;
+  let shelvingPosPerPair = 0;
+  for (const segLen of segs) {
+    if (!(segLen > 0)) continue;
+    palletPosPerPair   += Math.floor(segLen / PALLET_BAY_WIDTH_FT)   * 2 * palletLevels;
+    shelvingPosPerPair += Math.floor(segLen / SHELVING_BAY_WIDTH_FT) * 2 * shelvingLevels;
+  }
+
+  const totalPairs = Math.floor(totalColFaces / 2);
+
+  // Pairs that get closest to each target (round-to-nearest beats ceil
+  // because per-pair capacity is coarse — one shelving pair can hold
+  // thousands of positions, so ceil systematically overshoots small
+  // targets like a 4k shelving budget). If a non-zero target rounds to
+  // zero pairs we floor at 1 so the type still shows up in the scene.
+  function _pairsFor(target, posPerPair) {
+    if (!(posPerPair > 0) || !(target > 0)) return 0;
+    return Math.max(1, Math.round(target / posPerPair));
+  }
+  let fpPairs = _pairsFor(fpTarget, palletPosPerPair);
+  let cpPairs = _pairsFor(cpTarget, palletPosPerPair);
+  let shPairs = _pairsFor(shTarget, shelvingPosPerPair);
+
+  const wantPairs = fpPairs + cpPairs + shPairs;
+
+  /** @type {'over_built'|'under_built'|'exact_fit'} */
+  let mode;
+  if (wantPairs > totalPairs) {
+    // Building can't hold the desired capacity — scale per-type pair
+    // counts proportionally so they fit. Rendered HUD will show
+    // 'under_built' status and the user knows to grow the building.
+    mode = 'under_built';
+    if (wantPairs > 0) {
+      fpPairs = Math.floor(fpPairs * totalPairs / wantPairs);
+      cpPairs = Math.floor(cpPairs * totalPairs / wantPairs);
+      shPairs = Math.max(0, totalPairs - fpPairs - cpPairs);
+    } else {
+      fpPairs = cpPairs = shPairs = 0;
+    }
+  } else if (wantPairs === totalPairs) {
+    mode = 'exact_fit';
+  } else {
+    mode = 'over_built';
+  }
+
+  const unusedPairs = Math.max(0, totalPairs - fpPairs - cpPairs - shPairs);
+
+  return {
+    fullPalletCols:   fpPairs * 2,
+    cartonPalletCols: cpPairs * 2,
+    shelvingCols:     shPairs * 2,
+    unusedCols:       unusedPairs * 2,
+    palletPosPerPair,
+    shelvingPosPerPair,
+    mode,
+  };
+}
+
 // ============================================================
 // BAY & AISLE GEOMETRY
 // ============================================================

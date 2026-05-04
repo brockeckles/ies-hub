@@ -1,5 +1,5 @@
 // test-wsc-sizing.mjs — regression tests for I-06 (WSC honor explicit dock config + pallet override)
-import { sizeFacility, calcDIOH, orientFacility, elevationParams, crossAisleDefaults, crossAisleLayoutFt, rackPairCapacity, rollupRenderedFacts, PALLET_BAY_WIDTH_FT, SHELVING_BAY_WIDTH_FT } from './tools/warehouse-sizing/calc.js';
+import { sizeFacility, calcDIOH, orientFacility, elevationParams, crossAisleDefaults, crossAisleLayoutFt, rackPairCapacity, rollupRenderedFacts, allocateRackColsByTarget, PALLET_BAY_WIDTH_FT, SHELVING_BAY_WIDTH_FT } from './tools/warehouse-sizing/calc.js';
 
 let pass = 0, fail = 0;
 const t = (name, cond, extra = '') => {
@@ -640,6 +640,95 @@ import { assignDemand } from './tools/network-opt/calc.js';
   t('P0-2 integration: empty placement under-built', facts.status === 'under_built');
 }
 
+
+// ── allocateRackColsByTarget — target-driven 3D col allocation ──
+// (2026-05-05 — replaces inventory-mix-driven allocation that was
+// over-filling shelving by ~6× because shelving bays are 1.4× denser
+// than pallet bays AND shelving levels typically exceed pallet levels.
+// New helper sizes cols so rendered positions ≈ engine GROSS targets;
+// leftover cols become unused floor for over-built buildings.)
+{
+  // Wayfair Memphis FC scenario: 1000ft × 750ft, 89,926 gross targets,
+  // mix 40/45/15 with totalPalletsOverride=65000.
+  const segs = Array.from({ length: 3 }, () => 238); // 3 master segments × 238 ft
+  const r = allocateRackColsByTarget({
+    totalCols: 118,
+    segmentLensFt: segs,
+    palletLevels: 6,
+    shelvingLevels: 7,
+    fullPalletTarget:   40377,
+    cartonPalletTarget: 45424,
+    shelvingTarget:     4125,
+  });
+  // Per-pair capacity for 3 segments of 238 ft:
+  //   pallet: floor(238/4.33) × 2 × 6 × 3 segs = 54 × 2 × 6 × 3 = 1944
+  //   shelving: floor(238/3) × 2 × 7 × 3 segs = 79 × 2 × 7 × 3 = 3318
+  t('allocate: palletPosPerPair = 1944', r.palletPosPerPair === 1944);
+  t('allocate: shelvingPosPerPair = 3318', r.shelvingPosPerPair === 3318);
+  // Round-to-nearest target:
+  //   fp: round(40377/1944) = 21 pairs → 42 cols
+  //   cp: round(45424/1944) = 23 pairs → 46 cols
+  //   sh: round(4125/3318) = 1 pair  → 2 cols
+  t('allocate: fullPalletCols = 42', r.fullPalletCols === 42);
+  t('allocate: cartonPalletCols = 46', r.cartonPalletCols === 46);
+  t('allocate: shelvingCols = 2', r.shelvingCols === 2);
+  // Building has 59 pairs (118 cols); 21+23+1 = 45 pairs used → 14 unused
+  t('allocate: unusedCols = 28', r.unusedCols === 28);
+  t('allocate: cols sum to totalCols', r.fullPalletCols + r.cartonPalletCols + r.shelvingCols + r.unusedCols === 118);
+  t('allocate: mode = over_built', r.mode === 'over_built');
+}
+{
+  // Under-built: targets sum exceeds available cols → scale proportionally.
+  const segs = Array.from({ length: 3 }, () => 238);
+  const r = allocateRackColsByTarget({
+    totalCols: 10, // tiny building
+    segmentLensFt: segs,
+    palletLevels: 6,
+    shelvingLevels: 7,
+    fullPalletTarget:   40377,
+    cartonPalletTarget: 45424,
+    shelvingTarget:     4125,
+  });
+  t('allocate under-built: cols never exceed totalCols', r.fullPalletCols + r.cartonPalletCols + r.shelvingCols <= 10);
+  t('allocate under-built: mode = under_built', r.mode === 'under_built');
+  t('allocate under-built: full pallet still gets bulk of cols', r.fullPalletCols >= r.shelvingCols);
+}
+{
+  // Zero shelving target → zero shelving cols.
+  const segs = Array.from({ length: 3 }, () => 238);
+  const r = allocateRackColsByTarget({
+    totalCols: 118,
+    segmentLensFt: segs,
+    palletLevels: 6,
+    shelvingLevels: 7,
+    fullPalletTarget:   40000,
+    cartonPalletTarget: 40000,
+    shelvingTarget:     0,
+  });
+  t('allocate: zero shelving target → zero shelving cols', r.shelvingCols === 0);
+}
+{
+  // Non-zero target that rounds to zero pairs → floored at 1 pair so the
+  // type still appears in the scene.
+  const segs = Array.from({ length: 1 }, () => 1000); // one huge segment
+  const r = allocateRackColsByTarget({
+    totalCols: 20,
+    segmentLensFt: segs,
+    palletLevels: 6,
+    shelvingLevels: 7,
+    fullPalletTarget:   100,
+    cartonPalletTarget: 100,
+    shelvingTarget:     50,
+  });
+  // shelvingPosPerPair = floor(1000/3) × 2 × 7 = 4662; 50/4662 = 0.011 → round = 0; floored to 1.
+  t('allocate: tiny target floors to 1 pair (2 cols)', r.shelvingCols === 2);
+}
+{
+  // Empty inputs are safe.
+  const r = allocateRackColsByTarget({});
+  t('allocate empty: returns zeros', r.fullPalletCols === 0 && r.cartonPalletCols === 0 && r.shelvingCols === 0);
+  t('allocate empty: unusedCols = 0', r.unusedCols === 0);
+}
 
 console.log(`
 
