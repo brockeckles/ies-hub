@@ -1882,8 +1882,14 @@ function drawPlan() {
 
   function drawDoorRow(count, yTop, label, color, labelAbove, xStart, xEnd) {
     if (count <= 0) return;
-    const doorWPx   = Math.max(6, 8 * pxPerFt);   // 8 ft door
-    const minSpcPx  = Math.max(10, 12 * pxPerFt); // 12 ft on-center floor (real warehouse standard)
+    // Door visual size + spacing are anchored to the real 12-ft on-center
+    // standard. We keep tiny absolute floors so doors stay visible at very
+    // low zoom, but don't enforce a 10-px floor that would push a real
+    // door bank wider than the building wall when pxPerFt is small (e.g.,
+    // a 1000ft building rendered at ~0.5 px/ft would otherwise force
+    // 18-ft on-centers and trim 8+ doors from the demo).
+    const doorWPx   = Math.max(3, 8 * pxPerFt);
+    const minSpcPx  = Math.max(4, 12 * pxPerFt);
     // Hard bounds: a door is drawn from cx - doorWPx/2 to cx + doorWPx/2, so
     // the door center must stay inside [xStart + doorWPx/2, xEnd - doorWPx/2]
     // to keep the geometry inside the building rectangle. (Pre-fix: a centering
