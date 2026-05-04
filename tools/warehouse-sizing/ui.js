@@ -3406,6 +3406,33 @@ function build3DScene() {
       console.warn('[WSC] HUD render failed:', hudErr);
     }
 
+    // TEMP DEBUG: expose scene/forklifts to window for live verification.
+    // Remove once forklift visibility is confirmed.
+    window.__wscDebug = {
+      scene,
+      forklifts,
+      segmentMeta,
+      placedRacks,
+      camera,
+      W, D, H,
+      bwFt, bdFt,
+      forklift_count: forklifts.length,
+      segmentMeta_count: segmentMeta.length,
+    };
+    console.log('[WSC-DEBUG] scene built:', {
+      forklifts: forklifts.length,
+      segmentMeta: segmentMeta.length,
+      placedRacks: placedRacks.length,
+      W, D,
+      forklift_positions: forklifts.map(f => ({
+        x: f.group.position.x.toFixed(2),
+        y: f.group.position.y.toFixed(2),
+        z: f.group.position.z.toFixed(2),
+        from: [f.fromV.x.toFixed(2), f.fromV.y.toFixed(2), f.fromV.z.toFixed(2)],
+        to: [f.toV.x.toFixed(2), f.toV.y.toFixed(2), f.toV.z.toFixed(2)],
+      })),
+    });
+
     scene3d = {
       dispose() {
         alive = false;
