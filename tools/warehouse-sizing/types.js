@@ -33,6 +33,21 @@
  *   capacity gap. Replaces the buildingDimsOverride checkbox semantics.
  *   Default 'design'. Legacy facilities with buildingDimsOverride=true migrate
  *   to 'constraint' on load; all others to 'design'.
+ * @property {number} [velocityTierAPct] — Phase B (2026-05-05): A-velocity
+ *   SKU share (% of total SKUs, 0–100). Drives forward-pick demand and reserve
+ *   slotting tilt. Default for new facilities: 20% (Pareto). Legacy facilities
+ *   without a value also default to 20% — engine output is unchanged because
+ *   the existing forward-pick code path used activePickPct=20 as a hardcoded
+ *   audit default.
+ * @property {number} [velocityTierBPct] — B-velocity SKU share. Default 30%.
+ * @property {number} [velocityTierCPct] — C-velocity SKU share. Default 50%.
+ *   A+B+C should sum to 100 but are normalized at calc time if they don't.
+ * @property {'throughput' | 'pallets'} [primaryInventoryInput] — Phase B
+ *   (2026-05-05): which inventory UOM the user is driving from in Step 1.
+ *   'throughput' (default) = user enters annual/daily outbound + DOH + peak,
+ *   on-hand pallets/units derive. 'pallets' = user enters on-hand pallet
+ *   positions directly, throughput derives. The non-active path renders as
+ *   a read-only computed tile.
  */
 
 /**
@@ -103,11 +118,17 @@
 /**
  * @typedef {Object} VolumeInputs
  * @property {number} totalPallets — total pallet positions needed
- * @property {number} [totalSKUs] — number of SKUs
- * @property {number} [inventoryTurns] — annual inventory turns
+ * @property {number} [totalSKUs] — number of SKUs (legacy; not surfaced in Phase B UI)
+ * @property {number} [inventoryTurns] — annual inventory turns (legacy; not surfaced in Phase B UI; kept on the data model for back-compat with legacy heuristic suggestedSqft)
  * @property {number} [avgDailyInbound] — pallets/day inbound
  * @property {number} [avgDailyOutbound] — pallets/day outbound
  * @property {number} [peakMultiplier] — peak vs. average ratio (default 1.3)
+ * @property {number} [annualOutboundUnits] — Phase B (2026-05-05): annual
+ *   throughput in units. Used in throughput-driven primary input mode to
+ *   derive peak on-hand units = annual / 365 × DOH × peak. 0 = use legacy
+ *   peakUnitsPerDay/totalPallets as direct inputs.
+ * @property {number} [daysOnHand] — Phase B target Days On Hand. Default 30.
+ *   Drives the throughput → on-hand units conversion.
  */
 
 // ============================================================

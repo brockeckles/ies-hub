@@ -884,37 +884,130 @@ function _renderWscConfigHtml() {
     </div>
 
     <!-- ──────────────────────────────────────────────────────────────────
-         STEP 1 — Volume Requirements (the critical path starts here)
+         STEP 1 — Demand & Inventory Profile (Phase B redesign 2026-05-05).
+         Primary-input toggle picks driving UOM (throughput vs on-hand pallets);
+         non-active path becomes a derived read-only tile. ABC velocity tier
+         inputs (A/B/C %) drive forward-pick demand and slotting tilt.
+         Inv Turns + Total SKUs no longer surfaced in UI (data fields preserved
+         on the model for back-compat with legacy heuristic paths).
          ────────────────────────────────────────────────────────────────── -->
     <div class="wsc-config-section wsc-step" data-step="1">
       <div class="wsc-step-header" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
         <span class="wsc-step-num" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--ies-blue,#0047AB);color:#fff;font-size:11px;font-weight:700;">1</span>
-        <span class="wsc-step-title" style="font-size:13px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:var(--ies-gray-700);">Volume Requirements</span>
+        <span class="wsc-step-title" style="font-size:13px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:var(--ies-gray-700);">Demand &amp; Inventory Profile</span>
         ${facility.parent_cost_model_id ? `<button class="hub-btn hub-btn-ghost hub-btn-sm" data-action="wsc-pull-from-cm" title="Re-pull volume defaults from the linked Cost Model." style="font-weight:500;margin-left:auto;">↻ Pull from CM</button>` : ''}
       </div>
-      <div class="wsc-config-field" style="margin-bottom:8px;">
+      <div class="wsc-config-field" style="margin-bottom:10px;">
         <label>Facility Name</label>
         <input value="${facility.name}" data-fac="name" />
       </div>
-      <div class="wsc-config-row">
-        <div class="wsc-config-field"><label title="On-hand pallet positions at peak inventory. If > 0, overrides the units×mix derivation — use this when you have an engineered pallet count from a slotting study.">Pallet Positions <span style="color:var(--ies-gray-500);font-weight:400;">(on-hand)</span></label><input type="number" value="${volumes.totalPallets}" data-vol="totalPallets" /></div>
-        <div class="wsc-config-field"><label>Total SKUs</label><input type="number" value="${volumes.totalSKUs}" data-vol="totalSKUs" /></div>
+
+      <!-- Primary-input toggle (Phase B locked decision) -->
+      ${(() => {
+        const pri = facility.primaryInventoryInput || 'throughput';
+        return `
+          <div style="margin-bottom:10px;">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin-bottom:4px;">Drive sizing from</div>
+            <div role="radiogroup" aria-label="Primary inventory input" style="display:flex;gap:6px;">
+              <button type="button" role="radio" aria-checked="${pri === 'throughput'}" data-wsc-primary="throughput"
+                title="Enter annual or daily outbound + DOH. Tool derives on-hand units / pallets. Most natural for greenfield sizing — you usually know your throughput before you have a slotting study."
+                style="flex:1;padding:6px 10px;font-size:11px;font-weight:600;border-radius:5px;cursor:pointer;border:1px solid ${pri === 'throughput' ? 'var(--ies-blue,#0047AB)' : 'var(--ies-gray-200)'};background:${pri === 'throughput' ? 'var(--ies-blue,#0047AB)' : '#fff'};color:${pri === 'throughput' ? '#fff' : 'var(--ies-gray-700)'};">Throughput</button>
+              <button type="button" role="radio" aria-checked="${pri === 'pallets'}" data-wsc-primary="pallets"
+                title="Enter on-hand pallet positions directly. Tool derives implied throughput. Use this when you already have an engineered pallet count from a slotting study."
+                style="flex:1;padding:6px 10px;font-size:11px;font-weight:600;border-radius:5px;cursor:pointer;border:1px solid ${pri === 'pallets' ? 'var(--ies-blue,#0047AB)' : 'var(--ies-gray-200)'};background:${pri === 'pallets' ? 'var(--ies-blue,#0047AB)' : '#fff'};color:${pri === 'pallets' ? '#fff' : 'var(--ies-gray-700)'};">Pallet Positions</button>
+            </div>
+          </div>
+        `;
+      })()}
+
+      ${(() => {
+        const pri = facility.primaryInventoryInput || 'throughput';
+        const doh = +volumes.daysOnHand || 30;
+        const peakMult = +volumes.peakMultiplier || 1.3;
+        const annualOut = +volumes.annualOutboundUnits || 0;
+        const cartonProf = sized?.cartonProfile;
+        const cppActual = (cartonProf?.cartonsPerPallet) || (zones.productDimensions?.cartonsPerPallet) || 12;
+        const ucActual = (zones.productDimensions?.unitsPerCartonPallet) || 6;
+        const unitsPerPallet = cppActual * ucActual;
+
+        if (pri === 'throughput') {
+          // Primary inputs: annual outbound, DOH, peak. Compute on-hand units + pallets.
+          const peakOnHandUnits = (annualOut > 0 && doh > 0)
+            ? Math.round((annualOut / 365) * doh * peakMult)
+            : 0;
+          const peakOnHandPallets = (peakOnHandUnits > 0 && unitsPerPallet > 0)
+            ? Math.ceil(peakOnHandUnits / unitsPerPallet)
+            : 0;
+          return `
+            <div class="wsc-config-row">
+              <div class="wsc-config-field"><label title="Annual outbound throughput in units. Drives the on-hand inventory derivation: peak on-hand = (annual / 365) × DOH × peak factor.">Annual Outbound <span style="color:var(--ies-gray-500);font-weight:400;">(units)</span></label><input type="number" value="${volumes.annualOutboundUnits || 0}" data-vol="annualOutboundUnits" /></div>
+              <div class="wsc-config-field"><label title="Days On Hand target — drives the throughput → on-hand inventory conversion. Default 30 days. Tier-A SKUs typically run 7-15 DOH; Tier-C 60-90.">DOH (days)</label><input type="number" value="${doh}" step="1" data-vol="daysOnHand" /></div>
+            </div>
+            <div class="wsc-config-row">
+              <div class="wsc-config-field"><label title="Peak vs avg-day demand multiplier. Default 1.3. Drives both the peak on-hand units and the dock peak throughput.">Peak Factor</label><input type="number" value="${peakMult}" step="0.1" data-vol="peakMultiplier" /></div>
+              <div class="wsc-config-field"><label title="Average inbound pallets/day — drives dock throughput sizing.">Daily Inbound <span style="color:var(--ies-gray-500);font-weight:400;">(pallets/day)</span></label><input type="number" value="${volumes.avgDailyInbound}" data-vol="avgDailyInbound" /></div>
+            </div>
+            <div style="margin-top:10px;padding:8px 10px;background:var(--ies-gray-50);border-radius:4px;font-size:11px;color:var(--ies-gray-700);">
+              <div style="font-weight:700;margin-bottom:4px;color:var(--ies-gray-500);text-transform:uppercase;font-size:10px;">Derived on-hand inventory</div>
+              <div>Peak units on-hand: <strong>${peakOnHandUnits.toLocaleString()}</strong> (annual ÷ 365 × DOH × peak)</div>
+              <div>Peak pallets on-hand: <strong>${peakOnHandPallets.toLocaleString()}</strong> <span style="color:var(--ies-gray-500);">(at ${unitsPerPallet} units/pallet from Carton Profile)</span></div>
+            </div>
+          `;
+        }
+        // Pallet-driven mode
+        const totalPallets = +volumes.totalPallets || 0;
+        const onHandUnits = totalPallets * unitsPerPallet;
+        const impliedAnnualOut = (totalPallets > 0 && doh > 0 && peakMult > 0)
+          ? Math.round((onHandUnits / peakMult / doh) * 365)
+          : 0;
+        return `
+          <div class="wsc-config-row">
+            <div class="wsc-config-field"><label title="Total pallet positions on-hand at peak inventory. From a slotting study or engineered count. Engine sizes storage directly to this value (peak-units × mix derivation is bypassed).">Pallet Positions <span style="color:var(--ies-gray-500);font-weight:400;">(on-hand)</span></label><input type="number" value="${totalPallets}" data-vol="totalPallets" /></div>
+            <div class="wsc-config-field"><label title="Days On Hand — used to back into the implied throughput.">DOH (days)</label><input type="number" value="${doh}" step="1" data-vol="daysOnHand" /></div>
+          </div>
+          <div class="wsc-config-row">
+            <div class="wsc-config-field"><label title="Peak vs avg-day demand multiplier. Drives the implied annual throughput.">Peak Factor</label><input type="number" value="${peakMult}" step="0.1" data-vol="peakMultiplier" /></div>
+            <div class="wsc-config-field"><label title="Average inbound pallets/day — drives dock throughput sizing.">Daily Inbound <span style="color:var(--ies-gray-500);font-weight:400;">(pallets/day)</span></label><input type="number" value="${volumes.avgDailyInbound}" data-vol="avgDailyInbound" /></div>
+          </div>
+          <div style="margin-top:10px;padding:8px 10px;background:var(--ies-gray-50);border-radius:4px;font-size:11px;color:var(--ies-gray-700);">
+            <div style="font-weight:700;margin-bottom:4px;color:var(--ies-gray-500);text-transform:uppercase;font-size:10px;">Derived throughput</div>
+            <div>Peak units on-hand: <strong>${onHandUnits.toLocaleString()}</strong> <span style="color:var(--ies-gray-500);">(at ${unitsPerPallet} units/pallet)</span></div>
+            <div>Implied annual outbound: <strong>${impliedAnnualOut.toLocaleString()}</strong> units <span style="color:var(--ies-gray-500);">(on-hand ÷ peak ÷ DOH × 365)</span></div>
+          </div>
+        `;
+      })()}
+
+      <!-- ABC velocity tiers -->
+      <div style="margin-top:14px;padding-top:8px;border-top:1px solid var(--ies-gray-100);">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin-bottom:6px;">ABC velocity tiers <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--ies-gray-400);">(% of SKUs by velocity — Pareto default 20/30/50)</span></div>
+        ${(() => {
+          const a = +facility.velocityTierAPct || 0;
+          const b = +facility.velocityTierBPct || 0;
+          const c = +facility.velocityTierCPct || 0;
+          const total = Math.round((a + b + c) * 10) / 10;
+          const ok = total === 100;
+          const pillBg = ok ? '#dcfce7' : '#fef3c7';
+          const pillCol = ok ? '#166534' : '#92400e';
+          const pillTxt = ok ? `${total}% ✓` : `${total}% ⚠ ≠100`;
+          return `
+            <div class="wsc-config-row">
+              <div class="wsc-config-field"><label title="A-velocity SKUs (fast-movers, ~20% of SKUs drive ~80% of picks). Drives forward-pick demand and replenishment frequency.">A %</label><input type="number" min="0" max="100" value="${a}" data-fac="velocityTierAPct" /></div>
+              <div class="wsc-config-field"><label title="B-velocity SKUs (medium movers).">B %</label><input type="number" min="0" max="100" value="${b}" data-fac="velocityTierBPct" /></div>
+            </div>
+            <div class="wsc-config-row">
+              <div class="wsc-config-field"><label title="C-velocity SKUs (slow movers — typical reserve storage candidates).">C %</label><input type="number" min="0" max="100" value="${c}" data-fac="velocityTierCPct" /></div>
+              <div class="wsc-config-field" style="display:flex;align-items:flex-end;justify-content:flex-end;">
+                <span style="display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;background:${pillBg};color:${pillCol};font-size:11px;font-weight:700;letter-spacing:.02em;">Total: ${pillTxt}</span>
+              </div>
+            </div>
+          `;
+        })()}
       </div>
-      <div class="wsc-config-row">
-        <div class="wsc-config-field"><label title="Peak units ON-HAND in inventory at any one time. NOT throughput. The sizing engine converts this to pallet positions via the storage mix and units/pallet ratios.">Peak Units On-Hand</label><input type="number" value="${zones.peakUnitsPerDay || 500000}" data-inv="peakUnitsPerDay" /></div>
-        <div class="wsc-config-field"><label title="Average units ON-HAND in inventory. Drives DIOH and utilization warning band.">Avg Units On-Hand</label><input type="number" value="${zones.avgUnitsPerDay || 350000}" data-inv="avgUnitsPerDay" /></div>
-      </div>
-      <div class="wsc-config-row">
-        <div class="wsc-config-field"><label>Inv Turns/Yr</label><input type="number" value="${volumes.inventoryTurns}" step="1" data-vol="inventoryTurns" /></div>
-        <div class="wsc-config-field"><label>Peak Multiplier</label><input type="number" value="${volumes.peakMultiplier}" step="0.1" data-vol="peakMultiplier" /></div>
-      </div>
-      <div class="wsc-config-row">
-        <div class="wsc-config-field"><label title="Average inbound pallets/day — drives dock throughput sizing.">Daily Inbound <span style="color:var(--ies-gray-500);font-weight:400;">(pallets/day)</span></label><input type="number" value="${volumes.avgDailyInbound}" data-vol="avgDailyInbound" /></div>
+
+      <!-- Operating days/yr — kept here as it pairs with throughput -->
+      <div class="wsc-config-row" style="margin-top:10px;">
+        <div class="wsc-config-field"><label title="Operating days per year — used downstream by DIOH metric.">Operating Days/Yr</label><input type="number" value="${zones.operatingDaysPerYear || 250}" data-inv="operatingDaysPerYear" /></div>
         <div class="wsc-config-field"><label title="Average outbound pallets/day — drives dock throughput sizing.">Daily Outbound <span style="color:var(--ies-gray-500);font-weight:400;">(pallets/day)</span></label><input type="number" value="${volumes.avgDailyOutbound}" data-vol="avgDailyOutbound" /></div>
-      </div>
-      <div class="wsc-config-row">
-        <div class="wsc-config-field"><label title="Operating days per year — used to convert annual outbound volumes to daily.">Operating Days/Yr</label><input type="number" value="${zones.operatingDaysPerYear || 250}" data-inv="operatingDaysPerYear" /></div>
-        <div class="wsc-config-field"><label title="Daily outbound units — primary driver of DIOH.">Daily Outbound (units)</label><input type="number" value="${zones.outboundUnitsPerDay || 0}" data-inv="outboundUnitsPerDay" /></div>
       </div>
     </div>
 
@@ -1036,19 +1129,36 @@ function _renderWscConfigHtml() {
         <div class="wsc-config-field"><label>Aisle Width (ft)</label><input type="number" value="${facility.aisleWidth || calc.AISLE_WIDTHS[facility.storageType] || 12}" step="0.5" data-fac="aisleWidth" /></div>
       </div>
 
-      <!-- Mix sliders (FP / CP / Shelving) -->
-      <div class="wsc-config-field" style="margin-top:12px;margin-bottom:8px;">
-        <label>Full Pallet: <span id="wsc-alloc-fp" style="font-weight:700;">${(zones.storageAllocation?.fullPallet || 60)}%</span></label>
-        <input type="range" min="0" max="100" value="${zones.storageAllocation?.fullPallet || 60}" data-alloc="fullPallet" style="width:100%;" />
-      </div>
-      <div class="wsc-config-field" style="margin-bottom:8px;">
-        <label>Carton on Pallet: <span id="wsc-alloc-cp" style="font-weight:700;">${(zones.storageAllocation?.cartonOnPallet || 30)}%</span></label>
-        <input type="range" min="0" max="100" value="${zones.storageAllocation?.cartonOnPallet || 30}" data-alloc="cartonOnPallet" style="width:100%;" />
-      </div>
-      <div class="wsc-config-field" style="margin-bottom:8px;">
-        <label>Carton on Shelving: <span id="wsc-alloc-cs" style="font-weight:700;">${(zones.storageAllocation?.cartonOnShelving || 10)}%</span></label>
-        <input type="range" min="0" max="100" value="${zones.storageAllocation?.cartonOnShelving || 10}" data-alloc="cartonOnShelving" style="width:100%;" />
-      </div>
+      <!-- Phase B redesign (2026-05-05) — replaced 3 sliders with 3 numeric
+           inputs + a sum-validation pill. Decision: warn on ≠100%, no auto-
+           rebalance — let user fix manually (transparent UX). Labels gain
+           industry-standard plain-English clarifiers. -->
+      ${(() => {
+        const fp = +zones.storageAllocation?.fullPallet || 0;
+        const cp = +zones.storageAllocation?.cartonOnPallet || 0;
+        const cs = +zones.storageAllocation?.cartonOnShelving || 0;
+        const total = Math.round((fp + cp + cs) * 10) / 10;
+        const ok = total === 100;
+        const pillBg = ok ? '#dcfce7' : '#fef3c7';
+        const pillCol = ok ? '#166534' : '#92400e';
+        const pillTxt = ok ? `${total}% ✓` : `${total}% ⚠ ≠100`;
+        return `
+          <div style="margin-top:14px;padding-top:8px;border-top:1px solid var(--ies-gray-100);">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
+              <span>Storage type mix <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--ies-gray-400);">(% of on-hand inventory by storage pattern)</span></span>
+              <span style="display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;background:${pillBg};color:${pillCol};font-size:11px;font-weight:700;letter-spacing:.02em;">Total: ${pillTxt}</span>
+            </div>
+            <div class="wsc-config-row">
+              <div class="wsc-config-field"><label title="Reserve / Full Pallet — units stored as full pallet loads in selective rack. Highest density, bulk movement; typical for slower-moving / case-pick reserve.">Reserve <span style="color:var(--ies-gray-500);font-weight:400;">(Full Pallet) %</span></label><input type="number" min="0" max="100" value="${fp}" data-alloc="fullPallet" /></div>
+              <div class="wsc-config-field"><label title="Case Pick / Carton-on-Pallet — pallets staged in pick face for case-quantity pull. Mid-density; typical for B-velocity SKUs needing case-level access.">Case Pick <span style="color:var(--ies-gray-500);font-weight:400;">(Carton-on-Pallet) %</span></label><input type="number" min="0" max="100" value="${cp}" data-alloc="cartonOnPallet" /></div>
+            </div>
+            <div class="wsc-config-row">
+              <div class="wsc-config-field"><label title="Each Pick / Carton Shelving — cartons in shelf locations for unit-level picking. Lowest density, highest pick velocity; typical for A-velocity SKUs and split-case forward.">Each Pick <span style="color:var(--ies-gray-500);font-weight:400;">(Carton Shelving) %</span></label><input type="number" min="0" max="100" value="${cs}" data-alloc="cartonOnShelving" /></div>
+              <div class="wsc-config-field"></div>
+            </div>
+          </div>
+        `;
+      })()}
 
       <!-- SKU counts per zone (NEW — drives min-locations + sku-bound mode) -->
       <div style="margin-top:14px;padding-top:8px;border-top:1px solid var(--ies-gray-100);">
@@ -1130,11 +1240,51 @@ function _renderWscConfigHtml() {
           <details class="wsc-channel-allocs" style="margin-top:14px;border-top:1px solid var(--ies-gray-200);padding-top:8px;" open>
             <summary style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);cursor:pointer;">Per-channel allocation overrides</summary>
             <div style="display:flex;flex-direction:column;gap:0;margin-top:6px;font-size:11px;color:var(--ies-gray-600);">
-              <div style="font-size:10px;color:var(--ies-gray-400);font-weight:500;text-transform:none;letter-spacing:0;line-height:1.4;padding-bottom:4px;">FP / CP / CS — must sum to 100. ● = overridden, ○ = inheriting facility allocation.</div>
+              <div style="font-size:10px;color:var(--ies-gray-400);font-weight:500;text-transform:none;letter-spacing:0;line-height:1.4;padding-bottom:4px;">Reserve / Case Pick / Each Pick — must sum to 100. ● = overridden, ○ = inheriting facility allocation.</div>
               ${rows}
             </div>
           </details>`;
       })()}
+
+      <!-- Forward Pick — Phase B (2026-05-05) lifted from Advanced into Step 4
+           because it's a major slotting decision (pairs with ABC velocity:
+           A-velocity SKUs feed forward-pick demand). Default collapsed when
+           disabled, expanded when enabled. -->
+      <div style="margin-top:14px;padding-top:8px;border-top:1px solid var(--ies-gray-100);">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin-bottom:6px;">Forward Pick <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--ies-gray-400);">(velocity-driven slotting)</span></div>
+        <div class="wsc-config-field" style="margin-bottom:6px;">
+          <label style="display:flex;align-items:center;gap:6px;font-weight:500;font-size:12px;">
+            <input type="checkbox" ${zones.forwardPick?.enabled ? 'checked' : ''} data-fwd="enabled" style="margin:0;" />
+            <span>Enable Forward Pick area</span>
+          </label>
+        </div>
+        ${zones.forwardPick?.enabled ? `
+          <div class="wsc-config-row">
+            <div class="wsc-config-field">
+              <label title="Pick type drives sf-per-active-face. Carton Flow ~12 sf, Light Case ~14 sf, Heavy Case ~45 sf (pallet-style face).">Pick Type</label>
+              <select data-fwd="type">
+                <option value="carton_flow"${zones.forwardPick?.type === 'carton_flow' ? ' selected' : ''}>Carton Flow</option>
+                <option value="light_case"${zones.forwardPick?.type === 'light_case' ? ' selected' : ''}>Light Case</option>
+                <option value="heavy_case"${zones.forwardPick?.type === 'heavy_case' ? ' selected' : ''}>Heavy Case</option>
+              </select>
+            </div>
+            <div class="wsc-config-field"><label title="Total SKUs eligible for forward-pick assignment. The A-velocity tier % from Step 1 determines how many of these get an active pick face.">SKU count</label><input type="number" value="${zones.forwardPick?.skuCount || 2000}" data-fwd="skuCount" /></div>
+          </div>
+          <div class="wsc-config-row">
+            <div class="wsc-config-field"><label title="DOH held in the forward-pick area before replenishment from reserve. Lower = more frequent reps; higher = bigger forward area.">Days Inventory (DOH)</label><input type="number" value="${zones.forwardPick?.daysInventory || 3}" step="0.5" data-fwd="daysInventory" /></div>
+            <div class="wsc-config-field"><label title="Outbound units/day flowing through the forward-pick area. Used by some downstream metrics; doesn't drive area sizing directly (active-face count does).">Outbound (units/day)</label><input type="number" value="${zones.forwardPick?.outboundUnitsPerDay || 5000}" data-fwd="outboundUnitsPerDay" /></div>
+          </div>
+          <div style="margin-top:8px;padding:8px 10px;background:var(--ies-gray-50);border-radius:4px;font-size:11px;color:var(--ies-gray-700);">
+            <div style="font-weight:700;margin-bottom:4px;color:var(--ies-gray-500);text-transform:uppercase;font-size:10px;">Active-face derivation</div>
+            ${(() => {
+              const skus = +zones.forwardPick?.skuCount || 0;
+              const aPct = +facility.velocityTierAPct || 20;
+              const activeFaces = Math.ceil(skus * aPct / 100);
+              return `<div>Active faces = SKU count × A-velocity % = <strong>${skus.toLocaleString()}</strong> × <strong>${aPct}%</strong> = <strong>${activeFaces.toLocaleString()}</strong> faces</div>`;
+            })()}
+          </div>
+        ` : ''}
+      </div>
     </div>
 
     <!-- ──────────────────────────────────────────────────────────────────
@@ -1239,32 +1389,7 @@ function _renderWscConfigHtml() {
         </div>
       </div>
 
-      <!-- Forward Pick -->
-      <div style="margin-top:12px;">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin-bottom:6px;">Forward Pick Area</div>
-        <div class="wsc-config-field" style="margin-bottom:8px;">
-          <label style="display:flex; align-items:center; gap:6px;">
-            <input type="checkbox" ${zones.forwardPick?.enabled ? 'checked' : ''} data-fwd="enabled" style="margin:0;" />
-            <span>Enable Forward Pick</span>
-          </label>
-        </div>
-        <div class="wsc-config-field" style="margin-bottom:8px; display:${zones.forwardPick?.enabled ? 'block' : 'none'};" id="wsc-fwd-opts">
-          <label>Pick Type</label>
-          <select data-fwd="type">
-            <option value="carton_flow"${zones.forwardPick?.type === 'carton_flow' ? ' selected' : ''}>Carton Flow</option>
-            <option value="light_case"${zones.forwardPick?.type === 'light_case' ? ' selected' : ''}>Light Case</option>
-            <option value="heavy_case"${zones.forwardPick?.type === 'heavy_case' ? ' selected' : ''}>Heavy Case</option>
-          </select>
-        </div>
-        <div class="wsc-config-row" style="display:${zones.forwardPick?.enabled ? 'grid' : 'none'};" id="wsc-fwd-params">
-          <div class="wsc-config-field"><label>SKU Count</label><input type="number" value="${zones.forwardPick?.skuCount || 2000}" data-fwd="skuCount" /></div>
-          <div class="wsc-config-field"><label>Days Inventory</label><input type="number" value="${zones.forwardPick?.daysInventory || 3}" step="0.5" data-fwd="daysInventory" /></div>
-        </div>
-        <div class="wsc-config-field" style="display:${zones.forwardPick?.enabled ? 'block' : 'none'}; margin-top:8px;" id="wsc-fwd-outbound">
-          <label>Outbound Units/Day</label>
-          <input type="number" value="${zones.forwardPick?.outboundUnitsPerDay || 5000}" data-fwd="outboundUnitsPerDay" />
-        </div>
-      </div>
+      <!-- Forward Pick — moved to Step 4 in Phase B (2026-05-05) -->
 
       <!-- Optional Zones -->
       <div style="margin-top:12px;">
@@ -1384,6 +1509,21 @@ function bindConfigEvents(panel) {
     });
   });
 
+  // Phase B redesign (2026-05-05) — Primary inventory input toggle
+  // (Throughput / Pallet Positions). Re-renders the panel because Step 1
+  // inputs swap between throughput and pallet primary fields.
+  panel.querySelectorAll('[data-wsc-primary]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      const next = /** @type {HTMLElement} */ (e.currentTarget).dataset.wscPrimary;
+      if (next !== 'throughput' && next !== 'pallets') return;
+      if ((facility.primaryInventoryInput || 'throughput') === next) return;
+      facility.primaryInventoryInput = next;
+      isDirty = true;
+      renderConfigPanel();
+      renderContentView();
+    });
+  });
+
   // Zone fields (with input debounce for live update)
   panel.querySelectorAll('[data-zone]').forEach(input => {
     const handleChange = (e) => {
@@ -1418,27 +1558,21 @@ function bindConfigEvents(panel) {
     });
   });
 
-  // Storage allocation sliders — facility-level (legacy single mix).
-  // Use a strict CSS selector to avoid accidentally matching the per-channel
-  // [data-channel-alloc] inputs added in Phase 4 Layer B (those have a
-  // different attribute name).
+  // Storage allocation inputs — facility-level (legacy single mix).
+  // Phase B redesign (2026-05-05): replaced sliders with numeric inputs +
+  // sum-validation pill. Handler now re-renders the Configure panel so the
+  // pill updates and the per-channel "inheriting" rows reflect new facility
+  // defaults (fixes a Phase 2 bug where inheriting channels didn't refresh
+  // when facility-level allocation changed).
   panel.querySelectorAll('input[data-alloc]').forEach(input => {
     input.addEventListener('change', e => {
       const field = /** @type {HTMLInputElement} */ (e.target).dataset.alloc;
       const val = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
       if (!zones.storageAllocation) zones.storageAllocation = { fullPallet: 60, cartonOnPallet: 30, cartonOnShelving: 10 };
       zones.storageAllocation[field] = val;
-      // Update display label
-      const label = panel.querySelector(`#wsc-alloc-${field.slice(0, 2)}`);
-      if (label) label.textContent = val + '%';
       isDirty = true;
+      renderConfigPanel();
       renderContentView();
-    });
-    input.addEventListener('input', e => {
-      const field = /** @type {HTMLInputElement} */ (e.target).dataset.alloc;
-      const val = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
-      const label = panel.querySelector(`#wsc-alloc-${field.slice(0, 2)}`);
-      if (label) label.textContent = val + '%';
     });
   });
 
@@ -2505,9 +2639,36 @@ function toSizingInputs() {
   if (zones.chargingSqft > 0) optionalZones.push({ label: 'Charging / Maint.', sqft: zones.chargingSqft });
   if (zones.repackSqft > 0) optionalZones.push({ label: 'Repack', sqft: zones.repackSqft });
 
+  // Phase B redesign (2026-05-05) — primary-input toggle. When the user is
+  // driving from throughput AND has entered annual outbound + DOH, derive
+  // peak on-hand units from the formula: peak = (annual / 365) × DOH × peak.
+  // Otherwise fall back to the direct zones.peakUnitsPerDay input (legacy
+  // behavior + pallet-driven mode). Engine output unchanged for any saved
+  // scenario where annualOutboundUnits = 0 (the default).
+  const primaryInput = facility.primaryInventoryInput || 'throughput';
+  const peakMult = +volumes.peakMultiplier || 1.3;
+  const annualOut = +volumes.annualOutboundUnits || 0;
+  const doh = +volumes.daysOnHand || 30;
+  const peakUnitsFromThroughput = (annualOut > 0 && doh > 0)
+    ? Math.round((annualOut / 365) * doh * peakMult)
+    : 0;
+  const useThroughputDerivation = primaryInput === 'throughput' && peakUnitsFromThroughput > 0;
+  const effectivePeakUnits = useThroughputDerivation
+    ? peakUnitsFromThroughput
+    : (zones.peakUnitsPerDay || 500000);
+  // Avg follows the same source. When throughput-driven and avg-day demand
+  // can be inferred (annual / 365), use that × DOH for avg on-hand. Else
+  // fall back to direct zones.avgUnitsPerDay.
+  const avgUnitsFromThroughput = (annualOut > 0 && doh > 0)
+    ? Math.round((annualOut / 365) * doh)
+    : 0;
+  const effectiveAvgUnits = useThroughputDerivation
+    ? avgUnitsFromThroughput
+    : (zones.avgUnitsPerDay || 350000);
+
   return {
-    peakUnits: zones.peakUnitsPerDay || 500000,
-    avgUnits: zones.avgUnitsPerDay || 350000,
+    peakUnits: effectivePeakUnits,
+    avgUnits: effectiveAvgUnits,
     // WSC-B6 (2026-04-25): prefer the explicit dailyOutbound field; only
     // fall back to (avgUnitsPerDay × operatingDays) when blank. The legacy
     // path stuffed avgUnits *as on-hand* into outboundUnitsYr which was
@@ -2571,7 +2732,13 @@ function toSizingInputs() {
     forwardPick: fp && fp.enabled ? {
       enabled: true,
       skus: fp.skuCount || 0,
-      activePickPct: 20,                    // audit default — full UI for this is in B-series
+      // Phase B redesign (2026-05-05) — A-velocity SKU share drives forward-pick
+      // demand. Default 20% is the legacy hardcoded audit default, so existing
+      // scenarios produce identical sized output. When user tunes A% (e.g. 15%
+      // or 30%), forward-pick area scales accordingly.
+      activePickPct: Number.isFinite(+facility.velocityTierAPct) && +facility.velocityTierAPct >= 0
+        ? +facility.velocityTierAPct
+        : 20,
       pickType: fp.type === 'heavy_case' ? 'pallet' : 'carton',
       daysInventory: fp.daysInventory || 3,
     } : null,
@@ -4377,6 +4544,20 @@ function createDefaultFacility() {
     // Replaces the buildingDimsOverride boolean for new facilities; legacy
     // facilities with buildingDimsOverride=true migrate to 'constraint' on load.
     sizingMode: 'design',
+    // Phase B redesign (2026-05-05) — ABC velocity tier slotting.
+    // Pareto default: A=20% / B=30% / C=50%. A% replaces the legacy
+    // hardcoded 20% activePickPct in the forward-pick demand calc, so new
+    // scenarios still produce identical sized output until user tunes A%.
+    // For legacy scenarios, openEditor's migration block also sets these
+    // defaults — engine output unchanged because A=20% matches legacy.
+    velocityTierAPct: 20,
+    velocityTierBPct: 30,
+    velocityTierCPct: 50,
+    // Phase B redesign — primary inventory input toggle. 'throughput' is the
+    // IE-natural default (user enters annual/daily outbound + DOH + peak;
+    // on-hand pallets derive). 'pallets' = user enters on-hand pallet
+    // positions directly. The non-primary path renders as a derived tile.
+    primaryInventoryInput: 'throughput',
   };
 }
 
@@ -4414,6 +4595,13 @@ function createDefaultVolumes() {
     avgDailyInbound: 250,
     avgDailyOutbound: 290,
     peakMultiplier: 1.3,
+    // Phase B redesign (2026-05-05) — annual outbound + DOH replace the
+    // legacy throughput-as-implicit input. When primaryInventoryInput is
+    // 'throughput' (default), these drive on-hand units = (annualOutboundUnits
+    // / 365) × daysOnHand × peakMultiplier. 0 = fall back to direct
+    // peakUnitsPerDay input on zones (legacy behavior).
+    annualOutboundUnits: 0,
+    daysOnHand: 30,
   };
 }
 
