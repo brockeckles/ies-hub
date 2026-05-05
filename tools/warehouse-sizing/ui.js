@@ -1673,33 +1673,37 @@ function bindConfigEvents(panel) {
     });
   });
 
-  // Forward pick fields (with input debounce for live update)
+  // Forward pick fields. Phase B (2026-05-05): the legacy display-toggle path
+  // relied on #wsc-fwd-opts / #wsc-fwd-params / #wsc-fwd-outbound DOM ids that
+  // disappeared when Forward Pick was lifted into Step 4 with conditional
+  // template-literal rendering. Now: when 'enabled' toggles, re-render the
+  // Configure panel so the sub-block flips visibility correctly.
   panel.querySelectorAll('[data-fwd]').forEach(input => {
     const handleChange = (e) => {
       const field = /** @type {HTMLInputElement} */ (e.target).dataset.fwd;
       if (!zones.forwardPick) zones.forwardPick = { enabled: false, type: 'carton_flow', skuCount: 2000, daysInventory: 3, outboundUnitsPerDay: 5000 };
       if (field === 'enabled') {
         zones.forwardPick[field] = /** @type {HTMLInputElement} */ (e.target).checked;
-        const opts = panel.querySelector('#wsc-fwd-opts');
-        const params = panel.querySelector('#wsc-fwd-params');
-        const outbound = panel.querySelector('#wsc-fwd-outbound');
-        if (opts) opts.style.display = zones.forwardPick.enabled ? 'block' : 'none';
-        if (params) params.style.display = zones.forwardPick.enabled ? 'grid' : 'none';
-        if (outbound) outbound.style.display = zones.forwardPick.enabled ? 'block' : 'none';
       } else {
         const val = input.type === 'number' ? parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0 : /** @type {HTMLInputElement} */ (e.target).value;
         zones.forwardPick[field] = val;
       }
       isDirty = true;
     };
-    input.addEventListener('input', (e) => {
-      handleChange(e);
-      debouncedRender();
-    });
     input.addEventListener('change', (e) => {
+      const field = /** @type {HTMLInputElement} */ (e.target).dataset.fwd;
       handleChange(e);
+      // Toggling enabled flips the conditional sub-block; re-render the panel.
+      if (field === 'enabled') renderConfigPanel();
       renderContentView();
     });
+    // Keep input-event live update for non-enabled fields (text/number).
+    if (input.type !== 'checkbox') {
+      input.addEventListener('input', (e) => {
+        handleChange(e);
+        debouncedRender();
+      });
+    }
   });
 
   // Optional zone fields (with input debounce for live update)
