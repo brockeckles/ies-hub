@@ -3395,6 +3395,51 @@ function drawElevation() {
 }
 
 /**
+ * Phase F.3.3 (2026-05-05) — Stable pseudorandom shuffle of (bay, level)
+ * coordinate pairs so empty rack positions distribute throughout the
+ * zone instead of clustering at the back of every column.
+ *
+ * Brock callout: "would it be possible to randomly mix in the open
+ * positions within the racking - it looks more realistic". Pre-fix the
+ * placement loop placed pallets in bays 0..fillBays-1 at every level —
+ * the last bays of each face were always empty (deterministic block
+ * pattern). Now we shuffle all (bay, level) pairs and take the first
+ * `fillCount` for placement. The shuffle is seeded by face coordinates,
+ * so the pattern is stable across re-renders (no flickering when the
+ * scene rebuilds on input change).
+ *
+ * Mulberry32 PRNG — fast, decent distribution, deterministic from seed.
+ *
+ * @param {number} baysPerFace
+ * @param {number} levels
+ * @param {number} seed
+ * @returns {Array<[number, number]>} array of [bayIdx, levelIdx] tuples
+ */
+function _shuffledBayLevelOrder(baysPerFace, levels, seed) {
+  const arr = [];
+  for (let lv = 0; lv < levels; lv++) {
+    for (let b = 0; b < baysPerFace; b++) {
+      arr.push([b, lv]);
+    }
+  }
+  let s = (seed | 0) >>> 0;
+  function rand() {
+    s = (s + 0x6D2B79F5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+  // Fisher-Yates with seeded PRNG.
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    const tmp = arr[i];
+    arr[i] = arr[j];
+    arr[j] = tmp;
+  }
+  return arr;
+}
+
+/**
  * Phase D (2026-05-05) — Shelving Bay Detail elevation view.
  * Zoomed-in render of one shelving bay showing uprights + shelf decks +
  * cartons placed at fillPct, with dimension labels. Pulls geometry from
@@ -4341,21 +4386,29 @@ function build3DScene() {
         if (baysPerFace === 0) continue;
         const bayU = sBay * scale;
         const segZ0 = m.segCenter - m.segLenU / 2;
-        const fillBays = Math.floor(baysPerFace * m.fillPct);
         const palletCenterX = m.frontFaceX + m.intoRackDir * (palletDepthU / 2);
         const levelHeightU  = m.heightU / m.levels;
-        for (let lv = 0; lv < m.levels; lv++) {
+        // Phase F.3.3 (2026-05-05) — distribute filled bays randomly across
+        // the (bay, level) grid using a stable seeded shuffle. The total
+        // number of filled positions matches the legacy
+        // `floor(baysPerFace × levels × fillPct)` count (so HUD math stays
+        // accurate) but the empty positions now scatter throughout the
+        // zone instead of clustering at the back of every column.
+        const fillCount = Math.floor(baysPerFace * m.levels * m.fillPct);
+        // Coordinate-derived seed = stable across re-renders, unique per face.
+        const seed = ((Math.floor(m.mx * 1000) ^ Math.floor(m.segCenter * 1000)) >>> 0) ^ (m.side === 'A' ? 0x12345 : 0xABCD9);
+        const order = _shuffledBayLevelOrder(baysPerFace, m.levels, seed);
+        for (let i = 0; i < fillCount; i++) {
+          const [b, lv] = order[i];
           const beamY = levelHeightU * lv;
           const yU = beamY + palletLoadU / 2 + 0.05;
-          for (let b = 0; b < fillBays; b++) {
-            const bayBaseZ = segZ0 + b * bayU;
-            for (const zFrac of _zFractionsInBay) {
-              const z = bayBaseZ + zFrac * bayU;
-              dummy.position.set(palletCenterX, yU, z);
-              dummy.scale.set(1, 1, 1);
-              dummy.updateMatrix();
-              palletMesh.setMatrixAt(pi++, dummy.matrix);
-            }
+          const bayBaseZ = segZ0 + b * bayU;
+          for (const zFrac of _zFractionsInBay) {
+            const z = bayBaseZ + zFrac * bayU;
+            dummy.position.set(palletCenterX, yU, z);
+            dummy.scale.set(1, 1, 1);
+            dummy.updateMatrix();
+            palletMesh.setMatrixAt(pi++, dummy.matrix);
           }
         }
       }
@@ -4478,27 +4531,30 @@ function build3DScene() {
         if (baysPerFace === 0) continue;
         const bayU = m.bayWidthFt * scale;
         const segZ0 = m.segCenter - m.segLenU / 2;
-        const fillBays = Math.floor(baysPerFace * m.fillPct);
         const levelHeightU = m.heightU / m.levels;
         // Center the across-grid in the bay; center deep-grid against the rack depth.
         const acrossSpacing = bayU / acrossN;
         const deepSpacing = m.rackDepthU / Math.max(1, deepN);
-        for (let lv = 0; lv < m.levels; lv++) {
+        // Phase F.3.3 (2026-05-05) — same shuffle logic as pallet rack.
+        // Empty shelving bays scatter across the rack instead of clustering.
+        const fillCount = Math.floor(baysPerFace * m.levels * m.fillPct);
+        const seed = ((Math.floor(m.mx * 1000) ^ Math.floor(m.segCenter * 1000)) >>> 0) ^ (m.side === 'A' ? 0x55AA1 : 0x55AA9);
+        const order = _shuffledBayLevelOrder(baysPerFace, m.levels, seed);
+        for (let i = 0; i < fillCount; i++) {
+          const [b, lv] = order[i];
           const deckY = levelHeightU * lv;
           const yU = deckY + cartonYU / 2 + 0.04;
-          for (let b = 0; b < fillBays; b++) {
-            const bayBaseZ = segZ0 + b * bayU;
-            for (let a = 0; a < acrossN; a++) {
-              const z = bayBaseZ + (a + 0.5) * acrossSpacing;
-              for (let d = 0; d < deepN; d++) {
-                // X position: from aisle face, step back by deepSpacing,
-                // centered within each step. d=0 → closest to aisle.
-                const cartonCenterX = m.frontFaceX + m.intoRackDir * ((d + 0.5) * deepSpacing);
-                dummy.position.set(cartonCenterX, yU, z);
-                dummy.scale.set(1, 1, 1);
-                dummy.updateMatrix();
-                shCartonMesh.setMatrixAt(ci++, dummy.matrix);
-              }
+          const bayBaseZ = segZ0 + b * bayU;
+          for (let a = 0; a < acrossN; a++) {
+            const z = bayBaseZ + (a + 0.5) * acrossSpacing;
+            for (let d = 0; d < deepN; d++) {
+              // X position: from aisle face, step back by deepSpacing,
+              // centered within each step. d=0 → closest to aisle.
+              const cartonCenterX = m.frontFaceX + m.intoRackDir * ((d + 0.5) * deepSpacing);
+              dummy.position.set(cartonCenterX, yU, z);
+              dummy.scale.set(1, 1, 1);
+              dummy.updateMatrix();
+              shCartonMesh.setMatrixAt(ci++, dummy.matrix);
             }
           }
         }
