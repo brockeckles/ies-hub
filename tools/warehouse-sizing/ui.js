@@ -4358,13 +4358,35 @@ function build3DScene() {
     // kind keeps each kind's geometry sized correctly.
     // One InstancedMesh per kind-kind → at most 6 extra draw calls total.
     // ─────────────────────────────────────────────────────────────────
+    // Phase F.5 (2026-05-05) — Brock callout: "for the carton storage in
+    // pallet rack, what part of the configuration panel determines the
+    // carton sizing for these cartons? why don't they look any different
+    // sized than pallets?". Pre-fix Full Pallet and Carton-on-Pallet zones
+    // both rendered with the same wood-color palletGeo, looking identical.
+    // Now split palletMeta into fpMeta (Full Pallet) and cpMeta
+    // (Carton-on-Pallet), rendered with different geometry + material.
+    // FP: full-height wood-color pallet load. CP: shorter brown-carton
+    // stack profile (represents cartons stacked on a low-profile pallet
+    // base). Drives off facility.cartonHeightIn × cartonProfile.hi for
+    // CP carton-stack height (so Step 2 carton dims now visibly affect
+    // the Carton-on-Pallet rendering, not just shelving).
     /** @type {Array<typeof segmentMeta[number]>} */
-    const palletMeta = [];
+    const palletMeta = [];   // combined FP + CP — used for uprights/beams (same structural rack for both)
+    /** @type {Array<typeof segmentMeta[number]>} */
+    const fpMeta = [];       // FP only — for full-pallet load rendering
+    /** @type {Array<typeof segmentMeta[number]>} */
+    const cpMeta = [];       // CP only — for carton-on-pallet load rendering (Phase F.6)
     /** @type {Array<typeof segmentMeta[number]>} */
     const shelvingMeta = [];
     for (const m of segmentMeta) {
-      if (m && m.t && m.t.kind === 'shelving') shelvingMeta.push(m);
-      else palletMeta.push(m);
+      if (!m || !m.t) continue;
+      if (m.t.kind === 'shelving') {
+        shelvingMeta.push(m);
+      } else {
+        palletMeta.push(m);
+        if (m.t.typeKey === 'cartonPallet') cpMeta.push(m);
+        else fpMeta.push(m);
+      }
     }
 
     // ── Pallet structural detail (uprights + beams + pallets) ──────────
@@ -4381,7 +4403,11 @@ function build3DScene() {
     //     Real selective rack: 2 × 48" pallet + 12" inter/outboard clearances
     //     = 108" beam clear.
     const _rackingStruct = sized?.rackingStructure || {};
-    let totalUprights = 0, totalBeams = 0, totalPallets = 0;
+    let totalUprights = 0, totalBeams = 0;
+    // Phase F.6 (2026-05-05) — separate FP and CP pallet load counts so
+    // each renders with its own InstancedMesh + material + geometry.
+    let totalPalletsFP = 0;
+    let totalPalletsCP = 0;
     for (const m of palletMeta) {
       const sBay = m.structuralBayWidthFt || calc.PALLET_BAY_WIDTH_FT * 2;
       const baysPerFace = Math.max(0, Math.floor((m.segLenU / scale) / sBay));
@@ -4397,8 +4423,11 @@ function build3DScene() {
         : Math.max(0, m.levels - 1);
       totalBeams += beamsThisFace;
       // Pallets: bays × 2 (per bay) × levels × fillPct
-      totalPallets += Math.floor(baysPerFace * 2 * m.levels * m.fillPct);
+      const palletsThisFace = Math.floor(baysPerFace * 2 * m.levels * m.fillPct);
+      if (m.t.typeKey === 'cartonPallet') totalPalletsCP += palletsThisFace;
+      else totalPalletsFP += palletsThisFace;
     }
+    const totalPallets = totalPalletsFP + totalPalletsCP; // legacy alias
 
     if (totalUprights > 0) {
       const uprightW = 0.18, uprightDepthSlice = 0.18;
@@ -4462,33 +4491,25 @@ function build3DScene() {
       scene.add(beamMesh);
     }
 
-    if (totalPallets > 0) {
-      // Pallet+load: real GMA dimensions. 40" deep into rack × 60" load
-      // height × 48" wide along rack run. In feet: 3.33 X-depth × 5.0 Y-height
-      // × 4.0 Z-width. (Phase 3 bumped Y from 4.0 → 5.0 to match real load
-      // height; the level pitch the rendering anchors at is heightU/N which
-      // accommodates 5 ft + clearance.)
-      // Phase F.4 (2026-05-05) — Brock callout: "carton storage rendering in
-      // 3D looks messed up — doesn't make sense visually". Pre-fix the pallet
-      // box was 4.0 ft wide × 4.5 ft tall — with random F.3.3 placement that
-      // produced fully-stocked bays where vertically-adjacent pallets merged
-      // into a continuous brown wall (no inter-pallet gaps visible at typical
-      // viewing distance). Reduced both palletWidthU and palletLoadU so each
-      // pallet has a visible gap from its neighbors. Net result: pallets read
-      // as discrete units instead of a wall.
-      const palletDepthU = 3.33 * scale; // X — into rack
-      const palletLoadU  = 3.5  * scale; // Y — loaded pallet height (was 4.5; gap to next level visible)
-      const palletWidthU = 3.5  * scale; // Z — parallel to rack run (was 4.0; horizontal gap visible)
-      const palletGeo = new THREE.BoxGeometry(palletDepthU, palletLoadU, palletWidthU);
-      const palletMesh = new THREE.InstancedMesh(palletGeo, matPallet, totalPallets);
-      palletMesh.castShadow = true;
+    // Phase F.6 (2026-05-05) — split pallet load rendering into two passes:
+    // FP (wood-color full pallet load, 3.5 ft Y) and CP (brown carton-stack
+    // profile, derived from cartonHeightIn × cartonProfile.hi for
+    // representative carton-stack height). Pre-fix both rendered with the
+    // same wood pallet box so Carton-on-Pallet was visually indistinguishable
+    // from Full Pallet. Now the user can see at a glance which positions
+    // hold full pallets vs cartons-stacked-on-pallets, and the carton
+    // dimensions from Step 2 (Carton L/W/H) drive the CP appearance.
+    const palletDepthU = 3.33 * scale; // X — into rack
+    const _zFractionsInBay = [0.25, 0.75];
+
+    function _renderPalletLoadPass(meta, totalCount, mat, loadHeightU, widthU) {
+      if (totalCount <= 0 || meta.length === 0) return;
+      const geo = new THREE.BoxGeometry(palletDepthU, loadHeightU, widthU);
+      const mesh = new THREE.InstancedMesh(geo, mat, totalCount);
+      mesh.castShadow = true;
       const dummy = new THREE.Object3D();
-      // 2 pallets per bay positioned at quarter-points along Z.
-      // For a 9 ft bay: pallet centers at bayCenter ± 2.25 ft (= 0.25 × bayU
-      // and 0.75 × bayU from segZ0 + b × bayU).
-      const _zFractionsInBay = [0.25, 0.75];
       let pi = 0;
-      for (const m of palletMeta) {
+      for (const m of meta) {
         const sBay = m.structuralBayWidthFt || calc.PALLET_BAY_WIDTH_FT * 2;
         const baysPerFace = Math.max(0, Math.floor((m.segLenU / scale) / sBay));
         if (baysPerFace === 0) continue;
@@ -4496,32 +4517,47 @@ function build3DScene() {
         const segZ0 = m.segCenter - m.segLenU / 2;
         const palletCenterX = m.frontFaceX + m.intoRackDir * (palletDepthU / 2);
         const levelHeightU  = m.heightU / m.levels;
-        // Phase F.3.3 (2026-05-05) — distribute filled bays randomly across
-        // the (bay, level) grid using a stable seeded shuffle. The total
-        // number of filled positions matches the legacy
-        // `floor(baysPerFace × levels × fillPct)` count (so HUD math stays
-        // accurate) but the empty positions now scatter throughout the
-        // zone instead of clustering at the back of every column.
         const fillCount = Math.floor(baysPerFace * m.levels * m.fillPct);
-        // Coordinate-derived seed = stable across re-renders, unique per face.
         const seed = ((Math.floor(m.mx * 1000) ^ Math.floor(m.segCenter * 1000)) >>> 0) ^ (m.side === 'A' ? 0x12345 : 0xABCD9);
         const order = _shuffledBayLevelOrder(baysPerFace, m.levels, seed);
         for (let i = 0; i < fillCount; i++) {
           const [b, lv] = order[i];
           const beamY = levelHeightU * lv;
-          const yU = beamY + palletLoadU / 2 + 0.05;
+          const yU = beamY + loadHeightU / 2 + 0.05;
           const bayBaseZ = segZ0 + b * bayU;
           for (const zFrac of _zFractionsInBay) {
             const z = bayBaseZ + zFrac * bayU;
             dummy.position.set(palletCenterX, yU, z);
             dummy.scale.set(1, 1, 1);
             dummy.updateMatrix();
-            palletMesh.setMatrixAt(pi++, dummy.matrix);
+            mesh.setMatrixAt(pi++, dummy.matrix);
           }
         }
       }
-      palletMesh.instanceMatrix.needsUpdate = true;
-      scene.add(palletMesh);
+      mesh.instanceMatrix.needsUpdate = true;
+      scene.add(mesh);
+    }
+
+    // FP pass: full pallet wood box (~5 ft load height, slightly under level pitch).
+    _renderPalletLoadPass(fpMeta, totalPalletsFP, matPallet, 3.5 * scale, 3.5 * scale);
+
+    // CP pass: shorter brown carton-stack box. Height = cartonProfile.hi ×
+    // cartonHeightIn (real stacked-carton height) clamped to fit within the
+    // level pitch. Material = brown corrugated (matCarton, same as shelving).
+    if (cpMeta.length > 0 && totalPalletsCP > 0) {
+      const _cp = sized?.cartonProfile || {};
+      const _hi = Math.max(1, +_cp.hi || 4);
+      const _cartonHIn = +(_cp.cartonHeightIn || facility.cartonHeightIn) || 12;
+      // Real stacked height = hi × cartonHeightIn. Convert to feet × scale.
+      const cpStackFt = (_hi * _cartonHIn) / 12;
+      // Clamp to a max of the level pitch minus clearance (so carton stack
+      // doesn't punch into the upper level's beam). Use a representative
+      // typical level pitch of ~5 ft; min 2 ft floor so very short cartons
+      // are still visible.
+      const cpLoadFt = Math.max(2.0, Math.min(cpStackFt, 4.0));
+      const cpLoadU  = cpLoadFt * scale;
+      const cpWidthU = 3.2 * scale;  // narrower than FP's 3.5 — visible stack profile
+      _renderPalletLoadPass(cpMeta, totalPalletsCP, matCarton, cpLoadU, cpWidthU);
     }
 
     // ── Shelving structural detail (short uprights + shelf decks + cartons) ──
@@ -4699,12 +4735,22 @@ function build3DScene() {
     const outboundMat = new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.7 });
     const inboundMat  = new THREE.MeshStandardMaterial({ color: 0x1d4ed8, roughness: 0.7 });
 
-    function placeDoors(count, zEdge, mat) {
+    // Phase F.5 (2026-05-05) — Brock callout: "dock doors are still showing
+    // up on 3D in front of office". The 2D fix in F.4 clamped inbound xStart
+    // to officeRightX, but the 3D placeDoors distributed evenly across the
+    // full building width including the office X-range. Now clamp the 3D
+    // door bank to start AFTER the office's X extent on the dock face. The
+    // office sits at world X ∈ [-W/2 + 2, -W/2 + 2 + officeU], so the door
+    // bank starts at officeX1 + small clearance.
+    function placeDoors(count, zEdge, mat, xStartFloor) {
       if (count <= 0) return;
-      const usableW = W - 12 * scale * 2;
+      const xLeft = Math.max(-W / 2 + 12 * scale, xStartFloor);
+      const xRight = W / 2 - 12 * scale;
+      const usableW = Math.max(0, xRight - xLeft);
+      if (usableW <= 0) return;
       const spacing = usableW / (count + 1);
       for (let i = 0; i < count; i++) {
-        const dx = -W / 2 + 12 * scale + spacing * (i + 1) - doorWU / 2;
+        const dx = xLeft + spacing * (i + 1) - doorWU / 2;
         const door = new THREE.Mesh(
           new THREE.BoxGeometry(doorWU, doorHU, 0.6),
           mat,
@@ -4715,11 +4761,18 @@ function build3DScene() {
       }
     }
 
+    // Office X-range to skip on the dock face. officeZ0 is at -D/2 + stagingU,
+    // so the office sits at the dock-side. Clamp dock-face door bank start
+    // past officeX1 + small clearance.
+    const _officeBlocksDockFace = sized.officeSqft > 0;
+    const _outDockXStart = _officeBlocksDockFace ? officeX1 + 4 * scale : -W / 2 + 12 * scale;
     if (twoSided3D) {
-      placeDoors(outDoors, -D / 2 + 0.1, outboundMat);
-      placeDoors(inDoors,   D / 2 - 0.1, inboundMat);
+      placeDoors(outDoors, -D / 2 + 0.1, outboundMat, _outDockXStart);
+      // Inbound bank lives on the OPPOSITE wall (D/2) — office isn't there
+      // by default, so no clamp needed.
+      placeDoors(inDoors,   D / 2 - 0.1, inboundMat, -W / 2 + 12 * scale);
     } else if (totalDoors > 0) {
-      placeDoors(totalDoors, -D / 2 + 0.1, outboundMat);
+      placeDoors(totalDoors, -D / 2 + 0.1, outboundMat, _outDockXStart);
     }
 
     // ---------- Office cube ----------
