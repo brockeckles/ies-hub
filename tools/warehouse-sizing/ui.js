@@ -2298,6 +2298,12 @@ function drawPlan() {
     fullPalletTarget:   +sized.positions?.fullPalletGrossPositions   || 0,
     cartonPalletTarget: +sized.positions?.cartonPalletGrossPositions || 0,
     shelvingTarget:     +sized.positions?.shelvingGrossPositions     || 0,
+    // Phase F (2026-05-05) — Design mode pads leftover cols across types
+    // so the rack zone is visually full (eliminates the empty-floor strip
+    // on the right that surfaced in Brock's Phase E walkthrough).
+    // Constraint mode keeps target-only allocation so leftover-as-slack
+    // can be visualized + drive the shrink-CTA.
+    fillMode: (facility.sizingMode || 'design') === 'design' ? 'fill' : 'target',
   });
   const fullPalletCols   = _alloc2D.fullPalletCols;
   const cartonPalletCols = _alloc2D.cartonPalletCols;
@@ -4013,6 +4019,9 @@ function build3DScene() {
       fullPalletTarget:   +sized.positions?.fullPalletGrossPositions   || 0,
       cartonPalletTarget: +sized.positions?.cartonPalletGrossPositions || 0,
       shelvingTarget:     +sized.positions?.shelvingGrossPositions     || 0,
+      // Phase F (2026-05-05) — Design mode pads leftover cols across types
+      // (matches the 2D plan logic). Constraint mode = target-only.
+      fillMode: (facility.sizingMode || 'design') === 'design' ? 'fill' : 'target',
     });
     const fullPalletCols   = _alloc3D.fullPalletCols;
     const cartonPalletCols = _alloc3D.cartonPalletCols;

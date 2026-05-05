@@ -436,6 +436,13 @@ export function allocateRackColsByTarget(opts = {}) {
   const fpTarget = Math.max(0, +opts.fullPalletTarget   || 0);
   const cpTarget = Math.max(0, +opts.cartonPalletTarget || 0);
   const shTarget = Math.max(0, +opts.shelvingTarget     || 0);
+  // Phase F (2026-05-05) — fillMode option. Default 'target' = legacy
+  // break-on-per-type-exhaustion behavior (Constraint mode + shrink-CTA
+  // need leftover-as-slack to fire the right-size suggestion). New 'fill'
+  // mode pads remaining unused pairs proportionally across the three
+  // types so the rack zone is visually full. Used by Design mode where
+  // leftover floor reads as a bug, not engineered slack.
+  const fillMode = (opts.fillMode === 'fill') ? 'fill' : 'target';
 
   // Positions a single back-to-back rack-pair holds across every master segment.
   // (rackPairCapacity per segment, summed.)
@@ -482,6 +489,38 @@ export function allocateRackColsByTarget(opts = {}) {
     mode = 'exact_fit';
   } else {
     mode = 'over_built';
+  }
+
+  // Phase F (2026-05-05) — pad-to-fill in 'fill' mode. After the target-
+  // driven allocation, if leftover pairs exist (mode === 'over_built'),
+  // distribute them proportionally to the per-type targets so totalPairs
+  // is consumed exactly. This eliminates the visible empty-floor strip
+  // on the right of Design-mode renderings without changing the engine
+  // sizing math (which still drives the building footprint via
+  // requirementsDriven.totalSfRequired). Per-type counts go up modestly
+  // — the extra positions are visual slack that the IE designer would
+  // think of as future expansion / cross-aisle reserve / column-grid
+  // accommodation rolled into the visible rack zone.
+  if (fillMode === 'fill' && mode === 'over_built') {
+    const targets = [fpTarget, cpTarget, shTarget];
+    const sumTargets = targets.reduce((a, b) => a + b, 0);
+    const leftover = totalPairs - (fpPairs + cpPairs + shPairs);
+    if (leftover > 0 && sumTargets > 0) {
+      // Proportional allocation, then round; assign fence-post error to
+      // the largest target so totals reconcile exactly.
+      const fpAdd = Math.round(leftover * fpTarget / sumTargets);
+      const cpAdd = Math.round(leftover * cpTarget / sumTargets);
+      let shAdd = leftover - fpAdd - cpAdd;
+      if (shAdd < 0) shAdd = 0;
+      fpPairs += fpAdd;
+      cpPairs += cpAdd;
+      shPairs += shAdd;
+      // Final reconciliation: if rounding still left a gap, push to FP
+      // (the largest type for typical 3PL profiles).
+      const stillLeft = totalPairs - (fpPairs + cpPairs + shPairs);
+      if (stillLeft > 0) fpPairs += stillLeft;
+      mode = 'exact_fit';
+    }
   }
 
   const unusedPairs = Math.max(0, totalPairs - fpPairs - cpPairs - shPairs);
