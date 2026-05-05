@@ -3220,12 +3220,15 @@ function render3DView(container) {
     scene3d = null;
   }
   const sized = calc.sizeFacility(toSizingInputs());
+  // Phase A: header dims read from mode-aware facility shape so they match
+  // the rendered geometry (Design = sized footprint; Constraint = user W×D).
+  const _hdrFac = _renderFacility(facility, sized);
   container.innerHTML = `
     <div class="hub-card" style="padding:16px;">
       <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px;">
         <h3 class="text-subtitle" style="margin:0;">3D Walkthrough</h3>
         <span class="text-caption text-muted">
-          ${calc.formatSqft(sized.totalSqft)} sized  ·  ${facility.buildingWidth || '—'} × ${facility.buildingDepth || '—'} ft  ·  clear ht ${facility.clearHeight || 0} ft  ·  ${sized.dock.totalDoors} dock doors
+          ${calc.formatSqft(sized.totalSqft)} sized  ·  ${_hdrFac.buildingWidth || '—'} × ${_hdrFac.buildingDepth || '—'} ft  ·  clear ht ${facility.clearHeight || 0} ft  ·  ${sized.dock.totalDoors} dock doors
         </span>
       </div>
       <div id="wsc-3d-container" style="position:relative; width:100%; height:520px; background:#e9eef5; border-radius:6px; overflow:hidden;">
