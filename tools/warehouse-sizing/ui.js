@@ -1515,7 +1515,9 @@ function bindConfigEvents(panel) {
 
   // Phase A redesign (2026-05-05) — Sizing Mode toggle (Design / Constraint).
   // Re-renders both the Configure panel (Step 5 changes shape) and the content
-  // view (rendering swaps to mode-aware footprint).
+  // view (rendering swaps to mode-aware footprint). Phase E fix: also refresh
+  // the chrome KPI strip so the mode-aware chip label (Sized SF / Built SF)
+  // doesn't stay stale on mode toggle.
   panel.querySelectorAll('[data-wsc-mode]').forEach(btn => {
     btn.addEventListener('click', e => {
       const next = /** @type {HTMLElement} */ (e.currentTarget).dataset.wscMode;
@@ -1529,12 +1531,15 @@ function bindConfigEvents(panel) {
       isDirty = true;
       renderConfigPanel();
       renderContentView();
+      _refreshWscKpis();
     });
   });
 
   // Phase B redesign (2026-05-05) — Primary inventory input toggle
   // (Throughput / Pallet Positions). Re-renders the panel because Step 1
-  // inputs swap between throughput and pallet primary fields.
+  // inputs swap between throughput and pallet primary fields. Phase E fix:
+  // also refresh KPI strip — when primary-input toggles, the engine-derived
+  // peakUnits source changes, which can shift the sized total.
   panel.querySelectorAll('[data-wsc-primary]').forEach(btn => {
     btn.addEventListener('click', e => {
       const next = /** @type {HTMLElement} */ (e.currentTarget).dataset.wscPrimary;
@@ -1544,6 +1549,7 @@ function bindConfigEvents(panel) {
       isDirty = true;
       renderConfigPanel();
       renderContentView();
+      _refreshWscKpis();
     });
   });
 
