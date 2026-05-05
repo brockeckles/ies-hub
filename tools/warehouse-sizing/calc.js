@@ -2220,11 +2220,30 @@ export function sizeFacility(userInputs = {}) {
   const totalSqft = warehouseOpSqft + officeSqft;
 
   // ── Avg Utilization (for the warning band) ──
-  const avgPositions = Math.ceil(
-    ((i.avgUnits || 0) * mix.fullPalletPct / Math.max(1, i.unitsPerPallet)) +
-    ((i.avgUnits || 0) * mix.cartonOnPalletPct / Math.max(1, i.unitsPerCartonPal) / Math.max(1, i.cartonsPerPallet)) +
-    ((i.avgUnits || 0) * mix.cartonOnShelvingPct / Math.max(1, i.unitsPerCartonShelv) / Math.max(1, i.cartonsPerLocation))
-  );
+  // Phase F.10 (2026-05-05) — Brock callout (deferred from F.3.1): when
+  // totalPalletsOverride engages, designedPositions honors the override
+  // (e.g. Wayfair Memphis FC 65k pallets) but avgPositions still derived
+  // from avgUnits / unitsPerPallet (~900 unit-equivalents on Wayfair),
+  // collapsing utilizationPct to ~1.4% → renderer clamped to 30% floor →
+  // 70% of bays drew empty (resolved visually in F.3.1 + F.3.3 + F.8 +
+  // F.9). This fix corrects the underlying calc so the chrome KPI's
+  // "Utilization 10%" stops misleading: when override engages, scale
+  // avgPositions proportionally from the override using the avgUnits
+  // /peakUnits ratio (typical 0.6–0.8). Result: utilizationPct ≈ 60–80%
+  // matching real DC operating utilization.
+  const _useOverride = palletPositionsExplicit && i.totalPalletsOverride > 0;
+  const _peakRefUnits = (i.peakUnits || 0);
+  const _avgRefUnits = (i.avgUnits || 0);
+  const _avgPeakRatio = _peakRefUnits > 0
+    ? Math.max(0.1, Math.min(1.0, _avgRefUnits / _peakRefUnits))
+    : 0.7;
+  const avgPositions = _useOverride
+    ? Math.ceil(i.totalPalletsOverride * _avgPeakRatio)
+    : Math.ceil(
+      ((i.avgUnits || 0) * mix.fullPalletPct / Math.max(1, i.unitsPerPallet)) +
+      ((i.avgUnits || 0) * mix.cartonOnPalletPct / Math.max(1, i.unitsPerCartonPal) / Math.max(1, i.cartonsPerPallet)) +
+      ((i.avgUnits || 0) * mix.cartonOnShelvingPct / Math.max(1, i.unitsPerCartonShelv) / Math.max(1, i.cartonsPerLocation))
+    );
   const utilizationPct = designedPositions > 0
     ? Math.min(100, Math.round((avgPositions / designedPositions) * 100))
     : 0;

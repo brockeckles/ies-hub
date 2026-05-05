@@ -2399,10 +2399,45 @@ function drawPlan() {
             ctx.strokeRect(mx + rackPx + 2, segY, rackPx, sub * 0.7);
           }
         } else {
+          // Phase F.10 (2026-05-05) — IE-correct 2D rack rendering. Pre-fix
+          // the pallet rack zone drew as a single solid rectangle per
+          // segment per side ("two parallel orange stripes"). Now it shows
+          // per-bay structural detail to match the Phase 3 3D treatment:
+          //   • Outer rectangle (rack-pair outline) — light fill so individual
+          //     bays read against it
+          //   • Vertical bay-divider tick lines every PALLET_BAY_WIDTH_FT
+          //     suggesting upright posts
+          //   • Per-bay pallet "occupancy ticks" (small horizontal marks)
+          //     at fillPct so 2D plan reads same density as 3D scene
+          const bayWidthFt = (calc.PALLET_BAY_WIDTH_FT || 9);
+          const bayPxPlan = Math.max(2, bayWidthFt * pxPerFt);
+          // Rack-pair outline: lighter fill, darker stroke
           ctx.fillRect(mx, yTop, rackPx, segH);
-          ctx.strokeRect(mx, yTop, rackPx, segH);
           ctx.fillRect(mx + rackPx + 2, yTop, rackPx, segH);
+          // Stroke outline
+          ctx.strokeRect(mx, yTop, rackPx, segH);
           ctx.strokeRect(mx + rackPx + 2, yTop, rackPx, segH);
+          // Bay-divider tick lines (vertical posts) — only draw if the
+          // bay width is wide enough to be readable.
+          if (bayPxPlan > 4) {
+            ctx.save();
+            ctx.strokeStyle = t.stroke;
+            ctx.lineWidth = 0.5;
+            ctx.globalAlpha = 0.55;
+            for (let bayY = yTop + bayPxPlan; bayY < yTop + segH - 1; bayY += bayPxPlan) {
+              // Left rack of pair
+              ctx.beginPath();
+              ctx.moveTo(mx + 1, bayY);
+              ctx.lineTo(mx + rackPx - 1, bayY);
+              ctx.stroke();
+              // Right rack of pair
+              ctx.beginPath();
+              ctx.moveTo(mx + rackPx + 3, bayY);
+              ctx.lineTo(mx + 2 * rackPx + 1, bayY);
+              ctx.stroke();
+            }
+            ctx.restore();
+          }
         }
       };
 
