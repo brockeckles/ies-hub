@@ -2350,6 +2350,10 @@ function drawPlan() {
   let colIdx = 0;
   let typeIdx = 0;
   let typeUsed = 0;
+  // Phase F.4 (2026-05-05) — Brock callout: "is it possible to put in labels
+  // for the storage types in 2D". Track per-type X-extent during the rack
+  // loop so we can label each zone at its horizontal center after the loop.
+  const _zoneXExtents = TYPES.map(() => ({ minX: Infinity, maxX: -Infinity }));
   while (mx + 2 * rackPx + aislePx < X0 + Wpx - sideMarginPx) {
     // Advance to next type bucket if we've drawn all of the current one
     while (typeIdx < TYPES.length && typeUsed >= TYPES[typeIdx].count) {
@@ -2412,10 +2416,42 @@ function drawPlan() {
         if (segH > 0) drawSegment(segTop, segH);
       }
     }
+    // Track per-type X-extent for the post-loop zone labels.
+    if (typeIdx < _zoneXExtents.length) {
+      const ex = _zoneXExtents[typeIdx];
+      ex.minX = Math.min(ex.minX, mx);
+      ex.maxX = Math.max(ex.maxX, mx + 2 * rackPx + aislePx);
+    }
     typeUsed += 2;
     colIdx += 2;
     mx += modulePx;
   }
+
+  // ---------- Per-zone labels (F.4 fix) ----------
+  // Render each zone's name at its horizontal center, just below the top
+  // dim line. Skip zones that didn't render any cols (extents stay at
+  // Infinity / -Infinity).
+  ctx.font = 'bold 11px Montserrat, sans-serif';
+  ctx.textAlign = 'center';
+  for (let i = 0; i < TYPES.length; i++) {
+    const ex = _zoneXExtents[i];
+    if (!Number.isFinite(ex.minX) || !Number.isFinite(ex.maxX)) continue;
+    if (ex.maxX - ex.minX < 60) continue; // too narrow to label readably
+    const cx = (ex.minX + ex.maxX) / 2;
+    // Pill background for legibility against the orange/teal racks
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    const labelTxt = TYPES[i].label;
+    const padX2 = 6;
+    const lblW = ctx.measureText(labelTxt).width + padX2 * 2;
+    const lblH = 16;
+    ctx.fillRect(cx - lblW / 2, storageY + 30 - lblH + 4, lblW, lblH);
+    ctx.strokeStyle = TYPES[i].stroke;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(cx - lblW / 2, storageY + 30 - lblH + 4, lblW, lblH);
+    ctx.fillStyle = TYPES[i].stroke;
+    ctx.fillText(labelTxt, cx, storageY + 30);
+  }
+  ctx.textAlign = 'left';
 
   // ---------- Forward Pick Area (front strip of storage, when enabled) ----------
   if (fpEnabled && fpW > 80 && fpStripPx > 12) {
@@ -2586,9 +2622,14 @@ function drawPlan() {
   } else if (inboundDoors > 0 && outboundDoors > 0) {
     // Single-sided: bank inbound on the LEFT half and outbound on the RIGHT half
     // of the bottom wall. Mirrors how real ops separate I/O on one dock face.
+    // Phase F.4 (2026-05-05) — Brock callout: "office in 2D is shown going in
+    // front of the dock doors. Typically, if the office is in a corner of the
+    // facility, then there aren't any dock doors there." Clamp inbound xStart
+    // past the office right edge so doors skip the office X-range.
     const mid = X0 + Wpx / 2;
     const gap = Math.max(8 * pxPerFt, 60); // ≥ 8 ft visual gap between banks
-    drawDoorRow(inboundDoors,  Y0 + Hpx - 6, `${inboundDoors} Inbound`,  '#bfdbfe', false, X0,         mid - gap / 2);
+    const inboundStart = Math.max(X0, officeRightX);
+    drawDoorRow(inboundDoors,  Y0 + Hpx - 6, `${inboundDoors} Inbound`,  '#bfdbfe', false, inboundStart, mid - gap / 2);
     drawDoorRow(outboundDoors, Y0 + Hpx - 6, `${outboundDoors} Outbound`, '#fecaca', false, mid + gap / 2, X0 + Wpx);
   } else {
     // Edge case: only one type of door — distribute across the full wall.
@@ -2606,11 +2647,13 @@ function drawPlan() {
   ctx.fillText(`${depthFt.toLocaleString()} ft`, 0, 0);
   ctx.restore();
 
-  // Compass / orientation
+  // Compass / orientation. Phase F.4 (2026-05-05) — moved the top label
+  // INSIDE the building (was Y0-22, overlapped the title block "clear ht
+  // 36 ft" line at canvas Y=38). Bottom label stays just below dock face.
   ctx.fillStyle = '#6b7280';
   ctx.font = '10px Montserrat, sans-serif';
   ctx.textAlign = 'left';
-  ctx.fillText(twoSided ? '▲ INBOUND DOCK' : '▲ BACK', X0 + 4, Y0 - 22);
+  ctx.fillText(twoSided ? '▲ INBOUND DOCK' : '▲ BACK', X0 + 6, Y0 + 14);
   ctx.fillText(twoSided ? '▼ OUTBOUND DOCK' : '▼ DOCK FACE', X0 + 4, Y0 + Hpx + 22);
 
   // Title block (top-left, outside building)
@@ -4126,6 +4169,8 @@ function build3DScene() {
     let mx = -W / 2 + 6 * scale;
     let typeIdx = 0;
     let typeUsed = 0;
+    // Phase F.4 (2026-05-05) — track per-type X-extent for floating zone labels.
+    const _zone3dXExtents = TYPES.map(() => ({ minX: Infinity, maxX: -Infinity }));
     while (mx + 2 * rackDepthU + (aisleFt * scale) < W / 2 - 6 * scale) {
       while (typeIdx < TYPES.length && typeUsed >= TYPES[typeIdx].count) {
         typeIdx++;
@@ -4243,8 +4288,56 @@ function build3DScene() {
           });
         }
       }
+      // Track per-type X-extent for floating labels.
+      if (typeIdx < _zone3dXExtents.length) {
+        const ex = _zone3dXExtents[typeIdx];
+        ex.minX = Math.min(ex.minX, mx);
+        ex.maxX = Math.max(ex.maxX, mx + 2 * rackDepthU + (aisleFt * scale));
+      }
       typeUsed += 2;
       mx += moduleU;
+    }
+
+    // Phase F.4 (2026-05-05) — Brock callout: "floating labels in 3D" for
+    // storage types. Sprite-based labels positioned above each zone center.
+    // Sprites always face the camera so labels stay readable from any angle.
+    function _make3dZoneLabel(text, color) {
+      const c = document.createElement('canvas');
+      c.width = 256; c.height = 64;
+      const cx = c.getContext('2d');
+      cx.fillStyle = 'rgba(255,255,255,0.94)';
+      cx.fillRect(0, 0, 256, 64);
+      cx.strokeStyle = color;
+      cx.lineWidth = 3;
+      cx.strokeRect(2, 2, 252, 60);
+      cx.fillStyle = color;
+      cx.font = 'bold 24px sans-serif';
+      cx.textAlign = 'center';
+      cx.textBaseline = 'middle';
+      cx.fillText(text, 128, 34);
+      const tex = new THREE.CanvasTexture(c);
+      const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false, depthWrite: false });
+      const sprite = new THREE.Sprite(mat);
+      sprite.scale.set(60 * scale, 15 * scale, 1);
+      return sprite;
+    }
+    for (let i = 0; i < TYPES.length; i++) {
+      const ex = _zone3dXExtents[i];
+      if (!Number.isFinite(ex.minX) || !Number.isFinite(ex.maxX)) continue;
+      const t = TYPES[i];
+      const labelText = t.typeKey === 'fullPallet' ? 'Full Pallet'
+        : t.typeKey === 'cartonPallet' ? 'Carton on Pallet'
+        : 'Carton Shelving';
+      // Color match: dark orange / amber / teal
+      const labelColor = t.typeKey === 'fullPallet' ? '#9a3412'
+        : t.typeKey === 'cartonPallet' ? '#b45309'
+        : '#0f766e';
+      const cxWorld = (ex.minX + ex.maxX) / 2;
+      const sprite = _make3dZoneLabel(labelText, labelColor);
+      // Float ABOVE the rack height so labels don't clip into rack tops
+      sprite.position.set(cxWorld, rackHeightU + 8 * scale, 0);
+      sprite.renderOrder = 999; // always on top
+      scene.add(sprite);
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -4368,9 +4461,17 @@ function build3DScene() {
       // × 4.0 Z-width. (Phase 3 bumped Y from 4.0 → 5.0 to match real load
       // height; the level pitch the rendering anchors at is heightU/N which
       // accommodates 5 ft + clearance.)
+      // Phase F.4 (2026-05-05) — Brock callout: "carton storage rendering in
+      // 3D looks messed up — doesn't make sense visually". Pre-fix the pallet
+      // box was 4.0 ft wide × 4.5 ft tall — with random F.3.3 placement that
+      // produced fully-stocked bays where vertically-adjacent pallets merged
+      // into a continuous brown wall (no inter-pallet gaps visible at typical
+      // viewing distance). Reduced both palletWidthU and palletLoadU so each
+      // pallet has a visible gap from its neighbors. Net result: pallets read
+      // as discrete units instead of a wall.
       const palletDepthU = 3.33 * scale; // X — into rack
-      const palletLoadU  = 4.5  * scale; // Y — loaded pallet height (slightly under level pitch)
-      const palletWidthU = 4.0  * scale; // Z — parallel to rack run
+      const palletLoadU  = 3.5  * scale; // Y — loaded pallet height (was 4.5; gap to next level visible)
+      const palletWidthU = 3.5  * scale; // Z — parallel to rack run (was 4.0; horizontal gap visible)
       const palletGeo = new THREE.BoxGeometry(palletDepthU, palletLoadU, palletWidthU);
       const palletMesh = new THREE.InstancedMesh(palletGeo, matPallet, totalPallets);
       palletMesh.castShadow = true;
@@ -4621,10 +4722,16 @@ function build3DScene() {
     }
 
     // ---------- Camera + OrbitControls ----------
-    // Iso-style 3/4 view from front-right-above, looking at the building center.
+    // Iso-style 3/4 view from front-LEFT-above, looking at the building center.
+    // Phase F.4 (2026-05-05) — Brock callout: "office is on the left-hand side
+    // in 2D and the right-hand side in 3D". Pre-fix camTheta = 3π/4 placed
+    // camera at front-RIGHT, which made world -X (where office sits at
+    // -W/2 + 2) appear on the SCREEN RIGHT, opposite of 2D plan where -X
+    // is screen LEFT. Flipped to 5π/4 (camera at front-LEFT) so world -X
+    // appears on screen LEFT — office on left in both 2D and 3D now.
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 5000);
     const dist0 = Math.max(W, D) * 1.4;
-    const camTheta = (3 * Math.PI) / 4;
+    const camTheta = (5 * Math.PI) / 4;
     const camPhi   = Math.PI / 4;
     camera.position.set(
       dist0 * Math.cos(camPhi) * Math.sin(camTheta),
