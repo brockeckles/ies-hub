@@ -2371,8 +2371,26 @@ export function sizeFacility(userInputs = {}) {
     shelving: _shelvingLocations,
   };
 
+  // Phase F.3.2 (2026-05-05) — reconcile FIND-1 sized-total drift. Pre-fix
+  // sized.totalSqft (legacy v2-equivalent: warehouseOpSqft + officeSqft, no
+  // circulation buffer, legacy dock-SF formula with 1.25 surge) drifted
+  // ~1.2% from sized.requirementsDriven.totalSfRequired (Phase 1 IE-correct:
+  // storage + office + staging + additional + Phase 1 dock SF + 10%
+  // circulation, 1.20 surge). Two numbers on the same dashboard reading
+  // "the sized total" was a real Phase E walkthrough finding. Now totalSqft
+  // returns the requirementsDriven aggregate, so every consumer (KPI strip,
+  // dashboard panel, 2D plan, 3D scene, chrome chip) sees one consistent
+  // number. The local `totalSqft` legacy value is preserved as
+  // `legacyTotalSqft` in the result for any downstream that needs the
+  // pre-fix bookkeeping (none observed currently — flagged for follow-up
+  // if anything is found to depend on it).
+  const reconciledTotalSqft = (_requirementsDriven && +_requirementsDriven.totalSfRequired > 0)
+    ? +_requirementsDriven.totalSfRequired
+    : totalSqft;
+
   return {
-    totalSqft,
+    totalSqft: reconciledTotalSqft,
+    legacyTotalSqft: totalSqft,
     storageSqft,
     palletStorageSqft,
     shelvingStorageSqft,

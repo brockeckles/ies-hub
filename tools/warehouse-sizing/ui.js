@@ -4128,7 +4128,34 @@ function build3DScene() {
           // Record both faces for instanced uprights + beams + pallets.
           // fillPct sets how many bays render a pallet (front-of-aisle
           // shows occupancy without saturating the canvas).
-          const utilFrac = Math.max(0.30, Math.min(0.95, (sized.utilization?.utilizationPct || 75) / 100));
+          //
+          // Phase F.3.1 (2026-05-05) — fix Brock's "why is a big percentage
+          // of the racking empty?" callout. Pre-fix: fillPct = utilizationPct
+          // / 100 with 30% floor clamp. utilizationPct collapses to ~10% on
+          // the totalPalletsOverride path because designedPositions honors
+          // the override (65k) but avgPositions still derives from
+          // avgUnits/unitsPerPallet (~900 equivalent), giving a 1.4% ratio
+          // → clamped to 30% floor → 70% of bays drawn empty. That made the
+          // 3D scene read as a chronically under-loaded warehouse, which is
+          // a calc bug surfacing as a visualization disaster.
+          //
+          // New behavior: in Design mode, fillPct = designedPositions /
+          // grossPositions (typically 0.80–0.85 because gross = designed ×
+          // surge factor). This is the IE-correct "operating fill" — every
+          // engineered position is shown occupied, the surge buffer is
+          // shown empty. In Constraint mode, fall through to legacy
+          // utilizationPct behavior so genuinely under-loaded buildings
+          // still surface as empty bays.
+          let utilFrac;
+          const _modeForFill = facility.sizingMode || 'design';
+          if (_modeForFill === 'design') {
+            const designedP = +sized.positions?.designedPositions || 0;
+            const grossP    = +sized.positions?.grossPositions    || 0;
+            const ratio = (grossP > 0) ? designedP / grossP : 0.83;
+            utilFrac = Math.max(0.50, Math.min(0.95, ratio));
+          } else {
+            utilFrac = Math.max(0.30, Math.min(0.95, (sized.utilization?.utilizationPct || 75) / 100));
+          }
           // Side A's aisle-facing front sits at mx (left edge of the
           // back-to-back pair). intoRackDir +1 → rack extends to +X.
           // Side B's front sits at the right edge of the pair, extending
