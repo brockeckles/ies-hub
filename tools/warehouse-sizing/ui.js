@@ -167,6 +167,13 @@ function openEditor(savedRow) {
     facility = { ...createDefaultFacility(), ...data, id: savedRow.id, parent_cost_model_id: savedRow.parent_cost_model_id || null };
     zones = { ...createDefaultZones(), ...(data.zones || {}) };
     volumes = { ...createDefaultVolumes(), ...(data.volumes || {}) };
+    // Phase A migration (2026-05-05): if a legacy facility has buildingDimsOverride
+    // engaged (= user typed in W/D explicitly), migrate it to constraint mode so
+    // the rendering keeps using the user's dims. Facilities saved without the
+    // override stay in design mode (the default).
+    if (!data.sizingMode && facility.buildingDimsOverride) {
+      facility.sizingMode = 'constraint';
+    }
   } else {
     facility = createDefaultFacility();
     zones = createDefaultZones();
@@ -819,13 +826,63 @@ function renderConfigPanel() {
  *  path top-to-bottom: demand drives unit load drives storage strategy drives
  *  footprint. Building dims become a derived output with an Override toggle for
  *  fixed-site scenarios. */
+/**
+ * Phase A (2026-05-05): mode-aware facility shape for renderers.
+ *
+ * In Design mode, renderers should draw the engine's sized footprint exactly
+ * (no empty-building visual). orientFacility() and elevationParams() resolve
+ * dims via facility.buildingWidth/buildingDepth → totalSqft fallback. In design
+ * mode we may have stale/leftover user W/D from a prior session; this helper
+ * synthesizes a facility shape with buildingWidth/Depth set to the suggested
+ * footprint so renderers consume the IE-correct dims regardless.
+ *
+ * In Constraint mode, returns facility as-is — user W/D is the constraint and
+ * orientFacility consumes them directly.
+ *
+ * @param {*} facility
+ * @param {*} sized — output of calc.sizeFacility(toSizingInputs())
+ * @returns {*} facility shape suitable for renderer consumption
+ */
+function _renderFacility(facility, sized) {
+  const mode = facility?.sizingMode || 'design';
+  if (mode !== 'design') return facility;
+  const r = sized?.requirementsDriven;
+  if (!r || !(r.suggestedLongFt > 0) || !(r.suggestedShortFt > 0)) return facility;
+  return { ...facility, buildingWidth: r.suggestedLongFt, buildingDepth: r.suggestedShortFt };
+}
+
 function _renderWscConfigHtml() {
   // Compute sized once — used by Step 1 readout, Step 5 derived outputs, and CTA banner.
   let sized = null;
   try { sized = calc.sizeFacility(toSizingInputs()); } catch {}
   const sizedSqft = sized?.totalSqft || 0;
+  const mode = facility.sizingMode || 'design';
 
   return `
+    <!-- ──────────────────────────────────────────────────────────────────
+         SIZING MODE — Phase A (2026-05-05). Foundation toggle that drives
+         the whole tool: Design = inventory drives building (engine answer
+         is the single output, W/D hidden); Constraint = user W×D is a
+         hard constraint (rendering uses user dims, dashboard surfaces gap).
+         ────────────────────────────────────────────────────────────────── -->
+    <div class="wsc-config-section" style="margin-bottom:14px;padding:10px 12px;background:linear-gradient(180deg,#f8fafc 0%,#eef2f7 100%);border-radius:6px;border:1px solid var(--ies-gray-200);">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ies-gray-500);margin-bottom:6px;">Sizing Mode</div>
+      <div role="radiogroup" aria-label="Sizing mode" style="display:flex;gap:6px;">
+        <button type="button" role="radio" aria-checked="${mode === 'design'}" data-wsc-mode="design"
+                title="Inventory drives building dimensions. The engine sizes the facility from your peak units / mix / dock throughput. The 2D/3D rendering uses the sized footprint exactly. Use this for greenfield design or when you don't yet have a candidate building."
+                style="flex:1;padding:8px 10px;font-size:12px;font-weight:600;border-radius:5px;cursor:pointer;border:1px solid ${mode === 'design' ? 'var(--ies-blue,#0047AB)' : 'var(--ies-gray-200)'};background:${mode === 'design' ? 'var(--ies-blue,#0047AB)' : '#fff'};color:${mode === 'design' ? '#fff' : 'var(--ies-gray-700)'};transition:all .12s;">
+          Design
+          <div style="font-size:10px;font-weight:500;margin-top:2px;color:${mode === 'design' ? 'rgba(255,255,255,.85)' : 'var(--ies-gray-500)'};">Inventory → building</div>
+        </button>
+        <button type="button" role="radio" aria-checked="${mode === 'constraint'}" data-wsc-mode="constraint"
+                title="Building W×D is a hard constraint (existing site or candidate). Tool computes the required footprint from inventory and shows the gap vs your entered building. Rendering uses your W×D; empty space surfaces as 'capacity slack'."
+                style="flex:1;padding:8px 10px;font-size:12px;font-weight:600;border-radius:5px;cursor:pointer;border:1px solid ${mode === 'constraint' ? 'var(--ies-blue,#0047AB)' : 'var(--ies-gray-200)'};background:${mode === 'constraint' ? 'var(--ies-blue,#0047AB)' : '#fff'};color:${mode === 'constraint' ? '#fff' : 'var(--ies-gray-700)'};transition:all .12s;">
+          Constraint
+          <div style="font-size:10px;font-weight:500;margin-top:2px;color:${mode === 'constraint' ? 'rgba(255,255,255,.85)' : 'var(--ies-gray-500)'};">Building → fit check</div>
+        </button>
+      </div>
+    </div>
+
     <!-- ──────────────────────────────────────────────────────────────────
          STEP 1 — Volume Requirements (the critical path starts here)
          ────────────────────────────────────────────────────────────────── -->
@@ -1081,22 +1138,21 @@ function _renderWscConfigHtml() {
     </div>
 
     <!-- ──────────────────────────────────────────────────────────────────
-         STEP 5 — Derived Facility (read-only by default; Override toggle
-         exposes editable Width / Depth / Office / Doors)
+         STEP 5 — Sized Facility (Design mode) / Capacity Check (Constraint mode).
+         Phase A (2026-05-05): mode-aware title + content. Design = single
+         answer (engine output); Constraint = required vs entered W×D with
+         explicit gap row. The misleading "Built (current): X SF at Y ft"
+         label that mixed sized output with user dims under one label is gone.
          ────────────────────────────────────────────────────────────────── -->
     <div class="wsc-config-section wsc-step" data-step="5">
       <div class="wsc-step-header" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
         <span class="wsc-step-num" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--ies-gray-500);color:#fff;font-size:11px;font-weight:700;">5</span>
-        <span class="wsc-step-title" style="font-size:13px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:var(--ies-gray-700);">Derived Facility</span>
-        <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ies-gray-600);margin-left:auto;cursor:pointer;">
-          <input type="checkbox" data-fac-bool="buildingDimsOverride" ${facility.buildingDimsOverride ? 'checked' : ''} style="margin:0;" />
-          <span>Override</span>
-        </label>
+        <span class="wsc-step-title" style="font-size:13px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:var(--ies-gray-700);">${mode === 'constraint' ? 'Capacity Check' : 'Sized Facility'}</span>
       </div>
       ${(() => {
         if (!sized) return `<div style="font-size:11px;color:var(--ies-gray-500);">Sizing unavailable — fill in Steps 1-4.</div>`;
         const r = sized.requirementsDriven || {};
-        return `
+        const requiredBlock = `
           <div style="padding:10px 12px;background:var(--ies-gray-50);border-radius:6px;font-size:12px;color:var(--ies-gray-700);margin-bottom:8px;">
             <div style="display:flex;justify-content:space-between;padding:2px 0;"><span>Storage</span><strong>${r.storageSf?.toLocaleString() || 0} sf</strong></div>
             <div style="display:flex;justify-content:space-between;padding:2px 0;"><span>Dock (peak-throughput driven)</span><strong>${r.dockSf?.toLocaleString() || 0} sf</strong></div>
@@ -1104,29 +1160,43 @@ function _renderWscConfigHtml() {
             <div style="display:flex;justify-content:space-between;padding:2px 0;"><span>Staging</span><strong>${r.stagingSf?.toLocaleString() || 0} sf</strong></div>
             ${r.additionalSf > 0 ? `<div style="display:flex;justify-content:space-between;padding:2px 0;"><span>Additional</span><strong>${r.additionalSf.toLocaleString()} sf</strong></div>` : ''}
             <div style="display:flex;justify-content:space-between;padding:2px 0;color:var(--ies-gray-500);"><span>+ Circulation buffer (10%)</span><strong>${r.circulationSf?.toLocaleString() || 0} sf</strong></div>
-            <div style="display:flex;justify-content:space-between;padding:6px 0 2px;border-top:1px solid var(--ies-gray-200);margin-top:6px;font-weight:700;color:var(--ies-blue,#0047AB);"><span>Total Required</span><strong>${r.totalSfRequired?.toLocaleString() || 0} sf</strong></div>
-            <div style="display:flex;justify-content:space-between;padding:2px 0;color:var(--ies-gray-500);font-size:11px;"><span>Suggested footprint (1.5:1)</span><strong>${r.suggestedLongFt || 0} × ${r.suggestedShortFt || 0} ft</strong></div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0 2px;border-top:1px solid var(--ies-gray-200);margin-top:6px;font-weight:700;color:var(--ies-blue,#0047AB);"><span>${mode === 'constraint' ? 'Required' : 'Sized Total'}</span><strong>${r.totalSfRequired?.toLocaleString() || 0} sf</strong></div>
+            ${mode === 'design' ? `<div style="display:flex;justify-content:space-between;padding:2px 0;color:var(--ies-gray-500);font-size:11px;"><span>Suggested footprint (1.5:1)</span><strong>${r.suggestedLongFt || 0} × ${r.suggestedShortFt || 0} ft</strong></div>` : ''}
           </div>
-          <div style="font-size:11px;color:var(--ies-gray-500);margin-bottom:8px;">Built (current): <strong>${calc.formatSqft(sizedSqft)}</strong> at ${facility.buildingWidth || 0} × ${facility.buildingDepth || 0} ft</div>
+        `;
+        if (mode === 'design') return requiredBlock;
+        // Constraint mode — show user dims + capacity gap row.
+        const builtSf = (Number(facility.buildingWidth) || 0) * (Number(facility.buildingDepth) || 0);
+        const haveBuilt = builtSf > 0;
+        const required = r.totalSfRequired || 0;
+        const deltaSf = haveBuilt ? builtSf - required : 0;
+        const deltaPct = (haveBuilt && required > 0) ? Math.round((deltaSf / required) * 1000) / 10 : 0;
+        const gapColor = !haveBuilt ? 'var(--ies-gray-500)' : Math.abs(deltaPct) <= 5 ? 'var(--ies-green,#10b981)' : deltaSf > 0 ? 'var(--ies-blue,#0047AB)' : 'var(--ies-orange,#f97316)';
+        const gapLabel = !haveBuilt ? 'Enter building dims to compute gap' : Math.abs(deltaPct) <= 5 ? `Within ±5% — fits` : deltaSf > 0 ? `+${deltaPct}% slack` : `${deltaPct}% short`;
+        return `
+          ${requiredBlock}
+          <div style="padding:10px 12px;background:#fff;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:12px;color:var(--ies-gray-700);margin-bottom:8px;">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin-bottom:4px;">Existing building</div>
+            <div class="wsc-config-row" style="margin-bottom:6px;">
+              <div class="wsc-config-field"><label>Width (ft)</label><input type="number" value="${facility.buildingWidth || 0}" data-fac="buildingWidth" /></div>
+              <div class="wsc-config-field"><label>Depth (ft)</label><input type="number" value="${facility.buildingDepth || 0}" data-fac="buildingDepth" /></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:2px 0;"><span>Footprint area</span><strong>${haveBuilt ? builtSf.toLocaleString() + ' sf' : '—'}</strong></div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0 2px;border-top:1px solid var(--ies-gray-200);margin-top:6px;font-weight:700;color:${gapColor};"><span>Gap</span><strong>${haveBuilt ? (deltaSf >= 0 ? '+' : '') + deltaSf.toLocaleString() + ' sf · ' : ''}${gapLabel}</strong></div>
+          </div>
+          <div style="border-top:1px dashed var(--ies-gray-300);padding-top:8px;margin-top:4px;">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin-bottom:6px;">Constraint dims</div>
+            <div class="wsc-config-row">
+              <div class="wsc-config-field"><label>Col Spacing (ft)</label><input type="number" value="${facility.columnSpacingX || 50}" data-fac="columnSpacingX" /></div>
+              <div class="wsc-config-field"><label>Office SF</label><input type="number" value="${zones.officeSqft}" data-zone="officeSqft" /></div>
+            </div>
+            <div class="wsc-config-row">
+              <div class="wsc-config-field"><label>Recv Staging SF</label><input type="number" value="${zones.receiveStagingSqft}" data-zone="receiveStagingSqft" /></div>
+              <div class="wsc-config-field"><label>Ship Staging SF</label><input type="number" value="${zones.shipStagingSqft}" data-zone="shipStagingSqft" /></div>
+            </div>
+          </div>
         `;
       })()}
-      ${facility.buildingDimsOverride ? `
-        <div style="border-top:1px dashed var(--ies-gray-300);padding-top:8px;margin-top:4px;">
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin-bottom:6px;">Override (locked dims)</div>
-          <div class="wsc-config-row">
-            <div class="wsc-config-field"><label>Width (ft)</label><input type="number" value="${facility.buildingWidth}" data-fac="buildingWidth" /></div>
-            <div class="wsc-config-field"><label>Depth (ft)</label><input type="number" value="${facility.buildingDepth}" data-fac="buildingDepth" /></div>
-          </div>
-          <div class="wsc-config-row">
-            <div class="wsc-config-field"><label>Col Spacing (ft)</label><input type="number" value="${facility.columnSpacingX || 50}" data-fac="columnSpacingX" /></div>
-            <div class="wsc-config-field"><label>Office SF (override)</label><input type="number" value="${zones.officeSqft}" data-zone="officeSqft" /></div>
-          </div>
-          <div class="wsc-config-row">
-            <div class="wsc-config-field"><label>Recv Staging SF</label><input type="number" value="${zones.receiveStagingSqft}" data-zone="receiveStagingSqft" /></div>
-            <div class="wsc-config-field"><label>Ship Staging SF</label><input type="number" value="${zones.shipStagingSqft}" data-zone="shipStagingSqft" /></div>
-          </div>
-        </div>
-      ` : ''}
     </div>
 
     <!-- ──────────────────────────────────────────────────────────────────
@@ -1291,6 +1361,25 @@ function bindConfigEvents(panel) {
       // Override toggle re-renders the panel (to flip dim editor visibility);
       // bottom-beam toggles only re-render the content view.
       if (field === 'buildingDimsOverride') renderConfigPanel();
+      renderContentView();
+    });
+  });
+
+  // Phase A redesign (2026-05-05) — Sizing Mode toggle (Design / Constraint).
+  // Re-renders both the Configure panel (Step 5 changes shape) and the content
+  // view (rendering swaps to mode-aware footprint).
+  panel.querySelectorAll('[data-wsc-mode]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      const next = /** @type {HTMLElement} */ (e.currentTarget).dataset.wscMode;
+      if (next !== 'design' && next !== 'constraint') return;
+      if (facility.sizingMode === next) return;
+      facility.sizingMode = next;
+      // Keep buildingDimsOverride coherent with the new mode for any code
+      // path still consulting the legacy boolean. Constraint = override on;
+      // design = override off.
+      facility.buildingDimsOverride = (next === 'constraint');
+      isDirty = true;
+      renderConfigPanel();
       renderContentView();
     });
   });
@@ -1724,8 +1813,10 @@ function renderPlan() {
   // hold significantly more rack capacity than the entered inventory needs),
   // surface a one-click "right-size" banner above the canvas. Mirrors the
   // canvas's widthFt/depthFt computation so banner/canvas always agree.
+  // Phase A (2026-05-05): Constraint-mode only. In Design mode the rendering
+  // already equals the sized footprint, so a "shrink" suggestion would loop.
   let shrinkSuggestion = { recommended: false };
-  try {
+  if ((facility.sizingMode || 'design') === 'constraint') try {
     const _sizedForCta = calc.sizeFacility(toSizingInputs());
     const _orientUser = calc.orientFacility(facility);
     const _userFits = (_orientUser.longFt * _orientUser.shortFt) >= _sizedForCta.totalSqft * 0.98 && !_orientUser.derived;
@@ -1836,7 +1927,8 @@ function drawPlan() {
 
   // Pull sized facility numbers so this view agrees with the dashboard.
   const sized = calc.sizeFacility(toSizingInputs());
-  const elev = calc.elevationParams(facility);
+  // Phase A: route elevation params through mode-aware facility shape.
+  const elev = calc.elevationParams(_renderFacility(facility, sized));
   // Brock 2026-04-20: floorplan scale uses sized SF (the computed answer)
   // when the user hasn't set an Existing/Target SF constraint. This way
   // the 2D view renders as soon as peak units / storage inputs are
@@ -1850,29 +1942,20 @@ function drawPlan() {
     return;
   }
 
-  // Building dimensions (ft) — derive from sized SF when either input is
-  // missing OR the user-entered footprint can't fit the sized facility
-  // (prevents the "300×500 = 150K but sized = 578K" rendering where
-  // storage blocks overflow the canvas).
+  // Building dimensions (ft) — Phase A (2026-05-05): mode-aware via
+  // _renderFacility helper. Design mode → engine's suggested footprint
+  // (no empty-building visual). Constraint mode → user W×D (empty space
+  // surfaces as capacity slack; dashboard shows gap %).
   //
   // WSC-O1 (2026-05-04): single source of truth for orientation lives in
   // calc.orientFacility() — Plan / Elevation / 3D all consume it. Convention:
-  // dock-on-long-edge, longFt rendered horizontal, shortFt vertical. Pre-O1
-  // this block force-swapped to landscape locally; 3D had no swap; the two
-  // views drifted on portrait inputs.
-  const orientUser = calc.orientFacility(facility);
-  const userFits = (orientUser.longFt * orientUser.shortFt) >= totalSqft * 0.98 && !orientUser.derived;
-  let widthFt, depthFt;
-  if (userFits) {
-    widthFt = orientUser.longFt;
-    depthFt = orientUser.shortFt;
-  } else {
-    // Sized facility doesn't fit user-entered footprint — derive a 1.5:1
-    // landscape from sized SF (matches orientFacility's totalSqft fallback).
-    const sizedOrient = calc.orientFacility({ totalSqft });
-    widthFt = sizedOrient.longFt;
-    depthFt = sizedOrient.shortFt;
+  // dock-on-long-edge, longFt rendered horizontal, shortFt vertical.
+  let _orient = calc.orientFacility(_renderFacility(facility, sized));
+  if (!(_orient.longFt > 0 && _orient.shortFt > 0)) {
+    _orient = calc.orientFacility({ totalSqft });
   }
+  const widthFt = _orient.longFt;
+  const depthFt = _orient.shortFt;
 
   // Fit-to-canvas with padding for dimension labels
   const padX = 60, padY = 60;
@@ -2537,10 +2620,12 @@ function renderDashboard() {
   const fwdPick = calc.calcForwardPick(zones);
   const correctedSf = calc.calcSuggestedSF(facility, zones, volumes);
   const zoneBD = calc.zoneBreakdown(zones);
-  const elev = calc.elevationParams(facility);
 
   // v2-equivalent volume-first sizing (the engine we actually trust).
   const sized = calc.sizeFacility(toSizingInputs());
+
+  // Phase A: route elevation params through mode-aware facility shape.
+  const elev = calc.elevationParams(_renderFacility(facility, sized));
 
   // Phase 4 Layer B (volumes-as-nucleus, 2026-04-29): per-channel positions
   // breakdown for display. Same pallet-vs-carton math as sizeFacility but
@@ -2564,27 +2649,72 @@ function renderDashboard() {
       <div class="hub-kpi-item"><div class="hub-kpi-label">Dock Doors</div><div class="hub-kpi-value" title="${sized.dock.inboundDoors} in${sized.dock.inboundDoorsExplicit ? ' (explicit)' : ` (derived; throughput suggests ${sized.dock.inboundDoorsDerived})`} + ${sized.dock.outboundDoors} out${sized.dock.outboundDoorsExplicit ? ' (explicit)' : ` (derived; throughput suggests ${sized.dock.outboundDoorsDerived})`}${(sized.dock.inboundDoorsExplicit || sized.dock.outboundDoorsExplicit) ? '' : ', +25% surge buffer'}">${sized.dock.totalDoors}</div></div>
     </div>
 
-    <!-- Phase 2 redesign — Required vs Built panel (requirements-driven sizing).
-         Shows the IE-correct critical-path facility SF aggregation against
-         what the user actually has built. Apply button right-sizes the
-         building dims to the suggested 1.5:1 footprint. -->
+    <!-- Phase A redesign (2026-05-05) — Sized Facility / Capacity Check panel.
+         Mode-aware: Design mode shows the engine's sized footprint as the
+         single answer (no Built column, no Apply button — the engine answer
+         IS the answer). Constraint mode keeps the two-column Required vs
+         Built layout with status chip and the right-size button. The
+         pre-Phase-A panel always showed both columns and an Apply button,
+         which created the "two competing sizes" confusion. -->
     ${(() => {
       const r = sized.requirementsDriven;
       if (!r || !r.totalSfRequired) return '';
+      const _mode = facility.sizingMode || 'design';
+
+      // Design mode — single column. Engine answer = footprint.
+      if (_mode === 'design') {
+        return `
+          <div class="hub-card mb-6" style="border-left:4px solid var(--ies-blue,#0047AB);padding:16px 20px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+              <div>
+                <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--ies-gray-700);">Sized Facility</div>
+                <div style="font-size:11px;color:var(--ies-gray-500);margin-top:2px;">Design mode — engine sizes the building from inventory + dock throughput. Switch to Constraint mode in the Configure panel to evaluate an existing W×D.</div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-size:11px;color:var(--ies-gray-400);text-transform:uppercase;font-weight:700;">Sized total</div>
+                <div style="font-size:18px;font-weight:800;color:var(--ies-blue,#0047AB);">${r.totalSfRequired.toLocaleString()} sf</div>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+              <div>
+                <div style="font-size:11px;color:var(--ies-gray-500);text-transform:uppercase;font-weight:700;margin-bottom:6px;">Critical-path SF</div>
+                <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:12px;"><span>Storage</span><strong>${r.storageSf.toLocaleString()} sf</strong></div>
+                <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:12px;"><span>Dock <span style="color:var(--ies-gray-400);">(peak-throughput driven)</span></span><strong>${r.dockSf.toLocaleString()} sf</strong></div>
+                <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:12px;"><span>Office</span><strong>${r.officeSf.toLocaleString()} sf</strong></div>
+                <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:12px;"><span>Staging</span><strong>${r.stagingSf.toLocaleString()} sf</strong></div>
+                ${r.additionalSf > 0 ? `<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:12px;"><span>Additional</span><strong>${r.additionalSf.toLocaleString()} sf</strong></div>` : ''}
+                <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:11px;color:var(--ies-gray-500);"><span>+ Circulation buffer (10%)</span><strong>${r.circulationSf.toLocaleString()} sf</strong></div>
+                <div style="display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid var(--ies-gray-200);margin-top:6px;font-weight:700;color:var(--ies-blue,#0047AB);"><span>Total</span><strong>${r.totalSfRequired.toLocaleString()} sf</strong></div>
+              </div>
+              <div>
+                <div style="font-size:11px;color:var(--ies-gray-500);text-transform:uppercase;font-weight:700;margin-bottom:6px;">Footprint</div>
+                <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:12px;"><span>Long edge × Short edge</span><strong>${r.suggestedLongFt} × ${r.suggestedShortFt} ft</strong></div>
+                <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:12px;color:var(--ies-gray-500);"><span>Aspect ratio</span><strong>1.5 : 1</strong></div>
+                <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:11px;color:var(--ies-gray-500);"><span>Convention</span><strong>Dock on long edge</strong></div>
+                <div style="margin-top:10px;padding:8px 10px;background:var(--ies-gray-50);border-radius:4px;font-size:11px;color:var(--ies-gray-600);line-height:1.5;">
+                  The 2D plan and 3D scene render this footprint exactly. No empty-building visual — what you see equals the engineered answer.
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      // Constraint mode — Required vs Existing with status chip + right-size CTA.
       const builtSf = (facility.buildingWidth || 0) * (facility.buildingDepth || 0);
       const haveBuilt = builtSf > 0;
       const deltaSf = haveBuilt ? builtSf - r.totalSfRequired : 0;
       const deltaPct = (haveBuilt && r.totalSfRequired > 0) ? Math.round((deltaSf / r.totalSfRequired) * 1000) / 10 : 0;
-      const status = !haveBuilt ? 'unbuilt' : Math.abs(deltaPct) <= 5 ? 'on-target' : deltaPct > 5 ? 'over-built' : 'under-built';
-      const statusColor = status === 'on-target' ? 'var(--ies-green,#10b981)' : status === 'over-built' ? 'var(--ies-blue,#0047AB)' : status === 'under-built' ? 'var(--ies-orange,#f97316)' : 'var(--ies-gray-500)';
-      const statusLabel = status === 'on-target' ? '✓ On target (within 5%)' : status === 'over-built' ? `+${deltaPct}% over-built` : status === 'under-built' ? `${deltaPct}% under-built` : 'No building dims set';
+      const status = !haveBuilt ? 'unbuilt' : Math.abs(deltaPct) <= 5 ? 'on-target' : deltaPct > 5 ? 'slack' : 'short';
+      const statusColor = status === 'on-target' ? 'var(--ies-green,#10b981)' : status === 'slack' ? 'var(--ies-blue,#0047AB)' : status === 'short' ? 'var(--ies-orange,#f97316)' : 'var(--ies-gray-500)';
+      const statusLabel = status === 'on-target' ? '✓ On target (within 5%)' : status === 'slack' ? `+${deltaPct}% capacity slack` : status === 'short' ? `${deltaPct}% short` : 'Enter building dims';
       const canApply = r.suggestedLongFt > 0 && r.suggestedShortFt > 0;
       return `
         <div class="hub-card mb-6" style="border-left:4px solid ${statusColor};padding:16px 20px;">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
             <div>
-              <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--ies-gray-700);">Required vs Built</div>
-              <div style="font-size:11px;color:var(--ies-gray-500);margin-top:2px;">Requirements-driven facility sizing — critical path from volume → unit load → storage → footprint.</div>
+              <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--ies-gray-700);">Capacity Check</div>
+              <div style="font-size:11px;color:var(--ies-gray-500);margin-top:2px;">Constraint mode — your building is fixed. Tool shows whether your inventory fits, and by how much.</div>
             </div>
             <div style="text-align:right;">
               <div style="font-size:11px;color:var(--ies-gray-400);text-transform:uppercase;font-weight:700;">Status</div>
@@ -2604,13 +2734,13 @@ function renderDashboard() {
               <div style="font-size:11px;color:var(--ies-gray-500);margin-top:4px;">Suggested footprint: <strong>${r.suggestedLongFt} × ${r.suggestedShortFt} ft</strong> (1.5:1)</div>
             </div>
             <div>
-              <div style="font-size:11px;color:var(--ies-gray-500);text-transform:uppercase;font-weight:700;margin-bottom:6px;">Built (current dims)</div>
+              <div style="font-size:11px;color:var(--ies-gray-500);text-transform:uppercase;font-weight:700;margin-bottom:6px;">Existing building</div>
               ${haveBuilt ? `
                 <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:12px;"><span>Width × Depth</span><strong>${facility.buildingWidth} × ${facility.buildingDepth} ft</strong></div>
                 <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:12px;"><span>Footprint area</span><strong>${builtSf.toLocaleString()} sf</strong></div>
-                <div style="display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid var(--ies-gray-200);margin-top:6px;font-weight:700;color:${statusColor};"><span>Delta</span><strong>${deltaSf >= 0 ? '+' : ''}${deltaSf.toLocaleString()} sf (${deltaPct >= 0 ? '+' : ''}${deltaPct}%)</strong></div>
+                <div style="display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid var(--ies-gray-200);margin-top:6px;font-weight:700;color:${statusColor};"><span>Gap</span><strong>${deltaSf >= 0 ? '+' : ''}${deltaSf.toLocaleString()} sf (${deltaPct >= 0 ? '+' : ''}${deltaPct}%)</strong></div>
               ` : `
-                <div style="font-size:11px;color:var(--ies-gray-500);font-style:italic;padding:8px 0;">No building dims set. Click Apply below to use the suggested footprint, or enable Step 5 Override to set custom dims.</div>
+                <div style="font-size:11px;color:var(--ies-gray-500);font-style:italic;padding:8px 0;">No building dims set. Enter Width / Depth in Step 5, or click Apply suggested dims to use the engineered footprint as a starting point.</div>
               `}
               ${canApply ? `
                 <div style="margin-top:12px;display:flex;gap:8px;">
@@ -2894,7 +3024,10 @@ function renderUtilBar(label, pct, opts = {}) {
 // ============================================================
 
 function renderElevation() {
-  const elev = calc.elevationParams(facility, zones);
+  // Phase A: route elevation params through mode-aware facility shape.
+  let _sizedEl = null;
+  try { _sizedEl = calc.sizeFacility(toSizingInputs()); } catch {}
+  const elev = calc.elevationParams(_renderFacility(facility, _sizedEl), zones);
 
   return `
     <div class="hub-card">
@@ -2923,7 +3056,10 @@ function drawElevation() {
   const drawW = w - pad.l - pad.r;
   const drawH = h - pad.t - pad.b;
 
-  const elev = calc.elevationParams(facility);
+  // Phase A: route elevation params through mode-aware facility shape.
+  let _sizedDe = null;
+  try { _sizedDe = calc.sizeFacility(toSizingInputs()); } catch {}
+  const elev = calc.elevationParams(_renderFacility(facility, _sizedDe));
   const exteriorGrade = -4;
   const maxH = elev.clearHeight + 5;
   const scaleX = drawW / (elev.buildingWidth || 1);
@@ -3294,13 +3430,25 @@ function build3DScene() {
     // WSC-O1 (2026-05-04): always map longFt -> world X axis (left-to-right
     // on screen, facing camera at default azimuth) and shortFt -> world Z
     // axis (depth into screen). orientFacility() pins the dock-on-long-edge
-    // convention shared with the Plan view + Elevation. Pre-O1 the 3D scene
-    // mapped raw buildingWidth -> X with no swap, so portrait inputs (W<D)
-    // showed the long edge going INTO the screen while plan view showed it
-    // running across, producing a 90-degree disagreement between the two views.
-    const orient3d = calc.orientFacility(facility);
-    const bwFt = orient3d.longFt  || 500;       // long edge -> X axis
-    const bdFt = orient3d.shortFt || 300;       // short edge -> Z axis
+    // convention shared with the Plan view + Elevation.
+    //
+    // Phase A (2026-05-05): mode-aware footprint. Design mode renders the
+    // sized footprint exactly (no empty-building visual); Constraint mode
+    // renders the user's W×D and lets rack-allocation downstream cap to
+    // inventory need (leftover floor = capacity slack).
+    // Phase A (2026-05-05): mode-aware footprint via _renderFacility helper.
+    // Design mode → engine's suggested long/short. Constraint mode → user W×D
+    // (with a fallback to sized totalSqft when user hasn't entered dims yet).
+    let _sized3d = null;
+    try { _sized3d = calc.sizeFacility(toSizingInputs()); } catch {}
+    const _facFor3d = _renderFacility(facility, _sized3d);
+    let _orient3d = calc.orientFacility(_facFor3d);
+    if (!(_orient3d.longFt > 0 && _orient3d.shortFt > 0)) {
+      const sT = (_sized3d && _sized3d.totalSqft) || 0;
+      _orient3d = calc.orientFacility({ totalSqft: sT });
+    }
+    const bwFt = _orient3d.longFt  || 500;       // long edge -> X axis
+    const bdFt = _orient3d.shortFt || 300;       // short edge -> Z axis
     const ch   = facility.clearHeight || 32;
     const scale = 0.5;                          // 1 ft = 0.5 units
 
@@ -3373,8 +3521,10 @@ function build3DScene() {
     scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(roofPts), roofLineMat));
 
     // ---------- Storage geometry inputs ----------
-    const elev = calc.elevationParams(facility);
     const sized = calc.sizeFacility(toSizingInputs());
+    // Phase A: route elevation params through mode-aware facility shape so the
+    // 3D scene uses the same dock-on-long-edge dims as the 2D plan + dashboard.
+    const elev = calc.elevationParams(_renderFacility(facility, sized));
 
     const rackDepthFt = elev.rackDepthFt || 4.3;
     const aisleFt     = facility.aisleWidth || elev.aisleWidth || 12;
@@ -4217,6 +4367,13 @@ function createDefaultFacility() {
     // Step 5 Override toggle — when false, building dims display as derived;
     // when true, exposes editable Width/Depth inputs (legacy behavior).
     buildingDimsOverride: false,
+    // Phase A redesign (2026-05-05) — explicit sizing mode. 'design' = engine
+    // answer is the only footprint (W/D inputs hidden, rendering uses sized
+    // dims). 'constraint' = user W×D is a hard constraint (W/D first-class
+    // inputs, rendering uses user dims, dashboard shows the capacity gap).
+    // Replaces the buildingDimsOverride boolean for new facilities; legacy
+    // facilities with buildingDimsOverride=true migrate to 'constraint' on load.
+    sizingMode: 'design',
   };
 }
 

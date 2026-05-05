@@ -27,6 +27,12 @@
  * @property {number} [beamHeight] — beam height in inches (default 5)
  * @property {number} [flueSpace] — flue space between pallets in inches (default 3)
  * @property {number} [topClearance] — sprinkler clearance at top in inches (default 36)
+ * @property {'design' | 'constraint'} [sizingMode] — Phase A (2026-05-05): explicit
+ *   sizing mode. 'design' = inventory drives building dims (engine answer is the
+ *   single output); 'constraint' = user W×D is a constraint, tool answers the
+ *   capacity gap. Replaces the buildingDimsOverride checkbox semantics.
+ *   Default 'design'. Legacy facilities with buildingDimsOverride=true migrate
+ *   to 'constraint' on load; all others to 'design'.
  */
 
 /**
