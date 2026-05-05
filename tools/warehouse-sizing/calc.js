@@ -493,34 +493,32 @@ export function allocateRackColsByTarget(opts = {}) {
 
   // Phase F (2026-05-05) — pad-to-fill in 'fill' mode. After the target-
   // driven allocation, if leftover pairs exist (mode === 'over_built'),
-  // distribute them proportionally to the per-type targets so totalPairs
-  // is consumed exactly. This eliminates the visible empty-floor strip
-  // on the right of Design-mode renderings without changing the engine
-  // sizing math (which still drives the building footprint via
-  // requirementsDriven.totalSfRequired). Per-type counts go up modestly
-  // — the extra positions are visual slack that the IE designer would
-  // think of as future expansion / cross-aisle reserve / column-grid
-  // accommodation rolled into the visible rack zone.
+  // distribute them ONE PAIR AT A TIME to whichever type has the lowest
+  // achievement percentage relative to its target. This greedy approach
+  // ensures all three types converge toward equal achievement-% rather
+  // than over-padding the largest target while leaving shelving short.
+  // (Phase F.1's first-cut proportional-to-target padding under-served
+  // shelving because shelvingPosPerPair >> palletPosPerPair, making
+  // shelving's "fair share" of leftover pairs round to ~0.)
   if (fillMode === 'fill' && mode === 'over_built') {
-    const targets = [fpTarget, cpTarget, shTarget];
-    const sumTargets = targets.reduce((a, b) => a + b, 0);
-    const leftover = totalPairs - (fpPairs + cpPairs + shPairs);
-    if (leftover > 0 && sumTargets > 0) {
-      // Proportional allocation, then round; assign fence-post error to
-      // the largest target so totals reconcile exactly.
-      const fpAdd = Math.round(leftover * fpTarget / sumTargets);
-      const cpAdd = Math.round(leftover * cpTarget / sumTargets);
-      let shAdd = leftover - fpAdd - cpAdd;
-      if (shAdd < 0) shAdd = 0;
-      fpPairs += fpAdd;
-      cpPairs += cpAdd;
-      shPairs += shAdd;
-      // Final reconciliation: if rounding still left a gap, push to FP
-      // (the largest type for typical 3PL profiles).
-      const stillLeft = totalPairs - (fpPairs + cpPairs + shPairs);
-      if (stillLeft > 0) fpPairs += stillLeft;
-      mode = 'exact_fit';
+    let leftover = totalPairs - (fpPairs + cpPairs + shPairs);
+    while (leftover > 0) {
+      // Achievement % per type. Use Infinity for zero-target types so
+      // they never win the leftover pair (no need to over-allocate types
+      // the engine deemed unnecessary).
+      const fpAch = fpTarget > 0 ? (fpPairs * palletPosPerPair) / fpTarget : Infinity;
+      const cpAch = cpTarget > 0 ? (cpPairs * palletPosPerPair) / cpTarget : Infinity;
+      const shAch = shTarget > 0 ? (shPairs * shelvingPosPerPair) / shTarget : Infinity;
+      // Assign next pair to the lowest-achievement type. Ties broken by
+      // largest target (FP > CP > Shelving in typical 3PL profiles).
+      const min = Math.min(fpAch, cpAch, shAch);
+      if (!Number.isFinite(min)) break; // all targets zero — bail
+      if (fpAch === min) fpPairs += 1;
+      else if (cpAch === min) cpPairs += 1;
+      else shPairs += 1;
+      leftover -= 1;
     }
+    if (totalPairs - (fpPairs + cpPairs + shPairs) === 0) mode = 'exact_fit';
   }
 
   const unusedPairs = Math.max(0, totalPairs - fpPairs - cpPairs - shPairs);

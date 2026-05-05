@@ -3665,12 +3665,17 @@ function renderRenderedFactsHud(facts, ctx = {}) {
     const sign = d > 0 ? '+' : '';
     return `${sign}${d.toFixed(1)}%`;
   };
+  // Phase F.2 (2026-05-05) — mode-aware status copy. In Design mode the
+  // rack zone pads to fill the engineered footprint (Phase F.1 fillMode
+  // 'fill'), so "over-built" mis-frames an intentional design choice.
+  // Reframe as "Padded to fill footprint" with a neutral status chip.
+  const _hudMode = ctx.sizingMode || 'design';
   const statusLabel = status === 'on_target' ? 'On target (within 5%)'
     : status === 'under_built' ? 'Under-built — footprint too small'
-    : 'Over-built — building above sized need';
+    : (_hudMode === 'design' ? 'Padded to fill footprint' : 'Over-built — building above sized need');
   const statusClass = status === 'on_target' ? 'wsc-3d-hud-status--on'
     : status === 'under_built' ? 'wsc-3d-hud-status--under'
-    : 'wsc-3d-hud-status--over';
+    : (_hudMode === 'design' ? 'wsc-3d-hud-status--on' : 'wsc-3d-hud-status--over');
 
   const rowFor = (label, key, levelsLabel) => {
     const b = byType[key] || { columns: 0, positions: 0 };
@@ -4606,7 +4611,11 @@ function build3DScene() {
     try {
       const facts = calc.rollupRenderedFacts(placedRacks, sized);
       const hud = el.querySelector('#wsc-3d-hud');
-      if (hud) hud.innerHTML = renderRenderedFactsHud(facts, { palletLevels, shelvingLevels, sized });
+      // Phase F.2 (2026-05-05) — pass sizing mode into HUD so the status
+      // copy can reframe "Over-built" (which now reads as a bug) into
+      // "Padded to footprint" (intentional Phase F.1 fill behavior) when
+      // in Design mode.
+      if (hud) hud.innerHTML = renderRenderedFactsHud(facts, { palletLevels, shelvingLevels, sized, sizingMode: facility.sizingMode || 'design' });
     } catch (hudErr) {
       console.warn('[WSC] HUD render failed:', hudErr);
     }
