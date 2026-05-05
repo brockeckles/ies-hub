@@ -4552,23 +4552,118 @@ function build3DScene() {
     // FP pass: full pallet wood box (~5 ft load height, slightly under level pitch).
     _renderPalletLoadPass(fpMeta, totalPalletsFP, matPallet, 3.5 * scale, 3.5 * scale);
 
-    // CP pass: shorter brown carton-stack box. Height = cartonProfile.hi ×
-    // cartonHeightIn (real stacked-carton height) clamped to fit within the
-    // level pitch. Material = brown corrugated (matCarton, same as shelving).
+    // Phase F.8 (2026-05-05) — Brock callout: "I still don't understand the
+    // pallet vs cartons in pallet racking differences. visually they look the
+    // same except for the color. this is extremely confusing visually and
+    // makes me question the tool altogether". Color alone wasn't enough.
+    // Now CP renders as the IE-correct stack profile: a small wooden pallet
+    // base at the bottom + N visibly-separated carton-layer slabs on top
+    // (N = cartonProfile.hi, capped at 5 for visual clarity). Each layer
+    // slab is shorter than the equivalent FP pallet load and is brown
+    // corrugated material with thin gaps between layers — reads as
+    // "individual carton layers stacked on a pallet" instead of "another
+    // pallet that happens to be a different color".
     if (cpMeta.length > 0 && totalPalletsCP > 0) {
       const _cp = sized?.cartonProfile || {};
       const _hi = Math.max(1, +_cp.hi || 4);
       const _cartonHIn = +(_cp.cartonHeightIn || facility.cartonHeightIn) || 12;
-      // Real stacked height = hi × cartonHeightIn. Convert to feet × scale.
-      const cpStackFt = (_hi * _cartonHIn) / 12;
-      // Clamp to a max of the level pitch minus clearance (so carton stack
-      // doesn't punch into the upper level's beam). Use a representative
-      // typical level pitch of ~5 ft; min 2 ft floor so very short cartons
-      // are still visible.
-      const cpLoadFt = Math.max(2.0, Math.min(cpStackFt, 4.0));
-      const cpLoadU  = cpLoadFt * scale;
-      const cpWidthU = 3.2 * scale;  // narrower than FP's 3.5 — visible stack profile
-      _renderPalletLoadPass(cpMeta, totalPalletsCP, matCarton, cpLoadU, cpWidthU);
+      // Visible layer count: real hi capped at 5 so the stack is readable
+      // even at heavy ti×hi configurations (e.g. 8-hi pancake cartons would
+      // overcrowd the position). Each layer slab represents a real carton
+      // layer (height = cartonHeightIn × hi/visibleLayers so total stack
+      // height = cartonHeightIn × hi, matching the engineering reality).
+      const visibleLayers = Math.min(_hi, 5);
+      const realStackFt = (_hi * _cartonHIn) / 12;
+      // Cap total stack at 4 ft so it fits within the level pitch with the
+      // pallet base + small clearance.
+      const totalStackFt = Math.max(1.5, Math.min(realStackFt, 3.5));
+      // Pallet base (small wooden plank, 5" thick).
+      const palletBaseFt = 0.4;
+
+      // Pass 1: wooden pallet bases (one per CP position).
+      const baseW = 3.4 * scale;
+      const baseH = palletBaseFt * scale;
+      const baseD = palletDepthU; // X depth into rack
+      const palletBaseGeo = new THREE.BoxGeometry(baseD, baseH, baseW);
+      const palletBaseMesh = new THREE.InstancedMesh(palletBaseGeo, matPallet, totalPalletsCP);
+      palletBaseMesh.castShadow = true;
+      const dummy1 = new THREE.Object3D();
+      let bi = 0;
+      for (const m of cpMeta) {
+        const sBay = m.structuralBayWidthFt || calc.PALLET_BAY_WIDTH_FT * 2;
+        const baysPerFace = Math.max(0, Math.floor((m.segLenU / scale) / sBay));
+        if (baysPerFace === 0) continue;
+        const bayU = sBay * scale;
+        const segZ0 = m.segCenter - m.segLenU / 2;
+        const palletCenterX = m.frontFaceX + m.intoRackDir * (palletDepthU / 2);
+        const levelHeightU  = m.heightU / m.levels;
+        const fillCount = Math.floor(baysPerFace * m.levels * m.fillPct);
+        const seed = ((Math.floor(m.mx * 1000) ^ Math.floor(m.segCenter * 1000)) >>> 0) ^ (m.side === 'A' ? 0x12345 : 0xABCD9);
+        const order = _shuffledBayLevelOrder(baysPerFace, m.levels, seed);
+        for (let i = 0; i < fillCount; i++) {
+          const [b, lv] = order[i];
+          const beamY = levelHeightU * lv;
+          const yU = beamY + baseH / 2 + 0.05;
+          const bayBaseZ = segZ0 + b * bayU;
+          for (const zFrac of _zFractionsInBay) {
+            const z = bayBaseZ + zFrac * bayU;
+            dummy1.position.set(palletCenterX, yU, z);
+            dummy1.scale.set(1, 1, 1);
+            dummy1.updateMatrix();
+            palletBaseMesh.setMatrixAt(bi++, dummy1.matrix);
+          }
+        }
+      }
+      palletBaseMesh.instanceMatrix.needsUpdate = true;
+      scene.add(palletBaseMesh);
+
+      // Pass 2: visible carton-layer slabs stacked on top of each pallet base.
+      // visibleLayers slabs per CP position × 2 pallets per bay = 2*visibleLayers
+      // instances per filled position.
+      const layerH = (totalStackFt / visibleLayers) * scale;
+      const layerGapU = 0.08 * scale; // visible thin gap between layers
+      const layerSlabH = Math.max(0.05 * scale, layerH - layerGapU);
+      const slabW = 3.0 * scale;     // narrower than pallet base for visible "stack on pallet"
+      const slabD = palletDepthU * 0.92;
+      const slabGeo = new THREE.BoxGeometry(slabD, layerSlabH, slabW);
+      // Saturated cardboard tan — clearly different from FP's wood color.
+      const matCartonStack = new THREE.MeshStandardMaterial({ color: 0xc8966b, roughness: 0.85, metalness: 0.0 });
+      const totalCpSlabs = totalPalletsCP * visibleLayers;
+      const cartonSlabMesh = new THREE.InstancedMesh(slabGeo, matCartonStack, totalCpSlabs);
+      cartonSlabMesh.castShadow = true;
+      const dummy2 = new THREE.Object3D();
+      let si = 0;
+      for (const m of cpMeta) {
+        const sBay = m.structuralBayWidthFt || calc.PALLET_BAY_WIDTH_FT * 2;
+        const baysPerFace = Math.max(0, Math.floor((m.segLenU / scale) / sBay));
+        if (baysPerFace === 0) continue;
+        const bayU = sBay * scale;
+        const segZ0 = m.segCenter - m.segLenU / 2;
+        const palletCenterX = m.frontFaceX + m.intoRackDir * (palletDepthU / 2);
+        const levelHeightU  = m.heightU / m.levels;
+        const fillCount = Math.floor(baysPerFace * m.levels * m.fillPct);
+        const seed = ((Math.floor(m.mx * 1000) ^ Math.floor(m.segCenter * 1000)) >>> 0) ^ (m.side === 'A' ? 0x12345 : 0xABCD9);
+        const order = _shuffledBayLevelOrder(baysPerFace, m.levels, seed);
+        for (let i = 0; i < fillCount; i++) {
+          const [b, lv] = order[i];
+          const beamY = levelHeightU * lv;
+          // Stack starts at beamY + baseH (top of wooden pallet base).
+          const stackBaseY = beamY + baseH + 0.05;
+          const bayBaseZ = segZ0 + b * bayU;
+          for (const zFrac of _zFractionsInBay) {
+            const z = bayBaseZ + zFrac * bayU;
+            for (let ly = 0; ly < visibleLayers; ly++) {
+              const yU = stackBaseY + ly * layerH + layerSlabH / 2;
+              dummy2.position.set(palletCenterX, yU, z);
+              dummy2.scale.set(1, 1, 1);
+              dummy2.updateMatrix();
+              cartonSlabMesh.setMatrixAt(si++, dummy2.matrix);
+            }
+          }
+        }
+      }
+      cartonSlabMesh.instanceMatrix.needsUpdate = true;
+      scene.add(cartonSlabMesh);
     }
 
     // ── Shelving structural detail (short uprights + shelf decks + cartons) ──
