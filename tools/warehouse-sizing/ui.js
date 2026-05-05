@@ -3525,12 +3525,23 @@ function drawShelvingBayDetail(ctx, w, h, sized) {
   const levelHeightFt = c.shelfLevelHeightFt || 1.0;
   const totalHeightFt = levels * levelHeightFt;
 
-  // Cartons-per-shelf grid
+  // Cartons-per-shelf grid. Phase F.7 (2026-05-05) — Brock callout: "the
+  // carton orientation drop-down doesn't actually change anything. it
+  // re-renders, but the layout is the same." Pre-fix `cartonLin` was always
+  // cartonLengthIn / 12 regardless of orientation — so when user flipped
+  // L-along-rack → W-along-rack, cAcross changed (3 → 4) but each carton
+  // box was still drawn 12" wide along the rack, overflowing the bay.
+  // Now: along-rack dim is orientation-aware (cartonLength when L, cartonWidth
+  // when W), so the boxes shrink/grow to match the orientation actually
+  // selected, and the count × box-width fills the bay cleanly.
   const cAcross = c.cartonsPerShelfAcross || 3;
   const cDeep = c.cartonsPerShelfDeep || 2;
-  const cartonLin = (+facility.cartonLengthIn || 12) / 12;  // ft
-  const cartonWin = (+facility.cartonWidthIn || 9) / 12;
-  const cartonHin = (+facility.cartonHeightIn || 12) / 12;
+  const orientation = c.orientation || 'L-along-rack';
+  const cartonLengthFt = (+facility.cartonLengthIn || 12) / 12;
+  const cartonWidthFt  = (+facility.cartonWidthIn  || 9) / 12;
+  const cartonHin      = (+facility.cartonHeightIn || 12) / 12;
+  // Orientation-aware along-rack width per carton (drawn horizontally in this view).
+  const cartonAlongRackFt = (orientation === 'L-along-rack') ? cartonLengthFt : cartonWidthFt;
 
   // Layout: bay shown front-on. Horizontal = bay width (ft); vertical = total
   // shelving height. Add ~50% horizontal margin for dimension labels, ~30% vert.
@@ -3559,7 +3570,7 @@ function drawShelvingBayDetail(ctx, w, h, sized) {
   ctx.fillRect(toX(bayWidthFt - uprightWidthFt), toY(totalHeightFt), uprightWidthFt * scale, heightPx);
 
   // Shelf decks (one per level) + cartons
-  const cartonW = cartonLin * scale;  // along the bay run
+  const cartonW = cartonAlongRackFt * scale;  // along the bay run (orientation-aware)
   const cartonH = cartonHin * scale;  // vertical
   const deckThickFt = 0.04;
   ctx.font = '9px Montserrat, sans-serif';
@@ -3569,12 +3580,12 @@ function drawShelvingBayDetail(ctx, w, h, sized) {
     ctx.fillStyle = '#9ca3af';
     ctx.fillRect(toX(0), toY(yLevelFt + deckThickFt), bayPx, deckThickFt * scale);
 
-    // Cartons across the bay run (cAcross slots, each cartonLin wide)
-    // Center them horizontally in the bay
-    const totalCartonRunFt = cAcross * cartonLin;
+    // Cartons across the bay run (cAcross slots, each cartonAlongRackFt wide).
+    // Center them horizontally in the bay.
+    const totalCartonRunFt = cAcross * cartonAlongRackFt;
     const startX = (bayWidthFt - totalCartonRunFt) / 2;
     for (let i = 0; i < cAcross; i++) {
-      const cx = startX + i * cartonLin;
+      const cx = startX + i * cartonAlongRackFt;
       const cy = yLevelFt + deckThickFt;
       // Carton box (corrugated brown)
       ctx.fillStyle = '#b88a52';
@@ -4775,16 +4786,86 @@ function build3DScene() {
       placeDoors(totalDoors, -D / 2 + 0.1, outboundMat, _outDockXStart);
     }
 
-    // ---------- Office cube ----------
+    // ---------- Office structure ----------
+    // Phase F.7 (2026-05-05) — Brock callout: "can you replace the
+    // transparent of the office structure with something more visually
+    // obvious in 3D?". Pre-fix the office was a single transparent purple
+    // box (opacity 0.55) — read as a faint shape, not a building. Now:
+    // opaque tan masonry walls (matches typical 3PL office construction)
+    // + flat darker-tan roof + horizontal window strip on the dock-facing
+    // wall + door-cube on the same wall. Reads unambiguously as an office
+    // structure and stays distinct from the rack zones.
     if (sized.officeSqft > 0) {
       const oW = officeU, oD = officeU, oH = 12 * scale;
-      const officeMesh = new THREE.Mesh(
-        new THREE.BoxGeometry(oW, oH, oD),
-        new THREE.MeshStandardMaterial({ color: 0x8b5cf6, transparent: true, opacity: 0.55, roughness: 0.6 }),
+      const oCenterX = officeX0 + oW / 2;
+      const oCenterZ = officeZ0 + oD / 2;
+
+      // Solid masonry walls — light tan, opaque
+      const matOfficeWall = new THREE.MeshStandardMaterial({ color: 0xd6c8b0, roughness: 0.85, metalness: 0.0 });
+      const officeBody = new THREE.Mesh(new THREE.BoxGeometry(oW, oH, oD), matOfficeWall);
+      officeBody.position.set(oCenterX, oH / 2, oCenterZ);
+      officeBody.castShadow = true;
+      officeBody.receiveShadow = true;
+      scene.add(officeBody);
+
+      // Flat darker-tan roof slab (slightly larger than walls for shadow lip)
+      const matOfficeRoof = new THREE.MeshStandardMaterial({ color: 0x8b7752, roughness: 0.8, metalness: 0.0 });
+      const roofThk = 0.5 * scale;
+      const officeRoof = new THREE.Mesh(
+        new THREE.BoxGeometry(oW + 0.4 * scale, roofThk, oD + 0.4 * scale),
+        matOfficeRoof,
       );
-      officeMesh.position.set(officeX0 + oW / 2, oH / 2, officeZ0 + oD / 2);
-      officeMesh.castShadow = true;
-      scene.add(officeMesh);
+      officeRoof.position.set(oCenterX, oH + roofThk / 2, oCenterZ);
+      officeRoof.castShadow = true;
+      scene.add(officeRoof);
+
+      // Window strip on the dock-facing wall (toward -Z, inside building).
+      // Glass-like dark blue rectangle running ~70% of wall width.
+      const matWindow = new THREE.MeshStandardMaterial({ color: 0x1e3a5f, roughness: 0.2, metalness: 0.4 });
+      const winW = oW * 0.7;
+      const winH = 4 * scale;
+      const winY = oH * 0.55;
+      const winThk = 0.05 * scale;
+      const windowMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(winW, winH, winThk),
+        matWindow,
+      );
+      // Position on the dock-facing wall (smallest -Z face of the office)
+      windowMesh.position.set(oCenterX, winY, oCenterZ - oD / 2 - winThk / 2);
+      scene.add(windowMesh);
+
+      // Door cube on the dock-facing wall (right of the window strip)
+      const matDoor = new THREE.MeshStandardMaterial({ color: 0x4a3825, roughness: 0.7, metalness: 0.0 });
+      const doorW = 3.5 * scale;
+      const doorH = 7 * scale;
+      const doorMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(doorW, doorH, winThk),
+        matDoor,
+      );
+      doorMesh.position.set(oCenterX + winW / 2 + doorW / 2 + 0.5 * scale, doorH / 2, oCenterZ - oD / 2 - winThk / 2);
+      scene.add(doorMesh);
+
+      // Office sign on the roof — sprite floating above so it reads from
+      // any camera angle (matches the storage zone labels added in F.4).
+      const _signCanvas = document.createElement('canvas');
+      _signCanvas.width = 256; _signCanvas.height = 64;
+      const _sx = _signCanvas.getContext('2d');
+      _sx.fillStyle = 'rgba(255,255,255,0.95)';
+      _sx.fillRect(0, 0, 256, 64);
+      _sx.strokeStyle = '#475569';
+      _sx.lineWidth = 3;
+      _sx.strokeRect(2, 2, 252, 60);
+      _sx.fillStyle = '#1e293b';
+      _sx.font = 'bold 24px sans-serif';
+      _sx.textAlign = 'center';
+      _sx.textBaseline = 'middle';
+      _sx.fillText('Office', 128, 34);
+      const officeSignMat = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(_signCanvas), depthTest: false, depthWrite: false });
+      const officeSign = new THREE.Sprite(officeSignMat);
+      officeSign.scale.set(40 * scale, 10 * scale, 1);
+      officeSign.position.set(oCenterX, oH + 8 * scale, oCenterZ);
+      officeSign.renderOrder = 999;
+      scene.add(officeSign);
     }
 
     // ---------- Camera + OrbitControls ----------
