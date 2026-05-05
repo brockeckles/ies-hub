@@ -58,6 +58,11 @@ let scene3d = null;
 
 /** 2D-plan edit mode: when true, user can drag Office / Ship Staging / Forward Pick. */
 let _wscDrawerOpen = true;
+// Phase D (2026-05-05) — multi-angle Elevation view switcher.
+// 'side' = building cross-section along the long edge (current/legacy behavior).
+// 'shelving' = zoomed single shelving bay showing uprights + decks + cartons.
+/** @type {'side' | 'shelving'} */
+let _wscElevView = 'side';
 let _planEditMode = false;
 /** Rect registry populated each drawPlan() — keyed by zoneId → {x,y,w,h} in canvas px. */
 let _planZoneRects = {};
@@ -273,14 +278,27 @@ function _buildWscChromeOpts() {
  *  empty values because storage size is computed, not configured). */
 function _computeWscKpis() {
   const items = [];
-  // Total SF — width × depth when both are set, otherwise facility.totalSqft.
+  // Total SF — Phase D (2026-05-05) mode-aware. In Design mode, the engine's
+  // sized output IS the answer (no user-entered W/D); in Constraint mode,
+  // user-entered W×D is the constraint and the chip should show that. Pre-D,
+  // this read facility.buildingWidth × buildingDepth even in Design mode,
+  // showing stale user-entered dims that disagree with the rendered footprint.
+  let sized = null;
+  try { sized = calc.sizeFacility(toSizingInputs()); } catch {}
+  const mode = facility?.sizingMode || 'design';
   const w = +facility?.buildingWidth || 0;
   const d = +facility?.buildingDepth || 0;
-  const totalSf = (w > 0 && d > 0) ? (w * d) : (facility?.totalSqft || 0);
+  const userBuiltSf = (w > 0 && d > 0) ? (w * d) : 0;
+  const sizedSf = sized?.totalSqft || 0;
+  const totalSf = mode === 'constraint'
+    ? (userBuiltSf > 0 ? userBuiltSf : sizedSf)
+    : sizedSf;
   items.push({
-    label: 'Total SF',
+    label: mode === 'constraint' ? 'Built SF' : 'Sized SF',
     value: totalSf > 0 ? (totalSf / 1000).toFixed(0) + 'K' : '—',
-    hint: 'Building footprint (width × depth, or totalSqft if dims not set).',
+    hint: mode === 'constraint'
+      ? `Existing-building footprint (${w} × ${d} ft).`
+      : 'Engine-sized facility footprint (sum of storage + dock + zones + circulation).',
   });
   // Dock Doors — zones.dockConfig (NOT facility.*).
   const inb = zones?.dockConfig?.inboundDoors || 0;
@@ -547,6 +565,18 @@ async function bindShellEvents() {
   });
   // Phase 5.4 — cross-tool CM drillback chip delegation.
   bindCmDrillback(rootEl);
+
+  // Phase D (2026-05-05) — Elevation view-switcher delegation. The elevation
+  // canvas re-renders on every renderContentView, so delegated on rootEl.
+  rootEl?.addEventListener('click', (e) => {
+    const btn = /** @type {HTMLElement} */ (e.target)?.closest('[data-wsc-elev-view]');
+    if (!btn) return;
+    const view = btn.getAttribute('data-wsc-elev-view');
+    if (view !== 'side' && view !== 'shelving') return;
+    if (_wscElevView === view) return;
+    _wscElevView = view;
+    renderContentView();
+  });
 
   // Root-level delegation for data-wsc-action (toggle-edit-layout, reset-layout).
   // Using delegation per the event-delegation-pattern memory — renderPlan's
@@ -1991,8 +2021,43 @@ function renderPlan() {
     console.warn('[WSC] shrink suggestion failed:', e);
   }
 
+  // Phase D (2026-05-05) — Capacity-status strip above the canvas (Constraint
+  // mode only). Mirrors the Dashboard Capacity Check panel: shows
+  // Required vs Existing + Gap with color-coded status chip. Renders
+  // unconditionally when in Constraint mode with user dims set; the older
+  // shrink-suggestion CTA below still fires only on significant over-build.
+  let capacityStatus = null;
+  if ((facility.sizingMode || 'design') === 'constraint') {
+    try {
+      const _sizedCs = calc.sizeFacility(toSizingInputs());
+      const _required = _sizedCs?.requirementsDriven?.totalSfRequired || _sizedCs?.totalSqft || 0;
+      const _builtSf = (+facility.buildingWidth || 0) * (+facility.buildingDepth || 0);
+      if (_required > 0 && _builtSf > 0) {
+        const _delta = _builtSf - _required;
+        const _pct = Math.round((_delta / _required) * 1000) / 10;
+        const _status = Math.abs(_pct) <= 5 ? 'on-target' : _delta > 0 ? 'slack' : 'short';
+        capacityStatus = {
+          required: _required,
+          built: _builtSf,
+          delta: _delta,
+          pct: _pct,
+          status: _status,
+        };
+      }
+    } catch (e) { /* swallow */ }
+  }
+
   return `
     <div class="hub-card">
+      ${capacityStatus ? `
+        <div style="margin-bottom:var(--sp-2);padding:8px 14px;border-radius:6px;font-size:12px;display:flex;align-items:center;gap:12px;background:${capacityStatus.status === 'on-target' ? '#ecfdf5' : capacityStatus.status === 'slack' ? '#eff6ff' : '#fff7ed'};border:1px solid ${capacityStatus.status === 'on-target' ? '#a7f3d0' : capacityStatus.status === 'slack' ? '#bfdbfe' : '#fed7aa'};">
+          <span style="font-size:14px;line-height:1;">${capacityStatus.status === 'on-target' ? '✓' : capacityStatus.status === 'slack' ? '◭' : '⚠'}</span>
+          <span style="flex:1;line-height:1.5;color:${capacityStatus.status === 'on-target' ? '#065f46' : capacityStatus.status === 'slack' ? '#1e3a8a' : '#9a3412'};">
+            <strong>${capacityStatus.status === 'on-target' ? 'On target' : capacityStatus.status === 'slack' ? `Capacity slack: +${capacityStatus.pct}%` : `Inventory short: ${capacityStatus.pct}%`}</strong>
+            — Required <strong>${capacityStatus.required.toLocaleString()} sf</strong> · Existing <strong>${capacityStatus.built.toLocaleString()} sf</strong> · Gap <strong>${capacityStatus.delta >= 0 ? '+' : ''}${capacityStatus.delta.toLocaleString()} sf</strong>
+          </span>
+        </div>
+      ` : ''}
       ${shrinkSuggestion.recommended ? `
         <div style="margin-bottom:var(--sp-2); padding:10px 14px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:6px; font-size:12px; display:flex; align-items:center; gap:12px;">
           <span style="font-size:16px;line-height:1;">📐</span>
@@ -3192,16 +3257,27 @@ function renderElevation() {
   let _sizedEl = null;
   try { _sizedEl = calc.sizeFacility(toSizingInputs()); } catch {}
   const elev = calc.elevationParams(_renderFacility(facility, _sizedEl), zones);
+  const view = _wscElevView || 'side';
+  const c = _sizedEl?.cartonProfile;
 
   return `
     <div class="hub-card">
-      <div class="text-subtitle mb-4">Building Cross-Section (Elevation View)</div>
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:var(--sp-2);gap:12px;flex-wrap:wrap;">
+        <h3 class="text-subtitle" style="margin:0;">${view === 'shelving' ? 'Shelving Bay Detail' : 'Building Cross-Section'}</h3>
+        <div role="radiogroup" aria-label="Elevation view" style="display:flex;gap:4px;">
+          <button type="button" role="radio" aria-checked="${view === 'side'}" data-wsc-elev-view="side"
+            title="Building cross-section along the long edge — shows multiple aisles, rack levels, and clear height."
+            style="padding:5px 12px;font-size:11px;font-weight:600;border-radius:5px;cursor:pointer;border:1px solid ${view === 'side' ? 'var(--ies-blue,#0047AB)' : 'var(--ies-gray-200)'};background:${view === 'side' ? 'var(--ies-blue,#0047AB)' : '#fff'};color:${view === 'side' ? '#fff' : 'var(--ies-gray-700)'};">Side</button>
+          <button type="button" role="radio" aria-checked="${view === 'shelving'}" data-wsc-elev-view="shelving"
+            title="Zoomed view of a single shelving bay — shows uprights, shelf decks, and carton fill from Step 3 carton profile."
+            style="padding:5px 12px;font-size:11px;font-weight:600;border-radius:5px;cursor:pointer;border:1px solid ${view === 'shelving' ? 'var(--ies-blue,#0047AB)' : 'var(--ies-gray-200)'};background:${view === 'shelving' ? 'var(--ies-blue,#0047AB)' : '#fff'};color:${view === 'shelving' ? '#fff' : 'var(--ies-gray-700)'};">Shelving Bay</button>
+        </div>
+      </div>
       <canvas id="wsc-elevation-canvas" width="900" height="450" style="width:100%; border:1px solid var(--ies-gray-200); border-radius:6px; background:#fff;"></canvas>
       <div style="font-size:11px; color:var(--ies-gray-400); margin-top:8px;">
-        ${facility.storageType.charAt(0).toUpperCase() + facility.storageType.slice(1)}-deep racking ·
-        ${elev.rackLevels} levels ·
-        ${calc.formatFt(elev.aisleWidth)} aisles ·
-        ${calc.formatFt(facility.clearHeight)} clear height
+        ${view === 'shelving' && c
+          ? `${c.cartonsPerShelfAcross} × ${c.cartonsPerShelfDeep} cartons/shelf · ${c.shelfLevelsAt84In} levels at ${c.shelfLevelHeightFt.toFixed(2)} ft pitch · ${c.cartonsPerShelf} cartons/bay/level`
+          : `${facility.storageType.charAt(0).toUpperCase() + facility.storageType.slice(1)}-deep racking · ${elev.rackLevels} levels · ${calc.formatFt(elev.aisleWidth)} aisles · ${calc.formatFt(facility.clearHeight)} clear height`}
       </div>
     </div>
   `;
@@ -3214,15 +3290,23 @@ function drawElevation() {
   const ctx = /** @type {HTMLCanvasElement} */ (canvas).getContext('2d');
   if (!ctx) return;
 
+  // Phase A: route elevation params through mode-aware facility shape.
+  let _sizedDe = null;
+  try { _sizedDe = calc.sizeFacility(toSizingInputs()); } catch {}
+
+  // Phase D (2026-05-05) — branch on _wscElevView. 'shelving' renders a
+  // single zoomed shelving bay (uprights + decks + cartons from sized
+  // cartonProfile); 'side' falls through to the legacy cross-section.
+  if ((_wscElevView || 'side') === 'shelving') {
+    drawShelvingBayDetail(ctx, canvas.width, canvas.height, _sizedDe);
+    return;
+  }
+
   const w = canvas.width;
   const h = canvas.height;
   const pad = { l: 60, r: 100, t: 40, b: 60 };
   const drawW = w - pad.l - pad.r;
   const drawH = h - pad.t - pad.b;
-
-  // Phase A: route elevation params through mode-aware facility shape.
-  let _sizedDe = null;
-  try { _sizedDe = calc.sizeFacility(toSizingInputs()); } catch {}
   const elev = calc.elevationParams(_renderFacility(facility, _sizedDe));
   const exteriorGrade = -4;
   const maxH = elev.clearHeight + 5;
@@ -3296,6 +3380,150 @@ function drawElevation() {
 
   // Bottom dimension: building width
   drawDimH(ctx, toX(0), toX(elev.buildingWidth), toY(0) + 40, `${Math.round(elev.buildingWidth)}' Width`);
+}
+
+/**
+ * Phase D (2026-05-05) — Shelving Bay Detail elevation view.
+ * Zoomed-in render of one shelving bay showing uprights + shelf decks +
+ * cartons placed at fillPct, with dimension labels. Pulls geometry from
+ * sized.cartonProfile (Phase 1 helper computeCartonProfile output).
+ *
+ * Brock's original complaint #8b (2026-05-05 IE reassessment): "the
+ * elevation view also doesn't show the elevations effectively... should
+ * it possibly show it from various angles to identify what the shelving
+ * looks like too?". This view directly addresses that — the side cross-
+ * section view shows shelving as compressed stripes (not legible at
+ * building scale); this view zooms to a single bay so deck spacing,
+ * carton dims, and grid arrangement are visible.
+ */
+function drawShelvingBayDetail(ctx, w, h, sized) {
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = '#fafafa';
+  ctx.fillRect(0, 0, w, h);
+
+  const c = sized?.cartonProfile;
+  if (!c) {
+    ctx.fillStyle = '#9ca3af';
+    ctx.font = '13px Montserrat, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Carton profile unavailable — fill in Step 2 (Unit Load & Carton).', w / 2, h / 2);
+    return;
+  }
+
+  // Bay geometry from carton profile + unit load
+  const u = sized?.unitLoad;
+  const bayWidthFt = (u?.bayWidthFt) || 9.0;
+  const rackDepthFt = (u?.rackDepthSingleFt) || 4.0;
+  const levels = c.shelfLevelsAt84In || 7;
+  const levelHeightFt = c.shelfLevelHeightFt || 1.0;
+  const totalHeightFt = levels * levelHeightFt;
+
+  // Cartons-per-shelf grid
+  const cAcross = c.cartonsPerShelfAcross || 3;
+  const cDeep = c.cartonsPerShelfDeep || 2;
+  const cartonLin = (+facility.cartonLengthIn || 12) / 12;  // ft
+  const cartonWin = (+facility.cartonWidthIn || 9) / 12;
+  const cartonHin = (+facility.cartonHeightIn || 12) / 12;
+
+  // Layout: bay shown front-on. Horizontal = bay width (ft); vertical = total
+  // shelving height. Add ~50% horizontal margin for dimension labels, ~30% vert.
+  const pad = { l: 80, r: 200, t: 40, b: 60 };
+  const drawW = w - pad.l - pad.r;
+  const drawH = h - pad.t - pad.b;
+  const scaleX = drawW / bayWidthFt;
+  const scaleY = drawH / Math.max(totalHeightFt + 0.5, 1);
+  const scale = Math.min(scaleX, scaleY);
+  // Center the bay in the canvas
+  const bayPx = bayWidthFt * scale;
+  const heightPx = totalHeightFt * scale;
+  const x0 = pad.l + (drawW - bayPx) / 2;
+  const y0 = pad.t + (drawH - heightPx) / 2;
+  const toX = (ft) => x0 + ft * scale;
+  const toY = (ft) => y0 + heightPx - (ft * scale);  // ground at y0+heightPx
+
+  // Floor / slab
+  ctx.fillStyle = '#d1d5db';
+  ctx.fillRect(toX(-0.5), toY(0), bayPx + scale * 1.0, 4);
+
+  // Uprights (left + right of bay) — 0.12 ft × totalHeight
+  const uprightWidthFt = 0.12;
+  ctx.fillStyle = '#6b7280';
+  ctx.fillRect(toX(0), toY(totalHeightFt), uprightWidthFt * scale, heightPx);
+  ctx.fillRect(toX(bayWidthFt - uprightWidthFt), toY(totalHeightFt), uprightWidthFt * scale, heightPx);
+
+  // Shelf decks (one per level) + cartons
+  const cartonW = cartonLin * scale;  // along the bay run
+  const cartonH = cartonHin * scale;  // vertical
+  const deckThickFt = 0.04;
+  ctx.font = '9px Montserrat, sans-serif';
+  for (let lvl = 0; lvl < levels; lvl++) {
+    const yLevelFt = lvl * levelHeightFt;
+    // Deck slab
+    ctx.fillStyle = '#9ca3af';
+    ctx.fillRect(toX(0), toY(yLevelFt + deckThickFt), bayPx, deckThickFt * scale);
+
+    // Cartons across the bay run (cAcross slots, each cartonLin wide)
+    // Center them horizontally in the bay
+    const totalCartonRunFt = cAcross * cartonLin;
+    const startX = (bayWidthFt - totalCartonRunFt) / 2;
+    for (let i = 0; i < cAcross; i++) {
+      const cx = startX + i * cartonLin;
+      const cy = yLevelFt + deckThickFt;
+      // Carton box (corrugated brown)
+      ctx.fillStyle = '#b88a52';
+      ctx.fillRect(toX(cx), toY(cy + cartonHin), cartonW * 0.96, cartonH);
+      // Carton outline
+      ctx.strokeStyle = '#7a5a36';
+      ctx.lineWidth = 0.8;
+      ctx.strokeRect(toX(cx), toY(cy + cartonHin), cartonW * 0.96, cartonH);
+    }
+
+    // Level label
+    ctx.fillStyle = '#374151';
+    ctx.textAlign = 'right';
+    ctx.fillText(`L${lvl + 1}`, toX(0) - 6, toY(yLevelFt + levelHeightFt / 2) + 3);
+  }
+
+  // Top frame
+  ctx.fillStyle = '#9ca3af';
+  ctx.fillRect(toX(0), toY(totalHeightFt), bayPx, deckThickFt * scale);
+
+  // Dimension lines + labels
+  ctx.strokeStyle = '#666';
+  ctx.lineWidth = 1;
+  ctx.font = '11px Montserrat, sans-serif';
+  ctx.fillStyle = '#333';
+  ctx.textAlign = 'center';
+
+  // Bottom: bay width
+  drawDimH(ctx, toX(0), toX(bayWidthFt), toY(0) + 36, `${bayWidthFt.toFixed(2)} ft bay`);
+
+  // Right: total height
+  drawDimV(ctx, toX(bayWidthFt) + 16, toY(totalHeightFt), toY(0), `${totalHeightFt.toFixed(2)} ft total`);
+  // Right: level pitch (one level)
+  drawDimV(ctx, toX(bayWidthFt) + 60, toY(levelHeightFt), toY(0), `${levelHeightFt.toFixed(2)} ft pitch`);
+
+  // Right info panel
+  const infoX = toX(bayWidthFt) + 100;
+  const infoY = pad.t;
+  ctx.font = '10px Montserrat, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#6b7280';
+  ctx.fillText('CARTON', infoX, infoY);
+  ctx.fillStyle = '#111827';
+  ctx.fillText(`${(+facility.cartonLengthIn || 12).toFixed(0)}" × ${(+facility.cartonWidthIn || 9).toFixed(0)}" × ${(+facility.cartonHeightIn || 12).toFixed(0)}"`, infoX, infoY + 12);
+  ctx.fillStyle = '#6b7280';
+  ctx.fillText('PER SHELF', infoX, infoY + 30);
+  ctx.fillStyle = '#111827';
+  ctx.fillText(`${cAcross} across × ${cDeep} deep = ${c.cartonsPerShelf} cartons`, infoX, infoY + 42);
+  ctx.fillStyle = '#6b7280';
+  ctx.fillText('PER BAY', infoX, infoY + 60);
+  ctx.fillStyle = '#111827';
+  ctx.fillText(`${levels} levels × ${c.cartonsPerShelf} = ${levels * c.cartonsPerShelf} cartons`, infoX, infoY + 72);
+  ctx.fillStyle = '#6b7280';
+  ctx.fillText('ORIENTATION', infoX, infoY + 90);
+  ctx.fillStyle = '#111827';
+  ctx.fillText(c.orientation || 'L-along-rack', infoX, infoY + 102);
 }
 
 function drawRackProfile(ctx, toX, toY, xFt, depthFt, levels, posH, storageType) {
