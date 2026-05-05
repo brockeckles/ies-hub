@@ -3510,9 +3510,16 @@ function drawShelvingBayDetail(ctx, w, h, sized) {
     return;
   }
 
-  // Bay geometry from carton profile + unit load
+  // Bay geometry. Phase F.4 follow-up (2026-05-05) — Brock callout:
+  // "elevation for shelving bay... why wouldn't the tool put more cartons
+  // per level given the diagram? lots of unutilized space." Pre-fix the
+  // diagram pulled bayWidthFt from unitLoad (= 9 ft pallet bay), but
+  // shelving uses a much smaller bay (3 ft typical). With a 9 ft canvas
+  // showing 3 cartons of 12" each, the cartons only filled 3 ft of the
+  // 9 ft bay — looked like wasted space. Now reads from cartonProfile's
+  // shelfBayWidthFt (default 3 ft) so the diagram matches the engine math.
   const u = sized?.unitLoad;
-  const bayWidthFt = (u?.bayWidthFt) || 9.0;
+  const bayWidthFt = (+c.shelfBayWidthFt > 0 ? +c.shelfBayWidthFt : 3.0);
   const rackDepthFt = (u?.rackDepthSingleFt) || 4.0;
   const levels = c.shelfLevelsAt84In || 7;
   const levelHeightFt = c.shelfLevelHeightFt || 1.0;
@@ -4614,9 +4621,15 @@ function build3DScene() {
       // W-along-rack: short edge along rack run (Z), long edge into rack (X).
       const cartonZIn = orientation === 'L-along-rack' ? cartonLIn : cartonWIn;
       const cartonXIn = orientation === 'L-along-rack' ? cartonWIn : cartonLIn;
-      const cartonZU = (cartonZIn / 12) * scale;
-      const cartonXU = (cartonXIn / 12) * scale;
-      const cartonYU = (cartonHIn / 12) * scale;
+      // Phase F.5 (2026-05-05) — Brock callout: "carton shelving in 3D looks
+      // overly basic. one block per level". Cartons placed edge-to-edge at
+      // bayU/acrossN spacing merged visually into a single brown stripe per
+      // shelf. Scale each carton box down 12% so visible gaps appear between
+      // adjacent cartons in both Z (along the bay) and X (deep into rack).
+      const _cartonShrink = 0.88;
+      const cartonZU = (cartonZIn / 12) * scale * _cartonShrink;
+      const cartonXU = (cartonXIn / 12) * scale * _cartonShrink;
+      const cartonYU = (cartonHIn / 12) * scale * _cartonShrink;
       const cartonGeo = new THREE.BoxGeometry(cartonXU, cartonYU, cartonZU);
       const shCartonMesh = new THREE.InstancedMesh(cartonGeo, matCarton, totalShCartons);
       shCartonMesh.castShadow = true;
