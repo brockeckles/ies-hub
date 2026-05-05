@@ -4552,38 +4552,47 @@ function build3DScene() {
     // FP pass: full pallet wood box (~5 ft load height, slightly under level pitch).
     _renderPalletLoadPass(fpMeta, totalPalletsFP, matPallet, 3.5 * scale, 3.5 * scale);
 
-    // Phase F.8 (2026-05-05) — Brock callout: "I still don't understand the
-    // pallet vs cartons in pallet racking differences. visually they look the
-    // same except for the color. this is extremely confusing visually and
-    // makes me question the tool altogether". Color alone wasn't enough.
-    // Now CP renders as the IE-correct stack profile: a small wooden pallet
-    // base at the bottom + N visibly-separated carton-layer slabs on top
-    // (N = cartonProfile.hi, capped at 5 for visual clarity). Each layer
-    // slab is shorter than the equivalent FP pallet load and is brown
-    // corrugated material with thin gaps between layers — reads as
-    // "individual carton layers stacked on a pallet" instead of "another
-    // pallet that happens to be a different color".
+    // Phase F.8 + F.9 (2026-05-05) — Brock callouts:
+    //   F.8: "I still don't understand the pallet vs cartons in pallet
+    //   racking differences. visually they look the same except for the
+    //   color. this is extremely confusing".
+    //   F.9: "carton pallets still don't show the pallets... just cartons.
+    //   does the carton dims in the configure panel impact the 3D rendering?".
+    //
+    // CP now renders as the IE-correct stack profile:
+    //   • Wooden pallet base (taller, darker, slightly wider than the
+    //     carton stack so the pallet edges stick out clearly underneath).
+    //   • Carton-layer slabs stacked on top — N=hi visible slabs, each
+    //     shorter than the previous (flattens at the top to suggest a
+    //     real stack), in saturated cardboard tan distinct from FP wood.
+    //   • Slab footprint (Z × X) now tied to actual pallet dims
+    //     (facility.palletDepth × facility.palletWidth) so changing pallet
+    //     type or pallet dims visibly flows to the carton slab footprint.
+    //   • Slab height = (cartonHeightIn × hi) / visibleLayers so total
+    //     stack height matches the engineering reality.
     if (cpMeta.length > 0 && totalPalletsCP > 0) {
       const _cp = sized?.cartonProfile || {};
       const _hi = Math.max(1, +_cp.hi || 4);
       const _cartonHIn = +(_cp.cartonHeightIn || facility.cartonHeightIn) || 12;
-      // Visible layer count: real hi capped at 5 so the stack is readable
-      // even at heavy ti×hi configurations (e.g. 8-hi pancake cartons would
-      // overcrowd the position). Each layer slab represents a real carton
-      // layer (height = cartonHeightIn × hi/visibleLayers so total stack
-      // height = cartonHeightIn × hi, matching the engineering reality).
       const visibleLayers = Math.min(_hi, 5);
       const realStackFt = (_hi * _cartonHIn) / 12;
-      // Cap total stack at 4 ft so it fits within the level pitch with the
-      // pallet base + small clearance.
-      const totalStackFt = Math.max(1.5, Math.min(realStackFt, 3.5));
-      // Pallet base (small wooden plank, 5" thick).
-      const palletBaseFt = 0.4;
+      const totalStackFt = Math.max(1.5, Math.min(realStackFt, 3.0));
+      // Pallet base — taller (0.6 ft = 7", visibly thick) and slightly
+      // wider than the carton stack above so pallet edges stick out from
+      // under the cartons.
+      const palletBaseFt = 0.6;
+      // Pallet footprint (real GMA-style: 48" along rack × 40" into rack).
+      // Pull from facility.palletDepth (= along-rack length, default 48")
+      // and facility.palletWidth (= into-rack width, default 40").
+      const palletAlongRackFt = (+facility.palletDepth || 48) / 12;  // historical naming: palletDepth = pallet length along the beam
+      const palletIntoRackFt  = (+facility.palletWidth || 40) / 12;  // palletWidth = pallet's into-rack dim
 
       // Pass 1: wooden pallet bases (one per CP position).
-      const baseW = 3.4 * scale;
+      const baseW = palletAlongRackFt * scale;          // along the rack run (Z axis)
       const baseH = palletBaseFt * scale;
-      const baseD = palletDepthU; // X depth into rack
+      const baseD = palletIntoRackFt * scale;           // into the rack (X axis)
+      // Darker wood material (existing matPallet 0x9a6b3f) but expose more
+      // by making it taller AND wider than the cartons above.
       const palletBaseGeo = new THREE.BoxGeometry(baseD, baseH, baseW);
       const palletBaseMesh = new THREE.InstancedMesh(palletBaseGeo, matPallet, totalPalletsCP);
       palletBaseMesh.castShadow = true;
@@ -4618,13 +4627,17 @@ function build3DScene() {
       scene.add(palletBaseMesh);
 
       // Pass 2: visible carton-layer slabs stacked on top of each pallet base.
-      // visibleLayers slabs per CP position × 2 pallets per bay = 2*visibleLayers
-      // instances per filled position.
+      // F.9 (2026-05-05) — slab footprint is now slightly smaller than the
+      // wooden pallet base in BOTH dims (Z and X), so the pallet edges
+      // stick out around the bottom of the carton stack. This is the
+      // primary visual cue that there's a pallet underneath the cartons.
       const layerH = (totalStackFt / visibleLayers) * scale;
       const layerGapU = 0.08 * scale; // visible thin gap between layers
       const layerSlabH = Math.max(0.05 * scale, layerH - layerGapU);
-      const slabW = 3.0 * scale;     // narrower than pallet base for visible "stack on pallet"
-      const slabD = palletDepthU * 0.92;
+      // Slab Z (along rack) = pallet Z × 0.88 → pallet edges visible on each end
+      // Slab X (into rack) = pallet X × 0.88 → pallet edges visible front + back
+      const slabW = baseW * 0.88;
+      const slabD = baseD * 0.88;
       const slabGeo = new THREE.BoxGeometry(slabD, layerSlabH, slabW);
       // Saturated cardboard tan — clearly different from FP's wood color.
       const matCartonStack = new THREE.MeshStandardMaterial({ color: 0xc8966b, roughness: 0.85, metalness: 0.0 });
