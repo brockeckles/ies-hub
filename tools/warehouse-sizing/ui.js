@@ -63,6 +63,10 @@ let _wscDrawerOpen = true;
 // 'shelving' = zoomed single shelving bay showing uprights + decks + cartons.
 /** @type {'side' | 'shelving'} */
 let _wscElevView = 'side';
+// Phase F.12 (2026-05-06) — 3D wall visibility toggle. Hiding the walls
+// makes it dramatically easier to see what's inside the building (rack
+// fill, FP structure, cross-aisles). Persists between scene rebuilds.
+let _wscShowWalls = true;
 let _planEditMode = false;
 /** Rect registry populated each drawPlan() — keyed by zoneId → {x,y,w,h} in canvas px. */
 let _planZoneRects = {};
@@ -3827,6 +3831,12 @@ function render3DView(container) {
           ${calc.formatSqft(sized.totalSqft)} sized  ·  ${_hdrFac.buildingWidth || '—'} × ${_hdrFac.buildingDepth || '—'} ft  ·  clear ht ${facility.clearHeight || 0} ft  ·  ${sized.dock.totalDoors} dock doors
         </span>
       </div>
+      <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">
+        <span class="text-caption text-muted" style="margin-right:4px;">View:</span>
+        <button type="button" class="hub-btn hub-btn--sm ${_wscShowWalls ? '' : 'hub-btn--ghost'}" data-3d-toggle="walls" title="Toggle facility walls + roof line. Hide them to see inside the building more clearly.">
+          ${_wscShowWalls ? 'Hide Walls' : 'Show Walls'}
+        </button>
+      </div>
       <div id="wsc-3d-container" style="position:relative; width:100%; height:520px; background:#e9eef5; border-radius:6px; overflow:hidden;">
         <div id="wsc-3d-hud" class="wsc-3d-hud" aria-live="polite"></div>
       </div>
@@ -3835,6 +3845,31 @@ function render3DView(container) {
       </div>
     </div>
   `;
+  // Phase F.12 (2026-05-06) — wire wall-visibility toggle. We don't rebuild
+  // the scene; just walk for the wallsGroup and flip its `visible` flag.
+  // State persists in `_wscShowWalls` so future scene rebuilds (mode/FP
+  // toggles etc.) honor it.
+  const _toggleBtn = container.querySelector('[data-3d-toggle="walls"]');
+  if (_toggleBtn) {
+    _toggleBtn.addEventListener('click', () => {
+      _wscShowWalls = !_wscShowWalls;
+      // Find the cached scene + walk for wallsGroup. (Scene is held by
+      // build3DScene's closure; for a no-rebuild toggle we just access the
+      // canvas's __wscScene cache that build3DScene populates.)
+      const cont = container.querySelector('#wsc-3d-container');
+      const sc = cont && cont.__wscScene;
+      if (sc) {
+        sc.traverse((obj) => {
+          if (obj.userData && obj.userData.isFacilityWalls) {
+            obj.visible = _wscShowWalls;
+          }
+        });
+      }
+      // Update button label without re-rendering everything.
+      _toggleBtn.textContent = _wscShowWalls ? 'Hide Walls' : 'Show Walls';
+      _toggleBtn.classList.toggle('hub-btn--ghost', !_wscShowWalls);
+    });
+  }
 
   // Defer 3D scene build so the flex layout settles first.
   setTimeout(() => build3DScene(), 80);
@@ -3991,6 +4026,10 @@ function build3DScene() {
     // Subtle gradient sky-ish background (was flat #e9eef5).
     scene.background = new THREE.Color('#dde4ee');
     scene.fog = new THREE.Fog(0xdde4ee, 600, 2400);
+    // Phase F.12 (2026-05-06) — expose the scene on the container element so
+    // the wall-visibility toggle (above the canvas) can find it without a
+    // full scene rebuild. The toggle just flips wallsGroup.visible.
+    el.__wscScene = scene;
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(width, height);
@@ -4096,33 +4135,42 @@ function build3DScene() {
     const wallH = H;
     const wallThk = 1.2;
     const wallMat = new THREE.MeshStandardMaterial({ color: 0xe5e7eb, roughness: 0.85, metalness: 0.0 });
+    // Phase F.12 (2026-05-06) — group walls under a parent Object3D so the
+    // visibility toggle can hide all four perimeter walls + reveal joints + roof
+    // line in one operation. Tagged with userData.isFacilityWalls so build3DScene
+    // can find this group on rebuild and apply the persisted toggle state.
+    const wallsGroup = new THREE.Group();
+    wallsGroup.userData.isFacilityWalls = true;
+    wallsGroup.visible = _wscShowWalls;
+    scene.add(wallsGroup);
     // Long walls (run along X, +/-Z faces)
     const longWallGeo = new THREE.BoxGeometry(W, wallH, wallThk);
-    const wN = new THREE.Mesh(longWallGeo, wallMat); wN.position.set(0, wallH / 2,  D / 2 - wallThk / 2); wN.receiveShadow = true; scene.add(wN);
-    const wS = new THREE.Mesh(longWallGeo, wallMat); wS.position.set(0, wallH / 2, -D / 2 + wallThk / 2); wS.receiveShadow = true; scene.add(wS);
+    const wN = new THREE.Mesh(longWallGeo, wallMat); wN.position.set(0, wallH / 2,  D / 2 - wallThk / 2); wN.receiveShadow = true; wallsGroup.add(wN);
+    const wS = new THREE.Mesh(longWallGeo, wallMat); wS.position.set(0, wallH / 2, -D / 2 + wallThk / 2); wS.receiveShadow = true; wallsGroup.add(wS);
     // Short walls (run along Z, +/-X faces)
     const shortWallGeo = new THREE.BoxGeometry(wallThk, wallH, D);
-    const wE = new THREE.Mesh(shortWallGeo, wallMat); wE.position.set( W / 2 - wallThk / 2, wallH / 2, 0); wE.receiveShadow = true; scene.add(wE);
-    const wW = new THREE.Mesh(shortWallGeo, wallMat); wW.position.set(-W / 2 + wallThk / 2, wallH / 2, 0); wW.receiveShadow = true; scene.add(wW);
-    // Reveal joint lines on the long walls every ~30 ft
+    const wE = new THREE.Mesh(shortWallGeo, wallMat); wE.position.set( W / 2 - wallThk / 2, wallH / 2, 0); wE.receiveShadow = true; wallsGroup.add(wE);
+    const wW = new THREE.Mesh(shortWallGeo, wallMat); wW.position.set(-W / 2 + wallThk / 2, wallH / 2, 0); wW.receiveShadow = true; wallsGroup.add(wW);
+    // Reveal joint lines on the long walls every ~30 ft (added to wallsGroup
+    // so they hide together with the wall meshes when Brock toggles walls off).
     const jointMat = new THREE.LineBasicMaterial({ color: 0xb1b6bd });
     for (let panelX = -W / 2 + 30 * scale; panelX < W / 2 - 1; panelX += 30 * scale) {
       const a1 = [ panelX, 0,  D / 2 - wallThk / 2 - 0.05];
       const b1 = [ panelX, wallH,  D / 2 - wallThk / 2 - 0.05];
       const g1 = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...a1), new THREE.Vector3(...b1)]);
-      scene.add(new THREE.Line(g1, jointMat));
+      wallsGroup.add(new THREE.Line(g1, jointMat));
       const a2 = [ panelX, 0, -D / 2 + wallThk / 2 + 0.05];
       const b2 = [ panelX, wallH, -D / 2 + wallThk / 2 + 0.05];
       const g2 = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...a2), new THREE.Vector3(...b2)]);
-      scene.add(new THREE.Line(g2, jointMat));
+      wallsGroup.add(new THREE.Line(g2, jointMat));
     }
-    // Roof apex line (suggests exposed truss/joist)
+    // Roof apex line (suggests exposed truss/joist) — also part of wallsGroup
     const roofLineMat = new THREE.LineBasicMaterial({ color: 0x6b7280 });
     const roofPts = [
       new THREE.Vector3(-W / 2, wallH + 0.05,  0),
       new THREE.Vector3( W / 2, wallH + 0.05,  0),
     ];
-    scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(roofPts), roofLineMat));
+    wallsGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(roofPts), roofLineMat));
 
     // ---------- Storage geometry inputs ----------
     const sized = calc.sizeFacility(toSizingInputs());
@@ -4932,7 +4980,24 @@ function build3DScene() {
     // Plus: floating "FORWARD PICK · N faces" sprite overhead.
     // ─────────────────────────────────────────────────────────────────
     if (fpEnabled3D && fpX1 > fpX0 + 4 && fpDepthU > 4) {
-      const fpW = fpX1 - fpX0;
+      // Phase F.12 (2026-05-06) — Brock callout: "the forward pick area
+      // seems to be very wide". Pre-fix we rendered the FP visual across
+      // the FULL X-extent the engine reserved (= building-width minus
+      // office, ~880 ft on Wayfair). Real forward-pick zones are 50-200 ft
+      // wide compact blocks; large FP areas use multiple parallel aisles
+      // (which we don't render). Clamp the rendered width to a realistic
+      // 200 ft block centered within the engine's X-extent. The engine's
+      // overlap logic still reserves the wider strip so adjacent racks
+      // don't run through where carton-flow staging would actually live.
+      const fpEngineX0 = fpX0;
+      const fpEngineX1 = fpX1;
+      const fpEngineW  = fpEngineX1 - fpEngineX0;
+      const fpRenderMaxFt = 200;
+      const fpRenderWidthU = Math.min(fpEngineW, fpRenderMaxFt * scale);
+      const fpRenderCx = (fpEngineX0 + fpEngineX1) / 2;
+      const fpRenderX0 = fpRenderCx - fpRenderWidthU / 2;
+      const fpRenderX1 = fpRenderCx + fpRenderWidthU / 2;
+      const fpW = fpRenderWidthU;
       const fpZc = (fpZ0 + fpZ1) / 2;
       const fpType = zones.forwardPick?.type || 'carton_flow';
       const fpStruct = calc.forwardPickStructure({
@@ -4963,12 +5028,14 @@ function build3DScene() {
 
       // Soft colored volume — lower opacity than pre-F.11 (0.5 → 0.18)
       // because structural detail will carry visual reading from now on.
+      // F.12 (2026-05-06) — sized to the clamped render width, not the
+      // engine X-extent, so the soft volume doesn't span the whole building.
       const fpVolMat = new THREE.MeshStandardMaterial({
         color: fpColor, transparent: true, opacity: 0.18, depthWrite: false, roughness: 0.7,
       });
       const fpVolGeo = new THREE.BoxGeometry(fpW, fpTotalHeightU, fpDepthU);
       const fpVolMesh = new THREE.Mesh(fpVolGeo, fpVolMat);
-      fpVolMesh.position.set((fpX0 + fpX1) / 2, fpTotalHeightU / 2, fpZc);
+      fpVolMesh.position.set(fpRenderCx, fpTotalHeightU / 2, fpZc);
       fpVolMesh.castShadow = false;
       scene.add(fpVolMesh);
 
@@ -4986,6 +5053,9 @@ function build3DScene() {
       // Uprights: bay-boundary posts × 2 sides (front + back of FP rack).
       // The rack "depth" along Z = fpDepthU. Posts at Z = fpZ0 (front-of-aisle)
       // and Z = fpZ1 (back). Posts at every bay boundary along X.
+      // F.12 (2026-05-06) — uprights pinned to fpRenderX0 (clamped render
+      // origin), not fpX0 (engine extent), so they sit inside the visible
+      // FP block.
       if (fpBays > 0) {
         const fpUprightGeo = new THREE.BoxGeometry(0.18, fpTotalHeightU, 0.18);
         const fpUprightCount = (fpBays + 1) * 2;
@@ -4994,7 +5064,7 @@ function build3DScene() {
         const dummy = new THREE.Object3D();
         let ui = 0;
         for (let b = 0; b <= fpBays; b++) {
-          const x = fpX0 + b * fpBayWidthU;
+          const x = fpRenderX0 + b * fpBayWidthU;
           // Front upright (at fpZ0)
           dummy.position.set(x, fpTotalHeightU / 2, fpZ0);
           dummy.scale.set(1, 1, 1);
@@ -5008,28 +5078,56 @@ function build3DScene() {
         fpUprightMesh.instanceMatrix.needsUpdate = true;
         scene.add(fpUprightMesh);
 
-        // Horizontal members: shelf decks (light_case) or flow rails
-        // (carton_flow) or beams (heavy_case) at each level boundary.
-        // For each level, render one continuous slab spanning fpW × fpDepthU
-        // at that level's Y. Slab thickness ~0.08 ft.
-        const fpDeckGeo = new THREE.BoxGeometry(fpW, 0.08 * scale, fpDepthU);
-        const fpDeckMat = new THREE.MeshStandardMaterial({
-          color: 0x6b7280, roughness: 0.6, metalness: 0.4,
+        // Phase F.12 (2026-05-06) — Brock callout: "metallic looking roof
+        // over [the FP], which is not consistent with FP designs in
+        // reality." Pre-F.12 we rendered a continuous deck slab at every
+        // level boundary spanning fpW × fpDepthU — that read as a steel
+        // roof over the whole FP zone. Real carton-flow + selective rack
+        // have NARROW front + back load beams (~6 in × full lane length),
+        // not full-width decks. Only light_case shelving has continuous
+        // shelf decks (case-pick from the deck face).
+        //
+        // New rendering by type:
+        //   • carton_flow : front + back beams at each level (no deck)
+        //   • light_case  : continuous shelf decks (correct for shelving)
+        //   • heavy_case  : front + back beams (selective rack)
+        const fpBeamMat = new THREE.MeshStandardMaterial({
+          color: 0x4b5563, roughness: 0.6, metalness: 0.4,
         });
         for (let lv = 0; lv <= fpLevels; lv++) {
           const yU = lv * fpLevelHeightU;
-          // Skip if outside rack height (shouldn't happen, but defensive).
           if (yU > fpTotalHeightU + 0.001) continue;
-          // Top-most deck (lv === fpLevels) only renders for shelving-style
-          // (light_case) — flow rack and heavy_case typically have no top deck.
+          // Top-most level (lv === fpLevels) only gets a deck for light_case.
           if (lv === fpLevels && fpType !== 'light_case') continue;
-          // Bottom deck (floor level, lv === 0) skipped unless light_case.
+          // Bottom (floor, lv === 0) skipped unless light_case.
           if (lv === 0 && fpType !== 'light_case') continue;
-          const deck = new THREE.Mesh(fpDeckGeo, fpDeckMat);
-          deck.position.set((fpX0 + fpX1) / 2, yU, fpZc);
-          deck.castShadow = true;
-          deck.receiveShadow = true;
-          scene.add(deck);
+
+          if (fpType === 'light_case') {
+            // Continuous shelf deck — IE-correct for case-pick shelving
+            const deckGeo = new THREE.BoxGeometry(fpW, 0.08 * scale, fpDepthU);
+            const deck = new THREE.Mesh(deckGeo, fpBeamMat);
+            deck.position.set(fpRenderCx, yU, fpZc);
+            deck.castShadow = true;
+            deck.receiveShadow = true;
+            scene.add(deck);
+          } else {
+            // Narrow front + back load beams — IE-correct for carton-flow
+            // and selective rack. ~6 in tall × full lane length × ~3 in
+            // deep. Sit just inboard of the uprights so they connect.
+            const beamH = 0.5 * scale; // 6 inches
+            const beamD = 0.25 * scale; // 3 inches
+            const beamGeo = new THREE.BoxGeometry(fpW, beamH, beamD);
+            // Front beam at fpZ0
+            const fb = new THREE.Mesh(beamGeo, fpBeamMat);
+            fb.position.set(fpRenderCx, yU, fpZ0 + beamD / 2);
+            fb.castShadow = true;
+            scene.add(fb);
+            // Back beam at fpZ1
+            const bb = new THREE.Mesh(beamGeo, fpBeamMat);
+            bb.position.set(fpRenderCx, yU, fpZ1 - beamD / 2);
+            bb.castShadow = true;
+            scene.add(bb);
+          }
         }
 
         // Pick-face cartons + replen depth. Render brown carton cubes at
@@ -5049,7 +5147,7 @@ function build3DScene() {
           const dummy = new THREE.Object3D();
           let ci = 0;
           for (let b = 0; b < fpBays; b++) {
-            const xCenter = fpX0 + (b + 0.5) * fpBayWidthU;
+            const xCenter = fpRenderX0 + (b + 0.5) * fpBayWidthU;
             for (let lv = 0; lv < fpPickLevels; lv++) {
               const yCenter = lv * fpLevelHeightU + cartonH / 2 + 0.1 * scale;
               for (let d = 0; d < fpStruct.cartonsPerFace; d++) {
@@ -5087,7 +5185,7 @@ function build3DScene() {
             const dummy = new THREE.Object3D();
             let pi = 0;
             for (let b = 0; b < fpBays; b++) {
-              const xCenter = fpX0 + (b + 0.5) * fpBayWidthU;
+              const xCenter = fpRenderX0 + (b + 0.5) * fpBayWidthU;
               for (let lv = fpPickLevels; lv < fpLevels; lv++) {
                 const yCenter = lv * fpLevelHeightU + palH / 2 + 0.1 * scale;
                 dummy.position.set(xCenter, yCenter, fpZc);
@@ -5110,7 +5208,7 @@ function build3DScene() {
         : '#9d174d';
       const _fpSprite = _make3dZoneLabel(_fpLabelText, _fpLabelColor);
       _fpSprite.scale.set(80 * scale, 15 * scale, 1);
-      _fpSprite.position.set((fpX0 + fpX1) / 2, fpTotalHeightU + 6 * scale, fpZc);
+      _fpSprite.position.set(fpRenderCx, fpTotalHeightU + 6 * scale, fpZc);
       _fpSprite.renderOrder = 999;
       scene.add(_fpSprite);
     }
