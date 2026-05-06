@@ -2462,6 +2462,57 @@ function drawPlan() {
     mx += modulePx;
   }
 
+  // ---------- Phase F.11 (2026-05-06) — labeled cross-aisle strips ----------
+  // Brock's parked Phase F backlog: "render circulation buffer explicitly
+  // as labeled cross-aisles instead of consuming it as padding." Pre-F.11
+  // the cross-aisles existed only as invisible gaps between rack segments —
+  // a real IE artifact (NFPA-required egress + forklift turn-around) but
+  // visually indistinguishable from "dead space" or "rendering bug."
+  //
+  // Now: each cross-aisle band gets a light-gray fill + dashed stroke +
+  // "◀  CROSS-AISLE  ▶" label centered in the band. Reads at-a-glance as
+  // engineered circulation, not as a bug.
+  //
+  // Engine source of truth: calc.circulationLayoutFt (Phase F.11 helper).
+  // Master Y-bands already computed above as `_planMasterSegments`; the
+  // gaps between them ARE the cross-aisles. We don't need to re-derive
+  // positions, just paint them.
+  const _planRackLeftX  = X0 + sideMarginPx;
+  const _planRackRightX = X0 + Wpx - sideMarginPx;
+  if (_planMasterSegments.length > 1) {
+    ctx.save();
+    for (let i = 0; i < _planMasterSegments.length - 1; i++) {
+      const yTop = _planMasterSegments[i].yEnd;
+      const yBottom = _planMasterSegments[i + 1].yStart;
+      const bandH = yBottom - yTop;
+      if (bandH <= 0) continue;
+      // Light-gray strip
+      ctx.fillStyle = '#e5e7eb';
+      ctx.fillRect(_planRackLeftX, yTop, _planRackRightX - _planRackLeftX, bandH);
+      // Dashed top + bottom edges suggesting aisle striping
+      ctx.strokeStyle = '#9ca3af';
+      ctx.lineWidth = 0.5;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath();
+      ctx.moveTo(_planRackLeftX, yTop + 1);
+      ctx.lineTo(_planRackRightX, yTop + 1);
+      ctx.moveTo(_planRackLeftX, yBottom - 1);
+      ctx.lineTo(_planRackRightX, yBottom - 1);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // Label centered in band — only if band is tall enough to read
+      if (bandH > 8) {
+        const cy = yTop + bandH / 2;
+        const cx = (_planRackLeftX + _planRackRightX) / 2;
+        ctx.fillStyle = '#4b5563';
+        ctx.font = 'bold 9px Montserrat, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('◀  CROSS-AISLE  ▶', cx, cy + 3);
+      }
+    }
+    ctx.restore();
+  }
+
   // ---------- Per-zone labels (F.4 fix) ----------
   // Render each zone's name at its horizontal center, just below the top
   // dim line. Skip zones that didn't render any cols (extents stay at
@@ -4867,16 +4918,238 @@ function build3DScene() {
       scene.add(shCartonMesh);
     }
 
-    // Forward Pick block: medium-height carton-flow strip across the front
+    // ─────────────────────────────────────────────────────────────────
+    // Phase F.11 (2026-05-06) — Forward Pick 3D structural detail.
+    // Pre-F.11 FP rendered as a flat 10-ft purple box: no internal
+    // structure, read as a placeholder. Brock's parked Phase F backlog:
+    // "Forward Pick 3D structural detail polish."
+    //
+    // Now: rebuild as IE-correct rack structure based on FP type:
+    //   • carton_flow : 3 levels, 4 ft bays, gravity-flow rails, brown
+    //                   carton boxes at front of each lane
+    //   • light_case  : 4 levels, 3 ft bays, shelf decks, small cartons on each shelf
+    //   • heavy_case  : 4 levels, 4.33 ft bays, beams + pallets (2 pick + 2 reserve)
+    // Plus: floating "FORWARD PICK · N faces" sprite overhead.
+    // ─────────────────────────────────────────────────────────────────
     if (fpEnabled3D && fpX1 > fpX0 + 4 && fpDepthU > 4) {
       const fpW = fpX1 - fpX0;
-      const fpH = 10 * scale;
-      const fpGeo = new THREE.BoxGeometry(fpW, fpH, fpDepthU);
-      const fpMat = new THREE.MeshStandardMaterial({ color: 0x7c3aed, transparent: true, opacity: 0.5, roughness: 0.6 });
-      const fpMesh = new THREE.Mesh(fpGeo, fpMat);
-      fpMesh.position.set((fpX0 + fpX1) / 2, fpH / 2, (fpZ0 + fpZ1) / 2);
-      fpMesh.castShadow = true;
-      scene.add(fpMesh);
+      const fpZc = (fpZ0 + fpZ1) / 2;
+      const fpType = zones.forwardPick?.type || 'carton_flow';
+      const fpStruct = calc.forwardPickStructure({
+        type: fpType,
+        skuCount: +zones.forwardPick?.skuCount || 0,
+        velocityTierAPct: +facility.velocityTierAPct || 20,
+        daysInventory: +zones.forwardPick?.daysInventory || 3,
+        fpWidthFt: fpW / scale,
+        fpDepthFt: fpDepthU / scale,
+      });
+      const fpLevels       = fpStruct.levels;
+      const fpPickLevels   = fpStruct.pickLevels;
+      const fpBayWidthFt   = fpStruct.bayWidthFt;
+      const fpLevelHeightFt= fpStruct.levelHeightFt;
+      const fpTotalHeightU = fpStruct.totalHeightFt * scale;
+      const fpBayWidthU    = fpBayWidthFt * scale;
+      const fpLevelHeightU = fpLevelHeightFt * scale;
+      const fpBays         = fpStruct.bays;
+
+      // Color palette per type — distinct from FP/CP/Reserve so the user
+      // can read which kind of forward-pick at a glance.
+      const fpColors = {
+        carton_flow: 0x7c3aed, // violet (matches legacy)
+        light_case:  0x0ea5e9, // sky-blue
+        heavy_case:  0xdb2777, // pink-magenta
+      };
+      const fpColor = fpColors[fpType] || fpColors.carton_flow;
+
+      // Soft colored volume — lower opacity than pre-F.11 (0.5 → 0.18)
+      // because structural detail will carry visual reading from now on.
+      const fpVolMat = new THREE.MeshStandardMaterial({
+        color: fpColor, transparent: true, opacity: 0.18, depthWrite: false, roughness: 0.7,
+      });
+      const fpVolGeo = new THREE.BoxGeometry(fpW, fpTotalHeightU, fpDepthU);
+      const fpVolMesh = new THREE.Mesh(fpVolGeo, fpVolMat);
+      fpVolMesh.position.set((fpX0 + fpX1) / 2, fpTotalHeightU / 2, fpZc);
+      fpVolMesh.castShadow = false;
+      scene.add(fpVolMesh);
+
+      // Steel material for FP uprights + beams (matches selective rack
+      // visual language so user reads "rack structure" not "abstract box").
+      const fpSteelMat = new THREE.MeshStandardMaterial({
+        color: 0x4b5563, roughness: 0.55, metalness: 0.45,
+      });
+      // Carton material for pick faces + replen — saturated cardboard tan
+      // with slight type tint so each FP type is visually distinct.
+      const fpCartonMat = new THREE.MeshStandardMaterial({
+        color: 0xc8966b, roughness: 0.85, metalness: 0.0,
+      });
+
+      // Uprights: bay-boundary posts × 2 sides (front + back of FP rack).
+      // The rack "depth" along Z = fpDepthU. Posts at Z = fpZ0 (front-of-aisle)
+      // and Z = fpZ1 (back). Posts at every bay boundary along X.
+      if (fpBays > 0) {
+        const fpUprightGeo = new THREE.BoxGeometry(0.18, fpTotalHeightU, 0.18);
+        const fpUprightCount = (fpBays + 1) * 2;
+        const fpUprightMesh = new THREE.InstancedMesh(fpUprightGeo, fpSteelMat, fpUprightCount);
+        fpUprightMesh.castShadow = true;
+        const dummy = new THREE.Object3D();
+        let ui = 0;
+        for (let b = 0; b <= fpBays; b++) {
+          const x = fpX0 + b * fpBayWidthU;
+          // Front upright (at fpZ0)
+          dummy.position.set(x, fpTotalHeightU / 2, fpZ0);
+          dummy.scale.set(1, 1, 1);
+          dummy.updateMatrix();
+          fpUprightMesh.setMatrixAt(ui++, dummy.matrix);
+          // Back upright (at fpZ1)
+          dummy.position.set(x, fpTotalHeightU / 2, fpZ1);
+          dummy.updateMatrix();
+          fpUprightMesh.setMatrixAt(ui++, dummy.matrix);
+        }
+        fpUprightMesh.instanceMatrix.needsUpdate = true;
+        scene.add(fpUprightMesh);
+
+        // Horizontal members: shelf decks (light_case) or flow rails
+        // (carton_flow) or beams (heavy_case) at each level boundary.
+        // For each level, render one continuous slab spanning fpW × fpDepthU
+        // at that level's Y. Slab thickness ~0.08 ft.
+        const fpDeckGeo = new THREE.BoxGeometry(fpW, 0.08 * scale, fpDepthU);
+        const fpDeckMat = new THREE.MeshStandardMaterial({
+          color: 0x6b7280, roughness: 0.6, metalness: 0.4,
+        });
+        for (let lv = 0; lv <= fpLevels; lv++) {
+          const yU = lv * fpLevelHeightU;
+          // Skip if outside rack height (shouldn't happen, but defensive).
+          if (yU > fpTotalHeightU + 0.001) continue;
+          // Top-most deck (lv === fpLevels) only renders for shelving-style
+          // (light_case) — flow rack and heavy_case typically have no top deck.
+          if (lv === fpLevels && fpType !== 'light_case') continue;
+          // Bottom deck (floor level, lv === 0) skipped unless light_case.
+          if (lv === 0 && fpType !== 'light_case') continue;
+          const deck = new THREE.Mesh(fpDeckGeo, fpDeckMat);
+          deck.position.set((fpX0 + fpX1) / 2, yU, fpZc);
+          deck.castShadow = true;
+          deck.receiveShadow = true;
+          scene.add(deck);
+        }
+
+        // Pick-face cartons + replen depth. Render brown carton cubes at
+        // the front face of each bay × each pickable level. Replen depth
+        // (along Z, into the rack) = cartonsPerFace × small carton size.
+        // Reserve cartons (heavy_case) get 1-2 pallet boxes above the pick
+        // levels (drawn with matPallet wood color).
+        const cartonW = Math.min(fpBayWidthU * 0.7, 2.5 * scale); // along X
+        const cartonH = Math.min(fpLevelHeightU * 0.6, 1.5 * scale); // along Y
+        const cartonD = Math.min(2.0 * scale, fpDepthU / Math.max(2, fpStruct.cartonsPerFace + 1)); // along Z
+        const fpCartonGeo = new THREE.BoxGeometry(cartonW, cartonH, cartonD);
+        // Total carton count: bays × pickLevels × cartonsPerFace
+        const totalFpCartons = fpBays * fpPickLevels * fpStruct.cartonsPerFace;
+        if (totalFpCartons > 0) {
+          const fpCartonMesh = new THREE.InstancedMesh(fpCartonGeo, fpCartonMat, totalFpCartons);
+          fpCartonMesh.castShadow = true;
+          const dummy = new THREE.Object3D();
+          let ci = 0;
+          for (let b = 0; b < fpBays; b++) {
+            const xCenter = fpX0 + (b + 0.5) * fpBayWidthU;
+            for (let lv = 0; lv < fpPickLevels; lv++) {
+              const yCenter = lv * fpLevelHeightU + cartonH / 2 + 0.1 * scale;
+              for (let d = 0; d < fpStruct.cartonsPerFace; d++) {
+                // Replen stack along Z: carton 0 = pick face (front), then
+                // 1..N = replen depth (toward back).
+                const zCenter = fpZ0 + cartonD / 2 + 0.2 * scale + d * (cartonD + 0.05 * scale);
+                if (zCenter > fpZ1 - cartonD / 2) break; // out of FP depth
+                dummy.position.set(xCenter, yCenter, zCenter);
+                dummy.scale.set(1, 1, 1);
+                dummy.updateMatrix();
+                fpCartonMesh.setMatrixAt(ci++, dummy.matrix);
+              }
+            }
+          }
+          fpCartonMesh.count = ci; // trim unused slots
+          fpCartonMesh.instanceMatrix.needsUpdate = true;
+          scene.add(fpCartonMesh);
+        }
+
+        // Reserve pallets (heavy_case only): wood pallet boxes above pick
+        // levels. Two reserve levels × bays.
+        if (fpType === 'heavy_case' && fpLevels > fpPickLevels) {
+          const reserveLevels = fpLevels - fpPickLevels;
+          const palMat = new THREE.MeshStandardMaterial({
+            color: 0x9a6b3f, roughness: 0.78, metalness: 0.0,
+          });
+          const palW = Math.min(fpBayWidthU * 0.8, 4.0 * scale);
+          const palH = Math.min(fpLevelHeightU * 0.7, 4.0 * scale);
+          const palD = Math.min(fpDepthU * 0.7, 3.5 * scale);
+          const palGeo = new THREE.BoxGeometry(palW, palH, palD);
+          const palCount = fpBays * reserveLevels;
+          if (palCount > 0) {
+            const palMesh = new THREE.InstancedMesh(palGeo, palMat, palCount);
+            palMesh.castShadow = true;
+            const dummy = new THREE.Object3D();
+            let pi = 0;
+            for (let b = 0; b < fpBays; b++) {
+              const xCenter = fpX0 + (b + 0.5) * fpBayWidthU;
+              for (let lv = fpPickLevels; lv < fpLevels; lv++) {
+                const yCenter = lv * fpLevelHeightU + palH / 2 + 0.1 * scale;
+                dummy.position.set(xCenter, yCenter, fpZc);
+                dummy.scale.set(1, 1, 1);
+                dummy.updateMatrix();
+                palMesh.setMatrixAt(pi++, dummy.matrix);
+              }
+            }
+            palMesh.instanceMatrix.needsUpdate = true;
+            scene.add(palMesh);
+          }
+        }
+      }
+
+      // Floating "FORWARD PICK · N faces" sprite overhead — matches the
+      // Phase F.4 zone-label pattern for FP/CP/Reserve.
+      const _fpLabelText = `FORWARD PICK · ${fpStruct.activeFaces.toLocaleString()} faces`;
+      const _fpLabelColor = fpType === 'carton_flow' ? '#5b21b6'
+        : fpType === 'light_case' ? '#0369a1'
+        : '#9d174d';
+      const _fpSprite = _make3dZoneLabel(_fpLabelText, _fpLabelColor);
+      _fpSprite.scale.set(80 * scale, 15 * scale, 1);
+      _fpSprite.position.set((fpX0 + fpX1) / 2, fpTotalHeightU + 6 * scale, fpZc);
+      _fpSprite.renderOrder = 999;
+      scene.add(_fpSprite);
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Phase F.11 (2026-05-06) — labeled cross-aisle floor strips (3D).
+    // Same intent as the 2D plan view: render the cross-aisle bands
+    // explicitly as light-gray floor planes + overhead sprite labels so
+    // the user reads them as engineered circulation, not as gaps.
+    // Engine source of truth: calc.circulationLayoutFt.
+    // Master Z-bands already computed as `_3dMasterSegments`; gaps
+    // between them ARE the cross-aisles.
+    // ─────────────────────────────────────────────────────────────────
+    if (_3dMasterSegments.length > 1 && _3dGapU > 0.5) {
+      const _xaFloorMat = new THREE.MeshStandardMaterial({
+        color: 0xd1d5db, roughness: 0.9, metalness: 0.0,
+      });
+      const _3dRackLeftX = -W / 2 + 6 * scale;
+      const _3dRackRightX = W / 2 - 6 * scale;
+      const _xaWidthX = _3dRackRightX - _3dRackLeftX;
+      for (let i = 0; i < _3dMasterSegments.length - 1; i++) {
+        const segA = _3dMasterSegments[i];
+        const segB = _3dMasterSegments[i + 1];
+        const z0 = segA.z1;
+        const z1 = segB.z0;
+        const bandLen = z1 - z0;
+        if (bandLen <= 0.5) continue;
+        const xaGeo = new THREE.BoxGeometry(_xaWidthX, 0.04 * scale, bandLen);
+        const xaMesh = new THREE.Mesh(xaGeo, _xaFloorMat);
+        xaMesh.position.set((_3dRackLeftX + _3dRackRightX) / 2, 0.02 * scale, (z0 + z1) / 2);
+        xaMesh.receiveShadow = true;
+        scene.add(xaMesh);
+        // Overhead sprite label
+        const _xaSprite = _make3dZoneLabel('CROSS-AISLE', '#4b5563');
+        _xaSprite.scale.set(40 * scale, 10 * scale, 1);
+        _xaSprite.position.set((_3dRackLeftX + _3dRackRightX) / 2, rackHeightU + 4 * scale, (z0 + z1) / 2);
+        _xaSprite.renderOrder = 999;
+        scene.add(_xaSprite);
+      }
     }
 
     // ---------- Dock doors ----------

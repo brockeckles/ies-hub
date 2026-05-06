@@ -253,6 +253,211 @@ export function crossAisleLayoutFt(rackRunLenFt, opts = {}) {
   };
 }
 
+/**
+ * Phase F.11 (2026-05-06) — Render the building's circulation buffer as a
+ * concrete, labeled set of cross-aisles + side fire lanes instead of leaving
+ * it implicit in the engine's flat 10% circulation factor.
+ *
+ * **Why this exists.** Pre-F.11, the WSC engine accounted for circulation by
+ * inflating `requirementsDriven.totalSfRequired` by a flat 10% factor. The
+ * extra footprint then turned into either empty floor (Constraint mode) or
+ * extra rack pairs (Design mode `fillMode='fill'` padding). Cross-aisles
+ * existed only as gaps between rack segments — invisible to the user, who
+ * read them as either bugs or "wasted space." Brock's parked Phase F backlog
+ * called this out as the "biggest IE-correctness lift."
+ *
+ * **What this returns.** A complete circulation-strip layout that the 2D
+ * plan canvas + 3D scene can render directly:
+ *
+ *   - `crossAisles[]` — Y/Z bands BETWEEN rack segments (NFPA-driven, from
+ *     `crossAisleLayoutFt`). Each band has `posFt` (centerline position
+ *     along the rack run) and `widthFt` (clear width). Renderer paints a
+ *     light-gray strip + "CROSS-AISLE" label + travel-direction arrows.
+ *
+ *   - `sideFireLanes[]` — narrow strips along the LEFT and RIGHT perimeter
+ *     of the rack zone (between rack and building wall). Sized to the
+ *     `sideMarginFt` already reserved by the rack-placement loop. Renderer
+ *     paints a light-gray strip + "FIRE LANE" label.
+ *
+ *   - `circulationSf` — total square feet visible-circulation accounts for
+ *     (cross-aisles × full rack-zone width + 2 × side-fire-lane × rack-run-len).
+ *
+ *   - `circulationPct` — visible circulation as % of `storageSqft` for HUD.
+ *
+ *   - `crossAisleSf`, `sideFireLaneSf` — sub-totals for diagnostics.
+ *
+ * Pure helper. Renderer-agnostic. Same outputs feed 2D canvas + 3D scene
+ * so the two views agree on cross-aisle positions.
+ *
+ * @param {{
+ *   rackRunLenFt: number,        // length of the storage run along long edge (after staging)
+ *   rackZoneWidthFt: number,     // width of the rack zone along short edge (between side fire lanes)
+ *   sideMarginFt?: number,       // 6 ft default — width of left + right fire lanes
+ *   storageSqft?: number,        // for circulationPct denominator
+ *   sprinklerType?: string,
+ *   truckClass?: string,
+ * }} opts
+ * @returns {{
+ *   crossAisles: Array<{ posFt: number, widthFt: number }>,
+ *   sideFireLanes: Array<{ side: 'left'|'right', widthFt: number }>,
+ *   circulationSf: number,
+ *   crossAisleSf: number,
+ *   sideFireLaneSf: number,
+ *   circulationPct: number,
+ *   targetSpacingFt: number,
+ *   crossAisleClearFt: number,
+ *   sideMarginFt: number,
+ * }}
+ */
+export function circulationLayoutFt(opts = {}) {
+  const rackRunLenFt = Math.max(0, +opts.rackRunLenFt || 0);
+  const rackZoneWidthFt = Math.max(0, +opts.rackZoneWidthFt || 0);
+  const sideMarginFt = opts.sideMarginFt != null ? Math.max(0, +opts.sideMarginFt) : 6;
+  const storageSqft = Math.max(0, +opts.storageSqft || 0);
+
+  // Step 1: NFPA cross-aisle layout drives the egress-required cross-aisles.
+  const xa = crossAisleLayoutFt(rackRunLenFt, opts);
+  const segmentCount = Math.max(1, +xa.segmentCount || 1);
+  const clearFt = +xa.crossAisleClearFt || 0;
+  const segLenFt = +xa.segmentLenFt || 0;
+
+  /** @type {Array<{ posFt:number, widthFt:number }>} */
+  const crossAisles = [];
+  // Cross-aisle centerlines: between consecutive segments. With S segments
+  // there are (S-1) cross-aisles. posFt = distance along the rack run from
+  // the rack-zone start to the cross-aisle centerline.
+  let runFt = 0;
+  for (let i = 0; i < segmentCount - 1; i++) {
+    runFt += segLenFt; // end of segment i
+    const posFt = runFt + clearFt / 2;
+    crossAisles.push({ posFt, widthFt: clearFt });
+    runFt += clearFt;  // skip the cross-aisle band
+  }
+
+  // Step 2: side fire lanes (LEFT + RIGHT perimeter strips).
+  /** @type {Array<{ side:'left'|'right', widthFt:number }>} */
+  const sideFireLanes = sideMarginFt > 0
+    ? [
+        { side: 'left',  widthFt: sideMarginFt },
+        { side: 'right', widthFt: sideMarginFt },
+      ]
+    : [];
+
+  // Step 3: aggregate SF.
+  const crossAisleSf = (segmentCount - 1) * clearFt * rackZoneWidthFt;
+  const sideFireLaneSf = sideFireLanes.length * sideMarginFt * rackRunLenFt;
+  const circulationSf = crossAisleSf + sideFireLaneSf;
+  const circulationPct = storageSqft > 0
+    ? Math.round((circulationSf / storageSqft) * 1000) / 10
+    : 0;
+
+  return {
+    crossAisles,
+    sideFireLanes,
+    circulationSf,
+    crossAisleSf,
+    sideFireLaneSf,
+    circulationPct,
+    targetSpacingFt: +xa.targetSpacingFt || 0,
+    crossAisleClearFt: clearFt,
+    sideMarginFt,
+  };
+}
+
+/**
+ * Phase F.11 (2026-05-06) — Compute IE-correct structural parameters for
+ * Forward Pick rendering. Pre-F.11, the FP zone in 3D was a flat 10-ft
+ * purple box with no internal detail — read as a placeholder, not a real
+ * pick area. Brock's parked Phase F backlog called for "structural detail
+ * polish."
+ *
+ * **What this returns.** Geometry the 3D scene needs to draw a real
+ * forward-pick area: number of active pick faces, lane count, rack-style
+ * structural levels, and a few derived dimensions:
+ *
+ *   - `activeFaces` — `round(skuCount × velocityTierAPct / 100)`. The SKUs
+ *     that get a dedicated forward-pick face (rest are picked from reserve).
+ *
+ *   - `levels` — number of horizontal load levels in the FP zone:
+ *     - 'carton_flow' : 3 levels (2 pick + 1 replen)
+ *     - 'light_case'  : 4 levels (taller shelves, all pickable)
+ *     - 'heavy_case'  : 4 levels (2 pick at bottom + 2 reserve pallets above)
+ *
+ *   - `pickLevels` — number of levels actually pickable (not replen/reserve).
+ *
+ *   - `bayWidthFt` — pick-face width along the building width:
+ *     - 'carton_flow' : 4 ft (standard carton-flow lane)
+ *     - 'light_case'  : 3 ft (standard shelving bay)
+ *     - 'heavy_case'  : 4.33 ft (selective rack, GMA pallet)
+ *
+ *   - `levelHeightFt` — vertical pitch between levels.
+ *
+ *   - `totalHeightFt` — total height of the FP rack structure (= levels × pitch).
+ *
+ *   - `bays` — number of bays that fit along the FP zone width (= floor(fpWidthFt / bayWidthFt)).
+ *
+ *   - `cartonsPerFace` — visual replen depth for renderer (capped 1..6).
+ *
+ * Pure helper. Renderer-agnostic. UI computes the fp footprint dimensions
+ * and passes them in; calc returns the structural decomposition.
+ *
+ * @param {{
+ *   type?: 'carton_flow'|'light_case'|'heavy_case',
+ *   skuCount?: number,
+ *   velocityTierAPct?: number,
+ *   daysInventory?: number,
+ *   fpWidthFt?: number,
+ *   fpDepthFt?: number,
+ * }} opts
+ * @returns {{
+ *   type: string,
+ *   activeFaces: number,
+ *   levels: number,
+ *   pickLevels: number,
+ *   bayWidthFt: number,
+ *   levelHeightFt: number,
+ *   totalHeightFt: number,
+ *   bays: number,
+ *   cartonsPerFace: number,
+ * }}
+ */
+export function forwardPickStructure(opts = {}) {
+  const type = (opts.type === 'light_case' || opts.type === 'heavy_case')
+    ? opts.type
+    : 'carton_flow';
+  const skuCount = Math.max(0, +opts.skuCount || 0);
+  const velocityTierAPct = Math.max(0, Math.min(100, +opts.velocityTierAPct || 0));
+  const daysInventory = Math.max(0, +opts.daysInventory || 0);
+  const fpWidthFt = Math.max(0, +opts.fpWidthFt || 0);
+
+  // Per-type geometry constants (industry standard FP designs).
+  const TYPE_PARAMS = {
+    carton_flow: { levels: 3, pickLevels: 2, bayWidthFt: 4,    levelHeightFt: 3.5 },
+    light_case:  { levels: 4, pickLevels: 4, bayWidthFt: 3,    levelHeightFt: 2.0 },
+    heavy_case:  { levels: 4, pickLevels: 2, bayWidthFt: 4.33, levelHeightFt: 4.5 },
+  };
+  const p = TYPE_PARAMS[type];
+
+  const activeFaces = Math.round(skuCount * velocityTierAPct / 100);
+  const bays = fpWidthFt > 0 ? Math.max(0, Math.floor(fpWidthFt / p.bayWidthFt)) : 0;
+  const totalHeightFt = p.levels * p.levelHeightFt;
+  // Replen-depth heuristic (visual): 1 carton minimum, scaled by daysInventory.
+  // Capped so the renderer doesn't try to draw a 30-deep stack.
+  const cartonsPerFace = Math.max(1, Math.min(6, Math.round(daysInventory)));
+
+  return {
+    type,
+    activeFaces,
+    levels: p.levels,
+    pickLevels: p.pickLevels,
+    bayWidthFt: p.bayWidthFt,
+    levelHeightFt: p.levelHeightFt,
+    totalHeightFt,
+    bays,
+    cartonsPerFace,
+  };
+}
+
 // ============================================================
 // 3D RENDERED FACTS — achieved-vs-target accounting (P0-2)
 // ============================================================
