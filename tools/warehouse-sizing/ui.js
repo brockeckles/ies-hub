@@ -11,7 +11,7 @@ import { state } from '../../shared/state.js?v=20260418-sL';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sL';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260430-na-dot';
-import * as calc from './calc.js?v=20260508-emptystate';
+import * as calc from './calc.js?v=20260508-consolidate';
 import * as api from './api.js?v=20260418-sL';
 import * as cmApi from '../cost-model/api.js?v=20260504-auth1';
 import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
@@ -936,77 +936,69 @@ function _renderWscConfigHtml() {
         <input value="${facility.name}" data-fac="name" />
       </div>
 
-      <!-- Primary-input toggle (Phase B locked decision) -->
+      <!-- Brock 2026-05-08 (consolidation): unified inventory inputs.
+           Pre-fix the form had a binary toggle (Throughput vs Pallet Positions)
+           that branched into two distinct sub-forms. Now everything lives in
+           one flat form: throughput inputs (annual outbound, DOH, peak, daily
+           inbound) AND override inputs (total pallets, total shelving) all
+           visible at once. Engine logic: if override > 0 use it directly,
+           else derive forward from throughput. Removes the toggle entirely
+           and the wart where 'pallets mode' silently produced 0 shelving. -->
       ${(() => {
-        const pri = facility.primaryInventoryInput || 'throughput';
-        return `
-          <div style="margin-bottom:10px;">
-            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin-bottom:4px;">Drive sizing from</div>
-            <div role="radiogroup" aria-label="Primary inventory input" style="display:flex;gap:6px;">
-              <button type="button" role="radio" aria-checked="${pri === 'throughput'}" data-wsc-primary="throughput"
-                title="Enter annual or daily outbound + DOH. Tool derives on-hand units / pallets. Most natural for greenfield sizing — you usually know your throughput before you have a slotting study."
-                style="flex:1;padding:6px 10px;font-size:11px;font-weight:600;border-radius:5px;cursor:pointer;border:1px solid ${pri === 'throughput' ? 'var(--ies-blue,#0047AB)' : 'var(--ies-gray-200)'};background:${pri === 'throughput' ? 'var(--ies-blue,#0047AB)' : '#fff'};color:${pri === 'throughput' ? '#fff' : 'var(--ies-gray-700)'};">Throughput</button>
-              <button type="button" role="radio" aria-checked="${pri === 'pallets'}" data-wsc-primary="pallets"
-                title="Enter on-hand pallet positions directly. Tool derives implied throughput. Use this when you already have an engineered pallet count from a slotting study."
-                style="flex:1;padding:6px 10px;font-size:11px;font-weight:600;border-radius:5px;cursor:pointer;border:1px solid ${pri === 'pallets' ? 'var(--ies-blue,#0047AB)' : 'var(--ies-gray-200)'};background:${pri === 'pallets' ? 'var(--ies-blue,#0047AB)' : '#fff'};color:${pri === 'pallets' ? '#fff' : 'var(--ies-gray-700)'};">Pallet Positions</button>
-            </div>
-          </div>
-        `;
-      })()}
-
-      ${(() => {
-        const pri = facility.primaryInventoryInput || 'throughput';
         const doh = +volumes.daysOnHand || 30;
         const peakMult = +volumes.peakMultiplier || 1.3;
         const annualOut = +volumes.annualOutboundUnits || 0;
+        const totalPallets = +volumes.totalPallets || 0;
+        const totalShelv = +volumes.totalShelvingLocations || 0;
+        const palOverrideOn = totalPallets > 0;
+        const shelvOverrideOn = totalShelv > 0;
         const cartonProf = sized?.cartonProfile;
         const cppActual = (cartonProf?.cartonsPerPallet) || (zones.productDimensions?.cartonsPerPallet) || 12;
         const ucActual = (zones.productDimensions?.unitsPerCartonPallet) || 6;
         const unitsPerPallet = cppActual * ucActual;
 
-        if (pri === 'throughput') {
-          // Primary inputs: annual outbound, DOH, peak. Compute on-hand units + pallets.
-          const peakOnHandUnits = (annualOut > 0 && doh > 0)
-            ? Math.round((annualOut / 365) * doh * peakMult)
-            : 0;
-          const peakOnHandPallets = (peakOnHandUnits > 0 && unitsPerPallet > 0)
-            ? Math.ceil(peakOnHandUnits / unitsPerPallet)
-            : 0;
-          return `
-            <div class="wsc-config-row">
-              <div class="wsc-config-field"><label title="Annual outbound throughput in units. Drives the on-hand inventory derivation: peak on-hand = (annual / 365) × DOH × peak factor.">Annual Outbound <span style="color:var(--ies-gray-500);font-weight:400;">(units)</span></label><input type="number" value="${volumes.annualOutboundUnits || 0}" data-vol="annualOutboundUnits" /></div>
-              <div class="wsc-config-field"><label title="Days On Hand target — drives the throughput → on-hand inventory conversion. Default 30 days. Tier-A SKUs typically run 7-15 DOH; Tier-C 60-90.">DOH (days)</label><input type="number" value="${doh}" step="1" data-vol="daysOnHand" /></div>
-            </div>
-            <div class="wsc-config-row">
-              <div class="wsc-config-field"><label title="Peak vs avg-day demand multiplier. Default 1.3. Drives both the peak on-hand units and the dock peak throughput.">Peak Factor</label><input type="number" value="${peakMult}" step="0.1" data-vol="peakMultiplier" /></div>
-              <div class="wsc-config-field"><label title="Average inbound pallets/day — drives dock throughput sizing.">Daily Inbound <span style="color:var(--ies-gray-500);font-weight:400;">(pallets/day)</span></label><input type="number" value="${volumes.avgDailyInbound}" data-vol="avgDailyInbound" /></div>
-            </div>
-            <div style="margin-top:10px;padding:8px 10px;background:var(--ies-gray-50);border-radius:4px;font-size:11px;color:var(--ies-gray-700);">
-              <div style="font-weight:700;margin-bottom:4px;color:var(--ies-gray-500);text-transform:uppercase;font-size:10px;">Derived on-hand inventory</div>
-              <div>Peak units on-hand: <strong>${peakOnHandUnits.toLocaleString()}</strong> (annual ÷ 365 × DOH × peak)</div>
-              <div>Peak pallets on-hand: <strong>${peakOnHandPallets.toLocaleString()}</strong> <span style="color:var(--ies-gray-500);">(at ${unitsPerPallet} units/pallet from Carton Profile)</span></div>
-            </div>
-          `;
-        }
-        // Pallet-driven mode
-        const totalPallets = +volumes.totalPallets || 0;
-        const onHandUnits = totalPallets * unitsPerPallet;
-        const impliedAnnualOut = (totalPallets > 0 && doh > 0 && peakMult > 0)
-          ? Math.round((onHandUnits / peakMult / doh) * 365)
+        // Forward-derived peak on-hand inventory (always computed from throughput).
+        const peakOnHandUnits = (annualOut > 0 && doh > 0)
+          ? Math.round((annualOut / 365) * doh * peakMult)
           : 0;
+        const derivedPallets = (peakOnHandUnits > 0 && unitsPerPallet > 0)
+          ? Math.ceil(peakOnHandUnits / unitsPerPallet)
+          : 0;
+        const derivedShelving = sized?.locations?.shelving?.locationsRequired || 0;
+
+        // What the engine will actually use (override wins over derived).
+        const effectivePallets = palOverrideOn ? totalPallets : derivedPallets;
+        const effectiveShelving = shelvOverrideOn ? totalShelv : derivedShelving;
+
+        const palBadge = palOverrideOn
+          ? '<span style="display:inline-block;padding:1px 6px;border-radius:3px;background:#dbeafe;color:#1e40af;font-size:10px;font-weight:700;letter-spacing:.02em;margin-left:6px;">OVERRIDE</span>'
+          : '<span style="color:var(--ies-gray-500);font-weight:400;font-size:11px;margin-left:6px;">(derived)</span>';
+        const shelvBadge = shelvOverrideOn
+          ? '<span style="display:inline-block;padding:1px 6px;border-radius:3px;background:#dbeafe;color:#1e40af;font-size:10px;font-weight:700;letter-spacing:.02em;margin-left:6px;">OVERRIDE</span>'
+          : '<span style="color:var(--ies-gray-500);font-weight:400;font-size:11px;margin-left:6px;">(derived)</span>';
+
         return `
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin:6px 0 6px 0;">Throughput</div>
           <div class="wsc-config-row">
-            <div class="wsc-config-field"><label title="Total pallet positions on-hand at peak inventory. From a slotting study or engineered count. Engine sizes storage directly to this value (peak-units × mix derivation is bypassed).">Pallet Positions <span style="color:var(--ies-gray-500);font-weight:400;">(on-hand)</span></label><input type="number" value="${totalPallets}" data-vol="totalPallets" /></div>
-            <div class="wsc-config-field"><label title="Days On Hand — used to back into the implied throughput.">DOH (days)</label><input type="number" value="${doh}" step="1" data-vol="daysOnHand" /></div>
+            <div class="wsc-config-field"><label title="Annual outbound throughput in units. Drives the on-hand inventory derivation: peak on-hand = (annual / 365) × DOH × peak factor.">Annual Outbound <span style="color:var(--ies-gray-500);font-weight:400;">(units)</span></label><input type="number" value="${annualOut}" data-vol="annualOutboundUnits" /></div>
+            <div class="wsc-config-field"><label title="Days On Hand target — drives the throughput → on-hand inventory conversion. Default 30 days. Tier-A SKUs typically run 7-15 DOH; Tier-C 60-90.">DOH (days)</label><input type="number" value="${doh}" step="1" data-vol="daysOnHand" /></div>
           </div>
           <div class="wsc-config-row">
-            <div class="wsc-config-field"><label title="Peak vs avg-day demand multiplier. Drives the implied annual throughput.">Peak Factor</label><input type="number" value="${peakMult}" step="0.1" data-vol="peakMultiplier" /></div>
-            <div class="wsc-config-field"><label title="Average inbound pallets/day — drives dock throughput sizing.">Daily Inbound <span style="color:var(--ies-gray-500);font-weight:400;">(pallets/day)</span></label><input type="number" value="${volumes.avgDailyInbound}" data-vol="avgDailyInbound" /></div>
+            <div class="wsc-config-field"><label title="Peak vs avg-day demand multiplier. Default 1.3. Drives both the peak on-hand units and the dock peak throughput.">Peak Factor</label><input type="number" value="${peakMult}" step="0.1" data-vol="peakMultiplier" /></div>
+            <div class="wsc-config-field"><label title="Average inbound pallets/day — drives dock throughput sizing.">Daily Inbound <span style="color:var(--ies-gray-500);font-weight:400;">(pallets/day)</span></label><input type="number" value="${volumes.avgDailyInbound || 0}" data-vol="avgDailyInbound" /></div>
           </div>
+
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin:14px 0 6px 0;">Storage Counts <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--ies-gray-400);">(optional — override derived values when you have a slotting study)</span></div>
+          <div class="wsc-config-row">
+            <div class="wsc-config-field"><label title="Total pallet positions on-hand at peak. Leave blank (0) to derive from throughput. When > 0, replaces the derived count and bypasses peakUnits × mix derivation for FP+CP.">Pallet Positions <span style="color:var(--ies-gray-500);font-weight:400;">(0 = derive)</span></label><input type="number" value="${totalPallets}" data-vol="totalPallets" /></div>
+            <div class="wsc-config-field"><label title="Total carton-on-shelving locations on-hand at peak. Leave blank (0) to derive from throughput × shelving mix. When > 0, replaces the derived count.">Shelving Locations <span style="color:var(--ies-gray-500);font-weight:400;">(0 = derive)</span></label><input type="number" value="${totalShelv}" data-vol="totalShelvingLocations" /></div>
+          </div>
+
           <div style="margin-top:10px;padding:8px 10px;background:var(--ies-gray-50);border-radius:4px;font-size:11px;color:var(--ies-gray-700);">
-            <div style="font-weight:700;margin-bottom:4px;color:var(--ies-gray-500);text-transform:uppercase;font-size:10px;">Derived throughput</div>
-            <div>Peak units on-hand: <strong>${onHandUnits.toLocaleString()}</strong> <span style="color:var(--ies-gray-500);">(at ${unitsPerPallet} units/pallet)</span></div>
-            <div>Implied annual outbound: <strong>${impliedAnnualOut.toLocaleString()}</strong> units <span style="color:var(--ies-gray-500);">(on-hand ÷ peak ÷ DOH × 365)</span></div>
+            <div style="font-weight:700;margin-bottom:4px;color:var(--ies-gray-500);text-transform:uppercase;font-size:10px;">Engine will size</div>
+            <div>Peak units on-hand: <strong>${peakOnHandUnits.toLocaleString()}</strong> <span style="color:var(--ies-gray-500);">(annual ÷ 365 × DOH × peak)</span></div>
+            <div>Pallet positions: <strong>${effectivePallets.toLocaleString()}</strong>${palBadge}<span style="color:var(--ies-gray-500);"> ${palOverrideOn ? `(your count, derived = ${derivedPallets.toLocaleString()})` : `(at ${unitsPerPallet} units/pallet)`}</span></div>
+            <div>Shelving locations: <strong>${effectiveShelving.toLocaleString()}</strong>${shelvBadge}<span style="color:var(--ies-gray-500);"> ${shelvOverrideOn ? `(your count, derived = ${derivedShelving.toLocaleString()})` : `(from peak units × shelving mix)`}</span></div>
           </div>
         `;
       })()}
@@ -1539,23 +1531,13 @@ function bindConfigEvents(panel) {
     });
   });
 
-  // Phase B redesign (2026-05-05) — Primary inventory input toggle
-  // (Throughput / Pallet Positions). Re-renders the panel because Step 1
-  // inputs swap between throughput and pallet primary fields. Phase E fix:
-  // also refresh KPI strip — when primary-input toggles, the engine-derived
-  // peakUnits source changes, which can shift the sized total.
-  panel.querySelectorAll('[data-wsc-primary]').forEach(btn => {
-    btn.addEventListener('click', e => {
-      const next = /** @type {HTMLElement} */ (e.currentTarget).dataset.wscPrimary;
-      if (next !== 'throughput' && next !== 'pallets') return;
-      if ((facility.primaryInventoryInput || 'throughput') === next) return;
-      facility.primaryInventoryInput = next;
-      isDirty = true;
-      renderConfigPanel();
-      renderContentView();
-      _refreshWscKpis();
-    });
-  });
+  // Brock 2026-05-08 (consolidation): primary-input toggle removed. The Phase B
+  // toggle lived here from 2026-05-05 to 2026-05-08; it was replaced with a
+  // unified form where throughput inputs and override inputs live side-by-side.
+  // Engine logic now picks override-vs-derived per-field rather than mode-wide.
+  // facility.primaryInventoryInput is now silently unused (preserved on saved
+  // models for back-compat — has no effect on rendering or sizing).
+
 
   // Zone fields (with input debounce for live update)
   panel.querySelectorAll('[data-zone]').forEach(input => {
@@ -2947,6 +2929,12 @@ function toSizingInputs() {
     // (otherwise the engine derives positions from peakUnits × mix, which under-sizes
     // when peakUnits is entered as throughput rather than on-hand inventory).
     totalPalletsOverride: Number(volumes.totalPallets) || 0,
+    // Brock 2026-05-08 (consolidation): symmetric shelving-locations override.
+    // When user enters a shelving count from a slotting study, engine bypasses
+    // the peakUnits × shelvingMix derivation and uses this directly. Closes the
+    // wart where pre-consolidation 'pallets mode' silently produced 0 shelving
+    // when throughput was blank.
+    totalShelvingLocationsOverride: Number(volumes.totalShelvingLocations) || 0,
     officePct: (facility.totalSqft && zones.officeSqft)
       ? Math.max(0.02, Math.min(0.15, zones.officeSqft / facility.totalSqft))
       : 0.05,
@@ -5715,6 +5703,10 @@ function createDefaultVolumes() {
   // are dimensionless ratios applied only when other inputs are non-zero.
   return {
     totalPallets: 0,
+    // Brock 2026-05-08 (consolidation): shelving-locations override.
+    // Mirrors totalPallets — when set, engine bypasses peakUnits × shelvingMix
+    // derivation and uses this directly.
+    totalShelvingLocations: 0,
     totalSKUs: 0,
     inventoryTurns: 0,
     avgDailyInbound: 0,

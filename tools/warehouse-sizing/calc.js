@@ -2059,6 +2059,10 @@ export const SIZING_DEFAULTS = {
   // Optional explicit pallet position count — if > 0, bypasses units→pallets derivation
   // Use this when the user has an engineered pallet count from a slotting study
   totalPalletsOverride: 0,
+  // Brock 2026-05-08 (consolidation): symmetric override for shelving locations.
+  // If > 0, bypasses peakUnits × cartonOnShelvingPct ÷ ucShelv ÷ cartonsPerLocation
+  // derivation. Drives carton-on-shelving zone directly.
+  totalShelvingLocationsOverride: 0,
   // Other zones
   officePct: 0.05,
   forwardPick: null,       // see ForwardPickInputs
@@ -2290,7 +2294,7 @@ export function sizeFacility(userInputs = {}) {
   const csUnits = Math.round((i.peakUnits || 0) * mix.cartonOnShelvingPct);
   const csCartons = i.unitsPerCartonShelv > 0
     ? Math.ceil(csUnits / i.unitsPerCartonShelv) : 0;
-  const shelvingPositions = i.cartonsPerLocation > 0
+  const shelvingDerived = i.cartonsPerLocation > 0
     ? Math.ceil(csCartons / i.cartonsPerLocation) : 0;
 
   // If caller supplied an engineered pallet-position count, honour it directly
@@ -2300,6 +2304,17 @@ export function sizeFacility(userInputs = {}) {
     ? Math.round(i.totalPalletsOverride)
     : (fullPalletPositions + cartonPalletPositions);
   const palletPositionsExplicit = !!(i.totalPalletsOverride && i.totalPalletsOverride > 0);
+
+  // Brock 2026-05-08 (consolidation): symmetric override for shelving locations.
+  // Pre-fix the engine had a pallet-positions override but no shelving-locations
+  // override — so the legacy 'pallets' UI mode silently left shelving at 0
+  // when the user hadn't entered throughput. With the unified form (throughput
+  // + override inputs side-by-side), users can pin pallets, shelving, both,
+  // or neither — engine picks override when present, derives otherwise.
+  const shelvingPositions = (i.totalShelvingLocationsOverride && i.totalShelvingLocationsOverride > 0)
+    ? Math.round(i.totalShelvingLocationsOverride)
+    : shelvingDerived;
+  const shelvingPositionsExplicit = !!(i.totalShelvingLocationsOverride && i.totalShelvingLocationsOverride > 0);
 
   // Honeycomb buffer — still applies (even explicit pallet counts need honeycomb loss baked in)
   const buf = 1 + (i.honeycombPct || 0) / 100;
@@ -2522,7 +2537,7 @@ export function sizeFacility(userInputs = {}) {
     ? Math.round(i.totalPalletsOverride)
     : Math.ceil((+i.peakUnits || 0) / Math.max(1, +i.unitsPerPallet || 1));
 
-  const _shelvingLocations = computeShelvingLocations({
+  const _shelvingLocationsDerived = computeShelvingLocations({
     totalPallets: _totalPalletsForShelving,
     shelvingMixPct: mix.cartonOnShelvingPct,
     cartonsPerPallet: _cartonProfile.cartonsPerPallet,
@@ -2532,6 +2547,28 @@ export function sizeFacility(userInputs = {}) {
     honeycombPct: (i.honeycombPct || 0) / 100,
     surgePct:     (i.surgePct || 0) / 100,
   });
+
+  // Brock 2026-05-08 (consolidation): override the Phase 1 shelving rollup
+  // when totalShelvingLocationsOverride engaged. Caller's slotting-study
+  // count replaces both demand-bound and sku-bound paths; mode tag flips
+  // to 'override'. Keeps the buffered grossLocations symmetry by applying
+  // the same honeycomb + surge buffers the demand-bound path uses.
+  const _shelvingLocations = shelvingPositionsExplicit
+    ? (() => {
+        const base = Math.round(i.totalShelvingLocationsOverride);
+        const buf = 1 + ((i.honeycombPct || 0) / 100);
+        const surge = 1 + ((i.surgePct || 0) / 100);
+        const grossLocations = Math.ceil(base * buf);
+        return {
+          ..._shelvingLocationsDerived,
+          locationsRequired: base,
+          grossLocations,
+          surgeLocations: Math.ceil(grossLocations * surge),
+          mode: 'override',
+          explicit: true,
+        };
+      })()
+    : { ..._shelvingLocationsDerived, explicit: false };
 
   // Per-zone racking structure (beam row heights, no top beam, bottom beam
   // toggleable per zone). Shelving uses the carton-profile shelf level
