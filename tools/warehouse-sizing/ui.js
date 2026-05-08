@@ -11,7 +11,7 @@ import { state } from '../../shared/state.js?v=20260418-sL';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sL';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260430-na-dot';
-import * as calc from './calc.js?v=20260508-consolidate';
+import * as calc from './calc.js?v=20260508-consolidate2';
 import * as api from './api.js?v=20260418-sL';
 import * as cmApi from '../cost-model/api.js?v=20260504-auth1';
 import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
@@ -1556,7 +1556,13 @@ function bindConfigEvents(panel) {
     });
   });
 
-  // Volume fields (with input debounce for live update)
+  // Volume fields (with input debounce for live update).
+  // Brock 2026-05-08 (consolidation): on change (= blur), also re-render the
+  // Configure panel so the "Engine will size" chips update to reflect new
+  // throughput / override values. Pre-fix the chips stayed at 0 even after
+  // typing 50M into Annual Outbound — only renderContentView ran. Safe to
+  // re-render the panel on `change` because the user has already left the
+  // field (focus is elsewhere) by the time `change` fires.
   panel.querySelectorAll('[data-vol]').forEach(input => {
     const handleChange = (e) => {
       const field = /** @type {HTMLInputElement} */ (e.target).dataset.vol;
@@ -1569,7 +1575,9 @@ function bindConfigEvents(panel) {
     });
     input.addEventListener('change', (e) => {
       handleChange(e);
+      renderConfigPanel();
       renderContentView();
+      _refreshWscKpis();
     });
   });
 
