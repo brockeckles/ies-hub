@@ -11,7 +11,7 @@ import { state } from '../../shared/state.js?v=20260418-sL';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sL';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260430-na-dot';
-import * as calc from './calc.js?v=20260508-consolidate2';
+import * as calc from './calc.js?v=20260508-consolidate3';
 import * as api from './api.js?v=20260418-sL';
 import * as cmApi from '../cost-model/api.js?v=20260504-auth1';
 import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
@@ -958,13 +958,30 @@ function _renderWscConfigHtml() {
         const unitsPerPallet = cppActual * ucActual;
 
         // Forward-derived peak on-hand inventory (always computed from throughput).
+        // Brock 2026-05-08 (consolidation): chips read from sized.positions.*,
+        // not sized.locations.shelving.locationsRequired. The Phase 1 helper
+        // computeShelvingLocations uses a different (more aggressive) demand
+        // formula than sizeFacility's legacy peakUnits × csPct ÷ ucShelv ÷
+        // cartonsPerLocation path, so the two numbers drift. The chip should
+        // show what the engine ACTUALLY sizes against (= positions.shelvingPositions).
         const peakOnHandUnits = (annualOut > 0 && doh > 0)
           ? Math.round((annualOut / 365) * doh * peakMult)
           : 0;
         const derivedPallets = (peakOnHandUnits > 0 && unitsPerPallet > 0)
           ? Math.ceil(peakOnHandUnits / unitsPerPallet)
           : 0;
-        const derivedShelving = sized?.locations?.shelving?.locationsRequired || 0;
+        // Pull the engine-used shelving count from sized.positions; fall back
+        // to a local derivation (peakUnits × csMix ÷ unitsPerCartonShelv ÷
+        // cartonsPerLocation) when sized isn't yet populated.
+        const csMix = (+zones.storageAllocation?.cartonOnShelving || 0) / 100;
+        const ucShelv = (+zones.productDimensions?.unitsPerCartonShelving) || 0;
+        const cpl = (+zones.productDimensions?.cartonsPerLocation) || 0;
+        const localDerivedShelving = (peakOnHandUnits > 0 && csMix > 0 && ucShelv > 0 && cpl > 0)
+          ? Math.ceil(Math.round(peakOnHandUnits * csMix) / ucShelv / cpl)
+          : 0;
+        const derivedShelving = sized?.positions?.shelvingPositions
+          ? (shelvOverrideOn ? localDerivedShelving : sized.positions.shelvingPositions)
+          : localDerivedShelving;
 
         // What the engine will actually use (override wins over derived).
         const effectivePallets = palOverrideOn ? totalPallets : derivedPallets;
