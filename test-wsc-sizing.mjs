@@ -13,7 +13,7 @@ const t = (name, cond, extra = '') => {
 {
   const r = sizeFacility({
     peakUnits: 500000,
-    inPalletsDay: 50,       // would derive to 2 (the minimum) from throughput
+    inPalletsDay: 50,       // 50 / (20 × 8 = 160) = 0.31 → ceil = 1 door
     outPalletsDay: 50,
     inboundDoorsOverride: 28,
     outboundDoorsOverride: 28,
@@ -22,7 +22,10 @@ const t = (name, cond, extra = '') => {
   t('explicit outbound honored', r.dock.outboundDoors === 28);
   t('explicit total has no surge buffer', r.dock.totalDoors === 56);
   t('explicit provenance flag set', r.dock.inboundDoorsExplicit === true && r.dock.outboundDoorsExplicit === true);
-  t('derived value still reported', r.dock.inboundDoorsDerived === 2);
+  // Brock 2026-05-08: was `=== 2` when sizeFacility had a Math.max(2, ...)
+  // floor on derived doors. Floor dropped so blank scenarios produce 0 dock
+  // SF; correct math at 50 pallets/day vs 160 pallets/door/day capacity = 1.
+  t('derived value still reported', r.dock.inboundDoorsDerived === 1);
 }
 
 // ── Test: missing overrides fall back to throughput derivation ──

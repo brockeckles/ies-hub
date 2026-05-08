@@ -11,7 +11,7 @@ import { state } from '../../shared/state.js?v=20260418-sL';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sL';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260430-na-dot';
-import * as calc from './calc.js?v=20260504-phase2';
+import * as calc from './calc.js?v=20260508-emptystate';
 import * as api from './api.js?v=20260418-sL';
 import * as cmApi from '../cost-model/api.js?v=20260504-auth1';
 import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
@@ -2860,9 +2860,13 @@ function toSizingInputs() {
     ? Math.round((annualOut / 365) * doh * peakMult)
     : 0;
   const useThroughputDerivation = primaryInput === 'throughput' && peakUnitsFromThroughput > 0;
+  // Brock 2026-05-08: was `(zones.peakUnitsPerDay || 500000)` — 500K phantom
+  // peak units leaked in whenever the field was 0, producing 118K SF residual
+  // even when the user had cleared every input. `??` honors user-typed 0;
+  // saved scenarios that predate this field default to 0 (engine sizes 0 SF).
   const effectivePeakUnits = useThroughputDerivation
     ? peakUnitsFromThroughput
-    : (zones.peakUnitsPerDay || 500000);
+    : (zones.peakUnitsPerDay ?? 0);
   // Avg follows the same source. When throughput-driven and avg-day demand
   // can be inferred (annual / 365), use that × DOH for avg on-hand. Else
   // fall back to direct zones.avgUnitsPerDay.
@@ -2871,7 +2875,7 @@ function toSizingInputs() {
     : 0;
   const effectiveAvgUnits = useThroughputDerivation
     ? avgUnitsFromThroughput
-    : (zones.avgUnitsPerDay || 350000);
+    : (zones.avgUnitsPerDay ?? 0);
 
   return {
     peakUnits: effectivePeakUnits,
@@ -2881,18 +2885,25 @@ function toSizingInputs() {
     // path stuffed avgUnits *as on-hand* into outboundUnitsYr which was
     // dimensionally wrong; sizingEngine doesn't use outboundUnitsYr for
     // sizing anyway, but keep it for downstream callers.
+    // Brock 2026-05-08: operatingDays falls back to 0 (was 250). Engine
+    // doesn't size off outboundUnitsYr; downstream callers should handle 0
+    // explicitly. Honor user-typed 0.
     outboundUnitsYr: zones.outboundUnitsPerDay && zones.outboundUnitsPerDay > 0
-      ? zones.outboundUnitsPerDay * (zones.operatingDaysPerYear || 250)
-      : (zones.avgUnitsPerDay || 0) * (zones.operatingDaysPerYear || 250),
-    operatingDaysYr: zones.operatingDaysPerYear || 250,
+      ? zones.outboundUnitsPerDay * (zones.operatingDaysPerYear ?? 0)
+      : (zones.avgUnitsPerDay ?? 0) * (zones.operatingDaysPerYear ?? 0),
+    operatingDaysYr: zones.operatingDaysPerYear ?? 0,
     fullPalletPct: (alloc.fullPallet || 0) / 100,
     cartonOnPalletPct: (alloc.cartonOnPallet || 0) / 100,
     cartonOnShelvingPct: (alloc.cartonOnShelving || 0) / 100,
-    unitsPerPallet: prod.unitsPerPallet || 48,
-    unitsPerCartonPal: prod.unitsPerCartonPallet || 6,
-    cartonsPerPallet: prod.cartonsPerPallet || 12,
-    unitsPerCartonShelv: prod.unitsPerCartonShelving || 6,
-    cartonsPerLocation: prod.cartonsPerLocation || 4,
+    // Brock 2026-05-08: was `|| 48 / 6 / 12 / 6 / 4` — substituted demo
+    // conversions whenever the user had a 0/blank product profile, producing
+    // pallet-position counts on a phantom inventory. `??` honors typed 0;
+    // engine math guards against divide-by-zero and produces 0 positions.
+    unitsPerPallet: prod.unitsPerPallet ?? 0,
+    unitsPerCartonPal: prod.unitsPerCartonPallet ?? 0,
+    cartonsPerPallet: prod.cartonsPerPallet ?? 0,
+    unitsPerCartonShelv: prod.unitsPerCartonShelving ?? 0,
+    cartonsPerLocation: prod.cartonsPerLocation ?? 0,
     clearHeightFt: facility.clearHeight || 36,
     loadHeightIn: facility.palletHeight || 48,
     sprinklerClearanceIn: facility.topClearance || 18,
@@ -2903,10 +2914,13 @@ function toSizingInputs() {
     mixRackPct: 0.70,
     honeycombPct: 10,
     surgePct: 20,
-    inPalletsDay: volumes.avgDailyInbound || 200,
-    outPalletsDay: volumes.avgDailyOutbound || 200,
-    palletsPerDoorHour: dock.palletsPerDockHour || 20,
-    dockHours: dock.dockOperatingHours || 8,
+    // Brock 2026-05-08: was `|| 200 / 200 / 20 / 8` — phantom dock throughput
+    // forced 4 minimum doors × 1500 SF = 6,000+ SF dock + 540 SF staging
+    // even on a blank scenario. `??` honors typed 0.
+    inPalletsDay: volumes.avgDailyInbound ?? 0,
+    outPalletsDay: volumes.avgDailyOutbound ?? 0,
+    palletsPerDoorHour: dock.palletsPerDockHour ?? 0,
+    dockHours: dock.dockOperatingHours ?? 0,
     dockConfig: dock.sided === 'two' ? 'two' : 'one',
     // WSC-B10 (2026-04-25): wire dock-wall feasibility validator.
     // Dock face = the longer of buildingWidth/buildingDepth (assume the dock
@@ -5662,44 +5676,50 @@ function createDefaultFacility() {
 }
 
 function createDefaultZones() {
+  // Brock 2026-05-08: zones defaults zeroed to match the createDefaultFacility
+  // cleanup from 2026-04-20. Pre-fix, opening "+ New Scenario" pre-filled the
+  // form with seed data (5K office, 10K staging, 500K peak units/day, 10
+  // inbound + 12 outbound dock doors, etc.) intended to make the demo render
+  // a populated facility. Combined with || fallbacks in toSizingInputs, this
+  // also produced a phantom 118,368 SF residual that couldn't be cleared by
+  // zeroing inputs. Defaults that survive: dimensionless ratios on
+  // storageAllocation (need to sum to 100), dockConfig.sided structural
+  // toggle, forwardPick disabled flag + structural type, optionalZones
+  // disabled flags. Everything numeric is 0/blank.
   return {
-    officeSqft: 5000,
-    receiveStagingSqft: 10000,
-    shipStagingSqft: 10000,
-    chargingSqft: 2000,
-    repackSqft: 3000,
+    officeSqft: 0,
+    receiveStagingSqft: 0,
+    shipStagingSqft: 0,
+    chargingSqft: 0,
+    repackSqft: 0,
     otherSqft: 0,
     storageAllocation: { fullPallet: 60, cartonOnPallet: 30, cartonOnShelving: 10 },
-    dockConfig: { sided: 'single', inboundDoors: 10, outboundDoors: 12, palletsPerDockHour: 12, dockOperatingHours: 10 },
-    productDimensions: { unitsPerPallet: 48, unitsPerCartonPallet: 6, cartonsPerPallet: 12, unitsPerCartonShelving: 6, cartonsPerLocation: 4 },
-    forwardPick: { enabled: false, type: 'carton_flow', skuCount: 2000, daysInventory: 3, outboundUnitsPerDay: 5000 },
+    dockConfig: { sided: 'single', inboundDoors: 0, outboundDoors: 0, palletsPerDockHour: 0, dockOperatingHours: 0 },
+    productDimensions: { unitsPerPallet: 0, unitsPerCartonPallet: 0, cartonsPerPallet: 0, unitsPerCartonShelving: 0, cartonsPerLocation: 0 },
+    forwardPick: { enabled: false, type: 'carton_flow', skuCount: 0, daysInventory: 0, outboundUnitsPerDay: 0 },
     optionalZones: { vas: { enabled: false, sqft: 0 }, returns: { enabled: false, sqft: 0 }, chargeback: { enabled: false, sqft: 0 } },
     customZones: [],
-    peakUnitsPerDay: 500000,
-    avgUnitsPerDay: 350000,
-    operatingDaysPerYear: 250,
+    peakUnitsPerDay: 0,
+    avgUnitsPerDay: 0,
+    operatingDaysPerYear: 0,
   };
 }
 
 function createDefaultVolumes() {
-  // Sized to roughly match the default 150K sqft facility (so Recommended SF
-  // lands in the same ballpark as Total SF on a fresh model). 60K pallets/yr
-  // at 12 turns = 5K on-hand × 20 sqft/position ≈ 100K sqft reserve, plus
-  // 3K SKUs × 2 sqft pick + 1.3x support uplift + dock staging ≈ 140K sqft
-  // — matches the 150K facility with modest headroom. Replace with real
-  // project numbers as you go.
+  // Brock 2026-05-08: volumes defaults zeroed (was: 60K pallets / 3K SKUs /
+  // 250 inbound / 290 outbound / 12 turns / 1.3 peak — sized to match the
+  // legacy 150K sqft demo facility). Real project numbers should replace
+  // these fields explicitly. Structural defaults preserved: peakMultiplier
+  // and daysOnHand have engineering-meaningful baseline values (1.3 peak
+  // factor + 30-day on-hand) that survive blank-form sizing because they
+  // are dimensionless ratios applied only when other inputs are non-zero.
   return {
-    totalPallets: 60000,
-    totalSKUs: 3000,
-    inventoryTurns: 12,
-    avgDailyInbound: 250,
-    avgDailyOutbound: 290,
+    totalPallets: 0,
+    totalSKUs: 0,
+    inventoryTurns: 0,
+    avgDailyInbound: 0,
+    avgDailyOutbound: 0,
     peakMultiplier: 1.3,
-    // Phase B redesign (2026-05-05) — annual outbound + DOH replace the
-    // legacy throughput-as-implicit input. When primaryInventoryInput is
-    // 'throughput' (default), these drive on-hand units = (annualOutboundUnits
-    // / 365) × daysOnHand × peakMultiplier. 0 = fall back to direct
-    // peakUnitsPerDay input on zones (legacy behavior).
     annualOutboundUnits: 0,
     daysOnHand: 30,
   };

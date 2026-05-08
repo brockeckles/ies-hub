@@ -2359,9 +2359,17 @@ export function sizeFacility(userInputs = {}) {
   const storageSqft = palletStorageSqft + shelvingStorageSqft;
 
   // ── Dock Sizing ──
+  // Brock 2026-05-08: legacy `Math.max(2, ...)` floor forced minimum 2 doors
+  // per direction even with 0 throughput, producing 7,500 SF dock SF on a
+  // blank scenario. The legacy floor was a relic from when dock-doors were
+  // a structural constraint (every building has at least 2 doors); but for
+  // the engine this disagreed with Phase 1's `computeDockRequirement` which
+  // correctly returns 0 doors at 0 throughput. Drop the floor so the legacy
+  // path agrees with Phase 1; downstream UI can still display "min 2 doors
+  // recommended" as a soft guideline rather than an engine-mandated floor.
   const dockDivisor = Math.max(1, i.palletsPerDoorHour) * Math.max(1, i.dockHours);
-  const inDerived = Math.max(2, Math.ceil((i.inPalletsDay || 0) / dockDivisor));
-  const outDerived = Math.max(2, Math.ceil((i.outPalletsDay || 0) / dockDivisor));
+  const inDerived = Math.max(0, Math.ceil((i.inPalletsDay || 0) / dockDivisor));
+  const outDerived = Math.max(0, Math.ceil((i.outPalletsDay || 0) / dockDivisor));
   // Honor explicit user-supplied door counts when provided. When the user has
   // told us "I want 28 inbound + 28 outbound", the sizing engine should NOT
   // re-derive from throughput and quietly give them 8 doors.
