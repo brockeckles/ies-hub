@@ -130,12 +130,6 @@
         <!-- Resources -->
         <div class="hub-nav-group">
           <div class="hub-nav-group-label">Resources</div>
-          <div class="hub-nav-item" data-route="training">
-            <span class="hub-nav-icon">
-              <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-            </span>
-            <span class="hub-nav-label">Training Wiki</span>
-          </div>
           <div class="hub-nav-item" data-route="feedback">
             <span class="hub-nav-icon">
               <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
@@ -210,13 +204,13 @@
   <script type="module">
     import { auth } from './shared/auth.js?v=20260511-port1';
     import { router } from './shared/router.js?v=20260511-port1';
-    import { search } from './shared/search.js?v=20260511-port2';
+    import { search } from './shared/search.js?v=20260511-port17';
     import { bus } from './shared/event-bus.js?v=20260418-sK';
     // Shared UX modules — self-wire their listeners/guards on import.
     import { showToast } from './shared/toast.js?v=20260419-uC';
     import { mountFeedbackFab } from './shared/feedback-fab.js?v=20260430-btn-cleanup';
     import './shared/unsaved-guard.js?v=20260430-pm-g12';
-    import { tour } from './shared/tour.js?v=20260418-sK';
+    import { tour } from './shared/tour.js?v=20260511-port17';
     import { analytics } from './shared/analytics.js?v=20260504-auth1';
     import { openMfaGate } from './shared/mfa-ui.js?v=20260504-auth1';
     // Expose a couple of helpers for inline handlers + console debugging.
@@ -409,8 +403,8 @@
     function initRouter() {
       const outlet = document.getElementById('hub-content');
 
-      // (Hub Guide / "welcome" route removed 2026-04-17 PM — Training Wiki
-      // covers onboarding content now; Hub Guide was redundant.)
+      // (Hub Guide / "welcome" route removed 2026-04-17 PM.
+      // Training Wiki section killed 2026-05-11 — was demo data.)
 
       // Design Tools landing (inline) — category headers + filter tabs + beta
       // banner + wiki callout + fuller card descriptions.
@@ -582,8 +576,7 @@
         'overview': { title: 'Command Center', path: './hub/command-center/ui.js?v=20260504-auth1' },
         'marketmap': { title: 'Market Explorer', path: './hub/market-explorer/ui.js?v=20260429-me-deadcode1' },
         'deals': { title: 'Deal Management', path: './hub/deal-management/ui.js?v=20260511-port12' },
-        'training': { title: 'Training Wiki', path: './hub/training-wiki/ui.js?v=20260511-port6' },
-        'admin': { title: 'Admin', path: './hub/admin/ui.js?v=20260511-port12' },
+        'admin': { title: 'Admin', path: './hub/admin/ui.js?v=20260511-port17' },
         'feedback': { title: 'Ideas & Feedback', path: './hub/feedback/ui.js?v=20260430-fb1' },
       };
 
@@ -679,7 +672,6 @@
         marketmap: 'Market Explorer',
         deals: 'Deal Management',
         designtools: 'Design Tools',
-        training: 'Training Wiki',
         feedback: 'Ideas & Feedback',
         admin: 'Admin',
       };
@@ -720,7 +712,7 @@
         // Map section → tour name; fall back to 'welcome'.
         const tourMap = {
           overview: 'overview', deals: 'deals', designtools: 'designtools',
-          training: 'wiki', admin: 'admin',
+          admin: 'admin',
           'designtools/cost-model': 'cost-model',
           'designtools/warehouse-sizing': 'wsc',
           'designtools/network-opt': 'netopt',

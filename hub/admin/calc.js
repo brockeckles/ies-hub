@@ -468,9 +468,7 @@ export const ROUTE_LABELS = {
   'designtools/most-standards': 'MOST Labor Standards',
   'designtools/network-opt': 'Network Optimizer',
   designtools: 'Design Tools',
-  'training-wiki': 'Training Wiki',
   'market-explorer': 'Market Explorer',
-  wiki: 'Wiki',
 };
 
 export function humanRouteLabel(route) {

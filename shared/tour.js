@@ -98,14 +98,7 @@ const TOURS = {
     { route: 'designtools/most-standards', selector: '.most-library', placement: 'right', title: 'Template library',
       body: 'Reference templates (activity → UPH) stored in ref_most_templates. Edit templates here, then push rows to Cost Model labor.' },
   ],
-  // 9. Training Wiki
-  wiki: [
-    { route: 'training', selector: '.wiki-sidebar', placement: 'right', title: 'Sidebar nav',
-      body: 'Articles grouped into six sections (Robotics, Storage & Retrieval, Transportation, Operations, Systems, Reference). Breadcrumb at top.' },
-    { selector: '.wiki-search', placement: 'bottom', title: 'Search',
-      body: 'Relevance-scored search across all 41 articles. Tries title, tags, and body content.' },
-  ],
-  // 10. Admin
+  // 9. Admin
   admin: [
     { route: 'admin', selector: '.admin-tables', placement: 'bottom', title: 'Master tables',
       body: 'CRUD for reference data: escalation rules, cost buckets, vehicle types, DOS templates, SCCs, accounts, competitors, markets, verticals.' },
