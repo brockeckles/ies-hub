@@ -42,6 +42,17 @@ import {
   ofpUomOut as _ofpUomOut,
   ofpSlugifyForFlow as _ofpSlugifyForFlow,
 } from './ofp-helpers.js?v=20260511-port18';
+import {
+  cmState,
+  setModel,
+  setRefData,
+  setUserHasInteracted,
+  setWhatIfTransient,
+  setCurrentScenario,
+  setCurrentScenarioSnapshots,
+  setHeuristicOverrides,
+  setCurrentMarketLaborProfile,
+} from './state.js?v=20260511-port19';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 import { formatUomSingular } from '../../shared/format.js?v=20260511-port16';
 import { computeHeaderKpis } from './header-kpis.js?v=20260511-port16';
@@ -438,6 +449,18 @@ let _heuristicsLoadInFlight = false;
 // Phase 5b — What-If Studio transient overlay (preview-only; not persisted
 // until user hits Apply). Highest-priority layer in resolveCalcHeuristics.
 let whatIfTransient = {};
+
+// state-layer-lite seed (S21) — mirror the initial values of the 8
+// ui-owned bindings into cmState so other modules (renderers + future
+// extractions) can read them via getX() / cmState.X.
+setModel(model);
+setRefData(refData);
+setUserHasInteracted(userHasInteracted);
+setWhatIfTransient(whatIfTransient);
+setCurrentScenario(currentScenario);
+setCurrentScenarioSnapshots(currentScenarioSnapshots);
+setHeuristicOverrides(heuristicOverrides);
+setCurrentMarketLaborProfile(currentMarketLaborProfile);
 let _whatIfDebounce = null;
 // Phase 6 — Planning Ratios catalog (ref_planning_ratios + ref_heuristic_categories).
 // Separate from heuristicsCatalog above; this is the richer 142-rule engineering
@@ -497,20 +520,20 @@ function isCmV2UiOn() {
 export async function mount(el) {
   rootEl = el;
   activeSection = 'setup';
-  model = createEmptyModel();
-  userHasInteracted = false;
+  model = setModel(createEmptyModel());
+  userHasInteracted = setUserHasInteracted(false);
   viewMode = 'landing';
   // Reset Phase 3/4 module state so a prior session's cache doesn't bleed in
-  currentScenario = null;
+  currentScenario = setCurrentScenario(null);
   _chromeScenarioRow = null;
-  currentScenarioSnapshots = null;
+  currentScenarioSnapshots = setCurrentScenarioSnapshots(null);
   currentRevisions = [];
   dealScenarios = [];
   _scenariosLoadedOnce = false;
   _scenariosLoadInFlight = false;
   _heuristicsLoadInFlight = false;
-  heuristicOverrides = {};
-  currentMarketLaborProfile = null;
+  heuristicOverrides = setHeuristicOverrides({});
+  currentMarketLaborProfile = setCurrentMarketLaborProfile(null);
   // Phase 6 — planning ratios reset (catalog is shared across projects, don't
   // clear it; but overrides + open-category are per-project/session)
   planningRatioOverrides = {};
@@ -528,7 +551,7 @@ export async function mount(el) {
       api.listDeals().catch(() => []),
       api.fetchRefPeriods().catch(() => []),
     ]);
-    refData = { ...rd, periods };
+    refData = setRefData({ ...rd, periods });
     savedModels = models;
     savedDeals  = deals;
   } catch (err) {
@@ -552,9 +575,9 @@ export async function mount(el) {
       if (payload && payload.at && (Date.now() - payload.at) < 60000) {
         sessionStorage.removeItem('wsc_pending_push');
         // Switch to editor mode first, then apply
-        model = createEmptyModel();
+        model = setModel(createEmptyModel());
         isDirty = false;
-        userHasInteracted = false;
+        userHasInteracted = setUserHasInteracted(false);
         activeSection = 'facility';
         viewMode = 'editor';
         // Apply payload to the fresh model.
@@ -595,9 +618,9 @@ export async function mount(el) {
         sessionStorage.removeItem('most_pending_push');
         // Make sure we're on the editor, not the landing page
         if (viewMode !== 'editor') {
-          model = createEmptyModel();
+          model = setModel(createEmptyModel());
           isDirty = false;
-          userHasInteracted = false;
+          userHasInteracted = setUserHasInteracted(false);
           viewMode = 'editor';
         }
         handleMostPush(payload);
@@ -617,9 +640,9 @@ export async function mount(el) {
       if (payload && payload.at && (Date.now() - payload.at) < 60000) {
         sessionStorage.removeItem('netopt_pending_cm_push');
         if (viewMode !== 'editor') {
-          model = createEmptyModel();
+          model = setModel(createEmptyModel());
           isDirty = false;
-          userHasInteracted = false;
+          userHasInteracted = setUserHasInteracted(false);
           viewMode = 'editor';
         }
         handleNetOptPush(payload);
@@ -644,10 +667,10 @@ export async function mount(el) {
         const full = await api.getModel(Number(payload.id));
         if (full) {
           if (full.project_data) {
-            model = { ...createEmptyModel(), ...full.project_data, id: full.id };
+            model = setModel({ ...createEmptyModel(), ...full.project_data, id: full.id });
           } else {
             // Legacy fallback — minimal hydrate so editor has something to render.
-            model = createEmptyModel();
+            model = setModel(createEmptyModel());
             model.id = full.id;
             model.projectDetails = model.projectDetails || {};
             if (full.name) model.projectDetails.name = full.name;
@@ -658,7 +681,7 @@ export async function mount(el) {
           lastSavedAt = full.updated_at || full.created_at || null;
           lastSavedBy = null;
           isDirty = false;
-          userHasInteracted = false;
+          userHasInteracted = setUserHasInteracted(false);
           viewMode = 'editor';
           activeSection = 'projectDetails';
           // 2026-04-30 (F1) — Phase 5.4 cross-tool drillback consumes the
@@ -694,9 +717,9 @@ export async function mount(el) {
       if (payload && payload.at && (Date.now() - payload.at) < 60000 && payload.dealId) {
         sessionStorage.removeItem('cm_pending_new_for_deal');
         if (viewMode !== 'editor') {
-          model = createEmptyModel();
+          model = setModel(createEmptyModel());
           isDirty = false;
-          userHasInteracted = false;
+          userHasInteracted = setUserHasInteracted(false);
           viewMode = 'editor';
           activeSection = 'projectDetails';
         }
@@ -741,7 +764,7 @@ async function loadModelByCmId(id) {
     const full = await api.getModel(id);
     if (!full) { showToast('Model not found — it may have been deleted.', 'error'); return; }
     if (full.project_data) {
-      model = { ...createEmptyModel(), ...full.project_data, id: full.id };
+      model = setModel({ ...createEmptyModel(), ...full.project_data, id: full.id });
       lastSavedAt = full.updated_at || full.created_at || null;
       lastSavedBy = null;
       if (!model.projectDetails) model.projectDetails = createEmptyModel().projectDetails;
@@ -791,7 +814,7 @@ async function loadModelByCmId(id) {
       if (model.projectDetails.taxRate == null && full.tax_rate_pct != null) model.projectDetails.taxRate = Number(full.tax_rate_pct);
       try { window.__cmLoadedModel = model; } catch (_) {}
     } else {
-      model = reconstructModelFromFlatRow(full);
+      model = setModel(reconstructModelFromFlatRow(full));
       lastSavedAt = full.updated_at || full.created_at || null;
       lastSavedBy = null;
       showToast('Legacy model loaded from summary fields. Save to upgrade to the new format.', 'info');
@@ -805,17 +828,17 @@ async function loadModelByCmId(id) {
     api.backfillEquipmentLineTypes(model);
     api.backfillChannelsFromLegacy(model);
     isDirty = false;
-    userHasInteracted = false;
+    userHasInteracted = setUserHasInteracted(false);
     activeSection = 'setup';
     viewMode = 'editor';
-    currentScenario = null;
-    currentScenarioSnapshots = null;
+    currentScenario = setCurrentScenario(null);
+    currentScenarioSnapshots = setCurrentScenarioSnapshots(null);
     currentRevisions = [];
     dealScenarios = [];
     _scenariosLoadedOnce = false;
     _scenariosLoadInFlight = false;
-    heuristicOverrides = {};
-    currentMarketLaborProfile = null;
+    heuristicOverrides = setHeuristicOverrides({});
+    currentMarketLaborProfile = setCurrentMarketLaborProfile(null);
     planningRatioOverrides = {};
     _planningRatioOpenCategory = null;
     _selectedLaborIdx = 0;
@@ -861,9 +884,9 @@ async function loadModelByCmId(id) {
 function wireLandingEvents() {
   if (!rootEl) return;
   rootEl.querySelector('#cm-create-new')?.addEventListener('click', () => {
-    model = createEmptyModel();
+    model = setModel(createEmptyModel());
     isDirty = false;
-    userHasInteracted = false;
+    userHasInteracted = setUserHasInteracted(false);
     activeSection = 'setup';
     viewMode = 'editor';
     renderCurrentView();
@@ -8436,7 +8459,7 @@ function bindSectionEvents(section, container) {
       showToast(`Seeded: ${result.marketsAdded} markets, ${result.laborRatesAdded} labor rates, ${result.equipmentAdded} catalog items, ${result.facilityRatesAdded} facility rates, ${result.overheadRatesAdded} overhead rows.`, 'success');
       // Re-fetch + re-render so counts update.
       const rd = await api.loadAllRefData();
-      refData = { ...rd, periods: refData.periods || [] };
+      refData = setRefData({ ...rd, periods: refData.periods || [] });
       renderSection();
     } catch (err) {
       console.warn('[CM-SET-2] seedDefaultRefData failed:', err);
@@ -8465,7 +8488,7 @@ function bindSectionEvents(section, container) {
   if (section === 'whatif') {
     const applySliderUpdate = (key, raw) => {
       const v = raw === '' ? '' : Number(raw);
-      whatIfTransient = { ...whatIfTransient, [key]: v };
+      whatIfTransient = setWhatIfTransient({ ...whatIfTransient, [key]: v });
       // Mirror the slider and the number input together
       const slider = container.querySelector(`[data-whatif-slider="${key}"]`);
       const number = container.querySelector(`[data-whatif-number="${key}"]`);
@@ -8500,7 +8523,7 @@ function bindSectionEvents(section, container) {
     container.querySelector('[data-cm-action="whatif-reset"]')?.addEventListener('click', async () => {
       const ok = await showConfirm('Reset all What-If sliders?\n\nThis discards the transient overlay and returns to your persisted assumptions.', { okLabel: 'Reset' });
       if (!ok) return;
-      whatIfTransient = {};
+      whatIfTransient = setWhatIfTransient({});
       renderSection();
     });
 
@@ -8515,14 +8538,14 @@ function bindSectionEvents(section, container) {
       // Merge transient into persistent overrides
       const merged = { ...heuristicOverrides };
       for (const k of keys) merged[k] = whatIfTransient[k];
-      heuristicOverrides = merged;
+      heuristicOverrides = setHeuristicOverrides(merged);
       if (model?.id) {
         try { await api.saveHeuristicOverrides(model.id, heuristicOverrides); }
         catch (err) { showToast('Save failed: ' + (err?.message || err), 'error'); return; }
       } else {
         model.heuristicOverrides = heuristicOverrides;
       }
-      whatIfTransient = {};
+      whatIfTransient = setWhatIfTransient({});
       showToast(`Applied ${keys.length} override${keys.length === 1 ? '' : 's'}`, 'success');
       renderSection();
     });
@@ -8575,7 +8598,7 @@ function bindSectionEvents(section, container) {
         const merged = { ...heuristicOverrides };
         if (value === null || value === undefined || value === '') delete merged[key];
         else merged[key] = value;
-        heuristicOverrides = merged;
+        heuristicOverrides = setHeuristicOverrides(merged);
         // Persist if we have a saved project
         if (model?.id) {
           try {
@@ -8597,7 +8620,7 @@ function bindSectionEvents(section, container) {
         const key = btn.dataset.heuristicKey;
         const merged = { ...heuristicOverrides };
         delete merged[key];
-        heuristicOverrides = merged;
+        heuristicOverrides = setHeuristicOverrides(merged);
         if (model?.id) {
           try { await api.saveHeuristicOverrides(model.id, heuristicOverrides); } catch (_) {}
         } else {
@@ -8609,7 +8632,7 @@ function bindSectionEvents(section, container) {
     container.querySelector('[data-cm-action="reset-all-heuristics"]')?.addEventListener('click', async () => {
       const ok = await showConfirm('Reset all heuristics on this scenario to standard defaults?', { okLabel: 'Reset' });
       if (!ok) return;
-      heuristicOverrides = {};
+      heuristicOverrides = setHeuristicOverrides({});
       if (model?.id) {
         try { await api.saveHeuristicOverrides(model.id, heuristicOverrides); } catch (_) {}
       } else {
@@ -8762,7 +8785,7 @@ function bindSectionEvents(section, container) {
         if (field === 'label') patch.scenario_label = inp.value;
         if (field === 'description') patch.scenario_description = inp.value;
         try {
-          currentScenario = await api.saveScenario(patch);
+          currentScenario = setCurrentScenario(await api.saveScenario(patch));
           await ensureScenariosLoaded();
           renderSection();
         } catch (err) { console.warn('[CM] save scenario field failed:', err); }
@@ -8778,12 +8801,12 @@ function bindSectionEvents(section, container) {
 
     act('scenario-to-review')?.addEventListener('click', async () => {
       if (!currentScenario) return;
-      currentScenario = await api.saveScenario({ id: currentScenario.id, status: 'review' });
+      currentScenario = setCurrentScenario(await api.saveScenario({ id: currentScenario.id, status: 'review' }));
       renderSection();
     });
     act('scenario-to-draft')?.addEventListener('click', async () => {
       if (!currentScenario) return;
-      currentScenario = await api.saveScenario({ id: currentScenario.id, status: 'draft' });
+      currentScenario = setCurrentScenario(await api.saveScenario({ id: currentScenario.id, status: 'draft' }));
       renderSection();
     });
     act('scenario-archive')?.addEventListener('click', async () => {
@@ -8791,7 +8814,7 @@ function bindSectionEvents(section, container) {
       const ok = await showConfirm('Archive this scenario?\n\nSnapshots are preserved; status moves to "archived".',
         { okLabel: 'Archive', danger: true });
       if (!ok) return;
-      currentScenario = await api.archiveScenario(currentScenario.id);
+      currentScenario = setCurrentScenario(await api.archiveScenario(currentScenario.id));
       showToast('Scenario archived', 'success');
       renderSection();
     });
@@ -8853,13 +8876,13 @@ function bindSectionEvents(section, container) {
         return;
       }
       try {
-        currentScenario = await api.saveScenario({
+        currentScenario = setCurrentScenario(await api.saveScenario({
           project_id: model.id,
           deal_id: model?.projectDetails?.dealId || model?.deal_deals_id || null,
           scenario_label: model?.scenario_label || 'Baseline',
           is_baseline: true,
           status: 'draft',
-        });
+        }));
         await ensureScenariosLoaded();
         showToast('Scenario initialized', 'success');
         renderSection();
@@ -11563,7 +11586,7 @@ async function openEquipmentCatalog() {
 
 async function handleNew() {
   if (isDirty && !(await showConfirm('You have unsaved changes. Start a new model?', { okLabel: 'Start new' }))) return;
-  model = createEmptyModel();
+  model = setModel(createEmptyModel());
   isDirty = false;
   // CM-SAVE-1 — Reset save-state on a brand-new model.
   lastSavedAt = null;
@@ -11769,15 +11792,15 @@ async function regenSiblingProjections(projectId) {
   const savedLaborProfile = currentMarketLaborProfile;
 
   try {
-    model = siblingModel;
-    currentScenario = siblingScen;
-    currentScenarioSnapshots = siblingSnapshots;
-    heuristicOverrides = fullProj.heuristic_overrides || {};
-    whatIfTransient = {};
+    model = setModel(siblingModel);
+    currentScenario = setCurrentScenario(siblingScen);
+    currentScenarioSnapshots = setCurrentScenarioSnapshots(siblingSnapshots);
+    heuristicOverrides = setHeuristicOverrides(fullProj.heuristic_overrides || {});
+    whatIfTransient = setWhatIfTransient({});
     _lastMonthlyBundle = null; // force ensureMonthlyBundle to rebuild
     _lastProjections = null;
     _lastCalcHeuristics = null;
-    currentMarketLaborProfile = siblingLaborProfile;
+    currentMarketLaborProfile = setCurrentMarketLaborProfile(siblingLaborProfile);
 
     const bundle = ensureMonthlyBundle();
     if (!bundle) throw new Error('ensureMonthlyBundle returned null for sibling');
@@ -11785,15 +11808,15 @@ async function regenSiblingProjections(projectId) {
     return await api.persistMonthlyFacts(projectId, bundle);
   } finally {
     // Restore module-scope state regardless of success/failure.
-    model = savedModel;
-    currentScenario = savedScenario;
-    currentScenarioSnapshots = savedSnapshots;
-    heuristicOverrides = savedHOver;
-    whatIfTransient = savedTransient;
+    model = setModel(savedModel);
+    currentScenario = setCurrentScenario(savedScenario);
+    currentScenarioSnapshots = setCurrentScenarioSnapshots(savedSnapshots);
+    heuristicOverrides = setHeuristicOverrides(savedHOver);
+    whatIfTransient = setWhatIfTransient(savedTransient);
     _lastMonthlyBundle = savedBundle;
     _lastProjections = savedProjections;
     _lastCalcHeuristics = savedCalcHeur;
-    currentMarketLaborProfile = savedLaborProfile;
+    currentMarketLaborProfile = setCurrentMarketLaborProfile(savedLaborProfile);
   }
 }
 
@@ -12036,9 +12059,9 @@ function handleWscPush(payload) {
   // If WSC fired this while we were still on the landing view, enter the editor
   // with a fresh model first — otherwise navigateSection is a no-op.
   if (viewMode === 'landing') {
-    model = createEmptyModel();
+    model = setModel(createEmptyModel());
     isDirty = false;
-    userHasInteracted = false;
+    userHasInteracted = setUserHasInteracted(false);
     activeSection = 'facility';
     viewMode = 'editor';
   }
@@ -12084,9 +12107,9 @@ function handleNetOptPush(payload) {
   if (!payload) return;
 
   if (viewMode === 'landing') {
-    model = createEmptyModel();
+    model = setModel(createEmptyModel());
     isDirty = false;
-    userHasInteracted = false;
+    userHasInteracted = setUserHasInteracted(false);
     viewMode = 'editor';
   }
 
@@ -16215,11 +16238,11 @@ async function ensureHeuristicsLoaded() {
   if (projectId) {
     try {
       const p = await api.getModel(projectId);
-      heuristicOverrides = p?.heuristic_overrides || {};
+      heuristicOverrides = setHeuristicOverrides(p?.heuristic_overrides || {});
     } catch (_) { heuristicOverrides = {}; }
   } else {
     // Unsaved model — keep local overrides in the model itself
-    heuristicOverrides = model?.heuristicOverrides || {};
+    heuristicOverrides = setHeuristicOverrides(model?.heuristicOverrides || {});
   }
 }
 
@@ -16563,7 +16586,7 @@ async function ensureMarketLaborProfileLoaded() {
   if (!marketId) { currentMarketLaborProfile = null; return false; }
   if (currentMarketLaborProfile && currentMarketLaborProfile.market_id === marketId) return false;
   try {
-    currentMarketLaborProfile = await api.fetchLaborMarketProfile(marketId);
+    currentMarketLaborProfile = setCurrentMarketLaborProfile(await api.fetchLaborMarketProfile(marketId));
     return true;
   } catch (_) { currentMarketLaborProfile = null; return false; }
 }
@@ -16582,13 +16605,13 @@ async function ensureScenariosLoaded() {
       if (currentScenario.status === 'approved') {
         try {
           const grouped = await api.fetchSnapshots(currentScenario.id);
-          currentScenarioSnapshots = grouped || null;
+          currentScenarioSnapshots = setCurrentScenarioSnapshots(grouped || null);
         } catch (_) { currentScenarioSnapshots = null; }
       } else {
-        currentScenarioSnapshots = null;
+        currentScenarioSnapshots = setCurrentScenarioSnapshots(null);
       }
     } else {
-      currentScenarioSnapshots = null;
+      currentScenarioSnapshots = setCurrentScenarioSnapshots(null);
     }
   }
   if (dealId) {
