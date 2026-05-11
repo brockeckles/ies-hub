@@ -872,7 +872,7 @@ function renderSidebar() {
 async function applyMarketRates() {
   try {
     const rates = await api.fetchFreightRates();
-    if (!rates || !rates.length) { showNoToast('No market rate data available', 'info'); return; }
+    if (!rates || !rates.length) { showToast('No market rate data available', 'info'); return; }
     // Take latest rate per index_name
     const byIdx = new Map();
     for (const r of rates) {
@@ -886,11 +886,11 @@ async function applyMarketRates() {
     rateCard.tlPerMile = tlPerMile;
     // LTL per lb approximation: TL / (TL capacity ~44000 lb)
     rateCard.ltlPerLb = Math.max(0.15, tlPerMile / 90);
-    showNoToast(`Applied latest market rates (TL $${tlPerMile.toFixed(2)}/mi)`, 'success');
+    showToast(`Applied latest market rates (TL $${tlPerMile.toFixed(2)}/mi)`, 'success');
     renderContentView();
   } catch (err) {
     console.error('[netopt] applyMarketRates failed', err);
-    showNoToast('Market rate fetch failed', 'error');
+    showToast('Market rate fetch failed', 'error');
   }
 }
 
@@ -905,7 +905,7 @@ function balanceModeMix() {
   else if (avgWeight > 25) { tl = 15; ltl = 45; parcel = 40; }
   else { tl = 5; ltl = 25; parcel = 70; }
   modeMix = { tlPct: tl, ltlPct: ltl, parcelPct: parcel };
-  showNoToast(`Balanced mode mix to avg weight ${avgWeight.toFixed(0)} lb`, 'success');
+  showToast(`Balanced mode mix to avg weight ${avgWeight.toFixed(0)} lb`, 'success');
   renderContentView();
 }
 
@@ -917,7 +917,7 @@ function handleCsvUpload(e) {
   reader.onload = (ev) => {
     const text = String(ev.target.result || '');
     const lines = text.split(/\r?\n/).filter(Boolean);
-    if (!lines.length) { showNoToast('Empty CSV', 'error'); return; }
+    if (!lines.length) { showToast('Empty CSV', 'error'); return; }
     let applied = 0;
     for (let i = 1; i < lines.length; i++) {
       const [_lane, mode, rate] = lines[i].split(',').map(s => s.trim());
@@ -928,14 +928,14 @@ function handleCsvUpload(e) {
         else if (/parcel/i.test(mode)) { rateCard.parcelPerLb = r; applied++; }
       }
     }
-    showNoToast(`Rate card CSV applied (${applied} rate${applied === 1 ? '' : 's'})`, 'success');
+    showToast(`Rate card CSV applied (${applied} rate${applied === 1 ? '' : 's'})`, 'success');
     renderContentView();
   };
-  reader.onerror = () => showNoToast('CSV read failed', 'error');
+  reader.onerror = () => showToast('CSV read failed', 'error');
   reader.readAsText(file);
 }
 
-function showNoToast(msg, level) {
+function showToast(msg, level) {
   try {
     const ev = new CustomEvent('toast:show', { detail: { message: msg, level } });
     // Prefer event bus if present; fall back to console.
@@ -964,10 +964,10 @@ function applyArchetype(key) {
       annualDemand: Math.round(d.annualDemand * scale),
       maxDays: arch.maxDays,
     }));
-    showNoToast(`Applied ${arch.name} — seeded ${demands.length} demand points at ${(arch.baseVolume || baseTotal).toLocaleString()} total annual volume`, 'success');
+    showToast(`Applied ${arch.name} — seeded ${demands.length} demand points at ${(arch.baseVolume || baseTotal).toLocaleString()} total annual volume`, 'success');
   } else {
     demands = demands.map(d => ({ ...d, maxDays: arch.maxDays }));
-    showNoToast(`Applied ${arch.name} — mode mix ${arch.modeMix.tlPct}/${arch.modeMix.ltlPct}/${arch.modeMix.parcelPct} + max ${arch.maxDays}-day service`, 'success');
+    showToast(`Applied ${arch.name} — mode mix ${arch.modeMix.tlPct}/${arch.modeMix.ltlPct}/${arch.modeMix.parcelPct} + max ${arch.maxDays}-day service`, 'success');
   }
   // Re-render whichever view is active so visible state updates (Facilities
   // counts, Demand table, Service banner).
@@ -1015,7 +1015,7 @@ function findOptimalLocations() {
   }
   activeSection = 'facilities';
   renderContentView();
-  showNoToast(`Recommended ${recs.length} DC location${recs.length > 1 ? 's' : ''} based on demand clusters — activate the ones to evaluate, then hit Run Scenario`, 'success');
+  showToast(`Recommended ${recs.length} DC location${recs.length > 1 ? 's' : ''} based on demand clusters — activate the ones to evaluate, then hit Run Scenario`, 'success');
 }
 
 // ============================================================
@@ -2893,7 +2893,7 @@ function pushToFleet(scenario) {
   const payload = { lanes, sourceScenario: scenario.name, at: Date.now() };
   try { sessionStorage.setItem('netopt_pending_push', JSON.stringify(payload)); } catch {}
   bus.emit('netopt:push-to-fleet', payload);
-  showNoToast(`Pushed ${lanes.length} lanes to Fleet Modeler`, 'success');
+  showToast(`Pushed ${lanes.length} lanes to Fleet Modeler`, 'success');
   // Take the user to Fleet so the handoff is visible.
   window.location.hash = '#designtools/fleet-modeler';
 }
@@ -2925,7 +2925,7 @@ function pushToCostModel(scenario) {
   };
   try { sessionStorage.setItem('netopt_pending_cm_push', JSON.stringify(payload)); } catch {}
   bus.emit('netopt:push-to-cm', payload);
-  showNoToast(`Pushed ${totalDemand.toLocaleString()} annual units + transport cost to Cost Model`, 'success');
+  showToast(`Pushed ${totalDemand.toLocaleString()} annual units + transport cost to Cost Model`, 'success');
   window.location.hash = '#designtools/cost-model';
 }
 

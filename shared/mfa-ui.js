@@ -123,7 +123,7 @@ async function renderEnrollModal(overlay, { onPass, onLogout }) {
            for Outlook / Teams MFA — calling that out reduces the perceived
            friction of "do I really need to install another random app?". -->
       <div style="background:rgba(0,71,171,0.06);border:1px solid rgba(0,71,171,0.18);border-radius:8px;padding:10px 12px;margin:0 0 14px;font-size:12px;color:var(--ies-gray-700,#374151);line-height:1.5;">
-        <div style="font-weight:700;color:var(--ies-navy,#0a1628);margin-bottom:4px;">Recommended apps</div>
+        <div style="font-weight:700;color:var(--ies-navy, #1c1c1c);margin-bottom:4px;">Recommended apps</div>
         <div><strong>Microsoft Authenticator</strong> — most GXO employees already have it installed for Outlook / Teams MFA. <span style="color:var(--ies-gray-500,#6b7280);">No extra install needed.</span></div>
         <div style="margin-top:3px;"><strong>Google Authenticator</strong> · <strong>1Password</strong> · <strong>Authy</strong> — any of these also work if Microsoft Authenticator isn't on your phone.</div>
       </div>

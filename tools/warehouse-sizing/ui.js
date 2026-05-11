@@ -1092,7 +1092,7 @@ function _renderWscConfigHtml() {
         ${(() => {
           const sh = sized?.locations?.shelving;
           if (!sh) return '';
-          const modeColor = sh.mode === 'sku-bound' ? 'var(--ies-orange,#f97316)' : 'var(--ies-gray-700)';
+          const modeColor = sh.mode === 'sku-bound' ? 'var(--ies-orange, #ff3a00)' : 'var(--ies-gray-700)';
           return `
             <div style="margin-top:8px;padding:8px 10px;background:var(--ies-gray-50);border-radius:4px;font-size:11px;color:var(--ies-gray-700);">
               <div style="font-weight:700;margin-bottom:4px;color:var(--ies-gray-500);text-transform:uppercase;font-size:10px;">Shelving locations</div>
@@ -1457,7 +1457,7 @@ function _renderWscConfigHtml() {
         const required = r.totalSfRequired || 0;
         const deltaSf = haveBuilt ? builtSf - required : 0;
         const deltaPct = (haveBuilt && required > 0) ? Math.round((deltaSf / required) * 1000) / 10 : 0;
-        const gapColor = !haveBuilt ? 'var(--ies-gray-500)' : Math.abs(deltaPct) <= 5 ? 'var(--ies-green,#10b981)' : deltaSf > 0 ? 'var(--ies-blue,#0047AB)' : 'var(--ies-orange,#f97316)';
+        const gapColor = !haveBuilt ? 'var(--ies-gray-500)' : Math.abs(deltaPct) <= 5 ? 'var(--ies-green,#10b981)' : deltaSf > 0 ? 'var(--ies-blue,#0047AB)' : 'var(--ies-orange, #ff3a00)';
         const gapLabel = !haveBuilt ? 'Enter building dims to compute gap' : Math.abs(deltaPct) <= 5 ? `Within ±5% — fits` : deltaSf > 0 ? `+${deltaPct}% slack` : `${deltaPct}% short`;
         return `
           ${requiredBlock}
@@ -1926,15 +1926,15 @@ function copySummaryToClipboard() {
   ].join('\n');
   if (typeof navigator !== 'undefined' && navigator.clipboard) {
     navigator.clipboard.writeText(summary).then(
-      () => showWscToast('Summary copied to clipboard', 'success'),
-      () => showWscToast('Clipboard write failed', 'error'),
+      () => showToast('Summary copied to clipboard', 'success'),
+      () => showToast('Clipboard write failed', 'error'),
     );
   } else {
-    showWscToast('Clipboard not available', 'error');
+    showToast('Clipboard not available', 'error');
   }
 }
 
-function showWscToast(message, level) {
+function showToast(message, level) {
   const color = level === 'error' ? '#dc2626' : level === 'info' ? '#2563eb' : '#16a34a';
   const bg    = level === 'error' ? '#fef2f2' : level === 'info' ? '#eff6ff' : '#f0fdf4';
   const existing = document.getElementById('wsc-toast');
@@ -3106,7 +3106,7 @@ function renderDashboard() {
       const deltaSf = haveBuilt ? builtSf - r.totalSfRequired : 0;
       const deltaPct = (haveBuilt && r.totalSfRequired > 0) ? Math.round((deltaSf / r.totalSfRequired) * 1000) / 10 : 0;
       const status = !haveBuilt ? 'unbuilt' : Math.abs(deltaPct) <= 5 ? 'on-target' : deltaPct > 5 ? 'slack' : 'short';
-      const statusColor = status === 'on-target' ? 'var(--ies-green,#10b981)' : status === 'slack' ? 'var(--ies-blue,#0047AB)' : status === 'short' ? 'var(--ies-orange,#f97316)' : 'var(--ies-gray-500)';
+      const statusColor = status === 'on-target' ? 'var(--ies-green,#10b981)' : status === 'slack' ? 'var(--ies-blue,#0047AB)' : status === 'short' ? 'var(--ies-orange, #ff3a00)' : 'var(--ies-gray-500)';
       const statusLabel = status === 'on-target' ? '✓ On target (within 5%)' : status === 'slack' ? `+${deltaPct}% capacity slack` : status === 'short' ? `${deltaPct}% short` : 'Enter building dims';
       const canApply = r.suggestedLongFt > 0 && r.suggestedShortFt > 0;
       return `

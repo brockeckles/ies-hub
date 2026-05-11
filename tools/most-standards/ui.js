@@ -395,7 +395,7 @@ function _mostExtraStyles() {
         background: rgba(255, 149, 0, 0.04);
       }
       .most-row-variable td:first-child {
-        box-shadow: inset 3px 0 0 var(--ies-orange, #d97706);
+        box-shadow: inset 3px 0 0 var(--ies-orange, #ff3a00);
       }
 
       .most-detail-panel {
@@ -1160,7 +1160,7 @@ function renderEditor() {
               <tr class="most-elem-variable-detail">
                 <td></td>
                 <td colspan="8">
-                  <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; padding:6px 0 4px 4px; border-left:2px solid var(--ies-orange, #f97316); padding-left:8px;">
+                  <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; padding:6px 0 4px 4px; border-left:2px solid var(--ies-orange, #ff3a00); padding-left:8px;">
                     <div style="flex:0 0 140px;">
                       <label style="display:block;font-size:10px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:0.3px;margin-bottom:2px;">Driver</label>
                       <input class="hub-input" type="text" value="${el.variable_driver || ''}" data-elem-idx="${i}" data-elem-field="variable_driver" placeholder="e.g. walk distance (ft)" style="width:100%;font-size:11px;padding:4px 6px;" />

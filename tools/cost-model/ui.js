@@ -9,6 +9,7 @@
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
+import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260511-port2';
 import { auth } from '../../shared/auth.js?v=20260504-auth1';
 import * as calc from './calc.js?v=20260504-startup1';
 import * as api from './api.js?v=20260504-auth1';
@@ -38,32 +39,6 @@ import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-dril
  * @param {{ okLabel?: string, cancelLabel?: string, danger?: boolean }} [opts]
  * @returns {Promise<boolean>}
  */
-function showConfirm(message, opts = {}) {
-  return new Promise(resolve => {
-    const overlay = document.createElement('div');
-    overlay.className = 'hub-modal-overlay';
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:9999;';
-    const okBg = opts.danger ? '#dc2626' : 'var(--ies-blue-600)';
-    overlay.innerHTML = `
-      <div style="background:white;border-radius: 10px;padding:24px;min-width:420px;max-width:90vw;">
-        <div style="white-space:pre-line;font-size:14px;line-height:1.45;">${String(message).replace(/</g, '&lt;')}</div>
-        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
-          <button class="hub-btn" data-ans="0">${opts.cancelLabel || 'Cancel'}</button>
-          <button class="hub-btn hub-btn-primary" data-ans="1" style="${opts.danger ? `background:${okBg};` : ''}">${opts.okLabel || 'Confirm'}</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-    const done = (v) => { overlay.remove(); resolve(v); };
-    overlay.querySelector('[data-ans="0"]')?.addEventListener('click', () => done(false));
-    overlay.querySelector('[data-ans="1"]')?.addEventListener('click', () => done(true));
-    overlay.addEventListener('click', e => { if (e.target === overlay) done(false); });
-    document.addEventListener('keydown', function onKey(e) {
-      if (e.key === 'Escape') { document.removeEventListener('keydown', onKey); done(false); }
-      if (e.key === 'Enter')  { document.removeEventListener('keydown', onKey); done(true); }
-    });
-  });
-}
 
 /**
  * Show a non-blocking prompt modal. Resolves to the string value or null
@@ -72,34 +47,6 @@ function showConfirm(message, opts = {}) {
  * @param {string} [defaultValue]
  * @returns {Promise<string|null>}
  */
-function showPrompt(message, defaultValue = '') {
-  return new Promise(resolve => {
-    const overlay = document.createElement('div');
-    overlay.className = 'hub-modal-overlay';
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:9999;';
-    overlay.innerHTML = `
-      <div style="background:white;border-radius: 10px;padding:24px;min-width:480px;max-width:90vw;">
-        <div style="white-space:pre-line;font-size:14px;line-height:1.45;margin-bottom:10px;">${String(message).replace(/</g, '&lt;')}</div>
-        <input class="hub-input" data-prompt-input style="width:100%;font-size:14px;padding:6px 8px;" value="${String(defaultValue).replace(/"/g, '&quot;')}" />
-        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
-          <button class="hub-btn" data-ans="cancel">Cancel</button>
-          <button class="hub-btn hub-btn-primary" data-ans="ok">OK</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-    const input = overlay.querySelector('[data-prompt-input]');
-    setTimeout(() => input?.focus(), 20);
-    const done = (v) => { overlay.remove(); resolve(v); };
-    overlay.querySelector('[data-ans="cancel"]')?.addEventListener('click', () => done(null));
-    overlay.querySelector('[data-ans="ok"]')?.addEventListener('click', () => done(input?.value ?? ''));
-    overlay.addEventListener('click', e => { if (e.target === overlay) done(null); });
-    document.addEventListener('keydown', function onKey(e) {
-      if (e.key === 'Escape') { document.removeEventListener('keydown', onKey); done(null); }
-      if (e.key === 'Enter')  { document.removeEventListener('keydown', onKey); done(input?.value ?? ''); }
-    });
-  });
-}
 
 // ============================================================
 // STATE — tool-local reactive state
@@ -770,7 +717,7 @@ async function loadModelByCmId(id) {
   if (!id) return;
   try {
     const full = await api.getModel(id);
-    if (!full) { showCmToast('Model not found — it may have been deleted.', 'error'); return; }
+    if (!full) { showToast('Model not found — it may have been deleted.', 'error'); return; }
     if (full.project_data) {
       model = { ...createEmptyModel(), ...full.project_data, id: full.id };
       lastSavedAt = full.updated_at || full.created_at || null;
@@ -825,7 +772,7 @@ async function loadModelByCmId(id) {
       model = reconstructModelFromFlatRow(full);
       lastSavedAt = full.updated_at || full.created_at || null;
       lastSavedBy = null;
-      showCmToast('Legacy model loaded from summary fields. Save to upgrade to the new format.', 'info');
+      showToast('Legacy model loaded from summary fields. Save to upgrade to the new format.', 'info');
     }
     (model.laborLines || []).forEach(l => {
       if ((l.annual_hours || 0) === 0 && (l.volume || 0) > 0 && (l.base_uph || 0) > 0) {
@@ -870,7 +817,7 @@ async function loadModelByCmId(id) {
           _activeChannelKey = ch.key;
           activeSection = 'volumes';
           renderCurrentView();
-          showCmToast(`Drilled back to channel "${ch.name || ch.key}" from the linked tool.`, 'info');
+          showToast(`Drilled back to channel "${ch.name || ch.key}" from the linked tool.`, 'info');
         }
       }
     } catch (err) { console.warn('[CM] drillback hint consume failed:', err); }
@@ -885,7 +832,7 @@ async function loadModelByCmId(id) {
     }).catch(() => {});
   } catch (err) {
     console.error('[CM] Load failed:', err);
-    showCmToast('Load failed: ' + err.message, 'error');
+    showToast('Load failed: ' + err.message, 'error');
   }
 }
 
@@ -915,7 +862,7 @@ function wireLandingEvents() {
         renderCurrentView();
       } catch (err) {
         console.error('[CM] Delete failed:', err);
-        showCmToast('Delete failed: ' + err.message, 'error');
+        showToast('Delete failed: ' + err.message, 'error');
       }
     });
   });
@@ -931,10 +878,10 @@ function wireLandingEvents() {
         await api.duplicateModel(id);
         savedModels = await api.listModels();
         renderCurrentView();
-        showCmToast(`Duplicated "${name}".`, 'success');
+        showToast(`Duplicated "${name}".`, 'success');
       } catch (err) {
         console.error('[CM] Duplicate failed:', err);
-        showCmToast('Duplicate failed: ' + err.message, 'error');
+        showToast('Duplicate failed: ' + err.message, 'error');
       }
     });
   });
@@ -1012,10 +959,10 @@ function wireLandingEvents() {
         await api.reassignModelToDeal(movedId, targetDealId);
         savedModels = await api.listModels();
         renderCurrentView();
-        showCmToast(`Moved "${sourceName}" to "${targetLabel}".`, 'success');
+        showToast(`Moved "${sourceName}" to "${targetLabel}".`, 'success');
       } catch (err) {
         console.error('[CM-LND-2] Reassign failed:', err);
-        showCmToast('Move failed: ' + (err && err.message ? err.message : err), 'error');
+        showToast('Move failed: ' + (err && err.message ? err.message : err), 'error');
       }
     });
   });
@@ -1088,7 +1035,7 @@ function reconstructModelFromFlatRow(row) {
 /**
  * Small non-blocking toast (replaces alert() which freezes the tab on our live URL).
  */
-function showCmToast(message, level) {
+function showToast(message, level) {
   if (!rootEl) return;
   const color = level === 'error' ? '#dc2626' : level === 'info' ? '#2563eb' : '#16a34a';
   const bg = level === 'error' ? '#fef2f2' : level === 'info' ? '#eff6ff' : '#f0fdf4';
@@ -2804,7 +2751,7 @@ function renderProvenancePanelInner() {
         <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);font-weight:700;">Cell Inspector</div>
         <button id="cm-prov-close" class="hub-btn hub-btn-sm hub-btn-secondary" style="padding:2px 8px;font-size:11px;line-height:1.4;">Close ✕</button>
       </div>
-      <div style="font-size:15px;font-weight:700;color:var(--ies-navy,#0F1B2E);margin-top:4px;">${prov.label}</div>
+      <div style="font-size:15px;font-weight:700;color:var(--ies-navy, #1c1c1c);margin-top:4px;">${prov.label}</div>
       <div style="font-size:22px;font-weight:700;color:var(--ies-blue,#0047AB);margin-top:6px;">${_fmtProvValue(prov)}</div>
     </div>
 
@@ -2842,7 +2789,7 @@ function renderProvenancePanelInner() {
             : 'font-weight:600;color:var(--ies-gray-800,#1f2937);overflow-wrap:break-word;';
           const valueStyle = isSubRow
             ? 'font-weight:600;color:var(--ies-blue,#0047AB);font-variant-numeric:tabular-nums;font-size:12px;flex:0 1 auto;max-width:55%;text-align:right;overflow-wrap:break-word;'
-            : 'font-weight:700;color:var(--ies-navy,#0F1B2E);font-variant-numeric:tabular-nums;flex:0 1 auto;max-width:55%;text-align:right;overflow-wrap:break-word;';
+            : 'font-weight:700;color:var(--ies-navy, #1c1c1c);font-variant-numeric:tabular-nums;flex:0 1 auto;max-width:55%;text-align:right;overflow-wrap:break-word;';
           return `
             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;font-size:12.5px;line-height:1.4;">
               <div style="flex:1;min-width:0;">
@@ -4029,7 +3976,7 @@ function renderVolumes() {
       .cm-season-cell { display: flex; flex-direction: column; align-items: stretch; gap: 2px; }
       .cm-season-cell label { font-size: 10px; font-weight: 700; color: var(--ies-gray-500); text-align: center; text-transform: uppercase; }
       .cm-season-cell input { text-align: center; font-variant-numeric: tabular-nums; padding: 4px 2px; }
-      .cm-season-cell--peak input { background: rgba(217,119,6,0.10); border-color: var(--ies-orange, #d97706); font-weight: 700; }
+      .cm-season-cell--peak input { background: rgba(217,119,6,0.10); border-color: var(--ies-orange, #ff3a00); font-weight: 700; }
       .cm-season-summary { display: flex; align-items: center; gap: 18px; margin-top: 10px; font-size: 12px; color: var(--ies-gray-600); }
       .cm-season-summary__sum--bad { color: #dc2626; font-weight: 700; }
       .cm-season-summary__sum--good { color: #16a34a; font-weight: 700; }
@@ -4160,7 +4107,7 @@ function renderFacility() {
             const ratioStr = ratio > 1
               ? `${ratio.toFixed(1)}x larger than current`
               : `${(1 / ratio).toFixed(1)}x smaller than current`;
-            return `<div class="hub-field__hint" style="font-size:11px;color:var(--ies-orange,#b8860b);margin-top:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            return `<div class="hub-field__hint" style="font-size:11px;color:var(--ies-orange, #ff3a00);margin-top:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
               <span title="Volume-driven heuristic: 30-day DOH × pallets/yr × 40 sqft/pallet ÷ 0.55 utilization. Wide divergence usually means a channel UOM (units/case, lines/order, units/line) is off — check Volumes & Profile.">⚠ Suggested ${sug.toLocaleString()} sqft is ${ratioStr}. Review channel UOMs or confirm facility plan.</span>
               <button type="button" class="hub-btn hub-btn-secondary hub-btn-sm" data-action="apply-suggested-sqft" data-value="${sug}" title="Set Total Sqft to the suggestion">${verb} ${(sug / 1000).toFixed(0)}K</button>
             </div>`;
@@ -5154,7 +5101,7 @@ function renderLaborV2() {
                 <td><input class="hub-input hub-num" type="number" min="0" max="12" step="1" value="${l.peak_months || 0}" data-array="indirectLaborLines" data-idx="${i}" data-field="peak_months" data-type="number" /></td>
                 <td><input class="hub-input hub-num" type="number" min="0" max="100" step="1" value="${l.peak_markup_pct || 0}" data-array="indirectLaborLines" data-idx="${i}" data-field="peak_markup_pct" data-type="number" /></td>
                 <td class="hub-num" style="font-weight:600;" title="${bd.seasonal > 0 ? `Baseline ${calc.formatCurrency(bd.baseline)} + Seasonal ${calc.formatCurrency(bd.seasonal)}` : 'Baseline only'}">
-                  ${calc.formatCurrency(bd.total)}${bd.seasonal > 0 ? `<span style="display:block;font-size:10px;color:var(--ies-orange,#d97706);font-weight:600;">+${calc.formatCurrency(bd.seasonal, {compact:true})} peak</span>` : ''}
+                  ${calc.formatCurrency(bd.total)}${bd.seasonal > 0 ? `<span style="display:block;font-size:10px;color:var(--ies-orange, #ff3a00);font-weight:600;">+${calc.formatCurrency(bd.seasonal, {compact:true})} peak</span>` : ''}
                 </td>
                 <td><button class="cm-delete-btn" data-action="delete-indirect" data-idx="${i}" aria-label="Delete">×</button></td>
               </tr>
@@ -5168,8 +5115,8 @@ function renderLaborV2() {
             <tfoot>
               ${_indirectBreakdownCache && _indirectBreakdownCache.seasonal > 0 ? `
                 <tr style="background:rgba(217,119,6,0.06);">
-                  <td colspan="8" style="padding:8px 12px;font-size:12px;font-weight:600;color:var(--ies-orange,#d97706);">↳ Seasonal Uplift (temp / short-term during peak months)</td>
-                  <td class="hub-num" style="padding:8px 12px;font-weight:600;color:var(--ies-orange,#d97706);">+${calc.formatCurrency(_indirectBreakdownCache.seasonal)}</td>
+                  <td colspan="8" style="padding:8px 12px;font-size:12px;font-weight:600;color:var(--ies-orange, #ff3a00);">↳ Seasonal Uplift (temp / short-term during peak months)</td>
+                  <td class="hub-num" style="padding:8px 12px;font-weight:600;color:var(--ies-orange, #ff3a00);">+${calc.formatCurrency(_indirectBreakdownCache.seasonal)}</td>
                   <td></td>
                 </tr>
                 <tr>
@@ -5340,7 +5287,7 @@ function renderMonthlyLaborViewCard() {
         <td class="hub-num">${s.minFte.toFixed(1)} <span style="color:var(--ies-gray-400);font-size:11px;">(${escapeHtml(s.minMonthLabel)})</span></td>
         <td class="hub-num" style="font-weight:700;">${s.peakCount}</td>
         <td class="hub-num">${s.baselineCount}</td>
-        <td class="hub-num">${s.seasonalCount > 0 ? `<span style="color:var(--ies-orange, #d97706);font-weight:600;">+${s.seasonalCount}</span>` : '—'}</td>
+        <td class="hub-num">${s.seasonalCount > 0 ? `<span style="color:var(--ies-orange, #ff3a00);font-weight:600;">+${s.seasonalCount}</span>` : '—'}</td>
       </tr>
     `).join('');
   };
@@ -5393,7 +5340,7 @@ function renderMonthlyLaborViewCard() {
       <div class="cm-mlv-kpi-strip">
         <div class="cm-mlv-kpi">
           <div class="cm-mlv-kpi-label">PEAK DIRECT FTE</div>
-          <div class="cm-mlv-kpi-value" style="color:var(--ies-orange, #d97706);">${scopePeakFte.toFixed(1)}</div>
+          <div class="cm-mlv-kpi-value" style="color:var(--ies-orange, #ff3a00);">${scopePeakFte.toFixed(1)}</div>
           <div class="cm-mlv-kpi-sub">${escapeHtml(scopePeakLabel)}</div>
         </div>
         <div class="cm-mlv-kpi">
@@ -5512,7 +5459,7 @@ function renderMonthlyLaborViewCard() {
             </div>
             <div class="cm-mlv-kpi" style="background:#fff;">
               <div class="cm-mlv-kpi-label">SEASONAL FLEX HC</div>
-              <div class="cm-mlv-kpi-value" style="color:var(--ies-orange, #d97706);">${indirect.seasonalHc}</div>
+              <div class="cm-mlv-kpi-value" style="color:var(--ies-orange, #ff3a00);">${indirect.seasonalHc}</div>
               <div class="cm-mlv-kpi-sub">candidates for temp staffing</div>
             </div>
           </div>
@@ -5527,7 +5474,7 @@ function renderMonthlyLaborViewCard() {
                       <td>${escapeHtml(r.role)}</td>
                       <td class="hub-num">${r.peakHc}</td>
                       <td class="hub-num">${r.avgHc}</td>
-                      <td class="hub-num">${r.seasonalHc > 0 ? `<span style="color:var(--ies-orange, #d97706);font-weight:600;">+${r.seasonalHc}</span>` : '—'}</td>
+                      <td class="hub-num">${r.seasonalHc > 0 ? `<span style="color:var(--ies-orange, #ff3a00);font-weight:600;">+${r.seasonalHc}</span>` : '—'}</td>
                     </tr>
                   `).join('')}
                 </tbody>
@@ -6090,7 +6037,7 @@ Owned Facility — racking/dock/charging/office/security/conveyor">Line Type</th
                     ` : `
                       <input class="hub-input hub-num" type="number" value="${l.acquisition_cost || 0}" data-array="equipmentLines" data-idx="${i}" data-field="acquisition_cost" data-type="number" ${(() => {
                         if ((norm === 'capital' || norm === 'ti') && (Number(l.acquisition_cost) || 0) <= 0) {
-                          return `style="border-color: var(--ies-orange, #d97706); background: rgba(255,193,7,0.08);" title="$0 acquisition cost on a ${norm === 'capital' ? 'Capital' : 'TI'} line — set a unit cost or pull from the Equipment Catalog"`;
+                          return `style="border-color: var(--ies-orange, #ff3a00); background: rgba(255,193,7,0.08);" title="$0 acquisition cost on a ${norm === 'capital' ? 'Capital' : 'TI'} line — set a unit cost or pull from the Equipment Catalog"`;
                         }
                         // 2026-04-30 PM (item 3a): leased lines correctly read $0 acquisition
                         // (the $/mo column is the cost). Mute the field + add a tooltip so the
@@ -6122,7 +6069,7 @@ Owned Facility — racking/dock/charging/office/security/conveyor">Line Type</th
                 `;
               })()}
               <td class="hub-num" title="${lineBd.seasonal > 0 ? `Baseline ${calc.formatCurrency(lineBd.baseline)} + Seasonal ${calc.formatCurrency(lineBd.seasonal)}` : 'Baseline only'}">
-                ${calc.formatCurrency(calc.equipLineTableCost(l, overflow))}${lineBd.seasonal > 0 ? `<span style="display:block;font-size:10px;color:var(--ies-orange,#d97706);font-weight:600;">+${calc.formatCurrency(lineBd.seasonal, {compact:true})} peak</span>` : ''}
+                ${calc.formatCurrency(calc.equipLineTableCost(l, overflow))}${lineBd.seasonal > 0 ? `<span style="display:block;font-size:10px;color:var(--ies-orange, #ff3a00);font-weight:600;">+${calc.formatCurrency(lineBd.seasonal, {compact:true})} peak</span>` : ''}
               </td>
               <td class="cm-actions"><button class="cm-delete-btn" data-action="delete-equipment" data-idx="${i}" title="Delete row">×</button></td>
             </tr>
@@ -6132,8 +6079,8 @@ Owned Facility — racking/dock/charging/office/security/conveyor">Line Type</th
           ` : ''}
           ${breakdown.seasonal > 0 ? `
             <tr style="background:rgba(217,119,6,0.06);">
-              <td colspan="10" style="font-weight:600;color:var(--ies-orange,#d97706);">↳ Seasonal Uplift (short-term rental during peak)</td>
-              <td class="hub-num" style="font-weight:600;color:var(--ies-orange,#d97706);">+${calc.formatCurrency(breakdown.seasonal)}</td>
+              <td colspan="10" style="font-weight:600;color:var(--ies-orange, #ff3a00);">↳ Seasonal Uplift (short-term rental during peak)</td>
+              <td class="hub-num" style="font-weight:600;color:var(--ies-orange, #ff3a00);">+${calc.formatCurrency(breakdown.seasonal)}</td>
               <td></td>
             </tr>
             <tr>
@@ -7829,7 +7776,7 @@ function renderSummary() {
               <div>
                 <div class="hub-field__label" style="text-transform:none; letter-spacing:0;">${c.label} <span style="color:var(--ies-gray-400);font-weight:500;">(${c.pct}%)</span></div>
                 <div class="hub-num" style="font-size:14px; font-weight:700; text-align:left;">${calc.formatCurrency(c.value, {compact: true})}</div>
-                ${c.subAnnotation ? `<div style="font-size:11px;font-style:italic;color:var(--ies-orange,#d97706);margin-top:2px;">${c.subAnnotation}</div>` : ''}
+                ${c.subAnnotation ? `<div style="font-size:11px;font-style:italic;color:var(--ies-orange, #ff3a00);margin-top:2px;">${c.subAnnotation}</div>` : ''}
               </div>
             </div>
           `).join('');
@@ -13869,7 +13816,7 @@ function renderImplementation() {
       </div>
       <div class="hub-kpi-tile" title="Sum of all start-up lines — one-time outlay before steady-state operations">
         <div class="hub-kpi-tile__label">Implementation Spend</div>
-        <div class="hub-kpi-tile__value" style="color:var(--ies-orange,#d97706);">${calc.formatCurrency(totalImplSpend)}</div>
+        <div class="hub-kpi-tile__value" style="color:var(--ies-orange, #ff3a00);">${calc.formatCurrency(totalImplSpend)}</div>
       </div>
     </div>
 
@@ -17449,7 +17396,7 @@ function _ofpStyles() {
         cursor: pointer; padding: 0; display: inline-flex; align-items: center; justify-content: center;
         transition: background 0.12s;
       }
-      .ofp-add-btn:hover { background: var(--ies-navy, #001f3f); }
+      .ofp-add-btn:hover { background: var(--ies-navy, #1c1c1c); }
 
       /* v0.2 — node card top row (name + del/chip), delete button, validation chip */
       .ofp-node { position: relative; }
@@ -18018,7 +17965,7 @@ function _ofpStyles() {
         display: inline-flex; align-items: center; justify-content: center;
         transition: background 0.12s;
       }
-      .ofp-subarea__add:hover { background: var(--ies-navy, #001f3f); }
+      .ofp-subarea__add:hover { background: var(--ies-navy, #1c1c1c); }
       .ofp-subarea__nodes {
         display: flex; flex-direction: column; gap: 6px;
         padding: 8px;

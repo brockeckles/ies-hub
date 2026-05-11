@@ -343,7 +343,7 @@ function _stylesheet() {
   return `
     <style data-tool-chrome>
       .tool-chrome-shell .tc-top {
-        background: var(--ies-navy, #001f3f);
+        background: var(--ies-navy, #1c1c1c);
         color: #fff;
         flex: 0 0 auto;
         border-bottom: 1px solid rgba(255,255,255,0.08);
@@ -416,7 +416,7 @@ function _stylesheet() {
       }
       .tool-chrome-shell .tc-row2-toggle:hover { background: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.32); }
       .tool-chrome-shell .tc-row2-toggle--active {
-        background: #fff; color: var(--ies-navy, #001f3f); border-color: #fff;
+        background: #fff; color: var(--ies-navy, #1c1c1c); border-color: #fff;
       }
       .tool-chrome-shell .tc-row2-toggle__icon { font-size: 12px; line-height: 1; }
       .tool-chrome-shell .tc-row2-divider {
@@ -444,7 +444,7 @@ function _stylesheet() {
       }
       .tool-chrome-shell .tc-section-pill:hover { color: #fff; background: rgba(255,255,255,0.08); }
       .tool-chrome-shell .tc-section-pill--active {
-        color: var(--ies-navy, #001f3f);
+        color: var(--ies-navy, #1c1c1c);
         background: #fff;
         border-color: #fff;
       }

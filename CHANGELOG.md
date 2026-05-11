@@ -5,6 +5,14 @@ in parentheses where relevant for quick reference.
 
 ## 2026-05-11 — Port-readiness sprint (in progress)
 
+- **S3: bug fixes / token normalize.** Killed 4 token-fallback drift
+  classes (`var(--ies-orange, #d97706|#f97316|#b8860b)` and
+  `var(--ies-navy, #001f3f|#0F1B2E|#0a1628)`) — 30 fallbacks normalized to
+  the canonical `#ff3a00` / `#1c1c1c` across 5 files. Consolidated 3
+  local toast wrappers (`showCmToast` / `showWscToast` / `showNoToast`)
+  into the single `shared/toast.js` import every tool already had. Deleted
+  the byte-identical local `showConfirm`/`showPrompt` in cost-model/ui.js
+  in favor of `shared/confirm-modal.js`. Cache-bust 20260511-port3.
 - **S2: decisions.** Killed Change Management (route + nav + DEMO_INITIATIVES
   + working api.js that was never wired). Killed Deck Generator (engine,
   panel in Deal Management, PptxGenJS CDN, the v2-dtg-deckgen wiki article).
