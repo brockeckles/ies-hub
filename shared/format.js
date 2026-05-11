@@ -140,3 +140,38 @@ export function formatFt(ft) {
   if (ft == null || !Number.isFinite(ft)) return '—';
   return ft.toFixed(1) + ' ft';
 }
+
+/**
+ * Title-case + singularize a UOM string for display.
+ *
+ * Maps common variants (orders → Order, cartons → Carton) and
+ * unknown UOMs fall back to "strip trailing s + title-case".
+ * Empty / null input returns 'Order' (the default outbound UOM
+ * cost-model assumes when no volume line is configured).
+ *
+ * Added 2026-05-11 (S18) when computeHeaderKpis moved out of
+ * cost-model/ui.js — was previously a CM-local helper.
+ *
+ * @param {string|null|undefined} uom
+ * @returns {string}
+ */
+export function formatUomSingular(uom) {
+  const raw = String(uom || '').toLowerCase().trim();
+  if (!raw) return 'Order';
+  const map = {
+    'order': 'Order', 'orders': 'Order',
+    'each': 'Each', 'eaches': 'Each', 'unit': 'Unit', 'units': 'Unit',
+    'case': 'Case', 'cases': 'Case',
+    'pallet': 'Pallet', 'pallets': 'Pallet',
+    'carton': 'Carton', 'cartons': 'Carton',
+    'line': 'Line', 'lines': 'Line',
+    'pick': 'Pick', 'picks': 'Pick',
+    'sku': 'SKU', 'skus': 'SKU',
+    'hour': 'Hour', 'hours': 'Hour',
+    'trailer': 'Trailer', 'trailers': 'Trailer',
+    'shipment': 'Shipment', 'shipments': 'Shipment',
+  };
+  if (map[raw]) return map[raw];
+  const singular = raw.endsWith('s') ? raw.slice(0, -1) : raw;
+  return singular.charAt(0).toUpperCase() + singular.slice(1);
+}

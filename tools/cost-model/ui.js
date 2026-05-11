@@ -12,7 +12,7 @@ import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260511-port2';
 import ofpStyles from './operational-flow-styles.js?v=20260511-port4';
 import { auth } from '../../shared/auth.js?v=20260504-auth1';
-import * as calc from './calc.js?v=20260511-port11';
+import * as calc from './calc.js?v=20260511-port13';
 import * as api from './api.js?v=20260504-auth1';
 import * as scenarios from './calc.scenarios.js?v=20260430-pm-otfix2';
 import { renderHeuristicsPanel } from './render-heuristics-panel.js?v=20260511-port8';
@@ -28,6 +28,10 @@ import { renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260430-na-dot';
 import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260511-port12';
+import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port13';
+import { formatUomSingular } from '../../shared/format.js?v=20260511-port13';
+import { computeHeaderKpis } from './header-kpis.js?v=20260511-port13';
+import { computeWhatIfPreview } from './what-if-preview.js?v=20260511-port13';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
 // disk but no longer imported; can be deleted in a future cleanup.
@@ -1648,244 +1652,6 @@ function refreshSaveStateChip() {
 // stay visible while the user moves between sections. Mirrors NetOpt's
 // gradient-navy KPI bar pattern (see hub.css `.hub-kpi-bar`).
 
-/** Compute the 5 header KPIs from the current model. Returns { ready, items }. */
-function computeHeaderKpis() {
-  try {
-    const market = model?.projectDetails?.market;
-    const fr = (refData?.facilityRates || []).find(r => r.market_id === market);
-    const ur = (refData?.utilityRates  || []).find(r => r.market_id === market);
-    const outboundStar = (model?.volumeLines || []).find(v => v.isOutboundPrimary);
-    const orders = outboundStar?.volume || 0;
-    const outboundUomLabel = formatUomSingular(outboundStar?.uom);
-    const contractYears = model?.projectDetails?.contractTerm || 5;
-    const fin = model?.financial || {};
-
-    // Bail out cheaply when there's effectively no model yet — keeps the
-    // strip blank on empty Setup pages instead of flashing $0.
-    // 2026-04-29 (#14): also bail when the user hasn't touched anything yet
-    // so the seeded defaults (80K orders + sample equipment) don't surface
-    // a misleading "Cost/Order $5.94" / "NPV -$2.2M" before the user has
-    // entered a single value.
-    // 2026-04-30 (F2): loaded-from-DB models DO have meaningful data even
-    // before the user types, so distinguish loaded-with-data from
-    // fresh-empty-seed. Mirrors the hasData check in updateValidation().
-    const hasLoadedData = !!(model && (
-      (model.projectDetails?.name) ||
-      (Array.isArray(model.laborLines) && model.laborLines.length) ||
-      (Array.isArray(model.pricingBuckets) && model.pricingBuckets.length)
-    ));
-    if (!orders || (!userHasInteracted && !hasLoadedData)) {
-      return {
-        ready: false,
-        items: [
-          { label: `Cost / Unit`,   value: '—', hint: 'Set outbound volume on the Volumes section to populate.' },
-          { label: 'Y1 Revenue',    value: '—' },
-          { label: 'GP Margin (Y1)', value: '—' },
-          { label: 'Total FTEs',    value: '—' },
-          { label: `NPV (${contractYears}yr)`, value: '—' },
-          // 2026-04-30 (F4): 6th tile on bail-out so the strip is stable
-          // (prior version showed 5 chips on bail, 6 after first input).
-          { label: 'Contract',
-            value: contractYears > 0 ? `${contractYears} yr` : '—',
-            hint: 'Contract term — sets the multi-year P&L horizon, NPV window, and ramp tail.' },
-        ],
-      };
-    }
-
-    const summary = calc.computeSummary({
-      laborLines: model.laborLines || [],
-      indirectLaborLines: model.indirectLaborLines || [],
-      equipmentLines: model.equipmentLines || [],
-      overheadLines: model.overheadLines || [],
-      vasLines: model.vasLines || [],
-      startupLines: model.startupLines || [],
-      facility: model.facility || {},
-      shifts: model.shifts || {},
-      facilityRate: fr,
-      utilityRate: ur,
-      contractYears,
-      targetMarginPct: fin.targetMargin || 0,
-      annualOrders: orders,
-    });
-
-    // 2026-04-30 (F3) — align with renderSummary's projection inputs so the
-    // chrome KPI strip's NPV/Revenue tie to the Summary section's tiles.
-    // Prior version called buildYearlyProjections with raw model.financial
-    // and unenriched pricingBuckets; the I-02 fix that derives missing
-    // bucket rates from assigned costs only ran inside renderSummary, so
-    // chrome strip Y1 Revenue read $0 on every saved model.
-    const opHrs = calc.operatingHours(model.shifts || {});
-    const calcHeur = applySplitMonthBilling(scenarios.resolveCalcHeuristics(
-      currentScenario,
-      currentScenarioSnapshots,
-      heuristicOverrides,
-      _heurProjectFallbacks(model),
-      whatIfTransient,
-    ), model);
-    const marginFrac = (calcHeur.targetMarginPct || 0) / 100;
-    const pricingSnapshot = calc.computePricingSnapshot({ model, summary, marginFrac, opHrs, contractYears });
-    const enrichedPricingBuckets = pricingSnapshot.buckets;
-
-    const projResult = calc.buildYearlyProjections({
-      years: contractYears,
-      baseLaborCost:     summary.laborCost,
-      baseFacilityCost:  summary.facilityCost,
-      baseEquipmentCost: summary.equipmentCost,
-      baseOverheadCost:  summary.overheadCost,
-      baseVasCost:       summary.vasCost,
-      startupAmort:      summary.startupAmort,
-      startupCapital:    summary.startupCapital,
-      baseOrders:        orders,
-      marginPct:         marginFrac,
-      volGrowthPct:      calcHeur.volGrowthPct      / 100,
-      laborEscPct:       calcHeur.laborEscPct       / 100,
-      costEscPct:        calcHeur.costEscPct        / 100,
-      facilityEscPct:    calcHeur.facilityEscPct    / 100,
-      equipmentEscPct:   calcHeur.equipmentEscPct   / 100,
-      laborLines: model.laborLines || [],
-      taxRatePct: calcHeur.taxRatePct,
-      useMonthlyEngine: typeof window !== 'undefined' && window.COST_MODEL_MONTHLY_ENGINE !== false,
-      periods: (refData && refData.periods) || [],
-      ramp: null,
-      seasonality: model.seasonalityProfile || null,
-      preGoLiveMonths:  calcHeur.preGoLiveMonths,
-      dsoDays:          calcHeur.dsoDays,
-      dpoDays:          calcHeur.dpoDays,
-      laborPayableDays: calcHeur.laborPayableDays,
-      startupLines: model.startupLines || [],
-      pricingBuckets: enrichedPricingBuckets,
-      project_id: model.id || 0,
-      sgaOverlayPct: Number(model.financial?.sgaOverlayPct) || 0,
-      sgaAppliesTo:  model.financial?.sgaAppliesTo || 'net_revenue',
-      _calcHeur: calcHeur,
-      marketLaborProfile: currentMarketLaborProfile,
-      wageLoadByYear: null,
-    });
-    const projections = (projResult && projResult.projections) || [];
-    const y1 = projections[0] || null;
-    const metrics = calc.computeFinancialMetrics(projections, {
-      startupCapital:      summary.startupCapital,
-      equipmentCapital:    summary.equipmentCapital,
-      annualDepreciation:  (summary.equipmentAmort || 0) + (summary.startupAmort || 0),
-      discountRatePct:     calcHeur.discountRate ?? (fin.discountRate ?? 10),
-      reinvestRatePct:     calcHeur.reinvestRate ?? (fin.reinvestRate ?? 8),
-      taxRatePct:          calcHeur.taxRatePct,
-      dsoDays:             calcHeur.dsoDays || 0,
-      dpoDays:             calcHeur.dpoDays || 0,
-      totalFtes:           summary.totalFtes,
-      fixedCost:           summary.facilityCost + summary.overheadCost + summary.startupAmort,
-    });
-
-    const costPerUnit = summary.costPerOrder || 0;
-    // 2026-04-30 (F3) — fall back to summary.totalRevenue when the projection
-    // didn't emit a Y1 revenue (matches renderSummary's `?? summary.totalRevenue`).
-    const y1Revenue   = (y1 && y1.revenue) ? y1.revenue : (summary.totalRevenue || 0);
-    const y1Margin    = (y1Revenue > 0)
-      ? ((y1?.grossProfit || (y1Revenue - (y1?.totalCost || summary.totalCost || 0))) / y1Revenue) * 100
-      : 0;
-    const totalFtes   = summary.totalFtes || 0;
-    const npv         = (metrics && metrics.npv) || 0;
-
-    // Phase 5.2 — bundle the underlying numbers + lineage into a ctx the
-    // inspector panel can read when a KPI tile is clicked from any section.
-    // Mirrors _lastProvenanceContext but adds payback + costPerUnit so the
-    // KPI-specific row keys can render inputs even when the user has never
-    // navigated to Summary yet. Stashed onto _lastProvenanceContext so
-    // getCellProvenance has a single source of truth.
-    const kpiCtx = {
-      projections,
-      summary,
-      calcHeur: {
-        volGrowthPct: (fin.volGrowth || 0) * 1,
-        laborEscPct:  (fin.laborEsc  || 0) * 1,
-        costEscPct:   (fin.costEsc   || 0) * 1,
-        facilityEscPct:  fin.facilityEsc != null ? fin.facilityEsc : (fin.costEsc || 0),
-        equipmentEscPct: fin.equipmentEsc != null ? fin.equipmentEsc : (fin.costEsc || 0),
-        taxRatePct:   fin.taxRate != null ? fin.taxRate : 25,
-      },
-      marginFrac,
-      contractYears,
-      baseOrders: orders || 1,
-      computedAt: new Date().toISOString(),
-      channelLineage: channelCalc.buildChannelLineage(model),
-      // KPI-specific extras
-      kpi: {
-        costPerUnit,
-        y1Revenue,
-        y1Margin,
-        totalFtes,
-        npv,
-        payback: (metrics && metrics.payback) || null,
-        outboundUomLabel: outboundUomLabel || 'Unit',
-        discountRate: fin.discountRate || 10,
-      },
-    };
-
-    // If renderSummary hasn't run yet (user opened a non-Summary section
-    // first), seed _lastProvenanceContext so the inspector still works.
-    // renderSummary will overwrite with its richer ctx when the user
-    // navigates there. From-Summary loads always win because they pass
-    // through renderSummary AFTER refreshHeaderKpis.
-    if (!_lastProvenanceContext || _lastProvenanceContext._source !== 'summary') {
-      _lastProvenanceContext = { ...kpiCtx, _source: 'kpi' };
-    } else {
-      // Already on Summary — graft the kpi-specific extras onto it so
-      // KPI clicks read fresh costPerUnit/npv even mid-session.
-      _lastProvenanceContext.kpi = kpiCtx.kpi;
-    }
-
-    return {
-      ready: true,
-      items: [
-        {
-          key: 'kpi:costPerUnit',
-          label: `Cost / ${outboundUomLabel || 'Unit'}`,
-          value: costPerUnit > 0
-            ? calc.formatCurrency(costPerUnit, { decimals: costPerUnit < 10 ? 2 : 0 })
-            : '—',
-          hint: 'Total operating cost ÷ outbound primary volume. Drives the headline pricing rate.',
-        },
-        {
-          key: 'kpi:y1Revenue',
-          label: 'Y1 Revenue',
-          value: y1Revenue > 0 ? calc.formatCurrency(y1Revenue, { compact: true }) : '—',
-          hint: 'Year-1 revenue from the multi-year P&L (ramped, escalation-aware).',
-        },
-        {
-          key: 'kpi:y1Margin',
-          label: 'GP Margin (Y1)',
-          value: y1Revenue > 0 ? calc.formatPct(y1Margin, 1) : '—',
-          hint: 'Y1 gross profit ÷ revenue. Often lower than your target margin in early years until the ramp completes.',
-        },
-        {
-          key: 'kpi:totalFtes',
-          label: 'Total FTEs',
-          value: totalFtes > 0 ? totalFtes.toFixed(1) : '—',
-          hint: 'Direct + indirect headcount at steady-state operating hours.',
-        },
-        {
-          key: 'kpi:npv',
-          label: `NPV (${contractYears}yr)`,
-          value: npv !== 0 ? calc.formatCurrency(npv, { compact: true }) : '—',
-          hint: `Net present value over the ${contractYears}-year contract at ${fin.discountRate || 10}% discount rate.`,
-        },
-        {
-          key: 'kpi:contract',
-          // 2026-04-29 (Brock): contract term as framing context for the other
-          // chips. Sets the horizon for the multi-year P&L, NPV, and ramp.
-          label: 'Contract',
-          value: contractYears > 0
-            ? `${contractYears} yr${(contractYears * 12) % 12 === 0 ? '' : ` (${Math.round(contractYears * 12)} mo)`}`
-            : '—',
-          hint: `${Math.round(contractYears * 12)}-month contract term — sets the multi-year P&L horizon, NPV window, and ramp tail.`,
-        },
-      ],
-    };
-  } catch (err) {
-    console.warn('[CM] header KPI compute failed:', err);
-    return { ready: false, items: [] };
-  }
-}
 
 let _kpiRefreshTimer = null;
 /**
@@ -1899,7 +1665,7 @@ function refreshHeaderKpis(opts) {
     return;
   }
   if (!rootEl) return;
-  const kpis = computeHeaderKpis();
+  const kpis = computeHeaderKpis({ model, refData, userHasInteracted, whatIfTransient, currentScenario, currentScenarioSnapshots, heuristicOverrides, scenarios });
   refreshKpiStrip(rootEl, kpis.items || []);
 }
 
@@ -9769,214 +9535,6 @@ function whatIfSource(sliderKey) {
  *
  * @param {Object} [overlay] — transient slider map. Defaults to whatIfTransient.
  */
-function computeWhatIfPreview(overlay) {
-  try {
-    const ov = overlay === undefined ? whatIfTransient : (overlay || {});
-    const market = model.projectDetails?.market;
-    const fr = (refData.facilityRates || []).find(r => r.market_id === market);
-    const ur = (refData.utilityRates || []).find(r => r.market_id === market);
-    const opHrs = calc.operatingHours(model.shifts || {});
-    const orders = (model.volumeLines || []).find(v => v.isOutboundPrimary)?.volume || 0;
-    const contractYears = model.projectDetails?.contractTerm || 5;
-    const fin = model.financial || {};
-    const summary = calc.computeSummary({
-      laborLines: model.laborLines || [],
-      indirectLaborLines: model.indirectLaborLines || [],
-      equipmentLines: model.equipmentLines || [],
-      overheadLines: model.overheadLines || [],
-      vasLines: model.vasLines || [],
-      startupLines: model.startupLines || [],
-      facility: model.facility || {},
-      shifts: model.shifts || {},
-      facilityRate: fr,
-      utilityRate: ur,
-      contractYears,
-      targetMarginPct: fin.targetMargin || 0,
-      annualOrders: orders || 1,
-    });
-    const calcHeur = applySplitMonthBilling(scenarios.resolveCalcHeuristics(
-      currentScenario, currentScenarioSnapshots, heuristicOverrides, _heurProjectFallbacks(model), ov,
-    ), model);
-    const whatIfMarginFrac = (calcHeur.targetMarginPct || 0) / 100;
-
-    // Direct Labor Productivity scaling. Pull from the overlay first, then
-    // from heuristicOverrides, else default to 100 (no drag). Scale is
-    // 100/prod: 90% prod → 1.111× hours → 1.111× labor cost.
-    const dlProd = ov.direct_labor_productivity_pct != null && ov.direct_labor_productivity_pct !== ''
-      ? Number(ov.direct_labor_productivity_pct)
-      : (heuristicOverrides.direct_labor_productivity_pct != null && heuristicOverrides.direct_labor_productivity_pct !== ''
-          ? Number(heuristicOverrides.direct_labor_productivity_pct)
-          : 100);
-    const dlProdClamped = Math.max(1, Math.min(150, Number.isFinite(dlProd) ? dlProd : 100));
-    const laborHoursScale = 100 / dlProdClamped;  // 90 → 1.111, 100 → 1.0, 110 → 0.909
-
-    // 2026-04-21 PM (Brock live feedback): Direct Labor Productivity was
-    // scaling base_uph only, but the monthly engine reads `annual_hours`
-    // directly via monthlyEffectiveHours — so the slider was silently dead
-    // when the monthly engine was on (default). Fix: scale annual_hours
-    // alongside base_uph so BOTH paths (per-line monthly and aggregate
-    // yearly fallback) reflect productivity. 90% prod → 1.111× annual_hours
-    // → 1.111× labor cost; 110% prod → 0.909× hours → 0.909× cost.
-    // 2026-04-21 audit (Brock): Absence % slider was silently dead on
-    // projects where labor lines carry a `monthly_absence_profile` (market
-    // profile resolution). `monthlyAbsencePct` prefers the per-line profile
-    // → market profile → calcHeur fallback, so the slider's calcHeur value
-    // never reached the engine when profiles were set. Fix: when absence is
-    // in the overlay, strip per-line profiles so calcHeur.absenceAllowancePct
-    // becomes authoritative. Below we also clone the market profile with
-    // absence_pct nulled to close the last hop.
-    const absenceOverlayActive = ov.absence_allowance_pct != null && ov.absence_allowance_pct !== '';
-    const scaledLaborLines = (model.laborLines || []).map(l => ({
-      ...l,
-      annual_hours: (l.annual_hours || 0) * laborHoursScale,  // THE one the monthly engine consumes
-      base_uph: (l.base_uph || 0) / laborHoursScale,          // kept in sync for any UPH-reading downstream
-      // If absence overlay active, strip per-line profile so calcHeur wins.
-      ...(absenceOverlayActive ? { monthly_absence_profile: null } : {}),
-    }));
-    const scaledBaseLaborCost = summary.laborCost * laborHoursScale;
-    // Clone market profile without absence array when the overlay is driving
-    // absence. Same rationale as above — ensures calcHeur.absenceAllowancePct
-    // is the effective monthly absence for every month in the preview.
-    const whatIfMarketProfile = absenceOverlayActive && currentMarketLaborProfile
-      ? { ...currentMarketLaborProfile, peak_month_absence_pct: null }
-      : currentMarketLaborProfile;
-
-    // When margin or volume sliders are active, re-derive bucket rates
-    // from the overlay values — otherwise explicit rates on Wayfair-style
-    // buckets pin revenue at baseline and the margin slider reads as dead.
-    // For other sliders (DSO, tax rate, labor rate) the explicit rates
-    // remain the defensible pricing and we leave them alone.
-    const marginOverlayActive = ov.target_margin_pct != null && ov.target_margin_pct !== '';
-    const volOverlayActive    = ov.annual_volume_growth_pct != null && ov.annual_volume_growth_pct !== '';
-    // M4 (2026-04-21): pricing-discount slider — uniform multiplier on every
-    // bucket's effective rate. Same machinery as per-bucket overrides.
-    const pricingDiscountPct = ov.pricing_discount_pct != null && ov.pricing_discount_pct !== ''
-      ? Number(ov.pricing_discount_pct) : 0;
-    const pricingMult = 1 + pricingDiscountPct / 100;
-    const whatIfBuckets = (marginOverlayActive || volOverlayActive)
-      ? (() => {
-          const cleared = (model.pricingBuckets || []).map(b => ({ ...b, rate: 0 }));
-          const bucketCosts = calc.computeBucketCosts({
-            buckets: cleared,
-            laborLines: model.laborLines || [],
-            indirectLaborLines: model.indirectLaborLines || [],
-            equipmentLines: model.equipmentLines || [],
-            overheadLines: model.overheadLines || [],
-            vasLines: model.vasLines || [],
-            startupLines: (model.startupLines || []).map(l => ({
-              ...l,
-              annual_amort: (l.one_time_cost || 0) / Math.max(1, contractYears),
-            })),
-            facilityCost: summary.facilityCost || 0,
-            operatingHours: opHrs || 0,
-            facilityBucketId: model.financial?.facilityBucketId || null,
-          });
-          return calc.enrichBucketsWithDerivedRates({
-            buckets: cleared,
-            bucketCosts,
-            marginPct: whatIfMarginFrac || 0,
-            volumeLines: model.volumeLines || [],
-            model,
-          });
-        })()
-      : buildEnrichedPricingBuckets(summary, whatIfMarginFrac, opHrs, contractYears);
-    // Apply M4 pricing-discount multiplier AFTER enrichment so it layers on
-    // both explicit and derived rates uniformly.
-    const whatIfBucketsAfterDiscount = pricingMult === 1 ? whatIfBuckets
-      : whatIfBuckets.map(b => ({ ...b, rate: (Number(b.rate) || 0) * pricingMult }));
-
-    const projResult = calc.buildYearlyProjections({
-      years: contractYears,
-      baseLaborCost: scaledBaseLaborCost,
-      baseFacilityCost: summary.facilityCost,
-      baseEquipmentCost: summary.equipmentCost,
-      baseOverheadCost: summary.overheadCost,
-      baseVasCost: summary.vasCost,
-      startupAmort: summary.startupAmort,
-      startupCapital: summary.startupCapital,
-      baseOrders: orders || 1,
-      marginPct: whatIfMarginFrac,
-      volGrowthPct: calcHeur.volGrowthPct / 100,
-      laborEscPct:  calcHeur.laborEscPct  / 100,
-      costEscPct:   calcHeur.costEscPct   / 100,
-      facilityEscPct:  calcHeur.facilityEscPct  / 100,
-      equipmentEscPct: calcHeur.equipmentEscPct / 100,
-      laborLines: scaledLaborLines,
-      taxRatePct: calcHeur.taxRatePct,
-      useMonthlyEngine: typeof window !== 'undefined' && window.COST_MODEL_MONTHLY_ENGINE !== false,
-      periods: (refData && refData.periods) || [],
-      ramp: null,
-      seasonality: model.seasonalityProfile || null,
-      preGoLiveMonths: calcHeur.preGoLiveMonths,
-      dsoDays:           calcHeur.dsoDays,
-      dpoDays:           calcHeur.dpoDays,
-      laborPayableDays:  calcHeur.laborPayableDays,
-      startupLines: model.startupLines || [],
-      pricingBuckets: whatIfBucketsAfterDiscount,
-      project_id: model.id || 0,
-      _calcHeur: calcHeur,
-      marketLaborProfile: whatIfMarketProfile,
-      wageLoadByYear: null,
-    });
-
-    // Aggregate over the projection horizon
-    const projections = projResult.projections || [];
-    const totalRev = projections.reduce((s, y) => s + (y.revenue || 0), 0);
-    const totalOpex = projections.reduce((s, y) => s + (y.totalCost || 0), 0);
-    const totalEbitda = projections.reduce((s, y) => s + (y.ebitda || 0), 0);
-    const totalNI = projections.reduce((s, y) => s + (y.netIncome || 0), 0);
-    // Cum FCF — groupMonthlyToYearly now attaches a running `cumFcf` per year
-    // (post 2026-04-20 PM audit). Previously this field was absent and the
-    // KPI always read $0.
-    const lastCumFcf = projections.length
-      ? (projections[projections.length - 1].cumFcf ?? projections.reduce((s, y) => s + (y.freeCashFlow || 0), 0))
-      : 0;
-
-    // NPV — so the discount_rate_pct slider has a visible preview effect.
-    // Uses the built-in computeFinancialMetrics (same path Summary uses).
-    // Parity fix (2026-04-20 PM): pass equipmentCapital + annualDepreciation
-    // + taxRatePct + dso/dpo so the What-If baseline NPV matches the Summary
-    // NPV on the same project. Previously omitted, so the two screens read
-    // different NPVs for the unchanged baseline scenario.
-    const totalFtes = (model.laborLines || []).reduce((s, l) => {
-      if (!opHrs || opHrs <= 0) return s;
-      return s + ((l.annual_hours || 0) / opHrs);
-    }, 0);
-    let npv = 0;
-    try {
-      const metrics = calc.computeFinancialMetrics(projections, {
-        startupCapital:   summary.startupCapital || 0,
-        equipmentCapital: summary.equipmentCapital || 0,
-        annualDepreciation: (summary.equipmentAmort || 0) + (summary.startupAmort || 0),
-        discountRatePct: calcHeur.discountRatePct,
-        reinvestRatePct: calcHeur.reinvestRatePct || 8,
-        taxRatePct:      calcHeur.taxRatePct,
-        dsoDays:         calcHeur.dsoDays,
-        dpoDays:         calcHeur.dpoDays,
-        totalFtes,
-        fixedCost: (summary.facilityCost || 0) + (summary.overheadCost || 0) + (summary.startupAmort || 0),
-      });
-      npv = metrics.npv || 0;
-    } catch (metricsErr) {
-      // Metrics are defensive; a failure here shouldn't break the preview.
-      console.warn('[CM] preview metrics computation failed:', metricsErr);
-    }
-
-    return {
-      totalRev, totalOpex, totalEbitda, totalNI,
-      ebitdaMargin: totalRev > 0 ? (totalEbitda / totalRev * 100) : 0,
-      cumFcf: lastCumFcf,
-      npv,
-      // Expose per-year projections so the trajectory chart can render
-      // baseline vs scenario lines without a second compute pass.
-      projections,
-      calcHeur,
-    };
-  } catch (err) {
-    console.warn('[CM] what-if preview failed:', err);
-    return null;
-  }
-}
 
 /**
  * Per-slider isolated impact — re-runs the preview with an overlay that
@@ -9993,7 +9551,7 @@ function _computeWhatIfDriverImpacts(baseline) {
     k => whatIfTransient[k] !== '' && whatIfTransient[k] !== undefined,
   );
   for (const key of activeKeys) {
-    const iso = computeWhatIfPreview({ [key]: whatIfTransient[key] });
+    const iso = computeWhatIfPreview({ [key]: whatIfTransient[key] }, { model, refData, whatIfTransient, heuristicOverrides, currentScenario, currentScenarioSnapshots, currentMarketLaborProfile, scenarios });
     if (!iso) continue;
     out[key] = {
       dNI:       iso.totalNI       - baseline.totalNI,
@@ -10017,8 +9575,8 @@ function renderWhatIfStudio() {
   }
   // Compute BOTH baseline (empty overlay) and current-preview (with
   // transient overlay) so KPIs show Baseline | Scenario | Δ in-line.
-  const preview = computeWhatIfPreview();
-  const baseline = computeWhatIfPreview({});
+  const preview = computeWhatIfPreview(undefined, { model, refData, whatIfTransient, heuristicOverrides, currentScenario, currentScenarioSnapshots, currentMarketLaborProfile, scenarios });
+  const baseline = computeWhatIfPreview({}, { model, refData, whatIfTransient, heuristicOverrides, currentScenario, currentScenarioSnapshots, currentMarketLaborProfile, scenarios });
   const impacts = _computeWhatIfDriverImpacts(baseline);
 
   const groups = new Map();
@@ -10438,28 +9996,6 @@ function _esc(s) {
  * @param {string|undefined|null} uom
  * @returns {string}
  */
-function formatUomSingular(uom) {
-  const raw = String(uom || '').toLowerCase().trim();
-  if (!raw) return 'Order';
-  // Exact matches (plurals + common variants)
-  const map = {
-    'order': 'Order', 'orders': 'Order',
-    'each': 'Each', 'eaches': 'Each', 'unit': 'Unit', 'units': 'Unit',
-    'case': 'Case', 'cases': 'Case',
-    'pallet': 'Pallet', 'pallets': 'Pallet',
-    'carton': 'Carton', 'cartons': 'Carton',
-    'line': 'Line', 'lines': 'Line',
-    'pick': 'Pick', 'picks': 'Pick',
-    'sku': 'SKU', 'skus': 'SKU',
-    'hour': 'Hour', 'hours': 'Hour',
-    'trailer': 'Trailer', 'trailers': 'Trailer',
-    'shipment': 'Shipment', 'shipments': 'Shipment',
-  };
-  if (map[raw]) return map[raw];
-  // Fallback: strip trailing 's', title-case
-  const singular = raw.endsWith('s') ? raw.slice(0, -1) : raw;
-  return singular.charAt(0).toUpperCase() + singular.slice(1);
-}
 
 async function ensureLinkedDesignsLoaded() {
   if (!model?.id) return;
@@ -10935,15 +10471,6 @@ function syncDerivedTargetMargin() {
  * @param {Object} cmModel — the current cost model
  * @returns {Object} fallback bag for resolveCalcHeuristics
  */
-function _heurProjectFallbacks(cmModel) {
-  const fin = cmModel?.financial    || {};
-  const lc  = cmModel?.laborCosting || {};
-  return {
-    ...fin,
-    // Settings → Labor Factors → Overtime % (Bug A fix)
-    overtime: lc.overtimePct ?? fin.overtime,
-  };
-}
 
 // ============================================================
 // SPLIT-MONTH BILLING (2026-04-21)
@@ -10961,19 +10488,6 @@ function _heurProjectFallbacks(cmModel) {
  * @param {Object} cmModel  — the current cost model (we read contract_type + split fields)
  * @returns {Object} calcHeur, either unchanged or with `dsoDays` overridden
  */
-function applySplitMonthBilling(calcHeur, cmModel) {
-  if (!calcHeur || !cmModel) return calcHeur;
-  if (cmModel.projectDetails?.contractType !== 'split_month') return calcHeur;
-  const fixedPct = Math.max(0, Math.min(100, Number(cmModel.projectDetails?.splitBillingFixedPct ?? 40))) / 100;
-  const fixedDso = Math.max(0, Number(cmModel.projectDetails?.splitBillingFixedDsoDays ?? 15));
-  const varDso   = Math.max(0, Number(cmModel.projectDetails?.splitBillingVariableDsoDays ?? 45));
-  const weightedDso = fixedPct * fixedDso + (1 - fixedPct) * varDso;
-  return {
-    ...calcHeur,
-    dsoDays: weightedDso,
-    _splitMonthApplied: { fixedPct: fixedPct * 100, fixedDso, varDso, weightedDso },
-  };
-}
 
 // ============================================================
 // OVERRIDE AUDIT TRAIL (2026-04-21)
