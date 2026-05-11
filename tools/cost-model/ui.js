@@ -17,7 +17,7 @@ import * as api from './api.js?v=20260504-auth1';
 import * as scenarios from './calc.scenarios.js?v=20260430-pm-otfix2';
 import { renderHeuristicsPanel } from './render-heuristics-panel.js?v=20260511-port8';
 import { renderSensitivityCard } from './render-sensitivity-card.js?v=20260511-port8';
-import { renderImplementation } from './render-implementation.js?v=20260511-port8';
+import { renderImplementation } from './render-implementation.js?v=20260511-port9';
 import * as monthlyCalc from './calc.monthly.js?v=20260430-gp-fix2';
 import * as channelCalc from './calc.channels.js?v=20260429-vol13';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
@@ -3054,7 +3054,7 @@ function renderSection() {
     vas: renderVas,
     financial: renderFinancial,
     startup: renderStartup,
-    implementation: () => renderImplementation({ model, calc, createEmptyModel, escapeAttr, escapeHtml, renderImplPhaseStepperContent, renderImplRampPanel }),
+    implementation: () => renderImplementation({ model, calc, createEmptyModel, escapeAttr, escapeHtml, renderImplPhaseStepperContent, renderImplRampPanel, activeImplPhase }),
     pricing: renderPricing,
     summary: renderSummary,
     timeline: renderTimeline,

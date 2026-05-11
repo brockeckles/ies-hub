@@ -14,7 +14,7 @@
  */
 
 export function renderImplementation(opts) {
-  const { model, calc, createEmptyModel, escapeAttr, escapeHtml, renderImplPhaseStepperContent, renderImplRampPanel } = opts || {};
+  const { model, calc, createEmptyModel, escapeAttr, escapeHtml, renderImplPhaseStepperContent, renderImplRampPanel, activeImplPhase } = opts || {};
   // Lazy-init for legacy models that pre-date the section
   if (!model.implementationTimeline) {
     model.implementationTimeline = createEmptyModel().implementationTimeline;
