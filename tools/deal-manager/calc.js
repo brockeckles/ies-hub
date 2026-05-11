@@ -795,3 +795,37 @@ export function getDosActivityTemplates(stageNumber) {
 
   return templates[stageNumber] || [];
 }
+
+// ============================================================
+// runScenario — calc-as-service wrapper (port-readiness S8)
+// ============================================================
+//
+// Standardized entry point for external callers (HTTP / MCP / AI agents).
+// Aggregates site-level financials into a deal roll-up.
+export const ENGINE_VERSION = '1.0.0';
+
+/**
+ * Run a Multi-Site Analyzer scenario.
+ * @param {{
+ *   sites: import('./types.js?v=20260418-sL').Site[],
+ *   contractTermYears?: number,
+ *   ebitdaOverheadPct?: number,
+ *   discountRate?: number,
+ * }} params
+ * @returns {{ ok: boolean, version: string, result: any, errors: string[] }}
+ */
+export function runScenario(params) {
+  if (params == null || typeof params !== 'object') params = {};
+  const errors = [];
+  if (!Array.isArray(params.sites)) errors.push('sites must be an array');
+  if (errors.length) return { ok: false, version: ENGINE_VERSION, result: null, errors };
+  const result = computeDealFinancials(
+    params.sites,
+    params.contractTermYears || DEFAULT_CONTRACT_YEARS,
+    {
+      ebitdaOverheadPct: params.ebitdaOverheadPct,
+      discountRate: params.discountRate,
+    }
+  );
+  return { ok: true, version: ENGINE_VERSION, result, errors: [] };
+}

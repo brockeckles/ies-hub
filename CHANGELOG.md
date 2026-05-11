@@ -5,6 +5,17 @@ in parentheses where relevant for quick reference.
 
 ## 2026-05-11 — Port-readiness sprint (in progress)
 
+- **S8: positioning for AI/MCP future.** (1) New
+  `deal_outcomes` Supabase migration (won-deal learning loop schema —
+  populated manually for first 6 months until capture UI ships, plus an
+  enriched view with bid-vs-actual variance %). (2) Added
+  `runScenario(params)` calc-as-service wrappers to fleet-modeler,
+  center-of-gravity, deal-manager, and network-opt calc.js — standardized
+  `{ ok, version, result, errors }` contract that never throws.
+  Architecture prep so the future Anthropic-API-backed MCP server has a
+  cheap surface to expose. Cost Model + WSC deferred (input shape is
+  more complex; track in port-readiness assessment "Position" section).
+  +1 new test file (test-run-scenario.mjs, 19 assertions).
 - **S7: smoke tests for 4 untested engines + npm test runner.** Added
   smoke tests for NetOpt, Fleet Modeler, Center of Gravity, and Multi-Site
   Analyzer — the 4 engines that previously shipped with **zero** test

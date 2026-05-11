@@ -1690,3 +1690,43 @@ export function validateScenarioInputs(facilities, demands) {
   }
   return { ok: errors.length === 0, errors, warnings };
 }
+
+// ============================================================
+// runScenario — calc-as-service wrapper (port-readiness S8)
+// ============================================================
+//
+// Standardized entry point for external callers (HTTP / MCP / AI agents).
+// Assigns demands to facilities under the given mode mix + SLA + rate card.
+export const ENGINE_VERSION = '1.0.0';
+
+/**
+ * Run a Network Optimization scenario (single-shot demand assignment).
+ * For a full Optimize-Network sweep (multi-facility comparison), the UI
+ * orchestrates multiple runScenario() calls + the assignDemand engine.
+ *
+ * @param {{
+ *   facilities: Array<{ id: string, lat: number, lng: number, isOpen?: boolean, capacity?: number }>,
+ *   demands: Array<{ id: string, lat: number, lng: number, annualDemand: number, avgWeight?: number, nmfcClass?: number, maxDays?: number }>,
+ *   modeMix: { tlPct: number, ltlPct: number, parcelPct: number },
+ *   rateCard?: any,
+ *   serviceConfig?: any,
+ * }} params
+ * @returns {{ ok: boolean, version: string, result: any, errors: string[] }}
+ */
+export function runScenario(params) {
+  if (params == null || typeof params !== 'object') params = {};
+  const errors = [];
+  if (!Array.isArray(params.facilities)) errors.push('facilities must be an array');
+  if (!Array.isArray(params.demands)) errors.push('demands must be an array');
+  if (!params.modeMix || typeof params.modeMix !== 'object') errors.push('modeMix must be an object with tlPct/ltlPct/parcelPct');
+  if (errors.length) return { ok: false, version: ENGINE_VERSION, result: null, errors };
+  const assignments = assignDemand(
+    params.facilities,
+    params.demands,
+    params.modeMix,
+    params.rateCard || DEFAULT_RATES,
+    params.serviceConfig || DEFAULT_SERVICE
+  );
+  const totalCost = assignments.reduce((s, a) => s + (a.cost || 0), 0);
+  return { ok: true, version: ENGINE_VERSION, result: { assignments, totalCost }, errors: [] };
+}

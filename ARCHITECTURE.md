@@ -197,6 +197,44 @@ The calc side already split this way years ago (`calc.channels.js`,
 When adding a new Cost Model section, prefer creating a peer `*-ui.js`
 module over extending `ui.js` further.
 
+## 7.5 — Calc-as-service `runScenario` wrappers
+
+As of 2026-05-11 (port-readiness S8), four design-tool engines expose a
+standardized `runScenario(params)` export alongside their existing
+function-level API:
+
+| Tool                | Wrapper location                       |
+|---------------------|----------------------------------------|
+| Fleet Modeler       | `tools/fleet-modeler/calc.js`          |
+| Center of Gravity   | `tools/center-of-gravity/calc.js`      |
+| Multi-Site Analyzer | `tools/deal-manager/calc.js`           |
+| Network Optimization| `tools/network-opt/calc.js`            |
+
+Contract: `runScenario(params) -> { ok, version, result, errors }`. Never
+throws. Validates input shape, then delegates to the existing engine
+function. Each module also exports `ENGINE_VERSION` (a semver string).
+
+This is the architectural prep work for the future calc-as-service /
+MCP-server / AI-callable pattern. When Anthropic API access lands inside
+the firewall, these wrappers become the cheap surface to expose. Until
+then, they exist as a no-op layer (zero behavior change for the UI).
+
+Cost Model and Warehouse Sizing do not yet have `runScenario` wrappers
+because their inputs are far more complex (full multi-section CM model,
+WSC throughput + override mode). Add when needed — design notes in the
+2026-05-11 port-readiness assessment under "Position".
+
+## 7.6 — Won-deal learning loop (`deal_outcomes`)
+
+Migration `20260511180000_deal_outcomes_won_lost_loop.sql` adds a table to
+capture won/lost outcomes + Y1 actuals per deal. Schema-first by design —
+the capture UI ships later; for the first 6 months an admin user
+populates rows manually via Supabase Studio or a thin form.
+
+A `public.deal_outcomes_enriched` view pre-computes bid-vs-actual variance
+percentages, which is the input shape the future calibration coach + the
+benchmark library both consume.
+
 ## 8. Testing
 
 Pure Node ES-module tests live at the repo root as `test-*.mjs`. They are

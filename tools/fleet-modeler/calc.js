@@ -819,3 +819,37 @@ export function formatCpm(cpm) {
 export function formatPct(pct) {
   return (pct || 0).toFixed(1) + '%';
 }
+
+// ============================================================
+// runScenario — calc-as-service wrapper (port-readiness S8)
+// ============================================================
+//
+// Standardized entry point so external callers (HTTP service, MCP server,
+// in-process AI agents) can drive the Fleet engine through a single API
+// shape. Returns { ok, version, result, errors } — no throwing.
+export const ENGINE_VERSION = '1.0.0';
+
+/**
+ * Run a Fleet Modeler scenario.
+ * @param {{
+ *   lanes: import('./types.js?v=20260418-sM').Lane[],
+ *   vehicles?: import('./types.js?v=20260418-sM').VehicleSpec[],
+ *   config?: import('./types.js?v=20260418-sM').FleetConfig,
+ *   rateDeck?: any,
+ * }} params
+ * @returns {{ ok: boolean, version: string, result: any, errors: string[] }}
+ */
+export function runScenario(params) {
+  if (params == null || typeof params !== 'object') params = {};
+  const errors = [];
+  if (!Array.isArray(params.lanes)) errors.push('lanes must be an array');
+  if (params.vehicles && !Array.isArray(params.vehicles)) errors.push('vehicles must be an array when provided');
+  if (errors.length) return { ok: false, version: ENGINE_VERSION, result: null, errors };
+  const result = analyzeFleet(
+    params.lanes,
+    params.vehicles || DEFAULT_VEHICLES,
+    params.config || DEFAULT_CONFIG,
+    params.rateDeck
+  );
+  return { ok: true, version: ENGINE_VERSION, result, errors: [] };
+}

@@ -1436,3 +1436,50 @@ export function formatMiles(miles) {
 export function formatLatLng(lat, lng) {
   return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
 }
+
+// ============================================================
+// runScenario — calc-as-service wrapper (port-readiness S8)
+// ============================================================
+//
+// Standardized entry point for external callers (HTTP / MCP / AI agents).
+// Computes COG (k=1) or k-means clusters (k>=2) + transport cost estimate.
+export const ENGINE_VERSION = '1.0.0';
+
+/**
+ * Run a Center of Gravity scenario.
+ * @param {{
+ *   points: Array<{ id: string, lat: number, lng: number, weight: number }>,
+ *   k?: number,
+ *   maxIter?: number,
+ *   costPerMile?: number,
+ *   unitsPerTruck?: number,
+ * }} params
+ * @returns {{ ok: boolean, version: string, result: any, errors: string[] }}
+ */
+export function runScenario(params) {
+  if (params == null || typeof params !== 'object') params = {};
+  const errors = [];
+  if (!Array.isArray(params.points)) errors.push('points must be an array');
+  else if (params.points.length === 0) errors.push('points must be non-empty');
+  if (params.k != null && (!Number.isFinite(params.k) || params.k < 1)) errors.push('k must be a positive integer when provided');
+  if (errors.length) return { ok: false, version: ENGINE_VERSION, result: null, errors };
+  const k = Math.max(1, Math.min(Number(params.k) || 1, params.points.length));
+  const cogResult = k === 1 ? {
+    centers: [computeCog(params.points)],
+    assignments: params.points.map(p => ({
+      pointId: p.id, clusterId: 0,
+      distanceToCenter: haversine(p.lat, p.lng,
+        params.points.length ? computeCog(params.points).lat : 0,
+        params.points.length ? computeCog(params.points).lng : 0)
+    })),
+    iterations: 0,
+    totalWeightedDistance: 0,
+  } : kMeansCog(params.points, k, Number(params.maxIter) || 100);
+  const cost = estimateTransportCost(
+    cogResult,
+    params.points,
+    Number(params.costPerMile) || 2.85,
+    Number(params.unitsPerTruck) || 25000
+  );
+  return { ok: true, version: ENGINE_VERSION, result: { ...cogResult, transportCost: cost }, errors: [] };
+}
