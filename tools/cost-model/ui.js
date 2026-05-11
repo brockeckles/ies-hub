@@ -1033,22 +1033,6 @@ function reconstructModelFromFlatRow(row) {
   };
 }
 
-/**
- * Small non-blocking toast (replaces alert() which freezes the tab on our live URL).
- */
-function showToast(message, level) {
-  if (!rootEl) return;
-  const color = level === 'error' ? '#dc2626' : level === 'info' ? '#2563eb' : '#16a34a';
-  const bg = level === 'error' ? '#fef2f2' : level === 'info' ? '#eff6ff' : '#f0fdf4';
-  const existing = document.getElementById('cm-toast');
-  if (existing) existing.remove();
-  const el = document.createElement('div');
-  el.id = 'cm-toast';
-  el.style.cssText = `position:fixed;bottom:24px;right:24px;padding:12px 16px;border-radius: 10px;border:1px solid ${color};background:${bg};color:${color};font-size:13px;font-weight:600;z-index:9999;max-width:400px;box-shadow:0 4px 12px rgba(0,0,0,.12);`;
-  el.textContent = message;
-  document.body.appendChild(el);
-  setTimeout(() => { if (el.parentNode) el.remove(); }, 5000);
-}
 
 function wireEditorEvents() {
   if (!rootEl) return;
