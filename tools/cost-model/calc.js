@@ -282,20 +282,85 @@ export function wageLoadForYear(wageLoadByYear, year, fallback = 0.30) {
 }
 
 /**
- * Compound wage escalation: `baseWage × (1 + escPct)^(year - 1)`. Year 1
- * returns base (no escalation). Neg. escPct is clamped to 0; escPct is
- * expected as a FRACTION (0.03, not 3).
+ * Multiplicative escalation factor: `(1 + ratePct/100)^(year - 1)`. Year 1
+ * returns 1.0 (no escalation). Negative rates are clamped to 0 (escalation
+ * never reduces base; for a discount factor, callers should handle that
+ * separately). Expects rate as a PERCENT (5, not 0.05) — matches the
+ * shape of `ch.laborEscPct` / `ch.costEscPct` etc. in the Cost Model
+ * heuristics object.
+ *
+ * Single source of truth for the `baseValue × (1 + rate)^(yr − 1)` pattern
+ * that previously lived inline at 5 sites in cost-model/ui.js around
+ * line 2063 (S13 relocation 2026-05-11).
+ *
+ * @param {number} ratePct — percent (5 = 5%, not 0.05)
+ * @param {number} year — 1-based
+ * @returns {number}
+ */
+export function escalationFactor(ratePct, year) {
+  const r = Math.max(0, Number(ratePct) || 0) / 100;
+  const y = Math.max(1, Number(year) || 1);
+  return Math.pow(1 + r, y - 1);
+}
+
+/**
+ * Cumulative escalation from base (additive form): `(1 + ratePct/100)^(year - 1) - 1`.
+ * Year 1 returns 0 (no escalation yet). Useful for human-display strings like
+ * "compounded 9.3% by Y4". Negative rates are clamped to 0.
+ *
+ * @param {number} ratePct — percent (5 = 5%, not 0.05)
+ * @param {number} year — 1-based
+ * @returns {number} fractional cumulative escalation (0.0926 for 3%/yr by Y4)
+ */
+export function cumulativeEscalation(ratePct, year) {
+  return escalationFactor(ratePct, year) - 1;
+}
+
+/**
+ * Compound wage escalation: `baseWage × (1 + escFrac)^(year - 1)`. Year 1
+ * returns base (no escalation). Neg. escFrac is clamped to 0; escFrac is
+ * expected as a FRACTION (0.03, not 3) — different from the new
+ * `escalationFactor` helper which takes a percent. Kept as a fraction-shaped
+ * convenience for the existing labor-line callers that already had the
+ * fraction form.
  *
  * @param {number} baseWage
  * @param {number} year — 1-based
- * @param {number} wageEscFrac — fraction
+ * @param {number} wageEscFrac — fraction (0.03 = 3%)
  * @returns {number}
  */
 export function escalatedWage(baseWage, year, wageEscFrac) {
   const w = Number(baseWage) || 0;
-  const y = Math.max(1, Number(year) || 1);
-  const e = Math.max(0, Number(wageEscFrac) || 0);
-  return w * Math.pow(1 + e, y - 1);
+  const escPct = Math.max(0, Number(wageEscFrac) || 0) * 100;
+  return w * escalationFactor(escPct, year);
+}
+
+/**
+ * Sum of the 5 benefit-load percentage components on a LaborConfig.
+ * Pure: takes the lc object, returns total percent. Used by the labor
+ * editor's "benefits roll-up" KPI and by `defaultBurdenPct` auto-calc.
+ *
+ * Relocated from cost-model/ui.js → calc.js 2026-05-11 (S13) — pure
+ * math, no DOM dependency, deserves to live with the engine.
+ *
+ * @param {{
+ *   benefitLoadPayrollTaxesPct?: number,
+ *   benefitLoadWorkersCompPct?: number,
+ *   benefitLoadHealthWelfarePct?: number,
+ *   benefitLoadRetirementPct?: number,
+ *   benefitLoadOtherPct?: number,
+ * } | null | undefined} lc
+ * @returns {number} sum in percent (e.g. 28.5)
+ */
+export function benefitLoadTotal(lc) {
+  if (!lc) return 0;
+  return (
+    (Number(lc.benefitLoadPayrollTaxesPct)  || 0) +
+    (Number(lc.benefitLoadWorkersCompPct)   || 0) +
+    (Number(lc.benefitLoadHealthWelfarePct) || 0) +
+    (Number(lc.benefitLoadRetirementPct)    || 0) +
+    (Number(lc.benefitLoadOtherPct)         || 0)
+  );
 }
 
 /**

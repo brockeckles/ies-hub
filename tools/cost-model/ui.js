@@ -2059,13 +2059,12 @@ function getCellProvenance(rowKey, year) {
   const lineage = Array.isArray(ctx.channelLineage) ? ctx.channelLineage : [];
   const isMultiChannel = lineage.filter(c => !c.isHidden && !c.isReverse).length > 1;
 
-  // Cumulative escalation factor for human display ("compounded 9.3% by Y4")
-  const compound = (rate, n) => Math.pow(1 + rate, n - 1) - 1;
-  const volMult = Math.pow(1 + (ch.volGrowthPct || 0) / 100, year - 1);
-  const laborMult = Math.pow(1 + (ch.laborEscPct || 0) / 100, year - 1);
-  const facilityMult = Math.pow(1 + ((ch.facilityEscPct ?? ch.costEscPct) || 0) / 100, year - 1);
-  const equipmentMult = Math.pow(1 + ((ch.equipmentEscPct ?? ch.costEscPct) || 0) / 100, year - 1);
-  const costMult = Math.pow(1 + (ch.costEscPct || 0) / 100, year - 1);
+  // S13: escalation helpers live in calc.js (escalationFactor / cumulativeEscalation).
+  const volMult       = calc.escalationFactor(ch.volGrowthPct || 0,                              year);
+  const laborMult     = calc.escalationFactor(ch.laborEscPct   || 0,                              year);
+  const facilityMult  = calc.escalationFactor((ch.facilityEscPct  ?? ch.costEscPct) || 0,         year);
+  const equipmentMult = calc.escalationFactor((ch.equipmentEscPct ?? ch.costEscPct) || 0,         year);
+  const costMult      = calc.escalationFactor(ch.costEscPct    || 0,                              year);
 
   switch (rowKey) {
     case 'orders': {
@@ -2085,7 +2084,7 @@ function getCellProvenance(rowKey, year) {
           { label: baseLabel, value: _fmtNum(ctx.baseOrders), source: baseSource },
           ...channelRows,
           { label: 'Volume Growth', value: ((ch.volGrowthPct || 0).toFixed(1) + '%/yr'), source: 'Heuristics' },
-          { label: 'Cumulative growth', value: _fmtPct(compound((ch.volGrowthPct || 0) / 100, year)), source: `Compounded over ${year - 1} year(s)` },
+          { label: 'Cumulative growth', value: _fmtPct(calc.cumulativeEscalation(ch.volGrowthPct || 0, year)), source: `Compounded over ${year - 1} year(s)` },
         ],
         notes: isMultiChannel ? 'Orders aggregate across all non-reverse channels. Each channel\'s own primary volume converts into orders via its UOM conversions; per-channel rows above show those contributions.' : undefined,
       };
@@ -2122,7 +2121,7 @@ function getCellProvenance(rowKey, year) {
         inputs: [
           { label: 'Base Facility Cost', value: _fmtMoney(s.facilityCost), source: 'Facility rent + utilities + TI amort + property tax' },
           { label: 'Facility Escalation', value: (((ch.facilityEscPct ?? ch.costEscPct) || 0).toFixed(1) + '%/yr'), source: ch.facilityEscPct != null ? 'Heuristics → Facility Esc' : 'Heuristics → Cost Esc (default)' },
-          { label: 'Cumulative escalation', value: _fmtPct(compound(((ch.facilityEscPct ?? ch.costEscPct) || 0) / 100, year)), source: `Compounded over ${year - 1} year(s)` },
+          { label: 'Cumulative escalation', value: _fmtPct(calc.cumulativeEscalation((ch.facilityEscPct ?? ch.costEscPct) || 0, year)), source: `Compounded over ${year - 1} year(s)` },
         ],
         notes: 'No volume escalator — facility cost is structurally fixed. Add square footage or change market rate to move the base.',
       };
@@ -2135,7 +2134,7 @@ function getCellProvenance(rowKey, year) {
         inputs: [
           { label: 'Base Equipment Cost', value: _fmtMoney(s.equipmentCost), source: 'Sum of equipmentLines (own + rent + IT + 3-way)' },
           { label: 'Equipment Escalation', value: (((ch.equipmentEscPct ?? ch.costEscPct) || 0).toFixed(1) + '%/yr'), source: ch.equipmentEscPct != null ? 'Heuristics → Equipment Esc' : 'Heuristics → Cost Esc (default)' },
-          { label: 'Cumulative escalation', value: _fmtPct(compound(((ch.equipmentEscPct ?? ch.costEscPct) || 0) / 100, year)), source: `Compounded over ${year - 1} year(s)` },
+          { label: 'Cumulative escalation', value: _fmtPct(calc.cumulativeEscalation((ch.equipmentEscPct ?? ch.costEscPct) || 0, year)), source: `Compounded over ${year - 1} year(s)` },
         ],
       };
 
@@ -2150,7 +2149,7 @@ function getCellProvenance(rowKey, year) {
           ...(channelRows.length ? [{ label: 'Volume drivers (units)', value: '', source: 'VAS scales with cross-channel physical units' }] : []),
           ...channelRows,
           { label: 'Volume Growth', value: ((ch.volGrowthPct || 0).toFixed(1) + '%/yr'), source: 'Heuristics' },
-          { label: 'Cumulative growth', value: _fmtPct(compound((ch.volGrowthPct || 0) / 100, year)), source: `Compounded over ${year - 1} year(s)` },
+          { label: 'Cumulative growth', value: _fmtPct(calc.cumulativeEscalation(ch.volGrowthPct || 0, year)), source: `Compounded over ${year - 1} year(s)` },
         ],
         notes: 'VAS scales with volume, not cost-of-living. No escalation rate applied.',
       };
@@ -2162,7 +2161,7 @@ function getCellProvenance(rowKey, year) {
       const inputs = [
         { label: 'Base Overhead Cost', value: _fmtMoney(s.overheadCost), source: 'Sum of overheadLines (annualized)' },
         { label: 'Cost Escalation', value: ((ch.costEscPct || 0).toFixed(1) + '%/yr'), source: 'Heuristics' },
-        { label: 'Cumulative escalation', value: _fmtPct(compound((ch.costEscPct || 0) / 100, year)), source: `Compounded over ${year - 1} year(s)` },
+        { label: 'Cumulative escalation', value: _fmtPct(calc.cumulativeEscalation(ch.costEscPct || 0, year)), source: `Compounded over ${year - 1} year(s)` },
       ];
       if (p.sgaOverlay && p.sgaOverlay > 0) {
         inputs.push({ label: 'SG&A Overlay', value: _fmtMoney(p.sgaOverlay), source: 'Financial → SG&A Overlay %' });
@@ -4321,7 +4320,7 @@ function renderShifts() {
       lc.benefitLoadOtherPct         = STD.other;
     }
   }
-  const benefitLoadTotalPct = computeBenefitLoadTotal(lc);
+  const benefitLoadTotalPct = calc.benefitLoadTotal(lc);
   // Total drives calc.defaultBurdenPct — the value the calc engine consumes
   lc.defaultBurdenPct = Math.round(benefitLoadTotalPct * 100) / 100;
   const positions = Array.isArray(s.positions) ? s.positions : [];
@@ -8202,7 +8201,7 @@ function bindSectionEvents(section, container) {
       // section so both update (cheap — Labor Factors is ~1 card + a table).
       if (input.dataset.recomputeBenefitLoad === 'true') {
         const lc = model.laborCosting || (model.laborCosting = {});
-        lc.defaultBurdenPct = Math.round(computeBenefitLoadTotal(lc) * 100) / 100;
+        lc.defaultBurdenPct = Math.round(calc.benefitLoadTotal(lc) * 100) / 100;
         refreshNavCompletion();
         renderSection();
         return;
@@ -13244,17 +13243,6 @@ function buildEnrichedPricingBuckets(summary, marginFrac, opHrs, contractYears) 
  * consumes as the employer-side load. Brock 2026-04-21 pm — segments
  * the prior flat Wage Load into per-line-itemable buckets.
  */
-function computeBenefitLoadTotal(lc) {
-  if (!lc) return 0;
-  return (
-    (Number(lc.benefitLoadPayrollTaxesPct)  || 0) +
-    (Number(lc.benefitLoadWorkersCompPct)   || 0) +
-    (Number(lc.benefitLoadHealthWelfarePct) || 0) +
-    (Number(lc.benefitLoadRetirementPct)    || 0) +
-    (Number(lc.benefitLoadOtherPct)         || 0)
-  );
-}
-
 /**
  * Full pricing snapshot for Summary — returns both the enriched buckets
  * (I-02) and the raw bucket costs including the '_unassigned' pseudo-bucket
