@@ -5,6 +5,13 @@ in parentheses where relevant for quick reference.
 
 ## 2026-05-11 — Port-readiness sprint (in progress)
 
+- **S7: smoke tests for 4 untested engines + npm test runner.** Added
+  smoke tests for NetOpt, Fleet Modeler, Center of Gravity, and Multi-Site
+  Analyzer — the 4 engines that previously shipped with **zero** test
+  coverage despite ~9,500 LOC of optimization math. Each test covers
+  happy paths, edge cases, and key invariants (121 assertions across the
+  4 new files). Wrote `scripts/run-tests.mjs` + minimal `package.json` so
+  `npm test` runs the full suite (51 files, ~17s). Suite now: 51/51 files.
 - **S3: bug fixes / token normalize.** Killed 4 token-fallback drift
   classes (`var(--ies-orange, #d97706|#f97316|#b8860b)` and
   `var(--ies-navy, #001f3f|#0F1B2E|#0a1628)`) — 30 fallbacks normalized to

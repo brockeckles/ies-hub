@@ -1,0 +1,17 @@
+{
+  "name": "ies-hub",
+  "version": "3.0.0",
+  "description": "IES Intelligence Hub — internal solutions-design platform for the GXO IES team. Vanilla JS + ES modules, no build step.",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node scripts/run-tests.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/brockeckles/ies-hub.git"
+  }
+}
