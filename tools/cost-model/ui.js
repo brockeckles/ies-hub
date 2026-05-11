@@ -7,7 +7,6 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import { state } from '../../shared/state.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260419-tC';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { auth } from '../../shared/auth.js?v=20260504-auth1';
@@ -1202,7 +1201,6 @@ export function unmount() {
   bus.clear('netopt:push-to-cm');
   bus.clear('wsc:push-to-cm');
   if (isDirty) {
-    console.log('[CM] Unmounting with unsaved changes');
   }
   rootEl = null;
   bus.emit('cm:unmounted');
@@ -3074,7 +3072,6 @@ function _cmExtraStyles() {
 
 function navigateSection(key) {
   activeSection = key;
-  state.set('costModel.activeSection', key);
 
   // Update legacy sidebar-drawer highlighting (when sidebar is open)
   rootEl?.querySelectorAll('.cm-nav-item').forEach(item => {
@@ -9124,7 +9121,6 @@ function bindSectionEvents(section, container) {
       try {
         const email = (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('ies_user_email') : null);
         const result = await api.approveScenarioRpc(currentScenario.id, email);
-        console.log('[CM] approve result:', result);
         // Write a revision row via the client so the log captures this event
         try {
           const prev = await api.getLatestRevisionNumber(currentScenario.id);
@@ -9342,7 +9338,6 @@ async function openCompareModal(opts = {}) {
         for (const p of needsRegen) {
           try {
             const result = await regenSiblingProjections(p.projectId);
-            console.log('[CM] regen ok for project', p.projectId, result?.wrote);
           } catch (regenErr) {
             console.error('[CM] regen failed for project', p.projectId, regenErr);
             showToast(`Could not regen scenario ${p.scenarioId}: ${regenErr?.message || regenErr}`, 'warning');
@@ -11220,7 +11215,6 @@ function _launchToTool(target) {
     const payload = api.buildWscLaunchPayload(model);
     try { sessionStorage.setItem('cm_pending_push', JSON.stringify(payload)); } catch {}
     bus.emit('cm:push-to-wsc', payload); // fire even though listener may not be mounted yet — sessionStorage covers the gap
-    state.set('nav.tool', 'warehouse-sizing');
     window.location.hash = '#designtools/warehouse-sizing';
     return;
   }
@@ -11228,7 +11222,6 @@ function _launchToTool(target) {
     const payload = api.buildNetOptLaunchPayload(model);
     try { sessionStorage.setItem('cm_pending_netopt_push', JSON.stringify(payload)); } catch {}
     bus.emit('cm:push-to-netopt', payload);
-    state.set('nav.tool', 'network-opt');
     window.location.hash = '#designtools/network-opt';
     return;
   }
@@ -12646,7 +12639,6 @@ function handleMostPush(payload) {
   updateValidation();
 
   bus.emit('cm:labor-updated', { source: 'most', lineCount: mostLines.length });
-  console.log(`[CM] Received ${mostLines.length} labor lines from MOST`);
 }
 
 // ============================================================
@@ -12696,7 +12688,6 @@ function handleWscPush(payload) {
   }
 
   bus.emit('cm:facility-updated', { source: 'wsc' });
-  console.log('[CM] Received facility data from WSC:', payload);
 }
 
 // ============================================================
@@ -12758,7 +12749,6 @@ function handleNetOptPush(payload) {
     demand,
     transportCost: model.netoptBenchmark.transportCost,
   });
-  console.log('[CM] Received NetOpt scenario:', model.netoptBenchmark);
 }
 
 // ============================================================

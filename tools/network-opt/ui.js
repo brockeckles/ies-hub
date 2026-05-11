@@ -8,7 +8,6 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import { state } from '../../shared/state.js?v=20260418-sM';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sM';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260430-na-dot';
@@ -301,7 +300,6 @@ function applyCmHandoff(payload) {
     _refreshTopChrome?.();
     refreshNoHeaderKpis?.();
   }
-  console.log('[NetOpt] Received CM handoff, parent_cm_id=' + activeParentCmId);
 }
 
 function applyCogHandoff(payload) {
@@ -325,7 +323,6 @@ function applyCogHandoff(payload) {
   if (rootEl?.querySelector('#no-facilities-panel')) {
     renderFacilities(rootEl);
   }
-  console.log(`[NetOpt] Received ${candidates.length} facility candidates from COG`);
 }
 
 async function renderLanding() {

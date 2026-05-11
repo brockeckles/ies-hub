@@ -57,7 +57,6 @@
  */
 
 import { db } from './supabase.js?v=20260429-demo-s3';
-import { state } from './state.js?v=20260418-sK';
 import { bus } from './event-bus.js?v=20260418-sK';
 
 /** Cached session + user — source of truth is supabase.auth.getSession(). */
@@ -134,7 +133,6 @@ async function bootstrapSession() {
     _currentUser = data?.session?.user || null;
 
     if (_currentSession && _currentUser) {
-      state.set('user', shapeUser(_currentUser));
       mirrorIdentityToLegacy(_currentUser);
     }
 
@@ -168,7 +166,6 @@ async function bootstrapSession() {
         // becomes a real signed-in session. Clear the recovery flag so the
         // app can proceed to normal auth state.
         if (evt === 'USER_UPDATED' && _recoveryMode) _recoveryMode = false;
-        state.set('user', shapeUser(session.user));
         mirrorIdentityToLegacy(session.user);
         if (evt === 'SIGNED_IN') bus.emit('auth:login', { mode: 'password', email: session.user.email, id: session.user.id });
       } else if (evt === 'SIGNED_OUT') {
@@ -177,7 +174,6 @@ async function bootstrapSession() {
         // local logout() call), make sure role cache is also cleared here.
         _currentRole = null;
         _roleLoaded = false;
-        state.set('user', null);
         mirrorIdentityToLegacy(null);
         bus.emit('auth:logout');
       }
@@ -764,7 +760,6 @@ async function logout() {
   _currentRole = null;
   _roleLoaded = false;
   mirrorIdentityToLegacy(null);
-  state.set('user', null);
   bus.emit('auth:logout');
 }
 

@@ -1,303 +1,35 @@
 /**
  * IES Hub v3 — Tool Frame Helpers
  *
- * Shared primitives that every Design Tool uses so their top chrome
- * (back link + title + status chips + tab strip + primary run button)
- * renders identically. Domain inputs + visualization centers remain
- * tool-specific.
- *
- * Usage:
- *   import { renderToolHeader, renderInputGroup, bindPrimaryActionShortcut } from '../../shared/tool-frame.js?v=20260418-sK';
- *
- *   el.innerHTML = `
- *     <div class="hub-content-inner" style="padding:0;display:flex;flex-direction:column;height:100%;">
- *       ${renderToolHeader({
- *         toolName: 'Network Optimizer',
- *         toolKey: 'netopt',
- *         backAction: 'netopt-back',
- *         tabs: [...],
- *         activeTab: activeView,
- *         statusChips: [{ label: 'Stand-alone', kind: 'standalone' }],
- *         primaryAction: { label: 'Run Scenario', action: 'run', icon: '▶' },
- *       })}
- *       <div id="tool-body" style="flex:1;overflow:hidden;"></div>
- *     </div>
- *   `;
- *   bindPrimaryActionShortcut(el, 'run');
+ * Shared primitives for the phase stepper rendered above the Cost Model
+ * scope-structure-solution-output-analysis chrome. The broader header/tab
+ * primitives that used to live here (`renderToolHeader`, `renderInputGroup`,
+ * `renderResultsShelf`, etc.) were superseded by `shared/tool-chrome.js`
+ * and dropped 2026-05-11 as part of the port-readiness cleanup.
  *
  * @module shared/tool-frame
  */
 
 /**
- * @typedef {Object} ToolTab
+ * @typedef {Object} StepperPhase
  * @property {string} key
  * @property {string} label
- * @property {string} [title]
+ * @property {string} [sub]
+ * @property {number} [num]
+ * @property {'pending'|'active'|'complete'} [status]
  */
 
-/**
- * @typedef {Object} StatusChip
- * @property {string} label
- * @property {'linked'|'standalone'|'saved'|'draft'|'default'} [kind]
- * @property {boolean} [dot]
- * @property {string} [title]
- */
-
-/**
- * @typedef {Object} ActionBtn
- * @property {string} label
- * @property {string} action   data-action attribute value
- * @property {string} [icon]
- * @property {string} [title]
- * @property {boolean} [primary]
- * @property {'dirty'|'clean'} [state]   For primary Run buttons. 'clean' renders
- *   a muted outline "✓ Results current" variant — still clickable to force
- *   a re-run. 'dirty' (default) is the orange Run button. Tools pass 'clean'
- *   after a successful run when inputs haven't changed since, and flip back
- *   to 'dirty' on the next tracked input change.
- * @property {string} [cleanLabel]       Override for the clean-state label.
- *   Defaults to "✓ Results current".
- * @property {string} [cleanTitle]       Override for the clean-state tooltip.
- */
-
-/**
- * @typedef {Object} ToolHeaderOpts
- * @property {string} toolName
- * @property {string} [toolKey]            short id used for data-tool attr
- * @property {string} [backAction]         data-action of the back button (default toolKey+'-back')
- * @property {string} [backLabel]          default "← Scenarios"
- * @property {ToolTab[]} [tabs]
- * @property {string} [activeTab]
- * @property {string} [tabsId]             DOM id for the tab strip (default toolKey+'-tabs')
- * @property {StatusChip[]} [statusChips]
- * @property {ActionBtn} [primaryAction]   "Run / Calculate / Optimize"
- * @property {ActionBtn[]} [secondaryActions]
- * @property {string} [shortcutLabel]      default "⌘↵"
- * @property {string} [description]        Page description rendered inside a
- *   navy banner above the header strip. When provided, hides the original
- *   in-strip `.hub-tool-title` so the title only reads once. Echoes the CM
- *   "page-name lifted into navy bar" pattern (commits 384b2a7 + 57aae71).
- * @property {string} [subtitle]           Optional pill rendered next to the
- *   title in the navy banner — typically the active tab/view name. Skipped
- *   if `description` isn't also provided (banner only renders if either is).
- * @property {boolean} [showInlineTitle]   Force-render the in-strip title
- *   even when a banner is shown. Default false (banner replaces strip title).
- */
-
-/**
- * Render the shared tool header.
- * @param {ToolHeaderOpts} opts
- * @returns {string}
- */
-export function renderToolHeader(opts) {
-  const {
-    toolName,
-    toolKey = '',
-    backAction = (toolKey ? `${toolKey}-back` : 'tool-back'),
-    backLabel = '← Scenarios',
-    tabs = [],
-    activeTab = '',
-    tabsId = (toolKey ? `${toolKey}-tabs` : 'tool-tabs'),
-    statusChips = [],
-    primaryAction = null,
-    secondaryActions = [],
-    shortcutLabel = '⌘↵',
-    description = '',
-    subtitle = '',
-    showInlineTitle = false,
-  } = opts || {};
-
-  // Navy page banner — when description (or subtitle) provided, lift the
-  // page name out of the inline header strip into a navy gradient bar.
-  // Mirrors the CM page-name pattern shipped 2026-04-27 (AM2/AM3/AM6).
-  const hasBanner = Boolean(description || subtitle);
-  const bannerHtml = !hasBanner ? '' : `
-    <div class="hub-page-banner" ${toolKey ? `data-tool="${toolKey}"` : ''}>
-      <div class="hub-page-banner__title">
-        <span class="hub-page-banner__name">${escapeHtml(toolName)}</span>
-        ${subtitle ? `<span class="hub-page-banner__pill">${escapeHtml(subtitle)}</span>` : ''}
-      </div>
-      ${description ? `<p class="hub-page-banner__desc">${description}</p>` : ''}
-    </div>`;
-  // Hide the in-strip title when banner is shown (unless override) — avoids
-  // reading "MOST Labor Standards" twice.
-  const inlineTitleHtml = (hasBanner && !showInlineTitle)
-    ? ''
-    : `<h2 class="hub-tool-title">${escapeHtml(toolName)}</h2>`;
-
-  const tabsHtml = tabs.length === 0 ? '' : `
-    <div class="hub-tab-strip" id="${tabsId}">
-      ${tabs.map(t => `
-        <button type="button"
-                class="hub-tab-btn ${t.key === activeTab ? 'active' : ''}"
-                data-tab="${t.key}"
-                ${t.title ? `title="${escapeAttr(t.title)}"` : ''}>${escapeHtml(t.label)}</button>
-      `).join('')}
-    </div>`;
-
-  const chipsHtml = statusChips.length === 0 ? '' : `
-    <div class="hub-tool-status">
-      ${statusChips.map(c => `
-        <span class="hub-status-chip ${c.kind || 'default'} ${c.dot ? 'dot' : ''}"
-              ${c.title ? `title="${escapeAttr(c.title)}"` : ''}>${escapeHtml(c.label)}</span>
-      `).join('')}
-    </div>`;
-
-  // Inline children with no whitespace between spans. The template literal
-  // whitespace would otherwise leak into the button's accessible name and
-  // (depending on the platform) get spoken/copied as "▶\n  Run Scenario\n  ⌘↵".
-  // Run-state (clean vs dirty): when state === 'clean', render a muted outline
-  // "✓ Results current" variant — still clickable so the user can force a
-  // re-run (Monte Carlo trials, just-want-to-be-sure flows). The default
-  // 'dirty' state renders the standard orange Run button.
-  const isClean = primaryAction && primaryAction.state === 'clean';
-  const primaryLabel = isClean
-    ? (primaryAction.cleanLabel || '✓ Results current')
-    : primaryAction?.label;
-  const primaryIcon = isClean ? '' : primaryAction?.icon;
-  const primaryTitle = isClean
-    ? (primaryAction.cleanTitle || `Inputs unchanged since last run. Click to re-run (${shortcutLabel}).`)
-    : (primaryAction?.title || `Run (${shortcutLabel})`);
-  const primaryClasses = ['hub-btn', 'hub-run-btn'];
-  if (isClean) primaryClasses.push('is-clean');
-  const primaryHtml = !primaryAction ? '' : (
-    `<button type="button" class="${primaryClasses.join(' ')}" data-action="${primaryAction.action}" data-primary-action="${primaryAction.action}" data-run-state="${isClean ? 'clean' : 'dirty'}" title="${escapeAttr(primaryTitle)}">` +
-    (primaryIcon ? `<span class="hub-run-icon">${escapeHtml(primaryIcon)}</span>` : '') +
-    `<span>${escapeHtml(primaryLabel)}</span>` +
-    `<span class="hub-run-shortcut">${escapeHtml(shortcutLabel)}</span>` +
-    `</button>`
-  );
-
-  const secondariesHtml = secondaryActions.length === 0 ? '' : secondaryActions.map(a => `
-    <button type="button"
-            class="hub-btn hub-btn-sm ${a.primary ? 'hub-btn-primary' : 'hub-btn-secondary'}"
-            data-action="${a.action}"
-            ${a.title ? `title="${escapeAttr(a.title)}"` : ''}>
-      ${a.icon ? `<span>${escapeHtml(a.icon)}</span> ` : ''}${escapeHtml(a.label)}
-    </button>
-  `).join('');
-
-  const toolDataAttr = toolKey ? `data-tool="${toolKey}"` : '';
-
-  return `
-    ${bannerHtml}
-    <div class="hub-tool-header" ${toolDataAttr}>
-      <button type="button" class="hub-btn hub-btn-sm hub-btn-secondary hub-tool-back"
-              data-action="${backAction}" title="Back to saved scenarios">${escapeHtml(backLabel)}</button>
-      ${inlineTitleHtml}
-      ${chipsHtml}
-      ${tabsHtml}
-      <div class="hub-action-rail">
-        ${secondariesHtml}
-        ${primaryHtml}
-      </div>
-    </div>`;
-}
-
-/**
- * Wrap a label + input control in a .hub-input-group. Helper for inline template literals.
- * @param {{label:string, control:string, help?:string, error?:string, id?:string}} opts
- * @returns {string}
- */
-export function renderInputGroup(opts) {
-  const { label, control, help = '', error = '', id = '' } = opts || {};
-  return `
-    <div class="hub-input-group" ${id ? `id="${id}"` : ''}>
-      <label>${escapeHtml(label)}</label>
-      ${control}
-      ${help ? `<span class="hub-input-help">${escapeHtml(help)}</span>` : ''}
-      ${error ? `<span class="hub-input-error">${escapeHtml(error)}</span>` : ''}
-    </div>`;
-}
-
-/**
- * Render a KPI row for the results shelf.
- * @param {{label:string, value:string, hint?:string}[]} kpis
- * @param {{title?:string}} [opts]
- * @returns {string}
- */
-export function renderResultsShelf(kpis, opts = {}) {
-  const { title = 'Latest Run' } = opts;
-  return `
-    <div class="hub-results-shelf">
-      <div class="hub-results-header">${escapeHtml(title)}</div>
-      <div class="hub-results-kpis">
-        ${kpis.map(k => `
-          <div class="hub-results-kpi" ${k.hint ? `title="${escapeAttr(k.hint)}"` : ''}>
-            <span class="kpi-label">${escapeHtml(k.label)}</span>
-            <span class="kpi-value">${escapeHtml(k.value)}</span>
-          </div>
-        `).join('')}
-      </div>
-    </div>`;
-}
-
-/**
- * Bind Cmd/Ctrl+Enter to fire the primary action in this tool root.
- * Also adds a short green flash when the action fires.
- *
- * @param {HTMLElement} rootEl
- * @param {string} action          The data-action value to click
- * @param {() => void} [onRun]     Optional callback instead of clicking
- */
-export function bindPrimaryActionShortcut(rootEl, action, onRun) {
-  if (!rootEl || !action) return;
-  const handler = (e) => {
-    if (!(e.key === 'Enter' && (e.metaKey || e.ctrlKey))) return;
-    const btn = rootEl.querySelector(`[data-primary-action="${action}"]`) || rootEl.querySelector(`[data-action="${action}"]`);
-    if (!btn) return;
-    e.preventDefault();
-    if (typeof onRun === 'function') onRun();
-    else /** @type {HTMLButtonElement} */ (btn).click();
-    flashRunButton(btn);
-  };
-  rootEl.addEventListener('keydown', handler);
-  // Return the unbind function in case caller wants it
-  return () => rootEl.removeEventListener('keydown', handler);
-}
-
-/**
- * Flash the green success ring on the run button (called automatically by the
- * shortcut binding; tools can call it explicitly after their run completes).
- * @param {Element|null} btn
- */
-export function flashRunButton(btn) {
-  if (!btn) return;
-  btn.classList.remove('ran');
-  // Force reflow so the animation restarts
-  void /** @type {HTMLElement} */ (btn).offsetWidth;
-  btn.classList.add('ran');
-}
-
-/** Minimal helpers. */
 function escapeHtml(s) {
-  if (s == null) return '';
-  return String(s)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 function escapeAttr(s) { return escapeHtml(s); }
 
-
 /**
- * @typedef {Object} StepperPhase
- * @property {string} key                                Phase identifier (e.g. 'inputs').
- * @property {number} [num]                              Numeric badge — falls back to index+1.
- * @property {string} label                              Bold display text.
- * @property {string} [sub]                              Description below the label.
- * @property {'pending'|'active'|'complete'} status      Caller computes from tool state.
- */
-
-/**
- * Render a horizontal phase stepper — the canonical primary nav surface for
- * design tools. Caller computes status; this helper handles the chrome.
- *
- * Lifted out of tools/network-opt/ui.js (renderProcessFlow) on 2026-04-27 EVE2
- * as part of XT-SCOPE-3 so CoG + Fleet can adopt the same stepper without
- * duplicating ~80 lines of styling.
+ * Render a horizontal phase stepper (Scope → Structure → Solution → ...).
+ * Used by Cost Model. Caller passes phases + the currently-active key.
  *
  * @param {{ phases: StepperPhase[], activePhase: string }} opts
  * @returns {string}
@@ -359,31 +91,4 @@ export function bindPhaseStepper(container, onJump) {
   container._phaseHandler = handler;
 }
 
-
-/**
- * Render an inline sub-tab strip (used inside Run / Parameters phases).
- * Caller wires the click handler — typically delegated on the parent.
- *
- * Lifted out of tools/network-opt/ui.js on 2026-04-27 EVE2 follow-up so
- * CoG + Fleet stop inlining the same markup three different ways.
- *
- * @param {Array<{key:string, label:string, count?:string|number, title?:string}>} items
- * @param {string} activeKey
- * @param {string} [dataAttr]   data-* attribute name (default "section")
- * @returns {string}
- */
-export function renderSubTabStrip(items, activeKey, dataAttr = 'section') {
-  if (!Array.isArray(items) || items.length === 0) return '';
-  return `
-    <div class="hub-sub-tab-strip" style="display:flex;gap:0;border-bottom:1px solid var(--ies-gray-200);margin-bottom:0;flex-wrap:wrap;">
-      ${items.map(it => `
-        <button class="hub-btn" data-${escapeAttr(dataAttr)}="${escapeAttr(it.key)}"
-                ${it.title ? `title="${escapeAttr(it.title)}"` : ''}
-                style="background:transparent;border:0;border-bottom:2px solid ${it.key === activeKey ? 'var(--ies-blue)' : 'transparent'};border-radius:0;padding:10px 18px;font-size:13px;font-weight:${it.key === activeKey ? '700' : '500'};color:${it.key === activeKey ? 'var(--ies-blue)' : 'var(--ies-gray-600)'};cursor:pointer;">
-          ${escapeHtml(it.label)}${it.count != null ? ` <span style="opacity:0.65;font-weight:600;">${escapeHtml(String(it.count))}</span>` : ''}
-        </button>
-      `).join('')}
-    </div>`;
-}
-
-export default { renderToolHeader, renderInputGroup, renderResultsShelf, bindPrimaryActionShortcut, flashRunButton, renderPhaseStepper, bindPhaseStepper, renderSubTabStrip };
+export default { renderPhaseStepper, bindPhaseStepper };

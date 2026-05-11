@@ -17,7 +17,8 @@
  *
  *   // Every render, ask whether inputs diverge from the last-run hash:
  *   const state = runState.state({ points, config }); // 'dirty' | 'clean'
- *   renderToolHeader({ ..., primaryAction: { ..., state } });
+ *   // Pass state to whichever chrome helper renders the primary action
+ *   // (today that is renderToolChrome in shared/tool-chrome.js).
  *
  *   // On unmount / model switch / scenario change:
  *   runState.reset();

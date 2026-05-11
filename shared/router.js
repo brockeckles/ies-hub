@@ -18,7 +18,6 @@
  * @module shared/router
  */
 
-import { state } from './state.js?v=20260418-sK';
 import { bus } from './event-bus.js?v=20260418-sK';
 
 /**
@@ -111,8 +110,6 @@ class Router {
     const tool = parts[1] || null;
 
     // Update state
-    state.set('nav.section', section);
-    state.set('nav.tool', tool);
 
     // Unmount previous
     if (this._active?.module?.unmount) {

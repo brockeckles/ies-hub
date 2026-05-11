@@ -7,7 +7,6 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import { state } from '../../shared/state.js?v=20260418-sL';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sL';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260430-na-dot';
@@ -5553,7 +5552,6 @@ function pushToCm() {
     sessionStorage.setItem('wsc_pending_push', JSON.stringify({ ...payload, at: Date.now() }));
   } catch {}
   bus.emit('wsc:push-to-cm', payload);
-  console.log('[WSC] Pushed facility data to Cost Model:', payload);
   // Navigate to Cost Model Builder
   window.location.hash = 'designtools/cost-model';
 }
@@ -5606,7 +5604,6 @@ function handleCmPush(payload) {
   renderConfigPanel();
   renderContentView();
   _refreshWscKpis();
-  console.log('[WSC] Received facility data from Cost Model:', payload);
 }
 
 // ============================================================
