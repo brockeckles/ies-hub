@@ -17,10 +17,10 @@
  * The function never throws; any failure inside the try block returns
  * `{ ready: false, items: [] }` with a console.warn diagnostic.
  */
-import * as calc from './calc.js?v=20260511-port15';
+import * as calc from './calc.js?v=20260511-port16';
 import * as channelCalc from './calc.channels.js?v=20260429-vol13';
-import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port15';
-import { formatUomSingular } from '../../shared/format.js?v=20260511-port15';
+import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
+import { formatUomSingular } from '../../shared/format.js?v=20260511-port16';
 
 /**
  * @param {Object} opts
@@ -217,21 +217,14 @@ export function computeHeaderKpis({
       },
     };
 
-    // If renderSummary hasn't run yet (user opened a non-Summary section
-    // first), seed _lastProvenanceContext so the inspector still works.
-    // renderSummary will overwrite with its richer ctx when the user
-    // navigates there. From-Summary loads always win because they pass
-    // through renderSummary AFTER refreshHeaderKpis.
-    if (!_lastProvenanceContext || _lastProvenanceContext._source !== 'summary') {
-      _lastProvenanceContext = { ...kpiCtx, _source: 'kpi' };
-    } else {
-      // Already on Summary — graft the kpi-specific extras onto it so
-      // KPI clicks read fresh costPerUnit/npv even mid-session.
-      _lastProvenanceContext.kpi = kpiCtx.kpi;
-    }
+    // _lastProvenanceContext merge moved to caller (S18d). The function
+    // is pure compute; mutating ui.js's module-level provenance state
+    // from here would defeat that. Return kpiCtx so refreshHeaderKpis
+    // can perform the merge under ui.js's control.
 
     return {
       ready: true,
+      kpiCtx,
       items: [
         {
           key: 'kpi:costPerUnit',
