@@ -19,6 +19,7 @@ import * as calc from './calc.js?v=20260511-port11';
 import * as api from './api.js?v=20260504-auth1';
 import { createChart } from '../../shared/cdn-wrappers/chart-wrapper.js?v=20260418-sK';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
+import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260511-port12';
 
 // ============================================================
 // STATE
@@ -65,16 +66,8 @@ let facilities = [];
  */
 let _demandChannelFilter = null;
 
-/** Minimal HTML-escape for user-supplied strings. */
-function escapeHtml(s) {
-  if (s == null) return '';
-  return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[c]);
-}
-/** Escape for HTML attribute values (covers double-quote contexts). */
-function escapeAttr(s) {
-  if (s == null) return '';
-  return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[c]);
-}
+
+
 
 /** @type {import('./types.js?v=20260418-sM').DemandPoint[]} */
 let demands = [];

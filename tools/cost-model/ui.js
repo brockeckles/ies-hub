@@ -27,6 +27,7 @@ import * as shiftPlannerUi from './shift-planner-ui.js?v=20260430-hours-first';
 import { renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260430-na-dot';
 import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
+import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260511-port12';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
 // disk but no longer imported; can be deleted in a future cleanup.
@@ -5847,11 +5848,7 @@ function renderLaborDetailPane(lines, opHrs, lc) {
   `;
 }
 
-/** Safe attribute-value escape (quotes + basic). */
-function escapeAttr(s) {
-  if (s == null) return '';
-  return String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
-}
+
 
 function renderEquipment() {
   const lines = model.equipmentLines || [];
@@ -14804,7 +14801,9 @@ function _bindOperationalFlowEvents(container) {
 
   // Phase 5.4 — OFP channel chip drillback. Click → activate the named
   // channel in Volumes & Profile, then navigate the section there. Same-
-  // CM-model context so we route through `bus.emit('cm:goto-section')`.
+  // CM-model context, so we route via direct section assignment +
+  // renderCurrentView() rather than an event-bus hop (S11 prune killed
+  // the never-subscribed `cm:goto-section` emit; comment fixed S17).
   container.querySelectorAll('[data-ofp-channel-drillback]').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -17216,11 +17215,7 @@ function renderPlanningRatios() {
   `;
 }
 
-/** Tiny escape for user-displayed text pulled from the DB. */
-function escapeHtml(s) {
-  if (s == null) return '';
-  return String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
-}
+
 
 // ============================================================
 // SECTION 16: SCENARIOS (Phase 3 — status + clone + approve + compare)

@@ -15,6 +15,7 @@ import * as api from './api.js?v=20260418-sL';
 import * as cmApi from '../cost-model/api.js?v=20260504-auth1';
 import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { showConfirm } from '../../shared/confirm-modal.js';
+import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260511-port12';
 
 // ============================================================
 // CHROME v3 — phase + section structure (CM Chrome v3 ripple, step 3 redo)
@@ -5717,16 +5718,7 @@ function createDefaultVolumes() {
   };
 }
 
-/** Minimal HTML-escape for user-supplied strings in the dashboard. */
-function escapeHtml(s) {
-  if (s == null) return '';
-  return String(s)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
-}
+
 
 /**
  * Escape for HTML attribute values (covers double-quote contexts).
@@ -5734,12 +5726,4 @@ function escapeHtml(s) {
  * per-channel allocation editor and dashboard byChannel rows write
  * channelKey into data-* attribute values.
  */
-function escapeAttr(s) {
-  if (s == null) return '';
-  return String(s)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
-}
+

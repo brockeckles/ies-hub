@@ -9,6 +9,7 @@
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import * as api from './api.js?v=20260504-auth1';
 import { showToast } from '../../shared/toast.js?v=20260418-sK';
+import { escapeAttr } from '../../shared/escape.js?v=20260511-port12';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -702,9 +703,7 @@ function filteredDeals() {
   });
 }
 
-function escapeAttr(s) {
-  return String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
+
 
 function renderPipeline(el) {
   const visible = filteredDeals();

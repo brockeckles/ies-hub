@@ -12,6 +12,7 @@ import { showToast } from '../../shared/toast.js?v=20260418-sK';
 import { getEnv, getEnvLabel, getProjectRef } from '../../shared/supabase.js?v=20260429-demo-s3';
 import { getBuildInfo, getBuildInfoSync } from '../../shared/build-info.js?v=20260424-A2';
 import { showConfirm } from '../../shared/confirm-modal.js';
+import { escapeHtml } from '../../shared/escape.js?v=20260511-port12';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -708,15 +709,7 @@ function renderInviteUserModal(opts = {}) {
   setTimeout(() => nameInput.focus(), 50);
 }
 
-function escapeHtml(s) {
-  if (s == null) return '';
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
+
 
 // ===== ESCALATIONS =====
 function renderEscalations(el) {
