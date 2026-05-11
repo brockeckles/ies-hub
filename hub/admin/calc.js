@@ -205,7 +205,6 @@ export const DEMO_AUDIT_LOG = [
   { id: 'a2', action: 'create', tableName: 'fleet_scenarios', recordId: 'fs-12', userId: 'u2', userName: 'Design Engineer 1', timestamp: '2026-04-15T16:30:00Z' },
   { id: 'a3', action: 'update', tableName: 'opportunity_tasks', recordId: 'ot-45', userId: 'u1', userName: 'Brock Eckles', timestamp: '2026-04-15T14:00:00Z', changes: { status: { from: 'pending', to: 'completed' } } },
   { id: 'a4', action: 'delete', tableName: 'wiki_articles', recordId: 'w-old', userId: 'u1', userName: 'Brock Eckles', timestamp: '2026-04-14T09:00:00Z' },
-  { id: 'a5', action: 'create', tableName: 'change_initiatives', recordId: 'cm3', userId: 'u1', userName: 'Brock Eckles', timestamp: '2026-04-13T11:00:00Z' },
 ];
 
 // ============================================================
@@ -469,10 +468,8 @@ export const ROUTE_LABELS = {
   'designtools/most-standards': 'MOST Labor Standards',
   'designtools/network-opt': 'Network Optimizer',
   designtools: 'Design Tools',
-  'deck-generator': 'Deck Generator',
   'training-wiki': 'Training Wiki',
   'market-explorer': 'Market Explorer',
-  'change-mgmt': 'Change Management',
   wiki: 'Wiki',
 };
 

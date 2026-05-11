@@ -6,7 +6,7 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import * as calc from './calc.js?v=20260427-A3';
+import * as calc from './calc.js?v=20260511-port2';
 import * as api from './api.js?v=20260504-auth1';
 import { showToast } from '../../shared/toast.js?v=20260418-sK';
 import { getEnv, getEnvLabel, getProjectRef } from '../../shared/supabase.js?v=20260429-demo-s3';
