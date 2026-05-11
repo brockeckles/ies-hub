@@ -18,8 +18,8 @@
  * single what-if slider value (or full whatIfTransient when called
  * without an arg).
  */
-import * as calc from './calc.js?v=20260511-port13';
-import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port13';
+import * as calc from './calc.js?v=20260511-port14';
+import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port14';
 
 /**
  * @param {Object|undefined} overlay — what-if slider overlay (defaults to opts.whatIfTransient)

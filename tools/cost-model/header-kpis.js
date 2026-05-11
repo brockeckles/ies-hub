@@ -17,9 +17,9 @@
  * The function never throws; any failure inside the try block returns
  * `{ ready: false, items: [] }` with a console.warn diagnostic.
  */
-import * as calc from './calc.js?v=20260511-port13';
-import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port13';
-import { formatUomSingular } from '../../shared/format.js?v=20260511-port13';
+import * as calc from './calc.js?v=20260511-port14';
+import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port14';
+import { formatUomSingular } from '../../shared/format.js?v=20260511-port14';
 
 /**
  * @param {Object} opts
@@ -30,6 +30,7 @@ import { formatUomSingular } from '../../shared/format.js?v=20260511-port13';
  * @param {Object} opts.currentScenario — active scenario record
  * @param {Object} opts.currentScenarioSnapshots — scenario snapshot bag
  * @param {Object} opts.heuristicOverrides — heuristic override bag
+ * @param {Object|null} opts.currentMarketLaborProfile — resolved market labor profile
  * @param {Object} opts.scenarios — the calc.scenarios module (resolveCalcHeuristics)
  * @returns {{ ready: boolean, items: Array }}
  */
@@ -41,6 +42,7 @@ export function computeHeaderKpis({
   currentScenario,
   currentScenarioSnapshots,
   heuristicOverrides,
+  currentMarketLaborProfile,
   scenarios,
 }) {
   try {
