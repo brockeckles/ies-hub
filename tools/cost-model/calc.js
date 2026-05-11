@@ -4141,6 +4141,82 @@ export function adaptYearlyToMonthlyParams(p) {
   };
 }
 
+/**
+ * Pricing snapshot — enrich pricing buckets with derived rates and surface
+ * the unassigned-cost rollup. Pure function; reads from the passed-in
+ * `model` (NOT a module-level binding) so it can be called from outside
+ * the cost-model UI module.
+ *
+ * Relocated from `cost-model/ui.js` 2026-05-11 (S15). Three call sites
+ * in ui.js — chrome KPI strip, renderSummary's bucket panel, and the
+ * `buildEnrichedPricingBuckets` wrapper used by callers that only want
+ * the buckets array.
+ *
+ * @param {Object} params
+ * @param {Object} params.model — cost-model state (reads laborLines,
+ *   indirectLaborLines, equipmentLines, overheadLines, vasLines,
+ *   startupLines, pricingBuckets, volumeLines, financial.facilityBucketId)
+ * @param {Object} params.summary — output of computeSummary
+ * @param {number} params.marginFrac — target margin as a 0-based fraction
+ * @param {number} params.opHrs — operating hours per year
+ * @param {number} params.contractYears — for startup amortization (max 1)
+ * @returns {{
+ *   buckets: Array,           // enriched pricing buckets (derived rates, override diagnostics)
+ *   bucketCosts: Object,      // bucketId -> cost map, including `_unassigned`
+ *   unassignedCount: number,  // count of cost lines without pricing_bucket
+ *   unassignedLines: Array,   // [{ type, line }] for the Summary banner drill-down
+ * }}
+ */
+export function computePricingSnapshot({ model, summary, marginFrac, opHrs, contractYears }) {
+  const m = model || {};
+  const startupWithAmort = (m.startupLines || []).map(l => ({
+    ...l,
+    annual_amort: (l.one_time_cost || 0) / Math.max(1, contractYears || 5),
+  }));
+  // Compute WITHOUT unassigned-rollup so we can see the real unassigned total.
+  // The existing computeBucketCosts rolls unassigned into mgmt_fee — we want
+  // the pre-rollup number for the banner, so we recompute from line data.
+  const buckets = m.pricingBuckets || [];
+  const bucketCosts = computeBucketCosts({
+    buckets,
+    laborLines: m.laborLines || [],
+    indirectLaborLines: m.indirectLaborLines || [],
+    equipmentLines: m.equipmentLines || [],
+    overheadLines: m.overheadLines || [],
+    vasLines: m.vasLines || [],
+    startupLines: startupWithAmort,
+    facilityCost: summary?.facilityCost || 0,
+    operatingHours: opHrs || 0,
+    facilityBucketId: m.financial?.facilityBucketId || null,
+  });
+  // Count lines that explicitly lack a pricing_bucket (what goes to _unassigned)
+  const unassignedLines = [];
+  const tally = (arr, type) => (arr || []).forEach(l => {
+    if (!l.pricing_bucket) unassignedLines.push({ type, line: l });
+  });
+  tally(m.laborLines, 'labor');
+  tally(m.indirectLaborLines, 'indirect');
+  tally(m.equipmentLines, 'equipment');
+  tally(m.overheadLines, 'overhead');
+  tally(m.vasLines, 'vas');
+  tally(m.startupLines, 'startup');
+
+  const enrichedBuckets = enrichBucketsWithDerivedRates({
+    buckets,
+    bucketCosts,
+    marginPct: marginFrac || 0,
+    volumeLines: m.volumeLines || [],
+    model: m,
+  });
+
+  return {
+    buckets: enrichedBuckets,
+    bucketCosts,
+    unassignedCount: unassignedLines.length,
+    unassignedLines,
+  };
+}
+
 // ============================================================
 // runScenario — calc-as-service wrapper (port-readiness S10)
 // ============================================================

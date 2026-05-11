@@ -12,7 +12,7 @@ import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260511-port2';
 import ofpStyles from './operational-flow-styles.js?v=20260511-port4';
 import { auth } from '../../shared/auth.js?v=20260504-auth1';
-import * as calc from './calc.js?v=20260504-startup1';
+import * as calc from './calc.js?v=20260511-port10';
 import * as api from './api.js?v=20260504-auth1';
 import * as scenarios from './calc.scenarios.js?v=20260430-pm-otfix2';
 import { renderHeuristicsPanel } from './render-heuristics-panel.js?v=20260511-port8';
@@ -1722,7 +1722,7 @@ function computeHeaderKpis() {
       whatIfTransient,
     ), model);
     const marginFrac = (calcHeur.targetMarginPct || 0) / 100;
-    const pricingSnapshot = computePricingSnapshot(summary, marginFrac, opHrs, contractYears);
+    const pricingSnapshot = calc.computePricingSnapshot({ model, summary, marginFrac, opHrs, contractYears });
     const enrichedPricingBuckets = pricingSnapshot.buckets;
 
     const projResult = calc.buildYearlyProjections({
@@ -7487,7 +7487,7 @@ function renderSummary() {
   // I-02 FIX — derive missing bucket rates from assigned costs so new
   // models don't render $0 revenue until someone hand-wires bucket.rate.
   // I-01 FIX — also capture unassigned-cost rollup for the Summary banner.
-  const pricingSnapshot = computePricingSnapshot(summary, marginFrac, opHrs, contractYears);
+  const pricingSnapshot = calc.computePricingSnapshot({ model, summary, marginFrac, opHrs, contractYears });
   const enrichedPricingBuckets = pricingSnapshot.buckets;
   const unassignedCost = pricingSnapshot.bucketCosts['_unassigned'] || 0;
   const unassignedCount = pricingSnapshot.unassignedCount;
@@ -13153,7 +13153,7 @@ function defaultBucketFor(lineType) {
  * @param {number} contractYears — for startup amortization
  */
 function buildEnrichedPricingBuckets(summary, marginFrac, opHrs, contractYears) {
-  return computePricingSnapshot(summary, marginFrac, opHrs, contractYears).buckets;
+  return calc.computePricingSnapshot({ model, summary, marginFrac, opHrs, contractYears }).buckets;
 }
 
 /**
@@ -13169,54 +13169,6 @@ function buildEnrichedPricingBuckets(summary, marginFrac, opHrs, contractYears) 
  * (I-02) and the raw bucket costs including the '_unassigned' pseudo-bucket
  * (I-01 warning banner).
  */
-function computePricingSnapshot(summary, marginFrac, opHrs, contractYears) {
-  const startupWithAmort = (model.startupLines || []).map(l => ({
-    ...l,
-    annual_amort: (l.one_time_cost || 0) / Math.max(1, contractYears || 5),
-  }));
-  // Compute WITHOUT unassigned-rollup so we can see the real unassigned total.
-  // The existing computeBucketCosts rolls unassigned into mgmt_fee — we want
-  // the pre-rollup number for the banner, so we recompute from line data.
-  const buckets = model.pricingBuckets || [];
-  const bucketCosts = calc.computeBucketCosts({
-    buckets,
-    laborLines: model.laborLines || [],
-    indirectLaborLines: model.indirectLaborLines || [],
-    equipmentLines: model.equipmentLines || [],
-    overheadLines: model.overheadLines || [],
-    vasLines: model.vasLines || [],
-    startupLines: startupWithAmort,
-    facilityCost: summary.facilityCost || 0,
-    operatingHours: opHrs || 0,
-    facilityBucketId: model.financial?.facilityBucketId || null,
-  });
-  // Count lines that explicitly lack a pricing_bucket (what goes to _unassigned)
-  const unassignedLines = [];
-  const tally = (arr, type) => (arr || []).forEach(l => {
-    if (!l.pricing_bucket) unassignedLines.push({ type, line: l });
-  });
-  tally(model.laborLines, 'labor');
-  tally(model.indirectLaborLines, 'indirect');
-  tally(model.equipmentLines, 'equipment');
-  tally(model.overheadLines, 'overhead');
-  tally(model.vasLines, 'vas');
-  tally(model.startupLines, 'startup');
-
-  const enrichedBuckets = calc.enrichBucketsWithDerivedRates({
-    buckets,
-    bucketCosts,
-    marginPct: marginFrac || 0,
-    volumeLines: model.volumeLines || [],
-    model,
-  });
-
-  return {
-    buckets: enrichedBuckets,
-    bucketCosts,
-    unassignedCount: unassignedLines.length,
-    unassignedLines,
-  };
-}
 
 /**
  * Phase 2.1 dual-write — mirror channels[0] back to legacy fields so unmigrated
