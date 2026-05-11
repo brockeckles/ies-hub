@@ -18,8 +18,8 @@
  * single what-if slider value (or full whatIfTransient when called
  * without an arg).
  */
-import * as calc from './calc.js?v=20260511-port14';
-import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port14';
+import * as calc from './calc.js?v=20260511-port15';
+import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port15';
 
 /**
  * @param {Object|undefined} overlay — what-if slider overlay (defaults to opts.whatIfTransient)
@@ -153,7 +153,7 @@ export function computeWhatIfPreview(overlay, {
             model,
           });
         })()
-      : buildEnrichedPricingBuckets(summary, whatIfMarginFrac, opHrs, contractYears);
+      : calc.computePricingSnapshot({ model, summary, marginFrac: whatIfMarginFrac, opHrs, contractYears }).buckets;
     // Apply M4 pricing-discount multiplier AFTER enrichment so it layers on
     // both explicit and derived rates uniformly.
     const whatIfBucketsAfterDiscount = pricingMult === 1 ? whatIfBuckets
