@@ -54,7 +54,6 @@ const NO_SECTIONS = [
 let _noSidebarOpen = false;
 let _noKpiRefreshTimer = null;
 
-
 /** @type {import('./types.js?v=20260418-sM').Facility[]} */
 let facilities = [];
 
@@ -223,7 +222,6 @@ export async function mount(el) {
         sessionStorage.removeItem('cog_pending_push');
         openEditor(null);
         applyCogHandoff(payload);
-        bus.emit('netopt:mounted');
         return;
       }
       sessionStorage.removeItem('cog_pending_push');
@@ -246,7 +244,6 @@ export async function mount(el) {
         sessionStorage.removeItem('cm_pending_netopt_push');
         openEditor(null);
         applyCmHandoff(payload);
-        bus.emit('netopt:mounted');
         return;
       }
       sessionStorage.removeItem('cm_pending_netopt_push');
@@ -254,7 +251,6 @@ export async function mount(el) {
   } catch (e) { console.warn('[NetOpt] Failed to consume CM handoff:', e); }
 
   await renderLanding();
-  bus.emit('netopt:mounted');
 }
 
 /**
@@ -469,7 +465,6 @@ export function unmount() {
   bus.clear('cm:push-to-netopt'); // G12: free the CM handoff listener
   runState.reset();
   rootEl = null;
-  bus.emit('netopt:unmounted');
 }
 
 // ============================================================
@@ -738,7 +733,6 @@ function computeNoHeaderKpis() {
   ] };
 }
 
-
 function viewLabel(v) {
   const labels = { setup: 'Setup', map: 'Network Map', results: 'Results', comparison: 'Compare' };
   return labels[v] || v;
@@ -933,15 +927,6 @@ function handleCsvUpload(e) {
   };
   reader.onerror = () => showToast('CSV read failed', 'error');
   reader.readAsText(file);
-}
-
-function showToast(msg, level) {
-  try {
-    const ev = new CustomEvent('toast:show', { detail: { message: msg, level } });
-    // Prefer event bus if present; fall back to console.
-    if (window.__hubToast) window.__hubToast(msg, level);
-    else console.log(`[netopt toast] ${level}: ${msg}`);
-  } catch { console.log(msg); }
 }
 
 function applyArchetype(key) {
@@ -2184,7 +2169,6 @@ function renderRateCardEditor() {
   `;
 }
 
-
 // 2026-04-27 EVE2 (NO-SCOPE-6/4/5): Rate Card is now its own Parameters
 // sub-tab. Apply Market Rates + Upload Rate Card CSV are inline section
 // actions; previously they lived in the right-rail Tools panel (deleted).
@@ -3027,7 +3011,6 @@ function renderComparison(el) {
     renderScenarioComparison(el);
   }
 }
-
 
 /** Small chip describing how the most recent optimization was solved. */
 function renderOptimizationChip(meta) {

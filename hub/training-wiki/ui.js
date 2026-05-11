@@ -25,10 +25,9 @@ export async function mount(el) {
   bindEvents();
   renderSidebar();
   renderMain();
-  bus.emit('wiki:mounted');
 }
 
-export function unmount() { rootEl = null; bus.emit('wiki:unmounted'); }
+export function unmount() { rootEl = null;  }
 
 function renderShell() {
   return `

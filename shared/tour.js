@@ -128,14 +128,12 @@ function start(name) {
     return;
   }
   activeTour = { name, steps, idx: 0 };
-  bus.emit('tour:started', { name });
   advance(0);
 }
 
 function stop() {
   if (popover) { popover.remove(); popover = null; }
   if (activeTour) {
-    bus.emit('tour:stopped', { name: activeTour.name });
     activeTour = null;
   }
 }

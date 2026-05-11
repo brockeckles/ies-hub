@@ -73,13 +73,12 @@ export async function mount(el) {
   activeTab = 'tables';
   activeMasterTable = null;
   render();
-  bus.emit('admin:mounted');
   // Slice 4.4 — re-render once build-info resolves so the env chip
   // picks up the version suffix. Cheap no-op if already cached.
   getBuildInfo().then(() => { if (rootEl) render(); }).catch(() => {});
 }
 
-export function unmount() { rootEl = null; bus.emit('admin:unmounted'); }
+export function unmount() { rootEl = null;  }
 
 function render() {
   if (!rootEl) return;

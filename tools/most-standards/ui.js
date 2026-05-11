@@ -262,7 +262,6 @@ export async function mount(el) {
     }
   });
 
-
   // Load ref data
   try {
     refData = await api.loadRefData();
@@ -274,7 +273,6 @@ export async function mount(el) {
   }
 
   renderContent();
-  bus.emit('most:mounted');
 }
 
 /**
@@ -282,13 +280,11 @@ export async function mount(el) {
  */
 export function unmount() {
   rootEl = null;
-  bus.emit('most:unmounted');
 }
 
 // ============================================================
 // SHELL
 // ============================================================
-
 
 /** Re-buildable handler set for MOST chrome events. */
 function _buildMostChromeHandlers() {
@@ -1746,7 +1742,6 @@ function bindContentEvents(container) {
       try {
         const dup = await api.duplicateTemplate(id);
         refData.templates = await api.listTemplates();
-        bus.emit('most:template-saved', { id: dup.id });
       } catch (err) {
         console.error('[MOST] Duplicate template failed:', err);
       }
@@ -2373,7 +2368,6 @@ function createEmptyElement() {
   };
 }
 
-
 function updateEditorMetrics() {
   const totalTmu = calc.sumElementTmu(editorElements);
   const baseUph = calc.baseUph(totalTmu);
@@ -2450,7 +2444,6 @@ async function saveTemplateAction() {
     refData.templates = await api.listTemplates();
     editorTemplate = null;
     editorElements = [];
-    bus.emit('most:template-saved', { id: tpl.id });
     renderContent();
   } catch (err) {
     console.error('[MOST] Save template failed:', err);

@@ -31,14 +31,12 @@ export async function mount(el) {
     liveData = await api.fetchDashboardData();
     render();
   }, 5 * 60 * 1000);
-  bus.emit('command-center:mounted');
 }
 
 export function unmount() {
   if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
   destroyAllCharts();
   rootEl = null;
-  bus.emit('command-center:unmounted');
 }
 
 function renderLoading() {

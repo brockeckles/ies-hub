@@ -31,7 +31,6 @@ const COG_SECTIONS = [
   { key: 'sensitivity', label: '\u{1F4C8} Sensitivity', group: 'run' },
 ];
 
-
 // ============================================================
 // STATE
 // ============================================================
@@ -122,7 +121,6 @@ let _autoSaveInFlight = false;
 export async function mount(el) {
   rootEl = el;
   await renderLanding();
-  bus.emit('cog:mounted');
 }
 
 async function renderLanding() {
@@ -370,7 +368,6 @@ export function unmount() {
   if (mapInstance) { mapInstance.remove(); mapInstance = null; }
   runState.reset();
   rootEl = null;
-  bus.emit('cog:unmounted');
 }
 
 // ============================================================

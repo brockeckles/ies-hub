@@ -195,7 +195,6 @@ class GlobalSearch {
     router.navigate(entry.route);
     this._close();
     this._input.value = '';
-    bus.emit('search:navigate', { route: entry.route, title: entry.title });
   }
 
   _close() {

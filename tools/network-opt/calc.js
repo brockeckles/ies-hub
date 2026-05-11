@@ -1486,7 +1486,6 @@ export function normalizeDemand(d) {
   return d;
 }
 
-
 /**
  * Find the nearest candidate metro to a lat/lng point.
  * @param {number} lat
@@ -1649,7 +1648,6 @@ export function findOptimalLocations(demands, k, opts = {}) {
   }
   return recommendations;
 }
-
 
 /**
  * Pre-flight validator for Run Scenario. Checks that every input numeric

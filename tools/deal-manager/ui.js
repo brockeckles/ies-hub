@@ -130,7 +130,6 @@ export async function mount(el) {
   // user re-navigates to Multi-Site and re-links the CM.
   _cmSavedUnsub = bus.on('cm:model-saved', handleCmSaved);
 
-  bus.emit('deal:mounted');
 }
 
 /**
@@ -142,7 +141,6 @@ export function unmount() {
   // Reset MUL-F2 stage-template cache so the next mount reloads fresh.
   stageTemplateBundle = null;
   stageTemplateSource = 'fresh';
-  bus.emit('deal:unmounted');
 }
 
 /**
@@ -343,7 +341,6 @@ function bindShellEvents() {
       if (id === 'dm-load-sample') {
         allDeals = [{ ...calc.DEMO_DEAL, id: 'demo-deal-1' }];
         rerenderShell();
-        bus.emit('deal:sample-loaded');
         return;
       }
     },
@@ -815,7 +812,6 @@ async function openDeal(id) {
   // staging schema drift, RLS denial). Memoized via ensureStageTemplates().
   const tplBundle = await ensureStageTemplates();
   dosStages = buildDosStagesFromTemplates(tplBundle);
-
 
   // 2026-04-29 (Brock): land on Sites for empty deals so the natural next
   // step (linking cost models / adding sites) is right there. For already-

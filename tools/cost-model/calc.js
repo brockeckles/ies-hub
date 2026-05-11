@@ -2017,7 +2017,6 @@ function totalEquipmentCapitalFromProjections(projections) {
 // PRICING SCHEDULE
 // ============================================================
 
-
 // CM-PRC-1 — bucket auto-assignment heuristic.
 // Maps a cost line to the most likely pricing bucket based on the line's
 // metadata. Conservative: returns null when no signal matches, leaving the

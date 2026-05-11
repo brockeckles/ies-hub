@@ -29,7 +29,6 @@ export async function mount(el) {
   // Render shell first (with a loading state) so the user sees something.
   render();
   bindDelegatedEvents();
-  bus.emit('feedback:mounted');
   // Load live rows from hub_feedback (RLS: authenticated SELECT).
   try {
     items = await api.listFeedback();
@@ -65,7 +64,7 @@ function bindDelegatedEvents() {
   });
 }
 
-export function unmount() { rootEl = null; bus.emit('feedback:unmounted'); }
+export function unmount() { rootEl = null;  }
 
 function render() {
   if (!rootEl) return;

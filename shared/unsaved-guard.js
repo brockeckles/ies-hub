@@ -34,14 +34,12 @@ let _wired = false;
 export function markDirty(moduleId) {
   if (!moduleId) return;
   dirty.add(String(moduleId));
-  bus.emit('dirty:changed', { moduleId, dirty: true, count: dirty.size });
 }
 
 /** Mark a module as clean (saved or intentionally discarded). */
 export function markClean(moduleId) {
   if (!moduleId) return;
   dirty.delete(String(moduleId));
-  bus.emit('dirty:changed', { moduleId, dirty: false, count: dirty.size });
 }
 
 /** Returns true if any module has unsaved changes. */
@@ -57,7 +55,6 @@ export function listDirty() {
 /** Force-clear the registry (use only on explicit reset, e.g., logout). */
 export function clearAll() {
   dirty.clear();
-  bus.emit('dirty:changed', { moduleId: null, dirty: false, count: 0 });
 }
 
 // ---------------------------------------------------------------------------

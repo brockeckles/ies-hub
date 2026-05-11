@@ -36,7 +36,6 @@ const FLEET_SECTIONS = [
   { key: 'feasibility', label: '⏱ Feasibility',            group: 'run' },
 ];
 
-
 // ============================================================
 // STATE
 // ============================================================
@@ -134,7 +133,6 @@ export async function mount(el) {
   } catch (e) { console.warn('[Fleet] Failed to consume NetOpt handoff:', e); }
 
   await renderLanding();
-  bus.emit('fleet:mounted');
 }
 
 /**
@@ -242,7 +240,6 @@ export function unmount() {
   bus.clear('netopt:push-to-fleet'); // free the NetOpt handoff listener
   runState.reset();
   rootEl = null;
-  bus.emit('fleet:unmounted');
 }
 
 // ============================================================
@@ -980,7 +977,6 @@ function renderComparisonSubTab(el) {
             avgWeightLbs: l.avgWeightLbs,
             distanceMiles: l.distanceMiles,
           }));
-          bus.emit('fleet:push-to-netopt', { source: 'fleet-modeler', lanes: seed, totalAnnualMiles: result?.totalAnnualMiles });
           showToast(`Sent ${seed.length} lanes to Network Optimizer`, 'success');
         } catch (err) {
           showToast(`Push failed: ${err.message || 'unknown'}`, 'error');
@@ -1195,7 +1191,6 @@ function renderResults(el) {
           breakEven: result.breakEven,
         };
         // Stash on the bus — cost-model listens on 'fleet:push'.
-        bus.emit('fleet:push', payload);
         showToast('Fleet costs pushed to Cost Model bus', 'success');
       } catch (err) {
         showToast(`Push failed: ${err.message || 'unknown'}`, 'error');

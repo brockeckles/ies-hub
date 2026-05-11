@@ -29,7 +29,6 @@ const WSC_SECTIONS = [
   { key: '3d',        label: '3D View',        group: 'design' },
 ];
 
-
 // ============================================================
 // STATE
 // ============================================================
@@ -121,7 +120,6 @@ export async function mount(el) {
         viewMode = 'editor';
         openEditor(null);
         handleCmPush(payload);
-        bus.emit('wsc:mounted');
         return;
       }
       sessionStorage.removeItem('cm_pending_push'); // stale — discard
@@ -131,7 +129,6 @@ export async function mount(el) {
   }
 
   await renderLanding();
-  bus.emit('wsc:mounted');
 }
 
 async function renderLanding() {
@@ -202,7 +199,6 @@ export function unmount() {
   if (scene3d?.dispose) scene3d.dispose();
   scene3d = null;
   rootEl = null;
-  bus.emit('wsc:unmounted');
 }
 
 // ============================================================
@@ -763,14 +759,12 @@ function debounceRender(fn, ms = 100) {
   };
 }
 
-
 /** Save the current design — extracted so the chrome's onAction handler can dispatch. */
 async function handleSaveWsc() {
   try {
     const saved = await api.saveConfig({ ...facility, zones, volumes });
     facility.id = saved.id || saved[0]?.id || facility.id;
     isDirty = false;
-    bus.emit('wsc:saved', { id: facility.id });
     showToast(`Saved "${facility.name || 'Untitled'}"`, 'success');
     refreshToolChrome(rootEl, _buildWscChromeOpts());
     _refreshWscKpis();
@@ -1488,7 +1482,6 @@ function _renderWscConfigHtml() {
   `;
 }
 
-
 function bindConfigEvents(panel) {
   const debouncedRender = debounceRender(renderContentView, 100);
 
@@ -1553,7 +1546,6 @@ function bindConfigEvents(panel) {
   // Engine logic now picks override-vs-derived per-field rather than mode-wide.
   // facility.primaryInventoryInput is now silently unused (preserved on saved
   // models for back-compat — has no effect on rendering or sizing).
-
 
   // Zone fields (with input debounce for live update)
   panel.querySelectorAll('[data-zone]').forEach(input => {
@@ -1932,19 +1924,6 @@ function copySummaryToClipboard() {
   } else {
     showToast('Clipboard not available', 'error');
   }
-}
-
-function showToast(message, level) {
-  const color = level === 'error' ? '#dc2626' : level === 'info' ? '#2563eb' : '#16a34a';
-  const bg    = level === 'error' ? '#fef2f2' : level === 'info' ? '#eff6ff' : '#f0fdf4';
-  const existing = document.getElementById('wsc-toast');
-  if (existing) existing.remove();
-  const el = document.createElement('div');
-  el.id = 'wsc-toast';
-  el.style.cssText = `position:fixed;bottom:24px;right:24px;padding:12px 16px;border-radius:8px;border:1px solid ${color};background:${bg};color:${color};font-size:13px;font-weight:600;z-index:9999;max-width:400px;box-shadow:0 4px 12px rgba(0,0,0,.12);`;
-  el.textContent = message;
-  document.body.appendChild(el);
-  setTimeout(() => { if (el.parentNode) el.remove(); }, 4000);
 }
 
 // ============================================================
@@ -5510,7 +5489,6 @@ function build3DScene() {
     el.innerHTML = '<div style="padding:40px; text-align:center; color:var(--ies-gray-400);">3D rendering failed. Check console.</div>';
   }
 }
-
 
 // ============================================================
 // WSC ↔ CM INTEGRATION

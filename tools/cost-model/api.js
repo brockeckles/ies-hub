@@ -1135,7 +1135,6 @@ export async function superseRateCardRow(table, oldId, newRow) {
   return { retired: retiredRow, created: insertedRow };
 }
 
-
 /**
  * CM-LND-2 — partial-update helper used by drag-to-reassign on the landing
  * page. Patches only `deal_deals_id` + `updated_at` so we don't have to

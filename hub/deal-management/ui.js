@@ -99,7 +99,6 @@ export function mount(el) {
   detailTab = 'overview';
   render();
   bindDelegatedEvents();
-  bus.emit('deal-management:mounted');
 
   // Pull live activity templates from stage_element_templates. Falls back to
   // the hardcoded DOS_TEMPLATES if the fetch fails (e.g., offline).
@@ -130,7 +129,6 @@ async function loadRealDealsAndMerge() {
     // Splice real deals at the top
     DEALS.unshift(...live);
     for (const d of live) _realDealIds.add(d.id);
-    bus.emit('deal-management:real-deals-loaded', { count: live.length });
     // Re-render if visible
     if (viewMode === 'detail' && selectedDeal) {
       const refreshed = DEALS.find(x => x.id === selectedDeal.id);
@@ -169,7 +167,6 @@ async function loadLiveTemplates() {
     // Re-render if we're currently showing DOS data.
     if (viewMode === 'detail' && detailTab === 'dos') renderDetailContent();
     else if (viewMode !== 'detail') render();
-    bus.emit('deal-management:templates-loaded', { counts: Object.fromEntries(Object.entries(live).map(([k, v]) => [k, v.length])) });
   } catch (err) {
     console.warn('[deal-mgmt] live template load failed', err);
   }
@@ -308,7 +305,6 @@ function openNewOppModal() {
       } else {
         render();
       }
-      bus.emit('deal-management:deal-created', { id: inserted?.id });
     } catch (err) {
       if (createBtn) { createBtn.disabled = false; createBtn.textContent = 'Create Deal'; }
       showToast('Failed to create deal: ' + (err?.message || err), 'error');
@@ -319,7 +315,7 @@ function openNewOppModal() {
   modal.querySelector('#opp-name')?.focus();
 }
 
-export function unmount() { rootEl = null; bus.emit('deal-management:unmounted'); }
+export function unmount() { rootEl = null;  }
 
 // ============================================================
 // EVENT DELEGATION
@@ -436,7 +432,6 @@ function bindDelegatedEvents() {
         selectedDeal.daysInStage = 0;
         renderDetail();
         bus.emit('toast:show', { message: `Advanced to Stage ${selectedDeal.stage}: ${DOS_STAGES.find(s => s.id === selectedDeal.stage)?.name || ''}`, level: 'success' });
-        bus.emit('deal:stage-advanced', { id: selectedDeal.id, stage: selectedDeal.stage });
       }
       return;
     }

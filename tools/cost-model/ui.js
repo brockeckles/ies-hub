@@ -692,7 +692,6 @@ export async function mount(el) {
 
   renderCurrentView();
 
-  bus.emit('cm:mounted');
 }
 
 /** Render whichever view (landing vs editor) is active. Re-wires its events. */
@@ -836,7 +835,6 @@ async function loadModelByCmId(id) {
     showToast('Load failed: ' + err.message, 'error');
   }
 }
-
 
 function wireLandingEvents() {
   if (!rootEl) return;
@@ -1033,7 +1031,6 @@ function reconstructModelFromFlatRow(row) {
   };
 }
 
-
 function wireEditorEvents() {
   if (!rootEl) return;
   // Reset bound-flag so re-renders (renderShell on sidebar toggle, save, load,
@@ -1135,7 +1132,6 @@ export function unmount() {
   if (isDirty) {
   }
   rootEl = null;
-  bus.emit('cm:unmounted');
 }
 
 // ============================================================
@@ -3018,7 +3014,6 @@ function navigateSection(key) {
   _refreshTopChrome();
 
   renderSection();
-  bus.emit('cm:section-changed', { section: key });
 }
 
 /**
@@ -12100,7 +12095,6 @@ async function openEquipmentCatalog() {
     isDirty = true;
     close();
     renderSection();
-    bus.emit('cm:equipment-added-from-catalog', { name: newLine.equipment_name });
   });
 
   // Focus search on open
@@ -12145,8 +12139,8 @@ async function handleSave() {
       const bundle = _lastMonthlyBundle;
       if (bundle && model.id) {
         api.persistMonthlyFacts(model.id, bundle)
-          .then(({ wrote }) => bus.emit('cm:monthly-facts-updated', { project_id: model.id, rows: wrote }))
-          .catch(err => { console.warn('[CM] persistMonthlyFacts failed:', err); bus.emit('cm:pnl-refresh-failed', { project_id: model.id, error: err }); });
+          .then(({ wrote }) => ({}))
+          .catch(err => { console.warn('[CM] persistMonthlyFacts failed:', err);  });
       }
     }
     // 2026-04-30 PM (PL1): return success so callers (notably the Approve
@@ -12462,7 +12456,6 @@ function handleExportExcel() {
     const dateStr = new Date().toISOString().slice(0, 10);
     const fileName = `CM_${safeName}_${dateStr}.xlsx`;
     XLSX.writeFile(wb, fileName);
-    bus.emit('cm:model-exported', { fileName });
   } catch (err) {
     console.error('[CM] Excel export failed:', err);
     alert('Excel export failed: ' + (err.message || 'unknown error'));
@@ -12570,7 +12563,6 @@ function handleMostPush(payload) {
   navigateSection('labor');
   updateValidation();
 
-  bus.emit('cm:labor-updated', { source: 'most', lineCount: mostLines.length });
 }
 
 // ============================================================
@@ -12619,7 +12611,6 @@ function handleWscPush(payload) {
     renderCurrentView();
   }
 
-  bus.emit('cm:facility-updated', { source: 'wsc' });
 }
 
 // ============================================================
@@ -12676,11 +12667,6 @@ function handleNetOptPush(payload) {
   navigateSection('volumes');
   updateValidation();
 
-  bus.emit('cm:netopt-applied', {
-    source: 'netopt',
-    demand,
-    transportCost: model.netoptBenchmark.transportCost,
-  });
 }
 
 // ============================================================
@@ -14129,7 +14115,6 @@ function renderImplRampPanel(arrayKey, values, label, color) {
   `;
 }
 
-
 // ============================================================
 // OPERATIONAL FLOW PAGE (OFP) — v0.4 (Functional Areas + Flows), 2026-04-29
 // Rename ripple from v0.3a.9: "lanes" → "Functional Areas", "paths" → "Flows".
@@ -14541,9 +14526,6 @@ function _ofpRegisterFlow(tag, label) {
     model.ofpFlows.push({ tag, label: label || tag });
   }
 }
-
-
-
 
 // v0.3a.9 — Canonical MHE / IT option lists. Mirrors the inline option
 // blocks rendered by the Labor page (renderLaborV1 around line 3925)
@@ -15771,8 +15753,6 @@ function _bindOperationalFlowEvents(container) {
   if (container._ofpEscDetach) try { container._ofpEscDetach(); } catch (_) {}
   container._ofpEscDetach = () => document.removeEventListener('keydown', onEsc);
 }
-
-
 
 /**
  * Collect distinct path_tag values across direct + indirect labor lines
