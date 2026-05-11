@@ -4076,3 +4076,90 @@ export function adaptYearlyToMonthlyParams(p) {
     ptoPct:              Number(p.ptoPct)        || 0,
   };
 }
+
+// ============================================================
+// runScenario — calc-as-service wrapper (port-readiness S10)
+// ============================================================
+//
+// Standardized entry point for external callers (HTTP / MCP / AI
+// agents). Wraps computeSummary in the canonical
+// { ok, version, result, errors } contract. Never throws — bad input
+// returns ok=false with an explanatory errors array.
+//
+// Cost Model's input shape is multi-section (labor / equipment /
+// overhead / VAS / startup / facility / shifts) so the wrapper has
+// more validation surface than Fleet / COG / DM / NetOpt. Missing
+// arrays normalize to empty; missing shifts becomes `{}` (which
+// downstream code tolerates via optional chaining).
+export const ENGINE_VERSION = '1.0.0';
+
+/**
+ * Run a Cost Model scenario.
+ * @param {{
+ *   laborLines?: any[],
+ *   indirectLaborLines?: any[],
+ *   equipmentLines?: any[],
+ *   overheadLines?: any[],
+ *   vasLines?: any[],
+ *   startupLines?: any[],
+ *   facility?: any,
+ *   shifts?: any,
+ *   facilityRate?: any,
+ *   utilityRate?: any,
+ *   contractYears?: number,
+ *   targetMarginPct?: number,
+ *   annualOrders?: number,
+ *   laborOpts?: any,
+ *   mlv?: any,
+ * }} params
+ * @returns {{ ok: boolean, version: string, result: any, errors: string[] }}
+ */
+export function runScenario(params) {
+  if (params == null || typeof params !== 'object') params = {};
+  const errors = [];
+
+  // At least one source of cost must be present, otherwise the model
+  // is degenerate (zero revenue, zero cost) — surface that explicitly
+  // rather than silently returning a zeroed CostSummary.
+  const arrays = ['laborLines', 'indirectLaborLines', 'equipmentLines',
+                  'overheadLines', 'vasLines', 'startupLines'];
+  const anyArray = arrays.some(k => Array.isArray(params[k]) && params[k].length > 0);
+  if (!anyArray) errors.push('at least one cost line array (laborLines, equipmentLines, etc.) must be a non-empty array');
+
+  // Required scalars
+  if (params.contractYears != null && !Number.isFinite(Number(params.contractYears))) {
+    errors.push('contractYears must be a finite number when provided');
+  }
+  if (params.targetMarginPct != null && !Number.isFinite(Number(params.targetMarginPct))) {
+    errors.push('targetMarginPct must be a finite number when provided');
+  }
+
+  if (errors.length) return { ok: false, version: ENGINE_VERSION, result: null, errors };
+
+  // Normalize — computeSummary loops over arrays without optional chaining
+  // in places (totalLaborCost et al.), so undefined arrays would throw.
+  const normalized = {
+    laborLines:         Array.isArray(params.laborLines)         ? params.laborLines         : [],
+    indirectLaborLines: Array.isArray(params.indirectLaborLines) ? params.indirectLaborLines : [],
+    equipmentLines:     Array.isArray(params.equipmentLines)     ? params.equipmentLines     : [],
+    overheadLines:      Array.isArray(params.overheadLines)      ? params.overheadLines      : [],
+    vasLines:           Array.isArray(params.vasLines)           ? params.vasLines           : [],
+    startupLines:       Array.isArray(params.startupLines)       ? params.startupLines       : [],
+    facility:           params.facility || {},
+    shifts:             params.shifts   || { shiftsPerDay: 1, hoursPerShift: 8, daysPerWeek: 5 },
+    facilityRate:       params.facilityRate,
+    utilityRate:        params.utilityRate,
+    contractYears:      Number(params.contractYears)   || 5,
+    targetMarginPct:    Number(params.targetMarginPct) || 0,
+    annualOrders:       Number(params.annualOrders)    || 1,
+    laborOpts:          params.laborOpts,
+    mlv:                params.mlv,
+  };
+
+  try {
+    const result = computeSummary(normalized);
+    return { ok: true, version: ENGINE_VERSION, result, errors: [] };
+  } catch (e) {
+    return { ok: false, version: ENGINE_VERSION, result: null, errors: [e?.message || String(e)] };
+  }
+}

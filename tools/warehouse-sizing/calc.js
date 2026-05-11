@@ -2777,3 +2777,70 @@ export function labelForStoreType(t) {
     mix: 'Mixed Rack + Bulk',
   })[t] || t;
 }
+
+// ============================================================
+// runScenario — calc-as-service wrapper (port-readiness S10)
+// ============================================================
+//
+// Standardized entry point for external callers (HTTP / MCP / AI
+// agents). Wraps sizeFacility in the canonical
+// { ok, version, result, errors } contract. Never throws — bad input
+// returns ok=false with an explanatory errors array.
+//
+// WSC's validation surface is small because SIZING_DEFAULTS merges
+// into any partial input. The wrapper still rejects clearly broken
+// numeric inputs (negative dimensions, non-finite values) so callers
+// see a hard error rather than a quietly-normalized 0.
+export const ENGINE_VERSION = '1.0.0';
+
+/**
+ * Run a Warehouse Sizing scenario.
+ * @param {{
+ *   peakUnits?: number,
+ *   skuCount?: number,
+ *   clearHeightFt?: number,
+ *   fullPalletPct?: number,
+ *   cartonOnPalletPct?: number,
+ *   cartonOnShelvingPct?: number,
+ *   palletPositionsOverride?: number,
+ *   shelvingLocationsOverride?: number,
+ *   annualOutboundUnits?: number,
+ *   peakDays?: number,
+ *   daysOnHand?: number,
+ *   [k: string]: any,
+ * }} params
+ * @returns {{ ok: boolean, version: string, result: any, errors: string[] }}
+ */
+export function runScenario(params) {
+  if (params == null || typeof params !== 'object') params = {};
+  const errors = [];
+
+  // Reject obvious garbage: negative volumes, non-finite scalars where supplied.
+  const numericFields = [
+    'peakUnits', 'skuCount', 'clearHeightFt',
+    'fullPalletPct', 'cartonOnPalletPct', 'cartonOnShelvingPct',
+    'palletPositionsOverride', 'shelvingLocationsOverride',
+    'annualOutboundUnits', 'peakDays', 'daysOnHand',
+    'unitsPerPallet', 'cartonsPerPallet', 'unitsPerCartonPal',
+    'unitsPerCartonShelv', 'cartonsPerLocation',
+  ];
+  for (const k of numericFields) {
+    const v = params[k];
+    if (v == null) continue;
+    const n = Number(v);
+    if (!Number.isFinite(n)) {
+      errors.push(`${k} must be a finite number when provided`);
+    } else if (n < 0) {
+      errors.push(`${k} must be non-negative when provided`);
+    }
+  }
+
+  if (errors.length) return { ok: false, version: ENGINE_VERSION, result: null, errors };
+
+  try {
+    const result = sizeFacility(params);
+    return { ok: true, version: ENGINE_VERSION, result, errors: [] };
+  } catch (e) {
+    return { ok: false, version: ENGINE_VERSION, result: null, errors: [e?.message || String(e)] };
+  }
+}
