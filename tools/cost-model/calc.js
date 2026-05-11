@@ -2826,51 +2826,18 @@ export function sensitivityTable(baseCosts, baseOrders, adjustments = [-0.10, -0
  * @param {boolean} [opts.compact] — use K/M suffixes
  * @returns {string}
  */
-export function formatCurrency(value, opts = {}) {
-  if (opts.compact) {
-    if (Math.abs(value) >= 1_000_000) return '$' + (value / 1_000_000).toFixed(1) + 'M';
-    if (Math.abs(value) >= 1_000) return '$' + (value / 1_000).toFixed(0) + 'K';
-  }
-  const decimals = opts.decimals ?? (Math.abs(value) >= 1 ? 0 : 2);
-  return '$' + value.toLocaleString('en-US', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  });
-}
+// ============================================================
+// Display formatting — delegated to shared/format.js (S16)
+// ============================================================
+// formatCurrency / formatPct / formatNumber used to live here as
+// duplicated copies across cost-model / network-opt / fleet-modeler /
+// deal-manager / warehouse-sizing calc.js. Consolidated 2026-05-11
+// into shared/format.js — these re-exports preserve every existing
+// consumer call site (`calc.formatCurrency(...)` etc.) so the move is
+// a no-op at every call site.
+export { formatCurrency, formatPct, formatNumber } from '../../shared/format.js';
 
-/**
- * Format a number as percentage.
- * @param {number} value — raw percentage (e.g. 12.5 for 12.5%)
- * @param {number} [decimals=1]
- * @returns {string}
- */
-export function formatPct(value, decimals = 1) {
-  return value.toFixed(decimals) + '%';
-}
 
-/**
- * Format a plain number with thousands separators (en-US locale).
- * Use this for read-only numeric displays that aren't currency or percent —
- * e.g. headcount, square footage, hours, units, throughput. NOT for input
- * values (HTML <input type="number"> won't accept comma-separated text).
- *
- * 2026-04-27 AM10 — added during the Phase 1 thousands-separator sweep
- * (Brock walkthrough: "some use it, while others don't"). Architectural
- * note: formatting helpers belong in the UI layer, not calc; they're here
- * for the moment because formatCurrency/formatPct already lived here. A
- * future Phase 2 should hoist the trio out to shared/format.js.
- *
- * @param {number} value — raw number
- * @param {number} [decimals=0] — fractional digits
- * @returns {string} '7,323,691' or '134.2', etc. NaN/null/undefined → '—'
- */
-export function formatNumber(value, decimals = 0) {
-  if (value == null || !Number.isFinite(value)) return '—';
-  return value.toLocaleString('en-US', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  });
-}
 
 // ============================================================
 // AUTO-GENERATION — INDIRECT LABOR

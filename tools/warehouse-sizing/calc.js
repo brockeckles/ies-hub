@@ -1983,24 +1983,10 @@ export function formatSqft(sqft) {
   return Math.round(sqft).toLocaleString() + ' SF';
 }
 
-/**
- * Format a percentage.
- * @param {number} pct
- * @param {number} [decimals=1]
- * @returns {string}
- */
-export function formatPct(pct, decimals = 1) {
-  return (pct || 0).toFixed(decimals) + '%';
-}
+// Display formatting — delegated to shared/format.js (S16, was duplicated
+// across 4 tool calc.js files; consolidated 2026-05-11).
+export { formatPct, formatFt } from '../../shared/format.js';
 
-/**
- * Format height in feet.
- * @param {number} ft
- * @returns {string}
- */
-export function formatFt(ft) {
-  return (ft || 0).toFixed(1) + ' ft';
-}
 
 // ============================================================
 // VOLUME-FIRST FACILITY SIZING (v2 calcWarehouse port)

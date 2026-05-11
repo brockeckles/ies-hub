@@ -573,31 +573,10 @@ export const DEMO_SITES = [
 // FORMATTING
 // ============================================================
 
-/**
- * @param {number} val
- * @param {Object} [opts]
- * @param {boolean} [opts.compact]
- * @returns {string}
- */
-export function formatCurrency(val, opts = {}) {
-  if (opts.compact) {
-    if (Math.abs(val) >= 1e6) return '$' + (val / 1e6).toFixed(1) + 'M';
-    if (Math.abs(val) >= 1e3) return '$' + (val / 1e3).toFixed(0) + 'K';
-  }
-  return '$' + (val || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
-}
+// Display formatting — delegated to shared/format.js (S16, was duplicated
+// across 4 tool calc.js files; consolidated 2026-05-11).
+export { formatCurrency, formatPct, formatMonths } from '../../shared/format.js';
 
-/** @param {number} pct @returns {string} */
-export function formatPct(pct) {
-  return (pct || 0).toFixed(1) + '%';
-}
-
-/** @param {number} months @returns {string} */
-export function formatMonths(months) {
-  if (!isFinite(months) || months <= 0) return 'N/A';
-  if (months < 12) return months.toFixed(1) + ' mo';
-  return (months / 12).toFixed(1) + ' yr';
-}
 
 /** @param {string} status @returns {{ label: string, color: string, bg: string }} */
 export function statusBadge(status) {
