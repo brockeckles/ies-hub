@@ -146,7 +146,7 @@ const CACHE_BUST_ALLOWLIST = new Set([
   'tools/warehouse-sizing/types.js',
   'tools/warehouse-sizing/calc.js',
   'tools/fleet-modeler/api.js',
-  'tools/cost-model/api.js',     // 3 versions (S26 cascade bumped one; pre-existing auth1 + phase4-cm)
+  // S30 (2026-05-13) cleaned up tools/cost-model/api.js — was 3 versions across WSC/ui.js (auth1), DealMgr/ui.js (phase4-cm), CM/ui.js (port27); now 1 (?v=port30). Cascade bumped WSC/ui.js + DealMgr/ui.js + CM/ui.js cache-busts in index.html to port30; updated shared/router.js docstring example to match.
   'tools/cost-model/ofp-helpers.js',
   // S27 (2026-05-12 PM) cleaned up tools/cost-model/ui.js — was 2 versions (one was a stale router.js docstring ref), now 1 (?v=port27)
 ]);
