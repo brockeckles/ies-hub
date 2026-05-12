@@ -12,7 +12,7 @@ import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260511-port2';
 import ofpStyles from './operational-flow-styles.js?v=20260511-port4';
 import { auth } from '../../shared/auth.js?v=20260512-port27';
-import * as calc from './calc.js?v=20260511-port16';
+import * as calc from './calc.js?v=20260512-heur1v';
 import * as api from './api.js?v=20260512-cm-wsc-dimfix';
 import * as scenarios from './calc.scenarios.js?v=20260430-pm-otfix2';
 import { renderHeuristicsPanel } from './render-heuristics-panel.js?v=20260511-port8';
@@ -86,11 +86,11 @@ import {
   renderOperationalFlow,
   renderManageAreasModal as _renderManageAreasModal,
   renderManageFlowsModal as _renderManageFlowsModal,
-} from './operational-flow-render.js?v=20260513-port34';
+} from './operational-flow-render.js?v=20260512-heur1v';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 import { formatUomSingular } from '../../shared/format.js?v=20260511-port16';
-import { computeHeaderKpis } from './header-kpis.js?v=20260511-port16';
-import { computeWhatIfPreview } from './what-if-preview.js?v=20260511-port16';
+import { computeHeaderKpis } from './header-kpis.js?v=20260512-heur1v';
+import { computeWhatIfPreview } from './what-if-preview.js?v=20260512-heur1v';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
 // disk but no longer imported; can be deleted in a future cleanup.

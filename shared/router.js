@@ -9,7 +9,7 @@
  *   import { router } from './router.js?v=20260512-port28';
  *
  *   router.register('designtools/cost-model', {
- *     load: () => import('../tools/cost-model/ui.js?v=20260512-cm-wsc-handoff'),
+ *     load: () => import('../tools/cost-model/ui.js?v=20260512-heur1v'),
  *     title: 'Cost Model Builder',
  *   });
  *

@@ -3750,6 +3750,49 @@ export function autoGenerateStartup(state) {
  * @returns {Array<{ type: 'ok'|'warn'|'info', title: string, detail: string }>}
  */
 /**
+ * CM-HEUR-1 vertical-storage scaling (2026-05-12).
+ *
+ * The original heuristic used a flat 40 sqft/pallet — implicit
+ * single-level storage. That meaningfully over-estimated facility size
+ * for any DC with high clear height (i.e. nearly all modern build-to-
+ * suit space) and forced workarounds like Hearthwood's DOH=22 setting
+ * (used to artificially shrink avg-on-hand into a number the
+ * single-level math could produce a sensible suggestion for).
+ *
+ * Math:
+ *   pallet_level_pitch_ft  = 6.5 ft   (GMA 60" load + 6" pallet + 5" beam + 6" clearance)
+ *   sprinkler_clearance_ft = 1.5 ft   (top-flue + sprinkler head)
+ *   levels = floor((clearHeight - sprinkler_clearance) / pitch)
+ *   capped at 6 (above that, retrieval time + sprinkler classification gets ugly)
+ *   floor at 1 (always at least one level even for tight clears)
+ *   sqft_per_pallet = 40 / levels
+ *
+ * Reference table:
+ *   <24 ft clear → 3 levels  → 13.3 sqft/pallet
+ *   24-30 ft     → 4 levels  → 10.0 sqft/pallet
+ *   30-36 ft     → 5 levels  →  8.0 sqft/pallet
+ *   36-40 ft     → 5 levels  →  8.0 sqft/pallet
+ *   40+ ft       → 6 levels  →  6.7 sqft/pallet (cap)
+ *
+ * Default clear height when unset / non-positive: 32 ft (typical
+ * Class III mod-build, 4-level selective).
+ *
+ * @param {number} clearHeightFt — facility clear height
+ * @returns {{ levels: number, sqftPerPallet: number, clearHeight: number }}
+ */
+export function computeVerticalPalletFootprint(clearHeightFt) {
+  const PALLET_LEVEL_PITCH_FT = 6.5;
+  const SPRINKLER_CLEARANCE_FT = 1.5;
+  const SQFT_PER_PALLET_SINGLE_LEVEL = 40;
+  const MAX_LEVELS = 6;
+  const raw = Number(clearHeightFt);
+  const clear = Number.isFinite(raw) && raw > 0 ? raw : 32;
+  const usable = Math.max(0, clear - SPRINKLER_CLEARANCE_FT);
+  const levels = Math.max(1, Math.min(MAX_LEVELS, Math.floor(usable / PALLET_LEVEL_PITCH_FT)));
+  return { levels, sqftPerPallet: SQFT_PER_PALLET_SINGLE_LEVEL / levels, clearHeight: clear };
+}
+
+/**
  * R14 (2026-04-29) — pure helper: suggested facility sqft from volume.
  * Same DOH-aware math as the heuristic warning in generateHeuristics, factored
  * out so the Setup tab can show a "(suggested: NNNK)" hint before any warning
@@ -3767,7 +3810,8 @@ export function suggestFacilitySqft(state) {
   const dohRaw = Number(state.facility?.daysOnHand);
   const doh = Number.isFinite(dohRaw) && dohRaw > 0 ? dohRaw : 30;
   const avgPalletsOnHand = annualPalletsIn * (doh / 365);
-  const estPalletArea = avgPalletsOnHand * 40;
+  const { sqftPerPallet } = computeVerticalPalletFootprint(state.facility?.clearHeight);
+  const estPalletArea = avgPalletsOnHand * sqftPerPallet;
   // 2026-04-30 (G3) — sanity bound on the suggestion. The largest US
   // warehouses are ~3-4M sqft (Walmart Lehigh Valley ~3.4M, Boeing Everett
   // ~4.3M); a single-DC suggestion above 5M is almost always the symptom
@@ -3797,19 +3841,20 @@ export function suggestFacilitySqft(state) {
  * a nonsense suggestion. `sane` is true when raw ≤ 5M sqft.
  */
 export function suggestFacilitySqftDetail(state) {
-  if (!state) return { sqft: 0, raw: 0, capped: false, sane: true };
+  if (!state) return { sqft: 0, raw: 0, capped: false, sane: true, levels: 1, sqftPerPallet: 40 };
   const annualPalletsIn = _getAggregateInbound(state, 'pallets');
-  if (!(annualPalletsIn > 0)) return { sqft: 0, raw: 0, capped: false, sane: true };
+  if (!(annualPalletsIn > 0)) return { sqft: 0, raw: 0, capped: false, sane: true, levels: 1, sqftPerPallet: 40 };
   const dohRaw = Number(state.facility?.daysOnHand);
   const doh = Number.isFinite(dohRaw) && dohRaw > 0 ? dohRaw : 30;
   const avgPalletsOnHand = annualPalletsIn * (doh / 365);
-  const raw = (avgPalletsOnHand * 40) / 0.55;
+  const { levels, sqftPerPallet } = computeVerticalPalletFootprint(state.facility?.clearHeight);
+  const raw = (avgPalletsOnHand * sqftPerPallet) / 0.55;
   const SANITY_CAP_SQFT = 5_000_000;
   const capped = raw > SANITY_CAP_SQFT;
   const sqft = capped
     ? Math.round(SANITY_CAP_SQFT / 1000) * 1000
     : Math.round(raw / 1000) * 1000;
-  return { sqft, raw: Math.round(raw), capped, sane: !capped };
+  return { sqft, raw: Math.round(raw), capped, sane: !capped, levels, sqftPerPallet };
 }
 
 export function generateHeuristics(state, summary) {
@@ -3980,7 +4025,11 @@ export function generateHeuristics(state, summary) {
       const dohRaw = Number(state.facility?.daysOnHand);
       const doh = Number.isFinite(dohRaw) && dohRaw > 0 ? dohRaw : 30;
       const avgPalletsOnHand = annualPalletsIn * (doh / 365);
-      const estPalletArea = avgPalletsOnHand * 40;
+      // Vertical-storage scaling (2026-05-12): honor facility.clearHeight
+      // so multi-level rack shrinks the floor footprint per pallet.
+      // Default 32 ft (typical Class III) → 4 levels → 10 sqft/pallet.
+      const { levels, sqftPerPallet } = computeVerticalPalletFootprint(state.facility?.clearHeight);
+      const estPalletArea = avgPalletsOnHand * sqftPerPallet;
       const rawSqft = estPalletArea / 0.55;
       // 2026-04-30 (G3) — cap at 5M sqft. Above that, the volume profile
       // is almost certainly broken (typically misconfigured channel UOMs).
@@ -4005,7 +4054,7 @@ export function generateHeuristics(state, summary) {
             title: 'Suggested facility size: ~' + suggestedSqft.toLocaleString() + ' sqft',
             detail: 'Current: ' + sqft.toLocaleString() + ' sqft (' +
               (sqft > suggestedSqft ? 'may be oversized' : 'may be undersized') + '). ' +
-              'Rough estimate: ' + Math.round(avgPalletsOnHand).toLocaleString() + ' avg pallets on-hand × 40 sqft × 1.82 (55% net util). ' +
+              'Rough estimate: ' + Math.round(avgPalletsOnHand).toLocaleString() + ' avg pallets on-hand × ' + sqftPerPallet.toFixed(1) + ' sqft/pallet (' + levels + '-level rack at ' + Math.round(state.facility?.clearHeight || 32) + ' ft clear) / 0.55 net util. ' +
               'Inventory turns: ' + turnsLabel + '/yr (' + dohSource + '). ' +
               'Run Warehouse Sizing for a fully-sized recommendation.',
           });
