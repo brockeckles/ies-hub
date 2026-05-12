@@ -17,7 +17,7 @@
  *
  * @module tools/cost-model/operational-flow-registry
  */
-import { cmState } from './state.js?v=20260511-port21';
+import { cmState } from './state.js?v=20260511-port22';
 
 // ============================================================
 // Default Functional Area catalog. This array is the SEED for new cost
@@ -405,7 +405,7 @@ export function ofpFlowLabel(tag) {
  * deterministic hash into _OFP_FLOW_PALETTE so untagged or unregistered
  * flows still render a stable color.
  */
-function _flowColor(tag) {
+export function ofpFlowColor(tag) {
   if (!tag || !tag.trim()) return '#9CA3AF'; // neutral gray for untagged
   const meta = ofpFlowMeta(tag);
   if (meta && meta.color) return meta.color;

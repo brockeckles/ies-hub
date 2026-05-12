@@ -8,7 +8,7 @@
 //
 // Run:  node test-ofp-registry.mjs
 
-import { cmState, setModel, resetAll } from './tools/cost-model/state.js?v=20260511-port21';
+import { cmState, setModel, resetAll } from './tools/cost-model/state.js?v=20260511-port22';
 import {
   ofpEnsureAreaRegistry,
   ofpRegistry,
@@ -31,7 +31,8 @@ import {
   ofpAllFlowTags,
   ofpClassifyAreaFromLine,
   ofpClassifySubAreaFromLine,
-} from './tools/cost-model/operational-flow-registry.js?v=20260511-port21';
+  ofpFlowColor,
+} from './tools/cost-model/operational-flow-registry.js?v=20260511-port22';
 
 let passed = 0, failed = 0;
 const fails = [];
@@ -248,6 +249,17 @@ const subSorted2 = [...cmState.model.ofpAreas[0].subAreas]
   .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
   .map(s => s.key);
 ok('subarea move: qa moved up', subSorted2.indexOf('qa') < subSorted2.length - 1);
+
+// ============================================================
+// ofpFlowColor — deterministic palette hash (no model needed)
+// ============================================================
+ok('flowColor: stable for same tag',
+   ofpFlowColor('full-pallet') === ofpFlowColor('full-pallet'));
+ok('flowColor: returns hex color string',
+   typeof ofpFlowColor('xyz') === 'string' && ofpFlowColor('xyz').startsWith('#'));
+ok('flowColor: different tags can produce different colors',
+   ofpFlowColor('a-flow') !== ofpFlowColor('b-flow') ||
+   ofpFlowColor('a-flow') !== ofpFlowColor('c-flow'));  // at least one mismatch
 
 // ============================================================
 // Classifier — _classifyAreaFromLine + _classifySubAreaFromLine
