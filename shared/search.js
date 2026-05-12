@@ -9,7 +9,7 @@
  * @module shared/search
  */
 
-import { router } from './router.js?v=20260418-sK';
+import { router } from './router.js?v=20260512-port28';
 import { bus } from './event-bus.js?v=20260418-sK';
 
 /**

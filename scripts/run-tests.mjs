@@ -136,7 +136,7 @@ const CACHE_BUST_ALLOWLIST = new Set([
   'shared/toast.js',           // 3 versions; widely consumed
   // S26 (2026-05-12) cleaned up shared/auth.js — was 2 versions, now 1 (?v=port27)
   'shared/export.js',          // 3 versions; mostly stateless helpers
-  'shared/router.js',          // 2 versions; singleton router instance
+  // S27 (2026-05-12 PM) cleaned up shared/router.js — was 2 versions, now 1 (?v=port28)
   'shared/search.js',          // 2 versions; module-level state
   'shared/unsaved-guard.js',   // 3 versions; self-wires listeners
   'shared/scenario-landing.js',// 3 versions
@@ -146,9 +146,9 @@ const CACHE_BUST_ALLOWLIST = new Set([
   'tools/warehouse-sizing/types.js',
   'tools/warehouse-sizing/calc.js',
   'tools/fleet-modeler/api.js',
-  'tools/cost-model/api.js',
+  'tools/cost-model/api.js',     // 3 versions (S26 cascade bumped one; pre-existing auth1 + phase4-cm)
   'tools/cost-model/ofp-helpers.js',
-  'tools/cost-model/ui.js',
+  // S27 (2026-05-12 PM) cleaned up tools/cost-model/ui.js — was 2 versions (one was a stale router.js docstring ref), now 1 (?v=port27)
 ]);
 
 function cacheBustConsistencyCheck() {
