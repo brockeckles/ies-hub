@@ -19,16 +19,18 @@
  *
  * @module tools/cost-model/operational-flow-render
  */
-import { cmState } from './state.js?v=20260512-port24';
+import { cmState } from './state.js?v=20260512-port25';
 import {
   ofpAreaMeta as _ofpAreaMeta,
   ofpFlowLabel as _ofpFlowLabel,
   ofpFlowRegistry as _ofpFlowRegistry,
   ofpRegistry as _ofpRegistry,
+  ofpNormalizeAreaSortOrder as _ofpNormalizeAreaSortOrder,
+  ofpNormalizeFlowSortOrder as _ofpNormalizeFlowSortOrder,
   ofpClassifyAreaFromLine as _classifyAreaFromLine,
   ofpClassifySubAreaFromLine as _classifySubAreaFromLine,
   ofpFlowColor as _flowColor,
-} from './operational-flow-registry.js?v=20260512-port24';
+} from './operational-flow-registry.js?v=20260512-port25';
 import {
   ofpEquipBadge as _ofpEquipBadge,
   ofpUomIn as _ofpUomIn,
@@ -537,5 +539,302 @@ export function renderOperationalFlow() {
     </div>
 
     ${ofpStyles()}
+  `;
+}
+
+
+// ============================================================
+// Manage Areas + Manage Flows modal renderers (S24b).
+// Pure HTML. Events bound separately by ui.js after innerHTML.
+// ============================================================
+
+export function renderManageAreasModal() {
+  const model = cmState.model;
+  // Normalize sortOrder so the modal lists in dense 0..N-1 order — keeps
+  // up/down disabled-state math clean.
+  _ofpNormalizeAreaSortOrder();
+  const registry = _ofpRegistry();
+  const lastIdx = registry.length - 1;
+  // v0.10 — track which areas are expanded to show sub-areas. State
+  // persists across modal re-renders (closure on container).
+  const expanded = (typeof window !== 'undefined' && window.__ofpExpandedAreas) || new Set();
+  if (typeof window !== 'undefined') window.__ofpExpandedAreas = expanded;
+  // Count lines bound to each area for the line-count column + the
+  // delete-confirm prompt (so the user knows how many activities will
+  // be reassigned).
+  const counts = {};
+  for (const a of registry) counts[a.key] = 0;
+  for (const l of (model.laborLines || [])) {
+    const k = _classifyAreaFromLine(l);
+    counts[k] = (counts[k] || 0) + 1;
+  }
+  const indirectKey = registry.some(a => a.key === 'support') ? 'support' : 'unclassified';
+  for (const _l of (model.indirectLaborLines || [])) {
+    counts[indirectKey] = (counts[indirectKey] || 0) + 1;
+  }
+
+  // v0.10 — Pre-compute per-sub-area line counts.
+  const subCounts = {};
+  for (const a of registry) {
+    for (const sa of (a.subAreas || [])) {
+      subCounts[`${a.key}|${sa.key}`] = 0;
+    }
+  }
+  for (const l of (model.laborLines || [])) {
+    const k = _classifyAreaFromLine(l);
+    const sk = _classifySubAreaFromLine(l, k);
+    if (sk) subCounts[`${k}|${sk}`] = (subCounts[`${k}|${sk}`] || 0) + 1;
+  }
+  for (const l of (model.indirectLaborLines || [])) {
+    const supportKey = registry.some(a => a.key === 'support') ? 'support' : 'unclassified';
+    const sk = _classifySubAreaFromLine(l, supportKey);
+    if (sk) subCounts[`${supportKey}|${sk}`] = (subCounts[`${supportKey}|${sk}`] || 0) + 1;
+  }
+
+  const rows = registry.map((a, idx) => {
+    const isProtected = !!a.isProtected;
+    const badge = isProtected
+      ? '<span class="ofp-area-mgr__badge ofp-area-mgr__badge--protected" title="Protected — cannot delete">PROTECTED</span>'
+      : '';
+    const keywordsCell = a.key === 'unclassified'
+      ? '<span class="ofp-area-mgr__muted">— catch-all (no keywords)</span>'
+      : `
+        <div class="ofp-area-mgr__chips" data-area-key="${escapeAttr(a.key)}">
+          ${(a.keywords || []).map(kw => `
+            <span class="ofp-area-mgr__chip">
+              ${escapeHtml(kw)}
+              <button class="ofp-area-mgr__chip-x" data-area-key="${escapeAttr(a.key)}" data-keyword="${escapeAttr(kw)}" title="Remove keyword">×</button>
+            </span>
+          `).join('')}
+          <input type="text" class="ofp-area-mgr__chip-input" placeholder="+ keyword" data-area-key="${escapeAttr(a.key)}" />
+        </div>
+      `;
+    const delBtn = isProtected
+      ? `<button class="ofp-area-mgr__del" disabled title="Unclassified is protected — cannot delete">×</button>`
+      : `<button class="ofp-area-mgr__del" data-area-key="${escapeAttr(a.key)}" data-area-count="${counts[a.key] || 0}" title="Delete this Functional Area">×</button>`;
+
+    const upDisabled = idx === 0 ? 'disabled' : '';
+    const downDisabled = idx === lastIdx ? 'disabled' : '';
+    const isExpanded = expanded.has(a.key);
+    const subAreas = [...(a.subAreas || [])].sort((x, y) => (x.sortOrder || 0) - (y.sortOrder || 0));
+    const lastSubIdx = subAreas.length - 1;
+    const chevron = `<button class="ofp-area-mgr__chevron ${isExpanded ? 'ofp-area-mgr__chevron--open' : ''}" data-area-key="${escapeAttr(a.key)}" data-action="toggle-expand" title="${isExpanded ? 'Collapse sub-areas' : (subAreas.length > 0 ? 'Expand sub-areas' : 'Add sub-areas')}">▶</button>`;
+    return `
+      <tr class="ofp-area-mgr__row ofp-mgr-row ${a.hidden ? 'ofp-mgr-row--hidden' : ''} ${isExpanded ? 'ofp-mgr-row--expanded' : ''}" data-area-row-key="${escapeAttr(a.key)}" data-area-idx="${idx}">
+        <td class="ofp-mgr-row__handle-cell">
+          <span class="ofp-mgr-row__grip" data-area-key="${escapeAttr(a.key)}" draggable="true" title="Drag to reorder">⋮⋮</span>
+          ${chevron}
+        </td>
+        <td class="ofp-area-mgr__color-cell">
+          <input type="color" class="ofp-area-mgr__color-input" value="${a.color}" data-area-key="${escapeAttr(a.key)}" data-area-field="color" title="Header stripe color" />
+        </td>
+        <td class="ofp-area-mgr__label-cell">
+          <input type="text" class="hub-input ofp-area-mgr__input" value="${escapeAttr(a.label)}" data-area-key="${escapeAttr(a.key)}" data-area-field="label" maxlength="40" />
+          ${badge}
+        </td>
+        <td class="ofp-area-mgr__keywords-cell">${keywordsCell}</td>
+        <td class="ofp-area-mgr__display-cell">
+          <select class="hub-input ofp-area-mgr__input" data-area-key="${escapeAttr(a.key)}" data-area-field="displayMode">
+            <option value="main" ${a.displayMode === 'main' ? 'selected' : ''}>Main row</option>
+            <option value="wide" ${a.displayMode !== 'main' ? 'selected' : ''}>Wide row</option>
+          </select>
+        </td>
+        <td class="ofp-mgr-row__visible-cell">
+          <button class="ofp-mgr-row__visible ${a.hidden ? 'ofp-mgr-row__visible--off' : ''}" data-area-key="${escapeAttr(a.key)}" data-toggle="visible" title="${a.hidden ? 'Hidden on canvas — click to show' : 'Visible — click to hide on canvas'}">${a.hidden ? '🚫' : '👁'}</button>
+        </td>
+        <td class="ofp-area-mgr__count-cell">${counts[a.key] || 0}</td>
+        <td class="ofp-mgr-row__move-cell">
+          <button class="ofp-mgr-row__move" data-area-key="${escapeAttr(a.key)}" data-move="up" ${upDisabled} title="Move up">▲</button>
+          <button class="ofp-mgr-row__move" data-area-key="${escapeAttr(a.key)}" data-move="down" ${downDisabled} title="Move down">▼</button>
+        </td>
+        <td class="ofp-area-mgr__actions-cell">${delBtn}</td>
+      </tr>
+      ${isExpanded ? `
+        ${subAreas.map((sa, sidx) => {
+          const subUp = sidx === 0 ? 'disabled' : '';
+          const subDown = sidx === lastSubIdx ? 'disabled' : '';
+          const subKwChips = (sa.keywords || []).map(kw => `
+            <span class="ofp-area-mgr__chip">
+              ${escapeHtml(kw)}
+              <button class="ofp-area-mgr__chip-x" data-area-key="${escapeAttr(a.key)}" data-subarea-key="${escapeAttr(sa.key)}" data-keyword="${escapeAttr(kw)}" data-scope="sub" title="Remove keyword">×</button>
+            </span>
+          `).join('');
+          return `
+            <tr class="ofp-area-mgr__row ofp-subarea-mgr__row ${sa.hidden ? 'ofp-mgr-row--hidden' : ''}" data-area-row-key="${escapeAttr(a.key)}" data-subarea-row-key="${escapeAttr(sa.key)}">
+              <td class="ofp-mgr-row__handle-cell ofp-subarea-mgr__indent"></td>
+              <td class="ofp-area-mgr__color-cell">
+                <input type="color" class="ofp-area-mgr__color-input" value="${sa.color}" data-area-key="${escapeAttr(a.key)}" data-subarea-key="${escapeAttr(sa.key)}" data-subarea-field="color" title="Sub-area stripe color" />
+              </td>
+              <td class="ofp-area-mgr__label-cell">
+                <input type="text" class="hub-input ofp-area-mgr__input" value="${escapeAttr(sa.label)}" data-area-key="${escapeAttr(a.key)}" data-subarea-key="${escapeAttr(sa.key)}" data-subarea-field="label" maxlength="40" />
+              </td>
+              <td class="ofp-area-mgr__keywords-cell">
+                <div class="ofp-area-mgr__chips" data-area-key="${escapeAttr(a.key)}" data-subarea-key="${escapeAttr(sa.key)}" data-scope="sub">
+                  ${subKwChips}
+                  <input type="text" class="ofp-area-mgr__chip-input" placeholder="+ keyword" data-area-key="${escapeAttr(a.key)}" data-subarea-key="${escapeAttr(sa.key)}" data-scope="sub" />
+                </div>
+              </td>
+              <td class="ofp-area-mgr__display-cell"><span class="ofp-area-mgr__muted" title="Sub-areas always render stacked under their parent">— stacked under ${escapeHtml(a.label)} —</span></td>
+              <td class="ofp-mgr-row__visible-cell">
+                <button class="ofp-mgr-row__visible ${sa.hidden ? 'ofp-mgr-row__visible--off' : ''}" data-area-key="${escapeAttr(a.key)}" data-subarea-key="${escapeAttr(sa.key)}" data-toggle="sub-visible" title="${sa.hidden ? 'Hidden — click to show' : 'Visible — click to hide'}">${sa.hidden ? '🚫' : '👁'}</button>
+              </td>
+              <td class="ofp-area-mgr__count-cell">${subCounts[`${a.key}|${sa.key}`] || 0}</td>
+              <td class="ofp-mgr-row__move-cell">
+                <button class="ofp-mgr-row__move" data-area-key="${escapeAttr(a.key)}" data-subarea-key="${escapeAttr(sa.key)}" data-sub-move="up" ${subUp} title="Move up">▲</button>
+                <button class="ofp-mgr-row__move" data-area-key="${escapeAttr(a.key)}" data-subarea-key="${escapeAttr(sa.key)}" data-sub-move="down" ${subDown} title="Move down">▼</button>
+              </td>
+              <td class="ofp-area-mgr__actions-cell">
+                <button class="ofp-area-mgr__del" data-area-key="${escapeAttr(a.key)}" data-subarea-key="${escapeAttr(sa.key)}" data-sub-delete="1" title="Delete this sub-area">×</button>
+              </td>
+            </tr>
+          `;
+        }).join('')}
+        <tr class="ofp-subarea-mgr__add-row">
+          <td colspan="9">
+            <button class="ofp-subarea-mgr__add-btn" data-area-key="${escapeAttr(a.key)}" data-action="add-subarea">+ Add Sub-Area to ${escapeHtml(a.label)}</button>
+          </td>
+        </tr>
+      ` : ''}
+    `;
+  }).join('');
+
+  return `
+    <div class="ofp-areas-mgr">
+      <div class="ofp-areas-mgr__header">
+        <div>
+          <div class="ofp-areas-mgr__title">Manage Functional Areas</div>
+          <div class="ofp-areas-mgr__sub">Edit names, colors, and auto-classification keywords for this cost model. Changes save with the model.</div>
+        </div>
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-ofp-action="close-areas-modal" title="Close">✕</button>
+      </div>
+      <div class="ofp-areas-mgr__table-wrap">
+        <table class="ofp-area-mgr__table">
+          <thead>
+            <tr>
+              <th style="width:32px;"></th>
+              <th style="width:46px;">Color</th>
+              <th style="width:200px;">Label</th>
+              <th>Keywords (auto-classify activities by name match)</th>
+              <th style="width:130px;">Display</th>
+              <th style="width:48px;text-align:center;" title="Show or hide on canvas">Show</th>
+              <th style="width:64px;text-align:center;">Lines</th>
+              <th style="width:60px;text-align:center;">Order</th>
+              <th style="width:48px;"></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+          </tbody>
+        </table>
+      </div>
+      <div class="ofp-areas-mgr__footer">
+        <button class="hub-btn hub-btn-sm" data-ofp-action="add-area">+ Add Functional Area</button>
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-ofp-action="close-areas-modal">Done</button>
+      </div>
+    </div>
+  `;
+}
+
+export function renderManageFlowsModal() {
+  const model = cmState.model;
+  const flows = _ofpFlowRegistry();
+  // Count lines per flow tag
+  const counts = {};
+  for (const f of flows) counts[f.tag] = 0;
+  for (const l of (model.laborLines || [])) {
+    const t = (l?.path_tag || '').trim();
+    if (t) counts[t] = (counts[t] || 0) + 1;
+  }
+  for (const l of (model.indirectLaborLines || [])) {
+    const t = (l?.path_tag || '').trim();
+    if (t) counts[t] = (counts[t] || 0) + 1;
+  }
+
+  // v0.5 — Order by registry sortOrder (the user-controlled rank).
+  // Normalize first so the up/down enable-state math is clean.
+  _ofpNormalizeFlowSortOrder();
+  const sorted = [...flows].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+  const lastIdx = sorted.length - 1;
+
+  const rows = sorted.map((f, idx) => {
+    const resolved = _flowColor(f.tag);
+    const isAuto = !f.color;
+    const upDisabled = idx === 0 ? 'disabled' : '';
+    const downDisabled = idx === lastIdx ? 'disabled' : '';
+    return `
+      <tr class="ofp-area-mgr__row ofp-mgr-row ${f.hidden ? 'ofp-mgr-row--hidden' : ''}" data-flow-row-tag="${escapeAttr(f.tag)}" data-flow-idx="${idx}">
+        <td class="ofp-mgr-row__handle-cell">
+          <span class="ofp-mgr-row__grip" data-flow-tag="${escapeAttr(f.tag)}" draggable="true" title="Drag to reorder">⋮⋮</span>
+        </td>
+        <td class="ofp-area-mgr__color-cell">
+          <input type="color" class="ofp-area-mgr__color-input" value="${resolved}" data-flow-tag="${escapeAttr(f.tag)}" data-flow-field="color" title="${isAuto ? 'Auto color (hash). Pick to override.' : 'Color override — picker resets via the ↻ button.'}" />
+        </td>
+        <td class="ofp-area-mgr__label-cell">
+          <input type="text" class="hub-input ofp-area-mgr__input" value="${escapeAttr(f.label)}" data-flow-tag="${escapeAttr(f.tag)}" data-flow-field="label" maxlength="40" />
+        </td>
+        <td class="ofp-flow-mgr__tag-cell">
+          <code class="ofp-flow-mgr__tag" title="Canonical tag (matches line.path_tag). Immutable.">${escapeHtml(f.tag)}</code>
+          ${isAuto ? '<span class="ofp-flow-mgr__auto-chip" title="Color is auto (deterministic hash from tag).">auto</span>' : `<button class="ofp-flow-mgr__reset-color" data-flow-tag="${escapeAttr(f.tag)}" title="Reset to auto color">↻</button>`}
+        </td>
+        <td class="ofp-flow-mgr__channel-cell">
+          <select class="hub-select hub-select-sm" data-flow-tag="${escapeAttr(f.tag)}" data-flow-field="channelKey" title="Channel this flow serves. Phase 4 (volumes-as-nucleus, 2026-04-29) ties OFP flows to model.channels[] so the OFP and Volumes & Profile share the same channel vocabulary.">
+            <option value="" ${!f.channelKey ? 'selected' : ''}>(unmapped)</option>
+            ${(model.channels || []).map(c => `<option value="${escapeAttr(c.key)}" ${f.channelKey === c.key ? 'selected' : ''}>${escapeHtml(c.name || c.key)}</option>`).join('')}
+          </select>
+        </td>
+        <td class="ofp-mgr-row__visible-cell">
+          <button class="ofp-mgr-row__visible ${f.hidden ? 'ofp-mgr-row__visible--off' : ''}" data-flow-tag="${escapeAttr(f.tag)}" data-toggle="visible" title="${f.hidden ? 'Hidden on canvas — click to show' : 'Visible — click to hide on canvas'}">${f.hidden ? '🚫' : '👁'}</button>
+        </td>
+        <td class="ofp-area-mgr__count-cell">${counts[f.tag] || 0}</td>
+        <td class="ofp-mgr-row__move-cell">
+          <button class="ofp-mgr-row__move" data-flow-tag="${escapeAttr(f.tag)}" data-move="up" ${upDisabled} title="Move up">▲</button>
+          <button class="ofp-mgr-row__move" data-flow-tag="${escapeAttr(f.tag)}" data-move="down" ${downDisabled} title="Move down">▼</button>
+        </td>
+        <td class="ofp-area-mgr__actions-cell">
+          <button class="ofp-area-mgr__del" data-flow-tag="${escapeAttr(f.tag)}" data-flow-count="${counts[f.tag] || 0}" title="Delete this Flow">×</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  const emptyRow = sorted.length === 0
+    ? `<tr><td colspan="10" style="text-align:center; padding:32px 12px; color:var(--ies-gray-400); font-style:italic; font-size:12px;">No flows yet — drag a card onto another to connect them on a flow, or click + Add Flow below.</td></tr>`
+    : '';
+
+  return `
+    <div class="ofp-areas-mgr">
+      <div class="ofp-areas-mgr__header">
+        <div>
+          <div class="ofp-areas-mgr__title">Manage Flows</div>
+          <div class="ofp-areas-mgr__sub">Flows are parallel threads through Functional Areas — e.g. full-pallet, case-pick, kitting. Renaming the label leaves the underlying tag (line.path_tag) untouched, so saved scenarios keep their flow membership.</div>
+        </div>
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-ofp-action="close-flows-modal" title="Close">✕</button>
+      </div>
+      <div class="ofp-areas-mgr__table-wrap">
+        <table class="ofp-area-mgr__table">
+          <thead>
+            <tr>
+              <th style="width:32px;"></th>
+              <th style="width:46px;">Color</th>
+              <th style="width:240px;">Label</th>
+              <th>Tag</th>
+              <th style="width:140px;" title="Channel this flow belongs to. Backfilled from flow tag/label match against model.channels[].">Channel</th>
+              <th style="width:48px;text-align:center;" title="Show or hide on canvas">Show</th>
+              <th style="width:64px;text-align:center;">Lines</th>
+              <th style="width:60px;text-align:center;">Order</th>
+              <th style="width:48px;"></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+            ${emptyRow}
+          </tbody>
+        </table>
+      </div>
+      <div class="ofp-areas-mgr__footer">
+        <button class="hub-btn hub-btn-sm" data-ofp-action="add-flow">+ Add Flow</button>
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-ofp-action="close-flows-modal">Done</button>
+      </div>
+    </div>
   `;
 }
