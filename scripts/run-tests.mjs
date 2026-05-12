@@ -133,7 +133,7 @@ if (!skipParse) {
 // remove its entry from this allowlist.
 const CACHE_BUST_ALLOWLIST = new Set([
   // shared/* modules — singleton-ish, higher risk (singletons in browser)
-  'shared/toast.js',           // 3 versions; widely consumed
+  // S31 (2026-05-13) cleaned up shared/toast.js — was 3 versions (uC majority, sK in hub/admin + hub/deal-management, vE in tools/deal-manager dynamic import); now 1 (?v=uC). Cascade bumped hub/admin/ui.js + hub/deal-management/ui.js + tools/deal-manager/ui.js cache-busts in index.html to port31. Strategy: kept uC tag since 9 of 11 consumers already used it — minimized cascade.
   // S26 (2026-05-12) cleaned up shared/auth.js — was 2 versions, now 1 (?v=port27)
   'shared/export.js',          // 3 versions; mostly stateless helpers
   // S27 (2026-05-12 PM) cleaned up shared/router.js — was 2 versions, now 1 (?v=port28)

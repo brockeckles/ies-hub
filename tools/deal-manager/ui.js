@@ -187,7 +187,7 @@ async function handleCmSaved(payload) {
     // Nudge the user so it's obvious something changed without being
     // disruptive — small toast on the active tab.
     try {
-      const { showToast } = await import('../../shared/toast.js?v=20260420-vE');
+      const { showToast } = await import('../../shared/toast.js?v=20260419-uC');
       showToast(`Refreshed ${affectedIdx.length} site${affectedIdx.length > 1 ? 's' : ''} from updated cost model`, 'info');
     } catch { /* toast is best-effort; don't break the refresh on import failure */ }
   } catch (err) {

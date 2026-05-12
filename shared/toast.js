@@ -5,7 +5,7 @@
  * calls. Standardizes the toast UX across every tool.
  *
  * Usage:
- *   import { showToast } from './shared/toast.js?v=20260418-sK';
+ *   import { showToast } from './shared/toast.js?v=20260419-uC';
  *   showToast('Model saved', 'success');
  *   showToast('Save failed: invalid input', 'error');
  *
