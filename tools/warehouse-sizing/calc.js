@@ -2368,9 +2368,20 @@ export function sizeFacility(userInputs = {}) {
   // correctly returns 0 doors at 0 throughput. Drop the floor so the legacy
   // path agrees with Phase 1; downstream UI can still display "min 2 doors
   // recommended" as a soft guideline rather than an engine-mandated floor.
-  const dockDivisor = Math.max(1, i.palletsPerDoorHour) * Math.max(1, i.dockHours);
-  const inDerived = Math.max(0, Math.ceil((i.inPalletsDay || 0) / dockDivisor));
-  const outDerived = Math.max(0, Math.ceil((i.outPalletsDay || 0) / dockDivisor));
+  //
+  // 2026-05-12 (dock wart fix): the prior `Math.max(1, ...)` divisor floor
+  // produced explosive door counts when a user had entered daily throughput
+  // (in/outPalletsDay > 0) but not dock capacity (palletsPerDoorHour=0,
+  // dockHours=0). With both fallbacks engaging, dockDivisor=1, so derived
+  // doors ≈ daily-pallets — e.g., 200 in / 207 out → 407 raw doors, surge
+  // → 509 doors, × 1500 SF = 763,500 SF of "dock." Match Phase 1's
+  // computeDockRequirement pattern: zero capacity inputs → zero derived
+  // doors (no inference). User-supplied overrides still win via the
+  // explicit-doors branch below.
+  const hasValidDockCapacity = i.palletsPerDoorHour > 0 && i.dockHours > 0;
+  const dockDivisor = hasValidDockCapacity ? i.palletsPerDoorHour * i.dockHours : 0;
+  const inDerived = dockDivisor > 0 ? Math.ceil((i.inPalletsDay || 0) / dockDivisor) : 0;
+  const outDerived = dockDivisor > 0 ? Math.ceil((i.outPalletsDay || 0) / dockDivisor) : 0;
   // Honor explicit user-supplied door counts when provided. When the user has
   // told us "I want 28 inbound + 28 outbound", the sizing engine should NOT
   // re-derive from throughput and quietly give them 8 doors.
