@@ -566,8 +566,12 @@ test('Phase 4 — buildWscLaunchPayload: aggregates pallets across channels', ()
   const p = buildWscLaunchPayload(m);
   // DTC outbound: 1M orders × 10 units/order = 10M units / 480 units/pallet ≈ 20,833.
   // B2B outbound: 50,000 pallets directly.
-  // inboundOutboundRatio = 1.0 on both channels, so inbound pallets ≈ same as outbound (~70,833).
-  approx(p.totalPallets, 70833, 200);
+  // inboundOutboundRatio = 1.0 on both channels, so inbound pallets ≈ same as outbound.
+  // annualInbound ≈ 70,833. With default 30-day DOH, totalPallets = on-hand
+  // positions = 70,833 × 30/365 ≈ 5,822 (2026-05-12 dimensional fix).
+  approx(p.totalPallets, 5822, 200);
+  approx(p.annualPalletsInbound, 70833, 200);
+  approx(p.daysOnHand, 30, 0.01);
   // 250 op days from facility.opDaysPerYear; both inbound/outbound ≈ 70,833 / 250 ≈ 283.
   approx(p.avgDailyInbound,  283, 5);
   approx(p.avgDailyOutbound, 283, 5);
@@ -598,8 +602,12 @@ test('Phase 4 — buildWscLaunchPayload: legacy single-channel model also works'
     seasonalityProfile: { preset: 'flat', monthly_shares: Array.from({length:12},()=>1/12) },
   };
   const p = buildWscLaunchPayload(m);
-  // 1M orders × (2×5)=10M units / 480 units/pallet ≈ 20,833 pallets
-  approx(p.totalPallets, 20833, 50);
+  // 1M orders × (2×5)=10M units / 480 units/pallet ≈ 20,833 annual pallets.
+  // With default 30-day DOH, on-hand positions ≈ 20,833 × 30/365 ≈ 1,712
+  // (2026-05-12 dimensional fix — was 20,833 when payload sent annual flow).
+  approx(p.totalPallets, 1712, 50);
+  approx(p.annualPalletsInbound, 20833, 50);
+  approx(p.daysOnHand, 30, 0.01);
   // op-days fallback to facility default of 250 → ~83/day inbound/outbound.
   approx(p.avgDailyInbound,  83, 5);
   approx(p.avgDailyOutbound, 83, 5);

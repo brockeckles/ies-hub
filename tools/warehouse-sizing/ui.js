@@ -12,7 +12,7 @@ import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260430-na-dot';
 import * as calc from './calc.js?v=20260511-port11';
 import * as api from './api.js?v=20260418-sL';
-import * as cmApi from '../cost-model/api.js?v=20260513-port30';
+import * as cmApi from '../cost-model/api.js?v=20260512-cm-wsc-dimfix';
 import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { showConfirm } from '../../shared/confirm-modal.js';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260511-port12';
@@ -5670,6 +5670,12 @@ function handleCmPush(payload) {
   if (Number(payload.peakMultiplier)   > 0) volumes.peakMultiplier   = Number(payload.peakMultiplier);
   if (Number(payload.inventoryTurns)   > 0) volumes.inventoryTurns   = Number(payload.inventoryTurns);
   if (Number(payload.totalSKUs)        > 0) volumes.totalSKUs        = Number(payload.totalSKUs);
+  // 2026-05-12 — DOH is the missing third coordinate from the dimensional fix
+  // in cost-model/api.js. payload.totalPallets is now on-hand positions
+  // (annualPalletsInbound × DOH/365); WSC's throughput-driven derivation
+  // also uses volumes.daysOnHand, so propagate it here so the field stays
+  // consistent with the override path.
+  if (Number(payload.daysOnHand)       > 0) volumes.daysOnHand        = Number(payload.daysOnHand);
   // peakUnitsPerDay lives on `zones`, not `volumes` — it drives the storage
   // on-hand inventory sizing which is in the zones state object.
   if (Number(payload.peakUnitsPerDay)  > 0) zones.peakUnitsPerDay    = Number(payload.peakUnitsPerDay);

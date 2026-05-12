@@ -1355,6 +1355,17 @@ export function buildWscLaunchPayload(model) {
   const annualPalletsOutbound = getAggregateDerived(model, 'pallets');
   const avgDailyInbound  = annualPalletsInbound  / Math.max(1, opDays);
   const avgDailyOutbound = annualPalletsOutbound / Math.max(1, opDays);
+  // 2026-05-12 dimensional fix — WSC's `totalPallets` is an on-hand position
+  // count (what a slotting study outputs), NOT annual flow. Previously this
+  // payload stuffed annualPalletsInbound here, making WSC size the facility
+  // for ~52K pallet positions when on-hand was actually ~3K. Result: 700K
+  // SF instead of ~80K. Compute avgPalletsOnHand from DOH and send that.
+  // facility.daysOnHand defaults to 30 (12 turns/yr); when set explicitly
+  // (per project memory `project_cm_heur_1_facility_suggestion_bug`), use it.
+  const daysOnHand = Number(facility.daysOnHand) > 0
+    ? Number(facility.daysOnHand)
+    : 30;
+  const avgPalletsOnHand = annualPalletsInbound * (daysOnHand / 365);
   // A facility is sized to the busiest channel's peak day, not an average.
   const channels = getOutboundChannels(model);
   const peakMultiplier = channels.reduce((mx, c) =>
@@ -1382,7 +1393,10 @@ export function buildWscLaunchPayload(model) {
   return {
     clearHeight: facility.clearHeight || 0,
     totalSqft:   facility.totalSqft   || 0,
-    totalPallets:    Math.round(annualPalletsInbound),
+    // 2026-05-12 — avgPalletsOnHand, not annual flow. See header comment.
+    totalPallets:    Math.round(avgPalletsOnHand),
+    daysOnHand:      daysOnHand,
+    annualPalletsInbound: Math.round(annualPalletsInbound),
     avgDailyInbound: Math.round(avgDailyInbound),
     avgDailyOutbound: Math.round(avgDailyOutbound),
     peakMultiplier:  Number(peakMultiplier.toFixed(2)),
