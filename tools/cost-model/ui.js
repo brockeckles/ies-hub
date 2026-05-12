@@ -52,7 +52,7 @@ import {
   setCurrentScenarioSnapshots,
   setHeuristicOverrides,
   setCurrentMarketLaborProfile,
-} from './state.js?v=20260511-port23';
+} from './state.js?v=20260512-port26';
 import {
   ofpEnsureAreaRegistry as _ofpEnsureAreaRegistry,
   ofpRegistry as _ofpRegistry,
@@ -77,7 +77,7 @@ import {
   ofpClassifyAreaFromLine as _classifyAreaFromLine,
   ofpClassifySubAreaFromLine as _classifySubAreaFromLine,
   ofpFlowColor as _flowColor,
-} from './operational-flow-registry.js?v=20260512-port25';
+} from './operational-flow-registry.js?v=20260512-port26';
 import {
   renderFlowGroupsForEntries as _renderFlowGroupsForEntries,
   renderOfpSubArea as _renderOfpSubArea,
@@ -86,7 +86,7 @@ import {
   renderOperationalFlow,
   renderManageAreasModal as _renderManageAreasModal,
   renderManageFlowsModal as _renderManageFlowsModal,
-} from './operational-flow-render.js?v=20260512-port25';
+} from './operational-flow-render.js?v=20260512-port26';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 import { formatUomSingular } from '../../shared/format.js?v=20260511-port16';
 import { computeHeaderKpis } from './header-kpis.js?v=20260511-port16';

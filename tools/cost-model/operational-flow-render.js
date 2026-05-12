@@ -19,7 +19,7 @@
  *
  * @module tools/cost-model/operational-flow-render
  */
-import { cmState } from './state.js?v=20260512-port25';
+import { cmState } from './state.js?v=20260512-port26';
 import {
   ofpAreaMeta as _ofpAreaMeta,
   ofpFlowLabel as _ofpFlowLabel,
@@ -30,7 +30,7 @@ import {
   ofpClassifyAreaFromLine as _classifyAreaFromLine,
   ofpClassifySubAreaFromLine as _classifySubAreaFromLine,
   ofpFlowColor as _flowColor,
-} from './operational-flow-registry.js?v=20260512-port25';
+} from './operational-flow-registry.js?v=20260512-port26';
 import {
   ofpEquipBadge as _ofpEquipBadge,
   ofpUomIn as _ofpUomIn,
