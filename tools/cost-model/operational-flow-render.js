@@ -19,14 +19,16 @@
  *
  * @module tools/cost-model/operational-flow-render
  */
-import { cmState } from './state.js?v=20260511-port23';
+import { cmState } from './state.js?v=20260512-port24';
 import {
   ofpAreaMeta as _ofpAreaMeta,
   ofpFlowLabel as _ofpFlowLabel,
   ofpFlowRegistry as _ofpFlowRegistry,
+  ofpRegistry as _ofpRegistry,
+  ofpClassifyAreaFromLine as _classifyAreaFromLine,
   ofpClassifySubAreaFromLine as _classifySubAreaFromLine,
   ofpFlowColor as _flowColor,
-} from './operational-flow-registry.js?v=20260511-port23';
+} from './operational-flow-registry.js?v=20260512-port24';
 import {
   ofpEquipBadge as _ofpEquipBadge,
   ofpUomIn as _ofpUomIn,
@@ -34,6 +36,7 @@ import {
 } from './ofp-helpers.js?v=20260511-port12';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260511-port12';
 import * as calc from './calc.js?v=20260511-port16';
+import ofpStyles from './operational-flow-styles.js?v=20260511-port4';
 
 // v0.10 — Helper extracted from _renderOfpArea so we can reuse it for
 // both top-level area bodies AND sub-area bodies (when an area has
@@ -317,5 +320,222 @@ export function renderOfpNode(entry, areaKey, opHrs, lc) {
       ${(uomBadge || flowPill) ? `<div class="ofp-node__pills">${flowPill}${uomBadge}</div>` : ''}
       ${mhe || itDevice ? `<div class="ofp-node__badges">${_ofpEquipBadge(mhe, 'mhe')}${_ofpEquipBadge(itDevice, 'it')}</div>` : ''}
     </div>
+  `;
+}
+
+
+// ============================================================
+// renderOperationalFlow (S24a) — top-level OFP entrypoint.
+// Pure HTML. Wired to events + connectors + modals by ui.js.
+// ============================================================
+
+export function renderOperationalFlow() {
+  const model = cmState.model;
+  const directLines = model.laborLines || [];
+  const indirectLines = model.indirectLaborLines || [];
+
+  // Empty state — no labor lines at all
+  if (directLines.length === 0 && indirectLines.length === 0) {
+    return `
+      <div class="cm-section-header">
+        <div>
+          <h2>Operational Flow <span class="hub-status-chip cm-chip-info cm-chip-xs">v0.4 · editable</span></h2>
+          <div class="cm-section-desc">End-to-end view of the labor activities — Inbound through Outbound, with Returns/VAS and Support overlays. Auto-arranged from the Labor page.</div>
+        </div>
+      </div>
+      <div class="cm-card" style="text-align:center;padding:48px 24px;">
+        <div style="font-size:48px;line-height:1;margin-bottom:12px;opacity:0.4;">⇄</div>
+        <div style="font-size:14px;font-weight:600;color:var(--ies-navy);margin-bottom:6px;">No labor lines yet</div>
+        <div style="font-size:12px;color:var(--ies-gray-500);margin-bottom:16px;">Build labor lines on the Labor page and they'll auto-arrange into a process flow here.</div>
+        <button class="hub-btn hub-btn-sm" data-action="ofp-go-to-labor">Go to Labor →</button>
+      </div>
+      ${ofpStyles()}
+    `;
+  }
+
+  // Bin lines into areas using the per-cost-model registry. Areas
+  // map keyspace is dynamic — every registered area gets a bucket,
+  // even empty ones (so 'Areas Populated' KPI denominator is right).
+  const registry = _ofpRegistry();
+  const areasMap = {};
+  for (const area of registry) areasMap[area.key] = [];
+  directLines.forEach((l, idx) => {
+    const ak = _classifyAreaFromLine(l);
+    if (!areasMap[ak]) areasMap[ak] = [];
+    areasMap[ak].push({ line: l, idx, isDirect: true });
+  });
+  // Indirect labor → 'support' if it exists, else 'unclassified'. The
+  // user can delete the support area, so we can't blindly assume it.
+  const indirectTargetKey = registry.some(a => a.key === 'support') ? 'support' : 'unclassified';
+  indirectLines.forEach((l, idx) => {
+    if (!areasMap[indirectTargetKey]) areasMap[indirectTargetKey] = [];
+    areasMap[indirectTargetKey].push({ line: l, idx, isDirect: false });
+  });
+
+  // KPIs
+  const opHrs = calc.operatingHours(model.shifts || {});
+  const lc = model.laborCosting || {};
+  const totalDirectFte = directLines.reduce((s, l) => s + calc.fte(l, opHrs), 0);
+  const totalIndirectFte = indirectLines.reduce((s, l) => s + calc.fte(l, opHrs), 0);
+  const totalFte = totalDirectFte + totalIndirectFte;
+  const totalCost = directLines.reduce((s, l) => s + calc.directLineAnnualSimple(l, lc), 0)
+                  + indirectLines.reduce((s, l) => s + calc.indirectLineAnnualSimple(l, opHrs, lc), 0);
+
+  // v0.9 — Zoom level (persistent per cost model). Snap to nearest
+  // discrete step so legacy odd values from manual edits normalize on
+  // next render.
+  const _OFP_ZOOM_STEPS = [0.75, 0.9, 1.0, 1.15, 1.3];
+  const _ofpSnapZoom = (z) => {
+    const n = Number(z);
+    if (!isFinite(n) || n <= 0) return 1.0;
+    return _OFP_ZOOM_STEPS.reduce((best, s) => Math.abs(s - n) < Math.abs(best - n) ? s : best, _OFP_ZOOM_STEPS[2]);
+  };
+  const zoomLevel = _ofpSnapZoom(model.ofpZoom);
+  // Areas Populated denominator is the count of NON-unclassified areas
+  // when unclassified itself is empty (the bucket is hidden in that
+  // case so the headline ratio shouldn't include it).
+  const unclassifiedCount = (areasMap['unclassified'] || []).length;
+  const totalAreasPossible = unclassifiedCount > 0 ? registry.length : registry.length - 1;
+  const populatedAreas = Object.values(areasMap).filter(arr => arr.length > 0).length;
+
+  // Inter-area connector — direction only, no FTE label.
+  // v0.5/v0.8 tried MAX-FTE then SUM-FTE; both are mathematically
+  // ill-defined once areas are user-reorderable (same data renders
+  // different numbers when columns swap). Brock's call: just show
+  // direction. Each area's total FTE is already in its header above.
+  const arrowSvg = (upstreamEntries, upstreamLabel, downstreamLabel) => {
+    const tip = `${upstreamLabel} → ${downstreamLabel}`;
+    return `
+      <div class="ofp-connector" title="${escapeAttr(tip)}">
+        <svg viewBox="0 0 60 32" width="60" height="32" preserveAspectRatio="none" aria-hidden="true">
+          <defs>
+            <marker id="ofp-arrowhead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+              <path d="M0,0 L10,5 L0,10 z" fill="var(--ies-gray-400)"></path>
+            </marker>
+          </defs>
+          <line x1="0" y1="20" x2="56" y2="20" stroke="var(--ies-gray-400)" stroke-width="2" marker-end="url(#ofp-arrowhead)"></line>
+        </svg>
+      </div>
+    `;
+  };
+
+  // v0.6 — Hidden filter. Visible areas + flows only render on the
+  // canvas. Hidden items show as restore-chips above the KPI strip.
+  const hiddenAreas = registry.filter(a => a.hidden);
+  const hiddenFlows = (model.ofpFlows || []).filter(f => f.hidden);
+  const hiddenAreaKeys = new Set(hiddenAreas.map(a => a.key));
+
+  // Build the main row dynamically — interleave area cards with
+  // arrow connectors. arrowSvg takes the upstream area's entries to
+  // pick the throughput proxy, so we pass that explicitly.
+  const mainAreas = registry.filter(a => a.displayMode === 'main' && !hiddenAreaKeys.has(a.key));
+  const wideAreas = registry.filter(a => a.displayMode !== 'main' && !hiddenAreaKeys.has(a.key));
+  const mainRowParts = [];
+  mainAreas.forEach((area, i) => {
+    if (i > 0) {
+      const prev = mainAreas[i - 1];
+      mainRowParts.push(arrowSvg(areasMap[prev.key] || [], prev.label, area.label));
+    }
+    mainRowParts.push(renderOfpArea(area.key, areasMap[area.key] || [], opHrs, lc));
+  });
+  // Wide rows — only render if non-empty. Unclassified gets warn=true.
+  const wideRowsHtml = wideAreas
+    .filter(a => (areasMap[a.key] || []).length > 0)
+    .map(a => `
+      <div class="ofp-row ofp-row--secondary" style="margin-top:14px;">
+        ${renderOfpArea(a.key, areasMap[a.key], opHrs, lc, { wide: true, warn: a.key === 'unclassified' })}
+      </div>
+    `).join('');
+
+  // Hidden strip — only renders when at least one item is hidden.
+  // Chips show area label / flow label; click restores. Plus a
+  // 'Show all' button to clear every hidden flag in one go.
+  const hiddenStripHtml = (hiddenAreas.length + hiddenFlows.length) === 0 ? '' : `
+    <div class="ofp-hidden-strip">
+      <span class="ofp-hidden-strip__label">Hidden:</span>
+      ${hiddenAreas.map(a => `
+        <button class="ofp-hidden-chip" data-restore-area="${escapeAttr(a.key)}" title="Show ${escapeAttr(a.label)} on canvas">
+          <span class="ofp-hidden-chip__dot" style="background:${a.color};"></span>
+          <span class="ofp-hidden-chip__name">${escapeHtml(a.label)}</span>
+          <span class="ofp-hidden-chip__type">area</span>
+          <span class="ofp-hidden-chip__icon">👁</span>
+        </button>
+      `).join('')}
+      ${hiddenFlows.map(f => `
+        <button class="ofp-hidden-chip ofp-hidden-chip--flow" data-restore-flow="${escapeAttr(f.tag)}" title="Show flow '${escapeAttr(f.label)}' on canvas">
+          <span class="ofp-hidden-chip__dot" style="background:${_flowColor(f.tag)};"></span>
+          <span class="ofp-hidden-chip__name">${escapeHtml(f.label)}</span>
+          <span class="ofp-hidden-chip__type">flow</span>
+          <span class="ofp-hidden-chip__icon">👁</span>
+        </button>
+      `).join('')}
+      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-ofp-action="show-all-hidden" style="margin-left:auto;" title="Restore all hidden areas and flows">Show all</button>
+    </div>
+  `;
+
+  return `
+    <div class="cm-section-header" style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px;">
+      <div>
+        <h2>Operational Flow <span class="hub-status-chip cm-chip-info cm-chip-xs">v0.4 · editable</span></h2>
+        <div class="cm-section-desc">End-to-end view of the labor activities. Auto-arranged from the Labor page by activity-keyword classification, then editable per cost model. Click any node to inspect; "Edit on Labor page" round-trips the change.</div>
+      </div>
+      <div class="ofp-section-actions">
+        <div class="ofp-zoom-controls" title="Zoom canvas">
+          <button class="ofp-zoom-btn" data-ofp-action="zoom-out" title="Zoom out (75% min)">−</button>
+          <button class="ofp-zoom-pct" data-ofp-action="zoom-reset" title="Click to reset to 100%">${Math.round(zoomLevel * 100)}%</button>
+          <button class="ofp-zoom-btn" data-ofp-action="zoom-in" title="Zoom in (130% max)">+</button>
+        </div>
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-ofp-action="manage-areas" title="Edit Functional Areas — rename, recolor, edit keywords, add custom areas">⚙ Manage Areas</button>
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-ofp-action="manage-flows" title="Edit Flows — rename, recolor, add new flows">⚙ Manage Flows</button>
+      </div>
+    </div>
+
+    ${hiddenStripHtml}
+
+    <!-- v0.9 — Replaced 4-tile KPI strip with a thin warning banner that
+         only renders when unclassifiedCount > 0. Total FTE / Cost / Areas
+         Populated were duplicating data from the CM top toolbar; killing
+         them reclaims ~80px of canvas real estate. -->
+    ${unclassifiedCount > 0 ? `
+      <div class="ofp-warn-banner" title="Activities did not match any area keyword. Rename the activity on Labor, or extend the keyword catalog in Manage Areas.">
+        <span class="ofp-warn-banner__icon">⚠</span>
+        <span class="ofp-warn-banner__msg"><strong>${unclassifiedCount}</strong> activit${unclassifiedCount === 1 ? 'y is' : 'ies are'} unclassified — open <button class="ofp-warn-banner__action" data-ofp-action="manage-areas">Manage Areas</button> to add classification keywords, or rename activities on the Labor page.</span>
+      </div>
+    ` : ''}
+
+    <!-- v0.2.2 — Canvas reverts to full-width. Detail panel is now a
+         modal overlay (see #ofp-detail-modal below), so the areas no
+         longer have to share horizontal space with a side rail.
+         v0.3a.4 — position:relative + the absolute-positioned SVG
+         overlay below host the dotted same-flow connectors that get
+         drawn after each render by _renderOfpFlowConnectors().
+         v0.4 — main row + wide rows are now built dynamically from
+         the per-cost-model area registry instead of hardcoded layout. -->
+    <div class="cm-card ofp-canvas-card" style="padding:18px 18px 22px;position:relative;zoom:${zoomLevel};">
+      <svg class="ofp-flow-overlay" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"></svg>
+      <div class="ofp-row ofp-row--main">
+        ${mainRowParts.join('')}
+      </div>
+      ${wideRowsHtml}
+    </div>
+
+    <!-- Detail-panel modal (node click → editable drawer) -->
+    <div id="ofp-detail-modal" class="ofp-detail-modal" style="display:none;">
+      <div class="ofp-detail-modal__dialog" id="ofp-detail-panel"></div>
+    </div>
+
+    <!-- v0.4 — Manage Functional Areas modal. Populated on demand by
+         _ofpOpenManageAreasModal(). Centered dialog, click-outside +
+         Esc to close. -->
+    <div id="ofp-areas-modal" class="ofp-detail-modal ofp-detail-modal--centered" style="display:none;">
+      <div class="ofp-areas-modal__dialog" id="ofp-areas-panel"></div>
+    </div>
+
+    <!-- v0.4 — Manage Flows modal. Same UX pattern as Manage Areas. -->
+    <div id="ofp-flows-modal" class="ofp-detail-modal ofp-detail-modal--centered" style="display:none;">
+      <div class="ofp-areas-modal__dialog" id="ofp-flows-panel"></div>
+    </div>
+
+    ${ofpStyles()}
   `;
 }
