@@ -17,7 +17,7 @@
  *
  * @module tools/cost-model/operational-flow-registry
  */
-import { cmState } from './state.js?v=20260511-port20';
+import { cmState } from './state.js?v=20260511-port21';
 
 // ============================================================
 // Default Functional Area catalog. This array is the SEED for new cost
@@ -106,7 +106,7 @@ export function ofpRegistry() {
  *   2. keyword match across the registry in sortOrder
  *   3. fallback to 'unclassified' (always present)
  */
-function _classifyAreaFromLine(line) {
+export function ofpClassifyAreaFromLine(line) {
   if (!line) return 'unclassified';
   const registry = ofpRegistry();
   const keys = new Set(registry.map(a => a.key));
@@ -133,7 +133,7 @@ function _classifyAreaFromLine(line) {
  *   2. Keyword match across the parent's subAreas in sortOrder
  *   3. null (line renders in an "(other)" pile within the parent area)
  */
-function _classifySubAreaFromLine(line, areaKey) {
+export function ofpClassifySubAreaFromLine(line, areaKey) {
   if (!line || !areaKey) return null;
   const area = ofpAreaMeta(areaKey);
   if (!area || !Array.isArray(area.subAreas) || area.subAreas.length === 0) return null;

@@ -8,7 +8,7 @@
 //
 // Run:  node test-ofp-registry.mjs
 
-import { cmState, setModel, resetAll } from './tools/cost-model/state.js?v=20260511-port20';
+import { cmState, setModel, resetAll } from './tools/cost-model/state.js?v=20260511-port21';
 import {
   ofpEnsureAreaRegistry,
   ofpRegistry,
@@ -29,7 +29,9 @@ import {
   ofpMoveSubAreaUp,
   ofpMoveSubAreaDown,
   ofpAllFlowTags,
-} from './tools/cost-model/operational-flow-registry.js';
+  ofpClassifyAreaFromLine,
+  ofpClassifySubAreaFromLine,
+} from './tools/cost-model/operational-flow-registry.js?v=20260511-port21';
 
 let passed = 0, failed = 0;
 const fails = [];
@@ -246,6 +248,38 @@ const subSorted2 = [...cmState.model.ofpAreas[0].subAreas]
   .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
   .map(s => s.key);
 ok('subarea move: qa moved up', subSorted2.indexOf('qa') < subSorted2.length - 1);
+
+// ============================================================
+// Classifier — _classifyAreaFromLine + _classifySubAreaFromLine
+// ============================================================
+seedEmptyModel();
+ok('classifier: keyword match → outbound',
+  ofpClassifyAreaFromLine({ activity_name: 'Pick & Pack' }) === 'outbound');
+ok('classifier: flowLane override wins',
+  ofpClassifyAreaFromLine({ flowLane: 'support', activity_name: 'Picking' }) === 'support');
+ok('classifier: no match falls back to unclassified',
+  ofpClassifyAreaFromLine({ activity_name: 'XYZZY' }) === 'unclassified');
+ok('classifier: null line → unclassified',
+  ofpClassifyAreaFromLine(null) === 'unclassified');
+
+setModel({
+  laborLines: [],
+  ofpAreas: [
+    { key: 'inbound', label: 'Inbound', sortOrder: 0, displayMode: 'main', isProtected: false, keywords: ['receiv'],
+      subAreas: [
+        { key: 'unload', label: 'Unload', sortOrder: 0, keywords: ['unload', 'dock'] },
+        { key: 'qa',     label: 'QA',     sortOrder: 1, keywords: ['inspect', 'qa'] },
+      ]},
+  ],
+});
+ok('sub-classifier: keyword match → unload',
+  ofpClassifySubAreaFromLine({ activity_name: 'Unload pallets' }, 'inbound') === 'unload');
+ok('sub-classifier: flowSubArea override wins',
+  ofpClassifySubAreaFromLine({ flowSubArea: 'qa', activity_name: 'Unload' }, 'inbound') === 'qa');
+ok('sub-classifier: no match → null',
+  ofpClassifySubAreaFromLine({ activity_name: 'XYZZY' }, 'inbound') === null);
+ok('sub-classifier: area without subAreas → null',
+  ofpClassifySubAreaFromLine({ activity_name: 'unload' }, 'outbound') === null);
 
 // ============================================================
 // Cleanup
