@@ -75,6 +75,23 @@ let _planDrag = null;
 /** @type {'landing' | 'editor'} — landing shows saved scenarios; editor is the design surface */
 let viewMode = 'landing';
 
+/**
+ * 2026-05-12 — CM origin context.
+ *
+ * When WSC is launched from a Cost Model via "Size with Calculator", the CM
+ * stamps `sessionStorage.wsc_origin_cm` with { cmId, cmName, at }. The mount
+ * path reads it into `_originCm`; while truthy, the back button routes back
+ * to `#designtools/cost-model` (label: "Back to <CM name>") instead of the
+ * WSC scenarios landing. When no linked scenario is found for that CM and
+ * the editor opens with a blank-seeded facility, `_seededFromCm` is set so
+ * the editor body renders an amber banner "New scenario seeded from CM —
+ * Save to link."
+ *
+ * @type {{ cmId: number|string|null, cmName: string, at: number }|null}
+ */
+let _originCm = null;
+let _seededFromCm = false;
+
 // ============================================================
 // LIFECYCLE
 // ============================================================
@@ -112,15 +129,62 @@ export async function mount(el) {
   // wsc_pending_push pattern the other direction). The bus.emit from CM's
   // launch-wsc fires BEFORE WSC mounts, so the event is lost; picking it
   // up from sessionStorage here is the reliable path.
+  //
+  // 2026-05-12 — Enhanced: also reads `wsc_origin_cm` (cmName/cmId/ts) and
+  // looks up the most-recently-updated linked WSC scenario for that CM. If a
+  // linked scenario exists, open it directly (so user lands on their prior
+  // work, not a blank canvas). If none, open the editor blank-seeded from
+  // the CM payload and set `_seededFromCm` so the body renders a banner.
   try {
+    // Read origin marker first — it controls back-button label/routing
+    // regardless of whether a linked scenario is found below.
+    const originRaw = sessionStorage.getItem('wsc_origin_cm');
+    if (originRaw) {
+      try {
+        const o = JSON.parse(originRaw);
+        if (o && typeof o.at === 'number' && (Date.now() - o.at) < 60000) {
+          _originCm = o;
+        } else {
+          sessionStorage.removeItem('wsc_origin_cm'); // stale
+        }
+      } catch { sessionStorage.removeItem('wsc_origin_cm'); }
+    }
+
     const pending = sessionStorage.getItem('cm_pending_push');
     if (pending) {
       const payload = JSON.parse(pending);
       if (payload && payload.at && (Date.now() - payload.at) < 60000) {
         sessionStorage.removeItem('cm_pending_push');
         viewMode = 'editor';
-        openEditor(null);
-        handleCmPush(payload);
+
+        // Look up the most-recently-updated linked WSC scenario for this CM.
+        // If found, open it so the user sees their prior sizing work refreshed
+        // with the latest CM volumes. If none, open blank-seeded and surface
+        // a "New scenario" banner so the user knows their click started fresh.
+        let linkedRow = null;
+        const cmId = payload?.parent_cost_model_id;
+        if (cmId != null) {
+          try {
+            const linked = await cmApi.listLinkedDesignScenarios(cmId);
+            const mostRecent = linked?.wsc?.[0];
+            if (mostRecent?.id != null) {
+              linkedRow = await api.getConfig(mostRecent.id);
+            }
+          } catch (lookupErr) {
+            console.warn('[WSC] linked-scenario lookup failed; opening blank:', lookupErr);
+          }
+        }
+
+        if (linkedRow) {
+          openEditor(linkedRow);
+          // Refresh selected fields from the live CM payload so the linked
+          // scenario reflects the current volumes/clearHeight/sqft.
+          handleCmPush(payload);
+        } else {
+          _seededFromCm = true;
+          openEditor(null);
+          handleCmPush(payload);
+        }
         return;
       }
       sessionStorage.removeItem('cm_pending_push'); // stale — discard
@@ -267,8 +331,24 @@ function _buildWscChromeOpts() {
       '</button>' +
       '<div class="tc-row2-divider"></div>'
     ),
-    bodyHtml: '<div id="wsc-content" style="overflow-y:auto;padding:24px;height:100%;"></div>',
-    backTitle: 'Back to scenarios',
+    bodyHtml: (
+      // 2026-05-12 — When the editor was seeded from a CM with no prior linked
+      // scenario, render a dismissible amber banner above the content area so
+      // the user knows their click started a new scenario (vs. resumed an
+      // existing one). Clicking the X clears `_seededFromCm` and re-renders.
+      (_seededFromCm && _originCm
+        ? '<div id="wsc-cm-banner" style="display:flex;align-items:center;gap:10px;padding:10px 16px;background:#fef3c7;border-bottom:1px solid #f59e0b;font-size:13px;color:#78350f;flex-shrink:0;">'
+          + '<span style="font-size:16px;">✨</span>'
+          + '<span><strong>New scenario</strong> seeded from Cost Model: <strong>'
+          + escapeHtml(_originCm.cmName || 'Cost Model')
+          + '</strong> — Save to link this scenario back to the CM.</span>'
+          + '<button data-wsc-cm-banner-dismiss type="button" style="margin-left:auto;background:none;border:none;color:#78350f;cursor:pointer;font-size:18px;padding:0 4px;line-height:1;" title="Dismiss">×</button>'
+          + '</div>'
+        : ''
+      )
+      + '<div id="wsc-content" style="overflow-y:auto;padding:24px;flex:1;min-height:0;"></div>'
+    ),
+    backTitle: _originCm ? ('Back to ' + (_originCm.cmName || 'Cost Model')) : 'Back to scenarios',
   };
 }
 
@@ -544,8 +624,22 @@ async function bindShellEvents() {
       refreshToolChrome(rootEl, opts);
     },
     onBack: async () => {
-      if (isDirty && !(await showConfirm('Unsaved changes. Leave for the scenarios list?'))) return;
+      // 2026-05-12 — When WSC was launched from a Cost Model, the back button
+      // returns to that CM rather than the WSC scenarios list. Without this
+      // the user gets dumped on a list of all their facilities, losing context.
+      const goingToCm = !!_originCm;
+      const dirtyPrompt = goingToCm
+        ? 'Unsaved changes. Leave and return to the Cost Model?'
+        : 'Unsaved changes. Leave for the scenarios list?';
+      if (isDirty && !(await showConfirm(dirtyPrompt))) return;
       isDirty = false;
+      if (goingToCm) {
+        try { sessionStorage.removeItem('wsc_origin_cm'); } catch {}
+        _originCm = null;
+        _seededFromCm = false;
+        window.location.hash = '#designtools/cost-model';
+        return;
+      }
       viewMode = 'landing';
       await renderLanding();
     },
@@ -576,6 +670,16 @@ async function bindShellEvents() {
     if (_wscElevView === view) return;
     _wscElevView = view;
     renderContentView();
+  });
+
+  // 2026-05-12 — CM-seeded banner dismiss handler. Single delegate at rootEl,
+  // refreshes the chrome (which drops the banner element) without re-rendering
+  // the content view (preserves any in-progress text input).
+  rootEl?.addEventListener('click', (e) => {
+    const btn = /** @type {HTMLElement} */ (e.target)?.closest('[data-wsc-cm-banner-dismiss]');
+    if (!btn) return;
+    _seededFromCm = false;
+    refreshToolChrome(rootEl, _buildWscChromeOpts());
   });
 
   // Root-level delegation for data-wsc-action (toggle-edit-layout, reset-layout).

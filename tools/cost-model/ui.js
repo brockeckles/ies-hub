@@ -10654,6 +10654,15 @@ function _launchToTool(target) {
   if (target === 'wsc') {
     const payload = api.buildWscLaunchPayload(model);
     try { sessionStorage.setItem('cm_pending_push', JSON.stringify(payload)); } catch {}
+    // 2026-05-12 — stamp origin so WSC's Back button can return here + the
+    // editor can render a "seeded from CM" banner when no linked scenario exists.
+    try {
+      sessionStorage.setItem('wsc_origin_cm', JSON.stringify({
+        cmId: model?.id || null,
+        cmName: model?.projectDetails?.name || model?.name || 'Cost Model',
+        at: Date.now(),
+      }));
+    } catch {}
     bus.emit('cm:push-to-wsc', payload); // fire even though listener may not be mounted yet — sessionStorage covers the gap
     window.location.hash = '#designtools/warehouse-sizing';
     return;
