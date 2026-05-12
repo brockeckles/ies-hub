@@ -95,6 +95,140 @@ if (!skipParse) {
 }
 
 // ============================================================
+// PHASE 1.5 — Shared-module cache-bust consistency check
+// ============================================================
+//
+// This codebase cache-busts ES module imports by appending ?v=TAG to the
+// URL: `import { foo } from './shared/auth.js?v=port1'`. The browser
+// caches ES modules by FULL URL including the query string — so if one
+// consumer imports `./auth.js?v=port1` and another imports
+// `./auth.js?v=auth1`, the browser loads auth.js TWICE as two separate
+// module instances. Top-level state (singletons like `cmState`, `auth`,
+// `bus`) splits silently.
+//
+// This bit the codebase three times before this guard existed:
+//   - event-bus.js drift (see feedback_event_bus_cache_bust_drift.md)
+//   - auth.js drift broke user_id stamping for ~a week
+//     (see feedback_auth_js_drift_lesson.md)
+//   - state.js drift broke OFP rendering after S24a/b
+//     (see feedback_state_js_cache_bust_drift.md)
+//
+// The guard walks every .js under tools/+hub/+shared/ and index.html,
+// extracts `./module.js?v=TAG` import URLs, resolves each to a
+// repo-root-relative path, and fails if any single module is imported
+// with more than one distinct cache-bust across the codebase.
+//
+// **Pre-existing drift** is tracked in CACHE_BUST_ALLOWLIST below — those
+// 15 cases predate the guard and need targeted cleanup. They log a
+// deprecation reminder per run; new drift fails immediately.
+
+// Pre-existing drift carried over from before this guard shipped (S25).
+// Each entry MUST cite the consumers + drifted tags so cleanup is
+// possible without re-running the scanner.
+//
+// CLEANUP PLAN: pick the newest cache-bust for each module, update
+// every consumer to match, AND cascade-bump the consumer's own
+// cache-bust in its parent importer (so the browser re-fetches the
+// consumer with the corrected import URL). After cleaning a module,
+// remove its entry from this allowlist.
+const CACHE_BUST_ALLOWLIST = new Set([
+  // shared/* modules — singleton-ish, higher risk (singletons in browser)
+  'shared/toast.js',           // 3 versions; widely consumed
+  'shared/auth.js',            // 2 versions; SINGLETON — known drift class
+  'shared/export.js',          // 3 versions; mostly stateless helpers
+  'shared/router.js',          // 2 versions; singleton router instance
+  'shared/search.js',          // 2 versions; module-level state
+  'shared/unsaved-guard.js',   // 3 versions; self-wires listeners
+  'shared/scenario-landing.js',// 3 versions
+  // Per-tool drifts — types/api/calc only, no live state singletons
+  'tools/center-of-gravity/types.js',
+  'tools/most-standards/types.js',
+  'tools/warehouse-sizing/types.js',
+  'tools/warehouse-sizing/calc.js',
+  'tools/fleet-modeler/api.js',
+  'tools/cost-model/api.js',
+  'tools/cost-model/ofp-helpers.js',
+  'tools/cost-model/ui.js',
+]);
+
+function cacheBustConsistencyCheck() {
+  const dirs = ['tools', 'hub', 'shared'].map(d => join(REPO_ROOT, d));
+  const jsFiles = dirs.flatMap(walkJs);
+  const htmlFiles = [join(REPO_ROOT, 'index.html')];
+  const targets = [...jsFiles, ...htmlFiles];
+
+  // Capture relative `./path.js?v=TAG` and `../path.js?v=TAG` imports across
+  // every shape they appear in: ES module static + dynamic + side-effect
+  // imports, HTML `path: '...'` router registrations, HTML `<script src=>`,
+  // HTML `<link href=>` for modulepreload. Third-party https:// URLs are
+  // out of scope.
+  const RE = /(?:from\s+|import\s*\(?\s*|src=|href=|path:\s*)['"](\.{1,2}\/[^'"?]+\.js)\?v=([^'"]+)['"]/g;
+
+  const moduleImports = new Map();
+  let totalImports = 0;
+  for (const f of targets) {
+    const src = readFileSync(f, 'utf8');
+    let m;
+    RE.lastIndex = 0;
+    while ((m = RE.exec(src)) !== null) {
+      totalImports++;
+      const [, relPath, tag] = m;
+      const absTarget = resolve(dirname(f), relPath);
+      const targetKey = relative(REPO_ROOT, absTarget);
+      const lineNo = src.slice(0, m.index).split('\n').length;
+      if (!moduleImports.has(targetKey)) moduleImports.set(targetKey, new Map());
+      const tagMap = moduleImports.get(targetKey);
+      if (!tagMap.has(tag)) tagMap.set(tag, []);
+      tagMap.get(tag).push({ consumer: relative(REPO_ROOT, f), line: lineNo });
+    }
+  }
+
+  const newDrifts = [];
+  const allowlistedDrifts = [];
+  for (const [target, tagMap] of moduleImports.entries()) {
+    if (tagMap.size > 1) {
+      (CACHE_BUST_ALLOWLIST.has(target) ? allowlistedDrifts : newDrifts).push({ target, tags: tagMap });
+    }
+  }
+
+  console.log(
+    `Cache-bust consistency: ${targets.length} files, ${totalImports} relative .js imports, ` +
+    `${moduleImports.size} unique modules`
+  );
+  if (allowlistedDrifts.length > 0) {
+    console.log(`  ${allowlistedDrifts.length} pre-existing drifts (allowlisted in run-tests.mjs — cleanup pending):`);
+    for (const { target, tags } of allowlistedDrifts) {
+      console.log(`    - ${target} (${tags.size} versions)`);
+    }
+  }
+  if (newDrifts.length > 0) {
+    console.error(`\nCache-bust drift FAILED — ${newDrifts.length} module(s) have inconsistent cache-busts:\n`);
+    for (const { target, tags } of newDrifts) {
+      console.error(`  ✗ ${target} imported with ${tags.size} different cache-busts:`);
+      for (const [tag, sites] of tags.entries()) {
+        console.error(`      ?v=${tag}`);
+        for (const { consumer, line } of sites) {
+          console.error(`        ${consumer}:${line}`);
+        }
+      }
+      console.error('');
+    }
+    console.error(
+      'Fix: align every consumer to one cache-bust. The browser caches ES modules by full\n' +
+      'URL, so distinct ?v= tags load as separate singletons — splitting state silently.\n' +
+      'If this drift is intentional, add it to CACHE_BUST_ALLOWLIST in scripts/run-tests.mjs.\n'
+    );
+    return false;
+  }
+  return true;
+}
+
+if (!skipParse) {
+  if (!cacheBustConsistencyCheck()) process.exit(1);
+}
+
+
+// ============================================================
 // PHASE 2 — Test pass
 // ============================================================
 
