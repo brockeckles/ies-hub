@@ -7,7 +7,7 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import * as api from './api.js?v=20260504-auth1';
+import * as api from './api.js?v=20260512-port27';
 import { showToast } from '../../shared/toast.js?v=20260418-sK';
 import { escapeAttr } from '../../shared/escape.js?v=20260511-port12';
 

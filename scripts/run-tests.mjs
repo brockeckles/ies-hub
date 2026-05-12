@@ -134,7 +134,7 @@ if (!skipParse) {
 const CACHE_BUST_ALLOWLIST = new Set([
   // shared/* modules — singleton-ish, higher risk (singletons in browser)
   'shared/toast.js',           // 3 versions; widely consumed
-  'shared/auth.js',            // 2 versions; SINGLETON — known drift class
+  // S26 (2026-05-12) cleaned up shared/auth.js — was 2 versions, now 1 (?v=port27)
   'shared/export.js',          // 3 versions; mostly stateless helpers
   'shared/router.js',          // 2 versions; singleton router instance
   'shared/search.js',          // 2 versions; module-level state
