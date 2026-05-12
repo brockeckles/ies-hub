@@ -8,7 +8,7 @@
 //
 // Run:  node test-ofp-registry.mjs
 
-import { cmState, setModel, resetAll } from './tools/cost-model/state.js?v=20260511-port22';
+import { cmState, setModel, resetAll } from './tools/cost-model/state.js?v=20260511-port23';
 import {
   ofpEnsureAreaRegistry,
   ofpRegistry,
@@ -32,7 +32,7 @@ import {
   ofpClassifyAreaFromLine,
   ofpClassifySubAreaFromLine,
   ofpFlowColor,
-} from './tools/cost-model/operational-flow-registry.js?v=20260511-port22';
+} from './tools/cost-model/operational-flow-registry.js?v=20260511-port23';
 
 let passed = 0, failed = 0;
 const fails = [];

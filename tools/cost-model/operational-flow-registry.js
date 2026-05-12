@@ -17,7 +17,7 @@
  *
  * @module tools/cost-model/operational-flow-registry
  */
-import { cmState } from './state.js?v=20260511-port22';
+import { cmState } from './state.js?v=20260511-port23';
 
 // ============================================================
 // Default Functional Area catalog. This array is the SEED for new cost
