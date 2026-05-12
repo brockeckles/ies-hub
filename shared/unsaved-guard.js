@@ -6,7 +6,7 @@
  * guard prompts the user to confirm losing changes.
  *
  * Usage:
- *   import { markDirty, markClean } from './shared/unsaved-guard.js?v=20260418-sK';
+ *   import { markDirty, markClean } from './shared/unsaved-guard.js?v=20260513-port29';
  *
  *   // When user edits something:
  *   markDirty('cost-model');

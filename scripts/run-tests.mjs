@@ -138,7 +138,7 @@ const CACHE_BUST_ALLOWLIST = new Set([
   'shared/export.js',          // 3 versions; mostly stateless helpers
   // S27 (2026-05-12 PM) cleaned up shared/router.js — was 2 versions, now 1 (?v=port28)
   // S28 (2026-05-13) cleaned up shared/search.js — was 2 versions, now 1 (?v=port28); same docstring-drift pattern as S27
-  'shared/unsaved-guard.js',   // 3 versions; self-wires listeners
+  // S29 (2026-05-13) cleaned up shared/unsaved-guard.js — was 3 versions across CoG/ui.js (sP), NetOpt/ui.js (sM), index.html (pm-g12); now 1 (?v=port29). Cascade bumped CoG/ui.js + NetOpt/ui.js cache-busts in index.html to port29.
   'shared/scenario-landing.js',// 3 versions
   // Per-tool drifts — types/api/calc only, no live state singletons
   'tools/center-of-gravity/types.js',
