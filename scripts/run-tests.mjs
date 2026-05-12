@@ -135,7 +135,7 @@ const CACHE_BUST_ALLOWLIST = new Set([
   // shared/* modules — singleton-ish, higher risk (singletons in browser)
   // S31 (2026-05-13) cleaned up shared/toast.js — was 3 versions (uC majority, sK in hub/admin + hub/deal-management, vE in tools/deal-manager dynamic import); now 1 (?v=uC). Cascade bumped hub/admin/ui.js + hub/deal-management/ui.js + tools/deal-manager/ui.js cache-busts in index.html to port31. Strategy: kept uC tag since 9 of 11 consumers already used it — minimized cascade.
   // S26 (2026-05-12) cleaned up shared/auth.js — was 2 versions, now 1 (?v=port27)
-  'shared/export.js',          // 3 versions; mostly stateless helpers
+  // S32 (2026-05-13) cleaned up shared/export.js — was 3 versions (sM×3, tC, sP); now 1 (?v=sM). Cascade bumped CM/ui.js + CoG/ui.js + router.js docstring to port32. Majority-tag strategy (per feedback_cache_bust_majority_tag_strategy.md).
   // S27 (2026-05-12 PM) cleaned up shared/router.js — was 2 versions, now 1 (?v=port28)
   // S28 (2026-05-13) cleaned up shared/search.js — was 2 versions, now 1 (?v=port28); same docstring-drift pattern as S27
   // S29 (2026-05-13) cleaned up shared/unsaved-guard.js — was 3 versions across CoG/ui.js (sP), NetOpt/ui.js (sM), index.html (pm-g12); now 1 (?v=port29). Cascade bumped CoG/ui.js + NetOpt/ui.js cache-busts in index.html to port29.
