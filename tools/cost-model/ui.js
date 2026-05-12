@@ -12049,7 +12049,7 @@ function sectionHasData(key) {
 /**
  * Handle incoming labor lines from MOST tool.
  * Merges or replaces CM laborLines with MOST-derived data.
- * @param {import('../most-standards/types.js?v=20260418-sK').MostToCmPayload} payload
+ * @param {import('../most-standards/types.js?v=20260418-sM').MostToCmPayload} payload
  */
 function handleMostPush(payload) {
   if (!payload?.laborLines?.length) return;
@@ -12085,7 +12085,7 @@ function handleMostPush(payload) {
 /**
  * Handle incoming facility data from Warehouse Sizing Calculator.
  * Populates CM facility section fields.
- * @param {import('../warehouse-sizing/types.js?v=20260418-sK').WscToCmPayload} payload
+ * @param {import('../warehouse-sizing/types.js?v=20260418-sL').WscToCmPayload} payload
  */
 function handleWscPush(payload) {
   if (!payload) return;

@@ -590,7 +590,7 @@ export function estimateTransportCost(cogResult, points, costPerMile = 2.85, uni
  * can render a stacked breakdown. `estimatedCost` is aliased to `totalCost`
  * for back-compat with existing chart code.
  *
- * @param {import('./types.js?v=20260425-s3').WeightedPoint[]} points
+ * @param {import('./types.js?v=20260418-sP').WeightedPoint[]} points
  * @param {number} maxK
  * @param {number} [costPerMile=2.85]
  * @param {number} [maxIter=100]

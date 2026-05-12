@@ -141,9 +141,7 @@ const CACHE_BUST_ALLOWLIST = new Set([
   // S29 (2026-05-13) cleaned up shared/unsaved-guard.js — was 3 versions across CoG/ui.js (sP), NetOpt/ui.js (sM), index.html (pm-g12); now 1 (?v=port29). Cascade bumped CoG/ui.js + NetOpt/ui.js cache-busts in index.html to port29.
   // S33 (2026-05-13) cleaned up shared/scenario-landing.js — was 3 versions (sM×2, sL, sP); now 1 (?v=sM). Cascade bumped WSC/ui.js + CoG/ui.js in index.html to port33. Majority-tag strategy.
   // Per-tool drifts — types/api/calc only, no live state singletons
-  'tools/center-of-gravity/types.js',
-  'tools/most-standards/types.js',
-  'tools/warehouse-sizing/types.js',
+  // S34 (2026-05-13) cleaned up 3 types.js files (CoG/MOST/WSC) — each was 2 versions with a single JSDoc-only outlier. CoG/calc.js:593 (s3 → sP); CM/ui.js:12052 (MOST sK → sM); CM/ui.js:12088 (WSC sK → sL). No cascade — typedef refs are scanner-visible but not browser-loaded.
   'tools/warehouse-sizing/calc.js',
   'tools/fleet-modeler/api.js',
   // S30 (2026-05-13) cleaned up tools/cost-model/api.js — was 3 versions across WSC/ui.js (auth1), DealMgr/ui.js (phase4-cm), CM/ui.js (port27); now 1 (?v=port30). Cascade bumped WSC/ui.js + DealMgr/ui.js + CM/ui.js cache-busts in index.html to port30; updated shared/router.js docstring example to match.
