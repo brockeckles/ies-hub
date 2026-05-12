@@ -2814,7 +2814,7 @@ let _planMeta = null;
 /**
  * Convert the UI's (facility, zones, volumes) state into SizingInputs
  * for the v2-equivalent calc.sizeFacility engine.
- * @returns {import('./calc.js?v=20260419-uC').SizingInputs}
+ * @returns {import('./calc.js?v=20260511-port11').SizingInputs}
  */
 function toSizingInputs() {
   const alloc = zones.storageAllocation || { fullPallet: 60, cartonOnPallet: 30, cartonOnShelving: 10 };

@@ -131,23 +131,33 @@ if (!skipParse) {
 // cache-bust in its parent importer (so the browser re-fetches the
 // consumer with the corrected import URL). After cleaning a module,
 // remove its entry from this allowlist.
-const CACHE_BUST_ALLOWLIST = new Set([
-  // shared/* modules — singleton-ish, higher risk (singletons in browser)
-  // S31 (2026-05-13) cleaned up shared/toast.js — was 3 versions (uC majority, sK in hub/admin + hub/deal-management, vE in tools/deal-manager dynamic import); now 1 (?v=uC). Cascade bumped hub/admin/ui.js + hub/deal-management/ui.js + tools/deal-manager/ui.js cache-busts in index.html to port31. Strategy: kept uC tag since 9 of 11 consumers already used it — minimized cascade.
-  // S26 (2026-05-12) cleaned up shared/auth.js — was 2 versions, now 1 (?v=port27)
-  // S32 (2026-05-13) cleaned up shared/export.js — was 3 versions (sM×3, tC, sP); now 1 (?v=sM). Cascade bumped CM/ui.js + CoG/ui.js + router.js docstring to port32. Majority-tag strategy (per feedback_cache_bust_majority_tag_strategy.md).
-  // S27 (2026-05-12 PM) cleaned up shared/router.js — was 2 versions, now 1 (?v=port28)
-  // S28 (2026-05-13) cleaned up shared/search.js — was 2 versions, now 1 (?v=port28); same docstring-drift pattern as S27
-  // S29 (2026-05-13) cleaned up shared/unsaved-guard.js — was 3 versions across CoG/ui.js (sP), NetOpt/ui.js (sM), index.html (pm-g12); now 1 (?v=port29). Cascade bumped CoG/ui.js + NetOpt/ui.js cache-busts in index.html to port29.
-  // S33 (2026-05-13) cleaned up shared/scenario-landing.js — was 3 versions (sM×2, sL, sP); now 1 (?v=sM). Cascade bumped WSC/ui.js + CoG/ui.js in index.html to port33. Majority-tag strategy.
-  // Per-tool drifts — types/api/calc only, no live state singletons
-  // S34 (2026-05-13) cleaned up 3 types.js files (CoG/MOST/WSC) — each was 2 versions with a single JSDoc-only outlier. CoG/calc.js:593 (s3 → sP); CM/ui.js:12052 (MOST sK → sM); CM/ui.js:12088 (WSC sK → sL). No cascade — typedef refs are scanner-visible but not browser-loaded.
-  'tools/warehouse-sizing/calc.js',
-  'tools/fleet-modeler/api.js',
-  // S30 (2026-05-13) cleaned up tools/cost-model/api.js — was 3 versions across WSC/ui.js (auth1), DealMgr/ui.js (phase4-cm), CM/ui.js (port27); now 1 (?v=port30). Cascade bumped WSC/ui.js + DealMgr/ui.js + CM/ui.js cache-busts in index.html to port30; updated shared/router.js docstring example to match.
-  'tools/cost-model/ofp-helpers.js',
-  // S27 (2026-05-12 PM) cleaned up tools/cost-model/ui.js — was 2 versions (one was a stale router.js docstring ref), now 1 (?v=port27)
-]);
+// ============================================================
+// CACHE_BUST_ALLOWLIST
+// ============================================================
+// As of S35 (2026-05-13) this set is EMPTY — every previously-drifting
+// module has been aligned to a single cache-bust. From here forward,
+// the cache-bust guard is a HARD FAIL on any new drift.
+//
+// Sprint history (2026-05-11 → 2026-05-13):
+//   S26: shared/auth.js                       (2→1 ?v=port27)
+//   S27: shared/router.js + cost-model/ui.js  (2→1 ?v=port28; closed cost-model/ui.js too via router docstring fix)
+//   S28: shared/search.js                     (2→1 ?v=port28; docstring drift)
+//   S29: shared/unsaved-guard.js              (3→1 ?v=port29; CoG/NetOpt cascade)
+//   S30: tools/cost-model/api.js              (3→1 ?v=port30; WSC/DealMgr/CM cascade + router docstring)
+//   S31: shared/toast.js                      (3→1 ?v=uC majority-tag; aligned outliers)
+//   S32: shared/export.js                     (3→1 ?v=sM majority-tag; aligned outliers)
+//   S33: shared/scenario-landing.js           (3→1 ?v=sM majority-tag; aligned outliers)
+//   S34: 3 × types.js (CoG/MOST/WSC)          (each 2→1, JSDoc-only outliers)
+//   S35: ofp-helpers.js + WSC calc + Fleet api (final 3 → 0)
+//
+// **If you need to add a new entry here, you almost certainly shouldn't.**
+// Cascade-bump the consumer in its parent importer instead, or use the
+// majority-tag strategy from feedback_cache_bust_majority_tag_strategy.md.
+//
+// Pre-existing drift carried over from before this guard shipped (S25).
+// Each entry MUST cite the consumers + drifted tags so cleanup is
+// possible without re-running the scanner.
+const CACHE_BUST_ALLOWLIST = new Set([]);
 
 function cacheBustConsistencyCheck() {
   const dirs = ['tools', 'hub', 'shared'].map(d => join(REPO_ROOT, d));

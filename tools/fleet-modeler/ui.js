@@ -67,7 +67,7 @@ let mapInstance = null;
  * Carrier rate deck loaded from ref_fleet_carrier_rates.
  * Stays as the raw row array; calc.indexCarrierDeck materialises a
  * vehicleType→rate map at run time.
- * @type {Array<import('./api.js?v=20260418-sM').CarrierRate>}
+ * @type {Array<import('./api.js?v=20260504-auth1').CarrierRate>}
  */
 let carrierRateDeck = [];
 

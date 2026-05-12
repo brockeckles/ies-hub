@@ -35,7 +35,7 @@ import {
   ofpEquipBadge as _ofpEquipBadge,
   ofpUomIn as _ofpUomIn,
   ofpUomOut as _ofpUomOut,
-} from './ofp-helpers.js?v=20260511-port12';
+} from './ofp-helpers.js?v=20260511-port23';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260511-port12';
 import * as calc from './calc.js?v=20260511-port16';
 import ofpStyles from './operational-flow-styles.js?v=20260511-port4';
