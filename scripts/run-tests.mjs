@@ -137,7 +137,7 @@ const CACHE_BUST_ALLOWLIST = new Set([
   // S26 (2026-05-12) cleaned up shared/auth.js — was 2 versions, now 1 (?v=port27)
   'shared/export.js',          // 3 versions; mostly stateless helpers
   // S27 (2026-05-12 PM) cleaned up shared/router.js — was 2 versions, now 1 (?v=port28)
-  'shared/search.js',          // 2 versions; module-level state
+  // S28 (2026-05-13) cleaned up shared/search.js — was 2 versions, now 1 (?v=port28); same docstring-drift pattern as S27
   'shared/unsaved-guard.js',   // 3 versions; self-wires listeners
   'shared/scenario-landing.js',// 3 versions
   // Per-tool drifts — types/api/calc only, no live state singletons
