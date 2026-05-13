@@ -319,7 +319,7 @@ function _buildWscChromeOpts() {
     actions,
     showSidebar: _wscDrawerOpen,
     sidebarHeader: 'Configure',
-    sidebarBody: '<div id="wsc-config">' + _renderWscConfigHtml() + '</div>',
+    sidebarBody: '<div id="wsc-config">' + renderConfigHtml(_makeConfigCtx()) + '</div>',
     sidebarFooter,
     // Drawer-toggle pill — labeled, sits at the start of Row 2 so it's
     // discoverable next to the section pills (instead of relying on the
