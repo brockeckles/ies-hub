@@ -10670,7 +10670,7 @@ function _launchToTool(target) {
     // The hash-nav fallback preserves prior behavior if the dynamic import
     // throws (e.g., network blip).
     openToolInSlideOver({
-      toolPath: './tools/warehouse-sizing/ui.js?v=20260513-planextract',
+      toolPath: './tools/warehouse-sizing/ui.js?v=20260513-dashextract',
       title: 'Warehouse Sizing Calculator',
       subtitle: model?.projectDetails?.name ? `for ${model.projectDetails.name}` : 'slide-over from CM',
     }).catch((err) => {
