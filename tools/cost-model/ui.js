@@ -25,6 +25,7 @@ import * as shiftPlannerCalc from './shift-planner.js?v=20260430-hours-first';
 import * as shiftPlannerUi from './shift-planner-ui.js?v=20260430-hours-first';
 // 2026-04-28 — internal phase stepper for Implementation Timeline section.
 import { renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
+import { openToolInSlideOver } from '../../shared/tool-slideover.js?v=20260512-slideover';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260430-na-dot';
 import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260511-port12';
@@ -10664,7 +10665,18 @@ function _launchToTool(target) {
       }));
     } catch {}
     bus.emit('cm:push-to-wsc', payload); // fire even though listener may not be mounted yet — sessionStorage covers the gap
-    window.location.hash = '#designtools/warehouse-sizing';
+    // 2026-05-12 (slide-over) — open WSC in a right-side slide-over panel so
+    // the user feels "still in CM" rather than punted to a separate route.
+    // The hash-nav fallback preserves prior behavior if the dynamic import
+    // throws (e.g., network blip).
+    openToolInSlideOver({
+      toolPath: './tools/warehouse-sizing/ui.js?v=20260512-dock-wart',
+      title: 'Warehouse Sizing Calculator',
+      subtitle: model?.projectDetails?.name ? `for ${model.projectDetails.name}` : 'slide-over from CM',
+    }).catch((err) => {
+      console.warn('[cm→wsc] slide-over failed; falling back to hash nav', err);
+      window.location.hash = '#designtools/warehouse-sizing';
+    });
     return;
   }
   if (target === 'netopt') {
