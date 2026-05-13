@@ -26,7 +26,7 @@ import * as shiftPlannerUi from './shift-planner-ui.js?v=20260430-hours-first';
 // 2026-04-28 — internal phase stepper for Implementation Timeline section.
 import { renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
 import { openToolInSlideOver } from '../../shared/tool-slideover.js?v=20260512-slideover3';
-import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260430-na-dot';
+import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260430-na-dot';
 import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260511-port12';
 import {
@@ -169,6 +169,27 @@ let rootEl = null;
 
 /** @type {boolean} */
 let isDirty = false;
+
+/**
+ * Flip isDirty true and refresh the save chip ONLY on the clean→dirty
+ * transition. Mirrors the WSC `_markDirty` pattern (2026-05-13 fix):
+ * actions-rail refresh — not full `refreshToolChrome` — so input focus
+ * is preserved mid-keystroke. No-op on repeat sets (idempotent).
+ *
+ * Safety guards:
+ *  - skip refresh if `rootEl` isn't mounted yet (early load path)
+ *  - skip refresh if `viewMode !== 'editor'` (landing/list view has no chrome)
+ *  - try/catch around the rail refresh so a transient render error never
+ *    blocks the underlying state mutation.
+ */
+function _markCmDirty() {
+  if (isDirty) return;
+  isDirty = true;
+  if (rootEl && viewMode === 'editor') {
+    try { refreshToolChromeActions(rootEl, _buildCmChromeOpts()); } catch (_) {}
+  }
+}
+
 
 /** @type {string|null} ISO timestamp of the last successful save, OR the loaded model's updated_at. */
 let lastSavedAt = null;
@@ -632,7 +653,7 @@ export async function mount(el) {
         if (payload.palletPositions)  model.facility.palletPositions = payload.palletPositions;
         if (payload.sfPerPosition)    model.facility.sfPerPosition = payload.sfPerPosition;
         if (payload.peakUnitsPerDay)  model.facility.peakUnitsPerDay = payload.peakUnitsPerDay;
-        isDirty = true;
+        _markCmDirty();
       } else {
         // Stale — discard
         sessionStorage.removeItem('wsc_pending_push');
@@ -760,7 +781,7 @@ export async function mount(el) {
         }
         if (model && model.projectDetails) {
           model.projectDetails.dealId = payload.dealId;
-          isDirty = true;
+          _markCmDirty();
         }
       } else {
         sessionStorage.removeItem('cm_pending_new_for_deal');
@@ -6111,7 +6132,7 @@ function syncSeasonalFlex() {
     }
   }
 
-  isDirty = true;
+  _markCmDirty();
   refreshNavCompletion();
   renderSection();
 
@@ -7822,7 +7843,7 @@ function bindSectionEvents(section, container) {
       model,
       toast: (msg) => { try { showToast(msg); } catch (_) {} },
       onModelChange: () => {
-        isDirty = true;
+        _markCmDirty();
         if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
         refreshNavCompletion();
         renderSection();
@@ -7864,7 +7885,7 @@ function bindSectionEvents(section, container) {
       const parent = parts.reduce((o, k) => { o[k] = o[k] || {}; return o[k]; }, model);
       const v = (input.dataset.type === 'number') ? (parseFloat(input.value) || 0) : input.value;
       parent[last] = v;
-      isDirty = true;
+      _markCmDirty();
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       refreshNavCompletion();
     });
@@ -7903,7 +7924,7 @@ function bindSectionEvents(section, container) {
         const last = parts.pop();
         const parent = parts.reduce((o, k) => { o[k] = o[k] || {}; return o[k]; }, model);
         parent[last] = (input.dataset.type === 'number') ? (parseFloat(input.value) || 0) : input.value;
-        isDirty = true;
+        _markCmDirty();
         if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
         refreshNavCompletion();
         return;
@@ -7936,7 +7957,7 @@ function bindSectionEvents(section, container) {
           }
           while (arr.length <= idx) arr.push(null);
           arr[idx] = (val === '' || val === null) ? null : val;
-          isDirty = true;
+          _markCmDirty();
           if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
           refreshNavCompletion();
           return;
@@ -7946,7 +7967,7 @@ function bindSectionEvents(section, container) {
           // Labor: recompute annual_hours + re-render so Hrs/Yr, FTE, Annual Cost, override badge refresh
           if (input.dataset.array === 'laborLines' && (field === 'volume' || field === 'base_uph')) {
             recomputeLineHours(arr[idx]);
-            isDirty = true;
+            _markCmDirty();
             if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
             renderSection();
             return;
@@ -7958,7 +7979,7 @@ function bindSectionEvents(section, container) {
           // to purchase and cost stays 0" bug from the catalog.)
           if (input.dataset.array === 'equipmentLines' && field === 'acquisition_type') {
             autoPopulateCostOnAcqTypeFlip(arr[idx], val).then((changed) => {
-              isDirty = true;
+              _markCmDirty();
               if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
               // Always re-render so the cost input reflects the pulled value
               // and the $0 warning styling clears.
@@ -7979,7 +8000,7 @@ function bindSectionEvents(section, container) {
               // IT lines are always capital — flip the financing type to match
               arr[idx].acquisition_type = 'capital';
             }
-            isDirty = true;
+            _markCmDirty();
             if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
             renderSection();
             return;
@@ -7987,7 +8008,7 @@ function bindSectionEvents(section, container) {
           // Equipment: seasonal_months text input re-renders so the tooltip
           // refreshes with the human-readable month names.
           if (input.dataset.array === 'equipmentLines' && field === 'seasonal_months') {
-            isDirty = true;
+            _markCmDirty();
             if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
             renderSection();
             return;
@@ -7996,7 +8017,7 @@ function bindSectionEvents(section, container) {
           // row styling + amort display + pass-through tag. Re-render the
           // Start-Up table so the affordances match.
           if (input.dataset.array === 'startupLines' && field === 'billing_type') {
-            isDirty = true;
+            _markCmDirty();
             if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
             renderSection();
             return;
@@ -8019,7 +8040,7 @@ function bindSectionEvents(section, container) {
         }
       }
 
-      isDirty = true;
+      _markCmDirty();
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       // Benefit Load buckets: any edit should refresh the Total pill + the
       // underlying defaultBurdenPct the calc engine consumes. Re-render the
@@ -8086,7 +8107,7 @@ function bindSectionEvents(section, container) {
           if (!line.activity_name) line.activity_name = p.name;
         }
       }
-      isDirty = true;
+      _markCmDirty();
       renderSection();
     });
   });
@@ -8263,7 +8284,7 @@ function bindSectionEvents(section, container) {
           recomputeLineHours(line);
         }
       }
-      isDirty = true;
+      _markCmDirty();
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
     });
@@ -8362,7 +8383,7 @@ function bindSectionEvents(section, container) {
       } else {
         model.channelMix.mode = 'byVolume';
       }
-      isDirty = true;
+      _markCmDirty();
       renderSection();
     });
   });
@@ -8374,7 +8395,7 @@ function bindSectionEvents(section, container) {
       if (!model.channelMix) model.channelMix = { mode: 'byMix' };
       model.channelMix.totalVolume = v;
       _recomputeChannelPrimariesFromMix();
-      isDirty = true;
+      _markCmDirty();
       renderSection();
     });
   });
@@ -8384,7 +8405,7 @@ function bindSectionEvents(section, container) {
       if (!model.channelMix) model.channelMix = { mode: 'byMix' };
       model.channelMix.totalUom = e.target.value;
       _recomputeChannelPrimariesFromMix();
-      isDirty = true;
+      _markCmDirty();
       renderSection();
     });
   });
@@ -8395,7 +8416,7 @@ function bindSectionEvents(section, container) {
       const ch = (model.channels || []).find(c => c.key === key);
       if (!ch || !ch.primary) return;
       ch.primary.autoDerived = false;
-      isDirty = true;
+      _markCmDirty();
       renderSection();
       showToast(`Reverse channel "${ch.name}" — manual entry mode`, 'info');
     });
@@ -8408,7 +8429,7 @@ function bindSectionEvents(section, container) {
       if (!ch || !ch.primary) return;
       ch.primary.autoDerived = true;
       // Recomputation happens at next render
-      isDirty = true;
+      _markCmDirty();
       renderSection();
       showToast(`Reverse channel "${ch.name}" — auto-derived from outbound × returns%`, 'success');
     });
@@ -8425,7 +8446,7 @@ function bindSectionEvents(section, container) {
       if (existing) existing.pct = pct;
       else model.channelMix.allocations.push({ channelKey: key, pct });
       _recomputeChannelPrimariesFromMix();
-      isDirty = true;
+      _markCmDirty();
       renderSection();
     });
   });
@@ -8440,7 +8461,7 @@ function bindSectionEvents(section, container) {
       const activeIdx = Math.max(0, model.channels.findIndex(c => c.key === _activeChannelKey));
       model.channels[activeIdx].seasonality = { preset: name, monthly_shares: preset.slice() };
       if (activeIdx === 0) syncLegacyFromChannel(model);
-      isDirty = true;
+      _markCmDirty();
       renderSection();
       showToast(`Applied "${SEASONALITY_PRESET_LABELS[name]}" profile`, 'success');
     });
@@ -8465,7 +8486,7 @@ function bindSectionEvents(section, container) {
       // Only sync to legacy when editing channel 0 (the canonical primary).
       // Phase 3 will retire this branch when calc consumers read accessors.
       if (chIdx === 0) syncLegacyFromChannel(model);
-      isDirty = true;
+      _markCmDirty();
       // Debounced re-render so sum/peak summary updates without losing focus
       clearTimeout(_seasonalityRerenderTimer);
       _seasonalityRerenderTimer = setTimeout(() => renderSection(), 400);
@@ -8644,7 +8665,7 @@ function bindSectionEvents(section, container) {
           }
         } else {
           model.heuristicOverrides = heuristicOverrides;
-          isDirty = true;
+          _markCmDirty();
         }
         renderSection();
       });
@@ -8715,7 +8736,7 @@ function bindSectionEvents(section, container) {
             }
           } else {
             model.planningRatioOverrides = planningRatioOverrides;
-            isDirty = true;
+            _markCmDirty();
           }
           renderSection();
         });
@@ -9490,7 +9511,7 @@ async function openLaborSeasonalityModal(idx) {
         });
       } catch (e) { status.textContent = 'Save failed: ' + (e?.message || e); return; }
     } else {
-      isDirty = true;
+      _markCmDirty();
     }
     overlay.remove();
     renderSection();
@@ -10734,7 +10755,7 @@ async function handleAction(action, idx, btn) {
         ch.overrides.push({ key, pinnedValue: raw, pinnedAt: now });
       }
       _volEditingOverrideKey = null;
-      isDirty = true;
+      _markCmDirty();
       // Override is channel-only state; legacy fields don't represent it.
       // Phase 3 calc consumers will read overrides via accessors.
       renderSection();
@@ -10750,7 +10771,7 @@ async function handleAction(action, idx, btn) {
         ch.overrides = ch.overrides.filter(o => !o || o.key !== key);
       }
       _volEditingOverrideKey = null;
-      isDirty = true;
+      _markCmDirty();
       renderSection();
       showToast(`Removed override for ${key}`, 'info');
       return;
@@ -10870,7 +10891,7 @@ async function handleAction(action, idx, btn) {
       // Brock 2026-04-22 PM — resets the seasonality profile to flat 1/12.
       // Useful when a user loaded a preset and wants to start over.
       model.seasonalityProfile = { preset: 'flat', monthly_shares: new Array(12).fill(1/12) };
-      isDirty = true;
+      _markCmDirty();
       renderSection();
       showToast('Seasonality reset to flat (1/12 per month)', 'info');
       return;
@@ -10967,7 +10988,7 @@ async function handleAction(action, idx, btn) {
         // Unlink every labor line — the old position_ids no longer exist
         (model.laborLines || []).forEach(l => { l.position_id = null; });
         (model.indirectLaborLines || []).forEach(l => { l.position_id = null; });
-        isDirty = true;
+        _markCmDirty();
         showToast(`Replaced catalog with ${STANDARD_POSITIONS.length} standard roles. Re-link labor lines via the Position dropdown in the Labor section.`, 'success');
         renderSection();
       });
@@ -11006,7 +11027,7 @@ async function handleAction(action, idx, btn) {
         totalAfter += line.annual_hours;
         updated++;
       });
-      isDirty = true;
+      _markCmDirty();
       const deltaHrs = totalAfter - totalBefore;
       const deltaPct = totalBefore > 0 ? (deltaHrs / totalBefore * 100) : 0;
       const fmtHrs = (n) => Math.round(n).toLocaleString('en-US');
@@ -11210,13 +11231,13 @@ async function handleAction(action, idx, btn) {
       if (Number.isFinite(v) && v > 0) {
         model.facility = model.facility || {};
         model.facility.totalSqft = v;
-        isDirty = true;
+        _markCmDirty();
         showToast(`Total Sqft set to ${v.toLocaleString()} sqft (suggested)`, 'success');
       }
       break;
     }
   }
-  isDirty = true;
+  _markCmDirty();
   renderSection();
 }
 
@@ -11239,7 +11260,7 @@ function applyMostTemplate(idx, templateId) {
   if (!templateId) {
     line.most_template_id = '';
     line.most_template_name = '';
-    isDirty = true;
+    _markCmDirty();
     renderSection();
     return;
   }
@@ -11276,7 +11297,7 @@ function applyMostTemplate(idx, templateId) {
 
   recomputeLineHours(line);
 
-  isDirty = true;
+  _markCmDirty();
   if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
   renderSection();
 }
@@ -11294,7 +11315,7 @@ function resetMostUph(idx) {
   if (uph <= 0) return; // don't wipe user's uph if template has no uph
   line.base_uph = uph;
   recomputeLineHours(line);
-  isDirty = true;
+  _markCmDirty();
   renderSection();
 }
 
@@ -11626,7 +11647,7 @@ async function openEquipmentCatalog() {
     };
     if (!Array.isArray(model.equipmentLines)) model.equipmentLines = [];
     model.equipmentLines.push(newLine);
-    isDirty = true;
+    _markCmDirty();
     close();
     renderSection();
   });
@@ -12091,8 +12112,7 @@ function handleMostPush(payload) {
   }));
 
   model.laborLines = [...manualLines, ...mostLines];
-  isDirty = true;
-
+  _markCmDirty();
   // Navigate to labor section to show the result
   navigateSection('labor');
   updateValidation();
@@ -12137,7 +12157,7 @@ function handleWscPush(payload) {
   if (payload.sfPerPosition)    model.facility.sfPerPosition = payload.sfPerPosition;
   if (payload.peakUnitsPerDay)  model.facility.peakUnitsPerDay = payload.peakUnitsPerDay;
 
-  isDirty = true;
+  _markCmDirty();
   if (viewMode === 'editor') {
     navigateSection('facility');
     updateValidation();
@@ -12197,7 +12217,7 @@ function handleNetOptPush(payload) {
     receivedAt: Date.now(),
   };
 
-  isDirty = true;
+  _markCmDirty();
   navigateSection('volumes');
   updateValidation();
 
@@ -12953,7 +12973,7 @@ async function openChannelArchetypePicker(targetChannelKey = null) {
           } else if (wasReverse && !isNowReverse) {
             targetCh.primary = { ...targetCh.primary, activity: 'outbound', autoDerived: false };
           }
-          isDirty = true;
+          _markCmDirty();
           overlay.remove();
           renderSection();
           showToast(`Re-archetyped: ${targetCh.name}`, 'success');
@@ -12998,7 +13018,7 @@ async function openChannelArchetypePicker(targetChannelKey = null) {
         if (!Array.isArray(model.channels)) model.channels = [];
         model.channels.push(newCh);
         _activeChannelKey = newCh.key;
-        isDirty = true;
+        _markCmDirty();
         overlay.remove();
         renderSection();
         showToast(`Added channel: ${newCh.name}`, 'success');
@@ -13117,7 +13137,7 @@ function openChannelManageModal() {
         const ch = model.channels.find(c => c.key === key);
         if (!ch) return;
         ch.name = e.target.value || ch.name;
-        isDirty = true;
+        _markCmDirty();
         renderSection();
       });
     });
@@ -13133,10 +13153,10 @@ function openChannelManageModal() {
           const tmp = sorted[i].sortOrder;
           sorted[i].sortOrder = sorted[j].sortOrder;
           sorted[j].sortOrder = tmp;
-          isDirty = true;
+          _markCmDirty();
         } else if (action === 'vol-channel-toggle-hidden') {
           const ch = model.channels.find(c => c.key === key);
-          if (ch) { ch.hidden = !ch.hidden; isDirty = true; }
+          if (ch) { ch.hidden = !ch.hidden; _markCmDirty(); }
         } else if (action === 'vol-channel-rearchetype') {
           // R13 (2026-04-29): close the manage modal first so the picker
           // overlay doesn't stack on top of it; openChannelArchetypePicker
@@ -13149,7 +13169,7 @@ function openChannelManageModal() {
           if (!(await showConfirm(`Delete channel? All channel data is dropped — there's no undo.`, { okLabel: 'Delete', danger: true }))) return;
           model.channels = model.channels.filter(c => c.key !== key);
           if (_activeChannelKey === key) _activeChannelKey = model.channels[0]?.key || null;
-          isDirty = true;
+          _markCmDirty();
         }
         const body = overlay.querySelector('#cm-channel-mgmt-body');
         if (body) { body.innerHTML = renderBody(); wireBody(); }
@@ -13374,7 +13394,7 @@ function _bindOperationalFlowEvents(container) {
   const _OFP_ZOOM_STEPS_BIND = [0.75, 0.9, 1.0, 1.15, 1.3];
   const applyZoom = (z) => {
     model.ofpZoom = z;
-    isDirty = true;
+    _markCmDirty();
     if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
     const card = container.querySelector('.ofp-canvas-card');
     if (card) card.style.zoom = String(z);
@@ -13431,7 +13451,7 @@ function _bindOperationalFlowEvents(container) {
       const a = (model.ofpAreas || []).find(x => x.key === key);
       if (!a) return;
       a.hidden = false;
-      isDirty = true;
+      _markCmDirty();
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
     });
@@ -13443,7 +13463,7 @@ function _bindOperationalFlowEvents(container) {
       const f = (model.ofpFlows || []).find(x => x.tag === tag);
       if (!f) return;
       f.hidden = false;
-      isDirty = true;
+      _markCmDirty();
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
     });
@@ -13453,7 +13473,7 @@ function _bindOperationalFlowEvents(container) {
       e.stopPropagation();
       (model.ofpAreas || []).forEach(a => { if (a.hidden) a.hidden = false; });
       (model.ofpFlows || []).forEach(f => { if (f.hidden) f.hidden = false; });
-      isDirty = true;
+      _markCmDirty();
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
     });
@@ -13528,7 +13548,7 @@ function _bindOperationalFlowEvents(container) {
       if (areaCanvasDragKey === tgtKey) { areaCanvasDragKey = null; return; }
       _ofpReorderArea(areaCanvasDragKey, tgtKey, before ? 'before' : 'after');
       areaCanvasDragKey = null;
-      isDirty = true;
+      _markCmDirty();
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
     });
@@ -13582,7 +13602,7 @@ function _bindOperationalFlowEvents(container) {
       if (flowCanvasDragTag === tgtTag) { flowCanvasDragTag = null; return; }
       _ofpReorderFlow(flowCanvasDragTag, tgtTag, above ? 'before' : 'after');
       flowCanvasDragTag = null;
-      isDirty = true;
+      _markCmDirty();
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
     });
@@ -13672,7 +13692,7 @@ function _bindOperationalFlowEvents(container) {
       // Indirect labor lives in 'support' by convention. Allow override
       // anyway — the user knows what they want.
       line.flowLane = targetArea;
-      isDirty = true;
+      _markCmDirty();
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
       try { showToast(`Reassigned to ${targetArea === 'returnsVas' ? 'Returns/VAS' : (targetArea.charAt(0).toUpperCase() + targetArea.slice(1))}.`, 'success'); } catch (_) {}
@@ -13713,7 +13733,7 @@ function _bindOperationalFlowEvents(container) {
         // Drop on (other) → clear sub-area override; line falls back
         // to keyword classification within parent.
         delete line.flowSubArea;
-        isDirty = true;
+        _markCmDirty();
         if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
         renderSection();
         try { showToast('Cleared sub-area assignment.', 'success'); } catch (_) {}
@@ -13722,7 +13742,7 @@ function _bindOperationalFlowEvents(container) {
         const a = (model.ofpAreas || []).find(x => x.key === targetArea);
         const sa = a ? (a.subAreas || []).find(x => x.key === targetSub) : null;
         const lbl = sa ? `${a.label} → ${sa.label}` : targetSub;
-        isDirty = true;
+        _markCmDirty();
         if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
         renderSection();
         try { showToast(`Moved to ${lbl}`, 'success'); } catch (_) {}
@@ -13805,7 +13825,7 @@ function _bindOperationalFlowEvents(container) {
       // it shows up in Manage Flows immediately, not only after a
       // re-render side-effect.
       _ofpRegisterFlow(resolvedTag);
-      isDirty = true;
+      _markCmDirty();
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
       try { showToast(`Connected on flow "${_ofpFlowLabel(resolvedTag)}".`, 'success'); } catch (_) {}
@@ -14019,7 +14039,7 @@ function _ofpAddLineToArea(areaKey, subAreaKey) {
     if (subAreaKey) line.flowSubArea = subAreaKey;
     model.laborLines.push(line);
   }
-  isDirty = true;
+  _markCmDirty();
   if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
   renderSection();
 }
@@ -14028,7 +14048,7 @@ function _ofpDeleteLine(kind, idx) {
   const arr = kind === 'direct' ? (model.laborLines || []) : (model.indirectLaborLines || []);
   if (!arr[idx]) return;
   arr.splice(idx, 1);
-  isDirty = true;
+  _markCmDirty();
   if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
   renderSection();
 }
@@ -14270,7 +14290,7 @@ function _bindOfpPanelInputs(panel, container) {
           }
         }
       }
-      isDirty = true;
+      _markCmDirty();
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
     });
@@ -14345,7 +14365,7 @@ function _bindManageAreasEvents(container) {
       const a = model.ofpAreas.find(x => x.key === key);
       if (!a) return;
       a[field] = input.value;
-      isDirty = true;
+      _markCmDirty();
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
       _ofpOpenManageAreasModal(container);
@@ -14361,7 +14381,7 @@ function _bindManageAreasEvents(container) {
       const a = model.ofpAreas.find(x => x.key === key);
       if (!a) return;
       a.keywords = (a.keywords || []).filter(k => k !== kw);
-      isDirty = true;
+      _markCmDirty();
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
       _ofpOpenManageAreasModal(container);
@@ -14379,7 +14399,7 @@ function _bindManageAreasEvents(container) {
       const parts = raw.split(',').map(s => s.trim()).filter(Boolean);
       a.keywords = Array.from(new Set([...(a.keywords || []), ...parts]));
       input.value = '';
-      isDirty = true;
+      _markCmDirty();
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
       _ofpOpenManageAreasModal(container, key);
@@ -14416,7 +14436,7 @@ function _bindManageAreasEvents(container) {
       });
       // Remove from registry.
       model.ofpAreas = model.ofpAreas.filter(x => x.key !== key);
-      isDirty = true;
+      _markCmDirty();
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
       _ofpOpenManageAreasModal(container);
@@ -14453,7 +14473,7 @@ function _bindManageAreasEvents(container) {
       };
       if (unclassified) unclassified.sortOrder = beforeUnc + 1;
       model.ofpAreas.push(newArea);
-      isDirty = true;
+      _markCmDirty();
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
       _ofpOpenManageAreasModal(container, key);
@@ -14468,7 +14488,7 @@ function _bindManageAreasEvents(container) {
       const a = model.ofpAreas.find(x => x.key === key);
       if (!a) return;
       a.hidden = !a.hidden;
-      isDirty = true;
+      _markCmDirty();
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
       _ofpOpenManageAreasModal(container, key);
@@ -14483,7 +14503,7 @@ function _bindManageAreasEvents(container) {
       const dir = btn.dataset.move;
       if (dir === 'up') _ofpMoveAreaUp(key);
       else _ofpMoveAreaDown(key);
-      isDirty = true;
+      _markCmDirty();
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
       _ofpOpenManageAreasModal(container, key);
@@ -14533,7 +14553,7 @@ function _bindManageAreasEvents(container) {
       _ofpReorderArea(areaRowDragKey, tgtKey, above ? 'before' : 'after');
       const moved = areaRowDragKey;
       areaRowDragKey = null;
-      isDirty = true;
+      _markCmDirty();
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
       _ofpOpenManageAreasModal(container, moved);
@@ -14581,7 +14601,7 @@ function _bindManageAreasEvents(container) {
       const set = (typeof window !== 'undefined' && window.__ofpExpandedAreas) || new Set();
       set.add(areaKey);
       if (typeof window !== 'undefined') window.__ofpExpandedAreas = set;
-      isDirty = true;
+      _markCmDirty();
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
       _ofpOpenManageAreasModal(container, areaKey);
@@ -14599,7 +14619,7 @@ function _bindManageAreasEvents(container) {
       const sa = (a.subAreas || []).find(x => x.key === subKey);
       if (!sa) return;
       sa[field] = input.value;
-      isDirty = true;
+      _markCmDirty();
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
       _ofpOpenManageAreasModal(container, areaKey);
@@ -14618,7 +14638,7 @@ function _bindManageAreasEvents(container) {
       const sa = (a.subAreas || []).find(x => x.key === subKey);
       if (!sa) return;
       sa.keywords = (sa.keywords || []).filter(k => k !== kw);
-      isDirty = true;
+      _markCmDirty();
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
       _ofpOpenManageAreasModal(container, areaKey);
@@ -14639,7 +14659,7 @@ function _bindManageAreasEvents(container) {
       const parts = raw.split(',').map(s => s.trim()).filter(Boolean);
       sa.keywords = Array.from(new Set([...(sa.keywords || []), ...parts]));
       input.value = '';
-      isDirty = true;
+      _markCmDirty();
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
       _ofpOpenManageAreasModal(container, areaKey);
@@ -14664,7 +14684,7 @@ function _bindManageAreasEvents(container) {
       const sa = (a.subAreas || []).find(x => x.key === subKey);
       if (!sa) return;
       sa.hidden = !sa.hidden;
-      isDirty = true;
+      _markCmDirty();
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
       _ofpOpenManageAreasModal(container, areaKey);
@@ -14680,7 +14700,7 @@ function _bindManageAreasEvents(container) {
       const dir = btn.dataset.subMove;
       if (dir === 'up') _ofpMoveSubAreaUp(areaKey, subKey);
       else _ofpMoveSubAreaDown(areaKey, subKey);
-      isDirty = true;
+      _markCmDirty();
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
       _ofpOpenManageAreasModal(container, areaKey);
@@ -14708,7 +14728,7 @@ function _bindManageAreasEvents(container) {
       (model.laborLines || []).forEach(l => { if (l.flowSubArea === subKey) delete l.flowSubArea; });
       (model.indirectLaborLines || []).forEach(l => { if (l.flowSubArea === subKey) delete l.flowSubArea; });
       a.subAreas = a.subAreas.filter(x => x.key !== subKey);
-      isDirty = true;
+      _markCmDirty();
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
       _ofpOpenManageAreasModal(container, areaKey);
@@ -14782,7 +14802,7 @@ function _bindManageFlowsEvents(container) {
       const f = model.ofpFlows.find(x => x.tag === tag);
       if (!f) return;
       f[field] = input.value;
-      isDirty = true;
+      _markCmDirty();
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
       _ofpOpenManageFlowsModal(container, tag);
@@ -14797,7 +14817,7 @@ function _bindManageFlowsEvents(container) {
       const f = model.ofpFlows.find(x => x.tag === tag);
       if (!f) return;
       delete f.color;
-      isDirty = true;
+      _markCmDirty();
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
       _ofpOpenManageFlowsModal(container, tag);
@@ -14822,7 +14842,7 @@ function _bindManageFlowsEvents(container) {
       (model.indirectLaborLines || []).forEach(l => { if (l.path_tag === tag) delete l.path_tag; });
       // Remove from registry.
       model.ofpFlows = model.ofpFlows.filter(x => x.tag !== tag);
-      isDirty = true;
+      _markCmDirty();
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
       _ofpOpenManageFlowsModal(container);
@@ -14843,7 +14863,7 @@ function _bindManageFlowsEvents(container) {
       while (existing.has(tag)) { tag = `${slug}-${n++}`; }
       const next = (model.ofpFlows.reduce((mx, f) => Math.max(mx, f.sortOrder || 0), -1)) + 1;
       model.ofpFlows.push({ tag, label: labelTrim, sortOrder: next });
-      isDirty = true;
+      _markCmDirty();
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
       _ofpOpenManageFlowsModal(container, tag);
@@ -14858,7 +14878,7 @@ function _bindManageFlowsEvents(container) {
       const f = model.ofpFlows.find(x => x.tag === tag);
       if (!f) return;
       f.hidden = !f.hidden;
-      isDirty = true;
+      _markCmDirty();
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
       _ofpOpenManageFlowsModal(container, tag);
@@ -14873,7 +14893,7 @@ function _bindManageFlowsEvents(container) {
       const dir = btn.dataset.move;
       if (dir === 'up') _ofpMoveFlowUp(tag);
       else _ofpMoveFlowDown(tag);
-      isDirty = true;
+      _markCmDirty();
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
       _ofpOpenManageFlowsModal(container, tag);
@@ -14922,7 +14942,7 @@ function _bindManageFlowsEvents(container) {
       _ofpReorderFlow(flowRowDragTag, tgtTag, above ? 'before' : 'after');
       const moved = flowRowDragTag;
       flowRowDragTag = null;
-      isDirty = true;
+      _markCmDirty();
       if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
       renderSection();
       _ofpOpenManageFlowsModal(container, moved);
