@@ -23,6 +23,7 @@ import { renderDashboard } from './ui-dashboard.js?v=20260513-dashextract';
 import { renderElevation, drawElevation, shuffledBayLevelOrder } from './ui-elevation.js?v=20260513-elevextract';
 import { pushToCm, handleCmPush, createDefaultFacility, createDefaultZones, createDefaultVolumes } from './ui-cm-bridge.js?v=20260513-cmextract';
 import { wscExtraStyles } from './ui-styles.js?v=20260513-stylesextract';
+import { bindShellEvents } from './ui-shell-events.js?v=20260514-shellextract';
 
 // ============================================================
 // CHROME v3 — phase + section structure (CM Chrome v3 ripple, step 3 redo)
@@ -256,7 +257,7 @@ function openEditor(savedRow) {
     volumes = createDefaultVolumes();
   }
   rootEl.innerHTML = renderShell();
-  bindShellEvents();
+  bindShellEvents(_makeShellEventsCtx());
   renderConfigPanel();
   renderContentView();
   _refreshWscKpis();
@@ -448,263 +449,56 @@ function _refreshWscKpis() {
  *  clashed with the hub's lighter aesthetic. This stylesheet makes them
  *  match hub-input + cm-form-label patterns. */
 
-async function bindShellEvents() {
-  if (!rootEl) return;
-  // Idempotent — pre-fix this rebinds chrome + 2 click + 4 pointer
-  // listeners on EVERY section navigation (each onSection rebuilds the
-  // shell HTML and recalls bindShellEvents). Stale listeners stack:
-  // after N navigations the back-arrow fired onBack N+1 times → N+1
-  // showConfirm modals. Cancel removed only the topmost. Now we bind
-  // once per mount; mount() resets the flag on re-entry.
-  if (rootEl.__wscShellBound) return;
-  rootEl.__wscShellBound = true;
-
-  bindToolChromeEvents(rootEl, {
-    onPhase: () => {
-      // WSC is single-phase; phase tab clicks no-op.
-    },
-    onSection: (key) => {
-      if (!key || !WSC_SECTIONS.find(s => s.key === key)) return;
-      activeView = /** @type {any} */ (key);
-      // Re-render the shell to refresh chrome + content for the new view.
-      // (renderShell + renderConfigPanel + renderContentView is the legacy
-      // pattern; preserve it here.)
-      rootEl.innerHTML = renderShell();
-      bindShellEvents();
-      renderConfigPanel();
-      renderContentView();
-      _refreshWscKpis();
-    },
-    onSidebar: (kind) => {
-      _wscDrawerOpen = (kind === 'toggle') ? !_wscDrawerOpen : false;
-      // Flip the data-sidebar-open attribute (CSS handles the width
-      // transition) and refresh ONLY row2Prefix + the chrome's mode flag —
-      // sidebarBody is intentionally OMITTED so in-progress text input
-      // inside the panel is preserved.
-      const body = rootEl?.querySelector('.tc-body');
-      if (body) body.dataset.sidebarOpen = _wscDrawerOpen ? 'true' : 'false';
-      // Re-render the Configure pill so its label/active class reflect
-      // the new state. We pass an opts subset that includes row2Prefix
-      // (refreshed) but omits sidebarBody.
-      const opts = _buildWscChromeOpts();
-      delete opts.sidebarBody;
-      refreshToolChrome(rootEl, opts);
-    },
-    onBack: async () => {
-      // 2026-05-12 — When WSC was launched from a Cost Model, the back button
-      // returns to that CM rather than the WSC scenarios list. Without this
-      // the user gets dumped on a list of all their facilities, losing context.
-      const goingToCm = !!_originCm;
-      // 2026-05-12 (slide-over polish) — if WSC is mounted inside a CM
-      // slide-over panel, "back to CM" just means "close the panel" — the
-      // CM is already rendered behind it and a route change would yank the
-      // user out of it. Use the close callback the slide-over provided.
-      const inSlideover = _embedOpts?.embed === 'slideover' && typeof _embedOpts.onCloseRequest === 'function';
-      const dirtyPrompt = (goingToCm || inSlideover)
-        ? 'Unsaved changes. Leave and return to the Cost Model?'
-        : 'Unsaved changes. Leave for the scenarios list?';
-      if (isDirty && !(await showConfirm(dirtyPrompt))) return;
-      isDirty = false;
-      if (inSlideover) {
-        try { sessionStorage.removeItem('wsc_origin_cm'); } catch {}
-        _originCm = null;
-        _seededFromCm = false;
-        _embedOpts.onCloseRequest();
-        return;
-      }
-      if (goingToCm) {
-        try { sessionStorage.removeItem('wsc_origin_cm'); } catch {}
-        _originCm = null;
-        _seededFromCm = false;
-        window.location.hash = '#designtools/cost-model';
-        return;
-      }
-      viewMode = 'landing';
-      await renderLanding();
-    },
-    onAction: (id) => {
-      if (id === 'push-to-cm') {
-        const btn = rootEl.querySelector('[data-tc-primary]');
-        pushToCm(_makeCmCtx());
-        flashPrimaryAction(rootEl);
-        return;
-      }
-      if (id === 'wsc-save') return handleSaveWsc();
-    },
-    onPrimaryShortcut: () => {
-      pushToCm(_makeCmCtx());
-      flashPrimaryAction(rootEl);
-    },
-  });
-  // Phase 5.4 — cross-tool CM drillback chip delegation.
-  bindCmDrillback(rootEl);
-
-  // Phase D (2026-05-05) — Elevation view-switcher delegation. The elevation
-  // canvas re-renders on every renderContentView, so delegated on rootEl.
-  rootEl?.addEventListener('click', (e) => {
-    const btn = /** @type {HTMLElement} */ (e.target)?.closest('[data-wsc-elev-view]');
-    if (!btn) return;
-    const view = btn.getAttribute('data-wsc-elev-view');
-    if (view !== 'side' && view !== 'shelving') return;
-    if (_wscElevView === view) return;
-    _wscElevView = view;
-    renderContentView();
-  });
-
-  // 2026-05-12 — CM-seeded banner dismiss handler. Single delegate at rootEl,
-  // refreshes the chrome (which drops the banner element) without re-rendering
-  // the content view (preserves any in-progress text input).
-  rootEl?.addEventListener('click', (e) => {
-    const btn = /** @type {HTMLElement} */ (e.target)?.closest('[data-wsc-cm-banner-dismiss]');
-    if (!btn) return;
-    _seededFromCm = false;
-    refreshToolChrome(rootEl, _buildWscChromeOpts());
-  });
-
-  // Root-level delegation for data-wsc-action (toggle-edit-layout, reset-layout).
-  // Using delegation per the event-delegation-pattern memory — renderPlan's
-  // innerHTML rewrite would otherwise drop any per-element listener.
-  rootEl?.addEventListener('click', (e) => {
-    const btn = /** @type {HTMLElement} */ (e.target)?.closest('[data-wsc-action]');
-    if (!btn) return;
-    const action = btn.getAttribute('data-wsc-action');
-    if (action === 'toggle-edit-layout') {
-      _planEditMode = !_planEditMode;
-      renderContentView();
-    } else if (action === 'reset-layout') {
-      zones.layoutOverrides = {};
-      _markDirty();
-      renderContentView();
-    } else if (action === 'apply-shrink-suggestion') {
-      // Resize the building to the suggested dims surfaced in the over-built
-      // banner. Width comes from the col-allocation math; depth is preserved
-      // (master segment plan unchanged). Refresh the Configure side panel
-      // too so its Width/Depth inputs reflect the applied dims (without it
-      // the inputs cache the original facility values).
-      const w = +btn.getAttribute('data-suggested-width') || 0;
-      const d = +btn.getAttribute('data-suggested-depth') || 0;
-      if (w > 0) facility.buildingWidth = w;
-      if (d > 0) facility.buildingDepth = d;
-      _markDirty();
-      renderConfigPanel();
-      renderContentView();
-    } else if (action === 'apply-required-dims') {
-      // Phase 2 redesign: Required-vs-Built panel "Apply suggested dims" button.
-      // Maps long → buildingWidth (canonical dock-on-long-edge convention) and
-      // short → buildingDepth. Engages buildingDimsOverride so the user's
-      // applied dims are visibly the locked override (otherwise the next
-      // re-render would show the dims as derived again).
-      const longFt  = +btn.getAttribute('data-long')  || 0;
-      const shortFt = +btn.getAttribute('data-short') || 0;
-      if (longFt > 0)  facility.buildingWidth  = longFt;
-      if (shortFt > 0) facility.buildingDepth  = shortFt;
-      facility.buildingDimsOverride = true;
-      _markDirty();
-      renderConfigPanel();
-      renderContentView();
-    }
-  });
-
-  // Canvas pointer events for edit-mode dragging. Delegated on rootEl for the
-  // same reason — the canvas is recreated on every plan re-render.
-  rootEl?.addEventListener('pointerdown', (e) => {
-    if (!_planEditMode) return;
-    const canvas = /** @type {HTMLCanvasElement} */ (e.target);
-    if (!canvas || canvas.id !== 'wsc-plan-canvas' || !_planMeta) return;
-    const { X0, Y0, pxPerFt } = _planMeta;
-    const { offsetX, offsetY } = canvasMouseCoords(canvas, e);
-    const order = ['office', 'forwardPick', 'shipStaging'];
-    // Resize-corner hit-test wins over body-move (handles take priority)
-    let hit = null;
-    let mode = 'move';
-    let corner = null;
-    for (const id of order) {
-      const r = _planZoneRects[id];
-      if (!r) continue;
-      const c = hitCorner(r, offsetX, offsetY);
-      if (c) { hit = id; mode = 'resize'; corner = c; break; }
-    }
-    if (!hit) {
-      for (const id of order) {
-        const r = _planZoneRects[id];
-        if (!r) continue;
-        if (offsetX >= r.x && offsetX <= r.x + r.w && offsetY >= r.y && offsetY <= r.y + r.h) {
-          hit = id;
-          break;
-        }
-      }
-    }
-    if (!hit) return;
-    e.preventDefault();
-    const r = _planZoneRects[hit];
-    const curOverride = zones.layoutOverrides?.[hit] || {};
-    const curXFt = (curOverride.x !== undefined) ? curOverride.x : (r.x - X0) / pxPerFt;
-    const curYFt = (curOverride.y !== undefined) ? curOverride.y : (r.y - Y0) / pxPerFt;
-    const curWFt = (curOverride.w !== undefined) ? curOverride.w : r.w / pxPerFt;
-    const curHFt = (curOverride.h !== undefined) ? curOverride.h : r.h / pxPerFt;
-    _planDrag = {
-      zoneId: hit,
-      mode,                  // 'move' | 'resize'
-      corner,                // 'tl' | 'tr' | 'bl' | 'br' | null
-      startMouseXPx: offsetX,
-      startMouseYPx: offsetY,
-      origXFt: curXFt,
-      origYFt: curYFt,
-      origWFt: curWFt,
-      origHFt: curHFt,
-      pxPerFt,
-    };
-    canvas.setPointerCapture(e.pointerId);
-    canvas.style.cursor = mode === 'resize' ? 'nwse-resize' : 'grabbing';
-  });
-
-  rootEl?.addEventListener('pointermove', (e) => {
-    if (!_planDrag || !_planEditMode) return;
-    const canvas = /** @type {HTMLCanvasElement} */ (e.target);
-    if (!canvas || canvas.id !== 'wsc-plan-canvas') return;
-    const { offsetX, offsetY } = canvasMouseCoords(canvas, e);
-    const dxFt = (offsetX - _planDrag.startMouseXPx) / _planDrag.pxPerFt;
-    const dyFt = (offsetY - _planDrag.startMouseYPx) / _planDrag.pxPerFt;
-    const snap = 5;
-    if (!zones.layoutOverrides) zones.layoutOverrides = {};
-    const cur = zones.layoutOverrides[_planDrag.zoneId] || {};
-    if (_planDrag.mode === 'resize') {
-      // Translate corner-drag into x/y/w/h deltas
-      let newX = _planDrag.origXFt;
-      let newY = _planDrag.origYFt;
-      let newW = _planDrag.origWFt;
-      let newH = _planDrag.origHFt;
-      const c = _planDrag.corner;
-      if (c === 'br') { newW = _planDrag.origWFt + dxFt; newH = _planDrag.origHFt + dyFt; }
-      else if (c === 'tr') { newW = _planDrag.origWFt + dxFt; newY = _planDrag.origYFt + dyFt; newH = _planDrag.origHFt - dyFt; }
-      else if (c === 'bl') { newX = _planDrag.origXFt + dxFt; newW = _planDrag.origWFt - dxFt; newH = _planDrag.origHFt + dyFt; }
-      else if (c === 'tl') { newX = _planDrag.origXFt + dxFt; newW = _planDrag.origWFt - dxFt; newY = _planDrag.origYFt + dyFt; newH = _planDrag.origHFt - dyFt; }
-      // Snap and clamp to a reasonable minimum (10 ft per side)
-      newX = Math.round(newX / snap) * snap;
-      newY = Math.round(newY / snap) * snap;
-      newW = Math.max(10, Math.round(newW / snap) * snap);
-      newH = Math.max(10, Math.round(newH / snap) * snap);
-      zones.layoutOverrides[_planDrag.zoneId] = { ...cur, x: newX, y: newY, w: newW, h: newH };
-    } else {
-      // Move mode — only update x/y, preserve any existing w/h override
-      const newXFt = Math.round((_planDrag.origXFt + dxFt) / snap) * snap;
-      const newYFt = Math.round((_planDrag.origYFt + dyFt) / snap) * snap;
-      zones.layoutOverrides[_planDrag.zoneId] = { ...cur, x: newXFt, y: newYFt };
-    }
-    drawPlan(_makePlanCtx());
-  });
-
-  const finishDrag = () => {
-    if (!_planDrag) return;
-    const canvas = rootEl?.querySelector('#wsc-plan-canvas');
-    if (canvas) canvas.style.cursor = 'grab';
-    _planDrag = null;
-    _markDirty();
+/**
+ * Build the ctx payload that ui-shell-events.js consumes. Live getters preserve
+ * outer-scope-read semantics for state that mutates between event binding (mount
+ * time, idempotent) and event firing (later, possibly after multiple section
+ * changes). Setters write back to the closure-private `let` bindings so the
+ * extracted handlers can flip activeView, isDirty, viewMode, etc.
+ */
+function _makeShellEventsCtx() {
+  return {
+    rootEl,
+    WSC_SECTIONS,
+    // Live object refs — mutated in place (no setter needed)
+    get facility() { return facility; },
+    get zones() { return zones; },
+    // Read-only refs
+    get _embedOpts() { return _embedOpts; },
+    get _planMeta() { return _planMeta; },
+    get _planZoneRects() { return _planZoneRects; },
+    // Primitive state — get/set
+    get activeView() { return activeView; },
+    set activeView(v) { activeView = v; },
+    get _wscDrawerOpen() { return _wscDrawerOpen; },
+    set _wscDrawerOpen(v) { _wscDrawerOpen = v; },
+    get isDirty() { return isDirty; },
+    set isDirty(v) { isDirty = v; },
+    get _originCm() { return _originCm; },
+    set _originCm(v) { _originCm = v; },
+    get _seededFromCm() { return _seededFromCm; },
+    set _seededFromCm(v) { _seededFromCm = v; },
+    get viewMode() { return viewMode; },
+    set viewMode(v) { viewMode = v; },
+    get _wscElevView() { return _wscElevView; },
+    set _wscElevView(v) { _wscElevView = v; },
+    get _planEditMode() { return _planEditMode; },
+    set _planEditMode(v) { _planEditMode = v; },
+    get _planDrag() { return _planDrag; },
+    set _planDrag(v) { _planDrag = v; },
+    // Local renderer + helper refs
+    renderShell,
+    renderConfigPanel,
+    renderContentView,
+    refreshWscKpis: _refreshWscKpis,
+    buildWscChromeOpts: _buildWscChromeOpts,
+    makeCmCtx: _makeCmCtx,
+    makePlanCtx: _makePlanCtx,
+    handleSaveWsc,
+    renderLanding,
+    markDirty: _markDirty,
+    canvasMouseCoords,
   };
-  rootEl?.addEventListener('pointerup', finishDrag);
-  rootEl?.addEventListener('pointercancel', finishDrag);
-  rootEl?.addEventListener('pointerleave', finishDrag);
-
 }
 
 /**
