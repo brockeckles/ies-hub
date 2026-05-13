@@ -10,7 +10,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sM';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260430-na-dot';
-import * as calc from './calc.js?v=20260512-slideover3';
+import * as calc from './calc.js?v=20260514-fsi1';
 import * as api from './api.js?v=20260418-sL';
 import * as cmApi from '../cost-model/api.js?v=20260512-cm-wsc-dimfix';
 import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
@@ -1036,180 +1036,22 @@ function renderContentView() {
 /** Canvas geometry stash used by drag handlers to convert mouse → feet. */
 let _planMeta = null;
 
-// ============================================================
-// DASHBOARD VIEW
-// ============================================================
-
 /**
- * Convert the UI's (facility, zones, volumes) state into SizingInputs
- * for the v2-equivalent calc.sizeFacility engine.
- * @returns {import('./calc.js?v=20260512-slideover3').SizingInputs}
+ * Convert the UI's (facility, zones, volumes) state into SizingInputs for
+ * the calc.sizeFacility engine. Thin wrapper over the pure transform
+ * `calc.formStateToInputs` — the wrapper preserves closure-scope access to
+ * the WSC ui.js state vars (`facility`, `zones`, `volumes`) so the 11
+ * existing call sites and the five `_make*Ctx()` factories that hand the
+ * function off to by-view modules need no edits.
+ *
+ * Extraction 2026-05-14 (autonomous session). Body moved verbatim into
+ * calc.js so it can be unit-tested directly and so ui.js drops below 1K LOC.
+ *
+ * @returns {import('./calc.js?v=20260514-fsi1').SizingInputs}
  */
 function toSizingInputs() {
-  const alloc = zones.storageAllocation || { fullPallet: 60, cartonOnPallet: 30, cartonOnShelving: 10 };
-  const prod = zones.productDimensions || {};
-  const dock = zones.dockConfig || {};
-  const fp = zones.forwardPick || null;
-  const opt = zones.optionalZones || {};
-  const aisleMap = { 12: 'wide', 10: 'narrow', 6: 'vna' };
-  const aisleType = aisleMap[Math.round(facility.aisleWidth || 0)] || 'narrow';
-
-  const optionalZones = [];
-  if (opt.vas?.enabled) optionalZones.push({ label: 'VAS / Kitting', sqft: opt.vas.sqft || 0 });
-  if (opt.returns?.enabled) optionalZones.push({ label: 'Returns / QC', sqft: opt.returns.sqft || 0 });
-  if (opt.chargeback?.enabled) optionalZones.push({ label: 'Chargeback', sqft: opt.chargeback.sqft || 0 });
-  if (zones.chargingSqft > 0) optionalZones.push({ label: 'Charging / Maint.', sqft: zones.chargingSqft });
-  if (zones.repackSqft > 0) optionalZones.push({ label: 'Repack', sqft: zones.repackSqft });
-
-  // Phase B redesign (2026-05-05) — primary-input toggle. When the user is
-  // driving from throughput AND has entered annual outbound + DOH, derive
-  // peak on-hand units from the formula: peak = (annual / 365) × DOH × peak.
-  // Otherwise fall back to the direct zones.peakUnitsPerDay input (legacy
-  // behavior + pallet-driven mode). Engine output unchanged for any saved
-  // scenario where annualOutboundUnits = 0 (the default).
-  const primaryInput = facility.primaryInventoryInput || 'throughput';
-  const peakMult = +volumes.peakMultiplier || 1.3;
-  const annualOut = +volumes.annualOutboundUnits || 0;
-  const doh = +volumes.daysOnHand || 30;
-  const peakUnitsFromThroughput = (annualOut > 0 && doh > 0)
-    ? Math.round((annualOut / 365) * doh * peakMult)
-    : 0;
-  const useThroughputDerivation = primaryInput === 'throughput' && peakUnitsFromThroughput > 0;
-  // Brock 2026-05-08: was `(zones.peakUnitsPerDay || 500000)` — 500K phantom
-  // peak units leaked in whenever the field was 0, producing 118K SF residual
-  // even when the user had cleared every input. `??` honors user-typed 0;
-  // saved scenarios that predate this field default to 0 (engine sizes 0 SF).
-  const effectivePeakUnits = useThroughputDerivation
-    ? peakUnitsFromThroughput
-    : (zones.peakUnitsPerDay ?? 0);
-  // Avg follows the same source. When throughput-driven and avg-day demand
-  // can be inferred (annual / 365), use that × DOH for avg on-hand. Else
-  // fall back to direct zones.avgUnitsPerDay.
-  const avgUnitsFromThroughput = (annualOut > 0 && doh > 0)
-    ? Math.round((annualOut / 365) * doh)
-    : 0;
-  const effectiveAvgUnits = useThroughputDerivation
-    ? avgUnitsFromThroughput
-    : (zones.avgUnitsPerDay ?? 0);
-
-  return {
-    peakUnits: effectivePeakUnits,
-    avgUnits: effectiveAvgUnits,
-    // WSC-B6 (2026-04-25): prefer the explicit dailyOutbound field; only
-    // fall back to (avgUnitsPerDay × operatingDays) when blank. The legacy
-    // path stuffed avgUnits *as on-hand* into outboundUnitsYr which was
-    // dimensionally wrong; sizingEngine doesn't use outboundUnitsYr for
-    // sizing anyway, but keep it for downstream callers.
-    // Brock 2026-05-08: operatingDays falls back to 0 (was 250). Engine
-    // doesn't size off outboundUnitsYr; downstream callers should handle 0
-    // explicitly. Honor user-typed 0.
-    outboundUnitsYr: zones.outboundUnitsPerDay && zones.outboundUnitsPerDay > 0
-      ? zones.outboundUnitsPerDay * (zones.operatingDaysPerYear ?? 0)
-      : (zones.avgUnitsPerDay ?? 0) * (zones.operatingDaysPerYear ?? 0),
-    operatingDaysYr: zones.operatingDaysPerYear ?? 0,
-    fullPalletPct: (alloc.fullPallet || 0) / 100,
-    cartonOnPalletPct: (alloc.cartonOnPallet || 0) / 100,
-    cartonOnShelvingPct: (alloc.cartonOnShelving || 0) / 100,
-    // Brock 2026-05-08: was `|| 48 / 6 / 12 / 6 / 4` — substituted demo
-    // conversions whenever the user had a 0/blank product profile, producing
-    // pallet-position counts on a phantom inventory. `??` honors typed 0;
-    // engine math guards against divide-by-zero and produces 0 positions.
-    unitsPerPallet: prod.unitsPerPallet ?? 0,
-    unitsPerCartonPal: prod.unitsPerCartonPallet ?? 0,
-    cartonsPerPallet: prod.cartonsPerPallet ?? 0,
-    unitsPerCartonShelv: prod.unitsPerCartonShelving ?? 0,
-    cartonsPerLocation: prod.cartonsPerLocation ?? 0,
-    clearHeightFt: facility.clearHeight || 36,
-    loadHeightIn: facility.palletHeight || 48,
-    sprinklerClearanceIn: facility.topClearance || 18,
-    storeType: facility.storageType || 'single',
-    aisleType,
-    bulkDepth: 4,
-    stackHi: 3,
-    mixRackPct: 0.70,
-    honeycombPct: 10,
-    surgePct: 20,
-    // Brock 2026-05-08: was `|| 200 / 200 / 20 / 8` — phantom dock throughput
-    // forced 4 minimum doors × 1500 SF = 6,000+ SF dock + 540 SF staging
-    // even on a blank scenario. `??` honors typed 0.
-    inPalletsDay: volumes.avgDailyInbound ?? 0,
-    outPalletsDay: volumes.avgDailyOutbound ?? 0,
-    palletsPerDoorHour: dock.palletsPerDockHour ?? 0,
-    dockHours: dock.dockOperatingHours ?? 0,
-    dockConfig: dock.sided === 'two' ? 'two' : 'one',
-    // WSC-B10 (2026-04-25): wire dock-wall feasibility validator.
-    // Dock face = the longer of buildingWidth/buildingDepth (assume the dock
-    // sits on the longer wall). For two-sided layouts, doors split across
-    // opposing walls so each face needs only half — the validator already
-    // accounts for total door count vs available, so we provide raw face-length.
-    // Subtract 40 ft for corner walls + fire egress + columns.
-    availableWallFt: (() => {
-      const bw = facility.buildingWidth || 0;
-      const bd = facility.buildingDepth || 0;
-      if (!bw || !bd) return 0;             // dimensions blank → constraint disabled
-      const sided = (zones.dockConfig && zones.dockConfig.sided) || 'single';
-      const longestWall = Math.max(bw, bd);
-      const usable = Math.max(0, longestWall - 40);
-      // Two-sided uses TWO walls of equal length, so total available is 2× usable.
-      return sided === 'two' ? usable * 2 : usable;
-    })(),
-    // Honor explicit dock counts the user typed in the Dock Configuration panel.
-    // Engine still computes a derived value for comparison.
-    inboundDoorsOverride: Number(dock.inboundDoors) || 0,
-    outboundDoorsOverride: Number(dock.outboundDoors) || 0,
-    // Honor explicit pallet position count when user provides it on Volume Requirements.
-    // This is how high-throughput / engineered-inventory facilities should be sized
-    // (otherwise the engine derives positions from peakUnits × mix, which under-sizes
-    // when peakUnits is entered as throughput rather than on-hand inventory).
-    totalPalletsOverride: Number(volumes.totalPallets) || 0,
-    // Brock 2026-05-08 (consolidation): symmetric shelving-locations override.
-    // When user enters a shelving count from a slotting study, engine bypasses
-    // the peakUnits × shelvingMix derivation and uses this directly. Closes the
-    // wart where pre-consolidation 'pallets mode' silently produced 0 shelving
-    // when throughput was blank.
-    totalShelvingLocationsOverride: Number(volumes.totalShelvingLocations) || 0,
-    officePct: (facility.totalSqft && zones.officeSqft)
-      ? Math.max(0.02, Math.min(0.15, zones.officeSqft / facility.totalSqft))
-      : 0.05,
-    forwardPick: fp && fp.enabled ? {
-      enabled: true,
-      skus: fp.skuCount || 0,
-      // Phase B redesign (2026-05-05) — A-velocity SKU share drives forward-pick
-      // demand. Default 20% is the legacy hardcoded audit default, so existing
-      // scenarios produce identical sized output. When user tunes A% (e.g. 15%
-      // or 30%), forward-pick area scales accordingly.
-      activePickPct: Number.isFinite(+facility.velocityTierAPct) && +facility.velocityTierAPct >= 0
-        ? +facility.velocityTierAPct
-        : 20,
-      pickType: fp.type === 'heavy_case' ? 'pallet' : 'carton',
-      daysInventory: fp.daysInventory || 3,
-    } : null,
-    optionalZones,
-    customZones: (zones.customZones || []).map(z => ({ label: z.name || 'Custom', sqft: z.sqft || 0 })),
-    // ── Phase 2 redesign (2026-05-04): IE-correct unit-load + carton + SKU + dock fields ──
-    // All optional. When omitted, sizeFacility falls back to legacy behavior.
-    palletType: facility.palletType || 'GMA',
-    palletLengthIn: facility.palletWidth || 0,    // legacy facility.palletWidth = pallet length along beam
-    palletWidthIn: facility.palletDepth || 0,     // legacy facility.palletDepth = pallet width into rack
-    cartonLengthIn: facility.cartonLengthIn || 12,
-    cartonWidthIn:  facility.cartonWidthIn  || 9,
-    cartonHeightIn: facility.cartonHeightIn || 12,
-    cartonOrientation: facility.cartonOrientation || 'L-along-rack',
-    cartonsPerPalletOverride: Number(facility.cartonsPerPalletOverride) || 0,
-    fullPalletSkus:   Number(facility.fullPalletSkus)   || 0,
-    cartonPalletSkus: Number(facility.cartonPalletSkus) || 0,
-    shelvingSkus:     Number(facility.shelvingSkus)     || 0,
-    bottomBeamFp: !!facility.bottomBeamFp,
-    bottomBeamCp: !!facility.bottomBeamCp,
-    bottomBeamShelving: !!facility.bottomBeamShelving,
-    topBeam: !!facility.topBeam,
-    palletsPerTruck:    Number(facility.palletsPerTruck)    || 26,
-    dwellHoursPerTruck: Number(facility.dwellHoursPerTruck) || 1.5,
-    shiftHoursPerDay:   Number(facility.shiftHoursPerDay)   || 16,
-    surgePctDock: facility.surgePctDock != null ? Number(facility.surgePctDock) : 0.20,
-  };
+  return calc.formStateToInputs({ facility, zones, volumes });
 }
-
 
 // ============================================================
 // ELEVATION VIEW (Canvas 2D)
