@@ -10,7 +10,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sM';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260430-na-dot';
-import * as calc from './calc.js?v=20260512-dock-wart';
+import * as calc from './calc.js?v=20260512-slideover3';
 import * as api from './api.js?v=20260418-sL';
 import * as cmApi from '../cost-model/api.js?v=20260512-cm-wsc-dimfix';
 import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
@@ -90,6 +90,7 @@ let viewMode = 'landing';
  * @type {{ cmId: number|string|null, cmName: string, at: number }|null}
  */
 let _originCm = null;
+let _embedOpts = {};
 let _seededFromCm = false;
 
 // ============================================================
@@ -100,8 +101,13 @@ let _seededFromCm = false;
  * Mount the Warehouse Sizing Calculator.
  * @param {HTMLElement} el
  */
-export async function mount(el) {
+export async function mount(el, opts = {}) {
   rootEl = el;
+  // 2026-05-12 — `opts.embed` is set by shared/tool-slideover.js to
+  // 'slideover' when WSC is mounted inside a CM-launched slide-over panel.
+  // In that mode the chrome back-arrow closes the panel via the helper
+  // instead of changing routes (which would yank the user out of CM).
+  _embedOpts = opts && typeof opts === 'object' ? opts : {};
   // Reset the shell-bound flag + tool-chrome bound flag so subsequent
   // mount() calls (e.g., user returns to WSC after visiting another tool)
   // get a fresh set of listeners rather than reusing stale ones bound to
@@ -264,6 +270,7 @@ export function unmount() {
   if (scene3d?.dispose) scene3d.dispose();
   scene3d = null;
   rootEl = null;
+  _embedOpts = {};
 }
 
 // ============================================================
@@ -628,11 +635,23 @@ async function bindShellEvents() {
       // returns to that CM rather than the WSC scenarios list. Without this
       // the user gets dumped on a list of all their facilities, losing context.
       const goingToCm = !!_originCm;
-      const dirtyPrompt = goingToCm
+      // 2026-05-12 (slide-over polish) — if WSC is mounted inside a CM
+      // slide-over panel, "back to CM" just means "close the panel" — the
+      // CM is already rendered behind it and a route change would yank the
+      // user out of it. Use the close callback the slide-over provided.
+      const inSlideover = _embedOpts?.embed === 'slideover' && typeof _embedOpts.onCloseRequest === 'function';
+      const dirtyPrompt = (goingToCm || inSlideover)
         ? 'Unsaved changes. Leave and return to the Cost Model?'
         : 'Unsaved changes. Leave for the scenarios list?';
       if (isDirty && !(await showConfirm(dirtyPrompt))) return;
       isDirty = false;
+      if (inSlideover) {
+        try { sessionStorage.removeItem('wsc_origin_cm'); } catch {}
+        _originCm = null;
+        _seededFromCm = false;
+        _embedOpts.onCloseRequest();
+        return;
+      }
       if (goingToCm) {
         try { sessionStorage.removeItem('wsc_origin_cm'); } catch {}
         _originCm = null;
@@ -2918,7 +2937,7 @@ let _planMeta = null;
 /**
  * Convert the UI's (facility, zones, volumes) state into SizingInputs
  * for the v2-equivalent calc.sizeFacility engine.
- * @returns {import('./calc.js?v=20260512-dock-wart').SizingInputs}
+ * @returns {import('./calc.js?v=20260512-slideover3').SizingInputs}
  */
 function toSizingInputs() {
   const alloc = zones.storageAllocation || { fullPallet: 60, cartonOnPallet: 30, cartonOnShelving: 10 };

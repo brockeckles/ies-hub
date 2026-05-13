@@ -50,18 +50,30 @@ export async function openToolInSlideOver(opts) {
   overlay.setAttribute('aria-label', title || 'Design tool');
   overlay.style.cssText = [
     'position:fixed', 'inset:0', 'z-index:9990',
-    'background:rgba(0,0,0,0.32)',
-    'animation:hub-slideover-fade .15s ease',
+    // Slight blue tint + lower opacity so the CM behind reads as
+    // "still there, just paused" rather than dismissed.
+    'background:rgba(15,23,42,0.38)',
+    'backdrop-filter:blur(2px)',
+    '-webkit-backdrop-filter:blur(2px)',
+    'animation:hub-slideover-fade .18s ease',
   ].join(';');
 
   const panel = document.createElement('div');
   panel.style.cssText = [
-    'position:absolute', 'top:0', 'right:0', 'bottom:0',
-    'width:min(90vw, 1600px)',
+    'position:absolute',
+    // Inset 14 px from all edges so CM peeks through and the panel reads
+    // as a raised card hovering above the page.
+    'top:14px', 'right:14px', 'bottom:14px',
+    'width:min(calc(90vw - 14px), 1600px)',
     'background:#fff',
-    'box-shadow:-10px 0 30px rgba(0,0,0,0.15)',
+    'border-radius:14px',
+    // Layered shadow: a wide soft drop + a tighter close shadow + a
+    // hairline ring. The combination produces a real "lifted" feel
+    // without looking gauzy.
+    'box-shadow:0 24px 60px rgba(15,23,42,0.22), 0 6px 18px rgba(15,23,42,0.10), 0 0 0 1px rgba(15,23,42,0.06)',
     'display:flex', 'flex-direction:column',
-    'animation:hub-slideover-in .2s cubic-bezier(.2,.7,.3,1)',
+    'overflow:hidden',
+    'animation:hub-slideover-in .25s cubic-bezier(.2,.7,.3,1)',
   ].join(';');
 
   // Panel header with title + close button.
@@ -74,12 +86,6 @@ export async function openToolInSlideOver(opts) {
   ].join(';');
   header.innerHTML = `
     <div style="display:flex;align-items:center;gap:10px;min-width:0;">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-        stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-        style="flex-shrink:0;color:var(--ies-gray-500, #6b7280);"
-        aria-hidden="true">
-        <path d="M9 19l-7-7 7-7"/><path d="M2 12h20"/>
-      </svg>
       <strong style="font-size:14px;color:#1c1c1c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(title || 'Design tool')}</strong>
       ${subtitle ? `<span style="font-size:11px;color:var(--ies-gray-500, #6b7280);background:var(--ies-gray-100, #f3f4f6);padding:2px 8px;border-radius:999px;white-space:nowrap;flex-shrink:0;">${escapeHtml(subtitle)}</span>` : ''}
     </div>
@@ -146,7 +152,10 @@ export async function openToolInSlideOver(opts) {
   try {
     const mod = await import(resolvedToolPath);
     if (typeof mod.mount === 'function') {
-      await mod.mount(host);
+      // Pass embed metadata so the tool can adapt — e.g., wire its own
+      // back-arrow to close the slide-over instead of route-navigating.
+      // Tools that don't accept a 2nd arg ignore it (default param shape).
+      await mod.mount(host, { embed: 'slideover', onCloseRequest: close });
     } else {
       host.innerHTML = `<div style="padding:24px;color:var(--ies-gray-600);">Tool module loaded but has no mount() export.</div>`;
     }
