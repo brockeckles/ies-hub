@@ -25,7 +25,7 @@ import * as shiftPlannerCalc from './shift-planner.js?v=20260430-hours-first';
 import * as shiftPlannerUi from './shift-planner-ui.js?v=20260430-hours-first';
 // 2026-04-28 — internal phase stepper for Implementation Timeline section.
 import { renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
-import { openToolInSlideOver } from '../../shared/tool-slideover.js?v=20260512-slideover';
+import { openToolInSlideOver } from '../../shared/tool-slideover.js?v=20260512-slideover2';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260430-na-dot';
 import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260511-port12';

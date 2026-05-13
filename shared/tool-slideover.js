@@ -127,10 +127,24 @@ export async function openToolInSlideOver(opts) {
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
   document.addEventListener('keydown', escHandler);
 
-  // Dynamic import + mount the tool's UI into the host element. Any thrown
-  // error is surfaced inline in the panel so it doesn't silently dead-end.
+  // Dynamic import + mount the tool's UI into the host element.
+  //
+  // CRITICAL: `import(toolPath)` resolves the relative path against THIS
+  // module's URL (shared/tool-slideover.js), not the page. So a caller
+  // passing './tools/foo/ui.js' would get '/shared/tools/foo/ui.js' which
+  // is a 404. Resolve against document.baseURI (the page's base URL) so
+  // callers pass app-root-relative paths like './tools/warehouse-sizing/ui.js'.
+  // Absolute URLs and protocol-relative URLs pass through unchanged.
+  let resolvedToolPath;
   try {
-    const mod = await import(toolPath);
+    resolvedToolPath = new URL(toolPath, document.baseURI).href;
+  } catch (urlErr) {
+    resolvedToolPath = toolPath; // fall through to import; let it surface the error
+  }
+  // Any error thrown during import or mount is surfaced inline in the panel
+  // so it doesn't silently dead-end on the user.
+  try {
+    const mod = await import(resolvedToolPath);
     if (typeof mod.mount === 'function') {
       await mod.mount(host);
     } else {
