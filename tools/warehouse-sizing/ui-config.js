@@ -16,9 +16,9 @@
  *   { ctx.facility, ctx.zones, ctx.volumes, ctx.viewMode, rootEl,    // getters (live reads)
  *     ctx.isDirty, setDirty(v), resetState(),             // dirty-flag + bulk reset
  *     refreshKpis(), refreshContent(), refreshConfig(), refreshLanding(),
- *     copySummary(), toSizingInputs(), debounceRender(),
- *     handleCmPush(payload), handleSaveWsc(),
- *     createDefaultFacility(), createDefaultZones(), createDefaultVolumes() }
+ *     copySummary(), ctx.toSizingInputs(), ctx.debounceRender(),
+ *     ctx.handleCmPush(payload), ctx.handleSaveWsc(),
+ *     ctx.createDefaultFacility(), ctx.createDefaultZones(), ctx.createDefaultVolumes() }
  *
  * @module tools/warehouse-sizing/ui-config
  */
@@ -634,7 +634,7 @@ export function renderConfigHtml(ctx) {
 }
 
 export function bindConfigEvents(panel, ctx) {
-  const debouncedRender = ctx.debounceRender(renderContentView, 100);
+  const debouncedRender = ctx.debounceRender(ctx.refreshContent, 100);
 
   // Facility fields (with input debounce for live update)
   panel.querySelectorAll('[data-fac]').forEach(input => {
@@ -719,7 +719,7 @@ export function bindConfigEvents(panel, ctx) {
   // Brock 2026-05-08 (consolidation): on change (= blur), also re-render the
   // Configure panel so the "Engine will size" chips update to reflect new
   // throughput / override values. Pre-fix the chips stayed at 0 even after
-  // typing 50M into Annual Outbound — only renderContentView ran. Safe to
+  // typing 50M into Annual Outbound — only ctx.refreshContent ran. Safe to
   // re-render the panel on `change` because the user has already left the
   // field (focus is elsewhere) by the time `change` fires.
   panel.querySelectorAll('[data-vol]').forEach(input => {
@@ -957,7 +957,7 @@ export function bindConfigEvents(panel, ctx) {
 
   // Phase 4 of ctx.volumes-as-nucleus (Layer A, 2026-04-29): Pull-from-CM button.
   // Re-fetches the linked cost model and re-runs the channel-aware payload
-  // builder, then applies it through handleCmPush so ctx.volumes (and ctx.zones'
+  // builder, then applies it through ctx.handleCmPush so ctx.volumes (and ctx.zones'
   // peakUnitsPerDay) refresh in place.
   panel.querySelector('[data-action="wsc-pull-from-cm"]')?.addEventListener('click', async () => {
     const cmId = ctx.facility.parent_cost_model_id;
@@ -1010,7 +1010,7 @@ export function bindConfigEvents(panel, ctx) {
   });
 
   panel.querySelector('[data-action="wsc-save"]')?.addEventListener('click', async (e) => {
-    // Phase 4 (2026-05-04): delegate to handleSaveWsc so the WSC→CM writeback
+    // Phase 4 (2026-05-04): delegate to ctx.handleSaveWsc so the WSC→CM writeback
     // path runs from this button too. Pre-Phase-4 this had its own inline
     // save that bypassed the writeback logic, so saves from the side-panel
     // legacy save button silently skipped the CM update.
