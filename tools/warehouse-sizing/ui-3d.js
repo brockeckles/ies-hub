@@ -895,7 +895,7 @@ function build3DScene(ctx) {
         const levelHeightU  = m.heightU / m.levels;
         const fillCount = Math.floor(baysPerFace * m.levels * m.fillPct);
         const seed = ((Math.floor(m.mx * 1000) ^ Math.floor(m.segCenter * 1000)) >>> 0) ^ (m.side === 'A' ? 0x12345 : 0xABCD9);
-        const order = _shuffledBayLevelOrder(baysPerFace, m.levels, seed);
+        const order = ctx.shuffledBayLevelOrder(baysPerFace, m.levels, seed);
         for (let i = 0; i < fillCount; i++) {
           const [b, lv] = order[i];
           const beamY = levelHeightU * lv;
@@ -973,7 +973,7 @@ function build3DScene(ctx) {
         const levelHeightU  = m.heightU / m.levels;
         const fillCount = Math.floor(baysPerFace * m.levels * m.fillPct);
         const seed = ((Math.floor(m.mx * 1000) ^ Math.floor(m.segCenter * 1000)) >>> 0) ^ (m.side === 'A' ? 0x12345 : 0xABCD9);
-        const order = _shuffledBayLevelOrder(baysPerFace, m.levels, seed);
+        const order = ctx.shuffledBayLevelOrder(baysPerFace, m.levels, seed);
         for (let i = 0; i < fillCount; i++) {
           const [b, lv] = order[i];
           const beamY = levelHeightU * lv;
@@ -1021,7 +1021,7 @@ function build3DScene(ctx) {
         const levelHeightU  = m.heightU / m.levels;
         const fillCount = Math.floor(baysPerFace * m.levels * m.fillPct);
         const seed = ((Math.floor(m.mx * 1000) ^ Math.floor(m.segCenter * 1000)) >>> 0) ^ (m.side === 'A' ? 0x12345 : 0xABCD9);
-        const order = _shuffledBayLevelOrder(baysPerFace, m.levels, seed);
+        const order = ctx.shuffledBayLevelOrder(baysPerFace, m.levels, seed);
         for (let i = 0; i < fillCount; i++) {
           const [b, lv] = order[i];
           const beamY = levelHeightU * lv;
@@ -1173,7 +1173,7 @@ function build3DScene(ctx) {
         // Empty shelving bays scatter across the rack instead of clustering.
         const fillCount = Math.floor(baysPerFace * m.levels * m.fillPct);
         const seed = ((Math.floor(m.mx * 1000) ^ Math.floor(m.segCenter * 1000)) >>> 0) ^ (m.side === 'A' ? 0x55AA1 : 0x55AA9);
-        const order = _shuffledBayLevelOrder(baysPerFace, m.levels, seed);
+        const order = ctx.shuffledBayLevelOrder(baysPerFace, m.levels, seed);
         for (let i = 0; i < fillCount; i++) {
           const [b, lv] = order[i];
           const deckY = levelHeightU * lv;
