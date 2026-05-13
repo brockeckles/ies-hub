@@ -4,17 +4,17 @@
  * Slice 2 of 7: the left-side configuration drawer. Two exports:
  *
  *   renderConfigHtml(ctx)   — pure-ish: returns the panel HTML based on
- *                             current facility/zones/volumes state.
+ *                             current ctx.facility/ctx.zones/ctx.volumes state.
  *   bindConfigEvents(panel, ctx) — attaches all input-change handlers to
  *                                  the rendered panel. Writes to ctx.facility/
- *                                  zones/volumes (object mutation, live via
+ *                                  ctx.zones/ctx.volumes (object mutation, live via
  *                                  getters), flips ctx.setDirty(true), and
  *                                  calls ctx.refreshContent() to redraw the
  *                                  dashboard/canvas after each change.
  *
  * ctx shape (constructed by ui.js):
- *   { facility, zones, volumes, viewMode, rootEl,    // getters (live reads)
- *     isDirty, setDirty(v), resetState(),             // dirty-flag + bulk reset
+ *   { ctx.facility, ctx.zones, ctx.volumes, ctx.viewMode, rootEl,    // getters (live reads)
+ *     ctx.isDirty, setDirty(v), resetState(),             // dirty-flag + bulk reset
  *     refreshKpis(), refreshContent(), refreshConfig(), refreshLanding(),
  *     copySummary(), toSizingInputs(), debounceRender(),
  *     handleCmPush(payload), handleSaveWsc(),
@@ -47,7 +47,7 @@ export function renderConfigHtml(ctx) {
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ies-gray-500);margin-bottom:6px;">Sizing Mode</div>
       <div role="radiogroup" aria-label="Sizing mode" style="display:flex;gap:6px;">
         <button type="button" role="radio" aria-checked="${mode === 'design'}" data-wsc-mode="design"
-                title="Inventory drives building dimensions. The engine sizes the facility from your peak units / mix / dock throughput. The 2D/3D rendering uses the sized footprint exactly. Use this for greenfield design or when you don't yet have a candidate building."
+                title="Inventory drives building dimensions. The engine sizes the ctx.facility from your peak units / mix / dock throughput. The 2D/3D rendering uses the sized footprint exactly. Use this for greenfield design or when you don't yet have a candidate building."
                 style="flex:1;padding:8px 10px;font-size:12px;font-weight:600;border-radius:5px;cursor:pointer;border:1px solid ${mode === 'design' ? 'var(--ies-blue,#0047AB)' : 'var(--ies-gray-200)'};background:${mode === 'design' ? 'var(--ies-blue,#0047AB)' : '#fff'};color:${mode === 'design' ? '#fff' : 'var(--ies-gray-700)'};transition:all .12s;">
           Design
           <div style="font-size:10px;font-weight:500;margin-top:2px;color:${mode === 'design' ? 'rgba(255,255,255,.85)' : 'var(--ies-gray-500)'};">Inventory → building</div>
@@ -77,7 +77,7 @@ export function renderConfigHtml(ctx) {
       </div>
       <div class="wsc-config-field" style="margin-bottom:10px;">
         <label>Facility Name</label>
-        <input value="${facility.name}" data-fac="name" />
+        <input value="${ctx.facility.name}" data-fac="name" />
       </div>
 
       <!-- Brock 2026-05-08 (consolidation): unified inventory inputs.
@@ -146,7 +146,7 @@ export function renderConfigHtml(ctx) {
           </div>
           <div class="wsc-config-row">
             <div class="wsc-config-field"><label title="Peak vs avg-day demand multiplier. Default 1.3. Drives both the peak on-hand units and the dock peak throughput.">Peak Factor</label><input type="number" value="${peakMult}" step="0.1" data-vol="peakMultiplier" /></div>
-            <div class="wsc-config-field"><label title="Average inbound pallets/day — drives dock throughput sizing.">Daily Inbound <span style="color:var(--ies-gray-500);font-weight:400;">(pallets/day)</span></label><input type="number" value="${volumes.avgDailyInbound || 0}" data-vol="avgDailyInbound" /></div>
+            <div class="wsc-config-field"><label title="Average inbound pallets/day — drives dock throughput sizing.">Daily Inbound <span style="color:var(--ies-gray-500);font-weight:400;">(pallets/day)</span></label><input type="number" value="${ctx.volumes.avgDailyInbound || 0}" data-vol="avgDailyInbound" /></div>
           </div>
 
           <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin:14px 0 6px 0;">Storage Counts <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--ies-gray-400);">(optional — override derived values when you have a slotting study)</span></div>
@@ -227,12 +227,12 @@ export function renderConfigHtml(ctx) {
       <div style="margin-top:14px;padding-top:8px;border-top:1px solid var(--ies-gray-100);">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin-bottom:6px;">SKU breadth by zone <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--ies-gray-400);">(0 = derive heuristic)</span></div>
         <div class="wsc-config-row">
-          <div class="wsc-config-field"><label title="Number of distinct SKUs in the full-pallet zone. Sets a floor on minimum locations (one face per SKU). 0 = derive from positions × 0.1.">FP SKUs</label><input type="number" value="${facility.fullPalletSkus ?? 0}" data-fac="fullPalletSkus" /></div>
-          <div class="wsc-config-field"><label title="SKUs in the carton-on-pallet zone.">CP SKUs</label><input type="number" value="${facility.cartonPalletSkus ?? 0}" data-fac="cartonPalletSkus" /></div>
+          <div class="wsc-config-field"><label title="Number of distinct SKUs in the full-pallet zone. Sets a floor on minimum locations (one face per SKU). 0 = derive from positions × 0.1.">FP SKUs</label><input type="number" value="${ctx.facility.fullPalletSkus ?? 0}" data-fac="fullPalletSkus" /></div>
+          <div class="wsc-config-field"><label title="SKUs in the carton-on-pallet zone.">CP SKUs</label><input type="number" value="${ctx.facility.cartonPalletSkus ?? 0}" data-fac="cartonPalletSkus" /></div>
         </div>
         <div class="wsc-config-field" style="margin-top:8px;">
           <label title="SKUs in the shelving zone — each SKU minimally needs 1 shelf face. When SKUs × 1 face > demand-driven cartons, locations become sku-bound.">Shelving SKUs</label>
-          <input type="number" value="${facility.shelvingSkus ?? 0}" data-fac="shelvingSkus" />
+          <input type="number" value="${ctx.facility.shelvingSkus ?? 0}" data-fac="shelvingSkus" />
         </div>
         ${(() => {
           const sh = sized?.locations?.shelving;
@@ -266,14 +266,14 @@ export function renderConfigHtml(ctx) {
           return `
             <div class="wsc-channel-alloc-row" data-channel-key="${escapeAttr(c.channelKey)}" style="display:flex;flex-direction:column;gap:4px;padding:8px 0;border-top:1px solid var(--ies-gray-100);">
               <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:600;">
-                <span>${escapeHtml(c.name || c.channelKey)} ${isOverridden ? '<span style="color:var(--ies-blue);font-weight:700;" title="Channel override active">●</span>' : '<span style="color:var(--ies-gray-400);" title="Inheriting facility allocation">○</span>'}</span>
+                <span>${escapeHtml(c.name || c.channelKey)} ${isOverridden ? '<span style="color:var(--ies-blue);font-weight:700;" title="Channel override active">●</span>' : '<span style="color:var(--ies-gray-400);" title="Inheriting ctx.facility allocation">○</span>'}</span>
                 <span style="color:${totalOk ? 'var(--ies-gray-500)' : 'var(--ies-orange)'};">${total}%${totalOk ? '' : ' ⚠'}</span>
               </div>
               <div style="display:grid;grid-template-columns:repeat(3,1fr) auto;gap:4px;">
                 <input type="number" min="0" max="100" value="${fp}" data-channel-alloc="fullPallet" data-channel-key="${escapeAttr(c.channelKey)}" title="Full Pallet %" style="font-size:11px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;" />
                 <input type="number" min="0" max="100" value="${cp}" data-channel-alloc="cartonOnPallet" data-channel-key="${escapeAttr(c.channelKey)}" title="Carton on Pallet %" style="font-size:11px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;" />
                 <input type="number" min="0" max="100" value="${cs}" data-channel-alloc="cartonOnShelving" data-channel-key="${escapeAttr(c.channelKey)}" title="Carton Shelving %" style="font-size:11px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;" />
-                ${isOverridden ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-channel-alloc-reset="${escapeAttr(c.channelKey)}" title="Reset this channel to inherit the facility-level allocation" style="font-size:10px;padding:2px 6px;">↻</button>` : '<span></span>'}
+                ${isOverridden ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-channel-alloc-reset="${escapeAttr(c.channelKey)}" title="Reset this channel to inherit the ctx.facility-level allocation" style="font-size:10px;padding:2px 6px;">↻</button>` : '<span></span>'}
               </div>
             </div>`;
         }).join('');
@@ -290,8 +290,8 @@ export function renderConfigHtml(ctx) {
       <!-- Operating days/yr + Daily Outbound (pallets/day) — kept in Step 1
            with the volume profile; both feed downstream metrics. -->
       <div class="wsc-config-row" style="margin-top:10px;">
-        <div class="wsc-config-field"><label title="Operating days per year — used downstream by DIOH metric.">Operating Days/Yr</label><input type="number" value="${zones.operatingDaysPerYear || 250}" data-inv="operatingDaysPerYear" /></div>
-        <div class="wsc-config-field"><label title="Average outbound pallets/day — drives dock throughput sizing.">Daily Outbound <span style="color:var(--ies-gray-500);font-weight:400;">(pallets/day)</span></label><input type="number" value="${volumes.avgDailyOutbound}" data-vol="avgDailyOutbound" /></div>
+        <div class="wsc-config-field"><label title="Operating days per year — used downstream by DIOH metric.">Operating Days/Yr</label><input type="number" value="${ctx.zones.operatingDaysPerYear || 250}" data-inv="operatingDaysPerYear" /></div>
+        <div class="wsc-config-field"><label title="Average outbound pallets/day — drives dock throughput sizing.">Daily Outbound <span style="color:var(--ies-gray-500);font-weight:400;">(pallets/day)</span></label><input type="number" value="${ctx.volumes.avgDailyOutbound}" data-vol="avgDailyOutbound" /></div>
       </div>
     </div>
 
@@ -320,19 +320,19 @@ export function renderConfigHtml(ctx) {
             ).join('')}
           </select>
         </div>
-        <div class="wsc-config-field"><label>Clear Ht (ft)</label><input type="number" value="${facility.clearHeight}" step="1" data-fac="clearHeight" /></div>
+        <div class="wsc-config-field"><label>Clear Ht (ft)</label><input type="number" value="${ctx.facility.clearHeight}" step="1" data-fac="clearHeight" /></div>
       </div>
       <div class="wsc-config-row">
-        <div class="wsc-config-field"><label>Pallet Length (in)</label><input type="number" value="${facility.palletWidth ?? 48}" data-fac="palletWidth" /></div>
-        <div class="wsc-config-field"><label>Pallet Width (in)</label><input type="number" value="${facility.palletDepth ?? 40}" data-fac="palletDepth" /></div>
+        <div class="wsc-config-field"><label>Pallet Length (in)</label><input type="number" value="${ctx.facility.palletWidth ?? 48}" data-fac="palletWidth" /></div>
+        <div class="wsc-config-field"><label>Pallet Width (in)</label><input type="number" value="${ctx.facility.palletDepth ?? 40}" data-fac="palletDepth" /></div>
       </div>
       <div class="wsc-config-row">
-        <div class="wsc-config-field"><label>Load Height (in)</label><input type="number" value="${facility.palletHeight ?? 54}" data-fac="palletHeight" /></div>
-        <div class="wsc-config-field"><label>Beam Ht (in)</label><input type="number" value="${facility.beamHeight ?? 5}" data-fac="beamHeight" /></div>
+        <div class="wsc-config-field"><label>Load Height (in)</label><input type="number" value="${ctx.facility.palletHeight ?? 54}" data-fac="palletHeight" /></div>
+        <div class="wsc-config-field"><label>Beam Ht (in)</label><input type="number" value="${ctx.facility.beamHeight ?? 5}" data-fac="beamHeight" /></div>
       </div>
       <div class="wsc-config-row">
-        <div class="wsc-config-field"><label>Flue Space (in)</label><input type="number" value="${facility.flueSpace ?? 3}" data-fac="flueSpace" /></div>
-        <div class="wsc-config-field"><label>Sprinkler Clear (in)</label><input type="number" value="${facility.topClearance ?? 36}" data-fac="topClearance" /></div>
+        <div class="wsc-config-field"><label>Flue Space (in)</label><input type="number" value="${ctx.facility.flueSpace ?? 3}" data-fac="flueSpace" /></div>
+        <div class="wsc-config-field"><label>Sprinkler Clear (in)</label><input type="number" value="${ctx.facility.topClearance ?? 36}" data-fac="topClearance" /></div>
       </div>
       ${(() => {
         const u = sized?.unitLoad;
@@ -350,11 +350,11 @@ export function renderConfigHtml(ctx) {
       <!-- Carton -->
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin-top:14px;margin-bottom:6px;padding-top:8px;border-top:1px solid var(--ies-gray-100);">Carton</div>
       <div class="wsc-config-row">
-        <div class="wsc-config-field"><label>Carton L (in)</label><input type="number" value="${facility.cartonLengthIn ?? 12}" step="0.5" data-fac="cartonLengthIn" /></div>
-        <div class="wsc-config-field"><label>Carton W (in)</label><input type="number" value="${facility.cartonWidthIn ?? 9}" step="0.5" data-fac="cartonWidthIn" /></div>
+        <div class="wsc-config-field"><label>Carton L (in)</label><input type="number" value="${ctx.facility.cartonLengthIn ?? 12}" step="0.5" data-fac="cartonLengthIn" /></div>
+        <div class="wsc-config-field"><label>Carton W (in)</label><input type="number" value="${ctx.facility.cartonWidthIn ?? 9}" step="0.5" data-fac="cartonWidthIn" /></div>
       </div>
       <div class="wsc-config-row">
-        <div class="wsc-config-field"><label>Carton H (in)</label><input type="number" value="${facility.cartonHeightIn ?? 12}" step="0.5" data-fac="cartonHeightIn" /></div>
+        <div class="wsc-config-field"><label>Carton H (in)</label><input type="number" value="${ctx.facility.cartonHeightIn ?? 12}" step="0.5" data-fac="cartonHeightIn" /></div>
         <div class="wsc-config-field">
           <label title="L-along-rack: long edge of carton sits parallel to the rack run. W-along-rack: short edge along rack run. Affects cartons-per-shelf math.">Orientation</label>
           <select data-fac="cartonOrientation">
@@ -365,7 +365,7 @@ export function renderConfigHtml(ctx) {
       </div>
       <div class="wsc-config-field" style="margin-bottom:8px;">
         <label title="Override ti×hi-derived cartons-per-pallet. Use 0 to let the engine compute from carton + pallet dims (typical). Set > 0 if you have a slotting study with a specific case-pack.">Cartons/Pallet Override <span style="color:var(--ies-gray-500);font-weight:400;">(0 = derive)</span></label>
-        <input type="number" value="${facility.cartonsPerPalletOverride ?? 0}" data-fac="cartonsPerPalletOverride" />
+        <input type="number" value="${ctx.facility.cartonsPerPalletOverride ?? 0}" data-fac="cartonsPerPalletOverride" />
       </div>
       ${(() => {
         const c = sized?.cartonProfile;
@@ -405,7 +405,7 @@ export function renderConfigHtml(ctx) {
             ).join('')}
           </select>
         </div>
-        <div class="wsc-config-field"><label title="Aisle clear width in feet. Counterbalance ~12 ft, reach ~10 ft, VNA ~6 ft. Drives the module width = 2×rack-depth + aisle.">Aisle Width (ft)</label><input type="number" value="${facility.aisleWidth || calc.AISLE_WIDTHS[facility.storageType] || 12}" step="0.5" data-fac="aisleWidth" /></div>
+        <div class="wsc-config-field"><label title="Aisle clear width in feet. Counterbalance ~12 ft, reach ~10 ft, VNA ~6 ft. Drives the module width = 2×rack-depth + aisle.">Aisle Width (ft)</label><input type="number" value="${ctx.facility.aisleWidth || calc.AISLE_WIDTHS[ctx.facility.storageType] || 12}" step="0.5" data-fac="aisleWidth" /></div>
       </div>
 
       <!-- Bottom-beam toggles per zone — drive 3D rendering (rack levels w/ vs w/o ground beam) -->
@@ -450,11 +450,11 @@ export function renderConfigHtml(ctx) {
                 <option value="heavy_case"${ctx.zones.forwardPick?.type === 'heavy_case' ? ' selected' : ''}>Heavy Case</option>
               </select>
             </div>
-            <div class="wsc-config-field"><label title="Total SKUs eligible for forward-pick assignment. The A-velocity tier % from Step 1 determines how many of these get an active pick face.">SKU count</label><input type="number" value="${zones.forwardPick?.skuCount || 2000}" data-fwd="skuCount" /></div>
+            <div class="wsc-config-field"><label title="Total SKUs eligible for forward-pick assignment. The A-velocity tier % from Step 1 determines how many of these get an active pick face.">SKU count</label><input type="number" value="${ctx.zones.forwardPick?.skuCount || 2000}" data-fwd="skuCount" /></div>
           </div>
           <div class="wsc-config-row">
-            <div class="wsc-config-field"><label title="DOH held in the forward-pick area before replenishment from reserve. Lower = more frequent reps; higher = bigger forward area.">Days Inventory (DOH)</label><input type="number" value="${zones.forwardPick?.daysInventory || 3}" step="0.5" data-fwd="daysInventory" /></div>
-            <div class="wsc-config-field"><label title="Outbound units/day flowing through the forward-pick area. Used by some downstream metrics; doesn't drive area sizing directly (active-face count does).">Outbound (units/day)</label><input type="number" value="${zones.forwardPick?.outboundUnitsPerDay || 5000}" data-fwd="outboundUnitsPerDay" /></div>
+            <div class="wsc-config-field"><label title="DOH held in the forward-pick area before replenishment from reserve. Lower = more frequent reps; higher = bigger forward area.">Days Inventory (DOH)</label><input type="number" value="${ctx.zones.forwardPick?.daysInventory || 3}" step="0.5" data-fwd="daysInventory" /></div>
+            <div class="wsc-config-field"><label title="Outbound units/day flowing through the forward-pick area. Used by some downstream metrics; doesn't drive area sizing directly (active-face count does).">Outbound (units/day)</label><input type="number" value="${ctx.zones.forwardPick?.outboundUnitsPerDay || 5000}" data-fwd="outboundUnitsPerDay" /></div>
           </div>
           <div style="margin-top:8px;padding:8px 10px;background:var(--ies-gray-50);border-radius:4px;font-size:11px;color:var(--ies-gray-700);">
             <div style="font-weight:700;margin-bottom:4px;color:var(--ies-gray-500);text-transform:uppercase;font-size:10px;">Active-face derivation</div>
@@ -484,12 +484,12 @@ export function renderConfigHtml(ctx) {
       <!-- Dock throughput parameters (peak-throughput-driven derivation) -->
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin-bottom:6px;">Dock throughput parameters</div>
       <div class="wsc-config-row">
-        <div class="wsc-config-field"><label title="Pallets per truck — 26 with stack, 30 floor-loaded.">Pallets/Truck</label><input type="number" value="${facility.palletsPerTruck ?? 26}" data-fac="palletsPerTruck" /></div>
-        <div class="wsc-config-field"><label title="Hours each truck occupies a door (live unload + stage).">Dwell Hrs/Truck</label><input type="number" value="${facility.dwellHoursPerTruck ?? 1.5}" step="0.25" data-fac="dwellHoursPerTruck" /></div>
+        <div class="wsc-config-field"><label title="Pallets per truck — 26 with stack, 30 floor-loaded.">Pallets/Truck</label><input type="number" value="${ctx.facility.palletsPerTruck ?? 26}" data-fac="palletsPerTruck" /></div>
+        <div class="wsc-config-field"><label title="Hours each truck occupies a door (live unload + stage).">Dwell Hrs/Truck</label><input type="number" value="${ctx.facility.dwellHoursPerTruck ?? 1.5}" step="0.25" data-fac="dwellHoursPerTruck" /></div>
       </div>
       <div class="wsc-config-row">
-        <div class="wsc-config-field"><label title="Operating shift hours per day. 16 = 2-shift, 24 = round-clock.">Shift Hours/Day</label><input type="number" value="${facility.shiftHoursPerDay ?? 16}" data-fac="shiftHoursPerDay" /></div>
-        <div class="wsc-config-field"><label title="Dock surge buffer fraction. 0.20 = 20% buffer on derived door count.">Dock Surge</label><input type="number" value="${facility.surgePctDock ?? 0.20}" step="0.05" data-fac="surgePctDock" /></div>
+        <div class="wsc-config-field"><label title="Operating shift hours per day. 16 = 2-shift, 24 = round-clock.">Shift Hours/Day</label><input type="number" value="${ctx.facility.shiftHoursPerDay ?? 16}" data-fac="shiftHoursPerDay" /></div>
+        <div class="wsc-config-field"><label title="Dock surge buffer fraction. 0.20 = 20% buffer on derived door count.">Dock Surge</label><input type="number" value="${ctx.facility.surgePctDock ?? 0.20}" step="0.05" data-fac="surgePctDock" /></div>
       </div>
 
       <!-- Dock layout + explicit door overrides -->
@@ -503,12 +503,12 @@ export function renderConfigHtml(ctx) {
           </select>
         </div>
         <div class="wsc-config-row">
-          <div class="wsc-config-field"><label title="If > 0, engine uses this explicit count instead of deriving from peak throughput.">Inbound Doors <span style="color:var(--ies-gray-500);font-weight:400;">(explicit)</span></label><input type="number" value="${zones.dockConfig?.inboundDoors || 10}" data-dock="inboundDoors" /></div>
-          <div class="wsc-config-field"><label title="If > 0, engine uses this explicit count instead of deriving from peak throughput.">Outbound Doors <span style="color:var(--ies-gray-500);font-weight:400;">(explicit)</span></label><input type="number" value="${zones.dockConfig?.outboundDoors || 12}" data-dock="outboundDoors" /></div>
+          <div class="wsc-config-field"><label title="If > 0, engine uses this explicit count instead of deriving from peak throughput.">Inbound Doors <span style="color:var(--ies-gray-500);font-weight:400;">(explicit)</span></label><input type="number" value="${ctx.zones.dockConfig?.inboundDoors || 10}" data-dock="inboundDoors" /></div>
+          <div class="wsc-config-field"><label title="If > 0, engine uses this explicit count instead of deriving from peak throughput.">Outbound Doors <span style="color:var(--ies-gray-500);font-weight:400;">(explicit)</span></label><input type="number" value="${ctx.zones.dockConfig?.outboundDoors || 12}" data-dock="outboundDoors" /></div>
         </div>
         <div class="wsc-config-row">
-          <div class="wsc-config-field"><label title="Pallets per door per hour throughput rate. Drives the legacy door-utilization metric.">Pallets/Hr/Door</label><input type="number" value="${zones.dockConfig?.palletsPerDockHour || 12}" step="1" data-dock="palletsPerDockHour" /></div>
-          <div class="wsc-config-field"><label title="Legacy operating hours/day for door-utilization metric.">Operating Hrs <span style="color:var(--ies-gray-500);font-weight:400;">(legacy)</span></label><input type="number" value="${zones.dockConfig?.dockOperatingHours || 10}" step="0.5" data-dock="dockOperatingHours" /></div>
+          <div class="wsc-config-field"><label title="Pallets per door per hour throughput rate. Drives the legacy door-utilization metric.">Pallets/Hr/Door</label><input type="number" value="${ctx.zones.dockConfig?.palletsPerDockHour || 12}" step="1" data-dock="palletsPerDockHour" /></div>
+          <div class="wsc-config-field"><label title="Legacy operating hours/day for door-utilization metric.">Operating Hrs <span style="color:var(--ies-gray-500);font-weight:400;">(legacy)</span></label><input type="number" value="${ctx.zones.dockConfig?.dockOperatingHours || 10}" step="0.5" data-dock="dockOperatingHours" /></div>
         </div>
       </div>
 
@@ -521,8 +521,8 @@ export function renderConfigHtml(ctx) {
             <span>VAS</span>
           </label>
         </div>
-        <div class="wsc-config-row single-col" id="wsc-opt-vas-row" style="display:${zones.optionalZones?.vas?.enabled ? 'grid' : 'none'};">
-          <div class="wsc-config-field"><label>VAS SF</label><input type="number" value="${zones.optionalZones?.vas?.sqft || 0}" data-opt="vas-sqft" /></div>
+        <div class="wsc-config-row single-col" id="wsc-opt-vas-row" style="display:${ctx.zones.optionalZones?.vas?.enabled ? 'grid' : 'none'};">
+          <div class="wsc-config-field"><label>VAS SF</label><input type="number" value="${ctx.zones.optionalZones?.vas?.sqft || 0}" data-opt="vas-sqft" /></div>
         </div>
         <div class="wsc-config-field" style="margin-bottom:8px;">
           <label style="display:flex; align-items:center; gap:6px;">
@@ -530,8 +530,8 @@ export function renderConfigHtml(ctx) {
             <span>Returns</span>
           </label>
         </div>
-        <div class="wsc-config-row single-col" id="wsc-opt-returns-row" style="display:${zones.optionalZones?.returns?.enabled ? 'grid' : 'none'};">
-          <div class="wsc-config-field"><label>Returns SF</label><input type="number" value="${zones.optionalZones?.returns?.sqft || 0}" data-opt="returns-sqft" /></div>
+        <div class="wsc-config-row single-col" id="wsc-opt-returns-row" style="display:${ctx.zones.optionalZones?.returns?.enabled ? 'grid' : 'none'};">
+          <div class="wsc-config-field"><label>Returns SF</label><input type="number" value="${ctx.zones.optionalZones?.returns?.sqft || 0}" data-opt="returns-sqft" /></div>
         </div>
         <div class="wsc-config-field" style="margin-bottom:8px;">
           <label style="display:flex; align-items:center; gap:6px;">
@@ -539,23 +539,23 @@ export function renderConfigHtml(ctx) {
             <span>Chargeback</span>
           </label>
         </div>
-        <div class="wsc-config-row single-col" id="wsc-opt-chargeback-row" style="display:${zones.optionalZones?.chargeback?.enabled ? 'grid' : 'none'};">
-          <div class="wsc-config-field"><label>Chargeback SF</label><input type="number" value="${zones.optionalZones?.chargeback?.sqft || 0}" data-opt="chargeback-sqft" /></div>
+        <div class="wsc-config-row single-col" id="wsc-opt-chargeback-row" style="display:${ctx.zones.optionalZones?.chargeback?.enabled ? 'grid' : 'none'};">
+          <div class="wsc-config-field"><label>Chargeback SF</label><input type="number" value="${ctx.zones.optionalZones?.chargeback?.sqft || 0}" data-opt="chargeback-sqft" /></div>
         </div>
         <div class="wsc-config-row">
-          <div class="wsc-config-field"><label title="Battery charging / equipment maintenance area.">Charging SF</label><input type="number" value="${zones.chargingSqft || 0}" data-zone="chargingSqft" /></div>
-          <div class="wsc-config-field"><label title="Repack / value-add area inside the warehouse footprint.">Repack/VAS SF</label><input type="number" value="${zones.repackSqft || 0}" data-zone="repackSqft" /></div>
+          <div class="wsc-config-field"><label title="Battery charging / equipment maintenance area.">Charging SF</label><input type="number" value="${ctx.zones.chargingSqft || 0}" data-zone="chargingSqft" /></div>
+          <div class="wsc-config-field"><label title="Repack / value-add area inside the warehouse footprint.">Repack/VAS SF</label><input type="number" value="${ctx.zones.repackSqft || 0}" data-zone="repackSqft" /></div>
         </div>
         <div class="wsc-config-field" style="margin-top:8px;">
           <label>Other SF</label>
-          <input type="number" value="${zones.otherSqft || 0}" data-zone="otherSqft" />
+          <input type="number" value="${ctx.zones.otherSqft || 0}" data-zone="otherSqft" />
         </div>
       </div>
 
       <!-- Custom ctx.zones -->
       <div style="margin-top:14px;padding-top:8px;border-top:1px solid var(--ies-gray-100);">
         <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin-bottom:6px;">Custom ctx.zones</div>
-        <div id="wsc-custom-zones-list" style="display:flex; flex-direction:column; gap:6px; margin-bottom:8px;">
+        <div id="wsc-custom-ctx.zones-list" style="display:flex; flex-direction:column; gap:6px; margin-bottom:8px;">
           ${(ctx.zones.customZones || []).map((z, i) => `
             <div style="display:flex; gap:4px; align-items:center;">
               <input type="text" value="${z.name}" data-custom-name="${i}" placeholder="Zone name" style="flex:1; padding:4px 6px; border:1px solid var(--ies-gray-200); border-radius:4px; font-size:11px;" />
@@ -609,8 +609,8 @@ export function renderConfigHtml(ctx) {
           <div style="padding:10px 12px;background:#fff;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:12px;color:var(--ies-gray-700);margin-bottom:8px;">
             <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin-bottom:4px;">Existing building</div>
             <div class="wsc-config-row" style="margin-bottom:6px;">
-              <div class="wsc-config-field"><label>Width (ft)</label><input type="number" value="${facility.buildingWidth || 0}" data-fac="buildingWidth" /></div>
-              <div class="wsc-config-field"><label>Depth (ft)</label><input type="number" value="${facility.buildingDepth || 0}" data-fac="buildingDepth" /></div>
+              <div class="wsc-config-field"><label>Width (ft)</label><input type="number" value="${ctx.facility.buildingWidth || 0}" data-fac="buildingWidth" /></div>
+              <div class="wsc-config-field"><label>Depth (ft)</label><input type="number" value="${ctx.facility.buildingDepth || 0}" data-fac="buildingDepth" /></div>
             </div>
             <div style="display:flex;justify-content:space-between;padding:2px 0;"><span>Footprint area</span><strong>${haveBuilt ? builtSf.toLocaleString() + ' sf' : '—'}</strong></div>
             <div style="display:flex;justify-content:space-between;padding:6px 0 2px;border-top:1px solid var(--ies-gray-200);margin-top:6px;font-weight:700;color:${gapColor};"><span>Gap</span><strong>${haveBuilt ? (deltaSf >= 0 ? '+' : '') + deltaSf.toLocaleString() + ' sf · ' : ''}${gapLabel}</strong></div>
@@ -618,12 +618,12 @@ export function renderConfigHtml(ctx) {
           <div style="border-top:1px dashed var(--ies-gray-300);padding-top:8px;margin-top:4px;">
             <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin-bottom:6px;">Constraint dims</div>
             <div class="wsc-config-row">
-              <div class="wsc-config-field"><label>Col Spacing (ft)</label><input type="number" value="${facility.columnSpacingX || 50}" data-fac="columnSpacingX" /></div>
-              <div class="wsc-config-field"><label>Office SF</label><input type="number" value="${zones.officeSqft}" data-zone="officeSqft" /></div>
+              <div class="wsc-config-field"><label>Col Spacing (ft)</label><input type="number" value="${ctx.facility.columnSpacingX || 50}" data-fac="columnSpacingX" /></div>
+              <div class="wsc-config-field"><label>Office SF</label><input type="number" value="${ctx.zones.officeSqft}" data-zone="officeSqft" /></div>
             </div>
             <div class="wsc-config-row">
-              <div class="wsc-config-field"><label>Recv Staging SF</label><input type="number" value="${zones.receiveStagingSqft}" data-zone="receiveStagingSqft" /></div>
-              <div class="wsc-config-field"><label>Ship Staging SF</label><input type="number" value="${zones.shipStagingSqft}" data-zone="shipStagingSqft" /></div>
+              <div class="wsc-config-field"><label>Recv Staging SF</label><input type="number" value="${ctx.zones.receiveStagingSqft}" data-zone="receiveStagingSqft" /></div>
+              <div class="wsc-config-field"><label>Ship Staging SF</label><input type="number" value="${ctx.zones.shipStagingSqft}" data-zone="shipStagingSqft" /></div>
             </div>
           </div>
         `;
@@ -654,7 +654,7 @@ export function bindConfigEvents(panel, ctx) {
     });
   });
 
-  // Phase 2 redesign — boolean facility toggles (bottom-beam, override).
+  // Phase 2 redesign — boolean ctx.facility toggles (bottom-beam, override).
   // Re-renders the Configure panel itself when toggled because the override
   // toggle hides/shows the dims editor.
   panel.querySelectorAll('[data-fac-bool]').forEach(input => {
@@ -695,7 +695,7 @@ export function bindConfigEvents(panel, ctx) {
   // toggle lived here from 2026-05-05 to 2026-05-08; it was replaced with a
   // unified form where throughput inputs and override inputs live side-by-side.
   // Engine logic now picks override-vs-derived per-field rather than mode-wide.
-  // facility.primaryInventoryInput is now silently unused (preserved on saved
+  // ctx.facility.primaryInventoryInput is now silently unused (preserved on saved
   // models for back-compat — has no effect on rendering or sizing).
 
   // Zone fields (with input debounce for live update)
@@ -740,12 +740,12 @@ export function bindConfigEvents(panel, ctx) {
     });
   });
 
-  // Storage allocation inputs — facility-level (legacy single mix).
+  // Storage allocation inputs — ctx.facility-level (legacy single mix).
   // Phase B redesign (2026-05-05): replaced sliders with numeric inputs +
   // sum-validation pill. Handler now re-renders the Configure panel so the
-  // pill updates and the per-channel "inheriting" rows reflect new facility
+  // pill updates and the per-channel "inheriting" rows reflect new ctx.facility
   // defaults (fixes a Phase 2 bug where inheriting channels didn't refresh
-  // when facility-level allocation changed).
+  // when ctx.facility-level allocation changed).
   panel.querySelectorAll('input[data-alloc]').forEach(input => {
     input.addEventListener('change', e => {
       const field = /** @type {HTMLInputElement} */ (e.target).dataset.alloc;
@@ -758,9 +758,9 @@ export function bindConfigEvents(panel, ctx) {
     });
   });
 
-  // Phase 4 Layer B (volumes-as-nucleus, 2026-04-29) — per-channel
+  // Phase 4 Layer B (ctx.volumes-as-nucleus, 2026-04-29) — per-channel
   // storageAllocation override inputs. First write to a channel auto-promotes
-  // it from "inheriting facility" to "explicit override" (storageAllocation
+  // it from "inheriting ctx.facility" to "explicit override" (storageAllocation
   // populated on the channel mix). Reset (↻) wipes the override.
   panel.querySelectorAll('input[data-channel-alloc]').forEach(input => {
     input.addEventListener('change', e => {
@@ -773,7 +773,7 @@ export function bindConfigEvents(panel, ctx) {
       const mix = ctx.zones.channelMixes.find(m => m.channelKey === k);
       if (!mix) return;
       if (!mix.storageAllocation) {
-        // Promote to override — seed from facility default.
+        // Promote to override — seed from ctx.facility default.
         mix.storageAllocation = {
           fullPallet: facAlloc.fullPallet || 0,
           cartonOnPallet: facAlloc.cartonOnPallet || 0,
@@ -955,9 +955,9 @@ export function bindConfigEvents(panel, ctx) {
     ctx.refreshContent();
   });
 
-  // Phase 4 of volumes-as-nucleus (Layer A, 2026-04-29): Pull-from-CM button.
+  // Phase 4 of ctx.volumes-as-nucleus (Layer A, 2026-04-29): Pull-from-CM button.
   // Re-fetches the linked cost model and re-runs the channel-aware payload
-  // builder, then applies it through handleCmPush so volumes (and zones'
+  // builder, then applies it through handleCmPush so ctx.volumes (and ctx.zones'
   // peakUnitsPerDay) refresh in place.
   panel.querySelector('[data-action="wsc-pull-from-cm"]')?.addEventListener('click', async () => {
     const cmId = ctx.facility.parent_cost_model_id;

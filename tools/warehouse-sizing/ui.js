@@ -17,7 +17,7 @@ import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillbac
 import { showConfirm } from '../../shared/confirm-modal.js';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260511-port12';
 import { render3DView, disposeScene3d } from './ui-3d.js?v=20260513-3dextract2';
-import { renderConfigHtml, bindConfigEvents } from './ui-config.js?v=20260513-cfgextract';
+import { renderConfigHtml, bindConfigEvents } from './ui-config.js?v=20260513-cfgextract3';
 
 // ============================================================
 // CHROME v3 — phase + section structure (CM Chrome v3 ripple, step 3 redo)
