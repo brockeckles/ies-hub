@@ -289,6 +289,18 @@ function renderShell() {
 }
 
 /** Build chrome opts from current WSC state. */
+/** Mark the doc dirty and refresh chrome on the clean→dirty transition so the
+ *  save chip flips "Saved" → "Modified" in real time. Pre-fix: every isDirty=true
+ *  site only re-rendered KPIs / content / config — the chrome (where the chip
+ *  lives) stayed stale until a section change or save. */
+function _markDirty() {
+  const wasClean = !isDirty;
+  isDirty = true;
+  if (wasClean && facility.id && rootEl) {
+    refreshToolChrome(rootEl, _buildWscChromeOpts());
+  }
+}
+
 function _buildWscChromeOpts() {
   const draft = !facility.id;
   const modified = !!facility.id && isDirty;
@@ -558,7 +570,7 @@ async function bindShellEvents() {
       renderContentView();
     } else if (action === 'reset-layout') {
       zones.layoutOverrides = {};
-      isDirty = true;
+      _markDirty();
       renderContentView();
     } else if (action === 'apply-shrink-suggestion') {
       // Resize the building to the suggested dims surfaced in the over-built
@@ -570,7 +582,7 @@ async function bindShellEvents() {
       const d = +btn.getAttribute('data-suggested-depth') || 0;
       if (w > 0) facility.buildingWidth = w;
       if (d > 0) facility.buildingDepth = d;
-      isDirty = true;
+      _markDirty();
       renderConfigPanel();
       renderContentView();
     } else if (action === 'apply-required-dims') {
@@ -584,7 +596,7 @@ async function bindShellEvents() {
       if (longFt > 0)  facility.buildingWidth  = longFt;
       if (shortFt > 0) facility.buildingDepth  = shortFt;
       facility.buildingDimsOverride = true;
-      isDirty = true;
+      _markDirty();
       renderConfigPanel();
       renderContentView();
     }
@@ -684,7 +696,7 @@ async function bindShellEvents() {
     const canvas = rootEl?.querySelector('#wsc-plan-canvas');
     if (canvas) canvas.style.cursor = 'grab';
     _planDrag = null;
-    isDirty = true;
+    _markDirty();
   };
   rootEl?.addEventListener('pointerup', finishDrag);
   rootEl?.addEventListener('pointercancel', finishDrag);
@@ -827,7 +839,7 @@ function _makeConfigCtx() {
     get viewMode() { return viewMode; },
     get isDirty() { return isDirty; },
     rootEl,
-    setDirty(v) { isDirty = v; },
+    setDirty(v) { if (v) _markDirty(); else { isDirty = false; } },
     resetState() {
       facility = createDefaultFacility();
       zones = createDefaultZones();
