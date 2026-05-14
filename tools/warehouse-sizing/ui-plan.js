@@ -304,7 +304,8 @@ export function drawPlan(pctx) {
   const fpEnabled = !!pctx.zones.forwardPick?.enabled;
   const fpSqft    = fpEnabled ? Math.max(2000, Math.min(30000, (pctx.zones.forwardPick.skuCount || 2000) * 6)) : 0;
   // Visual strip height: scale FP sqft to footprint width × strip height
-  const fpStripFt = fpEnabled ? Math.min(60, Math.max(20, fpSqft / Math.max(1, widthFt - (officeWpx / pxPerFt + 8)))) : 0;
+  // Min 30 ft (was 20) so the FP strip renders thick enough to grab in edit mode.
+  const fpStripFt = fpEnabled ? Math.min(60, Math.max(30, fpSqft / Math.max(1, widthFt - (officeWpx / pxPerFt + 8)))) : 0;
   const _fpAutoStripPx = fpStripFt * pxPerFt;
   const _fpAutoY  = storageY + storageH - _fpAutoStripPx;
   const _fpAutoX  = officeX + officeWpx + 2;
@@ -663,7 +664,15 @@ export function drawPlan(pctx) {
   ctx.font = 'bold 11px Montserrat, sans-serif';
   ctx.textAlign = 'center';
   if (shipW > 100) {
-    ctx.fillText(`Ship Staging  ·  ${calc.formatSqft(sized.shipStagingSqft)}`, shipX + shipW / 2, shipY + shipDrawH / 2 + 4);
+    // If user corner-resized this zone, label should reflect drawn w*h, not
+    // the engine's sized.shipStagingSqft (Brock 2026-05-14 — "SF should reflect
+    // what I drew"). Move-only overrides keep the sized number; only w/h
+    // overrides flip the label to the drawn area.
+    const _o = pctx.zones.layoutOverrides?.shipStaging;
+    const _resized = !!_o && (_o.w !== undefined || _o.h !== undefined);
+    const _drawnSqft = Math.round((shipW * shipDrawH) / Math.max(1e-6, pxPerFt * pxPerFt));
+    const _labelSqft = _resized ? _drawnSqft : sized.shipStagingSqft;
+    ctx.fillText(`Ship Staging  ·  ${calc.formatSqft(_labelSqft)}`, shipX + shipW / 2, shipY + shipDrawH / 2 + 4);
   }
   pctx._planZoneRects.shipStaging = { x: shipX, y: shipY, w: shipW, h: shipDrawH };
 
@@ -682,7 +691,14 @@ export function drawPlan(pctx) {
     ctx.fillText('Office', officeX + officeWpx / 2, officeY + officeBlockH / 2 - 4);
     ctx.fillStyle = '#6b21a8';
     ctx.font = '10px Montserrat, sans-serif';
-    ctx.fillText(`${calc.formatSqft(sized.officeSqft)}`, officeX + officeWpx / 2, officeY + officeBlockH / 2 + 12);
+    // Resize-aware label (Brock 2026-05-14). Uses hit-rect w*h, which is
+    // what the user dragged. officeBlockH is the visual stretched-to-dock-face
+    // height — not the user-chosen size, so we deliberately use officeHpx.
+    const _oOff = pctx.zones.layoutOverrides?.office;
+    const _resizedOff = !!_oOff && (_oOff.w !== undefined || _oOff.h !== undefined);
+    const _drawnOff = Math.round((officeWpx * officeHpx) / Math.max(1e-6, pxPerFt * pxPerFt));
+    const _labelOff = _resizedOff ? _drawnOff : sized.officeSqft;
+    ctx.fillText(`${calc.formatSqft(_labelOff)}`, officeX + officeWpx / 2, officeY + officeBlockH / 2 + 12);
   }
 
   // ---------- Dock doors at bottom edge, aligned with ship staging ----------
