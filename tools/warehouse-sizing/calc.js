@@ -2427,6 +2427,83 @@ export function formStateToInputs({ facility = {}, zones = {}, volumes = {} } = 
 }
 
 /**
+ * Build the four-item KPI strip shown in the WSC chrome (Total/Built SF,
+ * Dock Doors, Rack Positions, Utilization). Pure — takes form state, calls
+ * sizeFacility + computeStorage internally, returns plain {label, value, hint}
+ * tuples ready for refreshKpiStrip.
+ *
+ * Extraction 2026-05-14: body moved verbatim from tools/warehouse-sizing/ui.js
+ * (function _computeWscKpis) so ui.js loses ~65 LOC and the SF mode logic can
+ * be unit-tested without a DOM.
+ *
+ * @param {{ facility?: object, zones?: object, volumes?: object }} state
+ * @returns {Array<{ label: string, value: string, hint: string }>}
+ */
+export function computeWscKpis({ facility = {}, zones = {}, volumes = {} } = {}) {
+  const items = [];
+
+  // Total SF — Phase D (2026-05-05) mode-aware. In Design mode the engine's
+  // sized output IS the answer (no user-entered W/D); in Constraint mode the
+  // user-entered W×D is the constraint and the chip should show that.
+  let sized = null;
+  try { sized = sizeFacility(formStateToInputs({ facility, zones, volumes })); } catch {}
+  const mode = facility?.sizingMode || 'design';
+  const w = +facility?.buildingWidth || 0;
+  const d = +facility?.buildingDepth || 0;
+  const userBuiltSf = (w > 0 && d > 0) ? (w * d) : 0;
+  const sizedSf = sized?.totalSqft || 0;
+  const totalSf = mode === 'constraint'
+    ? (userBuiltSf > 0 ? userBuiltSf : sizedSf)
+    : sizedSf;
+  items.push({
+    label: mode === 'constraint' ? 'Built SF' : 'Sized SF',
+    value: totalSf > 0 ? (totalSf / 1000).toFixed(0) + 'K' : '—',
+    hint: mode === 'constraint'
+      ? `Existing-building footprint (${w} × ${d} ft).`
+      : 'Engine-sized facility footprint (sum of storage + dock + zones + circulation).',
+  });
+
+  // Dock Doors — zones.dockConfig (NOT facility.*).
+  const inb = zones?.dockConfig?.inboundDoors || 0;
+  const out = zones?.dockConfig?.outboundDoors || 0;
+  items.push({
+    label: 'Dock Doors',
+    value: (inb + out) > 0 ? String(inb + out) : '—',
+    hint: `${inb} inbound + ${out} outbound`,
+  });
+
+  // Rack Positions — use sized engine (grossPositions = honeycomb + surge
+  // applied) so the chrome strip agrees with the Dashboard breakdown and
+  // the 3D HUD. Falls back to computeStorage geometric capacity only when
+  // the sizing engine has nothing to size against.
+  let rackPos = 0;
+  let utilPct = null;
+  if (sized) {
+    rackPos = sized?.positions?.grossPositions || 0;
+    utilPct = sized?.utilization?.utilizationPct ?? null;
+  }
+  if (rackPos === 0) {
+    try {
+      const storage = computeStorage(facility, zones);
+      rackPos = storage.totalPalletPositions || 0;
+    } catch {}
+  }
+  items.push({
+    label: 'Rack Positions',
+    value: rackPos > 0 ? (rackPos >= 1000 ? (rackPos / 1000).toFixed(1) + 'K' : String(rackPos)) : '—',
+    hint: 'Designed positions + honeycomb + surge buffer (from sizeFacility). Matches Dashboard Gross Positions.',
+  });
+
+  items.push({
+    label: 'Utilization',
+    value: (typeof utilPct === 'number' && utilPct > 0) ? utilPct.toFixed(1) + '%' : '—',
+    hint: 'Average inventory positions / designed positions. Healthy band 70-90%.',
+  });
+
+  return items;
+}
+
+/**
  * Volume-first facility sizing — top-level entry point. Ported from v2's
  * `calcWarehouse` (lines 1297-1808 in v2 warehouse-sizing.js) with browser
  * specifics removed.

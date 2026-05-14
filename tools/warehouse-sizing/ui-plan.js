@@ -19,7 +19,7 @@
  * @module tools/warehouse-sizing/ui-plan
  */
 
-import * as calc from './calc.js?v=20260514-fsi1';
+import * as calc from './calc.js?v=20260514-kpis1';
 
 export function renderPlan(pctx) {
   const storage = calc.computeStorage(pctx.facility, pctx.zones);
@@ -871,5 +871,5 @@ export function hitCorner(r, mx, my) {
 /**
  * Convert the UI's (pctx.facility, pctx.zones, pctx.volumes) state into SizingInputs
  * for the v2-equivalent calc.sizeFacility engine.
- * @returns {import('./calc.js?v=20260514-fsi1').SizingInputs}
+ * @returns {import('./calc.js?v=20260514-kpis1').SizingInputs}
  */

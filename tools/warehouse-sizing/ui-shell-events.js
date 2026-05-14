@@ -36,7 +36,7 @@
 import { refreshToolChrome, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260430-na-dot';
 import { bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { showConfirm } from '../../shared/confirm-modal.js';
-import { drawPlan, hitCorner } from './ui-plan.js?v=20260513-planextract';
+import { drawPlan, hitCorner } from './ui-plan.js?v=20260514-planmeta1';
 import { pushToCm } from './ui-cm-bridge.js?v=20260513-cmextract';
 
 /**

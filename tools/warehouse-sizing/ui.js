@@ -10,7 +10,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sM';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260430-na-dot';
-import * as calc from './calc.js?v=20260514-fsi1';
+import * as calc from './calc.js?v=20260514-kpis1';
 import * as api from './api.js?v=20260418-sL';
 import * as cmApi from '../cost-model/api.js?v=20260512-cm-wsc-dimfix';
 import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
@@ -378,70 +378,11 @@ function _buildWscChromeOpts() {
  *  Real-time math from calc.computeStorage(facility, zones) — not stored
  *  on facility.* (an early version of this function tried that and got
  *  empty values because storage size is computed, not configured). */
-function _computeWscKpis() {
-  const items = [];
-  // Total SF — Phase D (2026-05-05) mode-aware. In Design mode, the engine's
-  // sized output IS the answer (no user-entered W/D); in Constraint mode,
-  // user-entered W×D is the constraint and the chip should show that. Pre-D,
-  // this read facility.buildingWidth × buildingDepth even in Design mode,
-  // showing stale user-entered dims that disagree with the rendered footprint.
-  let sized = null;
-  try { sized = calc.sizeFacility(toSizingInputs()); } catch {}
-  const mode = facility?.sizingMode || 'design';
-  const w = +facility?.buildingWidth || 0;
-  const d = +facility?.buildingDepth || 0;
-  const userBuiltSf = (w > 0 && d > 0) ? (w * d) : 0;
-  const sizedSf = sized?.totalSqft || 0;
-  const totalSf = mode === 'constraint'
-    ? (userBuiltSf > 0 ? userBuiltSf : sizedSf)
-    : sizedSf;
-  items.push({
-    label: mode === 'constraint' ? 'Built SF' : 'Sized SF',
-    value: totalSf > 0 ? (totalSf / 1000).toFixed(0) + 'K' : '—',
-    hint: mode === 'constraint'
-      ? `Existing-building footprint (${w} × ${d} ft).`
-      : 'Engine-sized facility footprint (sum of storage + dock + zones + circulation).',
-  });
-  // Dock Doors — zones.dockConfig (NOT facility.*).
-  const inb = zones?.dockConfig?.inboundDoors || 0;
-  const out = zones?.dockConfig?.outboundDoors || 0;
-  items.push({
-    label: 'Dock Doors',
-    value: (inb + out) > 0 ? String(inb + out) : '—',
-    hint: `${inb} inbound + ${out} outbound`,
-  });
-  // Rack Positions — use sized engine (grossPositions = honeycomb + surge
-  // applied) so the chrome strip agrees with the Dashboard breakdown and
-  // the 3D HUD. Falls back to computeStorage geometric capacity only when
-  // the sizing engine has nothing to size against.
-  let rackPos = 0;
-  let utilPct = null;
-  try {
-    const sized = calc.sizeFacility(toSizingInputs());
-    rackPos = sized?.positions?.grossPositions || 0;
-    utilPct = sized?.utilization?.utilizationPct ?? null;
-    if (rackPos === 0) {
-      const storage = calc.computeStorage(facility, zones);
-      rackPos = storage.totalPalletPositions || 0;
-    }
-  } catch (_) {}
-  items.push({
-    label: 'Rack Positions',
-    value: rackPos > 0 ? (rackPos >= 1000 ? (rackPos / 1000).toFixed(1) + 'K' : String(rackPos)) : '—',
-    hint: 'Designed positions + honeycomb + surge buffer (from sizeFacility). Matches Dashboard Gross Positions.',
-  });
-  items.push({
-    label: 'Utilization',
-    value: (typeof utilPct === 'number' && utilPct > 0) ? utilPct.toFixed(1) + '%' : '—',
-    hint: 'Average inventory positions / designed positions. Healthy band 70-90%.',
-  });
-  return items;
-}
-
-/** Refresh KPI strip from current WSC state. Cheap to call. */
+/** Refresh KPI strip from current WSC state. Cheap to call. KPI compute
+ *  lives in calc.computeWscKpis — extracted 2026-05-14 (autonomous session). */
 function _refreshWscKpis() {
   if (!rootEl) return;
-  refreshKpiStrip(rootEl, _computeWscKpis());
+  refreshKpiStrip(rootEl, calc.computeWscKpis({ facility, zones, volumes }));
 }
 
 /** WSC-specific styles — the Configure-panel inputs were rendering with
@@ -843,7 +784,7 @@ let _planMeta = null;
  * Extraction 2026-05-14 (autonomous session). Body moved verbatim into
  * calc.js so it can be unit-tested directly and so ui.js drops below 1K LOC.
  *
- * @returns {import('./calc.js?v=20260514-fsi1').SizingInputs}
+ * @returns {import('./calc.js?v=20260514-kpis1').SizingInputs}
  */
 function toSizingInputs() {
   return calc.formStateToInputs({ facility, zones, volumes });
