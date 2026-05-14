@@ -140,7 +140,7 @@ export function renderPlan(pctx) {
               ↺ Reset Layout (${overrideKeys.length})
             </button>
           ` : ''}
-          <button class="${editing ? 'hub-btn-primary' : 'hub-btn-secondary'}" data-wsc-action="toggle-edit-layout" style="font-size:12px;padding:4px 10px;" title="Drag Office, Ship Staging, Forward Pick, or the rack block to manually reposition them">
+          <button class="${editing ? 'hub-btn-primary' : 'hub-btn-secondary'}" data-wsc-action="toggle-edit-layout" style="font-size:12px;padding:4px 10px;" title="Drag Office, Ship Staging, and Forward Pick to manually reposition them">
             ${editing ? '✓ Done Editing' : '✎ Edit Layout'}
           </button>
         </div>
@@ -149,7 +149,7 @@ export function renderPlan(pctx) {
         <canvas id="wsc-plan-canvas" width="900" height="520" style="width:100%; border:1px solid var(--ies-gray-200); border-radius:6px; background:#fff; ${editing ? 'cursor: grab;' : ''}"></canvas>
         ${editing ? `
           <div style="margin-top:8px;padding:8px 12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;font-size:12px;color:#1e3a8a;">
-            <strong>Edit mode:</strong> drag Office, Ship Staging, Forward Pick, or the rack block to reposition them. Racks move as one unit; the others can also be corner-resized. Snaps to 5 ft. Save the model to persist.
+            <strong>Edit mode:</strong> drag Office, Ship Staging, or Forward Pick pctx.zones to reposition them. Snaps to 5 ft. Save the model to persist.
           </div>
         ` : ''}
       </div>
@@ -397,24 +397,6 @@ export function drawPlan(pctx) {
     }
   }
 
-  // ---------- Rack-block draggable (2026-05-14) ----------
-  // Treat the whole rack region as a single draggable zone. The columns
-  // themselves are engine-computed (count, type, cross-aisle alignment),
-  // so we move the whole block as a unit via ctx.translate() rather than
-  // re-positioning each column. Move-only (no resize) — resize would mean
-  // re-allocating columns and is out of scope for v1.
-  const _racksAutoX = X0 + sideMarginPx;
-  const _racksAutoY = _planRacksTopFull;
-  const _racksAutoW = Wpx - 2 * sideMarginPx;
-  const _racksAutoH = _planRacksBottomFull - _planRacksTopFull;
-  const _racksPos   = applyOverride('racks', _racksAutoX, _racksAutoY, _racksAutoW, _racksAutoH);
-  const _racksDx    = _racksPos.x - _racksAutoX;
-  const _racksDy    = _racksPos.y - _racksAutoY;
-  pctx._planZoneRects.racks = { x: _racksPos.x, y: _racksPos.y, w: _racksAutoW, h: _racksAutoH };
-
-  ctx.save();
-  ctx.translate(_racksDx, _racksDy);
-
   let mx = X0 + sideMarginPx;
   let colIdx = 0;
   let typeIdx = 0;
@@ -607,8 +589,6 @@ export function drawPlan(pctx) {
     ctx.fillText(labelTxt, cx, storageY + 30);
   }
   ctx.textAlign = 'left';
-
-  ctx.restore();  // end rack-block translate
 
   // ---------- Forward Pick Area (front strip of storage, when enabled) ----------
   if (fpEnabled && fpW > 80 && fpStripPx > 12) {
@@ -852,7 +832,6 @@ export function drawPlan(pctx) {
     for (const [id, r] of Object.entries(pctx._planZoneRects)) {
       ctx.strokeStyle = id === 'office' ? '#8b5cf6'
                       : id === 'shipStaging' ? '#d97706'
-                      : id === 'racks' ? '#475569'
                       : '#7c3aed';
       ctx.strokeRect(r.x - 2, r.y - 2, r.w + 4, r.h + 4);
     }
@@ -860,11 +839,9 @@ export function drawPlan(pctx) {
 
     // Corner resize handles — draw small filled squares at the 4 corners of
     // each draggable zone. Click within HANDLE_PX of a corner initiates a
-    // resize; clicks inside the body still initiate a move. Racks are
-    // move-only (engine controls column count), so skip their handles.
+    // resize; clicks inside the body still initiate a move.
     ctx.save();
     for (const [id, r] of Object.entries(pctx._planZoneRects)) {
-      if (id === 'racks') continue;
       const color = id === 'office' ? '#8b5cf6'
                   : id === 'shipStaging' ? '#d97706'
                   : '#7c3aed';
