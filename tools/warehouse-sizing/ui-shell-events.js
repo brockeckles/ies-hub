@@ -36,7 +36,7 @@
 import { refreshToolChrome, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260430-na-dot';
 import { bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { showConfirm } from '../../shared/confirm-modal.js';
-import { drawPlan, hitCorner } from './ui-plan.js?v=20260514-zonelabels1';
+import { drawPlan, hitCorner } from './ui-plan.js?v=20260514-rackdrag1';
 import { pushToCm } from './ui-cm-bridge.js?v=20260513-cmextract';
 
 /**
@@ -214,12 +214,17 @@ export async function bindShellEvents(sctx) {
     if (!canvas || canvas.id !== 'wsc-plan-canvas' || !sctx._planMeta) return;
     const { X0, Y0, pxPerFt } = sctx._planMeta;
     const { offsetX, offsetY } = sctx.canvasMouseCoords(canvas, e);
-    const order = ['office', 'forwardPick', 'shipStaging'];
-    // Resize-corner hit-test wins over body-move (handles take priority)
+    // Racks last — they fill most of the canvas, so any other zone wins
+    // ties when they overlap. Racks are MOVE-only (engine controls column
+    // count + cross-aisle layout), so they're excluded from the corner
+    // hit-test below.
+    const order = ['office', 'forwardPick', 'shipStaging', 'racks'];
+    // Resize-corner hit-test wins over body-move (handles take priority).
     let hit = null;
     let mode = 'move';
     let corner = null;
     for (const id of order) {
+      if (id === 'racks') continue;
       const r = sctx._planZoneRects[id];
       if (!r) continue;
       const c = hitCorner(r, offsetX, offsetY);
