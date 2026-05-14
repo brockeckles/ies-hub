@@ -2267,6 +2267,23 @@ export function formStateToInputs({ facility = {}, zones = {}, volumes = {} } = 
   const dock = zones.dockConfig || {};
   const fp = zones.forwardPick || null;
   const opt = zones.optionalZones || {};
+  // Phase 1 of "drag changes the design" (2026-05-14): when the user
+  // corner-resizes a zone in the 2D plan view, the layoutOverride captures
+  // w/h in building-relative feet. Pass them through as SF overrides so the
+  // engine uses the drawn area instead of its formula-derived value. Move-only
+  // overrides (just x/y) stay cosmetic — only w+h trigger the engine path.
+  const _lo = zones.layoutOverrides || {};
+  const _resizedSqft = (key) => {
+    const o = _lo[key];
+    if (!o || o.w === undefined || o.h === undefined) return 0;
+    const wFt = Math.max(0, +o.w || 0);
+    const hFt = Math.max(0, +o.h || 0);
+    return Math.round(wFt * hFt);
+  };
+  const officeSqftOverride       = _resizedSqft('office');
+  const shipStagingSqftOverride  = _resizedSqft('shipStaging');
+  const recvStagingSqftOverride  = _resizedSqft('recvStaging');
+  const forwardPickSqftOverride  = _resizedSqft('forwardPick');
   const aisleMap = { 12: 'wide', 10: 'narrow', 6: 'vna' };
   const aisleType = aisleMap[Math.round(facility.aisleWidth || 0)] || 'narrow';
 
@@ -2399,9 +2416,17 @@ export function formStateToInputs({ facility = {}, zones = {}, volumes = {} } = 
         : 20,
       pickType: fp.type === 'heavy_case' ? 'pallet' : 'carton',
       daysInventory: fp.daysInventory || 3,
+      // 2026-05-14: drag-resize override. When > 0, sizeFacility uses it
+      // instead of (activeFaces × sfPerLoc).
+      sqftOverride: forwardPickSqftOverride,
     } : null,
     optionalZones,
     customZones: (zones.customZones || []).map(z => ({ label: z.name || 'Custom', sqft: z.sqft || 0 })),
+    // 2026-05-14: drag-resize SF overrides (Phase 1 of "drag changes the design").
+    // Engine prefers these over its formula-derived sqft when > 0.
+    officeSqftOverride,
+    shipStagingSqftOverride,
+    recvStagingSqftOverride,
     // ── Phase 2 redesign (2026-05-04): IE-correct unit-load + carton + SKU + dock fields ──
     // All optional. When omitted, sizeFacility falls back to legacy behavior.
     palletType: facility.palletType || 'GMA',
@@ -2664,19 +2689,24 @@ export function sizeFacility(userInputs = {}) {
 
   // ── Receiving / Shipping Staging ──
   const stagingFactor = i.dockConfig === 'two' ? 1.25 : 1.0;
-  const recvStagingSqft = Math.ceil((i.inPalletsDay || 0) * 0.15 * 18 * stagingFactor);
-  const shipStagingSqft = Math.ceil((i.outPalletsDay || 0) * 0.15 * 18 * stagingFactor);
+  const recvStagingSqft = (i.recvStagingSqftOverride > 0)
+    ? Math.round(i.recvStagingSqftOverride)
+    : Math.ceil((i.inPalletsDay || 0) * 0.15 * 18 * stagingFactor);
+  const shipStagingSqft = (i.shipStagingSqftOverride > 0)
+    ? Math.round(i.shipStagingSqftOverride)
+    : Math.ceil((i.outPalletsDay || 0) * 0.15 * 18 * stagingFactor);
 
   // ── Additional Zones ──
   const additionalItems = [];
   let additionalSqft = 0;
 
-  // Forward pick area
+  // Forward pick area. Drag-resize override (2026-05-14) wins when > 0.
   if (i.forwardPick && i.forwardPick.enabled) {
     const fp = i.forwardPick;
     const activeFaces = Math.ceil((fp.skus || 0) * (fp.activePickPct || 0) / 100);
     const sfPerLoc = fp.pickType === 'pallet' ? 45 : 12;
-    const fwdSqft = activeFaces * sfPerLoc;
+    const fwdSqftDerived = activeFaces * sfPerLoc;
+    const fwdSqft = (fp.sqftOverride > 0) ? Math.round(fp.sqftOverride) : fwdSqftDerived;
     additionalItems.push({ label: 'Forward Pick', sqft: fwdSqft });
     additionalSqft += fwdSqft;
   }
@@ -2699,7 +2729,9 @@ export function sizeFacility(userInputs = {}) {
 
   // ── Operational + Office ──
   const warehouseOpSqft = storageSqft + dockSqft + recvStagingSqft + shipStagingSqft + additionalSqft;
-  const officeSqft = Math.ceil(warehouseOpSqft * (i.officePct || 0));
+  const officeSqft = (i.officeSqftOverride > 0)
+    ? Math.round(i.officeSqftOverride)
+    : Math.ceil(warehouseOpSqft * (i.officePct || 0));
   const totalSqft = warehouseOpSqft + officeSqft;
 
   // ── Avg Utilization (for the warning band) ──

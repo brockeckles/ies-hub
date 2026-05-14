@@ -13,7 +13,7 @@
  * @module tools/warehouse-sizing/ui-3d
  */
 
-import * as calc from './calc.js?v=20260514-kpis1';
+import * as calc from './calc.js?v=20260514-engineoverride1';
 
 // ============================================================
 // MODULE-LOCAL 3D STATE

@@ -19,7 +19,7 @@
  * @module tools/warehouse-sizing/ui-plan
  */
 
-import * as calc from './calc.js?v=20260514-kpis1';
+import * as calc from './calc.js?v=20260514-engineoverride1';
 
 export function renderPlan(pctx) {
   const storage = calc.computeStorage(pctx.facility, pctx.zones);
@@ -492,14 +492,18 @@ export function drawPlan(pctx) {
         }
       };
 
-      // Intersect each master segment with this column's [racksTop, racksBottom]
-      // window. Cross-aisles stay aligned across the whole building; columns
-      // truncated by office / forward-pick simply lose their tail segments.
-      for (const mseg of _planMasterSegments) {
-        const segTop    = Math.max(mseg.yStart, racksTop);
-        const segBottom = Math.min(mseg.yEnd,   racksBottom);
-        const segH      = segBottom - segTop;
-        if (segH > 0) drawSegment(segTop, segH);
+      // Intersect each master segment with EACH of this column's ranges
+      // (FP-split-aware 2026-05-14 — racks fill both above + below a
+      // mid-building FP, instead of only above). Cross-aisles stay aligned
+      // across the whole building; columns truncated by office / FP simply
+      // lose their tail segments in each affected range.
+      for (const cr of columnRanges) {
+        for (const mseg of _planMasterSegments) {
+          const segTop    = Math.max(mseg.yStart, cr.top);
+          const segBottom = Math.min(mseg.yEnd,   cr.bot);
+          const segH      = segBottom - segTop;
+          if (segH > 0) drawSegment(segTop, segH);
+        }
       }
     }
     // Track per-type X-extent for the post-loop zone labels.
@@ -887,5 +891,5 @@ export function hitCorner(r, mx, my) {
 /**
  * Convert the UI's (pctx.facility, pctx.zones, pctx.volumes) state into SizingInputs
  * for the v2-equivalent calc.sizeFacility engine.
- * @returns {import('./calc.js?v=20260514-kpis1').SizingInputs}
+ * @returns {import('./calc.js?v=20260514-engineoverride1').SizingInputs}
  */

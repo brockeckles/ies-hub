@@ -36,7 +36,7 @@
 import { refreshToolChrome, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260430-na-dot';
 import { bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { showConfirm } from '../../shared/confirm-modal.js';
-import { drawPlan, hitCorner } from './ui-plan.js?v=20260514-zonelabels1';
+import { drawPlan, hitCorner } from './ui-plan.js?v=20260514-engineoverride1';
 import { pushToCm } from './ui-cm-bridge.js?v=20260513-cmextract';
 
 /**
@@ -302,6 +302,11 @@ export async function bindShellEvents(sctx) {
     if (canvas) canvas.style.cursor = 'grab';
     sctx._planDrag = null;
     sctx.markDirty();
+    // 2026-05-14 — when the drag was a resize, the layoutOverride feeds back
+    // into the engine via formStateToInputs. Repaint the KPI chrome strip so
+    // the Sized SF / Dock / Util values reflect the new engine output. Cheap
+    // (computeWscKpis is pure and fast).
+    try { sctx.refreshWscKpis?.(); } catch {}
   };
   rootEl?.addEventListener('pointerup', finishDrag);
   rootEl?.addEventListener('pointercancel', finishDrag);
