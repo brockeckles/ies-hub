@@ -805,7 +805,7 @@ export function drawPlan(pctx) {
   );
 
   // Stash canvas metadata for pointer-event handlers (edit mode).
-  _planMeta = { X0, Y0, Wpx, Hpx, pxPerFt, canvasEl: canvas };
+  pctx._planMeta = { X0, Y0, Wpx, Hpx, pxPerFt, canvasEl: canvas };
 
   // Edit-mode overlay: draw a dashed selection frame around each draggable
   // zone so the user sees what can be moved.
@@ -863,9 +863,6 @@ export function hitCorner(r, mx, my) {
   }
   return null;
 }
-
-/** Canvas geometry stash used by drag handlers to convert mouse → feet. */
-let _planMeta = null;
 
 // ============================================================
 // DASHBOARD VIEW
