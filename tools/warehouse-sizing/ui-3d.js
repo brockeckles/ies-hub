@@ -62,11 +62,20 @@ export function render3DView(container, ctx) {
           ${calc.formatSqft(sized.totalSqft)} sized  ·  ${_hdrFac.buildingWidth || '—'} × ${_hdrFac.buildingDepth || '—'} ft  ·  clear ht ${ctx.facility.clearHeight || 0} ft  ·  ${sized.dock.totalDoors} dock doors
         </span>
       </div>
-      <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">
+      <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;flex-wrap:wrap;">
         <span class="text-caption text-muted" style="margin-right:4px;">View:</span>
         <button type="button" class="hub-btn hub-btn--sm ${_wscShowWalls ? '' : 'hub-btn--ghost'}" data-3d-toggle="walls" title="Toggle facility walls + roof line. Hide them to see inside the building more clearly.">
           ${_wscShowWalls ? 'Hide Walls' : 'Show Walls'}
         </button>
+        <!-- Phase A.A5 (2026-05-26) — Camera presets. Click tweens the
+             camera+target via cubic ease-out. OrbitControls take over again
+             once the tween completes. -->
+        <span class="text-caption text-muted" style="margin-left:8px;margin-right:2px;">Camera:</span>
+        <button type="button" class="hub-btn hub-btn--sm hub-btn--ghost" data-3d-camera="overview" title="Iso-style front-left-above view (default)">Overview</button>
+        <button type="button" class="hub-btn hub-btn--sm hub-btn--ghost" data-3d-camera="iso-right" title="Iso-style front-right-above view">Iso ↻</button>
+        <button type="button" class="hub-btn hub-btn--sm hub-btn--ghost" data-3d-camera="aisle" title="Eye-level inside the building looking down the long aisle">Aisle</button>
+        <button type="button" class="hub-btn hub-btn--sm hub-btn--ghost" data-3d-camera="dock" title="Outside the dock face looking toward the building">Dock</button>
+        <button type="button" class="hub-btn hub-btn--sm hub-btn--ghost" data-3d-camera="topdown" title="Bird's-eye plan view from straight above">Top-Down</button>
       </div>
       <div id="wsc-3d-container" style="position:relative; width:100%; height:520px; background:#e9eef5; border-radius:6px; overflow:hidden;">
         <div id="wsc-3d-hud" class="wsc-3d-hud" aria-live="polite"></div>
@@ -101,6 +110,19 @@ export function render3DView(container, ctx) {
       _toggleBtn.classList.toggle('hub-btn--ghost', !_wscShowWalls);
     });
   }
+
+  // Phase A.A5 (2026-05-26) — preset click delegation. The actual tween
+  // function lives inside build3DScene's closure (where the camera +
+  // controls are scoped); we reach it via the cached el.__wsc3d hook that
+  // build3DScene populates on the container element.
+  container.addEventListener('click', (e) => {
+    const btn = /** @type {HTMLElement} */ (e.target)?.closest('[data-3d-camera]');
+    if (!btn) return;
+    const preset = btn.getAttribute('data-3d-camera');
+    const cont = container.querySelector('#wsc-3d-container');
+    const handle = cont && cont.__wsc3d;
+    if (handle && typeof handle.tweenTo === 'function') handle.tweenTo(preset);
+  });
 
   // Defer 3D scene build so the flex layout settles first.
   setTimeout(() => build3DScene(ctx), 80);
@@ -1689,6 +1711,81 @@ function build3DScene(ctx) {
       controls.maxDistance = Math.max(W, D) * 4.0;
       controls.maxPolarAngle = Math.PI / 2 - 0.05;
       controls.update();
+
+      // ---------- Phase A.A5 (2026-05-26) — Camera presets + tween ----------
+      // Five named poses scaled by the active building dims. tweenTo(name)
+      // animates camera.position + controls.target from the current values
+      // to the preset's via cubic ease-out over TWEEN_MS. While the tween
+      // is running, OrbitControls.update() continues to fire each frame
+      // (smooth damping respects manual interaction) but our overrides win
+      // because we set position + target between update() and render().
+      const TWEEN_MS = 600;
+      const _ease = (t) => 1 - Math.pow(1 - t, 3);                         // ease-out cubic
+      /** @type {Record<string, {pos:THREE.Vector3, tgt:THREE.Vector3}>} */
+      const _presets = {
+        // Default iso-style 3/4 view from front-LEFT-above.
+        overview: {
+          pos: new THREE.Vector3(
+            dist0 * Math.cos(camPhi) * Math.sin(camTheta),
+            dist0 * Math.sin(camPhi),
+            dist0 * Math.cos(camPhi) * Math.cos(camTheta),
+          ),
+          tgt: new THREE.Vector3(0, H * 0.4, 0),
+        },
+        // Mirror-image iso from front-RIGHT-above (theta = 3π/4).
+        'iso-right': {
+          pos: new THREE.Vector3(
+            dist0 * Math.cos(camPhi) * Math.sin((3 * Math.PI) / 4),
+            dist0 * Math.sin(camPhi),
+            dist0 * Math.cos(camPhi) * Math.cos((3 * Math.PI) / 4),
+          ),
+          tgt: new THREE.Vector3(0, H * 0.4, 0),
+        },
+        // Eye-level inside the building, looking down the long (X) axis.
+        // Camera near the west wall at ~6 ft up; target at the east wall
+        // same height. Reads as standing in a cross-aisle.
+        aisle: {
+          pos: new THREE.Vector3(-W * 0.45, Math.min(6, H * 0.18), D * 0.05),
+          tgt: new THREE.Vector3( W * 0.45, Math.min(6, H * 0.18), D * 0.05),
+        },
+        // Outside the dock face looking toward the building. WSC convention
+        // is dock-on-long-edge — long edge is X, so dock face is along ±Z.
+        // South side (positive Z) so the truck-court reads correctly.
+        dock: {
+          pos: new THREE.Vector3(0, Math.max(H * 0.45, 18), D * 0.95),
+          tgt: new THREE.Vector3(0, H * 0.35, 0),
+        },
+        // Bird's-eye plan view from straight above (matches 2D Plan).
+        topdown: {
+          pos: new THREE.Vector3(0.01, Math.max(W, D) * 0.9, 0.01),
+          tgt: new THREE.Vector3(0, 0, 0),
+        },
+      };
+      /** @type {{from:THREE.Vector3, to:THREE.Vector3, fromTgt:THREE.Vector3, toTgt:THREE.Vector3, start:number}|null} */
+      let _activeTween = null;
+      function tweenTo(name) {
+        const p = _presets[name];
+        if (!p) return;
+        _activeTween = {
+          from: camera.position.clone(),
+          to: p.pos.clone(),
+          fromTgt: controls.target.clone(),
+          toTgt: p.tgt.clone(),
+          start: performance.now(),
+        };
+      }
+      function _stepTween() {
+        if (!_activeTween) return;
+        const t = (performance.now() - _activeTween.start) / TWEEN_MS;
+        const k = _ease(Math.min(1, Math.max(0, t)));
+        camera.position.lerpVectors(_activeTween.from, _activeTween.to, k);
+        controls.target.lerpVectors(_activeTween.fromTgt, _activeTween.toTgt, k);
+        controls.update();
+        if (t >= 1) _activeTween = null;
+      }
+      // Expose for render3DView's click delegation + hook _stepTween into
+      // the animation loop below (set up after this block).
+      el.__wsc3d = { camera, controls, tweenTo, _stepTween };
     } else {
       // Fallback to a minimal manual handler if OrbitControls didn't load.
       let isDragging = false, lastX = 0, lastY = 0, theta = camTheta, phi = camPhi, dist = dist0;
@@ -1722,6 +1819,9 @@ function build3DScene(ctx) {
     function animate() {
       if (!ctx.rootEl || !alive) return;
       requestAnimationFrame(animate);
+      // Phase A.A5 — step any active camera tween BEFORE controls.update()
+      // so the user-facing damping still feels natural after the tween.
+      if (el.__wsc3d && typeof el.__wsc3d._stepTween === 'function') el.__wsc3d._stepTween();
       if (controls) controls.update();
       renderer.render(scene, camera);
     }

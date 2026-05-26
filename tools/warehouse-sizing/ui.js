@@ -16,7 +16,7 @@ import * as cmApi from '../cost-model/api.js?v=20260512-cm-wsc-dimfix';
 import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { showConfirm } from '../../shared/confirm-modal.js';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260511-port12';
-import { render3DView, disposeScene3d } from './ui-3d.js?v=20260526-phaseAs1';
+import { render3DView, disposeScene3d } from './ui-3d.js?v=20260526-phaseAm2';
 import { renderConfigHtml, bindConfigEvents } from './ui-config.js?v=20260513-cfgextract4';
 import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260526-phaseAm1';
 import { renderDashboard } from './ui-dashboard.js?v=20260513-dashextract';
