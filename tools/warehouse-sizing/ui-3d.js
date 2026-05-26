@@ -29,6 +29,11 @@ let _wscShowWalls = true;
 // future ceiling geometry so a high-angle camera can see rack tops without
 // the visual clutter of an overhead beam. Default ON.
 let _wscShowRoof = true;
+// Phase B (2026-05-26 evening) — Show/Hide the achieved-vs-target HUD
+// table that overlays the top-right of the 3D canvas. Some users want
+// an unobstructed view of the rendered layout for screenshots / demos.
+// Default ON; toggle button in the View: row alongside Walls / Roof.
+let _wscShowHud = true;
 
 // ============================================================
 // LIFECYCLE
@@ -75,6 +80,9 @@ export function render3DView(container, ctx) {
         <button type="button" class="hub-btn hub-btn--sm ${_wscShowRoof ? '' : 'hub-btn--ghost'}" data-3d-toggle="roof" title="Toggle the roof apex line. Off lets a high-angle camera see rack tops without the overhead beam in the way.">
           ${_wscShowRoof ? 'Hide Roof' : 'Show Roof'}
         </button>
+        <button type="button" class="hub-btn hub-btn--sm ${_wscShowHud ? '' : 'hub-btn--ghost'}" data-3d-toggle="hud" title="Toggle the achieved-vs-target HUD table that overlays the top-right of the 3D canvas. Hide for a clean view of the rendered layout.">
+          ${_wscShowHud ? 'Hide HUD' : 'Show HUD'}
+        </button>
         <!-- Phase A.A5 (2026-05-26) — Camera presets. Click tweens the
              camera+target via cubic ease-out. OrbitControls take over again
              once the tween completes. -->
@@ -116,6 +124,12 @@ export function render3DView(container, ctx) {
       if (sc) sc.traverse((obj) => { if (obj.userData?.isFacilityRoof) obj.visible = _wscShowRoof; });
       btn.textContent = _wscShowRoof ? 'Hide Roof' : 'Show Roof';
       btn.classList.toggle('hub-btn--ghost', !_wscShowRoof);
+    } else if (kind === 'hud') {
+      _wscShowHud = !_wscShowHud;
+      const hudEl = container.querySelector('#wsc-3d-hud');
+      if (hudEl) hudEl.style.display = _wscShowHud ? '' : 'none';
+      btn.textContent = _wscShowHud ? 'Hide HUD' : 'Show HUD';
+      btn.classList.toggle('hub-btn--ghost', !_wscShowHud);
     }
   });
 
@@ -1854,7 +1868,11 @@ function build3DScene(ctx) {
       // copy can reframe "Over-built" (which now reads as a bug) into
       // "Padded to footprint" (intentional Phase F.1 fill behavior) when
       // in Design mode.
-      if (hud) hud.innerHTML = renderRenderedFactsHud(facts, { palletLevels, shelvingLevels, sized, sizingMode: ctx.facility.sizingMode || 'design' });
+      if (hud) {
+        hud.innerHTML = renderRenderedFactsHud(facts, { palletLevels, shelvingLevels, sized, sizingMode: ctx.facility.sizingMode || 'design' });
+        // Honor the persistent Show/Hide HUD toggle across scene rebuilds.
+        hud.style.display = _wscShowHud ? '' : 'none';
+      }
     } catch (hudErr) {
       console.warn('[WSC] HUD render failed:', hudErr);
     }
