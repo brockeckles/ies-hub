@@ -492,11 +492,34 @@ export function drawPlan(pctx) {
         }
       };
 
-      // Intersect each master segment with EACH of this column's ranges
-      // (FP-split-aware 2026-05-14 — racks fill both above + below a
-      // mid-building FP, instead of only above). Cross-aisles stay aligned
-      // across the whole building; columns truncated by office / FP simply
-      // lose their tail segments in each affected range.
+      // Build per-column vertical ranges where racks can live. Start with
+      // the full rack zone, then subtract office + FP carve-outs that this
+      // column overlaps. Office sits in the bottom-left corner so it just
+      // truncates the bottom. FP at the default bottom position behaves
+      // the same — but a user-dragged mid-building FP SPLITS the column
+      // into above-FP and below-FP ranges (2026-05-14 Phase 1 of
+      // "drag changes the design"). Fix 2026-05-26: prior commit
+      // referenced columnRanges in the loop below without defining it,
+      // throwing ReferenceError mid-render and leaving the 2D Plan canvas
+      // blank for any scenario with rack columns.
+      const columnRanges = [];
+      {
+        const carves = [];
+        if (overlapsOfficeX) carves.push({ top: officeY - 4 * pxPerFt, bot: _planRacksBottomFull + 1 });
+        if (overlapsFpX)     carves.push({ top: fpY - 4 * pxPerFt, bot: fpY + fpStripPx + 4 * pxPerFt });
+        carves.sort((a, b) => a.top - b.top);
+        let cur = racksTop;
+        for (const c of carves) {
+          if (c.top > cur) columnRanges.push({ top: cur, bot: Math.min(c.top, _planRacksBottomFull) });
+          cur = Math.max(cur, c.bot);
+        }
+        if (cur < _planRacksBottomFull) columnRanges.push({ top: cur, bot: _planRacksBottomFull });
+      }
+
+      // Intersect each master segment with EACH of this column's ranges.
+      // Cross-aisles stay aligned across the whole building; columns
+      // truncated by office / FP simply lose their tail segments in each
+      // affected range.
       for (const cr of columnRanges) {
         for (const mseg of _planMasterSegments) {
           const segTop    = Math.max(mseg.yStart, cr.top);

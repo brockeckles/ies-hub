@@ -18,7 +18,7 @@ import { showConfirm } from '../../shared/confirm-modal.js';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260511-port12';
 import { render3DView, disposeScene3d } from './ui-3d.js?v=20260513-3dextract2';
 import { renderConfigHtml, bindConfigEvents } from './ui-config.js?v=20260513-cfgextract4';
-import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260514-engineoverride1';
+import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260526-planranges1';
 import { renderDashboard } from './ui-dashboard.js?v=20260513-dashextract';
 import { renderElevation, drawElevation, shuffledBayLevelOrder } from './ui-elevation.js?v=20260513-elevextract';
 import { pushToCm, handleCmPush, createDefaultFacility, createDefaultZones, createDefaultVolumes } from './ui-cm-bridge.js?v=20260513-cmextract';
