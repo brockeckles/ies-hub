@@ -24,6 +24,11 @@ let scene3d = null;
 
 /** Phase F.12 — 3D wall visibility toggle. Persists between scene rebuilds. */
 let _wscShowWalls = true;
+// Phase B.B22 (2026-05-26) — Roof-Off toggle. Conceptually separate from
+// "Hide Walls" — Roof-Off keeps the walls but drops the apex line + any
+// future ceiling geometry so a high-angle camera can see rack tops without
+// the visual clutter of an overhead beam. Default ON.
+let _wscShowRoof = true;
 
 // ============================================================
 // LIFECYCLE
@@ -64,8 +69,11 @@ export function render3DView(container, ctx) {
       </div>
       <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;flex-wrap:wrap;">
         <span class="text-caption text-muted" style="margin-right:4px;">View:</span>
-        <button type="button" class="hub-btn hub-btn--sm ${_wscShowWalls ? '' : 'hub-btn--ghost'}" data-3d-toggle="walls" title="Toggle facility walls + roof line. Hide them to see inside the building more clearly.">
+        <button type="button" class="hub-btn hub-btn--sm ${_wscShowWalls ? '' : 'hub-btn--ghost'}" data-3d-toggle="walls" title="Toggle facility walls. Hide them to see inside the building more clearly.">
           ${_wscShowWalls ? 'Hide Walls' : 'Show Walls'}
+        </button>
+        <button type="button" class="hub-btn hub-btn--sm ${_wscShowRoof ? '' : 'hub-btn--ghost'}" data-3d-toggle="roof" title="Toggle the roof apex line. Off lets a high-angle camera see rack tops without the overhead beam in the way.">
+          ${_wscShowRoof ? 'Hide Roof' : 'Show Roof'}
         </button>
         <!-- Phase A.A5 (2026-05-26) — Camera presets. Click tweens the
              camera+target via cubic ease-out. OrbitControls take over again
@@ -89,27 +97,27 @@ export function render3DView(container, ctx) {
   // the scene; just walk for the wallsGroup and flip its `visible` flag.
   // State persists in `_wscShowWalls` so future scene rebuilds (mode/FP
   // toggles etc.) honor it.
-  const _toggleBtn = container.querySelector('[data-3d-toggle="walls"]');
-  if (_toggleBtn) {
-    _toggleBtn.addEventListener('click', () => {
+  // Phase B.B22 (2026-05-26) — generic data-3d-toggle delegation. Handles
+  // both walls (legacy) + roof (new) by mapping the toggle key to a module
+  // state var + a userData marker on the scene group to traverse.
+  container.addEventListener('click', (e) => {
+    const btn = /** @type {HTMLElement} */ (e.target)?.closest('[data-3d-toggle]');
+    if (!btn) return;
+    const kind = btn.getAttribute('data-3d-toggle');
+    const cont = container.querySelector('#wsc-3d-container');
+    const sc = cont && cont.__wscScene;
+    if (kind === 'walls') {
       _wscShowWalls = !_wscShowWalls;
-      // Find the cached scene + walk for wallsGroup. (Scene is held by
-      // build3DScene's closure; for a no-rebuild toggle we just access the
-      // canvas's __wscScene cache that build3DScene populates.)
-      const cont = container.querySelector('#wsc-3d-container');
-      const sc = cont && cont.__wscScene;
-      if (sc) {
-        sc.traverse((obj) => {
-          if (obj.userData && obj.userData.isFacilityWalls) {
-            obj.visible = _wscShowWalls;
-          }
-        });
-      }
-      // Update button label without re-rendering everything.
-      _toggleBtn.textContent = _wscShowWalls ? 'Hide Walls' : 'Show Walls';
-      _toggleBtn.classList.toggle('hub-btn--ghost', !_wscShowWalls);
-    });
-  }
+      if (sc) sc.traverse((obj) => { if (obj.userData?.isFacilityWalls) obj.visible = _wscShowWalls; });
+      btn.textContent = _wscShowWalls ? 'Hide Walls' : 'Show Walls';
+      btn.classList.toggle('hub-btn--ghost', !_wscShowWalls);
+    } else if (kind === 'roof') {
+      _wscShowRoof = !_wscShowRoof;
+      if (sc) sc.traverse((obj) => { if (obj.userData?.isFacilityRoof) obj.visible = _wscShowRoof; });
+      btn.textContent = _wscShowRoof ? 'Hide Roof' : 'Show Roof';
+      btn.classList.toggle('hub-btn--ghost', !_wscShowRoof);
+    }
+  });
 
   // Phase A.A5 (2026-05-26) — preset click delegation. The actual tween
   // function lives inside build3DScene's closure (where the camera +
@@ -460,13 +468,19 @@ function build3DScene(ctx) {
       const g2 = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...a2), new THREE.Vector3(...b2)]);
       wallsGroup.add(new THREE.Line(g2, jointMat));
     }
-    // Roof apex line (suggests exposed truss/joist) — also part of wallsGroup
+    // Roof apex line (suggests exposed truss/joist). Phase B.B22 (2026-05-26)
+    // moved out of wallsGroup into its own roofGroup so the "Roof On / Off"
+    // toggle can hide it independently of the walls.
+    const roofGroup = new THREE.Group();
+    roofGroup.userData.isFacilityRoof = true;
+    roofGroup.visible = _wscShowRoof;
+    scene.add(roofGroup);
     const roofLineMat = new THREE.LineBasicMaterial({ color: 0x6b7280 });
     const roofPts = [
       new THREE.Vector3(-W / 2, wallH + 0.05,  0),
       new THREE.Vector3( W / 2, wallH + 0.05,  0),
     ];
-    wallsGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(roofPts), roofLineMat));
+    roofGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(roofPts), roofLineMat));
 
     // ---------- Storage geometry inputs ----------
     const sized = calc.sizeFacility(ctx.toSizingInputs());

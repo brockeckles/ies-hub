@@ -388,6 +388,30 @@ export function renderDashboard(ctx) {
            card (both rendered sized.zoneBreakdown). The Sized Facility Recommendation card at the top
            of the dashboard is the canonical "single source" summary; the Zone Allocation card here adds
            the visualization. Two breakdowns of the same numbers was three places to keep in sync. -->
+
+      <!-- Phase B.B12 (2026-05-26) — Standards & references footer.
+           Surfaces the IE canon underpinning the sizing engine so an RFP
+           reviewer can see WHICH standards are being applied. Cited per
+           the WSC Four-Persona Expert Review (Appendix A). -->
+      <div style="margin-top:24px;padding:16px 18px;background:var(--ies-gray-100, #f3f4f6);border:1px solid var(--ies-gray-200);border-radius:8px;font-size:11px;color:var(--ies-gray-600);line-height:1.6;">
+        <div style="font-weight:700;color:var(--ies-gray-700);text-transform:uppercase;letter-spacing:0.04em;font-size:10px;margin-bottom:6px;">
+          Standards &amp; references applied
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:8px 18px;">
+          <div><strong>Rack design:</strong> RMI ANSI MH16.1-2012 (R2021) — pallet rack; MH26.2 — wire decking</div>
+          <div><strong>Sprinkler:</strong> NFPA 13 (2022) Ch. 20–25 — storage occupancies, ESFR design</div>
+          <div><strong>Storage equipment:</strong> FEM 9.831 — storage equipment safety calculation</div>
+          <div><strong>Slab:</strong> ACI 360 — Design of Slabs-on-Ground (FF/FL flatness)</div>
+          <div><strong>Aisles &amp; PIT:</strong> 29 CFR 1910.176 (materials handling) · 1910.178 (powered industrial trucks)</div>
+          <div><strong>Egress &amp; area:</strong> IBC 2021 Ch. 5 (area/height) · Ch. 10 (egress) · IFC 2021</div>
+          <div><strong>Loads:</strong> ASCE 7 — 250 psf rack-supported; 125 psf general warehouse</div>
+          <div><strong>Operational benchmarks:</strong> WERC DC Measures; MHI; MHEDA TCO models</div>
+        </div>
+        <div style="margin-top:8px;color:var(--ies-gray-500);font-size:10px;">
+          Engine outputs are computed from these standards; specific code-edition compliance
+          is the responsibility of the receiving design team. See WSC_Four_Persona_Expert_Review.docx for full appendix.
+        </div>
+      </div>
     </div>
   `;
 }

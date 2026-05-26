@@ -36,6 +36,23 @@ export function cycleGridMode() {
   return _gridMode;
 }
 
+// Phase B.B14 (2026-05-26) — Layer visibility flags. Each toggle hides/shows
+// one class of canvas chrome. State is module-local (UI preference, not
+// persisted with the model). Default = everything on. Pairs nicely with the
+// existing grid cycle (which has its own state above).
+const _layers = {
+  columns: true,     // structural column bubbles + lead-in ticks
+  hatch:   true,     // ANSI31/dots hatch overlays on non-rack zones
+  labels:  true,     // in-zone text labels ("Office", "Ship Staging", etc.)
+  doors:   true,     // dock door rendering
+};
+export function getLayer(name) { return _layers[name] !== false; }
+export function toggleLayer(name) {
+  if (!(name in _layers)) return false;
+  _layers[name] = !_layers[name];
+  return _layers[name];
+}
+
 export function renderPlan(pctx) {
   const storage = calc.computeStorage(pctx.facility, pctx.zones);
   const overrideKeys = Object.keys(pctx.zones.layoutOverrides || {});
@@ -158,6 +175,14 @@ export function renderPlan(pctx) {
           <button class="hub-btn-secondary" data-wsc-action="cycle-grid" style="font-size:12px;padding:4px 10px;" title="Toggle the foot-snap grid overlay (cycles Off → 10' → 5' → 2'). Phase A.A6.">
             Grid: ${_GRID_LABEL[_gridMode]}
           </button>
+          <!-- Phase B.B14 (2026-05-26) — Layer visibility toggles. -->
+          <span style="display:inline-flex;align-items:center;gap:2px;padding:2px;background:var(--ies-gray-100, #f3f4f6);border:1px solid var(--ies-gray-200);border-radius:4px;">
+            <span class="text-caption text-muted" style="padding:0 6px;font-size:10px;text-transform:uppercase;letter-spacing:0.04em;">Layers</span>
+            <button data-wsc-layer-toggle="columns" title="Toggle structural column grid bubbles" style="font-size:11px;padding:2px 8px;border:0;background:${_layers.columns ? '#1c1c1c' : 'transparent'};color:${_layers.columns ? '#fff' : 'var(--ies-gray-600)'};border-radius:3px;cursor:pointer;font-weight:600;">Cols</button>
+            <button data-wsc-layer-toggle="hatch" title="Toggle ANSI hatch patterns on non-rack zones" style="font-size:11px;padding:2px 8px;border:0;background:${_layers.hatch ? '#1c1c1c' : 'transparent'};color:${_layers.hatch ? '#fff' : 'var(--ies-gray-600)'};border-radius:3px;cursor:pointer;font-weight:600;">Hatch</button>
+            <button data-wsc-layer-toggle="labels" title="Toggle in-zone text labels" style="font-size:11px;padding:2px 8px;border:0;background:${_layers.labels ? '#1c1c1c' : 'transparent'};color:${_layers.labels ? '#fff' : 'var(--ies-gray-600)'};border-radius:3px;cursor:pointer;font-weight:600;">Labels</button>
+            <button data-wsc-layer-toggle="doors" title="Toggle dock door rendering" style="font-size:11px;padding:2px 8px;border:0;background:${_layers.doors ? '#1c1c1c' : 'transparent'};color:${_layers.doors ? '#fff' : 'var(--ies-gray-600)'};border-radius:3px;cursor:pointer;font-weight:600;">Doors</button>
+          </span>
           <button class="${editing ? 'hub-btn-primary' : 'hub-btn-secondary'}" data-wsc-action="toggle-edit-layout" style="font-size:12px;padding:4px 10px;" title="Drag Office, Ship Staging, and Forward Pick to manually reposition them">
             ${editing ? '✓ Done Editing' : '✎ Edit Layout'}
           </button>
@@ -649,6 +674,7 @@ export function drawPlan(pctx) {
     ctx.lineWidth = 1;
     ctx.fillRect(fpX, fpY, fpW, fpStripPx);
     ctx.strokeRect(fpX, fpY, fpW, fpStripPx);
+    if (_layers.hatch) drawHatch(ctx, 'ansi31', fpX, fpY, fpW, fpStripPx, '#7c3aed');
     // Carton-flow lane lines
     ctx.strokeStyle = '#a78bfa';
     ctx.lineWidth = 0.5;
@@ -661,7 +687,7 @@ export function drawPlan(pctx) {
     ctx.fillStyle = '#5b21b6';
     ctx.font = 'bold 11px Montserrat, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(`Forward Pick  ·  ${(pctx.zones.forwardPick.type || 'carton flow').replace('_', ' ')}`, fpX + fpW / 2, fpY + fpStripPx / 2 + 4);
+    if (_layers.labels) ctx.fillText(`Forward Pick  ·  ${(pctx.zones.forwardPick.type || 'carton flow').replace('_', ' ')}`, fpX + fpW / 2, fpY + fpStripPx / 2 + 4);
   }
 
   // Storage label (top of storage zone, right-aligned to clear the office)
@@ -711,6 +737,7 @@ export function drawPlan(pctx) {
   ctx.strokeStyle = '#d97706';
   ctx.lineWidth = 1;
   ctx.fillRect(shipX, shipY, shipW, shipDrawH);
+  if (_layers.hatch) drawHatch(ctx, 'dots', shipX, shipY, shipW, shipDrawH, '#92400e');
   ctx.strokeRect(shipX, shipY, shipW, shipDrawH);
   ctx.fillStyle = '#92400e';
   ctx.font = 'bold 11px Montserrat, sans-serif';
@@ -724,7 +751,7 @@ export function drawPlan(pctx) {
     const _resized = !!_o && (_o.w !== undefined || _o.h !== undefined);
     const _drawnSqft = Math.round((shipW * shipDrawH) / Math.max(1e-6, pxPerFt * pxPerFt));
     const _labelSqft = _resized ? _drawnSqft : sized.shipStagingSqft;
-    ctx.fillText(`Ship Staging  ·  ${calc.formatSqft(_labelSqft)}`, shipX + shipW / 2, shipY + shipDrawH / 2 + 4);
+    if (_layers.labels) ctx.fillText(`Ship Staging  ·  ${calc.formatSqft(_labelSqft)}`, shipX + shipW / 2, shipY + shipDrawH / 2 + 4);
   }
   pctx._planZoneRects.shipStaging = { x: shipX, y: shipY, w: shipW, h: shipDrawH };
 
@@ -736,10 +763,11 @@ export function drawPlan(pctx) {
   const officeBlockH = (Y0 + Hpx) - officeY - 4;
   ctx.fillRect(officeX, officeY, officeWpx, officeBlockH);
   ctx.strokeRect(officeX, officeY, officeWpx, officeBlockH);
+  if (_layers.hatch) drawHatch(ctx, 'ansi31', officeX, officeY, officeWpx, officeBlockH, '#6b21a8');
   ctx.fillStyle = '#5b21b6';
   ctx.font = 'bold 11px Montserrat, sans-serif';
   ctx.textAlign = 'center';
-  if (officeWpx > 50 && officeBlockH > 28) {
+  if (_layers.labels && officeWpx > 50 && officeBlockH > 28) {
     ctx.fillText('Office', officeX + officeWpx / 2, officeY + officeBlockH / 2 - 4);
     ctx.fillStyle = '#6b21a8';
     ctx.font = '10px Montserrat, sans-serif';
@@ -755,10 +783,15 @@ export function drawPlan(pctx) {
 
   // ---------- Dock doors at bottom edge, aligned with ship staging ----------
   // Use the sized engine's door count so this view agrees with the KPI bar.
+  // Phase B.B14 — door rendering wrapped in if (_layers.doors) so the
+  // Layers toggle can hide doors entirely. twoSided is declared BEFORE
+  // the guard so the building-dimension-labels block below can still read
+  // it (decides INBOUND DOCK / OUTBOUND DOCK vs BACK / DOCK FACE labels).
   const totalDoors = sized.dock.totalDoors || 0;
   const inboundDoors = sized.dock.inboundDoors || 0;
   const outboundDoors = sized.dock.outboundDoors || 0;
   const twoSided = (pctx.zones.dockConfig?.sided === 'two');
+  if (_layers.doors) {
 
   function drawDoorRow(count, yTop, label, color, labelAbove, xStart, xEnd) {
     if (count <= 0) return;
@@ -839,6 +872,7 @@ export function drawPlan(pctx) {
     // Edge case: only one type of door — distribute across the full wall.
     drawDoorRow(totalDoors, Y0 + Hpx - 6, `${totalDoors} Dock Doors`, '#fecaca', false, X0, X0 + Wpx);
   }
+  }  // end if (_layers.doors)
 
   // ---------- Building dimension labels ----------
   ctx.fillStyle = '#374151';
@@ -964,7 +998,8 @@ export function drawPlan(pctx) {
   // drawing convention — turns the plan from "a picture of a building"
   // into "a sheet you could mark up." Hidden when bubbles would overlap
   // (column spacing × pxPerFt < bubble diameter + breathing room).
-  {
+  // Phase B.B14 — also hidden when the Layers > Cols toggle is off.
+  if (_layers.columns) {
     const colX = +pctx.facility.columnSpacingX || 50;
     const colY = +pctx.facility.columnSpacingY || 50;
     const bubbleR = 9;
@@ -1300,6 +1335,59 @@ export function planHoverUpdate(pctx, mouse) {
   const nextId = hovered?.id || null;
   pctx._planHoveredZone = nextId;
   return prev !== nextId;
+}
+
+/**
+ * Phase B.B16 (2026-05-26) — ANSI-style hatch overlay for non-rack zones.
+ * Draws a thin pattern on top of a zone fill so each zone reads with the
+ * CAD convention for its function: ANSI31 (diagonal stripes) on enclosed
+ * spaces like Office; DOTS on loose-material spaces like staging strips.
+ * The base fillRect already painted the color — this overlays texture.
+ *
+ * Kept subtle (alpha 0.18) so it doesn't fight the color coding.
+ *
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {'ansi31'|'dots'} kind
+ * @param {number} x  zone left in canvas px
+ * @param {number} y  zone top  in canvas px
+ * @param {number} w  zone width
+ * @param {number} h  zone height
+ * @param {string} color  stroke / dot color (hex)
+ */
+function drawHatch(ctx, kind, x, y, w, h, color) {
+  if (w < 12 || h < 12) return;                       // too small to read
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.clip();
+  ctx.globalAlpha = 0.18;
+  if (kind === 'ansi31') {
+    // Diagonal stripes, 45° angle, 6 px spacing.
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 0.6;
+    const spacing = 6;
+    // Cover the rect's diagonal extent so stripes fill corner-to-corner.
+    const span = w + h;
+    for (let i = -h; i < span; i += spacing) {
+      ctx.beginPath();
+      ctx.moveTo(x + i,         y);
+      ctx.lineTo(x + i + h,     y + h);
+      ctx.stroke();
+    }
+  } else if (kind === 'dots') {
+    // Loose-aggregate dots — staggered 7 px grid.
+    ctx.fillStyle = color;
+    const step = 7;
+    for (let row = 0; row * step < h; row++) {
+      const offset = (row % 2 === 0) ? 0 : step / 2;
+      for (let col = 0; col * step + offset < w; col++) {
+        ctx.beginPath();
+        ctx.arc(x + col * step + offset, y + row * step, 0.9, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+  ctx.restore();
 }
 
 /**

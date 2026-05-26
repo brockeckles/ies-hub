@@ -36,7 +36,7 @@
 import { refreshToolChrome, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260526-phaseAs1';
 import { bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { showConfirm } from '../../shared/confirm-modal.js';
-import { drawPlan, hitCorner, planHoverUpdate, cycleGridMode } from './ui-plan.js?v=20260526-phaseAm1';
+import { drawPlan, hitCorner, planHoverUpdate, cycleGridMode, toggleLayer } from './ui-plan.js?v=20260526-phaseBs1';
 import { pushToCm } from './ui-cm-bridge.js?v=20260513-cmextract';
 
 /**
@@ -210,6 +210,19 @@ export async function bindShellEvents(sctx) {
       sctx.renderConfigPanel();
       sctx.renderContentView();
     }
+  });
+
+  // Phase B.B14 (2026-05-26) — Layer visibility toggles delegate on a
+  // separate attribute so they live in their own pill group cleanly
+  // (the data-wsc-action listener above early-returns when the click
+  // doesn't have that attribute).
+  rootEl?.addEventListener('click', (e) => {
+    const btn = /** @type {HTMLElement} */ (e.target)?.closest('[data-wsc-layer-toggle]');
+    if (!btn) return;
+    const name = btn.getAttribute('data-wsc-layer-toggle');
+    if (!name) return;
+    toggleLayer(name);
+    sctx.renderContentView();
   });
 
   // Canvas pointer events for edit-mode dragging. Delegated on rootEl for the
