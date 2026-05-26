@@ -36,7 +36,7 @@
 import { refreshToolChrome, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260526-phaseAs1';
 import { bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { showConfirm } from '../../shared/confirm-modal.js';
-import { drawPlan, hitCorner, planHoverUpdate } from './ui-plan.js?v=20260526-phaseAs1';
+import { drawPlan, hitCorner, planHoverUpdate, cycleGridMode } from './ui-plan.js?v=20260526-phaseAm1';
 import { pushToCm } from './ui-cm-bridge.js?v=20260513-cmextract';
 
 /**
@@ -171,6 +171,12 @@ export async function bindShellEvents(sctx) {
     const action = btn.getAttribute('data-wsc-action');
     if (action === 'toggle-edit-layout') {
       sctx._planEditMode = !sctx._planEditMode;
+      sctx.renderContentView();
+    } else if (action === 'cycle-grid') {
+      // Phase A.A6 (2026-05-26) — grid modulus cycle. State lives in
+      // ui-plan.js (UI-only, not persisted). Re-render content so the
+      // button label updates AND drawPlan picks up the new mode.
+      cycleGridMode();
       sctx.renderContentView();
     } else if (action === 'reset-layout') {
       sctx.zones.layoutOverrides = {};
@@ -307,6 +313,9 @@ export async function bindShellEvents(sctx) {
       const newYFt = Math.round((drag.origYFt + dyFt) / snap) * snap;
       sctx.zones.layoutOverrides[drag.zoneId] = { ...cur, x: newXFt, y: newYFt };
     }
+    // Phase A.A9 (2026-05-26) — stash cursor position so drawPlan can
+    // render the live W × H callout next to the pointer.
+    sctx._planDragCursorPx = { x: offsetX, y: offsetY };
     drawPlan(sctx.makePlanCtx());
   });
 
@@ -315,6 +324,10 @@ export async function bindShellEvents(sctx) {
     const canvas = rootEl?.querySelector('#wsc-plan-canvas');
     if (canvas) canvas.style.cursor = 'grab';
     sctx._planDrag = null;
+    // Phase A.A9 — clear the cursor-position stash + repaint so the
+    // floating W × H callout disappears now that the drag is done.
+    sctx._planDragCursorPx = null;
+    try { drawPlan(sctx.makePlanCtx()); } catch {}
     sctx.markDirty();
     // 2026-05-14 — when the drag was a resize, the layoutOverride feeds back
     // into the engine via formStateToInputs. Repaint the KPI chrome strip so

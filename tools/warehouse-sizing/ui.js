@@ -18,12 +18,12 @@ import { showConfirm } from '../../shared/confirm-modal.js';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260511-port12';
 import { render3DView, disposeScene3d } from './ui-3d.js?v=20260526-phaseAs1';
 import { renderConfigHtml, bindConfigEvents } from './ui-config.js?v=20260513-cfgextract4';
-import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260526-phaseAs1';
+import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260526-phaseAm1';
 import { renderDashboard } from './ui-dashboard.js?v=20260513-dashextract';
 import { renderElevation, drawElevation, shuffledBayLevelOrder } from './ui-elevation.js?v=20260513-elevextract';
 import { pushToCm, handleCmPush, createDefaultFacility, createDefaultZones, createDefaultVolumes } from './ui-cm-bridge.js?v=20260513-cmextract';
 import { wscExtraStyles } from './ui-styles.js?v=20260513-stylesextract';
-import { bindShellEvents } from './ui-shell-events.js?v=20260514-engineoverride1';
+import { bindShellEvents } from './ui-shell-events.js?v=20260526-phaseAm1';
 
 // ============================================================
 // CHROME v3 — phase + section structure (CM Chrome v3 ripple, step 3 redo)
@@ -72,6 +72,17 @@ let _planEditMode = false;
 let _planZoneRects = {};
 /** Active drag state: { zoneId, startCanvasX, startCanvasY, origOverrideFt, pxPerFt, X0, Y0, Wpx, Hpx } */
 let _planDrag = null;
+// Phase A.A9 (2026-05-26) — live cursor position during a drag, in canvas px.
+// Set by the drag pointermove handler in ui-shell-events.js so drawPlan can
+// render a floating W × H callout near the cursor. Cleared on pointerup.
+/** @type {{x:number, y:number}|null} */
+let _planDragCursorPx = null;
+// Phase A.A13 (2026-05-26) — id of the zone the cursor is currently
+// hovering. Set by planHoverUpdate(), read by drawPlan's hover-outline
+// pass. Lives at module scope so it survives the ctx rebuild between
+// hover-handler runs.
+/** @type {string|null} */
+let _planHoveredZone = null;
 
 /** @type {'landing' | 'editor'} — landing shows saved scenarios; editor is the design surface */
 let viewMode = 'landing';
@@ -427,6 +438,8 @@ function _makeShellEventsCtx() {
     set _planEditMode(v) { _planEditMode = v; },
     get _planDrag() { return _planDrag; },
     set _planDrag(v) { _planDrag = v; },
+    get _planDragCursorPx() { return _planDragCursorPx; },
+    set _planDragCursorPx(v) { _planDragCursorPx = v; },
     // Local renderer + helper refs
     renderShell,
     renderConfigPanel,
@@ -613,6 +626,14 @@ function _makePlanCtx() {
     resetPlanZoneRects() { _planZoneRects = {}; },
     get _planMeta() { return _planMeta; },
     set _planMeta(v) { _planMeta = v; },
+    // Phase A.A9 — drag state read by drawPlan to render a live W × H
+    // dimension callout near the cursor during a move/resize.
+    get _planDrag() { return _planDrag; },
+    get _planDragCursorPx() { return _planDragCursorPx; },
+    // Phase A.A10/A11/A13 — hovered-zone state, set by planHoverUpdate
+    // and read by drawPlan's hover-outline pass.
+    get _planHoveredZone() { return _planHoveredZone; },
+    set _planHoveredZone(v) { _planHoveredZone = v; },
     renderFacility: _renderFacility,
     toSizingInputs,
     canvasMouseCoords,

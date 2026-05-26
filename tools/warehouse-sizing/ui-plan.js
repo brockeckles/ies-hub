@@ -21,6 +21,21 @@
 
 import * as calc from './calc.js?v=20260514-engineoverride1';
 
+// Phase A.A6 (2026-05-26) — Foot-snap grid overlay state. Module-level
+// because it's a UI preference (not part of the persisted facility model).
+// Cycle order: off → 10' → 5' → 2' → off. 10' is the default since it reads
+// cleanly at typical Wayfair-scale (~800 ft) building scales.
+/** @type {'off'|'10ft'|'5ft'|'2ft'} */
+let _gridMode = '10ft';
+const _GRID_CYCLE = ['off', '10ft', '5ft', '2ft'];
+const _GRID_LABEL = { off: 'Off', '10ft': "10'", '5ft': "5'", '2ft': "2'" };
+export function getGridMode() { return _gridMode; }
+export function cycleGridMode() {
+  const i = _GRID_CYCLE.indexOf(_gridMode);
+  _gridMode = _GRID_CYCLE[(i + 1) % _GRID_CYCLE.length];
+  return _gridMode;
+}
+
 export function renderPlan(pctx) {
   const storage = calc.computeStorage(pctx.facility, pctx.zones);
   const overrideKeys = Object.keys(pctx.zones.layoutOverrides || {});
@@ -140,6 +155,9 @@ export function renderPlan(pctx) {
               ↺ Reset Layout (${overrideKeys.length})
             </button>
           ` : ''}
+          <button class="hub-btn-secondary" data-wsc-action="cycle-grid" style="font-size:12px;padding:4px 10px;" title="Toggle the foot-snap grid overlay (cycles Off → 10' → 5' → 2'). Phase A.A6.">
+            Grid: ${_GRID_LABEL[_gridMode]}
+          </button>
           <button class="${editing ? 'hub-btn-primary' : 'hub-btn-secondary'}" data-wsc-action="toggle-edit-layout" style="font-size:12px;padding:4px 10px;" title="Drag Office, Ship Staging, and Forward Pick to manually reposition them">
             ${editing ? '✓ Done Editing' : '✎ Edit Layout'}
           </button>
@@ -896,6 +914,110 @@ export function drawPlan(pctx) {
     ctx.restore();
   }
 
+  // ---------- Phase A.A6 (2026-05-26) — Foot-snap grid overlay ----------
+  // Subtle grid lines drawn on top of zone fills so the user can read
+  // distances off the drawing. Minor lines at the chosen modulus, slightly
+  // heavier lines every 50 ft. Off by default for the smallest modulus
+  // (2 ft) at very-zoomed-out scales to avoid visual noise.
+  if (_gridMode !== 'off') {
+    const minorFt = _gridMode === '2ft' ? 2 : (_gridMode === '5ft' ? 5 : 10);
+    const majorFt = 50;
+    // Suppress 2' grid when pxPerFt is too small — would render as a solid
+    // grey wash. Threshold tuned for ~1 px per 2 ft visibility.
+    const minorPx = minorFt * pxPerFt;
+    if (minorPx >= 1.5) {
+      ctx.save();
+      ctx.lineWidth = 0.5;
+      ctx.strokeStyle = 'rgba(0,0,0,0.05)';
+      // Minor vertical lines
+      for (let f = minorFt; f < widthFt; f += minorFt) {
+        if (f % majorFt === 0) continue;
+        const xp = X0 + f * pxPerFt;
+        ctx.beginPath(); ctx.moveTo(xp, Y0); ctx.lineTo(xp, Y0 + Hpx); ctx.stroke();
+      }
+      // Minor horizontal lines
+      for (let f = minorFt; f < depthFt; f += minorFt) {
+        if (f % majorFt === 0) continue;
+        const yp = Y0 + f * pxPerFt;
+        ctx.beginPath(); ctx.moveTo(X0, yp); ctx.lineTo(X0 + Wpx, yp); ctx.stroke();
+      }
+      // Major lines every 50 ft (slightly darker)
+      ctx.lineWidth = 0.8;
+      ctx.strokeStyle = 'rgba(0,0,0,0.10)';
+      for (let f = majorFt; f < widthFt; f += majorFt) {
+        const xp = X0 + f * pxPerFt;
+        ctx.beginPath(); ctx.moveTo(xp, Y0); ctx.lineTo(xp, Y0 + Hpx); ctx.stroke();
+      }
+      for (let f = majorFt; f < depthFt; f += majorFt) {
+        const yp = Y0 + f * pxPerFt;
+        ctx.beginPath(); ctx.moveTo(X0, yp); ctx.lineTo(X0 + Wpx, yp); ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+
+  // ---------- Phase A.A8 (2026-05-26) — Column grid bubbles ----------
+  // Structural column grid at facility.columnSpacingX × columnSpacingY
+  // (default 50' × 50'). Bubbles drawn in the canvas margin: letters along
+  // the top edge (N-S column lines: A, B, C, ...), numerals along the left
+  // edge (E-W column lines: 1, 2, 3, ...). Classic ANSI D engineering
+  // drawing convention — turns the plan from "a picture of a building"
+  // into "a sheet you could mark up." Hidden when bubbles would overlap
+  // (column spacing × pxPerFt < bubble diameter + breathing room).
+  {
+    const colX = +pctx.facility.columnSpacingX || 50;
+    const colY = +pctx.facility.columnSpacingY || 50;
+    const bubbleR = 9;
+    const minPxBetween = bubbleR * 2 + 4;
+    const stepXPx = colX * pxPerFt;
+    const stepYPx = colY * pxPerFt;
+    if (stepXPx >= minPxBetween && stepYPx >= minPxBetween) {
+      ctx.save();
+      ctx.font = 'bold 9px Montserrat, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      // X-axis (letters along the top of the building)
+      let letterIdx = 0;
+      for (let f = 0; f <= widthFt + 0.5; f += colX) {
+        const xp = X0 + f * pxPerFt;
+        const yp = Y0 - 18;
+        // Lead-in tick
+        ctx.strokeStyle = 'rgba(0,0,0,0.30)';
+        ctx.lineWidth = 0.5;
+        ctx.beginPath(); ctx.moveTo(xp, Y0 - 8); ctx.lineTo(xp, Y0); ctx.stroke();
+        // Bubble
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#1f2937';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(xp, yp, bubbleR, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        // Label
+        ctx.fillStyle = '#1f2937';
+        ctx.fillText(_columnBubbleLetter(letterIdx), xp, yp + 0.5);
+        letterIdx++;
+        // Don't draw past a reasonable count; AA after Z is fine.
+        if (letterIdx > 100) break;
+      }
+      // Y-axis (numerals along the left of the building)
+      let numIdx = 0;
+      for (let f = 0; f <= depthFt + 0.5; f += colY) {
+        const xp = X0 - 18;
+        const yp = Y0 + f * pxPerFt;
+        ctx.strokeStyle = 'rgba(0,0,0,0.30)';
+        ctx.lineWidth = 0.5;
+        ctx.beginPath(); ctx.moveTo(X0 - 8, yp); ctx.lineTo(X0, yp); ctx.stroke();
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#1f2937';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(xp, yp, bubbleR, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#1f2937';
+        ctx.fillText(String(numIdx + 1), xp, yp + 0.5);
+        numIdx++;
+        if (numIdx > 100) break;
+      }
+      ctx.restore();
+    }
+  }
+
   // ---------- Phase A.A13 (2026-05-26) — Hover outline ----------
   // 1-px highlight outline on the currently hovered zone so the user sees
   // what their click would land on before they commit. State is set by the
@@ -909,6 +1031,61 @@ export function drawPlan(pctx) {
     ctx.setLineDash([]);
     ctx.strokeRect(r.x - 1, r.y - 1, r.w + 2, r.h + 2);
     ctx.restore();
+  }
+
+  // ---------- Phase A.A9 (2026-05-26) — Live dim callout during drag ----------
+  // While a drag is active, draw a floating label next to the cursor with
+  // the zone's current W × H in feet. Updates every pointer-move (called by
+  // the drag handler in ui-shell-events.js). Disappears on pointer-up
+  // (handler clears _planDragCursorPx + redraws). Reads zone dims from the
+  // already-applied layoutOverride via _planZoneRects.
+  if (pctx._planDrag && pctx._planDragCursorPx && pctx._planZoneRects) {
+    const drag = pctx._planDrag;
+    const cur  = pctx._planDragCursorPx;
+    const r    = pctx._planZoneRects[drag.zoneId];
+    if (r) {
+      const wFt = Math.round(r.w / pxPerFt);
+      const hFt = Math.round(r.h / pxPerFt);
+      const sqft = (wFt * hFt).toLocaleString();
+      const text = `${wFt} × ${hFt} ft  ·  ${sqft} sf`;
+      ctx.save();
+      ctx.font = 'bold 11px Montserrat, sans-serif';
+      const padX = 8;
+      const padY = 5;
+      const metrics = ctx.measureText(text);
+      const boxW = metrics.width + padX * 2;
+      const boxH = 11 + padY * 2;
+      // Position the callout above-right of the cursor by default; flip
+      // left/below if it would clip the canvas edge.
+      let bx = cur.x + 14;
+      let by = cur.y - boxH - 10;
+      if (bx + boxW > cw - 4) bx = cur.x - boxW - 14;
+      if (by < 4) by = cur.y + 14;
+      // Backing pill
+      ctx.fillStyle = 'rgba(31,41,55,0.92)';
+      ctx.strokeStyle = '#1f2937';
+      ctx.lineWidth = 1;
+      const rad = 4;
+      ctx.beginPath();
+      ctx.moveTo(bx + rad, by);
+      ctx.lineTo(bx + boxW - rad, by);
+      ctx.quadraticCurveTo(bx + boxW, by, bx + boxW, by + rad);
+      ctx.lineTo(bx + boxW, by + boxH - rad);
+      ctx.quadraticCurveTo(bx + boxW, by + boxH, bx + boxW - rad, by + boxH);
+      ctx.lineTo(bx + rad, by + boxH);
+      ctx.quadraticCurveTo(bx, by + boxH, bx, by + boxH - rad);
+      ctx.lineTo(bx, by + rad);
+      ctx.quadraticCurveTo(bx, by, bx + rad, by);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      // Label
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText(text, bx + padX, by + padY);
+      ctx.restore();
+    }
   }
 
   // ---------- Phase A.A7 (2026-05-26) — Scale bar + north arrow ----------
@@ -1123,6 +1300,26 @@ export function planHoverUpdate(pctx, mouse) {
   const nextId = hovered?.id || null;
   pctx._planHoveredZone = nextId;
   return prev !== nextId;
+}
+
+/**
+ * Phase A.A8 helper — convert 0-based column index to an A/B/C/AA-style
+ * label. Architectural-CAD convention: skip I and O so they don't read as
+ * 1 or 0 in pen-weight scans.
+ *
+ * @param {number} i  0-based column index
+ * @returns {string}
+ */
+function _columnBubbleLetter(i) {
+  const LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';   // skips I and O
+  const base = LETTERS.length;
+  let s = '';
+  let n = i;
+  do {
+    s = LETTERS[n % base] + s;
+    n = Math.floor(n / base) - 1;
+  } while (n >= 0);
+  return s;
 }
 
 /** Pixel radius around a corner that counts as a resize handle hit. */
