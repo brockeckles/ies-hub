@@ -36,7 +36,7 @@
 import { refreshToolChrome, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260526-phaseAs1';
 import { bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { showConfirm } from '../../shared/confirm-modal.js';
-import { drawPlan, hitCorner, planHoverUpdate, cycleGridMode, toggleLayer } from './ui-plan.js?v=20260526-phaseBs1';
+import { drawPlan, hitCorner, planHoverUpdate, cycleGridMode, toggleLayer, getMeasureMode, toggleMeasureMode, exitMeasureMode, addMeasurePoint, clearMeasurements, setMeasureCursor } from './ui-plan.js?v=20260526-measure1';
 import { pushToCm } from './ui-cm-bridge.js?v=20260513-cmextract';
 
 /**
@@ -171,6 +171,21 @@ export async function bindShellEvents(sctx) {
     const action = btn.getAttribute('data-wsc-action');
     if (action === 'toggle-edit-layout') {
       sctx._planEditMode = !sctx._planEditMode;
+      // Phase B.B17 — turning on edit mode exits measure mode so the
+      // canvas isn't owned by two modes at once.
+      if (sctx._planEditMode) exitMeasureMode();
+      sctx.renderContentView();
+    } else if (action === 'toggle-measure') {
+      // Phase B.B17 (2026-05-26) — measure-tool toggle. Mutually
+      // exclusive with edit-layout mode.
+      toggleMeasureMode();
+      if (getMeasureMode()) sctx._planEditMode = false;
+      sctx.renderContentView();
+    } else if (action === 'clear-measurements') {
+      // Phase B.B17 — drop all committed measurements + any pending
+      // anchor. Re-render the canvas so they disappear and refresh
+      // the chrome so the Clear button label updates.
+      clearMeasurements();
       sctx.renderContentView();
     } else if (action === 'cycle-grid') {
       // Phase A.A6 (2026-05-26) — grid modulus cycle. State lives in
@@ -223,6 +238,31 @@ export async function bindShellEvents(sctx) {
     if (!name) return;
     toggleLayer(name);
     sctx.renderContentView();
+  });
+
+  // Phase B.B17 (2026-05-26) — Measure-mode pointerdown. Click 1 sets
+  // anchor; click 2 commits the dimension line. Runs only when measure
+  // mode is active; otherwise the existing edit-mode handler below has
+  // a clean shot at the event.
+  rootEl?.addEventListener('pointerdown', (e) => {
+    if (!getMeasureMode()) return;
+    const canvas = /** @type {HTMLCanvasElement} */ (e.target);
+    if (!canvas || canvas.id !== 'wsc-plan-canvas' || !sctx._planMeta) return;
+    e.preventDefault();
+    const { X0, Y0, pxPerFt } = sctx._planMeta;
+    const { offsetX, offsetY } = sctx.canvasMouseCoords(canvas, e);
+    const xFt = (offsetX - X0) / pxPerFt;
+    const yFt = (offsetY - Y0) / pxPerFt;
+    const result = addMeasurePoint({ xFt, yFt });
+    if (result === 'commit') {
+      // Newly committed line — re-render so the Clear button count
+      // updates in the chrome AND drawPlan repaints with the new line.
+      sctx.renderContentView();
+    } else {
+      // Anchor set — repaint canvas so the start tick appears immediately
+      // even before the next mousemove.
+      try { drawPlan(sctx.makePlanCtx()); } catch {}
+    }
   });
 
   // Canvas pointer events for edit-mode dragging. Delegated on rootEl for the
@@ -287,6 +327,17 @@ export async function bindShellEvents(sctx) {
     const canvas = /** @type {HTMLCanvasElement} */ (e.target);
     if (!canvas || canvas.id !== 'wsc-plan-canvas' || !sctx._planMeta) return;
     const { offsetX, offsetY } = sctx.canvasMouseCoords(canvas, e);
+    // Phase B.B17 (2026-05-26) — measure-tool preview cursor update.
+    // When measure mode + anchor is set, repaint on every move so the
+    // preview line tracks the cursor. Cheap because drawPlan caches
+    // sizing output and the canvas is 900×520.
+    if (getMeasureMode()) {
+      setMeasureCursor({ xPx: offsetX, yPx: offsetY });
+      // Always repaint when measure mode is on — even without an
+      // anchor, the cursor coords matter for the status bar (the
+      // existing planHoverUpdate handles that below).
+      drawPlan(sctx.makePlanCtx());
+    }
     const changed = planHoverUpdate(sctx.makePlanCtx(), { offsetX, offsetY });
     if (changed) drawPlan(sctx.makePlanCtx());
   });
@@ -351,4 +402,36 @@ export async function bindShellEvents(sctx) {
   rootEl?.addEventListener('pointerup', finishDrag);
   rootEl?.addEventListener('pointercancel', finishDrag);
   rootEl?.addEventListener('pointerleave', finishDrag);
+
+  // Phase B.B17 (2026-05-26) — Document-level keyboard shortcuts for
+  // the Measure tool. 'M' toggles the mode, 'Esc' exits it. Bound on
+  // document so it works whether or not the canvas has focus. Guarded
+  // with a flag so we don't re-bind on every renderContentView (this
+  // bindShellEvents call is idempotent — see Phase 1 note above —
+  // but document-level listeners would still stack).
+  if (!document.__wscMeasureKeysBound) {
+    document.__wscMeasureKeysBound = true;
+    document.addEventListener('keydown', (e) => {
+      // Skip when the user is typing in a form field — we don't want
+      // 'M' inside a text input to flip the measure tool.
+      const tag = (e.target && e.target.tagName) || '';
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (e.target && e.target.isContentEditable) return;
+      // Also bail if any modifier is held — leave system shortcuts alone.
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // Only act when the WSC plan canvas is in the DOM — keeps the
+      // shortcut from firing on other tools' pages.
+      if (!document.querySelector('#wsc-plan-canvas')) return;
+      if (e.key === 'm' || e.key === 'M') {
+        e.preventDefault();
+        toggleMeasureMode();
+        if (getMeasureMode()) sctx._planEditMode = false;
+        sctx.renderContentView();
+      } else if (e.key === 'Escape' && getMeasureMode()) {
+        e.preventDefault();
+        exitMeasureMode();
+        sctx.renderContentView();
+      }
+    });
+  }
 }

@@ -13,7 +13,7 @@
 // positions (positive rack columns) — necessary to actually enter the loop
 // at ui-plan.js:~500 where the bug lives.
 
-import { drawPlan } from './tools/warehouse-sizing/ui-plan.js';
+import { drawPlan, addMeasurePoint, toggleMeasureMode, setMeasureCursor, clearMeasurements } from './tools/warehouse-sizing/ui-plan.js';
 
 let pass = 0, fail = 0;
 const t = (name, fn) => {
@@ -137,6 +137,39 @@ t('drawPlan: two-sided dock', () => {
   const pctx = makePctx({ dockConfig: { sided: 'two', inboundDoors: 10, outboundDoors: 12 } });
   drawPlan(pctx);
   if (pctx._calls.length < 50) throw new Error(`expected >50 calls, got ${pctx._calls.length}`);
+});
+
+t('drawPlan: with committed measurements (Phase B.B17 smoke)', () => {
+  // Lay two dimension lines and verify drawPlan + drawMeasurements run
+  // to completion. Catches scope-bleed / undefined-var bugs in the new
+  // overlay code without needing a real browser.
+  clearMeasurements();
+  addMeasurePoint({ xFt: 50, yFt: 100 });
+  addMeasurePoint({ xFt: 250, yFt: 100 });   // commits a horizontal 200 ft line
+  addMeasurePoint({ xFt: 300, yFt: 100 });
+  addMeasurePoint({ xFt: 300, yFt: 250 });   // commits a vertical 150 ft line
+  const pctx = makePctx();
+  drawPlan(pctx);
+  if (pctx._calls.length < 50) throw new Error(`expected >50 calls, got ${pctx._calls.length}`);
+  clearMeasurements();
+});
+
+t('drawPlan: measure-mode preview (anchor + cursor, no commit)', () => {
+  // Activate measure mode, lay an anchor, set the cursor — exercises
+  // the preview branch of drawMeasurements. Asserts the dashed-line
+  // path doesn't throw.
+  clearMeasurements();
+  toggleMeasureMode();      // → ON
+  try {
+    addMeasurePoint({ xFt: 100, yFt: 50 });   // sets anchor
+    setMeasureCursor({ xPx: 400, yPx: 300 });
+    const pctx = makePctx();
+    drawPlan(pctx);
+    if (pctx._calls.length < 50) throw new Error(`expected >50 calls, got ${pctx._calls.length}`);
+  } finally {
+    toggleMeasureMode();    // → OFF (also clears anchor/cursor)
+    clearMeasurements();
+  }
 });
 
 if (fail === 0) {

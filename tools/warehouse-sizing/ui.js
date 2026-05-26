@@ -18,12 +18,12 @@ import { showConfirm } from '../../shared/confirm-modal.js';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260511-port12';
 import { render3DView, disposeScene3d } from './ui-3d.js?v=20260526-hudtoggle1';
 import { renderConfigHtml, bindConfigEvents } from './ui-config.js?v=20260526-phaseAm3';
-import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260526-phaseBs1';
+import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260526-measure1';
 import { renderDashboard } from './ui-dashboard.js?v=20260526-phaseBs1';
 import { renderElevation, drawElevation, shuffledBayLevelOrder } from './ui-elevation.js?v=20260513-elevextract';
 import { pushToCm, handleCmPush, createDefaultFacility, createDefaultZones, createDefaultVolumes } from './ui-cm-bridge.js?v=20260513-cmextract';
 import { wscExtraStyles } from './ui-styles.js?v=20260513-stylesextract';
-import { bindShellEvents } from './ui-shell-events.js?v=20260526-phaseBs1';
+import { bindShellEvents } from './ui-shell-events.js?v=20260526-measure1';
 
 // ============================================================
 // CHROME v3 — phase + section structure (CM Chrome v3 ripple, step 3 redo)

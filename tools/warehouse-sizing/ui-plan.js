@@ -53,6 +53,63 @@ export function toggleLayer(name) {
   return _layers[name];
 }
 
+// Phase B.B17 (2026-05-26 evening) — Measure tool. CAD-style click-click
+// dimensioning on the 2D plan canvas. Points stored in feet so they
+// survive zoom/resize. Live preview rendered while an anchor is set.
+//   _measureMode    — toggle: button or 'M' keyboard shortcut
+//   _measureAnchor  — { xFt, yFt } first click of a pending measurement
+//   _measureCursor  — { xPx, yPx } stored each pointermove for preview
+//   _measureLines   — committed measurements, rendered persistently
+let _measureMode = false;
+/** @type {{xFt:number, yFt:number}|null} */
+let _measureAnchor = null;
+/** @type {{xPx:number, yPx:number}|null} */
+let _measureCursor = null;
+/** @type {Array<{aFt:{xFt:number,yFt:number}, bFt:{xFt:number,yFt:number}}>} */
+const _measureLines = [];
+export function getMeasureMode() { return _measureMode; }
+export function isMeasureModeActive() { return _measureMode; }
+export function toggleMeasureMode() {
+  _measureMode = !_measureMode;
+  // Leaving the mode also clears any pending anchor + preview
+  if (!_measureMode) { _measureAnchor = null; _measureCursor = null; }
+  return _measureMode;
+}
+export function exitMeasureMode() {
+  _measureMode = false;
+  _measureAnchor = null;
+  _measureCursor = null;
+}
+export function setMeasureCursor(px) {
+  // px = {xPx, yPx} or null
+  _measureCursor = px || null;
+}
+/** Click-handler entry. First click sets anchor; second commits a line. */
+export function addMeasurePoint(pt /* {xFt, yFt} */) {
+  if (!_measureMode || !pt) return false;
+  if (!_measureAnchor) {
+    _measureAnchor = { xFt: pt.xFt, yFt: pt.yFt };
+    return 'anchor';
+  }
+  // Reject degenerate (same point — likely an accidental double click)
+  const dx = pt.xFt - _measureAnchor.xFt;
+  const dy = pt.yFt - _measureAnchor.yFt;
+  if (Math.hypot(dx, dy) < 0.5) {
+    _measureAnchor = null;
+    return false;
+  }
+  _measureLines.push({ aFt: _measureAnchor, bFt: { xFt: pt.xFt, yFt: pt.yFt } });
+  _measureAnchor = null;
+  return 'commit';
+}
+export function hasMeasurements() { return _measureLines.length > 0 || !!_measureAnchor; }
+export function measurementCount() { return _measureLines.length; }
+export function clearMeasurements() {
+  _measureLines.length = 0;
+  _measureAnchor = null;
+  _measureCursor = null;
+}
+
 export function renderPlan(pctx) {
   const storage = calc.computeStorage(pctx.facility, pctx.zones);
   const overrideKeys = Object.keys(pctx.zones.layoutOverrides || {});
@@ -183,6 +240,15 @@ export function renderPlan(pctx) {
             <button data-wsc-layer-toggle="labels" title="Toggle in-zone text labels" style="font-size:11px;padding:2px 8px;border:0;background:${_layers.labels ? '#1c1c1c' : 'transparent'};color:${_layers.labels ? '#fff' : 'var(--ies-gray-600)'};border-radius:3px;cursor:pointer;font-weight:600;">Labels</button>
             <button data-wsc-layer-toggle="doors" title="Toggle dock door rendering" style="font-size:11px;padding:2px 8px;border:0;background:${_layers.doors ? '#1c1c1c' : 'transparent'};color:${_layers.doors ? '#fff' : 'var(--ies-gray-600)'};border-radius:3px;cursor:pointer;font-weight:600;">Doors</button>
           </span>
+          <!-- Phase B.B17 (2026-05-26) — Measure tool. M keyboard shortcut also toggles. -->
+          <button class="${_measureMode ? 'hub-btn-primary' : 'hub-btn-secondary'}" data-wsc-action="toggle-measure" style="font-size:12px;padding:4px 10px;" title="Measure distances on the floorplan. Click two points to lay a dimension line in feet. Press M to toggle, Esc to exit.">
+            ${_measureMode ? '✓ Measuring' : '📏 Measure'}
+          </button>
+          ${_measureLines.length > 0 ? `
+            <button class="hub-btn-link" data-wsc-action="clear-measurements" style="font-size:12px;padding:4px 8px;" title="Remove all dimension lines from the floorplan">
+              ✕ Clear (${_measureLines.length})
+            </button>
+          ` : ''}
           <button class="${editing ? 'hub-btn-primary' : 'hub-btn-secondary'}" data-wsc-action="toggle-edit-layout" style="font-size:12px;padding:4px 10px;" title="Drag Office, Ship Staging, and Forward Pick to manually reposition them">
             ${editing ? '✓ Done Editing' : '✎ Edit Layout'}
           </button>
@@ -200,6 +266,11 @@ export function renderPlan(pctx) {
         ${editing ? `
           <div style="margin-top:8px;padding:8px 12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;font-size:12px;color:#1e3a8a;">
             <strong>Edit mode:</strong> drag Office, Ship Staging, or Forward Pick pctx.zones to reposition them. Snaps to 5 ft. Save the model to persist.
+          </div>
+        ` : ''}
+        ${_measureMode ? `
+          <div style="margin-top:8px;padding:8px 12px;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;font-size:12px;color:#78350f;">
+            <strong>📏 Measure mode:</strong> click two points to lay a dimension line. Distance shown in feet. Press <strong>M</strong> to toggle off, <strong>Esc</strong> to exit.
           </div>
         ` : ''}
       </div>
@@ -1132,7 +1203,171 @@ export function drawPlan(pctx) {
   // they overlay any zone graphics underneath.
   drawScaleBar(ctx, cw, ch, pxPerFt);
   drawNorthArrow(ctx, cw, ch);
+
+  // Phase B.B17 (2026-05-26) — Measurement overlay. Rendered last so
+  // dimension lines and labels always sit on top of zone graphics.
+  drawMeasurements(ctx, X0, Y0, pxPerFt, cw, ch);
 }
+
+/**
+ * Phase B.B17 (2026-05-26) — Render committed measurements + live preview.
+ *
+ * Dimension line styling: white core with dark outline (reads on any zone
+ * background), tick marks at each endpoint, distance label centered on the
+ * line with a white pill backing. While measure-mode is active and an
+ * anchor point has been set, a dashed preview line follows the cursor.
+ *
+ * Points are stored in feet (xFt, yFt) so they survive canvas resize.
+ *
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} X0      Building origin offset (px) — top-left of building
+ * @param {number} Y0      Building origin offset (px)
+ * @param {number} pxPerFt Pixels per foot
+ * @param {number} cw      Canvas width (px) — for off-canvas clamping
+ * @param {number} ch      Canvas height (px)
+ */
+function drawMeasurements(ctx, X0, Y0, pxPerFt, cw, ch) {
+  const hasCommitted = _measureLines.length > 0;
+  const hasPreview = _measureMode && _measureAnchor && _measureCursor;
+  if (!hasCommitted && !hasPreview) return;
+
+  // Stash for drawDimensionLine — used to convert px distance → ft label
+  _lastDrawPxPerFt = pxPerFt;
+
+  ctx.save();
+
+  // ---- Committed measurements ----
+  for (const m of _measureLines) {
+    const ax = X0 + m.aFt.xFt * pxPerFt;
+    const ay = Y0 + m.aFt.yFt * pxPerFt;
+    const bx = X0 + m.bFt.xFt * pxPerFt;
+    const by = Y0 + m.bFt.yFt * pxPerFt;
+    drawDimensionLine(ctx, ax, ay, bx, by, false);
+  }
+
+  // ---- Live preview (anchor → cursor) ----
+  if (hasPreview) {
+    const ax = X0 + _measureAnchor.xFt * pxPerFt;
+    const ay = Y0 + _measureAnchor.yFt * pxPerFt;
+    const bx = _measureCursor.xPx;
+    const by = _measureCursor.yPx;
+    // Convert cursor back to ft for the label so it shows the live distance
+    drawDimensionLine(ctx, ax, ay, bx, by, true);
+  }
+
+  ctx.restore();
+}
+
+/**
+ * Paint a single dimension line — dark outline + light core, end ticks,
+ * pill-backed distance label centered on the line.
+ *
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} ax pixel coords (start)
+ * @param {number} ay
+ * @param {number} bx pixel coords (end)
+ * @param {number} by
+ * @param {boolean} dashed True for live preview (anchor → cursor)
+ */
+function drawDimensionLine(ctx, ax, ay, bx, by, dashed) {
+  // The pxPerFt used to make this measurement is implicit — we need to
+  // pull it from the caller. Easier to re-derive distance from canvas
+  // px / the pctx.pxPerFt we received. But we already received the
+  // committed point in ft, so distance is just Euclidean in ft via the
+  // stored aFt/bFt. For preview we use the cursor px → ft conversion
+  // done by drawMeasurements. Simplest: compute the px distance here
+  // and convert using the stored module-level pxPerFt-of-last-draw.
+  // But the only safe way is to pass it in. drawMeasurements has it,
+  // so we'll just stash it on the function for the next call. For now
+  // we read pxPerFt from a private cache set by drawMeasurements.
+  const distPx = Math.hypot(bx - ax, by - ay);
+  const distFt = distPx / _lastDrawPxPerFt;
+
+  // Dark outline (drop shadow for legibility on any color zone)
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = 'rgba(15, 23, 42, 0.55)';
+  ctx.setLineDash(dashed ? [6, 4] : []);
+  ctx.beginPath();
+  ctx.moveTo(ax, ay);
+  ctx.lineTo(bx, by);
+  ctx.stroke();
+
+  // Light core line
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = dashed ? '#fbbf24' : '#fef3c7';
+  ctx.setLineDash(dashed ? [6, 4] : []);
+  ctx.beginPath();
+  ctx.moveTo(ax, ay);
+  ctx.lineTo(bx, by);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // End ticks — perpendicular to the line, 6px each side of endpoint
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len = Math.hypot(dx, dy) || 1;
+  const px = -dy / len * 6;  // perpendicular vector
+  const py = dx / len * 6;
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#fef3c7';
+  for (const [tx, ty] of [[ax, ay], [bx, by]]) {
+    ctx.beginPath();
+    ctx.moveTo(tx - px, ty - py);
+    ctx.lineTo(tx + px, ty + py);
+    ctx.stroke();
+  }
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(15, 23, 42, 0.6)';
+  for (const [tx, ty] of [[ax, ay], [bx, by]]) {
+    ctx.beginPath();
+    ctx.moveTo(tx - px, ty - py);
+    ctx.lineTo(tx + px, ty + py);
+    ctx.stroke();
+  }
+
+  // Distance label — pill backing, centered on midpoint, offset slightly
+  // along the perpendicular so the label doesn't sit directly on the line.
+  const midX = (ax + bx) / 2;
+  const midY = (ay + by) / 2;
+  const offX = -dy / len * 10;
+  const offY = dx / len * 10;
+  const labelX = midX + offX;
+  const labelY = midY + offY;
+  const labelText = `${distFt.toFixed(distFt < 10 ? 1 : 0)} ft`;
+  ctx.font = 'bold 11px Montserrat, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const textW = ctx.measureText(labelText).width;
+  const padX = 6, padY = 3;
+  const boxW = textW + padX * 2;
+  const boxH = 14 + padY * 2;
+  ctx.fillStyle = dashed ? 'rgba(251, 191, 36, 0.95)' : 'rgba(254, 243, 199, 0.95)';
+  ctx.strokeStyle = dashed ? '#b45309' : '#92400e';
+  ctx.lineWidth = 1;
+  const rad = 4;
+  const bx0 = labelX - boxW / 2;
+  const by0 = labelY - boxH / 2;
+  ctx.beginPath();
+  ctx.moveTo(bx0 + rad, by0);
+  ctx.lineTo(bx0 + boxW - rad, by0);
+  ctx.quadraticCurveTo(bx0 + boxW, by0, bx0 + boxW, by0 + rad);
+  ctx.lineTo(bx0 + boxW, by0 + boxH - rad);
+  ctx.quadraticCurveTo(bx0 + boxW, by0 + boxH, bx0 + boxW - rad, by0 + boxH);
+  ctx.lineTo(bx0 + rad, by0 + boxH);
+  ctx.quadraticCurveTo(bx0, by0 + boxH, bx0, by0 + boxH - rad);
+  ctx.lineTo(bx0, by0 + rad);
+  ctx.quadraticCurveTo(bx0, by0, bx0 + rad, by0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#451a03';
+  ctx.fillText(labelText, labelX, labelY);
+}
+
+// Cache the pxPerFt of the most recent drawPlan call so drawDimensionLine
+// can convert pixel distances back to feet for its label. drawMeasurements
+// sets it on each invocation.
+let _lastDrawPxPerFt = 1;
 
 /**
  * Graphic scale bar — bottom-right corner of the canvas. Picks a "nice"
