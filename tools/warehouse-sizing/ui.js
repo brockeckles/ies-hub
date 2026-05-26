@@ -17,7 +17,7 @@ import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillbac
 import { showConfirm } from '../../shared/confirm-modal.js';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260511-port12';
 import { render3DView, disposeScene3d } from './ui-3d.js?v=20260526-phaseAm2';
-import { renderConfigHtml, bindConfigEvents } from './ui-config.js?v=20260513-cfgextract4';
+import { renderConfigHtml, bindConfigEvents } from './ui-config.js?v=20260526-phaseAm3';
 import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260526-phaseAm1';
 import { renderDashboard } from './ui-dashboard.js?v=20260513-dashextract';
 import { renderElevation, drawElevation, shuffledBayLevelOrder } from './ui-elevation.js?v=20260513-elevextract';

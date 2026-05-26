@@ -747,6 +747,21 @@ export function bindConfigEvents(panel, ctx) {
   // defaults (fixes a Phase 2 bug where inheriting channels didn't refresh
   // when ctx.facility-level allocation changed).
   panel.querySelectorAll('input[data-alloc]').forEach(input => {
+    // Phase A.A12 (2026-05-26) — live canvas update as the user types.
+    // input fires on every keystroke; we write to the model immediately and
+    // debounce the content re-render so the 2D Plan rack mix updates in
+    // real time. The panel itself is NOT re-rendered here — that would
+    // destroy input focus mid-typing. The blur-time change handler below
+    // still does the full refresh (panel pill + content) once the user
+    // commits the field.
+    input.addEventListener('input', e => {
+      const field = /** @type {HTMLInputElement} */ (e.target).dataset.alloc;
+      const val = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
+      if (!ctx.zones.storageAllocation) ctx.zones.storageAllocation = { fullPallet: 60, cartonOnPallet: 30, cartonOnShelving: 10 };
+      ctx.zones.storageAllocation[field] = val;
+      ctx.setDirty(true);
+      debouncedRender();
+    });
     input.addEventListener('change', e => {
       const field = /** @type {HTMLInputElement} */ (e.target).dataset.alloc;
       const val = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
@@ -763,17 +778,18 @@ export function bindConfigEvents(panel, ctx) {
   // it from "inheriting ctx.facility" to "explicit override" (storageAllocation
   // populated on the channel mix). Reset (↻) wipes the override.
   panel.querySelectorAll('input[data-channel-alloc]').forEach(input => {
-    input.addEventListener('change', e => {
-      const tgt = /** @type {HTMLInputElement} */ (e.target);
+    // Shared write — used by both input (live) and change (commit) paths.
+    const writeChannelAlloc = (tgt) => {
       const field = tgt.dataset.channelAlloc;
       const k = tgt.dataset.channelKey;
       const val = parseFloat(tgt.value) || 0;
       const facAlloc = ctx.zones.storageAllocation || { fullPallet: 60, cartonOnPallet: 30, cartonOnShelving: 10 };
-      if (!Array.isArray(ctx.zones.channelMixes)) return;
+      if (!Array.isArray(ctx.zones.channelMixes)) return false;
       const mix = ctx.zones.channelMixes.find(m => m.channelKey === k);
-      if (!mix) return;
+      if (!mix) return false;
       if (!mix.storageAllocation) {
-        // Promote to override — seed from ctx.facility default.
+        // First write promotes the channel to "explicit override" by
+        // seeding from the facility-level default.
         mix.storageAllocation = {
           fullPallet: facAlloc.fullPallet || 0,
           cartonOnPallet: facAlloc.cartonOnPallet || 0,
@@ -781,6 +797,19 @@ export function bindConfigEvents(panel, ctx) {
         };
       }
       mix.storageAllocation[field] = val;
+      return true;
+    };
+    // Phase A.A12 — live canvas update as the user types. Skip the panel
+    // re-render (would destroy input focus); blur-time change handler
+    // below still refreshes the panel so the channel-mix UI re-reflects
+    // the new override (e.g., reset button appears if alloc diverges).
+    input.addEventListener('input', e => {
+      if (!writeChannelAlloc(/** @type {HTMLInputElement} */ (e.target))) return;
+      ctx.setDirty(true);
+      debouncedRender();
+    });
+    input.addEventListener('change', e => {
+      if (!writeChannelAlloc(/** @type {HTMLInputElement} */ (e.target))) return;
       ctx.setDirty(true);
       ctx.refreshConfig();
       ctx.refreshContent();
