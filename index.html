@@ -24,6 +24,8 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js?v=20260418-sK" defer></script>
   <!-- OrbitControls (r128) — loaded from jsdelivr because cdnjs only ships the core bundle. Adds smooth damping, pan, zoom, reset to the 3D walkthrough. -->
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js?v=20260504-mat1" defer></script>
+  <!-- RoomEnvironment (r128) — image-based-lighting scene used to seed a PMREMGenerator-built envmap so PBR materials show real diffuse + specular probes instead of flat shading. Phase A.A2 (2026-05-26). -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/environments/RoomEnvironment.js?v=20260526-phaseAs1" defer></script>
   <!-- SheetJS: Cost Model Excel export (loads as global window.XLSX) -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js?v=20260418-sK"></script>
 
@@ -32,7 +34,7 @@
   <link rel="modulepreload" href="./shared/router.js?v=20260512-port28">
 
   <!-- Design System -->
-  <link rel="stylesheet" href="./css/hub.css?v=20260430-r12-aesthetic">
+  <link rel="stylesheet" href="./css/hub.css?v=20260526-phaseAs1">
 
   <!-- Feature flags — defaults ON for engines that have shipped past Phase 1 -->
   <script>

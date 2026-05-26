@@ -33,10 +33,10 @@
  * @module tools/warehouse-sizing/ui-shell-events
  */
 
-import { refreshToolChrome, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260430-na-dot';
+import { refreshToolChrome, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260526-phaseAs1';
 import { bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { showConfirm } from '../../shared/confirm-modal.js';
-import { drawPlan, hitCorner } from './ui-plan.js?v=20260526-planranges1';
+import { drawPlan, hitCorner, planHoverUpdate } from './ui-plan.js?v=20260526-phaseAs1';
 import { pushToCm } from './ui-cm-bridge.js?v=20260513-cmextract';
 
 /**
@@ -259,6 +259,20 @@ export async function bindShellEvents(sctx) {
     canvas.style.cursor = mode === 'resize' ? 'nwse-resize' : 'grabbing';
   });
 
+  // Phase A.A10/A11/A13 (2026-05-26) — always-on hover handler. Updates
+  // the status bar coords, the canvas cursor, and the hovered-zone highlight
+  // outline. Skips when a drag is in progress (the drag handler below
+  // already owns the canvas in that case).
+  rootEl?.addEventListener('pointermove', (e) => {
+    if (sctx._planDrag) return;
+    const canvas = /** @type {HTMLCanvasElement} */ (e.target);
+    if (!canvas || canvas.id !== 'wsc-plan-canvas' || !sctx._planMeta) return;
+    const { offsetX, offsetY } = sctx.canvasMouseCoords(canvas, e);
+    const changed = planHoverUpdate(sctx.makePlanCtx(), { offsetX, offsetY });
+    if (changed) drawPlan(sctx.makePlanCtx());
+  });
+
+  // Drag pointermove (existing) — applies layoutOverrides on active drag.
   rootEl?.addEventListener('pointermove', (e) => {
     if (!sctx._planDrag || !sctx._planEditMode) return;
     const canvas = /** @type {HTMLCanvasElement} */ (e.target);

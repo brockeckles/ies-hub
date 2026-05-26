@@ -146,7 +146,14 @@ export function renderPlan(pctx) {
         </div>
       </div>
       <div style="position:relative;">
-        <canvas id="wsc-plan-canvas" width="900" height="520" style="width:100%; border:1px solid var(--ies-gray-200); border-radius:6px; background:#fff; ${editing ? 'cursor: grab;' : ''}"></canvas>
+        <canvas id="wsc-plan-canvas" width="900" height="520" style="width:100%; border:1px solid var(--ies-gray-200); border-radius:6px; background:#fff; cursor: default;"></canvas>
+        <!-- Phase A.A10 (2026-05-26) — AutoCAD-style status strip: live
+             cursor coords + hovered-zone summary. Empty by default; the
+             hover handler in ui-shell-events fills it via planHoverUpdate. -->
+        <div id="wsc-plan-statusbar" style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:6px;padding:4px 10px;background:var(--ies-gray-100, #f3f4f6);border:1px solid var(--ies-gray-200);border-radius:4px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-variant-numeric:tabular-nums;font-size:11px;color:var(--ies-gray-700);min-height:22px;">
+          <span data-statusbar-coords style="white-space:nowrap;">X: ----  Y: ----  ft</span>
+          <span data-statusbar-selection style="flex:1;text-align:right;color:var(--ies-gray-500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Hover a zone…</span>
+        </div>
         ${editing ? `
           <div style="margin-top:8px;padding:8px 12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;font-size:12px;color:#1e3a8a;">
             <strong>Edit mode:</strong> drag Office, Ship Staging, or Forward Pick pctx.zones to reposition them. Snaps to 5 ft. Save the model to persist.
@@ -888,6 +895,234 @@ export function drawPlan(pctx) {
     }
     ctx.restore();
   }
+
+  // ---------- Phase A.A13 (2026-05-26) — Hover outline ----------
+  // 1-px highlight outline on the currently hovered zone so the user sees
+  // what their click would land on before they commit. State is set by the
+  // planHoverUpdate() handler in ui-shell-events.js; we just paint it here.
+  const hoveredId = pctx._planHoveredZone;
+  if (hoveredId && pctx._planZoneRects?.[hoveredId]) {
+    const r = pctx._planZoneRects[hoveredId];
+    ctx.save();
+    ctx.strokeStyle = '#2563eb';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([]);
+    ctx.strokeRect(r.x - 1, r.y - 1, r.w + 2, r.h + 2);
+    ctx.restore();
+  }
+
+  // ---------- Phase A.A7 (2026-05-26) — Scale bar + north arrow ----------
+  // CAD-convention chrome that turns the floorplan from a sketch into a
+  // drawing. Scale bar in bottom-right uses alternating filled / empty
+  // segments at a "nice" foot increment chosen from pxPerFt so it always
+  // reads as a sensible round number (50/100/200/500 ft). North arrow in
+  // the top-right is a simple triangle + "N" label. Both rendered last so
+  // they overlay any zone graphics underneath.
+  drawScaleBar(ctx, cw, ch, pxPerFt);
+  drawNorthArrow(ctx, cw, ch);
+}
+
+/**
+ * Graphic scale bar — bottom-right corner of the canvas. Picks a "nice"
+ * unit length (the largest of [50, 100, 200, 500] feet that fits in ~140
+ * canvas pixels) then draws four equal segments, alternating filled and
+ * empty, with tick labels at each boundary. Classic survey-style scale.
+ *
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} cw  canvas width  in px
+ * @param {number} ch  canvas height in px
+ * @param {number} pxPerFt  current drawing scale (one foot = N canvas px)
+ */
+function drawScaleBar(ctx, cw, ch, pxPerFt) {
+  if (!(pxPerFt > 0)) return;
+  // Pick a nice unit length so the full bar is roughly 120–180 px wide.
+  const CHOICES = [10, 20, 50, 100, 200, 500, 1000];
+  const targetBarPx = 160;
+  let unitFt = CHOICES[0];
+  for (const c of CHOICES) {
+    if (c * pxPerFt * 4 <= targetBarPx * 1.5) unitFt = c;
+  }
+  const segPx = unitFt * pxPerFt;
+  const totalPx = segPx * 4;
+  const totalFt = unitFt * 4;
+  const padding = 16;
+  const barH = 8;
+  const x0 = cw - padding - totalPx;
+  const y0 = ch - padding - barH - 14; // leave room for labels below
+  // Background pill so the bar reads against any underlying zone.
+  ctx.save();
+  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+  ctx.fillRect(x0 - 6, y0 - 4, totalPx + 12, barH + 22);
+  ctx.strokeStyle = '#9ca3af';
+  ctx.lineWidth = 0.5;
+  ctx.strokeRect(x0 - 6, y0 - 4, totalPx + 12, barH + 22);
+  // Alternating filled/empty segments.
+  for (let i = 0; i < 4; i++) {
+    const sx = x0 + i * segPx;
+    ctx.fillStyle = (i % 2 === 0) ? '#1f2937' : '#ffffff';
+    ctx.fillRect(sx, y0, segPx, barH);
+    ctx.strokeStyle = '#1f2937';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(sx, y0, segPx, barH);
+  }
+  // Tick labels — 0, 1×, 2×, 3×, 4×.
+  ctx.fillStyle = '#1f2937';
+  ctx.font = '9px Montserrat, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  for (let i = 0; i <= 4; i++) {
+    const sx = x0 + i * segPx;
+    const ft = i * unitFt;
+    ctx.fillText(`${ft}`, sx, y0 + barH + 1);
+  }
+  // Unit suffix at the far right.
+  ctx.textAlign = 'left';
+  ctx.fillText('ft', x0 + totalPx + 2, y0 + barH + 1);
+  // Scale ratio text above the bar (e.g., "0 — 200 ft").
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'bottom';
+  ctx.font = '9px Montserrat, sans-serif';
+  ctx.fillStyle = '#6b7280';
+  ctx.fillText(`SCALE  0 — ${totalFt} ft`, x0, y0 - 1);
+  ctx.restore();
+}
+
+/**
+ * North arrow — top-right corner of the canvas. WSC convention is north-up
+ * (top of canvas = north), matching the orientFacility() / dock-on-bottom
+ * layout shared with the 3D view. Simple equilateral triangle + "N" label.
+ *
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} cw
+ * @param {number} ch
+ */
+function drawNorthArrow(ctx, cw, ch) {
+  const padding = 16;
+  const r = 18;                              // arrow half-height
+  const cx = cw - padding - r;
+  const cy = padding + r + 2;
+  ctx.save();
+  // Background circle so it reads against any underlying graphic.
+  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+  ctx.beginPath();
+  ctx.arc(cx, cy, r + 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#9ca3af';
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+  // Arrow triangle (filled black pointing up, white pointing down — classic
+  // surveyor's compass-rose half-shading).
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - r);
+  ctx.lineTo(cx + r * 0.45, cy + r);
+  ctx.lineTo(cx, cy + r * 0.4);
+  ctx.closePath();
+  ctx.fillStyle = '#1f2937';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - r);
+  ctx.lineTo(cx - r * 0.45, cy + r);
+  ctx.lineTo(cx, cy + r * 0.4);
+  ctx.closePath();
+  ctx.fillStyle = '#ffffff';
+  ctx.strokeStyle = '#1f2937';
+  ctx.lineWidth = 1;
+  ctx.fill();
+  ctx.stroke();
+  // "N" label below the arrow.
+  ctx.fillStyle = '#1f2937';
+  ctx.font = 'bold 11px Montserrat, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillText('N', cx, cy + r + 3);
+  ctx.restore();
+}
+
+/**
+ * Phase A.A10 / A.A11 / A.A13 (2026-05-26) — shared hover handler for the
+ * 2D plan canvas. Called from ui-shell-events.js's always-on pointermove.
+ *
+ * Updates three things in one pass (all share the same hit-test):
+ *   1. The status bar's cursor-coord + zone-summary text (A10)
+ *   2. The canvas cursor (move / nwse-resize / ns-resize / ew-resize) (A11)
+ *   3. The hovered zone id on pctx — drawPlan reads this to draw a 1px
+ *      highlight outline on the hovered zone (A13)
+ *
+ * Returns true if the hovered zone changed (so caller can redraw).
+ *
+ * @param {object} pctx   Plan context (same shape as drawPlan's)
+ * @param {{offsetX:number, offsetY:number}} mouse
+ * @returns {boolean} whether _planHoveredZone changed
+ */
+export function planHoverUpdate(pctx, mouse) {
+  const canvas = pctx.rootEl?.querySelector('#wsc-plan-canvas');
+  const statusBar = pctx.rootEl?.querySelector('#wsc-plan-statusbar');
+  const meta = pctx._planMeta;
+  if (!canvas || !meta) return false;
+
+  // Convert mouse → building feet (origin at top-left corner of the drawn
+  // building rectangle). Coords outside the building still render in the
+  // status bar so users see they're "outside" the model.
+  const xFt = (mouse.offsetX - meta.X0) / meta.pxPerFt;
+  const yFt = (mouse.offsetY - meta.Y0) / meta.pxPerFt;
+
+  // Hit-test against _planZoneRects (populated each drawPlan pass).
+  let hovered = null;
+  const ZONE_LABELS = {
+    office:        'Office',
+    shipStaging:   'Ship Staging',
+    recvStaging:   'Receive Staging',
+    forwardPick:   'Forward Pick',
+  };
+  for (const [id, r] of Object.entries(pctx._planZoneRects || {})) {
+    if (mouse.offsetX >= r.x && mouse.offsetX <= r.x + r.w
+      && mouse.offsetY >= r.y && mouse.offsetY <= r.y + r.h) {
+      hovered = { id, rect: r };
+      break;
+    }
+  }
+
+  // ---- A11: cursor selection ----
+  // Editable zones get a corner-resize cursor when within the handle radius,
+  // a move cursor when inside the body, default cursor otherwise.
+  let cursor = 'default';
+  if (pctx._planEditMode && hovered) {
+    const hit = hitCorner(hovered.rect, mouse.offsetX, mouse.offsetY);
+    if (hit === 'tl' || hit === 'br') cursor = 'nwse-resize';
+    else if (hit === 'tr' || hit === 'bl') cursor = 'nesw-resize';
+    else cursor = 'move';
+  } else if (hovered) {
+    cursor = 'pointer';
+  }
+  canvas.style.cursor = cursor;
+
+  // ---- A10: status bar text ----
+  if (statusBar) {
+    const coordsEl = statusBar.querySelector('[data-statusbar-coords]');
+    const selEl    = statusBar.querySelector('[data-statusbar-selection]');
+    if (coordsEl) {
+      coordsEl.textContent = `X: ${xFt.toFixed(0).padStart(4, ' ')}  Y: ${yFt.toFixed(0).padStart(4, ' ')}  ft`;
+    }
+    if (selEl) {
+      if (hovered) {
+        const wFt = hovered.rect.w / meta.pxPerFt;
+        const hFt = hovered.rect.h / meta.pxPerFt;
+        const sqft = Math.round(wFt * hFt);
+        const label = ZONE_LABELS[hovered.id] || hovered.id;
+        selEl.style.color = 'var(--ies-gray-800)';
+        selEl.textContent = `${label}  ·  ${Math.round(wFt)} × ${Math.round(hFt)} ft  ·  ${sqft.toLocaleString()} sf`;
+      } else {
+        selEl.style.color = 'var(--ies-gray-500)';
+        selEl.textContent = 'Hover a zone…';
+      }
+    }
+  }
+
+  // ---- A13: hovered-zone state for next redraw ----
+  const prev = pctx._planHoveredZone;
+  const nextId = hovered?.id || null;
+  pctx._planHoveredZone = nextId;
+  return prev !== nextId;
 }
 
 /** Pixel radius around a corner that counts as a resize handle hit. */

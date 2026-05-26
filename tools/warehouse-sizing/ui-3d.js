@@ -271,10 +271,46 @@ function build3DScene(ctx) {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputEncoding = THREE.sRGBEncoding;
+    // Phase A.A1 (2026-05-26) — ACES Filmic tone mapping. Maps the
+    // linear-space PBR lighting through the same filmic curve every modern
+    // archviz renderer (Twinmotion / Enscape / UE5) uses, replacing the
+    // flat clamped-sRGB look that read as "MVP" to the 3D persona review.
+    // Exposure 1.0 keeps mid-tones where the existing materials expect them.
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
+    // Phase A.A2 (2026-05-26) — physically-correct light falloff so the
+    // PMREMGenerator-built envmap reads with the right brightness next to
+    // the direct lights. Has no visible effect on existing flat MeshStandard
+    // surfaces but lets future PBR materials behave correctly.
+    renderer.physicallyCorrectLights = true;
     el.appendChild(renderer.domElement);
 
+    // ---------- Image-based lighting (Phase A.A2, 2026-05-26) ----------
+    // Build a PMREM-prefiltered environment map from Three.js's stock
+    // RoomEnvironment (a procedural scene with a few colored lights that
+    // simulates a typical interior). Assigning to scene.environment makes
+    // every MeshStandardMaterial sample diffuse + specular probes from it,
+    // which unlocks real reflections on the steel rack uprights and a
+    // proper diffuse fill on the walls — the step-change the 3D persona
+    // review called out as "one IBL away from credible."
+    /** @type {THREE.PMREMGenerator|null} */ let pmremGenerator = null;
+    /** @type {THREE.Texture|null} */        let envMap = null;
+    if (typeof THREE.RoomEnvironment === 'function') {
+      pmremGenerator = new THREE.PMREMGenerator(renderer);
+      pmremGenerator.compileEquirectangularShader();
+      const roomScene = new THREE.RoomEnvironment();
+      envMap = pmremGenerator.fromScene(roomScene, 0.04).texture;
+      scene.environment = envMap;
+      roomScene.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+    }
+
     // ---------- Lighting ----------
-    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+    // Phase A.A2 (2026-05-26) — with scene.environment seeded by the
+    // PMREM-built RoomEnvironment, AmbientLight's flat contribution is
+    // largely redundant. Drop its intensity from 0.55 → 0.20 (kept non-zero
+    // to backstop the envmap on browsers where PMREMGenerator silently
+    // fails) and let the directional + hemisphere do the heavy lifting.
+    scene.add(new THREE.AmbientLight(0xffffff, 0.20));
     const dirLight = new THREE.DirectionalLight(0xffffff, 0.85);
     dirLight.position.set(180, 320, 200);
     dirLight.castShadow = true;
@@ -286,9 +322,13 @@ function build3DScene(ctx) {
     dirLight.shadow.camera.bottom = -shadowSpan;
     dirLight.shadow.camera.near = 1;
     dirLight.shadow.camera.far  = 1500;
-    dirLight.shadow.mapSize.width  = 1024;
-    dirLight.shadow.mapSize.height = 1024;
+    // Phase A.A3 (2026-05-26) — bump shadow map 1024 → 2048 for crisper
+    // rack-frame shadows + tune normalBias to kill peter-panning that gets
+    // more visible at the higher resolution. Bias stays at -0.0005.
+    dirLight.shadow.mapSize.width  = 2048;
+    dirLight.shadow.mapSize.height = 2048;
     dirLight.shadow.bias = -0.0005;
+    dirLight.shadow.normalBias = 0.02;
     scene.add(dirLight);
     scene.add(dirLight.target);
 
@@ -297,8 +337,11 @@ function build3DScene(ctx) {
     fillLight.position.set(-160, 120, -180);
     scene.add(fillLight);
 
-    // Subtle hemisphere light for ambient color variation
-    scene.add(new THREE.HemisphereLight(0xe7eef7, 0.0, 0.25));
+    // Hemisphere light (Phase A.A2 bump 2026-05-26): warm-ground / cool-sky
+    // pair at 0.55 intensity gives the floor an honest brown bounce + a
+    // sky-blue rim that reads as outdoor light spilling in. Replaces the
+    // 0.25-intensity / black-ground version that was nearly invisible.
+    scene.add(new THREE.HemisphereLight(0xb4c6dc, 0x8a7e6e, 0.55));
 
     // ---------- Geometry inputs ----------
     // WSC-O1 (2026-05-04): always map longFt -> world X axis (left-to-right
@@ -1706,6 +1749,12 @@ function build3DScene(ctx) {
       dispose() {
         alive = false;
         if (controls && typeof controls.dispose === 'function') controls.dispose();
+        // Phase A.A2 — release the PMREM-built envmap + generator before
+        // disposing the renderer so the GL context owning the textures is
+        // still alive when we tear them down.
+        if (envMap && typeof envMap.dispose === 'function') envMap.dispose();
+        if (pmremGenerator && typeof pmremGenerator.dispose === 'function') pmremGenerator.dispose();
+        scene.environment = null;
         renderer.dispose();
         renderer.domElement.remove();
       },

@@ -477,6 +477,10 @@ function _stylesheet() {
         font-size: 13px; font-weight: 700;
         color: #fff;
         margin-top: 1px;
+        /* Phase A.A14 (2026-05-26) — tabular-nums so the KPI strip values
+           sit in aligned digit columns regardless of figure widths. */
+        font-variant-numeric: tabular-nums;
+        font-feature-settings: "tnum";
       }
       /* Phase 5.2 — clickable KPI chip variant. Reset button defaults so
          the click target is a button styled identically to the span. */

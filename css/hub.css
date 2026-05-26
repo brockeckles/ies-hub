@@ -319,6 +319,14 @@ textarea.hub-input {
   overflow: hidden;
   text-overflow: ellipsis;
   line-height: 1.15;
+  /* Phase A.A14 (2026-05-26) — tabular-nums so digit columns align
+     across KPI tiles. Kept on Montserrat (the Hub's brand face) — the
+     CAD persona review's "monospace" recommendation translates in
+     practice to tabular-nums, which fixes the alignment problem without
+     swapping fonts and breaking the visual identity. font-feature-
+     settings is the safer cross-browser path. */
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
 }
 
 .hub-kpi-value.secondary { font-size: clamp(11px, 1.7cqi, 14px); }
