@@ -445,12 +445,17 @@ function _dedupedMajorCities() {
  * @param {number} [numRestarts=10] — set to 1 to recover legacy single-run behavior
  * @returns {import('./types.js?v=20260418-sP').MultiCogResult}
  */
-export function kMeansCog(points, k = 1, maxIter = 100, numRestarts = 10) {
+export function kMeansCog(points, k = 1, maxIter = 100, numRestarts = 10, fixedCenters = []) {
   if (points.length === 0 || k <= 0) {
-    return { centers: [], assignments: [], totalWeightedDistance: 0, iterations: 0, numRestarts: 0 };
+    return { centers: [], assignments: [], totalWeightedDistance: 0, iterations: 0, numRestarts: 0, lockedCount: 0 };
   }
   k = Math.min(k, points.length);
   const restarts = Math.max(1, Math.floor(numRestarts) || 1);
+  // 2026-05-28 B9 — locked / required centers. fixedCenters list is
+  // pre-seeded as the first N centers and never moved during iteration.
+  const fixed = Array.isArray(fixedCenters) ? fixedCenters.filter(c => Number.isFinite(+c.lat) && Number.isFinite(+c.lng)) : [];
+  const lockedCount = Math.min(fixed.length, k);
+  if (lockedCount > 0 && k < lockedCount) k = lockedCount;
 
   // Seed the PRNG from a stable hash of the input — deterministic per
   // points/k pair, varies between datasets.
@@ -458,15 +463,27 @@ export function kMeansCog(points, k = 1, maxIter = 100, numRestarts = 10) {
 
   let best = null;
   for (let r = 0; r < restarts; r++) {
-    // Restart #0 = legacy deterministic init (highest-weight seed). Others
-    // use a seeded weighted-random init.
-    const initCenters = r === 0
-      ? kMeansPlusPlusInit(points, k)
-      : kMeansPlusPlusInitSeeded(points, k, _mulberry32((baseSeed + r * 0x9E3779B9) >>> 0));
-    const trial = _kMeansSingleRun(points, k, maxIter, initCenters);
+    let initCenters;
+    if (lockedCount > 0) {
+      const lockedInits = fixed.slice(0, lockedCount).map(c => ({ lat: +c.lat, lng: +c.lng }));
+      const remaining = k - lockedCount;
+      let freeInits = [];
+      if (remaining > 0) {
+        freeInits = r === 0
+          ? kMeansPlusPlusInit(points, remaining)
+          : kMeansPlusPlusInitSeeded(points, remaining, _mulberry32((baseSeed + r * 0x9E3779B9) >>> 0));
+      }
+      initCenters = [...lockedInits, ...freeInits];
+    } else {
+      initCenters = r === 0
+        ? kMeansPlusPlusInit(points, k)
+        : kMeansPlusPlusInitSeeded(points, k, _mulberry32((baseSeed + r * 0x9E3779B9) >>> 0));
+    }
+    const trial = _kMeansSingleRun(points, k, maxIter, initCenters, lockedCount);
     if (!best || trial.totalWeightedDistance < best.totalWeightedDistance) best = trial;
   }
   best.numRestarts = restarts;
+  best.lockedCount = lockedCount;
   return best;
 }
 
@@ -479,7 +496,7 @@ export function kMeansCog(points, k = 1, maxIter = 100, numRestarts = 10) {
  * @param {{ lat: number, lng: number }[]} initCenters
  * @returns {import('./types.js?v=20260418-sP').MultiCogResult}
  */
-function _kMeansSingleRun(points, k, maxIter, initCenters) {
+function _kMeansSingleRun(points, k, maxIter, initCenters, lockedCount = 0) {
   let centers = initCenters.map(c => ({ lat: c.lat, lng: c.lng }));
   let assignments = [];
   let iter = 0;
@@ -513,9 +530,11 @@ function _kMeansSingleRun(points, k, maxIter, initCenters) {
 
     if (assignStable || centroidStable) break;
 
-    // Recompute centers as weighted centroids of assigned points
+    // Recompute centers as weighted centroids of assigned points.
+    // 2026-05-28 B9 — locked indices ([0, lockedCount)) skip the recompute.
     prevCenters = centers.map(c => ({ lat: c.lat, lng: c.lng }));
     centers = centers.map((_, ci) => {
+      if (ci < lockedCount) return centers[ci]; // locked — never moves
       const clusterPoints = points.filter((_, pi) => assignments[pi].clusterId === ci);
       if (clusterPoints.length === 0) return centers[ci]; // Keep empty cluster center
 
@@ -558,8 +577,25 @@ export function snapCentersToCandidates(mcr, points, candidates) {
   // Pick one candidate per center, picking the closest unused candidate
   // first. If candidates < centers, allow reuse so we still return k
   // centers. If candidates > centers, drop the rest.
+  // 2026-05-28 B9 — locked centers ([0, lockedCount)) skip the snap.
+  const lockedCount = mcr.lockedCount || 0;
   const used = new Set();
-  const snappedCenters = mcr.centers.map(c => {
+  // Reserve locked candidates so free centers don't snap onto them.
+  for (let lci = 0; lci < lockedCount; lci++) {
+    const lc = mcr.centers[lci];
+    if (!lc) continue;
+    for (let i = 0; i < cleaned.length; i++) {
+      if (Math.abs(+cleaned[i].lat - lc.lat) < 1e-6 && Math.abs(+cleaned[i].lng - lc.lng) < 1e-6) {
+        used.add(i);
+        break;
+      }
+    }
+  }
+  const snappedCenters = mcr.centers.map((c, ci) => {
+    if (ci < lockedCount) {
+      const match = cleaned.find(cd => Math.abs(+cd.lat - c.lat) < 1e-6 && Math.abs(+cd.lng - c.lng) < 1e-6);
+      return { ...c, candidateLabel: (match && match.label) ? match.label : (c.nearestCity || `Locked ${ci + 1}`), locked: true };
+    }
     let bestIdx = -1;
     let bestDist = Infinity;
     for (let i = 0; i < cleaned.length; i++) {
@@ -607,6 +643,7 @@ export function snapCentersToCandidates(mcr, points, candidates) {
     totalWeightedDistance,
     iterations: mcr.iterations,
     snappedToCandidates: true,
+    lockedCount: mcr.lockedCount || 0,
   };
 }
 

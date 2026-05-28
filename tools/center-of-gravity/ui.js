@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-cogtriage23';
+import * as calc from './calc.js?v=20260528-cogtriage24';
 import * as api from './api.js?v=20260504-auth1';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
@@ -246,7 +246,7 @@ function openEditor(savedRow) {
       (!Array.isArray(cogResult.assignments) || !cogResult.assignments.length)) {
     try {
       const _solvePts = _pointsForSolve();
-      cogResult = calc.kMeansCog(_solvePts, config.numCenters, config.maxIterations, config.kmeansRestarts ?? 10);
+      cogResult = calc.kMeansCog(_solvePts, config.numCenters, config.maxIterations, config.kmeansRestarts ?? 10, (config.snapToCandidates ? (config.candidateFacilities || []).filter(c => c.locked) : []));
       if (config.snapToCandidates && (config.candidateFacilities || []).length > 0) {
         cogResult = calc.snapCentersToCandidates(cogResult, _solvePts, config.candidateFacilities);
       }
@@ -294,7 +294,7 @@ function runOptimizeAndRender() {
   if (!rootEl) return;
   const _solvePts = _pointsForSolve();
   if (!_solvePts.length) return; // nothing to solve against
-  cogResult = calc.kMeansCog(_solvePts, config.numCenters, config.maxIterations, config.kmeansRestarts ?? 10);
+  cogResult = calc.kMeansCog(_solvePts, config.numCenters, config.maxIterations, config.kmeansRestarts ?? 10, (config.snapToCandidates ? (config.candidateFacilities || []).filter(c => c.locked) : []));
       if (config.snapToCandidates && (config.candidateFacilities || []).length > 0) {
         cogResult = calc.snapCentersToCandidates(cogResult, _solvePts, config.candidateFacilities);
       }
@@ -855,7 +855,7 @@ async function bindShellEvents() {
         requestAnimationFrame(() => {
           try {
             const _solvePts = _pointsForSolve();
-            cogResult = calc.kMeansCog(_solvePts, config.numCenters, config.maxIterations, config.kmeansRestarts ?? 10);
+            cogResult = calc.kMeansCog(_solvePts, config.numCenters, config.maxIterations, config.kmeansRestarts ?? 10, (config.snapToCandidates ? (config.candidateFacilities || []).filter(c => c.locked) : []));
             if (config.snapToCandidates && (config.candidateFacilities || []).length > 0) {
               cogResult = calc.snapCentersToCandidates(cogResult, _solvePts, config.candidateFacilities);
             }
@@ -1985,9 +1985,9 @@ function renderParametersPhase(el) {
           </label>
         </div>
         <textarea id="cog-candidate-list" rows="4"
-                  placeholder="One per line — Label, Lat, Lng &#10;Examples: &#10;ATL DC, 33.7490, -84.3880 &#10;DFW DC, 32.7767, -96.7970 &#10;LAX DC, 33.9425, -118.4081"
+                  placeholder="One per line — Label, Lat, Lng (prefix * to lock) &#10;Examples: &#10;*Memphis DC, 35.1495, -90.0490 &#10;DFW DC, 32.7767, -96.7970 &#10;LAX DC, 33.9425, -118.4081"
                   style="width:100%;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-family:monospace;line-height:1.5;${config.snapToCandidates ? '' : 'opacity:0.55;'}"
-                  ${config.snapToCandidates ? '' : 'disabled'}>${(config.candidateFacilities || []).map(c => `${c.label || ''}, ${c.lat}, ${c.lng}`).join('\n')}</textarea>
+                  ${config.snapToCandidates ? '' : 'disabled'}>${(config.candidateFacilities || []).map(c => `${c.locked ? '*' : ''}${c.label || ''}, ${c.lat}, ${c.lng}`).join('\n')}</textarea>
         <div id="cog-candidate-feedback" style="font-size:11px;color:var(--ies-gray-400);margin-top:4px;">${(config.candidateFacilities || []).length ? `${(config.candidateFacilities || []).length} candidate site(s) loaded` : 'No candidates yet — paste lines above when you want to constrain the solver.'}</div>
       </div>
     </div>
@@ -2177,8 +2177,11 @@ function renderParametersPhase(el) {
     const raw = /** @type {HTMLTextAreaElement} */ (e.target).value || '';
     const parsed = [];
     raw.split(/\r?\n/).forEach(line => {
-      const t = line.trim();
+      let t = line.trim();
       if (!t || t.startsWith('#')) return;
+      // 2026-05-28 B9 — leading '*' marks the candidate as LOCKED.
+      let locked = false;
+      if (t.startsWith('*')) { locked = true; t = t.slice(1).trim(); }
       const parts = t.split(',').map(s => s.trim());
       let label, lat, lng;
       if (parts.length >= 3) {
@@ -2190,15 +2193,16 @@ function renderParametersPhase(el) {
         lng = parseFloat(parts[1]);
       }
       if (Number.isFinite(lat) && Number.isFinite(lng)) {
-        parsed.push({ label: label || `Site ${parsed.length + 1}`, lat, lng });
+        parsed.push({ label: label || `Site ${parsed.length + 1}`, lat, lng, locked });
       }
     });
     config.candidateFacilities = parsed;
     const fb = el.querySelector('#cog-candidate-feedback');
     if (fb) {
+      const lockedCount = parsed.filter(c => c.locked).length;
       fb.textContent = parsed.length
-        ? `${parsed.length} candidate site(s) loaded`
-        : 'No valid lines parsed — format: Label, Lat, Lng (one per line)';
+        ? `${parsed.length} candidate site${parsed.length === 1 ? '' : 's'} loaded${lockedCount > 0 ? ` · ${lockedCount} locked (★)` : ''}`
+        : 'No valid lines parsed — format: Label, Lat, Lng (one per line) · prefix with * to lock';
     }
     markDirty();
   });
@@ -2498,7 +2502,7 @@ function renderAnalysis(el) {
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
             <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${clusterColor(i)};"></span>
             <span style="font-size:14px;font-weight:700;">Center ${i + 1}: ${c.nearestCity}</span>
-            ${c.candidateLabel ? `<span title="K-means picked this from your candidate list. Free centroid was ${calc.formatLatLng(c.snappedFromLat, c.snappedFromLng)}." style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;background:#dbeafe;color:#1d4ed8;letter-spacing:0.4px;">SNAPPED → ${c.candidateLabel}</span>` : ''}
+            ${c.locked ? `<span title="This center is locked — k-means kept it pinned at this candidate site through every iteration." style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;background:#fef3c7;color:#92400e;letter-spacing:0.4px;">★ LOCKED${c.candidateLabel ? ' → ' + c.candidateLabel : ''}</span>` : (c.candidateLabel ? `<span title="K-means picked this from your candidate list. Free centroid was ${calc.formatLatLng(c.snappedFromLat, c.snappedFromLng)}." style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;background:#dbeafe;color:#1d4ed8;letter-spacing:0.4px;">SNAPPED → ${c.candidateLabel}</span>` : '')}
           </div>
           <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px;font-size:13px;">
             <div>
