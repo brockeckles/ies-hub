@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-cogtriage8';
+import * as calc from './calc.js?v=20260528-cogtriage9';
 import * as api from './api.js?v=20260504-auth1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
 
@@ -2245,23 +2245,65 @@ function pushToNetOpt() {
     return;
   }
 
+  // 2026-05-28 G1 — deep handoff. Previously sent only
+  // {name, lat, lng, annualDemand} per center; NetOpt had to reconstruct
+  // every cost knob from scratch. Now we send the full state so the
+  // receiver can hit the ground running.
   const candidates = cogResult.centers.map((c, i) => ({
     name: `Center ${i + 1} (${c.nearestCity})`,
     lat: c.lat,
     lng: c.lng,
     annualDemand: c.totalWeight,
+    // 2026-05-28 — propagate capacity + fixed cost. NetOpt was defaulting
+    // to capacity=200,000 / fixedCost=$1M regardless of what COG set.
+    capacity: (config.capacityPerDC ?? 0) > 0 ? config.capacityPerDC : c.totalWeight,
+    fixedCost: (config.fixedCostPerDC ?? 0) > 0 ? config.fixedCostPerDC : 1000000,
+    // 2026-05-28 — when the candidate was snapped to a known site, pass
+    // the label so NetOpt's facility list shows the real site name.
+    candidateLabel: c.candidateLabel || null,
   }));
 
-  const payload = { candidates, at: Date.now() };
-  // Brock 2026-04-20: NetOpt wasn't even subscribing to this event before
-  // today — the emit was a no-op. Now NetOpt consumes either the
-  // in-session bus event or the sessionStorage handoff (mirrors the
-  // CM↔WSC and MOST→CM patterns). Both are fired so whichever arrives
-  // first wins; the other is a no-op.
+  // Demand points — actual solve set (post-exclude, post-cap). NetOpt's
+  // demand shape uses zip3 + annualDemand; we set zip3 = '' since COG
+  // tracks lat/lng + name only. NetOpt's normalizeDemand handles the rest.
+  const solvePts = _pointsForSolve();
+  const demandPoints = solvePts.map(p => ({
+    name: p.name || p.id,
+    lat: p.lat,
+    lng: p.lng,
+    annualDemand: p.weight || 0,
+  }));
+
+  const params = {
+    transportCostPerMile: config.transportCostPerMile,
+    roundTripFactor: config.roundTripFactor ?? 2.0,
+    roadFactor: config.roadFactor ?? 1.22,
+    maxServiceMiles: config.maxServiceMiles ?? 0,
+    capacityPerDC: config.capacityPerDC ?? 0,
+    fixedCostPerDC: config.fixedCostPerDC ?? 0,
+    weightUnit: config.weightUnit || 'lb',
+    unitsPerTruck: config.unitsPerTruck || 25000,
+  };
+
+  const origin = {
+    scenarioId: activeScenarioId || null,
+    scenarioName: _scenarioName || null,
+    sourceLabel: 'Center of Gravity',
+    pushedAt: Date.now(),
+    // Result fingerprint so a saved NetOpt config can later detect drift
+    // ("the COG that fed me has been re-run — do you want to re-pull?").
+    cogResultStamp: {
+      k: cogResult.centers.length,
+      totalCost: cogResult.totalCost || 0,
+      restartsUsed: cogResult.numRestarts || 1,
+    },
+  };
+
+  const payload = { candidates, demandPoints, params, origin, at: Date.now() };
   try { sessionStorage.setItem('cog_pending_push', JSON.stringify(payload)); } catch {}
   bus.emit('cog:push-to-netopt', payload);
-  showToast(`Pushed ${candidates.length} center(s) to Network Optimizer`, 'success');
-  // Navigate so the user lands on the receiving tool with the data applied.
+  const demandNote = demandPoints.length > 0 ? ` + ${demandPoints.length} demand point${demandPoints.length === 1 ? '' : 's'}` : '';
+  showToast(`Pushed ${candidates.length} center(s)${demandNote} to Network Optimizer`, 'success');
   window.location.hash = '#designtools/network-opt';
 }
 

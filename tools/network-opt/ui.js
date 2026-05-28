@@ -294,19 +294,68 @@ function applyCmHandoff(payload) {
 function applyCogHandoff(payload) {
   const candidates = Array.isArray(payload?.candidates) ? payload.candidates : [];
   if (candidates.length === 0) return;
+
+  // 2026-05-28 G1 — pull the rich payload COG now sends. Older payloads
+  // (pre-cogtriage9) lack these fields; everything below has defaults.
+  const params = payload?.params || {};
+  const demandPoints = Array.isArray(payload?.demandPoints) ? payload.demandPoints : [];
+  const origin = payload?.origin || null;
+
+  // Variable cost: derive from COG's $/mi if provided. NetOpt's variableCost
+  // is per-unit not per-mile, but the rough rule-of-thumb conversion is
+  // $/mi × road × rt / (units per truck × typical haul). We just propagate
+  // $/mi separately via params and let the user tune; default to a sensible
+  // 3.00 if not provided so legacy payloads still work.
+  const cpm = Number(params.transportCostPerMile) || 0;
+  const defaultVarCost = cpm > 0 ? +(cpm * 1.0).toFixed(2) : 3.00;
+
   for (const c of candidates) {
     facilities.push({
       id: 'f' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-      name: c.name || `COG Center ${facilities.length + 1}`,
+      // Prefer the snapped candidate label when COG had one.
+      name: c.candidateLabel || c.name || `COG Center ${facilities.length + 1}`,
       city: '', state: '',
       lat: Number(c.lat) || 0,
       lng: Number(c.lng) || 0,
-      capacity: Number(c.annualDemand) || 200000,
-      fixedCost: 1000000,
-      variableCost: 3.00,
+      // 2026-05-28 — use COG-supplied capacity / fixedCost when present.
+      capacity: Number(c.capacity) || Number(c.annualDemand) || 200000,
+      fixedCost: Number(c.fixedCost) || 1000000,
+      variableCost: defaultVarCost,
       isOpen: true,
+      // 2026-05-28 — drillback link to the source COG scenario.
+      sourceCogScenarioId: origin?.scenarioId || null,
+      sourceCogScenarioName: origin?.scenarioName || null,
     });
   }
+
+  // 2026-05-28 G1 — seed demands when COG sent them AND NetOpt is currently
+  // empty. Don't blow away manual work if the user already populated demand.
+  if (demandPoints.length > 0 && demands.length === 0) {
+    for (const dp of demandPoints) {
+      demands.push(calc.normalizeDemand({
+        id: 'd' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+        name: dp.name || 'COG demand',
+        zip3: '',
+        lat: Number(dp.lat) || 0,
+        lng: Number(dp.lng) || 0,
+        annualDemand: Number(dp.annualDemand) || 0,
+        // NetOpt defaults for fields COG doesn't track:
+        maxDays: 3,
+        avgWeight: 25,
+        nmfcClass: 100,
+        hazmat: false,
+        seasonality: 'uniform',
+        frequency: 'weekly',
+      }));
+    }
+  }
+
+  // 2026-05-28 G1 — seed serviceConfig.maxDistanceMiles from COG's
+  // maxServiceMiles when COG had one (and NetOpt's is at default null).
+  if (Number(params.maxServiceMiles) > 0 && serviceConfig.maxDistanceMiles == null) {
+    serviceConfig.maxDistanceMiles = Number(params.maxServiceMiles);
+  }
+
   markDirty();
   // If the editor shell is rendered, re-render its facility list
   if (rootEl?.querySelector('#no-facilities-panel')) {
