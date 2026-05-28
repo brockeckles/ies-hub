@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-cogtriage13';
+import * as calc from './calc.js?v=20260528-cogtriage14';
 import * as api from './api.js?v=20260504-auth1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
 
@@ -29,6 +29,7 @@ const COG_SECTIONS = [
   { key: 'numbers',     label: '\u{1F4CA} Numbers',     group: 'run' },
   { key: 'map',         label: '\u{1F5FA} Map',         group: 'run' },
   { key: 'sensitivity', label: '\u{1F4C8} Sensitivity', group: 'run' },
+  { key: 'compare',     label: '\u{2696}\u{FE0F} Compare',     group: 'run' },
 ];
 
 // ============================================================
@@ -65,6 +66,13 @@ let mapInstance = null;
 // 'lng' | 'weight' | 'type'; direction = 'asc' | 'desc'. null = original
 // (insertion) order.
 let _pointsSort = { column: null, direction: 'asc' };
+
+// 2026-05-28 F8 — compare-scenarios state. comparedScenarioIds holds the
+// (up to 2) other-scenario IDs the user picked in the Compare view.
+// _savedScenariosCache is populated lazily when Compare is first viewed.
+let comparedScenarioIds = [];
+/** @type {Array<any>|null} */
+let _savedScenariosCache = null;
 
 /**
  * Map overlay options — service-zone rings + heatmap toggles with
@@ -1517,6 +1525,7 @@ function renderRunPhase(el) {
   const inner = el.querySelector('#cog-run-inner');
   if (runSubTab === 'map')         renderMap(inner);
   else if (runSubTab === 'sensitivity') renderSensitivity(inner);
+  else if (runSubTab === 'compare') renderCompare(inner);
   else                              renderAnalysis(inner);
 }
 
@@ -1873,6 +1882,175 @@ function renderAnalysis(el) {
       renderContent();
       _refreshCogKpis();
     });
+  });
+}
+
+// ============================================================
+// COMPARE TAB (F8 — 2026-05-28)
+// ============================================================
+
+/**
+ * Extract a normalized metrics bag from a saved scenario row. Pulls
+ * directly from saved result + config; falls back to '—' / null for
+ * scenarios that pre-date the relevant commits. Handles both the active
+ * scenario (passed as a fake row with scenario_data assembled inline)
+ * and any saved row coming from api.listScenarios.
+ */
+function _cogMetricsFromSavedRow(row) {
+  const d = row?.scenario_data || {};
+  const cfg = d.config || {};
+  const result = d.result || null;
+  return {
+    label: row?.name || cfg.customerName || 'Untitled',
+    customer: cfg.customerName || '',
+    industry: cfg.industry || '',
+    dealStage: cfg.dealStage || '',
+    nPoints: (d.points || []).length,
+    nCenters: result?.centers?.length || 0,
+    k: cfg.numCenters || cfg.k || 0,
+    totalCost: typeof result?.totalCost === 'number' ? result.totalCost : null,
+    co2Tons: typeof result?.co2Tons === 'number' ? result.co2Tons : null,
+    coveragePct: typeof result?.serviceStats?.coveragePct === 'number' ? result.serviceStats.coveragePct : null,
+    maxServiceMiles: cfg.maxServiceMiles || 0,
+    peakUtil: typeof result?.capacityStats?.peakUtilization === 'number' ? result.capacityStats.peakUtilization : null,
+    capacityPerDC: cfg.capacityPerDC || 0,
+    avgDistance: result && typeof result.totalWeightedDistance === 'number' && (d.points || []).length > 0
+      ? result.totalWeightedDistance / Math.max(1, d.points.reduce((s, p) => s + (p.weight || 0), 0))
+      : null,
+    transportCostPerMile: cfg.transportCostPerMile ?? null,
+    roadFactor: cfg.roadFactor ?? null,
+    roundTripFactor: cfg.roundTripFactor ?? null,
+  };
+}
+
+function renderCompare(el) {
+  // Lazy-load the saved-scenarios list on first view.
+  if (_savedScenariosCache === null) {
+    el.innerHTML = '<div class="hub-card"><p class="text-body text-muted">Loading saved scenarios…</p></div>';
+    api.listScenarios().then(list => {
+      _savedScenariosCache = Array.isArray(list) ? list : [];
+      renderCompare(el);  // re-render with data
+    }).catch(err => {
+      console.error('[COG] listScenarios failed:', err);
+      _savedScenariosCache = [];
+      el.innerHTML = '<div class="hub-card"><p class="text-body text-muted">Failed to load saved scenarios.</p></div>';
+    });
+    return;
+  }
+
+  // Build the active-scenario metrics row from in-memory state.
+  const activeRow = {
+    id: activeScenarioId,
+    name: _scenarioName || '(Current edit — not yet saved)',
+    scenario_data: { points, config, result: cogResult },
+  };
+  const activeMetrics = _cogMetricsFromSavedRow(activeRow);
+
+  // Picker options — all saved scenarios except the active one.
+  const otherScenarios = _savedScenariosCache.filter(r => r.id !== activeScenarioId);
+
+  // Resolve compared scenarios from IDs, dropping any that no longer exist.
+  const compared = comparedScenarioIds
+    .map(id => _savedScenariosCache.find(r => r.id === id))
+    .filter(Boolean);
+  const comparedMetrics = compared.map(_cogMetricsFromSavedRow);
+
+  // Helper: render one column header.
+  const colHeader = (m, ix) => {
+    const ctxParts = [m.customer, m.industry, m.dealStage].filter(Boolean);
+    return `<div style="font-weight:700;font-size:12px;line-height:1.35;">
+        ${m.label}
+        ${ctxParts.length ? `<div style="font-weight:500;font-size:10px;color:var(--ies-gray-400);margin-top:2px;">${ctxParts.join(' · ')}</div>` : ''}
+      </div>`;
+  };
+
+  // Helper: render metric value or '—'.
+  const valCell = (v, fmt) => v == null ? '<span style="color:var(--ies-gray-300);">—</span>' : fmt(v);
+  const fmtCost = v => calc.formatCurrency(v, { compact: true });
+  const fmtPct = v => v.toFixed(1) + '%';
+  const fmtTons = v => v.toLocaleString(undefined, { maximumFractionDigits: 0 }) + ' t';
+  const fmtMi = v => calc.formatMiles(v);
+  const fmtNum = v => String(v);
+
+  const cols = [activeMetrics, ...comparedMetrics];
+  const gridCols = `2fr ${cols.map(() => '1fr').join(' ')}`;
+
+  el.innerHTML = `
+    <div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+        <h3 class="text-section" style="margin:0;">Compare Scenarios</h3>
+        <span style="font-size:12px;color:var(--ies-gray-400);">Active scenario vs up to 2 saved scenarios</span>
+      </div>
+
+      <div class="hub-card" style="padding:14px 16px;margin-bottom:16px;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:var(--ies-gray-500);margin-bottom:8px;">Pick scenarios to compare</div>
+        ${otherScenarios.length === 0 ? `
+          <div style="font-size:12px;color:var(--ies-gray-400);font-style:italic;">No other saved scenarios yet — save more scenarios to compare them here.</div>
+        ` : `
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            ${[0, 1].map(slot => `
+              <label style="font-size:11px;font-weight:600;color:var(--ies-gray-500);">Slot ${slot + 1}:</label>
+              <select data-compare-slot="${slot}" style="flex:1;min-width:200px;padding:6px 10px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;">
+                <option value="">— None —</option>
+                ${otherScenarios.map(r => `<option value="${r.id}"${comparedScenarioIds[slot] === r.id ? ' selected' : ''}>${(r.name || 'Untitled').replace(/</g, '&lt;')}</option>`).join('')}
+              </select>
+            `).join('')}
+            ${comparedScenarioIds.length > 0 ? `
+              <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-compare-clear">Clear</button>
+            ` : ''}
+          </div>
+        `}
+      </div>
+
+      ${comparedMetrics.length === 0 ? `
+        <div class="hub-card" style="padding:14px 16px;">
+          <p class="text-body text-muted" style="margin:0;font-size:12px;">Pick at least one scenario above to see a side-by-side comparison.</p>
+        </div>
+      ` : `
+        <div class="hub-card" style="padding:16px 18px;">
+          <div style="display:grid;grid-template-columns:${gridCols};gap:8px 18px;font-size:13px;align-items:baseline;">
+            <div style="font-weight:700;color:var(--ies-gray-500);font-size:11px;text-transform:uppercase;">Metric</div>
+            ${cols.map((m, i) => `<div style="text-align:right;">${colHeader(m, i)}</div>`).join('')}
+
+            ${[
+              ['Centers (k)',          (m) => valCell(m.nCenters || m.k, fmtNum)],
+              ['Demand points',        (m) => valCell(m.nPoints, fmtNum)],
+              ['Annual transport cost',(m) => valCell(m.totalCost, fmtCost)],
+              ['Service coverage',     (m) => valCell(m.coveragePct, fmtPct)],
+              ['Peak DC utilization',  (m) => valCell(m.peakUtil, fmtPct)],
+              ['Annual CO₂',           (m) => valCell(m.co2Tons, fmtTons)],
+              ['Avg weighted distance',(m) => valCell(m.avgDistance, fmtMi)],
+              ['$/mi',                 (m) => valCell(m.transportCostPerMile, v => '$' + v.toFixed(2))],
+              ['Road factor',          (m) => valCell(m.roadFactor, v => v.toFixed(2))],
+              ['Round-trip',           (m) => valCell(m.roundTripFactor, v => v.toFixed(1))],
+            ].map(([label, fn]) => `
+              <div style="color:var(--ies-gray-600);">${label}</div>
+              ${cols.map(m => `<div style="text-align:right;font-weight:600;">${fn(m)}</div>`).join('')}
+            `).join('')}
+          </div>
+          <div style="font-size:11px;color:var(--ies-gray-400);margin-top:14px;line-height:1.5;border-top:1px dashed var(--ies-gray-200);padding-top:10px;">
+            Values come from each scenario's saved result + config. Scenarios saved before today's commits may show '—' for newer metrics (CO₂, coverage, peak utilization) — re-Run those scenarios to populate.
+          </div>
+        </div>
+      `}
+    </div>
+  `;
+
+  // Wire picker selects.
+  el.querySelectorAll('[data-compare-slot]').forEach(sel => {
+    sel.addEventListener('change', (e) => {
+      const slot = parseInt(/** @type {HTMLElement} */ (e.target).dataset.compareSlot, 10);
+      const v = /** @type {HTMLSelectElement} */ (e.target).value;
+      // Maintain comparedScenarioIds with slot stability:
+      const next = [...comparedScenarioIds];
+      next[slot] = v || undefined;
+      comparedScenarioIds = next.filter(Boolean);
+      renderCompare(el);
+    });
+  });
+  el.querySelector('#cog-compare-clear')?.addEventListener('click', () => {
+    comparedScenarioIds = [];
+    renderCompare(el);
   });
 }
 
