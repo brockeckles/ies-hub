@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-parcel8';
+import * as calc from './calc.js?v=20260528-parcel9';
 import * as api from './api.js?v=20260504-auth1';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
@@ -1404,6 +1404,9 @@ function renderInputsPhase(el) {
                   <th style="text-align:right;padding:8px 6px;font-weight:700;cursor:pointer;user-select:none;" data-sort="lat" title="Click to sort by latitude">Lat${_pointsSort.column === 'lat' ? (_pointsSort.direction === 'asc' ? ' ↑' : ' ↓') : ''}</th>
                   <th style="text-align:right;padding:8px 6px;font-weight:700;cursor:pointer;user-select:none;" data-sort="lng" title="Click to sort by longitude">Lng${_pointsSort.column === 'lng' ? (_pointsSort.direction === 'asc' ? ' ↑' : ' ↓') : ''}</th>
                   <th style="text-align:right;padding:8px 6px;font-weight:700;cursor:pointer;user-select:none;" data-sort="weight" title="Click to sort by weight">Weight${_pointsSort.column === 'weight' ? (_pointsSort.direction === 'asc' ? ' ↑' : ' ↓') : ''}</th>
+                  ${points.some(p => p.parcelSharePct != null || p.avgPackageWeightLb != null) ? `
+                    <th style="text-align:center;padding:8px 6px;font-weight:700;cursor:pointer;user-select:none;" data-sort="parcelSharePct" title="Per-point parcel overrides: 'share% / avg-lb'. '—' means this point uses the scenario default. Click to sort by parcel share.">Parcel${_pointsSort.column === 'parcelSharePct' ? (_pointsSort.direction === 'asc' ? ' ↑' : ' ↓') : ''}</th>
+                  ` : ''}
                   <th style="text-align:center;padding:8px 6px;font-weight:700;cursor:pointer;user-select:none;" data-sort="type" title="Click to sort by type">Type${_pointsSort.column === 'type' ? (_pointsSort.direction === 'asc' ? ' ↑' : ' ↓') : ''}</th>
                   <th style="text-align:center;padding:8px 6px;"></th>
                 </tr>
@@ -1435,12 +1438,21 @@ function renderInputsPhase(el) {
                   const rowStyle = `border-bottom:1px solid var(--ies-gray-200);${exc ? 'background:#fafafa;color:var(--ies-gray-500);' : ''}`;
                   const nameStyle = `padding:6px;font-weight:600;${exc ? 'text-decoration:line-through;' : ''}`;
                   const ll = (v) => (v == null || Number.isNaN(v)) ? '<span style="color:var(--ies-gray-400);">—</span>' : v.toFixed(2);
+                  const hasOverrides = points.some(pp => pp.parcelSharePct != null || pp.avgPackageWeightLb != null);
+                  const shareStr = p.parcelSharePct != null ? (Math.round(p.parcelSharePct) + '%') : '—';
+                  const wtStr = p.avgPackageWeightLb != null ? ((+p.avgPackageWeightLb).toFixed(1) + 'lb') : '—';
+                  const parcelCellHtml = hasOverrides ? (
+                    '<td style="padding:6px;text-align:center;font-family:\'SFMono-Regular\',Consolas,Menlo,monospace;font-size:12px;color:var(--ies-gray-600);">' +
+                    '<span title="Parcel share / avg package weight (override; \'—\' uses scenario default)">' + shareStr + ' / ' + wtStr + '</span>' +
+                    '</td>'
+                  ) : '';
                   return `
                   <tr style="${rowStyle}">
                     <td style="${nameStyle}" title="${exc ? 'Excluded from the solve. Edit the source file and re-upload, or delete this row.' : ''}">${p.name || p.id}</td>
                     <td style="padding:6px;text-align:right;">${ll(p.lat)}</td>
                     <td style="padding:6px;text-align:right;">${ll(p.lng)}</td>
                     <td style="padding:6px;text-align:right;">${(p.weight || 0).toLocaleString()}</td>
+                    ${parcelCellHtml}
                     <td style="padding:6px;text-align:center;">
                       <span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;background:${badgeBg};color:${badgeFg};">${p.type}</span>
                     </td>
