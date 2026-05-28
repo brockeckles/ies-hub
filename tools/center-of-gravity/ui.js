@@ -1068,6 +1068,19 @@ function renderParametersPhase(el) {
                    style="width:80px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
+            <label style="font-size:13px;font-weight:600;" title="Multiplier applied to one-way distance to account for the empty return leg. 2.0 = full round trip (no backhaul revenue). 1.5-1.8 if your network has reliable backhaul matches. Threaded through Analysis totals + Sensitivity + per-row table.">Round-trip:</label>
+            <input type="number" value="${config.roundTripFactor ?? 2.0}" step="0.1" min="1.0" max="3.0" id="cog-rt-factor"
+                   style="width:70px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
+            <span style="font-size:11px;color:var(--ies-gray-400);">2.0 = full round trip · 1.5-1.8 with backhaul</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <label style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;cursor:pointer;" title="When ON, demand points whose lat/lng falls inside AK (51-72°N, -180 to -130°W) or HI (18-23°N, -161 to -154°W) bounding boxes are dropped before solving. Prevents a single offshore customer from dragging the centroid into the Pacific.">
+              <input type="checkbox" id="cog-exclude-offshore" ${config.excludeOffshore ? 'checked' : ''} style="cursor:pointer;">
+              Exclude AK &amp; HI from solve
+            </label>
+            <span style="font-size:11px;color:var(--ies-gray-400);">Keeps offshore demand visible in the points table but out of the k-means math</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
             <label style="font-size:13px;font-weight:600;">Fixed $ / DC / yr:</label>
             <input type="number" value="${config.fixedCostPerDC || 0}" step="50000" min="0" id="cog-fixed-cost"
                    title="Annual fully-loaded fixed cost per DC (rent + labor + IT + depreciation). Set to a non-zero value (e.g. $1,500,000) to model a true U-curve on the Sensitivity tab. Leave at 0 for a transport-only curve."
@@ -1439,6 +1452,24 @@ function renderAnalysis(el) {
   // Bind NetOpt push
   el.querySelector('#cog-push-netopt')?.addEventListener('click', () => {
     pushToNetOpt();
+  });
+
+  // 2026-05-28 — wire the data-cog-jump links in the "How this cost was
+  // calculated" panel. Previously the "Parameters" link emitted href="#"
+  // with no handler, so clicks did nothing. Now they switch phase.
+  el.querySelectorAll('[data-cog-jump]').forEach(link => {
+    link.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      const target = /** @type {HTMLElement} */ (link).dataset.cogJump;
+      if (target !== 'inputs' && target !== 'parameters' && target !== 'run') return;
+      activePhase = /** @type {any} */ (target);
+      if (target === 'run' && !runSubTab) runSubTab = 'numbers';
+      if (!rootEl) return;
+      rootEl.innerHTML = renderShell();
+      bindShellEvents();
+      renderContent();
+      _refreshCogKpis();
+    });
   });
 }
 
