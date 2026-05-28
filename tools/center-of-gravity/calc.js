@@ -14,6 +14,23 @@
 
 const EARTH_RADIUS_MI = 3959;
 
+// 2026-05-28 — Parcel cost engine (separate module). Re-export the
+// public surface so existing callers can reach it via calc.* without a
+// second import statement. The parcel engine handles per-package
+// zone-priced cost — replaces the per-truck-mile hack from commits
+// 16-26 with first-principles math. See parcel-calc.js for full docstring.
+export {
+  ZONE_BREAKPOINTS,
+  zoneForMiles,
+  FEDEX_GROUND_2026_LIST,
+  PARCEL_RATE_TABLES,
+  interpolateRate,
+  parcelCostPerPackage,
+  estimateParcelLane,
+  parcelDistributionByZone,
+  PARCEL_ENGINE_VERSION,
+} from './parcel-calc.js?v=20260528-parcel1';
+
 /** @type {import('./types.js?v=20260418-sP').CogConfig} */
 export const DEFAULT_CONFIG = {
   numCenters: 1,
