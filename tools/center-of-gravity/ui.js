@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-cogtriage5';
+import * as calc from './calc.js?v=20260528-cogtriage6';
 import * as api from './api.js?v=20260504-auth1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
 
@@ -203,6 +203,7 @@ function openEditor(savedRow) {
         cogResult = calc.snapCentersToCandidates(cogResult, _solvePts, config.candidateFacilities);
       }
       _enrichCogResultWithCost(cogResult, _solvePts);
+      calc.flagServiceViolations(cogResult, _solvePts, config.maxServiceMiles ?? 0, config.roadFactor ?? 1.22);
       sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
     } catch (err) {
       console.warn('[COG] Result rebuild from saved inputs failed; falling back to partial render:', err);
@@ -249,6 +250,7 @@ function runOptimizeAndRender() {
         cogResult = calc.snapCentersToCandidates(cogResult, _solvePts, config.candidateFacilities);
       }
   _enrichCogResultWithCost(cogResult, _solvePts);
+  calc.flagServiceViolations(cogResult, _solvePts, config.maxServiceMiles ?? 0, config.roadFactor ?? 1.22);
   sensitivityData = calc.sensitivityAnalysis(
     _solvePts,
     Math.max(config.numCenters, 5),
@@ -552,6 +554,20 @@ function _computeCogKpis() {
     value: recK,
     hint: 'k value with the lowest weighted-cost from the sensitivity sweep.',
   });
+  // 2026-05-28 — Service coverage KPI (B7). Only meaningful when
+  // maxServiceMiles is set; otherwise show '—'.
+  let svcStr = '—';
+  let svcHint = 'Set Max service mi in Parameters to flag out-of-SLA assignments.';
+  if (cogResult && cogResult.serviceStats && cogResult.serviceStats.maxMiles > 0) {
+    const pct = cogResult.serviceStats.coveragePct;
+    svcStr = `${pct.toFixed(1)}%`;
+    svcHint = `Share of demand weight within ${cogResult.serviceStats.maxMiles} road-mi of its assigned DC. ${cogResult.serviceStats.outCount} of ${cogResult.serviceStats.outCount + cogResult.serviceStats.coveredCount} points out of SLA.`;
+  }
+  items.push({
+    label: 'Service Coverage',
+    value: svcStr,
+    hint: svcHint,
+  });
   return items;
 }
 
@@ -618,6 +634,7 @@ async function bindShellEvents() {
           cogResult = calc.snapCentersToCandidates(cogResult, _solvePts, config.candidateFacilities);
         }
         _enrichCogResultWithCost(cogResult, _solvePts);
+        calc.flagServiceViolations(cogResult, _solvePts, config.maxServiceMiles ?? 0, config.roadFactor ?? 1.22);
         sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
         activePhase = 'run';
         runSubTab = 'numbers';
@@ -1081,6 +1098,12 @@ function renderParametersPhase(el) {
                    style="width:70px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
             <span style="font-size:11px;color:var(--ies-gray-400);">1.22 = US avg · 1.30 = mountain · 1.15 = plains · 1.00 = great-circle</span>
           </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <label style="font-size:13px;font-weight:600;" title="Service-level constraint. Demand points whose road-distance to the assigned DC exceeds this threshold get flagged out-of-service in the Analysis table and on the map. Doesn't change k-means math — it answers the 'can we hit 95% next-day' question. 0 = disabled.">Max service mi:</label>
+            <input type="number" value="${config.maxServiceMiles ?? 0}" step="50" min="0" max="3000" id="cog-max-service"
+                   style="width:80px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
+            <span style="font-size:11px;color:var(--ies-gray-400);">0 = off · 250 = same-day parcel · 500 = next-day TL · 800 = 2-day LTL</span>
+          </div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             <label style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;cursor:pointer;" title="When ON, demand points whose lat/lng falls inside AK (51-72°N, -180 to -130°W) or HI (18-23°N, -161 to -154°W) bounding boxes are dropped before solving. Prevents a single offshore customer from dragging the centroid into the Pacific.">
               <input type="checkbox" id="cog-exclude-offshore" ${config.excludeOffshore ? 'checked' : ''} style="cursor:pointer;">
@@ -1150,6 +1173,12 @@ function renderParametersPhase(el) {
   el.querySelector('#cog-road-factor')?.addEventListener('change', (e) => {
     const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
     config.roadFactor = (Number.isFinite(v) && v >= 1.0) ? v : 1.22;
+    markDirty();
+  });
+  // 2026-05-28 — Max service miles input (B7 service-level constraint).
+  el.querySelector('#cog-max-service')?.addEventListener('change', (e) => {
+    const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
+    config.maxServiceMiles = (Number.isFinite(v) && v >= 0) ? v : 0;
     markDirty();
   });
   // 2026-05-26 — Exclude Alaska & Hawaii checkbox.
@@ -1430,6 +1459,20 @@ function renderAnalysis(el) {
         </div>
       `;}).join('')}
 
+      ${(cogResult.serviceStats && cogResult.serviceStats.maxMiles > 0 && cogResult.serviceStats.outCount > 0) ? `
+        <div class="hub-card" style="margin-bottom:16px;padding:14px 18px;background:#fef2f2;border-left:4px solid #b91c1c;">
+          <div style="font-size:13px;font-weight:700;color:#b91c1c;margin-bottom:4px;">Service-level violations</div>
+          <div style="font-size:12px;color:#7f1d1d;line-height:1.5;">
+            <strong>${cogResult.serviceStats.outCount}</strong> of ${cogResult.serviceStats.outCount + cogResult.serviceStats.coveredCount} demand points
+            (<strong>${(100 - cogResult.serviceStats.coveragePct).toFixed(1)}%</strong> of weight) exceed the
+            <strong>${cogResult.serviceStats.maxMiles} road-mi</strong> SLA threshold.
+            They're highlighted in red in the Assignment Table below.
+            Options: add a DC to the candidate list near the violations, raise <strong>Centers (k)</strong>,
+            or relax the threshold in <a href="#" data-cog-jump="parameters" style="color:#b91c1c;text-decoration:underline;">Parameters</a>.
+          </div>
+        </div>
+      ` : ''}
+
       <!-- Assignment Table -->
       <div class="hub-card" style="padding:16px;">
         <div style="font-size:14px;font-weight:700;margin-bottom:12px;">Point Assignments</div>
@@ -1456,12 +1499,15 @@ function renderAnalysis(el) {
                 // one-way cost only, which read 50% low.
                 // 2026-05-28 — multiply by road factor too (same reason).
                 const cost = a.distanceToCenter * road * truckloads * config.transportCostPerMile * rt;
+                const outBadge = a.outOfService
+                  ? `<span title="Road distance ${Math.round(a.driveRoadMi || 0)} mi > ${cogResult.serviceStats?.maxMiles || 0} mi SLA" style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:700;background:#fee2e2;color:#b91c1c;letter-spacing:0.4px;">OUT</span>`
+                  : '';
                 return `
-                  <tr style="border-bottom:1px solid var(--ies-gray-200);">
+                  <tr style="border-bottom:1px solid var(--ies-gray-200);${a.outOfService ? 'background:#fff5f5;' : ''}">
                     <td style="padding:6px;text-align:center;">
                       <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${clusterColor(a.clusterId)};"></span>
                     </td>
-                    <td style="padding:6px;font-weight:600;">${pt?.name || a.pointId}</td>
+                    <td style="padding:6px;font-weight:600;">${pt?.name || a.pointId}${outBadge}</td>
                     <td style="padding:6px;text-align:right;">${(pt?.weight || 0).toLocaleString()}</td>
                     <td style="padding:6px;text-align:right;">${calc.formatMiles(a.distanceToCenter)}</td>
                     <td style="padding:6px;text-align:right;">${calc.formatCurrency(cost, { compact: true })}</td>
@@ -1701,10 +1747,15 @@ function initCogMap() {
     if (!pt) return;
     const color = clusterColor(a.clusterId);
     const size = Math.max(4, Math.min(10, pt.weight / 10000));
+    // 2026-05-28 B7 — out-of-service points get a red ring outline so
+    // they pop against the cluster color.
+    const ringColor = a.outOfService ? '#b91c1c' : color;
+    const ringWeight = a.outOfService ? 3 : 1;
     const marker = L.circleMarker([pt.lat, pt.lng], {
-      radius: size, fillColor: color, color: color, weight: 1, fillOpacity: 0.7,
+      radius: size, fillColor: color, color: ringColor, weight: ringWeight, fillOpacity: 0.7,
     }).addTo(mapInstance);
-    marker.bindPopup(`<strong>${pt.name || pt.id}</strong><br>Weight: ${pt.weight.toLocaleString()}<br>Cluster: ${a.clusterId + 1}<br>Distance: ${calc.formatMiles(a.distanceToCenter)}`);
+    const outNote = a.outOfService ? `<br><strong style="color:#b91c1c;">OUT of SLA</strong> (${Math.round(a.driveRoadMi || 0)} road-mi > ${cogResult.serviceStats?.maxMiles || 0} mi)` : '';
+    marker.bindPopup(`<strong>${pt.name || pt.id}</strong><br>Weight: ${pt.weight.toLocaleString()}<br>Cluster: ${a.clusterId + 1}<br>Distance: ${calc.formatMiles(a.distanceToCenter)}${outNote}`);
 
     // Line to center
     const center = cogResult.centers[a.clusterId];

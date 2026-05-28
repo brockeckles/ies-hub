@@ -60,6 +60,12 @@ export const DEFAULT_CONFIG = {
   /** @type {Array<{ label?: string, lat: number, lng: number }>} */
   candidateFacilities: [],
   snapToCandidates: false,
+  // 2026-05-28 — service-level constraint (B7). Threshold in road-miles
+  // above which an assignment is flagged 'out of service'. Doesn't change
+  // the k-means math — just surfaces violations so SDs can answer the
+  // #1 RFP question ('Can we hit 95% next-day?'). Common: 250 same-day
+  // parcel · 500 next-day TL · 800 2-day LTL · 0 = disabled.
+  maxServiceMiles: 0,
   // 2026-05-28 — road-mile multiplier. Haversine returns great-circle
   // distance; carriers pay for road miles. Continental US ratio averages
   // 1.20-1.25 (1.30+ in mountain west, 1.15 in plains). For a defensible
@@ -685,6 +691,45 @@ export function capWeightsByPercentile(points, percentile = 95) {
     ...p,
     weight: Math.min(p.weight, cap),
   }));
+}
+
+// ============================================================
+// SERVICE-LEVEL FLAGGING (B7 — 2026-05-28)
+// ============================================================
+
+/**
+ * Mutates `mcr.assignments` in place to add per-assignment fields:
+ *   - driveRoadMi: distanceToCenter * roadFactor (one-way road miles)
+ *   - outOfService: true when driveRoadMi exceeds maxMiles
+ * Returns aggregate coverage stats so the UI can render a single KPI.
+ *
+ * maxMiles <= 0 disables the check (everyone is in service).
+ *
+ * @param {import('./types.js?v=20260418-sP').MultiCogResult} mcr
+ * @param {import('./types.js?v=20260418-sP').WeightedPoint[]} points
+ * @param {number} maxMiles
+ * @param {number} roadFactor
+ * @returns {{ maxMiles: number, coveredWeight: number, outWeight: number, coveragePct: number, coveredCount: number, outCount: number }}
+ */
+export function flagServiceViolations(mcr, points, maxMiles = 0, roadFactor = 1.22) {
+  const stats = { maxMiles: maxMiles || 0, coveredWeight: 0, outWeight: 0, coveragePct: 100, coveredCount: 0, outCount: 0 };
+  if (!mcr || !Array.isArray(mcr.assignments)) return stats;
+  const road = Math.max(1, +roadFactor || 1);
+  const disabled = !(maxMiles > 0);
+  for (const a of mcr.assignments) {
+    const driveMi = (a.distanceToCenter || 0) * road;
+    a.driveRoadMi = driveMi;
+    a.outOfService = disabled ? false : (driveMi > maxMiles);
+    const pt = points.find(p => p.id === a.pointId);
+    const w = pt?.weight || 0;
+    if (a.outOfService) { stats.outWeight += w; stats.outCount += 1; }
+    else { stats.coveredWeight += w; stats.coveredCount += 1; }
+  }
+  const totalW = stats.coveredWeight + stats.outWeight;
+  stats.coveragePct = totalW > 0 ? (stats.coveredWeight / totalW * 100) : 100;
+  // Stamp summary on the result so renderAnalysis / chrome KPI can pull it.
+  mcr.serviceStats = stats;
+  return stats;
 }
 
 // ============================================================
