@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-parcel10';
+import * as calc from './calc.js?v=20260528-parcel11';
 import * as api from './api.js?v=20260504-auth1';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
@@ -107,6 +107,7 @@ let mapOptions = {
   labels: true,
   territories: false,
   pointLabels: false,
+  parcelZones: false,
   basemap: 'voyager',   // 'voyager' | 'positron' | 'satellite'
   zoneRadiiMiles: [250, 500, 750],
 };
@@ -3103,6 +3104,9 @@ function renderMap(el) {
           <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ies-gray-600);cursor:pointer;" title="Voronoi-style service territories — each cell is colored by the nearest center (haversine grid, ~60x40 cells)">
             <input type="checkbox" data-cog-toggle="territories" ${mapOptions.territories ? 'checked' : ''} style="margin:0;"> Territories
           </label>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ies-gray-600);cursor:pointer;" title="FedEx/UPS parcel zone boundary rings (Z2-Z6 at 150/300/600/1000/1400 mi) — colored green→red so you can see at a glance which destinations land in which zone">
+            <input type="checkbox" data-cog-toggle="parcelZones" ${mapOptions.parcelZones ? 'checked' : ''} style="margin:0;"> Parcel zones
+          </label>
           <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ies-gray-600);cursor:pointer;" title="Show demand-point names directly on the map (otherwise visible only on hover)">
             <input type="checkbox" data-cog-toggle="pointLabels" ${mapOptions.pointLabels ? 'checked' : ''} style="margin:0;"> Point labels
           </label>
@@ -3128,6 +3132,7 @@ function renderMap(el) {
         `).join('')}
         ${mapOptions.zones ? `<span style="opacity:0.8;">Rings: ${mapOptions.zoneRadiiMiles.join(' / ')} mi</span>` : ''}
         ${mapOptions.territories ? `<span style="opacity:0.8;">Territories: haversine-nearest grid</span>` : ''}
+        ${mapOptions.parcelZones ? `<span style="opacity:0.8;">Parcel zones: Z2(150) / Z3(300) / Z4(600) / Z5(1000) / Z6(1400) / Z7(1800) mi</span>` : ''}
       </div>
     </div>
   `;
@@ -3342,6 +3347,35 @@ function initCogMap() {
           fillColor: color,
           fillOpacity: 0.04 + (mapOptions.zoneRadiiMiles.length - ringIdx) * 0.02,
           dashArray: ringIdx > 0 ? '4 4' : null,
+          interactive: false,
+        }).addTo(mapInstance);
+      });
+    });
+  }
+
+  // 2026-05-28 35 — FedEx/UPS parcel zone rings. Concentric rings around
+  // each center at the standard zone boundaries (Z2-Z6 at 150/300/600/
+  // 1000/1400 mi). Colored green→red so it's instantly visible which
+  // destinations land in which zone. Drawn AFTER service-zone rings so
+  // it sits on top.
+  if (mapOptions.parcelZones) {
+    const PARCEL_ZONE_BANDS = [
+      { mi: 150,  color: '#15803d', label: 'Z2' },
+      { mi: 300,  color: '#22c55e', label: 'Z3' },
+      { mi: 600,  color: '#84cc16', label: 'Z4' },
+      { mi: 1000, color: '#eab308', label: 'Z5' },
+      { mi: 1400, color: '#f97316', label: 'Z6' },
+      { mi: 1800, color: '#ef4444', label: 'Z7' },
+    ];
+    cogResult.centers.forEach((c) => {
+      PARCEL_ZONE_BANDS.forEach((band) => {
+        L.circle([c.lat, c.lng], {
+          radius: band.mi * 1609.34,
+          color: band.color,
+          weight: 1.5,
+          opacity: 0.65,
+          fillOpacity: 0,
+          dashArray: '6 4',
           interactive: false,
         }).addTo(mapInstance);
       });
