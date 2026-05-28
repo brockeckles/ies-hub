@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-cogtriage19';
+import * as calc from './calc.js?v=20260528-cogtriage20';
 import * as api from './api.js?v=20260504-auth1';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
@@ -1440,6 +1440,13 @@ function renderInputsPhase(el) {
       showToast(`Loaded ${generated.length} demand points from ${calc.COG_ARCHETYPES[archSelect.value].name}.`, 'ok');
     }
   });
+
+  // 2026-05-28 C1 — re-render the wizard if a pending upload survived a
+  // phase switch (rare but possible if user clicked away mid-mapping).
+  if (_pendingUpload) {
+    const wizEl = el.querySelector('#cog-upload-wizard');
+    if (wizEl) renderUploadWizard(/** @type {HTMLElement} */ (wizEl));
+  }
 }
 
 function renderParametersPhase(el) {
