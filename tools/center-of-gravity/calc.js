@@ -26,12 +26,15 @@ import {
   USPS_GROUND_ADVANTAGE_2026_LIST,
   PARCEL_RATE_TABLES,
   PARCEL_CARRIER_LABELS,
+  SERVICE_LEVELS,
+  DEFAULT_SERVICE_MIX,
+  serviceMixMultiplier,
   interpolateRate,
   parcelCostPerPackage,
   estimateParcelLane,
   parcelDistributionByZone,
   PARCEL_ENGINE_VERSION,
-} from './parcel-calc.js?v=20260528-parcel4';
+} from './parcel-calc.js?v=20260528-parcel5';
 
 export {
   ZONE_BREAKPOINTS,
@@ -41,6 +44,9 @@ export {
   USPS_GROUND_ADVANTAGE_2026_LIST,
   PARCEL_RATE_TABLES,
   PARCEL_CARRIER_LABELS,
+  SERVICE_LEVELS,
+  DEFAULT_SERVICE_MIX,
+  serviceMixMultiplier,
   interpolateRate,
   parcelCostPerPackage,
   estimateParcelLane,
@@ -140,6 +146,9 @@ export const DEFAULT_CONFIG = {
   parcelResidentialShare: 0.5,
   parcelFuelPct: 25,
   parcelContractDiscountPct: 0,
+  // 2026-05-28 — Service mix: {ground, threeDay, twoDay, overnight}
+  // share %s. Default 100% ground (legacy compatible).
+  parcelServiceMix: { ground: 100, threeDay: 0, twoDay: 0, overnight: 0 },
   // 2026-05-28 — CO₂ emissions intensity (B20). kg CO₂ per truck-mile.
   // Default 1.62 = EPA SmartWay 2024 US heavy-duty diesel Class 8 average.
   // Range 1.30 (new fleets) to 2.10 (older / refrigerated). Threaded
@@ -1418,6 +1427,7 @@ export function estimateBlendedCost(cogResult, points, config) {
       const lane = estimateParcelLane({
         pkgCount, avgWeight, distanceMi: driveMi,
         fuelPct, residentialShare, discountPct, carrier,
+        serviceMix: cfg.parcelServiceMix,
       });
       parcelCostByCluster[a.clusterId] = (parcelCostByCluster[a.clusterId] || 0) + lane.totalCost;
       byZone[lane.zone] = (byZone[lane.zone] || 0) + pkgCount;

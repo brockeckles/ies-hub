@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-parcel4';
+import * as calc from './calc.js?v=20260528-parcel5';
 import * as api from './api.js?v=20260504-auth1';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
@@ -2006,6 +2006,31 @@ function renderParametersPhase(el) {
               <div style="font-size:10px;color:var(--ies-gray-400);margin-top:2px;">Most shippers negotiate 30-60% off list</div>
             </div>
           </div>
+
+          <!-- 2026-05-28 29 — Service mix row -->
+          <div style="margin-top:14px;border-top:1px dashed var(--ies-gray-200);padding-top:10px;">
+            <div style="font-size:11px;font-weight:600;color:var(--ies-gray-500);margin-bottom:6px;">Service mix (% of packages)</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(140px, 1fr));gap:8px;">
+              ${calc.SERVICE_LEVELS.map(svc => `
+                <div>
+                  <label style="display:block;font-size:10px;font-weight:600;color:var(--ies-gray-500);margin-bottom:2px;">${svc.label} <span style="color:var(--ies-gray-300);">×${svc.multiplier.toFixed(2)}</span></label>
+                  <div style="display:flex;align-items:center;gap:4px;">
+                    <input type="number" value="${(config.parcelServiceMix && config.parcelServiceMix[svc.key]) ?? (svc.key === 'ground' ? 100 : 0)}" min="0" max="100" step="5"
+                           data-cog-parcel-svc="${svc.key}"
+                           style="width:100%;padding:5px 7px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
+                    <span style="font-size:11px;color:var(--ies-gray-500);">%</span>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+            ${(() => {
+              const mult = calc.serviceMixMultiplier(config.parcelServiceMix);
+              const sum = calc.SERVICE_LEVELS.reduce((s, svc) => s + (Math.max(0, +(config.parcelServiceMix?.[svc.key]) || 0)), 0);
+              if (sum === 0) return `<div style="font-size:11px;color:#b91c1c;margin-top:8px;font-weight:600;">Service shares sum to 0 — set at least one to compute cost.</div>`;
+              if (Math.abs(sum - 100) > 0.5) return `<div style="font-size:11px;color:#a16207;margin-top:8px;">Shares sum to ${sum}% (normalized to 100%) · effective multiplier <strong>×${mult.toFixed(2)}</strong></div>`;
+              return `<div style="font-size:11px;color:#15803d;margin-top:8px;font-weight:600;">Service-blend multiplier: <strong>×${mult.toFixed(2)}</strong> applied on top of carrier Ground rates</div>`;
+            })()}
+          </div>
           ${(() => {
             const sampleW = config.parcelAvgPackageWeightLb ?? 5;
             const r = calc.parcelCostPerPackage({
@@ -2014,9 +2039,10 @@ function renderParametersPhase(el) {
               residentialShare: config.parcelResidentialShare ?? 0.5,
               discountPct: config.parcelContractDiscountPct ?? 0,
               carrier: config.parcelCarrier || 'fedex_ground',
+              serviceMix: config.parcelServiceMix,
             });
             return `<div style="font-size:11px;color:var(--ies-gray-500);margin-top:10px;border-top:1px dashed var(--ies-gray-200);padding-top:8px;line-height:1.5;">
-              <strong>Sample at current settings:</strong> ${sampleW} lb pkg @ Zone ${r.zone} (≈800 mi) = <strong>\$${r.cost.toFixed(2)}/pkg</strong> (base \$${r.base.toFixed(2)} + fuel \$${r.fuelAdd.toFixed(2)} − discount \$${r.discount.toFixed(2)} + residential \$${r.residAdd.toFixed(2)})
+              <strong>Sample at current settings:</strong> ${sampleW} lb pkg @ Zone ${r.zone} (≈800 mi) = <strong>\$${r.cost.toFixed(2)}/pkg</strong> · base \$${r.baseGround.toFixed(2)} (Ground) × ${r.svcMult.toFixed(2)} (svc mix) = \$${r.base.toFixed(2)} + fuel \$${r.fuelAdd.toFixed(2)} − discount \$${r.discount.toFixed(2)} + residential \$${r.residAdd.toFixed(2)}
             </div>`;
           })()}
         </div>
@@ -2215,6 +2241,16 @@ function renderParametersPhase(el) {
     const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
     config.parcelContractDiscountPct = Math.max(0, Math.min(80, Number.isFinite(v) ? v : 0));
     markDirty(); renderParametersPhase(el);
+  });
+  // 2026-05-28 29 — Parcel service-mix bindings.
+  el.querySelectorAll('[data-cog-parcel-svc]').forEach(input => {
+    input.addEventListener('change', (e) => {
+      const key = /** @type {HTMLElement} */ (e.target).dataset.cogParcelSvc;
+      const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
+      config.parcelServiceMix = config.parcelServiceMix || { ground: 100, threeDay: 0, twoDay: 0, overnight: 0 };
+      config.parcelServiceMix[key] = Math.max(0, Math.min(100, Number.isFinite(v) ? v : 0));
+      markDirty(); renderParametersPhase(el);
+    });
   });
 
   // 2026-05-28 E2 — Current state handlers.

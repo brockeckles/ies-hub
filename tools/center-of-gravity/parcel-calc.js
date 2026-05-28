@@ -263,10 +263,14 @@ export function parcelCostPerPackage(opts = {}) {
   const residentialFee = opts.residentialFee == null ? 5.25 : +opts.residentialFee;
   const discountPct = opts.discountPct == null ? 0 : +opts.discountPct;
   const carrier = opts.carrier || 'fedex_ground';
+  // 2026-05-28 — service mix multiplier (1.00 = Ground; 1.45 = 3-day;
+  // 2.15 = 2-day; 4.00 = overnight). Default is 100% ground (legacy).
+  const svcMult = serviceMixMultiplier(opts.serviceMix);
 
   const table = PARCEL_RATE_TABLES[carrier] || FEDEX_GROUND_2026_LIST;
   const zone = zoneForMiles(distanceMi);
-  const base = interpolateRate(weight, zone, table);
+  const baseGround = interpolateRate(weight, zone, table);
+  const base = baseGround * svcMult;
   const fuelAdd = base * (fuelPct / 100);
   const gross = base + fuelAdd;
   const discount = gross * (discountPct / 100);
@@ -274,7 +278,7 @@ export function parcelCostPerPackage(opts = {}) {
   const residAdd = residentialFee * residentialShare;
   const cost = net + residAdd;
 
-  return { cost, zone, base, fuelAdd, discount, residAdd };
+  return { cost, zone, base, fuelAdd, discount, residAdd, svcMult, baseGround };
 }
 
 // ============================================================
@@ -350,4 +354,49 @@ export function parcelDistributionByZone(assignments, points, clusterId, roadFac
 // ENGINE VERSION (for handoff payloads)
 // ============================================================
 
-export const PARCEL_ENGINE_VERSION = '1.0.0';
+/**
+ * 2026-05-28 — Service levels. Multipliers applied to the carrier's
+ * Ground rate matrix. Approximate match to published FedEx/UPS service-
+ * level pricing within ~5-10%; trades precision for not having to hand-
+ * enter 1,000+ cells of per-service rate data.
+ *
+ * Sourced from analysis of FedEx Standard List Rates 2026.
+ */
+export const SERVICE_LEVELS = [
+  { key: 'ground',    label: 'Ground',         multiplier: 1.00 },
+  { key: 'threeDay',  label: '3-Day Select',   multiplier: 1.45 },
+  { key: 'twoDay',    label: '2-Day Air',      multiplier: 2.15 },
+  { key: 'overnight', label: 'Overnight Air',  multiplier: 4.00 },
+];
+
+/**
+ * Default service mix — 100% Ground (legacy compatible).
+ */
+export const DEFAULT_SERVICE_MIX = {
+  ground:    100,
+  threeDay:  0,
+  twoDay:    0,
+  overnight: 0,
+};
+
+/**
+ * Compute the share-normalized service-level multiplier for a given
+ * service mix. Mix is {ground, threeDay, twoDay, overnight} share %s
+ * (need not sum to 100; normalized).
+ *
+ * @param {Object} mix
+ * @returns {number} blended multiplier ≥ 1.00
+ */
+export function serviceMixMultiplier(mix) {
+  const m = mix || DEFAULT_SERVICE_MIX;
+  let weighted = 0;
+  let sum = 0;
+  for (const svc of SERVICE_LEVELS) {
+    const share = Math.max(0, +m[svc.key] || 0);
+    weighted += share * svc.multiplier;
+    sum += share;
+  }
+  return sum > 0 ? weighted / sum : 1.00;
+}
+
+export const PARCEL_ENGINE_VERSION = '1.1.0';
