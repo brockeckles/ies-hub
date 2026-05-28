@@ -308,7 +308,7 @@ function scheduleAutoSave() {
 }
 function updateHeaderSaveState() {
   if (!rootEl) return;
-  const btn = rootEl.querySelector('[data-action="cog-save"]');
+  const btn = rootEl.querySelector('[data-tc-action="cog-save"]');
   if (!btn) return;
   btn.removeAttribute('disabled');
   btn.textContent = isDirty ? (activeScenarioId ? '💾 Save' : '💾 Save Scenario') : (activeScenarioId ? '✓ Saved' : '💾 Save Scenario');
@@ -352,7 +352,13 @@ async function handleSave() {
     isDirty = false;
     guardMarkClean('cog');
     // Re-render shell so status chip + button classes come through cleanly.
+    // 2026-05-26 — also re-bind chrome events. innerHTML replacement
+    // doesn't kill the rootEl-level click delegate, but other paths
+    // (onPhase, onSection) re-bind here, so do the same to stay
+    // consistent and immune to future refactors that move listeners
+    // off the rootEl itself.
     rootEl.innerHTML = renderShell();
+    bindShellEvents();
     renderContent();
     showToast(`Saved "${_scenarioName}".`, 'ok');
   } catch (err) {
@@ -811,6 +817,7 @@ function renderInputsPhase(el) {
     const dataRows = looksLikeZip(aoa[0]?.[0]) ? aoa : aoa.slice(1);
 
     const loaded = [];
+    const excluded = [];  // surfaced in points table as type='excluded'
     const skipped = { badZip: 0, noMatch: 0, badUnits: 0, blank: 0 };
     for (const row of dataRows) {
       if (!row || row.length === 0 || (row[0] === '' && row[1] === '')) { skipped.blank++; continue; }
@@ -820,9 +827,24 @@ function renderInputsPhase(el) {
       const zip = rawZip.replace(/[^0-9]/g, '').padStart(5, '0').slice(-5);
       if (!/^\d{5}$/.test(zip)) { skipped.badZip++; continue; }
       const unitsRaw = Number(String(row[1] ?? '').replace(/[,$\s]/g, ''));
-      if (!Number.isFinite(unitsRaw) || unitsRaw <= 0) { skipped.badUnits++; continue; }
+      const validUnits = Number.isFinite(unitsRaw) && unitsRaw > 0;
       const hit = calc.lookupLocation(zip);
-      if (!hit) { skipped.noMatch++; continue; }
+      // 2026-05-26 — instead of silently dropping no-match / bad-units
+      // rows, surface them in the points table as type='excluded' so
+      // the user can see exactly what didn't make it.
+      if (!hit || !validUnits) {
+        const reason = !hit ? 'no ZIP match' : 'missing / invalid units';
+        if (!hit) skipped.noMatch++; else skipped.badUnits++;
+        excluded.push({
+          id: 'px' + Date.now() + '_' + (loaded.length + excluded.length),
+          name: `ZIP ${zip} — excluded (${reason})`,
+          lat: null,
+          lng: null,
+          weight: validUnits ? Math.max(1, Math.round(unitsRaw)) : 0,
+          type: 'excluded',
+        });
+        continue;
+      }
       loaded.push({
         id: 'p' + Date.now() + '_' + loaded.length,
         name: `${hit.name} (${zip})`,
@@ -833,11 +855,10 @@ function renderInputsPhase(el) {
       });
     }
 
-    if (loaded.length === 0) {
+    const allUpload = [...loaded, ...excluded];
+    if (allUpload.length === 0) {
       const reason = skipped.badZip ? `${skipped.badZip} bad ZIP${skipped.badZip === 1 ? '' : 's'}`
-        : skipped.noMatch ? `no ZIPs matched the lookup table (${skipped.noMatch} attempted)`
-        : skipped.badUnits ? `${skipped.badUnits} row${skipped.badUnits === 1 ? '' : 's'} had non-positive / non-numeric units`
-        : 'no usable rows';
+        : 'no usable rows (all blank or unparseable)';
       showFeedback(`Nothing loaded — ${reason}.`, 'err');
       // Reset the input so the same file can be re-picked after fixing it.
       if (xlsxInput) xlsxInput.value = '';
@@ -845,26 +866,22 @@ function renderInputsPhase(el) {
     }
 
     if (points.length > 0) {
-      const ok = await showConfirm(`Replace ${points.length} existing point${points.length === 1 ? '' : 's'} with ${loaded.length} from "${file.name}"?`);
+      const ok = await showConfirm(`Replace ${points.length} existing point${points.length === 1 ? '' : 's'} with ${allUpload.length} from "${file.name}" (${loaded.length} active, ${excluded.length} excluded)?`);
       if (!ok) {
         showFeedback('Cancelled — existing points kept.', 'info');
         if (xlsxInput) xlsxInput.value = '';
         return;
       }
     }
-    points = loaded;
+    points = allUpload;
     markDirty();
     renderInputsPhase(el);
-    const skipTotal = skipped.badZip + skipped.noMatch + skipped.badUnits + skipped.blank;
-    const tail = skipTotal > 0
-      ? ` (${skipTotal} skipped: ${[
-          skipped.badZip ? `${skipped.badZip} bad ZIP` : '',
-          skipped.noMatch ? `${skipped.noMatch} no match` : '',
-          skipped.badUnits ? `${skipped.badUnits} bad units` : '',
-          skipped.blank ? `${skipped.blank} blank` : '',
-        ].filter(Boolean).join(', ')})`
-      : '';
-    showToast(`Loaded ${loaded.length} demand point${loaded.length === 1 ? '' : 's'} from ${file.name}${tail}.`, 'ok');
+    const tailParts = [];
+    if (excluded.length > 0) tailParts.push(`${excluded.length} excluded (visible in table)`);
+    if (skipped.badZip > 0) tailParts.push(`${skipped.badZip} bad ZIP dropped`);
+    if (skipped.blank > 0) tailParts.push(`${skipped.blank} blank dropped`);
+    const tail = tailParts.length ? ` — ${tailParts.join(', ')}` : '';
+    showToast(`Loaded ${loaded.length} active point${loaded.length === 1 ? '' : 's'} from ${file.name}${tail}.`, excluded.length > 0 ? 'warn' : 'ok');
     // Reset so re-uploading the same file fires the change event again.
     if (xlsxInput) xlsxInput.value = '';
   });
