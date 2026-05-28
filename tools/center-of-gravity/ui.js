@@ -650,6 +650,19 @@ function renderInputsPhase(el) {
           </div>
           <div id="cog-archetype-desc" style="font-size:12px;color:var(--ies-gray-500);display:none;padding:8px 12px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;margin-left:100px;"></div>
 
+          <!-- 2026-05-26 — bulk demand from an Excel / CSV file. Two
+               columns: 5-digit ZIP + units. Header row auto-detected. -->
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--ies-gray-200);padding-top:10px;">
+            <div style="font-size:11px;font-weight:600;color:var(--ies-gray-500);width:90px;flex-shrink:0;">Upload</div>
+            <input type="file" id="cog-xlsx-input" accept=".xlsx,.xls,.csv" style="display:none;" />
+            <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-xlsx-pick" title="Choose an Excel (.xlsx, .xls) or CSV file with two columns: 5-digit ZIP and units">📂 Upload XLS / XLSX / CSV</button>
+            <span id="cog-xlsx-filename" style="font-size:12px;color:var(--ies-gray-500);font-style:italic;"></span>
+            <span style="flex:1;font-size:11px;color:var(--ies-gray-400);text-align:right;">
+              Two columns: <strong>5-digit ZIP</strong>, <strong>units</strong>. Header row OK.
+            </span>
+          </div>
+          <div id="cog-xlsx-feedback" style="font-size:11px;color:var(--ies-gray-400);padding-left:100px;display:none;"></div>
+
           <datalist id="cog-city-list">
             ${calc.CITY_CENTROIDS.map(c => `<option value="${c.name}, ${c.state}"></option>`).join('')}
           </datalist>
@@ -731,6 +744,129 @@ function renderInputsPhase(el) {
     points = calc.DEMO_POINTS.map(p => ({ ...p }));
     markDirty();
     renderInputsPhase(el);
+  });
+
+  // 2026-05-26 — XLS / XLSX / CSV upload. Two columns: 5-digit ZIP + units.
+  // Parses with the globally-loaded SheetJS (already in index.html for
+  // exports). Auto-detects a header row, looks up each ZIP via
+  // calc.lookupLocation, pushes one demand point per resolved row.
+  // Mirrors the archetype loader's confirm-replace pattern.
+  const xlsxBtn = el.querySelector('#cog-xlsx-pick');
+  const xlsxInput = /** @type {HTMLInputElement|null} */ (el.querySelector('#cog-xlsx-input'));
+  const xlsxName = el.querySelector('#cog-xlsx-filename');
+  const xlsxFb = el.querySelector('#cog-xlsx-feedback');
+  const showFeedback = (msg, level) => {
+    if (!xlsxFb) return;
+    xlsxFb.style.display = 'block';
+    xlsxFb.textContent = msg;
+    xlsxFb.style.color = level === 'err' ? 'var(--ies-red)'
+      : level === 'warn' ? '#a16207'
+      : 'var(--ies-gray-500)';
+  };
+  xlsxBtn?.addEventListener('click', () => { xlsxInput?.click(); });
+  xlsxInput?.addEventListener('change', async (evt) => {
+    const file = /** @type {HTMLInputElement} */ (evt.target)?.files?.[0];
+    if (!file) return;
+    if (xlsxName) xlsxName.textContent = file.name;
+    showFeedback('Reading…', 'info');
+
+    // SheetJS lives at window.XLSX — same global the exports use.
+    const XLSX = /** @type {any} */ (typeof window !== 'undefined' ? window.XLSX : null);
+    if (!XLSX || !XLSX.read) {
+      showFeedback('Spreadsheet parser not loaded — refresh the page and try again.', 'err');
+      showToast('Spreadsheet library missing — hard refresh and retry.', 'err');
+      return;
+    }
+
+    let buffer;
+    try {
+      buffer = await file.arrayBuffer();
+    } catch (err) {
+      showFeedback(`Failed to read file: ${err?.message || err}`, 'err');
+      return;
+    }
+
+    let aoa;
+    try {
+      const wb = XLSX.read(buffer, { type: 'array' });
+      const sheetName = wb.SheetNames[0];
+      if (!sheetName) {
+        showFeedback('The file has no sheets.', 'err');
+        return;
+      }
+      aoa = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, defval: '', blankrows: false });
+    } catch (err) {
+      showFeedback(`Failed to parse file: ${err?.message || err}`, 'err');
+      return;
+    }
+
+    if (!Array.isArray(aoa) || aoa.length === 0) {
+      showFeedback('The file is empty.', 'err');
+      return;
+    }
+
+    // Header-row auto-detect: if the first row's first cell isn't a
+    // numeric / ZIP-looking value, treat it as a header and skip it.
+    const looksLikeZip = (v) => /^\s*\d{1,5}\s*$/.test(String(v ?? ''));
+    const dataRows = looksLikeZip(aoa[0]?.[0]) ? aoa : aoa.slice(1);
+
+    const loaded = [];
+    const skipped = { badZip: 0, noMatch: 0, badUnits: 0, blank: 0 };
+    for (const row of dataRows) {
+      if (!row || row.length === 0 || (row[0] === '' && row[1] === '')) { skipped.blank++; continue; }
+      // Normalize ZIP: 5-digit string, left-pad if Excel stripped leading zeros.
+      const rawZip = String(row[0] ?? '').trim();
+      if (!rawZip) { skipped.badZip++; continue; }
+      const zip = rawZip.replace(/[^0-9]/g, '').padStart(5, '0').slice(-5);
+      if (!/^\d{5}$/.test(zip)) { skipped.badZip++; continue; }
+      const unitsRaw = Number(String(row[1] ?? '').replace(/[,$\s]/g, ''));
+      if (!Number.isFinite(unitsRaw) || unitsRaw <= 0) { skipped.badUnits++; continue; }
+      const hit = calc.lookupLocation(zip);
+      if (!hit) { skipped.noMatch++; continue; }
+      loaded.push({
+        id: 'p' + Date.now() + '_' + loaded.length,
+        name: `${hit.name} (${zip})`,
+        lat: hit.lat,
+        lng: hit.lng,
+        weight: Math.max(1, Math.round(unitsRaw)),
+        type: 'demand',
+      });
+    }
+
+    if (loaded.length === 0) {
+      const reason = skipped.badZip ? `${skipped.badZip} bad ZIP${skipped.badZip === 1 ? '' : 's'}`
+        : skipped.noMatch ? `no ZIPs matched the lookup table (${skipped.noMatch} attempted)`
+        : skipped.badUnits ? `${skipped.badUnits} row${skipped.badUnits === 1 ? '' : 's'} had non-positive / non-numeric units`
+        : 'no usable rows';
+      showFeedback(`Nothing loaded — ${reason}.`, 'err');
+      // Reset the input so the same file can be re-picked after fixing it.
+      if (xlsxInput) xlsxInput.value = '';
+      return;
+    }
+
+    if (points.length > 0) {
+      const ok = await showConfirm(`Replace ${points.length} existing point${points.length === 1 ? '' : 's'} with ${loaded.length} from "${file.name}"?`);
+      if (!ok) {
+        showFeedback('Cancelled — existing points kept.', 'info');
+        if (xlsxInput) xlsxInput.value = '';
+        return;
+      }
+    }
+    points = loaded;
+    markDirty();
+    renderInputsPhase(el);
+    const skipTotal = skipped.badZip + skipped.noMatch + skipped.badUnits + skipped.blank;
+    const tail = skipTotal > 0
+      ? ` (${skipTotal} skipped: ${[
+          skipped.badZip ? `${skipped.badZip} bad ZIP` : '',
+          skipped.noMatch ? `${skipped.noMatch} no match` : '',
+          skipped.badUnits ? `${skipped.badUnits} bad units` : '',
+          skipped.blank ? `${skipped.blank} blank` : '',
+        ].filter(Boolean).join(', ')})`
+      : '';
+    showToast(`Loaded ${loaded.length} demand point${loaded.length === 1 ? '' : 's'} from ${file.name}${tail}.`, 'ok');
+    // Reset so re-uploading the same file fires the change event again.
+    if (xlsxInput) xlsxInput.value = '';
   });
 
   // City/state/ZIP lookup → resolve and append a point.
