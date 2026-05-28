@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-parcel13';
+import * as calc from './calc.js?v=20260528-parcel14';
 import * as api from './api.js?v=20260504-auth1';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
@@ -2042,6 +2042,12 @@ function renderParametersPhase(el) {
                      style="width:100%;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
               <div style="font-size:10px;color:var(--ies-gray-400);margin-top:2px;">1.0 dense · 1.2 mixed DTC · 2.0+ light/large</div>
             </div>
+            <div>
+              <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-500);margin-bottom:3px;">Accessorials \$/pkg avg</label>
+              <input type="number" value="${config.parcelAccessorialsPerPkg ?? 0}" min="0" step="0.25" id="cog-parcel-accessorials"
+                     style="width:100%;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
+              <div style="font-size:10px;color:var(--ies-gray-400);margin-top:2px;">DAS + oversize + hazmat avg · \$0-10 typical DTC</div>
+            </div>
           </div>
 
           <!-- 2026-05-28 29 — Service mix row -->
@@ -2078,6 +2084,7 @@ function renderParametersPhase(el) {
               carrier: config.parcelCarrier || 'fedex_ground',
               serviceMix: config.parcelServiceMix,
               dimMultiplier: config.parcelDimMultiplier ?? 1.0,
+              accessorialsPerPkg: config.parcelAccessorialsPerPkg ?? 0,
             });
             return `<div style="font-size:11px;color:var(--ies-gray-500);margin-top:10px;border-top:1px dashed var(--ies-gray-200);padding-top:8px;line-height:1.5;">
               <strong>Sample at current settings:</strong> ${sampleW} lb pkg @ Zone ${r.zone} (≈800 mi) = <strong>\$${r.cost.toFixed(2)}/pkg</strong> · base \$${r.baseGround.toFixed(2)} (Ground) × ${r.svcMult.toFixed(2)} (svc mix) = \$${r.base.toFixed(2)} + fuel \$${r.fuelAdd.toFixed(2)} − discount \$${r.discount.toFixed(2)} + residential \$${r.residAdd.toFixed(2)}
@@ -2283,6 +2290,11 @@ function renderParametersPhase(el) {
   el.querySelector('#cog-parcel-dim')?.addEventListener('change', (e) => {
     const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
     config.parcelDimMultiplier = Math.max(1.0, Math.min(3.0, Number.isFinite(v) ? v : 1.0));
+    markDirty(); renderParametersPhase(el);
+  });
+  el.querySelector('#cog-parcel-accessorials')?.addEventListener('change', (e) => {
+    const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
+    config.parcelAccessorialsPerPkg = Math.max(0, Number.isFinite(v) ? v : 0);
     markDirty(); renderParametersPhase(el);
   });
   // 2026-05-28 29 — Parcel service-mix bindings.

@@ -262,6 +262,8 @@ export function parcelCostPerPackage(opts = {}) {
   // 1.5-2.5 = light/large items (furniture, exercise gear).
   const dimMult = opts.dimMultiplier == null ? 1.0 : Math.max(1.0, +opts.dimMultiplier);
   const billWeight = weight * dimMult;
+  // 2026-05-28 38 — accessorials (DAS, oversize, hazmat surcharge avg).
+  const accessorials = Math.max(0, +opts.accessorialsPerPkg || 0);
   const distanceMi = +opts.distanceMi || 0;
   const fuelPct = opts.fuelPct == null ? 25 : +opts.fuelPct;
   const residentialShare = opts.residentialShare == null ? 0.5 : +opts.residentialShare;
@@ -281,9 +283,9 @@ export function parcelCostPerPackage(opts = {}) {
   const discount = gross * (discountPct / 100);
   const net = gross - discount;
   const residAdd = residentialFee * residentialShare;
-  const cost = net + residAdd;
+  const cost = net + residAdd + accessorials;
 
-  return { cost, zone, base, fuelAdd, discount, residAdd, svcMult, baseGround, billWeight };
+  return { cost, zone, base, fuelAdd, discount, residAdd, accessorials, svcMult, baseGround, billWeight };
 }
 
 // ============================================================
