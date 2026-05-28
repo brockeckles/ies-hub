@@ -1529,7 +1529,7 @@ export function estimateBlendedCost(cogResult, points, config) {
     avgCostPerUnit,
     parcelDetails: parcelShare > 0 ? {
       totalPackages: totalParcelPkgs,
-      byZone, avgWeight, carrier,
+      byZone, avgWeight: defaultAvgWeight, carrier,
       fuelPct, residentialShare, discountPct,
     } : null,
   };
