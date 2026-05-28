@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-parcel14';
+import * as calc from './calc.js?v=20260528-parcel15';
 import * as api from './api.js?v=20260504-auth1';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
@@ -2074,6 +2074,30 @@ function renderParametersPhase(el) {
               return `<div style="font-size:11px;color:#15803d;margin-top:8px;font-weight:600;">Service-blend multiplier: <strong>×${mult.toFixed(2)}</strong> applied on top of carrier Ground rates</div>`;
             })()}
           </div>
+          <!-- 2026-05-28 39 — Discount tier editor. -->
+          <div style="margin-top:14px;border-top:1px dashed var(--ies-gray-200);padding-top:10px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;">
+              <div style="font-size:11px;font-weight:600;color:var(--ies-gray-500);">Discount tiers (weight-banded) <span style="font-weight:400;color:var(--ies-gray-400);">— overrides the flat Contract discount above when set</span></div>
+              <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-parcel-tier-add" title="Add a weight band">+ band</button>
+            </div>
+            <div id="cog-parcel-tier-list" style="display:flex;flex-direction:column;gap:6px;">
+              ${(config.parcelDiscountTiers || []).length === 0 ? `
+                <div style="font-size:11px;color:var(--ies-gray-400);font-style:italic;">No tiers set — engine uses the flat Contract discount % above. Click '+ band' to add weight-banded tiers (e.g., 0-5 lb @ 35%, 5+ lb @ 40%).</div>
+              ` : (config.parcelDiscountTiers || []).map((t, ti) => `
+                <div style="display:flex;align-items:center;gap:8px;font-size:12px;">
+                  <span style="color:var(--ies-gray-500);width:60px;">Above</span>
+                  <input type="number" data-cog-tier-min="${ti}" value="${+t.minWeightLb || 0}" min="0" step="1"
+                         style="width:70px;padding:5px 7px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:12px;font-weight:600;text-align:right;">
+                  <span style="color:var(--ies-gray-500);">lb →</span>
+                  <input type="number" data-cog-tier-pct="${ti}" value="${+t.discountPct || 0}" min="0" max="80" step="1"
+                         style="width:70px;padding:5px 7px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:12px;font-weight:600;text-align:right;">
+                  <span style="color:var(--ies-gray-500);">% off list</span>
+                  <button class="hub-btn hub-btn-sm hub-btn-secondary" data-cog-tier-del="${ti}" style="padding:3px 7px;">✕</button>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
           ${(() => {
             const sampleW = config.parcelAvgPackageWeightLb ?? 5;
             const r = calc.parcelCostPerPackage({
@@ -2085,6 +2109,7 @@ function renderParametersPhase(el) {
               serviceMix: config.parcelServiceMix,
               dimMultiplier: config.parcelDimMultiplier ?? 1.0,
               accessorialsPerPkg: config.parcelAccessorialsPerPkg ?? 0,
+              discountTiers: config.parcelDiscountTiers,
             });
             return `<div style="font-size:11px;color:var(--ies-gray-500);margin-top:10px;border-top:1px dashed var(--ies-gray-200);padding-top:8px;line-height:1.5;">
               <strong>Sample at current settings:</strong> ${sampleW} lb pkg @ Zone ${r.zone} (≈800 mi) = <strong>\$${r.cost.toFixed(2)}/pkg</strong> · base \$${r.baseGround.toFixed(2)} (Ground) × ${r.svcMult.toFixed(2)} (svc mix) = \$${r.base.toFixed(2)} + fuel \$${r.fuelAdd.toFixed(2)} − discount \$${r.discount.toFixed(2)} + residential \$${r.residAdd.toFixed(2)}
@@ -2296,6 +2321,44 @@ function renderParametersPhase(el) {
     const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
     config.parcelAccessorialsPerPkg = Math.max(0, Number.isFinite(v) ? v : 0);
     markDirty(); renderParametersPhase(el);
+  });
+
+  // 2026-05-28 39 — Discount tier editor bindings.
+  el.querySelector('#cog-parcel-tier-add')?.addEventListener('click', () => {
+    config.parcelDiscountTiers = config.parcelDiscountTiers || [];
+    const last = config.parcelDiscountTiers[config.parcelDiscountTiers.length - 1];
+    const nextMin = last ? (+last.minWeightLb + 5) : 0;
+    config.parcelDiscountTiers.push({ minWeightLb: nextMin, discountPct: 30 });
+    markDirty(); renderParametersPhase(el);
+  });
+  el.querySelectorAll('[data-cog-tier-min]').forEach(inp => {
+    inp.addEventListener('change', (e) => {
+      const ti = parseInt(/** @type {HTMLElement} */ (e.target).dataset.cogTierMin, 10);
+      const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
+      if (config.parcelDiscountTiers && config.parcelDiscountTiers[ti]) {
+        config.parcelDiscountTiers[ti].minWeightLb = Math.max(0, Number.isFinite(v) ? v : 0);
+        markDirty(); renderParametersPhase(el);
+      }
+    });
+  });
+  el.querySelectorAll('[data-cog-tier-pct]').forEach(inp => {
+    inp.addEventListener('change', (e) => {
+      const ti = parseInt(/** @type {HTMLElement} */ (e.target).dataset.cogTierPct, 10);
+      const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
+      if (config.parcelDiscountTiers && config.parcelDiscountTiers[ti]) {
+        config.parcelDiscountTiers[ti].discountPct = Math.max(0, Math.min(80, Number.isFinite(v) ? v : 0));
+        markDirty(); renderParametersPhase(el);
+      }
+    });
+  });
+  el.querySelectorAll('[data-cog-tier-del]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const ti = parseInt(/** @type {HTMLElement} */ (e.target).dataset.cogTierDel, 10);
+      if (config.parcelDiscountTiers) {
+        config.parcelDiscountTiers.splice(ti, 1);
+        markDirty(); renderParametersPhase(el);
+      }
+    });
   });
   // 2026-05-28 29 — Parcel service-mix bindings.
   el.querySelectorAll('[data-cog-parcel-svc]').forEach(input => {

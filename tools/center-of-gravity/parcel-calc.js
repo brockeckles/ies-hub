@@ -268,7 +268,23 @@ export function parcelCostPerPackage(opts = {}) {
   const fuelPct = opts.fuelPct == null ? 25 : +opts.fuelPct;
   const residentialShare = opts.residentialShare == null ? 0.5 : +opts.residentialShare;
   const residentialFee = opts.residentialFee == null ? 5.25 : +opts.residentialFee;
-  const discountPct = opts.discountPct == null ? 0 : +opts.discountPct;
+  // 2026-05-28 39 — discount tier resolution. When discountTiers is a
+  // non-empty array, look up the matching band for billWeight; else use
+  // flat discountPct.
+  const flatDisc = opts.discountPct == null ? 0 : +opts.discountPct;
+  const tiers = Array.isArray(opts.discountTiers) ? opts.discountTiers : [];
+  let discountPct = flatDisc;
+  if (tiers.length > 0) {
+    // tiers is [{ minWeightLb, discountPct }]; pick highest minWeightLb
+    // ≤ billWeight (we use bill weight so DIM-heavy packages get the
+    // higher-weight tier discount, matching how carriers bill).
+    const sorted = [...tiers].sort((a, b) => (+a.minWeightLb || 0) - (+b.minWeightLb || 0));
+    let matched = null;
+    for (const t of sorted) {
+      if ((opts.weight || 0) * (opts.dimMultiplier == null ? 1 : +opts.dimMultiplier) >= (+t.minWeightLb || 0)) matched = t;
+    }
+    if (matched) discountPct = +matched.discountPct || 0;
+  }
   const carrier = opts.carrier || 'fedex_ground';
   // 2026-05-28 — service mix multiplier (1.00 = Ground; 1.45 = 3-day;
   // 2.15 = 2-day; 4.00 = overnight). Default is 100% ground (legacy).

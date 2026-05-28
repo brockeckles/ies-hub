@@ -34,7 +34,7 @@ import {
   estimateParcelLane,
   parcelDistributionByZone,
   PARCEL_ENGINE_VERSION,
-} from './parcel-calc.js?v=20260528-parcel14';
+} from './parcel-calc.js?v=20260528-parcel15';
 
 export {
   ZONE_BREAKPOINTS,
@@ -155,6 +155,11 @@ export const DEFAULT_CONFIG = {
   // 2026-05-28 38 — Avg accessorials per package (DAS + oversize +
   // hazmat). User-computed weighted average. Defaults to \$0.
   parcelAccessorialsPerPkg: 0,
+  // 2026-05-28 39 — Discount tiers (weight-banded). Empty = use the
+  // flat parcelContractDiscountPct. Tiers override when populated.
+  // Each entry: { minWeightLb, discountPct } — band runs from
+  // minWeightLb up to the next band's min (open-ended for the last band).
+  parcelDiscountTiers: [],
   // 2026-05-28 — CO₂ emissions intensity (B20). kg CO₂ per truck-mile.
   // Default 1.62 = EPA SmartWay 2024 US heavy-duty diesel Class 8 average.
   // Range 1.30 (new fleets) to 2.10 (older / refrigerated). Threaded
@@ -1470,6 +1475,7 @@ export function estimateBlendedCost(cogResult, points, config) {
           serviceMix: cfg.parcelServiceMix,
           dimMultiplier: cfg.parcelDimMultiplier ?? 1.0,
           accessorialsPerPkg: cfg.parcelAccessorialsPerPkg ?? 0,
+          discountTiers: cfg.parcelDiscountTiers,
         });
         parcelCostByCluster[a.clusterId] = (parcelCostByCluster[a.clusterId] || 0) + lane.totalCost;
         byZone[lane.zone] = (byZone[lane.zone] || 0) + pkgCount;
