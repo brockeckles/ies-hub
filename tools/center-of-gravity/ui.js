@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-cogtriage6';
+import * as calc from './calc.js?v=20260528-cogtriage7';
 import * as api from './api.js?v=20260504-auth1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
 
@@ -69,6 +69,7 @@ let mapOptions = {
   zones: true,
   heat: true,
   labels: true,
+  territories: false,
   zoneRadiiMiles: [250, 500, 750],
 };
 
@@ -1592,6 +1593,9 @@ function renderMap(el) {
           <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ies-gray-600);cursor:pointer;" title="Show 'C1 Memphis' tooltips above each centroid">
             <input type="checkbox" data-cog-toggle="labels" ${mapOptions.labels !== false ? 'checked' : ''} style="margin:0;"> Center labels
           </label>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ies-gray-600);cursor:pointer;" title="Voronoi-style service territories — each cell is colored by the nearest center (haversine grid, ~60x40 cells)">
+            <input type="checkbox" data-cog-toggle="territories" ${mapOptions.territories ? 'checked' : ''} style="margin:0;"> Territories
+          </label>
           <label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--ies-gray-600);">
             Radii:
             <input type="text" data-cog-toggle="radii" value="${mapOptions.zoneRadiiMiles.join(',')}"
@@ -1606,6 +1610,7 @@ function renderMap(el) {
           <span><span style="display:inline-block;width:10px;height:10px;background:${clusterColor(i)};border-radius:50%;vertical-align:middle;"></span> Cluster ${i + 1}</span>
         `).join('')}
         ${mapOptions.zones ? `<span style="opacity:0.8;">Rings: ${mapOptions.zoneRadiiMiles.join(' / ')} mi</span>` : ''}
+        ${mapOptions.territories ? `<span style="opacity:0.8;">Territories: haversine-nearest grid</span>` : ''}
       </div>
     </div>
   `;
@@ -1698,6 +1703,47 @@ function initCogMap() {
     }
   });
   new NorthArrow().addTo(mapInstance);
+
+  // 2026-05-28 D2 — Voronoi-style service territories. Renders a
+  // 60x40 grid of small translucent rectangles, each colored by its
+  // nearest center (haversine). Toggle via data-cog-toggle="territories".
+  // Drawn UNDER heatmap + zones + markers so the layering reads correctly.
+  if (mapOptions.territories && cogResult.centers.length > 0) {
+    const allPts = [...points.filter(p => p.lat != null).map(p => [p.lat, p.lng]),
+                    ...cogResult.centers.map(c => [c.lat, c.lng])];
+    if (allPts.length > 0) {
+      const lats = allPts.map(p => p[0]);
+      const lngs = allPts.map(p => p[1]);
+      const padLat = Math.max(0.5, (Math.max(...lats) - Math.min(...lats)) * 0.08);
+      const padLng = Math.max(0.5, (Math.max(...lngs) - Math.min(...lngs)) * 0.08);
+      const minLat = Math.min(...lats) - padLat;
+      const maxLat = Math.max(...lats) + padLat;
+      const minLng = Math.min(...lngs) - padLng;
+      const maxLng = Math.max(...lngs) + padLng;
+      const NLAT = 40, NLNG = 60;
+      const dLat = (maxLat - minLat) / NLAT;
+      const dLng = (maxLng - minLng) / NLNG;
+      for (let i = 0; i < NLAT; i++) {
+        for (let j = 0; j < NLNG; j++) {
+          const cLat = minLat + (i + 0.5) * dLat;
+          const cLng = minLng + (j + 0.5) * dLng;
+          // Find nearest center by haversine.
+          let bestK = 0;
+          let bestD = Infinity;
+          for (let k = 0; k < cogResult.centers.length; k++) {
+            const cc = cogResult.centers[k];
+            const d = calc.haversine(cLat, cLng, cc.lat, cc.lng);
+            if (d < bestD) { bestD = d; bestK = k; }
+          }
+          const color = clusterColor(bestK);
+          L.rectangle(
+            [[minLat + i * dLat, minLng + j * dLng], [minLat + (i + 1) * dLat, minLng + (j + 1) * dLng]],
+            { color: color, weight: 0, fillColor: color, fillOpacity: 0.10, interactive: false }
+          ).addTo(mapInstance);
+        }
+      }
+    }
+  }
 
   // Heatmap layer (drawn first so it sits under markers).
   // We weight each demand point and overlay a soft halo whose radius
