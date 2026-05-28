@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-cogtriage20fix';
+import * as calc from './calc.js?v=20260528-cogtriage21';
 import * as api from './api.js?v=20260504-auth1';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
@@ -1098,7 +1098,14 @@ function renderUploadWizard(container) {
         <div style="font-size:12px;">${statusMsg}</div>
         <div style="display:flex;gap:8px;">
           <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-wiz-cancel">Cancel</button>
-          <button class="hub-btn hub-btn-sm hub-btn-primary" id="cog-wiz-confirm" ${valid ? '' : 'disabled style="opacity:0.5;cursor:not-allowed;"'}>Confirm &amp; Load</button>
+          ${points.length > 0 ? `
+            <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-wiz-append" ${valid ? '' : 'disabled style="opacity:0.5;cursor:not-allowed;"'}
+                    title="Add these rows to your existing ${points.length} points (no replace)">+ Append</button>
+          ` : ''}
+          <button class="hub-btn hub-btn-sm hub-btn-primary" id="cog-wiz-confirm" ${valid ? '' : 'disabled style="opacity:0.5;cursor:not-allowed;"'}
+                  title="${points.length > 0 ? 'Replace all ' + points.length + ' existing points' : 'Load these rows'}">
+            ${points.length > 0 ? '↺ Replace' : 'Confirm & Load'}
+          </button>
         </div>
       </div>
     </div>
@@ -1122,11 +1129,15 @@ function renderUploadWizard(container) {
   });
   container.querySelector('#cog-wiz-confirm')?.addEventListener('click', async () => {
     if (!valid) return;
-    await _commitPendingUpload();
+    await _commitPendingUpload('replace');
+  });
+  container.querySelector('#cog-wiz-append')?.addEventListener('click', async () => {
+    if (!valid) return;
+    await _commitPendingUpload('append');
   });
 }
 
-async function _commitPendingUpload() {
+async function _commitPendingUpload(mode = 'replace') {
   if (!_pendingUpload) return;
   const pu = _pendingUpload;
   const mapping = pu.mapping;
@@ -1200,26 +1211,38 @@ async function _commitPendingUpload() {
     if (inputsEl) renderInputsPhase(inputsEl);
     return;
   }
-  if (points.length > 0) {
-    const ok = await showConfirm(`Replace ${points.length} existing point${points.length === 1 ? '' : 's'} with ${allUpload.length} from "${pu.fileName}" (${loaded.length} active, ${excluded.length} excluded)?`);
-    if (!ok) {
-      _pendingUpload = null;
-      const inputsEl = rootEl?.querySelector('#cog-content');
-      if (inputsEl) renderInputsPhase(inputsEl);
-      return;
+  if (mode === 'append' && points.length > 0) {
+    // Append: keep existing + add new. No confirm needed (Append is the
+    // intentional pick from the wizard buttons), but still snapshot for undo.
+    _snapshotForUndo(`Append "${pu.fileName}"`);
+    // De-duplicate id collisions between existing + new (every id has a
+    // Date.now() suffix so collisions are astronomically unlikely, but the
+    // safer floor is to re-id incoming).
+    const reIded = allUpload.map((p, i) => ({ ...p, id: 'p' + Date.now() + '_app_' + i }));
+    points = [...points, ...reIded];
+  } else {
+    if (points.length > 0) {
+      const ok = await showConfirm(`Replace ${points.length} existing point${points.length === 1 ? '' : 's'} with ${allUpload.length} from "${pu.fileName}" (${loaded.length} active, ${excluded.length} excluded)?`);
+      if (!ok) {
+        _pendingUpload = null;
+        const inputsEl = rootEl?.querySelector('#cog-content');
+        if (inputsEl) renderInputsPhase(inputsEl);
+        return;
+      }
+      _snapshotForUndo(`Upload "${pu.fileName}"`);
     }
-    _snapshotForUndo(`Upload "${pu.fileName}"`);
+    points = allUpload;
   }
-  points = allUpload;
   _pendingUpload = null;
   markDirty();
   const inputsEl = rootEl?.querySelector('#cog-content');
   if (inputsEl) renderInputsPhase(inputsEl);
   const tail = excluded.length > 0 ? ` — ${excluded.length} excluded (visible in table)` : '';
+  const verb = mode === 'append' ? 'Appended' : 'Loaded';
   if (_lastReplacedPoints) {
-    showToast(`Loaded ${loaded.length} active point${loaded.length === 1 ? '' : 's'} from ${pu.fileName}${tail}. <button data-cog-undo style="margin-left:8px;text-decoration:underline;background:none;border:none;color:inherit;cursor:pointer;font-weight:700;">Undo</button>`, excluded.length > 0 ? 'warn' : 'ok', { html: true });
+    showToast(`${verb} ${loaded.length} active point${loaded.length === 1 ? '' : 's'} from ${pu.fileName}${tail}. <button data-cog-undo style="margin-left:8px;text-decoration:underline;background:none;border:none;color:inherit;cursor:pointer;font-weight:700;">Undo</button>`, excluded.length > 0 ? 'warn' : 'ok', { html: true });
   } else {
-    showToast(`Loaded ${loaded.length} active point${loaded.length === 1 ? '' : 's'} from ${pu.fileName}${tail}.`, excluded.length > 0 ? 'warn' : 'ok');
+    showToast(`${verb} ${loaded.length} active point${loaded.length === 1 ? '' : 's'} from ${pu.fileName}${tail}.`, excluded.length > 0 ? 'warn' : 'ok');
   }
 }
 
@@ -2176,24 +2199,49 @@ function renderRunPhase(el) {
     <div>
       <!-- Sub-tabs moved to chrome Row 2 (CM Chrome v3 ripple) -->
 
-      ${cogResult && recK != null ? `
-        <div class="hub-card" style="background:linear-gradient(135deg,#f0fdf4,#f0f9ff);border:1px solid #22c55e;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+      ${cogResult && recK != null ? (() => {
+        // 2026-05-28 H8 — escalate when the user's current k differs from
+        // the sensitivity-recommended k.
+        const currentK = cogResult.centers.length;
+        const matches = currentK === recK;
+        const accent = matches ? '#22c55e' : '#f59e0b';
+        const accentDark = matches ? '#059669' : '#b45309';
+        const bgGrad = matches ? 'linear-gradient(135deg,#f0fdf4,#f0f9ff)' : 'linear-gradient(135deg,#fffbeb,#fef3c7)';
+        return `
+        <div class="hub-card" style="background:${bgGrad};border:1px solid ${accent};padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
           <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
-            <div style="font-size:10px;font-weight:700;letter-spacing:0.4px;color:#059669;text-transform:uppercase;">Recommended</div>
-            <div style="font-size:30px;font-weight:800;color:#059669;line-height:1;">${recK}</div>
-            <div style="font-size:10px;color:#059669;font-weight:600;">${recK === 1 ? 'DC' : 'DCs'}</div>
+            <div style="font-size:10px;font-weight:700;letter-spacing:0.4px;color:${accentDark};text-transform:uppercase;">Recommended</div>
+            <div style="font-size:30px;font-weight:800;color:${accentDark};line-height:1;">${recK}</div>
+            <div style="font-size:10px;color:${accentDark};font-weight:600;">${recK === 1 ? 'DC' : 'DCs'}</div>
           </div>
           <div style="font-size:12px;color:var(--ies-gray-600);flex:1;line-height:1.45;">
-            We tested networks from <strong>1 to ${(Array.isArray(sensitivityData) ? sensitivityData.length : 0)} DCs</strong> against your current demand and parameters.
-            <strong>${recK} ${recK === 1 ? 'DC' : 'DCs'}</strong> gave the lowest total cost.
-            Open the <b>Sensitivity</b> tab to see the cost curve and compare alternatives.
+            ${matches ? `
+              We tested networks from <strong>1 to ${(Array.isArray(sensitivityData) ? sensitivityData.length : 0)} DCs</strong> against your current demand and parameters. <strong>${recK} ${recK === 1 ? 'DC' : 'DCs'}</strong> gave the lowest total cost — matches your current selection. Open the <b>Sensitivity</b> tab to see the curve.
+            ` : `
+              We tested networks from <strong>1 to ${(Array.isArray(sensitivityData) ? sensitivityData.length : 0)} DCs</strong>. You're currently running <strong>${currentK} ${currentK === 1 ? 'DC' : 'DCs'}</strong>, but <strong>${recK} ${recK === 1 ? 'DC' : 'DCs'}</strong> gave the lowest total cost. <button data-cog-jump-k="${recK}" style="background:none;border:none;color:${accentDark};text-decoration:underline;cursor:pointer;font-weight:700;padding:0;font-size:12px;">Switch to k=${recK} and re-run →</button>
+            `}
           </div>
         </div>
-      ` : ''}
+      `; })() : ''}
 
       <div id="cog-run-inner"></div>
     </div>
   `;
+
+  // 2026-05-28 H8 — wire the 'Switch to k=N and re-run' link in the
+  // Recommended-k banner. Updates config.numCenters + triggers the same
+  // run path as the chrome Run button.
+  el.querySelectorAll('[data-cog-jump-k]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = parseInt(/** @type {HTMLElement} */ (btn).dataset.cogJumpK, 10);
+      if (!Number.isFinite(target) || target < 1) return;
+      config.numCenters = target;
+      markDirty();
+      // Re-run via the same code path the chrome Run button uses.
+      const runBtn = rootEl?.querySelector('[data-tc-action="cog-run"]');
+      if (runBtn) /** @type {HTMLElement} */ (runBtn).click();
+    });
+  });
 
   const inner = el.querySelector('#cog-run-inner');
   if (runSubTab === 'map')         renderMap(inner);
