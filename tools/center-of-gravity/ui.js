@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-parcel7';
+import * as calc from './calc.js?v=20260528-parcel8';
 import * as api from './api.js?v=20260504-auth1';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
@@ -1025,6 +1025,9 @@ function _autoDetectMapping(aoa, headerRow) {
     if (/(^|_| )state(_| |$)/.test(h)) return 'state';
     if (/(^|_| )(units|volume|demand|qty|quantity|annual)/.test(h)) return 'units';
     if (/(^|_| )(name|label|customer|location)/.test(h)) return 'name';
+    // 2026-05-28 32 — per-point parcel hints.
+    if (/(pkg|package).*(weight|wt|lb)|avg.*wt|avg.*weight|pkg.*lb/.test(h)) return 'avgPkgWeight';
+    if (/parcel.*share|parcel.*pct|parcel.*%|share.*parcel|%.*parcel/.test(h)) return 'parcelShare';
     return null;
   };
   for (let i = 0; i < ncol; i++) {
@@ -1060,16 +1063,18 @@ function renderUploadWizard(container) {
     pu.mapping = _autoDetectMapping(aoa, pu.headerRow);
   }
   const ROLES = [
-    { value: '',          label: 'Ignore' },
-    { value: 'zip5',      label: 'ZIP (5-digit)' },
-    { value: 'zip3',      label: 'ZIP (3-digit)' },
-    { value: 'city',      label: 'City' },
-    { value: 'state',     label: 'State' },
-    { value: 'cityState', label: 'City, State (combined)' },
-    { value: 'lat',       label: 'Latitude' },
-    { value: 'lng',       label: 'Longitude' },
-    { value: 'name',      label: 'Name / Label' },
-    { value: 'units',     label: 'Units (demand)' },
+    { value: '',              label: 'Ignore' },
+    { value: 'zip5',          label: 'ZIP (5-digit)' },
+    { value: 'zip3',          label: 'ZIP (3-digit)' },
+    { value: 'city',          label: 'City' },
+    { value: 'state',         label: 'State' },
+    { value: 'cityState',     label: 'City, State (combined)' },
+    { value: 'lat',           label: 'Latitude' },
+    { value: 'lng',           label: 'Longitude' },
+    { value: 'name',          label: 'Name / Label' },
+    { value: 'units',         label: 'Units (demand)' },
+    { value: 'avgPkgWeight',  label: 'Avg pkg weight (lb)' },
+    { value: 'parcelShare',   label: 'Parcel share %' },
   ];
   const mapping = pu.mapping;
   const hasUnits = Object.values(mapping).includes('units');
@@ -1222,12 +1227,24 @@ async function _commitPendingUpload(mode = 'replace') {
       });
       continue;
     }
+    // 2026-05-28 32 — capture per-point parcel overrides when mapped.
+    const ptAvgPkgWt = 'avgPkgWeight' in roleCol
+      ? parseFloat(String(row[roleCol.avgPkgWeight] ?? '').replace(/[,$\s]/g, ''))
+      : null;
+    const ptParcelShare = 'parcelShare' in roleCol
+      ? parseFloat(String(row[roleCol.parcelShare] ?? '').replace(/[,%\s]/g, ''))
+      : null;
+    const ptOverrides = {};
+    if (Number.isFinite(ptAvgPkgWt) && ptAvgPkgWt > 0) ptOverrides.avgPackageWeightLb = ptAvgPkgWt;
+    if (Number.isFinite(ptParcelShare)) ptOverrides.parcelSharePct = Math.max(0, Math.min(100, ptParcelShare));
+
     loaded.push({
       id: 'p' + Date.now() + '_' + loaded.length,
       name: nameField || `${hit.name}`,
       lat: hit.lat, lng: hit.lng,
       weight: Math.max(1, Math.round(unitsRaw)),
       type: 'demand',
+      ...ptOverrides,
     });
   }
   const allUpload = [...loaded, ...excluded];
