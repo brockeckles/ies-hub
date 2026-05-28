@@ -22,19 +22,25 @@ import {
   ZONE_BREAKPOINTS,
   zoneForMiles,
   FEDEX_GROUND_2026_LIST,
+  UPS_GROUND_2026_LIST,
+  USPS_GROUND_ADVANTAGE_2026_LIST,
   PARCEL_RATE_TABLES,
+  PARCEL_CARRIER_LABELS,
   interpolateRate,
   parcelCostPerPackage,
   estimateParcelLane,
   parcelDistributionByZone,
   PARCEL_ENGINE_VERSION,
-} from './parcel-calc.js?v=20260528-parcel3';
+} from './parcel-calc.js?v=20260528-parcel4';
 
 export {
   ZONE_BREAKPOINTS,
   zoneForMiles,
   FEDEX_GROUND_2026_LIST,
+  UPS_GROUND_2026_LIST,
+  USPS_GROUND_ADVANTAGE_2026_LIST,
   PARCEL_RATE_TABLES,
+  PARCEL_CARRIER_LABELS,
   interpolateRate,
   parcelCostPerPackage,
   estimateParcelLane,

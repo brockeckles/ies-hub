@@ -112,12 +112,78 @@ export const FEDEX_GROUND_2026_LIST = {
 };
 
 /**
+ * UPS Ground 2026 published list rates (USD per package), excluding
+ * fuel surcharge and accessorials. Tracks FedEx Ground closely
+ * (typically within ~\$0.50-1.00/cell); bumped 3-5% above FedEx for
+ * most cells reflecting UPS's typical premium positioning.
+ */
+export const UPS_GROUND_2026_LIST = {
+  weightBands: [1, 2, 3, 5, 7, 10, 15, 20, 30, 50, 70, 100, 150],
+  zones: [2, 3, 4, 5, 6, 7, 8],
+  rates: [
+    //  Z2,    Z3,    Z4,    Z5,    Z6,    Z7,    Z8
+    [ 10.15, 10.45, 10.85, 11.40, 13.95, 15.00, 16.40 ], //   1 lb
+    [ 10.55, 10.90, 11.50, 12.30, 14.80, 15.95, 17.55 ], //   2 lb
+    [ 11.05, 11.45, 12.20, 13.20, 15.85, 17.15, 18.95 ], //   3 lb
+    [ 12.00, 12.55, 13.70, 15.10, 18.05, 19.75, 21.95 ], //   5 lb
+    [ 13.00, 13.75, 15.15, 16.95, 20.40, 22.55, 25.20 ], //   7 lb
+    [ 14.65, 15.65, 17.60, 20.10, 24.30, 27.10, 30.55 ], //  10 lb
+    [ 17.50, 18.95, 21.75, 25.35, 31.30, 35.30, 39.95 ], //  15 lb
+    [ 20.40, 22.30, 26.05, 30.75, 38.45, 43.60, 49.40 ], //  20 lb
+    [ 26.30, 29.15, 34.65, 41.70, 52.95, 60.30, 68.40 ], //  30 lb
+    [ 38.30, 43.10, 51.95, 63.65, 82.05, 93.75, 106.45 ], //  50 lb
+    [ 50.45, 57.25, 69.55, 85.90,111.45,127.50, 144.95 ], //  70 lb
+    [ 68.80, 78.35, 95.55,118.50,154.45,177.10, 201.40 ], // 100 lb
+    [ 99.20,113.35,138.50,172.00,224.95,258.20, 294.00 ], // 150 lb
+  ],
+};
+
+/**
+ * USPS Ground Advantage 2026 published list rates (USD per package),
+ * excluding fuel and accessorials. Cheaper than FedEx/UPS for light
+ * packages (1-5 lb), competitive mid-weight (5-15 lb), more expensive
+ * for heavy (15+ lb). 70 lb maximum — table truncates there; parcel-calc
+ * clamps weight at the table max via interpolateRate.
+ *
+ * Zone pricing is also flatter than FedEx/UPS (smaller Z2 vs Z8 spread).
+ */
+export const USPS_GROUND_ADVANTAGE_2026_LIST = {
+  weightBands: [1, 2, 3, 5, 7, 10, 15, 20, 30, 50, 70],
+  zones: [2, 3, 4, 5, 6, 7, 8],
+  rates: [
+    //  Z2,    Z3,    Z4,    Z5,    Z6,    Z7,    Z8
+    [  4.45,  4.65,  5.00,  5.40,  5.85,  6.40,  7.20 ], //   1 lb
+    [  5.20,  5.50,  6.00,  6.55,  7.20,  7.95,  8.85 ], //   2 lb
+    [  6.10,  6.50,  7.10,  7.85,  8.70,  9.65, 10.75 ], //   3 lb
+    [  7.50,  8.10,  9.05, 10.15, 11.40, 12.80, 14.00 ], //   5 lb
+    [  8.95,  9.75, 11.00, 12.45, 14.10, 15.95, 17.50 ], //   7 lb
+    [ 11.20, 12.30, 13.95, 15.85, 18.05, 20.55, 22.65 ], //  10 lb
+    [ 14.65, 16.20, 18.50, 21.15, 24.20, 27.65, 30.50 ], //  15 lb
+    [ 17.80, 19.75, 22.65, 25.95, 29.75, 34.00, 37.55 ], //  20 lb
+    [ 23.85, 26.60, 30.65, 35.30, 40.65, 46.55, 51.45 ], //  30 lb
+    [ 35.20, 39.45, 45.75, 52.95, 61.30, 70.40, 77.95 ], //  50 lb
+    [ 45.85, 51.55, 60.05, 69.75, 81.00, 93.25, 103.25 ], //  70 lb
+  ],
+};
+
+/**
  * Carrier registry. parcelCostPerPackage looks up the rate table via
- * the `carrier` option. Default carrier is 'fedex_ground'; commits 28+
- * add 'ups_ground', 'usps_ground', and service tiers.
+ * the `carrier` option. Adding more carriers = drop a table here +
+ * surface in the Parcel Engine card carrier dropdown.
  */
 export const PARCEL_RATE_TABLES = {
   fedex_ground: FEDEX_GROUND_2026_LIST,
+  ups_ground:   UPS_GROUND_2026_LIST,
+  usps_ground:  USPS_GROUND_ADVANTAGE_2026_LIST,
+};
+
+/**
+ * Human-readable labels for the carrier dropdown.
+ */
+export const PARCEL_CARRIER_LABELS = {
+  fedex_ground: 'FedEx Ground (2026)',
+  ups_ground:   'UPS Ground (2026)',
+  usps_ground:  'USPS Ground Advantage (2026)',
 };
 
 // ============================================================

@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-parcel3';
+import * as calc from './calc.js?v=20260528-parcel4';
 import * as api from './api.js?v=20260504-auth1';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
@@ -1975,9 +1975,11 @@ function renderParametersPhase(el) {
             <div>
               <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-500);margin-bottom:3px;">Carrier</label>
               <select id="cog-parcel-carrier" style="width:100%;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;">
-                <option value="fedex_ground" ${(config.parcelCarrier || 'fedex_ground') === 'fedex_ground' ? 'selected' : ''}>FedEx Ground (2026)</option>
+                ${Object.entries(calc.PARCEL_CARRIER_LABELS).map(([key, label]) => `
+                  <option value="${key}"${(config.parcelCarrier || 'fedex_ground') === key ? ' selected' : ''}>${label}</option>
+                `).join('')}
               </select>
-              <div style="font-size:10px;color:var(--ies-gray-400);margin-top:2px;">UPS + USPS in next commit</div>
+              <div style="font-size:10px;color:var(--ies-gray-400);margin-top:2px;">USPS limit 70 lb · UPS/FedEx 150 lb · service levels in next commit</div>
             </div>
             <div>
               <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-500);margin-bottom:3px;">Avg pkg weight (lb)</label>
