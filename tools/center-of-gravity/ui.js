@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-cogtriage4';
+import * as calc from './calc.js?v=20260528-cogtriage5';
 import * as api from './api.js?v=20260504-auth1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
 
@@ -203,7 +203,7 @@ function openEditor(savedRow) {
         cogResult = calc.snapCentersToCandidates(cogResult, _solvePts, config.candidateFacilities);
       }
       _enrichCogResultWithCost(cogResult, _solvePts);
-      sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0, config.roundTripFactor ?? 2.0);
+      sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
     } catch (err) {
       console.warn('[COG] Result rebuild from saved inputs failed; falling back to partial render:', err);
     }
@@ -257,6 +257,7 @@ function runOptimizeAndRender() {
     config.unitsPerTruck || 25000,
     config.fixedCostPerDC || 0,
     config.roundTripFactor ?? 2.0,
+    config.roadFactor ?? 1.22,
   );
   runState.markClean(runStateInputs());
   updateRunButtonState();
@@ -404,6 +405,7 @@ function _enrichCogResultWithCost(result, solvePts) {
       config.transportCostPerMile,
       config.unitsPerTruck || 25000,
       config.roundTripFactor ?? 2.0,
+      config.roadFactor ?? 1.22,
     );
     result.totalCost = costEst.totalCost;
     result.totalTruckloads = costEst.totalTruckloads;
@@ -616,7 +618,7 @@ async function bindShellEvents() {
           cogResult = calc.snapCentersToCandidates(cogResult, _solvePts, config.candidateFacilities);
         }
         _enrichCogResultWithCost(cogResult, _solvePts);
-        sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0, config.roundTripFactor ?? 2.0);
+        sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
         activePhase = 'run';
         runSubTab = 'numbers';
         runState.markClean(runStateInputs());
@@ -1073,6 +1075,12 @@ function renderParametersPhase(el) {
                    style="width:70px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
             <span style="font-size:11px;color:var(--ies-gray-400);">2.0 = full round trip · 1.5-1.8 with backhaul</span>
           </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <label style="font-size:13px;font-weight:600;" title="Multiplier converting great-circle (haversine) distance into estimated road miles. Continental US average is 1.20-1.25. Mountain west runs 1.30+, plains 1.15. Set to 1.0 to revert to legacy great-circle math.">Road factor:</label>
+            <input type="number" value="${config.roadFactor ?? 1.22}" step="0.01" min="1.0" max="1.5" id="cog-road-factor"
+                   style="width:70px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
+            <span style="font-size:11px;color:var(--ies-gray-400);">1.22 = US avg · 1.30 = mountain · 1.15 = plains · 1.00 = great-circle</span>
+          </div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             <label style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;cursor:pointer;" title="When ON, demand points whose lat/lng falls inside AK (51-72°N, -180 to -130°W) or HI (18-23°N, -161 to -154°W) bounding boxes are dropped before solving. Prevents a single offshore customer from dragging the centroid into the Pacific.">
               <input type="checkbox" id="cog-exclude-offshore" ${config.excludeOffshore ? 'checked' : ''} style="cursor:pointer;">
@@ -1136,6 +1144,12 @@ function renderParametersPhase(el) {
   el.querySelector('#cog-rt-factor')?.addEventListener('change', (e) => {
     const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
     config.roundTripFactor = (Number.isFinite(v) && v > 0) ? v : 2.0;
+    markDirty();
+  });
+  // 2026-05-28 — Road-factor input.
+  el.querySelector('#cog-road-factor')?.addEventListener('change', (e) => {
+    const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
+    config.roadFactor = (Number.isFinite(v) && v >= 1.0) ? v : 1.22;
     markDirty();
   });
   // 2026-05-26 — Exclude Alaska & Hawaii checkbox.
@@ -1292,7 +1306,7 @@ function renderAnalysis(el) {
     return;
   }
 
-  const costEst = calc.estimateTransportCost(cogResult, points, config.transportCostPerMile, config.unitsPerTruck || 25000, config.roundTripFactor ?? 2.0);
+  const costEst = calc.estimateTransportCost(cogResult, points, config.transportCostPerMile, config.unitsPerTruck || 25000, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
 
   el.innerHTML = `
     <div>
@@ -1329,11 +1343,15 @@ function renderAnalysis(el) {
         const totalWeight = points.filter(p => p.type !== 'excluded' && p.lat != null).reduce((s, p) => s + (p.weight || 0), 0);
         const capacity = Math.max(1, config.unitsPerTruck || 25000);
         const trucks = totalWeight / capacity;
-        const totalLoadedMi = cogResult.assignments.reduce((s, a) => {
+        const totalGcMi = cogResult.assignments.reduce((s, a) => {
           const pt = points.find(p => p.id === a.pointId);
           const w = pt?.weight || 0;
           return s + (w / capacity) * a.distanceToCenter;
         }, 0);
+        // 2026-05-28 — surface road-factor before round-trip so the path
+        // is great-circle → road → round-trip. Matches estimateTransportCost.
+        const road = Math.max(1, +config.roadFactor || 1.22);
+        const totalLoadedMi = totalGcMi * road;
         const rt = Math.max(1, +config.roundTripFactor || 2.0);
         const totalMi = totalLoadedMi * rt;
         const cpm = config.transportCostPerMile || 0;
@@ -1351,7 +1369,10 @@ function renderAnalysis(el) {
             <span style="text-align:right;font-weight:600;">= ${fmtNum(trucks)} truckloads/yr</span>
             <span style="color:var(--ies-gray-500);">× weighted avg distance to assigned DC</span>
             <span></span>
-            <span style="text-align:right;font-weight:600;">= ${fmtNum(totalLoadedMi)} loaded mi/yr</span>
+            <span style="text-align:right;font-weight:600;">= ${fmtNum(totalGcMi)} great-circle mi/yr</span>
+            <span style="color:var(--ies-gray-500);">× ${road.toFixed(2)} road factor (great-circle → road)</span>
+            <span></span>
+            <span style="text-align:right;font-weight:600;">= ${fmtNum(totalLoadedMi)} loaded road-mi/yr</span>
             <span style="color:var(--ies-gray-500);">× ${rt.toFixed(1)} round-trip factor</span>
             <span></span>
             <span style="text-align:right;font-weight:600;">= ${fmtNum(totalMi)} total truck-mi/yr</span>
@@ -1428,11 +1449,13 @@ function renderAnalysis(el) {
                 const pt = points.find(p => p.id === a.pointId);
                 const capacity = Math.max(1, config.unitsPerTruck || 25000);
                 const rt = Math.max(1, +config.roundTripFactor || 2.0);
+                const road = Math.max(1, +config.roadFactor || 1.22);
                 const truckloads = (pt?.weight || 0) / capacity;
                 // 2026-05-26 — multiply by round-trip factor to match the
                 // totals row above. Previously this column showed the
                 // one-way cost only, which read 50% low.
-                const cost = a.distanceToCenter * truckloads * config.transportCostPerMile * rt;
+                // 2026-05-28 — multiply by road factor too (same reason).
+                const cost = a.distanceToCenter * road * truckloads * config.transportCostPerMile * rt;
                 return `
                   <tr style="border-bottom:1px solid var(--ies-gray-200);">
                     <td style="padding:6px;text-align:center;">
@@ -1752,7 +1775,7 @@ function renderSensitivity(el) {
           Optimal network of <strong>${cogResult.centers.length}</strong> facilit${cogResult.centers.length === 1 ? 'y' : 'ies'} reduces
           avg distance to <strong>${cogResult.centers[0] ? calc.formatMiles(cogResult.centers.reduce((s, c) => s + c.avgWeightedDistance, 0) / cogResult.centers.length) : 'N/A'}</strong>
           per facility, with total annual transport cost of <strong>${calc.formatCurrency(cogResult.assignments ?
-            calc.estimateTransportCost(cogResult, points, config.transportCostPerMile, config.unitsPerTruck || 25000, config.roundTripFactor ?? 2.0).totalCost : 0)}</strong>.
+            calc.estimateTransportCost(cogResult, points, config.transportCostPerMile, config.unitsPerTruck || 25000, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22).totalCost : 0)}</strong>.
           Compared to single facility: <strong>${savingsPct}%</strong> savings.
         </div>
       </div>
@@ -1921,7 +1944,7 @@ function exportCogAnalysis() {
     return;
   }
 
-  const costEst = calc.estimateTransportCost(cogResult, points, config.transportCostPerMile, config.unitsPerTruck || 25000, config.roundTripFactor ?? 2.0);
+  const costEst = calc.estimateTransportCost(cogResult, points, config.transportCostPerMile, config.unitsPerTruck || 25000, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
   const now = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
   const filename = `cog-analysis-${now}.csv`;
 
@@ -1957,8 +1980,9 @@ function exportCogAnalysis() {
     // by ~50% in the default rt=2.0 case because rt was missing here.
     const capacity = Math.max(1, config.unitsPerTruck || 25000);
     const rt = Math.max(1, +config.roundTripFactor || 2.0);
+    const road = Math.max(1, +config.roadFactor || 1.22);
     const truckloads = (pt?.weight || 0) / capacity;
-    const cost = a.distanceToCenter * truckloads * config.transportCostPerMile * rt;
+    const cost = a.distanceToCenter * road * truckloads * config.transportCostPerMile * rt;
     if (pt) {
       sections.push(`"${pt.name || pt.id}","${pt.lat.toFixed(4)}","${pt.lng.toFixed(4)}","${pt.weight}","Center ${a.clusterId + 1}","${a.distanceToCenter.toFixed(2)}","${cost.toFixed(2)}"`);
     }
@@ -2002,14 +2026,15 @@ function exportCogGeoJSON() {
   });
 
   // Demand points + center↔point lines
-  // 2026-05-28 — pull rt factor so per-row annual_transport_cost matches
-  // the on-screen Analysis-tab totals. (Same fix as CSV export.)
+  // 2026-05-28 — pull rt + road factors so per-row annual_transport_cost
+  // matches the on-screen Analysis-tab totals. (Same fix as CSV export.)
   const rt = Math.max(1, +config.roundTripFactor || 2.0);
+  const road = Math.max(1, +config.roadFactor || 1.22);
   cogResult.assignments.forEach(a => {
     const pt = points.find(p => p.id === a.pointId);
     if (!pt) return;
     const truckloads = (pt.weight || 0) / capacity;
-    const cost = a.distanceToCenter * truckloads * config.transportCostPerMile * rt;
+    const cost = a.distanceToCenter * road * truckloads * config.transportCostPerMile * rt;
     features.push({
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [pt.lng, pt.lat] },

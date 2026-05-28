@@ -60,6 +60,13 @@ export const DEFAULT_CONFIG = {
   /** @type {Array<{ label?: string, lat: number, lng: number }>} */
   candidateFacilities: [],
   snapToCandidates: false,
+  // 2026-05-28 — road-mile multiplier. Haversine returns great-circle
+  // distance; carriers pay for road miles. Continental US ratio averages
+  // 1.20-1.25 (1.30+ in mountain west, 1.15 in plains). For a defensible
+  // RFP number this should typically be 1.20-1.25. Set to 1.0 to recover
+  // legacy great-circle behavior. Threaded through estimateTransportCost
+  // + sensitivityAnalysis. Future: regional override (mountain / plains).
+  roadFactor: 1.22,
   // 2026-05-28 — k-means restart count. k-means is local-optimum-prone;
   // running N restarts with different seeds and keeping the lowest-cost
   // solution is the standard defense. Restart #0 uses the deterministic
@@ -701,13 +708,17 @@ export function capWeightsByPercentile(points, percentile = 95) {
  * @param {number} [unitsPerTruck=25000]
  * @returns {{ totalCost: number, avgCostPerUnit: number, costByCluster: number[], totalTruckloads: number }}
  */
-export function estimateTransportCost(cogResult, points, costPerMile = 2.85, unitsPerTruck = 25000, roundTripFactor = 2.0) {
+export function estimateTransportCost(cogResult, points, costPerMile = 2.85, unitsPerTruck = 25000, roundTripFactor = 2.0, roadFactor = 1.22) {
   const capacity = Math.max(1, unitsPerTruck || 1); // guard against /0
   // 2026-05-26 — Round-trip factor. Distances in cogResult.assignments are
   // one-way; carrier pricing includes the return leg. Default 2.0 = full
   // round-trip (no backhaul recovery). Conservative inputs (1.5-1.8) can
   // be used if a network has reliable backhaul revenue.
   const rt = Math.max(1, +roundTripFactor || 1);
+  // 2026-05-28 — Road-mile factor. Haversine returns great-circle;
+  // carriers pay for road miles. Default 1.22 = continental US average.
+  // Set to 1.0 to recover legacy great-circle math.
+  const road = Math.max(1, +roadFactor || 1);
   const costByCluster = cogResult.centers.map((_, ci) => {
     return cogResult.assignments
       .filter(a => a.clusterId === ci)
@@ -715,7 +726,7 @@ export function estimateTransportCost(cogResult, points, costPerMile = 2.85, uni
         const pt = points.find(p => p.id === a.pointId);
         const w = pt?.weight || 0;
         const truckloads = w / capacity;
-        return s + truckloads * a.distanceToCenter * costPerMile * rt;
+        return s + truckloads * a.distanceToCenter * road * costPerMile * rt;
       }, 0);
   });
 
@@ -762,14 +773,14 @@ export function estimateTransportCost(cogResult, points, costPerMile = 2.85, uni
  * @param {number} [fixedCostPerDC=0]  Annual fixed cost per facility ($/year).
  * @returns {Array<{ k: number, totalWeightedDistance: number, transportCost: number, facilityCost: number, totalCost: number, estimatedCost: number, avgDistance: number, isElbow?: boolean }>}
  */
-export function sensitivityAnalysis(points, maxK = 5, costPerMile = 2.85, maxIter = 100, unitsPerTruck = 25000, fixedCostPerDC = 0, roundTripFactor = 2.0) {
+export function sensitivityAnalysis(points, maxK = 5, costPerMile = 2.85, maxIter = 100, unitsPerTruck = 25000, fixedCostPerDC = 0, roundTripFactor = 2.0, roadFactor = 1.22) {
   const results = [];
   const effectiveMaxK = Math.min(maxK, points.length);
   const fixedTerm = Math.max(0, Number(fixedCostPerDC) || 0);
 
   for (let k = 1; k <= effectiveMaxK; k++) {
     const cogResult = kMeansCog(points, k, maxIter);
-    const cost = estimateTransportCost(cogResult, points, costPerMile, unitsPerTruck, roundTripFactor);
+    const cost = estimateTransportCost(cogResult, points, costPerMile, unitsPerTruck, roundTripFactor, roadFactor);
     const totalWeight = points.reduce((s, p) => s + p.weight, 0);
     const avgDist = totalWeight > 0 ? cogResult.totalWeightedDistance / totalWeight : 0;
     const transportCost = cost.totalCost;
