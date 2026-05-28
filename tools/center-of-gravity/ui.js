@@ -13,8 +13,9 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-cogtriage14';
+import * as calc from './calc.js?v=20260528-cogtriage15';
 import * as api from './api.js?v=20260504-auth1';
+import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
 
 // ============================================================
@@ -401,6 +402,83 @@ async function handleSave() {
     bindShellEvents();
     renderContent();
     showToast(`Saved "${_scenarioName}".`, 'ok');
+
+    // 2026-05-28 G2 — CM writeback. When this COG scenario is linked to a
+    // parent cost model (via activeParentCmId / parent_cost_model_id), push
+    // the result summary into the CM's project_data under linkedCogFacts so
+    // the CM can render "COG says $X/yr · Y% coverage · Z tons CO₂" without
+    // re-running COG. Best-effort: writeback failure is non-blocking.
+    if (activeParentCmId && cogResult) {
+      try {
+        // Compute the vs-current-state delta if available.
+        let deltaVsCurrent = null;
+        const csList = (config.currentStateDCs || []).filter(d => Number.isFinite(+d.lat) && Number.isFinite(+d.lng));
+        if (csList.length > 0) {
+          const solvePts = _pointsForSolve();
+          const csMcr = calc.buildMcrFromDcList(csList, solvePts);
+          if (csMcr) {
+            const csCost = calc.estimateTransportCost(csMcr, solvePts, config.transportCostPerMile, config.unitsPerTruck || 25000, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
+            calc.flagServiceViolations(csMcr, solvePts, config.maxServiceMiles ?? 0, config.roadFactor ?? 1.22);
+            const csCo2 = (csCost.totalTruckMiles || 0) * (config.co2KgPerTruckMile ?? 1.62) / 1000;
+            const propCost = cogResult.totalCost || 0;
+            const propCo2 = cogResult.co2Tons || 0;
+            deltaVsCurrent = {
+              currentNCenters: csList.length,
+              currentCost: csCost.totalCost,
+              currentCo2Tons: csCo2,
+              currentCoveragePct: csMcr.serviceStats?.maxMiles > 0 ? csMcr.serviceStats.coveragePct : null,
+              costDelta: csCost.totalCost - propCost,
+              costDeltaPct: csCost.totalCost > 0 ? ((csCost.totalCost - propCost) / csCost.totalCost * 100) : 0,
+              co2Delta: csCo2 - propCo2,
+              co2DeltaPct: csCo2 > 0 ? ((csCo2 - propCo2) / csCo2 * 100) : 0,
+              coverageDelta: (csMcr.serviceStats?.maxMiles > 0 && cogResult.serviceStats?.maxMiles > 0)
+                ? (cogResult.serviceStats.coveragePct - csMcr.serviceStats.coveragePct)
+                : null,
+            };
+          }
+        }
+
+        const cogFacts = {
+          scenarioId: activeScenarioId,
+          scenarioName: _scenarioName,
+          customerName: config.customerName || '',
+          industry: config.industry || '',
+          dealStage: config.dealStage || '',
+          nCenters: cogResult.centers.length,
+          kRequested: config.numCenters,
+          totalCost: cogResult.totalCost || 0,
+          totalTruckMiles: cogResult.totalTruckMiles || 0,
+          totalTruckloads: cogResult.totalTruckloads || 0,
+          co2Tons: cogResult.co2Tons || 0,
+          serviceCoveragePct: cogResult.serviceStats?.coveragePct ?? null,
+          maxServiceMiles: config.maxServiceMiles || 0,
+          peakUtilization: cogResult.capacityStats?.peakUtilization ?? null,
+          capacityPerDC: config.capacityPerDC || 0,
+          avgWeightedDistance: cogResult.totalWeightedDistance / Math.max(1, (points || []).reduce((s, p) => s + (p.weight || 0), 0)),
+          params: {
+            transportCostPerMile: config.transportCostPerMile,
+            roadFactor: config.roadFactor ?? 1.22,
+            roundTripFactor: config.roundTripFactor ?? 2.0,
+            weightUnit: config.weightUnit || 'lb',
+            unitsPerTruck: config.unitsPerTruck || 25000,
+            fixedCostPerDC: config.fixedCostPerDC || 0,
+          },
+          centerSummaries: cogResult.centers.map((c, i) => ({
+            label: c.candidateLabel || c.nearestCity || `Center ${i + 1}`,
+            lat: c.lat, lng: c.lng,
+            weight: c.totalWeight || 0,
+            avgDistance: c.avgWeightedDistance || 0,
+            cost: Array.isArray(cogResult.costByCluster) ? (cogResult.costByCluster[i] || 0) : 0,
+          })),
+          deltaVsCurrent,
+        };
+        await cmApi.applyCogWriteback(activeParentCmId, cogFacts);
+        showToast(`COG facts written to Cost Model #${activeParentCmId}`, 'info');
+      } catch (writebackErr) {
+        console.warn('[COG] CM writeback failed (non-blocking):', writebackErr);
+        showToast('COG saved, but CM writeback failed — see console.', 'warn');
+      }
+    }
   } catch (err) {
     console.error('[COG] save failed:', err);
     showToast(`Save failed: ${err.message || err}`, 'err');

@@ -205,6 +205,52 @@ export async function applyWscWriteback(cmId, wscFacts) {
 }
 
 /**
+ * 2026-05-28 G2 — Center of Gravity writeback. Mirrors applyWscWriteback.
+ * When a COG scenario is linked to a parent cost model, calling this
+ * after the COG save pushes the result summary into the CM's project_data
+ * under `linkedCogFacts` so the CM can render 'COG says $X/yr transport,
+ * Y% coverage, Z tons CO₂' without re-running COG.
+ *
+ * Expected cogFacts shape:
+ *   {
+ *     scenarioId, scenarioName, customerName, industry, dealStage,
+ *     nCenters, kRequested,
+ *     totalCost, totalTruckMiles, totalTruckloads,
+ *     co2Tons,
+ *     serviceCoveragePct, maxServiceMiles,
+ *     peakUtilization, capacityPerDC,
+ *     avgWeightedDistance,
+ *     params: { transportCostPerMile, roadFactor, roundTripFactor,
+ *               weightUnit, unitsPerTruck, fixedCostPerDC },
+ *     centerSummaries: [{ label, lat, lng, weight, avgDistance, cost }],
+ *     deltaVsCurrent: { costDelta, costDeltaPct, co2Delta, co2DeltaPct,
+ *                       coverageDelta, currentNCenters } | null,
+ *     updatedAt: ISO timestamp
+ *   }
+ *
+ * Additive write — fetch the parent CM's project_data, splice in the
+ * new linkedCogFacts key, push back via updateModel. Other fields untouched.
+ *
+ * @param {number|string} cmId
+ * @param {Object} cogFacts — see shape above
+ * @returns {Promise<void>}
+ */
+export async function applyCogWriteback(cmId, cogFacts) {
+  if (!cmId) throw new Error('applyCogWriteback: cmId required');
+  if (!cogFacts || typeof cogFacts !== 'object') throw new Error('applyCogWriteback: cogFacts required');
+  const row = await getModel(cmId);
+  if (!row) throw new Error(`applyCogWriteback: cost model ${cmId} not found`);
+  const data = (row.project_data && typeof row.project_data === 'object')
+    ? { ...row.project_data }
+    : {};
+  data.linkedCogFacts = {
+    ...cogFacts,
+    updatedAt: new Date().toISOString(),
+  };
+  return updateModel(cmId, data);
+}
+
+/**
  * Delete a cost model project.
  * @param {number} id
  * @returns {Promise<void>}
