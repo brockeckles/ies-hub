@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-parcel5';
+import * as calc from './calc.js?v=20260528-parcel6';
 import * as api from './api.js?v=20260504-auth1';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
@@ -590,6 +590,7 @@ function _enrichCogResultWithCost(result, solvePts) {
     result.costByCluster = costEst.costByCluster;
     result.truckCostByCluster = costEst.truckCostByCluster;
     result.parcelCostByCluster = costEst.parcelCostByCluster;
+    result.costByAssignment = costEst.costByAssignment;
     result.parcelDetails = costEst.parcelDetails;
     // CO₂ driven by TRUCK truck-miles only; parcel emissions are baked
     // into carrier rates and not exposed separately by FedEx/UPS.
@@ -2441,7 +2442,15 @@ function renderAnalysis(el) {
     return;
   }
 
-  const costEst = calc.estimateTransportCost(cogResult, points, _resolveCpm(), config.unitsPerTruck || 25000, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
+  // 2026-05-28 30 — read engine source of truth instead of recomputing.
+  // estimateTransportCost ignores mode-mix/parcel; cogResult has the
+  // proper blended numbers stamped by _enrichCogResultWithCost.
+  const costEst = {
+    totalCost: cogResult.totalCost ?? 0,
+    avgCostPerUnit: cogResult.avgCostPerUnit ?? 0,
+    totalTruckloads: cogResult.totalTruckloads ?? 0,
+    totalTruckMiles: cogResult.totalTruckMiles ?? 0,
+  };
 
   el.innerHTML = `
     <div>
@@ -2721,15 +2730,14 @@ function renderAnalysis(el) {
             <tbody>
               ${cogResult.assignments.map(a => {
                 const pt = points.find(p => p.id === a.pointId);
-                const capacity = Math.max(1, config.unitsPerTruck || 25000);
-                const rt = Math.max(1, +config.roundTripFactor || 2.0);
-                const road = Math.max(1, +config.roadFactor || 1.22);
-                const truckloads = (pt?.weight || 0) / capacity;
-                // 2026-05-26 — multiply by round-trip factor to match the
-                // totals row above. Previously this column showed the
-                // one-way cost only, which read 50% low.
-                // 2026-05-28 — multiply by road factor too (same reason).
-                const cost = a.distanceToCenter * road * truckloads * config.transportCostPerMile * rt;
+                // 2026-05-28 30 — read engine source of truth via
+                // cogResult.costByAssignment. Per-row was overstating
+                // by ~5x when mode mix was on because the inline formula
+                // ignored the parcel split. Now matches totalCost exactly.
+                const cbaRow = Array.isArray(cogResult.costByAssignment)
+                  ? cogResult.costByAssignment.find(x => x.pointId === a.pointId)
+                  : null;
+                const cost = cbaRow ? cbaRow.totalCost : 0;
                 const outBadge = a.outOfService
                   ? `<span title="Road distance ${Math.round(a.driveRoadMi || 0)} mi > ${cogResult.serviceStats?.maxMiles || 0} mi SLA" style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:700;background:#fee2e2;color:#b91c1c;letter-spacing:0.4px;">OUT</span>`
                   : '';
@@ -3421,8 +3429,7 @@ function renderSensitivity(el) {
         <div style="font-size:13px;line-height:1.6;color:#166534;">
           Optimal network of <strong>${cogResult.centers.length}</strong> facilit${cogResult.centers.length === 1 ? 'y' : 'ies'} reduces
           avg distance to <strong>${cogResult.centers[0] ? calc.formatMiles(cogResult.centers.reduce((s, c) => s + c.avgWeightedDistance, 0) / cogResult.centers.length) : 'N/A'}</strong>
-          per facility, with total annual transport cost of <strong>${calc.formatCurrency(cogResult.assignments ?
-            calc.estimateTransportCost(cogResult, points, _resolveCpm(), config.unitsPerTruck || 25000, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22).totalCost : 0)}</strong>.
+          per facility, with total annual transport cost of <strong>${calc.formatCurrency(cogResult.totalCost ?? 0)}</strong>.
           Compared to single facility: <strong>${savingsPct}%</strong> savings.
         </div>
       </div>
@@ -3591,7 +3598,13 @@ function exportCogAnalysis() {
     return;
   }
 
-  const costEst = calc.estimateTransportCost(cogResult, points, _resolveCpm(), config.unitsPerTruck || 25000, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
+  // 2026-05-28 30 — use engine source of truth.
+  const costEst = {
+    totalCost: cogResult.totalCost ?? 0,
+    avgCostPerUnit: cogResult.avgCostPerUnit ?? 0,
+    totalTruckloads: cogResult.totalTruckloads ?? 0,
+    totalTruckMiles: cogResult.totalTruckMiles ?? 0,
+  };
   const now = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
   const filename = `cog-analysis-${now}.csv`;
 
@@ -3622,14 +3635,11 @@ function exportCogAnalysis() {
   sections.push('Name,Latitude,Longitude,Weight,Assigned To Center,Distance to Center (mi),Transport Cost');
   cogResult.assignments.forEach(a => {
     const pt = points.find(p => p.id === a.pointId);
-    // 2026-05-28 — pull rt factor + capacity so per-row cost matches the
-    // on-screen Analysis-tab totals. Previously the export under-reported
-    // by ~50% in the default rt=2.0 case because rt was missing here.
-    const capacity = Math.max(1, config.unitsPerTruck || 25000);
-    const rt = Math.max(1, +config.roundTripFactor || 2.0);
-    const road = Math.max(1, +config.roadFactor || 1.22);
-    const truckloads = (pt?.weight || 0) / capacity;
-    const cost = a.distanceToCenter * road * truckloads * config.transportCostPerMile * rt;
+    // 2026-05-28 30 — read from engine source of truth.
+    const cbaRow = Array.isArray(cogResult.costByAssignment)
+      ? cogResult.costByAssignment.find(x => x.pointId === a.pointId)
+      : null;
+    const cost = cbaRow ? cbaRow.totalCost : 0;
     if (pt) {
       sections.push(`"${pt.name || pt.id}","${pt.lat.toFixed(4)}","${pt.lng.toFixed(4)}","${pt.weight}","Center ${a.clusterId + 1}","${a.distanceToCenter.toFixed(2)}","${cost.toFixed(2)}"`);
     }
@@ -3681,7 +3691,11 @@ function exportCogGeoJSON() {
     const pt = points.find(p => p.id === a.pointId);
     if (!pt) return;
     const truckloads = (pt.weight || 0) / capacity;
-    const cost = a.distanceToCenter * road * truckloads * config.transportCostPerMile * rt;
+    // 2026-05-28 30 — engine source of truth.
+    const cbaRow = Array.isArray(cogResult.costByAssignment)
+      ? cogResult.costByAssignment.find(x => x.pointId === a.pointId)
+      : null;
+    const cost = cbaRow ? cbaRow.totalCost : (a.distanceToCenter * road * truckloads * config.transportCostPerMile * rt);
     features.push({
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [pt.lng, pt.lat] },
@@ -3755,7 +3769,13 @@ function openPrintView() {
     return;
   }
   const solvePts = _pointsForSolve();
-  const costEst = calc.estimateTransportCost(cogResult, points, _resolveCpm(), config.unitsPerTruck || 25000, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
+  // 2026-05-28 30 — engine source of truth.
+  const costEst = {
+    totalCost: cogResult.totalCost ?? 0,
+    avgCostPerUnit: cogResult.avgCostPerUnit ?? 0,
+    totalTruckloads: cogResult.totalTruckloads ?? 0,
+    totalTruckMiles: cogResult.totalTruckMiles ?? 0,
+  };
   const today = new Date().toISOString().split('T')[0];
   const ctxParts = [config.customerName, (calc.INDUSTRY_OPTIONS.find(o => o.value === config.industry) || {}).label, (calc.DEAL_STAGES.find(o => o.value === config.dealStage) || {}).label].filter(Boolean);
   const ctxLine = ctxParts.length ? ctxParts.join(' · ') : 'Untitled scenario';

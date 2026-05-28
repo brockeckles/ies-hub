@@ -34,7 +34,7 @@ import {
   estimateParcelLane,
   parcelDistributionByZone,
   PARCEL_ENGINE_VERSION,
-} from './parcel-calc.js?v=20260528-parcel5';
+} from './parcel-calc.js?v=20260528-parcel6';
 
 export {
   ZONE_BREAKPOINTS,
@@ -1356,6 +1356,13 @@ export function estimateBlendedCost(cogResult, points, config) {
 
   if (!cfg.modeMixEnabled) {
     const r = estimateTransportCost(cogResult, points, cfg.transportCostPerMile, unitsPerTruck, rt, road);
+    // 2026-05-28 30 — per-assignment cost array for UI display.
+    const cbaOff = (cogResult.assignments || []).map(a => {
+      const pt = points.find(p => p.id === a.pointId);
+      const w = pt?.weight || 0;
+      const tl = (w / unitsPerTruck) * (a.distanceToCenter || 0) * road * (cfg.transportCostPerMile || 0) * rt;
+      return { pointId: a.pointId, clusterId: a.clusterId, truckCost: tl, parcelCost: 0, totalCost: tl, zone: null, pkgCount: 0 };
+    });
     return {
       totalCost: r.totalCost,
       truckCost: r.totalCost,
@@ -1363,6 +1370,7 @@ export function estimateBlendedCost(cogResult, points, config) {
       costByCluster: r.costByCluster,
       truckCostByCluster: r.costByCluster,
       parcelCostByCluster: r.costByCluster.map(() => 0),
+      costByAssignment: cbaOff,
       totalTruckloads: r.totalTruckloads,
       totalTruckMiles: r.totalTruckMiles,
       avgCostPerUnit: r.avgCostPerUnit,
@@ -1417,10 +1425,12 @@ export function estimateBlendedCost(cogResult, points, config) {
   let totalParcelPkgs = 0;
   let totalParcelCost = 0;
 
+  // 2026-05-28 30 — track per-assignment parcel cost too.
+  const perAssignmentParcel = [];
   if (parcelShare > 0 && Array.isArray(cogResult.assignments)) {
     for (const a of cogResult.assignments) {
       const pt = points.find(p => p.id === a.pointId);
-      if (!pt) continue;
+      if (!pt) { perAssignmentParcel.push({ cost: 0, zone: null, pkgCount: 0 }); continue; }
       const parcelWeight = (pt.weight || 0) * parcelShare;
       const pkgCount = avgWeight > 0 ? parcelWeight / avgWeight : 0;
       const driveMi = (a.distanceToCenter || 0) * road;
@@ -1433,8 +1443,27 @@ export function estimateBlendedCost(cogResult, points, config) {
       byZone[lane.zone] = (byZone[lane.zone] || 0) + pkgCount;
       totalParcelPkgs += pkgCount;
       totalParcelCost += lane.totalCost;
+      perAssignmentParcel.push({ cost: lane.totalCost, zone: lane.zone, pkgCount });
     }
+  } else {
+    for (const _ of (cogResult.assignments || [])) perAssignmentParcel.push({ cost: 0, zone: null, pkgCount: 0 });
   }
+  // Per-assignment truck cost.
+  const perAssignmentTruck = (cogResult.assignments || []).map(a => {
+    const pt = points.find(p => p.id === a.pointId);
+    const w = (pt?.weight || 0) * nonParcelShare;
+    const truckloads = w / unitsPerTruck;
+    return truckloads * (a.distanceToCenter || 0) * nonParcelCpm * road * rt;
+  });
+  const costByAssignment = (cogResult.assignments || []).map((a, i) => ({
+    pointId: a.pointId,
+    clusterId: a.clusterId,
+    truckCost: perAssignmentTruck[i] || 0,
+    parcelCost: perAssignmentParcel[i]?.cost || 0,
+    totalCost: (perAssignmentTruck[i] || 0) + (perAssignmentParcel[i]?.cost || 0),
+    zone: perAssignmentParcel[i]?.zone || null,
+    pkgCount: perAssignmentParcel[i]?.pkgCount || 0,
+  }));
 
   const totalCost = truckResult.totalCost + totalParcelCost;
   const activeWeight = points.reduce((s, p) => {
@@ -1451,6 +1480,7 @@ export function estimateBlendedCost(cogResult, points, config) {
     costByCluster,
     truckCostByCluster: truckResult.costByCluster,
     parcelCostByCluster,
+    costByAssignment,
     totalTruckloads: truckResult.totalTruckloads,
     totalTruckMiles: truckResult.totalTruckMiles,
     avgCostPerUnit,
