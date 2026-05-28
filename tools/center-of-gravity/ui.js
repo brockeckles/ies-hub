@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-parcel1';
+import * as calc from './calc.js?v=20260528-parcel2';
 import * as api from './api.js?v=20260504-auth1';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
@@ -253,7 +253,7 @@ function openEditor(savedRow) {
       calc.applyCapacityConstraints(cogResult, _solvePts, config.capacityPerDC ?? 0);
       _enrichCogResultWithCost(cogResult, _solvePts);
       calc.flagServiceViolations(cogResult, _solvePts, config.maxServiceMiles ?? 0, config.roadFactor ?? 1.22);
-      sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, config.sensitivityMaxK ?? 8), _resolveCpm(), config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
+      sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, config.sensitivityMaxK ?? 8), config);
     } catch (err) {
       console.warn('[COG] Result rebuild from saved inputs failed; falling back to partial render:', err);
     }
@@ -301,16 +301,7 @@ function runOptimizeAndRender() {
   calc.applyCapacityConstraints(cogResult, _solvePts, config.capacityPerDC ?? 0);
   _enrichCogResultWithCost(cogResult, _solvePts);
   calc.flagServiceViolations(cogResult, _solvePts, config.maxServiceMiles ?? 0, config.roadFactor ?? 1.22);
-  sensitivityData = calc.sensitivityAnalysis(
-    _solvePts,
-    Math.max(config.numCenters, config.sensitivityMaxK ?? 8),
-    _resolveCpm(),
-    config.maxIterations,
-    config.unitsPerTruck || 25000,
-    config.fixedCostPerDC || 0,
-    config.roundTripFactor ?? 2.0,
-    config.roadFactor ?? 1.22,
-  );
+  sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, config.sensitivityMaxK ?? 8), config);
   runState.markClean(runStateInputs());
   updateRunButtonState();
   // Re-render content without flipping tabs out from under the user.
@@ -588,19 +579,20 @@ function _resolveCpm() {
 function _enrichCogResultWithCost(result, solvePts) {
   if (!result || !Array.isArray(result.centers)) return result;
   try {
-    const costEst = calc.estimateTransportCost(
-      result,
-      solvePts,
-      _resolveCpm(),
-      config.unitsPerTruck || 25000,
-      config.roundTripFactor ?? 2.0,
-      config.roadFactor ?? 1.22,
-    );
+    // 2026-05-28 27b — route through estimateBlendedCost which handles
+    // legacy (modeMixEnabled=false) and parcel-aware (on) paths.
+    const costEst = calc.estimateBlendedCost(result, solvePts, config);
     result.totalCost = costEst.totalCost;
+    result.truckCost = costEst.truckCost;
+    result.parcelCost = costEst.parcelCost;
     result.totalTruckloads = costEst.totalTruckloads;
     result.avgCostPerUnit = costEst.avgCostPerUnit;
     result.costByCluster = costEst.costByCluster;
-    // 2026-05-28 B20 — CO₂ emissions. totalTruckMiles × kg/mi intensity.
+    result.truckCostByCluster = costEst.truckCostByCluster;
+    result.parcelCostByCluster = costEst.parcelCostByCluster;
+    result.parcelDetails = costEst.parcelDetails;
+    // CO₂ driven by TRUCK truck-miles only; parcel emissions are baked
+    // into carrier rates and not exposed separately by FedEx/UPS.
     result.totalTruckMiles = costEst.totalTruckMiles;
     const co2Intensity = Math.max(0, +config.co2KgPerTruckMile || 1.62);
     result.co2Kg = (costEst.totalTruckMiles || 0) * co2Intensity;
@@ -870,7 +862,7 @@ async function bindShellEvents() {
             calc.applyCapacityConstraints(cogResult, _solvePts, config.capacityPerDC ?? 0);
             _enrichCogResultWithCost(cogResult, _solvePts);
             calc.flagServiceViolations(cogResult, _solvePts, config.maxServiceMiles ?? 0, config.roadFactor ?? 1.22);
-            sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, config.sensitivityMaxK ?? 8), _resolveCpm(), config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
+            sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, config.sensitivityMaxK ?? 8), config);
             activePhase = 'run';
             runSubTab = 'numbers';
             runState.markClean(runStateInputs());

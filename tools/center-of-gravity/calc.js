@@ -14,11 +14,22 @@
 
 const EARTH_RADIUS_MI = 3959;
 
-// 2026-05-28 — Parcel cost engine (separate module). Re-export the
-// public surface so existing callers can reach it via calc.* without a
-// second import statement. The parcel engine handles per-package
-// zone-priced cost — replaces the per-truck-mile hack from commits
-// 16-26 with first-principles math. See parcel-calc.js for full docstring.
+// 2026-05-28 — Parcel cost engine (separate module). Local import so
+// the symbols are available INSIDE calc.js (estimateBlendedCost uses
+// estimateParcelLane); paired with the named re-export so external
+// callers can still reach them via calc.*.
+import {
+  ZONE_BREAKPOINTS,
+  zoneForMiles,
+  FEDEX_GROUND_2026_LIST,
+  PARCEL_RATE_TABLES,
+  interpolateRate,
+  parcelCostPerPackage,
+  estimateParcelLane,
+  parcelDistributionByZone,
+  PARCEL_ENGINE_VERSION,
+} from './parcel-calc.js?v=20260528-parcel2';
+
 export {
   ZONE_BREAKPOINTS,
   zoneForMiles,
@@ -29,7 +40,7 @@ export {
   estimateParcelLane,
   parcelDistributionByZone,
   PARCEL_ENGINE_VERSION,
-} from './parcel-calc.js?v=20260528-parcel1';
+};
 
 /** @type {import('./types.js?v=20260418-sP').CogConfig} */
 export const DEFAULT_CONFIG = {
@@ -115,6 +126,14 @@ export const DEFAULT_CONFIG = {
   //     on the lb-default should bump higher. Earlier placeholder of
   //     $8.50 was 3-5x too low (caught by Brock 2026-05-28).
   modeRates: { tlPerMile: 2.85, ltlPerMile: 4.20, parcelPerMile: 28.00 },
+  // 2026-05-28 27b — Parcel engine knobs. Active when modeMixEnabled=true
+  // and modeMix.parcelPct > 0. Parcel slice routes through parcel-calc's
+  // zone-priced math; modeRates.parcelPerMile becomes display-only legacy.
+  parcelCarrier: 'fedex_ground',
+  parcelAvgPackageWeightLb: 5,
+  parcelResidentialShare: 0.5,
+  parcelFuelPct: 25,
+  parcelContractDiscountPct: 0,
   // 2026-05-28 — CO₂ emissions intensity (B20). kg CO₂ per truck-mile.
   // Default 1.62 = EPA SmartWay 2024 US heavy-duty diesel Class 8 average.
   // Range 1.30 (new fleets) to 2.10 (older / refrigerated). Threaded
@@ -1299,6 +1318,135 @@ export function tornadoSensitivity(mcr, points, cfg, drivers) {
 }
 
 // ============================================================
+// BLENDED COST (TL + LTL via per-mile + parcel via per-package)
+// ============================================================
+
+/**
+ * Orchestration helper — when mode-mix is off, behaves identically to
+ * estimateTransportCost (passthrough). When on, splits each point's
+ * weight by mode share. TL+LTL slice routes through estimateTransportCost
+ * at the (TL+LTL)-only blended \$/mi. Parcel slice routes through
+ * estimateParcelLane per assignment (proper per-package zone math).
+ *
+ * @param {import('./types.js?v=20260418-sP').MultiCogResult} cogResult
+ * @param {import('./types.js?v=20260418-sP').WeightedPoint[]} points
+ * @param {Object} config
+ * @returns {Object}
+ */
+export function estimateBlendedCost(cogResult, points, config) {
+  const cfg = config || {};
+  const unitsPerTruck = cfg.unitsPerTruck || 25000;
+  const rt = cfg.roundTripFactor ?? 2.0;
+  const road = cfg.roadFactor ?? 1.22;
+
+  if (!cfg.modeMixEnabled) {
+    const r = estimateTransportCost(cogResult, points, cfg.transportCostPerMile, unitsPerTruck, rt, road);
+    return {
+      totalCost: r.totalCost,
+      truckCost: r.totalCost,
+      parcelCost: 0,
+      costByCluster: r.costByCluster,
+      truckCostByCluster: r.costByCluster,
+      parcelCostByCluster: r.costByCluster.map(() => 0),
+      totalTruckloads: r.totalTruckloads,
+      totalTruckMiles: r.totalTruckMiles,
+      avgCostPerUnit: r.avgCostPerUnit,
+      parcelDetails: null,
+    };
+  }
+
+  const mix = cfg.modeMix || { tlPct: 100, ltlPct: 0, parcelPct: 0 };
+  const sum = Math.max(0, +mix.tlPct || 0) + Math.max(0, +mix.ltlPct || 0) + Math.max(0, +mix.parcelPct || 0);
+  if (sum <= 0) {
+    return {
+      totalCost: 0, truckCost: 0, parcelCost: 0,
+      costByCluster: cogResult.centers.map(() => 0),
+      truckCostByCluster: cogResult.centers.map(() => 0),
+      parcelCostByCluster: cogResult.centers.map(() => 0),
+      totalTruckloads: 0, totalTruckMiles: 0, avgCostPerUnit: 0,
+      parcelDetails: null,
+    };
+  }
+  const parcelShare = (Math.max(0, +mix.parcelPct || 0)) / sum;
+  const nonParcelShare = 1 - parcelShare;
+
+  const tlPct = Math.max(0, +mix.tlPct || 0);
+  const ltlPct = Math.max(0, +mix.ltlPct || 0);
+  const rates = cfg.modeRates || {};
+  const tlR = +rates.tlPerMile || 0;
+  const ltlR = +rates.ltlPerMile || 0;
+  const nonParcelCpm = (tlPct + ltlPct) > 0 ? (tlPct * tlR + ltlPct * ltlR) / (tlPct + ltlPct) : 0;
+
+  let truckResult;
+  if (nonParcelShare > 0 && nonParcelCpm > 0) {
+    const truckPoints = points.map(p => ({ ...p, weight: (p.weight || 0) * nonParcelShare }));
+    truckResult = estimateTransportCost(cogResult, truckPoints, nonParcelCpm, unitsPerTruck, rt, road);
+  } else {
+    truckResult = {
+      totalCost: 0,
+      costByCluster: cogResult.centers.map(() => 0),
+      totalTruckloads: 0,
+      totalTruckMiles: 0,
+      avgCostPerUnit: 0,
+    };
+  }
+
+  const avgWeight = +cfg.parcelAvgPackageWeightLb || 5;
+  const fuelPct = cfg.parcelFuelPct == null ? 25 : +cfg.parcelFuelPct;
+  const residentialShare = cfg.parcelResidentialShare == null ? 0.5 : +cfg.parcelResidentialShare;
+  const discountPct = cfg.parcelContractDiscountPct == null ? 0 : +cfg.parcelContractDiscountPct;
+  const carrier = cfg.parcelCarrier || 'fedex_ground';
+
+  const parcelCostByCluster = cogResult.centers.map(() => 0);
+  const byZone = { 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0 };
+  let totalParcelPkgs = 0;
+  let totalParcelCost = 0;
+
+  if (parcelShare > 0 && Array.isArray(cogResult.assignments)) {
+    for (const a of cogResult.assignments) {
+      const pt = points.find(p => p.id === a.pointId);
+      if (!pt) continue;
+      const parcelWeight = (pt.weight || 0) * parcelShare;
+      const pkgCount = avgWeight > 0 ? parcelWeight / avgWeight : 0;
+      const driveMi = (a.distanceToCenter || 0) * road;
+      const lane = estimateParcelLane({
+        pkgCount, avgWeight, distanceMi: driveMi,
+        fuelPct, residentialShare, discountPct, carrier,
+      });
+      parcelCostByCluster[a.clusterId] = (parcelCostByCluster[a.clusterId] || 0) + lane.totalCost;
+      byZone[lane.zone] = (byZone[lane.zone] || 0) + pkgCount;
+      totalParcelPkgs += pkgCount;
+      totalParcelCost += lane.totalCost;
+    }
+  }
+
+  const totalCost = truckResult.totalCost + totalParcelCost;
+  const activeWeight = points.reduce((s, p) => {
+    if (p && p.type !== 'excluded' && p.lat != null && p.lng != null) return s + (p.weight || 0);
+    return s;
+  }, 0);
+  const avgCostPerUnit = activeWeight > 0 ? totalCost / activeWeight : 0;
+  const costByCluster = cogResult.centers.map((_, ci) => (truckResult.costByCluster[ci] || 0) + (parcelCostByCluster[ci] || 0));
+
+  return {
+    totalCost,
+    truckCost: truckResult.totalCost,
+    parcelCost: totalParcelCost,
+    costByCluster,
+    truckCostByCluster: truckResult.costByCluster,
+    parcelCostByCluster,
+    totalTruckloads: truckResult.totalTruckloads,
+    totalTruckMiles: truckResult.totalTruckMiles,
+    avgCostPerUnit,
+    parcelDetails: parcelShare > 0 ? {
+      totalPackages: totalParcelPkgs,
+      byZone, avgWeight, carrier,
+      fuelPct, residentialShare, discountPct,
+    } : null,
+  };
+}
+
+// ============================================================
 // SENSITIVITY (vary number of centers)
 // ============================================================
 
@@ -1322,14 +1470,26 @@ export function tornadoSensitivity(mcr, points, cfg, drivers) {
  * @param {number} [fixedCostPerDC=0]  Annual fixed cost per facility ($/year).
  * @returns {Array<{ k: number, totalWeightedDistance: number, transportCost: number, facilityCost: number, totalCost: number, estimatedCost: number, avgDistance: number, isElbow?: boolean }>}
  */
-export function sensitivityAnalysis(points, maxK = 5, costPerMile = 2.85, maxIter = 100, unitsPerTruck = 25000, fixedCostPerDC = 0, roundTripFactor = 2.0, roadFactor = 1.22) {
+export function sensitivityAnalysis(points, maxK = 5, configOrCpm = 2.85, maxIter = 100, unitsPerTruck = 25000, fixedCostPerDC = 0, roundTripFactor = 2.0, roadFactor = 1.22) {
+  // 2026-05-28 — accept config object (new, parcel-aware) or scalar cpm (legacy).
+  const isConfig = configOrCpm != null && typeof configOrCpm === 'object';
+  const cfg = isConfig ? configOrCpm : {
+    transportCostPerMile: configOrCpm,
+    unitsPerTruck, roundTripFactor, roadFactor, modeMixEnabled: false,
+  };
+  const fixedTermBase = isConfig
+    ? (Math.max(0, Number(cfg.fixedCostPerDC) || 0))
+    : (Math.max(0, Number(fixedCostPerDC) || 0));
+  const innerMaxIter = isConfig ? (cfg.maxIterations || 100) : maxIter;
+  const innerRestarts = isConfig ? (cfg.kmeansRestarts ?? 10) : 10;
+
   const results = [];
   const effectiveMaxK = Math.min(maxK, points.length);
-  const fixedTerm = Math.max(0, Number(fixedCostPerDC) || 0);
+  const fixedTerm = fixedTermBase;
 
   for (let k = 1; k <= effectiveMaxK; k++) {
-    const cogResult = kMeansCog(points, k, maxIter);
-    const cost = estimateTransportCost(cogResult, points, costPerMile, unitsPerTruck, roundTripFactor, roadFactor);
+    const cogResult = kMeansCog(points, k, innerMaxIter, innerRestarts);
+    const cost = estimateBlendedCost(cogResult, points, cfg);
     const totalWeight = points.reduce((s, p) => s + p.weight, 0);
     const avgDist = totalWeight > 0 ? cogResult.totalWeightedDistance / totalWeight : 0;
     const transportCost = cost.totalCost;
