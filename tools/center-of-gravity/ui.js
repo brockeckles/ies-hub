@@ -80,7 +80,10 @@ function runStateInputs() {
 }
 function updateRunButtonState() {
   if (!rootEl) return;
-  const btn = rootEl.querySelector('[data-primary-action="cog-run"]');
+  // 2026-05-26 — fixed selector. Chrome renders data-tc-action via
+  // shared/tool-chrome.js; data-primary-action was a stale legacy hook
+  // and silently returned null, leaving the dirty/clean state stuck.
+  const btn = rootEl.querySelector('[data-tc-action="cog-run"]');
   if (!btn) return;
   const s = runState.state(runStateInputs());
   const isClean = s === 'clean';
@@ -88,7 +91,11 @@ function updateRunButtonState() {
   btn.setAttribute('data-run-state', s);
   const iconSpan = btn.querySelector('.hub-run-icon');
   const labelSpan = btn.querySelector('span:not(.hub-run-icon):not(.hub-run-shortcut)');
-  if (labelSpan) labelSpan.textContent = isClean ? '✓ Results current' : 'Find Optimal Location';
+  // Stay aligned with the chrome's initial label ('Run'). Prior code flipped
+  // to 'Find Optimal Location' on dirty but the selector bug meant it never
+  // actually applied — and the empty-state messages referenced the unseen
+  // label, confusing users.
+  if (labelSpan) labelSpan.textContent = isClean ? '✓ Results current' : 'Run';
   if (iconSpan) iconSpan.style.display = isClean ? 'none' : '';
   btn.setAttribute('title', isClean
     ? 'Inputs unchanged since the last solve — k-means centers match the current points + config. Click to force a re-run.'
@@ -1216,7 +1223,7 @@ function renderRunPhase(el) {
 
 function renderAnalysis(el) {
   if (!cogResult) {
-    el.innerHTML = '<div class="hub-card"><p class="text-body text-muted">Click "Find Optimal Location" to see results.</p></div>';
+    el.innerHTML = '<div class="hub-card"><p class="text-body text-muted">Click <strong>Run</strong> in the toolbar above to see results.</p></div>';
     return;
   }
   // Guard against partial saved results (e.g., seeded via SQL with summary
@@ -1228,7 +1235,7 @@ function renderAnalysis(el) {
     el.innerHTML = `
       <div class="hub-card" style="max-width:900px;border-left:3px solid var(--ies-orange);">
         <h3 class="text-section" style="margin-top:0;">Results Preview</h3>
-        <p class="text-body">This scenario has summary results but lacks the per-point assignments needed for the full analysis view. Click <strong>Find Optimal Location</strong> above to rebuild the full solve from the current points + config.</p>
+        <p class="text-body">This scenario has summary results but lacks the per-point assignments needed for the full analysis view. Click the <strong>Run</strong> button in the toolbar above to rebuild the full solve from the current points + config.</p>
         ${(cogResult.centers || []).length > 0 ? `
           <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--ies-gray-200);">
             <div class="text-subtitle">Seeded Centers (${cogResult.centers.length})</div>
@@ -1373,7 +1380,7 @@ function renderMap(el) {
     el.innerHTML = `
       <div class="hub-card" style="max-width:900px;border-left:3px solid var(--ies-orange);">
         <h3 class="text-section" style="margin-top:0;">Map Preview Unavailable</h3>
-        <p class="text-body">This scenario's saved result lacks per-point assignments, so the flow-line map can't be drawn. Click <strong>Find Optimal Location</strong> to rebuild the full solve and see the map.</p>
+        <p class="text-body">This scenario's saved result lacks per-point assignments, so the flow-line map can't be drawn. Click the <strong>Run</strong> button in the toolbar above to rebuild the full solve and see the map.</p>
       </div>
     `;
     return;
