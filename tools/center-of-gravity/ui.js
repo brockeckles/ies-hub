@@ -202,6 +202,7 @@ function openEditor(savedRow) {
       if (config.snapToCandidates && (config.candidateFacilities || []).length > 0) {
         cogResult = calc.snapCentersToCandidates(cogResult, _solvePts, config.candidateFacilities);
       }
+      _enrichCogResultWithCost(cogResult, _solvePts);
       sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0, config.roundTripFactor ?? 2.0);
     } catch (err) {
       console.warn('[COG] Result rebuild from saved inputs failed; falling back to partial render:', err);
@@ -247,6 +248,7 @@ function runOptimizeAndRender() {
       if (config.snapToCandidates && (config.candidateFacilities || []).length > 0) {
         cogResult = calc.snapCentersToCandidates(cogResult, _solvePts, config.candidateFacilities);
       }
+  _enrichCogResultWithCost(cogResult, _solvePts);
   sensitivityData = calc.sensitivityAnalysis(
     _solvePts,
     Math.max(config.numCenters, 5),
@@ -387,6 +389,31 @@ export function unmount() {
 // ============================================================
 // SHELL
 // ============================================================
+
+// 2026-05-26 — Single source of cost truth. Stamp cost fields onto cogResult
+// so chrome KPI, Analysis-tab tiles, and the per-row table all read the same
+// numbers and all reflect the round-trip factor. Without this, kMeansCog
+// alone produces no cost — chrome shows '—' and the per-row table runs its
+// own one-way formula that disagrees with the Analysis-tab totals.
+function _enrichCogResultWithCost(result, solvePts) {
+  if (!result || !Array.isArray(result.centers)) return result;
+  try {
+    const costEst = calc.estimateTransportCost(
+      result,
+      solvePts,
+      config.transportCostPerMile,
+      config.unitsPerTruck || 25000,
+      config.roundTripFactor ?? 2.0,
+    );
+    result.totalCost = costEst.totalCost;
+    result.totalTruckloads = costEst.totalTruckloads;
+    result.avgCostPerUnit = costEst.avgCostPerUnit;
+    result.costByCluster = costEst.costByCluster;
+  } catch (err) {
+    console.warn('[COG] cost enrichment failed:', err);
+  }
+  return result;
+}
 
 function _pointsForSolve() {
   // H1: optionally winsorize point weights to a percentile cap before
@@ -588,6 +615,7 @@ async function bindShellEvents() {
         if (config.snapToCandidates && (config.candidateFacilities || []).length > 0) {
           cogResult = calc.snapCentersToCandidates(cogResult, _solvePts, config.candidateFacilities);
         }
+        _enrichCogResultWithCost(cogResult, _solvePts);
         sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0, config.roundTripFactor ?? 2.0);
         activePhase = 'run';
         runSubTab = 'numbers';
@@ -1280,6 +1308,52 @@ function renderAnalysis(el) {
         </div>
       </div>
 
+      <!-- 2026-05-26 — Transparent cost breakdown. Shows every multiplier in
+           the transport-cost formula so the math is auditable on-screen.
+           Helps users sanity-check the result against their own back-of-envelope
+           and catch unit-of-measure mismatches early. -->
+      ${(() => {
+        const totalWeight = points.filter(p => p.type !== 'excluded' && p.lat != null).reduce((s, p) => s + (p.weight || 0), 0);
+        const capacity = Math.max(1, config.unitsPerTruck || 25000);
+        const trucks = totalWeight / capacity;
+        const totalLoadedMi = cogResult.assignments.reduce((s, a) => {
+          const pt = points.find(p => p.id === a.pointId);
+          const w = pt?.weight || 0;
+          return s + (w / capacity) * a.distanceToCenter;
+        }, 0);
+        const rt = Math.max(1, +config.roundTripFactor || 2.0);
+        const totalMi = totalLoadedMi * rt;
+        const cpm = config.transportCostPerMile || 0;
+        const unitLabel = (calc.getWeightUnitMeta(config.weightUnit || 'lb').short || 'units');
+        const fmtNum = (n) => Math.round(n).toLocaleString();
+        return `
+        <div class="hub-card" style="margin-bottom:20px;padding:14px 18px;background:#f8fafc;border-left:4px solid #475569;">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:var(--ies-gray-500);margin-bottom:10px;">How this cost was calculated</div>
+          <div style="display:grid;grid-template-columns:auto 1fr auto;gap:6px 18px;font-size:13px;font-family:'SFMono-Regular',Consolas,Menlo,monospace;align-items:baseline;">
+            <span style="color:var(--ies-gray-500);">Annual demand</span>
+            <span></span>
+            <span style="text-align:right;font-weight:600;">${fmtNum(totalWeight)} ${unitLabel}</span>
+            <span style="color:var(--ies-gray-500);">÷ ${fmtNum(capacity)} ${unitLabel} per truckload</span>
+            <span></span>
+            <span style="text-align:right;font-weight:600;">= ${fmtNum(trucks)} truckloads/yr</span>
+            <span style="color:var(--ies-gray-500);">× weighted avg distance to assigned DC</span>
+            <span></span>
+            <span style="text-align:right;font-weight:600;">= ${fmtNum(totalLoadedMi)} loaded mi/yr</span>
+            <span style="color:var(--ies-gray-500);">× ${rt.toFixed(1)} round-trip factor</span>
+            <span></span>
+            <span style="text-align:right;font-weight:600;">= ${fmtNum(totalMi)} total truck-mi/yr</span>
+            <span style="color:var(--ies-gray-500);">× $${cpm.toFixed(2)} per loaded mile</span>
+            <span></span>
+            <span style="text-align:right;font-weight:600;">= ${calc.formatCurrency(totalMi * cpm, { compact: true })}/yr</span>
+          </div>
+          <div style="font-size:11px;color:var(--ies-gray-500);margin-top:10px;line-height:1.4;">
+            <strong>Sanity check:</strong> ${calc.formatCurrency(totalMi * cpm / Math.max(1, trucks), { compact: true })} per truckload &middot;
+            ${cpm.toFixed(2)} × ${rt.toFixed(1)} = $${(cpm * rt).toFixed(2)} per truck-mile all-in (loaded + empty).
+            If this looks off, adjust <strong>$/mi</strong>, <strong>round-trip factor</strong>, or <strong>${unitLabel}/truck</strong> in <a href="#" data-cog-jump="parameters" style="color:var(--ies-blue);text-decoration:underline;">Parameters</a>.
+          </div>
+        </div>`;
+      })()}
+
       <!-- Center Details -->
       ${cogResult.centers.map((c, i) => `
         <div class="hub-card" style="margin-bottom:16px;border-left:4px solid ${clusterColor(i)};">
@@ -1327,8 +1401,12 @@ function renderAnalysis(el) {
               ${cogResult.assignments.map(a => {
                 const pt = points.find(p => p.id === a.pointId);
                 const capacity = Math.max(1, config.unitsPerTruck || 25000);
+                const rt = Math.max(1, +config.roundTripFactor || 2.0);
                 const truckloads = (pt?.weight || 0) / capacity;
-                const cost = a.distanceToCenter * truckloads * config.transportCostPerMile;
+                // 2026-05-26 — multiply by round-trip factor to match the
+                // totals row above. Previously this column showed the
+                // one-way cost only, which read 50% low.
+                const cost = a.distanceToCenter * truckloads * config.transportCostPerMile * rt;
                 return `
                   <tr style="border-bottom:1px solid var(--ies-gray-200);">
                     <td style="padding:6px;text-align:center;">
