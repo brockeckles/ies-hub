@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260526-cogcost1';
+import * as calc from './calc.js?v=20260528-cogtriage2';
 import * as api from './api.js?v=20260504-auth1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
 
@@ -1917,9 +1917,13 @@ function exportCogAnalysis() {
   sections.push('Name,Latitude,Longitude,Weight,Assigned To Center,Distance to Center (mi),Transport Cost');
   cogResult.assignments.forEach(a => {
     const pt = points.find(p => p.id === a.pointId);
+    // 2026-05-28 — pull rt factor + capacity so per-row cost matches the
+    // on-screen Analysis-tab totals. Previously the export under-reported
+    // by ~50% in the default rt=2.0 case because rt was missing here.
     const capacity = Math.max(1, config.unitsPerTruck || 25000);
+    const rt = Math.max(1, +config.roundTripFactor || 2.0);
     const truckloads = (pt?.weight || 0) / capacity;
-    const cost = a.distanceToCenter * truckloads * config.transportCostPerMile;
+    const cost = a.distanceToCenter * truckloads * config.transportCostPerMile * rt;
     if (pt) {
       sections.push(`"${pt.name || pt.id}","${pt.lat.toFixed(4)}","${pt.lng.toFixed(4)}","${pt.weight}","Center ${a.clusterId + 1}","${a.distanceToCenter.toFixed(2)}","${cost.toFixed(2)}"`);
     }
@@ -1963,11 +1967,14 @@ function exportCogGeoJSON() {
   });
 
   // Demand points + center↔point lines
+  // 2026-05-28 — pull rt factor so per-row annual_transport_cost matches
+  // the on-screen Analysis-tab totals. (Same fix as CSV export.)
+  const rt = Math.max(1, +config.roundTripFactor || 2.0);
   cogResult.assignments.forEach(a => {
     const pt = points.find(p => p.id === a.pointId);
     if (!pt) return;
     const truckloads = (pt.weight || 0) / capacity;
-    const cost = a.distanceToCenter * truckloads * config.transportCostPerMile;
+    const cost = a.distanceToCenter * truckloads * config.transportCostPerMile * rt;
     features.push({
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [pt.lng, pt.lat] },

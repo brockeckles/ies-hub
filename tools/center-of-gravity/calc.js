@@ -584,9 +584,20 @@ export function estimateTransportCost(cogResult, points, costPerMile = 2.85, uni
   });
 
   const totalCost = costByCluster.reduce((s, c) => s + c, 0);
-  const totalWeight = points.reduce((s, p) => s + p.weight, 0);
-  const avgCostPerUnit = totalWeight > 0 ? totalCost / totalWeight : 0;
-  const totalTruckloads = totalWeight / capacity;
+  // 2026-05-28 — exclude type='excluded' / null-coord rows from the
+  // denominator. They live in points[] so the user can see them in the
+  // table, but they contribute zero to numerator (filtered by the
+  // assignments loop above). Including them in the denominator made
+  // avgCostPerUnit and totalTruckloads read systematically low when an
+  // upload had unresolved rows.
+  const activeWeight = points.reduce((s, p) => {
+    if (p && p.type !== 'excluded' && p.lat != null && p.lng != null) {
+      return s + (p.weight || 0);
+    }
+    return s;
+  }, 0);
+  const avgCostPerUnit = activeWeight > 0 ? totalCost / activeWeight : 0;
+  const totalTruckloads = activeWeight / capacity;
 
   return { totalCost, avgCostPerUnit, costByCluster, totalTruckloads };
 }
