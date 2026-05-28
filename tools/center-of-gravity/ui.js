@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-cogtriage20';
+import * as calc from './calc.js?v=20260528-cogtriage20fix';
 import * as api from './api.js?v=20260504-auth1';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
@@ -87,6 +87,11 @@ let _lastReplacedPoints = null;
 
 // 2026-05-28 C5 — delegated-click guard for the Undo toast button.
 let _undoDelegateBound = false;
+
+// 2026-05-28 C1 — pending upload state. Set after a file is parsed but
+// before the user confirms the column mapping. Cleared on cancel or confirm.
+/** @type {{ fileName: string, aoa: any[][], headerRow: string[]|null, mapping: object }|null} */
+let _pendingUpload = null;
 
 /**
  * Map overlay options — service-zone rings + heatmap toggles with
@@ -960,6 +965,264 @@ function renderContent() {
 // POINTS TAB
 // ============================================================
 
+/** 2026-05-28 C1 — column-mapping wizard helpers. See commit message. */
+function _autoDetectMapping(aoa, headerRow) {
+  const mapping = {};
+  if (!aoa || aoa.length === 0) return mapping;
+  const dataRows = aoa.slice(headerRow ? 1 : 0).slice(0, 20);
+  const ncol = Math.max(...dataRows.map(r => r ? r.length : 0));
+  const colStats = Array.from({ length: ncol }, (_, ci) => {
+    let zip5 = 0, zip3 = 0, lat = 0, lng = 0, num = 0, txt = 0, n = 0;
+    for (const row of dataRows) {
+      if (!row || row[ci] == null || row[ci] === '') continue;
+      n++;
+      const s = String(row[ci]).trim();
+      if (/^\d{5}$/.test(s)) zip5++;
+      else if (/^\d{3,4}$/.test(s)) zip3++;
+      const f = parseFloat(s.replace(/[,$\s]/g, ''));
+      if (Number.isFinite(f)) {
+        num++;
+        if (f >= -90 && f <= 90 && /\./.test(s)) lat++;
+        if (f >= -180 && f <= 180 && /\./.test(s)) lng++;
+      } else { txt++; }
+    }
+    return { ci, n, zip5, zip3, lat, lng, num, txt };
+  });
+  const headerHint = (i) => {
+    if (!headerRow || !headerRow[i]) return null;
+    const h = headerRow[i].toLowerCase();
+    if (/(^|_| )zip(_| |$)?|postal/.test(h)) return /3/.test(h) ? 'zip3' : 'zip5';
+    if (/(^|_| )(lat|latitude)(_| |$)/.test(h)) return 'lat';
+    if (/(^|_| )(lng|lon|longitude)(_| |$)/.test(h)) return 'lng';
+    if (/(^|_| )city(_| |$)/.test(h)) return 'city';
+    if (/(^|_| )state(_| |$)/.test(h)) return 'state';
+    if (/(^|_| )(units|volume|demand|qty|quantity|annual)/.test(h)) return 'units';
+    if (/(^|_| )(name|label|customer|location)/.test(h)) return 'name';
+    return null;
+  };
+  for (let i = 0; i < ncol; i++) {
+    const h = headerHint(i);
+    if (h) mapping[i] = h;
+  }
+  for (let i = 0; i < ncol; i++) {
+    if (mapping[i]) continue;
+    const s = colStats[i];
+    if (s.n === 0) continue;
+    if (s.zip5 / s.n > 0.7 && !Object.values(mapping).includes('zip5')) mapping[i] = 'zip5';
+    else if (s.zip3 / s.n > 0.7 && !Object.values(mapping).includes('zip5') && !Object.values(mapping).includes('zip3')) mapping[i] = 'zip3';
+    else if (s.lat / s.n > 0.7 && !Object.values(mapping).includes('lat')) mapping[i] = 'lat';
+    else if (s.lng / s.n > 0.7 && !Object.values(mapping).includes('lng')) mapping[i] = 'lng';
+  }
+  for (let i = ncol - 1; i >= 0; i--) {
+    if (mapping[i]) continue;
+    if (colStats[i].num / Math.max(1, colStats[i].n) > 0.7) {
+      mapping[i] = 'units';
+      break;
+    }
+  }
+  return mapping;
+}
+
+function renderUploadWizard(container) {
+  if (!_pendingUpload || !container) return;
+  const pu = _pendingUpload;
+  const aoa = pu.aoa;
+  const ncol = Math.max(...aoa.slice(0, 5).map(r => r ? r.length : 0));
+  const previewRows = aoa.slice(pu.headerRow ? 1 : 0).slice(0, 5);
+  if (!pu.mapping || Object.keys(pu.mapping).length === 0) {
+    pu.mapping = _autoDetectMapping(aoa, pu.headerRow);
+  }
+  const ROLES = [
+    { value: '',          label: 'Ignore' },
+    { value: 'zip5',      label: 'ZIP (5-digit)' },
+    { value: 'zip3',      label: 'ZIP (3-digit)' },
+    { value: 'city',      label: 'City' },
+    { value: 'state',     label: 'State' },
+    { value: 'cityState', label: 'City, State (combined)' },
+    { value: 'lat',       label: 'Latitude' },
+    { value: 'lng',       label: 'Longitude' },
+    { value: 'name',      label: 'Name / Label' },
+    { value: 'units',     label: 'Units (demand)' },
+  ];
+  const mapping = pu.mapping;
+  const hasUnits = Object.values(mapping).includes('units');
+  const hasLatLng = Object.values(mapping).includes('lat') && Object.values(mapping).includes('lng');
+  const hasZip5 = Object.values(mapping).includes('zip5');
+  const hasZip3 = Object.values(mapping).includes('zip3');
+  const hasCityState = (Object.values(mapping).includes('city') && Object.values(mapping).includes('state'))
+    || Object.values(mapping).includes('cityState');
+  const hasLocation = hasLatLng || hasZip5 || hasZip3 || hasCityState;
+  const valid = hasUnits && hasLocation;
+  const statusMsg = valid
+    ? `<span style="color:#15803d;font-weight:600;">✓ Ready to load — ${previewRows.length} rows previewed, ${aoa.length - (pu.headerRow ? 1 : 0)} total</span>`
+    : `<span style="color:#b91c1c;font-weight:600;">⚠ Need a Units column AND a location path (Lat+Lng, ZIP, or City+State)</span>`;
+  container.style.display = 'block';
+  container.innerHTML = `
+    <div class="hub-card" style="margin-top:10px;padding:14px 16px;background:#fffbeb;border-left:3px solid #f59e0b;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:12px;flex-wrap:wrap;">
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#92400e;">Column mapping for "${pu.fileName}"</div>
+          <div style="font-size:11px;color:var(--ies-gray-500);margin-top:2px;">${aoa.length} data row${aoa.length === 1 ? '' : 's'} · ${ncol} column${ncol === 1 ? '' : 's'}. Assign each column a role.</div>
+        </div>
+        <label style="font-size:11px;font-weight:600;color:var(--ies-gray-600);display:flex;align-items:center;gap:6px;cursor:pointer;">
+          <input type="checkbox" id="cog-wiz-has-header" ${pu.headerRow ? 'checked' : ''} style="cursor:pointer;">
+          Row 1 is a header
+        </label>
+      </div>
+      <div style="overflow-x:auto;margin-bottom:10px;">
+        <table style="border-collapse:collapse;font-size:12px;width:100%;min-width:480px;">
+          <thead>
+            <tr style="background:#fde68a;">
+              ${Array.from({ length: ncol }, (_, i) => `
+                <th style="padding:6px 8px;text-align:left;border:1px solid #fcd34d;font-weight:700;min-width:120px;">
+                  <div style="font-size:10px;color:#78350f;letter-spacing:0.3px;text-transform:uppercase;margin-bottom:2px;">Col ${String.fromCharCode(65 + i)}${pu.headerRow ? ' · ' + (pu.headerRow[i] || '') : ''}</div>
+                  <select data-wiz-col="${i}" style="width:100%;padding:4px 6px;border:1px solid #d97706;border-radius:4px;font-size:12px;font-weight:600;background:#fff;">
+                    ${ROLES.map(r => `<option value="${r.value}"${(mapping[i] || '') === r.value ? ' selected' : ''}>${r.label}</option>`).join('')}
+                  </select>
+                </th>
+              `).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            ${previewRows.map(row => `
+              <tr>
+                ${Array.from({ length: ncol }, (_, i) => `
+                  <td style="padding:5px 8px;border:1px solid #fde68a;background:#fff;color:var(--ies-gray-700);font-family:'SFMono-Regular',Consolas,Menlo,monospace;font-size:11px;white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis;">${row && row[i] != null ? String(row[i]).replace(/</g, '&lt;') : ''}</td>
+                `).join('')}
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+        <div style="font-size:12px;">${statusMsg}</div>
+        <div style="display:flex;gap:8px;">
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-wiz-cancel">Cancel</button>
+          <button class="hub-btn hub-btn-sm hub-btn-primary" id="cog-wiz-confirm" ${valid ? '' : 'disabled style="opacity:0.5;cursor:not-allowed;"'}>Confirm &amp; Load</button>
+        </div>
+      </div>
+    </div>
+  `;
+  container.querySelectorAll('[data-wiz-col]').forEach(sel => {
+    sel.addEventListener('change', (e) => {
+      const idx = parseInt(/** @type {HTMLElement} */ (e.target).dataset.wizCol, 10);
+      pu.mapping[idx] = /** @type {HTMLSelectElement} */ (e.target).value;
+      renderUploadWizard(container);
+    });
+  });
+  container.querySelector('#cog-wiz-has-header')?.addEventListener('change', (e) => {
+    const checked = /** @type {HTMLInputElement} */ (e.target).checked;
+    pu.headerRow = checked ? (pu.aoa[0] || []).map(v => String(v || '')) : null;
+    renderUploadWizard(container);
+  });
+  container.querySelector('#cog-wiz-cancel')?.addEventListener('click', () => {
+    _pendingUpload = null;
+    const inputsEl = rootEl?.querySelector('#cog-content');
+    if (inputsEl) renderInputsPhase(inputsEl);
+  });
+  container.querySelector('#cog-wiz-confirm')?.addEventListener('click', async () => {
+    if (!valid) return;
+    await _commitPendingUpload();
+  });
+}
+
+async function _commitPendingUpload() {
+  if (!_pendingUpload) return;
+  const pu = _pendingUpload;
+  const mapping = pu.mapping;
+  const dataRows = pu.aoa.slice(pu.headerRow ? 1 : 0);
+  const roleCol = {};
+  for (const [ci, role] of Object.entries(mapping)) {
+    if (role) roleCol[role] = parseInt(ci, 10);
+  }
+  const loaded = [];
+  const excluded = [];
+  for (const row of dataRows) {
+    if (!row || row.length === 0 || row.every(c => c === '' || c == null)) continue;
+    let hit = null;
+    let locDesc = '';
+    if ('lat' in roleCol && 'lng' in roleCol) {
+      const la = parseFloat(String(row[roleCol.lat] ?? '').replace(/[,$\s]/g, ''));
+      const ln = parseFloat(String(row[roleCol.lng] ?? '').replace(/[,$\s]/g, ''));
+      if (Number.isFinite(la) && Number.isFinite(ln)) {
+        hit = { name: `${la.toFixed(3)}, ${ln.toFixed(3)}`, lat: la, lng: ln };
+        locDesc = hit.name;
+      } else { locDesc = `lat="${row[roleCol.lat]}" lng="${row[roleCol.lng]}"`; }
+    }
+    if (!hit && 'zip5' in roleCol) {
+      const raw = String(row[roleCol.zip5] ?? '').trim().replace(/[^0-9]/g, '').padStart(5, '0').slice(-5);
+      locDesc = `ZIP ${raw}`;
+      if (/^\d{5}$/.test(raw)) hit = calc.lookupLocation(raw);
+    }
+    if (!hit && 'zip3' in roleCol) {
+      const raw = String(row[roleCol.zip3] ?? '').trim().replace(/[^0-9]/g, '').padStart(3, '0').slice(-3);
+      locDesc = `ZIP3 ${raw}`;
+      if (/^\d{3}$/.test(raw)) hit = calc.lookupLocation(raw);
+    }
+    if (!hit && 'cityState' in roleCol) {
+      const v = String(row[roleCol.cityState] ?? '').trim();
+      locDesc = v;
+      if (v) hit = calc.lookupLocation(v);
+    }
+    if (!hit && 'city' in roleCol) {
+      const c = String(row[roleCol.city] ?? '').trim();
+      const s = 'state' in roleCol ? String(row[roleCol.state] ?? '').trim() : '';
+      locDesc = s ? `${c}, ${s}` : c;
+      if (c) hit = calc.lookupLocation(locDesc);
+    }
+    const unitsRaw = Number(String(row[roleCol.units] ?? '').replace(/[,$\s]/g, ''));
+    const validUnits = Number.isFinite(unitsRaw) && unitsRaw > 0;
+    const nameField = 'name' in roleCol ? String(row[roleCol.name] ?? '').trim() : '';
+    if (!hit || !validUnits) {
+      const reason = !hit ? 'no location match' : 'missing / invalid units';
+      excluded.push({
+        id: 'px' + Date.now() + '_' + (loaded.length + excluded.length),
+        name: nameField || (locDesc ? `${locDesc} — excluded (${reason})` : `Row excluded (${reason})`),
+        lat: null, lng: null,
+        weight: validUnits ? Math.max(1, Math.round(unitsRaw)) : 0,
+        type: 'excluded',
+      });
+      continue;
+    }
+    loaded.push({
+      id: 'p' + Date.now() + '_' + loaded.length,
+      name: nameField || `${hit.name}`,
+      lat: hit.lat, lng: hit.lng,
+      weight: Math.max(1, Math.round(unitsRaw)),
+      type: 'demand',
+    });
+  }
+  const allUpload = [...loaded, ...excluded];
+  if (allUpload.length === 0) {
+    showToast(`Nothing loaded — every row blank/unparseable.`, 'err');
+    _pendingUpload = null;
+    const inputsEl = rootEl?.querySelector('#cog-content');
+    if (inputsEl) renderInputsPhase(inputsEl);
+    return;
+  }
+  if (points.length > 0) {
+    const ok = await showConfirm(`Replace ${points.length} existing point${points.length === 1 ? '' : 's'} with ${allUpload.length} from "${pu.fileName}" (${loaded.length} active, ${excluded.length} excluded)?`);
+    if (!ok) {
+      _pendingUpload = null;
+      const inputsEl = rootEl?.querySelector('#cog-content');
+      if (inputsEl) renderInputsPhase(inputsEl);
+      return;
+    }
+    _snapshotForUndo(`Upload "${pu.fileName}"`);
+  }
+  points = allUpload;
+  _pendingUpload = null;
+  markDirty();
+  const inputsEl = rootEl?.querySelector('#cog-content');
+  if (inputsEl) renderInputsPhase(inputsEl);
+  const tail = excluded.length > 0 ? ` — ${excluded.length} excluded (visible in table)` : '';
+  if (_lastReplacedPoints) {
+    showToast(`Loaded ${loaded.length} active point${loaded.length === 1 ? '' : 's'} from ${pu.fileName}${tail}. <button data-cog-undo style="margin-left:8px;text-decoration:underline;background:none;border:none;color:inherit;cursor:pointer;font-weight:700;">Undo</button>`, excluded.length > 0 ? 'warn' : 'ok', { html: true });
+  } else {
+    showToast(`Loaded ${loaded.length} active point${loaded.length === 1 ? '' : 's'} from ${pu.fileName}${tail}.`, excluded.length > 0 ? 'warn' : 'ok');
+  }
+}
+
 function renderInputsPhase(el) {
   // 2026-04-27 EVE2 (COG-SCOPE-1/2/5): pure Inputs surface — seeders +
   // add-point row + points table + KPI bar. Analysis Configuration and
@@ -1049,6 +1312,7 @@ function renderInputsPhase(el) {
             </span>
           </div>
           <div id="cog-xlsx-feedback" style="font-size:11px;color:var(--ies-gray-400);padding-left:100px;display:none;"></div>
+          <div id="cog-upload-wizard" style="${_pendingUpload ? '' : 'display:none;'}"></div>
 
           <datalist id="cog-city-list">
             ${calc.CITY_CENTROIDS.map(c => `<option value="${c.name}, ${c.state}"></option>`).join('')}
@@ -1233,6 +1497,32 @@ function renderInputsPhase(el) {
     if (!file) return;
     if (xlsxName) xlsxName.textContent = file.name;
     showFeedback('Reading…', 'info');
+    // 2026-05-28 C1 — parse + open the wizard instead of resolving inline.
+    const XLSX_ = /** @type {any} */ (typeof window !== 'undefined' ? window.XLSX : null);
+    if (!XLSX_ || !XLSX_.read) {
+      showFeedback('Spreadsheet parser not loaded — refresh and retry.', 'err');
+      return;
+    }
+    let bufW;
+    try { bufW = await file.arrayBuffer(); } catch (err) { showFeedback(`Read failed: ${err?.message || err}`, 'err'); return; }
+    let aoaW;
+    try {
+      const wbW = XLSX_.read(bufW, { type: 'array' });
+      const sn = wbW.SheetNames[0];
+      if (!sn) { showFeedback('File has no sheets.', 'err'); return; }
+      aoaW = XLSX_.utils.sheet_to_json(wbW.Sheets[sn], { header: 1, defval: '', blankrows: false });
+    } catch (err) { showFeedback(`Parse failed: ${err?.message || err}`, 'err'); return; }
+    if (!Array.isArray(aoaW) || aoaW.length === 0) { showFeedback('File is empty.', 'err'); return; }
+    const looksLikeData = /^\s*\d{1,5}\s*$/.test(String(aoaW[0]?.[0] ?? '')) || (typeof aoaW[0]?.[0] === 'number');
+    const headerRowW = looksLikeData ? null : (aoaW[0] || []).map(v => String(v || ''));
+    _pendingUpload = { fileName: file.name, aoa: aoaW, headerRow: headerRowW, mapping: {} };
+    if (xlsxInput) xlsxInput.value = '';
+    if (xlsxFb) xlsxFb.style.display = 'none';
+    const wizEl = el.querySelector('#cog-upload-wizard');
+    if (wizEl) renderUploadWizard(/** @type {HTMLElement} */ (wizEl));
+    return;  // wizard owns the rest of the flow
+    // ────── legacy inline-resolution path below (unreachable, kept one
+    // commit for diff readability) ──────
 
     // SheetJS lives at window.XLSX — same global the exports use.
     const XLSX = /** @type {any} */ (typeof window !== 'undefined' ? window.XLSX : null);
