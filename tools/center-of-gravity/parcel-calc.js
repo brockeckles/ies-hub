@@ -257,6 +257,11 @@ export function interpolateRate(weight, zone, table) {
  */
 export function parcelCostPerPackage(opts = {}) {
   const weight = +opts.weight || 0;
+  // 2026-05-28 37 — Dimensional weight. Carriers bill on max(actual,
+  // volumetric). Multiplier 1.0 = no DIM impact; 1.2 = typical mixed DTC;
+  // 1.5-2.5 = light/large items (furniture, exercise gear).
+  const dimMult = opts.dimMultiplier == null ? 1.0 : Math.max(1.0, +opts.dimMultiplier);
+  const billWeight = weight * dimMult;
   const distanceMi = +opts.distanceMi || 0;
   const fuelPct = opts.fuelPct == null ? 25 : +opts.fuelPct;
   const residentialShare = opts.residentialShare == null ? 0.5 : +opts.residentialShare;
@@ -269,7 +274,7 @@ export function parcelCostPerPackage(opts = {}) {
 
   const table = PARCEL_RATE_TABLES[carrier] || FEDEX_GROUND_2026_LIST;
   const zone = zoneForMiles(distanceMi);
-  const baseGround = interpolateRate(weight, zone, table);
+  const baseGround = interpolateRate(billWeight, zone, table);
   const base = baseGround * svcMult;
   const fuelAdd = base * (fuelPct / 100);
   const gross = base + fuelAdd;
@@ -278,7 +283,7 @@ export function parcelCostPerPackage(opts = {}) {
   const residAdd = residentialFee * residentialShare;
   const cost = net + residAdd;
 
-  return { cost, zone, base, fuelAdd, discount, residAdd, svcMult, baseGround };
+  return { cost, zone, base, fuelAdd, discount, residAdd, svcMult, baseGround, billWeight };
 }
 
 // ============================================================
