@@ -34,7 +34,7 @@ import {
   estimateParcelLane,
   parcelDistributionByZone,
   PARCEL_ENGINE_VERSION,
-} from './parcel-calc.js?v=20260528-parcel6';
+} from './parcel-calc.js?v=20260528-parcel7';
 
 export {
   ZONE_BREAKPOINTS,
@@ -1400,61 +1400,90 @@ export function estimateBlendedCost(cogResult, points, config) {
   const ltlR = +rates.ltlPerMile || 0;
   const nonParcelCpm = (tlPct + ltlPct) > 0 ? (tlPct * tlR + ltlPct * ltlR) / (tlPct + ltlPct) : 0;
 
-  let truckResult;
-  if (nonParcelShare > 0 && nonParcelCpm > 0) {
-    const truckPoints = points.map(p => ({ ...p, weight: (p.weight || 0) * nonParcelShare }));
-    truckResult = estimateTransportCost(cogResult, truckPoints, nonParcelCpm, unitsPerTruck, rt, road);
-  } else {
-    truckResult = {
-      totalCost: 0,
-      costByCluster: cogResult.centers.map(() => 0),
-      totalTruckloads: 0,
-      totalTruckMiles: 0,
-      avgCostPerUnit: 0,
-    };
-  }
+  // 2026-05-28 31 — per-point parcel-share + avg-pkg-weight overrides.
+  // Each demand point can override the scenario-level parcelPct via
+  // point.parcelSharePct, and the scenario-level avgPackageWeightLb via
+  // point.avgPackageWeightLb. This lets mixed-channel networks (B2B 100%
+  // TL + DTC 100% parcel) model accurately, with per-shipment zone-priced
+  // parcel rates.
 
-  const avgWeight = +cfg.parcelAvgPackageWeightLb || 5;
+  const defaultAvgWeight = +cfg.parcelAvgPackageWeightLb || 5;
   const fuelPct = cfg.parcelFuelPct == null ? 25 : +cfg.parcelFuelPct;
   const residentialShare = cfg.parcelResidentialShare == null ? 0.5 : +cfg.parcelResidentialShare;
   const discountPct = cfg.parcelContractDiscountPct == null ? 0 : +cfg.parcelContractDiscountPct;
   const carrier = cfg.parcelCarrier || 'fedex_ground';
 
   const parcelCostByCluster = cogResult.centers.map(() => 0);
+  const truckCostByCluster  = cogResult.centers.map(() => 0);
   const byZone = { 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0 };
   let totalParcelPkgs = 0;
   let totalParcelCost = 0;
+  let totalTruckMilesAcc = 0;
+  let totalTruckloadsAcc = 0;
 
-  // 2026-05-28 30 — track per-assignment parcel cost too.
   const perAssignmentParcel = [];
-  if (parcelShare > 0 && Array.isArray(cogResult.assignments)) {
+  const perAssignmentTruck = [];
+
+  if (Array.isArray(cogResult.assignments)) {
     for (const a of cogResult.assignments) {
       const pt = points.find(p => p.id === a.pointId);
-      if (!pt) { perAssignmentParcel.push({ cost: 0, zone: null, pkgCount: 0 }); continue; }
-      const parcelWeight = (pt.weight || 0) * parcelShare;
-      const pkgCount = avgWeight > 0 ? parcelWeight / avgWeight : 0;
+      if (!pt) {
+        perAssignmentParcel.push({ cost: 0, zone: null, pkgCount: 0 });
+        perAssignmentTruck.push(0);
+        continue;
+      }
+      // Per-point overrides — fall back to scenario defaults when unset.
+      const ptParcelShare = (pt.parcelSharePct != null && Number.isFinite(+pt.parcelSharePct))
+        ? Math.max(0, Math.min(100, +pt.parcelSharePct)) / 100
+        : parcelShare;
+      const ptNonParcelShare = 1 - ptParcelShare;
+      const ptAvgWeight = (pt.avgPackageWeightLb != null && Number.isFinite(+pt.avgPackageWeightLb) && +pt.avgPackageWeightLb > 0)
+        ? +pt.avgPackageWeightLb
+        : defaultAvgWeight;
       const driveMi = (a.distanceToCenter || 0) * road;
-      const lane = estimateParcelLane({
-        pkgCount, avgWeight, distanceMi: driveMi,
-        fuelPct, residentialShare, discountPct, carrier,
-        serviceMix: cfg.parcelServiceMix,
-      });
-      parcelCostByCluster[a.clusterId] = (parcelCostByCluster[a.clusterId] || 0) + lane.totalCost;
-      byZone[lane.zone] = (byZone[lane.zone] || 0) + pkgCount;
-      totalParcelPkgs += pkgCount;
-      totalParcelCost += lane.totalCost;
-      perAssignmentParcel.push({ cost: lane.totalCost, zone: lane.zone, pkgCount });
+
+      // Truck slice — point-specific share.
+      let truckCost = 0;
+      if (ptNonParcelShare > 0 && nonParcelCpm > 0) {
+        const wTruck = (pt.weight || 0) * ptNonParcelShare;
+        const tl = wTruck / unitsPerTruck;
+        truckCost = tl * (a.distanceToCenter || 0) * nonParcelCpm * road * rt;
+        truckCostByCluster[a.clusterId] = (truckCostByCluster[a.clusterId] || 0) + truckCost;
+        totalTruckMilesAcc += tl * (a.distanceToCenter || 0) * road * rt;
+        totalTruckloadsAcc += tl;
+      }
+      perAssignmentTruck.push(truckCost);
+
+      // Parcel slice — point-specific share + weight.
+      if (ptParcelShare > 0 && ptAvgWeight > 0) {
+        const parcelWeight = (pt.weight || 0) * ptParcelShare;
+        const pkgCount = parcelWeight / ptAvgWeight;
+        const lane = estimateParcelLane({
+          pkgCount, avgWeight: ptAvgWeight, distanceMi: driveMi,
+          fuelPct, residentialShare, discountPct, carrier,
+          serviceMix: cfg.parcelServiceMix,
+        });
+        parcelCostByCluster[a.clusterId] = (parcelCostByCluster[a.clusterId] || 0) + lane.totalCost;
+        byZone[lane.zone] = (byZone[lane.zone] || 0) + pkgCount;
+        totalParcelPkgs += pkgCount;
+        totalParcelCost += lane.totalCost;
+        perAssignmentParcel.push({ cost: lane.totalCost, zone: lane.zone, pkgCount });
+      } else {
+        perAssignmentParcel.push({ cost: 0, zone: null, pkgCount: 0 });
+      }
     }
-  } else {
-    for (const _ of (cogResult.assignments || [])) perAssignmentParcel.push({ cost: 0, zone: null, pkgCount: 0 });
   }
-  // Per-assignment truck cost.
-  const perAssignmentTruck = (cogResult.assignments || []).map(a => {
-    const pt = points.find(p => p.id === a.pointId);
-    const w = (pt?.weight || 0) * nonParcelShare;
-    const truckloads = w / unitsPerTruck;
-    return truckloads * (a.distanceToCenter || 0) * nonParcelCpm * road * rt;
-  });
+
+  // Synthetic truckResult shape (downstream consumers expect this shape).
+  const totalTruckCost = truckCostByCluster.reduce((s, x) => s + x, 0);
+  const truckResult = {
+    totalCost: totalTruckCost,
+    costByCluster: truckCostByCluster,
+    totalTruckloads: totalTruckloadsAcc,
+    totalTruckMiles: totalTruckMilesAcc,
+    avgCostPerUnit: 0,
+  };
+
   const costByAssignment = (cogResult.assignments || []).map((a, i) => ({
     pointId: a.pointId,
     clusterId: a.clusterId,

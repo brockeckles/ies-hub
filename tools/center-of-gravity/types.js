@@ -12,7 +12,9 @@
  * @property {number} lat
  * @property {number} lng
  * @property {number} weight — demand volume, revenue, or other weighting factor
- * @property {'demand' | 'supply' | 'facility'} type
+ * @property {'demand' | 'supply' | 'facility' | 'excluded'} type
+ * @property {number} [avgPackageWeightLb] — per-point avg parcel weight; falls back to config.parcelAvgPackageWeightLb
+ * @property {number} [parcelSharePct] — per-point parcel share % (0-100); falls back to config.modeMix.parcelPct
  */
 
 /**
