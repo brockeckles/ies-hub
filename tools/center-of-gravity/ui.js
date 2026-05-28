@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-cogtriage24';
+import * as calc from './calc.js?v=20260528-cogtriage25';
 import * as api from './api.js?v=20260504-auth1';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
@@ -1940,11 +1940,11 @@ function renderParametersPhase(el) {
               <input type="number" value="${config.modeMix?.parcelPct ?? 0}" min="0" max="100" step="5" id="cog-modemix-parcel-pct" ${config.modeMixEnabled ? '' : 'disabled'}
                      style="width:64px;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
               <span style="color:var(--ies-gray-500);">% @ \$</span>
-              <input type="number" value="${(config.modeRates?.parcelPerMile ?? 8.50).toFixed(2)}" min="0" step="0.05" id="cog-moderates-parcel" ${config.modeMixEnabled ? '' : 'disabled'}
+              <input type="number" value="${(config.modeRates?.parcelPerMile ?? 28.00).toFixed(2)}" min="0" step="0.05" id="cog-moderates-parcel" ${config.modeMixEnabled ? '' : 'disabled'}
                      style="width:64px;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
               <span style="color:var(--ies-gray-500);">/mi</span>
             </div>
-            <div style="font-size:10px;color:var(--ies-gray-400);margin-top:2px;">Ground parcel — \$7.50-10.00 effective</div>
+            <div style="font-size:10px;color:var(--ies-gray-400);margin-top:2px;">Ground parcel — derived: depends on units/truck + pkg weight + zone</div>
           </div>
         </div>
         ${(() => {
@@ -1955,6 +1955,11 @@ function renderParametersPhase(el) {
           if (Math.abs(sum - 100) > 0.5) return `<div style="font-size:11px;color:#a16207;margin-top:10px;">Shares sum to ${sum}% (will be normalized to 100%) · blended rate <strong>\$${effective.toFixed(2)}/mi</strong></div>`;
           return `<div style="font-size:11px;color:#15803d;margin-top:10px;font-weight:600;">Blended effective rate: \$${effective.toFixed(2)}/mi</div>`;
         })()}
+        ${config.modeMixEnabled && (config.modeMix?.parcelPct || 0) > 0 ? `
+          <div style="font-size:10px;color:var(--ies-gray-500);margin-top:8px;line-height:1.5;border-top:1px dashed var(--ies-gray-200);padding-top:8px;">
+            <strong>Parcel modeling caveat:</strong> ground parcel pricing is per-package by weight × zone, not per truck-mi. The parcel \$/mi here is a <em>derived</em> rate. Reference: UPS/FedEx 6 lb @ Zone 5 ≈ \$18 all-in (incl ~25% fuel + residential). At <strong>3,000 packages/trailer × 800 mi avg trip</strong>, that's ~\$67/mi effective. With this tool's default <strong>${(config.unitsPerTruck || 25000).toLocaleString()} ${(calc.getWeightUnitMeta(config.weightUnit || 'lb').short || 'units')}/truck</strong>, set <strong>Parcel \$/mi</strong> in the $25-$50 range for typical DTC; higher for express; lower if your \$/truck capacity is closer to a real parcel trailer count.
+          </div>
+        ` : ''}
       </div>
 
       <!-- 2026-05-28 E2 — Current State DCs for the vs-current benchmark. -->
@@ -2116,7 +2121,7 @@ function renderParametersPhase(el) {
   const bindModeRate = (id, key) => {
     el.querySelector(id)?.addEventListener('change', (e) => {
       const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
-      config.modeRates = config.modeRates || { tlPerMile: 2.85, ltlPerMile: 4.20, parcelPerMile: 8.50 };
+      config.modeRates = config.modeRates || { tlPerMile: 2.85, ltlPerMile: 4.20, parcelPerMile: 28.00 };
       config.modeRates[key] = Math.max(0, Number.isFinite(v) ? v : 0);
       markDirty();
       renderParametersPhase(el);

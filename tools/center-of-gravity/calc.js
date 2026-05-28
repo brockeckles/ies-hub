@@ -83,9 +83,21 @@ export const DEFAULT_CONFIG = {
   modeMix: { tlPct: 100, ltlPct: 0, parcelPct: 0 },
   // Per-mode effective rates — TL flat per-truck-mi, LTL/parcel are
   // effective rates that fold in consolidation overhead / zone surcharges.
-  // Industry rules-of-thumb: TL spot $2.50-$3.20, LTL $3.80-$4.60 effective,
-  // parcel ground $7.50-$10.00 effective.
-  modeRates: { tlPerMile: 2.85, ltlPerMile: 4.20, parcelPerMile: 8.50 },
+  // Industry rules-of-thumb (2026):
+  //   TL spot     $2.50-$3.20/mi
+  //   LTL         $3.80-$4.80/mi effective
+  //   Parcel ground $25-$65/mi effective — wide range because parcel is
+  //     fundamentally per-package (weight × zone), not per-mile.
+  //     Reference points: UPS/FedEx Ground 6lb @ Z5 ≈ $18 all-in
+  //     (after 25% fuel + residential); 3,000 packages per sortable
+  //     trailer = $54k/trailer over an 800 mi Z5 trip = $67/mi. With
+  //     COG's default unitsPerTruck=25,000 lbs and 5-lb packages,
+  //     the right effective rate to reverse-engineer typical DTC parcel
+  //     spend is closer to $40-50/mi. We default to $28 — sized for a
+  //     parcel-specific unitsPerTruck (~3,000 pkgs per trailer); users
+  //     on the lb-default should bump higher. Earlier placeholder of
+  //     $8.50 was 3-5x too low (caught by Brock 2026-05-28).
+  modeRates: { tlPerMile: 2.85, ltlPerMile: 4.20, parcelPerMile: 28.00 },
   // 2026-05-28 — CO₂ emissions intensity (B20). kg CO₂ per truck-mile.
   // Default 1.62 = EPA SmartWay 2024 US heavy-duty diesel Class 8 average.
   // Range 1.30 (new fleets) to 2.10 (older / refrigerated). Threaded
