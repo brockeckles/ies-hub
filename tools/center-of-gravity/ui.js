@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-cogtriage21';
+import * as calc from './calc.js?v=20260528-cogtriage22';
 import * as api from './api.js?v=20260504-auth1';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
@@ -916,9 +916,12 @@ async function bindShellEvents() {
       } else if (k === 'e' && cogResult) {
         e.preventDefault();
         exportCogAnalysis();
+      } else if (k === 'p' && cogResult) {
+        e.preventDefault();
+        openPrintView();
       } else if (k === '?') {
         e.preventDefault();
-        showToast('Shortcuts: 1/2/3 = Inputs/Parameters/Run · N/M/V/C = Numbers/Map/Sensitivity/Compare · A = add point · S = save · E = export CSV · Cmd+Enter = Run', 'info');
+        showToast('Shortcuts: 1/2/3 = Inputs/Parameters/Run · N/M/V/C = Numbers/Map/Sensitivity/Compare · A = add point · S = save · E = export CSV · P = print/PDF · Cmd+Enter = Run', 'info');
       }
     });
   }
@@ -2370,6 +2373,9 @@ function renderAnalysis(el) {
       <!-- Action Bar -->
       <div style="display:flex;gap:12px;margin-bottom:16px;align-items:center;">
         <h3 class="text-section" style="margin:0;flex:1;">Analysis Results</h3>
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-print-pdf" style="display:flex;align-items:center;gap:6px;" title="Open a print-friendly snapshot in a new tab — use your browser's Print > Save as PDF">
+          <span>🖨️ Print / PDF</span>
+        </button>
         <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-export-csv" style="display:flex;align-items:center;gap:6px;">
           <span>↓ Export CSV</span>
         </button>
@@ -2591,6 +2597,11 @@ function renderAnalysis(el) {
   // Bind NetOpt push
   el.querySelector('#cog-push-netopt')?.addEventListener('click', () => {
     pushToNetOpt();
+  });
+
+  // 2026-05-28 F4 — Print/PDF view.
+  el.querySelector('#cog-print-pdf')?.addEventListener('click', () => {
+    openPrintView();
   });
 
   // 2026-05-28 — wire the data-cog-jump links in the "How this cost was
@@ -3536,6 +3547,136 @@ function exportCogGeoJSON() {
   document.body.appendChild(a); a.click();
   setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 0);
   showToast('GeoJSON exported successfully', 'success');
+}
+
+/**
+ * 2026-05-28 F4 — Open a print-friendly snapshot of the current Analysis
+ * in a new tab. User uses their browser's native Print > Save as PDF to
+ * generate a shareable PDF without any external library.
+ *
+ * The print HTML is self-contained — inline styles, no JS — so it
+ * survives the popup's blank-document boot and doesn't depend on any
+ * loaded modules.
+ */
+function openPrintView() {
+  if (!cogResult) {
+    showToast('Run the analysis first.', 'warn');
+    return;
+  }
+  const win = window.open('', '_blank', 'width=900,height=1100');
+  if (!win) {
+    showToast('Popup blocked — allow popups for this site to print.', 'err');
+    return;
+  }
+  const solvePts = _pointsForSolve();
+  const costEst = calc.estimateTransportCost(cogResult, points, _resolveCpm(), config.unitsPerTruck || 25000, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
+  const today = new Date().toISOString().split('T')[0];
+  const ctxParts = [config.customerName, (calc.INDUSTRY_OPTIONS.find(o => o.value === config.industry) || {}).label, (calc.DEAL_STAGES.find(o => o.value === config.dealStage) || {}).label].filter(Boolean);
+  const ctxLine = ctxParts.length ? ctxParts.join(' · ') : 'Untitled scenario';
+  const scenarioName = _scenarioName || '(unsaved)';
+  const fmtMoney = (v) => '$' + (v || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
+  const fmtMi = (v) => Math.round(v).toLocaleString() + ' mi';
+  const co2 = cogResult.co2Tons || 0;
+  const co2Str = co2 >= 1000 ? (co2 / 1000).toFixed(1) + ' kt' : co2 >= 1 ? co2.toFixed(0) + ' t' : (co2 * 1000).toFixed(0) + ' kg';
+  const coverage = cogResult.serviceStats?.maxMiles > 0 ? cogResult.serviceStats.coveragePct.toFixed(1) + '%' : 'n/a';
+
+  const html = `<!doctype html>
+<html><head><meta charset="utf-8"/>
+<title>COG Analysis — ${scenarioName.replace(/</g, '&lt;')} — ${today}</title>
+<style>
+  @page { size: letter portrait; margin: 0.5in; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; color: #0a1628; background: #fff; margin: 0; padding: 0; font-size: 12px; line-height: 1.4; }
+  .doc { max-width: 7.5in; margin: 0 auto; padding: 16px 0; }
+  h1 { font-size: 20px; margin: 0 0 4px; color: #0a1628; }
+  h2 { font-size: 14px; margin: 18px 0 8px; color: #0a1628; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; }
+  .meta { color: #475569; font-size: 11px; margin-bottom: 16px; }
+  .kpi-strip { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 16px; background: linear-gradient(135deg, #0a1628, #0d1f3c); color: #fff; padding: 12px 16px; border-radius: 6px; }
+  .kpi { font-size: 11px; }
+  .kpi-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.3px; opacity: 0.7; }
+  .kpi-value { font-size: 18px; font-weight: 800; line-height: 1.1; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; font-variant-numeric: tabular-nums; }
+  thead { background: #f1f5f9; }
+  th { text-align: left; padding: 6px 8px; font-weight: 700; border: 1px solid #cbd5e1; }
+  td { padding: 5px 8px; border: 1px solid #e2e8f0; }
+  .right { text-align: right; }
+  .center-card { padding: 10px 12px; margin-bottom: 8px; border: 1px solid #e2e8f0; border-radius: 4px; page-break-inside: avoid; }
+  .center-card-head { font-weight: 700; font-size: 12px; margin-bottom: 6px; }
+  .center-card-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; font-size: 10px; }
+  .center-card-grid .lbl { color: #475569; font-size: 9px; text-transform: uppercase; }
+  .center-card-grid .val { font-weight: 700; }
+  .breakdown { background: #f8fafc; border-left: 3px solid #475569; padding: 10px 14px; margin-bottom: 12px; font-family: 'SFMono-Regular', Consolas, Menlo, monospace; font-size: 10px; line-height: 1.6; }
+  .footer { margin-top: 16px; font-size: 9px; color: #94a3b8; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 8px; }
+  .toolbar { padding: 8px 16px; background: #f1f5f9; border-bottom: 1px solid #cbd5e1; display: flex; gap: 8px; align-items: center; font-size: 11px; }
+  .toolbar button { padding: 5px 12px; font-size: 11px; border: 1px solid #475569; background: #fff; border-radius: 4px; cursor: pointer; }
+  @media print { .toolbar { display: none; } body { background: #fff; } }
+</style>
+</head><body>
+<div class="toolbar">
+  <strong>Print preview — use your browser's Print menu to Save as PDF.</strong>
+  <button onclick="window.print()" style="margin-left:auto;">🖨️ Print now</button>
+  <button onclick="window.close()">Close</button>
+</div>
+<div class="doc">
+  <h1>${scenarioName.replace(/</g, '&lt;')}</h1>
+  <div class="meta">${ctxLine.replace(/</g, '&lt;')} · Center of Gravity analysis · ${today}</div>
+
+  <div class="kpi-strip">
+    <div class="kpi"><div class="kpi-label">Centers</div><div class="kpi-value">${cogResult.centers.length}</div></div>
+    <div class="kpi"><div class="kpi-label">Truckloads/yr</div><div class="kpi-value">${Math.round(costEst.totalTruckloads || 0).toLocaleString()}</div></div>
+    <div class="kpi"><div class="kpi-label">Annual cost</div><div class="kpi-value">${fmtMoney(costEst.totalCost)}</div></div>
+    <div class="kpi"><div class="kpi-label">CO₂/yr</div><div class="kpi-value">${co2Str}</div></div>
+    <div class="kpi"><div class="kpi-label">Coverage</div><div class="kpi-value">${coverage}</div></div>
+  </div>
+
+  <h2>Cost calculation</h2>
+  <div class="breakdown">
+    ${solvePts.length} active demand points × ${(config.unitsPerTruck || 25000).toLocaleString()} ${(calc.getWeightUnitMeta(config.weightUnit || 'lb').short || 'units')}/truck<br/>
+    ${Math.round(costEst.totalTruckloads || 0).toLocaleString()} truckloads × weighted avg distance × ${(config.roadFactor ?? 1.22).toFixed(2)} road × ${(config.roundTripFactor ?? 2.0).toFixed(1)} round-trip<br/>
+    = ${Math.round(costEst.totalTruckMiles || 0).toLocaleString()} truck-mi/yr × $${(_resolveCpm() || 0).toFixed(2)}/mi<br/>
+    = <strong>${fmtMoney(costEst.totalCost)}/yr</strong> · CO₂ at ${(config.co2KgPerTruckMile ?? 1.62).toFixed(2)} kg/mi = <strong>${co2Str}/yr</strong>
+  </div>
+
+  <h2>Recommended centers</h2>
+  ${cogResult.centers.map((c, i) => `
+    <div class="center-card">
+      <div class="center-card-head">Center ${i + 1}: ${(c.nearestCity || '').replace(/</g, '&lt;')}${c.candidateLabel ? ` (snapped → ${c.candidateLabel.replace(/</g, '&lt;')})` : ''}</div>
+      <div class="center-card-grid">
+        <div><div class="lbl">Location</div><div class="val">${c.lat.toFixed(4)}, ${c.lng.toFixed(4)}</div></div>
+        <div><div class="lbl">Assigned weight</div><div class="val">${(c.totalWeight || 0).toLocaleString()}</div></div>
+        <div><div class="lbl">Avg distance</div><div class="val">${fmtMi(c.avgWeightedDistance)}</div></div>
+        <div><div class="lbl">Annual cost</div><div class="val">${fmtMoney(Array.isArray(cogResult.costByCluster) ? cogResult.costByCluster[i] : 0)}</div></div>
+      </div>
+    </div>
+  `).join('')}
+
+  <h2>Demand point assignments</h2>
+  <table>
+    <thead><tr>
+      <th>Point</th><th class="right">Lat</th><th class="right">Lng</th><th class="right">Weight</th><th class="right">Cluster</th><th class="right">Distance</th>
+    </tr></thead>
+    <tbody>
+      ${cogResult.assignments.map(a => {
+        const pt = points.find(p => p.id === a.pointId);
+        if (!pt) return '';
+        return `<tr>
+          <td>${(pt.name || pt.id).replace(/</g, '&lt;')}${a.outOfService ? ' <strong style="color:#b91c1c;">[OUT]</strong>' : ''}</td>
+          <td class="right">${pt.lat.toFixed(3)}</td>
+          <td class="right">${pt.lng.toFixed(3)}</td>
+          <td class="right">${(pt.weight || 0).toLocaleString()}</td>
+          <td class="right">${a.clusterId + 1}</td>
+          <td class="right">${fmtMi(a.distanceToCenter)}</td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  </table>
+
+  <div class="footer">Generated by IES Hub · Center of Gravity · ${today}</div>
+</div>
+</body></html>`;
+
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
 }
 
 /**
