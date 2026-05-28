@@ -60,6 +60,14 @@ export const DEFAULT_CONFIG = {
   /** @type {Array<{ label?: string, lat: number, lng: number }>} */
   candidateFacilities: [],
   snapToCandidates: false,
+  // 2026-05-28 — CO₂ emissions intensity (B20). kg CO₂ per truck-mile.
+  // Default 1.62 = EPA SmartWay 2024 US heavy-duty diesel Class 8 average.
+  // Range 1.30 (new fleets) to 2.10 (older / refrigerated). Threaded
+  // through estimateTransportCost; surfaced as a new chrome KPI + a row
+  // in the breakdown panel. CSRD / SECR / Scope 3 customer RFPs want
+  // this number; without it, the COG output is a non-starter for major
+  // 2026 deals.
+  co2KgPerTruckMile: 1.62,
   // 2026-05-28 — DC capacity ceiling (B6). When > 0, post-solve walks
   // demand from overflowing clusters to nearest under-capacity cluster
   // until everyone is within cap or every cluster is full. 0 = disabled
@@ -911,7 +919,21 @@ export function estimateTransportCost(cogResult, points, costPerMile = 2.85, uni
   const avgCostPerUnit = activeWeight > 0 ? totalCost / activeWeight : 0;
   const totalTruckloads = activeWeight / capacity;
 
-  return { totalCost, avgCostPerUnit, costByCluster, totalTruckloads };
+  // 2026-05-28 B20 — total truck-miles (rt + road already baked in via
+  // costByCluster math). Reconstruct from totalCost / cpm when cpm > 0;
+  // when cpm is 0, derive directly from the per-leg loop. Simpler: sum
+  // truckloads × distance × road × rt across assignments.
+  const totalTruckMiles = cogResult.centers.reduce((sum, _, ci) => {
+    return sum + cogResult.assignments
+      .filter(a => a.clusterId === ci)
+      .reduce((s, a) => {
+        const pt = points.find(p => p.id === a.pointId);
+        const w = pt?.weight || 0;
+        return s + (w / capacity) * a.distanceToCenter * road * rt;
+      }, 0);
+  }, 0);
+
+  return { totalCost, avgCostPerUnit, costByCluster, totalTruckloads, totalTruckMiles };
 }
 
 // ============================================================

@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-cogtriage9';
+import * as calc from './calc.js?v=20260528-cogtriage10';
 import * as api from './api.js?v=20260504-auth1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
 
@@ -416,6 +416,11 @@ function _enrichCogResultWithCost(result, solvePts) {
     result.totalTruckloads = costEst.totalTruckloads;
     result.avgCostPerUnit = costEst.avgCostPerUnit;
     result.costByCluster = costEst.costByCluster;
+    // 2026-05-28 B20 — CO₂ emissions. totalTruckMiles × kg/mi intensity.
+    result.totalTruckMiles = costEst.totalTruckMiles;
+    const co2Intensity = Math.max(0, +config.co2KgPerTruckMile || 1.62);
+    result.co2Kg = (costEst.totalTruckMiles || 0) * co2Intensity;
+    result.co2Tons = result.co2Kg / 1000;
   } catch (err) {
     console.warn('[COG] cost enrichment failed:', err);
   }
@@ -585,6 +590,22 @@ function _computeCogKpis() {
     label: 'Peak Util',
     value: utilStr,
     hint: utilHint,
+  });
+  // 2026-05-28 B20 — Annual CO₂ KPI. Reads cogResult.co2Tons stamped by
+  // _enrichCogResultWithCost; falls back to '—' when no result.
+  let co2Str = '—';
+  let co2Hint = 'CO₂ tons/yr from total truck-miles × emissions intensity (Parameters → CO₂ kg/truck-mi).';
+  if (cogResult && typeof cogResult.co2Tons === 'number' && cogResult.co2Tons >= 0) {
+    const t = cogResult.co2Tons;
+    if (t >= 1000) co2Str = (t / 1000).toFixed(1) + ' kt';
+    else if (t >= 1) co2Str = t.toFixed(0) + ' t';
+    else co2Str = (t * 1000).toFixed(0) + ' kg';
+    co2Hint = `${(cogResult.totalTruckMiles || 0).toLocaleString(undefined, {maximumFractionDigits:0})} truck-mi × ${(config.co2KgPerTruckMile ?? 1.62).toFixed(2)} kg/mi`;
+  }
+  items.push({
+    label: 'Annual CO₂',
+    value: co2Str,
+    hint: co2Hint,
   });
   return items;
 }
@@ -1118,6 +1139,12 @@ function renderParametersPhase(el) {
             <span style="font-size:11px;color:var(--ies-gray-400);">1.22 = US avg · 1.30 = mountain · 1.15 = plains · 1.00 = great-circle</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
+            <label style="font-size:13px;font-weight:600;" title="CO₂ emissions intensity per truck-mile. Default 1.62 kg/mi = EPA SmartWay 2024 US Class 8 average. Range 1.30 (new diesel / hybrid fleets) to 2.10 (older or refrigerated). Set to 0 to hide emissions output.">CO₂ kg/truck-mi:</label>
+            <input type="number" value="${config.co2KgPerTruckMile ?? 1.62}" step="0.01" min="0" max="3.0" id="cog-co2"
+                   style="width:80px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
+            <span style="font-size:11px;color:var(--ies-gray-400);">1.62 = US Class 8 avg · 1.30 = new diesel · 2.10 = refrigerated</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
             <label style="font-size:13px;font-weight:600;" title="Service-level constraint. Demand points whose road-distance to the assigned DC exceeds this threshold get flagged out-of-service in the Analysis table and on the map. Doesn't change k-means math — it answers the 'can we hit 95% next-day' question. 0 = disabled.">Max service mi:</label>
             <input type="number" value="${config.maxServiceMiles ?? 0}" step="50" min="0" max="3000" id="cog-max-service"
                    style="width:80px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
@@ -1198,6 +1225,12 @@ function renderParametersPhase(el) {
   el.querySelector('#cog-road-factor')?.addEventListener('change', (e) => {
     const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
     config.roadFactor = (Number.isFinite(v) && v >= 1.0) ? v : 1.22;
+    markDirty();
+  });
+  // 2026-05-28 — CO₂ intensity input (B20 emissions output).
+  el.querySelector('#cog-co2')?.addEventListener('change', (e) => {
+    const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
+    config.co2KgPerTruckMile = (Number.isFinite(v) && v >= 0) ? v : 1.62;
     markDirty();
   });
   // 2026-05-28 — Max service miles input (B7 service-level constraint).
@@ -1439,6 +1472,10 @@ function renderAnalysis(el) {
             <span style="color:var(--ies-gray-500);">× $${cpm.toFixed(2)} per loaded mile</span>
             <span></span>
             <span style="text-align:right;font-weight:600;">= ${calc.formatCurrency(totalMi * cpm, { compact: true })}/yr</span>
+            <span style="color:var(--ies-gray-500);grid-column:1 / 4;border-top:1px dashed var(--ies-gray-200);padding-top:6px;margin-top:4px;"></span>
+            <span style="color:var(--ies-gray-500);">CO₂: ${fmtNum(totalMi)} truck-mi × ${(config.co2KgPerTruckMile ?? 1.62).toFixed(2)} kg/mi</span>
+            <span></span>
+            <span style="text-align:right;font-weight:600;">= ${(totalMi * (config.co2KgPerTruckMile ?? 1.62) / 1000).toFixed(0).toLocaleString()} tons CO₂/yr</span>
           </div>
           <div style="font-size:11px;color:var(--ies-gray-500);margin-top:10px;line-height:1.4;">
             <strong>Sanity check:</strong> ${calc.formatCurrency(totalMi * cpm / Math.max(1, trucks), { compact: true })} per truckload &middot;
