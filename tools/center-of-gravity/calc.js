@@ -1088,6 +1088,102 @@ export function estimateTransportCost(cogResult, points, costPerMile = 2.85, uni
 }
 
 // ============================================================
+// TORNADO SENSITIVITY (multi-variable, B15 — 2026-05-28)
+// ============================================================
+
+/**
+ * Multi-variable tornado sensitivity. For each driver in `drivers`,
+ * sweeps its value to (baseline * (1 - delta)) and (baseline * (1 + delta)),
+ * recomputes totalCost using estimateTransportCost on the supplied
+ * cogResult, and returns one row per driver with low / high / swing.
+ * Rows are returned sorted by absolute swing descending — same shape
+ * a tornado chart expects.
+ *
+ * Drivers default to the cost-relevant config knobs; caller can override
+ * by passing a subset. demandTotal sweeps by scaling all point weights
+ * uniformly — the only driver that mutates input shape; others just
+ * change scalar config values.
+ *
+ * @param {import('./types.js?v=20260418-sP').MultiCogResult} mcr
+ * @param {import('./types.js?v=20260418-sP').WeightedPoint[]} points
+ * @param {Object} cfg — baseline config (transportCostPerMile, roadFactor, etc.)
+ * @param {Array<{ key: string, label: string, baseline: number, deltaPct: number }>} [drivers]
+ * @returns {Array<{ key: string, label: string, baseline: number, deltaPct: number, lowVal: number, highVal: number, lowCost: number, highCost: number, baselineCost: number, swing: number }>}
+ */
+export function tornadoSensitivity(mcr, points, cfg, drivers) {
+  if (!mcr || !Array.isArray(mcr.centers) || !Array.isArray(mcr.assignments)) return [];
+  const liveCfg = cfg || {};
+
+  // Helper: cost at supplied param overrides.
+  function costAt(overrides) {
+    const m = {
+      cpm: liveCfg.transportCostPerMile,
+      rt: liveCfg.roundTripFactor ?? 2.0,
+      road: liveCfg.roadFactor ?? 1.22,
+      cap: liveCfg.unitsPerTruck || 25000,
+      ...overrides,
+    };
+    const pts = overrides.points || points;
+    return estimateTransportCost(mcr, pts, m.cpm, m.cap, m.rt, m.road).totalCost;
+  }
+
+  const baselineCost = costAt({});
+
+  // Default driver set — caller can override to subset.
+  const baseCpm = +liveCfg.transportCostPerMile || 0;
+  const baseRoad = +(liveCfg.roadFactor ?? 1.22);
+  const baseRt = +(liveCfg.roundTripFactor ?? 2.0);
+  const allDrivers = drivers || [
+    { key: 'transportCostPerMile', label: '$/mi',              baseline: baseCpm, deltaPct: 20 },
+    { key: 'roundTripFactor',      label: 'Round-trip factor', baseline: baseRt,  deltaPct: 15 },
+    { key: 'roadFactor',           label: 'Road factor',       baseline: baseRoad,deltaPct: 10 },
+    { key: 'demandTotal',          label: 'Total demand',      baseline: 100,     deltaPct: 20 },
+  ];
+
+  const out = [];
+  for (const d of allDrivers) {
+    const lowVal = d.baseline * (1 - d.deltaPct / 100);
+    const highVal = d.baseline * (1 + d.deltaPct / 100);
+    let lowCost, highCost;
+    if (d.key === 'demandTotal') {
+      // Scale weights uniformly. Build scaled points sets (pure — don't mutate).
+      const lowFactor = 1 - d.deltaPct / 100;
+      const highFactor = 1 + d.deltaPct / 100;
+      const lowPts = points.map(p => ({ ...p, weight: (p.weight || 0) * lowFactor }));
+      const highPts = points.map(p => ({ ...p, weight: (p.weight || 0) * highFactor }));
+      lowCost = costAt({ points: lowPts });
+      highCost = costAt({ points: highPts });
+    } else if (d.key === 'transportCostPerMile') {
+      lowCost = costAt({ cpm: lowVal });
+      highCost = costAt({ cpm: highVal });
+    } else if (d.key === 'roundTripFactor') {
+      lowCost = costAt({ rt: lowVal });
+      highCost = costAt({ rt: highVal });
+    } else if (d.key === 'roadFactor') {
+      lowCost = costAt({ road: lowVal });
+      highCost = costAt({ road: highVal });
+    } else {
+      // Unknown driver — fall back to baseline.
+      lowCost = baselineCost;
+      highCost = baselineCost;
+    }
+    out.push({
+      key: d.key,
+      label: d.label,
+      baseline: d.baseline,
+      deltaPct: d.deltaPct,
+      lowVal, highVal,
+      lowCost, highCost,
+      baselineCost,
+      swing: Math.abs(highCost - lowCost),
+    });
+  }
+
+  out.sort((a, b) => b.swing - a.swing);
+  return out;
+}
+
+// ============================================================
 // SENSITIVITY (vary number of centers)
 // ============================================================
 

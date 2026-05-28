@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-cogtriage17';
+import * as calc from './calc.js?v=20260528-cogtriage18';
 import * as api from './api.js?v=20260504-auth1';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
@@ -2684,9 +2684,78 @@ function renderSensitivity(el) {
   const savings = baseline.estimatedCost - optimal.estimatedCost;
   const savingsPct = baseline.estimatedCost > 0 ? (savings / baseline.estimatedCost * 100).toFixed(1) : 0;
 
+  // 2026-05-28 B15 — Cost-driver tornado. Quick multi-variable
+  // sensitivity at the current k, using estimateTransportCost so the
+  // numbers stay consistent with everything else on the tab.
+  const tornado = calc.tornadoSensitivity(cogResult, points, config);
+
   el.innerHTML = `
     <div>
-      <h3 class="text-section" style="margin-bottom:16px;">Sensitivity: Number of Centers vs. Cost</h3>
+      <h3 class="text-section" style="margin-bottom:16px;">Sensitivity Analysis</h3>
+
+      ${tornado.length > 0 ? (() => {
+        const baselineCost = tornado[0]?.baselineCost || 0;
+        // Chart span: min/max across all driver low/high, with the
+        // baseline always visible (handles asymmetric swings).
+        const lows = tornado.map(t => t.lowCost);
+        const highs = tornado.map(t => t.highCost);
+        const xMin = Math.min(baselineCost, ...lows);
+        const xMax = Math.max(baselineCost, ...highs);
+        const xRange = Math.max(1, xMax - xMin);
+        const padPct = 0.08;
+        const xPlotMin = xMin - xRange * padPct;
+        const xPlotMax = xMax + xRange * padPct;
+        const xPlotRange = xPlotMax - xPlotMin;
+        const W = 720, H = Math.max(180, 40 + tornado.length * 38);
+        const labelW = 160;
+        const chartW = W - labelW - 20;
+        const xScale = (v) => labelW + ((v - xPlotMin) / xPlotRange) * chartW;
+        const baselineX = xScale(baselineCost);
+        const fmtCost = (v) => calc.formatCurrency(v, { compact: true });
+
+        return `
+        <div class="hub-card" style="padding:18px 20px;margin-bottom:20px;">
+          <div style="font-size:14px;font-weight:700;margin-bottom:6px;">Cost-driver tornado (current k = ${cogResult.centers.length})</div>
+          <div style="font-size:11px;color:var(--ies-gray-500);margin-bottom:14px;">
+            Each bar sweeps one driver to its low/high band while holding others at baseline. Bars sorted by absolute cost swing. Vertical dashed line = baseline total cost (${fmtCost(baselineCost)}).
+          </div>
+          <svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="overflow:visible;">
+            <!-- Baseline vertical line -->
+            <line x1="${baselineX}" y1="20" x2="${baselineX}" y2="${H - 30}" stroke="#475569" stroke-dasharray="4 3" stroke-width="1.5"/>
+            <text x="${baselineX}" y="${H - 12}" text-anchor="middle" font-size="11" fill="#475569" font-weight="600">${fmtCost(baselineCost)}</text>
+
+            <!-- Bars -->
+            ${tornado.map((t, i) => {
+              const y = 30 + i * 38;
+              const xLow = xScale(t.lowCost);
+              const xHigh = xScale(t.highCost);
+              const left = Math.min(xLow, xHigh);
+              const w = Math.max(2, Math.abs(xHigh - xLow));
+              const fmtVal = (v) => {
+                if (t.key === 'transportCostPerMile') return '$' + v.toFixed(2);
+                if (t.key === 'roundTripFactor') return v.toFixed(2) + 'x';
+                if (t.key === 'roadFactor') return v.toFixed(2);
+                if (t.key === 'demandTotal') return v.toFixed(0) + '%';
+                return String(v.toFixed(2));
+              };
+              return `
+                <text x="${labelW - 10}" y="${y + 13}" text-anchor="end" font-size="12" fill="var(--ies-gray-700)" font-weight="600">${t.label}</text>
+                <text x="${labelW - 10}" y="${y + 26}" text-anchor="end" font-size="10" fill="var(--ies-gray-400)">±${t.deltaPct}%</text>
+                <rect x="${left}" y="${y}" width="${w}" height="20" fill="${t.lowCost < t.highCost ? '#3b82f6' : '#f97316'}" rx="3" opacity="0.85"/>
+                <text x="${xLow}" y="${y + 13}" text-anchor="${xLow < baselineX ? 'end' : 'start'}" font-size="10" fill="var(--ies-gray-700)" font-weight="600" dx="${xLow < baselineX ? -4 : 4}">${fmtCost(t.lowCost)}</text>
+                <text x="${xHigh}" y="${y + 13}" text-anchor="${xHigh > baselineX ? 'start' : 'end'}" font-size="10" fill="var(--ies-gray-700)" font-weight="600" dx="${xHigh > baselineX ? 4 : -4}">${fmtCost(t.highCost)}</text>
+                <text x="${(xLow + xHigh) / 2}" y="${y + 33}" text-anchor="middle" font-size="9" fill="var(--ies-gray-400)">${fmtVal(t.lowVal)} → ${fmtVal(t.highVal)}</text>
+              `;
+            }).join('')}
+          </svg>
+          <div style="font-size:11px;color:var(--ies-gray-500);margin-top:10px;line-height:1.5;border-top:1px dashed var(--ies-gray-200);padding-top:8px;">
+            <strong>Reading this:</strong> Drivers near the top swing cost the most — focus contract-negotiation effort there. Drivers near the bottom are largely fixed — don't overthink them. Bars colored blue when low &lt; high (cost rises with the driver), orange when reversed.
+          </div>
+        </div>
+      `;
+      })() : ''}
+
+      <h4 style="font-size:14px;font-weight:700;margin-bottom:12px;color:var(--ies-gray-700);">Cost vs. Number of Centers</h4>
 
       <!-- Network Summary -->
       <div class="hub-card" style="padding:20px;margin-bottom:20px;background:linear-gradient(135deg,#f0fdf4,#f0fdf4);border-left:4px solid #22c55e;">
