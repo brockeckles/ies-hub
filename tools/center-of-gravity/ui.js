@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-parcel2';
+import * as calc from './calc.js?v=20260528-parcel3';
 import * as api from './api.js?v=20260504-auth1';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
@@ -1939,12 +1939,10 @@ function renderParametersPhase(el) {
             <div style="display:flex;align-items:center;gap:6px;">
               <input type="number" value="${config.modeMix?.parcelPct ?? 0}" min="0" max="100" step="5" id="cog-modemix-parcel-pct" ${config.modeMixEnabled ? '' : 'disabled'}
                      style="width:64px;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-              <span style="color:var(--ies-gray-500);">% @ \$</span>
-              <input type="number" value="${(config.modeRates?.parcelPerMile ?? 28.00).toFixed(2)}" min="0" step="0.05" id="cog-moderates-parcel" ${config.modeMixEnabled ? '' : 'disabled'}
-                     style="width:64px;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-              <span style="color:var(--ies-gray-500);">/mi</span>
+              <span style="color:var(--ies-gray-500);">%</span>
+              <span style="font-size:10px;color:var(--ies-gray-400);margin-left:6px;">→ Parcel Engine card below</span>
             </div>
-            <div style="font-size:10px;color:var(--ies-gray-400);margin-top:2px;">Ground parcel — derived: depends on units/truck + pkg weight + zone</div>
+            <div style="font-size:10px;color:var(--ies-gray-400);margin-top:2px;">Per-package zone-priced (UPS/FedEx) — not \$/mi</div>
           </div>
         </div>
         ${(() => {
@@ -1959,10 +1957,68 @@ function renderParametersPhase(el) {
         })()}
         ${config.modeMixEnabled && (config.modeMix?.parcelPct || 0) > 0 ? `
           <div style="font-size:10px;color:var(--ies-gray-500);margin-top:8px;line-height:1.5;border-top:1px dashed var(--ies-gray-200);padding-top:8px;">
-            <strong>Parcel modeling — how it works:</strong> ground parcel is door-to-door zone-priced (UPS/FedEx 6 lb @ Zone 5 ≈ \$18 all-in incl ~25% fuel + residential). Unlike TL/LTL, parcel rates don't compound with road-factor or round-trip — the carrier already priced the full trip. The engine handles this by <em>bypassing</em> road×rt on the parcel slice: the natural blended rate is what an SD intuits, but the engine uses an adjusted rate that pre-divides parcel by road×rt so the final formula (×road×rt) produces the right total. <strong>Quick sanity check:</strong> 3,000 packages/trailer × \$18 ÷ 800 mi ≈ \$67/mi effective. Default <strong>\$28/mi</strong> in the input matches that when applied through the bypass at default road=1.22 + rt=2.0. Bump higher for express, lighter packages, or longer zones.
+            <strong>Parcel cost:</strong> computed by the Parcel Engine below — per-package, zone-priced, using FedEx Ground 2026 published list rates with fuel + residential + contract-discount adjustments. The earlier bypass-hack is gone; this is first-principles math.
           </div>
         ` : ''}
       </div>
+
+      <!-- 2026-05-28 27c — Parcel Engine card. Only when mode mix on AND parcel > 0. -->
+      ${config.modeMixEnabled && (config.modeMix?.parcelPct || 0) > 0 ? `
+        <div class="hub-card" style="margin-bottom:20px;padding:16px;border-left:3px solid #be185d;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:12px;flex-wrap:wrap;">
+            <div>
+              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#9d174d;">Parcel Engine</div>
+              <div style="font-size:11px;color:var(--ies-gray-400);margin-top:2px;">Per-package zone-priced cost via 2026 carrier list rates. Active when Mode Mix parcel share > 0.</div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:10px 16px;font-size:12px;">
+            <div>
+              <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-500);margin-bottom:3px;">Carrier</label>
+              <select id="cog-parcel-carrier" style="width:100%;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;">
+                <option value="fedex_ground" ${(config.parcelCarrier || 'fedex_ground') === 'fedex_ground' ? 'selected' : ''}>FedEx Ground (2026)</option>
+              </select>
+              <div style="font-size:10px;color:var(--ies-gray-400);margin-top:2px;">UPS + USPS in next commit</div>
+            </div>
+            <div>
+              <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-500);margin-bottom:3px;">Avg pkg weight (lb)</label>
+              <input type="number" value="${config.parcelAvgPackageWeightLb ?? 5}" min="0.1" step="0.5" id="cog-parcel-avg-weight"
+                     style="width:100%;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
+              <div style="font-size:10px;color:var(--ies-gray-400);margin-top:2px;">DTC apparel 1-3 · consumer 5-10 · large 30+</div>
+            </div>
+            <div>
+              <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-500);margin-bottom:3px;">Residential %</label>
+              <input type="number" value="${((config.parcelResidentialShare ?? 0.5) * 100).toFixed(0)}" min="0" max="100" step="5" id="cog-parcel-residential"
+                     style="width:100%;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
+              <div style="font-size:10px;color:var(--ies-gray-400);margin-top:2px;">Pure DTC ≈ 95% · B2B ≈ 5%</div>
+            </div>
+            <div>
+              <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-500);margin-bottom:3px;">Fuel surcharge %</label>
+              <input type="number" value="${config.parcelFuelPct ?? 25}" min="0" max="50" step="0.5" id="cog-parcel-fuel"
+                     style="width:100%;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
+              <div style="font-size:10px;color:var(--ies-gray-400);margin-top:2px;">Currently 25-26% (May 2026)</div>
+            </div>
+            <div>
+              <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-500);margin-bottom:3px;">Contract discount %</label>
+              <input type="number" value="${config.parcelContractDiscountPct ?? 0}" min="0" max="80" step="1" id="cog-parcel-discount"
+                     style="width:100%;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
+              <div style="font-size:10px;color:var(--ies-gray-400);margin-top:2px;">Most shippers negotiate 30-60% off list</div>
+            </div>
+          </div>
+          ${(() => {
+            const sampleW = config.parcelAvgPackageWeightLb ?? 5;
+            const r = calc.parcelCostPerPackage({
+              weight: sampleW, distanceMi: 800,
+              fuelPct: config.parcelFuelPct ?? 25,
+              residentialShare: config.parcelResidentialShare ?? 0.5,
+              discountPct: config.parcelContractDiscountPct ?? 0,
+              carrier: config.parcelCarrier || 'fedex_ground',
+            });
+            return `<div style="font-size:11px;color:var(--ies-gray-500);margin-top:10px;border-top:1px dashed var(--ies-gray-200);padding-top:8px;line-height:1.5;">
+              <strong>Sample at current settings:</strong> ${sampleW} lb pkg @ Zone ${r.zone} (≈800 mi) = <strong>\$${r.cost.toFixed(2)}/pkg</strong> (base \$${r.base.toFixed(2)} + fuel \$${r.fuelAdd.toFixed(2)} − discount \$${r.discount.toFixed(2)} + residential \$${r.residAdd.toFixed(2)})
+            </div>`;
+          })()}
+        </div>
+      ` : ''}
 
       <!-- 2026-05-28 E2 — Current State DCs for the vs-current benchmark. -->
       <div class="hub-card" style="margin-bottom:20px;padding:16px;border-left:3px solid #92400e;">
@@ -2132,6 +2188,32 @@ function renderParametersPhase(el) {
   bindModeRate('#cog-moderates-tl', 'tlPerMile');
   bindModeRate('#cog-moderates-ltl', 'ltlPerMile');
   bindModeRate('#cog-moderates-parcel', 'parcelPerMile');
+
+  // 2026-05-28 27c — Parcel Engine bindings.
+  el.querySelector('#cog-parcel-carrier')?.addEventListener('change', (e) => {
+    config.parcelCarrier = /** @type {HTMLSelectElement} */ (e.target).value || 'fedex_ground';
+    markDirty(); renderParametersPhase(el);
+  });
+  el.querySelector('#cog-parcel-avg-weight')?.addEventListener('change', (e) => {
+    const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
+    config.parcelAvgPackageWeightLb = Math.max(0.1, Number.isFinite(v) ? v : 5);
+    markDirty(); renderParametersPhase(el);
+  });
+  el.querySelector('#cog-parcel-residential')?.addEventListener('change', (e) => {
+    const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
+    config.parcelResidentialShare = Math.max(0, Math.min(1, (Number.isFinite(v) ? v : 50) / 100));
+    markDirty(); renderParametersPhase(el);
+  });
+  el.querySelector('#cog-parcel-fuel')?.addEventListener('change', (e) => {
+    const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
+    config.parcelFuelPct = Math.max(0, Number.isFinite(v) ? v : 25);
+    markDirty(); renderParametersPhase(el);
+  });
+  el.querySelector('#cog-parcel-discount')?.addEventListener('change', (e) => {
+    const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
+    config.parcelContractDiscountPct = Math.max(0, Math.min(80, Number.isFinite(v) ? v : 0));
+    markDirty(); renderParametersPhase(el);
+  });
 
   // 2026-05-28 E2 — Current state handlers.
   el.querySelector('#cog-currentstate-list')?.addEventListener('change', (e) => {
@@ -2485,9 +2567,19 @@ function renderAnalysis(el) {
             ` : ''}
             <span style="color:var(--ies-gray-500);">× $${cpm.toFixed(2)} per loaded mile</span>
             <span></span>
-            <span style="text-align:right;font-weight:600;">= ${calc.formatCurrency(totalMi * cpm, { compact: true })}/yr</span>
+            <span style="text-align:right;font-weight:600;">= ${calc.formatCurrency(totalMi * cpm, { compact: true })}/yr ${cogResult.parcelDetails ? ' <em style="color:var(--ies-gray-400);font-weight:500;">(TL+LTL only)</em>' : ''}</span>
+            ${cogResult.parcelDetails ? `
+              <span style="color:var(--ies-gray-500);grid-column:1 / 4;border-top:1px dashed var(--ies-gray-200);padding-top:6px;margin-top:4px;"></span>
+              <span style="color:var(--ies-gray-500);">Parcel: ${fmtNum(cogResult.parcelDetails.totalPackages)} pkgs × $${(cogResult.parcelCost / Math.max(1, cogResult.parcelDetails.totalPackages)).toFixed(2)} avg</span>
+              <span style="font-size:10px;color:var(--ies-gray-400);">${Object.entries(cogResult.parcelDetails.byZone).filter(([_, n]) => n > 0).map(([z, n]) => 'Z' + z + ':' + Math.round(n / cogResult.parcelDetails.totalPackages * 100) + '%').join(' · ')}</span>
+              <span style="text-align:right;font-weight:600;">= ${calc.formatCurrency(cogResult.parcelCost, { compact: true })}/yr</span>
+              <span style="color:var(--ies-gray-500);grid-column:1 / 4;border-top:1px solid var(--ies-gray-300);padding-top:6px;margin-top:4px;"></span>
+              <span style="color:var(--ies-gray-700);font-weight:700;">TOTAL transport cost</span>
+              <span></span>
+              <span style="text-align:right;font-weight:800;color:var(--ies-blue);">= ${calc.formatCurrency(cogResult.totalCost, { compact: true })}/yr</span>
+            ` : ''}
             <span style="color:var(--ies-gray-500);grid-column:1 / 4;border-top:1px dashed var(--ies-gray-200);padding-top:6px;margin-top:4px;"></span>
-            <span style="color:var(--ies-gray-500);">CO₂: ${fmtNum(totalMi)} truck-mi × ${(config.co2KgPerTruckMile ?? 1.62).toFixed(2)} kg/mi</span>
+            <span style="color:var(--ies-gray-500);">CO₂: ${fmtNum(totalMi)} truck-mi × ${(config.co2KgPerTruckMile ?? 1.62).toFixed(2)} kg/mi ${cogResult.parcelDetails ? '<em>(truck only; parcel CO₂ embedded in carrier rate)</em>' : ''}</span>
             <span></span>
             <span style="text-align:right;font-weight:600;">= ${(totalMi * (config.co2KgPerTruckMile ?? 1.62) / 1000).toFixed(0).toLocaleString()} tons CO₂/yr</span>
           </div>

@@ -28,7 +28,7 @@ import {
   estimateParcelLane,
   parcelDistributionByZone,
   PARCEL_ENGINE_VERSION,
-} from './parcel-calc.js?v=20260528-parcel2';
+} from './parcel-calc.js?v=20260528-parcel3';
 
 export {
   ZONE_BREAKPOINTS,
