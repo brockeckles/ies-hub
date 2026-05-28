@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-cogtriage10';
+import * as calc from './calc.js?v=20260528-cogtriage11';
 import * as api from './api.js?v=20260504-auth1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
 
@@ -61,6 +61,11 @@ let sensitivityData = null;
 /** @type {object|null} */
 let mapInstance = null;
 
+// 2026-05-28 C12 — points-table sort state. column = 'name' | 'lat' |
+// 'lng' | 'weight' | 'type'; direction = 'asc' | 'desc'. null = original
+// (insertion) order.
+let _pointsSort = { column: null, direction: 'asc' };
+
 /**
  * Map overlay options — service-zone rings + heatmap toggles with
  * a user-editable radii list (comma-separated miles).
@@ -70,6 +75,8 @@ let mapOptions = {
   heat: true,
   labels: true,
   territories: false,
+  pointLabels: false,
+  basemap: 'voyager',   // 'voyager' | 'positron' | 'satellite'
   zoneRadiiMiles: [250, 500, 750],
 };
 
@@ -800,16 +807,31 @@ function renderInputsPhase(el) {
             <table style="width:100%;border-collapse:collapse;font-size:13px;">
               <thead style="position:sticky;top:0;background:#fff;">
                 <tr style="border-bottom:2px solid var(--ies-gray-200);">
-                  <th style="text-align:left;padding:8px 6px;font-weight:700;">Name</th>
-                  <th style="text-align:right;padding:8px 6px;font-weight:700;">Lat</th>
-                  <th style="text-align:right;padding:8px 6px;font-weight:700;">Lng</th>
-                  <th style="text-align:right;padding:8px 6px;font-weight:700;">Weight</th>
-                  <th style="text-align:center;padding:8px 6px;font-weight:700;">Type</th>
+                  <th style="text-align:left;padding:8px 6px;font-weight:700;cursor:pointer;user-select:none;" data-sort="name" title="Click to sort by name">Name${_pointsSort.column === 'name' ? (_pointsSort.direction === 'asc' ? ' ↑' : ' ↓') : ''}</th>
+                  <th style="text-align:right;padding:8px 6px;font-weight:700;cursor:pointer;user-select:none;" data-sort="lat" title="Click to sort by latitude">Lat${_pointsSort.column === 'lat' ? (_pointsSort.direction === 'asc' ? ' ↑' : ' ↓') : ''}</th>
+                  <th style="text-align:right;padding:8px 6px;font-weight:700;cursor:pointer;user-select:none;" data-sort="lng" title="Click to sort by longitude">Lng${_pointsSort.column === 'lng' ? (_pointsSort.direction === 'asc' ? ' ↑' : ' ↓') : ''}</th>
+                  <th style="text-align:right;padding:8px 6px;font-weight:700;cursor:pointer;user-select:none;" data-sort="weight" title="Click to sort by weight">Weight${_pointsSort.column === 'weight' ? (_pointsSort.direction === 'asc' ? ' ↑' : ' ↓') : ''}</th>
+                  <th style="text-align:center;padding:8px 6px;font-weight:700;cursor:pointer;user-select:none;" data-sort="type" title="Click to sort by type">Type${_pointsSort.column === 'type' ? (_pointsSort.direction === 'asc' ? ' ↑' : ' ↓') : ''}</th>
                   <th style="text-align:center;padding:8px 6px;"></th>
                 </tr>
               </thead>
               <tbody>
-                ${points.map((p, i) => {
+                ${(() => {
+                  // 2026-05-28 C12 — sortable view. Keep the original index
+                  // for delete-by-index handling (points.splice). When sort
+                  // is active, sort a shallow copy + keep the original
+                  // index on each row.
+                  const rows = points.map((p, i) => ({ p, i }));
+                  if (_pointsSort.column) {
+                    const col = _pointsSort.column;
+                    const dir = _pointsSort.direction === 'desc' ? -1 : 1;
+                    rows.sort((a, b) => {
+                      const av = a.p[col]; const bv = b.p[col];
+                      if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir;
+                      return String(av || '').localeCompare(String(bv || '')) * dir;
+                    });
+                  }
+                  return rows.map(({ p, i }) => {
                   const exc = p.type === 'excluded';
                   const badgeBg = exc ? '#fee2e2'
                     : p.type === 'demand' ? '#dbeafe'
@@ -833,7 +855,8 @@ function renderInputsPhase(el) {
                       <button class="hub-btn hub-btn-sm hub-btn-secondary" data-pt-del="${i}" style="padding:4px 8px;">✕</button>
                     </td>
                   </tr>`;
-                }).join('')}
+                }).join('');
+                })()}
               </tbody>
             </table>
           </div>
@@ -861,6 +884,21 @@ function renderInputsPhase(el) {
     btn.addEventListener('click', () => {
       points.splice(parseInt(/** @type {HTMLElement} */ (btn).dataset.ptDel), 1);
       markDirty();
+      renderInputsPhase(el);
+    });
+  });
+
+  // 2026-05-28 C12 — clickable sort headers. Same column twice flips
+  // direction; third click clears the sort (back to insertion order).
+  el.querySelectorAll('[data-sort]').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = /** @type {HTMLElement} */ (th).dataset.sort;
+      if (_pointsSort.column === col) {
+        if (_pointsSort.direction === 'asc') _pointsSort.direction = 'desc';
+        else _pointsSort = { column: null, direction: 'asc' };
+      } else {
+        _pointsSort = { column: col, direction: 'asc' };
+      }
       renderInputsPhase(el);
     });
   });
@@ -1682,6 +1720,17 @@ function renderMap(el) {
           <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ies-gray-600);cursor:pointer;" title="Voronoi-style service territories — each cell is colored by the nearest center (haversine grid, ~60x40 cells)">
             <input type="checkbox" data-cog-toggle="territories" ${mapOptions.territories ? 'checked' : ''} style="margin:0;"> Territories
           </label>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ies-gray-600);cursor:pointer;" title="Show demand-point names directly on the map (otherwise visible only on hover)">
+            <input type="checkbox" data-cog-toggle="pointLabels" ${mapOptions.pointLabels ? 'checked' : ''} style="margin:0;"> Point labels
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--ies-gray-600);" title="Switch basemap. Voyager = labeled streets (default). Positron = clean light. Satellite = imagery for site context.">
+            Basemap:
+            <select data-cog-toggle="basemap" style="padding:2px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:11px;">
+              <option value="voyager" ${mapOptions.basemap === 'voyager' ? 'selected' : ''}>Voyager</option>
+              <option value="positron" ${mapOptions.basemap === 'positron' ? 'selected' : ''}>Positron</option>
+              <option value="satellite" ${mapOptions.basemap === 'satellite' ? 'selected' : ''}>Satellite</option>
+            </select>
+          </label>
           <label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--ies-gray-600);">
             Radii:
             <input type="text" data-cog-toggle="radii" value="${mapOptions.zoneRadiiMiles.join(',')}"
@@ -1705,13 +1754,16 @@ function renderMap(el) {
   // the controls keep focus and we don't get into a render loop.
   el.querySelectorAll('[data-cog-toggle]').forEach(input => {
     input.addEventListener('change', (e) => {
-      const key = /** @type {HTMLElement} */ (e.target).dataset.cogToggle;
+      const target = /** @type {HTMLElement} */ (e.target);
+      const key = target.dataset.cogToggle;
       if (key === 'radii') {
-        const raw = /** @type {HTMLInputElement} */ (e.target).value;
+        const raw = /** @type {HTMLInputElement} */ (target).value;
         const parsed = raw.split(',').map(s => parseFloat(s.trim())).filter(n => Number.isFinite(n) && n > 0);
         mapOptions.zoneRadiiMiles = parsed.length ? parsed : [250, 500, 750];
+      } else if (key === 'basemap') {
+        mapOptions.basemap = /** @type {HTMLSelectElement} */ (target).value || 'voyager';
       } else {
-        mapOptions[key] = /** @type {HTMLInputElement} */ (e.target).checked;
+        mapOptions[key] = /** @type {HTMLInputElement} */ (target).checked;
       }
       initCogMap();
     });
@@ -1742,6 +1794,18 @@ function _ensureCogStyleInjected() {
   white-space: nowrap;
 }
 .leaflet-tooltip.cog-center-label::before { display: none; }
+.leaflet-tooltip.cog-pt-label {
+  background: rgba(255,255,255,0.85);
+  border: none;
+  border-radius: 4px;
+  padding: 1px 4px;
+  font-size: 10px;
+  color: #0a1628;
+  font-weight: 600;
+  box-shadow: none;
+  white-space: nowrap;
+}
+.leaflet-tooltip.cog-pt-label::before { display: none; }
   `;
   document.head.appendChild(styleEl);
 }
@@ -1762,11 +1826,29 @@ function initCogMap() {
   // has stronger state-boundary contrast and clearer city labels at zoom 4-6
   // (the typical CoG-result zoom band) which makes the result legible during
   // customer presentations. Falls back to OSM if cartocdn fails to load.
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-    maxZoom: 19,
-    subdomains: 'abcd',
-    attribution: '&copy; <a href="https://carto.com/attributions">CARTO</a> · OpenStreetMap'
-  }).addTo(mapInstance);
+  // 2026-05-28 D7 — basemap select. CARTO Voyager (default), Positron
+  // (clean light), or Esri WorldImagery (satellite). Falls back to
+  // Voyager when an unknown value is in state.
+  const BASEMAPS = {
+    voyager: {
+      url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+      attr: '&copy; <a href="https://carto.com/attributions">CARTO</a> · OpenStreetMap',
+      sub: 'abcd',
+    },
+    positron: {
+      url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+      attr: '&copy; <a href="https://carto.com/attributions">CARTO</a> · OpenStreetMap',
+      sub: 'abcd',
+    },
+    satellite: {
+      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      attr: '&copy; Esri · Maxar · Earthstar Geographics',
+      sub: '',
+    },
+  };
+  const bmKey = BASEMAPS[mapOptions.basemap] ? mapOptions.basemap : 'voyager';
+  const bm = BASEMAPS[bmKey];
+  L.tileLayer(bm.url, { maxZoom: 19, subdomains: bm.sub, attribution: bm.attr }).addTo(mapInstance);
 
   // 2026-05-28 D10 — scale bar. Standard cartographic element. Imperial
   // first (US default) with metric secondary. Bottom-left.
@@ -1888,6 +1970,10 @@ function initCogMap() {
     }).addTo(mapInstance);
     const outNote = a.outOfService ? `<br><strong style="color:#b91c1c;">OUT of SLA</strong> (${Math.round(a.driveRoadMi || 0)} road-mi > ${cogResult.serviceStats?.maxMiles || 0} mi)` : '';
     marker.bindPopup(`<strong>${pt.name || pt.id}</strong><br>Weight: ${pt.weight.toLocaleString()}<br>Cluster: ${a.clusterId + 1}<br>Distance: ${calc.formatMiles(a.distanceToCenter)}${outNote}`);
+    // 2026-05-28 D14 — permanent labels above each demand point when toggled.
+    if (mapOptions.pointLabels) {
+      marker.bindTooltip(pt.name || pt.id, { permanent: true, direction: 'top', offset: [0, -4], className: 'cog-pt-label', opacity: 0.85 });
+    }
 
     // Line to center
     const center = cogResult.centers[a.clusterId];
