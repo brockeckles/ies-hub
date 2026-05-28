@@ -60,6 +60,12 @@ export const DEFAULT_CONFIG = {
   /** @type {Array<{ label?: string, lat: number, lng: number }>} */
   candidateFacilities: [],
   snapToCandidates: false,
+  // 2026-05-28 — E2 current-state DC list. When non-empty, Analysis
+  // renders a side-by-side benchmark card (Current vs Proposed vs Delta)
+  // covering cost / coverage / CO₂ / avg distance. The biggest single
+  // story-telling unlock for RFP pitches — "this saves $X / +Y pp / -Z t".
+  /** @type {Array<{ label?: string, lat: number, lng: number }>} */
+  currentStateDCs: [],
   // 2026-05-28 — F2 deal context. Captured at the top of Inputs so every
   // scenario carries the customer/industry/deal-stage metadata SDs need
   // for reports. Persisted alongside points + result in scenario_data.
@@ -895,6 +901,72 @@ export function applyCapacityConstraints(mcr, points, capacityPerDC = 0) {
   }, 0);
   mcr.capacityStats = stats;
   return stats;
+}
+
+// ============================================================
+// NETWORK-FROM-DC-LIST (E2 benchmark — 2026-05-28)
+// ============================================================
+
+/**
+ * Build a MultiCogResult-shaped object from a fixed list of DCs. Each
+ * demand point gets assigned to its nearest DC by haversine. Per-center
+ * KPIs (totalWeight, avgWeightedDistance, maxDistance) are computed so
+ * the result drops straight into estimateTransportCost + flagServiceViolations.
+ *
+ * Used by the vs-current-state benchmark on the Analysis tab — you can
+ * pass a customer's existing DCs through the same math the optimizer ran
+ * on the proposed network, then diff the outputs.
+ *
+ * @param {Array<{ label?: string, lat: number, lng: number }>} dcs
+ * @param {import('./types.js?v=20260418-sP').WeightedPoint[]} points
+ * @returns {import('./types.js?v=20260418-sP').MultiCogResult|null}
+ */
+export function buildMcrFromDcList(dcs, points) {
+  const live = (points || []).filter(p => p && p.type !== 'excluded' && p.lat != null && p.lng != null);
+  const cleaned = (dcs || []).filter(d => Number.isFinite(+d.lat) && Number.isFinite(+d.lng));
+  if (cleaned.length === 0 || live.length === 0) return null;
+
+  // Assign each point to nearest DC.
+  const assignments = live.map(p => {
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    for (let i = 0; i < cleaned.length; i++) {
+      const d = haversine(p.lat, p.lng, +cleaned[i].lat, +cleaned[i].lng);
+      if (d < bestDist) { bestDist = d; bestIdx = i; }
+    }
+    return { pointId: p.id, clusterId: bestIdx, distanceToCenter: bestDist };
+  });
+
+  // Build per-center summary.
+  const centers = cleaned.map((dc, ci) => {
+    const clusterPts = live.filter((_, pi) => assignments[pi].clusterId === ci);
+    if (clusterPts.length === 0) {
+      return {
+        lat: +dc.lat, lng: +dc.lng,
+        totalWeight: 0, avgWeightedDistance: 0, maxDistance: 0,
+        nearestCity: dc.label || findNearestCity(+dc.lat, +dc.lng),
+        candidateLabel: dc.label || null,
+      };
+    }
+    const tw = clusterPts.reduce((s, p) => s + Math.max(0, p.weight || 0), 0);
+    const dists = clusterPts.map(p => ({ dist: haversine(+dc.lat, +dc.lng, p.lat, p.lng), weight: p.weight || 0 }));
+    const wdSum = dists.reduce((s, d) => s + d.dist * d.weight, 0);
+    return {
+      lat: +dc.lat, lng: +dc.lng,
+      totalWeight: tw,
+      avgWeightedDistance: tw > 0 ? wdSum / tw : 0,
+      maxDistance: Math.max(0, ...dists.map(d => d.dist)),
+      nearestCity: dc.label || findNearestCity(+dc.lat, +dc.lng),
+      candidateLabel: dc.label || null,
+    };
+  });
+
+  const totalWeightedDistance = assignments.reduce((s, a) => {
+    const p = live.find(x => x.id === a.pointId);
+    return s + a.distanceToCenter * (p?.weight || 0);
+  }, 0);
+
+  return { centers, assignments, totalWeightedDistance, iterations: 0, isCurrentState: true };
 }
 
 // ============================================================

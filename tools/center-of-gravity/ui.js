@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-cogtriage12';
+import * as calc from './calc.js?v=20260528-cogtriage13';
 import * as api from './api.js?v=20260504-auth1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
 
@@ -1283,6 +1283,21 @@ function renderParametersPhase(el) {
         </div>
       </div>
 
+      <!-- 2026-05-28 E2 — Current State DCs for the vs-current benchmark. -->
+      <div class="hub-card" style="margin-bottom:20px;padding:16px;border-left:3px solid #92400e;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:12px;flex-wrap:wrap;">
+          <div>
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-400);">Current State <span style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--ies-gray-300);">(optional)</span></div>
+            <div style="font-size:11px;color:var(--ies-gray-400);margin-top:2px;">The customer's existing DC footprint. When set, Analysis renders a side-by-side Current vs Proposed benchmark card with cost / coverage / CO₂ deltas.</div>
+          </div>
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-currentstate-copy-candidates" title="One-click: use the candidate facility list above as the current-state DCs (handy when the customer's existing sites are also in your candidate pool)" ${(config.candidateFacilities || []).length === 0 ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}>Use my candidates</button>
+        </div>
+        <textarea id="cog-currentstate-list" rows="3"
+                  placeholder="One per line — Label, Lat, Lng &#10;Examples: &#10;Memphis DC, 35.1495, -90.0490 &#10;Reno DC, 39.5296, -119.8138"
+                  style="width:100%;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-family:monospace;line-height:1.5;">${(config.currentStateDCs || []).map(c => `${c.label || ''}, ${c.lat}, ${c.lng}`).join('\n')}</textarea>
+        <div id="cog-currentstate-feedback" style="font-size:11px;color:var(--ies-gray-400);margin-top:4px;">${(config.currentStateDCs || []).length ? `${(config.currentStateDCs || []).length} current-state DC${(config.currentStateDCs || []).length === 1 ? '' : 's'} loaded — benchmark card will appear on Analysis after Run` : 'No current state yet — paste lines above to enable the vs-current benchmark.'}</div>
+      </div>
+
       <!-- Candidate Facilities (COG-B2 — snap k-means centers to a fixed list) -->
       <div class="hub-card" style="margin-bottom:20px;padding:16px;border-left:3px solid var(--ies-blue-light, #60a5fa);">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:12px;flex-wrap:wrap;">
@@ -1379,6 +1394,48 @@ function renderParametersPhase(el) {
     const v = parseInt(/** @type {HTMLInputElement} */ (e.target).value);
     config.outlierCapPercentile = Math.max(80, Math.min(99, isFinite(v) ? v : 95));
     markDirty();
+  });
+
+  // 2026-05-28 E2 — Current state handlers.
+  el.querySelector('#cog-currentstate-list')?.addEventListener('change', (e) => {
+    const raw = /** @type {HTMLTextAreaElement} */ (e.target).value || '';
+    const parsed = [];
+    raw.split(/\r?\n/).forEach(line => {
+      const t = line.trim();
+      if (!t || t.startsWith('#')) return;
+      const parts = t.split(',').map(s => s.trim());
+      let label, lat, lng;
+      if (parts.length >= 3) {
+        label = parts.slice(0, parts.length - 2).join(', ');
+        lat = parseFloat(parts[parts.length - 2]);
+        lng = parseFloat(parts[parts.length - 1]);
+      } else if (parts.length === 2) {
+        lat = parseFloat(parts[0]);
+        lng = parseFloat(parts[1]);
+      }
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        parsed.push({ label: label || `Site ${parsed.length + 1}`, lat, lng });
+      }
+    });
+    config.currentStateDCs = parsed;
+    const fb = el.querySelector('#cog-currentstate-feedback');
+    if (fb) {
+      fb.textContent = parsed.length
+        ? `${parsed.length} current-state DC${parsed.length === 1 ? '' : 's'} loaded — benchmark card will appear on Analysis after Run`
+        : 'No valid lines parsed — format: Label, Lat, Lng (one per line)';
+    }
+    markDirty();
+  });
+  el.querySelector('#cog-currentstate-copy-candidates')?.addEventListener('click', () => {
+    const cands = config.candidateFacilities || [];
+    if (cands.length === 0) {
+      showToast('No candidate facilities to copy from.', 'warn');
+      return;
+    }
+    config.currentStateDCs = cands.map(c => ({ label: c.label, lat: c.lat, lng: c.lng }));
+    markDirty();
+    renderParametersPhase(el);
+    showToast(`Copied ${cands.length} candidate site${cands.length === 1 ? '' : 's'} as current state.`, 'ok');
   });
 
   el.querySelector('#cog-snap-toggle')?.addEventListener('change', (e) => {
@@ -1501,6 +1558,85 @@ function renderAnalysis(el) {
 
   el.innerHTML = `
     <div>
+      ${(() => {
+        // 2026-05-28 E2 — Vs-current-state benchmark card. Only renders when
+        // a current-state DC list is set + we have a cogResult to compare.
+        const csList = (config.currentStateDCs || []).filter(d => Number.isFinite(+d.lat) && Number.isFinite(+d.lng));
+        if (csList.length === 0) return '';
+        const solvePts = _pointsForSolve();
+        if (solvePts.length === 0) return '';
+        const csMcr = calc.buildMcrFromDcList(csList, solvePts);
+        if (!csMcr) return '';
+        // Run the same math on the current-state network.
+        const csCost = calc.estimateTransportCost(csMcr, solvePts, config.transportCostPerMile, config.unitsPerTruck || 25000, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
+        calc.flagServiceViolations(csMcr, solvePts, config.maxServiceMiles ?? 0, config.roadFactor ?? 1.22);
+        const csCo2 = (csCost.totalTruckMiles || 0) * (config.co2KgPerTruckMile ?? 1.62) / 1000;
+        const csAvgDist = csMcr.totalWeightedDistance / Math.max(1, solvePts.reduce((s, p) => s + (p.weight || 0), 0));
+
+        // Proposed-state numbers from cogResult (already enriched).
+        const propCost = cogResult.totalCost || 0;
+        const propCo2 = cogResult.co2Tons || 0;
+        const propCoverage = cogResult.serviceStats?.maxMiles > 0 ? cogResult.serviceStats.coveragePct : null;
+        const csCoverage = csMcr.serviceStats?.maxMiles > 0 ? csMcr.serviceStats.coveragePct : null;
+        const propAvgDist = cogResult.totalWeightedDistance / Math.max(1, solvePts.reduce((s, p) => s + (p.weight || 0), 0));
+
+        const dCost = csCost.totalCost - propCost;
+        const dCostPct = csCost.totalCost > 0 ? ((dCost / csCost.totalCost) * 100) : 0;
+        const dCo2 = csCo2 - propCo2;
+        const dCo2Pct = csCo2 > 0 ? ((dCo2 / csCo2) * 100) : 0;
+        const dCoverage = (csCoverage != null && propCoverage != null) ? (propCoverage - csCoverage) : null;
+        const dAvgDist = csAvgDist - propAvgDist;
+
+        const goodColor = '#15803d';  // green = savings / improvement
+        const badColor = '#b91c1c';   // red = worse
+        const sign = (n) => n > 0 ? '+' : '';
+        const cell = (val, color) => `<div style="font-weight:700;color:${color || 'var(--ies-gray-800)'};">${val}</div>`;
+        const deltaCell = (val, isGood, isNeutral) => {
+          const c = isNeutral ? 'var(--ies-gray-500)' : (isGood ? goodColor : badColor);
+          return `<div style="font-weight:700;color:${c};">${val}</div>`;
+        };
+
+        return `
+          <div class="hub-card" style="margin-bottom:20px;padding:18px 20px;background:linear-gradient(135deg,#fffbeb,#f0fdf4);border-left:5px solid #15803d;">
+            <div style="font-size:13px;font-weight:700;color:#15803d;margin-bottom:6px;">Network Benchmark — Current State vs Proposed</div>
+            <div style="font-size:11px;color:var(--ies-gray-500);margin-bottom:12px;">Same demand, same cost rates, same SLA threshold. Differences come from where the DCs sit.</div>
+            <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:8px 16px;font-size:13px;align-items:baseline;">
+              <div style="font-weight:700;color:var(--ies-gray-500);font-size:11px;text-transform:uppercase;">Metric</div>
+              <div style="font-weight:700;color:var(--ies-gray-500);font-size:11px;text-transform:uppercase;text-align:right;">Current (${csList.length} DC${csList.length === 1 ? '' : 's'})</div>
+              <div style="font-weight:700;color:var(--ies-gray-500);font-size:11px;text-transform:uppercase;text-align:right;">Proposed (${cogResult.centers.length} DC${cogResult.centers.length === 1 ? '' : 's'})</div>
+              <div style="font-weight:700;color:var(--ies-gray-500);font-size:11px;text-transform:uppercase;text-align:right;">Delta</div>
+
+              <div style="color:var(--ies-gray-600);">Centers</div>
+              <div style="text-align:right;">${cell(csList.length)}</div>
+              <div style="text-align:right;">${cell(cogResult.centers.length)}</div>
+              <div style="text-align:right;">${deltaCell((cogResult.centers.length - csList.length > 0 ? '+' : '') + (cogResult.centers.length - csList.length), null, true)}</div>
+
+              <div style="color:var(--ies-gray-600);">Annual transport cost</div>
+              <div style="text-align:right;">${cell(calc.formatCurrency(csCost.totalCost, { compact: true }))}</div>
+              <div style="text-align:right;">${cell(calc.formatCurrency(propCost, { compact: true }))}</div>
+              <div style="text-align:right;">${deltaCell(`${sign(-dCost)}${calc.formatCurrency(Math.abs(dCost), { compact: true })} (${sign(-dCostPct)}${Math.abs(dCostPct).toFixed(1)}%)`, dCost > 0)}</div>
+
+              ${(csCoverage != null && propCoverage != null) ? `
+                <div style="color:var(--ies-gray-600);">Service coverage (${config.maxServiceMiles} mi)</div>
+                <div style="text-align:right;">${cell(csCoverage.toFixed(1) + '%')}</div>
+                <div style="text-align:right;">${cell(propCoverage.toFixed(1) + '%')}</div>
+                <div style="text-align:right;">${deltaCell(`${sign(dCoverage)}${dCoverage.toFixed(1)}pp`, dCoverage > 0)}</div>
+              ` : ''}
+
+              <div style="color:var(--ies-gray-600);">Annual CO₂ (tons)</div>
+              <div style="text-align:right;">${cell(csCo2.toLocaleString(undefined, { maximumFractionDigits: 0 }))}</div>
+              <div style="text-align:right;">${cell(propCo2.toLocaleString(undefined, { maximumFractionDigits: 0 }))}</div>
+              <div style="text-align:right;">${deltaCell(`${sign(-dCo2)}${Math.abs(dCo2).toLocaleString(undefined, { maximumFractionDigits: 0 })} t (${sign(-dCo2Pct)}${Math.abs(dCo2Pct).toFixed(1)}%)`, dCo2 > 0)}</div>
+
+              <div style="color:var(--ies-gray-600);">Avg weighted distance</div>
+              <div style="text-align:right;">${cell(calc.formatMiles(csAvgDist))}</div>
+              <div style="text-align:right;">${cell(calc.formatMiles(propAvgDist))}</div>
+              <div style="text-align:right;">${deltaCell(`${sign(-dAvgDist)}${calc.formatMiles(Math.abs(dAvgDist))}`, dAvgDist > 0)}</div>
+            </div>
+          </div>
+        `;
+      })()}
+
       <!-- Action Bar -->
       <div style="display:flex;gap:12px;margin-bottom:16px;align-items:center;">
         <h3 class="text-section" style="margin:0;flex:1;">Analysis Results</h3>
