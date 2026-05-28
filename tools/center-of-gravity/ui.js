@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-cogtriage25';
+import * as calc from './calc.js?v=20260528-cogtriage26';
 import * as api from './api.js?v=20260504-auth1';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
@@ -567,7 +567,15 @@ export function unmount() {
 // the mode toggle works without touching every caller.
 function _resolveCpm() {
   if (config.modeMixEnabled) {
-    return calc.effectiveCpm(config.modeMix, config.modeRates);
+    // 2026-05-28 — use formula-adjusted variant so road×rt doesn't
+    // double-count the parcel slice. See calc.effectiveCpmForFormula
+    // docstring for the why.
+    return calc.effectiveCpmForFormula(
+      config.modeMix,
+      config.modeRates,
+      config.roadFactor ?? 1.22,
+      config.roundTripFactor ?? 2.0,
+    );
   }
   return config.transportCostPerMile;
 }
@@ -1949,15 +1957,17 @@ function renderParametersPhase(el) {
         </div>
         ${(() => {
           const sum = (config.modeMix?.tlPct || 0) + (config.modeMix?.ltlPct || 0) + (config.modeMix?.parcelPct || 0);
-          const effective = calc.effectiveCpm(config.modeMix || {}, config.modeRates || {});
+          const natural = calc.effectiveCpm(config.modeMix || {}, config.modeRates || {});
+          const formula = calc.effectiveCpmForFormula(config.modeMix || {}, config.modeRates || {}, config.roadFactor ?? 1.22, config.roundTripFactor ?? 2.0);
+          const hasParcel = (config.modeMix?.parcelPct || 0) > 0;
           if (!config.modeMixEnabled) return `<div style="font-size:11px;color:var(--ies-gray-400);margin-top:10px;font-style:italic;">Mode mix is off — Analysis uses the single Truck \$/mi knob (\$${(config.transportCostPerMile || 0).toFixed(2)}).</div>`;
           if (sum === 0) return `<div style="font-size:11px;color:#b91c1c;margin-top:10px;font-weight:600;">Shares sum to 0 — set at least one mode > 0 to compute cost.</div>`;
-          if (Math.abs(sum - 100) > 0.5) return `<div style="font-size:11px;color:#a16207;margin-top:10px;">Shares sum to ${sum}% (will be normalized to 100%) · blended rate <strong>\$${effective.toFixed(2)}/mi</strong></div>`;
-          return `<div style="font-size:11px;color:#15803d;margin-top:10px;font-weight:600;">Blended effective rate: \$${effective.toFixed(2)}/mi</div>`;
+          if (Math.abs(sum - 100) > 0.5) return `<div style="font-size:11px;color:#a16207;margin-top:10px;">Shares sum to ${sum}% (will be normalized to 100%) · natural blended <strong>\$${natural.toFixed(2)}/mi</strong>${hasParcel ? ` · engine uses <strong>\$${formula.toFixed(2)}/mi</strong> (parcel bypasses road×rt)` : ''}</div>`;
+          return `<div style="font-size:11px;color:#15803d;margin-top:10px;font-weight:600;">Natural blended: \$${natural.toFixed(2)}/mi${hasParcel ? ` · <span style="font-weight:600;">Engine uses \$${formula.toFixed(2)}/mi</span> <span style="font-weight:500;color:var(--ies-gray-500);">(parcel bypasses road×rt — see note below)</span>` : ''}</div>`;
         })()}
         ${config.modeMixEnabled && (config.modeMix?.parcelPct || 0) > 0 ? `
           <div style="font-size:10px;color:var(--ies-gray-500);margin-top:8px;line-height:1.5;border-top:1px dashed var(--ies-gray-200);padding-top:8px;">
-            <strong>Parcel modeling caveat:</strong> ground parcel pricing is per-package by weight × zone, not per truck-mi. The parcel \$/mi here is a <em>derived</em> rate. Reference: UPS/FedEx 6 lb @ Zone 5 ≈ \$18 all-in (incl ~25% fuel + residential). At <strong>3,000 packages/trailer × 800 mi avg trip</strong>, that's ~\$67/mi effective. With this tool's default <strong>${(config.unitsPerTruck || 25000).toLocaleString()} ${(calc.getWeightUnitMeta(config.weightUnit || 'lb').short || 'units')}/truck</strong>, set <strong>Parcel \$/mi</strong> in the $25-$50 range for typical DTC; higher for express; lower if your \$/truck capacity is closer to a real parcel trailer count.
+            <strong>Parcel modeling — how it works:</strong> ground parcel is door-to-door zone-priced (UPS/FedEx 6 lb @ Zone 5 ≈ \$18 all-in incl ~25% fuel + residential). Unlike TL/LTL, parcel rates don't compound with road-factor or round-trip — the carrier already priced the full trip. The engine handles this by <em>bypassing</em> road×rt on the parcel slice: the natural blended rate is what an SD intuits, but the engine uses an adjusted rate that pre-divides parcel by road×rt so the final formula (×road×rt) produces the right total. <strong>Quick sanity check:</strong> 3,000 packages/trailer × \$18 ÷ 800 mi ≈ \$67/mi effective. Default <strong>\$28/mi</strong> in the input matches that when applied through the bypass at default road=1.22 + rt=2.0. Bump higher for express, lighter packages, or longer zones.
           </div>
         ` : ''}
       </div>
@@ -2449,7 +2459,11 @@ function renderAnalysis(el) {
         const totalLoadedMi = totalGcMi * road;
         const rt = Math.max(1, +config.roundTripFactor || 2.0);
         const totalMi = totalLoadedMi * rt;
-        const cpm = config.modeMixEnabled ? calc.effectiveCpm(config.modeMix, config.modeRates) : (config.transportCostPerMile || 0);
+        // 2026-05-28 — use formula-adjusted cpm so the breakdown total
+        // matches what the engine computes (parcel slice bypasses road×rt).
+        const cpm = config.modeMixEnabled
+          ? calc.effectiveCpmForFormula(config.modeMix, config.modeRates, config.roadFactor ?? 1.22, config.roundTripFactor ?? 2.0)
+          : (config.transportCostPerMile || 0);
         const unitLabel = (calc.getWeightUnitMeta(config.weightUnit || 'lb').short || 'units');
         const fmtNum = (n) => Math.round(n).toLocaleString();
         return `

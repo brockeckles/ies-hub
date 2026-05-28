@@ -841,6 +841,55 @@ export function effectiveCpm(modeMix, modeRates) {
   return (tlPct * tlR + ltlPct * ltlR + parcelPct * parcelR) / sum;
 }
 
+/**
+ * 2026-05-28 — Formula-adjusted blended $/mi. Same shape as effectiveCpm
+ * but pre-divides the PARCEL portion by road × rt so that when the
+ * standard cost formula multiplies by road × rt later, the parcel side
+ * cancels back to its raw all-in rate (no road/rt applied).
+ *
+ * Why: parcel pricing is door-to-door zone-priced (UPS/FedEx 6lb @ Z5 ≈
+ * $18 all-in including ~25% fuel + residential). The road-factor
+ * (great-circle → road) and round-trip multipliers exist because TL/LTL
+ * pay per-loaded-mile and have to account for empty backhaul; neither
+ * physically applies to a parcel shipment. Brock caught this 2026-05-28
+ * — the original effectiveCpm overstated parcel cost by road × rt ≈ 2.44×.
+ *
+ * Math:
+ *   nonParcel = (tlPct × tlRate + ltlPct × ltlRate) / sum    ← gets road×rt
+ *   parcel    = (parcelPct × parcelRate) / sum               ← bypasses road×rt
+ *   formula_cpm = nonParcel + parcel / (road × rt)
+ *
+ * Then in the standard formula: truckloads × dist × formula_cpm × road × rt
+ *   = truckloads × dist × (nonParcel × road × rt + parcel)
+ *   = correct mode-aware total.
+ *
+ * Known limitation: tornadoSensitivity holds cpm at baseline while
+ * sweeping road/rt; with the bypass, the parcel slice of cpm depends
+ * on baseline road/rt, so road/rt-row swings on the tornado are slightly
+ * understated when parcel share > 0. For 100% TL/LTL the tornado is
+ * exact. Acceptable for v1; address if SDs hit it.
+ *
+ * @param {{ tlPct?: number, ltlPct?: number, parcelPct?: number }} modeMix
+ * @param {{ tlPerMile?: number, ltlPerMile?: number, parcelPerMile?: number }} modeRates
+ * @param {number} [roadFactor=1.22]
+ * @param {number} [rt=2.0]
+ * @returns {number}
+ */
+export function effectiveCpmForFormula(modeMix, modeRates, roadFactor = 1.22, rt = 2.0) {
+  const tlPct     = Math.max(0, +modeMix?.tlPct     || 0);
+  const ltlPct    = Math.max(0, +modeMix?.ltlPct    || 0);
+  const parcelPct = Math.max(0, +modeMix?.parcelPct || 0);
+  const sum = tlPct + ltlPct + parcelPct;
+  if (sum <= 0) return 0;
+  const tlR     = +modeRates?.tlPerMile     || 0;
+  const ltlR    = +modeRates?.ltlPerMile    || 0;
+  const parcelR = +modeRates?.parcelPerMile || 0;
+  const road = Math.max(1, +roadFactor || 1);
+  const rtF  = Math.max(1, +rt || 1);
+  return (tlPct * tlR + ltlPct * ltlR) / sum
+       + (parcelPct * parcelR) / (sum * road * rtF);
+}
+
 // ============================================================
 // SERVICE-LEVEL FLAGGING (B7 — 2026-05-28)
 // ============================================================
