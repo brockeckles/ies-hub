@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260526-zip3backfill';
+import * as calc from './calc.js?v=20260526-cogcost1';
 import * as api from './api.js?v=20260504-auth1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
 
@@ -195,7 +195,7 @@ function openEditor(savedRow) {
       if (config.snapToCandidates && (config.candidateFacilities || []).length > 0) {
         cogResult = calc.snapCentersToCandidates(cogResult, _solvePts, config.candidateFacilities);
       }
-      sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0);
+      sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0, config.roundTripFactor ?? 2.0);
     } catch (err) {
       console.warn('[COG] Result rebuild from saved inputs failed; falling back to partial render:', err);
     }
@@ -247,6 +247,7 @@ function runOptimizeAndRender() {
     config.maxIterations,
     config.unitsPerTruck || 25000,
     config.fixedCostPerDC || 0,
+    config.roundTripFactor ?? 2.0,
   );
   runState.markClean(runStateInputs());
   updateRunButtonState();
@@ -388,7 +389,19 @@ function _pointsForSolve() {
   // rows defensively). These come from XLS uploads where the ZIP couldn't
   // be resolved or units were missing/invalid; they live in points[] so
   // the user can see them in the table, but they would NaN out the math.
-  const live = points.filter(p => p.type !== 'excluded' && p.lat != null && p.lng != null);
+  let live = points.filter(p => p.type !== 'excluded' && p.lat != null && p.lng != null);
+  // 2026-05-26 — Exclude Alaska & Hawaii from the solve when the toggle is
+  // on. AK lat ~51-71, lng ~-180 to -130. HI lat ~18-23, lng ~-161 to -154.
+  // Use generous bounding boxes; cleaner than testing each point against
+  // every state polygon. PR (lat ~18, lng -67) is in the HI box's longitude
+  // but VERY different latitude, so guard separately.
+  if (config.excludeOffshore) {
+    live = live.filter(p => {
+      const inAK = (p.lat >= 51 && p.lat <= 72) && (p.lng >= -180 && p.lng <= -130);
+      const inHI = (p.lat >= 18 && p.lat <= 23) && (p.lng >= -161 && p.lng <= -154);
+      return !inAK && !inHI;
+    });
+  }
   if (config.outlierCapEnabled) {
     return calc.capWeightsByPercentile(live, config.outlierCapPercentile || 95);
   }
@@ -568,7 +581,7 @@ async function bindShellEvents() {
         if (config.snapToCandidates && (config.candidateFacilities || []).length > 0) {
           cogResult = calc.snapCentersToCandidates(cogResult, _solvePts, config.candidateFacilities);
         }
-        sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0);
+        sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0, config.roundTripFactor ?? 2.0);
         activePhase = 'run';
         runSubTab = 'numbers';
         runState.markClean(runStateInputs());
@@ -1071,6 +1084,17 @@ function renderParametersPhase(el) {
     config.transportCostPerMile = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 2.85;
     markDirty();
   });
+  // 2026-05-26 — Round-trip factor input.
+  el.querySelector('#cog-rt-factor')?.addEventListener('change', (e) => {
+    const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
+    config.roundTripFactor = (Number.isFinite(v) && v > 0) ? v : 2.0;
+    markDirty();
+  });
+  // 2026-05-26 — Exclude Alaska & Hawaii checkbox.
+  el.querySelector('#cog-exclude-offshore')?.addEventListener('change', (e) => {
+    config.excludeOffshore = /** @type {HTMLInputElement} */ (e.target).checked;
+    markDirty();
+  });
   el.querySelector('#cog-weight-unit')?.addEventListener('change', (e) => {
     const v = /** @type {HTMLSelectElement} */ (e.target).value || 'lb';
     config.weightUnit = v;
@@ -1163,9 +1187,16 @@ function renderRunPhase(el) {
 
       ${cogResult && recK != null ? `
         <div class="hub-card" style="background:linear-gradient(135deg,#f0fdf4,#f0f9ff);border:1px solid #22c55e;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
-          <div style="font-size:11px;font-weight:700;letter-spacing:0.4px;color:#059669;text-transform:uppercase;">Recommended k</div>
-          <div style="font-size:22px;font-weight:800;color:#059669;line-height:1;">${recK}</div>
-          <div style="font-size:11px;color:var(--ies-gray-500);flex:1;">Sensitivity ${(Array.isArray(sensitivityData) ? sensitivityData.length : 0)} k tested · click <b>Sensitivity</b> sub-tab for the curve.</div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+            <div style="font-size:10px;font-weight:700;letter-spacing:0.4px;color:#059669;text-transform:uppercase;">Recommended</div>
+            <div style="font-size:30px;font-weight:800;color:#059669;line-height:1;">${recK}</div>
+            <div style="font-size:10px;color:#059669;font-weight:600;">${recK === 1 ? 'DC' : 'DCs'}</div>
+          </div>
+          <div style="font-size:12px;color:var(--ies-gray-600);flex:1;line-height:1.45;">
+            We tested networks from <strong>1 to ${(Array.isArray(sensitivityData) ? sensitivityData.length : 0)} DCs</strong> against your current demand and parameters.
+            <strong>${recK} ${recK === 1 ? 'DC' : 'DCs'}</strong> gave the lowest total cost.
+            Open the <b>Sensitivity</b> tab to see the cost curve and compare alternatives.
+          </div>
         </div>
       ` : ''}
 
@@ -1213,7 +1244,7 @@ function renderAnalysis(el) {
     return;
   }
 
-  const costEst = calc.estimateTransportCost(cogResult, points, config.transportCostPerMile, config.unitsPerTruck || 25000);
+  const costEst = calc.estimateTransportCost(cogResult, points, config.transportCostPerMile, config.unitsPerTruck || 25000, config.roundTripFactor ?? 2.0);
 
   el.innerHTML = `
     <div>
@@ -1570,7 +1601,7 @@ function renderSensitivity(el) {
           Optimal network of <strong>${cogResult.centers.length}</strong> facilit${cogResult.centers.length === 1 ? 'y' : 'ies'} reduces
           avg distance to <strong>${cogResult.centers[0] ? calc.formatMiles(cogResult.centers.reduce((s, c) => s + c.avgWeightedDistance, 0) / cogResult.centers.length) : 'N/A'}</strong>
           per facility, with total annual transport cost of <strong>${calc.formatCurrency(cogResult.assignments ?
-            calc.estimateTransportCost(cogResult, points, config.transportCostPerMile, config.unitsPerTruck || 25000).totalCost : 0)}</strong>.
+            calc.estimateTransportCost(cogResult, points, config.transportCostPerMile, config.unitsPerTruck || 25000, config.roundTripFactor ?? 2.0).totalCost : 0)}</strong>.
           Compared to single facility: <strong>${savingsPct}%</strong> savings.
         </div>
       </div>
@@ -1739,7 +1770,7 @@ function exportCogAnalysis() {
     return;
   }
 
-  const costEst = calc.estimateTransportCost(cogResult, points, config.transportCostPerMile, config.unitsPerTruck || 25000);
+  const costEst = calc.estimateTransportCost(cogResult, points, config.transportCostPerMile, config.unitsPerTruck || 25000, config.roundTripFactor ?? 2.0);
   const now = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
   const filename = `cog-analysis-${now}.csv`;
 

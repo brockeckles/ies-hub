@@ -20,6 +20,18 @@ export const DEFAULT_CONFIG = {
   maxIterations: 100,
   includeSupply: false,
   transportCostPerMile: 2.85,
+  // 2026-05-26 — Round-trip factor. The k-means + cost formula compute
+  // one-way distance from each demand point to its assigned center; real
+  // carriers price for the round trip (loaded outbound + empty/backhaul
+  // return). 2.0 = full round trip (no backhaul recovery). 1.5-1.8 if you
+  // model partial backhaul revenue. Multiplied through estimateTransportCost
+  // and sensitivityAnalysis.
+  roundTripFactor: 2.0,
+  // 2026-05-26 — Exclude Alaska & Hawaii from the solve. When TRUE, points
+  // whose lat/lng falls inside the AK or HI bounding boxes are dropped at
+  // _pointsForSolve time so a single AK customer doesn't drag the centroid
+  // toward the Pacific Northwest. Default OFF (preserves prior behavior).
+  excludeOffshore: false,
   // Truck capacity used to convert "weight × distance" into truckloads × distance.
   // Default 25,000 lbs (a typical 53-ft dry van payload). If users enter weight
   // in pallets, set to 26 (pallets per truck). If orders, set to a typical
@@ -553,8 +565,13 @@ export function capWeightsByPercentile(points, percentile = 95) {
  * @param {number} [unitsPerTruck=25000]
  * @returns {{ totalCost: number, avgCostPerUnit: number, costByCluster: number[], totalTruckloads: number }}
  */
-export function estimateTransportCost(cogResult, points, costPerMile = 2.85, unitsPerTruck = 25000) {
+export function estimateTransportCost(cogResult, points, costPerMile = 2.85, unitsPerTruck = 25000, roundTripFactor = 2.0) {
   const capacity = Math.max(1, unitsPerTruck || 1); // guard against /0
+  // 2026-05-26 — Round-trip factor. Distances in cogResult.assignments are
+  // one-way; carrier pricing includes the return leg. Default 2.0 = full
+  // round-trip (no backhaul recovery). Conservative inputs (1.5-1.8) can
+  // be used if a network has reliable backhaul revenue.
+  const rt = Math.max(1, +roundTripFactor || 1);
   const costByCluster = cogResult.centers.map((_, ci) => {
     return cogResult.assignments
       .filter(a => a.clusterId === ci)
@@ -562,7 +579,7 @@ export function estimateTransportCost(cogResult, points, costPerMile = 2.85, uni
         const pt = points.find(p => p.id === a.pointId);
         const w = pt?.weight || 0;
         const truckloads = w / capacity;
-        return s + truckloads * a.distanceToCenter * costPerMile;
+        return s + truckloads * a.distanceToCenter * costPerMile * rt;
       }, 0);
   });
 
@@ -598,14 +615,14 @@ export function estimateTransportCost(cogResult, points, costPerMile = 2.85, uni
  * @param {number} [fixedCostPerDC=0]  Annual fixed cost per facility ($/year).
  * @returns {Array<{ k: number, totalWeightedDistance: number, transportCost: number, facilityCost: number, totalCost: number, estimatedCost: number, avgDistance: number, isElbow?: boolean }>}
  */
-export function sensitivityAnalysis(points, maxK = 5, costPerMile = 2.85, maxIter = 100, unitsPerTruck = 25000, fixedCostPerDC = 0) {
+export function sensitivityAnalysis(points, maxK = 5, costPerMile = 2.85, maxIter = 100, unitsPerTruck = 25000, fixedCostPerDC = 0, roundTripFactor = 2.0) {
   const results = [];
   const effectiveMaxK = Math.min(maxK, points.length);
   const fixedTerm = Math.max(0, Number(fixedCostPerDC) || 0);
 
   for (let k = 1; k <= effectiveMaxK; k++) {
     const cogResult = kMeansCog(points, k, maxIter);
-    const cost = estimateTransportCost(cogResult, points, costPerMile, unitsPerTruck);
+    const cost = estimateTransportCost(cogResult, points, costPerMile, unitsPerTruck, roundTripFactor);
     const totalWeight = points.reduce((s, p) => s + p.weight, 0);
     const avgDist = totalWeight > 0 ? cogResult.totalWeightedDistance / totalWeight : 0;
     const transportCost = cost.totalCost;
