@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-cogtriage2';
+import * as calc from './calc.js?v=20260528-cogtriage3';
 import * as api from './api.js?v=20260504-auth1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
 
@@ -198,7 +198,7 @@ function openEditor(savedRow) {
       (!Array.isArray(cogResult.assignments) || !cogResult.assignments.length)) {
     try {
       const _solvePts = _pointsForSolve();
-      cogResult = calc.kMeansCog(_solvePts, config.numCenters, config.maxIterations);
+      cogResult = calc.kMeansCog(_solvePts, config.numCenters, config.maxIterations, config.kmeansRestarts ?? 10);
       if (config.snapToCandidates && (config.candidateFacilities || []).length > 0) {
         cogResult = calc.snapCentersToCandidates(cogResult, _solvePts, config.candidateFacilities);
       }
@@ -244,7 +244,7 @@ function runOptimizeAndRender() {
   if (!rootEl) return;
   const _solvePts = _pointsForSolve();
   if (!_solvePts.length) return; // nothing to solve against
-  cogResult = calc.kMeansCog(_solvePts, config.numCenters, config.maxIterations);
+  cogResult = calc.kMeansCog(_solvePts, config.numCenters, config.maxIterations, config.kmeansRestarts ?? 10);
       if (config.snapToCandidates && (config.candidateFacilities || []).length > 0) {
         cogResult = calc.snapCentersToCandidates(cogResult, _solvePts, config.candidateFacilities);
       }
@@ -611,7 +611,7 @@ async function bindShellEvents() {
       if (id === 'cog-save') return handleSave();
       if (id === 'cog-run') {
         const _solvePts = _pointsForSolve();
-        cogResult = calc.kMeansCog(_solvePts, config.numCenters, config.maxIterations);
+        cogResult = calc.kMeansCog(_solvePts, config.numCenters, config.maxIterations, config.kmeansRestarts ?? 10);
         if (config.snapToCandidates && (config.candidateFacilities || []).length > 0) {
           cogResult = calc.snapCentersToCandidates(cogResult, _solvePts, config.candidateFacilities);
         }

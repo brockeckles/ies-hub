@@ -60,6 +60,13 @@ export const DEFAULT_CONFIG = {
   /** @type {Array<{ label?: string, lat: number, lng: number }>} */
   candidateFacilities: [],
   snapToCandidates: false,
+  // 2026-05-28 — k-means restart count. k-means is local-optimum-prone;
+  // running N restarts with different seeds and keeping the lowest-cost
+  // solution is the standard defense. Restart #0 uses the deterministic
+  // highest-weight init (preserves the legacy single-run answer); restarts
+  // #1..N-1 use a seeded PRNG so results stay reproducible per input set.
+  // Default 10 is industry-standard. Set to 1 to recover legacy behavior.
+  kmeansRestarts: 10,
 };
 
 // CoG weight-unit metadata — drives label text + step sizes in the UI.
@@ -338,20 +345,53 @@ function _dedupedMajorCities() {
 
 /**
  * Run weighted k-means clustering to find optimal locations for k facilities.
+ * Runs `numRestarts` independent k-means trials and returns the lowest-cost
+ * solution. Restart #0 uses the deterministic highest-weight init (legacy
+ * behavior); restarts #1..N-1 use a seeded-PRNG k-means++ init so results
+ * stay reproducible per input set while escaping local optima.
+ *
  * @param {import('./types.js?v=20260418-sP').WeightedPoint[]} points
  * @param {number} k — number of centers
  * @param {number} [maxIter=100]
+ * @param {number} [numRestarts=10] — set to 1 to recover legacy single-run behavior
  * @returns {import('./types.js?v=20260418-sP').MultiCogResult}
  */
-export function kMeansCog(points, k = 1, maxIter = 100) {
+export function kMeansCog(points, k = 1, maxIter = 100, numRestarts = 10) {
   if (points.length === 0 || k <= 0) {
-    return { centers: [], assignments: [], totalWeightedDistance: 0, iterations: 0 };
+    return { centers: [], assignments: [], totalWeightedDistance: 0, iterations: 0, numRestarts: 0 };
   }
-
   k = Math.min(k, points.length);
+  const restarts = Math.max(1, Math.floor(numRestarts) || 1);
 
-  // Initialize centers using k-means++ seeding
-  let centers = kMeansPlusPlusInit(points, k);
+  // Seed the PRNG from a stable hash of the input — deterministic per
+  // points/k pair, varies between datasets.
+  const baseSeed = _pointsHash(points) ^ (k * 2654435761);
+
+  let best = null;
+  for (let r = 0; r < restarts; r++) {
+    // Restart #0 = legacy deterministic init (highest-weight seed). Others
+    // use a seeded weighted-random init.
+    const initCenters = r === 0
+      ? kMeansPlusPlusInit(points, k)
+      : kMeansPlusPlusInitSeeded(points, k, _mulberry32((baseSeed + r * 0x9E3779B9) >>> 0));
+    const trial = _kMeansSingleRun(points, k, maxIter, initCenters);
+    if (!best || trial.totalWeightedDistance < best.totalWeightedDistance) best = trial;
+  }
+  best.numRestarts = restarts;
+  return best;
+}
+
+/**
+ * Single k-means run from a given set of initial centers. Pure inner loop —
+ * the orchestrator above wraps this in multi-restart.
+ * @param {import('./types.js?v=20260418-sP').WeightedPoint[]} points
+ * @param {number} k
+ * @param {number} maxIter
+ * @param {{ lat: number, lng: number }[]} initCenters
+ * @returns {import('./types.js?v=20260418-sP').MultiCogResult}
+ */
+function _kMeansSingleRun(points, k, maxIter, initCenters) {
+  let centers = initCenters.map(c => ({ lat: c.lat, lng: c.lng }));
   let assignments = [];
   let iter = 0;
   // P2-sweep fix (2026-04-22): centroid-delta convergence. The assignment-
@@ -514,6 +554,102 @@ export function kMeansPlusPlusInit(points, k) {
     }
 
     centers.push({ lat: points[bestIdx].lat, lng: points[bestIdx].lng });
+  }
+
+  return centers;
+}
+
+// ============================================================
+// MULTI-RESTART HELPERS (2026-05-28)
+// ============================================================
+
+/**
+ * Stable hash of a points array — deterministic seed for the multi-restart
+ * PRNG. Order-independent: sums per-point hash contributions so the same
+ * point set in different order produces the same seed.
+ * @param {import('./types.js?v=20260418-sP').WeightedPoint[]} points
+ * @returns {number}
+ */
+function _pointsHash(points) {
+  let h = 2166136261 >>> 0;  // FNV-1a basis
+  for (const p of points) {
+    // Combine lat / lng / weight into 32-bit chunks.
+    const a = Math.floor((p.lat || 0) * 10000);
+    const b = Math.floor((p.lng || 0) * 10000);
+    const c = Math.floor(p.weight || 0);
+    h = ((h ^ a) * 16777619) >>> 0;
+    h = ((h ^ b) * 16777619) >>> 0;
+    h = ((h ^ c) * 16777619) >>> 0;
+  }
+  return h >>> 0;
+}
+
+/**
+ * mulberry32 PRNG — small, fast, well-behaved 32-bit generator.
+ * @param {number} seed
+ * @returns {() => number} — returns floats in [0, 1)
+ */
+function _mulberry32(seed) {
+  let s = seed >>> 0;
+  return function() {
+    s = (s + 0x6D2B79F5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * k-means++ initialization driven by a supplied PRNG. First center is
+ * picked with weighted-random selection (probability ∝ weight) instead
+ * of always taking the heaviest point — that's what escapes the local
+ * optimum the deterministic init falls into.
+ * @param {import('./types.js?v=20260418-sP').WeightedPoint[]} points
+ * @param {number} k
+ * @param {() => number} rng
+ * @returns {{ lat: number, lng: number }[]}
+ */
+export function kMeansPlusPlusInitSeeded(points, k, rng) {
+  if (points.length === 0) return [];
+  if (k >= points.length) return points.map(p => ({ lat: p.lat, lng: p.lng }));
+
+  const centers = [];
+
+  // First center: weighted-random pick (probability ∝ weight) using `rng`.
+  const totalW = points.reduce((s, p) => s + Math.max(0, p.weight || 0), 0);
+  let firstIdx = 0;
+  if (totalW > 0) {
+    let r = rng() * totalW;
+    for (let i = 0; i < points.length; i++) {
+      r -= Math.max(0, points[i].weight || 0);
+      if (r <= 0) { firstIdx = i; break; }
+    }
+  } else {
+    firstIdx = Math.floor(rng() * points.length);
+  }
+  centers.push({ lat: points[firstIdx].lat, lng: points[firstIdx].lng });
+
+  // Subsequent centers: weighted-random by (distance² × weight). Standard
+  // k-means++ sampling, not deterministic max-pick, so different restarts
+  // explore different seedings.
+  while (centers.length < k) {
+    const scores = points.map(p => {
+      const minDist = Math.min(...centers.map(c => haversine(p.lat, p.lng, c.lat, c.lng)));
+      return minDist * minDist * Math.max(0, p.weight || 0);
+    });
+    const totalScore = scores.reduce((s, x) => s + x, 0);
+    let pickIdx = 0;
+    if (totalScore > 0) {
+      let r = rng() * totalScore;
+      for (let i = 0; i < scores.length; i++) {
+        r -= scores[i];
+        if (r <= 0) { pickIdx = i; break; }
+      }
+    } else {
+      pickIdx = Math.floor(rng() * points.length);
+    }
+    centers.push({ lat: points[pickIdx].lat, lng: points[pickIdx].lng });
   }
 
   return centers;
