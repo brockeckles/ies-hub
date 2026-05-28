@@ -384,10 +384,15 @@ function _pointsForSolve() {
   // H1: optionally winsorize point weights to a percentile cap before
   // running k-means / sensitivity. Mitigates a single mega-shipper
   // dominating the centroid in real customer data.
+  // 2026-05-26 — also filter out type='excluded' rows (and any null-coord
+  // rows defensively). These come from XLS uploads where the ZIP couldn't
+  // be resolved or units were missing/invalid; they live in points[] so
+  // the user can see them in the table, but they would NaN out the math.
+  const live = points.filter(p => p.type !== 'excluded' && p.lat != null && p.lng != null);
   if (config.outlierCapEnabled) {
-    return calc.capWeightsByPercentile(points, config.outlierCapPercentile || 95);
+    return calc.capWeightsByPercentile(live, config.outlierCapPercentile || 95);
   }
-  return points;
+  return live;
 }
 
 function renderShell() {
@@ -697,24 +702,31 @@ function renderInputsPhase(el) {
                 </tr>
               </thead>
               <tbody>
-                ${points.map((p, i) => `
-                  <tr style="border-bottom:1px solid var(--ies-gray-200);">
-                    <td style="padding:6px;font-weight:600;">${p.name || p.id}</td>
-                    <td style="padding:6px;text-align:right;">${p.lat.toFixed(2)}</td>
-                    <td style="padding:6px;text-align:right;">${p.lng.toFixed(2)}</td>
-                    <td style="padding:6px;text-align:right;">${p.weight.toLocaleString()}</td>
+                ${points.map((p, i) => {
+                  const exc = p.type === 'excluded';
+                  const badgeBg = exc ? '#fee2e2'
+                    : p.type === 'demand' ? '#dbeafe'
+                    : p.type === 'supply' ? '#dcfce7' : '#fef3c7';
+                  const badgeFg = exc ? '#b91c1c'
+                    : p.type === 'demand' ? '#1d4ed8'
+                    : p.type === 'supply' ? '#15803d' : '#92400e';
+                  const rowStyle = `border-bottom:1px solid var(--ies-gray-200);${exc ? 'background:#fafafa;color:var(--ies-gray-500);' : ''}`;
+                  const nameStyle = `padding:6px;font-weight:600;${exc ? 'text-decoration:line-through;' : ''}`;
+                  const ll = (v) => (v == null || Number.isNaN(v)) ? '<span style="color:var(--ies-gray-400);">—</span>' : v.toFixed(2);
+                  return `
+                  <tr style="${rowStyle}">
+                    <td style="${nameStyle}" title="${exc ? 'Excluded from the solve. Edit the source file and re-upload, or delete this row.' : ''}">${p.name || p.id}</td>
+                    <td style="padding:6px;text-align:right;">${ll(p.lat)}</td>
+                    <td style="padding:6px;text-align:right;">${ll(p.lng)}</td>
+                    <td style="padding:6px;text-align:right;">${(p.weight || 0).toLocaleString()}</td>
                     <td style="padding:6px;text-align:center;">
-                      <span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;
-                        background:${p.type === 'demand' ? '#dbeafe' : p.type === 'supply' ? '#dcfce7' : '#fef3c7'};
-                        color:${p.type === 'demand' ? '#1d4ed8' : p.type === 'supply' ? '#15803d' : '#92400e'};">
-                        ${p.type}
-                      </span>
+                      <span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;background:${badgeBg};color:${badgeFg};">${p.type}</span>
                     </td>
                     <td style="padding:6px;text-align:center;">
                       <button class="hub-btn hub-btn-sm hub-btn-secondary" data-pt-del="${i}" style="padding:4px 8px;">✕</button>
                     </td>
-                  </tr>
-                `).join('')}
+                  </tr>`;
+                }).join('')}
               </tbody>
             </table>
           </div>
@@ -723,7 +735,13 @@ function renderInputsPhase(el) {
 
       <div class="hub-card" style="margin-top:20px;background:linear-gradient(135deg,#0a1628,#0d1f3c);color:#fff;padding:16px 20px;">
         <div style="display:flex;gap:32px;align-items:center;">
-          ${kpi('Points', String(points.length))}
+          ${(() => {
+            const activeCount = points.filter(p => p.type !== 'excluded').length;
+            const excludedCount = points.length - activeCount;
+            return excludedCount > 0
+              ? kpi('Points', `${activeCount} active · ${excludedCount} excluded`)
+              : kpi('Points', String(activeCount));
+          })()}
           ${kpi('Total Weight', totalWeight.toLocaleString())}
           ${kpi('Centers (k)', String(config.numCenters))}
         </div>
