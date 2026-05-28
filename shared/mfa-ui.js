@@ -24,7 +24,7 @@
  * @module shared/mfa-ui
  */
 
-import { auth } from './auth.js?v=20260512-port27';
+import { auth } from './auth.js?v=20260526-mfalift1';
 
 // ─── Public entry point ──────────────────────────────────────────────────
 

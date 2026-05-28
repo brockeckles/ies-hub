@@ -29,7 +29,7 @@
  *   completePasswordRecovery → signed in.
  *
  * Usage:
- *   import { auth } from './auth.js?v=20260512-port27';
+ *   import { auth } from './auth.js?v=20260526-mfalift1';
  *
  *   await auth.bootstrapSession();            // call once before gate check
  *   if (!auth.isAuthenticated()) {
@@ -366,8 +366,18 @@ async function getAalLevel() {
  * @returns {Promise<boolean>}
  */
 async function requiresMfa() {
-  const lvl = await getAalLevel();
-  return lvl !== 'aal2';
+  // TEMPORARY (2026-05-26) — MFA gate LIFTED at Brock's request to unblock
+  // GXO IT reviewer logins (nathan.clarke001, alan.hall1). The gate is
+  // app-layer only; zero RLS policies invoke current_user_is_aal2(), so
+  // returning false here is a complete bypass with no DB-side fallback.
+  //
+  // TO RESTORE: uncomment the two original lines below and delete this
+  // early-return + comment block. No other file touches this function's
+  // behavior; flipping it back is a one-edit change.
+  //
+  //   const lvl = await getAalLevel();
+  //   return lvl !== 'aal2';
+  return false;
 }
 
 /**
