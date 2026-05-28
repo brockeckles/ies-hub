@@ -73,6 +73,19 @@ export const DEFAULT_CONFIG = {
   industry: '',
   dealStage: '',
   notes: '',
+  // 2026-05-28 — Mode mix (B3). When enabled, cost uses the
+  // mode-weighted effective $/mi instead of the single transportCostPerMile
+  // knob. Real networks blend TL / LTL / parcel; applying a flat TL rate
+  // to a parcel-heavy customer understates cost by 30-50%. Defaults are
+  // 100/0/0 (pure TL) so existing scenarios behave identically until the
+  // toggle is flipped.
+  modeMixEnabled: false,
+  modeMix: { tlPct: 100, ltlPct: 0, parcelPct: 0 },
+  // Per-mode effective rates — TL flat per-truck-mi, LTL/parcel are
+  // effective rates that fold in consolidation overhead / zone surcharges.
+  // Industry rules-of-thumb: TL spot $2.50-$3.20, LTL $3.80-$4.60 effective,
+  // parcel ground $7.50-$10.00 effective.
+  modeRates: { tlPerMile: 2.85, ltlPerMile: 4.20, parcelPerMile: 8.50 },
   // 2026-05-28 — CO₂ emissions intensity (B20). kg CO₂ per truck-mile.
   // Default 1.62 = EPA SmartWay 2024 US heavy-duty diesel Class 8 average.
   // Range 1.30 (new fleets) to 2.10 (older / refrigerated). Threaded
@@ -748,6 +761,29 @@ export function capWeightsByPercentile(points, percentile = 95) {
     ...p,
     weight: Math.min(p.weight, cap),
   }));
+}
+
+// ============================================================
+// MODE-MIX (B3 — 2026-05-28)
+// ============================================================
+
+/**
+ * Compute the effective $/truck-mi from a mode mix + per-mode rates.
+ * Mode shares are normalized to sum to 100 (so 70/30/0 and 70/30 both work).
+ * @param {{ tlPct?: number, ltlPct?: number, parcelPct?: number }} modeMix
+ * @param {{ tlPerMile?: number, ltlPerMile?: number, parcelPerMile?: number }} modeRates
+ * @returns {number}
+ */
+export function effectiveCpm(modeMix, modeRates) {
+  const tlPct     = Math.max(0, +modeMix?.tlPct     || 0);
+  const ltlPct    = Math.max(0, +modeMix?.ltlPct    || 0);
+  const parcelPct = Math.max(0, +modeMix?.parcelPct || 0);
+  const sum = tlPct + ltlPct + parcelPct;
+  if (sum <= 0) return 0;
+  const tlR     = +modeRates?.tlPerMile     || 0;
+  const ltlR    = +modeRates?.ltlPerMile    || 0;
+  const parcelR = +modeRates?.parcelPerMile || 0;
+  return (tlPct * tlR + ltlPct * ltlR + parcelPct * parcelR) / sum;
 }
 
 // ============================================================

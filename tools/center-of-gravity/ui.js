@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-cogtriage15';
+import * as calc from './calc.js?v=20260528-cogtriage16';
 import * as api from './api.js?v=20260504-auth1';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
@@ -231,7 +231,7 @@ function openEditor(savedRow) {
       calc.applyCapacityConstraints(cogResult, _solvePts, config.capacityPerDC ?? 0);
       _enrichCogResultWithCost(cogResult, _solvePts);
       calc.flagServiceViolations(cogResult, _solvePts, config.maxServiceMiles ?? 0, config.roadFactor ?? 1.22);
-      sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
+      sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, 5), _resolveCpm(), config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
     } catch (err) {
       console.warn('[COG] Result rebuild from saved inputs failed; falling back to partial render:', err);
     }
@@ -282,7 +282,7 @@ function runOptimizeAndRender() {
   sensitivityData = calc.sensitivityAnalysis(
     _solvePts,
     Math.max(config.numCenters, 5),
-    config.transportCostPerMile,
+    _resolveCpm(),
     config.maxIterations,
     config.unitsPerTruck || 25000,
     config.fixedCostPerDC || 0,
@@ -417,7 +417,7 @@ async function handleSave() {
           const solvePts = _pointsForSolve();
           const csMcr = calc.buildMcrFromDcList(csList, solvePts);
           if (csMcr) {
-            const csCost = calc.estimateTransportCost(csMcr, solvePts, config.transportCostPerMile, config.unitsPerTruck || 25000, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
+            const csCost = calc.estimateTransportCost(csMcr, solvePts, _resolveCpm(), config.unitsPerTruck || 25000, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
             calc.flagServiceViolations(csMcr, solvePts, config.maxServiceMiles ?? 0, config.roadFactor ?? 1.22);
             const csCo2 = (csCost.totalTruckMiles || 0) * (config.co2KgPerTruckMile ?? 1.62) / 1000;
             const propCost = cogResult.totalCost || 0;
@@ -498,6 +498,18 @@ export function unmount() {
 // SHELL
 // ============================================================
 
+// 2026-05-28 B3 — single accessor for "what $/mi should we use right now".
+// When modeMixEnabled is on, returns the mode-weighted effective rate;
+// otherwise returns the legacy single transportCostPerMile. Used by all
+// estimateTransportCost + sensitivityAnalysis call sites so flipping
+// the mode toggle works without touching every caller.
+function _resolveCpm() {
+  if (config.modeMixEnabled) {
+    return calc.effectiveCpm(config.modeMix, config.modeRates);
+  }
+  return config.transportCostPerMile;
+}
+
 // 2026-05-26 — Single source of cost truth. Stamp cost fields onto cogResult
 // so chrome KPI, Analysis-tab tiles, and the per-row table all read the same
 // numbers and all reflect the round-trip factor. Without this, kMeansCog
@@ -509,7 +521,7 @@ function _enrichCogResultWithCost(result, solvePts) {
     const costEst = calc.estimateTransportCost(
       result,
       solvePts,
-      config.transportCostPerMile,
+      _resolveCpm(),
       config.unitsPerTruck || 25000,
       config.roundTripFactor ?? 2.0,
       config.roadFactor ?? 1.22,
@@ -777,7 +789,7 @@ async function bindShellEvents() {
         calc.applyCapacityConstraints(cogResult, _solvePts, config.capacityPerDC ?? 0);
         _enrichCogResultWithCost(cogResult, _solvePts);
         calc.flagServiceViolations(cogResult, _solvePts, config.maxServiceMiles ?? 0, config.roadFactor ?? 1.22);
-        sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
+        sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, 5), _resolveCpm(), config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
         activePhase = 'run';
         runSubTab = 'numbers';
         runState.markClean(runStateInputs());
@@ -1369,6 +1381,66 @@ function renderParametersPhase(el) {
         </div>
       </div>
 
+      <!-- 2026-05-28 B3 — Mode mix (TL / LTL / parcel). -->
+      <div class="hub-card" style="margin-bottom:20px;padding:16px;border-left:3px solid #7c3aed;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:12px;flex-wrap:wrap;">
+          <div>
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-400);">Mode Mix <span style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--ies-gray-300);">(optional)</span></div>
+            <div style="font-size:11px;color:var(--ies-gray-400);margin-top:2px;">Blend TL / LTL / parcel rates instead of a single \$/mi. Real networks rarely run 100% TL — applying a flat TL rate to a parcel-heavy customer understates cost by 30-50%.</div>
+          </div>
+          <label style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;" title="When ON, the cost engine uses the mode-weighted effective rate instead of the single \$/mi knob. The Truck \$/mi input on Analysis Configuration is ignored while this is on.">
+            <input type="checkbox" id="cog-modemix-toggle" ${config.modeMixEnabled ? 'checked' : ''} style="cursor:pointer;">
+            Use mode mix
+          </label>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:10px 16px;font-size:12px;${config.modeMixEnabled ? '' : 'opacity:0.55;'}">
+          <div>
+            <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-500);margin-bottom:3px;">TL share</label>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <input type="number" value="${config.modeMix?.tlPct ?? 100}" min="0" max="100" step="5" id="cog-modemix-tl-pct" ${config.modeMixEnabled ? '' : 'disabled'}
+                     style="width:64px;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
+              <span style="color:var(--ies-gray-500);">% @ \$</span>
+              <input type="number" value="${(config.modeRates?.tlPerMile ?? 2.85).toFixed(2)}" min="0" step="0.05" id="cog-moderates-tl" ${config.modeMixEnabled ? '' : 'disabled'}
+                     style="width:64px;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
+              <span style="color:var(--ies-gray-500);">/mi</span>
+            </div>
+            <div style="font-size:10px;color:var(--ies-gray-400);margin-top:2px;">Truckload — \$2.50-3.20 spot</div>
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-500);margin-bottom:3px;">LTL share</label>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <input type="number" value="${config.modeMix?.ltlPct ?? 0}" min="0" max="100" step="5" id="cog-modemix-ltl-pct" ${config.modeMixEnabled ? '' : 'disabled'}
+                     style="width:64px;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
+              <span style="color:var(--ies-gray-500);">% @ \$</span>
+              <input type="number" value="${(config.modeRates?.ltlPerMile ?? 4.20).toFixed(2)}" min="0" step="0.05" id="cog-moderates-ltl" ${config.modeMixEnabled ? '' : 'disabled'}
+                     style="width:64px;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
+              <span style="color:var(--ies-gray-500);">/mi</span>
+            </div>
+            <div style="font-size:10px;color:var(--ies-gray-400);margin-top:2px;">Less-than-truckload — \$3.80-4.60 effective</div>
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-500);margin-bottom:3px;">Parcel share</label>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <input type="number" value="${config.modeMix?.parcelPct ?? 0}" min="0" max="100" step="5" id="cog-modemix-parcel-pct" ${config.modeMixEnabled ? '' : 'disabled'}
+                     style="width:64px;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
+              <span style="color:var(--ies-gray-500);">% @ \$</span>
+              <input type="number" value="${(config.modeRates?.parcelPerMile ?? 8.50).toFixed(2)}" min="0" step="0.05" id="cog-moderates-parcel" ${config.modeMixEnabled ? '' : 'disabled'}
+                     style="width:64px;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
+              <span style="color:var(--ies-gray-500);">/mi</span>
+            </div>
+            <div style="font-size:10px;color:var(--ies-gray-400);margin-top:2px;">Ground parcel — \$7.50-10.00 effective</div>
+          </div>
+        </div>
+        ${(() => {
+          const sum = (config.modeMix?.tlPct || 0) + (config.modeMix?.ltlPct || 0) + (config.modeMix?.parcelPct || 0);
+          const effective = calc.effectiveCpm(config.modeMix || {}, config.modeRates || {});
+          if (!config.modeMixEnabled) return `<div style="font-size:11px;color:var(--ies-gray-400);margin-top:10px;font-style:italic;">Mode mix is off — Analysis uses the single Truck \$/mi knob (\$${(config.transportCostPerMile || 0).toFixed(2)}).</div>`;
+          if (sum === 0) return `<div style="font-size:11px;color:#b91c1c;margin-top:10px;font-weight:600;">Shares sum to 0 — set at least one mode > 0 to compute cost.</div>`;
+          if (Math.abs(sum - 100) > 0.5) return `<div style="font-size:11px;color:#a16207;margin-top:10px;">Shares sum to ${sum}% (will be normalized to 100%) · blended rate <strong>\$${effective.toFixed(2)}/mi</strong></div>`;
+          return `<div style="font-size:11px;color:#15803d;margin-top:10px;font-weight:600;">Blended effective rate: \$${effective.toFixed(2)}/mi</div>`;
+        })()}
+      </div>
+
       <!-- 2026-05-28 E2 — Current State DCs for the vs-current benchmark. -->
       <div class="hub-card" style="margin-bottom:20px;padding:16px;border-left:3px solid #92400e;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:12px;flex-wrap:wrap;">
@@ -1481,6 +1553,37 @@ function renderParametersPhase(el) {
     config.outlierCapPercentile = Math.max(80, Math.min(99, isFinite(v) ? v : 95));
     markDirty();
   });
+
+  // 2026-05-28 B3 — Mode mix handlers.
+  el.querySelector('#cog-modemix-toggle')?.addEventListener('change', (e) => {
+    config.modeMixEnabled = /** @type {HTMLInputElement} */ (e.target).checked;
+    markDirty();
+    renderParametersPhase(el);
+  });
+  const bindModePct = (id, key) => {
+    el.querySelector(id)?.addEventListener('change', (e) => {
+      const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
+      config.modeMix = config.modeMix || { tlPct: 100, ltlPct: 0, parcelPct: 0 };
+      config.modeMix[key] = Math.max(0, Math.min(100, Number.isFinite(v) ? v : 0));
+      markDirty();
+      renderParametersPhase(el);
+    });
+  };
+  bindModePct('#cog-modemix-tl-pct', 'tlPct');
+  bindModePct('#cog-modemix-ltl-pct', 'ltlPct');
+  bindModePct('#cog-modemix-parcel-pct', 'parcelPct');
+  const bindModeRate = (id, key) => {
+    el.querySelector(id)?.addEventListener('change', (e) => {
+      const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
+      config.modeRates = config.modeRates || { tlPerMile: 2.85, ltlPerMile: 4.20, parcelPerMile: 8.50 };
+      config.modeRates[key] = Math.max(0, Number.isFinite(v) ? v : 0);
+      markDirty();
+      renderParametersPhase(el);
+    });
+  };
+  bindModeRate('#cog-moderates-tl', 'tlPerMile');
+  bindModeRate('#cog-moderates-ltl', 'ltlPerMile');
+  bindModeRate('#cog-moderates-parcel', 'parcelPerMile');
 
   // 2026-05-28 E2 — Current state handlers.
   el.querySelector('#cog-currentstate-list')?.addEventListener('change', (e) => {
@@ -1641,7 +1744,7 @@ function renderAnalysis(el) {
     return;
   }
 
-  const costEst = calc.estimateTransportCost(cogResult, points, config.transportCostPerMile, config.unitsPerTruck || 25000, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
+  const costEst = calc.estimateTransportCost(cogResult, points, _resolveCpm(), config.unitsPerTruck || 25000, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
 
   el.innerHTML = `
     <div>
@@ -1655,7 +1758,7 @@ function renderAnalysis(el) {
         const csMcr = calc.buildMcrFromDcList(csList, solvePts);
         if (!csMcr) return '';
         // Run the same math on the current-state network.
-        const csCost = calc.estimateTransportCost(csMcr, solvePts, config.transportCostPerMile, config.unitsPerTruck || 25000, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
+        const csCost = calc.estimateTransportCost(csMcr, solvePts, _resolveCpm(), config.unitsPerTruck || 25000, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
         calc.flagServiceViolations(csMcr, solvePts, config.maxServiceMiles ?? 0, config.roadFactor ?? 1.22);
         const csCo2 = (csCost.totalTruckMiles || 0) * (config.co2KgPerTruckMile ?? 1.62) / 1000;
         const csAvgDist = csMcr.totalWeightedDistance / Math.max(1, solvePts.reduce((s, p) => s + (p.weight || 0), 0));
@@ -1768,7 +1871,7 @@ function renderAnalysis(el) {
         const totalLoadedMi = totalGcMi * road;
         const rt = Math.max(1, +config.roundTripFactor || 2.0);
         const totalMi = totalLoadedMi * rt;
-        const cpm = config.transportCostPerMile || 0;
+        const cpm = config.modeMixEnabled ? calc.effectiveCpm(config.modeMix, config.modeRates) : (config.transportCostPerMile || 0);
         const unitLabel = (calc.getWeightUnitMeta(config.weightUnit || 'lb').short || 'units');
         const fmtNum = (n) => Math.round(n).toLocaleString();
         return `
@@ -1790,6 +1893,12 @@ function renderAnalysis(el) {
             <span style="color:var(--ies-gray-500);">× ${rt.toFixed(1)} round-trip factor</span>
             <span></span>
             <span style="text-align:right;font-weight:600;">= ${fmtNum(totalMi)} total truck-mi/yr</span>
+            ${config.modeMixEnabled ? `
+              <span style="color:var(--ies-gray-500);grid-column:1 / 4;border-top:1px dashed var(--ies-gray-200);padding-top:6px;margin-top:4px;"></span>
+              <span style="color:var(--ies-gray-500);">Mode mix: TL ${config.modeMix.tlPct}% @ $${(config.modeRates.tlPerMile || 0).toFixed(2)} · LTL ${config.modeMix.ltlPct}% @ $${(config.modeRates.ltlPerMile || 0).toFixed(2)} · Parcel ${config.modeMix.parcelPct}% @ $${(config.modeRates.parcelPerMile || 0).toFixed(2)}</span>
+              <span></span>
+              <span style="text-align:right;font-weight:600;">= $${cpm.toFixed(2)} blended /mi</span>
+            ` : ''}
             <span style="color:var(--ies-gray-500);">× $${cpm.toFixed(2)} per loaded mile</span>
             <span></span>
             <span style="text-align:right;font-weight:600;">= ${calc.formatCurrency(totalMi * cpm, { compact: true })}/yr</span>
@@ -2496,7 +2605,7 @@ function renderSensitivity(el) {
           Optimal network of <strong>${cogResult.centers.length}</strong> facilit${cogResult.centers.length === 1 ? 'y' : 'ies'} reduces
           avg distance to <strong>${cogResult.centers[0] ? calc.formatMiles(cogResult.centers.reduce((s, c) => s + c.avgWeightedDistance, 0) / cogResult.centers.length) : 'N/A'}</strong>
           per facility, with total annual transport cost of <strong>${calc.formatCurrency(cogResult.assignments ?
-            calc.estimateTransportCost(cogResult, points, config.transportCostPerMile, config.unitsPerTruck || 25000, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22).totalCost : 0)}</strong>.
+            calc.estimateTransportCost(cogResult, points, _resolveCpm(), config.unitsPerTruck || 25000, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22).totalCost : 0)}</strong>.
           Compared to single facility: <strong>${savingsPct}%</strong> savings.
         </div>
       </div>
@@ -2665,7 +2774,7 @@ function exportCogAnalysis() {
     return;
   }
 
-  const costEst = calc.estimateTransportCost(cogResult, points, config.transportCostPerMile, config.unitsPerTruck || 25000, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
+  const costEst = calc.estimateTransportCost(cogResult, points, _resolveCpm(), config.unitsPerTruck || 25000, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
   const now = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
   const filename = `cog-analysis-${now}.csv`;
 
