@@ -60,6 +60,12 @@ export const DEFAULT_CONFIG = {
   /** @type {Array<{ label?: string, lat: number, lng: number }>} */
   candidateFacilities: [],
   snapToCandidates: false,
+  // 2026-05-28 — DC capacity ceiling (B6). When > 0, post-solve walks
+  // demand from overflowing clusters to nearest under-capacity cluster
+  // until everyone is within cap or every cluster is full. 0 = disabled
+  // (no capacity check, k-means assignment kept as-is). Units match
+  // weightUnit. Typical: 1.5M lbs/yr small DC, 5M med, 15M large.
+  capacityPerDC: 0,
   // 2026-05-28 — service-level constraint (B7). Threshold in road-miles
   // above which an assignment is flagged 'out of service'. Doesn't change
   // the k-means math — just surfaces violations so SDs can answer the
@@ -729,6 +735,120 @@ export function flagServiceViolations(mcr, points, maxMiles = 0, roadFactor = 1.
   stats.coveragePct = totalW > 0 ? (stats.coveredWeight / totalW * 100) : 100;
   // Stamp summary on the result so renderAnalysis / chrome KPI can pull it.
   mcr.serviceStats = stats;
+  return stats;
+}
+
+// ============================================================
+// CAPACITY CONSTRAINTS (B6 — 2026-05-28)
+// ============================================================
+
+/**
+ * Post-solve capacity walk. Mutates `mcr.assignments` in place to move
+ * demand from over-capacity clusters to nearest under-capacity clusters
+ * until everyone is within cap (or no under-cap cluster exists, in which
+ * case `stillOver` is true). Stamps mcr.capacityStats with utilization
+ * per cluster + aggregate. capacityPerDC <= 0 disables the walk and just
+ * reports utilization at 0 cap (so UI can show '— no cap' state).
+ *
+ * Algorithm: while any cluster exceeds cap and iter < 50, take the worst-
+ * overflowing cluster's farthest-assigned point (by haversine — most
+ * expensive to keep) and reassign it to the nearest under-cap cluster.
+ *
+ * @param {import('./types.js?v=20260418-sP').MultiCogResult} mcr
+ * @param {import('./types.js?v=20260418-sP').WeightedPoint[]} points
+ * @param {number} capacityPerDC
+ * @returns {{ capacityPerDC: number, perCluster: Array<{assignedWeight:number, utilization:number, overWeight:number}>, totalOverflow:number, reassignmentCount:number, stillOver:boolean, peakUtilization:number }}
+ */
+export function applyCapacityConstraints(mcr, points, capacityPerDC = 0) {
+  const k = mcr?.centers?.length || 0;
+  const stats = { capacityPerDC: capacityPerDC || 0, perCluster: [], totalOverflow: 0, reassignmentCount: 0, stillOver: false, peakUtilization: 0 };
+  if (!mcr || !Array.isArray(mcr.assignments) || k === 0) {
+    mcr && (mcr.capacityStats = stats);
+    return stats;
+  }
+  // Build weight + index per assignment for fast iteration.
+  const ptById = new Map(points.map(p => [p.id, p]));
+  // Re-init cluster weights from current assignments.
+  const clusterWeight = new Array(k).fill(0);
+  for (const a of mcr.assignments) {
+    const w = ptById.get(a.pointId)?.weight || 0;
+    clusterWeight[a.clusterId] += w;
+  }
+  const cap = capacityPerDC > 0 ? capacityPerDC : Infinity;
+  let iter = 0;
+  const MAX_ITER = 50;
+  while (cap !== Infinity && iter < MAX_ITER) {
+    // Find worst overflower.
+    let worstCi = -1;
+    let worstOver = 0;
+    for (let i = 0; i < k; i++) {
+      const over = clusterWeight[i] - cap;
+      if (over > worstOver) { worstOver = over; worstCi = i; }
+    }
+    if (worstCi < 0) break;  // no overflow
+    // Within the worst cluster, take the farthest-assigned point (by haversine).
+    let farIdx = -1;
+    let farDist = -1;
+    for (let i = 0; i < mcr.assignments.length; i++) {
+      if (mcr.assignments[i].clusterId !== worstCi) continue;
+      if (mcr.assignments[i].distanceToCenter > farDist) { farDist = mcr.assignments[i].distanceToCenter; farIdx = i; }
+    }
+    if (farIdx < 0) break;
+    // Find the nearest under-cap cluster for that point.
+    const pt = ptById.get(mcr.assignments[farIdx].pointId);
+    if (!pt) break;
+    let destCi = -1;
+    let destDist = Infinity;
+    for (let i = 0; i < k; i++) {
+      if (i === worstCi) continue;
+      if (clusterWeight[i] >= cap) continue;
+      const d = haversine(pt.lat, pt.lng, mcr.centers[i].lat, mcr.centers[i].lng);
+      if (d < destDist) { destDist = d; destCi = i; }
+    }
+    if (destCi < 0) { stats.stillOver = true; break; }  // every cluster full
+    // Reassign.
+    clusterWeight[worstCi] -= (pt.weight || 0);
+    clusterWeight[destCi] += (pt.weight || 0);
+    mcr.assignments[farIdx].clusterId = destCi;
+    mcr.assignments[farIdx].distanceToCenter = destDist;
+    mcr.assignments[farIdx].reassigned = true;
+    stats.reassignmentCount += 1;
+    iter += 1;
+  }
+  // Compute final per-cluster stats.
+  let total = 0;
+  for (let i = 0; i < k; i++) {
+    const w = clusterWeight[i];
+    const over = cap === Infinity ? 0 : Math.max(0, w - cap);
+    const util = cap === Infinity ? 0 : (w / cap * 100);
+    stats.perCluster.push({ assignedWeight: w, utilization: util, overWeight: over });
+    total += over;
+    if (util > stats.peakUtilization) stats.peakUtilization = util;
+  }
+  stats.totalOverflow = total;
+  // Refresh per-center summary fields since assignments may have moved.
+  for (let ci = 0; ci < k; ci++) {
+    const clusterPoints = points.filter(p => {
+      const aIdx = mcr.assignments.findIndex(a => a.pointId === p.id);
+      return aIdx >= 0 && mcr.assignments[aIdx].clusterId === ci;
+    });
+    if (clusterPoints.length === 0) {
+      mcr.centers[ci].totalWeight = 0;
+      continue;
+    }
+    const tw = clusterPoints.reduce((s, p) => s + Math.max(0, p.weight || 0), 0);
+    const distances = clusterPoints.map(p => ({ dist: haversine(mcr.centers[ci].lat, mcr.centers[ci].lng, p.lat, p.lng), weight: p.weight || 0 }));
+    const wdSum = distances.reduce((s, d) => s + d.dist * d.weight, 0);
+    mcr.centers[ci].totalWeight = tw;
+    mcr.centers[ci].avgWeightedDistance = tw > 0 ? wdSum / tw : 0;
+    mcr.centers[ci].maxDistance = Math.max(0, ...distances.map(d => d.dist));
+  }
+  // Recompute totalWeightedDistance.
+  mcr.totalWeightedDistance = mcr.assignments.reduce((s, a) => {
+    const p = ptById.get(a.pointId);
+    return s + a.distanceToCenter * (p?.weight || 0);
+  }, 0);
+  mcr.capacityStats = stats;
   return stats;
 }
 

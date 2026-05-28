@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-cogtriage7';
+import * as calc from './calc.js?v=20260528-cogtriage8';
 import * as api from './api.js?v=20260504-auth1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
 
@@ -203,6 +203,7 @@ function openEditor(savedRow) {
       if (config.snapToCandidates && (config.candidateFacilities || []).length > 0) {
         cogResult = calc.snapCentersToCandidates(cogResult, _solvePts, config.candidateFacilities);
       }
+      calc.applyCapacityConstraints(cogResult, _solvePts, config.capacityPerDC ?? 0);
       _enrichCogResultWithCost(cogResult, _solvePts);
       calc.flagServiceViolations(cogResult, _solvePts, config.maxServiceMiles ?? 0, config.roadFactor ?? 1.22);
       sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
@@ -250,6 +251,7 @@ function runOptimizeAndRender() {
       if (config.snapToCandidates && (config.candidateFacilities || []).length > 0) {
         cogResult = calc.snapCentersToCandidates(cogResult, _solvePts, config.candidateFacilities);
       }
+  calc.applyCapacityConstraints(cogResult, _solvePts, config.capacityPerDC ?? 0);
   _enrichCogResultWithCost(cogResult, _solvePts);
   calc.flagServiceViolations(cogResult, _solvePts, config.maxServiceMiles ?? 0, config.roadFactor ?? 1.22);
   sensitivityData = calc.sensitivityAnalysis(
@@ -569,6 +571,21 @@ function _computeCogKpis() {
     value: svcStr,
     hint: svcHint,
   });
+  // 2026-05-28 — Peak utilization KPI (B6). Only meaningful when
+  // capacityPerDC > 0; otherwise show '—'.
+  let utilStr = '—';
+  let utilHint = 'Set Capacity / DC in Parameters to track utilization.';
+  if (cogResult && cogResult.capacityStats && cogResult.capacityStats.capacityPerDC > 0) {
+    const pk = cogResult.capacityStats.peakUtilization;
+    utilStr = `${pk.toFixed(0)}%`;
+    if (cogResult.capacityStats.stillOver) utilStr += ' ⚠';
+    utilHint = `Peak cluster utilization against ${cogResult.capacityStats.capacityPerDC.toLocaleString()} cap. ${cogResult.capacityStats.reassignmentCount} reassignments walked.${cogResult.capacityStats.stillOver ? ' STILL OVER — raise k or cap.' : ''}`;
+  }
+  items.push({
+    label: 'Peak Util',
+    value: utilStr,
+    hint: utilHint,
+  });
   return items;
 }
 
@@ -634,6 +651,7 @@ async function bindShellEvents() {
         if (config.snapToCandidates && (config.candidateFacilities || []).length > 0) {
           cogResult = calc.snapCentersToCandidates(cogResult, _solvePts, config.candidateFacilities);
         }
+        calc.applyCapacityConstraints(cogResult, _solvePts, config.capacityPerDC ?? 0);
         _enrichCogResultWithCost(cogResult, _solvePts);
         calc.flagServiceViolations(cogResult, _solvePts, config.maxServiceMiles ?? 0, config.roadFactor ?? 1.22);
         sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, 5), config.transportCostPerMile, config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
@@ -1105,6 +1123,12 @@ function renderParametersPhase(el) {
                    style="width:80px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
             <span style="font-size:11px;color:var(--ies-gray-400);">0 = off · 250 = same-day parcel · 500 = next-day TL · 800 = 2-day LTL</span>
           </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <label style="font-size:13px;font-weight:600;" title="Capacity ceiling per DC (in your weight unit / yr). Post-solve, any cluster over cap reassigns its farthest demand to the nearest under-cap cluster until everyone fits or all clusters are full. 0 = disabled (k-means assignment kept as-is).">Capacity / DC:</label>
+            <input type="number" value="${config.capacityPerDC ?? 0}" step="100000" min="0" id="cog-capacity"
+                   style="width:120px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
+            <span style="font-size:11px;color:var(--ies-gray-400);">0 = off · ${(calc.getWeightUnitMeta(config.weightUnit || 'lb').short || 'units')}/yr · typical 1.5M small / 5M med / 15M large</span>
+          </div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             <label style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;cursor:pointer;" title="When ON, demand points whose lat/lng falls inside AK (51-72°N, -180 to -130°W) or HI (18-23°N, -161 to -154°W) bounding boxes are dropped before solving. Prevents a single offshore customer from dragging the centroid into the Pacific.">
               <input type="checkbox" id="cog-exclude-offshore" ${config.excludeOffshore ? 'checked' : ''} style="cursor:pointer;">
@@ -1180,6 +1204,12 @@ function renderParametersPhase(el) {
   el.querySelector('#cog-max-service')?.addEventListener('change', (e) => {
     const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
     config.maxServiceMiles = (Number.isFinite(v) && v >= 0) ? v : 0;
+    markDirty();
+  });
+  // 2026-05-28 — Capacity per DC input (B6 capacity constraint).
+  el.querySelector('#cog-capacity')?.addEventListener('change', (e) => {
+    const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
+    config.capacityPerDC = (Number.isFinite(v) && v >= 0) ? v : 0;
     markDirty();
   });
   // 2026-05-26 — Exclude Alaska & Hawaii checkbox.
@@ -1441,7 +1471,14 @@ function renderAnalysis(el) {
             </div>
             <div>
               <span style="color:var(--ies-gray-400);font-size:11px;text-transform:uppercase;">Assigned Weight</span>
-              <div style="font-weight:600;">${c.totalWeight.toLocaleString()}</div>
+              <div style="font-weight:600;">${c.totalWeight.toLocaleString()}${(() => {
+                const cap = cogResult.capacityStats;
+                if (!cap || cap.capacityPerDC <= 0 || !cap.perCluster[i]) return '';
+                const u = cap.perCluster[i].utilization;
+                const over = cap.perCluster[i].overWeight > 0;
+                const color = over ? '#b91c1c' : (u > 90 ? '#d97706' : 'var(--ies-gray-400)');
+                return ` <span style="font-size:11px;font-weight:700;color:${color};">${u.toFixed(0)}%${over ? ' OVER' : ''}</span>`;
+              })()}</div>
             </div>
             <div>
               <span style="color:var(--ies-gray-400);font-size:11px;text-transform:uppercase;">Avg Weighted Dist</span>
@@ -1460,6 +1497,18 @@ function renderAnalysis(el) {
         </div>
       `;}).join('')}
 
+      ${(cogResult.capacityStats && cogResult.capacityStats.capacityPerDC > 0 && cogResult.capacityStats.stillOver) ? `
+        <div class="hub-card" style="margin-bottom:16px;padding:14px 18px;background:#fef2f2;border-left:4px solid #b91c1c;">
+          <div style="font-size:13px;font-weight:700;color:#b91c1c;margin-bottom:4px;">Capacity overflow — solution not feasible</div>
+          <div style="font-size:12px;color:#7f1d1d;line-height:1.5;">
+            Every cluster hit the ${cogResult.capacityStats.capacityPerDC.toLocaleString()} cap and there's still
+            <strong>${cogResult.capacityStats.totalOverflow.toLocaleString()}</strong> in overflow weight.
+            The reassignment walk made ${cogResult.capacityStats.reassignmentCount} moves before stalling.
+            Options: raise <strong>Centers (k)</strong>, increase <strong>Capacity / DC</strong>, or accept the overflow as a third-party / overflow-DC plug.
+            Adjust in <a href="#" data-cog-jump="parameters" style="color:#b91c1c;text-decoration:underline;">Parameters</a>.
+          </div>
+        </div>
+      ` : ''}
       ${(cogResult.serviceStats && cogResult.serviceStats.maxMiles > 0 && cogResult.serviceStats.outCount > 0) ? `
         <div class="hub-card" style="margin-bottom:16px;padding:14px 18px;background:#fef2f2;border-left:4px solid #b91c1c;">
           <div style="font-size:13px;font-weight:700;color:#b91c1c;margin-bottom:4px;">Service-level violations</div>
