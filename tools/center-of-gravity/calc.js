@@ -94,6 +94,12 @@ export const DEFAULT_CONFIG = {
   // this number; without it, the COG output is a non-starter for major
   // 2026 deals.
   co2KgPerTruckMile: 1.62,
+  // 2026-05-28 — B17 sensitivity range. Maximum k explored on the
+  // Sensitivity tab. Was hardcoded to Math.max(numCenters, 5) which made
+  // 'how would a 12-DC network compare' impossible to test without
+  // bumping numCenters. Default 8 covers typical network-design ranges;
+  // user can crank to 20 for big-network deep dives.
+  sensitivityMaxK: 8,
   // 2026-05-28 — DC capacity ceiling (B6). When > 0, post-solve walks
   // demand from overflowing clusters to nearest under-capacity cluster
   // until everyone is within cap or every cluster is full. 0 = disabled

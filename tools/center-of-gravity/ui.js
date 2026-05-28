@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-cogtriage16';
+import * as calc from './calc.js?v=20260528-cogtriage17';
 import * as api from './api.js?v=20260504-auth1';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
@@ -74,6 +74,10 @@ let _pointsSort = { column: null, direction: 'asc' };
 let comparedScenarioIds = [];
 /** @type {Array<any>|null} */
 let _savedScenariosCache = null;
+
+// 2026-05-28 H1 — keyboard shortcut binding guard (document-level listener
+// registered once per page-load to avoid double-firing on chrome re-renders).
+let _kbShortcutsBound = false;
 
 /**
  * Map overlay options — service-zone rings + heatmap toggles with
@@ -231,7 +235,7 @@ function openEditor(savedRow) {
       calc.applyCapacityConstraints(cogResult, _solvePts, config.capacityPerDC ?? 0);
       _enrichCogResultWithCost(cogResult, _solvePts);
       calc.flagServiceViolations(cogResult, _solvePts, config.maxServiceMiles ?? 0, config.roadFactor ?? 1.22);
-      sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, 5), _resolveCpm(), config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
+      sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, config.sensitivityMaxK ?? 8), _resolveCpm(), config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
     } catch (err) {
       console.warn('[COG] Result rebuild from saved inputs failed; falling back to partial render:', err);
     }
@@ -281,7 +285,7 @@ function runOptimizeAndRender() {
   calc.flagServiceViolations(cogResult, _solvePts, config.maxServiceMiles ?? 0, config.roadFactor ?? 1.22);
   sensitivityData = calc.sensitivityAnalysis(
     _solvePts,
-    Math.max(config.numCenters, 5),
+    Math.max(config.numCenters, config.sensitivityMaxK ?? 8),
     _resolveCpm(),
     config.maxIterations,
     config.unitsPerTruck || 25000,
@@ -789,7 +793,7 @@ async function bindShellEvents() {
         calc.applyCapacityConstraints(cogResult, _solvePts, config.capacityPerDC ?? 0);
         _enrichCogResultWithCost(cogResult, _solvePts);
         calc.flagServiceViolations(cogResult, _solvePts, config.maxServiceMiles ?? 0, config.roadFactor ?? 1.22);
-        sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, 5), _resolveCpm(), config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
+        sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, config.sensitivityMaxK ?? 8), _resolveCpm(), config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
         activePhase = 'run';
         runSubTab = 'numbers';
         runState.markClean(runStateInputs());
@@ -812,6 +816,58 @@ async function bindShellEvents() {
       if (btn) btn.dispatchEvent(fakeEvent);
     },
   });
+
+  // 2026-05-28 H1 — keyboard shortcuts. Single document-level listener,
+  // gated so it only fires when COG is the active tool + no input is
+  // focused (don't hijack typing into a textarea). Wired via a guard
+  // flag so we don't double-register on re-bind.
+  if (!_kbShortcutsBound) {
+    _kbShortcutsBound = true;
+    document.addEventListener('keydown', (e) => {
+      if (!rootEl || !document.body.contains(rootEl)) return;
+      // Ignore when typing into an input / textarea / select.
+      const tag = (e.target?.tagName || '').toUpperCase();
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target?.isContentEditable) return;
+      // Ignore meta combos — Cmd+Enter is handled by the chrome primary
+      // shortcut; Cmd+S we don't want to swallow.
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const k = (e.key || '').toLowerCase();
+      const phaseMap = { '1': 'inputs', '2': 'parameters', '3': 'run' };
+      const subTabMap = { n: 'numbers', m: 'map', v: 'sensitivity', c: 'compare' };
+      if (phaseMap[k]) {
+        e.preventDefault();
+        activePhase = /** @type {any} */ (phaseMap[k]);
+        if (activePhase === 'run' && !runSubTab) runSubTab = 'numbers';
+        rootEl.innerHTML = renderShell();
+        bindShellEvents();
+        renderContent();
+        _refreshCogKpis();
+      } else if (subTabMap[k] && activePhase === 'run') {
+        e.preventDefault();
+        runSubTab = subTabMap[k];
+        rootEl.innerHTML = renderShell();
+        bindShellEvents();
+        renderContent();
+        _refreshCogKpis();
+      } else if (k === 'a' && activePhase === 'inputs') {
+        e.preventDefault();
+        // Add an empty point (matches the Blank button on Seeders).
+        points.push({ id: 'p' + Date.now(), name: 'New Point', lat: 39.83, lng: -98.58, weight: 10000, type: 'demand' });
+        markDirty();
+        const inputsEl = rootEl.querySelector('#cog-content');
+        if (inputsEl) renderInputsPhase(inputsEl);
+      } else if (k === 's') {
+        e.preventDefault();
+        handleSave();
+      } else if (k === 'e' && cogResult) {
+        e.preventDefault();
+        exportCogAnalysis();
+      } else if (k === '?') {
+        e.preventDefault();
+        showToast('Shortcuts: 1/2/3 = Inputs/Parameters/Run · N/M/V/C = Numbers/Map/Sensitivity/Compare · A = add point · S = save · E = export CSV · Cmd+Enter = Run', 'info');
+      }
+    });
+  }
 
   // Note: run-phase sub-tabs (Numbers/Map/Sensitivity) now live in chrome
   // Row 2 as section pills — onSection handler above routes those clicks.
@@ -1290,7 +1346,10 @@ function renderParametersPhase(el) {
     <div>
       <!-- Analysis Configuration (COG-SCOPE-2 lift) -->
       <div class="hub-card" style="margin-bottom:20px;padding:16px;border-left:3px solid var(--ies-blue);">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-400);margin-bottom:10px;">Analysis Configuration</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:12px;">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-400);">Analysis Configuration</div>
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-reset-defaults" title="Reset every Parameters knob to its default value (k=1, $2.85/mi, rt=2.0, road=1.22, no SLA, no capacity, mode mix off…). Preserves Deal Context, points, and Current State.">↺ Reset defaults</button>
+        </div>
         <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;">
           <div style="display:flex;align-items:center;gap:8px;">
             <label style="font-size:13px;font-weight:600;">Centers (k):</label>
@@ -1321,6 +1380,12 @@ function renderParametersPhase(el) {
             <label style="font-size:13px;font-weight:600;">Max Iterations:</label>
             <input type="number" value="${config.maxIterations || 100}" min="10" max="500" step="10" id="cog-iter"
                    style="width:80px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <label style="font-size:13px;font-weight:600;" title="Maximum k explored on the Sensitivity tab. Each k from 1..N gets its own solve. Default 8 covers typical network ranges; bump to 12-20 for big-network deep dives at the cost of slower Run.">Sensitivity max k:</label>
+            <input type="number" value="${config.sensitivityMaxK ?? 8}" min="2" max="20" step="1" id="cog-sens-max"
+                   style="width:70px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
+            <span style="font-size:11px;color:var(--ies-gray-400);">range 2-20 · default 8 · linear runtime cost</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
             <label style="font-size:13px;font-weight:600;" title="Multiplier applied to one-way distance to account for the empty return leg. 2.0 = full round trip (no backhaul revenue). 1.5-1.8 if your network has reliable backhaul matches. Threaded through Analysis totals + Sensitivity + per-row table.">Round-trip:</label>
@@ -1538,6 +1603,31 @@ function renderParametersPhase(el) {
   el.querySelector('#cog-iter')?.addEventListener('change', (e) => {
     config.maxIterations = Math.max(10, Math.min(500, parseInt(/** @type {HTMLInputElement} */ (e.target).value) || 100));
     markDirty();
+  });
+  // 2026-05-28 B17 — sensitivity max k.
+  el.querySelector('#cog-sens-max')?.addEventListener('change', (e) => {
+    const v = parseInt(/** @type {HTMLInputElement} */ (e.target).value, 10);
+    config.sensitivityMaxK = Math.max(2, Math.min(20, Number.isFinite(v) ? v : 8));
+    markDirty();
+  });
+  // 2026-05-28 H3 — reset Parameters to defaults. Preserves Deal Context
+  // (customer/industry/stage/notes), points, and Current State DCs —
+  // because losing the deal metadata + the customer-supplied dataset on a
+  // configuration reset would be hostile.
+  el.querySelector('#cog-reset-defaults')?.addEventListener('click', async () => {
+    const ok = await showConfirm('Reset all Parameters to defaults? This preserves Deal Context, demand points, and Current State DCs.');
+    if (!ok) return;
+    const preserve = {
+      customerName: config.customerName,
+      industry: config.industry,
+      dealStage: config.dealStage,
+      notes: config.notes,
+      currentStateDCs: config.currentStateDCs,
+    };
+    config = { ...calc.DEFAULT_CONFIG, ...preserve };
+    markDirty();
+    renderParametersPhase(el);
+    showToast('Parameters reset to defaults.', 'ok');
   });
   el.querySelector('#cog-fixed-cost')?.addEventListener('change', (e) => {
     config.fixedCostPerDC = Math.max(0, parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0);
