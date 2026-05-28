@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-cogtriage11';
+import * as calc from './calc.js?v=20260528-cogtriage12';
 import * as api from './api.js?v=20260504-auth1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
 
@@ -151,23 +151,32 @@ async function renderLanding() {
     getParent: (r) => ({ cmId: r.parent_cost_model_id, dealId: r.parent_deal_id }),
     getSubtitle: (r) => {
       const d = r.scenario_data || {};
+      const cfg = d.config || {};
       const nPoints = (d.points || []).length;
-      const k = d.config?.k || d.k;
+      const k = cfg.k || d.k;
       const result = d.result || null;
       const nCenters = result?.centers?.length || 0;
+      // 2026-05-28 F2 — prepend Deal Context when present.
+      const ctxParts = [];
+      if (cfg.customerName) ctxParts.push(cfg.customerName);
+      const indMatch = calc.INDUSTRY_OPTIONS.find(o => o.value && o.value === cfg.industry);
+      if (indMatch) ctxParts.push(indMatch.label);
+      const stageMatch = calc.DEAL_STAGES.find(o => o.value && o.value === cfg.dealStage);
+      if (stageMatch) ctxParts.push(stageMatch.label);
+      const ctxPrefix = ctxParts.length > 0 ? `${ctxParts.join(' · ')} — ` : '';
       // Prefer the most informative subtitle. Some scenarios are seeded with
       // results only (no points array) — for those, fall back to the result
       // shape rather than rendering "0 demand points" or empty.
       if (nPoints > 0) {
-        return `${nPoints} demand points${k ? ` · ${k}-DC analysis` : ''}`;
+        return `${ctxPrefix}${nPoints} demand points${k ? ` · ${k}-DC analysis` : ''}`;
       }
       if (nCenters > 0) {
         const totalCost = Number(result?.totalCost) || 0;
         const costStr = totalCost > 0 ? ` · $${(totalCost / 1e6).toFixed(1)}M` : '';
-        return `${nCenters} center${nCenters === 1 ? '' : 's'} (results only)${costStr}`;
+        return `${ctxPrefix}${nCenters} center${nCenters === 1 ? '' : 's'} (results only)${costStr}`;
       }
-      if (k) return `${k}-DC analysis (no points yet)`;
-      return '';
+      if (k) return `${ctxPrefix}${k}-DC analysis (no points yet)`;
+      return ctxPrefix.slice(0, -3) || '';  // strip trailing ' — '
     },
     onNew: () => openEditor(null),
     onOpen: (row) => openEditor(row),
@@ -742,6 +751,39 @@ function renderInputsPhase(el) {
   // the user reads the full menu at a glance.
   el.innerHTML = `
     <div>
+      <!-- 2026-05-28 F2 — Deal Context card. Lives at the top so every
+           scenario starts with customer/industry/deal-stage metadata. -->
+      <div class="hub-card" style="margin-bottom:16px;padding:14px 16px;border-left:3px solid #0047AB;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:12px;">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);">Deal Context</div>
+          <div style="font-size:11px;color:var(--ies-gray-400);">Captured on the scenario · shows up in the landing list</div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:10px;">
+          <div>
+            <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-500);margin-bottom:3px;">Customer</label>
+            <input type="text" id="cog-customer" value="${(config.customerName || '').replace(/"/g, '&quot;')}" placeholder="e.g. Wayfair, Acme Industries"
+                   style="width:100%;padding:7px 9px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;">
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-500);margin-bottom:3px;">Industry</label>
+            <select id="cog-industry" style="width:100%;padding:6px 9px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;">
+              ${calc.INDUSTRY_OPTIONS.map(o => `<option value="${o.value}"${(config.industry || '') === o.value ? ' selected' : ''}>${o.label}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-500);margin-bottom:3px;">Deal Stage</label>
+            <select id="cog-deal-stage" style="width:100%;padding:6px 9px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;">
+              ${calc.DEAL_STAGES.map(o => `<option value="${o.value}"${(config.dealStage || '') === o.value ? ' selected' : ''}>${o.label}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div style="margin-top:10px;">
+          <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-500);margin-bottom:3px;">Notes</label>
+          <textarea id="cog-notes" rows="2" placeholder="Open assumptions, customer constraints, anything the analyst should know on reopen…"
+                    style="width:100%;padding:7px 9px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;resize:vertical;">${(config.notes || '').replace(/</g, '&lt;')}</textarea>
+        </div>
+      </div>
+
       <!-- Seeders card -->
       <div class="hub-card" style="margin-bottom:16px;padding:14px 16px;border-left:3px solid #20c997;">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);margin-bottom:10px;">Seed demand points</div>
@@ -1102,6 +1144,24 @@ function renderInputsPhase(el) {
     } else if (archDesc) {
       archDesc.style.display = 'none';
     }
+  });
+
+  // 2026-05-28 F2 — Deal Context bindings.
+  el.querySelector('#cog-customer')?.addEventListener('change', (e) => {
+    config.customerName = /** @type {HTMLInputElement} */ (e.target).value.trim();
+    markDirty();
+  });
+  el.querySelector('#cog-industry')?.addEventListener('change', (e) => {
+    config.industry = /** @type {HTMLSelectElement} */ (e.target).value;
+    markDirty();
+  });
+  el.querySelector('#cog-deal-stage')?.addEventListener('change', (e) => {
+    config.dealStage = /** @type {HTMLSelectElement} */ (e.target).value;
+    markDirty();
+  });
+  el.querySelector('#cog-notes')?.addEventListener('change', (e) => {
+    config.notes = /** @type {HTMLTextAreaElement} */ (e.target).value;
+    markDirty();
   });
 
   el.querySelector('#cog-load-archetype')?.addEventListener('click', async () => {

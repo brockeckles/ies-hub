@@ -60,6 +60,13 @@ export const DEFAULT_CONFIG = {
   /** @type {Array<{ label?: string, lat: number, lng: number }>} */
   candidateFacilities: [],
   snapToCandidates: false,
+  // 2026-05-28 — F2 deal context. Captured at the top of Inputs so every
+  // scenario carries the customer/industry/deal-stage metadata SDs need
+  // for reports. Persisted alongside points + result in scenario_data.
+  customerName: '',
+  industry: '',
+  dealStage: '',
+  notes: '',
   // 2026-05-28 — CO₂ emissions intensity (B20). kg CO₂ per truck-mile.
   // Default 1.62 = EPA SmartWay 2024 US heavy-duty diesel Class 8 average.
   // Range 1.30 (new fleets) to 2.10 (older / refrigerated). Threaded
@@ -95,6 +102,36 @@ export const DEFAULT_CONFIG = {
   // Default 10 is industry-standard. Set to 1 to recover legacy behavior.
   kmeansRestarts: 10,
 };
+
+// 2026-05-28 F2 — deal-context dropdown values. Kept short and
+// 3PL-relevant; user can pick 'Other' (empty) and write a free-text note.
+export const INDUSTRY_OPTIONS = [
+  { value: '',                 label: '— Select —' },
+  { value: 'dtc_ecom',         label: 'DTC E-Commerce' },
+  { value: 'retail',           label: 'Retail / Big Box' },
+  { value: 'cpg_grocery',      label: 'CPG / Grocery' },
+  { value: 'industrial_mro',   label: 'Industrial / MRO' },
+  { value: 'food_bev',         label: 'Food & Beverage' },
+  { value: 'healthcare_pharma',label: 'Healthcare / Pharma' },
+  { value: 'auto_aftermarket', label: 'Auto / Aftermarket' },
+  { value: 'tech_electronics', label: 'Tech / Electronics' },
+  { value: 'apparel_lifestyle',label: 'Apparel / Lifestyle' },
+  { value: 'b2b_dist',         label: 'B2B Distribution' },
+  { value: 'other',            label: 'Other' },
+];
+
+export const DEAL_STAGES = [
+  { value: '',         label: '— Select —' },
+  { value: 'discovery',label: 'Discovery / Pre-RFI' },
+  { value: 'rfi',      label: 'RFI' },
+  { value: 'rfp',      label: 'RFP' },
+  { value: 'pricing',  label: 'Pricing' },
+  { value: 'contract', label: 'Contract Negotiation' },
+  { value: 'pilot',    label: 'Pilot' },
+  { value: 'won',      label: 'Won — In Implementation' },
+  { value: 'lost',     label: 'Lost / On Hold' },
+  { value: 'internal', label: 'Internal / Scenario Sketch' },
+];
 
 // CoG weight-unit metadata — drives label text + step sizes in the UI.
 export const WEIGHT_UNIT_OPTIONS = [
