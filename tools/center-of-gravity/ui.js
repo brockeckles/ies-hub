@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-cogtriage18';
+import * as calc from './calc.js?v=20260528-cogtriage19';
 import * as api from './api.js?v=20260504-auth1';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
@@ -78,6 +78,15 @@ let _savedScenariosCache = null;
 // 2026-05-28 H1 — keyboard shortcut binding guard (document-level listener
 // registered once per page-load to avoid double-firing on chrome re-renders).
 let _kbShortcutsBound = false;
+
+// 2026-05-28 C5 — undo-on-replace. Holds the previous points[] snapshot
+// after archetype / upload / demo replace operations so the toast Undo
+// button can restore. Cleared after 60s to avoid stale-state confusion.
+/** @type {{ points: any[], at: number, source: string }|null} */
+let _lastReplacedPoints = null;
+
+// 2026-05-28 C5 — delegated-click guard for the Undo toast button.
+let _undoDelegateBound = false;
 
 /**
  * Map overlay options — service-zone rings + heatmap toggles with
@@ -297,6 +306,46 @@ function runOptimizeAndRender() {
   updateRunButtonState();
   // Re-render content without flipping tabs out from under the user.
   renderContent();
+}
+
+/**
+ * 2026-05-28 C5 — Stash current points[] before a replace so the user
+ * can undo via toast. `source` is a human label for the disclosure.
+ */
+function _snapshotForUndo(source) {
+  _lastReplacedPoints = {
+    points: points.map(p => ({ ...p })),
+    at: Date.now(),
+    source,
+  };
+  // Auto-clear after 60s so we don't dangle stale state forever.
+  setTimeout(() => {
+    if (_lastReplacedPoints && (Date.now() - _lastReplacedPoints.at) >= 60000) {
+      _lastReplacedPoints = null;
+    }
+  }, 60000);
+}
+
+/**
+ * 2026-05-28 C5 — restore points[] from the undo slot. Called by the
+ * Undo button on replace toasts.
+ */
+function _undoReplace() {
+  if (!_lastReplacedPoints) return;
+  points = _lastReplacedPoints.points;
+  const source = _lastReplacedPoints.source;
+  _lastReplacedPoints = null;
+  markDirty();
+  if (rootEl) {
+    const inputsEl = rootEl.querySelector('#cog-content');
+    if (inputsEl && activePhase === 'inputs') renderInputsPhase(inputsEl);
+    else {
+      rootEl.innerHTML = renderShell();
+      bindShellEvents();
+      renderContent();
+    }
+  }
+  showToast(`Undid ${source} — restored ${points.length} point${points.length === 1 ? '' : 's'}.`, 'ok');
 }
 
 /**
@@ -869,6 +918,23 @@ async function bindShellEvents() {
     });
   }
 
+  // 2026-05-28 C5 — delegated handler for the Undo button in replace toasts.
+  // The toast is rendered outside rootEl by shared/toast.js so we attach
+  // at document level once.
+  if (!_undoDelegateBound) {
+    _undoDelegateBound = true;
+    document.addEventListener('click', (e) => {
+      const t = /** @type {HTMLElement} */ (e.target);
+      if (t && t.matches && t.matches('[data-cog-undo]')) {
+        e.preventDefault();
+        _undoReplace();
+        // Remove the toast that contained the button.
+        const toast = t.closest('.hub-toast, .toast, .ies-toast') || t.parentElement;
+        if (toast && toast.parentElement) toast.parentElement.removeChild(toast);
+      }
+    });
+  }
+
   // Note: run-phase sub-tabs (Numbers/Map/Sensitivity) now live in chrome
   // Row 2 as section pills — onSection handler above routes those clicks.
 }
@@ -1047,7 +1113,8 @@ function renderInputsPhase(el) {
                     <td style="padding:6px;text-align:center;">
                       <span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;background:${badgeBg};color:${badgeFg};">${p.type}</span>
                     </td>
-                    <td style="padding:6px;text-align:center;">
+                    <td style="padding:6px;text-align:center;display:flex;gap:4px;justify-content:center;">
+                      ${exc ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-pt-retry="${i}" title="Look up a corrected ZIP and re-resolve this row" style="padding:4px 8px;">↻</button>` : ''}
                       <button class="hub-btn hub-btn-sm hub-btn-secondary" data-pt-del="${i}" style="padding:4px 8px;">✕</button>
                     </td>
                   </tr>`;
@@ -1083,6 +1150,32 @@ function renderInputsPhase(el) {
       renderInputsPhase(el);
     });
   });
+  // 2026-05-28 C8 — retry excluded row with a corrected ZIP/city.
+  el.querySelectorAll('[data-pt-retry]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const idx = parseInt(/** @type {HTMLElement} */ (btn).dataset.ptRetry, 10);
+      const row = points[idx];
+      if (!row) return;
+      const corrected = await showPrompt(`Re-resolve "${row.name || 'this row'}" — enter a city, state, or ZIP:`, '');
+      if (!corrected) return;
+      const hit = calc.lookupLocation(corrected.trim());
+      if (!hit) {
+        showToast(`"${corrected}" didn't match a known city or ZIP.`, 'warn');
+        return;
+      }
+      points[idx] = {
+        ...row,
+        name: hit.name,
+        lat: hit.lat,
+        lng: hit.lng,
+        type: 'demand',
+        weight: row.weight && row.weight > 0 ? row.weight : 10000,
+      };
+      markDirty();
+      renderInputsPhase(el);
+      showToast(`Resolved to ${hit.name}.`, 'ok');
+    });
+  });
 
   // 2026-05-28 C12 — clickable sort headers. Same column twice flips
   // direction; third click clears the sort (back to insertion order).
@@ -1106,9 +1199,15 @@ function renderInputsPhase(el) {
   });
 
   el.querySelector('#cog-load-demo')?.addEventListener('click', () => {
+    if (points.length > 0) _snapshotForUndo('Load Demo');
     points = calc.DEMO_POINTS.map(p => ({ ...p }));
     markDirty();
     renderInputsPhase(el);
+    if (_lastReplacedPoints) {
+      showToast(`Loaded ${points.length} demo points. <button data-cog-undo style="margin-left:8px;text-decoration:underline;background:none;border:none;color:inherit;cursor:pointer;font-weight:700;">Undo</button>`, 'ok', { html: true });
+    } else {
+      showToast(`Loaded ${points.length} demo points.`, 'ok');
+    }
   });
 
   // 2026-05-26 — XLS / XLSX / CSV upload. Two columns: 5-digit ZIP + units.
@@ -1231,6 +1330,7 @@ function renderInputsPhase(el) {
         if (xlsxInput) xlsxInput.value = '';
         return;
       }
+      _snapshotForUndo(`Upload "${file.name}"`);
     }
     points = allUpload;
     markDirty();
@@ -1330,10 +1430,15 @@ function renderInputsPhase(el) {
       return;
     }
     if (points.length > 0 && !(await showConfirm(`Replace ${points.length} existing point${points.length === 1 ? '' : 's'} with ${generated.length} archetype-generated points?`))) return;
+    if (points.length > 0) _snapshotForUndo('Apply Archetype');
     points = generated;
     markDirty();
     renderInputsPhase(el);
-    showToast(`Loaded ${generated.length} demand points from ${calc.COG_ARCHETYPES[archSelect.value].name}.`, 'ok');
+    if (_lastReplacedPoints) {
+      showToast(`Loaded ${generated.length} demand points from ${calc.COG_ARCHETYPES[archSelect.value].name}. <button data-cog-undo style="margin-left:8px;text-decoration:underline;background:none;border:none;color:inherit;cursor:pointer;font-weight:700;">Undo</button>`, 'ok', { html: true });
+    } else {
+      showToast(`Loaded ${generated.length} demand points from ${calc.COG_ARCHETYPES[archSelect.value].name}.`, 'ok');
+    }
   });
 }
 
@@ -2472,7 +2577,18 @@ function initCogMap() {
     return;
   }
 
-  mapInstance = L.map(container).setView([39.8283, -98.5795], 4);
+  // 2026-05-28 D12 — compute bbox before map init so we don't get the
+  // zoom-4 continental-US flash before fitBounds kicks in.
+  const _allPtsForInit = [
+    ...points.filter(p => p.lat != null && p.lng != null).map(p => [p.lat, p.lng]),
+    ...cogResult.centers.map(c => [c.lat, c.lng]),
+  ];
+  if (_allPtsForInit.length > 0) {
+    const initBounds = L.latLngBounds(_allPtsForInit);
+    mapInstance = L.map(container, { zoomSnap: 0.25 }).fitBounds(initBounds, { padding: [30, 30], animate: false });
+  } else {
+    mapInstance = L.map(container).setView([39.8283, -98.5795], 4);
+  }
   // E1 fix (2026-04-25 EVE): CartoDB Voyager replaces OSM raw tiles. Voyager
   // has stronger state-boundary contrast and clearer city labels at zoom 4-6
   // (the typical CoG-result zoom band) which makes the result legible during
