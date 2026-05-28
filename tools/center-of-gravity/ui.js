@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-cogtriage3';
+import * as calc from './calc.js?v=20260528-cogtriage4';
 import * as api from './api.js?v=20260504-auth1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
 
@@ -1368,14 +1368,22 @@ function renderAnalysis(el) {
       })()}
 
       <!-- Center Details -->
-      ${cogResult.centers.map((c, i) => `
+      ${cogResult.centers.map((c, i) => {
+        // 2026-05-28 E1 — per-cluster cost. cogResult.costByCluster is
+        // populated by _enrichCogResultWithCost; fall back to inline calc
+        // if a saved result is missing it. Shows the cost share each
+        // center contributes to the total transport bill.
+        const clusterCost = Array.isArray(cogResult.costByCluster) ? cogResult.costByCluster[i] : null;
+        const totalClusterCost = Array.isArray(cogResult.costByCluster) ? cogResult.costByCluster.reduce((s, x) => s + x, 0) : 0;
+        const costShare = (totalClusterCost > 0 && clusterCost != null) ? (clusterCost / totalClusterCost * 100) : null;
+        return `
         <div class="hub-card" style="margin-bottom:16px;border-left:4px solid ${clusterColor(i)};">
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
             <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${clusterColor(i)};"></span>
             <span style="font-size:14px;font-weight:700;">Center ${i + 1}: ${c.nearestCity}</span>
             ${c.candidateLabel ? `<span title="K-means picked this from your candidate list. Free centroid was ${calc.formatLatLng(c.snappedFromLat, c.snappedFromLng)}." style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;background:#dbeafe;color:#1d4ed8;letter-spacing:0.4px;">SNAPPED → ${c.candidateLabel}</span>` : ''}
           </div>
-          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;font-size:13px;">
+          <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px;font-size:13px;">
             <div>
               <span style="color:var(--ies-gray-400);font-size:11px;text-transform:uppercase;">Location</span>
               <div style="font-weight:600;">${calc.formatLatLng(c.lat, c.lng)}</div>
@@ -1392,9 +1400,14 @@ function renderAnalysis(el) {
               <span style="color:var(--ies-gray-400);font-size:11px;text-transform:uppercase;">Max Distance</span>
               <div style="font-weight:600;">${calc.formatMiles(c.maxDistance)}</div>
             </div>
+            <div>
+              <span style="color:var(--ies-gray-400);font-size:11px;text-transform:uppercase;">Annual Cost</span>
+              <div style="font-weight:600;color:${clusterColor(i)};">${clusterCost != null ? calc.formatCurrency(clusterCost, { compact: true }) : '—'}</div>
+              ${costShare != null ? `<div style="font-size:11px;color:var(--ies-gray-400);">${costShare.toFixed(0)}% of total</div>` : ''}
+            </div>
           </div>
         </div>
-      `).join('')}
+      `;}).join('')}
 
       <!-- Assignment Table -->
       <div class="hub-card" style="padding:16px;">
@@ -1594,6 +1607,28 @@ function initCogMap() {
     subdomains: 'abcd',
     attribution: '&copy; <a href="https://carto.com/attributions">CARTO</a> · OpenStreetMap'
   }).addTo(mapInstance);
+
+  // 2026-05-28 D10 — scale bar. Standard cartographic element. Imperial
+  // first (US default) with metric secondary. Bottom-left.
+  L.control.scale({ imperial: true, metric: true, maxWidth: 180, position: 'bottomleft' }).addTo(mapInstance);
+
+  // 2026-05-28 D11 — north arrow / compass. Bottom-right, away from the
+  // scale bar. Pure SVG so we don't pull a new dep. Static (north is up on
+  // a Web Mercator basemap at any non-rotated zoom — Leaflet doesn't
+  // rotate, so a fixed glyph is correct).
+  const NorthArrow = L.Control.extend({
+    options: { position: 'bottomright' },
+    onAdd: function() {
+      const div = L.DomUtil.create('div', 'cog-north-arrow');
+      div.style.cssText = 'background:rgba(255,255,255,0.92);border:1px solid #475569;border-radius:6px;padding:4px 6px;box-shadow:0 1px 4px rgba(0,0,0,0.15);';
+      div.innerHTML = '<svg width="28" height="32" viewBox="0 0 28 32" xmlns="http://www.w3.org/2000/svg" aria-label="North">'
+        + '<polygon points="14,2 22,22 14,18 6,22" fill="#ef4444" stroke="#0a1628" stroke-width="1"/>'
+        + '<text x="14" y="30" text-anchor="middle" font-size="10" font-weight="700" fill="#0a1628">N</text>'
+        + '</svg>';
+      return div;
+    }
+  });
+  new NorthArrow().addTo(mapInstance);
 
   // Heatmap layer (drawn first so it sits under markers).
   // We weight each demand point and overlay a soft halo whose radius
