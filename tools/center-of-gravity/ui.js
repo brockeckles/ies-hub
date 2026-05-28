@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-parcel9';
+import * as calc from './calc.js?v=20260528-parcel10';
 import * as api from './api.js?v=20260504-auth1';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
@@ -2666,6 +2666,72 @@ function renderAnalysis(el) {
           </div>
         </div>`;
       })()}
+
+      ${cogResult.parcelDetails && Array.isArray(cogResult.costByAssignment) ? (() => {
+        // 2026-05-28 34 — Per-DC zone distribution. Headline visual for
+        // parcel COG: where do packages land relative to each DC's
+        // shipping zone bands?
+        const ZONE_COLORS = {
+          2: '#15803d', // green = same-day-ish
+          3: '#22c55e', // light green
+          4: '#84cc16', // yellow-green
+          5: '#eab308', // amber
+          6: '#f97316', // orange
+          7: '#ef4444', // red
+          8: '#b91c1c', // dark red
+        };
+        const perCluster = cogResult.centers.map((_, ci) => {
+          const z = { 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0 };
+          let total = 0;
+          for (const cba of cogResult.costByAssignment) {
+            if (cba.clusterId === ci && cba.zone && cba.pkgCount > 0) {
+              z[cba.zone] += cba.pkgCount;
+              total += cba.pkgCount;
+            }
+          }
+          return { z, total };
+        });
+        const grandTotal = perCluster.reduce((s, x) => s + x.total, 0);
+        if (grandTotal === 0) return '';
+        return `
+        <div class="hub-card" style="margin-bottom:20px;padding:18px 20px;background:linear-gradient(135deg,#fdf4ff,#fce7f3);border-left:4px solid #be185d;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:12px;flex-wrap:wrap;">
+            <div>
+              <div style="font-size:14px;font-weight:700;color:#9d174d;">Parcel Zone Distribution by DC</div>
+              <div style="font-size:11px;color:var(--ies-gray-500);margin-top:2px;">${(grandTotal).toLocaleString(undefined, {maximumFractionDigits: 0})} packages/yr across ${cogResult.centers.length} center${cogResult.centers.length === 1 ? '' : 's'}. Lower zones = cheaper + faster.</div>
+            </div>
+            <div style="display:flex;gap:6px;font-size:10px;color:var(--ies-gray-500);align-items:center;">
+              ${[2,3,4,5,6,7,8].map(z => '<span style="display:inline-flex;align-items:center;gap:3px;"><span style="width:10px;height:10px;border-radius:2px;background:' + ZONE_COLORS[z] + ';"></span>Z' + z + '</span>').join('')}
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:140px 1fr 80px;gap:6px 12px;font-size:11px;align-items:center;">
+            ${perCluster.map((row, ci) => {
+              const center = cogResult.centers[ci];
+              if (row.total === 0) {
+                return `
+                  <div style="font-weight:600;color:var(--ies-gray-600);">${(center.nearestCity || ('Center ' + (ci+1))).split('(')[0].trim()}</div>
+                  <div style="height:20px;background:var(--ies-gray-100);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--ies-gray-400);">no parcel here</div>
+                  <div style="text-align:right;color:var(--ies-gray-400);">0 pkg</div>
+                `;
+              }
+              return `
+                <div style="font-weight:600;color:var(--ies-gray-600);">${(center.nearestCity || ('Center ' + (ci+1))).split('(')[0].trim()}</div>
+                <div style="height:20px;border-radius:4px;overflow:hidden;display:flex;background:var(--ies-gray-100);">
+                  ${[2,3,4,5,6,7,8].map(z => {
+                    const pct = row.z[z] / row.total * 100;
+                    if (pct === 0) return '';
+                    return '<div style="width:' + pct.toFixed(1) + '%;background:' + ZONE_COLORS[z] + ';" title="Z' + z + ': ' + Math.round(row.z[z]) + ' pkg (' + pct.toFixed(1) + '%)"></div>';
+                  }).join('')}
+                </div>
+                <div style="text-align:right;font-weight:600;">${Math.round(row.total).toLocaleString()} pkg</div>
+              `;
+            }).join('')}
+          </div>
+          <div style="font-size:11px;color:var(--ies-gray-500);margin-top:10px;border-top:1px dashed var(--ies-gray-300);padding-top:8px;line-height:1.5;">
+            <strong>Reading this:</strong> a DC that lights up green (Z2-3) and yellow (Z4) is well-positioned for its parcel demand. Heavy orange/red (Z6-8) means packages travel longer zones — higher cost AND slower delivery. The 'why Memphis beats LA' chart.
+          </div>
+        </div>
+      `;})() : ''}
 
       <!-- Center Details -->
       ${cogResult.centers.map((c, i) => {
