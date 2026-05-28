@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260528-cogtriage22';
+import * as calc from './calc.js?v=20260528-cogtriage23';
 import * as api from './api.js?v=20260504-auth1';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
@@ -87,6 +87,10 @@ let _lastReplacedPoints = null;
 
 // 2026-05-28 C5 — delegated-click guard for the Undo toast button.
 let _undoDelegateBound = false;
+
+// 2026-05-28 D13 — window-resize listener guard (single registration so
+// repeated initCogMap calls don't stack listeners).
+let _mapResizeListenerBound = false;
 
 // 2026-05-28 C1 — pending upload state. Set after a file is parsed but
 // before the user confirms the column mapping. Cleared on cancel or confirm.
@@ -839,25 +843,44 @@ async function bindShellEvents() {
     onAction: (id) => {
       if (id === 'cog-save') return handleSave();
       if (id === 'cog-run') {
-        const _solvePts = _pointsForSolve();
-        cogResult = calc.kMeansCog(_solvePts, config.numCenters, config.maxIterations, config.kmeansRestarts ?? 10);
-        if (config.snapToCandidates && (config.candidateFacilities || []).length > 0) {
-          cogResult = calc.snapCentersToCandidates(cogResult, _solvePts, config.candidateFacilities);
-        }
-        calc.applyCapacityConstraints(cogResult, _solvePts, config.capacityPerDC ?? 0);
-        _enrichCogResultWithCost(cogResult, _solvePts);
-        calc.flagServiceViolations(cogResult, _solvePts, config.maxServiceMiles ?? 0, config.roadFactor ?? 1.22);
-        sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, config.sensitivityMaxK ?? 8), _resolveCpm(), config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
-        activePhase = 'run';
-        runSubTab = 'numbers';
-        runState.markClean(runStateInputs());
-        markDirty();
-        updateRunButtonState();
-        rootEl.innerHTML = renderShell();
-        bindShellEvents();
-        renderContent();
-        _refreshCogKpis();
-        flashPrimaryAction(rootEl);
+        // 2026-05-28 H7 — show 'Solving…' on the Run button before the
+        // sync solve kicks off. requestAnimationFrame yields one paint
+        // so the user sees the spinner-ish state on big datasets. For
+        // <1000 points it's basically instant.
+        const runBtn = rootEl?.querySelector('[data-tc-action="cog-run"]');
+        const labelSpan = runBtn?.querySelector('span:not(.hub-run-icon):not(.hub-run-shortcut)');
+        const prevLabel = labelSpan?.textContent;
+        if (labelSpan) labelSpan.textContent = '⏳ Solving…';
+        if (runBtn) /** @type {HTMLElement} */ (runBtn).setAttribute('aria-busy', 'true');
+        requestAnimationFrame(() => {
+          try {
+            const _solvePts = _pointsForSolve();
+            cogResult = calc.kMeansCog(_solvePts, config.numCenters, config.maxIterations, config.kmeansRestarts ?? 10);
+            if (config.snapToCandidates && (config.candidateFacilities || []).length > 0) {
+              cogResult = calc.snapCentersToCandidates(cogResult, _solvePts, config.candidateFacilities);
+            }
+            calc.applyCapacityConstraints(cogResult, _solvePts, config.capacityPerDC ?? 0);
+            _enrichCogResultWithCost(cogResult, _solvePts);
+            calc.flagServiceViolations(cogResult, _solvePts, config.maxServiceMiles ?? 0, config.roadFactor ?? 1.22);
+            sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, config.sensitivityMaxK ?? 8), _resolveCpm(), config.maxIterations, config.unitsPerTruck || 25000, config.fixedCostPerDC || 0, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
+            activePhase = 'run';
+            runSubTab = 'numbers';
+            runState.markClean(runStateInputs());
+            markDirty();
+            updateRunButtonState();
+            rootEl.innerHTML = renderShell();
+            bindShellEvents();
+            renderContent();
+            _refreshCogKpis();
+            flashPrimaryAction(rootEl);
+          } catch (err) {
+            console.error('[COG] run failed:', err);
+            showToast(`Run failed: ${err.message || err}`, 'err');
+            // Restore the prior button label on failure.
+            if (labelSpan && prevLabel != null) labelSpan.textContent = prevLabel;
+            if (runBtn) runBtn.removeAttribute('aria-busy');
+          }
+        });
         return;
       }
     },
@@ -2852,9 +2875,8 @@ function renderMap(el) {
       </div>
       <div id="cog-map-container" style="flex:1;min-height:500px;border-radius:10px;border:1px solid var(--ies-gray-200);overflow:hidden;"></div>
       <div style="display:flex;gap:16px;margin-top:12px;font-size:11px;color:var(--ies-gray-400);flex-wrap:wrap;">
-        <span><span style="display:inline-block;width:14px;height:14px;background:#ef4444;border-radius:50%;vertical-align:middle;border:2px solid #fff;box-shadow:0 0 0 1px #ef4444;"></span> Optimal Center</span>
         ${cogResult.centers.map((_, i) => `
-          <span><span style="display:inline-block;width:10px;height:10px;background:${clusterColor(i)};border-radius:50%;vertical-align:middle;"></span> Cluster ${i + 1}</span>
+          <span><span style="display:inline-block;width:14px;height:14px;background:${clusterColor(i)};border-radius:50%;vertical-align:middle;border:2px solid #fff;box-shadow:0 0 0 1px ${clusterColor(i)};"></span> Center ${i + 1}: ${(cogResult.centers[i].nearestCity || '').split('(')[0].trim()}</span>
         `).join('')}
         ${mapOptions.zones ? `<span style="opacity:0.8;">Rings: ${mapOptions.zoneRadiiMiles.join(' / ')} mi</span>` : ''}
         ${mapOptions.territories ? `<span style="opacity:0.8;">Territories: haversine-nearest grid</span>` : ''}
@@ -2897,12 +2919,12 @@ function _ensureCogStyleInjected() {
   styleEl.id = 'cog-style-inline';
   styleEl.textContent = `
 .leaflet-tooltip.cog-center-label {
-  background: rgba(255,255,255,0.92);
-  border: 1px solid #ef4444;
+  background: rgba(255,255,255,0.95);
+  border: 1px solid #0a1628;
   border-radius: 6px;
   padding: 3px 7px;
   font-size: 11px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.18);
   white-space: nowrap;
 }
 .leaflet-tooltip.cog-center-label::before { display: none; }
@@ -3109,9 +3131,12 @@ function initCogMap() {
 
   // Center markers (star-like — larger with border) + permanent label
   // E3/E4 — labels read at print resolution and on screenshot exports.
+  // 2026-05-28 D6 — center markers now use the cluster color (matches
+  // the assignment-line + demand-point coloring) instead of all-red.
   cogResult.centers.forEach((c, i) => {
+    const centerColor = clusterColor(i);
     const marker = L.circleMarker([c.lat, c.lng], {
-      radius: 14, fillColor: '#ef4444', color: '#fff', weight: 3, fillOpacity: 0.9,
+      radius: 14, fillColor: centerColor, color: '#fff', weight: 3, fillOpacity: 0.95,
     }).addTo(mapInstance);
     marker.bindPopup(`<strong>Center ${i + 1}</strong><br>${c.nearestCity}<br>Location: ${calc.formatLatLng(c.lat, c.lng)}<br>Avg Distance: ${calc.formatMiles(c.avgWeightedDistance)}`);
     if (mapOptions.labels !== false) {
@@ -3125,6 +3150,22 @@ function initCogMap() {
   // Fit bounds
   const allPts = [...points.map(p => [p.lat, p.lng]), ...cogResult.centers.map(c => [c.lat, c.lng])];
   if (allPts.length > 0) mapInstance.fitBounds(allPts, { padding: [30, 30] });
+
+  // 2026-05-28 D13 — window resize listener. Map was previously stuck
+  // at initial dimensions after a window resize. invalidateSize tells
+  // Leaflet to re-measure its container and re-render tiles.
+  if (!_mapResizeListenerBound) {
+    _mapResizeListenerBound = true;
+    let _resizeTimer = null;
+    window.addEventListener('resize', () => {
+      if (_resizeTimer) clearTimeout(_resizeTimer);
+      _resizeTimer = setTimeout(() => {
+        if (mapInstance) {
+          try { mapInstance.invalidateSize(true); } catch (_) { /* swallow */ }
+        }
+      }, 150);
+    });
+  }
 }
 
 // ============================================================
