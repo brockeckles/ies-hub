@@ -523,7 +523,32 @@ async function handleSave() {
             weight: c.totalWeight || 0,
             avgDistance: c.avgWeightedDistance || 0,
             cost: Array.isArray(cogResult.costByCluster) ? (cogResult.costByCluster[i] || 0) : 0,
+            // 2026-05-29 — per-cluster parcel + truck split so CM can
+            // show "Memphis: $1.2M truck / $4.3M parcel" not just total.
+            truckCost: Array.isArray(cogResult.truckCostByCluster) ? (cogResult.truckCostByCluster[i] || 0) : 0,
+            parcelCost: Array.isArray(cogResult.parcelCostByCluster) ? (cogResult.parcelCostByCluster[i] || 0) : 0,
           })),
+          // 2026-05-29 — parcel slice on totals (commits 27-40). When the
+          // scenario uses the parcel engine, CM gets the truck / parcel
+          // split + carrier + zone distribution + total packages so a
+          // parcel-heavy customer's CM panel can render apples-to-apples
+          // against pure-TL deals without re-running COG.
+          truckCost: cogResult.truckCost || 0,
+          parcelCost: cogResult.parcelCost || 0,
+          parcelDetails: cogResult.parcelDetails || null,
+          parcelParams: cogResult.parcelDetails ? {
+            modeMixEnabled: !!config.modeMixEnabled,
+            modeMix: config.modeMix || null,
+            parcelCarrier: config.parcelCarrier || null,
+            parcelAvgPackageWeightLb: config.parcelAvgPackageWeightLb ?? null,
+            parcelFuelPct: config.parcelFuelPct ?? null,
+            parcelContractDiscountPct: config.parcelContractDiscountPct ?? null,
+            parcelResidentialShare: config.parcelResidentialShare ?? null,
+            parcelServiceMix: config.parcelServiceMix || null,
+            parcelDimMultiplier: config.parcelDimMultiplier ?? null,
+            parcelAccessorialsPerPkg: config.parcelAccessorialsPerPkg ?? null,
+            parcelDiscountTiers: Array.isArray(config.parcelDiscountTiers) ? config.parcelDiscountTiers : [],
+          } : null,
           deltaVsCurrent,
         };
         await cmApi.applyCogWriteback(activeParentCmId, cogFacts);
@@ -4204,6 +4229,10 @@ function pushToNetOpt() {
     lat: p.lat,
     lng: p.lng,
     annualDemand: p.weight || 0,
+    // 2026-05-29 — per-point parcel overrides (commit 31). Forward so
+    // NetOpt's parcel engine sees the same mixed-channel routing COG used.
+    avgPackageWeightLb: (p.avgPackageWeightLb != null && Number.isFinite(+p.avgPackageWeightLb)) ? +p.avgPackageWeightLb : null,
+    parcelSharePct: (p.parcelSharePct != null && Number.isFinite(+p.parcelSharePct)) ? +p.parcelSharePct : null,
   }));
 
   const params = {
@@ -4215,6 +4244,22 @@ function pushToNetOpt() {
     fixedCostPerDC: config.fixedCostPerDC ?? 0,
     weightUnit: config.weightUnit || 'lb',
     unitsPerTruck: config.unitsPerTruck || 25000,
+    // 2026-05-29 — mode mix (B3) + parcel engine knobs. NetOpt's blended
+    // cost calc needs these to reproduce COG's cost; without them parcel-
+    // heavy customers land in NetOpt with pure-TL math + 30-50% under-
+    // statement.
+    modeMixEnabled: !!config.modeMixEnabled,
+    modeMix: config.modeMix || { tlPct: 100, ltlPct: 0, parcelPct: 0 },
+    modeRates: config.modeRates || { tlPerMile: 2.85, ltlPerMile: 4.20, parcelPerMile: 28.00 },
+    parcelCarrier: config.parcelCarrier || 'fedex_ground',
+    parcelAvgPackageWeightLb: config.parcelAvgPackageWeightLb ?? 5,
+    parcelResidentialShare: config.parcelResidentialShare ?? 0.5,
+    parcelFuelPct: config.parcelFuelPct ?? 25,
+    parcelContractDiscountPct: config.parcelContractDiscountPct ?? 0,
+    parcelServiceMix: config.parcelServiceMix || { ground: 100, threeDay: 0, twoDay: 0, overnight: 0 },
+    parcelDimMultiplier: config.parcelDimMultiplier ?? 1.0,
+    parcelAccessorialsPerPkg: config.parcelAccessorialsPerPkg ?? 0,
+    parcelDiscountTiers: Array.isArray(config.parcelDiscountTiers) ? config.parcelDiscountTiers : [],
   };
 
   const origin = {
@@ -4227,8 +4272,14 @@ function pushToNetOpt() {
     cogResultStamp: {
       k: cogResult.centers.length,
       totalCost: cogResult.totalCost || 0,
+      truckCost: cogResult.truckCost || 0,
+      parcelCost: cogResult.parcelCost || 0,
       restartsUsed: cogResult.numRestarts || 1,
     },
+    // 2026-05-29 — parcel snapshot. NetOpt receives the parcel cost split,
+    // total package count, zone distribution, and carrier so its UI can
+    // honor what COG already solved instead of re-running zone math.
+    parcelDetails: cogResult.parcelDetails || null,
   };
 
   const payload = { candidates, demandPoints, params, origin, at: Date.now() };

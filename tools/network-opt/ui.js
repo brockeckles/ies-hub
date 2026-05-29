@@ -346,6 +346,11 @@ function applyCogHandoff(payload) {
         hazmat: false,
         seasonality: 'uniform',
         frequency: 'weekly',
+        // 2026-05-29 — per-point parcel overrides forwarded from COG so
+        // mixed-channel routing (B2B 100% TL + DTC 100% parcel) is
+        // preserved when NetOpt's parcel engine reads them.
+        avgPackageWeightLb: (dp.avgPackageWeightLb != null && Number.isFinite(+dp.avgPackageWeightLb)) ? +dp.avgPackageWeightLb : null,
+        parcelSharePct: (dp.parcelSharePct != null && Number.isFinite(+dp.parcelSharePct)) ? +dp.parcelSharePct : null,
       }));
     }
   }
