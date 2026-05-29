@@ -1273,32 +1273,86 @@ export function estimateTransportCost(cogResult, points, costPerMile = 2.85, uni
 export function tornadoSensitivity(mcr, points, cfg, drivers) {
   if (!mcr || !Array.isArray(mcr.centers) || !Array.isArray(mcr.assignments)) return [];
   const liveCfg = cfg || {};
+  // 2026-05-29 — parcel-aware tornado. When the scenario uses the parcel
+  // engine, route cost through estimateBlendedCost so per-package zone-
+  // priced math participates in the swing. Previously the tornado held
+  // the parcel cost constant (it used estimateTransportCost only), which
+  // dramatically understated the cost-impact of fuel %, contract %, DIM,
+  // accessorials, and parcel-share swings — i.e. all the levers a parcel-
+  // heavy customer actually negotiates.
+  const parcelOn = !!liveCfg.modeMixEnabled && (liveCfg.modeMix?.parcelPct || 0) > 0;
 
-  // Helper: cost at supplied param overrides.
+  // Helper: cost at supplied param overrides. When parcel-on, runs
+  // estimateBlendedCost with a shallow-merged config; otherwise legacy
+  // estimateTransportCost path (preserves pre-parcel behavior).
   function costAt(overrides) {
-    const m = {
-      cpm: liveCfg.transportCostPerMile,
-      rt: liveCfg.roundTripFactor ?? 2.0,
-      road: liveCfg.roadFactor ?? 1.22,
-      cap: liveCfg.unitsPerTruck || 25000,
-      ...overrides,
-    };
     const pts = overrides.points || points;
-    return estimateTransportCost(mcr, pts, m.cpm, m.cap, m.rt, m.road).totalCost;
+    if (parcelOn) {
+      const overlay = { ...liveCfg };
+      if (overrides.cpm != null) overlay.transportCostPerMile = overrides.cpm;
+      if (overrides.rt != null)  overlay.roundTripFactor = overrides.rt;
+      if (overrides.road != null) overlay.roadFactor = overrides.road;
+      if (overrides.cap != null) overlay.unitsPerTruck = overrides.cap;
+      if (overrides.fuelPct != null) overlay.parcelFuelPct = overrides.fuelPct;
+      if (overrides.discountPct != null) overlay.parcelContractDiscountPct = overrides.discountPct;
+      if (overrides.dimMultiplier != null) overlay.parcelDimMultiplier = overrides.dimMultiplier;
+      if (overrides.accessorialsPerPkg != null) overlay.parcelAccessorialsPerPkg = overrides.accessorialsPerPkg;
+      if (overrides.parcelPct != null) {
+        const m = liveCfg.modeMix || { tlPct: 100, ltlPct: 0, parcelPct: 0 };
+        const otherShare = Math.max(0, 100 - overrides.parcelPct);
+        const tlOrig = Math.max(0, +m.tlPct || 0);
+        const ltlOrig = Math.max(0, +m.ltlPct || 0);
+        const denom = tlOrig + ltlOrig;
+        // Hold the TL:LTL ratio constant while sweeping parcel share.
+        const tlNew = denom > 0 ? (otherShare * (tlOrig / denom)) : otherShare;
+        const ltlNew = denom > 0 ? (otherShare * (ltlOrig / denom)) : 0;
+        overlay.modeMix = { tlPct: tlNew, ltlPct: ltlNew, parcelPct: overrides.parcelPct };
+      }
+      const r = estimateBlendedCost(mcr, pts, overlay);
+      return r.totalCost || 0;
+    }
+    const cpm = overrides.cpm != null ? overrides.cpm : liveCfg.transportCostPerMile;
+    const rt  = overrides.rt  != null ? overrides.rt  : (liveCfg.roundTripFactor ?? 2.0);
+    const road = overrides.road != null ? overrides.road : (liveCfg.roadFactor ?? 1.22);
+    const cap = overrides.cap != null ? overrides.cap : (liveCfg.unitsPerTruck || 25000);
+    return estimateTransportCost(mcr, pts, cpm, cap, rt, road).totalCost;
   }
 
   const baselineCost = costAt({});
 
-  // Default driver set — caller can override to subset.
+  // Default driver set — parcel scenarios get additional drivers for the
+  // knobs that actually move parcel cost. Truck-only scenarios keep the
+  // original 4-driver set (back-compat).
   const baseCpm = +liveCfg.transportCostPerMile || 0;
   const baseRoad = +(liveCfg.roadFactor ?? 1.22);
   const baseRt = +(liveCfg.roundTripFactor ?? 2.0);
-  const allDrivers = drivers || [
-    { key: 'transportCostPerMile', label: '$/mi',              baseline: baseCpm, deltaPct: 20 },
-    { key: 'roundTripFactor',      label: 'Round-trip factor', baseline: baseRt,  deltaPct: 15 },
-    { key: 'roadFactor',           label: 'Road factor',       baseline: baseRoad,deltaPct: 10 },
-    { key: 'demandTotal',          label: 'Total demand',      baseline: 100,     deltaPct: 20 },
-  ];
+  let allDrivers = drivers;
+  if (!allDrivers) {
+    allDrivers = [
+      { key: 'transportCostPerMile', label: '$/mi',              baseline: baseCpm, deltaPct: 20 },
+      { key: 'roundTripFactor',      label: 'Round-trip factor', baseline: baseRt,  deltaPct: 15 },
+      { key: 'roadFactor',           label: 'Road factor',       baseline: baseRoad,deltaPct: 10 },
+      { key: 'demandTotal',          label: 'Total demand',      baseline: 100,     deltaPct: 20 },
+    ];
+    if (parcelOn) {
+      const baseFuel = liveCfg.parcelFuelPct == null ? 25 : +liveCfg.parcelFuelPct;
+      const baseDisc = liveCfg.parcelContractDiscountPct == null ? 0 : +liveCfg.parcelContractDiscountPct;
+      const baseDim  = liveCfg.parcelDimMultiplier == null ? 1.0 : +liveCfg.parcelDimMultiplier;
+      const baseAcc  = liveCfg.parcelAccessorialsPerPkg == null ? 0 : +liveCfg.parcelAccessorialsPerPkg;
+      const baseParcelPct = +(liveCfg.modeMix?.parcelPct || 0);
+      allDrivers.push({ key: 'parcelFuelPct',           label: 'Parcel fuel %',         baseline: baseFuel,      deltaPct: 30 });
+      allDrivers.push({ key: 'parcelPct',               label: 'Parcel share of mix',   baseline: baseParcelPct, deltaPct: 25 });
+      if (baseDisc > 0) {
+        allDrivers.push({ key: 'parcelContractDiscountPct', label: 'Parcel contract discount %', baseline: baseDisc, deltaPct: 25 });
+      }
+      if (baseDim > 1) {
+        allDrivers.push({ key: 'parcelDimMultiplier', label: 'DIM weight multiplier', baseline: baseDim, deltaPct: 15 });
+      }
+      if (baseAcc > 0) {
+        allDrivers.push({ key: 'parcelAccessorialsPerPkg', label: 'Parcel accessorials $/pkg', baseline: baseAcc, deltaPct: 30 });
+      }
+    }
+  }
 
   const out = [];
   for (const d of allDrivers) {
@@ -1306,7 +1360,6 @@ export function tornadoSensitivity(mcr, points, cfg, drivers) {
     const highVal = d.baseline * (1 + d.deltaPct / 100);
     let lowCost, highCost;
     if (d.key === 'demandTotal') {
-      // Scale weights uniformly. Build scaled points sets (pure — don't mutate).
       const lowFactor = 1 - d.deltaPct / 100;
       const highFactor = 1 + d.deltaPct / 100;
       const lowPts = points.map(p => ({ ...p, weight: (p.weight || 0) * lowFactor }));
@@ -1322,8 +1375,22 @@ export function tornadoSensitivity(mcr, points, cfg, drivers) {
     } else if (d.key === 'roadFactor') {
       lowCost = costAt({ road: lowVal });
       highCost = costAt({ road: highVal });
+    } else if (d.key === 'parcelFuelPct') {
+      lowCost = costAt({ fuelPct: lowVal });
+      highCost = costAt({ fuelPct: highVal });
+    } else if (d.key === 'parcelContractDiscountPct') {
+      lowCost = costAt({ discountPct: Math.max(0, lowVal) });
+      highCost = costAt({ discountPct: Math.max(0, highVal) });
+    } else if (d.key === 'parcelDimMultiplier') {
+      lowCost = costAt({ dimMultiplier: Math.max(1, lowVal) });
+      highCost = costAt({ dimMultiplier: Math.max(1, highVal) });
+    } else if (d.key === 'parcelAccessorialsPerPkg') {
+      lowCost = costAt({ accessorialsPerPkg: Math.max(0, lowVal) });
+      highCost = costAt({ accessorialsPerPkg: Math.max(0, highVal) });
+    } else if (d.key === 'parcelPct') {
+      lowCost = costAt({ parcelPct: Math.max(0, Math.min(100, lowVal)) });
+      highCost = costAt({ parcelPct: Math.max(0, Math.min(100, highVal)) });
     } else {
-      // Unknown driver — fall back to baseline.
       lowCost = baselineCost;
       highCost = baselineCost;
     }
