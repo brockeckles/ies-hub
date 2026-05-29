@@ -3699,20 +3699,37 @@ function renderSensitivity(el) {
                 if (t.key === 'roundTripFactor') return v.toFixed(2) + 'x';
                 if (t.key === 'roadFactor') return v.toFixed(2);
                 if (t.key === 'demandTotal') return v.toFixed(0) + '%';
+                // 2026-05-29 — parcel drivers need their own units so the
+                // little number under each bar reads as "55% → 75%" not
+                // "55.00 → 75.00" (ambiguous, looked like noise).
+                if (t.key === 'parcelPct') return v.toFixed(0) + '%';
+                if (t.key === 'parcelFuelPct') return v.toFixed(0) + '%';
+                if (t.key === 'parcelContractDiscountPct') return v.toFixed(0) + '%';
+                if (t.key === 'parcelDimMultiplier') return v.toFixed(2) + '×';
+                if (t.key === 'parcelAccessorialsPerPkg') return '$' + v.toFixed(2);
                 return String(v.toFixed(2));
               };
               return `
                 <text x="${labelW - 10}" y="${y + 13}" text-anchor="end" font-size="12" fill="var(--ies-gray-700)" font-weight="600">${t.label}</text>
                 <text x="${labelW - 10}" y="${y + 26}" text-anchor="end" font-size="10" fill="var(--ies-gray-400)">±${t.deltaPct}%</text>
                 <rect x="${left}" y="${y}" width="${w}" height="20" fill="${t.lowCost < t.highCost ? '#3b82f6' : '#f97316'}" rx="3" opacity="0.85"/>
-                <text x="${xLow}" y="${y + 13}" text-anchor="${xLow < baselineX ? 'end' : 'start'}" font-size="10" fill="var(--ies-gray-700)" font-weight="600" dx="${xLow < baselineX ? -4 : 4}">${fmtCost(t.lowCost)}</text>
-                <text x="${xHigh}" y="${y + 13}" text-anchor="${xHigh > baselineX ? 'start' : 'end'}" font-size="10" fill="var(--ies-gray-700)" font-weight="600" dx="${xHigh > baselineX ? 4 : -4}">${fmtCost(t.highCost)}</text>
-                <text x="${(xLow + xHigh) / 2}" y="${y + 33}" text-anchor="middle" font-size="9" fill="var(--ies-gray-400)">${fmtVal(t.lowVal)} → ${fmtVal(t.highVal)}</text>
+                <!-- 2026-05-29 — endpoint tick caps so each bar's bounds
+                     are visually explicit even when one side is short. -->
+                <line x1="${xLow}" y1="${y - 3}" x2="${xLow}" y2="${y + 23}" stroke="var(--ies-gray-700)" stroke-width="1.5"/>
+                <line x1="${xHigh}" y1="${y - 3}" x2="${xHigh}" y2="${y + 23}" stroke="var(--ies-gray-700)" stroke-width="1.5"/>
+                <text x="${xLow}" y="${y + 13}" text-anchor="${xLow < baselineX ? 'end' : 'start'}" font-size="10" fill="var(--ies-gray-700)" font-weight="600" dx="${xLow < baselineX ? -6 : 6}">${fmtVal(t.lowVal)} / ${fmtCost(t.lowCost)}</text>
+                <text x="${xHigh}" y="${y + 13}" text-anchor="${xHigh > baselineX ? 'start' : 'end'}" font-size="10" fill="var(--ies-gray-700)" font-weight="600" dx="${xHigh > baselineX ? 6 : -6}">${fmtVal(t.highVal)} / ${fmtCost(t.highCost)}</text>
+                <text x="${(xLow + xHigh) / 2}" y="${y + 33}" text-anchor="middle" font-size="9" fill="var(--ies-gray-400)">swing ${fmtCost(t.swing)}</text>
               `;
             }).join('')}
           </svg>
-          <div style="font-size:11px;color:var(--ies-gray-500);margin-top:10px;line-height:1.5;border-top:1px dashed var(--ies-gray-200);padding-top:8px;">
-            <strong>Reading this:</strong> Drivers near the top swing cost the most — focus contract-negotiation effort there. Drivers near the bottom are largely fixed — don't overthink them. Bars colored blue when low &lt; high (cost rises with the driver), orange when reversed.
+          <div style="font-size:11px;color:var(--ies-gray-500);margin-top:10px;line-height:1.55;border-top:1px dashed var(--ies-gray-200);padding-top:10px;">
+            <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+              <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:18px;height:11px;background:#3b82f6;border-radius:2px;opacity:0.85;"></span><strong style="color:var(--ies-gray-700);">Blue</strong> — cost rises as the driver rises (e.g. \$/mi, fuel %, parcel share)</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:18px;height:11px;background:#f97316;border-radius:2px;opacity:0.85;"></span><strong style="color:var(--ies-gray-700);">Orange</strong> — cost falls as the driver rises (e.g. contract discount %)</span>
+            </div>
+            <strong>Reading the rows:</strong> Drivers near the top swing cost the most — focus contract-negotiation effort there. Drivers near the bottom are largely fixed — don't overthink them.<br/>
+            <strong>Reading each bar:</strong> Tick marks at each end show the cost at the driver's low and high test values; each label reads "<em>driver value / cost</em>". The vertical dashed line is the baseline cost. When the baseline value sits near one end of the bar (e.g. parcel share already at 90%), the bar can appear mostly on one side of the baseline — that's the cost asymmetry, not a chart error.
           </div>
         </div>
       `;
