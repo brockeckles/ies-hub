@@ -3664,9 +3664,9 @@ function renderSensitivity(el) {
         // chart area for the value labels ("$10.2M") which sit outside
         // the bar end. 8% of range fails when one driver dominates the
         // swing — the label of the biggest bar overflows the card.
-        const W = 720, H = Math.max(180, 40 + tornado.length * 38);
+        const W = 760, H = Math.max(180, 40 + tornado.length * 38);
         const labelW = 160;
-        const labelPadPx = 60;
+        const labelPadPx = 90;
         const chartW = W - labelW - 20 - labelPadPx;
         // Map xMin..xMax into [labelW + labelPadPx, labelW + labelPadPx + chartW].
         const xPlotMin = xMin;
@@ -3710,35 +3710,70 @@ function renderSensitivity(el) {
                 return String(v.toFixed(2));
               };
               return `
-                <text x="${labelW - 10}" y="${y + 13}" text-anchor="end" font-size="12" fill="var(--ies-gray-700)" font-weight="600">${t.label}</text>
-                <text x="${labelW - 10}" y="${y + 26}" text-anchor="end" font-size="10" fill="var(--ies-gray-400)">±${t.deltaPct}%</text>
-                <rect x="${left}" y="${y}" width="${w}" height="20" fill="${t.lowCost < t.highCost ? '#3b82f6' : '#f97316'}" rx="3" opacity="0.85"/>
-                <!-- 2026-05-29 — endpoint tick caps so each bar's bounds
-                     are visually explicit even when one side is short. -->
+                <!-- 2026-05-29 — row header: driver name, then a
+                     second line carrying both ±deltaPct% AND the swing
+                     dollars. Previously the swing label sat under each
+                     bar, where all of them clustered around the baseline
+                     and overlapped one another. -->
+                <text x="${labelW - 10}" y="${y + 9}" text-anchor="end" font-size="12" fill="var(--ies-gray-700)" font-weight="600">${t.label}</text>
+                <text x="${labelW - 10}" y="${y + 24}" text-anchor="end" font-size="10" fill="var(--ies-gray-400)">±${t.deltaPct}% · swing ${fmtCost(t.swing)}</text>
+                ${(() => {
+                  // 2026-05-29 — split the bar into two color segments
+                  // around the baseline: blue for the cost-below-baseline
+                  // portion, orange for the cost-above. Reads as 'driver
+                  // value in that direction makes cost go this way'.
+                  // Bars where the entire range is on one side of
+                  // baseline render as a single color (e.g. parcel share
+                  // that only ever increases cost = all orange).
+                  const left = Math.min(xLow, xHigh);
+                  const right = Math.max(xLow, xHigh);
+                  const blueRight = Math.min(right, baselineX);
+                  const blueW = Math.max(0, blueRight - left);
+                  const orangeLeft = Math.max(left, baselineX);
+                  const orangeW = Math.max(0, right - orangeLeft);
+                  let segs = '';
+                  if (blueW > 0) segs += '<rect x="' + left + '" y="' + y + '" width="' + blueW + '" height="20" fill="#3b82f6" opacity="0.85"/>';
+                  if (orangeW > 0) segs += '<rect x="' + orangeLeft + '" y="' + y + '" width="' + orangeW + '" height="20" fill="#f97316" opacity="0.85"/>';
+                  return segs;
+                })()}
+                <!-- endpoint tick caps -->
                 <line x1="${xLow}" y1="${y - 3}" x2="${xLow}" y2="${y + 23}" stroke="var(--ies-gray-700)" stroke-width="1.5"/>
                 <line x1="${xHigh}" y1="${y - 3}" x2="${xHigh}" y2="${y + 23}" stroke="var(--ies-gray-700)" stroke-width="1.5"/>
-                <!-- 2026-05-29 — two-line endpoint annotations. The
-                     prior 'value / cost' single-line format read as a
-                     delta ("cost rose by $27K when demand was at 80%"),
-                     which is the opposite of what the chart actually
-                     shows. Vertical pairing — driver value on top,
-                     absolute total cost on the bottom prefixed 'cost'
-                     — removes that ambiguity. -->
-                <text x="${xLow}" y="${y + 7}" text-anchor="${xLow < baselineX ? 'end' : 'start'}" font-size="9" fill="var(--ies-gray-500)" dx="${xLow < baselineX ? -6 : 6}">at ${fmtVal(t.lowVal)}</text>
-                <text x="${xLow}" y="${y + 19}" text-anchor="${xLow < baselineX ? 'end' : 'start'}" font-size="10" fill="var(--ies-gray-700)" font-weight="700" dx="${xLow < baselineX ? -6 : 6}">cost ${fmtCost(t.lowCost)}</text>
-                <text x="${xHigh}" y="${y + 7}" text-anchor="${xHigh > baselineX ? 'start' : 'end'}" font-size="9" fill="var(--ies-gray-500)" dx="${xHigh > baselineX ? 6 : -6}">at ${fmtVal(t.highVal)}</text>
-                <text x="${xHigh}" y="${y + 19}" text-anchor="${xHigh > baselineX ? 'start' : 'end'}" font-size="10" fill="var(--ies-gray-700)" font-weight="700" dx="${xHigh > baselineX ? 6 : -6}">cost ${fmtCost(t.highCost)}</text>
-                <text x="${(xLow + xHigh) / 2}" y="${y + 33}" text-anchor="middle" font-size="9" fill="var(--ies-gray-400)">swing ${fmtCost(t.swing)}</text>
+                ${(() => {
+                  // 2026-05-29 — smart endpoint label placement. If the
+                  // outward-pointing label would clip past the chart edge,
+                  // flip it to inside the bar so it stays visible. This
+                  // is what was happening to the parcel-share bar's
+                  // far-right cost label.
+                  const chartRight = labelW + labelPadPx + chartW;
+                  const chartLeft  = labelW + labelPadPx;
+                  const estLabelW = 64; // rough px for 'cost $XXM'
+                  const renderEnd = (xPt, val, cost) => {
+                    const wantOutsideRight = xPt > baselineX;
+                    const outsideAnchor = wantOutsideRight ? 'start' : 'end';
+                    const outsideDx = wantOutsideRight ? 6 : -6;
+                    const willClipRight = wantOutsideRight && (xPt + estLabelW > chartRight);
+                    const willClipLeft  = !wantOutsideRight && (xPt - estLabelW < chartLeft);
+                    const flip = willClipRight || willClipLeft;
+                    const anchor = flip ? (wantOutsideRight ? 'end' : 'start') : outsideAnchor;
+                    const dx = flip ? (wantOutsideRight ? -6 : 6) : outsideDx;
+                    return `
+                      <text x="${xPt}" y="${y + 7}" text-anchor="${anchor}" font-size="9" fill="var(--ies-gray-600)" dx="${dx}">at ${val}</text>
+                      <text x="${xPt}" y="${y + 19}" text-anchor="${anchor}" font-size="10" fill="${flip ? '#ffffff' : 'var(--ies-gray-700)'}" font-weight="700" dx="${dx}" style="${flip ? 'paint-order:stroke;stroke:#0a1628;stroke-width:2px;' : ''}">cost ${cost}</text>
+                    `;
+                  };
+                  return renderEnd(xLow, fmtVal(t.lowVal), fmtCost(t.lowCost)) + renderEnd(xHigh, fmtVal(t.highVal), fmtCost(t.highCost));
+                })()}
               `;
             }).join('')}
           </svg>
           <div style="font-size:11px;color:var(--ies-gray-500);margin-top:10px;line-height:1.55;border-top:1px dashed var(--ies-gray-200);padding-top:10px;">
             <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
-              <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:18px;height:11px;background:#3b82f6;border-radius:2px;opacity:0.85;"></span><strong style="color:var(--ies-gray-700);">Blue</strong> — cost rises as the driver rises (e.g. \$/mi, fuel %, parcel share)</span>
-              <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:18px;height:11px;background:#f97316;border-radius:2px;opacity:0.85;"></span><strong style="color:var(--ies-gray-700);">Orange</strong> — cost falls as the driver rises (e.g. contract discount %)</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:18px;height:11px;background:#3b82f6;border-radius:2px;opacity:0.85;"></span><strong style="color:var(--ies-gray-700);">Blue</strong> — total cost <em>below</em> baseline (favorable direction of this driver)</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:18px;height:11px;background:#f97316;border-radius:2px;opacity:0.85;"></span><strong style="color:var(--ies-gray-700);">Orange</strong> — total cost <em>above</em> baseline (unfavorable direction)</span>
             </div>
-            <strong>Reading the rows:</strong> Drivers near the top swing cost the most — focus contract-negotiation effort there. Drivers near the bottom are largely fixed — don't overthink them.<br/>
-            <strong>Reading each bar:</strong> Tick marks at each end show the cost at the driver's low and high test values; each label reads "<em>driver value / cost</em>". The vertical dashed line is the baseline cost. When the baseline value sits near one end of the bar (e.g. parcel share already at 90%), the bar can appear mostly on one side of the baseline — that's the cost asymmetry, not a chart error.
+            <strong>Reading the rows:</strong> Drivers near the top swing cost the most — focus negotiation effort there. Drivers near the bottom are largely fixed.<br/>
+            <strong>Reading each bar:</strong> The vertical dashed line is the baseline cost. Each end of the bar has a tick + label ("at <em>driver value</em>" / "cost <em>\$X</em>") — the cost AT that driver value, not a change. An all-orange bar means every sweep value raises cost above baseline (typically because the unsymmetric clamp on the driver only allows movement in one direction, e.g. parcel share already at 100%).
           </div>
         </div>
       `;
