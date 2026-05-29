@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260529-tornadoparcel1';
+import * as calc from './calc.js?v=20260529-horizon1';
 import * as api from './api.js?v=20260504-auth1';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
@@ -523,6 +523,22 @@ async function handleSave() {
           maxServiceMiles: config.maxServiceMiles || 0,
           peakUtilization: cogResult.capacityStats?.peakUtilization ?? null,
           capacityPerDC: config.capacityPerDC || 0,
+          // 2026-05-29 E3 — multi-year horizon for downstream CM Year-1
+          // → Year-N transport cost line. Empty when horizon=1.
+          horizon: (() => {
+            const h = Math.max(1, +config.analysisHorizonYears || 1);
+            if (h <= 1) return null;
+            const proj = calc.multiYearCostProjection(cogResult.totalCost || 0, config);
+            return {
+              years: h,
+              annualGrowthPct: +config.annualGrowthPct || 0,
+              annualEscalationPct: +config.annualEscalationPct || 0,
+              discountRatePct: +config.discountRatePct || 0,
+              totalCost: proj.totalCost,
+              totalNpv: proj.totalNpv,
+              yearCosts: proj.years.map(y => ({ year: y.year, cost: y.cost, cumulative: y.cumulative, npv: y.npv })),
+            };
+          })(),
           avgWeightedDistance: cogResult.totalWeightedDistance / Math.max(1, (points || []).reduce((s, p) => s + (p.weight || 0), 0)),
           params: {
             transportCostPerMile: config.transportCostPerMile,
@@ -2221,6 +2237,27 @@ function renderParametersPhase(el) {
     config.co2KgPerTruckMile = (Number.isFinite(v) && v >= 0) ? v : 1.62;
     markDirty();
   });
+  // 2026-05-29 E3 — Planning horizon inputs.
+  el.querySelector('#cog-horizon-years')?.addEventListener('change', (e) => {
+    const v = parseInt(/** @type {HTMLInputElement} */ (e.target).value, 10);
+    config.analysisHorizonYears = Math.max(1, Math.min(10, Number.isFinite(v) ? v : 1));
+    markDirty();
+  });
+  el.querySelector('#cog-annual-growth')?.addEventListener('change', (e) => {
+    const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
+    config.annualGrowthPct = Number.isFinite(v) ? v : 5;
+    markDirty();
+  });
+  el.querySelector('#cog-annual-escalation')?.addEventListener('change', (e) => {
+    const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
+    config.annualEscalationPct = Math.max(0, Number.isFinite(v) ? v : 3);
+    markDirty();
+  });
+  el.querySelector('#cog-discount-rate')?.addEventListener('change', (e) => {
+    const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
+    config.discountRatePct = Math.max(0, Number.isFinite(v) ? v : 8);
+    markDirty();
+  });
   // 2026-05-28 — Max service miles input (B7 service-level constraint).
   el.querySelector('#cog-max-service')?.addEventListener('change', (e) => {
     const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
@@ -2744,6 +2781,83 @@ function renderAnalysis(el) {
           ${kpi('Avg Cost/Unit', calc.formatCurrency(costEst.avgCostPerUnit))}
         </div>
       </div>
+
+      <!-- 2026-05-29 E3 — Multi-year cost timeline. Only rendered when
+           horizon > 1; defaults to 1 = back-compat hidden. RFP-grade
+           output: year-by-year projection + cumulative + NPV. -->
+      ${(() => {
+        const horizon = Math.max(1, +config.analysisHorizonYears || 1);
+        if (horizon <= 1) return '';
+        const proj = calc.multiYearCostProjection(costEst.totalCost || 0, config);
+        const growth = +config.annualGrowthPct || 0;
+        const escalation = +config.annualEscalationPct || 0;
+        const discount = +config.discountRatePct || 0;
+        const W = 720, H = 200;
+        const padL = 60, padR = 20, padT = 20, padB = 30;
+        const chartW = W - padL - padR;
+        const chartH = H - padT - padB;
+        const maxCost = Math.max(...proj.years.map(y => y.cost));
+        const xStep = chartW / Math.max(1, proj.years.length - 1);
+        const yScale = v => padT + chartH - (v / Math.max(1, maxCost)) * chartH;
+        const pts = proj.years.map((y, i) => `${padL + i * xStep},${yScale(y.cost)}`).join(' ');
+        return `
+          <div class="hub-card" style="padding:18px 22px;margin-bottom:20px;background:linear-gradient(135deg,#fffbeb,#f0fdf4);border-left:4px solid #15803d;">
+            <div style="display:flex;align-items:baseline;gap:18px;flex-wrap:wrap;margin-bottom:6px;">
+              <div style="font-size:14px;font-weight:700;color:#15803d;">${horizon}-year cost timeline</div>
+              <div style="font-size:11px;color:var(--ies-gray-500);">${growth >= 0 ? '+' : ''}${growth}% growth/yr · +${escalation}% escalation/yr · ${discount}% discount</div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:8px 24px;font-size:12px;margin-bottom:14px;">
+              <div><div style="font-size:10px;text-transform:uppercase;color:var(--ies-gray-500);letter-spacing:0.3px;">${horizon}-yr cumulative</div><div style="font-size:18px;font-weight:800;color:#0a1628;font-variant-numeric:tabular-nums;">${calc.formatCurrency(proj.totalCost, { compact: true })}</div></div>
+              <div><div style="font-size:10px;text-transform:uppercase;color:var(--ies-gray-500);letter-spacing:0.3px;">${horizon}-yr NPV</div><div style="font-size:18px;font-weight:800;color:#15803d;font-variant-numeric:tabular-nums;">${calc.formatCurrency(proj.totalNpv, { compact: true })}</div></div>
+              <div><div style="font-size:10px;text-transform:uppercase;color:var(--ies-gray-500);letter-spacing:0.3px;">Y${horizon} annual</div><div style="font-size:18px;font-weight:800;color:#0a1628;font-variant-numeric:tabular-nums;">${calc.formatCurrency(proj.years[proj.years.length - 1].cost, { compact: true })}</div></div>
+            </div>
+            <svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" style="background:rgba(255,255,255,0.6);border-radius:6px;">
+              <!-- y-axis line -->
+              <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT + chartH}" stroke="var(--ies-gray-400)" stroke-width="1"/>
+              <line x1="${padL}" y1="${padT + chartH}" x2="${padL + chartW}" y2="${padT + chartH}" stroke="var(--ies-gray-400)" stroke-width="1"/>
+              <!-- bars -->
+              ${proj.years.map((y, i) => {
+                const x = padL + i * xStep;
+                const barW = Math.max(20, xStep * 0.6);
+                const yTop = yScale(y.cost);
+                const h = (padT + chartH) - yTop;
+                return `
+                  <rect x="${x - barW/2}" y="${yTop}" width="${barW}" height="${h}" fill="#22c55e" opacity="0.7" rx="3"/>
+                  <text x="${x}" y="${yTop - 4}" text-anchor="middle" font-size="10" fill="var(--ies-gray-700)" font-weight="700">${calc.formatCurrency(y.cost, { compact: true })}</text>
+                  <text x="${x}" y="${padT + chartH + 18}" text-anchor="middle" font-size="11" fill="var(--ies-gray-600)" font-weight="600">Y${y.year}</text>
+                `;
+              }).join('')}
+            </svg>
+            <table style="width:100%;font-size:11px;margin-top:14px;border-collapse:collapse;font-variant-numeric:tabular-nums;">
+              <thead><tr style="background:rgba(0,0,0,0.04);">
+                <th style="padding:6px 8px;text-align:left;font-weight:700;">Year</th>
+                <th style="padding:6px 8px;text-align:right;font-weight:700;">Annual cost</th>
+                <th style="padding:6px 8px;text-align:right;font-weight:700;">Cumulative</th>
+                <th style="padding:6px 8px;text-align:right;font-weight:700;">Discounted (PV)</th>
+              </tr></thead>
+              <tbody>
+                ${proj.years.map(y => `
+                  <tr>
+                    <td style="padding:5px 8px;font-weight:600;">Year ${y.year}</td>
+                    <td style="padding:5px 8px;text-align:right;">${calc.formatCurrency(y.cost)}</td>
+                    <td style="padding:5px 8px;text-align:right;color:var(--ies-gray-600);">${calc.formatCurrency(y.cumulative)}</td>
+                    <td style="padding:5px 8px;text-align:right;color:#15803d;font-weight:600;">${calc.formatCurrency(y.npv)}</td>
+                  </tr>
+                `).join('')}
+                <tr style="border-top:2px solid var(--ies-gray-300);font-weight:700;">
+                  <td style="padding:6px 8px;">${horizon}-yr total</td>
+                  <td style="padding:6px 8px;"></td>
+                  <td style="padding:6px 8px;text-align:right;">${calc.formatCurrency(proj.totalCost)}</td>
+                  <td style="padding:6px 8px;text-align:right;color:#15803d;">${calc.formatCurrency(proj.totalNpv)}</td>
+                </tr>
+              </tbody>
+            </table>
+            <div style="font-size:10px;color:var(--ies-gray-400);margin-top:8px;line-height:1.5;">
+              Tune the horizon, growth, escalation, and discount rate in <em>Parameters → Planning horizon</em>. NPV uses the customer WACC as the discount rate.
+            </div>
+          </div>
+      ` ;
+      })()}
 
       <!-- 2026-05-26 — Transparent cost breakdown. Shows every multiplier in
            the transport-cost formula so the math is auditable on-screen.
@@ -4379,6 +4493,31 @@ function openPrintView() {
       = <strong>${fmtMoney(costEst.totalCost)}/yr</strong> · CO₂ at ${(config.co2KgPerTruckMile ?? 1.62).toFixed(2)} kg/mi = <strong>${co2Str}/yr</strong>
     </div>
   `}
+
+  ${(() => {
+    const horizon = Math.max(1, +config.analysisHorizonYears || 1);
+    if (horizon <= 1) return '';
+    const proj = calc.multiYearCostProjection(costEst.totalCost || 0, config);
+    const growth = +config.annualGrowthPct || 0;
+    const escalation = +config.annualEscalationPct || 0;
+    const discount = +config.discountRatePct || 0;
+    return `
+      <h2>${horizon}-year cost projection</h2>
+      <div class="breakdown" style="background:linear-gradient(135deg,#fffbeb,#f0fdf4);border-left-color:#15803d;">
+        <strong>${horizon}-yr cumulative:</strong> ${fmtMoney(proj.totalCost)} ·
+        <strong>${horizon}-yr NPV @ ${discount}%:</strong> ${fmtMoney(proj.totalNpv)} ·
+        <strong>Year-${horizon} annual:</strong> ${fmtMoney(proj.years[proj.years.length - 1].cost)}<br/>
+        Assumptions: ${growth >= 0 ? '+' : ''}${growth}% volume growth/yr · +${escalation}% rate escalation/yr · ${discount}% discount (WACC)
+      </div>
+      <table>
+        <thead><tr><th>Year</th><th class="right">Annual cost</th><th class="right">Cumulative</th><th class="right">Discounted (PV)</th></tr></thead>
+        <tbody>
+          ${proj.years.map(y => `<tr><td>Year ${y.year}</td><td class="right">${fmtMoney(y.cost)}</td><td class="right">${fmtMoney(y.cumulative)}</td><td class="right">${fmtMoney(y.npv)}</td></tr>`).join('')}
+          <tr style="border-top:2px solid #475569;font-weight:700;background:#f1f5f9;"><td>${horizon}-yr total</td><td class="right"></td><td class="right">${fmtMoney(proj.totalCost)}</td><td class="right">${fmtMoney(proj.totalNpv)}</td></tr>
+        </tbody>
+      </table>
+    `;
+  })()}
 
   <h2>Recommended centers</h2>
   ${cogResult.centers.map((c, i) => {

@@ -174,6 +174,19 @@ export const DEFAULT_CONFIG = {
   // bumping numCenters. Default 8 covers typical network-design ranges;
   // user can crank to 20 for big-network deep dives.
   sensitivityMaxK: 8,
+  // 2026-05-29 E3 — Multi-year planning horizon. SDs need 3-5 year
+  // cost projections for customer pitches (current single-year output
+  // is fine for directional RFI but breaks at RFP+). Cost projects
+  // forward as:
+  //   costY[n] = baseCost × (1 + growth/100)^n × (1 + escalation/100)^n
+  // where growth = annual demand growth and escalation = annual rate
+  // escalation (truck+parcel surcharges + inflation on labor / fuel).
+  // NPV at the given discount rate optional. Defaults to 1-year for
+  // back-compat with all existing scenarios.
+  analysisHorizonYears: 1,
+  annualGrowthPct: 5,
+  annualEscalationPct: 3,
+  discountRatePct: 8,
   // 2026-05-28 — DC capacity ceiling (B6). When > 0, post-solve walks
   // demand from overflowing clusters to nearest under-capacity cluster
   // until everyone is within cap or every cluster is full. 0 = disabled
@@ -1600,6 +1613,49 @@ export function estimateBlendedCost(cogResult, points, config) {
       fuelPct, residentialShare, discountPct,
     } : null,
   };
+}
+
+// ============================================================
+// MULTI-YEAR PROJECTION (E3 — 2026-05-29)
+// ============================================================
+
+/**
+ * Project baseline cost forward over the planning horizon.
+ *
+ * Year-n cost = baseCost × (1 + growth/100)^n × (1 + escalation/100)^n
+ * (compounded jointly because volume + rate both compound on the same
+ * base; a customer adding 5% volume each year while rates escalate 3%
+ * lands at 1.08^n × base.)
+ *
+ * NPV discounts each future year back to year 1 at discountRatePct.
+ *
+ * @param {number} baseCost — Year-1 annual cost (e.g., cogResult.totalCost)
+ * @param {Object} cfg — { analysisHorizonYears, annualGrowthPct, annualEscalationPct, discountRatePct }
+ * @returns {{ years: Array<{year:number, cost:number, cumulative:number, npv:number}>, totalCost: number, totalNpv: number }}
+ */
+export function multiYearCostProjection(baseCost, cfg) {
+  const horizon = Math.max(1, Math.min(20, +cfg?.analysisHorizonYears || 1));
+  const growth = +cfg?.annualGrowthPct || 0;
+  const escalation = +cfg?.annualEscalationPct || 0;
+  const discount = +cfg?.discountRatePct || 0;
+  const base = +baseCost || 0;
+
+  const years = [];
+  let cumulative = 0;
+  let totalNpv = 0;
+  for (let n = 0; n < horizon; n++) {
+    const growthMult = Math.pow(1 + growth / 100, n);
+    const escMult = Math.pow(1 + escalation / 100, n);
+    const cost = base * growthMult * escMult;
+    cumulative += cost;
+    // NPV: year-1 cost is NOT discounted (occurs now); year-n is
+    // discounted n-1 periods.
+    const npvFactor = Math.pow(1 + discount / 100, n);
+    const npv = cost / npvFactor;
+    totalNpv += npv;
+    years.push({ year: n + 1, cost, cumulative, npv });
+  }
+  return { years, totalCost: cumulative, totalNpv };
 }
 
 // ============================================================
