@@ -3717,8 +3717,17 @@ function renderSensitivity(el) {
                      are visually explicit even when one side is short. -->
                 <line x1="${xLow}" y1="${y - 3}" x2="${xLow}" y2="${y + 23}" stroke="var(--ies-gray-700)" stroke-width="1.5"/>
                 <line x1="${xHigh}" y1="${y - 3}" x2="${xHigh}" y2="${y + 23}" stroke="var(--ies-gray-700)" stroke-width="1.5"/>
-                <text x="${xLow}" y="${y + 13}" text-anchor="${xLow < baselineX ? 'end' : 'start'}" font-size="10" fill="var(--ies-gray-700)" font-weight="600" dx="${xLow < baselineX ? -6 : 6}">${fmtVal(t.lowVal)} / ${fmtCost(t.lowCost)}</text>
-                <text x="${xHigh}" y="${y + 13}" text-anchor="${xHigh > baselineX ? 'start' : 'end'}" font-size="10" fill="var(--ies-gray-700)" font-weight="600" dx="${xHigh > baselineX ? 6 : -6}">${fmtVal(t.highVal)} / ${fmtCost(t.highCost)}</text>
+                <!-- 2026-05-29 — two-line endpoint annotations. The
+                     prior 'value / cost' single-line format read as a
+                     delta ("cost rose by $27K when demand was at 80%"),
+                     which is the opposite of what the chart actually
+                     shows. Vertical pairing — driver value on top,
+                     absolute total cost on the bottom prefixed 'cost'
+                     — removes that ambiguity. -->
+                <text x="${xLow}" y="${y + 7}" text-anchor="${xLow < baselineX ? 'end' : 'start'}" font-size="9" fill="var(--ies-gray-500)" dx="${xLow < baselineX ? -6 : 6}">at ${fmtVal(t.lowVal)}</text>
+                <text x="${xLow}" y="${y + 19}" text-anchor="${xLow < baselineX ? 'end' : 'start'}" font-size="10" fill="var(--ies-gray-700)" font-weight="700" dx="${xLow < baselineX ? -6 : 6}">cost ${fmtCost(t.lowCost)}</text>
+                <text x="${xHigh}" y="${y + 7}" text-anchor="${xHigh > baselineX ? 'start' : 'end'}" font-size="9" fill="var(--ies-gray-500)" dx="${xHigh > baselineX ? 6 : -6}">at ${fmtVal(t.highVal)}</text>
+                <text x="${xHigh}" y="${y + 19}" text-anchor="${xHigh > baselineX ? 'start' : 'end'}" font-size="10" fill="var(--ies-gray-700)" font-weight="700" dx="${xHigh > baselineX ? 6 : -6}">cost ${fmtCost(t.highCost)}</text>
                 <text x="${(xLow + xHigh) / 2}" y="${y + 33}" text-anchor="middle" font-size="9" fill="var(--ies-gray-400)">swing ${fmtCost(t.swing)}</text>
               `;
             }).join('')}
