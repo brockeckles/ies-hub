@@ -3050,6 +3050,22 @@ function _cogMetricsFromSavedRow(row) {
     transportCostPerMile: cfg.transportCostPerMile ?? null,
     roadFactor: cfg.roadFactor ?? null,
     roundTripFactor: cfg.roundTripFactor ?? null,
+    // 2026-05-29 — parcel metrics. Pre-parcel scenarios store these as
+    // null; the Compare table hides parcel rows when no scenario in
+    // the cols set has parcelDetails.
+    truckCost: typeof result?.truckCost === 'number' ? result.truckCost : null,
+    parcelCost: typeof result?.parcelCost === 'number' ? result.parcelCost : null,
+    parcelPackages: result?.parcelDetails?.totalPackages ?? null,
+    parcelCarrier: result?.parcelDetails?.carrier ?? null,
+    parcelAvgWeight: result?.parcelDetails?.avgWeight ?? null,
+    parcelFuelPct: result?.parcelDetails?.fuelPct ?? null,
+    parcelDominantZone: (() => {
+      const bz = result?.parcelDetails?.byZone;
+      if (!bz) return null;
+      let max = -1, zone = null;
+      for (const k of Object.keys(bz)) { if (bz[k] > max) { max = bz[k]; zone = +k; } }
+      return zone;
+    })(),
   };
 }
 
@@ -3142,21 +3158,37 @@ function renderCompare(el) {
             <div style="font-weight:700;color:var(--ies-gray-500);font-size:11px;text-transform:uppercase;">Metric</div>
             ${cols.map((m, i) => `<div style="text-align:right;">${colHeader(m, i)}</div>`).join('')}
 
-            ${[
-              ['Centers (k)',          (m) => valCell(m.nCenters || m.k, fmtNum)],
-              ['Demand points',        (m) => valCell(m.nPoints, fmtNum)],
-              ['Annual transport cost',(m) => valCell(m.totalCost, fmtCost)],
-              ['Service coverage',     (m) => valCell(m.coveragePct, fmtPct)],
-              ['Peak DC utilization',  (m) => valCell(m.peakUtil, fmtPct)],
-              ['Annual CO₂',           (m) => valCell(m.co2Tons, fmtTons)],
-              ['Avg weighted distance',(m) => valCell(m.avgDistance, fmtMi)],
-              ['$/mi',                 (m) => valCell(m.transportCostPerMile, v => '$' + v.toFixed(2))],
-              ['Road factor',          (m) => valCell(m.roadFactor, v => v.toFixed(2))],
-              ['Round-trip',           (m) => valCell(m.roundTripFactor, v => v.toFixed(1))],
-            ].map(([label, fn]) => `
-              <div style="color:var(--ies-gray-600);">${label}</div>
-              ${cols.map(m => `<div style="text-align:right;font-weight:600;">${fn(m)}</div>`).join('')}
-            `).join('')}
+            ${(() => {
+              const anyParcel = cols.some(m => m.parcelCost != null && m.parcelCost > 0);
+              const fmtZone = z => z == null ? null : 'Z' + z;
+              const baseRows = [
+                ['Centers (k)',          (m) => valCell(m.nCenters || m.k, fmtNum)],
+                ['Demand points',        (m) => valCell(m.nPoints, fmtNum)],
+                ['Annual transport cost',(m) => valCell(m.totalCost, fmtCost)],
+              ];
+              const parcelRows = anyParcel ? [
+                ['  ↳ Truck (TL+LTL)',   (m) => valCell(m.truckCost, fmtCost)],
+                ['  ↳ Parcel',           (m) => valCell(m.parcelCost, fmtCost)],
+                ['  ↳ Parcel share',     (m) => m.totalCost > 0 && m.parcelCost != null ? fmtPct(m.parcelCost / m.totalCost * 100) : '<span style=\"color:var(--ies-gray-300);\">—</span>'],
+                ['Annual packages',      (m) => valCell(m.parcelPackages, v => Math.round(v).toLocaleString())],
+                ['Parcel carrier',       (m) => m.parcelCarrier ? (m.parcelCarrier || '').replace(/_/g, ' ') : '<span style=\"color:var(--ies-gray-300);\">—</span>'],
+                ['Avg pkg weight',       (m) => valCell(m.parcelAvgWeight, v => v.toFixed(1) + ' lb')],
+                ['Dominant zone',        (m) => valCell(m.parcelDominantZone, fmtZone)],
+              ] : [];
+              const tailRows = [
+                ['Service coverage',     (m) => valCell(m.coveragePct, fmtPct)],
+                ['Peak DC utilization',  (m) => valCell(m.peakUtil, fmtPct)],
+                ['Annual CO₂',           (m) => valCell(m.co2Tons, fmtTons)],
+                ['Avg weighted distance',(m) => valCell(m.avgDistance, fmtMi)],
+                ['$/mi',                 (m) => valCell(m.transportCostPerMile, v => '$' + v.toFixed(2))],
+                ['Road factor',          (m) => valCell(m.roadFactor, v => v.toFixed(2))],
+                ['Round-trip',           (m) => valCell(m.roundTripFactor, v => v.toFixed(1))],
+              ];
+              return [...baseRows, ...parcelRows, ...tailRows].map(([label, fn]) => `
+                <div style="color:var(--ies-gray-600);${label.startsWith('  ') ? 'padding-left:14px;font-size:11px;color:var(--ies-gray-500);' : ''}">${label.replace(/^  ↳ /, '↳ ')}</div>
+                ${cols.map(m => `<div style="text-align:right;font-weight:600;${label.startsWith('  ') ? 'font-size:11px;' : ''}">${fn(m)}</div>`).join('')}
+              `).join('');
+            })()}
           </div>
           <div style="font-size:11px;color:var(--ies-gray-400);margin-top:14px;line-height:1.5;border-top:1px dashed var(--ies-gray-200);padding-top:10px;">
             Values come from each scenario's saved result + config. Scenarios saved before today's commits may show '—' for newer metrics (CO₂, coverage, peak utilization) — re-Run those scenarios to populate.
@@ -4139,27 +4171,85 @@ function openPrintView() {
     <div class="kpi"><div class="kpi-label">CO₂/yr</div><div class="kpi-value">${co2Str}</div></div>
     <div class="kpi"><div class="kpi-label">Coverage</div><div class="kpi-value">${coverage}</div></div>
   </div>
+  ${cogResult.parcelDetails ? `
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;background:#f1f5f9;border-left:3px solid #14b8a6;padding:10px 14px;border-radius:4px;font-size:11px;">
+      <div><div style="font-size:9px;text-transform:uppercase;color:#475569;letter-spacing:0.3px;">Truck (TL+LTL)</div><div style="font-size:15px;font-weight:800;color:#0a1628;font-variant-numeric:tabular-nums;">${fmtMoney(cogResult.truckCost || 0)}<span style="font-size:10px;font-weight:500;color:#64748b;"> &nbsp;${costEst.totalCost > 0 ? ((cogResult.truckCost || 0) / costEst.totalCost * 100).toFixed(0) : 0}%</span></div></div>
+      <div><div style="font-size:9px;text-transform:uppercase;color:#475569;letter-spacing:0.3px;">Parcel</div><div style="font-size:15px;font-weight:800;color:#0a1628;font-variant-numeric:tabular-nums;">${fmtMoney(cogResult.parcelCost || 0)}<span style="font-size:10px;font-weight:500;color:#64748b;"> &nbsp;${costEst.totalCost > 0 ? ((cogResult.parcelCost || 0) / costEst.totalCost * 100).toFixed(0) : 0}%</span></div></div>
+      <div><div style="font-size:9px;text-transform:uppercase;color:#475569;letter-spacing:0.3px;">Packages/yr</div><div style="font-size:15px;font-weight:800;color:#0a1628;font-variant-numeric:tabular-nums;">${Math.round(cogResult.parcelDetails.totalPackages || 0).toLocaleString()}<span style="font-size:10px;font-weight:500;color:#64748b;"> &nbsp;${(cogResult.parcelDetails.carrier || '').replace(/_/g, ' ')}</span></div></div>
+    </div>
+  ` : ''}
 
   <h2>Cost calculation</h2>
-  <div class="breakdown">
-    ${solvePts.length} active demand points × ${(config.unitsPerTruck || 25000).toLocaleString()} ${(calc.getWeightUnitMeta(config.weightUnit || 'lb').short || 'units')}/truck<br/>
-    ${Math.round(costEst.totalTruckloads || 0).toLocaleString()} truckloads × weighted avg distance × ${(config.roadFactor ?? 1.22).toFixed(2)} road × ${(config.roundTripFactor ?? 2.0).toFixed(1)} round-trip<br/>
-    = ${Math.round(costEst.totalTruckMiles || 0).toLocaleString()} truck-mi/yr × $${(_resolveCpm() || 0).toFixed(2)}/mi<br/>
-    = <strong>${fmtMoney(costEst.totalCost)}/yr</strong> · CO₂ at ${(config.co2KgPerTruckMile ?? 1.62).toFixed(2)} kg/mi = <strong>${co2Str}/yr</strong>
-  </div>
+  ${cogResult.parcelDetails ? `
+    <div class="breakdown">
+      <strong>Truck slice (TL+LTL):</strong><br/>
+      ${Math.round(costEst.totalTruckloads || 0).toLocaleString()} truckloads × weighted avg distance × ${(config.roadFactor ?? 1.22).toFixed(2)} road × ${(config.roundTripFactor ?? 2.0).toFixed(1)} round-trip<br/>
+      = ${Math.round(costEst.totalTruckMiles || 0).toLocaleString()} truck-mi/yr × $${(_resolveCpm() || 0).toFixed(2)}/mi (blended)<br/>
+      = <strong>${fmtMoney(cogResult.truckCost || 0)}/yr</strong><br/>
+      <br/>
+      <strong>Parcel slice (${(cogResult.parcelDetails.carrier || '').replace(/_/g, ' ')}):</strong><br/>
+      ${Math.round(cogResult.parcelDetails.totalPackages || 0).toLocaleString()} pkgs/yr × zone-priced rate (avg ${(cogResult.parcelDetails.avgWeight || 0).toFixed(1)} lb)<br/>
+      + ${(cogResult.parcelDetails.fuelPct || 0).toFixed(0)}% fuel · ${(cogResult.parcelDetails.residentialShare * 100 || 0).toFixed(0)}% residential${(cogResult.parcelDetails.discountPct || 0) > 0 ? ` · −${(cogResult.parcelDetails.discountPct || 0).toFixed(0)}% contract discount` : ''}<br/>
+      = <strong>${fmtMoney(cogResult.parcelCost || 0)}/yr</strong> (avg $${cogResult.parcelDetails.totalPackages > 0 ? ((cogResult.parcelCost || 0) / cogResult.parcelDetails.totalPackages).toFixed(2) : '0.00'}/pkg)<br/>
+      <br/>
+      <strong>Total: ${fmtMoney(costEst.totalCost)}/yr</strong> · CO₂ at ${(config.co2KgPerTruckMile ?? 1.62).toFixed(2)} kg/mi (truck only) = <strong>${co2Str}/yr</strong>
+    </div>
+    <h2>Parcel zone distribution</h2>
+    <table>
+      <thead><tr><th>Zone</th><th class="right">Range (miles)</th><th class="right">Packages</th><th class="right">% of total</th></tr></thead>
+      <tbody>
+        ${[
+          { z: 2, lo: 0,    hi: 150 },
+          { z: 3, lo: 151,  hi: 300 },
+          { z: 4, lo: 301,  hi: 600 },
+          { z: 5, lo: 601,  hi: 1000 },
+          { z: 6, lo: 1001, hi: 1400 },
+          { z: 7, lo: 1401, hi: 1800 },
+          { z: 8, lo: 1801, hi: 999999 },
+        ].map(b => {
+          const n = (cogResult.parcelDetails.byZone || {})[b.z] || 0;
+          const tot = cogResult.parcelDetails.totalPackages || 0;
+          const pct = tot > 0 ? (n / tot * 100) : 0;
+          if (n <= 0) return '';
+          const range = b.hi >= 999999 ? `${b.lo.toLocaleString()}+` : `${b.lo.toLocaleString()}–${b.hi.toLocaleString()}`;
+          return `<tr><td>Z${b.z}</td><td class="right">${range}</td><td class="right">${Math.round(n).toLocaleString()}</td><td class="right">${pct.toFixed(1)}%</td></tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+  ` : `
+    <div class="breakdown">
+      ${solvePts.length} active demand points × ${(config.unitsPerTruck || 25000).toLocaleString()} ${(calc.getWeightUnitMeta(config.weightUnit || 'lb').short || 'units')}/truck<br/>
+      ${Math.round(costEst.totalTruckloads || 0).toLocaleString()} truckloads × weighted avg distance × ${(config.roadFactor ?? 1.22).toFixed(2)} road × ${(config.roundTripFactor ?? 2.0).toFixed(1)} round-trip<br/>
+      = ${Math.round(costEst.totalTruckMiles || 0).toLocaleString()} truck-mi/yr × $${(_resolveCpm() || 0).toFixed(2)}/mi<br/>
+      = <strong>${fmtMoney(costEst.totalCost)}/yr</strong> · CO₂ at ${(config.co2KgPerTruckMile ?? 1.62).toFixed(2)} kg/mi = <strong>${co2Str}/yr</strong>
+    </div>
+  `}
 
   <h2>Recommended centers</h2>
-  ${cogResult.centers.map((c, i) => `
+  ${cogResult.centers.map((c, i) => {
+    const tCost = Array.isArray(cogResult.truckCostByCluster) ? cogResult.truckCostByCluster[i] : 0;
+    const pCost = Array.isArray(cogResult.parcelCostByCluster) ? cogResult.parcelCostByCluster[i] : 0;
+    const tot = Array.isArray(cogResult.costByCluster) ? cogResult.costByCluster[i] : 0;
+    return `
     <div class="center-card">
       <div class="center-card-head">Center ${i + 1}: ${(c.nearestCity || '').replace(/</g, '&lt;')}${c.candidateLabel ? ` (snapped → ${c.candidateLabel.replace(/</g, '&lt;')})` : ''}</div>
       <div class="center-card-grid">
         <div><div class="lbl">Location</div><div class="val">${c.lat.toFixed(4)}, ${c.lng.toFixed(4)}</div></div>
         <div><div class="lbl">Assigned weight</div><div class="val">${(c.totalWeight || 0).toLocaleString()}</div></div>
         <div><div class="lbl">Avg distance</div><div class="val">${fmtMi(c.avgWeightedDistance)}</div></div>
-        <div><div class="lbl">Annual cost</div><div class="val">${fmtMoney(Array.isArray(cogResult.costByCluster) ? cogResult.costByCluster[i] : 0)}</div></div>
+        <div><div class="lbl">Annual cost</div><div class="val">${fmtMoney(tot)}</div></div>
       </div>
+      ${cogResult.parcelDetails ? `
+        <div class="center-card-grid" style="margin-top:6px;border-top:1px dashed #cbd5e1;padding-top:6px;">
+          <div><div class="lbl">Truck cost</div><div class="val">${fmtMoney(tCost)}</div></div>
+          <div><div class="lbl">Parcel cost</div><div class="val">${fmtMoney(pCost)}</div></div>
+          <div><div class="lbl">Parcel share</div><div class="val">${tot > 0 ? (pCost / tot * 100).toFixed(0) : 0}%</div></div>
+          <div><div class="lbl">$ / unit</div><div class="val">$${c.totalWeight > 0 ? (tot / c.totalWeight).toFixed(3) : '0.000'}</div></div>
+        </div>
+      ` : ''}
     </div>
-  `).join('')}
+  `;
+  }).join('')}
 
   <h2>Demand point assignments</h2>
   <table>
