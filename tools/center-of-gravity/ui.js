@@ -243,20 +243,31 @@ function openEditor(savedRow) {
   // renderMap expect), rebuild it from points+config so the full Analysis
   // and Map tabs render instead of erroring silently. Covers scenarios
   // that were seeded via SQL with only a summary result payload.
-  if (cogResult && points.length > 0 &&
-      (!Array.isArray(cogResult.assignments) || !cogResult.assignments.length)) {
+  if (cogResult && points.length > 0) {
     try {
       const _solvePts = _pointsForSolve();
-      cogResult = calc.kMeansCog(_solvePts, config.numCenters, config.maxIterations, config.kmeansRestarts ?? 10, (config.snapToCandidates ? (config.candidateFacilities || []).filter(c => c.locked) : []));
-      if (config.snapToCandidates && (config.candidateFacilities || []).length > 0) {
-        cogResult = calc.snapCentersToCandidates(cogResult, _solvePts, config.candidateFacilities);
+      const needFullRebuild = !Array.isArray(cogResult.assignments) || !cogResult.assignments.length;
+      if (needFullRebuild) {
+        // Saved row had only a summary — solve from scratch.
+        cogResult = calc.kMeansCog(_solvePts, config.numCenters, config.maxIterations, config.kmeansRestarts ?? 10, (config.snapToCandidates ? (config.candidateFacilities || []).filter(c => c.locked) : []));
+        if (config.snapToCandidates && (config.candidateFacilities || []).length > 0) {
+          cogResult = calc.snapCentersToCandidates(cogResult, _solvePts, config.candidateFacilities);
+        }
       }
+      // 2026-05-29 — ALWAYS re-stamp capacity/cost/service on a loaded
+      // result, even when assignments are present. Saved scenarios from
+      // before today's commits carry stale totalCost (truck-only or pre-
+      // mode-mix) and lack serviceStats/capacityStats/co2Tons. Without
+      // this, the chrome KPI strip shows '$39K / blank / blank / blank'
+      // while the Numbers tab re-runs the engine and shows the correct
+      // blended cost. Re-stamping here keeps every surface aligned with
+      // current engine math.
       calc.applyCapacityConstraints(cogResult, _solvePts, config.capacityPerDC ?? 0);
       _enrichCogResultWithCost(cogResult, _solvePts);
       calc.flagServiceViolations(cogResult, _solvePts, config.maxServiceMiles ?? 0, config.roadFactor ?? 1.22);
       sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, config.sensitivityMaxK ?? 8), config);
     } catch (err) {
-      console.warn('[COG] Result rebuild from saved inputs failed; falling back to partial render:', err);
+      console.warn('[COG] Result re-enrichment from saved inputs failed; falling back to partial render:', err);
     }
   }
   // New editor session — drop the prior scenario's run-state baseline.
@@ -3649,14 +3660,19 @@ function renderSensitivity(el) {
         const xMin = Math.min(baselineCost, ...lows);
         const xMax = Math.max(baselineCost, ...highs);
         const xRange = Math.max(1, xMax - xMin);
-        const padPct = 0.08;
-        const xPlotMin = xMin - xRange * padPct;
-        const xPlotMax = xMax + xRange * padPct;
-        const xPlotRange = xPlotMax - xPlotMin;
+        // 2026-05-29 — reserve fixed pixel padding on each side of the
+        // chart area for the value labels ("$10.2M") which sit outside
+        // the bar end. 8% of range fails when one driver dominates the
+        // swing — the label of the biggest bar overflows the card.
         const W = 720, H = Math.max(180, 40 + tornado.length * 38);
         const labelW = 160;
-        const chartW = W - labelW - 20;
-        const xScale = (v) => labelW + ((v - xPlotMin) / xPlotRange) * chartW;
+        const labelPadPx = 60;
+        const chartW = W - labelW - 20 - labelPadPx;
+        // Map xMin..xMax into [labelW + labelPadPx, labelW + labelPadPx + chartW].
+        const xPlotMin = xMin;
+        const xPlotMax = xMax;
+        const xPlotRange = Math.max(1, xPlotMax - xPlotMin);
+        const xScale = (v) => labelW + labelPadPx + ((v - xPlotMin) / xPlotRange) * chartW;
         const baselineX = xScale(baselineCost);
         const fmtCost = (v) => calc.formatCurrency(v, { compact: true });
 
@@ -3666,7 +3682,7 @@ function renderSensitivity(el) {
           <div style="font-size:11px;color:var(--ies-gray-500);margin-bottom:14px;">
             Each bar sweeps one driver to its low/high band while holding others at baseline. Bars sorted by absolute cost swing. Vertical dashed line = baseline total cost (${fmtCost(baselineCost)}).
           </div>
-          <svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="overflow:visible;">
+          <svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
             <!-- Baseline vertical line -->
             <line x1="${baselineX}" y1="20" x2="${baselineX}" y2="${H - 30}" stroke="#475569" stroke-dasharray="4 3" stroke-width="1.5"/>
             <text x="${baselineX}" y="${H - 12}" text-anchor="middle" font-size="11" fill="#475569" font-weight="600">${fmtCost(baselineCost)}</text>
