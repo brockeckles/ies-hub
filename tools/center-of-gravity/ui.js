@@ -482,14 +482,17 @@ async function handleSave() {
           const solvePts = _pointsForSolve();
           const csMcr = calc.buildMcrFromDcList(csList, solvePts);
           if (csMcr) {
-            const csCost = calc.estimateTransportCost(csMcr, solvePts, _resolveCpm(), config.unitsPerTruck || 25000, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
+            const csCost = calc.estimateBlendedCost(csMcr, solvePts, config);
             calc.flagServiceViolations(csMcr, solvePts, config.maxServiceMiles ?? 0, config.roadFactor ?? 1.22);
             const csCo2 = (csCost.totalTruckMiles || 0) * (config.co2KgPerTruckMile ?? 1.62) / 1000;
             const propCost = cogResult.totalCost || 0;
             const propCo2 = cogResult.co2Tons || 0;
+            const totalWtForDelta = solvePts.reduce((sW, p) => sW + (p.weight || 0), 0);
             deltaVsCurrent = {
               currentNCenters: csList.length,
               currentCost: csCost.totalCost,
+              currentCostPerUnit: totalWtForDelta > 0 ? csCost.totalCost / totalWtForDelta : 0,
+              proposedCostPerUnit: totalWtForDelta > 0 ? (cogResult.totalCost || 0) / totalWtForDelta : 0,
               currentCo2Tons: csCo2,
               currentCoveragePct: csMcr.serviceStats?.maxMiles > 0 ? csMcr.serviceStats.coveragePct : null,
               costDelta: csCost.totalCost - propCost,
@@ -514,6 +517,7 @@ async function handleSave() {
           totalCost: cogResult.totalCost || 0,
           totalTruckMiles: cogResult.totalTruckMiles || 0,
           totalTruckloads: cogResult.totalTruckloads || 0,
+          avgCostPerUnit: cogResult.avgCostPerUnit || 0,
           co2Tons: cogResult.co2Tons || 0,
           serviceCoveragePct: cogResult.serviceStats?.coveragePct ?? null,
           maxServiceMiles: config.maxServiceMiles || 0,
@@ -2616,8 +2620,13 @@ function renderAnalysis(el) {
         if (solvePts.length === 0) return '';
         const csMcr = calc.buildMcrFromDcList(csList, solvePts);
         if (!csMcr) return '';
-        // Run the same math on the current-state network.
-        const csCost = calc.estimateTransportCost(csMcr, solvePts, _resolveCpm(), config.unitsPerTruck || 25000, config.roundTripFactor ?? 2.0, config.roadFactor ?? 1.22);
+        // Run the same math on the current-state network. 2026-05-29 —
+        // route through estimateBlendedCost so parcel scenarios produce
+        // apples-to-apples numbers (was estimateTransportCost = truck-
+        // only, which understated current-state cost in parcel-heavy
+        // networks — the proposed side already uses blended math via
+        // cogResult enrichment).
+        const csCost = calc.estimateBlendedCost(csMcr, solvePts, config);
         calc.flagServiceViolations(csMcr, solvePts, config.maxServiceMiles ?? 0, config.roadFactor ?? 1.22);
         const csCo2 = (csCost.totalTruckMiles || 0) * (config.co2KgPerTruckMile ?? 1.62) / 1000;
         const csAvgDist = csMcr.totalWeightedDistance / Math.max(1, solvePts.reduce((s, p) => s + (p.weight || 0), 0));
@@ -2681,6 +2690,25 @@ function renderAnalysis(el) {
               <div style="text-align:right;">${cell(calc.formatMiles(csAvgDist))}</div>
               <div style="text-align:right;">${cell(calc.formatMiles(propAvgDist))}</div>
               <div style="text-align:right;">${deltaCell(`${sign(-dAvgDist)}${calc.formatMiles(Math.abs(dAvgDist))}`, dAvgDist > 0)}</div>
+
+              ${(() => {
+                // 2026-05-29 F13 — landed cost per unit. The TCO number
+                // SDs actually present to customers. Computed against
+                // active demand weight (excludes type='excluded' rows).
+                const totalWt = solvePts.reduce((s2, p) => s2 + (p.weight || 0), 0);
+                if (totalWt <= 0) return '';
+                const csPerUnit = csCost.totalCost / totalWt;
+                const propPerUnit = propCost / totalWt;
+                const dPerUnit = csPerUnit - propPerUnit;
+                const wtUnit = (calc.getWeightUnitMeta(config.weightUnit || 'lb').short || 'unit');
+                const fmtU = v => '\$' + v.toFixed(4);
+                return `
+                  <div style="color:var(--ies-gray-600);">Landed cost / ${wtUnit}</div>
+                  <div style="text-align:right;">${cell(fmtU(csPerUnit))}</div>
+                  <div style="text-align:right;">${cell(fmtU(propPerUnit))}</div>
+                  <div style="text-align:right;">${deltaCell(`${sign(-dPerUnit)}${fmtU(Math.abs(dPerUnit))} (${sign(-dPerUnit / Math.max(0.0001, csPerUnit) * 100)}${Math.abs(dPerUnit / Math.max(0.0001, csPerUnit) * 100).toFixed(1)}%)`, dPerUnit > 0)}</div>
+                `;
+              })()}
             </div>
           </div>
         `;
@@ -3061,6 +3089,11 @@ function _cogMetricsFromSavedRow(row) {
     transportCostPerMile: cfg.transportCostPerMile ?? null,
     roadFactor: cfg.roadFactor ?? null,
     roundTripFactor: cfg.roundTripFactor ?? null,
+    // 2026-05-29 F13 — landed cost per unit. The TCO metric SDs present.
+    avgCostPerUnit: typeof result?.avgCostPerUnit === 'number' ? result.avgCostPerUnit
+      : (typeof result?.totalCost === 'number' && (d.points || []).length > 0
+        ? result.totalCost / Math.max(1, (d.points || []).reduce((s, p) => s + (p.weight || 0), 0))
+        : null),
     // 2026-05-29 — parcel metrics. Pre-parcel scenarios store these as
     // null; the Compare table hides parcel rows when no scenario in
     // the cols set has parcelDetails.
@@ -3187,6 +3220,7 @@ function renderCompare(el) {
                 ['Dominant zone',        (m) => valCell(m.parcelDominantZone, fmtZone)],
               ] : [];
               const tailRows = [
+                ['Landed cost / unit',   (m) => valCell(m.avgCostPerUnit, v => '$' + v.toFixed(4))],
                 ['Service coverage',     (m) => valCell(m.coveragePct, fmtPct)],
                 ['Peak DC utilization',  (m) => valCell(m.peakUtil, fmtPct)],
                 ['Annual CO₂',           (m) => valCell(m.co2Tons, fmtTons)],
@@ -4284,10 +4318,11 @@ function openPrintView() {
   <h1>${scenarioName.replace(/</g, '&lt;')}</h1>
   <div class="meta">${ctxLine.replace(/</g, '&lt;')} · Center of Gravity analysis · ${today}</div>
 
-  <div class="kpi-strip">
+  <div class="kpi-strip" style="grid-template-columns:repeat(6, 1fr);">
     <div class="kpi"><div class="kpi-label">Centers</div><div class="kpi-value">${cogResult.centers.length}</div></div>
     <div class="kpi"><div class="kpi-label">Truckloads/yr</div><div class="kpi-value">${Math.round(costEst.totalTruckloads || 0).toLocaleString()}</div></div>
     <div class="kpi"><div class="kpi-label">Annual cost</div><div class="kpi-value">${fmtMoney(costEst.totalCost)}</div></div>
+    <div class="kpi"><div class="kpi-label">Cost / unit</div><div class="kpi-value">$${(costEst.avgCostPerUnit || 0).toFixed(4)}</div></div>
     <div class="kpi"><div class="kpi-label">CO₂/yr</div><div class="kpi-value">${co2Str}</div></div>
     <div class="kpi"><div class="kpi-label">Coverage</div><div class="kpi-value">${coverage}</div></div>
   </div>
