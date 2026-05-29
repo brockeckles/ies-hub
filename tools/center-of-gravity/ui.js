@@ -3740,11 +3740,25 @@ function renderSensitivity(el) {
                 <line x1="${xLow}" y1="${y - 3}" x2="${xLow}" y2="${y + 23}" stroke="var(--ies-gray-700)" stroke-width="1.5"/>
                 <line x1="${xHigh}" y1="${y - 3}" x2="${xHigh}" y2="${y + 23}" stroke="var(--ies-gray-700)" stroke-width="1.5"/>
                 ${(() => {
-                  // 2026-05-29 — smart endpoint label placement. If the
-                  // outward-pointing label would clip past the chart edge,
-                  // flip it to inside the bar so it stays visible. This
-                  // is what was happening to the parcel-share bar's
-                  // far-right cost label.
+                  // 2026-05-29 — narrow-bar fallback. When the bar is
+                  // less than ~40px wide (swing tiny relative to chart
+                  // scale, e.g. round-trip factor in a parcel-heavy
+                  // scenario), the two end labels overlap into garbled
+                  // text. Replace with a single centered annotation
+                  // above the bar.
+                  const barPxW = Math.abs(xHigh - xLow);
+                  if (barPxW < 40) {
+                    const midX = (xLow + xHigh) / 2;
+                    return `
+                      <text x="${midX}" y="${y - 4}" text-anchor="middle" font-size="9" fill="var(--ies-gray-600)">at ${fmtVal(t.lowVal)} → ${fmtVal(t.highVal)}</text>
+                    `;
+                  }
+                  // Wide bar — smart endpoint label placement. If the
+                  // outward-pointing label would clip past the chart
+                  // edge, flip it to inside the bar so it stays visible.
+                  // Inside labels render WHITE WITH DARK STROKE on both
+                  // lines so they remain legible against the orange/blue
+                  // bar fill.
                   const chartRight = labelW + labelPadPx + chartW;
                   const chartLeft  = labelW + labelPadPx;
                   const estLabelW = 64; // rough px for 'cost $XXM'
@@ -3757,9 +3771,12 @@ function renderSensitivity(el) {
                     const flip = willClipRight || willClipLeft;
                     const anchor = flip ? (wantOutsideRight ? 'end' : 'start') : outsideAnchor;
                     const dx = flip ? (wantOutsideRight ? -6 : 6) : outsideDx;
+                    const stroke = flip ? 'paint-order:stroke;stroke:#0a1628;stroke-width:2px;' : '';
+                    const atFill = flip ? '#ffffff' : 'var(--ies-gray-600)';
+                    const costFill = flip ? '#ffffff' : 'var(--ies-gray-700)';
                     return `
-                      <text x="${xPt}" y="${y + 7}" text-anchor="${anchor}" font-size="9" fill="var(--ies-gray-600)" dx="${dx}">at ${val}</text>
-                      <text x="${xPt}" y="${y + 19}" text-anchor="${anchor}" font-size="10" fill="${flip ? '#ffffff' : 'var(--ies-gray-700)'}" font-weight="700" dx="${dx}" style="${flip ? 'paint-order:stroke;stroke:#0a1628;stroke-width:2px;' : ''}">cost ${cost}</text>
+                      <text x="${xPt}" y="${y + 7}" text-anchor="${anchor}" font-size="9" fill="${atFill}" dx="${dx}" style="${stroke}">at ${val}</text>
+                      <text x="${xPt}" y="${y + 19}" text-anchor="${anchor}" font-size="10" fill="${costFill}" font-weight="700" dx="${dx}" style="${stroke}">cost ${cost}</text>
                     `;
                   };
                   return renderEnd(xLow, fmtVal(t.lowVal), fmtCost(t.lowCost)) + renderEnd(xHigh, fmtVal(t.highVal), fmtCost(t.highCost));
@@ -3767,13 +3784,39 @@ function renderSensitivity(el) {
               `;
             }).join('')}
           </svg>
+          ${(() => {
+            // Surface a warning when the parcel-share driver shows
+            // cost rising as parcel-share decreases. In a typical 3PL
+            // setup parcel costs MORE per pound than TL, so lowering
+            // parcel-share should LOWER total cost. If the chart shows
+            // the opposite, parcel cost per pound is unrealistically
+            // low — almost always a data-setup issue.
+            const parcelRow = tornado.find(r => r.key === 'parcelPct');
+            if (!parcelRow) return '';
+            // 'low driver value (parcel-share 75%)' should produce a
+            // LOWER cost than baseline if parcel is the expensive mode.
+            // When lowCost > baselineCost, the math is counterintuitive.
+            if (parcelRow.lowCost <= parcelRow.baselineCost + 1) return '';
+            const parcelAvgWt = config.parcelAvgPackageWeightLb || 5;
+            const unitsTruck = config.unitsPerTruck || 25000;
+            return `
+              <div style="background:#fef3c7;border-left:3px solid #f59e0b;padding:10px 14px;margin-top:14px;font-size:11px;color:#78350f;line-height:1.55;border-radius:0 4px 4px 0;">
+                <strong>⚠ Counterintuitive result on Parcel share of mix.</strong> The chart says reducing parcel share <em>raises</em> total cost — but parcel typically costs more per pound than TL, so this usually goes the other way. Almost always a data-setup issue:
+                <ul style="margin:6px 0 0 18px;padding:0;">
+                  <li><strong>Avg package weight</strong> currently set to <strong>${parcelAvgWt} lb</strong> — if this is too high (e.g. 500 lb), per-package parcel cost is artificially low, making parcel look cheaper than TL. Realistic DTC parcel is 1-50 lb.</li>
+                  <li><strong>Units per truck</strong> currently set to <strong>${unitsTruck.toLocaleString()}</strong> — must be in the SAME unit as the demand-point weight column (typically pounds).</li>
+                  <li>Verify the weight column in your input data is in pounds (not tons, not shipments-per-year).</li>
+                </ul>
+              </div>
+            `;
+          })()}
           <div style="font-size:11px;color:var(--ies-gray-500);margin-top:10px;line-height:1.55;border-top:1px dashed var(--ies-gray-200);padding-top:10px;">
             <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
               <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:18px;height:11px;background:#3b82f6;border-radius:2px;opacity:0.85;"></span><strong style="color:var(--ies-gray-700);">Blue</strong> — total cost <em>below</em> baseline (favorable direction of this driver)</span>
               <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:18px;height:11px;background:#f97316;border-radius:2px;opacity:0.85;"></span><strong style="color:var(--ies-gray-700);">Orange</strong> — total cost <em>above</em> baseline (unfavorable direction)</span>
             </div>
             <strong>Reading the rows:</strong> Drivers near the top swing cost the most — focus negotiation effort there. Drivers near the bottom are largely fixed.<br/>
-            <strong>Reading each bar:</strong> The vertical dashed line is the baseline cost. Each end of the bar has a tick + label ("at <em>driver value</em>" / "cost <em>\$X</em>") — the cost AT that driver value, not a change. An all-orange bar means every sweep value raises cost above baseline (typically because the unsymmetric clamp on the driver only allows movement in one direction, e.g. parcel share already at 100%).
+            <strong>Reading each bar:</strong> The vertical dashed line is the baseline cost. Each end of the bar has a tick + label ("at <em>driver value</em>" / "cost <em>\$X</em>") — the cost AT that driver value, not a change. An all-orange bar means every sweep value raises cost above baseline.
           </div>
         </div>
       `;
