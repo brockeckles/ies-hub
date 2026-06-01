@@ -3491,7 +3491,7 @@ function renderMap(el) {
   if (!document.getElementById('cog-marker-status-chip')) {
     const chip = document.createElement('div');
     chip.id = 'cog-marker-status-chip';
-    chip.textContent = 'mapfix7 · renderMap reached';
+    chip.textContent = 'mapfix8 · renderMap reached';
     chip.style.cssText = 'position:fixed;top:80px;right:12px;z-index:2147483646;font-family:monospace;font-size:11px;background:#facc15;color:#0a1628;padding:6px 10px;border-radius:6px;pointer-events:none;border:2px solid #0a1628;box-shadow:0 4px 12px rgba(0,0,0,0.3);max-width:340px;font-weight:600;line-height:1.45;';
     document.body.appendChild(chip);
   }
@@ -3530,7 +3530,7 @@ function renderMap(el) {
               ? `C${i+1}: ${c.lat.toFixed(3)},${c.lng.toFixed(3)} (${c.nearestCity || '?'})`
               : `<strong>C${i+1} INVALID (${c.lat}, ${c.lng})</strong>`;
           }).join(' &nbsp;·&nbsp; ');
-          return `<div style="width:100%;font-size:11px;background:${bg};color:${fg};padding:6px 10px;border-radius:4px;font-family:monospace;margin-top:4px;"><strong>build mapfix7</strong> &nbsp;·&nbsp; ${summary} &nbsp;·&nbsp; <a href="#" data-cog-action="zoom-centers" style="color:${fg};text-decoration:underline;">zoom to centers →</a></div>`;
+          return `<div style="width:100%;font-size:11px;background:${bg};color:${fg};padding:6px 10px;border-radius:4px;font-family:monospace;margin-top:4px;"><strong>build mapfix8</strong> &nbsp;·&nbsp; ${summary} &nbsp;·&nbsp; <a href="#" data-cog-action="zoom-centers" style="color:${fg};text-decoration:underline;">zoom to centers →</a></div>`;
         })()}
         <!-- 2026-06-01 mapfix7 — Bulletproof Center Locations card. Plain
              HTML rendered inside renderMap's innerHTML — does NOT depend
@@ -3679,12 +3679,29 @@ function _ensureCogStyleInjected() {
   document.head.appendChild(styleEl);
 }
 
+function _setChipStatus(msg) {
+  const chip = document.getElementById('cog-marker-status-chip');
+  if (chip) chip.textContent = 'mapfix8 · ' + msg;
+}
 function initCogMap() {
+  _setChipStatus('initCogMap start');
+  try {
+    _initCogMapBody();
+    _setChipStatus('initCogMap done');
+  } catch (err) {
+    console.error('[COG initCogMap] threw:', err);
+    _setChipStatus('THREW: ' + (err && err.message ? err.message : String(err)).slice(0, 200));
+    throw err;
+  }
+}
+function _initCogMapBody() {
+  _setChipStatus('step 1: style injected');
   _ensureCogStyleInjected();
   const container = rootEl?.querySelector('#cog-map-container');
   if (!container || !cogResult) return;
   if (mapInstance) { mapInstance.remove(); mapInstance = null; }
 
+  _setChipStatus('step 2: container + L check');
   if (typeof L === 'undefined') {
     container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:13px;color:var(--ies-gray-400);">Map requires Leaflet.js</div>';
     return;
@@ -3728,8 +3745,10 @@ function initCogMap() {
   };
   const bmKey = BASEMAPS[mapOptions.basemap] ? mapOptions.basemap : 'voyager';
   const bm = BASEMAPS[bmKey];
+  _setChipStatus('step 3: map created, adding tiles');
   L.tileLayer(bm.url, { maxZoom: 19, subdomains: bm.sub, attribution: bm.attr }).addTo(mapInstance);
 
+  _setChipStatus('step 4: tiles done');
   // 2026-05-28 D10 — scale bar. Standard cartographic element. Imperial
   // first (US default) with metric secondary. Bottom-left.
   L.control.scale({ imperial: true, metric: true, maxWidth: 180, position: 'bottomleft' }).addTo(mapInstance);
@@ -3796,6 +3815,7 @@ function initCogMap() {
   // Heatmap layer (drawn first so it sits under markers).
   // We weight each demand point and overlay a soft halo whose radius
   // scales with weight relative to the max in the dataset.
+  _setChipStatus('step 5: pre-heat');
   if (mapOptions.heat) {
     const maxWeight = Math.max(1, ...points.map(p => p.weight || 0));
     points.forEach(pt => {
@@ -3815,6 +3835,7 @@ function initCogMap() {
     });
   }
 
+  _setChipStatus('step 6: post-heat');
   // Service zones — translucent rings around each center at the
   // configured radii. Sits under the cluster lines so they read clearly.
   if (mapOptions.zones && Array.isArray(mapOptions.zoneRadiiMiles)) {
@@ -3864,6 +3885,7 @@ function initCogMap() {
     });
   }
 
+  _setChipStatus('step 7: pre-demand');
   // Demand points colored by cluster
   let _linesDrawn = 0;
   let _linesSkipped = 0;
@@ -3905,6 +3927,7 @@ function initCogMap() {
       _linesSkipped++;
     }
   });
+  _setChipStatus('step 8: demand done (' + _linesDrawn + ' lines)');
   console.log('[COG map] assignment lines:', _linesDrawn, 'drawn,', _linesSkipped, 'skipped (invalid center)');
 
   // Center markers (star-like — larger with border) + permanent label
@@ -3932,6 +3955,7 @@ function initCogMap() {
   // on screen in Brock's scenario. A plain div appended as the LAST
   // child of the container is at the top of DOM stacking order and
   // is always visible.
+  _setChipStatus('step 9: pre-centers');
   // 2026-06-01 mapfix5 — Center markers as position:fixed overlays
   // appended to document.body. Positioned via the union of
   // map.latLngToContainerPoint + container.getBoundingClientRect, so
@@ -4003,6 +4027,7 @@ function initCogMap() {
     document.body.appendChild(overlay);
     _centerOverlays.push({ overlay, c });
   });
+  _setChipStatus('step 10: centers built (' + _centerOverlays.length + ' overlays)');
   // Position overlays in VIEWPORT coords via container bounding rect +
   // map.latLngToContainerPoint. Re-run on map events + window
   // scroll/resize. Also: hide the overlay if the computed viewport
@@ -4049,7 +4074,7 @@ function initCogMap() {
   if (chip) chip.style.zIndex = '2147483646';
   const _refreshChip = () => {
     if (!mapInstance || !container || !container.isConnected) {
-      chip.textContent = 'mapfix5 · no map';
+      chip.textContent = 'mapfix8 · no map';
       return;
     }
     const rect = container.getBoundingClientRect();
@@ -4058,7 +4083,7 @@ function initCogMap() {
       const pt = mapInstance.latLngToContainerPoint([c.lat, c.lng]);
       return `C${i+1} ll=${c.lat.toFixed(2)},${c.lng.toFixed(2)} px=${Math.round(pt.x)},${Math.round(pt.y)} vp=${Math.round(rect.left + pt.x)},${Math.round(rect.top + pt.y)}`;
     });
-    chip.textContent = 'mapfix5 · ' + parts.join(' · ');
+    chip.textContent = 'mapfix8 · ' + parts.join(' · ');
   };
   _refreshChip();
   mapInstance.on('move zoom moveend zoomend', _refreshChip);
@@ -4066,7 +4091,7 @@ function initCogMap() {
   requestAnimationFrame(() => {
     try { _updateCenterOverlayPositions(); _refreshChip(); } catch (e) {
       console.error('[COG marker] update failed:', e);
-      if (chip) chip.textContent = 'mapfix7 · POSITIONING ERROR: ' + (e.message || e);
+      if (chip) chip.textContent = 'mapfix8 · POSITIONING ERROR: ' + (e.message || e);
     }
     setTimeout(() => {
       try { _updateCenterOverlayPositions(); _refreshChip(); } catch (e) {
