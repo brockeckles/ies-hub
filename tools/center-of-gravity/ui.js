@@ -3511,7 +3511,7 @@ function renderMap(el) {
               ? `C${i+1}: ${c.lat.toFixed(3)},${c.lng.toFixed(3)} (${c.nearestCity || '?'})`
               : `<strong>C${i+1} INVALID (${c.lat}, ${c.lng})</strong>`;
           }).join(' &nbsp;·&nbsp; ');
-          return `<div style="width:100%;font-size:11px;background:${bg};color:${fg};padding:6px 10px;border-radius:4px;font-family:monospace;margin-top:4px;"><strong>build mapfix4</strong> &nbsp;·&nbsp; ${summary} &nbsp;·&nbsp; <a href="#" data-cog-action="zoom-centers" style="color:${fg};text-decoration:underline;">zoom to centers →</a></div>`;
+          return `<div style="width:100%;font-size:11px;background:${bg};color:${fg};padding:6px 10px;border-radius:4px;font-family:monospace;margin-top:4px;"><strong>build mapfix5</strong> &nbsp;·&nbsp; ${summary} &nbsp;·&nbsp; <a href="#" data-cog-action="zoom-centers" style="color:${fg};text-decoration:underline;">zoom to centers →</a></div>`;
         })()}
         <div style="margin-left:auto;display:flex;gap:10px;align-items:center;">
           <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ies-gray-600);cursor:pointer;">
@@ -3887,15 +3887,23 @@ function initCogMap() {
   // on screen in Brock's scenario. A plain div appended as the LAST
   // child of the container is at the top of DOM stacking order and
   // is always visible.
+  // 2026-06-01 mapfix5 — Center markers as position:fixed overlays
+  // appended to document.body. Positioned via the union of
+  // map.latLngToContainerPoint + container.getBoundingClientRect, so
+  // they sit in VIEWPORT coordinates. position:fixed bypasses the map
+  // container's overflow:hidden, all Leaflet panes, and any other
+  // ancestor clipping. They cannot be hidden by anything. Updated on
+  // every map move + window scroll/resize.
+  // First: clean up any overlays from a previous initCogMap call.
+  document.querySelectorAll('.cog-center-fixed-overlay').forEach(n => n.remove());
   const _centerOverlays = [];
   cogResult.centers.forEach((c, i) => {
     const centerColor = clusterColor(i);
     if (!Number.isFinite(c.lat) || !Number.isFinite(c.lng)) {
-      console.warn('[COG map] center', i, 'has invalid coordinates — skipping render', c);
+      console.warn('[COG map] center', i, 'invalid coords — skipping', c);
       return;
     }
-    // Geographic crosshair (extends 0.6 degrees from center; grows/shrinks
-    // with zoom so it acts as a geographic indicator).
+    // Geographic crosshair (Leaflet SVG, scales with zoom).
     const crossArm = 0.6;
     L.polyline([[c.lat - crossArm, c.lng], [c.lat + crossArm, c.lng]], {
       color: '#0a1628', weight: 3, opacity: 0.85,
@@ -3903,60 +3911,116 @@ function initCogMap() {
     L.polyline([[c.lat, c.lng - crossArm], [c.lat, c.lng + crossArm]], {
       color: '#0a1628', weight: 3, opacity: 0.85,
     }).addTo(mapInstance);
-    // Plain DOM overlay — direct child of the map container.
+    // Build the fixed-position overlay element.
     const overlay = document.createElement('div');
-    overlay.className = 'cog-center-overlay';
+    overlay.className = 'cog-center-fixed-overlay';
     overlay.setAttribute('data-center-idx', String(i));
     const labelText = (mapOptions.labels !== false && c.nearestCity)
       ? c.nearestCity.split('(')[0].trim()
       : '';
     overlay.innerHTML = `
-      <div class="cog-center-overlay-dot" style="
+      ${labelText ? `<div style="
+        position: absolute; left: 50%; bottom: 52px;
+        transform: translateX(-50%);
+        white-space: nowrap;
+        background: rgba(255,255,255,0.97); border: 1.5px solid #0a1628;
+        border-radius: 5px; padding: 3px 8px;
+        font-size: 12px; font-weight: 700; color: #0a1628;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+        pointer-events: none;
+      ">★ ${labelText}</div>` : ''}
+      <div style="
         width: 44px; height: 44px; border-radius: 50%;
         background: ${centerColor};
         border: 4px solid #0a1628;
-        box-shadow: 0 0 0 6px rgba(255,255,255,0.95), 0 4px 14px rgba(0,0,0,0.45);
+        box-shadow: 0 0 0 6px rgba(255,255,255,0.97), 0 4px 14px rgba(0,0,0,0.45);
         display: flex; align-items: center; justify-content: center;
         color: #ffffff; font-weight: 800; font-size: 17px;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         text-shadow: 0 1px 2px rgba(0,0,0,0.5);
         cursor: pointer;
+        pointer-events: auto;
       ">C${i + 1}</div>
-      ${labelText ? `<div class="cog-center-overlay-label" style="
-        position: absolute; left: 50%; transform: translateX(-50%);
-        top: -22px; white-space: nowrap;
-        background: rgba(255,255,255,0.95); border: 1px solid #0a1628;
-        border-radius: 4px; padding: 2px 6px;
-        font-size: 11px; font-weight: 700; color: #0a1628;
-        box-shadow: 0 1px 4px rgba(0,0,0,0.2);
-        pointer-events: none;
-      ">★ ${labelText}</div>` : ''}
     `;
     overlay.style.cssText = `
-      position: absolute; width: 44px; height: 44px;
-      left: 0; top: 0; z-index: 1000;
-      pointer-events: auto;
+      position: fixed; width: 44px; height: 44px;
+      left: -100px; top: -100px;
+      z-index: 9999;
+      pointer-events: none;
     `;
-    overlay.addEventListener('click', () => {
+    overlay.addEventListener('click', (e) => {
+      if (e.target.tagName !== 'DIV' || e.target.parentNode !== overlay) return;
       L.popup()
         .setLatLng([c.lat, c.lng])
         .setContent(`<strong>Center ${i + 1}</strong><br>${c.nearestCity}<br>Location: ${calc.formatLatLng(c.lat, c.lng)}<br>Avg Distance: ${calc.formatMiles(c.avgWeightedDistance)}`)
         .openOn(mapInstance);
     });
-    container.appendChild(overlay);
+    document.body.appendChild(overlay);
     _centerOverlays.push({ overlay, c });
   });
-  // Position overlays now + on every map move/zoom.
+  // Position overlays in VIEWPORT coords via container bounding rect +
+  // map.latLngToContainerPoint. Re-run on map events + window
+  // scroll/resize. Also: hide the overlay if the computed viewport
+  // position is outside the map container's visible area.
   const _updateCenterOverlayPositions = () => {
+    if (!mapInstance || !container || !container.isConnected) return;
+    const rect = container.getBoundingClientRect();
     _centerOverlays.forEach(({ overlay, c }) => {
-      const pt = mapInstance.latLngToContainerPoint([c.lat, c.lng]);
-      // Anchor the 44px dot at its center on the lat/lng.
-      overlay.style.left = (pt.x - 22) + 'px';
-      overlay.style.top  = (pt.y - 22) + 'px';
+      try {
+        const pt = mapInstance.latLngToContainerPoint([c.lat, c.lng]);
+        const vx = rect.left + pt.x;
+        const vy = rect.top + pt.y;
+        const inside = pt.x >= -20 && pt.y >= -20 &&
+                       pt.x <= rect.width + 20 && pt.y <= rect.height + 20;
+        if (inside) {
+          overlay.style.left = (vx - 22) + 'px';
+          overlay.style.top  = (vy - 22) + 'px';
+          overlay.style.visibility = 'visible';
+        } else {
+          overlay.style.visibility = 'hidden';
+        }
+      } catch (err) {
+        console.warn('[COG marker] position update failed:', err);
+      }
     });
   };
   _updateCenterOverlayPositions();
   mapInstance.on('move zoom moveend zoomend viewreset', _updateCenterOverlayPositions);
+  if (!window._cogMarkerScrollBound) {
+    window._cogMarkerScrollBound = true;
+    window.addEventListener('scroll', () => {
+      if (window._cogMarkerScrollUpdater) window._cogMarkerScrollUpdater();
+    }, { passive: true });
+    window.addEventListener('resize', () => {
+      if (window._cogMarkerScrollUpdater) window._cogMarkerScrollUpdater();
+    });
+  }
+  window._cogMarkerScrollUpdater = _updateCenterOverlayPositions;
+  // Surface a status chip showing the latest computed viewport coords
+  // so we can SEE where the marker SHOULD be even if styling fails.
+  // Replaces the existing chip if any.
+  const chip = document.getElementById('cog-marker-status-chip') || (() => {
+    const c = document.createElement('div');
+    c.id = 'cog-marker-status-chip';
+    c.style.cssText = 'position:fixed;bottom:8px;left:8px;z-index:9998;font-family:monospace;font-size:10px;background:rgba(10,22,40,0.85);color:#fff;padding:4px 8px;border-radius:4px;pointer-events:none;';
+    document.body.appendChild(c);
+    return c;
+  })();
+  const _refreshChip = () => {
+    if (!mapInstance || !container || !container.isConnected) {
+      chip.textContent = 'mapfix5 · no map';
+      return;
+    }
+    const rect = container.getBoundingClientRect();
+    const parts = cogResult.centers.map((c, i) => {
+      if (!Number.isFinite(c.lat) || !Number.isFinite(c.lng)) return `C${i+1} invalid`;
+      const pt = mapInstance.latLngToContainerPoint([c.lat, c.lng]);
+      return `C${i+1} ll=${c.lat.toFixed(2)},${c.lng.toFixed(2)} px=${Math.round(pt.x)},${Math.round(pt.y)} vp=${Math.round(rect.left + pt.x)},${Math.round(rect.top + pt.y)}`;
+    });
+    chip.textContent = 'mapfix5 · ' + parts.join(' · ');
+  };
+  _refreshChip();
+  mapInstance.on('move zoom moveend zoomend', _refreshChip);
 
   // Fit bounds
   const allPts = [...points.map(p => [p.lat, p.lng]), ...cogResult.centers.map(c => [c.lat, c.lng])];
@@ -4021,16 +4085,28 @@ function renderSensitivity(el) {
         const baselineCost = tornado[0]?.baselineCost || 0;
         // Chart span: min/max across all driver low/high, with the
         // baseline always visible (handles asymmetric swings).
-        // 2026-06-01 — xMin/xMax must consider BOTH endpoints per row,
-        // not just lows for xMin and highs for xMax. When a driver's
-        // LOW value produces a HIGHER cost than baseline (e.g. parcel
-        // share — dropping parcel% raises blended cost when truck rates
-        // are high), that row's lowCost is the dominant cost and must
-        // extend xMax. The previous formulation made the bar overflow
-        // chartRight and silently lose its right-edge endpoint label.
+        // 2026-06-01 mapfix5 — Outlier-tolerant scale. When one driver's
+        // swing is 20-60x bigger than all others (parcel-share's typical
+        // case: dropping parcel% can multiply blended cost when truck
+        // rates dominate), a global min/max scale crushes every other
+        // row to invisible widths at the baseline tick. Fix: compute the
+        // chart range from rows whose endpoints are within 5x of baseline.
+        // Bars whose endpoints exceed that range get RENDERED CLIPPED
+        // at chart edge + chevron indicator + value annotation, so the
+        // chart is readable for all rows AND the outlier is clearly
+        // flagged with its real value.
         const allEndpoints = tornado.flatMap(t => [t.lowCost, t.highCost]);
-        const xMin = Math.min(baselineCost, ...allEndpoints);
-        const xMax = Math.max(baselineCost, ...allEndpoints);
+        // "Primary" endpoints are within 5x of baseline. If baseline is 0
+        // (degenerate), fall back to all endpoints.
+        const primaryEndpoints = baselineCost > 0
+          ? allEndpoints.filter(v => v < baselineCost * 5 && v > baselineCost / 5)
+          : allEndpoints;
+        const primaryLow  = primaryEndpoints.length ? Math.min(baselineCost, ...primaryEndpoints) : Math.min(baselineCost, ...allEndpoints);
+        const primaryHigh = primaryEndpoints.length ? Math.max(baselineCost, ...primaryEndpoints) : Math.max(baselineCost, ...allEndpoints);
+        // Widen by 8% so endpoint labels don't crash the axis edge.
+        const pad = (primaryHigh - primaryLow) * 0.08;
+        const xMin = primaryLow - pad;
+        const xMax = primaryHigh + pad;
         const xRange = Math.max(1, xMax - xMin);
         // 2026-05-29 — reserve fixed pixel padding on each side of the
         // chart area for the value labels ("$10.2M") which sit outside
@@ -4062,8 +4138,16 @@ function renderSensitivity(el) {
             <!-- Bars -->
             ${tornado.map((t, i) => {
               const y = 30 + i * 38;
-              const xLow = xScale(t.lowCost);
-              const xHigh = xScale(t.highCost);
+              // 2026-06-01 mapfix5 — clip bars at chart edges; outliers get
+              // a chevron + actual-value annotation at the clipped edge.
+              const chartRightEdge = labelW + labelPadPx + chartW;
+              const chartLeftEdge = labelW + labelPadPx;
+              const _rawXLow = xScale(t.lowCost);
+              const _rawXHigh = xScale(t.highCost);
+              const xLow = Math.max(chartLeftEdge, Math.min(chartRightEdge, _rawXLow));
+              const xHigh = Math.max(chartLeftEdge, Math.min(chartRightEdge, _rawXHigh));
+              const lowClipped  = _rawXLow > chartRightEdge + 0.5 || _rawXLow < chartLeftEdge - 0.5;
+              const highClipped = _rawXHigh > chartRightEdge + 0.5 || _rawXHigh < chartLeftEdge - 0.5;
               const left = Math.min(xLow, xHigh);
               const w = Math.max(2, Math.abs(xHigh - xLow));
               const fmtVal = (v) => {
@@ -4134,24 +4218,34 @@ function renderSensitivity(el) {
                   const chartRight = labelW + labelPadPx + chartW;
                   const chartLeft  = labelW + labelPadPx;
                   const estLabelW = 64; // rough px for 'cost $XXM'
-                  const renderEnd = (xPt, val, cost) => {
-                    const wantOutsideRight = xPt > baselineX;
+                  const renderEnd = (xPt, val, cost, clipped) => {
+                    const wantOutsideRight = xPt >= baselineX;
                     const outsideAnchor = wantOutsideRight ? 'start' : 'end';
                     const outsideDx = wantOutsideRight ? 6 : -6;
+                    // Clipped bars always render the label INSIDE the bar
+                    // (white-on-stroke), because the raw endpoint is past
+                    // the chart edge and the bar fills to the edge.
                     const willClipRight = wantOutsideRight && (xPt + estLabelW > chartRight);
                     const willClipLeft  = !wantOutsideRight && (xPt - estLabelW < chartLeft);
-                    const flip = willClipRight || willClipLeft;
+                    const flip = clipped || willClipRight || willClipLeft;
                     const anchor = flip ? (wantOutsideRight ? 'end' : 'start') : outsideAnchor;
                     const dx = flip ? (wantOutsideRight ? -6 : 6) : outsideDx;
                     const stroke = flip ? 'paint-order:stroke;stroke:#0a1628;stroke-width:2px;' : '';
                     const atFill = flip ? '#ffffff' : 'var(--ies-gray-600)';
                     const costFill = flip ? '#ffffff' : 'var(--ies-gray-700)';
+                    // Chevron rendered AT the clipped edge pointing outward,
+                    // makes the "this bar extends further than shown" state
+                    // unmistakable.
+                    const chevron = clipped
+                      ? `<polygon points="${wantOutsideRight ? `${xPt - 12},${y + 4} ${xPt - 2},${y + 10} ${xPt - 12},${y + 16}` : `${xPt + 12},${y + 4} ${xPt + 2},${y + 10} ${xPt + 12},${y + 16}`}" fill="#0a1628"/>`
+                      : '';
                     return `
+                      ${chevron}
                       <text x="${xPt}" y="${y + 7}" text-anchor="${anchor}" font-size="9" fill="${atFill}" dx="${dx}" style="${stroke}">at ${val}</text>
                       <text x="${xPt}" y="${y + 19}" text-anchor="${anchor}" font-size="10" fill="${costFill}" font-weight="700" dx="${dx}" style="${stroke}">cost ${cost}</text>
                     `;
                   };
-                  return renderEnd(xLow, fmtVal(t.lowVal), fmtCost(t.lowCost)) + renderEnd(xHigh, fmtVal(t.highVal), fmtCost(t.highCost));
+                  return renderEnd(xLow, fmtVal(t.lowVal), fmtCost(t.lowCost), lowClipped) + renderEnd(xHigh, fmtVal(t.highVal), fmtCost(t.highCost), highClipped);
                 })()}
               `;
             }).join('')}
