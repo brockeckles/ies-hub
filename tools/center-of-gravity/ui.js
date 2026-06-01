@@ -3498,6 +3498,21 @@ function renderMap(el) {
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
         <h3 class="text-section" style="margin:0;">Center of Gravity Map</h3>
         <span style="font-size:11px;color:var(--ies-gray-400);">${points.length} points • ${cogResult.centers.length} center(s)</span>
+        <!-- 2026-05-29 — build / center-status chip. If Brock sees this
+             chip he's on the live build; absence = stale cache. Color
+             goes red when any center has invalid coords. -->
+        ${(() => {
+          const invalidCount = cogResult.centers.filter(c => !Number.isFinite(c.lat) || !Number.isFinite(c.lng)).length;
+          const bg = invalidCount > 0 ? '#fee2e2' : '#dcfce7';
+          const fg = invalidCount > 0 ? '#991b1b' : '#15803d';
+          const summary = cogResult.centers.map((c, i) => {
+            const ok = Number.isFinite(c.lat) && Number.isFinite(c.lng);
+            return ok
+              ? `C${i+1} ${c.lat.toFixed(2)},${c.lng.toFixed(2)}`
+              : `<strong>C${i+1} INVALID (${c.lat}, ${c.lng})</strong>`;
+          }).join(' · ');
+          return `<span style="font-size:10px;background:${bg};color:${fg};padding:3px 8px;border-radius:4px;font-family:monospace;">build mapdiag1 · ${summary}</span>`;
+        })()}
         <div style="margin-left:auto;display:flex;gap:10px;align-items:center;">
           <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ies-gray-600);cursor:pointer;">
             <input type="checkbox" data-cog-toggle="zones" ${mapOptions.zones ? 'checked' : ''} style="margin:0;"> Service zones
