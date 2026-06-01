@@ -3511,7 +3511,7 @@ function renderMap(el) {
               ? `C${i+1}: ${c.lat.toFixed(3)},${c.lng.toFixed(3)} (${c.nearestCity || '?'})`
               : `<strong>C${i+1} INVALID (${c.lat}, ${c.lng})</strong>`;
           }).join(' &nbsp;·&nbsp; ');
-          return `<div style="width:100%;font-size:11px;background:${bg};color:${fg};padding:6px 10px;border-radius:4px;font-family:monospace;margin-top:4px;"><strong>build mapfix2</strong> &nbsp;·&nbsp; ${summary} &nbsp;·&nbsp; <a href="#" data-cog-action="zoom-centers" style="color:${fg};text-decoration:underline;">zoom to centers →</a></div>`;
+          return `<div style="width:100%;font-size:11px;background:${bg};color:${fg};padding:6px 10px;border-radius:4px;font-family:monospace;margin-top:4px;"><strong>build mapfix3</strong> &nbsp;·&nbsp; ${summary} &nbsp;·&nbsp; <a href="#" data-cog-action="zoom-centers" style="color:${fg};text-decoration:underline;">zoom to centers →</a></div>`;
         })()}
         <div style="margin-left:auto;display:flex;gap:10px;align-items:center;">
           <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ies-gray-600);cursor:pointer;">
@@ -3866,16 +3866,12 @@ function initCogMap() {
   // E3/E4 — labels read at print resolution and on screenshot exports.
   // 2026-05-28 D6 — center markers now use the cluster color (matches
   // the assignment-line + demand-point coloring) instead of all-red.
-  // 2026-05-29 v2 — Center markers were still invisible against
-  // 3K-dot heatmap at continental zoom. Going full-prominence: dedicated
-  // pane at z-index 650 + 38px white halo + 28px colored fill + 4px
-  // dark border + crosshair lines extending outward + permanent label.
-  // Plus a console.log dump so we can diagnose NaN coords if they exist.
-  if (!mapInstance.getPane('cog-centers')) {
-    mapInstance.createPane('cog-centers');
-    mapInstance.getPane('cog-centers').style.zIndex = 650;
-  }
-  // Diagnostic — surface what's actually in the centers array.
+  // 2026-05-29 v3 — Center markers now use L.marker + L.divIcon (HTML
+  // DOM node) instead of circleMarker (SVG). DivIcons render as real
+  // DOM elements layered above the entire Leaflet map container, so
+  // they're guaranteed visible regardless of SVG pane z-order, tile
+  // overlay opacity, or heatmap canvas layer. The HTML content uses
+  // CSS box-shadow for the halo effect.
   console.log('[COG map] drawing', cogResult.centers.length, 'center(s):',
     cogResult.centers.map((c, i) => ({
       i, lat: c.lat, lng: c.lng, valid: Number.isFinite(c.lat) && Number.isFinite(c.lng),
@@ -3887,34 +3883,39 @@ function initCogMap() {
       console.warn('[COG map] center', i, 'has invalid coordinates — skipping render', c);
       return;
     }
-    // Crosshair extension lines — 4 short black bars sticking out of the
-    // marker so the center is visible even at low zoom + busy heatmap.
+    // Crosshair bars (still SVG so they extend geographically — they
+    // shrink/grow with zoom, useful at continental view).
     const crossArm = 0.6; // degrees
-    const armColor = '#0a1628';
     L.polyline([[c.lat - crossArm, c.lng], [c.lat + crossArm, c.lng]], {
-      color: armColor, weight: 3, opacity: 0.9, pane: 'cog-centers',
+      color: '#0a1628', weight: 3, opacity: 0.85,
     }).addTo(mapInstance);
     L.polyline([[c.lat, c.lng - crossArm], [c.lat, c.lng + crossArm]], {
-      color: armColor, weight: 3, opacity: 0.9, pane: 'cog-centers',
+      color: '#0a1628', weight: 3, opacity: 0.85,
     }).addTo(mapInstance);
-    // Big white halo behind the colored marker for max contrast.
-    L.circleMarker([c.lat, c.lng], {
-      radius: 38, fillColor: '#ffffff', color: '#ffffff',
-      weight: 0, fillOpacity: 0.95, pane: 'cog-centers',
-    }).addTo(mapInstance);
-    // Main marker — much larger + thicker dark border.
-    const marker = L.circleMarker([c.lat, c.lng], {
-      radius: 28, fillColor: centerColor, color: '#0a1628',
-      weight: 4, fillOpacity: 1.0, pane: 'cog-centers',
-    }).addTo(mapInstance);
+    // DOM-based center marker — 40px colored circle with white halo
+    // via box-shadow + a numbered label baked into the HTML.
+    const centerIcon = L.divIcon({
+      className: 'cog-center-divicon',
+      html: `
+        <div style="
+          width: 40px; height: 40px; border-radius: 50%;
+          background: ${centerColor};
+          border: 4px solid #0a1628;
+          box-shadow: 0 0 0 6px rgba(255,255,255,0.95), 0 4px 12px rgba(0,0,0,0.35);
+          display: flex; align-items: center; justify-content: center;
+          color: #ffffff; font-weight: 800; font-size: 16px;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+        ">C${i + 1}</div>`,
+      iconSize: [40, 40],
+      iconAnchor: [20, 20],
+    });
+    const marker = L.marker([c.lat, c.lng], { icon: centerIcon, zIndexOffset: 1000 }).addTo(mapInstance);
     marker.bindPopup(`<strong>Center ${i + 1}</strong><br>${c.nearestCity}<br>Location: ${calc.formatLatLng(c.lat, c.lng)}<br>Avg Distance: ${calc.formatMiles(c.avgWeightedDistance)}`);
-    // 2026-05-29 — labels respect the Center labels checkbox so users
-    // can declutter the map. Marker itself still big + crosshair + halo
-    // so the center is locatable without the label.
     if (mapOptions.labels !== false) {
       marker.bindTooltip(
-        `<span style="font-weight:800;color:#0a1628;font-size:13px;">★ C${i + 1}</span> <span style="color:#475569;">${c.nearestCity || ''}</span>`,
-        { permanent: true, direction: 'top', offset: [0, -24], className: 'cog-center-label', opacity: 1.0 }
+        `<span style="font-weight:800;color:#0a1628;font-size:13px;">★ ${c.nearestCity || 'Center ' + (i+1)}</span>`,
+        { permanent: true, direction: 'top', offset: [0, -28], className: 'cog-center-label', opacity: 1.0 }
       );
     }
   });
