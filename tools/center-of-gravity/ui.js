@@ -165,13 +165,28 @@ const AUTO_RUN_DELAY_MS = 600;
 const AUTO_SAVE_DELAY_MS = 1500;
 let _autoSaveInFlight = false;
 
+// 2026-06-01 — teardown for body-level overlays created by initCogMap.
+// The center markers are appended to document.body via position:fixed so
+// they bypass map-container clipping. That means navigating away from
+// the COG editor leaves them floating over whatever the user sees next
+// (e.g., the scenarios list). Call this from any unmount path.
+function _cleanupCogBodyOverlays() {
+  document.querySelectorAll('.cog-center-fixed-overlay').forEach(n => n.remove());
+  // Also remove any stale diagnostic chrome from earlier sessions.
+  document.getElementById('cog-marker-test-overlay')?.remove();
+  document.getElementById('cog-marker-status-chip')?.remove();
+}
+
 export async function mount(el) {
   rootEl = el;
+  // Defensive: clear any overlays left over from a previous mount cycle.
+  _cleanupCogBodyOverlays();
   await renderLanding();
 }
 
 async function renderLanding() {
   if (!rootEl) return;
+  _cleanupCogBodyOverlays();
   await renderScenarioLanding(rootEl, {
     toolName: 'Center of Gravity',
     toolKey: 'cog',
