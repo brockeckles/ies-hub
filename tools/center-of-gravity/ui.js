@@ -3491,7 +3491,7 @@ function renderMap(el) {
   if (!document.getElementById('cog-marker-status-chip')) {
     const chip = document.createElement('div');
     chip.id = 'cog-marker-status-chip';
-    chip.textContent = 'mapfix9 · renderMap reached';
+    chip.textContent = 'mapfix10 · renderMap reached';
     chip.style.cssText = 'position:fixed;top:80px;right:12px;z-index:2147483646;font-family:monospace;font-size:11px;background:#facc15;color:#0a1628;padding:6px 10px;border-radius:6px;pointer-events:none;border:2px solid #0a1628;box-shadow:0 4px 12px rgba(0,0,0,0.3);max-width:340px;font-weight:600;line-height:1.45;';
     document.body.appendChild(chip);
   }
@@ -3530,7 +3530,7 @@ function renderMap(el) {
               ? `C${i+1}: ${c.lat.toFixed(3)},${c.lng.toFixed(3)} (${c.nearestCity || '?'})`
               : `<strong>C${i+1} INVALID (${c.lat}, ${c.lng})</strong>`;
           }).join(' &nbsp;·&nbsp; ');
-          return `<div style="width:100%;font-size:11px;background:${bg};color:${fg};padding:6px 10px;border-radius:4px;font-family:monospace;margin-top:4px;"><strong>build mapfix9</strong> &nbsp;·&nbsp; ${summary} &nbsp;·&nbsp; <a href="#" data-cog-action="zoom-centers" style="color:${fg};text-decoration:underline;">zoom to centers →</a></div>`;
+          return `<div style="width:100%;font-size:11px;background:${bg};color:${fg};padding:6px 10px;border-radius:4px;font-family:monospace;margin-top:4px;"><strong>build mapfix10</strong> &nbsp;·&nbsp; ${summary} &nbsp;·&nbsp; <a href="#" data-cog-action="zoom-centers" style="color:${fg};text-decoration:underline;">zoom to centers →</a></div>`;
         })()}
         <!-- 2026-06-01 mapfix7 — Bulletproof Center Locations card. Plain
              HTML rendered inside renderMap's innerHTML — does NOT depend
@@ -3681,7 +3681,7 @@ function _ensureCogStyleInjected() {
 
 function _setChipStatus(msg) {
   const chip = document.getElementById('cog-marker-status-chip');
-  if (chip) chip.textContent = 'mapfix9 · ' + msg;
+  if (chip) chip.textContent = 'mapfix10 · ' + msg;
 }
 function initCogMap() {
   _setChipStatus('initCogMap start');
@@ -3717,8 +3717,8 @@ function _initCogMapBody() {
   // 2026-05-28 D12 — compute bbox before map init so we don't get the
   // zoom-4 continental-US flash before fitBounds kicks in.
   const _allPtsForInit = [
-    ...points.filter(p => p.lat != null && p.lng != null).map(p => [p.lat, p.lng]),
-    ...cogResult.centers.map(c => [c.lat, c.lng]),
+    ...points.filter(p => p && Number.isFinite(+p.lat) && Number.isFinite(+p.lng)).map(p => [+p.lat, +p.lng]),
+    ...cogResult.centers.filter(c => c && Number.isFinite(+c.lat) && Number.isFinite(+c.lng)).map(c => [+c.lat, +c.lng]),
   ];
   if (_allPtsForInit.length > 0) {
     const initBounds = L.latLngBounds(_allPtsForInit);
@@ -3828,15 +3828,19 @@ function _initCogMapBody() {
     points.forEach(pt => {
       const w = pt.weight || 0;
       if (w <= 0) return;
+      // 2026-06-01 mapfix10 — skip points with missing/null coords.
+      // Leaflet's L.latLng([null, X]) returns null (typeof null === 'object'
+      // breaks its array-form parser), and then _project() does null.lng
+      // and the entire initCogMap aborts. Filter defensively here.
+      if (pt.lat == null || pt.lng == null || !Number.isFinite(+pt.lat) || !Number.isFinite(+pt.lng)) return;
       const norm = w / maxWeight;
-      // Halo radius in metres: 80km at max weight, 12km at min meaningful weight
       const haloMetres = 12000 + norm * 68000;
       L.circle([pt.lat, pt.lng], {
         radius: haloMetres,
         color: '#ff5630',
         weight: 0,
         fillColor: '#ff5630',
-        fillOpacity: 0.10 + norm * 0.20,    // 0.10 → 0.30
+        fillOpacity: 0.10 + norm * 0.20,
         interactive: false,
       }).addTo(mapInstance);
     });
@@ -3899,6 +3903,8 @@ function _initCogMapBody() {
   cogResult.assignments.forEach(a => {
     const pt = points.find(p => p.id === a.pointId);
     if (!pt) return;
+    // Skip points with missing coords (see mapfix10 heatmap comment).
+    if (pt.lat == null || pt.lng == null || !Number.isFinite(+pt.lat) || !Number.isFinite(+pt.lng)) return;
     const color = clusterColor(a.clusterId);
     // 2026-05-29 — bumped min radius 4→7 + base scale 10000→6000 so
     // even small-weight points are visible at continental zoom.
@@ -4090,7 +4096,7 @@ function _initCogMapBody() {
       const pt = mapInstance.latLngToContainerPoint([c.lat, c.lng]);
       return `C${i+1} ll=${c.lat.toFixed(2)},${c.lng.toFixed(2)} px=${Math.round(pt.x)},${Math.round(pt.y)} vp=${Math.round(rect.left + pt.x)},${Math.round(rect.top + pt.y)}`;
     });
-    chip.textContent = 'mapfix9 · ' + parts.join(' · ');
+    chip.textContent = 'mapfix10 · ' + parts.join(' · ');
   };
   _refreshChip();
   mapInstance.on('move zoom moveend zoomend', _refreshChip);
@@ -4108,7 +4114,10 @@ function _initCogMapBody() {
   });
 
   // Fit bounds
-  const allPts = [...points.map(p => [p.lat, p.lng]), ...cogResult.centers.map(c => [c.lat, c.lng])];
+  const allPts = [
+    ...points.filter(p => p && Number.isFinite(+p.lat) && Number.isFinite(+p.lng)).map(p => [+p.lat, +p.lng]),
+    ...cogResult.centers.filter(c => c && Number.isFinite(+c.lat) && Number.isFinite(+c.lng)).map(c => [+c.lat, +c.lng]),
+  ];
   if (allPts.length > 0) mapInstance.fitBounds(allPts, { padding: [30, 30] });
 
   // 2026-05-28 D13 — window resize listener. Map was previously stuck
