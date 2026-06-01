@@ -3811,13 +3811,21 @@ function initCogMap() {
     const pt = points.find(p => p.id === a.pointId);
     if (!pt) return;
     const color = clusterColor(a.clusterId);
-    const size = Math.max(4, Math.min(10, pt.weight / 10000));
+    // 2026-05-29 — bumped min radius 4→7 + base scale 10000→6000 so
+    // even small-weight points are visible at continental zoom.
+    const size = Math.max(7, Math.min(12, pt.weight / 6000));
     // 2026-05-28 B7 — out-of-service points get a red ring outline so
     // they pop against the cluster color.
-    const ringColor = a.outOfService ? '#b91c1c' : color;
-    const ringWeight = a.outOfService ? 3 : 1;
+    const ringColor = a.outOfService ? '#b91c1c' : '#ffffff';
+    const ringWeight = a.outOfService ? 3 : 1.5;
+    // Demand points in their own pane above zone rings (z=500 < cog-
+    // demand z=550 < cog-centers z=650) so they aren't occluded.
+    if (!mapInstance.getPane('cog-demand')) {
+      mapInstance.createPane('cog-demand');
+      mapInstance.getPane('cog-demand').style.zIndex = 550;
+    }
     const marker = L.circleMarker([pt.lat, pt.lng], {
-      radius: size, fillColor: color, color: ringColor, weight: ringWeight, fillOpacity: 0.7,
+      radius: size, fillColor: color, color: ringColor, weight: ringWeight, fillOpacity: 0.9, pane: 'cog-demand',
     }).addTo(mapInstance);
     const outNote = a.outOfService ? `<br><strong style="color:#b91c1c;">OUT of SLA</strong> (${Math.round(a.driveRoadMi || 0)} road-mi > ${cogResult.serviceStats?.maxMiles || 0} mi)` : '';
     marker.bindPopup(`<strong>${pt.name || pt.id}</strong><br>Weight: ${pt.weight.toLocaleString()}<br>Cluster: ${a.clusterId + 1}<br>Distance: ${calc.formatMiles(a.distanceToCenter)}${outNote}`);
@@ -3885,12 +3893,15 @@ function initCogMap() {
       weight: 4, fillOpacity: 1.0, pane: 'cog-centers',
     }).addTo(mapInstance);
     marker.bindPopup(`<strong>Center ${i + 1}</strong><br>${c.nearestCity}<br>Location: ${calc.formatLatLng(c.lat, c.lng)}<br>Avg Distance: ${calc.formatMiles(c.avgWeightedDistance)}`);
-    // Always-on permanent label regardless of toggle — needed so user
-    // can locate the center at first glance.
-    marker.bindTooltip(
-      `<span style="font-weight:800;color:#0a1628;font-size:13px;">★ C${i + 1}</span> <span style="color:#475569;">${c.nearestCity || ''}</span>`,
-      { permanent: true, direction: 'top', offset: [0, -24], className: 'cog-center-label', opacity: 1.0 }
-    );
+    // 2026-05-29 — labels respect the Center labels checkbox so users
+    // can declutter the map. Marker itself still big + crosshair + halo
+    // so the center is locatable without the label.
+    if (mapOptions.labels !== false) {
+      marker.bindTooltip(
+        `<span style="font-weight:800;color:#0a1628;font-size:13px;">★ C${i + 1}</span> <span style="color:#475569;">${c.nearestCity || ''}</span>`,
+        { permanent: true, direction: 'top', offset: [0, -24], className: 'cog-center-label', opacity: 1.0 }
+      );
+    }
   });
 
   // Fit bounds
