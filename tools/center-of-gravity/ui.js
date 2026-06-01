@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260529-pkgunit1';
+import * as calc from './calc.js?v=20260529-scale1';
 import * as api from './api.js?v=20260504-auth1';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
@@ -679,7 +679,12 @@ function _pointsForSolve() {
   // rows defensively). These come from XLS uploads where the ZIP couldn't
   // be resolved or units were missing/invalid; they live in points[] so
   // the user can see them in the table, but they would NaN out the math.
+  // 2026-05-29 — apply demandScaleFactor uniformly. Spread to keep the
+  // original points[] untouched — important because the points table
+  // displays raw input values.
+  const scale = Math.max(0.001, +config.demandScaleFactor || 1.0);
   let live = points.filter(p => p.type !== 'excluded' && p.lat != null && p.lng != null);
+  if (scale !== 1.0) live = live.map(p => ({ ...p, weight: (p.weight || 0) * scale }));
   // 2026-05-26 — Exclude Alaska & Hawaii from the solve when the toggle is
   // on. AK lat ~51-71, lng ~-180 to -130. HI lat ~18-23, lng ~-161 to -154.
   // Use generous bounding boxes; cleaner than testing each point against
@@ -1919,6 +1924,17 @@ function renderParametersPhase(el) {
             </select>
             <span style="font-size:11px;color:var(--ies-gray-400);" title="The Truck $/mi rate is per truck-mile regardless of weight unit. Weight Unit only changes how demand totals are bucketed into truckloads via the capacity below.">Cost rate is per truck-mile · weight unit drives demand → truckloads</span>
           </div>
+          <!-- 2026-05-29 — Demand scaling factor. Lets the user dial
+               sample data up to realistic customer volume without
+               re-uploading. Applied uniformly across every point in
+               _pointsForSolve, so flows through k-means + cost +
+               parcel + CO₂ + sensitivity. -->
+          <div style="display:flex;align-items:center;gap:8px;">
+            <label style="font-size:13px;font-weight:600;" title="Multiplies every demand-point weight uniformly before the solve. Use to dial sample data up to realistic customer volume (e.g. 100x), or to model 'what if customer is 5x our size'. 1.0 = no change. Does not modify the underlying points table.">Demand × :</label>
+            <input type="number" value="${config.demandScaleFactor ?? 1.0}" step="0.1" min="0.001" max="10000" id="cog-demand-scale"
+                   style="width:90px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;color:var(--ies-blue);">
+            <span style="font-size:11px;color:var(--ies-gray-400);">1.0 = no scale · 100 = 100× current · sample data → real volume</span>
+          </div>
           <div style="display:flex;align-items:center;gap:8px;">
             <label style="font-size:13px;font-weight:600;">Truck $/mi:</label>
             <input type="number" value="${config.transportCostPerMile}" step="0.01" id="cog-cpm"
@@ -2290,6 +2306,11 @@ function renderParametersPhase(el) {
   // 2026-05-26 — Exclude Alaska & Hawaii checkbox.
   el.querySelector('#cog-exclude-offshore')?.addEventListener('change', (e) => {
     config.excludeOffshore = /** @type {HTMLInputElement} */ (e.target).checked;
+    markDirty();
+  });
+  el.querySelector('#cog-demand-scale')?.addEventListener('change', (e) => {
+    const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
+    config.demandScaleFactor = Math.max(0.001, Math.min(10000, Number.isFinite(v) ? v : 1.0));
     markDirty();
   });
   el.querySelector('#cog-weight-unit')?.addEventListener('change', (e) => {
@@ -2830,7 +2851,7 @@ function renderAnalysis(el) {
             </div>
             <div style="display:grid;grid-template-columns:repeat(5, 1fr);gap:8px 14px;font-size:11px;font-variant-numeric:tabular-nums;">
               <div><div style="font-size:9px;text-transform:uppercase;color:var(--ies-gray-500);">Demand points</div><div style="font-weight:700;font-size:13px;">${solvePts.length.toLocaleString()}</div></div>
-              <div><div style="font-size:9px;text-transform:uppercase;color:var(--ies-gray-500);">Total demand</div><div style="font-weight:700;font-size:13px;">${totalWt.toLocaleString(undefined, {maximumFractionDigits:0})} ${wtUnit}</div></div>
+              <div><div style="font-size:9px;text-transform:uppercase;color:var(--ies-gray-500);">Total demand</div><div style="font-weight:700;font-size:13px;">${totalWt.toLocaleString(undefined, {maximumFractionDigits:0})} ${wtUnit}${(config.demandScaleFactor && config.demandScaleFactor !== 1.0) ? ` <span style="color:var(--ies-blue);font-size:10px;">(×${config.demandScaleFactor})</span>` : ''}</div></div>
               <div><div style="font-size:9px;text-transform:uppercase;color:var(--ies-gray-500);">Avg / point</div><div style="font-weight:700;font-size:13px;">${(totalWt/Math.max(1,solvePts.length)).toLocaleString(undefined, {maximumFractionDigits:0})} ${wtUnit}</div></div>
               <div><div style="font-size:9px;text-transform:uppercase;color:var(--ies-gray-500);">Cost / point / yr</div><div style="font-weight:700;font-size:13px;color:${lowFlag ? '#b91c1c' : '#0a1628'};">${calc.formatCurrency(costPerPoint)}</div></div>
               <div><div style="font-size:9px;text-transform:uppercase;color:var(--ies-gray-500);">Cost / ${wtUnit}</div><div style="font-weight:700;font-size:13px;">$${costPerUnit.toFixed(4)}</div></div>

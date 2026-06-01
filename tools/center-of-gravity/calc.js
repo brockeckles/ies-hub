@@ -92,6 +92,13 @@ export const DEFAULT_CONFIG = {
   // and capacity must agree. Supported: lb, cwt, pallets, units, cases,
   // orders, revenue.
   weightUnit: 'lb',
+  // 2026-05-29 — Demand scaling factor. Multiplies every point's weight
+  // uniformly before the solve. Lets SDs dial sample data up to a
+  // realistic customer scale without re-uploading (e.g. 'what if this
+  // customer is 100x our sample size?'). Default 1.0 = passthrough.
+  // Applied in _pointsForSolve so every downstream consumer (k-means,
+  // cost, parcel, CO₂, sensitivity, tornado) honors the scaled values.
+  demandScaleFactor: 1.0,
   // COG-B2: candidate facility list. When `snapToCandidates` is on, k-means
   // centers get snapped to the closest candidate after solve — turning the
   // free centroid into a constrained pick from a known site list (existing
