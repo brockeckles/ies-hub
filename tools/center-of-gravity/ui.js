@@ -3498,20 +3498,20 @@ function renderMap(el) {
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
         <h3 class="text-section" style="margin:0;">Center of Gravity Map</h3>
         <span style="font-size:11px;color:var(--ies-gray-400);">${points.length} points • ${cogResult.centers.length} center(s)</span>
-        <!-- 2026-05-29 — build / center-status chip. If Brock sees this
-             chip he's on the live build; absence = stale cache. Color
-             goes red when any center has invalid coords. -->
+        <!-- 2026-05-29 v3 — make the diagnostic banner large enough to be
+             unmissable; if Brock doesn't see this row he's still on a
+             cached build. Reports build tag + each center's lat/lng. -->
         ${(() => {
           const invalidCount = cogResult.centers.filter(c => !Number.isFinite(c.lat) || !Number.isFinite(c.lng)).length;
-          const bg = invalidCount > 0 ? '#fee2e2' : '#dcfce7';
-          const fg = invalidCount > 0 ? '#991b1b' : '#15803d';
+          const bg = invalidCount > 0 ? '#fee2e2' : '#fef3c7';
+          const fg = invalidCount > 0 ? '#991b1b' : '#78350f';
           const summary = cogResult.centers.map((c, i) => {
             const ok = Number.isFinite(c.lat) && Number.isFinite(c.lng);
             return ok
-              ? `C${i+1} ${c.lat.toFixed(2)},${c.lng.toFixed(2)}`
+              ? `C${i+1}: ${c.lat.toFixed(3)},${c.lng.toFixed(3)} (${c.nearestCity || '?'})`
               : `<strong>C${i+1} INVALID (${c.lat}, ${c.lng})</strong>`;
-          }).join(' · ');
-          return `<span style="font-size:10px;background:${bg};color:${fg};padding:3px 8px;border-radius:4px;font-family:monospace;">build mapdiag1 · ${summary}</span>`;
+          }).join(' &nbsp;·&nbsp; ');
+          return `<div style="width:100%;font-size:11px;background:${bg};color:${fg};padding:6px 10px;border-radius:4px;font-family:monospace;margin-top:4px;"><strong>build mapfix2</strong> &nbsp;·&nbsp; ${summary} &nbsp;·&nbsp; <a href="#" data-cog-action="zoom-centers" style="color:${fg};text-decoration:underline;">zoom to centers →</a></div>`;
         })()}
         <div style="margin-left:auto;display:flex;gap:10px;align-items:center;">
           <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ies-gray-600);cursor:pointer;">
@@ -3558,6 +3558,21 @@ function renderMap(el) {
       </div>
     </div>
   `;
+
+  // 2026-05-29 — Zoom-to-centers fallback: when the user can't find the
+  // center marker (e.g. obscured by heatmap or scrolled off), this link
+  // pans + zooms Leaflet to fit just the centers.
+  el.querySelector('[data-cog-action="zoom-centers"]')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (!mapInstance) return;
+    const valid = cogResult.centers.filter(c => Number.isFinite(c.lat) && Number.isFinite(c.lng));
+    if (!valid.length) { showToast('No valid centers to zoom to', 'warn'); return; }
+    if (valid.length === 1) {
+      mapInstance.setView([valid[0].lat, valid[0].lng], 7);
+    } else {
+      mapInstance.fitBounds(valid.map(c => [c.lat, c.lng]), { padding: [80, 80] });
+    }
+  });
 
   // Wire toggles — only re-init the leaflet map (NOT the whole panel) so
   // the controls keep focus and we don't get into a render loop.
