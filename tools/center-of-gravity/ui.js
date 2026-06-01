@@ -3491,7 +3491,7 @@ function renderMap(el) {
   if (!document.getElementById('cog-marker-status-chip')) {
     const chip = document.createElement('div');
     chip.id = 'cog-marker-status-chip';
-    chip.textContent = 'mapfix8 · renderMap reached';
+    chip.textContent = 'mapfix9 · renderMap reached';
     chip.style.cssText = 'position:fixed;top:80px;right:12px;z-index:2147483646;font-family:monospace;font-size:11px;background:#facc15;color:#0a1628;padding:6px 10px;border-radius:6px;pointer-events:none;border:2px solid #0a1628;box-shadow:0 4px 12px rgba(0,0,0,0.3);max-width:340px;font-weight:600;line-height:1.45;';
     document.body.appendChild(chip);
   }
@@ -3530,7 +3530,7 @@ function renderMap(el) {
               ? `C${i+1}: ${c.lat.toFixed(3)},${c.lng.toFixed(3)} (${c.nearestCity || '?'})`
               : `<strong>C${i+1} INVALID (${c.lat}, ${c.lng})</strong>`;
           }).join(' &nbsp;·&nbsp; ');
-          return `<div style="width:100%;font-size:11px;background:${bg};color:${fg};padding:6px 10px;border-radius:4px;font-family:monospace;margin-top:4px;"><strong>build mapfix8</strong> &nbsp;·&nbsp; ${summary} &nbsp;·&nbsp; <a href="#" data-cog-action="zoom-centers" style="color:${fg};text-decoration:underline;">zoom to centers →</a></div>`;
+          return `<div style="width:100%;font-size:11px;background:${bg};color:${fg};padding:6px 10px;border-radius:4px;font-family:monospace;margin-top:4px;"><strong>build mapfix9</strong> &nbsp;·&nbsp; ${summary} &nbsp;·&nbsp; <a href="#" data-cog-action="zoom-centers" style="color:${fg};text-decoration:underline;">zoom to centers →</a></div>`;
         })()}
         <!-- 2026-06-01 mapfix7 — Bulletproof Center Locations card. Plain
              HTML rendered inside renderMap's innerHTML — does NOT depend
@@ -3681,7 +3681,7 @@ function _ensureCogStyleInjected() {
 
 function _setChipStatus(msg) {
   const chip = document.getElementById('cog-marker-status-chip');
-  if (chip) chip.textContent = 'mapfix8 · ' + msg;
+  if (chip) chip.textContent = 'mapfix9 · ' + msg;
 }
 function initCogMap() {
   _setChipStatus('initCogMap start');
@@ -3690,8 +3690,15 @@ function initCogMap() {
     _setChipStatus('initCogMap done');
   } catch (err) {
     console.error('[COG initCogMap] threw:', err);
-    _setChipStatus('THREW: ' + (err && err.message ? err.message : String(err)).slice(0, 200));
-    throw err;
+    const chip = document.getElementById('cog-marker-status-chip');
+    const lastStep = chip ? chip.textContent.replace(/^mapfix\d+ . /, '') : '?';
+    const stack = err && err.stack ? err.stack.split('\n').slice(0, 3).join(' | ') : '';
+    if (chip) {
+      chip.textContent = 'mapfix9 · LAST=' + lastStep + ' | THREW: ' + (err && err.message ? err.message : String(err));
+      chip.title = stack;
+      // Also dump stack frame line numbers into the chip on a second line via title attr
+    }
+    // Don't re-throw — let the chip carry the diagnosis.
   }
 }
 function _initCogMapBody() {
@@ -4083,7 +4090,7 @@ function _initCogMapBody() {
       const pt = mapInstance.latLngToContainerPoint([c.lat, c.lng]);
       return `C${i+1} ll=${c.lat.toFixed(2)},${c.lng.toFixed(2)} px=${Math.round(pt.x)},${Math.round(pt.y)} vp=${Math.round(rect.left + pt.x)},${Math.round(rect.top + pt.y)}`;
     });
-    chip.textContent = 'mapfix8 · ' + parts.join(' · ');
+    chip.textContent = 'mapfix9 · ' + parts.join(' · ');
   };
   _refreshChip();
   mapInstance.on('move zoom moveend zoomend', _refreshChip);
