@@ -3511,7 +3511,7 @@ function renderMap(el) {
               ? `C${i+1}: ${c.lat.toFixed(3)},${c.lng.toFixed(3)} (${c.nearestCity || '?'})`
               : `<strong>C${i+1} INVALID (${c.lat}, ${c.lng})</strong>`;
           }).join(' &nbsp;·&nbsp; ');
-          return `<div style="width:100%;font-size:11px;background:${bg};color:${fg};padding:6px 10px;border-radius:4px;font-family:monospace;margin-top:4px;"><strong>build mapfix3</strong> &nbsp;·&nbsp; ${summary} &nbsp;·&nbsp; <a href="#" data-cog-action="zoom-centers" style="color:${fg};text-decoration:underline;">zoom to centers →</a></div>`;
+          return `<div style="width:100%;font-size:11px;background:${bg};color:${fg};padding:6px 10px;border-radius:4px;font-family:monospace;margin-top:4px;"><strong>build mapfix4</strong> &nbsp;·&nbsp; ${summary} &nbsp;·&nbsp; <a href="#" data-cog-action="zoom-centers" style="color:${fg};text-decoration:underline;">zoom to centers →</a></div>`;
         })()}
         <div style="margin-left:auto;display:flex;gap:10px;align-items:center;">
           <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ies-gray-600);cursor:pointer;">
@@ -3877,48 +3877,86 @@ function initCogMap() {
       i, lat: c.lat, lng: c.lng, valid: Number.isFinite(c.lat) && Number.isFinite(c.lng),
       city: c.nearestCity, weight: c.totalWeight,
     })));
+  // 2026-06-01 mapfix4 — Center marker is now a plain DOM overlay div
+  // appended directly to the map container (#cog-map-container), positioned
+  // via map.latLngToContainerPoint() and updated on move/zoom. This
+  // completely bypasses Leaflet's pane / SVG / canvas / marker-icon
+  // rendering — the previous five attempts (circleMarker→pane→halo→
+  // crosshair→divIcon) all relied on the Leaflet marker system, which
+  // for reasons we never fully isolated was not putting visible pixels
+  // on screen in Brock's scenario. A plain div appended as the LAST
+  // child of the container is at the top of DOM stacking order and
+  // is always visible.
+  const _centerOverlays = [];
   cogResult.centers.forEach((c, i) => {
     const centerColor = clusterColor(i);
     if (!Number.isFinite(c.lat) || !Number.isFinite(c.lng)) {
       console.warn('[COG map] center', i, 'has invalid coordinates — skipping render', c);
       return;
     }
-    // Crosshair bars (still SVG so they extend geographically — they
-    // shrink/grow with zoom, useful at continental view).
-    const crossArm = 0.6; // degrees
+    // Geographic crosshair (extends 0.6 degrees from center; grows/shrinks
+    // with zoom so it acts as a geographic indicator).
+    const crossArm = 0.6;
     L.polyline([[c.lat - crossArm, c.lng], [c.lat + crossArm, c.lng]], {
       color: '#0a1628', weight: 3, opacity: 0.85,
     }).addTo(mapInstance);
     L.polyline([[c.lat, c.lng - crossArm], [c.lat, c.lng + crossArm]], {
       color: '#0a1628', weight: 3, opacity: 0.85,
     }).addTo(mapInstance);
-    // DOM-based center marker — 40px colored circle with white halo
-    // via box-shadow + a numbered label baked into the HTML.
-    const centerIcon = L.divIcon({
-      className: 'cog-center-divicon',
-      html: `
-        <div style="
-          width: 40px; height: 40px; border-radius: 50%;
-          background: ${centerColor};
-          border: 4px solid #0a1628;
-          box-shadow: 0 0 0 6px rgba(255,255,255,0.95), 0 4px 12px rgba(0,0,0,0.35);
-          display: flex; align-items: center; justify-content: center;
-          color: #ffffff; font-weight: 800; font-size: 16px;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-          text-shadow: 0 1px 2px rgba(0,0,0,0.5);
-        ">C${i + 1}</div>`,
-      iconSize: [40, 40],
-      iconAnchor: [20, 20],
+    // Plain DOM overlay — direct child of the map container.
+    const overlay = document.createElement('div');
+    overlay.className = 'cog-center-overlay';
+    overlay.setAttribute('data-center-idx', String(i));
+    const labelText = (mapOptions.labels !== false && c.nearestCity)
+      ? c.nearestCity.split('(')[0].trim()
+      : '';
+    overlay.innerHTML = `
+      <div class="cog-center-overlay-dot" style="
+        width: 44px; height: 44px; border-radius: 50%;
+        background: ${centerColor};
+        border: 4px solid #0a1628;
+        box-shadow: 0 0 0 6px rgba(255,255,255,0.95), 0 4px 14px rgba(0,0,0,0.45);
+        display: flex; align-items: center; justify-content: center;
+        color: #ffffff; font-weight: 800; font-size: 17px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+        cursor: pointer;
+      ">C${i + 1}</div>
+      ${labelText ? `<div class="cog-center-overlay-label" style="
+        position: absolute; left: 50%; transform: translateX(-50%);
+        top: -22px; white-space: nowrap;
+        background: rgba(255,255,255,0.95); border: 1px solid #0a1628;
+        border-radius: 4px; padding: 2px 6px;
+        font-size: 11px; font-weight: 700; color: #0a1628;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+        pointer-events: none;
+      ">★ ${labelText}</div>` : ''}
+    `;
+    overlay.style.cssText = `
+      position: absolute; width: 44px; height: 44px;
+      left: 0; top: 0; z-index: 1000;
+      pointer-events: auto;
+    `;
+    overlay.addEventListener('click', () => {
+      L.popup()
+        .setLatLng([c.lat, c.lng])
+        .setContent(`<strong>Center ${i + 1}</strong><br>${c.nearestCity}<br>Location: ${calc.formatLatLng(c.lat, c.lng)}<br>Avg Distance: ${calc.formatMiles(c.avgWeightedDistance)}`)
+        .openOn(mapInstance);
     });
-    const marker = L.marker([c.lat, c.lng], { icon: centerIcon, zIndexOffset: 1000 }).addTo(mapInstance);
-    marker.bindPopup(`<strong>Center ${i + 1}</strong><br>${c.nearestCity}<br>Location: ${calc.formatLatLng(c.lat, c.lng)}<br>Avg Distance: ${calc.formatMiles(c.avgWeightedDistance)}`);
-    if (mapOptions.labels !== false) {
-      marker.bindTooltip(
-        `<span style="font-weight:800;color:#0a1628;font-size:13px;">★ ${c.nearestCity || 'Center ' + (i+1)}</span>`,
-        { permanent: true, direction: 'top', offset: [0, -28], className: 'cog-center-label', opacity: 1.0 }
-      );
-    }
+    container.appendChild(overlay);
+    _centerOverlays.push({ overlay, c });
   });
+  // Position overlays now + on every map move/zoom.
+  const _updateCenterOverlayPositions = () => {
+    _centerOverlays.forEach(({ overlay, c }) => {
+      const pt = mapInstance.latLngToContainerPoint([c.lat, c.lng]);
+      // Anchor the 44px dot at its center on the lat/lng.
+      overlay.style.left = (pt.x - 22) + 'px';
+      overlay.style.top  = (pt.y - 22) + 'px';
+    });
+  };
+  _updateCenterOverlayPositions();
+  mapInstance.on('move zoom moveend zoomend viewreset', _updateCenterOverlayPositions);
 
   // Fit bounds
   const allPts = [...points.map(p => [p.lat, p.lng]), ...cogResult.centers.map(c => [c.lat, c.lng])];
@@ -3983,10 +4021,16 @@ function renderSensitivity(el) {
         const baselineCost = tornado[0]?.baselineCost || 0;
         // Chart span: min/max across all driver low/high, with the
         // baseline always visible (handles asymmetric swings).
-        const lows = tornado.map(t => t.lowCost);
-        const highs = tornado.map(t => t.highCost);
-        const xMin = Math.min(baselineCost, ...lows);
-        const xMax = Math.max(baselineCost, ...highs);
+        // 2026-06-01 — xMin/xMax must consider BOTH endpoints per row,
+        // not just lows for xMin and highs for xMax. When a driver's
+        // LOW value produces a HIGHER cost than baseline (e.g. parcel
+        // share — dropping parcel% raises blended cost when truck rates
+        // are high), that row's lowCost is the dominant cost and must
+        // extend xMax. The previous formulation made the bar overflow
+        // chartRight and silently lose its right-edge endpoint label.
+        const allEndpoints = tornado.flatMap(t => [t.lowCost, t.highCost]);
+        const xMin = Math.min(baselineCost, ...allEndpoints);
+        const xMax = Math.max(baselineCost, ...allEndpoints);
         const xRange = Math.max(1, xMax - xMin);
         // 2026-05-29 — reserve fixed pixel padding on each side of the
         // chart area for the value labels ("$10.2M") which sit outside
