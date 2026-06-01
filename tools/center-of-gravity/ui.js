@@ -1037,6 +1037,9 @@ async function bindShellEvents() {
       } else if (k === 'p' && cogResult) {
         e.preventDefault();
         openPrintView();
+      } else if (k === 'd' && cogResult) {
+        e.preventDefault();
+        openPptxExport();
       } else if (k === '?') {
         e.preventDefault();
         showToast('Shortcuts: 1/2/3 = Inputs/Parameters/Run · N/M/V/C = Numbers/Map/Sensitivity/Compare · A = add point · S = save · E = export CSV · P = print/PDF · Cmd+Enter = Run', 'info');
@@ -2807,6 +2810,9 @@ function renderAnalysis(el) {
       <!-- Action Bar -->
       <div style="display:flex;gap:12px;margin-bottom:16px;align-items:center;">
         <h3 class="text-section" style="margin:0;flex:1;">Analysis Results</h3>
+        <button class="hub-btn hub-btn-sm hub-btn-primary" id="cog-generate-deck" style="display:flex;align-items:center;gap:6px;" title="Generate a 6-slide PowerPoint deck — Title, Executive Summary, Map, Cost Breakdown, Sensitivity, Assumptions (keyboard: D)">
+          <span>📊 Generate Deck</span>
+        </button>
         <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-print-pdf" style="display:flex;align-items:center;gap:6px;" title="Open a print-friendly snapshot in a new tab — use your browser's Print > Save as PDF">
           <span>🖨️ Print / PDF</span>
         </button>
@@ -3257,6 +3263,11 @@ function renderAnalysis(el) {
   // 2026-05-28 F4 — Print/PDF view.
   el.querySelector('#cog-print-pdf')?.addEventListener('click', () => {
     openPrintView();
+  });
+
+  // F3 — PowerPoint deck export.
+  el.querySelector('#cog-generate-deck')?.addEventListener('click', () => {
+    openPptxExport();
   });
 
 
@@ -4735,6 +4746,475 @@ function exportCogGeoJSON() {
   document.body.appendChild(a); a.click();
   setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 0);
   showToast('GeoJSON exported successfully', 'success');
+}
+
+/**
+ * F3 — PowerPoint deck export. Lazy-loads PptxGenJS from CDN on first
+ * use so initial page load isn't impacted. Produces a 6-slide deck:
+ *   1. Title — customer + deal context
+ *   2. Executive Summary — KPIs + vs-current delta + recommendation
+ *   3. Map — US bbox with native shapes (cannot fail; no image deps)
+ *   4. Cost Breakdown — per-cluster table + truck/parcel split
+ *   5. Sensitivity — k-curve line chart + cost-driver tornado bar chart
+ *   6. Assumptions & Recommendation — two-column
+ *
+ * Palette: dark navy (0A1628), amber (F59E0B), ice blue (CADCFC).
+ */
+let _pptxLoadPromise = null;
+function _ensurePptxLoaded() {
+  if (typeof window !== 'undefined' && window.PptxGenJS) return Promise.resolve();
+  if (_pptxLoadPromise) return _pptxLoadPromise;
+  _pptxLoadPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js';
+    s.async = true;
+    s.onload = () => {
+      if (window.PptxGenJS || window.pptxgen) resolve();
+      else reject(new Error('PptxGenJS loaded but global not found'));
+    };
+    s.onerror = () => reject(new Error('Failed to load PptxGenJS from CDN'));
+    document.head.appendChild(s);
+  });
+  return _pptxLoadPromise;
+}
+
+async function openPptxExport() {
+  if (!cogResult) { showToast('Run the analysis first.', 'warning'); return; }
+  showToast('Generating PowerPoint deck...', 'info');
+  try {
+    await _ensurePptxLoaded();
+    const PptxGenJSCtor = window.PptxGenJS || window.pptxgen;
+    const pres = new PptxGenJSCtor();
+    pres.layout = 'LAYOUT_WIDE'; // 13.3" x 7.5"
+    pres.author = 'GXO IES Solutions Design';
+    pres.company = 'GXO Logistics';
+    const today = new Date();
+    const dateStr = today.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    const customerName = (config.customerName || '').trim();
+    const industryLabel = (calc.INDUSTRY_OPTIONS.find(o => o.value === config.industry) || {}).label || '';
+    const stageLabel = (calc.DEAL_STAGES.find(o => o.value === config.dealStage) || {}).label || '';
+    const scenName = _scenarioName || 'Untitled scenario';
+    pres.title = `COG ${customerName ? customerName + ' — ' : ''}${dateStr}`;
+
+    // Palette
+    const C = {
+      navy: '0A1628', navySoft: '0D1F3C', amber: 'F59E0B',
+      ice: 'CADCFC', white: 'FFFFFF', gray100: 'F8FAFC',
+      gray200: 'E2E8F0', gray400: '94A3B8', gray500: '64748B',
+      gray700: '334155', good: '16A34A', bad: 'DC2626',
+    };
+    const fmtMoney = (v) => '$' + Math.round(v || 0).toLocaleString();
+    const fmtMoneyCompact = (v) => {
+      const n = Math.abs(v || 0);
+      if (n >= 1e9) return '$' + (v / 1e9).toFixed(1) + 'B';
+      if (n >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
+      if (n >= 1e3) return '$' + (v / 1e3).toFixed(0) + 'K';
+      return '$' + Math.round(v || 0);
+    };
+    const fmtPct = (v, dp = 1) => (v == null ? '—' : v.toFixed(dp) + '%');
+    const fmtNum = (v) => (v == null ? '—' : Math.round(v).toLocaleString());
+
+    // Pull data
+    const numCenters = cogResult.centers.length;
+    const totalCost = cogResult.totalCost || 0;
+    const truckCost = cogResult.truckCost || 0;
+    const parcelCost = cogResult.parcelCost || 0;
+    const parcelOn = parcelCost > 0;
+    const co2Tons = cogResult.co2Tons || 0;
+    const coverage = cogResult.serviceStats?.maxMiles > 0 ? cogResult.serviceStats.coveragePct : null;
+    const totalDemand = points.reduce((s, p) => s + (p.weight || 0), 0);
+    const costPerUnit = totalDemand > 0 ? totalCost / totalDemand : 0;
+    const co2Display = co2Tons >= 1000 ? (co2Tons / 1000).toFixed(1) + ' kt' : co2Tons.toFixed(0) + ' t';
+
+    // vs-current-state benchmark (re-computed inline; matches Network Benchmark)
+    let vsCurrent = null;
+    try {
+      const csList = (config.currentStateDCs || []).filter(d => Number.isFinite(+d.lat) && Number.isFinite(+d.lng));
+      if (csList.length > 0) {
+        const solvePts = _pointsForSolve();
+        const csMcr = calc.buildMcrFromDcList(csList, solvePts);
+        if (csMcr) {
+          const csCost = calc.estimateBlendedCost(csMcr, solvePts, config);
+          calc.flagServiceViolations(csMcr, solvePts, config.maxServiceMiles ?? 0, config.roadFactor ?? 1.22);
+          const csCo2 = (csCost.totalTruckMiles || 0) * (config.co2KgPerTruckMile ?? 1.62) / 1000;
+          vsCurrent = {
+            n: csList.length,
+            cost: csCost.totalCost,
+            co2Tons: csCo2,
+            coverage: csMcr.serviceStats?.maxMiles > 0 ? csMcr.serviceStats.coveragePct : null,
+            costDelta: totalCost - csCost.totalCost,
+            costDeltaPct: csCost.totalCost > 0 ? ((totalCost - csCost.totalCost) / csCost.totalCost * 100) : 0,
+            co2Delta: co2Tons - csCo2,
+          };
+        }
+      }
+    } catch (e) { console.warn('[F3] vs-current calc failed:', e); }
+
+    // ============================================================
+    // Slide 1: Title
+    // ============================================================
+    let s = pres.addSlide();
+    s.background = { color: C.navy };
+    // Top accent strip
+    s.addShape(pres.shapes.RECTANGLE, { x: 0, y: 0, w: 13.3, h: 0.18, fill: { color: C.amber }, line: { color: C.amber } });
+    // GXO IES wordmark top-left
+    s.addText('GXO IES · Solutions Design', { x: 0.6, y: 0.5, w: 6, h: 0.4, fontSize: 12, fontFace: 'Calibri', color: C.amber, bold: true, charSpacing: 4 });
+    // Date top-right
+    s.addText(dateStr, { x: 7, y: 0.5, w: 5.7, h: 0.4, fontSize: 12, fontFace: 'Calibri', color: C.ice, align: 'right' });
+
+    // Customer name (huge centered)
+    const customerHeadline = customerName || scenName;
+    s.addText(customerHeadline, { x: 0.6, y: 2.0, w: 12.1, h: 1.5, fontSize: 54, fontFace: 'Calibri', color: C.white, bold: true, align: 'center', valign: 'middle' });
+    // Subtitle
+    s.addText('Center of Gravity Analysis', { x: 0.6, y: 3.5, w: 12.1, h: 0.55, fontSize: 26, fontFace: 'Calibri', color: C.ice, align: 'center' });
+    // Context line
+    const ctxBits = [industryLabel, stageLabel, customerName ? null : `Scenario: ${scenName}`].filter(Boolean);
+    if (ctxBits.length) {
+      s.addText(ctxBits.join('   ·   '), { x: 0.6, y: 4.15, w: 12.1, h: 0.4, fontSize: 14, fontFace: 'Calibri', color: C.ice, align: 'center' });
+    }
+    // Headline KPIs at bottom of title
+    s.addText([
+      { text: String(numCenters), options: { fontSize: 44, color: C.amber, bold: true, breakLine: true } },
+      { text: numCenters === 1 ? 'distribution center' : 'distribution centers', options: { fontSize: 12, color: C.ice } },
+    ], { x: 1.5, y: 5.4, w: 3, h: 1.3, fontFace: 'Calibri', align: 'center', valign: 'top', margin: 0 });
+    s.addText([
+      { text: fmtMoneyCompact(totalCost), options: { fontSize: 44, color: C.amber, bold: true, breakLine: true } },
+      { text: 'annual network cost', options: { fontSize: 12, color: C.ice } },
+    ], { x: 5.15, y: 5.4, w: 3, h: 1.3, fontFace: 'Calibri', align: 'center', valign: 'top', margin: 0 });
+    s.addText([
+      { text: coverage != null ? fmtPct(coverage, 0) : co2Display, options: { fontSize: 44, color: C.amber, bold: true, breakLine: true } },
+      { text: coverage != null ? 'within service SLA' : 'annual CO\u2082', options: { fontSize: 12, color: C.ice } },
+    ], { x: 8.8, y: 5.4, w: 3, h: 1.3, fontFace: 'Calibri', align: 'center', valign: 'top', margin: 0 });
+    // Bottom accent strip
+    s.addShape(pres.shapes.RECTANGLE, { x: 0, y: 7.32, w: 13.3, h: 0.18, fill: { color: C.amber }, line: { color: C.amber } });
+
+    // ============================================================
+    // Slide 2: Executive Summary
+    // ============================================================
+    s = pres.addSlide();
+    s.background = { color: C.white };
+    // Header bar
+    s.addShape(pres.shapes.RECTANGLE, { x: 0, y: 0, w: 13.3, h: 0.85, fill: { color: C.navy }, line: { color: C.navy } });
+    s.addText('Executive Summary', { x: 0.6, y: 0.18, w: 8, h: 0.5, fontSize: 22, fontFace: 'Calibri', color: C.white, bold: true });
+    s.addText(customerHeadline + (industryLabel ? '  ·  ' + industryLabel : ''), { x: 0.6, y: 0.5, w: 12.1, h: 0.3, fontSize: 11, fontFace: 'Calibri', color: C.ice });
+
+    // 4 KPI cards across the top
+    const kpiCards = [
+      { label: 'Distribution Centers', value: String(numCenters), sub: numCenters === 1 ? 'single-DC network' : `${numCenters} DCs in solution` },
+      { label: 'Annual Network Cost', value: fmtMoneyCompact(totalCost), sub: `${fmtMoney(costPerUnit)} per unit` },
+      { label: 'Service Coverage', value: coverage != null ? fmtPct(coverage, 0) : 'n/a', sub: coverage != null ? `within ${cogResult.serviceStats?.maxMiles || 0}-mi SLA` : 'no SLA defined' },
+      { label: 'Annual CO\u2082', value: co2Display, sub: 'EPA SmartWay 1.62 kg/mi' },
+    ];
+    kpiCards.forEach((k, i) => {
+      const x = 0.6 + i * 3.1;
+      // Card background
+      s.addShape(pres.shapes.RECTANGLE, { x, y: 1.2, w: 2.9, h: 1.7, fill: { color: C.gray100 }, line: { color: C.gray200, width: 1 } });
+      // Accent bar (left side)
+      s.addShape(pres.shapes.RECTANGLE, { x, y: 1.2, w: 0.08, h: 1.7, fill: { color: C.amber }, line: { color: C.amber } });
+      // Label
+      s.addText(k.label, { x: x + 0.22, y: 1.32, w: 2.6, h: 0.3, fontSize: 10, fontFace: 'Calibri', color: C.gray500, bold: true, charSpacing: 2, margin: 0 });
+      // Value (big)
+      s.addText(k.value, { x: x + 0.22, y: 1.62, w: 2.6, h: 0.85, fontSize: 36, fontFace: 'Calibri', color: C.navy, bold: true, margin: 0 });
+      // Sub
+      s.addText(k.sub, { x: x + 0.22, y: 2.5, w: 2.6, h: 0.32, fontSize: 10, fontFace: 'Calibri', color: C.gray500, margin: 0 });
+    });
+
+    // vs-Current panel (if available)
+    if (vsCurrent) {
+      const goodCost = vsCurrent.costDelta < 0;
+      s.addShape(pres.shapes.RECTANGLE, { x: 0.6, y: 3.1, w: 12.1, h: 1.7, fill: { color: C.white }, line: { color: C.navy, width: 1.5 } });
+      s.addText('vs. Current State Network', { x: 0.8, y: 3.2, w: 6, h: 0.36, fontSize: 12, fontFace: 'Calibri', color: C.navy, bold: true, charSpacing: 3 });
+      s.addText(`Benchmarked against ${vsCurrent.n} current DC${vsCurrent.n === 1 ? '' : 's'}`, { x: 0.8, y: 3.5, w: 6, h: 0.3, fontSize: 10, fontFace: 'Calibri', color: C.gray500 });
+      // Three delta KPIs
+      const deltas = [
+        { label: 'Cost Δ', value: (vsCurrent.costDelta >= 0 ? '+' : '') + fmtMoneyCompact(vsCurrent.costDelta), sub: (vsCurrent.costDelta >= 0 ? '+' : '') + vsCurrent.costDeltaPct.toFixed(1) + '%', color: goodCost ? C.good : C.bad },
+        { label: 'CO\u2082 Δ', value: (vsCurrent.co2Delta >= 0 ? '+' : '') + Math.round(vsCurrent.co2Delta).toLocaleString() + ' t', sub: vsCurrent.co2Tons > 0 ? ((vsCurrent.co2Delta / vsCurrent.co2Tons * 100).toFixed(0) + '%') : '—', color: vsCurrent.co2Delta < 0 ? C.good : C.bad },
+        { label: 'Network', value: numCenters + ' vs ' + vsCurrent.n, sub: numCenters < vsCurrent.n ? 'consolidation' : (numCenters > vsCurrent.n ? 'expansion' : 'same footprint'), color: C.navy },
+      ];
+      deltas.forEach((d, i) => {
+        const dx = 7.0 + i * 1.85;
+        s.addText(d.label, { x: dx, y: 3.2, w: 1.7, h: 0.3, fontSize: 9, fontFace: 'Calibri', color: C.gray500, bold: true, charSpacing: 2, margin: 0 });
+        s.addText(d.value, { x: dx, y: 3.5, w: 1.7, h: 0.7, fontSize: 26, fontFace: 'Calibri', color: d.color, bold: true, margin: 0 });
+        s.addText(d.sub, { x: dx, y: 4.2, w: 1.7, h: 0.3, fontSize: 10, fontFace: 'Calibri', color: C.gray500, margin: 0 });
+      });
+    }
+
+    // Recommendation block
+    const recoY = vsCurrent ? 5.0 : 3.3;
+    s.addShape(pres.shapes.RECTANGLE, { x: 0.6, y: recoY, w: 12.1, h: 2.0, fill: { color: C.navy }, line: { color: C.navy } });
+    s.addShape(pres.shapes.RECTANGLE, { x: 0.6, y: recoY, w: 0.12, h: 2.0, fill: { color: C.amber }, line: { color: C.amber } });
+    s.addText('RECOMMENDATION', { x: 0.95, y: recoY + 0.15, w: 6, h: 0.3, fontSize: 11, fontFace: 'Calibri', color: C.amber, bold: true, charSpacing: 4 });
+    const primaryCity = cogResult.centers[0]?.nearestCity?.split('(')[0].trim() || 'the centroid location';
+    const recoLines = [];
+    if (numCenters === 1) {
+      recoLines.push(`Operate a single distribution center in ${primaryCity} to serve ${fmtNum(points.length)} demand points totaling ${fmtNum(totalDemand)} weight units.`);
+    } else {
+      const cities = cogResult.centers.map(c => c.nearestCity?.split('(')[0].trim()).filter(Boolean).slice(0, 4).join(', ');
+      recoLines.push(`Operate ${numCenters} distribution centers across ${cities || 'the recommended footprint'} to serve ${fmtNum(points.length)} demand points.`);
+    }
+    if (vsCurrent && vsCurrent.costDelta < 0) {
+      recoLines.push(`Saves ${fmtMoneyCompact(Math.abs(vsCurrent.costDelta))} per year (${Math.abs(vsCurrent.costDeltaPct).toFixed(1)}%) vs the current ${vsCurrent.n}-DC network.`);
+    } else if (vsCurrent && vsCurrent.costDelta > 0) {
+      recoLines.push(`Adds ${fmtMoneyCompact(Math.abs(vsCurrent.costDelta))} per year (${vsCurrent.costDeltaPct.toFixed(1)}%) vs current — value is in service/CO\u2082 not pure cost.`);
+    }
+    recoLines.push(`Annual landed cost ${fmtMoney(costPerUnit)} per unit at ${fmtNum(totalDemand)} units of demand.`);
+    s.addText(recoLines.join('\n'), { x: 0.95, y: recoY + 0.5, w: 11.6, h: 1.4, fontSize: 14, fontFace: 'Calibri', color: C.white, valign: 'top', paraSpaceAfter: 6 });
+
+    // Slide 2 footer
+    s.addText(`Scenario: ${scenName}  ·  Generated ${dateStr}`, { x: 0.6, y: 7.1, w: 12.1, h: 0.25, fontSize: 9, fontFace: 'Calibri', color: C.gray400 });
+
+    // ============================================================
+    // Slide 3: Map
+    // ============================================================
+    s = pres.addSlide();
+    s.background = { color: C.white };
+    s.addShape(pres.shapes.RECTANGLE, { x: 0, y: 0, w: 13.3, h: 0.85, fill: { color: C.navy }, line: { color: C.navy } });
+    s.addText('Network Map', { x: 0.6, y: 0.18, w: 8, h: 0.5, fontSize: 22, fontFace: 'Calibri', color: C.white, bold: true });
+    s.addText(`${numCenters} center${numCenters === 1 ? '' : 's'}  ·  ${fmtNum(points.length)} demand points`, { x: 0.6, y: 0.5, w: 12.1, h: 0.3, fontSize: 11, fontFace: 'Calibri', color: C.ice });
+
+    // Map bbox: continental US — lng -125 to -65, lat 24 to 50
+    const mapX = 0.6, mapY = 1.15, mapW = 12.1, mapH = 5.85;
+    const lngL = -125, lngR = -65, latT = 50, latB = 24;
+    const project = (lat, lng) => ({
+      x: mapX + ((lng - lngL) / (lngR - lngL)) * mapW,
+      y: mapY + ((latT - lat) / (latT - latB)) * mapH,
+    });
+    // Map background
+    s.addShape(pres.shapes.RECTANGLE, { x: mapX, y: mapY, w: mapW, h: mapH, fill: { color: C.gray100 }, line: { color: C.gray200, width: 1 } });
+    // Crude US continent shape — a single rounded rect to suggest land mass
+    // (don't try to draw the actual outline — keeps the slide editable)
+    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: mapX + 0.6, y: mapY + 0.5, w: mapW - 1.2, h: mapH - 1.0, fill: { color: 'EDF2F7' }, line: { color: 'CBD5E1', width: 1 }, rectRadius: 0.15 });
+    // Labels for region (rough)
+    s.addText('UNITED STATES', { x: mapX + 4, y: mapY + 2.5, w: 4.5, h: 0.4, fontSize: 14, fontFace: 'Calibri', color: 'B0BEC5', bold: true, align: 'center', charSpacing: 8 });
+
+    // Demand points — sampled for visual cleanliness (max 400 dots)
+    const validPts = points.filter(p => Number.isFinite(+p.lat) && Number.isFinite(+p.lng) && +p.lat >= latB && +p.lat <= latT && +p.lng >= lngL && +p.lng <= lngR);
+    const maxDots = 400;
+    const step = Math.max(1, Math.ceil(validPts.length / maxDots));
+    const sampledPts = validPts.filter((_, i) => i % step === 0);
+    sampledPts.forEach(pt => {
+      const { x: px, y: py } = project(+pt.lat, +pt.lng);
+      s.addShape(pres.shapes.OVAL, { x: px - 0.04, y: py - 0.04, w: 0.08, h: 0.08, fill: { color: 'F87171', transparency: 50 }, line: { color: 'F87171', width: 0 } });
+    });
+
+    // Service zones for each center
+    const validCenters = cogResult.centers.filter(c => Number.isFinite(+c.lat) && Number.isFinite(+c.lng));
+    const clusterColors = ['0047AB', '22C55E', 'F59E0B', '8B5CF6', 'EC4899', '06B6D4', 'EF4444', '14B8A6'];
+    validCenters.forEach((c, i) => {
+      const { x: cx, y: cy } = project(+c.lat, +c.lng);
+      const color = clusterColors[i % clusterColors.length];
+      // Service zone ring — 500 mi at this projection (~7.25 lat degrees, varies but use lat for approx)
+      const ringDeg = 500 / 69; // ~7.25 deg
+      const ringPx = (ringDeg / (latT - latB)) * mapH;
+      s.addShape(pres.shapes.OVAL, { x: cx - ringPx, y: cy - ringPx, w: ringPx * 2, h: ringPx * 2, fill: { color: color, transparency: 92 }, line: { color: color, width: 1, dashType: 'dash' } });
+    });
+    // Centers (drawn on top of zones)
+    validCenters.forEach((c, i) => {
+      const { x: cx, y: cy } = project(+c.lat, +c.lng);
+      const color = clusterColors[i % clusterColors.length];
+      // Halo
+      s.addShape(pres.shapes.OVAL, { x: cx - 0.22, y: cy - 0.22, w: 0.44, h: 0.44, fill: { color: C.white }, line: { color: C.white } });
+      // Center dot
+      s.addShape(pres.shapes.OVAL, { x: cx - 0.18, y: cy - 0.18, w: 0.36, h: 0.36, fill: { color: color }, line: { color: C.navy, width: 2 } });
+      // Label
+      s.addText('C' + (i + 1), { x: cx - 0.18, y: cy - 0.18, w: 0.36, h: 0.36, fontSize: 11, fontFace: 'Calibri', color: C.white, bold: true, align: 'center', valign: 'middle', margin: 0 });
+      // City label below
+      const city = c.nearestCity?.split('(')[0].trim();
+      if (city) {
+        s.addText(city, { x: cx - 1.0, y: cy + 0.22, w: 2.0, h: 0.3, fontSize: 10, fontFace: 'Calibri', color: C.navy, bold: true, align: 'center', margin: 0 });
+      }
+    });
+
+    // Legend
+    s.addShape(pres.shapes.RECTANGLE, { x: mapX + 0.15, y: mapY + mapH - 0.65, w: 4.2, h: 0.5, fill: { color: C.white, transparency: 10 }, line: { color: C.gray200, width: 1 } });
+    s.addShape(pres.shapes.OVAL, { x: mapX + 0.3, y: mapY + mapH - 0.5, w: 0.18, h: 0.18, fill: { color: clusterColors[0] }, line: { color: C.navy, width: 1.5 } });
+    s.addText('Distribution center', { x: mapX + 0.55, y: mapY + mapH - 0.55, w: 1.6, h: 0.3, fontSize: 9, fontFace: 'Calibri', color: C.gray700, margin: 0 });
+    s.addShape(pres.shapes.OVAL, { x: mapX + 2.2, y: mapY + mapH - 0.5, w: 0.1, h: 0.1, fill: { color: 'F87171' }, line: { color: 'F87171' } });
+    s.addText('Demand point (sampled)', { x: mapX + 2.4, y: mapY + mapH - 0.55, w: 1.9, h: 0.3, fontSize: 9, fontFace: 'Calibri', color: C.gray700, margin: 0 });
+
+    s.addText('Approximate positions. Ring = 500-mi service zone.', { x: mapX, y: mapY + mapH + 0.05, w: mapW, h: 0.25, fontSize: 8, fontFace: 'Calibri', color: C.gray400, italic: true });
+
+    // ============================================================
+    // Slide 4: Cost Breakdown
+    // ============================================================
+    s = pres.addSlide();
+    s.background = { color: C.white };
+    s.addShape(pres.shapes.RECTANGLE, { x: 0, y: 0, w: 13.3, h: 0.85, fill: { color: C.navy }, line: { color: C.navy } });
+    s.addText('Cost Breakdown', { x: 0.6, y: 0.18, w: 8, h: 0.5, fontSize: 22, fontFace: 'Calibri', color: C.white, bold: true });
+    s.addText(`Annual: ${fmtMoneyCompact(totalCost)}  ·  $${costPerUnit.toFixed(2)}/unit`, { x: 0.6, y: 0.5, w: 12.1, h: 0.3, fontSize: 11, fontFace: 'Calibri', color: C.ice });
+
+    // Per-cluster table
+    const tableHead = [
+      { text: '#', options: { bold: true, color: C.white, fill: { color: C.navy }, align: 'center' } },
+      { text: 'Center', options: { bold: true, color: C.white, fill: { color: C.navy } } },
+      { text: 'Demand', options: { bold: true, color: C.white, fill: { color: C.navy }, align: 'right' } },
+      { text: '% of total', options: { bold: true, color: C.white, fill: { color: C.navy }, align: 'right' } },
+      { text: 'Avg distance', options: { bold: true, color: C.white, fill: { color: C.navy }, align: 'right' } },
+      { text: 'Annual cost', options: { bold: true, color: C.white, fill: { color: C.navy }, align: 'right' } },
+    ];
+    const totalWtForTable = cogResult.centers.reduce((sm, c) => sm + (c.totalWeight || 0), 0) || 1;
+    const tableBody = cogResult.centers.map((c, i) => {
+      const cost = Array.isArray(cogResult.costByCluster) ? (cogResult.costByCluster[i] || 0) : 0;
+      const pct = (c.totalWeight || 0) / totalWtForTable * 100;
+      return [
+        { text: 'C' + (i + 1), options: { bold: true, color: clusterColors[i % clusterColors.length], align: 'center' } },
+        { text: c.nearestCity || 'Center ' + (i + 1), options: { color: C.navy } },
+        { text: fmtNum(c.totalWeight), options: { align: 'right', color: C.navy } },
+        { text: pct.toFixed(1) + '%', options: { align: 'right', color: C.gray500 } },
+        { text: Math.round(c.avgWeightedDistance || 0) + ' mi', options: { align: 'right', color: C.gray500 } },
+        { text: fmtMoneyCompact(cost), options: { align: 'right', color: C.navy, bold: true } },
+      ];
+    });
+    s.addTable([tableHead, ...tableBody], {
+      x: 0.6, y: 1.15, w: 12.1, h: Math.min(3.5, 0.4 + cogResult.centers.length * 0.35),
+      colW: [0.7, 4.0, 2.0, 1.6, 2.0, 1.8],
+      fontSize: 11, fontFace: 'Calibri', border: { type: 'solid', pt: 0.5, color: C.gray200 },
+    });
+
+    // Truck vs Parcel split (if parcel engine)
+    const splitY = Math.min(5.0, 1.5 + cogResult.centers.length * 0.35 + 0.4);
+    if (parcelOn && totalCost > 0) {
+      s.addText('Mode mix', { x: 0.6, y: splitY, w: 6, h: 0.3, fontSize: 12, fontFace: 'Calibri', color: C.gray500, bold: true, charSpacing: 3 });
+      const barY = splitY + 0.4;
+      const barW = 12.1;
+      const truckShare = Math.max(0, Math.min(1, truckCost / totalCost));
+      const parcelShare = Math.max(0, Math.min(1, parcelCost / totalCost));
+      s.addShape(pres.shapes.RECTANGLE, { x: 0.6, y: barY, w: barW * truckShare, h: 0.55, fill: { color: '3B82F6' }, line: { color: '3B82F6' } });
+      s.addShape(pres.shapes.RECTANGLE, { x: 0.6 + barW * truckShare, y: barY, w: barW * parcelShare, h: 0.55, fill: { color: C.amber }, line: { color: C.amber } });
+      // Labels on bar
+      if (truckShare > 0.08) s.addText(`TRUCK  ${(truckShare * 100).toFixed(0)}%  ${fmtMoneyCompact(truckCost)}`, { x: 0.6, y: barY, w: barW * truckShare, h: 0.55, fontSize: 11, fontFace: 'Calibri', color: C.white, bold: true, align: 'center', valign: 'middle', margin: 0 });
+      if (parcelShare > 0.08) s.addText(`PARCEL  ${(parcelShare * 100).toFixed(0)}%  ${fmtMoneyCompact(parcelCost)}`, { x: 0.6 + barW * truckShare, y: barY, w: barW * parcelShare, h: 0.55, fontSize: 11, fontFace: 'Calibri', color: C.white, bold: true, align: 'center', valign: 'middle', margin: 0 });
+    }
+
+    // ============================================================
+    // Slide 5: Sensitivity
+    // ============================================================
+    s = pres.addSlide();
+    s.background = { color: C.white };
+    s.addShape(pres.shapes.RECTANGLE, { x: 0, y: 0, w: 13.3, h: 0.85, fill: { color: C.navy }, line: { color: C.navy } });
+    s.addText('Sensitivity Analysis', { x: 0.6, y: 0.18, w: 8, h: 0.5, fontSize: 22, fontFace: 'Calibri', color: C.white, bold: true });
+    s.addText('How does cost respond to network size and to changes in key drivers?', { x: 0.6, y: 0.5, w: 12.1, h: 0.3, fontSize: 11, fontFace: 'Calibri', color: C.ice });
+
+    // Left: k vs cost line chart
+    if (Array.isArray(sensitivityData) && sensitivityData.length > 0) {
+      s.addText('Network size vs annual cost', { x: 0.6, y: 1.1, w: 6, h: 0.3, fontSize: 12, fontFace: 'Calibri', color: C.gray500, bold: true, charSpacing: 3 });
+      const kLabels = sensitivityData.map(d => String(d.k));
+      const kValues = sensitivityData.map(d => Math.round(d.totalCost || 0));
+      s.addChart(pres.charts.LINE, [{ name: 'Annual cost', labels: kLabels, values: kValues }], {
+        x: 0.6, y: 1.5, w: 6.0, h: 5.0,
+        chartColors: [C.amber],
+        chartArea: { fill: { color: C.white } },
+        catAxisLabelColor: C.gray500, catAxisLabelFontSize: 10,
+        valAxisLabelColor: C.gray500, valAxisLabelFontSize: 10,
+        valGridLine: { color: C.gray200, size: 0.5 },
+        catGridLine: { style: 'none' },
+        lineSize: 3, lineSmooth: true,
+        showValue: false, showLegend: false,
+        valAxisLabelFormatCode: '$#,##0,K',
+        catAxisTitle: 'Number of DCs (k)', catAxisTitleColor: C.gray700, catAxisTitleFontSize: 10, showCatAxisTitle: true,
+        valAxisTitle: 'Annual cost', valAxisTitleColor: C.gray700, valAxisTitleFontSize: 10, showValAxisTitle: true,
+      });
+      // Recommended-k callout
+      const recRow = sensitivityData.find(d => d.isRecommended || d.recommended);
+      if (recRow) {
+        s.addText(`Recommended k = ${recRow.k}  ·  ${fmtMoneyCompact(recRow.totalCost)}/yr`, { x: 0.6, y: 6.55, w: 6.0, h: 0.3, fontSize: 10, fontFace: 'Calibri', color: C.navy, bold: true, align: 'center' });
+      }
+    } else {
+      s.addText('Sensitivity data not available — run analysis with multiple k values.', { x: 0.6, y: 2.5, w: 6.0, h: 0.5, fontSize: 12, fontFace: 'Calibri', color: C.gray500, italic: true });
+    }
+
+    // Right: Cost-driver tornado as horizontal bar chart
+    try {
+      const tornado = calc.tornadoSensitivity(cogResult, points, config);
+      if (Array.isArray(tornado) && tornado.length > 0) {
+        s.addText('Cost-driver tornado', { x: 6.9, y: 1.1, w: 6, h: 0.3, fontSize: 12, fontFace: 'Calibri', color: C.gray500, bold: true, charSpacing: 3 });
+        // Take top 6 drivers by absolute swing
+        const top = tornado.slice(0, 6);
+        const labels = top.map(d => d.label);
+        const swings = top.map(d => Math.round(d.swing || 0));
+        s.addChart(pres.charts.BAR, [{ name: 'Cost swing ($)', labels, values: swings }], {
+          x: 6.9, y: 1.5, w: 6.0, h: 5.0,
+          barDir: 'bar',
+          chartColors: [C.navy],
+          chartArea: { fill: { color: C.white } },
+          catAxisLabelColor: C.gray700, catAxisLabelFontSize: 10,
+          valAxisLabelColor: C.gray500, valAxisLabelFontSize: 9,
+          valGridLine: { color: C.gray200, size: 0.5 },
+          catGridLine: { style: 'none' },
+          showValue: true, dataLabelColor: C.navy, dataLabelFontSize: 9,
+          dataLabelPosition: 'outEnd', dataLabelFormatCode: '$#,##0,K',
+          showLegend: false,
+          valAxisLabelFormatCode: '$#,##0,K',
+        });
+        s.addText('Each bar shows the cost swing when that driver varies \u00b1 its range.', { x: 6.9, y: 6.55, w: 6.0, h: 0.3, fontSize: 9, fontFace: 'Calibri', color: C.gray400, italic: true, align: 'center' });
+      }
+    } catch (e) {
+      console.warn('[F3] tornado calc failed:', e);
+    }
+
+    // ============================================================
+    // Slide 6: Assumptions & Recommendation
+    // ============================================================
+    s = pres.addSlide();
+    s.background = { color: C.white };
+    s.addShape(pres.shapes.RECTANGLE, { x: 0, y: 0, w: 13.3, h: 0.85, fill: { color: C.navy }, line: { color: C.navy } });
+    s.addText('Assumptions & Next Steps', { x: 0.6, y: 0.18, w: 8, h: 0.5, fontSize: 22, fontFace: 'Calibri', color: C.white, bold: true });
+    s.addText('Key parameters driving this analysis. Adjust to model alternatives.', { x: 0.6, y: 0.5, w: 12.1, h: 0.3, fontSize: 11, fontFace: 'Calibri', color: C.ice });
+
+    // Left column — Assumptions table
+    const assumpRows = [
+      ['Demand points', fmtNum(points.length)],
+      ['Total demand', fmtNum(totalDemand) + ' ' + (config.weightUnit || 'lb')],
+      ['Cost / mile', '$' + (config.transportCostPerMile || 2.85).toFixed(2)],
+      ['Road factor', (config.roadFactor ?? 1.22).toFixed(2) + ' × great-circle'],
+      ['Round-trip factor', (config.roundTripFactor ?? 2.0).toFixed(2) + 'x'],
+      ['Units / truck', fmtNum(config.unitsPerTruck || 25000)],
+      ['Fixed cost / DC', '$' + Math.round(config.fixedCostPerDC || 0).toLocaleString() + '/yr'],
+    ];
+    if (parcelOn) {
+      assumpRows.push(['Parcel share', (config.modeMix?.parcelPct ?? 0) + '%']);
+      assumpRows.push(['Avg pkg weight', (config.parcelAvgPackageWeightLb ?? 5) + ' lb']);
+      assumpRows.push(['Parcel carrier', config.parcelCarrier || 'fedex']);
+      if (config.parcelContractDiscountPct) assumpRows.push(['Contract discount', config.parcelContractDiscountPct + '%']);
+    }
+    if (config.maxServiceMiles > 0) assumpRows.push(['Service SLA', config.maxServiceMiles + ' mi']);
+    assumpRows.push(['CO\u2082 / truck-mile', (config.co2KgPerTruckMile ?? 1.62).toFixed(2) + ' kg']);
+
+    s.addText('ASSUMPTIONS', { x: 0.6, y: 1.1, w: 6, h: 0.3, fontSize: 11, fontFace: 'Calibri', color: C.gray500, bold: true, charSpacing: 4 });
+    const assumpTable = assumpRows.map(([k, v]) => [
+      { text: k, options: { color: C.gray700, fontSize: 11, valign: 'middle' } },
+      { text: v, options: { color: C.navy, fontSize: 11, bold: true, align: 'right', valign: 'middle' } },
+    ]);
+    s.addTable(assumpTable, {
+      x: 0.6, y: 1.45, w: 6.0, colW: [3.6, 2.4],
+      fontFace: 'Calibri', border: { type: 'solid', pt: 0.5, color: C.gray200 }, rowH: 0.32,
+    });
+
+    // Right column — Next Steps
+    s.addText('NEXT STEPS', { x: 7.0, y: 1.1, w: 6, h: 0.3, fontSize: 11, fontFace: 'Calibri', color: C.gray500, bold: true, charSpacing: 4 });
+    const nextSteps = [
+      { text: 'Validate the demand data — confirm point counts, weight units, and any excluded geographies.', options: { bullet: true, breakLine: true, color: C.navy } },
+      { text: 'Walk the recommended footprint with operations — labor, real estate availability, lease cost.', options: { bullet: true, breakLine: true, color: C.navy } },
+      { text: 'Tune cost-per-mile and round-trip factor against the customer\u2019s actual carrier rates.', options: { bullet: true, breakLine: true, color: C.navy } },
+      { text: 'Run sensitivity on growth — model 1, 3, and 5-yr horizons if growth > 5% / yr.', options: { bullet: true, breakLine: true, color: C.navy } },
+      { text: 'Compare against a current-state benchmark — load the current DC list under Parameters.', options: { bullet: true, color: C.navy } },
+    ];
+    s.addText(nextSteps, { x: 7.0, y: 1.45, w: 6.0, h: 4.5, fontSize: 12, fontFace: 'Calibri', paraSpaceAfter: 8 });
+
+    // Footer
+    s.addShape(pres.shapes.RECTANGLE, { x: 0, y: 7.05, w: 13.3, h: 0.45, fill: { color: C.gray100 }, line: { color: C.gray100 } });
+    s.addText('GXO IES Solutions Design  ·  Center of Gravity Engine v3', { x: 0.6, y: 7.13, w: 6, h: 0.3, fontSize: 9, fontFace: 'Calibri', color: C.gray500 });
+    s.addText(`${customerHeadline}  ·  ${dateStr}`, { x: 6.7, y: 7.13, w: 6.0, h: 0.3, fontSize: 9, fontFace: 'Calibri', color: C.gray500, align: 'right' });
+
+    // Save
+    const safeCustomer = (customerName || 'scenario').replace(/[^a-z0-9-]+/gi, '-').slice(0, 40);
+    const fname = `cog-${safeCustomer}-${today.toISOString().split('T')[0]}.pptx`;
+    await pres.writeFile({ fileName: fname });
+    showToast(`Deck downloaded: ${fname}`, 'success');
+  } catch (err) {
+    console.error('[F3 pptx] failed:', err);
+    showToast(`Deck export failed: ${err.message || err}`, 'error');
+  }
 }
 
 /**
