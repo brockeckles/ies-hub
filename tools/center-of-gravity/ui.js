@@ -4927,8 +4927,8 @@ async function openPptxExport() {
       s.addText(`Benchmarked against ${vsCurrent.n} current DC${vsCurrent.n === 1 ? '' : 's'}`, { x: 0.8, y: 3.5, w: 6, h: 0.3, fontSize: 10, fontFace: 'Calibri', color: C.gray500 });
       // Three delta KPIs
       const deltas = [
-        { label: 'Cost Δ', value: (vsCurrent.costDelta >= 0 ? '+' : '') + fmtMoneyCompact(vsCurrent.costDelta), sub: (vsCurrent.costDelta >= 0 ? '+' : '') + vsCurrent.costDeltaPct.toFixed(1) + '%', color: goodCost ? C.good : C.bad },
-        { label: 'CO\u2082 Δ', value: (vsCurrent.co2Delta >= 0 ? '+' : '') + Math.round(vsCurrent.co2Delta).toLocaleString() + ' t', sub: vsCurrent.co2Tons > 0 ? ((vsCurrent.co2Delta / vsCurrent.co2Tons * 100).toFixed(0) + '%') : '—', color: vsCurrent.co2Delta < 0 ? C.good : C.bad },
+        { label: 'Cost Δ', value: (vsCurrent.costDelta >= 0 ? '+' : '') + fmtMoneyCompact(vsCurrent.costDelta), sub: (vsCurrent.costDelta >= 0 ? '+' : '') + vsCurrent.costDeltaPct.toFixed(1) + '%', color: Math.abs(vsCurrent.costDelta) < 100 ? C.navy : (goodCost ? C.good : C.bad) },
+        { label: 'CO\u2082 Δ', value: (vsCurrent.co2Delta >= 0 ? '+' : '') + Math.round(vsCurrent.co2Delta).toLocaleString() + ' t', sub: vsCurrent.co2Tons > 0 ? ((vsCurrent.co2Delta / vsCurrent.co2Tons * 100).toFixed(0) + '%') : '—', color: Math.abs(vsCurrent.co2Delta) < 1 ? C.navy : (vsCurrent.co2Delta < 0 ? C.good : C.bad) },
         { label: 'Network', value: numCenters + ' vs ' + vsCurrent.n, sub: numCenters < vsCurrent.n ? 'consolidation' : (numCenters > vsCurrent.n ? 'expansion' : 'same footprint'), color: C.navy },
       ];
       deltas.forEach((d, i) => {
