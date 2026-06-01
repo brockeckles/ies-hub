@@ -653,8 +653,18 @@ function _enrichCogResultWithCost(result, solvePts) {
     // into carrier rates and not exposed separately by FedEx/UPS.
     result.totalTruckMiles = costEst.totalTruckMiles;
     const co2Intensity = Math.max(0, +config.co2KgPerTruckMile || 1.62);
-    result.co2Kg = (costEst.totalTruckMiles || 0) * co2Intensity;
+    const truckCo2Kg = (costEst.totalTruckMiles || 0) * co2Intensity;
+    // 2026-05-29 — parcel slice CO₂. Default 0.5 kg/pkg = EPA SmartWay
+    // average for ground parcel (FedEx ~0.46, UPS ~0.55). Surfaced in
+    // both the truck KPI and a separate parcelCo2Tons field so downstream
+    // (CM writeback, print) can show truck/parcel split.
+    const parcelPkgs = result.parcelDetails?.totalPackages || 0;
+    const parcelKgPerPkg = +config.parcelCo2KgPerPkg || 0.5;
+    const parcelCo2Kg = parcelPkgs * parcelKgPerPkg;
+    result.co2Kg = truckCo2Kg + parcelCo2Kg;
     result.co2Tons = result.co2Kg / 1000;
+    result.truckCo2Tons = truckCo2Kg / 1000;
+    result.parcelCo2Tons = parcelCo2Kg / 1000;
   } catch (err) {
     console.warn('[COG] cost enrichment failed:', err);
   }
@@ -679,7 +689,10 @@ function _pointsForSolve() {
     live = live.filter(p => {
       const inAK = (p.lat >= 51 && p.lat <= 72) && (p.lng >= -180 && p.lng <= -130);
       const inHI = (p.lat >= 18 && p.lat <= 23) && (p.lng >= -161 && p.lng <= -154);
-      return !inAK && !inHI;
+      // 2026-05-29 — Puerto Rico bounding box. Single PR customer would
+      // drag the centroid east into the Atlantic.
+      const inPR = (p.lat >= 17.5 && p.lat <= 18.7) && (p.lng >= -67.5 && p.lng <= -65.3);
+      return !inAK && !inHI && !inPR;
     });
   }
   if (config.outlierCapEnabled) {
@@ -797,44 +810,48 @@ function _computeCogKpis() {
     hint: 'k value with the lowest weighted-cost from the sensitivity sweep.',
   });
   // 2026-05-28 — Service coverage KPI (B7). Only meaningful when
-  // maxServiceMiles is set; otherwise show '—'.
-  let svcStr = '—';
-  let svcHint = 'Set Max service mi in Parameters to flag out-of-SLA assignments.';
+  // maxServiceMiles is set. 2026-05-29 — hide entirely when not
+  // configured (was rendering '—' which read as 'broken').
   if (cogResult && cogResult.serviceStats && cogResult.serviceStats.maxMiles > 0) {
     const pct = cogResult.serviceStats.coveragePct;
-    svcStr = `${pct.toFixed(1)}%`;
-    svcHint = `Share of demand weight within ${cogResult.serviceStats.maxMiles} road-mi of its assigned DC. ${cogResult.serviceStats.outCount} of ${cogResult.serviceStats.outCount + cogResult.serviceStats.coveredCount} points out of SLA.`;
+    items.push({
+      label: 'Service Coverage',
+      value: `${pct.toFixed(1)}%`,
+      hint: `Share of demand weight within ${cogResult.serviceStats.maxMiles} road-mi of its assigned DC. ${cogResult.serviceStats.outCount} of ${cogResult.serviceStats.outCount + cogResult.serviceStats.coveredCount} points out of SLA.`,
+    });
   }
-  items.push({
-    label: 'Service Coverage',
-    value: svcStr,
-    hint: svcHint,
-  });
   // 2026-05-28 — Peak utilization KPI (B6). Only meaningful when
-  // capacityPerDC > 0; otherwise show '—'.
-  let utilStr = '—';
-  let utilHint = 'Set Capacity / DC in Parameters to track utilization.';
+  // capacityPerDC > 0. Hidden otherwise (was '—').
   if (cogResult && cogResult.capacityStats && cogResult.capacityStats.capacityPerDC > 0) {
     const pk = cogResult.capacityStats.peakUtilization;
-    utilStr = `${pk.toFixed(0)}%`;
+    let utilStr = `${pk.toFixed(0)}%`;
     if (cogResult.capacityStats.stillOver) utilStr += ' ⚠';
-    utilHint = `Peak cluster utilization against ${cogResult.capacityStats.capacityPerDC.toLocaleString()} cap. ${cogResult.capacityStats.reassignmentCount} reassignments walked.${cogResult.capacityStats.stillOver ? ' STILL OVER — raise k or cap.' : ''}`;
+    items.push({
+      label: 'Peak Util',
+      value: utilStr,
+      hint: `Peak cluster utilization against ${cogResult.capacityStats.capacityPerDC.toLocaleString()} cap. ${cogResult.capacityStats.reassignmentCount} reassignments walked.${cogResult.capacityStats.stillOver ? ' STILL OVER — raise k or cap.' : ''}`,
+    });
   }
-  items.push({
-    label: 'Peak Util',
-    value: utilStr,
-    hint: utilHint,
-  });
-  // 2026-05-28 B20 — Annual CO₂ KPI. Reads cogResult.co2Tons stamped by
-  // _enrichCogResultWithCost; falls back to '—' when no result.
+  // 2026-05-28 B20 — Annual CO₂ KPI. 2026-05-29 — extended to include
+  // parcel emissions (was truck-only, which reported 0 for pure-parcel
+  // networks). Parcel CO₂ ≈ 0.5 kg/pkg ground (EPA SmartWay benchmarks
+  // FedEx Ground at ~0.46 kg/pkg, UPS Ground ~0.55 kg/pkg average). The
+  // KPI sums truck + parcel slices.
   let co2Str = '—';
-  let co2Hint = 'CO₂ tons/yr from total truck-miles × emissions intensity (Parameters → CO₂ kg/truck-mi).';
+  let co2Hint = 'CO₂ tons/yr from total truck-miles × emissions intensity.';
   if (cogResult && typeof cogResult.co2Tons === 'number' && cogResult.co2Tons >= 0) {
-    const t = cogResult.co2Tons;
+    const truckCo2 = cogResult.co2Tons || 0;
+    const parcelPkgs = cogResult.parcelDetails?.totalPackages || 0;
+    const parcelKgPerPkg = +config.parcelCo2KgPerPkg || 0.5;
+    const parcelCo2 = (parcelPkgs * parcelKgPerPkg) / 1000;
+    const t = truckCo2 + parcelCo2;
     if (t >= 1000) co2Str = (t / 1000).toFixed(1) + ' kt';
     else if (t >= 1) co2Str = t.toFixed(0) + ' t';
     else co2Str = (t * 1000).toFixed(0) + ' kg';
-    co2Hint = `${(cogResult.totalTruckMiles || 0).toLocaleString(undefined, {maximumFractionDigits:0})} truck-mi × ${(config.co2KgPerTruckMile ?? 1.62).toFixed(2)} kg/mi`;
+    co2Hint = `Truck: ${truckCo2.toFixed(0)} t (${(cogResult.totalTruckMiles || 0).toLocaleString(undefined, {maximumFractionDigits:0})} mi × ${(config.co2KgPerTruckMile ?? 1.62).toFixed(2)} kg/mi)`;
+    if (parcelPkgs > 0) {
+      co2Hint += ` · Parcel: ${parcelCo2.toFixed(0)} t (${parcelPkgs.toLocaleString(undefined, {maximumFractionDigits:0})} pkgs × ${parcelKgPerPkg.toFixed(2)} kg/pkg)`;
+    }
   }
   items.push({
     label: 'Annual CO₂',
@@ -1956,9 +1973,9 @@ function renderParametersPhase(el) {
             <span style="font-size:11px;color:var(--ies-gray-400);">0 = off · ${(calc.getWeightUnitMeta(config.weightUnit || 'lb').short || 'units')}/yr · typical 1.5M small / 5M med / 15M large</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <label style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;cursor:pointer;" title="When ON, demand points whose lat/lng falls inside AK (51-72°N, -180 to -130°W) or HI (18-23°N, -161 to -154°W) bounding boxes are dropped before solving. Prevents a single offshore customer from dragging the centroid into the Pacific.">
+            <label style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;cursor:pointer;" title="When ON, demand points whose lat/lng falls inside AK (51-72°N, -180 to -130°W), HI (18-23°N, -161 to -154°W), or PR (17.5-18.7°N, -67.5 to -65.3°W) bounding boxes are dropped before solving. Prevents a single offshore customer from dragging the centroid offshore.">
               <input type="checkbox" id="cog-exclude-offshore" ${config.excludeOffshore ? 'checked' : ''} style="cursor:pointer;">
-              Exclude AK &amp; HI from solve
+              Exclude AK · HI · PR from solve
             </label>
             <span style="font-size:11px;color:var(--ies-gray-400);">Keeps offshore demand visible in the points table but out of the k-means math</span>
           </div>
@@ -2776,7 +2793,12 @@ function renderAnalysis(el) {
         <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;">
           ${kpi('Centers Found', String(cogResult.centers.length))}
           ${kpi('Iterations', String(cogResult.iterations))}
-          ${kpi('Annual Truckloads', Math.round(costEst.totalTruckloads || 0).toLocaleString())}
+          ${(cogResult.parcelDetails && (cogResult.parcelDetails.totalPackages || 0) > 0)
+            ? kpi('Annual Packages', Math.round(cogResult.parcelDetails.totalPackages || 0).toLocaleString())
+            : kpi('Annual Truckloads', Math.round(costEst.totalTruckloads || 0).toLocaleString())}
+          ${(cogResult.parcelDetails && (cogResult.parcelDetails.totalPackages || 0) > 0) && (costEst.totalTruckloads || 0) > 0
+            ? kpi('Annual Truckloads', Math.round(costEst.totalTruckloads || 0).toLocaleString())
+            : ''}
           ${kpi('Est. Transport Cost', calc.formatCurrency(costEst.totalCost, { compact: true }))}
           ${kpi('Avg Cost/Unit', calc.formatCurrency(costEst.avgCostPerUnit))}
         </div>
@@ -2912,7 +2934,7 @@ function renderAnalysis(el) {
             ` : ''}
             <span style="color:var(--ies-gray-500);">× $${cpm.toFixed(2)} per loaded mile</span>
             <span></span>
-            <span style="text-align:right;font-weight:600;">= ${calc.formatCurrency(totalMi * cpm, { compact: true })}/yr ${cogResult.parcelDetails ? ' <em style="color:var(--ies-gray-400);font-weight:500;">(TL+LTL only)</em>' : ''}</span>
+            <span style="text-align:right;font-weight:600;">= ${calc.formatCurrency(cogResult.parcelDetails ? (cogResult.truckCost || 0) : (totalMi * cpm), { compact: true })}/yr ${cogResult.parcelDetails ? ' <em style="color:var(--ies-gray-400);font-weight:500;">(TL+LTL only)</em>' : ''}</span>
             ${cogResult.parcelDetails ? `
               <span style="color:var(--ies-gray-500);grid-column:1 / 4;border-top:1px dashed var(--ies-gray-200);padding-top:6px;margin-top:4px;"></span>
               <span style="color:var(--ies-gray-500);">Parcel: ${fmtNum(cogResult.parcelDetails.totalPackages)} pkgs × $${(cogResult.parcelCost / Math.max(1, cogResult.parcelDetails.totalPackages)).toFixed(2)} avg</span>
@@ -3148,6 +3170,7 @@ function renderAnalysis(el) {
   el.querySelector('#cog-print-pdf')?.addEventListener('click', () => {
     openPrintView();
   });
+
 
   // 2026-05-28 — wire the data-cog-jump links in the "How this cost was
   // calculated" panel. Previously the "Parameters" link emitted href="#"
